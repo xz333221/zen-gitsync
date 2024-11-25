@@ -1,0 +1,21 @@
+{
+  "name": "zen-git",
+  "version": "1.0.0",
+  "description": "控制台输入g，回车，输入提交内容，自动执行git add+commit+push",
+  "main": "index.js",
+  "scripts": {
+    "g": "node ./src/gitCommit.js"
+  },
+  "bin": { "g": "./src/gitCommit.js" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xz333221/zen-git.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/xz333221/zen-git/issues"
+  },
+  "homepage": "https://github.com/xz333221/zen-git#readme"
+}
