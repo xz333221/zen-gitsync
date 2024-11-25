@@ -1,6 +1,6 @@
 {
-  "name": "zen-git",
-  "version": "1.0.0",
+  "name": "zen-gitsync",
+  "version": "1.0.2",
   "description": "控制台输入g，回车，输入提交内容，自动执行git add+commit+push",
   "main": "index.js",
   "scripts": {
@@ -15,13 +15,13 @@
   "bin": { "g": "./src/gitCommit.js" },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xz333221/zen-git.git"
+    "url": "git+https://github.com/xz333221/zen-gitsync.git"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/xz333221/zen-git/issues"
+    "url": "https://github.com/xz333221/zen-gitsync/issues"
   },
-  "homepage": "https://github.com/xz333221/zen-git#readme"
+  "homepage": "https://github.com/xz333221/zen-gitsync#readme"
 }

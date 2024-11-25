@@ -1,7 +1,7 @@
 
-# zen-git
+# zen-gitsync
 
-`zen-git` 是一个简单的命令行工具，用于自动化 Git 提交和推送操作。只需在控制台输入 `g`，即可自动执行 `git add`、`git commit` 和 `git push` 操作，极大提升 Git 工作流程的效率。
+`zen-gitsync` 是一个简单的命令行工具，用于自动化 Git 提交和推送操作。只需在控制台输入 `g`，即可自动执行 `git add`、`git commit` 和 `git push` 操作，极大提升 Git 工作流程的效率。
 
 ## 特性
 
@@ -11,10 +11,10 @@
 
 ## 安装
 
-通过 npm 安装 `zen-git`，并进行全局安装：
+通过 npm 安装 `zen-gitsync`，并进行全局安装：
 
 ```bash
-npm install -g zen-git
+npm install -g zen-gitsync
 ```
 
 ## 使用方法
