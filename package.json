@@ -6,6 +6,12 @@
   "scripts": {
     "g": "node ./src/gitCommit.js"
   },
+  "files": [
+    "src/gitCommit.js",
+    "LICENSE",
+    "package.json",
+    "README.md"
+  ],
   "bin": { "g": "./src/gitCommit.js" },
   "repository": {
     "type": "git",
