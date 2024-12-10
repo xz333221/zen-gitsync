@@ -1,6 +1,22 @@
-#!/usr/bin/env node
+/**
+ *  fileName:gitCommit.js
+ *  time:2024/1/20
+ *  todo:$END$
+ */
+const {exec, execSync} = require('child_process')
+const os = require('os');
 
-const { exec, execSync } = require('child_process')
+const judgePlatform = () => {
+  // 判断是否是 Windows 系统
+  if (os.platform() === 'win32') {
+    try {
+      // 设置终端字符编码为 UTF-8
+      execSync('chcp 65001');
+    } catch (e) {
+      console.error('设置字符编码失败:', e.message);
+    }
+  }
+};
 
 // 有时候有乱码呢123神奇
 const readline = require('readline')
@@ -9,9 +25,9 @@ const rl = readline.createInterface({
   output: process.stdout
 })
 
-function rlPromisify (fn) {
+function rlPromisify(fn) {
   return async (...args) => {
-    return new Promise((resolve,reject) => fn(...args, resolve, reject))
+    return new Promise((resolve, reject) => fn(...args, resolve, reject))
   }
 }
 
@@ -27,8 +43,9 @@ const colors = [
 ];
 
 function getRandomColor() {
-  const randomIndex = Math.floor(Math.random() * colors.length);
-  return colors[randomIndex];
+  return `\x1b[0m`;
+  // const randomIndex = Math.floor(Math.random() * colors.length);
+  // return colors[randomIndex];
 }
 
 function resetColor() {
@@ -37,23 +54,54 @@ function resetColor() {
 
 function coloredLog(...args) {
   const color = getRandomColor();
-  console.log(color, ...args.map(arg => `\n${arg}`), resetColor());
+  // 获取控制台的宽度
+  const terminalWidth = process.stdout.columns;
+
+  // 创建与控制台宽度相同的横线
+  const line = '-'.repeat(terminalWidth);
+  let _args = args.map(arg => arg.split('\n')).flat().filter(arg => arg.trim() !== '');
+  console.log(line);
+  _args.map((arg, i) => {
+    let _color = color;
+    let trim_arg = arg.trim();
+    if (_args[0] === 'git diff' && arg.startsWith('-')) {
+      _color = '\x1b[31m';
+    }
+    if (_args[0] === 'git status' && trim_arg.startsWith('new file:')) {
+      _color = '\x1b[31m';
+    }
+    if (_args[0] === 'git diff' && arg.startsWith('+')) {
+      _color = '\x1b[32m';
+    }
+    if (_args[0] === 'git status' && trim_arg.startsWith('modified:')) {
+      _color = '\x1b[32m';
+    }
+    if (_args[0] === 'git diff' && arg.startsWith('@@ ')) {
+      _color = '\x1b[36m';
+    }
+    if (i === 0) {
+      console.log(`|\x1b[1m\x1b[34m ${arg}⬇️\x1b[22m\x1b[39m`);
+    } else {
+      console.log(`|${_color} ${arg}`, resetColor());
+    }
+  });
+  console.log(line);
 }
 
 
 class GitCommit {
-  constructor () {
+  constructor() {
     this.statusOutput = null
     this.init()
   }
 
-  async init () {
+  async init() {
     try {
-      // 设置终端字符编码为UTF-8
-      execSync('chcp 65001')
+      judgePlatform()
 
       this.statusOutput = this.execSyncGitCommand('git status')
       if (this.statusOutput.includes('nothing to commit, working tree clean')) {
+        process.exit();
         return
       }
       this.execSyncGitCommand('git diff')
@@ -85,11 +133,11 @@ class GitCommit {
     }
   }
 
-  execSyncGitCommand (command, options = {}) {
+  execSyncGitCommand(command, options = {}) {
     try {
-      let { encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, cwd = process.cwd() } = options
+      let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, cwd = process.cwd()} = options
       cwd = process.argv[2] || cwd
-      const output = execSync(command, { encoding, maxBuffer, cwd })
+      const output = execSync(command, {encoding, maxBuffer, cwd})
       let result = output.trim()
       coloredLog(command, result)
       return result
@@ -99,10 +147,10 @@ class GitCommit {
     }
   }
 
-  execGitCommand (command, options = {}, callback) {
-    let { encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, cwd = process.cwd() } = options
+  execGitCommand(command, options = {}, callback) {
+    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, cwd = process.cwd()} = options
     cwd = process.argv[2] || cwd
-    exec(command, { encoding, maxBuffer, cwd }, (error, stdout, stderr) => {
+    exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
       if (error) {
         coloredLog(command, error)
         return
