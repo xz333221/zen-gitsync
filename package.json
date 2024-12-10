@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "控制台输入g，回车，输入提交内容，自动执行git add+commit+push",
   "main": "index.js",
   "scripts": {
