@@ -1,8 +1,5 @@
-/**
- *  fileName:gitCommit.js
- *  time:2024/1/20
- *  todo:$END$
- */
+#!/usr/bin/env node
+
 const {exec, execSync} = require('child_process')
 const os = require('os');
 
