@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "控制台输入g，回车，输入提交内容，自动执行git add+commit+push",
   "main": "index.js",
   "scripts": {
@@ -9,9 +9,12 @@
   },
   "files": [
     "src/gitCommit.js",
+    "src/utils/index.js",
     "package.json"
   ],
-  "bin": { "g": "./src/gitCommit.js" },
+  "bin": {
+    "g": "./src/gitCommit.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xz333221/zen-gitsync.git"
@@ -22,5 +25,9 @@
   "bugs": {
     "url": "https://github.com/xz333221/zen-gitsync/issues"
   },
-  "homepage": "https://github.com/xz333221/zen-gitsync#readme"
+  "homepage": "https://github.com/xz333221/zen-gitsync#readme",
+  "dependencies": {
+    "boxen": "^8.0.1",
+    "chalk": "^5.4.1"
+  }
 }

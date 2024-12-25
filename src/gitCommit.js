@@ -2,6 +2,8 @@
 
 const {exec, execSync} = require('child_process')
 const os = require('os');
+const { coloredLog } = require('./utils');
+
 
 const judgePlatform = () => {
   // 判断是否是 Windows 系统
@@ -29,62 +31,6 @@ function rlPromisify(fn) {
 }
 
 const question = rlPromisify(rl.question.bind(rl))
-
-const colors = [
-  '\x1b[31m',  // 红色
-  '\x1b[32m',  // 绿色
-  '\x1b[33m',  // 黄色
-  '\x1b[34m',  // 蓝色
-  '\x1b[35m',  // 紫色
-  '\x1b[36m',  // 青色
-];
-
-function getRandomColor() {
-  return `\x1b[0m`;
-  // const randomIndex = Math.floor(Math.random() * colors.length);
-  // return colors[randomIndex];
-}
-
-function resetColor() {
-  return '\x1b[0m';
-}
-
-function coloredLog(...args) {
-  const color = getRandomColor();
-  // 获取控制台的宽度
-  const terminalWidth = process.stdout.columns;
-
-  // 创建与控制台宽度相同的横线
-  const line = '-'.repeat(terminalWidth);
-  let _args = args.map(arg => arg.split('\n')).flat().filter(arg => arg.trim() !== '');
-  console.log(line);
-  _args.map((arg, i) => {
-    let _color = color;
-    let trim_arg = arg.trim();
-    if (_args[0] === 'git diff' && arg.startsWith('-')) {
-      _color = '\x1b[31m';
-    }
-    if (_args[0] === 'git status' && trim_arg.startsWith('new file:')) {
-      _color = '\x1b[31m';
-    }
-    if (_args[0] === 'git diff' && arg.startsWith('+')) {
-      _color = '\x1b[32m';
-    }
-    if (_args[0] === 'git status' && trim_arg.startsWith('modified:')) {
-      _color = '\x1b[32m';
-    }
-    if (_args[0] === 'git diff' && arg.startsWith('@@ ')) {
-      _color = '\x1b[36m';
-    }
-    if (i === 0) {
-      console.log(`|\x1b[1m\x1b[34m ${arg}⬇️\x1b[22m\x1b[39m`);
-    } else {
-      console.log(`|${_color} ${arg}`, resetColor());
-    }
-  });
-  console.log(line);
-}
-
 
 class GitCommit {
   constructor() {
