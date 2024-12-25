@@ -103,8 +103,14 @@ class GitCommit {
       }
       this.execSyncGitCommand('git diff')
 
-      // 等待用户输入提交信息
-      const commitMessage = await question('请输入提交信息：')
+      // 检查命令行参数，判断是否有 -y 参数
+      const autoCommit = process.argv.includes('-y');
+      let commitMessage = '提交'; // 默认提交信息
+
+      if (!autoCommit) {
+        // 如果没有 -y 参数，则等待用户输入提交信息
+        commitMessage = await question('请输入提交信息：');
+      }
 
       // 执行 git add .
       this.statusOutput.includes('(use "git add <file>') && this.execSyncGitCommand('git add .')
@@ -133,7 +139,7 @@ class GitCommit {
   execSyncGitCommand(command, options = {}) {
     try {
       let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, cwd = process.cwd()} = options
-      cwd = process.argv[2] || cwd
+      // cwd = process.argv[2] || cwd
       const output = execSync(command, {encoding, maxBuffer, cwd})
       let result = output.trim()
       coloredLog(command, result)
@@ -146,7 +152,7 @@ class GitCommit {
 
   execGitCommand(command, options = {}, callback) {
     let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, cwd = process.cwd()} = options
-    cwd = process.argv[2] || cwd
+    // cwd = process.argv[2] || cwd
     exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
       if (error) {
         coloredLog(command, error)
