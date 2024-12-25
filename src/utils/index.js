@@ -14,6 +14,8 @@
 //
 // const boxedMessage = boxen(message, options);
 // console.log(boxedMessage);
+import stringWidth from 'string-width';
+
 const colors = [
   '\x1b[31m',  // 红色
   '\x1b[32m',  // 绿色
@@ -43,7 +45,7 @@ const coloredLog = (...args) =>{
   const end_line = '└' + '——'.repeat(terminalWidth / 2 - 1) + '┘';
   let _args = args.map(arg => arg.split('\n')).flat().filter(arg => arg.trim() !== '');
   console.log(start_line);
-  _args.map((arg, i) => {
+  _args.map(async (arg, i) => {
     let _color = color;
     let trim_arg = arg.trim();
     if (_args[0] === 'git diff' && arg.startsWith('-')) {
@@ -61,14 +63,29 @@ const coloredLog = (...args) =>{
     if (_args[0] === 'git diff' && arg.startsWith('@@ ')) {
       _color = '\x1b[36m';
     }
+    // 测试边框
+    let fix_end = ''
+    let length = stringWidth(arg);
+    if (length < terminalWidth) {
+      let fix2 = 0
+      if(trim_arg.startsWith('modified:')){
+        fix2 = 6
+      }
+      if (i === 0) {
+        fix2 = 2
+      }
+      fix_end = ' '.repeat(terminalWidth - length - 4 - fix2)
+      fix_end += "|"
+    }
+    // console.log(`fix_end ==> `, fix_end)
     if (i === 0) {
-      console.log(`|\x1b[1m\x1b[34m ${arg}⬇️\x1b[22m\x1b[39m`);
+      console.log(`|\x1b[1m\x1b[34m ${arg}⬇️\x1b[22m\x1b[39m${fix_end}`);
     } else {
-      console.log(`|${_color} ${arg}`, resetColor());
+      if(arg.trim().length > 0) {
+        console.log(`|${_color} ${arg}${fix_end}`, resetColor());
+      }
     }
   });
   console.log(end_line);
 }
-module.exports = {
-  coloredLog
-};
+export { coloredLog };

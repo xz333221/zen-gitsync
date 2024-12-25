@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-const {exec, execSync} = require('child_process')
-const os = require('os');
-const { coloredLog } = require('./utils');
+import {exec, execSync} from 'child_process'
+import os from 'os'
+import { coloredLog } from './utils/index.js';
+import readline from 'readline'
 
 
 const judgePlatform = () => {
@@ -18,7 +19,7 @@ const judgePlatform = () => {
 };
 
 // 有时候有乱码呢123神奇
-const readline = require('readline')
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
