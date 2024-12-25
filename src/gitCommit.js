@@ -75,7 +75,7 @@ class GitCommit {
       // this.execSyncGitCommand(`git push`);
       this.execGitCommand('git push', {}, (error, stdout, stderr) => {
         console.log('提交完成。')
-        this.execSyncGitCommand(`git log -n 1 --pretty=format:"%H %d %ad%n%B" --date=iso`)
+        this.execSyncGitCommand(`git log -n 1 --pretty=format:"%H%n%d%n%ad%n%B" --date=iso`)
         process.exit();
       })
     } catch (e) {
