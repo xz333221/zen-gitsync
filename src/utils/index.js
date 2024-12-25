@@ -79,7 +79,7 @@ const coloredLog = (...args) =>{
     }
     // console.log(`fix_end ==> `, fix_end)
     if (i === 0) {
-      console.log(`| \x1b[1m\x1b[34m > ${arg}\x1b[22m\x1b[39m${fix_end}`);
+      console.log(`| \x1b[1m\x1b[34m> ${arg}\x1b[22m\x1b[39m${fix_end}`);
     } else {
       if(arg.trim().length > 0) {
         console.log(`|${_color} ${arg}${fix_end}`, resetColor());
