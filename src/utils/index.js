@@ -71,9 +71,9 @@ const coloredLog = (...args) =>{
       if(trim_arg.startsWith('modified:')){
         fix2 = 6
       }
-      if (i === 0) {
-        fix2 = 2
-      }
+      // if (i === 0) {
+      //   fix2 = 2
+      // }
       fix_end = ' '.repeat(terminalWidth - length - 4 - fix2)
       fix_end += "|"
     }
