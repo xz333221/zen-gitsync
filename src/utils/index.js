@@ -72,7 +72,7 @@ const coloredLog = (...args) =>{
         fix2 = 6
       }
       if (i === 0) {
-        fix2 = 3
+        fix2 = 2
       }
       fix_end = ' '.repeat(terminalWidth - length - 4 - fix2)
       fix_end += "|"
