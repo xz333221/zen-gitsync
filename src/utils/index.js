@@ -71,15 +71,15 @@ const coloredLog = (...args) =>{
       if(trim_arg.startsWith('modified:')){
         fix2 = 6
       }
-      // if (i === 0) {
-      //   fix2 = 2
-      // }
+      if (i === 0) {
+        fix2 = 2
+      }
       fix_end = ' '.repeat(terminalWidth - length - 4 - fix2)
       fix_end += "|"
     }
     // console.log(`fix_end ==> `, fix_end)
     if (i === 0) {
-      console.log(`| > \x1b[1m\x1b[34m ${arg}\x1b[22m\x1b[39m${fix_end}`);
+      console.log(`| \x1b[1m\x1b[34m > ${arg}\x1b[22m\x1b[39m${fix_end}`);
     } else {
       if(arg.trim().length > 0) {
         console.log(`|${_color} ${arg}${fix_end}`, resetColor());
