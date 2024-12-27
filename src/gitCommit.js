@@ -154,4 +154,5 @@ const judgeInterval = () => {
     new GitCommit()
   }
 };
+
 judgeInterval()
