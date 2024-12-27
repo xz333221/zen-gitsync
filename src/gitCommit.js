@@ -35,9 +35,15 @@ function rlPromisify(fn) {
 const question = rlPromisify(rl.question.bind(rl))
 
 class GitCommit {
-  constructor() {
+  constructor( { exit }) {
     this.statusOutput = null
+    this.exit = exit
     this.init()
+  }
+  exec_exit(){
+    if (this.exit) {
+      process.exit()
+    }
   }
 
   async init() {
@@ -49,7 +55,7 @@ class GitCommit {
         if (this.statusOutput.includes('use "git push')) {
           this.exec_push()
         } else {
-          process.exit();
+          this.exec_exit();
         }
         return
       }
@@ -89,7 +95,7 @@ class GitCommit {
     this.execGitCommand('git push', {}, (error, stdout, stderr) => {
       console.log('提交完成。')
       this.execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
-      process.exit();
+      this.exec_exit();
     })
   }
 
@@ -140,7 +146,9 @@ const judgeInterval = () => {
       clearInterval(timer);
     }
     timer = setInterval(() => {
-      new GitCommit()
+      new GitCommit({
+        exit: false
+      })
     }, interval)
   } else {
     new GitCommit()
