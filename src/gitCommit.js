@@ -46,6 +46,7 @@ class GitCommit {
 
       this.statusOutput = this.execSyncGitCommand('git status')
       if (this.statusOutput.includes('nothing to commit, working tree clean')) {
+        this.statusOutput.includes('use "git push') && this.exec_push()
         process.exit();
         return
       }
@@ -68,20 +69,25 @@ class GitCommit {
         this.execSyncGitCommand(`git commit -m "${commitMessage || '提交'}"`)
       }
 
-
       // 检查是否需要拉取更新
       this.statusOutput.includes('use "git pull') && this.execSyncGitCommand('git pull')
 
-      // 执行 git push
-      // this.execSyncGitCommand(`git push`);
-      this.execGitCommand('git push', {}, (error, stdout, stderr) => {
-        console.log('提交完成。')
-        this.execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
-        process.exit();
-      })
+      this.exec_push()
+
+
     } catch (e) {
       console.log(`e ==> `, e)
     }
+  }
+
+  exec_push() {
+    // 执行 git push
+    // this.execSyncGitCommand(`git push`);
+    this.execGitCommand('git push', {}, (error, stdout, stderr) => {
+      console.log('提交完成。')
+      this.execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
+      process.exit();
+    })
   }
 
   execSyncGitCommand(command, options = {}) {
