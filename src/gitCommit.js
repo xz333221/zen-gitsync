@@ -137,16 +137,25 @@ const judgeInterval = () => {
   // 判断是否有 --interval 参数
   const intervalArg = process.argv.find(arg => arg.startsWith('--interval'));
   if (intervalArg) {
+    // console.log(`intervalArg ==> `, intervalArg)
     let interval = intervalArg.split('=')[1] || 60 * 60; // 默认间隔为1小时
+    // console.log(`interval ==> `, interval)
     interval = parseInt(interval, 10) * 1000; // 将间隔时间转换为毫秒
+    // console.log(`interval ==> `, interval)
     if (isNaN(interval)) {
-      console.error('无效的间隔时间，请使用 --interval=秒数');
+      console.log('无效的间隔时间，请使用 --interval=秒数');
       process.exit(1);
     }
     if (timer) {
+      console.log(`清空定时器`)
       clearInterval(timer);
+      timer = null;
     }
+    new GitCommit({
+      exit: false
+    })
     timer = setInterval(() => {
+      // console.log(`定时执行`)
       new GitCommit({
         exit: false
       })
