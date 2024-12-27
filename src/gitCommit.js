@@ -46,8 +46,11 @@ class GitCommit {
 
       this.statusOutput = this.execSyncGitCommand('git status')
       if (this.statusOutput.includes('nothing to commit, working tree clean')) {
-        this.statusOutput.includes('use "git push') && this.exec_push()
-        process.exit();
+        if (this.statusOutput.includes('use "git push')) {
+          this.exec_push()
+        } else {
+          process.exit();
+        }
         return
       }
       this.execSyncGitCommand('git diff')
