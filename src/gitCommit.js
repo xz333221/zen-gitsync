@@ -35,9 +35,9 @@ function rlPromisify(fn) {
 const question = rlPromisify(rl.question.bind(rl))
 
 class GitCommit {
-  constructor( { exit }) {
+  constructor(options) {
     this.statusOutput = null
-    this.exit = exit
+    this.exit = options?.exit || true
     this.init()
   }
   exec_exit(){

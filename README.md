@@ -35,4 +35,8 @@ $ g
 ```bash
 $ g -y
 ```
-
+定时执行自动提交，默认间隔1小时
+```bash
+$ g -y --interval
+$ g -y --interval=秒数 
+```
