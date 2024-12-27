@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "g": "node ./src/gitCommit.js",
-    "g:y": "node ./src/gitCommit.js -y"
+    "g:y": "node ./src/gitCommit.js -y",
+    "g:y:interval": "node ./src/gitCommit.js -y --interval",
+    "g:y:interval60": "node ./src/gitCommit.js --interval=60"
   },
   "files": [
     "src/gitCommit.js",

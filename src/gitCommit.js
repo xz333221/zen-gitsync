@@ -2,9 +2,10 @@
 
 import {exec, execSync} from 'child_process'
 import os from 'os'
-import { coloredLog } from './utils/index.js';
+import {coloredLog} from './utils/index.js';
 import readline from 'readline'
 
+let timer = null
 
 const judgePlatform = () => {
   // 判断是否是 Windows 系统
@@ -116,4 +117,24 @@ class GitCommit {
   }
 }
 
-new GitCommit()
+const judgeInterval = () => {
+  // 判断是否有 --interval 参数
+  const intervalArg = process.argv.find(arg => arg.startsWith('--interval'));
+  if (intervalArg) {
+    let interval = intervalArg.split('=')[1] || 5; // 默认间隔为1小时
+    interval = parseInt(interval, 10) * 1000; // 将间隔时间转换为毫秒
+    if (isNaN(interval)) {
+      console.error('无效的间隔时间，请使用 --interval=秒数');
+      process.exit(1);
+    }
+    if (timer) {
+      clearInterval(timer);
+    }
+    timer = setInterval(() => {
+      new GitCommit()
+    }, interval)
+  } else {
+    new GitCommit()
+  }
+};
+judgeInterval()
