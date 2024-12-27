@@ -136,7 +136,7 @@ const judgeInterval = () => {
   // 判断是否有 --interval 参数
   const intervalArg = process.argv.find(arg => arg.startsWith('--interval'));
   if (intervalArg) {
-    let interval = intervalArg.split('=')[1] || 15; // 默认间隔为1小时
+    let interval = intervalArg.split('=')[1] || 60 * 60; // 默认间隔为1小时
     interval = parseInt(interval, 10) * 1000; // 将间隔时间转换为毫秒
     if (isNaN(interval)) {
       console.error('无效的间隔时间，请使用 --interval=秒数');
