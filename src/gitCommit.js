@@ -37,10 +37,11 @@ const question = rlPromisify(rl.question.bind(rl))
 class GitCommit {
   constructor(options) {
     this.statusOutput = null
-    this.exit = options?.exit || true
+    this.exit = options.exit
     this.init()
   }
-  exec_exit(){
+
+  exec_exit() {
     if (this.exit) {
       process.exit()
     }
@@ -151,7 +152,9 @@ const judgeInterval = () => {
       })
     }, interval)
   } else {
-    new GitCommit()
+    new GitCommit({
+      exit: true
+    })
   }
 };
 
