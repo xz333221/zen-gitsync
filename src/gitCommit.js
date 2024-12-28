@@ -18,6 +18,14 @@ const judgePlatform = () => {
     }
   }
 };
+const getCwd = () => {
+  const cwdArg = process.argv.find(arg => arg.startsWith('--path')) || process.argv.find(arg => arg.startsWith('--cwd'));
+  if (cwdArg) {
+    const [, , value] = cwdArg.split('=')
+    return value || process.cwd()
+  }
+  return process.cwd()
+}
 
 // 有时候有乱码呢123神奇
 
@@ -102,8 +110,8 @@ class GitCommit {
 
   execSyncGitCommand(command, options = {}) {
     try {
-      let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, cwd = process.cwd()} = options
-      // cwd = process.argv[2] || cwd
+      let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024} = options
+      let cwd = getCwd()
       const output = execSync(command, {encoding, maxBuffer, cwd})
       let result = output.trim()
       coloredLog(command, result)
@@ -115,8 +123,8 @@ class GitCommit {
   }
 
   execGitCommand(command, options = {}, callback) {
-    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, cwd = process.cwd()} = options
-    // cwd = process.argv[2] || cwd
+    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024} = options
+    let cwd = getCwd()
     exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
       if (error) {
         coloredLog(command, error)
