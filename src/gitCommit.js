@@ -21,9 +21,9 @@ const judgePlatform = () => {
 const getCwd = () => {
   const cwdArg = process.argv.find(arg => arg.startsWith('--path')) || process.argv.find(arg => arg.startsWith('--cwd'));
   if (cwdArg) {
-    console.log(`cwdArg ==> `, cwdArg)
+    // console.log(`cwdArg ==> `, cwdArg)
     const [, value] = cwdArg.split('=')
-    console.log(`value ==> `, value)
+    // console.log(`value ==> `, value)
     return value || process.cwd()
   }
   return process.cwd()
