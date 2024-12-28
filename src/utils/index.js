@@ -34,7 +34,8 @@ function getRandomColor() {
 function resetColor() {
   return '\x1b[0m';
 }
-const coloredLog = (...args) =>{
+
+const coloredLog = (...args) => {
   const color = getRandomColor();
   // 获取控制台的宽度
   const terminalWidth = process.stdout.columns;
@@ -43,8 +44,8 @@ const coloredLog = (...args) =>{
   // const line = '-'.repeat(terminalWidth);
   let str = '├─'
   let str2 = '│'
-  const start_line = '┌' + '──'.repeat(terminalWidth / 2 - 1) + '┐';
-  const end_line = '└' + '──'.repeat(terminalWidth / 2 - 1) + '┘';
+  const start_line = '┌' + '─'.repeat(terminalWidth - 2) + '┐';
+  const end_line = '└' + '─'.repeat(terminalWidth - 2) + '┘';
   let _args = args.map(arg => arg.split('\n')).flat().filter(arg => arg.trim() !== '');
   console.log(start_line);
   _args.map(async (arg, i) => {
@@ -62,37 +63,45 @@ const coloredLog = (...args) =>{
     if (_args[0] === 'git status' && trim_arg.startsWith('modified:')) {
       _color = '\x1b[32m';
     }
+    if (_args[0] === 'git status' && trim_arg.startsWith('deleted:')) {
+      _color = '\x1b[31m';
+    }
     if (_args[0] === 'git diff' && arg.startsWith('@@ ')) {
       _color = '\x1b[36m';
     }
     // 测试边框
     let fix_end = ''
     let length = stringWidth(arg);
-    if (length < terminalWidth) {
+    // if (length < terminalWidth) {
       let fix2 = 0
-      if(trim_arg.startsWith('modified:')){
+      if (
+        _args[0] === 'git status' && trim_arg.startsWith('modified:')
+        || _args[0] === 'git status' && trim_arg.startsWith('deleted:')
+      ) {
         fix2 = 6
       }
       if (i === 0) {
         fix2 = 2
       }
-      console.log(`terminalWidth ==> `, terminalWidth)
-      console.log(`length ==> `, length)
-      console.log(`fix2 ==> `, fix2)
-      fix_end = ' '.repeat(terminalWidth - length - 4 - fix2)
+      let repeatLen = terminalWidth - length - 3 - fix2
+      if (repeatLen < 0) {
+        // repeatLen += terminalWidth
+        repeatLen = repeatLen % terminalWidth + terminalWidth
+      }
+      fix_end = ' '.repeat(repeatLen)
       fix_end += "│"
-    }
+    // }
     // console.log(`fix_end ==> `, fix_end)
     if (i === 0) {
       console.log(`│ \x1b[1m\x1b[34m> ${arg}\x1b[22m\x1b[39m${fix_end}`);
-      let mid = '├─' + '──'.repeat(terminalWidth / 2 - 2) + '─┤';
+      let mid = '├' + '─'.repeat(terminalWidth - 2) + '┤';
       console.log(mid);
     } else {
-      if(arg.trim().length > 0) {
+      if (arg.trim().length > 0) {
         console.log(`│${_color} ${arg}${resetColor()}${fix_end}`);
       }
     }
   });
   console.log(end_line);
 }
-export { coloredLog };
+export {coloredLog};

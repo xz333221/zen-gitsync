@@ -82,7 +82,7 @@ class GitCommit {
       }
 
       // 执行 git add .
-      this.statusOutput.includes('(use "git add <file>') && this.execSyncGitCommand('git add .')
+      this.statusOutput.includes('(use "git add') && this.execSyncGitCommand('git add .')
 
       // 执行 git commit
       if (this.statusOutput.includes('Untracked files:') || this.statusOutput.includes('Changes not staged for commit') || this.statusOutput.includes('Changes to be committed')) {
