@@ -76,6 +76,9 @@ const coloredLog = (...args) =>{
       if (i === 0) {
         fix2 = 2
       }
+      console.log(`terminalWidth ==> `, terminalWidth)
+      console.log(`length ==> `, length)
+      console.log(`fix2 ==> `, fix2)
       fix_end = ' '.repeat(terminalWidth - length - 4 - fix2)
       fix_end += "│"
     }
