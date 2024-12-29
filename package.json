@@ -31,6 +31,7 @@
   },
   "homepage": "https://github.com/xz333221/zen-gitsync#readme",
   "dependencies": {
+    "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "ora": "^8.1.1",
     "string-width": "^7.2.0"

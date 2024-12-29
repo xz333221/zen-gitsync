@@ -6,6 +6,7 @@ import {coloredLog} from './utils/index.js';
 import readline from 'readline'
 import ora from 'ora';
 import chalk from 'chalk';
+import boxen from 'boxen';
 
 let timer = null
 
@@ -109,7 +110,17 @@ class GitCommit {
     this.execGitCommand('git push', {
       spinner
     }, (error, stdout, stderr) => {
-      console.log(chalk.green.bold('✔ SUCCESS: 提交完成。')); // 使用绿色对勾图标
+      // 使用 boxen 绘制带边框的消息
+      const message = '✔ SUCCESS: 提交完成。';
+      const box = boxen(message, {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'round', // 方框的样式
+        borderColor: 'green', // 边框颜色
+        backgroundColor: 'black' // 背景颜色
+      });
+
+      console.log(box); // 打印带有边框的消息
       this.execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
       this.exec_exit();
     })
