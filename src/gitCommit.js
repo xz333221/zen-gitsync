@@ -120,6 +120,9 @@ class GitCommit {
       let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024} = options
       let cwd = getCwd()
       const output = execSync(command, {encoding, maxBuffer, cwd})
+      if(options.spinner){
+        options.spinner.stop();
+      }
       let result = output.trim()
       coloredLog(command, result)
       return result
