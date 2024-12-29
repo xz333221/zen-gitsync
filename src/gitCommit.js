@@ -114,7 +114,7 @@ class GitCommit {
       // 使用 boxen 绘制带边框的消息
       const message = chalk.green.bold(' SUCCESS: 提交完成 ');
       const box = boxen(message, {
-        borderStyle: 'round', // 方框的样式
+        // borderStyle: 'round', // 方框的样式
         // borderColor: 'whiteBright', // 边框颜色
         // backgroundColor: 'black', // 背景颜色
       });
