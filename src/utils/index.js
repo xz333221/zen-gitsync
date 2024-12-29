@@ -15,6 +15,40 @@
 // const boxedMessage = boxen(message, options);
 // console.log(boxedMessage);
 import stringWidth from 'string-width';
+import Table from 'cli-table3';
+import chalk from 'chalk';
+
+const printTableWithHeaderUnderline = () => {
+  // 获取终端的列数（宽度）
+  const terminalWidth = process.stdout.columns;
+
+  // 计算表格的宽度，保证至少有 2 个字符留给边框
+  const tableWidth = terminalWidth - 4; // 4 是左右边框和分隔符的宽度
+
+  // 计算每列的宽度
+  const colWidths = [tableWidth]; // 只有一列，因此宽度设置为终端宽度
+
+  const table = new Table({
+    head: ['Name'],  // 只有一个表头
+    colWidths,       // 使用动态计算的列宽
+    style: {
+      head: ['cyan'], // 表头文字颜色为cyan
+      border: ['yellow'],         // 边框颜色为黄色
+      compact: true,              // 启用紧凑模式，去掉不必要的空白
+    },
+    wordWrap: true,  // 启用自动换行
+  });
+
+  // 向表格中添加不同颜色的行
+  table.push(
+    [chalk.red('张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三')],
+    [chalk.green('李四')],
+  );
+
+  console.log(table.toString()); // 输出表格
+};
+
+// printTableWithHeaderUnderline();
 
 const colors = [
   '\x1b[31m',  // 红色
