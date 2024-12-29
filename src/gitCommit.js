@@ -115,8 +115,9 @@ class GitCommit {
       const message = ' SUCCESS: 提交完成。';
       const box = boxen(message, {
         borderStyle: 'round', // 方框的样式
-        borderColor: 'green', // 边框颜色
-        backgroundColor: 'black' // 背景颜色
+        borderColor: 'white', // 边框颜色
+        backgroundColor: 'black', // 背景颜色
+        color: 'green', // 文字颜色
       });
 
       console.log(box); // 打印带有边框的消息
