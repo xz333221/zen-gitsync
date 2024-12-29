@@ -132,6 +132,8 @@ class GitCommit {
     let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024} = options
     let cwd = getCwd()
     exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
+
+      callback && callback(error, stdout, stderr)
       if (error) {
         coloredLog(command, error)
         return
@@ -142,7 +144,6 @@ class GitCommit {
       if (stderr) {
         coloredLog(command, stderr)
       }
-      callback && callback(error, stdout, stderr)
     })
   }
 }
