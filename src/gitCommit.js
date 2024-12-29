@@ -106,8 +106,9 @@ class GitCommit {
     // 执行 git push
     // this.execSyncGitCommand(`git push`);
     const spinner = ora('正在推送代码...').start();
-    this.execGitCommand('git push', {}, (error, stdout, stderr) => {
-      spinner.stop();
+    this.execGitCommand('git push', {
+      spinner
+    }, (error, stdout, stderr) => {
       console.log(chalk.green.bold('✔ SUCCESS: 提交完成。')); // 使用绿色对勾图标
       this.execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
       this.exec_exit();
@@ -132,8 +133,9 @@ class GitCommit {
     let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024} = options
     let cwd = getCwd()
     exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
-
-      callback && callback(error, stdout, stderr)
+      if(options.spinner){
+        options.spinner.stop();
+      }
       if (error) {
         coloredLog(command, error)
         return
@@ -144,6 +146,7 @@ class GitCommit {
       if (stderr) {
         coloredLog(command, stderr)
       }
+      callback && callback(error, stdout, stderr)
     })
   }
 }
