@@ -110,6 +110,7 @@ class GitCommit {
     this.execGitCommand('git push', {
       spinner
     }, (error, stdout, stderr) => {
+
       // 使用 boxen 绘制带边框的消息
       const message = '✔ SUCCESS: 提交完成。';
       const box = boxen(message, {
