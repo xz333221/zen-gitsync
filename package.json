@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "1.2.5",
+  "version": "1.2.7",
   "description": "控制台输入g，回车，输入提交内容，自动执行git add+commit+push",
   "main": "index.js",
   "type": "module",
@@ -31,6 +31,8 @@
   },
   "homepage": "https://github.com/xz333221/zen-gitsync#readme",
   "dependencies": {
+    "chalk": "^5.4.1",
+    "ora": "^8.1.1",
     "string-width": "^7.2.0"
   }
 }

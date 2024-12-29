@@ -40,10 +40,6 @@ const coloredLog = (...args) => {
   // 获取控制台的宽度
   const terminalWidth = process.stdout.columns;
 
-  // 创建与控制台宽度相同的横线
-  // const line = '-'.repeat(terminalWidth);
-  let str = '├─'
-  let str2 = '│'
   const start_line = '┌' + '─'.repeat(terminalWidth - 2) + '┐';
   const end_line = '└' + '─'.repeat(terminalWidth - 2) + '┘';
   let _args = args.map(arg => arg.split('\n')).flat().filter(arg => arg.trim() !== '');
@@ -77,6 +73,7 @@ const coloredLog = (...args) => {
       if (
         _args[0] === 'git status' && trim_arg.startsWith('modified:')
         || _args[0] === 'git status' && trim_arg.startsWith('deleted:')
+        || _args[0] === 'git status' && trim_arg.startsWith('new file:')
       ) {
         fix2 = 6
       }

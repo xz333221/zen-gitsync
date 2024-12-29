@@ -48,3 +48,17 @@ $ g --path=./
 ```bash
 $ g --cwd=./
 ```
+
+#### 添加项目script
+```json
+{
+   "scripts": {
+      "g:y": "g -y"
+   }
+}
+```
+
+#### cmd同步文件夹
+```shell
+start /min cmd /k "g -y --path=你要同步的文件夹 --interval"
+```

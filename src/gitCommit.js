@@ -4,6 +4,8 @@ import {exec, execSync} from 'child_process'
 import os from 'os'
 import {coloredLog} from './utils/index.js';
 import readline from 'readline'
+import ora from 'ora';
+import chalk from 'chalk';
 
 let timer = null
 
@@ -103,8 +105,10 @@ class GitCommit {
   exec_push() {
     // 执行 git push
     // this.execSyncGitCommand(`git push`);
+    const spinner = ora('正在推送代码...').start();
     this.execGitCommand('git push', {}, (error, stdout, stderr) => {
-      console.log('提交完成。')
+      spinner.stop();
+      console.log(chalk.green.bold('✔ SUCCESS: 提交完成。')); // 使用绿色对勾图标
       this.execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
       this.exec_exit();
     })
