@@ -21,6 +21,8 @@ npm install -g zen-gitsync
 1. 在终端中，输入 `g` 并按回车。
 2. 输入提交信息，按回车确认提交。
 3. 工具将自动执行以下操作：
+    - `git status .`
+    - `git diff .`
     - `git add .`
     - `git commit -m "你的提交信息"`
     - `git push`
@@ -61,4 +63,9 @@ $ g --cwd=./
 #### cmd同步文件夹
 ```shell
 start /min cmd /k "g -y --path=你要同步的文件夹 --interval"
+```
+
+#### 不显示git diff内容
+```shell
+$ g --no-diff
 ```

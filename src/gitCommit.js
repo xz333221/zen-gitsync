@@ -74,7 +74,11 @@ class GitCommit {
         }
         return
       }
-      this.execSyncGitCommand('git diff')
+
+      const no_diff = process.argv.find(arg => arg.startsWith('--no-diff'))
+      if(!no_diff){
+        this.execSyncGitCommand('git diff')
+      }
 
       // 检查命令行参数，判断是否有 -y 参数
       const autoCommit = process.argv.includes('-y');

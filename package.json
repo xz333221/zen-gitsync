@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "1.2.9",
+  "version": "1.3.0",
   "description": "控制台输入g，回车，输入提交内容，自动执行git add+commit+push",
   "main": "index.js",
   "type": "module",
@@ -9,7 +9,8 @@
     "g:y": "node ./src/gitCommit.js -y",
     "g:y:interval": "node ./src/gitCommit.js -y --interval",
     "g:y:interval10": "node ./src/gitCommit.js -y --interval=10",
-    "g:cwd": "node ./src/gitCommit.js --path=./"
+    "g:cwd": "node ./src/gitCommit.js --path=./",
+    "g:no-diff": "node ./src/gitCommit.js --no-diff"
   },
   "files": [
     "src/gitCommit.js",
