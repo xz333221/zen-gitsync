@@ -1,12 +1,7 @@
 
 # zen-gitsync
 
-`zen-gitsync` 是一个简单的命令行工具，用于自动化 Git 提交和推送操作。只需在控制台输入 `g`，即可自动执行 `git add`、`git commit` 和 `git push` 操作，极大提升 Git 工作流程的效率。
-
-## 特性
-
-- 一键执行 `git add`、`git commit`、`git push`
-- 使用交互式命令行输入提交信息
+`zen-gitsync` 是一个简单的命令行工具，用于自动化 Git 提交和推送操作。只需在控制台输入 `g`，并输入提交内容，即可自动执行 `git add`、`git commit` 和 `git push` 操作，极大提升 Git 工作流程的效率。
 
 ## 安装
 
@@ -21,8 +16,6 @@ npm install -g zen-gitsync
 1. 在终端中，输入 `g` 并按回车。
 2. 输入提交信息，按回车确认提交。
 3. 工具将自动执行以下操作：
-    - `git status .`
-    - `git diff .`
     - `git add .`
     - `git commit -m "你的提交信息"`
     - `git push`
