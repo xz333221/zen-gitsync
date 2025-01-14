@@ -113,9 +113,8 @@ class GitCommit {
 
       // 使用 boxen 绘制带边框的消息
       let msg = ` SUCCESS: 提交完成 
-      message: ${this.commitMessage || '提交'}
-      time: ${new Date().toLocaleString()}
-      `
+ message: ${this.commitMessage || '提交'} 
+ time: ${new Date().toLocaleString()} `
       const message = chalk.green.bold(msg);
       const box = boxen(message, {
         // borderStyle: 'round', // 方框的样式
