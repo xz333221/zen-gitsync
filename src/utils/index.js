@@ -81,36 +81,41 @@ const coloredLog = (...args) => {
   _args.map(async (arg, i) => {
     let _color = color;
     let trim_arg = arg.trim();
+    let fix2 = 0
+    if (_args[0] === 'git status') {
+      if(arg.startsWith(' ')){
+        // _color = '\x1b[36m';
+      }
+      if(arg.startsWith('\t')){
+        _color = '\x1b[31m';
+        if (trim_arg.startsWith('new file:')) {
+          _color = '\x1b[31m';
+        }
+        if (trim_arg.startsWith('modified:')) {
+          _color = '\x1b[32m';
+        }
+        if (trim_arg.startsWith('deleted:')) {
+          _color = '\x1b[31m';
+        }
+      }
+    }
     if (_args[0] === 'git diff' && arg.startsWith('-')) {
       _color = '\x1b[31m';
     }
-    if (_args[0] === 'git status' && trim_arg.startsWith('new file:')) {
-      _color = '\x1b[31m';
-    }
+
     if (_args[0] === 'git diff' && arg.startsWith('+')) {
       _color = '\x1b[32m';
-    }
-    if (_args[0] === 'git status' && trim_arg.startsWith('modified:')) {
-      _color = '\x1b[32m';
-    }
-    if (_args[0] === 'git status' && trim_arg.startsWith('deleted:')) {
-      _color = '\x1b[31m';
     }
     if (_args[0] === 'git diff' && arg.startsWith('@@ ')) {
       _color = '\x1b[36m';
     }
     // 测试边框
     let fix_end = ''
+    arg = arg.replaceAll('\t', '      ')
     let length = stringWidth(arg);
+
     // if (length < terminalWidth) {
-      let fix2 = 0
-      if (
-        _args[0] === 'git status' && trim_arg.startsWith('modified:')
-        || _args[0] === 'git status' && trim_arg.startsWith('deleted:')
-        || _args[0] === 'git status' && trim_arg.startsWith('new file:')
-      ) {
-        fix2 = 6
-      }
+
       if (i === 0) {
         fix2 = 2
       }
