@@ -111,15 +111,15 @@ const calcColor = (commandLine, str) => {
       }
       break;
     case 'git diff':
-      if (str.startsWith('-')) {
-        color = 'red'
-      }
-      if (str.startsWith('+')) {
-        color = 'green'
-      }
-      if (str.startsWith('@@ ')) {
-        color = 'cyan'
-      }
+      // if (str.startsWith('---')) {
+      //   color = 'red'
+      // }
+      // if (str.startsWith('+++')) {
+      //   color = 'green'
+      // }
+      // if (str.startsWith('@@ ')) {
+      //   color = 'cyan'
+      // }
       break;
   }
   return color
@@ -138,7 +138,7 @@ const tableLog = (commandLine, content, type) => {
       content = content.toString().split('\n')
       head = chalk.bold.red(handle_commandLine)
       break;
-    case 'log':
+    case 'common':
       style.head = ['blue'];
       content = content.split('\n')
       break;
@@ -157,12 +157,7 @@ const coloredLog = (...args) => {
   // 获取参数内容
   const commandLine = args[0];
   const content = args[1];
-  const type = args[2] || 'log';
-
-
+  const type = args[2] || 'common';
   tableLog(commandLine, content, type);
-
-  // console.log(`args ==> `, args)
-
 }
 export {coloredLog};

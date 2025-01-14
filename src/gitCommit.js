@@ -83,7 +83,9 @@ class GitCommit {
 
       const no_diff = process.argv.find(arg => arg.startsWith('--no-diff'))
       if(!no_diff){
-        this.execSyncGitCommand('git diff')
+        this.execSyncGitCommand('git diff --color=always', {
+          head: `git diff`
+        })
       }
 
       // 检查命令行参数，判断是否有 -y 参数
@@ -120,7 +122,9 @@ class GitCommit {
     }
     const logCommand = `git log -n ${n} --pretty=format:"%C(green)%h%C(reset) | %C(cyan)%an%C(reset) | %C(yellow)%ad%C(reset) | %C(blue)%D%C(reset) | %C(magenta)%s%C(reset)" --date=format:"%Y-%m-%d %H:%M" --graph --decorate --color`
     try {
-      const logOutput = this.execSyncGitCommand(logCommand);
+      const logOutput = this.execSyncGitCommand(logCommand, {
+        head: `git log`
+      });
       // // 格式化输出 Git 提交记录
       // const box = boxen(chalk.green.bold(logOutput), {
       //   borderStyle: 'round',
@@ -161,14 +165,14 @@ class GitCommit {
 
   execSyncGitCommand(command, options = {}) {
     try {
-      let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024} = options
+      let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command} = options
       let cwd = getCwd()
       const output = execSync(command, {encoding, maxBuffer, cwd})
       if(options.spinner){
         options.spinner.stop();
       }
       let result = output.trim()
-      coloredLog(command, result)
+      coloredLog(head, result)
       return result
     } catch (e) {
       console.log(`执行命令出错 ==> `, command, e)
