@@ -108,7 +108,8 @@ const calcColor = (commandLine, str) => {
   return color
 }
 const tableLog = (commandLine, content, type) => {
-  let head = chalk.bold(chalk.blue(commandLine))
+  let handle_commandLine = `> ${commandLine}`
+  let head = chalk.bold.blue(handle_commandLine)
   let style = {
     // head: ['cyan'], // 表头文字颜色为cyan
     // border: ['whiteBright'],         // 边框颜色
@@ -118,7 +119,7 @@ const tableLog = (commandLine, content, type) => {
     case 'error':
       style.head = ['red'];
       content = content.toString().split('\n')
-      head = chalk.bold(chalk.red(commandLine))
+      head = chalk.bold.red(handle_commandLine)
       break;
     case 'log':
       style.head = ['blue'];
@@ -132,7 +133,6 @@ const tableLog = (commandLine, content, type) => {
     let row = item.replaceAll('\t', '      ')
     return chalk[fontColor](row)
   })
-  commandLine = `> ${commandLine}`
 
   printTableWithHeaderUnderline(head, content, style)
 }
