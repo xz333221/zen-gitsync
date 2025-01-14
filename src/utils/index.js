@@ -18,32 +18,40 @@ import stringWidth from 'string-width';
 import Table from 'cli-table3';
 import chalk from 'chalk';
 
-const printTableWithHeaderUnderline = () => {
+const printTableWithHeaderUnderline = (head, content, style) => {
   // 获取终端的列数（宽度）
   const terminalWidth = process.stdout.columns;
 
   // 计算表格的宽度，保证至少有 2 个字符留给边框
-  const tableWidth = terminalWidth - 4; // 4 是左右边框和分隔符的宽度
+  const tableWidth = terminalWidth - 2; // 左右边框和分隔符的宽度
 
   // 计算每列的宽度
   const colWidths = [tableWidth]; // 只有一列，因此宽度设置为终端宽度
 
-  const table = new Table({
-    head: ['Name'],  // 只有一个表头
-    colWidths,       // 使用动态计算的列宽
-    style: {
-      head: ['cyan'], // 表头文字颜色为cyan
-      border: ['yellow'],         // 边框颜色为黄色
+  if (!style) {
+    style = {
+      // head: ['cyan'], // 表头文字颜色为cyan
+      // border: ['white'],         // 边框颜色
       compact: true,              // 启用紧凑模式，去掉不必要的空白
-    },
+    }
+  }
+  // 创建表格实例
+  const table = new Table({
+    head: [head],  // 只有一个表头
+    colWidths,       // 使用动态计算的列宽
+    style: style,
     wordWrap: true,  // 启用自动换行
   });
 
   // 向表格中添加不同颜色的行
-  table.push(
-    [chalk.red('张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三')],
-    [chalk.green('李四')],
-  );
+  // eg:
+  // table.push(
+  //   [chalk.red('张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三')],
+  //   [chalk.green('李四')],
+  // );
+  content.forEach(item => {
+    table.push([item]);
+  })
 
   console.log(table.toString()); // 输出表格
 };
@@ -68,77 +76,75 @@ function getRandomColor() {
 function resetColor() {
   return '\x1b[0m';
 }
+const calcColor = (commandLine, str) => {
+  let color = 'reset'
+  switch (commandLine) {
+    case 'git status':
+      if (str.startsWith('\t')) {
+        color = 'red'
+        if (str.startsWith('new file:')) {
+          color = 'red'
+        }
+        if (str.startsWith('modified:')) {
+          color = 'green'
+        }
+        if (str.startsWith('deleted:')) {
+          color = 'red'
+        }
+      }
+      break;
+    case 'git diff':
+      if (str.startsWith('-')) {
+        color = 'red'
+      }
+      if (str.startsWith('+')) {
+        color = 'green'
+      }
+      if (str.startsWith('@@ ')) {
+        color = 'cyan'
+      }
+      break;
+  }
+  return color
+}
+const tableLog = (commandLine, content, type) => {
 
+  let style = {
+    // head: ['cyan'], // 表头文字颜色为cyan
+    // border: ['whiteBright'],         // 边框颜色
+    compact: true,              // 启用紧凑模式，去掉不必要的空白
+  }
+  switch (type) {
+    case 'error':
+      style.head = ['red'];
+      content = content.toString().split('\n')
+      break;
+    case 'log':
+      style.head = ['blue'];
+      content = content.split('\n')
+      break;
+    default:
+      break;
+  }
+  content = content.map(item => {
+    let fontColor = calcColor(commandLine, item)
+    let row = item.replaceAll('\t', '      ')
+    return chalk[fontColor](row)
+  })
+  commandLine = `> ${commandLine}`
+  let head = chalk.bold(chalk.blue(commandLine))
+  printTableWithHeaderUnderline(head, content, style)
+}
 const coloredLog = (...args) => {
-  const color = getRandomColor();
-  // 获取控制台的宽度
-  const terminalWidth = process.stdout.columns;
+  // 获取参数内容
+  const commandLine = args[0];
+  const content = args[1];
+  const type = args[2] || 'log';
 
-  const start_line = '┌' + '─'.repeat(terminalWidth - 2) + '┐';
-  const end_line = '└' + '─'.repeat(terminalWidth - 2) + '┘';
-  console.log(`args ==> `, args)
-  let _args = args.filter(arg => !!arg).map(arg => arg.split('\n')).flat().filter(arg => arg.trim() !== '');
-  console.log(start_line);
-  _args.map(async (arg, i) => {
-    let _color = color;
-    let trim_arg = arg.trim();
-    let fix2 = 0
-    if (_args[0] === 'git status') {
-      if(arg.startsWith(' ')){
-        // _color = '\x1b[36m';
-      }
-      if(arg.startsWith('\t')){
-        _color = '\x1b[31m';
-        if (trim_arg.startsWith('new file:')) {
-          _color = '\x1b[31m';
-        }
-        if (trim_arg.startsWith('modified:')) {
-          _color = '\x1b[32m';
-        }
-        if (trim_arg.startsWith('deleted:')) {
-          _color = '\x1b[31m';
-        }
-      }
-    }
-    if (_args[0] === 'git diff' && arg.startsWith('-')) {
-      _color = '\x1b[31m';
-    }
 
-    if (_args[0] === 'git diff' && arg.startsWith('+')) {
-      _color = '\x1b[32m';
-    }
-    if (_args[0] === 'git diff' && arg.startsWith('@@ ')) {
-      _color = '\x1b[36m';
-    }
-    // 测试边框
-    let fix_end = ''
-    arg = arg.replaceAll('\t', '      ')
-    let length = stringWidth(arg);
+  tableLog(commandLine, content, type);
 
-    // if (length < terminalWidth) {
+  // console.log(`args ==> `, args)
 
-      if (i === 0) {
-        fix2 = 2
-      }
-      let repeatLen = terminalWidth - length - 3 - fix2
-      if (repeatLen < 0) {
-        // repeatLen += terminalWidth
-        repeatLen = repeatLen % terminalWidth + terminalWidth
-      }
-      fix_end = ' '.repeat(repeatLen)
-      fix_end += "│"
-    // }
-    // console.log(`fix_end ==> `, fix_end)
-    if (i === 0) {
-      console.log(`│ \x1b[1m\x1b[34m> ${arg}\x1b[22m\x1b[39m${fix_end}`);
-      let mid = '├' + '─'.repeat(terminalWidth - 2) + '┤';
-      console.log(mid);
-    } else {
-      if (arg.trim().length > 0) {
-        console.log(`│${_color} ${arg}${resetColor()}${fix_end}`);
-      }
-    }
-  });
-  console.log(end_line);
 }
 export {coloredLog};

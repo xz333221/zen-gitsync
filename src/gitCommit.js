@@ -157,7 +157,7 @@ class GitCommit {
         options.spinner.stop();
       }
       if (error) {
-        coloredLog(command, error)
+        coloredLog(command, error, 'error')
         return
       }
       if (stdout) {
