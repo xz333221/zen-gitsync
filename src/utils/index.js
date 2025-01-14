@@ -76,6 +76,7 @@ const coloredLog = (...args) => {
 
   const start_line = '┌' + '─'.repeat(terminalWidth - 2) + '┐';
   const end_line = '└' + '─'.repeat(terminalWidth - 2) + '┘';
+  console.log(`args ==> `, args)
   let _args = args.filter(arg => !!arg).map(arg => arg.split('\n')).flat().filter(arg => arg.trim() !== '');
   console.log(start_line);
   _args.map(async (arg, i) => {
