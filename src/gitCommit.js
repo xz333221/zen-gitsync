@@ -65,6 +65,12 @@ class GitCommit {
     try {
       judgePlatform()
 
+      const logArg = process.argv.find(arg => arg === 'log');
+      if (logArg) {
+        await this.printGitLog(); // 如果有 log 参数，打印 Git 提交记录
+        return;
+      }
+
       this.statusOutput = this.execSyncGitCommand('git status')
       if (this.statusOutput.includes('nothing to commit, working tree clean')) {
         if (this.statusOutput.includes('use "git push')) {
@@ -105,6 +111,27 @@ class GitCommit {
     } catch (e) {
       console.log(`e ==> `, e)
     }
+  }
+  async printGitLog() {
+    let n = 20;
+    let logArg = process.argv.find(arg => arg.startsWith('--n='));
+    if (logArg) {
+      n = parseInt(logArg.split('=')[1], 10);
+    }
+    const logCommand = `git log -n ${n} --pretty=format:"%C(green)%h%C(reset) | %C(cyan)%an%C(reset) | %C(yellow)%ad%C(reset) | %C(blue)%D%C(reset) | %C(magenta)%s%C(reset)" --date=format:"%Y-%m-%d %H:%M" --graph --decorate --color`
+    try {
+      const logOutput = this.execSyncGitCommand(logCommand);
+      // // 格式化输出 Git 提交记录
+      // const box = boxen(chalk.green.bold(logOutput), {
+      //   borderStyle: 'round',
+      //   borderColor: 'cyan',
+      //   backgroundColor: 'black',
+      // });
+      // console.log(box); // 打印优雅的 Git 提交记录
+    } catch (error) {
+      console.error('无法获取 Git 提交记录:', error.message);
+    }
+    this.exec_exit(); // 打印完成后退出
   }
 
   exec_push() {

@@ -62,3 +62,9 @@ start /min cmd /k "g -y --path=你要同步的文件夹 --interval"
 ```shell
 $ g --no-diff
 ```
+
+#### 格式化打印git log
+```shell
+$ g log
+$ g log --n=5
+```

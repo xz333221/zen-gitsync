@@ -41,6 +41,23 @@ const printTableWithHeaderUnderline = (head, content, style) => {
     colWidths,       // 使用动态计算的列宽
     style: style,
     wordWrap: true,  // 启用自动换行
+    // chars: {
+    //   'top': '═',       // 顶部边框使用长横线
+    //   'top-mid': '╤',   // 顶部连接符
+    //   'top-left': '╔',   // 左上角
+    //   'top-right': '╗',  // 右上角
+    //   'bottom': '═',    // 底部边框
+    //   'bottom-mid': '╧', // 底部连接符
+    //   'bottom-left': '╚',// 左下角
+    //   'bottom-right': '╝',// 右下角
+    //   'left': '║',      // 左边框
+    //   'left-mid': '╟',  // 左连接符
+    //   'mid': '═',       // 中间分隔符
+    //   'mid-mid': '╪',   // 中间连接符
+    //   'right': '║',     // 右边框
+    //   'right-mid': '╢', // 右连接符
+    //   'middle': '│'     // 中间内容的边界
+    // }
   });
 
   // 向表格中添加不同颜色的行
@@ -112,7 +129,7 @@ const tableLog = (commandLine, content, type) => {
   let head = chalk.bold.blue(handle_commandLine)
   let style = {
     // head: ['cyan'], // 表头文字颜色为cyan
-    // border: ['whiteBright'],         // 边框颜色
+    border: [chalk.reset()],         // 边框颜色
     compact: true,              // 启用紧凑模式，去掉不必要的空白
   }
   switch (type) {
