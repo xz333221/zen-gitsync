@@ -51,6 +51,7 @@ class GitCommit {
   constructor(options) {
     this.statusOutput = null
     this.exit = options.exit
+    this.commitMessage = `提交`
     this.init()
   }
 
@@ -77,11 +78,10 @@ class GitCommit {
 
       // 检查命令行参数，判断是否有 -y 参数
       const autoCommit = process.argv.includes('-y');
-      let commitMessage = '提交'; // 默认提交信息
 
       if (!autoCommit) {
         // 如果没有 -y 参数，则等待用户输入提交信息
-        commitMessage = await question('请输入提交信息：');
+        this.commitMessage = await question('请输入提交信息：');
       }
 
       // 执行 git add .
@@ -89,7 +89,7 @@ class GitCommit {
 
       // 执行 git commit
       if (this.statusOutput.includes('Untracked files:') || this.statusOutput.includes('Changes not staged for commit') || this.statusOutput.includes('Changes to be committed')) {
-        this.execSyncGitCommand(`git commit -m "${commitMessage || '提交'}"`)
+        this.execSyncGitCommand(`git commit -m "${this.commitMessage || '提交'}"`)
       }
 
       // 检查是否需要拉取更新
@@ -112,7 +112,10 @@ class GitCommit {
     }, (error, stdout, stderr) => {
 
       // 使用 boxen 绘制带边框的消息
-      const message = chalk.green.bold(' SUCCESS: 提交完成 ');
+      let msg = ` SUCCESS: 提交完成 
+ message: ${this.commitMessage || '提交'} 
+ time: ${new Date().toLocaleString()} `
+      const message = chalk.green.bold(msg);
       const box = boxen(message, {
         // borderStyle: 'round', // 方框的样式
         // borderColor: 'whiteBright', // 边框颜色
@@ -120,7 +123,7 @@ class GitCommit {
       });
 
       console.log(box); // 打印带有边框的消息
-      this.execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
+      // this.execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
       this.exec_exit();
     })
   }
