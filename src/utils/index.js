@@ -31,7 +31,7 @@ const printTableWithHeaderUnderline = (head, content, style) => {
   if (!style) {
     style = {
       // head: ['cyan'], // 表头文字颜色为cyan
-      // border: ['white'],         // 边框颜色
+      border: [chalk.reset()],         // 边框颜色
       compact: true,              // 启用紧凑模式，去掉不必要的空白
     }
   }
