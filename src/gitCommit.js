@@ -170,11 +170,22 @@ class GitCommit {
     if (parseInt(behindCount) > 0) {
       try {
         const spinner = ora('发现远程更新，正在拉取...').start();
-        this.execGitCommandAsync('git pull --ff-only', {
+        // 尝试使用 --ff-only 拉取更新
+        this.execGitCommand('git pull --ff-only', {
           spinner,
           head: 'Pulling updates'
+        }, (error, stdout, stderr) => {
+          if (error) {
+            // 如果 --ff-only 拉取失败，尝试普通的 git pull
+            console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
+            this.execGitCommand('git pull', {
+              spinner,
+              head: 'Pulling updates'
+            });
+          } else {
+            console.log(chalk.green('✓ 已成功同步远程更新'));
+          }
         });
-        console.log(chalk.green('✓ 已成功同步远程更新'));
       } catch (pullError) {
         console.log(chalk.yellow('⚠️ 无法自动合并远程更改，可能存在冲突'));
         console.log(chalk.yellow('建议手动执行 git pull 并解决可能的冲突'));
