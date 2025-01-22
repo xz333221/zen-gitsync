@@ -30,18 +30,30 @@ $ g
 ```bash
 $ g -y
 ```
+#### 传入message直接提交：
+```bash
+$ g -m <message>
+$ g -m=<message>
+```
+
+#### 查看帮助
+```shell
+$ g -h
+$ g --help
+```
+
 #### 定时执行自动提交，默认间隔1小时
 ```bash
 $ g -y --interval
-$ g -y --interval=秒数 
+$ g -y --interval=<seconds> 
 ```
 #### 指定目录提交
 ```bash
-$ g --path=./
+$ g --path=<path> 
 ```
 或
 ```bash
-$ g --cwd=./
+$ g --cwd=<path> 
 ```
 
 #### 添加项目script

@@ -2,14 +2,14 @@
 
 import {exec, execSync} from 'child_process'
 import os from 'os'
-import {coloredLog} from './utils/index.js';
+import {coloredLog, errorLog} from './utils/index.js';
 import readline from 'readline'
 import ora from 'ora';
 import chalk from 'chalk';
 import boxen from 'boxen';
 import config from './config.js'
 
-const { defaultCommitMessage } = config
+const {defaultCommitMessage} = config
 
 let timer = null
 const showHelp = () => {
@@ -24,8 +24,8 @@ Options:
   --path=<path>           Set custom working directory
   --cwd=<path>            Set custom working directory
   --interval=<seconds>    Set interval time for automatic commits (in seconds)
-  --log                   Show git commit logs
-  --n=<number>            Number of commits to show with --log
+  log                     Show git commit logs
+    --n=<number>          Number of commits to show with --log
   --no-diff               Skip displaying git diff
 
 Example:
@@ -34,8 +34,8 @@ Example:
   g -y                       Auto commit with the default message
   g --path=/path/to/repo     Specify a custom working directory
   g --interval=600           Commit every 10 minutes (600 seconds)
-  g --log                    Show recent commit logs
-  g --n=5                    Show the last 5 commits with --log
+  g log                      Show recent commit logs
+  g log --n=5                Show the last 5 commits with --log
 
 Add auto submit in package.json:
   "scripts": {
@@ -100,83 +100,151 @@ class GitCommit {
       process.exit()
     }
   }
+  judgeLog() {
+    const logArg = process.argv.find(arg => arg === 'log');
+    if (logArg) {
+      this.printGitLog(); // 如果有 log 参数，打印 Git 提交记录
+      return true;
+    }
+  }
+  judgeHelp() {
+    if (process.argv.includes('-h') || process.argv.includes('--help')) {
+      showHelp();
+      return true;
+    }
+  }
+  execDiff() {
+    const no_diff = process.argv.find(arg => arg.startsWith('--no-diff'))
+    if (!no_diff) {
+      this.execSyncGitCommand('git diff --color=always', {
+        head: `git diff`
+      })
+    }
+  }
+  async execAddAndCommit() {
+    // 检查 -m 参数（提交信息）
+    const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
+    if (commitMessageArg) {
+      if (commitMessageArg.includes('=')) {
+        // 处理 -m=<message> 的情况
+        this.commitMessage = commitMessageArg.split('=')[1]?.replace(/^['"]|['"]$/g, '') || defaultCommitMessage;
+      } else {
+        // 处理 -m <message> 的情况
+        const index = process.argv.indexOf(commitMessageArg);
+        if (index !== -1 && process.argv[index + 1]) {
+          this.commitMessage = process.argv[index + 1]?.replace(/^['"]|['"]$/g, '') || defaultCommitMessage;
+        }
+      }
+    }
+
+    // 检查命令行参数，判断是否有 -y 参数
+    const autoCommit = process.argv.includes('-y');
+
+    if (!autoCommit && !commitMessageArg) {
+      // 如果没有 -y 参数，则等待用户输入提交信息
+      this.commitMessage = await question('请输入提交信息：');
+    }
+
+    this.statusOutput.includes('(use "git add') && this.execSyncGitCommand('git add .')
+
+    // 执行 git commit
+    if (this.statusOutput.includes('Untracked files:') || this.statusOutput.includes('Changes not staged for commit') || this.statusOutput.includes('Changes to be committed')) {
+      this.execSyncGitCommand(`git commit -m "${this.commitMessage || defaultCommitMessage}"`)
+    }
+  }
+  judgeRemote() {
+    // 检查是否有远程更新
+    try {
+      const remoteBranch = this.execSyncGitCommand('git rev-parse --abbrev-ref --symbolic-full-name @{u}', {
+        head: 'Checking remote branch'
+      }).trim();
+
+      // 获取本地和远程的 commit hash
+      const localHash = this.execSyncGitCommand('git rev-parse HEAD', {
+        head: 'Getting local hash'
+      }).trim();
+
+      const remoteHash = this.execSyncGitCommand(`git rev-parse ${remoteBranch}`, {
+        head: 'Getting remote hash'
+      }).trim();
+
+      // 如果本地落后于远程
+      if (localHash !== remoteHash) {
+        // 先尝试以 --ff-only 方式拉取
+        try {
+          const spinner = ora('发现远程更新，尝试快速合并...').start();
+          this.execGitCommandAsync('git pull --ff-only', {
+            spinner,
+            head: 'Trying fast-forward pull'
+          });
+          console.log(chalk.green('✓ 已成功同步远程更新'));
+        } catch (pullError) {
+          // 如果快速合并失败，提示用户手动处理
+          console.log(chalk.yellow('⚠️ 无法自动合并远程更改，可能存在冲突'));
+          console.log(chalk.yellow('建议手动执行 git pull 并解决可能的冲突'));
+          process.exit(0);
+        }
+      }
+    } catch (error) {
+      // 处理检查远程分支时的错误
+      if (error.message.includes('no upstream')) {
+        console.log(chalk.yellow('⚠️ 当前分支没有关联的远程分支'));
+      } else {
+        console.error(chalk.red('检查更新失败:', error.message));
+      }
+    }
+  }
 
   async init() {
     try {
       judgePlatform()
 
-      const logArg = process.argv.find(arg => arg === 'log');
-      if (logArg) {
-        await this.printGitLog(); // 如果有 log 参数，打印 Git 提交记录
-        return;
-      }
+      // 检查是否有 log 参数
+      if(this.judgeLog()) return
 
       // 检查帮助参数
-      if (process.argv.includes('-h') || process.argv.includes('--help')) {
-        showHelp();
-        return;
-      }
+      if(this.judgeHelp()) return
 
       this.statusOutput = this.execSyncGitCommand('git status')
-      if (this.statusOutput.includes('nothing to commit, working tree clean')) {
+      // 先检查本地是否有未提交的更改
+      const hasLocalChanges = !this.statusOutput.includes('nothing to commit, working tree clean');
+      if (hasLocalChanges) {
+        // 检查是否有 --no-diff 参数
+        this.execDiff()
+
+        await this.execAddAndCommit()
+
+        // 检查是否需要拉取更新
+        this.statusOutput.includes('use "git pull') && this.execSyncGitCommand('git pull')
+
+        // 检查是否有远程更新
+        this.judgeRemote()
+
+        this.exec_push()
+
+      }else{
         if (this.statusOutput.includes('use "git push')) {
           this.exec_push()
         } else {
+          this.judgeRemote()
           this.exec_exit();
         }
-        return
       }
-
-      const no_diff = process.argv.find(arg => arg.startsWith('--no-diff'))
-      if(!no_diff){
-        this.execSyncGitCommand('git diff --color=always', {
-          head: `git diff`
-        })
-      }
-
-      // 检查 -m 参数（提交信息）
-      const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
-      if (commitMessageArg) {
-        if (commitMessageArg.includes('=')) {
-          // 处理 -m=<message> 的情况
-          this.commitMessage = commitMessageArg.split('=')[1]?.replace(/^['"]|['"]$/g, '') || defaultCommitMessage;
-        } else {
-          // 处理 -m <message> 的情况
-          const index = process.argv.indexOf(commitMessageArg);
-          if (index !== -1 && process.argv[index + 1]) {
-            this.commitMessage = process.argv[index + 1]?.replace(/^['"]|['"]$/g, '') || defaultCommitMessage;
-          }
-        }
-      }
-
-
-
-      // 检查命令行参数，判断是否有 -y 参数
-      const autoCommit = process.argv.includes('-y');
-
-      if (!autoCommit && !commitMessageArg) {
-        // 如果没有 -y 参数，则等待用户输入提交信息
-        this.commitMessage = await question('请输入提交信息：');
-      }
-
-      // 执行 git add .
-      this.statusOutput.includes('(use "git add') && this.execSyncGitCommand('git add .')
-
-      // 执行 git commit
-      if (this.statusOutput.includes('Untracked files:') || this.statusOutput.includes('Changes not staged for commit') || this.statusOutput.includes('Changes to be committed')) {
-        this.execSyncGitCommand(`git commit -m "${this.commitMessage || defaultCommitMessage}"`)
-      }
-
-      // 检查是否需要拉取更新
-      this.statusOutput.includes('use "git pull') && this.execSyncGitCommand('git pull')
-
-      this.exec_push()
-
-
     } catch (e) {
-      console.log(`e ==> `, e)
+      // console.log(`e ==> `, e)
+      // console.log(`e.message ==> `, e.message)
+      // 应该提供更具体的错误信息
+      // console.error('Git operation failed:', e.message);
+      // 考虑不同错误类型的处理
+      if (e.message.includes('not a git repository')) {
+        errorLog('错误', '当前目录不是git仓库')
+      } else if (e.message.includes('Permission denied')) {
+        errorLog('错误', '权限不足，请检查git配置')
+      }
+      process.exit(1);
     }
   }
+
   async printGitLog() {
     let n = 20;
     let logArg = process.argv.find(arg => arg.startsWith('--n='));
@@ -231,14 +299,15 @@ class GitCommit {
       let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command} = options
       let cwd = getCwd()
       const output = execSync(command, {encoding, maxBuffer, cwd})
-      if(options.spinner){
+      if (options.spinner) {
         options.spinner.stop();
       }
       let result = output.trim()
       coloredLog(head, result)
       return result
     } catch (e) {
-      console.log(`执行命令出错 ==> `, command, e)
+      // console.log(`执行命令出错 ==> `, command, e)
+      coloredLog(command, e, 'error')
       throw new Error(e)
     }
   }
@@ -247,7 +316,7 @@ class GitCommit {
     let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024} = options
     let cwd = getCwd()
     exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
-      if(options.spinner){
+      if (options.spinner) {
         options.spinner.stop();
       }
       if (error) {

@@ -17,6 +17,7 @@
 import stringWidth from 'string-width';
 import Table from 'cli-table3';
 import chalk from 'chalk';
+import boxen from "boxen";
 
 const printTableWithHeaderUnderline = (head, content, style) => {
   // 获取终端的列数（宽度）
@@ -160,4 +161,12 @@ const coloredLog = (...args) => {
   const type = args[2] || 'common';
   tableLog(commandLine, content, type);
 }
-export {coloredLog};
+const errorLog = (commandLine, content) => {
+  // 使用 boxen 绘制带边框的消息
+  let msg = ` FAIL ${commandLine}
+ content: ${content} `
+  const message = chalk.red.bold(msg);
+  const box = boxen(message);
+  console.log(box); // 打印带有边框的消息
+}
+export {coloredLog, errorLog};
