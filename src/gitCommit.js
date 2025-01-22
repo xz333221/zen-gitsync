@@ -120,6 +120,7 @@ class GitCommit {
           head: `git diff`
         })
       }
+
       // 检查 -m 参数（提交信息）
       const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
       if (commitMessageArg) {
