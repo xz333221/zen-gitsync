@@ -17,26 +17,39 @@ const showHelp = () => {
 Usage: g [options]
 
 Options:
-  -h, --help          Show this help message
-  -y                  Auto commit with default message
-  --path=<path>       Set custom working directory
-  --cwd=<path>        Set custom working directory
-  --interval=<seconds> Set interval time for automatic commits
-  --log               Show git commit logs
-  --n=<number>        Number of commits to show with --log
-  --no-diff           Skip displaying git diff
+  -h, --help              Show this help message
+  -y                      Auto commit with default message
+  -m <message>            Commit message (use quotes if message contains spaces)
+  -m=<message>            Commit message (use this form without spaces around '=')
+  --path=<path>           Set custom working directory
+  --cwd=<path>            Set custom working directory
+  --interval=<seconds>    Set interval time for automatic commits (in seconds)
+  --log                   Show git commit logs
+  --n=<number>            Number of commits to show with --log
+  --no-diff               Skip displaying git diff
 
-Add auto submit in package.json
+Example:
+  g -m "Initial commit"      Commit with a custom message
+  g -m=Fix-bug               Commit with a custom message (no spaces around '=')
+  g -y                       Auto commit with the default message
+  g --path=/path/to/repo     Specify a custom working directory
+  g --interval=600           Commit every 10 minutes (600 seconds)
+  g --log                    Show recent commit logs
+  g --n=5                    Show the last 5 commits with --log
+
+Add auto submit in package.json:
   "scripts": {
     "g:y": "g -y"
   }
-cmd sync folder
+
+Start a background process for automatic commits:
   start /min cmd /k "g -y --path=your-folder --interval"
   `;
 
   console.log(helpMessage);
   process.exit();
 };
+
 const judgePlatform = () => {
   // 判断是否是 Windows 系统
   if (os.platform() === 'win32') {
