@@ -154,43 +154,29 @@ class GitCommit {
   }
   judgeRemote() {
     // 检查是否有远程更新
-    try {
-      const remoteBranch = this.execSyncGitCommand('git rev-parse --abbrev-ref --symbolic-full-name @{u}', {
-        head: 'Checking remote branch'
-      }).trim();
+    // 先获取远程最新状态
+    this.execSyncGitCommand('git remote update', {
+      head: 'Fetching remote updates'
+    });
 
-      // 获取本地和远程的 commit hash
-      const localHash = this.execSyncGitCommand('git rev-parse HEAD', {
-        head: 'Getting local hash'
-      }).trim();
+    // 检查是否需要 pull
+    const behindCount = this.execSyncGitCommand('git rev-list HEAD..@{u} --count', {
+      head: 'Checking if behind remote'
+    }).trim();
 
-      const remoteHash = this.execSyncGitCommand(`git rev-parse ${remoteBranch}`, {
-        head: 'Getting remote hash'
-      }).trim();
-
-      // 如果本地落后于远程
-      if (localHash !== remoteHash) {
-        // 先尝试以 --ff-only 方式拉取
-        try {
-          const spinner = ora('发现远程更新，尝试快速合并...').start();
-          this.execGitCommandAsync('git pull --ff-only', {
-            spinner,
-            head: 'Trying fast-forward pull'
-          });
-          console.log(chalk.green('✓ 已成功同步远程更新'));
-        } catch (pullError) {
-          // 如果快速合并失败，提示用户手动处理
-          console.log(chalk.yellow('⚠️ 无法自动合并远程更改，可能存在冲突'));
-          console.log(chalk.yellow('建议手动执行 git pull 并解决可能的冲突'));
-          process.exit(0);
-        }
-      }
-    } catch (error) {
-      // 处理检查远程分支时的错误
-      if (error.message.includes('no upstream')) {
-        console.log(chalk.yellow('⚠️ 当前分支没有关联的远程分支'));
-      } else {
-        console.error(chalk.red('检查更新失败:', error.message));
+    // 如果本地落后于远程
+    if (parseInt(behindCount) > 0) {
+      try {
+        const spinner = ora('发现远程更新，正在拉取...').start();
+        this.execGitCommandAsync('git pull --ff-only', {
+          spinner,
+          head: 'Pulling updates'
+        });
+        console.log(chalk.green('✓ 已成功同步远程更新'));
+      } catch (pullError) {
+        console.log(chalk.yellow('⚠️ 无法自动合并远程更改，可能存在冲突'));
+        console.log(chalk.yellow('建议手动执行 git pull 并解决可能的冲突'));
+        process.exit(1);
       }
     }
   }
