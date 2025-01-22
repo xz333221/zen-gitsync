@@ -156,12 +156,14 @@ class GitCommit {
     // 检查是否有远程更新
     // 先获取远程最新状态
     this.execSyncGitCommand('git remote update', {
-      head: 'Fetching remote updates'
+      head: 'Fetching remote updates',
+      log: false
     });
 
     // 检查是否需要 pull
     const behindCount = this.execSyncGitCommand('git rev-list HEAD..@{u} --count', {
-      head: 'Checking if behind remote'
+      head: 'Checking if behind remote',
+      log: false
     }).trim();
 
     // 如果本地落后于远程
@@ -282,38 +284,38 @@ class GitCommit {
 
   execSyncGitCommand(command, options = {}) {
     try {
-      let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command} = options
+      let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
       let cwd = getCwd()
       const output = execSync(command, {encoding, maxBuffer, cwd})
       if (options.spinner) {
         options.spinner.stop();
       }
       let result = output.trim()
-      coloredLog(head, result)
+      log && coloredLog(head, result)
       return result
     } catch (e) {
       // console.log(`执行命令出错 ==> `, command, e)
-      coloredLog(command, e, 'error')
+      log && coloredLog(command, e, 'error')
       throw new Error(e)
     }
   }
 
   execGitCommand(command, options = {}, callback) {
-    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024} = options
+    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
     let cwd = getCwd()
     exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
       if (options.spinner) {
         options.spinner.stop();
       }
       if (error) {
-        coloredLog(command, error, 'error')
+        log && coloredLog(head, error, 'error')
         return
       }
       if (stdout) {
-        coloredLog(command, stdout)
+        log && coloredLog(head, stdout)
       }
       if (stderr) {
-        coloredLog(command, stderr)
+        log && coloredLog(head, stderr)
       }
       callback && callback(error, stdout, stderr)
     })
