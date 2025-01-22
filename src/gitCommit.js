@@ -153,45 +153,53 @@ class GitCommit {
     }
   }
   judgeRemote() {
-    // 检查是否有远程更新
-    // 先获取远程最新状态
-    this.execSyncGitCommand('git remote update', {
-      head: 'Fetching remote updates',
-      log: false
-    });
+    return new Promise((resolve, reject) => {
+      // 检查是否有远程更新
+      // 先获取远程最新状态
+      this.execSyncGitCommand('git remote update', {
+        head: 'Fetching remote updates',
+        log: false
+      });
 
-    // 检查是否需要 pull
-    const behindCount = this.execSyncGitCommand('git rev-list HEAD..@{u} --count', {
-      head: 'Checking if behind remote',
-      log: false
-    }).trim();
+      // 检查是否需要 pull
+      const behindCount = this.execSyncGitCommand('git rev-list HEAD..@{u} --count', {
+        head: 'Checking if behind remote',
+        log: false
+      }).trim();
 
-    // 如果本地落后于远程
-    if (parseInt(behindCount) > 0) {
-      try {
-        const spinner = ora('发现远程更新，正在拉取...').start();
-        // 尝试使用 --ff-only 拉取更新
-        this.execGitCommand('git pull --ff-only', {
-          spinner,
-          head: 'Pulling updates'
-        }, (error, stdout, stderr) => {
-          if (error) {
-            // 如果 --ff-only 拉取失败，尝试普通的 git pull
-            console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
-            this.execGitCommand('git pull', {
-              spinner,
-              head: 'Pulling updates'
-            });
-          } else {
-            console.log(chalk.green('✓ 已成功同步远程更新'));
-          }
-        });
-      } catch (pullError) {
-        console.log(chalk.yellow('⚠️ 无法自动合并远程更改，可能存在冲突'));
-        console.log(chalk.yellow('建议手动执行 git pull 并解决可能的冲突'));
-        process.exit(1);
+      // 如果本地落后于远程
+      if (parseInt(behindCount) > 0) {
+        try {
+          const spinner = ora('发现远程更新，正在拉取...').start();
+          // 尝试使用 --ff-only 拉取更新
+          this.execGitCommand('git pull --ff-only', {
+            spinner,
+            head: 'Pulling updates'
+          }, (error, stdout, stderr) => {
+            if (error) {
+              // 如果 --ff-only 拉取失败，尝试普通的 git pull
+              console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
+              this.execGitCommand('git pull', {
+                spinner,
+                head: 'Pulling updates'
+              }, (error, stdout, stderr) => {
+                if (error) {
+                  reject(chalk.yellow('⚠️ 拉取失败，可能存在冲突'));
+                } else {
+                  resolve(chalk.green('✓ 成功同步远程更新'));
+                }
+              });
+            } else {
+              resolve(chalk.green('✓ 已成功同步远程更新'));
+            }
+          });
+        } catch (pullError) {
+          reject(chalk.yellow('⚠️ 拉取远程更新时出错，建议手动拉取并解决冲突'));
+        }
+      } else {
+        resolve(chalk.green('✓ 本地已是最新，无需拉取'));
       }
-    }
+    });
   }
 
   async init() {
@@ -217,7 +225,7 @@ class GitCommit {
         this.statusOutput.includes('use "git pull') && this.execSyncGitCommand('git pull')
 
         // 检查是否有远程更新
-        this.judgeRemote()
+        await this.judgeRemote()  // 等待 judgeRemote 完成
 
         this.exec_push()
       }else{
@@ -226,7 +234,8 @@ class GitCommit {
         } else if (this.statusOutput.includes('use "git pull')) {
           this.execSyncGitCommand('git pull')
         } else {
-          this.judgeRemote()
+          await this.judgeRemote()  // 等待 judgeRemote 完成
+          this.exec_exit();
         }
       }
     } catch (e) {
