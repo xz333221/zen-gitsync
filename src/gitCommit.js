@@ -213,6 +213,8 @@ class GitCommit {
       }else{
         if (this.statusOutput.includes('use "git push')) {
           this.exec_push()
+        } else if (this.statusOutput.includes('use "git pull')) {
+          this.execSyncGitCommand('git pull')
         } else {
           this.judgeRemote()
           this.exec_exit();
