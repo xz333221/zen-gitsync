@@ -7,9 +7,34 @@ import readline from 'readline'
 import ora from 'ora';
 import chalk from 'chalk';
 import boxen from 'boxen';
+import config from './config.js'
+
+const { defaultCommitMessage } = config
 
 let timer = null
+const showHelp = () => {
+  const helpMessage = `
+Usage: g [options]
 
+Options:
+  -h, --help          Show this help message
+  -y                  Auto commit with default message
+  --path=<path>       Set custom working directory
+  --cwd=<path>        Set custom working directory
+  --interval=<seconds> Set interval time for automatic commits
+  --log               Show git commit logs
+  --n=<number>        Number of commits to show with --log
+  --no-diff           Skip displaying git diff
+
+Add auto submit in package.json
+  "scripts": {
+    "g:y": "g -y"
+  }
+  `;
+
+  console.log(helpMessage);
+  process.exit();
+};
 const judgePlatform = () => {
   // 判断是否是 Windows 系统
   if (os.platform() === 'win32') {
@@ -51,7 +76,7 @@ class GitCommit {
   constructor(options) {
     this.statusOutput = null
     this.exit = options.exit
-    this.commitMessage = `提交`
+    this.commitMessage = defaultCommitMessage
     this.init()
   }
 
@@ -71,6 +96,12 @@ class GitCommit {
         return;
       }
 
+      // 检查帮助参数
+      if (process.argv.includes('-h') || process.argv.includes('--help')) {
+        showHelp();
+        return;
+      }
+
       this.statusOutput = this.execSyncGitCommand('git status')
       if (this.statusOutput.includes('nothing to commit, working tree clean')) {
         if (this.statusOutput.includes('use "git push')) {
@@ -87,11 +118,17 @@ class GitCommit {
           head: `git diff`
         })
       }
+      // 检查 -m 参数（提交信息）
+      const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
+      if (commitMessageArg) {
+        // 提取 -m 后面的提交信息
+        this.commitMessage = commitMessageArg.split('=')[1] || defaultCommitMessage;
+      }
 
       // 检查命令行参数，判断是否有 -y 参数
       const autoCommit = process.argv.includes('-y');
 
-      if (!autoCommit) {
+      if (!autoCommit && !commitMessageArg) {
         // 如果没有 -y 参数，则等待用户输入提交信息
         this.commitMessage = await question('请输入提交信息：');
       }
@@ -101,7 +138,7 @@ class GitCommit {
 
       // 执行 git commit
       if (this.statusOutput.includes('Untracked files:') || this.statusOutput.includes('Changes not staged for commit') || this.statusOutput.includes('Changes to be committed')) {
-        this.execSyncGitCommand(`git commit -m "${this.commitMessage || '提交'}"`)
+        this.execSyncGitCommand(`git commit -m "${this.commitMessage || defaultCommitMessage}"`)
       }
 
       // 检查是否需要拉取更新
@@ -148,7 +185,7 @@ class GitCommit {
 
       // 使用 boxen 绘制带边框的消息
       let msg = ` SUCCESS: 提交完成 
- message: ${this.commitMessage || '提交'} 
+ message: ${this.commitMessage || defaultCommitMessage} 
  time: ${new Date().toLocaleString()} `
       const message = chalk.green.bold(msg);
       const box = boxen(message, {
