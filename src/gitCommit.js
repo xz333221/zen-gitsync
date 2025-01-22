@@ -229,7 +229,6 @@ class GitCommit {
           this.execSyncGitCommand('git pull')
         } else {
           this.judgeRemote()
-          this.exec_exit();
         }
       }
     } catch (e) {
