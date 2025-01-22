@@ -123,9 +123,18 @@ class GitCommit {
       // 检查 -m 参数（提交信息）
       const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
       if (commitMessageArg) {
-        // 提取 -m 后面的提交信息并去除首尾的引号
-        this.commitMessage = commitMessageArg.split('=')[1]?.replace(/^['"]|['"]$/g, '') || defaultCommitMessage;
+        if (commitMessageArg.includes('=')) {
+          // 处理 -m=<message> 的情况
+          this.commitMessage = commitMessageArg.split('=')[1]?.replace(/^['"]|['"]$/g, '') || defaultCommitMessage;
+        } else {
+          // 处理 -m <message> 的情况
+          const index = process.argv.indexOf(commitMessageArg);
+          if (index !== -1 && process.argv[index + 1]) {
+            this.commitMessage = process.argv[index + 1]?.replace(/^['"]|['"]$/g, '') || defaultCommitMessage;
+          }
+        }
       }
+
 
 
       // 检查命令行参数，判断是否有 -y 参数
