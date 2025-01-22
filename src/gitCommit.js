@@ -121,9 +121,10 @@ class GitCommit {
       // 检查 -m 参数（提交信息）
       const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
       if (commitMessageArg) {
-        // 提取 -m 后面的提交信息
-        this.commitMessage = commitMessageArg.split('=')[1] || defaultCommitMessage;
+        // 提取 -m 后面的提交信息并去除首尾的引号
+        this.commitMessage = commitMessageArg.split('=')[1]?.replace(/^['"]|['"]$/g, '') || defaultCommitMessage;
       }
+
 
       // 检查命令行参数，判断是否有 -y 参数
       const autoCommit = process.argv.includes('-y');
