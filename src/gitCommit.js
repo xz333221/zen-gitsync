@@ -30,6 +30,8 @@ Add auto submit in package.json
   "scripts": {
     "g:y": "g -y"
   }
+cmd sync folder
+  start /min cmd /k "g -y --path=your-folder --interval"
   `;
 
   console.log(helpMessage);
