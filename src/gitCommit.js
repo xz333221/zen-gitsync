@@ -220,9 +220,7 @@ class GitCommit {
         this.judgeRemote()
 
         this.exec_push()
-
       }else{
-        console.log(`this.statusOutput ==> `, this.statusOutput)
         if (this.statusOutput.includes('use "git push')) {
           this.exec_push()
         } else if (this.statusOutput.includes('use "git pull')) {
