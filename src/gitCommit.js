@@ -32,8 +32,8 @@ Example:
   g -m "Initial commit"      Commit with a custom message
   g -m=Fix-bug               Commit with a custom message (no spaces around '=')
   g -y                       Auto commit with the default message
+  g -y --interval=600        Commit every 10 minutes (600 seconds)
   g --path=/path/to/repo     Specify a custom working directory
-  g --interval=600           Commit every 10 minutes (600 seconds)
   g log                      Show recent commit logs
   g log --n=5                Show the last 5 commits with --log
 
