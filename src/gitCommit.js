@@ -176,6 +176,9 @@ class GitCommit {
             spinner,
             head: 'Pulling updates'
           }, (error, stdout, stderr) => {
+            console.log(`error ==> `, error)
+            console.log(`stdout ==> `, stdout)
+            console.log(`stderr ==> `, stderr)
             if (error) {
               // 如果 --ff-only 拉取失败，尝试普通的 git pull
               console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
