@@ -185,7 +185,7 @@ class GitCommit {
         }
       } else {
         spinner.stop();
-        console.log(chalk.green('✓ 本地已是最新，无需拉取'));
+        console.log(chalk.green('✓ 本地已是最新'));
       }
     }catch (e) {
       console.log(`e ==> `, e)
