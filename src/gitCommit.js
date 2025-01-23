@@ -179,16 +179,17 @@ class GitCommit {
             if (error) {
               // 如果 --ff-only 拉取失败，尝试普通的 git pull
               console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
-              this.execGitCommand('git pull', {
-                spinner,
-                head: 'Pulling updates'
-              }, (error, stdout, stderr) => {
-                if (error) {
-                  reject(chalk.yellow('⚠️ 拉取失败，可能存在冲突'));
-                } else {
-                  resolve(chalk.green('✓ 成功同步远程更新'));
-                }
-              });
+              this.execPull()
+              // this.execGitCommand('git pull', {
+              //   spinner,
+              //   head: 'Pulling updates'
+              // }, (error, stdout, stderr) => {
+              //   if (error) {
+              //     reject(chalk.yellow('⚠️ 拉取失败，可能存在冲突'));
+              //   } else {
+              //     resolve(chalk.green('✓ 成功同步远程更新'));
+              //   }
+              // });
             } else {
               resolve(chalk.green('✓ 已成功同步远程更新'));
             }
@@ -200,6 +201,13 @@ class GitCommit {
         resolve(chalk.green('✓ 本地已是最新，无需拉取'));
       }
     });
+  }
+  execPull(){
+    // 检查是否需要拉取更新
+    const spinner = ora('正在推送代码...').start();
+    this.execSyncGitCommand('git pull', {
+      spinner
+    })
   }
 
   async init() {
@@ -221,8 +229,7 @@ class GitCommit {
 
         await this.execAddAndCommit()
 
-        // 检查是否需要拉取更新
-        this.statusOutput.includes('use "git pull') && this.execSyncGitCommand('git pull')
+        this.statusOutput.includes('use "git pull') && this.execPull()
 
         // 检查是否有远程更新
         await this.judgeRemote()  // 等待 judgeRemote 完成
@@ -232,7 +239,7 @@ class GitCommit {
         if (this.statusOutput.includes('use "git push')) {
           this.exec_push()
         } else if (this.statusOutput.includes('use "git pull')) {
-          this.execSyncGitCommand('git pull')
+          this.execPull()
         } else {
           await this.judgeRemote()  // 等待 judgeRemote 完成
           this.exec_exit();
