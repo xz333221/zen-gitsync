@@ -177,7 +177,7 @@ class GitCommit {
             head: 'Pulling updates'
           });
           spinner.stop();
-          resolve(chalk.green('✓ 已成功同步远程更新'));
+          console.log(chalk.green('✓ 已成功同步远程更新'));
         } catch (pullError) {
           // 如果 --ff-only 拉取失败，尝试普通的 git pull
           console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
@@ -185,7 +185,7 @@ class GitCommit {
         }
       } else {
         spinner.stop();
-        resolve(chalk.green('✓ 本地已是最新，无需拉取'));
+        console.log(chalk.green('✓ 本地已是最新，无需拉取'));
       }
     }catch (e) {
       console.log(`e ==> `, e)
