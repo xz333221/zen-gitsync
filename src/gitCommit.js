@@ -201,8 +201,8 @@ class GitCommit {
       })
     }catch (e) {
       console.log(chalk.yellow('⚠️ 拉取远程更新失败，可能存在冲突，请手动处理'));
+      throw Error(e)
     }
-
   }
 
   async init() {
