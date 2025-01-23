@@ -193,11 +193,16 @@ class GitCommit {
     }
   }
   async execPull(){
-    // 检查是否需要拉取更新
-    const spinner = ora('正在拉取代码...').start();
-    await this.execGitCommand('git pull', {
-      spinner
-    })
+    try{
+      // 检查是否需要拉取更新
+      const spinner = ora('正在拉取代码...').start();
+      await this.execGitCommand('git pull', {
+        spinner
+      })
+    }catch (e) {
+      console.log(chalk.yellow('⚠️ 拉取远程更新失败，可能存在冲突，请手动处理'));
+    }
+
   }
 
   async init() {
