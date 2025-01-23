@@ -172,16 +172,18 @@ class GitCommit {
         try {
           spinner.stop();
           const spinner_pull = ora('发现远程更新，正在拉取...').start();
-          // 尝试使用 --ff-only 拉取更新
-          const res = await this.execGitCommand('git pull --ff-only', {
-            spinner: spinner_pull,
-            head: 'Pulling updates'
-          });
+          await this.execPull()
+
+          // // 尝试使用 --ff-only 拉取更新
+          // const res = await this.execGitCommand('git pull --ff-only', {
+          //   spinner: spinner_pull,
+          //   head: 'Pulling updates'
+          // });
           console.log(chalk.green('✓ 已成功同步远程更新'));
         } catch (pullError) {
-          // 如果 --ff-only 拉取失败，尝试普通的 git pull
-          console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
-          await this.execPull()
+          // // 如果 --ff-only 拉取失败，尝试普通的 git pull
+          // console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
+          // await this.execPull()
         }
       } else {
         spinner.stop();
