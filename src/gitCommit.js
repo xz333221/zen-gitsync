@@ -171,7 +171,7 @@ class GitCommit {
       if (parseInt(behindCount) > 0) {
         try {
           spinner.stop();
-          const spinner_pull = ora('发现远程更新，正在拉取...').start();
+          // const spinner_pull = ora('发现远程更新，正在拉取...').start();
           await this.execPull()
 
           // // 尝试使用 --ff-only 拉取更新
