@@ -184,7 +184,7 @@ class GitCommit {
           // // 如果 --ff-only 拉取失败，尝试普通的 git pull
           // console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
           // await this.execPull()
-          new Error(pullError)
+          throw new Error(pullError)
         }
       } else {
         spinner.stop();
@@ -193,7 +193,7 @@ class GitCommit {
     }catch (e) {
       // console.log(`e ==> `, e)
       spinner.stop();
-      new Error(e)
+      throw new Error(e)
     }
   }
   async execPull(){
