@@ -207,7 +207,7 @@ class GitCommit {
   }
   execPull(){
     // 检查是否需要拉取更新
-    const spinner = ora('正在推送代码...').start();
+    const spinner = ora('正在拉取代码...').start();
     this.execSyncGitCommand('git pull', {
       spinner
     })
@@ -224,6 +224,11 @@ class GitCommit {
       if(this.judgeHelp()) return
 
       this.statusOutput = this.execSyncGitCommand('git status')
+      const hasUnmerged = this.statusOutput.includes('You have unmerged paths');
+      if(hasUnmerged){
+        errorLog('错误', '存在未合并的文件，请先解决冲突')
+        process.exit(1);
+      }
       // 先检查本地是否有未提交的更改
       const hasLocalChanges = !this.statusOutput.includes('nothing to commit, working tree clean');
       if (hasLocalChanges) {
