@@ -152,67 +152,50 @@ class GitCommit {
       this.execSyncGitCommand(`git commit -m "${this.commitMessage || defaultCommitMessage}"`)
     }
   }
-  judgeRemote() {
-    const spinner = ora('正在检查远程更新...').start();
-    return new Promise((resolve, reject) => {
+  async judgeRemote() {
+    try{
+      const spinner = ora('正在检查远程更新...').start();
       // 检查是否有远程更新
       // 先获取远程最新状态
-      this.execSyncGitCommand('git remote update', {
+      await this.execGitCommand('git remote update', {
         head: 'Fetching remote updates',
         log: false
       });
-
       // 检查是否需要 pull
-      const behindCount = this.execSyncGitCommand('git rev-list HEAD..@{u} --count', {
+      const res = await this.execGitCommand('git rev-list HEAD..@{u} --count', {
         head: 'Checking if behind remote',
         log: false
-      }).trim();
-
+      });
+      const behindCount = res.stdout.trim()
       // 如果本地落后于远程
       if (parseInt(behindCount) > 0) {
         try {
           const spinner = ora('发现远程更新，正在拉取...').start();
           // 尝试使用 --ff-only 拉取更新
-          this.execGitCommand('git pull --ff-only', {
+          const res = await this.execGitCommand('git pull --ff-only', {
             spinner,
             head: 'Pulling updates'
-          }, (error, stdout, stderr) => {
-            console.log(`error ==> `, error)
-            console.log(`stdout ==> `, stdout)
-            console.log(`stderr ==> `, stderr)
-            if (error) {
-              // 如果 --ff-only 拉取失败，尝试普通的 git pull
-              console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
-              this.execPull()
-              // this.execGitCommand('git pull', {
-              //   spinner,
-              //   head: 'Pulling updates'
-              // }, (error, stdout, stderr) => {
-              //   if (error) {
-              //     reject(chalk.yellow('⚠️ 拉取失败，可能存在冲突'));
-              //   } else {
-              //     resolve(chalk.green('✓ 成功同步远程更新'));
-              //   }
-              // });
-            } else {
-              spinner.stop();
-              resolve(chalk.green('✓ 已成功同步远程更新'));
-            }
           });
-        } catch (pullError) {
           spinner.stop();
-          reject(chalk.yellow('⚠️ 拉取远程更新时出错，建议手动拉取并解决冲突'));
+          resolve(chalk.green('✓ 已成功同步远程更新'));
+        } catch (pullError) {
+          // 如果 --ff-only 拉取失败，尝试普通的 git pull
+          console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
+          await this.execPull()
         }
       } else {
         spinner.stop();
         resolve(chalk.green('✓ 本地已是最新，无需拉取'));
       }
-    });
+    }catch (e) {
+      console.log(`e ==> `, e)
+      spinner.stop();
+    }
   }
-  execPull(){
+  async execPull(){
     // 检查是否需要拉取更新
     const spinner = ora('正在拉取代码...').start();
-    this.execSyncGitCommand('git pull', {
+    await this.execGitCommand('git pull', {
       spinner
     })
   }
@@ -241,19 +224,17 @@ class GitCommit {
 
         await this.execAddAndCommit()
 
-        this.statusOutput.includes('use "git pull') && this.execPull()
+        this.statusOutput.includes('use "git pull') && await this.execPull()
 
         // 检查是否有远程更新
-        const spinner = ora('正在检查远程更新...').start();
         await this.judgeRemote()  // 等待 judgeRemote 完成
-        spinner.stop();
 
         this.exec_push()
       }else{
         if (this.statusOutput.includes('use "git push')) {
           this.exec_push()
         } else if (this.statusOutput.includes('use "git pull')) {
-          this.execPull()
+          await this.execPull()
         } else {
           await this.judgeRemote()  // 等待 judgeRemote 完成
           this.exec_exit();
@@ -342,23 +323,30 @@ class GitCommit {
   }
 
   execGitCommand(command, options = {}, callback) {
-    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
-    let cwd = getCwd()
-    exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
-      if (options.spinner) {
-        options.spinner.stop();
-      }
-      if (error) {
-        log && coloredLog(head, error, 'error')
-        return
-      }
-      if (stdout) {
-        log && coloredLog(head, stdout)
-      }
-      if (stderr) {
-        log && coloredLog(head, stderr)
-      }
-      callback && callback(error, stdout, stderr)
+    return new Promise((resolve, reject) => {
+      let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
+      let cwd = getCwd()
+      exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
+        if (options.spinner) {
+          options.spinner.stop();
+        }
+        if (error) {
+          log && coloredLog(head, error, 'error')
+          reject(error)
+          return
+        }
+        if (stdout) {
+          log && coloredLog(head, stdout)
+        }
+        if (stderr) {
+          log && coloredLog(head, stderr)
+        }
+        resolve({
+          stdout,
+          stderr
+        })
+        callback && callback(error, stdout, stderr)
+      })
     })
   }
 }
