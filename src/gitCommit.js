@@ -153,6 +153,7 @@ class GitCommit {
     }
   }
   judgeRemote() {
+    const spinner = ora('正在检查远程更新...').start();
     return new Promise((resolve, reject) => {
       // 检查是否有远程更新
       // 先获取远程最新状态
@@ -194,13 +195,16 @@ class GitCommit {
               //   }
               // });
             } else {
+              spinner.stop();
               resolve(chalk.green('✓ 已成功同步远程更新'));
             }
           });
         } catch (pullError) {
+          spinner.stop();
           reject(chalk.yellow('⚠️ 拉取远程更新时出错，建议手动拉取并解决冲突'));
         }
       } else {
+        spinner.stop();
         resolve(chalk.green('✓ 本地已是最新，无需拉取'));
       }
     });
@@ -240,7 +244,9 @@ class GitCommit {
         this.statusOutput.includes('use "git pull') && this.execPull()
 
         // 检查是否有远程更新
+        const spinner = ora('正在检查远程更新...').start();
         await this.judgeRemote()  // 等待 judgeRemote 完成
+        spinner.stop();
 
         this.exec_push()
       }else{
