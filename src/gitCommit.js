@@ -188,7 +188,7 @@ class GitCommit {
         console.log(chalk.green('✓ 本地已是最新'));
       }
     }catch (e) {
-      console.log(`e ==> `, e)
+      // console.log(`e ==> `, e)
       spinner.stop();
     }
   }
@@ -246,7 +246,6 @@ class GitCommit {
         }
       }
     } catch (e) {
-      // console.log(`e ==> `, e)
       // console.log(`e.message ==> `, e.message)
       // 应该提供更具体的错误信息
       // console.error('Git operation failed:', e.message);
