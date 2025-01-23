@@ -16,7 +16,7 @@
     "g:no-diff": "node ./src/gitCommit.js --no-diff",
     "g:log": "node ./src/gitCommit.js log",
     "g:log5": "node ./src/gitCommit.js log --n=5",
-    "g -h": "node ./src/gitCommit.js -h"
+    "g:h": "node ./src/gitCommit.js -h"
   },
   "files": [
     "src/*",
