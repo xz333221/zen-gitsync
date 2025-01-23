@@ -193,6 +193,7 @@ class GitCommit {
     }catch (e) {
       // console.log(`e ==> `, e)
       spinner.stop();
+      new Error(e)
     }
   }
   async execPull(){
