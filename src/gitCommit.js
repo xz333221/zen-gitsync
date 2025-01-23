@@ -170,13 +170,13 @@ class GitCommit {
       // 如果本地落后于远程
       if (parseInt(behindCount) > 0) {
         try {
-          const spinner = ora('发现远程更新，正在拉取...').start();
+          spinner.stop();
+          const spinner_pull = ora('发现远程更新，正在拉取...').start();
           // 尝试使用 --ff-only 拉取更新
           const res = await this.execGitCommand('git pull --ff-only', {
-            spinner,
+            spinner: spinner_pull,
             head: 'Pulling updates'
           });
-          spinner.stop();
           console.log(chalk.green('✓ 已成功同步远程更新'));
         } catch (pullError) {
           // 如果 --ff-only 拉取失败，尝试普通的 git pull
