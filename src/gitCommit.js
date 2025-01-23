@@ -100,6 +100,7 @@ class GitCommit {
       process.exit()
     }
   }
+
   judgeLog() {
     const logArg = process.argv.find(arg => arg === 'log');
     if (logArg) {
@@ -107,12 +108,14 @@ class GitCommit {
       return true;
     }
   }
+
   judgeHelp() {
     if (process.argv.includes('-h') || process.argv.includes('--help')) {
       showHelp();
       return true;
     }
   }
+
   execDiff() {
     const no_diff = process.argv.find(arg => arg.startsWith('--no-diff'))
     if (!no_diff) {
@@ -121,6 +124,7 @@ class GitCommit {
       })
     }
   }
+
   async execAddAndCommit() {
     // 检查 -m 参数（提交信息）
     const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
@@ -152,8 +156,9 @@ class GitCommit {
       this.execSyncGitCommand(`git commit -m "${this.commitMessage || defaultCommitMessage}"`)
     }
   }
+
   async judgeRemote() {
-    try{
+    try {
       const spinner = ora('正在检查远程更新...').start();
       // 检查是否有远程更新
       // 先获取远程最新状态
@@ -190,20 +195,21 @@ class GitCommit {
         spinner.stop();
         console.log(chalk.green('✓ 本地已是最新'));
       }
-    }catch (e) {
+    } catch (e) {
       // console.log(`e ==> `, e)
       spinner.stop();
       throw new Error(e)
     }
   }
-  async execPull(){
-    try{
+
+  async execPull() {
+    try {
       // 检查是否需要拉取更新
       const spinner = ora('正在拉取代码...').start();
       await this.execGitCommand('git pull', {
         spinner
       })
-    }catch (e) {
+    } catch (e) {
       console.log(chalk.yellow('⚠️ 拉取远程更新合并失败，可能存在冲突，请手动处理'));
       throw Error(e)
     }
@@ -214,14 +220,14 @@ class GitCommit {
       judgePlatform()
 
       // 检查是否有 log 参数
-      if(this.judgeLog()) return
+      if (this.judgeLog()) return
 
       // 检查帮助参数
-      if(this.judgeHelp()) return
+      if (this.judgeHelp()) return
 
       this.statusOutput = this.execSyncGitCommand('git status')
       const hasUnmerged = this.statusOutput.includes('You have unmerged paths');
-      if(hasUnmerged){
+      if (hasUnmerged) {
         errorLog('错误', '存在未合并的文件，请先解决冲突')
         process.exit(1);
       }
@@ -239,7 +245,7 @@ class GitCommit {
         await this.judgeRemote()  // 等待 judgeRemote 完成
 
         this.exec_push()
-      }else{
+      } else {
         if (this.statusOutput.includes('use "git push')) {
           this.exec_push()
         } else if (this.statusOutput.includes('use "git pull')) {
@@ -250,6 +256,7 @@ class GitCommit {
         }
       }
     } catch (e) {
+      // console.log(`e ==> `, e)
       // console.log(`e.message ==> `, e.message)
       // 应该提供更具体的错误信息
       // console.error('Git operation failed:', e.message);
@@ -313,8 +320,8 @@ class GitCommit {
   }
 
   execSyncGitCommand(command, options = {}) {
+    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
     try {
-      let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
       let cwd = getCwd()
       const output = execSync(command, {encoding, maxBuffer, cwd})
       if (options.spinner) {
