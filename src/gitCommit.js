@@ -7,8 +7,8 @@ import readline from 'readline'
 import ora from 'ora';
 import chalk from 'chalk';
 import boxen from 'boxen';
-import config from './config.js'
-
+import config from './config.js';
+const { loadConfig, saveConfig } = config;
 const {defaultCommitMessage} = config
 
 let timer = null
@@ -17,16 +17,18 @@ const showHelp = () => {
 Usage: g [options]
 
 Options:
-  -h, --help              Show this help message
-  -y                      Auto commit with default message
-  -m <message>            Commit message (use quotes if message contains spaces)
-  -m=<message>            Commit message (use this form without spaces around '=')
-  --path=<path>           Set custom working directory
-  --cwd=<path>            Set custom working directory
-  --interval=<seconds>    Set interval time for automatic commits (in seconds)
-  log                     Show git commit logs
-    --n=<number>          Number of commits to show with --log
-  --no-diff               Skip displaying git diff
+  -h, --help                   Show this help message
+  --set-default-message=<msg>  Set default commit message
+  get-config                   Show current configuration
+  -y                           Auto commit with default message
+  -m <message>                 Commit message (use quotes if message contains spaces)
+  -m=<message>                 Commit message (use this form without spaces around '=')
+  --path=<path>                Set custom working directory
+  --cwd=<path>                 Set custom working directory
+  --interval=<seconds>         Set interval time for automatic commits (in seconds)
+  log                          Show git commit logs
+    --n=<number>               Number of commits to show with --log
+  --no-diff                    Skip displaying git diff
 
 Example:
   g -m "Initial commit"      Commit with a custom message
@@ -49,7 +51,25 @@ Start a background process for automatic commits:
   console.log(helpMessage);
   process.exit();
 };
+// 添加配置管理函数
+async function handleConfigCommands() {
+  if (process.argv.includes('get-config')) {
+    const currentConfig = await loadConfig();
+    console.log('Current configuration:');
+    console.log(currentConfig);
+    process.exit();
+  }
 
+  const setMsgArg = process.argv.find(arg => arg.startsWith('--set-default-message='));
+  if (setMsgArg) {
+    const newMessage = setMsgArg.split('=')[1];
+    const currentConfig = await loadConfig();
+    currentConfig.defaultCommitMessage = newMessage;
+    await saveConfig(currentConfig);
+    console.log(chalk.green(`✓ 默认提交信息已设置为: "${newMessage}"`));
+    process.exit();
+  }
+}
 const judgePlatform = () => {
   // 判断是否是 Windows 系统
   if (os.platform() === 'win32') {
@@ -91,8 +111,11 @@ class GitCommit {
   constructor(options) {
     this.statusOutput = null
     this.exit = options.exit
-    this.commitMessage = defaultCommitMessage
-    this.init()
+    // 从配置加载默认提交信息
+    loadConfig().then(config => {
+      this.commitMessage = config.defaultCommitMessage;
+      this.init();
+    });
   }
 
   exec_exit() {
@@ -365,7 +388,11 @@ class GitCommit {
     })
   }
 }
-
+// 在 judgeInterval 函数前添加配置命令处理
+async function main() {
+  await handleConfigCommands();
+  judgeInterval();
+}
 const judgeInterval = () => {
   // 判断是否有 --interval 参数
   const intervalArg = process.argv.find(arg => arg.startsWith('--interval'));
@@ -400,4 +427,4 @@ const judgeInterval = () => {
   }
 };
 
-judgeInterval()
+main()

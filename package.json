@@ -16,7 +16,9 @@
     "g:no-diff": "node ./src/gitCommit.js --no-diff",
     "g:log": "node ./src/gitCommit.js log",
     "g:log5": "node ./src/gitCommit.js log --n=5",
-    "g:h": "node ./src/gitCommit.js -h"
+    "g:h": "node ./src/gitCommit.js -h",
+    "g:get-config": "node ./src/gitCommit.js get-config",
+    "g:set-default-message": "node ./src/gitCommit.js --set-default-message=\"你的默认提交信息\""
   },
   "files": [
     "src/*",
