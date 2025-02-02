@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "1.3.6",
+  "version": "1.3.7",
   "description": "一个 git 自动查看差异并提交的工具",
   "main": "index.js",
   "type": "module",
@@ -18,7 +18,7 @@
     "g:log5": "node ./src/gitCommit.js log --n=5",
     "g:h": "node ./src/gitCommit.js -h",
     "g:get-config": "node ./src/gitCommit.js get-config",
-    "g:set-default-message": "node ./src/gitCommit.js --set-default-message=\"你的默认提交信息\""
+    "g:set-default-message": "node ./src/gitCommit.js --set-default-message=\"提交\""
   },
   "files": [
     "src/*",
