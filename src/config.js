@@ -2,7 +2,6 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 
-console.log(`os.homedir() ==> `, os.homedir())
 const configPath = path.join(os.homedir(), '.git-commit-tool.json');
 
 // 默认配置

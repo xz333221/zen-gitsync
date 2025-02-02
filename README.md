@@ -28,6 +28,14 @@ $ g
 ```bash
 $ g -y
 ```
+#### 设置默认提交信息：
+```bash
+$ g --set-default-message="提交"
+```
+#### 获取默认提交信息：
+```bash
+$ g get-config
+```
 #### 传入message直接提交：
 ```bash
 $ g -m <message>
