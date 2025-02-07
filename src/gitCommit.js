@@ -346,7 +346,7 @@ class GitCommit {
     let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
     try {
       let cwd = getCwd()
-      const output = execSync(command, {encoding, maxBuffer, cwd})
+      const output = execSync(command, {env: { ...process.env, LANG: 'C.UTF-8' },encoding, maxBuffer, cwd})
       if (options.spinner) {
         options.spinner.stop();
       }
@@ -364,7 +364,7 @@ class GitCommit {
     return new Promise((resolve, reject) => {
       let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
       let cwd = getCwd()
-      exec(command, {encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
+      exec(command, {env: { ...process.env, LANG: 'C.UTF-8' },encoding, maxBuffer, cwd}, (error, stdout, stderr) => {
         if (options.spinner) {
           options.spinner.stop();
         }
