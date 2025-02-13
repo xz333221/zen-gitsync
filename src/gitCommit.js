@@ -44,8 +44,19 @@ Add auto submit in package.json:
     "g:y": "g -y"
   }
 
-Start a background process for automatic commits:
-  start /min cmd /k "g -y --path=your-folder --interval"
+Run in the background across platforms:
+  Windows:
+    start /min cmd /k "g -y --path=your-folder --interval=600"
+  
+  Linux/macOS:
+    nohup g -y --path=your-folder --interval=600 > git-autocommit.log 2>&1 &
+
+Stop all monitoring processes:
+  Windows: Terminate the Node.js process in the Task Manager.
+  Linux/macOS:
+    pkill -f "g -y"       # Terminate all auto-commit processes
+    ps aux | grep "g -y"  # Find the specific process ID
+    kill [PID]            # Terminate the specified process
   `;
 
   console.log(helpMessage);
