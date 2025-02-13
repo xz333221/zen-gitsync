@@ -92,21 +92,6 @@ const getCwd = () => {
   return process.cwd()
 }
 
-// 有时候有乱码呢123神奇
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-})
-
-function rlPromisify(fn) {
-  return async (...args) => {
-    return new Promise((resolve, reject) => fn(...args, resolve, reject))
-  }
-}
-
-const question = rlPromisify(rl.question.bind(rl))
-
 class GitCommit {
   constructor(options) {
     this.statusOutput = null
@@ -169,6 +154,18 @@ class GitCommit {
 
     if (!autoCommit && !commitMessageArg) {
       // 如果没有 -y 参数，则等待用户输入提交信息
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      })
+
+      function rlPromisify(fn) {
+        return async (...args) => {
+          return new Promise((resolve, reject) => fn(...args, resolve, reject))
+        }
+      }
+
+      const question = rlPromisify(rl.question.bind(rl))
       this.commitMessage = await question('请输入提交信息：');
     }
 
