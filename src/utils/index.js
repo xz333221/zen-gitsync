@@ -205,10 +205,11 @@ function execSyncGitCommand(command, options = {}) {
   }
 }
 
-function execGitCommand(command, options = {}, callback) {
+function execGitCommand(command, options = {}) {
   return new Promise((resolve, reject) => {
     let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
     let cwd = getCwd()
+
     exec(command, {
       env: {...process.env, LANG: 'C.UTF-8'},
       encoding,
@@ -234,7 +235,6 @@ function execGitCommand(command, options = {}, callback) {
         stdout,
         stderr
       })
-      callback && callback(error, stdout, stderr)
     })
   })
 }
@@ -463,7 +463,7 @@ async function judgeRemote() {
       console.log(chalk.green('✓ 本地已是最新'));
     }
   } catch (e) {
-    console.log(`e ==> `, e)
+    // console.log(`e ==> `, e)
     spinner.stop();
     throw new Error(e)
   }
