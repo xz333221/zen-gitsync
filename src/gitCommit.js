@@ -419,7 +419,27 @@ async function main() {
     await handleConfigCommands();
     judgeInterval();
 }
+const showStartInfo = (interval) => {
+    const cwd = getCwd();
+    const intervalSeconds = interval / 1000;
+    const startTime = new Date().toLocaleString();
 
+    const message = chalk.green.bold([
+        `⏰ 定时提交任务已启动`,
+        `开始时间: ${chalk.yellow(startTime)}`,
+        `工作目录: ${chalk.cyan(cwd)}`,
+        `提交间隔: ${chalk.magenta(intervalSeconds + "秒")}`
+    ].join("\n"));
+
+    const box = boxen(message, {
+        padding: 1,
+        borderColor: 'green',
+        borderStyle: 'round',
+        margin: 1
+    });
+
+    console.log(box + "\n");
+}
 const judgeInterval = () => {
     // 判断是否有 --interval 参数
     const intervalArg = process.argv.find(arg => arg.startsWith('--interval'));
@@ -438,6 +458,10 @@ const judgeInterval = () => {
             clearInterval(timer);
             timer = null;
         }
+
+        // 开始定时任务提示
+        showStartInfo(interval);
+
         new GitCommit({
             exit: false
         })
