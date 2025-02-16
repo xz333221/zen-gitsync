@@ -32,7 +32,10 @@
     "type": "git",
     "url": "git+https://github.com/xz333221/zen-gitsync.git"
   },
-  "keywords": ["gitsync", "git"],
+  "keywords": [
+    "gitsync",
+    "git"
+  ],
   "author": "",
   "license": "MIT",
   "bugs": {
@@ -43,6 +46,7 @@
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "cli-table3": "^0.6.5",
+    "date-fns": "^4.1.0",
     "ora": "^8.1.1",
     "string-width": "^7.2.0"
   }

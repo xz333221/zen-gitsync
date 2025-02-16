@@ -24,6 +24,7 @@ import ora from "ora";
 import readline from 'readline'
 import path from 'path'
 
+
 const printTableWithHeaderUnderline = (head, content, style) => {
   // 获取终端的列数（宽度）
   const terminalWidth = process.stdout.columns;
