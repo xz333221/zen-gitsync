@@ -18,6 +18,7 @@ import stringWidth from 'string-width';
 import Table from 'cli-table3';
 import chalk from 'chalk';
 import boxen from "boxen";
+import {exec, execSync} from 'child_process'
 
 const printTableWithHeaderUnderline = (head, content, style) => {
   // 获取终端的列数（宽度）
@@ -94,6 +95,7 @@ function getRandomColor() {
 function resetColor() {
   return '\x1b[0m';
 }
+
 const calcColor = (commandLine, str) => {
   let color = 'reset'
   switch (commandLine) {
@@ -169,4 +171,72 @@ const errorLog = (commandLine, content) => {
   const box = boxen(message);
   console.log(box); // 打印带有边框的消息
 }
-export {coloredLog, errorLog};
+
+function execSyncGitCommand(command, options = {}) {
+  let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
+  try {
+    let cwd = getCwd()
+    const output = execSync(command, {
+      env: {
+        ...process.env,
+        LANG: 'en_US.UTF-8',    // Linux/macOS
+        LC_ALL: 'en_US.UTF-8',  // Linux/macOS
+        GIT_CONFIG_PARAMETERS: "'core.quotepath=false'" // 关闭路径转义
+      }, encoding, maxBuffer, cwd
+    })
+    if (options.spinner) {
+      options.spinner.stop();
+    }
+    let result = output.trim()
+    log && coloredLog(head, result)
+    return result
+  } catch (e) {
+    // console.log(`执行命令出错 ==> `, command, e)
+    log && coloredLog(command, e, 'error')
+    throw new Error(e)
+  }
+}
+
+function execGitCommand(command, options = {}, callback) {
+  return new Promise((resolve, reject) => {
+    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
+    let cwd = getCwd()
+    exec(command, {
+      env: {...process.env, LANG: 'C.UTF-8'},
+      encoding,
+      maxBuffer,
+      cwd
+    }, (error, stdout, stderr) => {
+      if (options.spinner) {
+        options.spinner.stop();
+      }
+      if (error) {
+        log && coloredLog(head, error, 'error')
+        reject(error)
+        return
+      }
+      if (stdout) {
+        log && coloredLog(head, stdout)
+      }
+      if (stderr) {
+        log && coloredLog(head, stderr)
+      }
+      resolve({
+        stdout,
+        stderr
+      })
+      callback && callback(error, stdout, stderr)
+    })
+  })
+}
+const getCwd = () => {
+  const cwdArg = process.argv.find(arg => arg.startsWith('--path')) || process.argv.find(arg => arg.startsWith('--cwd'));
+  if (cwdArg) {
+    // console.log(`cwdArg ==> `, cwdArg)
+    const [, value] = cwdArg.split('=')
+    // console.log(`value ==> `, value)
+    return value || process.cwd()
+  }
+  return process.cwd()
+}
+export {coloredLog, errorLog, execSyncGitCommand, execGitCommand, getCwd};
