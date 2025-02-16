@@ -131,7 +131,7 @@ const showStartInfo = (interval) => {
   const message = chalk.green.bold([
     `开始时间: ${chalk.yellow(startTime)}`,
     `工作目录: ${chalk.cyan(cwd)}`,
-    `提交间隔: ${chalk.magenta(formatDuration(interval))} (${intervalSeconds} 秒)`,
+    `提交间隔: ${chalk.magenta(formatDuration(interval))}`,
   ].join("\n"));
 
   coloredLog(head, message)
