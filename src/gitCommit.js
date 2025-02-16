@@ -312,7 +312,7 @@ const judgeInterval = async () => {
     // })
 
     // 开始定时任务提示
-    showStartInfo(interval);
+    // showStartInfo(interval);
 
     timer = setInterval(() => {
       // console.log(`定时执行`)
