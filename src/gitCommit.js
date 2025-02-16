@@ -438,7 +438,7 @@ const showStartInfo = (interval) => {
 
     console.log(box + "\n");
 }
-const judgeInterval = () => {
+const judgeInterval = async () => {
     // 判断是否有 --interval 参数
     const intervalArg = process.argv.find(arg => arg.startsWith('--interval'));
     if (intervalArg) {
@@ -459,6 +459,7 @@ const judgeInterval = () => {
 
         // 开始定时任务提示
         showStartInfo(interval);
+        await process.nextTick(() => {})
 
         new GitCommit({
             exit: false
