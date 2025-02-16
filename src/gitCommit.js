@@ -163,7 +163,7 @@ const judgeInterval = async () => {
       try {
         await createGitCommit({exit: false});
         showNextCommitTime(interval);
-        showUpdates();
+        // showUpdates();
       } catch (error) {
         console.error('提交出错:', error.message);
       }
