@@ -90,8 +90,6 @@ const judgePlatform = () => {
         try {
             // 设置终端字符编码为 UTF-8
             execSync('chcp 65001');
-            env.CHARSET = 'UTF-8';
-            env.GIT_OPTIONAL_LOCKS = '0'; // 禁用文件锁
         } catch (e) {
             console.error('设置字符编码失败:', e.message);
         }
