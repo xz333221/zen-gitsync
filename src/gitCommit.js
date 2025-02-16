@@ -151,25 +151,24 @@ const judgeInterval = async () => {
     // }, interval)
 
     let interval = parseInt(intervalArg.split('=')[1] || '3600', 10) * 1000;
-    // const showUpdates = () => {
-    //   showNextCommitTime(interval);
-    //   // 每小时更新一次时间显示
-    //   timer = setTimeout(() => {
-    //     showUpdates();
-    //   }, 3600000); // 每小时更新一次
-    // };
+    const showUpdates = () => {
+      showNextCommitTime(interval);
+      // 每小时更新一次时间显示
+      timer = setTimeout(() => {
+        showUpdates();
+      }, 20000); // 每小时更新一次
+    };
 
     const commitAndSchedule = async () => {
       try {
         await createGitCommit({exit: false});
         showNextCommitTime(interval);
-        // showUpdates();
+        showUpdates();
       } catch (error) {
         console.error('提交出错:', error.message);
       }
     };
 
-    showStartInfo(interval);
     await commitAndSchedule();
 
     // 设置定时提交
