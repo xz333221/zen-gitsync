@@ -108,7 +108,7 @@ async function createGitCommit(options) {
       await exec_push({exit, commitMessage})
     } else {
       if (statusOutput.includes('use "git push')) {
-        exec_push({exit, commitMessage})
+        await exec_push({exit, commitMessage})
       } else if (statusOutput.includes('use "git pull')) {
         await execPull()
       } else {
