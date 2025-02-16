@@ -14,27 +14,6 @@ import logUpdate from 'log-update';
 
 let countdownInterval = null;
 
-const render = () => {
-  const nextTime = Date.now() + remaining;
-  const formattedTime = dateFormat(nextTime, 'yyyy-MM-dd HH:mm:ss');
-  const duration = formatDuration(remaining);
-
-  const message = [
-    chalk.green.bold('🕒 倒计时'),
-    chalk.cyan(`下次提交: ${formattedTime}`),
-    chalk.yellow(`剩余时间: ${duration}`),
-    chalk.dim('按 Ctrl+C 终止进程')
-  ].join('\n');
-
-  const box = boxen(message, {
-    padding: 1,
-    margin: 1,
-    borderColor: 'cyan',
-    borderStyle: 'round'
-  });
-
-  logUpdate(box);
-};
 function startCountdown(interval) {
   let remaining = interval;
 
@@ -42,6 +21,32 @@ function startCountdown(interval) {
   if (countdownInterval) {
     clearInterval(countdownInterval);
   }
+
+  const render = () => {
+    const nextTime = Date.now() + remaining;
+    const formattedTime = dateFormat(nextTime, 'yyyy-MM-dd HH:mm:ss');
+    const duration = formatDuration(remaining);
+
+    const message = [
+      chalk.green.bold('🕒 倒计时'),
+      chalk.cyan(`下次提交: ${formattedTime}`),
+      chalk.yellow(`剩余时间: ${duration}`),
+      chalk.dim('按 Ctrl+C 终止进程')
+    ].join('\n');
+
+    const box = boxen(message, {
+      padding: 1,
+      margin: 1,
+      borderColor: 'cyan',
+      borderStyle: 'round'
+    });
+
+    setTimeout(() => {
+      logUpdate(box);
+    }, 500);
+    // logUpdate(box);
+  };
+
   // 立即渲染一次
   render();
 
