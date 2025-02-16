@@ -422,6 +422,8 @@ const showStartInfo = (interval) => {
     const intervalSeconds = interval / 1000;
     const startTime = new Date().toLocaleString();
 
+    const head = `⏰ 定时提交任务已启动`;
+
     const message = chalk.green.bold([
         `⏰ 定时提交任务已启动`,
         `开始时间: ${chalk.yellow(startTime)}`,
@@ -429,15 +431,17 @@ const showStartInfo = (interval) => {
         `提交间隔: ${chalk.magenta(intervalSeconds + "秒")}`
     ].join("\n"));
 
-    const box = boxen(message, {
-        padding: 1,
-        borderColor: 'green',
-        borderStyle: 'round',
-        margin: 1
-    });
+    coloredLog(head, message)
 
-    console.log(box + "\n");
-    console.log('\n'.repeat(6 - 1));
+    // const box = boxen(message, {
+    //     padding: 1,
+    //     borderColor: 'green',
+    //     borderStyle: 'round',
+    //     margin: 1
+    // });
+    //
+    // console.log(box + "\n");
+    // console.log('\n'.repeat(6 - 1));
 }
 const judgeInterval = async () => {
     // 判断是否有 --interval 参数
