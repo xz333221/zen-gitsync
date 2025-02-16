@@ -260,6 +260,7 @@ class GitCommit {
             if (this.judgeHelp()) return
 
             this.statusOutput = this.execSyncGitCommand('git status')
+            showStartInfo(1000);
             const hasUnmerged = this.statusOutput.includes('You have unmerged paths');
             if (hasUnmerged) {
                 errorLog('错误', '存在未合并的文件，请先解决冲突')
@@ -417,6 +418,7 @@ async function main() {
     await handleConfigCommands();
     judgeInterval();
 }
+
 const showStartInfo = (interval) => {
     const cwd = getCwd();
     const intervalSeconds = interval / 1000;
@@ -465,15 +467,10 @@ const judgeInterval = async () => {
 
         // 开始定时任务提示
         showStartInfo(interval);
-        await process.nextTick(() => {})
 
-        setTimeout(() => {
-            new GitCommit({
-                exit: false
-            })
-
-        }, 5000)
-
+        new GitCommit({
+            exit: false
+        })
 
         timer = setInterval(() => {
             // console.log(`定时执行`)
