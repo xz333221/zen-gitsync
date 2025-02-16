@@ -364,13 +364,13 @@ function exec_push({exit, commitMessage}) {
   });
 }
 function printCommitLog({commitMessage}) {
-  let msg = ` SUCCESS: 提交完成  
- message: ${commitMessage || 'submit'} 
- time: ${new Date().toLocaleString()} `
-  const message = chalk.green.bold(msg);
-  const box = boxen(message, {
-  });
-  console.log(box); // 打印带有边框的消息
+  const message = chalk.green.bold([
+    `提交完成`,
+    `message: ${commitMessage}`,
+    `time: ${new Date().toLocaleString()}`
+  ]);
+
+  coloredLog(head, message)
 }
 async function execPull() {
   try {
