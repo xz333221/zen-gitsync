@@ -358,6 +358,7 @@ function exec_push({exit, commitMessage}) {
     execGitCommand('git push', {
       spinner
     }).then(({stdout, stderr}) => {
+      console.log(`git push 完成`)
       printCommitLog({commitMessage})
       resolve({stdout, stderr})
     })
