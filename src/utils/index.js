@@ -426,7 +426,7 @@ function delay(timeout) {
 }
 async function judgeRemote() {
   try {
-    await process.next(() => {})
+    await delay(100)
     const spinner = ora('正在检查远程更新...').start();
     // 检查是否有远程更新
     // 先获取远程最新状态
