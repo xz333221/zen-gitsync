@@ -166,6 +166,9 @@ const commitAndSchedule = async (interval) => {
     }, interval + 100);
   } catch (error) {
     console.error('提交出错:', error.message);
+    clearTimeout(timer);
+    clearInterval(countdownInterval);
+    process.exit(1);
   }
 };
 const judgeInterval = async () => {
@@ -174,6 +177,7 @@ const judgeInterval = async () => {
     let interval = parseInt(intervalArg.split('=')[1] || '3600', 10) * 1000;
 
     showStartInfo(interval);
+    
     await commitAndSchedule(interval); // 传入 interval 参数
 
     // 处理退出清理
