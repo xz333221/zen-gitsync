@@ -383,7 +383,7 @@ function printCommitLog({ commitMessage }) {
       `${chalk.cyan.bold('Project:')} ${projectName}`,
       `${chalk.cyan.bold('Commit:')} ${hashDisplay} ${chalk.dim('on')} ${branchDisplay}`,
       `${chalk.cyan.bold('Message:')} ${chalk.reset(commitMessage)}`,
-      `${chalk.blueBright('Time:')} ${new Date().toLocaleString()}`
+      `${chalk.cyan.bold('Time:')} ${new Date().toLocaleString()}`
     ].join('\n');
 
     // 使用boxen创建装饰框
