@@ -441,7 +441,7 @@ const showStartInfo = (interval) => {
     // });
     //
     // console.log(box + "\n");
-    console.log('\n'.repeat(6));
+    // console.log('\n'.repeat(6));
 }
 const judgeInterval = async () => {
     // 判断是否有 --interval 参数
@@ -461,6 +461,7 @@ const judgeInterval = async () => {
             clearInterval(timer);
             timer = null;
         }
+        // this.execSyncGitCommand('git status')
 
         // 开始定时任务提示
         showStartInfo(interval);
@@ -471,7 +472,7 @@ const judgeInterval = async () => {
                 exit: false
             })
 
-        }, 1000)
+        }, 5000)
 
 
         timer = setInterval(() => {
