@@ -368,7 +368,7 @@ function printCommitLog({ commitMessage }) {
   try {
     // 获取项目名称（取git仓库根目录名）
     const projectRoot = execSyncGitCommand('git rev-parse --show-toplevel', { log: false });
-    const projectName = chalk.blue(path.basename(projectRoot.trim()));
+    const projectName = chalk.blueBright(path.basename(projectRoot.trim()));
 
     // 获取当前提交hash（取前7位）
     const commitHash = execSyncGitCommand('git rev-parse --short HEAD', { log: false }).trim();
@@ -383,7 +383,7 @@ function printCommitLog({ commitMessage }) {
       `${chalk.cyan.bold('Project:')} ${projectName}`,
       `${chalk.cyan.bold('Commit:')} ${hashDisplay} ${chalk.dim('on')} ${branchDisplay}`,
       `${chalk.cyan.bold('Message:')} ${chalk.reset(commitMessage)}`,
-      `${chalk.gray('Time:')} ${new Date().toLocaleString()}`
+      `${chalk.blueBright('Time:')} ${new Date().toLocaleString()}`
     ].join('\n');
 
     // 使用boxen创建装饰框
