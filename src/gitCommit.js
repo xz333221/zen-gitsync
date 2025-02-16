@@ -121,7 +121,9 @@ async function createGitCommit(options) {
       }
     }
   } catch (e) {
-    console.log(`createGitCommit error ==> `, e)
+    console.error(chalk.red.bold('提交流程错误:'));
+    console.error(chalk.dim(e.stack)); // 打印完整错误堆栈
+    throw e; // 继续向上抛出错误
   }
 }
 async function main() {
@@ -177,8 +179,13 @@ const judgeInterval = async () => {
     let interval = parseInt(intervalArg.split('=')[1] || '3600', 10) * 1000;
 
     showStartInfo(interval);
-    
-    await commitAndSchedule(interval); // 传入 interval 参数
+
+    try {
+      await commitAndSchedule(interval);
+    } catch (error) {
+      console.error(chalk.red.bold('定时提交致命错误:'), error.message);
+      process.exit(1);
+    }
 
     // 处理退出清理
     process.on('SIGINT', () => {
