@@ -22,6 +22,7 @@ import {exec, execSync} from 'child_process'
 import os from 'os'
 import ora from "ora";
 import readline from 'readline'
+import path from 'path'
 
 const printTableWithHeaderUnderline = (head, content, style) => {
   // 获取终端的列数（宽度）
