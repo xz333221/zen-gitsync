@@ -210,7 +210,7 @@ function execGitCommand(command, options = {}) {
     let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
     let cwd = getCwd()
 
-    setTimeout(() => {
+    // setTimeout(() => {
       exec(command, {
         env: {...process.env, LANG: 'C.UTF-8'},
         encoding,
@@ -237,7 +237,7 @@ function execGitCommand(command, options = {}) {
           stderr
         })
       })
-    }, 1000)
+    // }, 1000)
 
   })
 }

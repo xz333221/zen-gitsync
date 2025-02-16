@@ -157,13 +157,13 @@ const showStartInfo = (interval) => {
 const commitAndSchedule = async (interval) => {
   try {
     await createGitCommit({exit: false});
-    await delay(2000)
+    // await delay(2000)
     startCountdown(interval); // 启动倒计时
 
     // 设置定时提交
     timer = setTimeout(async () => {
       await commitAndSchedule(interval);
-    }, interval);
+    }, interval + 2000);
   } catch (error) {
     console.error('提交出错:', error.message);
   }
