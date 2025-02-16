@@ -268,8 +268,6 @@ async function main() {
 
   await handleConfigCommands();
 
-  await createGitCommit()
-  return
   judgeInterval();
 }
 
@@ -309,18 +307,17 @@ const judgeInterval = async () => {
       timer = null;
     }
 
-    new GitCommit({
-      exit: false
-    })
+    await createGitCommit({exit: false})
+    // new GitCommit({
+    //   exit: false
+    // })
 
     // 开始定时任务提示
     showStartInfo(interval);
 
     timer = setInterval(() => {
       // console.log(`定时执行`)
-      new GitCommit({
-        exit: false
-      })
+      createGitCommit({exit: false})
     }, interval)
   } else {
     new GitCommit({
