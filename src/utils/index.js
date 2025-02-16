@@ -164,9 +164,9 @@ const coloredLog = (...args) => {
   const commandLine = args[0];
   const content = args[1];
   const type = args[2] || 'common';
-  console.log(`commandLine ==> `, commandLine)
-  console.log(`content ==> `, content)
-  console.log(`type ==> `, type)
+  // console.log(`commandLine ==> `, commandLine)
+  // console.log(`content ==> `, content)
+  // console.log(`type ==> `, type)
   tableLog(commandLine, content, type);
 }
 const errorLog = (commandLine, content) => {
@@ -351,7 +351,6 @@ function judgeUnmerged(statusOutput) {
   }
 }
 function exec_push({exit, commitMessage}) {
-  console.log(`执行 git push`)
   // 执行 git push
   // execSyncGitCommand(`git push`);
   return new Promise((resolve, reject) => {
@@ -370,7 +369,7 @@ function printCommitLog({commitMessage}) {
   const message = chalk.green.bold([
     `message: ${commitMessage}`,
     `time: ${new Date().toLocaleString()}`
-  ]);
+  ].join("\n"));
 
   coloredLog(head, message)
 }
