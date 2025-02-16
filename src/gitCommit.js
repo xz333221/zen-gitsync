@@ -89,9 +89,8 @@ async function createGitCommit(options) {
   try {
     let statusOutput = null
     let exit = options ? !!options.exit : true
-    // const config = await loadConfig()
-    // let commitMessage = config.defaultCommitMessage
-    let commitMessage = 'test'
+    const config = await loadConfig()
+    let commitMessage = config.defaultCommitMessage
     let {stdout} = await execGitCommand('git status')
     statusOutput = stdout
     judgeUnmerged(statusOutput)
