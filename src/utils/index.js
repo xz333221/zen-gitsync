@@ -477,7 +477,7 @@ async function execAddAndCommit({statusOutput, commitMessage}) {
   statusOutput.includes('(use "git add') && execSyncGitCommand('git add .')
 
   // 执行 git commit
-  if (statusOutput.includes('Untracked files:') || statusOutput.includes('Changes not staged for commit') || this.statusOutput.includes('Changes to be committed')) {
+  if (statusOutput.includes('Untracked files:') || statusOutput.includes('Changes not staged for commit') || statusOutput.includes('Changes to be committed')) {
     execSyncGitCommand(`git commit -m "${commitMessage}"`)
   }
 }

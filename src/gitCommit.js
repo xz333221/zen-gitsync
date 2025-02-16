@@ -38,9 +38,9 @@ async function createGitCommit(options) {
 
       exec_push({exit, commitMessage})
     } else {
-      if (this.statusOutput.includes('use "git push')) {
+      if (statusOutput.includes('use "git push')) {
         exec_push({exit, commitMessage})
-      } else if (this.statusOutput.includes('use "git pull')) {
+      } else if (statusOutput.includes('use "git pull')) {
         await execPull()
       } else {
         await this.judgeRemote()  // 等待 judgeRemote 完成
