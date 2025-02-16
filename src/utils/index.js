@@ -515,7 +515,7 @@ async function execAddAndCommit({statusOutput, commitMessage}) {
 
   // 执行 git commit
   if (statusOutput.includes('Untracked files:') || statusOutput.includes('Changes not staged for commit') || statusOutput.includes('Changes to be committed')) {
-    execSyncGitCommand(`git commit -m "${commitMessage}"`)
+    await execGitCommand(`git commit -m "${commitMessage}"`)
   }
 }
 export {coloredLog, errorLog, execSyncGitCommand,
