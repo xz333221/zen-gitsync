@@ -424,7 +424,7 @@ async function execPull() {
   try {
     // 检查是否需要拉取更新
     const spinner = ora('正在拉取代码...').start();
-    await execGitCommand('git pull --merge', {
+    await execGitCommand('git pull', {
       spinner
     })
   } catch (e) {
