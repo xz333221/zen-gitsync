@@ -86,6 +86,7 @@ const {defaultCommitMessage} = config
 let timer = null
 
 async function createGitCommit(options) {
+  console.log(`自动提交流程开始=====================>`)
   try {
     let statusOutput = null
     let exit = options ? !!options.exit : true
