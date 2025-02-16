@@ -441,7 +441,7 @@ const showStartInfo = (interval) => {
     // });
     //
     // console.log(box + "\n");
-    console.log('\n'.repeat(6 - 1));
+    console.log('\n'.repeat(6));
 }
 const judgeInterval = async () => {
     // 判断是否有 --interval 参数
