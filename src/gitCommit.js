@@ -25,6 +25,12 @@ async function createGitCommit(options) {
     let exit = options ? !!options.exit : true
     const config = await loadConfig()
     let commitMessage = config.defaultCommitMessage
+
+    statusOutput = await execGitCommand('git status')
+    console.log(`commitMessage ==> `, commitMessage)
+    console.log(`statusOutput ==> `, statusOutput)
+    const hasUnmerged = this.statusOutput.includes('You have unmerged paths');
+
   } catch (e) {
     console.log(`createGitCommit error ==> `, e)
   }
@@ -44,21 +50,6 @@ class GitCommit {
   exec_exit() {
     if (this.exit) {
       process.exit()
-    }
-  }
-
-  judgeLog() {
-    const logArg = process.argv.find(arg => arg === 'log');
-    if (logArg) {
-      this.printGitLog(); // 如果有 log 参数，打印 Git 提交记录
-      return true;
-    }
-  }
-
-  judgeHelp() {
-    if (process.argv.includes('-h') || process.argv.includes('--help')) {
-      showHelp();
-      return true;
     }
   }
 
@@ -258,6 +249,9 @@ async function main() {
   judgeHelp()
 
   await handleConfigCommands();
+
+  await createGitCommit()
+  return
   judgeInterval();
 }
 
