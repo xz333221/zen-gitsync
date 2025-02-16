@@ -164,6 +164,7 @@ const coloredLog = (...args) => {
   const commandLine = args[0];
   const content = args[1];
   const type = args[2] || 'common';
+  console.log(`commandLine, content, type ==> `, commandLine, content, type)
   tableLog(commandLine, content, type);
 }
 const errorLog = (commandLine, content) => {
