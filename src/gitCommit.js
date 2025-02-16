@@ -79,7 +79,7 @@ async function createGitCommit(options) {
       // 检查是否有远程更新
       await judgeRemote()  // 等待 judgeRemote 完成
 
-      exec_push({exit, commitMessage})
+      await exec_push({exit, commitMessage})
     } else {
       if (statusOutput.includes('use "git push')) {
         exec_push({exit, commitMessage})
