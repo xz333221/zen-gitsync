@@ -49,22 +49,30 @@ const printTableWithHeaderUnderline = (head, content, style) => {
     style: style,
     wordWrap: true,  // 启用自动换行
     chars: {
-      'top': '═',       // 顶部边框使用长横线
-      'top-mid': '╤',   // 顶部连接符
-      'top-left': '╔',   // 左上角
-      'top-right': '╗',  // 右上角
-      'bottom': '═',    // 底部边框
-      'bottom-mid': '╧', // 底部连接符
-      'bottom-left': '╚',// 左下角
-      'bottom-right': '╝',// 右下角
-      'left': '║',      // 左边框
-      'left-mid': '╟',  // 左连接符
-      'mid': '═',       // 中间分隔符
-      'mid-mid': '╪',   // 中间连接符
-      'right': '║',     // 右边框
-      'right-mid': '╢', // 右连接符
-      'middle': '│'     // 中间内容的边界
-    }
+      'top': '─',
+      'top-mid': '┬',
+      'bottom': '─',
+      'mid': '─',
+      'left': '│',
+      'right': '│'
+    },
+    // chars: {
+    //   'top': '═',       // 顶部边框使用长横线
+    //   'top-mid': '╤',   // 顶部连接符
+    //   'top-left': '╔',   // 左上角
+    //   'top-right': '╗',  // 右上角
+    //   'bottom': '═',    // 底部边框
+    //   'bottom-mid': '╧', // 底部连接符
+    //   'bottom-left': '╚',// 左下角
+    //   'bottom-right': '╝',// 右下角
+    //   'left': '║',      // 左边框
+    //   'left-mid': '╟',  // 左连接符
+    //   'mid': '═',       // 中间分隔符
+    //   'mid-mid': '╪',   // 中间连接符
+    //   'right': '║',     // 右边框
+    //   'right-mid': '╢', // 右连接符
+    //   'middle': '│'     // 中间内容的边界
+    // }
   });
 
   // 向表格中添加不同颜色的行
