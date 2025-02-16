@@ -364,8 +364,8 @@ function exec_push({exit, commitMessage}) {
   });
 }
 function printCommitLog({commitMessage}) {
+  const head = `提交完成`;
   const message = chalk.green.bold([
-    `提交完成`,
     `message: ${commitMessage}`,
     `time: ${new Date().toLocaleString()}`
   ]);
