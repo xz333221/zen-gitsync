@@ -251,4 +251,86 @@ const judgePlatform = () => {
     }
   }
 };
-export {coloredLog, errorLog, execSyncGitCommand, execGitCommand, getCwd, judgePlatform};
+const showHelp = () => {
+  const helpMessage = `
+Usage: g [options]
+
+Options:
+  -h, --help                   Show this help message
+  --set-default-message=<msg>  Set default commit message
+  get-config                   Show current configuration
+  -y                           Auto commit with default message
+  -m <message>                 Commit message (use quotes if message contains spaces)
+  -m=<message>                 Commit message (use this form without spaces around '=')
+  --path=<path>                Set custom working directory
+  --cwd=<path>                 Set custom working directory
+  --interval=<seconds>         Set interval time for automatic commits (in seconds)
+  log                          Show git commit logs
+    --n=<number>               Number of commits to show with --log
+  --no-diff                    Skip displaying git diff
+
+Example:
+  g -m "Initial commit"      Commit with a custom message
+  g -m=Fix-bug               Commit with a custom message (no spaces around '=')
+  g -y                       Auto commit with the default message
+  g -y --interval=600        Commit every 10 minutes (600 seconds)
+  g --path=/path/to/repo     Specify a custom working directory
+  g log                      Show recent commit logs
+  g log --n=5                Show the last 5 commits with --log
+
+Add auto submit in package.json:
+  "scripts": {
+    "g:y": "g -y"
+  }
+
+Run in the background across platforms:
+  Windows:
+    start /min cmd /k "g -y --path=your-folder --interval=600"
+  
+  Linux/macOS:
+    nohup g -y --path=your-folder --interval=600 > git-autocommit.log 2>&1 &
+
+Stop all monitoring processes:
+  Windows: Terminate the Node.js process in the Task Manager.
+  Linux/macOS:
+    pkill -f "g -y"       # Terminate all auto-commit processes
+    ps aux | grep "g -y"  # Find the specific process ID
+    kill [PID]            # Terminate the specified process
+  `;
+
+  console.log(helpMessage);
+  process.exit();
+};
+function judgeLog() {
+  const logArg = process.argv.find(arg => arg === 'log');
+  if (logArg) {
+    printGitLog(); // 如果有 log 参数，打印 Git 提交记录
+    // 打印完成后退出
+    process.exit();
+  }
+}
+
+function judgeHelp() {
+  if (process.argv.includes('-h') || process.argv.includes('--help')) {
+    showHelp();
+  }
+}
+async function printGitLog() {
+  let n = 20;
+  let logArg = process.argv.find(arg => arg.startsWith('--n='));
+  if (logArg) {
+    n = parseInt(logArg.split('=')[1], 10);
+  }
+  const logCommand = `git log -n ${n} --pretty=format:"%C(green)%h%C(reset) | %C(cyan)%an%C(reset) | %C(yellow)%ad%C(reset) | %C(blue)%D%C(reset) | %C(magenta)%s%C(reset)" --date=format:"%Y-%m-%d %H:%M" --graph --decorate --color`
+  try {
+    const logOutput = execSyncGitCommand(logCommand, {
+      head: `git log`
+    });
+  } catch (error) {
+    console.error('无法获取 Git 提交记录:', error.message);
+  }
+  // 打印完成后退出
+  process.exit();
+}
+export {coloredLog, errorLog, execSyncGitCommand,
+  execGitCommand, getCwd, judgePlatform, showHelp, judgeLog, printGitLog, judgeHelp};

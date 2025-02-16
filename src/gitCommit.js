@@ -1,87 +1,34 @@
 #!/usr/bin/env node
-import {coloredLog, errorLog, execGitCommand, execSyncGitCommand, getCwd, judgePlatform} from './utils/index.js';
+import {
+  coloredLog, errorLog, execGitCommand, execSyncGitCommand, showHelp,
+  getCwd, judgePlatform, judgeLog, judgeHelp
+} from './utils/index.js';
 import readline from 'readline'
 import ora from 'ora';
 import chalk from 'chalk';
 import boxen from 'boxen';
 import config from './config.js';
 
-const {loadConfig, saveConfig} = config;
+const {loadConfig, saveConfig, handleConfigCommands} = config;
 const {defaultCommitMessage} = config
 
 let timer = null
-const showHelp = () => {
-  const helpMessage = `
-Usage: g [options]
 
-Options:
-  -h, --help                   Show this help message
-  --set-default-message=<msg>  Set default commit message
-  get-config                   Show current configuration
-  -y                           Auto commit with default message
-  -m <message>                 Commit message (use quotes if message contains spaces)
-  -m=<message>                 Commit message (use this form without spaces around '=')
-  --path=<path>                Set custom working directory
-  --cwd=<path>                 Set custom working directory
-  --interval=<seconds>         Set interval time for automatic commits (in seconds)
-  log                          Show git commit logs
-    --n=<number>               Number of commits to show with --log
-  --no-diff                    Skip displaying git diff
-
-Example:
-  g -m "Initial commit"      Commit with a custom message
-  g -m=Fix-bug               Commit with a custom message (no spaces around '=')
-  g -y                       Auto commit with the default message
-  g -y --interval=600        Commit every 10 minutes (600 seconds)
-  g --path=/path/to/repo     Specify a custom working directory
-  g log                      Show recent commit logs
-  g log --n=5                Show the last 5 commits with --log
-
-Add auto submit in package.json:
-  "scripts": {
-    "g:y": "g -y"
-  }
-
-Run in the background across platforms:
-  Windows:
-    start /min cmd /k "g -y --path=your-folder --interval=600"
-  
-  Linux/macOS:
-    nohup g -y --path=your-folder --interval=600 > git-autocommit.log 2>&1 &
-
-Stop all monitoring processes:
-  Windows: Terminate the Node.js process in the Task Manager.
-  Linux/macOS:
-    pkill -f "g -y"       # Terminate all auto-commit processes
-    ps aux | grep "g -y"  # Find the specific process ID
-    kill [PID]            # Terminate the specified process
-  `;
-
-  console.log(helpMessage);
-  process.exit();
-};
-
-// 添加配置管理函数
-async function handleConfigCommands() {
-  if (process.argv.includes('get-config')) {
-    const currentConfig = await loadConfig();
-    console.log('Current configuration:');
-    console.log(currentConfig);
-    process.exit();
-  }
-
-  const setMsgArg = process.argv.find(arg => arg.startsWith('--set-default-message='));
-  if (setMsgArg) {
-    const newMessage = setMsgArg.split('=')[1];
-    const currentConfig = await loadConfig();
-    currentConfig.defaultCommitMessage = newMessage;
-    await saveConfig(currentConfig);
-    console.log(chalk.green(`✓ 默认提交信息已设置为: "${newMessage}"`));
-    process.exit();
+function exec_exit(exit) {
+  if (exit) {
+    process.exit()
   }
 }
-
-
+async function createGitCommit(options) {
+  try {
+    let statusOutput = null
+    let exit = options ? !!options.exit : true
+    const config = await loadConfig()
+    let commitMessage = config.defaultCommitMessage
+  } catch (e) {
+    console.log(`createGitCommit error ==> `, e)
+  }
+}
 
 class GitCommit {
   constructor(options) {
@@ -228,13 +175,7 @@ class GitCommit {
 
   async init() {
     try {
-      judgePlatform()
 
-      // 检查是否有 log 参数
-      if (this.judgeLog()) return
-
-      // 检查帮助参数
-      if (this.judgeHelp()) return
 
       this.statusOutput = execSyncGitCommand('git status')
       const hasUnmerged = this.statusOutput.includes('You have unmerged paths');
@@ -281,29 +222,6 @@ class GitCommit {
     }
   }
 
-  async printGitLog() {
-    let n = 20;
-    let logArg = process.argv.find(arg => arg.startsWith('--n='));
-    if (logArg) {
-      n = parseInt(logArg.split('=')[1], 10);
-    }
-    const logCommand = `git log -n ${n} --pretty=format:"%C(green)%h%C(reset) | %C(cyan)%an%C(reset) | %C(yellow)%ad%C(reset) | %C(blue)%D%C(reset) | %C(magenta)%s%C(reset)" --date=format:"%Y-%m-%d %H:%M" --graph --decorate --color`
-    try {
-      const logOutput = execSyncGitCommand(logCommand, {
-        head: `git log`
-      });
-      // // 格式化输出 Git 提交记录
-      // const box = boxen(chalk.green.bold(logOutput), {
-      //   borderStyle: 'round',
-      //   borderColor: 'cyan',
-      //   backgroundColor: 'black',
-      // });
-      // console.log(box); // 打印优雅的 Git 提交记录
-    } catch (error) {
-      console.error('无法获取 Git 提交记录:', error.message);
-    }
-    this.exec_exit(); // 打印完成后退出
-  }
 
   exec_push() {
     // 执行 git push
@@ -335,6 +253,14 @@ class GitCommit {
 
 // 在 judgeInterval 函数前添加配置命令处理
 async function main() {
+  judgePlatform()
+
+  // 检查是否有 log 参数
+  judgeLog()
+
+  // 检查帮助参数
+  judgeHelp()
+
   await handleConfigCommands();
   judgeInterval();
 }
@@ -354,15 +280,6 @@ const showStartInfo = (interval) => {
   ].join("\n"));
 
   coloredLog(head, message)
-
-  // const box = boxen(message, {
-  //     padding: 1,
-  //     borderColor: 'green',
-  //     borderStyle: 'round',
-  //     margin: 1
-  // });
-  //
-  // console.log(box + "\n");
   // console.log('\n'.repeat(6));
 }
 const judgeInterval = async () => {
