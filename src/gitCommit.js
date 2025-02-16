@@ -89,7 +89,7 @@ const {defaultCommitMessage} = config
 let timer = null
 
 async function createGitCommit(options) {
-  console.log(`自动提交流程开始=====================>`)
+  // console.log(`自动提交流程开始=====================>`)
   try {
     let statusOutput = null
     let exit = options ? !!options.exit : true
@@ -163,7 +163,7 @@ const commitAndSchedule = async (interval) => {
     // 设置定时提交
     timer = setTimeout(async () => {
       await commitAndSchedule(interval);
-    }, interval + 2000);
+    }, interval + 500);
   } catch (error) {
     console.error('提交出错:', error.message);
   }
