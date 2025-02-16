@@ -219,36 +219,37 @@ function execGitCommand(command, options = {}) {
     let cwd = getCwd()
 
     // setTimeout(() => {
-      exec(command, {
-        env: {...process.env, LANG: 'C.UTF-8'},
-        encoding,
-        maxBuffer,
-        cwd
-      }, (error, stdout, stderr) => {
-        if (options.spinner) {
-          options.spinner.stop();
-        }
+    exec(command, {
+      env: {...process.env, LANG: 'C.UTF-8'},
+      encoding,
+      maxBuffer,
+      cwd
+    }, (error, stdout, stderr) => {
+      if (options.spinner) {
+        options.spinner.stop();
+      }
 
-        if (stdout) {
-          log && coloredLog(head, stdout)
-        }
-        if (stderr) {
-          log && coloredLog(head, stderr)
-        }
-        if (error) {
-          log && coloredLog(head, error, 'error')
-          reject(error)
-          return
-        }
-        resolve({
-          stdout,
-          stderr
-        })
+      if (stdout) {
+        log && coloredLog(head, stdout)
+      }
+      if (stderr) {
+        log && coloredLog(head, stderr)
+      }
+      if (error) {
+        log && coloredLog(head, error, 'error')
+        reject(error)
+        return
+      }
+      resolve({
+        stdout,
+        stderr
       })
+    })
     // }, 1000)
 
   })
 }
+
 const getCwd = () => {
   const cwdArg = process.argv.find(arg => arg.startsWith('--path')) || process.argv.find(arg => arg.startsWith('--cwd'));
   if (cwdArg) {
@@ -320,6 +321,7 @@ Stop all monitoring processes:
   console.log(helpMessage);
   process.exit();
 };
+
 function judgeLog() {
   const logArg = process.argv.find(arg => arg === 'log');
   if (logArg) {
@@ -334,6 +336,7 @@ function judgeHelp() {
     showHelp();
   }
 }
+
 async function printGitLog() {
   let n = 20;
   let logArg = process.argv.find(arg => arg.startsWith('--n='));
@@ -351,11 +354,13 @@ async function printGitLog() {
   // 打印完成后退出
   process.exit();
 }
+
 function exec_exit(exit) {
   if (exit) {
     process.exit()
   }
 }
+
 function judgeUnmerged(statusOutput) {
   const hasUnmerged = statusOutput.includes('You have unmerged paths');
   if (hasUnmerged) {
@@ -363,6 +368,7 @@ function judgeUnmerged(statusOutput) {
     process.exit(1);
   }
 }
+
 function exec_push({exit, commitMessage}) {
   // 执行 git push
   // execSyncGitCommand(`git push`);
@@ -376,18 +382,19 @@ function exec_push({exit, commitMessage}) {
     })
   });
 }
-function printCommitLog({ commitMessage }) {
+
+function printCommitLog({commitMessage}) {
   try {
     // 获取项目名称（取git仓库根目录名）
-    const projectRoot = execSyncGitCommand('git rev-parse --show-toplevel', { log: false });
+    const projectRoot = execSyncGitCommand('git rev-parse --show-toplevel', {log: false});
     const projectName = chalk.blueBright(path.basename(projectRoot.trim()));
 
     // 获取当前提交hash（取前7位）
-    const commitHash = execSyncGitCommand('git rev-parse --short HEAD', { log: false }).trim();
+    const commitHash = execSyncGitCommand('git rev-parse --short HEAD', {log: false}).trim();
     const hashDisplay = chalk.yellow(commitHash);
 
     // 获取分支信息
-    const branch = execSyncGitCommand('git branch --show-current', { log: false }).trim();
+    const branch = execSyncGitCommand('git branch --show-current', {log: false}).trim();
     const branchDisplay = chalk.magenta(branch);
 
     // 构建信息内容
@@ -420,6 +427,7 @@ function printCommitLog({ commitMessage }) {
     console.log(errorBox);
   }
 }
+
 async function execPull() {
   try {
     // 检查是否需要拉取更新
@@ -432,12 +440,14 @@ async function execPull() {
     throw Error(e)
   }
 }
+
 function delay(timeout) {
   return new Promise(resolve => setTimeout(resolve, timeout));
 }
+
 async function judgeRemote() {
+  const spinner = ora('正在检查远程更新...').start();
   try {
-    const spinner = ora('正在检查远程更新...').start();
     // 检查是否有远程更新
     // 先获取远程最新状态
     await execGitCommand('git remote update', {
@@ -532,6 +542,7 @@ async function execAddAndCommit({statusOutput, commitMessage}) {
     await execGitCommand(`git commit -m "${commitMessage}"`)
   }
 }
+
 // 添加时间格式化函数
 function formatDuration(ms) {
   const totalSeconds = Math.floor(ms / 1000);
@@ -547,7 +558,10 @@ function formatDuration(ms) {
     `${seconds}秒`
   ].filter(Boolean).join('');
 }
-export {coloredLog, errorLog, execSyncGitCommand,
+
+export {
+  coloredLog, errorLog, execSyncGitCommand,
   execGitCommand, getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
   judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,
-  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit};
+  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit
+};
