@@ -163,7 +163,7 @@ const commitAndSchedule = async (interval) => {
     // 设置定时提交
     timer = setTimeout(async () => {
       await commitAndSchedule(interval);
-    }, interval + 500);
+    }, interval + 100);
   } catch (error) {
     console.error('提交出错:', error.message);
   }
