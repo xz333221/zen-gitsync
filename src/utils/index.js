@@ -363,14 +363,37 @@ function exec_push({exit, commitMessage}) {
     })
   });
 }
-function printCommitLog({commitMessage}) {
-  const head = `提交完成`;
-  const message = chalk.green.bold([
-    `message: ${commitMessage}`,
-    `time: ${new Date().toLocaleString()}`
-  ].join("\n"));
+// function printCommitLog({commitMessage}) {
+//   const head = `提交完成`;
+//   const message = chalk.green.bold([
+//     `message: ${commitMessage}`,
+//     `time: ${new Date().toLocaleString()}`
+//   ].join("\n"));
+//
+//   coloredLog(head, message)
+// }
+function printCommitLog({ commitMessage }) {
+  // 获取当前分支信息
+  const branch = execSyncGitCommand('git branch --show-current', { log: false });
 
-  coloredLog(head, message)
+  const title = chalk.bold.green('✅ Commit Success');
+  const message = [
+    chalk.cyan.bold('Branch:  ') + chalk.magenta(branch),
+    chalk.cyan.bold('Message: ') + chalk.reset(commitMessage),
+    chalk.gray(`Time: ${new Date().toLocaleString()}`)
+  ].join('\n');
+
+  const box = boxen(message, {
+    padding: 1,
+    margin: 1,
+    borderStyle: 'round',
+    borderColor: 'green',
+    titleAlignment: 'center',
+    title: title,
+    float: 'left'
+  });
+
+  console.log(box);
 }
 async function execPull() {
   try {
