@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-
-import {exec, execSync} from 'child_process'
-import os from 'os'
-import {coloredLog, errorLog, execGitCommand, execSyncGitCommand, getCwd} from './utils/index.js';
+import {coloredLog, errorLog, execGitCommand, execSyncGitCommand, getCwd, judgePlatform} from './utils/index.js';
 import readline from 'readline'
 import ora from 'ora';
 import chalk from 'chalk';
@@ -84,17 +81,7 @@ async function handleConfigCommands() {
   }
 }
 
-const judgePlatform = () => {
-  // 判断是否是 Windows 系统
-  if (os.platform() === 'win32') {
-    try {
-      // 设置终端字符编码为 UTF-8
-      execSync('chcp 65001');
-    } catch (e) {
-      console.error('设置字符编码失败:', e.message);
-    }
-  }
-};
+
 
 class GitCommit {
   constructor(options) {

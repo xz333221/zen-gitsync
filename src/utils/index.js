@@ -19,6 +19,7 @@ import Table from 'cli-table3';
 import chalk from 'chalk';
 import boxen from "boxen";
 import {exec, execSync} from 'child_process'
+import os from 'os'
 
 const printTableWithHeaderUnderline = (head, content, style) => {
   // 获取终端的列数（宽度）
@@ -239,4 +240,15 @@ const getCwd = () => {
   }
   return process.cwd()
 }
-export {coloredLog, errorLog, execSyncGitCommand, execGitCommand, getCwd};
+const judgePlatform = () => {
+  // 判断是否是 Windows 系统
+  if (os.platform() === 'win32') {
+    try {
+      // 设置终端字符编码为 UTF-8
+      execSync('chcp 65001');
+    } catch (e) {
+      console.error('设置字符编码失败:', e.message);
+    }
+  }
+};
+export {coloredLog, errorLog, execSyncGitCommand, execGitCommand, getCwd, judgePlatform};
