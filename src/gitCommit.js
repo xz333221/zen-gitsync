@@ -12,7 +12,6 @@ import config from './config.js';
 import dateFormat from 'date-fns/format';
 import logUpdate from 'log-update';
 
-// 修改 showNextCommitTime 函数
 let countdownInterval = null;
 
 function startCountdown(interval) {
@@ -79,28 +78,6 @@ function formatDuration(ms) {
 }
 
 // 添加显示下次提交时间的函数
-function showNextCommitTime(interval) {
-  const nextTime = Date.now() + interval;
-  const formattedTime = dateFormat(nextTime, 'yyyy-MM-dd HH:mm:ss');
-  const remainingTime = formatDuration(interval);
-
-  const message = [
-    chalk.green.bold('🕒 下次提交时间'),
-    chalk.cyan(`具体时间: ${formattedTime}`),
-    chalk.yellow(`剩余时间: ${remainingTime}`),
-    chalk.dim('按 Ctrl+C 终止进程')
-  ].join('\n');
-
-  const box = boxen(message, {
-    padding: 1,
-    margin: 1,
-    borderColor: 'cyan',
-    borderStyle: 'round',
-    titleAlignment: 'center'
-  });
-
-  console.log(box);
-}
 
 
 const {loadConfig, saveConfig, handleConfigCommands} = config;
@@ -114,9 +91,9 @@ async function createGitCommit(options) {
     let exit = options ? !!options.exit : true
     const config = await loadConfig()
     let commitMessage = config.defaultCommitMessage
-
     let {stdout} = await execGitCommand('git status')
     statusOutput = stdout
+    //
     judgeUnmerged(statusOutput)
     // 先检查本地是否有未提交的更改
     const hasLocalChanges = !statusOutput.includes('nothing to commit, working tree clean');
