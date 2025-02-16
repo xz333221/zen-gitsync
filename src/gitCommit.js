@@ -319,9 +319,7 @@ const judgeInterval = async () => {
       createGitCommit({exit: false})
     }, interval)
   } else {
-    new GitCommit({
-      exit: true
-    })
+    createGitCommit({exit: false})
   }
 };
 
