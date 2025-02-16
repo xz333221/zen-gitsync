@@ -93,7 +93,7 @@ async function createGitCommit(options) {
     let commitMessage = config.defaultCommitMessage
     let {stdout} = await execGitCommand('git status')
     statusOutput = stdout
-    judgeUnmerged(statusOutput)
+    // judgeUnmerged(statusOutput)
     // 先检查本地是否有未提交的更改
     const hasLocalChanges = !statusOutput.includes('nothing to commit, working tree clean');
     if (hasLocalChanges) {
