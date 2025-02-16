@@ -20,6 +20,8 @@ import chalk from 'chalk';
 import boxen from "boxen";
 import {exec, execSync} from 'child_process'
 import os from 'os'
+import ora from "ora";
+import readline from 'readline'
 
 const printTableWithHeaderUnderline = (head, content, style) => {
   // 获取终端的列数（宽度）
@@ -211,16 +213,17 @@ function execGitCommand(command, options = {}, callback) {
       if (options.spinner) {
         options.spinner.stop();
       }
-      if (error) {
-        log && coloredLog(head, error, 'error')
-        reject(error)
-        return
-      }
+
       if (stdout) {
         log && coloredLog(head, stdout)
       }
       if (stderr) {
         log && coloredLog(head, stderr)
+      }
+      if (error) {
+        log && coloredLog(head, error, 'error')
+        reject(error)
+        return
       }
       resolve({
         stdout,
@@ -332,5 +335,153 @@ async function printGitLog() {
   // 打印完成后退出
   process.exit();
 }
+function exec_exit(exit) {
+  if (exit) {
+    process.exit()
+  }
+}
+function judgeUnmerged(statusOutput) {
+  const hasUnmerged = statusOutput.includes('You have unmerged paths');
+  if (hasUnmerged) {
+    errorLog('错误', '存在未合并的文件，请先解决冲突')
+    process.exit(1);
+  }
+}
+function exec_push({exit, commitMessage}) {
+  // 执行 git push
+  // execSyncGitCommand(`git push`);
+  return new Promise((resolve, reject) => {
+    const spinner = ora('正在推送代码...').start();
+    execGitCommand('git push', {
+      spinner
+    }, (error, stdout, stderr) => {
+      printCommitLog({commitMessage})
+
+      resolve({error, stdout, stderr})
+      // execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
+      // exec_exit(exit);
+    })
+  });
+}
+function printCommitLog({commitMessage}) {
+  let msg = ` SUCCESS: 提交完成  
+ message: ${commitMessage || 'submit'} 
+ time: ${new Date().toLocaleString()} `
+  const message = chalk.green.bold(msg);
+  const box = boxen(message, {
+  });
+  console.log(box); // 打印带有边框的消息
+}
+async function execPull() {
+  try {
+    // 检查是否需要拉取更新
+    const spinner = ora('正在拉取代码...').start();
+    await execGitCommand('git pull --merge', {
+      spinner
+    })
+  } catch (e) {
+    console.log(chalk.yellow('⚠️ 拉取远程更新合并失败，可能存在冲突，请手动处理'));
+    throw Error(e)
+  }
+}
+async function judgeRemote() {
+  try {
+    const spinner = ora('正在检查远程更新...').start();
+    // 检查是否有远程更新
+    // 先获取远程最新状态
+    await execGitCommand('git remote update', {
+      head: 'Fetching remote updates',
+      log: false
+    });
+    // 检查是否需要 pull
+    const res = await execGitCommand('git rev-list HEAD..@{u} --count', {
+      head: 'Checking if behind remote',
+      log: false
+    });
+    const behindCount = res.stdout.trim()
+    // 如果本地落后于远程
+    if (parseInt(behindCount) > 0) {
+      try {
+        spinner.stop();
+        // const spinner_pull = ora('发现远程更新，正在拉取...').start();
+        await execPull()
+
+        // // 尝试使用 --ff-only 拉取更新
+        // const res = await execGitCommand('git pull --ff-only', {
+        //   spinner: spinner_pull,
+        //   head: 'Pulling updates'
+        // });
+        console.log(chalk.green('✓ 已成功同步远程更新'));
+      } catch (pullError) {
+        // // 如果 --ff-only 拉取失败，尝试普通的 git pull
+        // console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
+        // await this.execPull()
+        throw new Error(pullError)
+      }
+    } else {
+      spinner.stop();
+      console.log(chalk.green('✓ 本地已是最新'));
+    }
+  } catch (e) {
+    // console.log(`e ==> `, e)
+    spinner.stop();
+    throw new Error(e)
+  }
+}
+
+function execDiff() {
+  const no_diff = process.argv.find(arg => arg.startsWith('--no-diff'))
+  if (!no_diff) {
+    execSyncGitCommand('git diff --color=always', {
+      head: `git diff`
+    })
+  }
+}
+
+async function execAddAndCommit({statusOutput, commitMessage}) {
+  // 检查 -m 参数（提交信息）
+  const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
+  if (commitMessageArg) {
+    if (commitMessageArg.includes('=')) {
+      // 处理 -m=<message> 的情况
+      commitMessage = commitMessageArg.split('=')[1]?.replace(/^['"]|['"]$/g, '');
+    } else {
+      // 处理 -m <message> 的情况
+      const index = process.argv.indexOf(commitMessageArg);
+      if (index !== -1 && process.argv[index + 1]) {
+        commitMessage = process.argv[index + 1]?.replace(/^['"]|['"]$/g, '');
+      }
+    }
+  }
+
+  // 检查命令行参数，判断是否有 -y 参数
+  const autoCommit = process.argv.includes('-y');
+
+  if (!autoCommit && !commitMessageArg) {
+    // 如果没有 -y 参数，则等待用户输入提交信息
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    })
+
+    function rlPromisify(fn) {
+      return async (...args) => {
+        return new Promise((resolve, reject) => fn(...args, resolve, reject))
+      }
+    }
+
+    const question = rlPromisify(rl.question.bind(rl))
+    commitMessage = await question('请输入提交信息：') || commitMessage;
+  }
+
+  statusOutput.includes('(use "git add') && execSyncGitCommand('git add .')
+
+  // 执行 git commit
+  if (statusOutput.includes('Untracked files:') || statusOutput.includes('Changes not staged for commit') || this.statusOutput.includes('Changes to be committed')) {
+    execSyncGitCommand(`git commit -m "${commitMessage}"`)
+  }
+}
 export {coloredLog, errorLog, execSyncGitCommand,
-  execGitCommand, getCwd, judgePlatform, showHelp, judgeLog, printGitLog, judgeHelp};
+  execGitCommand, getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
+  judgeHelp, exec_exit, judgeUnmerged,
+  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit};

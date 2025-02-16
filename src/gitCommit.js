@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import {
   coloredLog, errorLog, execGitCommand, execSyncGitCommand, showHelp,
-  getCwd, judgePlatform, judgeLog, judgeHelp
+  getCwd, judgePlatform, judgeLog, judgeHelp, exec_exit, judgeUnmerged,
+  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit
 } from './utils/index.js';
 import readline from 'readline'
 import ora from 'ora';
@@ -14,11 +15,6 @@ const {defaultCommitMessage} = config
 
 let timer = null
 
-function exec_exit(exit) {
-  if (exit) {
-    process.exit()
-  }
-}
 async function createGitCommit(options) {
   try {
     let statusOutput = null
@@ -26,11 +22,31 @@ async function createGitCommit(options) {
     const config = await loadConfig()
     let commitMessage = config.defaultCommitMessage
 
-    statusOutput = await execGitCommand('git status')
-    console.log(`commitMessage ==> `, commitMessage)
-    console.log(`statusOutput ==> `, statusOutput)
-    const hasUnmerged = this.statusOutput.includes('You have unmerged paths');
+    let {stdout} = await execGitCommand('git status')
+    statusOutput = stdout
+    judgeUnmerged(statusOutput)
+    // 先检查本地是否有未提交的更改
+    const hasLocalChanges = !statusOutput.includes('nothing to commit, working tree clean');
+    if (hasLocalChanges) {
+      // 检查是否有 --no-diff 参数
+      execDiff()
+      await execAddAndCommit({statusOutput, commitMessage})
+      this.statusOutput.includes('use "git pull') && await this.execPull()
 
+      // 检查是否有远程更新
+      await judgeRemote()  // 等待 judgeRemote 完成
+
+      exec_push({exit, commitMessage})
+    } else {
+      if (this.statusOutput.includes('use "git push')) {
+        exec_push({exit, commitMessage})
+      } else if (this.statusOutput.includes('use "git pull')) {
+        await execPull()
+      } else {
+        await this.judgeRemote()  // 等待 judgeRemote 完成
+        exec_exit(exit);
+      }
+    }
   } catch (e) {
     console.log(`createGitCommit error ==> `, e)
   }
@@ -172,8 +188,10 @@ class GitCommit {
         errorLog('错误', '存在未合并的文件，请先解决冲突')
         process.exit(1);
       }
+
       // 先检查本地是否有未提交的更改
       const hasLocalChanges = !this.statusOutput.includes('nothing to commit, working tree clean');
+
       if (hasLocalChanges) {
         // 检查是否有 --no-diff 参数
         this.execDiff()
