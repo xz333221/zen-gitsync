@@ -43,7 +43,7 @@ function startCountdown(interval) {
 
     setTimeout(() => {
       logUpdate(box);
-    }, 1000);
+    }, 200);
     // logUpdate(box);
   };
 
