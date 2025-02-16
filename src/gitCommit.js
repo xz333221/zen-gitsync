@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {
   coloredLog, errorLog, execGitCommand, execSyncGitCommand, showHelp,
-  getCwd, judgePlatform, judgeLog, judgeHelp, exec_exit, judgeUnmerged,
+  getCwd, judgePlatform, judgeLog, judgeHelp, exec_exit, judgeUnmerged, formatDuration,
   exec_push, execPull, judgeRemote, execDiff, execAddAndCommit, delay
 } from './utils/index.js';
 import readline from 'readline'
@@ -63,25 +63,6 @@ function startCountdown(interval) {
     render();
   }, 1000);
 }
-
-// 添加时间格式化函数
-function formatDuration(ms) {
-  const totalSeconds = Math.floor(ms / 1000);
-  const days = Math.floor(totalSeconds / (3600 * 24));
-  const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  return [
-    days && `${days}天`,
-    hours && `${hours}小时`,
-    minutes && `${minutes}分`,
-    `${seconds}秒`
-  ].filter(Boolean).join('');
-}
-
-// 添加显示下次提交时间的函数
-
 
 const {loadConfig, saveConfig, handleConfigCommands} = config;
 const {defaultCommitMessage} = config

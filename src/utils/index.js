@@ -532,7 +532,22 @@ async function execAddAndCommit({statusOutput, commitMessage}) {
     await execGitCommand(`git commit -m "${commitMessage}"`)
   }
 }
+// 添加时间格式化函数
+function formatDuration(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / (3600 * 24));
+  const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return [
+    days && `${days}天`,
+    hours && `${hours}小时`,
+    minutes && `${minutes}分`,
+    `${seconds}秒`
+  ].filter(Boolean).join('');
+}
 export {coloredLog, errorLog, execSyncGitCommand,
   execGitCommand, getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
-  judgeHelp, exec_exit, judgeUnmerged, delay,
+  judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,
   exec_push, execPull, judgeRemote, execDiff, execAddAndCommit};
