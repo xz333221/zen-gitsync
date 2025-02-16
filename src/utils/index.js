@@ -421,6 +421,9 @@ async function execPull() {
     throw Error(e)
   }
 }
+function delay(timeout) {
+  return new Promise(resolve => setTimeout(resolve, timeout));
+}
 async function judgeRemote() {
   try {
     await process.next(() => {})
