@@ -423,7 +423,7 @@ const showStartInfo = (interval) => {
     const startTime = new Date().toLocaleString();
 
     const message = chalk.green.bold([
-        // `⏰ 定时提交任务已启动`,
+        `⏰ 定时提交任务已启动`,
         `开始时间: ${chalk.yellow(startTime)}`,
         `工作目录: ${chalk.cyan(cwd)}`,
         `提交间隔: ${chalk.magenta(intervalSeconds + "秒")}`
