@@ -421,6 +421,7 @@ const showStartInfo = (interval) => {
     const cwd = getCwd();
     const intervalSeconds = interval / 1000;
     const startTime = new Date().toLocaleString();
+    console.log(`startTime ==> `, startTime)
 
     const message = chalk.green.bold([
         `⏰ 定时提交任务已启动`,
@@ -437,6 +438,7 @@ const showStartInfo = (interval) => {
     });
 
     console.log(box + "\n");
+    console.log(`startTime ==> `, startTime)
 }
 const judgeInterval = () => {
     // 判断是否有 --interval 参数
