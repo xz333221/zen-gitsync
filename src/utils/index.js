@@ -373,27 +373,48 @@ function exec_push({exit, commitMessage}) {
 //   coloredLog(head, message)
 // }
 function printCommitLog({ commitMessage }) {
-  // 获取当前分支信息
-  const branch = execSyncGitCommand('git branch --show-current', { log: false });
+  try {
+    // 获取项目名称（取git仓库根目录名）
+    const projectRoot = execSyncGitCommand('git rev-parse --show-toplevel', { log: false });
+    const projectName = chalk.blue(path.basename(projectRoot.trim()));
 
-  const title = chalk.bold.green('✅ Commit Success');
-  const message = [
-    chalk.cyan.bold('Branch:  ') + chalk.magenta(branch),
-    chalk.cyan.bold('Message: ') + chalk.reset(commitMessage),
-    chalk.gray(`Time: ${new Date().toLocaleString()}`)
-  ].join('\n');
+    // 获取当前提交hash（取前7位）
+    const commitHash = execSyncGitCommand('git rev-parse --short HEAD', { log: false }).trim();
+    const hashDisplay = chalk.yellow(commitHash);
 
-  const box = boxen(message, {
-    padding: 1,
-    margin: 1,
-    borderStyle: 'round',
-    borderColor: 'green',
-    titleAlignment: 'center',
-    title: title,
-    float: 'left'
-  });
+    // 获取分支信息
+    const branch = execSyncGitCommand('git branch --show-current', { log: false }).trim();
+    const branchDisplay = chalk.magenta(branch);
 
-  console.log(box);
+    // 构建信息内容
+    const message = [
+      `${chalk.cyan.bold('Project:')} ${projectName}`,
+      `${chalk.cyan.bold('Commit:')} ${hashDisplay} ${chalk.dim('on')} ${branchDisplay}`,
+      `${chalk.cyan.bold('Message:')} ${chalk.reset(commitMessage)}`,
+      `${chalk.gray('Time:')} ${new Date().toLocaleString()}`
+    ].join('\n');
+
+    // 使用boxen创建装饰框
+    const box = boxen(message, {
+      padding: 1,
+      margin: 1,
+      borderStyle: 'round',
+      borderColor: 'green',
+      title: chalk.bold.green('✅ COMMIT SUCCESS'),
+      titleAlignment: 'center',
+      float: 'left',
+      textAlignment: 'left'
+    });
+
+    console.log(box);
+  } catch (error) {
+    // 异常处理
+    const errorBox = boxen(chalk.red(`Failed to get commit details: ${error.message}`), {
+      borderColor: 'red',
+      padding: 1
+    });
+    console.log(errorBox);
+  }
 }
 async function execPull() {
   try {
