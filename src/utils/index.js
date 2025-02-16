@@ -526,5 +526,5 @@ async function execAddAndCommit({statusOutput, commitMessage}) {
 }
 export {coloredLog, errorLog, execSyncGitCommand,
   execGitCommand, getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
-  judgeHelp, exec_exit, judgeUnmerged,
+  judgeHelp, exec_exit, judgeUnmerged, delay,
   exec_push, execPull, judgeRemote, execDiff, execAddAndCommit};

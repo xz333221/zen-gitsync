@@ -2,7 +2,7 @@
 import {
   coloredLog, errorLog, execGitCommand, execSyncGitCommand, showHelp,
   getCwd, judgePlatform, judgeLog, judgeHelp, exec_exit, judgeUnmerged,
-  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit
+  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit, delay
 } from './utils/index.js';
 import readline from 'readline'
 import ora from 'ora';
@@ -43,7 +43,7 @@ function startCountdown(interval) {
 
     setTimeout(() => {
       logUpdate(box);
-    }, 1500);
+    }, 1000);
     // logUpdate(box);
   };
 
@@ -157,6 +157,7 @@ const showStartInfo = (interval) => {
 const commitAndSchedule = async (interval) => {
   try {
     await createGitCommit({exit: false});
+    await delay(2000)
     startCountdown(interval); // 启动倒计时
 
     // 设置定时提交
