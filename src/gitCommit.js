@@ -98,7 +98,7 @@ async function createGitCommit(options) {
     const hasLocalChanges = !statusOutput.includes('nothing to commit, working tree clean');
     if (hasLocalChanges) {
       // 检查是否有 --no-diff 参数
-      execDiff()
+      await execDiff()
       await execAddAndCommit({statusOutput, commitMessage})
       statusOutput.includes('use "git pull') && await execPull()
 

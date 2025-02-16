@@ -466,10 +466,10 @@ async function judgeRemote() {
   }
 }
 
-function execDiff() {
+async function execDiff() {
   const no_diff = process.argv.find(arg => arg.startsWith('--no-diff'))
   if (!no_diff) {
-    execSyncGitCommand('git diff --color=always', {
+    await execGitCommand('git diff --color=always', {
       head: `git diff`
     })
   }
@@ -511,7 +511,7 @@ async function execAddAndCommit({statusOutput, commitMessage}) {
     commitMessage = await question('请输入提交信息：') || commitMessage;
   }
 
-  statusOutput.includes('(use "git add') && execSyncGitCommand('git add .')
+  statusOutput.includes('(use "git add') && await execGitCommand('git add .')
 
   // 执行 git commit
   if (statusOutput.includes('Untracked files:') || statusOutput.includes('Changes not staged for commit') || statusOutput.includes('Changes to be committed')) {
