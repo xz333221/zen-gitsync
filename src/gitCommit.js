@@ -175,8 +175,6 @@ class GitCommit {
 
   async init() {
     try {
-
-
       this.statusOutput = execSyncGitCommand('git status')
       const hasUnmerged = this.statusOutput.includes('You have unmerged paths');
       if (hasUnmerged) {
@@ -188,9 +186,7 @@ class GitCommit {
       if (hasLocalChanges) {
         // 检查是否有 --no-diff 参数
         this.execDiff()
-
         await this.execAddAndCommit()
-
         this.statusOutput.includes('use "git pull') && await this.execPull()
 
         // 检查是否有远程更新
