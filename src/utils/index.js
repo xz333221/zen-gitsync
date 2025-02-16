@@ -463,7 +463,7 @@ async function judgeRemote() {
       console.log(chalk.green('✓ 本地已是最新'));
     }
   } catch (e) {
-    console.log(`e ==> `, e)
+    // console.log(`e ==> `, e)
     spinner.stop();
     throw new Error(e)
   }
