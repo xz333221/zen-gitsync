@@ -228,30 +228,30 @@ class GitCommit {
   }
 
 
-  exec_push() {
-    // 执行 git push
-    // execSyncGitCommand(`git push`);
-    const spinner = ora('正在推送代码...').start();
-    execGitCommand('git push', {
-      spinner
-    }, (error, stdout, stderr) => {
-
-      // 使用 boxen 绘制带边框的消息
-      let msg = ` SUCCESS: 提交完成 
- message: ${this.commitMessage || defaultCommitMessage} 
- time: ${new Date().toLocaleString()} `
-      const message = chalk.green.bold(msg);
-      const box = boxen(message, {
-        // borderStyle: 'round', // 方框的样式
-        // borderColor: 'whiteBright', // 边框颜色
-        // backgroundColor: 'black', // 背景颜色
-      });
-
-      console.log(box); // 打印带有边框的消息
-      // execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
-      this.exec_exit();
-    })
-  }
+ //  exec_push() {
+ //    // 执行 git push
+ //    // execSyncGitCommand(`git push`);
+ //    const spinner = ora('正在推送代码...').start();
+ //    execGitCommand('git push', {
+ //      spinner
+ //    }, (error, stdout, stderr) => {
+ //
+ //      // 使用 boxen 绘制带边框的消息
+ //      let msg = ` SUCCESS: 提交完成
+ // message: ${this.commitMessage || defaultCommitMessage}
+ // time: ${new Date().toLocaleString()} `
+ //      const message = chalk.green.bold(msg);
+ //      const box = boxen(message, {
+ //        // borderStyle: 'round', // 方框的样式
+ //        // borderColor: 'whiteBright', // 边框颜色
+ //        // backgroundColor: 'black', // 背景颜色
+ //      });
+ //
+ //      console.log(box); // 打印带有边框的消息
+ //      // execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
+ //      this.exec_exit();
+ //    })
+ //  }
 
 
 }
