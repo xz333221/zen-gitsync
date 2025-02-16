@@ -461,9 +461,14 @@ const judgeInterval = async () => {
         showStartInfo(interval);
         await process.nextTick(() => {})
 
-        new GitCommit({
-            exit: false
-        })
+        setTimeout(() => {
+            new GitCommit({
+                exit: false
+            })
+
+        }, 1000)
+
+
         timer = setInterval(() => {
             // console.log(`定时执行`)
             new GitCommit({
