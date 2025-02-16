@@ -48,14 +48,14 @@ const printTableWithHeaderUnderline = (head, content, style) => {
     colWidths,       // 使用动态计算的列宽
     style: style,
     wordWrap: true,  // 启用自动换行
-    chars: {
-      'top': '─',
-      'top-mid': '┬',
-      'bottom': '─',
-      'mid': '─',
-      'left': '│',
-      'right': '│'
-    },
+    // chars: {
+    //   'top': '─',
+    //   'top-mid': '┬',
+    //   'bottom': '─',
+    //   'mid': '─',
+    //   'left': '│',
+    //   'right': '│'
+    // },
     // chars: {
     //   'top': '═',       // 顶部边框使用长横线
     //   'top-mid': '╤',   // 顶部连接符
