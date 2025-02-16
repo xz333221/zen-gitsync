@@ -210,32 +210,35 @@ function execGitCommand(command, options = {}) {
     let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
     let cwd = getCwd()
 
-    exec(command, {
-      env: {...process.env, LANG: 'C.UTF-8'},
-      encoding,
-      maxBuffer,
-      cwd
-    }, (error, stdout, stderr) => {
-      if (options.spinner) {
-        options.spinner.stop();
-      }
+    setTimeout(() => {
+      exec(command, {
+        env: {...process.env, LANG: 'C.UTF-8'},
+        encoding,
+        maxBuffer,
+        cwd
+      }, (error, stdout, stderr) => {
+        if (options.spinner) {
+          options.spinner.stop();
+        }
 
-      if (stdout) {
-        log && coloredLog(head, stdout)
-      }
-      if (stderr) {
-        log && coloredLog(head, stderr)
-      }
-      if (error) {
-        log && coloredLog(head, error, 'error')
-        reject(error)
-        return
-      }
-      resolve({
-        stdout,
-        stderr
+        if (stdout) {
+          log && coloredLog(head, stdout)
+        }
+        if (stderr) {
+          log && coloredLog(head, stderr)
+        }
+        if (error) {
+          log && coloredLog(head, error, 'error')
+          reject(error)
+          return
+        }
+        resolve({
+          stdout,
+          stderr
+        })
       })
-    })
+    }, 1000)
+
   })
 }
 const getCwd = () => {
