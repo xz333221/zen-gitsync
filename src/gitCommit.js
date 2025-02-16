@@ -29,7 +29,7 @@ function startCountdown(interval) {
     const duration = formatDuration(remaining);
 
     const message = [
-      chalk.green.bold('🕒 动态倒计时'),
+      chalk.green.bold('🕒 倒计时'),
       chalk.cyan(`下次提交: ${formattedTime}`),
       chalk.yellow(`剩余时间: ${duration}`),
       chalk.dim('按 Ctrl+C 终止进程')
