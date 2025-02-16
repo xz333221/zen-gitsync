@@ -357,12 +357,9 @@ function exec_push({exit, commitMessage}) {
     const spinner = ora('正在推送代码...').start();
     execGitCommand('git push', {
       spinner
-    }, (error, stdout, stderr) => {
+    }).then(({stdout, stderr}) => {
       printCommitLog({commitMessage})
-
-      resolve({error, stdout, stderr})
-      // execSyncGitCommand(`git log -n 1 --pretty=format:"%B%n%h %d%n%ad" --date=iso`)
-      // exec_exit(exit);
+      resolve({stdout, stderr})
     })
   });
 }
