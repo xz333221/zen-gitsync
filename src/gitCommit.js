@@ -43,7 +43,7 @@ async function createGitCommit(options) {
       } else if (statusOutput.includes('use "git pull')) {
         await execPull()
       } else {
-        await this.judgeRemote()  // 等待 judgeRemote 完成
+        await judgeRemote()  // 等待 judgeRemote 完成
         exec_exit(exit);
       }
     }
