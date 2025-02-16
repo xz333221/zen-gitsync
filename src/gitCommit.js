@@ -31,7 +31,7 @@ async function createGitCommit(options) {
       // 检查是否有 --no-diff 参数
       execDiff()
       await execAddAndCommit({statusOutput, commitMessage})
-      statusOutput.includes('use "git pull') && await this.execPull()
+      statusOutput.includes('use "git pull') && await execPull()
 
       // 检查是否有远程更新
       await judgeRemote()  // 等待 judgeRemote 完成

@@ -351,6 +351,7 @@ function judgeUnmerged(statusOutput) {
   }
 }
 function exec_push({exit, commitMessage}) {
+  console.log(`执行 git push`)
   // 执行 git push
   // execSyncGitCommand(`git push`);
   return new Promise((resolve, reject) => {
