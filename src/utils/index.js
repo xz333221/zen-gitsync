@@ -220,7 +220,12 @@ function execGitCommand(command, options = {}) {
 
     // setTimeout(() => {
     exec(command, {
-      env: {...process.env, LANG: 'C.UTF-8'},
+      env: {
+        ...process.env,
+        LANG: 'en_US.UTF-8',    // Linux/macOS
+        LC_ALL: 'en_US.UTF-8',  // Linux/macOS
+        GIT_CONFIG_PARAMETERS: "'core.quotepath=false'" // 关闭路径转义
+      },
       encoding,
       maxBuffer,
       cwd
@@ -535,7 +540,17 @@ async function execAddAndCommit({statusOutput, commitMessage}) {
     commitMessage = await question('请输入提交信息：') || commitMessage;
   }
 
-  statusOutput.includes('(use "git add') && await execGitCommand('git add .')
+  // statusOutput.includes('(use "git add') && await execGitCommand('git add .')
+  // 强制添加所有变更
+  await execGitCommand('git add -A .');
+
+  // 提交前二次校验
+  const checkStatus = await execGitCommand('git status --porcelain', {log: false});
+  console.log(`checkStatus ==> `, checkStatus)
+  if (!checkStatus.stdout.trim()) {
+    console.log(chalk.yellow('⚠️ 没有检测到可提交的变更'));
+    return;
+  }
 
   // 执行 git commit
   if (statusOutput.includes('Untracked files:') || statusOutput.includes('Changes not staged for commit') || statusOutput.includes('Changes to be committed')) {
