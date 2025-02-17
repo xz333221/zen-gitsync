@@ -195,8 +195,8 @@ function execSyncGitCommand(command, options = {}) {
     const output = execSync(command, {
       env: {
         ...process.env,
-        LANG: 'en_US.UTF-8',    // Linux/macOS
-        LC_ALL: 'en_US.UTF-8',  // Linux/macOS
+        LANG: 'C.UTF-8',
+        LC_ALL: 'C.UTF-8',
         GIT_CONFIG_PARAMETERS: "'core.quotepath=false'" // 关闭路径转义
       }, encoding, maxBuffer, cwd
     })
@@ -222,8 +222,8 @@ function execGitCommand(command, options = {}) {
     exec(command, {
       env: {
         ...process.env,
-        LANG: 'en_US.UTF-8',    // Linux/macOS
-        LC_ALL: 'en_US.UTF-8',  // Linux/macOS
+        LANG: 'C.UTF-8',
+        LC_ALL: 'C.UTF-8',
         GIT_CONFIG_PARAMETERS: "'core.quotepath=false'" // 关闭路径转义
       },
       encoding,
