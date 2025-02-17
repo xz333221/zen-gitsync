@@ -465,6 +465,7 @@ async function judgeRemote() {
       log: false
     });
     const behindCount = res.stdout.trim()
+    const { green, black, bgGreen, white } = chalk;
     // 如果本地落后于远程
     if (parseInt(behindCount) > 0) {
       try {
@@ -477,7 +478,12 @@ async function judgeRemote() {
         //   spinner: spinner_pull,
         //   head: 'Pulling updates'
         // });
-        console.log(chalk.green('✓ 已成功同步远程更新'));
+        console.log(
+          bgGreen.white.bold(' SYNC ') +
+          green` ➔ ` +
+          black.bold('远程仓库已同步') +
+          green(' ✔')
+        );
       } catch (pullError) {
         // // 如果 --ff-only 拉取失败，尝试普通的 git pull
         // console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
@@ -486,7 +492,11 @@ async function judgeRemote() {
       }
     } else {
       spinner.stop();
-      console.log(chalk.green('✓ 本地已是最新'));
+      console.log(
+        green.bold.italic('ⓘ ') +
+        green`当前分支已是最新状态 ` +
+        green('✓')
+      );
     }
   } catch (e) {
     // console.log(`e ==> `, e)
