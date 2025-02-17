@@ -485,7 +485,7 @@ async function judgeRemote() {
         //   green(' ✔')
         // );
         const message = '已成功同步远程更新'.split('').map((char, i) =>
-          chalk.hsl(120, 100, 40 + i * 5)(char)
+          chalk.rgb(0, 255 - i*10, 0)(char)
         ).join('');
 
         console.log(chalk.bold(`✅ ${message}`));
