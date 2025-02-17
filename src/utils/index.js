@@ -481,7 +481,7 @@ async function judgeRemote() {
         console.log(
           bgGreen.white.bold(' SYNC ') +
           green` ➔ ` +
-          black.bold('远程仓库已同步') +
+          chalk.blue.bold('远程仓库已同步') +
           green(' ✔')
         );
       } catch (pullError) {
