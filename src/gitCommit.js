@@ -84,7 +84,7 @@ async function createGitCommit(options) {
     if (hasLocalChanges) {
       // 检查是否有 --no-diff 参数
       await execDiff()
-      await execAddAndCommit({statusOutput, commitMessage})
+      await execAddAndCommit({statusOutput, commitMessage, exit})
       statusOutput.includes('use "git pull') && await execPull()
 
       // 检查是否有远程更新

@@ -504,7 +504,7 @@ async function execDiff() {
   }
 }
 
-async function execAddAndCommit({statusOutput, commitMessage}) {
+async function execAddAndCommit({statusOutput, commitMessage, exit}) {
   // 检查 -m 参数（提交信息）
   const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
   if (commitMessageArg) {
@@ -540,15 +540,15 @@ async function execAddAndCommit({statusOutput, commitMessage}) {
     commitMessage = await question('请输入提交信息：') || commitMessage;
   }
 
-  // statusOutput.includes('(use "git add') && await execGitCommand('git add .')
+  statusOutput.includes('(use "git add') && await execGitCommand('git add .')
   // 强制添加所有变更
-  await execGitCommand('git add -A .');
+  // await execGitCommand('git add -A .');
 
   // 提交前二次校验
   const checkStatus = await execGitCommand('git status --porcelain', {log: false});
-  console.log(`checkStatus ==> `, checkStatus)
   if (!checkStatus.stdout.trim()) {
     console.log(chalk.yellow('⚠️ 没有检测到可提交的变更'));
+    // exec_exit(exit)
     return;
   }
 
