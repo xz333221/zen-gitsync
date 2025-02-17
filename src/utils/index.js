@@ -498,11 +498,7 @@ async function judgeRemote() {
       }
     } else {
       spinner.stop();
-      console.log(
-        chalk.blue.bold(`当前分支已是最新状态 `) +
-        green('✓')
-      );
-      console.log(chalk.bgGreen.black(' ✓ ') + chalk.green.bold(' 本地已是最新 '));
+      console.log(chalk.bgGreen.black(' ✓ ') + chalk.bold(' 本地已是最新 '));
     }
   } catch (e) {
     // console.log(`e ==> `, e)
