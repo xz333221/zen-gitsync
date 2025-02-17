@@ -489,7 +489,6 @@ async function judgeRemote() {
         ).join('');
 
         console.log(chalk.bold(`✅ ${message}`));
-        console.log(chalk.bgGreen.black(' ✔︎ ') + chalk.green.bold(' 已成功同步远程更新 '));
       } catch (pullError) {
         // // 如果 --ff-only 拉取失败，尝试普通的 git pull
         // console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
@@ -498,7 +497,10 @@ async function judgeRemote() {
       }
     } else {
       spinner.stop();
-      console.log(chalk.bgGreen.black(' ✓ ') + chalk.bold(' 本地已是最新 '));
+      const message = '本地已是最新'.split('').map((char, i) =>
+        chalk.rgb(0, 255 - i*10, 0)(char)
+      ).join('');
+      console.log(chalk.bold(`✅ ${message}`));
     }
   } catch (e) {
     // console.log(`e ==> `, e)
