@@ -29,7 +29,7 @@ function startCountdown(interval) {
 
     const message = [
       chalk.green.bold('🕒 倒计时'),
-      `🕒 ${chalk.green.bold('🕒 倒计时')}`
+      `🕒 ${chalk.green.bold('倒计时')}`
       `工作目录: ${chalk.cyan(getCwd())}`,
       chalk.cyan(`下次提交: ${formattedTime}`),
       `下次提交: ${chalk.cyan(formattedTime)}`,
