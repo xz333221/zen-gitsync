@@ -271,14 +271,14 @@ const judgePlatform = () => {
     try {
       // 设置终端字符编码为 UTF-8
       execSync('chcp 65001');
-      execSync('git config --global core.autocrlf true');
+      // execSync('git config --global core.autocrlf true');
       // 设置Git不转义路径（避免中文显示为八进制）
-      execSync('git config --global core.quotepath false');
+      // execSync('git config --global core.quotepath false');
     } catch (e) {
       console.error('设置字符编码失败:', e.message);
     }
   }else{
-    execSync('git config --global core.autocrlf input');
+    // execSync('git config --global core.autocrlf input');
   }
 };
 const showHelp = () => {
