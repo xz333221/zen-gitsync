@@ -23,6 +23,7 @@ import os from 'os'
 import ora from "ora";
 import readline from 'readline'
 import path from 'path'
+import fs from 'fs/promises'
 
 
 const printTableWithHeaderUnderline = (head, content, style) => {
@@ -298,6 +299,7 @@ Options:
   log                          Show git commit logs
     --n=<number>               Number of commits to show with --log
   --no-diff                    Skip displaying git diff
+  addScript                    Add "g:y": "g -y" to package.json scripts
 
 Example:
   g -m "Initial commit"      Commit with a custom message
@@ -307,6 +309,7 @@ Example:
   g --path=/path/to/repo     Specify a custom working directory
   g log                      Show recent commit logs
   g log --n=5                Show the last 5 commits with --log
+  g addScript                Add auto commit script to package.json
 
 Add auto submit in package.json:
   "scripts": {
@@ -593,9 +596,40 @@ function formatDuration(ms) {
   ].filter(Boolean).join('');
 }
 
+async function addScriptToPackageJson() {
+  try {
+    // 读取当前目录的 package.json
+    const packagePath = path.join(process.cwd(), 'package.json');
+    const packageJson = JSON.parse(await fs.readFile(packagePath, 'utf8'));
+    
+    // 确保有 scripts 部分
+    if (!packageJson.scripts) {
+      packageJson.scripts = {};
+    }
+
+    // 添加 g:y 命令
+    if (!packageJson.scripts['g:y']) {
+      packageJson.scripts['g:y'] = 'g -y';
+      // 写回文件
+      await fs.writeFile(packagePath, JSON.stringify(packageJson, null, 2));
+      console.log(chalk.green('✓ 成功添加 g:y 脚本到 package.json'));
+    } else {
+      console.log(chalk.yellow('⚠️ g:y 脚本已存在'));
+    }
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.error(chalk.red('❌ 当前目录下未找到 package.json 文件'));
+    } else {
+      console.error(chalk.red('❌ 添加脚本失败:'), error.message);
+    }
+    process.exit(1);
+  }
+}
+
 export {
   coloredLog, errorLog, execSyncGitCommand,
   execGitCommand, getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
   judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,
-  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit
+  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit,
+  addScriptToPackageJson
 };

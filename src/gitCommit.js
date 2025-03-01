@@ -2,7 +2,7 @@
 import {
   coloredLog, errorLog, execGitCommand, execSyncGitCommand, showHelp,
   getCwd, judgePlatform, judgeLog, judgeHelp, exec_exit, judgeUnmerged, formatDuration,
-  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit, delay
+  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit, delay, addScriptToPackageJson
 } from './utils/index.js';
 import readline from 'readline'
 import ora from 'ora';
@@ -110,6 +110,12 @@ async function createGitCommit(options) {
 }
 async function main() {
   judgePlatform()
+
+  // 检查是否是添加脚本命令
+  if (process.argv.includes('addScript')) {
+    await addScriptToPackageJson();
+    return;
+  }
 
   // 检查是否有 log 参数
   judgeLog()
