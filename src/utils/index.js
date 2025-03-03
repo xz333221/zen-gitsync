@@ -290,30 +290,33 @@ Options:
   -h, --help                   Show this help message
   --set-default-message=<msg>  Set default commit message
   get-config                   Show current configuration
-  -y                           Auto commit with default message
-  -m <message>                 Commit message (use quotes if message contains spaces)
-  -m=<message>                 Commit message (use this form without spaces around '=')
-  --path=<path>                Set custom working directory
-  --cwd=<path>                 Set custom working directory
-  --interval=<seconds>         Set interval time for automatic commits (in seconds)
-  log                          Show git commit logs
-    --n=<number>               Number of commits to show with --log
-  --no-diff                    Skip displaying git diff
-  addScript                    Add "g:y": "g -y" to package.json scripts
+  -y                          Auto commit with default message
+  -m <message>                Commit message (use quotes if message contains spaces)
+  -m=<message>                Commit message (use this form without spaces around '=')
+  --path=<path>               Set custom working directory
+  --cwd=<path>                Set custom working directory
+  --interval=<seconds>        Set interval time for automatic commits (in seconds)
+  log                         Show git commit logs
+    --n=<number>              Number of commits to show with --log
+  --no-diff                   Skip displaying git diff
+  addScript                   Add "g:y": "g -y" to package.json scripts
+  addResetScript             Add "g:reset": "git reset --hard origin <current-branch>" to package.json scripts
 
 Example:
   g -m "Initial commit"      Commit with a custom message
-  g -m=Fix-bug               Commit with a custom message (no spaces around '=')
-  g -y                       Auto commit with the default message
-  g -y --interval=600        Commit every 10 minutes (600 seconds)
-  g --path=/path/to/repo     Specify a custom working directory
-  g log                      Show recent commit logs
-  g log --n=5                Show the last 5 commits with --log
-  g addScript                Add auto commit script to package.json
+  g -m=Fix-bug              Commit with a custom message (no spaces around '=')
+  g -y                      Auto commit with the default message
+  g -y --interval=600       Commit every 10 minutes (600 seconds)
+  g --path=/path/to/repo    Specify a custom working directory
+  g log                     Show recent commit logs
+  g log --n=5               Show the last 5 commits with --log
+  g addScript              Add auto commit script to package.json
+  g addResetScript         Add reset script to package.json
 
 Add auto submit in package.json:
   "scripts": {
-    "g:y": "g -y"
+    "g:y": "g -y",
+    "g:reset": "git reset --hard origin <current-branch>"
   }
 
 Run in the background across platforms:
@@ -626,10 +629,43 @@ async function addScriptToPackageJson() {
   }
 }
 
+async function addResetScriptToPackageJson() {
+  try {
+    // 读取当前目录的 package.json
+    const packagePath = path.join(process.cwd(), 'package.json');
+    const packageJson = JSON.parse(await fs.readFile(packagePath, 'utf8'));
+    
+    // 确保有 scripts 部分
+    if (!packageJson.scripts) {
+      packageJson.scripts = {};
+    }
+
+    // 获取当前分支名
+    const branch = execSyncGitCommand('git branch --show-current', {log: false}).trim();
+
+    // 添加 g:reset 命令
+    if (!packageJson.scripts['g:reset']) {
+      packageJson.scripts['g:reset'] = `git reset --hard origin ${branch}`;
+      // 写回文件
+      await fs.writeFile(packagePath, JSON.stringify(packageJson, null, 2));
+      console.log(chalk.green(`✓ 成功添加 g:reset 脚本到 package.json (重置到 origin/${branch})`));
+    } else {
+      console.log(chalk.yellow('⚠️ g:reset 脚本已存在'));
+    }
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.error(chalk.red('❌ 当前目录下未找到 package.json 文件'));
+    } else {
+      console.error(chalk.red('❌ 添加脚本失败:'), error.message);
+    }
+    process.exit(1);
+  }
+}
+
 export {
   coloredLog, errorLog, execSyncGitCommand,
   execGitCommand, getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
   judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,
   exec_push, execPull, judgeRemote, execDiff, execAddAndCommit,
-  addScriptToPackageJson
+  addScriptToPackageJson, addResetScriptToPackageJson
 };

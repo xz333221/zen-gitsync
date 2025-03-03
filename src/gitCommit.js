@@ -2,7 +2,7 @@
 import {
   coloredLog, errorLog, execGitCommand, execSyncGitCommand, showHelp,
   getCwd, judgePlatform, judgeLog, judgeHelp, exec_exit, judgeUnmerged, formatDuration,
-  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit, delay, addScriptToPackageJson
+  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit, delay, addScriptToPackageJson, addResetScriptToPackageJson
 } from './utils/index.js';
 import readline from 'readline'
 import ora from 'ora';
@@ -114,6 +114,12 @@ async function main() {
   // 检查是否是添加脚本命令
   if (process.argv.includes('addScript')) {
     await addScriptToPackageJson();
+    return;
+  }
+
+  // 检查是否是添加重置脚本命令
+  if (process.argv.includes('addResetScript')) {
+    await addResetScriptToPackageJson();
     return;
   }
 
