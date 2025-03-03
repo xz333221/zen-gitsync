@@ -300,7 +300,7 @@ Options:
     --n=<number>              Number of commits to show with --log
   --no-diff                   Skip displaying git diff
   addScript                   Add "g:y": "g -y" to package.json scripts
-  addResetScript             Add "g:reset": "git reset --hard origin <current-branch>" to package.json scripts
+  addResetScript             Add "g:reset": "git reset --hard origin/<current-branch>" to package.json scripts
 
 Example:
   g -m "Initial commit"      Commit with a custom message
@@ -316,7 +316,7 @@ Example:
 Add auto submit in package.json:
   "scripts": {
     "g:y": "g -y",
-    "g:reset": "git reset --hard origin <current-branch>"
+    "g:reset": "git reset --hard origin/<current-branch>"
   }
 
 Run in the background across platforms:
@@ -645,7 +645,7 @@ async function addResetScriptToPackageJson() {
 
     // 添加 g:reset 命令
     if (!packageJson.scripts['g:reset']) {
-      packageJson.scripts['g:reset'] = `git reset --hard origin ${branch}`;
+      packageJson.scripts['g:reset'] = `git reset --hard origin/${branch}`;
       // 写回文件
       await fs.writeFile(packagePath, JSON.stringify(packageJson, null, 2));
       console.log(chalk.green(`✓ 成功添加 g:reset 脚本到 package.json (重置到 origin/${branch})`));

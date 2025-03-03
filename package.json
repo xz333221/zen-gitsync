@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "description": "一个 git 自动查看差异并提交的工具",
   "main": "index.js",
   "type": "module",
@@ -21,7 +21,7 @@
     "g:addResetScript": "node ./src/gitCommit.js addResetScript",
     "g:set-default-message": "node ./src/gitCommit.js --set-default-message=\"提交\"",
     "g:y": "g -y",
-    "g:reset": "git reset --hard origin main"
+    "g:reset": "git reset --hard origin/main"
   },
   "files": [
     "src/*",
