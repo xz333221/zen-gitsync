@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, defineEmits } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const emit = defineEmits(['commit-success', 'push-success'])
 const commitMessage = ref('')
@@ -38,14 +39,23 @@ async function commitChanges() {
     const result = await response.json()
     if (result.success) {
       commitMessage.value = ''
-      alert('提交成功!')
+      ElMessage({
+        message: '提交成功!',
+        type: 'success',
+      })
       // 发出提交成功事件
       emit('commit-success')
     } else {
-      alert('提交失败: ' + result.error)
+      ElMessage({
+        message: '提交失败: ' + result.error,
+        type: 'error',
+      })
     }
   } catch (error) {
-    alert('提交失败: ' + (error as Error).message)
+    ElMessage({
+      message: '提交失败: ' + (error as Error).message,
+      type: 'error',
+    })
   } finally {
     isCommitting.value = false
     commitBtnText.value = '提交'
@@ -64,14 +74,23 @@ async function pushChanges() {
     
     const result = await response.json()
     if (result.success) {
-      alert('推送成功!')
+      ElMessage({
+        message: '推送成功!',
+        type: 'success',
+      })
       // 发出推送成功事件
       emit('push-success')
     } else {
-      alert('推送失败: ' + result.error)
+      ElMessage({
+        message: '推送失败: ' + result.error,
+        type: 'error',
+      })
     }
   } catch (error) {
-    alert('推送失败: ' + (error as Error).message)
+    ElMessage({
+      message: '推送失败: ' + (error as Error).message,
+      type: 'error',
+    })
   } finally {
     isPushing.value = false
     pushBtnText.value = '推送到远程'
