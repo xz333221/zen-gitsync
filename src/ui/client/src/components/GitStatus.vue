@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, defineExpose } from 'vue'
 import { io } from 'socket.io-client'
 
 const status = ref('加载中...')
@@ -16,6 +16,11 @@ async function loadStatus() {
   }
 }
 
+// 刷新Git状态的方法
+async function refreshStatus() {
+  await loadStatus()
+}
+
 onMounted(() => {
   loadStatus()
   
@@ -27,6 +32,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   socket.disconnect()
+})
+
+// 暴露刷新方法给父组件
+defineExpose({
+  refreshStatus
 })
 </script>
 
