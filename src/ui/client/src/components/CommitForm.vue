@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, defineEmits } from 'vue'
+import { ref, onMounted, defineEmits, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 
 const emit = defineEmits(['commit-success', 'push-success'])
@@ -12,6 +12,49 @@ const isPushing = ref(false)
 const isCommitAndPushing = ref(false)
 const commitAndPushBtnText = ref('提交并推送')
 const placeholder = ref('输入提交信息...')
+
+// 标准化提交相关变量
+const isStandardCommit = ref(false)
+const commitType = ref('feat')
+const commitScope = ref('')
+const commitDescription = ref('')
+const commitBody = ref('')
+const commitFooter = ref('')
+
+// 提交类型选项
+const commitTypeOptions = [
+  { value: 'feat', label: 'feat: 新功能' },
+  { value: 'fix', label: 'fix: 修复bug' },
+  { value: 'docs', label: 'docs: 文档修改' },
+  { value: 'style', label: 'style: 样式修改' },
+  { value: 'refactor', label: 'refactor: 代码重构' },
+  { value: 'test', label: 'test: 测试代码' },
+  { value: 'chore', label: 'chore: 构建/工具修改' }
+]
+
+// 计算最终的提交信息
+const finalCommitMessage = computed(() => {
+  if (!isStandardCommit.value) {
+    return commitMessage.value;
+  }
+  
+  // 构建标准化提交信息
+  let message = `${commitType.value}`;
+  if (commitScope.value) {
+    message += `(${commitScope.value})`;
+  }
+  message += `: ${commitDescription.value}`;
+  
+  if (commitBody.value) {
+    message += `\n\n${commitBody.value}`;
+  }
+  
+  if (commitFooter.value) {
+    message += `\n\n${commitFooter.value}`;
+  }
+  
+  return message;
+})
 
 // 加载配置
 async function loadConfig() {
@@ -26,7 +69,15 @@ async function loadConfig() {
 
 // 提交更改
 async function commitChanges() {
-  const message = commitMessage.value
+  const message = finalCommitMessage.value
+  if (!message && isStandardCommit.value && !commitDescription.value) {
+    ElMessage({
+      message: '请输入提交描述',
+      type: 'warning',
+    })
+    return
+  }
+  
   try {
     isCommitting.value = true
     commitBtnText.value = '提交中...'
@@ -41,7 +92,15 @@ async function commitChanges() {
     
     const result = await response.json()
     if (result.success) {
-      commitMessage.value = ''
+      // 清空输入
+      if (isStandardCommit.value) {
+        commitDescription.value = ''
+        commitBody.value = ''
+        commitFooter.value = ''
+      } else {
+        commitMessage.value = ''
+      }
+      
       ElMessage({
         message: '提交成功!',
         type: 'success',
@@ -102,7 +161,15 @@ async function pushChanges() {
 
 // 提交并推送更改
 async function commitAndPush() {
-  const message = commitMessage.value
+  const message = finalCommitMessage.value
+  if (!message && isStandardCommit.value && !commitDescription.value) {
+    ElMessage({
+      message: '请输入提交描述',
+      type: 'warning',
+    })
+    return
+  }
+  
   try {
     isCommitAndPushing.value = true
     commitAndPushBtnText.value = '处理中...'
@@ -123,6 +190,15 @@ async function commitAndPush() {
         type: 'error',
       })
       return
+    }
+    
+    // 清空输入
+    if (isStandardCommit.value) {
+      commitDescription.value = ''
+      commitBody.value = ''
+      commitFooter.value = ''
+    } else {
+      commitMessage.value = ''
     }
     
     // 再推送
@@ -157,6 +233,11 @@ async function commitAndPush() {
   }
 }
 
+// 切换提交模式
+function toggleCommitMode() {
+  isStandardCommit.value = !isStandardCommit.value
+}
+
 onMounted(() => {
   loadConfig()
 })
@@ -165,7 +246,17 @@ onMounted(() => {
 <template>
   <div class="card">
     <h2>提交更改</h2>
-    <div class="commit-form">
+    
+    <div class="commit-mode-toggle">
+      <el-switch
+        v-model="isStandardCommit"
+        active-text="标准化提交"
+        inactive-text="普通提交"
+      />
+    </div>
+    
+    <!-- 普通提交表单 -->
+    <div v-if="!isStandardCommit" class="commit-form">
       <el-input 
         v-model="commitMessage" 
         :placeholder="placeholder"
@@ -176,6 +267,58 @@ onMounted(() => {
         :loading="isCommitting"
       >{{ commitBtnText }}</el-button>
     </div>
+    
+    <!-- 标准化提交表单 -->
+    <div v-else class="standard-commit-form">
+      <div class="standard-commit-header">
+        <el-select v-model="commitType" placeholder="提交类型" class="type-select">
+          <el-option
+            v-for="item in commitTypeOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+        
+        <el-input 
+          v-model="commitScope" 
+          placeholder="作用域（可选）" 
+          class="scope-input"
+        />
+        
+        <el-input 
+          v-model="commitDescription" 
+          placeholder="简短描述（必填）" 
+          class="description-input"
+        />
+      </div>
+      
+      <el-input 
+        v-model="commitBody" 
+        type="textarea" 
+        :rows="4" 
+        placeholder="正文（可选）：详细描述本次提交的内容和原因" 
+        class="body-input"
+      />
+      
+      <el-input 
+        v-model="commitFooter" 
+        placeholder="页脚（可选）：如 Closes #123" 
+        class="footer-input"
+      />
+      
+      <div class="preview-section">
+        <div class="preview-title">预览：</div>
+        <pre class="preview-content">{{ finalCommitMessage }}</pre>
+      </div>
+      
+      <el-button 
+        type="primary" 
+        @click="commitChanges" 
+        :loading="isCommitting"
+      >{{ commitBtnText }}</el-button>
+    </div>
+    
     <div class="button-group">
       <el-button 
         type="success" 
@@ -200,5 +343,49 @@ onMounted(() => {
 .button-group {
   display: flex;
   gap: 10px;
+}
+.commit-mode-toggle {
+  margin-bottom: 15px;
+}
+.standard-commit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+.standard-commit-header {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.type-select {
+  width: 120px;
+  flex-shrink: 0;
+}
+.scope-input {
+  width: 200px;
+  flex-shrink: 0;
+  flex-grow: 0;
+}
+.description-input {
+  flex-grow: 1;
+  min-width: 250px;
+}
+.preview-section {
+  background-color: #f5f7fa;
+  padding: 10px;
+  border-radius: 4px;
+}
+.preview-title {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+.preview-content {
+  white-space: pre-wrap;
+  font-family: monospace;
+  margin: 0;
+  padding: 10px;
+  background-color: #ebeef5;
+  border-radius: 4px;
 }
 </style>
