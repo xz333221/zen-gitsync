@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, defineEmits } from 'vue'
 
-const emit = defineEmits(['commit-success'])
+const emit = defineEmits(['commit-success', 'push-success'])
 const commitMessage = ref('')
 const commitBtnText = ref('提交')
 const pushBtnText = ref('推送到远程')
@@ -65,6 +65,8 @@ async function pushChanges() {
     const result = await response.json()
     if (result.success) {
       alert('推送成功!')
+      // 发出推送成功事件
+      emit('push-success')
     } else {
       alert('推送失败: ' + result.error)
     }

@@ -6,6 +6,7 @@ import LogList from './components/LogList.vue'
 
 const configInfo = ref('')
 const logListRef = ref(null)
+const gitStatusRef = ref(null)
 
 // 加载配置
 async function loadConfig() {
@@ -29,6 +30,19 @@ function handleCommitSuccess() {
     logListRef.value.refreshLog()
   }
 }
+
+// 处理推送成功事件
+function handlePushSuccess() {
+  // 刷新提交历史
+  if (logListRef.value) {
+    logListRef.value.refreshLog()
+  }
+  
+  // 刷新Git状态
+  if (gitStatusRef.value) {
+    gitStatusRef.value.refreshStatus()
+  }
+}
 </script>
 
 <template>
@@ -38,8 +52,11 @@ function handleCommitSuccess() {
   </header>
   
   <div class="container">
-    <GitStatus />
-    <CommitForm @commit-success="handleCommitSuccess" />
+    <GitStatus ref="gitStatusRef" />
+    <CommitForm 
+      @commit-success="handleCommitSuccess" 
+      @push-success="handlePushSuccess" 
+    />
     <LogList ref="logListRef" />
   </div>
 </template>
