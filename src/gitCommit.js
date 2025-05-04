@@ -11,7 +11,7 @@ import boxen from 'boxen';
 import config from './config.js';
 import dateFormat from 'date-fns/format';
 import logUpdate from 'log-update';
-import startUIServer from './ui/server.js';
+import startUIServer from './ui/server/index.js';
 
 let countdownInterval = null;
 

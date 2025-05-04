@@ -3,39 +3,40 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { execGitCommand } from '../utils/index.js';
+import { execGitCommand } from '../../utils/index.js';
 import open from 'open';
-import config from '../config.js';
+import config from '../../config.js';
 import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const configManager = config; // 确保 configManager 可用
 
 async function startUIServer() {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer);
   
-  // 启动前端Vue应用
-  const clientPath = path.join(__dirname, 'client');
-  console.log(`正在启动前端应用，路径: ${clientPath}`);
+  // // 启动前端Vue应用
+  // const clientPath = path.join(__dirname, '../client');
+  // console.log(`正在启动前端应用，路径: ${clientPath}`);
   
-  const vueProcess = exec('npm run dev', { cwd: clientPath }, (error) => {
-    if (error) {
-      console.error('启动前端应用失败:', error);
-    }
-  });
+  // const vueProcess = exec('npm run dev', { cwd: clientPath }, (error) => {
+  //   if (error) {
+  //     console.error('启动前端应用失败:', error);
+  //   }
+  // });
   
-  vueProcess.stdout.on('data', (data) => {
-    console.log(`前端输出: ${data}`);
-  });
+  // vueProcess.stdout.on('data', (data) => {
+  //   console.log(`前端输出: ${data}`);
+  // });
   
-  vueProcess.stderr.on('data', (data) => {
-    console.error(`前端错误: ${data}`);
-  });
+  // vueProcess.stderr.on('data', (data) => {
+  //   console.error(`前端错误: ${data}`);
+  // });
   
-  // 静态文件服务
-  app.use(express.static(path.join(__dirname, 'public')));
+  // // 静态文件服务
+  // app.use(express.static(path.join(__dirname, 'public')));
   
   // API路由
   app.get('/api/status', async (req, res) => {
@@ -48,14 +49,67 @@ async function startUIServer() {
   });
   
   // 获取配置
-  app.get('/api/config', async (req, res) => {
+  app.get('/api/config/getConfig', async (req, res) => {
     try {
-      const currentConfig = await config.loadConfig();
-      res.json(currentConfig);
+      const config = await configManager.loadConfig()
+      res.json(config)
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message })
     }
-  });
+  })
+  
+  // 保存描述模板
+  app.post('/api/config/save-template', express.json(), async (req, res) => {
+    try {
+      const { template, type } = req.body
+      
+      if (!template || !type) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      // 确保模板数组存在
+      if (!config.descriptionTemplates) {
+        config.descriptionTemplates = []
+      }
+      
+      // 检查是否已存在相同模板
+      if (!config.descriptionTemplates.includes(template)) {
+        config.descriptionTemplates.push(template)
+        await configManager.saveConfig(config)
+      }
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  // 删除描述模板
+  app.post('/api/config/delete-template', express.json(), async (req, res) => {
+    try {
+      const { template, type } = req.body
+      
+      if (!template || !type) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      // 确保模板数组存在
+      if (config.descriptionTemplates) {
+        const index = config.descriptionTemplates.indexOf(template)
+        if (index !== -1) {
+          config.descriptionTemplates.splice(index, 1)
+          await configManager.saveConfig(config)
+        }
+      }
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
   
   // 提交更改
   app.post('/api/commit', express.json(), async (req, res) => {
@@ -90,17 +144,8 @@ async function startUIServer() {
         // 从引用信息中提取分支名称
         let branch = null;
         if (refs) {
-          // 尝试匹配 HEAD -> branch_name 格式
-          const headMatch = refs.match(/HEAD -> ([^,\s]+)/);
-          if (headMatch) {
-            branch = headMatch[1];
-          } else {
-            // 尝试匹配其他引用格式
-            const refMatch = refs.match(/([^,\s]+)/);
-            if (refMatch) {
-              branch = refMatch[1];
-            }
-          }
+          // 提取所有引用信息，而不仅仅是第一个匹配
+          branch = refs.trim();
         }
         
         return { hash, author, date, message, branch };
@@ -141,3 +186,4 @@ async function startUIServer() {
 }
 
 export default startUIServer;
+

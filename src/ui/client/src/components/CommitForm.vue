@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, defineEmits, computed } from 'vue'
+import { ref, onMounted, defineEmits, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Setting } from '@element-plus/icons-vue'
 
 const emit = defineEmits(['commit-success', 'push-success'])
 const commitMessage = ref('')
@@ -21,6 +22,13 @@ const commitDescription = ref('')
 const commitBody = ref('')
 const commitFooter = ref('')
 
+// 提交模板相关变量
+const descriptionTemplates = ref<string[]>([])
+const selectedTemplate = ref('')
+// 添加对话框可见性变量
+const descriptionDialogVisible = ref(false)
+const newTemplateName = ref('')
+
 // 提交类型选项
 const commitTypeOptions = [
   { value: 'feat', label: 'feat: 新功能' },
@@ -31,6 +39,11 @@ const commitTypeOptions = [
   { value: 'test', label: 'test: 测试代码' },
   { value: 'chore', label: 'chore: 构建/工具修改' }
 ]
+
+// 监听标准化提交状态变化，保存到localStorage
+watch(isStandardCommit, (newValue) => {
+  localStorage.setItem('zen-gitsync-standard-commit', newValue.toString())
+})
 
 // 计算最终的提交信息
 const finalCommitMessage = computed(() => {
@@ -59,11 +72,140 @@ const finalCommitMessage = computed(() => {
 // 加载配置
 async function loadConfig() {
   try {
-    const response = await fetch('/api/config')
+    const response = await fetch('/api/config/getConfig')
     const config = await response.json()
     placeholder.value = `输入提交信息 (默认: ${config.defaultCommitMessage})`
+    
+    // 加载描述模板
+    if (config.descriptionTemplates && Array.isArray(config.descriptionTemplates)) {
+      descriptionTemplates.value = config.descriptionTemplates
+    }
   } catch (error) {
     console.error('加载配置失败:', error)
+  }
+}
+
+// 保存描述模板
+async function saveDescriptionTemplate() {
+  if (!newTemplateName.value.trim()) {
+    ElMessage({
+      message: '请输入模板内容',
+      type: 'warning',
+    })
+    return
+  }
+  
+  try {
+    // 检查是否已存在相同模板
+    if (descriptionTemplates.value.includes(newTemplateName.value)) {
+      ElMessage({
+        message: '该模板已存在',
+        type: 'warning',
+      })
+      return
+    }
+    
+    // 添加到本地数组
+    descriptionTemplates.value.push(newTemplateName.value)
+    
+    // 保存到服务器
+    const response = await fetch('/api/config/save-template', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        template: newTemplateName.value,
+        type: 'description'
+      })
+    })
+    
+    const result = await response.json()
+    if (result.success) {
+      ElMessage({
+        message: '模板保存成功!',
+        type: 'success',
+      })
+      newTemplateName.value = ''
+    } else {
+      ElMessage({
+        message: '模板保存失败: ' + result.error,
+        type: 'error',
+      })
+    }
+  } catch (error) {
+    ElMessage({
+      message: '模板保存失败: ' + (error as Error).message,
+      type: 'error',
+    })
+  }
+}
+
+// 删除描述模板
+async function deleteDescriptionTemplate(template: string) {
+  try {
+    // 从本地数组中删除
+    const index = descriptionTemplates.value.indexOf(template)
+    if (index !== -1) {
+      descriptionTemplates.value.splice(index, 1)
+    }
+    
+    // 从服务器删除
+    const response = await fetch('/api/config/delete-template', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        template,
+        type: 'description'
+      })
+    })
+    
+    const result = await response.json()
+    if (result.success) {
+      ElMessage({
+        message: '模板删除成功!',
+        type: 'success',
+      })
+    } else {
+      ElMessage({
+        message: '模板删除失败: ' + result.error,
+        type: 'error',
+      })
+    }
+  } catch (error) {
+    ElMessage({
+      message: '模板删除失败: ' + (error as Error).message,
+      type: 'error',
+    })
+  }
+}
+
+// 使用模板
+function useTemplate(template: string) {
+  commitDescription.value = template
+  descriptionDialogVisible.value = false
+}
+
+// 打开设置弹窗
+function openDescriptionSettings() {
+  descriptionDialogVisible.value = true
+}
+
+// 选择模板
+function selectTemplate() {
+  if (selectedTemplate.value) {
+    commitDescription.value = selectedTemplate.value
+    selectedTemplate.value = '' // 重置选择
+  }
+}
+
+// 从localStorage加载标准化提交设置
+function loadCommitPreference() {
+  const savedPreference = localStorage.getItem('zen-gitsync-standard-commit')
+  if (savedPreference !== null) {
+    isStandardCommit.value = savedPreference === 'true'
   }
 }
 
@@ -240,6 +382,7 @@ function toggleCommitMode() {
 
 onMounted(() => {
   loadConfig()
+  loadCommitPreference()
 })
 </script>
 
@@ -286,11 +429,22 @@ onMounted(() => {
           class="scope-input"
         />
         
-        <el-input 
-          v-model="commitDescription" 
-          placeholder="简短描述（必填）" 
-          class="description-input"
-        />
+        <div class="description-container">
+          <el-input 
+            v-model="commitDescription" 
+            placeholder="简短描述（必填）" 
+            class="description-input"
+          />
+          <el-button 
+            type="primary" 
+            :icon="Setting" 
+            circle 
+            size="small" 
+            class="settings-button"
+            @click="openDescriptionSettings"
+          >
+          </el-button>
+        </div>
       </div>
       
       <el-input 
@@ -331,6 +485,38 @@ onMounted(() => {
         :loading="isCommitAndPushing"
       >{{ commitAndPushBtnText }}</el-button>
     </div>
+    
+    <!-- 简短描述设置弹窗 -->
+    <el-dialog
+      title="简短描述模板设置"
+      v-model="descriptionDialogVisible"
+      width="500px"
+    >
+      <div class="template-form">
+        <el-input 
+          v-model="newTemplateName" 
+          placeholder="输入新模板内容"
+          class="template-input"
+        />
+        <el-button 
+          type="primary" 
+          @click="saveDescriptionTemplate"
+          :disabled="!newTemplateName.trim()"
+        >添加模板</el-button>
+      </div>
+      
+      <div class="template-list">
+        <h3>已保存模板</h3>
+        <el-empty v-if="descriptionTemplates.length === 0" description="暂无保存的模板" />
+        <el-card v-for="(template, index) in descriptionTemplates" :key="index" class="template-item">
+          <div class="template-content">{{ template }}</div>
+          <div class="template-actions">
+            <el-button type="primary" size="small" @click="useTemplate(template)">使用</el-button>
+            <el-button type="danger" size="small" @click="deleteDescriptionTemplate(template)">删除</el-button>
+          </div>
+        </el-card>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -367,9 +553,18 @@ onMounted(() => {
   flex-shrink: 0;
   flex-grow: 0;
 }
+.description-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-grow: 1;
+}
 .description-input {
   flex-grow: 1;
-  min-width: 250px;
+  min-width: 200px;
+}
+.settings-button {
+  flex-shrink: 0;
 }
 .preview-section {
   background-color: #f5f7fa;
@@ -387,5 +582,32 @@ onMounted(() => {
   padding: 10px;
   background-color: #ebeef5;
   border-radius: 4px;
+}
+.template-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.template-input {
+  flex-grow: 1;
+}
+.template-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.template-item {
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.template-content {
+  flex-grow: 1;
+  margin-right: 10px;
+  word-break: break-all;
+}
+.template-actions {
+  display: flex;
+  gap: 5px;
 }
 </style>

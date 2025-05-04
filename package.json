@@ -22,7 +22,9 @@
     "g:set-default-message": "node ./src/gitCommit.js --set-default-message=\"提交\"",
     "g:y": "g -y",
     "g:reset": "git reset --hard origin/main",
-    "g:ui": "node ./src/gitCommit.js ui"
+    "g:ui": "node ./src/gitCommit.js ui",
+    "start:vue": "cd ./src/ui/client && npm run dev",
+    "start:server": "node -e \"import('./src/ui/server/index.js').then(module => module.default())\""
   },
   "files": [
     "src/*",

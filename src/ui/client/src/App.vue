@@ -11,7 +11,7 @@ const gitStatusRef = ref(null)
 // 加载配置
 async function loadConfig() {
   try {
-    const response = await fetch('/api/config')
+    const response = await fetch('/api/config/getConfig')
     const config = await response.json()
     configInfo.value = `默认提交信息: ${config.defaultCommitMessage}`
   } catch (error) {
@@ -46,18 +46,27 @@ function handlePushSuccess() {
 </script>
 
 <template>
-  <header>
+  <header class="main-header">
     <h1>Zen GitSync UI</h1>
     <div id="config-info">{{ configInfo }}</div>
   </header>
   
   <div class="container">
-    <GitStatus ref="gitStatusRef" />
-    <CommitForm 
-      @commit-success="handleCommitSuccess" 
-      @push-success="handlePushSuccess" 
-    />
-    <LogList ref="logListRef" />
+    <div class="layout-container">
+      <!-- 左侧Git状态 -->
+      <div class="left-panel">
+        <GitStatus ref="gitStatusRef" />
+      </div>
+      
+      <!-- 右侧提交表单和历史 -->
+      <div class="right-panel">
+        <CommitForm 
+          @commit-success="handleCommitSuccess" 
+          @push-success="handlePushSuccess" 
+        />
+        <LogList ref="logListRef" />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -73,7 +82,7 @@ body {
   margin: 0 auto;
   padding: 20px;
 }
-header {
+.main-header {
   background-color: #24292e;
   color: white;
   padding: 15px 20px;
@@ -101,6 +110,34 @@ h1 {
   font-family: monospace;
   max-height: 300px;
   overflow-y: auto;
+}
+
+/* 新增布局样式 */
+.layout-container {
+  display: flex;
+  gap: 20px;
+}
+
+.left-panel {
+  flex: 0 0 30%;
+  max-width: 30%;
+}
+
+.right-panel {
+  flex: 0 0 70%;
+  max-width: 70%;
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+  .layout-container {
+    flex-direction: column;
+  }
+  
+  .left-panel, .right-panel {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
 }
 .commit-form {
   display: flex;

@@ -7,7 +7,8 @@ const configPath = path.join(os.homedir(), '.git-commit-tool.json');
 
 // 默认配置
 const defaultConfig = {
-  defaultCommitMessage: "submit"
+  defaultCommitMessage: "submit",
+  descriptionTemplates: []  // 添加描述模板数组
 };
 
 // 异步读取配置文件
