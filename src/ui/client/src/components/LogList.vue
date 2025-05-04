@@ -6,6 +6,7 @@ interface LogItem {
   date: string
   author: string
   message: string
+  branch?: string // 添加分支信息字段
 }
 
 const logs = ref<LogItem[]>([])
@@ -41,6 +42,8 @@ defineExpose({
         <span class="log-hash">{{ log.hash }}</span> - 
         <span class="log-date">{{ log.date }}</span> - 
         <span class="log-author">{{ log.author }}</span>
+        <!-- 添加分支信息显示 -->
+        <span v-if="log.branch" class="log-branch">{{ log.branch }}</span>
         <div class="log-message">{{ log.message }}</div>
       </div>
     </div>

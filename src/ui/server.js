@@ -6,6 +6,7 @@ import path from 'path';
 import { execGitCommand } from '../utils/index.js';
 import open from 'open';
 import config from '../config.js';
+import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +15,24 @@ async function startUIServer() {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer);
+  
+  // 启动前端Vue应用
+  const clientPath = path.join(__dirname, 'client');
+  console.log(`正在启动前端应用，路径: ${clientPath}`);
+  
+  const vueProcess = exec('npm run dev', { cwd: clientPath }, (error) => {
+    if (error) {
+      console.error('启动前端应用失败:', error);
+    }
+  });
+  
+  vueProcess.stdout.on('data', (data) => {
+    console.log(`前端输出: ${data}`);
+  });
+  
+  vueProcess.stderr.on('data', (data) => {
+    console.error(`前端错误: ${data}`);
+  });
   
   // 静态文件服务
   app.use(express.static(path.join(__dirname, 'public')));
@@ -63,10 +82,28 @@ async function startUIServer() {
   // 获取日志
   app.get('/api/log', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git log --pretty=format:"%h|%an|%ad|%s" --date=short -n 10');
+      // 修改 git log 命令，添加 %D 参数来获取引用信息（包括分支）
+      const { stdout } = await execGitCommand('git log --pretty=format:"%h|%an|%ad|%s|%D" --date=short -n 10');
       const logs = stdout.split('\n').map(line => {
-        const [hash, author, date, message] = line.split('|');
-        return { hash, author, date, message };
+        const [hash, author, date, message, refs] = line.split('|');
+        
+        // 从引用信息中提取分支名称
+        let branch = null;
+        if (refs) {
+          // 尝试匹配 HEAD -> branch_name 格式
+          const headMatch = refs.match(/HEAD -> ([^,\s]+)/);
+          if (headMatch) {
+            branch = headMatch[1];
+          } else {
+            // 尝试匹配其他引用格式
+            const refMatch = refs.match(/([^,\s]+)/);
+            if (refMatch) {
+              branch = refMatch[1];
+            }
+          }
+        }
+        
+        return { hash, author, date, message, branch };
       });
       res.json(logs);
     } catch (error) {
@@ -97,8 +134,9 @@ async function startUIServer() {
   // 启动服务器
   const PORT = 3000;
   httpServer.listen(PORT, () => {
-    console.log(`UI服务器已启动: http://localhost:${PORT}`);
-    open(`http://localhost:${PORT}`);
+    console.log(`后端API服务器已启动: http://localhost:${PORT}`);
+    // 不自动打开后端URL，让前端Vite服务器处理
+    // open(`http://localhost:${PORT}`);
   });
 }
 

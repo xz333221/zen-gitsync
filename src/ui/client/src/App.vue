@@ -127,6 +127,15 @@ button:hover {
 .log-message {
   font-weight: bold;
 }
+.log-branch {
+  display: inline-block;
+  background-color: #0366d6;
+  color: white;
+  border-radius: 3px;
+  padding: 2px 6px;
+  margin-left: 8px;
+  font-size: 12px;
+}
 </style>
 
 <style scoped>
