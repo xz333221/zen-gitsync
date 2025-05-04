@@ -229,7 +229,11 @@ async function commitChanges() {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ 
+        message,
+        // 添加一个标志，表示消息包含换行符
+        hasNewlines: message.includes('\n')
+      })
     })
     
     const result = await response.json()
@@ -322,7 +326,11 @@ async function commitAndPush() {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ 
+        message,
+        // 添加一个标志，表示消息包含换行符
+        hasNewlines: message.includes('\n')
+      })
     })
     
     const commitResult = await commitResponse.json()

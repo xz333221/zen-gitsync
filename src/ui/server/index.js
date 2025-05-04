@@ -124,12 +124,47 @@ async function startUIServer() {
   // 提交更改
   app.post('/api/commit', express.json(), async (req, res) => {
     try {
-      const { message } = req.body;
+      const { message, hasNewlines } = req.body;
+  
+      // 先执行 git add .
       await execGitCommand('git add .');
-      await execGitCommand(`git commit -m "${message || '提交'}"`);
-      res.json({ success: true });
+  
+      // 如果消息包含换行符，使用 -m 参数可能会有问题
+      // 使用 -F 参数从临时文件中读取提交消息
+      let commitCommand;
+  
+      if (hasNewlines) {
+        // 创建临时文件存储提交消息
+        const tempFile = path.join(os.tmpdir(), `commit-msg-${Date.now()}.txt`);
+        fs.writeFileSync(tempFile, message, 'utf8');
+  
+        // 使用 -F 参数从文件读取提交消息
+        commitCommand = `git commit -F "${tempFile}"`;
+  
+        // 执行命令
+        const { stdout, stderr } = await execGitCommand(commitCommand);
+  
+        // 删除临时文件
+        fs.unlinkSync(tempFile);
+  
+        if (stderr && !stderr.includes('nothing to commit')) {
+          throw new Error(stderr);
+        }
+  
+        res.json({ success: true, message: stdout });
+      } else {
+        // 没有换行符，使用原来的方式
+        commitCommand = `git commit -m "${message.replace(/"/g, '\\"')}"`;
+        const { stdout, stderr } = await execGitCommand(commitCommand);
+  
+        if (stderr && !stderr.includes('nothing to commit')) {
+          throw new Error(stderr);
+        }
+  
+        res.json({ success: true, message: stdout });
+      }
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message });
     }
   });
   
