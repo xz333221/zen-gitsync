@@ -11,6 +11,7 @@ import boxen from 'boxen';
 import config from './config.js';
 import dateFormat from 'date-fns/format';
 import logUpdate from 'log-update';
+import startUIServer from './ui/server.js';
 
 let countdownInterval = null;
 
@@ -110,6 +111,12 @@ async function createGitCommit(options) {
 }
 async function main() {
   judgePlatform()
+
+  // 检查是否是UI命令
+  if (process.argv.includes('ui')) {
+    await startUIServer();
+    return;
+  }
 
   // 检查是否是添加脚本命令
   if (process.argv.includes('addScript')) {
