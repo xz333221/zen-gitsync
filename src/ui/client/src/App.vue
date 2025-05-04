@@ -7,6 +7,7 @@ import LogList from './components/LogList.vue'
 const configInfo = ref('')
 const logListRef = ref(null)
 const gitStatusRef = ref(null)
+const currentBranch = ref('') // 添加当前分支状态变量
 
 // 加载配置
 async function loadConfig() {
@@ -19,8 +20,22 @@ async function loadConfig() {
   }
 }
 
+// 获取当前分支
+async function getCurrentBranch() {
+  try {
+    const response = await fetch('/api/branch')
+    const data = await response.json()
+    if (data.branch) {
+      currentBranch.value = data.branch
+    }
+  } catch (error) {
+    console.error('获取分支信息失败:', error)
+  }
+}
+
 onMounted(() => {
   loadConfig()
+  getCurrentBranch() // 初始加载分支信息
 })
 
 // 处理提交成功事件
@@ -42,13 +57,22 @@ function handlePushSuccess() {
   if (gitStatusRef.value) {
     gitStatusRef.value.refreshStatus()
   }
+  
+  // 刷新分支信息
+  getCurrentBranch()
 }
 </script>
 
 <template>
   <header class="main-header">
     <h1>Zen GitSync UI</h1>
-    <div id="config-info">{{ configInfo }}</div>
+    <div class="header-info">
+      <div id="branch-info" v-if="currentBranch">
+        <span class="branch-label">当前分支:</span>
+        <span class="branch-name">{{ currentBranch }}</span>
+      </div>
+      <div id="config-info">{{ configInfo }}</div>
+    </div>
   </header>
   
   <div class="container">
@@ -93,6 +117,27 @@ body {
 h1 {
   margin: 0;
   font-size: 24px;
+}
+.header-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+#branch-info {
+  background-color: #2ea44f;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+}
+.branch-label {
+  margin-right: 5px;
+  font-weight: bold;
+}
+.branch-name {
+  font-family: monospace;
 }
 .card {
   background-color: white;

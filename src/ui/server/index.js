@@ -48,6 +48,16 @@ async function startUIServer() {
     }
   });
   
+  // 获取当前分支
+  app.get('/api/branch', async (req, res) => {
+    try {
+      const { stdout } = await execGitCommand('git rev-parse --abbrev-ref HEAD');
+      res.json({ branch: stdout.trim() });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   // 获取配置
   app.get('/api/config/getConfig', async (req, res) => {
     try {
