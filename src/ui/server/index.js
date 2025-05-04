@@ -47,6 +47,14 @@ async function startUIServer() {
       res.status(500).json({ error: error.message });
     }
   });
+  app.get('/api/status_porcelain', async (req, res) => {
+    try {
+      const { stdout } = await execGitCommand('git status --porcelain');
+      res.json({ status: stdout });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
   
   // 获取当前分支
   app.get('/api/branch', async (req, res) => {
@@ -145,7 +153,7 @@ async function startUIServer() {
         const { stdout, stderr } = await execGitCommand(commitCommand);
   
         // 删除临时文件
-        // fs.unlinkSync(tempFile);
+        fs.unlinkSync(tempFile);
   
         if (stderr && !stderr.includes('nothing to commit')) {
           throw new Error(stderr);

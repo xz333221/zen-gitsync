@@ -71,7 +71,7 @@ function handlePushSuccess() {
         <span class="branch-label">当前分支:</span>
         <span class="branch-name">{{ currentBranch }}</span>
       </div>
-      <div id="config-info">{{ configInfo }}</div>
+      <!-- <div id="config-info">{{ configInfo }}</div> -->
     </div>
   </header>
   
@@ -102,9 +102,8 @@ body {
   background-color: #f5f5f5;
 }
 .container {
-  max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 20px 30px;
 }
 .main-header {
   background-color: #24292e;
