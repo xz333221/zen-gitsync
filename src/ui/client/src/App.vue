@@ -5,6 +5,7 @@ import CommitForm from './components/CommitForm.vue'
 import LogList from './components/LogList.vue'
 
 const configInfo = ref('')
+const logListRef = ref(null)
 
 // 加载配置
 async function loadConfig() {
@@ -20,6 +21,14 @@ async function loadConfig() {
 onMounted(() => {
   loadConfig()
 })
+
+// 处理提交成功事件
+function handleCommitSuccess() {
+  // 刷新提交历史
+  if (logListRef.value) {
+    logListRef.value.refreshLog()
+  }
+}
 </script>
 
 <template>
@@ -30,8 +39,8 @@ onMounted(() => {
   
   <div class="container">
     <GitStatus />
-    <CommitForm />
-    <LogList />
+    <CommitForm @commit-success="handleCommitSuccess" />
+    <LogList ref="logListRef" />
   </div>
 </template>
 

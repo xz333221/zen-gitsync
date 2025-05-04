@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, defineExpose } from 'vue'
 
 interface LogItem {
   hash: string
@@ -24,6 +24,11 @@ async function loadLog() {
 
 onMounted(() => {
   loadLog()
+})
+
+// 暴露方法给父组件
+defineExpose({
+  refreshLog: loadLog
 })
 </script>
 

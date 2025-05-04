@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, defineEmits } from 'vue'
 
+const emit = defineEmits(['commit-success'])
 const commitMessage = ref('')
 const commitBtnText = ref('提交')
 const pushBtnText = ref('推送到远程')
@@ -38,6 +39,8 @@ async function commitChanges() {
     if (result.success) {
       commitMessage.value = ''
       alert('提交成功!')
+      // 发出提交成功事件
+      emit('commit-success')
     } else {
       alert('提交失败: ' + result.error)
     }
