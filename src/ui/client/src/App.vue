@@ -106,24 +106,7 @@ h1 {
   display: flex;
   margin-bottom: 15px;
 }
-input[type="text"] {
-  flex: 1;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 3px;
-  margin-right: 10px;
-}
-button {
-  background-color: #2ea44f;
-  color: white;
-  border: none;
-  padding: 10px 15px;
-  border-radius: 3px;
-  cursor: pointer;
-}
-button:hover {
-  background-color: #2c974b;
-}
+
 .log-item {
   padding: 10px 0;
   border-bottom: 1px solid #eee;
