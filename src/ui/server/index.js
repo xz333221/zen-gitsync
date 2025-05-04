@@ -145,7 +145,7 @@ async function startUIServer() {
         const { stdout, stderr } = await execGitCommand(commitCommand);
   
         // 删除临时文件
-        fs.unlinkSync(tempFile);
+        // fs.unlinkSync(tempFile);
   
         if (stderr && !stderr.includes('nothing to commit')) {
           throw new Error(stderr);
