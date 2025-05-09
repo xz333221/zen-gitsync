@@ -58,7 +58,7 @@ const finalCommitMessage = computed(() => {
   }
   
   // 构建标准化提交信息
-  let message = `${commitType.value}`;
+  let message = `${commitType.value || ''}`;
   if (commitScope.value) {
     message += `(${commitScope.value})`;
   }
@@ -538,6 +538,7 @@ onMounted(() => {
       <el-input 
         v-model="commitMessage" 
         :placeholder="placeholder"
+        clearable
       />
       <el-button 
         type="primary" 
@@ -549,7 +550,7 @@ onMounted(() => {
     <!-- 标准化提交表单 -->
     <div v-else class="standard-commit-form">
       <div class="standard-commit-header">
-        <el-select v-model="commitType" placeholder="提交类型" class="type-select">
+        <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
           <el-option
             v-for="item in commitTypeOptions"
             :key="item.value"
@@ -563,6 +564,7 @@ onMounted(() => {
             v-model="commitScope" 
             placeholder="作用域（可选）" 
             class="scope-input"
+            clearable
           />
           <el-button 
             type="primary" 
@@ -580,6 +582,7 @@ onMounted(() => {
             v-model="commitDescription" 
             placeholder="简短描述（必填）" 
             class="description-input"
+            clearable
           />
           <el-button 
             type="primary" 
@@ -599,12 +602,14 @@ onMounted(() => {
         :rows="4" 
         placeholder="正文（可选）：详细描述本次提交的内容和原因" 
         class="body-input"
+        clearable
       />
       
       <el-input 
         v-model="commitFooter" 
         placeholder="页脚（可选）：如 Closes #123" 
         class="footer-input"
+        clearable
       />
       
       <div class="preview-section">
@@ -643,6 +648,7 @@ onMounted(() => {
           v-model="newTemplateName" 
           placeholder="输入新模板内容"
           class="template-input"
+          clearable
         />
         <el-button 
           type="primary" 
@@ -675,6 +681,7 @@ onMounted(() => {
           v-model="newScopeTemplate" 
           placeholder="输入新作用域模板"
           class="template-input"
+          clearable
         />
         <el-button 
           type="primary" 
