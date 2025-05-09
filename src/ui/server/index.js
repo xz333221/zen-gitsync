@@ -87,15 +87,30 @@ async function startUIServer() {
       
       const config = await configManager.loadConfig()
       
-      // 确保模板数组存在
-      if (!config.descriptionTemplates) {
-        config.descriptionTemplates = []
-      }
-      
-      // 检查是否已存在相同模板
-      if (!config.descriptionTemplates.includes(template)) {
-        config.descriptionTemplates.push(template)
-        await configManager.saveConfig(config)
+      if (type === 'description') {
+        // 确保描述模板数组存在
+        if (!config.descriptionTemplates) {
+          config.descriptionTemplates = []
+        }
+        
+        // 检查是否已存在相同模板
+        if (!config.descriptionTemplates.includes(template)) {
+          config.descriptionTemplates.push(template)
+          await configManager.saveConfig(config)
+        }
+      } else if (type === 'scope') {
+        // 确保作用域模板数组存在
+        if (!config.scopeTemplates) {
+          config.scopeTemplates = []
+        }
+        
+        // 检查是否已存在相同模板
+        if (!config.scopeTemplates.includes(template)) {
+          config.scopeTemplates.push(template)
+          await configManager.saveConfig(config)
+        }
+      } else {
+        return res.status(400).json({ success: false, error: '不支持的模板类型' })
       }
       
       res.json({ success: true })
@@ -103,6 +118,7 @@ async function startUIServer() {
       res.status(500).json({ success: false, error: error.message })
     }
   })
+  
   // 删除描述模板
   app.post('/api/config/delete-template', express.json(), async (req, res) => {
     try {
@@ -114,13 +130,26 @@ async function startUIServer() {
       
       const config = await configManager.loadConfig()
       
-      // 确保模板数组存在
-      if (config.descriptionTemplates) {
-        const index = config.descriptionTemplates.indexOf(template)
-        if (index !== -1) {
-          config.descriptionTemplates.splice(index, 1)
-          await configManager.saveConfig(config)
+      if (type === 'description') {
+        // 确保描述模板数组存在
+        if (config.descriptionTemplates) {
+          const index = config.descriptionTemplates.indexOf(template)
+          if (index !== -1) {
+            config.descriptionTemplates.splice(index, 1)
+            await configManager.saveConfig(config)
+          }
         }
+      } else if (type === 'scope') {
+        // 确保作用域模板数组存在
+        if (config.scopeTemplates) {
+          const index = config.scopeTemplates.indexOf(template)
+          if (index !== -1) {
+            config.scopeTemplates.splice(index, 1)
+            await configManager.saveConfig(config)
+          }
+        }
+      } else {
+        return res.status(400).json({ success: false, error: '不支持的模板类型' })
       }
       
       res.json({ success: true })

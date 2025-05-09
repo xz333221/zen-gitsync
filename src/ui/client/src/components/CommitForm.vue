@@ -29,6 +29,12 @@ const selectedTemplate = ref('')
 const descriptionDialogVisible = ref(false)
 const newTemplateName = ref('')
 
+// 作用域模板相关变量
+const scopeTemplates = ref<string[]>([])
+const selectedScopeTemplate = ref('')
+const scopeDialogVisible = ref(false)
+const newScopeTemplate = ref('')
+
 // 提交类型选项
 const commitTypeOptions = [
   { value: 'feat', label: 'feat: 新功能' },
@@ -79,6 +85,11 @@ async function loadConfig() {
     // 加载描述模板
     if (config.descriptionTemplates && Array.isArray(config.descriptionTemplates)) {
       descriptionTemplates.value = config.descriptionTemplates
+    }
+    
+    // 加载作用域模板
+    if (config.scopeTemplates && Array.isArray(config.scopeTemplates)) {
+      scopeTemplates.value = config.scopeTemplates
     }
   } catch (error) {
     console.error('加载配置失败:', error)
@@ -141,6 +152,62 @@ async function saveDescriptionTemplate() {
   }
 }
 
+// 保存作用域模板
+async function saveScopeTemplate() {
+  if (!newScopeTemplate.value.trim()) {
+    ElMessage({
+      message: '请输入模板内容',
+      type: 'warning',
+    })
+    return
+  }
+  
+  try {
+    // 检查是否已存在相同模板
+    if (scopeTemplates.value.includes(newScopeTemplate.value)) {
+      ElMessage({
+        message: '该模板已存在',
+        type: 'warning',
+      })
+      return
+    }
+    
+    // 添加到本地数组
+    scopeTemplates.value.push(newScopeTemplate.value)
+    
+    // 保存到服务器
+    const response = await fetch('/api/config/save-template', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        template: newScopeTemplate.value,
+        type: 'scope'
+      })
+    })
+    
+    const result = await response.json()
+    if (result.success) {
+      ElMessage({
+        message: '作用域模板保存成功!',
+        type: 'success',
+      })
+      newScopeTemplate.value = ''
+    } else {
+      ElMessage({
+        message: '作用域模板保存失败: ' + result.error,
+        type: 'error',
+      })
+    }
+  } catch (error) {
+    ElMessage({
+      message: '作用域模板保存失败: ' + (error as Error).message,
+      type: 'error',
+    })
+  }
+}
+
 // 删除描述模板
 async function deleteDescriptionTemplate(template: string) {
   try {
@@ -182,10 +249,57 @@ async function deleteDescriptionTemplate(template: string) {
   }
 }
 
+// 删除作用域模板
+async function deleteScopeTemplate(template: string) {
+  try {
+    // 从本地数组中删除
+    const index = scopeTemplates.value.indexOf(template)
+    if (index !== -1) {
+      scopeTemplates.value.splice(index, 1)
+    }
+    
+    // 从服务器删除
+    const response = await fetch('/api/config/delete-template', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        template,
+        type: 'scope'
+      })
+    })
+    
+    const result = await response.json()
+    if (result.success) {
+      ElMessage({
+        message: '作用域模板删除成功!',
+        type: 'success',
+      })
+    } else {
+      ElMessage({
+        message: '作用域模板删除失败: ' + result.error,
+        type: 'error',
+      })
+    }
+  } catch (error) {
+    ElMessage({
+      message: '作用域模板删除失败: ' + (error as Error).message,
+      type: 'error',
+    })
+  }
+}
+
 // 使用模板
 function useTemplate(template: string) {
   commitDescription.value = template
   descriptionDialogVisible.value = false
+}
+
+// 使用作用域模板
+function useScopeTemplate(template: string) {
+  commitScope.value = template
+  scopeDialogVisible.value = false
 }
 
 // 打开设置弹窗
@@ -193,11 +307,24 @@ function openDescriptionSettings() {
   descriptionDialogVisible.value = true
 }
 
+// 打开作用域设置弹窗
+function openScopeSettings() {
+  scopeDialogVisible.value = true
+}
+
 // 选择模板
 function selectTemplate() {
   if (selectedTemplate.value) {
     commitDescription.value = selectedTemplate.value
     selectedTemplate.value = '' // 重置选择
+  }
+}
+
+// 选择作用域模板
+function selectScopeTemplate() {
+  if (selectedScopeTemplate.value) {
+    commitScope.value = selectedScopeTemplate.value
+    selectedScopeTemplate.value = '' // 重置选择
   }
 }
 
@@ -431,11 +558,22 @@ onMounted(() => {
           />
         </el-select>
         
-        <el-input 
-          v-model="commitScope" 
-          placeholder="作用域（可选）" 
-          class="scope-input"
-        />
+        <div class="scope-container">
+          <el-input 
+            v-model="commitScope" 
+            placeholder="作用域（可选）" 
+            class="scope-input"
+          />
+          <el-button 
+            type="primary" 
+            :icon="Setting" 
+            circle 
+            size="small" 
+            class="settings-button"
+            @click="openScopeSettings"
+          >
+          </el-button>
+        </div>
         
         <div class="description-container">
           <el-input 
@@ -525,6 +663,38 @@ onMounted(() => {
         </el-card>
       </div>
     </el-dialog>
+    
+    <!-- 作用域设置弹窗 -->
+    <el-dialog
+      title="作用域模板设置"
+      v-model="scopeDialogVisible"
+      width="500px"
+    >
+      <div class="template-form">
+        <el-input 
+          v-model="newScopeTemplate" 
+          placeholder="输入新作用域模板"
+          class="template-input"
+        />
+        <el-button 
+          type="primary" 
+          @click="saveScopeTemplate"
+          :disabled="!newScopeTemplate.trim()"
+        >添加模板</el-button>
+      </div>
+      
+      <div class="template-list">
+        <h3>已保存作用域</h3>
+        <el-empty v-if="scopeTemplates.length === 0" description="暂无保存的作用域" />
+        <el-card v-for="(template, index) in scopeTemplates" :key="index" class="template-item">
+          <div class="template-content">{{ template }}</div>
+          <div class="template-actions">
+            <el-button type="primary" size="small" @click="useScopeTemplate(template)">使用</el-button>
+            <el-button type="danger" size="small" @click="deleteScopeTemplate(template)">删除</el-button>
+          </div>
+        </el-card>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -556,10 +726,15 @@ onMounted(() => {
   width: 120px;
   flex-shrink: 0;
 }
-.scope-input {
-  width: 200px;
-  flex-shrink: 0;
+.scope-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   flex-grow: 0;
+  width: 200px;
+}
+.scope-input {
+  flex-grow: 1;
 }
 .description-container {
   display: flex;
