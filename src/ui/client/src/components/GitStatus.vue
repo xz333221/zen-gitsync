@@ -135,7 +135,6 @@ function fileTypeLabel(type: string) {
 
 .file-list {
   margin-top: 10px;
-  width: 100%;  /* 新增：让文件列表填满卡片宽度 */
 }
 
 .file-item {
