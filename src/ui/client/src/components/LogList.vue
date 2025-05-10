@@ -47,12 +47,16 @@ async function loadLog(all = false) {
 }
 
 // 渲染Git图表
-function renderGraph() {
+async function renderGraph() {
   if (!graphContainer.value || logs.value.length === 0) return
   
   // 清空容器
   graphContainer.value.innerHTML = ''
   
+  // 获取当前分支
+  const branchResponse = await fetch('/api/branch')
+  const { branch: currentBranch } = await branchResponse.json()
+
   // 创建gitgraph实例
   const gitgraph = createGitgraph(graphContainer.value, {
     // 自定义选项
@@ -64,8 +68,8 @@ function renderGraph() {
   // 处理分支和提交数据
   // 注意：这里的实现是简化的，实际需要根据API返回的数据结构调整
   const branches: Record<string, any> = {}
-  const mainBranch = gitgraph.branch('main')
-  branches['main'] = mainBranch
+  const mainBranch = gitgraph.branch(currentBranch || 'main')  // 使用API获取的分支或默认main
+  branches[currentBranch || 'main'] = mainBranch
   
   // 简化示例 - 实际实现需要根据API返回的数据结构调整
   logs.value.forEach(commit => {
