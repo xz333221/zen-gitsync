@@ -160,6 +160,31 @@ async function startUIServer() {
     }
   });
   
+  // 新增获取当前工作目录接口
+  app.get('/api/current_directory', async (req, res) => {
+      try {
+          const directory = process.cwd();
+          
+          // 检查当前目录是否是Git仓库
+          try {
+              await execGitCommand('git rev-parse --is-inside-work-tree');
+          } catch (error) {
+              return res.status(400).json({ 
+                  error: '当前目录不是一个Git仓库',
+                  directory,
+                  isGitRepo: false
+              });
+          }
+          
+          res.json({ 
+              directory,
+              isGitRepo: true 
+          });
+      } catch (error) {
+          res.status(500).json({ error: error.message });
+      }
+  });
+  
   // 获取配置
   app.get('/api/config/getConfig', async (req, res) => {
     try {
@@ -381,8 +406,40 @@ async function startUIServer() {
   const PORT = 3000;
   httpServer.listen(PORT, () => {
     console.log(`后端API服务器已启动: http://localhost:${PORT}`);
-    // 不自动打开后端URL，让前端Vite服务器处理
     open(`http://localhost:${PORT}`);
+  }).on('error', async (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`端口 ${PORT} 被占用，尝试其他端口...`);
+      let newPort = PORT + 1;
+      while (newPort < PORT + 100) {
+        try {
+          await new Promise((resolve, reject) => {
+            httpServer.listen(newPort, () => {
+              console.log(`后端API服务器已启动: http://localhost:${newPort}`);
+              open(`http://localhost:${newPort}`);
+              resolve();
+            }).on('error', (e) => {
+              if (e.code === 'EADDRINUSE') {
+                console.log(`端口 ${newPort} 也被占用，继续尝试...`);
+                newPort++;
+                reject(e);
+              } else {
+                reject(e);
+              }
+            });
+          });
+          break;
+        } catch (e) {
+          if (newPort >= PORT + 100) {
+            console.error('无法找到可用端口，请手动指定端口');
+            process.exit(1);
+          }
+        }
+      }
+    } else {
+      console.error('服务器启动失败:', err);
+      process.exit(1);
+    }
   });
 }
 

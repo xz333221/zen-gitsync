@@ -301,6 +301,7 @@ Options:
   --no-diff                   Skip displaying git diff
   addScript                   Add "g:y": "g -y" to package.json scripts
   addResetScript             Add "g:reset": "git reset --hard origin/<current-branch>" to package.json scripts
+  ui                         Launch graphical user interface (v2.0.0)
 
 Example:
   g -m "Initial commit"      Commit with a custom message
@@ -325,6 +326,9 @@ Run in the background across platforms:
   
   Linux/macOS:
     nohup g -y --path=your-folder --interval=600 > git-autocommit.log 2>&1 &
+
+Start GUI interface:
+  g ui
 
 Stop all monitoring processes:
   Windows: Terminate the Node.js process in the Task Manager.

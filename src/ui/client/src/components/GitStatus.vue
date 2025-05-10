@@ -2,7 +2,7 @@
 import { ref, onMounted, defineExpose } from 'vue'
 import { ElMessage } from 'element-plus'
 // import { io } from 'socket.io-client'
-import { Refresh, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { Refresh, ArrowLeft, ArrowRight, Folder } from '@element-plus/icons-vue'
 
 const status = ref('加载中...')
 // const socket = io()
@@ -17,6 +17,7 @@ const currentFileIndex = ref(-1)
 
 // 解析 git status 输出，提取文件及类型
 function parseStatus(statusText: string) {
+  if (!statusText) return
   const lines = statusText.split('\n')
   const files: {path: string, type: string}[] = []
   for (const line of lines) {
@@ -37,9 +38,23 @@ function parseStatus(statusText: string) {
   fileList.value = files
 }
 
+const currentDirectory = ref('')
 async function loadStatus() {
   try {
     isRefreshing.value = true
+    // 获取当前工作目录
+    const responseDir = await fetch('/api/current_directory')
+    const dirData = await responseDir.json()
+    currentDirectory.value = dirData.directory || '未知目录'
+    
+    // 如果不是Git仓库，显示提示并返回
+    if (dirData.isGitRepo === false) {
+      status.value = '当前目录不是一个Git仓库'
+      fileList.value = []
+      ElMessage.warning('当前目录不是一个Git仓库')
+      return
+    }
+    
     const response = await fetch('/api/status')
     const data = await response.json()
     status.value = data.status
@@ -175,6 +190,10 @@ defineExpose({
 
 <template>
   <div class="card">
+    <div class="current-directory">
+      <el-icon><Folder /></el-icon>
+      <span>{{ currentDirectory }}</span>
+    </div>
     <div class="status-header">
       <h2>Git 状态</h2>
       <el-button 
@@ -364,5 +383,21 @@ function fileTypeLabel(type: string) {
 .file-counter {
   font-size: 14px;
   color: #606266;
+}
+.current-directory {
+  padding: 10px 15px;
+  background-color: #f0f0f0;
+  border-bottom: 1px solid #e1e4e8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: monospace;
+}
+.not-git-repo {
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #fffbf6;
+  border: 1px solid #f0c78a;
+  border-radius: 4px;
 }
 </style>
