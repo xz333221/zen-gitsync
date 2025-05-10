@@ -4,7 +4,7 @@ import GitStatus from './components/GitStatus.vue'
 import CommitForm from './components/CommitForm.vue'
 import LogList from './components/LogList.vue'
 import { ElMessage } from 'element-plus'
-
+import { Plus } from '@element-plus/icons-vue'
 import logo from './assets/logo.svg'
 
 const configInfo = ref('')
@@ -241,32 +241,6 @@ function openCreateBranchDialog() {
       <h1>Zen GitSync UI</h1>
     </div>
     <div class="header-info">
-      <div id="branch-info" v-if="currentBranch">
-        <span class="branch-label">当前分支:</span>
-        <el-select 
-          v-model="currentBranch" 
-          size="small" 
-          @change="changeBranch"
-          :loading="isChangingBranch"
-          class="branch-select"
-        >
-          <el-option 
-            v-for="branch in allBranches" 
-            :key="branch" 
-            :label="branch" 
-            :value="branch"
-          />
-        </el-select>
-        <!-- 添加创建分支按钮 -->
-        <el-button 
-          type="primary" 
-          size="small" 
-          @click="openCreateBranchDialog"
-          style="margin-left: 5px;"
-        >
-          新建分支
-        </el-button>
-      </div>
       <div id="user-info" v-if="userName && userEmail">
         <span class="user-label">用户:</span>
         <span class="user-name">{{ userName }}</span>
@@ -330,6 +304,37 @@ function openCreateBranchDialog() {
       
     </div>
   </div>
+
+  <footer class="main-footer">
+    <div class="branch-info" v-if="currentBranch">
+      <span class="branch-label">当前分支:</span>
+      <el-select 
+        v-model="currentBranch" 
+        size="small" 
+        @change="changeBranch"
+        :loading="isChangingBranch"
+        class="branch-select"
+      >
+        <el-option 
+          v-for="branch in allBranches" 
+          :key="branch" 
+          :label="branch" 
+          :value="branch"
+        />
+      </el-select>
+      <el-button 
+        type="primary" 
+        size="small" 
+        @click="openCreateBranchDialog"
+        style="margin-left: 5px;"
+      >
+        <el-icon><Plus /></el-icon>
+      </el-button>
+    </div>
+    <div class="footer-right">
+      <!-- <span>Zen GitSync © 2024</span> -->
+    </div>
+  </footer>
 </template>
 
 <style>
@@ -506,5 +511,28 @@ h1 {
 }
 .logo:hover {
   filter: drop-shadow(0 0 2em #42b883aa);
+}
+.main-footer {
+  background-color: #24292e;
+  color: white;
+  padding: 10px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+.branch-info {
+  display: flex;
+  align-items: center;
+}
+
+.footer-right {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
 }
 </style>
