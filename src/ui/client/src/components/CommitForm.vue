@@ -24,14 +24,12 @@ const commitFooter = ref("");
 
 // 提交模板相关变量
 const descriptionTemplates = ref<string[]>([]);
-const selectedTemplate = ref("");
 // 添加对话框可见性变量
 const descriptionDialogVisible = ref(false);
 const newTemplateName = ref("");
 
 // 作用域模板相关变量
 const scopeTemplates = ref<string[]>([]);
-const selectedScopeTemplate = ref("");
 const scopeDialogVisible = ref(false);
 const newScopeTemplate = ref("");
 
@@ -326,21 +324,6 @@ function openScopeSettings() {
   scopeDialogVisible.value = true;
 }
 
-// 选择模板
-function selectTemplate() {
-  if (selectedTemplate.value) {
-    commitDescription.value = selectedTemplate.value;
-    selectedTemplate.value = ""; // 重置选择
-  }
-}
-
-// 选择作用域模板
-function selectScopeTemplate() {
-  if (selectedScopeTemplate.value) {
-    commitScope.value = selectedScopeTemplate.value;
-    selectedScopeTemplate.value = ""; // 重置选择
-  }
-}
 
 // 从localStorage加载标准化提交设置
 function loadCommitPreference() {
@@ -562,10 +545,6 @@ async function commitAndPush() {
   }
 }
 
-// 切换提交模式
-function toggleCommitMode() {
-  isStandardCommit.value = !isStandardCommit.value;
-}
 
 onMounted(() => {
   loadConfig();

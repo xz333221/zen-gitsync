@@ -254,7 +254,7 @@ function getBranchTagType(ref: string) {
   if (ref.includes('HEAD')) return 'success'
   if (ref.includes('tag:')) return 'warning'
   if (ref.includes('origin/')) return 'info'
-  return ''
+  return 'primary' // 修改空字符串为有效的type值
 }
 </script>
 

@@ -8,8 +8,9 @@ import { Plus } from '@element-plus/icons-vue'
 import logo from './assets/logo.svg'
 
 const configInfo = ref('')
-const logListRef = ref(null)
-const gitStatusRef = ref(null)
+// 添加组件实例类型
+const logListRef = ref<InstanceType<typeof LogList> | null>(null)
+const gitStatusRef = ref<InstanceType<typeof GitStatus> | null>(null)
 const currentBranch = ref('') // 添加当前分支状态变量
 const userName = ref('') // 添加用户名变量
 const userEmail = ref('') // 添加用户邮箱变量
