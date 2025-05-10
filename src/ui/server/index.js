@@ -38,8 +38,8 @@ async function startUIServer() {
   //   console.error(`前端错误: ${data}`);
   // });
   
-  // // 静态文件服务
-  // app.use(express.static(path.join(__dirname, 'public')));
+  // 静态文件服务
+  app.use(express.static(path.join(__dirname, '../public')));
   
   // API路由
   app.get('/api/status', async (req, res) => {
@@ -358,31 +358,31 @@ async function startUIServer() {
   });
   
   // Socket.io 实时更新
-  io.on('connection', (socket) => {
-    console.log('客户端已连接');
+  // io.on('connection', (socket) => {
+  //   console.log('客户端已连接');
     
-    // 定期发送状态更新
-    const statusInterval = setInterval(async () => {
-      try {
-        const { stdout } = await execGitCommand('git status');
-        socket.emit('status_update', { status: stdout });
-      } catch (error) {
-        console.error('状态更新错误:', error);
-      }
-    }, 5000);
+  //   // 定期发送状态更新
+  //   const statusInterval = setInterval(async () => {
+  //     try {
+  //       const { stdout } = await execGitCommand('git status');
+  //       socket.emit('status_update', { status: stdout });
+  //     } catch (error) {
+  //       console.error('状态更新错误:', error);
+  //     }
+  //   }, 5000);
     
-    socket.on('disconnect', () => {
-      clearInterval(statusInterval);
-      console.log('客户端已断开连接');
-    });
-  });
+  //   socket.on('disconnect', () => {
+  //     clearInterval(statusInterval);
+  //     console.log('客户端已断开连接');
+  //   });
+  // });
   
   // 启动服务器
   const PORT = 3000;
   httpServer.listen(PORT, () => {
     console.log(`后端API服务器已启动: http://localhost:${PORT}`);
     // 不自动打开后端URL，让前端Vite服务器处理
-    // open(`http://localhost:${PORT}`);
+    open(`http://localhost:${PORT}`);
   });
 }
 

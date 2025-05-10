@@ -60,7 +60,9 @@ async function renderGraph() {
   // 创建gitgraph实例
   const gitgraph = createGitgraph(graphContainer.value, {
     // 自定义选项
+    // @ts-ignore: true
     orientation: 'vertical-reverse', // 从上到下的方向
+    // @ts-ignore: true
     template: 'metro', // 使用metro模板
     author: '提交者 <committer@example.com>'
   })
@@ -111,10 +113,10 @@ function toggleAllCommits() {
 onMounted(() => {
   loadLog()
 })
-
+const refreshLog = () => loadLog(showAllCommits.value)
 // 暴露方法给父组件
 defineExpose({
-  refreshLog: () => loadLog(showAllCommits.value)
+  refreshLog
 })
 </script>
 

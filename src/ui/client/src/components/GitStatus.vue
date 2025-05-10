@@ -157,10 +157,10 @@ onMounted(() => {
   loadStatus()
   
   // Socket.io 事件
-  socket.on('status_update', (data: { status: string }) => {
-    status.value = data.status
-    parseStatus(data.status)
-  })
+  // socket.on('status_update', (data: { status: string }) => {
+  //   status.value = data.status
+  //   parseStatus(data.status)
+  // })
 })
 
 onUnmounted(() => {
