@@ -226,6 +226,7 @@ defineExpose({
   border-radius: 4px;
   padding: 10px;
   background-color: #fff;
+  /* transform: scale(0.8); */
 }
 
 .graph-view {
