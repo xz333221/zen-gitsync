@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, defineExpose } from 'vue'
 import { io } from 'socket.io-client'
 import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 
 const status = ref('加载中...')
 const socket = io()
@@ -12,6 +12,8 @@ const selectedFile = ref('')
 const diffContent = ref('')
 const diffDialogVisible = ref(false)
 const isLoadingDiff = ref(false)
+// 添加当前文件索引
+const currentFileIndex = ref(-1)
 
 // 解析 git status 输出，提取文件及类型
 function parseStatus(statusText: string) {
@@ -106,6 +108,8 @@ async function getFileDiff(filePath: string) {
   try {
     isLoadingDiff.value = true
     selectedFile.value = filePath
+    // 设置当前文件索引
+    currentFileIndex.value = fileList.value.findIndex(file => file.path === filePath)
     const response = await fetch(`/api/diff?file=${encodeURIComponent(filePath)}`)
     const data = await response.json()
     diffContent.value = data.diff || '没有变更'
@@ -119,6 +123,24 @@ async function getFileDiff(filePath: string) {
   } finally {
     isLoadingDiff.value = false
   }
+}
+
+// 添加切换到上一个文件的方法
+async function goToPreviousFile() {
+  if (fileList.value.length === 0 || currentFileIndex.value <= 0) return
+  
+  const newIndex = currentFileIndex.value - 1
+  const prevFile = fileList.value[newIndex]
+  await getFileDiff(prevFile.path)
+}
+
+// 添加切换到下一个文件的方法
+async function goToNextFile() {
+  if (fileList.value.length === 0 || currentFileIndex.value >= fileList.value.length - 1) return
+  
+  const newIndex = currentFileIndex.value + 1
+  const nextFile = fileList.value[newIndex]
+  await getFileDiff(nextFile.path)
 }
 
 // 处理文件点击
@@ -188,6 +210,23 @@ defineExpose({
       <div v-loading="isLoadingDiff" class="diff-content">
         <div v-if="diffContent" v-html="formatDiff(diffContent)" class="diff-formatted"></div>
         <div v-else class="no-diff">该文件没有差异或是新文件</div>
+      </div>
+      
+      <!-- 添加文件导航按钮 -->
+      <div class="file-navigation">
+        <el-button 
+          :icon="ArrowLeft" 
+          @click="goToPreviousFile" 
+          :disabled="currentFileIndex <= 0 || fileList.length === 0"
+          circle
+        />
+        <span class="file-counter">{{ currentFileIndex + 1 }} / {{ fileList.length }}</span>
+        <el-button 
+          :icon="ArrowRight" 
+          @click="goToNextFile" 
+          :disabled="currentFileIndex >= fileList.length - 1 || fileList.length === 0"
+          circle
+        />
       </div>
     </el-dialog>
   </div>
@@ -311,5 +350,19 @@ function fileTypeLabel(type: string) {
   text-align: center;
   padding: 20px;
   color: #666;
+}
+
+/* 添加文件导航样式 */
+.file-navigation {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 15px;
+  gap: 10px;
+}
+
+.file-counter {
+  font-size: 14px;
+  color: #606266;
 }
 </style>

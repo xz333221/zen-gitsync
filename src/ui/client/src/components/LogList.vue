@@ -40,11 +40,11 @@ defineExpose({
     <h2>提交历史</h2>
     <div v-if="errorMessage">{{ errorMessage }}</div>
     <div v-else>
-      <el-table :data="logs" style="width: 100%" stripe>
-        <el-table-column prop="hash" label="提交哈希" width="100" />
-        <el-table-column prop="date" label="日期" width="180" />
-        <el-table-column prop="author" label="作者" width="150" />
-        <el-table-column label="分支" width="180">
+      <el-table :data="logs" style="width: 100%" stripe border>
+        <el-table-column prop="hash" label="提交哈希" width="100" resizable />
+        <el-table-column prop="date" label="日期" width="180" resizable />
+        <el-table-column prop="author" label="作者" width="150" resizable />
+        <el-table-column label="分支" width="180" resizable>
           <template #default="scope">
             <div v-if="scope.row.branch" class="branch-container">
               <el-tag 
@@ -59,7 +59,7 @@ defineExpose({
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="message" label="提交信息" />
+        <el-table-column prop="message" label="提交信息" resizable />
       </el-table>
     </div>
   </div>
@@ -70,5 +70,10 @@ defineExpose({
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* 添加表格列调整样式 */
+.el-table .el-table__cell .cell {
+  word-break: break-all;
 }
 </style>
