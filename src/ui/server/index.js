@@ -222,8 +222,11 @@ async function startUIServer() {
   // 获取日志
   app.get('/api/log', async (req, res) => {
     try {
+      // 获取请求参数中的数量限制，默认为100
+      const limit = req.query.all === 'true' ? '' : '-n 100';
+      
       // 修改 git log 命令，添加 %D 参数来获取引用信息（包括分支）
-      const { stdout } = await execGitCommand('git log --pretty=format:"%h|%an|%ad|%s|%D" --date=short -n 10');
+      const { stdout } = await execGitCommand(`git log --pretty=format:"%h|%an|%ad|%s|%D" --date=short ${limit}`);
       const logs = stdout.split('\n').map(line => {
         const [hash, author, date, message, refs] = line.split('|');
         
