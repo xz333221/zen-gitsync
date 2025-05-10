@@ -17,6 +17,9 @@ async function startUIServer() {
   const httpServer = createServer(app);
   const io = new Server(httpServer);
   
+  // 添加全局中间件来解析JSON请求体
+  app.use(express.json());
+  
   // // 启动前端Vue应用
   // const clientPath = path.join(__dirname, '../client');
   // console.log(`正在启动前端应用，路径: ${clientPath}`);
@@ -63,6 +66,80 @@ async function startUIServer() {
       res.json({ branch: stdout.trim() });
     } catch (error) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 获取所有分支
+  app.get('/api/branches', async (req, res) => {
+    try {
+      // 获取本地分支
+      const { stdout: localBranches } = await execGitCommand('git branch --format="%(refname:short)"');
+      // 获取远程分支（过滤掉 origin/HEAD 和 origin）
+      const { stdout: remoteBranches } = await execGitCommand('git branch -r --format="%(refname:short)"');
+      
+      // 合并并去重
+      const allBranches = [...new Set([
+        ...localBranches.split('\n')
+          .filter(Boolean)
+          .filter(b => !b.startsWith('* ')), // 过滤掉HEAD指针
+        ...remoteBranches.split('\n')
+          .filter(Boolean)
+          .filter(b => b.includes('/')) // 过滤掉单纯的 origin
+          .map(b => b.split('/')[1]) // 提取真正的分支名称
+      ])];
+      
+      res.json({ branches: allBranches });
+    } catch (error) {
+      console.error('获取分支列表失败:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 创建新分支
+  app.post('/api/create-branch', express.json(), async (req, res) => {
+    try {
+      const { newBranchName, baseBranch } = req.body;
+      
+      if (!newBranchName) {
+        return res.status(400).json({ success: false, error: '分支名称不能为空' });
+      }
+      
+      // 构建创建分支的命令
+      let command = `git branch ${newBranchName}`;
+      
+      // 如果指定了基础分支，则基于该分支创建
+      if (baseBranch) {
+        command = `git branch ${newBranchName} ${baseBranch}`;
+      }
+      
+      // 执行创建分支命令
+      await execGitCommand(command);
+      
+      // 切换到新创建的分支
+      await execGitCommand(`git checkout ${newBranchName}`);
+      
+      res.json({ success: true, branch: newBranchName });
+    } catch (error) {
+      console.error('创建分支失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 切换分支
+  app.post('/api/checkout', async (req, res) => {
+    try {
+      const { branch } = req.body;
+      if (!branch) {
+        return res.status(400).json({ success: false, error: '分支名称不能为空' });
+      }
+      
+      // 执行分支切换
+      await execGitCommand(`git checkout ${branch}`);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('切换分支失败:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
   
