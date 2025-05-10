@@ -28,6 +28,7 @@
   },
   "files": [
     "src/*",
+    "!src/ui/client/**",
     "package.json",
     "index.js"
   ],
