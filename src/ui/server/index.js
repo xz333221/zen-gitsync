@@ -1,12 +1,12 @@
 import express from 'express';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { execGitCommand } from '../../utils/index.js';
 import open from 'open';
 import config from '../../config.js';
-import { exec } from 'child_process';
+// import { Server } from 'socket.io';
+// import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,7 +15,7 @@ const configManager = config; // 确保 configManager 可用
 async function startUIServer() {
   const app = express();
   const httpServer = createServer(app);
-  const io = new Server(httpServer);
+  // const io = new Server(httpServer);
   
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
