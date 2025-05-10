@@ -13,8 +13,8 @@ const isPushing = ref(false);
 const isCommitAndPushing = ref(false);
 const commitAndPushBtnText = ref("提交并推送");
 const placeholder = ref("输入提交信息...");
-
-// 标准化提交相关变量
+// 添加默认提交信息变量
+const defaultCommitMessage = ref("");
 const isStandardCommit = ref(false);
 const commitType = ref("feat");
 const commitScope = ref("");
@@ -62,7 +62,8 @@ watch(skipHooks, (newValue) => {
 // 计算最终的提交信息
 const finalCommitMessage = computed(() => {
   if (!isStandardCommit.value) {
-    return commitMessage.value;
+    // 如果用户没有输入提交信息，则使用默认提交信息
+    return commitMessage.value || defaultCommitMessage.value;
   }
 
   // 构建标准化提交信息
@@ -89,6 +90,8 @@ async function loadConfig() {
     const response = await fetch("/api/config/getConfig");
     const config = await response.json();
     placeholder.value = `输入提交信息 (默认: ${config.defaultCommitMessage})`;
+    // 保存默认提交信息到变量中，以便后续使用
+    defaultCommitMessage.value = config.defaultCommitMessage || "";
 
     // 加载描述模板
     if (
@@ -703,51 +706,53 @@ onMounted(() => {
       width="80vw"
       style="height: 80vh"
     >
-      <div class="template-form">
-        <el-input
-          v-model="newTemplateName"
-          placeholder="输入新模板内容"
-          class="template-input"
-          clearable
-        />
-        <el-button
-          type="primary"
-          @click="saveDescriptionTemplate"
-          :disabled="!newTemplateName.trim()"
-          >添加模板</el-button
-        >
-      </div>
+      <div class="template-container">
+        <div class="template-form">
+          <el-input
+            v-model="newTemplateName"
+            placeholder="输入新模板内容"
+            class="template-input"
+            clearable
+          />
+          <el-button
+            type="primary"
+            @click="saveDescriptionTemplate"
+            :disabled="!newTemplateName.trim()"
+            >添加模板</el-button
+          >
+        </div>
 
-      <div class="template-list">
-        <h3>已保存模板</h3>
-        <el-empty
-          v-if="descriptionTemplates.length === 0"
-          description="暂无保存的模板"
-        />
-        <el-card
-          v-for="(template, index) in descriptionTemplates"
-          :key="index"
-          class="template-item"
-        >
-          <!-- 两端对齐 -->
-          <el-row justify="space-between" align="middle" style="width: 100%">
-            <div class="template-content">{{ template }}</div>
-            <div class="template-actions">
-              <el-button
-                type="primary"
-                size="small"
-                @click="useTemplate(template)"
-                >使用</el-button
-              >
-              <el-button
-                type="danger"
-                size="small"
-                @click="deleteDescriptionTemplate(template)"
-                >删除</el-button
-              >
-            </div>
-          </el-row>
-        </el-card>
+        <div class="template-list">
+          <h3>已保存模板</h3>
+          <el-empty
+            v-if="descriptionTemplates.length === 0"
+            description="暂无保存的模板"
+          />
+          <el-card
+            v-for="(template, index) in descriptionTemplates"
+            :key="index"
+            class="template-item"
+          >
+            <!-- 两端对齐 -->
+            <el-row justify="space-between" align="middle" style="width: 100%">
+              <div class="template-content">{{ template }}</div>
+              <div class="template-actions">
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="useTemplate(template)"
+                  >使用</el-button
+                >
+                <el-button
+                  type="danger"
+                  size="small"
+                  @click="deleteDescriptionTemplate(template)"
+                  >删除</el-button
+                >
+              </div>
+            </el-row>
+          </el-card>
+        </div>
       </div>
     </el-dialog>
 
@@ -758,50 +763,52 @@ onMounted(() => {
       width="80%"
       style="height: 80vh"
     >
-      <div class="template-form">
-        <el-input
-          v-model="newScopeTemplate"
-          placeholder="输入新作用域模板"
-          class="template-input"
-          clearable
-        />
-        <el-button
-          type="primary"
-          @click="saveScopeTemplate"
-          :disabled="!newScopeTemplate.trim()"
-          >添加模板</el-button
-        >
-      </div>
+      <div class="template-container">
+        <div class="template-form">
+          <el-input
+            v-model="newScopeTemplate"
+            placeholder="输入新作用域模板"
+            class="template-input"
+            clearable
+          />
+          <el-button
+            type="primary"
+            @click="saveScopeTemplate"
+            :disabled="!newScopeTemplate.trim()"
+            >添加模板</el-button
+          >
+        </div>
 
-      <div class="template-list">
-        <h3>已保存作用域</h3>
-        <el-empty
-          v-if="scopeTemplates.length === 0"
-          description="暂无保存的作用域"
-        />
-        <el-card
-          v-for="(template, index) in scopeTemplates"
-          :key="index"
-          class="template-item"
-        >
-          <el-row justify="space-between" align="middle" style="width: 100%">
-            <div class="template-content">{{ template }}</div>
-            <div class="template-actions">
-              <el-button
-                type="primary"
-                size="small"
-                @click="useScopeTemplate(template)"
-                >使用</el-button
-              >
-              <el-button
-                type="danger"
-                size="small"
-                @click="deleteScopeTemplate(template)"
-                >删除</el-button
-              >
-            </div>
-          </el-row>
-        </el-card>
+        <div class="template-list">
+          <h3>已保存作用域</h3>
+          <el-empty
+            v-if="scopeTemplates.length === 0"
+            description="暂无保存的作用域"
+          />
+          <el-card
+            v-for="(template, index) in scopeTemplates"
+            :key="index"
+            class="template-item"
+          >
+            <el-row justify="space-between" align="middle" style="width: 100%">
+              <div class="template-content">{{ template }}</div>
+              <div class="template-actions">
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="useScopeTemplate(template)"
+                  >使用</el-button
+                >
+                <el-button
+                  type="danger"
+                  size="small"
+                  @click="deleteScopeTemplate(template)"
+                  >删除</el-button
+                >
+              </div>
+            </el-row>
+          </el-card>
+        </div>
       </div>
     </el-dialog>
   </div>
@@ -875,17 +882,27 @@ onMounted(() => {
   background-color: #ebeef5;
   border-radius: 4px;
 }
-.template-form {
+.template-container {
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  height: calc(85vh - 100px);
+  overflow-y: auto;
+}
+
+.template-form {
   margin-bottom: 20px;
+}
+
+.template-list {
+  flex: 1;
+  overflow-y: auto;
 }
 .template-input {
   flex-grow: 1;
 }
 .template-list {
-  max-height: 300px;
   overflow-y: auto;
+  height: 100%;
 }
 .template-item {
   margin-bottom: 10px;
