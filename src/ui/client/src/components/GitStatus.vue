@@ -17,7 +17,7 @@ const currentFileIndex = ref(-1)
 
 // 解析 git status 输出，提取文件及类型
 function parseStatus(statusText: string) {
-  if (!statusText) return
+  if (statusText === undefined) return
   const lines = statusText.split('\n')
   const files: {path: string, type: string}[] = []
   for (const line of lines) {
