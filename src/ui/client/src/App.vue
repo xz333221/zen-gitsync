@@ -46,6 +46,11 @@ function handleCommitSuccess() {
   if (logListRef.value) {
     logListRef.value.refreshLog()
   }
+  
+  // 刷新Git状态
+  if (gitStatusRef.value) {
+    gitStatusRef.value.refreshStatus()
+  }
 }
 
 // 处理推送成功事件
