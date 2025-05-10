@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, defineExpose } from 'vue'
-import { io } from 'socket.io-client'
+import { ref, onMounted, defineExpose } from 'vue'
 import { ElMessage } from 'element-plus'
+// import { io } from 'socket.io-client'
 import { Refresh, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 
 const status = ref('加载中...')
-const socket = io()
+// const socket = io()
 const isRefreshing = ref(false)
 const fileList = ref<{path: string, type: string}[]>([])
 const selectedFile = ref('')
@@ -163,9 +163,9 @@ onMounted(() => {
   // })
 })
 
-onUnmounted(() => {
-  socket.disconnect()
-})
+// onUnmounted(() => {
+//   socket.disconnect()
+// })
 
 // 暴露刷新方法给父组件
 defineExpose({
