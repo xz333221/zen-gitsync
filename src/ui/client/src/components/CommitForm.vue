@@ -890,6 +890,9 @@ onMounted(() => {
 .template-item {
   margin-bottom: 10px;
 }
+.template-item:hover {
+  background-color: #f5f7fa;
+}
 .template-content {
   flex-grow: 1;
   margin-right: 10px;
