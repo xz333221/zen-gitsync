@@ -3,13 +3,16 @@ import { ref, onMounted, defineExpose } from 'vue'
 import { ElTable, ElTableColumn, ElTag, ElButton } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
+import { createGitgraph } from '@gitgraph/js'
 
 interface LogItem {
   hash: string
   date: string
   author: string
+  email: string  // 添加邮箱字段
   message: string
   branch?: string // 添加分支信息字段
+  parents?: string[] // 添加父提交信息
 }
 
 const logs = ref<LogItem[]>([])
@@ -17,21 +20,82 @@ const errorMessage = ref('')
 const isLoading = ref(false)
 const showAllCommits = ref(false)
 const totalCommits = ref(0)
+const showGraphView = ref(true) // 控制是否显示图表视图
+const graphContainer = ref<HTMLElement | null>(null)
 
 // 加载提交历史
 async function loadLog(all = false) {
   try {
     isLoading.value = true
     showAllCommits.value = all
-    const url = all ? '/api/log?all=true' : '/api/log'
+    // 修改API调用，获取更详细的提交信息，包括父提交
+    const url = all ? '/api/log?all=true&graph=true' : '/api/log?graph=true'
     const response = await fetch(url)
     logs.value = await response.json()
     totalCommits.value = logs.value.length
     errorMessage.value = ''
+    
+    // 加载完数据后渲染图表
+    if (showGraphView.value) {
+      setTimeout(renderGraph, 0)
+    }
   } catch (error) {
     errorMessage.value = '加载提交历史失败: ' + (error as Error).message
   } finally {
     isLoading.value = false
+  }
+}
+
+// 渲染Git图表
+function renderGraph() {
+  if (!graphContainer.value || logs.value.length === 0) return
+  
+  // 清空容器
+  graphContainer.value.innerHTML = ''
+  
+  // 创建gitgraph实例
+  const gitgraph = createGitgraph(graphContainer.value, {
+    // 自定义选项
+    orientation: 'vertical-reverse', // 从上到下的方向
+    template: 'metro', // 使用metro模板
+    author: '提交者 <committer@example.com>'
+  })
+  
+  // 处理分支和提交数据
+  // 注意：这里的实现是简化的，实际需要根据API返回的数据结构调整
+  const branches: Record<string, any> = {}
+  const mainBranch = gitgraph.branch('main')
+  branches['main'] = mainBranch
+  
+  // 简化示例 - 实际实现需要根据API返回的数据结构调整
+  logs.value.forEach(commit => {
+    // 这里需要根据实际数据结构构建分支图
+    let currentBranch = mainBranch
+    
+    // 如果有分支信息，使用对应的分支
+    if (commit.branch) {
+      const branchName = formatBranchName(commit.branch.split(',')[0])
+      if (!branches[branchName]) {
+        branches[branchName] = gitgraph.branch(branchName)
+      }
+      currentBranch = branches[branchName]
+    }
+    
+    // 创建提交，添加邮箱信息
+    currentBranch.commit({
+      hash: commit.hash,
+      subject: commit.message,
+      author: `${commit.author} <${commit.email}>`
+    })
+  })
+}
+
+// 切换视图模式
+function toggleViewMode() {
+  showGraphView.value = !showGraphView.value
+  if (showGraphView.value && logs.value.length > 0) {
+    // 延迟执行以确保DOM已更新
+    setTimeout(renderGraph, 0)
   }
 }
 
@@ -57,6 +121,13 @@ defineExpose({
       <div class="log-actions">
         <el-button 
           type="primary" 
+          size="small"
+          @click="toggleViewMode"
+        >
+          {{ showGraphView ? '表格视图' : '图表视图' }}
+        </el-button>
+        <el-button 
+          type="primary" 
           size="small" 
           @click="toggleAllCommits" 
           :loading="isLoading"
@@ -74,30 +145,45 @@ defineExpose({
     </div>
     <div v-if="errorMessage">{{ errorMessage }}</div>
     <div v-else>
-      <div class="commit-count" v-if="logs.length > 0">
-        显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近100条)' }}
+      <!-- 图表视图 -->
+      <div v-if="showGraphView" class="graph-view">
+        <div class="commit-count" v-if="logs.length > 0">
+          显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近100条)' }}
+        </div>
+        <div ref="graphContainer" class="graph-container"></div>
       </div>
-      <el-table :data="logs" style="width: 100%" stripe border v-loading="isLoading">
-        <el-table-column prop="hash" label="提交哈希" width="100" resizable />
-        <el-table-column prop="date" label="日期" width="180" resizable />
-        <el-table-column prop="author" label="作者" width="150" resizable />
-        <el-table-column label="分支" width="180" resizable>
-          <template #default="scope">
-            <div v-if="scope.row.branch" class="branch-container">
-              <el-tag 
-                v-for="(ref, index) in scope.row.branch.split(',')" 
-                :key="index"
-                size="small"
-                :type="getBranchTagType(ref)"
-                class="branch-tag"
-              >
-                {{ formatBranchName(ref) }}
-              </el-tag>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="message" label="提交信息" min-width="250" />
-      </el-table>
+      
+      <!-- 表格视图 -->
+      <div v-else>
+        <div class="commit-count" v-if="logs.length > 0">
+          显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近100条)' }}
+        </div>
+        <el-table :data="logs" style="width: 100%" stripe border v-loading="isLoading">
+          <el-table-column prop="hash" label="提交哈希" width="100" resizable />
+          <el-table-column prop="date" label="日期" width="180" resizable />
+          <el-table-column label="作者" width="200" resizable>
+            <template #default="scope">
+              {{ scope.row.author }} &lt;{{ scope.row.email }}&gt;
+            </template>
+          </el-table-column>
+          <el-table-column label="分支" width="180" resizable>
+            <template #default="scope">
+              <div v-if="scope.row.branch" class="branch-container">
+                <el-tag 
+                  v-for="(ref, index) in scope.row.branch.split(',')" 
+                  :key="index"
+                  size="small"
+                  :type="getBranchTagType(ref)"
+                  class="branch-tag"
+                >
+                  {{ formatBranchName(ref) }}
+                </el-tag>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="message" label="提交信息" min-width="250" />
+        </el-table>
+      </div>
     </div>
   </div>
 </template>
@@ -130,6 +216,20 @@ defineExpose({
   font-size: 14px;
   color: #606266;
   text-align: right;
+}
+
+.graph-container {
+  width: 100%;
+  height: 600px;
+  overflow: auto;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  padding: 10px;
+  background-color: #fff;
+}
+
+.graph-view {
+  width: 100%;
 }
 </style>
 

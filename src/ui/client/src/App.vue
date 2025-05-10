@@ -10,6 +10,8 @@ const configInfo = ref('')
 const logListRef = ref(null)
 const gitStatusRef = ref(null)
 const currentBranch = ref('') // 添加当前分支状态变量
+const userName = ref('') // 添加用户名变量
+const userEmail = ref('') // 添加用户邮箱变量
 
 // 加载配置
 async function loadConfig() {
@@ -35,9 +37,24 @@ async function getCurrentBranch() {
   }
 }
 
+// 获取Git用户信息
+async function getUserInfo() {
+  try {
+    const response = await fetch('/api/user-info')
+    const data = await response.json()
+    if (data.name && data.email) {
+      userName.value = data.name
+      userEmail.value = data.email
+    }
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+  }
+}
+
 onMounted(() => {
   loadConfig()
   getCurrentBranch() // 初始加载分支信息
+  getUserInfo() // 初始加载用户信息
 })
 
 // 处理提交成功事件
@@ -80,6 +97,11 @@ function handlePushSuccess() {
       <div id="branch-info" v-if="currentBranch">
         <span class="branch-label">当前分支:</span>
         <span class="branch-name">{{ currentBranch }}</span>
+      </div>
+      <div id="user-info" v-if="userName && userEmail">
+        <span class="user-label">用户:</span>
+        <span class="user-name">{{ userName }}</span>
+        <span class="user-email">&lt;{{ userEmail }}&gt;</span>
       </div>
       <!-- <div id="config-info">{{ configInfo }}</div> -->
     </div>
@@ -142,17 +164,22 @@ h1 {
   align-items: flex-end;
   gap: 5px;
 }
-#branch-info {
-  background-color: #2ea44f;
+#branch-info, #user-info {
+  background-color: rgba(255, 255, 255, 0.1);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 14px;
-  display: inline-flex;
-  align-items: center;
 }
-.branch-label {
-  margin-right: 5px;
+.branch-label, .user-label {
   font-weight: bold;
+  margin-right: 5px;
+}
+.user-name {
+  font-weight: bold;
+  margin-right: 5px;
+}
+.user-email {
+  color: #e0e0e0;
 }
 .branch-name {
   font-family: monospace;

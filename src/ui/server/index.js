@@ -66,6 +66,23 @@ async function startUIServer() {
     }
   });
   
+  // 获取Git用户配置信息
+  app.get('/api/user-info', async (req, res) => {
+    try {
+      // 获取用户名
+      const { stdout: userName } = await execGitCommand('git config user.name');
+      // 获取用户邮箱
+      const { stdout: userEmail } = await execGitCommand('git config user.email');
+      
+      res.json({ 
+        name: userName.trim(),
+        email: userEmail.trim()
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   // 获取配置
   app.get('/api/config/getConfig', async (req, res) => {
     try {
@@ -225,10 +242,10 @@ async function startUIServer() {
       // 获取请求参数中的数量限制，默认为100
       const limit = req.query.all === 'true' ? '' : '-n 100';
       
-      // 修改 git log 命令，添加 %D 参数来获取引用信息（包括分支）
-      const { stdout } = await execGitCommand(`git log --pretty=format:"%h|%an|%ad|%s|%D" --date=short ${limit}`);
+      // 修改 git log 命令，添加 %ae 参数来获取作者邮箱
+      const { stdout } = await execGitCommand(`git log --pretty=format:"%h|%an|%ae|%ad|%s|%D" --date=short ${limit}`);
       const logs = stdout.split('\n').map(line => {
-        const [hash, author, date, message, refs] = line.split('|');
+        const [hash, author, email, date, message, refs] = line.split('|');
         
         // 从引用信息中提取分支名称
         let branch = null;
@@ -237,7 +254,7 @@ async function startUIServer() {
           branch = refs.trim();
         }
         
-        return { hash, author, date, message, branch };
+        return { hash, author, email, date, message, branch };
       });
       res.json(logs);
     } catch (error) {
