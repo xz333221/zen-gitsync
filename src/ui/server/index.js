@@ -161,45 +161,49 @@ async function startUIServer() {
   // 提交更改
   app.post('/api/commit', express.json(), async (req, res) => {
     try {
-      const { message, hasNewlines } = req.body;
+      const { message, hasNewlines, noVerify } = req.body;
   
-      // 先执行 git add .
-      await execGitCommand('git add .');
+      // 构建 git commit 命令
+      let commitCommand = 'git commit';
   
-      // 如果消息包含换行符，使用 -m 参数可能会有问题
-      // 使用 -F 参数从临时文件中读取提交消息
-      let commitCommand;
-  
+      // 如果消息包含换行符，使用文件方式提交
       if (hasNewlines) {
-        // 创建临时文件存储提交消息
+        // 创建临时文件存储提交信息
         const tempFile = path.join(os.tmpdir(), `commit-msg-${Date.now()}.txt`);
-        fs.writeFileSync(tempFile, message, 'utf8');
-  
-        // 使用 -F 参数从文件读取提交消息
-        commitCommand = `git commit -F "${tempFile}"`;
-  
-        // 执行命令
-        const { stdout, stderr } = await execGitCommand(commitCommand);
-  
-        // 删除临时文件
-        fs.unlinkSync(tempFile);
-  
-        if (stderr && !stderr.includes('nothing to commit')) {
-          throw new Error(stderr);
-        }
-  
-        res.json({ success: true, message: stdout });
+        await fs.writeFile(tempFile, message);
+        commitCommand += ` -F "${tempFile}"`;
       } else {
-        // 没有换行符，使用原来的方式
-        commitCommand = `git commit -m "${message.replace(/"/g, '\\"')}"`;
-        const { stdout, stderr } = await execGitCommand(commitCommand);
-  
-        if (stderr && !stderr.includes('nothing to commit')) {
-          throw new Error(stderr);
-        }
-  
-        res.json({ success: true, message: stdout });
+        // 否则直接在命令行中提供消息
+        commitCommand += ` -m "${message}"`;
       }
+      
+      // 添加 --no-verify 参数
+      if (noVerify) {
+        commitCommand += ' --no-verify';
+      }
+      
+      console.log(`commitCommand ==>`, commitCommand);
+      // 执行提交命令
+      await execGitCommand(commitCommand);
+      
+      // 如果使用了临时文件，删除它
+      if (hasNewlines) {
+        const tempFile = path.join(os.tmpdir(), `commit-msg-${Date.now()}.txt`);
+        await fs.unlink(tempFile).catch(() => {});
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // 添加 add 接口
+  app.post('/api/add', async (req, res) => {
+    try {
+      // 执行 git add . 命令添加所有更改
+      await execGitCommand('git add .');
+      res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
