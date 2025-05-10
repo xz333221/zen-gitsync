@@ -238,6 +238,24 @@ async function startUIServer() {
     }
   });
   
+  // 获取文件差异
+  app.get('/api/diff', async (req, res) => {
+    try {
+      const filePath = req.query.file;
+      
+      if (!filePath) {
+        return res.status(400).json({ error: '缺少文件路径参数' });
+      }
+      
+      // 执行git diff命令获取文件差异
+      const { stdout } = await execGitCommand(`git diff -- "${filePath}"`);
+      
+      res.json({ diff: stdout });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   // Socket.io 实时更新
   io.on('connection', (socket) => {
     console.log('客户端已连接');

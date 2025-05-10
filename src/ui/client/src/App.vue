@@ -4,6 +4,8 @@ import GitStatus from './components/GitStatus.vue'
 import CommitForm from './components/CommitForm.vue'
 import LogList from './components/LogList.vue'
 
+import logo from './assets/logo.svg'
+
 const configInfo = ref('')
 const logListRef = ref(null)
 const gitStatusRef = ref(null)
@@ -65,7 +67,10 @@ function handlePushSuccess() {
 
 <template>
   <header class="main-header">
-    <h1>Zen GitSync UI</h1>
+    <div class="header-left">
+      <img :src="logo" alt="Zen GitSync Logo" class="logo" />
+      <h1>Zen GitSync UI</h1>
+    </div>
     <div class="header-info">
       <div id="branch-info" v-if="currentBranch">
         <span class="branch-label">当前分支:</span>
@@ -112,6 +117,15 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo {
+  height: 32px;
+  width: auto;
 }
 h1 {
   margin: 0;
@@ -182,6 +196,18 @@ h1 {
     flex: 0 0 100%;
     max-width: 100%;
   }
+  
+  .header-left {
+    gap: 8px;
+  }
+  
+  .logo {
+    height: 24px;
+  }
+  
+  h1 {
+    font-size: 20px;
+  }
 }
 .commit-form {
   display: flex;
@@ -221,15 +247,10 @@ h1 {
 
 <style scoped>
 .logo {
-  height: 6em;
-  padding: 1.5em;
   will-change: filter;
   transition: filter 300ms;
 }
 .logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vue:hover {
   filter: drop-shadow(0 0 2em #42b883aa);
 }
 </style>
