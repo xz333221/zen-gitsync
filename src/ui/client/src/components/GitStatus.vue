@@ -584,35 +584,6 @@ defineExpose({
   line-height: 1.5;
 }
 
-.diff-header {
-  font-weight: bold;
-  background-color: #e6f1fc;
-  padding: 3px;
-  margin: 5px 0;
-}
-
-.diff-old-file, .diff-new-file {
-  color: #888;
-}
-
-.diff-hunk-header {
-  color: #6f42c1;
-}
-
-.diff-added {
-  background-color: #e6ffed;
-  color: #28a745;
-}
-
-.diff-removed {
-  background-color: #ffeef0;
-  color: #d73a49;
-}
-
-.diff-context {
-  color: #444;
-}
-
 .file-navigation {
   display: flex;
   justify-content: center;
@@ -723,5 +694,37 @@ defineExpose({
 /* 移除按钮左侧的内边距 */
 .no-padding-left {
   padding-left: 8px !important;
+}
+</style>
+
+<!-- 添加非scoped样式，使diff格式化样式对动态内容生效 -->
+<style>
+.diff-header {
+  font-weight: bold;
+  background-color: #e6f1fc;
+  padding: 3px;
+  margin: 5px 0;
+}
+
+.diff-old-file, .diff-new-file {
+  color: #888;
+}
+
+.diff-hunk-header {
+  color: #6f42c1;
+}
+
+.diff-added {
+  background-color: #e6ffed;
+  color: #28a745;
+}
+
+.diff-removed {
+  background-color: #ffeef0;
+  color: #d73a49;
+}
+
+.diff-context {
+  color: #444;
 }
 </style>
