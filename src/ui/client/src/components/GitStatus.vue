@@ -188,7 +188,13 @@ async function browseDirectory(directoryPath: string) {
     isBrowsing.value = true
     browseErrorMessage.value = ''
     
-    const response = await fetch(`/api/browse_directory?path=${encodeURIComponent(directoryPath)}`)
+    // 确保Windows盘符路径格式正确
+    let normalizedPath = directoryPath
+    if (/^[A-Za-z]:$/.test(normalizedPath)) {
+      normalizedPath += '/'
+    }
+    
+    const response = await fetch(`/api/browse_directory?path=${encodeURIComponent(normalizedPath)}`)
     
     if (response.status === 403) {
       const data = await response.json()
@@ -219,18 +225,27 @@ async function browseDirectory(directoryPath: string) {
 
 // 导航到父目录
 function navigateToParent() {
-  // 获取当前路径的父目录
-  const pathParts = currentBrowsePath.value.split(/[/\\]/)
-  
-  // 处理根目录情况
-  if (pathParts.length <= 1 || (pathParts.length === 2 && pathParts[1] === '')) {
-    // 已经是根目录，Windows下可能是 'C:\'，Unix下是 '/'
+  // 检查是否已经是根目录
+  // Windows盘符根目录情况 (如 "E:")
+  if (/^[A-Za-z]:$/.test(currentBrowsePath.value) || 
+      /^[A-Za-z]:[\\/]$/.test(currentBrowsePath.value) || 
+      currentBrowsePath.value === '/') {
+    // 已经是根目录，不做任何操作
     return
   }
   
+  // 获取当前路径的父目录
+  let pathParts = currentBrowsePath.value.split(/[/\\]/)
+  
   // 移除最后一个目录部分
   pathParts.pop()
-  const parentPath = pathParts.join('/')
+  
+  // 处理Windows盘符特殊情况
+  let parentPath = pathParts.join('/')
+  if (pathParts.length === 1 && /^[A-Za-z]:$/.test(pathParts[0])) {
+    // 如果只剩下盘符，确保添加斜杠 (例如 "E:/")
+    parentPath = pathParts[0] + '/'
+  }
   
   if (parentPath) {
     browseDirectory(parentPath)
