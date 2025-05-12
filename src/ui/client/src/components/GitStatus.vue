@@ -374,16 +374,15 @@ defineExpose({
     >
       <el-form>
         <el-form-item label="目录路径">
-          <el-input v-model="newDirectoryPath" placeholder="请输入目录路径" clearable>
-            <template #append>
-              <el-button @click="openDirectoryBrowser" icon="Folder" type="primary" plain>
-                浏览
-              </el-button>
-              <el-button @click="changeDirectory" :loading="isChangingDirectory">
-                切换
-              </el-button>
-            </template>
-          </el-input>
+          <el-input v-model="newDirectoryPath" placeholder="请输入目录路径" clearable />
+          <div class="directory-buttons">
+            <el-button @click="openDirectoryBrowser" icon="Folder" type="primary" plain>
+              浏览
+            </el-button>
+            <el-button @click="changeDirectory" :loading="isChangingDirectory" type="primary">
+              切换
+            </el-button>
+          </div>
         </el-form-item>
       </el-form>
     </el-dialog>
@@ -695,5 +694,11 @@ defineExpose({
 .directory-item span {
   font-family: monospace;
   word-break: break-all;
+}
+
+.directory-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
 }
 </style>
