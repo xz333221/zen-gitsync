@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, defineExpose } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
-import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp } from '@element-plus/icons-vue'
+import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight } from '@element-plus/icons-vue'
 
 const status = ref('加载中...')
 // const socket = io()
@@ -327,6 +327,46 @@ async function refreshStatus() {
   await loadStatus()
 }
 
+// 添加撤回文件修改的方法
+async function revertFileChanges(filePath: string) {
+  try {
+    // 请求用户确认
+    await ElMessageBox.confirm(
+      `确定要撤回文件 "${filePath}" 的所有修改吗？此操作无法撤销。`,
+      '撤回修改',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    // 发送请求到后端API
+    const response = await fetch('/api/revert_file', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ filePath })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      ElMessage.success('已撤回文件修改')
+      // 刷新Git状态
+      await loadStatus()
+    } else {
+      ElMessage.error(result.error || '撤回文件修改失败')
+    }
+  } catch (error) {
+    // 用户取消或发生错误
+    if ((error as Error).message !== 'cancel') {
+      ElMessage.error(`撤回文件修改失败: ${(error as Error).message}`)
+    }
+  }
+}
+
 onMounted(() => {
   loadStatus()
   
@@ -374,10 +414,22 @@ defineExpose({
         v-for="file in fileList" 
         :key="file.path" 
         :class="['file-item', file.type]"
-        @click="handleFileClick(file)"
       >
-        <span class="file-type">{{ fileTypeLabel(file.type) }}</span>
-        <span class="file-path">{{ file.path }}</span>
+        <div class="file-info" @click="handleFileClick(file)">
+          <span class="file-type">{{ fileTypeLabel(file.type) }}</span>
+          <span class="file-path">{{ file.path }}</span>
+        </div>
+        <div class="file-actions">
+          <el-tooltip content="撤回修改" placement="top" :hide-after="1000">
+            <el-button
+              type="danger"
+              size="small"
+              :icon="RefreshRight"
+              circle
+              @click.stop="revertFileChanges(file.path)"
+            />
+          </el-tooltip>
+        </div>
       </div>
     </div>
     
@@ -530,10 +582,27 @@ defineExpose({
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: space-between;
 }
 
 .file-item:hover {
   background-color: #f5f7fa;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  flex-grow: 1;
+}
+
+.file-actions {
+  margin-left: 10px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.file-item:hover .file-actions {
+  opacity: 1;
 }
 
 .file-type {

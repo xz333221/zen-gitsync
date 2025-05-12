@@ -481,6 +481,58 @@ async function startUIServer() {
     }
   });
   
+  // 撤回文件修改
+  app.post('/api/revert_file', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      
+      if (!filePath) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少文件路径参数' 
+        });
+      }
+      
+      // 检查文件状态：未跟踪文件需要删除，修改文件需要恢复
+      const { stdout: statusOutput } = await execGitCommand(`git status --porcelain -- "${filePath}"`);
+      
+      // 未跟踪的文件 (??), 需要删除它
+      if (statusOutput.startsWith('??')) {
+        try {
+          await fs.unlink(filePath);
+          return res.json({ success: true, message: '未跟踪的文件已删除' });
+        } catch (error) {
+          return res.status(500).json({ 
+            success: false, 
+            error: `删除文件失败: ${error.message}` 
+          });
+        }
+      } 
+      // 已暂存的文件，先取消暂存
+      else if (statusOutput.startsWith('A ') || statusOutput.startsWith('M ') || statusOutput.startsWith('D ')) {
+        // 先取消暂存
+        await execGitCommand(`git reset HEAD -- "${filePath}"`);
+      }
+      
+      // 已修改文件，取消所有本地修改
+      if (statusOutput) {
+        await execGitCommand(`git checkout -- "${filePath}"`);
+        return res.json({ success: true, message: '文件修改已撤回' });
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          error: '文件没有修改或不存在' 
+        });
+      }
+    } catch (error) {
+      console.error('撤回文件修改失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `撤回文件修改失败: ${error.message}` 
+      });
+    }
+  });
+  
   // Socket.io 实时更新
   // io.on('connection', (socket) => {
   //   console.log('客户端已连接');
