@@ -376,7 +376,8 @@ defineExpose({
         <el-form-item label="目录路径">
           <el-input v-model="newDirectoryPath" placeholder="请输入目录路径" clearable />
           <div class="directory-buttons">
-            <el-button @click="openDirectoryBrowser" icon="Folder" type="primary" plain>
+            <el-button @click="openDirectoryBrowser" type="primary" plain class="no-padding-left">
+              <el-icon><Folder /></el-icon>
               浏览
             </el-button>
             <el-button @click="changeDirectory" :loading="isChangingDirectory" type="primary">
@@ -408,14 +409,16 @@ defineExpose({
             @click="navigateToParent" 
             :disabled="!currentBrowsePath || isBrowsing"
             size="small"
-            icon="ArrowUp"
+            class="no-padding-left"
           >
+            <el-icon><ArrowUp /></el-icon>
             上级目录
           </el-button>
           <el-button 
             @click="selectCurrentDirectory" 
             type="primary" 
             size="small"
+            class="no-padding-left"
           >
             选择当前目录
           </el-button>
@@ -700,5 +703,10 @@ defineExpose({
   display: flex;
   gap: 10px;
   margin-top: 10px;
+}
+
+/* 移除按钮左侧的内边距 */
+.no-padding-left {
+  padding-left: 8px !important;
 }
 </style>
