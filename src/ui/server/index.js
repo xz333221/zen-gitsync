@@ -5,6 +5,8 @@ import path from 'path';
 import { execGitCommand } from '../../utils/index.js';
 import open from 'open';
 import config from '../../config.js';
+import chalk from 'chalk';
+import fs from 'fs/promises';
 // import { Server } from 'socket.io';
 // import { exec } from 'child_process';
 
@@ -180,6 +182,103 @@ async function startUIServer() {
               directory,
               isGitRepo: true 
           });
+      } catch (error) {
+          res.status(500).json({ error: error.message });
+      }
+  });
+  
+  // 新增切换工作目录接口
+  app.post('/api/change_directory', async (req, res) => {
+      try {
+
+          const { path } = req.body;
+          
+          if (!path) {
+              return res.status(400).json({ success: false, error: '目录路径不能为空' });
+          }
+          
+          try {
+              process.chdir(path);
+              const newDirectory = process.cwd();
+              
+              // 检查新目录是否是Git仓库
+              try {
+                  await execGitCommand('git rev-parse --is-inside-work-tree');
+                  res.json({ 
+                      success: true, 
+                      directory: newDirectory,
+                      isGitRepo: true 
+                  });
+              } catch (error) {
+                  res.json({ 
+                      success: true, 
+                      directory: newDirectory,
+                      isGitRepo: false,
+                      warning: '新目录不是一个Git仓库'
+                  });
+              }
+          } catch (error) {
+              res.status(400).json({ 
+                  success: false, 
+                  error: `切换到目录 "${path}" 失败: ${error.message}` 
+              });
+          }
+      } catch (error) {
+          res.status(500).json({ error: error.message });
+      }
+  });
+  
+  // 获取目录内容（用于浏览目录）
+  app.get('/api/browse_directory', async (req, res) => {
+      try {
+          
+          // 获取要浏览的目录路径，如果没有提供，则使用当前目录
+          const directoryPath = req.query.path || process.cwd();
+          
+          try {
+              // 读取目录内容
+              const items = await fs.readdir(directoryPath, { withFileTypes: true });
+              
+              // 分离文件夹和文件
+              const directories = [];
+              const files = [];
+              
+              for (const item of items) {
+                  const fullPath = path.join(directoryPath, item.name);
+                  if (item.isDirectory()) {
+                      directories.push({
+                          name: item.name,
+                          path: fullPath,
+                          type: 'directory'
+                      });
+                  } else if (item.isFile()) {
+                      files.push({
+                          name: item.name,
+                          path: fullPath,
+                          type: 'file'
+                      });
+                  }
+              }
+              
+              // 优先显示目录，然后是文件，都按字母排序
+              directories.sort((a, b) => a.name.localeCompare(b.name));
+              files.sort((a, b) => a.name.localeCompare(b.name));
+              
+              // 获取父目录路径
+              const parentPath = path.dirname(directoryPath);
+              
+              res.json({
+                  success: true,
+                  currentPath: directoryPath,
+                  parentPath: parentPath !== directoryPath ? parentPath : null,
+                  items: [...directories, ...files]
+              });
+          } catch (error) {
+              res.status(400).json({
+                  success: false,
+                  error: `无法读取目录 "${directoryPath}": ${error.message}`
+              });
+          }
       } catch (error) {
           res.status(500).json({ error: error.message });
       }

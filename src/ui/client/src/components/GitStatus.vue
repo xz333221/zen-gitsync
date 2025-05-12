@@ -2,7 +2,7 @@
 import { ref, onMounted, defineExpose } from 'vue'
 import { ElMessage } from 'element-plus'
 // import { io } from 'socket.io-client'
-import { Refresh, ArrowLeft, ArrowRight, Folder } from '@element-plus/icons-vue'
+import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp } from '@element-plus/icons-vue'
 
 const status = ref('加载中...')
 // const socket = io()
@@ -14,6 +14,16 @@ const diffDialogVisible = ref(false)
 const isLoadingDiff = ref(false)
 // 添加当前文件索引
 const currentFileIndex = ref(-1)
+// 添加切换目录相关的状态
+const isDirectoryDialogVisible = ref(false)
+const newDirectoryPath = ref('')
+const isChangingDirectory = ref(false)
+// 添加目录浏览相关的状态
+const isDirectoryBrowserVisible = ref(false)
+const currentBrowsePath = ref('')
+const directoryItems = ref<{name: string, path: string, type: string}[]>([])
+const isBrowsing = ref(false)
+const browseErrorMessage = ref('')
 
 // 解析 git status 输出，提取文件及类型
 function parseStatus(statusText: string) {
@@ -158,9 +168,143 @@ async function goToNextFile() {
   await getFileDiff(nextFile.path)
 }
 
+// 打开切换目录对话框
+function openDirectoryDialog() {
+  newDirectoryPath.value = currentDirectory.value
+  isDirectoryDialogVisible.value = true
+}
+
+// 打开目录浏览器
+function openDirectoryBrowser() {
+  browseErrorMessage.value = ''
+  currentBrowsePath.value = newDirectoryPath.value || currentDirectory.value
+  isDirectoryBrowserVisible.value = true
+  browseDirectory(currentBrowsePath.value)
+}
+
+// 浏览目录
+async function browseDirectory(directoryPath: string) {
+  try {
+    isBrowsing.value = true
+    browseErrorMessage.value = ''
+    
+    const response = await fetch(`/api/browse_directory?path=${encodeURIComponent(directoryPath)}`)
+    
+    if (response.status === 403) {
+      const data = await response.json()
+      browseErrorMessage.value = data.error || '目录浏览功能未启用'
+      return
+    }
+    
+    if (!response.ok) {
+      const data = await response.json()
+      browseErrorMessage.value = data.error || '获取目录内容失败'
+      return
+    }
+    
+    const data = await response.json()
+    
+    if (data.success) {
+      directoryItems.value = data.items
+      currentBrowsePath.value = data.currentPath
+    } else {
+      browseErrorMessage.value = data.error || '获取目录内容失败'
+    }
+  } catch (error) {
+    browseErrorMessage.value = `获取目录内容失败: ${(error as Error).message}`
+  } finally {
+    isBrowsing.value = false
+  }
+}
+
+// 导航到父目录
+function navigateToParent() {
+  // 获取当前路径的父目录
+  const pathParts = currentBrowsePath.value.split(/[/\\]/)
+  
+  // 处理根目录情况
+  if (pathParts.length <= 1 || (pathParts.length === 2 && pathParts[1] === '')) {
+    // 已经是根目录，Windows下可能是 'C:\'，Unix下是 '/'
+    return
+  }
+  
+  // 移除最后一个目录部分
+  pathParts.pop()
+  const parentPath = pathParts.join('/')
+  
+  if (parentPath) {
+    browseDirectory(parentPath)
+  }
+}
+
+// 选择目录项
+function selectDirectoryItem(item: {name: string, path: string, type: string}) {
+  if (item.type === 'directory') {
+    browseDirectory(item.path)
+  }
+}
+
+// 选择当前目录
+function selectCurrentDirectory() {
+  newDirectoryPath.value = currentBrowsePath.value
+  isDirectoryBrowserVisible.value = false
+}
+
+// 切换工作目录
+async function changeDirectory() {
+  if (!newDirectoryPath.value) {
+    ElMessage.warning('目录路径不能为空')
+    return
+  }
+  
+  try {
+    isChangingDirectory.value = true
+    const response = await fetch('/api/change_directory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ path: newDirectoryPath.value })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      ElMessage.success('已切换工作目录')
+      currentDirectory.value = result.directory
+      isDirectoryDialogVisible.value = false
+      
+      // 如果新目录不是Git仓库，显示警告
+      if (!result.isGitRepo) {
+        ElMessage.warning('当前目录不是一个Git仓库')
+      }
+      
+      // 刷新状态
+      loadStatus()
+    } else {
+      ElMessage.error(result.error || '切换目录失败')
+    }
+  } catch (error) {
+    ElMessage.error(`切换目录失败: ${(error as Error).message}`)
+  } finally {
+    isChangingDirectory.value = false
+  }
+}
+
 // 处理文件点击
 function handleFileClick(file: {path: string, type: string}) {
   getFileDiff(file.path)
+}
+
+// 文件类型标签显示
+function fileTypeLabel(type: string) {
+  switch (type) {
+    case 'added': return '新增';
+    case 'modified': return '修改';
+    case 'deleted': return '删除';
+    case 'untracked': return '未跟踪';
+    default: return '其他';
+  }
 }
 
 // 刷新Git状态的方法
@@ -193,6 +337,9 @@ defineExpose({
     <div class="current-directory">
       <el-icon><Folder /></el-icon>
       <span>{{ currentDirectory }}</span>
+      <el-button type="primary" size="small" @click="openDirectoryDialog" plain>
+        切换目录
+      </el-button>
     </div>
     <div class="status-header">
       <h2>Git 状态</h2>
@@ -218,6 +365,78 @@ defineExpose({
         <span class="file-path">{{ file.path }}</span>
       </div>
     </div>
+    
+    <!-- 切换目录对话框 -->
+    <el-dialog
+      v-model="isDirectoryDialogVisible"
+      title="切换工作目录"
+      width="500px"
+    >
+      <el-form>
+        <el-form-item label="目录路径">
+          <el-input v-model="newDirectoryPath" placeholder="请输入目录路径" clearable>
+            <template #append>
+              <el-button @click="openDirectoryBrowser" icon="Folder" type="primary" plain>
+                浏览
+              </el-button>
+              <el-button @click="changeDirectory" :loading="isChangingDirectory">
+                切换
+              </el-button>
+            </template>
+          </el-input>
+        </el-form-item>
+      </el-form>
+    </el-dialog>
+    
+    <!-- 目录浏览对话框 -->
+    <el-dialog
+      v-model="isDirectoryBrowserVisible"
+      title="浏览目录"
+      width="600px"
+    >
+      <div class="browser-current-path">
+        <span>当前路径: {{ currentBrowsePath }}</span>
+      </div>
+      
+      <div v-if="browseErrorMessage" class="browser-error">
+        {{ browseErrorMessage }}
+      </div>
+      
+      <div v-loading="isBrowsing" class="directory-browser">
+        <!-- 导航栏 -->
+        <div class="browser-nav">
+          <el-button 
+            @click="navigateToParent" 
+            :disabled="!currentBrowsePath || isBrowsing"
+            size="small"
+            icon="ArrowUp"
+          >
+            上级目录
+          </el-button>
+          <el-button 
+            @click="selectCurrentDirectory" 
+            type="primary" 
+            size="small"
+          >
+            选择当前目录
+          </el-button>
+        </div>
+        
+        <!-- 目录内容列表 -->
+        <ul class="directory-items">
+          <li 
+            v-for="item in directoryItems" 
+            :key="item.path"
+            :class="['directory-item', item.type]"
+            @click="selectDirectoryItem(item)"
+          >
+            <el-icon v-if="item.type === 'directory'"><Folder /></el-icon>
+            <el-icon v-else><Document /></el-icon>
+            <span>{{ item.name }}</span>
+          </li>
+        </ul>
+      </div>
+    </el-dialog>
     
     <!-- 文件差异对话框 -->
     <el-dialog
@@ -251,18 +470,15 @@ defineExpose({
   </div>
 </template>
 
-<script lang="ts">
-// 辅助函数：类型标签
-function fileTypeLabel(type: string) {
-  if (type === 'added') return '新增'
-  if (type === 'modified') return '修改'
-  if (type === 'deleted') return '删除'
-  if (type === 'untracked') return '未跟踪'
-  return '其它'
-}
-</script>
-
 <style scoped>
+.card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
 .status-header {
   display: flex;
   justify-content: space-between;
@@ -274,130 +490,210 @@ function fileTypeLabel(type: string) {
   margin: 0;
 }
 
+.status-box {
+  white-space: pre-wrap;
+  font-family: monospace;
+  background-color: #f5f7fa;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
 .file-list {
-  margin-top: 10px;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .file-item {
+  padding: 8px 12px;
+  margin-bottom: 5px;
+  border-radius: 4px;
+  cursor: pointer;
   display: flex;
   align-items: center;
-  margin-bottom: 4px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: opacity 0.2s;
 }
+
 .file-item:hover {
-  opacity: 0.8;
+  background-color: #f5f7fa;
 }
-.file-item.added {
-  background: #e6ffed;
-  color: #22863a;
-}
-.file-item.modified {
-  background: #fff5b1;
-  color: #b08800;
-}
-.file-item.deleted {
-  background: #ffeef0;
-  color: #cb2431;
-}
-.file-item.untracked {
-  background: #f1f8ff;
-  color: #0366d6;
-}
+
 .file-type {
-  font-weight: bold;
-  margin-right: 8px;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-right: 10px;
+  flex-shrink: 0;
 }
+
+.added .file-type {
+  background-color: #e1f3d8;
+  color: #67c23a;
+}
+
+.modified .file-type {
+  background-color: #e6f1fc;
+  color: #409eff;
+}
+
+.deleted .file-type {
+  background-color: #fef0f0;
+  color: #f56c6c;
+}
+
+.untracked .file-type {
+  background-color: #fdf6ec;
+  color: #e6a23c;
+}
+
 .file-path {
   font-family: monospace;
+  word-break: break-all;
 }
 
 .diff-content {
-  max-height: 70vh;
-  overflow-y: auto;
-  background-color: #f6f8fa;
-  border: 1px solid #e1e4e8;
-  border-radius: 3px;
-  padding: 15px;
   font-family: monospace;
   white-space: pre-wrap;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 10px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
 }
 
 .diff-formatted {
-  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-/* 差异内容的颜色样式 - 使用深度选择器 */
-:deep(.diff-header) {
-  color: #24292e;
+.diff-header {
   font-weight: bold;
+  background-color: #e6f1fc;
+  padding: 3px;
+  margin: 5px 0;
 }
 
-:deep(.diff-old-file) {
-  color: #cb2431;
-  background-color: #ffeef0;
+.diff-old-file, .diff-new-file {
+  color: #888;
 }
 
-:deep(.diff-new-file) {
-  color: #22863a;
-  background-color: #e6ffed;
-}
-
-:deep(.diff-hunk-header) {
+.diff-hunk-header {
   color: #6f42c1;
-  background-color: #f1f8ff;
 }
 
-:deep(.diff-added) {
-  color: #22863a;
+.diff-added {
   background-color: #e6ffed;
+  color: #28a745;
 }
 
-:deep(.diff-removed) {
-  color: #cb2431;
+.diff-removed {
   background-color: #ffeef0;
+  color: #d73a49;
 }
 
-:deep(.diff-context) {
-  color: #24292e;
+.diff-context {
+  color: #444;
 }
 
-.no-diff {
-  text-align: center;
-  padding: 20px;
-  color: #666;
-}
-
-/* 添加文件导航样式 */
 .file-navigation {
   display: flex;
   justify-content: center;
   align-items: center;
   margin-top: 15px;
-  gap: 10px;
 }
 
 .file-counter {
+  margin: 0 15px;
   font-size: 14px;
   color: #606266;
 }
+
 .current-directory {
-  padding: 10px 15px;
-  background-color: #f0f0f0;
-  border-bottom: 1px solid #e1e4e8;
   display: flex;
   align-items: center;
-  gap: 8px;
+  margin-bottom: 15px;
+  padding: 8px 12px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
   font-family: monospace;
 }
-.not-git-repo {
-  margin: 10px 0;
-  padding: 10px;
-  background-color: #fffbf6;
-  border: 1px solid #f0c78a;
+
+.current-directory .el-icon {
+  margin-right: 8px;
+  color: #409eff;
+}
+
+.current-directory span {
+  flex-grow: 1;
+  word-break: break-all;
+  margin-right: 10px;
+}
+
+.browser-current-path {
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #606266;
+  background-color: #f5f7fa;
+  padding: 8px 12px;
   border-radius: 4px;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.browser-error {
+  margin-bottom: 10px;
+  color: #f56c6c;
+  padding: 8px 12px;
+  background-color: #fef0f0;
+  border-radius: 4px;
+}
+
+.directory-browser {
+  padding: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.browser-nav {
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.directory-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.directory-item {
+  padding: 8px 12px;
+  margin-bottom: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.directory-item:hover {
+  background-color: #f5f7fa;
+}
+
+.directory-item.directory {
+  color: #409eff;
+}
+
+.directory-item.file {
+  color: #606266;
+}
+
+.directory-item .el-icon {
+  margin-right: 10px;
+}
+
+.directory-item span {
+  font-family: monospace;
+  word-break: break-all;
 }
 </style>
