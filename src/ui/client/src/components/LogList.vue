@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { ElTable, ElTableColumn, ElTag, ElButton } from 'element-plus'
-import { RefreshRight } from '@element-plus/icons-vue'
+import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider } from 'element-plus'
+import { RefreshRight, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import { createGitgraph } from '@gitgraph/js'
 import { useGitLogStore } from '../stores/gitLogStore'
@@ -29,6 +29,12 @@ const showAllCommits = ref(false)
 const totalCommits = ref(0)
 const showGraphView = ref(true)
 const graphContainer = ref<HTMLElement | null>(null)
+
+// 添加图表缩放控制
+const graphScale = ref(1)
+const minScale = 0.5
+const maxScale = 1.5
+const scaleStep = 0.1
 
 // 加载提交历史
 async function loadLog(all = false) {
@@ -120,6 +126,11 @@ async function renderGraph() {
       author: `${commit.author} <${commit.email}>`
     })
   })
+  
+  // 确保渲染完成后调用自适应缩放
+  setTimeout(() => {
+    fitGraphToContainer()
+  }, 100)
 }
 
 // 切换视图模式
@@ -187,6 +198,55 @@ watch(() => gitLogStore.log, (newLogs) => {
 defineExpose({
   refreshLog
 })
+
+// 增加/减少缩放比例
+function zoomIn() {
+  if (graphScale.value < maxScale) {
+    graphScale.value = Math.min(maxScale, graphScale.value + scaleStep)
+    applyScale()
+  }
+}
+
+function zoomOut() {
+  if (graphScale.value > minScale) {
+    graphScale.value = Math.max(minScale, graphScale.value - scaleStep)
+    applyScale()
+  }
+}
+
+// 应用缩放比例
+function applyScale() {
+  if (!graphContainer.value) return
+  
+  const svgElement = graphContainer.value.querySelector('svg')
+  if (svgElement) {
+    svgElement.style.transform = `scale(${graphScale.value})`
+    svgElement.style.transformOrigin = 'top left'
+  }
+}
+
+// 自适应图表大小
+function fitGraphToContainer() {
+  if (!graphContainer.value) return
+  
+  const svgElement = graphContainer.value.querySelector('svg')
+  if (!svgElement) return
+  
+  // 获取SVG和容器的宽度
+  const svgWidth = svgElement.getBoundingClientRect().width / graphScale.value
+  const containerWidth = graphContainer.value.clientWidth
+  
+  // 计算合适的缩放比例
+  if (svgWidth > containerWidth) {
+    // 如果SVG宽度大于容器，需要缩小
+    graphScale.value = Math.max(minScale, containerWidth / svgWidth)
+  } else {
+    // 否则恢复到默认比例
+    graphScale.value = 1
+  }
+  
+  applyScale()
+}
 </script>
 
 <template>
@@ -225,6 +285,51 @@ defineExpose({
         <div class="commit-count" v-if="logs.length > 0">
           显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
         </div>
+        
+        <!-- 添加缩放控制 -->
+        <div class="graph-controls">
+          <div class="zoom-controls">
+            <el-button
+              type="primary"
+              :icon="ZoomOut"
+              circle
+              size="small"
+              @click="zoomOut"
+              :disabled="graphScale <= minScale"
+            />
+            
+            <el-slider
+              v-model="graphScale"
+              :min="minScale"
+              :max="maxScale"
+              :step="scaleStep"
+              @change="applyScale"
+              class="zoom-slider"
+            />
+            
+            <el-button
+              type="primary"
+              :icon="ZoomIn"
+              circle
+              size="small"
+              @click="zoomIn"
+              :disabled="graphScale >= maxScale"
+            />
+            
+            <el-button
+              type="primary"
+              size="small"
+              @click="fitGraphToContainer"
+            >
+              自适应大小
+            </el-button>
+          </div>
+          
+          <div class="scale-info">
+            缩放: {{ Math.round(graphScale * 100) }}%
+          </div>
+        </div>
+        
         <div ref="graphContainer" class="graph-container"></div>
       </div>
       
@@ -301,11 +406,37 @@ defineExpose({
   border-radius: 4px;
   padding: 10px;
   background-color: #fff;
-  /* transform: scale(0.8); */
+  position: relative;
+}
+
+.graph-container svg {
+  transform-origin: top left;
+  transition: transform 0.2s ease;
 }
 
 .graph-view {
   width: 100%;
+}
+
+.graph-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.zoom-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.zoom-slider {
+  width: 200px;
+}
+
+.scale-info {
+  font-size: 14px;
+  color: #606266;
 }
 </style>
 

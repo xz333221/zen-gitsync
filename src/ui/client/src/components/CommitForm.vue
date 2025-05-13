@@ -91,6 +91,19 @@ const finalCommitMessage = computed(() => {
   return message;
 });
 
+// 计算Git命令预览
+const gitCommandPreview = computed(() => {
+  // 基本命令
+  let command = `git commit -m "${finalCommitMessage.value}"`
+  
+  // 如果跳过钩子开关打开，添加 --no-verify 参数
+  if (skipHooks.value) {
+    command += ' --no-verify'
+  }
+  
+  return command
+});
+
 // 加载配置
 async function loadConfig() {
   try {
@@ -817,8 +830,11 @@ onMounted(() => {
       />
 
       <div class="preview-section">
-        <div class="preview-title">预览：</div>
+        <div class="preview-title">提交信息预览：</div>
         <pre class="preview-content">{{ finalCommitMessage }}</pre>
+        
+        <div class="preview-title" style="margin-top: 10px;">Git命令预览：</div>
+        <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
       </div>
     </div>
 
@@ -1182,6 +1198,17 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 15px;
+}
+
+.code-command {
+  background-color: #2d2d2d;
+  color: #f8f8f2;
+  font-family: 'Courier New', Courier, monospace;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 14px;
 }
 
 @media (max-width: 768px) {
