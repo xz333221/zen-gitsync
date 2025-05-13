@@ -11,18 +11,28 @@ export const useGitStore = defineStore('git', () => {
   const isChangingBranch = ref(false)
   const isCreatingBranch = ref(false)
   const isGitRepo = ref(false) // 当前目录是否是Git仓库
+  const lastCheckedTime = ref(0) // 上次检查Git仓库状态的时间戳
   
   // 检查当前目录是否是Git仓库
   async function checkGitRepo() {
+    // 如果距离上次检查不到1秒，直接返回缓存的结果
+    const now = Date.now()
+    if (now - lastCheckedTime.value < 1000) {
+      console.log('使用缓存的Git仓库状态:', isGitRepo.value ? '是' : '不是')
+      return isGitRepo.value
+    }
+    
     try {
       const response = await fetch('/api/current_directory')
       const data = await response.json()
       isGitRepo.value = data.isGitRepo === true
+      lastCheckedTime.value = now // 更新检查时间
       console.log(`当前目录${isGitRepo.value ? '是' : '不是'}Git仓库`)
       return isGitRepo.value
     } catch (error) {
       console.error('检查Git仓库状态失败:', error)
       isGitRepo.value = false
+      lastCheckedTime.value = now // 即使失败也更新检查时间，避免频繁重试
       return false
     }
   }
@@ -192,6 +202,7 @@ export const useGitStore = defineStore('git', () => {
     isChangingBranch,
     isCreatingBranch,
     isGitRepo,
+    lastCheckedTime,
     
     // 方法
     checkGitRepo,

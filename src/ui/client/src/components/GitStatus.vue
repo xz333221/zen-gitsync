@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, defineProps } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
 import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight } from '@element-plus/icons-vue'
 import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '../stores/gitStore'
+
+// 定义props
+const props = defineProps({
+  initialDirectory: {
+    type: String,
+    default: ''
+  }
+})
 
 const gitLogStore = useGitLogStore()
 const gitStore = useGitStore()
@@ -52,18 +60,17 @@ function parseStatus(statusText: string) {
   fileList.value = files
 }
 
-const currentDirectory = ref('')
+const currentDirectory = ref(props.initialDirectory || '');
 async function loadStatus() {
   try {
-    // 获取当前工作目录
-    const responseDir = await fetch('/api/current_directory')
-    const dirData = await responseDir.json()
-    currentDirectory.value = dirData.directory || '未知目录'
+    // 如果没有初始目录，才需要请求当前目录
+    if (!currentDirectory.value) {
+      const responseDir = await fetch('/api/current_directory')
+      const dirData = await responseDir.json()
+      currentDirectory.value = dirData.directory || '未知目录'
+    }
     
-    // 检查当前目录是否是 Git 仓库
-    await gitStore.checkGitRepo()
-    
-    // 如果不是Git仓库，显示提示并返回
+    // 如果不是Git仓库，直接显示提示并返回
     if (!gitStore.isGitRepo) {
       status.value = '当前目录不是一个Git仓库'
       fileList.value = []
@@ -293,20 +300,28 @@ async function changeDirectory() {
       currentDirectory.value = result.directory
       isDirectoryDialogVisible.value = false
       
-      // 更新 Git 仓库状态并重新加载 Git 相关数据
-      await gitStore.checkGitRepo()
-      await gitStore.loadInitialData()
+      // 直接使用API返回的Git仓库状态
+      gitStore.isGitRepo = result.isGitRepo
       
-      // 如果新目录是 Git 仓库，刷新 Git 状态和日志
-      if (gitStore.isGitRepo) {
-        await gitLogStore.fetchStatus()
-        await gitLogStore.fetchLog()
+      // 如果是Git仓库，加载Git相关数据
+      if (result.isGitRepo) {
+        // 加载Git分支和用户信息
+        await Promise.all([
+          gitStore.getCurrentBranch(),
+          gitStore.getAllBranches(),
+          gitStore.getUserInfo()
+        ])
+        
+        // 刷新Git状态
+        await loadStatus()
       } else {
         ElMessage.warning('当前目录不是一个Git仓库')
+        status.value = '当前目录不是一个Git仓库'
+        fileList.value = []
+        
+        // 清空Git相关状态
+        gitStore.$reset() // 使用pinia的reset方法重置状态
       }
-      
-      // 刷新状态
-      loadStatus()
     } else {
       ElMessage.error(result.error || '切换目录失败')
     }
@@ -379,17 +394,9 @@ async function revertFileChanges(filePath: string) {
 }
 
 onMounted(() => {
-  // 加载 Git 相关数据
-  gitStore.loadInitialData().then(() => {
-    // 加载 Git 状态
-    loadStatus()
-  })
-  
-  // Socket.io 事件
-  // socket.on('status_update', (data: { status: string }) => {
-  //   status.value = data.status
-  //   parseStatus(data.status)
-  // })
+  // App.vue已经加载了Git相关数据，此时只需加载状态
+  // 如果已有初始目录，则只需加载状态
+  loadStatus()
 })
 
 // onUnmounted(() => {

@@ -18,6 +18,10 @@ const gitStatusRef = ref<InstanceType<typeof GitStatus> | null>(null)
 const gitStore = useGitStore()
 const gitLogStore = useGitLogStore()
 
+// 添加初始化完成状态
+const initCompleted = ref(false)
+const currentDirectory = ref('')
+
 // 加载配置
 async function loadConfig() {
   try {
@@ -29,29 +33,62 @@ async function loadConfig() {
   }
 }
 
+// 加载当前目录信息
+async function loadCurrentDirectory() {
+  try {
+    const responseDir = await fetch('/api/current_directory')
+    const dirData = await responseDir.json()
+    currentDirectory.value = dirData.directory || '未知目录'
+    return dirData
+  } catch (error) {
+    console.error('获取当前目录失败:', error)
+    return { directory: '未知目录', isGitRepo: false }
+  }
+}
+
 onMounted(async () => {
   console.log('---------- 页面初始化开始 ----------')
-  loadConfig()
-  // 先加载Git仓库状态，再根据状态加载其他数据
-  await gitStore.loadInitialData() // 初始加载Git信息，会检查是否为Git仓库
   
-  // 只有是Git仓库的情况下才加载Git日志
-  if (gitStore.isGitRepo) {
-    // GitStatus组件会自己加载状态，这里不需要重复调用
-    // gitLogStore.fetchStatus()
-    gitLogStore.fetchLog() // 加载提交历史
-  } else {
-    ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
+  try {
+    // 并行加载配置和目录信息
+    const [_, dirData] = await Promise.all([
+      loadConfig(),
+      loadCurrentDirectory()
+    ])
+    
+    // 设置Git仓库状态
+    gitStore.isGitRepo = dirData.isGitRepo === true
+    gitStore.lastCheckedTime = Date.now()
+    
+    // 只有是Git仓库的情况下才加载Git相关信息
+    if (gitStore.isGitRepo) {
+      await Promise.all([
+        gitStore.getCurrentBranch(),
+        gitStore.getAllBranches(),
+        gitStore.getUserInfo(),
+        gitLogStore.fetchLog() // 加载提交历史
+      ])
+    } else {
+      ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
+    }
+  } catch (error) {
+    console.error('初始化失败:', error)
+  } finally {
+    // 标记初始化完成
+    initCompleted.value = true
+    console.log('---------- 页面初始化完成 ----------')
   }
-  
-  console.log('---------- 页面初始化完成 ----------')
 })
 
 // 处理提交成功事件
 function handleCommitSuccess() {
   // 直接使用store刷新状态
-  gitLogStore.fetchStatus()
   gitLogStore.fetchLog()
+  
+  // 刷新Git状态
+  if (gitStatusRef.value) {
+    gitStatusRef.value.refreshStatus()
+  }
 }
 
 // 处理推送成功事件
@@ -137,10 +174,22 @@ async function handleBranchChange(branch: string) {
   </header>
   
   <div class="container">
-    <div class="layout-container">
+    <div v-if="!initCompleted" class="loading-container">
+      <el-card class="loading-card">
+        <div class="loading-spinner">
+          <el-icon class="is-loading"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32zM195.2 195.2a32 32 0 0 1 45.248 0L376.32 331.008a32 32 0 0 1-45.248 45.248L195.2 240.448a32 32 0 0 1 0-45.248zm452.544 452.544a32 32 0 0 1 45.248 0L828.8 783.552a32 32 0 0 1-45.248 45.248L647.744 692.992a32 32 0 0 1 0-45.248zM828.8 195.264a32 32 0 0 1 0 45.184L692.992 376.32a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0zm-452.544 452.48a32 32 0 0 1 0 45.248L240.448 828.8a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0z"></path></svg></el-icon>
+        </div>
+        <div class="loading-text">加载中...</div>
+      </el-card>
+    </div>
+    
+    <div v-else class="layout-container">
       <!-- 左侧Git状态 -->
       <div class="left-panel">
-        <GitStatus ref="gitStatusRef" />
+        <GitStatus 
+          ref="gitStatusRef" 
+          :initial-directory="currentDirectory"
+        />
       </div>
       
       <!-- 右侧提交表单和历史 -->
@@ -422,6 +471,31 @@ h1 {
   padding: 10px 15px;
   border-radius: 4px;
   margin-bottom: 10px;
+}
+
+/* 添加加载中样式 */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.loading-card {
+  width: 300px;
+  text-align: center;
+  padding: 30px;
+}
+
+.loading-spinner {
+  font-size: 48px;
+  margin-bottom: 20px;
+  color: #409eff;
+}
+
+.loading-text {
+  font-size: 18px;
+  color: #606266;
 }
 </style>
 
