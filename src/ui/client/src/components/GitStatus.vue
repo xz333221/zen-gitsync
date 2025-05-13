@@ -4,8 +4,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
 import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight } from '@element-plus/icons-vue'
 import { useGitLogStore } from '../stores/gitLogStore'
+import { useGitStore } from '../stores/gitStore'
 
 const gitLogStore = useGitLogStore()
+const gitStore = useGitStore()
 const status = ref('加载中...')
 // const socket = io()
 const isRefreshing = computed(() => gitLogStore.isLoadingStatus)
@@ -58,17 +60,17 @@ async function loadStatus() {
     const dirData = await responseDir.json()
     currentDirectory.value = dirData.directory || '未知目录'
     
+    // 检查当前目录是否是 Git 仓库
+    await gitStore.checkGitRepo()
+    
     // 如果不是Git仓库，显示提示并返回
-    if (dirData.isGitRepo === false) {
+    if (!gitStore.isGitRepo) {
       status.value = '当前目录不是一个Git仓库'
       fileList.value = []
-      ElMessage.warning('当前目录不是一个Git仓库')
       return
     }
     
-    // 使用store获取Git状态
-    await gitLogStore.fetchStatus()
-    
+    // 直接获取Git状态，不再通过store调用
     const response = await fetch('/api/status')
     const data = await response.json()
     status.value = data.status
@@ -291,8 +293,15 @@ async function changeDirectory() {
       currentDirectory.value = result.directory
       isDirectoryDialogVisible.value = false
       
-      // 如果新目录不是Git仓库，显示警告
-      if (!result.isGitRepo) {
+      // 更新 Git 仓库状态并重新加载 Git 相关数据
+      await gitStore.checkGitRepo()
+      await gitStore.loadInitialData()
+      
+      // 如果新目录是 Git 仓库，刷新 Git 状态和日志
+      if (gitStore.isGitRepo) {
+        await gitLogStore.fetchStatus()
+        await gitLogStore.fetchLog()
+      } else {
         ElMessage.warning('当前目录不是一个Git仓库')
       }
       
@@ -327,7 +336,6 @@ function fileTypeLabel(type: string) {
 // 刷新Git状态的方法
 async function refreshStatus() {
   await loadStatus()
-  await gitLogStore.fetchStatus()
 }
 
 // 添加撤回文件修改的方法
@@ -371,7 +379,11 @@ async function revertFileChanges(filePath: string) {
 }
 
 onMounted(() => {
-  loadStatus()
+  // 加载 Git 相关数据
+  gitStore.loadInitialData().then(() => {
+    // 加载 Git 状态
+    loadStatus()
+  })
   
   // Socket.io 事件
   // socket.on('status_update', (data: { status: string }) => {

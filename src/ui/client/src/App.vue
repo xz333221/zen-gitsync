@@ -29,12 +29,21 @@ async function loadConfig() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   console.log('---------- 页面初始化开始 ----------')
   loadConfig()
-  gitStore.loadInitialData() // 初始加载Git信息
-  gitLogStore.fetchStatus() // 加载Git状态
-  gitLogStore.fetchLog() // 加载提交历史
+  // 先加载Git仓库状态，再根据状态加载其他数据
+  await gitStore.loadInitialData() // 初始加载Git信息，会检查是否为Git仓库
+  
+  // 只有是Git仓库的情况下才加载Git日志
+  if (gitStore.isGitRepo) {
+    // GitStatus组件会自己加载状态，这里不需要重复调用
+    // gitLogStore.fetchStatus()
+    gitLogStore.fetchLog() // 加载提交历史
+  } else {
+    ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
+  }
+  
   console.log('---------- 页面初始化完成 ----------')
 })
 
@@ -135,13 +144,24 @@ async function handleBranchChange(branch: string) {
       </div>
       
       <!-- 右侧提交表单和历史 -->
-      <div class="right-panel">
+      <div class="right-panel" v-if="gitStore.isGitRepo">
         <CommitForm 
           @commit-success="handleCommitSuccess" 
           @push-success="handlePushSuccess"
           @status-update="handleStatusUpdate"
         />
         <LogList ref="logListRef" />
+      </div>
+      <div class="right-panel" v-else>
+        <div class="card">
+          <h2>Git仓库初始化</h2>
+          <p>当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。</p>
+          <!-- 实用提示 -->
+          <div class="tips">
+            <h3>可以使用以下命令初始化仓库：</h3>
+            <div class="code-block">git init</div>
+          </div>
+        </div>
       </div>
 
       <!-- 创建分支对话框 -->
@@ -379,6 +399,29 @@ h1 {
 
 .branch-select :deep(.el-input__suffix) {
   color: white;
+}
+
+.tips {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f5f7fa;
+  border-radius: 5px;
+  border-left: 4px solid #409eff;
+}
+
+.tips h3 {
+  margin-top: 0;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.code-block {
+  background-color: #2d2d2d;
+  color: #f8f8f2;
+  font-family: monospace;
+  padding: 10px 15px;
+  border-radius: 4px;
+  margin-bottom: 10px;
 }
 </style>
 

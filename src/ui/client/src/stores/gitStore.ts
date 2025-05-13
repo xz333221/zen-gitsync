@@ -10,7 +10,23 @@ export const useGitStore = defineStore('git', () => {
   const userEmail = ref('')
   const isChangingBranch = ref(false)
   const isCreatingBranch = ref(false)
+  const isGitRepo = ref(false) // 当前目录是否是Git仓库
   
+  // 检查当前目录是否是Git仓库
+  async function checkGitRepo() {
+    try {
+      const response = await fetch('/api/current_directory')
+      const data = await response.json()
+      isGitRepo.value = data.isGitRepo === true
+      console.log(`当前目录${isGitRepo.value ? '是' : '不是'}Git仓库`)
+      return isGitRepo.value
+    } catch (error) {
+      console.error('检查Git仓库状态失败:', error)
+      isGitRepo.value = false
+      return false
+    }
+  }
+
   // 获取当前分支
   async function getCurrentBranch() {
     try {
@@ -149,10 +165,22 @@ export const useGitStore = defineStore('git', () => {
   }
 
   // 初始化加载
-  function loadInitialData() {
-    getCurrentBranch()
-    getAllBranches()
-    getUserInfo()
+  async function loadInitialData() {
+    // 先检查当前目录是否是Git仓库
+    const isRepo = await checkGitRepo()
+    
+    // 只有是Git仓库的情况下才加载Git相关信息
+    if (isRepo) {
+      getCurrentBranch()
+      getAllBranches()
+      getUserInfo()
+    } else {
+      // 清空所有Git相关状态
+      currentBranch.value = ''
+      allBranches.value = []
+      userName.value = ''
+      userEmail.value = ''
+    }
   }
 
   return {
@@ -163,8 +191,10 @@ export const useGitStore = defineStore('git', () => {
     userEmail,
     isChangingBranch,
     isCreatingBranch,
+    isGitRepo,
     
     // 方法
+    checkGitRepo,
     getCurrentBranch,
     getAllBranches,
     changeBranch,

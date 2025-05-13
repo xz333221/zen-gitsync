@@ -1,8 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useGitStore } from './gitStore'
 
 export const useGitLogStore = defineStore('gitLog', () => {
+  // 引用gitStore获取仓库状态
+  const gitStore = useGitStore()
+  
   // 状态
   const log = ref<any[]>([])
   const status = ref<{ staged: string[], unstaged: string[], untracked: string[] }>({
@@ -17,6 +21,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 获取提交日志
   async function fetchLog() {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      console.log('当前目录不是Git仓库，跳过加载提交历史')
+      return
+    }
+    
     try {
       isLoadingLog.value = true
       console.log('开始加载提交历史...')
@@ -39,6 +49,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 获取Git状态
   async function fetchStatus() {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      console.log('当前目录不是Git仓库，跳过加载Git状态')
+      return
+    }
+    
     try {
       isLoadingStatus.value = true
       const response = await fetch('/api/status')
@@ -63,6 +79,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 添加文件到暂存区 (git add .)
   async function addToStage() {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
     try {
       isAddingFiles.value = true
       const response = await fetch('/api/add', {
@@ -100,6 +122,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 提交更改
   async function commitChanges(message: string, noVerify = false) {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
     try {
       const response = await fetch('/api/commit', {
         method: 'POST',
@@ -143,6 +171,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 推送到远程
   async function pushToRemote() {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
     try {
       const response = await fetch('/api/push', {
         method: 'POST'
@@ -217,6 +251,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 重置暂存区 (git reset HEAD)
   async function resetHead() {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
     try {
       isResetting.value = true
       const response = await fetch('/api/reset-head', {
@@ -254,6 +294,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 重置当前分支到远程状态
   async function resetToRemote(branch: string) {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
     try {
       isResetting.value = true
       const response = await fetch('/api/reset-to-remote', {
@@ -296,6 +342,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 暂存文件
   async function stageFiles(files: string[]) {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
     try {
       const response = await fetch('/api/stage', {
         method: 'POST',
@@ -334,6 +386,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 取消暂存文件
   async function unstageFiles(files: string[]) {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
     try {
       const response = await fetch('/api/unstage', {
         method: 'POST',

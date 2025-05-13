@@ -32,6 +32,15 @@ const graphContainer = ref<HTMLElement | null>(null)
 
 // 加载提交历史
 async function loadLog(all = false) {
+  // 从gitStore获取仓库状态
+  const gitStore = useGitStore()
+  
+  // 检查是否是Git仓库
+  if (!gitStore.isGitRepo) {
+    errorMessage.value = '当前目录不是Git仓库'
+    return
+  }
+  
   try {
     showAllCommits.value = all
     // 修改API调用，获取更详细的提交信息，包括父提交
@@ -130,14 +139,23 @@ function getBranchTagType(ref: string) {
 }
 
 onMounted(() => {
-  // 初始加载
-  gitLogStore.fetchLog()
-  loadLog()
+  // 直接使用gitStore.isGitRepo
+  if (gitStore.isGitRepo) {
+    // 初始加载
+    gitLogStore.fetchLog()
+    loadLog()
+  } else {
+    errorMessage.value = '当前目录不是Git仓库'
+  }
 })
 
 const refreshLog = () => {
-  gitLogStore.fetchLog()
-  loadLog(showAllCommits.value)
+  if (gitStore.isGitRepo) {
+    gitLogStore.fetchLog()
+    loadLog(showAllCommits.value)
+  } else {
+    errorMessage.value = '当前目录不是Git仓库'
+  }
 }
 
 // 监听store中的日志变化
