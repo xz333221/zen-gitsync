@@ -665,7 +665,7 @@ onMounted(() => {
           :loading="gitLogStore.isAddingFiles"
           :icon="Plus"
         >
-          添加到暂存区
+          添加到暂存区(git add .)
         </el-button>
         
         <el-button
@@ -673,7 +673,7 @@ onMounted(() => {
           @click="commitChanges"
           :loading="gitLogStore.isLoadingStatus"
         >
-          提交
+          提交(git commit)
         </el-button>
         
         <el-button
@@ -682,7 +682,7 @@ onMounted(() => {
           :icon="Upload"
           :loading="isPushing"
         >
-          推送
+          推送(git push)
         </el-button>
       </div>
       
@@ -691,7 +691,7 @@ onMounted(() => {
           type="warning"
           @click="addAndCommit"
         >
-          添加并提交
+          添加并提交(git add+commit)
         </el-button>
         
         <el-button
@@ -699,7 +699,7 @@ onMounted(() => {
           @click="addCommitAndPush"
           :loading="isCommitAndPushing"
         >
-          添加、提交并推送
+          添加、提交并推送(git add+commit+push)
         </el-button>
       </div>
       
@@ -710,7 +710,7 @@ onMounted(() => {
           :loading="gitLogStore.isResetting"
           :icon="Refresh"
         >
-          重置暂存区
+          重置暂存区(git reset HEAD)
         </el-button>
         
         <el-button
@@ -719,7 +719,7 @@ onMounted(() => {
           :loading="gitLogStore.isResetting"
           :icon="Download"
         >
-          重置到远程
+          重置到远程(git reset --hard origin/branch)
         </el-button>
       </div>
     </div>
