@@ -22,7 +22,7 @@ const gitLogStore = useGitLogStore()
 const gitStore = useGitStore()
 
 // 获取日志数据
-const logs = computed(() => gitLogStore.log)
+const logs = ref<LogItem[]>([])
 const errorMessage = ref('')
 const isLoading = computed(() => gitLogStore.isLoadingLog)
 const showAllCommits = ref(false)
@@ -46,9 +46,26 @@ async function loadLog(all = false) {
     // 修改API调用，获取更详细的提交信息，包括父提交
     const url = all ? '/api/log?all=true&graph=true' : '/api/log?graph=true'
     const response = await fetch(url)
-    const logsData = await response.json()
-    gitLogStore.log = logsData
-    totalCommits.value = logsData.length
+    const data = await response.json()
+    
+    // 如果返回的是数组，说明服务器直接返回了日志数据
+    if (Array.isArray(data)) {
+      if (gitLogStore.log.length === 0) {
+        // 主存储区还没有数据，也填充一下
+        gitLogStore.log = data
+      }
+      // 确保本地组件状态的日志数据是最新的
+      logs.value = data
+      totalCommits.value = data.length
+    } else if (data.log && Array.isArray(data.log)) {
+      // 旧版API格式
+      if (gitLogStore.log.length === 0) {
+        gitLogStore.log = data.log
+      }
+      logs.value = data.log
+      totalCommits.value = data.log.length
+    }
+    
     errorMessage.value = ''
     
     // 加载完数据后渲染图表
@@ -141,8 +158,8 @@ function getBranchTagType(ref: string) {
 onMounted(() => {
   // 直接使用gitStore.isGitRepo
   if (gitStore.isGitRepo) {
-    // 初始加载
-    gitLogStore.fetchLog()
+    // App.vue 已经通过 fetchLog 加载了基本日志
+    // 这里只需加载带图表参数的日志即可
     loadLog()
   } else {
     errorMessage.value = '当前目录不是Git仓库'
@@ -160,6 +177,7 @@ const refreshLog = () => {
 
 // 监听store中的日志变化
 watch(() => gitLogStore.log, (newLogs) => {
+  logs.value = newLogs
   if (showGraphView.value && newLogs.length > 0) {
     setTimeout(renderGraph, 0)
   }
