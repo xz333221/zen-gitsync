@@ -9,13 +9,10 @@ const gitLogStore = useGitLogStore();
 const gitStore = useGitStore();
 const emit = defineEmits(["commit-success", "push-success", "status-update"]);
 const commitMessage = ref("");
-const commitBtnText = ref("提交");
-const pushBtnText = ref("推送到远程");
 const isCommitting = computed(() => gitLogStore.isLoadingStatus);
 const isPushing = ref(false);
 // 添加提交并推送的状态变量
 const isCommitAndPushing = ref(false);
-const commitAndPushBtnText = ref("提交并推送");
 const placeholder = ref("输入提交信息...");
 // 添加默认提交信息变量
 const defaultCommitMessage = ref("");
@@ -582,12 +579,6 @@ onMounted(() => {
     <!-- 普通提交表单 -->
     <div v-if="!isStandardCommit" class="commit-form">
       <el-input v-model="commitMessage" :placeholder="placeholder" clearable />
-      <el-button
-        type="primary"
-        @click="commitChanges"
-        :loading="isCommitting"
-        >{{ commitBtnText }}</el-button
-      >
     </div>
 
     <!-- 标准化提交表单 -->
@@ -664,13 +655,6 @@ onMounted(() => {
         <div class="preview-title">预览：</div>
         <pre class="preview-content">{{ finalCommitMessage }}</pre>
       </div>
-
-      <el-button
-        type="primary"
-        @click="commitChanges"
-        :loading="isCommitting"
-        >{{ commitBtnText }}</el-button
-      >
     </div>
 
     <div class="git-actions">
