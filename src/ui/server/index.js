@@ -23,6 +23,13 @@ async function startUIServer() {
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
   
+  // 添加请求日志中间件
+  app.use((req, res, next) => {
+    const now = new Date().toLocaleString();
+    console.log(`[${now}] ${req.method} ${req.url}`);
+    next();
+  });
+  
   // // 启动前端Vue应用
   // const clientPath = path.join(__dirname, '../client');
   // console.log(`正在启动前端应用，路径: ${clientPath}`);
@@ -596,7 +603,11 @@ async function startUIServer() {
   // 启动服务器
   const PORT = 3000;
   httpServer.listen(PORT, () => {
-    console.log(`后端API服务器已启动: http://localhost:${PORT}`);
+    console.log(chalk.green('======================================'));
+    console.log(chalk.green(`  Zen GitSync 服务器已启动`));
+    console.log(chalk.green(`  访问地址: http://localhost:${PORT}`));
+    console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
+    console.log(chalk.green('======================================'));
     open(`http://localhost:${PORT}`);
   }).on('error', async (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -606,7 +617,11 @@ async function startUIServer() {
         try {
           await new Promise((resolve, reject) => {
             httpServer.listen(newPort, () => {
-              console.log(`后端API服务器已启动: http://localhost:${newPort}`);
+              console.log(chalk.green('======================================'));
+              console.log(chalk.green(`  Zen GitSync 服务器已启动`));
+              console.log(chalk.green(`  访问地址: http://localhost:${newPort}`));
+              console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
+              console.log(chalk.green('======================================'));
               open(`http://localhost:${newPort}`);
               resolve();
             }).on('error', (e) => {

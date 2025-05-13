@@ -19,11 +19,13 @@ export const useGitLogStore = defineStore('gitLog', () => {
   async function fetchLog() {
     try {
       isLoadingLog.value = true
+      console.log('开始加载提交历史...')
       const response = await fetch('/api/log')
       const data = await response.json()
       if (data.log && Array.isArray(data.log)) {
         log.value = data.log
       }
+      console.log(`提交历史加载完成，共 ${log.value.length} 条记录`)
     } catch (error) {
       console.error('获取提交历史失败:', error)
       ElMessage({

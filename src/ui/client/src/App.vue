@@ -30,10 +30,12 @@ async function loadConfig() {
 }
 
 onMounted(() => {
+  console.log('---------- 页面初始化开始 ----------')
   loadConfig()
   gitStore.loadInitialData() // 初始加载Git信息
   gitLogStore.fetchStatus() // 加载Git状态
   gitLogStore.fetchLog() // 加载提交历史
+  console.log('---------- 页面初始化完成 ----------')
 })
 
 // 处理提交成功事件
