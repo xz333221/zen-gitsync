@@ -62,12 +62,15 @@ onMounted(async () => {
     
     // 只有是Git仓库的情况下才加载Git相关信息
     if (gitStore.isGitRepo) {
+      // 只获取分支和用户信息，不重复获取日志
       await Promise.all([
         gitStore.getCurrentBranch(),
         gitStore.getAllBranches(),
-        gitStore.getUserInfo(),
-        gitLogStore.fetchLog() // 加载提交历史
+        gitStore.getUserInfo()
       ])
+      
+      // 日志信息通过LogList组件直接加载即可，避免重复调用
+      // 移除 gitLogStore.fetchLog() 调用
     } else {
       ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
     }
@@ -82,22 +85,25 @@ onMounted(async () => {
 
 // 处理提交成功事件
 function handleCommitSuccess() {
-  // 直接使用store刷新状态
-  gitLogStore.fetchLog()
+  // 不再调用gitLogStore.fetchLog()，改用更新LogList组件
   
   // 刷新Git状态
   if (gitStatusRef.value) {
     gitStatusRef.value.refreshStatus()
   }
+  
+  // 直接刷新提交历史
+  if (logListRef.value) {
+    logListRef.value.refreshLog()
+  }
 }
 
 // 处理推送成功事件
 function handlePushSuccess() {
-  // 使用store刷新状态
-  gitLogStore.fetchLog()
+  // 不再调用gitLogStore.fetchLog()，改用更新LogList组件
   gitStore.getCurrentBranch()
   
-  // 直接刷新提交历史组件
+  // 直接刷新提交历史
   if (logListRef.value) {
     logListRef.value.refreshLog()
   }

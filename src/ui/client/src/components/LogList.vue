@@ -22,9 +22,12 @@ const gitLogStore = useGitLogStore()
 const gitStore = useGitStore()
 
 // 获取日志数据
-const logs = ref<LogItem[]>([])
+let logsData: LogItem[] = []
+const logs = ref<LogItem[]>(logsData)
 const errorMessage = ref('')
-const isLoading = computed(() => gitLogStore.isLoadingLog)
+// 定义本地加载状态，而不是依赖于computed
+const localLoading = ref(false)
+const isLoading = computed(() => gitLogStore.isLoadingLog || localLoading.value)
 const showAllCommits = ref(false)
 const totalCommits = ref(0)
 const showGraphView = ref(true)
@@ -49,94 +52,141 @@ async function loadLog(all = false) {
   
   try {
     showAllCommits.value = all
-    // 修改API调用，获取更详细的提交信息，包括父提交
+    
+    // 设置本地加载状态
+    localLoading.value = true
+    
+    // 保留graph参数，但服务器端其实不做特殊处理
+    // 这样可以兼容之前的代码，避免大量修改
     const url = all ? '/api/log?all=true&graph=true' : '/api/log?graph=true'
+    console.log(`加载日志数据: ${url}`)
+    
     const response = await fetch(url)
     const data = await response.json()
     
-    // 如果返回的是数组，说明服务器直接返回了日志数据
+    // 清空现有数据
+    logsData.length = 0
+    
+    // 更新本地数据
     if (Array.isArray(data)) {
-      if (gitLogStore.log.length === 0) {
-        // 主存储区还没有数据，也填充一下
-        gitLogStore.log = data
-      }
-      // 确保本地组件状态的日志数据是最新的
-      logs.value = data
+      // 新的API格式，直接返回数组
+      console.log(`日志加载完成: 共${data.length}条记录`)
+      
+      // 填充logsData
+      data.forEach((item: LogItem) => logsData.push(item))
+      
       totalCommits.value = data.length
     } else if (data.log && Array.isArray(data.log)) {
-      // 旧版API格式
-      if (gitLogStore.log.length === 0) {
-        gitLogStore.log = data.log
-      }
-      logs.value = data.log
+      // 旧版API格式，兼容处理
+      console.log(`日志加载完成: 共${data.log.length}条记录`)
+      
+      // 填充logsData
+      data.log.forEach((item: LogItem) => logsData.push(item))
+      
       totalCommits.value = data.log.length
+    } else {
+      console.error('未知的日志数据格式:', data)
+      errorMessage.value = '日志数据格式错误'
+      return
     }
     
-    errorMessage.value = ''
+    // 确保logs.value也更新
+    logs.value = [...logsData]
+    
+    console.log(`logsData长度: ${logsData.length}`) // 添加调试日志
     
     // 加载完数据后渲染图表
     if (showGraphView.value) {
       setTimeout(renderGraph, 0)
     }
+    
+    errorMessage.value = ''
   } catch (error) {
-    errorMessage.value = '加载提交历史失败: ' + (error as Error).message
+    errorMessage.value = '加载提交历史失败: ' + (error instanceof Error ? error.message : String(error))
+    console.error('加载日志失败:', error)
+  } finally {
+    // 重置本地加载状态
+    localLoading.value = false
   }
 }
 
 // 渲染Git图表
 async function renderGraph() {
-  if (!graphContainer.value || logs.value.length === 0) return
+  console.log(`开始渲染图表...数据长度: ${logsData.length}`)
   
-  // 清空容器
-  graphContainer.value.innerHTML = ''
+  if (!graphContainer.value) {
+    console.error('图表容器未找到')
+    return
+  }
   
-  // 创建gitgraph实例
-  const gitgraph = createGitgraph(graphContainer.value, {
-    // 自定义选项
-    // @ts-ignore: true
-    orientation: 'vertical-reverse', // 从上到下的方向
-    // @ts-ignore: true
-    template: 'metro', // 使用metro模板
-    author: '提交者 <committer@example.com>'
-  })
+  if (logsData.length === 0) {
+    console.error('没有日志数据可渲染')
+    return
+  }
   
-  // 处理分支和提交数据
-  const branches: Record<string, any> = {}
-  const mainBranch = gitgraph.branch(gitStore.currentBranch || 'main')
-  branches[gitStore.currentBranch || 'main'] = mainBranch
-  
-  // 简化示例 - 实际实现需要根据API返回的数据结构调整
-  logs.value.forEach(commit => {
-    // 这里需要根据实际数据结构构建分支图
-    let currentBranch = mainBranch
+  try {
+    // 清空容器
+    graphContainer.value.innerHTML = ''
     
-    // 如果有分支信息，使用对应的分支
-    if (commit.branch) {
-      const branchName = formatBranchName(commit.branch.split(',')[0])
-      if (!branches[branchName]) {
-        branches[branchName] = gitgraph.branch(branchName)
-      }
-      currentBranch = branches[branchName]
-    }
+    console.log(`创建gitgraph实例，分支: ${gitStore.currentBranch || 'main'}`)
     
-    // 创建提交，添加邮箱信息
-    currentBranch.commit({
-      hash: commit.hash,
-      subject: commit.message,
-      author: `${commit.author} <${commit.email}>`
+    // 创建gitgraph实例
+    const gitgraph = createGitgraph(graphContainer.value, {
+      // 自定义选项
+      orientation: 'vertical-reverse' as any, // 使用类型断言解决类型错误
+      template: 'metro' as any, // 使用类型断言解决类型错误
+      author: '提交者 <committer@example.com>'
     })
-  })
-  
-  // 确保渲染完成后调用自适应缩放
-  setTimeout(() => {
-    fitGraphToContainer()
-  }, 100)
+    
+    // 处理分支和提交数据
+    const branches: Record<string, any> = {}
+    const mainBranch = gitgraph.branch(gitStore.currentBranch || 'main')
+    branches[gitStore.currentBranch || 'main'] = mainBranch
+    
+    console.log(`开始创建提交图...共${logsData.length}条提交`)
+    
+    // 简化示例 - 实际实现需要根据API返回的数据结构调整
+    logsData.forEach((commit, index) => {
+      // 这里需要根据实际数据结构构建分支图
+      let currentBranch = mainBranch
+      
+      // 如果有分支信息，使用对应的分支
+      if (commit.branch) {
+        const branchName = formatBranchName(commit.branch.split(',')[0])
+        if (!branches[branchName]) {
+          branches[branchName] = gitgraph.branch(branchName)
+        }
+        currentBranch = branches[branchName]
+      }
+      
+      // 创建提交，添加邮箱信息
+      currentBranch.commit({
+        hash: commit.hash,
+        subject: commit.message,
+        author: `${commit.author} <${commit.email}>`
+      })
+      
+      if (index % 10 === 0) {
+        console.log(`已渲染 ${index + 1}/${logsData.length} 个提交`)
+      }
+    })
+    
+    console.log('图表渲染完成')
+    
+    // 确保渲染完成后调用自适应缩放
+    setTimeout(() => {
+      fitGraphToContainer()
+    }, 100)
+  } catch (error) {
+    console.error('渲染图表失败:', error)
+    errorMessage.value = '渲染图表失败: ' + (error instanceof Error ? error.message : String(error))
+  }
 }
 
 // 切换视图模式
 function toggleViewMode() {
   showGraphView.value = !showGraphView.value
-  if (showGraphView.value && logs.value.length > 0) {
+  if (showGraphView.value && logsData.length > 0) {
     // 延迟执行以确保DOM已更新
     setTimeout(renderGraph, 0)
   }
@@ -167,29 +217,69 @@ function getBranchTagType(ref: string) {
 }
 
 onMounted(() => {
-  // 直接使用gitStore.isGitRepo
+  // 检查gitLogStore中是否已有数据
   if (gitStore.isGitRepo) {
-    // App.vue 已经通过 fetchLog 加载了基本日志
-    // 这里只需加载带图表参数的日志即可
-    loadLog()
+    if (gitLogStore.log.length > 0) {
+      // 如果已经有数据，直接使用现有数据
+      console.log('使用已加载的日志数据')
+      
+      // 清空并填充logsData
+      logsData.length = 0
+      gitLogStore.log.forEach(item => logsData.push(item))
+      
+      // 由于TypeScript类型错误，我们直接设置totalCommits而不是使用logs.value.length
+      totalCommits.value = gitLogStore.log.length
+      
+      // 确保视图被渲染
+      if (showGraphView.value) {
+        setTimeout(() => {
+          console.log(`准备渲染图表，数据长度: ${logsData.length}`)
+          renderGraph()
+        }, 100)
+      }
+    } else {
+      // 否则加载数据
+      console.log('初始加载日志数据')
+      loadLog()
+    }
   } else {
     errorMessage.value = '当前目录不是Git仓库'
   }
 })
 
+// 简化刷新函数，只需调用loadLog即可
 const refreshLog = () => {
-  if (gitStore.isGitRepo) {
-    gitLogStore.fetchLog()
-    loadLog(showAllCommits.value)
-  } else {
+  if (!gitStore.isGitRepo) {
     errorMessage.value = '当前目录不是Git仓库'
+    return
   }
+  loadLog(showAllCommits.value)
 }
 
 // 监听store中的日志变化
 watch(() => gitLogStore.log, (newLogs) => {
-  logs.value = newLogs
-  if (showGraphView.value && newLogs.length > 0) {
+  console.log('监听到gitLogStore.log变化，更新图表数据')
+  
+  // 清空logsData
+  logsData.length = 0
+  
+  // 重新填充数据
+  newLogs.forEach((item: LogItem) => logsData.push(item))
+  
+  // 更新计数器
+  totalCommits.value = newLogs.length
+  
+  // 尝试解决logs.value赋值问题
+  try {
+    // @ts-ignore - 忽略TypeScript错误
+    logs.value = [...logsData]
+  } catch (error) {
+    console.warn('无法更新logs.value:', error)
+  }
+  
+  console.log(`数据更新完成，准备渲染图表(${logsData.length}条记录)`)
+  
+  if (showGraphView.value && logsData.length > 0) {
     setTimeout(renderGraph, 0)
   }
 })
@@ -282,8 +372,8 @@ function fitGraphToContainer() {
     <div v-else>
       <!-- 图表视图 -->
       <div v-if="showGraphView" class="graph-view">
-        <div class="commit-count" v-if="logs.length > 0">
-          显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
+        <div class="commit-count" v-if="logsData.length > 0">
+          显示 {{ logsData.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
         </div>
         
         <!-- 添加缩放控制 -->
