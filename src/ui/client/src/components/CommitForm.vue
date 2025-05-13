@@ -9,7 +9,6 @@ const gitLogStore = useGitLogStore();
 const gitStore = useGitStore();
 const emit = defineEmits(["commit-success", "push-success", "status-update"]);
 const commitMessage = ref("");
-const isCommitting = computed(() => gitLogStore.isLoadingStatus);
 const isPushing = ref(false);
 // 添加提交并推送的状态变量
 const isCommitAndPushing = ref(false);
@@ -494,20 +493,6 @@ function openDescriptionSettings() {
 // 打开作用域设置弹窗
 function openScopeSettings() {
   scopeDialogVisible.value = true;
-}
-
-// 从localStorage加载标准化提交设置
-function loadCommitPreference() {
-  const savedPreference = localStorage.getItem("zen-gitsync-standard-commit");
-  if (savedPreference !== null) {
-    isStandardCommit.value = savedPreference === "true";
-  }
-
-  // 加载跳过钩子设置
-  const savedSkipHooks = localStorage.getItem("zen-gitsync-skip-hooks");
-  if (savedSkipHooks !== null) {
-    skipHooks.value = savedSkipHooks === "true";
-  }
 }
 
 // 添加文件到暂存区 (git add)
