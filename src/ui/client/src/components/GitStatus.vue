@@ -415,7 +415,7 @@ defineExpose({
       <el-icon><Folder /></el-icon>
       <span>{{ currentDirectory }}</span>
       <el-button type="primary" size="small" @click="openDirectoryDialog" plain>
-        切换目录1
+        切换目录
       </el-button>
     </div>
     <div class="status-header">
