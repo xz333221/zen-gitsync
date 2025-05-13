@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Setting, Plus, Upload, Refresh, Download } from "@element-plus/icons-vue";
+import { Setting, Plus, Upload, Refresh, Download, Edit } from "@element-plus/icons-vue";
 import { useGitLogStore } from "../stores/gitLogStore";
 import { useGitStore } from "../stores/gitStore";
 
@@ -28,11 +28,19 @@ const descriptionTemplates = ref<string[]>([]);
 // 添加对话框可见性变量
 const descriptionDialogVisible = ref(false);
 const newTemplateName = ref("");
+// 添加模板编辑相关变量
+const isEditingDescription = ref(false);
+const originalDescriptionTemplate = ref("");
+const editingDescriptionIndex = ref(-1);
 
 // 作用域模板相关变量
 const scopeTemplates = ref<string[]>([]);
 const scopeDialogVisible = ref(false);
 const newScopeTemplate = ref("");
+// 添加作用域模板编辑相关变量
+const isEditingScope = ref(false);
+const originalScopeTemplate = ref("");
+const editingScopeIndex = ref(-1);
 
 // 跳过钩子
 const skipHooks = ref(false);
@@ -120,42 +128,49 @@ async function saveDescriptionTemplate() {
   }
 
   try {
-    // 检查是否已存在相同模板
-    if (descriptionTemplates.value.includes(newTemplateName.value)) {
-      ElMessage({
-        message: "该模板已存在",
-        type: "warning",
-      });
-      return;
-    }
-
-    // 添加到本地数组
-    descriptionTemplates.value.push(newTemplateName.value);
-
-    // 保存到服务器
-    const response = await fetch("/api/config/save-template", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        template: newTemplateName.value,
-        type: "description",
-      }),
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      ElMessage({
-        message: "模板保存成功!",
-        type: "success",
-      });
-      newTemplateName.value = "";
+    // 判断是编辑还是新建
+    if (isEditingDescription.value) {
+      // 编辑现有模板
+      await updateDescriptionTemplate();
     } else {
-      ElMessage({
-        message: "模板保存失败: " + result.error,
-        type: "error",
+      // 新建模板
+      // 检查是否已存在相同模板
+      if (descriptionTemplates.value.includes(newTemplateName.value)) {
+        ElMessage({
+          message: "该模板已存在",
+          type: "warning",
+        });
+        return;
+      }
+
+      // 添加到本地数组
+      descriptionTemplates.value.push(newTemplateName.value);
+
+      // 保存到服务器
+      const response = await fetch("/api/config/save-template", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          template: newTemplateName.value,
+          type: "description",
+        }),
       });
+
+      const result = await response.json();
+      if (result.success) {
+        ElMessage({
+          message: "模板保存成功!",
+          type: "success",
+        });
+        newTemplateName.value = "";
+      } else {
+        ElMessage({
+          message: "模板保存失败: " + result.error,
+          type: "error",
+        });
+      }
     }
   } catch (error) {
     ElMessage({
@@ -163,6 +178,74 @@ async function saveDescriptionTemplate() {
       type: "error",
     });
   }
+}
+
+// 编辑描述模板
+async function updateDescriptionTemplate() {
+  try {
+    // 先从本地数组中更新
+    if (editingDescriptionIndex.value >= 0) {
+      // 保存原模板和新模板
+      const oldTemplate = originalDescriptionTemplate.value;
+      const newTemplate = newTemplateName.value;
+      
+      // 更新本地数组
+      descriptionTemplates.value[editingDescriptionIndex.value] = newTemplate;
+      
+      // 调用API更新服务器
+      const response = await fetch("/api/config/update-template", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          oldTemplate,
+          newTemplate,
+          type: "description",
+        }),
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        ElMessage({
+          message: "模板更新成功!",
+          type: "success",
+        });
+        
+        // 重置编辑状态
+        isEditingDescription.value = false;
+        originalDescriptionTemplate.value = "";
+        editingDescriptionIndex.value = -1;
+        newTemplateName.value = "";
+      } else {
+        ElMessage({
+          message: "模板更新失败: " + result.error,
+          type: "error",
+        });
+      }
+    }
+  } catch (error) {
+    ElMessage({
+      message: "模板更新失败: " + (error as Error).message,
+      type: "error",
+    });
+  }
+}
+
+// 开始编辑描述模板
+function startEditDescriptionTemplate(template: string, index: number) {
+  isEditingDescription.value = true;
+  originalDescriptionTemplate.value = template;
+  editingDescriptionIndex.value = index;
+  newTemplateName.value = template;
+}
+
+// 取消编辑描述模板
+function cancelEditDescriptionTemplate() {
+  isEditingDescription.value = false;
+  originalDescriptionTemplate.value = "";
+  editingDescriptionIndex.value = -1;
+  newTemplateName.value = "";
 }
 
 // 保存作用域模板
@@ -176,42 +259,49 @@ async function saveScopeTemplate() {
   }
 
   try {
-    // 检查是否已存在相同模板
-    if (scopeTemplates.value.includes(newScopeTemplate.value)) {
-      ElMessage({
-        message: "该模板已存在",
-        type: "warning",
-      });
-      return;
-    }
-
-    // 添加到本地数组
-    scopeTemplates.value.push(newScopeTemplate.value);
-
-    // 保存到服务器
-    const response = await fetch("/api/config/save-template", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        template: newScopeTemplate.value,
-        type: "scope",
-      }),
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      ElMessage({
-        message: "作用域模板保存成功!",
-        type: "success",
-      });
-      newScopeTemplate.value = "";
+    // 判断是编辑还是新建
+    if (isEditingScope.value) {
+      // 编辑现有模板
+      await updateScopeTemplate();
     } else {
-      ElMessage({
-        message: "作用域模板保存失败: " + result.error,
-        type: "error",
+      // 新建模板
+      // 检查是否已存在相同模板
+      if (scopeTemplates.value.includes(newScopeTemplate.value)) {
+        ElMessage({
+          message: "该模板已存在",
+          type: "warning",
+        });
+        return;
+      }
+
+      // 添加到本地数组
+      scopeTemplates.value.push(newScopeTemplate.value);
+
+      // 保存到服务器
+      const response = await fetch("/api/config/save-template", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          template: newScopeTemplate.value,
+          type: "scope",
+        }),
       });
+
+      const result = await response.json();
+      if (result.success) {
+        ElMessage({
+          message: "作用域模板保存成功!",
+          type: "success",
+        });
+        newScopeTemplate.value = "";
+      } else {
+        ElMessage({
+          message: "作用域模板保存失败: " + result.error,
+          type: "error",
+        });
+      }
     }
   } catch (error) {
     ElMessage({
@@ -219,6 +309,74 @@ async function saveScopeTemplate() {
       type: "error",
     });
   }
+}
+
+// 更新作用域模板
+async function updateScopeTemplate() {
+  try {
+    // 先从本地数组中更新
+    if (editingScopeIndex.value >= 0) {
+      // 保存原模板和新模板
+      const oldTemplate = originalScopeTemplate.value;
+      const newTemplate = newScopeTemplate.value;
+      
+      // 更新本地数组
+      scopeTemplates.value[editingScopeIndex.value] = newTemplate;
+      
+      // 调用API更新服务器
+      const response = await fetch("/api/config/update-template", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          oldTemplate,
+          newTemplate,
+          type: "scope",
+        }),
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        ElMessage({
+          message: "作用域模板更新成功!",
+          type: "success",
+        });
+        
+        // 重置编辑状态
+        isEditingScope.value = false;
+        originalScopeTemplate.value = "";
+        editingScopeIndex.value = -1;
+        newScopeTemplate.value = "";
+      } else {
+        ElMessage({
+          message: "作用域模板更新失败: " + result.error,
+          type: "error",
+        });
+      }
+    }
+  } catch (error) {
+    ElMessage({
+      message: "作用域模板更新失败: " + (error as Error).message,
+      type: "error",
+    });
+  }
+}
+
+// 开始编辑作用域模板
+function startEditScopeTemplate(template: string, index: number) {
+  isEditingScope.value = true;
+  originalScopeTemplate.value = template;
+  editingScopeIndex.value = index;
+  newScopeTemplate.value = template;
+}
+
+// 取消编辑作用域模板
+function cancelEditScopeTemplate() {
+  isEditingScope.value = false;
+  originalScopeTemplate.value = "";
+  editingScopeIndex.value = -1;
+  newScopeTemplate.value = "";
 }
 
 // 删除描述模板
@@ -742,16 +900,23 @@ onMounted(() => {
         <div class="template-form">
           <el-input
             v-model="newTemplateName"
-            placeholder="输入新模板内容"
+            :placeholder="isEditingDescription ? '编辑模板内容' : '输入新模板内容'"
             class="template-input"
             clearable
           />
-          <el-button
-            type="primary"
-            @click="saveDescriptionTemplate"
-            :disabled="!newTemplateName.trim()"
-            >添加模板</el-button
-          >
+          <div class="template-form-buttons">
+            <el-button
+              v-if="isEditingDescription"
+              @click="cancelEditDescriptionTemplate"
+              >取消</el-button
+            >
+            <el-button
+              type="primary"
+              @click="saveDescriptionTemplate"
+              :disabled="!newTemplateName.trim()"
+              >{{ isEditingDescription ? '更新模板' : '添加模板' }}</el-button
+            >
+          </div>
         </div>
 
         <div class="template-list">
@@ -774,6 +939,13 @@ onMounted(() => {
                   size="small"
                   @click="useTemplate(template)"
                   >使用</el-button
+                >
+                <el-button
+                  type="warning"
+                  size="small"
+                  :icon="Edit"
+                  @click="startEditDescriptionTemplate(template, index)"
+                  >编辑</el-button
                 >
                 <el-button
                   type="danger"
@@ -799,16 +971,23 @@ onMounted(() => {
         <div class="template-form">
           <el-input
             v-model="newScopeTemplate"
-            placeholder="输入新作用域模板"
+            :placeholder="isEditingScope ? '编辑作用域模板内容' : '输入新作用域模板'"
             class="template-input"
             clearable
           />
-          <el-button
-            type="primary"
-            @click="saveScopeTemplate"
-            :disabled="!newScopeTemplate.trim()"
-            >添加模板</el-button
-          >
+          <div class="template-form-buttons">
+            <el-button
+              v-if="isEditingScope"
+              @click="cancelEditScopeTemplate"
+              >取消</el-button
+            >
+            <el-button
+              type="primary"
+              @click="saveScopeTemplate"
+              :disabled="!newScopeTemplate.trim()"
+              >{{ isEditingScope ? '更新模板' : '添加模板' }}</el-button
+            >
+          </div>
         </div>
 
         <div class="template-list">
@@ -830,6 +1009,13 @@ onMounted(() => {
                   size="small"
                   @click="useScopeTemplate(template)"
                   >使用</el-button
+                >
+                <el-button
+                  type="warning"
+                  size="small"
+                  :icon="Edit"
+                  @click="startEditScopeTemplate(template, index)"
+                  >编辑</el-button
                 >
                 <el-button
                   type="danger"

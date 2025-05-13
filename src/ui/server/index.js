@@ -384,6 +384,53 @@ async function startUIServer() {
     }
   })
   
+  // 更新模板
+  app.post('/api/config/update-template', express.json(), async (req, res) => {
+    try {
+      const { oldTemplate, newTemplate, type } = req.body
+      
+      if (!oldTemplate || !newTemplate || !type) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      if (type === 'description') {
+        // 确保描述模板数组存在
+        if (config.descriptionTemplates) {
+          const index = config.descriptionTemplates.indexOf(oldTemplate)
+          if (index !== -1) {
+            config.descriptionTemplates[index] = newTemplate
+            await configManager.saveConfig(config)
+          } else {
+            return res.status(404).json({ success: false, error: '未找到原模板' })
+          }
+        } else {
+          return res.status(404).json({ success: false, error: '模板列表不存在' })
+        }
+      } else if (type === 'scope') {
+        // 确保作用域模板数组存在
+        if (config.scopeTemplates) {
+          const index = config.scopeTemplates.indexOf(oldTemplate)
+          if (index !== -1) {
+            config.scopeTemplates[index] = newTemplate
+            await configManager.saveConfig(config)
+          } else {
+            return res.status(404).json({ success: false, error: '未找到原模板' })
+          }
+        } else {
+          return res.status(404).json({ success: false, error: '模板列表不存在' })
+        }
+      } else {
+        return res.status(400).json({ success: false, error: '不支持的模板类型' })
+      }
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
   // 提交更改
   app.post('/api/commit', express.json(), async (req, res) => {
     try {
