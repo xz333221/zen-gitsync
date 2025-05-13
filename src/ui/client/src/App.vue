@@ -50,6 +50,14 @@ function handlePushSuccess() {
   gitStore.getCurrentBranch()
 }
 
+// 处理状态更新事件
+function handleStatusUpdate() {
+  // 刷新Git状态
+  if (gitStatusRef.value) {
+    gitStatusRef.value.refreshStatus()
+  }
+}
+
 const createBranchDialogVisible = ref(false)
 const newBranchName = ref('')
 const selectedBaseBranch = ref('')
@@ -128,7 +136,8 @@ async function handleBranchChange(branch: string) {
       <div class="right-panel">
         <CommitForm 
           @commit-success="handleCommitSuccess" 
-          @push-success="handlePushSuccess" 
+          @push-success="handlePushSuccess"
+          @status-update="handleStatusUpdate"
         />
         <LogList ref="logListRef" />
       </div>

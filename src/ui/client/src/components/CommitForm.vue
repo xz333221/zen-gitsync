@@ -7,7 +7,7 @@ import { useGitStore } from "../stores/gitStore";
 
 const gitLogStore = useGitLogStore();
 const gitStore = useGitStore();
-const emit = defineEmits(["commit-success", "push-success"]);
+const emit = defineEmits(["commit-success", "push-success", "status-update"]);
 const commitMessage = ref("");
 const commitBtnText = ref("提交");
 const pushBtnText = ref("推送到远程");
@@ -345,8 +345,11 @@ function loadCommitPreference() {
 // 添加文件到暂存区 (git add)
 async function addToStage() {
   try {
-    await gitLogStore.addToStage();
-    // 无需清空提交信息
+    const result = await gitLogStore.addToStage();
+    if (result) {
+      // 触发状态更新事件
+      emit("status-update");
+    }
   } catch (error) {
     ElMessage({
       message: `添加文件失败: ${(error as Error).message}`,
@@ -375,6 +378,8 @@ async function commitChanges() {
       
       // 触发成功事件
       emit("commit-success");
+      // 触发状态更新事件
+      emit("status-update");
     }
   } catch (error) {
     ElMessage({
@@ -393,6 +398,8 @@ async function pushToRemote() {
     if (result) {
       // 触发成功事件
       emit("push-success");
+      // 触发状态更新事件
+      emit("status-update");
     }
   } catch (error) {
     ElMessage({
@@ -421,6 +428,8 @@ async function addAndCommit() {
       
       // 触发成功事件
       emit("commit-success");
+      // 触发状态更新事件
+      emit("status-update");
     }
   } catch (error) {
     ElMessage({
@@ -450,6 +459,8 @@ async function addCommitAndPush() {
       // 触发成功事件
       emit("commit-success");
       emit("push-success");
+      // 触发状态更新事件
+      emit("status-update");
     }
   } catch (error) {
     ElMessage({
@@ -472,7 +483,11 @@ async function resetHead() {
       }
     );
     
-    await gitLogStore.resetHead();
+    const result = await gitLogStore.resetHead();
+    if (result) {
+      // 触发状态更新事件
+      emit("status-update");
+    }
   } catch (error) {
     // 用户取消操作，不显示错误
     if ((error as any) !== 'cancel') {
@@ -497,7 +512,11 @@ async function resetToRemote() {
       }
     );
     
-    await gitLogStore.resetToRemote(gitStore.currentBranch);
+    const result = await gitLogStore.resetToRemote(gitStore.currentBranch);
+    if (result) {
+      // 触发状态更新事件
+      emit("status-update");
+    }
   } catch (error) {
     // 用户取消操作，不显示错误
     if ((error as any) !== 'cancel') {
