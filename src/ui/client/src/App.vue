@@ -96,6 +96,11 @@ function handlePushSuccess() {
   // 使用store刷新状态
   gitLogStore.fetchLog()
   gitStore.getCurrentBranch()
+  
+  // 直接刷新提交历史组件
+  if (logListRef.value) {
+    logListRef.value.refreshLog()
+  }
 }
 
 // 处理状态更新事件

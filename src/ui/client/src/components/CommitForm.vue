@@ -459,7 +459,12 @@ async function addCommitAndPush() {
       
       // 触发成功事件
       emit("commit-success");
-      emit("push-success");
+      
+      // 添加小延迟后再触发推送成功事件，确保提交历史能够刷新
+      setTimeout(() => {
+        emit("push-success");
+      }, 300);
+      
       // 触发状态更新事件
       emit("status-update");
     }

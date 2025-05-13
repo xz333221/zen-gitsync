@@ -239,7 +239,18 @@ export const useGitLogStore = defineStore('gitLog', () => {
       }
       
       // 再推送
-      return await pushToRemote()
+      const pushResult = await pushToRemote()
+      
+      // 推送成功后，确保刷新日志
+      if (pushResult) {
+        // 添加延迟以确保服务器处理完成
+        setTimeout(() => {
+          console.log('刷新提交历史...')
+          fetchLog()
+        }, 300)
+      }
+      
+      return pushResult
     } catch (error) {
       ElMessage({
         message: `暂存、提交并推送失败: ${(error as Error).message}`,
