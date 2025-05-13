@@ -7,7 +7,6 @@ import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import logo from './assets/logo.svg'
 import { useGitStore } from './stores/gitStore'
-import { useGitLogStore } from './stores/gitLogStore'
 
 const configInfo = ref('')
 // 添加组件实例类型
