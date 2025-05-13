@@ -441,8 +441,8 @@ async function startUIServer() {
   // 获取日志
   app.get('/api/log', async (req, res) => {
     try {
-      // 获取请求参数中的数量限制，默认为100
-      const limit = req.query.all === 'true' ? '' : '-n 100';
+      // 获取请求参数中的数量限制，默认为30
+      const limit = req.query.all === 'true' ? '' : '-n 30';
       
       // 修改 git log 命令，添加 %ae 参数来获取作者邮箱
       const { stdout } = await execGitCommand(`git log --all --pretty=format:"%h|%an|%ae|%ad|%s|%D" --date=short ${limit}`);

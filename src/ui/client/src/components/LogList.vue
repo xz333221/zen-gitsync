@@ -171,7 +171,7 @@ defineExpose({
           @click="toggleAllCommits" 
           :loading="isLoading"
         >
-          {{ showAllCommits ? '显示最近100条' : '显示所有提交' }}
+          {{ showAllCommits ? '显示最近30条' : '显示所有提交' }}
         </el-button>
         <el-button 
           :icon="RefreshRight" 
@@ -187,7 +187,7 @@ defineExpose({
       <!-- 图表视图 -->
       <div v-if="showGraphView" class="graph-view">
         <div class="commit-count" v-if="logs.length > 0">
-          显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近100条)' }}
+          显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
         </div>
         <div ref="graphContainer" class="graph-container"></div>
       </div>
@@ -195,7 +195,7 @@ defineExpose({
       <!-- 表格视图 -->
       <div v-else>
         <div class="commit-count" v-if="logs.length > 0">
-          显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近100条)' }}
+          显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
         </div>
         <el-table :data="logs" style="width: 100%" stripe border v-loading="isLoading">
           <el-table-column prop="hash" label="提交哈希" width="100" resizable />
