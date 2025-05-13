@@ -419,7 +419,7 @@ defineExpose({
       </el-button>
     </div>
     <div class="status-header">
-      <h2>Git 状态(git status)</h2>
+      <h2>Git 状态(git status)1</h2>
       <el-button 
         type="primary" 
         :icon="Refresh" 
