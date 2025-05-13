@@ -561,18 +561,20 @@ onMounted(() => {
     <h2>提交更改</h2>
 
     <div class="commit-options">
-      <div class="commit-mode-toggle">
-        <el-switch
-          v-model="isStandardCommit"
-          active-text="标准化提交"
-          inactive-text="普通提交"
-        />
-      </div>
+      <div class="options-row">
+        <div class="commit-mode-toggle">
+          <el-switch
+            v-model="isStandardCommit"
+            active-text="标准化提交"
+            inactive-text="普通提交"
+          />
+        </div>
 
-      <div class="no-verify-toggle">
-        <el-tooltip content="跳过 Git 钩子检查 (--no-verify)" placement="top">
-          <el-switch v-model="skipHooks" active-text="跳过钩子 (--no-verify)" />
-        </el-tooltip>
+        <div class="no-verify-toggle">
+          <el-tooltip content="跳过 Git 钩子检查 (--no-verify)" placement="top">
+            <el-switch v-model="skipHooks" active-text="跳过钩子 (--no-verify)" />
+          </el-tooltip>
+        </div>
       </div>
     </div>
 
@@ -868,7 +870,7 @@ onMounted(() => {
 }
 
 .commit-mode-toggle {
-  margin-bottom: 15px;
+  /* 移除margin-bottom */
 }
 
 .standard-commit-form {
@@ -982,6 +984,13 @@ onMounted(() => {
   justify-content: flex-end;
   min-width: 120px;
   flex-shrink: 0;
+}
+
+.options-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
 }
 
 @media (max-width: 768px) {
