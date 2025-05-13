@@ -16,7 +16,6 @@ const gitStatusRef = ref<InstanceType<typeof GitStatus> | null>(null)
 
 // 使用Git Store
 const gitStore = useGitStore()
-const gitLogStore = useGitLogStore()
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
