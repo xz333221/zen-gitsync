@@ -392,6 +392,7 @@ async function commitChanges() {
 // 推送到远程 (git push)
 async function pushToRemote() {
   try {
+    isPushing.value = true
     // 使用Store推送更改
     const result = await gitLogStore.pushToRemote();
     
@@ -406,6 +407,8 @@ async function pushToRemote() {
       message: `推送失败: ${(error as Error).message}`,
       type: "error",
     });
+  } finally {
+    isPushing.value = false
   }
 }
 
@@ -450,6 +453,7 @@ async function addCommitAndPush() {
   }
 
   try {
+    isCommitAndPushing.value = true
     const result = await gitLogStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
     
     if (result) {
@@ -467,6 +471,8 @@ async function addCommitAndPush() {
       message: `暂存、提交并推送失败: ${(error as Error).message}`,
       type: "error",
     });
+  } finally {
+    isCommitAndPushing.value = false
   }
 }
 
@@ -690,6 +696,7 @@ onMounted(() => {
           type="success"
           @click="pushToRemote"
           :icon="Upload"
+          :loading="isPushing"
         >
           推送
         </el-button>
@@ -706,6 +713,7 @@ onMounted(() => {
         <el-button
           type="danger"
           @click="addCommitAndPush"
+          :loading="isCommitAndPushing"
         >
           添加、提交并推送
         </el-button>
