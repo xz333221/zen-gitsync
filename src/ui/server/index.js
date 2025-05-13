@@ -7,6 +7,7 @@ import open from 'open';
 import config from '../../config.js';
 import chalk from 'chalk';
 import fs from 'fs/promises';
+import os from 'os';
 // import { Server } from 'socket.io';
 // import { exec } from 'child_process';
 
@@ -529,6 +530,45 @@ async function startUIServer() {
       res.status(500).json({ 
         success: false, 
         error: `撤回文件修改失败: ${error.message}` 
+      });
+    }
+  });
+  
+  // 重置暂存区 (git reset HEAD)
+  app.post('/api/reset-head', async (req, res) => {
+    try {
+      // 执行 git reset HEAD 命令
+      await execGitCommand('git reset HEAD');
+      res.json({ success: true });
+    } catch (error) {
+      console.error('重置暂存区失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `重置暂存区失败: ${error.message}` 
+      });
+    }
+  });
+  
+  // 重置到远程分支 (git reset --hard origin/branch)
+  app.post('/api/reset-to-remote', async (req, res) => {
+    try {
+      const { branch } = req.body;
+      
+      if (!branch) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少分支名称参数' 
+        });
+      }
+      
+      // 执行 git reset --hard origin/branch 命令
+      await execGitCommand(`git reset --hard origin/${branch}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('重置到远程分支失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `重置到远程分支失败: ${error.message}` 
       });
     }
   });

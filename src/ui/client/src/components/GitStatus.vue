@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
 import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight } from '@element-plus/icons-vue'
+import { useGitLogStore } from '../stores/gitLogStore'
 
+const gitLogStore = useGitLogStore()
 const status = ref('加载中...')
 // const socket = io()
-const isRefreshing = ref(false)
+const isRefreshing = computed(() => gitLogStore.isLoadingStatus)
 const fileList = ref<{path: string, type: string}[]>([])
 const selectedFile = ref('')
 const diffContent = ref('')
@@ -51,7 +53,6 @@ function parseStatus(statusText: string) {
 const currentDirectory = ref('')
 async function loadStatus() {
   try {
-    isRefreshing.value = true
     // 获取当前工作目录
     const responseDir = await fetch('/api/current_directory')
     const dirData = await responseDir.json()
@@ -64,6 +65,9 @@ async function loadStatus() {
       ElMessage.warning('当前目录不是一个Git仓库')
       return
     }
+    
+    // 使用store获取Git状态
+    await gitLogStore.fetchStatus()
     
     const response = await fetch('/api/status')
     const data = await response.json()
@@ -83,8 +87,6 @@ async function loadStatus() {
       message: '刷新失败: ' + (error as Error).message,
       type: 'error',
     })
-  } finally {
-    isRefreshing.value = false
   }
 }
 
@@ -325,6 +327,7 @@ function fileTypeLabel(type: string) {
 // 刷新Git状态的方法
 async function refreshStatus() {
   await loadStatus()
+  await gitLogStore.fetchStatus()
 }
 
 // 添加撤回文件修改的方法

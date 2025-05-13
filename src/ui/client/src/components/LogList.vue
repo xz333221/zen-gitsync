@@ -1,38 +1,45 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { ElTable, ElTableColumn, ElTag, ElButton } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import { createGitgraph } from '@gitgraph/js'
+import { useGitLogStore } from '../stores/gitLogStore'
+import { useGitStore } from '../stores/gitStore'
 
 interface LogItem {
   hash: string
   date: string
   author: string
-  email: string  // 添加邮箱字段
+  email: string
   message: string
-  branch?: string // 添加分支信息字段
-  parents?: string[] // 添加父提交信息
+  branch?: string
+  parents?: string[]
 }
 
-const logs = ref<LogItem[]>([])
+// 使用Git状态和日志Store
+const gitLogStore = useGitLogStore()
+const gitStore = useGitStore()
+
+// 获取日志数据
+const logs = computed(() => gitLogStore.log)
 const errorMessage = ref('')
-const isLoading = ref(false)
+const isLoading = computed(() => gitLogStore.isLoadingLog)
 const showAllCommits = ref(false)
 const totalCommits = ref(0)
-const showGraphView = ref(true) // 控制是否显示图表视图
+const showGraphView = ref(true)
 const graphContainer = ref<HTMLElement | null>(null)
 
 // 加载提交历史
 async function loadLog(all = false) {
   try {
-    isLoading.value = true
     showAllCommits.value = all
     // 修改API调用，获取更详细的提交信息，包括父提交
     const url = all ? '/api/log?all=true&graph=true' : '/api/log?graph=true'
     const response = await fetch(url)
-    logs.value = await response.json()
-    totalCommits.value = logs.value.length
+    const logsData = await response.json()
+    gitLogStore.log = logsData
+    totalCommits.value = logsData.length
     errorMessage.value = ''
     
     // 加载完数据后渲染图表
@@ -41,8 +48,6 @@ async function loadLog(all = false) {
     }
   } catch (error) {
     errorMessage.value = '加载提交历史失败: ' + (error as Error).message
-  } finally {
-    isLoading.value = false
   }
 }
 
@@ -53,10 +58,6 @@ async function renderGraph() {
   // 清空容器
   graphContainer.value.innerHTML = ''
   
-  // 获取当前分支
-  const branchResponse = await fetch('/api/branch')
-  const { branch: currentBranch } = await branchResponse.json()
-
   // 创建gitgraph实例
   const gitgraph = createGitgraph(graphContainer.value, {
     // 自定义选项
@@ -68,10 +69,9 @@ async function renderGraph() {
   })
   
   // 处理分支和提交数据
-  // 注意：这里的实现是简化的，实际需要根据API返回的数据结构调整
   const branches: Record<string, any> = {}
-  const mainBranch = gitgraph.branch(currentBranch || 'main')  // 使用API获取的分支或默认main
-  branches[currentBranch || 'main'] = mainBranch
+  const mainBranch = gitgraph.branch(gitStore.currentBranch || 'main')
+  branches[gitStore.currentBranch || 'main'] = mainBranch
   
   // 简化示例 - 实际实现需要根据API返回的数据结构调整
   logs.value.forEach(commit => {
@@ -110,10 +110,43 @@ function toggleAllCommits() {
   loadLog(!showAllCommits.value)
 }
 
+// 格式化分支名（实现该函数，因为在模板中调用了）
+function formatBranchName(ref: string) {
+  // 处理HEAD、远程分支等情况
+  if (ref.includes('HEAD -> ')) {
+    return ref.replace('HEAD -> ', '')
+  }
+  if (ref.includes('origin/')) {
+    return ref
+  }
+  return ref.trim()
+}
+
+// 获取分支标签类型（实现该函数，因为在模板中调用了）
+function getBranchTagType(ref: string) {
+  if (ref.includes('HEAD')) return 'success'
+  if (ref.includes('origin/')) return 'warning'
+  return 'info'
+}
+
 onMounted(() => {
+  // 初始加载
+  gitLogStore.fetchLog()
   loadLog()
 })
-const refreshLog = () => loadLog(showAllCommits.value)
+
+const refreshLog = () => {
+  gitLogStore.fetchLog()
+  loadLog(showAllCommits.value)
+}
+
+// 监听store中的日志变化
+watch(() => gitLogStore.log, (newLogs) => {
+  if (showGraphView.value && newLogs.length > 0) {
+    setTimeout(renderGraph, 0)
+  }
+})
+
 // 暴露方法给父组件
 defineExpose({
   refreshLog
@@ -239,30 +272,6 @@ defineExpose({
   width: 100%;
 }
 </style>
-
-<script lang="ts">
-// 辅助函数：格式化分支名称
-function formatBranchName(ref: string) {
-  // 移除 "HEAD -> " 前缀
-  ref = ref.trim().replace(/^HEAD\s*->\s*/, '')
-  
-  // 移除 "origin/" 前缀
-  ref = ref.replace(/^origin\//, '')
-  
-  // 移除 "tag: " 前缀，但保留标签名
-  ref = ref.replace(/^tag:\s*/, '')
-  
-  return ref.trim()
-}
-
-// 辅助函数：根据分支类型返回不同的标签类型
-function getBranchTagType(ref: string) {
-  if (ref.includes('HEAD')) return 'success'
-  if (ref.includes('tag:')) return 'warning'
-  if (ref.includes('origin/')) return 'info'
-  return 'primary' // 修改空字符串为有效的type值
-}
-</script>
 
 /* 添加表格列调整样式 */
 .el-table .el-table__cell .cell {

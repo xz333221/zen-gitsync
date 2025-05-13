@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from "vue";
-import { ElMessage } from "element-plus";
-import { Setting } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { Setting, Plus, Upload, Refresh, Download } from "@element-plus/icons-vue";
+import { useGitLogStore } from "../stores/gitLogStore";
+import { useGitStore } from "../stores/gitStore";
 
+const gitLogStore = useGitLogStore();
+const gitStore = useGitStore();
 const emit = defineEmits(["commit-success", "push-success"]);
 const commitMessage = ref("");
 const commitBtnText = ref("提交");
 const pushBtnText = ref("推送到远程");
-const isCommitting = ref(false);
+const isCommitting = computed(() => gitLogStore.isLoadingStatus);
 const isPushing = ref(false);
 // 添加提交并推送的状态变量
 const isCommitAndPushing = ref(false);
@@ -324,7 +328,6 @@ function openScopeSettings() {
   scopeDialogVisible.value = true;
 }
 
-
 // 从localStorage加载标准化提交设置
 function loadCommitPreference() {
   const savedPreference = localStorage.getItem("zen-gitsync-standard-commit");
@@ -339,216 +342,195 @@ function loadCommitPreference() {
   }
 }
 
-// 提交更改
+// 添加文件到暂存区 (git add)
+async function addToStage() {
+  try {
+    await gitLogStore.addToStage();
+    // 无需清空提交信息
+  } catch (error) {
+    ElMessage({
+      message: `添加文件失败: ${(error as Error).message}`,
+      type: "error",
+    });
+  }
+}
+
+// 提交更改 (git commit)
 async function commitChanges() {
-  const message = finalCommitMessage.value;
-  if (!message && isStandardCommit.value && !commitDescription.value) {
+  if (!finalCommitMessage.value.trim()) {
     ElMessage({
-      message: "请输入提交描述",
+      message: "提交信息不能为空",
       type: "warning",
     });
     return;
   }
 
   try {
-    isCommitting.value = true;
-    commitBtnText.value = "提交中...";
-
-    // 先执行 git add .
-    const addResponse = await fetch("/api/add", {
-      method: "POST",
-    });
+    // 使用Store提交更改
+    const result = await gitLogStore.commitChanges(finalCommitMessage.value, skipHooks.value);
     
-    const addResult = await addResponse.json();
-    if (!addResult.success) {
-      ElMessage({
-        message: "添加文件失败: " + addResult.error,
-        type: "error",
-      });
-      return;
+    if (result) {
+      // 清空提交信息
+      clearCommitFields();
+      
+      // 触发成功事件
+      emit("commit-success");
     }
-
-    const response = await fetch("/api/commit", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        // 添加一个标志，表示消息包含换行符
-        hasNewlines: message.includes("\n"),
-        // 添加 no-verify 选项
-        noVerify: skipHooks.value,
-      }),
+  } catch (error) {
+    ElMessage({
+      message: `提交失败: ${(error as Error).message}`,
+      type: "error",
     });
+  }
+}
 
-    const result = await response.json();
-    if (result.success) {
-      // 清空输入
-      if (isStandardCommit.value) {
-        commitDescription.value = "";
-        commitBody.value = "";
-        commitFooter.value = "";
-      } else {
-        commitMessage.value = "";
+// 推送到远程 (git push)
+async function pushToRemote() {
+  try {
+    // 使用Store推送更改
+    const result = await gitLogStore.pushToRemote();
+    
+    if (result) {
+      // 触发成功事件
+      emit("push-success");
+    }
+  } catch (error) {
+    ElMessage({
+      message: `推送失败: ${(error as Error).message}`,
+      type: "error",
+    });
+  }
+}
+
+// 添加并提交 (git add + git commit)
+async function addAndCommit() {
+  if (!finalCommitMessage.value.trim()) {
+    ElMessage({
+      message: "提交信息不能为空", 
+      type: "warning",
+    });
+    return;
+  }
+
+  try {
+    const result = await gitLogStore.addAndCommit(finalCommitMessage.value, skipHooks.value);
+    
+    if (result) {
+      // 清空提交信息
+      clearCommitFields();
+      
+      // 触发成功事件
+      emit("commit-success");
+    }
+  } catch (error) {
+    ElMessage({
+      message: `暂存并提交失败: ${(error as Error).message}`,
+      type: "error",
+    });
+  }
+}
+
+// 添加、提交并推送 (git add + git commit + git push)
+async function addCommitAndPush() {
+  if (!finalCommitMessage.value.trim()) {
+    ElMessage({
+      message: "提交信息不能为空",
+      type: "warning",
+    });
+    return;
+  }
+
+  try {
+    const result = await gitLogStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
+    
+    if (result) {
+      // 清空提交信息
+      clearCommitFields();
+      
+      // 触发成功事件
+      emit("commit-success");
+      emit("push-success");
+    }
+  } catch (error) {
+    ElMessage({
+      message: `暂存、提交并推送失败: ${(error as Error).message}`,
+      type: "error",
+    });
+  }
+}
+
+// 重置暂存区 (git reset HEAD)
+async function resetHead() {
+  try {
+    await ElMessageBox.confirm(
+      '确定要重置暂存区吗？这将取消所有已暂存的更改，但不会影响工作区的文件。',
+      '重置暂存区',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
       }
-
-      ElMessage({
-        message: "提交成功!",
-        type: "success",
-      });
-      // 发出提交成功事件
-      emit("commit-success");
-    } else {
-      ElMessage({
-        message: "提交失败: " + result.error,
-        type: "error",
-      });
-    }
-  } catch (error) {
-    ElMessage({
-      message: "提交失败: " + (error as Error).message,
-      type: "error",
-    });
-  } finally {
-    isCommitting.value = false;
-    commitBtnText.value = "提交";
-  }
-}
-
-// 推送更改
-async function pushChanges() {
-  try {
-    isPushing.value = true;
-    pushBtnText.value = "推送中...";
-
-    const response = await fetch("/api/push", {
-      method: "POST",
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      ElMessage({
-        message: "推送成功!",
-        type: "success",
-      });
-      // 发出推送成功事件
-      emit("push-success");
-    } else {
-      ElMessage({
-        message: "推送失败: " + result.error,
-        type: "error",
-      });
-    }
-  } catch (error) {
-    ElMessage({
-      message: "推送失败: " + (error as Error).message,
-      type: "error",
-    });
-  } finally {
-    isPushing.value = false;
-    pushBtnText.value = "推送到远程";
-  }
-}
-
-// 提交并推送更改
-async function commitAndPush() {
-  const message = finalCommitMessage.value;
-  if (!message && isStandardCommit.value && !commitDescription.value) {
-    ElMessage({
-      message: "请输入提交描述",
-      type: "warning",
-    });
-    return;
-  }
-
-  try {
-    isCommitAndPushing.value = true;
-    commitAndPushBtnText.value = "处理中...";
-
-    // 先执行 git add .
-    const addResponse = await fetch("/api/add", {
-      method: "POST",
-    });
+    );
     
-    const addResult = await addResponse.json();
-    if (!addResult.success) {
-      ElMessage({
-        message: "添加文件失败: " + addResult.error,
-        type: "error",
-      });
-      return;
-    }
-
-    // 再提交
-    const commitResponse = await fetch("/api/commit", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        // 添加一个标志，表示消息包含换行符
-        hasNewlines: message.includes("\n"),
-        // 添加 no-verify 选项
-        noVerify: skipHooks.value,
-      }),
-    });
-
-    const commitResult = await commitResponse.json();
-    if (!commitResult.success) {
-      ElMessage({
-        message: "提交失败: " + commitResult.error,
-        type: "error",
-      });
-      return;
-    }
-
-    // 清空输入
-    if (isStandardCommit.value) {
-      commitDescription.value = "";
-      commitBody.value = "";
-      commitFooter.value = "";
-    } else {
-      commitMessage.value = "";
-    }
-
-    // 再推送
-    const pushResponse = await fetch("/api/push", {
-      method: "POST",
-    });
-
-    const pushResult = await pushResponse.json();
-    if (pushResult.success) {
-      commitMessage.value = "";
-      ElMessage({
-        message: "提交并推送成功!",
-        type: "success",
-      });
-      // 发出提交和推送成功事件
-      emit("commit-success");
-      emit("push-success");
-    } else {
-      ElMessage({
-        message: "推送失败: " + pushResult.error,
-        type: "error",
-      });
-    }
+    await gitLogStore.resetHead();
   } catch (error) {
-    ElMessage({
-      message: "操作失败: " + (error as Error).message,
-      type: "error",
-    });
-  } finally {
-    isCommitAndPushing.value = false;
-    commitAndPushBtnText.value = "提交并推送";
+    // 用户取消操作，不显示错误
+    if ((error as any) !== 'cancel') {
+      ElMessage({
+        message: `重置暂存区失败: ${(error as Error).message}`,
+        type: 'error'
+      });
+    }
   }
 }
 
+// 重置到远程分支 (git reset --hard origin/branch)
+async function resetToRemote() {
+  try {
+    await ElMessageBox.confirm(
+      `确定要重置当前分支 "${gitStore.currentBranch}" 到远程状态吗？这将丢失所有未推送的提交和本地更改。`,
+      '重置到远程分支',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+    
+    await gitLogStore.resetToRemote(gitStore.currentBranch);
+  } catch (error) {
+    // 用户取消操作，不显示错误
+    if ((error as any) !== 'cancel') {
+      ElMessage({
+        message: `重置到远程分支失败: ${(error as Error).message}`,
+        type: 'error'
+      });
+    }
+  }
+}
+
+// 清空提交字段
+function clearCommitFields() {
+  commitMessage.value = "";
+  commitDescription.value = "";
+  commitBody.value = "";
+  commitFooter.value = "";
+}
 
 onMounted(() => {
   loadConfig();
-  loadCommitPreference();
+  
+  // 从 localStorage 中获取标准化提交设置
+  const savedStandardCommit = localStorage.getItem("zen-gitsync-standard-commit");
+  if (savedStandardCommit !== null) {
+    isStandardCommit.value = savedStandardCommit === "true";
+  }
+  
+  // 从 localStorage 中获取跳过钩子设置
+  const savedSkipHooks = localStorage.getItem("zen-gitsync-skip-hooks");
+  if (savedSkipHooks !== null) {
+    skipHooks.value = savedSkipHooks === "true";
+  }
 });
 </script>
 
@@ -666,16 +648,69 @@ onMounted(() => {
       >
     </div>
 
-    <div class="button-group">
-      <el-button type="success" @click="pushChanges" :loading="isPushing">{{
-        pushBtnText
-      }}</el-button>
-      <el-button
-        type="warning"
-        @click="commitAndPush"
-        :loading="isCommitAndPushing"
-        >{{ commitAndPushBtnText }}</el-button
-      >
+    <div class="git-actions">
+      <div class="action-row">
+        <el-button
+          type="primary"
+          @click="addToStage"
+          :loading="gitLogStore.isAddingFiles"
+          :icon="Plus"
+        >
+          添加到暂存区
+        </el-button>
+        
+        <el-button
+          type="primary"
+          @click="commitChanges"
+          :loading="gitLogStore.isLoadingStatus"
+        >
+          提交
+        </el-button>
+        
+        <el-button
+          type="success"
+          @click="pushToRemote"
+          :icon="Upload"
+        >
+          推送
+        </el-button>
+      </div>
+      
+      <div class="action-row">
+        <el-button
+          type="warning"
+          @click="addAndCommit"
+        >
+          添加并提交
+        </el-button>
+        
+        <el-button
+          type="danger"
+          @click="addCommitAndPush"
+        >
+          添加、提交并推送
+        </el-button>
+      </div>
+      
+      <div class="action-row">
+        <el-button
+          type="info"
+          @click="resetHead"
+          :loading="gitLogStore.isResetting"
+          :icon="Refresh"
+        >
+          重置暂存区
+        </el-button>
+        
+        <el-button
+          type="info"
+          @click="resetToRemote"
+          :loading="gitLogStore.isResetting"
+          :icon="Download"
+        >
+          重置到远程
+        </el-button>
+      </div>
     </div>
 
     <!-- 简短描述设置弹窗 -->
@@ -794,33 +829,55 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.card {
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+  padding: 20px;
+}
+
 .commit-form {
   display: flex;
   margin-bottom: 15px;
   gap: 10px;
 }
-.button-group {
+
+.git-actions {
+  margin-top: 20px;
   display: flex;
+  flex-direction: column;
   gap: 10px;
 }
+
+.action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .commit-mode-toggle {
   margin-bottom: 15px;
 }
+
 .standard-commit-form {
   display: flex;
   flex-direction: column;
   gap: 15px;
   margin-bottom: 15px;
 }
+
 .standard-commit-header {
   display: flex;
   gap: 10px;
   width: 100%;
 }
+
 .type-select {
   width: 120px;
   flex-shrink: 0;
 }
+
 .scope-container {
   display: flex;
   align-items: center;
@@ -828,31 +885,38 @@ onMounted(() => {
   flex-grow: 0;
   width: 200px;
 }
+
 .scope-input {
   flex-grow: 1;
 }
+
 .description-container {
   display: flex;
   align-items: center;
   gap: 5px;
   flex-grow: 1;
 }
+
 .description-input {
   flex-grow: 1;
   min-width: 200px;
 }
+
 .settings-button {
   flex-shrink: 0;
 }
+
 .preview-section {
   background-color: #f5f7fa;
   padding: 10px;
   border-radius: 4px;
 }
+
 .preview-title {
   font-weight: bold;
   margin-bottom: 5px;
 }
+
 .preview-content {
   white-space: pre-wrap;
   font-family: monospace;
@@ -861,6 +925,7 @@ onMounted(() => {
   background-color: #ebeef5;
   border-radius: 4px;
 }
+
 .template-container {
   display: flex;
   flex-direction: column;
@@ -876,24 +941,30 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
 }
+
 .template-input {
   flex-grow: 1;
 }
+
 .template-list {
   overflow-y: auto;
   height: 100%;
 }
+
 .template-item {
   margin-bottom: 10px;
 }
+
 .template-item:hover {
   background-color: #f5f7fa;
 }
+
 .template-content {
   flex-grow: 1;
   margin-right: 10px;
   word-break: break-all;
 }
+
 .template-actions {
   display: flex;
   gap: 5px;
@@ -901,4 +972,11 @@ onMounted(() => {
   min-width: 120px;
   flex-shrink: 0;
 }
+
+@media (max-width: 768px) {
+  .action-row {
+    flex-direction: column;
+  }
+}
 </style>
+

@@ -6,16 +6,17 @@ import LogList from './components/LogList.vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import logo from './assets/logo.svg'
+import { useGitStore } from './stores/gitStore'
+import { useGitLogStore } from './stores/gitLogStore'
 
 const configInfo = ref('')
 // 添加组件实例类型
 const logListRef = ref<InstanceType<typeof LogList> | null>(null)
 const gitStatusRef = ref<InstanceType<typeof GitStatus> | null>(null)
-const currentBranch = ref('') // 添加当前分支状态变量
-const userName = ref('') // 添加用户名变量
-const userEmail = ref('') // 添加用户邮箱变量
-const allBranches = ref<string[]>([]) // 添加所有分支列表
-const isChangingBranch = ref(false) // 添加分支切换状态
+
+// 使用Git Store
+const gitStore = useGitStore()
+const gitLogStore = useGitLogStore()
 
 // 加载配置
 async function loadConfig() {
@@ -28,210 +29,75 @@ async function loadConfig() {
   }
 }
 
-// 获取当前分支
-async function getCurrentBranch() {
-  try {
-    const response = await fetch('/api/branch')
-    const data = await response.json()
-    if (data.branch) {
-      currentBranch.value = data.branch
-    }
-  } catch (error) {
-    console.error('获取分支信息失败:', error)
-  }
-}
-
-// 获取所有分支
-async function getAllBranches() {
-  try {
-    const response = await fetch('/api/branches')
-    const data = await response.json()
-    if (data.branches && Array.isArray(data.branches)) {
-      allBranches.value = data.branches
-    }
-  } catch (error) {
-    console.error('获取所有分支信息失败:', error)
-  }
-}
-
-// 切换分支
-async function changeBranch(branch: string) {
-  console.log('切换到分支:', branch)
-  
-  try {
-    isChangingBranch.value = true
-    const response = await fetch('/api/checkout', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ branch })
-    })
-    
-    const result = await response.json()
-    if (result.success) {
-      ElMessage({
-        message: `已切换到分支: ${branch}`,
-        type: 'success'
-      })
-      
-      // 刷新状态
-      getCurrentBranch()
-      
-      // 刷新Git状态
-      if (gitStatusRef.value) {
-        gitStatusRef.value.refreshStatus()
-      }
-      
-      // 刷新提交历史
-      if (logListRef.value) {
-        logListRef.value.refreshLog()
-      }
-    } else {
-      ElMessage({
-        message: `切换分支失败: ${result.error}`,
-        type: 'error'
-      })
-      // 恢复选择框为当前分支
-      currentBranch.value = currentBranch.value
-    }
-  } catch (error) {
-    ElMessage({
-      message: `切换分支失败: ${(error as Error).message}`,
-      type: 'error'
-    })
-    // 恢复选择框为当前分支
-    currentBranch.value = currentBranch.value
-  } finally {
-    isChangingBranch.value = false
-  }
-}
-
-// 获取Git用户信息
-async function getUserInfo() {
-  try {
-    const response = await fetch('/api/user-info')
-    const data = await response.json()
-    if (data.name && data.email) {
-      userName.value = data.name
-      userEmail.value = data.email
-    }
-  } catch (error) {
-    console.error('获取用户信息失败:', error)
-  }
-}
-
 onMounted(() => {
   loadConfig()
-  getCurrentBranch() // 初始加载分支信息
-  getAllBranches() // 加载所有分支
-  getUserInfo() // 初始加载用户信息
+  gitStore.loadInitialData() // 初始加载Git信息
+  gitLogStore.fetchStatus() // 加载Git状态
+  gitLogStore.fetchLog() // 加载提交历史
 })
 
 // 处理提交成功事件
 function handleCommitSuccess() {
-  // 刷新提交历史
-  if (logListRef.value) {
-    logListRef.value.refreshLog()
-  }
-  
-  // 刷新Git状态
-  if (gitStatusRef.value) {
-    gitStatusRef.value.refreshStatus()
-  }
+  // 直接使用store刷新状态
+  gitLogStore.fetchStatus()
+  gitLogStore.fetchLog()
 }
 
 // 处理推送成功事件
 function handlePushSuccess() {
-  // 刷新提交历史
-  if (logListRef.value) {
-    logListRef.value.refreshLog()
-  }
-  
-  // 刷新Git状态
-  if (gitStatusRef.value) {
-    gitStatusRef.value.refreshStatus()
-  }
-  
-  // 刷新分支信息
-  getCurrentBranch()
+  // 使用store刷新状态
+  gitLogStore.fetchLog()
+  gitStore.getCurrentBranch()
 }
 
 const createBranchDialogVisible = ref(false)
 const newBranchName = ref('')
 const selectedBaseBranch = ref('')
-const isCreatingBranch = ref(false)
 
 // 创建新分支
 async function createNewBranch() {
-  if (!newBranchName.value.trim()) {
-    ElMessage({
-      message: '分支名称不能为空',
-      type: 'warning'
-    })
-    return
-  }
+  const success = await gitStore.createBranch(newBranchName.value, selectedBaseBranch.value)
   
-  try {
-    isCreatingBranch.value = true
+  if (success) {
+    // 关闭对话框
+    createBranchDialogVisible.value = false
     
-    const response = await fetch('/api/create-branch', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        newBranchName: newBranchName.value,
-        baseBranch: selectedBaseBranch.value || currentBranch.value
-      })
-    })
+    // 重置表单
+    newBranchName.value = ''
     
-    const result = await response.json()
-    if (result.success) {
-      ElMessage({
-        message: `已创建并切换到分支: ${newBranchName.value}`,
-        type: 'success'
-      })
-      
-      // 关闭对话框
-      createBranchDialogVisible.value = false
-      
-      // 重置表单
-      newBranchName.value = ''
-      
-      // 刷新状态
-      getCurrentBranch()
-      getAllBranches()
-      
-      // 刷新Git状态
-      if (gitStatusRef.value) {
-        gitStatusRef.value.refreshStatus()
-      }
-      
-      // 刷新提交历史
-      if (logListRef.value) {
-        logListRef.value.refreshLog()
-      }
-    } else {
-      ElMessage({
-        message: `创建分支失败: ${result.error}`,
-        type: 'error'
-      })
+    // 刷新Git状态
+    if (gitStatusRef.value) {
+      gitStatusRef.value.refreshStatus()
     }
-  } catch (error) {
-    ElMessage({
-      message: `创建分支失败: ${(error as Error).message}`,
-      type: 'error'
-    })
-  } finally {
-    isCreatingBranch.value = false
+    
+    // 刷新提交历史
+    if (logListRef.value) {
+      logListRef.value.refreshLog()
+    }
   }
 }
 
 // 打开创建分支对话框
 function openCreateBranchDialog() {
-  selectedBaseBranch.value = currentBranch.value
+  selectedBaseBranch.value = gitStore.currentBranch
   createBranchDialogVisible.value = true
+}
+
+// 切换分支
+async function handleBranchChange(branch: string) {
+  const success = await gitStore.changeBranch(branch)
+  
+  if (success) {
+    // 刷新Git状态
+    if (gitStatusRef.value) {
+      gitStatusRef.value.refreshStatus()
+    }
+    
+    // 刷新提交历史
+    if (logListRef.value) {
+      logListRef.value.refreshLog()
+    }
+  }
 }
 </script>
 
@@ -242,10 +108,10 @@ function openCreateBranchDialog() {
       <h1>Zen GitSync UI</h1>
     </div>
     <div class="header-info">
-      <div id="user-info" v-if="userName && userEmail">
+      <div id="user-info" v-if="gitStore.userName && gitStore.userEmail">
         <span class="user-label">用户:</span>
-        <span class="user-name">{{ userName }}</span>
-        <span class="user-email">&lt;{{ userEmail }}&gt;</span>
+        <span class="user-name">{{ gitStore.userName }}</span>
+        <span class="user-email">&lt;{{ gitStore.userEmail }}&gt;</span>
       </div>
       <!-- <div id="config-info">{{ configInfo }}</div> -->
     </div>
@@ -281,7 +147,7 @@ function openCreateBranchDialog() {
           <el-form-item label="基于分支">
             <el-select v-model="selectedBaseBranch" placeholder="选择基础分支" style="width: 100%;">
               <el-option 
-                v-for="branch in allBranches" 
+                v-for="branch in gitStore.allBranches" 
                 :key="branch" 
                 :label="branch" 
                 :value="branch"
@@ -295,7 +161,7 @@ function openCreateBranchDialog() {
             <el-button 
               type="primary" 
               @click="createNewBranch" 
-              :loading="isCreatingBranch"
+              :loading="gitStore.isCreatingBranch"
             >
               创建
             </el-button>
@@ -307,17 +173,17 @@ function openCreateBranchDialog() {
   </div>
 
   <footer class="main-footer">
-    <div class="branch-info" v-if="currentBranch">
+    <div class="branch-info" v-if="gitStore.currentBranch">
       <span class="branch-label">当前分支:</span>
       <el-select 
-        v-model="currentBranch" 
+        v-model="gitStore.currentBranch" 
         size="small" 
-        @change="changeBranch"
-        :loading="isChangingBranch"
+        @change="handleBranchChange"
+        :loading="gitStore.isChangingBranch"
         class="branch-select"
       >
         <el-option 
-          v-for="branch in allBranches" 
+          v-for="branch in gitStore.allBranches" 
           :key="branch" 
           :label="branch" 
           :value="branch"
