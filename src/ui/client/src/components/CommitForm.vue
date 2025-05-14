@@ -793,7 +793,6 @@ git config --global user.email "your.email@example.com"</pre>
                   type="primary" 
                   @click="addToStage" 
                   :loading="gitLogStore.isAddingFiles" 
-                  :icon="Plus"
                   class="action-button"
                 >
                   暂存更改
@@ -813,9 +812,8 @@ git config --global user.email "your.email@example.com"</pre>
                 <el-button 
                   type="success" 
                   @click="pushToRemote" 
-                  :icon="Upload" 
                   :loading="gitLogStore.isPushing"
-                  class="action-button"
+                  class="action-button push-button"
                 >
                   推送
                   <span class="command-text">git push</span>
@@ -851,23 +849,22 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="action-group">
               <div class="group-title">重置操作</div>
               <div class="group-buttons">
-                <el-button 
+                <!-- <el-button 
                   type="info" 
                   @click="resetHead" 
                   :loading="gitLogStore.isResetting" 
                   :icon="Refresh"
-                  class="action-button"
+                  class="action-button reset-button"
                 >
                   重置暂存区
                   <span class="command-text">git reset HEAD</span>
-                </el-button>
+                </el-button> -->
 
                 <el-button 
                   type="info" 
                   @click="resetToRemote" 
                   :loading="gitLogStore.isResetting" 
-                  :icon="Download"
-                  class="action-button"
+                  class="action-button reset-button"
                 >
                   重置到远程
                   <span class="command-text command-text-long">git reset --hard origin/branch</span>
@@ -973,6 +970,9 @@ git config --global user.email "your.email@example.com"</pre>
   margin-bottom: 15px;
   padding-bottom: 10px;
   border-bottom: 1px solid #dcdfe6;
+  font-size: 18px;
+  color: #303133;
+  font-weight: 500;
 }
 
 .commit-form {
@@ -994,9 +994,10 @@ git config --global user.email "your.email@example.com"</pre>
 .action-group {
   background-color: #f9f9f9;
   border-radius: 8px;
-  padding: 15px;
+  padding: 12px 15px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border-left: 4px solid #409EFF;
+  overflow: hidden; /* 确保子元素不会溢出 */
 }
 
 .action-group:nth-child(2) {
@@ -1010,19 +1011,26 @@ git config --global user.email "your.email@example.com"</pre>
 .group-title {
   font-size: 14px;
   font-weight: bold;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   color: #606266;
+  text-align: left;
+  display: block;
+  position: relative;
+  padding-left: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding-bottom: 8px;
 }
 
 .group-buttons {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  padding: 0 2px;
 }
 
 .action-button {
   position: relative;
-  padding-bottom: 20px;
+  padding: 14px 0 24px 0;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -1030,6 +1038,18 @@ git config --global user.email "your.email@example.com"</pre>
   justify-content: center;
   height: auto;
   text-align: center;
+  font-size: 16px;
+  border-radius: 6px;
+  border: none;
+}
+
+.action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-button:active {
+  transform: translateY(0);
 }
 
 .action-button :deep(.el-button__content) {
@@ -1040,21 +1060,22 @@ git config --global user.email "your.email@example.com"</pre>
   width: 100%;
 }
 
+.action-button :deep(.el-icon) {
+  margin-right: 0;
+  margin-bottom: 4px;
+  font-size: 18px;
+}
+
 .command-text {
   position: absolute;
-  bottom: 5px;
-  font-size: 10px;
-  opacity: 0.8;
+  bottom: 6px;
+  font-size: 14px;
   font-family: monospace;
   width: 100%;
   text-align: center;
   left: 0;
   white-space: nowrap;
-}
 
-.command-text-long {
-  font-size: 9px;
-  transform: scale(0.9);
 }
 
 .standard-commit-form {
@@ -1219,5 +1240,29 @@ git config --global user.email "your.email@example.com"</pre>
   4px;
   margin-top: 10px;
   white-space: pre;
+}
+
+/* 特定按钮样式 */
+.push-button {
+  background-color: #67c23a;
+  border-color: #67c23a;
+}
+
+.push-button:hover {
+  background-color: #85ce61;
+  border-color: #85ce61;
+}
+
+.reset-button {
+  background-color: #909399;
+  border-color: #909399;
+}
+
+.reset-button:hover {
+  background-color: #a6a9ad;
+  border-color: #a6a9ad;
+}
+.el-button+.el-button {
+  margin-left: 0;
 }
 </style>
