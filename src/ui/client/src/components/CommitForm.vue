@@ -761,38 +761,97 @@ onMounted(() => {
     </div>
 
     <div class="git-actions">
-      <div class="action-row">
-        <el-button type="primary" @click="addToStage" :loading="gitLogStore.isAddingFiles" :icon="Plus">
-          添加到暂存区(git add .)
-        </el-button>
+      <el-divider content-position="center">操作</el-divider>
+      
+      <div class="action-groups">
+        <div class="action-group">
+          <div class="group-title">基础操作</div>
+          <div class="group-buttons">
+            <el-button 
+              type="primary" 
+              @click="addToStage" 
+              :loading="gitLogStore.isAddingFiles" 
+              :icon="Plus"
+              class="action-button"
+            >
+              暂存更改
+              <span class="command-text">git add .</span>
+            </el-button>
 
-        <el-button type="primary" @click="commitChanges" :loading="gitLogStore.isLoadingStatus">
-          提交(git commit)
-        </el-button>
+            <el-button 
+              type="primary" 
+              @click="commitChanges" 
+              :loading="gitLogStore.isLoadingStatus"
+              class="action-button"
+            >
+              提交
+              <span class="command-text">git commit</span>
+            </el-button>
 
-        <el-button type="success" @click="pushToRemote" :icon="Upload" :loading="gitLogStore.isPushing">
-          推送(git push)
-        </el-button>
-      </div>
+            <el-button 
+              type="success" 
+              @click="pushToRemote" 
+              :icon="Upload" 
+              :loading="gitLogStore.isPushing"
+              class="action-button"
+            >
+              推送
+              <span class="command-text">git push</span>
+            </el-button>
+          </div>
+        </div>
 
-      <div class="action-row">
-        <el-button type="warning" @click="addAndCommit" :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting">
-          添加并提交(git add+commit)
-        </el-button>
+        <div class="action-group">
+          <div class="group-title">组合操作</div>
+          <div class="group-buttons">
+            <el-button 
+              type="warning" 
+              @click="addAndCommit" 
+              :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
+              class="action-button"
+            >
+              暂存并提交
+              <span class="command-text">git add + commit</span>
+            </el-button>
 
-        <el-button type="danger" @click="addCommitAndPush" :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing">
-          添加、提交并推送(git add+commit+push)
-        </el-button>
-      </div>
+            <el-button 
+              type="danger" 
+              @click="addCommitAndPush" 
+              :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
+              class="action-button"
+            >
+              一键推送
+              <span class="command-text">git add + commit + push</span>
+            </el-button>
+          </div>
+        </div>
 
-      <div class="action-row">
-        <el-button type="info" @click="resetHead" :loading="gitLogStore.isResetting" :icon="Refresh">
-          重置暂存区(git reset HEAD)
-        </el-button>
+        <div class="action-group">
+          <div class="group-title">重置操作</div>
+          <div class="group-buttons">
+            <el-button 
+              type="info" 
+              @click="resetHead" 
+              :loading="gitLogStore.isResetting" 
+              :icon="Refresh"
+              class="action-button"
+            >
+              重置暂存区
+              <span class="command-text">git reset HEAD</span>
+            </el-button>
 
-        <el-button type="info" @click="resetToRemote" :loading="gitLogStore.isResetting" :icon="Download">
-          重置到远程(git reset --hard origin/branch)
-        </el-button>
+            <el-button 
+              type="info" 
+              @click="resetToRemote" 
+              :loading="gitLogStore.isResetting" 
+              :icon="Download"
+              class="action-button"
+            >
+              重置到远程
+              <span class="command-text">git reset --hard origin/branch</span>
+            </el-button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -878,19 +937,60 @@ onMounted(() => {
 
 .git-actions {
   margin-top: 20px;
+}
+
+.action-groups {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 20px;
 }
 
-.action-row {
+.action-group {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-left: 4px solid #409EFF;
+}
+
+.action-group:nth-child(2) {
+  border-left-color: #E6A23C;
+}
+
+.action-group:nth-child(3) {
+  border-left-color: #909399;
+}
+
+.group-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  color: #606266;
+}
+
+.group-buttons {
   display: flex;
-  gap: 10px;
   flex-wrap: wrap;
+  gap: 10px;
 }
 
-.commit-mode-toggle {
-  /* 移除margin-bottom */
+.action-button {
+  position: relative;
+  padding-bottom: 20px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+}
+
+.command-text {
+  position: absolute;
+  bottom: 5px;
+  font-size: 10px;
+  opacity: 0.8;
+  font-family: monospace;
 }
 
 .standard-commit-form {
@@ -1025,8 +1125,12 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
-  .action-row {
+  .group-buttons {
     flex-direction: column;
+  }
+  
+  .action-button {
+    width: 100%;
   }
 }
 </style>

@@ -306,29 +306,32 @@ async function clearUserSettings() {
 
   <footer class="main-footer">
     <div class="branch-info" v-if="gitStore.currentBranch">
-      <span class="branch-label">当前分支:</span>
-      <el-select 
-        v-model="gitStore.currentBranch" 
-        size="small" 
-        @change="handleBranchChange"
-        :loading="gitStore.isChangingBranch"
-        class="branch-select"
-      >
-        <el-option 
-          v-for="branch in gitStore.allBranches" 
-          :key="branch" 
-          :label="branch" 
-          :value="branch"
-        />
-      </el-select>
-      <el-button 
-        type="primary" 
-        size="small" 
-        @click="openCreateBranchDialog"
-        style="margin-left: 5px;"
-      >
-        <el-icon><Plus /></el-icon>
-      </el-button>
+      <div class="branch-wrapper">
+        <span class="branch-label">当前分支:</span>
+        <el-select 
+          v-model="gitStore.currentBranch" 
+          size="small" 
+          @change="handleBranchChange"
+          :loading="gitStore.isChangingBranch"
+          class="branch-select"
+        >
+          <el-option 
+            v-for="branch in gitStore.allBranches" 
+            :key="branch" 
+            :label="branch" 
+            :value="branch"
+          />
+        </el-select>
+        <el-button 
+          type="primary" 
+          size="small" 
+          @click="openCreateBranchDialog"
+          class="create-branch-btn"
+        >
+          <el-icon><Plus /></el-icon>
+          新建分支
+        </el-button>
+      </div>
     </div>
     <div class="footer-right">
       <!-- <span>Zen GitSync © 2024</span> -->
@@ -529,10 +532,10 @@ h1 {
   font-size: 12px;
 }
 /* 添加分支选择框样式 */
-.branch-select {
+/* .branch-select {
   width: 150px;
   margin-left: 5px;
-}
+} */
 
 /* 调整下拉选择框在深色背景下的样式 */
 .branch-select :deep(.el-input__inner) {
@@ -628,6 +631,36 @@ h1 {
 .branch-info {
   display: flex;
   align-items: center;
+}
+
+.branch-wrapper {
+  display: flex;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 5px 10px;
+}
+
+.branch-label {
+  font-weight: bold;
+  margin-right: 10px;
+  color: #e0e0e0;
+}
+
+.branch-select {
+  width: 180px;
+  margin-right: 10px;
+}
+
+.create-branch-btn {
+  background-color: #2ea44f;
+  border-color: #2ea44f;
+  transition: background-color 0.3s;
+}
+
+.create-branch-btn:hover {
+  background-color: #3bbc63;
+  border-color: #3bbc63;
 }
 
 .footer-right {
