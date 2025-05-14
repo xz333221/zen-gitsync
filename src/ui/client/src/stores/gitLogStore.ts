@@ -3,6 +3,9 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useGitStore } from './gitStore'
 
+// 定义Git操作间隔时间（毫秒）
+const GIT_OPERATION_DELAY = 300
+
 export const useGitLogStore = defineStore('gitLog', () => {
   // 引用gitStore获取仓库状态
   const gitStore = useGitStore()
@@ -294,8 +297,8 @@ export const useGitLogStore = defineStore('gitLog', () => {
     const addResult = await addToStage()
     if (!addResult) return false
     
-    // 添加1秒延时
-    await delay(1000)
+    // 使用新的延时常量
+    await delay(GIT_OPERATION_DELAY)
     
     return await commitChanges(message, noVerify)
   }
@@ -306,14 +309,14 @@ export const useGitLogStore = defineStore('gitLog', () => {
       const addResult = await addToStage()
       if (!addResult) return false
       
-      // 添加1秒延时
-      await delay(1000)
+      // 使用新的延时常量
+      await delay(GIT_OPERATION_DELAY)
       
       const commitResult = await commitChanges(message, noVerify)
       if (!commitResult) return false
       
-      // 添加1秒延时
-      await delay(1000)
+      // 使用新的延时常量
+      await delay(GIT_OPERATION_DELAY)
       
       return await pushToRemote()
     } catch (error) {
