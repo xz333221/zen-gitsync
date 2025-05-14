@@ -821,7 +821,7 @@ onMounted(() => {
               class="action-button"
             >
               一键推送
-              <span class="command-text">git add + commit + push</span>
+              <span class="command-text command-text-long">git add + commit + push</span>
             </el-button>
           </div>
         </div>
@@ -848,7 +848,7 @@ onMounted(() => {
               class="action-button"
             >
               重置到远程
-              <span class="command-text">git reset --hard origin/branch</span>
+              <span class="command-text command-text-long">git reset --hard origin/branch</span>
             </el-button>
           </div>
         </div>
@@ -983,6 +983,15 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   height: auto;
+  text-align: center;
+}
+
+.action-button :deep(.el-button__content) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
 .command-text {
@@ -991,6 +1000,15 @@ onMounted(() => {
   font-size: 10px;
   opacity: 0.8;
   font-family: monospace;
+  width: 100%;
+  text-align: center;
+  left: 0;
+  white-space: nowrap;
+}
+
+.command-text-long {
+  font-size: 9px;
+  transform: scale(0.9);
 }
 
 .standard-commit-form {
