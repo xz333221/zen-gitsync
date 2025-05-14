@@ -16,7 +16,8 @@ const props = defineProps({
 
 const gitLogStore = useGitLogStore()
 const gitStore = useGitStore()
-const status = ref('加载中...')
+// 移除本地status定义，直接使用store中的statusText
+// const status = ref('加载中...')
 // const socket = io()
 const isRefreshing = computed(() => gitLogStore.isLoadingStatus)
 // 移除本地fileList定义，改用store中的fileList
@@ -37,8 +38,6 @@ const directoryItems = ref<{name: string, path: string, type: string}[]>([])
 const isBrowsing = ref(false)
 const browseErrorMessage = ref('')
 
-// 移除parseStatus函数，使用store中的parseStatusPorcelain
-
 const currentDirectory = ref(props.initialDirectory || '');
 async function loadStatus() {
   try {
@@ -51,24 +50,17 @@ async function loadStatus() {
     
     // 如果不是Git仓库，直接显示提示并返回
     if (!gitStore.isGitRepo) {
-      status.value = '当前目录不是一个Git仓库'
       return
     }
     
-    // 直接获取Git状态，不再通过store调用
-    const response = await fetch('/api/status')
-    const data = await response.json()
-    status.value = data.status
-
-    // 使用gitLogStore获取porcelain格式的状态
-    await gitLogStore.fetchStatusPorcelain()
+    // 使用gitLogStore获取Git状态
+    await gitLogStore.fetchStatus()
     
     ElMessage({
       message: 'Git 状态已刷新',
       type: 'success',
     })
   } catch (error) {
-    status.value = '加载状态失败: ' + (error as Error).message
     ElMessage({
       message: '刷新失败: ' + (error as Error).message,
       type: 'error',
@@ -293,8 +285,6 @@ async function changeDirectory() {
         await loadStatus()
       } else {
         ElMessage.warning('当前目录不是一个Git仓库')
-        status.value = '当前目录不是一个Git仓库'
-        
         // 清空Git相关状态
         gitStore.$reset() // 使用pinia的reset方法重置状态
       }
@@ -405,7 +395,9 @@ defineExpose({
         :loading="isRefreshing"
       />
     </div>
-    <div class="status-box">{{ status }}</div>
+    <div class="status-box">
+      {{ !gitStore.isGitRepo ? '当前目录不是一个Git仓库' : gitLogStore.statusText || '加载中...' }}
+    </div>
     <!-- 颜色区分不同类型文件 -->
     <div v-if="gitLogStore.fileList.length" class="file-list">
       <div 

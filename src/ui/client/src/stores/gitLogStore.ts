@@ -14,6 +14,8 @@ export const useGitLogStore = defineStore('gitLog', () => {
     unstaged: [],
     untracked: []
   })
+  // 添加Git状态文本
+  const statusText = ref('')
   // 添加fileList状态用于保存porcelain格式的状态
   const fileList = ref<{path: string, type: string}[]>([])
   const isLoadingLog = ref(false)
@@ -92,6 +94,8 @@ export const useGitLogStore = defineStore('gitLog', () => {
       const response = await fetch('/api/status')
       const data = await response.json()
       if (data.status) {
+        // 更新状态文本
+        statusText.value = data.status
         status.value = {
           staged: data.status.staged || [],
           unstaged: data.status.unstaged || [],
@@ -388,6 +392,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
     // 状态
     log,
     status,
+    statusText,
     fileList,
     isLoadingLog,
     isLoadingStatus,
