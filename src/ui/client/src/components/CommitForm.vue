@@ -9,7 +9,11 @@ const gitLogStore = useGitLogStore();
 const gitStore = useGitStore();
 const emit = defineEmits(["commit-success", "push-success", "status-update"]);
 const commitMessage = ref("");
+const isPushing = ref(false);
+// 添加提交并推送的状态变量
+const isCommitAndPushing = ref(false);
 const placeholder = ref("输入提交信息...");
+// 添加默认提交信息变量
 const defaultCommitMessage = ref("");
 const isStandardCommit = ref(false);
 const commitType = ref("feat");
@@ -18,22 +22,29 @@ const commitDescription = ref("");
 const commitBody = ref("");
 const commitFooter = ref("");
 
+// 提交模板相关变量
 const descriptionTemplates = ref<string[]>([]);
+// 添加对话框可见性变量
 const descriptionDialogVisible = ref(false);
 const newTemplateName = ref("");
+// 添加模板编辑相关变量
 const isEditingDescription = ref(false);
 const originalDescriptionTemplate = ref("");
 const editingDescriptionIndex = ref(-1);
 
+// 作用域模板相关变量
 const scopeTemplates = ref<string[]>([]);
 const scopeDialogVisible = ref(false);
 const newScopeTemplate = ref("");
+// 添加作用域模板编辑相关变量
 const isEditingScope = ref(false);
 const originalScopeTemplate = ref("");
 const editingScopeIndex = ref(-1);
 
+// 跳过钩子
 const skipHooks = ref(false);
 
+// 提交类型选项
 const commitTypeOptions = [
   { value: "feat", label: "feat: 新功能" },
   { value: "fix", label: "fix: 修复bug" },
@@ -44,19 +55,24 @@ const commitTypeOptions = [
   { value: "chore", label: "chore: 构建/工具修改" },
 ];
 
+// 监听标准化提交状态变化，保存到localStorage
 watch(isStandardCommit, (newValue) => {
   localStorage.setItem("zen-gitsync-standard-commit", newValue.toString());
 });
 
+// 监听跳过钩子状态变化，保存到localStorage
 watch(skipHooks, (newValue) => {
   localStorage.setItem("zen-gitsync-skip-hooks", newValue.toString());
 });
 
+// 计算最终的提交信息
 const finalCommitMessage = computed(() => {
   if (!isStandardCommit.value) {
+    // 如果用户没有输入提交信息，则使用默认提交信息
     return commitMessage.value || defaultCommitMessage.value;
   }
 
+  // 构建标准化提交信息
   let message = `${commitType.value || ""}`;
   if (commitScope.value) {
     message += `(${commitScope.value})`;
@@ -74,9 +90,12 @@ const finalCommitMessage = computed(() => {
   return message;
 });
 
+// 计算Git命令预览
 const gitCommandPreview = computed(() => {
+  // 基本命令
   let command = `git commit -m "${finalCommitMessage.value}"`
   
+  // 如果跳过钩子开关打开，添加 --no-verify 参数
   if (skipHooks.value) {
     command += ' --no-verify'
   }
@@ -84,13 +103,16 @@ const gitCommandPreview = computed(() => {
   return command
 });
 
+// 加载配置
 async function loadConfig() {
   try {
     const response = await fetch("/api/config/getConfig");
     const config = await response.json();
     placeholder.value = `输入提交信息 (默认: ${config.defaultCommitMessage})`;
+    // 保存默认提交信息到变量中，以便后续使用
     defaultCommitMessage.value = config.defaultCommitMessage || "";
 
+    // 加载描述模板
     if (
       config.descriptionTemplates &&
       Array.isArray(config.descriptionTemplates)
@@ -98,6 +120,7 @@ async function loadConfig() {
       descriptionTemplates.value = config.descriptionTemplates;
     }
 
+    // 加载作用域模板
     if (config.scopeTemplates && Array.isArray(config.scopeTemplates)) {
       scopeTemplates.value = config.scopeTemplates;
     }
@@ -106,6 +129,7 @@ async function loadConfig() {
   }
 }
 
+// 保存描述模板
 async function saveDescriptionTemplate() {
   if (!newTemplateName.value.trim()) {
     ElMessage({
@@ -116,9 +140,13 @@ async function saveDescriptionTemplate() {
   }
 
   try {
+    // 判断是编辑还是新建
     if (isEditingDescription.value) {
+      // 编辑现有模板
       await updateDescriptionTemplate();
     } else {
+      // 新建模板
+      // 检查是否已存在相同模板
       if (descriptionTemplates.value.includes(newTemplateName.value)) {
         ElMessage({
           message: "该模板已存在",
@@ -127,8 +155,10 @@ async function saveDescriptionTemplate() {
         return;
       }
 
+      // 添加到本地数组
       descriptionTemplates.value.push(newTemplateName.value);
 
+      // 保存到服务器
       const response = await fetch("/api/config/save-template", {
         method: "POST",
         headers: {
@@ -162,14 +192,19 @@ async function saveDescriptionTemplate() {
   }
 }
 
+// 编辑描述模板
 async function updateDescriptionTemplate() {
   try {
+    // 先从本地数组中更新
     if (editingDescriptionIndex.value >= 0) {
+      // 保存原模板和新模板
       const oldTemplate = originalDescriptionTemplate.value;
       const newTemplate = newTemplateName.value;
       
+      // 更新本地数组
       descriptionTemplates.value[editingDescriptionIndex.value] = newTemplate;
       
+      // 调用API更新服务器
       const response = await fetch("/api/config/update-template", {
         method: "POST",
         headers: {
@@ -189,6 +224,7 @@ async function updateDescriptionTemplate() {
           type: "success",
         });
         
+        // 重置编辑状态
         isEditingDescription.value = false;
         originalDescriptionTemplate.value = "";
         editingDescriptionIndex.value = -1;
@@ -208,6 +244,7 @@ async function updateDescriptionTemplate() {
   }
 }
 
+// 开始编辑描述模板
 function startEditDescriptionTemplate(template: string, index: number) {
   isEditingDescription.value = true;
   originalDescriptionTemplate.value = template;
@@ -215,6 +252,7 @@ function startEditDescriptionTemplate(template: string, index: number) {
   newTemplateName.value = template;
 }
 
+// 取消编辑描述模板
 function cancelEditDescriptionTemplate() {
   isEditingDescription.value = false;
   originalDescriptionTemplate.value = "";
@@ -222,6 +260,7 @@ function cancelEditDescriptionTemplate() {
   newTemplateName.value = "";
 }
 
+// 保存作用域模板
 async function saveScopeTemplate() {
   if (!newScopeTemplate.value.trim()) {
     ElMessage({
@@ -232,9 +271,13 @@ async function saveScopeTemplate() {
   }
 
   try {
+    // 判断是编辑还是新建
     if (isEditingScope.value) {
+      // 编辑现有模板
       await updateScopeTemplate();
     } else {
+      // 新建模板
+      // 检查是否已存在相同模板
       if (scopeTemplates.value.includes(newScopeTemplate.value)) {
         ElMessage({
           message: "该模板已存在",
@@ -243,8 +286,10 @@ async function saveScopeTemplate() {
         return;
       }
 
+      // 添加到本地数组
       scopeTemplates.value.push(newScopeTemplate.value);
 
+      // 保存到服务器
       const response = await fetch("/api/config/save-template", {
         method: "POST",
         headers: {
@@ -278,14 +323,19 @@ async function saveScopeTemplate() {
   }
 }
 
+// 更新作用域模板
 async function updateScopeTemplate() {
   try {
+    // 先从本地数组中更新
     if (editingScopeIndex.value >= 0) {
+      // 保存原模板和新模板
       const oldTemplate = originalScopeTemplate.value;
       const newTemplate = newScopeTemplate.value;
       
+      // 更新本地数组
       scopeTemplates.value[editingScopeIndex.value] = newTemplate;
       
+      // 调用API更新服务器
       const response = await fetch("/api/config/update-template", {
         method: "POST",
         headers: {
@@ -305,6 +355,7 @@ async function updateScopeTemplate() {
           type: "success",
         });
         
+        // 重置编辑状态
         isEditingScope.value = false;
         originalScopeTemplate.value = "";
         editingScopeIndex.value = -1;
@@ -324,6 +375,7 @@ async function updateScopeTemplate() {
   }
 }
 
+// 开始编辑作用域模板
 function startEditScopeTemplate(template: string, index: number) {
   isEditingScope.value = true;
   originalScopeTemplate.value = template;
@@ -331,6 +383,7 @@ function startEditScopeTemplate(template: string, index: number) {
   newScopeTemplate.value = template;
 }
 
+// 取消编辑作用域模板
 function cancelEditScopeTemplate() {
   isEditingScope.value = false;
   originalScopeTemplate.value = "";
@@ -338,13 +391,16 @@ function cancelEditScopeTemplate() {
   newScopeTemplate.value = "";
 }
 
+// 删除描述模板
 async function deleteDescriptionTemplate(template: string) {
   try {
+    // 从本地数组中删除
     const index = descriptionTemplates.value.indexOf(template);
     if (index !== -1) {
       descriptionTemplates.value.splice(index, 1);
     }
 
+    // 从服务器删除
     const response = await fetch("/api/config/delete-template", {
       method: "POST",
       headers: {
@@ -376,13 +432,16 @@ async function deleteDescriptionTemplate(template: string) {
   }
 }
 
+// 删除作用域模板
 async function deleteScopeTemplate(template: string) {
   try {
+    // 从本地数组中删除
     const index = scopeTemplates.value.indexOf(template);
     if (index !== -1) {
       scopeTemplates.value.splice(index, 1);
     }
 
+    // 从服务器删除
     const response = await fetch("/api/config/delete-template", {
       method: "POST",
       headers: {
@@ -414,28 +473,34 @@ async function deleteScopeTemplate(template: string) {
   }
 }
 
+// 使用模板
 function useTemplate(template: string) {
   commitDescription.value = template;
   descriptionDialogVisible.value = false;
 }
 
+// 使用作用域模板
 function useScopeTemplate(template: string) {
   commitScope.value = template;
   scopeDialogVisible.value = false;
 }
 
+// 打开设置弹窗
 function openDescriptionSettings() {
   descriptionDialogVisible.value = true;
 }
 
+// 打开作用域设置弹窗
 function openScopeSettings() {
   scopeDialogVisible.value = true;
 }
 
+// 添加文件到暂存区 (git add)
 async function addToStage() {
   try {
     const result = await gitLogStore.addToStage();
     if (result) {
+      // 触发状态更新事件
       emit("status-update");
     }
   } catch (error) {
@@ -446,6 +511,7 @@ async function addToStage() {
   }
 }
 
+// 提交更改 (git commit)
 async function commitChanges() {
   if (!finalCommitMessage.value.trim()) {
     ElMessage({
@@ -456,12 +522,16 @@ async function commitChanges() {
   }
 
   try {
+    // 使用Store提交更改
     const result = await gitLogStore.commitChanges(finalCommitMessage.value, skipHooks.value);
     
     if (result) {
+      // 清空提交信息
       clearCommitFields();
       
+      // 触发成功事件
       emit("commit-success");
+      // 触发状态更新事件
       emit("status-update");
     }
   } catch (error) {
@@ -472,12 +542,17 @@ async function commitChanges() {
   }
 }
 
+// 推送到远程 (git push)
 async function pushToRemote() {
   try {
+    isPushing.value = true
+    // 使用Store推送更改
     const result = await gitLogStore.pushToRemote();
     
     if (result) {
+      // 触发成功事件
       emit("push-success");
+      // 触发状态更新事件
       emit("status-update");
     }
   } catch (error) {
@@ -485,9 +560,12 @@ async function pushToRemote() {
       message: `推送失败: ${(error as Error).message}`,
       type: "error",
     });
+  } finally {
+    isPushing.value = false
   }
 }
 
+// 添加并提交 (git add + git commit)
 async function addAndCommit() {
   if (!finalCommitMessage.value.trim()) {
     ElMessage({
@@ -501,9 +579,12 @@ async function addAndCommit() {
     const result = await gitLogStore.addAndCommit(finalCommitMessage.value, skipHooks.value);
     
     if (result) {
+      // 清空提交信息
       clearCommitFields();
       
+      // 触发成功事件
       emit("commit-success");
+      // 触发状态更新事件
       emit("status-update");
     }
   } catch (error) {
@@ -514,6 +595,7 @@ async function addAndCommit() {
   }
 }
 
+// 添加、提交并推送 (git add + git commit + git push)
 async function addCommitAndPush() {
   if (!finalCommitMessage.value.trim()) {
     ElMessage({
@@ -524,17 +606,22 @@ async function addCommitAndPush() {
   }
 
   try {
+    isCommitAndPushing.value = true
     const result = await gitLogStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
     
     if (result) {
+      // 清空提交信息
       clearCommitFields();
       
+      // 触发成功事件
       emit("commit-success");
       
+      // 添加小延迟后再触发推送成功事件，确保提交历史能够刷新
       setTimeout(() => {
         emit("push-success");
       }, 300);
       
+      // 触发状态更新事件
       emit("status-update");
     }
   } catch (error) {
@@ -542,9 +629,12 @@ async function addCommitAndPush() {
       message: `暂存、提交并推送失败: ${(error as Error).message}`,
       type: "error",
     });
+  } finally {
+    isCommitAndPushing.value = false
   }
 }
 
+// 重置暂存区 (git reset HEAD)
 async function resetHead() {
   try {
     await ElMessageBox.confirm(
@@ -559,9 +649,11 @@ async function resetHead() {
     
     const result = await gitLogStore.resetHead();
     if (result) {
+      // 触发状态更新事件
       emit("status-update");
     }
   } catch (error) {
+    // 用户取消操作，不显示错误
     if ((error as any) !== 'cancel') {
       ElMessage({
         message: `重置暂存区失败: ${(error as Error).message}`,
@@ -571,6 +663,7 @@ async function resetHead() {
   }
 }
 
+// 重置到远程分支 (git reset --hard origin/branch)
 async function resetToRemote() {
   try {
     await ElMessageBox.confirm(
@@ -585,9 +678,11 @@ async function resetToRemote() {
     
     const result = await gitLogStore.resetToRemote(gitStore.currentBranch);
     if (result) {
+      // 触发状态更新事件
       emit("status-update");
     }
   } catch (error) {
+    // 用户取消操作，不显示错误
     if ((error as any) !== 'cancel') {
       ElMessage({
         message: `重置到远程分支失败: ${(error as Error).message}`,
@@ -597,6 +692,7 @@ async function resetToRemote() {
   }
 }
 
+// 清空提交字段
 function clearCommitFields() {
   commitMessage.value = "";
   commitDescription.value = "";
@@ -607,11 +703,13 @@ function clearCommitFields() {
 onMounted(() => {
   loadConfig();
   
+  // 从 localStorage 中获取标准化提交设置
   const savedStandardCommit = localStorage.getItem("zen-gitsync-standard-commit");
   if (savedStandardCommit !== null) {
     isStandardCommit.value = savedStandardCommit === "true";
   }
   
+  // 从 localStorage 中获取跳过钩子设置
   const savedSkipHooks = localStorage.getItem("zen-gitsync-skip-hooks");
   if (savedSkipHooks !== null) {
     skipHooks.value = savedSkipHooks === "true";
@@ -641,10 +739,12 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- 普通提交表单 -->
     <div v-if="!isStandardCommit" class="commit-form">
       <el-input v-model="commitMessage" :placeholder="placeholder" clearable />
     </div>
 
+    <!-- 标准化提交表单 -->
     <div v-else class="standard-commit-form">
       <div class="standard-commit-header">
         <el-select
@@ -746,7 +846,7 @@ onMounted(() => {
           type="success"
           @click="pushToRemote"
           :icon="Upload"
-          :loading="gitLogStore.isLoadingLog"
+          :loading="isPushing"
         >
           推送(git push)
         </el-button>
@@ -756,7 +856,6 @@ onMounted(() => {
         <el-button
           type="warning"
           @click="addAndCommit"
-          :loading="gitLogStore.isAddingFiles || gitLogStore.isLoadingStatus"
         >
           添加并提交(git add+commit)
         </el-button>
@@ -764,7 +863,7 @@ onMounted(() => {
         <el-button
           type="danger"
           @click="addCommitAndPush"
-          :loading="gitLogStore.isAddingFiles || gitLogStore.isLoadingStatus || gitLogStore.isLoadingLog"
+          :loading="isCommitAndPushing"
         >
           添加、提交并推送(git add+commit+push)
         </el-button>
@@ -791,6 +890,7 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- 简短描述设置弹窗 -->
     <el-dialog
       title="简短描述模板设置"
       v-model="descriptionDialogVisible"
@@ -831,6 +931,7 @@ onMounted(() => {
             :key="index"
             class="template-item"
           >
+            <!-- 两端对齐 -->
             <el-row justify="space-between" align="middle" style="width: 100%">
               <div class="template-content">{{ template }}</div>
               <div class="template-actions">
@@ -860,6 +961,7 @@ onMounted(() => {
       </div>
     </el-dialog>
 
+    <!-- 作用域设置弹窗 -->
     <el-dialog
       title="作用域模板设置"
       v-model="scopeDialogVisible"
