@@ -19,7 +19,7 @@ const gitStore = useGitStore()
 const status = ref('加载中...')
 // const socket = io()
 const isRefreshing = computed(() => gitLogStore.isLoadingStatus)
-const fileList = ref<{path: string, type: string}[]>([])
+// 移除本地fileList定义，改用store中的fileList
 const selectedFile = ref('')
 const diffContent = ref('')
 const diffDialogVisible = ref(false)
@@ -37,28 +37,7 @@ const directoryItems = ref<{name: string, path: string, type: string}[]>([])
 const isBrowsing = ref(false)
 const browseErrorMessage = ref('')
 
-// 解析 git status 输出，提取文件及类型
-function parseStatus(statusText: string) {
-  if (statusText === undefined) return
-  const lines = statusText.split('\n')
-  const files: {path: string, type: string}[] = []
-  for (const line of lines) {
-    // 匹配常见的 git status --porcelain 格式
-    // M: 修改, A: 新增, D: 删除, ??: 未跟踪
-    const match = line.match(/^([ MADRCU\?]{2})\s+(.+)$/)
-    if (match) {
-      let type = ''
-      const code = match[1].trim()
-      if (code === 'M' || code === 'MM' || code === 'AM' || code === 'RM') type = 'modified'
-      else if (code === 'A' || code === 'AA') type = 'added'
-      else if (code === 'D' || code === 'AD' || code === 'DA') type = 'deleted'
-      else if (code === '??') type = 'untracked'
-      else type = 'other'
-      files.push({ path: match[2], type })
-    }
-  }
-  fileList.value = files
-}
+// 移除parseStatus函数，使用store中的parseStatusPorcelain
 
 const currentDirectory = ref(props.initialDirectory || '');
 async function loadStatus() {
@@ -73,7 +52,6 @@ async function loadStatus() {
     // 如果不是Git仓库，直接显示提示并返回
     if (!gitStore.isGitRepo) {
       status.value = '当前目录不是一个Git仓库'
-      fileList.value = []
       return
     }
     
@@ -82,16 +60,15 @@ async function loadStatus() {
     const data = await response.json()
     status.value = data.status
 
-    const response_porcelain = await fetch('/api/status_porcelain')
-    const data_porcelain = await response_porcelain.json()
-    parseStatus(data_porcelain.status)
+    // 使用gitLogStore获取porcelain格式的状态
+    await gitLogStore.fetchStatusPorcelain()
+    
     ElMessage({
       message: 'Git 状态已刷新',
       type: 'success',
     })
   } catch (error) {
     status.value = '加载状态失败: ' + (error as Error).message
-    fileList.value = []
     ElMessage({
       message: '刷新失败: ' + (error as Error).message,
       type: 'error',
@@ -145,7 +122,7 @@ async function getFileDiff(filePath: string) {
     isLoadingDiff.value = true
     selectedFile.value = filePath
     // 设置当前文件索引
-    currentFileIndex.value = fileList.value.findIndex(file => file.path === filePath)
+    currentFileIndex.value = gitLogStore.fileList.findIndex(file => file.path === filePath)
     const response = await fetch(`/api/diff?file=${encodeURIComponent(filePath)}`)
     const data = await response.json()
     diffContent.value = data.diff || '没有变更'
@@ -163,19 +140,19 @@ async function getFileDiff(filePath: string) {
 
 // 添加切换到上一个文件的方法
 async function goToPreviousFile() {
-  if (fileList.value.length === 0 || currentFileIndex.value <= 0) return
+  if (gitLogStore.fileList.length === 0 || currentFileIndex.value <= 0) return
   
   const newIndex = currentFileIndex.value - 1
-  const prevFile = fileList.value[newIndex]
+  const prevFile = gitLogStore.fileList[newIndex]
   await getFileDiff(prevFile.path)
 }
 
 // 添加切换到下一个文件的方法
 async function goToNextFile() {
-  if (fileList.value.length === 0 || currentFileIndex.value >= fileList.value.length - 1) return
+  if (gitLogStore.fileList.length === 0 || currentFileIndex.value >= gitLogStore.fileList.length - 1) return
   
   const newIndex = currentFileIndex.value + 1
-  const nextFile = fileList.value[newIndex]
+  const nextFile = gitLogStore.fileList[newIndex]
   await getFileDiff(nextFile.path)
 }
 
@@ -317,7 +294,6 @@ async function changeDirectory() {
       } else {
         ElMessage.warning('当前目录不是一个Git仓库')
         status.value = '当前目录不是一个Git仓库'
-        fileList.value = []
         
         // 清空Git相关状态
         gitStore.$reset() // 使用pinia的reset方法重置状态
@@ -431,9 +407,9 @@ defineExpose({
     </div>
     <div class="status-box">{{ status }}</div>
     <!-- 颜色区分不同类型文件 -->
-    <div v-if="fileList.length" class="file-list">
+    <div v-if="gitLogStore.fileList.length" class="file-list">
       <div 
-        v-for="file in fileList" 
+        v-for="file in gitLogStore.fileList" 
         :key="file.path" 
         :class="['file-item', file.type]"
       >
@@ -546,14 +522,14 @@ defineExpose({
         <el-button 
           :icon="ArrowLeft" 
           @click="goToPreviousFile" 
-          :disabled="currentFileIndex <= 0 || fileList.length === 0"
+          :disabled="currentFileIndex <= 0 || gitLogStore.fileList.length === 0"
           circle
         />
-        <span class="file-counter">{{ currentFileIndex + 1 }} / {{ fileList.length }}</span>
+        <span class="file-counter">{{ currentFileIndex + 1 }} / {{ gitLogStore.fileList.length }}</span>
         <el-button 
           :icon="ArrowRight" 
           @click="goToNextFile" 
-          :disabled="currentFileIndex >= fileList.length - 1 || fileList.length === 0"
+          :disabled="currentFileIndex >= gitLogStore.fileList.length - 1 || gitLogStore.fileList.length === 0"
           circle
         />
       </div>

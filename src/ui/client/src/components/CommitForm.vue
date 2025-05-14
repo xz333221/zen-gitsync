@@ -94,12 +94,12 @@ const finalCommitMessage = computed(() => {
 const gitCommandPreview = computed(() => {
   // 基本命令
   let command = `git commit -m "${finalCommitMessage.value}"`
-  
+
   // 如果跳过钩子开关打开，添加 --no-verify 参数
   if (skipHooks.value) {
     command += ' --no-verify'
   }
-  
+
   return command
 });
 
@@ -200,10 +200,10 @@ async function updateDescriptionTemplate() {
       // 保存原模板和新模板
       const oldTemplate = originalDescriptionTemplate.value;
       const newTemplate = newTemplateName.value;
-      
+
       // 更新本地数组
       descriptionTemplates.value[editingDescriptionIndex.value] = newTemplate;
-      
+
       // 调用API更新服务器
       const response = await fetch("/api/config/update-template", {
         method: "POST",
@@ -216,14 +216,14 @@ async function updateDescriptionTemplate() {
           type: "description",
         }),
       });
-      
+
       const result = await response.json();
       if (result.success) {
         ElMessage({
           message: "模板更新成功!",
           type: "success",
         });
-        
+
         // 重置编辑状态
         isEditingDescription.value = false;
         originalDescriptionTemplate.value = "";
@@ -331,10 +331,10 @@ async function updateScopeTemplate() {
       // 保存原模板和新模板
       const oldTemplate = originalScopeTemplate.value;
       const newTemplate = newScopeTemplate.value;
-      
+
       // 更新本地数组
       scopeTemplates.value[editingScopeIndex.value] = newTemplate;
-      
+
       // 调用API更新服务器
       const response = await fetch("/api/config/update-template", {
         method: "POST",
@@ -347,14 +347,14 @@ async function updateScopeTemplate() {
           type: "scope",
         }),
       });
-      
+
       const result = await response.json();
       if (result.success) {
         ElMessage({
           message: "作用域模板更新成功!",
           type: "success",
         });
-        
+
         // 重置编辑状态
         isEditingScope.value = false;
         originalScopeTemplate.value = "";
@@ -524,11 +524,11 @@ async function commitChanges() {
   try {
     // 使用Store提交更改
     const result = await gitLogStore.commitChanges(finalCommitMessage.value, skipHooks.value);
-    
+
     if (result) {
       // 清空提交信息
       clearCommitFields();
-      
+
       // 触发成功事件
       emit("commit-success");
       // 触发状态更新事件
@@ -548,7 +548,7 @@ async function pushToRemote() {
     isPushing.value = true
     // 使用Store推送更改
     const result = await gitLogStore.pushToRemote();
-    
+
     if (result) {
       // 触发成功事件
       emit("push-success");
@@ -569,24 +569,22 @@ async function pushToRemote() {
 async function addAndCommit() {
   if (!finalCommitMessage.value.trim()) {
     ElMessage({
-      message: "提交信息不能为空", 
+      message: "提交信息不能为空",
       type: "warning",
     });
     return;
   }
 
   try {
-    const result = await gitLogStore.addAndCommit(finalCommitMessage.value, skipHooks.value);
-    
-    if (result) {
-      // 清空提交信息
-      clearCommitFields();
-      
-      // 触发成功事件
-      emit("commit-success");
-      // 触发状态更新事件
-      emit("status-update");
-    }
+    await gitLogStore.addAndCommit(finalCommitMessage.value, skipHooks.value);
+
+    // 清空提交信息
+    clearCommitFields();
+
+    // 触发成功事件
+    emit("commit-success");
+    // 触发状态更新事件
+    emit("status-update");
   } catch (error) {
     ElMessage({
       message: `暂存并提交失败: ${(error as Error).message}`,
@@ -606,31 +604,29 @@ async function addCommitAndPush() {
   }
 
   try {
-    isCommitAndPushing.value = true
-    const result = await gitLogStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
-    
-    if (result) {
-      // 清空提交信息
-      clearCommitFields();
-      
-      // 触发成功事件
-      emit("commit-success");
-      
-      // 添加小延迟后再触发推送成功事件，确保提交历史能够刷新
-      setTimeout(() => {
-        emit("push-success");
-      }, 300);
-      
-      // 触发状态更新事件
-      emit("status-update");
-    }
+    await gitLogStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
+
+
+    // 清空提交信息
+    clearCommitFields();
+
+    // 触发成功事件
+    emit("commit-success");
+
+    // 添加小延迟后再触发推送成功事件，确保提交历史能够刷新
+    setTimeout(() => {
+      emit("push-success");
+    }, 300);
+
+    // 触发状态更新事件
+    emit("status-update");
+
   } catch (error) {
     ElMessage({
       message: `暂存、提交并推送失败: ${(error as Error).message}`,
       type: "error",
     });
   } finally {
-    isCommitAndPushing.value = false
   }
 }
 
@@ -646,7 +642,7 @@ async function resetHead() {
         type: 'warning'
       }
     );
-    
+
     const result = await gitLogStore.resetHead();
     if (result) {
       // 触发状态更新事件
@@ -675,7 +671,7 @@ async function resetToRemote() {
         type: 'warning'
       }
     );
-    
+
     const result = await gitLogStore.resetToRemote(gitStore.currentBranch);
     if (result) {
       // 触发状态更新事件
@@ -702,13 +698,13 @@ function clearCommitFields() {
 
 onMounted(() => {
   loadConfig();
-  
+
   // 从 localStorage 中获取标准化提交设置
   const savedStandardCommit = localStorage.getItem("zen-gitsync-standard-commit");
   if (savedStandardCommit !== null) {
     isStandardCommit.value = savedStandardCommit === "true";
   }
-  
+
   // 从 localStorage 中获取跳过钩子设置
   const savedSkipHooks = localStorage.getItem("zen-gitsync-skip-hooks");
   if (savedSkipHooks !== null) {
@@ -724,11 +720,7 @@ onMounted(() => {
     <div class="commit-options">
       <div class="options-row">
         <div class="commit-mode-toggle">
-          <el-switch
-            v-model="isStandardCommit"
-            active-text="标准化提交"
-            inactive-text="普通提交"
-          />
+          <el-switch v-model="isStandardCommit" active-text="标准化提交" inactive-text="普通提交" />
         </div>
 
         <div class="no-verify-toggle">
@@ -747,77 +739,34 @@ onMounted(() => {
     <!-- 标准化提交表单 -->
     <div v-else class="standard-commit-form">
       <div class="standard-commit-header">
-        <el-select
-          v-model="commitType"
-          placeholder="提交类型"
-          class="type-select"
-          clearable
-        >
-          <el-option
-            v-for="item in commitTypeOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
+        <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
+          <el-option v-for="item in commitTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
 
         <div class="scope-container">
-          <el-input
-            v-model="commitScope"
-            placeholder="作用域（可选）"
-            class="scope-input"
-            clearable
-          />
-          <el-button
-            type="primary"
-            :icon="Setting"
-            circle
-            size="small"
-            class="settings-button"
-            @click="openScopeSettings"
-          >
+          <el-input v-model="commitScope" placeholder="作用域（可选）" class="scope-input" clearable />
+          <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
+            @click="openScopeSettings">
           </el-button>
         </div>
 
         <div class="description-container">
-          <el-input
-            v-model="commitDescription"
-            placeholder="简短描述（必填）"
-            class="description-input"
-            clearable
-          />
-          <el-button
-            type="primary"
-            :icon="Setting"
-            circle
-            size="small"
-            class="settings-button"
-            @click="openDescriptionSettings"
-          >
+          <el-input v-model="commitDescription" placeholder="简短描述（必填）" class="description-input" clearable />
+          <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
+            @click="openDescriptionSettings">
           </el-button>
         </div>
       </div>
 
-      <el-input
-        v-model="commitBody"
-        type="textarea"
-        :rows="4"
-        placeholder="正文（可选）：详细描述本次提交的内容和原因"
-        class="body-input"
-        clearable
-      />
+      <el-input v-model="commitBody" type="textarea" :rows="4" placeholder="正文（可选）：详细描述本次提交的内容和原因" class="body-input"
+        clearable />
 
-      <el-input
-        v-model="commitFooter"
-        placeholder="页脚（可选）：如 Closes #123"
-        class="footer-input"
-        clearable
-      />
+      <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
 
       <div class="preview-section">
         <div class="preview-title">提交信息预览：</div>
         <pre class="preview-content">{{ finalCommitMessage }}</pre>
-        
+
         <div class="preview-title" style="margin-top: 10px;">Git命令预览：</div>
         <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
       </div>
@@ -825,135 +774,65 @@ onMounted(() => {
 
     <div class="git-actions">
       <div class="action-row">
-        <el-button
-          type="primary"
-          @click="addToStage"
-          :loading="gitLogStore.isAddingFiles"
-          :icon="Plus"
-        >
+        <el-button type="primary" @click="addToStage" :loading="gitLogStore.isAddingFiles" :icon="Plus">
           添加到暂存区(git add .)
         </el-button>
-        
-        <el-button
-          type="primary"
-          @click="commitChanges"
-          :loading="gitLogStore.isLoadingStatus"
-        >
+
+        <el-button type="primary" @click="commitChanges" :loading="gitLogStore.isLoadingStatus">
           提交(git commit)
         </el-button>
-        
-        <el-button
-          type="success"
-          @click="pushToRemote"
-          :icon="Upload"
-          :loading="isPushing"
-        >
+
+        <el-button type="success" @click="pushToRemote" :icon="Upload" :loading="gitLogStore.isPushing">
           推送(git push)
         </el-button>
       </div>
-      
+
       <div class="action-row">
-        <el-button
-          type="warning"
-          @click="addAndCommit"
-        >
+        <el-button type="warning" @click="addAndCommit" :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting">
           添加并提交(git add+commit)
         </el-button>
-        
-        <el-button
-          type="danger"
-          @click="addCommitAndPush"
-          :loading="isCommitAndPushing"
-        >
+
+        <el-button type="danger" @click="addCommitAndPush" :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing">
           添加、提交并推送(git add+commit+push)
         </el-button>
       </div>
-      
+
       <div class="action-row">
-        <el-button
-          type="info"
-          @click="resetHead"
-          :loading="gitLogStore.isResetting"
-          :icon="Refresh"
-        >
+        <el-button type="info" @click="resetHead" :loading="gitLogStore.isResetting" :icon="Refresh">
           重置暂存区(git reset HEAD)
         </el-button>
-        
-        <el-button
-          type="info"
-          @click="resetToRemote"
-          :loading="gitLogStore.isResetting"
-          :icon="Download"
-        >
+
+        <el-button type="info" @click="resetToRemote" :loading="gitLogStore.isResetting" :icon="Download">
           重置到远程(git reset --hard origin/branch)
         </el-button>
       </div>
     </div>
 
     <!-- 简短描述设置弹窗 -->
-    <el-dialog
-      title="简短描述模板设置"
-      v-model="descriptionDialogVisible"
-      width="80vw"
-      style="height: 80vh"
-    >
+    <el-dialog title="简短描述模板设置" v-model="descriptionDialogVisible" width="80vw" style="height: 80vh">
       <div class="template-container">
         <div class="template-form">
-          <el-input
-            v-model="newTemplateName"
-            :placeholder="isEditingDescription ? '编辑模板内容' : '输入新模板内容'"
-            class="template-input"
-            clearable
-          />
+          <el-input v-model="newTemplateName" :placeholder="isEditingDescription ? '编辑模板内容' : '输入新模板内容'"
+            class="template-input" clearable />
           <div class="template-form-buttons">
-            <el-button
-              v-if="isEditingDescription"
-              @click="cancelEditDescriptionTemplate"
-              >取消</el-button
-            >
-            <el-button
-              type="primary"
-              @click="saveDescriptionTemplate"
-              :disabled="!newTemplateName.trim()"
-              >{{ isEditingDescription ? '更新模板' : '添加模板' }}</el-button
-            >
+            <el-button v-if="isEditingDescription" @click="cancelEditDescriptionTemplate">取消</el-button>
+            <el-button type="primary" @click="saveDescriptionTemplate" :disabled="!newTemplateName.trim()">{{
+              isEditingDescription ? '更新模板' : '添加模板' }}</el-button>
           </div>
         </div>
 
         <div class="template-list">
           <h3>已保存模板</h3>
-          <el-empty
-            v-if="descriptionTemplates.length === 0"
-            description="暂无保存的模板"
-          />
-          <el-card
-            v-for="(template, index) in descriptionTemplates"
-            :key="index"
-            class="template-item"
-          >
+          <el-empty v-if="descriptionTemplates.length === 0" description="暂无保存的模板" />
+          <el-card v-for="(template, index) in descriptionTemplates" :key="index" class="template-item">
             <!-- 两端对齐 -->
             <el-row justify="space-between" align="middle" style="width: 100%">
               <div class="template-content">{{ template }}</div>
               <div class="template-actions">
-                <el-button
-                  type="primary"
-                  size="small"
-                  @click="useTemplate(template)"
-                  >使用</el-button
-                >
-                <el-button
-                  type="warning"
-                  size="small"
-                  :icon="Edit"
-                  @click="startEditDescriptionTemplate(template, index)"
-                  >编辑</el-button
-                >
-                <el-button
-                  type="danger"
-                  size="small"
-                  @click="deleteDescriptionTemplate(template)"
-                  >删除</el-button
-                >
+                <el-button type="primary" size="small" @click="useTemplate(template)">使用</el-button>
+                <el-button type="warning" size="small" :icon="Edit"
+                  @click="startEditDescriptionTemplate(template, index)">编辑</el-button>
+                <el-button type="danger" size="small" @click="deleteDescriptionTemplate(template)">删除</el-button>
               </div>
             </el-row>
           </el-card>
@@ -962,68 +841,29 @@ onMounted(() => {
     </el-dialog>
 
     <!-- 作用域设置弹窗 -->
-    <el-dialog
-      title="作用域模板设置"
-      v-model="scopeDialogVisible"
-      width="80%"
-      style="height: 80vh"
-    >
+    <el-dialog title="作用域模板设置" v-model="scopeDialogVisible" width="80%" style="height: 80vh">
       <div class="template-container">
         <div class="template-form">
-          <el-input
-            v-model="newScopeTemplate"
-            :placeholder="isEditingScope ? '编辑作用域模板内容' : '输入新作用域模板'"
-            class="template-input"
-            clearable
-          />
+          <el-input v-model="newScopeTemplate" :placeholder="isEditingScope ? '编辑作用域模板内容' : '输入新作用域模板'"
+            class="template-input" clearable />
           <div class="template-form-buttons">
-            <el-button
-              v-if="isEditingScope"
-              @click="cancelEditScopeTemplate"
-              >取消</el-button
-            >
-            <el-button
-              type="primary"
-              @click="saveScopeTemplate"
-              :disabled="!newScopeTemplate.trim()"
-              >{{ isEditingScope ? '更新模板' : '添加模板' }}</el-button
-            >
+            <el-button v-if="isEditingScope" @click="cancelEditScopeTemplate">取消</el-button>
+            <el-button type="primary" @click="saveScopeTemplate" :disabled="!newScopeTemplate.trim()">{{ isEditingScope
+              ? '更新模板' : '添加模板' }}</el-button>
           </div>
         </div>
 
         <div class="template-list">
           <h3>已保存作用域</h3>
-          <el-empty
-            v-if="scopeTemplates.length === 0"
-            description="暂无保存的作用域"
-          />
-          <el-card
-            v-for="(template, index) in scopeTemplates"
-            :key="index"
-            class="template-item"
-          >
+          <el-empty v-if="scopeTemplates.length === 0" description="暂无保存的作用域" />
+          <el-card v-for="(template, index) in scopeTemplates" :key="index" class="template-item">
             <el-row justify="space-between" align="middle" style="width: 100%">
               <div class="template-content">{{ template }}</div>
               <div class="template-actions">
-                <el-button
-                  type="primary"
-                  size="small"
-                  @click="useScopeTemplate(template)"
-                  >使用</el-button
-                >
-                <el-button
-                  type="warning"
-                  size="small"
-                  :icon="Edit"
-                  @click="startEditScopeTemplate(template, index)"
-                  >编辑</el-button
-                >
-                <el-button
-                  type="danger"
-                  size="small"
-                  @click="deleteScopeTemplate(template)"
-                  >删除</el-button
-                >
+                <el-button type="primary" size="small" @click="useScopeTemplate(template)">使用</el-button>
+                <el-button type="warning" size="small" :icon="Edit"
+                  @click="startEditScopeTemplate(template, index)">编辑</el-button>
+                <el-button type="danger" size="small" @click="deleteScopeTemplate(template)">删除</el-button>
               </div>
             </el-row>
           </el-card>
@@ -1037,7 +877,7 @@ onMounted(() => {
 .card {
   background-color: white;
   border-radius: 5px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   margin-bottom: 20px;
   padding: 20px;
 }
@@ -1202,4 +1042,3 @@ onMounted(() => {
   }
 }
 </style>
-

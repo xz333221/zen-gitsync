@@ -14,10 +14,37 @@ export const useGitLogStore = defineStore('gitLog', () => {
     unstaged: [],
     untracked: []
   })
+  // 添加fileList状态用于保存porcelain格式的状态
+  const fileList = ref<{path: string, type: string}[]>([])
   const isLoadingLog = ref(false)
   const isLoadingStatus = ref(false)
   const isAddingFiles = ref(false)
+  const isCommiting = ref(false)
+  const isPushing = ref(false)
   const isResetting = ref(false)
+  
+  // 解析 git status --porcelain 输出，提取文件及类型
+  function parseStatusPorcelain(statusText: string) {
+    if (statusText === undefined) return
+    const lines = statusText.split('\n')
+    const files: {path: string, type: string}[] = []
+    for (const line of lines) {
+      // 匹配常见的 git status --porcelain 格式
+      // M: 修改, A: 新增, D: 删除, ??: 未跟踪
+      const match = line.match(/^([ MADRCU\?]{2})\s+(.+)$/)
+      if (match) {
+        let type = ''
+        const code = match[1].trim()
+        if (code === 'M' || code === 'MM' || code === 'AM' || code === 'RM') type = 'modified'
+        else if (code === 'A' || code === 'AA') type = 'added'
+        else if (code === 'D' || code === 'AD' || code === 'DA') type = 'deleted'
+        else if (code === '??') type = 'untracked'
+        else type = 'other'
+        files.push({ path: match[2], type })
+      }
+    }
+    fileList.value = files
+  }
   
   // 获取提交日志
   async function fetchLog() {
@@ -66,6 +93,9 @@ export const useGitLogStore = defineStore('gitLog', () => {
           untracked: data.status.untracked || []
         }
       }
+      
+      // 同时获取porcelain格式的状态
+      await fetchStatusPorcelain()
     } catch (error) {
       console.error('获取Git状态失败:', error)
       ElMessage({
@@ -74,6 +104,31 @@ export const useGitLogStore = defineStore('gitLog', () => {
       })
     } finally {
       isLoadingStatus.value = false
+    }
+  }
+  
+  // 获取Git状态 (porcelain格式)
+  async function fetchStatusPorcelain() {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      console.log('当前目录不是Git仓库，跳过加载Git状态')
+      return
+    }
+    
+    try {
+      const response = await fetch('/api/status_porcelain')
+      const data = await response.json()
+      if (data.status) {
+        parseStatusPorcelain(data.status)
+      }
+    } catch (error) {
+      console.error('获取Git状态(porcelain)失败:', error)
+      ElMessage({
+        message: `获取Git状态(porcelain)失败: ${(error as Error).message}`,
+        type: 'error'
+      })
+      // 清空文件列表
+      fileList.value = []
     }
   }
   
@@ -129,6 +184,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
     }
     
     try {
+      isCommiting.value = true
       const response = await fetch('/api/commit', {
         method: 'POST',
         headers: {
@@ -166,6 +222,8 @@ export const useGitLogStore = defineStore('gitLog', () => {
         type: 'error'
       })
       return false
+    } finally {
+      isCommiting.value = false
     }
   }
   
@@ -178,6 +236,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
     }
     
     try {
+      isPushing.value = true
       const response = await fetch('/api/push', {
         method: 'POST'
       })
@@ -188,6 +247,8 @@ export const useGitLogStore = defineStore('gitLog', () => {
           message: '推送成功',
           type: 'success'
         })
+        // 刷新状态
+        fetchStatus()
         
         // 刷新日志
         fetchLog()
@@ -206,58 +267,22 @@ export const useGitLogStore = defineStore('gitLog', () => {
         type: 'error'
       })
       return false
+    } finally {
+      isPushing.value = false
     }
   }
   
   // 暂存并提交
   async function addAndCommit(message: string, noVerify = false) {
-    try {
-      // 先添加到暂存区
-      const addResult = await addToStage()
-      if (!addResult) {
-        return false
-      }
-      
-      // 再提交
-      return await commitChanges(message, noVerify)
-    } catch (error) {
-      ElMessage({
-        message: `暂存并提交失败: ${(error as Error).message}`,
-        type: 'error'
-      })
-      return false
-    }
+    await addToStage()
+    await commitChanges(message, noVerify)
   }
   
   // 暂存、提交并推送
   async function addCommitAndPush(message: string, noVerify = false) {
-    try {
-      // 先添加并提交
-      const commitResult = await addAndCommit(message, noVerify)
-      if (!commitResult) {
-        return false
-      }
-      
-      // 再推送
-      const pushResult = await pushToRemote()
-      
-      // 推送成功后，确保刷新日志
-      if (pushResult) {
-        // 添加延迟以确保服务器处理完成
-        setTimeout(() => {
-          console.log('刷新提交历史...')
-          fetchLog()
-        }, 300)
-      }
-      
-      return pushResult
-    } catch (error) {
-      ElMessage({
-        message: `暂存、提交并推送失败: ${(error as Error).message}`,
-        type: 'error'
-      })
-      return false
-    }
+    await addToStage()
+    await commitChanges(message, noVerify)
+    await pushToRemote()
   }
   
   // 重置暂存区 (git reset HEAD)
@@ -443,14 +468,19 @@ export const useGitLogStore = defineStore('gitLog', () => {
     // 状态
     log,
     status,
+    fileList,
     isLoadingLog,
     isLoadingStatus,
     isAddingFiles,
     isResetting,
+    isCommiting,
+    isPushing,
     
     // 方法
     fetchLog,
     fetchStatus,
+    fetchStatusPorcelain,
+    parseStatusPorcelain,
     addToStage,
     commitChanges,
     pushToRemote,
