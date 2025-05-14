@@ -156,10 +156,10 @@ async function startUIServer() {
   // 获取Git用户配置信息
   app.get('/api/user-info', async (req, res) => {
     try {
-      // 获取用户名
-      const { stdout: userName } = await execGitCommand('git config user.name');
-      // 获取用户邮箱
-      const { stdout: userEmail } = await execGitCommand('git config user.email');
+      // 获取全局用户名
+      const { stdout: userName } = await execGitCommand('git config --global user.name');
+      // 获取全局用户邮箱
+      const { stdout: userEmail } = await execGitCommand('git config --global user.email');
       
       res.json({ 
         name: userName.trim(),
@@ -662,14 +662,32 @@ async function startUIServer() {
   // 清除Git用户配置
   app.post('/api/clear-user-config', async (req, res) => {
     try {
-      // 只清除本地仓库的配置，不影响全局配置
-      await execGitCommand('git config --unset user.name');
-      await execGitCommand('git config --unset user.email');
-      res.json({ success: true, message: '已清除Git用户配置' });
+      // 检查全局配置是否存在，如果存在才删除
+      try {
+        const { stdout: userName } = await execGitCommand('git config --global user.name');
+        if (userName.trim()) {
+          await execGitCommand('git config --global --unset user.name');
+        }
+      } catch (error) {
+        console.log('全局用户名配置检查失败，可能不存在:', error.message);
+        // 忽略错误继续执行
+      }
+      
+      try {
+        const { stdout: userEmail } = await execGitCommand('git config --global user.email');
+        if (userEmail.trim()) {
+          await execGitCommand('git config --global --unset user.email');
+        }
+      } catch (error) {
+        console.log('全局邮箱配置检查失败，可能不存在:', error.message);
+        // 忽略错误继续执行
+      }
+      
+      res.json({ success: true, message: '已清除全局Git用户配置' });
     } catch (error) {
       res.status(500).json({ 
         success: false, 
-        error: `清除Git用户配置失败: ${error.message}` 
+        error: `清除全局Git用户配置失败: ${error.message}` 
       });
     }
   });
@@ -685,13 +703,13 @@ async function startUIServer() {
         });
       }
       
-      await execGitCommand(`git config user.name "${name}"`);
-      await execGitCommand(`git config user.email "${email}"`);
-      res.json({ success: true, message: '已恢复Git用户配置' });
+      await execGitCommand(`git config --global user.name "${name}"`);
+      await execGitCommand(`git config --global user.email "${email}"`);
+      res.json({ success: true, message: '已更新全局Git用户配置' });
     } catch (error) {
       res.status(500).json({ 
         success: false, 
-        error: `恢复Git用户配置失败: ${error.message}` 
+        error: `更新全局Git用户配置失败: ${error.message}` 
       });
     }
   });

@@ -330,7 +330,7 @@ async function clearUserSettings() {
           :closable="false"
           show-icon
         >
-          这些设置只影响当前仓库的Git配置，不会修改全局配置。
+          这些设置将影响全局Git配置，对所有Git仓库生效。
         </el-alert>
       </el-form-item>
     </el-form>
