@@ -81,40 +81,6 @@ onMounted(async () => {
   }
 })
 
-// 处理提交成功事件
-function handleCommitSuccess() {
-  // 不再调用gitLogStore.fetchLog()，改用更新LogList组件
-  
-  // 刷新Git状态
-  if (gitStatusRef.value) {
-    gitStatusRef.value.refreshStatus()
-  }
-  
-  // 直接刷新提交历史
-  if (logListRef.value) {
-    logListRef.value.refreshLog()
-  }
-}
-
-// 处理推送成功事件
-function handlePushSuccess() {
-  // 不再调用gitLogStore.fetchLog()，改用更新LogList组件
-  gitStore.getCurrentBranch()
-  
-  // 直接刷新提交历史
-  if (logListRef.value) {
-    logListRef.value.refreshLog()
-  }
-}
-
-// 处理状态更新事件
-function handleStatusUpdate() {
-  // 刷新Git状态
-  if (gitStatusRef.value) {
-    gitStatusRef.value.refreshStatus()
-  }
-}
-
 const createBranchDialogVisible = ref(false)
 const newBranchName = ref('')
 const selectedBaseBranch = ref('')
@@ -203,11 +169,7 @@ async function handleBranchChange(branch: string) {
       
       <!-- 右侧提交表单和历史 -->
       <div class="right-panel" v-if="gitStore.isGitRepo">
-        <CommitForm 
-          @commit-success="handleCommitSuccess" 
-          @push-success="handlePushSuccess"
-          @status-update="handleStatusUpdate"
-        />
+        <CommitForm />
         <LogList ref="logListRef" />
       </div>
       <div class="right-panel" v-else>

@@ -7,11 +7,9 @@ import { useGitStore } from "../stores/gitStore";
 
 const gitLogStore = useGitLogStore();
 const gitStore = useGitStore();
-const emit = defineEmits(["commit-success", "push-success", "status-update"]);
 const commitMessage = ref("");
 const isPushing = ref(false);
 // 添加提交并推送的状态变量
-const isCommitAndPushing = ref(false);
 const placeholder = ref("输入提交信息...");
 // 添加默认提交信息变量
 const defaultCommitMessage = ref("");
@@ -501,7 +499,7 @@ async function addToStage() {
     const result = await gitLogStore.addToStage();
     if (result) {
       // 触发状态更新事件
-      emit("status-update");
+      gitLogStore.fetchStatus();
     }
   } catch (error) {
     ElMessage({
@@ -530,9 +528,8 @@ async function commitChanges() {
       clearCommitFields();
 
       // 触发成功事件
-      emit("commit-success");
-      // 触发状态更新事件
-      emit("status-update");
+      gitLogStore.fetchStatus();
+      gitLogStore.fetchLog();
     }
   } catch (error) {
     ElMessage({
@@ -551,9 +548,8 @@ async function pushToRemote() {
 
     if (result) {
       // 触发成功事件
-      emit("push-success");
-      // 触发状态更新事件
-      emit("status-update");
+      gitStore.getCurrentBranch();
+      gitLogStore.fetchLog();
     }
   } catch (error) {
     ElMessage({
@@ -582,9 +578,8 @@ async function addAndCommit() {
     clearCommitFields();
 
     // 触发成功事件
-    emit("commit-success");
-    // 触发状态更新事件
-    emit("status-update");
+    gitLogStore.fetchStatus();
+    gitLogStore.fetchLog();
   } catch (error) {
     ElMessage({
       message: `暂存并提交失败: ${(error as Error).message}`,
@@ -611,15 +606,8 @@ async function addCommitAndPush() {
     clearCommitFields();
 
     // 触发成功事件
-    emit("commit-success");
-
-    // 添加小延迟后再触发推送成功事件，确保提交历史能够刷新
-    setTimeout(() => {
-      emit("push-success");
-    }, 300);
-
-    // 触发状态更新事件
-    emit("status-update");
+    gitStore.getCurrentBranch();
+    gitLogStore.fetchLog();
 
   } catch (error) {
     ElMessage({
@@ -646,7 +634,7 @@ async function resetHead() {
     const result = await gitLogStore.resetHead();
     if (result) {
       // 触发状态更新事件
-      emit("status-update");
+      gitLogStore.fetchStatus();
     }
   } catch (error) {
     // 用户取消操作，不显示错误
@@ -675,7 +663,7 @@ async function resetToRemote() {
     const result = await gitLogStore.resetToRemote(gitStore.currentBranch);
     if (result) {
       // 触发状态更新事件
-      emit("status-update");
+      gitLogStore.fetchStatus();
     }
   } catch (error) {
     // 用户取消操作，不显示错误

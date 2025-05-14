@@ -376,94 +376,6 @@ export const useGitLogStore = defineStore('gitLog', () => {
     }
   }
   
-  // 暂存文件
-  async function stageFiles(files: string[]) {
-    // 检查是否是Git仓库
-    if (!gitStore.isGitRepo) {
-      ElMessage.warning('当前目录不是Git仓库')
-      return false
-    }
-    
-    try {
-      const response = await fetch('/api/stage', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ files })
-      })
-      
-      const result = await response.json()
-      if (result.success) {
-        ElMessage({
-          message: '暂存文件成功',
-          type: 'success'
-        })
-        
-        // 刷新状态
-        fetchStatus()
-        
-        return true
-      } else {
-        ElMessage({
-          message: `暂存文件失败: ${result.error}`,
-          type: 'error'
-        })
-        return false
-      }
-    } catch (error) {
-      ElMessage({
-        message: `暂存文件失败: ${(error as Error).message}`,
-        type: 'error'
-      })
-      return false
-    }
-  }
-  
-  // 取消暂存文件
-  async function unstageFiles(files: string[]) {
-    // 检查是否是Git仓库
-    if (!gitStore.isGitRepo) {
-      ElMessage.warning('当前目录不是Git仓库')
-      return false
-    }
-    
-    try {
-      const response = await fetch('/api/unstage', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ files })
-      })
-      
-      const result = await response.json()
-      if (result.success) {
-        ElMessage({
-          message: '取消暂存成功',
-          type: 'success'
-        })
-        
-        // 刷新状态
-        fetchStatus()
-        
-        return true
-      } else {
-        ElMessage({
-          message: `取消暂存失败: ${result.error}`,
-          type: 'error'
-        })
-        return false
-      }
-    } catch (error) {
-      ElMessage({
-        message: `取消暂存失败: ${(error as Error).message}`,
-        type: 'error'
-      })
-      return false
-    }
-  }
-  
   return {
     // 状态
     log,
@@ -487,8 +399,6 @@ export const useGitLogStore = defineStore('gitLog', () => {
     addAndCommit,
     addCommitAndPush,
     resetHead,
-    resetToRemote,
-    stageFiles,
-    unstageFiles
+    resetToRemote
   }
 }) 
