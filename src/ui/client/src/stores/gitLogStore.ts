@@ -69,8 +69,6 @@ export const useGitLogStore = defineStore('gitLog', () => {
       console.log('开始加载提交历史...')
       const response = await fetch('/api/log')
       const data = await response.json()
-      console.log('提交历史数据:', data)
-      console.log('提交历史数据类型:', typeof data)
       if (data && Array.isArray(data)) {
         log.value = data
       }
