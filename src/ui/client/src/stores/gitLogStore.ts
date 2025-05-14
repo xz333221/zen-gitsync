@@ -25,7 +25,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 解析 git status --porcelain 输出，提取文件及类型
   function parseStatusPorcelain(statusText: string) {
-    if (statusText === undefined) return
+    if (statusText === undefined || statusText === '') {
+      // 如果状态为空字符串，清空文件列表
+      fileList.value = []
+      return
+    }
+    
     const lines = statusText.split('\n')
     const files: {path: string, type: string}[] = []
     for (const line of lines) {
@@ -118,8 +123,11 @@ export const useGitLogStore = defineStore('gitLog', () => {
     try {
       const response = await fetch('/api/status_porcelain')
       const data = await response.json()
-      if (data.status) {
+      if (data.status !== undefined) {
         parseStatusPorcelain(data.status)
+      } else {
+        // 如果没有收到有效的 status 字段，清空文件列表
+        fileList.value = []
       }
     } catch (error) {
       console.error('获取Git状态(porcelain)失败:', error)
