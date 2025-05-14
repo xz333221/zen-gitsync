@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Setting, Plus, Upload, Refresh, Download, Edit } from "@element-plus/icons-vue";
+import { Setting, Edit } from "@element-plus/icons-vue";
 import { useGitLogStore } from "../stores/gitLogStore";
 import { useGitStore } from "../stores/gitStore";
 
@@ -615,35 +615,6 @@ async function addCommitAndPush() {
       type: "error",
     });
   } finally {
-  }
-}
-
-// 重置暂存区 (git reset HEAD)
-async function resetHead() {
-  try {
-    await ElMessageBox.confirm(
-      '确定要重置暂存区吗？这将取消所有已暂存的更改，但不会影响工作区的文件。',
-      '重置暂存区',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    );
-
-    const result = await gitLogStore.resetHead();
-    if (result) {
-      // 触发状态更新事件
-      gitLogStore.fetchStatus();
-    }
-  } catch (error) {
-    // 用户取消操作，不显示错误
-    if ((error as any) !== 'cancel') {
-      ElMessage({
-        message: `重置暂存区失败: ${(error as Error).message}`,
-        type: 'error'
-      });
-    }
   }
 }
 
