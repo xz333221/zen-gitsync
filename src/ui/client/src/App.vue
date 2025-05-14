@@ -4,7 +4,7 @@ import GitStatus from './components/GitStatus.vue'
 import CommitForm from './components/CommitForm.vue'
 import LogList from './components/LogList.vue'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Setting } from '@element-plus/icons-vue'
 import logo from './assets/logo.svg'
 import { useGitStore } from './stores/gitStore'
 
@@ -130,6 +130,40 @@ async function handleBranchChange(branch: string) {
     }
   }
 }
+
+// 添加用户设置相关状态
+const userSettingsDialogVisible = ref(false)
+const tempUserName = ref('')
+const tempUserEmail = ref('')
+
+// 打开用户设置对话框
+function openUserSettingsDialog() {
+  tempUserName.value = gitStore.userName
+  tempUserEmail.value = gitStore.userEmail
+  userSettingsDialogVisible.value = true
+}
+
+// 保存用户设置
+async function saveUserSettings() {
+  if (!tempUserName.value || !tempUserEmail.value) {
+    ElMessage.warning('用户名和邮箱不能为空')
+    return
+  }
+
+  const success = await gitStore.restoreUserConfig(tempUserName.value, tempUserEmail.value)
+  if (success) {
+    userSettingsDialogVisible.value = false
+  }
+}
+
+// 清除用户配置
+async function clearUserSettings() {
+  const success = await gitStore.clearUserConfig()
+  if (success) {
+    tempUserName.value = ''
+    tempUserEmail.value = ''
+  }
+}
 </script>
 
 <template>
@@ -143,6 +177,28 @@ async function handleBranchChange(branch: string) {
         <span class="user-label">用户:</span>
         <span class="user-name">{{ gitStore.userName }}</span>
         <span class="user-email">&lt;{{ gitStore.userEmail }}&gt;</span>
+        <el-button 
+          type="primary" 
+          size="small" 
+          @click="openUserSettingsDialog"
+          class="user-settings-btn"
+          circle
+        >
+          <el-icon><Setting /></el-icon>
+        </el-button>
+      </div>
+      <div id="user-info" v-else>
+        <span class="user-label">用户: </span>
+        <span class="user-warning">未配置</span>
+        <el-button 
+          type="primary" 
+          size="small" 
+          @click="openUserSettingsDialog"
+          class="user-settings-btn"
+          circle
+        >
+          <el-icon><Setting /></el-icon>
+        </el-button>
       </div>
       <!-- <div id="config-info">{{ configInfo }}</div> -->
     </div>
@@ -253,6 +309,49 @@ async function handleBranchChange(branch: string) {
       <!-- <span>Zen GitSync © 2024</span> -->
     </div>
   </footer>
+
+  <!-- 用户设置对话框 -->
+  <el-dialog
+    v-model="userSettingsDialogVisible"
+    title="Git用户设置"
+    width="30%"
+    destroy-on-close
+  >
+    <el-form>
+      <el-form-item label="用户名">
+        <el-input v-model="tempUserName" placeholder="请输入Git用户名" />
+      </el-form-item>
+      <el-form-item label="邮箱">
+        <el-input v-model="tempUserEmail" placeholder="请输入Git邮箱" />
+      </el-form-item>
+      <el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+        >
+          这些设置只影响当前仓库的Git配置，不会修改全局配置。
+        </el-alert>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button 
+          type="danger" 
+          @click="clearUserSettings"
+        >
+          清除配置
+        </el-button>
+        <el-button @click="userSettingsDialogVisible = false">取消</el-button>
+        <el-button 
+          type="primary" 
+          @click="saveUserSettings"
+        >
+          保存
+        </el-button>
+      </span>
+    </template>
+  </el-dialog>
 </template>
 
 <style>
@@ -467,6 +566,15 @@ h1 {
 .loading-text {
   font-size: 18px;
   color: #606266;
+}
+
+.user-settings-btn {
+  margin-left: 10px;
+}
+
+.user-warning {
+  color: #E6A23C;
+  font-weight: bold;
 }
 </style>
 

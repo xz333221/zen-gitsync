@@ -659,6 +659,43 @@ async function startUIServer() {
     }
   })
   
+  // 清除Git用户配置
+  app.post('/api/clear-user-config', async (req, res) => {
+    try {
+      // 只清除本地仓库的配置，不影响全局配置
+      await execGitCommand('git config --unset user.name');
+      await execGitCommand('git config --unset user.email');
+      res.json({ success: true, message: '已清除Git用户配置' });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: `清除Git用户配置失败: ${error.message}` 
+      });
+    }
+  });
+  
+  // 恢复Git用户配置
+  app.post('/api/restore-user-config', async (req, res) => {
+    try {
+      const { name, email } = req.body;
+      if (!name || !email) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '需要提供用户名和邮箱' 
+        });
+      }
+      
+      await execGitCommand(`git config user.name "${name}"`);
+      await execGitCommand(`git config user.email "${email}"`);
+      res.json({ success: true, message: '已恢复Git用户配置' });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: `恢复Git用户配置失败: ${error.message}` 
+      });
+    }
+  });
+  
   // Socket.io 实时更新
   // io.on('connection', (socket) => {
   //   console.log('客户端已连接');

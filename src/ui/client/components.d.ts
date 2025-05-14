@@ -9,6 +9,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     CommitForm: typeof import('./src/components/CommitForm.vue')['default']
+    ElAlert: typeof import('element-plus/es')['ElAlert']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCard: typeof import('element-plus/es')['ElCard']
     ElDialog: typeof import('element-plus/es')['ElDialog']
@@ -23,6 +24,7 @@ declare module 'vue' {
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     GitStatus: typeof import('./src/components/GitStatus.vue')['default']
+    Header: typeof import('./src/components/Header.vue')['default']
     LogList: typeof import('./src/components/LogList.vue')['default']
   }
   export interface ComponentCustomProperties {

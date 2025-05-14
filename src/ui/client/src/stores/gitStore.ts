@@ -205,6 +205,76 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 清除Git用户配置
+  async function clearUserConfig() {
+    try {
+      const response = await fetch('/api/clear-user-config', {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        // 清空本地状态
+        userName.value = '';
+        userEmail.value = '';
+        ElMessage({
+          message: '已清除Git用户配置',
+          type: 'success'
+        });
+        return true;
+      } else {
+        ElMessage({
+          message: `清除配置失败: ${result.error}`,
+          type: 'error'
+        });
+        return false;
+      }
+    } catch (error) {
+      ElMessage({
+        message: `清除配置失败: ${(error as Error).message}`,
+        type: 'error'
+      });
+      return false;
+    }
+  }
+
+  // 恢复Git用户配置
+  async function restoreUserConfig(name: string, email: string) {
+    try {
+      const response = await fetch('/api/restore-user-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name, email })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        // 更新本地状态
+        userName.value = name;
+        userEmail.value = email;
+        ElMessage({
+          message: '已恢复Git用户配置',
+          type: 'success'
+        });
+        return true;
+      } else {
+        ElMessage({
+          message: `恢复配置失败: ${result.error}`,
+          type: 'error'
+        });
+        return false;
+      }
+    } catch (error) {
+      ElMessage({
+        message: `恢复配置失败: ${(error as Error).message}`,
+        type: 'error'
+      });
+      return false;
+    }
+  }
+
   return {
     // 状态
     currentBranch,
@@ -224,6 +294,8 @@ export const useGitStore = defineStore('git', () => {
     changeBranch,
     getUserInfo,
     createBranch,
-    loadInitialData
+    loadInitialData,
+    clearUserConfig,
+    restoreUserConfig
   }
 }) 
