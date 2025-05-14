@@ -225,8 +225,33 @@ async function clearUserSettings() {
       
       <!-- 右侧提交表单和历史 -->
       <div class="right-panel" v-if="gitStore.isGitRepo">
-        <CommitForm />
-        <LogList ref="logListRef" />
+        <!-- 当用户未配置时显示配置提示 -->
+        <div v-if="!gitStore.userName || !gitStore.userEmail" class="card">
+          <h2>Git用户未配置</h2>
+          <p>请先配置Git用户信息才能进行提交操作。</p>
+          <div class="tips">
+            <h3>您可以通过以下方式配置：</h3>
+            <ol>
+              <li>点击右上角的设置按钮，配置用户名和邮箱</li>
+              <li>或者使用命令行配置：</li>
+              <div class="code-block">
+                git config --global user.name "您的用户名"<br>
+                git config --global user.email "您的邮箱"
+              </div>
+            </ol>
+            <el-button 
+              type="primary" 
+              @click="openUserSettingsDialog"
+            >
+              立即配置
+            </el-button>
+          </div>
+        </div>
+        <!-- 用户已配置显示提交表单 -->
+        <template v-else>
+          <CommitForm />
+          <LogList ref="logListRef" />
+        </template>
       </div>
       <div class="right-panel" v-else>
         <div class="card">
