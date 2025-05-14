@@ -13,6 +13,18 @@ export const useGitStore = defineStore('git', () => {
   const isGitRepo = ref(false) // 当前目录是否是Git仓库
   const lastCheckedTime = ref(0) // 上次检查Git仓库状态的时间戳
   
+  // 添加重置方法
+  function $reset() {
+    currentBranch.value = ''
+    allBranches.value = []
+    userName.value = ''
+    userEmail.value = ''
+    isChangingBranch.value = false
+    isCreatingBranch.value = false
+    isGitRepo.value = false
+    lastCheckedTime.value = 0
+  }
+
   // 检查当前目录是否是Git仓库
   async function checkGitRepo() {
     // 如果距离上次检查不到1秒，直接返回缓存的结果
@@ -205,6 +217,7 @@ export const useGitStore = defineStore('git', () => {
     lastCheckedTime,
     
     // 方法
+    $reset,
     checkGitRepo,
     getCurrentBranch,
     getAllBranches,
