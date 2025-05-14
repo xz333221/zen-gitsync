@@ -71,8 +71,8 @@ export const useGitLogStore = defineStore('gitLog', () => {
       const data = await response.json()
       console.log('提交历史数据:', data)
       console.log('提交历史数据类型:', typeof data)
-      if (data.log && Array.isArray(data.log)) {
-        log.value = data.log
+      if (data && Array.isArray(data)) {
+        log.value = data
       }
       console.log(`提交历史加载完成，共 ${log.value.length} 条记录`)
     } catch (error) {
