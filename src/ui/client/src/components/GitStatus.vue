@@ -482,18 +482,20 @@ defineExpose({
         </div>
         
         <!-- 目录内容列表 -->
-        <ul class="directory-items">
-          <li 
-            v-for="item in directoryItems" 
-            :key="item.path"
-            :class="['directory-item', item.type]"
-            @click="selectDirectoryItem(item)"
-          >
-            <el-icon v-if="item.type === 'directory'"><Folder /></el-icon>
-            <el-icon v-else><Document /></el-icon>
-            <span>{{ item.name }}</span>
-          </li>
-        </ul>
+        <div class="directory-items-container">
+          <ul class="directory-items">
+            <li 
+              v-for="item in directoryItems" 
+              :key="item.path"
+              :class="['directory-item', item.type]"
+              @click="selectDirectoryItem(item)"
+            >
+              <el-icon v-if="item.type === 'directory'"><Folder /></el-icon>
+              <el-icon v-else><Document /></el-icon>
+              <span>{{ item.name }}</span>
+            </li>
+          </ul>
+        </div>
       </div>
     </el-dialog>
     
@@ -698,14 +700,25 @@ defineExpose({
 
 .directory-browser {
   padding: 10px;
-  max-height: 400px;
-  overflow-y: auto;
+  height: 400px;
+  display: flex;
+  flex-direction: column;
 }
 
 .browser-nav {
   margin-bottom: 10px;
   display: flex;
   justify-content: space-between;
+  position: sticky;
+  top: 0;
+  background-color: #fff;
+  z-index: 1;
+  padding: 10px 0;
+}
+
+.directory-items-container {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .directory-items {

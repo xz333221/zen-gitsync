@@ -187,6 +187,11 @@ export const useGitLogStore = defineStore('gitLog', () => {
     }
   }
   
+  // 添加延时函数
+  function delay(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+  
   // 提交更改
   async function commitChanges(message: string, noVerify = false) {
     // 检查是否是Git仓库
@@ -286,15 +291,54 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 暂存并提交
   async function addAndCommit(message: string, noVerify = false) {
-    await addToStage()
-    await commitChanges(message, noVerify)
+    const addResult = await addToStage()
+    if (!addResult) return false
+    
+    // 添加1秒延时
+    await delay(1000)
+    
+    return await commitChanges(message, noVerify)
   }
   
   // 暂存、提交并推送
   async function addCommitAndPush(message: string, noVerify = false) {
-    await addToStage()
-    await commitChanges(message, noVerify)
-    await pushToRemote()
+    try {
+      const addResult = await addToStage()
+      if (!addResult) return false
+      
+      // 添加1秒延时
+      await delay(1000)
+      
+      const commitResult = await commitChanges(message, noVerify)
+      if (!commitResult) return false
+      
+      // 添加1秒延时
+      await delay(1000)
+      
+      return await pushToRemote()
+    } catch (error) {
+      // 如果发生错误，尝试删除 index.lock 文件
+      try {
+        const response = await fetch('/api/remove-lock', {
+          method: 'POST'
+        })
+        const result = await response.json()
+        if (result.success) {
+          ElMessage({
+            message: '已清理锁定文件，请重试操作',
+            type: 'warning'
+          })
+        }
+      } catch (e) {
+        console.error('清理锁定文件失败:', e)
+      }
+      
+      ElMessage({
+        message: `操作失败: ${(error as Error).message}`,
+        type: 'error'
+      })
+      return false
+    }
   }
   
   // 重置暂存区 (git reset HEAD)

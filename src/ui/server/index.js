@@ -630,6 +630,35 @@ async function startUIServer() {
     }
   });
   
+  // 添加清理Git锁定文件的接口
+  app.post('/api/remove-lock', async (req, res) => {
+    try {
+      const gitDir = path.join(process.cwd(), '.git')
+      const indexLockFile = path.join(gitDir, 'index.lock')
+      
+      // 检查文件是否存在
+      try {
+        await fs.access(indexLockFile)
+        // 如果文件存在，尝试删除它
+        await fs.unlink(indexLockFile)
+        res.json({ success: true, message: '已清理锁定文件' })
+      } catch (error) {
+        // 如果文件不存在，也返回成功
+        if (error.code === 'ENOENT') {
+          res.json({ success: true, message: '没有发现锁定文件' })
+        } else {
+          throw error
+        }
+      }
+    } catch (error) {
+      console.error('清理锁定文件失败:', error)
+      res.status(500).json({ 
+        success: false, 
+        error: `清理锁定文件失败: ${error.message}` 
+      })
+    }
+  })
+  
   // Socket.io 实时更新
   // io.on('connection', (socket) => {
   //   console.log('客户端已连接');
