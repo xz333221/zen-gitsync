@@ -626,45 +626,63 @@ h1 {
   left: 0;
   right: 0;
   z-index: 100;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
 }
 
 .branch-info {
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 .branch-wrapper {
   display: flex;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.15);
   border-radius: 4px;
-  padding: 5px 10px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s;
+}
+
+.branch-wrapper:hover {
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .branch-label {
   font-weight: bold;
   margin-right: 10px;
-  color: #e0e0e0;
+  color: #ffffff;
 }
 
 .branch-select {
-  width: 180px;
+  width: 200px;
   margin-right: 10px;
 }
 
 .create-branch-btn {
   background-color: #2ea44f;
   border-color: #2ea44f;
-  transition: background-color 0.3s;
+  transition: all 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .create-branch-btn:hover {
   background-color: #3bbc63;
   border-color: #3bbc63;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .footer-right {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 </style>

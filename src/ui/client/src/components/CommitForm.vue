@@ -707,154 +707,176 @@ onMounted(() => {
   <div class="card">
     <h2>提交更改</h2>
 
-    <div class="commit-options">
-      <div class="options-row">
-        <div class="commit-mode-toggle">
-          <el-switch v-model="isStandardCommit" active-text="标准化提交" inactive-text="普通提交" />
-        </div>
-
-        <div class="no-verify-toggle">
-          <el-tooltip content="跳过 Git 钩子检查 (--no-verify)" placement="top">
-            <el-switch v-model="skipHooks" active-text="跳过钩子 (--no-verify)" />
-          </el-tooltip>
-        </div>
+    <div class="layout-container">
+      <!-- 如果没有配置Git用户信息，显示提示 -->
+      <div v-if="gitStore.userName === '' || gitStore.userEmail === ''" class="git-config-warning">
+        <el-alert
+          title="Git用户信息未配置"
+          type="warning"
+          :closable="false"
+          show-icon
+        >
+          <p>您需要配置Git用户名和邮箱才能提交代码。请使用以下命令配置：</p>
+          <pre class="config-command">git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"</pre>
+        </el-alert>
       </div>
-    </div>
-
-    <!-- 普通提交表单 -->
-    <div v-if="!isStandardCommit" class="commit-form">
-      <el-input v-model="commitMessage" :placeholder="placeholder" clearable />
-    </div>
-
-    <!-- 标准化提交表单 -->
-    <div v-else class="standard-commit-form">
-      <div class="standard-commit-header">
-        <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
-          <el-option v-for="item in commitTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-
-        <div class="scope-container">
-          <el-input v-model="commitScope" placeholder="作用域（可选）" class="scope-input" clearable />
-          <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
-            @click="openScopeSettings">
-          </el-button>
-        </div>
-
-        <div class="description-container">
-          <el-input v-model="commitDescription" placeholder="简短描述（必填）" class="description-input" clearable />
-          <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
-            @click="openDescriptionSettings">
-          </el-button>
-        </div>
-      </div>
-
-      <el-input v-model="commitBody" type="textarea" :rows="4" placeholder="正文（可选）：详细描述本次提交的内容和原因" class="body-input"
-        clearable />
-
-      <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
-
-      <div class="preview-section">
-        <div class="preview-title">提交信息预览：</div>
-        <pre class="preview-content">{{ finalCommitMessage }}</pre>
-
-        <div class="preview-title" style="margin-top: 10px;">Git命令预览：</div>
-        <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
-      </div>
-    </div>
-
-    <div class="git-actions">
-      <el-divider content-position="center">操作</el-divider>
       
-      <div class="action-groups">
-        <div class="action-group">
-          <div class="group-title">基础操作</div>
-          <div class="group-buttons">
-            <el-button 
-              type="primary" 
-              @click="addToStage" 
-              :loading="gitLogStore.isAddingFiles" 
-              :icon="Plus"
-              class="action-button"
-            >
-              暂存更改
-              <span class="command-text">git add .</span>
-            </el-button>
+      <!-- 正常的提交区域，仅在Git用户信息已配置时显示 -->
+      <template v-else>
+        <!-- 左侧：提交表单 -->
+        <div class="commit-section">
+          <div class="commit-options">
+            <div class="options-row">
+              <div class="commit-mode-toggle">
+                <el-switch v-model="isStandardCommit" active-text="标准化提交" inactive-text="普通提交" />
+              </div>
 
-            <el-button 
-              type="primary" 
-              @click="commitChanges" 
-              :loading="gitLogStore.isLoadingStatus"
-              class="action-button"
-            >
-              提交
-              <span class="command-text">git commit</span>
-            </el-button>
+              <div class="no-verify-toggle">
+                <el-tooltip content="跳过 Git 钩子检查 (--no-verify)" placement="top">
+                  <el-switch v-model="skipHooks" active-text="跳过钩子 (--no-verify)" />
+                </el-tooltip>
+              </div>
+            </div>
+          </div>
 
-            <el-button 
-              type="success" 
-              @click="pushToRemote" 
-              :icon="Upload" 
-              :loading="gitLogStore.isPushing"
-              class="action-button"
-            >
-              推送
-              <span class="command-text">git push</span>
-            </el-button>
+          <!-- 普通提交表单 -->
+          <div v-if="!isStandardCommit" class="commit-form">
+            <el-input v-model="commitMessage" :placeholder="placeholder" clearable />
+          </div>
+
+          <!-- 标准化提交表单 -->
+          <div v-else class="standard-commit-form">
+            <div class="standard-commit-header">
+              <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
+                <el-option v-for="item in commitTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+
+              <div class="scope-container">
+                <el-input v-model="commitScope" placeholder="作用域（可选）" class="scope-input" clearable />
+                <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
+                  @click="openScopeSettings">
+                </el-button>
+              </div>
+
+              <div class="description-container">
+                <el-input v-model="commitDescription" placeholder="简短描述（必填）" class="description-input" clearable />
+                <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
+                  @click="openDescriptionSettings">
+                </el-button>
+              </div>
+            </div>
+
+            <el-input v-model="commitBody" type="textarea" :rows="4" placeholder="正文（可选）：详细描述本次提交的内容和原因" class="body-input"
+              clearable />
+
+            <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
+
+            <div class="preview-section">
+              <div class="preview-title">提交信息预览：</div>
+              <pre class="preview-content">{{ finalCommitMessage }}</pre>
+
+              <div class="preview-title" style="margin-top: 10px;">Git命令预览：</div>
+              <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
+            </div>
           </div>
         </div>
 
-        <div class="action-group">
-          <div class="group-title">组合操作</div>
-          <div class="group-buttons">
-            <el-button 
-              type="warning" 
-              @click="addAndCommit" 
-              :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
-              class="action-button"
-            >
-              暂存并提交
-              <span class="command-text">git add + commit</span>
-            </el-button>
+        <!-- 右侧：操作区域 -->
+        <div class="actions-section">
+          <h3>Git 操作</h3>
+          <div class="action-groups">
+            <div class="action-group">
+              <div class="group-title">基础操作</div>
+              <div class="group-buttons">
+                <el-button 
+                  type="primary" 
+                  @click="addToStage" 
+                  :loading="gitLogStore.isAddingFiles" 
+                  :icon="Plus"
+                  class="action-button"
+                >
+                  暂存更改
+                  <span class="command-text">git add .</span>
+                </el-button>
 
-            <el-button 
-              type="danger" 
-              @click="addCommitAndPush" 
-              :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
-              class="action-button"
-            >
-              一键推送
-              <span class="command-text command-text-long">git add + commit + push</span>
-            </el-button>
+                <el-button 
+                  type="primary" 
+                  @click="commitChanges" 
+                  :loading="gitLogStore.isLoadingStatus"
+                  class="action-button"
+                >
+                  提交
+                  <span class="command-text">git commit</span>
+                </el-button>
+
+                <el-button 
+                  type="success" 
+                  @click="pushToRemote" 
+                  :icon="Upload" 
+                  :loading="gitLogStore.isPushing"
+                  class="action-button"
+                >
+                  推送
+                  <span class="command-text">git push</span>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="action-group">
+              <div class="group-title">组合操作</div>
+              <div class="group-buttons">
+                <el-button 
+                  type="warning" 
+                  @click="addAndCommit" 
+                  :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
+                  class="action-button"
+                >
+                  暂存并提交
+                  <span class="command-text">git add + commit</span>
+                </el-button>
+
+                <el-button 
+                  type="danger" 
+                  @click="addCommitAndPush" 
+                  :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
+                  class="action-button"
+                >
+                  一键推送
+                  <span class="command-text command-text-long">git add + commit + push</span>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="action-group">
+              <div class="group-title">重置操作</div>
+              <div class="group-buttons">
+                <el-button 
+                  type="info" 
+                  @click="resetHead" 
+                  :loading="gitLogStore.isResetting" 
+                  :icon="Refresh"
+                  class="action-button"
+                >
+                  重置暂存区
+                  <span class="command-text">git reset HEAD</span>
+                </el-button>
+
+                <el-button 
+                  type="info" 
+                  @click="resetToRemote" 
+                  :loading="gitLogStore.isResetting" 
+                  :icon="Download"
+                  class="action-button"
+                >
+                  重置到远程
+                  <span class="command-text command-text-long">git reset --hard origin/branch</span>
+                </el-button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div class="action-group">
-          <div class="group-title">重置操作</div>
-          <div class="group-buttons">
-            <el-button 
-              type="info" 
-              @click="resetHead" 
-              :loading="gitLogStore.isResetting" 
-              :icon="Refresh"
-              class="action-button"
-            >
-              重置暂存区
-              <span class="command-text">git reset HEAD</span>
-            </el-button>
-
-            <el-button 
-              type="info" 
-              @click="resetToRemote" 
-              :loading="gitLogStore.isResetting" 
-              :icon="Download"
-              class="action-button"
-            >
-              重置到远程
-              <span class="command-text command-text-long">git reset --hard origin/branch</span>
-            </el-button>
-          </div>
-        </div>
-      </div>
+      </template>
     </div>
 
     <!-- 简短描述设置弹窗 -->
@@ -931,6 +953,28 @@ onMounted(() => {
   padding: 20px;
 }
 
+.layout-container {
+  display: flex;
+  gap: 20px;
+}
+
+.commit-section {
+  flex: 1;
+  min-width: 0; /* 防止子元素撑开 */
+}
+
+.actions-section {
+  width: 300px;
+  flex-shrink: 0;
+}
+
+.actions-section h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #dcdfe6;
+}
+
 .commit-form {
   display: flex;
   margin-bottom: 15px;
@@ -944,7 +988,7 @@ onMounted(() => {
 .action-groups {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 15px;
 }
 
 .action-group {
@@ -972,14 +1016,14 @@ onMounted(() => {
 
 .group-buttons {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 10px;
 }
 
 .action-button {
   position: relative;
   padding-bottom: 20px;
-  min-width: 120px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1022,21 +1066,20 @@ onMounted(() => {
 
 .standard-commit-header {
   display: flex;
+  flex-direction: column;
   gap: 10px;
   width: 100%;
 }
 
 .type-select {
-  width: 120px;
-  flex-shrink: 0;
+  width: 100%;
 }
 
 .scope-container {
   display: flex;
   align-items: center;
   gap: 5px;
-  flex-grow: 0;
-  width: 200px;
+  width: 100%;
 }
 
 .scope-input {
@@ -1047,12 +1090,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 5px;
-  flex-grow: 1;
+  width: 100%;
 }
 
 .description-input {
   flex-grow: 1;
-  min-width: 200px;
 }
 
 .settings-button {
@@ -1145,12 +1187,37 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
-  .group-buttons {
+  .layout-container {
     flex-direction: column;
+  }
+
+  .actions-section {
+    width: 100%;
+  }
+  
+  .group-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
   }
   
   .action-button {
-    width: 100%;
+    flex: 1;
+    min-width: 120px;
   }
+}
+
+.git-config-warning {
+  width: 100%;
+}
+
+.config-command {
+  background-color: #2d2d2d;
+  color: #f8f8f2;
+  font-family: 'Courier New', Courier, monospace;
+  padding: 10px;
+  border-radius:
+  4px;
+  margin-top: 10px;
+  white-space: pre;
 }
 </style>
