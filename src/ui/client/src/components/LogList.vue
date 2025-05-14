@@ -39,6 +39,9 @@ const minScale = 0.5
 const maxScale = 1.5
 const scaleStep = 0.1
 
+// 添加日志被刷新的提示状态
+const logRefreshed = ref(false)
+
 // 加载提交历史
 async function loadLog(all = false) {
   // 从gitStore获取仓库状态
@@ -94,6 +97,11 @@ async function loadLog(all = false) {
     logs.value = [...logsData]
     
     console.log(`logsData长度: ${logsData.length}`) // 添加调试日志
+    
+    // 设置刷新提示状态
+    logRefreshed.value = true
+    // 2秒后隐藏提示
+    setTimeout(() => { logRefreshed.value = false }, 2000)
     
     // 加载完数据后渲染图表
     if (showGraphView.value) {
@@ -365,11 +373,17 @@ function fitGraphToContainer() {
           size="small" 
           @click="refreshLog()" 
           :loading="isLoading"
+          :class="{ 'refresh-button-animated': logRefreshed }"
         />
       </div>
     </div>
     <div v-if="errorMessage">{{ errorMessage }}</div>
     <div v-else>
+      <!-- 添加刷新提示 -->
+      <div v-if="logRefreshed" class="refresh-notification">
+        提交历史已刷新
+      </div>
+      
       <!-- 图表视图 -->
       <div v-if="showGraphView" class="graph-view">
         <div class="commit-count" v-if="logsData.length > 0">
@@ -527,6 +541,34 @@ function fitGraphToContainer() {
 .scale-info {
   font-size: 14px;
   color: #606266;
+}
+
+.refresh-button-animated {
+  animation: pulse 1s;
+}
+
+.refresh-notification {
+  background-color: #f0f9eb;
+  color: #67c23a;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  text-align: center;
+  font-size: 14px;
+  border-left: 4px solid #67c23a;
+  animation: fadeOut 2s forwards;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
 }
 </style>
 

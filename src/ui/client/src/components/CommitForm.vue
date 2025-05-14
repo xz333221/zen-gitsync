@@ -664,6 +664,8 @@ async function resetToRemote() {
     if (result) {
       // 触发状态更新事件
       gitLogStore.fetchStatus();
+      // 更新提交历史
+      gitLogStore.fetchLog();
     }
   } catch (error) {
     // 用户取消操作，不显示错误
