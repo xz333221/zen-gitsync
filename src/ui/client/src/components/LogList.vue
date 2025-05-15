@@ -551,6 +551,11 @@ function formatCommitMessage(message: string) {
 
 <template>
   <div class="card">
+    <!-- 添加刷新提示，移到最外层 -->
+    <div v-if="logRefreshed" class="refresh-notification">
+      提交历史已刷新
+    </div>
+    
     <div class="log-header">
       <h2>提交历史</h2>
       <div class="log-actions">
@@ -588,11 +593,6 @@ function formatCommitMessage(message: string) {
     </div>
     <div v-if="errorMessage">{{ errorMessage }}</div>
     <div v-else>
-      <!-- 添加刷新提示 -->
-      <div v-if="logRefreshed" class="refresh-notification">
-        提交历史已刷新
-      </div>
-      
       <!-- 图表视图 -->
       <div v-if="showGraphView" class="graph-view">
         <div class="commit-count" v-if="logsData.length > 0">
@@ -905,13 +905,18 @@ function formatCommitMessage(message: string) {
 .refresh-notification {
   background-color: #f0f9eb;
   color: #67c23a;
-  padding: 8px;
-  border-radius: 4px;
-  margin-bottom: 10px;
-  text-align: center;
+  padding: 10px 15px;
+  border-radius: 8px;
   font-size: 14px;
   border-left: 4px solid #67c23a;
   animation: fadeOut 2s forwards;
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-width: 300px;
+  text-align: center;
 }
 
 @keyframes pulse {
@@ -921,8 +926,9 @@ function formatCommitMessage(message: string) {
 }
 
 @keyframes fadeOut {
-  0% { opacity: 1; }
-  70% { opacity: 1; }
+  0% { opacity: 0; transform: translateY(-20px); }
+  20% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
   100% { opacity: 0; }
 }
 
