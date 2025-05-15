@@ -43,10 +43,30 @@ export const useGitLogStore = defineStore('gitLog', () => {
     
     // 创建新连接
     try {
-      socket = io(window.location.origin, {
+      // 修正Socket.IO连接URL，使用固定的后端服务器端口3000
+      const backendUrl = window.location.hostname === 'localhost' ? 
+        'http://localhost:3000' : window.location.origin
+      
+      console.log('尝试连接Socket.IO服务器:', backendUrl)
+      
+      socket = io(backendUrl, {
         reconnectionDelayMax: 10000,
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000, // 初始重连延迟1秒
+        timeout: 20000, // 连接超时时间
+        autoConnect: true, // 自动连接
+        forceNew: true, // 强制创建新连接
+        transports: ['websocket', 'polling'] // 优先使用WebSocket
       })
       
+      // 检查socket是否成功创建
+      if (!socket) {
+        console.error('Socket.IO初始化失败: socket为null')
+        return
+      }
+      console.log('Socket.IO初始化成功，socket ID:', socket.id || '未连接')
+
       // 监听连接事件
       socket.on('connect', () => {
         console.log('成功连接到Socket.IO服务器')
@@ -92,6 +112,43 @@ export const useGitLogStore = defineStore('gitLog', () => {
       socket.on('monitoring_status', (data) => {
         console.log('文件监控状态:', data.active ? '已启动' : '已停止')
       })
+      
+      // 添加额外的连接问题诊断
+      socket.on('connect_error', (error) => {
+        console.error('Socket连接错误:', error.message)
+      })
+      
+      socket.on('connect_timeout', () => {
+        console.error('Socket连接超时')
+      })
+      
+      socket.on('reconnect', (attemptNumber) => {
+        console.log(`Socket重连成功，尝试次数: ${attemptNumber}`)
+        
+        // 重连后检查自动更新状态
+        if (autoUpdateEnabled.value) {
+          console.log('重连后重新发送start_monitoring请求')
+          socket.emit('start_monitoring')
+        }
+      })
+      
+      socket.on('reconnect_attempt', (attemptNumber) => {
+        console.log(`Socket尝试重连，第 ${attemptNumber} 次尝试`)
+      })
+      
+      socket.on('reconnect_error', (error) => {
+        console.error('Socket重连错误:', error.message)
+      })
+      
+      socket.on('reconnect_failed', () => {
+        console.error('Socket重连失败，已达到最大重试次数')
+      })
+      
+      // 手动尝试连接
+      if (socket && !socket.connected) {
+        console.log('Socket未连接，尝试手动连接...')
+        socket.connect()
+      }
     } catch (error) {
       console.error('Socket.IO连接初始化失败:', error)
     }
@@ -100,19 +157,39 @@ export const useGitLogStore = defineStore('gitLog', () => {
   // 切换自动更新状态
   function toggleAutoUpdate() {
     // autoUpdateEnabled.value = !autoUpdateEnabled.value
+    console.log('toggleAutoUpdate调用，当前值:', autoUpdateEnabled.value)
     
-    if (!socket) return
-    
-    if (autoUpdateEnabled.value) {
-      socket?.emit('start_monitoring')
-      ElMessage.success('自动更新已启用')
-    } else {
-      socket?.emit('stop_monitoring')
-      ElMessage.info('自动更新已禁用')
+    if (!socket) {
+      console.error('无法切换自动更新状态: socket连接不存在')
+      ElMessage.error('无法连接到服务器，自动更新可能不会生效')
+      
+      // 尝试重新初始化socket连接
+      console.log('尝试重新建立socket连接...')
+      initSocketConnection()
+      
+      // 即使socket可能不存在，也保存设置
+      localStorage.setItem('zen-gitsync-auto-update', autoUpdateEnabled.value.toString())
+      return
     }
     
-    // 保存设置到localStorage
-    localStorage.setItem('zen-gitsync-auto-update', autoUpdateEnabled.value.toString())
+    try {
+      if (autoUpdateEnabled.value) {
+        console.log('发送start_monitoring命令...')
+        socket.emit('start_monitoring')
+        ElMessage.success('自动更新已启用')
+      } else {
+        console.log('发送stop_monitoring命令...')
+        socket.emit('stop_monitoring')
+        ElMessage.info('自动更新已禁用')
+      }
+      
+      // 保存设置到localStorage
+      localStorage.setItem('zen-gitsync-auto-update', autoUpdateEnabled.value.toString())
+      console.log('已保存自动更新设置到本地存储:', autoUpdateEnabled.value)
+    } catch (error) {
+      console.error('切换自动更新状态时出错:', error)
+      ElMessage.error(`切换自动更新失败: ${(error as Error).message}`)
+    }
   }
   
   // 解析 git status --porcelain 输出，提取文件及类型
@@ -242,6 +319,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 获取Git状态 (porcelain格式)
   async function fetchStatusPorcelain() {
+    console.log('开始获取Git状态(porcelain格式)...')
     // 检查是否是Git仓库
     if (!gitStore.isGitRepo) {
       console.log('当前目录不是Git仓库，跳过加载Git状态')

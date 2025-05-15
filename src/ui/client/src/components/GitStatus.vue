@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
 import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight, Check, Close } from '@element-plus/icons-vue'
@@ -389,6 +389,19 @@ onMounted(() => {
   loadStatus()
 })
 
+// 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
+watch(() => gitLogStore.autoUpdateEnabled, (newValue) => {
+  // 调用store中的方法来实现服务器通信功能
+  gitLogStore.toggleAutoUpdate()
+})
+
+// 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
+watch(() => gitLogStore.autoUpdateEnabled, (newValue, oldValue) => {
+  console.log(`自动更新状态变更: ${oldValue} -> ${newValue}`)
+  // 调用store中的方法来实现服务器通信功能
+  gitLogStore.toggleAutoUpdate()
+}, { immediate: false })
+
 // onUnmounted(() => {
 //   socket.disconnect()
 // })
@@ -404,14 +417,12 @@ defineExpose({
       <h2>Git 状态</h2>
       <div class="header-actions">
         <el-tooltip 
-          :content="gitLogStore.autoUpdateEnabled ? '禁用自动更新' : '启用自动更新'" 
+          :content="gitLogStore.autoUpdateEnabled ? '禁用自动更新文件状态' : '启用自动更新文件状态'" 
           placement="top" 
           :hide-after="1000"
         >
-        
           <el-switch 
             v-model="gitLogStore.autoUpdateEnabled" 
-            @change="gitLogStore.toggleAutoUpdate" 
             style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 10px;"
             inline-prompt
             :active-icon="Check"
@@ -419,14 +430,16 @@ defineExpose({
             class="auto-update-switch"
           />
         </el-tooltip>
-        <el-button 
-          type="primary" 
-          :icon="Refresh" 
-          circle 
-          size="small" 
-          @click="refreshStatus" 
-          :loading="isRefreshing"
-        />
+        <el-tooltip content="刷新状态" placement="top" :hide-after="1000">
+          <el-button 
+            type="primary" 
+            :icon="Refresh" 
+            circle 
+            size="small" 
+            @click="refreshStatus" 
+            :loading="isRefreshing"
+          />
+        </el-tooltip>
       </div>
     </div>
     
