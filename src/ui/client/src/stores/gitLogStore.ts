@@ -127,7 +127,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
         // 重连后检查自动更新状态
         if (autoUpdateEnabled.value) {
           console.log('重连后重新发送start_monitoring请求')
-          socket.emit('start_monitoring')
+          socket?.emit('start_monitoring')
         }
       })
       
