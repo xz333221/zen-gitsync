@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider } from 'element-plus'
+import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider, ElDialog } from 'element-plus'
 import { RefreshRight, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import { createGitgraph } from '@gitgraph/js'
@@ -32,6 +32,10 @@ const showAllCommits = ref(false)
 const totalCommits = ref(0)
 const showGraphView = ref(false)
 const graphContainer = ref<HTMLElement | null>(null)
+
+// 添加提交详情弹窗相关变量
+const commitDetailVisible = ref(false)
+const selectedCommit = ref<LogItem | null>(null)
 
 // 添加图表缩放控制
 const graphScale = ref(1)
@@ -345,6 +349,12 @@ function fitGraphToContainer() {
   
   applyScale()
 }
+
+// 查看提交详情
+function viewCommitDetail(commit: LogItem) {
+  selectedCommit.value = commit
+  commitDetailVisible.value = true
+}
 </script>
 
 <template>
@@ -443,11 +453,17 @@ function fitGraphToContainer() {
           显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
         </div>
         <el-table :data="logs" style="width: 100%" stripe border v-loading="isLoading">
-          <el-table-column prop="hash" label="提交哈希" width="100" resizable />
-          <el-table-column prop="date" label="日期" width="180" resizable />
-          <el-table-column label="作者" width="200" resizable>
+          <el-table-column label="提交哈希" width="100" resizable>
             <template #default="scope">
-              {{ scope.row.author }} &lt;{{ scope.row.email }}&gt;
+              <span class="commit-hash" @click="viewCommitDetail(scope.row)">{{ scope.row.hash }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="date" label="日期" width="120" resizable />
+          <el-table-column label="作者" width="120" resizable>
+            <template #default="scope">
+              <el-tooltip :content="scope.row.email" placement="top" :hide-after="1000">
+                <span class="author-name">{{ scope.row.author }}</span>
+              </el-tooltip>
             </template>
           </el-table-column>
           <el-table-column label="分支" width="180" resizable>
@@ -469,6 +485,51 @@ function fitGraphToContainer() {
         </el-table>
       </div>
     </div>
+
+    <!-- 提交详情弹窗 -->
+    <el-dialog
+      v-model="commitDetailVisible"
+      :title="`提交详情: ${selectedCommit?.hash || ''}`"
+      width="80%"
+      destroy-on-close
+    >
+      <div v-if="selectedCommit" class="commit-detail">
+        <div class="detail-item">
+          <div class="detail-label">完整哈希:</div>
+          <div class="detail-value">{{ selectedCommit.hash }}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">作者:</div>
+          <div class="detail-value">{{ selectedCommit.author }} &lt;{{ selectedCommit.email }}&gt;</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">日期:</div>
+          <div class="detail-value">{{ selectedCommit.date }}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">分支:</div>
+          <div class="detail-value">
+            <template v-if="selectedCommit.branch">
+              <el-tag 
+                v-for="(ref, index) in selectedCommit.branch.split(',')" 
+                :key="index"
+                size="small"
+                :type="getBranchTagType(ref)"
+                class="branch-tag"
+                style="margin-right: 5px;"
+              >
+                {{ formatBranchName(ref) }}
+              </el-tag>
+            </template>
+            <span v-else>无</span>
+          </div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">提交信息:</div>
+          <div class="detail-value commit-message">{{ selectedCommit.message }}</div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -569,6 +630,58 @@ function fitGraphToContainer() {
   0% { opacity: 1; }
   70% { opacity: 1; }
   100% { opacity: 0; }
+}
+
+.author-name {
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.commit-hash {
+  cursor: pointer;
+  color: #409EFF;
+  font-family: monospace;
+}
+
+.commit-hash:hover {
+  text-decoration: underline;
+}
+
+.commit-detail {
+  padding: 15px;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.detail-item {
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.detail-label {
+  width: 100px;
+  font-weight: bold;
+  color: #606266;
+  flex-shrink: 0;
+}
+
+.detail-value {
+  flex: 1;
+  word-break: break-all;
+}
+
+.commit-message {
+  font-family: monospace;
+  white-space: pre-wrap;
+  background-color: #fff;
+  padding: 10px;
+  border-radius: 4px;
+  border-left: 4px solid #409EFF;
 }
 </style>
 
