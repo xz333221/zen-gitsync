@@ -913,32 +913,60 @@ git config --global user.email "your.email@example.com"</pre>
 </template>
 
 <style scoped>
+/* 添加动画相关的CSS */
+@keyframes borderRotate {
+  0% {
+    background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%;
+  }
+  25% {
+    background-position: 100% 0%, 100% 100%, 0% 100%, 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%, 0% 100%, 0% 0%, 100% 0%;
+  }
+  75% {
+    background-position: 0% 100%, 0% 0%, 100% 0%, 100% 100%;
+  }
+  100% {
+    background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%;
+  }
+}
+
 .card {
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   margin-bottom: 24px;
   padding: 20px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
   position: relative;
-  overflow: hidden;
+  z-index: 1;
+  transition: all 0.3s ease;
 }
 
 .card::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  height: 4px;
-  width: 100%;
-  background: linear-gradient(90deg, #409EFF, #67C23A, #409EFF);
-  background-size: 200% 200%;
+  inset: 0;
+  border-radius: 8px;
+  padding: 2px;
+  background: transparent;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, 
+                linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: -1;
   transition: all 0.3s ease;
 }
 
 .card.is-pushing::before {
-  animation: gradientShift 2s ease infinite, progressGlow 2s ease infinite;
-  height: 6px;
+  background: 
+    linear-gradient(90deg, #409EFF, #67C23A, #409EFF) 0% 0% / 200% 2px no-repeat,
+    linear-gradient(180deg, #409EFF, #67C23A, #409EFF) 100% 0% / 2px 200% no-repeat,
+    linear-gradient(270deg, #409EFF, #67C23A, #409EFF) 100% 100% / 200% 2px no-repeat,
+    linear-gradient(0deg, #409EFF, #67C23A, #409EFF) 0% 100% / 2px 200% no-repeat;
+  animation: borderRotate 2s linear infinite;
+  box-shadow: 0 0 10px rgba(103, 194, 58, 0.4);
 }
 
 .layout-container {
@@ -1264,30 +1292,5 @@ git config --global user.email "your.email@example.com"</pre>
 }
 .el-button+.el-button {
   margin-left: 0;
-}
-
-/* 添加动画相关的CSS */
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-@keyframes progressGlow {
-  0% {
-    box-shadow: 0 0 5px rgba(64, 158, 255, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 15px rgba(103, 194, 58, 0.7);
-  }
-  100% {
-    box-shadow: 0 0 5px rgba(64, 158, 255, 0.5);
-  }
 }
 </style>
