@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
-import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight } from '@element-plus/icons-vue'
+import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight, Check, Close } from '@element-plus/icons-vue'
 import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '../stores/gitStore'
 
@@ -397,14 +397,32 @@ defineExpose({
     </div>
     <div class="status-header">
       <h2>Git 状态(git status)</h2>
-      <el-button 
-        type="primary" 
-        :icon="Refresh" 
-        circle 
-        size="small" 
-        @click="refreshStatus" 
-        :loading="isRefreshing"
-      />
+      <div class="header-actions">
+        <el-tooltip 
+          :content="gitLogStore.autoUpdateEnabled ? '禁用自动更新' : '启用自动更新'" 
+          placement="top" 
+          :hide-after="1000"
+        >
+          <el-switch 
+            v-model="gitLogStore.autoUpdateEnabled" 
+            @change="gitLogStore.toggleAutoUpdate" 
+            active-color="#67C23A"
+            inactive-color="#909399"
+            inline-prompt
+            :active-icon="Check"
+            :inactive-icon="Close"
+            style="margin-right: 10px;"
+          />
+        </el-tooltip>
+        <el-button 
+          type="primary" 
+          :icon="Refresh" 
+          circle 
+          size="small" 
+          @click="refreshStatus" 
+          :loading="isRefreshing"
+        />
+      </div>
     </div>
     <div class="status-box">
       {{ !gitStore.isGitRepo ? '当前目录不是一个Git仓库' : gitLogStore.statusText || '加载中...' }}
@@ -560,6 +578,11 @@ defineExpose({
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid #f0f0f0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
 }
 
 .status-header h2 {

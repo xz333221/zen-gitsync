@@ -8,17 +8,25 @@ import config from '../../config.js';
 import chalk from 'chalk';
 import fs from 'fs/promises';
 import os from 'os';
-// import { Server } from 'socket.io';
+import { Server } from 'socket.io';
+import chokidar from 'chokidar';
 // import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const configManager = config; // 确保 configManager 可用
 
+// 文件系统变动监控器
+let watcher = null;
+// 防抖计时器
+let debounceTimer = null;
+// 防抖延迟时间 (毫秒)
+const DEBOUNCE_DELAY = 1000;
+
 async function startUIServer() {
   const app = express();
   const httpServer = createServer(app);
-  // const io = new Server(httpServer);
+  const io = new Server(httpServer);
   
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
@@ -29,24 +37,6 @@ async function startUIServer() {
     console.log(`[${now}] ${req.method} ${req.url}`);
     next();
   });
-  
-  // // 启动前端Vue应用
-  // const clientPath = path.join(__dirname, '../client');
-  // console.log(`正在启动前端应用，路径: ${clientPath}`);
-  
-  // const vueProcess = exec('npm run dev', { cwd: clientPath }, (error) => {
-  //   if (error) {
-  //     console.error('启动前端应用失败:', error);
-  //   }
-  // });
-  
-  // vueProcess.stdout.on('data', (data) => {
-  //   console.log(`前端输出: ${data}`);
-  // });
-  
-  // vueProcess.stderr.on('data', (data) => {
-  //   console.error(`前端错误: ${data}`);
-  // });
   
   // 静态文件服务
   app.use(express.static(path.join(__dirname, '../public')));
@@ -198,7 +188,6 @@ async function startUIServer() {
   // 新增切换工作目录接口
   app.post('/api/change_directory', async (req, res) => {
       try {
-
           const { path } = req.body;
           
           if (!path) {
@@ -212,12 +201,22 @@ async function startUIServer() {
               // 检查新目录是否是Git仓库
               try {
                   await execGitCommand('git rev-parse --is-inside-work-tree');
+                  
+                  // 初始化文件监控
+                  initFileSystemWatcher();
+                  
                   res.json({ 
                       success: true, 
                       directory: newDirectory,
                       isGitRepo: true 
                   });
               } catch (error) {
+                  // 不是Git仓库，停止监控
+                  if (watcher) {
+                    watcher.close().catch(err => console.error('关闭监控器失败:', err));
+                    watcher = null;
+                  }
+                  
                   res.json({ 
                       success: true, 
                       directory: newDirectory,
@@ -818,24 +817,121 @@ async function startUIServer() {
   });
   
   // Socket.io 实时更新
-  // io.on('connection', (socket) => {
-  //   console.log('客户端已连接');
+  io.on('connection', (socket) => {
+    console.log('客户端已连接:', socket.id);
     
-  //   // 定期发送状态更新
-  //   const statusInterval = setInterval(async () => {
-  //     try {
-  //       const { stdout } = await execGitCommand('git status');
-  //       socket.emit('status_update', { status: stdout });
-  //     } catch (error) {
-  //       console.error('状态更新错误:', error);
-  //     }
-  //   }, 5000);
+    // 当客户端连接时，立即发送一次Git状态
+    getAndBroadcastStatus();
     
-  //   socket.on('disconnect', () => {
-  //     clearInterval(statusInterval);
-  //     console.log('客户端已断开连接');
-  //   });
-  // });
+    // 客户端可以请求开始/停止监控
+    socket.on('start_monitoring', () => {
+      if (!watcher) {
+        initFileSystemWatcher();
+        socket.emit('monitoring_status', { active: true });
+      }
+    });
+    
+    socket.on('stop_monitoring', () => {
+      if (watcher) {
+        watcher.close().catch(err => console.error('关闭监控器失败:', err));
+        watcher = null;
+        socket.emit('monitoring_status', { active: false });
+      }
+    });
+    
+    // 客户端断开连接
+    socket.on('disconnect', () => {
+      console.log('客户端已断开连接:', socket.id);
+    });
+  });
+  
+  // 初始化文件系统监控
+  function initFileSystemWatcher() {
+    // 停止已有的监控器
+    if (watcher) {
+      watcher.close().catch(err => console.error('关闭旧监控器失败:', err));
+    }
+    
+    try {
+      // 获取当前工作目录
+      const currentDir = process.cwd();
+      
+      console.log(`初始化文件系统监控器，路径: ${currentDir}`);
+      
+      // 检查是否是Git仓库
+      try {
+        execGitCommand('git rev-parse --is-inside-work-tree');
+      } catch (error) {
+        console.log('当前目录不是Git仓库，不启动监控');
+        return;
+      }
+      
+      // 使用chokidar监控文件变动
+      watcher = chokidar.watch(currentDir, {
+        ignored: [
+          /(^|[\/\\])\../, // 忽略.开头的文件和目录
+          '**/node_modules/**', // 忽略node_modules
+          '**/.git/**', // 忽略.git目录
+        ],
+        persistent: true,
+        ignoreInitial: true, // 忽略初始扫描时的文件
+        awaitWriteFinish: {
+          stabilityThreshold: 300, // 等待文件写入完成的时间
+          pollInterval: 100 // 轮询间隔
+        }
+      });
+      
+      // 合并所有变动事件到一个处理程序
+      const events = ['add', 'change', 'unlink'];
+      events.forEach(event => {
+        watcher.on(event, path => {
+          console.log(`检测到文件变动 [${event}]: ${path}`);
+          debouncedNotifyChanges();
+        });
+      });
+      
+      watcher.on('error', error => {
+        console.error('文件监控错误:', error);
+      });
+      
+      console.log('文件系统监控器已启动');
+    } catch (error) {
+      console.error('启动文件监控失败:', error);
+    }
+  }
+  
+  // 获取并广播Git状态
+  async function getAndBroadcastStatus() {
+    try {
+      // 获取常规状态
+      const { stdout: statusOutput } = await execGitCommand('git status');
+      
+      // 获取porcelain格式状态
+      const { stdout: porcelainOutput } = await execGitCommand('git status --porcelain');
+      
+      // 广播到所有连接的客户端
+      io.emit('git_status_update', { 
+        status: statusOutput,
+        porcelain: porcelainOutput,
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log('已广播Git状态更新');
+    } catch (error) {
+      console.error('获取或广播Git状态失败:', error);
+    }
+  }
+  
+  // 防抖处理函数
+  function debouncedNotifyChanges() {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    
+    debounceTimer = setTimeout(() => {
+      getAndBroadcastStatus();
+    }, DEBOUNCE_DELAY);
+  }
   
   // 启动服务器
   const PORT = 3000;
@@ -845,6 +941,10 @@ async function startUIServer() {
     console.log(chalk.green(`  访问地址: http://localhost:${PORT}`));
     console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
     console.log(chalk.green('======================================'));
+    
+    // 启动文件监控
+    initFileSystemWatcher();
+    
     open(`http://localhost:${PORT}`);
   }).on('error', async (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -859,6 +959,10 @@ async function startUIServer() {
               console.log(chalk.green(`  访问地址: http://localhost:${newPort}`));
               console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
               console.log(chalk.green('======================================'));
+              
+              // 启动文件监控
+              initFileSystemWatcher();
+              
               open(`http://localhost:${newPort}`);
               resolve();
             }).on('error', (e) => {
