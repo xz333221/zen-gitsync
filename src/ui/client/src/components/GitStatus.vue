@@ -349,12 +349,23 @@ async function revertFileChanges(filePath: string) {
       // 刷新Git状态
       await loadStatus()
     } else {
-      ElMessage.error(result.error || '撤回文件修改失败')
+      // 使用自定义错误信息，避免显示undefined
+      ElMessage.error(result.error ? `撤回失败: ${result.error}` : '撤回文件修改失败，请重试')
     }
   } catch (error) {
-    // 用户取消或发生错误
-    if ((error as Error).message !== 'cancel') {
-      ElMessage.error(`撤回文件修改失败: ${(error as Error).message}`)
+    // 用户取消操作不显示错误
+    if ((error as any) === 'cancel' || (error as Error).message === 'cancel') {
+      // 用户取消操作，不做任何处理，也不显示错误
+      return
+    }
+    
+    // 其他错误情况才显示错误消息
+    // 避免显示undefined错误信息
+    const errorMessage = (error as Error).message || '未知错误';
+    if (errorMessage !== 'undefined') {
+      ElMessage.error(`撤回文件修改失败: ${errorMessage}`)
+    } else {
+      ElMessage.error('撤回文件修改失败，请重试')
     }
   }
 }
