@@ -405,6 +405,20 @@ async function revertFileChanges(filePath: string) {
   }
 }
 
+// 提取文件名和目录
+function getFileName(path: string): string {
+  const parts = path.split('/')
+  return parts[parts.length - 1]
+}
+
+function getFileDirectory(path: string): string {
+  const parts = path.split('/')
+  if (parts.length <= 1) return ''
+  
+  // 保留所有除最后一个部分的路径
+  return parts.slice(0, -1).join('/')
+}
+
 onMounted(() => {
   // App.vue已经加载了Git相关数据，此时只需加载状态
   // 如果已有初始目录，则只需加载状态
@@ -431,7 +445,7 @@ defineExpose({
       </el-button>
     </div>
     <div class="status-header">
-      <h2>Git 状态(git status)</h2>
+      <h2>Git 状态</h2>
       <div class="header-actions">
         <el-tooltip 
           :content="gitLogStore.autoUpdateEnabled ? '禁用自动更新' : '启用自动更新'" 
@@ -459,63 +473,135 @@ defineExpose({
         />
       </div>
     </div>
-    <div class="status-box">
-      {{ !gitStore.isGitRepo ? '当前目录不是一个Git仓库' : gitLogStore.statusText || '加载中...' }}
+    <div v-if="!gitStore.isGitRepo" class="status-box">
+      当前目录不是一个Git仓库
     </div>
-    <!-- 颜色区分不同类型文件 -->
-    <div v-if="gitLogStore.fileList.length" class="file-list">
-      <div 
-        v-for="file in gitLogStore.fileList" 
-        :key="file.path" 
-        :class="['file-item', file.type]"
-      >
-        <div class="file-info" @click="handleFileClick(file)">
-          <span class="file-type">{{ fileTypeLabel(file.type) }}</span>
-          <span class="file-path">{{ file.path }}</span>
-        </div>
-        <div class="file-actions">
-          <!-- 未跟踪文件: 显示暂存按钮 -->
-          <el-tooltip v-if="file.type === 'untracked'" content="添加到暂存区" placement="top" :hide-after="1000">
-            <el-button
-              type="success"
-              size="small"
-              circle
-              @click.stop="stageFile(file.path)"
-            >+</el-button>
-          </el-tooltip>
-          
-          <!-- 已修改未暂存文件: 显示暂存按钮 -->
-          <el-tooltip v-if="file.type === 'modified'" content="添加到暂存区" placement="top" :hide-after="1000">
-            <el-button
-              type="success"
-              size="small"
-              circle
-              @click.stop="stageFile(file.path)"
-            >+</el-button>
-          </el-tooltip>
-          
-          <!-- 已暂存文件: 显示取消暂存按钮 -->
-          <el-tooltip v-if="file.type === 'added'" content="取消暂存" placement="top" :hide-after="1000">
-            <el-button
-              type="warning"
-              size="small"
-              circle
-              @click.stop="unstageFile(file.path)"
-            >-</el-button>
-          </el-tooltip>
-          
-          <!-- 所有文件都显示撤销更改按钮 -->
-          <el-tooltip content="撤回修改" placement="top" :hide-after="1000">
-            <el-button
-              type="danger"
-              size="small"
-              :icon="RefreshRight"
-              circle
-              @click.stop="revertFileChanges(file.path)"
-            />
-          </el-tooltip>
+    
+    <!-- 现代化、简洁的文件列表 -->
+    <div v-if="gitLogStore.fileList.length" class="file-list-container">
+      <!-- 分组显示文件 -->
+      <div class="file-group">
+        <div class="file-group-header">已暂存的更改</div>
+        <div class="file-list">
+          <div
+            v-for="file in gitLogStore.fileList.filter(f => f.type === 'added')"
+            :key="file.path"
+            class="file-item"
+            @click="handleFileClick(file)"
+          >
+            <div class="file-info">
+              <div class="file-path-container">
+                <span class="file-name">{{ getFileName(file.path) }}</span>
+                <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+              </div>
+            </div>
+            <div class="file-actions">
+              <el-tooltip content="取消暂存" placement="top" :hide-after="1000">
+                <el-button
+                  type="warning"
+                  size="small"
+                  circle
+                  @click.stop="unstageFile(file.path)"
+                >-</el-button>
+              </el-tooltip>
+            </div>
+          </div>
+          <div v-if="!gitLogStore.fileList.some(f => f.type === 'added')" class="empty-file-group">
+            没有已暂存的文件
+          </div>
         </div>
       </div>
+      
+      <div class="file-group">
+        <div class="file-group-header">未暂存的更改</div>
+        <div class="file-list">
+          <div
+            v-for="file in gitLogStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
+            :key="file.path"
+            class="file-item"
+            @click="handleFileClick(file)"
+          >
+            <div class="file-info">
+              <div class="file-status-indicator" :class="file.type"></div>
+              <div class="file-path-container">
+                <span class="file-name">{{ getFileName(file.path) }}</span>
+                <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+              </div>
+            </div>
+            <div class="file-actions">
+              <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
+                <el-button
+                  type="success"
+                  size="small"
+                  circle
+                  @click.stop="stageFile(file.path)"
+                >+</el-button>
+              </el-tooltip>
+              <el-tooltip content="撤回修改" placement="top" :hide-after="1000">
+                <el-button
+                  type="danger"
+                  size="small"
+                  :icon="RefreshRight"
+                  circle
+                  @click.stop="revertFileChanges(file.path)"
+                />
+              </el-tooltip>
+            </div>
+          </div>
+          <div v-if="!gitLogStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')" class="empty-file-group">
+            没有未暂存的更改
+          </div>
+        </div>
+      </div>
+      
+      <div class="file-group">
+        <div class="file-group-header">未跟踪的文件</div>
+        <div class="file-list">
+          <div
+            v-for="file in gitLogStore.fileList.filter(f => f.type === 'untracked')"
+            :key="file.path"
+            class="file-item"
+            @click="handleFileClick(file)"
+          >
+            <div class="file-info">
+              <div class="file-status-indicator untracked"></div>
+              <div class="file-path-container">
+                <span class="file-name">{{ getFileName(file.path) }}</span>
+                <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+              </div>
+            </div>
+            <div class="file-actions">
+              <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
+                <el-button
+                  type="success"
+                  size="small"
+                  circle
+                  @click.stop="stageFile(file.path)"
+                >+</el-button>
+              </el-tooltip>
+              <el-tooltip content="删除文件" placement="top" :hide-after="1000">
+                <el-button
+                  type="danger"
+                  size="small"
+                  :icon="Close"
+                  circle
+                  @click.stop="revertFileChanges(file.path)"
+                />
+              </el-tooltip>
+            </div>
+          </div>
+          <div v-if="!gitLogStore.fileList.some(f => f.type === 'untracked')" class="empty-file-group">
+            没有未跟踪的文件
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div v-else-if="gitStore.isGitRepo" class="empty-status">
+      <div class="empty-icon">
+        <el-icon><Document /></el-icon>
+      </div>
+      <div class="empty-text">没有检测到任何更改</div>
     </div>
     
     <!-- 切换目录对话框 -->
@@ -653,6 +739,8 @@ defineExpose({
 
 .status-header h2 {
   margin: 0;
+  font-size: 18px;
+  color: #303133;
 }
 
 .status-box {
@@ -669,28 +757,59 @@ defineExpose({
   line-height: 1.5;
 }
 
-.file-list {
-  max-height: 400px;
-  overflow-y: auto;
+/* 现代化的文件列表容器 */
+.file-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.file-group {
+  background-color: #f8f9fa;
   border-radius: 6px;
-  border: 1px solid #f0f0f0;
-  padding: 4px;
+  overflow: hidden;
+  border: 1px solid #ebeef5;
+}
+
+.file-group-header {
+  font-size: 14px;
+  font-weight: bold;
+  padding: 8px 12px;
+  background-color: #f0f2f5;
+  color: #606266;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.file-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.empty-file-group {
+  padding: 12px;
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
+  font-style: italic;
 }
 
 .file-item {
-  padding: 8px 10px;
-  margin-bottom: 4px;
-  border-radius: 4px;
-  cursor: pointer;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  transition: background-color 0.2s ease;
-  overflow: hidden;
+  border-bottom: 1px solid #ebeef5;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.file-item:last-child {
+  border-bottom: none;
 }
 
 .file-item:hover {
-  background-color: #f5f7fa;
+  background-color: #ecf5ff;
 }
 
 .file-info {
@@ -698,88 +817,87 @@ defineExpose({
   align-items: center;
   flex-grow: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  gap: 8px;
+}
+
+.file-status-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #409eff;
+  flex-shrink: 0;
+}
+
+.file-status-indicator.added {
+  background-color: #67c23a;
+}
+
+.file-status-indicator.modified {
+  background-color: #409eff;
+}
+
+.file-status-indicator.deleted {
+  background-color: #f56c6c;
+}
+
+.file-status-indicator.untracked {
+  background-color: #e6a23c;
+}
+
+.file-path-container {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-name {
+  font-weight: 500;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.file-directory {
+  font-size: 12px;
+  color: #909399;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
 }
 
 .file-actions {
-  margin-left: 10px;
-  opacity: 0.7;
-  transition: opacity 0.2s;
   display: flex;
   gap: 5px;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
 .file-item:hover .file-actions {
   opacity: 1;
 }
 
-.file-type {
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  margin-right: 10px;
-  flex-shrink: 0;
-  min-width: 60px;
-  text-align: center;
-  font-weight: bold;
-}
-
-.added .file-type {
-  background-color: #e1f3d8;
-  color: #67c23a;
-}
-
-.modified .file-type {
-  background-color: #e6f1fc;
-  color: #409eff;
-}
-
-.deleted .file-type {
-  background-color: #fef0f0;
-  color: #f56c6c;
-}
-
-.untracked .file-type {
-  background-color: #fdf6ec;
-  color: #e6a23c;
-}
-
-.file-path {
-  font-family: monospace;
-  word-break: break-all;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.diff-content {
-  font-family: monospace;
-  white-space: pre-wrap;
-  max-height: 74vh;
-  overflow-y: auto;
-  padding: 16px;
+.empty-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
   background-color: #f8f9fa;
   border-radius: 6px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid #ebeef5;
 }
 
-.diff-formatted {
+.empty-icon {
+  font-size: 32px;
+  color: #c0c4cc;
+  margin-bottom: 10px;
+}
+
+.empty-text {
+  color: #909399;
   font-size: 14px;
-  line-height: 1.5;
-}
-
-.file-navigation {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: 15px;
-}
-
-.file-counter {
-  margin: 0 15px;
-  font-size: 14px;
-  color: #606266;
 }
 
 .current-directory {
@@ -896,6 +1014,35 @@ defineExpose({
 /* 减小差异对话框的顶部边距 */
 :deep(.diff-dialog) {
   --el-dialog-margin-top: 5vh;
+}
+
+.diff-content {
+  font-family: monospace;
+  white-space: pre-wrap;
+  max-height: 74vh;
+  overflow-y: auto;
+  padding: 16px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+}
+
+.diff-formatted {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.file-navigation {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 15px;
+}
+
+.file-counter {
+  margin: 0 15px;
+  font-size: 14px;
+  color: #606266;
 }
 </style>
 
