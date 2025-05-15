@@ -44,8 +44,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
     // 创建新连接
     try {
       // 修正Socket.IO连接URL，使用固定的后端服务器端口3000
-      const backendUrl = window.location.hostname === 'localhost' ? 
-        'http://localhost:3000' : window.location.origin
+      const backendUrl = 'http://localhost:3000'
       
       console.log('尝试连接Socket.IO服务器:', backendUrl)
       

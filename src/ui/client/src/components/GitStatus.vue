@@ -390,12 +390,6 @@ onMounted(() => {
 })
 
 // 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
-watch(() => gitLogStore.autoUpdateEnabled, (newValue) => {
-  // 调用store中的方法来实现服务器通信功能
-  gitLogStore.toggleAutoUpdate()
-})
-
-// 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
 watch(() => gitLogStore.autoUpdateEnabled, (newValue, oldValue) => {
   console.log(`自动更新状态变更: ${oldValue} -> ${newValue}`)
   // 调用store中的方法来实现服务器通信功能
@@ -459,9 +453,9 @@ defineExpose({
       <!-- 现代化、简洁的文件列表 -->
       <div v-if="gitLogStore.fileList.length" class="file-list-container">
         <!-- 分组显示文件 -->
-        <div class="file-group">
+        <div v-if="gitLogStore.fileList.some(f => f.type === 'added')" class="file-group">
           <div class="file-group-header">已暂存的更改</div>
-          <div class="file-list" :class="{'empty-file-container': !gitLogStore.fileList.some(f => f.type === 'added')}">
+          <div class="file-list">
             <div
               v-for="file in gitLogStore.fileList.filter(f => f.type === 'added')"
               :key="file.path"
@@ -485,15 +479,12 @@ defineExpose({
                 </el-tooltip>
               </div>
             </div>
-            <div v-if="!gitLogStore.fileList.some(f => f.type === 'added')" class="empty-file-group">
-              没有已暂存的文件
-            </div>
           </div>
         </div>
         
-        <div class="file-group">
+        <div v-if="gitLogStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')" class="file-group">
           <div class="file-group-header">未暂存的更改</div>
-          <div class="file-list" :class="{'empty-file-container': !gitLogStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')}">
+          <div class="file-list">
             <div
               v-for="file in gitLogStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
               :key="file.path"
@@ -527,15 +518,12 @@ defineExpose({
                 </el-tooltip>
               </div>
             </div>
-            <div v-if="!gitLogStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')" class="empty-file-group">
-              没有未暂存的更改
-            </div>
           </div>
         </div>
         
-        <div class="file-group">
+        <div v-if="gitLogStore.fileList.some(f => f.type === 'untracked')" class="file-group">
           <div class="file-group-header">未跟踪的文件</div>
-          <div class="file-list" :class="{'empty-file-container': !gitLogStore.fileList.some(f => f.type === 'untracked')}">
+          <div class="file-list">
             <div
               v-for="file in gitLogStore.fileList.filter(f => f.type === 'untracked')"
               :key="file.path"
@@ -568,9 +556,6 @@ defineExpose({
                   />
                 </el-tooltip>
               </div>
-            </div>
-            <div v-if="!gitLogStore.fileList.some(f => f.type === 'untracked')" class="empty-file-group">
-              没有未跟踪的文件
             </div>
           </div>
         </div>
