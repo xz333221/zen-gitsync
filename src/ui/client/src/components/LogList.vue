@@ -833,23 +833,44 @@ function formatCommitMessage(message: string) {
 </template>
 
 <style scoped>
+.card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  margin-bottom: 24px;
+  padding: 0; /* 移除卡片的内边距，避免与固定头部的内边距冲突 */
+  overflow: hidden; /* 确保圆角效果不被内容覆盖 */
+}
+
 .log-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0;
-  padding: 10px 20px;
+  padding: 16px 20px;
   background-color: white;
-  border-bottom: 1px solid #dcdfe6;
+  border-bottom: 1px solid #f0f0f0;
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
 
+.content-area {
+  padding: 20px;
+}
+
+/* 优化表格区域 */
+.el-table {
+  --el-table-border-color: #f0f0f0;
+  --el-table-header-bg-color: #f8f9fa;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* 统一按钮间距 */
 .log-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 
 .branch-container {
@@ -1213,19 +1234,6 @@ function formatCommitMessage(message: string) {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.content-area {
-  padding: 15px 20px 20px 20px;
-}
-
-.card {
-  background-color: white;
-  border-radius: 5px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-  margin-bottom: 20px;
-  padding: 0; /* 移除卡片的内边距，避免与固定头部的内边距冲突 */
-  overflow: hidden; /* 确保圆角效果不被内容覆盖 */
 }
 </style>
 

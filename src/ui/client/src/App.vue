@@ -391,7 +391,8 @@ body {
 }
 .container {
   margin: 0 auto;
-  padding: 85px 30px 60px 30px; /* 增加底部padding，为固定footer留出空间 */
+  padding: 85px 30px 70px 30px; /* 调整底部padding，为固定footer留出更多空间 */
+  max-width: 1400px; /* 限制最大宽度，大屏幕上更美观 */
 }
 .main-header {
   background-color: #24292e;
@@ -448,11 +449,18 @@ h1 {
 }
 .card {
   background-color: white;
-  border-radius: 5px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-  margin-bottom: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
   padding: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
 }
+
+.card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
 .status-box {
   background-color: #f6f8fa;
   border: 1px solid #e1e4e8;
@@ -467,7 +475,8 @@ h1 {
 /* 新增布局样式 */
 .layout-container {
   display: flex;
-  gap: 20px;
+  gap: 24px;
+  margin-bottom: 24px;
 }
 
 .left-panel {

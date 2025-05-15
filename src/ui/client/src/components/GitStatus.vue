@@ -547,21 +547,19 @@ defineExpose({
 .card {
   background-color: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  margin-bottom: 24px;
   padding: 20px;
-  margin-bottom: 20px;
-}
-
-/* 减小差异对话框的顶部边距 */
-:deep(.diff-dialog) {
-  --el-dialog-margin-top: 5vh;
+  border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .status-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .status-header h2 {
@@ -571,27 +569,34 @@ defineExpose({
 .status-box {
   white-space: pre-wrap;
   font-family: monospace;
-  background-color: #f5f7fa;
-  padding: 15px;
-  border-radius: 4px;
-  margin-bottom: 15px;
+  background-color: #f8f9fa;
+  padding: 16px;
+  border-radius: 6px;
+  margin-bottom: 20px;
   max-height: 300px;
   overflow-y: auto;
+  border: 1px solid #f0f0f0;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .file-list {
   max-height: 300px;
   overflow-y: auto;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+  padding: 4px;
 }
 
 .file-item {
-  padding: 8px 12px;
-  margin-bottom: 5px;
-  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  transition: background-color 0.2s ease;
 }
 
 .file-item:hover {
@@ -652,9 +657,10 @@ defineExpose({
   white-space: pre-wrap;
   max-height: 74vh;
   overflow-y: auto;
-  padding: 10px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
+  padding: 16px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
 }
 
 .diff-formatted {
@@ -678,11 +684,12 @@ defineExpose({
 .current-directory {
   display: flex;
   align-items: center;
-  margin-bottom: 15px;
-  padding: 8px 12px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
+  margin-bottom: 20px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
   font-family: monospace;
+  border: 1px solid #f0f0f0;
 }
 
 .current-directory .el-icon {
@@ -783,6 +790,11 @@ defineExpose({
 /* 移除按钮左侧的内边距 */
 .no-padding-left {
   padding-left: 8px !important;
+}
+
+/* 减小差异对话框的顶部边距 */
+:deep(.diff-dialog) {
+  --el-dialog-margin-top: 5vh;
 }
 </style>
 
