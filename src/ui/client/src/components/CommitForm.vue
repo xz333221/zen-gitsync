@@ -914,22 +914,36 @@ git config --global user.email "your.email@example.com"</pre>
 
 <style scoped>
 /* 添加动画相关的CSS */
-@keyframes borderRotate {
-  0% {
-    background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%;
+@keyframes snakeBorder {
+  0%, 100% {
+    border-top: 2px solid #409EFF;
+    border-right: 2px solid transparent;
+    border-bottom: 2px solid transparent;
+    border-left: 2px solid transparent;
   }
   25% {
-    background-position: 100% 0%, 100% 100%, 0% 100%, 0% 0%;
+    border-top: 2px solid #409EFF;
+    border-right: 2px solid #67C23A;
+    border-bottom: 2px solid transparent;
+    border-left: 2px solid transparent;
   }
   50% {
-    background-position: 100% 100%, 0% 100%, 0% 0%, 100% 0%;
+    border-top: 2px solid transparent;
+    border-right: 2px solid #67C23A;
+    border-bottom: 2px solid #409EFF;
+    border-left: 2px solid transparent;
   }
   75% {
-    background-position: 0% 100%, 0% 0%, 100% 0%, 100% 100%;
+    border-top: 2px solid transparent;
+    border-right: 2px solid transparent;
+    border-bottom: 2px solid #409EFF;
+    border-left: 2px solid #67C23A;
   }
-  100% {
-    background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%;
-  }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(64, 158, 255, 0.4); }
+  50% { box-shadow: 0 0 12px rgba(103, 194, 58, 0.5); }
 }
 
 .card {
@@ -939,34 +953,12 @@ git config --global user.email "your.email@example.com"</pre>
   margin-bottom: 24px;
   padding: 20px;
   position: relative;
-  z-index: 1;
+  border: 2px solid transparent;
   transition: all 0.3s ease;
 }
 
-.card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 8px;
-  padding: 2px;
-  background: transparent;
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, 
-                linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  z-index: -1;
-  transition: all 0.3s ease;
-}
-
-.card.is-pushing::before {
-  background: 
-    linear-gradient(90deg, #409EFF, #67C23A, #409EFF) 0% 0% / 200% 2px no-repeat,
-    linear-gradient(180deg, #409EFF, #67C23A, #409EFF) 100% 0% / 2px 200% no-repeat,
-    linear-gradient(270deg, #409EFF, #67C23A, #409EFF) 100% 100% / 200% 2px no-repeat,
-    linear-gradient(0deg, #409EFF, #67C23A, #409EFF) 0% 100% / 2px 200% no-repeat;
-  animation: borderRotate 2s linear infinite;
-  box-shadow: 0 0 10px rgba(103, 194, 58, 0.4);
+.card.is-pushing {
+  animation: snakeBorder 1.5s linear infinite, glowPulse 2s ease infinite;
 }
 
 .layout-container {
