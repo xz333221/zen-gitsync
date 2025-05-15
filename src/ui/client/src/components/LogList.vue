@@ -556,6 +556,7 @@ function formatCommitMessage(message: string) {
       提交历史已刷新
     </div>
     
+    <!-- 固定头部区域 -->
     <div class="log-header">
       <h2>提交历史</h2>
       <div class="log-actions">
@@ -591,180 +592,184 @@ function formatCommitMessage(message: string) {
         </el-button>
       </div>
     </div>
-    <div v-if="errorMessage">{{ errorMessage }}</div>
-    <div v-else>
-      <!-- 图表视图 -->
-      <div v-if="showGraphView" class="graph-view">
-        <div class="commit-count" v-if="logsData.length > 0">
-          显示 {{ logsData.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
-        </div>
-        
-        <!-- 添加缩放控制 -->
-        <div class="graph-controls">
-          <div class="zoom-controls">
-            <el-button
-              type="primary"
-              circle
-              size="small"
-              @click="zoomOut"
-              :disabled="graphScale <= minScale"
-            >
-              <el-icon><ZoomOut /></el-icon>
-            </el-button>
-            
-            <el-slider
-              v-model="graphScale"
-              :min="minScale"
-              :max="maxScale"
-              :step="scaleStep"
-              @change="applyScale"
-              class="zoom-slider"
-            />
-            
-            <el-button
-              type="primary"
-              circle
-              size="small"
-              @click="zoomIn"
-              :disabled="graphScale >= maxScale"
-            >
-              <el-icon><ZoomIn /></el-icon>
-            </el-button>
-            
-            <el-button
-              type="primary"
-              size="small"
-              @click="fitGraphToContainer"
-            >
-              自适应大小
-            </el-button>
-          </div>
-          
-          <div class="scale-info">
-            缩放: {{ Math.round(graphScale * 100) }}%
-          </div>
-        </div>
-        
-        <div ref="graphContainer" class="graph-container"></div>
-      </div>
-      
-      <!-- 表格视图 -->
+    
+    <!-- 内容区域，添加上边距以避免被固定头部遮挡 -->
+    <div class="content-area">
+      <div v-if="errorMessage">{{ errorMessage }}</div>
       <div v-else>
-        <div class="history-controls">
-          <div class="history-stats">
-            <el-tag type="info" effect="plain" size="large" class="record-count">
-              <template #icon>
-                <el-icon><Document /></el-icon>
-              </template>
-              显示 {{ filteredLogs.length }}/{{ logs.length }} 条记录 
-              <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
-                最近30条
-              </el-tag>
-              <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
-                全部
-              </el-tag>
-            </el-tag>
+        <!-- 图表视图 -->
+        <div v-if="showGraphView" class="graph-view">
+          <div class="commit-count" v-if="logsData.length > 0">
+            显示 {{ logsData.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
           </div>
           
-          <div class="filter-actions">
-            <el-button 
-              :type="filterVisible ? 'primary' : 'default'"
-              size="default" 
-              @click="filterVisible = !filterVisible"
-            >
-              <template #icon>
-                <el-icon>
-                  <Filter />
-                </el-icon>
-              </template>
-              筛选
-              <el-badge v-if="filteredLogs.length !== logs.length" :value="filteredLogs.length" class="filter-badge" />
-            </el-button>
+          <!-- 添加缩放控制 -->
+          <div class="graph-controls">
+            <div class="zoom-controls">
+              <el-button
+                type="primary"
+                circle
+                size="small"
+                @click="zoomOut"
+                :disabled="graphScale <= minScale"
+              >
+                <el-icon><ZoomOut /></el-icon>
+              </el-button>
+              
+              <el-slider
+                v-model="graphScale"
+                :min="minScale"
+                :max="maxScale"
+                :step="scaleStep"
+                @change="applyScale"
+                class="zoom-slider"
+              />
+              
+              <el-button
+                type="primary"
+                circle
+                size="small"
+                @click="zoomIn"
+                :disabled="graphScale >= maxScale"
+              >
+                <el-icon><ZoomIn /></el-icon>
+              </el-button>
+              
+              <el-button
+                type="primary"
+                size="small"
+                @click="fitGraphToContainer"
+              >
+                自适应大小
+              </el-button>
+            </div>
+            
+            <div class="scale-info">
+              缩放: {{ Math.round(graphScale * 100) }}%
+            </div>
           </div>
+          
+          <div ref="graphContainer" class="graph-container"></div>
         </div>
         
-        <!-- 筛选条件面板 -->
-        <div v-if="filterVisible" class="filter-panel">
-          <div class="filter-form">
-            <div class="filter-item">
-              <div class="filter-label">作者:</div>
-              <el-select 
-                v-model="authorFilter" 
-                placeholder="选择作者" 
-                clearable 
-                filterable
-                class="filter-input"
-              >
-                <el-option 
-                  v-for="author in availableAuthors" 
-                  :key="author" 
-                  :label="author" 
-                  :value="author"
-                />
-              </el-select>
-            </div>
-            
-            <div class="filter-item">
-              <div class="filter-label">提交信息包含:</div>
-              <el-input 
-                v-model="messageFilter" 
-                placeholder="关键词" 
-                clearable 
-                class="filter-input"
-              />
-            </div>
-            
-            <div class="filter-item">
-              <div class="filter-label">日期范围:</div>
-              <el-date-picker
-                v-model="dateRangeFilter"
-                type="daterange"
-                range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                format="YYYY-MM-DD"
-                value-format="YYYY-MM-DD"
-                class="filter-input date-range"
-              />
+        <!-- 表格视图 -->
+        <div v-else>
+          <div class="history-controls">
+            <div class="history-stats">
+              <el-tag type="info" effect="plain" size="large" class="record-count">
+                <template #icon>
+                  <el-icon><Document /></el-icon>
+                </template>
+                显示 {{ filteredLogs.length }}/{{ logs.length }} 条记录 
+                <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
+                  最近30条
+                </el-tag>
+                <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
+                  全部
+                </el-tag>
+              </el-tag>
             </div>
             
             <div class="filter-actions">
-              <el-button type="info" size="small" @click="resetFilters">重置</el-button>
+              <el-button 
+                :type="filterVisible ? 'primary' : 'default'"
+                size="default" 
+                @click="filterVisible = !filterVisible"
+              >
+                <template #icon>
+                  <el-icon>
+                    <Filter />
+                  </el-icon>
+                </template>
+                筛选
+                <el-badge v-if="filteredLogs.length !== logs.length" :value="filteredLogs.length" class="filter-badge" />
+              </el-button>
             </div>
           </div>
-        </div>
-        
-        <el-table :data="filteredLogs" style="width: 100%" stripe border v-loading="isLoading">
-          <el-table-column label="提交哈希" width="100" resizable>
-            <template #default="scope">
-              <span class="commit-hash" @click="viewCommitDetail(scope.row)">{{ scope.row.hash.substring(0, 7) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="date" label="日期" width="120" resizable />
-          <el-table-column label="作者" width="120" resizable>
-            <template #default="scope">
-              <el-tooltip :content="scope.row.email" placement="top" :hide-after="1000">
-                <span class="author-name">{{ scope.row.author }}</span>
-              </el-tooltip>
-            </template>
-          </el-table-column>
-          <el-table-column label="分支" width="180" resizable>
-            <template #default="scope">
-              <div v-if="scope.row.branch" class="branch-container">
-                <el-tag 
-                  v-for="(ref, index) in scope.row.branch.split(',')" 
-                  :key="index"
-                  size="small"
-                  :type="getBranchTagType(ref)"
-                  class="branch-tag"
+          
+          <!-- 筛选条件面板 -->
+          <div v-if="filterVisible" class="filter-panel">
+            <div class="filter-form">
+              <div class="filter-item">
+                <div class="filter-label">作者:</div>
+                <el-select 
+                  v-model="authorFilter" 
+                  placeholder="选择作者" 
+                  clearable 
+                  filterable
+                  class="filter-input"
                 >
-                  {{ formatBranchName(ref) }}
-                </el-tag>
+                  <el-option 
+                    v-for="author in availableAuthors" 
+                    :key="author" 
+                    :label="author" 
+                    :value="author"
+                  />
+                </el-select>
               </div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="message" label="提交信息" min-width="250" />
-        </el-table>
+              
+              <div class="filter-item">
+                <div class="filter-label">提交信息包含:</div>
+                <el-input 
+                  v-model="messageFilter" 
+                  placeholder="关键词" 
+                  clearable 
+                  class="filter-input"
+                />
+              </div>
+              
+              <div class="filter-item">
+                <div class="filter-label">日期范围:</div>
+                <el-date-picker
+                  v-model="dateRangeFilter"
+                  type="daterange"
+                  range-separator="至"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  class="filter-input date-range"
+                />
+              </div>
+              
+              <div class="filter-actions">
+                <el-button type="info" size="small" @click="resetFilters">重置</el-button>
+              </div>
+            </div>
+          </div>
+          
+          <el-table :data="filteredLogs" style="width: 100%" stripe border v-loading="isLoading">
+            <el-table-column label="提交哈希" width="100" resizable>
+              <template #default="scope">
+                <span class="commit-hash" @click="viewCommitDetail(scope.row)">{{ scope.row.hash.substring(0, 7) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="date" label="日期" width="120" resizable />
+            <el-table-column label="作者" width="120" resizable>
+              <template #default="scope">
+                <el-tooltip :content="scope.row.email" placement="top" :hide-after="1000">
+                  <span class="author-name">{{ scope.row.author }}</span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column label="分支" width="180" resizable>
+              <template #default="scope">
+                <div v-if="scope.row.branch" class="branch-container">
+                  <el-tag 
+                    v-for="(ref, index) in scope.row.branch.split(',')" 
+                    :key="index"
+                    size="small"
+                    :type="getBranchTagType(ref)"
+                    class="branch-tag"
+                  >
+                    {{ formatBranchName(ref) }}
+                  </el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="message" label="提交信息" min-width="250" />
+          </el-table>
+        </div>
       </div>
     </div>
 
@@ -832,7 +837,14 @@ function formatCommitMessage(message: string) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 0;
+  padding: 10px 20px;
+  background-color: white;
+  border-bottom: 1px solid #dcdfe6;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
 
 .log-actions {
@@ -1201,6 +1213,19 @@ function formatCommitMessage(message: string) {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.content-area {
+  padding: 15px 20px 20px 20px;
+}
+
+.card {
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+  padding: 0; /* 移除卡片的内边距，避免与固定头部的内边距冲突 */
+  overflow: hidden; /* 确保圆角效果不被内容覆盖 */
 }
 </style>
 

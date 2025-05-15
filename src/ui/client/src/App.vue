@@ -391,7 +391,7 @@ body {
 }
 .container {
   margin: 0 auto;
-  padding: 20px 30px;
+  padding: 85px 30px 60px 30px; /* 增加底部padding，为固定footer留出空间 */
 }
 .main-header {
   background-color: #24292e;
@@ -400,6 +400,12 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 .header-left {
   display: flex;
