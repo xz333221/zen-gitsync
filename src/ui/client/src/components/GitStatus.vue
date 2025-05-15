@@ -298,17 +298,6 @@ async function changeDirectory() {
   }
 }
 
-// 获取文件状态码
-function getFileStatusCode(type: string) {
-  switch (type) {
-    case 'added': return 'staged' // 已暂存的新增文件
-    case 'modified': return 'modified' // 已修改未暂存的文件
-    case 'deleted': return 'deleted' // 已删除未暂存的文件
-    case 'untracked': return 'untracked' // 未跟踪的文件
-    default: return 'other'
-  }
-}
-
 // 处理文件点击
 function handleFileClick(file: {path: string, type: string}) {
   getFileDiff(file.path)

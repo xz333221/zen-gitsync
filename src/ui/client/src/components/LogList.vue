@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider, ElDialog, ElSelect, ElOption, ElDatePicker, ElInput, ElBadge } from 'element-plus'
-import { RefreshRight, ZoomIn, ZoomOut, ArrowDown, ArrowUp, Search, Filter, Document, TrendCharts, List, More } from '@element-plus/icons-vue'
+import { RefreshRight, ZoomIn, ZoomOut, Filter, Document, TrendCharts, List, More } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import { createGitgraph } from '@gitgraph/js'
 import { useGitLogStore } from '../stores/gitLogStore'
