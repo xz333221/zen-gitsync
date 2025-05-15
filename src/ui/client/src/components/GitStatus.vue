@@ -423,12 +423,11 @@ defineExpose({
           <el-switch 
             v-model="gitLogStore.autoUpdateEnabled" 
             @change="gitLogStore.toggleAutoUpdate" 
-            active-color="#67C23A"
-            inactive-color="#909399"
+            style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 10px;"
             inline-prompt
             :active-icon="Check"
             :inactive-icon="Close"
-            style="margin-right: 10px;"
+            class="auto-update-switch"
           />
         </el-tooltip>
         <el-button 
@@ -1079,5 +1078,23 @@ defineExpose({
   display: block;
   margin: 2px 0;
   background-color: #fafbfc;
+}
+
+/* 增加自动更新开关的样式 */
+.auto-update-switch .el-switch__core {
+  transition: all 0.3s ease-in-out;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.auto-update-switch .el-switch__core:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.auto-update-switch.is-checked .el-switch__core {
+  box-shadow: 0 2px 5px rgba(103, 194, 58, 0.3);
+}
+
+.auto-update-switch.is-checked .el-switch__core:hover {
+  box-shadow: 0 2px 8px rgba(103, 194, 58, 0.5);
 }
 </style>
