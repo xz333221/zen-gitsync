@@ -1001,6 +1001,106 @@ defineExpose({
   content: '没有Git状态信息可显示';
   font-size: 14px;
 }
+
+/* 添加目录浏览相关样式 */
+.browser-current-path {
+  font-family: monospace;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #f5f7fa;
+  border-radius: 6px;
+  overflow-x: auto;
+  white-space: nowrap;
+  border: 1px solid #ebeef5;
+}
+
+.browser-error {
+  color: #f56c6c;
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #fef0f0;
+  border-radius: 4px;
+  border-left: 3px solid #f56c6c;
+}
+
+.browser-nav {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.no-padding-left {
+  padding-left: 12px;
+}
+
+.directory-browser {
+  height: 400px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.directory-items-container {
+  flex: 1;
+  overflow-y: auto;
+  background-color: #f8f9fa;
+  padding: 10px;
+}
+
+.directory-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.directory-item {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  background-color: white;
+  border: 1px solid #ebeef5;
+  transition: all 0.2s;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  gap: 5px;
+}
+
+.directory-item:hover {
+  background-color: #ecf5ff;
+  border-color: #c6e2ff;
+}
+
+.directory-item.directory {
+  background-color: #f0f7ff;
+  color: #409eff;
+}
+
+.directory-item .el-icon {
+  margin-right: 5px;
+  flex-shrink: 0;
+}
+
+.directory-item.directory .el-icon {
+  color: #409eff;
+}
+
+.directory-item.file .el-icon {
+  color: #909399;
+}
+
+.directory-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
 </style>
 
 <!-- 非scoped样式，使diff格式化样式对动态内容生效 -->
