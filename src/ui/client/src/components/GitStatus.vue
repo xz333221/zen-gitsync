@@ -298,13 +298,6 @@ async function changeDirectory() {
   }
 }
 
-// 解析 git status --porcelain 格式
-function parseFileStatus(file: {path: string, type: string}) {
-  // 获取文件的状态码，用于显示不同的操作按钮
-  const statusCode = getFileStatusCode(file.type)
-  return statusCode
-}
-
 // 获取文件状态码
 function getFileStatusCode(type: string) {
   switch (type) {
@@ -316,27 +309,9 @@ function getFileStatusCode(type: string) {
   }
 }
 
-// 判断文件是否已暂存
-function isFileStaged(file: {path: string, type: string}) {
-  // 根据VSCode逻辑，判断文件是否已暂存
-  // 在porcelain格式中，第一列字符决定暂存区状态，第二列字符决定工作区状态
-  return file.type === 'added'
-}
-
 // 处理文件点击
 function handleFileClick(file: {path: string, type: string}) {
   getFileDiff(file.path)
-}
-
-// 文件类型标签显示
-function fileTypeLabel(type: string) {
-  switch (type) {
-    case 'added': return '已暂存';
-    case 'modified': return '已修改';
-    case 'deleted': return '已删除';
-    case 'untracked': return '未跟踪';
-    default: return '其他';
-  }
 }
 
 // 暂存单个文件
