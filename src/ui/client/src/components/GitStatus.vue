@@ -485,7 +485,7 @@ defineExpose({
         <!-- 分组显示文件 -->
         <div class="file-group">
           <div class="file-group-header">已暂存的更改</div>
-          <div class="file-list">
+          <div class="file-list" :class="{'empty-file-container': !gitLogStore.fileList.some(f => f.type === 'added')}">
             <div
               v-for="file in gitLogStore.fileList.filter(f => f.type === 'added')"
               :key="file.path"
@@ -517,7 +517,7 @@ defineExpose({
         
         <div class="file-group">
           <div class="file-group-header">未暂存的更改</div>
-          <div class="file-list">
+          <div class="file-list" :class="{'empty-file-container': !gitLogStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')}">
             <div
               v-for="file in gitLogStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
               :key="file.path"
@@ -559,7 +559,7 @@ defineExpose({
         
         <div class="file-group">
           <div class="file-group-header">未跟踪的文件</div>
-          <div class="file-list">
+          <div class="file-list" :class="{'empty-file-container': !gitLogStore.fileList.some(f => f.type === 'untracked')}">
             <div
               v-for="file in gitLogStore.fileList.filter(f => f.type === 'untracked')"
               :key="file.path"
@@ -803,7 +803,7 @@ defineExpose({
   flex-direction: column;
   margin-bottom: 0;
   gap: 12px;
-  height: calc(100% - 60px);
+  height: calc(100% - 70px); /* 给底部留出些空间 */
 }
 
 .file-group {
@@ -812,10 +812,19 @@ defineExpose({
   overflow: hidden;
   border: 1px solid #ebeef5;
   margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
 }
 
+/* 让每个文件组根据内容自动增长 */
+.file-group {
+  flex: 0 1 auto; /* 不主动增长，但允许缩小，基于内容大小 */
+}
+
+/* 最后一个分组可以吸收剩余空间 */
 .file-group:last-child {
   margin-bottom: 0;
+  flex: 1 1 auto; /* 可以增长占用剩余空间 */
 }
 
 .file-group-header {
@@ -825,20 +834,87 @@ defineExpose({
   background-color: #f0f2f5;
   color: #606266;
   border-bottom: 1px solid #ebeef5;
+  flex-shrink: 0; /* 防止header被压缩 */
 }
 
 .file-list {
-  max-height: 120px; /* 更小的固定高度 */
   overflow-y: auto;
   min-height: 40px; /* 最小高度 */
+  flex-grow: 1; /* 允许文件列表在文件组内扩展 */
+  padding: 0;
+  margin: 0;
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(144, 147, 153, 0.3) transparent; /* Firefox */
+}
+
+/* Webkit浏览器的滚动条样式 */
+.file-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.file-list::-webkit-scrollbar-thumb {
+  background-color: rgba(144, 147, 153, 0.3);
+  border-radius: 4px;
+}
+
+.file-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(144, 147, 153, 0.5);
+}
+
+.file-list::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+/* 让每个文件列表自适应高度，使其在容器中更好地分配空间 */
+.file-list:empty {
+  display: none; /* 如果列表为空，不显示 */
+}
+
+/* 当没有足够的项目填充列表时，禁用滚动 */
+.file-list:has(.empty-file-group) {
+  overflow-y: hidden;
+}
+
+/* 替换为更兼容的选择器 */
+/* 改用直接为empty-file-group父容器添加样式 */
+.empty-file-container {
+  overflow-y: hidden !important; /* 强制禁用滚动 */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 1;
 }
 
 .empty-file-group {
-  padding: 12px;
+  padding: 16px;
   text-align: center;
   color: #909399;
   font-size: 13px;
   font-style: italic;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px; /* 增加最小高度 */
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  margin: 8px;
+}
+
+/* 自定义每个分组的展开逻辑 */
+/* 已暂存文件分组 - 保持小巧 */
+.file-group:nth-child(1) {
+  flex: 0 1 auto;
+}
+
+/* 未暂存更改分组 - 稍微大一些 */
+.file-group:nth-child(2) {
+  flex: 0 1 auto;
+}
+
+/* 未跟踪文件分组 - 可以占据剩余空间 */
+.file-group:nth-child(3) {
+  flex: 1 1 auto;
 }
 
 .file-item {
