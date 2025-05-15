@@ -30,7 +30,7 @@ const localLoading = ref(false)
 const isLoading = computed(() => gitLogStore.isLoadingLog || localLoading.value)
 const showAllCommits = ref(false)
 const totalCommits = ref(0)
-const showGraphView = ref(true)
+const showGraphView = ref(false)
 const graphContainer = ref<HTMLElement | null>(null)
 
 // 添加图表缩放控制
