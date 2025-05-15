@@ -675,7 +675,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="card">
+  <div class="card" :class="{ 'is-pushing': gitLogStore.isPushing || isPushing }">
     <h2>提交更改</h2>
 
     <div class="layout-container">
@@ -931,7 +931,14 @@ git config --global user.email "your.email@example.com"</pre>
   left: 0;
   height: 4px;
   width: 100%;
-  background: linear-gradient(90deg, #409EFF, #67C23A);
+  background: linear-gradient(90deg, #409EFF, #67C23A, #409EFF);
+  background-size: 200% 200%;
+  transition: all 0.3s ease;
+}
+
+.card.is-pushing::before {
+  animation: gradientShift 2s ease infinite, progressGlow 2s ease infinite;
+  height: 6px;
 }
 
 .layout-container {
@@ -1257,5 +1264,30 @@ git config --global user.email "your.email@example.com"</pre>
 }
 .el-button+.el-button {
   margin-left: 0;
+}
+
+/* 添加动画相关的CSS */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes progressGlow {
+  0% {
+    box-shadow: 0 0 5px rgba(64, 158, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(103, 194, 58, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 5px rgba(64, 158, 255, 0.5);
+  }
 }
 </style>
