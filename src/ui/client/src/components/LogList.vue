@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider, ElDialog, ElSelect, ElOption, ElDatePicker, ElInput } from 'element-plus'
-import { RefreshRight, ZoomIn, ZoomOut, ArrowDown, ArrowUp, Search, Filter } from '@element-plus/icons-vue'
+import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider, ElDialog, ElSelect, ElOption, ElDatePicker, ElInput, ElBadge } from 'element-plus'
+import { RefreshRight, ZoomIn, ZoomOut, ArrowDown, ArrowUp, Search, Filter, Document, TrendCharts, List, More } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import { createGitgraph } from '@gitgraph/js'
 import { useGitLogStore } from '../stores/gitLogStore'
@@ -559,6 +559,9 @@ function formatCommitMessage(message: string) {
           size="small"
           @click="toggleViewMode"
         >
+          <template #icon>
+            <el-icon><component :is="showGraphView ? Document : TrendCharts" /></el-icon>
+          </template>
           {{ showGraphView ? '表格视图' : '图表视图' }}
         </el-button>
         <el-button 
@@ -567,16 +570,20 @@ function formatCommitMessage(message: string) {
           @click="toggleAllCommits" 
           :loading="isLoading"
         >
+          <template #icon>
+            <el-icon><component :is="showAllCommits ? List : More" /></el-icon>
+          </template>
           {{ showAllCommits ? '显示最近30条' : '显示所有提交' }}
         </el-button>
         <el-button 
-          :icon="RefreshRight" 
           circle 
           size="small" 
           @click="refreshLog()" 
           :loading="isLoading"
           :class="{ 'refresh-button-animated': logRefreshed }"
-        />
+        >
+          <el-icon><RefreshRight /></el-icon>
+        </el-button>
       </div>
     </div>
     <div v-if="errorMessage">{{ errorMessage }}</div>
@@ -597,12 +604,13 @@ function formatCommitMessage(message: string) {
           <div class="zoom-controls">
             <el-button
               type="primary"
-              :icon="ZoomOut"
               circle
               size="small"
               @click="zoomOut"
               :disabled="graphScale <= minScale"
-            />
+            >
+              <el-icon><ZoomOut /></el-icon>
+            </el-button>
             
             <el-slider
               v-model="graphScale"
@@ -615,12 +623,13 @@ function formatCommitMessage(message: string) {
             
             <el-button
               type="primary"
-              :icon="ZoomIn"
               circle
               size="small"
               @click="zoomIn"
               :disabled="graphScale >= maxScale"
-            />
+            >
+              <el-icon><ZoomIn /></el-icon>
+            </el-button>
             
             <el-button
               type="primary"
@@ -641,23 +650,35 @@ function formatCommitMessage(message: string) {
       
       <!-- 表格视图 -->
       <div v-else>
-        <div class="log-header-actions">
-          <div class="commit-count" v-if="logs.length > 0">
-            显示 {{ filteredLogs.length }}/{{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
+        <div class="history-controls">
+          <div class="history-stats">
+            <el-tag type="info" effect="plain" size="large" class="record-count">
+              <template #icon>
+                <el-icon><Document /></el-icon>
+              </template>
+              显示 {{ filteredLogs.length }}/{{ logs.length }} 条记录 
+              <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
+                最近30条
+              </el-tag>
+              <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
+                全部
+              </el-tag>
+            </el-tag>
           </div>
           
           <div class="filter-actions">
             <el-button 
-              type="primary" 
-              size="small" 
+              :type="filterVisible ? 'primary' : 'default'"
+              size="default" 
               @click="filterVisible = !filterVisible"
             >
               <template #icon>
                 <el-icon>
-                  <component :is="filterVisible ? ArrowUp : ArrowDown" />
+                  <Filter />
                 </el-icon>
               </template>
-              筛选 {{ filteredLogs.length !== logs.length ? `(${filteredLogs.length})` : '' }}
+              筛选
+              <el-badge v-if="filteredLogs.length !== logs.length" :value="filteredLogs.length" class="filter-badge" />
             </el-button>
           </div>
         </div>
@@ -1105,11 +1126,33 @@ function formatCommitMessage(message: string) {
   --el-dialog-margin-top: 5vh;
 }
 
-.log-header-actions {
+.history-controls {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 15px;
+  padding: 0;
+}
+
+.history-stats {
+  display: flex;
+  align-items: center;
+}
+
+.record-count {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding-left: 15px;
+  padding-right: 15px;
+}
+
+.record-count :deep(.el-icon) {
+  margin-right: 6px;
+}
+
+.filter-badge :deep(.el-badge__content) {
+  background-color: #409EFF;
 }
 
 .filter-panel {
@@ -1118,6 +1161,7 @@ function formatCommitMessage(message: string) {
   padding: 15px;
   margin-bottom: 15px;
   border: 1px solid #e4e7ed;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
 }
 
 .filter-form {
