@@ -481,6 +481,46 @@ async function startUIServer() {
     }
   });
   
+  // 添加单个文件到暂存区
+  app.post('/api/add-file', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      
+      if (!filePath) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少文件路径参数' 
+        });
+      }
+      
+      // 执行 git add 命令添加特定文件
+      await execGitCommand(`git add "${filePath}"`);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // 从暂存区移除单个文件
+  app.post('/api/unstage-file', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      
+      if (!filePath) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少文件路径参数' 
+        });
+      }
+      
+      // 执行 git reset HEAD 命令移除特定文件的暂存
+      await execGitCommand(`git reset HEAD -- "${filePath}"`);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
   // 推送更改
   app.post('/api/push', async (req, res) => {
     try {

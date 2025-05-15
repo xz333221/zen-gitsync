@@ -298,6 +298,31 @@ async function changeDirectory() {
   }
 }
 
+// 解析 git status --porcelain 格式
+function parseFileStatus(file: {path: string, type: string}) {
+  // 获取文件的状态码，用于显示不同的操作按钮
+  const statusCode = getFileStatusCode(file.type)
+  return statusCode
+}
+
+// 获取文件状态码
+function getFileStatusCode(type: string) {
+  switch (type) {
+    case 'added': return 'staged' // 已暂存的新增文件
+    case 'modified': return 'modified' // 已修改未暂存的文件
+    case 'deleted': return 'deleted' // 已删除未暂存的文件
+    case 'untracked': return 'untracked' // 未跟踪的文件
+    default: return 'other'
+  }
+}
+
+// 判断文件是否已暂存
+function isFileStaged(file: {path: string, type: string}) {
+  // 根据VSCode逻辑，判断文件是否已暂存
+  // 在porcelain格式中，第一列字符决定暂存区状态，第二列字符决定工作区状态
+  return file.type === 'added'
+}
+
 // 处理文件点击
 function handleFileClick(file: {path: string, type: string}) {
   getFileDiff(file.path)
@@ -306,12 +331,22 @@ function handleFileClick(file: {path: string, type: string}) {
 // 文件类型标签显示
 function fileTypeLabel(type: string) {
   switch (type) {
-    case 'added': return '新增';
-    case 'modified': return '修改';
-    case 'deleted': return '删除';
+    case 'added': return '已暂存';
+    case 'modified': return '已修改';
+    case 'deleted': return '已删除';
     case 'untracked': return '未跟踪';
     default: return '其他';
   }
+}
+
+// 暂存单个文件
+async function stageFile(filePath: string) {
+  await gitLogStore.addFileToStage(filePath)
+}
+
+// 取消暂存单个文件
+async function unstageFile(filePath: string) {
+  await gitLogStore.unstageFile(filePath)
 }
 
 // 刷新Git状态的方法
@@ -439,6 +474,37 @@ defineExpose({
           <span class="file-path">{{ file.path }}</span>
         </div>
         <div class="file-actions">
+          <!-- 未跟踪文件: 显示暂存按钮 -->
+          <el-tooltip v-if="file.type === 'untracked'" content="添加到暂存区" placement="top" :hide-after="1000">
+            <el-button
+              type="success"
+              size="small"
+              circle
+              @click.stop="stageFile(file.path)"
+            >+</el-button>
+          </el-tooltip>
+          
+          <!-- 已修改未暂存文件: 显示暂存按钮 -->
+          <el-tooltip v-if="file.type === 'modified'" content="添加到暂存区" placement="top" :hide-after="1000">
+            <el-button
+              type="success"
+              size="small"
+              circle
+              @click.stop="stageFile(file.path)"
+            >+</el-button>
+          </el-tooltip>
+          
+          <!-- 已暂存文件: 显示取消暂存按钮 -->
+          <el-tooltip v-if="file.type === 'added'" content="取消暂存" placement="top" :hide-after="1000">
+            <el-button
+              type="warning"
+              size="small"
+              circle
+              @click.stop="unstageFile(file.path)"
+            >-</el-button>
+          </el-tooltip>
+          
+          <!-- 所有文件都显示撤销更改按钮 -->
           <el-tooltip content="撤回修改" placement="top" :hide-after="1000">
             <el-button
               type="danger"
@@ -596,7 +662,7 @@ defineExpose({
   padding: 16px;
   border-radius: 6px;
   margin-bottom: 20px;
-  max-height: 300px;
+  max-height: 200px;
   overflow-y: auto;
   border: 1px solid #f0f0f0;
   font-size: 14px;
@@ -604,7 +670,7 @@ defineExpose({
 }
 
 .file-list {
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
   border-radius: 6px;
   border: 1px solid #f0f0f0;
@@ -612,14 +678,15 @@ defineExpose({
 }
 
 .file-item {
-  padding: 10px 12px;
-  margin-bottom: 6px;
-  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border-radius: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   transition: background-color 0.2s ease;
+  overflow: hidden;
 }
 
 .file-item:hover {
@@ -630,12 +697,17 @@ defineExpose({
   display: flex;
   align-items: center;
   flex-grow: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-actions {
   margin-left: 10px;
-  opacity: 0.5;
+  opacity: 0.7;
   transition: opacity 0.2s;
+  display: flex;
+  gap: 5px;
 }
 
 .file-item:hover .file-actions {
@@ -648,6 +720,9 @@ defineExpose({
   border-radius: 10px;
   margin-right: 10px;
   flex-shrink: 0;
+  min-width: 60px;
+  text-align: center;
+  font-weight: bold;
 }
 
 .added .file-type {
@@ -673,6 +748,9 @@ defineExpose({
 .file-path {
   font-family: monospace;
   word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .diff-content {

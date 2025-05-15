@@ -131,12 +131,37 @@ export const useGitLogStore = defineStore('gitLog', () => {
       const match = line.match(/^([ MADRCU\?]{2})\s+(.+)$/)
       if (match) {
         let type = ''
-        const code = match[1].trim()
-        if (code === 'M' || code === 'MM' || code === 'AM' || code === 'RM') type = 'modified'
-        else if (code === 'A' || code === 'AA') type = 'added'
-        else if (code === 'D' || code === 'AD' || code === 'DA') type = 'deleted'
-        else if (code === '??') type = 'untracked'
-        else type = 'other'
+        const code = match[1]
+        const indexStatus = code.charAt(0)
+        const workTreeStatus = code.charAt(1)
+        
+        // 根据暂存区状态和工作区状态确定文件类型
+        if (indexStatus === 'A') {
+          // 已暂存的新文件
+          type = 'added'
+        } else if (indexStatus === 'M') {
+          // 已暂存的修改文件
+          type = 'added'
+        } else if (indexStatus === 'D') {
+          // 已暂存的删除文件
+          type = 'added'
+        } else if (indexStatus === 'R') {
+          // 已暂存的重命名文件
+          type = 'added'
+        } else if (indexStatus === ' ' && workTreeStatus === 'M') {
+          // 已修改未暂存的文件
+          type = 'modified'
+        } else if (indexStatus === ' ' && workTreeStatus === 'D') {
+          // 已删除未暂存的文件
+          type = 'deleted'
+        } else if (code === '??') {
+          // 未跟踪的文件
+          type = 'untracked'
+        } else {
+          // 其他情况
+          type = 'other'
+        }
+        
         files.push({ path: match[2], type })
       }
     }
@@ -283,6 +308,100 @@ export const useGitLogStore = defineStore('gitLog', () => {
       return false
     } finally {
       isAddingFiles.value = false
+    }
+  }
+  
+  // 添加单个文件到暂存区
+  async function addFileToStage(filePath: string) {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
+    try {
+      isAddingFiles.value = true
+      const response = await fetch('/api/add-file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filePath })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        ElMessage({
+          message: '文件已暂存',
+          type: 'success'
+        })
+        
+        // 刷新状态
+        fetchStatus()
+        
+        return true
+      } else {
+        ElMessage({
+          message: `暂存文件失败: ${result.error}`,
+          type: 'error'
+        })
+        return false
+      }
+    } catch (error) {
+      ElMessage({
+        message: `暂存文件失败: ${(error as Error).message}`,
+        type: 'error'
+      })
+      return false
+    } finally {
+      isAddingFiles.value = false
+    }
+  }
+  
+  // 取消暂存单个文件
+  async function unstageFile(filePath: string) {
+    // 检查是否是Git仓库
+    if (!gitStore.isGitRepo) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
+    try {
+      isResetting.value = true
+      const response = await fetch('/api/unstage-file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filePath })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        ElMessage({
+          message: '已取消暂存文件',
+          type: 'success'
+        })
+        
+        // 刷新状态
+        fetchStatus()
+        
+        return true
+      } else {
+        ElMessage({
+          message: `取消暂存失败: ${result.error}`,
+          type: 'error'
+        })
+        return false
+      }
+    } catch (error) {
+      ElMessage({
+        message: `取消暂存失败: ${(error as Error).message}`,
+        type: 'error'
+      })
+      return false
+    } finally {
+      isResetting.value = false
     }
   }
   
@@ -570,6 +689,8 @@ export const useGitLogStore = defineStore('gitLog', () => {
     fetchStatusPorcelain,
     parseStatusPorcelain,
     addToStage,
+    addFileToStage,
+    unstageFile,
     commitChanges,
     pushToRemote,
     addAndCommit,
