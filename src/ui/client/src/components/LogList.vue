@@ -363,8 +363,22 @@ async function viewCommitDetail(commit: LogItem) {
   commitDiff.value = ''
   selectedCommitFile.value = ''
   
+  // 调试输出当前提交对象的所有属性
+  console.log('提交详情对象:', JSON.stringify(commit, null, 2))
+  console.log('哈希值类型和长度:', typeof commit.hash, commit.hash ? commit.hash.length : 0)
+  console.log('提交信息类型和长度:', typeof commit.message, commit.message ? commit.message.length : 0)
+  console.log('提交分支:', commit.branch)
+  
   try {
     console.log(`获取提交详情: ${commit.hash}`)
+    
+    // 确保哈希值有效
+    if (!commit.hash || commit.hash.length < 7) {
+      console.error('无效的提交哈希值:', commit.hash)
+      commitDiff.value = '无效的提交哈希值'
+      isLoadingCommitDetail.value = false
+      return
+    }
     
     // 获取提交的变更文件列表
     const filesResponse = await fetch(`/api/commit-files?hash=${commit.hash}`)
@@ -458,6 +472,18 @@ function formatDiff(diffText: string) {
       return `<div class="diff-context">${escapedLine}</div>`;
     }
   }).join('');
+}
+
+// 格式化提交信息，支持多行显示
+function formatCommitMessage(message: string) {
+  if (!message) return '(无提交信息)';
+  
+  // 调试输出
+  console.log('格式化前的提交信息:', message)
+  console.log('提交信息中的换行符数量:', (message.match(/\n/g) || []).length)
+  
+  // 返回格式化后的提交信息，保留换行符
+  return message.trim();
 }
 </script>
 
@@ -559,7 +585,7 @@ function formatDiff(diffText: string) {
         <el-table :data="logs" style="width: 100%" stripe border v-loading="isLoading">
           <el-table-column label="提交哈希" width="100" resizable>
             <template #default="scope">
-              <span class="commit-hash" @click="viewCommitDetail(scope.row)">{{ scope.row.hash }}</span>
+              <span class="commit-hash" @click="viewCommitDetail(scope.row)">{{ scope.row.hash.substring(0, 7) }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="date" label="日期" width="120" resizable />
@@ -593,7 +619,7 @@ function formatDiff(diffText: string) {
     <!-- 提交详情弹窗 -->
     <el-dialog
       v-model="commitDetailVisible"
-      :title="`提交详情: ${selectedCommit?.hash || ''}`"
+      :title="`提交详情: ${selectedCommit?.hash ? selectedCommit.hash.substring(0, 7) : '未知'}`"
       width="80%"
       destroy-on-close
       class="commit-detail-dialog"
@@ -601,39 +627,23 @@ function formatDiff(diffText: string) {
       <div v-loading="isLoadingCommitDetail" class="commit-detail-container">
         <!-- 提交基本信息 -->
         <div v-if="selectedCommit" class="commit-info">
-          <div class="detail-item">
-            <div class="detail-label">完整哈希:</div>
-            <div class="detail-value">{{ selectedCommit.hash }}</div>
-          </div>
-          <div class="detail-item">
-            <div class="detail-label">作者:</div>
-            <div class="detail-value">{{ selectedCommit.author }} &lt;{{ selectedCommit.email }}&gt;</div>
-          </div>
-          <div class="detail-item">
-            <div class="detail-label">日期:</div>
-            <div class="detail-value">{{ selectedCommit.date }}</div>
-          </div>
-          <div class="detail-item">
-            <div class="detail-label">分支:</div>
-            <div class="detail-value">
-              <template v-if="selectedCommit.branch">
-                <el-tag 
-                  v-for="(ref, index) in selectedCommit.branch.split(',')" 
-                  :key="index"
-                  size="small"
-                  :type="getBranchTagType(ref)"
-                  class="branch-tag"
-                  style="margin-right: 5px;"
-                >
-                  {{ formatBranchName(ref) }}
-                </el-tag>
-              </template>
-              <span v-else>无</span>
+          <div class="commit-info-header">
+            <div class="info-item">
+              <span class="item-label">哈希:</span>
+              <span class="item-value">{{ selectedCommit.hash }}</span>
+            </div>
+            <div class="info-item">
+              <span class="item-label">作者:</span>
+              <span class="item-value">{{ selectedCommit.author }} &lt;{{ selectedCommit.email }}&gt;</span>
+            </div>
+            <div class="info-item">
+              <span class="item-label">日期:</span>
+              <span class="item-value">{{ selectedCommit.date }}</span>
             </div>
           </div>
-          <div class="detail-item">
-            <div class="detail-label">提交信息:</div>
-            <div class="detail-value commit-message">{{ selectedCommit.message }}</div>
+          <div class="commit-message-container">
+            <div class="message-label">提交信息:</div>
+            <div class="message-content" v-html="formatCommitMessage(selectedCommit.message).replace(/\n/g, '<br>')"></div>
           </div>
         </div>
 
@@ -790,13 +800,68 @@ function formatDiff(diffText: string) {
 }
 
 .commit-info {
-  padding: 15px;
+  padding: 12px;
   background-color: #f5f7fa;
   border-radius: 8px;
   font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.commit-info-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
+  background-color: #fff;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #e4e7ed;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.item-label {
+  font-weight: bold;
+  color: #606266;
+  white-space: nowrap;
+}
+
+.item-value {
+  color: #333;
+  word-break: break-all;
+}
+
+.commit-message-container {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.message-label {
+  font-weight: bold;
+  color: #606266;
+}
+
+.message-content {
+  background-color: #fff;
+  padding: 12px;
+  border-radius: 4px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  border-left: 4px solid #409EFF;
+  line-height: 1.5;
+  border: 1px solid #e4e7ed;
+  border-left: 4px solid #409EFF;
 }
 
 .commit-files-diff {
+  margin-top: 5px;
   display: flex;
   gap: 20px;
   height: 60vh;
@@ -902,6 +967,11 @@ function formatDiff(diffText: string) {
 
 .diff-context {
   background-color: #f5f7fa;
+}
+
+/* 减小对话框的顶部边距 */
+:deep(.commit-detail-dialog) {
+  --el-dialog-margin-top: 5vh;
 }
 </style>
 

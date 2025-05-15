@@ -505,6 +505,7 @@ defineExpose({
       :title="`文件差异: ${selectedFile}`"
       width="80%"
       destroy-on-close
+      class="diff-dialog"
     >
       <div v-loading="isLoadingDiff" class="diff-content">
         <div v-if="diffContent" v-html="formatDiff(diffContent)" class="diff-formatted"></div>
@@ -538,6 +539,11 @@ defineExpose({
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   padding: 20px;
   margin-bottom: 20px;
+}
+
+/* 减小差异对话框的顶部边距 */
+:deep(.diff-dialog) {
+  --el-dialog-margin-top: 5vh;
 }
 
 .status-header {
@@ -633,7 +639,7 @@ defineExpose({
 .diff-content {
   font-family: monospace;
   white-space: pre-wrap;
-  max-height: 60vh;
+  max-height: 74vh;
   overflow-y: auto;
   padding: 10px;
   background-color: #f5f7fa;
@@ -769,34 +775,67 @@ defineExpose({
 }
 </style>
 
-<!-- 添加非scoped样式，使diff格式化样式对动态内容生效 -->
+<!-- 非scoped样式，使diff格式化样式对动态内容生效 -->
 <style>
 .diff-header {
   font-weight: bold;
   background-color: #e6f1fc;
-  padding: 3px;
-  margin: 5px 0;
+  padding: 5px;
+  margin: 8px 0;
+  border-radius: 4px;
+  color: #0366d6;
+  border-bottom: 1px solid #c8e1ff;
 }
 
 .diff-old-file, .diff-new-file {
-  color: #888;
+  color: #586069;
+  padding: 2px 5px;
+  font-family: monospace;
+}
+
+.diff-old-file {
+  color: #cb2431;
+}
+
+.diff-new-file {
+  color: #22863a;
 }
 
 .diff-hunk-header {
   color: #6f42c1;
+  background-color: #f1f8ff;
+  padding: 2px 5px;
+  margin: 5px 0;
+  border-radius: 3px;
+  font-family: monospace;
 }
 
 .diff-added {
   background-color: #e6ffed;
-  color: #28a745;
+  color: #22863a;
+  padding: 0 5px;
+  border-left: 4px solid #22863a;
+  font-family: monospace;
+  display: block;
+  margin: 2px 0;
 }
 
 .diff-removed {
   background-color: #ffeef0;
-  color: #d73a49;
+  color: #cb2431;
+  padding: 0 5px;
+  border-left: 4px solid #cb2431;
+  font-family: monospace;
+  display: block;
+  margin: 2px 0;
 }
 
 .diff-context {
   color: #444;
+  padding: 0 5px;
+  font-family: monospace;
+  display: block;
+  margin: 2px 0;
+  background-color: #fafbfc;
 }
 </style>

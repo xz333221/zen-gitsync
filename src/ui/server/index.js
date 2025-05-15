@@ -502,9 +502,40 @@ async function startUIServer() {
       // 由前端统一使用该接口
       
       // 修改 git log 命令，添加 %ae 参数来获取作者邮箱
-      const { stdout } = await execGitCommand(`git log --all --pretty=format:"%h|%an|%ae|%ad|%s|%D" --date=short ${limit}`);
-      const logs = stdout.split('\n').map(line => {
-        const [hash, author, email, date, message, refs] = line.split('|');
+      // 使用 %H 获取完整哈希值（而不是短哈希 %h）
+      // 使用 %B 获取完整提交信息（包括正文）
+      const { stdout } = await execGitCommand(`git log --all --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${limit}`);
+      
+      // 分隔符改为使用特殊标记，因为提交信息中可能包含|字符
+      const recordSeparator = "\n<<<RECORD_SEPARATOR>>>\n";
+      const fieldSeparator = "<<<FIELD_SEPARATOR>>>";
+      
+      // 预处理输出，替换提交记录之间的换行符
+      const processedOutput = stdout.replace(/\n(?=[a-f0-9]{40}\|)/g, recordSeparator);
+      
+      // 按记录分隔符拆分日志条目
+      const logEntries = processedOutput.split(recordSeparator);
+      
+      const logs = logEntries.map(entry => {
+        // 使用第一个|分隔哈希值，其余部分作为整体
+        const hashEndIndex = entry.indexOf('|');
+        const hash = entry.substring(0, hashEndIndex);
+        const restPart = entry.substring(hashEndIndex + 1);
+        
+        // 使用最后一个|分隔引用信息，其余部分作为整体
+        const lastPipeIndex = restPart.lastIndexOf('|');
+        const refs = restPart.substring(lastPipeIndex + 1).trim();
+        const middlePart = restPart.substring(0, lastPipeIndex);
+        
+        // 分隔作者、邮箱、日期和提交信息
+        const parts = middlePart.split('|');
+        
+        // 确保即使分隔出的部分不足，也能提供默认值
+        const author = parts[0] || '';
+        const email = parts[1] || '';
+        const date = parts[2] || '';
+        // 提交信息可能包含多行
+        const message = parts.slice(3).join('|').trim();
         
         // 从引用信息中提取分支名称
         let branch = null;
@@ -515,6 +546,7 @@ async function startUIServer() {
         
         return { hash, author, email, date, message, branch };
       });
+      
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: error.message });
