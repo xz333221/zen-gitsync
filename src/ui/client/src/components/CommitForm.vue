@@ -1029,7 +1029,7 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 40px; /* 添加最小高度确保loading不会改变按钮高度 */
+  min-height: 30px; /* 添加最小高度确保loading不会改变按钮高度 */
 }
 
 .action-button :deep(.el-icon) {
