@@ -963,7 +963,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .card-header {
-  padding: 16px 20px;
+  padding: 10px 16px;
   border-bottom: 1px solid #f0f0f0;
   display: flex;
   justify-content: space-between;
@@ -972,7 +972,8 @@ git config --global user.email "your.email@example.com"</pre>
 
 .card-header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 500;
   color: #303133;
 }
 

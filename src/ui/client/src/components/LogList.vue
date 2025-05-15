@@ -850,12 +850,23 @@ function formatCommitMessage(message: string) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0;
-  padding: 16px 20px;
+  padding: 10px 16px;
   background-color: white;
   border-bottom: 1px solid #f0f0f0;
   position: sticky;
   top: 0;
   z-index: 100;
+}
+
+.log-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.log-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .content-area {

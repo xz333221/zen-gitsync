@@ -210,7 +210,7 @@ function handleVResize(event: MouseEvent) {
     const newRightRatio = 1 - newLeftRatio;
     
     // 更新网格模板列
-    gridLayout.style.gridTemplateColumns = `${newLeftRatio}fr 10px ${newRightRatio}fr`;
+    gridLayout.style.gridTemplateColumns = `${newLeftRatio}fr 8px ${newRightRatio}fr`;
   }
 }
 
@@ -258,7 +258,7 @@ function handleHResize(event: MouseEvent) {
     const newBottomRatio = 1 - newTopRatio;
     
     // 更新网格模板行
-    gridLayout.style.gridTemplateRows = `${newTopRatio}fr 10px ${newBottomRatio}fr`;
+    gridLayout.style.gridTemplateRows = `${newTopRatio}fr 8px ${newBottomRatio}fr`;
   }
 }
 
@@ -511,19 +511,19 @@ body {
   bottom: 60px; /* 底部footer高度 */
   left: 0;
   right: 0;
-  padding: 20px;
+  padding: 10px;
   overflow: hidden; /* 防止整体滚动 */
 }
 
 .grid-layout {
   display: grid;
-  grid-template-columns: 1fr 10px 1fr;
-  grid-template-rows: 1fr 10px 1fr;
+  grid-template-columns: 1fr 8px 3fr;
+  grid-template-rows: 1fr 8px 1fr;
   grid-template-areas: 
     "git-status v-resizer commit-form"
     "h-resizer h-resizer h-resizer"
     "log-list log-list log-list";
-  gap: 0;
+  gap: 10px;
   height: 100%;
 }
 
@@ -531,21 +531,21 @@ body {
   grid-area: git-status;
   overflow: hidden;
   max-height: 100%;
-  padding-right: 10px;
+  padding: 0;
 }
 
 .commit-form-panel {
   grid-area: commit-form;
   overflow: hidden;
   max-height: 100%;
-  padding-left: 10px;
+  padding: 0;
 }
 
 .log-list-panel {
   grid-area: log-list;
   overflow: hidden;
   max-height: 100%;
-  padding-top: 10px;
+  padding: 0;
 }
 
 /* 确保每个卡片内部可以滚动 */
@@ -720,6 +720,7 @@ h1 {
       "commit-form"
       "h-resizer"
       "log-list";
+    gap: 10px;
   }
   
   .vertical-resizer {
@@ -741,18 +742,14 @@ h1 {
 
   .git-status-panel {
     max-height: 30vh;
-    padding-bottom: 10px;
   }
   
   .commit-form-panel {
     max-height: 30vh;
-    padding-top: 10px;
-    padding-bottom: 10px;
   }
   
   .log-list-panel {
     max-height: 40vh;
-    padding-top: 10px;
   }
 }
 </style>
@@ -831,6 +828,7 @@ h1 {
   transition: background-color 0.2s;
   position: relative;
   z-index: 10;
+  border-radius: 4px;
 }
 
 .vertical-resizer::after {
@@ -862,6 +860,7 @@ h1 {
   transition: background-color 0.2s;
   position: relative;
   z-index: 10;
+  border-radius: 4px;
 }
 
 .horizontal-resizer::after {
