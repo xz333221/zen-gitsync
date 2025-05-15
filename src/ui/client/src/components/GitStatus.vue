@@ -403,7 +403,6 @@ onMounted(() => {
 // onUnmounted(() => {
 //   socket.disconnect()
 // })
-
 // 暴露刷新方法给父组件
 defineExpose({
   refreshStatus
@@ -420,6 +419,7 @@ defineExpose({
           placement="top" 
           :hide-after="1000"
         >
+        
           <el-switch 
             v-model="gitLogStore.autoUpdateEnabled" 
             @change="gitLogStore.toggleAutoUpdate" 

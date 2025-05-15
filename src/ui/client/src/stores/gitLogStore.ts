@@ -99,7 +99,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
   
   // 切换自动更新状态
   function toggleAutoUpdate() {
-    autoUpdateEnabled.value = !autoUpdateEnabled.value
+    // autoUpdateEnabled.value = !autoUpdateEnabled.value
     
     if (!socket) return
     
