@@ -164,6 +164,110 @@ async function clearUserSettings() {
     tempUserEmail.value = ''
   }
 }
+
+// 添加分隔条相关逻辑
+let isVResizing = false;
+let isHResizing = false;
+let initialX = 0;
+let initialY = 0;
+let initialGridTemplateColumns = '';
+let initialGridTemplateRows = '';
+
+function startVResize(event: MouseEvent) {
+  isVResizing = true;
+  initialX = event.clientX;
+  
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
+  initialGridTemplateColumns = getComputedStyle(gridLayout).gridTemplateColumns;
+  
+  document.getElementById('v-resizer')?.classList.add('active');
+  
+  document.addEventListener('mousemove', handleVResize);
+  document.addEventListener('mouseup', stopVResize);
+  
+  // 防止文本选择
+  event.preventDefault();
+}
+
+function handleVResize(event: MouseEvent) {
+  if (!isVResizing) return;
+  
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
+  const delta = event.clientX - initialX;
+  
+  // 解析当前的网格模板列值
+  const columns = initialGridTemplateColumns.split(' ');
+  
+  // 确保我们有足够的列
+  if (columns.length >= 3) {
+    // 计算新的左列宽度
+    const leftColWidth = parseFloat(columns[0]);
+    const rightColWidth = parseFloat(columns[2]);
+    
+    // 计算新的左右列比例
+    const totalWidth = leftColWidth + rightColWidth;
+    const newLeftRatio = (leftColWidth + delta / gridLayout.clientWidth * totalWidth) / totalWidth;
+    const newRightRatio = 1 - newLeftRatio;
+    
+    // 更新网格模板列
+    gridLayout.style.gridTemplateColumns = `${newLeftRatio}fr 10px ${newRightRatio}fr`;
+  }
+}
+
+function stopVResize() {
+  isVResizing = false;
+  document.getElementById('v-resizer')?.classList.remove('active');
+  document.removeEventListener('mousemove', handleVResize);
+  document.removeEventListener('mouseup', stopVResize);
+}
+
+function startHResize(event: MouseEvent) {
+  isHResizing = true;
+  initialY = event.clientY;
+  
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
+  initialGridTemplateRows = getComputedStyle(gridLayout).gridTemplateRows;
+  
+  document.getElementById('h-resizer')?.classList.add('active');
+  
+  document.addEventListener('mousemove', handleHResize);
+  document.addEventListener('mouseup', stopHResize);
+  
+  // 防止文本选择
+  event.preventDefault();
+}
+
+function handleHResize(event: MouseEvent) {
+  if (!isHResizing) return;
+  
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
+  const delta = event.clientY - initialY;
+  
+  // 解析当前的网格模板行值
+  const rows = initialGridTemplateRows.split(' ');
+  
+  // 确保我们有足够的行
+  if (rows.length >= 3) {
+    // 计算新的上行高度
+    const topRowHeight = parseFloat(rows[0]);
+    const bottomRowHeight = parseFloat(rows[2]);
+    
+    // 计算新的上下行比例
+    const totalHeight = topRowHeight + bottomRowHeight;
+    const newTopRatio = (topRowHeight + delta / gridLayout.clientHeight * totalHeight) / totalHeight;
+    const newBottomRatio = 1 - newTopRatio;
+    
+    // 更新网格模板行
+    gridLayout.style.gridTemplateRows = `${newTopRatio}fr 10px ${newBottomRatio}fr`;
+  }
+}
+
+function stopHResize() {
+  isHResizing = false;
+  document.getElementById('h-resizer')?.classList.remove('active');
+  document.removeEventListener('mousemove', handleHResize);
+  document.removeEventListener('mouseup', stopHResize);
+}
 </script>
 
 <template>
@@ -222,6 +326,9 @@ async function clearUserSettings() {
         />
       </div>
       
+      <!-- 垂直分隔条 -->
+      <div class="vertical-resizer" id="v-resizer" @mousedown="startVResize"></div>
+      
       <!-- 上方右侧提交表单 -->
       <div class="commit-form-panel" v-if="gitStore.isGitRepo">
         <!-- 当用户未配置时显示配置提示 -->
@@ -262,6 +369,9 @@ async function clearUserSettings() {
           </div>
         </div>
       </div>
+      
+      <!-- 水平分隔条 -->
+      <div class="horizontal-resizer" id="h-resizer" @mousedown="startHResize"></div>
       
       <!-- 下方提交历史 -->
       <div class="log-list-panel" v-if="gitStore.isGitRepo">
@@ -407,31 +517,35 @@ body {
 
 .grid-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto 1fr;
+  grid-template-columns: 1fr 10px 1fr;
+  grid-template-rows: 1fr 10px 1fr;
   grid-template-areas: 
-    "git-status commit-form"
-    "log-list log-list";
-  gap: 20px;
+    "git-status v-resizer commit-form"
+    "h-resizer h-resizer h-resizer"
+    "log-list log-list log-list";
+  gap: 0;
   height: 100%;
 }
 
 .git-status-panel {
   grid-area: git-status;
   overflow: hidden;
-  max-height: calc(50vh - 70px);
+  max-height: 100%;
+  padding-right: 10px;
 }
 
 .commit-form-panel {
   grid-area: commit-form;
   overflow: hidden;
-  max-height: calc(50vh - 70px);
+  max-height: 100%;
+  padding-left: 10px;
 }
 
 .log-list-panel {
   grid-area: log-list;
   overflow: hidden;
-  max-height: calc(50vh - 30px);
+  max-height: 100%;
+  padding-top: 10px;
 }
 
 /* 确保每个卡片内部可以滚动 */
@@ -599,29 +713,46 @@ h1 {
 @media (max-width: 768px) {
   .grid-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto auto auto auto auto;
     grid-template-areas: 
       "git-status"
+      "v-resizer"
       "commit-form"
+      "h-resizer"
       "log-list";
+  }
+  
+  .vertical-resizer {
+    height: 10px;
+    cursor: row-resize;
+  }
+
+  .vertical-resizer::after {
+    width: 30px;
+    height: 4px;
   }
   
   .git-status-panel,
   .commit-form-panel,
   .log-list-panel {
+    padding: 0;
     max-height: none;
   }
 
   .git-status-panel {
     max-height: 30vh;
+    padding-bottom: 10px;
   }
   
   .commit-form-panel {
     max-height: 30vh;
+    padding-top: 10px;
+    padding-bottom: 10px;
   }
   
   .log-list-panel {
     max-height: 40vh;
+    padding-top: 10px;
   }
 }
 </style>
@@ -690,5 +821,67 @@ h1 {
   padding: 8px 12px;
   border-radius: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* 垂直分隔条样式 */
+.vertical-resizer {
+  grid-area: v-resizer;
+  background-color: #e0e0e0;
+  cursor: col-resize;
+  transition: background-color 0.2s;
+  position: relative;
+  z-index: 10;
+}
+
+.vertical-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 50px;
+  background-color: #b0b0b0;
+  border-radius: 2px;
+}
+
+.vertical-resizer:hover, .vertical-resizer.active {
+  background-color: #c0c0c0;
+}
+
+.vertical-resizer:hover::after, .vertical-resizer.active::after {
+  background-color: #409EFF;
+  box-shadow: 0 0 6px rgba(64, 158, 255, 0.5);
+}
+
+/* 水平分隔条样式 */
+.horizontal-resizer {
+  grid-area: h-resizer;
+  background-color: #e0e0e0;
+  cursor: row-resize;
+  transition: background-color 0.2s;
+  position: relative;
+  z-index: 10;
+}
+
+.horizontal-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50px;
+  height: 4px;
+  background-color: #b0b0b0;
+  border-radius: 2px;
+}
+
+.horizontal-resizer:hover, .horizontal-resizer.active {
+  background-color: #c0c0c0;
+}
+
+.horizontal-resizer:hover::after, .horizontal-resizer.active::after {
+  background-color: #409EFF;
+  box-shadow: 0 0 6px rgba(64, 158, 255, 0.5);
 }
 </style>

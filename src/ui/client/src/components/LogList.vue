@@ -838,6 +838,7 @@ function formatCommitMessage(message: string) {
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
   height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   border: 1px solid rgba(0, 0, 0, 0.03);
@@ -861,6 +862,7 @@ function formatCommitMessage(message: string) {
   padding: 0 20px 20px 20px;
   overflow-y: auto;
   flex: 1;
+  min-height: 100px;
 }
 
 /* 优化表格区域 */

@@ -956,6 +956,7 @@ git config --global user.email "your.email@example.com"</pre>
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
   border: 1px solid rgba(0, 0, 0, 0.03);
   height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -976,7 +977,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .card-content {
-  padding: 20px;
+  padding: 15px;
   overflow-y: auto;
   flex: 1;
 }
@@ -984,6 +985,7 @@ git config --global user.email "your.email@example.com"</pre>
 .layout-container {
   display: flex;
   gap: 20px;
+  height: 100%;
 }
 
 .commit-section {

@@ -724,6 +724,7 @@ defineExpose({
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
   border: 1px solid rgba(0, 0, 0, 0.03);
   height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -749,9 +750,11 @@ defineExpose({
 }
 
 .card-content {
-  padding: 20px;
+  padding: 15px;
   overflow-y: auto;
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .current-directory {
@@ -792,10 +795,10 @@ defineExpose({
 
 /* 现代化的文件列表容器 */
 .file-list-container {
+  flex: 1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 10px;
 }
 
 .file-group {
@@ -815,8 +818,9 @@ defineExpose({
 }
 
 .file-list {
-  max-height: 150px; /* 减小高度 */
+  max-height: 120px; /* 更小的固定高度 */
   overflow-y: auto;
+  min-height: 40px; /* 最小高度 */
 }
 
 .empty-file-group {
