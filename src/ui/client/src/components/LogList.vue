@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider, ElDialog } from 'element-plus'
-import { RefreshRight, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider, ElDialog, ElSelect, ElOption, ElDatePicker, ElInput } from 'element-plus'
+import { RefreshRight, ZoomIn, ZoomOut, ArrowDown, ArrowUp, Search, Filter } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import { createGitgraph } from '@gitgraph/js'
 import { useGitLogStore } from '../stores/gitLogStore'
@@ -49,6 +49,68 @@ const scaleStep = 0.1
 
 // 添加日志被刷新的提示状态
 const logRefreshed = ref(false)
+
+// 添加筛选相关变量
+const filterVisible = ref(false)
+const authorFilter = ref('')
+const messageFilter = ref('')
+const dateRangeFilter = ref<any>(null)
+const availableAuthors = computed(() => {
+  // 从日志中提取不重复的作者列表
+  const authors = new Set<string>()
+  logs.value.forEach(log => {
+    if (log.author) {
+      authors.add(log.author)
+    }
+  })
+  return Array.from(authors).sort()
+})
+
+// 应用筛选后的日志
+const filteredLogs = computed(() => {
+  if (!authorFilter.value && !messageFilter.value && !dateRangeFilter.value) {
+    return logs.value
+  }
+  
+  return logs.value.filter(log => {
+    // 作者筛选
+    if (authorFilter.value && log.author !== authorFilter.value) {
+      return false
+    }
+    
+    // 提交信息关键词筛选
+    if (messageFilter.value && !log.message.toLowerCase().includes(messageFilter.value.toLowerCase())) {
+      return false
+    }
+    
+    // 日期范围筛选
+    if (dateRangeFilter.value && dateRangeFilter.value.length === 2) {
+      const logDate = new Date(log.date)
+      const [startDateStr, endDateStr] = dateRangeFilter.value
+      
+      // 转换日期字符串为Date对象
+      const startDate = new Date(startDateStr)
+      const endDate = new Date(endDateStr)
+      
+      // 设置时间为一天的开始和结束，确保包含完整日期
+      startDate.setHours(0, 0, 0, 0)
+      endDate.setHours(23, 59, 59, 999)
+      
+      if (logDate < startDate || logDate > endDate) {
+        return false
+      }
+    }
+    
+    return true
+  })
+})
+
+// 重置筛选条件
+function resetFilters() {
+  authorFilter.value = ''
+  messageFilter.value = ''
+  dateRangeFilter.value = null
+}
 
 // 加载提交历史
 async function loadLog(all = false) {
@@ -579,10 +641,79 @@ function formatCommitMessage(message: string) {
       
       <!-- 表格视图 -->
       <div v-else>
-        <div class="commit-count" v-if="logs.length > 0">
-          显示 {{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
+        <div class="log-header-actions">
+          <div class="commit-count" v-if="logs.length > 0">
+            显示 {{ filteredLogs.length }}/{{ logs.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
+          </div>
+          
+          <div class="filter-actions">
+            <el-button 
+              type="primary" 
+              size="small" 
+              @click="filterVisible = !filterVisible"
+            >
+              <template #icon>
+                <el-icon>
+                  <component :is="filterVisible ? ArrowUp : ArrowDown" />
+                </el-icon>
+              </template>
+              筛选 {{ filteredLogs.length !== logs.length ? `(${filteredLogs.length})` : '' }}
+            </el-button>
+          </div>
         </div>
-        <el-table :data="logs" style="width: 100%" stripe border v-loading="isLoading">
+        
+        <!-- 筛选条件面板 -->
+        <div v-if="filterVisible" class="filter-panel">
+          <div class="filter-form">
+            <div class="filter-item">
+              <div class="filter-label">作者:</div>
+              <el-select 
+                v-model="authorFilter" 
+                placeholder="选择作者" 
+                clearable 
+                filterable
+                class="filter-input"
+              >
+                <el-option 
+                  v-for="author in availableAuthors" 
+                  :key="author" 
+                  :label="author" 
+                  :value="author"
+                />
+              </el-select>
+            </div>
+            
+            <div class="filter-item">
+              <div class="filter-label">提交信息包含:</div>
+              <el-input 
+                v-model="messageFilter" 
+                placeholder="关键词" 
+                clearable 
+                class="filter-input"
+              />
+            </div>
+            
+            <div class="filter-item">
+              <div class="filter-label">日期范围:</div>
+              <el-date-picker
+                v-model="dateRangeFilter"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                class="filter-input date-range"
+              />
+            </div>
+            
+            <div class="filter-actions">
+              <el-button type="info" size="small" @click="resetFilters">重置</el-button>
+            </div>
+          </div>
+        </div>
+        
+        <el-table :data="filteredLogs" style="width: 100%" stripe border v-loading="isLoading">
           <el-table-column label="提交哈希" width="100" resizable>
             <template #default="scope">
               <span class="commit-hash" @click="viewCommitDetail(scope.row)">{{ scope.row.hash.substring(0, 7) }}</span>
@@ -972,6 +1103,54 @@ function formatCommitMessage(message: string) {
 /* 减小对话框的顶部边距 */
 :deep(.commit-detail-dialog) {
   --el-dialog-margin-top: 5vh;
+}
+
+.log-header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.filter-panel {
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  border: 1px solid #e4e7ed;
+}
+
+.filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: flex-end;
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: #606266;
+  font-weight: bold;
+}
+
+.filter-input {
+  width: 200px;
+}
+
+.filter-input.date-range {
+  width: 350px;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 </style>
 
