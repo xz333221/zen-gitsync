@@ -36,6 +36,10 @@ const graphContainer = ref<HTMLElement | null>(null)
 // 添加提交详情弹窗相关变量
 const commitDetailVisible = ref(false)
 const selectedCommit = ref<LogItem | null>(null)
+const commitFiles = ref<string[]>([])
+const commitDiff = ref('')
+const isLoadingCommitDetail = ref(false)
+const selectedCommitFile = ref('')
 
 // 添加图表缩放控制
 const graphScale = ref(1)
@@ -351,9 +355,109 @@ function fitGraphToContainer() {
 }
 
 // 查看提交详情
-function viewCommitDetail(commit: LogItem) {
+async function viewCommitDetail(commit: LogItem) {
   selectedCommit.value = commit
   commitDetailVisible.value = true
+  isLoadingCommitDetail.value = true
+  commitFiles.value = []
+  commitDiff.value = ''
+  selectedCommitFile.value = ''
+  
+  try {
+    console.log(`获取提交详情: ${commit.hash}`)
+    
+    // 获取提交的变更文件列表
+    const filesResponse = await fetch(`/api/commit-files?hash=${commit.hash}`)
+    console.log('API响应状态: ', filesResponse.status)
+    const filesData = await filesResponse.json()
+    console.log('文件列表数据: ', filesData)
+    
+    if (filesData.success && Array.isArray(filesData.files)) {
+      commitFiles.value = filesData.files
+      
+      // 如果有文件，自动加载第一个文件的差异
+      if (commitFiles.value.length > 0) {
+        await getCommitFileDiff(commit.hash, commitFiles.value[0])
+      } else {
+        console.log('没有找到变更文件')
+        commitDiff.value = '该提交没有变更文件'
+      }
+    } else {
+      console.error('获取提交文件列表失败:', filesData.error || '未知错误')
+      commitDiff.value = `获取文件列表失败: ${filesData.error || '未知错误'}`
+    }
+  } catch (error) {
+    console.error('获取提交详情失败:', error)
+    commitDiff.value = `获取提交详情失败: ${(error as Error).message}`
+  } finally {
+    isLoadingCommitDetail.value = false
+  }
+}
+
+// 获取提交中特定文件的差异
+async function getCommitFileDiff(hash: string, filePath: string) {
+  isLoadingCommitDetail.value = true
+  selectedCommitFile.value = filePath
+  
+  try {
+    console.log(`获取文件差异: hash=${hash}, file=${filePath}`)
+    const diffResponse = await fetch(`/api/commit-file-diff?hash=${hash}&file=${encodeURIComponent(filePath)}`)
+    console.log('差异API响应状态: ', diffResponse.status)
+    const diffData = await diffResponse.json()
+    console.log('差异数据: ', diffData.success, typeof diffData.diff)
+    
+    if (diffData.success) {
+      commitDiff.value = diffData.diff || '没有变更内容'
+    } else {
+      console.error('获取差异失败: ', diffData.error)
+      commitDiff.value = `获取差异失败: ${diffData.error || '未知错误'}`
+    }
+  } catch (error) {
+    console.error('获取文件差异失败:', error)
+    commitDiff.value = `获取差异失败: ${(error as Error).message}`
+  } finally {
+    isLoadingCommitDetail.value = false
+  }
+}
+
+// 格式化差异内容，添加颜色
+function formatDiff(diffText: string) {
+  if (!diffText) return '';
+  
+  // 将差异内容按行分割
+  const lines = diffText.split('\n');
+  
+  // 转义 HTML 标签的函数
+  function escapeHtml(text: string) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+  
+  // 为每行添加适当的 CSS 类
+  return lines.map(line => {
+    // 先转义 HTML 标签，再添加样式
+    const escapedLine = escapeHtml(line);
+    
+    if (line.startsWith('diff --git')) {
+      return `<div class="diff-header">${escapedLine}</div>`;
+    } else if (line.startsWith('---')) {
+      return `<div class="diff-old-file">${escapedLine}</div>`;
+    } else if (line.startsWith('+++')) {
+      return `<div class="diff-new-file">${escapedLine}</div>`;
+    } else if (line.startsWith('@@')) {
+      return `<div class="diff-hunk-header">${escapedLine}</div>`;
+    } else if (line.startsWith('+')) {
+      return `<div class="diff-added">${escapedLine}</div>`;
+    } else if (line.startsWith('-')) {
+      return `<div class="diff-removed">${escapedLine}</div>`;
+    } else {
+      return `<div class="diff-context">${escapedLine}</div>`;
+    }
+  }).join('');
 }
 </script>
 
@@ -492,41 +596,69 @@ function viewCommitDetail(commit: LogItem) {
       :title="`提交详情: ${selectedCommit?.hash || ''}`"
       width="80%"
       destroy-on-close
+      class="commit-detail-dialog"
     >
-      <div v-if="selectedCommit" class="commit-detail">
-        <div class="detail-item">
-          <div class="detail-label">完整哈希:</div>
-          <div class="detail-value">{{ selectedCommit.hash }}</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">作者:</div>
-          <div class="detail-value">{{ selectedCommit.author }} &lt;{{ selectedCommit.email }}&gt;</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">日期:</div>
-          <div class="detail-value">{{ selectedCommit.date }}</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">分支:</div>
-          <div class="detail-value">
-            <template v-if="selectedCommit.branch">
-              <el-tag 
-                v-for="(ref, index) in selectedCommit.branch.split(',')" 
-                :key="index"
-                size="small"
-                :type="getBranchTagType(ref)"
-                class="branch-tag"
-                style="margin-right: 5px;"
-              >
-                {{ formatBranchName(ref) }}
-              </el-tag>
-            </template>
-            <span v-else>无</span>
+      <div v-loading="isLoadingCommitDetail" class="commit-detail-container">
+        <!-- 提交基本信息 -->
+        <div v-if="selectedCommit" class="commit-info">
+          <div class="detail-item">
+            <div class="detail-label">完整哈希:</div>
+            <div class="detail-value">{{ selectedCommit.hash }}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">作者:</div>
+            <div class="detail-value">{{ selectedCommit.author }} &lt;{{ selectedCommit.email }}&gt;</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">日期:</div>
+            <div class="detail-value">{{ selectedCommit.date }}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">分支:</div>
+            <div class="detail-value">
+              <template v-if="selectedCommit.branch">
+                <el-tag 
+                  v-for="(ref, index) in selectedCommit.branch.split(',')" 
+                  :key="index"
+                  size="small"
+                  :type="getBranchTagType(ref)"
+                  class="branch-tag"
+                  style="margin-right: 5px;"
+                >
+                  {{ formatBranchName(ref) }}
+                </el-tag>
+              </template>
+              <span v-else>无</span>
+            </div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">提交信息:</div>
+            <div class="detail-value commit-message">{{ selectedCommit.message }}</div>
           </div>
         </div>
-        <div class="detail-item">
-          <div class="detail-label">提交信息:</div>
-          <div class="detail-value commit-message">{{ selectedCommit.message }}</div>
+
+        <!-- 变更文件列表和差异 -->
+        <div class="commit-files-diff">
+          <div class="files-list">
+            <h3>变更文件</h3>
+            <el-empty v-if="commitFiles.length === 0" description="没有找到变更文件"></el-empty>
+            <ul v-else>
+              <li 
+                v-for="file in commitFiles" 
+                :key="file"
+                :class="{ 'active-file': file === selectedCommitFile }"
+                @click="getCommitFileDiff(selectedCommit!.hash, file)"
+              >
+                {{ file }}
+              </li>
+            </ul>
+          </div>
+          <div class="file-diff">
+            <h3 v-if="selectedCommitFile">文件差异: {{ selectedCommitFile }}</h3>
+            <h3 v-else>文件差异</h3>
+            <el-empty v-if="!commitDiff && !isLoadingCommitDetail" description="选择文件查看差异"></el-empty>
+            <div v-else-if="commitDiff" v-html="formatDiff(commitDiff)" class="diff-content"></div>
+          </div>
         </div>
       </div>
     </el-dialog>
@@ -651,37 +783,125 @@ function viewCommitDetail(commit: LogItem) {
   text-decoration: underline;
 }
 
-.commit-detail {
+.commit-detail-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.commit-info {
   padding: 15px;
   background-color: #f5f7fa;
   border-radius: 8px;
   font-size: 14px;
 }
 
-.detail-item {
+.commit-files-diff {
   display: flex;
-  margin-bottom: 12px;
+  gap: 20px;
+  height: 60vh;
 }
 
-.detail-label {
-  width: 100px;
-  font-weight: bold;
-  color: #606266;
-  flex-shrink: 0;
+.files-list {
+  width: 25%;
+  overflow-y: auto;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  padding: 10px;
 }
 
-.detail-value {
-  flex: 1;
-  word-break: break-all;
+.files-list h3 {
+  margin-top: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #dcdfe6;
+  font-size: 16px;
 }
 
-.commit-message {
+.files-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.files-list li {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-bottom: 5px;
   font-family: monospace;
-  white-space: pre-wrap;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.files-list li:hover {
+  background-color: #ecf5ff;
+}
+
+.files-list li.active-file {
+  background-color: #409eff;
+  color: white;
+}
+
+.file-diff {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.file-diff h3 {
+  margin-top: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #dcdfe6;
+  font-size: 16px;
+}
+
+.diff-content {
+  flex: 1;
+  overflow-y: auto;
   background-color: #fff;
   padding: 10px;
   border-radius: 4px;
-  border-left: 4px solid #409EFF;
+  font-family: monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.diff-header {
+  font-weight: bold;
+  color: #409EFF;
+}
+
+.diff-old-file {
+  color: #E6A23C;
+}
+
+.diff-new-file {
+  color: #67C23A;
+}
+
+.diff-hunk-header {
+  font-weight: bold;
+  color: #409EFF;
+}
+
+.diff-added {
+  background-color: #f0f9eb;
+  color: #67C23A;
+}
+
+.diff-removed {
+  background-color: #fef2f2;
+  color: #F56C6C;
+}
+
+.diff-context {
+  background-color: #f5f7fa;
 }
 </style>
 

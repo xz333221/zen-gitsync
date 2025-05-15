@@ -630,6 +630,77 @@ async function startUIServer() {
     }
   });
   
+  // 获取提交的文件列表
+  app.get('/api/commit-files', async (req, res) => {
+    try {
+      const hash = req.query.hash;
+      
+      if (!hash) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少提交哈希参数' 
+        });
+      }
+      
+      console.log(`获取提交文件列表: hash=${hash}`);
+      
+      // 执行命令获取提交中修改的文件列表
+      const { stdout } = await execGitCommand(`git show --name-only --format="" ${hash}`);
+      
+      // 将输出按行分割，并过滤掉空行
+      const files = stdout.split('\n').filter(line => line.trim());
+      console.log(`找到${files.length}个文件:`, files);
+      
+      res.json({ 
+        success: true, 
+        files 
+      });
+    } catch (error) {
+      console.error('获取提交文件列表失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `获取提交文件列表失败: ${error.message}` 
+      });
+    }
+  });
+  
+  // 获取提交中特定文件的差异
+  app.get('/api/commit-file-diff', async (req, res) => {
+    try {
+      const hash = req.query.hash;
+      const filePath = req.query.file;
+      
+      if (!hash || !filePath) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少必要参数' 
+        });
+      }
+      
+      console.log(`获取提交文件差异: hash=${hash}, file=${filePath}`);
+      
+      // 执行命令获取文件差异，-p显示补丁，限定文件路径
+      const { stdout } = await execGitCommand(`git show ${hash} -- "${filePath}"`);
+      
+      console.log(`获取到差异内容，长度: ${stdout.length}`);
+      // 如果差异内容太长，只打印前100个字符
+      if (stdout.length > 100) {
+        console.log(`差异内容预览: ${stdout.substring(0, 100)}...`);
+      }
+      
+      res.json({ 
+        success: true, 
+        diff: stdout 
+      });
+    } catch (error) {
+      console.error('获取提交文件差异失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `获取提交文件差异失败: ${error.message}` 
+      });
+    }
+  });
+  
   // 添加清理Git锁定文件的接口
   app.post('/api/remove-lock', async (req, res) => {
     try {
