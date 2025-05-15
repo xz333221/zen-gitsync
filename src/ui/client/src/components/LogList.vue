@@ -837,9 +837,11 @@ function formatCommitMessage(message: string) {
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-  margin-bottom: 24px;
-  padding: 0; /* 移除卡片的内边距，避免与固定头部的内边距冲突 */
-  overflow: hidden; /* 确保圆角效果不被内容覆盖 */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  overflow: hidden;
 }
 
 .log-header {
@@ -856,7 +858,9 @@ function formatCommitMessage(message: string) {
 }
 
 .content-area {
-  padding: 20px;
+  padding: 0 20px 20px 20px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 /* 优化表格区域 */

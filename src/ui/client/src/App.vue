@@ -200,11 +200,10 @@ async function clearUserSettings() {
           <el-icon><Setting /></el-icon>
         </el-button>
       </div>
-      <!-- <div id="config-info">{{ configInfo }}</div> -->
     </div>
   </header>
   
-  <div class="container">
+  <main class="main-container">
     <div v-if="!initCompleted" class="loading-container">
       <el-card class="loading-card">
         <div class="loading-spinner">
@@ -214,17 +213,17 @@ async function clearUserSettings() {
       </el-card>
     </div>
     
-    <div v-else class="layout-container">
-      <!-- 左侧Git状态 -->
-      <div class="left-panel">
+    <div v-else class="grid-layout">
+      <!-- 上方左侧Git状态 -->
+      <div class="git-status-panel">
         <GitStatus 
           ref="gitStatusRef" 
           :initial-directory="currentDirectory"
         />
       </div>
       
-      <!-- 右侧提交表单和历史 -->
-      <div class="right-panel" v-if="gitStore.isGitRepo">
+      <!-- 上方右侧提交表单 -->
+      <div class="commit-form-panel" v-if="gitStore.isGitRepo">
         <!-- 当用户未配置时显示配置提示 -->
         <div v-if="!gitStore.userName || !gitStore.userEmail" class="card">
           <h2>Git用户未配置</h2>
@@ -250,10 +249,9 @@ async function clearUserSettings() {
         <!-- 用户已配置显示提交表单 -->
         <template v-else>
           <CommitForm />
-          <LogList ref="logListRef" />
         </template>
       </div>
-      <div class="right-panel" v-else>
+      <div class="commit-form-panel" v-else>
         <div class="card">
           <h2>Git仓库初始化</h2>
           <p>当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。</p>
@@ -263,6 +261,11 @@ async function clearUserSettings() {
             <div class="code-block">git init</div>
           </div>
         </div>
+      </div>
+      
+      <!-- 下方提交历史 -->
+      <div class="log-list-panel" v-if="gitStore.isGitRepo">
+        <LogList ref="logListRef" />
       </div>
 
       <!-- 创建分支对话框 -->
@@ -302,7 +305,7 @@ async function clearUserSettings() {
       </el-dialog>
       
     </div>
-  </div>
+  </main>
 
   <footer class="main-footer">
     <div class="branch-info" v-if="gitStore.currentBranch">
@@ -388,12 +391,61 @@ body {
   margin: 0;
   padding: 0;
   background-color: #f5f5f5;
+  overflow: hidden; /* 防止出现滚动条 */
+  height: 100vh;
 }
-.container {
-  margin: 0 auto;
-  padding: 85px 30px 70px 30px; /* 调整底部padding，为固定footer留出更多空间 */
-  max-width: 1400px; /* 限制最大宽度，大屏幕上更美观 */
+
+.main-container {
+  position: fixed;
+  top: 60px; /* 顶部导航栏高度 */
+  bottom: 60px; /* 底部footer高度 */
+  left: 0;
+  right: 0;
+  padding: 20px;
+  overflow: hidden; /* 防止整体滚动 */
 }
+
+.grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas: 
+    "git-status commit-form"
+    "log-list log-list";
+  gap: 20px;
+  height: 100%;
+}
+
+.git-status-panel {
+  grid-area: git-status;
+  overflow: hidden;
+  max-height: calc(50vh - 70px);
+}
+
+.commit-form-panel {
+  grid-area: commit-form;
+  overflow: hidden;
+  max-height: calc(50vh - 70px);
+}
+
+.log-list-panel {
+  grid-area: log-list;
+  overflow: hidden;
+  max-height: calc(50vh - 30px);
+}
+
+/* 确保每个卡片内部可以滚动 */
+.card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .main-header {
   background-color: #24292e;
   color: white;
@@ -407,58 +459,56 @@ body {
   right: 0;
   z-index: 1000;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  height: 60px;
+  box-sizing: border-box;
 }
+
 .header-left {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+
 .logo {
   height: 32px;
   width: auto;
 }
+
 h1 {
   margin: 0;
   font-size: 24px;
 }
+
 .header-info {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 5px;
 }
+
 #branch-info, #user-info {
   background-color: rgba(255, 255, 255, 0.1);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 14px;
 }
+
 .branch-label, .user-label {
   font-weight: bold;
   margin-right: 5px;
 }
+
 .user-name {
   font-weight: bold;
   margin-right: 5px;
 }
+
 .user-email {
   color: #e0e0e0;
 }
+
 .branch-name {
   font-family: monospace;
-}
-.card {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  margin-bottom: 24px;
-  padding: 20px;
-  border: 1px solid rgba(0, 0, 0, 0.03);
-  transition: box-shadow 0.3s ease, transform 0.2s ease;
-}
-
-.card:hover {
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
 .status-box {
@@ -468,99 +518,7 @@ h1 {
   padding: 15px;
   white-space: pre-wrap;
   font-family: monospace;
-  max-height: 300px;
   overflow-y: auto;
-}
-
-/* 新增布局样式 */
-.layout-container {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 24px;
-}
-
-.left-panel {
-  flex: 0 0 30%;
-  max-width: 30%;
-}
-
-.right-panel {
-  flex: 0 0 70%;
-  max-width: 70%;
-}
-
-/* 响应式布局 */
-@media (max-width: 768px) {
-  .layout-container {
-    flex-direction: column;
-  }
-  
-  .left-panel, .right-panel {
-    flex: 0 0 100%;
-    max-width: 100%;
-  }
-  
-  .header-left {
-    gap: 8px;
-  }
-  
-  .logo {
-    height: 24px;
-  }
-  
-  h1 {
-    font-size: 20px;
-  }
-}
-.commit-form {
-  display: flex;
-  margin-bottom: 15px;
-}
-
-.log-item {
-  padding: 10px 0;
-  border-bottom: 1px solid #eee;
-}
-.log-item:last-child {
-  border-bottom: none;
-}
-.log-hash {
-  color: #6f42c1;
-  font-family: monospace;
-}
-.log-author {
-  color: #6a737d;
-}
-.log-date {
-  color: #6a737d;
-}
-.log-message {
-  font-weight: bold;
-}
-.log-branch {
-  display: inline-block;
-  background-color: #0366d6;
-  color: white;
-  border-radius: 3px;
-  padding: 2px 6px;
-  margin-left: 8px;
-  font-size: 12px;
-}
-/* 添加分支选择框样式 */
-/* .branch-select {
-  width: 150px;
-  margin-left: 5px;
-} */
-
-/* 调整下拉选择框在深色背景下的样式 */
-.branch-select :deep(.el-input__inner) {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: white;
-  border: none;
-}
-
-.branch-select :deep(.el-input__suffix) {
-  color: white;
 }
 
 .tips {
@@ -586,12 +544,12 @@ h1 {
   margin-bottom: 10px;
 }
 
-/* 添加加载中样式 */
+/* 加载中样式 */
 .loading-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 400px;
+  height: 100%;
 }
 
 .loading-card {
@@ -619,16 +577,7 @@ h1 {
   color: #E6A23C;
   font-weight: bold;
 }
-</style>
 
-<style scoped>
-.logo {
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
-}
 .main-footer {
   background-color: #24292e;
   color: white;
@@ -642,6 +591,48 @@ h1 {
   right: 0;
   z-index: 100;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  height: 60px;
+  box-sizing: border-box;
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+  .grid-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: 
+      "git-status"
+      "commit-form"
+      "log-list";
+  }
+  
+  .git-status-panel,
+  .commit-form-panel,
+  .log-list-panel {
+    max-height: none;
+  }
+
+  .git-status-panel {
+    max-height: 30vh;
+  }
+  
+  .commit-form-panel {
+    max-height: 30vh;
+  }
+  
+  .log-list-panel {
+    max-height: 40vh;
+  }
+}
+</style>
+
+<style scoped>
+.logo {
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #42b883aa);
 }
 
 .branch-info {

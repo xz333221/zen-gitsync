@@ -437,13 +437,6 @@ defineExpose({
 
 <template>
   <div class="card">
-    <div class="current-directory">
-      <el-icon><Folder /></el-icon>
-      <span>{{ currentDirectory }}</span>
-      <el-button type="primary" size="small" @click="openDirectoryDialog" plain>
-        切换目录
-      </el-button>
-    </div>
     <div class="status-header">
       <h2>Git 状态</h2>
       <div class="header-actions">
@@ -473,135 +466,146 @@ defineExpose({
         />
       </div>
     </div>
-    <div v-if="!gitStore.isGitRepo" class="status-box">
-      当前目录不是一个Git仓库
-    </div>
     
-    <!-- 现代化、简洁的文件列表 -->
-    <div v-if="gitLogStore.fileList.length" class="file-list-container">
-      <!-- 分组显示文件 -->
-      <div class="file-group">
-        <div class="file-group-header">已暂存的更改</div>
-        <div class="file-list">
-          <div
-            v-for="file in gitLogStore.fileList.filter(f => f.type === 'added')"
-            :key="file.path"
-            class="file-item"
-            @click="handleFileClick(file)"
-          >
-            <div class="file-info">
-              <div class="file-path-container">
-                <span class="file-name">{{ getFileName(file.path) }}</span>
-                <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+    <div class="card-content">
+      <div class="current-directory">
+        <el-icon><Folder /></el-icon>
+        <span>{{ currentDirectory }}</span>
+        <el-button type="primary" size="small" @click="openDirectoryDialog" plain>
+          切换目录
+        </el-button>
+      </div>
+      
+      <div v-if="!gitStore.isGitRepo" class="status-box">
+        当前目录不是一个Git仓库
+      </div>
+      
+      <!-- 现代化、简洁的文件列表 -->
+      <div v-if="gitLogStore.fileList.length" class="file-list-container">
+        <!-- 分组显示文件 -->
+        <div class="file-group">
+          <div class="file-group-header">已暂存的更改</div>
+          <div class="file-list">
+            <div
+              v-for="file in gitLogStore.fileList.filter(f => f.type === 'added')"
+              :key="file.path"
+              class="file-item"
+              @click="handleFileClick(file)"
+            >
+              <div class="file-info">
+                <div class="file-path-container">
+                  <span class="file-name">{{ getFileName(file.path) }}</span>
+                  <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <el-tooltip content="取消暂存" placement="top" :hide-after="1000">
+                  <el-button
+                    type="warning"
+                    size="small"
+                    circle
+                    @click.stop="unstageFile(file.path)"
+                  >-</el-button>
+                </el-tooltip>
               </div>
             </div>
-            <div class="file-actions">
-              <el-tooltip content="取消暂存" placement="top" :hide-after="1000">
-                <el-button
-                  type="warning"
-                  size="small"
-                  circle
-                  @click.stop="unstageFile(file.path)"
-                >-</el-button>
-              </el-tooltip>
+            <div v-if="!gitLogStore.fileList.some(f => f.type === 'added')" class="empty-file-group">
+              没有已暂存的文件
             </div>
           </div>
-          <div v-if="!gitLogStore.fileList.some(f => f.type === 'added')" class="empty-file-group">
-            没有已暂存的文件
+        </div>
+        
+        <div class="file-group">
+          <div class="file-group-header">未暂存的更改</div>
+          <div class="file-list">
+            <div
+              v-for="file in gitLogStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
+              :key="file.path"
+              class="file-item"
+              @click="handleFileClick(file)"
+            >
+              <div class="file-info">
+                <div class="file-status-indicator" :class="file.type"></div>
+                <div class="file-path-container">
+                  <span class="file-name">{{ getFileName(file.path) }}</span>
+                  <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
+                  <el-button
+                    type="success"
+                    size="small"
+                    circle
+                    @click.stop="stageFile(file.path)"
+                  >+</el-button>
+                </el-tooltip>
+                <el-tooltip content="撤回修改" placement="top" :hide-after="1000">
+                  <el-button
+                    type="danger"
+                    size="small"
+                    :icon="RefreshRight"
+                    circle
+                    @click.stop="revertFileChanges(file.path)"
+                  />
+                </el-tooltip>
+              </div>
+            </div>
+            <div v-if="!gitLogStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')" class="empty-file-group">
+              没有未暂存的更改
+            </div>
+          </div>
+        </div>
+        
+        <div class="file-group">
+          <div class="file-group-header">未跟踪的文件</div>
+          <div class="file-list">
+            <div
+              v-for="file in gitLogStore.fileList.filter(f => f.type === 'untracked')"
+              :key="file.path"
+              class="file-item"
+              @click="handleFileClick(file)"
+            >
+              <div class="file-info">
+                <div class="file-status-indicator untracked"></div>
+                <div class="file-path-container">
+                  <span class="file-name">{{ getFileName(file.path) }}</span>
+                  <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
+                  <el-button
+                    type="success"
+                    size="small"
+                    circle
+                    @click.stop="stageFile(file.path)"
+                  >+</el-button>
+                </el-tooltip>
+                <el-tooltip content="删除文件" placement="top" :hide-after="1000">
+                  <el-button
+                    type="danger"
+                    size="small"
+                    :icon="Close"
+                    circle
+                    @click.stop="revertFileChanges(file.path)"
+                  />
+                </el-tooltip>
+              </div>
+            </div>
+            <div v-if="!gitLogStore.fileList.some(f => f.type === 'untracked')" class="empty-file-group">
+              没有未跟踪的文件
+            </div>
           </div>
         </div>
       </div>
       
-      <div class="file-group">
-        <div class="file-group-header">未暂存的更改</div>
-        <div class="file-list">
-          <div
-            v-for="file in gitLogStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
-            :key="file.path"
-            class="file-item"
-            @click="handleFileClick(file)"
-          >
-            <div class="file-info">
-              <div class="file-status-indicator" :class="file.type"></div>
-              <div class="file-path-container">
-                <span class="file-name">{{ getFileName(file.path) }}</span>
-                <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
-              </div>
-            </div>
-            <div class="file-actions">
-              <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
-                <el-button
-                  type="success"
-                  size="small"
-                  circle
-                  @click.stop="stageFile(file.path)"
-                >+</el-button>
-              </el-tooltip>
-              <el-tooltip content="撤回修改" placement="top" :hide-after="1000">
-                <el-button
-                  type="danger"
-                  size="small"
-                  :icon="RefreshRight"
-                  circle
-                  @click.stop="revertFileChanges(file.path)"
-                />
-              </el-tooltip>
-            </div>
-          </div>
-          <div v-if="!gitLogStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')" class="empty-file-group">
-            没有未暂存的更改
-          </div>
+      <div v-else-if="gitStore.isGitRepo" class="empty-status">
+        <div class="empty-icon">
+          <el-icon><Document /></el-icon>
         </div>
+        <div class="empty-text">没有检测到任何更改</div>
       </div>
-      
-      <div class="file-group">
-        <div class="file-group-header">未跟踪的文件</div>
-        <div class="file-list">
-          <div
-            v-for="file in gitLogStore.fileList.filter(f => f.type === 'untracked')"
-            :key="file.path"
-            class="file-item"
-            @click="handleFileClick(file)"
-          >
-            <div class="file-info">
-              <div class="file-status-indicator untracked"></div>
-              <div class="file-path-container">
-                <span class="file-name">{{ getFileName(file.path) }}</span>
-                <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
-              </div>
-            </div>
-            <div class="file-actions">
-              <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
-                <el-button
-                  type="success"
-                  size="small"
-                  circle
-                  @click.stop="stageFile(file.path)"
-                >+</el-button>
-              </el-tooltip>
-              <el-tooltip content="删除文件" placement="top" :hide-after="1000">
-                <el-button
-                  type="danger"
-                  size="small"
-                  :icon="Close"
-                  circle
-                  @click.stop="revertFileChanges(file.path)"
-                />
-              </el-tooltip>
-            </div>
-          </div>
-          <div v-if="!gitLogStore.fileList.some(f => f.type === 'untracked')" class="empty-file-group">
-            没有未跟踪的文件
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <div v-else-if="gitStore.isGitRepo" class="empty-status">
-      <div class="empty-icon">
-        <el-icon><Document /></el-icon>
-      </div>
-      <div class="empty-text">没有检测到任何更改</div>
     </div>
     
     <!-- 切换目录对话框 -->
@@ -718,17 +722,18 @@ defineExpose({
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-  margin-bottom: 24px;
-  padding: 20px;
   border: 1px solid rgba(0, 0, 0, 0.03);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .status-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  padding: 16px 20px;
   border-bottom: 1px solid #f0f0f0;
 }
 
@@ -741,6 +746,34 @@ defineExpose({
   margin: 0;
   font-size: 18px;
   color: #303133;
+}
+
+.card-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.current-directory {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  font-family: monospace;
+  border: 1px solid #f0f0f0;
+}
+
+.current-directory .el-icon {
+  margin-right: 8px;
+  color: #409eff;
+}
+
+.current-directory span {
+  flex-grow: 1;
+  word-break: break-all;
+  margin-right: 10px;
 }
 
 .status-box {
@@ -782,7 +815,7 @@ defineExpose({
 }
 
 .file-list {
-  max-height: 300px;
+  max-height: 150px; /* 减小高度 */
   overflow-y: auto;
 }
 
@@ -898,28 +931,6 @@ defineExpose({
 .empty-text {
   color: #909399;
   font-size: 14px;
-}
-
-.current-directory {
-  display: flex;
-  align-items: center;
-  margin-bottom: 20px;
-  padding: 12px;
-  background-color: #f8f9fa;
-  border-radius: 6px;
-  font-family: monospace;
-  border: 1px solid #f0f0f0;
-}
-
-.current-directory .el-icon {
-  margin-right: 8px;
-  color: #409eff;
-}
-
-.current-directory span {
-  flex-grow: 1;
-  word-break: break-all;
-  margin-right: 10px;
 }
 
 .browser-current-path {

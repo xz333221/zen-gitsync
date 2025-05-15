@@ -676,239 +676,243 @@ onMounted(() => {
 
 <template>
   <div class="card" :class="{ 'is-pushing': gitLogStore.isPushing || isPushing }">
-    <h2>提交更改</h2>
-
-    <div class="layout-container">
-      <!-- 如果没有配置Git用户信息，显示提示 -->
-      <div v-if="gitStore.userName === '' || gitStore.userEmail === ''" class="git-config-warning">
-        <el-alert
-          title="Git用户信息未配置"
-          type="warning"
-          :closable="false"
-          show-icon
-        >
-          <p>您需要配置Git用户名和邮箱才能提交代码。请使用以下命令配置：</p>
-          <pre class="config-command">git config --global user.name "Your Name"
-git config --global user.email "your.email@example.com"</pre>
-        </el-alert>
-      </div>
-      
-      <!-- 正常的提交区域，仅在Git用户信息已配置时显示 -->
-      <template v-else>
-        <!-- 左侧：提交表单 -->
-        <div class="commit-section">
-          <div class="commit-options">
-            <div class="options-row">
-              <div class="commit-mode-toggle">
-                <el-switch v-model="isStandardCommit" active-text="标准化提交" inactive-text="普通提交" />
-              </div>
-
-              <div class="no-verify-toggle">
-                <el-tooltip content="跳过 Git 钩子检查 (--no-verify)" placement="top">
-                  <el-switch v-model="skipHooks" active-text="跳过钩子 (--no-verify)" />
-                </el-tooltip>
-              </div>
-            </div>
-          </div>
-
-          <!-- 普通提交表单 -->
-          <div v-if="!isStandardCommit" class="commit-form">
-            <el-input v-model="commitMessage" :placeholder="placeholder" clearable />
-          </div>
-
-          <!-- 标准化提交表单 -->
-          <div v-else class="standard-commit-form">
-            <div class="standard-commit-header">
-              <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
-                <el-option v-for="item in commitTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-              </el-select>
-
-              <div class="scope-container">
-                <el-input v-model="commitScope" placeholder="作用域（可选）" class="scope-input" clearable />
-                <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
-                  @click="openScopeSettings">
-                </el-button>
-              </div>
-
-              <div class="description-container">
-                <el-input v-model="commitDescription" placeholder="简短描述（必填）" class="description-input" clearable />
-                <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
-                  @click="openDescriptionSettings">
-                </el-button>
-              </div>
-            </div>
-
-            <el-input v-model="commitBody" type="textarea" :rows="4" placeholder="正文（可选）：详细描述本次提交的内容和原因" class="body-input"
-              clearable />
-
-            <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
-
-            <div class="preview-section">
-              <div class="preview-title">提交信息预览：</div>
-              <pre class="preview-content">{{ finalCommitMessage }}</pre>
-
-              <div class="preview-title" style="margin-top: 10px;">Git命令预览：</div>
-              <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
-            </div>
-          </div>
-        </div>
-
-        <!-- 右侧：操作区域 -->
-        <div class="actions-section">
-          <h3>Git 操作</h3>
-          <div class="action-groups">
-            <div class="action-group">
-              <div class="group-title">基础操作</div>
-              <div class="group-buttons">
-                <el-button 
-                  type="primary" 
-                  @click="addToStage" 
-                  :loading="gitLogStore.isAddingFiles" 
-                  class="action-button"
-                >
-                  暂存更改
-                  <span class="command-text">git add .</span>
-                </el-button>
-
-                <el-button 
-                  type="primary" 
-                  @click="commitChanges" 
-                  :loading="gitLogStore.isLoadingStatus"
-                  class="action-button"
-                >
-                  提交
-                  <span class="command-text">git commit</span>
-                </el-button>
-
-                <el-button 
-                  type="success" 
-                  @click="pushToRemote" 
-                  :loading="gitLogStore.isPushing"
-                  class="action-button push-button"
-                >
-                  推送
-                  <span class="command-text">git push</span>
-                </el-button>
-              </div>
-            </div>
-
-            <div class="action-group">
-              <div class="group-title">组合操作</div>
-              <div class="group-buttons">
-                <el-button 
-                  type="warning" 
-                  @click="addAndCommit" 
-                  :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
-                  class="action-button"
-                >
-                  暂存并提交
-                  <span class="command-text">git add + commit</span>
-                </el-button>
-
-                <el-button 
-                  type="danger" 
-                  @click="addCommitAndPush" 
-                  :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
-                  class="action-button"
-                >
-                  一键推送
-                  <span class="command-text command-text-long">git add + commit + push</span>
-                </el-button>
-              </div>
-            </div>
-
-            <div class="action-group">
-              <div class="group-title">重置操作</div>
-              <div class="group-buttons">
-                <!-- <el-button 
-                  type="info" 
-                  @click="resetHead" 
-                  :loading="gitLogStore.isResetting" 
-                  :icon="Refresh"
-                  class="action-button reset-button"
-                >
-                  重置暂存区
-                  <span class="command-text">git reset HEAD</span>
-                </el-button> -->
-
-                <el-button 
-                  type="info" 
-                  @click="resetToRemote" 
-                  :loading="gitLogStore.isResetting" 
-                  class="action-button reset-button"
-                >
-                  重置到远程
-                  <span class="command-text command-text-long">git reset --hard origin/branch</span>
-                </el-button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </template>
+    <div class="card-header">
+      <h2>提交更改</h2>
     </div>
 
-    <!-- 简短描述设置弹窗 -->
-    <el-dialog title="简短描述模板设置" v-model="descriptionDialogVisible" width="80vw" style="height: 80vh">
-      <div class="template-container">
-        <div class="template-form">
-          <el-input v-model="newTemplateName" :placeholder="isEditingDescription ? '编辑模板内容' : '输入新模板内容'"
-            class="template-input" clearable />
-          <div class="template-form-buttons">
-            <el-button v-if="isEditingDescription" @click="cancelEditDescriptionTemplate">取消</el-button>
-            <el-button type="primary" @click="saveDescriptionTemplate" :disabled="!newTemplateName.trim()">{{
-              isEditingDescription ? '更新模板' : '添加模板' }}</el-button>
+    <div class="card-content">
+      <div class="layout-container">
+        <!-- 如果没有配置Git用户信息，显示提示 -->
+        <div v-if="gitStore.userName === '' || gitStore.userEmail === ''" class="git-config-warning">
+          <el-alert
+            title="Git用户信息未配置"
+            type="warning"
+            :closable="false"
+            show-icon
+          >
+            <p>您需要配置Git用户名和邮箱才能提交代码。请使用以下命令配置：</p>
+            <pre class="config-command">git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"</pre>
+          </el-alert>
+        </div>
+        
+        <!-- 正常的提交区域，仅在Git用户信息已配置时显示 -->
+        <template v-else>
+          <!-- 左侧：提交表单 -->
+          <div class="commit-section">
+            <div class="commit-options">
+              <div class="options-row">
+                <div class="commit-mode-toggle">
+                  <el-switch v-model="isStandardCommit" active-text="标准化提交" inactive-text="普通提交" />
+                </div>
+
+                <div class="no-verify-toggle">
+                  <el-tooltip content="跳过 Git 钩子检查 (--no-verify)" placement="top">
+                    <el-switch v-model="skipHooks" active-text="跳过钩子 (--no-verify)" />
+                  </el-tooltip>
+                </div>
+              </div>
+            </div>
+
+            <!-- 普通提交表单 -->
+            <div v-if="!isStandardCommit" class="commit-form">
+              <el-input v-model="commitMessage" :placeholder="placeholder" clearable />
+            </div>
+
+            <!-- 标准化提交表单 -->
+            <div v-else class="standard-commit-form">
+              <div class="standard-commit-header">
+                <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
+                  <el-option v-for="item in commitTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+
+                <div class="scope-container">
+                  <el-input v-model="commitScope" placeholder="作用域（可选）" class="scope-input" clearable />
+                  <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
+                    @click="openScopeSettings">
+                  </el-button>
+                </div>
+
+                <div class="description-container">
+                  <el-input v-model="commitDescription" placeholder="简短描述（必填）" class="description-input" clearable />
+                  <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
+                    @click="openDescriptionSettings">
+                  </el-button>
+                </div>
+              </div>
+
+              <el-input v-model="commitBody" type="textarea" :rows="4" placeholder="正文（可选）：详细描述本次提交的内容和原因" class="body-input"
+                clearable />
+
+              <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
+
+              <div class="preview-section">
+                <div class="preview-title">提交信息预览：</div>
+                <pre class="preview-content">{{ finalCommitMessage }}</pre>
+
+                <div class="preview-title" style="margin-top: 10px;">Git命令预览：</div>
+                <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右侧：操作区域 -->
+          <div class="actions-section">
+            <h3>Git 操作</h3>
+            <div class="action-groups">
+              <div class="action-group">
+                <div class="group-title">基础操作</div>
+                <div class="group-buttons">
+                  <el-button 
+                    type="primary" 
+                    @click="addToStage" 
+                    :loading="gitLogStore.isAddingFiles" 
+                    class="action-button"
+                  >
+                    暂存更改
+                    <span class="command-text">git add .</span>
+                  </el-button>
+
+                  <el-button 
+                    type="primary" 
+                    @click="commitChanges" 
+                    :loading="gitLogStore.isLoadingStatus"
+                    class="action-button"
+                  >
+                    提交
+                    <span class="command-text">git commit</span>
+                  </el-button>
+
+                  <el-button 
+                    type="success" 
+                    @click="pushToRemote" 
+                    :loading="gitLogStore.isPushing"
+                    class="action-button push-button"
+                  >
+                    推送
+                    <span class="command-text">git push</span>
+                  </el-button>
+                </div>
+              </div>
+
+              <div class="action-group">
+                <div class="group-title">组合操作</div>
+                <div class="group-buttons">
+                  <el-button 
+                    type="warning" 
+                    @click="addAndCommit" 
+                    :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
+                    class="action-button"
+                  >
+                    暂存并提交
+                    <span class="command-text">git add + commit</span>
+                  </el-button>
+
+                  <el-button 
+                    type="danger" 
+                    @click="addCommitAndPush" 
+                    :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
+                    class="action-button"
+                  >
+                    一键推送
+                    <span class="command-text command-text-long">git add + commit + push</span>
+                  </el-button>
+                </div>
+              </div>
+
+              <div class="action-group">
+                <div class="group-title">重置操作</div>
+                <div class="group-buttons">
+                  <!-- <el-button 
+                    type="info" 
+                    @click="resetHead" 
+                    :loading="gitLogStore.isResetting" 
+                    :icon="Refresh"
+                    class="action-button reset-button"
+                  >
+                    重置暂存区
+                    <span class="command-text">git reset HEAD</span>
+                  </el-button> -->
+
+                  <el-button 
+                    type="info" 
+                    @click="resetToRemote" 
+                    :loading="gitLogStore.isResetting" 
+                    class="action-button reset-button"
+                  >
+                    重置到远程
+                    <span class="command-text command-text-long">git reset --hard origin/branch</span>
+                  </el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- 简短描述设置弹窗 -->
+      <el-dialog title="简短描述模板设置" v-model="descriptionDialogVisible" width="80vw" style="height: 80vh">
+        <div class="template-container">
+          <div class="template-form">
+            <el-input v-model="newTemplateName" :placeholder="isEditingDescription ? '编辑模板内容' : '输入新模板内容'"
+              class="template-input" clearable />
+            <div class="template-form-buttons">
+              <el-button v-if="isEditingDescription" @click="cancelEditDescriptionTemplate">取消</el-button>
+              <el-button type="primary" @click="saveDescriptionTemplate" :disabled="!newTemplateName.trim()">{{
+                isEditingDescription ? '更新模板' : '添加模板' }}</el-button>
+            </div>
+          </div>
+
+          <div class="template-list">
+            <h3>已保存模板</h3>
+            <el-empty v-if="descriptionTemplates.length === 0" description="暂无保存的模板" />
+            <el-card v-for="(template, index) in descriptionTemplates" :key="index" class="template-item">
+              <!-- 两端对齐 -->
+              <el-row justify="space-between" align="middle" style="width: 100%">
+                <div class="template-content">{{ template }}</div>
+                <div class="template-actions">
+                  <el-button type="primary" size="small" @click="useTemplate(template)">使用</el-button>
+                  <el-button type="warning" size="small" :icon="Edit"
+                    @click="startEditDescriptionTemplate(template, index)">编辑</el-button>
+                  <el-button type="danger" size="small" @click="deleteDescriptionTemplate(template)">删除</el-button>
+                </div>
+              </el-row>
+            </el-card>
           </div>
         </div>
+      </el-dialog>
 
-        <div class="template-list">
-          <h3>已保存模板</h3>
-          <el-empty v-if="descriptionTemplates.length === 0" description="暂无保存的模板" />
-          <el-card v-for="(template, index) in descriptionTemplates" :key="index" class="template-item">
-            <!-- 两端对齐 -->
-            <el-row justify="space-between" align="middle" style="width: 100%">
-              <div class="template-content">{{ template }}</div>
-              <div class="template-actions">
-                <el-button type="primary" size="small" @click="useTemplate(template)">使用</el-button>
-                <el-button type="warning" size="small" :icon="Edit"
-                  @click="startEditDescriptionTemplate(template, index)">编辑</el-button>
-                <el-button type="danger" size="small" @click="deleteDescriptionTemplate(template)">删除</el-button>
-              </div>
-            </el-row>
-          </el-card>
-        </div>
-      </div>
-    </el-dialog>
+      <!-- 作用域设置弹窗 -->
+      <el-dialog title="作用域模板设置" v-model="scopeDialogVisible" width="80%" style="height: 80vh">
+        <div class="template-container">
+          <div class="template-form">
+            <el-input v-model="newScopeTemplate" :placeholder="isEditingScope ? '编辑作用域模板内容' : '输入新作用域模板'"
+              class="template-input" clearable />
+            <div class="template-form-buttons">
+              <el-button v-if="isEditingScope" @click="cancelEditScopeTemplate">取消</el-button>
+              <el-button type="primary" @click="saveScopeTemplate" :disabled="!newScopeTemplate.trim()">{{ isEditingScope
+                ? '更新模板' : '添加模板' }}</el-button>
+            </div>
+          </div>
 
-    <!-- 作用域设置弹窗 -->
-    <el-dialog title="作用域模板设置" v-model="scopeDialogVisible" width="80%" style="height: 80vh">
-      <div class="template-container">
-        <div class="template-form">
-          <el-input v-model="newScopeTemplate" :placeholder="isEditingScope ? '编辑作用域模板内容' : '输入新作用域模板'"
-            class="template-input" clearable />
-          <div class="template-form-buttons">
-            <el-button v-if="isEditingScope" @click="cancelEditScopeTemplate">取消</el-button>
-            <el-button type="primary" @click="saveScopeTemplate" :disabled="!newScopeTemplate.trim()">{{ isEditingScope
-              ? '更新模板' : '添加模板' }}</el-button>
+          <div class="template-list">
+            <h3>已保存作用域</h3>
+            <el-empty v-if="scopeTemplates.length === 0" description="暂无保存的作用域" />
+            <el-card v-for="(template, index) in scopeTemplates" :key="index" class="template-item">
+              <el-row justify="space-between" align="middle" style="width: 100%">
+                <div class="template-content">{{ template }}</div>
+                <div class="template-actions">
+                  <el-button type="primary" size="small" @click="useScopeTemplate(template)">使用</el-button>
+                  <el-button type="warning" size="small" :icon="Edit"
+                    @click="startEditScopeTemplate(template, index)">编辑</el-button>
+                  <el-button type="danger" size="small" @click="deleteScopeTemplate(template)">删除</el-button>
+                </div>
+              </el-row>
+            </el-card>
           </div>
         </div>
-
-        <div class="template-list">
-          <h3>已保存作用域</h3>
-          <el-empty v-if="scopeTemplates.length === 0" description="暂无保存的作用域" />
-          <el-card v-for="(template, index) in scopeTemplates" :key="index" class="template-item">
-            <el-row justify="space-between" align="middle" style="width: 100%">
-              <div class="template-content">{{ template }}</div>
-              <div class="template-actions">
-                <el-button type="primary" size="small" @click="useScopeTemplate(template)">使用</el-button>
-                <el-button type="warning" size="small" :icon="Edit"
-                  @click="startEditScopeTemplate(template, index)">编辑</el-button>
-                <el-button type="danger" size="small" @click="deleteScopeTemplate(template)">删除</el-button>
-              </div>
-            </el-row>
-          </el-card>
-        </div>
-      </div>
-    </el-dialog>
+      </el-dialog>
+    </div>
   </div>
 </template>
 
@@ -949,16 +953,32 @@ git config --global user.email "your.email@example.com"</pre>
 .card {
   background-color: white;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  margin-bottom: 24px;
-  padding: 20px;
-  position: relative;
-  border: 2px solid transparent;
-  transition: all 0.3s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.card.is-pushing {
-  animation: snakeBorder 1.5s linear infinite, glowPulse 2s ease infinite;
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #303133;
+}
+
+.card-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .layout-container {
