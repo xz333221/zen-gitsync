@@ -850,12 +850,13 @@ function formatCommitMessage(message: string) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0;
-  padding: 10px 16px;
+  padding: 8px 16px;
   background-color: white;
   border-bottom: 1px solid #f0f0f0;
   position: sticky;
   top: 0;
   z-index: 100;
+  height: 36px;
 }
 
 .log-header h2 {
@@ -874,6 +875,7 @@ function formatCommitMessage(message: string) {
   overflow-y: auto;
   flex: 1;
   min-height: 100px;
+  height: calc(100% - 52px);
 }
 
 /* 优化表格区域 */

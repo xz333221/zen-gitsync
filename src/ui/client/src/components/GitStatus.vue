@@ -734,8 +734,9 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
+  padding: 8px 16px;
   border-bottom: 1px solid #f0f0f0;
+  height: 36px;
 }
 
 .status-header h2 {
@@ -800,6 +801,9 @@ defineExpose({
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  margin-bottom: 0;
+  gap: 12px;
+  height: calc(100% - 60px);
 }
 
 .file-group {
@@ -807,6 +811,11 @@ defineExpose({
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid #ebeef5;
+  margin-bottom: 12px;
+}
+
+.file-group:last-child {
+  margin-bottom: 0;
 }
 
 .file-group-header {
@@ -921,10 +930,11 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 200px;
+  height: calc(100% - 70px);
   background-color: #f8f9fa;
   border-radius: 6px;
   border: 1px solid #ebeef5;
+  margin-top: 15px;
 }
 
 .empty-icon {
@@ -938,127 +948,21 @@ defineExpose({
   font-size: 14px;
 }
 
-.browser-current-path {
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: #606266;
-  background-color: #f5f7fa;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-family: monospace;
-  word-break: break-all;
-}
-
-.browser-error {
-  margin-bottom: 10px;
-  color: #f56c6c;
-  padding: 8px 12px;
-  background-color: #fef0f0;
-  border-radius: 4px;
-}
-
-.directory-browser {
-  padding: 10px;
-  height: 400px;
-  display: flex;
-  flex-direction: column;
-}
-
-.browser-nav {
-  margin-bottom: 10px;
-  display: flex;
-  justify-content: space-between;
-  position: sticky;
-  top: 0;
-  background-color: #fff;
-  z-index: 1;
-  padding: 10px 0;
-}
-
-.directory-items-container {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.directory-items {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.directory-item {
-  padding: 8px 12px;
-  margin-bottom: 5px;
-  border-radius: 4px;
-  cursor: pointer;
+/* 添加针对空内容区域的样式 */
+.card-content:empty {
   display: flex;
   align-items: center;
-}
-
-.directory-item:hover {
-  background-color: #f5f7fa;
-}
-
-.directory-item.directory {
-  color: #409eff;
-}
-
-.directory-item.file {
-  color: #606266;
-}
-
-.directory-item .el-icon {
-  margin-right: 10px;
-}
-
-.directory-item span {
-  font-family: monospace;
-  word-break: break-all;
-}
-
-.directory-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-/* 移除按钮左侧的内边距 */
-.no-padding-left {
-  padding-left: 8px !important;
-}
-
-/* 减小差异对话框的顶部边距 */
-:deep(.diff-dialog) {
-  --el-dialog-margin-top: 5vh;
-}
-
-.diff-content {
-  font-family: monospace;
-  white-space: pre-wrap;
-  max-height: 74vh;
-  overflow-y: auto;
-  padding: 16px;
+  justify-content: center;
   background-color: #f8f9fa;
   border-radius: 6px;
-  border: 1px solid #f0f0f0;
+  border: 1px dashed #dcdfe6;
+  color: #909399;
+  height: 100%;
 }
 
-.diff-formatted {
+.card-content:empty::after {
+  content: '没有Git状态信息可显示';
   font-size: 14px;
-  line-height: 1.5;
-}
-
-.file-navigation {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: 15px;
-}
-
-.file-counter {
-  margin: 0 15px;
-  font-size: 14px;
-  color: #606266;
 }
 </style>
 
