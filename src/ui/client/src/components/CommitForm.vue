@@ -1029,12 +1029,20 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
   justify-content: center;
   width: 100%;
+  min-height: 40px; /* 添加最小高度确保loading不会改变按钮高度 */
 }
 
 .action-button :deep(.el-icon) {
   margin-right: 0;
   margin-bottom: 4px;
   font-size: 18px;
+}
+
+/* 添加loading状态的样式 */
+.action-button :deep(.el-loading-spinner) {
+  position: absolute;
+  top: calc(50% - 16px);
+  margin-top: 0;
 }
 
 .command-text {
