@@ -255,12 +255,20 @@ export const useGitLogStore = defineStore('gitLog', () => {
     try {
       isLoadingLog.value = true
       console.log('开始加载提交历史...')
-      const response = await fetch('/api/log')
+      
+      // 增加时间戳参数避免缓存，确保获取最新数据
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/log?_t=${timestamp}`)
       const data = await response.json()
-      if (data && Array.isArray(data)) {
-        log.value = data
+      
+      if (data && data.data && Array.isArray(data.data)) {
+        // 清空并更新日志数组
+        log.value = [...data.data]
+        console.log(`提交历史加载完成，共 ${log.value.length} 条记录`)
+      } else {
+        console.warn('API返回的提交历史格式不正确:', data)
+        log.value = [] // 如果数据格式不对，清空日志
       }
-      console.log(`提交历史加载完成，共 ${log.value.length} 条记录`)
       
       if (showMessage) {
         ElMessage({

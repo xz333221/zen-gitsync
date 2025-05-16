@@ -102,113 +102,68 @@ async function loadLog(all = false, page = 1) {
   }
   
   try {
-    showAllCommits.value = all
-    
-    // 判断是初次加载还是加载更多
-    const isLoadMore = page > 1
-    
-    // 只有初次加载时设置本地加载状态
-    if (!isLoadMore) {
-      localLoading.value = true
-      
-      // 初始加载时，默认认为有更多数据可加载
-      hasMoreData.value = true
-      
-      // 初次加载时清空数据
-      logsData.length = 0
-      logs.value = []
-    } else {
+    // 设置加载状态
+    if (page > 1) {
       isLoadingMore.value = true
+    } else {
+      localLoading.value = true
     }
     
-    // 构造URL，包含分页参数和筛选条件
-    let url = all 
-      ? '/api/log?all=true' 
-      : `/api/log?page=${page}&limit=100`
+    console.log(`加载提交历史: page=${page}, all=${all}`)
     
-    // 添加筛选条件到URL
-    // 作者筛选
-    if (authorFilter.value && authorFilter.value.length > 0) {
-      url += `&author=${encodeURIComponent(authorFilter.value.join(','))}`
+    // 构建查询参数
+    const queryParams = new URLSearchParams()
+    queryParams.append('page', page.toString())
+    queryParams.append('all', all.toString())
+    
+    // 添加筛选参数
+    if (authorFilter.value.length > 0) {
+      queryParams.append('author', authorFilter.value.join(','))
     }
     
-    // 提交信息筛选
     if (messageFilter.value) {
-      url += `&message=${encodeURIComponent(messageFilter.value)}`
+      queryParams.append('message', messageFilter.value)
     }
     
-    // 日期范围筛选
-    if (dateRangeFilter.value && dateRangeFilter.value.length === 2) {
-      const [startDate, endDate] = dateRangeFilter.value
-      url += `&dateFrom=${encodeURIComponent(startDate)}&dateTo=${encodeURIComponent(endDate)}`
+    if (dateRangeFilter.value && Array.isArray(dateRangeFilter.value) && dateRangeFilter.value.length === 2) {
+      queryParams.append('dateFrom', dateRangeFilter.value[0])
+      queryParams.append('dateTo', dateRangeFilter.value[1])
     }
     
-    console.log(`加载日志数据: ${url}，页码: ${page}`)
+    // 添加时间戳防止缓存
+    queryParams.append('_t', Date.now().toString())
     
-    const response = await fetch(url)
+    const response = await fetch(`/api/log?${queryParams.toString()}`)
     const result = await response.json()
     
-    // 调试输出服务器返回的数据结构
-    console.log('服务器返回数据结构:', JSON.stringify(result, null, 2))
-    console.log('服务器返回数据长度:', result.data?.length || result.log?.length || 0)
-    console.log('服务器返回hasMore状态:', result.hasMore)
-    
-    // 更新分页信息
-    currentPage.value = page
-    totalCommits.value = result.total || 0
-    
-    // 如果API没有返回hasMore字段，则根据返回数据量判断
-    // 如果返回数据少于请求的限制数量，认为没有更多数据了
-    const returnedDataCount = (result.data?.length || result.log?.length || 0)
-    hasMoreData.value = result.hasMore !== undefined ? result.hasMore : (returnedDataCount >= 100)
-    
-    console.log(`是否有更多数据: ${hasMoreData.value}, 当前页: ${currentPage.value}`)
-
-    // 添加数据到日志列表
-    if (result.data && Array.isArray(result.data)) {
-      if (isLoadMore) {
-        // 添加到现有数据
-        result.data.forEach((item: LogItem) => {
-          // 检查是否已存在相同哈希值的提交
-          const exists = logsData.some(existingItem => existingItem.hash === item.hash)
-          if (!exists) {
-            logsData.push(item)
-          }
-        })
-      } else {
-        // 替换现有数据
-        result.data.forEach((item: LogItem) => logsData.push(item))
-      }
-    } else if (result.log && Array.isArray(result.log)) {
-      // 旧版API格式，兼容处理
-      if (isLoadMore) {
-        // 添加到现有数据
-        result.log.forEach((item: LogItem) => {
-          // 检查是否已存在相同哈希值的提交
-          const exists = logsData.some(existingItem => existingItem.hash === item.hash)
-          if (!exists) {
-            logsData.push(item)
-          }
-        })
-      } else {
-        // 替换现有数据
-        result.log.forEach((item: LogItem) => logsData.push(item))
-      }
-    } else {
-      // 如果是加载更多出错，则标记没有更多数据
-      if (isLoadMore) {
-        hasMoreData.value = false
-      } else {
-        console.error('未知的日志数据格式:', result)
-        errorMessage.value = '日志数据格式错误'
-        return
-      }
+    // 确保result有正确的数据结构
+    if (!result || !result.data || !Array.isArray(result.data)) {
+      console.error('API返回的数据格式不正确:', result)
+      errorMessage.value = '加载提交历史失败: 服务器返回数据格式不正确'
+      return
     }
     
-    // 确保logs.value也更新
+    const isLoadMore = page > 1
+    
+    // 处理结果
+    // 如果是加载更多，追加数据，否则替换数据
+    if (isLoadMore) {
+      result.data.forEach((item: LogItem) => logsData.push(item))
+    } else {
+      logsData.length = 0
+      result.data.forEach((item: LogItem) => logsData.push(item))
+    }
+    
+    // 强制重新渲染列表
     logs.value = [...logsData]
     
-    console.log(`logsData长度: ${logsData.length}`) // 添加调试日志
+    // 更新总数和分页标记
+    totalCommits.value = result.total || logsData.length
+    hasMoreData.value = result.hasMore === true
+    
+    if (!hasMoreData.value) {
+      console.log('已加载所有提交记录')
+    }
     
     // 设置刷新提示状态（仅在初次加载时）
     if (!isLoadMore) {
@@ -468,29 +423,36 @@ const refreshLog = () => {
 watch(() => gitLogStore.log, (newLogs) => {
   console.log('监听到gitLogStore.log变化，更新图表数据')
   
-  // 清空logsData
-  logsData.length = 0
-  
-  // 重新填充数据
-  newLogs.forEach((item: LogItem) => logsData.push(item))
-  
-  // 更新计数器
-  totalCommits.value = newLogs.length
-  
-  // 尝试解决logs.value赋值问题
   try {
-    // @ts-ignore - 忽略TypeScript错误
+    // 清空logsData
+    logsData.length = 0
+    
+    // 重新填充数据，使用类型断言
+    if (Array.isArray(newLogs)) {
+      // @ts-ignore - 忽略类型校验
+      newLogs.forEach(item => item && logsData.push(item))
+    }
+    
+    // 更新计数器
+    totalCommits.value = logsData.length
+    
+    // 确保引用更新，触发UI重渲染
+    // @ts-ignore - 忽略类型校验
     logs.value = [...logsData]
+    
+    // 设置刷新提示
+    logRefreshed.value = true
+    setTimeout(() => { logRefreshed.value = false }, 2000)
+    
+    console.log(`数据更新完成，共${logs.value.length}条记录，准备渲染图表`)
+    
+    if (showGraphView.value && logsData.length > 0) {
+      setTimeout(renderGraph, 0)
+    }
   } catch (error) {
-    console.warn('无法更新logs.value:', error)
+    console.error('更新日志数据失败:', error)
   }
-  
-  console.log(`数据更新完成，准备渲染图表(${logsData.length}条记录)`)
-  
-  if (showGraphView.value && logsData.length > 0) {
-    setTimeout(renderGraph, 0)
-  }
-})
+}, { immediate: true })
 
 // 暴露方法给父组件
 defineExpose({
