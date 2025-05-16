@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onBeforeUnmount } from 'vue'
 import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider, ElDialog, ElSelect, ElOption, ElDatePicker, ElInput, ElBadge } from 'element-plus'
 import { RefreshRight, ZoomIn, ZoomOut, Filter, Document, TrendCharts, List, More } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
@@ -107,7 +107,7 @@ const filteredLogs = computed(() => {
 
 // 重置筛选条件
 function resetFilters() {
-  authorFilter.value = ''
+  authorFilter.value = []
   messageFilter.value = ''
   dateRangeFilter.value = null
 }
@@ -547,6 +547,11 @@ function formatCommitMessage(message: string) {
   // 返回格式化后的提交信息，保留换行符
   return message.trim();
 }
+
+// 添加空的onBeforeUnmount
+onBeforeUnmount(() => {
+  // 清理工作
+})
 </script>
 
 <template>
@@ -558,8 +563,38 @@ function formatCommitMessage(message: string) {
     
     <!-- 固定头部区域 -->
     <div class="log-header">
-      <h2>提交历史</h2>
+      <div class="header-left">
+        <h2>提交历史</h2>
+        <el-tag type="info" effect="plain" size="small" class="record-count" v-if="!showGraphView">
+          <template #icon>
+            <el-icon><Document /></el-icon>
+          </template>
+          {{ filteredLogs.length }}/{{ logs.length }}
+          <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
+            最近30条
+          </el-tag>
+          <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
+            全部
+          </el-tag>
+        </el-tag>
+      </div>
+      
       <div class="log-actions">
+        <!-- 筛选按钮移到这里 -->
+        <el-button
+          v-if="!showGraphView" 
+          :type="filterVisible ? 'primary' : 'default'"
+          size="small" 
+          @click="filterVisible = !filterVisible"
+        >
+          <template #icon>
+            <el-icon><Filter /></el-icon>
+          </template>
+          筛选
+          <el-badge v-if="filteredLogs.length !== logs.length" :value="filteredLogs.length" class="filter-badge" />
+        </el-button>
+        
+        <!-- 原有的按钮 -->
         <el-button 
           type="primary" 
           size="small"
@@ -593,8 +628,63 @@ function formatCommitMessage(message: string) {
       </div>
     </div>
     
+    <!-- 筛选面板放在头部下方，但在内容区域之前 -->
+    <div v-if="filterVisible && !showGraphView" class="filter-panel-header">
+      <div class="filter-form">
+        <div class="filter-item">
+          <div class="filter-label">作者:</div>
+          <el-select 
+            v-model="authorFilter" 
+            placeholder="选择作者" 
+            multiple
+            clearable 
+            filterable
+            class="filter-input"
+            size="small"
+          >
+            <el-option 
+              v-for="author in availableAuthors" 
+              :key="author" 
+              :label="author" 
+              :value="author"
+            />
+          </el-select>
+        </div>
+        
+        <div class="filter-item">
+          <div class="filter-label">提交信息包含:</div>
+          <el-input 
+            v-model="messageFilter" 
+            placeholder="关键词" 
+            clearable 
+            class="filter-input"
+            size="small"
+          />
+        </div>
+        
+        <div class="filter-item">
+          <div class="filter-label">日期范围:</div>
+          <el-date-picker
+            v-model="dateRangeFilter"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            class="filter-input date-range"
+            size="small"
+          />
+        </div>
+        
+        <div class="filter-actions">
+          <el-button type="info" size="small" @click="resetFilters">重置</el-button>
+        </div>
+      </div>
+    </div>
+    
     <!-- 内容区域，添加上边距以避免被固定头部遮挡 -->
-    <div class="content-area">
+    <div class="content-area" :class="{'with-filter': filterVisible && !showGraphView}">
       <div v-if="errorMessage">{{ errorMessage }}</div>
       <div v-else>
         <!-- 图表视图 -->
@@ -653,93 +743,16 @@ function formatCommitMessage(message: string) {
         </div>
         
         <!-- 表格视图 -->
-        <div v-else>
-          <div class="history-controls">
-            <div class="history-stats">
-              <el-tag type="info" effect="plain" size="large" class="record-count">
-                <template #icon>
-                  <el-icon><Document /></el-icon>
-                </template>
-                显示 {{ filteredLogs.length }}/{{ logs.length }} 条记录 
-                <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
-                  最近30条
-                </el-tag>
-                <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
-                  全部
-                </el-tag>
-              </el-tag>
-            </div>
-            
-            <div class="filter-actions">
-              <el-button 
-                :type="filterVisible ? 'primary' : 'default'"
-                size="default" 
-                @click="filterVisible = !filterVisible"
-              >
-                <template #icon>
-                  <el-icon>
-                    <Filter />
-                  </el-icon>
-                </template>
-                筛选
-                <el-badge v-if="filteredLogs.length !== logs.length" :value="filteredLogs.length" class="filter-badge" />
-              </el-button>
-            </div>
-          </div>
-          
-          <!-- 筛选条件面板 -->
-          <div v-if="filterVisible" class="filter-panel">
-            <div class="filter-form">
-              <div class="filter-item">
-                <div class="filter-label">作者:</div>
-                <el-select 
-                  v-model="authorFilter" 
-                  placeholder="选择作者" 
-                  multiple
-                  clearable 
-                  filterable
-                  class="filter-input"
-                >
-                  <el-option 
-                    v-for="author in availableAuthors" 
-                    :key="author" 
-                    :label="author" 
-                    :value="author"
-                  />
-                </el-select>
-              </div>
-              
-              <div class="filter-item">
-                <div class="filter-label">提交信息包含:</div>
-                <el-input 
-                  v-model="messageFilter" 
-                  placeholder="关键词" 
-                  clearable 
-                  class="filter-input"
-                />
-              </div>
-              
-              <div class="filter-item">
-                <div class="filter-label">日期范围:</div>
-                <el-date-picker
-                  v-model="dateRangeFilter"
-                  type="daterange"
-                  range-separator="至"
-                  start-placeholder="开始日期"
-                  end-placeholder="结束日期"
-                  format="YYYY-MM-DD"
-                  value-format="YYYY-MM-DD"
-                  class="filter-input date-range"
-                />
-              </div>
-              
-              <div class="filter-actions">
-                <el-button type="info" size="small" @click="resetFilters">重置</el-button>
-              </div>
-            </div>
-          </div>
-          
-          <el-table :data="filteredLogs" style="width: 100%" stripe border v-loading="isLoading">
+        <div v-else class="table-view-container">
+          <el-table 
+            :data="filteredLogs" 
+            stripe 
+            border 
+            v-loading="isLoading"
+            class="log-table"
+            :empty-text="isLoading ? '加载中...' : '没有匹配的提交记录'"
+            height="500"
+          >
             <el-table-column label="提交哈希" width="100" resizable>
               <template #default="scope">
                 <span class="commit-hash" @click="viewCommitDetail(scope.row)">{{ scope.row.hash.substring(0, 7) }}</span>
@@ -858,6 +871,13 @@ function formatCommitMessage(message: string) {
   top: 0;
   z-index: 100;
   height: 36px;
+  flex-shrink: 0; /* 防止头部被压缩 */
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .log-header h2 {
@@ -872,11 +892,26 @@ function formatCommitMessage(message: string) {
 }
 
 .content-area {
-  padding: 0 20px 20px 20px;
+  padding: 10px 0;
   overflow-y: auto;
   flex: 1;
   min-height: 100px;
   height: calc(100% - 52px);
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-area.with-filter {
+  height: calc(100% - 52px); /* 只减去header高度，因为筛选面板已经sticky */
+}
+
+/* 确保内容区域内的直接子元素占满高度 */
+.content-area > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 优化表格区域 */
@@ -1191,6 +1226,17 @@ function formatCommitMessage(message: string) {
   align-items: center;
   margin-bottom: 15px;
   padding: 0;
+  position: sticky;
+  top: 52px; /* 与 log-header 的高度匹配 */
+  z-index: 90;
+  background-color: white;
+  padding: 5px 0;
+  transition: box-shadow 0.3s ease, background-color 0.3s ease, padding 0.2s ease;
+}
+
+/* 当滚动时添加微妙的阴影效果 */
+.content-area:not(:hover) .history-controls:not(:hover) {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .history-stats {
@@ -1221,6 +1267,19 @@ function formatCommitMessage(message: string) {
   margin-bottom: 15px;
   border: 1px solid #e4e7ed;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 98px; /* history-controls的高度(36px) + padding(10px) + log-header的高度(52px) */
+  z-index: 89; /* 比history-controls低一点 */
+  transition: box-shadow 0.3s ease, background-color 0.3s ease, transform 0.2s ease;
+}
+
+/* 当滚动时增强视觉效果 */
+.content-area:not(:hover) .filter-panel:not(:hover) {
+  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.1);
+}
+
+.filter-panel:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
 .filter-form {
@@ -1254,6 +1313,185 @@ function formatCommitMessage(message: string) {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 表格样式 */
+.log-table {
+  transition: margin-top 0.3s ease;
+  min-height: 200px; /* 确保表格有最小高度 */
+  height: 100%; /* 填充可用空间 */
+}
+
+/* 为带筛选面板的表格添加顶部边距 */
+.log-table.has-filter {
+  margin-top: 10px;
+}
+
+/* 当控件固定时增加表格上边距 */
+.log-table.has-sticky-controls {
+  margin-top: 52px !important; /* controls 高度 + 一些额外空间 */
+}
+
+/* 当筛选面板固定时再增加表格上边距 */
+.log-table.has-sticky-filter {
+  margin-top: 140px !important; /* 筛选面板高度 + controls 高度 + 一些额外空间 */
+}
+
+/* 表格为空时的样式 */
+.el-table__empty-block {
+  min-height: 200px;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 确保表格容器占满可用空间 */
+.content-area > div:not(.graph-view) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 表格视图容器 */
+.table-view-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+}
+
+.log-table {
+  flex: 1;
+  min-height: 400px;
+}
+
+.filter-panel.filter-sticky {
+  background-color: rgba(245, 247, 250, 0.97);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  border-top: none;
+}
+
+.history-controls.controls-sticky {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background-color: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(4px);
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* 表格容器样式 */
+.table-view-container .el-table {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-view-container .el-table__inner-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-view-container .el-table__body-wrapper {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* 解决空表格问题 */
+.el-table__empty-text {
+  min-height: 300px !important;
+  height: 100% !important;
+  margin-top: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 筛选面板头部样式 */
+.filter-panel-header {
+  background-color: #f5f7fa;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e4e7ed;
+  position: sticky;
+  top: 36px; /* 紧贴log-header下方 */
+  z-index: 99;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  margin-bottom: 0; /* 移除底部边距 */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.filter-panel-header .filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+
+.filter-panel-header .filter-item {
+  margin-right: 12px;
+}
+
+.filter-panel-header .filter-label {
+  font-size: 12px;
+  color: #606266;
+  margin-bottom: 4px;
+}
+
+.filter-panel-header .filter-input {
+  width: 180px;
+}
+
+.filter-panel-header .filter-input.date-range {
+  width: 320px;
+}
+
+.content-area.with-filter {
+  height: calc(100% - 52px - 60px); /* 减去header高度和filter高度 */
+}
+
+/* 记录计数标签 */
+.record-count {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding-left: 8px;
+  padding-right: 8px;
+  margin-left: 8px;
+}
+
+.record-count :deep(.el-icon) {
+  margin-right: 4px;
+  font-size: 12px;
+}
+
+/* 表格视图容器简化 */
+.table-view-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 400px; /* 确保至少有一定高度 */
+}
+
+.log-table {
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  flex: 1;
+}
+
+/* 重置或移除不再需要的样式 */
+.history-controls,
+.filter-panel {
+  display: none; /* 隐藏原来的筛选组件 */
+}
+
+.log-table.has-filter,
+.log-table.has-sticky-controls,
+.log-table.has-sticky-filter {
+  margin-top: 0 !important; /* 重置原来的边距 */
 }
 </style>
 
