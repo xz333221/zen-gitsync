@@ -843,6 +843,66 @@ async function startUIServer() {
     }
   });
   
+  // 撤销某个提交 (revert)
+  app.post('/api/revert-commit', async (req, res) => {
+    try {
+      const { hash } = req.body;
+      
+      if (!hash) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少提交哈希参数' 
+        });
+      }
+      
+      console.log(`执行撤销提交操作: hash=${hash}`);
+      
+      // 执行git revert命令
+      await execGitCommand(`git revert --no-edit ${hash}`);
+      
+      res.json({ 
+        success: true, 
+        message: `已成功撤销提交 ${hash}` 
+      });
+    } catch (error) {
+      console.error('撤销提交失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `撤销提交失败: ${error.message}` 
+      });
+    }
+  });
+  
+  // Cherry-pick某个提交
+  app.post('/api/cherry-pick-commit', async (req, res) => {
+    try {
+      const { hash } = req.body;
+      
+      if (!hash) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少提交哈希参数' 
+        });
+      }
+      
+      console.log(`执行Cherry-pick操作: hash=${hash}`);
+      
+      // 执行git cherry-pick命令
+      await execGitCommand(`git cherry-pick ${hash}`);
+      
+      res.json({ 
+        success: true, 
+        message: `已成功Cherry-pick提交 ${hash}` 
+      });
+    } catch (error) {
+      console.error('Cherry-pick提交失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `Cherry-pick提交失败: ${error.message}` 
+      });
+    }
+  });
+  
   // 添加清理Git锁定文件的接口
   app.post('/api/remove-lock', async (req, res) => {
     try {

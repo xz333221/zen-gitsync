@@ -1,6 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, onBeforeUnmount, nextTick } from 'vue'
-import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider, ElDialog, ElSelect, ElOption, ElDatePicker, ElInput, ElBadge } from 'element-plus'
+import { 
+  ElTable, 
+  ElTableColumn, 
+  ElTag, 
+  ElButton, 
+  ElSlider, 
+  ElDialog, 
+  ElSelect, 
+  ElOption, 
+  ElDatePicker, 
+  ElInput, 
+  ElBadge,
+  ElMessage,
+  ElMessageBox
+} from 'element-plus'
 import { RefreshRight, ZoomIn, ZoomOut, Filter, Document, TrendCharts, List, More } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import { createGitgraph } from '@gitgraph/js'
@@ -63,6 +77,12 @@ const authorFilter = ref<string[]>([])
 const messageFilter = ref('')
 const dateRangeFilter = ref<any>(null)
 const availableAuthors = ref<string[]>([])
+
+// 添加右键菜单相关变量
+const contextMenuVisible = ref(false)
+const contextMenuTop = ref(0)
+const contextMenuLeft = ref(0)
+const selectedContextCommit = ref<LogItem | null>(null)
 
 // 应用筛选后的日志
 const filteredLogs = computed(() => {
@@ -719,6 +739,117 @@ function extractAuthorsFromLogs() {
   availableAuthors.value = Array.from(authors).sort()
   console.log(`从现有日志中提取了${availableAuthors.value.length}位作者`)
 }
+
+// 处理右键菜单事件
+function handleContextMenu(row: LogItem, column: any, event: MouseEvent) {
+  // 阻止默认右键菜单
+  event.preventDefault()
+  
+  // 设置右键菜单位置
+  contextMenuTop.value = event.clientY
+  contextMenuLeft.value = event.clientX
+  
+  // 设置选中的提交
+  selectedContextCommit.value = row
+  
+  // 显示右键菜单
+  contextMenuVisible.value = true
+  
+  // 点击其他地方时隐藏菜单
+  const hideContextMenu = () => {
+    contextMenuVisible.value = false
+    document.removeEventListener('click', hideContextMenu)
+  }
+  
+  // 添加点击监听器
+  setTimeout(() => {
+    document.addEventListener('click', hideContextMenu)
+  }, 0)
+}
+
+// 撤销提交 (Revert)
+async function revertCommit(commit: LogItem | null) {
+  if (!commit) return
+  
+  try {
+    // 询问确认
+    await ElMessageBox.confirm(
+      `确定要撤销提交 ${commit.hash.substring(0, 7)} 吗？这将创建一个新的提交来撤销这次提交的更改。`,
+      '撤销提交确认',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    // 发送请求
+    const response = await fetch('/api/revert-commit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ hash: commit.hash })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      ElMessage.success(result.message || '已成功撤销提交')
+      // 刷新日志
+      refreshLog()
+    } else {
+      ElMessage.error(result.error || '撤销提交失败')
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('撤销提交出错:', error)
+      ElMessage.error('撤销提交失败: ' + (error.message || error))
+    }
+  }
+}
+
+// Cherry-pick提交
+async function cherryPickCommit(commit: LogItem | null) {
+  if (!commit) return
+  
+  try {
+    // 询问确认
+    await ElMessageBox.confirm(
+      `确定要将提交 ${commit.hash.substring(0, 7)} Cherry-Pick 到当前分支吗？`,
+      'Cherry-Pick确认',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    // 发送请求
+    const response = await fetch('/api/cherry-pick-commit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ hash: commit.hash })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      ElMessage.success(result.message || '已成功Cherry-Pick提交')
+      // 刷新日志
+      refreshLog()
+    } else {
+      ElMessage.error(result.error || 'Cherry-Pick提交失败')
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('Cherry-Pick提交出错:', error)
+      ElMessage.error('Cherry-Pick提交失败: ' + (error.message || error))
+    }
+  }
+}
 </script>
 
 <template>
@@ -912,16 +1043,7 @@ function extractAuthorsFromLogs() {
         
         <!-- 表格视图 -->
         <div v-else class="table-view-container">
-          <el-table 
-            ref="tableRef"
-            :data="filteredLogs" 
-            stripe 
-            border 
-            v-loading="isLoading"
-            class="log-table"
-            :empty-text="isLoading ? '加载中...' : '没有匹配的提交记录'"
-            height="500"
-          >
+                              <el-table             ref="tableRef"            :data="filteredLogs"             stripe             border             v-loading="isLoading"            class="log-table"            :empty-text="isLoading ? '加载中...' : '没有匹配的提交记录'"            height="500"            @row-contextmenu="handleContextMenu"          >
             <el-table-column label="提交哈希" width="100" resizable>
               <template #default="scope">
                 <span class="commit-hash" @click="viewCommitDetail(scope.row)">{{ scope.row.hash.substring(0, 7) }}</span>
@@ -1031,11 +1153,7 @@ function extractAuthorsFromLogs() {
           </div>
         </div>
       </div>
-    </el-dialog>
-  </div>
-</template>
-
-<style scoped>
+          </el-dialog>    </div>        <!-- 添加右键菜单 -->    <div       v-show="contextMenuVisible"       class="context-menu"       :style="{ top: contextMenuTop + 'px', left: contextMenuLeft + 'px' }"    >      <div class="context-menu-item" @click="viewCommitDetail(selectedContextCommit)">        <i class="el-icon-view"></i> 查看详情      </div>      <div class="context-menu-item" @click="revertCommit(selectedContextCommit)">        <i class="el-icon-delete"></i> 撤销提交 (Revert)      </div>      <div class="context-menu-item" @click="cherryPickCommit(selectedContextCommit)">        <i class="el-icon-edit"></i> Cherry-Pick 到当前分支      </div>    </div></template><style scoped>
 .card {
   background-color: white;
   border-radius: 8px;
@@ -1736,9 +1854,39 @@ function extractAuthorsFromLogs() {
   margin-top: 5px;
   color: #c0c4cc;
 }
+
+/* 右键菜单样式 */
+.context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  padding: 8px 0;
+  z-index: 3000;
+  min-width: 180px;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.context-menu-item:hover {
+  background-color: #f5f7fa;
+}
+
+.context-menu-item i {
+  margin-right: 8px;
+}
 </style>
 
 /* 添加表格列调整样式 */
+<style>
 .el-table .el-table__cell .cell {
   word-break: break-all;
 }
+</style>
