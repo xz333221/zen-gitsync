@@ -480,6 +480,11 @@ defineExpose({
           </div>
         </div>
         
+        <!-- 默认状态信息 -->
+        <div v-if="!gitStore.hasUpstream || (gitStore.branchAhead === 0 && gitStore.branchBehind === 0)" class="git-status-message">
+          <p>当前工作在 <el-tag size="small" type="success">{{ gitStore.currentBranch }}</el-tag> 分支</p>
+        </div>
+        
         <!-- 现代化、简洁的文件列表 -->
         <div v-if="gitLogStore.fileList.length" class="file-list-container">
           <!-- 分组显示文件 -->
@@ -795,7 +800,8 @@ defineExpose({
   flex-direction: column;
   margin-bottom: 0;
   gap: 12px;
-  height: calc(100% - 70px); /* 给底部留出些空间 */
+  height: auto; /* 改为自适应高度，不固定高度 */
+  min-height: 100px; /* 设置最小高度 */
 }
 
 .file-group {
@@ -832,6 +838,7 @@ defineExpose({
 .file-list {
   overflow-y: auto;
   min-height: 40px; /* 最小高度 */
+  max-height: 200px; /* 最大高度限制，避免过长列表 */
   flex-grow: 1; /* 允许文件列表在文件组内扩展 */
   padding: 0;
   margin: 0;
@@ -1143,6 +1150,24 @@ defineExpose({
   border-radius: 4px;
   margin-bottom: 15px;
   border-left: 3px solid #e6a23c;
+}
+
+/* 添加默认分支状态信息样式 */
+.git-status-message {
+  padding: 12px 15px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  border-left: 3px solid #67c23a;
+}
+
+.git-status-message p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #606266;
 }
 
 .sync-status-content {
