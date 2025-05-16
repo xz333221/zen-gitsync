@@ -536,26 +536,68 @@ async function startUIServer() {
     try {
       // 获取分页参数
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 200;
+      const limit = parseInt(req.query.limit) || 100;
       const skip = (page - 1) * limit;
       
-      // 如果all=true，则不使用限制
-      const limitOption = req.query.all === 'true' ? '' : `-n ${skip + limit}`;
-      const totalOption = req.query.all === 'true' ? '' : '--count';
+      // 获取筛选参数
+      const author = req.query.author ? req.query.author.split(',') : [];
+      const message = req.query.message || '';
+      const dateFrom = req.query.dateFrom || '';
+      const dateTo = req.query.dateTo || '';
+      
+      // 构建Git命令选项
+      let commandOptions = [];
+      
+      // 作者筛选（支持多作者）
+      if (author.length > 0) {
+        // 对每个作者构建 --author 选项
+        author.forEach(a => {
+          if (a.trim()) {
+            commandOptions.push(`--author="${a.trim()}"`);
+          }
+        });
+      }
+      
+      // 日期范围筛选
+      if (dateFrom && dateTo) {
+        commandOptions.push(`--after="${dateFrom}" --before="${dateTo} 23:59:59"`);
+      } else if (dateFrom) {
+        commandOptions.push(`--after="${dateFrom}"`);
+      } else if (dateTo) {
+        commandOptions.push(`--before="${dateTo} 23:59:59"`);
+      }
+      
+      // 提交信息筛选
+      if (message) {
+        commandOptions.push(`--grep="${message}"`);
+      }
+      
+      // 如果all=true，则不使用限制，否则按页码和limit精确获取
+      // 修复：只获取当前页的数据，而不是累计所有之前页的数据
+      const limitOption = req.query.all === 'true' ? '' : `-n ${limit} --skip=${skip}`;
+      
+      // 合并所有命令选项
+      const options = [...commandOptions, limitOption].filter(Boolean).join(' ');
+      
+      console.log(`执行Git命令: git log --all --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${options}`);
       
       // 使用 git log 命令获取提交历史
-      let { stdout: logOutput } = await execGitCommand(`git log --all --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${limitOption}`);
+      let { stdout: logOutput } = await execGitCommand(
+        `git log --all --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${options}`
+      );
       
-      // 获取总提交数量
+      // 获取总提交数量（考虑筛选条件）
       let totalCommits = 0;
-      if (totalOption) {
-        try {
-          const { stdout: countOutput } = await execGitCommand(`git rev-list --all --count`);
-          totalCommits = parseInt(countOutput.trim());
-        } catch (error) {
-          console.error('获取提交总数失败:', error);
-          totalCommits = 0;
-        }
+      try {
+        // 构建计数命令，包含相同的筛选条件
+        const countCommand = `git rev-list --all --count ${commandOptions.join(' ')}`;
+        console.log(`执行计数命令: ${countCommand}`);
+        
+        const { stdout: countOutput } = await execGitCommand(countCommand);
+        totalCommits = parseInt(countOutput.trim());
+      } catch (error) {
+        console.error('获取提交总数失败:', error);
+        totalCommits = 0;
       }
       
       // 替换提交记录之间的换行符
@@ -581,7 +623,8 @@ async function startUIServer() {
       }).filter(item => item !== null);
       
       // 计算是否有更多数据
-      const hasMore = req.query.all === 'true' ? false : (data.length >= limit && skip + data.length < totalCommits);
+      // 修复：使用总记录数和已获取记录总数来判断
+      const hasMore = req.query.all === 'true' ? false : (skip + data.length < totalCommits);
       
       console.log(`分页查询 - 页码: ${page}, 每页数量: ${limit}, 跳过: ${skip}, 总数: ${totalCommits}, 返回数量: ${data.length}, 是否有更多: ${hasMore}`);
       
@@ -859,6 +902,28 @@ async function startUIServer() {
       res.status(500).json({ 
         success: false, 
         error: `更新全局Git用户配置失败: ${error.message}` 
+      });
+    }
+  });
+  
+  // 获取所有作者列表
+  app.get('/api/authors', async (req, res) => {
+    try {
+      // 使用git命令获取所有提交者
+      const { stdout } = await execGitCommand('git log --format="%an" | sort | uniq');
+      
+      // 将结果按行分割并过滤空行
+      const authors = stdout.split('\n').filter(author => author.trim() !== '');
+      
+      res.json({
+        success: true,
+        authors: authors
+      });
+    } catch (error) {
+      console.error('获取作者列表失败:', error);
+      res.status(500).json({
+        success: false,
+        error: '获取作者列表失败: ' + error.message
       });
     }
   });

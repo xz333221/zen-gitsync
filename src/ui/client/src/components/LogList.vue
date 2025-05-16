@@ -62,62 +62,13 @@ const filterVisible = ref(false)
 const authorFilter = ref<string[]>([])
 const messageFilter = ref('')
 const dateRangeFilter = ref<any>(null)
-const availableAuthors = computed(() => {
-  // 从日志中提取不重复的作者列表
-  const authors = new Set<string>()
-  logs.value.forEach(log => {
-    if (log.author) {
-      authors.add(log.author)
-    }
-  })
-  return Array.from(authors).sort()
-})
+const availableAuthors = ref<string[]>([])
 
 // 应用筛选后的日志
 const filteredLogs = computed(() => {
-  if (!authorFilter.value && !messageFilter.value && !dateRangeFilter.value) {
-    return logs.value
-  }
-  
-  return logs.value.filter(log => {
-    // 作者筛选
-    if (authorFilter.value.length > 0 && !authorFilter.value.includes(log.author)) {
-      return false
-    }
-    
-    // 提交信息关键词筛选
-    if (messageFilter.value && !log.message.toLowerCase().includes(messageFilter.value.toLowerCase())) {
-      return false
-    }
-    
-    // 日期范围筛选
-    if (dateRangeFilter.value && dateRangeFilter.value.length === 2) {
-      const logDate = new Date(log.date)
-      const [startDateStr, endDateStr] = dateRangeFilter.value
-      
-      // 转换日期字符串为Date对象
-      const startDate = new Date(startDateStr)
-      const endDate = new Date(endDateStr)
-      
-      // 设置时间为一天的开始和结束，确保包含完整日期
-      startDate.setHours(0, 0, 0, 0)
-      endDate.setHours(23, 59, 59, 999)
-      
-      if (logDate < startDate || logDate > endDate) {
-        return false
-      }
-    }
-    
-    return true
-  })
+  // 不再在前端进行筛选，直接使用加载的日志
+  return logs.value;
 })
-
-// 重置筛选条件
-function resetFilters() {
-  authorFilter.value = []
-  messageFilter.value = ''
-  dateRangeFilter.value = null
-}
 
 // 加载提交历史
 async function loadLog(all = false, page = 1) {
@@ -142,16 +93,37 @@ async function loadLog(all = false, page = 1) {
       
       // 初始加载时，默认认为有更多数据可加载
       hasMoreData.value = true
+      
+      // 初次加载时清空数据
+      logsData.length = 0
+      logs.value = []
     } else {
       isLoadingMore.value = true
     }
     
-    // 构造URL，包含分页参数
-    const url = all 
+    // 构造URL，包含分页参数和筛选条件
+    let url = all 
       ? '/api/log?all=true' 
-      : `/api/log?page=${page}&limit=200`
+      : `/api/log?page=${page}&limit=100`
     
-    console.log(`加载日志数据: ${url}`)
+    // 添加筛选条件到URL
+    // 作者筛选
+    if (authorFilter.value && authorFilter.value.length > 0) {
+      url += `&author=${encodeURIComponent(authorFilter.value.join(','))}`
+    }
+    
+    // 提交信息筛选
+    if (messageFilter.value) {
+      url += `&message=${encodeURIComponent(messageFilter.value)}`
+    }
+    
+    // 日期范围筛选
+    if (dateRangeFilter.value && dateRangeFilter.value.length === 2) {
+      const [startDate, endDate] = dateRangeFilter.value
+      url += `&dateFrom=${encodeURIComponent(startDate)}&dateTo=${encodeURIComponent(endDate)}`
+    }
+    
+    console.log(`加载日志数据: ${url}，页码: ${page}`)
     
     const response = await fetch(url)
     const result = await response.json()
@@ -161,45 +133,47 @@ async function loadLog(all = false, page = 1) {
     console.log('服务器返回数据长度:', result.data?.length || result.log?.length || 0)
     console.log('服务器返回hasMore状态:', result.hasMore)
     
-    // 清空现有数据（仅在初次加载时）
-    if (!isLoadMore) {
-      logsData.length = 0
-    }
-    
     // 更新分页信息
     currentPage.value = page
+    totalCommits.value = result.total || 0
     
-    // 明确设置是否有更多数据
-    if (result.hasMore !== undefined) {
-      hasMoreData.value = result.hasMore
-    } else {
-      // 如果API没有返回hasMore字段，则根据返回数据量判断
-      // 如果返回数据少于请求的限制数量，认为没有更多数据了
-      const returnedDataCount = (result.data?.length || result.log?.length || 0)
-      hasMoreData.value = returnedDataCount >= 200
-    }
+    // 如果API没有返回hasMore字段，则根据返回数据量判断
+    // 如果返回数据少于请求的限制数量，认为没有更多数据了
+    const returnedDataCount = (result.data?.length || result.log?.length || 0)
+    hasMoreData.value = result.hasMore !== undefined ? result.hasMore : (returnedDataCount >= 100)
     
-    console.log(`是否有更多数据: ${hasMoreData.value}`)
+    console.log(`是否有更多数据: ${hasMoreData.value}, 当前页: ${currentPage.value}`)
 
     // 添加数据到日志列表
     if (result.data && Array.isArray(result.data)) {
-      // 如果是加载更多，则追加数据，否则替换数据
       if (isLoadMore) {
-        result.data.forEach((item: LogItem) => logsData.push(item))
+        // 添加到现有数据
+        result.data.forEach((item: LogItem) => {
+          // 检查是否已存在相同哈希值的提交
+          const exists = logsData.some(existingItem => existingItem.hash === item.hash)
+          if (!exists) {
+            logsData.push(item)
+          }
+        })
       } else {
+        // 替换现有数据
         result.data.forEach((item: LogItem) => logsData.push(item))
       }
-      
-      totalCommits.value = result.total || result.data.length
     } else if (result.log && Array.isArray(result.log)) {
       // 旧版API格式，兼容处理
       if (isLoadMore) {
-        result.log.forEach((item: LogItem) => logsData.push(item))
+        // 添加到现有数据
+        result.log.forEach((item: LogItem) => {
+          // 检查是否已存在相同哈希值的提交
+          const exists = logsData.some(existingItem => existingItem.hash === item.hash)
+          if (!exists) {
+            logsData.push(item)
+          }
+        })
       } else {
+        // 替换现有数据
         result.log.forEach((item: LogItem) => logsData.push(item))
       }
-      
-      totalCommits.value = result.total || result.log.length
     } else {
       // 如果是加载更多出错，则标记没有更多数据
       if (isLoadMore) {
@@ -432,6 +406,9 @@ onMounted(() => {
       console.log('初始加载日志数据')
       loadLog()
     }
+    
+    // 加载所有可能的作者列表
+    fetchAllAuthors()
   } else {
     errorMessage.value = '当前目录不是Git仓库'
   }
@@ -688,6 +665,39 @@ function loadMoreLogs() {
   console.log(`加载更多日志，页码: ${currentPage.value + 1}`)
   loadLog(showAllCommits.value, currentPage.value + 1)
 }
+
+// 重置筛选条件并重新加载数据
+function resetFilters() {
+  authorFilter.value = []
+  messageFilter.value = ''
+  dateRangeFilter.value = null
+  
+  // 重置筛选后重新加载数据
+  currentPage.value = 1
+  loadLog(showAllCommits.value, 1)
+}
+
+// 应用筛选条件
+function applyFilters() {
+  // 应用筛选时重置到第一页
+  currentPage.value = 1
+  loadLog(showAllCommits.value, 1)
+}
+
+// 添加获取所有作者的函数
+async function fetchAllAuthors() {
+  try {
+    const response = await fetch('/api/authors')
+    const result = await response.json()
+    
+    if (result.success && Array.isArray(result.authors)) {
+      // 更新可用作者列表
+      availableAuthors.value = result.authors.sort()
+    }
+  } catch (error) {
+    console.error('获取作者列表失败:', error)
+  }
+}
 </script>
 
 <template>
@@ -707,7 +717,7 @@ function loadMoreLogs() {
           </template>
           {{ filteredLogs.length }}/{{ logs.length }}
           <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
-            分页加载
+            分页加载 (每页100条)
           </el-tag>
           <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
             全部
@@ -750,7 +760,7 @@ function loadMoreLogs() {
           <template #icon>
             <el-icon><component :is="showAllCommits ? List : More" /></el-icon>
           </template>
-          {{ showAllCommits ? '显示分页加载' : '显示所有提交' }}
+          {{ showAllCommits ? '显示分页加载 (每页100条)' : '显示所有提交' }}
         </el-button>
         <el-button 
           circle 
@@ -814,6 +824,7 @@ function loadMoreLogs() {
         </div>
         
         <div class="filter-actions">
+          <el-button type="primary" size="small" @click="applyFilters">应用筛选</el-button>
           <el-button type="info" size="small" @click="resetFilters">重置</el-button>
         </div>
       </div>
@@ -826,7 +837,7 @@ function loadMoreLogs() {
         <!-- 图表视图 -->
         <div v-if="showGraphView" class="graph-view">
           <div class="commit-count" v-if="logsData.length > 0">
-            显示 {{ logsData.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(分页加载)' }}
+            显示 {{ logsData.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(分页加载，每页100条)' }}
           </div>
           
           <!-- 添加缩放控制 -->
@@ -923,6 +934,11 @@ function loadMoreLogs() {
           
           <!-- 添加底部加载状态和加载更多按钮 -->
           <div v-if="!showAllCommits" class="load-more-container">
+            <!-- 显示加载状态和页码信息 -->
+            <div class="pagination-info">
+              <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(totalCommits / 100) || 1 }} 页 (总计 {{ totalCommits }} 条记录)</span>
+            </div>
+            
             <div v-if="isLoadingMore" class="loading-more">
               <div class="loading-spinner"></div>
               <span>加载更多...</span>
@@ -1636,9 +1652,17 @@ function loadMoreLogs() {
 /* 添加底部加载更多相关样式 */
 .load-more-container {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   padding: 15px 0;
   border-top: 1px dashed #ebeef5;
+  gap: 10px;
+}
+
+.pagination-info {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 5px;
 }
 
 .loading-more {
