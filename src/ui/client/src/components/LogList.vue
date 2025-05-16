@@ -830,7 +830,7 @@ async function cherryPickCommit(commit: LogItem | null) {
     <div class="log-header">
       <div class="header-left">
         <h2>提交历史</h2>
-        <el-tag type="info" effect="plain" size="small" class="record-count" v-if="!showGraphView">
+        <!-- <el-tag type="info" effect="plain" size="small" class="record-count" v-if="!showGraphView">
           <template #icon>
             <el-icon><Document /></el-icon>
           </template>
@@ -841,7 +841,7 @@ async function cherryPickCommit(commit: LogItem | null) {
           <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
             全部
           </el-tag>
-        </el-tag>
+        </el-tag> -->
       </div>
       
       <div class="log-actions">
