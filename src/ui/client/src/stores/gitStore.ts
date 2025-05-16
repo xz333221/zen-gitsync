@@ -13,6 +13,12 @@ export const useGitStore = defineStore('git', () => {
   const isGitRepo = ref(false) // 当前目录是否是Git仓库
   const lastCheckedTime = ref(0) // 上次检查Git仓库状态的时间戳
   
+  // 添加分支状态相关变量
+  const branchAhead = ref(0) // 当前分支领先远程分支的提交数
+  const branchBehind = ref(0) // 当前分支落后远程分支的提交数
+  const hasUpstream = ref(false) // 当前分支是否有上游分支
+  const upstreamBranch = ref('') // 上游分支名称
+  
   // 添加重置方法
   function $reset() {
     currentBranch.value = ''
@@ -23,6 +29,34 @@ export const useGitStore = defineStore('git', () => {
     isCreatingBranch.value = false
     isGitRepo.value = false
     lastCheckedTime.value = 0
+    branchAhead.value = 0
+    branchBehind.value = 0
+    hasUpstream.value = false
+    upstreamBranch.value = ''
+  }
+
+  // 获取分支状态（领先/落后远程）
+  async function getBranchStatus() {
+    if (!isGitRepo.value) return;
+    
+    try {
+      const response = await fetch('/api/branch-status');
+      const data = await response.json();
+      
+      if (data) {
+        branchAhead.value = data.ahead || 0;
+        branchBehind.value = data.behind || 0;
+        hasUpstream.value = data.hasUpstream || false;
+        upstreamBranch.value = data.upstreamBranch || '';
+      }
+    } catch (error) {
+      console.error('获取分支状态失败:', error);
+      // 出错时重置状态
+      branchAhead.value = 0;
+      branchBehind.value = 0;
+      hasUpstream.value = false;
+      upstreamBranch.value = '';
+    }
   }
 
   // 检查当前目录是否是Git仓库
@@ -56,6 +90,8 @@ export const useGitStore = defineStore('git', () => {
       const data = await response.json()
       if (data.branch) {
         currentBranch.value = data.branch
+        // 获取分支状态信息
+        await getBranchStatus();
       }
     } catch (error) {
       console.error('获取分支信息失败:', error)
@@ -285,6 +321,10 @@ export const useGitStore = defineStore('git', () => {
     isCreatingBranch,
     isGitRepo,
     lastCheckedTime,
+    branchAhead,
+    branchBehind,
+    hasUpstream,
+    upstreamBranch,
     
     // 方法
     $reset,
