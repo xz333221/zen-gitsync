@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Setting, Edit } from "@element-plus/icons-vue";
+import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position } from "@element-plus/icons-vue";
 import { useGitLogStore } from "../stores/gitLogStore";
 import { useGitStore } from "../stores/gitStore";
 
@@ -10,6 +10,8 @@ const gitStore = useGitStore();
 const commitMessage = ref("");
 const isPushing = ref(false);
 // 添加提交并推送的状态变量
+const showPushSuccess = ref(false);
+// 添加placeholder变量
 const placeholder = ref("输入提交信息...");
 // 添加默认提交信息变量
 const defaultCommitMessage = ref("");
@@ -539,6 +541,14 @@ async function commitChanges() {
   }
 }
 
+// 显示推送成功提示
+function showPushSuccessIndicator() {
+  showPushSuccess.value = true;
+  setTimeout(() => {
+    showPushSuccess.value = false;
+  }, 2000);
+}
+
 // 推送到远程 (git push)
 async function pushToRemote() {
   try {
@@ -550,6 +560,9 @@ async function pushToRemote() {
       // 触发成功事件
       gitStore.getCurrentBranch();
       gitLogStore.fetchLog();
+      
+      // 显示成功动画
+      showPushSuccessIndicator();
     }
   } catch (error) {
     ElMessage({
@@ -609,6 +622,9 @@ async function addCommitAndPush() {
     
     // 确保通过fetchLog获取的是最新的第1页数据
     gitLogStore.fetchLog();
+    
+    // 显示成功动画
+    showPushSuccessIndicator();
 
   } catch (error) {
     ElMessage({
@@ -680,6 +696,14 @@ onMounted(() => {
     <div class="card-header">
       <h2>提交更改</h2>
     </div>
+
+    <!-- 添加推送成功指示器 -->
+    <transition name="el-fade-in-linear">
+      <div v-if="showPushSuccess" class="push-success-indicator">
+        <el-icon class="push-success-icon"><Check /></el-icon>
+        <div class="push-success-text">推送成功!</div>
+      </div>
+    </transition>
 
     <div class="card-content">
       <div class="layout-container">
@@ -790,10 +814,11 @@ git config --global user.email "your.email@example.com"</pre>
 
                     <el-tooltip content="git push" placement="top" effect="light" popper-class="git-cmd-tooltip">
                       <el-button 
-                        type="success" 
-                        @click="pushToRemote" 
+                        type="primary"
+                        :icon="Upload"
+                        @click="pushToRemote"
                         :loading="gitLogStore.isPushing"
-                        class="action-button push-button"
+                        :class="['action-button', 'push-button', { 'is-loading': gitLogStore.isPushing || isPushing }]"
                       >
                         推送
                       </el-button>
@@ -807,8 +832,9 @@ git config --global user.email "your.email@example.com"</pre>
                   <div class="group-buttons">
                     <el-tooltip content="git add + git commit" placement="top" effect="light" popper-class="git-cmd-tooltip">
                       <el-button 
-                        type="warning" 
-                        @click="addAndCommit" 
+                        type="primary"
+                        :icon="Edit"
+                        @click="addAndCommit"
                         :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
                         class="action-button"
                       >
@@ -818,10 +844,11 @@ git config --global user.email "your.email@example.com"</pre>
 
                     <el-tooltip content="git add + git commit + git push" placement="top" effect="light" popper-class="git-cmd-tooltip">
                       <el-button 
-                        type="danger" 
-                        @click="addCommitAndPush" 
+                        type="success"
+                        :icon="Position"
+                        @click="addCommitAndPush"
                         :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
-                        class="action-button"
+                        :class="['action-button', 'one-click-push', { 'is-loading': gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing }]"
                       >
                         一键推送
                       </el-button>
@@ -834,12 +861,25 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="action-group reset-group">
                 <div class="group-title">重置操作</div>
                 <div class="group-buttons">
+                  <el-tooltip content="git reset HEAD" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="warning"
+                      :icon="RefreshRight"
+                      @click="gitLogStore.resetHead"
+                      :loading="gitLogStore.isResetting"
+                      class="action-button reset-button"
+                    >
+                      重置暂存区
+                    </el-button>
+                  </el-tooltip>
+
                   <el-tooltip content="git reset --hard origin/branch" placement="top" effect="light" popper-class="git-cmd-tooltip">
                     <el-button 
-                      type="info" 
-                      @click="resetToRemote" 
-                      :loading="gitLogStore.isResetting" 
-                      class="action-button reset-button"
+                      type="danger"
+                      :icon="Delete"
+                      @click="resetToRemote"
+                      :loading="gitLogStore.isResetting"
+                      class="action-button danger-button"
                     >
                       重置到远程
                     </el-button>
@@ -1251,7 +1291,25 @@ git config --global user.email "your.email@example.com"</pre>
   white-space: pre;
 }
 
-/* 特定按钮样式 */
+/* 推送时的动画效果 */
+@keyframes pushing-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.4); }
+  70% { box-shadow: 0 0 0 15px rgba(103, 194, 58, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(103, 194, 58, 0); }
+}
+
+@keyframes pushing-border {
+  0% { border-color: #67c23a; }
+  50% { border-color: #85ce61; }
+  100% { border-color: #67c23a; }
+}
+
+.card.is-pushing {
+  animation: pushing-border 1.5s infinite ease-in-out;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
 .push-button {
   background-color: #67c23a;
   border-color: #67c23a;
@@ -1260,6 +1318,73 @@ git config --global user.email "your.email@example.com"</pre>
 .push-button:hover {
   background-color: #85ce61;
   border-color: #85ce61;
+}
+
+.push-button.is-loading, 
+.push-button.is-loading:hover, 
+.push-button.is-loading:focus {
+  animation: pushing-pulse 1.5s infinite;
+  background-color: #67c23a !important;
+  border-color: #67c23a !important;
+}
+
+.el-button.push-button.is-loading .el-loading-spinner {
+  color: #fff !important;
+}
+
+/* 一键推送按钮动画 */
+@keyframes one-click-push-glow {
+  0% { box-shadow: 0 0 5px rgba(103, 194, 58, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(103, 194, 58, 0.8); }
+  100% { box-shadow: 0 0 5px rgba(103, 194, 58, 0.5); }
+}
+
+.action-button.one-click-push {
+  position: relative;
+  overflow: hidden;
+}
+
+.action-button.one-click-push.is-loading, 
+.action-button.one-click-push.is-loading:hover {
+  animation: one-click-push-glow 1.5s infinite;
+  background-color: #67c23a !important;
+  border-color: #67c23a !important;
+}
+
+/* 推送成功动画 */
+@keyframes push-success {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.push-success-indicator {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  padding: 20px 30px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: push-success 0.5s ease-out;
+  z-index: 9999;
+}
+
+.push-success-icon {
+  font-size: 48px;
+  color: #67c23a;
+  margin-bottom: 10px;
+}
+
+.push-success-text {
+  font-size: 18px;
+  font-weight: bold;
+  color: #303133;
 }
 
 .reset-button {
