@@ -601,6 +601,7 @@ defineExpose({
             <el-icon><Document /></el-icon>
           </div>
           <div class="empty-text">没有检测到任何更改</div>
+          <div class="empty-subtext">工作区是干净的</div>
         </div>
       </div>
     </div>
@@ -754,6 +755,7 @@ defineExpose({
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 300px; /* 确保内容区有最小高度 */
 }
 
 .current-directory {
@@ -1006,22 +1008,51 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: calc(100% - 70px);
+  height: 200px; /* 固定高度，确保有足够空间 */
   background-color: #f8f9fa;
   border-radius: 6px;
   border: 1px solid #ebeef5;
   margin-top: 15px;
+  padding: 30px;
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.02);
 }
 
 .empty-icon {
-  font-size: 32px;
-  color: #c0c4cc;
-  margin-bottom: 10px;
+  font-size: 48px; /* 更大的图标 */
+  color: #dcdfe6; /* 更浅的颜色 */
+  margin-bottom: 20px;
+  background-color: #f0f2f5;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  border: 1px dashed #e4e7ed;
+}
+
+.empty-icon:hover {
+  background-color: #ebeef5;
+  transform: scale(1.05);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+}
+
+.empty-status:hover .empty-text {
+  color: #606266;
 }
 
 .empty-text {
   color: #909399;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.empty-subtext {
+  color: #c0c4cc;
   font-size: 14px;
+  margin-top: 5px;
+  font-style: italic;
 }
 
 /* 添加针对空内容区域的样式 */
