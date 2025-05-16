@@ -562,6 +562,7 @@ async function pushToRemote() {
       gitLogStore.fetchLog();
       
       // 显示成功动画
+      isPushing.value = false
       showPushSuccessIndicator();
     }
   } catch (error) {
@@ -569,7 +570,6 @@ async function pushToRemote() {
       message: `推送失败: ${(error as Error).message}`,
       type: "error",
     });
-  } finally {
     isPushing.value = false
   }
 }
@@ -612,6 +612,7 @@ async function addCommitAndPush() {
   }
 
   try {
+    isPushing.value = true
     await gitLogStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
 
     // 清空提交信息
@@ -624,6 +625,7 @@ async function addCommitAndPush() {
     gitLogStore.fetchLog();
     
     // 显示成功动画
+    isPushing.value = false
     showPushSuccessIndicator();
 
   } catch (error) {
@@ -631,7 +633,7 @@ async function addCommitAndPush() {
       message: `暂存、提交并推送失败: ${(error as Error).message}`,
       type: "error",
     });
-  } finally {
+    isPushing.value = false
   }
 }
 
@@ -696,6 +698,18 @@ onMounted(() => {
     <div class="card-header">
       <h2>提交更改</h2>
     </div>
+
+    <!-- 添加推送中指示器 -->
+    <transition name="el-fade-in-linear">
+      <div v-if="isPushing" class="pushing-indicator">
+        <div class="pushing-spinner">
+          <svg viewBox="0 0 50 50" class="circular">
+            <circle class="path" cx="25" cy="25" r="20" fill="none" />
+          </svg>
+        </div>
+        <div class="pushing-text">正在推送...</div>
+      </div>
+    </transition>
 
     <!-- 添加推送成功指示器 -->
     <transition name="el-fade-in-linear">
@@ -1408,6 +1422,71 @@ git config --global user.email "your.email@example.com"</pre>
 }
 .el-button+.el-button {
   margin-left: 0;
+}
+
+/* 推送中动画样式 */
+.pushing-indicator {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  background-color: rgba(64, 158, 255, 0.95);
+  border-radius: 12px;
+  padding: 20px 30px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  width: 200px;
+  height: 200px;
+  color: white;
+}
+
+.pushing-spinner {
+  margin-bottom: 16px;
+}
+
+.pushing-text {
+  font-size: 20px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.circular {
+  height: 64px;
+  width: 64px;
+  animation: pushing-rotate 2s linear infinite;
+}
+
+.path {
+  stroke: white;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 90, 150;
+  stroke-dashoffset: 0;
+  animation: pushing-dash 1.5s ease-in-out infinite;
+}
+
+@keyframes pushing-rotate {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pushing-dash {
+  0% {
+    stroke-dasharray: 1, 150;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -35;
+  }
+  100% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -124;
+  }
 }
 </style>
 
