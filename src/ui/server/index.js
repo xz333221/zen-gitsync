@@ -548,14 +548,23 @@ async function startUIServer() {
       // 构建Git命令选项
       let commandOptions = [];
       
-      // 作者筛选（支持多作者）
+      // 作者筛选（支持多作者，使用正则表达式OR操作）
       if (author.length > 0) {
-        // 对每个作者构建 --author 选项
-        author.forEach(a => {
-          if (a.trim()) {
-            commandOptions.push(`--author="${a.trim()}"`);
-          }
-        });
+        // 过滤掉空作者
+        const validAuthors = author.filter(a => a.trim() !== '');
+        
+        if (validAuthors.length === 1) {
+          // 单个作者，直接使用--author
+          commandOptions.push(`--author="${validAuthors[0].trim()}"`);
+        } else if (validAuthors.length > 1) {
+          // 多个作者，使用正则表达式OR条件
+          // 只转义OR运算符，保持其他内容不变
+          const authorPattern = validAuthors
+            .map(a => a.trim())
+            .join('\\|');  // 在JavaScript字符串中\\|会变成\|，在shell中会成为|
+          
+          commandOptions.push(`--author="${authorPattern}"`);
+        }
       }
       
       // 日期范围筛选
@@ -590,11 +599,23 @@ async function startUIServer() {
       let totalCommits = 0;
       try {
         // 构建计数命令，包含相同的筛选条件
-        const countCommand = `git rev-list --all --count ${commandOptions.join(' ')}`;
-        console.log(`执行计数命令: ${countCommand}`);
-        
-        const { stdout: countOutput } = await execGitCommand(countCommand);
-        totalCommits = parseInt(countOutput.trim());
+        // 对于作者筛选，使用 rev-list 并手动计数，避免 --count 与复杂作者筛选结合可能的问题
+        if (author.length > 1) {
+          // 多作者情况，使用 wc -l 手动计数
+          const countCommand = `git rev-list --all ${commandOptions.join(' ')}`;
+          console.log(`执行计数命令(多作者): ${countCommand}`);
+          
+          const { stdout: countOutput } = await execGitCommand(countCommand);
+          // 计算行数作为提交数
+          totalCommits = countOutput.trim().split('\n').filter(line => line.trim() !== '').length;
+        } else {
+          // 单作者或无作者筛选，可以直接使用 --count
+          const countCommand = `git rev-list --all --count ${commandOptions.join(' ')}`;
+          console.log(`执行计数命令(单作者): ${countCommand}`);
+          
+          const { stdout: countOutput } = await execGitCommand(countCommand);
+          totalCommits = parseInt(countOutput.trim());
+        }
       } catch (error) {
         console.error('获取提交总数失败:', error);
         totalCommits = 0;
@@ -906,18 +927,27 @@ async function startUIServer() {
     }
   });
   
-  // 获取所有作者列表
+        // 获取所有作者列表
   app.get('/api/authors', async (req, res) => {
     try {
-      // 使用git命令获取所有提交者
-      const { stdout } = await execGitCommand('git log --format="%an" | sort | uniq');
+      // 使用git命令获取所有提交者，不依赖Unix命令
+      const { stdout } = await execGitCommand('git log --format="%an"');
       
       // 将结果按行分割并过滤空行
-      const authors = stdout.split('\n').filter(author => author.trim() !== '');
+      const lines = stdout.split('\n').filter(author => author.trim() !== '');
+      
+      // 手动去重，不依赖Unix的uniq命令
+      const uniqueAuthors = Array.from(new Set(lines)).sort();
+      
+      // 控制台输出一下搜索示例，方便调试
+      if (uniqueAuthors.length > 1) {
+        const searchExample = uniqueAuthors.slice(0, 2).join('|');
+        console.log(`多作者搜索示例: git log --author="${searchExample}"`);
+      }
       
       res.json({
         success: true,
-        authors: authors
+        authors: uniqueAuthors
       });
     } catch (error) {
       console.error('获取作者列表失败:', error);

@@ -687,16 +687,37 @@ function applyFilters() {
 // 添加获取所有作者的函数
 async function fetchAllAuthors() {
   try {
+    console.log('获取所有可用作者...')
     const response = await fetch('/api/authors')
     const result = await response.json()
     
     if (result.success && Array.isArray(result.authors)) {
       // 更新可用作者列表
       availableAuthors.value = result.authors.sort()
+      console.log(`获取到${availableAuthors.value.length}位作者`)
+    } else {
+      // 如果获取作者列表失败，但正常获取了日志
+      // 从当前加载的日志中提取作者列表作为备选
+      console.warn('从API获取作者列表失败，将从现有日志中提取作者列表')
+      extractAuthorsFromLogs()
     }
   } catch (error) {
     console.error('获取作者列表失败:', error)
+    // 从当前加载的日志中提取作者列表作为备选
+    extractAuthorsFromLogs()
   }
+}
+
+// 从已加载的日志中提取作者列表
+function extractAuthorsFromLogs() {
+  const authors = new Set<string>()
+  logs.value.forEach(log => {
+    if (log.author) {
+      authors.add(log.author)
+    }
+  })
+  availableAuthors.value = Array.from(authors).sort()
+  console.log(`从现有日志中提取了${availableAuthors.value.length}位作者`)
 }
 </script>
 
