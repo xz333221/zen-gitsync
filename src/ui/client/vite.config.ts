@@ -24,6 +24,7 @@ export default defineConfig({
     })
   ],
   server: {
+    port: 5544, // 修改为你需要的端口（例如8080）
     proxy: {
       '/api': {
         target: 'http://localhost:3000', // 替换为您的后端服务地址
