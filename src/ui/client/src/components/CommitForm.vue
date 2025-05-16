@@ -760,89 +760,89 @@ git config --global user.email "your.email@example.com"</pre>
           <div class="actions-section">
             <h3>Git 操作</h3>
             <div class="action-groups">
-              <div class="action-group">
-                <div class="group-title">基础操作</div>
-                <div class="group-buttons">
-                  <el-button 
-                    type="primary" 
-                    @click="addToStage" 
-                    :loading="gitLogStore.isAddingFiles" 
-                    class="action-button"
-                  >
-                    暂存更改
-                    <span class="command-text">git add .</span>
-                  </el-button>
+              <div class="operations-wrapper">
+                <!-- 基础操作 -->
+                <div class="action-group">
+                  <div class="group-title">基础操作</div>
+                  <div class="group-buttons">
+                    <el-tooltip content="git add ." placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="primary" 
+                        @click="addToStage" 
+                        :loading="gitLogStore.isAddingFiles" 
+                        class="action-button"
+                      >
+                        暂存更改
+                      </el-button>
+                    </el-tooltip>
 
-                  <el-button 
-                    type="primary" 
-                    @click="commitChanges" 
-                    :loading="gitLogStore.isLoadingStatus"
-                    class="action-button"
-                  >
-                    提交
-                    <span class="command-text">git commit</span>
-                  </el-button>
+                    <el-tooltip content="git commit" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="primary" 
+                        @click="commitChanges" 
+                        :loading="gitLogStore.isLoadingStatus"
+                        class="action-button"
+                      >
+                        提交
+                      </el-button>
+                    </el-tooltip>
 
-                  <el-button 
-                    type="success" 
-                    @click="pushToRemote" 
-                    :loading="gitLogStore.isPushing"
-                    class="action-button push-button"
-                  >
-                    推送
-                    <span class="command-text">git push</span>
-                  </el-button>
+                    <el-tooltip content="git push" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="success" 
+                        @click="pushToRemote" 
+                        :loading="gitLogStore.isPushing"
+                        class="action-button push-button"
+                      >
+                        推送
+                      </el-button>
+                    </el-tooltip>
+                  </div>
+                </div>
+
+                <!-- 组合操作 -->
+                <div class="action-group">
+                  <div class="group-title">组合操作</div>
+                  <div class="group-buttons">
+                    <el-tooltip content="git add + git commit" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="warning" 
+                        @click="addAndCommit" 
+                        :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
+                        class="action-button"
+                      >
+                        暂存并提交
+                      </el-button>
+                    </el-tooltip>
+
+                    <el-tooltip content="git add + git commit + git push" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="danger" 
+                        @click="addCommitAndPush" 
+                        :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
+                        class="action-button"
+                      >
+                        一键推送
+                      </el-button>
+                    </el-tooltip>
+                  </div>
                 </div>
               </div>
 
-              <div class="action-group">
-                <div class="group-title">组合操作</div>
-                <div class="group-buttons">
-                  <el-button 
-                    type="warning" 
-                    @click="addAndCommit" 
-                    :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
-                    class="action-button"
-                  >
-                    暂存并提交
-                    <span class="command-text">git add + commit</span>
-                  </el-button>
-
-                  <el-button 
-                    type="danger" 
-                    @click="addCommitAndPush" 
-                    :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
-                    class="action-button"
-                  >
-                    一键推送
-                    <span class="command-text command-text-long">git add + commit + push</span>
-                  </el-button>
-                </div>
-              </div>
-
-              <div class="action-group">
+              <!-- 重置操作 -->
+              <div class="action-group reset-group">
                 <div class="group-title">重置操作</div>
                 <div class="group-buttons">
-                  <!-- <el-button 
-                    type="info" 
-                    @click="resetHead" 
-                    :loading="gitLogStore.isResetting" 
-                    :icon="Refresh"
-                    class="action-button reset-button"
-                  >
-                    重置暂存区
-                    <span class="command-text">git reset HEAD</span>
-                  </el-button> -->
-
-                  <el-button 
-                    type="info" 
-                    @click="resetToRemote" 
-                    :loading="gitLogStore.isResetting" 
-                    class="action-button reset-button"
-                  >
-                    重置到远程
-                    <span class="command-text command-text-long">git reset --hard origin/branch</span>
-                  </el-button>
+                  <el-tooltip content="git reset --hard origin/branch" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="info" 
+                      @click="resetToRemote" 
+                      :loading="gitLogStore.isResetting" 
+                      class="action-button reset-button"
+                    >
+                      重置到远程
+                    </el-button>
+                  </el-tooltip>
                 </div>
               </div>
             </div>
@@ -986,7 +986,8 @@ git config --global user.email "your.email@example.com"</pre>
 
 .layout-container {
   display: flex;
-  gap: 20px;
+  flex-direction: column;
+  gap: 15px;
   height: 100%;
 }
 
@@ -996,43 +997,42 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .actions-section {
-  width: 300px;
+  width: 100%;
   flex-shrink: 0;
 }
 
 .actions-section h3 {
   margin-top: 0;
-  margin-bottom: 15px;
-  padding-bottom: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #dcdfe6;
-  font-size: 18px;
+  font-size: 16px;
   color: #303133;
   font-weight: 500;
 }
 
-.commit-form {
+.operations-wrapper {
   display: flex;
-  margin-bottom: 15px;
   gap: 10px;
-}
-
-.git-actions {
-  margin-top: 20px;
 }
 
 .action-groups {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 12px;
 }
 
 .action-group {
   background-color: #f9f9f9;
-  border-radius: 8px;
-  padding: 12px 15px;
+  border-radius: 6px;
+  padding: 8px 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border-left: 4px solid #409EFF;
-  overflow: hidden; /* 确保子元素不会溢出 */
+  border-left: 3px solid #409EFF;
+  flex: 1;
+}
+
+.reset-group {
+  width: 100%;
 }
 
 .action-group:nth-child(2) {
@@ -1044,82 +1044,51 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .group-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: bold;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #606266;
   text-align: left;
   display: block;
   position: relative;
-  padding-left: 10px;
+  padding-left: 6px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  padding-bottom: 8px;
+  padding-bottom: 6px;
 }
 
 .group-buttons {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 8px;
-  padding: 0 2px;
+  padding: 0;
 }
 
 .action-button {
-  position: relative;
-  padding: 14px 0 24px 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: auto;
-  text-align: center;
-  font-size: 16px;
-  border-radius: 6px;
-  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  flex: 1;
+  min-width: 100px;
+  border-radius: 4px;
+  height: 36px;
+  padding: 0 10px;
 }
 
 .action-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 
 .action-button:active {
   transform: translateY(0);
 }
 
-.action-button :deep(.el-button__content) {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 40px; /* 添加最小高度确保loading不会改变按钮高度 */
-}
-
-.action-button :deep(.el-icon) {
-  margin-right: 0;
-  margin-bottom: 4px;
-  font-size: 18px;
-}
-
-/* 添加loading状态的样式 */
-.action-button :deep(.el-icon.is-loading) {
-  position: absolute;
-  top: calc(50% - 10px);
-  left: calc(16px);
-  margin-top: 0;
-}
-
 .command-text {
-  position: absolute;
-  bottom: 6px;
-  font-size: 14px;
-  font-family: monospace;
-  width: 100%;
-  text-align: center;
-  left: 0;
-  white-space: nowrap;
+  display: none;
+}
 
+.command-text-long {
+  display: none;
 }
 
 .standard-commit-form {
@@ -1251,23 +1220,21 @@ git config --global user.email "your.email@example.com"</pre>
   font-size: 14px;
 }
 
-@media (max-width: 768px) {
+@media (min-width: 768px) {
   .layout-container {
-    flex-direction: column;
+    flex-direction: row;
+  }
+
+  .commit-section {
+    flex: 3;
   }
 
   .actions-section {
-    width: 100%;
+    width: 320px;
   }
   
-  .group-buttons {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-  
-  .action-button {
-    flex: 1;
-    min-width: 120px;
+  .operations-wrapper {
+    flex-direction: column;
   }
 }
 
@@ -1308,5 +1275,21 @@ git config --global user.email "your.email@example.com"</pre>
 }
 .el-button+.el-button {
   margin-left: 0;
+}
+</style>
+
+<!-- 添加全局样式 -->
+<style>
+/* Git命令tooltip样式 */
+.git-cmd-tooltip {
+  font-family: 'Consolas', 'Courier New', monospace !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #303133 !important;
+  background-color: #f5f7fa !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 4px !important;
+  padding: 8px 12px !important;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1) !important;
 }
 </style>
