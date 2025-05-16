@@ -742,32 +742,72 @@ defineExpose({
     <!-- 文件差异对话框 -->
     <el-dialog
       v-model="diffDialogVisible"
-      :title="`文件差异: ${selectedFile}`"
-      width="80%"
+      width="85%"
+      top="5vh"
       destroy-on-close
       class="diff-dialog"
+      :show-close="false"
+      style="height: calc(100vh - 150px);"
+      :modal-append-to-body="false"
+      :close-on-click-modal="false"
     >
+      <template #header>
+        <div class="diff-dialog-header">
+          <div class="file-title">
+            <el-icon class="file-icon"><Document /></el-icon>
+            <span class="file-path">{{ selectedFile }}</span>
+          </div>
+          <div class="header-actions">
+            <el-button 
+              @click="diffDialogVisible = false" 
+              circle 
+              size="small" 
+              :icon="Close" 
+              class="close-button"
+            />
+          </div>
+        </div>
+      </template>
+      
       <div v-loading="isLoadingDiff" class="diff-content">
         <div v-if="diffContent" v-html="formatDiff(diffContent)" class="diff-formatted"></div>
         <div v-else class="no-diff">该文件没有差异或是新文件</div>
       </div>
       
-      <!-- 添加文件导航按钮 -->
-      <div class="file-navigation">
-        <el-button 
-          :icon="ArrowLeft" 
-          @click="goToPreviousFile" 
-          :disabled="currentFileIndex <= 0 || gitLogStore.fileList.length === 0"
-          circle
-        />
-        <span class="file-counter">{{ currentFileIndex + 1 }} / {{ gitLogStore.fileList.length }}</span>
-        <el-button 
-          :icon="ArrowRight" 
-          @click="goToNextFile" 
-          :disabled="currentFileIndex >= gitLogStore.fileList.length - 1 || gitLogStore.fileList.length === 0"
-          circle
-        />
-      </div>
+      <template #footer>
+        <div class="file-navigation">
+          <el-button 
+            type="primary"
+            :icon="ArrowLeft" 
+            @click="goToPreviousFile" 
+            :disabled="currentFileIndex <= 0 || gitLogStore.fileList.length === 0"
+            plain
+            class="nav-button"
+          >
+            上一个文件
+          </el-button>
+          
+          <div class="file-counter">
+            <el-tag type="info" effect="plain" class="counter-tag">
+              {{ currentFileIndex + 1 }} / {{ gitLogStore.fileList.length }}
+            </el-tag>
+          </div>
+          
+          <el-button 
+            type="primary"
+            :icon="ArrowRight" 
+            @click="goToNextFile" 
+            :disabled="currentFileIndex >= gitLogStore.fileList.length - 1 || gitLogStore.fileList.length === 0"
+            plain
+            class="nav-button"
+          >
+            下一个文件
+            <template #icon>
+              <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+            </template>
+          </el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -1329,6 +1369,120 @@ defineExpose({
   align-items: center;
   gap: 6px;
   font-size: 13px;
+}
+.diff-dialog {
+  height: calc(100vh - 150px);
+}
+
+.diff-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #ebeef5;
+  background-color: #f9f9fb;
+}
+
+.file-title {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.file-icon {
+  color: #409eff;
+  font-size: 20px;
+}
+
+.file-path {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: monospace;
+}
+
+.diff-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 20px;
+  background-color: #fafafa;
+  /* height: 100%;
+  overflow: auto; */
+}
+:deep(.el-dialog__body) {
+  height: calc(100vh - 320px);
+  overflow: auto;
+}
+.diff-formatted {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  padding-bottom: 20px;
+}
+
+.no-diff {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #909399;
+  font-size: 14px;
+}
+
+.file-navigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  border-top: 1px solid #ebeef5;
+  background-color: #f9f9fb;
+}
+
+.counter-tag {
+  font-family: monospace;
+  font-size: 14px;
+  padding: 6px 12px;
+  min-width: 80px;
+  text-align: center;
+}
+
+.nav-button {
+  min-width: 120px;
+}
+
+/* 确保文件差异对话框里的内容滚动条样式一致 */
+.diff-formatted::-webkit-scrollbar,
+.diff-content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.diff-formatted::-webkit-scrollbar-thumb,
+.diff-content::-webkit-scrollbar-thumb {
+  background-color: rgba(144, 147, 153, 0.3);
+  border-radius: 4px;
+}
+
+.diff-formatted::-webkit-scrollbar-thumb:hover,
+.diff-content::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(144, 147, 153, 0.5);
+}
+
+.diff-formatted::-webkit-scrollbar-track,
+.diff-content::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+/* 兼容Firefox滚动条样式 */
+.diff-formatted,
+.diff-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
 }
 </style>
 
