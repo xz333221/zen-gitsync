@@ -1,6 +1,3 @@
 window/linux
 1111222
 123
-123111
-asdfasd
-asdas 
