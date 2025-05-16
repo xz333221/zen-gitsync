@@ -52,7 +52,7 @@ const logRefreshed = ref(false)
 
 // 添加筛选相关变量
 const filterVisible = ref(false)
-const authorFilter = ref('')
+const authorFilter = ref<string[]>([])
 const messageFilter = ref('')
 const dateRangeFilter = ref<any>(null)
 const availableAuthors = computed(() => {
@@ -74,7 +74,7 @@ const filteredLogs = computed(() => {
   
   return logs.value.filter(log => {
     // 作者筛选
-    if (authorFilter.value && log.author !== authorFilter.value) {
+    if (authorFilter.value.length > 0 && !authorFilter.value.includes(log.author)) {
       return false
     }
     
@@ -695,6 +695,7 @@ function formatCommitMessage(message: string) {
                 <el-select 
                   v-model="authorFilter" 
                   placeholder="选择作者" 
+                  multiple
                   clearable 
                   filterable
                   class="filter-input"
