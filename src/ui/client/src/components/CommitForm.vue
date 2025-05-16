@@ -1361,9 +1361,8 @@ git config --global user.email "your.email@example.com"</pre>
 
 .push-success-indicator {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0; /* 同时设置top, right, bottom, left为0 */
+  margin: auto;
   background-color: rgba(255, 255, 255, 0.95);
   border-radius: 12px;
   padding: 20px 30px;
@@ -1372,11 +1371,10 @@ git config --global user.email "your.email@example.com"</pre>
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  /* animation: push-success 0.5s ease-out; */
+  animation: push-success 0.5s ease-out;
   z-index: 9999;
   width: 200px;
   height: 200px;
-  margin: auto;
 }
 
 .push-success-icon {
