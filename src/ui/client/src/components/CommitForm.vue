@@ -601,12 +601,13 @@ async function addCommitAndPush() {
   try {
     await gitLogStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
 
-
     // 清空提交信息
     clearCommitFields();
 
     // 触发成功事件
     gitStore.getCurrentBranch();
+    
+    // 确保通过fetchLog获取的是最新的第1页数据
     gitLogStore.fetchLog();
 
   } catch (error) {

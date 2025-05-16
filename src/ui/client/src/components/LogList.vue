@@ -439,6 +439,9 @@ watch(() => gitLogStore.log, (newLogs) => {
     // 更新计数器
     totalCommits.value = logsData.length
     
+    // 重置当前页为第1页
+    currentPage.value = 1
+    
     // 确保引用更新，触发UI重渲染
     // @ts-ignore - 忽略类型校验
     logs.value = [...logsData]
@@ -1046,7 +1049,7 @@ async function cherryPickCommit(commit: LogItem | null) {
           <div v-if="!showAllCommits" class="load-more-container">
             <!-- 显示加载状态和页码信息 -->
             <div class="pagination-info">
-              <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(totalCommits / 100) || 1 }} 页 (总计 {{ totalCommits }} 条记录)</span>
+              <span>第 {{ currentPage }} 页 {{ totalCommits > 0 ? `/ 共 ${Math.ceil(totalCommits / 100) || 1} 页` : '' }} (总计 {{ totalCommits }} 条记录)</span>
             </div>
             
             <div v-if="isLoadingMore" class="loading-more">
