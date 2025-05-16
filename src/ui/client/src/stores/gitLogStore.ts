@@ -258,7 +258,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
       
       // 增加时间戳参数避免缓存，确保获取最新数据
       const timestamp = new Date().getTime()
-      const response = await fetch(`/api/log?_t=${timestamp}`)
+      const response = await fetch(`/api/log?page=1&_t=${timestamp}`)
       const data = await response.json()
       
       if (data && data.data && Array.isArray(data.data)) {

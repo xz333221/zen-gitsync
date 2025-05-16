@@ -157,6 +157,9 @@ async function loadLog(all = false, page = 1) {
     // 强制重新渲染列表
     logs.value = [...logsData]
     
+    // 更新当前页码
+    currentPage.value = page
+    
     // 更新总数和分页标记
     totalCommits.value = result.total || logsData.length
     hasMoreData.value = result.hasMore === true
@@ -509,7 +512,9 @@ function fitGraphToContainer() {
 }
 
 // 查看提交详情
-async function viewCommitDetail(commit: LogItem) {
+async function viewCommitDetail(commit: LogItem | null) {
+  if (!commit) return
+  
   selectedCommit.value = commit
   commitDetailVisible.value = true
   isLoadingCommitDetail.value = true
