@@ -749,6 +749,27 @@ async function startUIServer() {
     }
   });
   
+  // 获取文件内容 (用于未跟踪文件)
+  app.get('/api/file-content', async (req, res) => {
+    try {
+      const filePath = req.query.file;
+      
+      if (!filePath) {
+        return res.status(400).json({ error: '缺少文件路径参数' });
+      }
+      
+      try {
+        // 读取文件内容
+        const content = await fs.readFile(filePath, 'utf8');
+        res.json({ success: true, content });
+      } catch (readError) {
+        res.status(500).json({ success: false, error: `无法读取文件: ${readError.message}` });
+      }
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   // 撤回文件修改
   app.post('/api/revert_file', async (req, res) => {
     try {

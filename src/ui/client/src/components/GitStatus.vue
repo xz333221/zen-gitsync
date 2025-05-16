@@ -118,10 +118,41 @@ async function getFileDiff(filePath: string) {
     selectedFile.value = filePath
     // 设置当前文件索引
     currentFileIndex.value = gitLogStore.fileList.findIndex(file => file.path === filePath)
-    const response = await fetch(`/api/diff?file=${encodeURIComponent(filePath)}`)
-    const data = await response.json()
-    diffContent.value = data.diff || '没有变更'
-    diffDialogVisible.value = true
+    
+    // 获取当前文件的状态类型
+    const currentFile = gitLogStore.fileList[currentFileIndex.value]
+    
+    // 对未跟踪文件特殊处理
+    if (currentFile && currentFile.type === 'untracked') {
+      try {
+        // 获取未跟踪文件的内容
+        const response = await fetch(`/api/file-content?file=${encodeURIComponent(filePath)}`)
+        const data = await response.json()
+        
+        if (data.success && data.content) {
+          // 构建一个类似diff的格式来显示新文件内容
+          diffContent.value = `diff --git a/${filePath} b/${filePath}\n` +
+            `新文件: ${filePath}\n` +
+            `--- /dev/null\n` +
+            `+++ b/${filePath}\n` +
+            `@@ -0,0 +1,${data.content.split('\n').length} @@\n` +
+            data.content.split('\n').map((line: string) => `+${line}`).join('\n')
+        } else {
+          diffContent.value = '这是一个新文件，尚未被Git跟踪。\n添加到暂存区后可以提交该文件。'
+        }
+      } catch (error) {
+        console.error('获取未跟踪文件内容失败:', error)
+        diffContent.value = '这是一个新文件，尚未被Git跟踪。\n添加到暂存区后可以提交该文件。'
+      }
+      
+      diffDialogVisible.value = true
+    } else {
+      // 对于已跟踪的文件，获取常规差异
+      const response = await fetch(`/api/diff?file=${encodeURIComponent(filePath)}`)
+      const data = await response.json()
+      diffContent.value = data.diff || '没有变更'
+      diffDialogVisible.value = true
+    }
   } catch (error) {
     ElMessage({
       message: '获取文件差异失败: ' + (error as Error).message,
