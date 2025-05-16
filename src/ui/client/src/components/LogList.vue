@@ -1766,6 +1766,7 @@ async function cherryPickCommit(commit: LogItem | null) {
   padding: 15px 0;
   border-top: 1px dashed #ebeef5;
   gap: 10px;
+  display: none;
 }
 
 .pagination-info {
