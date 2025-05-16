@@ -1031,9 +1031,6 @@ git config --global user.email "your.email@example.com"</pre>
   flex: 1;
 }
 
-.reset-group {
-  width: 100%;
-}
 
 .action-group:nth-child(2) {
   border-left-color: #E6A23C;
