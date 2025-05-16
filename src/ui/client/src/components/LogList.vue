@@ -768,6 +768,8 @@ async function revertCommit(commit: LogItem | null) {
       ElMessage.success(result.message || '已成功撤销提交')
       // 刷新日志
       refreshLog()
+      // 刷新Git状态
+      gitLogStore.fetchStatus()
     } else {
       ElMessage.error(result.error || '撤销提交失败')
     }
@@ -810,6 +812,8 @@ async function cherryPickCommit(commit: LogItem | null) {
       ElMessage.success(result.message || '已成功Cherry-Pick提交')
       // 刷新日志
       refreshLog()
+      // 刷新Git状态
+      gitLogStore.fetchStatus()
     } else {
       ElMessage.error(result.error || 'Cherry-Pick提交失败')
     }
