@@ -770,6 +770,8 @@ async function revertCommit(commit: LogItem | null) {
       refreshLog()
       // 刷新Git状态
       gitLogStore.fetchStatus()
+      // 添加: 刷新分支状态
+      gitStore.getBranchStatus()
     } else {
       ElMessage.error(result.error || '撤销提交失败')
     }
@@ -814,6 +816,8 @@ async function cherryPickCommit(commit: LogItem | null) {
       refreshLog()
       // 刷新Git状态
       gitLogStore.fetchStatus()
+      // 添加: 刷新分支状态
+      gitStore.getBranchStatus()
     } else {
       ElMessage.error(result.error || 'Cherry-Pick提交失败')
     }
