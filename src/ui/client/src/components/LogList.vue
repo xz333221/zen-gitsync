@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, onMounted, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { ElTable, ElTableColumn, ElTag, ElButton, ElSlider, ElDialog, ElSelect, ElOption, ElDatePicker, ElInput, ElBadge } from 'element-plus'
 import { RefreshRight, ZoomIn, ZoomOut, Filter, Document, TrendCharts, List, More } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
@@ -32,6 +32,13 @@ const showAllCommits = ref(false)
 const totalCommits = ref(0)
 const showGraphView = ref(false)
 const graphContainer = ref<HTMLElement | null>(null)
+
+// 添加分页相关变量
+const currentPage = ref(1)
+const hasMoreData = ref(true)
+const isLoadingMore = ref(false)
+const loadTimerInterval = ref<number | null>(null)
+const tableViewContainer = ref<HTMLElement | null>(null)
 
 // 添加提交详情弹窗相关变量
 const commitDetailVisible = ref(false)
@@ -113,7 +120,7 @@ function resetFilters() {
 }
 
 // 加载提交历史
-async function loadLog(all = false) {
+async function loadLog(all = false, page = 1) {
   // 从gitStore获取仓库状态
   const gitStore = useGitStore()
   
@@ -126,41 +133,82 @@ async function loadLog(all = false) {
   try {
     showAllCommits.value = all
     
-    // 设置本地加载状态
-    localLoading.value = true
+    // 判断是初次加载还是加载更多
+    const isLoadMore = page > 1
     
-    // 保留graph参数，但服务器端其实不做特殊处理
-    // 这样可以兼容之前的代码，避免大量修改
-    const url = all ? '/api/log?all=true&graph=true' : '/api/log?graph=true'
+    // 只有初次加载时设置本地加载状态
+    if (!isLoadMore) {
+      localLoading.value = true
+      
+      // 初始加载时，默认认为有更多数据可加载
+      hasMoreData.value = true
+    } else {
+      isLoadingMore.value = true
+    }
+    
+    // 构造URL，包含分页参数
+    const url = all 
+      ? '/api/log?all=true' 
+      : `/api/log?page=${page}&limit=200`
+    
     console.log(`加载日志数据: ${url}`)
     
     const response = await fetch(url)
-    const data = await response.json()
+    const result = await response.json()
     
-    // 清空现有数据
-    logsData.length = 0
+    // 调试输出服务器返回的数据结构
+    console.log('服务器返回数据结构:', JSON.stringify(result, null, 2))
+    console.log('服务器返回数据长度:', result.data?.length || result.log?.length || 0)
+    console.log('服务器返回hasMore状态:', result.hasMore)
     
-    // 更新本地数据
-    if (Array.isArray(data)) {
-      // 新的API格式，直接返回数组
-      console.log(`日志加载完成: 共${data.length}条记录`)
-      
-      // 填充logsData
-      data.forEach((item: LogItem) => logsData.push(item))
-      
-      totalCommits.value = data.length
-    } else if (data.log && Array.isArray(data.log)) {
-      // 旧版API格式，兼容处理
-      console.log(`日志加载完成: 共${data.log.length}条记录`)
-      
-      // 填充logsData
-      data.log.forEach((item: LogItem) => logsData.push(item))
-      
-      totalCommits.value = data.log.length
+    // 清空现有数据（仅在初次加载时）
+    if (!isLoadMore) {
+      logsData.length = 0
+    }
+    
+    // 更新分页信息
+    currentPage.value = page
+    
+    // 明确设置是否有更多数据
+    if (result.hasMore !== undefined) {
+      hasMoreData.value = result.hasMore
     } else {
-      console.error('未知的日志数据格式:', data)
-      errorMessage.value = '日志数据格式错误'
-      return
+      // 如果API没有返回hasMore字段，则根据返回数据量判断
+      // 如果返回数据少于请求的限制数量，认为没有更多数据了
+      const returnedDataCount = (result.data?.length || result.log?.length || 0)
+      hasMoreData.value = returnedDataCount >= 200
+    }
+    
+    console.log(`是否有更多数据: ${hasMoreData.value}`)
+
+    // 添加数据到日志列表
+    if (result.data && Array.isArray(result.data)) {
+      // 如果是加载更多，则追加数据，否则替换数据
+      if (isLoadMore) {
+        result.data.forEach((item: LogItem) => logsData.push(item))
+      } else {
+        result.data.forEach((item: LogItem) => logsData.push(item))
+      }
+      
+      totalCommits.value = result.total || result.data.length
+    } else if (result.log && Array.isArray(result.log)) {
+      // 旧版API格式，兼容处理
+      if (isLoadMore) {
+        result.log.forEach((item: LogItem) => logsData.push(item))
+      } else {
+        result.log.forEach((item: LogItem) => logsData.push(item))
+      }
+      
+      totalCommits.value = result.total || result.log.length
+    } else {
+      // 如果是加载更多出错，则标记没有更多数据
+      if (isLoadMore) {
+        hasMoreData.value = false
+      } else {
+        console.error('未知的日志数据格式:', result)
+        errorMessage.value = '日志数据格式错误'
+        return
+      }
     }
     
     // 确保logs.value也更新
@@ -168,13 +216,15 @@ async function loadLog(all = false) {
     
     console.log(`logsData长度: ${logsData.length}`) // 添加调试日志
     
-    // 设置刷新提示状态
-    logRefreshed.value = true
-    // 2秒后隐藏提示
-    setTimeout(() => { logRefreshed.value = false }, 2000)
+    // 设置刷新提示状态（仅在初次加载时）
+    if (!isLoadMore) {
+      logRefreshed.value = true
+      // 2秒后隐藏提示
+      setTimeout(() => { logRefreshed.value = false }, 2000)
+    }
     
-    // 加载完数据后渲染图表
-    if (showGraphView.value) {
+    // 加载完数据后渲染图表（仅在初次加载时）
+    if (!isLoadMore && showGraphView.value) {
       setTimeout(renderGraph, 0)
     }
     
@@ -182,9 +232,18 @@ async function loadLog(all = false) {
   } catch (error) {
     errorMessage.value = '加载提交历史失败: ' + (error instanceof Error ? error.message : String(error))
     console.error('加载日志失败:', error)
+    
+    // 如果加载更多失败，标记没有更多数据
+    if (page > 1) {
+      hasMoreData.value = false
+    }
   } finally {
-    // 重置本地加载状态
-    localLoading.value = false
+    // 重置加载状态
+    if (page > 1) {
+      isLoadingMore.value = false
+    } else {
+      localLoading.value = false
+    }
   }
 }
 
@@ -294,6 +353,59 @@ function getBranchTagType(ref: string) {
   return 'info'
 }
 
+// 添加对表格实例的引用
+const tableRef = ref<InstanceType<typeof ElTable> | null>(null)
+const tableBodyWrapper = ref<HTMLElement | null>(null)
+
+// 监听表格滚动事件的处理函数
+function handleTableScroll(event: Event) {
+  if (showGraphView.value || !hasMoreData.value || isLoadingMore.value || isLoading.value) {
+    return
+  }
+  
+  const target = event.target as HTMLElement
+  const { scrollTop, scrollHeight, clientHeight } = target
+  const scrollDistance = scrollHeight - scrollTop - clientHeight
+  
+  // 调试信息
+  console.log('表格滚动:', {
+    scrollTop,
+    scrollHeight,
+    clientHeight,
+    scrollDistance
+  })
+  
+  // 当滚动到距离底部20px时触发加载
+  if (scrollDistance <= 20) {
+    console.log('已滚动到底部，加载更多数据')
+    loadMoreLogs()
+  }
+}
+
+// 设置表格滚动监听
+function setupTableScrollListener() {
+  if (!tableRef.value) return
+  
+  // 获取表格的body-wrapper
+  tableBodyWrapper.value = tableRef.value.$el.querySelector('.el-table__body-wrapper')
+  
+  if (tableBodyWrapper.value) {
+    console.log('添加表格滚动监听')
+    tableBodyWrapper.value.addEventListener('scroll', handleTableScroll, true)
+  } else {
+    console.error('未找到表格的body-wrapper元素')
+  }
+}
+
+// 移除表格滚动监听
+function removeTableScrollListener() {
+  if (tableBodyWrapper.value) {
+    console.log('移除表格滚动监听')
+    tableBodyWrapper.value.removeEventListener('scroll', handleTableScroll, true)
+    tableBodyWrapper.value = null
+  }
+}
+
 onMounted(() => {
   // 检查gitLogStore中是否已有数据
   if (gitStore.isGitRepo) {
@@ -323,6 +435,24 @@ onMounted(() => {
   } else {
     errorMessage.value = '当前目录不是Git仓库'
   }
+  
+  // 在下一个tick中设置表格滚动监听
+  nextTick(() => {
+    setTimeout(() => {
+      setupTableScrollListener()
+    }, 500) // 给表格足够的时间来渲染
+  })
+})
+
+onBeforeUnmount(() => {
+  // 清除表格滚动监听
+  removeTableScrollListener()
+  
+  // 清除定时器
+  if (loadTimerInterval.value !== null) {
+    window.clearInterval(loadTimerInterval.value)
+    loadTimerInterval.value = null
+  }
 })
 
 // 简化刷新函数，只需调用loadLog即可
@@ -331,7 +461,10 @@ const refreshLog = () => {
     errorMessage.value = '当前目录不是Git仓库'
     return
   }
-  loadLog(showAllCommits.value)
+  // 重置页码，重新加载第一页
+  currentPage.value = 1
+  hasMoreData.value = true
+  loadLog(showAllCommits.value, 1)
 }
 
 // 监听store中的日志变化
@@ -548,10 +681,13 @@ function formatCommitMessage(message: string) {
   return message.trim();
 }
 
-// 添加空的onBeforeUnmount
-onBeforeUnmount(() => {
-  // 清理工作
-})
+// 加载更多日志
+function loadMoreLogs() {
+  if (!hasMoreData.value || isLoadingMore.value || isLoading.value) return
+  
+  console.log(`加载更多日志，页码: ${currentPage.value + 1}`)
+  loadLog(showAllCommits.value, currentPage.value + 1)
+}
 </script>
 
 <template>
@@ -571,7 +707,7 @@ onBeforeUnmount(() => {
           </template>
           {{ filteredLogs.length }}/{{ logs.length }}
           <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
-            最近200条
+            分页加载
           </el-tag>
           <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
             全部
@@ -614,7 +750,7 @@ onBeforeUnmount(() => {
           <template #icon>
             <el-icon><component :is="showAllCommits ? List : More" /></el-icon>
           </template>
-          {{ showAllCommits ? '显示最近200条' : '显示所有提交' }}
+          {{ showAllCommits ? '显示分页加载' : '显示所有提交' }}
         </el-button>
         <el-button 
           circle 
@@ -690,7 +826,7 @@ onBeforeUnmount(() => {
         <!-- 图表视图 -->
         <div v-if="showGraphView" class="graph-view">
           <div class="commit-count" v-if="logsData.length > 0">
-            显示 {{ logsData.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近200条)' }}
+            显示 {{ logsData.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(分页加载)' }}
           </div>
           
           <!-- 添加缩放控制 -->
@@ -745,12 +881,14 @@ onBeforeUnmount(() => {
         <!-- 表格视图 -->
         <div v-else class="table-view-container">
           <el-table 
+            ref="tableRef"
             :data="filteredLogs" 
             stripe 
             border 
             v-loading="isLoading"
             class="log-table"
             :empty-text="isLoading ? '加载中...' : '没有匹配的提交记录'"
+            height="500"
           >
             <el-table-column label="提交哈希" width="100" resizable>
               <template #default="scope">
@@ -782,6 +920,21 @@ onBeforeUnmount(() => {
             </el-table-column>
             <el-table-column prop="message" label="提交信息" min-width="250" />
           </el-table>
+          
+          <!-- 添加底部加载状态和加载更多按钮 -->
+          <div v-if="!showAllCommits" class="load-more-container">
+            <div v-if="isLoadingMore" class="loading-more">
+              <div class="loading-spinner"></div>
+              <span>加载更多...</span>
+            </div>
+            <div v-else-if="hasMoreData" class="load-more-button" @click="loadMoreLogs">
+              <span>加载更多</span>
+            </div>
+            <div v-else class="no-more-data">
+              <span>没有更多数据了</span>
+              <span v-if="logs.length > 0" class="total-loaded">（已加载 {{ logs.length }} 条记录）</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1478,6 +1631,65 @@ onBeforeUnmount(() => {
 .log-table.has-sticky-controls,
 .log-table.has-sticky-filter {
   margin-top: 0 !important; /* 重置原来的边距 */
+}
+
+/* 添加底部加载更多相关样式 */
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  padding: 15px 0;
+  border-top: 1px dashed #ebeef5;
+}
+
+.loading-more {
+  display: flex;
+  align-items: center;
+  color: #909399;
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+  border: 2px solid #dcdfe6;
+  border-top-color: #409eff;
+  border-radius: 50%;
+  animation: spinner 1s linear infinite;
+}
+
+@keyframes spinner {
+  to {transform: rotate(360deg);}
+}
+
+.load-more-button {
+  cursor: pointer;
+  color: #409eff;
+  font-size: 14px;
+  padding: 6px 16px;
+  border: 1px solid #d9ecff;
+  background-color: #ecf5ff;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.load-more-button:hover {
+  background-color: #d9ecff;
+}
+
+.no-more-data {
+  color: #909399;
+  font-size: 14px;
+  font-style: italic;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.total-loaded {
+  font-size: 12px;
+  margin-top: 5px;
+  color: #c0c4cc;
 }
 </style>
 

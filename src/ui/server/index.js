@@ -534,61 +534,68 @@ async function startUIServer() {
   // 获取日志
   app.get('/api/log', async (req, res) => {
     try {
-      // 获取请求参数中的数量限制，默认为200
-      const limit = req.query.all === 'true' ? '' : '-n 200';
+      // 获取分页参数
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 200;
+      const skip = (page - 1) * limit;
       
-      // graph参数保留但不做特殊处理，避免前端代码重复调用API
-      // 由前端统一使用该接口
+      // 如果all=true，则不使用限制
+      const limitOption = req.query.all === 'true' ? '' : `-n ${skip + limit}`;
+      const totalOption = req.query.all === 'true' ? '' : '--count';
       
-      // 修改 git log 命令，添加 %ae 参数来获取作者邮箱
-      // 使用 %H 获取完整哈希值（而不是短哈希 %h）
-      // 使用 %B 获取完整提交信息（包括正文）
-      const { stdout } = await execGitCommand(`git log --all --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${limit}`);
+      // 使用 git log 命令获取提交历史
+      let { stdout: logOutput } = await execGitCommand(`git log --all --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${limitOption}`);
       
-      // 分隔符改为使用特殊标记，因为提交信息中可能包含|字符
-      const recordSeparator = "\n<<<RECORD_SEPARATOR>>>\n";
-      const fieldSeparator = "<<<FIELD_SEPARATOR>>>";
-      
-      // 预处理输出，替换提交记录之间的换行符
-      const processedOutput = stdout.replace(/\n(?=[a-f0-9]{40}\|)/g, recordSeparator);
-      
-      // 按记录分隔符拆分日志条目
-      const logEntries = processedOutput.split(recordSeparator);
-      
-      const logs = logEntries.map(entry => {
-        // 使用第一个|分隔哈希值，其余部分作为整体
-        const hashEndIndex = entry.indexOf('|');
-        const hash = entry.substring(0, hashEndIndex);
-        const restPart = entry.substring(hashEndIndex + 1);
-        
-        // 使用最后一个|分隔引用信息，其余部分作为整体
-        const lastPipeIndex = restPart.lastIndexOf('|');
-        const refs = restPart.substring(lastPipeIndex + 1).trim();
-        const middlePart = restPart.substring(0, lastPipeIndex);
-        
-        // 分隔作者、邮箱、日期和提交信息
-        const parts = middlePart.split('|');
-        
-        // 确保即使分隔出的部分不足，也能提供默认值
-        const author = parts[0] || '';
-        const email = parts[1] || '';
-        const date = parts[2] || '';
-        // 提交信息可能包含多行
-        const message = parts.slice(3).join('|').trim();
-        
-        // 从引用信息中提取分支名称
-        let branch = null;
-        if (refs) {
-          // 提取所有引用信息，而不仅仅是第一个匹配
-          branch = refs.trim();
+      // 获取总提交数量
+      let totalCommits = 0;
+      if (totalOption) {
+        try {
+          const { stdout: countOutput } = await execGitCommand(`git rev-list --all --count`);
+          totalCommits = parseInt(countOutput.trim());
+        } catch (error) {
+          console.error('获取提交总数失败:', error);
+          totalCommits = 0;
         }
-        
-        return { hash, author, email, date, message, branch };
-      });
+      }
       
-      res.json(logs);
+      // 替换提交记录之间的换行符
+      logOutput = logOutput.replace(/\n(?=[a-f0-9]{40}\|)/g, "<<<RECORD_SEPARATOR>>>");
+      
+      // 按分隔符拆分日志条目
+      const logEntries = logOutput.split("<<<RECORD_SEPARATOR>>>");
+      
+      // 处理每个日志条目
+      const data = logEntries.map(entry => {
+        const parts = entry.split('|');
+        if (parts.length >= 5) {
+          return {
+            hash: parts[0],
+            author: parts[1],
+            email: parts[2],
+            date: parts[3],
+            message: parts[4],
+            branch: parts[5] || ''
+          };
+        }
+        return null;
+      }).filter(item => item !== null);
+      
+      // 计算是否有更多数据
+      const hasMore = req.query.all === 'true' ? false : (data.length >= limit && skip + data.length < totalCommits);
+      
+      console.log(`分页查询 - 页码: ${page}, 每页数量: ${limit}, 跳过: ${skip}, 总数: ${totalCommits}, 返回数量: ${data.length}, 是否有更多: ${hasMore}`);
+      
+      // 返回提交历史数据，包括是否有更多数据的标志
+      res.json({
+        data: data,
+        total: totalCommits,
+        page: page,
+        limit: limit,
+        hasMore: hasMore
+      });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      console.error('获取Git日志失败:', error);
+      res.status(500).json({ error: '获取日志失败: ' + error.message });
     }
   });
   
