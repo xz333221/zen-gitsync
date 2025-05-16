@@ -1001,6 +1001,7 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 .card-header {
@@ -1359,11 +1360,11 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .push-success-indicator {
-  position: fixed;
+  position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.95);
   border-radius: 12px;
   padding: 20px 30px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
@@ -1373,18 +1374,29 @@ git config --global user.email "your.email@example.com"</pre>
   justify-content: center;
   animation: push-success 0.5s ease-out;
   z-index: 9999;
+  width: 200px;
+  height: 200px;
+  margin: auto;
 }
 
 .push-success-icon {
-  font-size: 48px;
+  font-size: 64px;
   color: #67c23a;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
+  animation: bounce 0.8s ease-in-out;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+  40% {transform: translateY(-20px);}
+  60% {transform: translateY(-10px);}
 }
 
 .push-success-text {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: bold;
   color: #303133;
+  text-align: center;
 }
 
 .reset-button {
