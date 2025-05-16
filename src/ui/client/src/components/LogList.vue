@@ -52,7 +52,6 @@ const currentPage = ref(1)
 const hasMoreData = ref(true)
 const isLoadingMore = ref(false)
 const loadTimerInterval = ref<number | null>(null)
-const tableViewContainer = ref<HTMLElement | null>(null)
 
 // 添加提交详情弹窗相关变量
 const commitDetailVisible = ref(false)
@@ -712,6 +711,7 @@ function extractAuthorsFromLogs() {
 
 // 处理右键菜单事件
 function handleContextMenu(row: LogItem, column: any, event: MouseEvent) {
+  console.log('handleContextMenu', row, column, event)
   // 阻止默认右键菜单
   event.preventDefault()
   
