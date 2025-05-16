@@ -534,8 +534,8 @@ async function startUIServer() {
   // 获取日志
   app.get('/api/log', async (req, res) => {
     try {
-      // 获取请求参数中的数量限制，默认为30
-      const limit = req.query.all === 'true' ? '' : '-n 30';
+      // 获取请求参数中的数量限制，默认为200
+      const limit = req.query.all === 'true' ? '' : '-n 200';
       
       // graph参数保留但不做特殊处理，避免前端代码重复调用API
       // 由前端统一使用该接口

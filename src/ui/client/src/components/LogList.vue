@@ -571,7 +571,7 @@ onBeforeUnmount(() => {
           </template>
           {{ filteredLogs.length }}/{{ logs.length }}
           <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
-            最近30条
+            最近200条
           </el-tag>
           <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
             全部
@@ -614,7 +614,7 @@ onBeforeUnmount(() => {
           <template #icon>
             <el-icon><component :is="showAllCommits ? List : More" /></el-icon>
           </template>
-          {{ showAllCommits ? '显示最近30条' : '显示所有提交' }}
+          {{ showAllCommits ? '显示最近200条' : '显示所有提交' }}
         </el-button>
         <el-button 
           circle 
@@ -690,7 +690,7 @@ onBeforeUnmount(() => {
         <!-- 图表视图 -->
         <div v-if="showGraphView" class="graph-view">
           <div class="commit-count" v-if="logsData.length > 0">
-            显示 {{ logsData.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近30条)' }}
+            显示 {{ logsData.length }} 条提交记录 {{ showAllCommits ? '(全部)' : '(最近200条)' }}
           </div>
           
           <!-- 添加缩放控制 -->
@@ -751,7 +751,6 @@ onBeforeUnmount(() => {
             v-loading="isLoading"
             class="log-table"
             :empty-text="isLoading ? '加载中...' : '没有匹配的提交记录'"
-            height="500"
           >
             <el-table-column label="提交哈希" width="100" resizable>
               <template #default="scope">
@@ -893,18 +892,15 @@ onBeforeUnmount(() => {
 
 .content-area {
   padding: 10px 0;
-  overflow-y: auto;
   flex: 1;
   min-height: 100px;
   height: calc(100% - 52px);
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
 }
 
 .content-area.with-filter {
-  height: calc(100% - 52px); /* 只减去header高度，因为筛选面板已经sticky */
+  height: calc(100% - 52px - 60px); /* 减去header高度和filter高度 */
 }
 
 /* 确保内容区域内的直接子元素占满高度 */
@@ -945,10 +941,18 @@ onBeforeUnmount(() => {
   text-align: right;
 }
 
+.graph-view {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
 .graph-container {
   width: 100%;
-  height: 600px;
-  overflow: auto;
+  flex: 1;
+  min-height: 500px;
   border: 1px solid #ebeef5;
   border-radius: 4px;
   padding: 10px;
@@ -959,10 +963,6 @@ onBeforeUnmount(() => {
 .graph-container svg {
   transform-origin: top left;
   transition: transform 0.2s ease;
-}
-
-.graph-view {
-  width: 100%;
 }
 
 .graph-controls {
@@ -1357,11 +1357,26 @@ onBeforeUnmount(() => {
   flex-direction: column;
   flex: 1;
   height: 100%;
+  overflow-y: auto;
 }
 
 .log-table {
+  width: 100%;
   flex: 1;
-  min-height: 400px;
+}
+
+/* 表格容器样式 */
+.table-view-container .el-table {
+  flex: 1;
+  width: 100%;
+}
+
+.table-view-container .el-table__inner-wrapper {
+  width: 100%;
+}
+
+.table-view-container .el-table__body-wrapper {
+  width: 100%;
 }
 
 .filter-panel.filter-sticky {
@@ -1377,35 +1392,6 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(4px);
   padding: 8px 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-/* 表格容器样式 */
-.table-view-container .el-table {
-  flex: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.table-view-container .el-table__inner-wrapper {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.table-view-container .el-table__body-wrapper {
-  flex: 1;
-  overflow-y: auto;
-}
-
-/* 解决空表格问题 */
-.el-table__empty-text {
-  min-height: 300px !important;
-  height: 100% !important;
-  margin-top: 0 !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* 筛选面板头部样式 */
