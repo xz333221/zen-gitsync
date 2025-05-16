@@ -1372,7 +1372,7 @@ git config --global user.email "your.email@example.com"</pre>
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  animation: push-success 0.5s ease-out;
+  /* animation: push-success 0.5s ease-out; */
   z-index: 9999;
   width: 200px;
   height: 200px;
