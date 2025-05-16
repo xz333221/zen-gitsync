@@ -336,6 +336,7 @@ export const useGitStore = defineStore('git', () => {
     createBranch,
     loadInitialData,
     clearUserConfig,
-    restoreUserConfig
+    restoreUserConfig,
+    getBranchStatus
   }
 }) 

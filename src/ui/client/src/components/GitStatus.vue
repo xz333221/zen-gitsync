@@ -56,6 +56,9 @@ async function loadStatus() {
     // 使用gitLogStore获取Git状态
     await gitLogStore.fetchStatus()
     
+    // 同时刷新分支状态信息，确保显示最新的领先/落后提交数
+    await gitStore.getBranchStatus()
+    
     ElMessage({
       message: 'Git 状态已刷新',
       type: 'success',
@@ -387,6 +390,11 @@ onMounted(() => {
   // App.vue已经加载了Git相关数据，此时只需加载状态
   // 如果已有初始目录，则只需加载状态
   loadStatus()
+  
+  // 如果是Git仓库，确保分支状态也被加载
+  if (gitStore.isGitRepo) {
+    gitStore.getBranchStatus()
+  }
 })
 
 // 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
@@ -602,6 +610,24 @@ defineExpose({
           </div>
           <div class="empty-text">没有检测到任何更改</div>
           <div class="empty-subtext">工作区是干净的</div>
+          
+          <!-- 添加分支信息 -->
+          <div class="branch-info">
+            <p>当前工作在 <el-tag size="small" type="success">{{ gitStore.currentBranch }}</el-tag> 分支</p>
+            
+            <!-- 显示分支同步状态 -->
+            <div v-if="gitStore.hasUpstream">
+              <span v-if="gitStore.branchAhead > 0" class="branch-sync-info warning">
+                <el-icon><ArrowUp /></el-icon> 你的分支领先 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchAhead }} 个提交
+              </span>
+              <span v-else-if="gitStore.branchBehind > 0" class="branch-sync-info info">
+                <el-icon><ArrowDown /></el-icon> 你的分支落后 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchBehind }} 个提交
+              </span>
+              <span v-else class="branch-sync-info success">
+                <el-icon><Check /></el-icon> 你的分支与 'origin/{{ gitStore.currentBranch }}' 同步
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1008,51 +1034,87 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 200px; /* 固定高度，确保有足够空间 */
-  background-color: #f8f9fa;
-  border-radius: 6px;
-  border: 1px solid #ebeef5;
-  margin-top: 15px;
-  padding: 30px;
-  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.02);
+  padding: 40px 20px;
+  text-align: center;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  margin-top: 10px;
 }
 
 .empty-icon {
-  font-size: 48px; /* 更大的图标 */
-  color: #dcdfe6; /* 更浅的颜色 */
-  margin-bottom: 20px;
-  background-color: #f0f2f5;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
+  width: 60px;
+  height: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s;
-  border: 1px dashed #e4e7ed;
-}
-
-.empty-icon:hover {
   background-color: #ebeef5;
-  transform: scale(1.05);
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+  border-radius: 50%;
+  margin-bottom: 15px;
+  font-size: 24px;
+  color: #909399;
+  animation: pulse 2s infinite ease-in-out;
 }
 
-.empty-status:hover .empty-text {
-  color: #606266;
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.7; }
 }
 
 .empty-text {
-  color: #909399;
   font-size: 16px;
   font-weight: 500;
+  color: #606266;
+  margin-bottom: 5px;
 }
 
 .empty-subtext {
-  color: #c0c4cc;
   font-size: 14px;
+  color: #909399;
+  margin-bottom: 20px;
+}
+
+/* 分支信息样式 */
+.branch-info {
+  margin-top: 15px;
+  padding: 10px 15px;
+  background-color: #ebeef5;
+  border-radius: 6px;
+  text-align: left;
+  width: 100%;
+  max-width: 400px;
+}
+
+.branch-info p {
+  margin: 5px 0;
+  font-size: 14px;
+  color: #606266;
+}
+
+.branch-sync-info {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
   margin-top: 5px;
-  font-style: italic;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background-color: #f5f7fa;
+}
+
+.branch-sync-info.warning {
+  color: #e6a23c;
+  background-color: #fdf6ec;
+}
+
+.branch-sync-info.info {
+  color: #909399;
+  background-color: #f4f4f5;
+}
+
+.branch-sync-info.success {
+  color: #67c23a;
+  background-color: #f0f9eb;
 }
 
 /* 添加针对空内容区域的样式 */
