@@ -76,6 +76,9 @@ const authorFilter = ref<string[]>([])
 const messageFilter = ref('')
 const dateRangeFilter = ref<any>(null)
 const availableAuthors = ref<string[]>([])
+// 添加分支筛选
+const branchFilter = ref<string[]>([])
+const availableBranches = ref<string[]>([])
 
 // 添加右键菜单相关变量
 const contextMenuVisible = ref(false)
@@ -118,6 +121,11 @@ async function loadLog(all = false, page = 1) {
     // 添加筛选参数
     if (authorFilter.value.length > 0) {
       queryParams.append('author', authorFilter.value.join(','))
+    }
+    
+    // 添加分支筛选参数
+    if (branchFilter.value.length > 0) {
+      queryParams.append('branch', branchFilter.value.join(','))
     }
     
     if (messageFilter.value) {
@@ -386,6 +394,9 @@ onMounted(() => {
     
     // 加载所有可能的作者列表
     fetchAllAuthors()
+    
+    // 加载所有可能的分支列表
+    fetchAllBranches()
   } else {
     errorMessage.value = '当前目录不是Git仓库'
   }
@@ -658,6 +669,7 @@ function loadMoreLogs() {
 // 重置筛选条件并重新加载数据
 function resetFilters() {
   authorFilter.value = []
+  branchFilter.value = []
   messageFilter.value = ''
   dateRangeFilter.value = null
   
@@ -707,6 +719,49 @@ function extractAuthorsFromLogs() {
   })
   availableAuthors.value = Array.from(authors).sort()
   console.log(`从现有日志中提取了${availableAuthors.value.length}位作者`)
+}
+
+// 添加获取所有分支的函数
+async function fetchAllBranches() {
+  try {
+    console.log('获取所有可用分支...')
+    const response = await fetch('/api/branches')
+    const result = await response.json()
+    
+    if (result.branches && Array.isArray(result.branches)) {
+      // 更新可用分支列表
+      availableBranches.value = result.branches.sort()
+      console.log(`获取到${availableBranches.value.length}个分支`)
+    } else {
+      console.warn('获取分支列表失败')
+      extractBranchesFromLogs()
+    }
+  } catch (error) {
+    console.error('获取分支列表失败:', error)
+    extractBranchesFromLogs()
+  }
+}
+
+// 从日志中提取分支
+function extractBranchesFromLogs() {
+  // 从当前加载的日志中提取唯一的分支名称
+  const branches = new Set<string>()
+  
+  logs.value.forEach(log => {
+    if (log.branch) {
+      // 分支可能是逗号分隔的多个引用
+      const refs = log.branch.split(',')
+      refs.forEach(ref => {
+        const branch = formatBranchName(ref.trim())
+        if (branch) {
+          branches.add(branch)
+        }
+      })
+    }
+  })
+  
+  availableBranches.value = Array.from(branches).sort()
+  console.log(`从日志中提取了${availableBranches.value.length}个分支`)
 }
 
 // 处理右键菜单事件
@@ -923,6 +978,26 @@ async function cherryPickCommit(commit: LogItem | null) {
               :key="author" 
               :label="author" 
               :value="author"
+            />
+          </el-select>
+        </div>
+        
+        <div class="filter-item">
+          <div class="filter-label">分支:</div>
+          <el-select 
+            v-model="branchFilter" 
+            placeholder="选择分支" 
+            multiple
+            clearable 
+            filterable
+            class="filter-input"
+            size="small"
+          >
+            <el-option 
+              v-for="branch in availableBranches" 
+              :key="branch" 
+              :label="branch" 
+              :value="branch"
             />
           </el-select>
         </div>

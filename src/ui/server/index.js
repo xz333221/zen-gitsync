@@ -653,10 +653,25 @@ async function startUIServer() {
       const message = req.query.message || '';
       const dateFrom = req.query.dateFrom || '';
       const dateTo = req.query.dateTo || '';
+      const branch = req.query.branch ? req.query.branch.split(',') : [];
       
       // 构建Git命令选项
       let commandOptions = [];
       
+      // 修改分支筛选处理 - 使用正确的引用格式
+      if (branch.length > 0) {
+        // 不再简单拼接分支名，而是将它们作为引用路径处理
+        // 如果指定了分支，不再使用--all参数，而是直接用分支名
+        commandOptions = commandOptions.filter(opt => opt !== '--all');
+        
+        // 将分支名格式化为Git可理解的引用格式
+        const branchRefs = branch.map(b => b.trim()).join(' ');
+        
+        // 直接将分支名作为命令参数，并确保后面添加 -- 分隔符防止歧义
+        return executeGitLogCommand(res, branchRefs, author, message, dateFrom, dateTo, limit, skip, req.query.all === 'true');
+      }
+      
+      // 如果没有指定分支，则使用--all参数
       // 作者筛选（支持多作者，使用正则表达式OR操作）
       if (author.length > 0) {
         // 过滤掉空作者
@@ -730,47 +745,130 @@ async function startUIServer() {
         totalCommits = 0;
       }
       
-      // 替换提交记录之间的换行符
-      logOutput = logOutput.replace(/\n(?=[a-f0-9]{40}\|)/g, "<<<RECORD_SEPARATOR>>>");
-      
-      // 按分隔符拆分日志条目
-      const logEntries = logOutput.split("<<<RECORD_SEPARATOR>>>");
-      
-      // 处理每个日志条目
-      const data = logEntries.map(entry => {
-        const parts = entry.split('|');
-        if (parts.length >= 5) {
-          return {
-            hash: parts[0],
-            author: parts[1],
-            email: parts[2],
-            date: parts[3],
-            message: parts[4],
-            branch: parts[5] || ''
-          };
-        }
-        return null;
-      }).filter(item => item !== null);
-      
-      // 计算是否有更多数据
-      // 修复：使用总记录数和已获取记录总数来判断
-      const hasMore = req.query.all === 'true' ? false : (skip + data.length < totalCommits);
-      
-      console.log(`分页查询 - 页码: ${page}, 每页数量: ${limit}, 跳过: ${skip}, 总数: ${totalCommits}, 返回数量: ${data.length}, 是否有更多: ${hasMore}`);
-      
-      // 返回提交历史数据，包括是否有更多数据的标志
-      res.json({
-        data: data,
-        total: totalCommits,
-        page: page,
-        limit: limit,
-        hasMore: hasMore
-      });
+      processAndSendLogOutput(res, logOutput, totalCommits, page, limit);
     } catch (error) {
       console.error('获取Git日志失败:', error);
       res.status(500).json({ error: '获取日志失败: ' + error.message });
     }
   });
+  
+  // 抽取执行Git日志命令的函数
+  async function executeGitLogCommand(res, branchRefs, author, message, dateFrom, dateTo, limit, skip, isAll) {
+    try {
+      // 构建命令选项
+      const commandOptions = [];
+      
+      // 作者筛选
+      if (author.length > 0) {
+        const validAuthors = author.filter(a => a.trim() !== '');
+        
+        if (validAuthors.length === 1) {
+          commandOptions.push(`--author="${validAuthors[0].trim()}"`);
+        } else if (validAuthors.length > 1) {
+          const authorPattern = validAuthors.map(a => a.trim()).join('\\|');
+          commandOptions.push(`--author="${authorPattern}"`);
+        }
+      }
+      
+      // 日期范围筛选
+      if (dateFrom && dateTo) {
+        commandOptions.push(`--after="${dateFrom}" --before="${dateTo} 23:59:59"`);
+      } else if (dateFrom) {
+        commandOptions.push(`--after="${dateFrom}"`);
+      } else if (dateTo) {
+        commandOptions.push(`--before="${dateTo} 23:59:59"`);
+      }
+      
+      // 提交信息筛选
+      if (message) {
+        commandOptions.push(`--grep="${message}"`);
+      }
+      
+      // 限制选项
+      const limitOption = isAll ? '' : `-n ${limit} --skip=${skip}`;
+      
+      // 合并所有选项
+      const options = [...commandOptions, limitOption].filter(Boolean).join(' ');
+      
+      // 准备分支引用，确保它们被正确识别为分支而不是文件名
+      // 使用 refs/heads/ 前缀明确指示这是分支
+      const formattedBranchRefs = branchRefs.split(' ')
+        .map(branch => {
+          // 检查是否已经是完整引用
+          if (branch.startsWith('refs/') || branch.includes('/')) {
+            return branch;
+          }
+          // 添加refs/heads/前缀
+          return `refs/heads/${branch}`;
+        })
+        .join(' ');
+      
+      // 构建执行的命令
+      const command = `git log ${formattedBranchRefs} --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${options}`;
+      console.log(`执行Git命令(带分支引用): ${command}`);
+      
+      // 执行命令
+      const { stdout: logOutput } = await execGitCommand(command);
+      
+      // 获取总提交数
+      let totalCommits = 0;
+      try {
+        // 构建计数命令
+        const countCommand = `git rev-list ${formattedBranchRefs} --count ${commandOptions.join(' ')}`;
+        console.log(`执行计数命令(分支): ${countCommand}`);
+        
+        const { stdout: countOutput } = await execGitCommand(countCommand);
+        totalCommits = parseInt(countOutput.trim());
+      } catch (error) {
+        console.error('获取提交总数失败:', error);
+        totalCommits = 0;
+      }
+      
+      processAndSendLogOutput(res, logOutput, totalCommits, skip / limit + 1, limit);
+    } catch (error) {
+      console.error('执行Git日志命令失败:', error);
+      res.status(500).json({ error: '获取日志失败: ' + error.message });
+    }
+  }
+  
+  // 抽取处理输出并发送响应的函数
+  function processAndSendLogOutput(res, logOutput, totalCommits, page, limit) {
+    // 替换提交记录之间的换行符
+    logOutput = logOutput.replace(/\n(?=[a-f0-9]{40}\|)/g, "<<<RECORD_SEPARATOR>>>");
+    
+    // 按分隔符拆分日志条目
+    const logEntries = logOutput.split("<<<RECORD_SEPARATOR>>>");
+    
+    // 处理每个日志条目
+    const data = logEntries.map(entry => {
+      const parts = entry.split('|');
+      if (parts.length >= 5) {
+        return {
+          hash: parts[0],
+          author: parts[1],
+          email: parts[2],
+          date: parts[3],
+          message: parts[4],
+          branch: parts[5] || ''
+        };
+      }
+      return null;
+    }).filter(item => item !== null);
+    
+    // 计算是否有更多数据
+    const hasMore = page * limit < totalCommits;
+    
+    console.log(`分页查询 - 页码: ${page}, 每页数量: ${limit}, 总数: ${totalCommits}, 返回数量: ${data.length}, 是否有更多: ${hasMore}`);
+    
+    // 返回提交历史数据，包括是否有更多数据的标志
+    res.json({
+      data: data,
+      total: totalCommits,
+      page: page,
+      limit: limit,
+      hasMore: hasMore
+    });
+  }
   
   // 获取文件差异
   app.get('/api/diff', async (req, res) => {

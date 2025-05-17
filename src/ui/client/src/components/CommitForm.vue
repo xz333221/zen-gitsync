@@ -835,18 +835,8 @@ onMounted(() => {
     skipHooks.value = savedSkipHooks === "true";
   }
   
-  // 立即获取一次分支状态
+  // 获取一次分支状态
   gitStore.getBranchStatus();
-  
-  // 设置定时器，每5秒更新一次分支状态
-  const branchStatusInterval = setInterval(() => {
-    gitStore.getBranchStatus();
-  }, 5000);
-  
-  // 在组件卸载时清除定时器
-  onUnmounted(() => {
-    clearInterval(branchStatusInterval);
-  });
 });
 </script>
 
