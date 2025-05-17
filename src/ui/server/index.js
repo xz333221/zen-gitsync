@@ -390,7 +390,7 @@ async function startUIServer() {
     }
   })
   
-  // 保存描述模板
+  // 保存模板
   app.post('/api/config/save-template', express.json(), async (req, res) => {
     try {
       const { template, type } = req.body
@@ -423,6 +423,17 @@ async function startUIServer() {
           config.scopeTemplates.push(template)
           await configManager.saveConfig(config)
         }
+      } else if (type === 'message') {
+        // 确保提交信息模板数组存在
+        if (!config.messageTemplates) {
+          config.messageTemplates = []
+        }
+        
+        // 检查是否已存在相同模板
+        if (!config.messageTemplates.includes(template)) {
+          config.messageTemplates.push(template)
+          await configManager.saveConfig(config)
+        }
       } else {
         return res.status(400).json({ success: false, error: '不支持的模板类型' })
       }
@@ -433,7 +444,7 @@ async function startUIServer() {
     }
   })
   
-  // 删除描述模板
+  // 删除模板
   app.post('/api/config/delete-template', express.json(), async (req, res) => {
     try {
       const { template, type } = req.body
@@ -459,6 +470,15 @@ async function startUIServer() {
           const index = config.scopeTemplates.indexOf(template)
           if (index !== -1) {
             config.scopeTemplates.splice(index, 1)
+            await configManager.saveConfig(config)
+          }
+        }
+      } else if (type === 'message') {
+        // 确保提交信息模板数组存在
+        if (config.messageTemplates) {
+          const index = config.messageTemplates.indexOf(template)
+          if (index !== -1) {
+            config.messageTemplates.splice(index, 1)
             await configManager.saveConfig(config)
           }
         }
@@ -502,6 +522,19 @@ async function startUIServer() {
           const index = config.scopeTemplates.indexOf(oldTemplate)
           if (index !== -1) {
             config.scopeTemplates[index] = newTemplate
+            await configManager.saveConfig(config)
+          } else {
+            return res.status(404).json({ success: false, error: '未找到原模板' })
+          }
+        } else {
+          return res.status(404).json({ success: false, error: '模板列表不存在' })
+        }
+      } else if (type === 'message') {
+        // 确保提交信息模板数组存在
+        if (config.messageTemplates) {
+          const index = config.messageTemplates.indexOf(oldTemplate)
+          if (index !== -1) {
+            config.messageTemplates[index] = newTemplate
             await configManager.saveConfig(config)
           } else {
             return res.status(404).json({ success: false, error: '未找到原模板' })

@@ -62,6 +62,12 @@ const commitTypeOptions = [
   { value: "chore", label: "chore: 构建/工具修改" },
 ];
 
+// 添加默认提交信息模板相关变量
+const messageTemplates = ref<string[]>([]);
+const isEditingMessage = ref(false);
+const originalMessageTemplate = ref("");
+const editingMessageIndex = ref(-1);
+
 // 监听标准化提交状态变化，保存到localStorage
 watch(isStandardCommit, (newValue) => {
   localStorage.setItem("zen-gitsync-standard-commit", newValue.toString());
@@ -130,6 +136,11 @@ async function loadConfig() {
     // 加载作用域模板
     if (config.scopeTemplates && Array.isArray(config.scopeTemplates)) {
       scopeTemplates.value = config.scopeTemplates;
+    }
+    
+    // 加载提交信息模板
+    if (config.messageTemplates && Array.isArray(config.messageTemplates)) {
+      messageTemplates.value = config.messageTemplates;
     }
   } catch (error) {
     console.error("加载配置失败:", error);
@@ -757,8 +768,8 @@ async function saveDefaultMessage() {
         type: "success",
       });
       
-      // 关闭弹窗
-      defaultMessageDialogVisible.value = false;
+      // 不再关闭弹窗，而是保留当前编辑状态
+      // defaultMessageDialogVisible.value = false;
     } else {
       ElMessage({
         message: "保存失败: " + result.error,
@@ -1160,14 +1171,42 @@ git config --global user.email "your.email@example.com"</pre>
       </el-dialog>
 
       <!-- 默认提交信息设置弹窗 -->
-      <el-dialog title="默认提交信息设置" v-model="defaultMessageDialogVisible" width="50%" style="height: 50vh">
+      <el-dialog title="默认提交信息设置" v-model="defaultMessageDialogVisible" width="80%" style="height: 80vh">
         <div class="template-container">
           <div class="template-form">
-            <el-input v-model="newDefaultMessage" placeholder="输入新的默认提交信息" class="template-input" clearable />
+            <el-input v-model="newDefaultMessage" :placeholder="isEditingMessage ? '编辑模板内容' : '输入新模板内容'" class="template-input" clearable />
             <div class="template-form-buttons">
-              <el-button @click="defaultMessageDialogVisible = false">取消</el-button>
-              <el-button type="primary" @click="saveDefaultMessage" :disabled="!newDefaultMessage.trim()">保存默认提交信息</el-button>
+              <el-button v-if="isEditingMessage" @click="cancelEditMessageTemplate">取消</el-button>
+              <el-button type="primary" @click="saveMessageTemplate" :disabled="!newDefaultMessage.trim()">
+                {{ isEditingMessage ? '更新模板' : '添加模板' }}
+              </el-button>
+              <el-button type="success" @click="saveDefaultMessage" :disabled="!newDefaultMessage.trim()">
+                设为默认提交信息
+              </el-button>
             </div>
+          </div>
+
+          <div class="template-list">
+            <h3>已保存模板</h3>
+            <el-empty v-if="messageTemplates.length === 0" description="暂无保存的模板" />
+            <el-card v-for="(template, index) in messageTemplates" :key="index" class="template-item">
+              <el-row justify="space-between" align="middle" style="width: 100%">
+                <div class="template-content">{{ template }}</div>
+                <div class="template-actions">
+                  <el-button type="primary" size="small" @click="useMessageTemplate(template)">使用</el-button>
+                  <el-button type="warning" size="small" :icon="Edit"
+                    @click="startEditMessageTemplate(template, index)">编辑</el-button>
+                  <el-button type="danger" size="small" @click="deleteMessageTemplate(template)">删除</el-button>
+                </div>
+              </el-row>
+            </el-card>
+          </div>
+          
+          <div class="current-default-message" v-if="defaultCommitMessage">
+            <h3>当前默认提交信息</h3>
+            <el-card>
+              <div class="default-message-content">{{ defaultCommitMessage }}</div>
+            </el-card>
           </div>
         </div>
       </el-dialog>
@@ -1691,6 +1730,20 @@ git config --global user.email "your.email@example.com"</pre>
     stroke-dasharray: 90, 150;
     stroke-dashoffset: -124;
   }
+}
+
+.current-default-message {
+  margin-top: 20px;
+  border-top: 1px solid #ebeef5;
+  padding-top: 15px;
+}
+
+.default-message-content {
+  padding: 10px;
+  background-color: #f0f9eb;
+  border-left: 3px solid #67c23a;
+  font-weight: 500;
+  word-break: break-all;
 }
 </style>
 
