@@ -764,6 +764,49 @@ async function saveDefaultMessage() {
   }
 }
 
+// 根据Git状态计算按钮禁用状态
+const hasUnstagedChanges = computed(() => {
+  return gitLogStore.fileList.some(file => ['modified', 'deleted', 'untracked'].includes(file.type));
+});
+
+// 计算未暂存文件数量
+const unstagedFilesCount = computed(() => {
+  return gitLogStore.fileList.filter(file => ['modified', 'deleted', 'untracked'].includes(file.type)).length;
+});
+
+// 计算已暂存文件数量
+const stagedFilesCount = computed(() => {
+  return gitLogStore.fileList.filter(file => file.type === 'added').length;
+});
+
+const hasStagedChanges = computed(() => {
+  return stagedFilesCount.value > 0;
+});
+
+const hasAnyChanges = computed(() => {
+  return gitLogStore.fileList.length > 0;
+});
+
+const needsPush = computed(() => {
+  return gitStore.branchAhead > 0;
+});
+
+const needsPull = computed(() => {
+  return gitStore.branchBehind > 0;
+});
+
+const canPush = computed(() => {
+  return gitStore.hasUpstream && (needsPush.value || hasStagedChanges.value);
+});
+
+const canReset = computed(() => {
+  return hasStagedChanges.value;
+});
+
+const canResetToRemote = computed(() => {
+  return gitStore.hasUpstream && (needsPush.value || needsPull.value || hasAnyChanges.value);
+});
+
 onMounted(() => {
   loadConfig();
 
@@ -897,41 +940,48 @@ git config --global user.email "your.email@example.com"</pre>
                 <div class="action-group">
                   <div class="group-title">基础操作</div>
                   <div class="group-buttons">
-                    <el-tooltip content="git add ." placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-tooltip :content="hasUnstagedChanges ? `暂存${unstagedFilesCount}个待更改文件` : 'git add .'" placement="top" effect="light" popper-class="git-cmd-tooltip">
                       <el-button 
                         type="primary" 
                         @click="addToStage" 
                         :loading="gitLogStore.isAddingFiles" 
+                        :disabled="!hasUnstagedChanges"
                         class="action-button"
                       >
                         暂存更改
+                        <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
                       </el-button>
                     </el-tooltip>
 
-                    <el-tooltip content="git commit" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-tooltip :content="hasStagedChanges ? `提交${stagedFilesCount}个已暂存文件` : 'git commit'" placement="top" effect="light" popper-class="git-cmd-tooltip">
                       <el-button 
                         type="primary" 
                         @click="commitChanges" 
                         :loading="gitLogStore.isLoadingStatus"
+                        :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
                         class="action-button"
                       >
                         提交
+                        <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
                       </el-button>
                     </el-tooltip>
 
-                    <el-tooltip content="git push" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-tooltip :content="needsPush ? `推送${gitStore.branchAhead}个本地提交` : 'git push'" placement="top" effect="light" popper-class="git-cmd-tooltip">
                       <el-button 
                         type="primary"
                         :icon="Upload"
                         @click="pushToRemote"
                         :loading="gitLogStore.isPushing"
+                        :disabled="!canPush"
                         :class="['action-button', 'push-button', { 'is-loading': gitLogStore.isPushing || isPushing }]"
+                        :style="needsPush ? {backgroundColor: '#67c23a !important', borderColor: '#67c23a !important'} : {}"
                       >
                         推送
+                        <span v-if="needsPush">({{gitStore.branchAhead}})</span>
                       </el-button>
                     </el-tooltip>
                     
-                    <el-tooltip content="git pull" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-tooltip :content="needsPull ? `拉取${gitStore.branchBehind}个远程提交` : 'git pull'" placement="top" effect="light" popper-class="git-cmd-tooltip">
                       <el-button 
                         type="primary"
                         :icon="Download"
@@ -939,8 +989,10 @@ git config --global user.email "your.email@example.com"</pre>
                         :loading="isGitPulling"
                         :disabled="!gitStore.hasUpstream"
                         class="action-button"
+                        :style="needsPull ? {color: 'white', backgroundColor: '#E6A23C', borderColor: '#E6A23C'} : {}"
                       >
                         拉取
+                        <span v-if="needsPull">({{gitStore.branchBehind}})</span>
                       </el-button>
                     </el-tooltip>
                     
@@ -968,6 +1020,7 @@ git config --global user.email "your.email@example.com"</pre>
                         :icon="Edit"
                         @click="addAndCommit"
                         :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
+                        :disabled="!hasUnstagedChanges || !finalCommitMessage.trim()"
                         class="action-button"
                       >
                         暂存并提交
@@ -980,6 +1033,7 @@ git config --global user.email "your.email@example.com"</pre>
                         :icon="Position"
                         @click="addCommitAndPush"
                         :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
+                        :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
                         :class="['action-button', 'one-click-push', { 'is-loading': gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing }]"
                       >
                         一键推送
@@ -993,15 +1047,17 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="action-group reset-group">
                 <div class="group-title">重置操作</div>
                 <div class="group-buttons">
-                  <el-tooltip content="git reset HEAD" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip :content="canReset ? `撤销${stagedFilesCount}个已暂存文件` : 'git reset HEAD'" placement="top" effect="light" popper-class="git-cmd-tooltip">
                     <el-button 
                       type="warning"
                       :icon="RefreshRight"
                       @click="gitLogStore.resetHead"
                       :loading="gitLogStore.isResetting"
+                      :disabled="!canReset"
                       class="action-button reset-button"
                     >
                       重置暂存区
+                      <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
                     </el-button>
                   </el-tooltip>
 
@@ -1011,6 +1067,7 @@ git config --global user.email "your.email@example.com"</pre>
                       :icon="Delete"
                       @click="resetToRemote"
                       :loading="gitLogStore.isResetting"
+                      :disabled="!canResetToRemote"
                       class="action-button danger-button"
                     >
                       重置到远程
