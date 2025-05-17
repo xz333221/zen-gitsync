@@ -369,6 +369,27 @@ async function startUIServer() {
     }
   })
   
+  // 保存默认提交信息
+  app.post('/api/config/saveDefaultMessage', express.json(), async (req, res) => {
+    try {
+      const { defaultCommitMessage } = req.body
+      
+      if (!defaultCommitMessage) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      // 更新默认提交信息
+      config.defaultCommitMessage = defaultCommitMessage
+      await configManager.saveConfig(config)
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
   // 保存描述模板
   app.post('/api/config/save-template', express.json(), async (req, res) => {
     try {

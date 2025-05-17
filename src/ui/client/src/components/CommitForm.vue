@@ -44,6 +44,10 @@ const isEditingScope = ref(false);
 const originalScopeTemplate = ref("");
 const editingScopeIndex = ref(-1);
 
+// 默认提交信息设置相关变量
+const defaultMessageDialogVisible = ref(false);
+const newDefaultMessage = ref("");
+
 // 跳过钩子
 const skipHooks = ref(false);
 
@@ -705,6 +709,61 @@ function clearCommitFields() {
   commitFooter.value = "";
 }
 
+// 打开默认提交信息设置弹窗
+function openDefaultMessageSettings() {
+  newDefaultMessage.value = defaultCommitMessage.value;
+  defaultMessageDialogVisible.value = true;
+}
+
+// 保存默认提交信息
+async function saveDefaultMessage() {
+  if (!newDefaultMessage.value.trim()) {
+    ElMessage({
+      message: "请输入默认提交信息",
+      type: "warning",
+    });
+    return;
+  }
+
+  try {
+    // 保存到服务器
+    const response = await fetch("/api/config/saveDefaultMessage", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        defaultCommitMessage: newDefaultMessage.value,
+      }),
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      // 更新本地状态
+      defaultCommitMessage.value = newDefaultMessage.value;
+      placeholder.value = `输入提交信息 (默认: ${defaultCommitMessage.value})`;
+      
+      ElMessage({
+        message: "默认提交信息保存成功!",
+        type: "success",
+      });
+      
+      // 关闭弹窗
+      defaultMessageDialogVisible.value = false;
+    } else {
+      ElMessage({
+        message: "保存失败: " + result.error,
+        type: "error",
+      });
+    }
+  } catch (error) {
+    ElMessage({
+      message: "保存失败: " + (error as Error).message,
+      type: "error",
+    });
+  }
+}
+
 onMounted(() => {
   loadConfig();
 
@@ -784,7 +843,12 @@ git config --global user.email "your.email@example.com"</pre>
 
             <!-- 普通提交表单 -->
             <div v-if="!isStandardCommit" class="commit-form">
-              <el-input v-model="commitMessage" :placeholder="placeholder" clearable />
+              <div class="description-container">
+                <el-input v-model="commitMessage" :placeholder="placeholder" clearable />
+                <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
+                  @click="openDefaultMessageSettings">
+                </el-button>
+              </div>
             </div>
 
             <!-- 标准化提交表单 -->
@@ -1018,6 +1082,19 @@ git config --global user.email "your.email@example.com"</pre>
                 </div>
               </el-row>
             </el-card>
+          </div>
+        </div>
+      </el-dialog>
+
+      <!-- 默认提交信息设置弹窗 -->
+      <el-dialog title="默认提交信息设置" v-model="defaultMessageDialogVisible" width="50%" style="height: 50vh">
+        <div class="template-container">
+          <div class="template-form">
+            <el-input v-model="newDefaultMessage" placeholder="输入新的默认提交信息" class="template-input" clearable />
+            <div class="template-form-buttons">
+              <el-button @click="defaultMessageDialogVisible = false">取消</el-button>
+              <el-button type="primary" @click="saveDefaultMessage" :disabled="!newDefaultMessage.trim()">保存默认提交信息</el-button>
+            </div>
           </div>
         </div>
       </el-dialog>
