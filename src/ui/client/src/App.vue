@@ -447,7 +447,7 @@ function stopHResize() {
         </template>
       </div>
       <div class="commit-form-panel" v-else>
-        <div class="card">
+        <div class="card" style="padding: 20px;">
           <h2>Git仓库初始化</h2>
           <p>当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。</p>
           <!-- 实用提示 -->

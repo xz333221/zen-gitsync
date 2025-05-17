@@ -721,7 +721,9 @@ defineExpose({
     <el-dialog
       v-model="isDirectoryDialogVisible"
       title="切换工作目录"
-      width="500px"
+      width="80vw"
+      top="10vh"
+      style="height: 200px;"
     >
       <el-form>
         <el-form-item label="目录路径">
@@ -743,7 +745,8 @@ defineExpose({
     <el-dialog
       v-model="isDirectoryBrowserVisible"
       title="浏览目录"
-      width="600px"
+      width="80vw"
+      top="70px"
     >
       <div class="browser-current-path">
         <span>当前路径: {{ currentBrowsePath }}</span>

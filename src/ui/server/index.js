@@ -1322,9 +1322,7 @@ async function startUIServer() {
       console.log(`初始化文件系统监控器，路径: ${currentDir}`);
       
       // 检查是否是Git仓库
-      try {
-        execGitCommand('git rev-parse --is-inside-work-tree');
-      } catch (error) {
+      if (!isGitRepo) {
         console.log('当前目录不是Git仓库，不启动监控');
         return;
       }
@@ -1366,6 +1364,17 @@ async function startUIServer() {
   // 获取并广播Git状态
   async function getAndBroadcastStatus() {
     try {
+      // 如果不是Git仓库，发送特殊状态
+      if (!isGitRepo) {
+        io.emit('git_status_update', { 
+          isGitRepo: false,
+          status: '当前目录不是Git仓库',
+          porcelain: '',
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+      
       // 获取常规状态
       const { stdout: statusOutput } = await execGitCommand('git status');
       
@@ -1374,6 +1383,7 @@ async function startUIServer() {
       
       // 广播到所有连接的客户端
       io.emit('git_status_update', { 
+        isGitRepo: true,
         status: statusOutput,
         porcelain: porcelainOutput,
         timestamp: new Date().toISOString()
@@ -1396,6 +1406,19 @@ async function startUIServer() {
     }, DEBOUNCE_DELAY);
   }
   
+  // 检查当前目录是否是Git仓库
+  let isGitRepo = false;
+  try {
+    const { stdout } = await execGitCommand('git rev-parse --is-inside-work-tree', { log: false });
+    isGitRepo = stdout.trim() === 'true';
+  } catch (error) {
+    isGitRepo = false;
+    console.log(chalk.yellow('======================================'));
+    console.log(chalk.yellow(`  提示: 当前目录不是Git仓库`));
+    console.log(chalk.yellow(`  目录: ${process.cwd()}`));
+    console.log(chalk.yellow('======================================'));
+  }
+  
   // 启动服务器
   const PORT = 3000;
   httpServer.listen(PORT, () => {
@@ -1403,10 +1426,14 @@ async function startUIServer() {
     console.log(chalk.green(`  Zen GitSync 服务器已启动`));
     console.log(chalk.green(`  访问地址: http://localhost:${PORT}`));
     console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
+    if (isGitRepo) {
+      console.log(chalk.green(`  当前目录是Git仓库，文件监控已启动`));
+      // 启动文件监控
+      initFileSystemWatcher();
+    } else {
+      console.log(chalk.yellow(`  当前目录不是Git仓库，文件监控未启动`));
+    }
     console.log(chalk.green('======================================'));
-    
-    // 启动文件监控
-    initFileSystemWatcher();
     
     open(`http://localhost:${PORT}`);
   }).on('error', async (err) => {
@@ -1422,36 +1449,19 @@ async function startUIServer() {
               console.log(chalk.green(`  访问地址: http://localhost:${newPort}`));
               console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
               console.log(chalk.green('======================================'));
-              
-              // 启动文件监控
-              initFileSystemWatcher();
-              
-              open(`http://localhost:${newPort}`);
               resolve();
-            }).on('error', (e) => {
-              if (e.code === 'EADDRINUSE') {
-                console.log(`端口 ${newPort} 也被占用，继续尝试...`);
-                newPort++;
-                reject(e);
-              } else {
-                reject(e);
-              }
             });
           });
           break;
-        } catch (e) {
-          if (newPort >= PORT + 100) {
-            console.error('无法找到可用端口，请手动指定端口');
-            process.exit(1);
-          }
+        } catch (error) {
+          newPort++;
         }
       }
     } else {
-      console.error('服务器启动失败:', err);
+      console.error('启动服务器失败:', err);
       process.exit(1);
     }
   });
 }
 
 export default startUIServer;
-
