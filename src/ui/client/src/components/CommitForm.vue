@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position } from "@element-plus/icons-vue";
+import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection } from "@element-plus/icons-vue";
 import { useGitLogStore } from "../stores/gitLogStore";
 import { useGitStore } from "../stores/gitStore";
 
@@ -11,6 +11,9 @@ const commitMessage = ref("");
 const isPushing = ref(false);
 // 添加提交并推送的状态变量
 const showPushSuccess = ref(false);
+// 添加git pull和fetch操作相关状态变量
+const isGitPulling = ref(false);
+const isGitFetching = ref(false);
 // 添加placeholder变量
 const placeholder = ref("输入提交信息...");
 // 添加默认提交信息变量
@@ -551,26 +554,52 @@ function showPushSuccessIndicator() {
 
 // 推送到远程 (git push)
 async function pushToRemote() {
+  isPushing.value = true;
   try {
-    isPushing.value = true
-    // 使用Store推送更改
-    const result = await gitLogStore.pushToRemote();
-
-    if (result) {
-      // 触发成功事件
-      gitStore.getCurrentBranch();
-      gitLogStore.fetchLog();
-      
-      // 显示成功动画
-      isPushing.value = false
-      showPushSuccessIndicator();
-    }
+    await gitLogStore.pushToRemote();
+    // 显示推送成功提示
+    showPushSuccessIndicator();
   } catch (error) {
     ElMessage({
       message: `推送失败: ${(error as Error).message}`,
-      type: "error",
+      type: 'error',
     });
-    isPushing.value = false
+  } finally {
+    isPushing.value = false;
+  }
+}
+
+// 处理git pull操作
+async function handleGitPull() {
+  isGitPulling.value = true;
+  try {
+    await gitStore.gitPull();
+    // 刷新状态
+    await gitLogStore.fetchStatus();
+  } catch (error) {
+    ElMessage({
+      message: `拉取失败: ${(error as Error).message}`,
+      type: 'error',
+    });
+  } finally {
+    isGitPulling.value = false;
+  }
+}
+
+// 处理git fetch --all操作
+async function handleGitFetchAll() {
+  isGitFetching.value = true;
+  try {
+    await gitStore.gitFetchAll();
+    // 刷新状态
+    await gitLogStore.fetchStatus();
+  } catch (error) {
+    ElMessage({
+      message: `获取远程分支信息失败: ${(error as Error).message}`,
+      type: 'error',
+    });
+  } finally {
+    isGitFetching.value = false;
   }
 }
 
@@ -835,6 +864,31 @@ git config --global user.email "your.email@example.com"</pre>
                         :class="['action-button', 'push-button', { 'is-loading': gitLogStore.isPushing || isPushing }]"
                       >
                         推送
+                      </el-button>
+                    </el-tooltip>
+                    
+                    <el-tooltip content="git pull" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="primary"
+                        :icon="Download"
+                        @click="handleGitPull"
+                        :loading="isGitPulling"
+                        :disabled="!gitStore.hasUpstream"
+                        class="action-button"
+                      >
+                        拉取
+                      </el-button>
+                    </el-tooltip>
+                    
+                    <el-tooltip content="git fetch --all" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="info"
+                        :icon="Connection"
+                        @click="handleGitFetchAll"
+                        :loading="isGitFetching"
+                        class="action-button"
+                      >
+                        获取所有远程分支
                       </el-button>
                     </el-tooltip>
                   </div>

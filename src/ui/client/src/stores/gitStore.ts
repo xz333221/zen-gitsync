@@ -311,6 +311,88 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 执行git pull操作
+  async function gitPull() {
+    if (!isGitRepo.value) {
+      ElMessage({
+        message: '当前目录不是Git仓库',
+        type: 'warning'
+      });
+      return false;
+    }
+
+    try {
+      const response = await fetch('/api/pull', {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        ElMessage({
+          message: '拉取成功',
+          type: 'success'
+        });
+        
+        // 刷新分支状态
+        await getBranchStatus();
+        return true;
+      } else {
+        ElMessage({
+          message: `拉取失败: ${result.error}`,
+          type: 'error'
+        });
+        return false;
+      }
+    } catch (error) {
+      ElMessage({
+        message: `拉取失败: ${(error as Error).message}`,
+        type: 'error'
+      });
+      return false;
+    }
+  }
+
+  // 执行git fetch --all操作
+  async function gitFetchAll() {
+    if (!isGitRepo.value) {
+      ElMessage({
+        message: '当前目录不是Git仓库',
+        type: 'warning'
+      });
+      return false;
+    }
+
+    try {
+      const response = await fetch('/api/fetch-all', {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        ElMessage({
+          message: '获取所有远程分支信息成功',
+          type: 'success'
+        });
+        
+        // 刷新分支状态
+        await getBranchStatus();
+        return true;
+      } else {
+        ElMessage({
+          message: `获取远程分支信息失败: ${result.error}`,
+          type: 'error'
+        });
+        return false;
+      }
+    } catch (error) {
+      ElMessage({
+        message: `获取远程分支信息失败: ${(error as Error).message}`,
+        type: 'error'
+      });
+      return false;
+    }
+  }
+
   return {
     // 状态
     currentBranch,
@@ -337,6 +419,8 @@ export const useGitStore = defineStore('git', () => {
     loadInitialData,
     clearUserConfig,
     restoreUserConfig,
-    getBranchStatus
+    getBranchStatus,
+    gitPull,
+    gitFetchAll
   }
 }) 

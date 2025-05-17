@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
-import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight, Check, Close } from '@element-plus/icons-vue'
+import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight, Check, Close, Download, Connection } from '@element-plus/icons-vue'
 import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '../stores/gitStore'
 
@@ -37,6 +37,10 @@ const currentBrowsePath = ref('')
 const directoryItems = ref<{name: string, path: string, type: string}[]>([])
 const isBrowsing = ref(false)
 const browseErrorMessage = ref('')
+
+// 添加git操作相关状态
+const isGitPulling = ref(false)
+const isGitFetching = ref(false)
 
 const currentDirectory = ref(props.initialDirectory || '');
 async function loadStatus() {
@@ -352,6 +356,30 @@ async function refreshStatus() {
   await loadStatus()
 }
 
+// 添加git pull操作方法
+async function handleGitPull() {
+  isGitPulling.value = true
+  try {
+    await gitStore.gitPull()
+    // 刷新Git状态
+    await loadStatus()
+  } finally {
+    isGitPulling.value = false
+  }
+}
+
+// 添加git fetch --all操作方法
+async function handleGitFetchAll() {
+  isGitFetching.value = true
+  try {
+    await gitStore.gitFetchAll()
+    // 刷新Git状态
+    await loadStatus()
+  } finally {
+    isGitFetching.value = false
+  }
+}
+
 // 添加撤回文件修改的方法
 async function revertFileChanges(filePath: string) {
   try {
@@ -463,6 +491,32 @@ defineExpose({
             class="auto-update-switch"
           />
         </el-tooltip>
+        
+        <!-- 添加Git Pull按钮 -->
+        <el-tooltip content="Git Pull (拉取远程更新)" placement="top" :hide-after="1000">
+          <el-button 
+            type="primary" 
+            :icon="Download" 
+            circle 
+            size="small" 
+            @click="handleGitPull" 
+            :loading="isGitPulling"
+            :disabled="!gitStore.hasUpstream"
+          />
+        </el-tooltip>
+        
+        <!-- 添加Git Fetch All按钮 -->
+        <el-tooltip content="Git Fetch All (获取所有远程分支)" placement="top" :hide-after="1000">
+          <el-button 
+            type="info" 
+            :icon="Connection" 
+            circle 
+            size="small" 
+            @click="handleGitFetchAll" 
+            :loading="isGitFetching"
+          />
+        </el-tooltip>
+        
         <el-tooltip content="刷新状态" placement="top" :hide-after="1000">
           <el-button 
             type="primary" 

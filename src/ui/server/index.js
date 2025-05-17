@@ -592,10 +592,30 @@ async function startUIServer() {
   // 推送更改
   app.post('/api/push', async (req, res) => {
     try {
-      await execGitCommand('git push');
-      res.json({ success: true });
+      const { stdout } = await execGitCommand('git push');
+      res.json({ success: true, message: stdout });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // 添加git pull API端点
+  app.post('/api/pull', async (req, res) => {
+    try {
+      const { stdout } = await execGitCommand('git pull');
+      res.json({ success: true, message: stdout });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // 添加git fetch --all API端点
+  app.post('/api/fetch-all', async (req, res) => {
+    try {
+      const { stdout } = await execGitCommand('git fetch --all');
+      res.json({ success: true, message: stdout });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
     }
   });
   
