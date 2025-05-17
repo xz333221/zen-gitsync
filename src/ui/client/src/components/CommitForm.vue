@@ -1094,10 +1094,25 @@ git config --global user.email "your.email@example.com"</pre>
             <!-- 普通提交表单 -->
             <div v-if="!isStandardCommit" class="commit-form">
               <div class="description-container">
-                <el-input v-model="commitMessage" :placeholder="placeholder" clearable />
-                <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
-                  @click="openDefaultMessageSettings">
-                </el-button>
+                <el-input 
+                  v-model="commitMessage" 
+                  :placeholder="placeholder" 
+                  type="textarea"
+                  :rows="6"
+                  resize="none"
+                  class="commit-message-input"
+                />
+                <div class="input-actions">
+                  <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
+                    @click="openDefaultMessageSettings">
+                  </el-button>
+                </div>
+              </div>
+              
+              <!-- 添加Git命令预览区域 -->
+              <div class="preview-section">
+                <div class="preview-title">Git提交命令预览：</div>
+                <pre class="preview-content code-command">git commit -m "{{ finalCommitMessage || '<提交信息>' }}"{{ skipHooks ? ' --no-verify' : '' }}</pre>
               </div>
             </div>
 
@@ -1132,7 +1147,7 @@ git config --global user.email "your.email@example.com"</pre>
                 <div class="preview-title">提交信息预览：</div>
                 <pre class="preview-content">{{ finalCommitMessage }}</pre>
 
-                <div class="preview-title" style="margin-top: 10px;">Git命令预览：</div>
+                <div class="preview-title" style="margin-top: 10px;">Git提交命令预览：</div>
                 <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
               </div>
             </div>
@@ -1650,6 +1665,7 @@ git config --global user.email "your.email@example.com"</pre>
   background-color: #f5f7fa;
   padding: 10px;
   border-radius: 4px;
+  margin-top: 10px;
 }
 
 .preview-title {
