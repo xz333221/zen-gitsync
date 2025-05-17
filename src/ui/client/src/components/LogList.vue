@@ -1578,7 +1578,7 @@ async function cherryPickCommit(commit: LogItem | null) {
 
 /* 减小对话框的顶部边距 */
 :deep(.commit-detail-dialog) {
-  --el-dialog-margin-top: 5vh;
+  --el-dialog-margin-top: 7vh;
 }
 
 .history-controls {

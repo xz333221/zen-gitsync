@@ -796,12 +796,12 @@ defineExpose({
     <!-- 文件差异对话框 -->
     <el-dialog
       v-model="diffDialogVisible"
-      width="85%"
-      top="5vh"
+      width="80vw"
+      top="70px"
       destroy-on-close
       class="diff-dialog"
       :show-close="false"
-      style="height: calc(100vh - 150px);"
+      style="height: calc(100vh - 140px);"
       :modal-append-to-body="false"
       :close-on-click-modal="false"
     >

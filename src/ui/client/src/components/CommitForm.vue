@@ -1288,7 +1288,15 @@ git config --global user.email "your.email@example.com"</pre>
       </div>
 
       <!-- 简短描述设置弹窗 -->
-      <el-dialog title="简短描述模板设置" v-model="descriptionDialogVisible" width="80vw" style="height: 80vh">
+      <el-dialog 
+        title="简短描述模板设置" 
+        v-model="descriptionDialogVisible" 
+        width="80vw"
+        top="70px"
+        style="height: calc(100vh - 140px);"
+        :close-on-click-modal="false"
+        class="template-dialog"
+      >
         <div class="template-container">
           <div class="template-form">
             <el-input v-model="newTemplateName" :placeholder="isEditingDescription ? '编辑模板内容' : '输入新模板内容'"
@@ -1320,7 +1328,15 @@ git config --global user.email "your.email@example.com"</pre>
       </el-dialog>
 
       <!-- 作用域设置弹窗 -->
-      <el-dialog title="作用域模板设置" v-model="scopeDialogVisible" width="80%" style="height: 80vh">
+      <el-dialog 
+        title="作用域模板设置" 
+        v-model="scopeDialogVisible" 
+        width="80vw"
+        top="70px" 
+        style="height: calc(100vh - 140px);"
+        :close-on-click-modal="false"
+        class="template-dialog"
+      >
         <div class="template-container">
           <div class="template-form">
             <el-input v-model="newScopeTemplate" :placeholder="isEditingScope ? '编辑作用域模板内容' : '输入新作用域模板'"
@@ -1351,8 +1367,16 @@ git config --global user.email "your.email@example.com"</pre>
       </el-dialog>
 
       <!-- 默认提交信息设置弹窗 -->
-      <el-dialog title="默认提交信息设置" v-model="defaultMessageDialogVisible" width="80%" style="height: 80vh">
-        <div class="template-container">
+      <el-dialog 
+        title="默认提交信息设置" 
+        v-model="defaultMessageDialogVisible" 
+        width="80vw" 
+        top="70px"
+        style="height: calc(100vh - 140px);"
+        :close-on-click-modal="false"
+        class="message-template-dialog"
+      >
+        <div class="template-container message-template-container">
           <div class="template-form">
             <el-input v-model="newDefaultMessage" :placeholder="isEditingMessage ? '编辑模板内容' : '输入新模板内容'" class="template-input" clearable />
             <div class="template-form-buttons">
@@ -1366,27 +1390,38 @@ git config --global user.email "your.email@example.com"</pre>
             </div>
           </div>
 
-          <div class="template-list">
-            <h3>已保存模板</h3>
-            <el-empty v-if="messageTemplates.length === 0" description="暂无保存的模板" />
-            <el-card v-for="(template, index) in messageTemplates" :key="index" class="template-item">
-              <el-row justify="space-between" align="middle" style="width: 100%">
-                <div class="template-content">{{ template }}</div>
-                <div class="template-actions">
-                  <el-button type="primary" size="small" @click="useMessageTemplate(template)">使用</el-button>
-                  <el-button type="warning" size="small" :icon="Edit"
-                    @click="startEditMessageTemplate(template, index)">编辑</el-button>
-                  <el-button type="danger" size="small" @click="deleteMessageTemplate(template)">删除</el-button>
-                </div>
-              </el-row>
-            </el-card>
-          </div>
-          
-          <div class="current-default-message" v-if="defaultCommitMessage">
-            <h3>当前默认提交信息</h3>
-            <el-card>
-              <div class="default-message-content">{{ defaultCommitMessage }}</div>
-            </el-card>
+          <div class="templates-container">
+            <div class="message-templates-list">
+              <h3>已保存模板</h3>
+              <div class="templates-scroll-area">
+                <el-empty v-if="messageTemplates.length === 0" description="暂无保存的模板" />
+                <el-card v-for="(template, index) in messageTemplates" :key="index" class="template-item">
+                  <el-row justify="space-between" align="middle" style="width: 100%">
+                    <div class="template-content">{{ template }}</div>
+                    <div class="template-actions">
+                      <el-button type="primary" size="small" @click="useMessageTemplate(template)">使用</el-button>
+                      <el-button type="warning" size="small" :icon="Edit"
+                        @click="startEditMessageTemplate(template, index)">编辑</el-button>
+                      <el-button type="danger" size="small" @click="deleteMessageTemplate(template)">删除</el-button>
+                    </div>
+                  </el-row>
+                </el-card>
+              </div>
+            </div>
+            
+            <div class="current-default-message">
+              <h3>当前默认提交信息</h3>
+              <el-card class="default-message-card" v-if="defaultCommitMessage">
+                <div class="default-message-content">{{ defaultCommitMessage }}</div>
+              </el-card>
+              <el-empty v-else description="尚未设置默认提交信息" :image-size="100" />
+              
+              <div class="message-help-text">
+                <h4>关于默认提交信息</h4>
+                <p>默认提交信息将在未输入提交信息时自动使用。</p>
+                <p>你可以通过点击左侧模板的<el-tag size="small" type="primary">使用</el-tag>按钮先选择喜欢的模板，然后点击上方<el-tag size="small" type="success">设为默认提交信息</el-tag>按钮保存。</p>
+              </div>
+            </div>
           </div>
         </div>
       </el-dialog>
@@ -1636,15 +1671,22 @@ git config --global user.email "your.email@example.com"</pre>
   flex-direction: column;
   height: calc(85vh - 100px);
   overflow-y: auto;
+  padding: 5px;
 }
 
 .template-form {
   margin-bottom: 20px;
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  border: 1px solid #ebeef5;
 }
 
-.template-list {
-  flex: 1;
-  overflow-y: auto;
+.template-form-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  justify-content: flex-end;
 }
 
 .template-input {
@@ -1656,25 +1698,42 @@ git config --global user.email "your.email@example.com"</pre>
   height: 100%;
 }
 
+.template-list h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+
 .template-item {
   margin-bottom: 10px;
+  transition: all 0.2s ease;
+  border: 1px solid #ebeef5;
 }
 
 .template-item:hover {
   background-color: #f5f7fa;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
 
 .template-content {
   flex-grow: 1;
   margin-right: 10px;
   word-break: break-all;
+  padding: 5px 0;
+  color: #303133;
+  font-weight: 500;
 }
 
 .template-actions {
   display: flex;
-  gap: 5px;
+  gap: 8px;
   justify-content: flex-end;
-  min-width: 120px;
+  min-width: 180px;
   flex-shrink: 0;
 }
 
@@ -1912,18 +1971,109 @@ git config --global user.email "your.email@example.com"</pre>
   }
 }
 
+.message-template-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 278px);
+  overflow: hidden;
+}
+
+.templates-container {
+  display: flex;
+  gap: 20px;
+  margin-top: 15px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.message-templates-list {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #ebeef5;
+  padding-right: 15px;
+  height: calc(100vh - 432px);
+}
+
+.message-templates-list h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+
 .current-default-message {
-  margin-top: 20px;
-  border-top: 1px solid #ebeef5;
-  padding-top: 15px;
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding-left: 15px;
+}
+
+.current-default-message h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.templates-scroll-area {
+  overflow-y: auto;
+  padding-right: 5px;
+  flex: 1;
+}
+
+.default-message-card {
+  margin-bottom: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.default-message-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .default-message-content {
-  padding: 10px;
+  padding: 12px 15px;
   background-color: #f0f9eb;
   border-left: 3px solid #67c23a;
   font-weight: 500;
   word-break: break-all;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  border-radius: 0 4px 4px 0;
+  color: #303133;
+}
+
+.message-help-text {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 15px;
+  font-size: 14px;
+  color: #606266;
+  border-left: 3px solid #909399;
+  margin-top: auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.message-help-text h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #303133;
+  font-size: 15px;
+}
+
+.message-help-text p {
+  margin: 8px 0;
+  line-height: 1.5;
 }
 </style>
 
@@ -1940,5 +2090,61 @@ git config --global user.email "your.email@example.com"</pre>
   border-radius: 4px !important;
   padding: 8px 12px !important;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 弹窗样式优化 */
+.template-dialog .el-dialog__header,
+.message-template-dialog .el-dialog__header {
+  padding: 15px 20px;
+  margin-right: 0;
+  border-bottom: 1px solid #ebeef5;
+  background-color: #f8f9fa;
+}
+
+.template-dialog .el-dialog__title,
+.message-template-dialog .el-dialog__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.template-dialog .el-dialog__body,
+.message-template-dialog .el-dialog__body {
+  padding: 20px;
+}
+
+.template-dialog .el-dialog__headerbtn,
+.message-template-dialog .el-dialog__headerbtn {
+  top: 15px;
+  right: 20px;
+}
+
+.template-dialog .el-input__inner,
+.message-template-dialog .el-input__inner {
+  height: 40px;
+  line-height: 40px;
+}
+
+.template-dialog .el-button,
+.message-template-dialog .el-button {
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.template-dialog .el-card,
+.message-template-dialog .el-card {
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.template-dialog .el-card__body,
+.message-template-dialog .el-card__body {
+  padding: 12px 15px;
+}
+
+.template-dialog .el-empty__image,
+.message-template-dialog .el-empty__image {
+  width: 80px;
+  height: 80px;
 }
 </style>
