@@ -495,7 +495,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
   
-  // 提交更改
+  // 提交更改 (git commit)
   async function commitChanges(message: string, noVerify = false) {
     // 检查是否是Git仓库
     if (!gitStore.isGitRepo) {
@@ -527,6 +527,9 @@ export const useGitLogStore = defineStore('gitLog', () => {
         // 刷新状态和日志
         fetchStatus()
         fetchLog()
+        
+        // 更新分支状态
+        gitStore.getBranchStatus()
         
         return true
       } else {
@@ -572,6 +575,9 @@ export const useGitLogStore = defineStore('gitLog', () => {
         
         // 刷新日志
         fetchLog()
+        
+        // 更新分支状态
+        gitStore.getBranchStatus()
         
         return true
       } else {
@@ -640,6 +646,12 @@ export const useGitLogStore = defineStore('gitLog', () => {
         message: `操作失败: ${(error as Error).message}`,
         type: 'error'
       })
+      
+      // 即使出错也要刷新状态
+      fetchStatus()
+      fetchLog()
+      gitStore.getBranchStatus()
+      
       return false
     }
   }

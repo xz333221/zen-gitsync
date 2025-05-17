@@ -48,6 +48,9 @@ export const useGitStore = defineStore('git', () => {
         branchBehind.value = data.behind || 0;
         hasUpstream.value = data.hasUpstream || false;
         upstreamBranch.value = data.upstreamBranch || '';
+        
+        // 添加调试日志
+        console.log(`分支状态更新：领先 ${branchAhead.value} 个提交，落后 ${branchBehind.value} 个提交，上游分支：${hasUpstream.value ? upstreamBranch.value : '无'}`);
       }
     } catch (error) {
       console.error('获取分支状态失败:', error);

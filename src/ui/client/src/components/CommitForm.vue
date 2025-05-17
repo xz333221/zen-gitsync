@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, computed, watch, onUnmounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection } from "@element-plus/icons-vue";
 import { useGitLogStore } from "../stores/gitLogStore";
@@ -539,6 +539,9 @@ async function commitChanges() {
       // 触发成功事件
       gitLogStore.fetchStatus();
       gitLogStore.fetchLog();
+      
+      // 手动更新分支状态
+      gitStore.getBranchStatus();
     }
   } catch (error) {
     ElMessage({
@@ -563,6 +566,9 @@ async function pushToRemote() {
     await gitLogStore.pushToRemote();
     // 显示推送成功提示
     showPushSuccessIndicator();
+    
+    // 手动更新分支状态
+    gitStore.getBranchStatus();
   } catch (error) {
     ElMessage({
       message: `推送失败: ${(error as Error).message}`,
@@ -656,6 +662,9 @@ async function addCommitAndPush() {
     
     // 确保通过fetchLog获取的是最新的第1页数据
     gitLogStore.fetchLog();
+    
+    // 手动更新分支状态
+    gitStore.getBranchStatus();
     
     // 显示成功动画
     isPushing.value = false
@@ -796,7 +805,11 @@ const needsPull = computed(() => {
 });
 
 const canPush = computed(() => {
-  return gitStore.hasUpstream && (needsPush.value || hasStagedChanges.value);
+  // 修改条件判断：
+  // 1. 如果分支有上游并且领先提交，可以推送
+  // 2. 如果有已暂存的更改但未提交，不能推送
+  // 3. 如果有已提交未推送的更改，可以推送
+  return gitStore.hasUpstream && (needsPush.value || (hasStagedChanges.value && finalCommitMessage.value.trim()));
 });
 
 const canReset = computed(() => {
@@ -821,6 +834,19 @@ onMounted(() => {
   if (savedSkipHooks !== null) {
     skipHooks.value = savedSkipHooks === "true";
   }
+  
+  // 立即获取一次分支状态
+  gitStore.getBranchStatus();
+  
+  // 设置定时器，每5秒更新一次分支状态
+  const branchStatusInterval = setInterval(() => {
+    gitStore.getBranchStatus();
+  }, 5000);
+  
+  // 在组件卸载时清除定时器
+  onUnmounted(() => {
+    clearInterval(branchStatusInterval);
+  });
 });
 </script>
 
