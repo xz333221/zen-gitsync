@@ -1875,7 +1875,7 @@ git config --global user.email "your.email@example.com"</pre>
   position: absolute;
   inset: 0; /* 同时设置top, right, bottom, left为0 */
   margin: auto;
-  background-color: rgba(255, 255, 255, 0.95);
+  background-color: rgba(255, 255, 255, 1);
   border-radius: 12px;
   padding: 20px 30px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
