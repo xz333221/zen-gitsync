@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, onUnmounted } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection } from "@element-plus/icons-vue";
 import { useGitLogStore } from "../stores/gitLogStore";
