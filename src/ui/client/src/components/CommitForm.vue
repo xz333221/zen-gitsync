@@ -831,6 +831,186 @@ const canResetToRemote = computed(() => {
   return gitStore.hasUpstream && (needsPush.value || needsPull.value || hasAnyChanges.value);
 });
 
+// 保存默认提交信息模板
+async function saveMessageTemplate() {
+  if (!newDefaultMessage.value.trim()) {
+    ElMessage({
+      message: "请输入模板内容",
+      type: "warning",
+    });
+    return;
+  }
+
+  try {
+    // 判断是编辑还是新建
+    if (isEditingMessage.value) {
+      // 编辑现有模板
+      await updateMessageTemplate();
+    } else {
+      // 新建模板
+      // 检查是否已存在相同模板
+      if (messageTemplates.value.includes(newDefaultMessage.value)) {
+        ElMessage({
+          message: "该模板已存在",
+          type: "warning",
+        });
+        return;
+      }
+
+      // 添加到本地数组
+      messageTemplates.value.push(newDefaultMessage.value);
+
+      // 保存到服务器
+      const response = await fetch("/api/config/save-template", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          template: newDefaultMessage.value,
+          type: "message",
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        ElMessage({
+          message: "提交信息模板保存成功!",
+          type: "success",
+        });
+        newDefaultMessage.value = "";
+      } else {
+        ElMessage({
+          message: "模板保存失败: " + result.error,
+          type: "error",
+        });
+      }
+    }
+  } catch (error) {
+    ElMessage({
+      message: "模板保存失败: " + (error as Error).message,
+      type: "error",
+    });
+  }
+}
+
+// 更新提交信息模板
+async function updateMessageTemplate() {
+  try {
+    // 先从本地数组中更新
+    if (editingMessageIndex.value >= 0) {
+      // 保存原模板和新模板
+      const oldTemplate = originalMessageTemplate.value;
+      const newTemplate = newDefaultMessage.value;
+
+      // 更新本地数组
+      messageTemplates.value[editingMessageIndex.value] = newTemplate;
+
+      // 调用API更新服务器
+      const response = await fetch("/api/config/update-template", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          oldTemplate,
+          newTemplate,
+          type: "message",
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        ElMessage({
+          message: "提交信息模板更新成功!",
+          type: "success",
+        });
+
+        // 重置编辑状态
+        isEditingMessage.value = false;
+        originalMessageTemplate.value = "";
+        editingMessageIndex.value = -1;
+        newDefaultMessage.value = "";
+      } else {
+        ElMessage({
+          message: "模板更新失败: " + result.error,
+          type: "error",
+        });
+      }
+    }
+  } catch (error) {
+    ElMessage({
+      message: "模板更新失败: " + (error as Error).message,
+      type: "error",
+    });
+  }
+}
+
+// 开始编辑提交信息模板
+function startEditMessageTemplate(template: string, index: number) {
+  isEditingMessage.value = true;
+  originalMessageTemplate.value = template;
+  editingMessageIndex.value = index;
+  newDefaultMessage.value = template;
+}
+
+// 取消编辑提交信息模板
+function cancelEditMessageTemplate() {
+  isEditingMessage.value = false;
+  originalMessageTemplate.value = "";
+  editingMessageIndex.value = -1;
+  newDefaultMessage.value = "";
+}
+
+// 删除提交信息模板
+async function deleteMessageTemplate(template: string) {
+  try {
+    // 从本地数组中删除
+    const index = messageTemplates.value.indexOf(template);
+    if (index !== -1) {
+      messageTemplates.value.splice(index, 1);
+    }
+
+    // 从服务器删除
+    const response = await fetch("/api/config/delete-template", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        template,
+        type: "message",
+      }),
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      ElMessage({
+        message: "提交信息模板删除成功!",
+        type: "success",
+      });
+    } else {
+      ElMessage({
+        message: "模板删除失败: " + result.error,
+        type: "error",
+      });
+    }
+  } catch (error) {
+    ElMessage({
+      message: "模板删除失败: " + (error as Error).message,
+      type: "error",
+    });
+  }
+}
+
+// 使用默认提交信息模板
+function useMessageTemplate(template: string) {
+  // 设置为当前提交信息
+  commitMessage.value = template;
+  // 设置为默认提交信息编辑框的内容
+  newDefaultMessage.value = template;
+}
+
 onMounted(() => {
   loadConfig();
 
