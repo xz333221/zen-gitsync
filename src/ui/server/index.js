@@ -659,7 +659,22 @@ async function startUIServer() {
       const { stdout } = await execGitCommand('git pull');
       res.json({ success: true, message: stdout });
     } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+      // 改进错误处理，检查是否需要合并
+      const errorMsg = error.message || '';
+      const needsMerge = errorMsg.includes('merge') || 
+                         errorMsg.includes('需要合并') || 
+                         errorMsg.includes('CONFLICT') ||
+                         errorMsg.includes('冲突');
+      
+      // 返回更详细的错误信息和标记
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        needsMerge: needsMerge,
+        // 包含完整的错误输出
+        fullError: error.stderr || error.message,
+        pullOutput: error.stdout || ''
+      });
     }
   });
   

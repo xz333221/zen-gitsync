@@ -340,10 +340,19 @@ export const useGitStore = defineStore('git', () => {
         await getBranchStatus();
         return true;
       } else {
-        ElMessage({
-          message: `拉取失败: ${result.error}`,
-          type: 'error'
-        });
+        // 改进错误提示
+        if (result.needsMerge) {
+          ElMessage({
+            message: `需要合并更改: ${result.pullOutput || '存在冲突需要手动解决'}`,
+            type: 'warning',
+            duration: 5000
+          });
+        } else {
+          ElMessage({
+            message: `拉取失败: ${result.error}`,
+            type: 'error'
+          });
+        }
         return false;
       }
     } catch (error) {
