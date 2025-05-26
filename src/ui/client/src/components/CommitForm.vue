@@ -707,10 +707,11 @@ async function saveDefaultMessage() {
       defaultCommitMessage.value = newDefaultMessage.value;
       placeholder.value = `输入提交信息 (默认: ${newDefaultMessage.value})`;
       
-      ElMessage({
-        message: "默认提交信息已保存",
-        type: "success",
-      });
+      // configStore 已经显示了成功消息，这里不需要重复显示
+      // ElMessage({
+      //   message: "默认提交信息已保存",
+      //   type: "success",
+      // });
       
       // 关闭对话框
       defaultMessageDialogVisible.value = false;
