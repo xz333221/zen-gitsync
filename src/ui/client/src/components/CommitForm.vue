@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection } from "@element-plus/icons-vue";
+import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown } from "@element-plus/icons-vue";
 import { useGitLogStore } from "../stores/gitLogStore";
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
@@ -52,6 +52,9 @@ const newDefaultMessage = ref("");
 
 // 跳过钩子
 const skipHooks = ref(false);
+
+// 添加控制正文和页脚显示的状态变量
+const showAdvancedFields = ref(false);
 
 // 提交类型选项
 const commitTypeOptions = [
@@ -1057,15 +1060,17 @@ git config --global user.email "your.email@example.com"</pre>
             <!-- 标准化提交表单 -->
             <div v-else class="standard-commit-form">
               <div class="standard-commit-header">
-                <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
-                  <el-option v-for="item in commitTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-                </el-select>
+                <div class="type-scope-container">
+                  <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
+                    <el-option v-for="item in commitTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
 
-                <div class="scope-container">
-                  <el-input v-model="commitScope" placeholder="作用域（可选）" class="scope-input" clearable />
-                  <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
-                    @click="openScopeSettings">
-                  </el-button>
+                  <div class="scope-wrapper">
+                    <el-input v-model="commitScope" placeholder="作用域（可选）" class="scope-input" clearable />
+                    <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
+                      @click="openScopeSettings">
+                    </el-button>
+                  </div>
                 </div>
 
                 <div class="description-container">
@@ -1076,10 +1081,21 @@ git config --global user.email "your.email@example.com"</pre>
                 </div>
               </div>
 
-              <el-input v-model="commitBody" type="textarea" :rows="4" placeholder="正文（可选）：详细描述本次提交的内容和原因" class="body-input"
-                clearable />
+              <!-- 添加展开/收起高级选项的控制按钮 -->
+              <div class="advanced-options-toggle" @click="showAdvancedFields = !showAdvancedFields">
+                <span>{{ showAdvancedFields ? '收起' : '正文及页脚' }}</span>
+                <el-icon class="toggle-icon" :class="{ 'is-active': showAdvancedFields }">
+                  <arrow-down />
+                </el-icon>
+              </div>
 
-              <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
+              <!-- 使用过渡效果包装高级字段 -->
+              <div v-show="showAdvancedFields" class="advanced-fields">
+                <el-input v-model="commitBody" type="textarea" :rows="4" placeholder="正文（可选）：详细描述本次提交的内容和原因" class="body-input"
+                  clearable />
+
+                <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
+              </div>
 
               <div class="preview-section">
                 <div class="preview-title">提交信息预览：</div>
@@ -1569,19 +1585,22 @@ git config --global user.email "your.email@example.com"</pre>
   width: 100%;
 }
 
-.type-select {
+.type-scope-container {
+  display: flex;
+  gap: 10px;
   width: 100%;
+  margin-bottom: 10px;
 }
 
-.scope-container {
+.type-select {
+  width: 35%; /* 提交类型占35%宽度 */
+}
+
+.scope-wrapper {
   display: flex;
   align-items: center;
   gap: 5px;
-  width: 100%;
-}
-
-.scope-input {
-  flex-grow: 1;
+  width: 65%; /* 作用域占65%宽度 */
 }
 
 .description-container {
@@ -1591,7 +1610,7 @@ git config --global user.email "your.email@example.com"</pre>
   width: 100%;
 }
 
-.description-input {
+.scope-input, .description-input {
   flex-grow: 1;
 }
 
@@ -1603,7 +1622,6 @@ git config --global user.email "your.email@example.com"</pre>
   background-color: #f5f7fa;
   padding: 10px;
   border-radius: 4px;
-  margin-top: 10px;
 }
 
 .preview-title {
@@ -2028,6 +2046,51 @@ git config --global user.email "your.email@example.com"</pre>
 .message-help-text p {
   margin: 8px 0;
   line-height: 1.5;
+}
+
+.advanced-options-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.advanced-options-toggle:hover {
+  background-color: #ebeef5;
+  color: #409EFF;
+}
+
+.toggle-icon {
+  margin-left: 8px;
+  transition: transform 0.3s ease;
+}
+
+.toggle-icon.is-active {
+  transform: rotate(180deg);
+}
+
+.advanced-fields {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  animation: fade-in 0.3s ease-in-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
 
