@@ -450,10 +450,11 @@ onMounted(() => {
   // 如果已有初始目录，则只需加载状态
   loadStatus()
   
+  // 不要在这里重复调用getBranchStatus，因为loadStatus已经包含了这个调用
   // 如果是Git仓库，确保分支状态也被加载
-  if (gitStore.isGitRepo) {
-    gitStore.getBranchStatus()
-  }
+  // if (gitStore.isGitRepo) {
+  //   gitStore.getBranchStatus()
+  // }
 })
 
 // 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate

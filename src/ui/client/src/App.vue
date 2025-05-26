@@ -60,9 +60,11 @@ onMounted(async () => {
     
     // 只有是Git仓库的情况下才加载Git相关信息
     if (gitStore.isGitRepo) {
-      // 只获取分支和用户信息，不重复获取日志
+      // 获取分支信息时，同时获取分支状态
+      await gitStore.getCurrentBranch(false) // 不跳过分支状态获取，但会使用防抖
+      
+      // 并行获取其他信息
       await Promise.all([
-        gitStore.getCurrentBranch(),
         gitStore.getAllBranches(),
         gitStore.getUserInfo()
       ])
