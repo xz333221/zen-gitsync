@@ -4,9 +4,11 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection } from "@element-plus/icons-vue";
 import { useGitLogStore } from "../stores/gitLogStore";
 import { useGitStore } from "../stores/gitStore";
+import { useConfigStore } from "../stores/configStore";
 
 const gitLogStore = useGitLogStore();
 const gitStore = useGitStore();
+const configStore = useConfigStore();
 const commitMessage = ref("");
 const isPushing = ref(false);
 // 添加提交并推送的状态变量
@@ -119,28 +121,29 @@ const gitCommandPreview = computed(() => {
 // 加载配置
 async function loadConfig() {
   try {
-    const response = await fetch("/api/config/getConfig");
-    const config = await response.json();
-    placeholder.value = `输入提交信息 (默认: ${config.defaultCommitMessage})`;
-    // 保存默认提交信息到变量中，以便后续使用
-    defaultCommitMessage.value = config.defaultCommitMessage || "";
+    const config = await configStore.loadConfig();
+    if (config) {
+      placeholder.value = `输入提交信息 (默认: ${config.defaultCommitMessage})`;
+      // 保存默认提交信息到变量中，以便后续使用
+      defaultCommitMessage.value = config.defaultCommitMessage || "";
 
-    // 加载描述模板
-    if (
-      config.descriptionTemplates &&
-      Array.isArray(config.descriptionTemplates)
-    ) {
-      descriptionTemplates.value = config.descriptionTemplates;
-    }
+      // 加载描述模板
+      if (
+        config.descriptionTemplates &&
+        Array.isArray(config.descriptionTemplates)
+      ) {
+        descriptionTemplates.value = config.descriptionTemplates;
+      }
 
-    // 加载作用域模板
-    if (config.scopeTemplates && Array.isArray(config.scopeTemplates)) {
-      scopeTemplates.value = config.scopeTemplates;
-    }
-    
-    // 加载提交信息模板
-    if (config.messageTemplates && Array.isArray(config.messageTemplates)) {
-      messageTemplates.value = config.messageTemplates;
+      // 加载作用域模板
+      if (config.scopeTemplates && Array.isArray(config.scopeTemplates)) {
+        scopeTemplates.value = config.scopeTemplates;
+      }
+      
+      // 加载提交信息模板
+      if (config.messageTemplates && Array.isArray(config.messageTemplates)) {
+        messageTemplates.value = config.messageTemplates;
+      }
     }
   } catch (error) {
     console.error("加载配置失败:", error);
@@ -173,90 +176,67 @@ async function saveDescriptionTemplate() {
         return;
       }
 
-      // 添加到本地数组
-      descriptionTemplates.value.push(newTemplateName.value);
-
-      // 保存到服务器
-      const response = await fetch("/api/config/save-template", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          template: newTemplateName.value,
-          type: "description",
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        ElMessage({
-          message: "模板保存成功!",
-          type: "success",
-        });
-        newTemplateName.value = "";
-      } else {
-        ElMessage({
-          message: "模板保存失败: " + result.error,
-          type: "error",
-        });
+      // 使用 configStore 保存模板
+      const success = await configStore.saveTemplate(newTemplateName.value, 'description');
+      
+      if (success) {
+        // 确保本地数组同步更新
+        if (!descriptionTemplates.value.includes(newTemplateName.value)) {
+          descriptionTemplates.value.push(newTemplateName.value);
+        }
+        // 强制更新视图
+        descriptionTemplates.value = [...descriptionTemplates.value];
+        
+        // configStore已经显示了成功消息，这里不需要重复操作
+        newTemplateName.value = ""; // 清空输入框，但不关闭弹窗
       }
     }
   } catch (error) {
     ElMessage({
-      message: "模板保存失败: " + (error as Error).message,
+      message: `保存模板失败: ${(error as Error).message}`,
       type: "error",
     });
   }
 }
 
-// 编辑描述模板
+// 更新描述模板
 async function updateDescriptionTemplate() {
+  if (!newTemplateName.value.trim()) {
+    ElMessage({
+      message: "请输入模板内容",
+      type: "warning",
+    });
+    return;
+  }
+
   try {
-    // 先从本地数组中更新
-    if (editingDescriptionIndex.value >= 0) {
-      // 保存原模板和新模板
-      const oldTemplate = originalDescriptionTemplate.value;
-      const newTemplate = newTemplateName.value;
+    // 使用 configStore 更新模板
+    const success = await configStore.updateTemplate(
+      originalDescriptionTemplate.value,
+      newTemplateName.value,
+      'description'
+    );
 
-      // 更新本地数组
-      descriptionTemplates.value[editingDescriptionIndex.value] = newTemplate;
-
-      // 调用API更新服务器
-      const response = await fetch("/api/config/update-template", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          oldTemplate,
-          newTemplate,
-          type: "description",
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        ElMessage({
-          message: "模板更新成功!",
-          type: "success",
-        });
-
-        // 重置编辑状态
-        isEditingDescription.value = false;
-        originalDescriptionTemplate.value = "";
-        editingDescriptionIndex.value = -1;
-        newTemplateName.value = "";
-      } else {
-        ElMessage({
-          message: "模板更新失败: " + result.error,
-          type: "error",
-        });
+    if (success) {
+      // 确保本地数组同步更新
+      const index = descriptionTemplates.value.indexOf(originalDescriptionTemplate.value);
+      if (index !== -1) {
+        descriptionTemplates.value[index] = newTemplateName.value;
       }
+      // 强制更新视图
+      descriptionTemplates.value = [...descriptionTemplates.value];
+      
+      // configStore已经更新了本地数组并显示了成功消息，这里不需要重复操作
+      
+      // 重置编辑状态
+      isEditingDescription.value = false;
+      originalDescriptionTemplate.value = "";
+      editingDescriptionIndex.value = -1;
+      newTemplateName.value = "";
     }
   } catch (error) {
     ElMessage({
-      message: "模板更新失败: " + (error as Error).message,
+      message: `更新模板失败: ${(error as Error).message}`,
       type: "error",
     });
   }
@@ -304,38 +284,24 @@ async function saveScopeTemplate() {
         return;
       }
 
-      // 添加到本地数组
-      scopeTemplates.value.push(newScopeTemplate.value);
-
-      // 保存到服务器
-      const response = await fetch("/api/config/save-template", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          template: newScopeTemplate.value,
-          type: "scope",
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        ElMessage({
-          message: "作用域模板保存成功!",
-          type: "success",
-        });
-        newScopeTemplate.value = "";
-      } else {
-        ElMessage({
-          message: "作用域模板保存失败: " + result.error,
-          type: "error",
-        });
+      // 使用 configStore 保存模板
+      const success = await configStore.saveTemplate(newScopeTemplate.value, 'scope');
+      
+      if (success) {
+        // 确保本地数组同步更新
+        if (!scopeTemplates.value.includes(newScopeTemplate.value)) {
+          scopeTemplates.value.push(newScopeTemplate.value);
+        }
+        // 强制更新视图
+        scopeTemplates.value = [...scopeTemplates.value];
+        
+        // configStore已经显示了成功消息，这里不需要重复操作
+        newScopeTemplate.value = ""; // 清空输入框，但不关闭弹窗
       }
     }
   } catch (error) {
     ElMessage({
-      message: "作用域模板保存失败: " + (error as Error).message,
+      message: `保存模板失败: ${(error as Error).message}`,
       type: "error",
     });
   }
@@ -343,51 +309,42 @@ async function saveScopeTemplate() {
 
 // 更新作用域模板
 async function updateScopeTemplate() {
+  if (!newScopeTemplate.value.trim()) {
+    ElMessage({
+      message: "请输入模板内容",
+      type: "warning",
+    });
+    return;
+  }
+
   try {
-    // 先从本地数组中更新
-    if (editingScopeIndex.value >= 0) {
-      // 保存原模板和新模板
-      const oldTemplate = originalScopeTemplate.value;
-      const newTemplate = newScopeTemplate.value;
+    // 使用 configStore 更新模板
+    const success = await configStore.updateTemplate(
+      originalScopeTemplate.value,
+      newScopeTemplate.value,
+      'scope'
+    );
 
-      // 更新本地数组
-      scopeTemplates.value[editingScopeIndex.value] = newTemplate;
-
-      // 调用API更新服务器
-      const response = await fetch("/api/config/update-template", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          oldTemplate,
-          newTemplate,
-          type: "scope",
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        ElMessage({
-          message: "作用域模板更新成功!",
-          type: "success",
-        });
-
-        // 重置编辑状态
-        isEditingScope.value = false;
-        originalScopeTemplate.value = "";
-        editingScopeIndex.value = -1;
-        newScopeTemplate.value = "";
-      } else {
-        ElMessage({
-          message: "作用域模板更新失败: " + result.error,
-          type: "error",
-        });
+    if (success) {
+      // 确保本地数组同步更新
+      const index = scopeTemplates.value.indexOf(originalScopeTemplate.value);
+      if (index !== -1) {
+        scopeTemplates.value[index] = newScopeTemplate.value;
       }
+      // 强制更新视图
+      scopeTemplates.value = [...scopeTemplates.value];
+      
+      // configStore已经更新了本地数组并显示了成功消息，这里不需要重复操作
+      
+      // 重置编辑状态
+      isEditingScope.value = false;
+      originalScopeTemplate.value = "";
+      editingScopeIndex.value = -1;
+      newScopeTemplate.value = "";
     }
   } catch (error) {
     ElMessage({
-      message: "作用域模板更新失败: " + (error as Error).message,
+      message: `更新模板失败: ${(error as Error).message}`,
       type: "error",
     });
   }
@@ -412,39 +369,37 @@ function cancelEditScopeTemplate() {
 // 删除描述模板
 async function deleteDescriptionTemplate(template: string) {
   try {
-    // 从本地数组中删除
-    const index = descriptionTemplates.value.indexOf(template);
-    if (index !== -1) {
-      descriptionTemplates.value.splice(index, 1);
-    }
+    // 确认删除
+    await ElMessageBox.confirm(
+      `确定要删除描述模板 "${template}" 吗？`,
+      "删除确认",
+      {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
+      }
+    );
 
-    // 从服务器删除
-    const response = await fetch("/api/config/delete-template", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        template,
-        type: "description",
-      }),
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      ElMessage({
-        message: "模板删除成功!",
-        type: "success",
-      });
-    } else {
-      ElMessage({
-        message: "模板删除失败: " + result.error,
-        type: "error",
-      });
+    // 使用 configStore 删除模板
+    const success = await configStore.deleteTemplate(template, 'description');
+    
+    if (success) {
+      // 确保本地数组同步更新
+      const index = descriptionTemplates.value.indexOf(template);
+      if (index !== -1) {
+        descriptionTemplates.value.splice(index, 1);
+      }
+      // 强制更新视图
+      descriptionTemplates.value = [...descriptionTemplates.value];
     }
   } catch (error) {
+    if (error === "cancel") {
+      // 用户取消删除，不做任何操作
+      return;
+    }
+    
     ElMessage({
-      message: "模板删除失败: " + (error as Error).message,
+      message: `删除模板失败: ${(error as Error).message}`,
       type: "error",
     });
   }
@@ -453,39 +408,37 @@ async function deleteDescriptionTemplate(template: string) {
 // 删除作用域模板
 async function deleteScopeTemplate(template: string) {
   try {
-    // 从本地数组中删除
-    const index = scopeTemplates.value.indexOf(template);
-    if (index !== -1) {
-      scopeTemplates.value.splice(index, 1);
-    }
+    // 确认删除
+    await ElMessageBox.confirm(
+      `确定要删除作用域模板 "${template}" 吗？`,
+      "删除确认",
+      {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
+      }
+    );
 
-    // 从服务器删除
-    const response = await fetch("/api/config/delete-template", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        template,
-        type: "scope",
-      }),
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      ElMessage({
-        message: "作用域模板删除成功!",
-        type: "success",
-      });
-    } else {
-      ElMessage({
-        message: "作用域模板删除失败: " + result.error,
-        type: "error",
-      });
+    // 使用 configStore 删除模板
+    const success = await configStore.deleteTemplate(template, 'scope');
+    
+    if (success) {
+      // 确保本地数组同步更新
+      const index = scopeTemplates.value.indexOf(template);
+      if (index !== -1) {
+        scopeTemplates.value.splice(index, 1);
+      }
+      // 强制更新视图
+      scopeTemplates.value = [...scopeTemplates.value];
     }
   } catch (error) {
+    if (error === "cancel") {
+      // 用户取消删除，不做任何操作
+      return;
+    }
+    
     ElMessage({
-      message: "作用域模板删除失败: " + (error as Error).message,
+      message: `删除模板失败: ${(error as Error).message}`,
       type: "error",
     });
   }
@@ -746,39 +699,25 @@ async function saveDefaultMessage() {
   }
 
   try {
-    // 保存到服务器
-    const response = await fetch("/api/config/saveDefaultMessage", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        defaultCommitMessage: newDefaultMessage.value,
-      }),
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      // 更新本地状态
+    // 使用 configStore 保存默认提交信息
+    const success = await configStore.saveDefaultMessage(newDefaultMessage.value);
+    
+    if (success) {
+      // 更新本地默认提交信息
       defaultCommitMessage.value = newDefaultMessage.value;
-      placeholder.value = `输入提交信息 (默认: ${defaultCommitMessage.value})`;
+      placeholder.value = `输入提交信息 (默认: ${newDefaultMessage.value})`;
       
       ElMessage({
-        message: "默认提交信息保存成功!",
+        message: "默认提交信息已保存",
         type: "success",
       });
       
-      // 不再关闭弹窗，而是保留当前编辑状态
-      // defaultMessageDialogVisible.value = false;
-    } else {
-      ElMessage({
-        message: "保存失败: " + result.error,
-        type: "error",
-      });
+      // 关闭对话框
+      defaultMessageDialogVisible.value = false;
     }
   } catch (error) {
     ElMessage({
-      message: "保存失败: " + (error as Error).message,
+      message: `保存默认提交信息失败: ${(error as Error).message}`,
       type: "error",
     });
   }
@@ -1026,8 +965,6 @@ onMounted(() => {
     skipHooks.value = savedSkipHooks === "true";
   }
   
-  // 获取一次分支状态
-  gitStore.getBranchStatus();
 });
 </script>
 

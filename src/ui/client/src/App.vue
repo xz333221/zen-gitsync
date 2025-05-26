@@ -7,6 +7,7 @@ import { ElMessage } from 'element-plus'
 import { Plus, Setting } from '@element-plus/icons-vue'
 import logo from './assets/logo.svg'
 import { useGitStore } from './stores/gitStore'
+import { useConfigStore } from './stores/configStore'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -15,6 +16,8 @@ const gitStatusRef = ref<InstanceType<typeof GitStatus> | null>(null)
 
 // 使用Git Store
 const gitStore = useGitStore()
+// 使用Config Store
+const configStore = useConfigStore()
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
@@ -23,9 +26,10 @@ const currentDirectory = ref('')
 // 加载配置
 async function loadConfig() {
   try {
-    const response = await fetch('/api/config/getConfig')
-    const config = await response.json()
-    configInfo.value = `默认提交信息: ${config.defaultCommitMessage}`
+    const config = await configStore.loadConfig()
+    if (config) {
+      configInfo.value = `默认提交信息: ${config.defaultCommitMessage}`
+    }
   } catch (error) {
     console.error('加载配置失败:', error)
   }
@@ -62,7 +66,7 @@ onMounted(async () => {
     if (gitStore.isGitRepo) {
       // 并行获取所有Git信息，确保每个API只调用一次
       await Promise.all([
-        gitStore.getCurrentBranch(),  // 获取当前分支，内部会调用 getBranchStatus
+        gitStore.getCurrentBranch(),  // 获取当前分支
         gitStore.getAllBranches(),    // 获取所有分支
         gitStore.getUserInfo()        // 获取用户信息
       ])

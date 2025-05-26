@@ -108,10 +108,7 @@ export const useGitStore = defineStore('git', () => {
       const data = await response.json()
       if (data.branch) {
         currentBranch.value = data.branch
-        // 获取分支状态信息，但可以选择跳过
-        if (!skipBranchStatus) {
-          await getBranchStatus();
-        }
+        // 不再在这里调用 getBranchStatus
       }
     } catch (error) {
       console.error('获取分支信息失败:', error)
@@ -159,8 +156,9 @@ export const useGitStore = defineStore('git', () => {
           type: 'success'
         })
         
-        // 刷新状态
-        getCurrentBranch()
+        // 分别刷新分支信息和分支状态
+        await getCurrentBranch()
+        await getBranchStatus()
         
         return true
       } else {
@@ -226,9 +224,10 @@ export const useGitStore = defineStore('git', () => {
           type: 'success'
         })
         
-        // 刷新状态
-        getCurrentBranch()
-        getAllBranches()
+        // 分别刷新分支信息和状态
+        await getCurrentBranch()
+        await getBranchStatus()
+        await getAllBranches()
         
         return true
       } else {
@@ -246,25 +245,6 @@ export const useGitStore = defineStore('git', () => {
       return false
     } finally {
       isCreatingBranch.value = false
-    }
-  }
-
-  // 初始化加载
-  async function loadInitialData() {
-    // 先检查当前目录是否是Git仓库
-    const isRepo = await checkGitRepo()
-    
-    // 只有是Git仓库的情况下才加载Git相关信息
-    if (isRepo) {
-      getCurrentBranch()
-      getAllBranches(true) // 强制刷新分支列表
-      getUserInfo()
-    } else {
-      // 清空所有Git相关状态
-      currentBranch.value = ''
-      allBranches.value = []
-      userName.value = ''
-      userEmail.value = ''
     }
   }
 
@@ -454,7 +434,6 @@ export const useGitStore = defineStore('git', () => {
     changeBranch,
     getUserInfo,
     createBranch,
-    loadInitialData,
     clearUserConfig,
     restoreUserConfig,
     getBranchStatus,
