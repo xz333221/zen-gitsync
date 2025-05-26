@@ -395,8 +395,7 @@ onMounted(() => {
     // 加载所有可能的作者列表
     fetchAllAuthors()
     
-    // 加载所有可能的分支列表
-    fetchAllBranches()
+    // 不再在这里直接设置 availableBranches，改为通过 watch 监听 gitStore.allBranches 的变化
   } else {
     errorMessage.value = '当前目录不是Git仓库'
   }
@@ -408,6 +407,17 @@ onMounted(() => {
     }, 500) // 给表格足够的时间来渲染
   })
 })
+
+// 添加对 gitStore.allBranches 的监听
+watch(() => gitStore.allBranches, (newBranches) => {
+  if (newBranches && newBranches.length > 0) {
+    availableBranches.value = [...newBranches].sort()
+    console.log(`分支数据更新，共 ${availableBranches.value.length} 个分支`)
+  } else {
+    availableBranches.value = []
+    console.warn('gitStore 中没有分支数据')
+  }
+}, { immediate: true }) // immediate: true 确保组件创建时立即执行一次
 
 onBeforeUnmount(() => {
   // 清除表格滚动监听
@@ -725,16 +735,17 @@ function extractAuthorsFromLogs() {
 async function fetchAllBranches() {
   try {
     console.log('获取所有可用分支...')
-    const response = await fetch('/api/branches')
-    const result = await response.json()
     
-    if (result.branches && Array.isArray(result.branches)) {
+    // 直接调用 gitStore 中的方法获取分支列表
+    await gitStore.getAllBranches()
+    
+    // 从 gitStore 中获取分支列表
+    if (gitStore.allBranches.length > 0) {
       // 更新可用分支列表
-      availableBranches.value = result.branches.sort()
+      availableBranches.value = [...gitStore.allBranches].sort()
       console.log(`获取到${availableBranches.value.length}个分支`)
     } else {
-      console.warn('获取分支列表失败')
-      extractBranchesFromLogs()
+      console.warn('gitStore中没有分支数据')
     }
   } catch (error) {
     console.error('获取分支列表失败:', error)

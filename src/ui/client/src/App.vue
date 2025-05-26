@@ -60,16 +60,12 @@ onMounted(async () => {
     
     // 只有是Git仓库的情况下才加载Git相关信息
     if (gitStore.isGitRepo) {
-      // 获取分支信息时，同时获取分支状态
-      await gitStore.getCurrentBranch(false) // 不跳过分支状态获取，但会使用防抖
-      
-      // 并行获取其他信息
+      // 并行获取所有Git信息，确保每个API只调用一次
       await Promise.all([
-        gitStore.getAllBranches(),
-        gitStore.getUserInfo()
+        gitStore.getCurrentBranch(),  // 获取当前分支，内部会调用 getBranchStatus
+        gitStore.getAllBranches(),    // 获取所有分支
+        gitStore.getUserInfo()        // 获取用户信息
       ])
-      
-      // 日志信息通过LogList组件直接加载即可，避免重复调用
     } else {
       ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
     }

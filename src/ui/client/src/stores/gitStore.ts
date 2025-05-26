@@ -24,6 +24,8 @@ export const useGitStore = defineStore('git', () => {
   const upstreamBranch = ref('') // 上游分支名称
   // 添加上次获取分支状态的时间戳
   const lastBranchStatusTime = ref(0)
+  // 添加上次获取分支列表的时间戳
+  const lastBranchesTime = ref(0)
   
   // 添加重置方法
   function $reset() {
@@ -40,20 +42,14 @@ export const useGitStore = defineStore('git', () => {
     hasUpstream.value = false
     upstreamBranch.value = ''
     lastBranchStatusTime.value = 0
+    lastBranchesTime.value = 0
   }
 
   // 获取分支状态（领先/落后远程）
   async function getBranchStatus(force = false) {
     if (!isGitRepo.value) return;
     
-    // 如果距离上次获取不到1秒且不是强制刷新，则跳过
-    const now = Date.now();
-    if (!force && now - lastBranchStatusTime.value < 1000) {
-      console.log('使用缓存的分支状态，跳过API调用');
-      return;
-    }
-    
-    // 简化逻辑，移除防抖，直接发起请求
+    // 移除时间戳缓存判断，简化逻辑
     try {
       console.log('获取分支状态...');
       const response = await fetch('/api/branch-status');
@@ -123,12 +119,19 @@ export const useGitStore = defineStore('git', () => {
   }
 
   // 获取所有分支
-  async function getAllBranches() {
+  async function getAllBranches(force = false) {
+    if (!isGitRepo.value) return;
+    
+    // 移除时间戳缓存判断，简化逻辑
     try {
+      console.log('获取所有分支...');
       const response = await fetch('/api/branches')
       const data = await response.json()
       if (data.branches && Array.isArray(data.branches)) {
         allBranches.value = data.branches
+        // 更新获取时间戳
+        lastBranchesTime.value = Date.now();
+        console.log(`获取到${data.branches.length}个分支`);
       }
     } catch (error) {
       console.error('获取所有分支信息失败:', error)
@@ -254,7 +257,7 @@ export const useGitStore = defineStore('git', () => {
     // 只有是Git仓库的情况下才加载Git相关信息
     if (isRepo) {
       getCurrentBranch()
-      getAllBranches()
+      getAllBranches(true) // 强制刷新分支列表
       getUserInfo()
     } else {
       // 清空所有Git相关状态
@@ -441,6 +444,7 @@ export const useGitStore = defineStore('git', () => {
     hasUpstream,
     upstreamBranch,
     lastBranchStatusTime,
+    lastBranchesTime,
     
     // 方法
     $reset,
