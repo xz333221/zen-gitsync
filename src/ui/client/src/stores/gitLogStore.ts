@@ -96,15 +96,6 @@ export const useGitLogStore = defineStore('gitLog', () => {
         if (data.porcelain !== undefined) {
           parseStatusPorcelain(data.porcelain)
         }
-        
-        // 根据文件列表判断是否需要更新日志
-        const hasChanges = fileList.value.length > 0
-        
-        // 如果有变化，更新状态
-        if (hasChanges) {
-          // 自动刷新日志，但不要显示消息通知
-          fetchLog(false)
-        }
       })
       
       // 监听监控状态
