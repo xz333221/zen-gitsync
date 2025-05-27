@@ -624,9 +624,6 @@ async function addCommitAndPush() {
     // 清空提交信息
     clearCommitFields();
 
-    // 确保通过fetchLog获取的是最新的第1页数据
-    gitLogStore.fetchLog();
-    
     // 显示成功动画
     isPushing.value = false
     showPushSuccessIndicator();
