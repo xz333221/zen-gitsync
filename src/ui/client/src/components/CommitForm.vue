@@ -624,14 +624,8 @@ async function addCommitAndPush() {
     // 清空提交信息
     clearCommitFields();
 
-    // 触发成功事件
-    gitStore.getCurrentBranch();
-    
     // 确保通过fetchLog获取的是最新的第1页数据
     gitLogStore.fetchLog();
-    
-    // 手动更新分支状态
-    gitStore.getBranchStatus();
     
     // 显示成功动画
     isPushing.value = false
