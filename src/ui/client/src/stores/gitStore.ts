@@ -46,7 +46,7 @@ export const useGitStore = defineStore('git', () => {
   }
 
   // 获取分支状态（领先/落后远程）
-  async function getBranchStatus(force = false) {
+  async function getBranchStatus() {
     if (!isGitRepo.value) return;
     
     // 移除时间戳缓存判断，简化逻辑
@@ -102,7 +102,7 @@ export const useGitStore = defineStore('git', () => {
   }
 
   // 获取当前分支
-  async function getCurrentBranch(skipBranchStatus = false) {
+  async function getCurrentBranch() {
     try {
       const response = await fetch('/api/branch')
       const data = await response.json()
@@ -116,7 +116,7 @@ export const useGitStore = defineStore('git', () => {
   }
 
   // 获取所有分支
-  async function getAllBranches(force = false) {
+  async function getAllBranches() {
     if (!isGitRepo.value) return;
     
     // 移除时间戳缓存判断，简化逻辑

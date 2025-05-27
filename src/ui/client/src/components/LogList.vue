@@ -731,49 +731,29 @@ function extractAuthorsFromLogs() {
   console.log(`从现有日志中提取了${availableAuthors.value.length}位作者`)
 }
 
-// 添加获取所有分支的函数
-async function fetchAllBranches() {
-  try {
-    console.log('获取所有可用分支...')
+// // 添加获取所有分支的函数
+// async function fetchAllBranches() {
+//   try {
+//     console.log('获取所有可用分支...')
     
-    // 直接调用 gitStore 中的方法获取分支列表
-    await gitStore.getAllBranches()
+//     // 直接调用 gitStore 中的方法获取分支列表
+//     await gitStore.getAllBranches()
     
-    // 从 gitStore 中获取分支列表
-    if (gitStore.allBranches.length > 0) {
-      // 更新可用分支列表
-      availableBranches.value = [...gitStore.allBranches].sort()
-      console.log(`获取到${availableBranches.value.length}个分支`)
-    } else {
-      console.warn('gitStore中没有分支数据')
-    }
-  } catch (error) {
-    console.error('获取分支列表失败:', error)
-    extractBranchesFromLogs()
-  }
-}
+//     // 从 gitStore 中获取分支列表
+//     if (gitStore.allBranches.length > 0) {
+//       // 更新可用分支列表
+//       availableBranches.value = [...gitStore.allBranches].sort()
+//       console.log(`获取到${availableBranches.value.length}个分支`)
+//     } else {
+//       console.warn('gitStore中没有分支数据')
+//     }
+//   } catch (error) {
+//     console.error('获取分支列表失败:', error)
+//     extractBranchesFromLogs()
+//   }
+// }
 
-// 从日志中提取分支
-function extractBranchesFromLogs() {
-  // 从当前加载的日志中提取唯一的分支名称
-  const branches = new Set<string>()
-  
-  logs.value.forEach(log => {
-    if (log.branch) {
-      // 分支可能是逗号分隔的多个引用
-      const refs = log.branch.split(',')
-      refs.forEach(ref => {
-        const branch = formatBranchName(ref.trim())
-        if (branch) {
-          branches.add(branch)
-        }
-      })
-    }
-  })
-  
-  availableBranches.value = Array.from(branches).sort()
-  console.log(`从日志中提取了${availableBranches.value.length}个分支`)
-}
+
 
 // 处理右键菜单事件
 function handleContextMenu(row: LogItem, column: any, event: MouseEvent) {
