@@ -337,6 +337,8 @@ export const useGitStore = defineStore('git', () => {
     }
 
     try {
+      // 显示加载中状态
+      isGitPulling.value = true;
       const response = await fetch('/api/pull', {
         method: 'POST'
       });
@@ -373,6 +375,9 @@ export const useGitStore = defineStore('git', () => {
         type: 'error'
       });
       return false;
+    } finally {
+      // 隐藏加载中状态
+      isGitPulling.value = false;
     }
   }
 

@@ -21,7 +21,8 @@ const commitScope = ref("");
 const commitDescription = ref("");
 const commitBody = ref("");
 const commitFooter = ref("");
-const { isPushing, isGitPulling, isGitFetching } = gitStore;  // 新增：从store获取状态
+const { isGitPulling, isGitFetching } = gitStore;  // 新增：从store获取状态
+const { isPushing } = gitLogStore;  // 新增：从store获取状态
 
 // 提交模板相关变量
 const descriptionTemplates = ref<string[]>([]);
