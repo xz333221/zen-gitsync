@@ -4,7 +4,7 @@ import GitStatus from './components/GitStatus.vue'
 import CommitForm from './components/CommitForm.vue'
 import LogList from './components/LogList.vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Setting } from '@element-plus/icons-vue'
+import { Plus, Setting, Folder } from '@element-plus/icons-vue'
 import logo from './assets/logo.svg'
 import { useGitStore } from './stores/gitStore'
 import { useConfigStore } from './stores/configStore'
@@ -371,6 +371,94 @@ function stopHResize() {
   // 保存布局比例
   saveLayoutRatios();
 }
+
+// 添加目录切换相关逻辑
+const isDirectoryDialogVisible = ref(false)
+const newDirectoryPath = ref('')
+const isChangingDirectory = ref(false)
+
+// 复制当前目录路径到剪贴板
+async function copyDirectoryPath() {
+  if (!currentDirectory.value) {
+    ElMessage.warning('当前目录路径为空')
+    return
+  }
+  
+  try {
+    await navigator.clipboard.writeText(currentDirectory.value)
+    ElMessage.success('已复制目录路径')
+  } catch (error) {
+    console.error('复制目录路径失败:', error)
+    ElMessage.error(`复制失败: ${(error as Error).message}`)
+  }
+}
+
+// 打开切换目录对话框
+function openDirectoryDialog() {
+  newDirectoryPath.value = currentDirectory.value
+  isDirectoryDialogVisible.value = true
+}
+
+// 切换目录
+async function changeDirectory() {
+  if (!newDirectoryPath.value) {
+    ElMessage.warning('目录路径不能为空')
+    return
+  }
+  
+  try {
+    isChangingDirectory.value = true
+    const response = await fetch('/api/change_directory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ path: newDirectoryPath.value })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      ElMessage.success('已切换工作目录')
+      currentDirectory.value = result.directory
+      isDirectoryDialogVisible.value = false
+      
+      // 直接使用API返回的Git仓库状态
+      gitStore.isGitRepo = result.isGitRepo
+      
+      // 如果是Git仓库，加载Git相关数据
+      if (result.isGitRepo) {
+        // 加载Git分支和用户信息
+        await Promise.all([
+          gitStore.getCurrentBranch(),
+          gitStore.getAllBranches(),
+          gitStore.getUserInfo(),
+          gitStore.getRemoteUrl()
+        ])
+        
+        // 刷新Git状态
+        if (gitStatusRef.value) {
+          gitStatusRef.value.refreshStatus()
+        }
+        
+        // 刷新提交历史
+        if (logListRef.value) {
+          logListRef.value.refreshLog()
+        }
+      } else {
+        ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
+        // 清空Git相关状态
+        gitStore.$reset()
+      }
+    } else {
+      ElMessage.error(result.error || '切换目录失败')
+    }
+  } catch (error) {
+    ElMessage.error(`切换目录失败: ${(error as Error).message}`)
+  } finally {
+    isChangingDirectory.value = false
+  }
+}
 </script>
 
 <template>
@@ -380,6 +468,33 @@ function stopHResize() {
       <h1>Zen GitSync UI</h1>
     </div>
     <div class="header-info">
+      <!-- 添加目录选择功能 -->
+      <div class="directory-selector">
+        <div class="directory-display">
+          <el-icon><Folder /></el-icon>
+          <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
+        </div>
+        <div class="directory-actions">
+          <el-button 
+            type="primary" 
+            size="small" 
+            @click="openDirectoryDialog"
+            class="dir-button"
+          >
+            <el-icon style="margin-right: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M128 192v640h768V320H485.76L357.504 192H128zm-32-64h287.872l128.384 128H928a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32z"></path></svg></el-icon>
+            切换
+          </el-button>
+          <el-button
+            type="info"
+            size="small"
+            @click="copyDirectoryPath"
+            class="dir-button"
+          >
+            <el-icon style="margin-right: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" /><path fill="currentColor" d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" /></svg></el-icon>
+            复制
+          </el-button>
+        </div>
+      </div>
       <div id="user-info" v-if="gitStore.userName && gitStore.userEmail">
         <span class="user-label">用户:</span>
         <span class="user-name">{{ gitStore.userName }}</span>
@@ -612,6 +727,35 @@ function stopHResize() {
       </span>
     </template>
   </el-dialog>
+
+  <!-- 添加切换目录对话框 -->
+  <el-dialog
+    v-model="isDirectoryDialogVisible"
+    title="切换工作目录"
+    width="50%"
+    destroy-on-close
+  >
+    <el-form>
+      <el-form-item label="目录路径">
+        <el-input 
+          v-model="newDirectoryPath" 
+          placeholder="请输入目录路径"
+        />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="isDirectoryDialogVisible = false">取消</el-button>
+        <el-button 
+          type="primary" 
+          @click="changeDirectory()" 
+          :loading="isChangingDirectory"
+        >
+          切换
+        </el-button>
+      </span>
+    </template>
+  </el-dialog>
 </template>
 
 <style>
@@ -714,8 +858,7 @@ h1 {
 
 .header-info {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 5px;
 }
 
@@ -1038,5 +1181,69 @@ h1 {
   background-color: #409EFF;
   height: 6px;
   box-shadow: 0 0 8px rgba(64, 158, 255, 0.6);
+}
+/* 添加目录选择器样式 */
+.directory-selector {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  background-color: rgba(40, 44, 52, 0.7);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.directory-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0; /* 防止flex子项溢出 */
+}
+
+.directory-path {
+  font-family: monospace;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 4px 8px;
+  border-radius: 3px;
+  border-left: 3px solid #409EFF;
+  flex: 1;
+  min-width: 0; /* 防止flex子项溢出 */
+  max-width: 350px; /* 控制最大宽度 */
+}
+
+.directory-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+.dir-button {
+  background: linear-gradient(135deg, #409EFF 0%, #53a8ff 100%);
+  color: white;
+  border: none;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s;
+  padding: 6px 12px;
+  height: 32px;
+}
+
+.dir-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dir-button.el-button--info {
+  background: linear-gradient(135deg, #909399 0%, #a6a9ad 100%);
 }
 </style>

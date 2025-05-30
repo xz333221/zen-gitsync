@@ -528,20 +528,9 @@ defineExpose({
     </div>
     
     <div class="card-content">
-      <div class="current-directory">
-        <el-icon><Folder /></el-icon>
-        <span>{{ currentDirectory }}</span>
-        <el-button type="primary" size="small" @click="openDirectoryDialog" plain>
-          切换目录
-        </el-button>
-      </div>
-      
       <div v-if="!gitStore.isGitRepo" class="status-box">
         <div class="empty-status">
           <p>当前目录不是Git仓库</p>
-          <el-button type="primary" size="small" @click="openDirectoryDialog">
-            切换目录
-          </el-button>
         </div>
       </div>
       
@@ -696,174 +685,60 @@ defineExpose({
           <!-- 添加分支信息 -->
           <div class="branch-info">
             <p>当前工作在 <el-tag size="small" type="success">{{ gitStore.currentBranch }}</el-tag> 分支</p>
-            
-            <!-- 显示分支同步状态 -->
-            <div v-if="gitStore.hasUpstream">
-              <span v-if="gitStore.branchAhead > 0" class="branch-sync-info warning">
-                <el-icon><ArrowUp /></el-icon> 你的分支领先 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchAhead }} 个提交
-              </span>
-              <span v-else-if="gitStore.branchBehind > 0" class="branch-sync-info info">
-                <el-icon><ArrowDown /></el-icon> 你的分支落后 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchBehind }} 个提交
-              </span>
-              <span v-else class="branch-sync-info success">
-                <el-icon><Check /></el-icon> 你的分支与 'origin/{{ gitStore.currentBranch }}' 同步
-              </span>
-            </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
+  
+  <!-- 文件差异对话框 -->
+  <el-dialog
+    v-model="diffDialogVisible"
+    :title="`文件差异: ${selectedFile}`"
+    width="80%"
+    destroy-on-close
+    class="diff-dialog"
+  >
+    <div v-loading="isLoadingDiff" class="diff-content">
+      <div v-if="diffContent" v-html="formatDiff(diffContent)" class="diff-formatted"></div>
+      <div v-else class="no-diff">该文件没有差异或是新文件</div>
+    </div>
     
-    <!-- 切换目录对话框 -->
-    <el-dialog
-      v-model="isDirectoryDialogVisible"
-      title="切换工作目录"
-      width="80vw"
-      top="10vh"
-      style="height: 200px;"
-    >
-      <el-form>
-        <el-form-item label="目录路径">
-          <el-input v-model="newDirectoryPath" placeholder="请输入目录路径" clearable />
-          <div class="directory-buttons">
-            <el-button @click="openDirectoryBrowser" type="primary" plain class="no-padding-left">
-              <el-icon><Folder /></el-icon>
-              浏览
-            </el-button>
-            <el-button @click="changeDirectory" :loading="isChangingDirectory" type="primary">
-              切换
-            </el-button>
-          </div>
-        </el-form-item>
-      </el-form>
-    </el-dialog>
-    
-    <!-- 目录浏览对话框 -->
-    <el-dialog
-      v-model="isDirectoryBrowserVisible"
-      title="浏览目录"
-      width="80vw"
-      top="70px"
-    >
-      <div class="browser-current-path">
-        <span>当前路径: {{ currentBrowsePath }}</span>
-      </div>
-      
-      <div v-if="browseErrorMessage" class="browser-error">
-        {{ browseErrorMessage }}
-      </div>
-      
-      <div v-loading="isBrowsing" class="directory-browser">
-        <!-- 导航栏 -->
-        <div class="browser-nav">
-          <el-button 
-            @click="navigateToParent" 
-            :disabled="!currentBrowsePath || isBrowsing"
-            size="small"
-            class="no-padding-left"
-          >
-            <el-icon><ArrowUp /></el-icon>
-            上级目录
-          </el-button>
-          <el-button 
-            @click="selectCurrentDirectory" 
-            type="primary" 
-            size="small"
-            class="no-padding-left"
-          >
-            选择当前目录
-          </el-button>
+    <template #footer>
+      <div class="file-navigation">
+        <el-button 
+          type="primary"
+          :icon="ArrowLeft" 
+          @click="goToPreviousFile" 
+          :disabled="currentFileIndex <= 0 || gitStore.fileList.length === 0"
+          plain
+          class="nav-button"
+        >
+          上一个文件
+        </el-button>
+        
+        <div class="file-counter">
+          <el-tag type="info" effect="plain" class="counter-tag">
+            {{ currentFileIndex + 1 }} / {{ gitStore.fileList.length }}
+          </el-tag>
         </div>
         
-        <!-- 目录内容列表 -->
-        <div class="directory-items-container">
-          <ul class="directory-items">
-            <li 
-              v-for="item in directoryItems" 
-              :key="item.path"
-              :class="['directory-item', item.type]"
-              @click="selectDirectoryItem(item)"
-            >
-              <el-icon v-if="item.type === 'directory'"><Folder /></el-icon>
-              <el-icon v-else><Document /></el-icon>
-              <span>{{ item.name }}</span>
-            </li>
-          </ul>
-        </div>
+        <el-button 
+          type="primary"
+          :icon="ArrowRight" 
+          @click="goToNextFile" 
+          :disabled="currentFileIndex >= gitStore.fileList.length - 1 || gitStore.fileList.length === 0"
+          plain
+          class="nav-button"
+        >
+          下一个文件
+          <template #icon>
+            <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+          </template>
+        </el-button>
       </div>
-    </el-dialog>
-    
-    <!-- 文件差异对话框 -->
-    <el-dialog
-      v-model="diffDialogVisible"
-      width="80vw"
-      top="70px"
-      destroy-on-close
-      class="diff-dialog"
-      :show-close="false"
-      style="height: calc(100vh - 140px);"
-      :modal-append-to-body="false"
-      :close-on-click-modal="false"
-    >
-      <template #header>
-        <div class="diff-dialog-header">
-          <div class="file-title">
-            <el-icon class="file-icon"><Document /></el-icon>
-            <span class="file-path">{{ selectedFile }}</span>
-          </div>
-          <div class="header-actions">
-            <el-button 
-              @click="diffDialogVisible = false" 
-              circle 
-              size="small" 
-              :icon="Close" 
-              class="close-button"
-            />
-          </div>
-        </div>
-      </template>
-      
-      <div v-loading="isLoadingDiff" class="diff-content">
-        <div v-if="diffContent" v-html="formatDiff(diffContent)" class="diff-formatted"></div>
-        <div v-else class="no-diff">该文件没有差异或是新文件</div>
-      </div>
-      
-      <template #footer>
-        <div class="file-navigation">
-          <el-button 
-            type="primary"
-            :icon="ArrowLeft" 
-            @click="goToPreviousFile" 
-            :disabled="currentFileIndex <= 0 || gitStore.fileList.length === 0"
-            plain
-            class="nav-button"
-          >
-            上一个文件
-          </el-button>
-          
-          <div class="file-counter">
-            <el-tag type="info" effect="plain" class="counter-tag">
-              {{ currentFileIndex + 1 }} / {{ gitStore.fileList.length }}
-            </el-tag>
-          </div>
-          
-          <el-button 
-            type="primary"
-            :icon="ArrowRight" 
-            @click="goToNextFile" 
-            :disabled="currentFileIndex >= gitStore.fileList.length - 1 || gitStore.fileList.length === 0"
-            plain
-            class="nav-button"
-          >
-            下一个文件
-            <template #icon>
-              <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-            </template>
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
-  </div>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -909,26 +784,9 @@ defineExpose({
   min-height: 300px; /* 确保内容区有最小高度 */
 }
 
+/* 移除当前目录样式 */
 .current-directory {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-  padding: 10px;
-  background-color: #f8f9fa;
-  border-radius: 6px;
-  font-family: monospace;
-  border: 1px solid #f0f0f0;
-}
-
-.current-directory .el-icon {
-  margin-right: 8px;
-  color: #409eff;
-}
-
-.current-directory span {
-  flex-grow: 1;
-  word-break: break-all;
-  margin-right: 10px;
+  display: none;
 }
 
 .status-box {
