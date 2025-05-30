@@ -524,7 +524,6 @@ function showPushSuccessIndicator() {
 
 // 推送到远程 (git push)
 async function pushToRemote() {
-  isPushing.value = true;
   try {
     await gitLogStore.pushToRemote();
     // 显示推送成功提示
@@ -538,7 +537,6 @@ async function pushToRemote() {
       type: 'error',
     });
   } finally {
-    isPushing.value = false;
   }
 }
 
