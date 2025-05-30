@@ -925,6 +925,8 @@ async function cherryPickCommit(commit: LogItem | null) {
           :type="filterVisible ? 'primary' : 'default'"
           size="small" 
           @click="filterVisible = !filterVisible"
+          class="action-button filter-button"
+          :class="{'active-filter': filterVisible}"
         >
           <template #icon>
             <el-icon><Filter /></el-icon>
@@ -938,6 +940,8 @@ async function cherryPickCommit(commit: LogItem | null) {
           type="primary" 
           size="small"
           @click="toggleViewMode"
+          class="action-button view-mode-button"
+          :class="{'active-view': showGraphView}"
         >
           <template #icon>
             <el-icon><component :is="showGraphView ? Document : TrendCharts" /></el-icon>
@@ -945,21 +949,24 @@ async function cherryPickCommit(commit: LogItem | null) {
           {{ showGraphView ? '表格视图' : '图表视图' }}
         </el-button>
         <el-button 
-          type="primary" 
+          type="success" 
           size="small" 
           @click="toggleAllCommits" 
           :loading="isLoading"
+          class="action-button commit-display-button"
+          :class="{'active-commits': showAllCommits}"
         >
           <template #icon>
             <el-icon><component :is="showAllCommits ? List : More" /></el-icon>
           </template>
-          {{ showAllCommits ? '显示分页加载 (每页100条)' : '显示所有提交' }}
+          {{ showAllCommits ? '显示分页加载' : '显示所有提交' }}
         </el-button>
         <el-button 
           circle 
           size="small" 
           @click="refreshLog()" 
           :class="{ 'refresh-button-animated': logRefreshed }"
+          class="action-button refresh-button"
         >
           <template v-if="!isLoading">
             <el-icon><RefreshRight /></el-icon>
@@ -975,7 +982,6 @@ async function cherryPickCommit(commit: LogItem | null) {
     <div v-if="filterVisible && !showGraphView" class="filter-panel-header">
       <div class="filter-form">
         <div class="filter-item">
-          <div class="filter-label">作者:</div>
           <el-select 
             v-model="authorFilter" 
             placeholder="选择作者" 
@@ -985,6 +991,9 @@ async function cherryPickCommit(commit: LogItem | null) {
             class="filter-input"
             size="small"
           >
+            <template #prefix>
+              <span class="compact-label">作者</span>
+            </template>
             <el-option 
               v-for="author in availableAuthors" 
               :key="author" 
@@ -995,7 +1004,6 @@ async function cherryPickCommit(commit: LogItem | null) {
         </div>
         
         <div class="filter-item">
-          <div class="filter-label">分支:</div>
           <el-select 
             v-model="branchFilter" 
             placeholder="选择分支" 
@@ -1005,6 +1013,9 @@ async function cherryPickCommit(commit: LogItem | null) {
             class="filter-input"
             size="small"
           >
+            <template #prefix>
+              <span class="compact-label">分支</span>
+            </template>
             <el-option 
               v-for="branch in availableBranches" 
               :key="branch" 
@@ -1015,18 +1026,20 @@ async function cherryPickCommit(commit: LogItem | null) {
         </div>
         
         <div class="filter-item">
-          <div class="filter-label">提交信息包含:</div>
           <el-input 
             v-model="messageFilter" 
-            placeholder="关键词" 
+            placeholder="提交信息关键词" 
             clearable 
             class="filter-input"
             size="small"
-          />
+          >
+            <template #prefix>
+              <span class="compact-label">信息</span>
+            </template>
+          </el-input>
         </div>
         
         <div class="filter-item">
-          <div class="filter-label">日期范围:</div>
           <el-date-picker
             v-model="dateRangeFilter"
             type="daterange"
@@ -1037,12 +1050,16 @@ async function cherryPickCommit(commit: LogItem | null) {
             value-format="YYYY-MM-DD"
             class="filter-input date-range"
             size="small"
-          />
+          >
+            <template #prefix>
+              <span class="compact-label">日期</span>
+            </template>
+          </el-date-picker>
         </div>
         
         <div class="filter-actions">
-          <el-button type="primary" size="small" @click="applyFilters">应用筛选</el-button>
-          <el-button type="info" size="small" @click="resetFilters">重置</el-button>
+          <el-button type="primary" size="small" @click="applyFilters" class="filter-action-button">应用</el-button>
+          <el-button type="info" size="small" @click="resetFilters" class="filter-action-button">重置</el-button>
         </div>
       </div>
     </div>
@@ -1050,7 +1067,7 @@ async function cherryPickCommit(commit: LogItem | null) {
     <!-- 内容区域，添加上边距以避免被固定头部遮挡 -->
     <div class="content-area" :class="{'with-filter': filterVisible && !showGraphView}">
       <div v-if="errorMessage">{{ errorMessage }}</div>
-      <div v-else>
+      <div class="content-area-content" v-else>
         <!-- 图表视图 -->
         <div v-if="showGraphView" class="graph-view">
           <div class="commit-count" v-if="logsData.length > 0">
@@ -1141,7 +1158,7 @@ async function cherryPickCommit(commit: LogItem | null) {
           </el-table>
           
           <!-- 添加底部加载状态和加载更多按钮 -->
-          <div v-if="!showAllCommits" class="load-more-container">
+          <div v-if="!showAllCommits && false" class="load-more-container">
             <!-- 显示加载状态和页码信息 -->
             <div class="pagination-info">
               <span>第 {{ currentPage }} 页 {{ totalCommits > 0 ? `/ 共 ${Math.ceil(totalCommits / 100) || 1} 页` : '' }} (总计 {{ totalCommits }} 条记录)</span>
@@ -1263,6 +1280,88 @@ async function cherryPickCommit(commit: LogItem | null) {
   gap: 8px;
 }
 
+/* 优化按钮样式 */
+.action-button {
+  transition: all 0.3s ease;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-weight: 500;
+  padding: 8px 16px;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 筛选按钮样式 */
+.filter-button {
+  background: linear-gradient(135deg, #E6A23C 0%, #f0c78a 100%);
+  color: white;
+  min-width: 90px;
+}
+
+.filter-button.active-filter {
+  background: linear-gradient(135deg, #d48806 0%, #E6A23C 100%);
+}
+
+.filter-button .filter-badge :deep(.el-badge__content) {
+  background-color: #F56C6C;
+  color: white;
+  border: 2px solid white;
+  box-shadow: 0 0 0 1px #E6A23C;
+}
+
+/* 视图切换按钮样式 */
+.view-mode-button {
+  background: linear-gradient(135deg, #409EFF 0%, #53a8ff 100%);
+  color: white;
+}
+
+.view-mode-button.active-view {
+  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+}
+
+/* 提交显示按钮样式 */
+.commit-display-button {
+  background: linear-gradient(135deg, #67C23A 0%, #85ce61 100%);
+  color: white;
+}
+
+.commit-display-button.active-commits {
+  background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
+}
+
+/* 刷新按钮样式 */
+.refresh-button {
+  background: linear-gradient(135deg, #909399 0%, #C0C4CC 100%);
+  color: white;
+  min-width: unset;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.refresh-button:hover {
+  background: linear-gradient(135deg, #606266 0%, #909399 100%);
+}
+
+.refresh-button-animated {
+  animation: spin 1s linear;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 .content-area {
   padding: 10px 0;
   flex: 1;
@@ -1270,6 +1369,9 @@ async function cherryPickCommit(commit: LogItem | null) {
   height: calc(100% - 52px);
   display: flex;
   flex-direction: column;
+}
+.content-area-content{
+  height: 100%;
 }
 
 .content-area.with-filter {
@@ -1359,10 +1461,6 @@ async function cherryPickCommit(commit: LogItem | null) {
   color: #606266;
 }
 
-.refresh-button-animated {
-  animation: pulse 1s;
-}
-
 .refresh-notification {
   background-color: #f0f9eb;
   color: #67c23a;
@@ -1378,12 +1476,6 @@ async function cherryPickCommit(commit: LogItem | null) {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   max-width: 300px;
   text-align: center;
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.2); }
-  100% { transform: scale(1); }
 }
 
 @keyframes fadeOut {
@@ -1620,13 +1712,15 @@ async function cherryPickCommit(commit: LogItem | null) {
 .record-count {
   display: flex;
   align-items: center;
-  height: 36px;
-  padding-left: 15px;
-  padding-right: 15px;
+  height: 24px;
+  padding-left: 8px;
+  padding-right: 8px;
+  margin-left: 8px;
 }
 
 .record-count :deep(.el-icon) {
-  margin-right: 6px;
+  margin-right: 4px;
+  font-size: 12px;
 }
 
 .filter-badge :deep(.el-badge__content) {
@@ -1634,140 +1728,15 @@ async function cherryPickCommit(commit: LogItem | null) {
 }
 
 .filter-panel {
-  background-color: #f5f7fa;
-  border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 15px;
-  border: 1px solid #e4e7ed;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-  position: sticky;
-  top: 98px; /* history-controls的高度(36px) + padding(10px) + log-header的高度(52px) */
-  z-index: 89; /* 比history-controls低一点 */
-  transition: box-shadow 0.3s ease, background-color 0.3s ease, transform 0.2s ease;
+  display: none; /* 隐藏原来的筛选组件 */
 }
 
-/* 当滚动时增强视觉效果 */
-.content-area:not(:hover) .filter-panel:not(:hover) {
-  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.1);
-}
-
-.filter-panel:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-}
-
-.filter-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-  align-items: flex-end;
-}
-
-.filter-item {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.filter-label {
-  font-size: 13px;
-  color: #606266;
-  font-weight: bold;
-}
-
-.filter-input {
-  width: 200px;
-}
-
-.filter-input.date-range {
-  width: 350px;
-}
-
-.filter-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* 表格样式 */
-.log-table {
-  transition: margin-top 0.3s ease;
-  min-height: 200px; /* 确保表格有最小高度 */
-  height: 100%; /* 填充可用空间 */
-}
-
-/* 为带筛选面板的表格添加顶部边距 */
-.log-table.has-filter {
-  margin-top: 10px;
-}
-
-/* 当控件固定时增加表格上边距 */
-.log-table.has-sticky-controls {
-  margin-top: 52px !important; /* controls 高度 + 一些额外空间 */
-}
-
-/* 当筛选面板固定时再增加表格上边距 */
+.log-table.has-filter,
+.log-table.has-sticky-controls,
 .log-table.has-sticky-filter {
-  margin-top: 140px !important; /* 筛选面板高度 + controls 高度 + 一些额外空间 */
+  margin-top: 0 !important; /* 重置原来的边距 */
 }
 
-/* 表格为空时的样式 */
-.el-table__empty-block {
-  min-height: 200px;
-  justify-content: center;
-  align-items: center;
-}
-
-/* 确保表格容器占满可用空间 */
-.content-area > div:not(.graph-view) {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-/* 表格视图容器 */
-.table-view-container {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  height: 100%;
-  overflow-y: auto;
-}
-
-.log-table {
-  width: 100%;
-  flex: 1;
-}
-
-/* 表格容器样式 */
-.table-view-container .el-table {
-  flex: 1;
-  width: 100%;
-}
-
-.table-view-container .el-table__inner-wrapper {
-  width: 100%;
-}
-
-.table-view-container .el-table__body-wrapper {
-  width: 100%;
-}
-
-.filter-panel.filter-sticky {
-  background-color: rgba(245, 247, 250, 0.97);
-  backdrop-filter: blur(4px);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
-  border-top: none;
-}
-
-.history-controls.controls-sticky {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  background-color: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(4px);
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-/* 筛选面板头部样式 */
 .filter-panel-header {
   background-color: #f5f7fa;
   padding: 10px 16px;
@@ -1783,47 +1752,60 @@ async function cherryPickCommit(commit: LogItem | null) {
 
 .filter-panel-header .filter-form {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  align-items: flex-end;
-  justify-content: flex-start;
+  flex-wrap: nowrap;
+  justify-content: space-between;
 }
 
 .filter-panel-header .filter-item {
-  margin-right: 12px;
-}
-
-.filter-panel-header .filter-label {
-  font-size: 12px;
-  color: #606266;
-  margin-bottom: 4px;
+  margin-right: 0;
+  flex: 1;
+  min-width: 0;
 }
 
 .filter-panel-header .filter-input {
-  width: 180px;
+  width: 100%;
 }
 
 .filter-panel-header .filter-input.date-range {
-  width: 320px;
+  width: 100%;
+  max-width: 280px;
 }
 
-.content-area.with-filter {
-  height: calc(100% - 52px - 60px); /* 减去header高度和filter高度 */
+.compact-label {
+  color: #909399;
+  font-size: 12px;
+  margin-right: 4px;
+  white-space: nowrap;
+  font-weight: bold;
+  border-right: 1px solid #dcdfe6;
+  padding-right: 6px;
 }
 
-/* 记录计数标签 */
-.record-count {
+.filter-action-button {
+  padding: 8px 15px;
+  border-radius: 4px;
+  transition: all 0.3s;
+  min-width: 60px;
+}
+
+.filter-action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.filter-actions {
   display: flex;
   align-items: center;
-  height: 24px;
-  padding-left: 8px;
-  padding-right: 8px;
-  margin-left: 8px;
+  gap: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.record-count :deep(.el-icon) {
-  margin-right: 4px;
-  font-size: 12px;
+/* 表格样式 */
+.el-table .el-table__cell .cell {
+  word-break: break-all;
 }
 
 /* 表格视图容器简化 */
@@ -1841,18 +1823,6 @@ async function cherryPickCommit(commit: LogItem | null) {
   flex: 1;
 }
 
-/* 重置或移除不再需要的样式 */
-.history-controls,
-.filter-panel {
-  display: none; /* 隐藏原来的筛选组件 */
-}
-
-.log-table.has-filter,
-.log-table.has-sticky-controls,
-.log-table.has-sticky-filter {
-  margin-top: 0 !important; /* 重置原来的边距 */
-}
-
 /* 添加底部加载更多相关样式 */
 .load-more-container {
   display: flex;
@@ -1861,7 +1831,6 @@ async function cherryPickCommit(commit: LogItem | null) {
   padding: 15px 0;
   border-top: 1px dashed #ebeef5;
   gap: 10px;
-  display: none;
 }
 
 .pagination-info {
@@ -1947,6 +1916,20 @@ async function cherryPickCommit(commit: LogItem | null) {
 
 .context-menu-item i {
   margin-right: 8px;
+}
+
+.refresh-button-animated {
+  animation: spin 1s linear;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 表格样式 */
+.el-table .el-table__cell .cell {
+  word-break: break-all;
 }
 </style>
 
