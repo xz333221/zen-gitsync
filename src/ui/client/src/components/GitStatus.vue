@@ -321,6 +321,9 @@ async function changeDirectory() {
         
         // 刷新Git状态
         await loadStatus()
+        
+        // 刷新提交历史
+        await gitStore.fetchLog(false)
       } else {
         ElMessage.warning('当前目录不是一个Git仓库')
         // 清空Git相关状态
