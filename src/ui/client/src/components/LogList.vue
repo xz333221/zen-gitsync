@@ -15,7 +15,7 @@ import {
   ElMessage,
   ElMessageBox
 } from 'element-plus'
-import { RefreshRight, ZoomIn, ZoomOut, Filter, Document, TrendCharts, List, More } from '@element-plus/icons-vue'
+import { RefreshRight, Loading, ZoomIn, ZoomOut, Filter, Document, TrendCharts, List, More } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import { createGitgraph } from '@gitgraph/js'
 import { useGitStore } from '../stores/gitStore'
@@ -959,10 +959,14 @@ async function cherryPickCommit(commit: LogItem | null) {
           circle 
           size="small" 
           @click="refreshLog()" 
-          :loading="isLoading"
           :class="{ 'refresh-button-animated': logRefreshed }"
         >
-          <el-icon><RefreshRight /></el-icon>
+          <template v-if="!isLoading">
+            <el-icon><RefreshRight /></el-icon>
+          </template>
+          <template v-else>
+            <el-icon><Loading /></el-icon>
+          </template>
         </el-button>
       </div>
     </div>
