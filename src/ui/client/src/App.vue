@@ -23,18 +23,6 @@ const configStore = useConfigStore()
 const initCompleted = ref(false)
 const currentDirectory = ref('')
 
-// 加载配置
-async function loadConfig() {
-  try {
-    const config = await configStore.loadConfig()
-    if (config) {
-      configInfo.value = `默认提交信息: ${config.defaultCommitMessage}`
-    }
-  } catch (error) {
-    console.error('加载配置失败:', error)
-  }
-}
-
 // 更新配置信息显示
 function updateConfigInfo() {
   if (configStore.config) {

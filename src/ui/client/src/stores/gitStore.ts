@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, onMounted, onUnmounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { io, Socket } from 'socket.io-client'
 
 // 定义Git操作间隔时间（毫秒）

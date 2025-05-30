@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
 })
 
 // 刷新日志的方法
-async function refreshLog(loadAll = false) {
+async function refreshLog() {
   // 简单调用gitStore的fetchLog方法
   await gitStore.fetchLog(true)
   

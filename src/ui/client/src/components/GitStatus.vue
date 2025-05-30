@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
-import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, ArrowDown, RefreshRight, Check, Close, Download, Connection } from '@element-plus/icons-vue'
+import { Refresh, ArrowLeft, ArrowRight, Document, ArrowUp, ArrowDown, RefreshRight, Check, Close, Download, Connection } from '@element-plus/icons-vue'
 // import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '../stores/gitStore'
 
@@ -28,11 +28,11 @@ const isLoadingDiff = ref(false)
 // 添加当前文件索引
 const currentFileIndex = ref(-1)
 // 添加切换目录相关的状态
-const isDirectoryDialogVisible = ref(false)
-const newDirectoryPath = ref('')
-const isChangingDirectory = ref(false)
+// const isDirectoryDialogVisible = ref(false)
+// const newDirectoryPath = ref('')
+// const isChangingDirectory = ref(false)
 // 添加目录浏览相关的状态
-const isDirectoryBrowserVisible = ref(false)
+// const isDirectoryBrowserVisible = ref(false)
 const currentBrowsePath = ref('')
 const directoryItems = ref<{name: string, path: string, type: string}[]>([])
 const isBrowsing = ref(false)
@@ -188,157 +188,157 @@ async function goToNextFile() {
 }
 
 // 打开切换目录对话框
-function openDirectoryDialog() {
-  newDirectoryPath.value = currentDirectory.value
-  isDirectoryDialogVisible.value = true
-}
+// function openDirectoryDialog() {
+//   newDirectoryPath.value = currentDirectory.value
+//   isDirectoryDialogVisible.value = true
+// }
 
 // 打开目录浏览器
-function openDirectoryBrowser() {
-  browseErrorMessage.value = ''
-  currentBrowsePath.value = newDirectoryPath.value || currentDirectory.value
-  isDirectoryBrowserVisible.value = true
-  browseDirectory(currentBrowsePath.value)
-}
+// function openDirectoryBrowser() {
+//   browseErrorMessage.value = ''
+//   currentBrowsePath.value = newDirectoryPath.value || currentDirectory.value
+//   isDirectoryBrowserVisible.value = true
+//   browseDirectory(currentBrowsePath.value)
+// }
 
 // 浏览目录
-async function browseDirectory(directoryPath: string) {
-  try {
-    isBrowsing.value = true
-    browseErrorMessage.value = ''
+// async function browseDirectory(directoryPath: string) {
+//   try {
+//     isBrowsing.value = true
+//     browseErrorMessage.value = ''
     
-    // 确保Windows盘符路径格式正确
-    let normalizedPath = directoryPath
-    if (/^[A-Za-z]:$/.test(normalizedPath)) {
-      normalizedPath += '/'
-    }
+//     // 确保Windows盘符路径格式正确
+//     let normalizedPath = directoryPath
+//     if (/^[A-Za-z]:$/.test(normalizedPath)) {
+//       normalizedPath += '/'
+//     }
     
-    const response = await fetch(`/api/browse_directory?path=${encodeURIComponent(normalizedPath)}`)
+//     const response = await fetch(`/api/browse_directory?path=${encodeURIComponent(normalizedPath)}`)
     
-    if (response.status === 403) {
-      const data = await response.json()
-      browseErrorMessage.value = data.error || '目录浏览功能未启用'
-      return
-    }
+//     if (response.status === 403) {
+//       const data = await response.json()
+//       browseErrorMessage.value = data.error || '目录浏览功能未启用'
+//       return
+//     }
     
-    if (!response.ok) {
-      const data = await response.json()
-      browseErrorMessage.value = data.error || '获取目录内容失败'
-      return
-    }
+//     if (!response.ok) {
+//       const data = await response.json()
+//       browseErrorMessage.value = data.error || '获取目录内容失败'
+//       return
+//     }
     
-    const data = await response.json()
+//     const data = await response.json()
     
-    if (data.success) {
-      directoryItems.value = data.items
-      currentBrowsePath.value = data.currentPath
-    } else {
-      browseErrorMessage.value = data.error || '获取目录内容失败'
-    }
-  } catch (error) {
-    browseErrorMessage.value = `获取目录内容失败: ${(error as Error).message}`
-  } finally {
-    isBrowsing.value = false
-  }
-}
+//     if (data.success) {
+//       directoryItems.value = data.items
+//       currentBrowsePath.value = data.currentPath
+//     } else {
+//       browseErrorMessage.value = data.error || '获取目录内容失败'
+//     }
+//   } catch (error) {
+//     browseErrorMessage.value = `获取目录内容失败: ${(error as Error).message}`
+//   } finally {
+//     isBrowsing.value = false
+//   }
+// }
 
 // 导航到父目录
-function navigateToParent() {
-  // 检查是否已经是根目录
-  // Windows盘符根目录情况 (如 "E:")
-  if (/^[A-Za-z]:$/.test(currentBrowsePath.value) || 
-      /^[A-Za-z]:[\\/]$/.test(currentBrowsePath.value) || 
-      currentBrowsePath.value === '/') {
-    // 已经是根目录，不做任何操作
-    return
-  }
+// function navigateToParent() {
+//   // 检查是否已经是根目录
+//   // Windows盘符根目录情况 (如 "E:")
+//   if (/^[A-Za-z]:$/.test(currentBrowsePath.value) || 
+//       /^[A-Za-z]:[\\/]$/.test(currentBrowsePath.value) || 
+//       currentBrowsePath.value === '/') {
+//     // 已经是根目录，不做任何操作
+//     return
+//   }
   
-  // 获取当前路径的父目录
-  let pathParts = currentBrowsePath.value.split(/[/\\]/)
+//   // 获取当前路径的父目录
+//   let pathParts = currentBrowsePath.value.split(/[/\\]/)
   
-  // 移除最后一个目录部分
-  pathParts.pop()
+//   // 移除最后一个目录部分
+//   pathParts.pop()
   
-  // 处理Windows盘符特殊情况
-  let parentPath = pathParts.join('/')
-  if (pathParts.length === 1 && /^[A-Za-z]:$/.test(pathParts[0])) {
-    // 如果只剩下盘符，确保添加斜杠 (例如 "E:/")
-    parentPath = pathParts[0] + '/'
-  }
+//   // 处理Windows盘符特殊情况
+//   let parentPath = pathParts.join('/')
+//   if (pathParts.length === 1 && /^[A-Za-z]:$/.test(pathParts[0])) {
+//     // 如果只剩下盘符，确保添加斜杠 (例如 "E:/")
+//     parentPath = pathParts[0] + '/'
+//   }
   
-  if (parentPath) {
-    browseDirectory(parentPath)
-  }
-}
+//   if (parentPath) {
+//     browseDirectory(parentPath)
+//   }
+// }
 
-// 选择目录项
-function selectDirectoryItem(item: {name: string, path: string, type: string}) {
-  if (item.type === 'directory') {
-    browseDirectory(item.path)
-  }
-}
+// // 选择目录项
+// function selectDirectoryItem(item: {name: string, path: string, type: string}) {
+//   if (item.type === 'directory') {
+//     browseDirectory(item.path)
+//   }
+// }
 
-// 选择当前目录
-function selectCurrentDirectory() {
-  newDirectoryPath.value = currentBrowsePath.value
-  isDirectoryBrowserVisible.value = false
-}
+// // 选择当前目录
+// function selectCurrentDirectory() {
+//   newDirectoryPath.value = currentBrowsePath.value
+//   isDirectoryBrowserVisible.value = false
+// }
 
-// 切换工作目录
-async function changeDirectory() {
-  if (!newDirectoryPath.value) {
-    ElMessage.warning('目录路径不能为空')
-    return
-  }
+// // 切换工作目录
+// async function changeDirectory() {
+//   if (!newDirectoryPath.value) {
+//     ElMessage.warning('目录路径不能为空')
+//     return
+//   }
   
-  try {
-    isChangingDirectory.value = true
-    const response = await fetch('/api/change_directory', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ path: newDirectoryPath.value })
-    })
+//   try {
+//     isChangingDirectory.value = true
+//     const response = await fetch('/api/change_directory', {
+//       method: 'POST',
+//       headers: {
+//         'Content-Type': 'application/json'
+//       },
+//       body: JSON.stringify({ path: newDirectoryPath.value })
+//     })
     
-    const result = await response.json()
+//     const result = await response.json()
     
-    if (result.success) {
-      ElMessage.success('已切换工作目录')
-      currentDirectory.value = result.directory
-      isDirectoryDialogVisible.value = false
+//     if (result.success) {
+//       ElMessage.success('已切换工作目录')
+//       currentDirectory.value = result.directory
+//       isDirectoryDialogVisible.value = false
       
-      // 直接使用API返回的Git仓库状态
-      gitStore.isGitRepo = result.isGitRepo
+//       // 直接使用API返回的Git仓库状态
+//       gitStore.isGitRepo = result.isGitRepo
       
-      // 如果是Git仓库，加载Git相关数据
-      if (result.isGitRepo) {
-        // 加载Git分支和用户信息
-        await Promise.all([
-          gitStore.getCurrentBranch(),
-          gitStore.getAllBranches(),
-          gitStore.getUserInfo()
-        ])
+//       // 如果是Git仓库，加载Git相关数据
+//       if (result.isGitRepo) {
+//         // 加载Git分支和用户信息
+//         await Promise.all([
+//           gitStore.getCurrentBranch(),
+//           gitStore.getAllBranches(),
+//           gitStore.getUserInfo()
+//         ])
         
-        // 刷新Git状态
-        await loadStatus()
+//         // 刷新Git状态
+//         await loadStatus()
         
-        // 刷新提交历史
-        await gitStore.fetchLog(false)
-      } else {
-        ElMessage.warning('当前目录不是一个Git仓库')
-        // 清空Git相关状态
-        gitStore.$reset() // 使用pinia的reset方法重置状态
-      }
-    } else {
-      ElMessage.error(result.error || '切换目录失败')
-    }
-  } catch (error) {
-    ElMessage.error(`切换目录失败: ${(error as Error).message}`)
-  } finally {
-    isChangingDirectory.value = false
-  }
-}
+//         // 刷新提交历史
+//         await gitStore.fetchLog(false)
+//       } else {
+//         ElMessage.warning('当前目录不是一个Git仓库')
+//         // 清空Git相关状态
+//         gitStore.$reset() // 使用pinia的reset方法重置状态
+//       }
+//     } else {
+//       ElMessage.error(result.error || '切换目录失败')
+//     }
+//   } catch (error) {
+//     ElMessage.error(`切换目录失败: ${(error as Error).message}`)
+//   } finally {
+//     isChangingDirectory.value = false
+//   }
+// }
 
 // 处理文件点击
 function handleFileClick(file: {path: string, type: string}) {
