@@ -544,7 +544,6 @@ async function pushToRemote() {
 
 // 处理git pull操作
 async function handleGitPull() {
-  isGitPulling.value = true;
   try {
     await gitStore.gitPull();
     // 刷新状态
@@ -555,13 +554,11 @@ async function handleGitPull() {
       type: 'error',
     });
   } finally {
-    isGitPulling.value = false;
   }
 }
 
 // 处理git fetch --all操作
 async function handleGitFetchAll() {
-  isGitFetching.value = true;
   try {
     await gitStore.gitFetchAll();
     // 刷新状态
@@ -572,7 +569,6 @@ async function handleGitFetchAll() {
       type: 'error',
     });
   } finally {
-    isGitFetching.value = false;
   }
 }
 
@@ -614,14 +610,12 @@ async function addCommitAndPush() {
   }
 
   try {
-    isPushing.value = true
     await gitLogStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
 
     // 清空提交信息
     clearCommitFields();
 
     // 显示成功动画
-    isPushing.value = false
     showPushSuccessIndicator();
 
   } catch (error) {
@@ -629,7 +623,6 @@ async function addCommitAndPush() {
       message: `暂存、提交并推送失败: ${(error as Error).message}`,
       type: "error",
     });
-    isPushing.value = false
   }
 }
 
