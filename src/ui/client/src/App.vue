@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, h } from 'vue'
 import GitStatus from './components/GitStatus.vue'
 import CommitForm from './components/CommitForm.vue'
 import LogList from './components/LogList.vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Setting, Folder } from '@element-plus/icons-vue'
 import logo from './assets/logo.svg'
 import { useGitStore } from './stores/gitStore'
@@ -376,6 +376,7 @@ function stopHResize() {
 const isDirectoryDialogVisible = ref(false)
 const newDirectoryPath = ref('')
 const isChangingDirectory = ref(false)
+const recentDirectories = ref<string[]>([])
 
 // 复制当前目录路径到剪贴板
 async function copyDirectoryPath() {
@@ -397,6 +398,23 @@ async function copyDirectoryPath() {
 function openDirectoryDialog() {
   newDirectoryPath.value = currentDirectory.value
   isDirectoryDialogVisible.value = true
+  
+  // 获取最近使用过的目录
+  getRecentDirectories()
+}
+
+// 获取最近访问的目录
+async function getRecentDirectories() {
+  try {
+    const response = await fetch('/api/recent_directories')
+    const result = await response.json()
+    
+    if (result.success && Array.isArray(result.directories)) {
+      recentDirectories.value = result.directories
+    }
+  } catch (error) {
+    console.error('获取最近目录失败:', error)
+  }
 }
 
 // 切换目录
@@ -422,6 +440,9 @@ async function changeDirectory() {
       ElMessage.success('已切换工作目录')
       currentDirectory.value = result.directory
       isDirectoryDialogVisible.value = false
+
+      // 保存到最近使用的目录
+      await saveRecentDirectory(result.directory)
 
       // 直接使用API返回的Git仓库状态
       gitStore.isGitRepo = result.isGitRepo
@@ -459,6 +480,150 @@ async function changeDirectory() {
     isChangingDirectory.value = false
   }
 }
+
+// 保存最近使用的目录
+async function saveRecentDirectory(directory: string) {
+  try {
+    await fetch('/api/save_recent_directory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ path: directory })
+    })
+  } catch (error) {
+    console.error('保存最近目录失败:', error)
+  }
+}
+
+// 添加浏览目录的功能
+async function browseDirectory() {
+  try {
+    const response = await fetch('/api/browse_directory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        currentPath: newDirectoryPath.value || currentDirectory.value 
+      })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      // 打开目录选择对话框
+      selectDirectoryDialog(result)
+    } else if (result.error) {
+      ElMessage.error(result.error)
+    }
+  } catch (error) {
+    console.error('浏览目录失败:', error)
+    ElMessage.error(`浏览目录失败: ${(error as Error).message}`)
+  }
+}
+
+// 打开目录选择对话框
+function selectDirectoryDialog(directoryData: any) {
+  if (!directoryData || !directoryData.items) return
+  
+  ElMessageBox.alert(
+    h('div', { class: 'directory-browser' }, [
+      h('div', { class: 'current-path' }, [
+        h('span', { class: 'path-label' }, '当前路径: '),
+        h('span', { class: 'path-value' }, directoryData.path)
+      ]),
+      h('div', { class: 'directory-list' }, [
+        // 添加返回上级目录选项
+        directoryData.parentPath ? h('div', { 
+          class: 'directory-item parent-dir',
+          onClick: () => {
+            selectDirectory(directoryData.parentPath)
+          }
+        }, [
+          h('span', { class: 'dir-icon' }, 
+            h('svg', { 
+              class: 'folder-icon', 
+              viewBox: '0 0 24 24',
+              width: '20',
+              height: '20',
+              style: { fill: '#E6A23C' }
+            }, [
+              h('path', { d: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z' })
+            ])
+          ),
+          h('span', { class: 'dir-name' }, '返回上级目录')
+        ]) : null,
+        // 列出当前目录下的所有子目录
+        ...directoryData.items.map((item: any) => h('div', { 
+          class: 'directory-item',
+          onClick: () => {
+            selectDirectory(item.path)
+          }
+        }, [
+          h('span', { class: 'dir-icon' },
+            h('svg', { 
+              class: 'folder-icon', 
+              viewBox: '0 0 24 24',
+              width: '20',
+              height: '20',
+              style: { fill: '#409EFF' }
+            }, [
+              h('path', { d: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z' })
+            ])
+          ),
+          h('span', { class: 'dir-name' }, item.name)
+        ]))
+      ])
+    ]),
+    '浏览并选择目录',
+    {
+      confirmButtonText: '使用当前目录',
+      customClass: 'directory-browser-dialog',
+      callback: (action: string) => {
+        if (action === 'confirm') {
+          newDirectoryPath.value = directoryData.path
+        }
+      }
+    }
+  )
+}
+
+// 选择目录
+async function selectDirectory(dirPath: string) {
+  try {
+    // 先关闭当前对话框
+    ElMessageBox.close();
+    
+    // 延迟一小段时间再打开新对话框，确保旧对话框已完全关闭
+    setTimeout(async () => {
+      try {
+        const response = await fetch('/api/browse_directory', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ currentPath: dirPath })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          // 重新打开目录选择对话框，显示新的目录内容
+          selectDirectoryDialog(result);
+        } else if (result.error) {
+          ElMessage.error(result.error);
+        }
+      } catch (error) {
+        console.error('浏览目录失败:', error);
+        ElMessage.error(`浏览目录失败: ${(error as Error).message}`);
+      }
+    }, 100);
+  } catch (error) {
+    console.error('处理目录选择时出错:', error);
+    ElMessage.error(`处理目录选择时出错: ${(error as Error).message}`);
+  }
+}
 </script>
 
 <template>
@@ -490,28 +655,32 @@ async function changeDirectory() {
       <!-- 添加目录选择功能 -->
       <div class="directory-selector">
         <div class="directory-display">
-          <el-icon>
-            <Folder />
-          </el-icon>
+          <div class="directory-icon">
+            <el-icon>
+              <Folder />
+            </el-icon>
+          </div>
           <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
         </div>
         <div class="directory-actions">
-          <el-button type="primary" size="small" @click="openDirectoryDialog" class="dir-button">
-            <el-icon style="margin-right: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <el-button type="primary" size="small" @click="openDirectoryDialog" class="dir-button" circle>
+            <el-icon>
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
                 <path fill="currentColor"
                   d="M128 192v640h768V320H485.76L357.504 192H128zm-32-64h287.872l128.384 128H928a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32z">
                 </path>
-              </svg></el-icon>
-            切换
+              </svg>
+            </el-icon>
           </el-button>
-          <el-button type="info" size="small" @click="copyDirectoryPath" class="dir-button">
-            <el-icon style="margin-right: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <el-button type="info" size="small" @click="copyDirectoryPath" class="dir-button" circle>
+            <el-icon>
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
                 <path fill="currentColor"
                   d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
                 <path fill="currentColor"
                   d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
-              </svg></el-icon>
-            复制
+              </svg>
+            </el-icon>
           </el-button>
         </div>
       </div>
@@ -526,8 +695,8 @@ async function changeDirectory() {
           <el-icon class="is-loading"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
               <path fill="currentColor"
                 d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32zM195.2 195.2a32 32 0 0 1 45.248 0L376.32 331.008a32 32 0 0 1-45.248 45.248L195.2 240.448a32 32 0 0 1 0-45.248zm452.544 452.544a32 32 0 0 1 45.248 0L828.8 783.552a32 32 0 0 1-45.248 45.248L647.744 692.992a32 32 0 0 1 0-45.248zM828.8 195.264a32 32 0 0 1 0 45.184L692.992 376.32a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0zm-452.544 452.48a32 32 0 0 1 0 45.248L240.448 828.8a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0z">
-              </path>
-            </svg></el-icon>
+                </path>
+              </svg></el-icon>
         </div>
         <div class="loading-text">加载中...</div>
       </el-card>
@@ -678,7 +847,26 @@ async function changeDirectory() {
   <el-dialog v-model="isDirectoryDialogVisible" title="切换工作目录" width="50%" destroy-on-close>
     <el-form>
       <el-form-item label="目录路径">
-        <el-input v-model="newDirectoryPath" placeholder="请输入目录路径" />
+        <div class="directory-input-group">
+          <el-input v-model="newDirectoryPath" placeholder="请输入目录路径" />
+          <el-button type="primary" @click="browseDirectory">
+            <el-icon><Folder /></el-icon>
+            浏览
+          </el-button>
+        </div>
+      </el-form-item>
+      <el-form-item label="常用目录" v-if="recentDirectories.length > 0">
+        <div class="recent-directories">
+          <el-tag 
+            v-for="(dir, index) in recentDirectories" 
+            :key="index" 
+            class="recent-dir-tag"
+            @click="newDirectoryPath = dir"
+            effect="plain"
+          >
+            {{ dir }}
+          </el-tag>
+        </div>
       </el-form-item>
     </el-form>
     <template #footer>
@@ -718,8 +906,8 @@ body {
 
 .grid-layout {
   display: grid;
-  grid-template-columns: 1fr 8px 3fr;
-  /* 左右区域比例为1:3 */
+  grid-template-columns: 2fr 8px 3fr;
+  /* 左右区域比例为2:3 */
   grid-template-rows: 1fr 8px 1fr;
   grid-template-areas:
     "git-status v-resizer commit-form"
@@ -765,7 +953,7 @@ body {
 .main-header {
   background-color: #24292e;
   color: white;
-  padding: 15px 20px;
+  padding: 0 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -783,6 +971,8 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 220px;
+  flex: 1;
 }
 
 .logo {
@@ -798,15 +988,59 @@ h1 {
 .header-info {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
-#branch-info,
+/* 调整用户信息和目录选择的排列 */
 #user-info {
-  background-color: rgba(255, 255, 255, 0.1);
-  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  background-color: rgba(40, 44, 52, 0.7);
+  padding: 6px 10px;
   border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+/* 添加目录选择器样式 */
+.directory-selector {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  background-color: rgba(40, 44, 52, 0.7);
+  border-radius: 4px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+.directory-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.directory-path {
+  font-family: monospace;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 14px;
+  font-weight: 500;
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 4px 8px;
+  border-radius: 3px;
+  border-left: 3px solid #409EFF;
+  flex: 1;
+  min-width: 0;
+  max-width: 500px;
 }
 
 .branch-label,
@@ -1177,27 +1411,394 @@ h1 {
 
 .directory-actions {
   display: flex;
-  gap: 6px;
-  margin-left: 10px;
+  gap: 4px;
+  margin-left: 8px;
 }
 
 .dir-button {
+  padding: 6px;
+  height: 28px;
+  width: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: linear-gradient(135deg, #409EFF 0%, #53a8ff 100%);
   color: white;
   border: none;
-  font-weight: 500;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   transition: all 0.3s;
-  padding: 6px 12px;
-  height: 32px;
 }
 
 .dir-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, #53a8ff 0%, #66b1ff 100%);
 }
 
 .dir-button.el-button--info {
   background: linear-gradient(135deg, #909399 0%, #a6a9ad 100%);
+}
+
+.dir-button.el-button--info:hover {
+  background: linear-gradient(135deg, #a6a9ad 0%, #c0c4cc 100%);
+}
+
+.directory-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  background-color: rgba(64, 158, 255, 0.1);
+  color: #409EFF;
+  margin-right: 2px;
+}
+
+.directory-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.recent-directories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.recent-dir-tag {
+  cursor: pointer;
+  background-color: #e6f7ff;
+  border: 1px solid #91d5ff;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.directory-browser {
+  width: 100%;
+  height: 400px;
+  overflow: auto;
+}
+
+.current-path {
+  padding: 10px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.path-label {
+  font-weight: bold;
+  margin-right: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.path-value {
+  font-family: monospace;
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+  background-color: #fff;
+  padding: 5px 8px;
+  border-radius: 3px;
+  border: 1px solid #dcdfe6;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  width: 100%;
+}
+
+.directory-list {
+  list-style: none !important;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  background-color: white;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.directory-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid #ebeef5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  list-style: none !important; /* 确保列表项没有项目符号 */
+}
+
+.directory-item:hover {
+  background-color: #ecf5ff;
+}
+
+.directory-item:last-child {
+  border-bottom: none;
+}
+
+.parent-dir {
+  background-color: #f5f7fa;
+  font-weight: 500;
+}
+
+.dir-icon {
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.dir-name {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.folder-icon {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+  transition: all 0.2s ease;
+}
+
+.directory-item:hover .folder-icon {
+  transform: scale(1.1);
+}
+
+/* 目录浏览器对话框样式 */
+:deep(.directory-browser-dialog) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+:deep(.directory-browser-dialog .el-message-box__header) {
+  background-color: #f5f7fa;
+  padding: 15px 20px;
+  border-bottom: 1px solid #e4e7ed;
+  position: relative;
+}
+
+:deep(.directory-browser-dialog .el-message-box__title) {
+  color: #409EFF;
+  font-weight: 500;
+  font-size: 18px;
+}
+
+:deep(.directory-browser-dialog .el-message-box__headerbtn) {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.directory-browser-dialog .el-message-box__headerbtn:hover) {
+  background-color: rgba(0, 0, 0, 0.1);
+  transform: rotate(90deg);
+}
+
+:deep(.directory-browser-dialog .el-message-box__headerbtn .el-message-box__close) {
+  color: #606266;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+:deep(.directory-browser-dialog .el-message-box__headerbtn:hover .el-message-box__close) {
+  color: #409EFF;
+}
+
+:deep(.directory-browser-dialog .el-message-box__content) {
+  padding: 20px;
+}
+</style>
+
+<!-- 添加全局样式，确保能影响body下的弹窗 -->
+<style>
+.el-message-box__message{
+  width: 100%;
+}
+/* 目录浏览器全局样式 */
+.directory-browser-dialog {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.directory-browser-dialog .el-message-box__header {
+  background-color: #f5f7fa;
+  padding: 15px 20px;
+  border-bottom: 1px solid #e4e7ed;
+  position: relative;
+}
+
+.directory-browser-dialog .el-message-box__title {
+  color: #409EFF;
+  font-weight: 500;
+  font-size: 18px;
+}
+
+.directory-browser-dialog .el-message-box__headerbtn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.directory-browser-dialog .el-message-box__headerbtn:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+  transform: rotate(90deg);
+}
+
+.directory-browser-dialog .el-message-box__headerbtn .el-message-box__close {
+  color: #606266;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.directory-browser-dialog .el-message-box__headerbtn:hover .el-message-box__close {
+  color: #409EFF;
+}
+
+.directory-browser-dialog .el-message-box__content {
+  padding: 20px;
+}
+
+.directory-browser-dialog .el-message-box__btns {
+  padding: 10px 20px 15px;
+  border-top: 1px solid #e4e7ed;
+}
+
+.directory-browser {
+  width: 100%;
+  height: 400px;
+  overflow: auto;
+}
+
+.current-path {
+  padding: 10px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #e4e7ed;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.path-label {
+  font-weight: bold;
+  margin-right: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.path-value {
+  font-family: monospace;
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+  background-color: #fff;
+  padding: 5px 8px;
+  border-radius: 3px;
+  border: 1px solid #dcdfe6;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  width: 100%;
+}
+
+.directory-list {
+  list-style: none !important;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  background-color: white;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.directory-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid #ebeef5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  list-style: none !important; /* 确保列表项没有项目符号 */
+}
+
+.directory-item:hover {
+  background-color: #ecf5ff;
+}
+
+.directory-item:last-child {
+  border-bottom: none;
+}
+
+.parent-dir {
+  background-color: #f5f7fa;
+  font-weight: 500;
+}
+
+.dir-icon {
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.dir-name {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.folder-icon {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+  transition: all 0.2s ease;
+}
+
+.directory-item:hover .folder-icon {
+  transform: scale(1.1);
 }
 </style>

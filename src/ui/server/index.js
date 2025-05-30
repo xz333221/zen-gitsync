@@ -329,6 +329,101 @@ async function startUIServer() {
       }
   });
   
+  // POST接口版本的浏览目录功能
+  app.post('/api/browse_directory', async (req, res) => {
+      try {
+          // 获取要浏览的目录路径，如果没有提供，则使用当前目录
+          const directoryPath = req.body.currentPath || process.cwd();
+          
+          try {
+              // 读取目录内容
+              const items = await fs.readdir(directoryPath, { withFileTypes: true });
+              
+              // 分离文件夹和文件
+              const directories = [];
+              const files = [];
+              
+              for (const item of items) {
+                  const fullPath = path.join(directoryPath, item.name);
+                  if (item.isDirectory()) {
+                      directories.push({
+                          name: item.name,
+                          path: fullPath,
+                          type: 'directory'
+                      });
+                  }
+              }
+              
+              // 只返回目录，不返回文件
+              directories.sort((a, b) => a.name.localeCompare(b.name));
+              
+              // 获取父目录路径
+              const parentPath = path.dirname(directoryPath);
+              
+              // 返回选择的目录路径
+              res.json({
+                  success: true,
+                  path: directoryPath,
+                  parentPath: parentPath !== directoryPath ? parentPath : null,
+                  items: directories
+              });
+          } catch (error) {
+              res.status(400).json({
+                  success: false,
+                  error: `无法读取目录 "${directoryPath}": ${error.message}`
+              });
+          }
+      } catch (error) {
+          res.status(500).json({ 
+              success: false,
+              error: error.message 
+          });
+      }
+  });
+  
+  // 获取最近访问的目录列表
+  app.get('/api/recent_directories', async (req, res) => {
+      try {
+          // 尝试从配置中获取最近的目录
+          const recentDirs = await configManager.getRecentDirectories();
+          res.json({
+              success: true,
+              directories: recentDirs || []
+          });
+      } catch (error) {
+          res.status(500).json({ 
+              success: false,
+              error: error.message 
+          });
+      }
+  });
+  
+  // 保存最近访问的目录
+  app.post('/api/save_recent_directory', async (req, res) => {
+      try {
+          const { path } = req.body;
+          
+          if (!path) {
+              return res.status(400).json({ 
+                  success: false, 
+                  error: '目录路径不能为空' 
+              });
+          }
+          
+          // 保存到配置
+          await configManager.saveRecentDirectory(path);
+          
+          res.json({
+              success: true
+          });
+      } catch (error) {
+          res.status(500).json({ 
+              success: false,
+              error: error.message 
+          });
+      }
+  });
+  
   // 获取配置
   app.get('/api/config/getConfig', async (req, res) => {
     try {
