@@ -52,7 +52,7 @@ async function startUIServer() {
   });
   app.get('/api/status_porcelain', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git status --porcelain');
+      const { stdout } = await execGitCommand('git status --porcelain --untracked-files=all');
       res.json({ status: stdout });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -1394,7 +1394,7 @@ async function startUIServer() {
       const { stdout: statusOutput } = await execGitCommand('git status');
       
       // 获取porcelain格式状态
-      const { stdout: porcelainOutput } = await execGitCommand('git status --porcelain');
+      const { stdout: porcelainOutput } = await execGitCommand('git status --porcelain --untracked-files=all');
       
       // 广播到所有连接的客户端
       io.emit('git_status_update', { 
