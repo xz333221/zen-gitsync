@@ -16,6 +16,11 @@ export const useGitStore = defineStore('git', () => {
   const isCreatingBranch = ref(false)
   const isGitRepo = ref(false) // 当前目录是否是Git仓库
   const lastCheckedTime = ref(0) // 上次检查Git仓库状态的时间戳
+
+  // 新增Git操作状态
+  const isPushing = ref(false)         // 推送中状态
+  const isGitPulling = ref(false)      // 拉取中状态
+  const isGitFetching = ref(false) 
   
   // 添加分支状态相关变量
   const branchAhead = ref(0) // 当前分支领先远程分支的提交数
@@ -43,6 +48,9 @@ export const useGitStore = defineStore('git', () => {
     upstreamBranch.value = ''
     lastBranchStatusTime.value = 0
     lastBranchesTime.value = 0
+    isPushing.value = false
+    isGitPulling.value = false
+    isGitFetching.value = false
   }
 
   // 获取分支状态（领先/落后远程）
@@ -438,6 +446,9 @@ export const useGitStore = defineStore('git', () => {
     restoreUserConfig,
     getBranchStatus,
     gitPull,
-    gitFetchAll
+    gitFetchAll,
+    isPushing,
+    isGitPulling,
+    isGitFetching,
   }
 }) 

@@ -10,12 +10,7 @@ const gitLogStore = useGitLogStore();
 const gitStore = useGitStore();
 const configStore = useConfigStore();
 const commitMessage = ref("");
-const isPushing = ref(false);
-// 添加提交并推送的状态变量
 const showPushSuccess = ref(false);
-// 添加git pull和fetch操作相关状态变量
-const isGitPulling = ref(false);
-const isGitFetching = ref(false);
 // 添加placeholder变量
 const placeholder = ref("输入提交信息...");
 // 添加默认提交信息变量
@@ -26,6 +21,7 @@ const commitScope = ref("");
 const commitDescription = ref("");
 const commitBody = ref("");
 const commitFooter = ref("");
+const { isPushing, isGitPulling, isGitFetching } = gitStore;  // 新增：从store获取状态
 
 // 提交模板相关变量
 const descriptionTemplates = ref<string[]>([]);
