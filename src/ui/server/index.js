@@ -72,67 +72,37 @@ async function startUIServer() {
   // 获取分支与远程的差异状态（领先/落后提交数）
   app.get('/api/branch-status', async (req, res) => {
     try {
-      // 先获取当前分支名
-      const { stdout: branchName } = await execGitCommand('git rev-parse --abbrev-ref HEAD');
-      const currentBranch = branchName.trim();
-      
-      // 获取远程仓库名称
-      const { stdout: remoteName } = await execGitCommand('git remote');
-      const remote = remoteName.trim() || 'origin';
-      
-      // 尝试获取当前分支的上游分支
-      let upstreamBranch = '';
-      let hasUpstream = false;
-      
-      try {
-        const { stdout: upstream } = await execGitCommand(`git rev-parse --abbrev-ref ${currentBranch}@{upstream}`);
-        upstreamBranch = upstream.trim();
-        hasUpstream = true;
-      } catch (error) {
-        // 没有上游分支设置，这是正常的
-        console.log(`分支 ${currentBranch} 没有设置上游分支`);
-        hasUpstream = false;
+      // 检查当前目录是否是Git仓库
+      if (!isGitRepo) {
+        return res.json({ hasUpstream: false, ahead: 0, behind: 0 });
       }
       
-      // 如果分支没有上游设置，直接返回结果
-      if (!hasUpstream) {
-        return res.json({
-          branch: currentBranch,
-          remote,
-          hasUpstream: false,
-          ahead: 0,
-          behind: 0
-        });
+      // 获取当前分支
+      const { stdout: branchOutput } = await execGitCommand('git symbolic-ref --short HEAD');
+      const currentBranch = branchOutput.trim();
+      
+      // 获取上游分支
+      const { stdout: upstreamOutput } = await execGitCommand('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { ignoreError: true });
+      
+      if (!upstreamOutput.trim()) {
+        // 没有上游分支
+        return res.json({ hasUpstream: false, ahead: 0, behind: 0 });
       }
       
-      // 获取领先和落后的提交数
-      const { stdout: statusCompare } = await execGitCommand(`git rev-list --count --left-right ${currentBranch}...${upstreamBranch}`);
+      const upstreamBranch = upstreamOutput.trim();
       
-      // 解析结果，格式通常是 "1  2" 表示领先1个提交，落后2个提交
-      let ahead = 0;
-      let behind = 0;
-      
-      if (statusCompare && statusCompare.trim()) {
-        const parts = statusCompare.trim().split(/\s+/);
-        if (parts.length >= 2) {
-          ahead = parseInt(parts[0]) || 0;
-          behind = parseInt(parts[1]) || 0;
-        } else if (parts.length === 1) {
-          // 只有一个数字的情况，通常是领先的提交数
-          ahead = parseInt(parts[0]) || 0;
-        }
-      }
+      // 获取领先/落后提交数
+      const { stdout: aheadBehindOutput } = await execGitCommand(`git rev-list --left-right --count ${currentBranch}...${upstreamBranch}`);
+      const [ahead, behind] = aheadBehindOutput.trim().split('\t').map(Number);
       
       res.json({
-        branch: currentBranch,
-        remote,
-        upstreamBranch,
         hasUpstream: true,
+        upstreamBranch,
         ahead,
         behind
       });
     } catch (error) {
-      console.error("获取分支状态失败:", error);
+      console.error('获取分支状态失败:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -1263,7 +1233,32 @@ async function startUIServer() {
     }
   });
   
-        // 获取所有作者列表
+  // 获取远程仓库URL的API
+  app.get('/api/remote-url', async (req, res) => {
+    try {
+      // 检查当前目录是否是Git仓库
+      if (!isGitRepo) {
+        return res.json({ success: false, error: '当前目录不是Git仓库' });
+      }
+      
+      // 执行git命令获取远程仓库URL
+      const { stdout } = await execGitCommand('git config --get remote.origin.url');
+      
+      // 返回远程仓库URL
+      res.json({ 
+        success: true, 
+        url: stdout.trim() 
+      });
+    } catch (error) {
+      console.error('获取远程仓库URL失败:', error);
+      res.json({ 
+        success: false, 
+        error: error.message || '获取远程仓库URL失败' 
+      });
+    }
+  });
+  
+  // 获取所有作者列表
   app.get('/api/authors', async (req, res) => {
     try {
       // 使用git命令获取所有提交者，不依赖Unix命令

@@ -80,7 +80,8 @@ onMounted(async () => {
       await Promise.all([
         gitStore.getCurrentBranch(),  // 获取当前分支
         gitStore.getAllBranches(),    // 获取所有分支
-        gitStore.getUserInfo()        // 获取用户信息
+        gitStore.getUserInfo(),        // 获取用户信息
+        gitStore.getRemoteUrl()        // 获取远程仓库地址
       ])
     } else {
       ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
@@ -548,8 +549,24 @@ function stopHResize() {
         </el-button>
       </div>
     </div>
-    <div class="footer-right">
-      <!-- <span>Zen GitSync © 2024</span> -->
+    <div class="footer-right" v-if="gitStore.remoteUrl">
+      <span class="repo-url-label">远程仓库:</span>
+      <span class="repo-url">{{ gitStore.remoteUrl }}</span>
+      <el-button 
+        type="primary"
+        circle
+        size="small"
+        @click="gitStore.copyRemoteUrl()"
+        class="copy-url-btn"
+        title="复制仓库地址"
+      >
+        <el-icon>
+          <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <path fill="currentColor" d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
+            <path fill="currentColor" d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
+          </svg>
+        </el-icon>
+      </el-button>
     </div>
   </footer>
 
@@ -920,6 +937,35 @@ h1 {
   padding: 8px 12px;
   border-radius: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.repo-url-label {
+  font-weight: bold;
+  margin-right: 8px;
+  color: #ffffff;
+}
+
+.repo-url {
+  color: #e6f7ff;
+  font-family: monospace;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-url-btn {
+  transition: all 0.3s;
+  background-color: #1890ff;
+  border-color: #1890ff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.copy-url-btn:hover {
+  background-color: #40a9ff;
+  border-color: #40a9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* 垂直分隔条样式 */

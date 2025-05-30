@@ -21,6 +21,10 @@ export const useGitStore = defineStore('git', () => {
   const isGitRepo = ref(false) // 当前目录是否是Git仓库
   const lastCheckedTime = ref(0) // 上次检查Git仓库状态的时间戳
 
+  // 添加远程仓库地址状态
+  const remoteUrl = ref('') // 远程仓库地址
+  const isLoadingRemoteUrl = ref(false) // 加载远程仓库地址的状态
+
   // 新增Git操作状态
   const isPushing = ref(false)         // 推送中状态
   const isGitPulling = ref(false)      // 拉取中状态
@@ -78,6 +82,8 @@ export const useGitStore = defineStore('git', () => {
     isPushing.value = false
     isGitPulling.value = false
     isGitFetching.value = false
+    remoteUrl.value = '' // 重置远程仓库地址
+    isLoadingRemoteUrl.value = false
     
     // 重置gitLogStore的状态
     log.value = []
@@ -1172,6 +1178,58 @@ export const useGitStore = defineStore('git', () => {
     }
   }
   
+  // 获取远程仓库地址
+  async function getRemoteUrl() {
+    if (!isGitRepo.value) return;
+    
+    try {
+      isLoadingRemoteUrl.value = true;
+      console.log('获取远程仓库地址...');
+      const response = await fetch('/api/remote-url');
+      const data = await response.json();
+      
+      if (data.success) {
+        remoteUrl.value = data.url || '';
+        console.log(`获取到远程仓库地址: ${remoteUrl.value}`);
+      } else {
+        console.warn('获取远程仓库地址失败:', data.error);
+        remoteUrl.value = '';
+      }
+    } catch (error) {
+      console.error('获取远程仓库地址失败:', error);
+      remoteUrl.value = '';
+    } finally {
+      isLoadingRemoteUrl.value = false;
+    }
+  }
+
+  // 复制远程仓库地址到剪贴板
+  async function copyRemoteUrl() {
+    if (!remoteUrl.value) {
+      ElMessage({
+        message: '没有可复制的远程仓库地址',
+        type: 'warning'
+      });
+      return false;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(remoteUrl.value);
+      ElMessage({
+        message: '已复制远程仓库地址',
+        type: 'success'
+      });
+      return true;
+    } catch (error) {
+      console.error('复制远程仓库地址失败:', error);
+      ElMessage({
+        message: `复制失败: ${(error as Error).message}`,
+        type: 'error'
+      });
+      return false;
+    }
+  }
+  
   // 在组件挂载时初始化socket连接
   onMounted(() => {
     // 从localStorage加载自动更新设置
@@ -1207,6 +1265,8 @@ export const useGitStore = defineStore('git', () => {
     upstreamBranch,
     lastBranchStatusTime,
     lastBranchesTime,
+    remoteUrl,
+    isLoadingRemoteUrl,
     
     // 从 gitLogStore 合并的状态
     log,
@@ -1251,5 +1311,7 @@ export const useGitStore = defineStore('git', () => {
     addCommitAndPush,
     resetHead,
     resetToRemote,
+    getRemoteUrl,
+    copyRemoteUrl,
   }
 }) 
