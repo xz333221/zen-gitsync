@@ -33,10 +33,10 @@ const currentFileIndex = ref(-1)
 // const isChangingDirectory = ref(false)
 // 添加目录浏览相关的状态
 // const isDirectoryBrowserVisible = ref(false)
-const currentBrowsePath = ref('')
-const directoryItems = ref<{name: string, path: string, type: string}[]>([])
-const isBrowsing = ref(false)
-const browseErrorMessage = ref('')
+// const currentBrowsePath = ref('')
+// const directoryItems = ref<{name: string, path: string, type: string}[]>([])
+// const isBrowsing = ref(false)
+// const browseErrorMessage = ref('')
 
 // 添加git操作相关状态
 // 不再需要本地状态变量，使用gitStore中的isGitPulling和isGitFetching
