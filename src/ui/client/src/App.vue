@@ -57,23 +57,23 @@ async function loadCurrentDirectory() {
 
 onMounted(async () => {
   console.log('---------- 页面初始化开始 ----------')
-  
+
   try {
     // 并行加载配置和目录信息
     const dirData = await loadCurrentDirectory()
-    
+
     // 确保配置已加载
     if (!configStore.isLoaded) {
       await configStore.loadConfig()
     }
-    
+
     // 更新配置信息显示
     updateConfigInfo()
-    
+
     // 设置Git仓库状态
     gitStore.isGitRepo = dirData.isGitRepo === true
     gitStore.lastCheckedTime = Date.now()
-    
+
     // 只有是Git仓库的情况下才加载Git相关信息
     if (gitStore.isGitRepo) {
       // 并行获取所有Git信息，确保每个API只调用一次
@@ -92,7 +92,7 @@ onMounted(async () => {
     // 标记初始化完成
     initCompleted.value = true
     console.log('---------- 页面初始化完成 ----------')
-    
+
     // 无论是否是Git仓库，都应该加载布局比例
     // 使用短延时确保DOM已完全渲染
     setTimeout(() => {
@@ -108,19 +108,19 @@ const selectedBaseBranch = ref('')
 // 创建新分支
 async function createNewBranch() {
   const success = await gitStore.createBranch(newBranchName.value, selectedBaseBranch.value)
-  
+
   if (success) {
     // 关闭对话框
     createBranchDialogVisible.value = false
-    
+
     // 重置表单
     newBranchName.value = ''
-    
+
     // 刷新Git状态
     if (gitStatusRef.value) {
       gitStatusRef.value.refreshStatus()
     }
-    
+
     // 刷新提交历史
     if (logListRef.value) {
       logListRef.value.refreshLog()
@@ -137,13 +137,13 @@ function openCreateBranchDialog() {
 // 切换分支
 async function handleBranchChange(branch: string) {
   const success = await gitStore.changeBranch(branch)
-  
+
   if (success) {
     // 刷新Git状态
     if (gitStatusRef.value) {
       gitStatusRef.value.refreshStatus()
     }
-    
+
     // 刷新提交历史
     if (logListRef.value) {
       logListRef.value.refreshLog()
@@ -197,28 +197,28 @@ let initialGridTemplateRows = '';
 function saveLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
-  
+
   // 获取当前的列和行比例
   const columns = getComputedStyle(gridLayout).gridTemplateColumns.split(' ');
   const rows = getComputedStyle(gridLayout).gridTemplateRows.split(' ');
-  
+
   if (columns.length >= 3 && rows.length >= 3) {
     // 解析左右区域比例
     const leftColWidth = parseFloat(columns[0]);
     const rightColWidth = parseFloat(columns[2]);
     const totalWidth = leftColWidth + rightColWidth;
     const leftRatio = leftColWidth / totalWidth;
-    
+
     // 解析上下区域比例
     const topRowHeight = parseFloat(rows[0]);
     const bottomRowHeight = parseFloat(rows[2]);
     const totalHeight = topRowHeight + bottomRowHeight;
     const topRatio = topRowHeight / totalHeight;
-    
+
     // 保存到localStorage
     localStorage.setItem('zen-gitsync-layout-left-ratio', leftRatio.toString());
     localStorage.setItem('zen-gitsync-layout-top-ratio', topRatio.toString());
-    
+
     console.log(`布局比例已保存 - 左侧: ${(leftRatio * 100).toFixed(0)}%, 上方: ${(topRatio * 100).toFixed(0)}%`);
   }
 }
@@ -227,11 +227,11 @@ function saveLayoutRatios() {
 function loadLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
-  
+
   // 从localStorage获取保存的比例
   const savedLeftRatio = localStorage.getItem('zen-gitsync-layout-left-ratio');
   const savedTopRatio = localStorage.getItem('zen-gitsync-layout-top-ratio');
-  
+
   // 应用左右区域比例
   if (savedLeftRatio) {
     const leftRatio = parseFloat(savedLeftRatio);
@@ -242,7 +242,7 @@ function loadLayoutRatios() {
     // 默认比例 1:3
     gridLayout.style.gridTemplateColumns = "1fr 8px 3fr";
   }
-  
+
   // 应用上下区域比例
   if (savedTopRatio) {
     const topRatio = parseFloat(savedTopRatio);
@@ -255,43 +255,43 @@ function loadLayoutRatios() {
 function startVResize(event: MouseEvent) {
   isVResizing = true;
   initialX = event.clientX;
-  
+
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   initialGridTemplateColumns = getComputedStyle(gridLayout).gridTemplateColumns;
-  
+
   document.getElementById('v-resizer')?.classList.add('active');
-  
+
   document.addEventListener('mousemove', handleVResize);
   document.addEventListener('mouseup', stopVResize);
-  
+
   // 防止文本选择
   event.preventDefault();
 }
 
 function handleVResize(event: MouseEvent) {
   if (!isVResizing) return;
-  
+
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   const delta = event.clientX - initialX;
-  
+
   // 解析当前的网格模板列值
   const columns = initialGridTemplateColumns.split(' ');
-  
+
   // 确保我们有足够的列
   if (columns.length >= 3) {
     // 计算新的左列宽度
     const leftColWidth = parseFloat(columns[0]);
     const rightColWidth = parseFloat(columns[2]);
-    
+
     // 计算新的左右列比例
     const totalWidth = leftColWidth + rightColWidth;
     const newLeftRatio = (leftColWidth + delta / gridLayout.clientWidth * totalWidth) / totalWidth;
     const newRightRatio = 1 - newLeftRatio;
-    
+
     // 确保左侧宽度不小于总宽度的10%且不大于50%
     const minLeftRatio = 0.1;
     const maxLeftRatio = 0.5;
-    
+
     if (newLeftRatio < minLeftRatio) {
       gridLayout.style.gridTemplateColumns = `${minLeftRatio}fr 8px ${1 - minLeftRatio}fr`;
     } else if (newLeftRatio > maxLeftRatio) {
@@ -307,7 +307,7 @@ function stopVResize() {
   document.getElementById('v-resizer')?.classList.remove('active');
   document.removeEventListener('mousemove', handleVResize);
   document.removeEventListener('mouseup', stopVResize);
-  
+
   // 保存布局比例
   saveLayoutRatios();
 }
@@ -315,43 +315,43 @@ function stopVResize() {
 function startHResize(event: MouseEvent) {
   isHResizing = true;
   initialY = event.clientY;
-  
+
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   initialGridTemplateRows = getComputedStyle(gridLayout).gridTemplateRows;
-  
+
   document.getElementById('h-resizer')?.classList.add('active');
-  
+
   document.addEventListener('mousemove', handleHResize);
   document.addEventListener('mouseup', stopHResize);
-  
+
   // 防止文本选择
   event.preventDefault();
 }
 
 function handleHResize(event: MouseEvent) {
   if (!isHResizing) return;
-  
+
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   const delta = event.clientY - initialY;
-  
+
   // 解析当前的网格模板行值
   const rows = initialGridTemplateRows.split(' ');
-  
+
   // 确保我们有足够的行
   if (rows.length >= 3) {
     // 计算新的上行高度
     const topRowHeight = parseFloat(rows[0]);
     const bottomRowHeight = parseFloat(rows[2]);
-    
+
     // 计算新的上下行比例
     const totalHeight = topRowHeight + bottomRowHeight;
     const newTopRatio = (topRowHeight + delta / gridLayout.clientHeight * totalHeight) / totalHeight;
     const newBottomRatio = 1 - newTopRatio;
-    
+
     // 确保上方区域不小于总高度的20%且不大于80%
     const minTopRatio = 0.2;
     const maxTopRatio = 0.8;
-    
+
     if (newTopRatio < minTopRatio) {
       gridLayout.style.gridTemplateRows = `${minTopRatio}fr 8px ${1 - minTopRatio}fr`;
     } else if (newTopRatio > maxTopRatio) {
@@ -367,7 +367,7 @@ function stopHResize() {
   document.getElementById('h-resizer')?.classList.remove('active');
   document.removeEventListener('mousemove', handleHResize);
   document.removeEventListener('mouseup', stopHResize);
-  
+
   // 保存布局比例
   saveLayoutRatios();
 }
@@ -383,7 +383,7 @@ async function copyDirectoryPath() {
     ElMessage.warning('当前目录路径为空')
     return
   }
-  
+
   try {
     await navigator.clipboard.writeText(currentDirectory.value)
     ElMessage.success('已复制目录路径')
@@ -405,7 +405,7 @@ async function changeDirectory() {
     ElMessage.warning('目录路径不能为空')
     return
   }
-  
+
   try {
     isChangingDirectory.value = true
     const response = await fetch('/api/change_directory', {
@@ -415,17 +415,17 @@ async function changeDirectory() {
       },
       body: JSON.stringify({ path: newDirectoryPath.value })
     })
-    
+
     const result = await response.json()
-    
+
     if (result.success) {
       ElMessage.success('已切换工作目录')
       currentDirectory.value = result.directory
       isDirectoryDialogVisible.value = false
-      
+
       // 直接使用API返回的Git仓库状态
       gitStore.isGitRepo = result.isGitRepo
-      
+
       // 如果是Git仓库，加载Git相关数据
       if (result.isGitRepo) {
         // 加载Git分支和用户信息
@@ -435,12 +435,12 @@ async function changeDirectory() {
           gitStore.getUserInfo(),
           gitStore.getRemoteUrl()
         ])
-        
+
         // 刷新Git状态
         if (gitStatusRef.value) {
           gitStatusRef.value.refreshStatus()
         }
-        
+
         // 刷新提交历史
         if (logListRef.value) {
           logListRef.value.refreshLog()
@@ -468,85 +468,80 @@ async function changeDirectory() {
       <h1>Zen GitSync UI</h1>
     </div>
     <div class="header-info">
-      <!-- 添加目录选择功能 -->
-      <div class="directory-selector">
-        <div class="directory-display">
-          <el-icon><Folder /></el-icon>
-          <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
-        </div>
-        <div class="directory-actions">
-          <el-button 
-            type="primary" 
-            size="small" 
-            @click="openDirectoryDialog"
-            class="dir-button"
-          >
-            <el-icon style="margin-right: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M128 192v640h768V320H485.76L357.504 192H128zm-32-64h287.872l128.384 128H928a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32z"></path></svg></el-icon>
-            切换
-          </el-button>
-          <el-button
-            type="info"
-            size="small"
-            @click="copyDirectoryPath"
-            class="dir-button"
-          >
-            <el-icon style="margin-right: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" /><path fill="currentColor" d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" /></svg></el-icon>
-            复制
-          </el-button>
-        </div>
-      </div>
       <div id="user-info" v-if="gitStore.userName && gitStore.userEmail">
         <span class="user-label">用户:</span>
         <span class="user-name">{{ gitStore.userName }}</span>
         <span class="user-email">&lt;{{ gitStore.userEmail }}&gt;</span>
-        <el-button 
-          type="primary" 
-          size="small" 
-          @click="openUserSettingsDialog"
-          class="user-settings-btn"
-          circle
-        >
-          <el-icon><Setting /></el-icon>
+        <el-button type="primary" size="small" @click="openUserSettingsDialog" class="user-settings-btn" circle>
+          <el-icon>
+            <Setting />
+          </el-icon>
         </el-button>
       </div>
       <div id="user-info" v-else>
         <span class="user-label">用户: </span>
         <span class="user-warning">未配置</span>
-        <el-button 
-          type="primary" 
-          size="small" 
-          @click="openUserSettingsDialog"
-          class="user-settings-btn"
-          circle
-        >
-          <el-icon><Setting /></el-icon>
+        <el-button type="primary" size="small" @click="openUserSettingsDialog" class="user-settings-btn" circle>
+          <el-icon>
+            <Setting />
+          </el-icon>
         </el-button>
       </div>
+      <!-- 添加目录选择功能 -->
+      <div class="directory-selector">
+        <div class="directory-display">
+          <el-icon>
+            <Folder />
+          </el-icon>
+          <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
+        </div>
+        <div class="directory-actions">
+          <el-button type="primary" size="small" @click="openDirectoryDialog" class="dir-button">
+            <el-icon style="margin-right: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor"
+                  d="M128 192v640h768V320H485.76L357.504 192H128zm-32-64h287.872l128.384 128H928a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32z">
+                </path>
+              </svg></el-icon>
+            切换
+          </el-button>
+          <el-button type="info" size="small" @click="copyDirectoryPath" class="dir-button">
+            <el-icon style="margin-right: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor"
+                  d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
+                <path fill="currentColor"
+                  d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
+              </svg></el-icon>
+            复制
+          </el-button>
+        </div>
+      </div>
+
     </div>
   </header>
-  
+
   <main class="main-container">
     <div v-if="!initCompleted" class="loading-container">
       <el-card class="loading-card">
         <div class="loading-spinner">
-          <el-icon class="is-loading"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32zM195.2 195.2a32 32 0 0 1 45.248 0L376.32 331.008a32 32 0 0 1-45.248 45.248L195.2 240.448a32 32 0 0 1 0-45.248zm452.544 452.544a32 32 0 0 1 45.248 0L828.8 783.552a32 32 0 0 1-45.248 45.248L647.744 692.992a32 32 0 0 1 0-45.248zM828.8 195.264a32 32 0 0 1 0 45.184L692.992 376.32a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0zm-452.544 452.48a32 32 0 0 1 0 45.248L240.448 828.8a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0z"></path></svg></el-icon>
+          <el-icon class="is-loading"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor"
+                d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32zM195.2 195.2a32 32 0 0 1 45.248 0L376.32 331.008a32 32 0 0 1-45.248 45.248L195.2 240.448a32 32 0 0 1 0-45.248zm452.544 452.544a32 32 0 0 1 45.248 0L828.8 783.552a32 32 0 0 1-45.248 45.248L647.744 692.992a32 32 0 0 1 0-45.248zM828.8 195.264a32 32 0 0 1 0 45.184L692.992 376.32a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0zm-452.544 452.48a32 32 0 0 1 0 45.248L240.448 828.8a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0z">
+              </path>
+            </svg></el-icon>
         </div>
         <div class="loading-text">加载中...</div>
       </el-card>
     </div>
-    
+
     <div v-else class="grid-layout">
       <!-- 上方左侧Git状态 -->
       <div class="git-status-panel">
-        <GitStatus 
-          ref="gitStatusRef" 
-          :initial-directory="currentDirectory"
-        />
+        <GitStatus ref="gitStatusRef" :initial-directory="currentDirectory" />
       </div>
-      
+
       <!-- 垂直分隔条 -->
       <div class="vertical-resizer" id="v-resizer" @mousedown="startVResize"></div>
-      
+
       <!-- 上方右侧提交表单 -->
       <div class="commit-form-panel" v-if="gitStore.isGitRepo">
         <!-- 当用户未配置时显示配置提示 -->
@@ -563,10 +558,7 @@ async function changeDirectory() {
                 git config --global user.email "您的邮箱"
               </div>
             </ol>
-            <el-button 
-              type="primary" 
-              @click="openUserSettingsDialog"
-            >
+            <el-button type="primary" @click="openUserSettingsDialog">
               立即配置
             </el-button>
           </div>
@@ -587,51 +579,37 @@ async function changeDirectory() {
           </div>
         </div>
       </div>
-      
+
       <!-- 水平分隔条 -->
       <div class="horizontal-resizer" id="h-resizer" @mousedown="startHResize"></div>
-      
+
       <!-- 下方提交历史 -->
       <div class="log-list-panel" v-if="gitStore.isGitRepo">
         <LogList ref="logListRef" />
       </div>
 
       <!-- 创建分支对话框 -->
-      <el-dialog
-        v-model="createBranchDialogVisible"
-        title="创建新分支"
-        width="30%"
-        destroy-on-close
-      >
+      <el-dialog v-model="createBranchDialogVisible" title="创建新分支" width="30%" destroy-on-close>
         <el-form :model="{ newBranchName, selectedBaseBranch }">
           <el-form-item label="新分支名称">
             <el-input v-model="newBranchName" placeholder="请输入新分支名称" />
           </el-form-item>
           <el-form-item label="基于分支">
             <el-select v-model="selectedBaseBranch" placeholder="选择基础分支" style="width: 100%;">
-              <el-option 
-                v-for="branch in gitStore.allBranches" 
-                :key="branch" 
-                :label="branch" 
-                :value="branch"
-              />
+              <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
             </el-select>
           </el-form-item>
         </el-form>
         <template #footer>
           <span class="dialog-footer">
             <el-button @click="createBranchDialogVisible = false">取消</el-button>
-            <el-button 
-              type="primary" 
-              @click="createNewBranch" 
-              :loading="gitStore.isCreatingBranch"
-            >
+            <el-button type="primary" @click="createNewBranch" :loading="gitStore.isCreatingBranch">
               创建
             </el-button>
           </span>
         </template>
       </el-dialog>
-      
+
     </div>
   </main>
 
@@ -639,27 +617,14 @@ async function changeDirectory() {
     <div class="branch-info" v-if="gitStore.currentBranch">
       <div class="branch-wrapper">
         <span class="branch-label">当前分支:</span>
-        <el-select 
-          v-model="gitStore.currentBranch" 
-          size="small" 
-          @change="handleBranchChange"
-          :loading="gitStore.isChangingBranch"
-          class="branch-select"
-        >
-          <el-option 
-            v-for="branch in gitStore.allBranches" 
-            :key="branch" 
-            :label="branch" 
-            :value="branch"
-          />
+        <el-select v-model="gitStore.currentBranch" size="small" @change="handleBranchChange"
+          :loading="gitStore.isChangingBranch" class="branch-select">
+          <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
         </el-select>
-        <el-button 
-          type="primary" 
-          size="small" 
-          @click="openCreateBranchDialog"
-          class="create-branch-btn"
-        >
-          <el-icon><Plus /></el-icon>
+        <el-button type="primary" size="small" @click="openCreateBranchDialog" class="create-branch-btn">
+          <el-icon>
+            <Plus />
+          </el-icon>
           新建分支
         </el-button>
       </div>
@@ -667,18 +632,14 @@ async function changeDirectory() {
     <div class="footer-right" v-if="gitStore.remoteUrl">
       <span class="repo-url-label">远程仓库:</span>
       <span class="repo-url">{{ gitStore.remoteUrl }}</span>
-      <el-button 
-        type="primary"
-        circle
-        size="small"
-        @click="gitStore.copyRemoteUrl()"
-        class="copy-url-btn"
-        title="复制仓库地址"
-      >
+      <el-button type="primary" circle size="small" @click="gitStore.copyRemoteUrl()" class="copy-url-btn"
+        title="复制仓库地址">
         <el-icon>
           <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
-            <path fill="currentColor" d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
+            <path fill="currentColor"
+              d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
+            <path fill="currentColor"
+              d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
           </svg>
         </el-icon>
       </el-button>
@@ -686,12 +647,7 @@ async function changeDirectory() {
   </footer>
 
   <!-- 用户设置对话框 -->
-  <el-dialog
-    v-model="userSettingsDialogVisible"
-    title="Git用户设置"
-    width="30%"
-    destroy-on-close
-  >
+  <el-dialog v-model="userSettingsDialogVisible" title="Git用户设置" width="30%" destroy-on-close>
     <el-form>
       <el-form-item label="用户名">
         <el-input v-model="tempUserName" placeholder="请输入Git用户名" />
@@ -700,28 +656,18 @@ async function changeDirectory() {
         <el-input v-model="tempUserEmail" placeholder="请输入Git邮箱" />
       </el-form-item>
       <el-form-item>
-        <el-alert
-          type="info"
-          :closable="false"
-          show-icon
-        >
+        <el-alert type="info" :closable="false" show-icon>
           这些设置将影响全局Git配置，对所有Git仓库生效。
         </el-alert>
       </el-form-item>
     </el-form>
     <template #footer>
       <span class="dialog-footer">
-        <el-button 
-          type="danger" 
-          @click="clearUserSettings"
-        >
+        <el-button type="danger" @click="clearUserSettings">
           清除配置
         </el-button>
         <el-button @click="userSettingsDialogVisible = false">取消</el-button>
-        <el-button 
-          type="primary" 
-          @click="saveUserSettings"
-        >
+        <el-button type="primary" @click="saveUserSettings">
           保存
         </el-button>
       </span>
@@ -729,28 +675,16 @@ async function changeDirectory() {
   </el-dialog>
 
   <!-- 添加切换目录对话框 -->
-  <el-dialog
-    v-model="isDirectoryDialogVisible"
-    title="切换工作目录"
-    width="50%"
-    destroy-on-close
-  >
+  <el-dialog v-model="isDirectoryDialogVisible" title="切换工作目录" width="50%" destroy-on-close>
     <el-form>
       <el-form-item label="目录路径">
-        <el-input 
-          v-model="newDirectoryPath" 
-          placeholder="请输入目录路径"
-        />
+        <el-input v-model="newDirectoryPath" placeholder="请输入目录路径" />
       </el-form-item>
     </el-form>
     <template #footer>
       <span class="dialog-footer">
         <el-button @click="isDirectoryDialogVisible = false">取消</el-button>
-        <el-button 
-          type="primary" 
-          @click="changeDirectory()" 
-          :loading="isChangingDirectory"
-        >
+        <el-button type="primary" @click="changeDirectory()" :loading="isChangingDirectory">
           切换
         </el-button>
       </span>
@@ -764,25 +698,30 @@ body {
   margin: 0;
   padding: 0;
   background-color: #f5f5f5;
-  overflow: hidden; /* 防止出现滚动条 */
+  overflow: hidden;
+  /* 防止出现滚动条 */
   height: 100vh;
 }
 
 .main-container {
   position: fixed;
-  top: 60px; /* 顶部导航栏高度 */
-  bottom: 60px; /* 底部footer高度 */
+  top: 60px;
+  /* 顶部导航栏高度 */
+  bottom: 60px;
+  /* 底部footer高度 */
   left: 0;
   right: 0;
   padding: 10px;
-  overflow: hidden; /* 防止整体滚动 */
+  overflow: hidden;
+  /* 防止整体滚动 */
 }
 
 .grid-layout {
   display: grid;
-  grid-template-columns: 1fr 8px 3fr; /* 左右区域比例为1:3 */
+  grid-template-columns: 1fr 8px 3fr;
+  /* 左右区域比例为1:3 */
   grid-template-rows: 1fr 8px 1fr;
-  grid-template-areas: 
+  grid-template-areas:
     "git-status v-resizer commit-form"
     "h-resizer h-resizer h-resizer"
     "log-list log-list log-list";
@@ -862,14 +801,16 @@ h1 {
   gap: 5px;
 }
 
-#branch-info, #user-info {
+#branch-info,
+#user-info {
   background-color: rgba(255, 255, 255, 0.1);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 14px;
 }
 
-.branch-label, .user-label {
+.branch-label,
+.user-label {
   font-weight: bold;
   margin-right: 5px;
 }
@@ -976,7 +917,7 @@ h1 {
   .grid-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto auto auto;
-    grid-template-areas: 
+    grid-template-areas:
       "git-status"
       "v-resizer"
       "commit-form"
@@ -984,7 +925,7 @@ h1 {
       "log-list";
     gap: 10px;
   }
-  
+
   .vertical-resizer {
     height: 10px;
     cursor: row-resize;
@@ -994,7 +935,7 @@ h1 {
     width: 30px;
     height: 4px;
   }
-  
+
   .git-status-panel,
   .commit-form-panel,
   .log-list-panel {
@@ -1005,11 +946,11 @@ h1 {
   .git-status-panel {
     max-height: 30vh;
   }
-  
+
   .commit-form-panel {
     max-height: 30vh;
   }
-  
+
   .log-list-panel {
     max-height: 40vh;
   }
@@ -1021,6 +962,7 @@ h1 {
   will-change: filter;
   transition: filter 300ms;
 }
+
 .logo:hover {
   filter: drop-shadow(0 0 2em #42b883aa);
 }
@@ -1119,7 +1061,8 @@ h1 {
   transition: background-color 0.2s, box-shadow 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: 8px; /* 增加圆角 */
+  border-radius: 8px;
+  /* 增加圆角 */
   box-shadow: 0 0 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -1132,16 +1075,19 @@ h1 {
   width: 4px;
   height: 50px;
   background-color: #a0a0a0;
-  border-radius: 4px; /* 增加圆角 */
+  border-radius: 4px;
+  /* 增加圆角 */
   transition: background-color 0.2s, width 0.2s, box-shadow 0.2s;
 }
 
-.vertical-resizer:hover, .vertical-resizer.active {
+.vertical-resizer:hover,
+.vertical-resizer.active {
   background-color: #d0d0d0;
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
-.vertical-resizer:hover::after, .vertical-resizer.active::after {
+.vertical-resizer:hover::after,
+.vertical-resizer.active::after {
   background-color: #409EFF;
   width: 6px;
   box-shadow: 0 0 8px rgba(64, 158, 255, 0.6);
@@ -1155,7 +1101,8 @@ h1 {
   transition: background-color 0.2s, box-shadow 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: 8px; /* 增加圆角 */
+  border-radius: 8px;
+  /* 增加圆角 */
   box-shadow: 0 0 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -1168,20 +1115,24 @@ h1 {
   width: 50px;
   height: 4px;
   background-color: #a0a0a0;
-  border-radius: 4px; /* 增加圆角 */
+  border-radius: 4px;
+  /* 增加圆角 */
   transition: background-color 0.2s, height 0.2s, box-shadow 0.2s;
 }
 
-.horizontal-resizer:hover, .horizontal-resizer.active {
+.horizontal-resizer:hover,
+.horizontal-resizer.active {
   background-color: #d0d0d0;
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
-.horizontal-resizer:hover::after, .horizontal-resizer.active::after {
+.horizontal-resizer:hover::after,
+.horizontal-resizer.active::after {
   background-color: #409EFF;
   height: 6px;
   box-shadow: 0 0 8px rgba(64, 158, 255, 0.6);
 }
+
 /* 添加目录选择器样式 */
 .directory-selector {
   display: flex;
@@ -1201,7 +1152,8 @@ h1 {
   align-items: center;
   gap: 8px;
   flex: 1;
-  min-width: 0; /* 防止flex子项溢出 */
+  min-width: 0;
+  /* 防止flex子项溢出 */
 }
 
 .directory-path {
@@ -1217,8 +1169,10 @@ h1 {
   border-radius: 3px;
   border-left: 3px solid #409EFF;
   flex: 1;
-  min-width: 0; /* 防止flex子项溢出 */
-  max-width: 350px; /* 控制最大宽度 */
+  min-width: 0;
+  /* 防止flex子项溢出 */
+  max-width: 350px;
+  /* 控制最大宽度 */
 }
 
 .directory-actions {
