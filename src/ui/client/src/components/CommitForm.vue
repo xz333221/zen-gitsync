@@ -1135,7 +1135,7 @@ git config --global user.email "your.email@example.com"</pre>
                         type="primary"
                         :icon="Download"
                         @click="handleGitPull"
-                        :loading="isGitPulling"
+                        :loading="gitStore.       isGitPulling"
                         :disabled="!gitStore.hasUpstream"
                         class="action-button"
                         :style="needsPull ? {color: 'white', backgroundColor: '#E6A23C', borderColor: '#E6A23C'} : {}"
@@ -1150,7 +1150,7 @@ git config --global user.email "your.email@example.com"</pre>
                         type="info"
                         :icon="Connection"
                         @click="handleGitFetchAll"
-                        :loading="isGitFetching"
+                        :loading="gitStore.isGitFetching"
                         class="action-button"
                       >
                         获取所有远程分支

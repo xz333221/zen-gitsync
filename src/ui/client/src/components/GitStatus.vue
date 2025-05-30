@@ -39,8 +39,9 @@ const isBrowsing = ref(false)
 const browseErrorMessage = ref('')
 
 // 添加git操作相关状态
-const isGitPulling = ref(false)
-const isGitFetching = ref(false)
+// 不再需要本地状态变量，使用gitStore中的isGitPulling和isGitFetching
+// const isGitPulling = ref(false)
+// const isGitFetching = ref(false)
 
 const currentDirectory = ref(props.initialDirectory || '');
 async function loadStatus() {
@@ -361,25 +362,27 @@ async function refreshStatus() {
 
 // 添加git pull操作方法
 async function handleGitPull() {
-  isGitPulling.value = true
   try {
+    // 使用store中的状态变量，而不是本地变量
     await gitStore.gitPull()
     // 刷新Git状态
     await loadStatus()
-  } finally {
-    isGitPulling.value = false
+  } catch (error) {
+    // 错误处理已经在store中完成
+    console.error('拉取操作发生错误:', error)
   }
 }
 
 // 添加git fetch --all操作方法
 async function handleGitFetchAll() {
-  isGitFetching.value = true
   try {
+    // 使用store中的状态变量，而不是本地变量
     await gitStore.gitFetchAll()
     // 刷新Git状态
     await loadStatus()
-  } finally {
-    isGitFetching.value = false
+  } catch (error) {
+    // 错误处理已经在store中完成
+    console.error('获取远程分支信息操作发生错误:', error)
   }
 }
 
@@ -497,7 +500,7 @@ defineExpose({
             circle 
             size="small" 
             @click="handleGitPull" 
-            :loading="isGitPulling"
+            :loading="gitStore.isGitPulling"
             :disabled="!gitStore.hasUpstream"
           />
         </el-tooltip>
@@ -510,7 +513,7 @@ defineExpose({
             circle 
             size="small" 
             @click="handleGitFetchAll" 
-            :loading="isGitFetching"
+            :loading="gitStore.isGitFetching"
           />
         </el-tooltip>
         
