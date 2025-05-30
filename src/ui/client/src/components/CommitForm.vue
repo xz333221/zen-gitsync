@@ -19,7 +19,7 @@ const commitScope = ref("");
 const commitDescription = ref("");
 const commitBody = ref("");
 const commitFooter = ref("");
-const { isGitPulling, isGitFetching, isPushing } = gitStore;  // 新增：从store获取状态
+const { isGitPulling, isGitFetching } = gitStore;  // 从store获取状态
 
 // 提交模板相关变量
 const descriptionTemplates = ref<string[]>([]);
@@ -946,14 +946,14 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="card" :class="{ 'is-pushing': gitStore.isPushing || isPushing }">
+  <div class="card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header">
       <h2>提交更改</h2>
     </div>
 
     <!-- 添加推送中指示器 -->
     <transition name="el-fade-in-linear">
-      <div v-if="isPushing" class="pushing-indicator">
+      <div v-if="gitStore.isPushing" class="pushing-indicator">
         <div class="pushing-spinner">
           <svg viewBox="0 0 50 50" class="circular">
             <circle class="path" cx="25" cy="25" r="20" fill="none" />
@@ -1122,7 +1122,7 @@ git config --global user.email "your.email@example.com"</pre>
                         @click="pushToRemote"
                         :loading="gitStore.isPushing"
                         :disabled="!canPush"
-                        :class="['action-button', 'push-button', { 'is-loading': gitStore.isPushing || isPushing }]"
+                        :class="['action-button', 'push-button', { 'is-loading': gitStore.isPushing }]"
                         :style="needsPush ? {backgroundColor: '#67c23a !important', borderColor: '#67c23a !important'} : {}"
                       >
                         推送
