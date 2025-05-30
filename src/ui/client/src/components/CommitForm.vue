@@ -2,11 +2,9 @@
 import { ref, onMounted, computed, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown } from "@element-plus/icons-vue";
-import { useGitLogStore } from "../stores/gitLogStore";
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
 
-const gitLogStore = useGitLogStore();
 const gitStore = useGitStore();
 const configStore = useConfigStore();
 const commitMessage = ref("");
@@ -21,8 +19,7 @@ const commitScope = ref("");
 const commitDescription = ref("");
 const commitBody = ref("");
 const commitFooter = ref("");
-const { isGitPulling, isGitFetching } = gitStore;  // 新增：从store获取状态
-const { isPushing } = gitLogStore;  // 新增：从store获取状态
+const { isGitPulling, isGitFetching, isPushing } = gitStore;  // 新增：从store获取状态
 
 // 提交模板相关变量
 const descriptionTemplates = ref<string[]>([]);
@@ -469,10 +466,10 @@ function openScopeSettings() {
 // 添加文件到暂存区 (git add)
 async function addToStage() {
   try {
-    const result = await gitLogStore.addToStage();
+    const result = await gitStore.addToStage();
     if (result) {
       // 触发状态更新事件
-      gitLogStore.fetchStatus();
+      gitStore.fetchStatus();
     }
   } catch (error) {
     ElMessage({
@@ -494,15 +491,15 @@ async function commitChanges() {
 
   try {
     // 使用Store提交更改
-    const result = await gitLogStore.commitChanges(finalCommitMessage.value, skipHooks.value);
+    const result = await gitStore.commitChanges(finalCommitMessage.value, skipHooks.value);
 
     if (result) {
       // 清空提交信息
       clearCommitFields();
 
       // 触发成功事件
-      gitLogStore.fetchStatus();
-      gitLogStore.fetchLog();
+      gitStore.fetchStatus();
+      gitStore.fetchLog();
       
       // 手动更新分支状态
       gitStore.getBranchStatus();
@@ -526,7 +523,7 @@ function showPushSuccessIndicator() {
 // 推送到远程 (git push)
 async function pushToRemote() {
   try {
-    await gitLogStore.pushToRemote();
+    await gitStore.pushToRemote();
     // 显示推送成功提示
     showPushSuccessIndicator();
     
@@ -546,7 +543,7 @@ async function handleGitPull() {
   try {
     await gitStore.gitPull();
     // 刷新状态
-    await gitLogStore.fetchStatus();
+    await gitStore.fetchStatus();
   } catch (error) {
     ElMessage({
       message: `拉取失败: ${(error as Error).message}`,
@@ -561,7 +558,7 @@ async function handleGitFetchAll() {
   try {
     await gitStore.gitFetchAll();
     // 刷新状态
-    await gitLogStore.fetchStatus();
+    await gitStore.fetchStatus();
   } catch (error) {
     ElMessage({
       message: `获取远程分支信息失败: ${(error as Error).message}`,
@@ -582,14 +579,14 @@ async function addAndCommit() {
   }
 
   try {
-    await gitLogStore.addAndCommit(finalCommitMessage.value, skipHooks.value);
+    await gitStore.addAndCommit(finalCommitMessage.value, skipHooks.value);
 
     // 清空提交信息
     clearCommitFields();
 
     // 触发成功事件
-    gitLogStore.fetchStatus();
-    gitLogStore.fetchLog();
+    gitStore.fetchStatus();
+    gitStore.fetchLog();
   } catch (error) {
     ElMessage({
       message: `暂存并提交失败: ${(error as Error).message}`,
@@ -609,7 +606,7 @@ async function addCommitAndPush() {
   }
 
   try {
-    await gitLogStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
+    await gitStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
 
     // 清空提交信息
     clearCommitFields();
@@ -638,12 +635,12 @@ async function resetToRemote() {
       }
     );
 
-    const result = await gitLogStore.resetToRemote(gitStore.currentBranch);
+    const result = await gitStore.resetToRemote(gitStore.currentBranch);
     if (result) {
       // 触发状态更新事件
-      gitLogStore.fetchStatus();
+      gitStore.fetchStatus();
       // 更新提交历史
-      gitLogStore.fetchLog();
+      gitStore.fetchLog();
     }
   } catch (error) {
     // 用户取消操作，不显示错误
@@ -708,17 +705,17 @@ async function saveDefaultMessage() {
 
 // 根据Git状态计算按钮禁用状态
 const hasUnstagedChanges = computed(() => {
-  return gitLogStore.fileList.some(file => ['modified', 'deleted', 'untracked'].includes(file.type));
+  return gitStore.fileList.some(file => ['modified', 'deleted', 'untracked'].includes(file.type));
 });
 
 // 计算未暂存文件数量
 const unstagedFilesCount = computed(() => {
-  return gitLogStore.fileList.filter(file => ['modified', 'deleted', 'untracked'].includes(file.type)).length;
+  return gitStore.fileList.filter(file => ['modified', 'deleted', 'untracked'].includes(file.type)).length;
 });
 
 // 计算已暂存文件数量
 const stagedFilesCount = computed(() => {
-  return gitLogStore.fileList.filter(file => file.type === 'added').length;
+  return gitStore.fileList.filter(file => file.type === 'added').length;
 });
 
 const hasStagedChanges = computed(() => {
@@ -726,7 +723,7 @@ const hasStagedChanges = computed(() => {
 });
 
 const hasAnyChanges = computed(() => {
-  return gitLogStore.fileList.length > 0;
+  return gitStore.fileList.length > 0;
 });
 
 const needsPush = computed(() => {
@@ -952,7 +949,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="card" :class="{ 'is-pushing': gitLogStore.isPushing || isPushing }">
+  <div class="card" :class="{ 'is-pushing': gitStore.isPushing || isPushing }">
     <div class="card-header">
       <h2>提交更改</h2>
     </div>
@@ -1099,7 +1096,7 @@ git config --global user.email "your.email@example.com"</pre>
                       <el-button 
                         type="primary" 
                         @click="addToStage" 
-                        :loading="gitLogStore.isAddingFiles" 
+                        :loading="gitStore.isAddingFiles" 
                         :disabled="!hasUnstagedChanges"
                         class="action-button"
                       >
@@ -1112,7 +1109,7 @@ git config --global user.email "your.email@example.com"</pre>
                       <el-button 
                         type="primary" 
                         @click="commitChanges" 
-                        :loading="gitLogStore.isLoadingStatus"
+                        :loading="gitStore.isLoadingStatus"
                         :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
                         class="action-button"
                       >
@@ -1126,9 +1123,9 @@ git config --global user.email "your.email@example.com"</pre>
                         type="primary"
                         :icon="Upload"
                         @click="pushToRemote"
-                        :loading="gitLogStore.isPushing"
+                        :loading="gitStore.isPushing"
                         :disabled="!canPush"
-                        :class="['action-button', 'push-button', { 'is-loading': gitLogStore.isPushing || isPushing }]"
+                        :class="['action-button', 'push-button', { 'is-loading': gitStore.isPushing || isPushing }]"
                         :style="needsPush ? {backgroundColor: '#67c23a !important', borderColor: '#67c23a !important'} : {}"
                       >
                         推送
@@ -1174,7 +1171,7 @@ git config --global user.email "your.email@example.com"</pre>
                         type="primary"
                         :icon="Edit"
                         @click="addAndCommit"
-                        :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting"
+                        :loading="gitStore.isAddingFiles || gitStore.isCommiting"
                         :disabled="!hasUnstagedChanges || !finalCommitMessage.trim()"
                         class="action-button"
                       >
@@ -1187,9 +1184,9 @@ git config --global user.email "your.email@example.com"</pre>
                         type="success"
                         :icon="Position"
                         @click="addCommitAndPush"
-                        :loading="gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing"
+                        :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
                         :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
-                        :class="['action-button', 'one-click-push', { 'is-loading': gitLogStore.isAddingFiles || gitLogStore.isCommiting || gitLogStore.isPushing }]"
+                        :class="['action-button', 'one-click-push', { 'is-loading': gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing }]"
                       >
                         一键推送
                       </el-button>
@@ -1206,8 +1203,8 @@ git config --global user.email "your.email@example.com"</pre>
                     <el-button 
                       type="warning"
                       :icon="RefreshRight"
-                      @click="gitLogStore.resetHead"
-                      :loading="gitLogStore.isResetting"
+                      @click="gitStore.resetHead"
+                      :loading="gitStore.isResetting"
                       :disabled="!canReset"
                       class="action-button reset-button"
                     >
@@ -1221,7 +1218,7 @@ git config --global user.email "your.email@example.com"</pre>
                       type="danger"
                       :icon="Delete"
                       @click="resetToRemote"
-                      :loading="gitLogStore.isResetting"
+                      :loading="gitStore.isResetting"
                       :disabled="!canResetToRemote"
                       class="action-button danger-button"
                     >

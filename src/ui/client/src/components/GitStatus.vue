@@ -3,7 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
 import { Refresh, ArrowLeft, ArrowRight, Folder, Document, ArrowUp, RefreshRight, Check, Close, Download, Connection } from '@element-plus/icons-vue'
-import { useGitLogStore } from '../stores/gitLogStore'
+// import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '../stores/gitStore'
 
 // 定义props
@@ -14,12 +14,12 @@ const props = defineProps({
   }
 })
 
-const gitLogStore = useGitLogStore()
+// const gitLogStore = useGitLogStore()
 const gitStore = useGitStore()
 // 移除本地status定义，直接使用store中的statusText
 // const status = ref('加载中...')
 // const socket = io()
-const isRefreshing = computed(() => gitLogStore.isLoadingStatus)
+const isRefreshing = computed(() => gitStore.isLoadingStatus)
 // 移除本地fileList定义，改用store中的fileList
 const selectedFile = ref('')
 const diffContent = ref('')
@@ -57,8 +57,8 @@ async function loadStatus() {
       return
     }
     
-    // 使用gitLogStore获取Git状态
-    await gitLogStore.fetchStatus()
+    // 使用gitStore获取Git状态
+    await gitStore.fetchStatus()
     
     // 同时刷新分支状态信息，确保显示最新的领先/落后提交数
     await gitStore.getBranchStatus()
@@ -121,10 +121,10 @@ async function getFileDiff(filePath: string) {
     isLoadingDiff.value = true
     selectedFile.value = filePath
     // 设置当前文件索引
-    currentFileIndex.value = gitLogStore.fileList.findIndex(file => file.path === filePath)
+    currentFileIndex.value = gitStore.fileList.findIndex(file => file.path === filePath)
     
     // 获取当前文件的状态类型
-    const currentFile = gitLogStore.fileList[currentFileIndex.value]
+    const currentFile = gitStore.fileList[currentFileIndex.value]
     
     // 对未跟踪文件特殊处理
     if (currentFile && currentFile.type === 'untracked') {
@@ -170,19 +170,19 @@ async function getFileDiff(filePath: string) {
 
 // 添加切换到上一个文件的方法
 async function goToPreviousFile() {
-  if (gitLogStore.fileList.length === 0 || currentFileIndex.value <= 0) return
+  if (gitStore.fileList.length === 0 || currentFileIndex.value <= 0) return
   
   const newIndex = currentFileIndex.value - 1
-  const prevFile = gitLogStore.fileList[newIndex]
+  const prevFile = gitStore.fileList[newIndex]
   await getFileDiff(prevFile.path)
 }
 
 // 添加切换到下一个文件的方法
 async function goToNextFile() {
-  if (gitLogStore.fileList.length === 0 || currentFileIndex.value >= gitLogStore.fileList.length - 1) return
+  if (gitStore.fileList.length === 0 || currentFileIndex.value >= gitStore.fileList.length - 1) return
   
   const newIndex = currentFileIndex.value + 1
-  const nextFile = gitLogStore.fileList[newIndex]
+  const nextFile = gitStore.fileList[newIndex]
   await getFileDiff(nextFile.path)
 }
 
@@ -343,12 +343,12 @@ function handleFileClick(file: {path: string, type: string}) {
 
 // 暂存单个文件
 async function stageFile(filePath: string) {
-  await gitLogStore.addFileToStage(filePath)
+  await gitStore.addFileToStage(filePath)
 }
 
 // 取消暂存单个文件
 async function unstageFile(filePath: string) {
-  await gitLogStore.unstageFile(filePath)
+  await gitStore.unstageFile(filePath)
 }
 
 // 刷新Git状态的方法
@@ -451,10 +451,10 @@ onMounted(() => {
 })
 
 // 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
-watch(() => gitLogStore.autoUpdateEnabled, (newValue, oldValue) => {
+watch(() => gitStore.autoUpdateEnabled, (newValue, oldValue) => {
   console.log(`自动更新状态变更: ${oldValue} -> ${newValue}`)
   // 调用store中的方法来实现服务器通信功能
-  gitLogStore.toggleAutoUpdate()
+  gitStore.toggleAutoUpdate()
 }, { immediate: false })
 
 // onUnmounted(() => {
@@ -472,12 +472,12 @@ defineExpose({
       <h2>Git 状态</h2>
       <div class="header-actions">
         <el-tooltip 
-          :content="gitLogStore.autoUpdateEnabled ? '禁用自动更新文件状态' : '启用自动更新文件状态'" 
+          :content="gitStore.autoUpdateEnabled ? '禁用自动更新文件状态' : '启用自动更新文件状态'" 
           placement="top" 
           :hide-after="1000"
         >
           <el-switch 
-            v-model="gitLogStore.autoUpdateEnabled" 
+            v-model="gitStore.autoUpdateEnabled" 
             style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 10px;"
             inline-prompt
             :active-icon="Check"
@@ -573,13 +573,13 @@ defineExpose({
         </div>
         
         <!-- 现代化、简洁的文件列表 -->
-        <div v-if="gitLogStore.fileList.length" class="file-list-container">
+        <div v-if="gitStore.fileList.length" class="file-list-container">
           <!-- 分组显示文件 -->
-          <div v-if="gitLogStore.fileList.some(f => f.type === 'added')" class="file-group">
+          <div v-if="gitStore.fileList.some(f => f.type === 'added')" class="file-group">
             <div class="file-group-header">已暂存的更改</div>
             <div class="file-list">
               <div
-                v-for="file in gitLogStore.fileList.filter(f => f.type === 'added')"
+                v-for="file in gitStore.fileList.filter(f => f.type === 'added')"
                 :key="file.path"
                 class="file-item"
                 @click="handleFileClick(file)"
@@ -604,11 +604,11 @@ defineExpose({
             </div>
           </div>
           
-          <div v-if="gitLogStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')" class="file-group">
+          <div v-if="gitStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')" class="file-group">
             <div class="file-group-header">未暂存的更改</div>
             <div class="file-list">
               <div
-                v-for="file in gitLogStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
+                v-for="file in gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
                 :key="file.path"
                 class="file-item"
                 @click="handleFileClick(file)"
@@ -643,11 +643,11 @@ defineExpose({
             </div>
           </div>
           
-          <div v-if="gitLogStore.fileList.some(f => f.type === 'untracked')" class="file-group">
+          <div v-if="gitStore.fileList.some(f => f.type === 'untracked')" class="file-group">
             <div class="file-group-header">未跟踪的文件</div>
             <div class="file-list">
               <div
-                v-for="file in gitLogStore.fileList.filter(f => f.type === 'untracked')"
+                v-for="file in gitStore.fileList.filter(f => f.type === 'untracked')"
                 :key="file.path"
                 class="file-item"
                 @click="handleFileClick(file)"
@@ -831,7 +831,7 @@ defineExpose({
             type="primary"
             :icon="ArrowLeft" 
             @click="goToPreviousFile" 
-            :disabled="currentFileIndex <= 0 || gitLogStore.fileList.length === 0"
+            :disabled="currentFileIndex <= 0 || gitStore.fileList.length === 0"
             plain
             class="nav-button"
           >
@@ -840,7 +840,7 @@ defineExpose({
           
           <div class="file-counter">
             <el-tag type="info" effect="plain" class="counter-tag">
-              {{ currentFileIndex + 1 }} / {{ gitLogStore.fileList.length }}
+              {{ currentFileIndex + 1 }} / {{ gitStore.fileList.length }}
             </el-tag>
           </div>
           
@@ -848,7 +848,7 @@ defineExpose({
             type="primary"
             :icon="ArrowRight" 
             @click="goToNextFile" 
-            :disabled="currentFileIndex >= gitLogStore.fileList.length - 1 || gitLogStore.fileList.length === 0"
+            :disabled="currentFileIndex >= gitStore.fileList.length - 1 || gitStore.fileList.length === 0"
             plain
             class="nav-button"
           >

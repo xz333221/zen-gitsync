@@ -18,7 +18,6 @@ import {
 import { RefreshRight, ZoomIn, ZoomOut, Filter, Document, TrendCharts, List, More } from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import { createGitgraph } from '@gitgraph/js'
-import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '../stores/gitStore'
 
 interface LogItem {
@@ -32,7 +31,6 @@ interface LogItem {
 }
 
 // 使用Git状态和日志Store
-const gitLogStore = useGitLogStore()
 const gitStore = useGitStore()
 
 // 获取日志数据
@@ -41,7 +39,7 @@ const logs = ref<LogItem[]>(logsData)
 const errorMessage = ref('')
 // 定义本地加载状态，而不是依赖于computed
 const localLoading = ref(false)
-const isLoading = computed(() => gitLogStore.isLoadingLog || localLoading.value)
+const isLoading = computed(() => gitStore.isLoadingLog || localLoading.value)
 const showAllCommits = ref(false)
 const totalCommits = ref(0)
 const showGraphView = ref(false)
@@ -366,18 +364,18 @@ function removeTableScrollListener() {
 }
 
 onMounted(() => {
-  // 检查gitLogStore中是否已有数据
+  // 检查gitStore中是否已有数据
   if (gitStore.isGitRepo) {
-    if (gitLogStore.log.length > 0) {
+    if (gitStore.log.length > 0) {
       // 如果已经有数据，直接使用现有数据
       console.log('使用已加载的日志数据')
       
       // 清空并填充logsData
       logsData.length = 0
-      gitLogStore.log.forEach(item => logsData.push(item))
+      gitStore.log.forEach(item => logsData.push(item))
       
       // 由于TypeScript类型错误，我们直接设置totalCommits而不是使用logs.value.length
-      totalCommits.value = gitLogStore.log.length
+      totalCommits.value = gitStore.log.length
       
       // 确保视图被渲染
       if (showGraphView.value) {
@@ -430,21 +428,40 @@ onBeforeUnmount(() => {
   }
 })
 
-// 简化刷新函数，只需调用loadLog即可
-const refreshLog = () => {
-  if (!gitStore.isGitRepo) {
-    errorMessage.value = '当前目录不是Git仓库'
-    return
-  }
-  // 重置页码，重新加载第一页
+// 刷新日志的方法
+async function refreshLog(loadAll = false) {
+  // 简单调用gitStore的fetchLog方法
+  await gitStore.fetchLog(true)
+  
+  // 重新填充本地数据
+  logsData.length = 0
+  gitStore.log.forEach(item => logsData.push(item))
+  
+  // 触发视图更新
+  logs.value = [...logsData]
+  
+  // 设置总条数
+  totalCommits.value = gitStore.log.length
+  
+  // 重置分页状态
   currentPage.value = 1
-  hasMoreData.value = true
-  loadLog(showAllCommits.value, 1)
+  hasMoreData.value = false // 使用API直接加载全部日志时，没有更多数据
+  
+  // 设置刷新提示
+  logRefreshed.value = true
+  // 2秒后隐藏提示
+  setTimeout(() => { logRefreshed.value = false }, 2000)
+  
+  // 如果当前是图表视图，刷新图表
+  if (showGraphView.value) {
+    await nextTick()
+    renderGraph()
+  }
 }
 
 // 监听store中的日志变化
-watch(() => gitLogStore.log, (newLogs) => {
-  console.log('监听到gitLogStore.log变化，更新图表数据')
+watch(() => gitStore.log, (newLogs) => {
+  console.log('监听到gitStore.log变化，更新图表数据')
   
   try {
     // 清空logsData
@@ -815,7 +832,7 @@ async function revertCommit(commit: LogItem | null) {
       // 刷新日志
       refreshLog()
       // 刷新Git状态
-      gitLogStore.fetchStatus()
+      gitStore.fetchStatus()
       // 添加: 刷新分支状态
       gitStore.getBranchStatus()
     } else {
@@ -861,7 +878,7 @@ async function cherryPickCommit(commit: LogItem | null) {
       // 刷新日志
       refreshLog()
       // 刷新Git状态
-      gitLogStore.fetchStatus()
+      gitStore.fetchStatus()
       // 添加: 刷新分支状态
       gitStore.getBranchStatus()
     } else {
