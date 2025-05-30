@@ -35,6 +35,13 @@ async function loadConfig() {
   }
 }
 
+// 更新配置信息显示
+function updateConfigInfo() {
+  if (configStore.config) {
+    configInfo.value = `默认提交信息: ${configStore.config.defaultCommitMessage}`
+  }
+}
+
 // 加载当前目录信息
 async function loadCurrentDirectory() {
   try {
@@ -53,10 +60,15 @@ onMounted(async () => {
   
   try {
     // 并行加载配置和目录信息
-    const [_, dirData] = await Promise.all([
-      loadConfig(),
-      loadCurrentDirectory()
-    ])
+    const dirData = await loadCurrentDirectory()
+    
+    // 确保配置已加载
+    if (!configStore.isLoaded) {
+      await configStore.loadConfig()
+    }
+    
+    // 更新配置信息显示
+    updateConfigInfo()
     
     // 设置Git仓库状态
     gitStore.isGitRepo = dirData.isGitRepo === true

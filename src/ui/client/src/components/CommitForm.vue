@@ -115,35 +115,27 @@ const gitCommandPreview = computed(() => {
   return command
 });
 
-// 加载配置
-async function loadConfig() {
-  try {
-    const config = await configStore.loadConfig();
-    if (config) {
-      placeholder.value = `输入提交信息 (默认: ${config.defaultCommitMessage})`;
-      // 保存默认提交信息到变量中，以便后续使用
-      defaultCommitMessage.value = config.defaultCommitMessage || "";
+// 使用配置信息
+function updateFromConfig() {
+  const config = configStore.config;
+  if (config) {
+    placeholder.value = `输入提交信息 (默认: ${config.defaultCommitMessage})`;
+    defaultCommitMessage.value = config.defaultCommitMessage || "";
 
-      // 加载描述模板
-      if (
-        config.descriptionTemplates &&
-        Array.isArray(config.descriptionTemplates)
-      ) {
-        descriptionTemplates.value = config.descriptionTemplates;
-      }
-
-      // 加载作用域模板
-      if (config.scopeTemplates && Array.isArray(config.scopeTemplates)) {
-        scopeTemplates.value = config.scopeTemplates;
-      }
-      
-      // 加载提交信息模板
-      if (config.messageTemplates && Array.isArray(config.messageTemplates)) {
-        messageTemplates.value = config.messageTemplates;
-      }
+    // 加载描述模板
+    if (config.descriptionTemplates && Array.isArray(config.descriptionTemplates)) {
+      descriptionTemplates.value = config.descriptionTemplates;
     }
-  } catch (error) {
-    console.error("加载配置失败:", error);
+
+    // 加载作用域模板
+    if (config.scopeTemplates && Array.isArray(config.scopeTemplates)) {
+      scopeTemplates.value = config.scopeTemplates;
+    }
+    
+    // 加载提交信息模板
+    if (config.messageTemplates && Array.isArray(config.messageTemplates)) {
+      messageTemplates.value = config.messageTemplates;
+    }
   }
 }
 
@@ -930,21 +922,26 @@ function useMessageTemplate(template: string) {
   newDefaultMessage.value = template;
 }
 
-onMounted(() => {
-  loadConfig();
-
-  // 从 localStorage 中获取标准化提交设置
+onMounted(async () => {
+  // 从localStorage加载标准化提交选项
   const savedStandardCommit = localStorage.getItem("zen-gitsync-standard-commit");
   if (savedStandardCommit !== null) {
     isStandardCommit.value = savedStandardCommit === "true";
   }
 
-  // 从 localStorage 中获取跳过钩子设置
+  // 从localStorage加载跳过钩子选项
   const savedSkipHooks = localStorage.getItem("zen-gitsync-skip-hooks");
   if (savedSkipHooks !== null) {
     skipHooks.value = savedSkipHooks === "true";
   }
+
+  // 监听配置变化并更新
+  watch(() => configStore.config, updateFromConfig, { immediate: true });
   
+  // 确保配置已加载
+  if (!configStore.config) {
+    await configStore.loadConfig();
+  }
 });
 </script>
 

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 
 export const useConfigStore = defineStore('config', () => {
@@ -11,36 +11,41 @@ export const useConfigStore = defineStore('config', () => {
   const isLoading = ref(false)
   const isLoaded = ref(false)
 
+  // 添加 computed 属性返回完整配置
+  const config = computed(() => {
+    return {
+      defaultCommitMessage: defaultCommitMessage.value,
+      descriptionTemplates: descriptionTemplates.value,
+      scopeTemplates: scopeTemplates.value,
+      messageTemplates: messageTemplates.value
+    }
+  })
+
   // 加载配置
   async function loadConfig() {
     // 如果已经加载过，则不再重复加载
     if (isLoaded.value && !isLoading.value) {
       console.log('使用缓存的配置信息')
-      return {
-        defaultCommitMessage: defaultCommitMessage.value,
-        descriptionTemplates: descriptionTemplates.value,
-        scopeTemplates: scopeTemplates.value,
-        messageTemplates: messageTemplates.value
-      }
+      return config.value
     }
 
     try {
       isLoading.value = true
       console.log('加载配置信息...')
       const response = await fetch('/api/config/getConfig')
-      const config = await response.json()
+      const configData = await response.json()
       
       // 更新状态
-      defaultCommitMessage.value = config.defaultCommitMessage || ''
-      descriptionTemplates.value = config.descriptionTemplates || []
-      scopeTemplates.value = config.scopeTemplates || []
-      messageTemplates.value = config.messageTemplates || []
+      defaultCommitMessage.value = configData.defaultCommitMessage || ''
+      descriptionTemplates.value = configData.descriptionTemplates || []
+      scopeTemplates.value = configData.scopeTemplates || []
+      messageTemplates.value = configData.messageTemplates || []
       
       // 标记为已加载
       isLoaded.value = true
       
       console.log('配置信息加载完成')
-      return config
+      return config.value
     } catch (error) {
       console.error('加载配置失败:', error)
       ElMessage.error(`加载配置失败: ${(error as Error).message}`)
@@ -201,6 +206,7 @@ export const useConfigStore = defineStore('config', () => {
     messageTemplates,
     isLoading,
     isLoaded,
+    config,
     
     // 方法
     loadConfig,
