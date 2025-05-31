@@ -1052,6 +1052,8 @@ defineExpose({
 }
 .status-box-wrap{
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 分支信息样式 */
