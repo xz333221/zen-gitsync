@@ -538,14 +538,10 @@ defineExpose({
       </div>
       
       <div v-else>
-        <!-- 分支信息统一显示区域 -->
-        <div class="branch-status-info">
-          <div class="branch-base-info">
-            <p>当前工作在 <el-tag size="small" type="success">{{ gitStore.currentBranch }}</el-tag> 分支</p>
-          </div>
-          
+        <!-- 分支信息仅在有领先/落后状态时才显示 -->
+        <div v-if="gitStore.hasUpstream && (gitStore.branchAhead > 0 || gitStore.branchBehind > 0)" class="branch-status-info">
           <!-- 分支同步状态信息 -->
-          <div v-if="gitStore.hasUpstream && (gitStore.branchAhead > 0 || gitStore.branchBehind > 0)" class="branch-sync-status">
+          <div class="branch-sync-status">
             <div class="sync-status-content">
               <el-tooltip content="本地分支与远程分支的状态对比" placement="top">
                 <div class="status-badges">
@@ -1066,30 +1062,13 @@ defineExpose({
   border: 1px solid #ebeef5;
 }
 
-.branch-base-info {
-  padding: 12px 15px;
-  border-left: 3px solid #67c23a;
-  border-bottom: 1px solid #ebeef5;
-  background-color: #f0f9eb;
-  display: flex;
-  align-items: center;
-}
-
-.branch-base-info p {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: #606266;
-}
-
 .branch-sync-status {
   display: flex;
   align-items: center;
   padding: 12px 15px;
   border-left: 3px solid #e6a23c;
   margin-bottom: 0;
+  background-color: #fdf6ec;
 }
 
 /* 移除旧的状态信息样式 */
