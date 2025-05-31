@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "一个 git 自动查看差异并提交的工具",
   "main": "index.js",
   "type": "module",
@@ -27,8 +27,11 @@
     "start:server": "node -e \"import('./src/ui/server/index.js').then(module => module.default())\""
   },
   "files": [
-    "src/*",
-    "!src/ui/client/**",
+    "src/ui/public/**",
+    "src/ui/server/**",
+    "src/utils/**",
+    "src/gitCommit.js",
+    "src/config.js",
     "package.json",
     "index.js"
   ],
