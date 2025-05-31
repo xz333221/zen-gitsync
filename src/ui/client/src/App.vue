@@ -484,6 +484,35 @@ async function saveRecentDirectory(directory: string) {
   }
 }
 
+// 在资源管理器中打开当前目录
+async function openInFileExplorer() {
+  try {
+    if (!currentDirectory.value) {
+      ElMessage.warning('当前目录路径为空')
+      return
+    }
+    
+    const response = await fetch('/api/open_directory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ path: currentDirectory.value })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      ElMessage.success('已在文件管理器中打开目录')
+    } else if (result.error) {
+      ElMessage.error(result.error)
+    }
+  } catch (error) {
+    console.error('打开目录失败:', error)
+    ElMessage.error(`打开目录失败: ${(error as Error).message}`)
+  }
+}
+
 // 添加浏览目录的功能
 async function browseDirectory() {
   try {
@@ -651,7 +680,7 @@ async function selectDirectory(dirPath: string) {
           <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
         </div>
         <div class="directory-actions">
-          <el-button type="primary" size="small" @click="openDirectoryDialog" class="dir-button" circle>
+          <el-button type="primary" size="small" @click="openDirectoryDialog" class="dir-button" circle title="切换目录">
             <el-icon>
               <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
                 <path fill="currentColor"
@@ -660,7 +689,15 @@ async function selectDirectory(dirPath: string) {
               </svg>
             </el-icon>
           </el-button>
-          <el-button type="info" size="small" @click="copyDirectoryPath" class="dir-button" circle>
+          <el-button type="success" size="small" @click="openInFileExplorer" class="dir-button" circle title="在资源管理器中打开">
+            <el-icon>
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" 
+                  d="M928 444H820V330.4c0-17.7-14.3-32-32-32H473L355.7 186.2a8.15 8.15 0 0 0-5.5-2.2H96c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h698c13 0 24.8-7.9 29.7-20l134-332c1.5-3.8 2.3-7.9 2.3-12 0-17.7-14.3-32-32-32zM136 256h188.5l119.6 114.4H748V444H238c-13 0-24.8 7.9-29.7 20L136 643.2V256zm635.3 512H159l103.3-256h612.4L771.3 768z" />
+              </svg>
+            </el-icon>
+          </el-button>
+          <el-button type="info" size="small" @click="copyDirectoryPath" class="dir-button" circle title="复制路径">
             <el-icon>
               <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
                 <path fill="currentColor"

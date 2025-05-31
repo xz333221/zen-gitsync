@@ -398,6 +398,37 @@ async function startUIServer() {
       }
   });
   
+  // 在资源管理器/访达中打开当前目录
+  app.post('/api/open_directory', async (req, res) => {
+      try {
+          // 获取要打开的目录路径，如果没有提供，则使用当前目录
+          const directoryPath = req.body.path || process.cwd();
+          
+          try {
+              // 检查目录是否存在
+              await fs.access(directoryPath);
+              
+              // 使用open模块打开目录，自动处理不同操作系统
+              await open(directoryPath, { wait: false });
+              
+              res.json({
+                  success: true,
+                  message: '已在文件管理器中打开目录'
+              });
+          } catch (error) {
+              res.status(400).json({
+                  success: false,
+                  error: `无法打开目录 "${directoryPath}": ${error.message}`
+              });
+          }
+      } catch (error) {
+          res.status(500).json({ 
+              success: false,
+              error: error.message 
+          });
+      }
+  });
+  
   // 保存最近访问的目录
   app.post('/api/save_recent_directory', async (req, res) => {
       try {
