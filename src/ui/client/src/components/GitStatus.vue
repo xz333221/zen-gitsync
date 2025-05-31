@@ -1015,7 +1015,7 @@ defineExpose({
   text-align: center;
   background-color: #f9f9f9;
   border-radius: 8px;
-  height: 100%;
+  flex-grow: 1;
 }
 
 .empty-icon {
