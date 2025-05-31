@@ -1259,7 +1259,6 @@ async function cherryPickCommit(commit: LogItem | null) {
   position: sticky;
   top: 0;
   z-index: 100;
-  height: 36px;
   flex-shrink: 0; /* 防止头部被压缩 */
 }
 
@@ -1343,8 +1342,6 @@ async function cherryPickCommit(commit: LogItem | null) {
   background: linear-gradient(135deg, #909399 0%, #C0C4CC 100%);
   color: white;
   min-width: unset;
-  width: 36px;
-  height: 36px;
   padding: 0;
   border-radius: 50%;
 }

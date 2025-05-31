@@ -756,7 +756,6 @@ defineExpose({
   align-items: center;
   padding: 8px 16px;
   border-bottom: 1px solid #f0f0f0;
-  height: 36px;
 }
 
 .status-header h2 {
@@ -1016,7 +1015,7 @@ defineExpose({
   text-align: center;
   background-color: #f9f9f9;
   border-radius: 8px;
-  margin-top: 10px;
+  height: 100%;
 }
 
 .empty-icon {

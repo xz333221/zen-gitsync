@@ -1423,7 +1423,6 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 36px;
 }
 
 .card-header h2 {
