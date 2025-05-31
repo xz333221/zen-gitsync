@@ -537,7 +537,7 @@ defineExpose({
         </div>
       </div>
       
-      <div v-else>
+      <div class="status-box-wrap" v-else>
         <!-- 分支信息仅在有领先/落后状态时才显示 -->
         <div v-if="gitStore.hasUpstream && (gitStore.branchAhead > 0 || gitStore.branchBehind > 0)" class="branch-status-info">
           <!-- 分支同步状态信息 -->
@@ -1051,6 +1051,9 @@ defineExpose({
   font-size: 14px;
   color: #909399;
   margin-bottom: 20px;
+}
+.status-box-wrap{
+  height: 100%;
 }
 
 /* 分支信息样式 */
