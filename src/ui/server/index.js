@@ -1275,6 +1275,36 @@ async function startUIServer() {
     }
   });
   
+  // 重置到指定提交(hard)
+  app.post('/api/reset-to-commit', async (req, res) => {
+    try {
+      const { hash } = req.body;
+      
+      if (!hash) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少提交哈希参数' 
+        });
+      }
+      
+      console.log(`执行重置到指定提交操作: hash=${hash}`);
+      
+      // 执行git reset --hard命令
+      await execGitCommand(`git reset --hard ${hash}`);
+      
+      res.json({ 
+        success: true, 
+        message: `已成功重置到提交 ${hash}` 
+      });
+    } catch (error) {
+      console.error('重置到指定提交失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `重置到指定提交失败: ${error.message}` 
+      });
+    }
+  });
+  
   // 添加清理Git锁定文件的接口
   app.post('/api/remove-lock', async (req, res) => {
     try {
