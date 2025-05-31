@@ -538,33 +538,35 @@ defineExpose({
       </div>
       
       <div v-else>
-        <!-- 分支同步状态信息 -->
-        <div v-if="gitStore.hasUpstream && (gitStore.branchAhead > 0 || gitStore.branchBehind > 0)" class="branch-sync-status">
-          <div class="sync-status-content">
-            <el-tooltip content="本地分支与远程分支的状态对比" placement="top">
-              <div class="status-badges">
-                <el-tag v-if="gitStore.branchAhead > 0" size="small" type="warning" class="status-badge">
-                  <template #default>
-                    <span class="badge-content">
-                      <el-icon><ArrowUp /></el-icon> 你的分支领先 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchAhead }} 个提交
-                    </span>
-                  </template>
-                </el-tag>
-                <el-tag v-if="gitStore.branchBehind > 0" size="small" type="info" class="status-badge">
-                  <template #default>
-                    <span class="badge-content">
-                      <el-icon><ArrowDown /></el-icon> 你的分支落后 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchBehind }} 个提交
-                    </span>
-                  </template>
-                </el-tag>
-              </div>
-            </el-tooltip>
+        <!-- 分支信息统一显示区域 -->
+        <div class="branch-status-info">
+          <div class="branch-base-info">
+            <p>当前工作在 <el-tag size="small" type="success">{{ gitStore.currentBranch }}</el-tag> 分支</p>
           </div>
-        </div>
-        
-        <!-- 默认状态信息 -->
-        <div v-if="!gitStore.hasUpstream || (gitStore.branchAhead === 0 && gitStore.branchBehind === 0)" class="git-status-message">
-          <p>当前工作在 <el-tag size="small" type="success">{{ gitStore.currentBranch }}</el-tag> 分支</p>
+          
+          <!-- 分支同步状态信息 -->
+          <div v-if="gitStore.hasUpstream && (gitStore.branchAhead > 0 || gitStore.branchBehind > 0)" class="branch-sync-status">
+            <div class="sync-status-content">
+              <el-tooltip content="本地分支与远程分支的状态对比" placement="top">
+                <div class="status-badges">
+                  <el-tag v-if="gitStore.branchAhead > 0" size="small" type="warning" class="status-badge">
+                    <template #default>
+                      <span class="badge-content">
+                        <el-icon><ArrowUp /></el-icon> 你的分支领先 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchAhead }} 个提交
+                      </span>
+                    </template>
+                  </el-tag>
+                  <el-tag v-if="gitStore.branchBehind > 0" size="small" type="info" class="status-badge">
+                    <template #default>
+                      <span class="badge-content">
+                        <el-icon><ArrowDown /></el-icon> 你的分支落后 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchBehind }} 个提交
+                      </span>
+                    </template>
+                  </el-tag>
+                </div>
+              </el-tooltip>
+            </div>
+          </div>
         </div>
         
         <!-- 现代化、简洁的文件列表 -->
@@ -684,11 +686,6 @@ defineExpose({
           </div>
           <div class="empty-text">没有检测到任何更改</div>
           <div class="empty-subtext">工作区是干净的</div>
-          
-          <!-- 添加分支信息 -->
-          <div class="branch-info">
-            <p>当前工作在 <el-tag size="small" type="success">{{ gitStore.currentBranch }}</el-tag> 分支</p>
-          </div>
         </div>
       </div>
     </div>
@@ -1061,46 +1058,47 @@ defineExpose({
 }
 
 /* 分支信息样式 */
-.branch-info {
-  margin-top: 15px;
-  padding: 10px 15px;
-  background-color: #ebeef5;
-  border-radius: 6px;
-  text-align: left;
-  width: 100%;
-  max-width: 400px;
+.branch-status-info {
+  margin-bottom: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ebeef5;
 }
 
-.branch-info p {
-  margin: 5px 0;
+.branch-base-info {
+  padding: 12px 15px;
+  border-left: 3px solid #67c23a;
+  border-bottom: 1px solid #ebeef5;
+  background-color: #f0f9eb;
+  display: flex;
+  align-items: center;
+}
+
+.branch-base-info p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   color: #606266;
 }
 
-.branch-sync-info {
+.branch-sync-status {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 13px;
-  margin-top: 5px;
-  padding: 5px 8px;
-  border-radius: 4px;
-  background-color: #f5f7fa;
+  padding: 12px 15px;
+  border-left: 3px solid #e6a23c;
+  margin-bottom: 0;
 }
 
-.branch-sync-info.warning {
-  color: #e6a23c;
-  background-color: #fdf6ec;
+/* 移除旧的状态信息样式 */
+.git-status-message {
+  display: none;
 }
 
-.branch-sync-info.info {
-  color: #909399;
-  background-color: #f4f4f5;
-}
-
-.branch-sync-info.success {
-  color: #67c23a;
-  background-color: #f0f9eb;
+.branch-info {
+  display: none;
 }
 
 /* 添加针对空内容区域的样式 */
@@ -1221,34 +1219,6 @@ defineExpose({
 }
 
 /* 添加分支状态样式 */
-.branch-sync-status {
-  display: flex;
-  align-items: center;
-  padding: 12px 15px;
-  background-color: #f8f9fa;
-  border-radius: 4px;
-  margin-bottom: 15px;
-  border-left: 3px solid #e6a23c;
-}
-
-/* 添加默认分支状态信息样式 */
-.git-status-message {
-  padding: 12px 15px;
-  background-color: #f8f9fa;
-  border-radius: 4px;
-  margin-bottom: 15px;
-  border-left: 3px solid #67c23a;
-}
-
-.git-status-message p {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: #606266;
-}
-
 .sync-status-content {
   display: flex;
   align-items: center;
