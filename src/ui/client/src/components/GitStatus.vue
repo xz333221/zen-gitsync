@@ -777,7 +777,7 @@ defineExpose({
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 300px; /* 确保内容区有最小高度 */
+  min-height: 100%; /* 确保内容区有最小高度 */
 }
 
 /* 移除当前目录样式 */
