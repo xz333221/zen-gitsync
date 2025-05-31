@@ -534,7 +534,8 @@ async function handleGitPull() {
   try {
     await gitStore.gitPull();
     // 刷新状态
-    await gitStore.fetchStatus();
+    gitStore.fetchStatus();
+    gitStore.fetchLog();
   } catch (error) {
     ElMessage({
       message: `拉取失败: ${(error as Error).message}`,
