@@ -119,7 +119,7 @@ const graphContainer = ref<HTMLElement | null>(null);
 
 // 添加分页相关变量
 const currentPage = ref(1);
-const hasMoreData = ref(true);
+const hasMoreData = ref(true); // 默认为true，确保初始化时能尝试加载更多
 const isLoadingMore = ref(false);
 const loadTimerInterval = ref<number | null>(null);
 
@@ -252,6 +252,8 @@ async function loadLog(all = false, page = 1) {
     totalCommits.value = result.total || logsData.length;
     hasMoreData.value = result.hasMore === true;
 
+    console.log(`加载完成: 当前页=${currentPage.value}, 是否有更多=${hasMoreData.value}, 总条数=${totalCommits.value}`);
+
     if (!hasMoreData.value) {
       console.log("已加载所有提交记录");
     }
@@ -268,6 +270,12 @@ async function loadLog(all = false, page = 1) {
     // 加载完数据后渲染图表（仅在初次加载时）
     if (!isLoadMore && showGraphView.value) {
       setTimeout(renderGraph, 0);
+    } else if (!isLoadMore && !showGraphView.value && !all) {
+      // 如果是表格视图且是分页模式，设置滚动监听并检查是否需要加载更多
+      nextTick(() => {
+        setupTableScrollListener();
+        setTimeout(checkAndLoadMore, 200);
+      });
     }
 
     errorMessage.value = "";
@@ -377,7 +385,28 @@ function toggleViewMode() {
 
 // 切换显示所有提交
 function toggleAllCommits() {
-  loadLog(!showAllCommits.value);
+  showAllCommits.value = !showAllCommits.value;
+  
+  // 如果切换到分页模式，重置hasMoreData为true
+  if (!showAllCommits.value) {
+    hasMoreData.value = true;
+  }
+  
+  // 重置当前页码
+  currentPage.value = 1;
+  
+  // 加载日志
+  loadLog(showAllCommits.value);
+  
+  // 确保在下一个渲染周期重新设置滚动监听
+  nextTick(() => {
+    setTimeout(() => {
+      if (!showGraphView.value && !showAllCommits.value) {
+        setupTableScrollListener();
+        checkAndLoadMore(); // 检查是否需要加载更多
+      }
+    }, 300);
+  });
 }
 
 // 格式化分支名（实现该函数，因为在模板中调用了）
@@ -424,6 +453,9 @@ function handleTableScroll(event: Event) {
     scrollHeight,
     clientHeight,
     scrollDistance,
+    hasMoreData: hasMoreData.value,
+    isLoadingMore: isLoadingMore.value,
+    isLoading: isLoading.value
   });
 
   // 当滚动到距离底部20px时触发加载
@@ -435,31 +467,40 @@ function handleTableScroll(event: Event) {
 
 // 设置表格滚动监听
 function setupTableScrollListener() {
-  if (!tableRef.value) return;
+  console.log("设置表格滚动监听 - 开始");
+  if (!tableRef.value) {
+    console.error("tableRef.value 不存在");
+    return;
+  }
 
   // 获取表格的body-wrapper
-  tableBodyWrapper.value = tableRef.value.$el.querySelector(
-    ".el-table__body-wrapper"
-  );
-
-  if (tableBodyWrapper.value) {
-    console.log("添加表格滚动监听");
-    tableBodyWrapper.value.addEventListener("scroll", handleTableScroll, true);
-  } else {
+  const bodyWrapper = tableRef.value.$el.querySelector(".el-table__body-wrapper");
+  
+  if (!bodyWrapper) {
     console.error("未找到表格的body-wrapper元素");
+    return;
+  }
+  
+  console.log("找到表格的body-wrapper元素");
+  tableBodyWrapper.value = bodyWrapper;
+
+  // 先移除旧的监听器，避免重复
+  if (tableBodyWrapper.value) {
+    tableBodyWrapper.value.removeEventListener("scroll", handleTableScroll, true);
+    tableBodyWrapper.value.addEventListener("scroll", handleTableScroll, true);
+    console.log("成功添加表格滚动监听");
   }
 }
 
 // 移除表格滚动监听
 function removeTableScrollListener() {
+  console.log("移除表格滚动监听 - 开始");
   if (tableBodyWrapper.value) {
-    console.log("移除表格滚动监听");
-    tableBodyWrapper.value.removeEventListener(
-      "scroll",
-      handleTableScroll,
-      true
-    );
+    tableBodyWrapper.value.removeEventListener("scroll", handleTableScroll, true);
+    console.log("成功移除表格滚动监听");
     tableBodyWrapper.value = null;
+  } else {
+    console.log("tableBodyWrapper.value 不存在，无需移除监听");
   }
 }
 
@@ -517,6 +558,16 @@ onMounted(() => {
         renderTableBranchGraph();
       }
     }, 500);
+  });
+
+  // 添加对表格的监听，确保表格创建后设置滚动监听
+  watch(() => tableRef.value, (newTableRef) => {
+    if (newTableRef && !showGraphView.value && !showAllCommits.value) {
+      console.log("表格引用已创建，设置滚动监听");
+      nextTick(() => {
+        setupTableScrollListener();
+      });
+    }
   });
 });
 
@@ -848,9 +899,16 @@ function formatCommitMessage(message: string) {
 
 // 加载更多日志
 function loadMoreLogs() {
-  if (!hasMoreData.value || isLoadingMore.value || isLoading.value) return;
+  if (!hasMoreData.value || isLoadingMore.value || isLoading.value) {
+    console.log("不满足加载更多条件:", {
+      hasMoreData: hasMoreData.value,
+      isLoadingMore: isLoadingMore.value,
+      isLoading: isLoading.value
+    });
+    return;
+  }
 
-  console.log(`加载更多日志，页码: ${currentPage.value + 1}`);
+  console.log(`加载更多日志，当前页码: ${currentPage.value}，下一页: ${currentPage.value + 1}`);
   loadLog(showAllCommits.value, currentPage.value + 1);
 }
 
@@ -1541,6 +1599,62 @@ async function resetToCommit(commit: LogItem | null) {
     }
   }
 }
+
+// 检查表格是否滚动到底部并加载更多数据
+function checkAndLoadMore() {
+  console.log("检查是否需要加载更多数据");
+  
+  if (
+    showGraphView.value ||
+    !hasMoreData.value ||
+    isLoadingMore.value ||
+    isLoading.value ||
+    showAllCommits.value
+  ) {
+    console.log("不满足加载条件:", {
+      showGraphView: showGraphView.value,
+      hasMoreData: hasMoreData.value,
+      isLoadingMore: isLoadingMore.value,
+      isLoading: isLoading.value,
+      showAllCommits: showAllCommits.value
+    });
+    return;
+  }
+  
+  if (!tableBodyWrapper.value) {
+    console.log("表格容器不存在，重新设置滚动监听");
+    setupTableScrollListener();
+    return;
+  }
+  
+  const { scrollTop, scrollHeight, clientHeight } = tableBodyWrapper.value;
+  const scrollDistance = scrollHeight - scrollTop - clientHeight;
+  
+  console.log("表格滚动位置:", {
+    scrollTop,
+    scrollHeight,
+    clientHeight,
+    scrollDistance
+  });
+  
+  if (scrollDistance <= 50) {
+    console.log("表格已滚动到底部，加载更多数据");
+    loadMoreLogs();
+  }
+}
+
+// 在表格视图显示时添加定时检查
+watch(() => showGraphView.value, (isGraphView) => {
+  if (!isGraphView && !showAllCommits.value) {
+    console.log("切换到表格视图，设置滚动监听和定时检查");
+    nextTick(() => {
+      setupTableScrollListener();
+      
+      // 延迟200ms后检查一次，处理初始渲染时可能需要加载更多数据的情况
+      setTimeout(checkAndLoadMore, 200);
+    });
+  }
+});
 </script>
 
 <template>
@@ -1851,7 +1965,7 @@ async function resetToCommit(commit: LogItem | null) {
           </el-table>
 
           <!-- 添加底部加载状态和加载更多按钮 -->
-          <div v-if="!showAllCommits && false" class="load-more-container">
+          <div v-if="!showAllCommits" class="load-more-container">
             <!-- 显示加载状态和页码信息 -->
             <div class="pagination-info">
               <span
