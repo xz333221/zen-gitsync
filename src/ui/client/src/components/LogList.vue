@@ -81,16 +81,16 @@ interface ToLine extends BranchLine {
 // 联合类型表示所有可能的线条类型
 type GraphLine = ThroughLine | FromLine | ToLine;
 
-const COLORS = [
-  "#2196f3", // 蓝色
-  "#e91e63", // 粉色
-  "#4caf50", // 绿色
-  "#ff9800", // 橙色
-  "#9c27b0", // 紫色
-  "#00bcd4", // 青色
-  "#ff5722", // 深橙色
-  "#607d8b", // 蓝灰色
-];
+// const COLORS = [
+//   "#2196f3", // 蓝色
+//   "#e91e63", // 粉色
+//   "#4caf50", // 绿色
+//   "#ff9800", // 橙色
+//   "#9c27b0", // 紫色
+//   "#00bcd4", // 青色
+//   "#ff5722", // 深橙色
+//   "#607d8b", // 蓝灰色
+// ];
 
 interface LogItem {
   hash: string;
