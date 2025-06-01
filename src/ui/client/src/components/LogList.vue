@@ -483,6 +483,11 @@ onMounted(() => {
           console.log(`准备渲染图表，数据长度: ${logsData.length}`);
           renderGraph();
         }, 100);
+      } else {
+        // 如果是表格视图，渲染分支图
+        setTimeout(() => {
+          renderTableBranchGraph();
+        }, 100);
       }
     } else {
       // 否则加载数据
@@ -508,7 +513,9 @@ onMounted(() => {
   // 表格数据加载完成后绘制分支图
   nextTick(() => {
     setTimeout(() => {
-      renderTableBranchGraph();
+      if (!showGraphView.value) {
+        renderTableBranchGraph();
+      }
     }, 500);
   });
 });
@@ -539,7 +546,22 @@ onBeforeUnmount(() => {
   }
 });
 
-// 刷新日志的方法
+// 添加一个简单的防抖函数
+function debounce(fn: Function, delay: number) {
+  let timer: number | null = null;
+  return function(...args: any[]) {
+    if (timer) clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      fn(...args);
+      timer = null;
+    }, delay);
+  };
+}
+
+// 对renderTableBranchGraph进行防抖处理
+const debouncedRenderTableBranchGraph = debounce(renderTableBranchGraph, 200);
+
+// 修改refreshLog函数
 async function refreshLog() {
   // 简单调用gitStore的fetchLog方法
   await gitStore.fetchLog(true);
@@ -569,6 +591,14 @@ async function refreshLog() {
   if (showGraphView.value) {
     await nextTick();
     renderGraph();
+  } else {
+    // 如果是表格视图，清空并重新计算分支图
+    commitNodes.value.clear();
+    branchLines.value = [];
+    columnCount.value = 1;
+    await nextTick();
+    // 使用防抖版本
+    debouncedRenderTableBranchGraph();
   }
 }
 
@@ -1072,176 +1102,256 @@ function assignColumnsToCommits() {
   return { mainBranchColor, branchColorMap };
 }
 
+// 添加一个变量来控制绘制状态，防止重复渲染
+let isDrawingBranchGraph = false;
+
 // 绘制分支图
 function drawBranchGraphs() {
-  // 获取分支颜色映射
-  const { mainBranchColor, branchColorMap } = assignColumnsToCommits();
+  // 检查是否正在进行渲染
+  if (isDrawingBranchGraph) {
+    console.log("已有渲染进行中，跳过");
+    return;
+  }
   
-  // 为每个提交绘制图形
-  logs.value.forEach((commit, rowIndex) => {
-    if (!commit.hash) return;
+  try {
+    isDrawingBranchGraph = true;
     
-    const cellId = `commit-graph-${commit.hash.substring(0, 7)}`;
-    const cell = document.getElementById(cellId);
-    if (!cell) return;
+    // 获取分支颜色映射，但防止递归调用
+    const branchColorMap = new Map<string, string>();
+    branchColorMap.set("main", "#2196f3"); // 蓝色
+    branchColorMap.set("master", "#2196f3"); // 蓝色
+    const mainBranchColor = "#2196f3";
     
-    // 创建SVG元素
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("width", "100%");
-    svg.setAttribute("height", "100%");
-    // 使用标准viewBox，但确保overflow是visible
-    svg.setAttribute("viewBox", "0 0 100 100");
-    svg.style.display = "block";
-    svg.style.overflow = "visible";
-    
-    // 清空单元格
-    cell.innerHTML = "";
-    cell.appendChild(svg);
-    
-    // 获取当前提交节点
-    const node = commitNodes.value.get(commit.hash);
-    if (!node) return;
-    
-    // 调整坐标系统，使用百分比布局
-    const columnWidth = 20;
-    const x = 10 + node.column * columnWidth;
-    const y = 50; // 中点是50%的位置
-    
-    // 查找与当前行相关的所有分支线
-    const relevantLines: GraphLine[] = [];
-    
-    // 1. 通过当前行的线
-    for (const line of branchLines.value) {
-      if (line.fromRow < rowIndex && line.toRow > rowIndex) {
-        relevantLines.push({
-          ...line,
-          type: 'through',
-          x: 10 + line.fromColumn * columnWidth
-        });
-      }
-    }
-    
-    // 2. 从当前行出发的线
-    for (const line of branchLines.value) {
-      if (line.fromRow === rowIndex) {
-        relevantLines.push({
-          ...line,
-          type: 'from',
-          fromX: 10 + line.fromColumn * columnWidth,
-          toX: 10 + line.toColumn * columnWidth
-        });
-      }
-    }
-    
-    // 3. 到当前行的线
-    for (const line of branchLines.value) {
-      if (line.toRow === rowIndex) {
-        relevantLines.push({
-          ...line,
-          type: 'to',
-          fromX: 10 + line.fromColumn * columnWidth,
-          toX: 10 + line.toColumn * columnWidth
-        });
-      }
-    }
-    
-    // 先绘制通过的线 - 从-20高度到120高度，远超出viewBox范围
-    relevantLines.filter((line): line is ThroughLine => line.type === 'through').forEach(line => {
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      path.setAttribute("x1", line.x.toString());
-      path.setAttribute("y1", "-20"); // 远超出viewBox顶部
-      path.setAttribute("x2", line.x.toString());
-      path.setAttribute("y2", "120"); // 远超出viewBox底部
-      path.setAttribute("stroke", line.color);
-      path.setAttribute("stroke-width", "2");
-      svg.appendChild(path);
-    });
-    
-    // 绘制到当前节点的线 - 从-20高度到50%高度(中点)
-    relevantLines.filter((line): line is ToLine => line.type === 'to').forEach(line => {
-      if (line.fromColumn === line.toColumn) {
-        // 垂直线
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        path.setAttribute("x1", line.toX.toString());
-        path.setAttribute("y1", "-20"); // 远超出viewBox顶部
-        path.setAttribute("x2", line.toX.toString());
-        path.setAttribute("y2", y.toString()); // 到达中点
-        path.setAttribute("stroke", line.color);
-        path.setAttribute("stroke-width", "2");
-        svg.appendChild(path);
-      } else {
-        // 斜线或弯曲线
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        
-        if (line.fromColumn < line.toColumn) {
-          // 从左到右
-          path.setAttribute("d", `M${line.fromX},-20 C${line.fromX},15 ${line.toX},30 ${line.toX},${y}`);
-        } else {
-          // 从右到左
-          path.setAttribute("d", `M${line.fromX},-20 C${line.fromX},15 ${line.toX},30 ${line.toX},${y}`);
+    // 仅当branchLines为空时才重新计算
+    if (branchLines.value.length === 0) {
+      console.log("branchLines为空，重新计算");
+      // 重新分配列位置
+      assignColumnsToCommits();
+      
+      // 如果还是为空，创建一些默认线条
+      if (branchLines.value.length === 0 && logs.value.length > 1) {
+        console.log("创建默认分支线");
+        // 为连续的提交创建简单的垂直线
+        for (let i = 0; i < logs.value.length - 1; i++) {
+          if (logs.value[i].hash && logs.value[i+1].hash) {
+            branchLines.value.push({
+              fromRow: i,
+              fromColumn: 0, // 主分支列
+              toRow: i+1,
+              toColumn: 0, // 主分支列
+              color: mainBranchColor
+            });
+          }
         }
-        
-        path.setAttribute("stroke", line.color);
-        path.setAttribute("stroke-width", "2");
-        path.setAttribute("fill", "none");
-        svg.appendChild(path);
       }
-    });
+    } else {
+      console.log(`使用现有分支线，数量: ${branchLines.value.length}`);
+    }
     
-    // 绘制从当前节点出发的线 - 从50%高度(中点)到120高度
-    relevantLines.filter((line): line is FromLine => line.type === 'from').forEach(line => {
-      if (line.fromColumn === line.toColumn) {
-        // 垂直线
+    // 为每个提交绘制图形
+    logs.value.forEach((commit, rowIndex) => {
+      if (!commit.hash) return;
+      
+      const cellId = `commit-graph-${commit.hash.substring(0, 7)}`;
+      const cell = document.getElementById(cellId);
+      if (!cell) return;
+      
+      // 如果单元格已经有SVG，跳过
+      if (cell.querySelector('svg')) {
+        return;
+      }
+      
+      // 创建SVG元素
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("width", "100%");
+      svg.setAttribute("height", "100%");
+      // 使用标准viewBox，但确保overflow是visible
+      svg.setAttribute("viewBox", "0 0 100 100");
+      svg.style.display = "block";
+      svg.style.overflow = "visible";
+      
+      // 清空单元格
+      cell.innerHTML = "";
+      cell.appendChild(svg);
+      
+      // 获取当前提交节点
+      const node = commitNodes.value.get(commit.hash);
+      if (!node) return;
+      
+      // 调整坐标系统，使用百分比布局
+      const columnWidth = 20;
+      const x = 10 + node.column * columnWidth;
+      const y = 50; // 中点是50%的位置
+      
+      // 查找与当前行相关的所有分支线
+      const relevantLines: GraphLine[] = [];
+      
+      // 1. 通过当前行的线
+      for (const line of branchLines.value) {
+        if (line.fromRow < rowIndex && line.toRow > rowIndex) {
+          relevantLines.push({
+            ...line,
+            type: 'through',
+            x: 10 + line.fromColumn * columnWidth
+          });
+        }
+      }
+      
+      // 2. 从当前行出发的线
+      for (const line of branchLines.value) {
+        if (line.fromRow === rowIndex) {
+          relevantLines.push({
+            ...line,
+            type: 'from',
+            fromX: 10 + line.fromColumn * columnWidth,
+            toX: 10 + line.toColumn * columnWidth
+          });
+        }
+      }
+      
+      // 3. 到当前行的线
+      for (const line of branchLines.value) {
+        if (line.toRow === rowIndex) {
+          relevantLines.push({
+            ...line,
+            type: 'to',
+            fromX: 10 + line.fromColumn * columnWidth,
+            toX: 10 + line.toColumn * columnWidth
+          });
+        }
+      }
+      
+      // 如果relevantLines为空且不是最后一行，添加默认线条
+      if (relevantLines.length === 0 && rowIndex < logs.value.length - 1) {
+        // 向下的线
+        if (branchLines.value.length > 0) {
+          relevantLines.push({
+            ...branchLines.value[0],
+            type: 'from',
+            fromX: x,
+            toX: x
+          });
+        } else {
+          // 创建默认线条
+          relevantLines.push({
+            type: 'from',
+            fromX: x,
+            toX: x,
+            fromRow: rowIndex,
+            fromColumn: 0,
+            toRow: rowIndex + 1,
+            toColumn: 0,
+            color: mainBranchColor
+          });
+        }
+      }
+      
+      // 先绘制通过的线 - 从-20高度到120高度，远超出viewBox范围
+      relevantLines.filter((line): line is ThroughLine => line.type === 'through').forEach(line => {
         const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        path.setAttribute("x1", line.fromX.toString());
-        path.setAttribute("y1", y.toString()); // 从中点开始
-        path.setAttribute("x2", line.fromX.toString());
+        path.setAttribute("x1", line.x.toString());
+        path.setAttribute("y1", "-20"); // 远超出viewBox顶部
+        path.setAttribute("x2", line.x.toString());
         path.setAttribute("y2", "120"); // 远超出viewBox底部
         path.setAttribute("stroke", line.color);
         path.setAttribute("stroke-width", "2");
         svg.appendChild(path);
-      } else {
-        // 斜线或弯曲线
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        
-        if (line.fromColumn < line.toColumn) {
-          // 向右弯曲
-          path.setAttribute("d", `M${line.fromX},${y} C${line.fromX},70 ${line.toX},85 ${line.toX},120`);
+      });
+      
+      // 绘制到当前节点的线 - 从-20高度到50%高度(中点)
+      relevantLines.filter((line): line is ToLine => line.type === 'to').forEach(line => {
+        if (line.fromColumn === line.toColumn) {
+          // 垂直线
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          path.setAttribute("x1", line.toX.toString());
+          path.setAttribute("y1", "-20"); // 远超出viewBox顶部
+          path.setAttribute("x2", line.toX.toString());
+          path.setAttribute("y2", y.toString()); // 到达中点
+          path.setAttribute("stroke", line.color);
+          path.setAttribute("stroke-width", "2");
+          svg.appendChild(path);
         } else {
-          // 向左弯曲
-          path.setAttribute("d", `M${line.fromX},${y} C${line.fromX},70 ${line.toX},85 ${line.toX},120`);
+          // 斜线或弯曲线
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          
+          if (line.fromColumn < line.toColumn) {
+            // 从左到右
+            path.setAttribute("d", `M${line.fromX},-20 C${line.fromX},15 ${line.toX},30 ${line.toX},${y}`);
+          } else {
+            // 从右到左
+            path.setAttribute("d", `M${line.fromX},-20 C${line.fromX},15 ${line.toX},30 ${line.toX},${y}`);
+          }
+          
+          path.setAttribute("stroke", line.color);
+          path.setAttribute("stroke-width", "2");
+          path.setAttribute("fill", "none");
+          svg.appendChild(path);
         }
-        
-        path.setAttribute("stroke", line.color);
-        path.setAttribute("stroke-width", "2");
-        path.setAttribute("fill", "none");
-        svg.appendChild(path);
-      }
+      });
+      
+      // 绘制从当前节点出发的线 - 从50%高度(中点)到120高度
+      relevantLines.filter((line): line is FromLine => line.type === 'from').forEach(line => {
+        if (line.fromColumn === line.toColumn) {
+          // 垂直线
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          path.setAttribute("x1", line.fromX.toString());
+          path.setAttribute("y1", y.toString()); // 从中点开始
+          path.setAttribute("x2", line.fromX.toString());
+          path.setAttribute("y2", "120"); // 远超出viewBox底部
+          path.setAttribute("stroke", line.color);
+          path.setAttribute("stroke-width", "2");
+          svg.appendChild(path);
+        } else {
+          // 斜线或弯曲线
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          
+          if (line.fromColumn < line.toColumn) {
+            // 向右弯曲
+            path.setAttribute("d", `M${line.fromX},${y} C${line.fromX},70 ${line.toX},85 ${line.toX},120`);
+          } else {
+            // 向左弯曲
+            path.setAttribute("d", `M${line.fromX},${y} C${line.fromX},70 ${line.toX},85 ${line.toX},120`);
+          }
+          
+          path.setAttribute("stroke", line.color);
+          path.setAttribute("stroke-width", "2");
+          path.setAttribute("fill", "none");
+          svg.appendChild(path);
+        }
+      });
+      
+      // 绘制当前提交的点
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", x.toString());
+      circle.setAttribute("cy", y.toString());
+      circle.setAttribute("r", "6"); // 稍微增大点的大小
+      
+      // 获取分支颜色
+      const branchName = node.branch || "";
+      const branchColor = branchColorMap.get(branchName) || mainBranchColor;
+      
+      circle.setAttribute("fill", branchColor);
+      circle.setAttribute("stroke", "#fff");
+      circle.setAttribute("stroke-width", "2");
+      svg.appendChild(circle);
     });
-    
-    // 绘制当前提交的点
-    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", x.toString());
-    circle.setAttribute("cy", y.toString());
-    circle.setAttribute("r", "6"); // 稍微增大点的大小
-    
-    // 获取分支颜色
-    const branchName = node.branch || "";
-    const branchColor = branchColorMap.get(branchName) || mainBranchColor;
-    
-    circle.setAttribute("fill", branchColor);
-    circle.setAttribute("stroke", "#fff");
-    circle.setAttribute("stroke-width", "2");
-    svg.appendChild(circle);
-  });
+  } catch (error) {
+    console.error("渲染分支图失败:", error);
+    errorMessage.value = "渲染分支图失败: " + (error instanceof Error ? error.message : String(error));
+  } finally {
+    isDrawingBranchGraph = false;
+  }
 }
 
-// 监听表格数据更新后重新绘制分支图
+// 监听logs.value的变化
 watch(
   () => logs.value,
   () => {
     nextTick(() => {
-      renderTableBranchGraph();
+      if (!showGraphView.value) {
+        // 使用防抖版本
+        debouncedRenderTableBranchGraph();
+      }
     });
   },
   { deep: true } // 添加deep选项以确保检测到数组内部元素的变化
@@ -2636,10 +2746,35 @@ async function resetToCommit(commit: LogItem | null) {
 
 /* 确保SVG元素完全填充单元格 */
 :deep(.branch-graph-cell svg) {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: visible !important;
+  z-index: 10 !important;
+}
+
+/* 增强SVG线条和节点的可见性 */
+:deep(.branch-graph-cell svg line),
+:deep(.branch-graph-cell svg path) {
+  stroke-width: 2 !important;
+}
+
+:deep(.branch-graph-cell svg circle) {
+  r: 6 !important;
+  stroke-width: 2 !important;
+}
+
+/* 增加分支图单元格的宽度 */
+.branch-graph-column {
+  min-width: 60px !important;
+  width: 60px !important;
+}
+
+/* 确保分支图单元格内容可见 */
+.branch-graph-cell {
+  position: relative !important;
+  overflow: visible !important;
+  z-index: 1 !important;
 }
 
 /* 去掉表格行边框 */
