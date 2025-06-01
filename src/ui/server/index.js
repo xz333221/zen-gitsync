@@ -798,6 +798,7 @@ async function startUIServer() {
       const dateFrom = req.query.dateFrom || '';
       const dateTo = req.query.dateTo || '';
       const branch = req.query.branch ? req.query.branch.split(',') : [];
+      const withParents = req.query.with_parents === 'true';
       
       // 构建Git命令选项
       let commandOptions = [];
@@ -812,7 +813,7 @@ async function startUIServer() {
         const branchRefs = branch.map(b => b.trim()).join(' ');
         
         // 直接将分支名作为命令参数，并确保后面添加 -- 分隔符防止歧义
-        return executeGitLogCommand(res, branchRefs, author, message, dateFrom, dateTo, limit, skip, req.query.all === 'true');
+        return executeGitLogCommand(res, branchRefs, author, message, dateFrom, dateTo, limit, skip, req.query.all === 'true', withParents);
       }
       
       // 如果没有指定分支，则使用--all参数
@@ -856,11 +857,17 @@ async function startUIServer() {
       // 合并所有命令选项
       const options = [...commandOptions, limitOption].filter(Boolean).join(' ');
       
-      console.log(`执行Git命令: git log --all --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${options}`);
+      // 添加父提交信息的格式
+      let formatString = '%H|%an|%ae|%ad|%B|%D';
+      if (withParents) {
+        formatString = '%H|%an|%ae|%ad|%B|%D|%P';
+      }
+      
+      console.log(`执行Git命令: git log --all --pretty=format:"${formatString}" --date=short ${options}`);
       
       // 使用 git log 命令获取提交历史
       let { stdout: logOutput } = await execGitCommand(
-        `git log --all --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${options}`
+        `git log --all --pretty=format:"${formatString}" --date=short ${options}`
       );
       
       // 获取总提交数量（考虑筛选条件）
@@ -889,7 +896,7 @@ async function startUIServer() {
         totalCommits = 0;
       }
       
-      processAndSendLogOutput(res, logOutput, totalCommits, page, limit);
+      processAndSendLogOutput(res, logOutput, totalCommits, page, limit, withParents);
     } catch (error) {
       console.error('获取Git日志失败:', error);
       res.status(500).json({ error: '获取日志失败: ' + error.message });
@@ -897,7 +904,7 @@ async function startUIServer() {
   });
   
   // 抽取执行Git日志命令的函数
-  async function executeGitLogCommand(res, branchRefs, author, message, dateFrom, dateTo, limit, skip, isAll) {
+  async function executeGitLogCommand(res, branchRefs, author, message, dateFrom, dateTo, limit, skip, isAll, withParents = false) {
     try {
       // 构建命令选项
       const commandOptions = [];
@@ -947,8 +954,14 @@ async function startUIServer() {
         })
         .join(' ');
       
+      // 添加父提交信息的格式
+      let formatString = '%H|%an|%ae|%ad|%B|%D';
+      if (withParents) {
+        formatString = '%H|%an|%ae|%ad|%B|%D|%P';
+      }
+      
       // 构建执行的命令
-      const command = `git log ${formattedBranchRefs} --pretty=format:"%H|%an|%ae|%ad|%B|%D" --date=short ${options}`;
+      const command = `git log ${formattedBranchRefs} --pretty=format:"${formatString}" --date=short ${options}`;
       console.log(`执行Git命令(带分支引用): ${command}`);
       
       // 执行命令
@@ -968,7 +981,7 @@ async function startUIServer() {
         totalCommits = 0;
       }
       
-      processAndSendLogOutput(res, logOutput, totalCommits, skip / limit + 1, limit);
+      processAndSendLogOutput(res, logOutput, totalCommits, skip / limit + 1, limit, withParents);
     } catch (error) {
       console.error('执行Git日志命令失败:', error);
       res.status(500).json({ error: '获取日志失败: ' + error.message });
@@ -976,7 +989,7 @@ async function startUIServer() {
   }
   
   // 抽取处理输出并发送响应的函数
-  function processAndSendLogOutput(res, logOutput, totalCommits, page, limit) {
+  function processAndSendLogOutput(res, logOutput, totalCommits, page, limit, withParents = false) {
     // 替换提交记录之间的换行符
     logOutput = logOutput.replace(/\n(?=[a-f0-9]{40}\|)/g, "<<<RECORD_SEPARATOR>>>");
     
@@ -987,7 +1000,7 @@ async function startUIServer() {
     const data = logEntries.map(entry => {
       const parts = entry.split('|');
       if (parts.length >= 5) {
-        return {
+        const result = {
           hash: parts[0],
           author: parts[1],
           email: parts[2],
@@ -995,6 +1008,13 @@ async function startUIServer() {
           message: parts[4],
           branch: parts[5] || ''
         };
+        
+        // 如果请求了父提交信息，添加到结果中
+        if (withParents && parts[6]) {
+          result.parents = parts[6].split(' ');
+        }
+        
+        return result;
       }
       return null;
     }).filter(item => item !== null);

@@ -37,6 +37,61 @@ import "element-plus/dist/index.css";
 import { createGitgraph } from "@gitgraph/js";
 import { useGitStore } from "../stores/gitStore";
 
+// 添加分支图绘制相关接口和常量
+interface CommitNode {
+  hash: string;
+  parents: string[];
+  column: number;
+  row: number;
+  branch?: string; // 分支名称
+}
+
+interface BranchInfo {
+  name: string;
+  color: string;
+  column: number;
+}
+
+interface BranchLine {
+  fromRow: number;
+  fromColumn: number;
+  toRow: number;
+  toColumn: number;
+  color: string;
+}
+
+// 添加新的接口定义，用于处理绘图时的线条类型
+interface ThroughLine extends BranchLine {
+  type: 'through';
+  x: number;
+}
+
+interface FromLine extends BranchLine {
+  type: 'from';
+  fromX: number;
+  toX: number;
+}
+
+interface ToLine extends BranchLine {
+  type: 'to';
+  fromX: number;
+  toX: number;
+}
+
+// 联合类型表示所有可能的线条类型
+type GraphLine = ThroughLine | FromLine | ToLine;
+
+const COLORS = [
+  "#2196f3", // 蓝色
+  "#e91e63", // 粉色
+  "#4caf50", // 绿色
+  "#ff9800", // 橙色
+  "#9c27b0", // 紫色
+  "#00bcd4", // 青色
+  "#ff5722", // 深橙色
+  "#607d8b", // 蓝灰色
+];
+
 interface LogItem {
   hash: string;
   date: string;
@@ -101,6 +156,12 @@ const contextMenuTop = ref(0);
 const contextMenuLeft = ref(0);
 const selectedContextCommit = ref<LogItem | null>(null);
 
+// 添加分支图相关变量
+const commitNodes = ref<Map<string, CommitNode>>(new Map());
+const branchLines = ref<BranchLine[]>([]);
+const columnCount = ref(1);
+const branchInfo = ref<Map<string, BranchInfo>>(new Map());
+
 // 应用筛选后的日志
 const filteredLogs = computed(() => {
   // 不再在前端进行筛选，直接使用加载的日志
@@ -132,6 +193,7 @@ async function loadLog(all = false, page = 1) {
     const queryParams = new URLSearchParams();
     queryParams.append("page", page.toString());
     queryParams.append("all", all.toString());
+    queryParams.append("with_parents", "true"); // 添加参数请求父提交信息
 
     // 添加筛选参数
     if (authorFilter.value.length > 0) {
@@ -441,6 +503,13 @@ onMounted(() => {
     setTimeout(() => {
       setupTableScrollListener();
     }, 500); // 给表格足够的时间来渲染
+  });
+
+  // 表格数据加载完成后绘制分支图
+  nextTick(() => {
+    setTimeout(() => {
+      renderTableBranchGraph();
+    }, 500);
   });
 });
 
@@ -810,27 +879,373 @@ function extractAuthorsFromLogs() {
   console.log(`从现有日志中提取了${availableAuthors.value.length}位作者`);
 }
 
-// // 添加获取所有分支的函数
-// async function fetchAllBranches() {
-//   try {
-//     console.log('获取所有可用分支...')
+// 渲染表格中的分支图
+function renderTableBranchGraph() {
+  if (!tableRef.value || showGraphView.value) return;
+  
+  // 清空之前的计算结果
+  commitNodes.value.clear();
+  branchLines.value = [];
+  columnCount.value = 1;
+  
+  // 第一步：为每个提交分配列位置
+  assignColumnsToCommits();
+  
+  // 第二步：绘制图形
+  nextTick(() => {
+    drawBranchGraphs();
+  });
+}
 
-//     // 直接调用 gitStore 中的方法获取分支列表
-//     await gitStore.getAllBranches()
+// 为每个提交分配列位置
+function assignColumnsToCommits() {
+  // 重置数据
+  commitNodes.value.clear();
+  branchLines.value = [];
+  branchInfo.value.clear();
+  
+  // 创建提交图
+  const commitGraph = new Map<string, string[]>(); // hash -> [parent hashes]
+  const childrenMap = new Map<string, string[]>(); // hash -> [child hashes]
+  
+  // 第一步：构建提交图和子提交映射
+  logs.value.forEach(commit => {
+    if (!commit.hash) return;
+    
+    // 记录提交的父提交
+    if (commit.parents && commit.parents.length > 0) {
+      commitGraph.set(commit.hash, [...commit.parents]);
+      
+      // 记录每个父提交的子提交
+      commit.parents.forEach(parentHash => {
+        if (!childrenMap.has(parentHash)) {
+          childrenMap.set(parentHash, []);
+        }
+        childrenMap.get(parentHash)?.push(commit.hash);
+      });
+    } else {
+      commitGraph.set(commit.hash, []);
+    }
+  });
+  
+  // 第二步：分配分支和列
+  // 使用固定的主分支列和颜色
+  const mainColumn = 0;
+  const mainBranchColor = "#2196f3"; // 蓝色
+  
+  // 其他分支的颜色
+  const branchColors = [
+    "#e91e63", // 粉色
+    "#4caf50", // 绿色
+    "#ff9800", // 橙色
+    "#9c27b0", // 紫色
+    "#00bcd4", // 青色
+    "#ff5722", // 深橙色
+    "#607d8b", // 蓝灰色
+  ];
+  
+  // 创建分支映射，用于跟踪每个提交所属的分支
+  const branchByCommit = new Map<string, string>();
+  
+  // 从提交信息中提取分支名称
+  logs.value.forEach(commit => {
+    if (!commit.hash || !commit.branch) return;
+    
+    // 尝试从分支信息中提取分支名
+    const branchMatches = commit.branch.match(/(HEAD -> |origin\/)?([^\s,]+)/g);
+    if (branchMatches && branchMatches.length > 0) {
+      // 优先使用HEAD指向的分支
+      const headBranch = branchMatches.find(b => b.includes("HEAD -> "));
+      if (headBranch) {
+        const branchName = headBranch.replace("HEAD -> ", "").trim();
+        branchByCommit.set(commit.hash, branchName);
+      } else {
+        // 否则使用第一个分支名
+        const branchName = branchMatches[0].replace("origin/", "").trim();
+        branchByCommit.set(commit.hash, branchName);
+      }
+    }
+  });
+  
+  // 为每个分支分配一个唯一的列
+  const branchColumns = new Map<string, number>();
+  let nextColumn = 0;
+  
+  // 确保主分支在第一列
+  branchColumns.set("main", mainColumn);
+  branchColumns.set("master", mainColumn);
+  nextColumn++;
+  
+  // 为分支分配颜色
+  const branchColorMap = new Map<string, string>();
+  branchColorMap.set("main", mainBranchColor);
+  branchColorMap.set("master", mainBranchColor);
+  
+  // 为每个提交分配列
+  const columns = new Map<string, number>();
+  
+  // 首先处理有明确分支名的提交
+  logs.value.forEach((commit, index) => {
+    if (!commit.hash) return;
+    
+    const hash = commit.hash;
+    const branchName = branchByCommit.get(hash) || "main";
+    
+    // 为分支分配列
+    if (!branchColumns.has(branchName)) {
+      branchColumns.set(branchName, nextColumn++);
+      
+      // 为分支分配颜色
+      const colorIndex = (branchColumns.get(branchName) || 0) % branchColors.length;
+      branchColorMap.set(branchName, branchColors[colorIndex]);
+    }
+    
+    // 记录提交的列
+    const column = branchColumns.get(branchName) || 0;
+    columns.set(hash, column);
+    
+    // 记录提交节点
+    commitNodes.value.set(hash, {
+      hash,
+      parents: commit.parents || [],
+      column,
+      row: index,
+      branch: branchName
+    });
+    
+    // 记录分支信息
+    if (!branchInfo.value.has(branchName)) {
+      branchInfo.value.set(branchName, {
+        name: branchName,
+        color: branchColorMap.get(branchName) || mainBranchColor,
+        column
+      });
+    }
+  });
+  
+  // 处理合并提交和分支线
+  logs.value.forEach((commit, rowIndex) => {
+    if (!commit.hash || !commit.parents || commit.parents.length === 0) return;
+    
+    const currentNode = commitNodes.value.get(commit.hash);
+    if (!currentNode) return;
+    
+    const currentColumn = currentNode.column;
+    const currentBranchName = currentNode.branch || "main";
+    const currentColor = branchColorMap.get(currentBranchName) || mainBranchColor;
+    
+    // 处理每个父提交
+    commit.parents.forEach((parentHash, parentIndex) => {
+      const parentRow = logs.value.findIndex(c => c.hash === parentHash);
+      if (parentRow < 0) return; // 父提交不在当前日志中
+      
+      const parentNode = commitNodes.value.get(parentHash);
+      if (!parentNode) return;
+      
+      const parentColumn = parentNode.column;
+      const parentBranchName = parentNode.branch || "main";
+      const parentColor = branchColorMap.get(parentBranchName) || mainBranchColor;
+      
+      // 确定连接线的颜色
+      let lineColor = currentColor;
+      
+      // 如果是合并提交，第一个父提交使用当前分支颜色，其他父提交使用各自分支颜色
+      if (commit.parents && commit.parents.length > 1 && parentIndex > 0) {
+        lineColor = parentColor;
+      }
+      
+      // 添加分支线
+      branchLines.value.push({
+        fromRow: rowIndex,
+        fromColumn: currentColumn,
+        toRow: parentRow,
+        toColumn: parentColumn,
+        color: lineColor
+      });
+    });
+  });
+  
+  // 更新最大列数
+  columnCount.value = nextColumn;
+  
+  // 导出变量以供其他函数使用
+  return { mainBranchColor, branchColorMap };
+}
 
-//     // 从 gitStore 中获取分支列表
-//     if (gitStore.allBranches.length > 0) {
-//       // 更新可用分支列表
-//       availableBranches.value = [...gitStore.allBranches].sort()
-//       console.log(`获取到${availableBranches.value.length}个分支`)
-//     } else {
-//       console.warn('gitStore中没有分支数据')
-//     }
-//   } catch (error) {
-//     console.error('获取分支列表失败:', error)
-//     extractBranchesFromLogs()
-//   }
-// }
+// 绘制分支图
+function drawBranchGraphs() {
+  // 获取分支颜色映射
+  const { mainBranchColor, branchColorMap } = assignColumnsToCommits();
+  
+  // 为每个提交绘制图形
+  logs.value.forEach((commit, rowIndex) => {
+    if (!commit.hash) return;
+    
+    const cellId = `commit-graph-${commit.hash.substring(0, 7)}`;
+    const cell = document.getElementById(cellId);
+    if (!cell) return;
+    
+    // 创建SVG元素
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", "100%");
+    // 使用标准viewBox，但确保overflow是visible
+    svg.setAttribute("viewBox", "0 0 100 100");
+    svg.style.display = "block";
+    svg.style.overflow = "visible";
+    
+    // 清空单元格
+    cell.innerHTML = "";
+    cell.appendChild(svg);
+    
+    // 获取当前提交节点
+    const node = commitNodes.value.get(commit.hash);
+    if (!node) return;
+    
+    // 调整坐标系统，使用百分比布局
+    const columnWidth = 20;
+    const x = 10 + node.column * columnWidth;
+    const y = 50; // 中点是50%的位置
+    
+    // 查找与当前行相关的所有分支线
+    const relevantLines: GraphLine[] = [];
+    
+    // 1. 通过当前行的线
+    for (const line of branchLines.value) {
+      if (line.fromRow < rowIndex && line.toRow > rowIndex) {
+        relevantLines.push({
+          ...line,
+          type: 'through',
+          x: 10 + line.fromColumn * columnWidth
+        });
+      }
+    }
+    
+    // 2. 从当前行出发的线
+    for (const line of branchLines.value) {
+      if (line.fromRow === rowIndex) {
+        relevantLines.push({
+          ...line,
+          type: 'from',
+          fromX: 10 + line.fromColumn * columnWidth,
+          toX: 10 + line.toColumn * columnWidth
+        });
+      }
+    }
+    
+    // 3. 到当前行的线
+    for (const line of branchLines.value) {
+      if (line.toRow === rowIndex) {
+        relevantLines.push({
+          ...line,
+          type: 'to',
+          fromX: 10 + line.fromColumn * columnWidth,
+          toX: 10 + line.toColumn * columnWidth
+        });
+      }
+    }
+    
+    // 先绘制通过的线 - 从-20高度到120高度，远超出viewBox范围
+    relevantLines.filter((line): line is ThroughLine => line.type === 'through').forEach(line => {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      path.setAttribute("x1", line.x.toString());
+      path.setAttribute("y1", "-20"); // 远超出viewBox顶部
+      path.setAttribute("x2", line.x.toString());
+      path.setAttribute("y2", "120"); // 远超出viewBox底部
+      path.setAttribute("stroke", line.color);
+      path.setAttribute("stroke-width", "2");
+      svg.appendChild(path);
+    });
+    
+    // 绘制到当前节点的线 - 从-20高度到50%高度(中点)
+    relevantLines.filter((line): line is ToLine => line.type === 'to').forEach(line => {
+      if (line.fromColumn === line.toColumn) {
+        // 垂直线
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        path.setAttribute("x1", line.toX.toString());
+        path.setAttribute("y1", "-20"); // 远超出viewBox顶部
+        path.setAttribute("x2", line.toX.toString());
+        path.setAttribute("y2", y.toString()); // 到达中点
+        path.setAttribute("stroke", line.color);
+        path.setAttribute("stroke-width", "2");
+        svg.appendChild(path);
+      } else {
+        // 斜线或弯曲线
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        
+        if (line.fromColumn < line.toColumn) {
+          // 从左到右
+          path.setAttribute("d", `M${line.fromX},-20 C${line.fromX},15 ${line.toX},30 ${line.toX},${y}`);
+        } else {
+          // 从右到左
+          path.setAttribute("d", `M${line.fromX},-20 C${line.fromX},15 ${line.toX},30 ${line.toX},${y}`);
+        }
+        
+        path.setAttribute("stroke", line.color);
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("fill", "none");
+        svg.appendChild(path);
+      }
+    });
+    
+    // 绘制从当前节点出发的线 - 从50%高度(中点)到120高度
+    relevantLines.filter((line): line is FromLine => line.type === 'from').forEach(line => {
+      if (line.fromColumn === line.toColumn) {
+        // 垂直线
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        path.setAttribute("x1", line.fromX.toString());
+        path.setAttribute("y1", y.toString()); // 从中点开始
+        path.setAttribute("x2", line.fromX.toString());
+        path.setAttribute("y2", "120"); // 远超出viewBox底部
+        path.setAttribute("stroke", line.color);
+        path.setAttribute("stroke-width", "2");
+        svg.appendChild(path);
+      } else {
+        // 斜线或弯曲线
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        
+        if (line.fromColumn < line.toColumn) {
+          // 向右弯曲
+          path.setAttribute("d", `M${line.fromX},${y} C${line.fromX},70 ${line.toX},85 ${line.toX},120`);
+        } else {
+          // 向左弯曲
+          path.setAttribute("d", `M${line.fromX},${y} C${line.fromX},70 ${line.toX},85 ${line.toX},120`);
+        }
+        
+        path.setAttribute("stroke", line.color);
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("fill", "none");
+        svg.appendChild(path);
+      }
+    });
+    
+    // 绘制当前提交的点
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", x.toString());
+    circle.setAttribute("cy", y.toString());
+    circle.setAttribute("r", "6"); // 稍微增大点的大小
+    
+    // 获取分支颜色
+    const branchName = node.branch || "";
+    const branchColor = branchColorMap.get(branchName) || mainBranchColor;
+    
+    circle.setAttribute("fill", branchColor);
+    circle.setAttribute("stroke", "#fff");
+    circle.setAttribute("stroke-width", "2");
+    svg.appendChild(circle);
+  });
+}
+
+// 监听表格数据更新后重新绘制分支图
+watch(
+  () => logs.value,
+  () => {
+    nextTick(() => {
+      renderTableBranchGraph();
+    });
+  },
+  { deep: true } // 添加deep选项以确保检测到数组内部元素的变化
+);
 
 // 处理右键菜单事件
 function handleContextMenu(row: LogItem, column: any, event: MouseEvent) {
@@ -982,7 +1397,7 @@ async function resetToCommit(commit: LogItem | null) {
       {
         confirmButtonText: "确认重置",
         cancelButtonText: "取消",
-        type: "danger",
+        type: "warning",
         dangerouslyUseHTMLString: true
       }
     );
@@ -1281,6 +1696,11 @@ async function resetToCommit(commit: LogItem | null) {
             height="500"
             @row-contextmenu="handleContextMenu"
           >
+            <el-table-column width="60" class-name="branch-graph-column">
+              <template #default="scope">
+                <div class="branch-graph-cell" :id="`commit-graph-${scope.row.hash.substring(0, 7)}`"></div>
+              </template>
+            </el-table-column>
             <el-table-column label="提交哈希" width="100" resizable>
               <template #default="scope">
                 <span
@@ -2183,11 +2603,87 @@ async function resetToCommit(commit: LogItem | null) {
 .el-table .el-table__cell .cell {
   word-break: break-all;
 }
+
+/* 分支图样式 */
+.branch-graph-column {
+  padding: 0 !important;
+  overflow: visible;
+}
+
+.branch-graph-cell {
+  height: 40px;
+  width: 100%;
+  position: relative;
+  padding: 0;
+  margin: 0;
+}
+
+/* 分支图列样式 */
+.branch-graph-column .cell {
+  padding: 0 !important;
+  height: 100%;
+  margin: 0;
+  overflow: visible;
+}
+
+.el-table .branch-graph-column {
+  width: 60px !important;
+  padding: 0 !important;
+}
+:deep(.el-table .el-table__cell) {
+  padding: 0 !important;
+}
+
+/* 确保SVG元素完全填充单元格 */
+:deep(.branch-graph-cell svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* 去掉表格行边框 */
+:deep(.el-table--border .el-table__inner-wrapper tr) {
+  border: none !important;
+}
+
+:deep(.el-table--border .el-table__inner-wrapper td) {
+  border-right: none !important;
+  border-bottom: none !important;
+}
+
+:deep(.el-table--border .el-table__inner-wrapper th) {
+  border-right: none !important;
+}
+
+:deep(.el-table--border) {
+  border: none !important;
+}
+
+:deep(.el-table--border .el-table__inner-wrapper) {
+  border: none !important;
+}
+
+:deep(.el-table--border::after),
+:deep(.el-table--border::before),
+:deep(.el-table__inner-wrapper::after),
+:deep(.el-table__inner-wrapper::before) {
+  display: none !important;
+}
+
+/* 表格背景设置 */
+:deep(.el-table tr) {
+  background-color: transparent !important;
+}
+
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td) {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
 </style>
 
 /* 添加表格列调整样式 */
 <style>
-.el-table .el-table__cell .cell {
+:deep(.el-table .el-table__cell .cell) {
   word-break: break-all;
 }
 </style>
