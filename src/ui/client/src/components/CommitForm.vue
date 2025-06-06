@@ -1028,6 +1028,44 @@ git config --global user.email "your.email@example.com"</pre>
                 <div class="preview-title">Git提交命令预览：</div>
                 <pre class="preview-content code-command">git commit -m "{{ finalCommitMessage || '<提交信息>' }}"{{ skipHooks ? ' --no-verify' : '' }}</pre>
               </div>
+              
+              <!-- 添加的按钮组 -->
+              <div class="form-bottom-actions">
+                <div class="button-row">
+                  <el-button 
+                    type="primary" 
+                    @click="commitChanges" 
+                    :loading="gitStore.isLoadingStatus"
+                    :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
+                  >
+                    提交
+                    <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
+                  </el-button>
+                  
+                  <el-button 
+                    type="primary"
+                    :icon="Upload"
+                    @click="pushToRemote"
+                    :loading="gitStore.isPushing"
+                    :disabled="!canPush"
+                    :style="needsPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                  >
+                    推送
+                    <span v-if="needsPush">({{gitStore.branchAhead}})</span>
+                  </el-button>
+                </div>
+                
+                <el-button 
+                  type="success"
+                  :icon="Position"
+                  @click="addCommitAndPush"
+                  :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
+                  :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                  class="full-width-button"
+                >
+                  一键推送所有
+                </el-button>
+              </div>
             </div>
 
             <!-- 标准化提交表单 -->
@@ -1076,6 +1114,44 @@ git config --global user.email "your.email@example.com"</pre>
 
                 <div class="preview-title" style="margin-top: 10px;">Git提交命令预览：</div>
                 <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
+              </div>
+              
+              <!-- 添加的按钮组 -->
+              <div class="form-bottom-actions">
+                <div class="button-row">
+                  <el-button 
+                    type="primary" 
+                    @click="commitChanges" 
+                    :loading="gitStore.isLoadingStatus"
+                    :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
+                  >
+                    提交
+                    <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
+                  </el-button>
+                  
+                  <el-button 
+                    type="primary"
+                    :icon="Upload"
+                    @click="pushToRemote"
+                    :loading="gitStore.isPushing"
+                    :disabled="!canPush"
+                    :style="needsPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                  >
+                    推送
+                    <span v-if="needsPush">({{gitStore.branchAhead}})</span>
+                  </el-button>
+                </div>
+                
+                <el-button 
+                  type="success"
+                  :icon="Position"
+                  @click="addCommitAndPush"
+                  :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
+                  :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                  class="full-width-button"
+                >
+                  一键推送所有
+                </el-button>
               </div>
             </div>
           </div>
@@ -1185,7 +1261,7 @@ git config --global user.email "your.email@example.com"</pre>
                         :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
                         :class="['action-button', 'one-click-push', { 'is-loading': gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing }]"
                       >
-                        一键推送
+                        一键推送所有
                       </el-button>
                     </el-tooltip>
                   </div>
@@ -1773,7 +1849,7 @@ git config --global user.email "your.email@example.com"</pre>
   color: #fff !important;
 }
 
-/* 一键推送按钮动画 */
+/* 一键推送所有按钮动画 */
 @keyframes one-click-push-glow {
   0% { box-shadow: 0 0 5px rgba(103, 194, 58, 0.5); }
   50% { box-shadow: 0 0 20px rgba(103, 194, 58, 0.8); }
@@ -1869,14 +1945,57 @@ git config --global user.email "your.email@example.com"</pre>
   color: white;
 }
 
-.pushing-spinner {
-  margin-bottom: 16px;
+/* 表单底部操作按钮样式 */
+.form-bottom-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+  padding: 12px;
+  background-color: #f5f7fa;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-left: 3px solid #67C23A;
+}
+
+.button-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.button-row .el-button {
+  flex: 1;
+  min-width: 100px;
+}
+
+.full-width-button {
+  width: 100%;
+  margin-top: 5px;
+  font-weight: 500;
+  height: 40px;
+}
+
+.form-bottom-actions .el-button {
+  font-weight: 500;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.form-bottom-actions .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 
 .pushing-text {
   font-size: 20px;
   font-weight: bold;
   text-align: center;
+}
+
+.pushing-spinner {
+  margin-bottom: 16px;
 }
 
 .circular {
