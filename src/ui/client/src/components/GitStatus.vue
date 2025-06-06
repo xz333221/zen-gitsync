@@ -151,8 +151,14 @@ async function getFileDiff(filePath: string) {
       }
       
       diffDialogVisible.value = true
+    } else if (currentFile && currentFile.type === 'added') {
+      // 对于已暂存的文件，使用 diff --cached 获取差异
+      const response = await fetch(`/api/diff-cached?file=${encodeURIComponent(filePath)}`)
+      const data = await response.json()
+      diffContent.value = data.diff || '没有变更'
+      diffDialogVisible.value = true
     } else {
-      // 对于已跟踪的文件，获取常规差异
+      // 对于未暂存的文件，获取常规差异
       const response = await fetch(`/api/diff?file=${encodeURIComponent(filePath)}`)
       const data = await response.json()
       diffContent.value = data.diff || '没有变更'
@@ -740,21 +746,22 @@ defineExpose({
 <style scoped>
 .card {
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   border: 1px solid rgba(0, 0, 0, 0.03);
   height: 100%;
   width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: all 0.3s ease;
 }
 
 .status-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid #f0f0f0;
 }
 
@@ -768,19 +775,15 @@ defineExpose({
 .header-actions {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 .card-content {
-  padding: 15px;
+  padding: 16px;
   overflow-y: auto;
   flex: 1;
   display: flex;
   flex-direction: column;
-}
-
-/* 移除当前目录样式 */
-.current-directory {
-  display: none;
 }
 
 .status-box {
@@ -788,7 +791,7 @@ defineExpose({
   font-family: monospace;
   background-color: #f8f9fa;
   padding: 16px;
-  border-radius: 6px;
+  border-radius: 8px;
   margin-bottom: 20px;
   max-height: 200px;
   overflow-y: auto;
@@ -797,58 +800,62 @@ defineExpose({
   line-height: 1.5;
 }
 
-/* 现代化的文件列表容器 */
+/* 文件列表容器 */
 .file-list-container {
   flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  margin-bottom: 0;
-  gap: 12px;
-  height: auto; /* 改为自适应高度，不固定高度 */
-  min-height: 100px; /* 设置最小高度 */
+  gap: 16px;
+  height: auto;
+  min-height: 100px;
 }
 
 .file-group {
   background-color: #f8f9fa;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   border: 1px solid #ebeef5;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
+  transition: box-shadow 0.3s ease;
+}
+
+.file-group:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 /* 让每个文件组根据内容自动增长 */
 .file-group {
-  flex: 0 1 auto; /* 不主动增长，但允许缩小，基于内容大小 */
+  flex: 0 1 auto;
 }
 
 /* 最后一个分组可以吸收剩余空间 */
 .file-group:last-child {
   margin-bottom: 0;
-  flex: 1 1 auto; /* 可以增长占用剩余空间 */
+  flex: 1 1 auto;
 }
 
 .file-group-header {
   font-size: 14px;
   font-weight: bold;
-  padding: 8px 12px;
+  padding: 10px 16px;
   background-color: #f0f2f5;
   color: #606266;
   border-bottom: 1px solid #ebeef5;
-  flex-shrink: 0; /* 防止header被压缩 */
+  flex-shrink: 0;
 }
 
 .file-list {
   overflow-y: auto;
-  min-height: 40px; /* 最小高度 */
-  max-height: 200px; /* 最大高度限制，避免过长列表 */
-  flex-grow: 1; /* 允许文件列表在文件组内扩展 */
+  min-height: 40px;
+  max-height: 200px;
+  flex-grow: 1;
   padding: 0;
   margin: 0;
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: rgba(144, 147, 153, 0.3) transparent; /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
 }
 
 /* Webkit浏览器的滚动条样式 */
@@ -870,20 +877,12 @@ defineExpose({
   background-color: transparent;
 }
 
-/* 让每个文件列表自适应高度，使其在容器中更好地分配空间 */
 .file-list:empty {
-  display: none; /* 如果列表为空，不显示 */
+  display: none;
 }
 
-/* 当没有足够的项目填充列表时，禁用滚动 */
-.file-list:has(.empty-file-group) {
-  overflow-y: hidden;
-}
-
-/* 替换为更兼容的选择器 */
-/* 改用直接为empty-file-group父容器添加样式 */
 .empty-file-container {
-  overflow-y: hidden !important; /* 强制禁用滚动 */
+  overflow-y: hidden !important;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -899,36 +898,20 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 50px; /* 增加最小高度 */
+  min-height: 50px;
   background-color: #f8f9fa;
   border-radius: 4px;
   margin: 8px;
 }
 
-/* 自定义每个分组的展开逻辑 */
-/* 已暂存文件分组 - 保持小巧 */
-.file-group:nth-child(1) {
-  flex: 0 1 auto;
-}
-
-/* 未暂存更改分组 - 稍微大一些 */
-.file-group:nth-child(2) {
-  flex: 0 1 auto;
-}
-
-/* 未跟踪文件分组 - 可以占据剩余空间 */
-.file-group:nth-child(3) {
-  flex: 1 1 auto;
-}
-
 .file-item {
-  padding: 8px 12px;
+  padding: 10px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid #ebeef5;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
 }
 
 .file-item:last-child {
@@ -945,12 +928,12 @@ defineExpose({
   flex-grow: 1;
   overflow: hidden;
   white-space: nowrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .file-status-indicator {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background-color: #409eff;
   flex-shrink: 0;
@@ -983,7 +966,7 @@ defineExpose({
   color: #303133;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.2;
+  line-height: 1.4;
 }
 
 .file-directory {
@@ -997,9 +980,9 @@ defineExpose({
 
 .file-actions {
   display: flex;
-  gap: 5px;
+  gap: 8px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s ease;
 }
 
 .file-item:hover .file-actions {
@@ -1019,15 +1002,15 @@ defineExpose({
 }
 
 .empty-icon {
-  width: 60px;
-  height: 60px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #ebeef5;
+  background-color: #f0f2f5;
   border-radius: 50%;
-  margin-bottom: 15px;
-  font-size: 24px;
+  margin-bottom: 16px;
+  font-size: 28px;
   color: #909399;
   animation: pulse 2s infinite ease-in-out;
 }
@@ -1039,10 +1022,10 @@ defineExpose({
 }
 
 .empty-text {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 500;
   color: #606266;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
 }
 
 .empty-subtext {
@@ -1050,162 +1033,43 @@ defineExpose({
   color: #909399;
   margin-bottom: 20px;
 }
-.status-box-wrap{
+
+.status-box-wrap {
   height: 100%;
   display: flex;
   flex-direction: column;
+  gap: 16px;
 }
 
 /* 分支信息样式 */
 .branch-status-info {
-  margin-bottom: 15px;
+  margin-bottom: 0;
   background-color: #f8f9fa;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #ebeef5;
+  transition: all 0.3s ease;
+}
+
+.branch-status-info:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .branch-sync-status {
   display: flex;
   align-items: center;
-  padding: 12px 15px;
+  padding: 12px 16px;
   border-left: 3px solid #e6a23c;
   margin-bottom: 0;
   background-color: #fdf6ec;
 }
 
-/* 移除旧的状态信息样式 */
-.git-status-message {
-  display: none;
-}
-
-.branch-info {
-  display: none;
-}
-
-/* 添加针对空内容区域的样式 */
-.card-content:empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #f8f9fa;
-  border-radius: 6px;
-  border: 1px dashed #dcdfe6;
-  color: #909399;
-  height: 100%;
-}
-
-.card-content:empty::after {
-  content: '没有Git状态信息可显示';
-  font-size: 14px;
-}
-
-/* 添加目录浏览相关样式 */
-.browser-current-path {
-  font-family: monospace;
-  margin-bottom: 15px;
-  padding: 10px;
-  background-color: #f5f7fa;
-  border-radius: 6px;
-  overflow-x: auto;
-  white-space: nowrap;
-  border: 1px solid #ebeef5;
-}
-
-.browser-error {
-  color: #f56c6c;
-  margin: 10px 0;
-  padding: 10px;
-  background-color: #fef0f0;
-  border-radius: 4px;
-  border-left: 3px solid #f56c6c;
-}
-
-.browser-nav {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.no-padding-left {
-  padding-left: 12px;
-}
-
-.directory-browser {
-  height: 400px;
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.directory-items-container {
-  flex: 1;
-  overflow-y: auto;
-  background-color: #f8f9fa;
-  padding: 10px;
-}
-
-.directory-items {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-}
-
-.directory-item {
-  display: flex;
-  align-items: center;
-  padding: 8px;
-  cursor: pointer;
-  border-radius: 4px;
-  background-color: white;
-  border: 1px solid #ebeef5;
-  transition: all 0.2s;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  gap: 5px;
-}
-
-.directory-item:hover {
-  background-color: #ecf5ff;
-  border-color: #c6e2ff;
-}
-
-.directory-item.directory {
-  background-color: #f0f7ff;
-  color: #409eff;
-}
-
-.directory-item .el-icon {
-  margin-right: 5px;
-  flex-shrink: 0;
-}
-
-.directory-item.directory .el-icon {
-  color: #409eff;
-}
-
-.directory-item.file .el-icon {
-  color: #909399;
-}
-
-.directory-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-/* 添加分支状态样式 */
 .sync-status-content {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+  width: 100%;
 }
 
 .status-badges {
@@ -1219,6 +1083,9 @@ defineExpose({
   display: flex;
   align-items: center;
   width: 100%;
+  border-radius: 4px;
+  padding: 8px 12px;
+  transition: all 0.3s ease;
 }
 
 .status-badge.el-tag--warning {
@@ -1231,63 +1098,41 @@ defineExpose({
   border-color: #e9e9eb;
 }
 
+.status-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
 .badge-content {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
 }
+
+/* 差异对话框样式 */
 .diff-dialog {
   height: calc(100vh - 150px);
 }
 
-.diff-dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid #ebeef5;
-  background-color: #f9f9fb;
-}
-
-.file-title {
-  display: flex;
-  align-items: center;
-  font-size: 16px;
-  font-weight: 500;
-  color: #303133;
-  gap: 10px;
-  overflow: hidden;
-}
-
-.file-icon {
-  color: #409eff;
-  font-size: 20px;
-}
-
-.file-path {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: monospace;
+:deep(.el-dialog__body) {
+  height: calc(100vh - 320px);
+  overflow: auto;
+  padding: 0;
 }
 
 .diff-content {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 20px;
+  padding: 16px 20px;
   background-color: #fafafa;
-  /* height: 100%;
-  overflow: auto; */
+  height: 100%;
 }
-:deep(.el-dialog__body) {
-  height: calc(100vh - 320px);
-  overflow: auto;
-}
+
 .diff-formatted {
-  font-family: 'Consolas', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   white-space: pre-wrap;
   padding-bottom: 20px;
 }
@@ -1305,7 +1150,7 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 20px;
+  padding: 12px 20px;
   border-top: 1px solid #ebeef5;
   background-color: #f9f9fb;
 }
@@ -1320,6 +1165,12 @@ defineExpose({
 
 .nav-button {
   min-width: 120px;
+  transition: all 0.3s ease;
+}
+
+.nav-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* 确保文件差异对话框里的内容滚动条样式一致 */
@@ -1351,6 +1202,34 @@ defineExpose({
   scrollbar-width: thin;
   scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
 }
+
+/* 增加自动更新开关的样式 */
+.auto-update-switch :deep(.el-switch__core) {
+  transition: all 0.3s ease-in-out;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.auto-update-switch :deep(.el-switch__core:hover) {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.auto-update-switch.is-checked :deep(.el-switch__core) {
+  box-shadow: 0 2px 5px rgba(103, 194, 58, 0.3);
+}
+
+.auto-update-switch.is-checked :deep(.el-switch__core:hover) {
+  box-shadow: 0 2px 8px rgba(103, 194, 58, 0.5);
+}
+
+/* 按钮悬停效果 */
+.el-button {
+  transition: all 0.3s ease;
+}
+
+.el-button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
 </style>
 
 <!-- 非scoped样式，使diff格式化样式对动态内容生效 -->
@@ -1358,16 +1237,16 @@ defineExpose({
 .diff-header {
   font-weight: bold;
   background-color: #e6f1fc;
-  padding: 5px;
-  margin: 8px 0;
-  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 10px 0;
+  border-radius: 6px;
   color: #0366d6;
   border-bottom: 1px solid #c8e1ff;
 }
 
 .diff-old-file, .diff-new-file {
   color: #586069;
-  padding: 2px 5px;
+  padding: 4px 8px;
   font-family: monospace;
 }
 
@@ -1382,16 +1261,16 @@ defineExpose({
 .diff-hunk-header {
   color: #6f42c1;
   background-color: #f1f8ff;
-  padding: 2px 5px;
-  margin: 5px 0;
-  border-radius: 3px;
+  padding: 4px 8px;
+  margin: 8px 0;
+  border-radius: 4px;
   font-family: monospace;
 }
 
 .diff-added {
   background-color: #e6ffed;
   color: #22863a;
-  padding: 0 5px;
+  padding: 2px 8px;
   border-left: 4px solid #22863a;
   font-family: monospace;
   display: block;
@@ -1401,7 +1280,7 @@ defineExpose({
 .diff-removed {
   background-color: #ffeef0;
   color: #cb2431;
-  padding: 0 5px;
+  padding: 2px 8px;
   border-left: 4px solid #cb2431;
   font-family: monospace;
   display: block;
@@ -1410,28 +1289,10 @@ defineExpose({
 
 .diff-context {
   color: #444;
-  padding: 0 5px;
+  padding: 2px 8px;
   font-family: monospace;
   display: block;
   margin: 2px 0;
   background-color: #fafbfc;
-}
-
-/* 增加自动更新开关的样式 */
-.auto-update-switch .el-switch__core {
-  transition: all 0.3s ease-in-out;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-
-.auto-update-switch .el-switch__core:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.auto-update-switch.is-checked .el-switch__core {
-  box-shadow: 0 2px 5px rgba(103, 194, 58, 0.3);
-}
-
-.auto-update-switch.is-checked .el-switch__core:hover {
-  box-shadow: 0 2px 8px rgba(103, 194, 58, 0.5);
 }
 </style>

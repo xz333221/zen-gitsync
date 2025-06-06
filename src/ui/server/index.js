@@ -1051,6 +1051,23 @@ async function startUIServer() {
       res.status(500).json({ error: error.message });
     }
   });
+  // 获取已暂存文件差异
+  app.get('/api/diff-cached', async (req, res) => {
+    try {
+      const filePath = req.query.file;
+      
+      if (!filePath) {
+        return res.status(400).json({ error: '缺少文件路径参数' });
+      }
+      
+      // 执行git diff --cached命令获取已暂存文件差异
+      const { stdout } = await execGitCommand(`git diff --cached -- "${filePath}"`);
+      
+      res.json({ diff: stdout });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
   
   // 获取文件内容 (用于未跟踪文件)
   app.get('/api/file-content', async (req, res) => {

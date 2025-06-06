@@ -1968,33 +1968,21 @@ watch(() => showGraphView.value, (isGraphView) => {
           <div v-if="!showAllCommits" class="load-more-container">
             <!-- 显示加载状态和页码信息 -->
             <div class="pagination-info">
-              <span
-                >第 {{ currentPage }} 页
-                {{
-                  totalCommits > 0
-                    ? `/ 共 ${Math.ceil(totalCommits / 100) || 1} 页`
-                    : ""
-                }}
-                (总计 {{ totalCommits }} 条记录)</span
-              >
+              <span>第 {{ currentPage }} 页
+                {{ totalCommits > 0 ? `/ 共 ${Math.ceil(totalCommits / 100) || 1} 页` : "" }}
+                (总计 {{ totalCommits }} 条记录)</span>
             </div>
 
             <div v-if="isLoadingMore" class="loading-more">
               <div class="loading-spinner"></div>
               <span>加载更多...</span>
             </div>
-            <div
-              v-else-if="hasMoreData"
-              class="load-more-button"
-              @click="loadMoreLogs"
-            >
+            <div v-else-if="hasMoreData" class="load-more-button" @click="loadMoreLogs">
               <span>加载更多</span>
             </div>
             <div v-else class="no-more-data">
               <span>没有更多数据了</span>
-              <span v-if="logs.length > 0" class="total-loaded"
-                >（已加载 {{ logs.length }} 条记录）</span
-              >
+              <span v-if="logs.length > 0" class="total-loaded">（已加载 {{ logs.length }} 条记录）</span>
             </div>
           </div>
         </div>
@@ -2116,14 +2104,15 @@ watch(() => showGraphView.value, (isGraphView) => {
 <style scoped>
 .card {
   background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   height: 100%;
   width: 100%;
   display: flex;
   flex-direction: column;
   border: 1px solid rgba(0, 0, 0, 0.03);
   overflow: hidden;
+  transition: all 0.3s ease;
 }
 
 .log-header {
@@ -2131,19 +2120,19 @@ watch(() => showGraphView.value, (isGraphView) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0;
-  padding: 8px 16px;
+  padding: 12px 16px;
   background-color: white;
   border-bottom: 1px solid #f0f0f0;
   position: sticky;
   top: 0;
   z-index: 100;
-  flex-shrink: 0; /* 防止头部被压缩 */
+  flex-shrink: 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .log-header h2 {
@@ -2154,13 +2143,13 @@ watch(() => showGraphView.value, (isGraphView) => {
 
 .log-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 
 /* 优化按钮样式 */
 .action-button {
   transition: all 0.3s ease;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid transparent;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   font-weight: 500;
@@ -2169,7 +2158,7 @@ watch(() => showGraphView.value, (isGraphView) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .action-button:hover {
@@ -2220,8 +2209,10 @@ watch(() => showGraphView.value, (isGraphView) => {
   background: linear-gradient(135deg, #909399 0%, #c0c4cc 100%);
   color: white;
   min-width: unset;
-  padding: 0;
+  padding: 8px;
   border-radius: 50%;
+  width: 36px;
+  height: 36px;
 }
 
 .refresh-button:hover {
@@ -2242,19 +2233,21 @@ watch(() => showGraphView.value, (isGraphView) => {
 }
 
 .content-area {
-  padding: 10px 0;
+  padding: 10px 16px;
   flex: 1;
   min-height: 100px;
   height: calc(100% - 52px);
   display: flex;
   flex-direction: column;
 }
+
 .content-area-content {
   height: 100%;
 }
 
 .content-area.with-filter {
   height: calc(100% - 52px - 60px); /* 减去header高度和filter高度 */
+  padding-top: 0;
 }
 
 /* 确保内容区域内的直接子元素占满高度 */
@@ -2268,28 +2261,56 @@ watch(() => showGraphView.value, (isGraphView) => {
 .el-table {
   --el-table-border-color: #f0f0f0;
   --el-table-header-bg-color: #f8f9fa;
-  border-radius: 4px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
-/* 统一按钮间距 */
-.log-actions {
-  display: flex;
-  gap: 12px;
+:deep(.el-table__header-wrapper) {
+  background-color: #f8f9fa;
+}
+
+:deep(.el-table__header) th {
+  background-color: #f8f9fa;
+  color: #606266;
+  font-weight: 600;
+  height: 48px;
+}
+
+:deep(.el-table__row) {
+  transition: all 0.2s ease;
+}
+
+:deep(.el-table__row:hover) {
+  background-color: #ecf5ff !important;
+}
+
+:deep(.el-table--striped .el-table__row--striped) {
+  background-color: #fafafa;
+}
+
+:deep(.el-table__cell) {
+  padding: 8px 0;
 }
 
 .branch-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
 }
 
 .branch-tag {
-  margin-right: 4px;
+  margin-right: 0;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.branch-tag:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .commit-count {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   font-size: 14px;
   color: #606266;
   text-align: right;
@@ -2301,6 +2322,7 @@ watch(() => showGraphView.value, (isGraphView) => {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  padding: 0 8px;
 }
 
 .graph-container {
@@ -2308,10 +2330,11 @@ watch(() => showGraphView.value, (isGraphView) => {
   flex: 1;
   min-height: 500px;
   border: 1px solid #ebeef5;
-  border-radius: 4px;
-  padding: 10px;
+  border-radius: 8px;
+  padding: 16px;
   background-color: #fff;
   position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .graph-container svg {
@@ -2323,12 +2346,17 @@ watch(() => showGraphView.value, (isGraphView) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
+  background-color: #f8f9fa;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
 }
 
 .zoom-controls {
   display: flex;
-  gap: 8px;
+  gap: 12px;
+  align-items: center;
 }
 
 .zoom-slider {
@@ -2338,6 +2366,10 @@ watch(() => showGraphView.value, (isGraphView) => {
 .scale-info {
   font-size: 14px;
   color: #606266;
+  background-color: #fff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
 }
 
 .refresh-notification {
@@ -2381,16 +2413,24 @@ watch(() => showGraphView.value, (isGraphView) => {
   text-overflow: ellipsis;
   display: inline-block;
   max-width: 100%;
+  font-weight: 500;
 }
 
 .commit-hash {
   cursor: pointer;
   color: #409eff;
-  font-family: monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-weight: 500;
+  border-radius: 4px;
+  padding: 2px 4px;
+  background-color: #ecf5ff;
+  transition: all 0.2s ease;
 }
 
 .commit-hash:hover {
-  text-decoration: underline;
+  text-decoration: none;
+  background-color: #d9ecff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .commit-detail-container {
@@ -2400,30 +2440,30 @@ watch(() => showGraphView.value, (isGraphView) => {
 }
 
 .commit-info {
-  padding: 12px;
+  padding: 16px;
   background-color: #f5f7fa;
   border-radius: 8px;
   font-size: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .commit-info-header {
   display: flex;
   flex-wrap: wrap;
-  gap: 15px;
+  gap: 16px;
   align-items: center;
   background-color: #fff;
-  padding: 10px;
-  border-radius: 4px;
+  padding: 16px;
+  border-radius: 8px;
   border: 1px solid #e4e7ed;
 }
 
 .info-item {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
 }
 
 .item-label {
@@ -2440,7 +2480,7 @@ watch(() => showGraphView.value, (isGraphView) => {
 .commit-message-container {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 
 .message-label {
@@ -2450,18 +2490,17 @@ watch(() => showGraphView.value, (isGraphView) => {
 
 .message-content {
   background-color: #fff;
-  padding: 12px;
-  border-radius: 4px;
-  font-family: monospace;
+  padding: 16px;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   white-space: pre-wrap;
-  border-left: 4px solid #409eff;
-  line-height: 1.5;
+  line-height: 1.6;
   border: 1px solid #e4e7ed;
   border-left: 4px solid #409eff;
 }
 
 .commit-files-diff {
-  margin-top: 5px;
+  margin-top: 8px;
   display: flex;
   gap: 20px;
   height: 60vh;
@@ -2472,14 +2511,15 @@ watch(() => showGraphView.value, (isGraphView) => {
   overflow-y: auto;
   background-color: #f5f7fa;
   border-radius: 8px;
-  padding: 10px;
+  padding: 16px;
 }
 
 .files-list h3 {
   margin-top: 0;
-  padding-bottom: 10px;
+  padding-bottom: 12px;
   border-bottom: 1px solid #dcdfe6;
   font-size: 16px;
+  font-weight: 500;
 }
 
 .files-list ul {
@@ -2489,24 +2529,28 @@ watch(() => showGraphView.value, (isGraphView) => {
 }
 
 .files-list li {
-  padding: 8px 10px;
+  padding: 10px 12px;
   cursor: pointer;
   border-radius: 4px;
-  margin-bottom: 5px;
-  font-family: monospace;
+  margin-bottom: 6px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 13px;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
 }
 
 .files-list li:hover {
   background-color: #ecf5ff;
+  border-color: #d9ecff;
 }
 
 .files-list li.active-file {
   background-color: #409eff;
   color: white;
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
 }
 
 .file-diff {
@@ -2515,58 +2559,58 @@ watch(() => showGraphView.value, (isGraphView) => {
   flex-direction: column;
   background-color: #f5f7fa;
   border-radius: 8px;
-  padding: 10px;
+  padding: 16px;
   overflow: hidden;
 }
 
 .file-diff h3 {
   margin-top: 0;
-  padding-bottom: 10px;
+  padding-bottom: 12px;
   border-bottom: 1px solid #dcdfe6;
   font-size: 16px;
+  font-weight: 500;
 }
 
 .diff-content {
   flex: 1;
   overflow-y: auto;
   background-color: #fff;
-  padding: 10px;
-  border-radius: 4px;
-  font-family: monospace;
+  padding: 16px;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
+  border: 1px solid #ebeef5;
 }
 
-.diff-header {
-  font-weight: bold;
-  color: #409eff;
+/* 滚动条样式 */
+.diff-content::-webkit-scrollbar,
+.files-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.diff-old-file {
-  color: #e6a23c;
+.diff-content::-webkit-scrollbar-thumb,
+.files-list::-webkit-scrollbar-thumb {
+  background-color: rgba(144, 147, 153, 0.3);
+  border-radius: 4px;
 }
 
-.diff-new-file {
-  color: #67c23a;
+.diff-content::-webkit-scrollbar-thumb:hover,
+.files-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(144, 147, 153, 0.5);
 }
 
-.diff-hunk-header {
-  font-weight: bold;
-  color: #409eff;
+.diff-content::-webkit-scrollbar-track,
+.files-list::-webkit-scrollbar-track {
+  background-color: transparent;
 }
 
-.diff-added {
-  background-color: #f0f9eb;
-  color: #67c23a;
-}
-
-.diff-removed {
-  background-color: #fef2f2;
-  color: #f56c6c;
-}
-
-.diff-context {
-  background-color: #f5f7fa;
+/* Firefox滚动条样式 */
+.diff-content,
+.files-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
 }
 
 /* 减小对话框的顶部边距 */
@@ -2574,76 +2618,28 @@ watch(() => showGraphView.value, (isGraphView) => {
   --el-dialog-margin-top: 7vh;
 }
 
-.history-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-  padding: 0;
-  position: sticky;
-  top: 52px; /* 与 log-header 的高度匹配 */
-  z-index: 90;
-  background-color: white;
-  padding: 5px 0;
-  transition: box-shadow 0.3s ease, background-color 0.3s ease,
-    padding 0.2s ease;
-}
-
-/* 当滚动时添加微妙的阴影效果 */
-.content-area:not(:hover) .history-controls:not(:hover) {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.history-stats {
-  display: flex;
-  align-items: center;
-}
-
-.record-count {
-  display: flex;
-  align-items: center;
-  height: 24px;
-  padding-left: 8px;
-  padding-right: 8px;
-  margin-left: 8px;
-}
-
-.record-count :deep(.el-icon) {
-  margin-right: 4px;
-  font-size: 12px;
-}
-
-.filter-badge :deep(.el-badge__content) {
-  background-color: #409eff;
-}
-
-.filter-panel {
-  display: none; /* 隐藏原来的筛选组件 */
-}
-
-.log-table.has-filter,
-.log-table.has-sticky-controls,
-.log-table.has-sticky-filter {
-  margin-top: 0 !important; /* 重置原来的边距 */
+:deep(.commit-detail-dialog .el-dialog__body) {
+  padding: 16px;
 }
 
 .filter-panel-header {
   background-color: #f5f7fa;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid #e4e7ed;
   position: sticky;
   top: 36px; /* 紧贴log-header下方 */
   z-index: 99;
   transition: all 0.3s ease;
   flex-shrink: 0;
-  margin-bottom: 0; /* 移除底部边距 */
+  margin-bottom: 10px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border-radius: 0 0 8px 8px;
 }
 
 .filter-panel-header .filter-form {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: nowrap;
   justify-content: space-between;
 }
@@ -2666,18 +2662,19 @@ watch(() => showGraphView.value, (isGraphView) => {
 .compact-label {
   color: #909399;
   font-size: 12px;
-  margin-right: 4px;
+  margin-right: 6px;
   white-space: nowrap;
   font-weight: bold;
   border-right: 1px solid #dcdfe6;
-  padding-right: 6px;
+  padding-right: 8px;
 }
 
 .filter-action-button {
-  padding: 8px 15px;
-  border-radius: 4px;
+  padding: 8px 16px;
+  border-radius: 6px;
   transition: all 0.3s;
-  min-width: 60px;
+  min-width: 70px;
+  font-weight: 500;
 }
 
 .filter-action-button:hover {
@@ -2688,14 +2685,9 @@ watch(() => showGraphView.value, (isGraphView) => {
 .filter-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   white-space: nowrap;
   flex-shrink: 0;
-}
-
-/* 表格样式 */
-.el-table .el-table__cell .cell {
-  word-break: break-all;
 }
 
 /* 表格视图容器简化 */
@@ -2703,7 +2695,7 @@ watch(() => showGraphView.value, (isGraphView) => {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 400px; /* 确保至少有一定高度 */
+  min-height: 400px;
 }
 
 .log-table {
@@ -2718,28 +2710,28 @@ watch(() => showGraphView.value, (isGraphView) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 15px 0;
+  padding: 8px 0;
   border-top: 1px dashed #ebeef5;
-  gap: 10px;
+  gap: 8px;
 }
 
 .pagination-info {
   font-size: 13px;
   color: #909399;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .loading-more {
   display: flex;
   align-items: center;
   color: #909399;
-  font-size: 14px;
+  font-size: 13px;
+  gap: 8px;
 }
 
 .loading-spinner {
-  width: 20px;
-  height: 20px;
-  margin-right: 10px;
+  width: 16px;
+  height: 16px;
   border: 2px solid #dcdfe6;
   border-top-color: #409eff;
   border-radius: 50%;
@@ -2755,21 +2747,18 @@ watch(() => showGraphView.value, (isGraphView) => {
 .load-more-button {
   cursor: pointer;
   color: #409eff;
-  font-size: 14px;
+  font-size: 13px;
   padding: 6px 16px;
   border: 1px solid #d9ecff;
   background-color: #ecf5ff;
   border-radius: 4px;
   transition: all 0.3s;
-}
-
-.load-more-button:hover {
-  background-color: #d9ecff;
+  font-weight: 500;
 }
 
 .no-more-data {
   color: #909399;
-  font-size: 14px;
+  font-size: 13px;
   font-style: italic;
   display: flex;
   flex-direction: column;
@@ -2778,7 +2767,7 @@ watch(() => showGraphView.value, (isGraphView) => {
 
 .total-loaded {
   font-size: 12px;
-  margin-top: 5px;
+  margin-top: 4px;
   color: #c0c4cc;
 }
 
@@ -2787,45 +2776,43 @@ watch(() => showGraphView.value, (isGraphView) => {
   position: fixed;
   background: white;
   border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  padding: 8px 0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 6px 0;
   z-index: 3000;
-  min-width: 180px;
+  min-width: 200px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .context-menu-item {
-  padding: 8px 16px;
+  padding: 10px 16px;
   cursor: pointer;
   font-size: 14px;
   display: flex;
   align-items: center;
+  transition: all 0.2s ease;
+  color: #606266;
 }
 
 .context-menu-item:hover {
   background-color: #f5f7fa;
+  color: #409eff;
 }
 
 .context-menu-item i {
-  margin-right: 8px;
-}
-
-.refresh-button-animated {
-  animation: spin 1s linear;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* 表格样式 */
-.el-table .el-table__cell .cell {
-  word-break: break-all;
+  margin-right: 10px;
+  font-size: 16px;
 }
 
 /* 分支图样式 */
@@ -2854,6 +2841,7 @@ watch(() => showGraphView.value, (isGraphView) => {
   width: 60px !important;
   padding: 0 !important;
 }
+
 :deep(.el-table .el-table__cell) {
   padding: 0 !important;
 }
@@ -2930,9 +2918,82 @@ watch(() => showGraphView.value, (isGraphView) => {
 }
 </style>
 
-/* 添加表格列调整样式 */
+<!-- 添加表格列调整样式 -->
 <style>
-:deep(.el-table .el-table__cell .cell) {
+.el-table .el-table__cell .cell {
   word-break: break-all;
 }
+
+/* 优化diff显示样式 */
+.diff-header {
+  font-weight: bold;
+  background-color: #e6f1fc;
+  padding: 10px 16px;
+  margin: 12px 0;
+  border-radius: 6px;
+  color: #0366d6;
+  border-bottom: 1px solid #c8e1ff;
+}
+
+.diff-old-file, .diff-new-file {
+  color: #586069;
+  padding: 4px 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.diff-old-file {
+  color: #cb2431;
+}
+
+.diff-new-file {
+  color: #22863a;
+}
+
+.diff-hunk-header {
+  color: #6f42c1;
+  background-color: #f1f8ff;
+  padding: 4px 8px;
+  margin: 8px 0;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.diff-added {
+  background-color: #e6ffed;
+  color: #22863a;
+  padding: 2px 8px;
+  border-left: 4px solid #22863a;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  display: block;
+  margin: 2px 0;
+}
+
+.diff-removed {
+  background-color: #ffeef0;
+  color: #cb2431;
+  padding: 2px 8px;
+  border-left: 4px solid #cb2431;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  display: block;
+  margin: 2px 0;
+}
+
+.diff-context {
+  color: #444;
+  padding: 2px 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  display: block;
+  margin: 2px 0;
+  background-color: #fafbfc;
+}
 </style>
+
+<!-- 底部加载更多按钮悬停效果 -->
+<style>
+.load-more-button:hover {
+  background-color: #d9ecff;
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.15);
+  transform: translateY(-1px);
+}
+</style>
+
