@@ -303,7 +303,15 @@ Options:
   addResetScript             Add "g:reset": "git reset --hard origin/<current-branch>" to package.json scripts
   ui                         Launch graphical user interface (v2.0.0)
 
+  --cmd="your-cmd"            Execute custom cmd command (immediately, at a time, or periodically)
+  --cmd-interval=<seconds>    Execute custom cmd every N seconds
+  --at="HH:MM"                Execute custom cmd at a specific time (today) or --at="YYYY-MM-DD HH:MM:SS"
+
 Example:
+  g --cmd="echo hello" --cmd-interval=5      # 每5秒执行一次echo hello
+  g --cmd="echo at-time" --at=23:59          # 在23:59执行一次echo at-time
+  g --cmd="echo now"                         # 立即执行一次echo now
+  g --cmd="echo hi" --cmd-interval=10 --interval=60  # cmd和git自动提交并行
   g -m "Initial commit"      Commit with a custom message
   g -m=Fix-bug              Commit with a custom message (no spaces around '=')
   g -y                      Auto commit with the default message
