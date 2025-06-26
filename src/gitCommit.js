@@ -142,12 +142,18 @@ async function main() {
   // ========== 新增：自定义cmd定时/定点执行功能 ==========
   const cmdArg = process.argv.find(arg => arg.startsWith('--cmd='));
   if (cmdArg) {
-    const cmd = cmdArg.split('=')[1].replace(/^['"]|['"]$/g, '');
+    // 使用正则表达式提取参数值，确保等号不会截断命令内容
+    const cmdMatch = cmdArg.match(/^--cmd=(['"]?)(.*)\1$/);
+    let cmd = cmdMatch ? cmdMatch[2] : '';
+    cmd = cmd.replace(/%%/g, '%'); // 关键修复
+    
     const atArg = process.argv.find(arg => arg.startsWith('--at='));
     const intervalArg = process.argv.find(arg => arg.startsWith('--cmd-interval='));
+    
     if (atArg) {
       // 定点执行
-      const atTime = atArg.split('=')[1].replace(/^['"]|['"]$/g, '');
+      const atMatch = atArg.match(/^--at=(['"]?)(.*)\1$/);
+      const atTime = atMatch ? atMatch[2] : '';
       const now = new Date();
       let target;
       if (/^\d{2}:\d{2}$/.test(atTime)) {
@@ -175,18 +181,23 @@ async function main() {
       }
     } else if (intervalArg) {
       // 定时循环执行
-      const interval = parseInt(intervalArg.split('=')[1], 10) * 1000;
-      console.log(`每隔 ${interval/1000} 秒执行: ${cmd}`);
-      setInterval(() => {
-        console.log(`\n[自定义命令执行] ${new Date().toLocaleString()}\n> ${cmd}`);
-        exec(cmd, (err, stdout, stderr) => {
-          if (err) {
-            console.error(`[自定义命令错误]`, err.message);
-          }
-          if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
-          if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
-        });
-      }, interval);
+      const intervalMatch = intervalArg.match(/^--cmd-interval=(['"]?)(.*)\1$/);
+      const interval = intervalMatch ? parseInt(intervalMatch[2], 10) * 1000 : 0;
+      if (interval > 0) {
+        console.log(`每隔 ${interval/1000} 秒执行: ${cmd}`);
+        setInterval(() => {
+          console.log(`\n[自定义命令执行] ${new Date().toLocaleString()}\n> ${cmd}`);
+          exec(cmd, (err, stdout, stderr) => {
+            if (err) {
+              console.error(`[自定义命令错误]`, err.message);
+            }
+            if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
+            if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
+          });
+        }, interval);
+      } else {
+        console.error('无效的时间间隔参数');
+      }
     } else {
       // 立即执行一次
       console.log(`[自定义命令立即执行] > ${cmd}`);
