@@ -1579,6 +1579,7 @@ git config --global user.email "your.email@example.com"</pre>
               @click="handleMergeBranch" 
               :loading="gitStore.isGitMerging"
               :disabled="!selectedBranch"
+              class="merge-confirm-btn"
             >
               合并
             </el-button>
@@ -2342,6 +2343,16 @@ git config --global user.email "your.email@example.com"</pre>
   gap: 10px;
 }
 
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.merge-confirm-btn {
+  margin-left: 10px;
+}
+
 .merge-button {
   background-color: #409EFF;
   border-color: #409EFF;
@@ -2384,7 +2395,8 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* 弹窗样式优化 */
 .template-dialog .el-dialog__header,
-.message-template-dialog .el-dialog__header {
+.message-template-dialog .el-dialog__header,
+.merge-dialog .el-dialog__header {
   padding: 15px 20px;
   margin-right: 0;
   border-bottom: 1px solid #ebeef5;
@@ -2392,25 +2404,34 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .template-dialog .el-dialog__title,
-.message-template-dialog .el-dialog__title {
+.message-template-dialog .el-dialog__title,
+.merge-dialog .el-dialog__title {
   font-size: 16px;
   font-weight: 600;
   color: #303133;
 }
 
 .template-dialog .el-dialog__body,
-.message-template-dialog .el-dialog__body {
+.message-template-dialog .el-dialog__body,
+.merge-dialog .el-dialog__body {
   padding: 20px;
 }
 
+.merge-dialog .el-dialog__footer {
+  padding: 15px 20px;
+  border-top: 1px solid #f0f0f0;
+}
+
 .template-dialog .el-dialog__headerbtn,
-.message-template-dialog .el-dialog__headerbtn {
+.message-template-dialog .el-dialog__headerbtn,
+.merge-dialog .el-dialog__headerbtn {
   top: 15px;
   right: 20px;
 }
 
 .template-dialog .el-input__inner,
-.message-template-dialog .el-input__inner {
+.message-template-dialog .el-input__inner,
+.merge-dialog .el-input__inner {
   height: 40px;
   line-height: 40px;
 }
