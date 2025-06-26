@@ -1109,8 +1109,8 @@ git config --global user.email "your.email@example.com"</pre>
               </div>
 
               <div class="preview-section">
-                <div class="preview-title">提交信息预览：</div>
-                <pre class="preview-content">{{ finalCommitMessage }}</pre>
+                <!-- <div class="preview-title">提交信息预览：</div>
+                <pre class="preview-content">{{ finalCommitMessage }}</pre> -->
 
                 <div class="preview-title" style="margin-top: 10px;">Git提交命令预览：</div>
                 <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>

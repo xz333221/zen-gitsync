@@ -1965,7 +1965,7 @@ watch(() => showGraphView.value, (isGraphView) => {
           </el-table>
 
           <!-- 添加底部加载状态和加载更多按钮 -->
-          <div v-if="!showAllCommits" class="load-more-container">
+          <div v-if="!showAllCommits && false" class="load-more-container">
             <!-- 显示加载状态和页码信息 -->
             <div class="pagination-info">
               <span>第 {{ currentPage }} 页
