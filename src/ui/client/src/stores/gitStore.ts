@@ -28,7 +28,8 @@ export const useGitStore = defineStore('git', () => {
   // 新增Git操作状态
   const isPushing = ref(false)         // 推送中状态
   const isGitPulling = ref(false)      // 拉取中状态
-  const isGitFetching = ref(false) 
+  const isGitFetching = ref(false)     // 获取远程分支信息状态
+  const isGitMerging = ref(false)      // 合并分支状态
   
   // 添加分支状态相关变量
   const branchAhead = ref(0) // 当前分支领先远程分支的提交数
@@ -82,6 +83,7 @@ export const useGitStore = defineStore('git', () => {
     isPushing.value = false
     isGitPulling.value = false
     isGitFetching.value = false
+    isGitMerging.value = false
     remoteUrl.value = '' // 重置远程仓库地址
     isLoadingRemoteUrl.value = false
     
@@ -1029,6 +1031,93 @@ export const useGitStore = defineStore('git', () => {
     }
   }
   
+  // 合并分支
+  async function mergeBranch(branch: string, options: { 
+    noCommit?: boolean, 
+    noFf?: boolean, 
+    squash?: boolean, 
+    message?: string 
+  } = {}) {
+    if (!isGitRepo.value) {
+      ElMessage({
+        message: '当前目录不是Git仓库',
+        type: 'warning'
+      });
+      return false;
+    }
+
+    if (!branch) {
+      ElMessage({
+        message: '请选择要合并的分支',
+        type: 'warning'
+      });
+      return false;
+    }
+
+    // 防止自己合并自己
+    if (branch === currentBranch.value) {
+      ElMessage({
+        message: '不能合并当前分支到自身',
+        type: 'warning'
+      });
+      return false;
+    }
+
+    try {
+      isGitMerging.value = true;
+      
+      const response = await fetch('/api/merge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          branch,
+          ...options
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (response.status === 409) {
+        // 合并冲突
+        ElMessage({
+          message: '合并分支时发生冲突，请手动解决',
+          type: 'warning',
+          duration: 5000
+        });
+        return false;
+      }
+      
+      if (result.success) {
+        ElMessage({
+          message: `成功合并分支 ${branch} 到 ${currentBranch.value}`,
+          type: 'success'
+        });
+        
+        // 刷新Git状态
+        await fetchStatus();
+        await getBranchStatus();
+        
+        return true;
+      } else {
+        ElMessage({
+          message: `合并分支失败: ${result.error}`,
+          type: 'error'
+        });
+        return false;
+      }
+    } catch (error) {
+      ElMessage({
+        message: `合并分支失败: ${(error as Error).message}`,
+        type: 'error'
+      });
+      return false;
+    } finally {
+      isGitMerging.value = false;
+    }
+  }
+  
   // 暂存并提交
   async function addAndCommit(message: string, noVerify = false) {
     const addResult = await addToStage()
@@ -1280,6 +1369,12 @@ export const useGitStore = defineStore('git', () => {
     isResetting,
     autoUpdateEnabled,
     
+    // Git操作状态
+    isPushing,
+    isGitPulling,
+    isGitFetching,
+    isGitMerging,
+    
     // 方法
     $reset,
     checkGitRepo,
@@ -1293,9 +1388,6 @@ export const useGitStore = defineStore('git', () => {
     getBranchStatus,
     gitPull,
     gitFetchAll,
-    isPushing,
-    isGitPulling,
-    isGitFetching,
     initSocketConnection,
     toggleAutoUpdate,
     parseStatusPorcelain,
@@ -1313,5 +1405,6 @@ export const useGitStore = defineStore('git', () => {
     resetToRemote,
     getRemoteUrl,
     copyRemoteUrl,
+    mergeBranch
   }
 }) 

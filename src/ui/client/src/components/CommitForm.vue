@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown } from "@element-plus/icons-vue";
+import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share } from "@element-plus/icons-vue";
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
 
@@ -29,6 +29,16 @@ const newTemplateName = ref("");
 const isEditingDescription = ref(false);
 const originalDescriptionTemplate = ref("");
 const editingDescriptionIndex = ref(-1);
+
+// 添加合并分支相关的状态
+const isMergeDialogVisible = ref(false);
+const selectedBranch = ref('');
+const mergeOptions = ref({
+  noFf: false,
+  squash: false,
+  noCommit: false,
+  message: ''
+});
 
 // 作用域模板相关变量
 const scopeTemplates = ref<string[]>([]);
@@ -532,31 +542,28 @@ async function pushToRemote() {
 // 处理git pull操作
 async function handleGitPull() {
   try {
-    await gitStore.gitPull();
-    // 刷新状态
-    gitStore.fetchStatus();
-    gitStore.fetchLog();
+    // 使用store中的状态变量，而不是本地变量
+    await gitStore.gitPull()
+    // 刷新Git状态
+    await gitStore.fetchStatus();
+    await gitStore.fetchLog(false);
   } catch (error) {
-    ElMessage({
-      message: `拉取失败: ${(error as Error).message}`,
-      type: 'error',
-    });
-  } finally {
+    // 错误处理已经在store中完成
+    console.error('拉取操作发生错误:', error)
   }
 }
 
 // 处理git fetch --all操作
 async function handleGitFetchAll() {
   try {
-    await gitStore.gitFetchAll();
-    // 刷新状态
+    // 使用store中的状态变量，而不是本地变量
+    await gitStore.gitFetchAll()
+    // 刷新Git状态
     await gitStore.fetchStatus();
+    await gitStore.fetchLog(false);
   } catch (error) {
-    ElMessage({
-      message: `获取远程分支信息失败: ${(error as Error).message}`,
-      type: 'error',
-    });
-  } finally {
+    // 错误处理已经在store中完成
+    console.error('获取远程分支信息操作发生错误:', error)
   }
 }
 
@@ -943,6 +950,46 @@ onMounted(async () => {
     await configStore.loadConfig();
   }
 });
+
+// 打开合并分支对话框
+function openMergeDialog() {
+  selectedBranch.value = '';
+  mergeOptions.value = {
+    noFf: false,
+    squash: false,
+    noCommit: false,
+    message: ''
+  };
+  isMergeDialogVisible.value = true;
+  
+  // 确保已经加载了分支列表
+  if (gitStore.allBranches.length === 0) {
+    gitStore.getAllBranches();
+  }
+}
+
+// 执行合并分支操作
+async function handleMergeBranch() {
+  if (!selectedBranch.value) {
+    ElMessage({
+      message: '请选择要合并的分支',
+      type: 'warning'
+    });
+    return;
+  }
+  
+  try {
+    const result = await gitStore.mergeBranch(selectedBranch.value, mergeOptions.value);
+    if (result) {
+      isMergeDialogVisible.value = false;
+      // 刷新Git状态
+      await gitStore.fetchStatus();
+      await gitStore.fetchLog(false);
+    }
+  } catch (error) {
+    console.error('合并分支操作发生错误:', error);
+  }
+}
 </script>
 
 <template>
@@ -1300,6 +1347,25 @@ git config --global user.email "your.email@example.com"</pre>
                   </el-tooltip>
                 </div>
               </div>
+              
+              <!-- 添加单独的分支操作组 -->
+              <div class="action-group branch-group">
+                <div class="group-title">分支操作</div>
+                <div class="group-buttons">
+                  <!-- 合并分支按钮 -->
+                  <el-tooltip content="合并其他分支到当前分支" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="primary"
+                      :icon="Share"
+                      @click="openMergeDialog"
+                      :loading="gitStore.isGitMerging"
+                      class="action-button merge-button"
+                    >
+                      合并分支
+                    </el-button>
+                  </el-tooltip>
+                </div>
+              </div>
             </div>
           </div>
         </template>
@@ -1442,6 +1508,82 @@ git config --global user.email "your.email@example.com"</pre>
             </div>
           </div>
         </div>
+      </el-dialog>
+      
+      <!-- 合并分支对话框 -->
+      <el-dialog 
+        title="合并分支" 
+        v-model="isMergeDialogVisible" 
+        width="500px"
+        :close-on-click-modal="false"
+        class="merge-dialog"
+      >
+        <div class="merge-dialog-content">
+          <p class="merge-intro">选择要合并到当前分支 ({{ gitStore.currentBranch }}) 的分支:</p>
+          
+          <el-form label-position="top">
+            <el-form-item label="选择分支">
+              <el-select 
+                v-model="selectedBranch" 
+                placeholder="选择要合并的分支" 
+                style="width: 100%"
+                filterable
+              >
+                <el-option 
+                  v-for="branch in gitStore.allBranches.filter(b => b !== gitStore.currentBranch)" 
+                  :key="branch" 
+                  :label="branch" 
+                  :value="branch" 
+                />
+              </el-select>
+            </el-form-item>
+            
+            <el-form-item label="合并选项">
+              <div class="merge-options">
+                <el-checkbox v-model="mergeOptions.noFf">
+                  <el-tooltip content="创建合并提交，即使可以使用快进合并" placement="top">
+                    <span>禁用快进合并 (--no-ff)</span>
+                  </el-tooltip>
+                </el-checkbox>
+                
+                <el-checkbox v-model="mergeOptions.squash">
+                  <el-tooltip content="将多个提交压缩为一个提交" placement="top">
+                    <span>压缩提交 (--squash)</span>
+                  </el-tooltip>
+                </el-checkbox>
+                
+                <el-checkbox v-model="mergeOptions.noCommit">
+                  <el-tooltip content="执行合并但不自动创建提交" placement="top">
+                    <span>不自动提交 (--no-commit)</span>
+                  </el-tooltip>
+                </el-checkbox>
+              </div>
+            </el-form-item>
+            
+            <el-form-item label="合并提交信息 (可选)" v-if="mergeOptions.noFf && !mergeOptions.noCommit">
+              <el-input 
+                v-model="mergeOptions.message" 
+                type="textarea" 
+                :rows="3" 
+                placeholder="输入自定义合并提交信息"
+              />
+            </el-form-item>
+          </el-form>
+        </div>
+        
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="isMergeDialogVisible = false">取消</el-button>
+            <el-button 
+              type="primary" 
+              @click="handleMergeBranch" 
+              :loading="gitStore.isGitMerging"
+              :disabled="!selectedBranch"
+            >
+              合并
+            </el-button>
+          </div>
+        </template>
       </el-dialog>
     </div>
   </div>
@@ -2182,6 +2324,46 @@ git config --global user.email "your.email@example.com"</pre>
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* 合并分支对话框样式 */
+.merge-dialog-content {
+  padding: 0 10px;
+}
+
+.merge-intro {
+  margin-bottom: 20px;
+  color: #606266;
+}
+
+.merge-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.merge-button {
+  background-color: #409EFF;
+  border-color: #409EFF;
+}
+
+/* 分支操作组样式 */
+.branch-group {
+  margin-top: 20px;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 16px;
+}
+
+.branch-group .group-title {
+  color: #606266;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+/* 禁用复选框下的提示文本换行 */
+:deep(.el-checkbox__label) {
+  white-space: normal;
+  line-height: 1.4;
 }
 </style>
 

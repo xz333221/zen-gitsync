@@ -181,6 +181,70 @@ async function startUIServer() {
     }
   });
   
+  // 合并分支
+  app.post('/api/merge', async (req, res) => {
+    try {
+      const { branch, noCommit, noFf, squash, message } = req.body;
+      
+      if (!branch) {
+        return res.status(400).json({ success: false, error: '分支名称不能为空' });
+      }
+      
+      // 构建Git合并命令
+      let command = `git merge ${branch}`;
+      
+      // 添加可选参数
+      if (noCommit) {
+        command += ' --no-commit';
+      }
+      
+      if (noFf) {
+        command += ' --no-ff';
+      }
+      
+      if (squash) {
+        command += ' --squash';
+      }
+      
+      if (message) {
+        command += ` -m "${message}"`;
+      }
+      
+      try {
+        // 执行合并命令
+        const { stdout } = await execGitCommand(command);
+        
+        res.json({ 
+          success: true, 
+          message: '分支合并成功',
+          output: stdout 
+        });
+      } catch (error) {
+        // 检查是否有合并冲突
+        const errorMsg = error.message || '';
+        const hasConflicts = errorMsg.includes('CONFLICT') || 
+                            errorMsg.includes('Automatic merge failed');
+        
+        if (hasConflicts) {
+          res.status(409).json({
+            success: false,
+            hasConflicts: true,
+            error: '合并过程中发生冲突，需要手动解决',
+            details: errorMsg
+          });
+        } else {
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.error('合并分支失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `合并分支失败: ${error.message}` 
+      });
+    }
+  });
+  
   // 获取Git用户配置信息
   app.get('/api/user-info', async (req, res) => {
     try {
