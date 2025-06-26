@@ -536,7 +536,10 @@ defineExpose({
       </div>
     </div>
     
-    <div class="card-content">
+    <div class="card-content" 
+      v-loading="gitStore.isGitPulling || gitStore.isGitFetching" 
+      :element-loading-text="gitStore.isGitPulling ? '正在拉取代码...' : '正在获取远程分支信息...'"
+    >
       <div v-if="!gitStore.isGitRepo" class="status-box">
         <div class="empty-status">
           <p>当前目录不是Git仓库</p>
@@ -755,6 +758,7 @@ defineExpose({
   flex-direction: column;
   overflow: hidden;
   transition: all 0.3s ease;
+  position: relative;
 }
 
 .status-header {
@@ -781,6 +785,7 @@ defineExpose({
 .card-content {
   padding: 16px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -795,9 +800,12 @@ defineExpose({
   margin-bottom: 20px;
   max-height: 200px;
   overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid #f0f0f0;
   font-size: 14px;
   line-height: 1.5;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* 文件列表容器 */
@@ -809,6 +817,8 @@ defineExpose({
   gap: 16px;
   height: auto;
   min-height: 100px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .file-group {
@@ -1229,6 +1239,24 @@ defineExpose({
 .el-button:not(:disabled):hover {
   transform: translateY(-2px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 自定义Git操作加载样式 */
+.card-content :deep(.el-loading-mask) {
+  background-color: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(3px);
+  z-index: 10;
+}
+
+.card-content :deep(.el-loading-spinner) {
+  transform: scale(1.2);
+}
+
+.card-content :deep(.el-loading-text) {
+  font-size: 16px;
+  color: #409EFF;
+  font-weight: bold;
+  margin-top: 10px;
 }
 </style>
 
