@@ -922,9 +922,9 @@ async function startUIServer() {
       const options = [...commandOptions, limitOption].filter(Boolean).join(' ');
       
       // 添加父提交信息的格式
-      let formatString = '%H|%an|%ae|%ad|%B|%D';
+      let formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D';
       if (withParents) {
-        formatString = '%H|%an|%ae|%ad|%B|%D|%P';
+        formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D%x1E%P';
       }
       
       console.log(`执行Git命令: git log --all --pretty=format:"${formatString}" --date=short ${options}`);
@@ -1019,9 +1019,10 @@ async function startUIServer() {
         .join(' ');
       
       // 添加父提交信息的格式
-      let formatString = '%H|%an|%ae|%ad|%B|%D';
+      // 确认格式字符串使用 %x1E 作为分隔符
+      let formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D';
       if (withParents) {
-        formatString = '%H|%an|%ae|%ad|%B|%D|%P';
+        formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D%x1E%P';
       }
       
       // 构建执行的命令
@@ -1054,15 +1055,16 @@ async function startUIServer() {
   
   // 抽取处理输出并发送响应的函数
   function processAndSendLogOutput(res, logOutput, totalCommits, page, limit, withParents = false) {
-    // 替换提交记录之间的换行符
-    logOutput = logOutput.replace(/\n(?=[a-f0-9]{40}\|)/g, "<<<RECORD_SEPARATOR>>>");
-    
-    // 按分隔符拆分日志条目
-    const logEntries = logOutput.split("<<<RECORD_SEPARATOR>>>");
-    
-    // 处理每个日志条目
-    const data = logEntries.map(entry => {
-      const parts = entry.split('|');
+    // 替换提交记录之间的换行符 - 使用 ASCII 控制字符 \x1E 匹配
+    logOutput = logOutput.replace(/\n(?=[a-f0-9]{40}\x1E)/g, "<<<RECORD_SEPARATOR>>>");
+  
+  // 按分隔符拆分日志条目
+  const logEntries = logOutput.split("<<<RECORD_SEPARATOR>>>");
+  
+  // 处理每个日志条目
+  const data = logEntries.map(entry => {
+    // 使用 ASCII 控制字符 \x1E 拆分字段
+    const parts = entry.split('\x1E');
       if (parts.length >= 5) {
         const result = {
           hash: parts[0],

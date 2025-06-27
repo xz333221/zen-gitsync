@@ -371,7 +371,8 @@ async function printGitLog() {
   if (logArg) {
     n = parseInt(logArg.split('=')[1], 10);
   }
-  const logCommand = `git log -n ${n} --pretty=format:"%C(green)%h%C(reset) | %C(cyan)%an%C(reset) | %C(yellow)%ad%C(reset) | %C(blue)%D%C(reset) | %C(magenta)%s%C(reset)" --date=format:"%Y-%m-%d %H:%M" --graph --decorate --color`
+  // 使用 ASCII 记录分隔符 %x1E 作为字段分隔符
+  const logCommand = `git log -n ${n} --pretty=format:"%C(green)%h%C(reset) %x1E %C(cyan)%an%C(reset) %x1E %C(yellow)%ad%C(reset) %x1E %C(blue)%D%C(reset) %x1E %C(magenta)%s%C(reset)" --date=format:"%Y-%m-%d %H:%M" --graph --decorate --color`
   try {
     const logOutput = execSyncGitCommand(logCommand, {
       head: `git log`
