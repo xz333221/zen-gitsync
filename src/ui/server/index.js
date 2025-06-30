@@ -1560,6 +1560,154 @@ async function startUIServer() {
     }
   });
   
+  // 获取stash列表
+  app.get('/api/stash-list', async (req, res) => {
+    try {
+      const { stdout } = await execGitCommand('git stash list');
+      
+      // 解析stash列表
+      const stashList = stdout.split('\n')
+        .filter(Boolean)
+        .map(line => {
+          // 尝试解析stash行，格式类似: stash@{0}: WIP on branch: commit message
+          const match = line.match(/^(stash@\{\d+\}): (.+)$/);
+          if (match) {
+            return {
+              id: match[1],
+              description: match[2]
+            };
+          }
+          return null;
+        })
+        .filter(item => item !== null);
+      
+      res.json({ success: true, stashes: stashList });
+    } catch (error) {
+      console.error('获取stash列表失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 创建新的stash
+  app.post('/api/stash-save', async (req, res) => {
+    try {
+      const { message, includeUntracked } = req.body;
+      
+      // 构建stash命令
+      let command = 'git stash push';
+      
+      // 添加可选参数
+      if (message) {
+        command += ` -m "${message}"`;
+      }
+      
+      if (includeUntracked) {
+        command += ' --include-untracked';
+      }
+      
+      const { stdout } = await execGitCommand(command);
+      
+      // 检查是否有任何更改被保存
+      if (stdout.includes('No local changes to save')) {
+        return res.json({ 
+          success: false, 
+          message: '没有本地更改需要保存' 
+        });
+      }
+      
+      res.json({ 
+        success: true, 
+        message: '成功保存工作区更改',
+        output: stdout 
+      });
+    } catch (error) {
+      console.error('保存stash失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 应用特定的stash
+  app.post('/api/stash-apply', async (req, res) => {
+    try {
+      const { stashId, pop } = req.body;
+      
+      if (!stashId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少stash ID参数' 
+        });
+      }
+      
+      // 决定是使用apply(保留stash)还是pop(应用后删除stash)
+      const command = pop ? `git stash pop ${stashId}` : `git stash apply ${stashId}`;
+      
+      try {
+        const { stdout } = await execGitCommand(command);
+        
+        res.json({ 
+          success: true, 
+          message: `成功${pop ? '应用并删除' : '应用'}stash`,
+          output: stdout 
+        });
+      } catch (error) {
+        // 检查是否有合并冲突
+        if (error.message && error.message.includes('CONFLICT')) {
+          return res.status(409).json({
+            success: false,
+            hasConflicts: true,
+            error: '应用stash时发生冲突，需要手动解决',
+            details: error.message
+          });
+        }
+        throw error;
+      }
+    } catch (error) {
+      console.error('应用stash失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 删除特定的stash
+  app.post('/api/stash-drop', async (req, res) => {
+    try {
+      const { stashId } = req.body;
+      
+      if (!stashId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少stash ID参数' 
+        });
+      }
+      
+      const { stdout } = await execGitCommand(`git stash drop ${stashId}`);
+      
+      res.json({ 
+        success: true, 
+        message: '成功删除stash',
+        output: stdout 
+      });
+    } catch (error) {
+      console.error('删除stash失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 清空所有stash
+  app.post('/api/stash-clear', async (req, res) => {
+    try {
+      const { stdout } = await execGitCommand('git stash clear');
+      
+      res.json({ 
+        success: true, 
+        message: '成功清空所有stash',
+        output: stdout 
+      });
+    } catch (error) {
+      console.error('清空stash失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
   // Socket.io 实时更新
   io.on('connection', (socket) => {
     console.log('客户端已连接:', socket.id);

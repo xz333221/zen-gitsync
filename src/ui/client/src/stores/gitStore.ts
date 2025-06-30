@@ -64,6 +64,13 @@ export const useGitStore = defineStore('git', () => {
   const isCommiting = ref(false)
   const isResetting = ref(false)
   
+  // 在状态部分添加stash相关的状态变量
+  const stashes = ref<{ id: string; description: string }[]>([])
+  const isLoadingStashes = ref(false)
+  const isApplyingStash = ref(false)
+  const isDroppingStash = ref(false)
+  const isSavingStash = ref(false)
+  
   // 添加重置方法
   function $reset() {
     currentBranch.value = ''
@@ -1338,6 +1345,194 @@ export const useGitStore = defineStore('git', () => {
     }
   })
 
+  // 获取stash列表
+  async function getStashList() {
+    if (!isGitRepo.value) {
+      ElMessage.warning('当前目录不是Git仓库');
+      return [];
+    }
+    
+    try {
+      isLoadingStashes.value = true;
+      
+      const response = await fetch('/api/stash-list');
+      const data = await response.json();
+      
+      if (data.success) {
+        stashes.value = data.stashes;
+        return data.stashes;
+      } else {
+        ElMessage.error(`获取stash列表失败: ${data.error}`);
+        return [];
+      }
+    } catch (error) {
+      console.error('获取stash列表失败:', error);
+      ElMessage.error(`获取stash列表失败: ${(error as Error).message}`);
+      return [];
+    } finally {
+      isLoadingStashes.value = false;
+    }
+  }
+
+  // 保存stash
+  async function saveStash(message?: string, includeUntracked = false) {
+    if (!isGitRepo.value) {
+      ElMessage.warning('当前目录不是Git仓库');
+      return false;
+    }
+    
+    try {
+      isSavingStash.value = true;
+      
+      const response = await fetch('/api/stash-save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          message, 
+          includeUntracked 
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        ElMessage.success(result.message);
+        // 刷新stash列表和Git状态
+        await getStashList();
+        await fetchStatus();
+        return true;
+      } else {
+        ElMessage.warning(result.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('保存stash失败:', error);
+      ElMessage.error(`保存stash失败: ${(error as Error).message}`);
+      return false;
+    } finally {
+      isSavingStash.value = false;
+    }
+  }
+
+  // 应用stash
+  async function applyStash(stashId: string, pop = false) {
+    if (!isGitRepo.value) {
+      ElMessage.warning('当前目录不是Git仓库');
+      return false;
+    }
+    
+    try {
+      isApplyingStash.value = true;
+      
+      const response = await fetch('/api/stash-apply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ stashId, pop })
+      });
+      
+      const result = await response.json();
+      
+      if (response.status === 409) {
+        // 合并冲突
+        ElMessage.warning('应用stash时发生冲突，请手动解决');
+        return false;
+      }
+      
+      if (result.success) {
+        ElMessage.success(result.message);
+        // 刷新stash列表和Git状态
+        await getStashList();
+        await fetchStatus();
+        return true;
+      } else {
+        ElMessage.error(`应用stash失败: ${result.error}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('应用stash失败:', error);
+      ElMessage.error(`应用stash失败: ${(error as Error).message}`);
+      return false;
+    } finally {
+      isApplyingStash.value = false;
+    }
+  }
+
+  // 删除stash
+  async function dropStash(stashId: string) {
+    if (!isGitRepo.value) {
+      ElMessage.warning('当前目录不是Git仓库');
+      return false;
+    }
+    
+    try {
+      isDroppingStash.value = true;
+      
+      const response = await fetch('/api/stash-drop', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ stashId })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        ElMessage.success(result.message);
+        // 刷新stash列表
+        await getStashList();
+        return true;
+      } else {
+        ElMessage.error(`删除stash失败: ${result.error}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('删除stash失败:', error);
+      ElMessage.error(`删除stash失败: ${(error as Error).message}`);
+      return false;
+    } finally {
+      isDroppingStash.value = false;
+    }
+  }
+
+  // 清空所有stash
+  async function clearAllStashes() {
+    if (!isGitRepo.value) {
+      ElMessage.warning('当前目录不是Git仓库');
+      return false;
+    }
+    
+    try {
+      isDroppingStash.value = true;
+      
+      const response = await fetch('/api/stash-clear', {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        ElMessage.success(result.message);
+        // 刷新stash列表
+        stashes.value = [];
+        return true;
+      } else {
+        ElMessage.error(`清空stash失败: ${result.error}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('清空stash失败:', error);
+      ElMessage.error(`清空stash失败: ${(error as Error).message}`);
+      return false;
+    } finally {
+      isDroppingStash.value = false;
+    }
+  }
+
   return {
     // 状态
     currentBranch,
@@ -1356,6 +1551,13 @@ export const useGitStore = defineStore('git', () => {
     lastBranchesTime,
     remoteUrl,
     isLoadingRemoteUrl,
+    
+    // stash相关状态
+    stashes,
+    isLoadingStashes,
+    isApplyingStash,
+    isDroppingStash,
+    isSavingStash,
     
     // 从 gitLogStore 合并的状态
     log,
@@ -1405,6 +1607,12 @@ export const useGitStore = defineStore('git', () => {
     resetToRemote,
     getRemoteUrl,
     copyRemoteUrl,
-    mergeBranch
+    mergeBranch,
+    // stash相关方法
+    getStashList,
+    saveStash,
+    applyStash,
+    dropStash,
+    clearAllStashes
   }
 }) 

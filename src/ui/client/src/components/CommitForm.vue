@@ -70,6 +70,83 @@ const commitTypeOptions = [
   { value: "chore", label: "chore: 构建/工具修改" },
 ];
 
+// 添加stash相关的状态
+const isStashDialogVisible = ref(false);
+const isStashListDialogVisible = ref(false);
+const stashMessage = ref('');
+const includeUntracked = ref(false);
+
+// 添加stash相关方法
+function openStashDialog() {
+  stashMessage.value = '';
+  includeUntracked.value = false;
+  isStashDialogVisible.value = true;
+}
+
+function openStashListDialog() {
+  gitStore.getStashList();
+  isStashListDialogVisible.value = true;
+}
+
+async function saveStash() {
+  try {
+    await gitStore.saveStash(stashMessage.value, includeUntracked.value);
+    isStashDialogVisible.value = false;
+  } catch (error) {
+    console.error('储藏失败:', error);
+  }
+}
+
+async function applyStash(stashId: string, pop = false) {
+  try {
+    await gitStore.applyStash(stashId, pop);
+    if (pop) {
+      // 如果是应用并删除，刷新列表
+      await gitStore.getStashList();
+    }
+  } catch (error) {
+    console.error('应用储藏失败:', error);
+  }
+}
+
+async function confirmDropStash(stashId: string) {
+  ElMessageBox.confirm(
+    '确定要删除此储藏吗？此操作不可恢复。',
+    '删除储藏',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  )
+  .then(async () => {
+    await gitStore.dropStash(stashId);
+    await gitStore.getStashList();
+  })
+  .catch(() => {
+    // 用户取消操作
+  });
+}
+
+async function confirmClearAllStashes() {
+  ElMessageBox.confirm(
+    '确定要清空所有储藏吗？此操作不可恢复。',
+    '清空所有储藏',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  )
+  .then(async () => {
+    await gitStore.clearAllStashes();
+    await gitStore.getStashList();
+  })
+  .catch(() => {
+    // 用户取消操作
+  });
+}
+
 // 添加默认提交信息模板相关变量
 const messageTemplates = ref<string[]>([]);
 const isEditingMessage = ref(false);
@@ -1022,6 +1099,7 @@ async function handleMergeBranch() {
     console.error('合并分支操作发生错误:', error);
   }
 }
+
 </script>
 
 <template>
@@ -1309,6 +1387,34 @@ git config --global user.email "your.email@example.com"</pre>
                         class="action-button"
                       >
                         获取所有远程分支
+                      </el-button>
+                    </el-tooltip>
+                  </div>
+                </div>
+
+                <!-- 储藏操作 -->
+                <div class="action-group">
+                  <div class="group-title">储藏操作</div>
+                  <div class="group-buttons">
+                    <el-tooltip content="将工作区更改储藏起来" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="warning" 
+                        @click="openStashDialog" 
+                        :loading="gitStore.isSavingStash"
+                        :disabled="!hasAnyChanges"
+                        class="action-button"
+                      >
+                        储藏更改
+                      </el-button>
+                    </el-tooltip>
+
+                    <el-tooltip content="查看和管理所有储藏记录" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="info"
+                        @click="openStashListDialog"
+                        class="action-button"
+                      >
+                        储藏列表
                       </el-button>
                     </el-tooltip>
                   </div>
@@ -1622,6 +1728,105 @@ git config --global user.email "your.email@example.com"</pre>
               class="merge-confirm-btn"
             >
               合并
+            </el-button>
+          </div>
+        </template>
+      </el-dialog>
+      
+      <!-- Stash列表弹窗 -->
+      <el-dialog
+        title="储藏列表 (Git Stash)"
+        v-model="isStashListDialogVisible"
+        width="600px"
+        :close-on-click-modal="false"
+      >
+        <div class="stash-list-content">
+          <el-table
+            :data="gitStore.stashes"
+            stripe
+            style="width: 100%"
+            v-loading="gitStore.isLoadingStashes"
+            empty-text="暂无储藏记录"
+          >
+            <el-table-column prop="id" label="ID" width="100" />
+            <el-table-column prop="description" label="描述" />
+            <el-table-column label="操作" width="220">
+              <template #default="scope">
+                <el-button
+                  size="small"
+                  @click="applyStash(scope.row.id, false)"
+                  :loading="gitStore.isApplyingStash"
+                >
+                  应用
+                </el-button>
+                <el-button
+                  size="small"
+                  type="primary"
+                  @click="applyStash(scope.row.id, true)"
+                  :loading="gitStore.isApplyingStash"
+                >
+                  应用并删除
+                </el-button>
+                <el-button
+                  size="small"
+                  type="danger"
+                  @click="confirmDropStash(scope.row.id)"
+                  :loading="gitStore.isDroppingStash"
+                >
+                  删除
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          
+          <div class="stash-list-actions" v-if="gitStore.stashes.length > 0">
+            <el-button
+              type="danger"
+              @click="confirmClearAllStashes"
+              :loading="gitStore.isDroppingStash"
+            >
+              清空所有储藏
+            </el-button>
+          </div>
+        </div>
+      </el-dialog>
+      
+      <!-- Stash弹窗 -->
+      <el-dialog
+        title="储藏更改 (Git Stash)"
+        v-model="isStashDialogVisible"
+        width="500px"
+        :close-on-click-modal="false"
+      >
+        <div class="stash-dialog-content">
+          <p>将当前工作区的更改储藏起来，稍后可以再次应用。</p>
+          
+          <el-form label-position="top">
+            <el-form-item label="储藏说明 (可选)">
+              <el-input 
+                v-model="stashMessage" 
+                placeholder="输入储藏说明（可选）"
+                clearable
+              />
+            </el-form-item>
+            
+            <el-form-item>
+              <el-checkbox v-model="includeUntracked">
+                包含未跟踪文件 (--include-untracked)
+              </el-checkbox>
+            </el-form-item>
+          </el-form>
+        </div>
+        
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="isStashDialogVisible = false">取消</el-button>
+            <el-button
+              type="primary"
+              @click="saveStash"
+              :loading="gitStore.isSavingStash"
+            >
+              储藏
             </el-button>
           </div>
         </template>
@@ -2415,6 +2620,22 @@ git config --global user.email "your.email@example.com"</pre>
 :deep(.el-checkbox__label) {
   white-space: normal;
   line-height: 1.4;
+}
+
+/* stash相关样式 */
+.stash-list-content {
+  padding: 20px 0;
+}
+
+.stash-list-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.stash-dialog-content p {
+  margin-bottom: 20px;
+  color: #606266;
 }
 </style>
 
