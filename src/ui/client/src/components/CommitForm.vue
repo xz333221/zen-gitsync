@@ -1392,33 +1392,7 @@ git config --global user.email "your.email@example.com"</pre>
                   </div>
                 </div>
 
-                <!-- 储藏操作 -->
-                <div class="action-group">
-                  <div class="group-title">储藏操作</div>
-                  <div class="group-buttons">
-                    <el-tooltip content="将工作区更改储藏起来" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="warning" 
-                        @click="openStashDialog" 
-                        :loading="gitStore.isSavingStash"
-                        :disabled="!hasAnyChanges"
-                        class="action-button"
-                      >
-                        储藏更改
-                      </el-button>
-                    </el-tooltip>
-
-                    <el-tooltip content="查看和管理所有储藏记录" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="info"
-                        @click="openStashListDialog"
-                        class="action-button"
-                      >
-                        储藏列表
-                      </el-button>
-                    </el-tooltip>
-                  </div>
-                </div>
+                
 
                 <!-- 组合操作 -->
                 <div class="action-group">
@@ -1504,6 +1478,34 @@ git config --global user.email "your.email@example.com"</pre>
                   </el-tooltip>
                 </div>
               </div>
+
+              <!-- 储藏操作 -->
+              <div class="action-group">
+                  <div class="group-title">储藏操作</div>
+                  <div class="group-buttons">
+                    <el-tooltip content="将工作区更改储藏起来" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="warning" 
+                        @click="openStashDialog" 
+                        :loading="gitStore.isSavingStash"
+                        :disabled="!hasAnyChanges"
+                        class="action-button"
+                      >
+                        储藏更改
+                      </el-button>
+                    </el-tooltip>
+
+                    <el-tooltip content="查看和管理所有储藏记录" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                      <el-button 
+                        type="info"
+                        @click="openStashListDialog"
+                        class="action-button"
+                      >
+                        储藏列表
+                      </el-button>
+                    </el-tooltip>
+                  </div>
+                </div>
             </div>
           </div>
         </template>
@@ -2605,7 +2607,6 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* 分支操作组样式 */
 .branch-group {
-  margin-top: 20px;
   border-top: 1px solid #f0f0f0;
   padding-top: 16px;
 }
