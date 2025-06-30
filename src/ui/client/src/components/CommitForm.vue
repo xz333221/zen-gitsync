@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share } from "@element-plus/icons-vue";
 import { useGitStore } from "../stores/gitStore";
@@ -960,6 +960,7 @@ function openMergeDialog() {
     noCommit: false,
     message: ''
   };
+  branchTypeFilter.value = 'all'; // 默认显示所有分支
   isMergeDialogVisible.value = true;
   
   // 确保已经加载了分支列表
@@ -967,6 +968,37 @@ function openMergeDialog() {
     gitStore.getAllBranches();
   }
 }
+
+// 分支类型过滤器
+const branchTypeFilter = ref('all');
+
+// 根据分支类型过滤分支列表
+const filteredBranches = computed(() => {
+  const branches = gitStore.allBranches.filter(b => b !== gitStore.currentBranch);
+  
+  console.log('筛选分支列表:', {
+    allBranches: gitStore.allBranches,
+    currentBranch: gitStore.currentBranch,
+    branchTypeFilter: branchTypeFilter.value,
+    filteredBranches: branches
+  });
+  
+  if (branchTypeFilter.value === 'local') {
+    // 过滤本地分支（不包含 'origin/' 前缀的分支）
+    const localBranches = branches.filter(b => !b.includes('origin/'));
+    console.log('本地分支:', localBranches);
+    return localBranches;
+  } else if (branchTypeFilter.value === 'remote') {
+    // 过滤远程分支（包含 'origin/' 前缀的分支）
+    const remoteBranches = branches.filter(b => b.includes('origin/'));
+    console.log('远程分支:', remoteBranches);
+    return remoteBranches;
+  } else {
+    // 返回所有分支
+    console.log('所有分支:', branches);
+    return branches;
+  }
+});
 
 // 执行合并分支操作
 async function handleMergeBranch() {
@@ -1522,6 +1554,14 @@ git config --global user.email "your.email@example.com"</pre>
           <p class="merge-intro">选择要合并到当前分支 ({{ gitStore.currentBranch }}) 的分支:</p>
           
           <el-form label-position="top">
+            <el-form-item label="分支类型">
+              <el-radio-group v-model="branchTypeFilter" size="small">
+                <el-radio-button label="all">所有分支</el-radio-button>
+                <el-radio-button label="local">本地分支</el-radio-button>
+                <el-radio-button label="remote">远程分支</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            
             <el-form-item label="选择分支">
               <el-select 
                 v-model="selectedBranch" 
@@ -1530,7 +1570,7 @@ git config --global user.email "your.email@example.com"</pre>
                 filterable
               >
                 <el-option 
-                  v-for="branch in gitStore.allBranches.filter(b => b !== gitStore.currentBranch)" 
+                  v-for="branch in filteredBranches" 
                   :key="branch" 
                   :label="branch" 
                   :value="branch" 
