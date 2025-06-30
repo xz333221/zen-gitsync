@@ -110,24 +110,25 @@ async function startUIServer() {
   // 获取所有分支
   app.get('/api/branches', async (req, res) => {
     try {
-      // 获取本地分支 - 修改命令以获取包含当前分支的完整列表
+      // 获取本地分支 - 使用简单的git branch命令
       const { stdout: localBranches } = await execGitCommand('git branch');
-      // 获取远程分支（过滤掉 origin/HEAD）
-      const { stdout: remoteBranches } = await execGitCommand('git branch -r --format="%(refname:short)"');
       
-      // 处理本地分支 - 考虑到git branch命令输出的格式，如"* main"
+      // 获取远程分支
+      const { stdout: remoteBranches } = await execGitCommand('git branch -r');
+      
+      // 处理本地分支 - 正确解析git branch的标准输出格式
       const localBranchList = localBranches.split('\n')
         .filter(Boolean)
         .map(b => b.trim())
         .map(b => b.startsWith('* ') ? b.substring(2) : b); // 移除星号并保留分支名
       
-      // 处理远程分支，保留origin/前缀
+      // 处理远程分支，保留完整的远程分支名称
       const remoteBranchList = remoteBranches.split('\n')
         .filter(Boolean)
-        .filter(b => !b.includes('HEAD')) // 过滤掉HEAD指针
-        .filter(b => b.includes('/')); // 过滤掉单纯的 origin
+        .map(b => b.trim())
+        .filter(b => b !== 'origin' && !b.includes('HEAD')); // 过滤掉单纯的origin和HEAD引用
       
-      // 合并分支列表，不再去重，保留远程分支的完整名称
+      // 合并分支列表
       const allBranches = [
         ...localBranchList,
         ...remoteBranchList
