@@ -110,21 +110,32 @@ async function startUIServer() {
   // 获取所有分支
   app.get('/api/branches', async (req, res) => {
     try {
-      // 获取本地分支
-      const { stdout: localBranches } = await execGitCommand('git branch --format="%(refname:short)"');
-      // 获取远程分支（过滤掉 origin/HEAD 和 origin）
+      // 获取本地分支 - 修改命令以获取包含当前分支的完整列表
+      const { stdout: localBranches } = await execGitCommand('git branch');
+      // 获取远程分支（过滤掉 origin/HEAD）
       const { stdout: remoteBranches } = await execGitCommand('git branch -r --format="%(refname:short)"');
       
-      // 合并并去重
-      const allBranches = [...new Set([
-        ...localBranches.split('\n')
-          .filter(Boolean)
-          .filter(b => !b.startsWith('* ')), // 过滤掉HEAD指针
-        ...remoteBranches.split('\n')
-          .filter(Boolean)
-          .filter(b => b.includes('/')) // 过滤掉单纯的 origin
-          .map(b => b.split('/')[1]) // 提取真正的分支名称
-      ])];
+      // 处理本地分支 - 考虑到git branch命令输出的格式，如"* main"
+      const localBranchList = localBranches.split('\n')
+        .filter(Boolean)
+        .map(b => b.trim())
+        .map(b => b.startsWith('* ') ? b.substring(2) : b); // 移除星号并保留分支名
+      
+      // 处理远程分支，保留origin/前缀
+      const remoteBranchList = remoteBranches.split('\n')
+        .filter(Boolean)
+        .filter(b => !b.includes('HEAD')) // 过滤掉HEAD指针
+        .filter(b => b.includes('/')); // 过滤掉单纯的 origin
+      
+      // 合并分支列表，不再去重，保留远程分支的完整名称
+      const allBranches = [
+        ...localBranchList,
+        ...remoteBranchList
+      ];
+      
+      console.log('本地分支:', localBranchList);
+      console.log('远程分支:', remoteBranchList);
+      console.log('所有分支:', allBranches);
       
       res.json({ branches: allBranches });
     } catch (error) {
@@ -190,7 +201,7 @@ async function startUIServer() {
         return res.status(400).json({ success: false, error: '分支名称不能为空' });
       }
       
-      // 构建Git合并命令
+      // 构建Git合并命令 - 直接使用传入的分支名（可能包含origin/前缀）
       let command = `git merge ${branch}`;
       
       // 添加可选参数
