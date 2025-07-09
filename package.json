@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "2.1.25",
+  "version": "2.1.26",
   "description": "一个 git 自动查看差异并提交的工具",
   "main": "index.js",
   "type": "module",
@@ -26,8 +26,8 @@
     "g:test-cmd": "node ./src/gitCommit.js --cmd=\"echo zen-gitsync test\" --cmd-interval=5",
     "g:test-cmd-at": "node ./src/gitCommit.js --cmd=\"echo at-time-test\" --at=21:09",
     "start:vue": "cd ./src/ui/client && npm run dev",
-    "start:server": "node -e \"import('./src/ui/server/index.js').then(module => module.default())\"",
-    "start:server:no-open": "node -e \"import('./src/ui/server/index.js').then(module => module.default(true))\"",
+    "start:server": "node -e \"import('./index.js').then(module => module.startServer(false))\"",
+    "start:server:no-open": "node -e \"import('./index.js').then(module => module.startServer(true))\"",
     "release": "node ./scripts/release.js",
     "release:win": ".\\scripts\\release.bat"
   },

@@ -115,7 +115,7 @@ async function main() {
 
   // 检查是否是UI命令
   if (process.argv.includes('ui')) {
-    await startUIServer();
+    await startUIServer(false, false); // 传入noOpen=false, savePort=false
     return;
   }
 

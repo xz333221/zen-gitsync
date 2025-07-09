@@ -23,7 +23,7 @@ let debounceTimer = null;
 // 防抖延迟时间 (毫秒)
 const DEBOUNCE_DELAY = 1000;
 
-async function startUIServer(noOpen = false) {
+async function startUIServer(noOpen = false, savePort = false) {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer);
@@ -1854,10 +1854,13 @@ async function startUIServer(noOpen = false) {
   // 创建一个函数来保存端口号到文件
   async function savePortToFile(port) {
     try {
-      // 保存到项目根目录的.port文件
-      const portFilePath = path.join(process.cwd(), '.port');
-      await fs.writeFile(portFilePath, port.toString(), 'utf8');
-      console.log(`端口号 ${port} 已保存到 ${portFilePath}`);
+      // 只有当savePort为true时才保存端口号
+      if (savePort) {
+        // 保存到项目根目录的.port文件
+        const portFilePath = path.join(process.cwd(), '.port');
+        await fs.writeFile(portFilePath, port.toString(), 'utf8');
+        console.log(`端口号 ${port} 已保存到 ${portFilePath}`);
+      }
     } catch (error) {
       console.error('保存端口号到文件失败:', error);
     }
