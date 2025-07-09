@@ -2,13 +2,33 @@ import { defineStore } from 'pinia'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { io, Socket } from 'socket.io-client'
+import fs from 'fs'
+import path from 'path'
 
 // 定义Git操作间隔时间（毫秒）
 const GIT_OPERATION_DELAY = 300
 
-// 删除防抖变量
-// let branchStatusDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-// const BRANCH_STATUS_DEBOUNCE_DELAY = 1000; // 1秒防抖延迟
+// 读取后端服务器端口
+function getBackendPort() {
+  try {
+    // 尝试读取.port文件
+    const portFilePath = path.resolve(process.cwd(), '../../../.port')
+    if (fs.existsSync(portFilePath)) {
+      const port = fs.readFileSync(portFilePath, 'utf8').trim()
+      console.log(`检测到后端服务器端口: ${port}`)
+      return parseInt(port, 10)
+    }
+  } catch (error) {
+    console.error('读取后端端口失败:', error)
+  }
+  
+  // 默认端口
+  console.log('使用默认后端端口: 3000')
+  return 3000
+}
+
+// 获取后端端口
+const backendPort = getBackendPort()
 
 export const useGitStore = defineStore('git', () => {
   // 状态
@@ -493,8 +513,8 @@ export const useGitStore = defineStore('git', () => {
     
     // 创建新连接
     try {
-      // 修正Socket.IO连接URL，使用固定的后端服务器端口3000
-      const backendUrl = 'http://localhost:3000'
+      // 使用动态端口连接Socket.IO服务器
+      const backendUrl = `http://localhost:${backendPort}`
       
       console.log('尝试连接Socket.IO服务器:', backendUrl)
       
@@ -708,13 +728,6 @@ export const useGitStore = defineStore('git', () => {
       } else {
         console.warn('API返回的提交历史格式不正确:', data)
         log.value = [] // 如果数据格式不对，清空日志
-      }
-      
-      if (showMessage) {
-        ElMessage({
-          message: '提交历史已更新',
-          type: 'success'
-        })
       }
     } catch (error) {
       console.error('获取提交历史失败:', error)

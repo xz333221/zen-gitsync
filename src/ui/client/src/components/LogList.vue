@@ -32,6 +32,8 @@ import {
   TrendCharts,
   List,
   More,
+  FullScreen,
+  Close,
 } from "@element-plus/icons-vue";
 import "element-plus/dist/index.css";
 import { createGitgraph } from "@gitgraph/js";
@@ -504,6 +506,15 @@ function removeTableScrollListener() {
   }
 }
 
+// 添加键盘事件处理函数
+function handleKeyDown(event: KeyboardEvent) {
+  // 按ESC键退出全屏模式
+  if (event.key === 'Escape' && isFullscreen.value) {
+    isFullscreen.value = false;
+  }
+}
+
+// 在组件挂载时添加键盘事件监听
 onMounted(() => {
   // 检查gitStore中是否已有数据
   if (gitStore.isGitRepo) {
@@ -569,6 +580,9 @@ onMounted(() => {
       });
     }
   });
+
+  // 添加键盘事件监听
+  window.addEventListener('keydown', handleKeyDown);
 });
 
 // 添加对 gitStore.allBranches 的监听
@@ -595,6 +609,9 @@ onBeforeUnmount(() => {
     window.clearInterval(loadTimerInterval.value);
     loadTimerInterval.value = null;
   }
+
+  // 移除键盘事件监听
+  window.removeEventListener('keydown', handleKeyDown);
 });
 
 // 添加一个简单的防抖函数
@@ -1655,13 +1672,26 @@ watch(() => showGraphView.value, (isGraphView) => {
     });
   }
 });
+
+// 添加全屏状态变量
+const isFullscreen = ref(false);
+
+// 切换全屏模式
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value;
+  
+  // 使用nextTick确保DOM更新后执行后续操作
+  nextTick(() => {
+    // 如果是图表视图，需要重新计算图表大小
+    if (showGraphView.value && graphContainer.value) {
+      renderGraph();
+    }
+  });
+}
 </script>
 
 <template>
-  <div class="card">
-    <!-- 添加刷新提示，移到最外层 -->
-    <div v-if="logRefreshed" class="refresh-notification">提交历史已刷新</div>
-
+  <div class="card" :class="{ 'fullscreen-mode': isFullscreen }">
     <!-- 固定头部区域 -->
     <div class="log-header">
       <div class="header-left">
@@ -1681,32 +1711,26 @@ watch(() => showGraphView.value, (isGraphView) => {
       </div>
 
       <div class="log-actions">
-        <!-- 筛选按钮移到这里 -->
+        <!-- 筛选按钮 - 只显示图标 -->
         <el-button
           v-if="!showGraphView"
           :type="filterVisible ? 'primary' : 'default'"
           size="small"
           @click="filterVisible = !filterVisible"
-          class="action-button filter-button"
+          class="action-button filter-button icon-only-button"
           :class="{ 'active-filter': filterVisible }"
         >
           <template #icon>
             <el-icon><Filter /></el-icon>
           </template>
-          筛选
-          <el-badge
-            v-if="filteredLogs.length !== logs.length"
-            :value="filteredLogs.length"
-            class="filter-badge"
-          />
         </el-button>
 
-        <!-- 原有的按钮 -->
+        <!-- 视图切换按钮 - 只显示图标 -->
         <el-button
           type="primary"
           size="small"
           @click="toggleViewMode"
-          class="action-button view-mode-button"
+          class="action-button view-mode-button icon-only-button"
           :class="{ 'active-view': showGraphView }"
         >
           <template #icon>
@@ -1714,9 +1738,11 @@ watch(() => showGraphView.value, (isGraphView) => {
               ><component :is="showGraphView ? Document : TrendCharts"
             /></el-icon>
           </template>
-          {{ showGraphView ? "表格视图" : "图表视图" }}
         </el-button>
+        
+        <!-- 显示所有提交按钮 - 隐藏 -->
         <el-button
+          v-show="false"
           type="success"
           size="small"
           @click="toggleAllCommits"
@@ -1729,6 +1755,20 @@ watch(() => showGraphView.value, (isGraphView) => {
           </template>
           {{ showAllCommits ? "显示分页加载" : "显示所有提交" }}
         </el-button>
+        
+        <!-- 全屏按钮 - 只显示图标 -->
+        <el-button
+          type="info"
+          size="small"
+          @click="toggleFullscreen"
+          class="action-button fullscreen-button icon-only-button"
+          :class="{ 'active-fullscreen': isFullscreen }"
+        >
+          <template #icon>
+            <el-icon><component :is="isFullscreen ? Close : FullScreen" /></el-icon>
+          </template>
+        </el-button>
+        
         <el-button
           circle
           size="small"
@@ -2076,6 +2116,7 @@ watch(() => showGraphView.value, (isGraphView) => {
   <div
     v-show="contextMenuVisible"
     class="context-menu"
+    :class="{ 'fullscreen-context-menu': isFullscreen }"
     :style="{ top: contextMenuTop + 'px', left: contextMenuLeft + 'px' }"
   >
     <div
@@ -2104,45 +2145,50 @@ watch(() => showGraphView.value, (isGraphView) => {
 <style scoped>
 .card {
   background-color: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  height: 100%;
-  width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(0, 0, 0, 0.03);
+  height: 100%;
   overflow: hidden;
-  transition: all 0.3s ease;
+  position: relative;
 }
 
 .log-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0;
-  padding: 12px 16px;
-  background-color: white;
-  border-bottom: 1px solid #f0f0f0;
+  padding:16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #ebeef5;
   position: sticky;
   top: 0;
+  background-color: white;
   z-index: 100;
-  flex-shrink: 0;
+}
+
+.fullscreen-mode .log-header {
+  margin-bottom: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.log-header h2 {
+.header-left h2 {
   margin: 0;
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
 }
 
 .log-actions {
   display: flex;
+  align-items: center;
   gap: 12px;
 }
 
@@ -2154,7 +2200,6 @@ watch(() => showGraphView.value, (isGraphView) => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   font-weight: 500;
   padding: 8px 16px;
-  min-width: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2239,10 +2284,13 @@ watch(() => showGraphView.value, (isGraphView) => {
   height: calc(100% - 52px);
   display: flex;
   flex-direction: column;
+  overflow: auto;
 }
 
 .content-area-content {
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .content-area.with-filter {
@@ -2624,37 +2672,54 @@ watch(() => showGraphView.value, (isGraphView) => {
 
 .filter-panel-header {
   background-color: #f5f7fa;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e4e7ed;
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  width: 100%;
   position: sticky;
   top: 36px; /* 紧贴log-header下方 */
   z-index: 99;
-  transition: all 0.3s ease;
-  flex-shrink: 0;
-  margin-bottom: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border-radius: 0 0 8px 8px;
 }
 
-.filter-panel-header .filter-form {
+.fullscreen-mode .filter-panel-header {
+  position: sticky;
+  top: 60px;
+  z-index: 9;
+  background-color: white;
+  width: 100%;
+  border-radius: 0;
+  border-bottom: 1px solid #ebeef5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.filter-form {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
-  flex-wrap: nowrap;
+  align-items: center;
   justify-content: space-between;
 }
 
-.filter-panel-header .filter-item {
-  margin-right: 0;
+.filter-item {
   flex: 1;
-  min-width: 0;
+  min-width: 200px;
 }
 
-.filter-panel-header .filter-input {
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.filter-input {
   width: 100%;
 }
 
-.filter-panel-header .filter-input.date-range {
+.filter-input.date-range {
   width: 100%;
   max-width: 280px;
 }
@@ -2682,27 +2747,25 @@ watch(() => showGraphView.value, (isGraphView) => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.filter-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
 /* 表格视图容器简化 */
 .table-view-container {
+  height: 100%;
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 400px;
 }
 
 .log-table {
-  width: 100%;
-  height: 100%;
-  min-height: 300px;
   flex: 1;
+  width: 100%;
+}
+
+.fullscreen-mode .table-view-container {
+  height: calc(100vh - 160px); /* 减去头部和可能的筛选面板高度 */
+}
+
+.fullscreen-mode .log-table {
+  height: 100%;
 }
 
 /* 添加底部加载更多相关样式 */
@@ -2915,6 +2978,107 @@ watch(() => showGraphView.value, (isGraphView) => {
 
 :deep(.el-table--striped .el-table__body tr.el-table__row--striped td) {
   background-color: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* 添加全屏模式样式 */
+.fullscreen-mode {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  margin: 0;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  background-color: white;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  overflow: auto;
+}
+
+/* 全屏模式下的头部区域 */
+.fullscreen-mode .log-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: white;
+  padding: 16px;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+/* 全屏模式下的筛选面板 */
+.fullscreen-mode .filter-panel-header {
+  position: sticky;
+  top: 60px;
+  z-index: 9;
+  background-color: white;
+  width: 100%;
+}
+
+/* 全屏模式下的内容区域调整 */
+.fullscreen-mode .content-area {
+  height: calc(100vh); /* 减去头部高度和padding */
+  max-height: none;
+  flex: 1;
+  overflow: auto;
+}
+
+/* 全屏模式下表格视图调整 */
+.fullscreen-mode .el-table {
+  height: calc(100vh - 60px); /* 减去头部和可能的筛选面板高度 */
+}
+
+/* 全屏模式下图表视图调整 */
+.fullscreen-mode .graph-view {
+  height: calc(100vh - 140px); /* 减去头部和控制区域高度 */
+}
+
+/* 全屏按钮样式 */
+.fullscreen-button {
+  background: linear-gradient(135deg, #909399 0%, #c0c4cc 100%);
+  color: white;
+}
+
+.fullscreen-button.active-fullscreen {
+  background: linear-gradient(135deg, #606266 0%, #909399 100%);
+}
+
+/* 右键菜单样式 */
+.context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 6px 0;
+  z-index: 3000;
+  min-width: 200px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* 全屏模式下的右键菜单需要更高的z-index */
+.fullscreen-context-menu {
+  z-index: 999999; /* 增加z-index，确保在全屏模式下显示在最上层 */
+}
+
+/* 新增只显示图标的按钮样式 */
+.icon-only-button {
+  min-width: unset;
+  width: 36px;
+  height: 36px;
+  padding: 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-only-button .el-icon {
+  margin-right: 0;
 }
 </style>
 

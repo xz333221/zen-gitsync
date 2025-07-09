@@ -5,6 +5,28 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { visualizer } from 'rollup-plugin-visualizer'
+import fs from 'fs'
+
+// 读取后端服务器端口
+function getBackendPort() {
+  try {
+    // 尝试读取.port文件
+    const portFilePath = path.resolve(__dirname, '../../..', '.port')
+    if (fs.existsSync(portFilePath)) {
+      const port = fs.readFileSync(portFilePath, 'utf8').trim()
+      console.log(`检测到后端服务器端口: ${port}`)
+      return parseInt(port, 10)
+    }
+  } catch (error) {
+    console.error('读取后端端口失败:', error)
+  }
+  
+  // 默认端口
+  console.log('使用默认后端端口: 3000')
+  return 3000
+}
+
+const backendPort = getBackendPort()
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -28,7 +50,7 @@ export default defineConfig({
     open: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000', // 替换为您的后端服务地址
+        target: `http://localhost:${backendPort}`, // 动态设置后端服务地址
         changeOrigin: true,
         // rewrite: (path) => path.replace(/^\/api/, '')
       }

@@ -23,7 +23,7 @@ let debounceTimer = null;
 // 防抖延迟时间 (毫秒)
 const DEBOUNCE_DELAY = 1000;
 
-async function startUIServer() {
+async function startUIServer(noOpen = false) {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer);
@@ -1850,6 +1850,19 @@ async function startUIServer() {
   
   // 启动服务器
   const PORT = 3000;
+  
+  // 创建一个函数来保存端口号到文件
+  async function savePortToFile(port) {
+    try {
+      // 保存到项目根目录的.port文件
+      const portFilePath = path.join(process.cwd(), '.port');
+      await fs.writeFile(portFilePath, port.toString(), 'utf8');
+      console.log(`端口号 ${port} 已保存到 ${portFilePath}`);
+    } catch (error) {
+      console.error('保存端口号到文件失败:', error);
+    }
+  }
+  
   httpServer.listen(PORT, () => {
     console.log(chalk.green('======================================'));
     console.log(chalk.green(`  Zen GitSync 服务器已启动`));
@@ -1864,7 +1877,13 @@ async function startUIServer() {
     }
     console.log(chalk.green('======================================'));
     
-    open(`http://localhost:${PORT}`);
+    // 保存端口号到文件
+    savePortToFile(PORT);
+    
+    // 只有在noOpen为false时才打开浏览器
+    if (!noOpen) {
+      open(`http://localhost:${PORT}`);
+    }
   }).on('error', async (err) => {
     if (err.code === 'EADDRINUSE') {
       console.log(`端口 ${PORT} 被占用，尝试其他端口...`);
@@ -1878,6 +1897,10 @@ async function startUIServer() {
               console.log(chalk.green(`  访问地址: http://localhost:${newPort}`));
               console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
               console.log(chalk.green('======================================'));
+              
+              // 保存新端口号到文件
+              savePortToFile(newPort);
+              
               resolve();
             });
           });
