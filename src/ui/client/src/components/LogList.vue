@@ -18,7 +18,6 @@ import {
   ElOption,
   ElDatePicker,
   ElInput,
-  ElBadge,
   ElMessage,
   ElMessageBox,
 } from "element-plus";
