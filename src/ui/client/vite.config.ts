@@ -4,7 +4,7 @@ import path from 'path'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
-import { visualizer } from 'rollup-plugin-visualizer'
+// import { visualizer } from 'rollup-plugin-visualizer'
 import fs from 'fs'
 
 // 读取后端服务器端口
@@ -38,12 +38,12 @@ export default defineConfig({
       resolvers: [ElementPlusResolver()],
     }),
     vue(),
-    visualizer({
-      open: true,
-      gzipSize: true,
-      brotliSize: true,
-      filename: 'stats.html'
-    })
+    // visualizer({
+    //   open: true,
+    //   gzipSize: true,
+    //   brotliSize: true,
+    //   filename: 'stats.html'
+    // })
   ],
   server: {
     port: 5544,

@@ -72,7 +72,8 @@ async function askContinue(message) {
   
   try {
     const answer = await rl.question(message);
-    return answer.toLowerCase() === 'y';
+    // 如果是空字符串(直接回车)或者是"y"，都返回true
+    return answer.toLowerCase() === 'y' || answer.trim() === '';
   } finally {
     rl.close();
   }
@@ -171,7 +172,7 @@ async function checkAndCleanGitLocks() {
       console.log(chalk.yellow('3. 重新运行发布脚本'));
       
       // 询问是否要继续
-      const shouldContinue = await askContinue(chalk.yellow('是否尝试继续执行？(y/N): '));
+      const shouldContinue = await askContinue(chalk.yellow('是否尝试继续执行？(Y/n): '));
       
       if (!shouldContinue) {
         console.log(chalk.yellow('用户选择终止发布过程'));
@@ -211,8 +212,8 @@ async function checkEnvironment() {
       const rl = createReadlineInterface();
       
       try {
-        const answer = await rl.question(chalk.yellow(`当前不在主分支上，是否继续在 ${currentBranch} 分支上发布? (y/N): `));
-        if (answer.toLowerCase() !== 'y') {
+        const answer = await rl.question(chalk.yellow(`当前不在主分支上，是否继续在 ${currentBranch} 分支上发布? (Y/n): `));
+        if (answer.toLowerCase() === 'n') {
           throw '用户选择取消发布';
         }
       } finally {
@@ -235,8 +236,8 @@ async function checkEnvironment() {
       const rl = createReadlineInterface();
       
       try {
-        const answer = await rl.question(chalk.yellow('有未提交的更改，是否继续发布? (y/N): '));
-        if (answer.toLowerCase() !== 'y') {
+        const answer = await rl.question(chalk.yellow('有未提交的更改，是否继续发布? (Y/n): '));
+        if (answer.toLowerCase() === 'n') {
           throw '用户选择取消发布';
         }
       } finally {
@@ -354,8 +355,8 @@ async function buildFrontend() {
     const rl = createReadlineInterface();
     
     try {
-      const answer = await rl.question(chalk.yellow('是否继续发布流程？(y/N): '));
-      if (answer.toLowerCase() !== 'y') {
+      const answer = await rl.question(chalk.yellow('是否继续发布流程？(Y/n): '));
+      if (answer.toLowerCase() === 'n') {
         console.log(chalk.red('发布流程已取消'));
         process.exit(1);
       }
@@ -386,7 +387,7 @@ async function commitChanges(version) {
     // 使用--force参数，避免可能的锁文件问题，但排除node_modules目录
     execSync('git add .', { stdio: 'inherit' });
     
-    // 等待一下，确保文件系统操作完成
+    // 等待一下，确保文件系统同步
     console.log(chalk.gray('等待文件系统同步...'));
     execSync('sleep 1 || ping -n 2 127.0.0.1 > nul', { stdio: 'ignore' });
     
@@ -433,9 +434,9 @@ async function commitChanges(version) {
     const rl = createReadlineInterface();
     
     try {
-      const answer = await rl.question(chalk.yellow('是否推送代码和标签到远程仓库? (y/N): '));
+      const answer = await rl.question(chalk.yellow('是否推送代码和标签到远程仓库? (Y/n): '));
       
-      if (answer.toLowerCase() === 'y') {
+      if (answer.toLowerCase() !== 'n') {
         try {
           // 获取当前分支
           const branch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
@@ -476,31 +477,31 @@ async function commitChanges(version) {
   }
 }
 
-// 发布到npm
+// 发布到NPM
 async function publishToNpm() {
   console.log(chalk.blue('\n=== 发布到NPM ==='));
   
-  // 添加确认步骤
+  // 创建readline接口
   const rl = createReadlineInterface();
   
   try {
     // 等待用户确认
-    const answer = await rl.question(chalk.yellow('确认发布到NPM? (y/N): '));
-    if (answer.toLowerCase() !== 'y') {
-      throw '用户取消了发布';
+    const answer = await rl.question(chalk.yellow('是否发布到NPM? (Y/n): '));
+    
+    if (answer.toLowerCase() === 'n') {
+      console.log(chalk.yellow('跳过发布到NPM'));
+      return;
     }
     
-    console.log(chalk.gray('执行npm publish...'));
-    execSync('npm publish', { stdio: 'inherit' });
-    console.log(chalk.green('成功发布到NPM'));
-  } catch (error) {
-    if (error === '用户取消了发布') {
-      console.log(chalk.yellow('发布已取消'));
-      process.exit(0);
+    // 执行npm发布
+    console.log(chalk.gray('执行npm发布...'));
+    try {
+      execSync('npm publish', { stdio: 'inherit' });
+      console.log(chalk.green('已成功发布到NPM'));
+    } catch (error) {
+      console.error(chalk.red('发布到NPM失败:'), error);
+      throw error;
     }
-    
-    console.error(chalk.red('发布失败:'), error);
-    process.exit(1);
   } finally {
     rl.close();
   }
