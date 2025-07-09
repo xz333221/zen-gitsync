@@ -1852,71 +1852,110 @@ async function startUIServer(noOpen = false, savePort = false) {
   const PORT = 3000;
   
   // 创建一个函数来保存端口号到文件
-  async function savePortToFile(port) {
-    try {
-      // 只有当savePort为true时才保存端口号
-      if (savePort) {
-        // 保存到项目根目录的.port文件
-        const portFilePath = path.join(process.cwd(), '.port');
-        await fs.writeFile(portFilePath, port.toString(), 'utf8');
-        console.log(`端口号 ${port} 已保存到 ${portFilePath}`);
+  // 使用闭包保存端口状态，防止多次写入相同端口
+  const savePortToFile = (function() {
+    let savedPort = null;
+    
+    return async function(port) {
+      try {
+        // 只有当savePort为true且端口没有保存过时才保存端口号
+        if (savePort && savedPort !== port) {
+          savedPort = port;
+          // 保存到项目根目录的.port文件
+          const portFilePath = path.join(process.cwd(), '.port');
+          await fs.writeFile(portFilePath, port.toString(), 'utf8');
+          console.log(`端口号 ${port} 已保存到 ${portFilePath}`);
+        }
+      } catch (error) {
+        console.error('保存端口号到文件失败:', error);
       }
-    } catch (error) {
-      console.error('保存端口号到文件失败:', error);
-    }
-  }
+    };
+  })();
   
-  httpServer.listen(PORT, () => {
-    console.log(chalk.green('======================================'));
-    console.log(chalk.green(`  Zen GitSync 服务器已启动`));
-    console.log(chalk.green(`  访问地址: http://localhost:${PORT}`));
-    console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
-    if (isGitRepo) {
-      console.log(chalk.green(`  当前目录是Git仓库，文件监控已启动`));
-      // 启动文件监控
-      initFileSystemWatcher();
-    } else {
-      console.log(chalk.yellow(`  当前目录不是Git仓库，文件监控未启动`));
-    }
-    console.log(chalk.green('======================================'));
+  // 尝试在可用端口上启动服务器
+  await startServerOnAvailablePort(PORT);
+  
+  // 启动服务器函数
+  async function startServerOnAvailablePort(startPort) {
+    let currentPort = startPort;
+    const maxPort = startPort + 100; // 最多尝试100个端口
     
-    // 保存端口号到文件
-    savePortToFile(PORT);
-    
-    // 只有在noOpen为false时才打开浏览器
-    if (!noOpen) {
-      open(`http://localhost:${PORT}`);
-    }
-  }).on('error', async (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.log(`端口 ${PORT} 被占用，尝试其他端口...`);
-      let newPort = PORT + 1;
-      while (newPort < PORT + 100) {
-        try {
-          await new Promise((resolve, reject) => {
-            httpServer.listen(newPort, () => {
-              console.log(chalk.green('======================================'));
-              console.log(chalk.green(`  Zen GitSync 服务器已启动`));
-              console.log(chalk.green(`  访问地址: http://localhost:${newPort}`));
-              console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
-              console.log(chalk.green('======================================'));
-              
-              // 保存新端口号到文件
-              savePortToFile(newPort);
-              
-              resolve();
-            });
+    while (currentPort < maxPort) {
+      try {
+        // 等待1秒，避免快速尝试多个端口
+        if (currentPort > startPort) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          console.log(`尝试端口 ${currentPort}...`);
+        }
+        
+        // 尝试在当前端口启动服务器
+        await new Promise((resolve, reject) => {
+          // 仅监听一次error事件
+          const errorHandler = (err) => {
+            httpServer.removeListener('error', errorHandler);
+            reject(err);
+          };
+          
+          // 使用变量标记回调是否已执行，防止多次触发
+          let callbackExecuted = false;
+          
+          httpServer.once('error', errorHandler);
+          
+          httpServer.listen(currentPort, () => {
+            // 确保回调只执行一次
+            if (callbackExecuted) return;
+            callbackExecuted = true;
+            
+            // 成功监听，移除错误处理器
+            httpServer.removeListener('error', errorHandler);
+            
+            // 输出服务器信息
+            console.log(chalk.green('======================================'));
+            console.log(chalk.green(`  Zen GitSync 服务器已启动`));
+            console.log(chalk.green(`  访问地址: http://localhost:${currentPort}`));
+            console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
+            
+            if (isGitRepo) {
+              console.log(chalk.green(`  当前目录是Git仓库，文件监控已启动`));
+              // 启动文件监控
+              initFileSystemWatcher();
+            } else {
+              console.log(chalk.yellow(`  当前目录不是Git仓库，文件监控未启动`));
+            }
+            
+            console.log(chalk.green('======================================'));
+            
+            // 保存端口号到文件
+            savePortToFile(currentPort);
+            
+            // 只有在noOpen为false时才打开浏览器
+            if (!noOpen) {
+              open(`http://localhost:${currentPort}`);
+            }
+            
+            resolve();
           });
-          break;
-        } catch (error) {
-          newPort++;
+        });
+        
+        // 如果成功启动，退出循环
+        return;
+      } catch (err) {
+        // 处理端口被占用的情况
+        if (err.code === 'EADDRINUSE') {
+          console.log(`端口 ${currentPort} 被占用，尝试下一个端口...`);
+          currentPort++;
+        } else {
+          // 其他错误，直接抛出
+          console.error('启动服务器失败:', err);
+          process.exit(1);
         }
       }
-    } else {
-      console.error('启动服务器失败:', err);
-      process.exit(1);
     }
-  });
+    
+    // 如果尝试了所有端口都失败
+    console.error(`无法找到可用端口 (尝试范围: ${startPort}-${maxPort-1})`);
+    process.exit(1);
+  }
 }
 
 export default startUIServer;
