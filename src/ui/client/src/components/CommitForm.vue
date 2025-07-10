@@ -1189,6 +1189,17 @@ git config --global user.email "your.email@example.com"</pre>
               <!-- 添加的按钮组 -->
               <div class="form-bottom-actions">
                 <div class="button-row">
+                  <el-button
+                    type="primary"
+                    @click="addToStage"
+                    :loading="gitStore.isAddingFiles"
+                    :disabled="!hasUnstagedChanges"
+                    class="stage-button"
+                  >
+                    暂存更改
+                    <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
+                  </el-button>
+                  
                   <el-button 
                     type="primary" 
                     @click="commitChanges" 
@@ -1219,7 +1230,7 @@ git config --global user.email "your.email@example.com"</pre>
                   :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
                   :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
                   class="full-width-button"
-                  style="background-color: #8e44ad; border-color: #8e44ad;"
+                  style="background-color: #4169e1; border-color: #4169e1;"
                 >
                   一键推送所有
                 </el-button>
@@ -1277,6 +1288,17 @@ git config --global user.email "your.email@example.com"</pre>
               <!-- 添加的按钮组 -->
               <div class="form-bottom-actions">
                 <div class="button-row">
+                  <el-button
+                    type="primary"
+                    @click="addToStage"
+                    :loading="gitStore.isAddingFiles"
+                    :disabled="!hasUnstagedChanges"
+                    class="stage-button"
+                  >
+                    暂存更改
+                    <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
+                  </el-button>
+                  
                   <el-button 
                     type="primary" 
                     @click="commitChanges" 
@@ -1469,7 +1491,7 @@ git config --global user.email "your.email@example.com"</pre>
                 <div class="group-title">分支操作</div>
                 <div class="group-buttons">
                   <!-- 合并分支按钮 -->
-                  <el-tooltip content="合并其他分支到当前分支" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip content="git merge" placement="top" effect="light" popper-class="git-cmd-tooltip">
                     <el-button 
                       type="primary"
                       :icon="Share"
@@ -1487,7 +1509,7 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="action-group">
                   <div class="group-title">储藏操作</div>
                   <div class="group-buttons">
-                    <el-tooltip content="将工作区更改储藏起来" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-tooltip content="git stash" placement="top" effect="light" popper-class="git-cmd-tooltip">
                       <el-button 
                         type="warning" 
                         @click="openStashDialog" 
@@ -1950,19 +1972,14 @@ git config --global user.email "your.email@example.com"</pre>
 .action-group {
   background-color: #f9f9f9;
   border-radius: 6px;
-  padding: 8px 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border-left: 3px solid #409EFF;
+  padding: 12px 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
   flex: 1;
 }
 
-
-.action-group:nth-child(2) {
-  border-left-color: #E6A23C;
-}
-
-.action-group:nth-child(3) {
-  border-left-color: #909399;
+.action-group:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .group-title {
@@ -2348,8 +2365,12 @@ git config --global user.email "your.email@example.com"</pre>
   padding: 12px;
   background-color: #f5f7fa;
   border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border-left: 3px solid #67C23A;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.form-bottom-actions:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .button-row {
@@ -2611,8 +2632,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* 分支操作组样式 */
 .branch-group {
-  border-top: 1px solid #f0f0f0;
-  padding-top: 16px;
+  border-top: none;
 }
 
 .branch-group .group-title {
@@ -2641,6 +2661,11 @@ git config --global user.email "your.email@example.com"</pre>
 .stash-dialog-content p {
   margin-bottom: 20px;
   color: #606266;
+}
+
+/* 重置操作组样式 */
+.reset-group {
+  border-top: none;
 }
 </style>
 

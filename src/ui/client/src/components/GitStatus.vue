@@ -514,7 +514,7 @@ defineExpose({
         <!-- 添加Git Fetch All按钮 -->
         <el-tooltip content="Git Fetch All (获取所有远程分支)" placement="top" :hide-after="1000">
           <el-button 
-            type="info" 
+            type="primary" 
             :icon="Connection" 
             circle 
             size="small" 
