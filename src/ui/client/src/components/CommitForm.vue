@@ -1205,7 +1205,7 @@ git config --global user.email "your.email@example.com"</pre>
                     @click="pushToRemote"
                     :loading="gitStore.isPushing"
                     :disabled="!canPush"
-                    :style="needsPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                    :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
                   >
                     推送
                     <span v-if="needsPush">({{gitStore.branchAhead}})</span>
@@ -1219,6 +1219,7 @@ git config --global user.email "your.email@example.com"</pre>
                   :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
                   :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
                   class="full-width-button"
+                  style="background-color: #8e44ad; border-color: #8e44ad;"
                 >
                   一键推送所有
                 </el-button>
@@ -1292,7 +1293,7 @@ git config --global user.email "your.email@example.com"</pre>
                     @click="pushToRemote"
                     :loading="gitStore.isPushing"
                     :disabled="!canPush"
-                    :style="needsPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                    :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
                   >
                     推送
                     <span v-if="needsPush">({{gitStore.branchAhead}})</span>
@@ -1306,6 +1307,7 @@ git config --global user.email "your.email@example.com"</pre>
                   :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
                   :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
                   class="full-width-button"
+                  style="background-color: #4169e1; border-color: #4169e1;"
                 >
                   一键推送所有
                 </el-button>
@@ -1356,7 +1358,7 @@ git config --global user.email "your.email@example.com"</pre>
                         :loading="gitStore.isPushing"
                         :disabled="!canPush"
                         :class="['action-button', 'push-button', { 'is-loading': gitStore.isPushing }]"
-                        :style="needsPush ? {backgroundColor: '#67c23a !important', borderColor: '#67c23a !important'} : {}"
+                        :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
                       >
                         推送
                         <span v-if="needsPush">({{gitStore.branchAhead}})</span>
@@ -1368,10 +1370,10 @@ git config --global user.email "your.email@example.com"</pre>
                         type="primary"
                         :icon="Download"
                         @click="handleGitPull"
-                        :loading="gitStore.       isGitPulling"
+                        :loading="gitStore.isGitPulling"
                         :disabled="!gitStore.hasUpstream"
                         class="action-button"
-                        :style="needsPull ? {color: 'white', backgroundColor: '#E6A23C', borderColor: '#E6A23C'} : {}"
+                        :style="gitStore.hasUpstream ? {color: 'white', backgroundColor: '#1e90ff', borderColor: '#1e90ff'} : {}"
                       >
                         拉取
                         <span v-if="needsPull">({{gitStore.branchBehind}})</span>
@@ -1385,6 +1387,7 @@ git config --global user.email "your.email@example.com"</pre>
                         @click="handleGitFetchAll"
                         :loading="gitStore.isGitFetching"
                         class="action-button"
+                        style="color: white; background-color: #1e90ff; border-color: #1e90ff;"
                       >
                         获取所有远程分支
                       </el-button>
@@ -1419,6 +1422,7 @@ git config --global user.email "your.email@example.com"</pre>
                         :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
                         :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
                         :class="['action-button', 'one-click-push', { 'is-loading': gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing }]"
+                        style="background-color: #4169e1; border-color: #4169e1;"
                       >
                         一键推送所有
                       </el-button>
