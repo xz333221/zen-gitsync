@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share } from "@element-plus/icons-vue";
+import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu } from "@element-plus/icons-vue";
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
 
@@ -1100,12 +1100,29 @@ async function handleMergeBranch() {
   }
 }
 
+// 添加抽屉状态变量
+const gitOperationsDrawerVisible = ref(false);
+
+// 切换抽屉显示/隐藏
+function toggleGitOperationsDrawer() {
+  gitOperationsDrawerVisible.value = !gitOperationsDrawerVisible.value;
+}
+
 </script>
 
 <template>
   <div class="card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header">
       <h2>提交更改</h2>
+      <!-- 更改Git操作按钮图标 -->
+      <el-button
+        type="primary"
+        :icon="Menu"
+        size="small"
+        circle
+        @click="toggleGitOperationsDrawer"
+        class="git-tools-button"
+      />
     </div>
 
     <!-- 添加推送中指示器 -->
@@ -1336,206 +1353,216 @@ git config --global user.email "your.email@example.com"</pre>
               </div>
             </div>
           </div>
+        </template>
+      </div>
 
-          <!-- 右侧：操作区域 -->
-          <div class="actions-section">
-            <h3>Git 操作</h3>
-            <div class="action-groups">
-              <div class="operations-wrapper">
-                <!-- 基础操作 -->
-                <div class="action-group">
-                  <div class="group-title">基础操作</div>
-                  <div class="group-buttons">
-                    <el-tooltip :content="hasUnstagedChanges ? `暂存${unstagedFilesCount}个待更改文件` : 'git add .'" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="primary" 
-                        @click="addToStage" 
-                        :loading="gitStore.isAddingFiles" 
-                        :disabled="!hasUnstagedChanges"
-                        class="action-button"
-                      >
-                        暂存更改
-                        <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
-                      </el-button>
-                    </el-tooltip>
-
-                    <el-tooltip :content="hasStagedChanges ? `提交${stagedFilesCount}个已暂存文件` : 'git commit'" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="primary" 
-                        @click="commitChanges" 
-                        :loading="gitStore.isLoadingStatus"
-                        :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
-                        class="action-button"
-                      >
-                        提交
-                        <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
-                      </el-button>
-                    </el-tooltip>
-
-                    <el-tooltip :content="needsPush ? `推送${gitStore.branchAhead}个本地提交` : 'git push'" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="primary"
-                        :icon="Upload"
-                        @click="pushToRemote"
-                        :loading="gitStore.isPushing"
-                        :disabled="!canPush"
-                        :class="['action-button', 'push-button', { 'is-loading': gitStore.isPushing }]"
-                        :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
-                      >
-                        推送
-                        <span v-if="needsPush">({{gitStore.branchAhead}})</span>
-                      </el-button>
-                    </el-tooltip>
-                    
-                    <el-tooltip :content="needsPull ? `拉取${gitStore.branchBehind}个远程提交` : 'git pull'" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="primary"
-                        :icon="Download"
-                        @click="handleGitPull"
-                        :loading="gitStore.isGitPulling"
-                        :disabled="!gitStore.hasUpstream"
-                        class="action-button"
-                        :style="gitStore.hasUpstream ? {color: 'white', backgroundColor: '#1e90ff', borderColor: '#1e90ff'} : {}"
-                      >
-                        拉取
-                        <span v-if="needsPull">({{gitStore.branchBehind}})</span>
-                      </el-button>
-                    </el-tooltip>
-                    
-                    <el-tooltip content="git fetch --all" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="info"
-                        :icon="Connection"
-                        @click="handleGitFetchAll"
-                        :loading="gitStore.isGitFetching"
-                        class="action-button"
-                        style="color: white; background-color: #1e90ff; border-color: #1e90ff;"
-                      >
-                        获取所有远程分支
-                      </el-button>
-                    </el-tooltip>
-                  </div>
-                </div>
-
-                
-
-                <!-- 组合操作 -->
-                <div class="action-group">
-                  <div class="group-title">组合操作</div>
-                  <div class="group-buttons">
-                    <el-tooltip content="git add + git commit" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="primary"
-                        :icon="Edit"
-                        @click="addAndCommit"
-                        :loading="gitStore.isAddingFiles || gitStore.isCommiting"
-                        :disabled="!hasUnstagedChanges || !finalCommitMessage.trim()"
-                        class="action-button"
-                      >
-                        暂存并提交
-                      </el-button>
-                    </el-tooltip>
-
-                    <el-tooltip content="git add + git commit + git push" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="success"
-                        :icon="Position"
-                        @click="addCommitAndPush"
-                        :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                        :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
-                        :class="['action-button', 'one-click-push', { 'is-loading': gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing }]"
-                        style="background-color: #4169e1; border-color: #4169e1;"
-                      >
-                        一键推送所有
-                      </el-button>
-                    </el-tooltip>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 重置操作 -->
-              <div class="action-group reset-group">
-                <div class="group-title">重置操作</div>
+      <!-- Git操作抽屉 -->
+      <el-drawer
+        v-model="gitOperationsDrawerVisible"
+        title="Git 操作"
+        direction="rtl"
+        size="340px"
+        :with-header="true"
+        :show-close="true"
+        :destroy-on-close="false"
+        class="git-operations-drawer"
+      >
+        <div class="actions-section">
+          <div class="action-groups">
+            <div class="operations-wrapper">
+              <!-- 基础操作 -->
+              <div class="action-group">
+                <div class="group-title">基础操作</div>
                 <div class="group-buttons">
-                  <el-tooltip :content="canReset ? `撤销${stagedFilesCount}个已暂存文件` : 'git reset HEAD'" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip :content="hasUnstagedChanges ? `暂存${unstagedFilesCount}个待更改文件` : 'git add .'" placement="top" effect="light" popper-class="git-cmd-tooltip">
                     <el-button 
-                      type="warning"
-                      :icon="RefreshRight"
-                      @click="gitStore.resetHead"
-                      :loading="gitStore.isResetting"
-                      :disabled="!canReset"
-                      class="action-button reset-button"
+                      type="primary" 
+                      @click="addToStage" 
+                      :loading="gitStore.isAddingFiles" 
+                      :disabled="!hasUnstagedChanges"
+                      class="action-button"
                     >
-                      重置暂存区
+                      暂存更改
+                      <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
+                    </el-button>
+                  </el-tooltip>
+
+                  <el-tooltip :content="hasStagedChanges ? `提交${stagedFilesCount}个已暂存文件` : 'git commit'" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="primary" 
+                      @click="commitChanges" 
+                      :loading="gitStore.isLoadingStatus"
+                      :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
+                      class="action-button"
+                    >
+                      提交
                       <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
                     </el-button>
                   </el-tooltip>
 
-                  <el-tooltip content="git reset --hard origin/branch" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                    <el-button 
-                      type="danger"
-                      :icon="Delete"
-                      @click="resetToRemote"
-                      :loading="gitStore.isResetting"
-                      :disabled="!canResetToRemote"
-                      class="action-button danger-button"
-                    >
-                      重置到远程
-                    </el-button>
-                  </el-tooltip>
-                </div>
-              </div>
-              
-              <!-- 添加单独的分支操作组 -->
-              <div class="action-group branch-group">
-                <div class="group-title">分支操作</div>
-                <div class="group-buttons">
-                  <!-- 合并分支按钮 -->
-                  <el-tooltip content="git merge" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip :content="needsPush ? `推送${gitStore.branchAhead}个本地提交` : 'git push'" placement="top" effect="light" popper-class="git-cmd-tooltip">
                     <el-button 
                       type="primary"
-                      :icon="Share"
-                      @click="openMergeDialog"
-                      :loading="gitStore.isGitMerging"
-                      class="action-button merge-button"
+                      :icon="Upload"
+                      @click="pushToRemote"
+                      :loading="gitStore.isPushing"
+                      :disabled="!canPush"
+                      :class="['action-button', 'push-button', { 'is-loading': gitStore.isPushing }]"
+                      :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
                     >
-                      合并分支
+                      推送
+                      <span v-if="needsPush">({{gitStore.branchAhead}})</span>
+                    </el-button>
+                  </el-tooltip>
+                  
+                  <el-tooltip :content="needsPull ? `拉取${gitStore.branchBehind}个远程提交` : 'git pull'" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="primary"
+                      :icon="Download"
+                      @click="handleGitPull"
+                      :loading="gitStore.isGitPulling"
+                      :disabled="!gitStore.hasUpstream"
+                      class="action-button"
+                      :style="gitStore.hasUpstream ? {color: 'white', backgroundColor: '#1e90ff', borderColor: '#1e90ff'} : {}"
+                    >
+                      拉取
+                      <span v-if="needsPull">({{gitStore.branchBehind}})</span>
+                    </el-button>
+                  </el-tooltip>
+                  
+                  <el-tooltip content="git fetch --all" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="info"
+                      :icon="Connection"
+                      @click="handleGitFetchAll"
+                      :loading="gitStore.isGitFetching"
+                      class="action-button"
+                      style="color: white; background-color: #1e90ff; border-color: #1e90ff;"
+                    >
+                      获取所有远程分支
                     </el-button>
                   </el-tooltip>
                 </div>
               </div>
 
-              <!-- 储藏操作 -->
-              <div class="action-group">
-                  <div class="group-title">储藏操作</div>
-                  <div class="group-buttons">
-                    <el-tooltip content="git stash" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="warning" 
-                        @click="openStashDialog" 
-                        :loading="gitStore.isSavingStash"
-                        :disabled="!hasAnyChanges"
-                        class="action-button"
-                      >
-                        储藏更改
-                      </el-button>
-                    </el-tooltip>
+              
 
-                    <el-tooltip content="查看和管理所有储藏记录" placement="top" effect="light" popper-class="git-cmd-tooltip">
-                      <el-button 
-                        type="info"
-                        @click="openStashListDialog"
-                        class="action-button"
-                      >
-                        储藏列表
-                      </el-button>
-                    </el-tooltip>
-                  </div>
+              <!-- 组合操作 -->
+              <div class="action-group">
+                <div class="group-title">组合操作</div>
+                <div class="group-buttons">
+                  <el-tooltip content="git add + git commit" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="primary"
+                      :icon="Edit"
+                      @click="addAndCommit"
+                      :loading="gitStore.isAddingFiles || gitStore.isCommiting"
+                      :disabled="!hasUnstagedChanges || !finalCommitMessage.trim()"
+                      class="action-button"
+                    >
+                      暂存并提交
+                    </el-button>
+                  </el-tooltip>
+
+                  <el-tooltip content="git add + git commit + git push" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="success"
+                      :icon="Position"
+                      @click="addCommitAndPush"
+                      :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
+                      :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                      :class="['action-button', 'one-click-push', { 'is-loading': gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing }]"
+                      style="background-color: #4169e1; border-color: #4169e1;"
+                    >
+                      一键推送所有
+                    </el-button>
+                  </el-tooltip>
                 </div>
+              </div>
             </div>
+
+            <!-- 重置操作 -->
+            <div class="action-group reset-group">
+              <div class="group-title">重置操作</div>
+              <div class="group-buttons">
+                <el-tooltip :content="canReset ? `撤销${stagedFilesCount}个已暂存文件` : 'git reset HEAD'" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-button 
+                    type="warning"
+                    :icon="RefreshRight"
+                    @click="gitStore.resetHead"
+                    :loading="gitStore.isResetting"
+                    :disabled="!canReset"
+                    class="action-button reset-button"
+                  >
+                    重置暂存区
+                    <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
+                  </el-button>
+                </el-tooltip>
+
+                <el-tooltip content="git reset --hard origin/branch" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-button 
+                    type="danger"
+                    :icon="Delete"
+                    @click="resetToRemote"
+                    :loading="gitStore.isResetting"
+                    :disabled="!canResetToRemote"
+                    class="action-button danger-button"
+                  >
+                    重置到远程
+                  </el-button>
+                </el-tooltip>
+              </div>
+            </div>
+            
+            <!-- 添加单独的分支操作组 -->
+            <div class="action-group branch-group">
+              <div class="group-title">分支操作</div>
+              <div class="group-buttons">
+                <!-- 合并分支按钮 -->
+                <el-tooltip content="合并其他分支到当前分支" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-button 
+                    type="primary"
+                    :icon="Share"
+                    @click="openMergeDialog"
+                    :loading="gitStore.isGitMerging"
+                    class="action-button merge-button"
+                  >
+                    合并分支
+                  </el-button>
+                </el-tooltip>
+              </div>
+            </div>
+
+            <!-- 储藏操作 -->
+            <div class="action-group">
+                <div class="group-title">储藏操作</div>
+                <div class="group-buttons">
+                  <el-tooltip content="将工作区更改储藏起来" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="warning" 
+                      @click="openStashDialog" 
+                      :loading="gitStore.isSavingStash"
+                      :disabled="!hasAnyChanges"
+                      class="action-button"
+                    >
+                      储藏更改
+                    </el-button>
+                  </el-tooltip>
+
+                  <el-tooltip content="查看和管理所有储藏记录" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                    <el-button 
+                      type="info"
+                      @click="openStashListDialog"
+                      class="action-button"
+                    >
+                      储藏列表
+                    </el-button>
+                  </el-tooltip>
+                </div>
+              </div>
           </div>
-        </template>
-      </div>
+        </div>
+      </el-drawer>
 
       <!-- 简短描述设置弹窗 -->
       <el-dialog 
@@ -1940,12 +1967,12 @@ git config --global user.email "your.email@example.com"</pre>
 
 .commit-section {
   flex: 1;
+  width: 100%;
   min-width: 0; /* 防止子元素撑开 */
 }
 
 .actions-section {
-  width: 100%;
-  flex-shrink: 0;
+  padding: 0;
 }
 
 .actions-section h3 {
@@ -2666,6 +2693,57 @@ git config --global user.email "your.email@example.com"</pre>
 /* 重置操作组样式 */
 .reset-group {
   border-top: none;
+}
+
+/* 添加Git工具按钮样式 */
+.card-header {
+  padding: 8px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.git-tools-button {
+  transition: transform 0.3s;
+}
+
+.git-tools-button:hover {
+  transform: rotate(90deg);
+}
+
+/* 布局调整，让提交区占据全部宽度 */
+.layout-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  height: 100%;
+}
+
+.commit-section {
+  flex: 1;
+  width: 100%;
+  min-width: 0; /* 防止子元素撑开 */
+}
+
+/* Git操作抽屉样式 */
+:deep(.git-operations-drawer) {
+  .el-drawer__header {
+    margin-bottom: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  
+  .el-drawer__body {
+    padding: 10px;
+    overflow-y: auto;
+  }
+}
+
+.actions-section {
+  padding: 0;
 }
 </style>
 

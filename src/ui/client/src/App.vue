@@ -932,14 +932,14 @@ body {
 
 .grid-layout {
   display: grid;
-  grid-template-columns: 2fr 8px 3fr;
-  /* 左右区域比例为2:3 */
-  grid-template-rows: 1fr 8px 1fr;
+  grid-template-columns: 2fr 4px 3fr;
+  /* 左右区域比例为2:3, 分隔线从8px减少到4px */
+  grid-template-rows: 1fr 4px 1fr;
   grid-template-areas:
     "git-status v-resizer commit-form"
     "h-resizer h-resizer h-resizer"
     "log-list log-list log-list";
-  gap: 10px;
+  gap: 6px; /* 从10px减少到6px */
   height: 100%;
 }
 
@@ -1321,9 +1321,8 @@ h1 {
   transition: background-color 0.2s, box-shadow 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: 8px;
-  /* 增加圆角 */
-  box-shadow: 0 0 3px rgba(0, 0, 0, 0.1);
+  border-radius: 4px; /* 从8px减少到4px */
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.1); /* 减小阴影 */
 }
 
 .vertical-resizer::after {
@@ -1332,25 +1331,24 @@ h1 {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 4px;
-  height: 50px;
+  width: 2px; /* 从4px减少到2px */
+  height: 40px; /* 从50px减少到40px */
   background-color: #a0a0a0;
-  border-radius: 4px;
-  /* 增加圆角 */
+  border-radius: 2px; /* 从4px减少到2px */
   transition: background-color 0.2s, width 0.2s, box-shadow 0.2s;
 }
 
 .vertical-resizer:hover,
 .vertical-resizer.active {
   background-color: #d0d0d0;
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2); /* 减小阴影 */
 }
 
 .vertical-resizer:hover::after,
 .vertical-resizer.active::after {
   background-color: #409EFF;
-  width: 6px;
-  box-shadow: 0 0 8px rgba(64, 158, 255, 0.6);
+  width: 3px; /* 从6px减少到3px */
+  box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
 }
 
 /* 水平分隔条样式 */
@@ -1361,9 +1359,8 @@ h1 {
   transition: background-color 0.2s, box-shadow 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: 8px;
-  /* 增加圆角 */
-  box-shadow: 0 0 3px rgba(0, 0, 0, 0.1);
+  border-radius: 4px; /* 从8px减少到4px */
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.1); /* 减小阴影 */
 }
 
 .horizontal-resizer::after {
@@ -1372,25 +1369,24 @@ h1 {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 50px;
-  height: 4px;
+  width: 40px; /* 从50px减少到40px */
+  height: 2px; /* 从4px减少到2px */
   background-color: #a0a0a0;
-  border-radius: 4px;
-  /* 增加圆角 */
+  border-radius: 2px; /* 从4px减少到2px */
   transition: background-color 0.2s, height 0.2s, box-shadow 0.2s;
 }
 
 .horizontal-resizer:hover,
 .horizontal-resizer.active {
   background-color: #d0d0d0;
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2); /* 减小阴影 */
 }
 
 .horizontal-resizer:hover::after,
 .horizontal-resizer.active::after {
   background-color: #409EFF;
-  height: 6px;
-  box-shadow: 0 0 8px rgba(64, 158, 255, 0.6);
+  height: 3px; /* 从6px减少到3px */
+  box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
 }
 
 /* 添加目录选择器样式 */
