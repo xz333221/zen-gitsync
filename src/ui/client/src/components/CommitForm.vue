@@ -1205,52 +1205,62 @@ git config --global user.email "your.email@example.com"</pre>
               
               <!-- 添加的按钮组 -->
               <div class="form-bottom-actions">
-                <div class="button-row">
-                  <el-button
-                    type="primary"
-                    @click="addToStage"
-                    :loading="gitStore.isAddingFiles"
-                    :disabled="!hasUnstagedChanges"
-                    class="stage-button"
-                  >
-                    暂存更改
-                    <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
-                  </el-button>
+                <div class="actions-flex-container">
+                  <div class="left-actions">
+                    <div class="button-grid">
+                      <el-button
+                        type="primary"
+                        @click="addToStage"
+                        :loading="gitStore.isAddingFiles"
+                        :disabled="!hasUnstagedChanges"
+                        class="stage-button"
+                      >
+                        暂存更改
+                        <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
+                      </el-button>
+                      
+                      <el-button 
+                        type="primary" 
+                        @click="commitChanges" 
+                        :loading="gitStore.isLoadingStatus"
+                        :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
+                      >
+                        提交
+                        <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
+                      </el-button>
+                      
+                      <el-button 
+                        type="primary"
+                        :icon="Upload"
+                        @click="pushToRemote"
+                        :loading="gitStore.isPushing"
+                        :disabled="!canPush"
+                        :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                      >
+                        推送
+                        <span v-if="needsPush">({{gitStore.branchAhead}})</span>
+                      </el-button>
+                    </div>
+                  </div>
                   
-                  <el-button 
-                    type="primary" 
-                    @click="commitChanges" 
-                    :loading="gitStore.isLoadingStatus"
-                    :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
-                  >
-                    提交
-                    <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
-                  </el-button>
-                  
-                  <el-button 
-                    type="primary"
-                    :icon="Upload"
-                    @click="pushToRemote"
-                    :loading="gitStore.isPushing"
-                    :disabled="!canPush"
-                    :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
-                  >
-                    推送
-                    <span v-if="needsPush">({{gitStore.branchAhead}})</span>
-                  </el-button>
+                  <div class="right-actions">
+                    <el-button 
+                      type="success"
+                      @click="addCommitAndPush"
+                      :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
+                      :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                      class="one-push-button"
+                    >
+                      <div class="one-push-content">
+                        <el-icon class="one-push-icon"><Position /></el-icon>
+                        <div class="one-push-text">
+                          <span class="one-push-title">一键推送所有</span>
+                          <span class="one-push-desc">暂存 + 提交 + 推送</span>
+                        </div>
+                      </div>
+                    </el-button>
+                  </div>
                 </div>
-                
-                <el-button 
-                  type="success"
-                  :icon="Position"
-                  @click="addCommitAndPush"
-                  :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                  :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
-                  class="full-width-button"
-                  style="background-color: #4169e1; border-color: #4169e1;"
-                >
-                  一键推送所有
-                </el-button>
               </div>
             </div>
 
@@ -1304,52 +1314,62 @@ git config --global user.email "your.email@example.com"</pre>
               
               <!-- 添加的按钮组 -->
               <div class="form-bottom-actions">
-                <div class="button-row">
-                  <el-button
-                    type="primary"
-                    @click="addToStage"
-                    :loading="gitStore.isAddingFiles"
-                    :disabled="!hasUnstagedChanges"
-                    class="stage-button"
-                  >
-                    暂存更改
-                    <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
-                  </el-button>
+                <div class="actions-flex-container">
+                  <div class="left-actions">
+                    <div class="button-grid">
+                      <el-button
+                        type="primary"
+                        @click="addToStage"
+                        :loading="gitStore.isAddingFiles"
+                        :disabled="!hasUnstagedChanges"
+                        class="stage-button"
+                      >
+                        暂存更改
+                        <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
+                      </el-button>
+                      
+                      <el-button 
+                        type="primary" 
+                        @click="commitChanges" 
+                        :loading="gitStore.isLoadingStatus"
+                        :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
+                      >
+                        提交
+                        <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
+                      </el-button>
+                      
+                      <el-button 
+                        type="primary"
+                        :icon="Upload"
+                        @click="pushToRemote"
+                        :loading="gitStore.isPushing"
+                        :disabled="!canPush"
+                        :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                      >
+                        推送
+                        <span v-if="needsPush">({{gitStore.branchAhead}})</span>
+                      </el-button>
+                    </div>
+                  </div>
                   
-                  <el-button 
-                    type="primary" 
-                    @click="commitChanges" 
-                    :loading="gitStore.isLoadingStatus"
-                    :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
-                  >
-                    提交
-                    <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
-                  </el-button>
-                  
-                  <el-button 
-                    type="primary"
-                    :icon="Upload"
-                    @click="pushToRemote"
-                    :loading="gitStore.isPushing"
-                    :disabled="!canPush"
-                    :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
-                  >
-                    推送
-                    <span v-if="needsPush">({{gitStore.branchAhead}})</span>
-                  </el-button>
+                  <div class="right-actions">
+                    <el-button 
+                      type="success"
+                      @click="addCommitAndPush"
+                      :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
+                      :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                      class="one-push-button"
+                    >
+                      <div class="one-push-content">
+                        <el-icon class="one-push-icon"><Position /></el-icon>
+                        <div class="one-push-text">
+                          <span class="one-push-title">一键推送所有</span>
+                          <span class="one-push-desc">暂存 + 提交 + 推送</span>
+                        </div>
+                      </div>
+                    </el-button>
+                  </div>
                 </div>
-                
-                <el-button 
-                  type="success"
-                  :icon="Position"
-                  @click="addCommitAndPush"
-                  :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                  :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
-                  class="full-width-button"
-                  style="background-color: #4169e1; border-color: #4169e1;"
-                >
-                  一键推送所有
-                </el-button>
               </div>
             </div>
           </div>
@@ -1472,7 +1492,6 @@ git config --global user.email "your.email@example.com"</pre>
                       :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
                       :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
                       :class="['action-button', 'one-click-push', { 'is-loading': gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing }]"
-                      style="background-color: #4169e1; border-color: #4169e1;"
                     >
                       一键推送所有
                     </el-button>
@@ -2385,10 +2404,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* 表单底部操作按钮样式 */
 .form-bottom-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 15px;
+  display: block;
   padding: 12px;
   background-color: #f5f7fa;
   border-radius: 6px;
@@ -2400,34 +2416,111 @@ git config --global user.email "your.email@example.com"</pre>
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
-.button-row {
+.actions-flex-container {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 15px;
   width: 100%;
 }
 
-.button-row .el-button {
-  flex: 1;
-  min-width: 100px;
+.left-actions {
+  flex: 3;
+  display: flex;
+  align-items: center;
 }
 
-.full-width-button {
+.right-actions {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.button-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
   width: 100%;
-  margin-top: 5px;
-  font-weight: 500;
-  height: 40px;
+  height: 100%;
 }
 
-.form-bottom-actions .el-button {
-  font-weight: 500;
-  border-radius: 4px;
-  transition: all 0.3s;
+.button-grid .el-button {
+  margin: 0;
+  height: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 15px;
 }
 
-.form-bottom-actions .el-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+.button-grid .el-button:first-child {
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
+}
+
+.button-grid .el-button:nth-child(2) {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+}
+
+.button-grid .el-button:last-child {
+  grid-column: 1 / 3;
+  grid-row: 2 / 3;
+}
+
+.one-push-button {
+  height: 100%;
+  width: 100%;
+  padding: 10px 15px;
+  background: linear-gradient(135deg, #4169e1, #5e81f4);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(65, 105, 225, 0.25);
+  transition: all 0.3s ease;
+}
+
+.one-push-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(65, 105, 225, 0.35);
+  background: linear-gradient(135deg, #3a5ecc, #4b6edf);
+}
+
+.one-push-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(65, 105, 225, 0.2);
+}
+
+.one-push-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.one-push-icon {
+  font-size: 24px;
+  margin-right: 10px;
+}
+
+.one-push-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.one-push-title {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.one-push-desc {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-top: 4px;
 }
 
 .pushing-text {
@@ -2744,6 +2837,141 @@ git config --global user.email "your.email@example.com"</pre>
 
 .actions-section {
   padding: 0;
+}
+
+.center-button-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  position: relative;
+}
+
+.button-divider {
+  height: 1px;
+  background: linear-gradient(to right, rgba(220, 223, 230, 0), rgba(220, 223, 230, 1), rgba(220, 223, 230, 0));
+  flex: 1;
+  margin: 0 15px;
+}
+
+.one-push-button {
+  padding: 0 25px;
+  min-width: 160px;
+  height: 40px;
+  font-weight: 500;
+  border-radius: 20px;
+  box-shadow: 0 2px 6px rgba(65, 105, 225, 0.3);
+  transition: all 0.3s;
+  position: relative;
+  z-index: 2;
+}
+
+.one-push-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(65, 105, 225, 0.4);
+}
+
+.action-separator {
+  position: relative;
+  text-align: center;
+  margin: 12px 0;
+  height: 20px;
+}
+
+.separator-text {
+  background-color: #f5f7fa;
+  padding: 0 10px;
+  font-size: 12px;
+  color: #909399;
+  position: relative;
+  z-index: 1;
+}
+
+.action-separator::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: #e4e7ed;
+  z-index: 0;
+}
+
+.one-push-container {
+  display: flex;
+  justify-content: center;
+}
+
+.one-push-button {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #4169e1, #5e81f4);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(65, 105, 225, 0.25);
+  transition: all 0.3s ease;
+}
+
+.one-push-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(65, 105, 225, 0.35);
+  background: linear-gradient(135deg, #3a5ecc, #4b6edf);
+}
+
+.one-push-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(65, 105, 225, 0.2);
+}
+
+.one-push-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.one-push-icon {
+  font-size: 20px;
+  margin-right: 10px;
+}
+
+.one-push-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.one-push-title {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.one-push-desc {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.button-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.button-row .el-button {
+  flex: 1;
+  min-width: 100px;
+}
+
+/* 移除之前的样式 */
+.center-button-container,
+.button-divider {
+  display: none;
 }
 </style>
 
