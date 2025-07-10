@@ -815,7 +815,7 @@ const canPush = computed(() => {
   // 1. 如果分支有上游并且领先提交，可以推送
   // 2. 如果有已暂存的更改但未提交，不能推送
   // 3. 如果有已提交未推送的更改，可以推送
-  return gitStore.hasUpstream && (needsPush.value || (hasStagedChanges.value && finalCommitMessage.value.trim()));
+  return gitStore.hasUpstream && needsPush.value && !hasStagedChanges.value;
 });
 
 const canReset = computed(() => {
