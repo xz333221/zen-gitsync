@@ -493,6 +493,16 @@ async function publishToNpm() {
       return;
     }
     
+    // 切换到官方npm registry
+    console.log(chalk.gray('切换到官方npm registry...'));
+    try {
+      execSync('nrm use npm', { stdio: 'inherit' });
+      console.log(chalk.green('已切换到官方npm registry'));
+    } catch (error) {
+      console.error(chalk.yellow('切换npm registry失败:'), error);
+      console.log(chalk.yellow('继续使用当前registry发布...'));
+    }
+    
     // 执行npm发布
     console.log(chalk.gray('执行npm发布...'));
     try {
