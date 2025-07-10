@@ -1308,7 +1308,7 @@ git config --global user.email "your.email@example.com"</pre>
                 <!-- <div class="preview-title">提交信息预览：</div>
                 <pre class="preview-content">{{ finalCommitMessage }}</pre> -->
 
-                <div class="preview-title" style="margin-top: 10px;">Git提交命令预览：</div>
+                <div class="preview-title">Git提交命令预览：</div>
                 <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
               </div>
               
@@ -2079,14 +2079,14 @@ git config --global user.email "your.email@example.com"</pre>
 .standard-commit-form {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 8px;
   margin-bottom: 15px;
 }
 
 .standard-commit-header {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   width: 100%;
 }
 
@@ -2106,6 +2106,12 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
   gap: 5px;
   width: 65%; /* 作用域占65%宽度 */
+}
+
+.commit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .description-container {
@@ -2405,7 +2411,7 @@ git config --global user.email "your.email@example.com"</pre>
 /* 表单底部操作按钮样式 */
 .form-bottom-actions {
   display: block;
-  padding: 12px;
+  padding: 8px; /* 从12px减少到8px */
   background-color: #f5f7fa;
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -2419,7 +2425,7 @@ git config --global user.email "your.email@example.com"</pre>
 .actions-flex-container {
   display: flex;
   justify-content: space-between;
-  gap: 15px;
+  gap: 10px; /* 从15px减少到10px */
   width: 100%;
 }
 
@@ -2440,7 +2446,7 @@ git config --global user.email "your.email@example.com"</pre>
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  gap: 8px;
+  gap: 6px; /* 从8px减少到6px */
   width: 100%;
   height: 100%;
 }
