@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { execGitCommand, getCommandHistory, registerSocketIO } from '../../utils/index.js';
+import { execGitCommand, getCommandHistory, clearCommandHistory, registerSocketIO } from '../../utils/index.js';
 import open from 'open';
 import config from '../../config.js';
 import chalk from 'chalk';
@@ -1755,6 +1755,12 @@ async function startUIServer(noOpen = false, savePort = false) {
       socket.emit('full_command_history', { history: fullHistory });
     });
     
+    // 清空命令历史
+    socket.on('clear_command_history', () => {
+      const result = clearCommandHistory();
+      socket.emit('command_history_cleared', { success: result });
+    });
+    
     // 客户端断开连接
     socket.on('disconnect', () => {
       console.log('客户端已断开连接:', socket.id);
@@ -1980,6 +1986,16 @@ async function startUIServer(noOpen = false, savePort = false) {
     console.error(`无法找到可用端口 (尝试范围: ${startPort}-${maxPort-1})`);
     process.exit(1);
   }
+  
+  // 添加命令历史的清空API
+  app.post('/api/clear-command-history', async (req, res) => {
+    try {
+      const result = clearCommandHistory();
+      res.json({ success: result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 }
 
 export default startUIServer;

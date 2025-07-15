@@ -76,12 +76,7 @@ const printTableWithHeaderUnderline = (head, content, style) => {
     // }
   });
 
-  // 向表格中添加不同颜色的行
-  // eg:
-  // table.push(
-  //   [chalk.red('张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三')],
-  //   [chalk.green('李四')],
-  // );
+  
   content.forEach(item => {
     table.push([item]);
   })
@@ -225,6 +220,19 @@ let ioInstance = null;
 // 提供注册Socket.io实例的函数
 function registerSocketIO(io) {
   ioInstance = io;
+}
+
+// 清空命令历史记录
+function clearCommandHistory() {
+  // 清空数组
+  commandHistory.length = 0;
+  
+  // 通过WebSocket广播历史已清空
+  if (ioInstance) {
+    ioInstance.emit('command_history_cleared');
+  }
+  
+  return true;
 }
 
 function execGitCommand(command, options = {}) {
@@ -744,6 +752,7 @@ async function addResetScriptToPackageJson() {
 export {
   coloredLog, errorLog, execSyncGitCommand,
   execGitCommand, getCommandHistory, // Add this export
+  clearCommandHistory,
   registerSocketIO, // 导出注册Socket.io的函数
   getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
   judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,

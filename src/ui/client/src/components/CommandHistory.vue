@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import { ElMessage } from 'element-plus';
-import { RefreshRight, CopyDocument, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { Delete, CopyDocument, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import { useGitStore } from '../stores/gitStore';
 
 // 获取Git Store以访问Socket实例
@@ -22,6 +22,7 @@ interface CommandHistoryItem {
 
 const commandHistory = ref<CommandHistoryItem[]>([]);
 const isLoading = ref(false);
+const isClearingHistory = ref(false);
 const hasSocketConnection = ref(false);
 const expandedItems = ref<Set<number>>(new Set());
 
@@ -48,6 +49,53 @@ async function loadHistory() {
     ElMessage.error(`加载命令历史失败: ${(error as Error).message}`);
   } finally {
     isLoading.value = false;
+  }
+}
+
+// 清空命令历史记录
+async function clearCommandHistory() {
+  try {
+    // 先确认是否要清空
+    await ElMessageBox.confirm(
+      '确定要清空所有命令历史记录吗？此操作不可恢复。',
+      '清空命令历史',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+    
+    isClearingHistory.value = true;
+    
+    // 优先使用WebSocket
+    if (gitStore.socket && gitStore.socket.connected) {
+      gitStore.socket.emit('clear_command_history');
+    } else {
+      // 后备方案：使用HTTP API
+      const response = await fetch('/api/clear-command-history', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        commandHistory.value = [];
+        ElMessage.success('命令历史已清空');
+      } else {
+        ElMessage.error(`清空命令历史失败: ${result.error}`);
+      }
+    }
+  } catch (error: any) {
+    // 用户取消操作不显示错误
+    if (error !== 'cancel' && error.toString() !== 'Error: cancel') {
+      ElMessage.error(`清空命令历史失败: ${error.message}`);
+    }
+  } finally {
+    isClearingHistory.value = false;
   }
 }
 
@@ -114,7 +162,6 @@ function initSocketListeners() {
   
   // 监听初始命令历史
   gitStore.socket.on('initial_command_history', (data: { history: CommandHistoryItem[] }) => {
-    console.log(`监听初始命令历史 data ==>`, data);
     commandHistory.value = data.history;
     hasSocketConnection.value = true;
   });
@@ -142,6 +189,15 @@ function initSocketListeners() {
     hasSocketConnection.value = true;
   });
   
+  // 监听历史清空事件
+  gitStore.socket.on('command_history_cleared', (data: { success: boolean }) => {
+    if (data.success) {
+      commandHistory.value = [];
+      ElMessage.success('命令历史已清空');
+    }
+    isClearingHistory.value = false;
+  });
+  
   // 监听Socket连接/断开事件
   gitStore.socket.on('connect', () => {
     hasSocketConnection.value = true;
@@ -160,6 +216,7 @@ function cleanupSocketListeners() {
     gitStore.socket.off('initial_command_history');
     gitStore.socket.off('command_history_update');
     gitStore.socket.off('full_command_history');
+    gitStore.socket.off('command_history_cleared');
   }
 }
 
@@ -167,6 +224,12 @@ function cleanupSocketListeners() {
 onMounted(() => {
   // 初始化Socket.io监听器
   initSocketListeners();
+  
+  // 确保Socket已初始化
+  if (!gitStore.socket) {
+    console.log('尝试初始化Socket连接');
+    gitStore.initSocketConnection();
+  }
   
   // 加载历史记录
   loadHistory();
@@ -192,14 +255,14 @@ onUnmounted(() => {
           {{ hasSocketConnection ? '实时更新' : '未连接' }}
         </el-tag>
         <el-button 
-          type="primary" 
-          :icon="RefreshRight" 
+          type="danger" 
+          :icon="Delete" 
           circle 
           size="small" 
-          @click="loadHistory" 
-          :loading="isLoading"
-          class="refresh-button"
-          title="手动刷新历史记录"
+          @click="clearCommandHistory" 
+          :loading="isClearingHistory"
+          class="clear-button"
+          title="清空命令历史"
         />
       </div>
     </div>
@@ -337,12 +400,14 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.refresh-button {
+.clear-button {
   transition: all 0.3s;
 }
 
-.refresh-button:hover {
-  transform: rotate(180deg);
+.clear-button:hover {
+  transform: rotate(12deg);
+  background-color: #ff4d4f;
+  border-color: #ff4d4f;
 }
 
 .card-content {
