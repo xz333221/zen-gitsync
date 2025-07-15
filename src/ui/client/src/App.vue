@@ -3,6 +3,7 @@ import { ref, onMounted, h } from 'vue'
 import GitStatus from './components/GitStatus.vue'
 import CommitForm from './components/CommitForm.vue'
 import LogList from './components/LogList.vue'
+import CommandHistory from './components/CommandHistory.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Setting, Folder } from '@element-plus/icons-vue'
 import logo from './assets/logo.svg'
@@ -175,11 +176,13 @@ async function clearUserSettings() {
 
 // 添加分隔条相关逻辑
 let isVResizing = false;
+let isVBottomResizing = false;
 let isHResizing = false;
 let initialX = 0;
 let initialY = 0;
 let initialGridTemplateColumns = '';
 let initialGridTemplateRows = '';
+let activeResizer = null;
 
 // 保存布局比例到localStorage
 function saveLayoutRatios() {
@@ -208,6 +211,12 @@ function saveLayoutRatios() {
     localStorage.setItem('zen-gitsync-layout-top-ratio', topRatio.toString());
 
     console.log(`布局比例已保存 - 左侧: ${(leftRatio * 100).toFixed(0)}%, 上方: ${(topRatio * 100).toFixed(0)}%`);
+    
+    // 保存底部左右区域比例
+    // 注意：底部的列布局与顶部相同，但需要单独保存以防将来改为不同布局
+    localStorage.setItem('zen-gitsync-layout-bottom-left-ratio', leftRatio.toString());
+    
+    console.log(`底部布局比例已保存 - 左侧: ${(leftRatio * 100).toFixed(0)}%`);
   }
 }
 
@@ -219,6 +228,7 @@ function loadLayoutRatios() {
   // 从localStorage获取保存的比例
   const savedLeftRatio = localStorage.getItem('zen-gitsync-layout-left-ratio');
   const savedTopRatio = localStorage.getItem('zen-gitsync-layout-top-ratio');
+  const savedBottomLeftRatio = localStorage.getItem('zen-gitsync-layout-bottom-left-ratio');
 
   // 应用左右区域比例
   if (savedLeftRatio) {
@@ -238,16 +248,32 @@ function loadLayoutRatios() {
     gridLayout.style.gridTemplateRows = `${topRatio}fr 8px ${bottomRatio}fr`;
     console.log(`已恢复上方比例: ${(topRatio * 100).toFixed(0)}%`);
   }
+  
+  // 注意：底部的列布局与顶部相同，使用相同的gridTemplateColumns，
+  // 但如果将来需要独立控制，可以使用savedBottomLeftRatio
 }
 
 function startVResize(event: MouseEvent) {
-  isVResizing = true;
+  // 记录当前操作的分隔条
+  const target = event.currentTarget as HTMLElement;
+  if (!target || !target.id) return;
+  
+  activeResizer = target.id;
+  
+  // 根据分隔条位置，设置不同的状态
+  if (activeResizer === 'v-resizer') {
+    isVResizing = true;
+  } else if (activeResizer === 'v-resizer-bottom') {
+    isVBottomResizing = true;
+  }
+  
   initialX = event.clientX;
 
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   initialGridTemplateColumns = getComputedStyle(gridLayout).gridTemplateColumns;
 
-  document.getElementById('v-resizer')?.classList.add('active');
+  // 标记当前激活的分隔条
+  document.getElementById(activeResizer)?.classList.add('active');
 
   document.addEventListener('mousemove', handleVResize);
   document.addEventListener('mouseup', stopVResize);
@@ -257,7 +283,7 @@ function startVResize(event: MouseEvent) {
 }
 
 function handleVResize(event: MouseEvent) {
-  if (!isVResizing) return;
+  if (!isVResizing && !isVBottomResizing) return;
 
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   const delta = event.clientX - initialX;
@@ -292,7 +318,12 @@ function handleVResize(event: MouseEvent) {
 
 function stopVResize() {
   isVResizing = false;
+  isVBottomResizing = false;
+  
+  // 移除所有分隔条的active类
   document.getElementById('v-resizer')?.classList.remove('active');
+  document.getElementById('v-resizer-bottom')?.classList.remove('active');
+  
   document.removeEventListener('mousemove', handleVResize);
   document.removeEventListener('mouseup', stopVResize);
 
@@ -777,7 +808,15 @@ async function selectDirectory(dirPath: string) {
       <!-- 水平分隔条 -->
       <div class="horizontal-resizer" id="h-resizer" @mousedown="startHResize"></div>
 
-      <!-- 下方提交历史 -->
+      <!-- 下方左侧命令历史 -->
+      <div class="command-history-panel" v-if="gitStore.isGitRepo">
+        <CommandHistory />
+      </div>
+
+      <!-- 垂直分隔条(下方) -->
+      <div class="vertical-resizer-bottom" id="v-resizer-bottom" @mousedown="startVResize"></div>
+
+      <!-- 下方右侧提交历史 -->
       <div class="log-list-panel" v-if="gitStore.isGitRepo">
         <LogList ref="logListRef" />
       </div>
@@ -938,7 +977,7 @@ body {
   grid-template-areas:
     "git-status v-resizer commit-form"
     "h-resizer h-resizer h-resizer"
-    "log-list log-list log-list";
+    "command-history v-resizer-bottom log-list";
   gap: 6px; /* 从10px减少到6px */
   height: 100%;
 }
@@ -959,6 +998,13 @@ body {
 
 .log-list-panel {
   grid-area: log-list;
+  overflow: hidden;
+  max-height: 100%;
+  padding: 0;
+}
+
+.command-history-panel {
+  grid-area: command-history;
   overflow: hidden;
   max-height: 100%;
   padding: 0;
@@ -1176,12 +1222,14 @@ h1 {
 @media (max-width: 768px) {
   .grid-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto auto;
+    grid-template-rows: auto auto auto auto auto auto auto;
     grid-template-areas:
       "git-status"
       "v-resizer"
       "commit-form"
       "h-resizer"
+      "command-history"
+      "v-resizer-bottom"
       "log-list";
     gap: 10px;
   }
@@ -1198,6 +1246,7 @@ h1 {
 
   .git-status-panel,
   .commit-form-panel,
+  .command-history-panel,
   .log-list-panel {
     padding: 0;
     max-height: none;
@@ -1211,8 +1260,12 @@ h1 {
     max-height: 30vh;
   }
 
+  .command-history-panel {
+    max-height: 30vh;
+  }
+
   .log-list-panel {
-    max-height: 40vh;
+    max-height: 30vh;
   }
 }
 </style>
@@ -1386,6 +1439,43 @@ h1 {
 .horizontal-resizer.active::after {
   background-color: #409EFF;
   height: 3px; /* 从6px减少到3px */
+  box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
+}
+
+.vertical-resizer-bottom {
+  grid-area: v-resizer-bottom;
+  background-color: #e8e8e8;
+  cursor: col-resize;
+  transition: background-color 0.2s, box-shadow 0.2s;
+  position: relative;
+  z-index: 10;
+  border-radius: 4px; /* 从8px减少到4px */
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.1); /* 减小阴影 */
+}
+
+.vertical-resizer-bottom::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px; /* 从4px减少到2px */
+  height: 40px; /* 从50px减少到40px */
+  background-color: #a0a0a0;
+  border-radius: 2px; /* 从4px减少到2px */
+  transition: background-color 0.2s, width 0.2s, box-shadow 0.2s;
+}
+
+.vertical-resizer-bottom:hover,
+.vertical-resizer-bottom.active {
+  background-color: #d0d0d0;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2); /* 减小阴影 */
+}
+
+.vertical-resizer-bottom:hover::after,
+.vertical-resizer-bottom.active::after {
+  background-color: #409EFF;
+  width: 3px; /* 从6px减少到3px */
   box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
 }
 

@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { execGitCommand } from '../../utils/index.js';
+import { execGitCommand, getCommandHistory, registerSocketIO } from '../../utils/index.js';
 import open from 'open';
 import config from '../../config.js';
 import chalk from 'chalk';
@@ -28,6 +28,9 @@ async function startUIServer(noOpen = false, savePort = false) {
   const httpServer = createServer(app);
   const io = new Server(httpServer);
   
+  // 注册Socket.io实例，用于命令历史通知
+  registerSocketIO(io);
+  
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
   
@@ -50,6 +53,17 @@ async function startUIServer(noOpen = false, savePort = false) {
       res.status(500).json({ error: error.message });
     }
   });
+  
+  // Add new endpoint for command history
+  app.get('/api/command-history', async (req, res) => {
+    try {
+      const history = getCommandHistory();
+      res.json({ success: true, history });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
   app.get('/api/status_porcelain', async (req, res) => {
     try {
       const { stdout } = await execGitCommand('git status --porcelain --untracked-files=all');
@@ -1715,6 +1729,10 @@ async function startUIServer(noOpen = false, savePort = false) {
     // 当客户端连接时，立即发送一次Git状态
     getAndBroadcastStatus();
     
+    // 发送当前命令历史
+    const history = getCommandHistory();
+    socket.emit('initial_command_history', { history });
+    
     // 客户端可以请求开始/停止监控
     socket.on('start_monitoring', () => {
       if (!watcher) {
@@ -1729,6 +1747,12 @@ async function startUIServer(noOpen = false, savePort = false) {
         watcher = null;
         socket.emit('monitoring_status', { active: false });
       }
+    });
+    
+    // 请求完整命令历史
+    socket.on('request_full_history', () => {
+      const fullHistory = getCommandHistory();
+      socket.emit('full_command_history', { history: fullHistory });
     });
     
     // 客户端断开连接

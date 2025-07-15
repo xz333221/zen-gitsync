@@ -79,7 +79,7 @@ const printTableWithHeaderUnderline = (head, content, style) => {
   // 向表格中添加不同颜色的行
   // eg:
   // table.push(
-  //   [chalk.red('张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三')],
+  //   [chalk.red('张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三张三')],
   //   [chalk.green('李四')],
   // );
   content.forEach(item => {
@@ -214,10 +214,26 @@ function execSyncGitCommand(command, options = {}) {
   }
 }
 
+// Add a command history array to store commands and their results
+const commandHistory = [];
+const MAX_HISTORY_SIZE = 100;
+const MAX_OUTPUT_LENGTH = 5000; // Limit the output length to avoid memory issues
+
+// 添加一个变量来保存Socket.io实例
+let ioInstance = null;
+
+// 提供注册Socket.io实例的函数
+function registerSocketIO(io) {
+  ioInstance = io;
+}
+
 function execGitCommand(command, options = {}) {
   return new Promise((resolve, reject) => {
     let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
     let cwd = getCwd()
+    
+    // Record start time for command execution
+    const startTime = Date.now();
 
     // setTimeout(() => {
     exec(command, {
@@ -233,6 +249,52 @@ function execGitCommand(command, options = {}) {
     }, (error, stdout, stderr) => {
       if (options.spinner) {
         options.spinner.stop();
+      }
+      
+      // Calculate execution time
+      const executionTime = Date.now() - startTime;
+
+      // Truncate long outputs
+      let truncatedStdout = stdout;
+      let truncatedStderr = stderr;
+      let isStdoutTruncated = false;
+      let isStderrTruncated = false;
+      
+      if (stdout && stdout.length > MAX_OUTPUT_LENGTH) {
+        truncatedStdout = stdout.substring(0, MAX_OUTPUT_LENGTH) + '\n... (output truncated)';
+        isStdoutTruncated = true;
+      }
+      
+      if (stderr && stderr.length > MAX_OUTPUT_LENGTH) {
+        truncatedStderr = stderr.substring(0, MAX_OUTPUT_LENGTH) + '\n... (error output truncated)';
+        isStderrTruncated = true;
+      }
+
+      // Add command to history
+      const historyItem = {
+        command,
+        stdout: truncatedStdout || '',
+        stderr: truncatedStderr || '',
+        error: error ? error.message : null,
+        executionTime,
+        timestamp: new Date().toISOString(),
+        success: !error,
+        isStdoutTruncated,
+        isStderrTruncated
+      };
+      
+      // Add to history (limited size)
+      commandHistory.unshift(historyItem);
+      if (commandHistory.length > MAX_HISTORY_SIZE) {
+        commandHistory.pop();
+      }
+      
+      // 通过WebSocket广播命令历史更新
+      if (ioInstance) {
+        ioInstance.emit('command_history_update', { 
+          newCommand: historyItem,
+          fullHistory: commandHistory.slice(0, 10) // 只发送最近10条以减小数据量
+        });
       }
 
       if (stdout) {
@@ -252,8 +314,12 @@ function execGitCommand(command, options = {}) {
       })
     })
     // }, 1000)
-
   })
+}
+
+// Function to get command history
+function getCommandHistory() {
+  return [...commandHistory];
 }
 
 const getCwd = () => {
@@ -677,7 +743,9 @@ async function addResetScriptToPackageJson() {
 
 export {
   coloredLog, errorLog, execSyncGitCommand,
-  execGitCommand, getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
+  execGitCommand, getCommandHistory, // Add this export
+  registerSocketIO, // 导出注册Socket.io的函数
+  getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
   judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,
   exec_push, execPull, judgeRemote, execDiff, execAddAndCommit,
   addScriptToPackageJson, addResetScriptToPackageJson

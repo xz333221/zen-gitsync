@@ -1,0 +1,524 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
+import { ElMessage } from 'element-plus';
+import { RefreshRight, CopyDocument, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
+import { useGitStore } from '../stores/gitStore';
+
+// 获取Git Store以访问Socket实例
+const gitStore = useGitStore();
+
+// Define the structure of a command history item
+interface CommandHistoryItem {
+  command: string;
+  stdout: string;
+  stderr: string;
+  error: string | null;
+  executionTime: number;
+  timestamp: string;
+  success: boolean;
+  isStdoutTruncated: boolean;
+  isStderrTruncated: boolean;
+}
+
+const commandHistory = ref<CommandHistoryItem[]>([]);
+const isLoading = ref(false);
+const hasSocketConnection = ref(false);
+const expandedItems = ref<Set<number>>(new Set());
+
+// 加载命令历史 - 仅用于初始加载或手动刷新
+async function loadHistory() {
+  try {
+    isLoading.value = true;
+    
+    if (gitStore.socket && gitStore.socket.connected) {
+      // 通过WebSocket请求完整历史
+      gitStore.socket.emit('request_full_history');
+    } else {
+      // 作为后备，使用HTTP接口获取
+      const response = await fetch('/api/command-history');
+      const result = await response.json();
+      
+      if (result.success) {
+        commandHistory.value = result.history;
+      } else {
+        ElMessage.error(`加载命令历史失败: ${result.error}`);
+      }
+    }
+  } catch (error) {
+    ElMessage.error(`加载命令历史失败: ${(error as Error).message}`);
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+// Format timestamp to a more readable format
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  return date.toLocaleString();
+}
+
+// Format execution time
+function formatExecutionTime(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  } else {
+    return `${(ms / 1000).toFixed(2)}s`;
+  }
+}
+
+// Toggle expansion of a command result
+function toggleExpand(index: number) {
+  if (expandedItems.value.has(index)) {
+    expandedItems.value.delete(index);
+  } else {
+    expandedItems.value.add(index);
+  }
+}
+
+// Check if a command is expanded
+function isExpanded(index: number): boolean {
+  return expandedItems.value.has(index);
+}
+
+// Copy command to clipboard
+async function copyCommand(command: string) {
+  try {
+    await navigator.clipboard.writeText(command);
+    ElMessage.success('命令已复制到剪贴板');
+  } catch (error) {
+    ElMessage.error(`复制失败: ${(error as Error).message}`);
+  }
+}
+
+// Copy output to clipboard
+async function copyOutput(item: CommandHistoryItem) {
+  try {
+    let outputText = '';
+    if (item.stdout) outputText += `标准输出:\n${item.stdout}\n\n`;
+    if (item.stderr) outputText += `错误输出:\n${item.stderr}\n\n`;
+    if (item.error) outputText += `错误信息:\n${item.error}`;
+    
+    await navigator.clipboard.writeText(outputText.trim());
+    ElMessage.success('输出已复制到剪贴板');
+  } catch (error) {
+    ElMessage.error(`复制失败: ${(error as Error).message}`);
+  }
+}
+
+// 初始化WebSocket监听
+function initSocketListeners() {
+  if (!gitStore.socket) {
+    console.error('Socket实例不可用');
+    return;
+  }
+  
+  // 监听初始命令历史
+  gitStore.socket.on('initial_command_history', (data: { history: CommandHistoryItem[] }) => {
+    console.log(`监听初始命令历史 data ==>`, data);
+    commandHistory.value = data.history;
+    hasSocketConnection.value = true;
+  });
+  
+  // 监听命令历史更新
+  gitStore.socket.on('command_history_update', (data: { 
+    newCommand: CommandHistoryItem,
+    fullHistory: CommandHistoryItem[]
+  }) => {
+    // 将新命令添加到历史记录的开头
+    commandHistory.value.unshift(data.newCommand);
+    
+    // 确保不超过100条记录
+    if (commandHistory.value.length > 100) {
+      commandHistory.value.pop();
+    }
+    
+    hasSocketConnection.value = true;
+  });
+  
+  // 监听完整历史响应
+  gitStore.socket.on('full_command_history', (data: { history: CommandHistoryItem[] }) => {
+    commandHistory.value = data.history;
+    isLoading.value = false;
+    hasSocketConnection.value = true;
+  });
+  
+  // 监听Socket连接/断开事件
+  gitStore.socket.on('connect', () => {
+    hasSocketConnection.value = true;
+    ElMessage.success('已连接到实时命令历史');
+  });
+  
+  gitStore.socket.on('disconnect', () => {
+    hasSocketConnection.value = false;
+    ElMessage.warning('实时命令历史连接已断开');
+  });
+}
+
+// 清除WebSocket监听器
+function cleanupSocketListeners() {
+  if (gitStore.socket) {
+    gitStore.socket.off('initial_command_history');
+    gitStore.socket.off('command_history_update');
+    gitStore.socket.off('full_command_history');
+  }
+}
+
+// Load history on component mount
+onMounted(() => {
+  // 初始化Socket.io监听器
+  initSocketListeners();
+  
+  // 加载历史记录
+  loadHistory();
+});
+
+// 清理工作
+onUnmounted(() => {
+  cleanupSocketListeners();
+});
+</script>
+
+<template>
+  <div class="card">
+    <div class="card-header">
+      <h2>Git 命令历史</h2>
+      <div class="header-actions">
+        <el-tag 
+          :type="hasSocketConnection ? 'success' : 'danger'" 
+          size="small" 
+          effect="dark"
+          class="socket-status"
+        >
+          {{ hasSocketConnection ? '实时更新' : '未连接' }}
+        </el-tag>
+        <el-button 
+          type="primary" 
+          :icon="RefreshRight" 
+          circle 
+          size="small" 
+          @click="loadHistory" 
+          :loading="isLoading"
+          class="refresh-button"
+          title="手动刷新历史记录"
+        />
+      </div>
+    </div>
+    
+    <div class="card-content">
+      <div v-if="isLoading && commandHistory.length === 0" class="loading-state">
+        <el-icon class="loading-icon is-loading">
+          <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <path fill="currentColor"
+              d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32zM195.2 195.2a32 32 0 0 1 45.248 0L376.32 331.008a32 32 0 0 1-45.248 45.248L195.2 240.448a32 32 0 0 1 0-45.248zm452.544 452.544a32 32 0 0 1 45.248 0L828.8 783.552a32 32 0 0 1-45.248 45.248L647.744 692.992a32 32 0 0 1 0-45.248zM828.8 195.264a32 32 0 0 1 0 45.184L692.992 376.32a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0zm-452.544 452.48a32 32 0 0 1 0 45.248L240.448 828.8a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0z">
+            </path>
+          </svg>
+        </el-icon>
+        <div class="loading-text">加载命令历史...</div>
+      </div>
+      
+      <el-empty v-else-if="commandHistory.length === 0" description="暂无命令历史" />
+      
+      <div v-else class="history-list">
+        <div v-for="(item, index) in commandHistory" :key="index" class="history-item" :class="{ 'is-error': !item.success }">
+          <div class="item-header" @click="toggleExpand(index)">
+            <div class="command-info">
+              <div class="command-text">
+                <el-tag size="small" :type="item.success ? 'success' : 'danger'" effect="dark" class="status-tag">
+                  {{ item.success ? '成功' : '失败' }}
+                </el-tag>
+                <code>{{ item.command }}</code>
+              </div>
+              <div class="command-meta">
+                <span class="timestamp">{{ formatTimestamp(item.timestamp) }}</span>
+                <span class="duration">耗时: {{ formatExecutionTime(item.executionTime) }}</span>
+              </div>
+            </div>
+            <div class="item-actions">
+              <el-button 
+                type="primary" 
+                :icon="CopyDocument" 
+                circle 
+                size="small" 
+                @click.stop="copyCommand(item.command)"
+                title="复制命令"
+              />
+              <el-button 
+                :type="isExpanded(index) ? 'primary' : 'default'" 
+                :icon="isExpanded(index) ? ArrowUp : ArrowDown" 
+                circle 
+                size="small" 
+                @click.stop="toggleExpand(index)"
+                title="展开/收起"
+              />
+            </div>
+          </div>
+          
+          <div v-if="isExpanded(index)" class="item-details">
+            <div v-if="item.stdout" class="output-section">
+              <div class="output-header">
+                <h4>标准输出</h4>
+                <el-button 
+                  type="primary" 
+                  :icon="CopyDocument" 
+                  circle 
+                  size="small" 
+                  @click="copyOutput(item)"
+                  title="复制输出"
+                />
+              </div>
+              <pre class="output-content">{{ item.stdout }}</pre>
+              <div v-if="item.isStdoutTruncated" class="truncation-notice">
+                <el-alert type="info" :closable="false" show-icon>
+                  输出内容过长已被截断，请直接执行命令查看完整输出
+                </el-alert>
+              </div>
+            </div>
+            
+            <div v-if="item.stderr" class="output-section error">
+              <div class="output-header">
+                <h4>错误输出</h4>
+              </div>
+              <pre class="output-content">{{ item.stderr }}</pre>
+              <div v-if="item.isStderrTruncated" class="truncation-notice">
+                <el-alert type="info" :closable="false" show-icon>
+                  错误输出内容过长已被截断，请直接执行命令查看完整输出
+                </el-alert>
+              </div>
+            </div>
+            
+            <div v-if="item.error" class="output-section error">
+              <div class="output-header">
+                <h4>错误信息</h4>
+              </div>
+              <pre class="output-content">{{ item.error }}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 8px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.socket-status {
+  font-size: 12px;
+}
+
+.refresh-button {
+  transition: all 0.3s;
+}
+
+.refresh-button:hover {
+  transform: rotate(180deg);
+}
+
+.card-content {
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 100px;
+}
+
+.loading-icon {
+  font-size: 36px;
+  color: #409EFF;
+  margin-bottom: 10px;
+}
+
+.loading-text {
+  font-size: 14px;
+  color: #606266;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  transition: all 0.2s;
+  background-color: #f8f9fa;
+  overflow: hidden;
+}
+
+.history-item:hover {
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.history-item.is-error {
+  border-left: 3px solid #f56c6c;
+}
+
+.item-header {
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.item-header:hover {
+  background-color: #f0f2f5;
+}
+
+.command-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.command-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.command-text code {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.command-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.timestamp {
+  white-space: nowrap;
+}
+
+.duration {
+  white-space: nowrap;
+}
+
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.item-details {
+  padding: 10px 12px;
+  border-top: 1px solid #ebeef5;
+  background-color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.output-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.output-section.error {
+  border-left: 3px solid #f56c6c;
+  padding-left: 8px;
+}
+
+.output-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.output-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #606266;
+}
+
+.output-content {
+  background-color: #f8f9fa;
+  padding: 10px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #ebeef5;
+}
+
+.status-tag {
+  flex-shrink: 0;
+}
+
+.truncation-notice {
+  margin-top: 6px;
+}
+
+/* Custom scrollbar for output-content */
+.output-content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.output-content::-webkit-scrollbar-thumb {
+  background-color: #c0c4cc;
+  border-radius: 3px;
+}
+
+.output-content::-webkit-scrollbar-track {
+  background-color: #f5f7fa;
+}
+</style> 

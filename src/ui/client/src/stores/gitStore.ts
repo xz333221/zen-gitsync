@@ -67,6 +67,9 @@ export const useGitStore = defineStore('git', () => {
   // 自动更新状态开关
   const autoUpdateEnabled = ref(true)
   
+  // Socket.io 实例
+  const socketRef = ref<Socket | null>(null);
+  
   // 状态
   const log = ref<any[]>([])
   const status = ref<{ staged: string[], unstaged: string[], untracked: string[] }>({
@@ -507,8 +510,8 @@ export const useGitStore = defineStore('git', () => {
   // Socket.io连接处理
   function initSocketConnection() {
     // 如果已经有socket连接，先断开
-    if (socket) {
-      socket.disconnect()
+    if (socketRef.value) {
+      socketRef.value.disconnect()
     }
     
     // 创建新连接
@@ -518,7 +521,7 @@ export const useGitStore = defineStore('git', () => {
       
       console.log('尝试连接Socket.IO服务器:', backendUrl)
       
-      socket = io(backendUrl, {
+      socketRef.value = io(backendUrl, {
         reconnectionDelayMax: 10000,
         reconnection: true,
         reconnectionAttempts: 10,
@@ -530,29 +533,29 @@ export const useGitStore = defineStore('git', () => {
       })
       
       // 检查socket是否成功创建
-      if (!socket) {
+      if (!socketRef.value) {
         console.error('Socket.IO初始化失败: socket为null')
         return
       }
-      console.log('Socket.IO初始化成功，socket ID:', socket.id || '未连接')
+      console.log('Socket.IO初始化成功，socket ID:', socketRef.value.id || '未连接')
 
       // 监听连接事件
-      socket.on('connect', () => {
+      socketRef.value.on('connect', () => {
         console.log('成功连接到Socket.IO服务器')
         
         // 如果自动更新开启，向服务器请求开始监控
-        if (autoUpdateEnabled.value && socket) {
-          socket.emit('start_monitoring')
+        if (autoUpdateEnabled.value && socketRef.value) {
+          socketRef.value.emit('start_monitoring')
         }
       })
       
       // 监听断开连接事件
-      socket.on('disconnect', (reason) => {
+      socketRef.value.on('disconnect', (reason) => {
         console.log('与Socket.IO服务器断开连接:', reason)
       })
       
       // 监听Git状态更新事件
-      socket.on('git_status_update', (data) => {
+      socketRef.value.on('git_status_update', (data) => {
         if (!autoUpdateEnabled.value) return
         
         console.log('收到Git状态更新通知:', new Date().toLocaleTimeString())
@@ -569,45 +572,45 @@ export const useGitStore = defineStore('git', () => {
       })
       
       // 监听监控状态
-      socket.on('monitoring_status', (data) => {
+      socketRef.value.on('monitoring_status', (data) => {
         console.log('文件监控状态:', data.active ? '已启动' : '已停止')
       })
       
       // 添加额外的连接问题诊断
-      socket.on('connect_error', (error) => {
+      socketRef.value.on('connect_error', (error) => {
         console.error('Socket连接错误:', error.message)
       })
       
-      socket.on('connect_timeout', () => {
+      socketRef.value.on('connect_timeout', () => {
         console.error('Socket连接超时')
       })
       
-      socket.on('reconnect', (attemptNumber) => {
+      socketRef.value.on('reconnect', (attemptNumber) => {
         console.log(`Socket重连成功，尝试次数: ${attemptNumber}`)
         
         // 重连后检查自动更新状态
         if (autoUpdateEnabled.value) {
           console.log('重连后重新发送start_monitoring请求')
-          socket?.emit('start_monitoring')
+          socketRef.value?.emit('start_monitoring')
         }
       })
       
-      socket.on('reconnect_attempt', (attemptNumber) => {
+      socketRef.value.on('reconnect_attempt', (attemptNumber) => {
         console.log(`Socket尝试重连，第 ${attemptNumber} 次尝试`)
       })
       
-      socket.on('reconnect_error', (error) => {
+      socketRef.value.on('reconnect_error', (error) => {
         console.error('Socket重连错误:', error.message)
       })
       
-      socket.on('reconnect_failed', () => {
+      socketRef.value.on('reconnect_failed', () => {
         console.error('Socket重连失败，已达到最大重试次数')
       })
       
       // 手动尝试连接
-      if (socket && !socket.connected) {
+      if (socketRef.value && !socketRef.value.connected) {
         console.log('Socket未连接，尝试手动连接...')
-        socket.connect()
+        socketRef.value.connect()
       }
     } catch (error) {
       console.error('Socket.IO连接初始化失败:', error)
@@ -618,7 +621,7 @@ export const useGitStore = defineStore('git', () => {
   function toggleAutoUpdate() {
     console.log('toggleAutoUpdate调用，当前值:', autoUpdateEnabled.value)
     
-    if (!socket) {
+    if (!socketRef.value) {
       console.error('无法切换自动更新状态: socket连接不存在')
       ElMessage.error('无法连接到服务器，自动更新可能不会生效')
       
@@ -634,11 +637,11 @@ export const useGitStore = defineStore('git', () => {
     try {
       if (autoUpdateEnabled.value) {
         console.log('发送start_monitoring命令...')
-        socket.emit('start_monitoring')
+        socketRef.value.emit('start_monitoring')
         ElMessage.success('自动更新已启用')
       } else {
         console.log('发送stop_monitoring命令...')
-        socket.emit('stop_monitoring')
+        socketRef.value.emit('stop_monitoring')
         ElMessage.info('自动更新已禁用')
       }
       
@@ -1351,11 +1354,16 @@ export const useGitStore = defineStore('git', () => {
   })
   
   // 在组件卸载时断开socket连接
-  onUnmounted(() => {
-    if (socket) {
-      socket.disconnect()
-      socket = null
+  function disconnectSocket() {
+    if (socketRef.value) {
+      socketRef.value.disconnect();
+      socketRef.value = null;
     }
+  }
+
+  // 在组件卸载时断开socket连接
+  onUnmounted(() => {
+    disconnectSocket();
   })
 
   // 获取stash列表
@@ -1626,6 +1634,8 @@ export const useGitStore = defineStore('git', () => {
     saveStash,
     applyStash,
     dropStash,
-    clearAllStashes
+    clearAllStashes,
+    socket: socketRef,
+    disconnectSocket
   }
 }) 
