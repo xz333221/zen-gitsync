@@ -23,8 +23,11 @@ interface CommandHistoryItem {
 const commandHistory = ref<CommandHistoryItem[]>([]);
 const isLoading = ref(false);
 const isClearingHistory = ref(false);
+const isCopyingHistory = ref(false);
 const hasSocketConnection = ref(false);
 const expandedItems = ref<Set<number>>(new Set());
+// 添加新变量来跟踪复制命令列表的加载状态
+const isCopyingCommands = ref(false);
 
 // 加载命令历史 - 仅用于初始加载或手动刷新
 async function loadHistory() {
@@ -49,6 +52,72 @@ async function loadHistory() {
     ElMessage.error(`加载命令历史失败: ${(error as Error).message}`);
   } finally {
     isLoading.value = false;
+  }
+}
+
+// 复制所有命令历史
+async function copyAllHistory() {
+  if (commandHistory.value.length === 0) {
+    ElMessage.warning('没有可复制的命令历史');
+    return;
+  }
+  
+  try {
+    isCopyingHistory.value = true;
+    
+    // 格式化所有命令历史为文本
+    const historyText = commandHistory.value.map(item => {
+      // 基本格式：命令 + 时间 + 耗时 + 状态
+      let text = `# ${formatTimestamp(item.timestamp)} (耗时: ${formatExecutionTime(item.executionTime)}) - ${item.success ? '成功' : '失败'}\n`;
+      text += `${item.command}\n`;
+      
+      // 添加输出（如果需要）
+      if (item.stdout) {
+        text += `\n# 输出:\n${item.stdout}\n`;
+      }
+      
+      // 添加错误（如果有）
+      if (item.stderr) {
+        text += `\n# 错误输出:\n${item.stderr}\n`;
+      }
+      
+      if (item.error) {
+        text += `\n# 错误信息:\n${item.error}\n`;
+      }
+      
+      return text;
+    }).join('\n---\n\n');
+    
+    await navigator.clipboard.writeText(historyText);
+    ElMessage.success('命令历史已复制到剪贴板');
+  } catch (error) {
+    ElMessage.error(`复制失败: ${(error as Error).message}`);
+  } finally {
+    isCopyingHistory.value = false;
+  }
+}
+
+// 只复制命令列表
+async function copyCommandsOnly() {
+  if (commandHistory.value.length === 0) {
+    ElMessage.warning('没有可复制的命令');
+    return;
+  }
+  
+  try {
+    isCopyingCommands.value = true;
+    
+    // 只提取命令部分
+    const commandsText = commandHistory.value
+      .map(item => item.command)
+      .join('\n');
+    
+    await navigator.clipboard.writeText(commandsText);
+    ElMessage.success('命令列表已复制到剪贴板');
+  } catch (error) {
+    ElMessage.error(`复制失败: ${(error as Error).message}`);
+  } finally {
+    isCopyingCommands.value = false;
   }
 }
 
@@ -255,6 +324,28 @@ onUnmounted(() => {
           {{ hasSocketConnection ? '实时更新' : '未连接' }}
         </el-tag>
         <el-button 
+          type="success" 
+          :icon="CopyDocument" 
+          circle 
+          size="small" 
+          @click="copyCommandsOnly" 
+          :loading="isCopyingCommands"
+          class="copy-commands-button"
+          title="只复制命令列表（不含输出）"
+          :disabled="commandHistory.length === 0"
+        />
+        <el-button 
+          type="primary" 
+          :icon="CopyDocument" 
+          circle 
+          size="small" 
+          @click="copyAllHistory" 
+          :loading="isCopyingHistory"
+          class="copy-all-button"
+          title="复制完整命令历史（含输出）"
+          :disabled="commandHistory.length === 0"
+        />
+        <el-button 
           type="danger" 
           :icon="Delete" 
           circle 
@@ -263,6 +354,7 @@ onUnmounted(() => {
           :loading="isClearingHistory"
           class="clear-button"
           title="清空命令历史"
+          :disabled="commandHistory.length === 0"
         />
       </div>
     </div>
@@ -408,6 +500,77 @@ onUnmounted(() => {
   transform: rotate(12deg);
   background-color: #ff4d4f;
   border-color: #ff4d4f;
+}
+
+.copy-all-button {
+  transition: all 0.3s;
+  position: relative;
+}
+
+.copy-all-button:hover {
+  transform: translateY(-2px);
+  background-color: #409EFF;
+  border-color: #409EFF;
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
+}
+
+.copy-commands-button {
+  transition: all 0.3s;
+  position: relative;
+}
+
+.copy-commands-button:hover {
+  transform: translateY(-2px);
+  background-color: #67C23A;
+  border-color: #67C23A;
+  box-shadow: 0 2px 6px rgba(103, 194, 58, 0.3);
+}
+
+.copy-commands-button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.3);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.copy-all-button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.3);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.copy-commands-button:active::after,
+.copy-all-button:active::after {
+  opacity: 1;
+  animation: ripple 0.6s ease-out;
+}
+
+@keyframes ripple {
+  0% {
+    width: 0;
+    height: 0;
+    opacity: 0.5;
+  }
+  100% {
+    width: 30px;
+    height: 30px;
+    opacity: 0;
+  }
 }
 
 .card-content {
