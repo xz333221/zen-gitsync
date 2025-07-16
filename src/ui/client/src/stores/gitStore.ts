@@ -2,29 +2,41 @@ import { defineStore } from 'pinia'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { io, Socket } from 'socket.io-client'
-import fs from 'fs'
-import path from 'path'
 
 // 定义Git操作间隔时间（毫秒）
 const GIT_OPERATION_DELAY = 300
 
-// 读取后端服务器端口
+// 获取后端服务器端口
 function getBackendPort() {
+  // 优先从环境变量中读取端口
+  const envPort = import.meta.env.VITE_BACKEND_PORT;
+  if (envPort) {
+    console.log(`从环境变量读取后端端口: ${envPort}`);
+    return parseInt(envPort, 10);
+  }
+
+  // 在浏览器环境中，使用当前页面的URL来确定端口
   try {
-    // 尝试读取.port文件
-    const portFilePath = path.resolve(process.cwd(), '../../../.port')
-    if (fs.existsSync(portFilePath)) {
-      const port = fs.readFileSync(portFilePath, 'utf8').trim()
-      console.log(`检测到后端服务器端口: ${port}`)
-      return parseInt(port, 10)
+    const currentPort = window.location.port;
+    
+    // 开发环境使用后端默认端口3000
+    if (currentPort === '5173' || currentPort === '4173') {
+      console.log('开发环境，使用后端默认端口: 3000');
+      return 3000;
+    }
+    
+    // 生产环境时，前后端通常部署在同一端口
+    if (currentPort) {
+      console.log(`使用当前页面端口作为后端端口: ${currentPort}`);
+      return parseInt(currentPort, 10);
     }
   } catch (error) {
-    console.error('读取后端端口失败:', error)
+    console.error('获取后端端口失败:', error);
   }
   
   // 默认端口
-  console.log('使用默认后端端口: 3000')
-  return 3000
+  console.log('使用默认后端端口: 3000');
+  return 3000;
 }
 
 // 获取后端端口

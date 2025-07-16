@@ -1881,7 +1881,7 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 启动服务器
   const PORT = 3000;
   
-  // 创建一个函数来保存端口号到文件
+  // 创建一个函数来保存端口号到文件和环境变量
   // 使用闭包保存端口状态，防止多次写入相同端口
   const savePortToFile = (function() {
     let savedPort = null;
@@ -1891,10 +1891,29 @@ async function startUIServer(noOpen = false, savePort = false) {
         // 只有当savePort为true且端口没有保存过时才保存端口号
         if (savePort && savedPort !== port) {
           savedPort = port;
+          
           // 保存到项目根目录的.port文件
           const portFilePath = path.join(process.cwd(), '.port');
           await fs.writeFile(portFilePath, port.toString(), 'utf8');
           console.log(`端口号 ${port} 已保存到 ${portFilePath}`);
+          
+          // 同时保存到前端Vite项目的.env.local文件
+          try {
+            const clientPath = path.join(process.cwd(), 'src', 'ui', 'client');
+            const envPath = path.join(clientPath, '.env.local');
+            
+            // 检查目录是否存在
+            await fs.access(clientPath).catch(() => {
+              console.log(`客户端目录 ${clientPath} 不存在，跳过环境变量设置`);
+              return Promise.reject(new Error('Client directory not found'));
+            });
+            
+            // 写入环境变量
+            await fs.writeFile(envPath, `VITE_BACKEND_PORT=${port}\n`, 'utf8');
+            console.log(`端口号环境变量已保存到 ${envPath}`);
+          } catch (envError) {
+            console.error('保存端口号到环境变量失败，但不影响主要功能:', envError);
+          }
         }
       } catch (error) {
         console.error('保存端口号到文件失败:', error);
