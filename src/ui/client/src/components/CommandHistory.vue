@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, Teleport } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, CopyDocument, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
+import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock } from '@element-plus/icons-vue';
 import { useGitStore } from '../stores/gitStore';
 
 // 获取Git Store以访问Socket实例
@@ -28,6 +28,17 @@ const hasSocketConnection = ref(false);
 const expandedItems = ref<Set<number>>(new Set());
 // 添加新变量来跟踪复制命令列表的加载状态
 const isCopyingCommands = ref(false);
+// 弹窗显示状态
+const dialogVisible = ref(false);
+
+// 打开命令历史弹窗
+function openCommandHistory() {
+  dialogVisible.value = true;
+  // 如果还没有加载过历史记录，则加载
+  if (commandHistory.value.length === 0) {
+    loadHistory();
+  }
+}
 
 // 加载命令历史 - 仅用于初始加载或手动刷新
 async function loadHistory() {
@@ -293,15 +304,14 @@ function cleanupSocketListeners() {
 onMounted(() => {
   // 初始化Socket.io监听器
   initSocketListeners();
-  
+
   // 确保Socket已初始化
   if (!gitStore.socket) {
     console.log('尝试初始化Socket连接');
     gitStore.initSocketConnection();
   }
-  
-  // 加载历史记录
-  loadHistory();
+
+  // 不再自动加载历史记录，改为在弹窗打开时加载
 });
 
 // 清理工作
@@ -311,55 +321,80 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="card">
-    <div class="card-header">
-      <h2>Git 命令历史</h2>
-      <div class="header-actions">
-        <el-tag 
-          :type="hasSocketConnection ? 'success' : 'danger'" 
-          size="small" 
-          effect="dark"
-          class="socket-status"
-        >
-          {{ hasSocketConnection ? '实时更新' : '未连接' }}
-        </el-tag>
-        <el-button 
-          type="success" 
-          :icon="CopyDocument" 
-          circle 
-          size="small" 
-          @click="copyCommandsOnly" 
-          :loading="isCopyingCommands"
-          class="copy-commands-button"
-          title="只复制命令列表（不含输出）"
-          :disabled="commandHistory.length === 0"
-        />
-        <el-button 
-          type="primary" 
-          :icon="CopyDocument" 
-          circle 
-          size="small" 
-          @click="copyAllHistory" 
-          :loading="isCopyingHistory"
-          class="copy-all-button"
-          title="复制完整命令历史（含输出）"
-          :disabled="commandHistory.length === 0"
-        />
-        <el-button 
-          type="danger" 
-          :icon="Delete" 
-          circle 
-          size="small" 
-          @click="clearCommandHistory" 
-          :loading="isClearingHistory"
-          class="clear-button"
-          title="清空命令历史"
-          :disabled="commandHistory.length === 0"
-        />
+  <!-- 命令历史按钮 -->
+  <el-button
+    type="primary"
+    :icon="Clock"
+    @click="openCommandHistory"
+    class="command-history-button"
+    title="查看Git命令历史"
+  >
+    命令历史
+  </el-button>
+
+  <!-- 命令历史弹窗 -->
+  <Teleport to="body">
+    <el-dialog
+      v-model="dialogVisible"
+      title="Git 命令历史"
+      width="80%"
+      top="5vh"
+      destroy-on-close
+      class="command-history-dialog"
+      :z-index="99999"
+      append-to-body
+      modal
+    >
+    <template #header>
+      <div class="dialog-header">
+        <h2>Git 命令历史</h2>
+        <div class="header-actions">
+          <el-tag
+            :type="hasSocketConnection ? 'success' : 'danger'"
+            size="small"
+            effect="dark"
+            class="socket-status"
+          >
+            {{ hasSocketConnection ? '实时更新' : '未连接' }}
+          </el-tag>
+          <el-button
+            type="success"
+            :icon="CopyDocument"
+            circle
+            size="small"
+            @click="copyCommandsOnly"
+            :loading="isCopyingCommands"
+            class="copy-commands-button"
+            title="只复制命令列表（不含输出）"
+            :disabled="commandHistory.length === 0"
+          />
+          <el-button
+            type="primary"
+            :icon="CopyDocument"
+            circle
+            size="small"
+            @click="copyAllHistory"
+            :loading="isCopyingHistory"
+            class="copy-all-button"
+            title="复制完整命令历史（含输出）"
+            :disabled="commandHistory.length === 0"
+          />
+          <el-button
+            type="danger"
+            :icon="Delete"
+            circle
+            size="small"
+            @click="clearCommandHistory"
+            :loading="isClearingHistory"
+            class="clear-button"
+            title="清空命令历史"
+            :disabled="commandHistory.length === 0"
+          />
+        </div>
       </div>
-    </div>
-    
-    <div class="card-content">
+    </template>
+
+    <div class="dialog-content">
       <div v-if="isLoading && commandHistory.length === 0" class="loading-state">
         <el-icon class="loading-icon is-loading">
           <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
@@ -370,9 +405,9 @@ onUnmounted(() => {
         </el-icon>
         <div class="loading-text">加载命令历史...</div>
       </div>
-      
+
       <el-empty v-else-if="commandHistory.length === 0" description="暂无命令历史" />
-      
+
       <div v-else class="history-list">
         <div v-for="(item, index) in commandHistory" :key="index" class="history-item" :class="{ 'is-error': !item.success }">
           <div class="item-header" @click="toggleExpand(index)">
@@ -389,34 +424,34 @@ onUnmounted(() => {
               </div>
             </div>
             <div class="item-actions">
-              <el-button 
-                type="primary" 
-                :icon="CopyDocument" 
-                circle 
-                size="small" 
+              <el-button
+                type="primary"
+                :icon="CopyDocument"
+                circle
+                size="small"
                 @click.stop="copyCommand(item.command)"
                 title="复制命令"
               />
-              <el-button 
-                :type="isExpanded(index) ? 'primary' : 'default'" 
-                :icon="isExpanded(index) ? ArrowUp : ArrowDown" 
-                circle 
-                size="small" 
+              <el-button
+                :type="isExpanded(index) ? 'primary' : 'default'"
+                :icon="isExpanded(index) ? ArrowUp : ArrowDown"
+                circle
+                size="small"
                 @click.stop="toggleExpand(index)"
                 title="展开/收起"
               />
             </div>
           </div>
-          
+
           <div v-if="isExpanded(index)" class="item-details">
             <div v-if="item.stdout" class="output-section">
               <div class="output-header">
                 <h4>标准输出</h4>
-                <el-button 
-                  type="primary" 
-                  :icon="CopyDocument" 
-                  circle 
-                  size="small" 
+                <el-button
+                  type="primary"
+                  :icon="CopyDocument"
+                  circle
+                  size="small"
                   @click="copyOutput(item)"
                   title="复制输出"
                 />
@@ -428,7 +463,7 @@ onUnmounted(() => {
                 </el-alert>
               </div>
             </div>
-            
+
             <div v-if="item.stderr" class="output-section error">
               <div class="output-header">
                 <h4>错误输出</h4>
@@ -440,7 +475,7 @@ onUnmounted(() => {
                 </el-alert>
               </div>
             </div>
-            
+
             <div v-if="item.error" class="output-section error">
               <div class="output-header">
                 <h4>错误信息</h4>
@@ -451,33 +486,52 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-  </div>
+  </el-dialog>
+  </Teleport>
 </template>
 
 <style scoped>
-.card {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.03);
-  height: 100%;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/* 命令历史按钮样式 */
+.command-history-button {
+  transition: all 0.3s ease;
 }
 
-.card-header {
-  padding: 8px 16px;
-  border-bottom: 1px solid #f0f0f0;
+.command-history-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+}
+
+/* 弹窗样式 */
+.command-history-dialog {
+  border-radius: 8px;
+  z-index: 9999 !important;
+}
+
+:deep(.command-history-dialog .el-dialog__header) {
+  padding: 0;
+  margin-right: 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+:deep(.command-history-dialog .el-overlay) {
+  z-index: 9998 !important;
+}
+
+:deep(.command-history-dialog .el-dialog) {
+  z-index: 9999 !important;
+}
+
+.dialog-header {
+  padding: 16px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background-color: #f8f9fa;
 }
 
-.card-header h2 {
+.dialog-header h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 500;
   color: #303133;
 }
@@ -573,10 +627,10 @@ onUnmounted(() => {
   }
 }
 
-.card-content {
-  padding: 10px;
+.dialog-content {
+  padding: 20px;
   overflow-y: auto;
-  flex: 1;
+  max-height: calc(80vh - 120px);
 }
 
 .loading-state {
@@ -749,4 +803,28 @@ onUnmounted(() => {
 .output-content::-webkit-scrollbar-track {
   background-color: #f5f7fa;
 }
-</style> 
+</style>
+
+<!-- 全局样式确保弹窗在最上层 -->
+<style>
+.command-history-dialog {
+  z-index: 99999 !important;
+}
+
+.el-overlay {
+  z-index: 99998 !important;
+}
+
+.el-dialog {
+  z-index: 99999 !important;
+}
+
+/* 确保命令历史弹窗的遮罩层在最上层 */
+.el-overlay.is-message-box {
+  z-index: 99998 !important;
+}
+
+.el-dialog.command-history-dialog {
+  z-index: 99999 !important;
+}
+</style>

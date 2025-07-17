@@ -741,6 +741,11 @@ async function selectDirectory(dirPath: string) {
         </div>
       </div>
 
+      <!-- 命令历史按钮 -->
+      <div class="command-history-section" v-if="gitStore.isGitRepo">
+        <CommandHistory />
+      </div>
+
     </div>
   </header>
 
@@ -808,15 +813,7 @@ async function selectDirectory(dirPath: string) {
       <!-- 水平分隔条 -->
       <div class="horizontal-resizer" id="h-resizer" @mousedown="startHResize"></div>
 
-      <!-- 下方左侧命令历史 -->
-      <div class="command-history-panel" v-if="gitStore.isGitRepo">
-        <CommandHistory />
-      </div>
-
-      <!-- 垂直分隔条(下方) -->
-      <div class="vertical-resizer-bottom" id="v-resizer-bottom" @mousedown="startVResize"></div>
-
-      <!-- 下方右侧提交历史 -->
+      <!-- 下方提交历史 -->
       <div class="log-list-panel" v-if="gitStore.isGitRepo">
         <LogList ref="logListRef" />
       </div>
@@ -977,7 +974,7 @@ body {
   grid-template-areas:
     "git-status v-resizer commit-form"
     "h-resizer h-resizer h-resizer"
-    "command-history v-resizer-bottom log-list";
+    "log-list log-list log-list";
   gap: 6px; /* 从10px减少到6px */
   height: 100%;
 }
@@ -1003,12 +1000,7 @@ body {
   padding: 0;
 }
 
-.command-history-panel {
-  grid-area: command-history;
-  overflow: hidden;
-  max-height: 100%;
-  padding: 0;
-}
+
 
 /* 确保每个卡片内部可以滚动 */
 .card {
@@ -1088,6 +1080,12 @@ h1 {
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   flex-shrink: 0;
+}
+
+.command-history-section {
+  display: flex;
+  align-items: center;
+  margin-left: 12px;
 }
 
 .directory-display {
@@ -1222,14 +1220,12 @@ h1 {
 @media (max-width: 768px) {
   .grid-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto auto auto auto;
+    grid-template-rows: auto auto auto auto auto;
     grid-template-areas:
       "git-status"
       "v-resizer"
       "commit-form"
       "h-resizer"
-      "command-history"
-      "v-resizer-bottom"
       "log-list";
     gap: 10px;
   }
@@ -1246,7 +1242,6 @@ h1 {
 
   .git-status-panel,
   .commit-form-panel,
-  .command-history-panel,
   .log-list-panel {
     padding: 0;
     max-height: none;
@@ -1260,12 +1255,8 @@ h1 {
     max-height: 30vh;
   }
 
-  .command-history-panel {
-    max-height: 30vh;
-  }
-
   .log-list-panel {
-    max-height: 30vh;
+    max-height: 40vh;
   }
 }
 </style>
