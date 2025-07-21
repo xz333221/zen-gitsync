@@ -1221,8 +1221,6 @@ function assignColumnsToCommits() {
     "#607d8b", // 蓝灰色
   ];
 
-  console.log("\n开始创建分支线...");
-
   // 为每个提交创建到其父提交的连线
   logs.value.forEach((commit, rowIndex) => {
     if (!commit.hash) return;
@@ -1265,7 +1263,7 @@ function assignColumnsToCommits() {
         };
 
         branchLines.value.push(branchLine);
-        console.log(`创建连线: 从行${parentRow}列${parentNode.column} 到 行${rowIndex}列${currentNode.column}, 颜色: ${lineColor}`);
+        console.log(`✓ 创建连线: ${logs.value[parentRow].hash.substring(0,7)} -> ${commit.hash.substring(0,7)}`);
       } else {
         // 父提交不在当前视图中，创建延续线到视图边界
         console.log(`父提交 ${parentHash.substring(0, 7)} 不在当前视图中，创建延续线`);
@@ -1294,7 +1292,7 @@ function assignColumnsToCommits() {
   // 更新最大列数
   columnCount.value = nextAvailableColumn;
 
-  console.log(`分支线创建完成，共${branchLines.value.length}条线，最大列数: ${nextAvailableColumn}`);
+  console.log(`✓ 分支线创建完成: ${branchLines.value.length}条线`);
 
   // 导出变量以供其他函数使用
   return { mainBranchColor, branchColors };
