@@ -682,13 +682,21 @@ async function addCommitAndPush() {
   }
 
   try {
-    await gitStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
+    const result = await gitStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
 
-    // 清空提交信息
-    clearCommitFields();
+    if (result) {
+      // 清空提交信息
+      clearCommitFields();
 
-    // 显示成功动画
-    showPushSuccessIndicator();
+      // 显示成功动画
+      showPushSuccessIndicator();
+
+      // 额外等待一下，确保所有状态都已更新
+      setTimeout(() => {
+        // 强制刷新分支状态，确保界面同步
+        gitStore.getBranchStatus(true); // 强制刷新
+      }, 1000);
+    }
 
   } catch (error) {
     ElMessage({

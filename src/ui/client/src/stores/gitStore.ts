@@ -1027,15 +1027,14 @@ export const useGitStore = defineStore('git', () => {
           message: '推送成功',
           type: 'success'
         })
-        // 刷新状态
-        fetchStatus()
-        
-        // 刷新日志
-        fetchLog()
-        
-        // 更新分支状态
-        getBranchStatus()
-        
+
+        // 等待所有状态刷新完成
+        await Promise.all([
+          fetchStatus(),      // 刷新文件状态
+          fetchLog(),         // 刷新提交日志
+          getBranchStatus()   // 更新分支状态
+        ])
+
         return true
       } else {
         ElMessage({
@@ -1158,17 +1157,20 @@ export const useGitStore = defineStore('git', () => {
     try {
       const addResult = await addToStage()
       if (!addResult) return false
-      
+
       // 使用新的延时常量
       await delay(GIT_OPERATION_DELAY)
-      
+
       const commitResult = await commitChanges(message, noVerify)
       if (!commitResult) return false
-      
+
       // 使用新的延时常量
       await delay(GIT_OPERATION_DELAY)
-      
-      return await pushToRemote()
+
+      const pushResult = await pushToRemote()
+
+      // 推送完成后，确保状态已经刷新（pushToRemote已经包含了状态刷新）
+      return pushResult
     } catch (error) {
       // 如果发生错误，尝试删除 index.lock 文件
       try {
@@ -1190,12 +1192,18 @@ export const useGitStore = defineStore('git', () => {
         message: `操作失败: ${(error as Error).message}`,
         type: 'error'
       })
-      
+
       // 即使出错也要刷新状态
-      fetchStatus()
-      fetchLog()
-      getBranchStatus()
-      
+      try {
+        await Promise.all([
+          fetchStatus(),
+          fetchLog(),
+          getBranchStatus()
+        ])
+      } catch (refreshError) {
+        console.error('刷新状态失败:', refreshError)
+      }
+
       return false
     }
   }
