@@ -33,6 +33,7 @@ import {
   More,
   FullScreen,
   Close,
+  CopyDocument,
 } from "@element-plus/icons-vue";
 import "element-plus/dist/index.css";
 import { createGitgraph } from "@gitgraph/js";
@@ -911,6 +912,35 @@ function formatCommitMessage(message: string) {
 
   // 返回格式化后的提交信息，保留换行符
   return message.trim();
+}
+
+// 提取纯净的提交信息（去除类型前缀）
+function extractPureMessage(message: string): string {
+  if (!message) return "";
+
+  // 匹配常见的提交信息格式：type(scope): description 或 type: description
+  // 使用 dotAll 标志来匹配多行内容
+  const conventionalCommitRegex = /^(feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert)(\([^)]+\))?\s*:\s*(.+)$/s;
+  const match = message.match(conventionalCommitRegex);
+
+  if (match) {
+    // 如果匹配到标准格式，返回描述部分（保留多行结构）
+    return match[3].trim();
+  }
+
+  // 如果不是标准格式，返回原始信息
+  return message.trim();
+}
+
+// 复制纯净的提交信息
+async function copyPureMessage(message: string) {
+  try {
+    const pureMessage = extractPureMessage(message);
+    await navigator.clipboard.writeText(pureMessage);
+    ElMessage.success('提交信息已复制到剪贴板');
+  } catch (error) {
+    ElMessage.error('复制失败');
+  }
 }
 
 // 加载更多日志
@@ -2000,7 +2030,21 @@ function toggleFullscreen() {
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="message" label="提交信息" min-width="250" />
+            <el-table-column label="提交信息" min-width="250">
+              <template #default="scope">
+                <div class="commit-message-cell">
+                  <span class="message-text">{{ scope.row.message }}</span>
+                  <el-button
+                    type="text"
+                    :icon="CopyDocument"
+                    size="small"
+                    @click.stop="copyPureMessage(scope.row.message)"
+                    class="copy-message-btn"
+                    title="复制纯净提交信息（不含类型前缀）"
+                  />
+                </div>
+              </template>
+            </el-table-column>
           </el-table>
 
           <!-- 添加底部加载状态和加载更多按钮 -->
@@ -2757,6 +2801,36 @@ function toggleFullscreen() {
 .log-table {
   flex: 1;
   width: 100%;
+}
+
+/* 提交信息单元格样式 */
+.commit-message-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.message-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-message-btn {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  padding: 4px;
+  min-width: auto;
+  height: auto;
+}
+
+.commit-message-cell:hover .copy-message-btn {
+  opacity: 1;
+}
+
+.copy-message-btn:hover {
+  color: #409eff;
 }
 
 .fullscreen-mode .table-view-container {
