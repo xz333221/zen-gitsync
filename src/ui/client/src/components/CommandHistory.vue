@@ -87,9 +87,10 @@ async function copyAllHistory() {
         text += `\n# 输出:\n${item.stdout}\n`;
       }
       
-      // 添加错误（如果有）
+      // 添加stderr输出（根据命令类型决定标签）
       if (item.stderr) {
-        text += `\n# 错误输出:\n${item.stderr}\n`;
+        const stderrLabel = isStderrNormalOutput(item.command) ? '输出信息' : '错误输出';
+        text += `\n# ${stderrLabel}:\n${item.stderr}\n`;
       }
       
       if (item.error) {
@@ -218,14 +219,36 @@ async function copyCommand(command: string) {
   }
 }
 
+// 判断是否是Git push相关命令
+function isGitPushCommand(command: string): boolean {
+  return command.includes('git push') || command.includes('git-push');
+}
+
+// 判断stderr是否应该被视为正常输出
+function isStderrNormalOutput(command: string): boolean {
+  // Git push命令的stderr通常包含正常的推送信息
+  if (isGitPushCommand(command)) {
+    return true;
+  }
+
+  // 可以在这里添加其他命令的特殊处理
+  return false;
+}
+
 // Copy output to clipboard
 async function copyOutput(item: CommandHistoryItem) {
   try {
     let outputText = '';
     if (item.stdout) outputText += `标准输出:\n${item.stdout}\n\n`;
-    if (item.stderr) outputText += `错误输出:\n${item.stderr}\n\n`;
+
+    if (item.stderr) {
+      // 根据命令类型决定标签
+      const stderrLabel = isStderrNormalOutput(item.command) ? '输出信息' : '错误输出';
+      outputText += `${stderrLabel}:\n${item.stderr}\n\n`;
+    }
+
     if (item.error) outputText += `错误信息:\n${item.error}`;
-    
+
     await navigator.clipboard.writeText(outputText.trim());
     ElMessage.success('输出已复制到剪贴板');
   } catch (error) {
@@ -464,14 +487,14 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div v-if="item.stderr" class="output-section error">
+            <div v-if="item.stderr" :class="['output-section', isStderrNormalOutput(item.command) ? '' : 'error']">
               <div class="output-header">
-                <h4>错误输出</h4>
+                <h4>{{ isStderrNormalOutput(item.command) ? '输出信息' : '错误输出' }}</h4>
               </div>
               <pre class="output-content">{{ item.stderr }}</pre>
               <div v-if="item.isStderrTruncated" class="truncation-notice">
                 <el-alert type="info" :closable="false" show-icon>
-                  错误输出内容过长已被截断，请直接执行命令查看完整输出
+                  {{ isStderrNormalOutput(item.command) ? '输出信息' : '错误输出' }}内容过长已被截断，请直接执行命令查看完整输出
                 </el-alert>
               </div>
             </div>
@@ -751,6 +774,12 @@ onUnmounted(() => {
 
 .output-section.error {
   border-left: 3px solid #f56c6c;
+  padding-left: 8px;
+}
+
+/* 为正常的stderr输出（如git push）添加不同的样式 */
+.output-section:not(.error) {
+  border-left: 3px solid #67c23a;
   padding-left: 8px;
 }
 
