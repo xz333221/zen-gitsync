@@ -2203,7 +2203,6 @@ function toggleFullscreen() {
   justify-content: space-between;
   align-items: center;
   padding:16px;
-  margin-bottom: 16px;
   border-bottom: 1px solid #ebeef5;
   position: sticky;
   top: 0;
@@ -3068,7 +3067,6 @@ function toggleFullscreen() {
   background-color: white;
   display: flex;
   flex-direction: column;
-  padding: 16px;
   overflow: auto;
 }
 
