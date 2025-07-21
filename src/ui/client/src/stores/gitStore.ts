@@ -89,8 +89,7 @@ export const useGitStore = defineStore('git', () => {
     unstaged: [],
     untracked: []
   })
-  // 添加Git状态文本
-  const statusText = ref('')
+  // 移除不再使用的statusText，只保留解析后的文件列表
   // 添加fileList状态用于保存porcelain格式的状态
   const fileList = ref<{path: string, type: string}[]>([])
   const isLoadingLog = ref(false)
@@ -136,7 +135,6 @@ export const useGitStore = defineStore('git', () => {
       unstaged: [],
       untracked: []
     }
-    statusText.value = ''
     fileList.value = []
     isLoadingLog.value = false
     isLoadingStatus.value = false
@@ -146,25 +144,31 @@ export const useGitStore = defineStore('git', () => {
     // 不重置autoUpdateEnabled，保留用户设置
   }
 
-  // 获取分支状态（领先/落后远程）
-  async function getBranchStatus() {
+  // 获取分支状态（领先/落后远程）- 带缓存优化
+  async function getBranchStatus(forceRefresh = false) {
     if (!isGitRepo.value) return;
-    
-    // 移除时间戳缓存判断，简化逻辑
+
+    // 如果不是强制刷新，且距离上次获取不到30秒，使用缓存
+    const now = Date.now();
+    if (!forceRefresh && now - lastBranchStatusTime.value < 30000) {
+      console.log('使用缓存的分支状态');
+      return;
+    }
+
     try {
       console.log('获取分支状态...');
       const response = await fetch('/api/branch-status');
       const data = await response.json();
-      
+
       if (data) {
         branchAhead.value = data.ahead || 0;
         branchBehind.value = data.behind || 0;
         hasUpstream.value = data.hasUpstream || false;
         upstreamBranch.value = data.upstreamBranch || '';
-        
+
         // 更新获取时间戳
-        lastBranchStatusTime.value = Date.now();
-        
+        lastBranchStatusTime.value = now;
+
         // 添加调试日志
         console.log(`分支状态更新：领先 ${branchAhead.value} 个提交，落后 ${branchBehind.value} 个提交，上游分支：${hasUpstream.value ? upstreamBranch.value : '无'}`);
       }
@@ -572,10 +576,7 @@ export const useGitStore = defineStore('git', () => {
         
         console.log('收到Git状态更新通知:', new Date().toLocaleTimeString())
         
-        // 更新状态文本
-        if (data.status) {
-          statusText.value = data.status
-        }
+        // 不再需要更新statusText，只处理porcelain格式
         
         // 更新文件列表
         if (data.porcelain !== undefined) {
@@ -757,29 +758,17 @@ export const useGitStore = defineStore('git', () => {
     }
   }
   
-  // 获取Git状态
+  // 获取Git状态 (优化版本 - 只获取porcelain格式)
   async function fetchStatus() {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
       console.log('当前目录不是Git仓库，跳过加载Git状态')
       return
     }
-    
+
     try {
       isLoadingStatus.value = true
-      const response = await fetch('/api/status')
-      const data = await response.json()
-      if (data.status) {
-        // 更新状态文本
-        statusText.value = data.status
-        status.value = {
-          staged: data.status.staged || [],
-          unstaged: data.status.unstaged || [],
-          untracked: data.status.untracked || []
-        }
-      }
-      
-      // 同时获取porcelain格式的状态
+      // 直接获取porcelain格式的状态，不再获取完整的git status
       await fetchStatusPorcelain()
     } catch (error) {
       console.error('获取Git状态失败:', error)
@@ -1595,7 +1584,6 @@ export const useGitStore = defineStore('git', () => {
     // 从 gitLogStore 合并的状态
     log,
     status,
-    statusText,
     fileList,
     isLoadingLog,
     isLoadingStatus,

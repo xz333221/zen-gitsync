@@ -70,7 +70,8 @@ onMounted(async () => {
         gitStore.getCurrentBranch(),  // 获取当前分支
         gitStore.getAllBranches(),    // 获取所有分支
         gitStore.getUserInfo(),        // 获取用户信息
-        gitStore.getRemoteUrl()        // 获取远程仓库地址
+        gitStore.getRemoteUrl(),       // 获取远程仓库地址
+        gitStore.getBranchStatus()     // 获取分支状态（上游分支信息）
       ])
     } else {
       ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')

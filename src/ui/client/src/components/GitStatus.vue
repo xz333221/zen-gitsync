@@ -52,18 +52,18 @@ async function loadStatus() {
       const dirData = await responseDir.json()
       currentDirectory.value = dirData.directory || '未知目录'
     }
-    
+
     // 如果不是Git仓库，直接显示提示并返回
     if (!gitStore.isGitRepo) {
       return
     }
-    
-    // 使用gitStore获取Git状态
+
+    // 使用gitStore获取Git状态（只获取文件状态）
     await gitStore.fetchStatus()
-    
-    // 同时刷新分支状态信息，确保显示最新的领先/落后提交数
+
+    // 总是刷新分支状态以获取上游分支信息
     await gitStore.getBranchStatus()
-    
+
     ElMessage({
       message: 'Git 状态已刷新',
       type: 'success',
@@ -361,9 +361,32 @@ async function unstageFile(filePath: string) {
   await gitStore.unstageFile(filePath)
 }
 
-// 刷新Git状态的方法
+// 刷新Git状态的方法（优化版本）
 async function refreshStatus() {
-  await loadStatus()
+  await loadStatusOptimized()
+}
+
+// 优化的状态加载方法 - 只刷新文件状态，不刷新分支状态
+async function loadStatusOptimized() {
+  try {
+    // 如果不是Git仓库，直接显示提示并返回
+    if (!gitStore.isGitRepo) {
+      return
+    }
+
+    // 只获取文件状态，不获取分支状态（分支状态变化频率低）
+    await gitStore.fetchStatus()
+
+    ElMessage({
+      message: 'Git 文件状态已刷新',
+      type: 'success',
+    })
+  } catch (error) {
+    ElMessage({
+      message: '刷新失败: ' + (error as Error).message,
+      type: 'error',
+    })
+  }
 }
 
 // 添加git pull操作方法

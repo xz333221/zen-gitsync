@@ -45,14 +45,7 @@ async function startUIServer(noOpen = false, savePort = false) {
   app.use(express.static(path.join(__dirname, '../public')));
   
   // API路由
-  app.get('/api/status', async (req, res) => {
-    try {
-      const { stdout } = await execGitCommand('git status');
-      res.json({ status: stdout });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+  // 移除了 /api/status 端点，因为前端只使用 porcelain 格式
   
   // Add new endpoint for command history
   app.get('/api/command-history', async (req, res) => {
@@ -1820,34 +1813,29 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   }
   
-  // 获取并广播Git状态
+  // 获取并广播Git状态 (优化版本 - 只获取porcelain格式)
   async function getAndBroadcastStatus() {
     try {
       // 如果不是Git仓库，发送特殊状态
       if (!isGitRepo) {
-        io.emit('git_status_update', { 
+        io.emit('git_status_update', {
           isGitRepo: false,
-          status: '当前目录不是Git仓库',
           porcelain: '',
           timestamp: new Date().toISOString()
         });
         return;
       }
-      
-      // 获取常规状态
-      const { stdout: statusOutput } = await execGitCommand('git status');
-      
-      // 获取porcelain格式状态
+
+      // 只获取porcelain格式状态，不再获取完整的git status
       const { stdout: porcelainOutput } = await execGitCommand('git status --porcelain --untracked-files=all');
-      
+
       // 广播到所有连接的客户端
-      io.emit('git_status_update', { 
+      io.emit('git_status_update', {
         isGitRepo: true,
-        status: statusOutput,
         porcelain: porcelainOutput,
         timestamp: new Date().toISOString()
       });
-      
+
       console.log('已广播Git状态更新');
     } catch (error) {
       console.error('获取或广播Git状态失败:', error);
