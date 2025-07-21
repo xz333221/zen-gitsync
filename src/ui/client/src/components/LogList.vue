@@ -1081,14 +1081,32 @@ function assignColumnsToCommits() {
 
     console.log(`\n处理提交 ${commit.hash.substring(0, 7)} (行${rowIndex})`);
     console.log(`父提交:`, commit.parents || []);
+    console.log(`分支信息:`, commit.branch);
 
     let assignedColumn: number;
     const parents = commit.parents || [];
 
     if (rowIndex === 0) {
-      // 第一个提交总是主分支
-      assignedColumn = 0;
-      console.log(`第一个提交，分配到主分支`);
+      // 第一个提交：智能识别分支
+      const branchInfo = commit.branch || '';
+      const isTag = branchInfo.includes('tag:');
+
+      // 更精确的主分支识别：只有包含 main 但不包含其他分支名的才是主分支
+      const isOnMainBranch = (branchInfo.includes('main') && !branchInfo.includes('testbranch')) ||
+                            (branchInfo.includes('origin/HEAD') && branchInfo.includes('main')) ||
+                            !branchInfo.trim();
+
+      // 检查是否在真正的分支上
+      const hasRealBranch = branchInfo.includes('testbranch') ||
+                           (branchInfo.trim() && !isOnMainBranch && !isTag);
+
+      if (hasRealBranch && !isTag) {
+        assignedColumn = nextAvailableColumn++;
+        console.log(`第一个提交在真正的分支上 (${branchInfo})，分配到列 ${assignedColumn}`);
+      } else {
+        assignedColumn = 0;
+        console.log(`第一个提交在主分支上 (${branchInfo})，分配到列 0`);
+      }
     } else if (parents.length === 0) {
       // 没有父提交，使用主分支
       assignedColumn = 0;
@@ -1134,9 +1152,32 @@ function assignColumnsToCommits() {
           }
         }
       } else {
-        // 父提交不在视图中，使用主分支
-        assignedColumn = 0;
-        console.log(`父提交不在视图中，使用主分支`);
+        // 父提交不在当前视图中
+        // 对于分页情况，我们需要更智能的处理
+        // 检查这个提交是否是合并提交或有特殊的分支信息
+
+        // 检查提交的分支信息，更智能地识别真正的分支
+        const branchInfo = commit.branch || '';
+        const isTag = branchInfo.includes('tag:');
+
+        // 更精确的主分支识别
+        const isOnMainBranch = (branchInfo.includes('main') && !branchInfo.includes('testbranch')) ||
+                              (branchInfo.includes('origin/HEAD') && branchInfo.includes('main')) ||
+                              !branchInfo.trim();
+
+        // 检查是否在真正的分支上
+        const hasRealBranch = branchInfo.includes('testbranch') ||
+                             (branchInfo.trim() && !isOnMainBranch && !isTag);
+
+        if (hasRealBranch && !isTag) {
+          // 这个提交在一个真正的命名分支上，分配新列
+          assignedColumn = nextAvailableColumn++;
+          console.log(`提交在真正的分支上但父提交不在视图中，分配新分支列 ${assignedColumn} (分支: ${branchInfo})`);
+        } else {
+          // 主分支、标签或空分支信息，使用主分支
+          assignedColumn = 0;
+          console.log(`父提交不在视图中，使用主分支 (分支信息: ${branchInfo})`);
+        }
       }
     } else {
       // 多父提交（合并提交）
@@ -1323,9 +1364,11 @@ function drawContinuousBranchGraph() {
   if (!logs.value.length) return;
 
   const columnWidth = 20;
+  const rowHeight = 40; // 表格行高
   const mainBranchColor = "#2196f3";
+  const branchColors = ["#4caf50", "#ff9800", "#9c27b0", "#f44336", "#00bcd4"];
 
-  // 为每个提交创建SVG并绘制
+  // 为每个提交创建SVG并绘制节点和连线
   logs.value.forEach((commit, rowIndex) => {
     if (!commit.hash) return;
 
@@ -1340,7 +1383,7 @@ function drawContinuousBranchGraph() {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("width", "100%");
     svg.setAttribute("height", "100%");
-    svg.setAttribute("viewBox", "0 0 100 100");
+    svg.setAttribute("viewBox", "0 0 260 40"); // 调整viewBox以匹配列宽
     svg.style.display = "block";
     svg.style.overflow = "visible";
 
@@ -1354,14 +1397,15 @@ function drawContinuousBranchGraph() {
     const y = 50; // 中心点
 
     // 绘制连接线
-    drawConnectionLines(svg, rowIndex, x, y, columnWidth, mainBranchColor);
+    drawConnectionLines(svg, rowIndex, x, y, columnWidth, mainBranchColor, branchColors);
 
-    // 绘制提交节点
+    // 绘制提交节点 - 使用正确的分支颜色
+    const nodeColor = node.column === 0 ? mainBranchColor : branchColors[Math.min(node.column - 1, branchColors.length - 1)];
     const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     circle.setAttribute("cx", x.toString());
     circle.setAttribute("cy", y.toString());
     circle.setAttribute("r", "6");
-    circle.setAttribute("fill", mainBranchColor);
+    circle.setAttribute("fill", nodeColor);
     circle.setAttribute("stroke", "#fff");
     circle.setAttribute("stroke-width", "2");
     svg.appendChild(circle);
@@ -1369,7 +1413,7 @@ function drawContinuousBranchGraph() {
 }
 
 // 绘制连接线的辅助函数
-function drawConnectionLines(svg: SVGElement, rowIndex: number, x: number, y: number, columnWidth: number, color: string) {
+function drawConnectionLines(svg: SVGElement, rowIndex: number, x: number, y: number, columnWidth: number, mainColor: string, branchColors: string[]) {
   // 查找与当前行相关的分支线
   // 注意：现在fromRow > toRow（父提交在下方，子提交在上方）
   const incomingLines = branchLines.value.filter(line => line.toRow === rowIndex);
@@ -1473,6 +1517,11 @@ function drawConnectionLines(svg: SVGElement, rowIndex: number, x: number, y: nu
 
   // 如果没有任何线条且不是最后一行，绘制默认垂直线
   if (incomingLines.length === 0 && outgoingLines.length === 0 && throughLines.length === 0) {
+    // 获取当前提交的节点信息来确定颜色
+    const currentCommit = logs.value[rowIndex];
+    const currentNode = commitNodes.value.get(currentCommit.hash);
+    const lineColor = currentNode && currentNode.column === 0 ? mainColor : branchColors[Math.min((currentNode?.column || 1) - 1, branchColors.length - 1)];
+
     if (rowIndex > 0) {
       // 从上方来的线
       const inLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -1480,7 +1529,7 @@ function drawConnectionLines(svg: SVGElement, rowIndex: number, x: number, y: nu
       inLine.setAttribute("y1", "0");
       inLine.setAttribute("x2", x.toString());
       inLine.setAttribute("y2", y.toString());
-      inLine.setAttribute("stroke", color);
+      inLine.setAttribute("stroke", lineColor);
       inLine.setAttribute("stroke-width", "2");
       svg.appendChild(inLine);
     }
@@ -1492,7 +1541,7 @@ function drawConnectionLines(svg: SVGElement, rowIndex: number, x: number, y: nu
       outLine.setAttribute("y1", y.toString());
       outLine.setAttribute("x2", x.toString());
       outLine.setAttribute("y2", "100");
-      outLine.setAttribute("stroke", color);
+      outLine.setAttribute("stroke", lineColor);
       outLine.setAttribute("stroke-width", "2");
       svg.appendChild(outLine);
     }
