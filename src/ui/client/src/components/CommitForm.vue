@@ -1237,36 +1237,46 @@ git config --global user.email "your.email@example.com"</pre>
                         <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
                       </el-button>
                       
-                      <el-button 
-                        type="primary"
-                        :icon="Upload"
-                        @click="pushToRemote"
-                        :loading="gitStore.isPushing"
-                        :disabled="!canPush"
-                        :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                      <el-tooltip
+                        :content="canPush ? '推送已提交的更改到远程仓库' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : (!needsPush ? '没有需要推送的提交' : '有未提交的暂存更改，请先提交'))"
+                        placement="top"
                       >
-                        推送
-                        <span v-if="needsPush">({{gitStore.branchAhead}})</span>
-                      </el-button>
+                        <el-button
+                          type="primary"
+                          :icon="Upload"
+                          @click="pushToRemote"
+                          :loading="gitStore.isPushing"
+                          :disabled="!canPush"
+                          :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                        >
+                          推送
+                          <span v-if="needsPush">({{gitStore.branchAhead}})</span>
+                        </el-button>
+                      </el-tooltip>
                     </div>
                   </div>
                   
                   <div class="right-actions">
-                    <el-button 
-                      type="success"
-                      @click="addCommitAndPush"
-                      :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                      :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
-                      class="one-push-button"
+                    <el-tooltip
+                      :content="(!hasAnyChanges ? '没有需要提交的更改' : (!finalCommitMessage.trim() ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
+                      placement="top"
                     >
-                      <div class="one-push-content">
-                        <el-icon class="one-push-icon"><Position /></el-icon>
-                        <div class="one-push-text">
-                          <span class="one-push-title">一键推送所有</span>
-                          <span class="one-push-desc">暂存 + 提交 + 推送</span>
+                      <el-button
+                        type="success"
+                        @click="addCommitAndPush"
+                        :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
+                        :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                        class="one-push-button"
+                      >
+                        <div class="one-push-content">
+                          <el-icon class="one-push-icon"><Position /></el-icon>
+                          <div class="one-push-text">
+                            <span class="one-push-title">一键推送所有</span>
+                            <span class="one-push-desc">暂存 + 提交 + 推送</span>
+                          </div>
                         </div>
-                      </div>
-                    </el-button>
+                      </el-button>
+                    </el-tooltip>
                   </div>
                 </div>
               </div>
@@ -1346,36 +1356,46 @@ git config --global user.email "your.email@example.com"</pre>
                         <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
                       </el-button>
                       
-                      <el-button 
-                        type="primary"
-                        :icon="Upload"
-                        @click="pushToRemote"
-                        :loading="gitStore.isPushing"
-                        :disabled="!canPush"
-                        :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                      <el-tooltip
+                        :content="canPush ? '推送已提交的更改到远程仓库' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : (!needsPush ? '没有需要推送的提交' : '有未提交的暂存更改，请先提交'))"
+                        placement="top"
                       >
-                        推送
-                        <span v-if="needsPush">({{gitStore.branchAhead}})</span>
-                      </el-button>
+                        <el-button
+                          type="primary"
+                          :icon="Upload"
+                          @click="pushToRemote"
+                          :loading="gitStore.isPushing"
+                          :disabled="!canPush"
+                          :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
+                        >
+                          推送
+                          <span v-if="needsPush">({{gitStore.branchAhead}})</span>
+                        </el-button>
+                      </el-tooltip>
                     </div>
                   </div>
                   
                   <div class="right-actions">
-                    <el-button 
-                      type="success"
-                      @click="addCommitAndPush"
-                      :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                      :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
-                      class="one-push-button"
+                    <el-tooltip
+                      :content="(!hasAnyChanges ? '没有需要提交的更改' : (!finalCommitMessage.trim() ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
+                      placement="top"
                     >
-                      <div class="one-push-content">
-                        <el-icon class="one-push-icon"><Position /></el-icon>
-                        <div class="one-push-text">
-                          <span class="one-push-title">一键推送所有</span>
-                          <span class="one-push-desc">暂存 + 提交 + 推送</span>
+                      <el-button
+                        type="success"
+                        @click="addCommitAndPush"
+                        :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
+                        :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                        class="one-push-button"
+                      >
+                        <div class="one-push-content">
+                          <el-icon class="one-push-icon"><Position /></el-icon>
+                          <div class="one-push-text">
+                            <span class="one-push-title">一键推送所有</span>
+                            <span class="one-push-desc">暂存 + 提交 + 推送</span>
+                          </div>
                         </div>
-                      </div>
-                    </el-button>
+                      </el-button>
+                    </el-tooltip>
                   </div>
                 </div>
               </div>
