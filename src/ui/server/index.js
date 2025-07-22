@@ -39,6 +39,14 @@ let currentBranchCache = {
   cacheTimeout: 300000 // 5分钟缓存，或者直到主动清除
 };
 
+// 上游分支缓存 - 只在特定情况下更新
+let upstreamBranchCache = {
+  upstreamBranch: null,
+  lastUpdate: 0,
+  // 上游分支缓存时间也较长，因为上游分支设置不频繁
+  cacheTimeout: 300000 // 5分钟缓存，或者直到主动清除
+};
+
 async function startUIServer(noOpen = false, savePort = false) {
   const app = express();
   const httpServer = createServer(app);
@@ -109,11 +117,44 @@ async function startUIServer(noOpen = false, savePort = false) {
     return branchName;
   }
 
+  // 获取上游分支的优化函数
+  async function getUpstreamBranchOptimized(forceRefresh = false) {
+    const now = Date.now();
+
+    // 如果不是强制刷新且缓存有效，使用缓存
+    if (!forceRefresh &&
+        upstreamBranchCache.upstreamBranch !== null &&
+        (now - upstreamBranchCache.lastUpdate) < upstreamBranchCache.cacheTimeout) {
+      console.log(`使用缓存的上游分支: ${upstreamBranchCache.upstreamBranch}`);
+      return upstreamBranchCache.upstreamBranch;
+    }
+
+    // 缓存失效或强制刷新，重新获取
+    console.log('重新获取上游分支...');
+    const { stdout: upstreamOutput } = await execGitCommand('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { ignoreError: true });
+    const upstreamBranch = upstreamOutput.trim() || null;
+
+    // 更新缓存
+    upstreamBranchCache = {
+      upstreamBranch,
+      lastUpdate: now,
+      cacheTimeout: 300000 // 5分钟缓存
+    };
+
+    return upstreamBranch;
+  }
+
   // 清除分支缓存的函数（在分支切换时调用）
   function clearBranchCache() {
     console.log('清除分支缓存');
     currentBranchCache = {
       branchName: null,
+      lastUpdate: 0,
+      cacheTimeout: 300000
+    };
+    // 清除上游分支缓存
+    upstreamBranchCache = {
+      upstreamBranch: null,
       lastUpdate: 0,
       cacheTimeout: 300000
     };
@@ -184,10 +225,15 @@ async function startUIServer(noOpen = false, savePort = false) {
 
       const currentBranch = await getCurrentBranchOptimized(shouldForceRefreshBranch);
 
-      // 获取上游分支
-      const { stdout: upstreamOutput } = await execGitCommand('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { ignoreError: true });
+      // 使用优化后的上游分支获取函数
+      // 只有在分支状态强制刷新且上游分支缓存也失效时，才强制刷新上游分支
+      const shouldForceRefreshUpstream = forceRefresh &&
+        (upstreamBranchCache.upstreamBranch === null ||
+         (Date.now() - upstreamBranchCache.lastUpdate) >= upstreamBranchCache.cacheTimeout);
 
-      if (!upstreamOutput.trim()) {
+      const upstreamBranch = await getUpstreamBranchOptimized(shouldForceRefreshUpstream);
+
+      if (!upstreamBranch) {
         // 没有上游分支，清空缓存
         branchStatusCache = {
           currentBranch: null,
@@ -197,8 +243,6 @@ async function startUIServer(noOpen = false, savePort = false) {
         };
         return res.json({ hasUpstream: false, ahead: 0, behind: 0 });
       }
-
-      const upstreamBranch = upstreamOutput.trim();
 
       // 更新缓存
       branchStatusCache = {
