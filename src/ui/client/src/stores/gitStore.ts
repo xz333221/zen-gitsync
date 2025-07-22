@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 import { io, Socket } from 'socket.io-client'
 
 // 定义Git操作间隔时间（毫秒）
-const GIT_OPERATION_DELAY = 300
+const GIT_OPERATION_DELAY = 500
 
 // 获取后端服务器端口
 function getBackendPort() {
@@ -989,9 +989,9 @@ export const useGitStore = defineStore('git', () => {
         return true
       } else {
         ElMessage({
-          message: `提交失败: ${result.error}`,
-          type: 'error'
-        })
+          message: `commitChanges 提交失败: ${result.error}`,
+          type: "error",
+        });
         return false
       }
     } catch (error) {
