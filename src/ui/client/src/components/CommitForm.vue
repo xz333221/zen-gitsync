@@ -9,6 +9,7 @@ const gitStore = useGitStore();
 const configStore = useConfigStore();
 const commitMessage = ref("");
 const showPushSuccess = ref(false);
+const isUpdatingStatus = ref(false); // 添加状态更新中的标识
 // 添加placeholder变量
 const placeholder = ref("输入提交信息...");
 // 添加默认提交信息变量
@@ -603,6 +604,9 @@ async function pushToRemote() {
   try {
     await gitStore.pushToRemote();
 
+    // 推送完成后，设置状态更新中标识，避免显示间隙
+    isUpdatingStatus.value = true;
+
     // 等待分支状态刷新完成后再显示成功动画
     try {
       // 手动更新分支状态
@@ -614,8 +618,11 @@ async function pushToRemote() {
       console.error('刷新分支状态失败:', error);
       // 即使刷新失败也显示成功动画，因为推送操作已经成功
       showPushSuccessIndicator();
+    } finally {
+      isUpdatingStatus.value = false;
     }
   } catch (error) {
+    isUpdatingStatus.value = false;
     ElMessage({
       message: `推送失败: ${(error as Error).message}`,
       type: 'error',
@@ -696,6 +703,7 @@ async function addCommitAndPush() {
       clearCommitFields();
 
       // 等待分支状态刷新完成后再显示成功动画
+      isUpdatingStatus.value = true;
       try {
         // 延时确保所有状态都已更新
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -709,6 +717,8 @@ async function addCommitAndPush() {
         console.error('刷新分支状态失败:', error);
         // 即使刷新失败也显示成功动画，因为主要操作已经成功
         showPushSuccessIndicator();
+      } finally {
+        isUpdatingStatus.value = false;
       }
     }
 
@@ -1149,13 +1159,15 @@ function toggleGitOperationsDrawer() {
 
     <!-- 添加推送中指示器 -->
     <transition name="el-fade-in-linear">
-      <div v-if="gitStore.isPushing" class="pushing-indicator">
+      <div v-if="gitStore.isPushing || isUpdatingStatus" class="pushing-indicator">
         <div class="pushing-spinner">
           <svg viewBox="0 0 50 50" class="circular">
             <circle class="path" cx="25" cy="25" r="20" fill="none" />
           </svg>
         </div>
-        <div class="pushing-text">正在推送...</div>
+        <div class="pushing-text">
+          {{ gitStore.isPushing ? '正在推送...' : '更新状态中...' }}
+        </div>
       </div>
     </transition>
 
