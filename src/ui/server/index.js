@@ -147,12 +147,15 @@ async function startUIServer(noOpen = false, savePort = false) {
 
       const now = Date.now();
       const forceRefresh = req.query.force === 'true';
+      const refreshCountOnly = req.query.countOnly === 'true'; // 新增：只刷新计数
 
-      // 检查缓存是否有效（除非强制刷新）
-      if (!forceRefresh &&
-          branchStatusCache.currentBranch &&
-          branchStatusCache.upstreamBranch &&
-          (now - branchStatusCache.lastUpdate) < branchStatusCache.cacheTimeout) {
+      // 检查分支信息缓存是否有效
+      const branchInfoCacheValid = branchStatusCache.currentBranch &&
+                                   branchStatusCache.upstreamBranch &&
+                                   (now - branchStatusCache.lastUpdate) < branchStatusCache.cacheTimeout;
+
+      // 如果只需要刷新计数，或者缓存有效且不是强制刷新
+      if ((refreshCountOnly && branchInfoCacheValid) || (!forceRefresh && branchInfoCacheValid)) {
 
         // 使用缓存的分支信息，只重新计算领先/落后状态
         const { stdout: aheadBehindOutput } = await execGitCommand(
@@ -160,7 +163,7 @@ async function startUIServer(noOpen = false, savePort = false) {
         );
         const [ahead, behind] = aheadBehindOutput.trim().split('\t').map(Number);
 
-        console.log(`使用缓存的分支信息: ${branchStatusCache.currentBranch} -> ${branchStatusCache.upstreamBranch}`);
+        console.log(`使用缓存的分支信息: ${branchStatusCache.currentBranch} -> ${branchStatusCache.upstreamBranch} (${refreshCountOnly ? '只刷新计数' : '缓存有效'})`);
 
         return res.json({
           hasUpstream: true,
@@ -173,8 +176,13 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 缓存失效或强制刷新，重新获取分支信息
       console.log('重新获取分支信息...');
 
-      // 使用优化后的分支获取函数
-      const currentBranch = await getCurrentBranchOptimized(forceRefresh);
+      // 分支名缓存和分支状态缓存独立工作
+      // 只有在分支状态强制刷新且分支名缓存也失效时，才强制刷新分支名
+      const shouldForceRefreshBranch = forceRefresh &&
+        (!currentBranchCache.branchName ||
+         (Date.now() - currentBranchCache.lastUpdate) >= currentBranchCache.cacheTimeout);
+
+      const currentBranch = await getCurrentBranchOptimized(shouldForceRefreshBranch);
 
       // 获取上游分支
       const { stdout: upstreamOutput } = await execGitCommand('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { ignoreError: true });

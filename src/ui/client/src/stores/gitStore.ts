@@ -143,20 +143,25 @@ export const useGitStore = defineStore('git', () => {
   }
 
   // 获取分支状态（领先/落后远程）- 带缓存优化
-  async function getBranchStatus(forceRefresh = false) {
+  async function getBranchStatus(forceRefresh = false, countOnly = false) {
     if (!isGitRepo.value) return;
 
     // 如果不是强制刷新，且距离上次获取不到30秒，使用缓存
     const now = Date.now();
-    if (!forceRefresh && now - lastBranchStatusTime.value < 30000) {
+    if (!forceRefresh && !countOnly && now - lastBranchStatusTime.value < 30000) {
       console.log('使用缓存的分支状态');
       return;
     }
 
     try {
       console.log('获取分支状态...');
-      // 传递force参数到后端API
-      const url = forceRefresh ? '/api/branch-status?force=true' : '/api/branch-status';
+      // 构建URL参数
+      let url = '/api/branch-status';
+      const params = [];
+      if (forceRefresh) params.push('force=true');
+      if (countOnly) params.push('countOnly=true');
+      if (params.length > 0) url += '?' + params.join('&');
+
       const response = await fetch(url);
       const data = await response.json();
 
@@ -1029,9 +1034,9 @@ export const useGitStore = defineStore('git', () => {
 
         // 推送成功后只刷新必要的状态，避免重复调用
         await Promise.all([
-          fetchStatus(),      // 刷新文件状态
-          fetchLog(),         // 刷新提交日志
-          getBranchStatus(true) // 强制刷新分支状态
+          fetchStatus(),              // 刷新文件状态
+          fetchLog(),                 // 刷新提交日志
+          getBranchStatus(false, true) // 只刷新领先/落后计数，不重新获取分支信息
         ])
 
         return true
