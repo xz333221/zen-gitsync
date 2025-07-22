@@ -23,6 +23,14 @@ let debounceTimer = null;
 // 防抖延迟时间 (毫秒)
 const DEBOUNCE_DELAY = 1000;
 
+// 分支状态缓存
+let branchStatusCache = {
+  currentBranch: null,
+  upstreamBranch: null,
+  lastUpdate: 0,
+  cacheTimeout: 5000 // 5秒缓存
+};
+
 async function startUIServer(noOpen = false, savePort = false) {
   const app = express();
   const httpServer = createServer(app);
@@ -76,32 +84,74 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
 
-  // 获取分支与远程的差异状态（领先/落后提交数）
+  // 获取分支与远程的差异状态（领先/落后提交数）- 优化版本
   app.get('/api/branch-status', async (req, res) => {
     try {
       // 检查当前目录是否是Git仓库
       if (!isGitRepo) {
         return res.json({ hasUpstream: false, ahead: 0, behind: 0 });
       }
-      
+
+      const now = Date.now();
+      const forceRefresh = req.query.force === 'true';
+
+      // 检查缓存是否有效（除非强制刷新）
+      if (!forceRefresh &&
+          branchStatusCache.currentBranch &&
+          branchStatusCache.upstreamBranch &&
+          (now - branchStatusCache.lastUpdate) < branchStatusCache.cacheTimeout) {
+
+        // 使用缓存的分支信息，只重新计算领先/落后状态
+        const { stdout: aheadBehindOutput } = await execGitCommand(
+          `git rev-list --left-right --count ${branchStatusCache.currentBranch}...${branchStatusCache.upstreamBranch}`
+        );
+        const [ahead, behind] = aheadBehindOutput.trim().split('\t').map(Number);
+
+        console.log(`使用缓存的分支信息: ${branchStatusCache.currentBranch} -> ${branchStatusCache.upstreamBranch}`);
+
+        return res.json({
+          hasUpstream: true,
+          upstreamBranch: branchStatusCache.upstreamBranch,
+          ahead,
+          behind
+        });
+      }
+
+      // 缓存失效或强制刷新，重新获取分支信息
+      console.log('重新获取分支信息...');
+
       // 获取当前分支
       const { stdout: branchOutput } = await execGitCommand('git symbolic-ref --short HEAD');
       const currentBranch = branchOutput.trim();
-      
+
       // 获取上游分支
       const { stdout: upstreamOutput } = await execGitCommand('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { ignoreError: true });
-      
+
       if (!upstreamOutput.trim()) {
-        // 没有上游分支
+        // 没有上游分支，清空缓存
+        branchStatusCache = {
+          currentBranch: null,
+          upstreamBranch: null,
+          lastUpdate: 0,
+          cacheTimeout: 5000
+        };
         return res.json({ hasUpstream: false, ahead: 0, behind: 0 });
       }
-      
+
       const upstreamBranch = upstreamOutput.trim();
-      
+
+      // 更新缓存
+      branchStatusCache = {
+        currentBranch,
+        upstreamBranch,
+        lastUpdate: now,
+        cacheTimeout: 5000
+      };
+
       // 获取领先/落后提交数
       const { stdout: aheadBehindOutput } = await execGitCommand(`git rev-list --left-right --count ${currentBranch}...${upstreamBranch}`);
       const [ahead, behind] = aheadBehindOutput.trim().split('\t').map(Number);
-      
+
       res.json({
         hasUpstream: true,
         upstreamBranch,
