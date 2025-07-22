@@ -1021,6 +1021,10 @@ export const useGitStore = defineStore('git', () => {
       
       const result = await response.json()
       if (result.success) {
+        await Promise.all([
+          fetchStatus(),
+          getBranchStatus(), // 更新分支状态
+        ]);
         ElMessage({
           message: '推送成功',
           type: 'success'
@@ -1028,9 +1032,7 @@ export const useGitStore = defineStore('git', () => {
 
         // 等待所有状态刷新完成
         await Promise.all([
-          fetchStatus(),      // 刷新文件状态
           fetchLog(),         // 刷新提交日志
-          getBranchStatus()   // 更新分支状态
         ])
 
         return true

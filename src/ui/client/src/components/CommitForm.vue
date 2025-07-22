@@ -694,7 +694,7 @@ async function addCommitAndPush() {
       // 额外等待一下，确保所有状态都已更新
       setTimeout(() => {
         // 强制刷新分支状态，确保界面同步
-        gitStore.getBranchStatus(true); // 强制刷新
+        // gitStore.getBranchStatus(true); // 强制刷新
       }, 1000);
     }
 
