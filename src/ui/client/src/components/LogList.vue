@@ -39,50 +39,6 @@ import "element-plus/dist/index.css";
 import { createGitgraph } from "@gitgraph/js";
 import { useGitStore } from "../stores/gitStore";
 
-// 添加分支图绘制相关接口和常量
-interface CommitNode {
-  hash: string;
-  parents: string[];
-  column: number;
-  row: number;
-  branch?: string; // 分支名称
-}
-
-interface BranchInfo {
-  name: string;
-  color: string;
-  column: number;
-}
-
-interface BranchLine {
-  fromRow: number;
-  fromColumn: number;
-  toRow: number;
-  toColumn: number;
-  color: string;
-}
-
-// 添加新的接口定义，用于处理绘图时的线条类型
-interface ThroughLine extends BranchLine {
-  type: 'through';
-  x: number;
-}
-
-interface FromLine extends BranchLine {
-  type: 'from';
-  fromX: number;
-  toX: number;
-}
-
-interface ToLine extends BranchLine {
-  type: 'to';
-  fromX: number;
-  toX: number;
-}
-
-// 联合类型表示所有可能的线条类型
-type GraphLine = ThroughLine | FromLine | ToLine;
-
 // const COLORS = [
 //   "#2196f3", // 蓝色
 //   "#e91e63", // 粉色
@@ -133,6 +89,8 @@ const commitDiff = ref("");
 const isLoadingCommitDetail = ref(false);
 const selectedCommitFile = ref("");
 
+
+
 // 添加图表缩放控制
 const graphScale = ref(1);
 const minScale = 0.5;
@@ -158,11 +116,7 @@ const contextMenuTop = ref(0);
 const contextMenuLeft = ref(0);
 const selectedContextCommit = ref<LogItem | null>(null);
 
-// 添加分支图相关变量
-const commitNodes = ref<Map<string, CommitNode>>(new Map());
-const branchLines = ref<BranchLine[]>([]);
-const columnCount = ref(1);
-const branchInfo = ref<Map<string, BranchInfo>>(new Map());
+
 
 // 应用筛选后的日志
 const filteredLogs = computed(() => {
@@ -188,8 +142,6 @@ async function loadLog(all = false, page = 1) {
     } else {
       localLoading.value = true;
     }
-
-    console.log(`加载提交历史: page=${page}, all=${all}`);
 
     // 构建查询参数
     const queryParams = new URLSearchParams();
@@ -228,7 +180,6 @@ async function loadLog(all = false, page = 1) {
 
     // 确保result有正确的数据结构
     if (!result || !result.data || !Array.isArray(result.data)) {
-      console.error("API返回的数据格式不正确:", result);
       errorMessage.value = "加载提交历史失败: 服务器返回数据格式不正确";
       return;
     }
@@ -253,12 +204,6 @@ async function loadLog(all = false, page = 1) {
     // 更新总数和分页标记
     totalCommits.value = result.total || logsData.length;
     hasMoreData.value = result.hasMore === true;
-
-    console.log(`加载完成: 当前页=${currentPage.value}, 是否有更多=${hasMoreData.value}, 总条数=${totalCommits.value}`);
-
-    if (!hasMoreData.value) {
-      console.log("已加载所有提交记录");
-    }
 
     // 设置刷新提示状态（仅在初次加载时）
     if (!isLoadMore) {
@@ -285,7 +230,6 @@ async function loadLog(all = false, page = 1) {
     errorMessage.value =
       "加载提交历史失败: " +
       (error instanceof Error ? error.message : String(error));
-    console.error("加载日志失败:", error);
 
     // 如果加载更多失败，标记没有更多数据
     if (page > 1) {
@@ -303,23 +247,17 @@ async function loadLog(all = false, page = 1) {
 
 // 渲染Git图表
 async function renderGraph() {
-  console.log(`开始渲染图表...数据长度: ${logsData.length}`);
-
   if (!graphContainer.value) {
-    console.error("图表容器未找到");
     return;
   }
 
   if (logsData.length === 0) {
-    console.error("没有日志数据可渲染");
     return;
   }
 
   try {
     // 清空容器
     graphContainer.value.innerHTML = "";
-
-    console.log(`创建gitgraph实例，分支: ${gitStore.currentBranch || "main"}`);
 
     // 创建gitgraph实例
     const gitgraph = createGitgraph(graphContainer.value, {
@@ -334,10 +272,8 @@ async function renderGraph() {
     const mainBranch = gitgraph.branch(gitStore.currentBranch || "main");
     branches[gitStore.currentBranch || "main"] = mainBranch;
 
-    console.log(`开始创建提交图...共${logsData.length}条提交`);
-
     // 简化示例 - 实际实现需要根据API返回的数据结构调整
-    logsData.forEach((commit, index) => {
+    logsData.forEach((commit) => {
       // 这里需要根据实际数据结构构建分支图
       let currentBranch = mainBranch;
 
@@ -356,20 +292,13 @@ async function renderGraph() {
         subject: commit.message,
         author: `${commit.author} <${commit.email}>`,
       });
-
-      if (index % 10 === 0) {
-        console.log(`已渲染 ${index + 1}/${logsData.length} 个提交`);
-      }
     });
-
-    console.log("图表渲染完成");
 
     // 确保渲染完成后调用自适应缩放
     setTimeout(() => {
       fitGraphToContainer();
     }, 100);
   } catch (error) {
-    console.error("渲染图表失败:", error);
     errorMessage.value =
       "渲染图表失败: " +
       (error instanceof Error ? error.message : String(error));
@@ -449,60 +378,39 @@ function handleTableScroll(event: Event) {
   const { scrollTop, scrollHeight, clientHeight } = target;
   const scrollDistance = scrollHeight - scrollTop - clientHeight;
 
-  // 调试信息
-  console.log("表格滚动:", {
-    scrollTop,
-    scrollHeight,
-    clientHeight,
-    scrollDistance,
-    hasMoreData: hasMoreData.value,
-    isLoadingMore: isLoadingMore.value,
-    isLoading: isLoading.value
-  });
-
   // 当滚动到距离底部20px时触发加载
   if (scrollDistance <= 20) {
-    console.log("已滚动到底部，加载更多数据");
     loadMoreLogs();
   }
 }
 
 // 设置表格滚动监听
 function setupTableScrollListener() {
-  console.log("设置表格滚动监听 - 开始");
   if (!tableRef.value) {
-    console.error("tableRef.value 不存在");
     return;
   }
 
   // 获取表格的body-wrapper
   const bodyWrapper = tableRef.value.$el.querySelector(".el-table__body-wrapper");
-  
+
   if (!bodyWrapper) {
-    console.error("未找到表格的body-wrapper元素");
     return;
   }
-  
-  console.log("找到表格的body-wrapper元素");
+
   tableBodyWrapper.value = bodyWrapper;
 
   // 先移除旧的监听器，避免重复
   if (tableBodyWrapper.value) {
     tableBodyWrapper.value.removeEventListener("scroll", handleTableScroll, true);
     tableBodyWrapper.value.addEventListener("scroll", handleTableScroll, true);
-    console.log("成功添加表格滚动监听");
   }
 }
 
 // 移除表格滚动监听
 function removeTableScrollListener() {
-  console.log("移除表格滚动监听 - 开始");
   if (tableBodyWrapper.value) {
     tableBodyWrapper.value.removeEventListener("scroll", handleTableScroll, true);
-    console.log("成功移除表格滚动监听");
     tableBodyWrapper.value = null;
-  } else {
-    console.log("tableBodyWrapper.value 不存在，无需移除监听");
   }
 }
 
@@ -520,8 +428,6 @@ onMounted(() => {
   if (gitStore.isGitRepo) {
     if (gitStore.log.length > 0) {
       // 如果已经有数据，直接使用现有数据
-      console.log("使用已加载的日志数据");
-
       // 清空并填充logsData
       logsData.length = 0;
       gitStore.log.forEach((item) => logsData.push(item));
@@ -532,18 +438,11 @@ onMounted(() => {
       // 确保视图被渲染
       if (showGraphView.value) {
         setTimeout(() => {
-          console.log(`准备渲染图表，数据长度: ${logsData.length}`);
           renderGraph();
-        }, 100);
-      } else {
-        // 如果是表格视图，渲染分支图
-        setTimeout(() => {
-          renderTableBranchGraph();
         }, 100);
       }
     } else {
       // 否则加载数据
-      console.log("初始加载日志数据");
       loadLog();
     }
 
@@ -562,19 +461,11 @@ onMounted(() => {
     }, 500); // 给表格足够的时间来渲染
   });
 
-  // 表格数据加载完成后绘制分支图
-  nextTick(() => {
-    setTimeout(() => {
-      if (!showGraphView.value) {
-        renderTableBranchGraph();
-      }
-    }, 500);
-  });
+
 
   // 添加对表格的监听，确保表格创建后设置滚动监听
   watch(() => tableRef.value, (newTableRef) => {
     if (newTableRef && !showGraphView.value && !showAllCommits.value) {
-      console.log("表格引用已创建，设置滚动监听");
       nextTick(() => {
         setupTableScrollListener();
       });
@@ -591,10 +482,8 @@ watch(
   (newBranches) => {
     if (newBranches && newBranches.length > 0) {
       availableBranches.value = [...newBranches].sort();
-      console.log(`分支数据更新，共 ${availableBranches.value.length} 个分支`);
     } else {
       availableBranches.value = [];
-      console.warn("gitStore 中没有分支数据");
     }
   },
   { immediate: true }
@@ -614,20 +503,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown);
 });
 
-// 添加一个简单的防抖函数
-function debounce(fn: Function, delay: number) {
-  let timer: number | null = null;
-  return function(...args: any[]) {
-    if (timer) clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      fn(...args);
-      timer = null;
-    }, delay);
-  };
-}
 
-// 对renderTableBranchGraph进行防抖处理
-const debouncedRenderTableBranchGraph = debounce(renderTableBranchGraph, 200);
 
 // 修改refreshLog函数
 async function refreshLog() {
@@ -659,14 +535,6 @@ async function refreshLog() {
   if (showGraphView.value) {
     await nextTick();
     renderGraph();
-  } else {
-    // 如果是表格视图，清空并重新计算分支图
-    commitNodes.value.clear();
-    branchLines.value = [];
-    columnCount.value = 1;
-    await nextTick();
-    // 使用防抖版本
-    debouncedRenderTableBranchGraph();
   }
 }
 
@@ -674,8 +542,6 @@ async function refreshLog() {
 watch(
   () => gitStore.log,
   (newLogs) => {
-    console.log("监听到gitStore.log变化，更新图表数据");
-
     try {
       // 清空logsData
       logsData.length = 0;
@@ -702,13 +568,11 @@ watch(
         logRefreshed.value = false;
       }, 2000);
 
-      console.log(`数据更新完成，共${logs.value.length}条记录，准备渲染图表`);
-
       if (showGraphView.value && logsData.length > 0) {
         setTimeout(renderGraph, 0);
       }
     } catch (error) {
-      console.error("更新日志数据失败:", error);
+      // 静默处理错误
     }
   },
   { immediate: true }
@@ -768,6 +632,10 @@ function fitGraphToContainer() {
   applyScale();
 }
 
+
+
+
+
 // 查看提交详情
 async function viewCommitDetail(commit: LogItem | null) {
   if (!commit) return;
@@ -779,26 +647,9 @@ async function viewCommitDetail(commit: LogItem | null) {
   commitDiff.value = "";
   selectedCommitFile.value = "";
 
-  // 调试输出当前提交对象的所有属性
-  console.log("提交详情对象:", JSON.stringify(commit, null, 2));
-  console.log(
-    "哈希值类型和长度:",
-    typeof commit.hash,
-    commit.hash ? commit.hash.length : 0
-  );
-  console.log(
-    "提交信息类型和长度:",
-    typeof commit.message,
-    commit.message ? commit.message.length : 0
-  );
-  console.log("提交分支:", commit.branch);
-
   try {
-    console.log(`获取提交详情: ${commit.hash}`);
-
     // 确保哈希值有效
     if (!commit.hash || commit.hash.length < 7) {
-      console.error("无效的提交哈希值:", commit.hash);
       commitDiff.value = "无效的提交哈希值";
       isLoadingCommitDetail.value = false;
       return;
@@ -806,9 +657,7 @@ async function viewCommitDetail(commit: LogItem | null) {
 
     // 获取提交的变更文件列表
     const filesResponse = await fetch(`/api/commit-files?hash=${commit.hash}`);
-    console.log("API响应状态: ", filesResponse.status);
     const filesData = await filesResponse.json();
-    console.log("文件列表数据: ", filesData);
 
     if (filesData.success && Array.isArray(filesData.files)) {
       commitFiles.value = filesData.files;
@@ -817,15 +666,12 @@ async function viewCommitDetail(commit: LogItem | null) {
       if (commitFiles.value.length > 0) {
         await getCommitFileDiff(commit.hash, commitFiles.value[0]);
       } else {
-        console.log("没有找到变更文件");
         commitDiff.value = "该提交没有变更文件";
       }
     } else {
-      console.error("获取提交文件列表失败:", filesData.error || "未知错误");
       commitDiff.value = `获取文件列表失败: ${filesData.error || "未知错误"}`;
     }
   } catch (error) {
-    console.error("获取提交详情失败:", error);
     commitDiff.value = `获取提交详情失败: ${(error as Error).message}`;
   } finally {
     isLoadingCommitDetail.value = false;
@@ -838,22 +684,17 @@ async function getCommitFileDiff(hash: string, filePath: string) {
   selectedCommitFile.value = filePath;
 
   try {
-    console.log(`获取文件差异: hash=${hash}, file=${filePath}`);
     const diffResponse = await fetch(
       `/api/commit-file-diff?hash=${hash}&file=${encodeURIComponent(filePath)}`
     );
-    console.log("差异API响应状态: ", diffResponse.status);
     const diffData = await diffResponse.json();
-    console.log("差异数据: ", diffData.success, typeof diffData.diff);
 
     if (diffData.success) {
       commitDiff.value = diffData.diff || "没有变更内容";
     } else {
-      console.error("获取差异失败: ", diffData.error);
       commitDiff.value = `获取差异失败: ${diffData.error || "未知错误"}`;
     }
   } catch (error) {
-    console.error("获取文件差异失败:", error);
     commitDiff.value = `获取差异失败: ${(error as Error).message}`;
   } finally {
     isLoadingCommitDetail.value = false;
@@ -906,10 +747,6 @@ function formatDiff(diffText: string) {
 function formatCommitMessage(message: string) {
   if (!message) return "(无提交信息)";
 
-  // 调试输出
-  console.log("格式化前的提交信息:", message);
-  console.log("提交信息中的换行符数量:", (message.match(/\n/g) || []).length);
-
   // 返回格式化后的提交信息，保留换行符
   return message.trim();
 }
@@ -946,15 +783,9 @@ async function copyPureMessage(message: string) {
 // 加载更多日志
 function loadMoreLogs() {
   if (!hasMoreData.value || isLoadingMore.value || isLoading.value) {
-    console.log("不满足加载更多条件:", {
-      hasMoreData: hasMoreData.value,
-      isLoadingMore: isLoadingMore.value,
-      isLoading: isLoading.value
-    });
     return;
   }
 
-  console.log(`加载更多日志，当前页码: ${currentPage.value}，下一页: ${currentPage.value + 1}`);
   loadLog(showAllCommits.value, currentPage.value + 1);
 }
 
@@ -980,22 +811,18 @@ function applyFilters() {
 // 添加获取所有作者的函数
 async function fetchAllAuthors() {
   try {
-    console.log("获取所有可用作者...");
     const response = await fetch("/api/authors");
     const result = await response.json();
 
     if (result.success && Array.isArray(result.authors)) {
       // 更新可用作者列表
       availableAuthors.value = result.authors.sort();
-      console.log(`获取到${availableAuthors.value.length}位作者`);
     } else {
       // 如果获取作者列表失败，但正常获取了日志
       // 从当前加载的日志中提取作者列表作为备选
-      console.warn("从API获取作者列表失败，将从现有日志中提取作者列表");
       extractAuthorsFromLogs();
     }
   } catch (error) {
-    console.error("获取作者列表失败:", error);
     // 从当前加载的日志中提取作者列表作为备选
     extractAuthorsFromLogs();
   }
@@ -1010,559 +837,24 @@ function extractAuthorsFromLogs() {
     }
   });
   availableAuthors.value = Array.from(authors).sort();
-  console.log(`从现有日志中提取了${availableAuthors.value.length}位作者`);
 }
 
-// 渲染表格中的分支图
-function renderTableBranchGraph() {
-  if (!tableRef.value || showGraphView.value) return;
-  
-  // 清空之前的计算结果
-  commitNodes.value.clear();
-  branchLines.value = [];
-  columnCount.value = 1;
-  
-  // 第一步：为每个提交分配列位置
-  assignColumnsToCommits();
-  
-  // 第二步：绘制图形
-  nextTick(() => {
-    drawBranchGraphs();
-  });
-}
 
-// 为每个提交分配列位置 - 新的动态算法
-function assignColumnsToCommits() {
-  console.log("开始重新分配提交列位置");
 
-  // 重置数据
-  commitNodes.value.clear();
-  branchLines.value = [];
-  branchInfo.value.clear();
 
-  if (logs.value.length === 0) return;
 
-  // 智能分支图算法 - 基于子提交数量来决定分支
-  const commitColumns = new Map<string, number>(); // hash -> column
-  const childrenCount = new Map<string, number>(); // hash -> 子提交数量
-  let nextAvailableColumn = 1; // 从1开始，0留给主分支
-
-  console.log("开始智能分支图算法...");
-
-  // 第一步：统计每个提交的子提交数量
-  logs.value.forEach(commit => {
-    if (!commit.hash || !commit.parents) return;
-
-    commit.parents.forEach(parentHash => {
-      const currentCount = childrenCount.get(parentHash) || 0;
-      childrenCount.set(parentHash, currentCount + 1);
-    });
-  });
-
-  console.log("子提交统计完成:");
-  Array.from(childrenCount.entries()).forEach(([hash, count]) => {
-    if (count > 1) {
-      console.log(`  分支点: ${hash.substring(0, 7)} 有 ${count} 个子提交`);
-    }
-  });
-
-  // 检查合并提交
-  const mergeCommits = logs.value.filter(commit =>
-    commit.parents && commit.parents.length > 1
-  );
-  console.log(`发现 ${mergeCommits.length} 个合并提交:`);
-  mergeCommits.forEach(commit => {
-    console.log(`  合并提交: ${commit.hash?.substring(0, 7)} 有 ${commit.parents?.length} 个父提交`);
-  });
-
-  // 第二步：为每个提交分配列
-  logs.value.forEach((commit, rowIndex) => {
-    if (!commit.hash) return;
-
-    console.log(`\n处理提交 ${commit.hash.substring(0, 7)} (行${rowIndex})`);
-    console.log(`父提交:`, commit.parents || []);
-    console.log(`分支信息:`, commit.branch);
-
-    let assignedColumn: number;
-    const parents = commit.parents || [];
-
-    if (rowIndex === 0) {
-      // 第一个提交：智能识别分支
-      const branchInfo = commit.branch || '';
-      const isTag = branchInfo.includes('tag:');
-
-      // 更精确的主分支识别：只有包含 main 但不包含其他分支名的才是主分支
-      const isOnMainBranch = (branchInfo.includes('main') && !branchInfo.includes('testbranch')) ||
-                            (branchInfo.includes('origin/HEAD') && branchInfo.includes('main')) ||
-                            !branchInfo.trim();
-
-      // 检查是否在真正的分支上
-      const hasRealBranch = branchInfo.includes('testbranch') ||
-                           (branchInfo.trim() && !isOnMainBranch && !isTag);
-
-      if (hasRealBranch && !isTag) {
-        assignedColumn = nextAvailableColumn++;
-        console.log(`第一个提交在真正的分支上 (${branchInfo})，分配到列 ${assignedColumn}`);
-      } else {
-        assignedColumn = 0;
-        console.log(`第一个提交在主分支上 (${branchInfo})，分配到列 0`);
-      }
-    } else if (parents.length === 0) {
-      // 没有父提交，使用主分支
-      assignedColumn = 0;
-      console.log(`没有父提交，使用主分支`);
-    } else if (parents.length === 1) {
-      // 单父提交
-      const parentHash = parents[0];
-      const parentColumn = commitColumns.get(parentHash);
-      const parentChildrenCount = childrenCount.get(parentHash) || 1;
-
-      if (parentColumn !== undefined) {
-        // 父提交在视图中
-        if (parentChildrenCount === 1) {
-          // 父提交只有一个子提交，继承其列
-          assignedColumn = parentColumn;
-          console.log(`父提交只有1个子提交，继承列 ${assignedColumn}`);
-        } else {
-          // 父提交有多个子提交，这是一个分支点
-          console.log(`父提交 ${parentHash.substring(0, 7)} 有 ${parentChildrenCount} 个子提交，这是一个分支点`);
-
-          // 检查已经处理过的兄弟提交
-          const processedSiblings = logs.value.slice(0, rowIndex).filter(c =>
-            c.parents && c.parents.includes(parentHash)
-          );
-
-          console.log(`已处理的兄弟提交数量: ${processedSiblings.length}`);
-
-          if (processedSiblings.length === 0) {
-            // 这是第一个被处理的子提交
-            if (parentColumn === 0) {
-              // 父提交在主分支上，第一个子提交继续主分支
-              assignedColumn = 0;
-              console.log(`第一个子提交，继续主分支`);
-            } else {
-              // 父提交在分支上，继承其列
-              assignedColumn = parentColumn;
-              console.log(`第一个子提交，继承父分支列 ${assignedColumn}`);
-            }
-          } else {
-            // 这不是第一个子提交，创建新分支
-            assignedColumn = nextAvailableColumn++;
-            console.log(`第 ${processedSiblings.length + 1} 个子提交，创建新分支 ${assignedColumn}`);
-          }
-        }
-      } else {
-        // 父提交不在当前视图中
-        // 对于分页情况，我们需要更智能的处理
-        // 检查这个提交是否是合并提交或有特殊的分支信息
-
-        // 检查提交的分支信息，更智能地识别真正的分支
-        const branchInfo = commit.branch || '';
-        const isTag = branchInfo.includes('tag:');
-
-        // 更精确的主分支识别
-        const isOnMainBranch = (branchInfo.includes('main') && !branchInfo.includes('testbranch')) ||
-                              (branchInfo.includes('origin/HEAD') && branchInfo.includes('main')) ||
-                              !branchInfo.trim();
-
-        // 检查是否在真正的分支上
-        const hasRealBranch = branchInfo.includes('testbranch') ||
-                             (branchInfo.trim() && !isOnMainBranch && !isTag);
-
-        if (hasRealBranch && !isTag) {
-          // 这个提交在一个真正的命名分支上，分配新列
-          assignedColumn = nextAvailableColumn++;
-          console.log(`提交在真正的分支上但父提交不在视图中，分配新分支列 ${assignedColumn} (分支: ${branchInfo})`);
-        } else {
-          // 主分支、标签或空分支信息，使用主分支
-          assignedColumn = 0;
-          console.log(`父提交不在视图中，使用主分支 (分支信息: ${branchInfo})`);
-        }
-      }
-    } else {
-      // 多父提交（合并提交）
-      const parentColumns = parents
-        .map(parentHash => commitColumns.get(parentHash))
-        .filter(col => col !== undefined) as number[];
-
-      if (parentColumns.length > 0) {
-        // 合并到主分支（最小列号）
-        assignedColumn = Math.min(...parentColumns);
-        console.log(`合并提交，合并到列 ${assignedColumn}`);
-      } else {
-        // 父提交都不在视图中，使用主分支
-        assignedColumn = 0;
-        console.log(`合并提交，父提交不在视图中，使用主分支`);
-      }
-    }
-
-    commitColumns.set(commit.hash, assignedColumn);
-    console.log(`提交 ${commit.hash.substring(0, 7)} 最终分配到列 ${assignedColumn}`);
-
-    // 记录提交节点
-    commitNodes.value.set(commit.hash, {
-      hash: commit.hash,
-      parents: commit.parents || [],
-      column: assignedColumn,
-      row: rowIndex,
-      branch: assignedColumn === 0 ? "main" : `branch-${assignedColumn}`
-    });
-  });
-
-  // 创建分支线
-  const mainBranchColor = "#2196f3";
-  const branchColors = [
-    "#e91e63", // 粉色
-    "#4caf50", // 绿色
-    "#ff9800", // 橙色
-    "#9c27b0", // 紫色
-    "#00bcd4", // 青色
-    "#ff5722", // 深橙色
-    "#607d8b", // 蓝灰色
-  ];
-
-  // 为每个提交创建到其父提交的连线
-  logs.value.forEach((commit, rowIndex) => {
-    if (!commit.hash) return;
-
-    const currentNode = commitNodes.value.get(commit.hash);
-    if (!currentNode) return;
-
-    console.log(`\n处理提交 ${commit.hash.substring(0, 7)} 的连线:`);
-
-    // 如果没有父提交，跳过
-    if (!commit.parents || commit.parents.length === 0) {
-      console.log(`提交 ${commit.hash.substring(0, 7)} 没有父提交`);
-      return;
-    }
-
-    // 处理每个父提交
-    commit.parents.forEach((parentHash, parentIndex) => {
-      const parentRow = logs.value.findIndex(c => c.hash === parentHash);
-
-      if (parentRow >= 0) {
-        // 父提交在当前视图中，创建正常连线
-        const parentNode = commitNodes.value.get(parentHash);
-        if (!parentNode) {
-          console.log(`找不到父提交节点 ${parentHash.substring(0, 7)}`);
-          return;
-        }
-
-        // 确定线条颜色 - 使用目标列的颜色
-        const targetColumn = currentNode.column;
-        const colorIndex = Math.min(targetColumn, branchColors.length - 1);
-        const lineColor = targetColumn === 0 ? mainBranchColor : branchColors[colorIndex];
-
-        // 创建分支线
-        const branchLine = {
-          fromRow: parentRow,      // 父提交在下方
-          fromColumn: parentNode.column,
-          toRow: rowIndex,         // 当前提交在上方
-          toColumn: currentNode.column,
-          color: lineColor
-        };
-
-        branchLines.value.push(branchLine);
-        console.log(`✓ 创建连线: ${logs.value[parentRow].hash.substring(0,7)} -> ${commit.hash.substring(0,7)}`);
-      } else {
-        // 父提交不在当前视图中，创建延续线到视图边界
-        console.log(`父提交 ${parentHash.substring(0, 7)} 不在当前视图中，创建延续线`);
-
-        // 确定线条颜色
-        const targetColumn = currentNode.column;
-        const colorIndex = Math.min(targetColumn, branchColors.length - 1);
-        const lineColor = targetColumn === 0 ? mainBranchColor : branchColors[colorIndex];
-
-        // 创建从视图底部到当前提交的延续线
-        const continuationLine = {
-          fromRow: logs.value.length,  // 视图底部
-          fromColumn: currentNode.column,
-          toRow: rowIndex,
-          toColumn: currentNode.column,
-          color: lineColor,
-          isDashed: true  // 标记为虚线，表示延续
-        };
-
-        branchLines.value.push(continuationLine);
-        console.log(`创建延续线: 从视图底部列${currentNode.column} 到 行${rowIndex}列${currentNode.column}`);
-      }
-    });
-  });
-
-  // 更新最大列数
-  columnCount.value = nextAvailableColumn;
-
-  console.log(`✓ 分支线创建完成: ${branchLines.value.length}条线`);
-
-  // 导出变量以供其他函数使用
-  return { mainBranchColor, branchColors };
-}
-
-// 添加一个变量来控制绘制状态，防止重复渲染
-let isDrawingBranchGraph = false;
-
-// 绘制分支图
-function drawBranchGraphs() {
-  // 检查是否正在进行渲染
-  if (isDrawingBranchGraph) {
-    console.log("已有渲染进行中，跳过");
-    return;
-  }
-
-  try {
-    isDrawingBranchGraph = true;
-
-    // 获取分支颜色映射，但防止递归调用
-    const branchColorMap = new Map<string, string>();
-    branchColorMap.set("main", "#2196f3"); // 蓝色
-    branchColorMap.set("master", "#2196f3"); // 蓝色
-    const mainBranchColor = "#2196f3";
-
-    // 仅当branchLines为空时才重新计算
-    if (branchLines.value.length === 0) {
-      console.log("branchLines为空，重新计算");
-      // 重新分配列位置
-      assignColumnsToCommits();
-
-      // 如果还是为空，创建一些默认线条
-      if (branchLines.value.length === 0 && logs.value.length > 1) {
-        console.log("创建默认分支线");
-        // 为连续的提交创建简单的垂直线（父提交在下方）
-        for (let i = 0; i < logs.value.length - 1; i++) {
-          if (logs.value[i].hash && logs.value[i+1].hash) {
-            branchLines.value.push({
-              fromRow: i+1,    // 父提交在下方（较大索引）
-              fromColumn: 0,   // 主分支列
-              toRow: i,        // 子提交在上方（较小索引）
-              toColumn: 0,     // 主分支列
-              color: mainBranchColor
-            });
-          }
-        }
-      }
-    } else {
-      console.log(`使用现有分支线，数量: ${branchLines.value.length}`);
-    }
-
-    // 使用新的连续绘制方法
-    drawContinuousBranchGraph();
-
-  } catch (error) {
-    console.error("渲染分支图失败:", error);
-    errorMessage.value = "渲染分支图失败: " + (error instanceof Error ? error.message : String(error));
-  } finally {
-    isDrawingBranchGraph = false;
-  }
-}
-
-// 新的连续分支图绘制方法
-function drawContinuousBranchGraph() {
-  console.log(`开始绘制连续分支图，共${logs.value.length}个提交，${branchLines.value.length}条分支线`);
-
-  if (!logs.value.length) return;
-
-  const columnWidth = 20;
-  const rowHeight = 40; // 表格行高
-  const mainBranchColor = "#2196f3";
-  const branchColors = ["#4caf50", "#ff9800", "#9c27b0", "#f44336", "#00bcd4"];
-
-  // 为每个提交创建SVG并绘制节点和连线
-  logs.value.forEach((commit, rowIndex) => {
-    if (!commit.hash) return;
-
-    const cellId = `commit-graph-${commit.hash.substring(0, 7)}`;
-    const cell = document.getElementById(cellId);
-    if (!cell) return;
-
-    // 如果单元格已经有SVG，清空它
-    cell.innerHTML = "";
-
-    // 创建SVG元素
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("width", "100%");
-    svg.setAttribute("height", "100%");
-    svg.setAttribute("viewBox", "0 0 260 40"); // 调整viewBox以匹配列宽
-    svg.style.display = "block";
-    svg.style.overflow = "visible";
-
-    cell.appendChild(svg);
-
-    // 获取当前提交节点信息
-    const node = commitNodes.value.get(commit.hash);
-    if (!node) return;
-
-    const x = 10 + node.column * columnWidth;
-    const y = 50; // 中心点
-
-    // 绘制连接线
-    drawConnectionLines(svg, rowIndex, x, y, columnWidth, mainBranchColor, branchColors);
-
-    // 绘制提交节点 - 使用正确的分支颜色
-    const nodeColor = node.column === 0 ? mainBranchColor : branchColors[Math.min(node.column - 1, branchColors.length - 1)];
-    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("cx", x.toString());
-    circle.setAttribute("cy", y.toString());
-    circle.setAttribute("r", "6");
-    circle.setAttribute("fill", nodeColor);
-    circle.setAttribute("stroke", "#fff");
-    circle.setAttribute("stroke-width", "2");
-    svg.appendChild(circle);
-  });
-}
-
-// 绘制连接线的辅助函数
-function drawConnectionLines(svg: SVGElement, rowIndex: number, x: number, y: number, columnWidth: number, mainColor: string, branchColors: string[]) {
-  // 查找与当前行相关的分支线
-  // 注意：现在fromRow > toRow（父提交在下方，子提交在上方）
-  const incomingLines = branchLines.value.filter(line => line.toRow === rowIndex);
-  const outgoingLines = branchLines.value.filter(line => line.fromRow === rowIndex);
-  const throughLines = branchLines.value.filter(line => line.fromRow > rowIndex && line.toRow < rowIndex);
-
-  // 绘制通过当前行的线条（不连接到节点）
-  throughLines.forEach(line => {
-    const lineX = 10 + line.fromColumn * columnWidth;
-    const throughLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    throughLine.setAttribute("x1", lineX.toString());
-    throughLine.setAttribute("y1", "0");
-    throughLine.setAttribute("x2", lineX.toString());
-    throughLine.setAttribute("y2", "100");
-    throughLine.setAttribute("stroke", line.color);
-    throughLine.setAttribute("stroke-width", "2");
-
-    // 如果是虚线，添加虚线样式
-    if ((line as any).isDashed) {
-      throughLine.setAttribute("stroke-dasharray", "5,5");
-    }
-
-    svg.appendChild(throughLine);
-  });
-
-  // 绘制进入当前节点的线条
-  incomingLines.forEach(line => {
-    const fromX = 10 + line.fromColumn * columnWidth;
-    const toX = 10 + line.toColumn * columnWidth;
-
-    if (line.fromColumn === line.toColumn) {
-      // 垂直线
-      const inLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      inLine.setAttribute("x1", fromX.toString());
-      inLine.setAttribute("y1", "0");
-      inLine.setAttribute("x2", toX.toString());
-      inLine.setAttribute("y2", y.toString());
-      inLine.setAttribute("stroke", line.color);
-      inLine.setAttribute("stroke-width", "2");
-
-      // 如果是虚线，添加虚线样式
-      if ((line as any).isDashed) {
-        inLine.setAttribute("stroke-dasharray", "5,5");
-      }
-
-      svg.appendChild(inLine);
-    } else {
-      // 弯曲线
-      const inPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      inPath.setAttribute("d", `M${fromX},0 C${fromX},25 ${toX},25 ${toX},${y}`);
-      inPath.setAttribute("stroke", line.color);
-      inPath.setAttribute("stroke-width", "2");
-      inPath.setAttribute("fill", "none");
-
-      // 如果是虚线，添加虚线样式
-      if ((line as any).isDashed) {
-        inPath.setAttribute("stroke-dasharray", "5,5");
-      }
-
-      svg.appendChild(inPath);
-    }
-  });
-
-  // 绘制从当前节点出发的线条
-  outgoingLines.forEach(line => {
-    const fromX = 10 + line.fromColumn * columnWidth;
-    const toX = 10 + line.toColumn * columnWidth;
-
-    if (line.fromColumn === line.toColumn) {
-      // 垂直线
-      const outLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      outLine.setAttribute("x1", fromX.toString());
-      outLine.setAttribute("y1", y.toString());
-      outLine.setAttribute("x2", toX.toString());
-      outLine.setAttribute("y2", "100");
-      outLine.setAttribute("stroke", line.color);
-      outLine.setAttribute("stroke-width", "2");
-
-      // 如果是虚线，添加虚线样式
-      if ((line as any).isDashed) {
-        outLine.setAttribute("stroke-dasharray", "5,5");
-      }
-
-      svg.appendChild(outLine);
-    } else {
-      // 弯曲线
-      const outPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      outPath.setAttribute("d", `M${fromX},${y} C${fromX},75 ${toX},75 ${toX},100`);
-      outPath.setAttribute("stroke", line.color);
-      outPath.setAttribute("stroke-width", "2");
-      outPath.setAttribute("fill", "none");
-
-      // 如果是虚线，添加虚线样式
-      if ((line as any).isDashed) {
-        outPath.setAttribute("stroke-dasharray", "5,5");
-      }
-
-      svg.appendChild(outPath);
-    }
-  });
-
-  // 如果没有任何线条且不是最后一行，绘制默认垂直线
-  if (incomingLines.length === 0 && outgoingLines.length === 0 && throughLines.length === 0) {
-    // 获取当前提交的节点信息来确定颜色
-    const currentCommit = logs.value[rowIndex];
-    const currentNode = commitNodes.value.get(currentCommit.hash);
-    const lineColor = currentNode && currentNode.column === 0 ? mainColor : branchColors[Math.min((currentNode?.column || 1) - 1, branchColors.length - 1)];
-
-    if (rowIndex > 0) {
-      // 从上方来的线
-      const inLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      inLine.setAttribute("x1", x.toString());
-      inLine.setAttribute("y1", "0");
-      inLine.setAttribute("x2", x.toString());
-      inLine.setAttribute("y2", y.toString());
-      inLine.setAttribute("stroke", lineColor);
-      inLine.setAttribute("stroke-width", "2");
-      svg.appendChild(inLine);
-    }
-
-    if (rowIndex < logs.value.length - 1) {
-      // 向下的线
-      const outLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      outLine.setAttribute("x1", x.toString());
-      outLine.setAttribute("y1", y.toString());
-      outLine.setAttribute("x2", x.toString());
-      outLine.setAttribute("y2", "100");
-      outLine.setAttribute("stroke", lineColor);
-      outLine.setAttribute("stroke-width", "2");
-      svg.appendChild(outLine);
-    }
-  }
-}
 
 // 监听logs.value的变化
 watch(
   () => logs.value,
   () => {
-    nextTick(() => {
-      if (!showGraphView.value) {
-        // 使用防抖版本
-        debouncedRenderTableBranchGraph();
-      }
-    });
+    // 图表视图相关逻辑已移除
   },
   { deep: true } // 添加deep选项以确保检测到数组内部元素的变化
 );
 
 // 处理右键菜单事件
-function handleContextMenu(row: LogItem, column: any, event: MouseEvent) {
-  console.log("handleContextMenu", row, column, event);
+function handleContextMenu(row: LogItem, _column: any, event: MouseEvent) {
   // 阻止默认右键菜单
   event.preventDefault();
 
@@ -1631,7 +923,6 @@ async function revertCommit(commit: LogItem | null) {
     }
   } catch (error: any) {
     if (error !== "cancel") {
-      console.error("撤销提交出错:", error);
       ElMessage.error("撤销提交失败: " + (error.message || error));
     }
   }
@@ -1677,7 +968,6 @@ async function cherryPickCommit(commit: LogItem | null) {
     }
   } catch (error: any) {
     if (error !== "cancel") {
-      console.error("Cherry-Pick提交出错:", error);
       ElMessage.error("Cherry-Pick提交失败: " + (error.message || error));
     }
   }
@@ -1691,7 +981,6 @@ async function copyCommitHash(commit: LogItem | null) {
     await navigator.clipboard.writeText(commit.hash);
     ElMessage.success(`已复制提交哈希: ${commit.hash.substring(0, 7)}`);
   } catch (error) {
-    console.error("复制提交哈希失败:", error);
     ElMessage.error(`复制提交哈希失败: ${(error as Error).message}`);
   }
 }
@@ -1739,7 +1028,6 @@ async function resetToCommit(commit: LogItem | null) {
     }
   } catch (error: any) {
     if (error !== "cancel") {
-      console.error("重置到指定提交出错:", error);
       ElMessage.error("重置到指定提交失败: " + (error.message || error));
     }
   }
@@ -1747,8 +1035,6 @@ async function resetToCommit(commit: LogItem | null) {
 
 // 检查表格是否滚动到底部并加载更多数据
 function checkAndLoadMore() {
-  console.log("检查是否需要加载更多数据");
-  
   if (
     showGraphView.value ||
     !hasMoreData.value ||
@@ -1756,34 +1042,18 @@ function checkAndLoadMore() {
     isLoading.value ||
     showAllCommits.value
   ) {
-    console.log("不满足加载条件:", {
-      showGraphView: showGraphView.value,
-      hasMoreData: hasMoreData.value,
-      isLoadingMore: isLoadingMore.value,
-      isLoading: isLoading.value,
-      showAllCommits: showAllCommits.value
-    });
     return;
   }
-  
+
   if (!tableBodyWrapper.value) {
-    console.log("表格容器不存在，重新设置滚动监听");
     setupTableScrollListener();
     return;
   }
-  
+
   const { scrollTop, scrollHeight, clientHeight } = tableBodyWrapper.value;
   const scrollDistance = scrollHeight - scrollTop - clientHeight;
-  
-  console.log("表格滚动位置:", {
-    scrollTop,
-    scrollHeight,
-    clientHeight,
-    scrollDistance
-  });
-  
+
   if (scrollDistance <= 50) {
-    console.log("表格已滚动到底部，加载更多数据");
     loadMoreLogs();
   }
 }
@@ -1791,10 +1061,9 @@ function checkAndLoadMore() {
 // 在表格视图显示时添加定时检查
 watch(() => showGraphView.value, (isGraphView) => {
   if (!isGraphView && !showAllCommits.value) {
-    console.log("切换到表格视图，设置滚动监听和定时检查");
     nextTick(() => {
       setupTableScrollListener();
-      
+
       // 延迟200ms后检查一次，处理初始渲染时可能需要加载更多数据的情况
       setTimeout(checkAndLoadMore, 200);
     });
@@ -1830,7 +1099,7 @@ function toggleFullscreen() {
           </template>
           {{ filteredLogs.length }}/{{ logs.length }}
           <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
-            分页加载 (每页100条)
+            分页加载 (每页20条)
           </el-tag>
           <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
             全部
@@ -2023,7 +1292,7 @@ function toggleFullscreen() {
         <div v-if="showGraphView" class="graph-view">
           <div class="commit-count" v-if="logsData.length > 0">
             显示 {{ logsData.length }} 条提交记录
-            {{ showAllCommits ? "(全部)" : "(分页加载，每页100条)" }}
+            {{ showAllCommits ? "(全部)" : "(分页加载，每页20条)" }}
           </div>
 
           <!-- 添加缩放控制 -->
@@ -2088,11 +1357,7 @@ function toggleFullscreen() {
             height="500"
             @row-contextmenu="handleContextMenu"
           >
-            <el-table-column width="260" class-name="branch-graph-column">
-              <template #default="scope">
-                <div class="branch-graph-cell" :id="`commit-graph-${scope.row.hash.substring(0, 7)}`"></div>
-              </template>
-            </el-table-column>
+
             <el-table-column label="提交哈希" width="100" resizable>
               <template #default="scope">
                 <span
@@ -2114,7 +1379,7 @@ function toggleFullscreen() {
                 </el-tooltip>
               </template>
             </el-table-column>
-            <el-table-column label="分支" width="180" resizable>
+            <el-table-column label="分支" width="280" resizable>
               <template #default="scope">
                 <div v-if="scope.row.branch" class="branch-container">
                   <el-tag
@@ -2151,7 +1416,7 @@ function toggleFullscreen() {
             <!-- 显示加载状态和页码信息 -->
             <div class="pagination-info">
               <span>第 {{ currentPage }} 页
-                {{ totalCommits > 0 ? `/ 共 ${Math.ceil(totalCommits / 100) || 1} 页` : "" }}
+                {{ totalCommits > 0 ? `/ 共 ${Math.ceil(totalCommits / 20) || 1} 页` : "" }}
                 (总计 {{ totalCommits }} 条记录)</span>
             </div>
 
@@ -3049,69 +2314,7 @@ function toggleFullscreen() {
   font-size: 16px;
 }
 
-/* 分支图样式 */
-.branch-graph-column {
-  padding: 0 !important;
-  overflow: visible;
-}
 
-.branch-graph-cell {
-  height: 40px;
-  width: 100%;
-  position: relative;
-  padding: 0;
-  margin: 0;
-}
-
-/* 分支图列样式 */
-.branch-graph-column .cell {
-  padding: 0 !important;
-  height: 100%;
-  margin: 0;
-  overflow: visible;
-}
-
-.el-table .branch-graph-column {
-  width: 60px !important;
-  padding: 0 !important;
-}
-
-:deep(.el-table .el-table__cell) {
-  padding: 0 !important;
-}
-
-/* 确保SVG元素完全填充单元格 */
-:deep(.branch-graph-cell svg) {
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  overflow: visible !important;
-  z-index: 10 !important;
-}
-
-/* 增强SVG线条和节点的可见性 */
-:deep(.branch-graph-cell svg line),
-:deep(.branch-graph-cell svg path) {
-  stroke-width: 2 !important;
-}
-
-:deep(.branch-graph-cell svg circle) {
-  r: 6 !important;
-  stroke-width: 2 !important;
-}
-
-/* 增加分支图单元格的宽度 */
-.branch-graph-column {
-  min-width: 60px !important;
-  width: 60px !important;
-}
-
-/* 确保分支图单元格内容可见 */
-.branch-graph-cell {
-  position: relative !important;
-  overflow: visible !important;
-  z-index: 1 !important;
-}
 
 /* 去掉表格行边框 */
 :deep(.el-table--border .el-table__inner-wrapper tr) {
