@@ -497,6 +497,8 @@ async function publishToNpm() {
     console.log(chalk.gray('切换到官方npm registry...'));
     try {
       execSync('nrm use npm', { stdio: 'inherit' });
+      // 等待1s
+      await new Promise(resolve => setTimeout(resolve, 1000));
       console.log(chalk.green('已切换到官方npm registry'));
     } catch (error) {
       console.error(chalk.yellow('切换npm registry失败:'), error);
