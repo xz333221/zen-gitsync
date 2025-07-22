@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 import { io, Socket } from 'socket.io-client'
 
 // 定义Git操作间隔时间（毫秒）
-const GIT_OPERATION_DELAY = 500
+const GIT_OPERATION_DELAY = 800
 
 // 获取后端服务器端口
 function getBackendPort() {
@@ -828,10 +828,10 @@ export const useGitStore = defineStore('git', () => {
           message: '文件已添加到暂存区',
           type: 'success'
         })
-        
-        // 刷新状态
-        fetchStatus()
-        
+
+        // 不在这里立即刷新状态，避免与后续操作产生竞争条件
+        // fetchStatus() 会在整个操作完成后统一刷新
+
         return true
       } else {
         ElMessage({
@@ -1143,35 +1143,50 @@ export const useGitStore = defineStore('git', () => {
   
   // 暂存并提交
   async function addAndCommit(message: string, noVerify = false) {
+    console.log('开始暂存并提交操作...')
     const addResult = await addToStage()
     if (!addResult) return false
-    
-    // 使用新的延时常量
+
+    // 等待暂存操作完全完成
+    console.log('暂存完成，等待Git操作完成...')
     await delay(GIT_OPERATION_DELAY)
-    
-    return await commitChanges(message, noVerify)
+
+    console.log('开始提交更改...')
+    const commitResult = await commitChanges(message, noVerify)
+    console.log('暂存并提交操作完成')
+    return commitResult
   }
   
   // 暂存、提交并推送
   async function addCommitAndPush(message: string, noVerify = false) {
     try {
+      // 第一步：暂存文件
+      console.log('开始暂存文件...')
       const addResult = await addToStage()
       if (!addResult) return false
 
-      // 使用新的延时常量
+      // 等待暂存操作完全完成
+      console.log('暂存完成，等待Git操作完成...')
       await delay(GIT_OPERATION_DELAY)
 
+      // 第二步：提交更改
+      console.log('开始提交更改...')
       const commitResult = await commitChanges(message, noVerify)
       if (!commitResult) return false
 
-      // 使用新的延时常量
+      // 等待提交操作完全完成
+      console.log('提交完成，等待Git操作完成...')
       await delay(GIT_OPERATION_DELAY)
 
+      // 第三步：推送到远程
+      console.log('开始推送到远程...')
       const pushResult = await pushToRemote()
 
-      // 推送完成后，确保状态已经刷新（pushToRemote已经包含了状态刷新）
+      console.log('一键推送操作完成')
       return pushResult
     } catch (error) {
+      console.error('一键推送操作失败:', error)
+
       // 如果发生错误，尝试删除 index.lock 文件
       try {
         const response = await fetch('/api/remove-lock', {
@@ -1180,7 +1195,7 @@ export const useGitStore = defineStore('git', () => {
         const result = await response.json()
         if (result.success) {
           ElMessage({
-            message: '已清理锁定文件，请重试操作',
+            message: '检测到Git锁定文件冲突，已自动清理，请重试操作',
             type: 'warning'
           })
         }
