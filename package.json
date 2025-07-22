@@ -26,8 +26,8 @@
     "g:test-cmd": "node ./src/gitCommit.js --cmd=\"echo zen-gitsync test\" --cmd-interval=5",
     "g:test-cmd-at": "node ./src/gitCommit.js --cmd=\"echo at-time-test\" --at=21:09",
     "start:vue": "cd ./src/ui/client && npm run dev",
-    "start:server": "node -e \"import('./index.js').then(module => module.startServer(false))\"",
-    "start:server:no-open": "node -e \"import('./index.js').then(module => module.startServer(true))\"",
+    "start:server": "node server.js",
+    "start:server:no-open": "node server.js --no-open",
     "release": "node ./scripts/release.js",
     "release:win": ".\\scripts\\release.bat"
   },
