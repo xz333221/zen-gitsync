@@ -978,14 +978,10 @@ export const useGitStore = defineStore('git', () => {
           message: '提交成功',
           type: 'success'
         })
-        
-        // 刷新状态和日志
-        fetchStatus()
-        fetchLog()
-        
-        // 更新分支状态
-        getBranchStatus()
-        
+
+        // 在一键操作中，状态刷新会在最后统一进行，避免重复调用
+        // 如果是单独的提交操作，会在CommitForm.vue中单独刷新状态
+
         return true
       } else {
         ElMessage({
@@ -1021,14 +1017,16 @@ export const useGitStore = defineStore('git', () => {
       
       const result = await response.json()
       if (result.success) {
-        await Promise.all([
-          fetchStatus(),
-          getBranchStatus(), // 更新分支状态
-        ]);
+        ElMessage({
+          message: '推送成功',
+          type: 'success'
+        })
 
-        // 等待所有状态刷新完成
+        // 推送成功后只刷新必要的状态，避免重复调用
         await Promise.all([
+          fetchStatus(),      // 刷新文件状态
           fetchLog(),         // 刷新提交日志
+          getBranchStatus(true) // 强制刷新分支状态
         ])
 
         return true
@@ -1153,7 +1151,7 @@ export const useGitStore = defineStore('git', () => {
     return commitResult
   }
   
-  // 暂存、提交并推送
+  // 暂存、提交并推送（优化版本 - 减少重复的状态查询）
   async function addCommitAndPush(message: string, noVerify = false) {
     try {
       // 第一步：暂存文件
@@ -1174,11 +1172,11 @@ export const useGitStore = defineStore('git', () => {
       console.log('提交完成，等待Git操作完成...')
       await delay(GIT_OPERATION_DELAY)
 
-      // 第三步：推送到远程
+      // 第三步：推送到远程（pushToRemote会统一刷新所有状态）
       console.log('开始推送到远程...')
       const pushResult = await pushToRemote()
 
-      console.log('一键推送操作完成')
+      console.log('一键推送操作完成，状态已统一刷新')
       return pushResult
     } catch (error) {
       console.error('一键推送操作失败:', error)
