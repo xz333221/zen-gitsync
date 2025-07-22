@@ -74,8 +74,6 @@ export const useGitStore = defineStore('git', () => {
   const lastBranchesTime = ref(0)
 
   // 从 gitLogStore 导入的状态
-  // 定义socket连接
-  let socket: Socket | null = null
   // 自动更新状态开关
   const autoUpdateEnabled = ref(true)
   

@@ -229,7 +229,6 @@ function loadLayoutRatios() {
   // 从localStorage获取保存的比例
   const savedLeftRatio = localStorage.getItem('zen-gitsync-layout-left-ratio');
   const savedTopRatio = localStorage.getItem('zen-gitsync-layout-top-ratio');
-  const savedBottomLeftRatio = localStorage.getItem('zen-gitsync-layout-bottom-left-ratio');
 
   // 应用左右区域比例
   if (savedLeftRatio) {

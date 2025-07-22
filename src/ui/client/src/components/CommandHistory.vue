@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, Teleport } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock } from '@element-plus/icons-vue';
 import { useGitStore } from '../stores/gitStore';
