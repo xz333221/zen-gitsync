@@ -47,6 +47,13 @@ let upstreamBranchCache = {
   cacheTimeout: 300000 // 5分钟缓存，或者直到主动清除
 };
 
+// 推送状态标记 - 用于优化推送后的分支状态查询
+let recentPushStatus = {
+  justPushed: false,
+  pushTime: 0,
+  validDuration: 10000 // 推送后10秒内认为分支状态是同步的
+};
+
 async function startUIServer(noOpen = false, savePort = false) {
   const app = express();
   const httpServer = createServer(app);
@@ -165,6 +172,12 @@ async function startUIServer(noOpen = false, savePort = false) {
       lastUpdate: 0,
       cacheTimeout: 5000
     };
+    // 清除推送状态标记
+    recentPushStatus = {
+      justPushed: false,
+      pushTime: 0,
+      validDuration: 10000
+    };
   }
 
   // 获取当前分支 - 使用缓存优化
@@ -189,6 +202,18 @@ async function startUIServer(noOpen = false, savePort = false) {
       const now = Date.now();
       const forceRefresh = req.query.force === 'true';
       const refreshCountOnly = req.query.countOnly === 'true'; // 新增：只刷新计数
+
+      // 检查是否刚刚推送过，如果是则直接返回同步状态
+      if (recentPushStatus.justPushed &&
+          (now - recentPushStatus.pushTime) < recentPushStatus.validDuration) {
+        console.log('检测到最近推送过，直接返回同步状态');
+        return res.json({
+          hasUpstream: true,
+          upstreamBranch: branchStatusCache.upstreamBranch || 'origin/main',
+          ahead: 0,
+          behind: 0
+        });
+      }
 
       // 检查分支信息缓存是否有效
       const branchInfoCacheValid = branchStatusCache.currentBranch &&
@@ -986,6 +1011,15 @@ async function startUIServer(noOpen = false, savePort = false) {
   app.post('/api/push', async (req, res) => {
     try {
       const { stdout } = await execGitCommand('git push');
+
+      // 推送成功后，设置推送状态标记
+      recentPushStatus = {
+        justPushed: true,
+        pushTime: Date.now(),
+        validDuration: 10000 // 10秒内认为分支状态是同步的
+      };
+
+      console.log('推送成功，已设置推送状态标记');
       res.json({ success: true, message: stdout });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
