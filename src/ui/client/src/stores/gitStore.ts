@@ -206,17 +206,20 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
-  // 获取当前分支
-  async function getCurrentBranch() {
+  // 获取当前分支（优化版本 - 支持强制刷新）
+  async function getCurrentBranch(forceRefresh = false) {
     try {
-      const response = await fetch('/api/branch')
-      const data = await response.json()
+      // 传递force参数到后端API
+      const url = forceRefresh ? '/api/branch?force=true' : '/api/branch';
+      const response = await fetch(url);
+      const data = await response.json();
       if (data.branch) {
-        currentBranch.value = data.branch
+        currentBranch.value = data.branch;
+        console.log(`当前分支更新为: ${data.branch}${forceRefresh ? ' (强制刷新)' : ''}`);
         // 不再在这里调用 getBranchStatus
       }
     } catch (error) {
-      console.error('获取分支信息失败:', error)
+      console.error('获取分支信息失败:', error);
     }
   }
 
@@ -261,9 +264,9 @@ export const useGitStore = defineStore('git', () => {
           type: 'success'
         })
         
-        // 分别刷新分支信息和分支状态
-        await getCurrentBranch()
-        await getBranchStatus()
+        // 分别刷新分支信息和分支状态（强制刷新）
+        await getCurrentBranch(true) // 强制刷新分支名
+        await getBranchStatus(true)  // 强制刷新分支状态
         
         return true
       } else {
@@ -329,10 +332,10 @@ export const useGitStore = defineStore('git', () => {
           type: 'success'
         })
         
-        // 分别刷新分支信息和状态
-        await getCurrentBranch()
-        await getBranchStatus()
-        await getAllBranches()
+        // 分别刷新分支信息和状态（强制刷新）
+        await getCurrentBranch(true) // 强制刷新分支名
+        await getBranchStatus(true)  // 强制刷新分支状态
+        await getAllBranches()       // 刷新分支列表
         
         return true
       } else {

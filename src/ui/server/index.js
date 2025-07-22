@@ -31,6 +31,14 @@ let branchStatusCache = {
   cacheTimeout: 5000 // 5秒缓存
 };
 
+// 当前分支缓存 - 只在特定情况下更新
+let currentBranchCache = {
+  branchName: null,
+  lastUpdate: 0,
+  // 分支名缓存时间更长，因为分支切换不频繁
+  cacheTimeout: 300000 // 5分钟缓存，或者直到主动清除
+};
+
 async function startUIServer(noOpen = false, savePort = false) {
   const app = express();
   const httpServer = createServer(app);
@@ -74,11 +82,56 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
   
-  // 获取当前分支
+  // 获取当前分支的优化函数
+  async function getCurrentBranchOptimized(forceRefresh = false) {
+    const now = Date.now();
+
+    // 如果不是强制刷新且缓存有效，使用缓存
+    if (!forceRefresh &&
+        currentBranchCache.branchName &&
+        (now - currentBranchCache.lastUpdate) < currentBranchCache.cacheTimeout) {
+      console.log(`使用缓存的分支名: ${currentBranchCache.branchName}`);
+      return currentBranchCache.branchName;
+    }
+
+    // 缓存失效或强制刷新，重新获取
+    console.log('重新获取当前分支名...');
+    const { stdout } = await execGitCommand('git symbolic-ref --short HEAD');
+    const branchName = stdout.trim();
+
+    // 更新缓存
+    currentBranchCache = {
+      branchName,
+      lastUpdate: now,
+      cacheTimeout: 300000 // 5分钟缓存
+    };
+
+    return branchName;
+  }
+
+  // 清除分支缓存的函数（在分支切换时调用）
+  function clearBranchCache() {
+    console.log('清除分支缓存');
+    currentBranchCache = {
+      branchName: null,
+      lastUpdate: 0,
+      cacheTimeout: 300000
+    };
+    // 同时清除分支状态缓存
+    branchStatusCache = {
+      currentBranch: null,
+      upstreamBranch: null,
+      lastUpdate: 0,
+      cacheTimeout: 5000
+    };
+  }
+
+  // 获取当前分支 - 使用缓存优化
   app.get('/api/branch', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git rev-parse --abbrev-ref HEAD');
-      res.json({ branch: stdout.trim() });
+      const forceRefresh = req.query.force === 'true';
+      const branch = await getCurrentBranchOptimized(forceRefresh);
+      res.json({ branch });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -120,9 +173,8 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 缓存失效或强制刷新，重新获取分支信息
       console.log('重新获取分支信息...');
 
-      // 获取当前分支
-      const { stdout: branchOutput } = await execGitCommand('git symbolic-ref --short HEAD');
-      const currentBranch = branchOutput.trim();
+      // 使用优化后的分支获取函数
+      const currentBranch = await getCurrentBranchOptimized(forceRefresh);
 
       // 获取上游分支
       const { stdout: upstreamOutput } = await execGitCommand('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { ignoreError: true });
@@ -224,7 +276,10 @@ async function startUIServer(noOpen = false, savePort = false) {
       
       // 切换到新创建的分支
       await execGitCommand(`git checkout ${newBranchName}`);
-      
+
+      // 清除分支缓存，因为分支已切换
+      clearBranchCache();
+
       res.json({ success: true, branch: newBranchName });
     } catch (error) {
       console.error('创建分支失败:', error);
@@ -242,7 +297,10 @@ async function startUIServer(noOpen = false, savePort = false) {
       
       // 执行分支切换
       await execGitCommand(`git checkout ${branch}`);
-      
+
+      // 清除分支缓存，因为分支已切换
+      clearBranchCache();
+
       res.json({ success: true });
     } catch (error) {
       console.error('切换分支失败:', error);

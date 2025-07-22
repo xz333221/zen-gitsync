@@ -67,11 +67,11 @@ onMounted(async () => {
     if (gitStore.isGitRepo) {
       // 并行获取所有Git信息，确保每个API只调用一次
       await Promise.all([
-        gitStore.getCurrentBranch(),  // 获取当前分支
-        gitStore.getAllBranches(),    // 获取所有分支
-        gitStore.getUserInfo(),        // 获取用户信息
-        gitStore.getRemoteUrl(),       // 获取远程仓库地址
-        gitStore.getBranchStatus()     // 获取分支状态（上游分支信息）
+        gitStore.getCurrentBranch(true), // 强制获取当前分支（页面首次加载）
+        gitStore.getAllBranches(),       // 获取所有分支
+        gitStore.getUserInfo(),          // 获取用户信息
+        gitStore.getRemoteUrl(),         // 获取远程仓库地址
+        gitStore.getBranchStatus(true)   // 强制获取分支状态（页面首次加载）
       ])
     } else {
       ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
