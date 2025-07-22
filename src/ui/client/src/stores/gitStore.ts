@@ -155,7 +155,9 @@ export const useGitStore = defineStore('git', () => {
 
     try {
       console.log('获取分支状态...');
-      const response = await fetch('/api/branch-status');
+      // 传递force参数到后端API
+      const url = forceRefresh ? '/api/branch-status?force=true' : '/api/branch-status';
+      const response = await fetch(url);
       const data = await response.json();
 
       if (data) {

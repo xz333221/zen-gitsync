@@ -609,14 +609,14 @@ async function pushToRemote() {
 
     // 等待分支状态刷新完成后再显示成功动画
     try {
-      // 手动更新分支状态
-      await gitStore.getBranchStatus(true);
+      // pushToRemote已经刷新了分支状态，这里稍等一下确保状态传播
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       // 分支状态刷新完成后显示推送成功提示
       showPushSuccessIndicator();
     } catch (error) {
-      console.error('刷新分支状态失败:', error);
-      // 即使刷新失败也显示成功动画，因为推送操作已经成功
+      console.error('推送后处理失败:', error);
+      // 即使处理失败也显示成功动画，因为推送操作已经成功
       showPushSuccessIndicator();
     } finally {
       isUpdatingStatus.value = false;
@@ -708,14 +708,15 @@ async function addCommitAndPush() {
         // 延时确保所有状态都已更新
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // 强制刷新分支状态，确保界面同步
-        await gitStore.getBranchStatus(true);
+        // pushToRemote已经刷新了分支状态，这里不需要重复调用
+        // 只需要等待一下确保状态已经传播到UI
+        console.log('一键推送完成，状态已在pushToRemote中刷新');
 
         // 分支状态刷新完成后显示成功动画
         showPushSuccessIndicator();
       } catch (error) {
-        console.error('刷新分支状态失败:', error);
-        // 即使刷新失败也显示成功动画，因为主要操作已经成功
+        console.error('一键推送后处理失败:', error);
+        // 即使处理失败也显示成功动画，因为主要操作已经成功
         showPushSuccessIndicator();
       } finally {
         isUpdatingStatus.value = false;
