@@ -953,33 +953,9 @@ async function startUIServer(noOpen = false, savePort = false) {
         `git log --all --pretty=format:"${formatString}" --date=format:"%Y-%m-%d %H:%M" ${options}`
       );
       
-      // 获取总提交数量（考虑筛选条件）
-      let totalCommits = 0;
-      try {
-        // 构建计数命令，包含相同的筛选条件
-        // 对于作者筛选，使用 rev-list 并手动计数，避免 --count 与复杂作者筛选结合可能的问题
-        if (author.length > 1) {
-          // 多作者情况，使用 wc -l 手动计数
-          const countCommand = `git rev-list --all ${commandOptions.join(' ')}`;
-          console.log(`执行计数命令(多作者): ${countCommand}`);
-          
-          const { stdout: countOutput } = await execGitCommand(countCommand);
-          // 计算行数作为提交数
-          totalCommits = countOutput.trim().split('\n').filter(line => line.trim() !== '').length;
-        } else {
-          // 单作者或无作者筛选，可以直接使用 --count
-          const countCommand = `git rev-list --all --count ${commandOptions.join(' ')}`;
-          console.log(`执行计数命令(单作者): ${countCommand}`);
-          
-          const { stdout: countOutput } = await execGitCommand(countCommand);
-          totalCommits = parseInt(countOutput.trim());
-        }
-      } catch (error) {
-        console.error('获取提交总数失败:', error);
-        totalCommits = 0;
-      }
-      
-      processAndSendLogOutput(res, logOutput, totalCommits, page, limit, withParents);
+      // 分页加载优化：不需要获取总数，通过实际返回的数据量判断是否还有更多
+      // 这里直接处理已获取的数据，通过返回数据量判断是否还有更多
+      processAndSendLogOutput(res, logOutput, page, limit, withParents);
     } catch (error) {
       console.error('获取Git日志失败:', error);
       res.status(500).json({ error: '获取日志失败: ' + error.message });
@@ -1051,29 +1027,16 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 执行命令
       const { stdout: logOutput } = await execGitCommand(command);
       
-      // 获取总提交数
-      let totalCommits = 0;
-      try {
-        // 构建计数命令
-        const countCommand = `git rev-list ${formattedBranchRefs} --count ${commandOptions.join(' ')}`;
-        console.log(`执行计数命令(分支): ${countCommand}`);
-        
-        const { stdout: countOutput } = await execGitCommand(countCommand);
-        totalCommits = parseInt(countOutput.trim());
-      } catch (error) {
-        console.error('获取提交总数失败:', error);
-        totalCommits = 0;
-      }
-      
-      processAndSendLogOutput(res, logOutput, totalCommits, skip / limit + 1, limit, withParents);
+      // 分页加载优化：不需要获取总数，通过实际返回的数据量判断是否还有更多
+      processAndSendLogOutput(res, logOutput, skip / limit + 1, limit, withParents);
     } catch (error) {
       console.error('执行Git日志命令失败:', error);
       res.status(500).json({ error: '获取日志失败: ' + error.message });
     }
   }
   
-  // 抽取处理输出并发送响应的函数
-  function processAndSendLogOutput(res, logOutput, totalCommits, page, limit, withParents = false) {
+  // 抽取处理输出并发送响应的函数（优化版本：不再依赖总数计算）
+  function processAndSendLogOutput(res, logOutput, page, limit, withParents = false) {
     // 替换提交记录之间的换行符 - 使用 ASCII 控制字符 \x1E 匹配
     logOutput = logOutput.replace(/\n(?=[a-f0-9]{40}\x1E)/g, "<<<RECORD_SEPARATOR>>>");
   
@@ -1104,15 +1067,17 @@ async function startUIServer(noOpen = false, savePort = false) {
       return null;
     }).filter(item => item !== null);
     
-    // 计算是否有更多数据
-    const hasMore = page * limit < totalCommits;
-    
-    console.log(`分页查询 - 页码: ${page}, 每页数量: ${limit}, 总数: ${totalCommits}, 返回数量: ${data.length}, 是否有更多: ${hasMore}`);
-    
+    // 优化：通过返回的数据量判断是否有更多数据，而不依赖总数计算
+    // 如果返回的数据量等于请求的limit，说明可能还有更多数据
+    // 如果返回的数据量小于limit，说明已经到底了
+    const hasMore = data.length === limit;
+
+    console.log(`分页查询 - 页码: ${page}, 每页数量: ${limit}, 返回数量: ${data.length}, 是否有更多: ${hasMore} (优化版本，不计算总数)`);
+
     // 返回提交历史数据，包括是否有更多数据的标志
     res.json({
       data: data,
-      total: totalCommits,
+      total: -1, // 不再提供总数，前端不应依赖此字段
       page: page,
       limit: limit,
       hasMore: hasMore
