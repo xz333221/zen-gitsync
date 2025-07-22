@@ -1025,10 +1025,6 @@ export const useGitStore = defineStore('git', () => {
           fetchStatus(),
           getBranchStatus(), // 更新分支状态
         ]);
-        ElMessage({
-          message: '推送成功',
-          type: 'success'
-        })
 
         // 等待所有状态刷新完成
         await Promise.all([

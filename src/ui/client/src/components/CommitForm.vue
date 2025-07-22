@@ -1175,7 +1175,7 @@ function toggleGitOperationsDrawer() {
     <transition name="el-fade-in-linear">
       <div v-if="showPushSuccess" class="push-success-indicator">
         <el-icon class="push-success-icon"><Check /></el-icon>
-        <div class="push-success-text">推送成功!</div>
+        <div class="push-success-text">已完成!</div>
       </div>
     </transition>
 
