@@ -578,9 +578,9 @@ async function commitChanges() {
       // 触发成功事件
       gitStore.fetchStatus();
       gitStore.fetchLog();
-      
-      // 手动更新分支状态
-      gitStore.getBranchStatus();
+
+      // 手动更新分支状态（不需要等待，因为只是提交操作）
+      gitStore.getBranchStatus(true);
     }
   } catch (error) {
     ElMessage({
@@ -602,17 +602,24 @@ function showPushSuccessIndicator() {
 async function pushToRemote() {
   try {
     await gitStore.pushToRemote();
-    // 显示推送成功提示
-    showPushSuccessIndicator();
-    
-    // 手动更新分支状态
-    gitStore.getBranchStatus();
+
+    // 等待分支状态刷新完成后再显示成功动画
+    try {
+      // 手动更新分支状态
+      await gitStore.getBranchStatus(true);
+
+      // 分支状态刷新完成后显示推送成功提示
+      showPushSuccessIndicator();
+    } catch (error) {
+      console.error('刷新分支状态失败:', error);
+      // 即使刷新失败也显示成功动画，因为推送操作已经成功
+      showPushSuccessIndicator();
+    }
   } catch (error) {
     ElMessage({
       message: `推送失败: ${(error as Error).message}`,
       type: 'error',
     });
-  } finally {
   }
 }
 
@@ -688,14 +695,21 @@ async function addCommitAndPush() {
       // 清空提交信息
       clearCommitFields();
 
-      // 额外等待一下，确保所有状态都已更新
-      setTimeout(() => {
-        // 强制刷新分支状态，确保界面同步
-        gitStore.getBranchStatus(true); // 强制刷新
-      }, 1000);
+      // 等待分支状态刷新完成后再显示成功动画
+      try {
+        // 延时确保所有状态都已更新
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // 显示成功动画
-      showPushSuccessIndicator();
+        // 强制刷新分支状态，确保界面同步
+        await gitStore.getBranchStatus(true);
+
+        // 分支状态刷新完成后显示成功动画
+        showPushSuccessIndicator();
+      } catch (error) {
+        console.error('刷新分支状态失败:', error);
+        // 即使刷新失败也显示成功动画，因为主要操作已经成功
+        showPushSuccessIndicator();
+      }
     }
 
   } catch (error) {
