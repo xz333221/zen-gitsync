@@ -1367,7 +1367,38 @@ function toggleFullscreen() {
                 >
               </template>
             </el-table-column>
-            <el-table-column prop="date" label="日期" width="120" resizable />
+            <el-table-column label="提交信息" min-width="350">
+              <template #default="scope">
+                <div class="commit-message-cell">
+                  <!-- 分支信息和提交信息水平排列 -->
+                  <div class="message-content">
+                    <!-- 分支信息 -->
+                    <div v-if="scope.row.branch" class="branch-container">
+                      <el-tag
+                        v-for="(ref, index) in scope.row.branch.split(',')"
+                        :key="index"
+                        size="small"
+                        :type="getBranchTagType(ref)"
+                        class="branch-tag"
+                      >
+                        {{ formatBranchName(ref) }}
+                      </el-tag>
+                    </div>
+                    <!-- 提交信息 -->
+                    <span class="message-text">{{ scope.row.message }}</span>
+                    <el-button
+                      type="text"
+                      :icon="CopyDocument"
+                      size="small"
+                      @click.stop="copyPureMessage(scope.row.message)"
+                      class="copy-message-btn"
+                      title="复制纯净提交信息（不含类型前缀）"
+                    />
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="date" label="日期" width="140" resizable />
             <el-table-column label="作者" width="120" resizable>
               <template #default="scope">
                 <el-tooltip
@@ -1377,36 +1408,6 @@ function toggleFullscreen() {
                 >
                   <span class="author-name">{{ scope.row.author }}</span>
                 </el-tooltip>
-              </template>
-            </el-table-column>
-            <el-table-column label="分支" width="280" resizable>
-              <template #default="scope">
-                <div v-if="scope.row.branch" class="branch-container">
-                  <el-tag
-                    v-for="(ref, index) in scope.row.branch.split(',')"
-                    :key="index"
-                    size="small"
-                    :type="getBranchTagType(ref)"
-                    class="branch-tag"
-                  >
-                    {{ formatBranchName(ref) }}
-                  </el-tag>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="提交信息" min-width="250">
-              <template #default="scope">
-                <div class="commit-message-cell">
-                  <span class="message-text">{{ scope.row.message }}</span>
-                  <el-button
-                    type="text"
-                    :icon="CopyDocument"
-                    size="small"
-                    @click.stop="copyPureMessage(scope.row.message)"
-                    class="copy-message-btn"
-                    title="复制纯净提交信息（不含类型前缀）"
-                  />
-                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -1749,13 +1750,19 @@ function toggleFullscreen() {
 .branch-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
+  margin-right: 8px;
+  flex-shrink: 0;
 }
 
 .branch-tag {
   margin-right: 0;
   border-radius: 4px;
   transition: all 0.2s ease;
+  font-size: 11px;
+  padding: 1px 6px;
+  height: 18px;
+  line-height: 16px;
 }
 
 .branch-tag:hover {
@@ -1940,17 +1947,6 @@ function toggleFullscreen() {
 .message-label {
   font-weight: bold;
   color: #606266;
-}
-
-.message-content {
-  background-color: #fff;
-  padding: 16px;
-  border-radius: 8px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  white-space: pre-wrap;
-  line-height: 1.6;
-  border: 1px solid #e4e7ed;
-  border-left: 4px solid #409eff;
 }
 
 .commit-files-diff {
@@ -2170,8 +2166,14 @@ function toggleFullscreen() {
 .commit-message-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
   min-height: 32px;
+}
+
+.message-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
 }
 
 .message-text {

@@ -946,11 +946,11 @@ async function startUIServer(noOpen = false, savePort = false) {
         formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D%x1E%P';
       }
       
-      console.log(`执行Git命令: git log --all --pretty=format:"${formatString}" --date=short ${options}`);
-      
+      console.log(`执行Git命令: git log --all --pretty=format:"${formatString}" --date=format:"%Y-%m-%d %H:%M" ${options}`);
+
       // 使用 git log 命令获取提交历史
       let { stdout: logOutput } = await execGitCommand(
-        `git log --all --pretty=format:"${formatString}" --date=short ${options}`
+        `git log --all --pretty=format:"${formatString}" --date=format:"%Y-%m-%d %H:%M" ${options}`
       );
       
       // 获取总提交数量（考虑筛选条件）
@@ -1045,7 +1045,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       }
       
       // 构建执行的命令
-      const command = `git log ${formattedBranchRefs} --pretty=format:"${formatString}" --date=short ${options}`;
+      const command = `git log ${formattedBranchRefs} --pretty=format:"${formatString}" --date=format:"%Y-%m-%d %H:%M" ${options}`;
       console.log(`执行Git命令(带分支引用): ${command}`);
       
       // 执行命令
