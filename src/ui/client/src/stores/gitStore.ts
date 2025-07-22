@@ -1032,12 +1032,17 @@ export const useGitStore = defineStore('git', () => {
           type: 'success'
         })
 
-        // 推送成功后只刷新必要的状态，避免重复调用
+        // 推送成功后，逻辑上本地和远程必定同步，直接设置状态
+        branchAhead.value = 0;  // 推送成功后，本地不再领先
+        branchBehind.value = 0; // 推送成功后，本地不再落后
+
+        // 只刷新文件状态和提交日志，不需要重新计算分支状态
         await Promise.all([
-          fetchStatus(),              // 刷新文件状态
-          fetchLog(),                 // 刷新提交日志
-          getBranchStatus(false, true) // 只刷新领先/落后计数，不重新获取分支信息
+          fetchStatus(),  // 刷新文件状态
+          fetchLog(),     // 刷新提交日志
         ])
+
+        console.log('推送成功，分支状态已设置为同步 (ahead=0, behind=0)');
 
         return true
       } else {
