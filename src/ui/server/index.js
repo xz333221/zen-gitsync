@@ -2152,7 +2152,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     console.error(`无法找到可用端口 (尝试范围: ${startPort}-${maxPort-1})`);
     process.exit(1);
   }
-  
+
   // ========== 文件锁定相关 API ==========
 
   // 获取锁定文件列表

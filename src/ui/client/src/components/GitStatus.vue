@@ -2,9 +2,10 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
-import { Refresh, ArrowLeft, ArrowRight, Document, ArrowUp, ArrowDown, RefreshRight, Check, Close, Download, Connection } from '@element-plus/icons-vue'
+import { Refresh, ArrowLeft, ArrowRight, Document, ArrowUp, ArrowDown, RefreshRight, Check, Close, Download, Connection, Lock, Unlock, InfoFilled } from '@element-plus/icons-vue'
 // import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '../stores/gitStore'
+import { useConfigStore } from '../stores/configStore'
 
 // 定义props
 const props = defineProps({
@@ -16,6 +17,7 @@ const props = defineProps({
 
 // const gitLogStore = useGitLogStore()
 const gitStore = useGitStore()
+const configStore = useConfigStore()
 // 移除本地status定义，直接使用store中的statusText
 // const status = ref('加载中...')
 // const socket = io()
@@ -475,14 +477,34 @@ function getFileName(path: string): string {
 function getFileDirectory(path: string): string {
   const parts = path.split('/')
   if (parts.length <= 1) return ''
-  
+
   // 保留所有除最后一个部分的路径
   return parts.slice(0, -1).join('/')
+}
+
+// 检查文件是否被锁定
+function isFileLocked(filePath: string): boolean {
+  return configStore.lockedFiles.includes(filePath)
+}
+
+// 切换文件锁定状态
+async function toggleFileLock(filePath: string) {
+  const isLocked = isFileLocked(filePath)
+
+  if (isLocked) {
+    // 解锁文件
+    await configStore.unlockFile(filePath)
+  } else {
+    // 锁定文件
+    await configStore.lockFile(filePath)
+  }
 }
 
 onMounted(() => {
   // App.vue已经加载了Git相关数据，此时只需加载状态
   loadStatus()
+  // 加载锁定文件列表
+  configStore.loadLockedFiles()
 })
 
 // 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
@@ -611,12 +633,30 @@ defineExpose({
                 @click="handleFileClick(file)"
               >
                 <div class="file-info">
+                  <div class="file-status-indicator" :class="['added', { 'locked': isFileLocked(file.path) }]"></div>
                   <div class="file-path-container">
-                    <span class="file-name">{{ getFileName(file.path) }}</span>
+                    <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
+                      {{ getFileName(file.path) }}
+                      <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
+                        <Lock />
+                      </el-icon>
+                    </span>
                     <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
                   </div>
                 </div>
                 <div class="file-actions">
+                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000">
+                    <el-button
+                      :type="isFileLocked(file.path) ? 'danger' : 'info'"
+                      size="small"
+                      circle
+                      @click.stop="toggleFileLock(file.path)"
+                    >
+                      <el-icon>
+                        <component :is="isFileLocked(file.path) ? 'Lock' : 'Unlock'" />
+                      </el-icon>
+                    </el-button>
+                  </el-tooltip>
                   <el-tooltip content="取消暂存" placement="top" :hide-after="1000">
                     <el-button
                       type="warning"
@@ -640,13 +680,30 @@ defineExpose({
                 @click="handleFileClick(file)"
               >
                 <div class="file-info">
-                  <div class="file-status-indicator" :class="file.type"></div>
+                  <div class="file-status-indicator" :class="[file.type, { 'locked': isFileLocked(file.path) }]"></div>
                   <div class="file-path-container">
-                    <span class="file-name">{{ getFileName(file.path) }}</span>
+                    <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
+                      {{ getFileName(file.path) }}
+                      <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
+                        <Lock />
+                      </el-icon>
+                    </span>
                     <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
                   </div>
                 </div>
                 <div class="file-actions">
+                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000">
+                    <el-button
+                      :type="isFileLocked(file.path) ? 'danger' : 'info'"
+                      size="small"
+                      circle
+                      @click.stop="toggleFileLock(file.path)"
+                    >
+                      <el-icon>
+                        <component :is="isFileLocked(file.path) ? 'Lock' : 'Unlock'" />
+                      </el-icon>
+                    </el-button>
+                  </el-tooltip>
                   <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
                     <el-button
                       type="success"
@@ -679,13 +736,30 @@ defineExpose({
                 @click="handleFileClick(file)"
               >
                 <div class="file-info">
-                  <div class="file-status-indicator untracked"></div>
+                  <div class="file-status-indicator" :class="['untracked', { 'locked': isFileLocked(file.path) }]"></div>
                   <div class="file-path-container">
-                    <span class="file-name">{{ getFileName(file.path) }}</span>
+                    <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
+                      {{ getFileName(file.path) }}
+                      <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
+                        <Lock />
+                      </el-icon>
+                    </span>
                     <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
                   </div>
                 </div>
                 <div class="file-actions">
+                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000">
+                    <el-button
+                      :type="isFileLocked(file.path) ? 'danger' : 'info'"
+                      size="small"
+                      circle
+                      @click.stop="toggleFileLock(file.path)"
+                    >
+                      <el-icon>
+                        <component :is="isFileLocked(file.path) ? 'Lock' : 'Unlock'" />
+                      </el-icon>
+                    </el-button>
+                  </el-tooltip>
                   <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
                     <el-button
                       type="success"
@@ -708,7 +782,46 @@ defineExpose({
             </div>
           </div>
         </div>
-        
+
+        <!-- 锁定文件列表 -->
+        <div v-if="configStore.lockedFiles.length > 0" class="file-group locked-files-group">
+          <div class="file-group-header">
+            <span>🔒 锁定的文件 ({{ configStore.lockedFiles.length }})</span>
+            <el-tooltip content="这些文件在提交时会被自动跳过" placement="top">
+              <el-icon class="info-icon"><InfoFilled /></el-icon>
+            </el-tooltip>
+          </div>
+          <div class="file-list">
+            <div
+              v-for="filePath in configStore.lockedFiles"
+              :key="filePath"
+              class="file-item locked-file-item"
+            >
+              <div class="file-info">
+                <div class="file-status-indicator locked"></div>
+                <div class="file-path-container">
+                  <span class="file-name">{{ getFileName(filePath) }}</span>
+                  <span class="file-directory">{{ getFileDirectory(filePath) }}</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <el-tooltip content="解锁文件" placement="top" :hide-after="1000">
+                  <el-button
+                    type="danger"
+                    size="small"
+                    circle
+                    @click.stop="configStore.unlockFile(filePath)"
+                  >
+                    <el-icon>
+                      <Lock />
+                    </el-icon>
+                  </el-button>
+                </el-tooltip>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div v-else-if="gitStore.isGitRepo" class="empty-status">
           <div class="empty-icon">
             <el-icon><Document /></el-icon>
@@ -1346,5 +1459,80 @@ defineExpose({
   display: block;
   margin: 2px 0;
   background-color: #fafbfc;
+}
+
+/* 锁定文件样式 */
+.locked-files-group {
+  background-color: #fff7e6;
+  border: 1px solid #ffd591;
+}
+
+.locked-files-group .file-group-header {
+  background-color: #fff2e8;
+  color: #d46b08;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.locked-files-group .info-icon {
+  color: #d46b08;
+  cursor: help;
+}
+
+.locked-file-item {
+  background-color: #fffbf0;
+  border-left: 3px solid #ffa940;
+}
+
+.locked-file-item:hover {
+  background-color: #fff7e6;
+}
+
+.file-status-indicator.locked {
+  background-color: #ffa940;
+  border-radius: 50%;
+  position: relative;
+}
+
+.file-status-indicator.locked::before {
+  content: '🔒';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 8px;
+}
+
+/* 锁定文件名样式 */
+.locked-file-name {
+  color: #d46b08 !important;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lock-indicator {
+  color: #d46b08;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* 为锁定的文件状态指示器添加特殊样式 */
+.file-status-indicator.modified.locked {
+  background: linear-gradient(45deg, #1890ff 50%, #ffa940 50%);
+}
+
+.file-status-indicator.untracked.locked {
+  background: linear-gradient(45deg, #52c41a 50%, #ffa940 50%);
+}
+
+.file-status-indicator.added.locked {
+  background: linear-gradient(45deg, #52c41a 50%, #ffa940 50%);
+}
+
+.file-status-indicator.deleted.locked {
+  background: linear-gradient(45deg, #ff4d4f 50%, #ffa940 50%);
 }
 </style>
