@@ -47,6 +47,21 @@ $ g -h
 $ g --help
 ```
 
+#### 文件锁定功能
+```shell
+# 锁定文件（锁定后的文件不会被包含在提交中）
+$ g --lock-file=config.json
+
+# 解锁文件
+$ g --unlock-file=config.json
+
+# 查看所有锁定的文件
+$ g --list-locked
+
+# 检查文件是否被锁定
+$ g --check-lock=config.json
+```
+
 #### 定时执行自动提交，默认间隔1小时
 ```bash
 $ g -y --interval
@@ -99,4 +114,34 @@ $ g log --n=5
 ### 启动图形界面：
 ```shell
 $ g ui
+```
+
+## 🔒 文件锁定功能
+
+文件锁定功能允许您临时排除某些文件不被包含在 Git 提交中，而无需修改 `.gitignore` 文件。这对于以下场景特别有用：
+
+- 临时排除配置文件（如包含敏感信息的配置）
+- 跳过正在开发中的实验性文件
+- 避免提交临时的调试文件
+
+### 特点：
+- ✅ 不修改 `.gitignore` 文件
+- ✅ 支持命令行和 Web UI 操作
+- ✅ 锁定状态持久保存
+- ✅ 支持相对路径和绝对路径
+- ✅ 自动跳过锁定文件，显示清晰的提示信息
+
+### 使用场景示例：
+```shell
+# 锁定配置文件，避免提交敏感信息
+$ g --lock-file=.env
+
+# 锁定正在开发的功能文件
+$ g --lock-file=src/experimental-feature.js
+
+# 查看当前锁定的文件
+$ g --list-locked
+
+# 开发完成后解锁文件
+$ g --unlock-file=src/experimental-feature.js
 ```
