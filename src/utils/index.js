@@ -24,6 +24,7 @@ import ora from "ora";
 import readline from 'readline'
 import path from 'path'
 import fs from 'fs/promises'
+import config from '../config.js'
 
 
 const printTableWithHeaderUnderline = (head, content, style) => {
@@ -377,6 +378,12 @@ Options:
   addResetScript             Add "g:reset": "git reset --hard origin/<current-branch>" to package.json scripts
   ui                         Launch graphical user interface (v2.0.0)
 
+File Locking:
+  --lock-file=<path>          Lock a file to exclude it from commits
+  --unlock-file=<path>        Unlock a previously locked file
+  --list-locked               List all currently locked files
+  --check-lock=<path>         Check if a file is locked
+
   --cmd="your-cmd"            Execute custom cmd command (immediately, at a time, or periodically)
   --cmd-interval=<seconds>    Execute custom cmd every N seconds
   --at="HH:MM"                Execute custom cmd at a specific time (today) or --at="YYYY-MM-DD HH:MM:SS"
@@ -395,6 +402,9 @@ Example:
   g log --n=5               Show the last 5 commits with --log
   g addScript              Add auto commit script to package.json
   g addResetScript         Add reset script to package.json
+  g --lock-file=config.json    Lock config.json file
+  g --unlock-file=config.json  Unlock config.json file
+  g --list-locked              List all locked files
 
 Add auto submit in package.json:
   "scripts": {
@@ -616,6 +626,78 @@ async function execDiff() {
   }
 }
 
+// 执行 git add 但排除锁定的文件
+async function execGitAddWithLockFilter() {
+  try {
+    // 获取锁定的文件列表
+    const lockedFiles = await config.getLockedFiles();
+
+    if (lockedFiles.length === 0) {
+      // 如果没有锁定文件，直接执行 git add .
+      await execGitCommand('git add .');
+      return;
+    }
+
+    // 获取所有修改的文件
+    const statusResult = await execGitCommand('git status --porcelain', {log: false});
+    const modifiedFiles = statusResult.stdout
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => {
+        // 解析 git status --porcelain 的输出格式
+        // 格式: XY filename 或 XY "filename with spaces"
+        const match = line.match(/^..\s+(.+)$/);
+        if (match) {
+          let filename = match[1];
+          // 如果文件名被引号包围，去掉引号
+          if (filename.startsWith('"') && filename.endsWith('"')) {
+            filename = filename.slice(1, -1);
+            // 处理转义字符
+            filename = filename.replace(/\\(.)/g, '$1');
+          }
+          return filename;
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    // 过滤掉锁定的文件
+    const filesToAdd = modifiedFiles.filter(file => {
+      const normalizedFile = path.normalize(file);
+      const isLocked = lockedFiles.some(lockedFile => {
+        const normalizedLocked = path.normalize(lockedFile);
+        return normalizedFile === normalizedLocked ||
+               normalizedFile.startsWith(normalizedLocked + path.sep);
+      });
+
+      if (isLocked) {
+        console.log(chalk.yellow(`🔒 跳过锁定文件: ${file}`));
+        return false;
+      }
+      return true;
+    });
+
+    if (filesToAdd.length === 0) {
+      console.log(chalk.blue('📝 所有修改的文件都被锁定，没有文件需要添加'));
+      return;
+    }
+
+    // 逐个添加未锁定的文件
+    for (const file of filesToAdd) {
+      await execGitCommand(`git add "${file}"`, {
+        head: `git add ${file}`,
+        log: false
+      });
+    }
+
+    console.log(chalk.green(`✅ 已添加 ${filesToAdd.length} 个文件到暂存区 (跳过 ${lockedFiles.length} 个锁定文件)`));
+
+  } catch (error) {
+    console.error(chalk.red('执行 git add 时出错:'), error.message);
+    throw error;
+  }
+}
+
 async function execAddAndCommit({statusOutput, commitMessage, exit}) {
   // 检查 -m 参数（提交信息）
   const commitMessageArg = process.argv.find(arg => arg.startsWith('-m'));
@@ -652,9 +734,10 @@ async function execAddAndCommit({statusOutput, commitMessage, exit}) {
     commitMessage = await question('请输入提交信息：') || commitMessage;
   }
 
-  statusOutput.includes('(use "git add') && await execGitCommand('git add .')
-  // 强制添加所有变更
-  // await execGitCommand('git add -A .');
+  // 使用带锁定文件过滤的 git add
+  if (statusOutput.includes('(use "git add')) {
+    await execGitAddWithLockFilter();
+  }
 
   // 提交前二次校验
   const checkStatus = await execGitCommand('git status --porcelain', {log: false});
@@ -757,5 +840,6 @@ export {
   getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
   judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,
   exec_push, execPull, judgeRemote, execDiff, execAddAndCommit,
+  execGitAddWithLockFilter, // 导出新的 git add 函数
   addScriptToPackageJson, addResetScriptToPackageJson
 };

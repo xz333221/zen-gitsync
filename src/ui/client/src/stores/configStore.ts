@@ -8,6 +8,7 @@ export const useConfigStore = defineStore('config', () => {
   const descriptionTemplates = ref<string[]>([])
   const scopeTemplates = ref<string[]>([])
   const messageTemplates = ref<string[]>([])
+  const lockedFiles = ref<string[]>([])
   const isLoading = ref(false)
   const isLoaded = ref(false)
 
@@ -17,7 +18,8 @@ export const useConfigStore = defineStore('config', () => {
       defaultCommitMessage: defaultCommitMessage.value,
       descriptionTemplates: descriptionTemplates.value,
       scopeTemplates: scopeTemplates.value,
-      messageTemplates: messageTemplates.value
+      messageTemplates: messageTemplates.value,
+      lockedFiles: lockedFiles.value
     }
   })
 
@@ -198,21 +200,126 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 锁定文件相关函数
+  async function loadLockedFiles() {
+    try {
+      const response = await fetch('/api/locked-files')
+      const result = await response.json()
+
+      if (result.success) {
+        lockedFiles.value = result.lockedFiles || []
+        return result.lockedFiles
+      } else {
+        ElMessage.error(`加载锁定文件列表失败: ${result.error}`)
+        return []
+      }
+    } catch (error) {
+      console.error('加载锁定文件列表失败:', error)
+      ElMessage.error(`加载锁定文件列表失败: ${(error as Error).message}`)
+      return []
+    }
+  }
+
+  async function lockFile(filePath: string) {
+    try {
+      const response = await fetch('/api/lock-file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filePath })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // 重新加载锁定文件列表
+        await loadLockedFiles()
+        ElMessage.success(`文件已锁定: ${filePath}`)
+        return true
+      } else {
+        ElMessage.error(`锁定文件失败: ${result.error}`)
+        return false
+      }
+    } catch (error) {
+      console.error('锁定文件失败:', error)
+      ElMessage.error(`锁定文件失败: ${(error as Error).message}`)
+      return false
+    }
+  }
+
+  async function unlockFile(filePath: string) {
+    try {
+      const response = await fetch('/api/unlock-file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filePath })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        // 重新加载锁定文件列表
+        await loadLockedFiles()
+        ElMessage.success(`文件已解锁: ${filePath}`)
+        return true
+      } else {
+        ElMessage.error(`解锁文件失败: ${result.error}`)
+        return false
+      }
+    } catch (error) {
+      console.error('解锁文件失败:', error)
+      ElMessage.error(`解锁文件失败: ${(error as Error).message}`)
+      return false
+    }
+  }
+
+  async function isFileLocked(filePath: string) {
+    try {
+      const response = await fetch('/api/check-file-lock', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filePath })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        return result.isLocked
+      } else {
+        console.error('检查文件锁定状态失败:', result.error)
+        return false
+      }
+    } catch (error) {
+      console.error('检查文件锁定状态失败:', error)
+      return false
+    }
+  }
+
   return {
     // 状态
     defaultCommitMessage,
     descriptionTemplates,
     scopeTemplates,
     messageTemplates,
+    lockedFiles,
     isLoading,
     isLoaded,
     config,
-    
+
     // 方法
     loadConfig,
     saveDefaultMessage,
     saveTemplate,
     deleteTemplate,
-    updateTemplate
+    updateTemplate,
+    loadLockedFiles,
+    lockFile,
+    unlockFile,
+    isFileLocked
   }
 }) 

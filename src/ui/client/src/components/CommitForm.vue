@@ -1207,9 +1207,7 @@ git config --global user.email "your.email@example.com"</pre>
                 </div>
 
                 <div class="no-verify-toggle">
-                  <el-tooltip content="跳过 Git 钩子检查 (--no-verify)" placement="top">
-                    <el-switch v-model="skipHooks" active-text="跳过钩子 (--no-verify)" />
-                  </el-tooltip>
+                  <el-switch v-model="skipHooks" active-text="跳过 Git 钩子检查 (--no-verify)" />
                 </div>
               </div>
             </div>

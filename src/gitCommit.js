@@ -110,6 +110,56 @@ async function createGitCommit(options) {
     throw e; // 继续向上抛出错误
   }
 }
+// 处理文件锁定相关命令
+async function handleFileLockCommands() {
+  // 锁定文件命令
+  const lockFileArg = process.argv.find(arg => arg.startsWith('--lock-file='));
+  if (lockFileArg) {
+    const filePath = lockFileArg.split('=')[1];
+    if (filePath) {
+      await config.lockFile(filePath);
+    } else {
+      console.log(chalk.red('❌ 请指定要锁定的文件路径'));
+    }
+    process.exit();
+  }
+
+  // 解锁文件命令
+  const unlockFileArg = process.argv.find(arg => arg.startsWith('--unlock-file='));
+  if (unlockFileArg) {
+    const filePath = unlockFileArg.split('=')[1];
+    if (filePath) {
+      await config.unlockFile(filePath);
+    } else {
+      console.log(chalk.red('❌ 请指定要解锁的文件路径'));
+    }
+    process.exit();
+  }
+
+  // 列出锁定文件命令
+  if (process.argv.includes('--list-locked')) {
+    await config.listLockedFiles();
+    process.exit();
+  }
+
+  // 检查文件是否锁定命令
+  const checkLockArg = process.argv.find(arg => arg.startsWith('--check-lock='));
+  if (checkLockArg) {
+    const filePath = checkLockArg.split('=')[1];
+    if (filePath) {
+      const isLocked = await config.isFileLocked(filePath);
+      if (isLocked) {
+        console.log(chalk.yellow(`🔒 文件已锁定: ${filePath}`));
+      } else {
+        console.log(chalk.green(`🔓 文件未锁定: ${filePath}`));
+      }
+    } else {
+      console.log(chalk.red('❌ 请指定要检查的文件路径'));
+    }
+    process.exit();
+  }
+}
+
 async function main() {
   judgePlatform()
 
@@ -138,6 +188,9 @@ async function main() {
   judgeHelp()
 
   await handleConfigCommands();
+
+  // ========== 文件锁定功能 ==========
+  await handleFileLockCommands();
 
   // ========== 新增：自定义cmd定时/定点执行功能 ==========
   const cmdArg = process.argv.find(arg => arg.startsWith('--cmd='));

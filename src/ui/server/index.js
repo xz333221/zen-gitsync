@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { execGitCommand, getCommandHistory, clearCommandHistory, registerSocketIO } from '../../utils/index.js';
+import { execGitCommand, getCommandHistory, clearCommandHistory, registerSocketIO, execGitAddWithLockFilter } from '../../utils/index.js';
 import open from 'open';
 import config from '../../config.js';
 import chalk from 'chalk';
@@ -959,8 +959,8 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 添加 add 接口
   app.post('/api/add', async (req, res) => {
     try {
-      // 执行 git add . 命令添加所有更改
-      await execGitCommand('git add .');
+      // 使用带锁定文件过滤的 git add
+      await execGitAddWithLockFilter();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -2153,6 +2153,63 @@ async function startUIServer(noOpen = false, savePort = false) {
     process.exit(1);
   }
   
+  // ========== 文件锁定相关 API ==========
+
+  // 获取锁定文件列表
+  app.get('/api/locked-files', async (req, res) => {
+    try {
+      const lockedFiles = await configManager.getLockedFiles();
+      res.json({ success: true, lockedFiles });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 锁定文件
+  app.post('/api/lock-file', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+      }
+
+      const result = await configManager.lockFile(filePath);
+      res.json({ success: true, locked: result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 解锁文件
+  app.post('/api/unlock-file', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+      }
+
+      const result = await configManager.unlockFile(filePath);
+      res.json({ success: true, unlocked: result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 检查文件是否锁定
+  app.post('/api/check-file-lock', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+      }
+
+      const isLocked = await configManager.isFileLocked(filePath);
+      res.json({ success: true, isLocked });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // 添加命令历史的清空API
   app.post('/api/clear-command-history', async (req, res) => {
     try {
