@@ -486,7 +486,24 @@ function getFileDirectory(path: string): string {
 
 // 检查文件是否被锁定
 function isFileLocked(filePath: string): boolean {
-  return configStore.lockedFiles.includes(filePath)
+  // 标准化路径分隔符，统一使用正斜杠
+  const normalizedPath = filePath.replace(/\\/g, '/')
+  const isLocked = configStore.lockedFiles.some(lockedFile => {
+    const normalizedLocked = lockedFile.replace(/\\/g, '/')
+    return normalizedPath === normalizedLocked
+  })
+
+  // 添加调试信息
+  if (filePath === 'test/2.txt' || filePath === '2.txt') {
+    console.log('检查文件锁定状态:', {
+      filePath,
+      normalizedPath,
+      lockedFiles: configStore.lockedFiles,
+      normalizedLockedFiles: configStore.lockedFiles.map(f => f.replace(/\\/g, '/')),
+      isLocked
+    })
+  }
+  return isLocked
 }
 
 // 切换文件锁定状态
