@@ -42,6 +42,7 @@ export const useConfigStore = defineStore('config', () => {
       descriptionTemplates.value = configData.descriptionTemplates || []
       scopeTemplates.value = configData.scopeTemplates || []
       messageTemplates.value = configData.messageTemplates || []
+      lockedFiles.value = configData.lockedFiles || []
       
       // 标记为已加载
       isLoaded.value = true

@@ -505,7 +505,8 @@ async function toggleFileLock(filePath: string) {
 onMounted(() => {
   // App.vue已经加载了Git相关数据，此时只需加载状态
   loadStatus()
-  // 加载锁定文件列表
+  // 加载配置和锁定文件列表
+  configStore.loadConfig()
   configStore.loadLockedFiles()
 })
 
