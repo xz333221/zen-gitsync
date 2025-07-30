@@ -886,15 +886,39 @@ defineExpose({
   <el-dialog
     v-model="showLockedFilesDialog"
     title="锁定文件管理"
-    width="600px"
+    width="700px"
     destroy-on-close
   >
+    <!-- 功能说明 -->
+    <div class="lock-feature-description">
+      <div class="description-header">
+        <el-icon class="description-icon"><InfoFilled /></el-icon>
+        <span class="description-title">文件锁定功能说明</span>
+      </div>
+      <div class="description-content">
+        <p><strong>🔒 锁定文件的作用：</strong></p>
+        <ul>
+          <li>锁定的文件在执行 Git 提交时会被自动跳过，不会被添加到暂存区</li>
+          <li>适用于临时文件、配置文件、或不想提交的开发中文件</li>
+          <li>锁定状态会持久保存，直到手动解锁</li>
+        </ul>
+        <p><strong>💡 使用场景：</strong></p>
+        <ul>
+          <li>开发过程中的临时测试文件</li>
+          <li>本地配置文件（如数据库连接、API密钥等）</li>
+          <li>正在开发但还不想提交的功能文件</li>
+        </ul>
+      </div>
+    </div>
+
+    <el-divider />
+
     <div v-if="configStore.lockedFiles.length === 0" class="empty-locked-files">
       <div class="empty-icon">
         <el-icon><Lock /></el-icon>
       </div>
       <p>当前没有锁定的文件</p>
-      <p class="empty-tip">锁定的文件在提交时会被自动跳过</p>
+      <p class="empty-tip">您可以在文件列表中点击锁定按钮来锁定文件</p>
     </div>
 
     <div v-else class="locked-files-list">
@@ -1640,6 +1664,52 @@ defineExpose({
 .locked-files-header .info-icon {
   color: #d46b08;
   cursor: help;
+}
+
+/* 功能说明样式 */
+.lock-feature-description {
+  background-color: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.description-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.description-icon {
+  color: #1890ff;
+  font-size: 16px;
+}
+
+.description-title {
+  font-weight: 600;
+  color: #262626;
+  font-size: 14px;
+}
+
+.description-content {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #595959;
+}
+
+.description-content p {
+  margin: 8px 0;
+}
+
+.description-content ul {
+  margin: 4px 0 12px 0;
+  padding-left: 20px;
+}
+
+.description-content li {
+  margin: 4px 0;
 }
 
 .locked-file-items {
