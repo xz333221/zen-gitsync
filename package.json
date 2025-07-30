@@ -28,6 +28,11 @@
     "start:vue": "cd ./src/ui/client && npm run dev",
     "start:server": "node server.js",
     "start:server:no-open": "node server.js --no-open",
+    "nrm:ls": "nrm ls",
+    "change:nrm:npm": "nrm use npm",
+    "change:nrm:lenovo-nexus": "nrm use lenovo-nexus",
+    "update:g": "npm install -g zen-gitsync",
+    "npm:ls:g": "npm ls -g",
     "release": "node ./scripts/release.js",
     "release:win": ".\\scripts\\release.bat"
   },
