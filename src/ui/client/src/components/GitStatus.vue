@@ -690,7 +690,7 @@ defineExpose({
                       @click.stop="toggleFileLock(file.path)"
                     >
                       <el-icon>
-                        <component :is="isFileLocked(file.path) ? 'Lock' : 'Unlock'" />
+                        <component :is="isFileLocked(file.path) ? Lock : Unlock" />
                       </el-icon>
                     </el-button>
                   </el-tooltip>
@@ -737,7 +737,7 @@ defineExpose({
                       @click.stop="toggleFileLock(file.path)"
                     >
                       <el-icon>
-                        <component :is="isFileLocked(file.path) ? 'Lock' : 'Unlock'" />
+                        <component :is="isFileLocked(file.path) ? Lock : Unlock" />
                       </el-icon>
                     </el-button>
                   </el-tooltip>
@@ -793,7 +793,7 @@ defineExpose({
                       @click.stop="toggleFileLock(file.path)"
                     >
                       <el-icon>
-                        <component :is="isFileLocked(file.path) ? 'Lock' : 'Unlock'" />
+                        <component :is="isFileLocked(file.path) ? Lock : Unlock" />
                       </el-icon>
                     </el-button>
                   </el-tooltip>
