@@ -851,7 +851,7 @@ const hasStagedChanges = computed(() => {
 });
 
 const hasAnyChanges = computed(() => {
-  return gitStore.fileList.length > 0;
+  return gitStore.fileList.some(file => !isFileLocked(file.path));
 });
 
 const needsPush = computed(() => {
