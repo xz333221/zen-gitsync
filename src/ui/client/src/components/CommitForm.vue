@@ -812,19 +812,38 @@ async function saveDefaultMessage() {
   }
 }
 
+// 检查文件是否被锁定的同步方法
+function isFileLocked(filePath: string): boolean {
+  // 标准化路径分隔符，统一使用正斜杠
+  const normalizedPath = filePath.replace(/\\/g, '/')
+  return configStore.lockedFiles.some(lockedFile => {
+    const normalizedLocked = lockedFile.replace(/\\/g, '/')
+    return normalizedPath === normalizedLocked
+  })
+}
+
 // 根据Git状态计算按钮禁用状态
 const hasUnstagedChanges = computed(() => {
-  return gitStore.fileList.some(file => ['modified', 'deleted', 'untracked'].includes(file.type));
+  return gitStore.fileList.some(file =>
+    ['modified', 'deleted', 'untracked'].includes(file.type) &&
+    !isFileLocked(file.path)
+  );
 });
 
-// 计算未暂存文件数量
+// 计算未暂存文件数量（排除锁定文件）
 const unstagedFilesCount = computed(() => {
-  return gitStore.fileList.filter(file => ['modified', 'deleted', 'untracked'].includes(file.type)).length;
+  return gitStore.fileList.filter(file =>
+    ['modified', 'deleted', 'untracked'].includes(file.type) &&
+    !isFileLocked(file.path)
+  ).length;
 });
 
-// 计算已暂存文件数量
+// 计算已暂存文件数量（排除锁定文件）
 const stagedFilesCount = computed(() => {
-  return gitStore.fileList.filter(file => file.type === 'added').length;
+  return gitStore.fileList.filter(file =>
+    file.type === 'added' &&
+    !isFileLocked(file.path)
+  ).length;
 });
 
 const hasStagedChanges = computed(() => {
