@@ -29,6 +29,8 @@ const diffDialogVisible = ref(false)
 const isLoadingDiff = ref(false)
 // 添加当前文件索引
 const currentFileIndex = ref(-1)
+// 锁定文件对话框状态
+const showLockedFilesDialog = ref(false)
 // 添加切换目录相关的状态
 // const isDirectoryDialogVisible = ref(false)
 // const newDirectoryPath = ref('')
@@ -568,14 +570,31 @@ defineExpose({
             :loading="gitStore.isGitFetching"
           />
         </el-tooltip>
-        
+
+        <!-- 锁定文件管理按钮 -->
+        <el-tooltip
+          v-if="configStore.lockedFiles.length > 0"
+          content="管理锁定文件"
+          placement="top"
+          :hide-after="1000"
+        >
+          <el-button
+            type="warning"
+            circle
+            size="small"
+            @click="showLockedFilesDialog = true"
+          >
+            <el-icon><Lock /></el-icon>
+          </el-button>
+        </el-tooltip>
+
         <el-tooltip content="刷新状态" placement="top" :hide-after="1000">
-          <el-button 
-            type="primary" 
-            :icon="Refresh" 
-            circle 
-            size="small" 
-            @click="refreshStatus" 
+          <el-button
+            type="primary"
+            :icon="Refresh"
+            circle
+            size="small"
+            @click="refreshStatus"
             :loading="isRefreshing"
           />
         </el-tooltip>
@@ -783,44 +802,7 @@ defineExpose({
           </div>
         </div>
 
-        <!-- 锁定文件列表 -->
-        <div v-if="configStore.lockedFiles.length > 0" class="file-group locked-files-group">
-          <div class="file-group-header">
-            <span>🔒 锁定的文件 ({{ configStore.lockedFiles.length }})</span>
-            <el-tooltip content="这些文件在提交时会被自动跳过" placement="top">
-              <el-icon class="info-icon"><InfoFilled /></el-icon>
-            </el-tooltip>
-          </div>
-          <div class="file-list">
-            <div
-              v-for="filePath in configStore.lockedFiles"
-              :key="filePath"
-              class="file-item locked-file-item"
-            >
-              <div class="file-info">
-                <div class="file-status-indicator locked"></div>
-                <div class="file-path-container">
-                  <span class="file-name">{{ getFileName(filePath) }}</span>
-                  <span class="file-directory">{{ getFileDirectory(filePath) }}</span>
-                </div>
-              </div>
-              <div class="file-actions">
-                <el-tooltip content="解锁文件" placement="top" :hide-after="1000">
-                  <el-button
-                    type="danger"
-                    size="small"
-                    circle
-                    @click.stop="configStore.unlockFile(filePath)"
-                  >
-                    <el-icon>
-                      <Lock />
-                    </el-icon>
-                  </el-button>
-                </el-tooltip>
-              </div>
-            </div>
-          </div>
-        </div>
+
 
         <div v-else-if="gitStore.isGitRepo" class="empty-status">
           <div class="empty-icon">
@@ -879,6 +861,67 @@ defineExpose({
           </template>
         </el-button>
       </div>
+    </template>
+  </el-dialog>
+
+  <!-- 锁定文件管理对话框 -->
+  <el-dialog
+    v-model="showLockedFilesDialog"
+    title="锁定文件管理"
+    width="600px"
+    destroy-on-close
+  >
+    <div v-if="configStore.lockedFiles.length === 0" class="empty-locked-files">
+      <div class="empty-icon">
+        <el-icon><Lock /></el-icon>
+      </div>
+      <p>当前没有锁定的文件</p>
+      <p class="empty-tip">锁定的文件在提交时会被自动跳过</p>
+    </div>
+
+    <div v-else class="locked-files-list">
+      <div class="locked-files-header">
+        <span>🔒 已锁定 {{ configStore.lockedFiles.length }} 个文件</span>
+        <el-tooltip content="这些文件在提交时会被自动跳过" placement="top">
+          <el-icon class="info-icon"><InfoFilled /></el-icon>
+        </el-tooltip>
+      </div>
+
+      <div class="locked-file-items">
+        <div
+          v-for="filePath in configStore.lockedFiles"
+          :key="filePath"
+          class="locked-file-item"
+        >
+          <div class="file-info">
+            <div class="file-status-indicator locked"></div>
+            <div class="file-path-container">
+              <span class="file-name">{{ getFileName(filePath) }}</span>
+              <span class="file-directory">{{ getFileDirectory(filePath) }}</span>
+            </div>
+          </div>
+          <div class="file-actions">
+            <el-tooltip content="解锁文件" placement="top" :hide-after="1000">
+              <el-button
+                type="danger"
+                size="small"
+                circle
+                @click="configStore.unlockFile(filePath)"
+              >
+                <el-icon>
+                  <Unlock />
+                </el-icon>
+              </el-button>
+            </el-tooltip>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="showLockedFilesDialog = false">关闭</el-button>
+      </span>
     </template>
   </el-dialog>
 </template>
@@ -1534,5 +1577,72 @@ defineExpose({
 
 .file-status-indicator.deleted.locked {
   background: linear-gradient(45deg, #ff4d4f 50%, #ffa940 50%);
+}
+
+/* 锁定文件对话框样式 */
+.empty-locked-files {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.empty-locked-files .empty-icon {
+  font-size: 48px;
+  color: #d9d9d9;
+  margin-bottom: 16px;
+}
+
+.empty-locked-files p {
+  margin: 8px 0;
+}
+
+.empty-tip {
+  font-size: 12px;
+  color: #999;
+}
+
+.locked-files-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.locked-files-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background-color: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  color: #d46b08;
+  font-weight: 500;
+}
+
+.locked-files-header .info-icon {
+  color: #d46b08;
+  cursor: help;
+}
+
+.locked-file-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.locked-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: #fffbf0;
+  border: 1px solid #ffd591;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.locked-file-item:hover {
+  background-color: #fff7e6;
+  border-color: #ffa940;
 }
 </style>
