@@ -1354,20 +1354,20 @@ function toggleFullscreen() {
             v-loading="isLoading"
             class="log-table"
             :empty-text="isLoading ? '加载中...' : '没有匹配的提交记录'"
-            height="500"
+            height="450"
             @row-contextmenu="handleContextMenu"
           >
 
-            <el-table-column label="提交哈希" width="100" resizable>
+            <el-table-column label="哈希" width="80" resizable>
               <template #default="scope">
                 <span
                   class="commit-hash"
                   @click="viewCommitDetail(scope.row)"
-                  >{{ scope.row.hash.substring(0, 7) }}</span
+                  >{{ scope.row.hash.substring(0, 6) }}</span
                 >
               </template>
             </el-table-column>
-            <el-table-column label="提交信息" min-width="350">
+            <el-table-column label="提交信息" min-width="300">
               <template #default="scope">
                 <div class="commit-message-cell">
                   <!-- 分支信息和提交信息水平排列 -->
@@ -1398,8 +1398,8 @@ function toggleFullscreen() {
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="date" label="日期" width="140" resizable />
-            <el-table-column label="作者" width="120" resizable>
+            <el-table-column prop="date" label="日期" width="120" resizable />
+            <el-table-column label="作者" width="100" resizable>
               <template #default="scope">
                 <el-tooltip
                   :content="scope.row.email"
@@ -1567,7 +1567,7 @@ function toggleFullscreen() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding:16px;
+  padding: 8px 12px;
   border-bottom: 1px solid #ebeef5;
   position: sticky;
   top: 0;
@@ -1588,7 +1588,7 @@ function toggleFullscreen() {
 
 .header-left h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
   color: #303133;
 }
@@ -1728,7 +1728,8 @@ function toggleFullscreen() {
   background-color: #f8f9fa;
   color: #606266;
   font-weight: 600;
-  height: 48px;
+  height: 36px;
+  font-size: 13px;
 }
 
 :deep(.el-table__row) {
@@ -1744,7 +1745,8 @@ function toggleFullscreen() {
 }
 
 :deep(.el-table__cell) {
-  padding: 8px 0;
+  padding: 4px 0;
+  font-size: 13px;
 }
 
 .branch-container {
@@ -1757,12 +1759,12 @@ function toggleFullscreen() {
 
 .branch-tag {
   margin-right: 0;
-  border-radius: 4px;
+  border-radius: 3px;
   transition: all 0.2s ease;
-  font-size: 11px;
-  padding: 1px 6px;
-  height: 18px;
-  line-height: 16px;
+  font-size: 10px;
+  padding: 1px 4px;
+  height: 16px;
+  line-height: 14px;
 }
 
 .branch-tag:hover {
@@ -1875,6 +1877,7 @@ function toggleFullscreen() {
   display: inline-block;
   max-width: 100%;
   font-weight: 500;
+  font-size: 12px;
 }
 
 .commit-hash {
@@ -1882,10 +1885,11 @@ function toggleFullscreen() {
   color: #409eff;
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-weight: 500;
-  border-radius: 4px;
-  padding: 2px 4px;
+  border-radius: 3px;
+  padding: 1px 3px;
   background-color: #ecf5ff;
   transition: all 0.2s ease;
+  font-size: 11px;
 }
 
 .commit-hash:hover {
@@ -2180,6 +2184,8 @@ function toggleFullscreen() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 .copy-message-btn {
