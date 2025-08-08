@@ -115,6 +115,7 @@ $ g log --n=5
 ```shell
 $ g ui
 ```
+![Zen GitSync UI](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/zen-gitsync-ui.png)
 
 ## 🔒 文件锁定功能
 
