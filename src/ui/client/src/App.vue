@@ -462,6 +462,8 @@ async function changeDirectory() {
 
       // 保存到最近使用的目录
       await saveRecentDirectory(result.directory)
+      // 立即刷新最近目录列表，确保对话框里立刻可见
+      await getRecentDirectories()
 
       // 直接使用API返回的Git仓库状态
       gitStore.isGitRepo = result.isGitRepo

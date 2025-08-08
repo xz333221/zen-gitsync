@@ -131,6 +131,31 @@ async function getLockedFiles() {
   return config.lockedFiles || [];
 }
 
+// 全局“最近访问的目录”管理（保存在原始配置的顶层）
+const MAX_RECENT_DIRS = 12;
+
+async function getRecentDirectories() {
+  const raw = await readRawConfigFile();
+  const list = raw?.recentDirectories;
+  return Array.isArray(list) ? list : [];
+}
+
+async function saveRecentDirectory(dirPath) {
+  if (!dirPath || typeof dirPath !== 'string') return;
+  const raw = (await readRawConfigFile()) || {};
+  let list = Array.isArray(raw.recentDirectories) ? raw.recentDirectories.slice() : [];
+
+  // 规范化：Windows 下统一为小写，去掉重复，保持最新在前
+  const normalized = normalizeProjectPath(dirPath);
+  list = list.filter(p => normalizeProjectPath(p) !== normalized);
+  list.unshift(dirPath);
+  if (list.length > MAX_RECENT_DIRS) list = list.slice(0, MAX_RECENT_DIRS);
+
+  raw.recentDirectories = list;
+  await writeRawConfigFile(raw);
+  return list;
+}
+
 // 添加配置管理函数
 async function handleConfigCommands() {
   if (process.argv.includes('get-config')) {
@@ -158,5 +183,7 @@ export default {
   unlockFile,
   isFileLocked,
   listLockedFiles,
-  getLockedFiles
+  getLockedFiles,
+  getRecentDirectories,
+  saveRecentDirectory
 };
