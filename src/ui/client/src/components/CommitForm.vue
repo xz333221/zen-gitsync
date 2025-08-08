@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Setting, Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu } from "@element-plus/icons-vue";
+import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu } from "@element-plus/icons-vue";
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
 
