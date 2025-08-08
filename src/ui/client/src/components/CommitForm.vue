@@ -21,6 +21,11 @@ const commitDescription = ref("");
 const commitBody = ref("");
 const commitFooter = ref("");
 
+// 配置JSON编辑器
+const configEditorVisible = ref(false);
+const configEditorText = ref("");
+const configEditorSaving = ref(false);
+
 // 提交模板相关变量
 const descriptionTemplates = ref<string[]>([]);
 // 添加对话框可见性变量
@@ -85,6 +90,50 @@ function openStashDialog() {
   includeUntracked.value = false;
   excludeLocked.value = true;
   isStashDialogVisible.value = true;
+}
+
+// 打开配置编辑器
+function openConfigEditor() {
+  try {
+    const cfg = configStore.config;
+    // 使用当前配置填充编辑器
+    configEditorText.value = JSON.stringify(cfg, null, 2);
+    configEditorVisible.value = true;
+  } catch (e) {
+    ElMessage.error('加载配置失败');
+  }
+}
+
+// 保存完整配置
+async function saveFullConfig() {
+  try {
+    configEditorSaving.value = true;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(configEditorText.value);
+    } catch (e: any) {
+      ElMessage.error(`JSON 解析失败: ${e.message || e}`);
+      return;
+    }
+
+    const resp = await fetch('/api/config/saveAll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: parsed })
+    });
+    const result = await resp.json();
+    if (!result.success) {
+      throw new Error(result.error || '保存失败');
+    }
+    // 重新加载配置
+    await configStore.loadConfig();
+    ElMessage.success('配置已保存');
+    configEditorVisible.value = false;
+  } catch (err: any) {
+    ElMessage.error(`保存配置失败: ${err.message || err}`);
+  } finally {
+    configEditorSaving.value = false;
+  }
 }
 
 function openStashListDialog() {
@@ -1312,6 +1361,10 @@ git config --global user.email "your.email@example.com"</pre>
                 <div class="no-verify-toggle">
                   <el-switch v-model="skipHooks" active-text="跳过 Git 钩子检查 (--no-verify)" />
                 </div>
+
+                <div class="config-edit-toggle">
+                  <el-button size="small" type="primary" :icon="Edit" @click="openConfigEditor">配置</el-button>
+                </div>
               </div>
             </div>
 
@@ -1743,6 +1796,29 @@ git config --global user.email "your.email@example.com"</pre>
           </div>
         </div>
       </el-drawer>
+
+      <!-- 配置JSON编辑弹窗 -->
+      <el-dialog
+        class="config-editor-dialog"
+        title="编辑配置 JSON"
+        v-model="configEditorVisible"
+        width="60%"
+      >
+        <el-input
+          v-model="configEditorText"
+          type="textarea"
+          :rows="18"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="在此编辑当前项目配置的 JSON"
+        />
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="configEditorVisible = false">取消</el-button>
+            <el-button type="primary" :loading="configEditorSaving" @click="saveFullConfig">保存</el-button>
+          </span>
+        </template>
+      </el-dialog>
 
       <!-- 简短描述设置弹窗 -->
       <el-dialog 

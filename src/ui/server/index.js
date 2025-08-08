@@ -507,6 +507,13 @@ async function startUIServer(noOpen = false, savePort = false) {
               // 检查新目录是否是Git仓库
               try {
                   await execGitCommand('git rev-parse --is-inside-work-tree');
+                  // 确保切换后立即初始化该项目的配置条目
+                  try {
+                    const currentCfg = await configManager.loadConfig();
+                    await configManager.saveConfig(currentCfg);
+                  } catch (e) {
+                    console.warn('初始化项目配置失败:', e?.message || e);
+                  }
                   
                   // 初始化文件监控
                   initFileSystemWatcher();
@@ -523,6 +530,14 @@ async function startUIServer(noOpen = false, savePort = false) {
                     watcher = null;
                   }
                   
+                  // 即使不是Git仓库也初始化当前目录配置（使用CWD作为项目键）
+                  try {
+                    const currentCfg = await configManager.loadConfig();
+                    await configManager.saveConfig(currentCfg);
+                  } catch (e) {
+                    console.warn('非Git目录初始化项目配置失败:', e?.message || e);
+                  }
+
                   res.json({ 
                       success: true, 
                       directory: newDirectory,
@@ -746,6 +761,23 @@ async function startUIServer(noOpen = false, savePort = false) {
       
       // 更新默认提交信息
       config.defaultCommitMessage = defaultCommitMessage
+      await configManager.saveConfig(config)
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
+  // 保存所有配置
+  app.post('/api/config/saveAll', express.json(), async (req, res) => {
+    try {
+      const { config } = req.body
+      
+      if (!config) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
       await configManager.saveConfig(config)
       
       res.json({ success: true })
