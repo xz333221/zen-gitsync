@@ -1163,6 +1163,36 @@ function toggleGitOperationsDrawer() {
   gitOperationsDrawerVisible.value = !gitOperationsDrawerVisible.value;
 }
 
+// 查询描述模板的函数
+function queryDescriptionTemplates(queryString: string, callback: (suggestions: any[]) => void) {
+  const results = queryString
+    ? descriptionTemplates.value.filter(template => 
+        template.toLowerCase().includes(queryString.toLowerCase())
+      ).map(template => ({ value: template }))
+    : descriptionTemplates.value.map(template => ({ value: template }));
+  callback(results);
+}
+
+// 查询作用域模板的函数
+function queryScopeTemplates(queryString: string, callback: (suggestions: any[]) => void) {
+  const results = queryString
+    ? scopeTemplates.value.filter(template => 
+        template.toLowerCase().includes(queryString.toLowerCase())
+      ).map(template => ({ value: template }))
+    : scopeTemplates.value.map(template => ({ value: template }));
+  callback(results);
+}
+
+// 处理描述选择
+function handleDescriptionSelect(item: { value: string }) {
+  commitDescription.value = item.value;
+}
+
+// 处理作用域选择
+function handleScopeSelect(item: { value: string }) {
+  commitScope.value = item.value;
+}
+
 </script>
 
 <template>
@@ -1338,7 +1368,14 @@ git config --global user.email "your.email@example.com"</pre>
                   </el-select>
 
                   <div class="scope-wrapper">
-                    <el-input v-model="commitScope" placeholder="作用域（可选）" class="scope-input" clearable />
+                    <el-autocomplete
+                      v-model="commitScope"
+                      :fetch-suggestions="queryScopeTemplates"
+                      placeholder="作用域（可选）"
+                      class="scope-input"
+                      clearable
+                      @select="handleScopeSelect"
+                    />
                     <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
                       @click="openScopeSettings">
                     </el-button>
@@ -1346,7 +1383,14 @@ git config --global user.email "your.email@example.com"</pre>
                 </div>
 
                 <div class="description-container">
-                  <el-input v-model="commitDescription" placeholder="简短描述（必填）" class="description-input" clearable />
+                  <el-autocomplete
+                    v-model="commitDescription"
+                    :fetch-suggestions="queryDescriptionTemplates"
+                    placeholder="简短描述（必填）"
+                    class="description-input"
+                    clearable
+                    @select="handleDescriptionSelect"
+                  />
                   <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
                     @click="openDescriptionSettings">
                   </el-button>

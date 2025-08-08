@@ -11,6 +11,7 @@ declare module 'vue' {
     CommandHistory: typeof import('./src/components/CommandHistory.vue')['default']
     CommitForm: typeof import('./src/components/CommitForm.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
+    ElAutocomplete: typeof import('element-plus/es')['ElAutocomplete']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCard: typeof import('element-plus/es')['ElCard']
     ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
