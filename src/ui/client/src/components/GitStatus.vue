@@ -684,13 +684,15 @@ defineExpose({
               >
                 <div class="file-info">
                   <div class="file-status-indicator" :class="['added', { 'locked': isFileLocked(file.path) }]"></div>
-                  <div class="file-path-container">
+                  <div class="file-name-section">
                     <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
                       {{ getFileName(file.path) }}
                       <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
                         <Lock />
                       </el-icon>
                     </span>
+                  </div>
+                  <div class="file-path-section" :title="getFileDirectory(file.path)">
                     <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
                   </div>
                 </div>
@@ -701,8 +703,9 @@ defineExpose({
                       size="small"
                       circle
                       @click.stop="toggleFileLock(file.path)"
+                      class="file-action-btn"
                     >
-                      <el-icon>
+                      <el-icon size="12">
                         <component :is="isFileLocked(file.path) ? Lock : Unlock" />
                       </el-icon>
                     </el-button>
@@ -713,6 +716,7 @@ defineExpose({
                       size="small"
                       circle
                       @click.stop="unstageFile(file.path)"
+                      class="file-action-btn"
                     >-</el-button>
                   </el-tooltip>
                 </div>
@@ -736,13 +740,15 @@ defineExpose({
               >
                 <div class="file-info">
                   <div class="file-status-indicator" :class="[file.type, { 'locked': isFileLocked(file.path) }]"></div>
-                  <div class="file-path-container">
+                  <div class="file-name-section">
                     <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
                       {{ getFileName(file.path) }}
                       <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
                         <Lock />
                       </el-icon>
                     </span>
+                  </div>
+                  <div class="file-path-section" :title="getFileDirectory(file.path)">
                     <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
                   </div>
                 </div>
@@ -753,8 +759,9 @@ defineExpose({
                       size="small"
                       circle
                       @click.stop="toggleFileLock(file.path)"
+                      class="file-action-btn"
                     >
-                      <el-icon>
+                      <el-icon size="12">
                         <component :is="isFileLocked(file.path) ? Lock : Unlock" />
                       </el-icon>
                     </el-button>
@@ -765,6 +772,7 @@ defineExpose({
                       size="small"
                       circle
                       @click.stop="stageFile(file.path)"
+                      class="file-action-btn"
                     >+</el-button>
                   </el-tooltip>
                   <el-tooltip content="撤回修改" placement="top" :hide-after="1000">
@@ -774,6 +782,7 @@ defineExpose({
                       :icon="RefreshRight"
                       circle
                       @click.stop="revertFileChanges(file.path)"
+                      class="file-action-btn"
                     />
                   </el-tooltip>
                 </div>
@@ -797,13 +806,15 @@ defineExpose({
               >
                 <div class="file-info">
                   <div class="file-status-indicator" :class="['untracked', { 'locked': isFileLocked(file.path) }]"></div>
-                  <div class="file-path-container">
+                  <div class="file-name-section">
                     <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
                       {{ getFileName(file.path) }}
                       <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
                         <Lock />
                       </el-icon>
                     </span>
+                  </div>
+                  <div class="file-path-section" :title="getFileDirectory(file.path)">
                     <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
                   </div>
                 </div>
@@ -814,8 +825,9 @@ defineExpose({
                       size="small"
                       circle
                       @click.stop="toggleFileLock(file.path)"
+                      class="file-action-btn"
                     >
-                      <el-icon>
+                      <el-icon size="12">
                         <component :is="isFileLocked(file.path) ? Lock : Unlock" />
                       </el-icon>
                     </el-button>
@@ -826,6 +838,7 @@ defineExpose({
                       size="small"
                       circle
                       @click.stop="stageFile(file.path)"
+                      class="file-action-btn"
                     >+</el-button>
                   </el-tooltip>
                   <el-tooltip content="删除文件" placement="top" :hide-after="1000">
@@ -835,6 +848,7 @@ defineExpose({
                       :icon="Close"
                       circle
                       @click.stop="revertFileChanges(file.path)"
+                      class="file-action-btn"
                     />
                   </el-tooltip>
                 </div>
@@ -1028,7 +1042,7 @@ defineExpose({
 }
 
 .card-content {
-  padding: 16px;
+  padding: 8px;
   overflow-y: auto;
   overflow-x: hidden;
   flex: 1;
@@ -1085,9 +1099,9 @@ defineExpose({
 }
 
 .file-group-header {
-  font-size: 14px;
-  font-weight: bold;
-  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
   background-color: #f0f2f5;
   color: #606266;
   border-bottom: 1px solid #ebeef5;
@@ -1095,9 +1109,10 @@ defineExpose({
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   transition: background-color 0.2s ease;
   user-select: none;
+  min-height: 28px;
 }
 
 .file-group-header:hover {
@@ -1106,7 +1121,7 @@ defineExpose({
 
 .collapse-icon {
   transition: transform 0.2s ease;
-  font-size: 16px;
+  font-size: 14px;
   color: #6c757d;
 }
 
@@ -1116,7 +1131,7 @@ defineExpose({
 
 .file-list {
   overflow-y: visible;
-  min-height: 40px;
+  min-height: 30px;
   max-height: none;
   flex-grow: 1;
   padding: 0;
@@ -1170,13 +1185,14 @@ defineExpose({
 }
 
 .file-item {
-  padding: 10px 16px;
+  padding: 6px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid #ebeef5;
   cursor: pointer;
   transition: all 0.2s ease;
+  min-height: 32px;
 }
 
 .file-item:last-child {
@@ -1192,8 +1208,7 @@ defineExpose({
   align-items: center;
   flex-grow: 1;
   overflow: hidden;
-  white-space: nowrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .file-status-indicator {
@@ -1220,38 +1235,54 @@ defineExpose({
   background-color: #e6a23c;
 }
 
-.file-path-container {
+.file-name-section {
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.file-path-section {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  max-width: 200px;
 }
 
 .file-name {
   font-weight: 500;
   color: #303133;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.4;
+  flex-shrink: 0;
+  line-height: 1.3;
+  font-size: 13px;
 }
 
 .file-directory {
-  font-size: 12px;
+  font-size: 11px;
   color: #909399;
-  max-width: 200px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
 }
 
 .file-actions {
   display: flex;
-  gap: 8px;
   opacity: 0;
   transition: opacity 0.2s ease;
 }
 
 .file-item:hover .file-actions {
   opacity: 1;
+}
+
+.file-action-btn {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  padding: 0 !important;
+  font-size: 11px !important;
 }
 
 .empty-status {

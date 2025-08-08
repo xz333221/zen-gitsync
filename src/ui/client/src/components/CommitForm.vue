@@ -2139,7 +2139,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .card-content {
-  padding: 15px;
+  padding: 8px;
   overflow-y: auto;
   flex: 1;
 }
