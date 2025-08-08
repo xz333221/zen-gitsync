@@ -1193,6 +1193,21 @@ function handleScopeSelect(item: { value: string }) {
   commitScope.value = item.value;
 }
 
+// 查询提交信息模板的函数
+function queryMessageTemplates(queryString: string, callback: (suggestions: any[]) => void) {
+  const results = queryString
+    ? messageTemplates.value.filter(template => 
+        template.toLowerCase().includes(queryString.toLowerCase())
+      ).map(template => ({ value: template }))
+    : messageTemplates.value.map(template => ({ value: template }));
+  callback(results);
+}
+
+// 处理提交信息选择
+function handleMessageSelect(item: { value: string }) {
+  commitMessage.value = item.value;
+}
+
 </script>
 
 <template>
@@ -1267,13 +1282,15 @@ git config --global user.email "your.email@example.com"</pre>
             <!-- 普通提交表单 -->
             <div v-if="!isStandardCommit" class="commit-form">
               <div class="description-container">
-                <el-input 
-                  v-model="commitMessage" 
-                  :placeholder="placeholder" 
+                <el-autocomplete
+                  v-model="commitMessage"
+                  :fetch-suggestions="queryMessageTemplates"
+                  :placeholder="placeholder"
                   type="textarea"
                   :rows="6"
                   resize="none"
                   class="commit-message-input"
+                  @select="handleMessageSelect"
                 />
                 <div class="input-actions">
                   <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
