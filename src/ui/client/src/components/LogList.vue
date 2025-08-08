@@ -1398,7 +1398,7 @@ function toggleFullscreen() {
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="date" label="日期" width="120" resizable />
+            <el-table-column prop="date" label="日期" width="150" resizable />
             <el-table-column label="作者" width="100" resizable>
               <template #default="scope">
                 <el-tooltip

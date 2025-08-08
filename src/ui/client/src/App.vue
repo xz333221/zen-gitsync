@@ -1519,9 +1519,9 @@ h1 {
 }
 
 .dir-button {
-  padding: 6px;
-  height: 28px;
-  width: 28px;
+  padding: 4px;
+  height: 24px;
+  width: 24px;
   border-radius: 50%;
   display: flex;
   align-items: center;
