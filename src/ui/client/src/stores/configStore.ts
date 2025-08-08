@@ -23,10 +23,10 @@ export const useConfigStore = defineStore('config', () => {
     }
   })
 
-  // 加载配置
-  async function loadConfig() {
-    // 如果已经加载过，则不再重复加载
-    if (isLoaded.value && !isLoading.value) {
+  // 加载配置（可强制刷新）
+  async function loadConfig(force = false) {
+    // 如果已经加载过且未强制刷新，则不再重复加载
+    if (!force && isLoaded.value && !isLoading.value) {
       console.log('使用缓存的配置信息')
       return config.value
     }

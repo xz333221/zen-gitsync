@@ -466,8 +466,8 @@ async function changeDirectory() {
       // 直接使用API返回的Git仓库状态
       gitStore.isGitRepo = result.isGitRepo
 
-      // 切换目录后，重新加载当前项目配置（确保新项目配置被初始化并反映到前端）
-      await configStore.loadConfig()
+      // 切换目录后，强制重新加载当前项目配置（确保新项目配置被初始化并反映到前端）
+      await configStore.loadConfig(true)
 
       // 如果是Git仓库，加载Git相关数据
       if (result.isGitRepo) {
