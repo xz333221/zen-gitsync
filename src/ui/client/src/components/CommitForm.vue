@@ -1165,47 +1165,83 @@ function toggleGitOperationsDrawer() {
 
 // 查询描述模板的函数
 function queryDescriptionTemplates(queryString: string, callback: (suggestions: any[]) => void) {
-  const results = queryString
+  const templateResults = queryString
     ? descriptionTemplates.value.filter(template => 
         template.toLowerCase().includes(queryString.toLowerCase())
       ).map(template => ({ value: template }))
     : descriptionTemplates.value.map(template => ({ value: template }));
+  
+  // 添加设置选项到下拉列表
+  const results = [
+    ...templateResults,
+    { value: '⚙️ 管理模板...', isSettings: true }
+  ];
   callback(results);
 }
 
 // 查询作用域模板的函数
 function queryScopeTemplates(queryString: string, callback: (suggestions: any[]) => void) {
-  const results = queryString
+  const templateResults = queryString
     ? scopeTemplates.value.filter(template => 
         template.toLowerCase().includes(queryString.toLowerCase())
       ).map(template => ({ value: template }))
     : scopeTemplates.value.map(template => ({ value: template }));
+  
+  // 添加设置选项到下拉列表
+  const results = [
+    ...templateResults,
+    { value: '⚙️ 管理模板...', isSettings: true }
+  ];
   callback(results);
 }
 
 // 处理描述选择
-function handleDescriptionSelect(item: { value: string }) {
-  commitDescription.value = item.value;
+function handleDescriptionSelect(item: { value: string; isSettings?: boolean }) {
+  if (item.isSettings) {
+    openDescriptionSettings();
+    // 清空输入框中的设置选项文本
+    commitDescription.value = '';
+  } else {
+    commitDescription.value = item.value;
+  }
 }
 
 // 处理作用域选择
-function handleScopeSelect(item: { value: string }) {
-  commitScope.value = item.value;
+function handleScopeSelect(item: { value: string; isSettings?: boolean }) {
+  if (item.isSettings) {
+    openScopeSettings();
+    // 清空输入框中的设置选项文本
+    commitScope.value = '';
+  } else {
+    commitScope.value = item.value;
+  }
 }
 
 // 查询提交信息模板的函数
 function queryMessageTemplates(queryString: string, callback: (suggestions: any[]) => void) {
-  const results = queryString
+  const templateResults = queryString
     ? messageTemplates.value.filter(template => 
         template.toLowerCase().includes(queryString.toLowerCase())
       ).map(template => ({ value: template }))
     : messageTemplates.value.map(template => ({ value: template }));
+  
+  // 添加设置选项到下拉列表
+  const results = [
+    ...templateResults,
+    { value: '⚙️ 管理模板...', isSettings: true }
+  ];
   callback(results);
 }
 
 // 处理提交信息选择
-function handleMessageSelect(item: { value: string }) {
-  commitMessage.value = item.value;
+function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
+  if (item.isSettings) {
+    openDefaultMessageSettings();
+    // 清空输入框中的设置选项文本
+    commitMessage.value = '';
+  } else {
+    commitMessage.value = item.value;
+  }
 }
 
 </script>
@@ -1292,11 +1328,6 @@ git config --global user.email "your.email@example.com"</pre>
                   class="commit-message-input"
                   @select="handleMessageSelect"
                 />
-                <div class="input-actions">
-                  <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
-                    @click="openDefaultMessageSettings">
-                  </el-button>
-                </div>
               </div>
               
               <!-- 添加Git命令预览区域 -->
@@ -1393,9 +1424,6 @@ git config --global user.email "your.email@example.com"</pre>
                       clearable
                       @select="handleScopeSelect"
                     />
-                    <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
-                      @click="openScopeSettings">
-                    </el-button>
                   </div>
                 </div>
 
@@ -1408,9 +1436,6 @@ git config --global user.email "your.email@example.com"</pre>
                     clearable
                     @select="handleDescriptionSelect"
                   />
-                  <el-button type="primary" :icon="Setting" circle size="small" class="settings-button"
-                    @click="openDescriptionSettings">
-                  </el-button>
                 </div>
               </div>
 
