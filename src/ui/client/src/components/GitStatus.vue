@@ -31,6 +31,12 @@ const isLoadingDiff = ref(false)
 const currentFileIndex = ref(-1)
 // 锁定文件对话框状态
 const showLockedFilesDialog = ref(false)
+// 添加文件组折叠状态
+const collapsedGroups = ref({
+  staged: false,    // 已暂存的更改
+  unstaged: false,  // 未暂存的更改
+  untracked: false  // 未跟踪的文件
+})
 // 添加切换目录相关的状态
 // const isDirectoryDialogVisible = ref(false)
 // const newDirectoryPath = ref('')
@@ -507,16 +513,18 @@ function isFileLocked(filePath: string): boolean {
 }
 
 // 切换文件锁定状态
-async function toggleFileLock(filePath: string) {
+function toggleFileLock(filePath: string) {
   const isLocked = isFileLocked(filePath)
-
   if (isLocked) {
-    // 解锁文件
-    await configStore.unlockFile(filePath)
+    configStore.unlockFile(filePath)
   } else {
-    // 锁定文件
-    await configStore.lockFile(filePath)
+    configStore.lockFile(filePath)
   }
+}
+
+// 切换文件组的折叠状态
+function toggleGroupCollapse(groupType: 'staged' | 'unstaged' | 'untracked') {
+  collapsedGroups.value[groupType] = !collapsedGroups.value[groupType]
 }
 
 onMounted(() => {
@@ -661,8 +669,13 @@ defineExpose({
         <div v-if="gitStore.fileList.length" class="file-list-container">
           <!-- 分组显示文件 -->
           <div v-if="gitStore.fileList.some(f => f.type === 'added')" class="file-group">
-            <div class="file-group-header">已暂存的更改</div>
-            <div class="file-list">
+            <div class="file-group-header" @click="toggleGroupCollapse('staged')">
+              <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.staged }">
+                <ArrowDown />
+              </el-icon>
+              <span>已暂存的更改</span>
+            </div>
+            <div v-show="!collapsedGroups.staged" class="file-list">
               <div
                 v-for="file in gitStore.fileList.filter(f => f.type === 'added')"
                 :key="file.path"
@@ -708,8 +721,13 @@ defineExpose({
           </div>
           
           <div v-if="gitStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')" class="file-group">
-            <div class="file-group-header">未暂存的更改</div>
-            <div class="file-list">
+            <div class="file-group-header" @click="toggleGroupCollapse('unstaged')">
+              <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.unstaged }">
+                <ArrowDown />
+              </el-icon>
+              <span>未暂存的更改</span>
+            </div>
+            <div v-show="!collapsedGroups.unstaged" class="file-list">
               <div
                 v-for="file in gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
                 :key="file.path"
@@ -764,8 +782,13 @@ defineExpose({
           </div>
           
           <div v-if="gitStore.fileList.some(f => f.type === 'untracked')" class="file-group">
-            <div class="file-group-header">未跟踪的文件</div>
-            <div class="file-list">
+            <div class="file-group-header" @click="toggleGroupCollapse('untracked')">
+              <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.untracked }">
+                <ArrowDown />
+              </el-icon>
+              <span>未跟踪的文件</span>
+            </div>
+            <div v-show="!collapsedGroups.untracked" class="file-list">
               <div
                 v-for="file in gitStore.fileList.filter(f => f.type === 'untracked')"
                 :key="file.path"
@@ -1032,15 +1055,12 @@ defineExpose({
 
 /* 文件列表容器 */
 .file-list-container {
+  overflow-y: auto;
   flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  height: auto;
-  min-height: 100px;
   width: 100%;
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
 }
 
 .file-group {
@@ -1048,7 +1068,7 @@ defineExpose({
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #ebeef5;
-  margin-bottom: 0;
+  margin-bottom: 4px;
   display: flex;
   flex-direction: column;
   transition: box-shadow 0.3s ease;
@@ -1056,11 +1076,6 @@ defineExpose({
 
 .file-group:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-/* 让每个文件组根据内容自动增长 */
-.file-group {
-  flex: 0 1 auto;
 }
 
 /* 最后一个分组可以吸收剩余空间 */
@@ -1077,35 +1092,53 @@ defineExpose({
   color: #606266;
   border-bottom: 1px solid #ebeef5;
   flex-shrink: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.2s ease;
+  user-select: none;
+}
+
+.file-group-header:hover {
+  background-color: #e9ecef;
+}
+
+.collapse-icon {
+  transition: transform 0.2s ease;
+  font-size: 16px;
+  color: #6c757d;
+}
+
+.collapse-icon.collapsed {
+  transform: rotate(-90deg);
 }
 
 .file-list {
-  overflow-y: auto;
+  overflow-y: visible;
   min-height: 40px;
-  max-height: 200px;
+  max-height: none;
   flex-grow: 1;
   padding: 0;
   margin: 0;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
 }
 
 /* Webkit浏览器的滚动条样式 */
-.file-list::-webkit-scrollbar {
+.file-list-container::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-.file-list::-webkit-scrollbar-thumb {
+.file-list-container::-webkit-scrollbar-thumb {
   background-color: rgba(144, 147, 153, 0.3);
   border-radius: 4px;
 }
 
-.file-list::-webkit-scrollbar-thumb:hover {
+.file-list-container::-webkit-scrollbar-thumb:hover {
   background-color: rgba(144, 147, 153, 0.5);
 }
 
-.file-list::-webkit-scrollbar-track {
+.file-list-container::-webkit-scrollbar-track {
   background-color: transparent;
 }
 
