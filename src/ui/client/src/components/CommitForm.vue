@@ -126,7 +126,28 @@ async function saveFullConfig() {
       throw new Error(result.error || '保存失败');
     }
     // 重新加载配置
-    await configStore.loadConfig();
+    await configStore.loadConfig(true);
+    // 同步锁定文件列表（部分视图依赖独立接口）
+    try {
+      await configStore.loadLockedFiles();
+    } catch {}
+    // 同步本地模板列表，保证保存后UI立刻更新
+    try {
+      if (Array.isArray(configStore.descriptionTemplates)) {
+        // pinia ref arrays
+        descriptionTemplates.value = [...configStore.descriptionTemplates];
+      }
+    } catch {}
+    try {
+      if (Array.isArray(configStore.scopeTemplates)) {
+        scopeTemplates.value = [...configStore.scopeTemplates];
+      }
+    } catch {}
+    try {
+      if (Array.isArray(configStore.messageTemplates)) {
+        messageTemplates.value = [...configStore.messageTemplates];
+      }
+    } catch {}
     ElMessage.success('配置已保存');
     configEditorVisible.value = false;
   } catch (err: any) {
