@@ -76,11 +76,14 @@ const isStashDialogVisible = ref(false);
 const isStashListDialogVisible = ref(false);
 const stashMessage = ref('');
 const includeUntracked = ref(false);
+// 新增：排除锁定文件选项（默认勾选）
+const excludeLocked = ref(true);
 
 // 添加stash相关方法
 function openStashDialog() {
   stashMessage.value = '';
   includeUntracked.value = false;
+  excludeLocked.value = true;
   isStashDialogVisible.value = true;
 }
 
@@ -91,7 +94,7 @@ function openStashListDialog() {
 
 async function saveStash() {
   try {
-    await gitStore.saveStash(stashMessage.value, includeUntracked.value);
+    await gitStore.saveStash(stashMessage.value, includeUntracked.value, excludeLocked.value);
     isStashDialogVisible.value = false;
   } catch (error) {
     console.error('储藏失败:', error);
@@ -1959,6 +1962,12 @@ git config --global user.email "your.email@example.com"</pre>
             <el-form-item>
               <el-checkbox v-model="includeUntracked">
                 包含未跟踪文件 (--include-untracked)
+              </el-checkbox>
+            </el-form-item>
+
+            <el-form-item>
+              <el-checkbox v-model="excludeLocked">
+                排除锁定文件
               </el-checkbox>
             </el-form-item>
           </el-form>

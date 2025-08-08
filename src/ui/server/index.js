@@ -1757,35 +1757,66 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 创建新的stash
   app.post('/api/stash-save', async (req, res) => {
     try {
-      const { message, includeUntracked } = req.body;
-      
-      // 构建stash命令
+      const { message, includeUntracked, excludeLocked } = req.body;
+
+      if (excludeLocked) {
+        const lockedFiles = await configManager.getLockedFiles();
+        const { stdout: statusStdout } = await execGitCommand('git status --porcelain', { log: false });
+        const changedFiles = statusStdout
+          .split('\n')
+          .filter(line => line.trim())
+          .map(line => {
+            const match = line.match(/^..\s+(.+)$/);
+            if (match) {
+              let filename = match[1];
+              if (filename.startsWith('"') && filename.endsWith('"')) {
+                filename = filename.slice(1, -1).replace(/\\(.)/g, '$1');
+              }
+              return filename;
+            }
+            return null;
+          })
+          .filter(Boolean);
+
+        const path = (await import('path')).default;
+        const filesToStash = changedFiles.filter(file => {
+          const normalizedFile = path.normalize(file);
+          const isLocked = lockedFiles.some(locked => {
+            const normalizedLocked = path.normalize(locked);
+            return normalizedFile === normalizedLocked || normalizedFile.startsWith(normalizedLocked + path.sep);
+          });
+          return !isLocked;
+        });
+
+        if (filesToStash.length === 0) {
+          return res.json({ success: false, message: '所有更改都是锁定文件，无需储藏' });
+        }
+
+        let command = 'git stash push';
+        if (message) command += ` -m "${message}"`;
+        if (includeUntracked) command += ' --include-untracked';
+        const args = filesToStash.map(f => `"${f}"`).join(' ');
+        command += ` -- ${args}`;
+
+        const { stdout } = await execGitCommand(command);
+        if (stdout.includes('No local changes to save')) {
+          return res.json({ success: false, message: '没有本地更改需要保存' });
+        }
+        return res.json({ success: true, message: '成功保存未锁定的工作区更改', output: stdout });
+      }
+
       let command = 'git stash push';
-      
-      // 添加可选参数
       if (message) {
         command += ` -m "${message}"`;
       }
-      
       if (includeUntracked) {
         command += ' --include-untracked';
       }
-      
       const { stdout } = await execGitCommand(command);
-      
-      // 检查是否有任何更改被保存
       if (stdout.includes('No local changes to save')) {
-        return res.json({ 
-          success: false, 
-          message: '没有本地更改需要保存' 
-        });
+        return res.json({ success: false, message: '没有本地更改需要保存' });
       }
-      
-      res.json({ 
-        success: true, 
-        message: '成功保存工作区更改',
-        output: stdout 
-      });
+      res.json({ success: true, message: '成功保存工作区更改', output: stdout });
     } catch (error) {
       console.error('保存stash失败:', error);
       res.status(500).json({ success: false, error: error.message });

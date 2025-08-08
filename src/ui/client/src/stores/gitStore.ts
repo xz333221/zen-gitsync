@@ -1429,7 +1429,7 @@ export const useGitStore = defineStore('git', () => {
   }
 
   // 保存stash
-  async function saveStash(message?: string, includeUntracked = false) {
+  async function saveStash(message?: string, includeUntracked = false, excludeLocked = true) {
     if (!isGitRepo.value) {
       ElMessage.warning('当前目录不是Git仓库');
       return false;
@@ -1443,9 +1443,10 @@ export const useGitStore = defineStore('git', () => {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
-          message, 
-          includeUntracked 
+        body: JSON.stringify({
+          message,
+          includeUntracked,
+          excludeLocked
         })
       });
       
