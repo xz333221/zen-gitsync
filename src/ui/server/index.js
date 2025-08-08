@@ -511,6 +511,8 @@ async function startUIServer(noOpen = false, savePort = false) {
                   try {
                     const currentCfg = await configManager.loadConfig();
                     await configManager.saveConfig(currentCfg);
+                    // 将新目录加入最近目录
+                    await configManager.saveRecentDirectory(newDirectory);
                   } catch (e) {
                     console.warn('初始化项目配置失败:', e?.message || e);
                   }
@@ -534,6 +536,8 @@ async function startUIServer(noOpen = false, savePort = false) {
                   try {
                     const currentCfg = await configManager.loadConfig();
                     await configManager.saveConfig(currentCfg);
+                    // 将新目录加入最近目录
+                    await configManager.saveRecentDirectory(newDirectory);
                   } catch (e) {
                     console.warn('非Git目录初始化项目配置失败:', e?.message || e);
                   }
