@@ -1320,15 +1320,23 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
   <div class="card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header">
       <h2>提交更改</h2>
-      <!-- 更改Git操作按钮图标 -->
-      <el-button
-        type="primary"
-        :icon="Menu"
-        size="small"
-        circle
-        @click="toggleGitOperationsDrawer"
-        class="git-tools-button"
-      />
+      <div class="header-actions">
+        <el-button
+          size="small"
+          type="primary"
+          :icon="Edit"
+          @click="openConfigEditor"
+        >配置</el-button>
+        <!-- 更改Git操作按钮图标 -->
+        <el-button
+          type="primary"
+          :icon="Menu"
+          size="small"
+          circle
+          @click="toggleGitOperationsDrawer"
+          class="git-tools-button"
+        />
+      </div>
     </div>
 
     <!-- 添加推送中指示器 -->
@@ -1381,10 +1389,6 @@ git config --global user.email "your.email@example.com"</pre>
 
                 <div class="no-verify-toggle">
                   <el-switch v-model="skipHooks" active-text="跳过 Git 钩子检查 (--no-verify)" />
-                </div>
-
-                <div class="config-edit-toggle">
-                  <el-button size="small" type="primary" :icon="Edit" @click="openConfigEditor">配置</el-button>
                 </div>
               </div>
             </div>
@@ -2233,6 +2237,12 @@ git config --global user.email "your.email@example.com"</pre>
   font-size: 16px;
   font-weight: 500;
   color: #303133;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .card-content {
