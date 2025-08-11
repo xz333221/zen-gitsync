@@ -62,7 +62,6 @@ async function loadStatus() {
       const dirData = await responseDir.json()
       currentDirectory.value = dirData.directory || '未知目录'
     }
-
     // 如果不是Git仓库，直接显示提示并返回
     if (!gitStore.isGitRepo) {
       return
@@ -83,6 +82,47 @@ async function loadStatus() {
       message: '刷新失败: ' + (error as Error).message,
       type: 'error',
     })
+  }
+}
+
+// 解锁单个文件（带确认）
+async function confirmUnlockFile(filePath: string) {
+  try {
+    await ElMessageBox.confirm(
+      `确认解锁该文件？\n${filePath}`,
+      '确认解锁',
+      {
+        type: 'warning',
+        confirmButtonText: '解锁',
+        cancelButtonText: '取消',
+      }
+    )
+    await configStore.unlockFile(filePath)
+  } catch (e) {
+    // 用户取消
+  }
+}
+
+// 解锁全部锁定文件（带确认）
+async function confirmUnlockAll() {
+  if (!configStore.lockedFiles.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确认解锁所有已锁定文件？共 ${configStore.lockedFiles.length} 个。`,
+      '清空全部锁定',
+      {
+        type: 'warning',
+        confirmButtonText: '全部解锁',
+        cancelButtonText: '取消',
+      }
+    )
+    // 复制数组，防止过程中列表变化
+    const files = [...configStore.lockedFiles]
+    await Promise.all(files.map(f => configStore.unlockFile(f)))
+    await configStore.loadLockedFiles()
+    ElMessage.success('已清空所有文件锁定')
+  } catch (e) {
+    // 用户取消
   }
 }
 
@@ -964,6 +1004,16 @@ defineExpose({
         <el-tooltip content="这些文件在提交时会被自动跳过" placement="top">
           <el-icon class="info-icon"><InfoFilled /></el-icon>
         </el-tooltip>
+        <div style="flex:1"></div>
+        <el-button
+          type="danger"
+          size="small"
+          plain
+          :disabled="!configStore.lockedFiles.length"
+          @click="confirmUnlockAll"
+        >
+          清空全部锁定
+        </el-button>
       </div>
 
       <div class="locked-file-items">
@@ -985,12 +1035,11 @@ defineExpose({
                 type="danger"
                 size="small"
                 circle
-                @click="configStore.unlockFile(filePath)"
-              >
-                <el-icon>
-                  <Unlock />
-                </el-icon>
-              </el-button>
+                class="file-action-btn"
+                :icon="Unlock"
+                aria-label="解锁"
+                @click="confirmUnlockFile(filePath)"
+              />
             </el-tooltip>
           </div>
         </div>
@@ -1271,6 +1320,7 @@ defineExpose({
   display: flex;
   opacity: 0;
   transition: opacity 0.2s ease;
+  gap: 8px;
 }
 
 .file-item:hover .file-actions {
@@ -1278,11 +1328,14 @@ defineExpose({
 }
 
 .file-action-btn {
-  width: 20px !important;
-  height: 20px !important;
-  min-width: 20px !important;
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
   padding: 0 !important;
-  font-size: 11px !important;
+  font-size: 16px !important; /* controls icon size */
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
 }
 
 .empty-status {
@@ -1688,6 +1741,10 @@ defineExpose({
 /* 锁定文件对话框样式 */
 .empty-locked-files {
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
   padding: 40px 20px;
   color: #666;
 }
@@ -1796,5 +1853,10 @@ defineExpose({
 .locked-file-item:hover {
   background-color: #fff7e6;
   border-color: #ffa940;
+}
+
+/* 确保锁定文件列表中的操作按钮可见 */
+.locked-file-item .file-actions {
+  opacity: 1;
 }
 </style>
