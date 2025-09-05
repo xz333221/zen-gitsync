@@ -957,6 +957,8 @@ defineExpose({
     v-model="diffDialogVisible"
     :title="`文件差异: ${selectedFile}`"
     width="80%"
+    top="50px"
+    style="height: calc(100vh - 100px);"
     destroy-on-close
     class="diff-dialog"
   >
@@ -1512,12 +1514,6 @@ defineExpose({
   height: calc(100vh - 150px);
 }
 
-:deep(.el-dialog__body) {
-  height: calc(100vh - 320px);
-  overflow: auto;
-  padding: 0;
-}
-
 .diff-content {
   flex: 1;
   overflow-y: auto;
@@ -1541,6 +1537,14 @@ defineExpose({
   height: 100%;
   color: #909399;
   font-size: 14px;
+}
+
+/* 让差异内容区域内部滚动，不撑高弹窗 */
+.diff-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  max-height: calc(100vh - 240px);
 }
 
 .file-navigation {

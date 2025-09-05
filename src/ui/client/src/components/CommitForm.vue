@@ -2218,37 +2218,39 @@ git config --global user.email "your.email@example.com"</pre>
             <el-table-column prop="description" label="描述" />
             <el-table-column label="操作" width="280">
               <template #default="scope">
-                <el-button
-                  size="small"
-                  type="info"
-                  @click="viewStashDetail(scope.row)"
-                  :loading="isLoadingStashDetail"
-                >
-                  查看
-                </el-button>
-                <el-button
-                  size="small"
-                  @click="applyStash(scope.row.id, false)"
-                  :loading="gitStore.isApplyingStash"
-                >
-                  应用
-                </el-button>
-                <el-button
-                  size="small"
-                  type="primary"
-                  @click="applyStash(scope.row.id, true)"
-                  :loading="gitStore.isApplyingStash"
-                >
-                  应用并删除
-                </el-button>
-                <el-button
-                  size="small"
-                  type="danger"
-                  @click="confirmDropStash(scope.row.id)"
-                  :loading="gitStore.isDroppingStash"
-                >
-                  删除
-                </el-button>
+                <div class="stash-action-buttons">
+                  <el-button
+                    size="small"
+                    type="info"
+                    @click="viewStashDetail(scope.row)"
+                    :loading="isLoadingStashDetail"
+                  >
+                    查看
+                  </el-button>
+                  <el-button
+                    size="small"
+                    @click="applyStash(scope.row.id, false)"
+                    :loading="gitStore.isApplyingStash"
+                  >
+                    应用
+                  </el-button>
+                  <el-button
+                    size="small"
+                    type="primary"
+                    @click="applyStash(scope.row.id, true)"
+                    :loading="gitStore.isApplyingStash"
+                  >
+                    应用并删除
+                  </el-button>
+                  <el-button
+                    size="small"
+                    type="danger"
+                    @click="confirmDropStash(scope.row.id)"
+                    :loading="gitStore.isDroppingStash"
+                  >
+                    删除
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -2317,7 +2319,8 @@ git config --global user.email "your.email@example.com"</pre>
         title="储藏详情"
         v-model="stashDetailVisible"
         width="90%"
-        top="5vh"
+        top="50px"
+        style="height: calc(100vh - 100px);"
         :close-on-click-modal="false"
         class="stash-detail-dialog"
       >
@@ -3496,7 +3499,12 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* Stash详情弹窗样式 */
 .stash-detail-dialog .el-dialog__body {
-  padding: 20px;
+  padding: 12px;
+  /* 限制弹窗内容最大高度，出现内部滚动 */
+  max-height: calc(100vh - 220px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .stash-detail-dialog .el-dialog__footer {
@@ -3505,7 +3513,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .stash-detail-content {
-  height: calc(85vh - 120px);
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -3545,6 +3553,8 @@ git config --global user.email "your.email@example.com"</pre>
   border-radius: 8px;
   border: 1px solid #e4e7ed;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .stash-diff-panel {
@@ -3554,6 +3564,8 @@ git config --global user.email "your.email@example.com"</pre>
   border: 1px solid #e4e7ed;
   overflow: hidden;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-header {
@@ -3583,7 +3595,8 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .files-list {
-  height: 400px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -3623,12 +3636,16 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .diff-content {
-  height: 400px;
+  flex: 1;
+  min-height: 0;
+  /* 让右侧diff区域有明确的最大高度以触发内部滚动 */
+  max-height: 100%;
   overflow: hidden;
 }
 
 .diff-text {
-  
+  max-height: calc(100vh - 360px);
+  overflow-y: auto;
   font-size: 12px;
   line-height: 1.6;
   color: #303133;
@@ -3730,5 +3747,12 @@ git config --global user.email "your.email@example.com"</pre>
 .message-template-dialog .el-empty__image {
   width: 80px;
   height: 80px;
+}
+
+/* 储藏列表 操作按钮间距 */
+.stash-action-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>
