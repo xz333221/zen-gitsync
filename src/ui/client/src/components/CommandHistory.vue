@@ -368,56 +368,51 @@ onUnmounted(() => {
       append-to-body
       modal
     >
-    <template #header>
-      <div class="dialog-header">
-        <h2>Git 命令历史</h2>
-        <div class="header-actions">
-          <el-tag
-            :type="hasSocketConnection ? 'success' : 'danger'"
-            size="small"
-            effect="dark"
-            class="socket-status"
-          >
-            {{ hasSocketConnection ? '实时更新' : '未连接' }}
-          </el-tag>
-          <el-button
-            type="success"
-            :icon="CopyDocument"
-            circle
-            size="small"
-            @click="copyCommandsOnly"
-            :loading="isCopyingCommands"
-            class="copy-commands-button"
-            title="只复制命令列表（不含输出）"
-            :disabled="commandHistory.length === 0"
-          />
-          <el-button
-            type="primary"
-            :icon="CopyDocument"
-            circle
-            size="small"
-            @click="copyAllHistory"
-            :loading="isCopyingHistory"
-            class="copy-all-button"
-            title="复制完整命令历史（含输出）"
-            :disabled="commandHistory.length === 0"
-          />
-          <el-button
-            type="danger"
-            :icon="Delete"
-            circle
-            size="small"
-            @click="clearCommandHistory"
-            :loading="isClearingHistory"
-            class="clear-button"
-            title="清空命令历史"
-            :disabled="commandHistory.length === 0"
-          />
-        </div>
-      </div>
-    </template>
-
     <div class="dialog-content">
+      <div class="dialog-toolbar">
+        <el-tag
+          :type="hasSocketConnection ? 'success' : 'danger'"
+          size="small"
+          effect="dark"
+          class="socket-status"
+        >
+          {{ hasSocketConnection ? '实时更新' : '未连接' }}
+        </el-tag>
+        <el-button
+          type="success"
+          :icon="CopyDocument"
+          circle
+          size="small"
+          @click="copyCommandsOnly"
+          :loading="isCopyingCommands"
+          class="copy-commands-button"
+          title="只复制命令列表（不含输出）"
+          :disabled="commandHistory.length === 0"
+        />
+        <el-button
+          type="primary"
+          :icon="CopyDocument"
+          circle
+          size="small"
+          @click="copyAllHistory"
+          :loading="isCopyingHistory"
+          class="copy-all-button"
+          title="复制完整命令历史（含输出）"
+          :disabled="commandHistory.length === 0"
+        />
+        <el-button
+          type="danger"
+          :icon="Delete"
+          circle
+          size="small"
+          @click="clearCommandHistory"
+          :loading="isClearingHistory"
+          class="clear-button"
+          title="清空命令历史"
+          :disabled="commandHistory.length === 0"
+        />
+      </div>
+      <div class="history-scroll">
       <div v-if="isLoading && commandHistory.length === 0" class="loading-state">
         <el-icon class="loading-icon is-loading">
           <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
@@ -508,6 +503,7 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+      </div>
     </div>
   </el-dialog>
   </Teleport>
@@ -530,12 +526,6 @@ onUnmounted(() => {
   z-index: 9999 !important;
 }
 
-:deep(.command-history-dialog .el-dialog__header) {
-  padding: 0;
-  margin-right: 0;
-  border-bottom: 1px solid #ebeef5;
-}
-
 :deep(.command-history-dialog .el-overlay) {
   z-index: 9998 !important;
 }
@@ -544,30 +534,16 @@ onUnmounted(() => {
   z-index: 9999 !important;
 }
 
-.dialog-header {
-  padding: 16px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: #f8f9fa;
-}
 
-.dialog-header h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 500;
-  color: #303133;
-}
-
-.header-actions {
+.dialog-toolbar {
+  padding: 12px 20px 12px 20px;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
-.socket-status {
-  font-size: 12px;
-}
+.socket-status { font-size: 12px; }
 
 .clear-button {
   transition: all 0.3s;
@@ -651,9 +627,7 @@ onUnmounted(() => {
 }
 
 .dialog-content {
-  padding: 20px;
-  overflow-y: auto;
-  max-height: calc(80vh - 120px);
+  padding: 0 20px 20px 20px;
 }
 
 .loading-state {
@@ -663,6 +637,11 @@ onUnmounted(() => {
   justify-content: center;
   height: 100%;
   min-height: 100px;
+}
+
+.history-scroll {
+  overflow-y: auto;
+  max-height: calc(80vh - 160px);
 }
 
 .loading-icon {

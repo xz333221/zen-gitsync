@@ -2339,7 +2339,7 @@ git config --global user.email "your.email@example.com"</pre>
               </div>
               
               <div class="files-list" v-loading="isLoadingStashDetail && stashFiles.length === 0">
-                <el-scrollbar height="400px">
+                <el-scrollbar height="100%">
                   <el-tooltip 
                     v-for="file in stashFiles" 
                     :key="file"
@@ -2374,7 +2374,7 @@ git config --global user.email "your.email@example.com"</pre>
               </div>
               
               <div class="diff-content" v-loading="isLoadingStashDetail">
-                <el-scrollbar height="400px">
+                <el-scrollbar height="100%">
                   <div 
                     v-if="stashDiff" 
                     class="diff-text"
@@ -3495,19 +3495,6 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 /* Stash详情弹窗样式 */
-.stash-detail-dialog .el-dialog__header {
-  padding: 15px 20px;
-  margin-right: 0;
-  border-bottom: 1px solid #ebeef5;
-  background-color: #f8f9fa;
-}
-
-.stash-detail-dialog .el-dialog__title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-}
-
 .stash-detail-dialog .el-dialog__body {
   padding: 20px;
 }
@@ -3515,25 +3502,6 @@ git config --global user.email "your.email@example.com"</pre>
 .stash-detail-dialog .el-dialog__footer {
   padding: 15px 20px;
   border-top: 1px solid #f0f0f0;
-}
-
-/* 调整储藏详情弹窗关闭按钮位置 - 垂直居中 */
-.stash-detail-dialog .el-dialog__headerbtn {
-  top: 46px;
-  right: 30px;
-  transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
-}
-
-.stash-detail-dialog .el-dialog__headerbtn .el-dialog__close {
-  font-size: 18px;
-  color: #909399;
-  transition: color 0.3s ease;
-}
-
-.stash-detail-dialog .el-dialog__headerbtn:hover .el-dialog__close {
-  color: #f56c6c;
 }
 
 .stash-detail-content {
@@ -3726,41 +3694,13 @@ git config --global user.email "your.email@example.com"</pre>
   padding: 1px 4px;
 }
 
-/* 弹窗样式优化 */
-.template-dialog .el-dialog__header,
-.message-template-dialog .el-dialog__header,
-.merge-dialog .el-dialog__header {
-  padding: 15px 20px;
-  margin-right: 0;
-  border-bottom: 1px solid #ebeef5;
-  background-color: #f8f9fa;
-}
-
-.template-dialog .el-dialog__title,
-.message-template-dialog .el-dialog__title,
-.merge-dialog .el-dialog__title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-}
-
 .template-dialog .el-dialog__body,
 .message-template-dialog .el-dialog__body,
 .merge-dialog .el-dialog__body {
   padding: 20px;
 }
 
-.merge-dialog .el-dialog__footer {
-  padding: 15px 20px;
-  border-top: 1px solid #f0f0f0;
-}
 
-.template-dialog .el-dialog__headerbtn,
-.message-template-dialog .el-dialog__headerbtn,
-.merge-dialog .el-dialog__headerbtn {
-  top: 15px;
-  right: 20px;
-}
 
 .template-dialog .el-input__inner,
 .message-template-dialog .el-input__inner,
