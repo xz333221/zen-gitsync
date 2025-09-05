@@ -725,15 +725,29 @@ defineExpose({
                 <div class="file-info">
                   <div class="file-status-indicator" :class="['added', { 'locked': isFileLocked(file.path) }]"></div>
                   <div class="file-name-section">
-                    <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
-                      {{ getFileName(file.path) }}
-                      <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
-                        <Lock />
-                      </el-icon>
-                    </span>
+                    <el-tooltip
+                      :content="getFileName(file.path)"
+                      placement="top"
+                      :disabled="getFileName(file.path).length <= 25"
+                      :hide-after="1000"
+                    >
+                      <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
+                        {{ getFileName(file.path) }}
+                        <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
+                          <Lock />
+                        </el-icon>
+                      </span>
+                    </el-tooltip>
                   </div>
                   <div class="file-path-section" :title="getFileDirectory(file.path)">
-                    <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+                    <el-tooltip
+                      :content="getFileDirectory(file.path)"
+                      placement="top"
+                      :disabled="getFileDirectory(file.path).length <= 30"
+                      :hide-after="1000"
+                    >
+                      <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+                    </el-tooltip>
                   </div>
                 </div>
                 <div class="file-actions">
@@ -781,15 +795,29 @@ defineExpose({
                 <div class="file-info">
                   <div class="file-status-indicator" :class="[file.type, { 'locked': isFileLocked(file.path) }]"></div>
                   <div class="file-name-section">
-                    <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
-                      {{ getFileName(file.path) }}
-                      <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
-                        <Lock />
-                      </el-icon>
-                    </span>
+                    <el-tooltip
+                      :content="getFileName(file.path)"
+                      placement="top"
+                      :disabled="getFileName(file.path).length <= 25"
+                      :hide-after="1000"
+                    >
+                      <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
+                        {{ getFileName(file.path) }}
+                        <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
+                          <Lock />
+                        </el-icon>
+                      </span>
+                    </el-tooltip>
                   </div>
                   <div class="file-path-section" :title="getFileDirectory(file.path)">
-                    <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+                    <el-tooltip
+                      :content="getFileDirectory(file.path)"
+                      placement="top"
+                      :disabled="getFileDirectory(file.path).length <= 30"
+                      :hide-after="1000"
+                    >
+                      <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+                    </el-tooltip>
                   </div>
                 </div>
                 <div class="file-actions">
@@ -847,15 +875,29 @@ defineExpose({
                 <div class="file-info">
                   <div class="file-status-indicator" :class="['untracked', { 'locked': isFileLocked(file.path) }]"></div>
                   <div class="file-name-section">
-                    <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
-                      {{ getFileName(file.path) }}
-                      <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
-                        <Lock />
-                      </el-icon>
-                    </span>
+                    <el-tooltip
+                      :content="getFileName(file.path)"
+                      placement="top"
+                      :disabled="getFileName(file.path).length <= 25"
+                      :hide-after="1000"
+                    >
+                      <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
+                        {{ getFileName(file.path) }}
+                        <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
+                          <Lock />
+                        </el-icon>
+                      </span>
+                    </el-tooltip>
                   </div>
                   <div class="file-path-section" :title="getFileDirectory(file.path)">
-                    <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+                    <el-tooltip
+                      :content="getFileDirectory(file.path)"
+                      placement="top"
+                      :disabled="getFileDirectory(file.path).length <= 30"
+                      :hide-after="1000"
+                    >
+                      <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
+                    </el-tooltip>
                   </div>
                 </div>
                 <div class="file-actions">
@@ -1289,6 +1331,9 @@ defineExpose({
   align-items: center;
   min-width: 0;
   gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .file-path-section {
@@ -1301,9 +1346,12 @@ defineExpose({
 .file-name {
   font-weight: 500;
   color: #303133;
-  flex-shrink: 0;
   line-height: 1.3;
   font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: inline-block;
 }
 
 .file-directory {
@@ -1317,10 +1365,10 @@ defineExpose({
 }
 
 .file-actions {
+  padding-left: 8px;
   display: flex;
   opacity: 0;
   transition: opacity 0.2s ease;
-  gap: 8px;
 }
 
 .file-item:hover .file-actions {
@@ -1713,6 +1761,9 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lock-indicator {
