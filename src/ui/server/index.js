@@ -1940,6 +1940,77 @@ async function startUIServer(noOpen = false, savePort = false) {
       res.status(500).json({ success: false, error: error.message });
     }
   });
+
+  // 获取stash中的文件列表
+  app.get('/api/stash-files', async (req, res) => {
+    try {
+      const { stashId } = req.query;
+      
+      if (!stashId) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少stash ID参数'
+        });
+      }
+      
+      console.log(`获取stash文件列表: stashId=${stashId}`);
+      
+      // 执行git stash show --name-only命令获取文件列表
+      const { stdout } = await execGitCommand(`git stash show --name-only ${stashId}`);
+      
+      // 将输出按行分割，并过滤掉空行
+      const files = stdout.split('\n').filter(line => line.trim());
+      console.log(`找到${files.length}个stash文件:`, files);
+      
+      res.json({ 
+        success: true, 
+        files 
+      });
+    } catch (error) {
+      console.error('获取stash文件列表失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `获取stash文件列表失败: ${error.message}` 
+      });
+    }
+  });
+
+  // 获取stash中特定文件的差异
+  app.get('/api/stash-file-diff', async (req, res) => {
+    try {
+      const { stashId, file } = req.query;
+      
+      if (!stashId || !file) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少必要参数'
+        });
+      }
+      
+      console.log(`获取stash文件差异: stashId=${stashId}, file=${file}`);
+      
+      // 执行git stash show -p命令获取特定文件的差异
+      // 需要使用正确的语法：git show stashId:file 或者 git stash show -p stashId -- file
+      const { stdout } = await execGitCommand(`git show ${stashId} -- "${file}"`);
+      
+      console.log(`获取到差异内容，长度: ${stdout.length}`);
+      // 如果差异内容太长，只打印前100个字符
+      if (stdout.length > 100) {
+        console.log(`差异内容预览: ${stdout.substring(0, 100)}...`);
+      }
+      
+      res.json({ 
+        success: true, 
+        diff: stdout 
+      });
+    } catch (error) {
+      console.error('获取stash文件差异失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `获取stash文件差异失败: ${error.message}` 
+      });
+    }
+  });
   
   // Socket.io 实时更新
   io.on('connection', (socket) => {

@@ -1497,7 +1497,14 @@ function toggleFullscreen() {
                 :class="{ 'active-file': file === selectedCommitFile }"
                 @click="getCommitFileDiff(selectedCommit!.hash, file)"
               >
-                {{ file }}
+                <el-tooltip
+                  :content="file"
+                  placement="top"
+                  :disabled="file.length <= 35"
+                  :hide-after="1000"
+                >
+                  {{ file }}
+                </el-tooltip>
               </li>
             </ul>
           </div>

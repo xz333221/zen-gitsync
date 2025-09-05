@@ -84,6 +84,14 @@ const includeUntracked = ref(false);
 // 新增：排除锁定文件选项（默认勾选）
 const excludeLocked = ref(true);
 
+// stash详情弹窗相关状态
+const stashDetailVisible = ref(false);
+const selectedStash = ref<{ id: string; description: string } | null>(null);
+const stashFiles = ref<string[]>([]);
+const stashDiff = ref('');
+const isLoadingStashDetail = ref(false);
+const selectedStashFile = ref('');
+
 // 添加stash相关方法
 function openStashDialog() {
   stashMessage.value = '';
@@ -219,6 +227,113 @@ async function confirmClearAllStashes() {
   .catch(() => {
     // 用户取消操作
   });
+}
+
+// 查看stash详情
+async function viewStashDetail(stash: { id: string; description: string }) {
+  if (!stash) return;
+
+  selectedStash.value = stash;
+  stashDetailVisible.value = true;
+  isLoadingStashDetail.value = true;
+  stashFiles.value = [];
+  stashDiff.value = '';
+  selectedStashFile.value = '';
+
+  try {
+    // 确保 stash ID 有效
+    if (!stash.id || stash.id.length < 7) {
+      stashDiff.value = '无效的stash ID';
+      isLoadingStashDetail.value = false;
+      return;
+    }
+
+    // 获取stash的变更文件列表
+    const filesResponse = await fetch(`/api/stash-files?stashId=${encodeURIComponent(stash.id)}`);
+    const filesData = await filesResponse.json();
+
+    if (filesData.success && Array.isArray(filesData.files)) {
+      stashFiles.value = filesData.files;
+
+      // 如果有文件，自动加载第一个文件的差异
+      if (stashFiles.value.length > 0) {
+        await getStashFileDiff(stash.id, stashFiles.value[0]);
+      } else {
+        stashDiff.value = '该stash没有变更文件';
+      }
+    } else {
+      stashDiff.value = `获取文件列表失败: ${filesData.error || '未知错误'}`;
+    }
+  } catch (error) {
+    stashDiff.value = `获取stash详情失败: ${(error as Error).message}`;
+  } finally {
+    isLoadingStashDetail.value = false;
+  }
+}
+
+// 获取stash中特定文件的差异
+async function getStashFileDiff(stashId: string, filePath: string) {
+  isLoadingStashDetail.value = true;
+  selectedStashFile.value = filePath;
+
+  try {
+    const diffResponse = await fetch(
+      `/api/stash-file-diff?stashId=${encodeURIComponent(stashId)}&file=${encodeURIComponent(filePath)}`
+    );
+    const diffData = await diffResponse.json();
+
+    if (diffData.success) {
+      stashDiff.value = diffData.diff || '没有变更内容';
+    } else {
+      stashDiff.value = `获取差异失败: ${diffData.error || '未知错误'}`;
+    }
+  } catch (error) {
+    stashDiff.value = `获取差异失败: ${(error as Error).message}`;
+  } finally {
+    isLoadingStashDetail.value = false;
+  }
+}
+
+// 格式化差异内容，添加颜色和语法高亮
+function formatStashDiff(diffText: string) {
+  if (!diffText) return "";
+
+  // 将差异内容按行分割
+  const lines = diffText.split("\n");
+
+  // 转义 HTML 标签的函数
+  function escapeHtml(text: string) {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // 为每行添加适当的 CSS 类
+  return lines
+    .map((line) => {
+      // 先转义 HTML 标签，再添加样式
+      const escapedLine = escapeHtml(line);
+
+      if (line.startsWith("diff --git")) {
+        return `<div class="diff-header">${escapedLine}</div>`;
+      } else if (line.startsWith("---")) {
+        return `<div class="diff-old-file">${escapedLine}</div>`;
+      } else if (line.startsWith("+++")) {
+        return `<div class="diff-new-file">${escapedLine}</div>`;
+      } else if (line.startsWith("@@")) {
+        return `<div class="diff-hunk-header">${escapedLine}</div>`;
+      } else if (line.startsWith("+")) {
+        return `<div class="diff-added">${escapedLine}</div>`;
+      } else if (line.startsWith("-")) {
+        return `<div class="diff-removed">${escapedLine}</div>`;
+      } else {
+        return `<div class="diff-context">${escapedLine}</div>`;
+      }
+    })
+    .join("");
 }
 
 // 添加默认提交信息模板相关变量
@@ -2086,8 +2201,16 @@ git config --global user.email "your.email@example.com"</pre>
           >
             <el-table-column prop="id" label="ID" width="100" />
             <el-table-column prop="description" label="描述" />
-            <el-table-column label="操作" width="220">
+            <el-table-column label="操作" width="280">
               <template #default="scope">
+                <el-button
+                  size="small"
+                  type="info"
+                  @click="viewStashDetail(scope.row)"
+                  :loading="isLoadingStashDetail"
+                >
+                  查看
+                </el-button>
                 <el-button
                   size="small"
                   @click="applyStash(scope.row.id, false)"
@@ -2170,6 +2293,92 @@ git config --global user.email "your.email@example.com"</pre>
             >
               储藏
             </el-button>
+          </div>
+        </template>
+      </el-dialog>
+
+      <!-- Stash详情弹窗 -->
+      <el-dialog
+        title="储藏详情"
+        v-model="stashDetailVisible"
+        width="90%"
+        top="5vh"
+        :close-on-click-modal="false"
+        class="stash-detail-dialog"
+      >
+        <div class="stash-detail-content" v-if="selectedStash">
+          <!-- 储藏信息头部 -->
+          <div class="stash-header">
+            <div class="stash-info">
+              <h3>{{ selectedStash.id }}</h3>
+              <p class="stash-description">{{ selectedStash.description }}</p>
+            </div>
+          </div>
+
+          <!-- 主要内容区域 -->
+          <div class="stash-main-content">
+            <!-- 左侧：文件列表 -->
+            <div class="stash-files-panel">
+              <div class="panel-header">
+                <h4>变更文件 ({{ stashFiles.length }})</h4>
+              </div>
+              
+              <div class="files-list" v-loading="isLoadingStashDetail && stashFiles.length === 0">
+                <el-scrollbar height="400px">
+                  <el-tooltip 
+                    v-for="file in stashFiles" 
+                    :key="file"
+                    :content="file"
+                    placement="right"
+                    effect="dark"
+                    :disabled="file.length <= 35"
+                  >
+                    <div 
+                      :class="['file-item', { 'active': file === selectedStashFile }]"
+                      @click="getStashFileDiff(selectedStash.id, file)"
+                    >
+                      <el-icon class="file-icon"><Document /></el-icon>
+                      <span class="file-name">{{ file }}</span>
+                    </div>
+                  </el-tooltip>
+                  
+                  <el-empty 
+                    v-if="!isLoadingStashDetail && stashFiles.length === 0" 
+                    description="没有找到变更文件"
+                    :image-size="80"
+                  />
+                </el-scrollbar>
+              </div>
+            </div>
+
+            <!-- 右侧：差异显示 -->
+            <div class="stash-diff-panel">
+              <div class="panel-header">
+                <h4>文件差异</h4>
+                <span v-if="selectedStashFile" class="selected-file">{{ selectedStashFile }}</span>
+              </div>
+              
+              <div class="diff-content" v-loading="isLoadingStashDetail">
+                <el-scrollbar height="400px">
+                  <div 
+                    v-if="stashDiff" 
+                    class="diff-text"
+                    v-html="formatStashDiff(stashDiff)"
+                  ></div>
+                  <el-empty 
+                    v-else-if="!isLoadingStashDetail" 
+                    description="请选择文件查看差异"
+                    :image-size="80"
+                  />
+                </el-scrollbar>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="stashDetailVisible = false">关闭</el-button>
           </div>
         </template>
       </el-dialog>
@@ -3268,6 +3477,238 @@ git config --global user.email "your.email@example.com"</pre>
   border-radius: 4px !important;
   padding: 8px 12px !important;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Stash详情弹窗样式 */
+.stash-detail-dialog .el-dialog__header {
+  padding: 15px 20px;
+  margin-right: 0;
+  border-bottom: 1px solid #ebeef5;
+  background-color: #f8f9fa;
+}
+
+.stash-detail-dialog .el-dialog__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.stash-detail-dialog .el-dialog__body {
+  padding: 20px;
+}
+
+.stash-detail-dialog .el-dialog__footer {
+  padding: 15px 20px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 调整储藏详情弹窗关闭按钮位置 - 垂直居中 */
+.stash-detail-dialog .el-dialog__headerbtn {
+  top: 46px;
+  right: 30px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+}
+
+.stash-detail-dialog .el-dialog__headerbtn .el-dialog__close {
+  font-size: 18px;
+  color: #909399;
+  transition: color 0.3s ease;
+}
+
+.stash-detail-dialog .el-dialog__headerbtn:hover .el-dialog__close {
+  color: #f56c6c;
+}
+
+.stash-detail-content {
+  height: calc(85vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+.stash-header {
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.stash-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #409eff;
+  font-family: 'Courier New', monospace;
+}
+
+.stash-description {
+  margin: 0;
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.stash-main-content {
+  display: flex;
+  flex: 1;
+  gap: 20px;
+  min-height: 0;
+}
+
+.stash-files-panel {
+  width: 300px;
+  flex-shrink: 0;
+  background-color: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+  overflow: hidden;
+}
+
+.stash-diff-panel {
+  flex: 1;
+  background-color: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.panel-header {
+  padding: 12px 16px;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.panel-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.selected-file {
+  font-size: 12px;
+  color: #909399;
+  font-family: 'Courier New', monospace;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-list {
+  height: 400px;
+  overflow: hidden;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.file-item:hover {
+  background-color: #e6f7ff;
+}
+
+.file-item.active {
+  background-color: #409eff;
+  color: white;
+}
+
+.file-item.active .file-icon {
+  color: white;
+}
+
+.file-icon {
+  margin-right: 8px;
+  color: #606266;
+  font-size: 16px;
+}
+
+.file-name {
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.diff-content {
+  height: 400px;
+  overflow: hidden;
+}
+
+.diff-text {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #303133;
+  background-color: #fff;
+  margin: 0;
+  padding: 16px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border: none;
+  outline: none;
+  /* 确保高亮样式能正确应用 */
+  overflow-wrap: break-word;
+}
+
+/* Git diff 语法高亮样式 */
+.diff-header {
+  color: #666666;
+  background-color: #f8f8f8;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: bold;
+}
+
+.diff-old-file {
+  color: #d73027;
+  background-color: #ffeeee;
+  padding: 1px 4px;
+  font-weight: bold;
+}
+
+.diff-new-file {
+  color: #1a9641;
+  background-color: #eeffee;
+  padding: 1px 4px;
+  font-weight: bold;
+}
+
+.diff-hunk-header {
+  color: #0366d6;
+  background-color: #f1f8ff;
+  padding: 2px 4px;
+  font-weight: bold;
+  border-radius: 3px;
+}
+
+.diff-added {
+  color: #22863a;
+  background-color: #f0fff4;
+  padding: 1px 4px;
+  border-left: 3px solid #28a745;
+}
+
+.diff-removed {
+  color: #d73027;
+  background-color: #ffeef0;
+  padding: 1px 4px;
+  border-left: 3px solid #dc3545;
+}
+
+.diff-context {
+  color: #586069;
+  background-color: transparent;
+  padding: 1px 4px;
 }
 
 /* 弹窗样式优化 */
