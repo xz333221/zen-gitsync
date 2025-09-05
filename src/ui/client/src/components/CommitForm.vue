@@ -165,6 +165,20 @@ async function saveFullConfig() {
   }
 }
 
+// 用系统默认程序打开用户主目录下的配置文件
+async function openSystemConfigFile() {
+  try {
+    const resp = await fetch('/api/config/open-file', { method: 'POST' });
+    const result = await resp.json();
+    if (!resp.ok || !result?.success) {
+      throw new Error(result?.error || '打开失败');
+    }
+    ElMessage.success('已用系统程序打开配置文件');
+  } catch (err: any) {
+    ElMessage.error(`打开配置文件失败: ${err?.message || err}`);
+  }
+}
+
 function openStashListDialog() {
   gitStore.getStashList();
   isStashListDialogVisible.value = true;
@@ -1954,6 +1968,7 @@ git config --global user.email "your.email@example.com"</pre>
         />
         <template #footer>
           <span class="dialog-footer">
+            <el-button @click="openSystemConfigFile">打开系统配置文件</el-button>
             <el-button @click="configEditorVisible = false">取消</el-button>
             <el-button type="primary" :loading="configEditorSaving" @click="saveFullConfig">保存</el-button>
           </span>
@@ -3538,7 +3553,7 @@ git config --global user.email "your.email@example.com"</pre>
   font-size: 18px;
   font-weight: 600;
   color: #409eff;
-  font-family: 'Courier New', monospace;
+  
 }
 
 .stash-description {
@@ -3592,7 +3607,7 @@ git config --global user.email "your.email@example.com"</pre>
 .selected-file {
   font-size: 12px;
   color: #909399;
-  font-family: 'Courier New', monospace;
+  
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3634,7 +3649,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .file-name {
   font-size: 13px;
-  font-family: 'Courier New', monospace;
+  
   word-break: break-all;
   line-height: 1.4;
 }
@@ -3645,7 +3660,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .diff-text {
-  font-family: 'Courier New', monospace;
+  
   font-size: 12px;
   line-height: 1.6;
   color: #303133;

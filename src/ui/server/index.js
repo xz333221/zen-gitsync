@@ -64,6 +64,22 @@ async function startUIServer(noOpen = false, savePort = false) {
   
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
+
+  // 记录最近打开的目录（优先 Git 根目录，其次当前工作目录）
+  try {
+    let dirPath = process.cwd();
+    try {
+      const { stdout } = await execGitCommand('git rev-parse --show-toplevel');
+      const root = stdout?.trim();
+      if (root) dirPath = root;
+    } catch (_) {
+      // 非Git仓库或命令失败，使用 CWD 即可
+    }
+    await configManager.saveRecentDirectory(dirPath);
+    console.log(chalk.gray(`已记录最近打开目录: ${dirPath}`));
+  } catch (e) {
+    console.warn(chalk.yellow(`记录最近目录失败: ${e?.message || e}`));
+  }
   
   // 添加请求日志中间件
   app.use((req, res, next) => {
@@ -787,6 +803,30 @@ async function startUIServer(noOpen = false, savePort = false) {
       res.json({ success: true })
     } catch (error) {
       res.status(500).json({ success: false, error: error.message })
+    }
+  })
+
+  // 使用系统默认程序打开配置文件 ~/.git-commit-tool.json
+  app.post('/api/config/open-file', async (req, res) => {
+    try {
+      const filePath = path.join(os.homedir(), '.git-commit-tool.json');
+      try {
+        // 检查文件是否存在，不存在也尝试让系统创建（可能会打开空文件）
+        await fs.access(filePath);
+      } catch (_) {
+        // 如果文件不存在，先创建一个最小结构，避免某些系统无法打开不存在的路径
+        try {
+          await fs.writeFile(filePath, '{}', 'utf-8');
+        } catch (e) {
+          // 创建失败不阻断打开尝试
+          console.warn('创建配置文件失败(可忽略):', e?.message || e);
+        }
+      }
+
+      await open(filePath, { wait: false });
+      res.json({ success: true })
+    } catch (error) {
+      res.status(400).json({ success: false, error: `无法打开配置文件: ${error.message}` })
     }
   })
   

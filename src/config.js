@@ -45,6 +45,21 @@ async function writeRawConfigFile(obj) {
   await fs.writeFile(configPath, JSON.stringify(obj, null, 2), 'utf-8');
 }
 
+// 更安全的读取，区分“文件不存在”和“解析失败”
+async function safeLoadRaw() {
+  try {
+    const data = await fs.readFile(configPath, 'utf-8');
+    return { ok: true, obj: JSON.parse(data), existed: true };
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      // 文件不存在：当作空对象，但可继续写入
+      return { ok: true, obj: {}, existed: false };
+    }
+    // 其他错误（例如解析失败）：不写入，提示用户
+    return { ok: false, error: err };
+  }
+}
+
 // 异步读取配置文件
 async function loadConfig() {
   const key = getCurrentProjectKey();
@@ -63,16 +78,22 @@ async function loadConfig() {
 // 异步保存配置
 async function saveConfig(config) {
   const key = getCurrentProjectKey();
-  const raw = (await readRawConfigFile()) || {};
+  const state = await safeLoadRaw();
+  if (!state.ok) {
+    console.warn(chalk.yellow('⚠️ 解析配置文件失败，已取消写入以避免覆盖。')); 
+    console.warn(chalk.gray(`文件: ${configPath}`));
+    return;
+  }
+
+  const raw = state.obj; // 保留现有顶层键
 
   // 确保 projects 容器存在
   if (!raw.projects || typeof raw.projects !== 'object') {
     raw.projects = {};
   }
 
-  // 写入当前项目配置
+  // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
   raw.projects[key] = { ...defaultConfig, ...config };
-
   await writeRawConfigFile(raw);
 }
 // 文件锁定管理函数
@@ -142,7 +163,13 @@ async function getRecentDirectories() {
 
 async function saveRecentDirectory(dirPath) {
   if (!dirPath || typeof dirPath !== 'string') return;
-  const raw = (await readRawConfigFile()) || {};
+  const state = await safeLoadRaw();
+  if (!state.ok) {
+    console.warn(chalk.yellow('⚠️ 解析配置文件失败，已取消写入最近目录以避免覆盖。'));
+    console.warn(chalk.gray(`文件: ${configPath}`));
+    return [];
+  }
+  const raw = state.obj; // 保留现有顶层键
   let list = Array.isArray(raw.recentDirectories) ? raw.recentDirectories.slice() : [];
 
   // 规范化：Windows 下统一为小写，去掉重复，保持最新在前
