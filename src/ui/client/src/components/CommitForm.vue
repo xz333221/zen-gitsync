@@ -1743,8 +1743,10 @@ git config --global user.email "your.email@example.com"</pre>
           </div>
         </template>
       </div>
+      </div>
+    </div>
 
-      <!-- Git操作抽屉 -->
+    <!-- Git操作抽屉 -->
       <el-drawer
         v-model="gitOperationsDrawerVisible"
         title="Git 操作"
@@ -2114,6 +2116,53 @@ git config --global user.email "your.email@example.com"</pre>
         </div>
       </el-dialog>
       
+      <!-- Stash弹窗：创建储藏 -->
+      <el-dialog
+        title="储藏更改 (Git Stash)"
+        v-model="isStashDialogVisible"
+        width="500px"
+        :close-on-click-modal="false"
+      >
+        <div class="stash-dialog-content">
+          <p>将当前工作区的更改储藏起来，稍后可以再次应用。</p>
+          
+          <el-form label-position="top">
+            <el-form-item label="储藏说明 (可选)">
+              <el-input 
+                v-model="stashMessage" 
+                placeholder="输入储藏说明（可选）"
+                clearable
+              />
+            </el-form-item>
+            
+            <el-form-item>
+              <el-checkbox v-model="includeUntracked">
+                包含未跟踪文件 (--include-untracked)
+              </el-checkbox>
+            </el-form-item>
+
+            <el-form-item>
+              <el-checkbox v-model="excludeLocked">
+                排除锁定文件
+              </el-checkbox>
+            </el-form-item>
+          </el-form>
+        </div>
+        
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="isStashDialogVisible = false">取消</el-button>
+            <el-button
+              type="primary"
+              @click="saveStash"
+              :loading="gitStore.isSavingStash"
+            >
+              储藏
+            </el-button>
+          </div>
+        </template>
+      </el-dialog>
+      
       <!-- 合并分支对话框 -->
       <el-dialog 
         title="合并分支" 
@@ -2267,53 +2316,6 @@ git config --global user.email "your.email@example.com"</pre>
         </div>
       </el-dialog>
       
-      <!-- Stash弹窗 -->
-      <el-dialog
-        title="储藏更改 (Git Stash)"
-        v-model="isStashDialogVisible"
-        width="500px"
-        :close-on-click-modal="false"
-      >
-        <div class="stash-dialog-content">
-          <p>将当前工作区的更改储藏起来，稍后可以再次应用。</p>
-          
-          <el-form label-position="top">
-            <el-form-item label="储藏说明 (可选)">
-              <el-input 
-                v-model="stashMessage" 
-                placeholder="输入储藏说明（可选）"
-                clearable
-              />
-            </el-form-item>
-            
-            <el-form-item>
-              <el-checkbox v-model="includeUntracked">
-                包含未跟踪文件 (--include-untracked)
-              </el-checkbox>
-            </el-form-item>
-
-            <el-form-item>
-              <el-checkbox v-model="excludeLocked">
-                排除锁定文件
-              </el-checkbox>
-            </el-form-item>
-          </el-form>
-        </div>
-        
-        <template #footer>
-          <div class="dialog-footer">
-            <el-button @click="isStashDialogVisible = false">取消</el-button>
-            <el-button
-              type="primary"
-              @click="saveStash"
-              :loading="gitStore.isSavingStash"
-            >
-              储藏
-            </el-button>
-          </div>
-        </template>
-      </el-dialog>
-
       <!-- Stash详情弹窗 -->
       <el-dialog
         title="储藏详情"
@@ -2322,74 +2324,53 @@ git config --global user.email "your.email@example.com"</pre>
         top="50px"
         style="height: calc(100vh - 100px);"
         :close-on-click-modal="false"
-        class="stash-detail-dialog"
+        class="stash-detail-dialog use-flex-body"
       >
-        <div class="stash-detail-content" v-if="selectedStash">
-          <!-- 储藏信息头部 -->
-          <div class="stash-header">
-            <div class="stash-info">
-              <h3>{{ selectedStash.id }}</h3>
-              <p class="stash-description">{{ selectedStash.description }}</p>
+        <div class="stash-header" v-if="selectedStash">
+          <div class="stash-info">
+            <h3>{{ selectedStash.id }}</h3>
+            <p class="stash-description">{{ selectedStash.description }}</p>
+          </div>
+        </div>
+
+        <div class="stash-main-content">
+          <div class="stash-files-panel">
+            <div class="panel-header">
+              <h4>文件列表</h4>
+            </div>
+            <div class="files-list">
+              <el-scrollbar height="100%">
+                <div
+                  v-for="file in stashFiles"
+                  :key="file"
+                  class="file-item"
+                  :class="{ active: selectedStashFile === file }"
+                  @click="getStashFileDiff(selectedStash!.id, file)"
+                >
+                  <span class="file-name">{{ file }}</span>
+                </div>
+              </el-scrollbar>
             </div>
           </div>
 
-          <!-- 主要内容区域 -->
-          <div class="stash-main-content">
-            <!-- 左侧：文件列表 -->
-            <div class="stash-files-panel">
-              <div class="panel-header">
-                <h4>变更文件 ({{ stashFiles.length }})</h4>
-              </div>
-              
-              <div class="files-list" v-loading="isLoadingStashDetail && stashFiles.length === 0">
-                <el-scrollbar height="100%">
-                  <el-tooltip 
-                    v-for="file in stashFiles" 
-                    :key="file"
-                    :content="file"
-                    placement="right"
-                    effect="dark"
-                    :disabled="file.length <= 35"
-                  >
-                    <div 
-                      :class="['file-item', { 'active': file === selectedStashFile }]"
-                      @click="getStashFileDiff(selectedStash.id, file)"
-                    >
-                      <el-icon class="file-icon"><Document /></el-icon>
-                      <span class="file-name">{{ file }}</span>
-                    </div>
-                  </el-tooltip>
-                  
-                  <el-empty 
-                    v-if="!isLoadingStashDetail && stashFiles.length === 0" 
-                    description="没有找到变更文件"
-                    :image-size="80"
-                  />
-                </el-scrollbar>
-              </div>
+          <div class="stash-diff-panel">
+            <div class="panel-header">
+              <h4>文件差异</h4>
+              <span v-if="selectedStashFile" class="selected-file">{{ selectedStashFile }}</span>
             </div>
-
-            <!-- 右侧：差异显示 -->
-            <div class="stash-diff-panel">
-              <div class="panel-header">
-                <h4>文件差异</h4>
-                <span v-if="selectedStashFile" class="selected-file">{{ selectedStashFile }}</span>
-              </div>
+            
+            <div class="diff-content dialog-content-scroll" v-loading="isLoadingStashDetail">
+              <div 
+                v-if="stashDiff" 
+                class="diff-text"
+                v-html="formatStashDiff(stashDiff)"
+              ></div>
               
-              <div class="diff-content" v-loading="isLoadingStashDetail">
-                <el-scrollbar height="100%">
-                  <div 
-                    v-if="stashDiff" 
-                    class="diff-text"
-                    v-html="formatStashDiff(stashDiff)"
-                  ></div>
-                  <el-empty 
-                    v-else-if="!isLoadingStashDetail" 
-                    description="请选择文件查看差异"
-                    :image-size="80"
-                  />
-                </el-scrollbar>
-              </div>
+              <el-empty 
+                v-else-if="!isLoadingStashDetail" 
+                description="请选择文件查看差异"
+                :image-size="80"
+              />
             </div>
           </div>
         </div>
@@ -2400,38 +2381,36 @@ git config --global user.email "your.email@example.com"</pre>
           </div>
         </template>
       </el-dialog>
-    </div>
-  </div>
 </template>
 
-<style scoped>
-/* 添加动画相关的CSS */
-@keyframes snakeBorder {
-  0%, 100% {
-    border-top: 2px solid #409EFF;
-    border-right: 2px solid transparent;
-    border-bottom: 2px solid transparent;
-    border-left: 2px solid transparent;
+<style scoped lang="scss">
+  /* 添加动画相关的CSS */
+  @keyframes snakeBorder {
+    0%, 100% {
+      border-top: 2px solid #409EFF;
+      border-right: 2px solid transparent;
+      border-bottom: 2px solid transparent;
+      border-left: 2px solid transparent;
+    }
+    25% {
+      border-top: 2px solid #409EFF;
+      border-right: 2px solid #67C23A;
+      border-bottom: 2px solid transparent;
+      border-left: 2px solid transparent;
+    }
+    50% {
+      border-top: 2px solid transparent;
+      border-right: 2px solid #67C23A;
+      border-bottom: 2px solid #409EFF;
+      border-left: 2px solid transparent;
+    }
+    75% {
+      border-top: 2px solid transparent;
+      border-right: 2px solid transparent;
+      border-bottom: 2px solid #409EFF;
+      border-left: 2px solid #67C23A;
+    }
   }
-  25% {
-    border-top: 2px solid #409EFF;
-    border-right: 2px solid #67C23A;
-    border-bottom: 2px solid transparent;
-    border-left: 2px solid transparent;
-  }
-  50% {
-    border-top: 2px solid transparent;
-    border-right: 2px solid #67C23A;
-    border-bottom: 2px solid #409EFF;
-    border-left: 2px solid transparent;
-  }
-  75% {
-    border-top: 2px solid transparent;
-    border-right: 2px solid transparent;
-    border-bottom: 2px solid #409EFF;
-    border-left: 2px solid #67C23A;
-  }
-}
 
 @keyframes glowPulse {
   0%, 100% { box-shadow: 0 0 8px rgba(64, 158, 255, 0.4); }
@@ -3483,7 +3462,7 @@ git config --global user.email "your.email@example.com"</pre>
 </style>
 
 <!-- 添加全局样式 -->
-<style>
+<style lang="scss">
 /* Git命令tooltip样式 */
 .git-cmd-tooltip {
   font-family: 'Consolas', 'Courier New', monospace !important;
@@ -3500,11 +3479,6 @@ git config --global user.email "your.email@example.com"</pre>
 /* Stash详情弹窗样式 */
 .stash-detail-dialog .el-dialog__body {
   padding: 12px;
-  /* 限制弹窗内容最大高度，出现内部滚动 */
-  max-height: calc(100vh - 220px);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 .stash-detail-dialog .el-dialog__footer {
@@ -3638,14 +3612,9 @@ git config --global user.email "your.email@example.com"</pre>
 .diff-content {
   flex: 1;
   min-height: 0;
-  /* 让右侧diff区域有明确的最大高度以触发内部滚动 */
-  max-height: 100%;
-  overflow: hidden;
 }
 
 .diff-text {
-  max-height: calc(100vh - 360px);
-  overflow-y: auto;
   font-size: 12px;
   line-height: 1.6;
   color: #303133;
@@ -3660,56 +3629,7 @@ git config --global user.email "your.email@example.com"</pre>
   overflow-wrap: break-word;
 }
 
-/* Git diff 语法高亮样式 */
-.diff-header {
-  color: #666666;
-  background-color: #f8f8f8;
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-weight: bold;
-}
-
-.diff-old-file {
-  color: #d73027;
-  background-color: #ffeeee;
-  padding: 1px 4px;
-  font-weight: bold;
-}
-
-.diff-new-file {
-  color: #1a9641;
-  background-color: #eeffee;
-  padding: 1px 4px;
-  font-weight: bold;
-}
-
-.diff-hunk-header {
-  color: #0366d6;
-  background-color: #f1f8ff;
-  padding: 2px 4px;
-  font-weight: bold;
-  border-radius: 3px;
-}
-
-.diff-added {
-  color: #22863a;
-  background-color: #f0fff4;
-  padding: 1px 4px;
-  border-left: 3px solid #28a745;
-}
-
-.diff-removed {
-  color: #d73027;
-  background-color: #ffeef0;
-  padding: 1px 4px;
-  border-left: 3px solid #dc3545;
-}
-
-.diff-context {
-  color: #586069;
-  background-color: transparent;
-  padding: 1px 4px;
-}
+/* Git diff 样式已提取到全局样式：src/ui/client/src/styles/common.css */
 
 .template-dialog .el-dialog__body,
 .message-template-dialog .el-dialog__body,

@@ -960,9 +960,9 @@ defineExpose({
     top="50px"
     style="height: calc(100vh - 100px);"
     destroy-on-close
-    class="diff-dialog"
+    class="diff-dialog use-flex-body"
   >
-    <div v-loading="isLoadingDiff" class="diff-content">
+    <div v-loading="isLoadingDiff" class="diff-content dialog-content-scroll">
       <div v-if="diffContent" v-html="formatDiff(diffContent)" class="diff-formatted"></div>
       <div v-else class="no-diff">该文件没有差异或是新文件</div>
     </div>
@@ -1574,36 +1574,6 @@ defineExpose({
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* 确保文件差异对话框里的内容滚动条样式一致 */
-.diff-formatted::-webkit-scrollbar,
-.diff-content::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.diff-formatted::-webkit-scrollbar-thumb,
-.diff-content::-webkit-scrollbar-thumb {
-  background-color: rgba(144, 147, 153, 0.3);
-  border-radius: 4px;
-}
-
-.diff-formatted::-webkit-scrollbar-thumb:hover,
-.diff-content::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(144, 147, 153, 0.5);
-}
-
-.diff-formatted::-webkit-scrollbar-track,
-.diff-content::-webkit-scrollbar-track {
-  background-color: transparent;
-}
-
-/* 兼容Firefox滚动条样式 */
-.diff-formatted,
-.diff-content {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
-}
-
 /* 增加自动更新开关的样式 */
 .auto-update-switch :deep(.el-switch__core) {
   transition: all 0.3s ease-in-out;
@@ -1648,71 +1618,6 @@ defineExpose({
   color: #409EFF;
   font-weight: bold;
   margin-top: 10px;
-}
-</style>
-
-<!-- 非scoped样式，使diff格式化样式对动态内容生效 -->
-<style>
-.diff-header {
-  font-weight: bold;
-  background-color: #e6f1fc;
-  padding: 8px 12px;
-  margin: 10px 0;
-  border-radius: 6px;
-  color: #0366d6;
-  border-bottom: 1px solid #c8e1ff;
-}
-
-.diff-old-file, .diff-new-file {
-  color: #586069;
-  padding: 4px 8px;
-  font-family: monospace;
-}
-
-.diff-old-file {
-  color: #cb2431;
-}
-
-.diff-new-file {
-  color: #22863a;
-}
-
-.diff-hunk-header {
-  color: #6f42c1;
-  background-color: #f1f8ff;
-  padding: 4px 8px;
-  margin: 8px 0;
-  border-radius: 4px;
-  font-family: monospace;
-}
-
-.diff-added {
-  background-color: #e6ffed;
-  color: #22863a;
-  padding: 2px 8px;
-  border-left: 4px solid #22863a;
-  font-family: monospace;
-  display: block;
-  margin: 2px 0;
-}
-
-.diff-removed {
-  background-color: #ffeef0;
-  color: #cb2431;
-  padding: 2px 8px;
-  border-left: 4px solid #cb2431;
-  font-family: monospace;
-  display: block;
-  margin: 2px 0;
-}
-
-.diff-context {
-  color: #444;
-  padding: 2px 8px;
-  font-family: monospace;
-  display: block;
-  margin: 2px 0;
-  background-color: #fafbfc;
 }
 
 /* 锁定文件样式 */
