@@ -38,6 +38,7 @@ import {
 import "element-plus/dist/index.css";
 import { createGitgraph } from "@gitgraph/js";
 import { useGitStore } from "../stores/gitStore";
+import { formatDiff, formatCommitMessage, extractPureMessage } from "../utils/index.ts";
 
 // const COLORS = [
 //   "#2196f3", // 蓝色
@@ -701,73 +702,9 @@ async function getCommitFileDiff(hash: string, filePath: string) {
   }
 }
 
-// 格式化差异内容，添加颜色
-function formatDiff(diffText: string) {
-  if (!diffText) return "";
 
-  // 将差异内容按行分割
-  const lines = diffText.split("\n");
 
-  // 转义 HTML 标签的函数
-  function escapeHtml(text: string) {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
 
-  // 为每行添加适当的 CSS 类
-  return lines
-    .map((line) => {
-      // 先转义 HTML 标签，再添加样式
-      const escapedLine = escapeHtml(line);
-
-      if (line.startsWith("diff --git")) {
-        return `<div class="diff-header">${escapedLine}</div>`;
-      } else if (line.startsWith("---")) {
-        return `<div class="diff-old-file">${escapedLine}</div>`;
-      } else if (line.startsWith("+++")) {
-        return `<div class="diff-new-file">${escapedLine}</div>`;
-      } else if (line.startsWith("@@")) {
-        return `<div class="diff-hunk-header">${escapedLine}</div>`;
-      } else if (line.startsWith("+")) {
-        return `<div class="diff-added">${escapedLine}</div>`;
-      } else if (line.startsWith("-")) {
-        return `<div class="diff-removed">${escapedLine}</div>`;
-      } else {
-        return `<div class="diff-context">${escapedLine}</div>`;
-      }
-    })
-    .join("");
-}
-
-// 格式化提交信息，支持多行显示
-function formatCommitMessage(message: string) {
-  if (!message) return "(无提交信息)";
-
-  // 返回格式化后的提交信息，保留换行符
-  return message.trim();
-}
-
-// 提取纯净的提交信息（去除类型前缀）
-function extractPureMessage(message: string): string {
-  if (!message) return "";
-
-  // 匹配常见的提交信息格式：type(scope): description 或 type: description
-  // 使用 dotAll 标志来匹配多行内容
-  const conventionalCommitRegex = /^(feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert)(\([^)]+\))?\s*:\s*(.+)$/s;
-  const match = message.match(conventionalCommitRegex);
-
-  if (match) {
-    // 如果匹配到标准格式，返回描述部分（保留多行结构）
-    return match[3].trim();
-  }
-
-  // 如果不是标准格式，返回原始信息
-  return message.trim();
-}
 
 // 复制纯净的提交信息
 async function copyPureMessage(message: string) {

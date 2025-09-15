@@ -6,6 +6,7 @@ import { Refresh, ArrowLeft, ArrowRight, Document, ArrowUp, ArrowDown, RefreshRi
 // import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '../stores/gitStore'
 import { useConfigStore } from '../stores/configStore'
+import { formatDiff } from '../utils/index.ts'
 
 // 定义props
 const props = defineProps({
@@ -126,45 +127,7 @@ async function confirmUnlockAll() {
   }
 }
 
-// 格式化差异内容，添加颜色
-function formatDiff(diffText: string) {
-  if (!diffText) return '';
-  
-  // 将差异内容按行分割
-  const lines = diffText.split('\n');
-  
-  // 转义 HTML 标签的函数
-  function escapeHtml(text: string) {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-  
-  // 为每行添加适当的 CSS 类
-  return lines.map(line => {
-    // 先转义 HTML 标签，再添加样式
-    const escapedLine = escapeHtml(line);
-    
-    if (line.startsWith('diff --git')) {
-      return `<div class="diff-header">${escapedLine}</div>`;
-    } else if (line.startsWith('---')) {
-      return `<div class="diff-old-file">${escapedLine}</div>`;
-    } else if (line.startsWith('+++')) {
-      return `<div class="diff-new-file">${escapedLine}</div>`;
-    } else if (line.startsWith('@@')) {
-      return `<div class="diff-hunk-header">${escapedLine}</div>`;
-    } else if (line.startsWith('+')) {
-      return `<div class="diff-added">${escapedLine}</div>`;
-    } else if (line.startsWith('-')) {
-      return `<div class="diff-removed">${escapedLine}</div>`;
-    } else {
-      return `<div class="diff-context">${escapedLine}</div>`;
-    }
-  }).join('');
-}
+
 
 // 获取文件差异
 async function getFileDiff(filePath: string) {

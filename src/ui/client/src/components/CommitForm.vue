@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu } from "@element-plus/icons-vue";
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
+import { formatDiff, formatStashDiff } from "../utils/index.ts";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -308,47 +309,7 @@ async function getStashFileDiff(stashId: string, filePath: string) {
   }
 }
 
-// 格式化差异内容，添加颜色和语法高亮
-function formatStashDiff(diffText: string) {
-  if (!diffText) return "";
 
-  // 将差异内容按行分割
-  const lines = diffText.split("\n");
-
-  // 转义 HTML 标签的函数
-  function escapeHtml(text: string) {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  // 为每行添加适当的 CSS 类
-  return lines
-    .map((line) => {
-      // 先转义 HTML 标签，再添加样式
-      const escapedLine = escapeHtml(line);
-
-      if (line.startsWith("diff --git")) {
-        return `<div class="diff-header">${escapedLine}</div>`;
-      } else if (line.startsWith("---")) {
-        return `<div class="diff-old-file">${escapedLine}</div>`;
-      } else if (line.startsWith("+++")) {
-        return `<div class="diff-new-file">${escapedLine}</div>`;
-      } else if (line.startsWith("@@")) {
-        return `<div class="diff-hunk-header">${escapedLine}</div>`;
-      } else if (line.startsWith("+")) {
-        return `<div class="diff-added">${escapedLine}</div>`;
-      } else if (line.startsWith("-")) {
-        return `<div class="diff-removed">${escapedLine}</div>`;
-      } else {
-        return `<div class="diff-context">${escapedLine}</div>`;
-      }
-    })
-    .join("");
-}
 
 // 添加默认提交信息模板相关变量
 const messageTemplates = ref<string[]>([]);
