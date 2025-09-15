@@ -5,6 +5,7 @@ import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connecti
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
 import { formatDiff, formatStashDiff } from "../utils/index.ts";
+import FileDiffViewer from "./FileDiffViewer.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -309,6 +310,13 @@ async function getStashFileDiff(stashId: string, filePath: string) {
   }
 }
 
+// 处理stash文件选择
+function handleStashFileSelect(filePath: string) {
+  if (selectedStash.value) {
+    getStashFileDiff(selectedStash.value.id, filePath);
+  }
+}
+
 
 
 // 添加默认提交信息模板相关变量
@@ -361,6 +369,14 @@ const hasUserCommitMessage = computed(() => {
     // 标准化提交模式：必须有提交类型和描述
     return commitType.value.trim() !== '' && commitDescription.value.trim() !== '';
   }
+});
+
+// 为stash组件准备文件列表
+const stashFilesForViewer = computed(() => {
+  return stashFiles.value.map(file => ({
+    path: file,
+    name: file.split('/').pop() || file
+  }));
 });
 
 // 计算Git命令预览
@@ -2306,45 +2322,14 @@ git config --global user.email "your.email@example.com"</pre>
         </div>
 
         <div class="stash-main-content">
-          <div class="stash-files-panel">
-            <div class="panel-header">
-              <h4>文件列表</h4>
-            </div>
-            <div class="files-list">
-              <el-scrollbar height="100%">
-                <div
-                  v-for="file in stashFiles"
-                  :key="file"
-                  class="file-item"
-                  :class="{ active: selectedStashFile === file }"
-                  @click="getStashFileDiff(selectedStash!.id, file)"
-                >
-                  <span class="file-name">{{ file }}</span>
-                </div>
-              </el-scrollbar>
-            </div>
-          </div>
-
-          <div class="stash-diff-panel">
-            <div class="panel-header">
-              <h4>文件差异</h4>
-              <span v-if="selectedStashFile" class="selected-file">{{ selectedStashFile }}</span>
-            </div>
-            
-            <div class="diff-content dialog-content-scroll" v-loading="isLoadingStashDetail">
-              <div 
-                v-if="stashDiff" 
-                class="diff-text"
-                v-html="formatStashDiff(stashDiff)"
-              ></div>
-              
-              <el-empty 
-                v-else-if="!isLoadingStashDetail" 
-                description="请选择文件查看差异"
-                :image-size="80"
-              />
-            </div>
-          </div>
+          <FileDiffViewer
+            :files="stashFilesForViewer"
+            :diffContent="stashDiff"
+            :selectedFile="selectedStashFile"
+            emptyText="该stash没有变更文件"
+            height="100%"
+            @file-select="handleStashFileSelect"
+          />
         </div>
         
         <template #footer>
@@ -3451,6 +3436,15 @@ git config --global user.email "your.email@example.com"</pre>
 /* Stash详情弹窗样式 */
 .stash-detail-dialog .el-dialog__body {
   padding: 12px;
+  height: calc(100vh - 200px); // 给对话框体设置明确高度
+  display: flex;
+  flex-direction: column;
+}
+
+.use-flex-body .el-dialog__body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .stash-detail-dialog .el-dialog__footer {
@@ -3486,10 +3480,9 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .stash-main-content {
-  display: flex;
   flex: 1;
-  gap: 20px;
   min-height: 0;
+  height: 100%; // 确保容器高度填充满
 }
 
 .stash-files-panel {

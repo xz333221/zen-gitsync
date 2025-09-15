@@ -2,23 +2,43 @@
 
 /* Git diff syntax highlight */
 .diff-header {
-  background-color: #f6f8fa;
-  padding: 6px 10px;
-  margin: 10px 0;
+  background-color: #f1f8ff;
+  padding: 8px 12px;
+  margin: 8px 0;
   border-radius: 6px;
   color: #0366d6;
-  border-bottom: 1px solid #c8e1ff;
+  border: 1px solid #c8e1ff;
+  border-left: 4px solid #0366d6;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(3, 102, 214, 0.1);
 }
 
 .diff-old-file,
 .diff-new-file {
-  color: #586069;
-  padding: 4px 8px;
-  font-family: monospace;
+  padding: 5px 8px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 1px 0;
+  border-radius: 3px;
+  display: block;
+  font-weight: 600;
 }
 
-.diff-old-file { color: #cb2431; }
-.diff-new-file { color: #22863a; }
+.diff-old-file { 
+  color: #cb2431; 
+  background-color: #ffeef0;
+  border-left: 4px solid #cb2431;
+}
+
+.diff-new-file { 
+  color: #22863a; 
+  background-color: #e6ffed;
+  border-left: 4px solid #22863a;
+}
 
 .diff-hunk-header {
   color: #6f42c1;
@@ -26,7 +46,9 @@
   padding: 4px 8px;
   margin: 8px 0;
   border-radius: 4px;
-  font-family: monospace;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .diff-added {
@@ -34,9 +56,11 @@
   color: #22863a;
   padding: 2px 8px;
   border-left: 4px solid #22863a;
-  font-family: monospace;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
   display: block;
-  margin: 2px 0;
+  margin: 1px 0;
 }
 
 .diff-removed {
@@ -44,18 +68,22 @@
   color: #cb2431;
   padding: 2px 8px;
   border-left: 4px solid #cb2431;
-  font-family: monospace;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
   display: block;
-  margin: 2px 0;
+  margin: 1px 0;
 }
 
 .diff-context {
-  color: #444;
+  color: #24292f;
   padding: 2px 8px;
-  font-family: monospace;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
   display: block;
-  margin: 2px 0;
-  background-color: #fafbfc;
+  margin: 1px 0;
+  background-color: #ffffff;
 }
 
 /* Scrollbar styles for diff areas */

@@ -39,6 +39,7 @@ import "element-plus/dist/index.css";
 import { createGitgraph } from "@gitgraph/js";
 import { useGitStore } from "../stores/gitStore";
 import { formatDiff, formatCommitMessage, extractPureMessage } from "../utils/index.ts";
+import FileDiffViewer from "./FileDiffViewer.vue";
 
 // const COLORS = [
 //   "#2196f3", // 蓝色
@@ -123,6 +124,14 @@ const selectedContextCommit = ref<LogItem | null>(null);
 const filteredLogs = computed(() => {
   // 不再在前端进行筛选，直接使用加载的日志
   return logs.value;
+});
+
+// 为提交组件准备文件列表
+const commitFilesForViewer = computed(() => {
+  return commitFiles.value.map(file => ({
+    path: file,
+    name: file.split('/').pop() || file
+  }));
 });
 
 // 加载提交历史
@@ -699,6 +708,13 @@ async function getCommitFileDiff(hash: string, filePath: string) {
     commitDiff.value = `获取差异失败: ${(error as Error).message}`;
   } finally {
     isLoadingCommitDetail.value = false;
+  }
+}
+
+// 处理提交文件选择
+function handleCommitFileSelect(filePath: string) {
+  if (selectedCommit.value) {
+    getCommitFileDiff(selectedCommit.value.hash, filePath);
   }
 }
 
@@ -1420,47 +1436,15 @@ function toggleFullscreen() {
         </div>
 
         <!-- 变更文件列表和差异 -->
-        <div class="commit-files-diff">
-          <div class="files-list">
-            <h3>变更文件</h3>
-            <el-empty
-              v-if="commitFiles.length === 0"
-              description="没有找到变更文件"
-            ></el-empty>
-            <ul v-else>
-              <li
-                v-for="file in commitFiles"
-                :key="file"
-                :class="{ 'active-file': file === selectedCommitFile }"
-                @click="getCommitFileDiff(selectedCommit!.hash, file)"
-              >
-                <el-tooltip
-                  :content="file"
-                  placement="top"
-                  :disabled="file.length <= 35"
-                  :hide-after="1000"
-                >
-                  {{ file }}
-                </el-tooltip>
-              </li>
-            </ul>
-          </div>
-          <div class="file-diff">
-            <h3 v-if="selectedCommitFile">
-              文件差异: {{ selectedCommitFile }}
-            </h3>
-            <h3 v-else>文件差异</h3>
-            <el-empty
-              v-if="!commitDiff && !isLoadingCommitDetail"
-              description="选择文件查看差异"
-            ></el-empty>
-            <div
-              v-else-if="commitDiff"
-              v-html="formatDiff(commitDiff)"
-              class="diff-content"
-            ></div>
-          </div>
-        </div>
+        <FileDiffViewer
+          :files="commitFilesForViewer"
+          :loading="isLoadingCommitDetail"
+          :diffContent="commitDiff"
+          :selectedFile="selectedCommitFile"
+          emptyText="没有找到变更文件"
+          height="60vh"
+          @file-select="handleCommitFileSelect"
+        />
       </div>
     </el-dialog>
   </div>
@@ -1521,7 +1505,9 @@ function toggleFullscreen() {
 
 .fullscreen-mode .log-header {
   margin-bottom: 10px;
+  /* AI start Copilot */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  /* AI end Copilot */
 }
 
 .header-left {

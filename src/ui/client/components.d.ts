@@ -34,6 +34,7 @@ declare module 'vue' {
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    FileDiffViewer: typeof import('./src/components/FileDiffViewer.vue')['default']
     GitStatus: typeof import('./src/components/GitStatus.vue')['default']
     LogList: typeof import('./src/components/LogList.vue')['default']
   }

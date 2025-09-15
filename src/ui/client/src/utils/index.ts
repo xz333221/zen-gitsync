@@ -34,7 +34,8 @@ export function formatDiff(diffText: string): string {
       // 先转义HTML标签，再添加样式
       const escapedLine = escapeHtml(line);
 
-      if (line.startsWith("diff --git")) {
+      // diff --git 或 diff --cc (合并冲突) 行
+      if (line.startsWith("diff --git") || line.startsWith("diff --cc") || line.startsWith("diff --combined")) {
         return `<div class="diff-header">${escapedLine}</div>`;
       } else if (line.startsWith("---")) {
         return `<div class="diff-old-file">${escapedLine}</div>`;

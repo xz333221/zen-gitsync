@@ -7,6 +7,7 @@ import { Refresh, ArrowLeft, ArrowRight, Document, ArrowUp, ArrowDown, RefreshRi
 import { useGitStore } from '../stores/gitStore'
 import { useConfigStore } from '../stores/configStore'
 import { formatDiff } from '../utils/index.ts'
+import FileDiffViewer from './FileDiffViewer.vue'
 
 // 定义props
 const props = defineProps({
@@ -30,6 +31,20 @@ const diffDialogVisible = ref(false)
 const isLoadingDiff = ref(false)
 // 添加当前文件索引
 const currentFileIndex = ref(-1)
+
+// 为FileDiffViewer组件准备数据
+const gitFilesForViewer = computed(() => {
+  return gitStore.fileList.map(file => ({
+    path: file.path,
+    name: file.path.split('/').pop() || file.path,
+    type: file.type
+  }))
+})
+
+// 处理FileDiffViewer组件的文件选择
+async function handleGitFileSelect(filePath: string) {
+  await getFileDiff(filePath)
+}
 // 锁定文件对话框状态
 const showLockedFilesDialog = ref(false)
 // 添加文件组折叠状态
@@ -162,20 +177,16 @@ async function getFileDiff(filePath: string) {
         console.error('获取未跟踪文件内容失败:', error)
         diffContent.value = '这是一个新文件，尚未被Git跟踪。\n添加到暂存区后可以提交该文件。'
       }
-      
-      diffDialogVisible.value = true
     } else if (currentFile && currentFile.type === 'added') {
       // 对于已暂存的文件，使用 diff --cached 获取差异
       const response = await fetch(`/api/diff-cached?file=${encodeURIComponent(filePath)}`)
       const data = await response.json()
       diffContent.value = data.diff || '没有变更'
-      diffDialogVisible.value = true
     } else {
       // 对于未暂存的文件，获取常规差异
       const response = await fetch(`/api/diff?file=${encodeURIComponent(filePath)}`)
       const data = await response.json()
       diffContent.value = data.diff || '没有变更'
-      diffDialogVisible.value = true
     }
   } catch (error) {
     ElMessage({
@@ -188,23 +199,7 @@ async function getFileDiff(filePath: string) {
   }
 }
 
-// 添加切换到上一个文件的方法
-async function goToPreviousFile() {
-  if (gitStore.fileList.length === 0 || currentFileIndex.value <= 0) return
-  
-  const newIndex = currentFileIndex.value - 1
-  const prevFile = gitStore.fileList[newIndex]
-  await getFileDiff(prevFile.path)
-}
 
-// 添加切换到下一个文件的方法
-async function goToNextFile() {
-  if (gitStore.fileList.length === 0 || currentFileIndex.value >= gitStore.fileList.length - 1) return
-  
-  const newIndex = currentFileIndex.value + 1
-  const nextFile = gitStore.fileList[newIndex]
-  await getFileDiff(nextFile.path)
-}
 
 // 打开切换目录对话框
 // function openDirectoryDialog() {
@@ -361,7 +356,13 @@ async function goToNextFile() {
 
 // 处理文件点击
 function handleFileClick(file: {path: string, type: string}) {
-  getFileDiff(file.path)
+  // 打开差异对话框，然后获取首个文件的差异
+  diffDialogVisible.value = true
+  // 如果有文件列表，默认选中点击的文件，否则选中第一个
+  if (gitStore.fileList.length > 0) {
+    const targetFile = gitStore.fileList.find(f => f.path === file.path) || gitStore.fileList[0]
+    getFileDiff(targetFile.path)
+  }
 }
 
 // 暂存单个文件
@@ -918,52 +919,21 @@ defineExpose({
   <!-- 文件差异对话框 -->
   <el-dialog
     v-model="diffDialogVisible"
-    :title="`文件差异: ${selectedFile}`"
-    width="80%"
+    title="文件差异"
+    width="90%"
     top="50px"
     style="height: calc(100vh - 100px);"
     destroy-on-close
     class="diff-dialog use-flex-body"
   >
-    <div v-loading="isLoadingDiff" class="diff-content dialog-content-scroll">
-      <div v-if="diffContent" v-html="formatDiff(diffContent)" class="diff-formatted"></div>
-      <div v-else class="no-diff">该文件没有差异或是新文件</div>
-    </div>
-    
-    <template #footer>
-      <div class="file-navigation">
-        <el-button 
-          type="primary"
-          :icon="ArrowLeft" 
-          @click="goToPreviousFile" 
-          :disabled="currentFileIndex <= 0 || gitStore.fileList.length === 0"
-          plain
-          class="nav-button"
-        >
-          上一个文件
-        </el-button>
-        
-        <div class="file-counter">
-          <el-tag type="info" effect="plain" class="counter-tag">
-            {{ currentFileIndex + 1 }} / {{ gitStore.fileList.length }}
-          </el-tag>
-        </div>
-        
-        <el-button 
-          type="primary"
-          :icon="ArrowRight" 
-          @click="goToNextFile" 
-          :disabled="currentFileIndex >= gitStore.fileList.length - 1 || gitStore.fileList.length === 0"
-          plain
-          class="nav-button"
-        >
-          下一个文件
-          <template #icon>
-            <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-          </template>
-        </el-button>
-      </div>
-    </template>
+    <FileDiffViewer
+      :files="gitFilesForViewer"
+      :diffContent="diffContent"
+      :selectedFile="selectedFile"
+      emptyText="选择文件查看差异"
+      height="100%"
+      @file-select="handleGitFileSelect"
+    />
   </el-dialog>
 
   <!-- 锁定文件管理对话框 -->
@@ -1477,64 +1447,11 @@ defineExpose({
   height: calc(100vh - 150px);
 }
 
-.diff-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 20px;
-  background-color: #fafafa;
-  height: 100%;
-}
-
-.diff-formatted {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  padding-bottom: 20px;
-}
-
-.no-diff {
+.use-flex-body .el-dialog__body {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   height: 100%;
-  color: #909399;
-  font-size: 14px;
-}
-
-/* 让差异内容区域内部滚动，不撑高弹窗 */
-.diff-content {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  max-height: calc(100vh - 240px);
-}
-
-.file-navigation {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 20px;
-  border-top: 1px solid #ebeef5;
-  background-color: #f9f9fb;
-}
-
-.counter-tag {
-  font-family: monospace;
-  font-size: 14px;
-  padding: 6px 12px;
-  min-width: 80px;
-  text-align: center;
-}
-
-.nav-button {
-  min-width: 120px;
-  transition: all 0.3s ease;
-}
-
-.nav-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 12px;
 }
 
 /* 增加自动更新开关的样式 */
