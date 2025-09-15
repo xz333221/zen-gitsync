@@ -391,6 +391,17 @@ const finalCommitMessage = computed(() => {
   return message;
 });
 
+// 计算是否有用户输入的提交信息（不包括默认提交信息）
+const hasUserCommitMessage = computed(() => {
+  if (!isStandardCommit.value) {
+    // 普通提交模式：只有用户输入的提交信息才算有效
+    return commitMessage.value.trim() !== '';
+  } else {
+    // 标准化提交模式：必须有提交类型和描述
+    return commitType.value.trim() !== '' && commitDescription.value.trim() !== '';
+  }
+});
+
 // 计算Git命令预览
 const gitCommandPreview = computed(() => {
   // 基本命令
@@ -1563,7 +1574,7 @@ git config --global user.email "your.email@example.com"</pre>
                         type="primary" 
                         @click="commitChanges" 
                         :loading="gitStore.isLoadingStatus"
-                        :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
+                        :disabled="!hasStagedChanges || !hasUserCommitMessage"
                       >
                         提交
                         <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
@@ -1590,14 +1601,14 @@ git config --global user.email "your.email@example.com"</pre>
                   
                   <div class="right-actions">
                     <el-tooltip
-                      :content="(!hasAnyChanges ? '没有需要提交的更改' : (!finalCommitMessage.trim() ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
+                      :content="(!hasAnyChanges ? '没有需要提交的更改' : (!hasUserCommitMessage ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
                       placement="top"
                     >
                       <el-button
                         type="success"
                         @click="addCommitAndPush"
                         :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                        :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                        :disabled="!hasAnyChanges || !hasUserCommitMessage || !gitStore.hasUpstream"
                         class="one-push-button"
                       >
                         <div class="one-push-content">
@@ -1690,7 +1701,7 @@ git config --global user.email "your.email@example.com"</pre>
                         type="primary" 
                         @click="commitChanges" 
                         :loading="gitStore.isLoadingStatus"
-                        :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
+                        :disabled="!hasStagedChanges || !hasUserCommitMessage"
                       >
                         提交
                         <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
@@ -1717,14 +1728,14 @@ git config --global user.email "your.email@example.com"</pre>
                   
                   <div class="right-actions">
                     <el-tooltip
-                      :content="(!hasAnyChanges ? '没有需要提交的更改' : (!finalCommitMessage.trim() ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
+                      :content="(!hasAnyChanges ? '没有需要提交的更改' : (!hasUserCommitMessage ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
                       placement="top"
                     >
                       <el-button
                         type="success"
                         @click="addCommitAndPush"
                         :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                        :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                        :disabled="!hasAnyChanges || !hasUserCommitMessage || !gitStore.hasUpstream"
                         class="one-push-button"
                       >
                         <div class="one-push-content">
@@ -1782,7 +1793,7 @@ git config --global user.email "your.email@example.com"</pre>
                       type="primary" 
                       @click="commitChanges" 
                       :loading="gitStore.isLoadingStatus"
-                      :disabled="!hasStagedChanges || !finalCommitMessage.trim()"
+                      :disabled="!hasStagedChanges || !hasUserCommitMessage"
                       class="action-button"
                     >
                       提交
@@ -1847,7 +1858,7 @@ git config --global user.email "your.email@example.com"</pre>
                       :icon="Edit"
                       @click="addAndCommit"
                       :loading="gitStore.isAddingFiles || gitStore.isCommiting"
-                      :disabled="!hasUnstagedChanges || !finalCommitMessage.trim()"
+                      :disabled="!hasUnstagedChanges || !hasUserCommitMessage"
                       class="action-button"
                     >
                       暂存并提交
@@ -1860,7 +1871,7 @@ git config --global user.email "your.email@example.com"</pre>
                       :icon="Position"
                       @click="addCommitAndPush"
                       :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                      :disabled="!hasAnyChanges || !finalCommitMessage.trim() || !gitStore.hasUpstream"
+                      :disabled="!hasAnyChanges || !hasUserCommitMessage || !gitStore.hasUpstream"
                       :class="['action-button', 'one-click-push', { 'is-loading': gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing }]"
                     >
                       一键推送所有
