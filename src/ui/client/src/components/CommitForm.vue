@@ -4,7 +4,6 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu } from "@element-plus/icons-vue";
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
-import { formatDiff, formatStashDiff } from "../utils/index.ts";
 import FileDiffViewer from "./FileDiffViewer.vue";
 import CommonDialog from "./CommonDialog.vue";
 

@@ -13,7 +13,6 @@ import {
   ElTag,
   ElButton,
   ElSlider,
-  ElDialog,
   ElSelect,
   ElOption,
   ElDatePicker,
@@ -38,7 +37,7 @@ import {
 import "element-plus/dist/index.css";
 import { createGitgraph } from "@gitgraph/js";
 import { useGitStore } from "../stores/gitStore";
-import { formatDiff, formatCommitMessage, extractPureMessage } from "../utils/index.ts";
+import { formatCommitMessage, extractPureMessage } from "../utils/index.ts";
 import FileDiffViewer from "./FileDiffViewer.vue";
 import CommonDialog from "./CommonDialog.vue";
 
