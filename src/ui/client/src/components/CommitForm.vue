@@ -6,6 +6,7 @@ import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
 import { formatDiff, formatStashDiff } from "../utils/index.ts";
 import FileDiffViewer from "./FileDiffViewer.vue";
+import CommonDialog from "./CommonDialog.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -2105,11 +2106,15 @@ git config --global user.email "your.email@example.com"</pre>
       </el-dialog>
       
       <!-- Stash弹窗：创建储藏 -->
-      <el-dialog
-        title="储藏更改 (Git Stash)"
+      <CommonDialog
         v-model="isStashDialogVisible"
-        width="500px"
+        title="储藏更改 (Git Stash)"
+        size="medium"
         :close-on-click-modal="false"
+        show-footer
+        confirm-text="储藏"
+        :confirm-loading="gitStore.isSavingStash"
+        @confirm="saveStash"
       >
         <div class="stash-dialog-content">
           <p>将当前工作区的更改储藏起来，稍后可以再次应用。</p>
@@ -2136,20 +2141,7 @@ git config --global user.email "your.email@example.com"</pre>
             </el-form-item>
           </el-form>
         </div>
-        
-        <template #footer>
-          <div class="dialog-footer">
-            <el-button @click="isStashDialogVisible = false">取消</el-button>
-            <el-button
-              type="primary"
-              @click="saveStash"
-              :loading="gitStore.isSavingStash"
-            >
-              储藏
-            </el-button>
-          </div>
-        </template>
-      </el-dialog>
+      </CommonDialog>
       
       <!-- 合并分支对话框 -->
       <el-dialog 
@@ -2305,39 +2297,39 @@ git config --global user.email "your.email@example.com"</pre>
       </el-dialog>
       
       <!-- Stash详情弹窗 -->
-      <el-dialog
-        title="储藏详情"
+      <CommonDialog
         v-model="stashDetailVisible"
-        width="90%"
-        top="50px"
-        style="height: calc(100vh - 100px);"
+        title="储藏详情"
+        custom-class="stash-detail-dialog"
+        size="extra-large"
+        type="flex"
         :close-on-click-modal="false"
-        class="stash-detail-dialog use-flex-body"
       >
-        <div class="stash-header" v-if="selectedStash">
-          <div class="stash-info">
-            <h3>{{ selectedStash.id }}</h3>
-            <p class="stash-description">{{ selectedStash.description }}</p>
+        <div class="stash-content">
+          <!-- 储藏信息横向布局 -->
+          <div class="stash-info-row" v-if="selectedStash">
+            <div class="stash-id">
+              <span class="info-label">Stash ID:</span>
+              <code class="stash-id-value">{{ selectedStash.id }}</code>
+            </div>
+            <div class="stash-description">
+              <span class="info-label">描述:</span>
+              <span class="stash-description-value">{{ selectedStash.description }}</span>
+            </div>
           </div>
-        </div>
 
-        <div class="stash-main-content">
-          <FileDiffViewer
-            :files="stashFilesForViewer"
-            :diffContent="stashDiff"
-            :selectedFile="selectedStashFile"
-            emptyText="该stash没有变更文件"
-            height="100%"
-            @file-select="handleStashFileSelect"
-          />
-        </div>
-        
-        <template #footer>
-          <div class="dialog-footer">
-            <el-button @click="stashDetailVisible = false">关闭</el-button>
+          <!-- 文件差异查看器 -->
+          <div class="stash-main-content">
+            <FileDiffViewer
+              :files="stashFilesForViewer"
+              :diffContent="stashDiff"
+              :selectedFile="selectedStashFile"
+              emptyText="该stash没有变更文件"
+              @file-select="handleStashFileSelect"
+            />
           </div>
-        </template>
-      </el-dialog>
+        </div>
+      </CommonDialog>
 </template>
 
 <style scoped lang="scss">
@@ -2503,6 +2495,67 @@ git config --global user.email "your.email@example.com"</pre>
 
 .action-button:active {
   transform: translateY(0);
+}
+
+/* 储藏详情弹窗样式 */
+.stash-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 12px;
+}
+
+.stash-info-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 16px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+  flex-shrink: 0; /* 不被压缩 */
+}
+
+.stash-id,
+.stash-description {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+  white-space: nowrap;
+}
+
+.stash-id-value {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  background-color: #e9ecef;
+  color: #495057;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #dee2e6;
+}
+
+.stash-description {
+  flex: 1; /* 占据剩余空间 */
+}
+
+.stash-description-value {
+  font-size: 14px;
+  color: #303133;
+  font-weight: 400;
+  word-break: break-all;
+}
+
+.stash-main-content {
+  flex: 1;
+  min-height: 0; /* 关键：允许flex子元素缩小 */
+  display: flex;
+  flex-direction: column;
 }
 
 .command-text {

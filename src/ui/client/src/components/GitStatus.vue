@@ -8,6 +8,7 @@ import { useGitStore } from '../stores/gitStore'
 import { useConfigStore } from '../stores/configStore'
 import { formatDiff } from '../utils/index.ts'
 import FileDiffViewer from './FileDiffViewer.vue'
+import CommonDialog from './CommonDialog.vue'
 
 // 定义props
 const props = defineProps({
@@ -917,30 +918,28 @@ defineExpose({
   </div>
   
   <!-- 文件差异对话框 -->
-  <el-dialog
+  <CommonDialog
     v-model="diffDialogVisible"
     title="文件差异"
-    width="90%"
-    top="50px"
-    style="height: calc(100vh - 100px);"
+    custom-class="file-diff-dialog"
+    size="extra-large"
+    type="flex"
     destroy-on-close
-    class="diff-dialog use-flex-body"
   >
     <FileDiffViewer
       :files="gitFilesForViewer"
       :diffContent="diffContent"
       :selectedFile="selectedFile"
       emptyText="选择文件查看差异"
-      height="100%"
       @file-select="handleGitFileSelect"
     />
-  </el-dialog>
+  </CommonDialog>
 
   <!-- 锁定文件管理对话框 -->
-  <el-dialog
+  <CommonDialog
     v-model="showLockedFilesDialog"
     title="锁定文件管理"
-    width="700px"
+    size="large"
     destroy-on-close
   >
     <!-- 功能说明 -->
@@ -1028,7 +1027,7 @@ defineExpose({
         <el-button @click="showLockedFilesDialog = false">关闭</el-button>
       </span>
     </template>
-  </el-dialog>
+  </CommonDialog>
 </template>
 
 <style scoped>

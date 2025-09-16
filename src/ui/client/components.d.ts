@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     CommandHistory: typeof import('./src/components/CommandHistory.vue')['default']
     CommitForm: typeof import('./src/components/CommitForm.vue')['default']
+    CommonDialog: typeof import('./src/components/CommonDialog.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAutocomplete: typeof import('element-plus/es')['ElAutocomplete']
     ElButton: typeof import('element-plus/es')['ElButton']

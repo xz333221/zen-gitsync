@@ -24,7 +24,7 @@ const props = withDefaults(defineProps<Props>(), {
   emptyText: '没有找到变更文件',
   diffContent: '',
   selectedFile: '',
-  height: '400px',
+  height: '100%',
   showFileList: true
 });
 
@@ -152,7 +152,9 @@ watch(() => props.files, (newFiles) => {
   border-radius: 8px;
   overflow: hidden;
   background-color: #fff;
-  height: 100%; // 确保填充满父容器
+  height: 100%; /* 确保填充满父容器 */
+  flex: 1; /* 关键：允许在flex父容器中伸缩 */
+  min-height: 0; /* 关键：允许flex子元素收缩 */
 }
 
 .files-panel {
@@ -272,7 +274,7 @@ watch(() => props.files, (newFiles) => {
   padding: 16px;
   overflow: auto;
   background-color: #fff;
-  min-height: 0; // 确保flex子元素能正确收缩
+  min-height: 0; /* 确保flex子元素能正确收缩 */
   
   .diff-text {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
@@ -280,20 +282,20 @@ watch(() => props.files, (newFiles) => {
     line-height: 1.45;
     white-space: pre-wrap;
     word-break: break-all;
-    height: 100%; // 确保diff内容填充满容器
+    height: 100%; /* 确保diff内容填充满容器 */
   }
   
 
 }
 
-// 滚动条样式
+/* 滚动条样式 */
 :deep(.el-scrollbar__view) {
   height: 100%;
 }
 
-// diff样式继承自全局样式
+/* diff样式继承自全局样式 */
 .diff-text {
-  // 确保全局diff样式优先级高于组件局部样式
+  /* 确保全局diff样式优先级高于组件局部样式 */
   :deep(.diff-header) {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace !important;
     font-size: 12px !important;

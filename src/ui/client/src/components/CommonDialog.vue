@@ -1,0 +1,300 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { ElDialog } from 'element-plus'
+
+// 定义弹窗尺寸枚举
+type DialogSize = 'small' | 'medium' | 'large' | 'extra-large'
+type DialogType = 'default' | 'flex' | 'full-height'
+
+interface Props {
+  // 基础属性
+  modelValue: boolean
+  title: string
+  size?: DialogSize
+  type?: DialogType
+  
+  // 高级属性
+  width?: string
+  height?: string
+  top?: string
+  
+  // 功能属性
+  closeOnClickModal?: boolean
+  closeOnPressEscape?: boolean
+  destroyOnClose?: boolean
+  draggable?: boolean
+  
+  // 样式相关
+  customClass?: string
+  appendToBody?: boolean
+  lockScroll?: boolean
+  
+  // 按钮配置
+  showFooter?: boolean
+  confirmText?: string
+  cancelText?: string
+  showCancel?: boolean
+  confirmLoading?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  size: 'medium',
+  type: 'default',
+  top: '8vh',
+  closeOnClickModal: false,
+  closeOnPressEscape: true,
+  destroyOnClose: false,
+  draggable: false,
+  appendToBody: false,
+  lockScroll: true,
+  showFooter: false,
+  confirmText: '确定',
+  cancelText: '取消',
+  showCancel: true,
+  confirmLoading: false
+})
+
+// 定义事件
+interface Emits {
+  (e: 'update:modelValue', value: boolean): void
+  (e: 'confirm'): void
+  (e: 'cancel'): void
+  (e: 'close'): void
+  (e: 'opened'): void
+  (e: 'closed'): void
+}
+
+const emit = defineEmits<Emits>()
+
+// 计算弹窗尺寸
+const dialogWidth = computed(() => {
+  if (props.width) return props.width
+  
+  switch (props.size) {
+    case 'small':
+      return '30%'
+    case 'medium':
+      return '50%'
+    case 'large':
+      return '80%'
+    case 'extra-large':
+      return '90%'
+    default:
+      return '50%'
+  }
+})
+
+// 计算弹窗高度
+const dialogHeight = computed(() => {
+  if (props.height) return props.height
+  
+  switch (props.type) {
+    case 'full-height':
+      return 'calc(100vh - 100px)'
+    case 'flex':
+      return 'calc(100vh - 160px)' // 增加一些边距，防止超出
+    default:
+      return 'auto'
+  }
+})
+
+// 计算弹窗样式
+const dialogStyle = computed(() => {
+  const style: Record<string, string> = {}
+  
+  if (props.type === 'full-height' || props.type === 'flex') {
+    style['--dialog-height'] = dialogHeight.value
+  }
+  
+  return style
+})
+
+// 计算CSS类
+const dialogClass = computed(() => {
+  const classes = []
+  
+  if (props.customClass) {
+    classes.push(props.customClass)
+  }
+  
+  if (props.type === 'flex') {
+    classes.push('common-dialog--flex')
+  }
+  
+  if (props.type === 'full-height') {
+    classes.push('common-dialog--full-height')
+  }
+  
+  return classes.join(' ')
+})
+
+// 事件处理
+function handleClose() {
+  emit('update:modelValue', false)
+  emit('close')
+}
+
+function handleConfirm() {
+  emit('confirm')
+}
+
+function handleCancel() {
+  emit('cancel')
+  handleClose()
+}
+
+function handleOpened() {
+  emit('opened')
+}
+
+function handleClosed() {
+  emit('closed')
+}
+</script>
+
+<template>
+  <el-dialog
+    :model-value="modelValue"
+    :title="title"
+    :width="dialogWidth"
+    :top="top"
+    :style="dialogStyle"
+    :close-on-click-modal="closeOnClickModal"
+    :close-on-press-escape="closeOnPressEscape"
+    :destroy-on-close="destroyOnClose"
+    :draggable="draggable"
+    :class="dialogClass"
+    :append-to-body="appendToBody"
+    :lock-scroll="lockScroll"
+    @close="handleClose"
+    @opened="handleOpened"
+    @closed="handleClosed"
+  >
+    <!-- 主要内容区域 -->
+    <slot />
+    
+    <!-- 底部按钮区域 -->
+    <template #footer v-if="showFooter || $slots.footer">
+      <slot name="footer">
+        <div class="common-dialog__footer">
+          <el-button v-if="showCancel" @click="handleCancel">
+            {{ cancelText }}
+          </el-button>
+          <el-button 
+            type="primary" 
+            :loading="confirmLoading"
+            @click="handleConfirm"
+          >
+            {{ confirmText }}
+          </el-button>
+        </div>
+      </slot>
+    </template>
+  </el-dialog>
+</template>
+
+<style lang="scss">
+// 添加全局样式支持
+.file-diff-dialog.common-dialog--flex .el-dialog__body {
+  height: calc(100vh - 200px) !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.stash-detail-dialog.common-dialog--flex .el-dialog__body {
+  height: calc(100vh - 200px) !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.commit-detail-dialog.common-dialog--flex .el-dialog__body {
+  height: calc(100vh - 200px) !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+</style>
+
+<style scoped lang="scss">
+// flex布局弹窗
+:deep(.common-dialog--flex) {
+  .el-dialog {
+    display: flex;
+    flex-direction: column;
+    height: var(--dialog-height, auto) !important;
+    max-height: 90vh; /* 防止超出屏幕 */
+  }
+  
+  .el-dialog__body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 16px;
+    box-sizing: border-box;
+    overflow: hidden;
+    min-height: 0; /* 关键：允许flex子元素缩小 */
+  }
+}
+
+// 全高度弹窗
+:deep(.common-dialog--full-height) {
+  .el-dialog {
+    display: flex;
+    flex-direction: column;
+    height: var(--dialog-height, auto);
+  }
+  
+  .el-dialog__body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    padding: 12px;
+    box-sizing: border-box;
+    min-height: 0; /* 关键：允许flex子元素缩小 */
+  }
+}
+
+/* 为自定义类名提供更高的优先级 */
+:deep(.commit-detail-dialog.common-dialog--flex .el-dialog__body) {
+  height: calc(100vh - 200px) !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* 文件差异弹窗样式 - 提高优先级 */
+:deep(.file-diff-dialog.common-dialog--flex .el-dialog__body) {
+  height: calc(100vh - 200px) !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* 储藏详情弹窗样式 - 提高优先级 */
+:deep(.stash-detail-dialog.common-dialog--flex .el-dialog__body) {
+  height: calc(100vh - 200px) !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+// 通用底部按钮样式
+.common-dialog__footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  
+  .el-button {
+    min-width: 80px;
+  }
+}
+</style>

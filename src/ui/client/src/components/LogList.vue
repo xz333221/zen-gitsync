@@ -40,6 +40,7 @@ import { createGitgraph } from "@gitgraph/js";
 import { useGitStore } from "../stores/gitStore";
 import { formatDiff, formatCommitMessage, extractPureMessage } from "../utils/index.ts";
 import FileDiffViewer from "./FileDiffViewer.vue";
+import CommonDialog from "./CommonDialog.vue";
 
 // const COLORS = [
 //   "#2196f3", // 蓝色
@@ -1391,14 +1392,15 @@ function toggleFullscreen() {
     </div>
 
     <!-- 提交详情弹窗 -->
-    <el-dialog
+    <CommonDialog
       v-model="commitDetailVisible"
       :title="`提交详情: ${
         selectedCommit?.hash ? selectedCommit.hash.substring(0, 7) : '未知'
       }`"
-      width="80%"
+      size="extra-large"
+      type="flex"
       destroy-on-close
-      class="commit-detail-dialog"
+      custom-class="commit-detail-dialog"
     >
       <div v-loading="isLoadingCommitDetail" class="commit-detail-container">
         <!-- 提交基本信息 -->
@@ -1442,11 +1444,10 @@ function toggleFullscreen() {
           :diffContent="commitDiff"
           :selectedFile="selectedCommitFile"
           emptyText="没有找到变更文件"
-          height="60vh"
           @file-select="handleCommitFileSelect"
         />
       </div>
-    </el-dialog>
+    </CommonDialog>
   </div>
   <!-- 添加右键菜单 -->
   <div
@@ -1831,26 +1832,31 @@ function toggleFullscreen() {
 .commit-detail-container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
+  flex: 1; /* 关键：允许在flex父容器中伸缩 */
+  min-height: 0; /* 关键：允许flex子元素收缩 */
+  overflow: hidden; /* 防止内容超出 */
 }
 
 .commit-info {
-  padding: 16px;
+  padding: 12px;
   background-color: #f5f7fa;
   border-radius: 8px;
   font-size: 14px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  flex-shrink: 0; /* 防止信息区域被压缩 */
+  max-height: 200px; /* 限制最大高度 */
 }
 
 .commit-info-header {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
   background-color: #fff;
-  padding: 16px;
+  padding: 12px;
   border-radius: 8px;
   border: 1px solid #e4e7ed;
 }
@@ -1883,88 +1889,13 @@ function toggleFullscreen() {
   color: #606266;
 }
 
-.commit-files-diff {
-  margin-top: 8px;
-  display: flex;
-  gap: 20px;
-  height: 60vh;
-}
-
-.files-list {
-  width: 25%;
-  overflow-y: auto;
-  background-color: #f5f7fa;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.files-list h3 {
-  margin-top: 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #dcdfe6;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.files-list ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.files-list li {
-  padding: 10px 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  margin-bottom: 6px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 13px;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
-}
-
-.files-list li:hover {
-  background-color: #ecf5ff;
-  border-color: #d9ecff;
-}
-
-.files-list li.active-file {
-  background-color: #409eff;
-  color: white;
-  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
-}
-
-.file-diff {
-  flex: 1;
+/* 提交详情弹窗样式 */
+:deep(.commit-detail-dialog .el-dialog__body) {
+  padding: 12px;
+  height: calc(100vh - 200px); /* 给对话框体设置明确高度 */
   display: flex;
   flex-direction: column;
-  background-color: #f5f7fa;
-  border-radius: 8px;
-  padding: 16px;
   overflow: hidden;
-}
-
-.file-diff h3 {
-  margin-top: 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #dcdfe6;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.diff-content {
-  flex: 1;
-  overflow-y: auto;
-  background-color: #fff;
-  padding: 16px;
-  border-radius: 8px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  border: 1px solid #ebeef5;
 }
 
 /* 滚动条样式 */
@@ -1995,15 +1926,6 @@ function toggleFullscreen() {
 .files-list {
   scrollbar-width: thin;
   scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
-}
-
-/* 减小对话框的顶部边距 */
-:deep(.commit-detail-dialog) {
-  --el-dialog-margin-top: 7vh;
-}
-
-:deep(.commit-detail-dialog .el-dialog__body) {
-  padding: 16px;
 }
 
 .filter-panel-header {
