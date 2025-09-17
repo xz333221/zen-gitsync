@@ -687,7 +687,6 @@ async function selectDirectory(dirPath: string) {
     </div>
     <div class="header-info">
       <div id="user-info" v-if="gitStore.userName && gitStore.userEmail">
-        <span class="user-label">用户:</span>
         <span class="user-name">{{ gitStore.userName }}</span>
         <span class="user-email">&lt;{{ gitStore.userEmail }}&gt;</span>
         <el-button type="primary" size="small" @click="openUserSettingsDialog" class="user-settings-btn" circle>
@@ -1131,6 +1130,7 @@ h1 {
 
 .user-email {
   color: #e0e0e0;
+  font-size: 12px;
 }
 
 .branch-name {

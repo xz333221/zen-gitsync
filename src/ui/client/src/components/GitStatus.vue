@@ -1275,6 +1275,8 @@ defineExpose({
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  max-width: 120px;
+  flex-shrink: 0;
 }
 
 .file-path-section {

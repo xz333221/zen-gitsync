@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu } from "@element-plus/icons-vue";
+import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu, CopyDocument } from "@element-plus/icons-vue";
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
 import FileDiffViewer from "./FileDiffViewer.vue";
@@ -1431,6 +1431,16 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
   }
 }
 
+// 复制Git命令到剪贴板
+async function copyGitCommand() {
+  try {
+    await navigator.clipboard.writeText(gitCommandPreview.value);
+    ElMessage.success('Git命令已复制到剪贴板');
+  } catch (error) {
+    ElMessage.error(`复制失败: ${(error as Error).message}`);
+  }
+}
+
 </script>
 
 <template>
@@ -1527,7 +1537,19 @@ git config --global user.email "your.email@example.com"</pre>
               
               <!-- 添加Git命令预览区域 -->
               <div class="preview-section">
-                <div class="preview-title">Git提交命令预览：</div>
+                <div class="preview-header">
+                  <div class="preview-title">Git提交命令预览：</div>
+                  <el-button
+                    type="primary"
+                    :icon="CopyDocument"
+                    size="small"
+                    @click="copyGitCommand"
+                    title="复制命令"
+                    class="copy-command-btn"
+                  >
+                    复制
+                  </el-button>
+                </div>
                 <pre class="preview-content code-command">git commit -m "{{ finalCommitMessage || '<提交信息>' }}"{{ skipHooks ? ' --no-verify' : '' }}</pre>
               </div>
               
@@ -1656,7 +1678,19 @@ git config --global user.email "your.email@example.com"</pre>
                 <!-- <div class="preview-title">提交信息预览：</div>
                 <pre class="preview-content">{{ finalCommitMessage }}</pre> -->
 
-                <div class="preview-title">Git提交命令预览：</div>
+                <div class="preview-header">
+                  <div class="preview-title">Git提交命令预览：</div>
+                  <el-button
+                    type="primary"
+                    :icon="CopyDocument"
+                    size="small"
+                    @click="copyGitCommand"
+                    title="复制命令"
+                    class="copy-command-btn"
+                  >
+                    复制
+                  </el-button>
+                </div>
                 <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
               </div>
               
@@ -2628,9 +2662,24 @@ git config --global user.email "your.email@example.com"</pre>
   border-radius: 4px;
 }
 
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
 .preview-title {
-  font-weight: bold;
-  margin-bottom: 5px;
+  font-weight: 500;
+  color: #606266;
+  font-size: 14px;
+  margin: 0;
+}
+
+.copy-command-btn {
+  font-size: 12px;
+  height: 28px;
+  padding: 4px 8px;
 }
 
 .preview-content {

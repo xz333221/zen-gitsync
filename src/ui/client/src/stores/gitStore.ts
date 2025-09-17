@@ -8,35 +8,23 @@ const GIT_OPERATION_DELAY = 800
 
 // 获取后端服务器端口
 function getBackendPort() {
-  // 优先从环境变量中读取端口
-  const envPort = import.meta.env.VITE_BACKEND_PORT;
-  if (envPort) {
-    console.log(`从环境变量读取后端端口: ${envPort}`);
-    return parseInt(envPort, 10);
-  }
-
-  // 在浏览器环境中，使用当前页面的URL来确定端口
-  try {
-    const currentPort = window.location.port;
-    
-    // 开发环境使用后端默认端口3000
-    if (currentPort === '5173' || currentPort === '4173') {
-      console.log('开发环境，使用后端默认端口: 3000');
-      return 3000;
+  const currentPort = window.location.port || '80';
+  
+  // 开发环境判断：只在开发环境中从环境变量读取后端端口
+  if (currentPort === '5173' || currentPort === '4173' || currentPort === '5544') {
+    const envPort = import.meta.env.VITE_BACKEND_PORT;
+    if (envPort) {
+      console.log(`开发环境：从环境变量读取后端端口 ${envPort}`);
+      return parseInt(envPort, 10);
     }
-    
-    // 生产环境时，前后端通常部署在同一端口
-    if (currentPort) {
-      console.log(`使用当前页面端口作为后端端口: ${currentPort}`);
-      return parseInt(currentPort, 10);
-    }
-  } catch (error) {
-    console.error('获取后端端口失败:', error);
+    console.log('开发环境：使用默认后端端口 3000');
+    return 3000;
   }
   
-  // 默认端口
-  console.log('使用默认后端端口: 3000');
-  return 3000;
+  // 生产环境：直接使用当前页面端口，不读取环境变量
+  const port = parseInt(currentPort, 10);
+  console.log(`生产环境：使用当前页面端口 ${port}`);
+  return port;
 }
 
 // 获取后端端口
@@ -391,9 +379,9 @@ export const useGitStore = defineStore('git', () => {
       }
     } catch (error) {
       ElMessage({
-        message: `清除配置失败: ${(error as Error).message}`,
-        type: 'error'
-      });
+          message: `清除配置失败: ${(error as Error).message}`,
+          type: 'error'
+        });
       return false;
     }
   }
@@ -428,9 +416,9 @@ export const useGitStore = defineStore('git', () => {
       }
     } catch (error) {
       ElMessage({
-        message: `恢复配置失败: ${(error as Error).message}`,
-        type: 'error'
-      });
+          message: `恢复配置失败: ${(error as Error).message}`,
+          type: 'error'
+        });
       return false;
     }
   }
@@ -536,15 +524,14 @@ export const useGitStore = defineStore('git', () => {
 
   // 从 gitLogStore 合并过来的方法
   // Socket.io连接处理
-  function initSocketConnection() {
+  async function initSocketConnection() {
     // 如果已经有socket连接，先断开
     if (socketRef.value) {
       socketRef.value.disconnect()
     }
     
-    // 创建新连接
     try {
-      // 使用动态端口连接Socket.IO服务器
+      // 使用后端端口连接Socket.IO服务器
       const backendUrl = `http://localhost:${backendPort}`
       
       console.log('尝试连接Socket.IO服务器:', backendUrl)
@@ -565,11 +552,11 @@ export const useGitStore = defineStore('git', () => {
         console.error('Socket.IO初始化失败: socket为null')
         return
       }
-      console.log('Socket.IO初始化成功，socket ID:', socketRef.value.id || '未连接')
+      console.log('Socket.IO客户端已创建，开始注册事件监听器...')
 
       // 监听连接事件
       socketRef.value.on('connect', () => {
-        console.log('成功连接到Socket.IO服务器')
+        console.log('✅ Socket.IO连接成功，事件监听器已生效，Socket ID:', socketRef.value?.id)
         
         // 如果自动更新开启，向服务器请求开始监控
         if (autoUpdateEnabled.value && socketRef.value) {
@@ -609,7 +596,12 @@ export const useGitStore = defineStore('git', () => {
       // 监听Git状态更新事件
       socketRef.value.on('git_status_update', (data) => {
         if (!autoUpdateEnabled.value) return
-        
+
+        console.log('✅ 成功监听到 git_status_update 事件:', new Date().toLocaleTimeString())
+        console.log(`git_status_update data ==>`, data)
+        console.log(`currentProjectPath.value ==>`, currentProjectPath.value)
+        console.log(`data.projectPath ==>`, data.projectPath)
+
         // 验证消息来源，确保只处理当前项目的更新
         if (data.projectPath && currentProjectPath.value && 
             data.projectPath !== currentProjectPath.value) {
@@ -617,7 +609,7 @@ export const useGitStore = defineStore('git', () => {
           return
         }
         
-        console.log('收到Git状态更新通知:', new Date().toLocaleTimeString())
+        console.log('正在更新 Git 文件状态...')
         
         // 更新文件列表
         if (data.porcelain !== undefined) {
@@ -660,6 +652,9 @@ export const useGitStore = defineStore('git', () => {
       socketRef.value.on('reconnect_failed', () => {
         console.error('Socket重连失败，已达到最大重试次数')
       })
+      
+      // 事件监听器注册完成
+      console.log('Socket.IO事件监听器注册完成：connect, project_info, project_changed, git_status_update, monitoring_status')
       
       // 手动尝试连接
       if (socketRef.value && !socketRef.value.connected) {
@@ -1416,6 +1411,7 @@ export const useGitStore = defineStore('git', () => {
       autoUpdateEnabled.value = savedAutoUpdate === 'true'
     }
     
+    // 初始化Socket连接
     initSocketConnection()
   })
   

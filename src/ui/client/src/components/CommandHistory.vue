@@ -352,7 +352,6 @@ onUnmounted(() => {
     class="command-history-button"
     title="查看Git命令历史"
   >
-    命令历史
   </el-button>
 
   <!-- 命令历史弹窗 -->
