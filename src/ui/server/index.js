@@ -855,6 +855,41 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   })
 
+  // 检查系统配置文件格式
+  app.get('/api/config/check-file-format', async (req, res) => {
+    try {
+      const configPath = path.join(os.homedir(), '.git-commit-tool.json');
+      
+      try {
+        const data = await fs.readFile(configPath, 'utf-8');
+        try {
+          JSON.parse(data);
+          res.json({ success: true, isValidJson: true, exists: true });
+        } catch (parseError) {
+          res.json({ 
+            success: true, 
+            isValidJson: false, 
+            exists: true, 
+            error: `JSON解析失败: ${parseError.message}` 
+          });
+        }
+      } catch (fileError) {
+        if (fileError.code === 'ENOENT') {
+          res.json({ success: true, isValidJson: true, exists: false });
+        } else {
+          res.json({ 
+            success: true, 
+            isValidJson: false, 
+            exists: true, 
+            error: `文件读取失败: ${fileError.message}` 
+          });
+        }
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  })
+
   // 使用系统默认程序打开配置文件 ~/.git-commit-tool.json
   app.post('/api/config/open-file', async (req, res) => {
     try {

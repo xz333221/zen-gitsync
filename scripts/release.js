@@ -498,6 +498,26 @@ async function publishToNpm() {
     try {
       execSync('npm publish --registry=https://registry.npmjs.org/', { stdio: 'inherit' });
       console.log(chalk.green('已成功发布到NPM'));
+      
+      // 发布成功后执行更新和查看命令
+      console.log(chalk.blue('\n=== 发布后操作 ==='));
+      
+      try {
+        console.log(chalk.gray('执行 npm run update:g...'));
+        execSync('npm run update:g', { stdio: 'inherit' });
+        console.log(chalk.green('✅ update:g 执行完成'));
+      } catch (error) {
+        console.error(chalk.red('❌ update:g 执行失败:'), error.message);
+      }
+      
+      try {
+        console.log(chalk.gray('执行 npm run npm:ls:g...'));
+        execSync('npm run npm:ls:g', { stdio: 'inherit' });
+        console.log(chalk.green('✅ npm:ls:g 执行完成'));
+      } catch (error) {
+        console.error(chalk.red('❌ npm:ls:g 执行失败:'), error.message);
+      }
+      
     } catch (error) {
       console.error(chalk.red('发布到NPM失败:'), error);
       throw error;

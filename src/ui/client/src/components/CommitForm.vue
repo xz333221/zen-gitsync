@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu, CopyDocument } from "@element-plus/icons-vue";
+import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu, CopyDocument, Warning } from "@element-plus/icons-vue";
 import { useGitStore } from "../stores/gitStore";
 import { useConfigStore } from "../stores/configStore";
 import FileDiffViewer from "./FileDiffViewer.vue";
@@ -27,6 +27,10 @@ const commitFooter = ref("");
 const configEditorVisible = ref(false);
 const configEditorText = ref("");
 const configEditorSaving = ref(false);
+
+// 配置文件格式警告弹窗
+const configWarningVisible = ref(false);
+const configWarningMessage = ref('');
 
 // 提交模板相关变量
 const descriptionTemplates = ref<string[]>([]);
@@ -103,11 +107,32 @@ function openStashDialog() {
 }
 
 // 打开配置编辑器
-function openConfigEditor() {
+async function openConfigEditor() {
   try {
+    // 检查系统配置文件格式
+    const formatCheckResp = await fetch('/api/config/check-file-format');
+    const formatResult = await formatCheckResp.json();
+    
+    let warningMessage = '';
+    if (formatResult.success) {
+      if (!formatResult.exists) {
+        warningMessage = '系统配置文件不存在，将使用默认配置。';
+      } else if (!formatResult.isValidJson) {
+        warningMessage = `系统配置文件格式有误：${formatResult.error}\n编辑后保存可能会覆盖原文件内容。`;
+      }
+    }
+    
     const cfg = configStore.config;
     // 使用当前配置填充编辑器
     configEditorText.value = JSON.stringify(cfg, null, 2);
+    
+    // 如果有警告信息，先显示提示
+    if (warningMessage) {
+      configWarningMessage.value = warningMessage;
+      configWarningVisible.value = true;
+      return; // 停止执行，等待用户选择
+    }
+    
     configEditorVisible.value = true;
   } catch (e) {
     ElMessage.error('加载配置失败');
@@ -179,6 +204,20 @@ async function openSystemConfigFile() {
   } catch (err: any) {
     ElMessage.error(`打开配置文件失败: ${err?.message || err}`);
   }
+}
+
+// 处理配置文件警告弹窗的操作
+function handleConfigWarningAction(action: 'continue' | 'open' | 'cancel') {
+  configWarningVisible.value = false;
+  
+  if (action === 'continue') {
+    // 继续编辑 - 打开JSON编辑器
+    configEditorVisible.value = true;
+  } else if (action === 'open') {
+    // 打开系统配置文件
+    openSystemConfigFile();
+  }
+  // action === 'cancel' 时什么也不做，只关闭弹窗
 }
 
 function openStashListDialog() {
@@ -2001,6 +2040,30 @@ git config --global user.email "your.email@example.com"</pre>
         </template>
       </el-dialog>
 
+      <!-- 配置文件格式警告弹窗 -->
+      <el-dialog
+        v-model="configWarningVisible"
+        title="配置文件格式提示"
+        width="500px"
+        :close-on-click-modal="false"
+        :close-on-press-escape="false"
+        :show-close="false"
+      >
+        <div class="config-warning-content">
+          <el-icon class="warning-icon" color="#f56c6c" size="24">
+            <Warning />
+          </el-icon>
+          <p class="warning-message">{{ configWarningMessage }}</p>
+        </div>
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="handleConfigWarningAction('cancel')">取消</el-button>
+            <el-button type="info" @click="handleConfigWarningAction('open')">打开系统配置文件</el-button>
+            <el-button type="primary" @click="handleConfigWarningAction('continue')">继续编辑</el-button>
+          </span>
+        </template>
+      </el-dialog>
+
       <!-- 简短描述设置弹窗 -->
       <el-dialog 
         title="简短描述模板设置" 
@@ -3741,6 +3804,35 @@ git config --global user.email "your.email@example.com"</pre>
 .stash-action-buttons {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
+}
+
+/* 配置文件格式警告弹窗样式 */
+.config-warning-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.warning-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.warning-message {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #606266;
+  white-space: pre-line;
+}
+
+/* 警告弹窗按钮区域 */
+.config-warning-content + .el-dialog__footer .dialog-footer {
+  display: flex;
+  justify-content: flex-end;
   gap: 8px;
 }
 </style>
