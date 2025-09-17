@@ -31,7 +31,7 @@
     "nrm:ls": "nrm ls",
     "change:nrm:npm": "nrm use npm",
     "change:nrm:lenovo-nexus": "nrm use lenovo-nexus",
-    "update:g": "npm install -g zen-gitsync",
+    "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
     "npm:ls:g": "npm ls -g",
     "release": "node ./scripts/release.js",
     "release:win": ".\\scripts\\release.bat"

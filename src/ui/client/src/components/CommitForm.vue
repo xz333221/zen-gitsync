@@ -1560,6 +1560,7 @@ git config --global user.email "your.email@example.com"</pre>
                       <el-tooltip
                         :content="canPush ? '推送已提交的更改到远程仓库' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : (!needsPush ? '没有需要推送的提交' : '有未提交的暂存更改，请先提交'))"
                         placement="top"
+                        :show-after="200"
                       >
                         <el-button
                           type="primary"
@@ -1580,6 +1581,7 @@ git config --global user.email "your.email@example.com"</pre>
                     <el-tooltip
                       :content="(!hasAnyChanges ? '没有需要提交的更改' : (!hasUserCommitMessage ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
                       placement="top"
+                      :show-after="200"
                     >
                       <el-button
                         type="success"
@@ -1687,6 +1689,7 @@ git config --global user.email "your.email@example.com"</pre>
                       <el-tooltip
                         :content="canPush ? '推送已提交的更改到远程仓库' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : (!needsPush ? '没有需要推送的提交' : '有未提交的暂存更改，请先提交'))"
                         placement="top"
+                        :show-after="200"
                       >
                         <el-button
                           type="primary"
@@ -1707,6 +1710,7 @@ git config --global user.email "your.email@example.com"</pre>
                     <el-tooltip
                       :content="(!hasAnyChanges ? '没有需要提交的更改' : (!hasUserCommitMessage ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
                       placement="top"
+                      :show-after="200"
                     >
                       <el-button
                         type="success"
@@ -1752,7 +1756,7 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="action-group">
                 <div class="group-title">基础操作</div>
                 <div class="group-buttons">
-                  <el-tooltip :content="hasUnstagedChanges ? `暂存${unstagedFilesCount}个待更改文件` : 'git add .'" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip :content="hasUnstagedChanges ? `暂存${unstagedFilesCount}个待更改文件` : 'git add .'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
                       type="primary" 
                       @click="addToStage" 
@@ -1765,7 +1769,7 @@ git config --global user.email "your.email@example.com"</pre>
                     </el-button>
                   </el-tooltip>
 
-                  <el-tooltip :content="hasStagedChanges ? `提交${stagedFilesCount}个已暂存文件` : 'git commit'" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip :content="hasStagedChanges ? `提交${stagedFilesCount}个已暂存文件` : 'git commit'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
                       type="primary" 
                       @click="commitChanges" 
@@ -1778,7 +1782,7 @@ git config --global user.email "your.email@example.com"</pre>
                     </el-button>
                   </el-tooltip>
 
-                  <el-tooltip :content="needsPush ? `推送${gitStore.branchAhead}个本地提交` : 'git push'" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip :content="needsPush ? `推送${gitStore.branchAhead}个本地提交` : 'git push'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
                       type="primary"
                       :icon="Upload"
@@ -1793,7 +1797,7 @@ git config --global user.email "your.email@example.com"</pre>
                     </el-button>
                   </el-tooltip>
                   
-                  <el-tooltip :content="needsPull ? `拉取${gitStore.branchBehind}个远程提交` : 'git pull'" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip :content="needsPull ? `拉取${gitStore.branchBehind}个远程提交` : 'git pull'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
                       type="primary"
                       :icon="Download"
@@ -1808,7 +1812,7 @@ git config --global user.email "your.email@example.com"</pre>
                     </el-button>
                   </el-tooltip>
                   
-                  <el-tooltip content="git fetch --all" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip content="git fetch --all" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
                       type="info"
                       :icon="Connection"
@@ -1829,7 +1833,7 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="action-group">
                 <div class="group-title">组合操作</div>
                 <div class="group-buttons">
-                  <el-tooltip content="git add + git commit" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip content="git add + git commit" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
                       type="primary"
                       :icon="Edit"
@@ -1842,7 +1846,7 @@ git config --global user.email "your.email@example.com"</pre>
                     </el-button>
                   </el-tooltip>
 
-                  <el-tooltip content="git add + git commit + git push" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip content="git add + git commit + git push" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
                       type="success"
                       :icon="Position"
@@ -1862,7 +1866,7 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="action-group reset-group">
               <div class="group-title">重置操作</div>
               <div class="group-buttons">
-                <el-tooltip :content="canReset ? `撤销${stagedFilesCount}个已暂存文件` : 'git reset HEAD'" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                <el-tooltip :content="canReset ? `撤销${stagedFilesCount}个已暂存文件` : 'git reset HEAD'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                   <el-button 
                     type="warning"
                     :icon="RefreshRight"
@@ -1876,7 +1880,7 @@ git config --global user.email "your.email@example.com"</pre>
                   </el-button>
                 </el-tooltip>
 
-                <el-tooltip content="git reset --hard origin/branch" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                <el-tooltip content="git reset --hard origin/branch" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                   <el-button 
                     type="danger"
                     :icon="Delete"
@@ -1896,7 +1900,7 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="group-title">分支操作</div>
               <div class="group-buttons">
                 <!-- 合并分支按钮 -->
-                <el-tooltip content="合并其他分支到当前分支" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                <el-tooltip content="合并其他分支到当前分支" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                   <el-button 
                     type="primary"
                     :icon="Share"
@@ -1914,7 +1918,7 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="action-group">
                 <div class="group-title">储藏操作</div>
                 <div class="group-buttons">
-                  <el-tooltip content="将工作区更改储藏起来" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip content="将工作区更改储藏起来" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
                       type="warning" 
                       @click="openStashDialog" 
@@ -1926,7 +1930,7 @@ git config --global user.email "your.email@example.com"</pre>
                     </el-button>
                   </el-tooltip>
 
-                  <el-tooltip content="查看和管理所有储藏记录" placement="top" effect="light" popper-class="git-cmd-tooltip">
+                  <el-tooltip content="查看和管理所有储藏记录" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
                       type="info"
                       @click="openStashListDialog"

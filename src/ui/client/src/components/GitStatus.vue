@@ -564,6 +564,7 @@ defineExpose({
           :content="gitStore.autoUpdateEnabled ? '禁用自动更新文件状态' : '启用自动更新文件状态'" 
           placement="top" 
           :hide-after="1000"
+          :show-after="200"
         >
           <el-switch 
             v-model="gitStore.autoUpdateEnabled" 
@@ -576,7 +577,7 @@ defineExpose({
         </el-tooltip>
         
         <!-- 添加Git Pull按钮 -->
-        <el-tooltip content="Git Pull (拉取远程更新)" placement="top" :hide-after="1000">
+        <el-tooltip content="Git Pull (拉取远程更新)" placement="top" :hide-after="1000" :show-after="200">
           <el-button 
             type="primary" 
             :icon="Download" 
@@ -589,7 +590,7 @@ defineExpose({
         </el-tooltip>
         
         <!-- 添加Git Fetch All按钮 -->
-        <el-tooltip content="Git Fetch All (获取所有远程分支)" placement="top" :hide-after="1000">
+        <el-tooltip content="Git Fetch All (获取所有远程分支)" placement="top" :hide-after="1000" :show-after="200">
           <el-button 
             v-show="false"
             type="primary" 
@@ -607,6 +608,7 @@ defineExpose({
           content="管理锁定文件"
           placement="top"
           :hide-after="1000"
+          :show-after="200"
         >
           <el-button
             type="warning"
@@ -618,7 +620,7 @@ defineExpose({
           </el-button>
         </el-tooltip>
 
-        <el-tooltip content="刷新状态" placement="top" :hide-after="1000">
+        <el-tooltip content="刷新状态" placement="top" :hide-after="1000" :show-after="200">
           <el-button
             type="primary"
             :icon="Refresh"
@@ -647,7 +649,7 @@ defineExpose({
           <!-- 分支同步状态信息 -->
           <div class="branch-sync-status">
             <div class="sync-status-content">
-              <el-tooltip content="本地分支与远程分支的状态对比" placement="top">
+              <el-tooltip content="本地分支与远程分支的状态对比" placement="top" :show-after="200">
                 <div class="status-badges">
                   <el-tag v-if="gitStore.branchAhead > 0" size="small" type="warning" class="status-badge">
                     <template #default>
@@ -694,6 +696,7 @@ defineExpose({
                       placement="top"
                       :disabled="getFileName(file.path).length <= 25"
                       :hide-after="1000"
+                      :show-after="200"
                     >
                       <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
                         {{ getFileName(file.path) }}
@@ -709,13 +712,14 @@ defineExpose({
                       placement="top"
                       :disabled="getFileDirectory(file.path).length <= 30"
                       :hide-after="1000"
+                      :show-after="200"
                     >
                       <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
                     </el-tooltip>
                   </div>
                 </div>
                 <div class="file-actions">
-                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000">
+                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000" :show-after="200">
                     <el-button
                       :type="isFileLocked(file.path) ? 'danger' : 'info'"
                       size="small"
@@ -728,7 +732,7 @@ defineExpose({
                       </el-icon>
                     </el-button>
                   </el-tooltip>
-                  <el-tooltip content="取消暂存" placement="top" :hide-after="1000">
+                  <el-tooltip content="取消暂存" placement="top" :hide-after="1000" :show-after="200">
                     <el-button
                       type="warning"
                       size="small"
@@ -764,6 +768,7 @@ defineExpose({
                       placement="top"
                       :disabled="getFileName(file.path).length <= 25"
                       :hide-after="1000"
+                      :show-after="200"
                     >
                       <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
                         {{ getFileName(file.path) }}
@@ -779,13 +784,14 @@ defineExpose({
                       placement="top"
                       :disabled="getFileDirectory(file.path).length <= 30"
                       :hide-after="1000"
+                      :show-after="200"
                     >
                       <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
                     </el-tooltip>
                   </div>
                 </div>
                 <div class="file-actions">
-                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000">
+                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000" :show-after="200">
                     <el-button
                       :type="isFileLocked(file.path) ? 'danger' : 'info'"
                       size="small"
@@ -798,7 +804,7 @@ defineExpose({
                       </el-icon>
                     </el-button>
                   </el-tooltip>
-                  <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
+                  <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000" :show-after="200">
                     <el-button
                       type="success"
                       size="small"
@@ -807,7 +813,7 @@ defineExpose({
                       class="file-action-btn"
                     >+</el-button>
                   </el-tooltip>
-                  <el-tooltip content="撤回修改" placement="top" :hide-after="1000">
+                  <el-tooltip content="撤回修改" placement="top" :hide-after="1000" :show-after="200">
                     <el-button
                       type="danger"
                       size="small"
@@ -844,6 +850,7 @@ defineExpose({
                       placement="top"
                       :disabled="getFileName(file.path).length <= 25"
                       :hide-after="1000"
+                      :show-after="200"
                     >
                       <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
                         {{ getFileName(file.path) }}
@@ -859,13 +866,14 @@ defineExpose({
                       placement="top"
                       :disabled="getFileDirectory(file.path).length <= 30"
                       :hide-after="1000"
+                      :show-after="200"
                     >
                       <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
                     </el-tooltip>
                   </div>
                 </div>
                 <div class="file-actions">
-                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000">
+                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000" :show-after="200">
                     <el-button
                       :type="isFileLocked(file.path) ? 'danger' : 'info'"
                       size="small"
@@ -878,7 +886,7 @@ defineExpose({
                       </el-icon>
                     </el-button>
                   </el-tooltip>
-                  <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000">
+                  <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000" :show-after="200">
                     <el-button
                       type="success"
                       size="small"
@@ -887,7 +895,7 @@ defineExpose({
                       class="file-action-btn"
                     >+</el-button>
                   </el-tooltip>
-                  <el-tooltip content="删除文件" placement="top" :hide-after="1000">
+                  <el-tooltip content="删除文件" placement="top" :hide-after="1000" :show-after="200">
                     <el-button
                       type="danger"
                       size="small"

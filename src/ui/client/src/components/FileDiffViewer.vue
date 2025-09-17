@@ -111,6 +111,7 @@ watch(() => props.files, (newFiles) => {
               placement="top"
               :disabled="file.displayName.length <= 35"
               :hide-after="1000"
+              :show-after="200"
             >
               <span class="file-name">{{ file.displayName }}</span>
             </el-tooltip>

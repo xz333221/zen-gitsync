@@ -16,6 +16,9 @@ pnpm-debug.log*
 # Editor directories and files
 .idea
 .vscode
+.qoder
+.windsurf
+
 *.suo
 *.ntvs*
 *.njsproj
