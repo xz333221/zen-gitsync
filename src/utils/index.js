@@ -697,9 +697,12 @@ async function execGitAddWithLockFilter() {
         const normalizedGitFile = gitRelativeFile.replace(/\\/g, '/');
         const normalizedLockedFile = normalizedLocked.replace(/\\/g, '/');
         
-        // 精确匹配或目录匹配
-        return normalizedGitFile === normalizedLockedFile ||
-               normalizedGitFile.startsWith(normalizedLockedFile + '/');
+        // 精确匹配或目录匹配（双向检查）
+        const isExactMatch = normalizedGitFile === normalizedLockedFile;
+        const isFileInLockedDir = normalizedGitFile.startsWith(normalizedLockedFile + '/');
+        const isLockedFileInDir = normalizedLockedFile.startsWith(normalizedGitFile + '/');
+        
+        return isExactMatch || isFileInLockedDir || isLockedFileInDir;
       });
 
       if (isLocked) {
