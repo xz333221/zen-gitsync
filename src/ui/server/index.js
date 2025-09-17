@@ -59,6 +59,13 @@ async function startUIServer(noOpen = false, savePort = false) {
   const httpServer = createServer(app);
   const io = new Server(httpServer);
   
+  // 获取当前项目的唯一标识（使用工作目录路径）
+  const currentProjectPath = process.cwd();
+  const projectRoomId = `project:${currentProjectPath.replace(/[\\/:\s]/g, '_')}`;
+  
+  console.log(chalk.blue(`项目房间ID: ${projectRoomId}`));
+  console.log(chalk.blue(`项目路径: ${currentProjectPath}`));
+  
   // 注册Socket.io实例，用于命令历史通知
   registerSocketIO(io);
   
@@ -520,9 +527,23 @@ async function startUIServer(noOpen = false, savePort = false) {
               process.chdir(path);
               const newDirectory = process.cwd();
               
+              // 更新当前项目路径和房间ID
+              const oldProjectPath = currentProjectPath;
+              const newProjectPath = newDirectory;
+              const newProjectRoomId = `project:${newProjectPath.replace(/[\\/:*?"<>|\s]/g, '_')}`;
+              
+              console.log(chalk.yellow(`项目路径切换: ${oldProjectPath} -> ${newProjectPath}`));
+              console.log(chalk.yellow(`房间ID更新: ${projectRoomId} -> ${newProjectRoomId}`));
+              
               // 检查新目录是否是Git仓库
               try {
                   await execGitCommand('git rev-parse --is-inside-work-tree');
+                  
+                  // 更新全局变量
+                  currentProjectPath = newProjectPath;
+                  projectRoomId = newProjectRoomId;
+                  isGitRepo = true;
+                  
                   // 确保切换后立即初始化该项目的配置条目
                   try {
                     const currentCfg = await configManager.loadConfig();
@@ -533,20 +554,47 @@ async function startUIServer(noOpen = false, savePort = false) {
                     console.warn('初始化项目配置失败:', e?.message || e);
                   }
                   
-                  // 初始化文件监控
+                  // 关闭旧的文件监控
+                  if (watcher) {
+                    watcher.close().catch(err => console.error('关闭旧监控器失败:', err));
+                    watcher = null;
+                  }
+                  
+                  // 通知所有旧房间的客户端项目已切换
+                  io.to(projectRoomId).emit('project_changed', {
+                    oldProjectPath: currentProjectPath,
+                    newProjectPath: newProjectPath,
+                    newProjectRoomId: newProjectRoomId
+                  });
+                  
+                  // 重新初始化文件监控（新路径）
                   initFileSystemWatcher();
                   
                   res.json({ 
                       success: true, 
                       directory: newDirectory,
-                      isGitRepo: true 
+                      isGitRepo: true,
+                      projectRoomId: newProjectRoomId
                   });
               } catch (error) {
                   // 不是Git仓库，停止监控
+                  
+                  // 更新全局变量
+                  currentProjectPath = newProjectPath;
+                  projectRoomId = newProjectRoomId;
+                  isGitRepo = false;
+                  
                   if (watcher) {
                     watcher.close().catch(err => console.error('关闭监控器失败:', err));
                     watcher = null;
                   }
+                  
+                  // 通知所有旧房间的客户端项目已切换
+                  io.to(projectRoomId).emit('project_changed', {
+                    oldProjectPath: currentProjectPath,
+                    newProjectPath: newProjectPath,
+                    newProjectRoomId: newProjectRoomId
+                  });
                   
                   // 即使不是Git仓库也初始化当前目录配置（使用CWD作为项目键）
                   try {
@@ -562,7 +610,8 @@ async function startUIServer(noOpen = false, savePort = false) {
                       success: true, 
                       directory: newDirectory,
                       isGitRepo: false,
-                      warning: '新目录不是一个Git仓库'
+                      warning: '新目录不是一个Git仓库',
+                      projectRoomId: newProjectRoomId
                   });
               }
           } catch (error) {
@@ -2056,6 +2105,10 @@ async function startUIServer(noOpen = false, savePort = false) {
   io.on('connection', (socket) => {
     console.log('客户端已连接:', socket.id);
     
+    // 客户端连接时加入当前项目的房间
+    socket.join(projectRoomId);
+    console.log(`客户端 ${socket.id} 已加入房间: ${projectRoomId}`);
+    
     // 当客户端连接时，立即发送一次Git状态
     getAndBroadcastStatus();
     
@@ -2063,12 +2116,24 @@ async function startUIServer(noOpen = false, savePort = false) {
     const history = getCommandHistory();
     socket.emit('initial_command_history', { history });
     
+    // 发送项目信息给客户端
+    socket.emit('project_info', {
+      projectPath: currentProjectPath,
+      projectRoomId: projectRoomId
+    });
+    
     // 客户端可以请求开始/停止监控
     socket.on('start_monitoring', () => {
       if (!watcher) {
         initFileSystemWatcher();
         socket.emit('monitoring_status', { active: true });
       }
+    });
+    
+    // 处理客户端加入新房间的请求
+    socket.on('join_room', (roomId) => {
+      socket.join(roomId);
+      console.log(`客户端 ${socket.id} 已加入房间: ${roomId}`);
     });
     
     socket.on('stop_monitoring', () => {
@@ -2093,7 +2158,8 @@ async function startUIServer(noOpen = false, savePort = false) {
     
     // 客户端断开连接
     socket.on('disconnect', () => {
-      console.log('客户端已断开连接:', socket.id);
+      console.log(`客户端已断开连接: ${socket.id} (房间: ${projectRoomId})`);
+      // Socket.IO 会自动从房间中移除断开的连接
     });
   });
   
@@ -2155,10 +2221,11 @@ async function startUIServer(noOpen = false, savePort = false) {
     try {
       // 如果不是Git仓库，发送特殊状态
       if (!isGitRepo) {
-        io.emit('git_status_update', {
+        io.to(projectRoomId).emit('git_status_update', {
           isGitRepo: false,
           porcelain: '',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          projectPath: currentProjectPath
         });
         return;
       }
@@ -2166,14 +2233,15 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 只获取porcelain格式状态，不再获取完整的git status
       const { stdout: porcelainOutput } = await execGitCommand('git status --porcelain --untracked-files=all');
 
-      // 广播到所有连接的客户端
-      io.emit('git_status_update', {
+      // 广播到当前项目房间的所有客户端
+      io.to(projectRoomId).emit('git_status_update', {
         isGitRepo: true,
         porcelain: porcelainOutput,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        projectPath: currentProjectPath
       });
 
-      console.log('已广播Git状态更新');
+      console.log(`已广播Git状态更新到房间: ${projectRoomId}`);
     } catch (error) {
       console.error('获取或广播Git状态失败:', error);
     }

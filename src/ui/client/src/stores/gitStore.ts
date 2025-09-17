@@ -80,6 +80,10 @@ export const useGitStore = defineStore('git', () => {
   // Socket.io 实例
   const socketRef = ref<Socket | null>(null);
   
+  // 当前项目信息
+  const currentProjectPath = ref('')
+  const currentProjectRoomId = ref('')
+  
   // 状态
   const log = ref<any[]>([])
   const status = ref<{ staged: string[], unstaged: string[], untracked: string[] }>({
@@ -573,6 +577,30 @@ export const useGitStore = defineStore('git', () => {
         }
       })
       
+      // 监听项目信息
+      socketRef.value.on('project_info', (data) => {
+        currentProjectPath.value = data.projectPath
+        currentProjectRoomId.value = data.projectRoomId
+        console.log(`当前项目: ${data.projectPath}`)
+        console.log(`房间ID: ${data.projectRoomId}`)
+      })
+      
+      // 监听项目切换事件
+      socketRef.value.on('project_changed', (data) => {
+        console.log(`项目已切换: ${data.oldProjectPath} -> ${data.newProjectPath}`)
+        
+        // 更新当前项目信息
+        currentProjectPath.value = data.newProjectPath
+        currentProjectRoomId.value = data.newProjectRoomId
+        
+        // 重新加入新的项目房间
+        if (socketRef.value) {
+          socketRef.value.emit('join_room', data.newProjectRoomId)
+        }
+        
+        console.log(`已加入新项目房间: ${data.newProjectRoomId}`)
+      })
+      
       // 监听断开连接事件
       socketRef.value.on('disconnect', (reason) => {
         console.log('与Socket.IO服务器断开连接:', reason)
@@ -582,9 +610,14 @@ export const useGitStore = defineStore('git', () => {
       socketRef.value.on('git_status_update', (data) => {
         if (!autoUpdateEnabled.value) return
         
-        console.log('收到Git状态更新通知:', new Date().toLocaleTimeString())
+        // 验证消息来源，确保只处理当前项目的更新
+        if (data.projectPath && currentProjectPath.value && 
+            data.projectPath !== currentProjectPath.value) {
+          console.log(`忽略不同项目的状态更新: ${data.projectPath}`)
+          return
+        }
         
-        // 不再需要更新statusText，只处理porcelain格式
+        console.log('收到Git状态更新通知:', new Date().toLocaleTimeString())
         
         // 更新文件列表
         if (data.porcelain !== undefined) {

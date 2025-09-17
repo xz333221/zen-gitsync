@@ -638,6 +638,16 @@ async function execGitAddWithLockFilter() {
       return;
     }
 
+    // 获取Git工作目录根路径，确保路径匹配的准确性
+    let gitRoot;
+    try {
+      const gitRootResult = await execGitCommand('git rev-parse --show-toplevel', {log: false});
+      gitRoot = path.normalize(gitRootResult.stdout.trim());
+    } catch (error) {
+      console.warn(chalk.yellow('⚠️ 无法获取Git根目录，使用当前工作目录'));
+      gitRoot = path.normalize(process.cwd());
+    }
+
     // 获取所有修改的文件
     const statusResult = await execGitCommand('git status --porcelain', {log: false});
     const modifiedFiles = statusResult.stdout
@@ -661,13 +671,35 @@ async function execGitAddWithLockFilter() {
       })
       .filter(Boolean);
 
-    // 过滤掉锁定的文件
+    // 过滤掉锁定的文件，使用更严格的路径匹配逻辑
     const filesToAdd = modifiedFiles.filter(file => {
-      const normalizedFile = path.normalize(file);
+      // Git status 返回的是相对于Git根目录的路径
+      const gitRelativeFile = path.normalize(file);
+      
       const isLocked = lockedFiles.some(lockedFile => {
-        const normalizedLocked = path.normalize(lockedFile);
-        return normalizedFile === normalizedLocked ||
-               normalizedFile.startsWith(normalizedLocked + path.sep);
+        // 处理锁定文件路径：可能是相对路径或绝对路径
+        let normalizedLocked;
+        if (path.isAbsolute(lockedFile)) {
+          // 绝对路径：转换为相对于Git根目录的路径
+          const absoluteLocked = path.normalize(lockedFile);
+          if (absoluteLocked.startsWith(gitRoot)) {
+            normalizedLocked = path.relative(gitRoot, absoluteLocked);
+          } else {
+            // 锁定文件不在当前Git仓库中，跳过
+            return false;
+          }
+        } else {
+          // 相对路径：直接使用
+          normalizedLocked = path.normalize(lockedFile);
+        }
+        
+        // 统一路径分隔符（Windows兼容性）
+        const normalizedGitFile = gitRelativeFile.replace(/\\/g, '/');
+        const normalizedLockedFile = normalizedLocked.replace(/\\/g, '/');
+        
+        // 精确匹配或目录匹配
+        return normalizedGitFile === normalizedLockedFile ||
+               normalizedGitFile.startsWith(normalizedLockedFile + '/');
       });
 
       if (isLocked) {
@@ -690,7 +722,8 @@ async function execGitAddWithLockFilter() {
       });
     }
 
-    console.log(chalk.green(`✅ 已添加 ${filesToAdd.length} 个文件到暂存区 (跳过 ${lockedFiles.length} 个锁定文件)`));
+    const skippedCount = modifiedFiles.length - filesToAdd.length;
+    console.log(chalk.green(`✅ 已添加 ${filesToAdd.length} 个文件到暂存区${skippedCount > 0 ? ` (跳过 ${skippedCount} 个锁定文件)` : ''}`));
 
   } catch (error) {
     console.error(chalk.red('执行 git add 时出错:'), error.message);
