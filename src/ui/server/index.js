@@ -1891,27 +1891,52 @@ async function startUIServer(noOpen = false, savePort = false) {
           .split('\n')
           .filter(line => line.trim())
           .map(line => {
-            const match = line.match(/^..\s+(.+)$/);
+            const match = line.match(/^(..)\s+(.+)$/);
             if (match) {
-              let filename = match[1];
+              const status = match[1];
+              let filename = match[2];
               if (filename.startsWith('"') && filename.endsWith('"')) {
                 filename = filename.slice(1, -1).replace(/\\(.)/g, '$1');
               }
-              return filename;
+              return { status, filename };
             }
             return null;
           })
           .filter(Boolean);
 
         const path = (await import('path')).default;
-        const filesToStash = changedFiles.filter(file => {
-          const normalizedFile = path.normalize(file);
+        const fs = (await import('fs')).default;
+        
+        // 过滤出未锁定且存在的文件
+        const filesToStash = [];
+        for (const item of changedFiles) {
+          const { status, filename } = item;
+          const normalizedFile = path.normalize(filename);
+          
+          // 检查是否被锁定
           const isLocked = lockedFiles.some(locked => {
             const normalizedLocked = path.normalize(locked);
             return normalizedFile === normalizedLocked || normalizedFile.startsWith(normalizedLocked + path.sep);
           });
-          return !isLocked;
-        });
+          
+          if (!isLocked) {
+            // 检查文件是否存在（排除已删除的文件和目录）
+            try {
+              const fullPath = path.resolve(filename);
+              const stats = fs.statSync(fullPath);
+              // 只包含文件，不包含目录
+              if (stats.isFile()) {
+                filesToStash.push(filename);
+              }
+            } catch (error) {
+              // 对于已删除的文件（D状态），我们仍然需要包含它们
+              if (status.includes('D')) {
+                filesToStash.push(filename);
+              }
+              // 其他情况（如文件不存在）则跳过
+            }
+          }
+        }
 
         if (filesToStash.length === 0) {
           return res.json({ success: false, message: '所有更改都是锁定文件，无需储藏' });
