@@ -704,6 +704,50 @@ async function execGitAddWithLockFilter() {
         
         return isExactMatch || isFileInLockedDir || isLockedFileInDir;
       });
+      
+      // 额外检查：如果是目录路径，检查该目录下是否有任何未锁定的文件
+      if (!isLocked && file.endsWith('/')) {
+        // 这是一个目录路径，检查是否该目录下所有文件都被锁定
+        const dirPath = file.slice(0, -1); // 移除末尾的 '/'
+        const hasUnlockedFilesInDir = modifiedFiles.some(otherFile => {
+          if (otherFile === file) return false; // 跳过目录本身
+          
+          const normalizedOtherFile = path.normalize(otherFile).replace(/\\/g, '/');
+          const normalizedDirPath = dirPath.replace(/\\/g, '/');
+          
+          // 检查文件是否在这个目录下
+          if (normalizedOtherFile.startsWith(normalizedDirPath + '/')) {
+            // 检查这个文件是否被锁定
+            const isOtherFileLocked = lockedFiles.some(lockedFile => {
+              let normalizedLocked;
+              if (path.isAbsolute(lockedFile)) {
+                const absoluteLocked = path.normalize(lockedFile);
+                if (absoluteLocked.startsWith(gitRoot)) {
+                  normalizedLocked = path.relative(gitRoot, absoluteLocked);
+                } else {
+                  return false;
+                }
+              } else {
+                normalizedLocked = path.normalize(lockedFile);
+              }
+              
+              const normalizedLockedFile = normalizedLocked.replace(/\\/g, '/');
+              return normalizedOtherFile === normalizedLockedFile ||
+                     normalizedOtherFile.startsWith(normalizedLockedFile + '/') ||
+                     normalizedLockedFile.startsWith(normalizedOtherFile + '/');
+            });
+            
+            return !isOtherFileLocked; // 如果文件未锁定，返回 true
+          }
+          return false;
+        });
+        
+        // 如果目录下没有未锁定的文件，则跳过这个目录
+        if (!hasUnlockedFilesInDir) {
+          console.log(chalk.yellow(`🔒 跳过目录（所有文件都被锁定）: ${file}`));
+          return false;
+        }
+      }
 
       if (isLocked) {
         console.log(chalk.yellow(`🔒 跳过锁定文件: ${file}`));
