@@ -1547,7 +1547,6 @@ git config --global user.email "your.email@example.com"</pre>
                     title="复制命令"
                     class="copy-command-btn"
                   >
-                    复制
                   </el-button>
                 </div>
                 <pre class="preview-content code-command">git commit -m "{{ finalCommitMessage || '<提交信息>' }}"{{ skipHooks ? ' --no-verify' : '' }}</pre>
@@ -1688,7 +1687,6 @@ git config --global user.email "your.email@example.com"</pre>
                     title="复制命令"
                     class="copy-command-btn"
                   >
-                    复制
                   </el-button>
                 </div>
                 <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>

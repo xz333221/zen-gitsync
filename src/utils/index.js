@@ -648,8 +648,8 @@ async function execGitAddWithLockFilter() {
       gitRoot = path.normalize(process.cwd());
     }
 
-    // 获取所有修改的文件
-    const statusResult = await execGitCommand('git status --porcelain', {log: false});
+    // 获取所有修改的文件（包括未跟踪文件）
+    const statusResult = await execGitCommand('git status --porcelain --untracked-files=all', {log: false});
     const modifiedFiles = statusResult.stdout
       .split('\n')
       .filter(line => line.trim())
@@ -819,8 +819,8 @@ async function execAddAndCommit({statusOutput, commitMessage, exit}) {
     await execGitAddWithLockFilter();
   }
 
-  // 提交前二次校验
-  const checkStatus = await execGitCommand('git status --porcelain', {log: false});
+  // 提交前二次校验（包括未跟踪文件）
+  const checkStatus = await execGitCommand('git status --porcelain --untracked-files=all', {log: false});
   if (!checkStatus.stdout.trim()) {
     console.log(chalk.yellow('⚠️ 没有检测到可提交的变更'));
     // exec_exit(exit)
