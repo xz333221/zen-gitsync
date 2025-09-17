@@ -36,10 +36,10 @@ import {
 } from "@element-plus/icons-vue";
 import "element-plus/dist/index.css";
 import { createGitgraph } from "@gitgraph/js";
-import { useGitStore } from "../stores/gitStore";
-import { formatCommitMessage, extractPureMessage } from "../utils/index.ts";
-import FileDiffViewer from "./FileDiffViewer.vue";
-import CommonDialog from "./CommonDialog.vue";
+import { useGitStore } from "@stores/gitStore";
+import { formatCommitMessage, extractPureMessage } from "@utils/index.ts";
+import FileDiffViewer from "@components/FileDiffViewer.vue";
+import CommonDialog from "@components/CommonDialog.vue";
 
 // const COLORS = [
 //   "#2196f3", // 蓝色

@@ -2,10 +2,10 @@
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu, CopyDocument, Warning } from "@element-plus/icons-vue";
-import { useGitStore } from "../stores/gitStore";
-import { useConfigStore } from "../stores/configStore";
-import FileDiffViewer from "./FileDiffViewer.vue";
-import CommonDialog from "./CommonDialog.vue";
+import { useGitStore } from "@stores/gitStore";
+import { useConfigStore } from "@stores/configStore";
+import FileDiffViewer from "@components/FileDiffViewer.vue";
+import CommonDialog from "@components/CommonDialog.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();

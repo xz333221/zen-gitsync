@@ -8,8 +8,8 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    CommandHistory: typeof import('./src/components/CommandHistory.vue')['default']
-    CommitForm: typeof import('./src/components/CommitForm.vue')['default']
+    CommandHistory: typeof import('@views/components/CommandHistory.vue')['default']
+    CommitForm: typeof import('@views/components/CommitForm.vue')['default']
     CommonDialog: typeof import('./src/components/CommonDialog.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAutocomplete: typeof import('element-plus/es')['ElAutocomplete']
@@ -35,8 +35,8 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     FileDiffViewer: typeof import('./src/components/FileDiffViewer.vue')['default']
-    GitStatus: typeof import('./src/components/GitStatus.vue')['default']
-    LogList: typeof import('./src/components/LogList.vue')['default']
+    GitStatus: typeof import('@views/components/GitStatus.vue')['default']
+    LogList: typeof import('@views/components/LogList.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

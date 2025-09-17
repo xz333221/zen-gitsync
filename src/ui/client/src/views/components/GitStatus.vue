@@ -4,10 +4,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
 import { Refresh, Document, ArrowUp, ArrowDown, RefreshRight, Check, Close, Download, Connection, Lock, Unlock, InfoFilled } from '@element-plus/icons-vue'
 // import { useGitLogStore } from '../stores/gitLogStore'
-import { useGitStore } from '../stores/gitStore'
-import { useConfigStore } from '../stores/configStore'
-import FileDiffViewer from './FileDiffViewer.vue'
-import CommonDialog from './CommonDialog.vue'
+import { useGitStore } from '@stores/gitStore'
+import { useConfigStore } from '@stores/configStore'
+import FileDiffViewer from '@components/FileDiffViewer.vue'
+import CommonDialog from '@components/CommonDialog.vue'
 
 // 定义props
 const props = defineProps({

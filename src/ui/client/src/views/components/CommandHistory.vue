@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock } from '@element-plus/icons-vue';
-import { useGitStore } from '../stores/gitStore';
+import { useGitStore } from '@stores/gitStore';
 
 // 获取Git Store以访问Socket实例
 const gitStore = useGitStore();

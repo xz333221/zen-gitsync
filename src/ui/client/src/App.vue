@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, h } from 'vue'
-import GitStatus from './components/GitStatus.vue'
-import CommitForm from './components/CommitForm.vue'
-import LogList from './components/LogList.vue'
-import CommandHistory from './components/CommandHistory.vue'
+import GitStatus from '@views/components/GitStatus.vue'
+import CommitForm from '@views/components/CommitForm.vue'
+import LogList from '@views/components/LogList.vue'
+import CommandHistory from '@views/components/CommandHistory.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Setting, Folder } from '@element-plus/icons-vue'
-import logo from './assets/logo.svg'
-import { useGitStore } from './stores/gitStore'
-import { useConfigStore } from './stores/configStore'
+import logo from '@assets/logo.svg'
+import { useGitStore } from '@stores/gitStore'
+import { useConfigStore } from '@stores/configStore'
 
 const configInfo = ref('')
 // 添加组件实例类型
