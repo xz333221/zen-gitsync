@@ -1221,49 +1221,6 @@ h1 {
   box-sizing: border-box;
 }
 
-/* 响应式布局 */
-@media (max-width: 768px) {
-  .grid-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto auto;
-    grid-template-areas:
-      "git-status"
-      "v-resizer"
-      "commit-form"
-      "h-resizer"
-      "log-list";
-    gap: 10px;
-  }
-
-  .vertical-resizer {
-    height: 10px;
-    cursor: row-resize;
-  }
-
-  .vertical-resizer::after {
-    width: 30px;
-    height: 4px;
-  }
-
-  .git-status-panel,
-  .commit-form-panel,
-  .log-list-panel {
-    padding: 0;
-    max-height: none;
-  }
-
-  .git-status-panel {
-    max-height: 30vh;
-  }
-
-  .commit-form-panel {
-    max-height: 30vh;
-  }
-
-  .log-list-panel {
-    max-height: 40vh;
-  }
-}
 </style>
 
 <style scoped>

@@ -1,7 +1,8 @@
 <template>
   <div class="git-command-preview">
-    <div class="preview-header">
+    <div class="preview-container">
       <div class="preview-title">{{ title }}</div>
+      <div class="preview-content code-command">{{ displayCommand }}</div>
       <el-button
         type="primary"
         :icon="CopyDocument"
@@ -12,7 +13,6 @@
       >
       </el-button>
     </div>
-    <pre class="preview-content code-command">{{ displayCommand }}</pre>
   </div>
 </template>
 
@@ -59,68 +59,74 @@ async function copyCommand() {
 .git-command-preview {
   margin-top: 12px;
   
-  .preview-header {
+  .preview-container {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    gap: 12px;
+    background-color: #f5f7fa;
+    border: 1px solid #e4e7ed;
+    border-radius: 6px;
+    padding: 12px 16px;
+    transition: all 0.2s ease;
+    
+    &:hover {
+      border-color: #c0c4cc;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
     
     .preview-title {
       font-size: 14px;
       color: #606266;
       font-weight: 500;
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: fit-content;
+    }
+    
+    .preview-content {
+      flex: 1;
+      background-color: #1a1a1a;
+      color: #ffffff;
+      border: 1px solid #3c4043;
+      border-radius: 4px;
+      padding: 8px 12px;
+      margin: 0;
+      font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.4;
+      overflow-x: auto;
+      white-space: nowrap;
+      text-shadow: 0 0 1px rgba(255, 255, 255, 0.3);
+      
+      &.code-command {
+        background-color: #1a1a1a;
+        color: #ffffff;
+        border-color: #3c4043;
+        font-weight: 500;
+        text-shadow: 0 0 1px rgba(255, 255, 255, 0.3);
+      }
     }
     
     .copy-command-btn {
-      padding: 4px 8px;
-      min-height: 24px;
+      padding: 6px 12px;
+      min-height: 32px;
+      flex-shrink: 0;
+      border-radius: 4px;
       
       .el-icon {
         font-size: 14px;
       }
-    }
-  }
-  
-  .preview-content {
-    background-color: #f5f7fa;
-    border: 1px solid #e4e7ed;
-    border-radius: 4px;
-    padding: 12px;
-    margin: 0;
-    font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
-    font-size: 13px;
-    color: #2c3e50;
-    line-height: 1.4;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    
-    &.code-command {
-      background-color: #282c34;
-      color: #abb2bf;
-      border-color: #3c4043;
-    }
-  }
-}
-
-// 支持暗色主题
-@media (prefers-color-scheme: dark) {
-  .git-command-preview {
-    .preview-title {
-      color: #c0c4cc;
-    }
-    
-    .preview-content {
-      background-color: #1e1e1e;
-      border-color: #414243;
-      color: #d4d4d4;
       
-      &.code-command {
-        background-color: #0d1117;
-        color: #c9d1d9;
-        border-color: #30363d;
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(64, 158, 255, 0.3);
       }
     }
   }
 }
+
+
+
+
 </style>

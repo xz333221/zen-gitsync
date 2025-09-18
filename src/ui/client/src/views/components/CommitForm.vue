@@ -2180,22 +2180,20 @@ git config --global user.email "your.email@example.com"</pre>
   font-size: 14px;
 }
 
-@media (min-width: 768px) {
-  .layout-container {
-    flex-direction: row;
-  }
+.layout-container {
+  flex-direction: row;
+}
 
-  .commit-section {
-    flex: 3;
-  }
+.commit-section {
+  flex: 3;
+}
 
-  .actions-section {
-    width: 320px;
-  }
-  
-  .operations-wrapper {
-    flex-direction: column;
-  }
+.actions-section {
+  width: 320px;
+}
+
+.operations-wrapper {
+  flex-direction: column;
 }
 
 .git-config-warning {
