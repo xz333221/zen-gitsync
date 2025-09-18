@@ -6,6 +6,8 @@ import { useGitStore } from "@stores/gitStore";
 import { useConfigStore } from "@stores/configStore";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
+import TemplateManager from "@components/TemplateManager.vue";
+import GitCommandPreview from "@components/GitCommandPreview.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -36,11 +38,7 @@ const configWarningMessage = ref('');
 const descriptionTemplates = ref<string[]>([]);
 // 添加对话框可见性变量
 const descriptionDialogVisible = ref(false);
-const newTemplateName = ref("");
-// 添加模板编辑相关变量
-const isEditingDescription = ref(false);
-const originalDescriptionTemplate = ref("");
-const editingDescriptionIndex = ref(-1);
+
 
 // 添加合并分支相关的状态
 const isMergeDialogVisible = ref(false);
@@ -55,15 +53,11 @@ const mergeOptions = ref({
 // 作用域模板相关变量
 const scopeTemplates = ref<string[]>([]);
 const scopeDialogVisible = ref(false);
-const newScopeTemplate = ref("");
-// 添加作用域模板编辑相关变量
-const isEditingScope = ref(false);
-const originalScopeTemplate = ref("");
-const editingScopeIndex = ref(-1);
+
 
 // 默认提交信息设置相关变量
 const defaultMessageDialogVisible = ref(false);
-const newDefaultMessage = ref("");
+
 
 // 跳过钩子
 const skipHooks = ref(false);
@@ -360,9 +354,7 @@ function handleStashFileSelect(filePath: string) {
 
 // 添加默认提交信息模板相关变量
 const messageTemplates = ref<string[]>([]);
-const isEditingMessage = ref(false);
-const originalMessageTemplate = ref("");
-const editingMessageIndex = ref(-1);
+
 
 // 监听标准化提交状态变化，保存到localStorage
 watch(isStandardCommit, (newValue) => {
@@ -455,299 +447,11 @@ function updateFromConfig() {
   }
 }
 
-// 保存描述模板
-async function saveDescriptionTemplate() {
-  if (!newTemplateName.value.trim()) {
-    ElMessage({
-      message: "请输入模板内容",
-      type: "warning",
-    });
-    return;
-  }
 
-  try {
-    // 判断是编辑还是新建
-    if (isEditingDescription.value) {
-      // 编辑现有模板
-      await updateDescriptionTemplate();
-    } else {
-      // 新建模板
-      // 检查是否已存在相同模板
-      if (descriptionTemplates.value.includes(newTemplateName.value)) {
-        ElMessage({
-          message: "该模板已存在",
-          type: "warning",
-        });
-        return;
-      }
 
-      // 使用 configStore 保存模板
-      const success = await configStore.saveTemplate(newTemplateName.value, 'description');
-      
-      if (success) {
-        // 确保本地数组同步更新
-        if (!descriptionTemplates.value.includes(newTemplateName.value)) {
-          descriptionTemplates.value.push(newTemplateName.value);
-        }
-        // 强制更新视图
-        descriptionTemplates.value = [...descriptionTemplates.value];
-        
-        // configStore已经显示了成功消息，这里不需要重复操作
-        newTemplateName.value = ""; // 清空输入框，但不关闭弹窗
-      }
-    }
-  } catch (error) {
-    ElMessage({
-      message: `保存模板失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
 
-// 更新描述模板
-async function updateDescriptionTemplate() {
-  if (!newTemplateName.value.trim()) {
-    ElMessage({
-      message: "请输入模板内容",
-      type: "warning",
-    });
-    return;
-  }
 
-  try {
-    // 使用 configStore 更新模板
-    const success = await configStore.updateTemplate(
-      originalDescriptionTemplate.value,
-      newTemplateName.value,
-      'description'
-    );
 
-    if (success) {
-      // 确保本地数组同步更新
-      const index = descriptionTemplates.value.indexOf(originalDescriptionTemplate.value);
-      if (index !== -1) {
-        descriptionTemplates.value[index] = newTemplateName.value;
-      }
-      // 强制更新视图
-      descriptionTemplates.value = [...descriptionTemplates.value];
-      
-      // configStore已经更新了本地数组并显示了成功消息，这里不需要重复操作
-      
-      // 重置编辑状态
-      isEditingDescription.value = false;
-      originalDescriptionTemplate.value = "";
-      editingDescriptionIndex.value = -1;
-      newTemplateName.value = "";
-    }
-  } catch (error) {
-    ElMessage({
-      message: `更新模板失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
-
-// 开始编辑描述模板
-function startEditDescriptionTemplate(template: string, index: number) {
-  isEditingDescription.value = true;
-  originalDescriptionTemplate.value = template;
-  editingDescriptionIndex.value = index;
-  newTemplateName.value = template;
-}
-
-// 取消编辑描述模板
-function cancelEditDescriptionTemplate() {
-  isEditingDescription.value = false;
-  originalDescriptionTemplate.value = "";
-  editingDescriptionIndex.value = -1;
-  newTemplateName.value = "";
-}
-
-// 保存作用域模板
-async function saveScopeTemplate() {
-  if (!newScopeTemplate.value.trim()) {
-    ElMessage({
-      message: "请输入模板内容",
-      type: "warning",
-    });
-    return;
-  }
-
-  try {
-    // 判断是编辑还是新建
-    if (isEditingScope.value) {
-      // 编辑现有模板
-      await updateScopeTemplate();
-    } else {
-      // 新建模板
-      // 检查是否已存在相同模板
-      if (scopeTemplates.value.includes(newScopeTemplate.value)) {
-        ElMessage({
-          message: "该模板已存在",
-          type: "warning",
-        });
-        return;
-      }
-
-      // 使用 configStore 保存模板
-      const success = await configStore.saveTemplate(newScopeTemplate.value, 'scope');
-      
-      if (success) {
-        // 确保本地数组同步更新
-        if (!scopeTemplates.value.includes(newScopeTemplate.value)) {
-          scopeTemplates.value.push(newScopeTemplate.value);
-        }
-        // 强制更新视图
-        scopeTemplates.value = [...scopeTemplates.value];
-        
-        // configStore已经显示了成功消息，这里不需要重复操作
-        newScopeTemplate.value = ""; // 清空输入框，但不关闭弹窗
-      }
-    }
-  } catch (error) {
-    ElMessage({
-      message: `保存模板失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
-
-// 更新作用域模板
-async function updateScopeTemplate() {
-  if (!newScopeTemplate.value.trim()) {
-    ElMessage({
-      message: "请输入模板内容",
-      type: "warning",
-    });
-    return;
-  }
-
-  try {
-    // 使用 configStore 更新模板
-    const success = await configStore.updateTemplate(
-      originalScopeTemplate.value,
-      newScopeTemplate.value,
-      'scope'
-    );
-
-    if (success) {
-      // 确保本地数组同步更新
-      const index = scopeTemplates.value.indexOf(originalScopeTemplate.value);
-      if (index !== -1) {
-        scopeTemplates.value[index] = newScopeTemplate.value;
-      }
-      // 强制更新视图
-      scopeTemplates.value = [...scopeTemplates.value];
-      
-      // configStore已经更新了本地数组并显示了成功消息，这里不需要重复操作
-      
-      // 重置编辑状态
-      isEditingScope.value = false;
-      originalScopeTemplate.value = "";
-      editingScopeIndex.value = -1;
-      newScopeTemplate.value = "";
-    }
-  } catch (error) {
-    ElMessage({
-      message: `更新模板失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
-
-// 开始编辑作用域模板
-function startEditScopeTemplate(template: string, index: number) {
-  isEditingScope.value = true;
-  originalScopeTemplate.value = template;
-  editingScopeIndex.value = index;
-  newScopeTemplate.value = template;
-}
-
-// 取消编辑作用域模板
-function cancelEditScopeTemplate() {
-  isEditingScope.value = false;
-  originalScopeTemplate.value = "";
-  editingScopeIndex.value = -1;
-  newScopeTemplate.value = "";
-}
-
-// 删除描述模板
-async function deleteDescriptionTemplate(template: string) {
-  try {
-    // 确认删除
-    await ElMessageBox.confirm(
-      `确定要删除描述模板 "${template}" 吗？`,
-      "删除确认",
-      {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      }
-    );
-
-    // 使用 configStore 删除模板
-    const success = await configStore.deleteTemplate(template, 'description');
-    
-    if (success) {
-      // 确保本地数组同步更新
-      const index = descriptionTemplates.value.indexOf(template);
-      if (index !== -1) {
-        descriptionTemplates.value.splice(index, 1);
-      }
-      // 强制更新视图
-      descriptionTemplates.value = [...descriptionTemplates.value];
-    }
-  } catch (error) {
-    if (error === "cancel") {
-      // 用户取消删除，不做任何操作
-      return;
-    }
-    
-    ElMessage({
-      message: `删除模板失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
-
-// 删除作用域模板
-async function deleteScopeTemplate(template: string) {
-  try {
-    // 确认删除
-    await ElMessageBox.confirm(
-      `确定要删除作用域模板 "${template}" 吗？`,
-      "删除确认",
-      {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      }
-    );
-
-    // 使用 configStore 删除模板
-    const success = await configStore.deleteTemplate(template, 'scope');
-    
-    if (success) {
-      // 确保本地数组同步更新
-      const index = scopeTemplates.value.indexOf(template);
-      if (index !== -1) {
-        scopeTemplates.value.splice(index, 1);
-      }
-      // 强制更新视图
-      scopeTemplates.value = [...scopeTemplates.value];
-    }
-  } catch (error) {
-    if (error === "cancel") {
-      // 用户取消删除，不做任何操作
-      return;
-    }
-    
-    ElMessage({
-      message: `删除模板失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
 
 // 使用模板
 function useTemplate(template: string) {
@@ -999,47 +703,7 @@ function clearCommitFields() {
   commitFooter.value = "";
 }
 
-// 打开默认提交信息设置弹窗
-function openDefaultMessageSettings() {
-  newDefaultMessage.value = defaultCommitMessage.value;
-  defaultMessageDialogVisible.value = true;
-}
 
-// 保存默认提交信息
-async function saveDefaultMessage() {
-  if (!newDefaultMessage.value.trim()) {
-    ElMessage({
-      message: "请输入默认提交信息",
-      type: "warning",
-    });
-    return;
-  }
-
-  try {
-    // 使用 configStore 保存默认提交信息
-    const success = await configStore.saveDefaultMessage(newDefaultMessage.value);
-    
-    if (success) {
-      // 更新本地默认提交信息
-      defaultCommitMessage.value = newDefaultMessage.value;
-      placeholder.value = `输入提交信息 (默认: ${newDefaultMessage.value})`;
-      
-      // configStore 已经显示了成功消息，这里不需要重复显示
-      // ElMessage({
-      //   message: "默认提交信息已保存",
-      //   type: "success",
-      // });
-      
-      // 关闭对话框
-      defaultMessageDialogVisible.value = false;
-    }
-  } catch (error) {
-    ElMessage({
-      message: `保存默认提交信息失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
 
 // 检查文件是否被锁定的同步方法
 function isFileLocked(filePath: string): boolean {
@@ -1107,184 +771,24 @@ const canResetToRemote = computed(() => {
   return gitStore.hasUpstream && (needsPush.value || needsPull.value || hasAnyChanges.value);
 });
 
-// 保存默认提交信息模板
-async function saveMessageTemplate() {
-  if (!newDefaultMessage.value.trim()) {
-    ElMessage({
-      message: "请输入模板内容",
-      type: "warning",
-    });
-    return;
-  }
 
-  try {
-    // 判断是编辑还是新建
-    if (isEditingMessage.value) {
-      // 编辑现有模板
-      await updateMessageTemplate();
-    } else {
-      // 新建模板
-      // 检查是否已存在相同模板
-      if (messageTemplates.value.includes(newDefaultMessage.value)) {
-        ElMessage({
-          message: "该模板已存在",
-          type: "warning",
-        });
-        return;
-      }
-
-      // 添加到本地数组
-      messageTemplates.value.push(newDefaultMessage.value);
-
-      // 保存到服务器
-      const response = await fetch("/api/config/save-template", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          template: newDefaultMessage.value,
-          type: "message",
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        ElMessage({
-          message: "提交信息模板保存成功!",
-          type: "success",
-        });
-        newDefaultMessage.value = "";
-      } else {
-        ElMessage({
-          message: "模板保存失败: " + result.error,
-          type: "error",
-        });
-      }
-    }
-  } catch (error) {
-    ElMessage({
-      message: "模板保存失败: " + (error as Error).message,
-      type: "error",
-    });
-  }
-}
-
-// 更新提交信息模板
-async function updateMessageTemplate() {
-  try {
-    // 先从本地数组中更新
-    if (editingMessageIndex.value >= 0) {
-      // 保存原模板和新模板
-      const oldTemplate = originalMessageTemplate.value;
-      const newTemplate = newDefaultMessage.value;
-
-      // 更新本地数组
-      messageTemplates.value[editingMessageIndex.value] = newTemplate;
-
-      // 调用API更新服务器
-      const response = await fetch("/api/config/update-template", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          oldTemplate,
-          newTemplate,
-          type: "message",
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        ElMessage({
-          message: "提交信息模板更新成功!",
-          type: "success",
-        });
-
-        // 重置编辑状态
-        isEditingMessage.value = false;
-        originalMessageTemplate.value = "";
-        editingMessageIndex.value = -1;
-        newDefaultMessage.value = "";
-      } else {
-        ElMessage({
-          message: "模板更新失败: " + result.error,
-          type: "error",
-        });
-      }
-    }
-  } catch (error) {
-    ElMessage({
-      message: "模板更新失败: " + (error as Error).message,
-      type: "error",
-    });
-  }
-}
-
-// 开始编辑提交信息模板
-function startEditMessageTemplate(template: string, index: number) {
-  isEditingMessage.value = true;
-  originalMessageTemplate.value = template;
-  editingMessageIndex.value = index;
-  newDefaultMessage.value = template;
-}
-
-// 取消编辑提交信息模板
-function cancelEditMessageTemplate() {
-  isEditingMessage.value = false;
-  originalMessageTemplate.value = "";
-  editingMessageIndex.value = -1;
-  newDefaultMessage.value = "";
-}
-
-// 删除提交信息模板
-async function deleteMessageTemplate(template: string) {
-  try {
-    // 从本地数组中删除
-    const index = messageTemplates.value.indexOf(template);
-    if (index !== -1) {
-      messageTemplates.value.splice(index, 1);
-    }
-
-    // 从服务器删除
-    const response = await fetch("/api/config/delete-template", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        template,
-        type: "message",
-      }),
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      ElMessage({
-        message: "提交信息模板删除成功!",
-        type: "success",
-      });
-    } else {
-      ElMessage({
-        message: "模板删除失败: " + result.error,
-        type: "error",
-      });
-    }
-  } catch (error) {
-    ElMessage({
-      message: "模板删除失败: " + (error as Error).message,
-      type: "error",
-    });
-  }
-}
 
 // 使用默认提交信息模板
 function useMessageTemplate(template: string) {
   // 设置为当前提交信息
   commitMessage.value = template;
-  // 设置为默认提交信息编辑框的内容
-  newDefaultMessage.value = template;
+}
+
+// 设置为默认提交信息（从 TemplateManager 组件调用）
+async function setDefaultFromTemplate(template: string) {
+  try {
+    const success = await configStore.saveDefaultMessage(template);
+    if (success) {
+      ElMessage.success('默认提交信息设置成功');
+    }
+  } catch (error) {
+    ElMessage.error(`设置默认提交信息失败: ${(error as Error).message}`);
+  }
 }
 
 onMounted(async () => {
@@ -1462,7 +966,7 @@ function queryMessageTemplates(queryString: string, callback: (suggestions: any[
 // 处理提交信息选择
 function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
   if (item.isSettings) {
-    openDefaultMessageSettings();
+    defaultMessageDialogVisible.value = true;
     // 清空输入框中的设置选项文本
     commitMessage.value = '';
   } else {
@@ -1470,15 +974,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
   }
 }
 
-// 复制Git命令到剪贴板
-async function copyGitCommand() {
-  try {
-    await navigator.clipboard.writeText(gitCommandPreview.value);
-    ElMessage.success('Git命令已复制到剪贴板');
-  } catch (error) {
-    ElMessage.error(`复制失败: ${(error as Error).message}`);
-  }
-}
+
 
 </script>
 
@@ -1574,22 +1070,12 @@ git config --global user.email "your.email@example.com"</pre>
                 />
               </div>
               
-              <!-- 添加Git命令预览区域 -->
-              <div class="preview-section">
-                <div class="preview-header">
-                  <div class="preview-title">Git提交命令预览：</div>
-                  <el-button
-                    type="primary"
-                    :icon="CopyDocument"
-                    size="small"
-                    @click="copyGitCommand"
-                    title="复制命令"
-                    class="copy-command-btn"
-                  >
-                  </el-button>
-                </div>
-                <pre class="preview-content code-command">git commit -m "{{ finalCommitMessage || '<提交信息>' }}"{{ skipHooks ? ' --no-verify' : '' }}</pre>
-              </div>
+              <!-- Git命令预览 -->
+              <GitCommandPreview 
+                :command="gitCommandPreview"
+                title="Git提交命令预览："
+                placeholder="git commit -m &quot;<提交信息>&quot;"
+              />
               
               <!-- 添加的按钮组 -->
               <div class="form-bottom-actions">
@@ -1712,24 +1198,12 @@ git config --global user.email "your.email@example.com"</pre>
                 <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
               </div>
 
-              <div class="preview-section">
-                <!-- <div class="preview-title">提交信息预览：</div>
-                <pre class="preview-content">{{ finalCommitMessage }}</pre> -->
-
-                <div class="preview-header">
-                  <div class="preview-title">Git提交命令预览：</div>
-                  <el-button
-                    type="primary"
-                    :icon="CopyDocument"
-                    size="small"
-                    @click="copyGitCommand"
-                    title="复制命令"
-                    class="copy-command-btn"
-                  >
-                  </el-button>
-                </div>
-                <pre class="preview-content code-command">{{ gitCommandPreview }}</pre>
-              </div>
+              <!-- Git命令预览 -->
+              <GitCommandPreview 
+                :command="gitCommandPreview"
+                title="Git提交命令预览："
+                placeholder="git commit -m &quot;<提交信息>&quot;"
+              />
               
               <!-- 添加的按钮组 -->
               <div class="form-bottom-actions">
@@ -2064,144 +1538,42 @@ git config --global user.email "your.email@example.com"</pre>
         </template>
       </el-dialog>
 
-      <!-- 简短描述设置弹窗 -->
-      <el-dialog 
-        title="简短描述模板设置" 
-        v-model="descriptionDialogVisible" 
-        width="80vw"
-        top="70px"
-        style="height: calc(100vh - 140px);"
-        :close-on-click-modal="false"
-        class="template-dialog"
-      >
-        <div class="template-container">
-          <div class="template-form">
-            <el-input v-model="newTemplateName" :placeholder="isEditingDescription ? '编辑模板内容' : '输入新模板内容'"
-              class="template-input" clearable />
-            <div class="template-form-buttons">
-              <el-button v-if="isEditingDescription" @click="cancelEditDescriptionTemplate">取消</el-button>
-              <el-button type="primary" @click="saveDescriptionTemplate" :disabled="!newTemplateName.trim()">{{
-                isEditingDescription ? '更新模板' : '添加模板' }}</el-button>
-            </div>
-          </div>
+      <!-- 简短描述模板设置 -->
+      <TemplateManager
+        v-model:visible="descriptionDialogVisible"
+        type="description"
+        title="简短描述模板设置"
+        placeholder="输入新模板内容"
+        edit-placeholder="编辑模板内容"
+        empty-description="暂无保存的模板"
+        @use-template="useTemplate"
+      />
 
-          <div class="template-list">
-            <h3>已保存模板</h3>
-            <el-empty v-if="descriptionTemplates.length === 0" description="暂无保存的模板" />
-            <el-card v-for="(template, index) in descriptionTemplates" :key="index" class="template-item">
-              <!-- 两端对齐 -->
-              <el-row justify="space-between" align="middle" style="width: 100%">
-                <div class="template-content">{{ template }}</div>
-                <div class="template-actions">
-                  <el-button type="primary" size="small" @click="useTemplate(template)">使用</el-button>
-                  <el-button type="warning" size="small" :icon="Edit"
-                    @click="startEditDescriptionTemplate(template, index)">编辑</el-button>
-                  <el-button type="danger" size="small" @click="deleteDescriptionTemplate(template)">删除</el-button>
-                </div>
-              </el-row>
-            </el-card>
-          </div>
-        </div>
-      </el-dialog>
 
       <!-- 作用域设置弹窗 -->
-      <el-dialog 
-        title="作用域模板设置" 
-        v-model="scopeDialogVisible" 
-        width="80vw"
-        top="70px" 
-        style="height: calc(100vh - 140px);"
-        :close-on-click-modal="false"
-        class="template-dialog"
-      >
-        <div class="template-container">
-          <div class="template-form">
-            <el-input v-model="newScopeTemplate" :placeholder="isEditingScope ? '编辑作用域模板内容' : '输入新作用域模板'"
-              class="template-input" clearable />
-            <div class="template-form-buttons">
-              <el-button v-if="isEditingScope" @click="cancelEditScopeTemplate">取消</el-button>
-              <el-button type="primary" @click="saveScopeTemplate" :disabled="!newScopeTemplate.trim()">{{ isEditingScope
-                ? '更新模板' : '添加模板' }}</el-button>
-            </div>
-          </div>
-
-          <div class="template-list">
-            <h3>已保存作用域</h3>
-            <el-empty v-if="scopeTemplates.length === 0" description="暂无保存的作用域" />
-            <el-card v-for="(template, index) in scopeTemplates" :key="index" class="template-item">
-              <el-row justify="space-between" align="middle" style="width: 100%">
-                <div class="template-content">{{ template }}</div>
-                <div class="template-actions">
-                  <el-button type="primary" size="small" @click="useScopeTemplate(template)">使用</el-button>
-                  <el-button type="warning" size="small" :icon="Edit"
-                    @click="startEditScopeTemplate(template, index)">编辑</el-button>
-                  <el-button type="danger" size="small" @click="deleteScopeTemplate(template)">删除</el-button>
-                </div>
-              </el-row>
-            </el-card>
-          </div>
-        </div>
-      </el-dialog>
+      <TemplateManager
+        v-model:visible="scopeDialogVisible"
+        type="scope"
+        title="作用域模板设置"
+        placeholder="输入新作用域模板"
+        edit-placeholder="编辑作用域模板内容"
+        empty-description="暂无保存的作用域"
+        @use-template="useScopeTemplate"
+      />
 
       <!-- 默认提交信息设置弹窗 -->
-      <el-dialog 
-        title="默认提交信息设置" 
-        v-model="defaultMessageDialogVisible" 
-        width="80vw" 
-        top="70px"
-        style="height: calc(100vh - 140px);"
-        :close-on-click-modal="false"
-        class="message-template-dialog"
-      >
-        <div class="template-container message-template-container">
-          <div class="template-form">
-            <el-input v-model="newDefaultMessage" :placeholder="isEditingMessage ? '编辑模板内容' : '输入新模板内容'" class="template-input" clearable />
-            <div class="template-form-buttons">
-              <el-button v-if="isEditingMessage" @click="cancelEditMessageTemplate">取消</el-button>
-              <el-button type="primary" @click="saveMessageTemplate" :disabled="!newDefaultMessage.trim()">
-                {{ isEditingMessage ? '更新模板' : '添加模板' }}
-              </el-button>
-              <el-button type="success" @click="saveDefaultMessage" :disabled="!newDefaultMessage.trim()">
-                设为默认提交信息
-              </el-button>
-            </div>
-          </div>
-
-          <div class="templates-container">
-            <div class="message-templates-list">
-              <h3>已保存模板</h3>
-              <div class="templates-scroll-area">
-                <el-empty v-if="messageTemplates.length === 0" description="暂无保存的模板" />
-                <el-card v-for="(template, index) in messageTemplates" :key="index" class="template-item">
-                  <el-row justify="space-between" align="middle" style="width: 100%">
-                    <div class="template-content">{{ template }}</div>
-                    <div class="template-actions">
-                      <el-button type="primary" size="small" @click="useMessageTemplate(template)">使用</el-button>
-                      <el-button type="warning" size="small" :icon="Edit"
-                        @click="startEditMessageTemplate(template, index)">编辑</el-button>
-                      <el-button type="danger" size="small" @click="deleteMessageTemplate(template)">删除</el-button>
-                    </div>
-                  </el-row>
-                </el-card>
-              </div>
-            </div>
-            
-            <div class="current-default-message">
-              <h3>当前默认提交信息</h3>
-              <el-card class="default-message-card" v-if="defaultCommitMessage">
-                <div class="default-message-content">{{ defaultCommitMessage }}</div>
-              </el-card>
-              <el-empty v-else description="尚未设置默认提交信息" :image-size="100" />
-              
-              <div class="message-help-text">
-                <h4>关于默认提交信息</h4>
-                <p>默认提交信息将在未输入提交信息时自动使用。</p>
-                <p>你可以通过点击左侧模板的<el-tag size="small" type="primary">使用</el-tag>按钮先选择喜欢的模板，然后点击上方<el-tag size="small" type="success">设为默认提交信息</el-tag>按钮保存。</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </el-dialog>
+      <TemplateManager
+        v-model:visible="defaultMessageDialogVisible"
+        type="message"
+        title="默认提交信息设置"
+        placeholder="输入新模板内容"
+        edit-placeholder="编辑模板内容"
+        empty-description="暂无保存的模板"
+        :show-default-section="true"
+        :show-help-text="true"
+        @use-template="useMessageTemplate"
+        @set-default="setDefaultFromTemplate"
+      />
       
       <!-- Stash弹窗：创建储藏 -->
       <CommonDialog
@@ -2717,40 +2089,7 @@ git config --global user.email "your.email@example.com"</pre>
   flex-shrink: 0;
 }
 
-.preview-section {
-  background-color: #f5f7fa;
-  padding: 10px;
-  border-radius: 4px;
-}
 
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.preview-title {
-  font-weight: 500;
-  color: #606266;
-  font-size: 14px;
-  margin: 0;
-}
-
-.copy-command-btn {
-  font-size: 12px;
-  height: 28px;
-  padding: 4px 8px;
-}
-
-.preview-content {
-  white-space: pre-wrap;
-  font-family: monospace;
-  margin: 0;
-  padding: 10px;
-  background-color: #ebeef5;
-  border-radius: 4px;
-}
 
 .template-container {
   display: flex;
