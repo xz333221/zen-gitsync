@@ -1912,8 +1912,6 @@ git config --global user.email "your.email@example.com"</pre>
   font-weight: 500;
   flex: 1;
   min-width: 100px;
-  border-radius: 4px;
-  height: 36px;
   padding: 0 10px;
 }
 
@@ -2139,7 +2137,6 @@ git config --global user.email "your.email@example.com"</pre>
   font-size: 14px;
 }
 
-@media (min-width: 768px) {
   .layout-container {
     flex-direction: row;
   }
@@ -2155,7 +2152,6 @@ git config --global user.email "your.email@example.com"</pre>
   .operations-wrapper {
     flex-direction: column;
   }
-}
 
 .git-config-warning {
   width: 100%;
