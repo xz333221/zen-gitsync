@@ -100,7 +100,7 @@ async function handleQuickPush() {
       @click="handleQuickPush"
       :loading="isLoading"
       :disabled="isDisabled"
-      :class="variant"
+      :class="variant === 'large' ? 'one-push-button' : ['action-button', 'one-click-push', { 'is-loading': isLoading }]"
     >
       <div class="one-push-content">
         <el-icon class="one-push-icon"><Position /></el-icon>
@@ -114,4 +114,57 @@ async function handleQuickPush() {
 </template>
 
 <style scoped>
+.one-push-button {
+  height: 60px;
+  width: 100%;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+  border: none;
+  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.4);
+  transition: all 0.3s ease;
+}
+
+.one-push-button:hover {
+  background: linear-gradient(135deg, #85ce61 0%, #67c23a 100%);
+  box-shadow: 0 6px 16px rgba(103, 194, 58, 0.5);
+  transform: translateY(-1px);
+}
+
+.one-push-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.one-push-icon {
+  font-size: 20px;
+  color: white;
+}
+
+.one-push-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.one-push-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  line-height: 1.2;
+}
+
+.one-push-desc {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  line-height: 1.2;
+  margin-top: 2px;
+}
 </style>
