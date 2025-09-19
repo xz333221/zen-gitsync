@@ -8,6 +8,7 @@ import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
 import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
+import QuickPushButton from "@components/QuickPushButton.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -618,52 +619,6 @@ async function addAndCommit() {
   }
 }
 
-// 添加、提交并推送 (git add + git commit + git push)
-async function addCommitAndPush() {
-  if (!finalCommitMessage.value.trim()) {
-    ElMessage({
-      message: "提交信息不能为空",
-      type: "warning",
-    });
-    return;
-  }
-
-  try {
-    const result = await gitStore.addCommitAndPush(finalCommitMessage.value, skipHooks.value);
-
-    if (result) {
-      // 清空提交信息
-      clearCommitFields();
-
-      // 等待分支状态刷新完成后再显示成功动画
-      isUpdatingStatus.value = true;
-      try {
-        // 延时确保所有状态都已更新
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // pushToRemote已经刷新了分支状态，这里不需要重复调用
-        // 只需要等待一下确保状态已经传播到UI
-        console.log('一键推送完成，状态已在pushToRemote中刷新');
-
-        // 分支状态刷新完成后显示成功动画
-        showPushSuccessIndicator();
-      } catch (error) {
-        console.error('一键推送后处理失败:', error);
-        // 即使处理失败也显示成功动画，因为主要操作已经成功
-        showPushSuccessIndicator();
-      } finally {
-        isUpdatingStatus.value = false;
-      }
-    }
-
-  } catch (error) {
-    ElMessage({
-      message: `暂存、提交并推送失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
-
 // 重置到远程分支 (git reset --hard origin/branch)
 async function resetToRemote() {
   try {
@@ -701,6 +656,37 @@ function clearCommitFields() {
   commitDescription.value = "";
   commitBody.value = "";
   commitFooter.value = "";
+}
+
+// 处理QuickPushButton的推送前事件
+function handleQuickPushBefore() {
+  // 推送前的处理逻辑（如有需要）
+}
+
+// 处理QuickPushButton的推送后事件
+function handleQuickPushAfter(success: boolean) {
+  if (success) {
+    // 等待分支状态刷新完成后再显示成功动画
+    isUpdatingStatus.value = true;
+    try {
+      // 延时确保所有状态都已更新
+      setTimeout(async () => {
+        try {
+          // 分支状态刷新完成后显示成功动画
+          showPushSuccessIndicator();
+        } catch (error) {
+          console.error('一键推送后处理失败:', error);
+          // 即使处理失败也显示成功动画，因为主要操作已经成功
+          showPushSuccessIndicator();
+        } finally {
+          isUpdatingStatus.value = false;
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('一键推送后处理失败:', error);
+      isUpdatingStatus.value = false;
+    }
+  }
 }
 
 
@@ -1124,27 +1110,15 @@ git config --global user.email "your.email@example.com"</pre>
                   </div>
                   
                   <div class="right-actions">
-                    <el-tooltip
-                      :content="(!hasAnyChanges ? '没有需要提交的更改' : (!hasUserCommitMessage ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
-                      placement="top"
-                      :show-after="200"
-                    >
-                      <el-button
-                        type="success"
-                        @click="addCommitAndPush"
-                        :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                        :disabled="!hasAnyChanges || !hasUserCommitMessage || !gitStore.hasUpstream"
-                        class="one-push-button"
-                      >
-                        <div class="one-push-content">
-                          <el-icon class="one-push-icon"><Position /></el-icon>
-                          <div class="one-push-text">
-                            <span class="one-push-title">一键推送所有</span>
-                            <span class="one-push-desc">暂存 + 提交 + 推送</span>
-                          </div>
-                        </div>
-                      </el-button>
-                    </el-tooltip>
+                    <QuickPushButton 
+                      variant="large"
+                      :has-user-commit-message="hasUserCommitMessage"
+                      :final-commit-message="finalCommitMessage"
+                      :skip-hooks="skipHooks"
+                      @before-push="handleQuickPushBefore"
+                      @after-push="handleQuickPushAfter"
+                      @clear-fields="clearCommitFields"
+                    />
                   </div>
                 </div>
               </div>
@@ -1252,27 +1226,15 @@ git config --global user.email "your.email@example.com"</pre>
                   </div>
                   
                   <div class="right-actions">
-                    <el-tooltip
-                      :content="(!hasAnyChanges ? '没有需要提交的更改' : (!hasUserCommitMessage ? '请输入提交信息' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : '一键完成：暂存所有更改 → 提交 → 推送到远程仓库')))"
-                      placement="top"
-                      :show-after="200"
-                    >
-                      <el-button
-                        type="success"
-                        @click="addCommitAndPush"
-                        :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                        :disabled="!hasAnyChanges || !hasUserCommitMessage || !gitStore.hasUpstream"
-                        class="one-push-button"
-                      >
-                        <div class="one-push-content">
-                          <el-icon class="one-push-icon"><Position /></el-icon>
-                          <div class="one-push-text">
-                            <span class="one-push-title">一键推送所有</span>
-                            <span class="one-push-desc">暂存 + 提交 + 推送</span>
-                          </div>
-                        </div>
-                      </el-button>
-                    </el-tooltip>
+                    <QuickPushButton 
+                      variant="large"
+                      :has-user-commit-message="hasUserCommitMessage"
+                      :final-commit-message="finalCommitMessage"
+                      :skip-hooks="skipHooks"
+                      @before-push="handleQuickPushBefore"
+                      @after-push="handleQuickPushAfter"
+                      @clear-fields="clearCommitFields"
+                    />
                   </div>
                 </div>
               </div>
@@ -1391,18 +1353,15 @@ git config --global user.email "your.email@example.com"</pre>
                     </el-button>
                   </el-tooltip>
 
-                  <el-tooltip content="git add + git commit + git push" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
-                    <el-button 
-                      type="success"
-                      :icon="Position"
-                      @click="addCommitAndPush"
-                      :loading="gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing"
-                      :disabled="!hasAnyChanges || !hasUserCommitMessage || !gitStore.hasUpstream"
-                      :class="['action-button', 'one-click-push', { 'is-loading': gitStore.isAddingFiles || gitStore.isCommiting || gitStore.isPushing }]"
-                    >
-                      一键推送所有
-                    </el-button>
-                  </el-tooltip>
+                  <QuickPushButton 
+                    variant="small"
+                    :has-user-commit-message="hasUserCommitMessage"
+                    :final-commit-message="finalCommitMessage"
+                    :skip-hooks="skipHooks"
+                    @before-push="handleQuickPushBefore"
+                    @after-push="handleQuickPushAfter"
+                    @clear-fields="clearCommitFields"
+                  />
                 </div>
               </div>
             </div>
@@ -2180,20 +2139,22 @@ git config --global user.email "your.email@example.com"</pre>
   font-size: 14px;
 }
 
-.layout-container {
-  flex-direction: row;
-}
+@media (min-width: 768px) {
+  .layout-container {
+    flex-direction: row;
+  }
 
-.commit-section {
-  flex: 3;
-}
+  .commit-section {
+    flex: 3;
+  }
 
-.actions-section {
-  width: 320px;
-}
-
-.operations-wrapper {
-  flex-direction: column;
+  .actions-section {
+    width: 320px;
+  }
+  
+  .operations-wrapper {
+    flex-direction: column;
+  }
 }
 
 .git-config-warning {

@@ -33,7 +33,9 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     FileDiffViewer: typeof import('./src/components/FileDiffViewer.vue')['default']
+    GitActionButtons: typeof import('./src/components/GitActionButtons.vue')['default']
     GitCommandPreview: typeof import('./src/components/GitCommandPreview.vue')['default']
+    QuickPushButton: typeof import('./src/components/QuickPushButton.vue')['default']
     TemplateManager: typeof import('./src/components/TemplateManager.vue')['default']
   }
   export interface ComponentCustomProperties {
