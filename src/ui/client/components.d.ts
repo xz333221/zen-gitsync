@@ -35,7 +35,7 @@ declare module 'vue' {
     FileDiffViewer: typeof import('./src/components/FileDiffViewer.vue')['default']
     GitActionButtons: typeof import('./src/components/GitActionButtons.vue')['default']
     GitCommandPreview: typeof import('./src/components/GitCommandPreview.vue')['default']
-    QuickPushButton: typeof import('./src/components/QuickPushButton.vue')['default']
+    QuickPushButton: typeof import('./src/components/buttons/QuickPushButton.vue')['default']
     TemplateManager: typeof import('./src/components/TemplateManager.vue')['default']
   }
   export interface ComponentCustomProperties {

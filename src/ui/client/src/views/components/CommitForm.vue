@@ -8,7 +8,7 @@ import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
 import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
-import QuickPushButton from "@components/QuickPushButton.vue";
+import QuickPushButton from "@/components/buttons/QuickPushButton.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
