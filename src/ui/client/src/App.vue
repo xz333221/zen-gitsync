@@ -683,7 +683,7 @@ async function selectDirectory(dirPath: string) {
   <header class="main-header">
     <div class="header-left">
       <img :src="logo" alt="Zen GitSync Logo" class="logo" />
-      <h1>Zen GitSync UI</h1>
+      <h1>Zen GitSync</h1>
     </div>
     <div class="header-info">
       <div id="user-info" v-if="gitStore.userName && gitStore.userEmail">

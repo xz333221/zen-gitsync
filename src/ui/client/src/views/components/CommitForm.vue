@@ -2,7 +2,10 @@
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu, CopyDocument, Warning, Loading } from "@element-plus/icons-vue";
-import { ElLoading } from 'element-plus';
+import GlobalLoading from "@/components/GlobalLoading.vue";
+import SuccessModal from "@/components/SuccessModal.vue";
+import { useGlobalLoading } from "@/composables/useGlobalLoading";
+import { useSuccessModal } from "@/composables/useSuccessModal";
 import { useGitStore } from "@stores/gitStore";
 import { useConfigStore } from "@stores/configStore";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
@@ -18,8 +21,8 @@ import GitActionButtons from "@/components/GitActionButtons.vue";
 const gitStore = useGitStore();
 const configStore = useConfigStore();
 const commitMessage = ref("");
-const showPushSuccess = ref(false);
-let loadingInstance: any = null;
+const { loadingState, show: showLoading, hide: hideLoading } = useGlobalLoading();
+const { successState, show: showSuccess } = useSuccessModal();
 const isUpdatingStatus = ref(false); // 添加状态更新中的标识
 // 添加placeholder变量
 const placeholder = ref("输入提交信息...");
@@ -490,12 +493,13 @@ function openScopeSettings() {
   scopeDialogVisible.value = true;
 }
 
-// 显示推送成功提示
+// 显示推送成功提示（保留兼容性）
 function showPushSuccessIndicator() {
-  showPushSuccess.value = true;
-  setTimeout(() => {
-    showPushSuccess.value = false;
-  }, 2000);
+  showSuccess({
+    text: '操作成功！',
+    description: '已完成操作',
+    duration: 2000
+  });
 }
 
 // 处理git pull操作
@@ -594,35 +598,39 @@ function clearCommitFields() {
 
 // 处理QuickPushButton的推送前事件
 function handleQuickPushBefore() {
-  // 推送前的处理逻辑（如有需要）
-  loadingInstance = ElLoading.service({
-    lock: true,
+  // 显示全局loading
+  showLoading({
     text: '正在推送到远程仓库...',
-    background: 'rgba(0, 0, 0, 0.8)',
-    customClass: 'git-push-loading'
+    showProgress: false
   });
 }
 
 // 处理QuickPushButton的推送后事件
 function handleQuickPushAfter(success: boolean) {
-  if (loadingInstance) {
-    loadingInstance.close();
-    loadingInstance = null;
-  }
+  // 关闭loading
+  hideLoading();
   
   if (success) {
-    // 等待分支状态刷新完成后再显示成功动画
+    // 等待分支状态刷新完成后再显示成功提示
     isUpdatingStatus.value = true;
     try {
       // 延时确保所有状态都已更新
       setTimeout(async () => {
         try {
-          // 分支状态刷新完成后显示成功动画
-          showPushSuccessIndicator();
+          // 分支状态刷新完成后显示成功提示
+          showSuccess({
+            text: '推送成功！',
+            description: '代码已成功推送到远程仓库',
+            duration: 2000
+          });
         } catch (error) {
           console.error('一键推送后处理失败:', error);
-          // 即使处理失败也显示成功动画，因为主要操作已经成功
-          showPushSuccessIndicator();
+          // 即使处理失败也显示成功提示，因为主要操作已经成功
+          showSuccess({
+            text: '推送成功！',
+            description: '代码已成功推送到远程仓库',
+            duration: 2000
+          });
         } finally {
           isUpdatingStatus.value = false;
         }
@@ -633,8 +641,6 @@ function handleQuickPushAfter(success: boolean) {
     }
   }
 }
-
-
 
 // 检查文件是否被锁定的同步方法
 function isFileLocked(filePath: string): boolean {
@@ -701,8 +707,6 @@ const canReset = computed(() => {
 const canResetToRemote = computed(() => {
   return gitStore.hasUpstream && (needsPush.value || needsPull.value || hasAnyChanges.value);
 });
-
-
 
 // 使用默认提交信息模板
 function useMessageTemplate(template: string) {
@@ -957,7 +961,6 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
 }
 
 
-
 </script>
 
 <template>
@@ -982,22 +985,6 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
         />
       </div>
     </div>
-
-    <!-- 状态更新指示器 -->
-    <transition name="el-fade-in-linear">
-      <div v-if="isUpdatingStatus" class="status-updating-indicator">
-        <el-icon class="is-loading"><Loading /></el-icon>
-        <span>更新状态中...</span>
-      </div>
-    </transition>
-
-    <!-- 添加推送成功指示器 -->
-    <transition name="el-fade-in-linear">
-      <div v-if="showPushSuccess" class="push-success-indicator">
-        <el-icon class="push-success-icon"><Check /></el-icon>
-        <div class="push-success-text">已完成!</div>
-      </div>
-    </transition>
 
     <div class="card-content">
       <div class="layout-container">
@@ -1689,6 +1676,29 @@ git config --global user.email "your.email@example.com"</pre>
           </div>
         </div>
       </CommonDialog>
+      
+      <!-- 状态更新指示器 -->
+      <transition name="el-fade-in-linear">
+        <div v-if="isUpdatingStatus" class="status-updating-indicator">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          <span>更新状态中...</span>
+        </div>
+      </transition>
+
+      <!-- 全局Loading组件 -->
+      <GlobalLoading 
+        :visible="loadingState.visible"
+        :text="loadingState.text"
+        :show-progress="loadingState.showProgress"
+        :progress="loadingState.progress"
+      />
+        
+      <!-- 成功提示组件 -->
+      <SuccessModal 
+        :visible="successState.visible"
+        :text="successState.text"
+        :description="successState.description"
+      />
 </template>
 
 <style scoped lang="scss">
@@ -2329,50 +2339,7 @@ git config --global user.email "your.email@example.com"</pre>
   border-color: #67c23a !important;
 }
 
-/* 推送成功动画 */
-@keyframes push-success {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
-}
-
-.push-success-indicator {
-  position: absolute;
-  inset: 0; /* 同时设置top, right, bottom, left为0 */
-  margin: auto;
-  background-color: rgba(255, 255, 255, 1);
-  border-radius: 12px;
-  padding: 20px 30px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  animation: push-success 0.5s ease-out;
-  z-index: 999;
-  width: 200px;
-  height: 200px;
-}
-
-.push-success-icon {
-  font-size: 64px;
-  color: #67c23a;
-  margin-bottom: 16px;
-  animation: bounce 0.8s ease-in-out;
-}
-
-@keyframes bounce {
-  0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
-  40% {transform: translateY(-20px);}
-  60% {transform: translateY(-10px);}
-}
-
-.push-success-text {
-  font-size: 20px;
-  font-weight: bold;
-  color: #303133;
-  text-align: center;
-}
+/* 推送成功动画已移除，使用新的SuccessModal组件 */
 
 .reset-button {
   background-color: #909399;

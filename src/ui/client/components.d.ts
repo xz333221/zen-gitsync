@@ -37,9 +37,11 @@ declare module 'vue' {
     FileGroup: typeof import('./src/components/FileGroup.vue')['default']
     GitActionButtons: typeof import('./src/components/GitActionButtons.vue')['default']
     GitCommandPreview: typeof import('./src/components/GitCommandPreview.vue')['default']
+    GlobalLoading: typeof import('./src/components/GlobalLoading.vue')['default']
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']
     QuickPushButton: typeof import('./src/components/buttons/QuickPushButton.vue')['default']
     StageButton: typeof import('./src/components/buttons/StageButton.vue')['default']
+    SuccessModal: typeof import('./src/components/SuccessModal.vue')['default']
     TemplateManager: typeof import('./src/components/TemplateManager.vue')['default']
   }
   export interface ComponentCustomProperties {
