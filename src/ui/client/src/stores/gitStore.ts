@@ -852,8 +852,6 @@ export const useGitStore = defineStore('git', () => {
   
   // 添加文件到暂存区 (过滤锁定文件)
   async function addToStage() {
-    console.log('=== 进入 addToStage 方法 ===')
-    
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
       ElMessage.warning('当前目录不是Git仓库')
@@ -863,25 +861,15 @@ export const useGitStore = defineStore('git', () => {
     try {
       isAddingFiles.value = true
       
-      // 调试信息：打印锁定文件列表
-      console.log('锁定文件列表:', configStore.lockedFiles)
-      console.log('当前文件列表:', fileList.value.map(f => f.path))
-      
       // 获取当前文件列表，过滤掉锁定的文件
       const filesToAdd = fileList.value.filter(file => {
         const normalizedPath = file.path.replace(/\\/g, '/')
         const isLocked = configStore.lockedFiles.some(lockedFile => {
           const normalizedLocked = lockedFile.replace(/\\/g, '/')
-          const match = normalizedPath === normalizedLocked
-          if (match) {
-            console.log(`文件 ${normalizedPath} 被锁定，跳过`)
-          }
-          return match
+          return normalizedPath === normalizedLocked
         })
         return !isLocked
       })
-      
-      console.log(`总文件数: ${fileList.value.length}, 需要添加的文件数: ${filesToAdd.length}`)
       
       if (filesToAdd.length === 0) {
         ElMessage({
@@ -893,7 +881,6 @@ export const useGitStore = defineStore('git', () => {
       
       // 如果所有文件都没有被锁定，使用 git add . 提高效率
       if (filesToAdd.length === fileList.value.length) {
-        console.log('使用 git add . 添加所有文件')
         const response = await fetch('/api/add', {
           method: 'POST'
         })
@@ -913,52 +900,27 @@ export const useGitStore = defineStore('git', () => {
           return false
         }
       } else {
-        console.log('有锁定文件，逐个添加非锁定文件')
-        // 有锁定文件，需要逐个添加非锁定文件
-        let successCount = 0
-        let failCount = 0
+        // 有锁定文件，使用后端的过滤逻辑
+        const response = await fetch('/api/add-filtered', {
+          method: 'POST'
+        })
         
-        for (const file of filesToAdd) {
-          try {
-            const response = await fetch('/api/add-file', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ filePath: file.path })
-            })
-            
-            const result = await response.json()
-            if (result.success) {
-              successCount++
-            } else {
-              failCount++
-              console.error(`添加文件 ${file.path} 失败:`, result.error)
-            }
-          } catch (error) {
-            failCount++
-            console.error(`添加文件 ${file.path} 失败:`, error)
-          }
-        }
-        
-        if (successCount > 0) {
+        const result = await response.json()
+        if (result.success) {
           const lockedCount = fileList.value.length - filesToAdd.length
-          let message = `已添加 ${successCount} 个文件到暂存区`
+          let message = `已添加 ${filesToAdd.length} 个文件到暂存区`
           if (lockedCount > 0) {
             message += `，跳过 ${lockedCount} 个锁定文件`
-          }
-          if (failCount > 0) {
-            message += `，${failCount} 个文件添加失败`
           }
           
           ElMessage({
             message,
-            type: failCount > 0 ? 'warning' : 'success'
+            type: 'success'
           })
           return true
         } else {
           ElMessage({
-            message: '所有文件添加失败',
+            message: `添加文件失败: ${result.error}`,
             type: 'error'
           })
           return false

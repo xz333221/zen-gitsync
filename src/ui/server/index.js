@@ -1119,6 +1119,17 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 添加 add 接口
   app.post('/api/add', async (req, res) => {
     try {
+      // 直接执行 git add . - 前端已经做了锁定文件过滤判断
+      await execGitCommand('git add .');
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // 添加带锁定文件过滤的 add 接口
+  app.post('/api/add-filtered', async (req, res) => {
+    try {
       // 使用带锁定文件过滤的 git add
       await execGitAddWithLockFilter();
       res.json({ success: true });
@@ -1126,7 +1137,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       res.status(500).json({ success: false, error: error.message });
     }
   });
-  
+
   // 添加 add-all 接口（直接执行 git add . 不考虑锁定文件）
   app.post('/api/add-all', async (req, res) => {
     try {
