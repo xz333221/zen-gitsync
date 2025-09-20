@@ -1013,28 +1013,59 @@ git config --global user.email "your.email@example.com"</pre>
           <!-- 左侧：提交表单 -->
           <div class="commit-section">
             <div class="commit-options">
-              <div class="options-row">
-                <div class="commit-mode-toggle">
-                  <el-switch v-model="isStandardCommit" active-text="标准化提交" inactive-text="普通提交" />
+              <!-- 提交模式开关 -->
+              <div class="option-card">
+                <div class="option-header">
+                  <div class="option-icon">
+                    <el-icon><Edit /></el-icon>
+                  </div>
+                  <div class="option-info">
+                    <h4 class="option-title">提交模式</h4>
+                    <p class="option-desc">选择传统或标准化提交格式</p>
+                  </div>
+                  <el-switch 
+                    v-model="isStandardCommit" 
+                    active-text="标准化" 
+                    inactive-text="普通" 
+                    active-color="#409eff"
+                    class="option-switch"
+                  />
                 </div>
+              </div>
 
-                <div class="no-verify-toggle">
-                  <el-switch v-model="skipHooks" active-text="跳过 Git 钩子检查 (--no-verify)" />
+              <!-- Git钩子开关 -->
+              <div class="option-card">
+                <div class="option-header">
+                  <div class="option-icon warning">
+                    <el-icon><Warning /></el-icon>
+                  </div>
+                  <div class="option-info">
+                    <h4 class="option-title">跳过钩子检查</h4>
+                    <p class="option-desc">添加--no-verify参数</p>
+                  </div>
+                  <el-switch 
+                    v-model="skipHooks" 
+                    active-color="#f56c6c"
+                    class="option-switch"
+                  />
                 </div>
               </div>
               
-              <!-- 新增的回车自动一键提交开关行 -->
-              <div class="options-row">
-                <div class="auto-push-toggle">
+              <!-- 回车自动提交开关 -->
+              <div class="option-card">
+                <div class="option-header">
+                  <div class="option-icon success">
+                    <el-icon><Check /></el-icon>
+                  </div>
+                  <div class="option-info">
+                    <h4 class="option-title">回车自动提交</h4>
+                    <p class="option-desc">输入提交信息后按回车直接执行一键推送</p>
+                  </div>
                   <el-switch 
                     v-model="autoQuickPushOnEnter" 
-                    active-text="回车自动一键提交"
                     active-color="#67c23a"
+                    class="option-switch"
                   />
-                </div>
-                
-                <div class="auto-push-description">
-                  <span class="description-text">开启后输入提交信息按回车直接执行一键推送</span>
                 </div>
               </div>
             </div>
@@ -2008,32 +2039,132 @@ git config --global user.email "your.email@example.com"</pre>
   flex-shrink: 0;
 }
 
-.options-row {
+/* 提交选项卡片样式 */
+.commit-options {
   display: flex;
-  justify-content: space-between;
+  flex-direction: row;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.option-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 8px 10px;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  flex: 1;
+  min-width: 0;
+}
+
+.option-card:hover {
+  border-color: #409eff;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.option-header {
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  margin-bottom: 15px;
+  gap: 8px;
+  text-align: left;
 }
 
-/* 新增的回车自动一键提交开关样式 */
-.options-row:last-child {
-  margin-bottom: 8px;
-}
-
-.auto-push-toggle {
+.option-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #409eff;
+  color: white;
+  font-size: 10px;
   flex-shrink: 0;
 }
 
-.auto-push-description {
-  flex: 1;
-  margin-left: 10px;
+.option-icon.warning {
+  background: #f56c6c;
 }
 
-.description-text {
+.option-icon.success {
+  background: #67c23a;
+}
+
+.option-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.option-title {
+  margin: 0;
   font-size: 12px;
-  color: var(--text-tertiary, #9ca3af);
-  line-height: 1.3;
-  font-style: italic;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.option-desc {
+  margin: 0;
+  font-size: 10px;
+  color: #909399;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.option-switch {
+  flex-shrink: 0;
+}
+
+/* 开关组件自定义样式 */
+.option-switch :deep(.el-switch__label) {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.option-switch :deep(.el-switch__label.is-active) {
+  color: #409eff;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .commit-options {
+    flex-direction: column;
+    gap: 6px;
+  }
+  
+  .option-card {
+    padding: 8px;
+  }
+  
+  .option-header {
+    flex-direction: row;
+    gap: 8px;
+    text-align: left;
+  }
+  
+  .option-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+  
+  .option-title {
+    font-size: 11px;
+  }
+  
+  .option-desc {
+    font-size: 9px;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
 }
 
 .code-command {
