@@ -1143,11 +1143,6 @@ export const useGitStore = defineStore('git', () => {
       
       const result = await response.json()
       if (result.success) {
-        ElMessage({
-          message: '推送成功',
-          type: 'success'
-        })
-
         // 推送成功后，逻辑上本地和远程必定同步，直接设置状态
         branchAhead.value = 0;  // 推送成功后，本地不再领先
         branchBehind.value = 0; // 推送成功后，本地不再落后

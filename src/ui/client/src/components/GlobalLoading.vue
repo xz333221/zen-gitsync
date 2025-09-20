@@ -46,8 +46,8 @@ withDefaults(defineProps<Props>(), {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.85) 0%, rgba(103, 194, 58, 0.85) 100%);
-  backdrop-filter: blur(20px);
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.75) 0%, rgba(103, 194, 58, 0.75) 100%);
+  backdrop-filter: blur(25px);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -2226,6 +2226,35 @@ git config --global user.email "your.email@example.com"</pre>
   color: white;
 }
 
+/* 按钮禁用状态样式优化 */
+.top-actions-container :deep(.el-button:disabled) {
+  opacity: 0.4 !important;
+  background-color: #f5f7fa !important;
+  border-color: #e4e7ed !important;
+  color: #c0c4cc !important;
+}
+
+.top-actions-container :deep(.el-button--primary:disabled) {
+  background-color: #a0cfff !important;
+  border-color: #a0cfff !important;
+  color: #ffffff !important;
+  opacity: 0.5 !important;
+}
+
+.top-actions-container :deep(.el-button--success:disabled) {
+  background-color: #b3e19d !important;
+  border-color: #b3e19d !important;
+  color: #ffffff !important;
+  opacity: 0.5 !important;
+}
+
+.top-actions-container :deep(.el-button--warning:disabled) {
+  background-color: #f3d19e !important;
+  border-color: #f3d19e !important;
+  color: #ffffff !important;
+  opacity: 0.5 !important;
+}
+
 .top-actions-container :deep(.el-button--info) {
   background: #909399;
   border: none;
