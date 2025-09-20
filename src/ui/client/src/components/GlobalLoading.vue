@@ -58,16 +58,18 @@ withDefaults(defineProps<Props>(), {
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  background: #ffffff;
-  padding: 32px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.95);
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+  min-width: 120px;
 }
 
 .loading-spinner {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
 }
 
 .spinner-ring {
@@ -76,10 +78,10 @@ withDefaults(defineProps<Props>(), {
   left: 0;
   width: 100%;
   height: 100%;
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #409eff;
+  border: 2px solid #e4e7ed;
+  border-top: 2px solid #409eff;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 .spinner-ring:nth-child(2),
@@ -89,9 +91,10 @@ withDefaults(defineProps<Props>(), {
 
 .loading-text {
   color: #606266;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
   text-align: center;
+  margin-top: 4px;
 }
 
 .loading-progress {
