@@ -67,6 +67,9 @@ const defaultMessageDialogVisible = ref(false);
 // 跳过钩子
 const skipHooks = ref(false);
 
+// 回车自动一键提交开关
+const autoQuickPushOnEnter = ref(false);
+
 // 添加控制正文和页脚显示的状态变量
 const showAdvancedFields = ref(false);
 
@@ -369,6 +372,11 @@ watch(isStandardCommit, (newValue) => {
 // 监听跳过钩子状态变化，保存到localStorage
 watch(skipHooks, (newValue) => {
   localStorage.setItem("zen-gitsync-skip-hooks", newValue.toString());
+});
+
+// 监听回车自动一键提交状态变化，保存到localStorage
+watch(autoQuickPushOnEnter, (newValue) => {
+  localStorage.setItem("zen-gitsync-auto-quick-push", newValue.toString());
 });
 
 // 计算最终的提交信息
@@ -691,6 +699,40 @@ function useMessageTemplate(template: string) {
   defaultMessageDialogVisible.value = false;
 }
 
+// 处理回车键事件 - 自动一键提交
+async function handleEnterKey(event: KeyboardEvent) {
+  // 只在开启自动一键提交时处理
+  if (!autoQuickPushOnEnter.value) {
+    return;
+  }
+
+  // 检查是否有有效的提交信息
+  if (!hasUserCommitMessage.value) {
+    return;
+  }
+
+  // 只在按下 Enter 键时处理（不包括 Shift+Enter）
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault(); // 阻止默认的换行行为
+
+    try {
+      // 执行一键提交推送
+      handleQuickPushBefore();
+      const result = await gitStore.addCommitAndPush(
+        finalCommitMessage.value,
+        skipHooks.value
+      );
+      if (result) {
+        clearCommitFields();
+      }
+      handleQuickPushAfter(result);
+    } catch (error) {
+      console.error('回车自动一键提交失败:', error);
+      handleQuickPushAfter(false);
+    }
+  }
+}
+
 // 设置为默认提交信息（从 TemplateManager 组件调用）
 async function setDefaultFromTemplate(template: string) {
   try {
@@ -714,6 +756,12 @@ onMounted(async () => {
   const savedSkipHooks = localStorage.getItem("zen-gitsync-skip-hooks");
   if (savedSkipHooks !== null) {
     skipHooks.value = savedSkipHooks === "true";
+  }
+
+  // 从localStorage加载回车自动一键提交选项
+  const savedAutoQuickPush = localStorage.getItem("zen-gitsync-auto-quick-push");
+  if (savedAutoQuickPush !== null) {
+    autoQuickPushOnEnter.value = savedAutoQuickPush === "true";
   }
 
   // 监听配置变化并更新
@@ -965,6 +1013,21 @@ git config --global user.email "your.email@example.com"</pre>
                   <el-switch v-model="skipHooks" active-text="跳过 Git 钩子检查 (--no-verify)" />
                 </div>
               </div>
+              
+              <!-- 新增的回车自动一键提交开关行 -->
+              <div class="options-row">
+                <div class="auto-push-toggle">
+                  <el-switch 
+                    v-model="autoQuickPushOnEnter" 
+                    active-text="回车自动一键提交"
+                    active-color="#67c23a"
+                  />
+                </div>
+                
+                <div class="auto-push-description">
+                  <span class="description-text">开启后输入提交信息按回车直接执行一键推送</span>
+                </div>
+              </div>
             </div>
 
             <!-- 普通提交表单 -->
@@ -979,6 +1042,7 @@ git config --global user.email "your.email@example.com"</pre>
                   resize="none"
                   class="commit-message-input"
                   @select="handleMessageSelect"
+                  @keydown="handleEnterKey"
                 />
               </div>
               
@@ -1030,6 +1094,7 @@ git config --global user.email "your.email@example.com"</pre>
                     class="description-input"
                     clearable
                     @select="handleDescriptionSelect"
+                    @keydown="handleEnterKey"
                   />
                 </div>
               </div>
@@ -1935,6 +2000,27 @@ git config --global user.email "your.email@example.com"</pre>
   justify-content: space-between;
   align-items: center;
   margin-bottom: 15px;
+}
+
+/* 新增的回车自动一键提交开关样式 */
+.options-row:last-child {
+  margin-bottom: 8px;
+}
+
+.auto-push-toggle {
+  flex-shrink: 0;
+}
+
+.auto-push-description {
+  flex: 1;
+  margin-left: 10px;
+}
+
+.description-text {
+  font-size: 12px;
+  color: var(--text-tertiary, #9ca3af);
+  line-height: 1.3;
+  font-style: italic;
 }
 
 .code-command {
