@@ -63,6 +63,7 @@ withDefaults(defineProps<Props>(), {
   background: linear-gradient(135deg, rgba(64, 158, 255, 0.9) 0%, rgba(103, 194, 58, 0.9) 100%);
   backdrop-filter: blur(25px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  height: 200px;
 }
 
 .loading-spinner {
