@@ -10,14 +10,14 @@ const configStore = useConfigStore();
 
 // 定义组件props
 interface Props {
-  variant?: "large" | "small";
+  from?: "form" | "drawer";
   hasUserCommitMessage?: boolean;
   finalCommitMessage?: string;
   skipHooks?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  variant: "large",
+  from: "form",
   hasUserCommitMessage: false,
   finalCommitMessage: "",
   skipHooks: false,
@@ -97,14 +97,14 @@ async function handleQuickPush() {
       @click="handleQuickPush"
       :loading="isLoading"
       :disabled="isDisabled"
-      :class="variant"
+      :class="from"
       class="one-push-button"
     >
       <div class="one-push-content">
         <el-icon class="one-push-icon"><Position /></el-icon>
         <div class="one-push-text">
           <span class="one-push-title">一键推送所有</span>
-          <span v-if="variant === 'large'" class="one-push-desc"
+          <span v-if="from === 'form'" class="one-push-desc"
             >暂存 + 提交 + 推送</span
           >
         </div>
@@ -116,8 +116,12 @@ async function handleQuickPush() {
 <style scoped lang="scss">
 .one-push-button {
   height: 100%;
-  &.large {
+  &.form {
     width: 100%;
+  }
+  &.drawer {
+    width: auto;
+    height: 32px;
   }
   .one-push-content {
     display: flex;

@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    CommitButton: typeof import('./src/components/buttons/CommitButton.vue')['default']
     CommonDialog: typeof import('./src/components/CommonDialog.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAutocomplete: typeof import('element-plus/es')['ElAutocomplete']
@@ -35,7 +36,9 @@ declare module 'vue' {
     FileDiffViewer: typeof import('./src/components/FileDiffViewer.vue')['default']
     GitActionButtons: typeof import('./src/components/GitActionButtons.vue')['default']
     GitCommandPreview: typeof import('./src/components/GitCommandPreview.vue')['default']
+    PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']
     QuickPushButton: typeof import('./src/components/buttons/QuickPushButton.vue')['default']
+    StageButton: typeof import('./src/components/buttons/StageButton.vue')['default']
     TemplateManager: typeof import('./src/components/TemplateManager.vue')['default']
   }
   export interface ComponentCustomProperties {

@@ -9,6 +9,10 @@ import CommonDialog from "@components/CommonDialog.vue";
 import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
 import QuickPushButton from "@/components/buttons/QuickPushButton.vue";
+import StageButton from "@/components/buttons/StageButton.vue";
+import CommitButton from "@/components/buttons/CommitButton.vue";
+import PushButton from "@/components/buttons/PushButton.vue";
+import GitActionButtons from "@/components/GitActionButtons.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -1063,65 +1067,17 @@ git config --global user.email "your.email@example.com"</pre>
                 placeholder="git commit -m &quot;<提交信息>&quot;"
               />
               
-              <!-- 添加的按钮组 -->
-              <div class="form-bottom-actions">
-                <div class="actions-flex-container">
-                  <div class="left-actions">
-                    <div class="button-grid">
-                      <el-button
-                        type="primary"
-                        @click="addToStage"
-                        :loading="gitStore.isAddingFiles"
-                        :disabled="!hasUnstagedChanges"
-                        class="stage-button"
-                      >
-                        暂存更改
-                        <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
-                      </el-button>
-                      
-                      <el-button 
-                        type="primary" 
-                        @click="commitChanges" 
-                        :loading="gitStore.isLoadingStatus"
-                        :disabled="!hasStagedChanges || !hasUserCommitMessage"
-                      >
-                        提交
-                        <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
-                      </el-button>
-                      
-                      <el-tooltip
-                        :content="canPush ? '推送已提交的更改到远程仓库' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : (!needsPush ? '没有需要推送的提交' : '有未提交的暂存更改，请先提交'))"
-                        placement="top"
-                        :show-after="200"
-                      >
-                        <el-button
-                          type="primary"
-                          :icon="Upload"
-                          @click="pushToRemote"
-                          :loading="gitStore.isPushing"
-                          :disabled="!canPush"
-                          :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
-                        >
-                          推送
-                          <span v-if="needsPush">({{gitStore.branchAhead}})</span>
-                        </el-button>
-                      </el-tooltip>
-                    </div>
-                  </div>
-                  
-                  <div class="right-actions">
-                    <QuickPushButton 
-                      variant="large"
-                      :has-user-commit-message="hasUserCommitMessage"
-                      :final-commit-message="finalCommitMessage"
-                      :skip-hooks="skipHooks"
-                      @before-push="handleQuickPushBefore"
-                      @after-push="handleQuickPushAfter"
-                      @clear-fields="clearCommitFields"
-                    />
-                  </div>
-                </div>
-              </div>
+              <!-- Git操作按钮组 -->
+              <GitActionButtons
+                :has-user-commit-message="hasUserCommitMessage"
+                :final-commit-message="finalCommitMessage"
+                :skip-hooks="skipHooks"
+                from="form"
+                @after-commit="(success) => { if (success) clearCommitFields() }"
+                @after-push="handleQuickPushAfter"
+                @before-push="handleQuickPushBefore"
+                @clear-fields="clearCommitFields"
+              />
             </div>
 
             <!-- 标准化提交表单 -->
@@ -1172,6 +1128,7 @@ git config --global user.email "your.email@example.com"</pre>
                 <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
               </div>
 
+                <!-- 高级字段结束后的Git命令预览和按钮组 -->
               <!-- Git命令预览 -->
               <GitCommandPreview 
                 :command="gitCommandPreview"
@@ -1179,65 +1136,17 @@ git config --global user.email "your.email@example.com"</pre>
                 placeholder="git commit -m &quot;<提交信息>&quot;"
               />
               
-              <!-- 添加的按钮组 -->
-              <div class="form-bottom-actions">
-                <div class="actions-flex-container">
-                  <div class="left-actions">
-                    <div class="button-grid">
-                      <el-button
-                        type="primary"
-                        @click="addToStage"
-                        :loading="gitStore.isAddingFiles"
-                        :disabled="!hasUnstagedChanges"
-                        class="stage-button"
-                      >
-                        暂存更改
-                        <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
-                      </el-button>
-                      
-                      <el-button 
-                        type="primary" 
-                        @click="commitChanges" 
-                        :loading="gitStore.isLoadingStatus"
-                        :disabled="!hasStagedChanges || !hasUserCommitMessage"
-                      >
-                        提交
-                        <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
-                      </el-button>
-                      
-                      <el-tooltip
-                        :content="canPush ? '推送已提交的更改到远程仓库' : (!gitStore.hasUpstream ? '当前分支没有上游分支' : (!needsPush ? '没有需要推送的提交' : '有未提交的暂存更改，请先提交'))"
-                        placement="top"
-                        :show-after="200"
-                      >
-                        <el-button
-                          type="primary"
-                          :icon="Upload"
-                          @click="pushToRemote"
-                          :loading="gitStore.isPushing"
-                          :disabled="!canPush"
-                          :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
-                        >
-                          推送
-                          <span v-if="needsPush">({{gitStore.branchAhead}})</span>
-                        </el-button>
-                      </el-tooltip>
-                    </div>
-                  </div>
-                  
-                  <div class="right-actions">
-                    <QuickPushButton 
-                      variant="large"
-                      :has-user-commit-message="hasUserCommitMessage"
-                      :final-commit-message="finalCommitMessage"
-                      :skip-hooks="skipHooks"
-                      @before-push="handleQuickPushBefore"
-                      @after-push="handleQuickPushAfter"
-                      @clear-fields="clearCommitFields"
-                    />
-                  </div>
-                </div>
-              </div>
+              <!-- Git操作按钮组 -->
+              <GitActionButtons
+                :has-user-commit-message="hasUserCommitMessage"
+                :final-commit-message="finalCommitMessage"
+                :skip-hooks="skipHooks"
+                from="form"
+                @after-commit="(success) => { if (success) clearCommitFields() }"
+                @after-push="handleQuickPushAfter"
+                @before-push="handleQuickPushBefore"
+                @clear-fields="clearCommitFields"
+              />
             </div>
           </div>
         </template>
@@ -1263,46 +1172,27 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="action-group">
                 <div class="group-title">基础操作</div>
                 <div class="group-buttons">
-                  <el-tooltip :content="hasUnstagedChanges ? `暂存${unstagedFilesCount}个待更改文件` : 'git add .'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
-                    <el-button 
-                      type="primary" 
-                      @click="addToStage" 
-                      :loading="gitStore.isAddingFiles" 
-                      :disabled="!hasUnstagedChanges"
-                      class="action-button"
-                    >
-                      暂存更改
-                      <span v-if="unstagedFilesCount > 0">({{unstagedFilesCount}})</span>
-                    </el-button>
-                  </el-tooltip>
+                  <StageButton
+                    @click="() => {}"
+                    from="drawer"
+                  />
 
-                  <el-tooltip :content="hasStagedChanges ? `提交${stagedFilesCount}个已暂存文件` : 'git commit'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
-                    <el-button 
-                      type="primary" 
-                      @click="commitChanges" 
-                      :loading="gitStore.isLoadingStatus"
-                      :disabled="!hasStagedChanges || !hasUserCommitMessage"
-                      class="action-button"
-                    >
-                      提交
-                      <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
-                    </el-button>
-                  </el-tooltip>
+                  <CommitButton
+                    :has-user-commit-message="hasUserCommitMessage"
+                    :final-commit-message="finalCommitMessage"
+                    :skip-hooks="skipHooks"
+                    @before-commit="() => {}"
+                    @after-commit="(success) => { if (success) clearCommitFields() }"
+                    @click="() => {}"
+                    from="drawer"
+                  />
 
-                  <el-tooltip :content="needsPush ? `推送${gitStore.branchAhead}个本地提交` : 'git push'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
-                    <el-button 
-                      type="primary"
-                      :icon="Upload"
-                      @click="pushToRemote"
-                      :loading="gitStore.isPushing"
-                      :disabled="!canPush"
-                      :class="['action-button', 'push-button', { 'is-loading': gitStore.isPushing }]"
-                      :style="canPush ? {backgroundColor: '#67c23a', borderColor: '#67c23a'} : {}"
-                    >
-                      推送
-                      <span v-if="needsPush">({{gitStore.branchAhead}})</span>
-                    </el-button>
-                  </el-tooltip>
+                  <PushButton
+                    @before-push="() => {}"
+                    @after-push="(success) => { if (success) showPushSuccessIndicator() }"
+                    @click="() => {}"
+                    from="drawer"
+                  />
                   
                   <el-tooltip :content="needsPull ? `拉取${gitStore.branchBehind}个远程提交` : 'git pull'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
                     <el-button 
@@ -1354,7 +1244,7 @@ git config --global user.email "your.email@example.com"</pre>
                   </el-tooltip>
 
                   <QuickPushButton 
-                    variant="small"
+                    from="drawer"
                     :has-user-commit-message="hasUserCommitMessage"
                     :final-commit-message="finalCommitMessage"
                     :skip-hooks="skipHooks"
@@ -1910,9 +1800,8 @@ git config --global user.email "your.email@example.com"</pre>
 .action-button {
   font-size: 14px;
   font-weight: 500;
-  flex: 1;
-  min-width: 100px;
-  padding: 0 10px;
+  // flex: 1;
+  // padding: 0 10px;
 }
 
 .action-button:hover {
@@ -2339,14 +2228,6 @@ git config --global user.email "your.email@example.com"</pre>
   justify-content: center;
 }
 
-.button-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: 6px; /* 从8px减少到6px */
-  width: 100%;
-  height: 100%;
-}
 
 .button-grid .el-button {
   margin: 0;
