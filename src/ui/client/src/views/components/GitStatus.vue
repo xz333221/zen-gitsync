@@ -956,17 +956,8 @@ defineExpose({
         <span class="description-title">文件锁定功能说明</span>
       </div>
       <div class="description-content">
-        <p><strong>🔒 锁定文件的作用：</strong></p>
         <ul>
           <li>锁定的文件在执行 Git 提交时会被自动跳过，不会被添加到暂存区</li>
-          <li>适用于临时文件、配置文件、或不想提交的开发中文件</li>
-          <li>锁定状态会持久保存，直到手动解锁</li>
-        </ul>
-        <p><strong>💡 使用场景：</strong></p>
-        <ul>
-          <li>开发过程中的临时测试文件</li>
-          <li>本地配置文件（如数据库连接、API密钥等）</li>
-          <li>正在开发但还不想提交的功能文件</li>
         </ul>
       </div>
     </div>

@@ -687,6 +687,8 @@ const canResetToRemote = computed(() => {
 function useMessageTemplate(template: string) {
   // 设置为当前提交信息
   commitMessage.value = template;
+  // 关闭弹窗
+  defaultMessageDialogVisible.value = false;
 }
 
 // 设置为默认提交信息（从 TemplateManager 组件调用）
