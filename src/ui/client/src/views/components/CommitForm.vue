@@ -363,6 +363,32 @@ function handleStashFileSelect(filePath: string) {
   }
 }
 
+// 处理打开文件
+async function handleOpenFile(filePath: string, context: string) {
+  try {
+    const response = await fetch('/api/open-file', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        filePath,
+        context
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      ElMessage.success(result.message);
+    } else {
+      ElMessage.error(result.error || '打开文件失败');
+    }
+  } catch (error) {
+    ElMessage.error(`打开文件失败: ${(error as Error).message}`);
+  }
+}
+
 
 
 // 添加默认提交信息模板相关变量
@@ -1667,8 +1693,10 @@ git config --global user.email "your.email@example.com"</pre>
               :files="stashFilesForViewer"
               :diffContent="stashDiff"
               :selectedFile="selectedStashFile"
+              context="stash-detail"
               emptyText="该stash没有变更文件"
               @file-select="handleStashFileSelect"
+              @open-file="handleOpenFile"
             />
           </div>
         </div>

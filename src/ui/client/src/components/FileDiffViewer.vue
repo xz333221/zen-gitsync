@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { ElEmpty, ElScrollbar, ElTooltip, ElIcon } from 'element-plus';
-import { Document } from '@element-plus/icons-vue';
+import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage } from 'element-plus';
+import { Document, FolderOpened } from '@element-plus/icons-vue';
 import { formatDiff } from '../utils/index.ts';
 
 // 定义props
@@ -11,6 +11,9 @@ interface FileItem {
   type?: string; // 文件类型，可选
 }
 
+// 定义上下文类型
+type ContextType = 'git-status' | 'commit-detail' | 'stash-detail';
+
 interface Props {
   files: FileItem[]; // 文件列表
   emptyText?: string; // 无文件时的提示文本
@@ -18,6 +21,8 @@ interface Props {
   selectedFile?: string; // 当前选中的文件路径
   height?: string; // 组件高度
   showFileList?: boolean; // 是否显示文件列表，默认true
+  context?: ContextType; // 使用上下文，用于确定打开文件的行为
+  showOpenButton?: boolean; // 是否显示打开文件按钮，默认true
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -25,12 +30,15 @@ const props = withDefaults(defineProps<Props>(), {
   diffContent: '',
   selectedFile: '',
   height: '100%',
-  showFileList: true
+  showFileList: true,
+  context: 'git-status',
+  showOpenButton: true
 });
 
 // 定义事件
 interface Emits {
   (e: 'file-select', filePath: string): void; // 选择文件时触发
+  (e: 'open-file', filePath: string, context: ContextType): void; // 打开文件时触发
 }
 
 const emit = defineEmits<Emits>();
@@ -59,6 +67,30 @@ function handleFileSelect(filePath: string) {
   internalSelectedFile.value = filePath;
   emit('file-select', filePath);
 }
+
+// 打开文件方法
+function handleOpenFile() {
+  if (!currentSelectedFile.value) {
+    ElMessage.warning('请先选择一个文件');
+    return;
+  }
+  
+  emit('open-file', currentSelectedFile.value, props.context);
+}
+
+// 计算打开按钮的提示文本
+const openButtonTooltip = computed(() => {
+  switch (props.context) {
+    case 'git-status':
+      return '在系统默认编辑器中打开文件';
+    case 'commit-detail':
+      return '打开该提交时的文件版本';
+    case 'stash-detail':
+      return '打开该stash中的文件版本';
+    default:
+      return '打开文件';
+  }
+});
 
 // 监听props.selectedFile变化，同步内部状态
 watch(() => props.selectedFile, (newVal) => {
@@ -124,9 +156,27 @@ watch(() => props.files, (newFiles) => {
     <div class="diff-panel" :class="{ 'full-width': !showFileList }">
       <div class="panel-header">
         <h4>文件差异</h4>
-        <span v-if="currentSelectedFile" class="selected-file">
-          {{ currentSelectedFile.split('/').pop() }}
-        </span>
+        <div class="header-right">
+          <span v-if="currentSelectedFile" class="selected-file">
+            {{ currentSelectedFile.split('/').pop() }}
+          </span>
+          <el-tooltip
+            v-if="showOpenButton && currentSelectedFile"
+            :content="openButtonTooltip"
+            placement="top"
+            effect="light"
+          >
+            <el-button
+              type="primary"
+              size="small"
+              :icon="FolderOpened"
+              @click="handleOpenFile"
+              class="open-file-btn"
+            >
+              打开文件
+            </el-button>
+          </el-tooltip>
+        </div>
       </div>
       
       <div class="diff-content">
@@ -200,6 +250,24 @@ watch(() => props.files, (newFiles) => {
     font-size: var(--font-size-md);
     font-weight: var(--font-weight-semibold);
     color: #303133;
+  }
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.open-file-btn {
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
   }
 }
 

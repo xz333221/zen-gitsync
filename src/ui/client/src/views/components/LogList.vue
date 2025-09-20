@@ -718,6 +718,32 @@ function handleCommitFileSelect(filePath: string) {
   }
 }
 
+// 处理打开文件
+async function handleOpenFile(filePath: string, context: string) {
+  try {
+    const response = await fetch('/api/open-file', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        filePath,
+        context
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      ElMessage.success(result.message);
+    } else {
+      ElMessage.error(result.error || '打开文件失败');
+    }
+  } catch (error) {
+    ElMessage.error(`打开文件失败: ${(error as Error).message}`);
+  }
+}
+
 
 
 
@@ -1443,8 +1469,10 @@ function toggleFullscreen() {
           :loading="isLoadingCommitDetail"
           :diffContent="commitDiff"
           :selectedFile="selectedCommitFile"
+          context="commit-detail"
           emptyText="没有找到变更文件"
           @file-select="handleCommitFileSelect"
+          @open-file="handleOpenFile"
         />
       </div>
     </CommonDialog>

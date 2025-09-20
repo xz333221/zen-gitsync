@@ -46,6 +46,32 @@ const gitFilesForViewer = computed(() => {
 async function handleGitFileSelect(filePath: string) {
   await getFileDiff(filePath)
 }
+
+// 处理打开文件
+async function handleOpenFile(filePath: string, context: string) {
+  try {
+    const response = await fetch('/api/open-file', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        filePath,
+        context
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      ElMessage.success(result.message);
+    } else {
+      ElMessage.error(result.error || '打开文件失败');
+    }
+  } catch (error) {
+    ElMessage.error(`打开文件失败: ${(error as Error).message}`);
+  }
+}
 // 锁定文件对话框状态
 const showLockedFilesDialog = ref(false)
 // 添加文件组折叠状态
@@ -735,8 +761,10 @@ defineExpose({
       :files="gitFilesForViewer"
       :diffContent="diffContent"
       :selectedFile="selectedFile"
+      context="git-status"
       emptyText="选择文件查看差异"
       @file-select="handleGitFileSelect"
+      @open-file="handleOpenFile"
     />
   </CommonDialog>
 
