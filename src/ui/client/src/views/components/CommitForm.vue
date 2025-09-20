@@ -2413,46 +2413,79 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 /* 全局loading自定义样式 */
-:deep(.git-push-loading) {
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.9) 0%, rgba(103, 194, 58, 0.9) 100%) !important;
-  backdrop-filter: blur(10px) !important;
+.git-push-loading {
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.95) 0%, rgba(103, 194, 58, 0.95) 100%) !important;
+  backdrop-filter: blur(15px) !important;
 }
 
-:deep(.git-push-loading .el-loading-mask) {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
+.git-push-loading .el-loading-mask {
+  background: transparent !important;
 }
 
-:deep(.git-push-loading .el-loading-spinner) {
-  margin-bottom: 20px !important;
+.git-push-loading .el-loading-spinner {
+  margin-top: -50px !important;
   position: relative !important;
 }
 
-:deep(.git-push-loading .el-loading-spinner .circular) {
-  width: 80px !important;
-  height: 80px !important;
+.git-push-loading .el-loading-spinner svg {
+  width: 100px !important;
+  height: 100px !important;
+  color: #ffffff !important;
+}
+
+.git-push-loading .el-loading-spinner .circular {
+  width: 100px !important;
+  height: 100px !important;
   animation: git-push-rotate 2s linear infinite !important;
 }
 
-:deep(.git-push-loading .el-loading-spinner .path) {
+.git-push-loading .el-loading-spinner .path {
   stroke: #ffffff !important;
-  stroke-width: 3 !important;
+  stroke-width: 4 !important;
   stroke-linecap: round !important;
-  stroke-dasharray: 90, 150 !important;
-  stroke-dashoffset: 0 !important;
-  animation: git-push-dash 1.5s ease-in-out infinite !important;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5)) !important;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.8)) !important;
 }
 
-:deep(.git-push-loading .el-loading-text) {
+.git-push-loading .el-loading-text {
   color: #ffffff !important;
-  font-size: 18px !important;
-  font-weight: 600 !important;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
-  margin-top: 10px !important;
-  letter-spacing: 0.5px !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+  margin-top: 30px !important;
+  letter-spacing: 1px !important;
+  text-transform: uppercase !important;
+}
+
+/* 添加呼吸光环效果 */
+.git-push-loading .el-loading-spinner::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, transparent 70%);
+  animation: git-push-pulse 3s ease-in-out infinite;
+  z-index: -1;
+}
+
+/* 添加旋转光环 */
+.git-push-loading .el-loading-spinner::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 140px;
+  height: 140px;
+  margin: -70px 0 0 -70px;
+  border: 2px solid transparent;
+  border-top: 2px solid rgba(255, 255, 255, 0.3);
+  border-right: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  animation: git-push-rotate 4s linear infinite reverse;
+  z-index: -1;
 }
 
 /* 自定义loading动画 */
@@ -2465,39 +2498,10 @@ git config --global user.email "your.email@example.com"</pre>
   }
 }
 
-@keyframes git-push-dash {
-  0% {
-    stroke-dasharray: 1, 150;
-    stroke-dashoffset: 0;
-  }
-  50% {
-    stroke-dasharray: 90, 150;
-    stroke-dashoffset: -35;
-  }
-  100% {
-    stroke-dasharray: 90, 150;
-    stroke-dashoffset: -124;
-  }
-}
-
-/* 添加脉冲效果 */
-:deep(.git-push-loading .el-loading-spinner::before) {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100px;
-  height: 100px;
-  margin: -50px 0 0 -50px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  animation: git-push-pulse 2s ease-in-out infinite;
-}
-
 @keyframes git-push-pulse {
   0% {
     transform: scale(0.8);
-    opacity: 1;
+    opacity: 0.8;
   }
   50% {
     transform: scale(1.2);
@@ -2505,7 +2509,7 @@ git config --global user.email "your.email@example.com"</pre>
   }
   100% {
     transform: scale(0.8);
-    opacity: 1;
+    opacity: 0.8;
   }
 }
 
