@@ -46,7 +46,8 @@ withDefaults(defineProps<Props>(), {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.75) 0%, rgba(103, 194, 58, 0.75) 100%);
+  backdrop-filter: blur(25px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -57,19 +58,13 @@ withDefaults(defineProps<Props>(), {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(8px);
-  min-width: 120px;
+  gap: 20px;
 }
 
 .loading-spinner {
   position: relative;
-  width: 32px;
-  height: 32px;
+  width: 120px;
+  height: 120px;
 }
 
 .spinner-ring {
@@ -78,38 +73,57 @@ withDefaults(defineProps<Props>(), {
   left: 0;
   width: 100%;
   height: 100%;
-  border: 2px solid #e4e7ed;
-  border-top: 2px solid #409eff;
+  border: 4px solid transparent;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
 }
 
-.spinner-ring:nth-child(2),
+.spinner-ring:nth-child(1) {
+  border-top: 4px solid rgba(255, 255, 255, 0.9);
+  animation: spin 2s linear infinite;
+}
+
+.spinner-ring:nth-child(2) {
+  border-right: 4px solid rgba(255, 255, 255, 0.6);
+  animation: spin 3s linear infinite reverse;
+  width: 90%;
+  height: 90%;
+  top: 5%;
+  left: 5%;
+}
+
 .spinner-ring:nth-child(3) {
-  display: none;
+  border-bottom: 4px solid rgba(255, 255, 255, 0.3);
+  animation: spin 4s linear infinite;
+  width: 80%;
+  height: 80%;
+  top: 10%;
+  left: 10%;
 }
 
 .loading-text {
-  color: #606266;
-  font-size: 13px;
-  font-weight: 400;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  letter-spacing: 1px;
   text-align: center;
-  margin-top: 4px;
+  animation: pulse-text 2s ease-in-out infinite;
 }
 
 .loading-progress {
   width: 200px;
   height: 4px;
-  background: #f0f0f0;
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .progress-bar {
   height: 100%;
-  background: #409eff;
+  background: linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0.8) 100%);
   border-radius: 2px;
   transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
 /* 动画效果 */
@@ -122,31 +136,44 @@ withDefaults(defineProps<Props>(), {
   }
 }
 
+@keyframes pulse-text {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
 /* 过渡动画 */
 .loading-fade-enter-active,
 .loading-fade-leave-active {
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
 .loading-fade-enter-from,
 .loading-fade-leave-to {
   opacity: 0;
+  backdrop-filter: blur(0px);
 }
 
 .loading-fade-enter-to,
 .loading-fade-leave-from {
   opacity: 1;
+  backdrop-filter: blur(15px);
 }
 
 .loading-fade-enter-active .loading-container,
 .loading-fade-leave-active .loading-container {
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
 .loading-fade-enter-from .loading-container,
 .loading-fade-leave-to .loading-container {
   opacity: 0;
-  transform: scale(0.9);
+  transform: scale(0.8);
 }
 
 .loading-fade-enter-to .loading-container,
