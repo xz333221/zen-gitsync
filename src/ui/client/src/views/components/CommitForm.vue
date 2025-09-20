@@ -21,7 +21,7 @@ import GitActionButtons from "@/components/GitActionButtons.vue";
 const gitStore = useGitStore();
 const configStore = useConfigStore();
 const commitMessage = ref("");
-const { loadingState, show: showLoading, hide: hideLoading } = useGlobalLoading();
+const { loadingState, show: showLoading, hide: hideLoading, setText: setLoadingText } = useGlobalLoading();
 const { successState, show: showSuccess } = useSuccessModal();
 const isUpdatingStatus = ref(false); // 添加状态更新中的标识
 // 添加placeholder变量
@@ -598,9 +598,9 @@ function clearCommitFields() {
 
 // 处理QuickPushButton的推送前事件
 function handleQuickPushBefore() {
-  // 显示全局loading
+  // 显示全局loading，初始显示暂存文件
   showLoading({
-    text: '正在推送到远程仓库...',
+    text: '正在暂存文件...',
     showProgress: false
   });
 }
@@ -770,6 +770,25 @@ async function setDefaultFromTemplate(template: string) {
     ElMessage.error(`设置默认提交信息失败: ${(error as Error).message}`);
   }
 }
+
+// 监听GitStore状态变化，更新loading文字
+watch(() => gitStore.isAddingFiles, (isAdding) => {
+  if (isAdding && loadingState.visible) {
+    setLoadingText('正在暂存文件...');
+  }
+});
+
+watch(() => gitStore.isCommiting, (isCommiting) => {
+  if (isCommiting && loadingState.visible) {
+    setLoadingText('正在提交更改...');
+  }
+});
+
+watch(() => gitStore.isPushing, (isPushing) => {
+  if (isPushing && loadingState.visible) {
+    setLoadingText('正在推送到远程仓库...');
+  }
+});
 
 onMounted(async () => {
   // 从localStorage加载标准化提交选项

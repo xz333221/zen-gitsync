@@ -38,11 +38,18 @@ export function useGlobalLoading() {
     loadingState.text = text
   }
 
+  const setText = (text: string) => {
+    if (loadingState.visible) {
+      loadingState.text = text
+    }
+  }
+
   return {
     loadingState,
     show,
     hide,
     updateProgress,
-    updateText
+    updateText,
+    setText
   }
 }
