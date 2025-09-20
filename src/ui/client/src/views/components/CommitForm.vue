@@ -711,6 +711,15 @@ async function handleEnterKey(event: KeyboardEvent) {
     return;
   }
 
+  // 添加与一键推送按钮相同的禁用逻辑判断
+  // 检查是否有任何变更
+  const hasAnyChangesValue = gitStore.fileList.some(file => !isFileLocked(file.path));
+  
+  // 检查是否满足推送条件（与QuickPushButton.vue中的isDisabled逻辑一致）
+  if (!hasAnyChangesValue || !hasUserCommitMessage.value || !gitStore.hasUpstream) {
+    return;
+  }
+
   // 只在按下 Enter 键时处理（不包括 Shift+Enter）
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault(); // 阻止默认的换行行为
