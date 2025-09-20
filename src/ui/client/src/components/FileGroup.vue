@@ -212,10 +212,6 @@ function getActionButtons(fileType: string) {
 </template>
 
 <style scoped>
-.file-group {
-  margin-bottom: 16px;
-}
-
 .file-group-header {
   display: flex;
   align-items: center;
@@ -225,7 +221,7 @@ function getActionButtons(fileType: string) {
   border-radius: 6px;
   cursor: pointer;
   font-weight: 500;
-  font-size: 12px;
+  font-size: 14px;
   color: #374151;
   border: 1px solid #e5e7eb;
   transition: all 0.2s ease;
@@ -233,12 +229,12 @@ function getActionButtons(fileType: string) {
 
 .file-group-header:hover {
   background-color: #f1f5f9;
-  border-color: #d1d5db;
+  /* border-color: #d1d5db; */
 }
 
 .collapse-icon {
   transition: transform 0.2s ease;
-  font-size: 16px;
+  font-size: 12px;
   color: #6b7280;
 }
 
@@ -255,12 +251,13 @@ function getActionButtons(fileType: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 6px;
+  /* padding: 2px 6px; */
   background-color: #fff;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid #f3f4f6;
+  min-height: 30px;
 }
 
 .file-item:hover {
@@ -305,16 +302,18 @@ function getActionButtons(fileType: string) {
 
 .file-name-section {
   min-width: 0;
-  flex-shrink: 1;
+  /* flex-shrink: 1; */
 }
 
 .file-name {
+  /* max-width: 100px; */
   font-weight: 500;
   color: #1f2937;
   font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 
 .file-name.locked-file-name {

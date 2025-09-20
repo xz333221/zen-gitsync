@@ -1998,27 +1998,7 @@ git config --global user.email "your.email@example.com"</pre>
   transition: all 0.3s ease;
 }
 
-.push-button {
-  background-color: #67c23a;
-  border-color: #67c23a;
-}
 
-.push-button:hover {
-  background-color: #85ce61;
-  border-color: #85ce61;
-}
-
-.push-button.is-loading, 
-.push-button.is-loading:hover, 
-.push-button.is-loading:focus {
-  animation: pushing-pulse 1.5s infinite;
-  background-color: #67c23a !important;
-  border-color: #67c23a !important;
-}
-
-.el-button.push-button.is-loading .el-loading-spinner {
-  color: #fff !important;
-}
 
 /* 一键推送所有按钮动画 */
 @keyframes one-click-push-glow {
@@ -2790,38 +2770,7 @@ git config --global user.email "your.email@example.com"</pre>
   overflow: hidden;
 }
 
-.file-item {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
 
-.file-item:hover {
-  background-color: #e6f7ff;
-}
-
-.file-item.active {
-  background-color: #409eff;
-  color: white;
-}
-
-.file-item.active .file-icon {
-  color: white;
-}
-
-.file-icon {
-  margin-right: 8px;
-  color: #606266;
-  font-size: 16px;
-}
-
-.file-name {
-  font-size: 13px;
-  
-  word-break: break-all;
-  line-height: 1.4;
-}
 
 .diff-content {
   flex: 1;
