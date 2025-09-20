@@ -147,24 +147,30 @@ watch(() => props.files, (newFiles) => {
 </template>
 
 <style scoped lang="scss">
+/* 导入全局变量 */
+@import '../styles/variables.scss';
+
 .file-diff-viewer {
   display: flex;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  background-color: #fff;
+  background-color: var(--bg-container);
   height: 100%; /* 确保填充满父容器 */
   flex: 1; /* 关键：允许在flex父容器中伸缩 */
   min-height: 0; /* 关键：允许flex子元素收缩 */
+  box-shadow: var(--shadow-base);
+  transition: var(--transition-all);
 }
 
 .files-panel {
   width: 300px;
   min-width: 250px;
-  background-color: #fafafa;
-  border-right: 1px solid #e4e7ed;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  box-shadow: inset -1px 0 0 var(--border-color-light);
 }
 
 .diff-panel {
@@ -172,6 +178,7 @@ watch(() => props.files, (newFiles) => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  background: var(--bg-container);
   
   &.full-width {
     width: 100%;
@@ -179,40 +186,53 @@ watch(() => props.files, (newFiles) => {
 }
 
 .panel-header {
-  padding: 12px 16px;
-  background-color: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-primary-gradient);
+  color: var(--color-white);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   
   h4 {
     margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: #303133;
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-white);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   }
 }
 
 .file-count {
-  font-size: 12px;
-  color: #909399;
-  font-weight: normal;
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: var(--font-weight-medium);
+  background: rgba(255, 255, 255, 0.15);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .selected-file {
-  font-size: 12px;
-  color: #909399;
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.8);
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  background: rgba(255, 255, 255, 0.1);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
 }
 
 .files-list {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border-radius: 0 0 var(--radius-base) 0;
 }
 
 
@@ -220,47 +240,116 @@ watch(() => props.files, (newFiles) => {
 .file-item {
   display: flex;
   align-items: center;
-  padding: 8px 16px;
+  padding: var(--spacing-base) var(--spacing-lg);
   cursor: pointer;
-  transition: all 0.2s ease;
-  border-bottom: 1px solid #f0f0f0;
+  transition: var(--transition-all);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  background: transparent;
   
-  &:hover {
-    background-color: #e6f7ff;
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: transparent;
+    transition: var(--transition-all);
   }
   
-  &.active {
-    background-color: #409eff;
-    color: white;
+  &:hover {
+    background: linear-gradient(90deg, rgba(64, 158, 255, 0.08) 0%, rgba(255, 255, 255, 0.5) 100%);
+    transform: translateX(2px);
     
-    .file-icon {
-      color: white;
+    &::before {
+      background: var(--color-primary);
     }
   }
   
-  // 根据文件类型添加不同样式
+  &.active {
+    background: var(--color-primary-gradient);
+    color: var(--color-white);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    
+    &::before {
+      background: var(--color-white);
+      width: 4px;
+    }
+    
+    .file-icon {
+      color: var(--color-white);
+    }
+  }
+  
+  // 根据文件类型添加不同样式 - 使用统一的Git状态颜色
   &.file-type-added {
-    border-left: 3px solid #67c23a;
+    &::before {
+      background: var(--git-status-added);
+    }
+    
+    &:not(.active):hover {
+      background: linear-gradient(90deg, rgba(16, 185, 129, 0.1) 0%, rgba(255, 255, 255, 0.8) 100%);
+      
+      &::before {
+        background: var(--git-status-added);
+        width: 4px;
+      }
+    }
   }
   
   &.file-type-modified {
-    border-left: 3px solid #e6a23c;
+    &::before {
+      background: var(--git-status-modified);
+    }
+    
+    &:not(.active):hover {
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.1) 0%, rgba(255, 255, 255, 0.8) 100%);
+      
+      &::before {
+        background: var(--git-status-modified);
+        width: 4px;
+      }
+    }
   }
   
   &.file-type-deleted {
-    border-left: 3px solid #f56c6c;
+    &::before {
+      background: var(--git-status-deleted);
+    }
+    
+    &:not(.active):hover {
+      background: linear-gradient(90deg, rgba(239, 68, 68, 0.1) 0%, rgba(255, 255, 255, 0.8) 100%);
+      
+      &::before {
+        background: var(--git-status-deleted);
+        width: 4px;
+      }
+    }
   }
   
   &.file-type-untracked {
-    border-left: 3px solid #909399;
+    &::before {
+      background: var(--git-status-untracked);
+    }
+    
+    &:not(.active):hover {
+      background: linear-gradient(90deg, rgba(139, 92, 246, 0.1) 0%, rgba(255, 255, 255, 0.8) 100%);
+      
+      &::before {
+        background: var(--git-status-untracked);
+        width: 4px;
+      }
+    }
   }
 }
 
 .file-icon {
-  margin-right: 8px;
-  color: #606266;
-  font-size: 16px;
+  margin-right: var(--spacing-base);
+  color: var(--text-secondary);
+  font-size: var(--font-size-lg);
   flex-shrink: 0;
+  transition: var(--transition-color);
 }
 
 .file-name {
@@ -268,81 +357,69 @@ watch(() => props.files, (newFiles) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  transition: var(--transition-color);
+  
+  .active & {
+    color: var(--color-white);
+    font-weight: var(--font-weight-semibold);
+  }
 }
 
 .diff-content {
   flex: 1;
-  padding: 16px;
+  padding: var(--spacing-lg);
   overflow: auto;
-  background-color: #fff;
-  min-height: 0; /* 确保flex子元素能正确收缩 */
+  background: var(--bg-container);
+  min-height: 0; /* 确保 flex 子元素能正确收缩 */
   
   .diff-text {
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
-    font-size: 12px;
-    line-height: 1.45;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-normal);
     white-space: pre-wrap;
     word-break: break-all;
-    height: 100%; /* 确保diff内容填充满容器 */
+    height: 100%; /* 确保 diff 内容填充满容器 */
+    padding: var(--spacing-md);
+    background: var(--bg-code);
+    border-radius: var(--radius-base);
+    border: 1px solid var(--border-color-light);
   }
-  
-
 }
 
-/* 滚动条样式 */
+/* 滚动条样式 - 使用全局变量 */
 :deep(.el-scrollbar__view) {
   height: 100%;
 }
 
-/* diff样式继承自全局样式 */
+:deep(.el-scrollbar__bar) {
+  .el-scrollbar__thumb {
+    background-color: var(--scrollbar-thumb);
+    
+    &:hover {
+      background-color: var(--scrollbar-thumb-hover);
+    }
+  }
+}
+
+/* diff样式 - 移除重复样式，使用全局变量 */
 .diff-text {
-  /* 确保全局diff样式优先级高于组件局部样式 */
-  :deep(.diff-header) {
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace !important;
-    font-size: 12px !important;
-    line-height: 1.45 !important;
-    background-color: #f1f8ff !important;
-    color: #0366d6 !important;
-    border: 1px solid #c8e1ff !important;
-    border-left: 4px solid #0366d6 !important;
-    font-weight: 600 !important;
-    padding: 8px 12px !important;
-    margin: 8px 0 !important;
-    border-radius: 6px !important;
-    box-shadow: 0 1px 3px rgba(3, 102, 214, 0.1) !important;
-  }
+  /* 全局diff样式已在common.scss中定义，这里只需要组件特定的样式 */
+  border-radius: var(--radius-base);
+  background: var(--bg-code);
+  border: 1px solid var(--border-color-light);
   
+  /* 确保全局样式正确应用 */
+  :deep(.diff-header),
   :deep(.diff-old-file),
-  :deep(.diff-new-file) {
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace !important;
-    font-size: 12px !important;
-    line-height: 1.45 !important;
-    padding: 5px 8px !important;
-    margin: 1px 0 !important;
-    border-radius: 3px !important;
-    display: block !important;
-    font-weight: 600 !important;
-  }
-  
-  :deep(.diff-old-file) {
-    color: #cb2431 !important;
-    background-color: #ffeef0 !important;
-    border-left: 4px solid #cb2431 !important;
-  }
-  
-  :deep(.diff-new-file) {
-    color: #22863a !important;
-    background-color: #e6ffed !important;
-    border-left: 4px solid #22863a !important;
-  }
-  
+  :deep(.diff-new-file),
   :deep(.diff-hunk-header),
   :deep(.diff-added),
   :deep(.diff-removed),
   :deep(.diff-context) {
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace !important;
-    font-size: 12px !important;
-    line-height: 1.45 !important;
+    /* 样式已在全局variables.scss和common.scss中统一定义 */
   }
 }
 </style>

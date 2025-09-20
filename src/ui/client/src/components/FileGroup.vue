@@ -212,30 +212,45 @@ function getActionButtons(fileType: string) {
 </template>
 
 <style scoped>
+/* 导入全局变量 */
+@import '../styles/variables.scss';
+
+.file-group {
+  margin-bottom: var(--spacing-md);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-container);
+  box-shadow: var(--shadow-base);
+  border: 1px solid var(--border-color);
+  transition: var(--transition-all);
+}
+
+.file-group:hover {
+  box-shadow: var(--shadow-hover);
+}
+
 .file-group-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background-color: #f8fafc;
-  border-radius: 6px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-primary-gradient);
   cursor: pointer;
-  font-weight: 500;
-  font-size: 14px;
-  color: #374151;
-  border: 1px solid #e5e7eb;
-  transition: all 0.2s ease;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  color: var(--color-white);
+  transition: var(--transition-all);
+  position: relative;
 }
 
 .file-group-header:hover {
-  background-color: #f1f5f9;
-  /* border-color: #d1d5db; */
+  background: var(--color-primary-gradient-hover);
 }
 
 .collapse-icon {
-  transition: transform 0.2s ease;
-  font-size: 12px;
-  color: #6b7280;
+  transition: var(--transition-transform);
+  font-size: var(--font-size-sm);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .collapse-icon.collapsed {
@@ -245,124 +260,194 @@ function getActionButtons(fileType: string) {
 .file-list {
   display: flex;
   flex-direction: column;
+  padding: var(--spacing-sm);
+  gap: 1px;
 }
 
 .file-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* padding: 2px 6px; */
-  background-color: #fff;
-  border-radius: 4px;
+  padding: var(--spacing-sm) var(--spacing-base);
+  background: var(--bg-container);
+  border-radius: var(--radius-base);
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid #f3f4f6;
-  min-height: 30px;
+  transition: var(--transition-bg), var(--transition-shadow);
+  border: 1px solid var(--border-color-light);
+  height: 28px;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.file-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background: transparent;
+  transition: var(--transition-all);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .file-item:hover {
-  background-color: #f9fafb;
+  background: var(--bg-container-hover);
+  border-color: var(--border-hover);
+}
+
+.file-item:hover::before {
+  background: var(--color-primary-gradient);
 }
 
 .file-info {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--spacing-md);
   flex: 1;
   min-width: 0;
 }
 
 .file-status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
+  transition: var(--transition-all);
 }
 
 .file-status-indicator.added {
-  background-color: #22c55e;
+  background: var(--git-status-added);
 }
 
 .file-status-indicator.modified {
-  background-color: #f59e0b;
+  background: var(--git-status-modified);
 }
 
 .file-status-indicator.deleted {
-  background-color: #ef4444;
+  background: var(--git-status-deleted);
 }
 
 .file-status-indicator.untracked {
-  background-color: #8b5cf6;
+  background: var(--git-status-untracked);
 }
 
 .file-status-indicator.locked {
-  border: 2px solid #dc2626;
-  background-color: transparent;
+  border: 2px solid var(--git-status-locked);
+  background: #fef2f2;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  50% { box-shadow: 0 0 0 2px rgba(220, 38, 38, 0); }
 }
 
 .file-name-section {
   min-width: 0;
-  /* flex-shrink: 1; */
+  flex: 0 1 auto;
 }
 
 .file-name {
-  /* max-width: 100px; */
-  font-weight: 500;
-  color: #1f2937;
-  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  transition: var(--transition-color);
+}
+
+.file-item:hover .file-name {
+  color: var(--text-link);
 }
 
 .file-name.locked-file-name {
-  color: #dc2626;
+  color: var(--git-status-locked);
+  font-weight: var(--font-weight-semibold);
 }
 
 .lock-indicator {
-  font-size: 12px;
-  color: #dc2626;
+  font-size: var(--font-size-xs);
+  color: var(--git-status-locked);
 }
 
 .file-path-section {
   flex: 1;
   min-width: 0;
-  margin-left: 8px;
+  margin-left: var(--spacing-md);
 }
 
 .file-directory {
-  font-size: 12px;
-  color: #6b7280;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   display: block;
+  font-weight: var(--font-weight-normal);
+  background: var(--color-gray-100);
+  padding: 1px var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-all);
+}
+
+.file-item:hover .file-directory {
+  background: #e0e7ff;
+  color: #6366f1;
 }
 
 .file-actions {
   display: none;
   align-items: center;
-  gap: 2px;
+  gap: var(--spacing-xs);
   flex-shrink: 0;
+  padding: 1px;
+  border-radius: var(--radius-base);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color-light);
 }
 
 .file-item:hover .file-actions {
   display: flex;
+  animation: slideIn var(--transition-base) ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(var(--spacing-base));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .file-action-btn {
   min-width: auto !important;
-  width: auto !important;
-  height: auto !important;
-  padding: 4px !important;
+  width: 20px !important;
+  height: 20px !important;
+  padding: 0 !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: var(--transition-all);
+  border-radius: var(--radius-sm);
 }
 
 .file-action-btn:hover {
-  transform: scale(1.1);
+  transform: scale(1.05);
+  box-shadow: var(--shadow-sm);
+}
+
+.file-action-btn:active {
+  transform: scale(1);
+  transition: var(--transition-fast);
 }
 </style>

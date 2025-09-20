@@ -1,0 +1,338 @@
+/* =======================================================
+   全局CSS变量定义文件 - 统一管理项目样式变量
+   ======================================================= */
+
+:root {
+  /* ===== 基础颜色定义 ===== */
+  
+  /* 主色调 */
+  --color-primary: #409eff;
+  --color-primary-light: #5a67d8;
+  --color-primary-dark: #337ecc;
+  --color-primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --color-primary-gradient-hover: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+  
+  /* 语义颜色 */
+  --color-success: #67c23a;
+  --color-success-light: #10b981;
+  --color-warning: #e6a23c;
+  --color-warning-light: #f59e0b;
+  --color-danger: #f56c6c;
+  --color-danger-light: #ef4444;
+  --color-danger-dark: #dc2626;
+  --color-info: #909399;
+  --color-info-light: #8b5cf6;
+  
+  /* 中性颜色 */
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  
+  /* ===== Git文件状态颜色 ===== */
+  
+  /* 文件状态指示器颜色 */
+  --git-status-added: #10b981;        /* 新增文件 - 绿色 */
+  --git-status-modified: #f59e0b;     /* 修改文件 - 橙色 */
+  --git-status-deleted: #ef4444;      /* 删除文件 - 红色 */
+  --git-status-untracked: #8b5cf6;    /* 未跟踪文件 - 紫色 */
+  --git-status-locked: #dc2626;       /* 锁定文件 - 深红色 */
+  
+  /* Git差异显示颜色 */
+  --git-diff-header-bg: #f1f8ff;
+  --git-diff-header-color: #0366d6;
+  --git-diff-header-border: #c8e1ff;
+  --git-diff-added-bg: #e6ffed;
+  --git-diff-added-color: #22863a;
+  --git-diff-added-border: #22863a;
+  --git-diff-removed-bg: #ffeef0;
+  --git-diff-removed-color: #cb2431;
+  --git-diff-removed-border: #cb2431;
+  --git-diff-hunk-bg: #f1f8ff;
+  --git-diff-hunk-color: #6f42c1;
+  --git-diff-context-color: #24292f;
+  --git-diff-context-bg: #ffffff;
+  
+  /* ===== 按钮颜色系统 ===== */
+  
+  /* 主要按钮 */
+  --btn-primary-bg: var(--color-primary);
+  --btn-primary-hover-bg: var(--color-primary-light);
+  --btn-primary-active-bg: var(--color-primary-dark);
+  --btn-primary-color: var(--color-white);
+  
+  /* 成功按钮 */
+  --btn-success-bg: var(--color-success);
+  --btn-success-hover-bg: #85ce61;
+  --btn-success-active-bg: #5daf34;
+  --btn-success-color: var(--color-white);
+  
+  /* 警告按钮 */
+  --btn-warning-bg: var(--color-warning);
+  --btn-warning-hover-bg: #ebb563;
+  --btn-warning-active-bg: #cf9236;
+  --btn-warning-color: var(--color-white);
+  
+  /* 危险按钮 */
+  --btn-danger-bg: var(--color-danger);
+  --btn-danger-hover-bg: #f78989;
+  --btn-danger-active-bg: #dd6161;
+  --btn-danger-color: var(--color-white);
+  
+  /* 信息按钮 */
+  --btn-info-bg: var(--color-info);
+  --btn-info-hover-bg: #a6a9ad;
+  --btn-info-active-bg: #82848a;
+  --btn-info-color: var(--color-white);
+  
+  /* 文本按钮 */
+  --btn-text-color: var(--color-primary);
+  --btn-text-hover-color: var(--color-primary-light);
+  --btn-text-active-color: var(--color-primary-dark);
+  
+  /* ===== 背景颜色 ===== */
+  
+  /* 页面背景 */
+  --bg-page: #f5f5f5;
+  --bg-page-dark: #2d2d2d;
+  
+  /* 容器背景 */
+  --bg-container: var(--color-white);
+  --bg-container-hover: #f8fafc;
+  --bg-container-dark: #24292e;
+  
+  /* 浮层背景 */
+  --bg-overlay: rgba(40, 44, 52, 0.7);
+  --bg-overlay-light: rgba(0, 0, 0, 0.2);
+  
+  /* 代码区域背景 */
+  --bg-code: #f6f8fa;
+  --bg-code-dark: #2d2d2d;
+  --bg-code-line: #fafbfc;
+  
+  /* ===== 边框颜色 ===== */
+  
+  /* 基础边框 */
+  --border-color: rgba(0, 0, 0, 0.06);
+  --border-color-light: rgba(0, 0, 0, 0.03);
+  --border-color-medium: #e1e4e8;
+  --border-color-dark: rgba(255, 255, 255, 0.15);
+  
+  /* 交互边框 */
+  --border-hover: rgba(102, 126, 234, 0.15);
+  --border-focus: var(--color-primary);
+  --border-active: var(--color-primary-dark);
+  
+  /* ===== 阴影 ===== */
+  
+  /* 基础阴影 */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-base: 0 1px 4px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.12);
+  
+  /* 交互阴影 */
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-active: 0 2px 6px rgba(0, 0, 0, 0.12);
+  --shadow-focus: 0 0 0 2px rgba(64, 158, 255, 0.2);
+  
+  /* 深色主题阴影 */
+  --shadow-dark: 0 2px 10px rgba(0, 0, 0, 0.2);
+  --shadow-dark-lg: 0 4px 16px rgba(0, 0, 0, 0.3);
+  
+  /* ===== 文字颜色 ===== */
+  
+  /* 主要文字 */
+  --text-primary: #1f2937;
+  --text-primary-dark: #f8f8f2;
+  
+  /* 次要文字 */
+  --text-secondary: #606266;
+  --text-secondary-dark: #e0e0e0;
+  
+  /* 辅助文字 */
+  --text-tertiary: #9ca3af;
+  --text-tertiary-dark: rgba(255, 255, 255, 0.6);
+  
+  /* 占位符文字 */
+  --text-placeholder: #c0c4cc;
+  --text-placeholder-dark: rgba(255, 255, 255, 0.4);
+  
+  /* 链接文字 */
+  --text-link: var(--color-primary);
+  --text-link-hover: var(--color-primary-light);
+  --text-link-active: var(--color-primary-dark);
+  
+  /* 状态文字 */
+  --text-success: var(--color-success);
+  --text-warning: var(--color-warning);
+  --text-danger: var(--color-danger);
+  --text-info: var(--color-info);
+  
+  /* ===== 尺寸变量 ===== */
+  
+  /* 圆角 */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-base: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 50%;
+  
+  /* 间距 */
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-base: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 20px;
+  --spacing-2xl: 24px;
+  --spacing-3xl: 32px;
+  
+  /* 字体大小 */
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-base: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+  --font-size-3xl: 24px;
+  
+  /* 行高 */
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.4;
+  --line-height-relaxed: 1.6;
+  
+  /* 字体粗细 */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  /* ===== 动画与过渡 ===== */
+  
+  /* 过渡时间 */
+  --transition-fast: 0.1s;
+  --transition-base: 0.2s;
+  --transition-slow: 0.3s;
+  
+  /* 过渡函数 */
+  --ease-in: ease-in;
+  --ease-out: ease-out;
+  --ease-in-out: ease-in-out;
+  --ease-custom: cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* 常用过渡组合 */
+  --transition-all: all var(--transition-base) var(--ease-custom);
+  --transition-color: color var(--transition-base) var(--ease-custom);
+  --transition-bg: background-color var(--transition-base) var(--ease-custom);
+  --transition-border: border-color var(--transition-base) var(--ease-custom);
+  --transition-shadow: box-shadow var(--transition-base) var(--ease-custom);
+  --transition-transform: transform var(--transition-base) var(--ease-custom);
+  
+  /* ===== 层级 ===== */
+  
+  /* z-index层级 */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+  --z-toast: 1080;
+  
+  /* ===== 滚动条样式 ===== */
+  
+  /* 滚动条颜色 */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(144, 147, 153, 0.3);
+  --scrollbar-thumb-hover: rgba(144, 147, 153, 0.5);
+  --scrollbar-width: 6px;
+  
+  /* ===== 代码字体 ===== */
+  
+  /* 等宽字体族 */
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
+}
+
+/* =======================================================
+   深色主题变量覆盖
+   ======================================================= */
+   
+[data-theme="dark"] {
+  /* 页面背景 */
+  --bg-page: var(--bg-page-dark);
+  --bg-container: var(--bg-container-dark);
+  
+  /* 文字颜色 */
+  --text-primary: var(--text-primary-dark);
+  --text-secondary: var(--text-secondary-dark);
+  --text-tertiary: var(--text-tertiary-dark);
+  --text-placeholder: var(--text-placeholder-dark);
+  
+  /* 边框颜色 */
+  --border-color: var(--border-color-dark);
+  --border-color-light: rgba(255, 255, 255, 0.08);
+  --border-color-medium: rgba(255, 255, 255, 0.12);
+  
+  /* 阴影 */
+  --shadow-base: var(--shadow-dark);
+  --shadow-lg: var(--shadow-dark-lg);
+  
+  /* Git差异显示 - 深色主题调整 */
+  --git-diff-context-bg: #24292e;
+  --git-diff-context-color: #f8f8f2;
+}
+
+/* =======================================================
+   便捷工具类 - 基于变量的常用样式
+   ======================================================= */
+
+/* 渐变背景工具类 */
+.bg-gradient-primary {
+  background: var(--color-primary-gradient);
+}
+
+.bg-gradient-primary-hover {
+  background: var(--color-primary-gradient-hover);
+}
+
+/* 状态颜色工具类 */
+.text-git-added { color: var(--git-status-added); }
+.text-git-modified { color: var(--git-status-modified); }
+.text-git-deleted { color: var(--git-status-deleted); }
+.text-git-untracked { color: var(--git-status-untracked); }
+.text-git-locked { color: var(--git-status-locked); }
+
+.bg-git-added { background-color: var(--git-status-added); }
+.bg-git-modified { background-color: var(--git-status-modified); }
+.bg-git-deleted { background-color: var(--git-status-deleted); }
+.bg-git-untracked { background-color: var(--git-status-untracked); }
+.bg-git-locked { background-color: var(--git-status-locked); }
+
+/* 阴影工具类 */
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-base { box-shadow: var(--shadow-base); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+.shadow-xl { box-shadow: var(--shadow-xl); }
+
+/* 过渡工具类 */
+.transition-all { transition: var(--transition-all); }
+.transition-color { transition: var(--transition-color); }
+.transition-bg { transition: var(--transition-bg); }
+.transition-border { transition: var(--transition-border); }
+.transition-shadow { transition: var(--transition-shadow); }
+.transition-transform { transition: var(--transition-transform); }
