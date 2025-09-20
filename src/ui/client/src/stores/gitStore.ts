@@ -861,15 +861,25 @@ export const useGitStore = defineStore('git', () => {
     try {
       isAddingFiles.value = true
       
+      // 调试信息：打印锁定文件列表
+      console.log('锁定文件列表:', configStore.lockedFiles)
+      console.log('当前文件列表:', fileList.value.map(f => f.path))
+      
       // 获取当前文件列表，过滤掉锁定的文件
       const filesToAdd = fileList.value.filter(file => {
         const normalizedPath = file.path.replace(/\\/g, '/')
         const isLocked = configStore.lockedFiles.some(lockedFile => {
           const normalizedLocked = lockedFile.replace(/\\/g, '/')
-          return normalizedPath === normalizedLocked
+          const match = normalizedPath === normalizedLocked
+          if (match) {
+            console.log(`文件 ${normalizedPath} 被锁定，跳过`)
+          }
+          return match
         })
         return !isLocked
       })
+      
+      console.log(`总文件数: ${fileList.value.length}, 需要添加的文件数: ${filesToAdd.length}`)
       
       if (filesToAdd.length === 0) {
         ElMessage({
@@ -881,6 +891,7 @@ export const useGitStore = defineStore('git', () => {
       
       // 如果所有文件都没有被锁定，使用 git add . 提高效率
       if (filesToAdd.length === fileList.value.length) {
+        console.log('使用 git add . 添加所有文件')
         const response = await fetch('/api/add', {
           method: 'POST'
         })
@@ -900,6 +911,7 @@ export const useGitStore = defineStore('git', () => {
           return false
         }
       } else {
+        console.log('有锁定文件，逐个添加非锁定文件')
         // 有锁定文件，需要逐个添加非锁定文件
         let successCount = 0
         let failCount = 0
