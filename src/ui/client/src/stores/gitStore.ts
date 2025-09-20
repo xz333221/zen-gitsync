@@ -852,6 +852,8 @@ export const useGitStore = defineStore('git', () => {
   
   // 添加文件到暂存区 (过滤锁定文件)
   async function addToStage() {
+    console.log('=== 进入 addToStage 方法 ===')
+    
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
       ElMessage.warning('当前目录不是Git仓库')
