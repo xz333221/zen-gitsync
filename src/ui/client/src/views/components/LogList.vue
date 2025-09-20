@@ -1616,7 +1616,6 @@ function toggleFullscreen() {
 }
 
 .content-area {
-  padding: 10px 16px;
   flex: 1;
   min-height: 100px;
   height: calc(100% - 52px);

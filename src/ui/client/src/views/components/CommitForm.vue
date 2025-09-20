@@ -2125,7 +2125,7 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
   justify-content: center;
   animation: push-success 0.5s ease-out;
-  z-index: 9999;
+  z-index: 999;
   width: 200px;
   height: 200px;
 }
@@ -2176,7 +2176,7 @@ git config --global user.email "your.email@example.com"</pre>
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 999;
   width: 200px;
   height: 200px;
   color: white;
@@ -2237,6 +2237,8 @@ git config --global user.email "your.email@example.com"</pre>
   border-radius: 8px;
   box-shadow: 0 4px 10px rgba(65, 105, 225, 0.25);
   transition: all 0.3s ease;
+  position: relative;
+  z-index: 1000;
 }
 
 .one-push-button:hover {
@@ -2673,6 +2675,8 @@ git config --global user.email "your.email@example.com"</pre>
   border-radius: 8px;
   box-shadow: 0 4px 10px rgba(65, 105, 225, 0.25);
   transition: all 0.3s ease;
+  position: relative;
+  z-index: 1000;
 }
 
 .one-push-button:hover {
