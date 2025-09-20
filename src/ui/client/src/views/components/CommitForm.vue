@@ -597,9 +597,8 @@ function handleQuickPushBefore() {
   // 推送前的处理逻辑（如有需要）
   loadingInstance = ElLoading.service({
     lock: true,
-    text: '正在推送...',
-    background: 'rgba(0, 0, 0, 0.7)',
-    spinner: 'el-icon-loading',
+    text: '正在推送到远程仓库...',
+    background: 'rgba(0, 0, 0, 0.8)',
     customClass: 'git-push-loading'
   });
 }
@@ -2415,22 +2414,99 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* 全局loading自定义样式 */
 :deep(.git-push-loading) {
-  background: rgba(0, 0, 0, 0.8) !important;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.9) 0%, rgba(103, 194, 58, 0.9) 100%) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+:deep(.git-push-loading .el-loading-mask) {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+:deep(.git-push-loading .el-loading-spinner) {
+  margin-bottom: 20px !important;
+  position: relative !important;
+}
+
+:deep(.git-push-loading .el-loading-spinner .circular) {
+  width: 80px !important;
+  height: 80px !important;
+  animation: git-push-rotate 2s linear infinite !important;
+}
+
+:deep(.git-push-loading .el-loading-spinner .path) {
+  stroke: #ffffff !important;
+  stroke-width: 3 !important;
+  stroke-linecap: round !important;
+  stroke-dasharray: 90, 150 !important;
+  stroke-dashoffset: 0 !important;
+  animation: git-push-dash 1.5s ease-in-out infinite !important;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5)) !important;
 }
 
 :deep(.git-push-loading .el-loading-text) {
   color: #ffffff !important;
-  font-size: 16px !important;
-  font-weight: 500 !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  margin-top: 10px !important;
+  letter-spacing: 0.5px !important;
 }
 
-:deep(.git-push-loading .el-loading-spinner) {
-  color: #67c23a !important;
+/* 自定义loading动画 */
+@keyframes git-push-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
-:deep(.git-push-loading .el-loading-spinner .circular) {
-  width: 50px !important;
-  height: 50px !important;
+@keyframes git-push-dash {
+  0% {
+    stroke-dasharray: 1, 150;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -35;
+  }
+  100% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -124;
+  }
+}
+
+/* 添加脉冲效果 */
+:deep(.git-push-loading .el-loading-spinner::before) {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100px;
+  height: 100px;
+  margin: -50px 0 0 -50px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  animation: git-push-pulse 2s ease-in-out infinite;
+}
+
+@keyframes git-push-pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
 }
 
 .actions-flex-container {
