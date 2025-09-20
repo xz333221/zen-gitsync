@@ -1947,7 +1947,6 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   gap: 10px;
   width: 100%;
-  margin-bottom: 10px;
 }
 
 .type-select {
@@ -1972,11 +1971,163 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
   gap: 5px;
   width: 100%;
+  /* 添加背景和边框，让容器更明显 */
+  background: linear-gradient(135deg, #f8faff 0%, #eef4ff 100%);
+  // border: 2px solid #d4e8ff;
+  border-radius: 12px;
+  // padding: 4px;
+  margin: 8px 0;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+  transition: all 0.3s ease;
 }
 
-.scope-input, .description-input {
-  flex-grow: 1;
+.description-container:hover {
+  // border-color: #409eff;
+  box-shadow: 0 4px 16px rgba(64, 158, 255, 0.2);
 }
+
+/* 简短描述输入框样式 */
+:deep(.description-input) {
+  flex-grow: 1;
+  
+  .el-input__wrapper {
+    border-radius: 8px;
+    background: #ffffff;
+    border: 2px solid #409eff;
+    box-shadow: 0 2px 4px rgba(64, 158, 255, 0.1);
+    transition: all 0.3s ease;
+  }
+  
+  .el-input__wrapper:hover {
+    border-color: #66b1ff;
+    box-shadow: 0 4px 8px rgba(64, 158, 255, 0.2);
+  }
+  
+  .el-input__wrapper.is-focus {
+    border-color: #409eff;
+    box-shadow: 0 0 0 4px rgba(64, 158, 255, 0.2);
+  }
+  
+  .el-input__inner {
+    font-size: 15px;
+    font-weight: 500;
+    color: #303133;
+  }
+  
+  .el-input__inner::placeholder {
+    color: #a8abb2;
+    font-weight: normal;
+  }
+}
+
+/* 提交类型选择框样式 */
+:deep(.type-select) {
+  .el-select__wrapper {
+    border-radius: 8px;
+    background: #ffffff;
+    border: 2px solid #f56c6c;
+    box-shadow: 0 2px 4px rgba(245, 108, 108, 0.1);
+    transition: all 0.3s ease;
+    height: 40px; /* 统一高度 */
+  }
+  
+  .el-select__wrapper:hover {
+    border-color: #f78989;
+    box-shadow: 0 4px 8px rgba(245, 108, 108, 0.2);
+  }
+  
+  .el-select__wrapper.is-focus {
+    border-color: #f56c6c;
+    box-shadow: 0 0 0 4px rgba(245, 108, 108, 0.2);
+  }
+  
+  .el-select__inner {
+    font-size: 14px;
+    font-weight: 500;
+    color: #303133;
+  }
+  
+  .el-select__inner::placeholder {
+    color: #a8abb2;
+    font-weight: normal;
+  }
+}
+
+/* 作用域输入框样式 */
+:deep(.scope-input) {
+  flex-grow: 1;
+  
+  .el-input__wrapper {
+    border-radius: 8px;
+    background: #ffffff;
+    border: 2px solid #67c23a;
+    box-shadow: 0 2px 4px rgba(103, 194, 58, 0.1);
+    transition: all 0.3s ease;
+    height: 40px; /* 统一高度 */
+  }
+  
+  .el-input__wrapper:hover {
+    border-color: #85ce61;
+    box-shadow: 0 4px 8px rgba(103, 194, 58, 0.2);
+  }
+  
+  .el-input__wrapper.is-focus {
+    border-color: #67c23a;
+    box-shadow: 0 0 0 4px rgba(103, 194, 58, 0.2);
+  }
+  
+  .el-input__inner {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  
+  .el-input__inner::placeholder {
+    color: #a8abb2;
+    font-weight: normal;
+  }
+}
+
+/* 提交信息输入框样式 */
+:deep(.commit-message-input) {
+  /* 添加背景和边框，让容器更明显 */
+  background: linear-gradient(135deg, #fff8f0 0%, #fff2e6 100%);
+  border-radius: 12px;
+  margin: 8px 0;
+  box-shadow: 0 2px 8px rgba(230, 162, 60, 0.1);
+  transition: all 0.3s ease;
+  
+  .el-textarea__inner {
+    border-radius: 8px;
+    background: #ffffff;
+    border: 2px solid #e6a23c;
+    box-shadow: 0 2px 4px rgba(230, 162, 60, 0.1);
+    font-size: 15px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+  }
+  
+  .el-textarea__inner:hover {
+    border-color: #ebb563;
+    box-shadow: 0 4px 8px rgba(230, 162, 60, 0.2);
+  }
+  
+  .el-textarea__inner:focus {
+    border-color: #e6a23c;
+    box-shadow: 0 0 0 4px rgba(230, 162, 60, 0.2);
+    outline: none;
+  }
+  
+  .el-textarea__inner::placeholder {
+    color: #a8abb2;
+    font-weight: normal;
+  }
+}
+
+:deep(.commit-message-input):hover {
+  border-color: #e6a23c;
+  box-shadow: 0 4px 16px rgba(230, 162, 60, 0.2);
+}
+
 
 .settings-button {
   flex-shrink: 0;
