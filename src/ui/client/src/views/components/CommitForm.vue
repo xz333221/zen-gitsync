@@ -480,92 +480,12 @@ function openScopeSettings() {
   scopeDialogVisible.value = true;
 }
 
-// 添加文件到暂存区 (git add)
-async function addToStage() {
-  try {
-    const result = await gitStore.addToStage();
-    if (result) {
-      // 触发状态更新事件
-      gitStore.fetchStatus();
-    }
-  } catch (error) {
-    ElMessage({
-      message: `添加文件失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
-
-// 提交更改 (git commit)
-async function commitChanges() {
-  if (!finalCommitMessage.value.trim()) {
-    ElMessage({
-      message: "提交信息不能为空",
-      type: "warning",
-    });
-    return;
-  }
-
-  try {
-    // 使用Store提交更改
-    const result = await gitStore.commitChanges(finalCommitMessage.value, skipHooks.value);
-
-    if (result) {
-      // 清空提交信息
-      clearCommitFields();
-
-      // 触发成功事件
-      gitStore.fetchStatus();
-      gitStore.fetchLog();
-
-      // 手动更新分支状态（不需要等待，因为只是提交操作）
-      gitStore.getBranchStatus(true);
-    }
-  } catch (error) {
-    ElMessage({
-      message: `提交失败: ${(error as Error).message}`,
-      type: "error",
-    });
-  }
-}
-
 // 显示推送成功提示
 function showPushSuccessIndicator() {
   showPushSuccess.value = true;
   setTimeout(() => {
     showPushSuccess.value = false;
   }, 2000);
-}
-
-// 推送到远程 (git push)
-async function pushToRemote() {
-  try {
-    await gitStore.pushToRemote();
-
-    // 推送完成后，设置状态更新中标识，避免显示间隙
-    isUpdatingStatus.value = true;
-
-    // 等待分支状态刷新完成后再显示成功动画
-    try {
-      // pushToRemote已经刷新了分支状态，这里稍等一下确保状态传播
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // 分支状态刷新完成后显示推送成功提示
-      showPushSuccessIndicator();
-    } catch (error) {
-      console.error('推送后处理失败:', error);
-      // 即使处理失败也显示成功动画，因为推送操作已经成功
-      showPushSuccessIndicator();
-    } finally {
-      isUpdatingStatus.value = false;
-    }
-  } catch (error) {
-    isUpdatingStatus.value = false;
-    ElMessage({
-      message: `推送失败: ${(error as Error).message}`,
-      type: 'error',
-    });
-  }
 }
 
 // 处理git pull操作

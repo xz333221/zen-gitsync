@@ -1127,6 +1127,17 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
   
+  // 添加 add-all 接口（直接执行 git add . 不考虑锁定文件）
+  app.post('/api/add-all', async (req, res) => {
+    try {
+      // 直接执行 git add . 不考虑锁定文件
+      await execGitCommand('git add .');
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
   // 添加单个文件到暂存区
   app.post('/api/add-file', async (req, res) => {
     try {

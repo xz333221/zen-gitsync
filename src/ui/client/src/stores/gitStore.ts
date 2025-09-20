@@ -846,7 +846,7 @@ export const useGitStore = defineStore('git', () => {
     }
   }
   
-  // 添加文件到暂存区 (git add .)
+  // 添加文件到暂存区 (git add .) 
   async function addToStage() {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
@@ -869,6 +869,46 @@ export const useGitStore = defineStore('git', () => {
 
         // 不在这里立即刷新状态，避免与后续操作产生竞争条件
         // fetchStatus() 会在整个操作完成后统一刷新
+
+        return true
+      } else {
+        ElMessage({
+          message: `添加文件失败: ${result.error}`,
+          type: 'error'
+        })
+        return false
+      }
+    } catch (error) {
+      ElMessage({
+        message: `添加文件失败: ${(error as Error).message}`,
+        type: 'error'
+      })
+      return false
+    } finally {
+      isAddingFiles.value = false
+    }
+  }
+  
+  // 直接添加所有文件到暂存区 (git add . 不考虑锁定文件)
+  async function addAllToStage() {
+    // 检查是否是Git仓库
+    if (!isGitRepo.value) {
+      ElMessage.warning('当前目录不是Git仓库')
+      return false
+    }
+    
+    try {
+      isAddingFiles.value = true
+      const response = await fetch('/api/add-all', {
+        method: 'POST'
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        ElMessage({
+          message: '所有文件已添加到暂存区',
+          type: 'success'
+        })
 
         return true
       } else {
@@ -1680,6 +1720,7 @@ export const useGitStore = defineStore('git', () => {
     fetchStatus,
     fetchStatusPorcelain,
     addToStage,
+    addAllToStage,
     addFileToStage,
     unstageFile,
     commitChanges,

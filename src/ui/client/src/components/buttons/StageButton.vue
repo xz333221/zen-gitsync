@@ -27,6 +27,20 @@ function isFileLocked(filePath: string): boolean {
   })
 }
 
+// 检查是否有文件匹配锁定列表
+function hasLockedFileMatches(): boolean {
+  if (configStore.lockedFiles.length === 0) {
+    return false
+  }
+  
+  return gitStore.fileList.some(file => {
+    if (!['modified', 'deleted', 'untracked'].includes(file.type)) {
+      return false
+    }
+    return isFileLocked(file.path)
+  })
+}
+
 // 计算未暂存文件数量（排除锁定文件）
 const unstagedFilesCount = computed(() => {
   return gitStore.fileList.filter(file =>
@@ -53,14 +67,30 @@ const tooltipText = computed(() => {
   if (!hasUnstagedChanges.value) {
     return '没有需要暂存的更改'
   }
-  return `暂存${unstagedFilesCount.value}个未暂存文件`
+  
+  const hasMatches = hasLockedFileMatches()
+  if (hasMatches) {
+    return `暂存${unstagedFilesCount.value}个未暂存文件（逐个添加）`
+  } else {
+    return `暂存所有更改（git add .）`
+  }
 })
 
 // 处理点击事件
 async function handleClick() {
   emit('click')
   try {
-    const result = await gitStore.addToStage()
+    let result
+    const hasMatches = hasLockedFileMatches()
+    
+    if (hasMatches) {
+      // 有锁定文件匹配，使用原有的逐个添加逻辑
+      result = await gitStore.addToStage()
+    } else {
+      // 没有锁定文件匹配，直接使用 git add .
+      result = await gitStore.addAllToStage()
+    }
+    
     if (result) {
       // 触发状态更新事件
       gitStore.fetchStatus()
