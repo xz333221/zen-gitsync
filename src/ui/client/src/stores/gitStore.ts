@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { io, Socket } from 'socket.io-client'
+import { useConfigStore } from './configStore'
 
 // 定义Git操作间隔时间（毫秒）
 const GIT_OPERATION_DELAY = 800
@@ -31,6 +32,9 @@ function getBackendPort() {
 const backendPort = getBackendPort()
 
 export const useGitStore = defineStore('git', () => {
+  // 获取configStore实例
+  const configStore = useConfigStore()
+  
   // 状态
   const currentBranch = ref('')
   const allBranches = ref<string[]>([])
@@ -846,7 +850,7 @@ export const useGitStore = defineStore('git', () => {
     }
   }
   
-  // 添加文件到暂存区 (git add .) 
+  // 添加文件到暂存区 (过滤锁定文件)
   async function addToStage() {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
@@ -856,27 +860,95 @@ export const useGitStore = defineStore('git', () => {
     
     try {
       isAddingFiles.value = true
-      const response = await fetch('/api/add', {
-        method: 'POST'
+      
+      // 获取当前文件列表，过滤掉锁定的文件
+      const filesToAdd = fileList.value.filter(file => {
+        const normalizedPath = file.path.replace(/\\/g, '/')
+        const isLocked = configStore.lockedFiles.some(lockedFile => {
+          const normalizedLocked = lockedFile.replace(/\\/g, '/')
+          return normalizedPath === normalizedLocked
+        })
+        return !isLocked
       })
       
-      const result = await response.json()
-      if (result.success) {
+      if (filesToAdd.length === 0) {
         ElMessage({
-          message: '文件已添加到暂存区',
-          type: 'success'
-        })
-
-        // 不在这里立即刷新状态，避免与后续操作产生竞争条件
-        // fetchStatus() 会在整个操作完成后统一刷新
-
-        return true
-      } else {
-        ElMessage({
-          message: `添加文件失败: ${result.error}`,
-          type: 'error'
+          message: '没有需要暂存的文件（所有文件都被锁定）',
+          type: 'warning'
         })
         return false
+      }
+      
+      // 如果所有文件都没有被锁定，使用 git add . 提高效率
+      if (filesToAdd.length === fileList.value.length) {
+        const response = await fetch('/api/add', {
+          method: 'POST'
+        })
+        
+        const result = await response.json()
+        if (result.success) {
+          ElMessage({
+            message: '文件已添加到暂存区',
+            type: 'success'
+          })
+          return true
+        } else {
+          ElMessage({
+            message: `添加文件失败: ${result.error}`,
+            type: 'error'
+          })
+          return false
+        }
+      } else {
+        // 有锁定文件，需要逐个添加非锁定文件
+        let successCount = 0
+        let failCount = 0
+        
+        for (const file of filesToAdd) {
+          try {
+            const response = await fetch('/api/add-file', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ filePath: file.path })
+            })
+            
+            const result = await response.json()
+            if (result.success) {
+              successCount++
+            } else {
+              failCount++
+              console.error(`添加文件 ${file.path} 失败:`, result.error)
+            }
+          } catch (error) {
+            failCount++
+            console.error(`添加文件 ${file.path} 失败:`, error)
+          }
+        }
+        
+        if (successCount > 0) {
+          const lockedCount = fileList.value.length - filesToAdd.length
+          let message = `已添加 ${successCount} 个文件到暂存区`
+          if (lockedCount > 0) {
+            message += `，跳过 ${lockedCount} 个锁定文件`
+          }
+          if (failCount > 0) {
+            message += `，${failCount} 个文件添加失败`
+          }
+          
+          ElMessage({
+            message,
+            type: failCount > 0 ? 'warning' : 'success'
+          })
+          return true
+        } else {
+          ElMessage({
+            message: '所有文件添加失败',
+            type: 'error'
+          })
+          return false
+        }
       }
     } catch (error) {
       ElMessage({
