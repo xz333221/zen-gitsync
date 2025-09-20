@@ -1012,6 +1012,20 @@ git config --global user.email "your.email@example.com"</pre>
         <template v-else>
           <!-- 左侧：提交表单 -->
           <div class="commit-section">
+            <!-- Git操作按钮组 - 移到最上面 -->
+            <div class="top-actions-container">
+              <GitActionButtons
+                :has-user-commit-message="hasUserCommitMessage"
+                :final-commit-message="finalCommitMessage"
+                :skip-hooks="skipHooks"
+                from="form"
+                @after-commit="(success) => { if (success) clearCommitFields() }"
+                @after-push="handleQuickPushAfter"
+                @before-push="handleQuickPushBefore"
+                @clear-fields="clearCommitFields"
+              />
+            </div>
+
             <div class="commit-options">
               <!-- 提交模式开关 -->
               <div class="option-card">
@@ -1158,24 +1172,12 @@ git config --global user.email "your.email@example.com"</pre>
                 <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
               </div>
 
-                <!-- 高级字段结束后的Git命令预览和按钮组 -->
+                <!-- 高级字段结束后的Git命令预览 -->
               <!-- Git命令预览 -->
               <GitCommandPreview 
                 :command="gitCommandPreview"
                 title="Git提交命令预览："
                 placeholder="git commit -m &quot;<提交信息>&quot;"
-              />
-              
-              <!-- Git操作按钮组 -->
-              <GitActionButtons
-                :has-user-commit-message="hasUserCommitMessage"
-                :final-commit-message="finalCommitMessage"
-                :skip-hooks="skipHooks"
-                from="form"
-                @after-commit="(success) => { if (success) clearCommitFields() }"
-                @after-push="handleQuickPushAfter"
-                @before-push="handleQuickPushBefore"
-                @clear-fields="clearCommitFields"
               />
             </div>
           </div>
@@ -2133,6 +2135,67 @@ git config --global user.email "your.email@example.com"</pre>
   color: #409eff;
 }
 
+/* 顶部按钮区域样式 */
+.top-actions-container {
+  margin-bottom: 16px;
+}
+
+.top-actions-container :deep(.form-bottom-actions) {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border: 1px solid #90caf9;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.1);
+  margin-bottom: 0;
+}
+
+.top-actions-container :deep(.form-bottom-actions):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.15);
+}
+
+.top-actions-container :deep(.actions-flex-container) {
+  gap: 20px;
+}
+
+.top-actions-container :deep(.button-grid) {
+  gap: 16px;
+}
+
+/* 按钮样式优化 */
+.top-actions-container :deep(.el-button) {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.top-actions-container :deep(.el-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.top-actions-container :deep(.el-button--primary) {
+  background: #409eff;
+  border: none;
+  color: white;
+}
+
+.top-actions-container :deep(.el-button--success) {
+  background: #67c23a;
+  border: none;
+  color: white;
+}
+
+.top-actions-container :deep(.el-button--warning) {
+  background: #e6a23c;
+  border: none;
+  color: white;
+}
+
+.top-actions-container :deep(.el-button--info) {
+  background: #909399;
+  border: none;
+  color: white;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .commit-options {
@@ -2164,6 +2227,16 @@ git config --global user.email "your.email@example.com"</pre>
     font-size: 9px;
     -webkit-line-clamp: 1;
     line-clamp: 1;
+  }
+  
+  .top-actions-container :deep(.actions-flex-container) {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .top-actions-container :deep(.button-grid) {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
 
