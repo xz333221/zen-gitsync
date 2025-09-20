@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu, CopyDocument, Warning } from "@element-plus/icons-vue";
+import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu, CopyDocument, Warning, Loading } from "@element-plus/icons-vue";
+import { ElLoading } from 'element-plus';
 import { useGitStore } from "@stores/gitStore";
 import { useConfigStore } from "@stores/configStore";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
@@ -18,6 +19,7 @@ const gitStore = useGitStore();
 const configStore = useConfigStore();
 const commitMessage = ref("");
 const showPushSuccess = ref(false);
+let loadingInstance: any = null;
 const isUpdatingStatus = ref(false); // 添加状态更新中的标识
 // 添加placeholder变量
 const placeholder = ref("输入提交信息...");
@@ -593,10 +595,22 @@ function clearCommitFields() {
 // 处理QuickPushButton的推送前事件
 function handleQuickPushBefore() {
   // 推送前的处理逻辑（如有需要）
+  loadingInstance = ElLoading.service({
+    lock: true,
+    text: '正在推送...',
+    background: 'rgba(0, 0, 0, 0.7)',
+    spinner: 'el-icon-loading',
+    customClass: 'git-push-loading'
+  });
 }
 
 // 处理QuickPushButton的推送后事件
 function handleQuickPushAfter(success: boolean) {
+  if (loadingInstance) {
+    loadingInstance.close();
+    loadingInstance = null;
+  }
+  
   if (success) {
     // 等待分支状态刷新完成后再显示成功动画
     isUpdatingStatus.value = true;
@@ -970,17 +984,11 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
       </div>
     </div>
 
-    <!-- 添加推送中指示器 -->
+    <!-- 状态更新指示器 -->
     <transition name="el-fade-in-linear">
-      <div v-if="gitStore.isPushing || isUpdatingStatus" class="pushing-indicator">
-        <div class="pushing-spinner">
-          <svg viewBox="0 0 50 50" class="circular">
-            <circle class="path" cx="25" cy="25" r="20" fill="none" />
-          </svg>
-        </div>
-        <div class="pushing-text">
-          {{ gitStore.isPushing ? '正在推送...' : '更新状态中...' }}
-        </div>
+      <div v-if="isUpdatingStatus" class="status-updating-indicator">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>更新状态中...</span>
       </div>
     </transition>
 
@@ -2376,27 +2384,53 @@ git config --global user.email "your.email@example.com"</pre>
   background-color: #a6a9ad;
   border-color: #a6a9ad;
 }
-.el-button+.el-button {
-  margin-left: 0;
+
+/* 状态更新指示器样式 */
+.status-updating-indicator {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #409eff;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.2);
+  z-index: 2000;
+  backdrop-filter: blur(4px);
 }
 
-/* 推送中动画样式 */
-.pushing-indicator {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  background-color: rgba(64, 158, 255, 1);
-  border-radius: 12px;
-  padding: 20px 30px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 999;
-  width: 200px;
-  height: 200px;
-  color: white;
+.status-updating-indicator span {
+  font-size: 14px;
+  color: #409eff;
+  font-weight: 500;
+}
+
+.status-updating-indicator .el-icon {
+  font-size: 16px;
+  color: #409eff;
+}
+
+/* 全局loading自定义样式 */
+:deep(.git-push-loading) {
+  background: rgba(0, 0, 0, 0.8) !important;
+}
+
+:deep(.git-push-loading .el-loading-text) {
+  color: #ffffff !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+}
+
+:deep(.git-push-loading .el-loading-spinner) {
+  color: #67c23a !important;
+}
+
+:deep(.git-push-loading .el-loading-spinner .circular) {
+  width: 50px !important;
+  height: 50px !important;
 }
 
 .actions-flex-container {
