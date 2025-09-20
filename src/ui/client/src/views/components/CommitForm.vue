@@ -1121,17 +1121,6 @@ git config --global user.email "your.email@example.com"</pre>
                 placeholder="git commit -m &quot;<提交信息>&quot;"
               />
               
-              <!-- Git操作按钮组 -->
-              <GitActionButtons
-                :has-user-commit-message="hasUserCommitMessage"
-                :final-commit-message="finalCommitMessage"
-                :skip-hooks="skipHooks"
-                from="form"
-                @after-commit="(success) => { if (success) clearCommitFields() }"
-                @after-push="handleQuickPushAfter"
-                @before-push="handleQuickPushBefore"
-                @clear-fields="clearCommitFields"
-              />
             </div>
 
             <!-- 标准化提交表单 -->

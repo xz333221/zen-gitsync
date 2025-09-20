@@ -1248,7 +1248,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     try {
       // 获取分页参数
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const limit = parseInt(req.query.limit) || 50;
       const skip = (page - 1) * limit;
       
       // 获取筛选参数
