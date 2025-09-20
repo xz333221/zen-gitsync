@@ -611,26 +611,16 @@ function handleQuickPushAfter(success: boolean) {
   hideLoading();
   
   if (success) {
-    // 等待分支状态刷新完成后再显示成功提示
+    // 等待分支状态刷新完成
     isUpdatingStatus.value = true;
     try {
       // 延时确保所有状态都已更新
       setTimeout(async () => {
         try {
-          // 分支状态刷新完成后显示成功提示
-          showSuccess({
-            text: '推送成功！',
-            description: '代码已成功推送到远程仓库',
-            duration: 2000
-          });
+          // 分支状态刷新完成，不再显示成功提示
+          console.log('推送成功，状态已更新');
         } catch (error) {
           console.error('一键推送后处理失败:', error);
-          // 即使处理失败也显示成功提示，因为主要操作已经成功
-          showSuccess({
-            text: '推送成功！',
-            description: '代码已成功推送到远程仓库',
-            duration: 2000
-          });
         } finally {
           isUpdatingStatus.value = false;
         }
@@ -1120,7 +1110,6 @@ git config --global user.email "your.email@example.com"</pre>
                 title="Git提交命令预览："
                 placeholder="git commit -m &quot;<提交信息>&quot;"
               />
-              
             </div>
 
             <!-- 标准化提交表单 -->
