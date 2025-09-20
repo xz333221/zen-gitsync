@@ -504,16 +504,6 @@ function isFileLocked(filePath: string): boolean {
     return normalizedPath === normalizedLocked
   })
 
-  // 添加调试信息
-  if (filePath === 'test/2.txt' || filePath === '2.txt') {
-    console.log('检查文件锁定状态:', {
-      filePath,
-      normalizedPath,
-      lockedFiles: configStore.lockedFiles,
-      normalizedLockedFiles: configStore.lockedFiles.map(f => f.replace(/\\/g, '/')),
-      isLocked
-    })
-  }
   return isLocked
 }
 
@@ -898,6 +888,8 @@ defineExpose({
   box-sizing: border-box;
 }
 
+
+
 /* 文件列表容器 */
 .file-list-container {
   overflow-y: auto;
@@ -906,67 +898,6 @@ defineExpose({
   box-sizing: border-box;
   scrollbar-width: thin;
   scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
-}
-
-.file-group {
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid #ebeef5;
-  margin-bottom: 4px;
-  display: flex;
-  flex-direction: column;
-  transition: box-shadow 0.3s ease;
-}
-
-.file-group:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-/* 最后一个分组可以吸收剩余空间 */
-.file-group:last-child {
-  margin-bottom: 0;
-  flex: 1 1 auto;
-}
-
-.file-group-header {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 12px;
-  background-color: #f0f2f5;
-  color: #606266;
-  border-bottom: 1px solid #ebeef5;
-  flex-shrink: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: background-color 0.2s ease;
-  user-select: none;
-  min-height: 28px;
-}
-
-.file-group-header:hover {
-  background-color: #e9ecef;
-}
-
-.collapse-icon {
-  transition: transform 0.2s ease;
-  font-size: 14px;
-  color: #6c757d;
-}
-
-.collapse-icon.collapsed {
-  transform: rotate(-90deg);
-}
-
-.file-list {
-  overflow-y: visible;
-  min-height: 30px;
-  max-height: none;
-  flex-grow: 1;
-  padding: 0;
-  margin: 0;
 }
 
 /* Webkit浏览器的滚动条样式 */
@@ -988,145 +919,7 @@ defineExpose({
   background-color: transparent;
 }
 
-.file-list:empty {
-  display: none;
-}
 
-.empty-file-container {
-  overflow-y: hidden !important;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  flex: 1;
-}
-
-.empty-file-group {
-  padding: 16px;
-  text-align: center;
-  color: #909399;
-  font-size: 13px;
-  font-style: italic;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 50px;
-  background-color: #f8f9fa;
-  border-radius: 4px;
-  margin: 8px;
-}
-
-.file-item {
-  padding: 6px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #ebeef5;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-height: 32px;
-}
-
-.file-item:last-child {
-  border-bottom: none;
-}
-
-.file-item:hover {
-  background-color: #ecf5ff;
-}
-
-.file-info {
-  display: flex;
-  align-items: center;
-  flex-grow: 1;
-  overflow: hidden;
-  gap: 8px;
-}
-
-.file-status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #409eff;
-  flex-shrink: 0;
-}
-
-.file-status-indicator.added {
-  background-color: #67c23a;
-}
-
-.file-status-indicator.modified {
-  background-color: #409eff;
-}
-
-.file-status-indicator.deleted {
-  background-color: #f56c6c;
-}
-
-.file-status-indicator.untracked {
-  background-color: #e6a23c;
-}
-
-.file-name-section {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 8px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  max-width: 120px;
-  flex-shrink: 0;
-}
-
-.file-path-section {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  max-width: 200px;
-}
-
-.file-name {
-  font-weight: 500;
-  color: #303133;
-  line-height: 1.3;
-  font-size: 13px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  display: inline-block;
-}
-
-.file-directory {
-  font-size: 11px;
-  color: #909399;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-
-.file-actions {
-  padding-left: 8px;
-  display: flex;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.file-item:hover .file-actions {
-  opacity: 1;
-}
-
-.file-action-btn {
-  width: 26px !important;
-  height: 26px !important;
-  min-width: 26px !important;
-  padding: 0 !important;
-  font-size: 16px !important; /* controls icon size */
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-}
 
 .empty-status {
   display: flex;
@@ -1307,83 +1100,7 @@ defineExpose({
   margin-top: 10px;
 }
 
-/* 锁定文件样式 */
-.locked-files-group {
-  background-color: #fff7e6;
-  border: 1px solid #ffd591;
-}
 
-.locked-files-group .file-group-header {
-  background-color: #fff2e8;
-  color: #d46b08;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.locked-files-group .info-icon {
-  color: #d46b08;
-  cursor: help;
-}
-
-.locked-file-item {
-  background-color: #fffbf0;
-  border-left: 3px solid #ffa940;
-}
-
-.locked-file-item:hover {
-  background-color: #fff7e6;
-}
-
-.file-status-indicator.locked {
-  background-color: #ffa940;
-  border-radius: 50%;
-  position: relative;
-}
-
-.file-status-indicator.locked::before {
-  content: '🔒';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 8px;
-}
-
-/* 锁定文件名样式 */
-.locked-file-name {
-  color: #d46b08 !important;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lock-indicator {
-  color: #d46b08;
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-/* 为锁定的文件状态指示器添加特殊样式 */
-.file-status-indicator.modified.locked {
-  background: linear-gradient(45deg, #1890ff 50%, #ffa940 50%);
-}
-
-.file-status-indicator.untracked.locked {
-  background: linear-gradient(45deg, #52c41a 50%, #ffa940 50%);
-}
-
-.file-status-indicator.added.locked {
-  background: linear-gradient(45deg, #52c41a 50%, #ffa940 50%);
-}
-
-.file-status-indicator.deleted.locked {
-  background: linear-gradient(45deg, #ff4d4f 50%, #ffa940 50%);
-}
 
 /* 锁定文件对话框样式 */
 .empty-locked-files {
@@ -1502,8 +1219,5 @@ defineExpose({
   border-color: #ffa940;
 }
 
-/* 确保锁定文件列表中的操作按钮可见 */
-.locked-file-item .file-actions {
-  opacity: 1;
-}
+
 </style>

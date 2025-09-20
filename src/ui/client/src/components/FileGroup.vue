@@ -178,11 +178,11 @@ function getActionButtons(fileType: string) {
             <el-button
               :type="props.isFileLocked(file.path) ? 'danger' : 'info'"
               size="small"
-              circle
+              text
               @click="handleToggleFileLock(file.path, $event)"
               class="file-action-btn"
             >
-              <el-icon size="12">
+              <el-icon size="16">
                 <component :is="props.isFileLocked(file.path) ? Lock : Unlock" />
               </el-icon>
             </el-button>
@@ -194,12 +194,14 @@ function getActionButtons(fileType: string) {
               <el-button
                 :type="action.buttonType"
                 size="small"
-                circle
+                text
                 @click="action.handler(file.path, $event)"
                 class="file-action-btn"
-                :icon="typeof action.icon === 'string' ? undefined : action.icon"
               >
-                <span v-if="typeof action.icon === 'string'">{{ action.icon }}</span>
+                <el-icon v-if="typeof action.icon !== 'string'" size="16">
+                  <component :is="action.icon" />
+                </el-icon>
+                <span v-else style="font-size: 16px; font-weight: bold;">{{ action.icon }}</span>
               </el-button>
             </el-tooltip>
           </template>
@@ -218,16 +220,15 @@ function getActionButtons(fileType: string) {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 4px 8px;
   background-color: #f8fafc;
   border-radius: 6px;
   cursor: pointer;
   font-weight: 500;
-  font-size: 14px;
+  font-size: 12px;
   color: #374151;
   border: 1px solid #e5e7eb;
   transition: all 0.2s ease;
-  margin-bottom: 8px;
 }
 
 .file-group-header:hover {
@@ -248,33 +249,28 @@ function getActionButtons(fileType: string) {
 .file-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 
 .file-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 6px 6px;
   background-color: #fff;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid #f3f4f6;
-  min-height: 48px;
 }
 
 .file-item:hover {
   background-color: #f9fafb;
-  border-color: #e5e7eb;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .file-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
@@ -346,19 +342,28 @@ function getActionButtons(fileType: string) {
 }
 
 .file-actions {
-  display: flex;
+  display: none;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
+.file-item:hover .file-actions {
+  display: flex;
+}
+
 .file-action-btn {
-  width: 28px;
-  height: 28px;
+  min-width: auto !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 4px !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: bold;
+  transition: all 0.2s ease;
+}
+
+.file-action-btn:hover {
+  transform: scale(1.1);
 }
 </style>

@@ -2793,10 +2793,8 @@ git config --global user.email "your.email@example.com"</pre>
 .file-item {
   display: flex;
   align-items: center;
-  padding: 8px 16px;
   cursor: pointer;
   transition: all 0.2s ease;
-  border-bottom: 1px solid #f0f0f0;
 }
 
 .file-item:hover {
