@@ -8,6 +8,7 @@ import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
 import CommonDialog from '@components/CommonDialog.vue'
+import FileGroup from '@/components/FileGroup.vue'
 
 // 定义props
 const props = defineProps({
@@ -673,246 +674,53 @@ defineExpose({
         
         <!-- 现代化、简洁的文件列表 -->
         <div v-if="gitStore.fileList.length" class="file-list-container">
-          <!-- 分组显示文件 -->
-          <div v-if="gitStore.fileList.some(f => f.type === 'added')" class="file-group">
-            <div class="file-group-header" @click="toggleGroupCollapse('staged')">
-              <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.staged }">
-                <ArrowDown />
-              </el-icon>
-              <span>已暂存的更改</span>
-            </div>
-            <div v-show="!collapsedGroups.staged" class="file-list">
-              <div
-                v-for="file in gitStore.fileList.filter(f => f.type === 'added')"
-                :key="file.path"
-                class="file-item"
-                @click="handleFileClick(file)"
-              >
-                <div class="file-info">
-                  <div class="file-status-indicator" :class="['added', { 'locked': isFileLocked(file.path) }]"></div>
-                  <div class="file-name-section">
-                    <el-tooltip
-                      :content="getFileName(file.path)"
-                      placement="top"
-                      :disabled="getFileName(file.path).length <= 25"
-                      :hide-after="1000"
-                      :show-after="200"
-                    >
-                      <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
-                        {{ getFileName(file.path) }}
-                        <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
-                          <Lock />
-                        </el-icon>
-                      </span>
-                    </el-tooltip>
-                  </div>
-                  <div class="file-path-section" :title="getFileDirectory(file.path)">
-                    <el-tooltip
-                      :content="getFileDirectory(file.path)"
-                      placement="top"
-                      :disabled="getFileDirectory(file.path).length <= 30"
-                      :hide-after="1000"
-                      :show-after="200"
-                    >
-                      <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
-                    </el-tooltip>
-                  </div>
-                </div>
-                <div class="file-actions">
-                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000" :show-after="200">
-                    <el-button
-                      :type="isFileLocked(file.path) ? 'danger' : 'info'"
-                      size="small"
-                      circle
-                      @click.stop="toggleFileLock(file.path)"
-                      class="file-action-btn"
-                    >
-                      <el-icon size="12">
-                        <component :is="isFileLocked(file.path) ? Lock : Unlock" />
-                      </el-icon>
-                    </el-button>
-                  </el-tooltip>
-                  <el-tooltip content="取消暂存" placement="top" :hide-after="1000" :show-after="200">
-                    <el-button
-                      type="warning"
-                      size="small"
-                      circle
-                      @click.stop="unstageFile(file.path)"
-                      class="file-action-btn"
-                    >-</el-button>
-                  </el-tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- 已暂存的更改 -->
+          <FileGroup
+            :files="gitStore.fileList.filter(f => f.type === 'added')"
+            title="已暂存的更改"
+            group-key="staged"
+            :collapsed-groups="collapsedGroups"
+            :is-file-locked="isFileLocked"
+            :get-file-name="getFileName"
+            :get-file-directory="getFileDirectory"
+            @toggle-collapse="toggleGroupCollapse"
+            @file-click="handleFileClick"
+            @toggle-file-lock="toggleFileLock"
+            @unstage-file="unstageFile"
+          />
           
-          <div v-if="gitStore.fileList.some(f => f.type === 'modified' || f.type === 'deleted')" class="file-group">
-            <div class="file-group-header" @click="toggleGroupCollapse('unstaged')">
-              <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.unstaged }">
-                <ArrowDown />
-              </el-icon>
-              <span>未暂存的更改</span>
-            </div>
-            <div v-show="!collapsedGroups.unstaged" class="file-list">
-              <div
-                v-for="file in gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
-                :key="file.path"
-                class="file-item"
-                @click="handleFileClick(file)"
-              >
-                <div class="file-info">
-                  <div class="file-status-indicator" :class="[file.type, { 'locked': isFileLocked(file.path) }]"></div>
-                  <div class="file-name-section">
-                    <el-tooltip
-                      :content="getFileName(file.path)"
-                      placement="top"
-                      :disabled="getFileName(file.path).length <= 25"
-                      :hide-after="1000"
-                      :show-after="200"
-                    >
-                      <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
-                        {{ getFileName(file.path) }}
-                        <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
-                          <Lock />
-                        </el-icon>
-                      </span>
-                    </el-tooltip>
-                  </div>
-                  <div class="file-path-section" :title="getFileDirectory(file.path)">
-                    <el-tooltip
-                      :content="getFileDirectory(file.path)"
-                      placement="top"
-                      :disabled="getFileDirectory(file.path).length <= 30"
-                      :hide-after="1000"
-                      :show-after="200"
-                    >
-                      <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
-                    </el-tooltip>
-                  </div>
-                </div>
-                <div class="file-actions">
-                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000" :show-after="200">
-                    <el-button
-                      :type="isFileLocked(file.path) ? 'danger' : 'info'"
-                      size="small"
-                      circle
-                      @click.stop="toggleFileLock(file.path)"
-                      class="file-action-btn"
-                    >
-                      <el-icon size="12">
-                        <component :is="isFileLocked(file.path) ? Lock : Unlock" />
-                      </el-icon>
-                    </el-button>
-                  </el-tooltip>
-                  <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000" :show-after="200">
-                    <el-button
-                      type="success"
-                      size="small"
-                      circle
-                      @click.stop="stageFile(file.path)"
-                      class="file-action-btn"
-                    >+</el-button>
-                  </el-tooltip>
-                  <el-tooltip content="撤回修改" placement="top" :hide-after="1000" :show-after="200">
-                    <el-button
-                      type="danger"
-                      size="small"
-                      :icon="RefreshRight"
-                      circle
-                      @click.stop="revertFileChanges(file.path)"
-                      class="file-action-btn"
-                    />
-                  </el-tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- 未暂存的更改 -->
+          <FileGroup
+            :files="gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
+            title="未暂存的更改"
+            group-key="unstaged"
+            :collapsed-groups="collapsedGroups"
+            :is-file-locked="isFileLocked"
+            :get-file-name="getFileName"
+            :get-file-directory="getFileDirectory"
+            @toggle-collapse="toggleGroupCollapse"
+            @file-click="handleFileClick"
+            @toggle-file-lock="toggleFileLock"
+            @stage-file="stageFile"
+            @revert-file-changes="revertFileChanges"
+          />
           
-          <div v-if="gitStore.fileList.some(f => f.type === 'untracked')" class="file-group">
-            <div class="file-group-header" @click="toggleGroupCollapse('untracked')">
-              <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.untracked }">
-                <ArrowDown />
-              </el-icon>
-              <span>未跟踪的文件</span>
-            </div>
-            <div v-show="!collapsedGroups.untracked" class="file-list">
-              <div
-                v-for="file in gitStore.fileList.filter(f => f.type === 'untracked')"
-                :key="file.path"
-                class="file-item"
-                @click="handleFileClick(file)"
-              >
-                <div class="file-info">
-                  <div class="file-status-indicator" :class="['untracked', { 'locked': isFileLocked(file.path) }]"></div>
-                  <div class="file-name-section">
-                    <el-tooltip
-                      :content="getFileName(file.path)"
-                      placement="top"
-                      :disabled="getFileName(file.path).length <= 25"
-                      :hide-after="1000"
-                      :show-after="200"
-                    >
-                      <span class="file-name" :class="{ 'locked-file-name': isFileLocked(file.path) }">
-                        {{ getFileName(file.path) }}
-                        <el-icon v-if="isFileLocked(file.path)" class="lock-indicator">
-                          <Lock />
-                        </el-icon>
-                      </span>
-                    </el-tooltip>
-                  </div>
-                  <div class="file-path-section" :title="getFileDirectory(file.path)">
-                    <el-tooltip
-                      :content="getFileDirectory(file.path)"
-                      placement="top"
-                      :disabled="getFileDirectory(file.path).length <= 30"
-                      :hide-after="1000"
-                      :show-after="200"
-                    >
-                      <span class="file-directory">{{ getFileDirectory(file.path) }}</span>
-                    </el-tooltip>
-                  </div>
-                </div>
-                <div class="file-actions">
-                  <el-tooltip :content="isFileLocked(file.path) ? '解锁文件' : '锁定文件'" placement="top" :hide-after="1000" :show-after="200">
-                    <el-button
-                      :type="isFileLocked(file.path) ? 'danger' : 'info'"
-                      size="small"
-                      circle
-                      @click.stop="toggleFileLock(file.path)"
-                      class="file-action-btn"
-                    >
-                      <el-icon size="12">
-                        <component :is="isFileLocked(file.path) ? Lock : Unlock" />
-                      </el-icon>
-                    </el-button>
-                  </el-tooltip>
-                  <el-tooltip content="添加到暂存区" placement="top" :hide-after="1000" :show-after="200">
-                    <el-button
-                      type="success"
-                      size="small"
-                      circle
-                      @click.stop="stageFile(file.path)"
-                      class="file-action-btn"
-                    >+</el-button>
-                  </el-tooltip>
-                  <el-tooltip content="删除文件" placement="top" :hide-after="1000" :show-after="200">
-                    <el-button
-                      type="danger"
-                      size="small"
-                      :icon="Close"
-                      circle
-                      @click.stop="revertFileChanges(file.path)"
-                      class="file-action-btn"
-                    />
-                  </el-tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- 未跟踪的文件 -->
+          <FileGroup
+            :files="gitStore.fileList.filter(f => f.type === 'untracked')"
+            title="未跟踪的文件"
+            group-key="untracked"
+            :collapsed-groups="collapsedGroups"
+            :is-file-locked="isFileLocked"
+            :get-file-name="getFileName"
+            :get-file-directory="getFileDirectory"
+            @toggle-collapse="toggleGroupCollapse"
+            @file-click="handleFileClick"
+            @toggle-file-lock="toggleFileLock"
+            @stage-file="stageFile"
+            @revert-file-changes="revertFileChanges"
+          />
         </div>
-
-
-
         <div v-else-if="gitStore.isGitRepo" class="empty-status">
           <div class="empty-icon">
             <el-icon><Document /></el-icon>

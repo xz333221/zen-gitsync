@@ -34,6 +34,7 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     FileDiffViewer: typeof import('./src/components/FileDiffViewer.vue')['default']
+    FileGroup: typeof import('./src/components/FileGroup.vue')['default']
     GitActionButtons: typeof import('./src/components/GitActionButtons.vue')['default']
     GitCommandPreview: typeof import('./src/components/GitCommandPreview.vue')['default']
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']
