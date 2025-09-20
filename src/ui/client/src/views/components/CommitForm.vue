@@ -2116,20 +2116,6 @@ git config --global user.email "your.email@example.com"</pre>
   color: white;
 }
 
-/* 表单底部操作按钮样式 */
-.form-bottom-actions {
-  display: block;
-  padding: 8px; /* 从12px减少到8px */
-  background-color: #f5f7fa;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-}
-
-.form-bottom-actions:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-}
-
 .actions-flex-container {
   display: flex;
   justify-content: space-between;
@@ -2384,12 +2370,13 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 0;
+  padding: 6px 0;
   background-color: #f5f7fa;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.3s ease;
   user-select: none;
+  font-size: 14px;
 }
 
 .advanced-options-toggle:hover {
@@ -2400,6 +2387,7 @@ git config --global user.email "your.email@example.com"</pre>
 .toggle-icon {
   margin-left: 8px;
   transition: transform 0.3s ease;
+  font-size: 12px;
 }
 
 .toggle-icon.is-active {
