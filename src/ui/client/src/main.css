@@ -1,6 +1,5 @@
 /* 导入Tailwind和全局变量 */
 @import "tailwindcss";
-@import "./styles/variables.scss";
 
 /* 基础重置样式 - 使用CSS变量 */
 * {

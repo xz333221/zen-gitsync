@@ -212,8 +212,7 @@ function getActionButtons(fileType: string) {
 </template>
 
 <style scoped>
-/* 导入全局变量 */
-@import '../styles/variables.scss';
+/* 使用全局CSS变量 */
 
 .file-group {
   margin-bottom: var(--spacing-md);

@@ -4,7 +4,7 @@
    ======================================================= */
 
 /* 导入全局CSS变量 */
-@import './variables.scss';
+@use './variables';
 
 /* Git diff syntax highlight */
 .diff-header {
