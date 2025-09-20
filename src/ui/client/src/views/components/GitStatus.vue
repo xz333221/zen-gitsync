@@ -976,24 +976,23 @@ defineExpose({
 /* 分支信息样式 */
 .branch-status-info {
   margin-bottom: 0;
-  background-color: #f8f9fa;
+  background-color: #ffffff;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #ebeef5;
+  border: 1px solid #e4e7ed;
   transition: all 0.3s ease;
 }
 
 .branch-status-info:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .branch-sync-status {
   display: flex;
   align-items: center;
   padding: 12px 16px;
-  border-left: 3px solid #e6a23c;
   margin-bottom: 0;
-  background-color: #fdf6ec;
+  background-color: #f8f9fa;
 }
 
 .sync-status-content {
@@ -1021,13 +1020,15 @@ defineExpose({
 }
 
 .status-badge.el-tag--warning {
-  background-color: #fdf6ec;
-  border-color: #faecd8;
+  background-color: #fff7e6;
+  border-color: #ffd591;
+  color: #d46b08;
 }
 
 .status-badge.el-tag--info {
-  background-color: #f4f4f5;
-  border-color: #e9e9eb;
+  background-color: #e6f7ff;
+  border-color: #91d5ff;
+  color: #1890ff;
 }
 
 .status-badge:hover {

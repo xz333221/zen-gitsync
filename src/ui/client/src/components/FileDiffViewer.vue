@@ -166,7 +166,7 @@ watch(() => props.files, (newFiles) => {
 .files-panel {
   width: 300px;
   min-width: 250px;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: #fafbfc;
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -187,52 +187,50 @@ watch(() => props.files, (newFiles) => {
 
 .panel-header {
   padding: var(--spacing-md) var(--spacing-lg);
-  background: var(--color-primary-gradient);
-  color: var(--color-white);
-  border-bottom: 1px solid var(--border-color);
+  background: #ffffff;
+  color: #303133;
+  border-bottom: 1px solid #e4e7ed;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   
   h4 {
     margin: 0;
     font-size: var(--font-size-md);
     font-weight: var(--font-weight-semibold);
-    color: var(--color-white);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    color: #303133;
   }
 }
 
 .file-count {
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.8);
+  color: #606266;
   font-weight: var(--font-weight-medium);
-  background: rgba(255, 255, 255, 0.15);
+  background: #f5f7fa;
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-full);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #e4e7ed;
 }
 
 .selected-file {
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.8);
+  color: #606266;
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: rgba(255, 255, 255, 0.1);
+  background: #f0f2f5;
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-sm);
+  border: 1px solid #d9d9d9;
 }
 
 .files-list {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
-  border-radius: 0 0 var(--radius-base) 0;
+  background: #ffffff;
 }
 
 
@@ -259,26 +257,26 @@ watch(() => props.files, (newFiles) => {
   }
   
   &:hover {
-    background: linear-gradient(90deg, rgba(64, 158, 255, 0.08) 0%, rgba(255, 255, 255, 0.5) 100%);
+    background: #f5f7fa;
     transform: translateX(2px);
     
     &::before {
-      background: var(--color-primary);
+      background: #409eff;
     }
   }
   
   &.active {
-    background: var(--color-primary-gradient);
-    color: var(--color-white);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    background: #e6f7ff;
+    color: #1890ff;
+    border-left: 3px solid #1890ff;
     
     &::before {
-      background: var(--color-white);
+      background: #1890ff;
       width: 4px;
     }
     
     .file-icon {
-      color: var(--color-white);
+      color: #1890ff;
     }
   }
   
@@ -363,7 +361,7 @@ watch(() => props.files, (newFiles) => {
   transition: var(--transition-color);
   
   .active & {
-    color: var(--color-white);
+    color: #1890ff;
     font-weight: var(--font-weight-semibold);
   }
 }
@@ -411,15 +409,6 @@ watch(() => props.files, (newFiles) => {
   background: var(--bg-code);
   border: 1px solid var(--border-color-light);
   
-  /* 确保全局样式正确应用 */
-  :deep(.diff-header),
-  :deep(.diff-old-file),
-  :deep(.diff-new-file),
-  :deep(.diff-hunk-header),
-  :deep(.diff-added),
-  :deep(.diff-removed),
-  :deep(.diff-context) {
-    /* 样式已在全局variables.scss和common.scss中统一定义 */
-  }
+  /* 全局diff样式已在common.scss中定义 */
 }
 </style>

@@ -234,23 +234,24 @@ function getActionButtons(fileType: string) {
   align-items: center;
   gap: var(--spacing-md);
   padding: var(--spacing-md) var(--spacing-lg);
-  background: var(--color-primary-gradient);
+  background: #f8f9fa;
   cursor: pointer;
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-sm);
-  color: var(--color-white);
+  color: #303133;
   transition: var(--transition-all);
   position: relative;
+  border-bottom: 1px solid #e4e7ed;
 }
 
 .file-group-header:hover {
-  background: var(--color-primary-gradient-hover);
+  background: #f0f2f5;
 }
 
 .collapse-icon {
   transition: var(--transition-transform);
   font-size: var(--font-size-sm);
-  color: rgba(255, 255, 255, 0.9);
+  color: #606266;
 }
 
 .collapse-icon.collapsed {
@@ -297,7 +298,7 @@ function getActionButtons(fileType: string) {
 }
 
 .file-item:hover::before {
-  background: var(--color-primary-gradient);
+  background: #409eff;
 }
 
 .file-info {
