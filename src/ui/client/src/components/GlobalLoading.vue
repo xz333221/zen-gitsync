@@ -46,8 +46,7 @@ withDefaults(defineProps<Props>(), {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.75) 0%, rgba(103, 194, 58, 0.75) 100%);
-  backdrop-filter: blur(25px);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -59,6 +58,11 @@ withDefaults(defineProps<Props>(), {
   flex-direction: column;
   align-items: center;
   gap: 20px;
+  padding: 40px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.9) 0%, rgba(103, 194, 58, 0.9) 100%);
+  backdrop-filter: blur(25px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .loading-spinner {
@@ -156,13 +160,11 @@ withDefaults(defineProps<Props>(), {
 .loading-fade-enter-from,
 .loading-fade-leave-to {
   opacity: 0;
-  backdrop-filter: blur(0px);
 }
 
 .loading-fade-enter-to,
 .loading-fade-leave-from {
   opacity: 1;
-  backdrop-filter: blur(15px);
 }
 
 .loading-fade-enter-active .loading-container,
@@ -174,11 +176,13 @@ withDefaults(defineProps<Props>(), {
 .loading-fade-leave-to .loading-container {
   opacity: 0;
   transform: scale(0.8);
+  backdrop-filter: blur(0px);
 }
 
 .loading-fade-enter-to .loading-container,
 .loading-fade-leave-from .loading-container {
   opacity: 1;
   transform: scale(1);
+  backdrop-filter: blur(25px);
 }
 </style>
