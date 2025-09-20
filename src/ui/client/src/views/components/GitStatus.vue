@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
-import { Refresh, Document, ArrowUp, ArrowDown, RefreshRight, Check, Close, Download, Connection, Lock, Unlock, InfoFilled } from '@element-plus/icons-vue'
+import { Refresh, Document, ArrowUp, ArrowDown, Check, Close, Download, Connection, Lock, Unlock, InfoFilled } from '@element-plus/icons-vue'
 // import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'

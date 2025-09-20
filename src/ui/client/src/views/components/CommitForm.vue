@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, Upload, RefreshRight, Delete, Position, Download, Connection, ArrowDown, Share, Menu, CopyDocument, Warning, Loading } from "@element-plus/icons-vue";
+import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Menu, Warning, Loading } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";

@@ -7,7 +7,7 @@ interface Props {
   from?: 'form' | 'drawer' | 'status'
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   from: 'form'
 })
 
