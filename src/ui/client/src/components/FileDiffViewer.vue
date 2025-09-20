@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage } from 'element-plus';
 import { Document, FolderOpened } from '@element-plus/icons-vue';
 import { formatDiff } from '../utils/index.ts';
+import vscodeIcon from '@/assets/images/vscode.webp';
 
 // 定义props
 interface FileItem {
@@ -39,6 +40,7 @@ const props = withDefaults(defineProps<Props>(), {
 interface Emits {
   (e: 'file-select', filePath: string): void; // 选择文件时触发
   (e: 'open-file', filePath: string, context: ContextType): void; // 打开文件时触发
+  (e: 'open-with-vscode', filePath: string, context: ContextType): void; // 用VSCode打开文件时触发
 }
 
 const emit = defineEmits<Emits>();
@@ -76,6 +78,16 @@ function handleOpenFile() {
   }
   
   emit('open-file', currentSelectedFile.value, props.context);
+}
+
+// 用VSCode打开文件方法
+function handleOpenWithVSCode() {
+  if (!currentSelectedFile.value) {
+    ElMessage.warning('请先选择一个文件');
+    return;
+  }
+  
+  emit('open-with-vscode', currentSelectedFile.value, props.context);
 }
 
 // 计算打开按钮的提示文本
@@ -160,22 +172,38 @@ watch(() => props.files, (newFiles) => {
           <span v-if="currentSelectedFile" class="selected-file">
             {{ currentSelectedFile.split('/').pop() }}
           </span>
-          <el-tooltip
-            v-if="showOpenButton && currentSelectedFile"
-            :content="openButtonTooltip"
-            placement="top"
-            effect="light"
-          >
-            <el-button
-              type="primary"
-              size="small"
-              :icon="FolderOpened"
-              @click="handleOpenFile"
-              class="open-file-btn"
+          <div v-if="showOpenButton && currentSelectedFile" class="action-buttons">
+            <el-tooltip
+              :content="openButtonTooltip"
+              placement="top"
+              effect="light"
             >
-              打开文件
-            </el-button>
-          </el-tooltip>
+              <el-button
+                type="primary"
+                size="small"
+                :icon="FolderOpened"
+                @click="handleOpenFile"
+                class="open-file-btn"
+              >
+                打开文件
+              </el-button>
+            </el-tooltip>
+            <el-tooltip
+              content="用VSCode打开文件"
+              placement="top"
+              effect="light"
+            >
+              <el-button
+                type="success"
+                size="small"
+                @click="handleOpenWithVSCode"
+                class="vscode-btn"
+              >
+                <img :src="vscodeIcon" alt="VSCode" class="vscode-icon" />
+                VSCode
+              </el-button>
+            </el-tooltip>
+          </div>
         </div>
       </div>
       
@@ -259,6 +287,12 @@ watch(() => props.files, (newFiles) => {
   gap: var(--spacing-sm);
 }
 
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .open-file-btn {
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
@@ -269,6 +303,27 @@ watch(() => props.files, (newFiles) => {
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
   }
+}
+
+.vscode-btn {
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(103, 194, 58, 0.3);
+  }
+}
+
+.vscode-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 .file-count {

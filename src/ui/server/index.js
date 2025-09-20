@@ -858,6 +858,94 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
   
+  // 用VSCode打开文件
+  app.post('/api/open-with-vscode', async (req, res) => {
+    try {
+      const { filePath, context } = req.body;
+      
+      if (!filePath) {
+        return res.status(400).json({
+          success: false,
+          error: '文件路径不能为空'
+        });
+      }
+      
+      let targetFilePath = filePath;
+      
+      // 根据上下文处理不同的文件打开方式
+      switch (context) {
+        case 'git-status':
+        case 'commit-detail':
+        case 'stash-detail':
+          targetFilePath = path.resolve(process.cwd(), filePath);
+          break;
+        default:
+          targetFilePath = path.resolve(process.cwd(), filePath);
+      }
+      
+      try {
+        // 使用VSCode打开文件
+        // 尝试使用 'code' 命令打开文件
+        const { spawn } = await import('child_process');
+        
+        // 创建一个Promise来处理spawn的异步结果
+        const spawnPromise = new Promise((resolve, reject) => {
+          const vscodeProcess = spawn('code', [targetFilePath], {
+            detached: true,
+            stdio: 'ignore'
+          });
+          
+          // 监听错误事件
+          vscodeProcess.on('error', (err) => {
+            reject(err);
+          });
+          
+          // 监听spawn事件，表示进程成功启动
+          vscodeProcess.on('spawn', () => {
+            resolve('success');
+          });
+          
+          vscodeProcess.unref();
+        });
+        
+        await spawnPromise;
+        
+        res.json({
+          success: true,
+          message: `已用VSCode打开文件: ${path.basename(targetFilePath)}`
+        });
+      } catch (error) {
+        // 如果VSCode命令不可用，尝试直接用open打开
+        try {
+          await open(targetFilePath, { app: { name: 'code' } });
+          res.json({
+            success: true,
+            message: `已用VSCode打开文件: ${path.basename(targetFilePath)}`
+          });
+        } catch (openError) {
+          // 最后的备用方案：尝试用系统默认编辑器打开
+          try {
+            await open(targetFilePath);
+            res.json({
+              success: true,
+              message: `VSCode不可用，已用系统默认程序打开文件: ${path.basename(targetFilePath)}`
+            });
+          } catch (finalError) {
+            res.status(400).json({
+              success: false,
+              error: `无法打开文件 "${path.basename(targetFilePath)}": VSCode可能未安装或未添加到PATH，且系统默认程序也无法打开该文件`
+            });
+          }
+        }
+      }
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+  
   // 保存最近访问的目录
   app.post('/api/save_recent_directory', async (req, res) => {
       try {

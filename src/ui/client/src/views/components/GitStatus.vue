@@ -72,6 +72,32 @@ async function handleOpenFile(filePath: string, context: string) {
     ElMessage.error(`打开文件失败: ${(error as Error).message}`);
   }
 }
+
+// 处理用VSCode打开文件
+async function handleOpenWithVSCode(filePath: string, context: string) {
+  try {
+    const response = await fetch('/api/open-with-vscode', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        filePath,
+        context
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      ElMessage.success(result.message);
+    } else {
+      ElMessage.error(result.error || '用VSCode打开文件失败');
+    }
+  } catch (error) {
+    ElMessage.error(`用VSCode打开文件失败: ${(error as Error).message}`);
+  }
+}
 // 锁定文件对话框状态
 const showLockedFilesDialog = ref(false)
 // 添加文件组折叠状态
@@ -765,6 +791,7 @@ defineExpose({
       emptyText="选择文件查看差异"
       @file-select="handleGitFileSelect"
       @open-file="handleOpenFile"
+      @open-with-vscode="handleOpenWithVSCode"
     />
   </CommonDialog>
 
