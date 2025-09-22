@@ -2129,7 +2129,9 @@ async function startUIServer(noOpen = false, savePort = false) {
         const path = (await import('path')).default;
         const fs = (await import('fs')).default;
         
-        // 过滤出未锁定且存在的文件
+        // 过滤出未锁定且需要包含在 stash 中的路径（文件或目录）
+        // 注意：当 includeUntracked === true 时，允许把未跟踪目录作为 pathspec 传给
+        // `git stash push -u -- <pathspec>`，这样可正确包含新建目录内的未跟踪文件。
         const filesToStash = [];
         for (const item of changedFiles) {
           const { status, filename } = item;
@@ -2142,20 +2144,26 @@ async function startUIServer(noOpen = false, savePort = false) {
           });
           
           if (!isLocked) {
-            // 检查文件是否存在（排除已删除的文件和目录）
             try {
               const fullPath = path.resolve(filename);
               const stats = fs.statSync(fullPath);
-              // 只包含文件，不包含目录
+              // 1) 已存在的普通文件：始终包含
               if (stats.isFile()) {
                 filesToStash.push(filename);
+              } else if (stats.isDirectory()) {
+                // 2) 目录：当勾选了 includeUntracked 时，允许把目录作为 pathspec
+                // 这样 `git stash push -u -- <dir>` 会把目录中的未跟踪文件也一并保存
+                if (includeUntracked) {
+                  filesToStash.push(filename);
+                }
               }
             } catch (error) {
+              // 3) 文件系统不可达的情况
               // 对于已删除的文件（D状态），我们仍然需要包含它们
               if (status.includes('D')) {
                 filesToStash.push(filename);
               }
-              // 其他情况（如文件不存在）则跳过
+              // 其他情况（如路径不存在且不是删除状态）则跳过
             }
           }
         }
