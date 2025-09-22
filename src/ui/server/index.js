@@ -2285,7 +2285,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
 
-  // 获取stash中的文件列表
+  // 获取stash中的文件列表（包含未跟踪文件）
   app.get('/api/stash-files', async (req, res) => {
     try {
       const { stashId } = req.query;
@@ -2299,12 +2299,27 @@ async function startUIServer(noOpen = false, savePort = false) {
       
       console.log(`获取stash文件列表: stashId=${stashId}`);
       
-      // 执行git stash show --name-only命令获取文件列表
-      const { stdout } = await execGitCommand(`git stash show --name-only ${stashId}`);
-      
-      // 将输出按行分割，并过滤掉空行
-      const files = stdout.split('\n').filter(line => line.trim());
-      console.log(`找到${files.length}个stash文件:`, files);
+      // 1) 跟踪文件的变更列表：父1 与 stash 提交的差异
+      const { stdout: trackedOut } = await execGitCommand(`git diff --name-only ${stashId}^1 ${stashId}`, { log: false });
+      const trackedFiles = trackedOut.split('\n').map(s => s.trim()).filter(Boolean);
+
+      // 2) 检查第三父是否存在（仅在包含未跟踪文件的 stash 中存在）
+      let untrackedFiles = [];
+      try {
+        const { stdout: thirdExists } = await execGitCommand(`git rev-parse ${stashId}^3`, { log: false });
+        if (thirdExists && thirdExists.trim()) {
+          const { stdout: untrackedOut } = await execGitCommand(`git ls-tree -r --name-only ${stashId}^3`, { log: false });
+          untrackedFiles = untrackedOut.split('\n').map(s => s.trim()).filter(Boolean);
+        }
+      } catch (_) {
+        // 没有第三父，说明没有未跟踪文件
+        untrackedFiles = [];
+      }
+
+      // 合并并去重
+      const fileSet = new Set([ ...trackedFiles, ...untrackedFiles ]);
+      const files = Array.from(fileSet);
+      console.log(`找到${files.length}个stash文件(含未跟踪):`, files);
       
       res.json({ 
         success: true, 
@@ -2319,7 +2334,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
 
-  // 获取stash中特定文件的差异
+  // 获取stash中特定文件的差异（包含未跟踪文件）
   app.get('/api/stash-file-diff', async (req, res) => {
     try {
       const { stashId, file } = req.query;
@@ -2332,21 +2347,43 @@ async function startUIServer(noOpen = false, savePort = false) {
       }
       
       console.log(`获取stash文件差异: stashId=${stashId}, file=${file}`);
-      
-      // 执行git stash show -p命令获取特定文件的差异
-      // 需要使用正确的语法：git show stashId:file 或者 git stash show -p stashId -- file
+
+      // 检查该文件是否来自第三父(未跟踪文件)
+      let isFromThirdParent = false;
+      try {
+        await execGitCommand(`git cat-file -e ${stashId}^3:"${file}"`, { log: false });
+        isFromThirdParent = true;
+      } catch (_) {
+        isFromThirdParent = false;
+      }
+
+      if (isFromThirdParent) {
+        // 未跟踪文件：读取第三父中的内容，构造新增文件的统一diff
+        const { stdout: blob } = await execGitCommand(`git show ${stashId}^3:"${file}"`, { log: false });
+        const lines = blob.endsWith('\n') ? blob.slice(0, -1).split('\n') : blob.split('\n');
+        const lineCount = lines.filter(() => true).length; // 保持计数正确
+        const plusLines = lines.map(l => `+${l}`).join('\n');
+        const diffText = [
+          `diff --git a/${file} b/${file}`,
+          `new file mode 100644`,
+          `--- /dev/null`,
+          `+++ b/${file}`,
+          `@@ -0,0 +${lineCount} @@`,
+          `${plusLines}`
+        ].join('\n');
+
+        return res.json({ success: true, diff: diffText });
+      }
+
+      // 否则，使用原有方式获取与父1的变更
       const { stdout } = await execGitCommand(`git show ${stashId} -- "${file}"`);
       
       console.log(`获取到差异内容，长度: ${stdout.length}`);
-      // 如果差异内容太长，只打印前100个字符
       if (stdout.length > 100) {
         console.log(`差异内容预览: ${stdout.substring(0, 100)}...`);
       }
       
-      res.json({ 
-        success: true, 
-        diff: stdout 
-      });
+      res.json({ success: true, diff: stdout });
     } catch (error) {
       console.error('获取stash文件差异失败:', error);
       res.status(500).json({ 
