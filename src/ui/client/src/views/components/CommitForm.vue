@@ -1137,7 +1137,6 @@ git config --global user.email "your.email@example.com"</pre>
                   class="commit-message-input"
                   @select="handleMessageSelect"
                   @keydown="handleEnterKey"
-                  :teleported="false"
                 />
               </div>
               
@@ -1153,7 +1152,7 @@ git config --global user.email "your.email@example.com"</pre>
             <div v-else class="standard-commit-form">
               <div class="standard-commit-header">
                 <div class="type-scope-container">
-                  <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable :teleported="false">
+                  <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
                     <el-option v-for="item in commitTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
                   </el-select>
 
@@ -1165,7 +1164,6 @@ git config --global user.email "your.email@example.com"</pre>
                       class="scope-input"
                       clearable
                       @select="handleScopeSelect"
-                      :teleported="false"
                     />
                   </div>
                 </div>
@@ -1179,7 +1177,6 @@ git config --global user.email "your.email@example.com"</pre>
                     clearable
                     @select="handleDescriptionSelect"
                     @keydown="handleEnterKey"
-                    :teleported="false"
                   />
                 </div>
               </div>
@@ -1548,7 +1545,6 @@ git config --global user.email "your.email@example.com"</pre>
                 placeholder="选择要合并的分支" 
                 style="width: 100%"
                 filterable
-                :teleported="false"
               >
                 <el-option 
                   v-for="branch in filteredBranches" 
