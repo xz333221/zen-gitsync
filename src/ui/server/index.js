@@ -2129,10 +2129,10 @@ async function startUIServer(noOpen = false, savePort = false) {
         const path = (await import('path')).default;
         const fs = (await import('fs')).default;
         
-        // 过滤出未锁定且需要包含在 stash 中的路径（文件或目录）
-        // 注意：当 includeUntracked === true 时，允许把未跟踪目录作为 pathspec 传给
-        // `git stash push -u -- <pathspec>`，这样可正确包含新建目录内的未跟踪文件。
-        const filesToStash = [];
+        // 过滤出未锁定且需要包含在 stash 中的路径
+        // 修复：当 includeUntracked === true 且变更项是“新目录”时，不能直接把目录作为 pathspec
+        // 否则会把目录里的“锁定文件”一起打入 stash。这里将目录展开为具体文件，并逐个过滤锁定路径。
+        const filesToStashSet = new Set();
         for (const item of changedFiles) {
           const { status, filename } = item;
           const normalizedFile = path.normalize(filename);
@@ -2147,27 +2147,52 @@ async function startUIServer(noOpen = false, savePort = false) {
             try {
               const fullPath = path.resolve(filename);
               const stats = fs.statSync(fullPath);
-              // 1) 已存在的普通文件：始终包含
+              // 1) 已存在的普通文件：直接加入
               if (stats.isFile()) {
-                filesToStash.push(filename);
+                filesToStashSet.add(filename);
               } else if (stats.isDirectory()) {
-                // 2) 目录：当勾选了 includeUntracked 时，允许把目录作为 pathspec
-                // 这样 `git stash push -u -- <dir>` 会把目录中的未跟踪文件也一并保存
+                // 2) 目录：当勾选了 includeUntracked 时，展开目录下的文件（包含未跟踪和已跟踪修改）
                 if (includeUntracked) {
-                  filesToStash.push(filename);
+                  try {
+                    // 使用 git 列出该目录下的未跟踪和已修改文件
+                    const { stdout: listStdout } = await execGitCommand(`git ls-files -mo --exclude-standard "${filename}"`, { log: false });
+                    const listed = listStdout
+                      .split('\n')
+                      .map(l => l.trim())
+                      .filter(Boolean)
+                      // 仅保留该目录下的条目
+                      .filter(p => {
+                        const n = path.normalize(p);
+                        const base = path.normalize(filename);
+                        return n === base || n.startsWith(base + path.sep);
+                      });
+                    for (const p of listed) {
+                      const n = path.normalize(p);
+                      const locked = lockedFiles.some(locked => {
+                        const nl = path.normalize(locked);
+                        return n === nl || n.startsWith(nl + path.sep);
+                      });
+                      if (!locked) {
+                        filesToStashSet.add(p);
+                      }
+                    }
+                  } catch (_) {
+                    // 如果 git 列举失败，退化为不处理该目录
+                  }
                 }
               }
             } catch (error) {
               // 3) 文件系统不可达的情况
               // 对于已删除的文件（D状态），我们仍然需要包含它们
               if (status.includes('D')) {
-                filesToStash.push(filename);
+                filesToStashSet.add(filename);
               }
               // 其他情况（如路径不存在且不是删除状态）则跳过
             }
           }
         }
 
+        const filesToStash = Array.from(filesToStashSet);
         if (filesToStash.length === 0) {
           return res.json({ success: false, message: '所有更改都是锁定文件，无需储藏' });
         }

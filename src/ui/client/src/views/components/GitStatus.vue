@@ -428,31 +428,17 @@ async function unstageFile(filePath: string) {
   await gitStore.unstageFile(filePath)
 }
 
-// 刷新Git状态的方法（优化版本）
+// 刷新Git状态的方法（包含分支领先/落后信息，强制刷新绕过缓存）
 async function refreshStatus() {
-  await loadStatusOptimized()
-}
-
-// 优化的状态加载方法 - 只刷新文件状态，不刷新分支状态
-async function loadStatusOptimized() {
   try {
-    // 如果不是Git仓库，直接显示提示并返回
-    if (!gitStore.isGitRepo) {
-      return
-    }
-
-    // 只获取文件状态，不获取分支状态（分支状态变化频率低）
+    if (!gitStore.isGitRepo) return
+    // 刷新文件状态
     await gitStore.fetchStatus()
-
-    ElMessage({
-      message: 'Git 文件状态已刷新',
-      type: 'success',
-    })
+    // 强制刷新分支状态（绕过30秒缓存），确保 branchAhead/branchBehind 立即更新
+    await gitStore.getBranchStatus(true)
+    ElMessage.success('Git 状态已刷新')
   } catch (error) {
-    ElMessage({
-      message: '刷新失败: ' + (error as Error).message,
-      type: 'error',
-    })
+    ElMessage.error('刷新失败: ' + (error as Error).message)
   }
 }
 

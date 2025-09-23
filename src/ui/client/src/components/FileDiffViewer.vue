@@ -225,9 +225,6 @@ watch(() => props.files, (newFiles) => {
 </template>
 
 <style scoped lang="scss">
-/* 导入全局变量 */
-@import '../styles/variables.scss';
-
 .file-diff-viewer {
   display: flex;
   border: 1px solid var(--border-color);
