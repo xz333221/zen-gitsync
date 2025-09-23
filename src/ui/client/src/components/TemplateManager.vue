@@ -307,10 +307,9 @@ defineExpose({
 }
 
 .template-list {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
+  overflow-y: auto;
   flex-direction: column;
+  max-height: calc(100vh - 350px);
 }
 
 .template-list h3 {
@@ -368,6 +367,7 @@ defineExpose({
   flex: 1;
   overflow-y: auto;
   padding-right: 8px;
+  max-height: calc(100vh - 360px);
 }
 
 .current-default-message {

@@ -1781,7 +1781,6 @@ git config --global user.email "your.email@example.com"</pre>
   width: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   position: relative;
 }
 

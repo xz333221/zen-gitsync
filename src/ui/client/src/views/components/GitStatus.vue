@@ -891,7 +891,6 @@ defineExpose({
   width: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   transition: all 0.3s ease;
   position: relative;
 }
