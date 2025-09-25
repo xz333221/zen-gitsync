@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage } from 'element-plus';
-import { Document, FolderOpened } from '@element-plus/icons-vue';
+import { Document, FolderOpened, Lock } from '@element-plus/icons-vue';
 import { formatDiff } from '../utils/index.ts';
 import vscodeIcon from '@/assets/images/vscode.webp';
 
@@ -10,6 +10,7 @@ interface FileItem {
   path: string;
   name?: string; // 用于显示的文件名，如果没有则使用path
   type?: string; // 文件类型，可选
+  locked?: boolean; // 是否被锁定
 }
 
 // 定义上下文类型
@@ -62,6 +63,19 @@ const displayFiles = computed(() => {
 
 const hasDiffContent = computed(() => {
   return props.diffContent && props.diffContent.trim() !== '';
+});
+
+// 选中文件路径拆分（目录/文件名），用于头部展示
+const selectedFileDir = computed(() => {
+  if (!currentSelectedFile.value) return '';
+  const parts = currentSelectedFile.value.split('/');
+  return parts.slice(0, -1).join('/') + (parts.length > 1 ? '/' : '');
+});
+
+const selectedFileName = computed(() => {
+  if (!currentSelectedFile.value) return '';
+  const parts = currentSelectedFile.value.split('/');
+  return parts[parts.length - 1] || currentSelectedFile.value;
 });
 
 // 方法
@@ -143,7 +157,8 @@ watch(() => props.files, (newFiles) => {
             class="file-item"
             :class="{ 
               'active': file.path === currentSelectedFile,
-              [`file-type-${file.type}`]: file.type 
+              [`file-type-${file.type}`]: file.type,
+              'is-locked': file.locked
             }"
             @click="handleFileSelect(file.path)"
           >
@@ -159,6 +174,17 @@ watch(() => props.files, (newFiles) => {
             >
               <span class="file-name">{{ file.displayName }}</span>
             </el-tooltip>
+            <el-tooltip
+              v-if="file.locked"
+              content="该文件已被锁定，提交时会被跳过"
+              placement="top"
+              :hide-after="1000"
+              :show-after="200"
+            >
+              <el-icon class="lock-icon" color="#E6A23C">
+                <Lock />
+              </el-icon>
+            </el-tooltip>
           </div>
         </el-scrollbar>
       </div>
@@ -169,9 +195,18 @@ watch(() => props.files, (newFiles) => {
       <div class="panel-header">
         <h4>文件差异</h4>
         <div class="header-right">
-          <span v-if="currentSelectedFile" class="selected-file">
-            {{ currentSelectedFile.split('/').pop() }}
-          </span>
+          <el-tooltip
+            v-if="currentSelectedFile"
+            :content="currentSelectedFile"
+            placement="top"
+            effect="light"
+            :hide-after="1000"
+            :show-after="200"
+          >
+            <span class="selected-file">
+              <span class="path-dir">{{ selectedFileDir }}</span><span class="path-name">{{ selectedFileName }}</span>
+            </span>
+          </el-tooltip>
           <div v-if="showOpenButton && currentSelectedFile" class="action-buttons">
             <el-tooltip
               :content="openButtonTooltip"
@@ -185,7 +220,6 @@ watch(() => props.files, (newFiles) => {
                 @click="handleOpenFile"
                 class="open-file-btn"
               >
-                打开文件
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -200,7 +234,6 @@ watch(() => props.files, (newFiles) => {
                 class="vscode-btn"
               >
                 <img :src="vscodeIcon" alt="VSCode" class="vscode-icon" />
-                VSCode
               </el-button>
             </el-tooltip>
           </div>
@@ -257,6 +290,12 @@ watch(() => props.files, (newFiles) => {
   
   &.full-width {
     width: 100%;
+  }
+
+  &.is-locked {
+    .lock-icon {
+      opacity: 1;
+    }
   }
 }
 
@@ -334,9 +373,9 @@ watch(() => props.files, (newFiles) => {
 }
 
 .selected-file {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: #606266;
-  max-width: 200px;
+  max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -344,6 +383,19 @@ watch(() => props.files, (newFiles) => {
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-sm);
   border: 1px solid #d9d9d9;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-mono);
+}
+
+.path-dir {
+  color: #909399;
+}
+
+.path-name {
+  color: #303133;
+  font-weight: var(--font-weight-semibold);
 }
 
 .files-list {
@@ -484,6 +536,12 @@ watch(() => props.files, (newFiles) => {
     color: #1890ff;
     font-weight: var(--font-weight-semibold);
   }
+}
+
+.lock-icon {
+  margin-left: 8px;
+  flex-shrink: 0;
+  opacity: 0.9;
 }
 
 .diff-content {

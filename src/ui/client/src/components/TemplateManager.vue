@@ -38,6 +38,8 @@ const newTemplate = ref('')
 const isEditing = ref(false)
 const originalTemplate = ref('')
 const editingIndex = ref(-1)
+const isSaving = ref(false)
+const isSavingDefault = ref(false)
 
 // 计算属性：获取当前类型的模板列表
 const templates = computed(() => {
@@ -97,23 +99,24 @@ async function saveTemplate() {
   }
 
   try {
+    isSaving.value = true
     if (isEditing.value) {
       // 更新模板
       const success = await configStore.updateTemplate(originalTemplate.value, newTemplate.value, props.type)
       if (success) {
-        ElMessage.success('模板更新成功')
         resetForm()
       }
     } else {
       // 新增模板
       const success = await configStore.saveTemplate(newTemplate.value, props.type)
       if (success) {
-        ElMessage.success('模板保存成功')
         newTemplate.value = ''
       }
     }
   } catch (error) {
     ElMessage.error(`模板保存失败: ${(error as Error).message}`)
+  } finally {
+    isSaving.value = false
   }
 }
 
@@ -144,7 +147,7 @@ async function deleteTemplate(template: string) {
   try {
     const success = await configStore.deleteTemplate(template, props.type)
     if (success) {
-      ElMessage.success('模板删除成功')
+      // 成功提示已在 store 中统一处理
     }
   } catch (error) {
     ElMessage.error(`模板删除失败: ${(error as Error).message}`)
@@ -158,13 +161,15 @@ async function setAsDefault() {
   }
 
   try {
+    isSavingDefault.value = true
     const success = await configStore.saveDefaultMessage(newTemplate.value)
     if (success) {
       emit('set-default', newTemplate.value)
-      ElMessage.success('默认提交信息设置成功')
     }
   } catch (error) {
     ElMessage.error(`设置默认提交信息失败: ${(error as Error).message}`)
+  } finally {
+    isSavingDefault.value = false
   }
 }
 
@@ -198,7 +203,8 @@ defineExpose({
           <el-button 
             type="primary" 
             @click="saveTemplate" 
-            :disabled="!newTemplate.trim()"
+            :disabled="!newTemplate.trim() || isSaving"
+            :loading="isSaving"
           >
             {{ buttonText }}
           </el-button>
@@ -207,7 +213,9 @@ defineExpose({
             v-if="type === 'message'" 
             type="success" 
             @click="setAsDefault" 
-            :disabled="!newTemplate.trim()"
+            :disabled="!newTemplate.trim() || isSavingDefault"
+            :loading="isSavingDefault"
+            plain
           >
             设为默认提交信息
           </el-button>
@@ -292,18 +300,21 @@ defineExpose({
 
 .template-form {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 
 .template-input {
   font-size: 14px;
+  flex: 1;
 }
 
 .template-form-buttons {
   display: flex;
   gap: 8px;
   justify-content: flex-start;
+  flex-wrap: nowrap;
 }
 
 .template-list {

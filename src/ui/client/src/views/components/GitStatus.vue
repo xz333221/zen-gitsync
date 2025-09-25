@@ -38,7 +38,8 @@ const gitFilesForViewer = computed(() => {
   return gitStore.fileList.map(file => ({
     path: file.path,
     name: file.path.split('/').pop() || file.path,
-    type: file.type
+    type: file.type,
+    locked: isFileLocked(file.path)
   }))
 })
 
