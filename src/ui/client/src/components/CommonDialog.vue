@@ -40,7 +40,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   size: 'medium',
   type: 'default',
-  top: '8vh',
+  top: '80px',
   closeOnClickModal: false,
   closeOnPressEscape: true,
   destroyOnClose: false,
@@ -85,29 +85,7 @@ const dialogWidth = computed(() => {
 })
 
 // 计算弹窗高度
-const dialogHeight = computed(() => {
-  if (props.height) return props.height
-  
-  switch (props.type) {
-    case 'full-height':
-      return 'calc(100vh - 100px)'
-    case 'flex':
-      return 'calc(100vh - 160px)' // 增加一些边距，防止超出
-    default:
-      return 'auto'
-  }
-})
-
-// 计算弹窗样式
-const dialogStyle = computed(() => {
-  const style: Record<string, string> = {}
-  
-  if (props.type === 'full-height' || props.type === 'flex') {
-    style['--dialog-height'] = dialogHeight.value
-  }
-  
-  return style
-})
+// 移除 --dialog-height 相关计算，改为使用全局样式控制高度
 
 // 计算CSS类
 const dialogClass = computed(() => {
@@ -158,7 +136,6 @@ function handleClosed() {
     :title="title"
     :width="dialogWidth"
     :top="top"
-    :style="dialogStyle"
     :close-on-click-modal="closeOnClickModal"
     :close-on-press-escape="closeOnPressEscape"
     :destroy-on-close="destroyOnClose"
@@ -200,7 +177,9 @@ function handleClosed() {
   padding: 12px !important;
   display: flex !important;
   flex-direction: column !important;
-  overflow: hidden !important;
+  /* 仅纵向滚动 */
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
 }
 
 .stash-detail-dialog.common-dialog--flex .el-dialog__body {
@@ -208,7 +187,8 @@ function handleClosed() {
   padding: 12px !important;
   display: flex !important;
   flex-direction: column !important;
-  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
 }
 
 .commit-detail-dialog.common-dialog--flex .el-dialog__body {
@@ -216,7 +196,8 @@ function handleClosed() {
   padding: 12px !important;
   display: flex !important;
   flex-direction: column !important;
-  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
 }
 </style>
 
@@ -226,8 +207,13 @@ function handleClosed() {
   .el-dialog {
     display: flex;
     flex-direction: column;
-    height: var(--dialog-height, auto) !important;
+    /* 使用全局的 .el-dialog 高度策略，这里不再设置变量高度 */
+    height: auto !important;
     max-height: 90vh; /* 防止超出屏幕 */
+  }
+  .el-dialog__header,
+  .el-dialog__footer {
+    flex: 0 0 auto;
   }
   
   .el-dialog__body {
@@ -236,7 +222,9 @@ function handleClosed() {
     flex: 1;
     padding: 16px;
     box-sizing: border-box;
-    overflow: hidden;
+    /* 仅纵向滚动 */
+    overflow-x: hidden;
+    overflow-y: auto;
     min-height: 0; /* 关键：允许flex子元素缩小 */
   }
 }
@@ -246,14 +234,19 @@ function handleClosed() {
   .el-dialog {
     display: flex;
     flex-direction: column;
-    height: var(--dialog-height, auto);
+    height: auto;
+  }
+  .el-dialog__header,
+  .el-dialog__footer {
+    flex: 0 0 auto;
   }
   
   .el-dialog__body {
     display: flex;
     flex-direction: column;
     flex: 1;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding: 12px;
     box-sizing: border-box;
     min-height: 0; /* 关键：允许flex子元素缩小 */

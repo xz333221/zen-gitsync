@@ -557,7 +557,6 @@ watch(() => props.files, (newFiles) => {
     line-height: var(--line-height-normal);
     white-space: pre-wrap;
     word-break: break-all;
-    height: 100%; /* 确保 diff 内容填充满容器 */
     padding: var(--spacing-md);
     background: var(--bg-code);
     border-radius: var(--radius-base);

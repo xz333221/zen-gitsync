@@ -135,10 +135,17 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    /* 仅纵向滚动 */
+    overflow-x: hidden;
+    overflow-y: auto;
     /* keep mild default padding; components can override */
     padding: 8px 16px;
     box-sizing: border-box;
+  }
+
+  .el-dialog__header,
+  .el-dialog__footer {
+    flex: 0 0 auto;
   }
 }
 
@@ -147,4 +154,33 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+/* =======================================================
+   Global: make ALL Element Plus dialogs use vertical flex
+   Header + Body + Footer stacked vertically. Body fills
+   remaining space and scrolls vertically on overflow.
+   ======================================================= */
+.el-dialog {
+  display: flex;
+  flex-direction: column;
+  /* Keep the dialog within viewport */
+  height: calc(100% - 160px);
+  max-height: 90vh;
+}
+
+.el-dialog__header,
+.el-dialog__footer {
+  flex: 0 0 auto;
+}
+
+.el-dialog__body {
+  display: flex;
+  flex-direction: column;
+  /* allow body to take remaining height */
+  flex: 1 1 auto;
+  min-height: 0;
+  /* scroll only vertically by default */
+  overflow-x: hidden;
+  overflow-y: auto;
 }

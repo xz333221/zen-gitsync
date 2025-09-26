@@ -222,27 +222,29 @@ defineExpose({
         </div>
       </div>
 
-      <!-- 普通模板布局 -->
+      <!-- 普通模板布局：固定标题，仅列表滚动 -->
       <div v-if="type !== 'message'" class="template-list">
         <h3>已保存{{ type === 'description' ? '模板' : '作用域' }}</h3>
         <el-empty v-if="templates.length === 0" :description="emptyDescription" />
-        <el-card v-for="(template, index) in templates" :key="index" class="template-item">
-          <el-row justify="space-between" align="middle" style="width: 100%">
-            <div class="template-content">{{ template }}</div>
-            <div class="template-actions">
-              <el-button type="primary" size="small" @click="useTemplate(template)">使用</el-button>
-              <el-button 
-                type="warning" 
-                size="small" 
-                :icon="Edit"
-                @click="startEditTemplate(template, index)"
-              >
-                编辑
-              </el-button>
-              <el-button type="danger" size="small" @click="deleteTemplate(template)">删除</el-button>
-            </div>
-          </el-row>
-        </el-card>
+        <div v-else class="template-list-scroll">
+          <el-card v-for="(template, index) in templates" :key="index" class="template-item">
+            <el-row justify="space-between" align="middle" style="width: 100%">
+              <div class="template-content">{{ template }}</div>
+              <div class="template-actions">
+                <el-button type="primary" size="small" @click="useTemplate(template)">使用</el-button>
+                <el-button 
+                  type="warning" 
+                  size="small" 
+                  :icon="Edit"
+                  @click="startEditTemplate(template, index)"
+                >
+                  编辑
+                </el-button>
+                <el-button type="danger" size="small" @click="deleteTemplate(template)">删除</el-button>
+              </div>
+            </el-row>
+          </el-card>
+        </div>
       </div>
 
       <!-- 提交信息模板的特殊布局 -->
@@ -319,9 +321,11 @@ defineExpose({
 }
 
 .template-list {
-  overflow-y: auto;
+  display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 350px);
+  /* 占据对话框内容剩余空间，避免标题跟随滚动 */
+  flex: 1;
+  overflow: hidden;
 }
 
 .template-list h3 {
@@ -329,6 +333,26 @@ defineExpose({
   font-size: 16px;
   font-weight: 600;
   color: #303133;
+}
+
+/* 仅列表滚动区域 */
+.template-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.template-list-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.template-list-scroll::-webkit-scrollbar-thumb {
+  background-color: #c0c4cc;
+  border-radius: 3px;
+}
+
+.template-list-scroll::-webkit-scrollbar-track {
+  background-color: #f5f7fa;
 }
 
 .template-item {
