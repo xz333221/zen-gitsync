@@ -308,6 +308,7 @@ defineExpose({
 .template-input {
   font-size: 14px;
   flex: 1;
+  height: 34px;
 }
 
 .template-form-buttons {
