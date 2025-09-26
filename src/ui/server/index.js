@@ -2108,7 +2108,8 @@ async function startUIServer(noOpen = false, savePort = false) {
 
       if (excludeLocked) {
         const lockedFiles = await configManager.getLockedFiles();
-        const { stdout: statusStdout } = await execGitCommand('git status --porcelain', { log: false });
+        // 包含未跟踪文件，确保状态与 UI 一致
+        const { stdout: statusStdout } = await execGitCommand('git status --porcelain --untracked-files=all', { log: false });
         const changedFiles = statusStdout
           .split('\n')
           .filter(line => line.trim())
@@ -2192,9 +2193,41 @@ async function startUIServer(noOpen = false, savePort = false) {
           }
         }
 
-        const filesToStash = Array.from(filesToStashSet);
+        let filesToStash = Array.from(filesToStashSet);
         if (filesToStash.length === 0) {
           return res.json({ success: false, message: '所有更改都是锁定文件，无需储藏' });
+        }
+
+        // 在执行 stash 前进行候选校验：
+        // 1) 仍有跟踪差异的文件
+        try {
+          const args = filesToStash.map(f => `"${f}"`).join(' ');
+          const { stdout: diffNames } = await execGitCommand(`git diff --name-only -- ${args}`, { log: false });
+          const trackedChanged = new Set(diffNames.split('\n').map(s => s.trim()).filter(Boolean));
+
+          // 2) 仍为未跟踪的文件（当 includeUntracked 才检查）
+          let untrackedExisting = new Set();
+          if (includeUntracked) {
+            const { stdout: others } = await execGitCommand(`git ls-files --others --exclude-standard -- ${args}`, { log: false });
+            untrackedExisting = new Set(others.split('\n').map(s => s.trim()).filter(Boolean));
+          }
+
+          // 合并有效集合
+          const validSet = new Set();
+          for (const f of filesToStash) {
+            if (trackedChanged.has(f) || untrackedExisting.has(f)) {
+              validSet.add(f);
+            }
+          }
+
+          filesToStash = Array.from(validSet);
+        } catch (e) {
+          // 校验失败不应中断主流程，保守继续使用原集合
+          console.warn('候选文件有效性校验失败（将继续尝试储藏）:', e?.message || e);
+        }
+
+        if (filesToStash.length === 0) {
+          return res.json({ success: false, message: '没有可储藏的更改（可能刚刚已储藏，或被锁定过滤）' });
         }
 
         let command = 'git stash push';
@@ -2223,6 +2256,11 @@ async function startUIServer(noOpen = false, savePort = false) {
       }
       res.json({ success: true, message: '成功保存工作区更改', output: stdout });
     } catch (error) {
+      // 友好处理：当 Git 返回 "No valid patches in input" 时，提示无可储藏更改
+      const msg = error?.message || '';
+      if (msg.includes('No valid patches in input')) {
+        return res.json({ success: false, message: '没有可储藏的更改（可能刚刚已储藏，或被锁定过滤）' });
+      }
       console.error('保存stash失败:', error);
       res.status(500).json({ success: false, error: error.message });
     }
