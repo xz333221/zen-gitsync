@@ -356,13 +356,19 @@ defineExpose({
 }
 
 .template-item {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   border-radius: 6px;
-  transition: all 0.3s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Remove shadows, use lightweight border style */
+:deep(.template-item.el-card) {
+  box-shadow: none !important;
+  border: 1px solid #eceff5;
 }
 
 .template-item:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background-color: #fafcff;
 }
 
 .template-content {
@@ -375,7 +381,7 @@ defineExpose({
 
 .template-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
   flex-shrink: 0;
 }
@@ -466,5 +472,102 @@ defineExpose({
 
 .templates-scroll-area::-webkit-scrollbar-track {
   background-color: #f5f7fa;
+}
+
+/* 对话框整体视觉优化（仅作用于当前组件内的 el-dialog） */
+:deep(.el-dialog) {
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+:deep(.el-dialog__header) {
+  padding: 14px 18px;
+  border-bottom: 1px solid #eef0f3;
+}
+
+:deep(.el-dialog__title) {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+:deep(.el-dialog__headerbtn) {
+  top: 14px;
+  right: 14px;
+}
+
+:deep(.el-dialog__body) {
+  padding: 16px 18px 18px 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+}
+
+:deep(.el-dialog__footer) {
+  padding: 12px 18px;
+  border-top: 1px solid #eef0f3;
+}
+
+/* 表单区更紧凑、卡片化背景 */
+.template-form {
+  background: #f9fbff;
+  border: 1px solid #e6eefc;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.template-input {
+  height: 36px;
+}
+
+.template-form-buttons .el-button {
+  min-width: 92px;
+}
+
+/* 标题在滚动时保持可见 */
+.template-list {
+  position: relative;
+}
+
+.template-list h3 {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 2;
+  padding: 8px 0 10px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+/* 卡片列表的细节优化 */
+:deep(.template-item .el-card__body) {
+  padding: 8px 10px;
+}
+
+/* Disable transform/shadow hover effects for a flatter look */
+
+.template-item:hover {
+  transform: none;
+  box-shadow: none !important;
+}
+
+.template-actions .el-button {
+  min-width: 66px;
+}
+
+/* message 模式下左侧标题 sticky 与滚动体验优化 */
+.message-templates-list {
+  position: relative;
+}
+
+.message-templates-list h3 {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 2;
+  padding: 8px 0 10px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.templates-scroll-area {
+  padding-top: 4px;
 }
 </style>
