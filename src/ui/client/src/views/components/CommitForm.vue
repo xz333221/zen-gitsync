@@ -1216,7 +1216,7 @@ git config --global user.email "your.email@example.com"</pre>
         v-model="gitOperationsDrawerVisible"
         title="Git 操作"
         direction="rtl"
-        size="340px"
+        size="360px"
         :with-header="true"
         :show-close="true"
         :destroy-on-close="false"
@@ -1397,28 +1397,64 @@ git config --global user.email "your.email@example.com"</pre>
       </el-drawer>
 
       <!-- 配置JSON编辑弹窗 -->
-      <el-dialog
-        class="config-editor-dialog"
-        title="编辑配置 JSON"
+      <CommonDialog
         v-model="configEditorVisible"
-        width="60%"
+        title="编辑配置 JSON"
+        size="large"
+        custom-class="config-editor-dialog"
+        :show-footer="false"
       >
-        <el-input
-          v-model="configEditorText"
-          type="textarea"
-          :rows="18"
-          spellcheck="false"
-          autocomplete="off"
-          placeholder="在此编辑当前项目配置的 JSON"
-        />
-        <template #footer>
-          <span class="dialog-footer">
-            <el-button @click="openSystemConfigFile">打开系统配置文件</el-button>
-            <el-button @click="configEditorVisible = false">取消</el-button>
-            <el-button type="primary" :loading="configEditorSaving" @click="saveFullConfig">保存</el-button>
-          </span>
-        </template>
-      </el-dialog>
+        <div class="config-editor-content">
+          <!-- 编辑器头部信息 -->
+          <div class="editor-header">
+            <div class="editor-info">
+              <el-icon class="info-icon"><Edit /></el-icon>
+              <span class="info-text">编辑当前项目的配置文件</span>
+            </div>
+            <div class="editor-tips">
+              <el-tag size="small" type="info">支持JSON格式</el-tag>
+            </div>
+          </div>
+          
+          <!-- JSON编辑器 -->
+          <div class="json-editor-wrapper">
+            <el-input
+              v-model="configEditorText"
+              type="textarea"
+              :rows="20"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="在此编辑当前项目配置的 JSON..."
+              class="json-editor"
+            />
+          </div>
+          
+          <!-- 底部操作按钮 -->
+          <div class="editor-footer">
+            <div class="footer-left">
+              <el-button 
+                :icon="Connection" 
+                @click="openSystemConfigFile"
+                class="system-config-btn"
+              >
+                打开系统配置文件
+              </el-button>
+            </div>
+            <div class="footer-right">
+              <el-button @click="configEditorVisible = false">取消</el-button>
+              <el-button 
+                type="primary" 
+                :loading="configEditorSaving" 
+                :icon="Check"
+                @click="saveFullConfig"
+                class="save-btn"
+              >
+                保存配置
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </CommonDialog>
 
       <!-- 配置文件格式警告弹窗 -->
       <el-dialog
@@ -3740,6 +3776,126 @@ git config --global user.email "your.email@example.com"</pre>
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 配置JSON编辑弹窗样式 */
+.config-editor-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.editor-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-icon {
+  font-size: 16px;
+  color: #409eff;
+}
+
+.info-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.editor-tips {
+  display: flex;
+  gap: 8px;
+}
+
+.json-editor-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
+.json-editor {
+  height: 100%;
+  .el-textarea__inner {
+    height: 100%;
+    border-radius: 8px;
+    border: 2px solid #e4e7ed;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    background: #fafafa;
+    color: #2c3e50;
+    resize: none;
+    transition: all 0.3s ease;
+    
+    &:hover {
+      border-color: #c0c4cc;
+    }
+    
+    &:focus {
+      border-color: #409eff;
+      box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+      background: #ffffff;
+      outline: none;
+    }
+    
+    &::placeholder {
+      color: #a8abb2;
+      font-style: italic;
+    }
+  }
+}
+
+.editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.footer-left {
+  display: flex;
+  gap: 8px;
+}
+
+.footer-right {
+  display: flex;
+  gap: 8px;
+}
+
+.system-config-btn {
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(144, 147, 153, 0.3);
+  }
+}
+
+.save-btn {
+  border-radius: 6px;
+  font-weight: 500;
+  min-width: 100px;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  }
 }
 
 /* 配置文件格式警告弹窗样式 */
