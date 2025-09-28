@@ -300,10 +300,6 @@ function getActionButtons(fileType: string) {
   border-color: var(--border-hover);
 }
 
-.file-item:hover::before {
-  background: #409eff;
-}
-
 .file-info {
   display: flex;
   align-items: center;
