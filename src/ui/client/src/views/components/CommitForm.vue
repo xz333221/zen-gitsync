@@ -1140,7 +1140,7 @@ git config --global user.email "your.email@example.com"</pre>
                   :fetch-suggestions="queryMessageTemplates"
                   :placeholder="commitMessagePlaceholder"
                   type="textarea"
-                  :rows="6"
+                  :rows="4"
                   resize="none"
                   class="commit-message-input"
                   @select="handleMessageSelect"
@@ -1151,7 +1151,7 @@ git config --global user.email "your.email@example.com"</pre>
               <!-- Git命令预览 -->
               <GitCommandPreview 
                 :command="gitCommandPreview"
-                title="Git提交命令预览："
+                title="提交命令预览："
                 placeholder="git commit -m &quot;<提交信息>&quot;"
               />
             </div>
@@ -1209,7 +1209,7 @@ git config --global user.email "your.email@example.com"</pre>
               <!-- Git命令预览 -->
               <GitCommandPreview 
                 :command="gitCommandPreview"
-                title="Git提交命令预览："
+                title="提交命令预览："
                 placeholder="git commit -m &quot;<提交信息>&quot;"
               />
             </div>

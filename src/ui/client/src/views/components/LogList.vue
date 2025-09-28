@@ -1361,6 +1361,7 @@ function toggleFullscreen() {
             :empty-text="isLoading ? '加载中...' : '没有匹配的提交记录'"
             height="450"
             @row-contextmenu="handleContextMenu"
+            @row-click="(row) => viewCommitDetail(row)"
           >
 
             <el-table-column label="哈希" width="80" resizable>
@@ -1582,7 +1583,7 @@ function toggleFullscreen() {
 .log-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 /* 优化按钮样式 */
@@ -1592,11 +1593,11 @@ function toggleFullscreen() {
   border: 1px solid transparent;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   font-weight: 500;
-  padding: 8px 16px;
+  padding: 4px 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .action-button:hover {
@@ -1647,14 +1648,23 @@ function toggleFullscreen() {
   background: linear-gradient(135deg, #909399 0%, #c0c4cc 100%);
   color: white;
   min-width: unset;
-  padding: 8px;
+  padding: 6px;
   border-radius: 50%;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
 }
 
 .refresh-button:hover {
   background: linear-gradient(135deg, #606266 0%, #909399 100%);
+}
+
+/* 图标按钮专用的更小尺寸 */
+.icon-only-button {
+  min-width: unset !important;
+  padding: 4px !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
 }
 
 .refresh-button-animated {
@@ -1719,6 +1729,7 @@ function toggleFullscreen() {
 
 :deep(.el-table__row) {
   transition: all 0.2s ease;
+  cursor: pointer;
 }
 
 :deep(.el-table__row:hover) {
@@ -1730,8 +1741,8 @@ function toggleFullscreen() {
 }
 
 :deep(.el-table__cell) {
-  padding: 4px 0;
-  font-size: 13px;
+  padding: 0;
+  font-size: 12px;
 }
 
 .branch-container {
@@ -1747,8 +1758,8 @@ function toggleFullscreen() {
   border-radius: 3px;
   transition: all 0.2s ease;
   font-size: 10px;
-  padding: 1px 4px;
-  height: 16px;
+  padding: 0 4px;
+  height: 14px;
   line-height: 14px;
 }
 
@@ -2076,7 +2087,7 @@ function toggleFullscreen() {
 .commit-message-cell {
   display: flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 26px;
 }
 
 .message-content {
@@ -2090,8 +2101,8 @@ function toggleFullscreen() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
-  line-height: 1.3;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .copy-message-btn {

@@ -623,7 +623,6 @@ onUnmounted(() => {
 .history-scroll {
   flex-grow: 1;
   overflow-y: auto;
-  padding-top: 8px;
 }
 /* 弹窗内按钮样式调整 */
 .dialog-content .modern-btn {
