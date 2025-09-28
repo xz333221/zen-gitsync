@@ -109,7 +109,7 @@ const selectedStashFile = ref('');
 function openStashDialog() {
   stashMessage.value = '';
   includeUntracked.value = false;
-  excludeLocked.value = true;
+  excludeLocked.value = !allChangesAreLocked.value;
   isStashDialogVisible.value = true;
 }
 
@@ -717,6 +717,16 @@ const hasStagedChanges = computed(() => {
 
 const hasAnyChanges = computed(() => {
   return gitStore.fileList.some(file => !isFileLocked(file.path));
+});
+
+// 新增：是否存在任何变更（包含锁定文件在内）
+const anyChangesIncludingLocked = computed(() => {
+  return gitStore.fileList.length > 0;
+});
+
+// 新增：是否所有变更均为锁定文件
+const allChangesAreLocked = computed(() => {
+  return gitStore.fileList.length > 0 && gitStore.fileList.every(file => isFileLocked(file.path));
 });
 
 const needsPush = computed(() => {
@@ -1360,7 +1370,7 @@ git config --global user.email "your.email@example.com"</pre>
                       type="warning" 
                       @click="openStashDialog" 
                       :loading="gitStore.isSavingStash"
-                      :disabled="!hasAnyChanges"
+                      :disabled="!anyChangesIncludingLocked"
                       class="action-button"
                     >
                       储藏更改
@@ -1533,7 +1543,7 @@ git config --global user.email "your.email@example.com"</pre>
             </el-form-item>
 
             <el-form-item>
-              <el-checkbox v-model="excludeLocked">
+              <el-checkbox v-model="excludeLocked" :disabled="allChangesAreLocked">
                 排除锁定文件
               </el-checkbox>
             </el-form-item>
