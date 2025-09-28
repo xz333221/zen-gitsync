@@ -3,15 +3,13 @@
     <div class="preview-container">
       <div class="preview-title">{{ title }}</div>
       <div class="preview-content code-command">{{ displayCommand }}</div>
-      <el-button
-        type="primary"
-        :icon="CopyDocument"
-        size="small"
-        @click="copyCommand"
-        :title="copyButtonText"
-        class="copy-command-btn"
-      >
-      </el-button>
+      <el-tooltip :content="copyButtonText" placement="bottom" effect="dark" :open-delay="300">
+        <button class="modern-btn copy-command-btn" @click="copyCommand">
+          <el-icon class="btn-icon">
+            <CopyDocument />
+          </el-icon>
+        </button>
+      </el-tooltip>
     </div>
   </div>
 </template>
@@ -56,6 +54,12 @@ async function copyCommand() {
 </script>
 
 <style scoped lang="scss">
+.modern-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .git-command-preview {
   
   .preview-container {
@@ -108,18 +112,59 @@ async function copyCommand() {
     }
     
     .copy-command-btn {
-      padding: 6px 12px;
-      min-height: 32px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
       flex-shrink: 0;
-      border-radius: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: rgba(64, 158, 255, 0.08);
+      color: rgba(64, 158, 255, 0.9);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      font-family: inherit;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(64, 158, 255, 0.1);
+      position: relative;
+      overflow: hidden;
       
-      .el-icon {
-        font-size: 14px;
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(102, 177, 255, 0.1) 100%);
+        opacity: 0;
+        transition: opacity 0.2s ease;
       }
       
       &:hover {
+        background: rgba(64, 158, 255, 0.12);
+        color: #409EFF;
+        border-color: rgba(64, 158, 255, 0.2);
         transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(64, 158, 255, 0.3);
+        box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+        
+        &::before {
+          opacity: 1;
+        }
+      }
+      
+      &:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 6px rgba(64, 158, 255, 0.1);
+      }
+      
+      .btn-icon {
+        font-size: 14px;
+        transition: transform 0.2s ease;
+        z-index: 1;
+        position: relative;
       }
     }
   }

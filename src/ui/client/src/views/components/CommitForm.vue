@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, defineExpose } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Menu, Warning, Loading } from "@element-plus/icons-vue";
+import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";
@@ -925,6 +925,9 @@ function toggleGitOperationsDrawer() {
   gitOperationsDrawerVisible.value = !gitOperationsDrawerVisible.value;
 }
 
+// 向父组件暴露方法，便于从 Header 触发
+defineExpose({ openConfigEditor, toggleGitOperationsDrawer });
+
 // 查询描述模板的函数
 function queryDescriptionTemplates(queryString: string, callback: (suggestions: any[]) => void) {
   const templateResults = queryString
@@ -1013,23 +1016,6 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
   <div class="card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header">
       <h2>提交更改</h2>
-      <div class="header-actions">
-        <el-button
-          size="small"
-          type="primary"
-          :icon="Edit"
-          @click="openConfigEditor"
-        >配置</el-button>
-        <!-- 更改Git操作按钮图标 -->
-        <el-button
-          type="primary"
-          :icon="Menu"
-          size="small"
-          circle
-          @click="toggleGitOperationsDrawer"
-          class="git-tools-button"
-        />
-      </div>
     </div>
 
     <div class="card-content">

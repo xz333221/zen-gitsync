@@ -345,14 +345,13 @@ onUnmounted(() => {
 
 <template>
   <!-- 命令历史按钮 -->
-  <el-button
-    type="primary"
-    :icon="Clock"
-    @click="openCommandHistory"
-    class="command-history-button"
-    title="查看Git命令历史"
-  >
-  </el-button>
+  <el-tooltip content="查看Git命令历史" placement="bottom" effect="dark" :open-delay="500">
+    <button class="modern-btn command-history-button" @click="openCommandHistory">
+      <el-icon class="btn-icon">
+        <Clock />
+      </el-icon>
+    </button>
+  </el-tooltip>
 
   <!-- 命令历史弹窗 -->
   <Teleport to="body">
@@ -377,39 +376,54 @@ onUnmounted(() => {
         >
           {{ hasSocketConnection ? '实时更新' : '未连接' }}
         </el-tag>
-        <el-button
-          type="success"
-          :icon="CopyDocument"
-          circle
-          size="small"
-          @click="copyCommandsOnly"
-          :loading="isCopyingCommands"
-          class="copy-commands-button"
-          title="只复制命令列表（不含输出）"
-          :disabled="commandHistory.length === 0"
-        />
-        <el-button
-          type="primary"
-          :icon="CopyDocument"
-          circle
-          size="small"
-          @click="copyAllHistory"
-          :loading="isCopyingHistory"
-          class="copy-all-button"
-          title="复制完整命令历史（含输出）"
-          :disabled="commandHistory.length === 0"
-        />
-        <el-button
-          type="danger"
-          :icon="Delete"
-          circle
-          size="small"
-          @click="clearCommandHistory"
-          :loading="isClearingHistory"
-          class="clear-button"
-          title="清空命令历史"
-          :disabled="commandHistory.length === 0"
-        />
+        <el-tooltip content="只复制命令列表（不含输出）" placement="bottom" effect="dark" :open-delay="300">
+          <button 
+            class="modern-btn copy-commands-button" 
+            @click="copyCommandsOnly"
+            :disabled="commandHistory.length === 0 || isCopyingCommands"
+          >
+            <el-icon class="btn-icon" v-if="!isCopyingCommands">
+              <CopyDocument />
+            </el-icon>
+            <el-icon class="btn-icon is-loading" v-else>
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
+              </svg>
+            </el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip content="复制完整命令历史（含输出）" placement="bottom" effect="dark" :open-delay="300">
+          <button 
+            class="modern-btn copy-all-button" 
+            @click="copyAllHistory"
+            :disabled="commandHistory.length === 0 || isCopyingHistory"
+          >
+            <el-icon class="btn-icon" v-if="!isCopyingHistory">
+              <CopyDocument />
+            </el-icon>
+            <el-icon class="btn-icon is-loading" v-else>
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
+              </svg>
+            </el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip content="清空命令历史" placement="bottom" effect="dark" :open-delay="300">
+          <button 
+            class="modern-btn clear-button" 
+            @click="clearCommandHistory"
+            :disabled="commandHistory.length === 0 || isClearingHistory"
+          >
+            <el-icon class="btn-icon" v-if="!isClearingHistory">
+              <Delete />
+            </el-icon>
+            <el-icon class="btn-icon is-loading" v-else>
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
+              </svg>
+            </el-icon>
+          </button>
+        </el-tooltip>
       </div>
       <div class="history-scroll">
       <div v-if="isLoading && commandHistory.length === 0" class="loading-state">
@@ -441,22 +455,28 @@ onUnmounted(() => {
               </div>
             </div>
             <div class="item-actions">
-              <el-button
-                type="primary"
-                :icon="CopyDocument"
-                circle
-                size="small"
-                @click.stop="copyCommand(item.command)"
-                title="复制命令"
-              />
-              <el-button
-                :type="isExpanded(index) ? 'primary' : 'default'"
-                :icon="isExpanded(index) ? ArrowUp : ArrowDown"
-                circle
-                size="small"
-                @click.stop="toggleExpand(index)"
-                title="展开/收起"
-              />
+              <el-tooltip content="复制命令" placement="bottom" effect="dark" :open-delay="300">
+                <button 
+                  class="modern-btn item-copy-button" 
+                  @click.stop="copyCommand(item.command)"
+                >
+                  <el-icon class="btn-icon">
+                    <CopyDocument />
+                  </el-icon>
+                </button>
+              </el-tooltip>
+              <el-tooltip content="展开/收起" placement="bottom" effect="dark" :open-delay="300">
+                <button 
+                  class="modern-btn expand-button" 
+                  :class="{ 'is-expanded': isExpanded(index) }"
+                  @click.stop="toggleExpand(index)"
+                >
+                  <el-icon class="btn-icon">
+                    <ArrowUp v-if="isExpanded(index)" />
+                    <ArrowDown v-else />
+                  </el-icon>
+                </button>
+              </el-tooltip>
             </div>
           </div>
 
@@ -464,14 +484,16 @@ onUnmounted(() => {
             <div v-if="item.stdout" class="output-section">
               <div class="output-header">
                 <h4>标准输出</h4>
-                <el-button
-                  type="primary"
-                  :icon="CopyDocument"
-                  circle
-                  size="small"
-                  @click="copyOutput(item)"
-                  title="复制输出"
-                />
+                <el-tooltip content="复制输出" placement="bottom" effect="dark" :open-delay="300">
+                  <button 
+                    class="modern-btn output-copy-button" 
+                    @click="copyOutput(item)"
+                  >
+                    <el-icon class="btn-icon">
+                      <CopyDocument />
+                    </el-icon>
+                  </button>
+                </el-tooltip>
               </div>
               <pre class="output-content">{{ item.stdout }}</pre>
               <div v-if="item.isStdoutTruncated" class="truncation-notice">
@@ -511,12 +533,116 @@ onUnmounted(() => {
 <style scoped>
 /* 命令历史按钮样式 */
 .command-history-button {
-  transition: all 0.3s ease;
+  width: 36px;
+  height: 36px;
+  padding: 0;
 }
 
-.command-history-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+/* 现代按钮基础样式 */
+.modern-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.modern-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(102, 177, 255, 0.1) 100%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.modern-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.modern-btn:hover::before {
+  opacity: 1;
+}
+
+.modern-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.modern-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.modern-btn:disabled:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: none;
+  box-shadow: none;
+}
+
+.modern-btn .btn-icon {
+  font-size: 16px;
+  transition: transform 0.2s ease;
+  z-index: 1;
+  position: relative;
+}
+
+/* 弹窗内按钮样式调整 */
+.dialog-content .modern-btn {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dialog-content .modern-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 1);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+/* 特定按钮尺寸 */
+.copy-commands-button,
+.copy-all-button,
+.clear-button,
+.item-copy-button,
+.expand-button,
+.output-copy-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+/* 清除按钮特殊样式 */
+.clear-button:hover {
+  background: rgba(245, 108, 108, 0.1);
+}
+
+.clear-button:hover::before {
+  background: linear-gradient(135deg, rgba(245, 108, 108, 0.1) 0%, rgba(255, 77, 79, 0.1) 100%);
+}
+
+/* 展开按钮动画 */
+.expand-button.is-expanded .btn-icon {
+  transform: rotate(180deg);
 }
 
 /* 弹窗样式 */
@@ -544,86 +670,6 @@ onUnmounted(() => {
 
 .socket-status { font-size: 12px; }
 
-.clear-button {
-  transition: all 0.3s;
-}
-
-.clear-button:hover {
-  transform: rotate(12deg);
-  background-color: #ff4d4f;
-  border-color: #ff4d4f;
-}
-
-.copy-all-button {
-  transition: all 0.3s;
-  position: relative;
-}
-
-.copy-all-button:hover {
-  transform: translateY(-2px);
-  background-color: #409EFF;
-  border-color: #409EFF;
-  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
-}
-
-.copy-commands-button {
-  transition: all 0.3s;
-  position: relative;
-}
-
-.copy-commands-button:hover {
-  transform: translateY(-2px);
-  background-color: #67C23A;
-  border-color: #67C23A;
-  box-shadow: 0 2px 6px rgba(103, 194, 58, 0.3);
-}
-
-.copy-commands-button::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.3);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.copy-all-button::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.3);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.copy-commands-button:active::after,
-.copy-all-button:active::after {
-  opacity: 1;
-  animation: ripple 0.6s ease-out;
-}
-
-@keyframes ripple {
-  0% {
-    width: 0;
-    height: 0;
-    opacity: 0.5;
-  }
-  100% {
-    width: 30px;
-    height: 30px;
-    opacity: 0;
-  }
-}
 
 .dialog-content {
   padding: 0 20px 20px 20px;

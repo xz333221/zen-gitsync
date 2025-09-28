@@ -4,8 +4,9 @@ import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
+import CommonDialog from '@components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Setting, Folder } from '@element-plus/icons-vue'
+import { Edit, Menu, Folder, Plus, Setting, Close, User, Message, InfoFilled, Check, Delete } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -14,6 +15,7 @@ const configInfo = ref('')
 // 添加组件实例类型
 const logListRef = ref<InstanceType<typeof LogList> | null>(null)
 const gitStatusRef = ref<InstanceType<typeof GitStatus> | null>(null)
+const commitFormRef = ref<InstanceType<typeof CommitForm> | null>(null)
 
 // 使用Git Store
 const gitStore = useGitStore()
@@ -397,21 +399,6 @@ const newDirectoryPath = ref('')
 const isChangingDirectory = ref(false)
 const recentDirectories = ref<string[]>([])
 
-// 复制当前目录路径到剪贴板
-async function copyDirectoryPath() {
-  if (!currentDirectory.value) {
-    ElMessage.warning('当前目录路径为空')
-    return
-  }
-
-  try {
-    await navigator.clipboard.writeText(currentDirectory.value)
-    ElMessage.success('已复制目录路径')
-  } catch (error) {
-    console.error('复制目录路径失败:', error)
-    ElMessage.error(`复制失败: ${(error as Error).message}`)
-  }
-}
 
 // 打开切换目录对话框
 function openDirectoryDialog() {
@@ -689,20 +676,24 @@ async function selectDirectory(dirPath: string) {
       <div id="user-info" v-if="gitStore.userName && gitStore.userEmail">
         <span class="user-name">{{ gitStore.userName }}</span>
         <span class="user-email">&lt;{{ gitStore.userEmail }}&gt;</span>
-        <el-button type="primary" size="small" @click="openUserSettingsDialog" class="user-settings-btn" circle>
-          <el-icon>
-            <Setting />
-          </el-icon>
-        </el-button>
+        <el-tooltip content="用户设置" placement="bottom" effect="dark" :open-delay="500">
+          <button class="modern-btn user-settings-btn" @click="openUserSettingsDialog">
+            <el-icon class="btn-icon">
+              <Setting />
+            </el-icon>
+          </button>
+        </el-tooltip>
       </div>
       <div id="user-info" v-else>
         <span class="user-label">用户: </span>
         <span class="user-warning">未配置</span>
-        <el-button type="primary" size="small" @click="openUserSettingsDialog" class="user-settings-btn" circle>
-          <el-icon>
-            <Setting />
-          </el-icon>
-        </el-button>
+        <el-tooltip content="用户设置" placement="bottom" effect="dark" :open-delay="500">
+          <button class="modern-btn user-settings-btn" @click="openUserSettingsDialog">
+            <el-icon class="btn-icon">
+              <Setting />
+            </el-icon>
+          </button>
+        </el-tooltip>
       </div>
       <!-- 添加目录选择功能 -->
       <div class="directory-selector">
@@ -715,41 +706,47 @@ async function selectDirectory(dirPath: string) {
           <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
         </div>
         <div class="directory-actions">
-          <el-button type="primary" size="small" @click="openDirectoryDialog" class="dir-button" circle title="切换目录">
-            <el-icon>
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor"
-                  d="M128 192v640h768V320H485.76L357.504 192H128zm-32-64h287.872l128.384 128H928a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32z">
-                </path>
-              </svg>
-            </el-icon>
-          </el-button>
-          <el-button type="success" size="small" @click="openInFileExplorer" class="dir-button" circle title="在资源管理器中打开">
-            <el-icon>
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" 
-                  d="M928 444H820V330.4c0-17.7-14.3-32-32-32H473L355.7 186.2a8.15 8.15 0 0 0-5.5-2.2H96c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h698c13 0 24.8-7.9 29.7-20l134-332c1.5-3.8 2.3-7.9 2.3-12 0-17.7-14.3-32-32-32zM136 256h188.5l119.6 114.4H748V444H238c-13 0-24.8 7.9-29.7 20L136 643.2V256zm635.3 512H159l103.3-256h612.4L771.3 768z" />
-              </svg>
-            </el-icon>
-          </el-button>
-          <el-button type="info" size="small" @click="copyDirectoryPath" class="dir-button" circle title="复制路径">
-            <el-icon>
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor"
-                  d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
-                <path fill="currentColor"
-                  d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
-              </svg>
-            </el-icon>
-          </el-button>
+          <el-tooltip content="切换目录" placement="bottom" effect="dark" :open-delay="500">
+            <button class="modern-btn dir-btn" @click="openDirectoryDialog">
+              <el-icon class="btn-icon">
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="currentColor"
+                    d="M128 192v640h768V320H485.76L357.504 192H128zm-32-64h287.872l128.384 128H928a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32z">
+                  </path>
+                </svg>
+              </el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip content="在资源管理器中打开" placement="bottom" effect="dark" :open-delay="500">
+            <button class="modern-btn dir-btn" @click="openInFileExplorer">
+              <el-icon class="btn-icon">
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="currentColor" 
+                    d="M928 444H820V330.4c0-17.7-14.3-32-32-32H473L355.7 186.2a8.15 8.15 0 0 0-5.5-2.2H96c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h698c13 0 24.8-7.9 29.7-20l134-332c1.5-3.8 2.3-7.9 2.3-12 0-17.7-14.3-32-32-32zM136 256h188.5l119.6 114.4H748V444H238c-13 0-24.8 7.9-29.7 20L136 643.2V256zm635.3 512H159l103.3-256h612.4L771.3 768z" />
+                </svg>
+              </el-icon>
+            </button>
+          </el-tooltip>
         </div>
       </div>
 
-      <!-- 命令历史按钮 -->
-      <div class="command-history-section" v-if="gitStore.isGitRepo">
-        <CommandHistory />
+      <!-- 顶部右侧动作 -->
+      <div class="header-actions-right" v-if="gitStore.isGitRepo">
+        <!-- 命令历史按钮 -->
+        <div class="command-history-section" v-if="gitStore.isGitRepo">
+          <CommandHistory />
+        </div>
+        <el-tooltip content="编辑项目配置" placement="bottom" effect="dark" :open-delay="500">
+          <button class="modern-btn config-btn" @click="commitFormRef?.openConfigEditor()">
+            <el-icon class="btn-icon"><Edit /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip content="Git 操作" placement="bottom" effect="dark" :open-delay="500">
+          <button class="modern-btn drawer-btn" @click="commitFormRef?.toggleGitOperationsDrawer()">
+            <el-icon class="btn-icon"><Menu /></el-icon>
+          </button>
+        </el-tooltip>
       </div>
-
     </div>
   </header>
 
@@ -799,7 +796,7 @@ async function selectDirectory(dirPath: string) {
         </div>
         <!-- 用户已配置显示提交表单 -->
         <template v-else>
-          <CommitForm />
+          <CommitForm ref="commitFormRef" />
         </template>
       </div>
       <div class="commit-form-panel" v-else>
@@ -855,58 +852,108 @@ async function selectDirectory(dirPath: string) {
           :loading="gitStore.isChangingBranch" class="branch-select">
           <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
         </el-select>
-        <el-button type="primary" size="small" @click="openCreateBranchDialog" class="create-branch-btn">
-          <el-icon>
+        <button class="modern-btn create-branch-btn" @click="openCreateBranchDialog">
+          <el-icon class="btn-icon">
             <Plus />
           </el-icon>
-          新建分支
-        </el-button>
+          <span class="btn-text">新建分支</span>
+        </button>
       </div>
     </div>
     <div class="footer-right" v-if="gitStore.remoteUrl">
       <span class="repo-url-label">远程仓库:</span>
       <span class="repo-url">{{ gitStore.remoteUrl }}</span>
-      <el-button type="primary" circle size="small" @click="gitStore.copyRemoteUrl()" class="copy-url-btn"
-        title="复制仓库地址">
-        <el-icon>
-          <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor"
-              d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
-            <path fill="currentColor"
-              d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
-          </svg>
-        </el-icon>
-      </el-button>
+      <el-tooltip content="复制仓库地址" placement="top" effect="dark" :open-delay="500">
+        <button class="modern-btn copy-url-btn" @click="gitStore.copyRemoteUrl()">
+          <el-icon class="btn-icon">
+            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor"
+                d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
+              <path fill="currentColor"
+                d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
+            </svg>
+          </el-icon>
+        </button>
+      </el-tooltip>
     </div>
   </footer>
 
   <!-- 用户设置对话框 -->
-  <el-dialog v-model="userSettingsDialogVisible" title="Git用户设置" width="30%" destroy-on-close>
-    <el-form>
-      <el-form-item label="用户名">
-        <el-input v-model="tempUserName" placeholder="请输入Git用户名" />
-      </el-form-item>
-      <el-form-item label="邮箱">
-        <el-input v-model="tempUserEmail" placeholder="请输入Git邮箱" />
-      </el-form-item>
-      <el-form-item>
-        <el-alert type="info" :closable="false" show-icon>
-          这些设置将影响全局Git配置，对所有Git仓库生效。
-        </el-alert>
-      </el-form-item>
-    </el-form>
+  <CommonDialog
+    v-model="userSettingsDialogVisible"
+    title="Git 用户设置"
+    size="small"
+    :destroy-on-close="true"
+    custom-class="user-settings-dialog"
+  >
+    <div class="user-settings-content">
+      <el-form class="user-form" :model="{ tempUserName, tempUserEmail }" label-position="top">
+        <div class="form-group">
+          <el-form-item class="form-item">
+            <template #label>
+              <div class="form-label">
+                <el-icon class="label-icon"><User /></el-icon>
+                <span>用户名</span>
+              </div>
+            </template>
+            <el-input 
+              v-model="tempUserName" 
+              placeholder="请输入 Git 用户名" 
+              class="modern-input"
+              size="large"
+            />
+          </el-form-item>
+        </div>
+        
+        <div class="form-group">
+          <el-form-item class="form-item">
+            <template #label>
+              <div class="form-label">
+                <el-icon class="label-icon"><Message /></el-icon>
+                <span>邮箱地址</span>
+              </div>
+            </template>
+            <el-input 
+              v-model="tempUserEmail" 
+              placeholder="请输入 Git 邮箱地址" 
+              class="modern-input"
+              size="large"
+            />
+          </el-form-item>
+        </div>
+        
+        <div class="info-section">
+          <div class="info-card">
+            <div class="info-icon">
+              <el-icon><InfoFilled /></el-icon>
+            </div>
+            <div class="info-content">
+              <p class="info-title">全局配置</p>
+              <p class="info-desc">这些设置将影响全局 Git 配置，对所有 Git 仓库生效</p>
+            </div>
+          </div>
+        </div>
+      </el-form>
+    </div>
+    
     <template #footer>
-      <span class="dialog-footer">
-        <el-button type="danger" @click="clearUserSettings">
-          清除配置
-        </el-button>
-        <el-button @click="userSettingsDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveUserSettings">
-          保存
-        </el-button>
-      </span>
+      <div class="user-settings-footer">
+        <button class="footer-btn danger-btn" @click="clearUserSettings">
+          <el-icon><Delete /></el-icon>
+          <span>清除配置</span>
+        </button>
+        <div class="footer-actions">
+          <button class="footer-btn cancel-btn" @click="userSettingsDialogVisible = false">
+            取消
+          </button>
+          <button class="footer-btn primary-btn" @click="saveUserSettings">
+            <el-icon><Check /></el-icon>
+            <span>保存设置</span>
+          </button>
+        </div>
+      </div>
     </template>
-  </el-dialog>
+  </CommonDialog>
 
   <!-- 添加切换目录对话框 -->
   <el-dialog v-model="isDirectoryDialogVisible" title="切换工作目录" width="50%" destroy-on-close>
@@ -958,13 +1005,13 @@ body {
 
 .main-container {
   position: fixed;
-  top: 60px;
+  top: 64px;
   /* 顶部导航栏高度 */
   bottom: 60px;
   /* 底部footer高度 */
   left: 0;
   right: 0;
-  padding: 10px;
+  padding: 12px;
   overflow: hidden;
   z-index: 1001;
   /* 防止整体滚动 */
@@ -1019,9 +1066,9 @@ body {
 }
 
 .main-header {
-  background-color: #24292e;
+  background: linear-gradient(135deg, #1a1d23 0%, #24292e 50%, #2c3338 100%);
   color: white;
-  padding: 0 20px;
+  padding: 0 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1030,9 +1077,10 @@ body {
   left: 0;
   right: 0;
   z-index: 1000;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-  height: 60px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1);
+  height: 64px;
   box-sizing: border-box;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .header-left {
@@ -1056,20 +1104,31 @@ h1 {
 .header-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
+  flex: 1;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 /* 调整用户信息和目录选择的排列 */
 #user-info {
   display: flex;
   align-items: center;
-  background-color: rgba(40, 44, 52, 0.7);
-  padding: 6px 10px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  margin-right: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+#user-info:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* 添加目录选择器样式 */
@@ -1078,18 +1137,113 @@ h1 {
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
-  background-color: rgba(40, 44, 52, 0.7);
-  border-radius: 4px;
-  padding: 6px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
+  transition: all 0.2s ease;
+  max-width: 420px;
+}
+
+.directory-selector:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .command-history-section {
   display: flex;
   align-items: center;
-  margin-left: 12px;
+}
+
+/* 顶部右侧动作区 */
+.header-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modern-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.modern-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(102, 177, 255, 0.1) 100%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.modern-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.modern-btn:hover::before {
+  opacity: 1;
+}
+
+.modern-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.config-btn {
+  padding: 10px;
+  gap: 8px;
+}
+
+.drawer-btn {
+  padding: 10px;
+}
+
+.modern-btn .btn-icon {
+  font-size: 16px;
+  transition: transform 0.2s ease;
+  z-index: 1;
+  position: relative;
+}
+
+.modern-btn .btn-text {
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 1;
+  position: relative;
+}
+
+.drawer-btn:hover .btn-icon {
+  transform: rotate(180deg);
+}
+
+.config-btn:hover .btn-icon {
+  transform: scale(1.1);
 }
 
 .directory-display {
@@ -1195,10 +1349,6 @@ h1 {
   color: #606266;
 }
 
-.user-settings-btn {
-  margin-left: 10px;
-}
-
 .user-warning {
   color: #E6A23C;
   font-weight: bold;
@@ -1264,19 +1414,6 @@ h1 {
   margin-right: 10px;
 }
 
-.create-branch-btn {
-  background-color: #2ea44f;
-  border-color: #2ea44f;
-  transition: all 0.3s;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.create-branch-btn:hover {
-  background-color: #3bbc63;
-  border-color: #3bbc63;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
 
 .footer-right {
   display: flex;
@@ -1305,19 +1442,6 @@ h1 {
   white-space: nowrap;
 }
 
-.copy-url-btn {
-  transition: all 0.3s;
-  background-color: #1890ff;
-  border-color: #1890ff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.copy-url-btn:hover {
-  background-color: #40a9ff;
-  border-color: #40a9ff;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
 
 /* 垂直分隔条样式 */
 .vertical-resizer {
@@ -1476,37 +1600,244 @@ h1 {
 
 .directory-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-left: 8px;
 }
 
-.dir-button {
-  padding: 4px;
-  height: 24px;
-  width: 24px;
-  border-radius: 50%;
+.dir-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.user-settings-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  margin-left: 10px;
+}
+
+.create-branch-btn {
+  padding: 8px 12px;
+  gap: 6px;
+}
+
+.copy-url-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+/* 用户设置对话框样式 */
+.user-settings-content {
+  padding: 8px 0;
+}
+
+.user-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  position: relative;
+}
+
+.form-item {
+  margin-bottom: 0;
+}
+
+:deep(.form-item .el-form-item__label) {
+  padding: 0 0 8px 0;
+  font-weight: 500;
+  color: #374151;
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.label-icon {
+  font-size: 16px;
+  color: #6b7280;
+}
+
+:deep(.modern-input .el-input__wrapper) {
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+:deep(.modern-input .el-input__wrapper:hover) {
+  border-color: #d1d5db;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+:deep(.modern-input.is-focus .el-input__wrapper) {
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1), 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+:deep(.modern-input .el-input__inner) {
+  font-size: 14px;
+  color: #374151;
+  font-weight: 400;
+}
+
+:deep(.modern-input .el-input__inner::placeholder) {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.info-section {
+  margin-top: 4px;
+}
+
+.info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.info-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+}
+
+.info-icon {
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #409EFF 0%, #53a8ff 100%);
-  color: white;
+  color: #0284c7;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.info-icon .el-icon {
+  font-size: 16px;
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-title {
+  margin: 0 0 3px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0c4a6e;
+}
+
+.info-desc {
+  margin: 0;
+  font-size: 12px;
+  color: #075985;
+  line-height: 1.4;
+}
+
+.user-settings-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
+}
+
+.footer-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
   border: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.dir-button:hover {
+.footer-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.footer-btn:hover::before {
+  left: 100%;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  color: white;
+  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.25);
+}
+
+.primary-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
-  background: linear-gradient(135deg, #53a8ff 0%, #66b1ff 100%);
+  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
 }
 
-.dir-button.el-button--info {
-  background: linear-gradient(135deg, #909399 0%, #a6a9ad 100%);
+.primary-btn:active {
+  transform: translateY(0);
 }
 
-.dir-button.el-button--info:hover {
-  background: linear-gradient(135deg, #a6a9ad 0%, #c0c4cc 100%);
+.cancel-btn {
+  background: #ffffff;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.cancel-btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.danger-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
+}
+
+.danger-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.35);
+}
+
+.danger-btn:active {
+  transform: translateY(0);
 }
 
 .directory-icon {
