@@ -28,6 +28,10 @@ interface Props {
   customClass?: string
   appendToBody?: boolean
   lockScroll?: boolean
+  // 高度控制：'fixed' 使用固定高度 calc(100% - offset)；'max' 使用最大高度
+  heightMode?: 'fixed' | 'max'
+  // 计算高度时的偏移量（例如头尾合计占用高度），默认 '160px'
+  heightOffset?: string
   
   // 按钮配置
   showFooter?: boolean
@@ -47,6 +51,8 @@ const props = withDefaults(defineProps<Props>(), {
   draggable: false,
   appendToBody: false,
   lockScroll: true,
+  heightMode: 'max',
+  heightOffset: '160px',
   showFooter: false,
   confirmText: '确定',
   cancelText: '取消',
@@ -106,6 +112,16 @@ const dialogClass = computed(() => {
   return classes.join(' ')
 })
 
+// 计算高度/最大高度的内联样式，覆盖全局默认 max-height
+const dialogStyle = computed(() => {
+  const calc = `calc(100% - ${props.heightOffset})`
+  if (props.heightMode === 'fixed') {
+    return { height: calc }
+  }
+  // 默认模式：最大高度
+  return { maxHeight: calc }
+})
+
 // 事件处理
 function handleClose() {
   emit('update:modelValue', false)
@@ -136,6 +152,7 @@ function handleClosed() {
     :title="title"
     :width="dialogWidth"
     :top="top"
+    :style="dialogStyle"
     :close-on-click-modal="closeOnClickModal"
     :close-on-press-escape="closeOnPressEscape"
     :destroy-on-close="destroyOnClose"

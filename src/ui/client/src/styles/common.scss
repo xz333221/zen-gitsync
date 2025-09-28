@@ -176,6 +176,7 @@
 .el-dialog__body {
   display: flex;
   flex-direction: column;
+  gap: 8px;
   /* allow body to take remaining height */
   flex: 1 1 auto;
   min-height: 0;

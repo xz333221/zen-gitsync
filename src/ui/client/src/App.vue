@@ -1641,7 +1641,6 @@ h1 {
   background-color: rgba(40, 44, 52, 0.7);
   border-radius: 4px;
   padding: 8px 12px;
-  margin-bottom: 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }

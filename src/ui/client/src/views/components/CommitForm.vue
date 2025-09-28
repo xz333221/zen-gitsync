@@ -472,6 +472,18 @@ const hasUserCommitMessage = computed(() => {
   }
 });
 
+// 占位符：普通提交输入框，根据是否开启回车自动一键提交显示提示
+const commitMessagePlaceholder = computed(() => {
+  const base = `输入提交信息 (默认: ${defaultCommitMessage.value})`;
+  return autoQuickPushOnEnter.value ? `${base}（按回车一键推送）` : base;
+});
+
+// 占位符：标准化提交的简短描述输入框，根据是否开启回车自动一键提交显示提示
+const descriptionPlaceholder = computed(() => {
+  const base = '简短描述（必填）';
+  return autoQuickPushOnEnter.value ? '简短描述（必填，按回车一键推送）' : base;
+});
+
 // 为stash组件准备文件列表
 const stashFilesForViewer = computed(() => {
   return stashFiles.value.map(file => ({
@@ -1126,7 +1138,7 @@ git config --global user.email "your.email@example.com"</pre>
                 <el-autocomplete
                   v-model="commitMessage"
                   :fetch-suggestions="queryMessageTemplates"
-                  :placeholder="placeholder"
+                  :placeholder="commitMessagePlaceholder"
                   type="textarea"
                   :rows="6"
                   resize="none"
@@ -1168,7 +1180,7 @@ git config --global user.email "your.email@example.com"</pre>
                   <el-autocomplete
                     v-model="commitDescription"
                     :fetch-suggestions="queryDescriptionTemplates"
-                    placeholder="简短描述（必填）"
+                    :placeholder="descriptionPlaceholder"
                     class="description-input"
                     clearable
                     @select="handleDescriptionSelect"
@@ -1397,10 +1409,10 @@ git config --global user.email "your.email@example.com"</pre>
         v-model="configEditorVisible"
         title="编辑配置 JSON"
         size="large"
+        height-mode="fixed"
         custom-class="config-editor-dialog"
         :show-footer="false"
       >
-        <div class="config-editor-content">
           <!-- 编辑器头部信息 -->
           <div class="editor-header">
             <div class="editor-info">
@@ -1417,7 +1429,6 @@ git config --global user.email "your.email@example.com"</pre>
             <el-input
               v-model="configEditorText"
               type="textarea"
-              :rows="20"
               spellcheck="false"
               autocomplete="off"
               placeholder="在此编辑当前项目配置的 JSON..."
@@ -1449,7 +1460,6 @@ git config --global user.email "your.email@example.com"</pre>
               </el-button>
             </div>
           </div>
-        </div>
       </CommonDialog>
 
       <!-- 配置文件格式警告弹窗 -->

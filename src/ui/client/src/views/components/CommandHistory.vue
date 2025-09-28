@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock } from '@element-plus/icons-vue';
 import { useGitStore } from '@stores/gitStore';
+import CommonDialog from '@/components/CommonDialog.vue';
 
 // 获取Git Store以访问Socket实例
 const gitStore = useGitStore();
@@ -369,20 +370,16 @@ onUnmounted(() => {
     </button>
   </el-tooltip>
 
-  <!-- 命令历史弹窗 -->
-  <Teleport to="body">
-    <el-dialog
-      v-model="dialogVisible"
-      title="Git 命令历史"
-      width="80%"
-      top="5vh"
-      destroy-on-close
-      class="command-history-dialog"
-      :z-index="1000"
-      append-to-body
-      modal
-    >
-    <div class="dialog-content">
+  <!-- 命令历史弹窗（使用 CommonDialog） -->
+  <CommonDialog
+    v-model="dialogVisible"
+    title="Git 命令历史"
+    :width="'80%'"
+    :top="'5vh'"
+    destroy-on-close
+    custom-class="command-history-dialog"
+    :append-to-body="true"
+  >
       <div class="dialog-toolbar">
         <el-tag
           :type="hasSocketConnection ? 'success' : 'danger'"
@@ -544,12 +541,10 @@ onUnmounted(() => {
         </div>
       </div>
       </div>
-    </div>
-  </el-dialog>
-  </Teleport>
+  </CommonDialog>
 </template>
 
-<style scoped>
+<style lang="scss" scoped>
 /* 命令历史按钮样式 */
 .command-history-button {
   width: 36px;
@@ -625,6 +620,11 @@ onUnmounted(() => {
   position: relative;
 }
 
+.history-scroll {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding-top: 8px;
+}
 /* 弹窗内按钮样式调整 */
 .dialog-content .modern-btn {
   background: rgba(0, 0, 0, 0.05);
@@ -814,11 +814,6 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-
-.dialog-content {
-  padding: 0 20px 20px 20px;
-}
-
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -826,11 +821,6 @@ onUnmounted(() => {
   justify-content: center;
   height: 100%;
   min-height: 100px;
-}
-
-.history-scroll {
-  overflow-y: auto;
-  max-height: calc(80vh - 160px);
 }
 
 .loading-icon {
@@ -848,6 +838,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .history-item {

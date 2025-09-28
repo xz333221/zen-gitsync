@@ -33,6 +33,12 @@ const isLoadingDiff = ref(false)
 // 添加当前文件索引
 const currentFileIndex = ref(-1)
 
+// 每个文件的锁定/解锁加载状态
+const lockingFiles = ref<Record<string, boolean>>({})
+function isLocking(filePath: string) {
+  return !!lockingFiles.value[filePath]
+}
+
 // 为FileDiffViewer组件准备数据
 const gitFilesForViewer = computed(() => {
   return gitStore.fileList.map(file => ({
@@ -547,12 +553,19 @@ function isFileLocked(filePath: string): boolean {
 }
 
 // 切换文件锁定状态
-function toggleFileLock(filePath: string) {
-  const isLocked = isFileLocked(filePath)
-  if (isLocked) {
-    configStore.unlockFile(filePath)
-  } else {
-    configStore.lockFile(filePath)
+async function toggleFileLock(filePath: string) {
+  if (lockingFiles.value[filePath]) return
+  lockingFiles.value[filePath] = true
+  try {
+    const isLocked = isFileLocked(filePath)
+    if (isLocked) {
+      await configStore.unlockFile(filePath)
+    } else {
+      await configStore.lockFile(filePath)
+    }
+  } finally {
+    // 使用 nextTick 也可，但这里直接清理状态
+    delete lockingFiles.value[filePath]
   }
 }
 
@@ -710,6 +723,7 @@ defineExpose({
             group-key="staged"
             :collapsed-groups="collapsedGroups"
             :is-file-locked="isFileLocked"
+            :is-locking="isLocking"
             :get-file-name="getFileName"
             :get-file-directory="getFileDirectory"
             @toggle-collapse="toggleGroupCollapse"
@@ -725,6 +739,7 @@ defineExpose({
             group-key="unstaged"
             :collapsed-groups="collapsedGroups"
             :is-file-locked="isFileLocked"
+            :is-locking="isLocking"
             :get-file-name="getFileName"
             :get-file-directory="getFileDirectory"
             @toggle-collapse="toggleGroupCollapse"
@@ -741,6 +756,7 @@ defineExpose({
             group-key="untracked"
             :collapsed-groups="collapsedGroups"
             :is-file-locked="isFileLocked"
+            :is-locking="isLocking"
             :get-file-name="getFileName"
             :get-file-directory="getFileDirectory"
             @toggle-collapse="toggleGroupCollapse"

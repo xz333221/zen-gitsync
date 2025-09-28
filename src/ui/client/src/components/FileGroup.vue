@@ -13,6 +13,7 @@ interface Props {
   groupKey: 'staged' | 'unstaged' | 'untracked'
   collapsedGroups: Record<string, boolean>
   isFileLocked: (filePath: string) => boolean
+  isLocking: (filePath: string) => boolean
   getFileName: (filePath: string) => string
   getFileDirectory: (filePath: string) => string
 }
@@ -135,6 +136,7 @@ function getActionButtons(fileType: string) {
         v-for="file in files"
         :key="file.path"
         class="file-item"
+        :class="{ 'is-loading': props.isLocking(file.path) }"
         @click="handleFileClick(file)"
       >
         <div class="file-info">
@@ -170,7 +172,7 @@ function getActionButtons(fileType: string) {
         <div class="file-actions">
           <!-- 锁定/解锁按钮 -->
           <el-tooltip 
-            :content="props.isFileLocked(file.path) ? '解锁文件' : '锁定文件'" 
+            :content="props.isLocking(file.path) ? '处理中...' : (props.isFileLocked(file.path) ? '解锁文件' : '锁定文件')" 
             placement="top" 
             :hide-after="1000" 
             :show-after="200"
@@ -179,17 +181,19 @@ function getActionButtons(fileType: string) {
               :type="props.isFileLocked(file.path) ? 'danger' : 'info'"
               size="small"
               text
+              :loading="props.isLocking(file.path)"
+              :disabled="props.isLocking(file.path)"
               @click="handleToggleFileLock(file.path, $event)"
               class="file-action-btn"
             >
-              <el-icon size="16">
+              <el-icon v-if="!props.isLocking(file.path)" size="16">
                 <component :is="props.isFileLocked(file.path) ? Lock : Unlock" />
               </el-icon>
             </el-button>
           </el-tooltip>
           
-          <!-- 动态操作按钮 -->
-          <template v-for="action in getActionButtons(file.type)" :key="action.type">
+          <!-- 动态操作按钮（文件被锁定时隐藏） -->
+          <template v-if="!props.isFileLocked(file.path)" v-for="action in getActionButtons(file.type)" :key="action.type">
             <el-tooltip :content="action.tooltip" placement="top" :hide-after="1000" :show-after="200">
               <el-button
                 :type="action.buttonType"
@@ -232,7 +236,7 @@ function getActionButtons(fileType: string) {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: var(--spacing-base) var(--spacing-lg);
   background: #f8f9fa;
   cursor: pointer;
   font-weight: var(--font-weight-semibold);
