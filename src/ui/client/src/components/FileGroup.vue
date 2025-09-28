@@ -240,7 +240,7 @@ function getActionButtons(fileType: string) {
   background: #f8f9fa;
   cursor: pointer;
   font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   color: #303133;
   transition: var(--transition-all);
   position: relative;
@@ -351,7 +351,7 @@ function getActionButtons(fileType: string) {
 .file-name {
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   line-height: var(--line-height-tight);
   overflow: hidden;
   text-overflow: ellipsis;

@@ -2101,8 +2101,8 @@ function toggleFullscreen() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  line-height: 1.2;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-tight);
 }
 
 .copy-message-btn {
