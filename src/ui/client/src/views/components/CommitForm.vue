@@ -1016,6 +1016,19 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
   <div class="card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header">
       <h2>提交更改</h2>
+      <!-- Git操作按钮组 - 移到标题右侧 -->
+      <div class="header-actions" v-if="gitStore.userName !== '' && gitStore.userEmail !== ''">
+        <GitActionButtons
+          :has-user-commit-message="hasUserCommitMessage"
+          :final-commit-message="finalCommitMessage"
+          :skip-hooks="skipHooks"
+          from="form"
+          @after-commit="(success) => { if (success) clearCommitFields() }"
+          @after-push="handleQuickPushAfter"
+          @before-push="handleQuickPushBefore"
+          @clear-fields="clearCommitFields"
+        />
+      </div>
     </div>
 
     <div class="card-content">
@@ -1038,19 +1051,6 @@ git config --global user.email "your.email@example.com"</pre>
         <template v-else>
           <!-- 左侧：提交表单 -->
           <div class="commit-section">
-            <!-- Git操作按钮组 - 移到最上面 -->
-            <div class="top-actions-container">
-              <GitActionButtons
-                :has-user-commit-message="hasUserCommitMessage"
-                :final-commit-message="finalCommitMessage"
-                :skip-hooks="skipHooks"
-                from="form"
-                @after-commit="(success) => { if (success) clearCommitFields() }"
-                @after-push="handleQuickPushAfter"
-                @before-push="handleQuickPushBefore"
-                @clear-fields="clearCommitFields"
-              />
-            </div>
 
             <div class="commit-options">
               <!-- 提交模式开关 -->
@@ -1872,6 +1872,89 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 头部按钮组样式优化 */
+.header-actions :deep(.form-bottom-actions) {
+  background: #ffffff;
+  border: 1px solid #e4e7ed;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.header-actions :deep(.form-bottom-actions):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.header-actions :deep(.actions-flex-container) {
+  gap: 12px;
+}
+
+.header-actions :deep(.button-grid) {
+  gap: 8px;
+}
+
+/* 头部按钮样式优化 */
+.header-actions :deep(.el-button) {
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.header-actions :deep(.el-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.header-actions :deep(.el-button--primary) {
+  background: #409eff;
+  border: none;
+  color: white;
+}
+
+.header-actions :deep(.el-button--success) {
+  background: #67c23a;
+  border: none;
+  color: white;
+}
+
+.header-actions :deep(.el-button--warning) {
+  background: #e6a23c;
+  border: none;
+  color: white;
+}
+
+/* 头部按钮禁用状态样式优化 */
+.header-actions :deep(.el-button:disabled) {
+  opacity: 0.4 !important;
+  background-color: #f5f7fa !important;
+  border-color: #e4e7ed !important;
+  color: #c0c4cc !important;
+}
+
+.header-actions :deep(.el-button--primary:disabled) {
+  background-color: #a0cfff !important;
+  border-color: #a0cfff !important;
+  color: #ffffff !important;
+  opacity: 0.5 !important;
+}
+
+.header-actions :deep(.el-button--success:disabled) {
+  background-color: #b3e19d !important;
+  border-color: #b3e19d !important;
+  color: #ffffff !important;
+  opacity: 0.5 !important;
+}
+
+.header-actions :deep(.el-button--warning:disabled) {
+  background-color: #f3d19e !important;
+  border-color: #f3d19e !important;
+  color: #ffffff !important;
+  opacity: 0.5 !important;
 }
 
 .card-content {

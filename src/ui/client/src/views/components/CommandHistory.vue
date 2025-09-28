@@ -101,7 +101,11 @@ async function copyAllHistory() {
     }).join('\n---\n\n');
     
     await navigator.clipboard.writeText(historyText);
-    ElMessage.success('命令历史已复制到剪贴板');
+    ElMessage({
+      message: '命令历史已复制到剪贴板',
+      type: 'success',
+      zIndex: 100000
+    });
   } catch (error) {
     ElMessage.error(`复制失败: ${(error as Error).message}`);
   } finally {
@@ -125,7 +129,11 @@ async function copyCommandsOnly() {
       .join('\n');
     
     await navigator.clipboard.writeText(commandsText);
-    ElMessage.success('命令列表已复制到剪贴板');
+    ElMessage({
+      message: '命令列表已复制到剪贴板',
+      type: 'success',
+      zIndex: 100000
+    });
   } catch (error) {
     ElMessage.error(`复制失败: ${(error as Error).message}`);
   } finally {
@@ -213,7 +221,11 @@ function isExpanded(index: number): boolean {
 async function copyCommand(command: string) {
   try {
     await navigator.clipboard.writeText(command);
-    ElMessage.success('命令已复制到剪贴板');
+    ElMessage({
+      message: '命令已复制到剪贴板',
+      type: 'success',
+      zIndex: 100000
+    });
   } catch (error) {
     ElMessage.error(`复制失败: ${(error as Error).message}`);
   }
@@ -250,7 +262,11 @@ async function copyOutput(item: CommandHistoryItem) {
     if (item.error) outputText += `错误信息:\n${item.error}`;
 
     await navigator.clipboard.writeText(outputText.trim());
-    ElMessage.success('输出已复制到剪贴板');
+    ElMessage({
+      message: '输出已复制到剪贴板',
+      type: 'success',
+      zIndex: 100000
+    });
   } catch (error) {
     ElMessage.error(`复制失败: ${(error as Error).message}`);
   }
@@ -362,7 +378,7 @@ onUnmounted(() => {
       top="5vh"
       destroy-on-close
       class="command-history-dialog"
-      :z-index="99999"
+      :z-index="1000"
       append-to-body
       modal
     >
@@ -378,7 +394,7 @@ onUnmounted(() => {
         </el-tag>
         <el-tooltip content="只复制命令列表（不含输出）" placement="bottom" effect="dark" :open-delay="300">
           <button 
-            class="modern-btn copy-commands-button" 
+            class="modern-btn copy-commands-button enhanced-btn" 
             @click="copyCommandsOnly"
             :disabled="commandHistory.length === 0 || isCopyingCommands"
           >
@@ -390,11 +406,12 @@ onUnmounted(() => {
                 <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
               </svg>
             </el-icon>
+            <span class="btn-text">命令</span>
           </button>
         </el-tooltip>
         <el-tooltip content="复制完整命令历史（含输出）" placement="bottom" effect="dark" :open-delay="300">
           <button 
-            class="modern-btn copy-all-button" 
+            class="modern-btn copy-all-button enhanced-btn" 
             @click="copyAllHistory"
             :disabled="commandHistory.length === 0 || isCopyingHistory"
           >
@@ -406,11 +423,12 @@ onUnmounted(() => {
                 <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
               </svg>
             </el-icon>
+            <span class="btn-text">全部</span>
           </button>
         </el-tooltip>
         <el-tooltip content="清空命令历史" placement="bottom" effect="dark" :open-delay="300">
           <button 
-            class="modern-btn clear-button" 
+            class="modern-btn clear-button enhanced-btn danger-btn" 
             @click="clearCommandHistory"
             :disabled="commandHistory.length === 0 || isClearingHistory"
           >
@@ -422,6 +440,7 @@ onUnmounted(() => {
                 <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
               </svg>
             </el-icon>
+            <span class="btn-text">清空</span>
           </button>
         </el-tooltip>
       </div>
@@ -457,7 +476,7 @@ onUnmounted(() => {
             <div class="item-actions">
               <el-tooltip content="复制命令" placement="bottom" effect="dark" :open-delay="300">
                 <button 
-                  class="modern-btn item-copy-button" 
+                  class="modern-btn item-copy-button enhanced-btn" 
                   @click.stop="copyCommand(item.command)"
                 >
                   <el-icon class="btn-icon">
@@ -467,7 +486,7 @@ onUnmounted(() => {
               </el-tooltip>
               <el-tooltip content="展开/收起" placement="bottom" effect="dark" :open-delay="300">
                 <button 
-                  class="modern-btn expand-button" 
+                  class="modern-btn expand-button enhanced-btn" 
                   :class="{ 'is-expanded': isExpanded(index) }"
                   @click.stop="toggleExpand(index)"
                 >
@@ -486,7 +505,7 @@ onUnmounted(() => {
                 <h4>标准输出</h4>
                 <el-tooltip content="复制输出" placement="bottom" effect="dark" :open-delay="300">
                   <button 
-                    class="modern-btn output-copy-button" 
+                    class="modern-btn output-copy-button enhanced-btn" 
                     @click="copyOutput(item)"
                   >
                     <el-icon class="btn-icon">
@@ -619,25 +638,143 @@ onUnmounted(() => {
   border-color: rgba(0, 0, 0, 0.15);
 }
 
-/* 特定按钮尺寸 */
+/* 增强按钮样式 */
+.enhanced-btn {
+  min-width: 60px;
+  height: 36px;
+  padding: 8px 12px;
+  gap: 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.enhanced-btn .btn-text {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 1;
+  position: relative;
+}
+
+.enhanced-btn .btn-icon {
+  font-size: 14px;
+  z-index: 1;
+  position: relative;
+}
+
+/* 危险按钮样式 */
+.danger-btn {
+  background: rgba(245, 108, 108, 0.1);
+  color: #f56c6c;
+  border-color: rgba(245, 108, 108, 0.2);
+}
+
+.danger-btn::before {
+  background: linear-gradient(135deg, rgba(245, 108, 108, 0.15) 0%, rgba(255, 77, 79, 0.15) 100%);
+}
+
+.danger-btn:hover {
+  background: rgba(245, 108, 108, 0.15);
+  color: #f56c6c;
+  border-color: rgba(245, 108, 108, 0.3);
+  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.2);
+}
+
+/* 工具栏按钮特殊尺寸 */
 .copy-commands-button,
 .copy-all-button,
-.clear-button,
+.clear-button {
+  min-width: 70px;
+  height: 36px;
+  font-weight: 600;
+}
+
+/* 按钮组整体样式 */
+.dialog-toolbar .enhanced-btn {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.85);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.dialog-toolbar .enhanced-btn:hover {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: rgba(0, 0, 0, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dialog-toolbar .danger-btn {
+  background: rgba(245, 108, 108, 0.08);
+  color: #f56c6c;
+  border-color: rgba(245, 108, 108, 0.15);
+}
+
+.dialog-toolbar .danger-btn:hover {
+  background: rgba(245, 108, 108, 0.12);
+  color: #f56c6c;
+  border-color: rgba(245, 108, 108, 0.25);
+  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.15);
+}
+
+/* 小按钮尺寸 */
 .item-copy-button,
 .expand-button,
 .output-copy-button {
   width: 32px;
   height: 32px;
   padding: 0;
+  min-width: 32px;
+  gap: 0;
+  border-radius: 6px;
 }
 
-/* 清除按钮特殊样式 */
-.clear-button:hover {
-  background: rgba(245, 108, 108, 0.1);
+.item-copy-button .btn-text,
+.expand-button .btn-text,
+.output-copy-button .btn-text {
+  display: none;
 }
 
-.clear-button:hover::before {
-  background: linear-gradient(135deg, rgba(245, 108, 108, 0.1) 0%, rgba(255, 77, 79, 0.1) 100%);
+/* 小按钮的悬浮效果调整 */
+.item-copy-button:hover,
+.expand-button:hover,
+.output-copy-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.item-copy-button:active,
+.expand-button:active,
+.output-copy-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* 按钮悬浮效果增强 */
+.enhanced-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.enhanced-btn:active {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* 按钮加载状态 */
+.enhanced-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.enhanced-btn:disabled:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 /* 展开按钮动画 */
@@ -661,14 +798,21 @@ onUnmounted(() => {
 
 
 .dialog-toolbar {
-  padding: 12px 20px 12px 20px;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 12px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 1px solid #dee2e6;
+  border-radius: 8px 8px 0 0;
 }
 
-.socket-status { font-size: 12px; }
+.socket-status { 
+  font-size: 12px;
+  margin-right: auto;
+  font-weight: 500;
+}
 
 
 .dialog-content {
@@ -861,15 +1005,15 @@ onUnmounted(() => {
 <!-- 全局样式确保弹窗在最上层 -->
 <style>
 .command-history-dialog {
-  z-index: 99999 !important;
+  z-index: 1999 !important;
 }
 
 .el-overlay {
-  z-index: 99998 !important;
+  z-index: 1998 !important;
 }
 
 .el-dialog {
-  z-index: 99999 !important;
+  z-index: 1999 !important;
 }
 
 /* 确保命令历史弹窗的遮罩层在最上层 */

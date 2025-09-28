@@ -6,7 +6,7 @@ import LogList from '@views/components/LogList.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Menu, Folder, Plus, Setting, Close, User, Message, InfoFilled, Check, Delete } from '@element-plus/icons-vue'
+import { Edit, Menu, Folder, Plus, Setting, User, Message, InfoFilled, Check, Delete, Clock } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -820,26 +820,67 @@ async function selectDirectory(dirPath: string) {
       </div>
 
       <!-- 创建分支对话框 -->
-      <el-dialog v-model="createBranchDialogVisible" title="创建新分支" width="30%" destroy-on-close>
-        <el-form :model="{ newBranchName, selectedBaseBranch }">
-          <el-form-item label="新分支名称">
-            <el-input v-model="newBranchName" placeholder="请输入新分支名称" />
-          </el-form-item>
-          <el-form-item label="基于分支">
-            <el-select v-model="selectedBaseBranch" placeholder="选择基础分支" style="width: 100%;">
-              <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
-            </el-select>
-          </el-form-item>
-        </el-form>
+      <CommonDialog
+        v-model="createBranchDialogVisible"
+        title="创建新分支"
+        size="small"
+        :destroy-on-close="true"
+        custom-class="create-branch-dialog"
+      >
+        <div class="create-branch-content">
+          <el-form :model="{ newBranchName, selectedBaseBranch }" label-position="top">
+            <el-form-item>
+              <template #label>
+                <div class="form-label">
+                  <el-icon class="label-icon"><Plus /></el-icon>
+                  <span>新分支名称</span>
+                </div>
+              </template>
+              <el-input 
+                v-model="newBranchName" 
+                placeholder="请输入新分支名称" 
+                class="modern-input"
+                size="large"
+              />
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <div class="form-label">
+                  <el-icon class="label-icon"><Menu /></el-icon>
+                  <span>基于分支</span>
+                </div>
+              </template>
+              <el-select 
+                v-model="selectedBaseBranch" 
+                placeholder="选择基础分支" 
+                class="modern-select"
+                size="large"
+                style="width: 100%;"
+              >
+                <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
         <template #footer>
-          <span class="dialog-footer">
-            <el-button @click="createBranchDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="createNewBranch" :loading="gitStore.isCreatingBranch">
-              创建
-            </el-button>
-          </span>
+          <div class="create-branch-footer">
+            <div class="footer-actions">
+              <button type="button" class="footer-btn cancel-btn" @click="createBranchDialogVisible = false">
+                取消
+              </button>
+              <button type="button" class="footer-btn primary-btn" @click="createNewBranch" :disabled="gitStore.isCreatingBranch">
+                <el-icon v-if="!gitStore.isCreatingBranch"><Check /></el-icon>
+                <el-icon class="is-loading" v-else>
+                  <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
+                  </svg>
+                </el-icon>
+                <span>创建</span>
+              </button>
+            </div>
+          </div>
         </template>
-      </el-dialog>
+      </CommonDialog>
 
     </div>
   </main>
@@ -938,15 +979,15 @@ async function selectDirectory(dirPath: string) {
     
     <template #footer>
       <div class="user-settings-footer">
-        <button class="footer-btn danger-btn" @click="clearUserSettings">
+        <button type="button" class="footer-btn danger-btn" @click="clearUserSettings">
           <el-icon><Delete /></el-icon>
           <span>清除配置</span>
         </button>
         <div class="footer-actions">
-          <button class="footer-btn cancel-btn" @click="userSettingsDialogVisible = false">
+          <button type="button" class="footer-btn cancel-btn" @click="userSettingsDialogVisible = false">
             取消
           </button>
-          <button class="footer-btn primary-btn" @click="saveUserSettings">
+          <button type="button" class="footer-btn primary-btn" @click="saveUserSettings">
             <el-icon><Check /></el-icon>
             <span>保存设置</span>
           </button>
@@ -956,40 +997,75 @@ async function selectDirectory(dirPath: string) {
   </CommonDialog>
 
   <!-- 添加切换目录对话框 -->
-  <el-dialog v-model="isDirectoryDialogVisible" title="切换工作目录" width="50%" destroy-on-close>
-    <el-form>
-      <el-form-item label="目录路径">
-        <div class="directory-input-group">
-          <el-input v-model="newDirectoryPath" placeholder="请输入目录路径" />
-          <el-button type="primary" @click="browseDirectory">
-            <el-icon><Folder /></el-icon>
-            浏览
-          </el-button>
-        </div>
-      </el-form-item>
-      <el-form-item label="常用目录" v-if="recentDirectories.length > 0">
-        <div class="recent-directories">
-          <el-tag 
-            v-for="(dir, index) in recentDirectories" 
-            :key="index" 
-            class="recent-dir-tag"
-            @click="newDirectoryPath = dir"
-            effect="plain"
-          >
-            {{ dir }}
-          </el-tag>
-        </div>
-      </el-form-item>
-    </el-form>
+  <CommonDialog
+    v-model="isDirectoryDialogVisible"
+    title="切换工作目录"
+    size="medium"
+    :destroy-on-close="true"
+    custom-class="directory-dialog"
+  >
+    <div class="directory-content">
+      <el-form label-position="top">
+        <el-form-item>
+          <template #label>
+            <div class="form-label">
+              <el-icon class="label-icon"><Folder /></el-icon>
+              <span>目录路径</span>
+            </div>
+          </template>
+          <div class="directory-input-group">
+            <el-input 
+              v-model="newDirectoryPath" 
+              placeholder="请输入目录路径" 
+              class="modern-input"
+              size="large"
+            />
+            <button type="button" class="browse-btn" @click="browseDirectory">
+              <el-icon><Folder /></el-icon>
+              <span>浏览</span>
+            </button>
+          </div>
+        </el-form-item>
+        <el-form-item v-if="recentDirectories.length > 0">
+          <template #label>
+            <div class="form-label">
+              <el-icon class="label-icon"><Clock /></el-icon>
+              <span>常用目录</span>
+            </div>
+          </template>
+          <div class="recent-directories">
+            <div 
+              v-for="(dir, index) in recentDirectories" 
+              :key="index" 
+              class="recent-dir-item"
+              @click="newDirectoryPath = dir"
+            >
+              <el-icon class="dir-icon"><Folder /></el-icon>
+              <span class="dir-path">{{ dir }}</span>
+            </div>
+          </div>
+        </el-form-item>
+      </el-form>
+    </div>
     <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="isDirectoryDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="changeDirectory()" :loading="isChangingDirectory">
-          切换
-        </el-button>
-      </span>
+      <div class="directory-footer">
+        <div class="footer-actions">
+          <button type="button" class="footer-btn cancel-btn" @click="isDirectoryDialogVisible = false">
+            取消
+          </button>
+          <button type="button" class="footer-btn primary-btn" @click="changeDirectory()" :disabled="isChangingDirectory">
+            <el-icon v-if="!isChangingDirectory"><Check /></el-icon>
+            <el-icon class="is-loading" v-else>
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
+              </svg>
+            </el-icon>
+            <span>切换</span>
+          </button>
+        </div>
+      </div>
     </template>
-  </el-dialog>
+  </CommonDialog>
 </template>
 
 <style>
@@ -1838,6 +1914,143 @@ h1 {
 
 .danger-btn:active {
   transform: translateY(0);
+}
+
+/* 创建分支对话框样式 */
+.create-branch-content {
+  padding: 8px 0;
+}
+
+.create-branch-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+/* 切换目录对话框样式 */
+.directory-content {
+  padding: 8px 0;
+}
+
+.directory-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.directory-input-group .modern-input {
+  flex: 1;
+}
+
+.browse-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-height: 40px;
+}
+
+.browse-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
+}
+
+.browse-btn:active {
+  transform: translateY(0);
+}
+
+.recent-directories {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.recent-dir-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.recent-dir-item:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateX(2px);
+}
+
+.dir-icon {
+  font-size: 16px;
+  color: #3498db;
+  flex-shrink: 0;
+}
+
+.dir-path {
+  font-size: 13px;
+  color: #374151;
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.directory-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+/* 选择框样式 */
+:deep(.modern-select .el-select__wrapper) {
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+:deep(.modern-select .el-select__wrapper:hover) {
+  border-color: #d1d5db;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+:deep(.modern-select.is-focus .el-select__wrapper) {
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1), 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* 加载动画 */
+.is-loading {
+  animation: rotating 2s linear infinite;
+}
+
+@keyframes rotating {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .directory-icon {
