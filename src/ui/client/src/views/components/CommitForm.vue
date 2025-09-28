@@ -1605,72 +1605,123 @@ git config --global user.email "your.email@example.com"</pre>
       </el-dialog>
       
       <!-- Stash列表弹窗 -->
-      <el-dialog
-        title="储藏列表 (Git Stash)"
+      <CommonDialog
         v-model="isStashListDialogVisible"
-        width="600px"
-        :close-on-click-modal="false"
+        title="储藏列表 (Git Stash)"
+        size="large"
+        :show-footer="false"
+        custom-class="stash-list-dialog"
       >
         <div class="stash-list-content">
-          <el-table
-            :data="gitStore.stashes"
-            stripe
-            style="width: 100%"
-            v-loading="gitStore.isLoadingStashes"
-            empty-text="暂无储藏记录"
-          >
-            <el-table-column prop="id" label="ID" width="100" />
-            <el-table-column prop="description" label="描述" />
-            <el-table-column label="操作" width="280">
-              <template #default="scope">
-                <div class="stash-action-buttons">
-                  <el-button
-                    size="small"
-                    type="info"
-                    @click="viewStashDetail(scope.row)"
-                    :loading="isLoadingStashDetail"
-                  >
-                    查看
-                  </el-button>
-                  <el-button
-                    size="small"
-                    @click="applyStash(scope.row.id, false)"
-                    :loading="gitStore.isApplyingStash"
-                  >
-                    应用
-                  </el-button>
-                  <el-button
-                    size="small"
-                    type="primary"
-                    @click="applyStash(scope.row.id, true)"
-                    :loading="gitStore.isApplyingStash"
-                  >
-                    应用并删除
-                  </el-button>
-                  <el-button
-                    size="small"
-                    type="danger"
-                    @click="confirmDropStash(scope.row.id)"
-                    :loading="gitStore.isDroppingStash"
-                  >
-                    删除
-                  </el-button>
+          <!-- 头部统计信息 -->
+          <div class="stash-header" v-if="!gitStore.isLoadingStashes">
+            <div class="stash-stats">
+              <div class="stat-item">
+                <el-icon class="stat-icon"><Connection /></el-icon>
+                <span class="stat-number">{{ gitStore.stashes.length }}</span>
+                <span class="stat-label">个储藏</span>
+              </div>
+            </div>
+            <div class="stash-actions-header" v-if="gitStore.stashes.length > 0">
+              <el-button
+                type="danger"
+                size="small"
+                :icon="Delete"
+                @click="confirmClearAllStashes"
+                :loading="gitStore.isDroppingStash"
+                class="clear-all-btn"
+              >
+                清空所有储藏
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 储藏列表 -->
+          <div class="stash-list-container" v-loading="gitStore.isLoadingStashes">
+            <div v-if="gitStore.stashes.length === 0 && !gitStore.isLoadingStashes" class="empty-state">
+              <el-empty
+                description="暂无储藏记录"
+                :image-size="120"
+              >
+                <template #image>
+                  <el-icon class="empty-icon"><Connection /></el-icon>
+                </template>
+                <template #description>
+                  <p class="empty-text">还没有任何储藏记录</p>
+                  <p class="empty-hint">使用 git stash 可以临时保存工作进度</p>
+                </template>
+              </el-empty>
+            </div>
+            
+            <div v-else class="stash-cards">
+              <div 
+                v-for="(stash, index) in gitStore.stashes" 
+                :key="stash.id"
+                class="stash-card"
+                :class="{ 'stash-card-latest': index === 0 }"
+              >
+                <div class="stash-card-content">
+                  <div class="stash-info">
+                    <div class="stash-main-info">
+                      <div class="stash-id-badge">
+                        <el-icon class="badge-icon"><Connection /></el-icon>
+                        <span class="stash-id-text">{{ stash.id }}</span>
+                        <el-tag v-if="index === 0" size="small" type="success" class="latest-tag">最新</el-tag>
+                      </div>
+                      <div class="stash-description">
+                        <span class="description-text">{{ stash.description }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="stash-card-actions">
+                    <el-button
+                      size="small"
+                      type="info"
+                      :icon="Edit"
+                      @click="viewStashDetail(stash)"
+                      :loading="isLoadingStashDetail"
+                      class="action-btn view-btn"
+                    >
+                      查看
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="success"
+                      :icon="Download"
+                      @click="applyStash(stash.id, false)"
+                      :loading="gitStore.isApplyingStash"
+                      class="action-btn apply-btn"
+                    >
+                      应用
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="primary"
+                      :icon="Check"
+                      @click="applyStash(stash.id, true)"
+                      :loading="gitStore.isApplyingStash"
+                      class="action-btn apply-pop-btn"
+                    >
+                      应用并删除
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="danger"
+                      :icon="Delete"
+                      @click="confirmDropStash(stash.id)"
+                      :loading="gitStore.isDroppingStash"
+                      class="action-btn delete-btn"
+                    >
+                      删除
+                    </el-button>
+                  </div>
                 </div>
-              </template>
-            </el-table-column>
-          </el-table>
-          
-          <div class="stash-list-actions" v-if="gitStore.stashes.length > 0">
-            <el-button
-              type="danger"
-              @click="confirmClearAllStashes"
-              :loading="gitStore.isDroppingStash"
-            >
-              清空所有储藏
-            </el-button>
+              </div>
+            </div>
           </div>
         </div>
-      </el-dialog>
+      </CommonDialog>
       
       <!-- Stash详情弹窗 -->
       <CommonDialog
@@ -3041,13 +3092,265 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* stash相关样式 */
 .stash-list-content {
-  padding: 20px 0;
+  padding: 0;
+  min-height: 400px;
 }
 
-.stash-list-actions {
-  margin-top: 20px;
+/* Stash列表弹窗样式 */
+:deep(.stash-list-dialog) {
+  .common-dialog__header {
+    background: #409eff;
+    color: white;
+    padding: 20px 24px;
+    border-radius: 8px 8px 0 0;
+    margin: 0;
+  }
+  
+  .common-dialog__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: white;
+  }
+  
+  .common-dialog__close {
+    color: white;
+    font-size: 18px;
+    
+    &:hover {
+      color: #f0f0f0;
+    }
+  }
+  
+  .common-dialog__body {
+    padding: 24px;
+    background: #f8f9fa;
+  }
+}
+
+/* 头部统计信息 */
+.stash-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.stash-stats {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #409eff;
+  border-radius: 20px;
+  color: white;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
+}
+
+.stat-icon {
+  font-size: 16px;
+}
+
+.stat-number {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.stat-label {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.stash-actions-header {
+  display: flex;
+  gap: 12px;
+}
+
+.clear-all-btn {
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 108, 108, 0.3);
+  }
+}
+
+/* 储藏列表容器 */
+.stash-list-container {
+  min-height: 300px;
+}
+
+/* 空状态样式 */
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 64px;
+  color: #c0c4cc;
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 16px;
+  color: #606266;
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.empty-hint {
+  font-size: 14px;
+  color: #909399;
+  margin: 0;
+}
+
+/* 储藏卡片列表 */
+.stash-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stash-card {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+  overflow: hidden;
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    border-color: #409eff;
+  }
+}
+
+.stash-card-latest {
+  border: 2px solid #67c23a;
+  box-shadow: 0 2px 12px rgba(103, 194, 58, 0.15);
+  
+  &:hover {
+    border-color: #67c23a;
+    box-shadow: 0 4px 16px rgba(103, 194, 58, 0.25);
+  }
+}
+
+.stash-card-content {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.stash-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.stash-main-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stash-id-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.badge-icon {
+  font-size: 14px;
+  color: #909399;
+}
+
+.stash-id-text {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  background: #f5f7fa;
+  color: #606266;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  border: 1px solid #e4e7ed;
+}
+
+.latest-tag {
+  margin-left: 4px;
+}
+
+.stash-description {
+  flex: 1;
+  min-width: 0;
+}
+
+.description-text {
+  margin: 0;
+  font-size: 14px;
+  color: #303133;
+  line-height: 1.4;
+  word-break: break-word;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stash-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.action-btn {
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  min-width: 60px;
+  padding: 6px 12px;
+  font-size: 12px;
+  
+  &:hover {
+    transform: translateY(-1px);
+  }
+}
+
+.view-btn:hover {
+  box-shadow: 0 4px 12px rgba(144, 147, 153, 0.3);
+}
+
+.apply-btn:hover {
+  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.3);
+}
+
+.apply-pop-btn:hover {
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+}
+
+.delete-btn:hover {
+  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.3);
 }
 
 .stash-dialog-content p {
@@ -3432,7 +3735,7 @@ git config --global user.email "your.email@example.com"</pre>
   height: 80px;
 }
 
-/* 储藏列表 操作按钮间距 */
+/* 储藏列表 操作按钮间距 (保留兼容性) */
 .stash-action-buttons {
   display: inline-flex;
   align-items: center;
