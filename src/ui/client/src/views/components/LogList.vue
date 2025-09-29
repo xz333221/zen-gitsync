@@ -1540,7 +1540,7 @@ function toggleFullscreen() {
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   display: flex;
   flex-direction: column;
   height: 100%;

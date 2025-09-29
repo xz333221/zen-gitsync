@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, defineExpose } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading } from "@element-plus/icons-vue";
+import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading, Box, Setting, Document } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";
@@ -1508,32 +1508,76 @@ git config --global user.email "your.email@example.com"</pre>
         :close-on-click-modal="false"
         show-footer
         confirm-text="储藏"
+        cancel-text="取消"
         :confirm-loading="gitStore.isSavingStash"
+        custom-class="stash-dialog"
         @confirm="saveStash"
       >
         <div class="stash-dialog-content">
-          <p>将当前工作区的更改储藏起来，稍后可以再次应用。</p>
+          <!-- 功能说明卡片 -->
+          <div class="stash-info-card">
+            <div class="info-icon">
+              <el-icon><Box /></el-icon>
+            </div>
+            <div class="info-content">
+              <h4>储藏工作区更改</h4>
+              <p>将当前工作区的更改临时保存，稍后可以重新应用到任何分支</p>
+            </div>
+          </div>
           
-          <el-form label-position="top">
-            <el-form-item label="储藏说明 (可选)">
+          <el-form label-position="top" class="stash-form">
+            <el-form-item label="储藏说明">
               <el-input 
                 v-model="stashMessage" 
-                placeholder="输入储藏说明（可选）"
+                placeholder="为这次储藏添加描述信息（可选）"
                 clearable
+                :rows="2"
+                type="textarea"
+                resize="none"
+                maxlength="200"
+                show-word-limit
               />
             </el-form-item>
             
-            <el-form-item>
-              <el-checkbox v-model="includeUntracked">
-                包含未跟踪文件 (--include-untracked)
-              </el-checkbox>
-            </el-form-item>
+            <!-- 选项配置 -->
+            <div class="stash-options">
+              <h5 class="options-title">
+                <el-icon><Setting /></el-icon>
+                储藏选项
+              </h5>
+              
+              <div class="option-item">
+                <el-checkbox v-model="includeUntracked" size="large">
+                  <span class="option-label">包含未跟踪文件</span>
+                </el-checkbox>
+                <p class="option-desc">同时储藏新建但未添加到Git的文件 (--include-untracked)</p>
+              </div>
 
-            <el-form-item>
-              <el-checkbox v-model="excludeLocked" :disabled="allChangesAreLocked">
-                排除锁定文件
-              </el-checkbox>
-            </el-form-item>
+              <div class="option-item">
+                <el-checkbox v-model="excludeLocked" :disabled="allChangesAreLocked" size="large">
+                  <span class="option-label">排除锁定文件</span>
+                </el-checkbox>
+                <p class="option-desc" :class="{ 'disabled': allChangesAreLocked }">
+                  不储藏被锁定的文件，保持其当前状态
+                </p>
+              </div>
+            </div>
+            
+            <!-- 储藏预览信息 -->
+            <div class="stash-preview" v-if="gitStore.status.staged.length > 0 || gitStore.status.unstaged.length > 0">
+              <h5 class="preview-title">
+                <el-icon><Document /></el-icon>
+                将要储藏的文件
+              </h5>
+              <div class="file-count-info">
+                <el-tag type="success" v-if="gitStore.status.staged.length > 0">
+                  已暂存: {{ gitStore.status.staged.length }} 个文件
+                </el-tag>
+                <el-tag type="warning" v-if="gitStore.status.unstaged.length > 0">
+                  未暂存: {{ gitStore.status.unstaged.length }} 个文件
+                </el-tag>
+              </div>
+            </div>
           </el-form>
         </div>
       </CommonDialog>
@@ -1851,7 +1895,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .card-header {
-  padding: 8px 16px;
+  padding: 8px;
   border-bottom: 1px solid #f0f0f0;
   display: flex;
   justify-content: space-between;
@@ -1877,7 +1921,7 @@ git config --global user.email "your.email@example.com"</pre>
   border: 1px solid #e4e7ed;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   margin: 0;
-  padding: 8px 12px;
+  padding: 8px;
 }
 
 .header-actions :deep(.form-bottom-actions):hover {
@@ -1886,7 +1930,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .header-actions :deep(.actions-flex-container) {
-  gap: 12px;
+  gap: 8px;
 }
 
 .header-actions :deep(.button-grid) {
@@ -1898,7 +1942,7 @@ git config --global user.email "your.email@example.com"</pre>
   border-radius: 6px;
   font-weight: 500;
   transition: all 0.3s ease;
-  padding: 6px 12px;
+  padding: 6px 8px;
   font-size: 12px;
 }
 
@@ -1963,7 +2007,7 @@ git config --global user.email "your.email@example.com"</pre>
 .layout-container {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 8px;
   height: 100%;
 }
 
@@ -1979,7 +2023,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .actions-section h3 {
   margin-top: 0;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid #dcdfe6;
   font-size: 16px;
@@ -1989,19 +2033,19 @@ git config --global user.email "your.email@example.com"</pre>
 
 .operations-wrapper {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .action-groups {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .action-group {
   background-color: #f9f9f9;
   border-radius: 6px;
-  padding: 12px 14px;
+  padding: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: all 0.3s ease;
   flex: 1;
@@ -2053,14 +2097,14 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 12px;
+  gap: 8px;
 }
 
 .stash-info-row {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 8px;
   background-color: #f8f9fa;
   border-radius: 6px;
   border: 1px solid #e9ecef;
@@ -2121,7 +2165,7 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 15px;
+  margin-bottom: 8px;
 }
 
 .standard-commit-header {
@@ -2133,7 +2177,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .type-scope-container {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   align-items: stretch;
 }
@@ -2341,17 +2385,17 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .template-form {
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   background-color: #f8f9fa;
-  padding: 15px;
+  padding: 8px;
   border-radius: 6px;
   border: 1px solid #ebeef5;
 }
 
 .template-form-buttons {
   display: flex;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 8px;
+  margin-top: 8px;
   justify-content: flex-end;
 }
 
@@ -2366,7 +2410,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .template-list h3 {
   margin-top: 0;
-  margin-bottom: 15px;
+  margin-bottom: 8px;
   font-size: 16px;
   font-weight: 500;
   color: #303133;
@@ -2375,7 +2419,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .template-item {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   transition: all 0.2s ease;
   border: 1px solid #ebeef5;
 }
@@ -2388,7 +2432,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .template-content {
   flex-grow: 1;
-  margin-right: 10px;
+  margin-right: 8px;
   word-break: break-all;
   padding: 5px 0;
   color: #303133;
@@ -2415,7 +2459,7 @@ git config --global user.email "your.email@example.com"</pre>
   background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
   border: 1px solid #e9ecef;
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 8px;
   transition: all 0.3s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   flex: 1;
@@ -2499,7 +2543,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* 顶部按钮区域样式 */
 .top-actions-container {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .top-actions-container :deep(.form-bottom-actions) {
@@ -2515,11 +2559,11 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .top-actions-container :deep(.actions-flex-container) {
-  gap: 20px;
+  gap: 8px;
 }
 
 .top-actions-container :deep(.button-grid) {
-  gap: 16px;
+  gap: 8px;
 }
 
 /* 按钮样式优化 */
@@ -2622,7 +2666,7 @@ git config --global user.email "your.email@example.com"</pre>
   
   .top-actions-container :deep(.actions-flex-container) {
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
   }
   
   .top-actions-container :deep(.button-grid) {
@@ -2635,7 +2679,7 @@ git config --global user.email "your.email@example.com"</pre>
   background-color: #2d2d2d;
   color: #f8f8f2;
   font-family: 'Courier New', Courier, monospace;
-  padding: 10px;
+  padding: 8px;
   border-radius: 4px;
   overflow-x: auto;
   white-space: pre;
@@ -2666,10 +2710,10 @@ git config --global user.email "your.email@example.com"</pre>
   background-color: #2d2d2d;
   color: #f8f8f2;
   font-family: 'Courier New', Courier, monospace;
-  padding: 10px;
+  padding: 8px;
   border-radius:
   4px;
-  margin-top: 10px;
+  margin-top: 8px;
   white-space: pre;
 }
 
@@ -2733,7 +2777,7 @@ git config --global user.email "your.email@example.com"</pre>
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid #409eff;
   border-radius: 8px;
-  padding: 12px 16px;
+  padding: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2857,7 +2901,7 @@ git config --global user.email "your.email@example.com"</pre>
 .actions-flex-container {
   display: flex;
   justify-content: space-between;
-  gap: 10px; /* 从15px减少到10px */
+  gap: 8px; /* 统一到8px */
   width: 100%;
 }
 
@@ -2882,7 +2926,7 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 15px;
+  padding: 8px;
 }
 
 .button-grid .el-button:first-child {
@@ -2903,7 +2947,7 @@ git config --global user.email "your.email@example.com"</pre>
 .one-push-button {
   height: 100%;
   width: 100%;
-  padding: 10px 15px;
+  padding: 8px;
   background: linear-gradient(135deg, #4169e1, #5e81f4);
   border: none;
   border-radius: 8px;
@@ -2933,7 +2977,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .one-push-icon {
   font-size: 24px;
-  margin-right: 10px;
+  margin-right: 8px;
 }
 
 .one-push-text {
@@ -2962,7 +3006,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .pushing-spinner {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .circular {
@@ -3010,8 +3054,8 @@ git config --global user.email "your.email@example.com"</pre>
 
 .templates-container {
   display: flex;
-  gap: 20px;
-  margin-top: 15px;
+  gap: 8px;
+  margin-top: 8px;
   flex: 1;
   overflow: hidden;
 }
@@ -3021,13 +3065,13 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   flex-direction: column;
   border-right: 1px solid #ebeef5;
-  padding-right: 15px;
+  padding-right: 8px;
   height: calc(100vh - 432px);
 }
 
 .message-templates-list h3 {
   margin-top: 0;
-  margin-bottom: 15px;
+  margin-bottom: 8px;
   font-size: 16px;
   font-weight: 500;
   color: #303133;
@@ -3039,13 +3083,13 @@ git config --global user.email "your.email@example.com"</pre>
   flex: 2;
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  padding-left: 15px;
+  gap: 8px;
+  padding-left: 8px;
 }
 
 .current-default-message h3 {
   margin-top: 0;
-  margin-bottom: 15px;
+  margin-bottom: 8px;
   font-size: 16px;
   font-weight: 500;
   color: #303133;
@@ -3060,7 +3104,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .default-message-card {
-  margin-bottom: 15px;
+  margin-bottom: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   border-radius: 4px;
   transition: all 0.3s ease;
@@ -3071,7 +3115,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .default-message-content {
-  padding: 12px 15px;
+  padding: 8px;
   background-color: #f0f9eb;
   border-left: 3px solid #67c23a;
   font-weight: 500;
@@ -3086,7 +3130,7 @@ git config --global user.email "your.email@example.com"</pre>
 .message-help-text {
   background-color: #f8f9fa;
   border-radius: 4px;
-  padding: 15px;
+  padding: 8px;
   font-size: 14px;
   color: #606266;
   border-left: 3px solid #909399;
@@ -3096,7 +3140,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .message-help-text h4 {
   margin-top: 0;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #303133;
   font-size: 15px;
 }
@@ -3158,20 +3202,20 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .merge-intro {
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   color: #606266;
 }
 
 .merge-options {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 .merge-confirm-btn {
@@ -3253,7 +3297,7 @@ git config --global user.email "your.email@example.com"</pre>
 .stash-stats {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 8px;
 }
 
 .stat-item {
@@ -3283,7 +3327,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .stash-actions-header {
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
 .clear-all-btn {
@@ -3332,7 +3376,7 @@ git config --global user.email "your.email@example.com"</pre>
 .stash-cards {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .stash-card {
@@ -3364,7 +3408,7 @@ git config --global user.email "your.email@example.com"</pre>
   padding: 16px 20px;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 8px;
 }
 
 .stash-info {
@@ -3378,7 +3422,7 @@ git config --global user.email "your.email@example.com"</pre>
 .stash-main-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -3464,7 +3508,6 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .stash-dialog-content p {
-  margin-bottom: 20px;
   color: #606266;
 }
 
@@ -3703,7 +3746,6 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .stash-header {
-  margin-bottom: 20px;
   padding-bottom: 15px;
   border-bottom: 1px solid #ebeef5;
 }
@@ -3976,7 +4018,7 @@ git config --global user.email "your.email@example.com"</pre>
 .config-warning-content {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
   padding: 16px 0;
 }
 
@@ -3999,5 +4041,259 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* 储藏弹窗样式优化 */
+.stash-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stash-info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.stash-info-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0ea5e9 0%, #0284c7 100%);
+}
+
+.stash-info-card .info-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  border-radius: 10px;
+  color: white;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
+
+.stash-info-card .info-content {
+  flex: 1;
+}
+
+.stash-info-card .info-content h4 {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0c4a6e;
+  line-height: 1.2;
+}
+
+.stash-info-card .info-content p {
+  margin: 0;
+  font-size: 14px;
+  color: #075985;
+  line-height: 1.4;
+}
+
+.stash-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stash-form .el-form-item {
+  margin-bottom: 0;
+}
+
+.stash-form .el-form-item__label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.stash-form .el-textarea {
+  .el-textarea__inner {
+    border-radius: 8px;
+    border: 2px solid #e5e7eb;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    line-height: 1.5;
+    
+    &:hover {
+      border-color: #d1d5db;
+    }
+    
+    &:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+  }
+}
+
+.stash-options {
+  padding: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.options-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.options-title .el-icon {
+  color: #6b7280;
+  font-size: 16px;
+}
+
+.option-item {
+  margin-bottom: 8px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.option-item .el-checkbox {
+  margin-bottom: 8px;
+}
+
+.option-label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 14px;
+}
+
+.option-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.4;
+  padding-left: 24px;
+  
+  &.disabled {
+    color: #9ca3af;
+  }
+}
+
+.stash-preview {
+  padding: 8px;
+  background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
+  border: 1px solid #fbbf24;
+  border-radius: 12px;
+  position: relative;
+}
+
+.stash-preview::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+  border-radius: 12px 12px 0 0;
+}
+
+.preview-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.preview-title .el-icon {
+  color: #d97706;
+  font-size: 16px;
+}
+
+.file-count-info {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.file-count-info .el-tag {
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+/* 储藏弹窗的CommonDialog样式定制 */
+:deep(.stash-dialog) {
+  .el-dialog {
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .el-dialog__header {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-bottom: 1px solid #e2e8f0;
+    padding: 18px 24px;
+  }
+  
+  .el-dialog__title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .el-dialog__body {
+    padding: 24px;
+    background: #ffffff;
+  }
+  
+  .el-dialog__footer {
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    padding: 16px 24px;
+  }
+  
+  .common-dialog__footer {
+    .el-button {
+      border-radius: 8px;
+      font-weight: 500;
+      padding: 10px 20px;
+      transition: all 0.3s ease;
+      
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+    }
+    
+    .el-button--primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      border: none;
+      
+      &:hover {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      }
+    }
+  }
 }
 </style>

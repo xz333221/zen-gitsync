@@ -1162,7 +1162,7 @@ body {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 220px;
   flex: 1;
 }
@@ -1180,7 +1180,7 @@ h1 {
 .header-info {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   flex: 1;
   justify-content: flex-end;
   min-width: 0;
@@ -1416,7 +1416,6 @@ h1 {
 
 .loading-spinner {
   font-size: 48px;
-  margin-bottom: 20px;
   color: #409eff;
 }
 
@@ -1462,7 +1461,7 @@ h1 {
 .branch-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .branch-wrapper {
@@ -1480,34 +1479,27 @@ h1 {
 }
 
 .branch-label {
-  font-weight: bold;
   margin-right: 10px;
   color: #ffffff;
 }
 
-.branch-select {
-  width: 200px;
-  margin-right: 10px;
-}
-
-
-.footer-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 13px;
-  background-color: rgba(255, 255, 255, 0.1);
-  padding: 8px 12px;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.repo-url-label {
-  font-weight: bold;
-  margin-right: 8px;
-  color: #ffffff;
-}
+  .branch-select {
+    width: 200px;
+    margin-right: 10px;
+  }
+  .footer-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  .repo-url-label {
+    font-weight: bold;
+    margin-right: 8px;
+    color: #ffffff;
+  }
 
 .repo-url {
   color: #e6f7ff;
@@ -1711,7 +1703,7 @@ h1 {
 .user-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 8px;
 }
 
 .form-group {
@@ -1779,7 +1771,7 @@ h1 {
 .info-card {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
   padding: 14px;
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   border: 1px solid #bae6fd;
@@ -1840,7 +1832,7 @@ h1 {
 
 .footer-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
 .footer-btn {
@@ -1979,7 +1971,7 @@ h1 {
 .recent-dir-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 10px 12px;
   background: #f8fafc;
   border: 1px solid #e5e7eb;

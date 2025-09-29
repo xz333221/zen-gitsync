@@ -611,7 +611,7 @@ defineExpose({
         >
           <el-switch 
             v-model="gitStore.autoUpdateEnabled" 
-            style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 10px;"
+            style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 8px;"
             inline-prompt
             :active-icon="Check"
             :inactive-icon="Close"
@@ -902,7 +902,7 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 8px;
   border-bottom: 1px solid #f0f0f0;
 }
 
@@ -932,9 +932,9 @@ defineExpose({
   white-space: pre-wrap;
   font-family: monospace;
   background-color: #f8f9fa;
-  padding: 16px;
+  padding: 8px;
   border-radius: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   max-height: 200px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -997,7 +997,7 @@ defineExpose({
   justify-content: center;
   background-color: #f0f2f5;
   border-radius: 50%;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   font-size: 28px;
   color: #909399;
   animation: pulse 2s infinite ease-in-out;
@@ -1019,7 +1019,7 @@ defineExpose({
 .empty-subtext {
   font-size: 14px;
   color: #909399;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
 }
 
 .status-box-wrap {
@@ -1046,7 +1046,7 @@ defineExpose({
 .branch-sync-status {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 8px;
   margin-bottom: 0;
   background-color: #f8f9fa;
 }
@@ -1071,7 +1071,7 @@ defineExpose({
   align-items: center;
   width: 100%;
   border-radius: 4px;
-  padding: 8px 12px;
+  padding: 8px;
   transition: all 0.3s ease;
 }
 
@@ -1108,7 +1108,7 @@ defineExpose({
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 12px;
+  padding: 8px;
 }
 
 /* 增加自动更新开关的样式 */
@@ -1154,7 +1154,7 @@ defineExpose({
   font-size: 16px;
   color: #409EFF;
   font-weight: bold;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 
@@ -1166,14 +1166,14 @@ defineExpose({
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  padding: 40px 20px;
+  padding: 8px;
   color: #666;
 }
 
 .empty-locked-files .empty-icon {
   font-size: 48px;
   color: #d9d9d9;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .empty-locked-files p {
@@ -1194,11 +1194,11 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 8px;
   background-color: #fff7e6;
   border: 1px solid #ffd591;
   border-radius: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   color: #d46b08;
   font-weight: 500;
 }
@@ -1213,15 +1213,15 @@ defineExpose({
   background-color: #f6f8fa;
   border: 1px solid #e1e4e8;
   border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: 8px;
+  margin-bottom: 8px;
 }
 
 .description-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .description-icon {
@@ -1246,8 +1246,8 @@ defineExpose({
 }
 
 .description-content ul {
-  margin: 4px 0 12px 0;
-  padding-left: 20px;
+  margin: 4px 0 8px 0;
+  padding-left: 8px;
 }
 
 .description-content li {
@@ -1259,21 +1259,15 @@ defineExpose({
   flex-direction: column;
   gap: 8px;
 }
-
 .locked-file-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 8px;
   background-color: #fffbf0;
   border: 1px solid #ffd591;
   border-radius: 6px;
   transition: all 0.2s ease;
-}
-
-.locked-file-item:hover {
-  background-color: #fff7e6;
-  border-color: #ffa940;
 }
 
 

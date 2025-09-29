@@ -65,11 +65,11 @@ async function copyCommand() {
   .preview-container {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     border: 1px solid #dee2e6;
     border-radius: 8px;
-    padding: 8px 12px;
+    padding: 8px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
@@ -121,7 +121,7 @@ async function copyCommand() {
       color: #e8f4fd;
       border: 1px solid #404040;
       border-radius: 6px;
-      padding: 6px 10px;
+      padding: 6px 8px;
       margin: 0;
       font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
       font-size: 12px;

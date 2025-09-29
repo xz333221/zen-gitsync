@@ -50,7 +50,7 @@ function onChange(val: boolean) {
   background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
   border: 1px solid #e9ecef;
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 8px;
   transition: all 0.3s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
