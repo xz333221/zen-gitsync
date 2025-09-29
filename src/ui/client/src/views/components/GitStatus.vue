@@ -983,7 +983,6 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
   text-align: center;
   background-color: #f9f9f9;
   border-radius: 8px;
