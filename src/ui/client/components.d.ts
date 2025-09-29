@@ -35,6 +35,7 @@ declare module 'vue' {
     GitActionButtons: typeof import('./src/components/GitActionButtons.vue')['default']
     GitCommandPreview: typeof import('./src/components/GitCommandPreview.vue')['default']
     GlobalLoading: typeof import('./src/components/GlobalLoading.vue')['default']
+    InlineCard: typeof import('./src/components/InlineCard.vue')['default']
     OptionSwitchCard: typeof import('./src/components/OptionSwitchCard.vue')['default']
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']
     QuickPushButton: typeof import('./src/components/buttons/QuickPushButton.vue')['default']

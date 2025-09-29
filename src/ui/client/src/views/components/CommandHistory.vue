@@ -558,7 +558,6 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border: none;
-  background: #f8f9fa;
   color: #495057;
   border-radius: 8px;
   cursor: pointer;
@@ -862,7 +861,6 @@ onUnmounted(() => {
   border: 1px solid var(--border-card);
   border-radius: 4px;
   transition: all 0.2s;
-  background-color: #f8f9fa;
   overflow: hidden;
 }
 
@@ -1006,7 +1004,6 @@ onUnmounted(() => {
 }
 
 .output-content {
-  background-color: #f8f9fa;
   padding: 10px;
   border-radius: 4px;
   font-family: 'Consolas', 'Courier New', monospace;

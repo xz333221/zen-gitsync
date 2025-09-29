@@ -924,7 +924,6 @@ defineExpose({
 .status-box {
   white-space: pre-wrap;
   font-family: monospace;
-  background-color: #f8f9fa;
   padding: 8px;
   border-radius: 8px;
   margin-bottom: 8px;
@@ -1041,7 +1040,6 @@ defineExpose({
   align-items: center;
   padding: 8px;
   margin-bottom: 0;
-  background-color: #f8f9fa;
 }
 
 .sync-status-content {

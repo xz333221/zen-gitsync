@@ -1,10 +1,5 @@
-/* 导入Tailwind和全局变量 */
-@import "tailwindcss";
-
 /* 基础重置样式 - 使用CSS变量 */
 * {
-    margin: 0;
-    padding: 0;
     box-sizing: border-box;
 }
 

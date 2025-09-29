@@ -5,6 +5,7 @@ import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
 import CommonDialog from '@components/CommonDialog.vue'
+import InlineCard from '@components/InlineCard.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Menu, Folder, Plus, Setting, User, Message, InfoFilled, Check, Delete, Clock } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -703,62 +704,64 @@ async function selectDirectory(dirPath: string) {
       <h1>Zen GitSync</h1>
     </div>
     <div class="header-info">
-      <div id="user-info" v-if="gitStore.userName && gitStore.userEmail">
-        <span class="user-name">{{ gitStore.userName }}</span>
-        <span class="user-email">&lt;{{ gitStore.userEmail }}&gt;</span>
-        <el-tooltip content="用户设置" placement="bottom" effect="dark" :open-delay="500">
-          <button class="modern-btn user-settings-btn" @click="openUserSettingsDialog">
-            <el-icon class="btn-icon">
-              <Setting />
-            </el-icon>
-          </button>
-        </el-tooltip>
-      </div>
-      <div id="user-info" v-else>
-        <span class="user-label">用户: </span>
-        <span class="user-warning">未配置</span>
-        <el-tooltip content="用户设置" placement="bottom" effect="dark" :open-delay="500">
-          <button class="modern-btn user-settings-btn" @click="openUserSettingsDialog">
-            <el-icon class="btn-icon">
-              <Setting />
-            </el-icon>
-          </button>
-        </el-tooltip>
-      </div>
-      <!-- 添加目录选择功能 -->
-      <div class="directory-selector">
-        <div class="directory-display">
+      <!-- 用户信息卡片 -->
+      <InlineCard id="user-info" class="user-info-card" compact>
+        <template #content>
+          <template v-if="gitStore.userName && gitStore.userEmail">
+            <span class="user-name">{{ gitStore.userName }}</span>
+            <span class="user-email">&lt;{{ gitStore.userEmail }}&gt;</span>
+          </template>
+          <template v-else>
+            <span class="user-label">用户: </span>
+            <span class="user-warning">未配置</span>
+          </template>
+        </template>
+        <template #actions>
+          <el-tooltip content="用户设置" placement="bottom" effect="dark" :open-delay="500">
+            <button class="modern-btn user-settings-btn" @click="openUserSettingsDialog">
+              <el-icon class="btn-icon"><Setting /></el-icon>
+            </button>
+          </el-tooltip>
+        </template>
+      </InlineCard>
+
+      <!-- 目录选择卡片 -->
+      <InlineCard id="directory-selector" class="directory-selector" compact>
+        <template #icon>
           <div class="directory-icon">
-            <el-icon>
-              <Folder />
-            </el-icon>
+            <el-icon><Folder /></el-icon>
           </div>
-          <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
-        </div>
-        <div class="directory-actions">
-          <el-tooltip content="切换目录" placement="bottom" effect="dark" :open-delay="500">
-            <button class="modern-btn dir-btn" @click="openDirectoryDialog">
-              <el-icon class="btn-icon">
-                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                  <path fill="currentColor"
-                    d="M128 192v640h768V320H485.76L357.504 192H128zm-32-64h287.872l128.384 128H928a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32z">
-                  </path>
-                </svg>
-              </el-icon>
-            </button>
-          </el-tooltip>
-          <el-tooltip content="在资源管理器中打开" placement="bottom" effect="dark" :open-delay="500">
-            <button class="modern-btn dir-btn" @click="openInFileExplorer">
-              <el-icon class="btn-icon">
-                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                  <path fill="currentColor" 
-                    d="M928 444H820V330.4c0-17.7-14.3-32-32-32H473L355.7 186.2a8.15 8.15 0 0 0-5.5-2.2H96c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h698c13 0 24.8-7.9 29.7-20l134-332c1.5-3.8 2.3-7.9 2.3-12 0-17.7-14.3-32-32-32zM136 256h188.5l119.6 114.4H748V444H238c-13 0-24.8 7.9-29.7 20L136 643.2V256zm635.3 512H159l103.3-256h612.4L771.3 768z" />
-                </svg>
-              </el-icon>
-            </button>
-          </el-tooltip>
-        </div>
-      </div>
+        </template>
+        <template #content>
+          <div class="directory-display">
+            <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
+          </div>
+        </template>
+        <template #actions>
+          <div class="directory-actions">
+            <el-tooltip content="切换目录" placement="bottom" effect="dark" :open-delay="500">
+              <button class="modern-btn dir-btn" @click="openDirectoryDialog">
+                <el-icon class="btn-icon">
+                  <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="currentColor"
+                      d="M128 192v640h768V320H485.76L357.504 192H128zm-32-64h287.872l128.384 128H928a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32z" />
+                  </svg>
+                </el-icon>
+              </button>
+            </el-tooltip>
+            <el-tooltip content="在资源管理器中打开" placement="bottom" effect="dark" :open-delay="500">
+              <button class="modern-btn dir-btn" @click="openInFileExplorer">
+                <el-icon class="btn-icon">
+                  <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="currentColor"
+                      d="M928 444H820V330.4c0-17.7-14.3-32-32-32H473L355.7 186.2a8.15 8.15 0 0 0-5.5-2.2H96c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h698c13 0 24.8-7.9 29.7-20l134-332c1.5-3.8 2.3-7.9 2.3-12 0-17.7-14.3-32-32-32zM136 256h188.5l119.6 114.4H748V444H238c-13 0-24.8 7.9-29.7 20L136 643.2V256zm635.3 512H159l103.3-256h612.4L771.3 768z" />
+                  </svg>
+                </el-icon>
+              </button>
+            </el-tooltip>
+          </div>
+        </template>
+      </InlineCard>
 
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
@@ -932,37 +935,45 @@ async function selectDirectory(dirPath: string) {
     </div>
   </main>
 
-  <footer class="main-footer app-footer">
+  <footer class="main-footer app-footer p-4">
     <div class="branch-info" v-if="gitStore.currentBranch">
-      <div class="branch-wrapper">
-        <span class="branch-label">当前分支:</span>
-        <el-select v-model="gitStore.currentBranch" size="small" @change="handleBranchChange"
-          :loading="gitStore.isChangingBranch" class="branch-select">
-          <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
-        </el-select>
-        <button class="modern-btn create-branch-btn" @click="openCreateBranchDialog">
-          <el-icon class="btn-icon">
-            <Plus />
-          </el-icon>
-          <span class="btn-text">新建分支</span>
-        </button>
-      </div>
+      <InlineCard class="branch-wrapper" compact>
+        <template #content>
+          <span class="branch-label">当前分支:</span>
+          <el-select v-model="gitStore.currentBranch" size="small" @change="handleBranchChange"
+            :loading="gitStore.isChangingBranch" class="branch-select">
+            <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
+          </el-select>
+        </template>
+        <template #actions>
+          <button class="modern-btn create-branch-btn" @click="openCreateBranchDialog">
+            <el-icon class="btn-icon"><Plus /></el-icon>
+            <span class="btn-text">新建分支</span>
+          </button>
+        </template>
+      </InlineCard>
     </div>
-    <div class="footer-right" v-if="gitStore.remoteUrl">
-      <span class="repo-url-label">远程仓库:</span>
-      <span class="repo-url">{{ gitStore.remoteUrl }}</span>
-      <el-tooltip content="复制仓库地址" placement="top" effect="dark" :open-delay="500">
-        <button class="modern-btn copy-url-btn" @click="gitStore.copyRemoteUrl()">
-          <el-icon class="btn-icon">
-            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor"
-                d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
-              <path fill="currentColor"
-                d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
-            </svg>
-          </el-icon>
-        </button>
-      </el-tooltip>
+    <div v-if="gitStore.remoteUrl">
+      <InlineCard class="footer-right" compact>
+        <template #content>
+          <span class="repo-url-label">远程仓库:</span>
+          <span class="repo-url">{{ gitStore.remoteUrl }}</span>
+        </template>
+        <template #actions>
+          <el-tooltip content="复制仓库地址" placement="top" effect="dark" :open-delay="500">
+            <button class="modern-btn copy-url-btn" @click="gitStore.copyRemoteUrl()">
+              <el-icon class="btn-icon">
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="currentColor"
+                    d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
+                  <path fill="currentColor"
+                    d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
+                </svg>
+              </el-icon>
+            </button>
+          </el-tooltip>
+        </template>
+      </InlineCard>
     </div>
   </footer>
 
@@ -1215,7 +1226,6 @@ h1 {
 #user-info {
   display: flex;
   align-items: center;
-  background: #f8f9fa;
   padding: 8px 14px;
   border-radius: 8px;
   border: 1px solid var(--border-component);
@@ -1230,7 +1240,6 @@ h1 {
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
-  background: #f8f9fa;
   border-radius: 8px;
   padding: 8px 14px;
   border: 1px solid var(--border-component);
@@ -1309,6 +1318,11 @@ h1 {
   padding: 10px;
 }
 
+/* 统一主题切换按钮为与其它图标按钮一致的尺寸与外观 */
+.theme-toggle-btn {
+  padding: 10px;
+}
+
 .modern-btn .btn-icon {
   font-size: 16px;
   transition: transform 0.2s ease;
@@ -1355,6 +1369,17 @@ h1 {
   flex: 1;
   min-width: 0;
   max-width: 500px;
+}
+
+/* 统一 InlineCard 内部内容的垂直尺寸，避免因为内部再套一层有 padding/border 的容器导致高度不一致 */
+.inline-card .directory-path {
+  background: transparent;
+  border: 0;
+  border-left: 0;
+  padding: 0 8px;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
 }
 
 .branch-label,
@@ -1447,7 +1472,6 @@ h1 {
   z-index: 100;
   height: 60px;
   box-sizing: border-box;
-  padding: 10px 20px;
 }
 
 </style>
@@ -1471,7 +1495,6 @@ h1 {
 .branch-wrapper {
   display: flex;
   align-items: center;
-  background-color: #f8f9fa;
   border-radius: 4px;
   padding: 8px 12px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -1498,7 +1521,6 @@ h1 {
     gap: 8px;
     color: #495057;
     font-size: 13px;
-    background-color: #f8f9fa;
     padding: 8px;
     border-radius: 4px;
     border: 1px solid var(--border-component);

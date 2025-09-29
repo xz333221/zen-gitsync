@@ -2103,7 +2103,6 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
   gap: 8px;
   padding: 8px;
-  background-color: #f8f9fa;
   border-radius: 6px;
   border: 1px solid var(--border-component);
   flex-shrink: 0; /* 不被压缩 */
@@ -2383,7 +2382,6 @@ git config --global user.email "your.email@example.com"</pre>
 
 .template-form {
   margin-bottom: 8px;
-  background-color: #f8f9fa;
   padding: 8px;
   border-radius: 6px;
   border: 1px solid var(--border-card);
@@ -3117,12 +3115,10 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .message-help-text {
-  background-color: #f8f9fa;
   border-radius: 4px;
   padding: 8px;
   font-size: 14px;
   color: #606266;
-  border-left: 3px solid #909399;
   margin-top: auto;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
@@ -3262,11 +3258,6 @@ git config --global user.email "your.email@example.com"</pre>
     &:hover {
       color: var(--border-card);
     }
-  }
-  
-  .common-dialog__body {
-    padding: 24px;
-    background: #f8f9fa;
   }
 }
 
@@ -3963,7 +3954,6 @@ git config --global user.email "your.email@example.com"</pre>
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #f8f9fa;
   border-radius: 8px;
   border: 1px solid var(--border-component);
 }

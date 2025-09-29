@@ -437,7 +437,6 @@ defineExpose({
 }
 
 .message-help-text {
-  background-color: #f8f9fa;
   padding: 16px;
   border-radius: 6px;
   border-left: 4px solid #409eff;

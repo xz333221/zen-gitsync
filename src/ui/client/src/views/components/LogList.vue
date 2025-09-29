@@ -1295,11 +1295,6 @@ function toggleFullscreen() {
       <div class="content-area-content" v-else>
         <!-- 图表视图 -->
         <div v-if="showGraphView" class="graph-view">
-          <div class="commit-count" v-if="logsData.length > 0">
-            显示 {{ logsData.length }} 条提交记录
-            {{ showAllCommits ? "(全部)" : "(分页加载，每页20条)" }}
-          </div>
-
           <!-- 添加缩放控制 -->
           <div class="graph-controls">
             <div class="zoom-controls">
@@ -1789,7 +1784,6 @@ function toggleFullscreen() {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
-  background-color: #f8f9fa;
   padding: 12px;
   border-radius: 8px;
   border: 1px solid var(--border-card);
