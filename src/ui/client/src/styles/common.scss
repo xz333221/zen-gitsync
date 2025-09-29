@@ -1,16 +1,42 @@
-/* ======================================================= 
-   公共样式文件 - Git差异格式化和滚动条 (SCSS)
-   导入全局变量，使用统一的设计令牌
+/* =======================================================
+   全局通用样式文件 - 基础样式和组件样式
    ======================================================= */
 
 /* 导入全局CSS变量 */
 @use './variables';
 
-/* Git diff syntax highlight */
+/* =======================================================
+   全局文字颜色应用
+   ======================================================= */
+
+/* 全局文字颜色 */
+body, * {
+  color: var(--color-text);
+}
+
+/* 次要文字 */
+.text-secondary {
+  color: var(--color-text-secondary) !important;
+}
+
+/* 辅助文字 */
+.text-tertiary {
+  color: var(--color-text-tertiary) !important;
+}
+
+/* 占位符文字 */
+.text-placeholder {
+  color: var(--color-text-placeholder) !important;
+}
+
+/* =======================================================
+   Git差异显示样式
+   ======================================================= */
+
 .diff-header {
-  background-color: var(--git-diff-header-bg);
-  padding: var(--spacing-base) var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-base);
   margin: var(--spacing-base) 0;
+  background-color: var(--git-diff-header-bg);
   border-radius: var(--radius-md);
   color: var(--git-diff-header-color);
   border: 1px solid var(--git-diff-header-border);

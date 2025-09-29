@@ -1577,7 +1577,7 @@ function toggleFullscreen() {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  
 }
 
 .log-actions {
@@ -1791,7 +1791,6 @@ function toggleFullscreen() {
   border: 1px solid #ebeef5;
   border-radius: 8px;
   padding: 16px;
-  background-color: #fff;
   position: relative;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
@@ -1825,7 +1824,6 @@ function toggleFullscreen() {
 .scale-info {
   font-size: 14px;
   color: #606266;
-  background-color: #fff;
   padding: 4px 10px;
   border-radius: 4px;
   border: 1px solid #ebeef5;
@@ -1920,7 +1918,6 @@ function toggleFullscreen() {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-  background-color: #fff;
   padding: 12px;
   border-radius: 8px;
   border: 1px solid #e4e7ed;

@@ -12,6 +12,7 @@
 [data-theme="dark"] {
   /* 页面背景 */
   --bg-page: var(--bg-page-dark);
+  --bg-title: var(--bg-title-dark);
   --bg-container: var(--bg-container-dark);
   
   /* 文字颜色 */
@@ -19,6 +20,12 @@
   --text-secondary: var(--text-secondary-dark);
   --text-tertiary: var(--text-tertiary-dark);
   --text-placeholder: var(--text-placeholder-dark);
+  
+  /* 全局文字颜色覆盖 */
+  --color-text: var(--text-primary-dark);
+  --color-text-secondary: var(--text-secondary-dark);
+  --color-text-tertiary: var(--text-tertiary-dark);
+  --color-text-placeholder: var(--text-placeholder-dark);
   
   /* 边框颜色 */
   --border-color: var(--border-color-dark);
@@ -219,6 +226,30 @@
     background: var(--bg-page-dark);
   }
 
+  /* 提交表单容器深色主题 */
+  .commit-form-container,
+  .layout-container {
+    background: var(--bg-container-dark) !important;
+  }
+
+  /* 提交信息输入区域深色主题 */
+  .commit-message-container,
+  .description-container {
+    background: var(--bg-container-dark) !important;
+  }
+
+  /* Git命令预览区域深色主题 */
+  .git-command-preview,
+  .preview-section {
+    background: var(--bg-container-dark) !important;
+  }
+
+  /* 开关卡片区域深色主题 */
+  .header-switches,
+  .commit-options {
+    background: transparent !important;
+  }
+
   /* Git状态组件深色主题 */
   .git-status-card,
   .status-card {
@@ -296,8 +327,61 @@
     border-color: rgba(255, 255, 255, 0.1) !important;
   }
 
-  /* 选择器深色主题 */
-  .el-select .el-input__wrapper {
+  /* 提交信息输入框容器深色主题 */
+  .commit-message-input {
+    background: rgba(255, 255, 255, 0.02) !important;
+  }
+
+  /* 标准化提交表单深色主题 */
+  .standard-commit-form,
+  .commit-form-wrapper {
+    background: var(--bg-container-dark) !important;
+  }
+
+  /* 提交表单各个区域深色主题 */
+  .form-row,
+  .form-group {
+    background: transparent !important;
+  }
+
+  /* Git状态文件列表容器 */
+  .file-list,
+  .status-list,
+  .files-container {
+    background: var(--bg-container-dark) !important;
+  }
+
+  /* 渐变背景深色主题覆盖 */
+  .option-card {
+    background: linear-gradient(135deg, var(--bg-container-dark) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+  }
+
+  .stash-header {
+    background: linear-gradient(135deg, var(--bg-container-dark) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+  }
+  .commit-message-input {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+  }
+
+  /* Element Plus Card组件深色主题 */
+  .el-card {
+    background-color: var(--bg-container-dark) !important;
+    border-color: var(--border-color-dark) !important;
+  }
+
+  .el-card__header {
+    background-color: var(--bg-container-dark) !important;
+    border-bottom-color: var(--border-color-dark) !important;
+    color: var(--color-text) !important;
+  }
+
+  .el-card__body {
+    background-color: var(--bg-container-dark) !important;
+    color: var(--color-text) !important;
+  }
+
+  /* Element Plus组件深色主题 */
+  .el-input .el-input__wrapper {
     background-color: rgba(255, 255, 255, 0.08) !important;
   }
 

@@ -106,7 +106,6 @@ withDefaults(defineProps<Props>(), {
 }
 
 .loading-text {
-  color: #ffffff;
   font-size: 18px;
   font-weight: 600;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);

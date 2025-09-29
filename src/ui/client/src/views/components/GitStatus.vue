@@ -599,10 +599,11 @@ defineExpose({
 </script>
 
 <template>
-  <div class="card">
-    <div class="status-header">
-      <h2>Git 状态</h2>
-      <div class="header-actions">
+  <el-card shadow="hover" class="git-status-card">
+    <template #header>
+      <div class="status-header">
+        <h2>Git 状态</h2>
+        <div class="header-actions">
         <el-tooltip 
           :content="gitStore.autoUpdateEnabled ? '禁用自动更新文件状态' : '启用自动更新文件状态'" 
           placement="top" 
@@ -673,8 +674,9 @@ defineExpose({
             :loading="isRefreshing"
           />
         </el-tooltip>
+        </div>
       </div>
-    </div>
+    </template>
     
     <div class="card-content" 
       v-loading="gitStore.isGitPulling || gitStore.isGitFetching" 
@@ -775,7 +777,7 @@ defineExpose({
         </div>
       </div>
     </div>
-  </div>
+  </el-card>
   
   <!-- 文件差异对话框 -->
   <CommonDialog
@@ -903,7 +905,7 @@ defineExpose({
   margin: 0;
   font-size: 16px;
   font-weight: 500;
-  color: #303133;
+  
 }
 
 .header-actions {
@@ -1069,7 +1071,6 @@ defineExpose({
 }
 
 .status-badge.el-tag--warning {
-  background-color: #fff7e6;
   border-color: #ffd591;
   color: #d46b08;
 }
@@ -1188,7 +1189,6 @@ defineExpose({
   align-items: center;
   gap: 8px;
   padding: 8px;
-  background-color: #fff7e6;
   border: 1px solid #ffd591;
   border-radius: 6px;
   margin-bottom: 8px;
@@ -1256,7 +1256,6 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   padding: 8px;
-  background-color: #fffbf0;
   border: 1px solid #ffd591;
   border-radius: 6px;
   transition: all 0.2s ease;

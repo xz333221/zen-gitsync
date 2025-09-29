@@ -1910,7 +1910,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin: 0;
   font-size: 16px;
   font-weight: 500;
-  color: #303133;
+  
 }
 
 .header-actions {
@@ -1984,21 +1984,18 @@ git config --global user.email "your.email@example.com"</pre>
 .header-actions :deep(.el-button--primary:disabled) {
   background-color: #a0cfff !important;
   border-color: #a0cfff !important;
-  color: #ffffff !important;
   opacity: 0.5 !important;
 }
 
 .header-actions :deep(.el-button--success:disabled) {
   background-color: #b3e19d !important;
   border-color: #b3e19d !important;
-  color: #ffffff !important;
   opacity: 0.5 !important;
 }
 
 .header-actions :deep(.el-button--warning:disabled) {
   background-color: #f3d19e !important;
   border-color: #f3d19e !important;
-  color: #ffffff !important;
   opacity: 0.5 !important;
 }
 
@@ -2031,7 +2028,7 @@ git config --global user.email "your.email@example.com"</pre>
   padding-bottom: 8px;
   border-bottom: 1px solid #dcdfe6;
   font-size: 16px;
-  color: #303133;
+  
   font-weight: 500;
 }
 
@@ -2145,7 +2142,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .stash-description-value {
   font-size: 14px;
-  color: #303133;
+  
   font-weight: 400;
   word-break: break-all;
 }
@@ -2256,7 +2253,7 @@ git config --global user.email "your.email@example.com"</pre>
   .el-input__inner {
     font-size: 15px;
     font-weight: 500;
-    color: #303133;
+    
     height: 34px;
   }
   
@@ -2290,7 +2287,7 @@ git config --global user.email "your.email@example.com"</pre>
   .el-select__inner {
     font-size: 14px;
     font-weight: 500;
-    color: #303133;
+    
   }
   
   .el-select__inner::placeholder {
@@ -2336,7 +2333,7 @@ git config --global user.email "your.email@example.com"</pre>
 /* 提交信息输入框样式 */
 :deep(.commit-message-input) {
   /* 添加背景和边框，让容器更明显 */
-  background: linear-gradient(135deg, #fff8f0 0%, #fff2e6 100%);
+  background: linear-gradient(135deg, var(--bg-container-hover) 0%, #fff2e6 100%);
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(230, 162, 60, 0.1);
   transition: all 0.3s ease;
@@ -2417,7 +2414,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin-bottom: 8px;
   font-size: 16px;
   font-weight: 500;
-  color: #303133;
+  
   padding-bottom: 8px;
   border-bottom: 1px solid #ebeef5;
 }
@@ -2439,7 +2436,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin-right: 8px;
   word-break: break-all;
   padding: 5px 0;
-  color: #303133;
+  
   font-weight: 500;
 }
 
@@ -2514,7 +2511,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #303133;
+  
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -2611,21 +2608,18 @@ git config --global user.email "your.email@example.com"</pre>
 .top-actions-container :deep(.el-button--primary:disabled) {
   background-color: #a0cfff !important;
   border-color: #a0cfff !important;
-  color: #ffffff !important;
   opacity: 0.5 !important;
 }
 
 .top-actions-container :deep(.el-button--success:disabled) {
   background-color: #b3e19d !important;
   border-color: #b3e19d !important;
-  color: #ffffff !important;
   opacity: 0.5 !important;
 }
 
 .top-actions-container :deep(.el-button--warning:disabled) {
   background-color: #f3d19e !important;
   border-color: #f3d19e !important;
-  color: #ffffff !important;
   opacity: 0.5 !important;
 }
 
@@ -2819,7 +2813,6 @@ git config --global user.email "your.email@example.com"</pre>
 .git-push-loading .el-loading-spinner svg {
   width: 100px !important;
   height: 100px !important;
-  color: #ffffff !important;
 }
 
 .git-push-loading .el-loading-spinner .circular {
@@ -2836,7 +2829,6 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .git-push-loading .el-loading-text {
-  color: #ffffff !important;
   font-size: 20px !important;
   font-weight: 700 !important;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
@@ -3078,7 +3070,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin-bottom: 8px;
   font-size: 16px;
   font-weight: 500;
-  color: #303133;
+  
   padding-bottom: 8px;
   border-bottom: 1px solid #ebeef5;
 }
@@ -3096,7 +3088,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin-bottom: 8px;
   font-size: 16px;
   font-weight: 500;
-  color: #303133;
+  
   padding-bottom: 8px;
   border-bottom: 1px solid #ebeef5;
 }
@@ -3128,7 +3120,7 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   align-items: center;
   border-radius: 0 4px 4px 0;
-  color: #303133;
+  
 }
 
 .message-help-text {
@@ -3145,7 +3137,7 @@ git config --global user.email "your.email@example.com"</pre>
 .message-help-text h4 {
   margin-top: 0;
   margin-bottom: 8px;
-  color: #303133;
+  
   font-size: 15px;
 }
 
@@ -3463,7 +3455,7 @@ git config --global user.email "your.email@example.com"</pre>
  .description-text {
    margin: 0;
    font-size: 14px;
-   color: #303133;
+   
    line-height: 1.4;
    word-break: break-word;
    font-weight: 500;
@@ -3820,7 +3812,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  
 }
 
 .selected-file {
@@ -3849,8 +3841,7 @@ git config --global user.email "your.email@example.com"</pre>
 .diff-text {
   font-size: 12px;
   line-height: 1.6;
-  color: #303133;
-  background-color: #fff;
+  
   margin: 0;
   padding: 16px;
   white-space: pre-wrap;
@@ -3940,7 +3931,7 @@ git config --global user.email "your.email@example.com"</pre>
 .info-text {
   font-size: 14px;
   font-weight: 500;
-  color: #303133;
+  
 }
 
 .editor-tips {

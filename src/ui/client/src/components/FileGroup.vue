@@ -255,18 +255,12 @@ function getStatusLetter(fileType: string): string {
   align-items: center;
   gap: var(--spacing-md);
   padding: var(--spacing-base) var(--spacing-lg);
-  background: #f8f9fa;
   cursor: pointer;
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-base);
-  color: #303133;
+  
   transition: var(--transition-all);
   position: relative;
-  border-bottom: 1px solid #e4e7ed;
-}
-
-.file-group-header:hover {
-  background: #f0f2f5;
 }
 
 .collapse-icon {

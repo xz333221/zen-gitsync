@@ -323,7 +323,7 @@ function handleClosed() {
 :deep(.el-dialog__title) {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  
 }
 
 :deep(.el-dialog__headerbtn) {

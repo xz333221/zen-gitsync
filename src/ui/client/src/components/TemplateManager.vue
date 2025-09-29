@@ -332,7 +332,7 @@ defineExpose({
   margin: 0 0 16px 0;
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  
 }
 
 /* 仅列表滚动区域 */
@@ -423,7 +423,7 @@ defineExpose({
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  
 }
 
 .default-message-card {
@@ -446,7 +446,7 @@ defineExpose({
 .message-help-text h4 {
   margin: 0 0 8px 0;
   font-size: 14px;
-  color: #303133;
+  
 }
 
 .message-help-text p {
@@ -489,7 +489,7 @@ defineExpose({
 :deep(.el-dialog__title) {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  
 }
 
 :deep(.el-dialog__headerbtn) {

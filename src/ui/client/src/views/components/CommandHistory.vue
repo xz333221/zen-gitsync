@@ -919,7 +919,7 @@ onUnmounted(() => {
 .command-text code {
   font-family: 'Consolas', 'Courier New', monospace;
   font-size: 13px;
-  color: #303133;
+  
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -962,7 +962,6 @@ onUnmounted(() => {
 .item-details {
   padding: 10px 12px;
   border-top: 1px solid #ebeef5;
-  background-color: #fff;
   display: flex;
   flex-direction: column;
   gap: 12px;

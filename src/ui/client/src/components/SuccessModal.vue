@@ -97,7 +97,7 @@ withDefaults(defineProps<Props>(), {
 .success-text {
   font-size: 24px;
   font-weight: 700;
-  color: #303133;
+  
   margin: 0;
 }
 

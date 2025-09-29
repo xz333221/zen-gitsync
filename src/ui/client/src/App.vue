@@ -819,8 +819,10 @@ async function selectDirectory(dirPath: string) {
       <!-- 上方右侧提交表单 -->
       <div class="commit-form-panel" v-if="gitStore.isGitRepo">
         <!-- 当用户未配置时显示配置提示 -->
-        <div v-if="!gitStore.userName || !gitStore.userEmail" class="card">
-          <h2>Git用户未配置</h2>
+        <el-card v-if="!gitStore.userName || !gitStore.userEmail" shadow="hover">
+          <template #header>
+            <h2>Git用户未配置</h2>
+          </template>
           <p>请先配置Git用户信息才能进行提交操作。</p>
           <div class="tips">
             <h3>您可以通过以下方式配置：</h3>
@@ -836,22 +838,24 @@ async function selectDirectory(dirPath: string) {
               立即配置
             </el-button>
           </div>
-        </div>
+        </el-card>
         <!-- 用户已配置显示提交表单 -->
         <template v-else>
           <CommitForm ref="commitFormRef" />
         </template>
       </div>
       <div class="commit-form-panel" v-else>
-        <div class="card" style="padding: 20px;">
-          <h2>Git仓库初始化</h2>
+        <el-card shadow="hover">
+          <template #header>
+            <h2>Git仓库初始化</h2>
+          </template>
           <p>当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。</p>
           <!-- 实用提示 -->
           <div class="tips">
             <h3>可以使用以下命令初始化仓库：</h3>
             <div class="code-block">git init</div>
           </div>
-        </div>
+        </el-card>
       </div>
 
       <!-- 水平分隔条 -->
@@ -1172,16 +1176,18 @@ body {
 
 
 
-/* 确保每个卡片内部可以滚动 */
-.card {
-  background-color: var(--bg-container);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.03);
+/* el-card样式调整 */
+.el-card {
   height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.el-card .el-card__body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
 }
 
 .main-header {
@@ -1281,8 +1287,8 @@ h1 {
   align-items: center;
   justify-content: center;
   border: none;
-  background: #f8f9fa;
-  color: #495057;
+  background: var(--bg-title);
+  color: var(--color-text);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);

@@ -302,7 +302,7 @@ watch(() => props.files, (newFiles) => {
 .panel-header {
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--bg-container);
-  color: #303133;
+  
   border-bottom: 1px solid #e4e7ed;
   display: flex;
   justify-content: space-between;
@@ -313,7 +313,7 @@ watch(() => props.files, (newFiles) => {
     margin: 0;
     font-size: var(--font-size-md);
     font-weight: var(--font-weight-semibold);
-    color: #303133;
+    
   }
 }
 
@@ -394,7 +394,7 @@ watch(() => props.files, (newFiles) => {
 }
 
 .path-name {
-  color: #303133;
+  
   font-weight: var(--font-weight-semibold);
 }
 
