@@ -2041,7 +2041,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .action-group {
-  background-color: #f9f9f9;
+  background-color: var(--bg-component-area);
   border-radius: 6px;
   padding: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);

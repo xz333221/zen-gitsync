@@ -977,7 +977,7 @@ defineExpose({
   align-items: center;
   justify-content: center;
   text-align: center;
-  background-color: #f9f9f9;
+  background-color: var(--bg-component-area);
   border-radius: 8px;
   flex-grow: 1;
 }
