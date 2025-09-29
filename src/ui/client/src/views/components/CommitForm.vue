@@ -4213,7 +4213,6 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 12px 0;
   font-size: 14px;
   font-weight: 600;
   color: #92400e;

@@ -1494,6 +1494,8 @@ h1 {
     color: rgba(255, 255, 255, 0.9);
     font-size: 13px;
     background-color: rgba(255, 255, 255, 0.1);
+    padding: 8px;
+    border-radius: 4px;
   }
   .repo-url-label {
     font-weight: bold;
