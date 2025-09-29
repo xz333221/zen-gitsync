@@ -896,7 +896,7 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   padding: 8px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-card);
 }
 
 .status-header h2 {
@@ -931,7 +931,7 @@ defineExpose({
   max-height: 200px;
   overflow-y: auto;
   overflow-x: hidden;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--border-card);
   font-size: 14px;
   line-height: 1.5;
   width: 100%;
@@ -1028,7 +1028,7 @@ defineExpose({
   background-color: var(--bg-container);
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
   transition: all 0.3s ease;
 }
 

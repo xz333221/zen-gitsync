@@ -1553,7 +1553,7 @@ function toggleFullscreen() {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-card);
   position: sticky;
   top: 0;
   background-color: var(--bg-container);
@@ -1780,7 +1780,7 @@ function toggleFullscreen() {
   width: 100%;
   flex: 1;
   min-height: 500px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-card);
   border-radius: 8px;
   padding: 16px;
   position: relative;
@@ -1800,7 +1800,7 @@ function toggleFullscreen() {
   background-color: #f8f9fa;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-card);
 }
 
 .zoom-controls {
@@ -1818,7 +1818,7 @@ function toggleFullscreen() {
   color: #606266;
   padding: 4px 10px;
   border-radius: 4px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-card);
 }
 
 .refresh-notification {
@@ -1912,7 +1912,7 @@ function toggleFullscreen() {
   align-items: center;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
 }
 
 .info-item {
@@ -2002,7 +2002,7 @@ function toggleFullscreen() {
   background-color: var(--bg-container);
   width: 100%;
   border-radius: 0;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-card);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -2124,7 +2124,7 @@ function toggleFullscreen() {
   flex-direction: column;
   align-items: center;
   padding: 8px 0;
-  border-top: 1px dashed #ebeef5;
+  border-top: 1px dashed var(--border-card);
   gap: 8px;
 }
 

@@ -172,9 +172,6 @@ async function copyCommand() {
       display: flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid #d1d5db;
-      background: #f9fafb;
-      color: #6b7280;
       cursor: pointer;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       font-family: inherit;

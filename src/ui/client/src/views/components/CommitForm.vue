@@ -1900,7 +1900,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .card-header {
   padding: 8px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-card);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1922,7 +1922,7 @@ git config --global user.email "your.email@example.com"</pre>
 /* 头部按钮组样式优化 */
 .header-actions :deep(.form-bottom-actions) {
   background: var(--bg-container);
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   margin: 0;
   padding: 8px;
@@ -2250,7 +2250,6 @@ git config --global user.email "your.email@example.com"</pre>
   .el-input__inner {
     font-size: 15px;
     font-weight: 500;
-    
     height: 34px;
   }
   
@@ -2387,7 +2386,7 @@ git config --global user.email "your.email@example.com"</pre>
   background-color: #f8f9fa;
   padding: 8px;
   border-radius: 6px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-card);
 }
 
 .template-form-buttons {
@@ -2413,13 +2412,13 @@ git config --global user.email "your.email@example.com"</pre>
   font-weight: 500;
   
   padding-bottom: 8px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-card);
 }
 
 .template-item {
   margin-bottom: 8px;
   transition: all 0.2s ease;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-card);
 }
 
 .template-item:hover {
@@ -2546,7 +2545,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .top-actions-container :deep(.form-bottom-actions) {
   background: var(--bg-container);
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   margin-bottom: 0;
 }
@@ -3054,7 +3053,7 @@ git config --global user.email "your.email@example.com"</pre>
   flex: 3;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #ebeef5;
+  border-right: 1px solid var(--border-card);
   padding-right: 8px;
   height: calc(100vh - 432px);
 }
@@ -3066,7 +3065,7 @@ git config --global user.email "your.email@example.com"</pre>
   font-weight: 500;
   
   padding-bottom: 8px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-card);
 }
 
 .current-default-message {
@@ -3084,7 +3083,7 @@ git config --global user.email "your.email@example.com"</pre>
   font-weight: 500;
   
   padding-bottom: 8px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-card);
 }
 
 .templates-scroll-area {
@@ -3154,7 +3153,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .advanced-options-toggle:hover {
-  background-color: #ebeef5;
+  background-color: var(--border-card);
   color: #409EFF;
 }
 
@@ -3261,7 +3260,7 @@ git config --global user.email "your.email@example.com"</pre>
     font-size: 18px;
     
     &:hover {
-      color: #f0f0f0;
+      color: var(--border-card);
     }
   }
   
@@ -3434,7 +3433,7 @@ git config --global user.email "your.email@example.com"</pre>
   border-radius: 4px;
   font-weight: 500;
   letter-spacing: 0.5px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
 }
 
 .latest-tag {
@@ -3510,7 +3509,7 @@ git config --global user.email "your.email@example.com"</pre>
 /* 添加Git工具按钮样式 */
 .card-header {
   padding: 8px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-card);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -3552,7 +3551,7 @@ git config --global user.email "your.email@example.com"</pre>
   .el-drawer__header {
     margin-bottom: 10px;
     padding: 12px 16px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-card);
     font-size: 16px;
     font-weight: 500;
   }
@@ -3622,7 +3621,7 @@ git config --global user.email "your.email@example.com"</pre>
   left: 0;
   right: 0;
   height: 1px;
-  background-color: #e4e7ed;
+  background-color: var(--border-card);
   z-index: 0;
 }
 
@@ -3725,7 +3724,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .stash-detail-dialog .el-dialog__footer {
   padding: 15px 20px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-card);
 }
 
 .stash-detail-content {
@@ -3736,7 +3735,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .stash-header {
   padding-bottom: 15px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-card);
 }
 
 .stash-info h3 {
@@ -3765,7 +3764,7 @@ git config --global user.email "your.email@example.com"</pre>
   flex-shrink: 0;
   background-color: #fafafa;
   border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -3775,7 +3774,7 @@ git config --global user.email "your.email@example.com"</pre>
   flex: 1;
   background-color: #fafafa;
   border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
   overflow: hidden;
   min-width: 0;
   display: flex;
@@ -3785,7 +3784,7 @@ git config --global user.email "your.email@example.com"</pre>
 .panel-header {
   padding: 12px 16px;
   background-color: var(--bg-panel);
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--border-card);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -3932,7 +3931,7 @@ git config --global user.email "your.email@example.com"</pre>
   .el-textarea__inner {
     height: 100%;
     border-radius: 8px;
-    border: 2px solid #e4e7ed;
+    border: 2px solid var(--border-card);
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.6;
@@ -4105,7 +4104,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .stash-form .el-form-item__label {
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-title);
   font-size: 14px;
   margin-bottom: 8px;
 }
@@ -4131,8 +4130,6 @@ git config --global user.email "your.email@example.com"</pre>
 
 .stash-options {
   padding: 8px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
   border-radius: 12px;
 }
 
@@ -4143,7 +4140,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin: 0 0 8px 0;
   font-size: 15px;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-title);
 }
 
 .options-title .el-icon {
@@ -4165,7 +4162,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .option-label {
   font-weight: 500;
-  color: #374151;
+  color: var(--color-text-title);
   font-size: 14px;
 }
 
@@ -4228,38 +4225,6 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* 储藏弹窗的CommonDialog样式定制 */
 :deep(.stash-dialog) {
-  .el-dialog {
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1);
-  }
-  
-  .el-dialog__header {
-    background: linear-gradient(135deg, var(--color-white) 0%, #f8fafc 100%);
-    border-bottom: 1px solid #e2e8f0;
-    padding: 18px 24px;
-  }
-  
-  .el-dialog__title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #1e293b;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  
-  .el-dialog__body {
-    padding: 24px;
-    background: var(--bg-container);
-  }
-  
-  .el-dialog__footer {
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-    padding: 16px 24px;
-  }
-  
   .common-dialog__footer {
     .el-button {
       border-radius: 8px;

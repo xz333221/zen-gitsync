@@ -859,7 +859,7 @@ onUnmounted(() => {
 }
 
 .history-item {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-card);
   border-radius: 4px;
   transition: all 0.2s;
   background-color: #f8f9fa;
@@ -958,7 +958,7 @@ onUnmounted(() => {
 
 .item-details {
   padding: 10px 12px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--border-card);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1016,7 +1016,7 @@ onUnmounted(() => {
   margin: 0;
   max-height: 300px;
   overflow-y: auto;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-card);
 }
 
 /* 深色主题下的输出内容 */

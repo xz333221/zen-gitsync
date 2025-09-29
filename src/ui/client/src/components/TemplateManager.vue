@@ -474,44 +474,8 @@ defineExpose({
   background-color: var(--bg-panel);
 }
 
-/* 对话框整体视觉优化（仅作用于当前组件内的 el-dialog） */
-:deep(.el-dialog) {
-  border-radius: 12px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-}
-
-:deep(.el-dialog__header) {
-  padding: 14px 18px;
-  border-bottom: 1px solid #eef0f3;
-}
-
-:deep(.el-dialog__title) {
-  font-size: 16px;
-  font-weight: 600;
-  
-}
-
-:deep(.el-dialog__headerbtn) {
-  top: 14px;
-  right: 14px;
-}
-
-:deep(.el-dialog__body) {
-  padding: 16px 18px 18px 18px;
-  background: linear-gradient(180deg, var(--bg-container) 0%, #fafbfc 100%);
-}
-
-:deep(.el-dialog__footer) {
-  padding: 12px 18px;
-  border-top: 1px solid #eef0f3;
-}
-
 /* 表单区更紧凑、卡片化背景 */
 .template-form {
-  background: #f9fbff;
-  border: 1px solid #e6eefc;
-  border-radius: 8px;
   padding: 10px;
 }
 

@@ -303,7 +303,7 @@ watch(() => props.files, (newFiles) => {
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--bg-container);
   
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--border-card);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -369,7 +369,7 @@ watch(() => props.files, (newFiles) => {
   background: var(--bg-panel);
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-full);
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
 }
 
 .selected-file {

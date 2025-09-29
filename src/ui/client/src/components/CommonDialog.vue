@@ -315,21 +315,6 @@ function handleClosed() {
   overflow: hidden;
 }
 
-:deep(.el-dialog__header) {
-  padding: 14px 18px;
-  border-bottom: 1px solid #eef0f3;
-}
-
-:deep(.el-dialog__title) {
-  font-size: 16px;
-  font-weight: 600;
-  
-}
-
-:deep(.el-dialog__headerbtn) {
-  top: 14px;
-  right: 14px;
-}
 
 :deep(.el-dialog__body) {
   padding: 16px 18px 18px 18px;
@@ -338,6 +323,5 @@ function handleClosed() {
 
 :deep(.el-dialog__footer) {
   padding: 12px 18px;
-  border-top: 1px solid #eef0f3;
 }
 </style>

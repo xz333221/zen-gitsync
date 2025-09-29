@@ -1224,13 +1224,6 @@ h1 {
   transition: all 0.2s ease;
 }
 
-#user-info:hover {
-  background: var(--border-component);
-  border-color: #dee2e6;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
 /* 添加目录选择器样式 */
 .directory-selector {
   display: flex;
@@ -1249,9 +1242,6 @@ h1 {
 
 .directory-selector:hover {
   background: var(--border-component);
-  border-color: #dee2e6;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .command-history-section {
@@ -1299,9 +1289,6 @@ h1 {
 .modern-btn:hover {
   background: var(--border-component);
   color: #343a40;
-  border-color: #dee2e6;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .modern-btn:hover::before {
@@ -1552,14 +1539,12 @@ h1 {
   transform: translate(-50%, -50%);
   width: 2px; /* 从4px减少到2px */
   height: 40px; /* 从50px减少到40px */
-  background-color: #a0a0a0;
   border-radius: 2px; /* 从4px减少到2px */
   transition: background-color 0.2s, width 0.2s, box-shadow 0.2s;
 }
 
 .vertical-resizer:hover,
 .vertical-resizer.active {
-  background-color: #d0d0d0;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.2); /* 减小阴影 */
 }
 
@@ -1608,42 +1593,6 @@ h1 {
   box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
 }
 
-.vertical-resizer-bottom {
-  grid-area: v-resizer-bottom;
-  background-color: #e8e8e8;
-  cursor: col-resize;
-  transition: background-color 0.2s, box-shadow 0.2s;
-  position: relative;
-  z-index: 10;
-  border-radius: 4px; /* 从8px减少到4px */
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.1); /* 减小阴影 */
-}
-
-.vertical-resizer-bottom::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 2px; /* 从4px减少到2px */
-  height: 40px; /* 从50px减少到40px */
-  background-color: #a0a0a0;
-  border-radius: 2px; /* 从4px减少到2px */
-  transition: background-color 0.2s, width 0.2s, box-shadow 0.2s;
-}
-
-.vertical-resizer-bottom:hover,
-.vertical-resizer-bottom.active {
-  background-color: #d0d0d0;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2); /* 减小阴影 */
-}
-
-.vertical-resizer-bottom:hover::after,
-.vertical-resizer-bottom.active::after {
-  background-color: #409EFF;
-  width: 3px; /* 从6px减少到3px */
-  box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
-}
 
 
 .directory-display {
@@ -1727,7 +1676,7 @@ h1 {
 :deep(.form-item .el-form-item__label) {
   padding: 0 0 8px 0;
   font-weight: 500;
-  color: #374151;
+  color: var(--color-text-title);
 }
 
 .form-label {
@@ -1736,7 +1685,7 @@ h1 {
   gap: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: #374151;
+  color: var(--color-text-title);
 }
 
 .label-icon {
@@ -1765,7 +1714,7 @@ h1 {
 
 :deep(.modern-input .el-input__inner) {
   font-size: 14px;
-  color: #374151;
+  color: var(--color-text-title);
   font-weight: 400;
 }
 
@@ -1890,18 +1839,6 @@ h1 {
   transform: translateY(0);
 }
 
-.cancel-btn {
-  background: var(--bg-container);
-  color: #6b7280;
-  border: 1px solid #d1d5db;
-}
-
-.cancel-btn:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
-  color: #374151;
-}
-
 .danger-btn {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;
@@ -2004,7 +1941,7 @@ h1 {
 
 .dir-path {
   font-size: 13px;
-  color: #374151;
+  color: var(--color-text-title);
   font-family: 'Courier New', monospace;
   word-break: break-all;
   overflow: hidden;
@@ -2098,7 +2035,7 @@ h1 {
   background-color: var(--bg-panel);
   border-radius: 4px;
   margin-bottom: 10px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
   display: flex;
   align-items: center;
   width: 100%;
@@ -2129,7 +2066,7 @@ h1 {
   list-style: none !important;
   padding: 0;
   margin: 0;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
   border-radius: 4px;
   max-height: 300px;
   overflow-y: auto;
@@ -2142,7 +2079,7 @@ h1 {
 
 .directory-item {
   padding: 10px 12px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-card);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2201,7 +2138,7 @@ h1 {
 :deep(.directory-browser-dialog .el-message-box__header) {
   background-color: var(--bg-panel);
   padding: 15px 20px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--border-card);
   position: relative;
 }
 
@@ -2259,7 +2196,7 @@ h1 {
 .directory-browser-dialog .el-message-box__header {
   background-color: var(--bg-panel);
   padding: 15px 20px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--border-card);
   position: relative;
 }
 
@@ -2304,7 +2241,7 @@ h1 {
 
 .directory-browser-dialog .el-message-box__btns {
   padding: 10px 20px 15px;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid var(--border-card);
 }
 
 .directory-browser {
@@ -2318,7 +2255,7 @@ h1 {
   background-color: var(--bg-panel);
   border-radius: 4px;
   margin-bottom: 10px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
   display: flex;
   align-items: center;
   width: 100%;
@@ -2349,7 +2286,7 @@ h1 {
   list-style: none !important;
   padding: 0;
   margin: 0;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--border-card);
   border-radius: 4px;
   max-height: 300px;
   overflow-y: auto;
@@ -2362,7 +2299,7 @@ h1 {
 
 .directory-item {
   padding: 10px 12px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-card);
   cursor: pointer;
   display: flex;
   align-items: center;
