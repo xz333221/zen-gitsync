@@ -836,7 +836,7 @@ watch(() => gitStore.isCommiting, (isCommiting) => {
 
 watch(() => gitStore.isPushing, (isPushing) => {
   if (isPushing && loadingState.visible) {
-    setLoadingText('正在推送到远程仓库...');
+    setLoadingText('正在推送...');
   }
 });
 

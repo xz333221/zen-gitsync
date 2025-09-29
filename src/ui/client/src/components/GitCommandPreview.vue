@@ -66,8 +66,8 @@ async function copyCommand() {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border: 1px solid #dee2e6;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
     padding: 8px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -90,7 +90,7 @@ async function copyCommand() {
     &:hover {
       border-color: #409eff;
       box-shadow: 0 2px 8px rgba(64, 158, 255, 0.12);
-      background: linear-gradient(135deg, #ffffff 0%, #f0f7ff 100%);
+      background: #f8fafc;
       
       &::before {
         opacity: 1;
@@ -99,7 +99,7 @@ async function copyCommand() {
     
     .preview-title {
       font-size: 12px;
-      color: #495057;
+      color: #374151;
       font-weight: 600;
       white-space: nowrap;
       flex-shrink: 0;
@@ -117,9 +117,9 @@ async function copyCommand() {
     
     .preview-content {
       flex: 1;
-      background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
-      color: #e8f4fd;
-      border: 1px solid #404040;
+      background: #f8fafc;
+      color: #1f2937;
+      border: 1px solid #d1d5db;
       border-radius: 6px;
       padding: 6px 8px;
       margin: 0;
@@ -129,7 +129,6 @@ async function copyCommand() {
       line-height: 1.3;
       overflow-x: auto;
       white-space: nowrap;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
       position: relative;
       transition: all 0.3s ease;
       
@@ -140,7 +139,7 @@ async function copyCommand() {
         left: 0;
         right: 0;
         bottom: 0;
-        background: linear-gradient(135deg, rgba(64, 158, 255, 0.05) 0%, rgba(102, 177, 255, 0.05) 100%);
+        background: linear-gradient(135deg, rgba(64, 158, 255, 0.03) 0%, rgba(102, 177, 255, 0.03) 100%);
         opacity: 0;
         transition: opacity 0.3s ease;
         pointer-events: none;
@@ -148,7 +147,8 @@ async function copyCommand() {
       
       &:hover {
         border-color: #409eff;
-        box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.3);
+        box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2);
+        background: #f1f5f9;
         
         &::before {
           opacity: 1;
@@ -156,11 +156,10 @@ async function copyCommand() {
       }
       
       &.code-command {
-        background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
-        color: #e8f4fd;
-        border-color: #404040;
+        background: #f8fafc;
+        color: #1f2937;
+        border-color: #d1d5db;
         font-weight: 500;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
       }
     }
     
@@ -173,13 +172,12 @@ async function copyCommand() {
       display: flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid rgba(64, 158, 255, 0.2);
-      background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(102, 177, 255, 0.1) 100%);
-      color: #409eff;
+      border: 1px solid #d1d5db;
+      background: #f9fafb;
+      color: #6b7280;
       cursor: pointer;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       font-family: inherit;
-      backdrop-filter: blur(10px);
       position: relative;
       overflow: hidden;
       
@@ -195,11 +193,11 @@ async function copyCommand() {
       }
       
       &:hover {
-        background: linear-gradient(135deg, rgba(64, 158, 255, 0.15) 0%, rgba(102, 177, 255, 0.15) 100%);
+        background: #f3f4f6;
         color: #409eff;
-        border-color: rgba(64, 158, 255, 0.4);
+        border-color: #409eff;
         transform: scale(1.05);
-        box-shadow: 0 3px 8px rgba(64, 158, 255, 0.2);
+        box-shadow: 0 3px 8px rgba(64, 158, 255, 0.15);
         
         &::before {
           left: 100%;
@@ -225,24 +223,7 @@ async function copyCommand() {
   }
 }
 
-/* 深色主题支持 */
-@media (prefers-color-scheme: dark) {
-  .git-command-preview {
-    .preview-container {
-      background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-      border-color: #4a5568;
-      
-      &:hover {
-        background: linear-gradient(135deg, #2d3748 0%, #2c5282 100%);
-        border-color: #409eff;
-      }
-      
-      .preview-title {
-        color: #e2e8f0;
-      }
-    }
-  }
-}
+/* 白色主题专用样式 */
 
 /* 滚动条样式 */
 .preview-content::-webkit-scrollbar {
@@ -250,18 +231,18 @@ async function copyCommand() {
 }
 
 .preview-content::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
+  background: #f3f4f6;
   border-radius: 3px;
 }
 
 .preview-content::-webkit-scrollbar-thumb {
-  background: rgba(64, 158, 255, 0.5);
+  background: #d1d5db;
   border-radius: 3px;
   transition: background 0.3s ease;
 }
 
 .preview-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(64, 158, 255, 0.7);
+  background: #9ca3af;
 }
 
 /* 动画关键帧 */

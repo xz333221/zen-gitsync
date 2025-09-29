@@ -1142,8 +1142,8 @@ body {
 }
 
 .main-header {
-  background: linear-gradient(135deg, #1a1d23 0%, #24292e 50%, #2c3338 100%);
-  color: white;
+  background: #ffffff;
+  color: #333333;
   padding: 0 24px;
   display: flex;
   justify-content: space-between;
@@ -1153,10 +1153,10 @@ body {
   left: 0;
   right: 0;
   z-index: 1000;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   height: 64px;
   box-sizing: border-box;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .header-left {
@@ -1190,21 +1190,20 @@ h1 {
 #user-info {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.06);
+  background: #f8f9fa;
   padding: 8px 14px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
   transition: all 0.2s ease;
 }
 
 #user-info:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #e9ecef;
+  border-color: #dee2e6;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* 添加目录选择器样式 */
@@ -1213,22 +1212,21 @@ h1 {
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
-  background: rgba(255, 255, 255, 0.06);
+  background: #f8f9fa;
   border-radius: 8px;
   padding: 8px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
   transition: all 0.2s ease;
   max-width: 420px;
 }
 
 .directory-selector:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #e9ecef;
+  border-color: #dee2e6;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .command-history-section {
@@ -1248,16 +1246,15 @@ h1 {
   align-items: center;
   justify-content: center;
   border: none;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
+  background: #f8f9fa;
+  color: #495057;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid #e9ecef;
   position: relative;
   overflow: hidden;
 }
@@ -1275,11 +1272,11 @@ h1 {
 }
 
 .modern-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: white;
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #e9ecef;
+  color: #343a40;
+  border-color: #dee2e6;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .modern-btn:hover::before {
@@ -1332,16 +1329,17 @@ h1 {
 
 .directory-path {
   font-family: monospace;
-  color: #ffffff;
+  color: #495057;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 14px;
   font-weight: 500;
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: #ffffff;
   padding: 4px 8px;
   border-radius: 3px;
   border-left: 3px solid #409EFF;
+  border: 1px solid #dee2e6;
   flex: 1;
   min-width: 0;
   max-width: 500px;
@@ -1359,7 +1357,7 @@ h1 {
 }
 
 .user-email {
-  color: #e0e0e0;
+  color: #6c757d;
   font-size: 12px;
 }
 
@@ -1430,8 +1428,8 @@ h1 {
 }
 
 .main-footer {
-  background-color: #24292e;
-  color: white;
+  background-color: #ffffff;
+  color: #333333;
   padding: 10px 20px;
   display: flex;
   justify-content: space-between;
@@ -1441,9 +1439,10 @@ h1 {
   left: 0;
   right: 0;
   z-index: 100;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
   height: 60px;
   box-sizing: border-box;
+  border-top: 1px solid #e5e7eb;
 }
 
 </style>
@@ -1467,20 +1466,21 @@ h1 {
 .branch-wrapper {
   display: flex;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: #f8f9fa;
   border-radius: 4px;
   padding: 8px 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e9ecef;
   transition: all 0.3s;
 }
 
 .branch-wrapper:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: #e9ecef;
 }
 
 .branch-label {
   margin-right: 10px;
-  color: #ffffff;
+  color: #495057;
 }
 
   .branch-select {
@@ -1491,20 +1491,21 @@ h1 {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: rgba(255, 255, 255, 0.9);
+    color: #495057;
     font-size: 13px;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: #f8f9fa;
     padding: 8px;
     border-radius: 4px;
+    border: 1px solid #e9ecef;
   }
   .repo-url-label {
     font-weight: bold;
     margin-right: 8px;
-    color: #ffffff;
+    color: #495057;
   }
 
 .repo-url {
-  color: #e6f7ff;
+  color: #6c757d;
   font-family: monospace;
   max-width: 300px;
   overflow: hidden;
@@ -1626,18 +1627,6 @@ h1 {
   box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
 }
 
-/* 添加目录选择器样式 */
-.directory-selector {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  background-color: rgba(40, 44, 52, 0.7);
-  border-radius: 4px;
-  padding: 8px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
 
 .directory-display {
   display: flex;
@@ -1650,16 +1639,17 @@ h1 {
 
 .directory-path {
   font-family: monospace;
-  color: #ffffff;
+  color: #495057;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 14px;
   font-weight: 500;
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: #ffffff;
   padding: 4px 8px;
   border-radius: 3px;
   border-left: 3px solid #409EFF;
+  border: 1px solid #dee2e6;
   flex: 1;
   min-width: 0;
   /* 防止flex子项溢出 */

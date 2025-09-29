@@ -552,22 +552,21 @@ onUnmounted(() => {
   padding: 0;
 }
 
-/* 现代按钮基础样式 */
+/* 现代按钮基础样式 - 白色主题 */
 .modern-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
+  background: #f8f9fa;
+  color: #495057;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid #e9ecef;
   position: relative;
   overflow: hidden;
 }
@@ -586,7 +585,6 @@ onUnmounted(() => {
 
 .modern-btn:hover {
   background: rgba(255, 255, 255, 0.12);
-  color: white;
   border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
