@@ -7,6 +7,7 @@
   "scripts": {
     "start:server:no-open": "node server.js --no-open",
     "start:vue": "cd ./src/ui/client && npm run dev",
+    "release": "node ./scripts/release.js",
     "g": "node ./src/gitCommit.js",
     "g:m": "node ./src/gitCommit.js -m='test'",
     "g:m2": "node ./src/gitCommit.js -m testmsg",
@@ -32,8 +33,7 @@
     "change:nrm:npm": "nrm use npm",
     "change:nrm:lenovo-nexus": "nrm use lenovo-nexus",
     "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
-    "npm:ls:g": "npm ls -g",
-    "release": "node ./scripts/release.js"
+    "npm:ls:g": "npm ls -g"
   },
   "files": [
     "src/ui/public/**",
