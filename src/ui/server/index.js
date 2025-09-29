@@ -2681,6 +2681,8 @@ async function startUIServer(noOpen = false, savePort = false) {
       }
     };
   })();
+  // 使用变量标记回调是否已执行，防止多次触发
+  let callbackExecuted = false;
   
   // 尝试在可用端口上启动服务器
   await startServerOnAvailablePort(PORT);
@@ -2694,7 +2696,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       try {
         // 等待1秒，避免快速尝试多个端口
         if (currentPort > startPort) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 500));
           console.log(`尝试端口 ${currentPort}...`);
         }
         
@@ -2705,9 +2707,6 @@ async function startUIServer(noOpen = false, savePort = false) {
             httpServer.removeListener('error', errorHandler);
             reject(err);
           };
-          
-          // 使用变量标记回调是否已执行，防止多次触发
-          let callbackExecuted = false;
           
           httpServer.once('error', errorHandler);
           
