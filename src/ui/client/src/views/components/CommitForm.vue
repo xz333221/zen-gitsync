@@ -3286,8 +3286,8 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding: 12px 16px;
+  margin-bottom: 8px;
+  padding: 8px;
   background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
   border-radius: 8px;
   border: 1px solid #e9ecef;
@@ -3304,11 +3304,10 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 2px 8px;
   background: #409eff;
-  border-radius: 20px;
+  border-radius: 8px;
   color: white;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
 }
 
 .stat-icon {
@@ -3331,14 +3330,13 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .clear-all-btn {
-  border-radius: 20px;
-  padding: 8px 16px;
+  border-radius: 8px;
+  padding: 2px 8px;
   font-weight: 500;
   transition: all 0.3s ease;
   
   &:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(245, 108, 108, 0.3);
   }
 }
 
@@ -3389,7 +3387,6 @@ git config --global user.email "your.email@example.com"</pre>
   
   &:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     border-color: #409eff;
   }
 }
@@ -3405,7 +3402,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .stash-card-content {
-  padding: 16px 20px;
+  padding: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
