@@ -1724,14 +1724,6 @@ function toggleFullscreen() {
   cursor: pointer;
 }
 
-:deep(.el-table__row:hover) {
-  background-color: #ecf5ff !important;
-}
-
-:deep(.el-table--striped .el-table__row--striped) {
-  background-color: #fafafa;
-}
-
 :deep(.el-table__cell) {
   padding: 0;
   font-size: 12px;
@@ -2442,9 +2434,7 @@ function toggleFullscreen() {
 <!-- 底部加载更多按钮悬停效果 -->
 <style>
 .load-more-button:hover {
-  background-color: #d9ecff;
   box-shadow: 0 2px 6px rgba(64, 158, 255, 0.15);
-  transform: translateY(-1px);
 }
 </style>
 
