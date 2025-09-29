@@ -571,6 +571,19 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+/* 深色主题下的按钮样式 */
+[data-theme="dark"] .modern-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .modern-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
 .modern-btn::before {
   content: '';
   position: absolute;
@@ -805,6 +818,12 @@ onUnmounted(() => {
   border-radius: 8px 8px 0 0;
 }
 
+/* 深色主题下的工具栏 */
+[data-theme="dark"] .dialog-toolbar {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
 .socket-status { 
   font-size: 12px;
   margin-right: auto;
@@ -847,6 +866,17 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+/* 深色主题下的历史项 */
+[data-theme="dark"] .history-item {
+  border-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .history-item:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
 .history-item:hover {
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
@@ -866,6 +896,11 @@ onUnmounted(() => {
 
 .item-header:hover {
   background-color: #f0f2f5;
+}
+
+/* 深色主题下的项目头部 */
+[data-theme="dark"] .item-header:hover {
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 .command-info {
@@ -891,12 +926,22 @@ onUnmounted(() => {
   flex: 1;
 }
 
+/* 深色主题下的命令文本 */
+[data-theme="dark"] .command-text code {
+  color: rgba(255, 255, 255, 0.9);
+}
+
 .command-meta {
   display: flex;
   align-items: center;
   gap: 16px;
   font-size: 12px;
   color: #909399;
+}
+
+/* 深色主题下的命令元数据 */
+[data-theme="dark"] .command-meta {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .timestamp {
@@ -921,6 +966,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* 深色主题下的详情区域 */
+[data-theme="dark"] .item-details {
+  border-top-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.02);
 }
 
 .output-section {
@@ -953,6 +1004,11 @@ onUnmounted(() => {
   color: #606266;
 }
 
+/* 深色主题下的输出头部 */
+[data-theme="dark"] .output-header h4 {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .output-content {
   background-color: #f8f9fa;
   padding: 10px;
@@ -965,6 +1021,13 @@ onUnmounted(() => {
   max-height: 300px;
   overflow-y: auto;
   border: 1px solid #ebeef5;
+}
+
+/* 深色主题下的输出内容 */
+[data-theme="dark"] .output-content {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .status-tag {

@@ -125,7 +125,7 @@ withDefaults(defineProps<Props>(), {
 
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0.8) 100%);
+  background: linear-gradient(90deg, var(--bg-container) 0%, rgba(255, 255, 255, 0.8) 100%);
   border-radius: 2px;
   transition: width 0.3s ease;
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);

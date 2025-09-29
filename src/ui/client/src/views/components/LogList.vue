@@ -1537,7 +1537,7 @@ function toggleFullscreen() {
 </template>
 <style scoped>
 .card {
-  background-color: white;
+  background-color: var(--bg-container);
   border-radius: 8px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
   margin-bottom: 8px;
@@ -1556,7 +1556,7 @@ function toggleFullscreen() {
   border-bottom: 1px solid #ebeef5;
   position: sticky;
   top: 0;
-  background-color: white;
+  background-color: var(--bg-container);
   z-index: 100;
 }
 
@@ -2010,7 +2010,7 @@ function toggleFullscreen() {
   position: sticky;
   top: 60px;
   z-index: 9;
-  background-color: white;
+  background-color: var(--bg-container);
   width: 100%;
   border-radius: 0;
   border-bottom: 1px solid #ebeef5;
@@ -2198,7 +2198,7 @@ function toggleFullscreen() {
 /* 右键菜单样式 */
 .context-menu {
   position: fixed;
-  background: white;
+  background: var(--bg-container);
   border: 1px solid #dcdfe6;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
@@ -2291,7 +2291,7 @@ function toggleFullscreen() {
   border-radius: 0;
   border: none;
   box-shadow: none;
-  background-color: white;
+  background-color: var(--bg-container);
   display: flex;
   flex-direction: column;
   overflow: auto;
@@ -2302,7 +2302,7 @@ function toggleFullscreen() {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: white;
+  background-color: var(--bg-container);
   padding: 16px;
   margin-bottom: 10px;
   width: 100%;
@@ -2313,7 +2313,7 @@ function toggleFullscreen() {
   position: sticky;
   top: 60px;
   z-index: 9;
-  background-color: white;
+  background-color: var(--bg-container);
   width: 100%;
 }
 
@@ -2348,7 +2348,7 @@ function toggleFullscreen() {
 /* 右键菜单样式 */
 .context-menu {
   position: fixed;
-  background: white;
+  background: var(--bg-container);
   border: 1px solid #dcdfe6;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);

@@ -1887,7 +1887,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .card {
-  background-color: white;
+  background-color: var(--bg-container);
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
   border: 1px solid rgba(0, 0, 0, 0.03);
@@ -1921,7 +1921,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 /* 头部按钮组样式优化 */
 .header-actions :deep(.form-bottom-actions) {
-  background: #ffffff;
+  background: var(--bg-container);
   border: 1px solid #e4e7ed;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   margin: 0;
@@ -2236,7 +2236,7 @@ git config --global user.email "your.email@example.com"</pre>
   
   .el-input__wrapper {
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--bg-container);
     border: 2px solid #409eff;
     box-shadow: 0 2px 4px rgba(64, 158, 255, 0.1);
     transition: all 0.3s ease;
@@ -2270,7 +2270,7 @@ git config --global user.email "your.email@example.com"</pre>
 :deep(.type-select) {
   .el-select__wrapper {
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--bg-container);
     border: 2px solid #f56c6c;
     box-shadow: 0 2px 4px rgba(245, 108, 108, 0.1);
     transition: all 0.3s ease;
@@ -2305,7 +2305,7 @@ git config --global user.email "your.email@example.com"</pre>
   
   .el-input__wrapper {
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--bg-container);
     border: 2px solid #67c23a;
     box-shadow: 0 2px 4px rgba(103, 194, 58, 0.1);
     transition: all 0.3s ease;
@@ -2343,7 +2343,7 @@ git config --global user.email "your.email@example.com"</pre>
   
   .el-textarea__inner {
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--bg-container);
     border: 2px solid #e6a23c;
     box-shadow: 0 2px 4px rgba(230, 162, 60, 0.1);
     font-size: 15px;
@@ -2460,7 +2460,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .option-card {
-  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
   border: 1px solid #e9ecef;
   border-radius: 8px;
   padding: 8px;
@@ -2551,7 +2551,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .top-actions-container :deep(.form-bottom-actions) {
-  background: #ffffff;
+  background: var(--bg-container);
   border: 1px solid #e4e7ed;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   margin-bottom: 0;
@@ -3292,7 +3292,7 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
   margin-bottom: 8px;
   padding: 8px;
-  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
   border-radius: 8px;
   border: 1px solid #e9ecef;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
@@ -3382,7 +3382,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .stash-card {
-  background: white;
+  background: var(--bg-container);
   border-radius: 8px;
   border: 1px solid #e9ecef;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -3974,7 +3974,7 @@ git config --global user.email "your.email@example.com"</pre>
     &:focus {
       border-color: #409eff;
       box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
-      background: #ffffff;
+      background: var(--bg-container);
       outline: none;
     }
     
@@ -4261,7 +4261,7 @@ git config --global user.email "your.email@example.com"</pre>
   }
   
   .el-dialog__header {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    background: linear-gradient(135deg, var(--color-white) 0%, #f8fafc 100%);
     border-bottom: 1px solid #e2e8f0;
     padding: 18px 24px;
   }
@@ -4277,7 +4277,7 @@ git config --global user.email "your.email@example.com"</pre>
   
   .el-dialog__body {
     padding: 24px;
-    background: #ffffff;
+    background: var(--bg-container);
   }
   
   .el-dialog__footer {

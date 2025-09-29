@@ -48,7 +48,7 @@ function onChange(val: boolean) {
 
 <style scoped>
 .option-card {
-  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  background: linear-gradient(135deg, var(--bg-container) 0%, #f8f9fa 100%);
   border: 1px solid #e9ecef;
   border-radius: 8px;
   padding: 8px;

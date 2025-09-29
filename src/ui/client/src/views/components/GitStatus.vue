@@ -879,7 +879,7 @@ defineExpose({
 
 <style scoped>
 .card {
-  background-color: #fff;
+  background-color: var(--bg-container);
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   border: 1px solid rgba(0, 0, 0, 0.03);
@@ -1025,7 +1025,7 @@ defineExpose({
 /* 分支信息样式 */
 .branch-status-info {
   margin-bottom: 0;
-  background-color: #ffffff;
+  background-color: var(--bg-container);
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #e4e7ed;

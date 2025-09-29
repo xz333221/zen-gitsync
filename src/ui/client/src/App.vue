@@ -1174,7 +1174,7 @@ body {
 
 /* 确保每个卡片内部可以滚动 */
 .card {
-  background-color: white;
+  background-color: var(--bg-container);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.03);
@@ -1370,7 +1370,7 @@ h1 {
   text-overflow: ellipsis;
   font-size: 14px;
   font-weight: 500;
-  background-color: #ffffff;
+  background-color: var(--bg-container);
   padding: 4px 8px;
   border-radius: 3px;
   border-left: 3px solid #409EFF;
@@ -1673,7 +1673,7 @@ h1 {
   text-overflow: ellipsis;
   font-size: 14px;
   font-weight: 500;
-  background-color: #ffffff;
+  background-color: var(--bg-container);
   padding: 4px 8px;
   border-radius: 3px;
   border-left: 3px solid #409EFF;
@@ -1760,7 +1760,7 @@ h1 {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
   padding: 10px 12px;
-  background: #ffffff;
+  background: var(--bg-container);
 }
 
 :deep(.modern-input .el-input__wrapper:hover) {
@@ -1901,7 +1901,7 @@ h1 {
 }
 
 .cancel-btn {
-  background: #ffffff;
+  background: var(--bg-container);
   color: #6b7280;
   border: 1px solid #d1d5db;
 }
@@ -2037,7 +2037,7 @@ h1 {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
   padding: 10px 12px;
-  background: #ffffff;
+  background: var(--bg-container);
 }
 
 :deep(.modern-select .el-select__wrapper:hover) {
@@ -2127,7 +2127,7 @@ h1 {
   word-break: break-all;
   flex: 1;
   min-width: 0;
-  background-color: #fff;
+  background-color: var(--bg-container);
   padding: 5px 8px;
   border-radius: 3px;
   border: 1px solid #dcdfe6;
@@ -2143,7 +2143,7 @@ h1 {
   border-radius: 4px;
   max-height: 300px;
   overflow-y: auto;
-  background-color: white;
+  background-color: var(--bg-container);
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -2347,7 +2347,7 @@ h1 {
   word-break: break-all;
   flex: 1;
   min-width: 0;
-  background-color: #fff;
+  background-color: var(--bg-container);
   padding: 5px 8px;
   border-radius: 3px;
   border: 1px solid #dcdfe6;
@@ -2363,7 +2363,7 @@ h1 {
   border-radius: 4px;
   max-height: 300px;
   overflow-y: auto;
-  background-color: white;
+  background-color: var(--bg-container);
   display: flex;
   flex-direction: column;
   width: 100%;

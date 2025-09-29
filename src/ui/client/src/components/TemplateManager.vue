@@ -499,7 +499,7 @@ defineExpose({
 
 :deep(.el-dialog__body) {
   padding: 16px 18px 18px 18px;
-  background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+  background: linear-gradient(180deg, var(--bg-container) 0%, #fafbfc 100%);
 }
 
 :deep(.el-dialog__footer) {

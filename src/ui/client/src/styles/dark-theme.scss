@@ -213,6 +213,526 @@
   .preview-content::-webkit-scrollbar-thumb:hover {
     background: rgba(64, 158, 255, 0.7);
   }
+
+  /* 主容器深色主题 */
+  .main-container {
+    background: var(--bg-page-dark);
+  }
+
+  /* Git状态组件深色主题 */
+  .git-status-card,
+  .status-card {
+    background: var(--bg-container-dark);
+    border-color: var(--border-color-dark);
+  }
+
+  /* 提交表单深色主题 */
+  .commit-form,
+  .commit-section {
+    background: var(--bg-container-dark);
+  }
+
+  /* 提交历史深色主题 */
+  .log-list,
+  .history-list,
+  .commit-list {
+    background: var(--bg-container-dark);
+  }
+
+  /* 输入框深色主题 */
+  .el-input__wrapper {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    box-shadow: none !important;
+  }
+
+  .el-input__wrapper:hover {
+    border-color: rgba(255, 255, 255, 0.25) !important;
+  }
+
+  .el-input__wrapper.is-focus {
+    border-color: #409eff !important;
+    box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2) !important;
+  }
+
+  .el-input__inner {
+    color: rgba(255, 255, 255, 0.9) !important;
+    background-color: transparent !important;
+  }
+
+  .el-input__inner::placeholder {
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+
+  .el-textarea__inner {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    box-shadow: none !important;
+  }
+
+  .el-textarea__inner:hover {
+    border-color: rgba(255, 255, 255, 0.25) !important;
+  }
+
+  .el-textarea__inner:focus {
+    border-color: #409eff !important;
+    box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2) !important;
+  }
+
+  .el-textarea__inner::placeholder {
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+
+  /* 自动完成输入框 */
+  .el-autocomplete .el-input__wrapper {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  /* 提交信息输入框特殊样式 */
+  .commit-message-input .el-textarea__inner {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* 选择器深色主题 */
+  .el-select .el-input__wrapper {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .el-select-dropdown {
+    background-color: var(--bg-container-dark) !important;
+    border-color: var(--border-color-dark) !important;
+  }
+
+  .el-select-dropdown__item {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-select-dropdown__item:hover {
+    background-color: rgba(64, 158, 255, 0.2) !important;
+  }
+
+  .el-select-dropdown__item.selected {
+    background-color: rgba(64, 158, 255, 0.3) !important;
+    color: #409eff !important;
+  }
+
+  /* 自动完成下拉菜单 */
+  .el-autocomplete-suggestion {
+    background-color: var(--bg-container-dark) !important;
+    border-color: var(--border-color-dark) !important;
+  }
+
+  .el-autocomplete-suggestion__wrap {
+    background-color: var(--bg-container-dark) !important;
+  }
+
+  .el-autocomplete-suggestion li {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-autocomplete-suggestion li:hover {
+    background-color: rgba(64, 158, 255, 0.2) !important;
+  }
+
+  .el-autocomplete-suggestion li.highlighted {
+    background-color: rgba(64, 158, 255, 0.3) !important;
+  }
+
+  /* 弹窗深色主题 */
+  .el-dialog {
+    background-color: var(--bg-container-dark) !important;
+    border: 1px solid var(--border-color-dark) !important;
+  }
+
+  .el-dialog__header {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+    border-bottom: 1px solid var(--border-color-dark) !important;
+  }
+
+  .el-dialog__title {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-dialog__body {
+    background-color: var(--bg-container-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-dialog__footer {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+    border-top: 1px solid var(--border-color-dark) !important;
+  }
+
+  /* 抽屉深色主题 */
+  .el-drawer {
+    background-color: var(--bg-container-dark) !important;
+    border-left: 1px solid var(--border-color-dark) !important;
+  }
+
+  .el-drawer__header {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+    border-bottom: 1px solid var(--border-color-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-drawer__body {
+    background-color: var(--bg-container-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  /* 遮罩层深色主题 */
+  .el-overlay {
+    background-color: rgba(0, 0, 0, 0.7) !important;
+  }
+
+  /* 消息提示深色主题 */
+  .el-message {
+    background-color: var(--bg-container-dark) !important;
+    border-color: var(--border-color-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-message.el-message--success {
+    background-color: rgba(103, 194, 58, 0.1) !important;
+    border-color: rgba(103, 194, 58, 0.3) !important;
+  }
+
+  .el-message.el-message--warning {
+    background-color: rgba(230, 162, 60, 0.1) !important;
+    border-color: rgba(230, 162, 60, 0.3) !important;
+  }
+
+  .el-message.el-message--error {
+    background-color: rgba(245, 108, 108, 0.1) !important;
+    border-color: rgba(245, 108, 108, 0.3) !important;
+  }
+
+  /* 标签深色主题 */
+  .el-tag {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-tag.el-tag--success {
+    background-color: rgba(103, 194, 58, 0.2) !important;
+    border-color: rgba(103, 194, 58, 0.4) !important;
+    color: #67c23a !important;
+  }
+
+  .el-tag.el-tag--warning {
+    background-color: rgba(230, 162, 60, 0.2) !important;
+    border-color: rgba(230, 162, 60, 0.4) !important;
+    color: #e6a23c !important;
+  }
+
+  .el-tag.el-tag--danger {
+    background-color: rgba(245, 108, 108, 0.2) !important;
+    border-color: rgba(245, 108, 108, 0.4) !important;
+    color: #f56c6c !important;
+  }
+
+  /* 按钮深色主题 */
+  .el-button {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-button:hover {
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
+  }
+
+  .el-button--primary {
+    background-color: #409eff !important;
+    border-color: #409eff !important;
+  }
+
+  .el-button--primary:hover {
+    background-color: #66b1ff !important;
+    border-color: #66b1ff !important;
+  }
+
+  .el-button--success {
+    background-color: #67c23a !important;
+    border-color: #67c23a !important;
+  }
+
+  .el-button--success:hover {
+    background-color: #85ce61 !important;
+    border-color: #85ce61 !important;
+  }
+
+  .el-button--warning {
+    background-color: #e6a23c !important;
+    border-color: #e6a23c !important;
+  }
+
+  .el-button--warning:hover {
+    background-color: #ebb563 !important;
+    border-color: #ebb563 !important;
+  }
+
+  .el-button--danger {
+    background-color: #f56c6c !important;
+    border-color: #f56c6c !important;
+  }
+
+  .el-button--danger:hover {
+    background-color: #f78989 !important;
+    border-color: #f78989 !important;
+  }
+
+  /* 特定组件深色主题 */
+  
+  /* Git状态文件列表 */
+  .file-item,
+  .status-item,
+  .file-list-item {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border-color: var(--border-color-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .file-item:hover,
+  .status-item:hover,
+  .file-list-item:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* 文件状态标识 */
+  .file-status,
+  .status-indicator {
+    color: rgba(255, 255, 255, 0.8) !important;
+  }
+
+  /* 文件路径文本 */
+  .file-path,
+  .file-name {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  /* 提交历史列表项 */
+  .commit-item,
+  .log-item,
+  .commit-list-item,
+  .history-item-wrapper {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border-color: var(--border-color-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .commit-item:hover,
+  .log-item:hover,
+  .commit-list-item:hover,
+  .history-item-wrapper:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* 提交信息文本 */
+  .commit-message,
+  .commit-title {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  /* 提交作者和时间 */
+  .commit-author,
+  .commit-time,
+  .commit-date {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+
+  /* 提交哈希 */
+  .commit-hash,
+  .commit-id {
+    color: rgba(255, 255, 255, 0.7) !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* 代码差异显示 */
+  .diff-content,
+  .diff-viewer {
+    background: var(--bg-container-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  /* 空状态显示 */
+  .el-empty {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+
+  .el-empty__description {
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+
+  /* 加载状态 */
+  .loading-container,
+  .loading-card {
+    background: var(--bg-container-dark) !important;
+    border-color: var(--border-color-dark) !important;
+  }
+
+  /* 警告提示 */
+  .el-alert {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-color: var(--border-color-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-alert--warning {
+    background-color: rgba(230, 162, 60, 0.1) !important;
+    border-color: rgba(230, 162, 60, 0.3) !important;
+  }
+
+  .el-alert--success {
+    background-color: rgba(103, 194, 58, 0.1) !important;
+    border-color: rgba(103, 194, 58, 0.3) !important;
+  }
+
+  .el-alert--error {
+    background-color: rgba(245, 108, 108, 0.1) !important;
+    border-color: rgba(245, 108, 108, 0.3) !important;
+  }
+
+  .el-alert--info {
+    background-color: rgba(64, 158, 255, 0.1) !important;
+    border-color: rgba(64, 158, 255, 0.3) !important;
+  }
+
+  /* 工具提示 */
+  .el-tooltip__popper {
+    background-color: rgba(0, 0, 0, 0.9) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* 下拉菜单 */
+  .el-dropdown-menu {
+    background-color: var(--bg-container-dark) !important;
+    border-color: var(--border-color-dark) !important;
+  }
+
+  .el-dropdown-menu__item {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-dropdown-menu__item:hover {
+    background-color: rgba(64, 158, 255, 0.2) !important;
+  }
+
+  /* 表格 */
+  .el-table {
+    background-color: var(--bg-container-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-table th {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-color: var(--border-color-dark) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-table td {
+    border-color: var(--border-color-dark) !important;
+  }
+
+  .el-table--striped .el-table__body tr.el-table__row--striped td {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+  }
+
+  .el-table__body tr:hover > td {
+    background-color: rgba(64, 158, 255, 0.1) !important;
+  }
+
+  /* 分页器 */
+  .el-pagination {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-pagination .el-pager li {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    border-color: var(--border-color-dark) !important;
+  }
+
+  .el-pagination .el-pager li:hover {
+    background-color: rgba(64, 158, 255, 0.2) !important;
+  }
+
+  .el-pagination .el-pager li.active {
+    background-color: #409eff !important;
+    color: white !important;
+  }
+
+  /* 开关组件 */
+  .el-switch {
+    --el-switch-off-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* 复选框 */
+  .el-checkbox__input.is-checked .el-checkbox__inner {
+    background-color: #409eff !important;
+    border-color: #409eff !important;
+  }
+
+  .el-checkbox__inner {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .el-checkbox__label {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  /* 单选框 */
+  .el-radio__input.is-checked .el-radio__inner {
+    background-color: #409eff !important;
+    border-color: #409eff !important;
+  }
+
+  .el-radio__inner {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .el-radio__label {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  /* 进度条 */
+  .el-progress-bar__outer {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* 面包屑 */
+  .el-breadcrumb__item {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  .el-breadcrumb__item:last-child {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  /* 步骤条 */
+  .el-steps .el-step__title {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-steps .el-step__description {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+
+  /* 时间线 */
+  .el-timeline-item__content {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .el-timeline-item__timestamp {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
 }
 
 /* =======================================================

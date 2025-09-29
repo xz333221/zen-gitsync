@@ -52,7 +52,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .success-container {
-  background: #ffffff;
+  background: var(--bg-container);
   border-radius: 16px;
   padding: 40px;
   display: flex;

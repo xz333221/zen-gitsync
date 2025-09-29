@@ -66,7 +66,7 @@ async function copyCommand() {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #ffffff;
+    background: var(--bg-container);
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     padding: 8px;

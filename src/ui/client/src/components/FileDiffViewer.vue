@@ -301,7 +301,7 @@ watch(() => props.files, (newFiles) => {
 
 .panel-header {
   padding: var(--spacing-md) var(--spacing-lg);
-  background: #ffffff;
+  background: var(--bg-container);
   color: #303133;
   border-bottom: 1px solid #e4e7ed;
   display: flex;
@@ -402,7 +402,7 @@ watch(() => props.files, (newFiles) => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--bg-container);
 }
 
 
