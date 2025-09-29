@@ -17,6 +17,7 @@ import StageButton from "@/components/buttons/StageButton.vue";
 import CommitButton from "@/components/buttons/CommitButton.vue";
 import PushButton from "@/components/buttons/PushButton.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
+import OptionSwitchCard from "@components/OptionSwitchCard.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -1076,61 +1077,51 @@ git config --global user.email "your.email@example.com"</pre>
 
             <div class="commit-options">
               <!-- 提交模式开关 -->
-              <div class="option-card">
-                <div class="option-header">
-                  <div class="option-icon">
-                    <el-icon><Edit /></el-icon>
-                  </div>
-                  <div class="option-info">
-                    <h4 class="option-title">提交模式</h4>
-                    <p class="option-desc">选择传统或标准化提交格式</p>
-                  </div>
-                  <el-switch 
-                    v-model="isStandardCommit" 
-                    active-text="标准化" 
-                    inactive-text="普通" 
-                    active-color="#409eff"
-                    class="option-switch"
-                  />
-                </div>
-              </div>
+              <OptionSwitchCard
+                v-model="isStandardCommit"
+                title="提交模式"
+                tooltip="选择传统或标准化提交格式"
+                active-text="标准化"
+                inactive-text="普通"
+                active-color="#409eff"
+              >
+                <template #icon>
+                  <el-icon><Edit /></el-icon>
+                </template>
+              </OptionSwitchCard>
 
               <!-- Git钩子开关 -->
-              <div class="option-card">
-                <div class="option-header">
-                  <div class="option-icon warning">
-                    <el-icon><Warning /></el-icon>
-                  </div>
-                  <div class="option-info">
-                    <h4 class="option-title">跳过钩子检查</h4>
-                    <p class="option-desc">添加--no-verify参数</p>
-                  </div>
-                  <el-switch 
-                    v-model="skipHooks" 
-                    active-color="#f56c6c"
-                    class="option-switch"
-                  />
-                </div>
-              </div>
-              
+              <OptionSwitchCard
+                v-model="skipHooks"
+                title="跳过钩子检查"
+                tooltip="添加 --no-verify 参数"
+                active-color="#f56c6c"
+                icon-class="warning"
+              >
+                <template #icon>
+                  <el-icon><Warning /></el-icon>
+                </template>
+              </OptionSwitchCard>
+
               <!-- 回车自动提交开关 -->
-              <div class="option-card">
-                <div class="option-header">
-                  <div class="option-icon success">
-                    <el-icon><Check /></el-icon>
-                  </div>
-                  <div class="option-info">
-                    <h4 class="option-title">回车自动提交</h4>
-                    <p class="option-desc">输入提交信息后按回车直接执行一键推送</p>
-                  </div>
-                  <el-switch 
-                    v-model="autoQuickPushOnEnter" 
-                    active-color="#67c23a"
-                    class="option-switch"
-                  />
-                </div>
-              </div>
+              <OptionSwitchCard
+                v-model="autoQuickPushOnEnter"
+                title="回车自动提交"
+                tooltip="输入提交信息后按回车直接执行一键推送"
+                active-color="#67c23a"
+                icon-class="success"
+              >
+                <template #icon>
+                  <el-icon><Check /></el-icon>
+                </template>
+              </OptionSwitchCard>
             </div>
+
+            <GitCommandPreview 
+              :command="gitCommandPreview"
+              title="提交命令预览："
+              placeholder="git commit -m &quot;<提交信息>&quot;"
+            />
 
             <!-- 普通提交表单 -->
             <div v-if="!isStandardCommit" class="commit-form">
@@ -1140,20 +1131,13 @@ git config --global user.email "your.email@example.com"</pre>
                   :fetch-suggestions="queryMessageTemplates"
                   :placeholder="commitMessagePlaceholder"
                   type="textarea"
-                  :rows="4"
+                  :rows="3"
                   resize="none"
                   class="commit-message-input"
                   @select="handleMessageSelect"
                   @keydown="handleEnterKey"
                 />
               </div>
-              
-              <!-- Git命令预览 -->
-              <GitCommandPreview 
-                :command="gitCommandPreview"
-                title="提交命令预览："
-                placeholder="git commit -m &quot;<提交信息>&quot;"
-              />
             </div>
 
             <!-- 标准化提交表单 -->
@@ -1174,18 +1158,19 @@ git config --global user.email "your.email@example.com"</pre>
                       @select="handleScopeSelect"
                     />
                   </div>
-                </div>
 
-                <div class="description-container">
-                  <el-autocomplete
-                    v-model="commitDescription"
-                    :fetch-suggestions="queryDescriptionTemplates"
-                    :placeholder="descriptionPlaceholder"
-                    class="description-input"
-                    clearable
-                    @select="handleDescriptionSelect"
-                    @keydown="handleEnterKey"
-                  />
+                  <!-- 将简短描述放入同一行 -->
+                  <div class="description-container description-inline">
+                    <el-autocomplete
+                      v-model="commitDescription"
+                      :fetch-suggestions="queryDescriptionTemplates"
+                      :placeholder="descriptionPlaceholder"
+                      class="description-input"
+                      clearable
+                      @select="handleDescriptionSelect"
+                      @keydown="handleEnterKey"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1204,14 +1189,6 @@ git config --global user.email "your.email@example.com"</pre>
 
                 <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
               </div>
-
-                <!-- 高级字段结束后的Git命令预览 -->
-              <!-- Git命令预览 -->
-              <GitCommandPreview 
-                :command="gitCommandPreview"
-                title="提交命令预览："
-                placeholder="git commit -m &quot;<提交信息>&quot;"
-              />
             </div>
           </div>
         </template>
@@ -2158,17 +2135,18 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   gap: 10px;
   width: 100%;
+  align-items: stretch;
 }
 
 .type-select {
-  width: 35%; /* 提交类型占35%宽度 */
+  width: 180px; 
 }
 
 .scope-wrapper {
   display: flex;
   align-items: center;
   gap: 5px;
-  width: 65%; /* 作用域占65%宽度 */
+  width: 120px;
 }
 
 .commit-form {
@@ -2182,14 +2160,21 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
   gap: 5px;
   width: 100%;
-  /* 添加背景和边框，让容器更明显 */
   background: linear-gradient(135deg, #f8faff 0%, #eef4ff 100%);
-  // border: 2px solid #d4e8ff;
   border-radius: 12px;
-  // padding: 4px;
-  margin: 8px 0;
   box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
   transition: all 0.3s ease;
+}
+
+/* 行内模式（与类型/作用域同一行） */
+.description-container.description-inline {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.description-container.description-inline:hover {
+  box-shadow: none;
 }
 
 .description-container:hover {
@@ -2207,6 +2192,7 @@ git config --global user.email "your.email@example.com"</pre>
     border: 2px solid #409eff;
     box-shadow: 0 2px 4px rgba(64, 158, 255, 0.1);
     transition: all 0.3s ease;
+    height: 40px; /* 统一高度，与其它输入保持一致 */
   }
   
   .el-input__wrapper:hover {
@@ -2223,6 +2209,7 @@ git config --global user.email "your.email@example.com"</pre>
     font-size: 15px;
     font-weight: 500;
     color: #303133;
+    height: 34px;
   }
   
   .el-input__inner::placeholder {
@@ -2303,7 +2290,6 @@ git config --global user.email "your.email@example.com"</pre>
   /* 添加背景和边框，让容器更明显 */
   background: linear-gradient(135deg, #fff8f0 0%, #fff2e6 100%);
   border-radius: 12px;
-  margin: 8px 0;
   box-shadow: 0 2px 8px rgba(230, 162, 60, 0.1);
   transition: all 0.3s ease;
   
@@ -2422,7 +2408,7 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   flex-direction: row;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .option-card {
@@ -3149,10 +3135,9 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .advanced-fields {
-  margin-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 8px;
   animation: fade-in 0.3s ease-in-out;
 }
 

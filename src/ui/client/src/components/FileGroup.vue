@@ -121,6 +121,22 @@ function getActionButtons(fileType: string) {
       return []
   }
 }
+
+// 将文件类型映射为字母标记
+function getStatusLetter(fileType: string): string {
+  switch (fileType) {
+    case 'added':
+      return 'A'
+    case 'modified':
+      return 'M'
+    case 'deleted':
+      return 'D'
+    case 'untracked':
+      return 'U'
+    default:
+      return ''
+  }
+}
 </script>
 
 <template>
@@ -140,7 +156,9 @@ function getActionButtons(fileType: string) {
         @click="handleFileClick(file)"
       >
         <div class="file-info">
-          <div class="file-status-indicator" :class="[file.type, { 'locked': props.isFileLocked(file.path) }]"></div>
+          <div class="file-status-indicator" :class="[file.type, { 'locked': props.isFileLocked(file.path) }]">
+            {{ getStatusLetter(file.type) }}
+          </div>
           <div class="file-name-section">
             <el-tooltip
               :content="props.getFileName(file.path)"
@@ -149,7 +167,7 @@ function getActionButtons(fileType: string) {
               :hide-after="1000"
               :show-after="200"
             >
-              <span class="file-name" :class="{ 'locked-file-name': props.isFileLocked(file.path) }">
+              <span class="file-name" :class="{ 'locked-file-name': props.isFileLocked(file.path), 'deleted-file-name': file.type === 'deleted' }">
                 {{ props.getFileName(file.path) }}
                 <el-icon v-if="props.isFileLocked(file.path)" class="lock-indicator">
                   <Lock />
@@ -272,7 +290,7 @@ function getActionButtons(fileType: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-sm) var(--spacing-base);
+  padding: 0 var(--spacing-base);
   background: var(--bg-container);
   border-radius: var(--radius-base);
   cursor: pointer;
@@ -309,32 +327,33 @@ function getActionButtons(fileType: string) {
 }
 
 .file-status-indicator {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   transition: var(--transition-all);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-secondary);
 }
 
-.file-status-indicator.added {
-  background: var(--git-status-added);
-}
+.file-status-indicator.added { color: var(--git-status-added); }
+.file-status-indicator.modified { color: var(--git-status-modified); }
+.file-status-indicator.deleted { color: var(--git-status-deleted); }
+.file-status-indicator.untracked { color: var(--git-status-untracked); }
 
-.file-status-indicator.modified {
-  background: var(--git-status-modified);
-}
-
-.file-status-indicator.deleted {
-  background: var(--git-status-deleted);
-}
-
-.file-status-indicator.untracked {
-  background: var(--git-status-untracked);
-}
-
+/* 锁定状态保持为圆点，不显示字母 */
 .file-status-indicator.locked {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
   border: 2px solid var(--git-status-locked);
   background: #fef2f2;
+  color: transparent;
+  font-size: 0;
   animation: pulse 2s infinite;
 }
 
@@ -369,6 +388,16 @@ function getActionButtons(fileType: string) {
 .file-name.locked-file-name {
   color: var(--git-status-locked);
   font-weight: var(--font-weight-semibold);
+}
+
+.file-name.deleted-file-name {
+  text-decoration: line-through;
+  color: var(--git-status-deleted);
+}
+
+/* 悬浮时保持删除态颜色 */
+.file-item:hover .file-name.deleted-file-name {
+  color: var(--git-status-deleted);
 }
 
 .lock-indicator {

@@ -5,6 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "start:server:no-open": "node server.js --no-open",
+    "start:vue": "cd ./src/ui/client && npm run dev",
     "g": "node ./src/gitCommit.js",
     "g:m": "node ./src/gitCommit.js -m='test'",
     "g:m2": "node ./src/gitCommit.js -m testmsg",
@@ -25,16 +27,13 @@
     "g:ui": "node ./src/gitCommit.js ui",
     "g:test-cmd": "node ./src/gitCommit.js --cmd=\"echo zen-gitsync test\" --cmd-interval=5",
     "g:test-cmd-at": "node ./src/gitCommit.js --cmd=\"echo at-time-test\" --at=21:09",
-    "start:vue": "cd ./src/ui/client && npm run dev",
     "start:server": "node server.js",
-    "start:server:no-open": "node server.js --no-open",
     "nrm:ls": "nrm ls",
     "change:nrm:npm": "nrm use npm",
     "change:nrm:lenovo-nexus": "nrm use lenovo-nexus",
     "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
     "npm:ls:g": "npm ls -g",
-    "release": "node ./scripts/release.js",
-    "release:win": ".\\scripts\\release.bat"
+    "release": "node ./scripts/release.js"
   },
   "files": [
     "src/ui/public/**",

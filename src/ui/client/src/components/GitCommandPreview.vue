@@ -73,6 +73,7 @@ async function copyCommand() {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
+    margin-bottom: 8px;
     
     &::before {
       content: '';
@@ -219,36 +220,6 @@ async function copyCommand() {
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 1;
         position: relative;
-      }
-    }
-  }
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .git-command-preview {
-    .preview-container {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 8px;
-      padding: 8px 10px;
-      
-      .preview-title {
-        text-align: center;
-        justify-content: center;
-        font-size: 11px;
-      }
-      
-      .preview-content {
-        text-align: center;
-        font-size: 11px;
-        padding: 4px 8px;
-      }
-      
-      .copy-command-btn {
-        align-self: center;
-        width: 32px;
-        height: 32px;
       }
     }
   }
