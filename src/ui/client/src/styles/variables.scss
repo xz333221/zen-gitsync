@@ -268,33 +268,8 @@
 }
 
 /* =======================================================
-   深色主题变量覆盖
+   深色主题变量覆盖 - 已移动到 dark-theme.scss
    ======================================================= */
-   
-[data-theme="dark"] {
-  /* 页面背景 */
-  --bg-page: var(--bg-page-dark);
-  --bg-container: var(--bg-container-dark);
-  
-  /* 文字颜色 */
-  --text-primary: var(--text-primary-dark);
-  --text-secondary: var(--text-secondary-dark);
-  --text-tertiary: var(--text-tertiary-dark);
-  --text-placeholder: var(--text-placeholder-dark);
-  
-  /* 边框颜色 */
-  --border-color: var(--border-color-dark);
-  --border-color-light: rgba(255, 255, 255, 0.08);
-  --border-color-medium: rgba(255, 255, 255, 0.12);
-  
-  /* 阴影 */
-  --shadow-base: var(--shadow-dark);
-  --shadow-lg: var(--shadow-dark-lg);
-  
-  /* Git差异显示 - 深色主题调整 */
-  --git-diff-context-bg: #24292e;
-  --git-diff-context-color: #f8f8f2;
-}
 
 /* =======================================================
    便捷工具类 - 基于变量的常用样式

@@ -1,0 +1,240 @@
+/* =======================================================
+   深色主题样式文件 - 专门处理深色模式的样式覆盖
+   ======================================================= */
+
+/* 导入全局CSS变量 */
+@use './variables';
+
+/* =======================================================
+   深色主题变量覆盖
+   ======================================================= */
+   
+[data-theme="dark"] {
+  /* 页面背景 */
+  --bg-page: var(--bg-page-dark);
+  --bg-container: var(--bg-container-dark);
+  
+  /* 文字颜色 */
+  --text-primary: var(--text-primary-dark);
+  --text-secondary: var(--text-secondary-dark);
+  --text-tertiary: var(--text-tertiary-dark);
+  --text-placeholder: var(--text-placeholder-dark);
+  
+  /* 边框颜色 */
+  --border-color: var(--border-color-dark);
+  --border-color-light: rgba(255, 255, 255, 0.08);
+  --border-color-medium: rgba(255, 255, 255, 0.12);
+  
+  /* 阴影 */
+  --shadow-sm: var(--shadow-dark);
+  --shadow-base: var(--shadow-dark);
+  --shadow-md: var(--shadow-dark-lg);
+  --shadow-lg: var(--shadow-dark-lg);
+  --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.4);
+  
+  /* Git差异显示 - 深色主题调整 */
+  --git-diff-context-bg: #24292e;
+  --git-diff-context-color: #f8f8f2;
+  --git-diff-header-bg: #1f2937;
+  --git-diff-header-color: #60a5fa;
+  --git-diff-header-border: #374151;
+  --git-diff-added-bg: rgba(34, 134, 58, 0.15);
+  --git-diff-added-color: #56d364;
+  --git-diff-removed-bg: rgba(248, 81, 73, 0.15);
+  --git-diff-removed-color: #f85149;
+  --git-diff-hunk-bg: #1f2937;
+  --git-diff-hunk-color: #a78bfa;
+}
+
+/* =======================================================
+   深色主题专用组件样式
+   ======================================================= */
+
+[data-theme="dark"] {
+  /* Header 深色主题 */
+  .app-header {
+    background: var(--bg-container-dark);
+    color: var(--text-primary-dark);
+    border-bottom-color: var(--border-color-dark);
+    box-shadow: var(--shadow-dark);
+  }
+
+  /* Footer 深色主题 */
+  .app-footer {
+    background: var(--bg-container-dark);
+    color: var(--text-primary-dark);
+    border-top-color: var(--border-color-dark);
+    box-shadow: var(--shadow-dark);
+  }
+
+  /* Card 深色主题 */
+  .app-card {
+    background: var(--bg-container-dark);
+    border-color: var(--border-color-dark);
+    box-shadow: var(--shadow-dark);
+  }
+
+  .app-card:hover {
+    box-shadow: var(--shadow-dark-lg);
+  }
+
+  .app-card-header {
+    border-bottom-color: var(--border-color-light);
+  }
+
+  .app-card-header h2 {
+    color: var(--text-primary-dark);
+  }
+
+  .app-card-footer {
+    border-top-color: var(--border-color-light);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  /* Modern Button 深色主题 */
+  .modern-btn {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .modern-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .modern-btn:disabled:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* 用户信息区域深色主题 */
+  #user-info {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  #user-info:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .user-email {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  /* 目录选择器深色主题 */
+  .directory-selector {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .directory-selector:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .directory-path {
+    color: rgba(255, 255, 255, 0.9);
+    background-color: rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  /* 分支信息深色主题 */
+  .branch-wrapper {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .branch-wrapper:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .branch-label {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .footer-right {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .repo-url-label {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .repo-url {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  /* Git命令预览深色主题 */
+  .git-command-preview .preview-container {
+    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    border-color: #4a5568;
+  }
+
+  .git-command-preview .preview-container:hover {
+    background: linear-gradient(135deg, #2d3748 0%, #2c5282 100%);
+    border-color: #409eff;
+  }
+
+  .git-command-preview .preview-title {
+    color: #e2e8f0;
+  }
+
+  .git-command-preview .preview-content {
+    background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
+    color: #e8f4fd;
+    border-color: #404040;
+  }
+
+  .git-command-preview .copy-command-btn {
+    background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(102, 177, 255, 0.1) 100%);
+    border-color: rgba(64, 158, 255, 0.2);
+    color: #409eff;
+  }
+
+  .git-command-preview .copy-command-btn:hover {
+    background: linear-gradient(135deg, rgba(64, 158, 255, 0.15) 0%, rgba(102, 177, 255, 0.15) 100%);
+    border-color: rgba(64, 158, 255, 0.4);
+  }
+
+  /* 滚动条深色主题 */
+  .preview-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .preview-content::-webkit-scrollbar-thumb {
+    background: rgba(64, 158, 255, 0.5);
+  }
+
+  .preview-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(64, 158, 255, 0.7);
+  }
+}
+
+/* =======================================================
+   深色主题专用动画和过渡效果
+   ======================================================= */
+
+[data-theme="dark"] {
+  /* 深色主题下的特殊动画效果 */
+  .modern-btn::before {
+    background: linear-gradient(135deg, rgba(64, 158, 255, 0.2) 0%, rgba(102, 177, 255, 0.2) 100%);
+  }
+
+  /* 深色主题下的悬浮发光效果 */
+  .app-card:hover {
+    box-shadow: 
+      var(--shadow-dark-lg),
+      0 0 20px rgba(64, 158, 255, 0.1);
+  }
+
+  .modern-btn:hover {
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.15),
+      0 0 8px rgba(64, 158, 255, 0.2);
+  }
+}
