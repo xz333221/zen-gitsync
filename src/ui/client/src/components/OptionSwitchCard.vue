@@ -9,9 +9,10 @@ interface Props {
   inactiveText?: string
   activeColor?: string
   iconClass?: string
+  compact?: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
 }>()
@@ -22,7 +23,7 @@ function onChange(val: boolean) {
 </script>
 
 <template>
-  <div class="option-card compact">
+  <div class="option-card" :class="{ compact: props.compact }">
     <el-tooltip :content="tooltip" placement="top" :hide-after="1000" :show-after="200">
       <div class="option-header">
         <div class="option-icon" :class="iconClass">
@@ -57,6 +58,7 @@ function onChange(val: boolean) {
 
 .option-card.compact {
   padding: 4px 8px;
+  min-width: 120px;
 }
 
 .option-card:hover {

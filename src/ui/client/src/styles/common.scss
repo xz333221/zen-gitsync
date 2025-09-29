@@ -184,3 +184,157 @@
   overflow-x: hidden;
   overflow-y: auto;
 }
+
+/* =======================================================
+   公共布局组件样式 - Header、Footer、Card
+   ======================================================= */
+
+/* Header 样式 */
+.app-header {
+  background: var(--color-white);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color-medium);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-all);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-base) var(--spacing-lg);
+}
+
+/* Footer 样式 */
+.app-footer {
+  background: var(--color-white);
+  color: var(--text-primary);
+  border-top: 1px solid var(--border-color-medium);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-all);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Card 样式 */
+.app-card {
+  background: var(--color-white);
+  border: 1px solid var(--border-color-medium);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-all);
+  overflow: hidden;
+}
+
+.app-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Card Header */
+.app-card-header {
+  padding: var(--spacing-base) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-lg);
+}
+
+.app-card-header h2 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+/* Card Content */
+.app-card-content {
+  padding: var(--spacing-lg);
+}
+
+/* Card Footer */
+.app-card-footer {
+  padding: var(--spacing-base) var(--spacing-lg);
+  border-top: 1px solid var(--border-color-light);
+  background: var(--color-gray-50);
+}
+
+/* Header Actions */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
+.header-switches {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+  justify-content: center;
+}
+
+/* Modern Button 基础样式 */
+.modern-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--color-gray-50);
+  color: var(--text-secondary);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: var(--transition-all);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  border: 1px solid var(--border-color-medium);
+  position: relative;
+  overflow: hidden;
+}
+
+.modern-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(102, 177, 255, 0.1) 100%);
+  opacity: 0;
+  transition: opacity var(--transition-base) ease;
+}
+
+.modern-btn:hover {
+  background: var(--color-gray-100);
+  color: var(--text-primary);
+  border-color: var(--border-color-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.modern-btn:hover::before {
+  opacity: 1;
+}
+
+.modern-btn:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.modern-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.modern-btn:disabled:hover {
+  background: var(--color-gray-50);
+  transform: none;
+  box-shadow: none;
+}
+
+.modern-btn .btn-icon {
+  font-size: var(--font-size-lg);
+  transition: var(--transition-transform);
+  z-index: 1;
+  position: relative;
+}

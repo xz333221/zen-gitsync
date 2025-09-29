@@ -1036,9 +1036,54 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
 </script>
 
 <template>
-  <div class="card" :class="{ 'is-pushing': gitStore.isPushing }">
-    <div class="card-header">
+  <div class="card app-card" :class="{ 'is-pushing': gitStore.isPushing }">
+    <div class="card-header app-card-header">
       <h2>提交更改</h2>
+      <!-- 提交选项开关组 -->
+      <div class="header-switches" v-if="gitStore.userName !== '' && gitStore.userEmail !== ''">
+        <!-- 提交模式开关 -->
+        <OptionSwitchCard
+          v-model="isStandardCommit"
+          title="提交模式"
+          tooltip="选择传统或标准化提交格式"
+          active-text="标准化"
+          inactive-text="普通"
+          active-color="#409eff"
+          compact
+        >
+          <template #icon>
+            <el-icon><Edit /></el-icon>
+          </template>
+        </OptionSwitchCard>
+
+        <!-- Git钩子开关 -->
+        <OptionSwitchCard
+          v-model="skipHooks"
+          title="跳过钩子检查"
+          tooltip="添加 --no-verify 参数"
+          active-color="#f56c6c"
+          icon-class="warning"
+          compact
+        >
+          <template #icon>
+            <el-icon><Warning /></el-icon>
+          </template>
+        </OptionSwitchCard>
+
+        <!-- 回车自动提交开关 -->
+        <OptionSwitchCard
+          v-model="autoQuickPushOnEnter"
+          title="回车自动提交"
+          tooltip="输入提交信息后按回车直接执行一键推送"
+          active-color="#67c23a"
+          icon-class="success"
+          compact
+        >
+          <template #icon>
+            <el-icon><Check /></el-icon>
+          </template>
+        </OptionSwitchCard>
+      </div>
       <!-- Git操作按钮组 - 移到标题右侧 -->
       <div class="header-actions" v-if="gitStore.userName !== '' && gitStore.userEmail !== ''">
         <GitActionButtons
@@ -1054,7 +1099,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
       </div>
     </div>
 
-    <div class="card-content">
+    <div class="card-content app-card-content">
       <div class="layout-container">
         <!-- 如果没有配置Git用户信息，显示提示 -->
         <div v-if="gitStore.userName === '' || gitStore.userEmail === ''" class="git-config-warning">
@@ -1075,47 +1120,6 @@ git config --global user.email "your.email@example.com"</pre>
           <!-- 左侧：提交表单 -->
           <div class="commit-section">
 
-            <div class="commit-options">
-              <!-- 提交模式开关 -->
-              <OptionSwitchCard
-                v-model="isStandardCommit"
-                title="提交模式"
-                tooltip="选择传统或标准化提交格式"
-                active-text="标准化"
-                inactive-text="普通"
-                active-color="#409eff"
-              >
-                <template #icon>
-                  <el-icon><Edit /></el-icon>
-                </template>
-              </OptionSwitchCard>
-
-              <!-- Git钩子开关 -->
-              <OptionSwitchCard
-                v-model="skipHooks"
-                title="跳过钩子检查"
-                tooltip="添加 --no-verify 参数"
-                active-color="#f56c6c"
-                icon-class="warning"
-              >
-                <template #icon>
-                  <el-icon><Warning /></el-icon>
-                </template>
-              </OptionSwitchCard>
-
-              <!-- 回车自动提交开关 -->
-              <OptionSwitchCard
-                v-model="autoQuickPushOnEnter"
-                title="回车自动提交"
-                tooltip="输入提交信息后按回车直接执行一键推送"
-                active-color="#67c23a"
-                icon-class="success"
-              >
-                <template #icon>
-                  <el-icon><Check /></el-icon>
-                </template>
-              </OptionSwitchCard>
-            </div>
 
             <GitCommandPreview 
               :command="gitCommandPreview"
@@ -3524,6 +3528,15 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
+}
+
+.header-switches {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  justify-content: center;
 }
 
 .git-tools-button {

@@ -667,7 +667,7 @@ async function selectDirectory(dirPath: string) {
 </script>
 
 <template>
-  <header class="main-header">
+  <header class="main-header app-header">
     <div class="header-left">
       <img :src="logo" alt="Zen GitSync Logo" class="logo" />
       <h1>Zen GitSync</h1>
@@ -731,7 +731,7 @@ async function selectDirectory(dirPath: string) {
       </div>
 
       <!-- 顶部右侧动作 -->
-      <div class="header-actions-right" v-if="gitStore.isGitRepo">
+      <div class="header-actions" v-if="gitStore.isGitRepo">
         <!-- 命令历史按钮 -->
         <div class="command-history-section" v-if="gitStore.isGitRepo">
           <CommandHistory />
@@ -885,7 +885,7 @@ async function selectDirectory(dirPath: string) {
     </div>
   </main>
 
-  <footer class="main-footer">
+  <footer class="main-footer app-footer">
     <div class="branch-info" v-if="gitStore.currentBranch">
       <div class="branch-wrapper">
         <span class="branch-label">当前分支:</span>
@@ -1142,21 +1142,13 @@ body {
 }
 
 .main-header {
-  background: #ffffff;
-  color: #333333;
-  padding: 0 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   height: 64px;
   box-sizing: border-box;
-  border-bottom: 1px solid #e5e7eb;
 }
 
 .header-left {
@@ -1428,21 +1420,14 @@ h1 {
 }
 
 .main-footer {
-  background-color: #ffffff;
-  color: #333333;
-  padding: 10px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 100;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
   height: 60px;
   box-sizing: border-box;
-  border-top: 1px solid #e5e7eb;
+  padding: 10px 20px;
 }
 
 </style>
