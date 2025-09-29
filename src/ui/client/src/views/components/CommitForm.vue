@@ -1205,7 +1205,7 @@ git config --global user.email "your.email@example.com"</pre>
         v-model="gitOperationsDrawerVisible"
         title="Git 操作"
         direction="rtl"
-        size="360px"
+        size="362px"
         :with-header="true"
         :show-close="true"
         :destroy-on-close="false"
@@ -3540,9 +3540,7 @@ git config --global user.email "your.email@example.com"</pre>
 /* Git操作抽屉样式 */
 :deep(.git-operations-drawer) {
   .el-drawer__header {
-    margin-bottom: 10px;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--border-card);
     font-size: 16px;
     font-weight: 500;
   }

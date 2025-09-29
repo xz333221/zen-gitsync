@@ -1454,11 +1454,6 @@ h1 {
   color: #409eff;
 }
 
-.loading-text {
-  font-size: 18px;
-  color: #606266;
-}
-
 .user-warning {
   color: #E6A23C;
   font-weight: bold;

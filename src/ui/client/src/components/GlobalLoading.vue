@@ -1,7 +1,7 @@
 <template>
   <teleport to="body">
     <transition name="loading-fade">
-      <div v-if="visible" class="global-loading-overlay" @click.stop>
+      <div v-if="visible || mock" class="global-loading-overlay" @click.stop>
         <div class="loading-container">
           <!-- 主加载器 -->
           <div class="loading-spinner">
@@ -13,9 +13,9 @@
           <!-- 加载文字 -->
           <div class="loading-text">{{ text }}</div>
           
-          <!-- 进度条（可选） -->
-          <div v-if="showProgress" class="loading-progress">
-            <div class="progress-bar" :style="{ width: progress + '%' }"></div>
+          <!-- 进度条（可选/Mock） -->
+          <div v-if="showProgress || mock" class="loading-progress">
+            <div class="progress-bar" :class="{ 'is-mock': mock && !showProgress }" :style="showProgress ? { width: progress + '%' } : undefined"></div>
           </div>
         </div>
       </div>
@@ -29,13 +29,16 @@ interface Props {
   text?: string
   showProgress?: boolean
   progress?: number
+  /** 开启后组件将强制展示，适合开发/演示使用 */
+  mock?: boolean
 }
 
 withDefaults(defineProps<Props>(), {
   visible: false,
   text: '加载中...',
   showProgress: false,
-  progress: 0
+  progress: 0,
+  mock: false
 })
 </script>
 
@@ -46,7 +49,7 @@ withDefaults(defineProps<Props>(), {
   left: 0;
   right: 0;
   bottom: 0;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.0);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -111,6 +114,7 @@ withDefaults(defineProps<Props>(), {
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   letter-spacing: 1px;
   text-align: center;
+  color: #fff;
   animation: pulse-text 2s ease-in-out infinite;
 }
 
@@ -128,6 +132,12 @@ withDefaults(defineProps<Props>(), {
   border-radius: 2px;
   transition: width 0.3s ease;
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+/* Mock 进度：自动循环 */
+.progress-bar.is-mock {
+  width: 0%;
+  animation: mock-progress 2.4s ease-in-out infinite;
 }
 
 /* 动画效果 */
@@ -149,6 +159,12 @@ withDefaults(defineProps<Props>(), {
     opacity: 0.8;
     transform: scale(1.05);
   }
+}
+
+@keyframes mock-progress {
+  0% { width: 0%; }
+  50% { width: 70%; }
+  100% { width: 100%; }
 }
 
 /* 过渡动画 */
@@ -184,5 +200,30 @@ withDefaults(defineProps<Props>(), {
   opacity: 1;
   transform: scale(1);
   backdrop-filter: blur(25px);
+}
+
+/* 深色主题优化 */
+[data-theme="dark"] .global-loading-overlay {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .loading-container {
+  background: linear-gradient(135deg, rgba(22, 22, 22, 0.9) 0%, rgba(28, 28, 28, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="dark"] .loading-text {
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+}
+
+[data-theme="dark"] .loading-progress {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .progress-bar {
+  background: linear-gradient(90deg, rgba(64,158,255,0.85) 0%, rgba(103,194,58,0.85) 100%);
+  box-shadow: 0 0 10px rgba(64, 158, 255, 0.45);
 }
 </style>
