@@ -2057,7 +2057,7 @@ git config --global user.email "your.email@example.com"</pre>
   font-size: 13px;
   font-weight: bold;
   margin-bottom: 8px;
-  color: #606266;
+  color: var(--text-primary);
   text-align: left;
   display: block;
   position: relative;
@@ -3217,11 +3217,6 @@ git config --global user.email "your.email@example.com"</pre>
   border-top: none;
 }
 
-.branch-group .group-title {
-  color: #606266;
-  font-weight: 500;
-  margin-bottom: 12px;
-}
 
 /* 禁用复选框下的提示文本换行 */
 :deep(.el-checkbox__label) {
