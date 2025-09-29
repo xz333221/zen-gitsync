@@ -818,7 +818,6 @@ defineExpose({
       </div>
     </div>
 
-    <el-divider />
 
     <div v-if="configStore.lockedFiles.length === 0" class="empty-locked-files">
       <div class="empty-icon">
@@ -875,12 +874,6 @@ defineExpose({
         </div>
       </div>
     </div>
-
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="showLockedFilesDialog = false">关闭</el-button>
-      </span>
-    </template>
   </CommonDialog>
 </template>
 
@@ -1214,7 +1207,6 @@ defineExpose({
   border: 1px solid #e1e4e8;
   border-radius: 8px;
   padding: 8px;
-  margin-bottom: 8px;
 }
 
 .description-header {

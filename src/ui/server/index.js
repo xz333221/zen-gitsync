@@ -2468,6 +2468,74 @@ async function startUIServer(noOpen = false, savePort = false) {
       });
     }
   });
+
+  
+  // ========== 文件锁定相关 API ==========
+
+  // 获取锁定文件列表
+  app.get('/api/locked-files', async (req, res) => {
+    try {
+      const lockedFiles = await configManager.getLockedFiles();
+      res.json({ success: true, lockedFiles });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 锁定文件
+  app.post('/api/lock-file', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+      }
+
+      const result = await configManager.lockFile(filePath);
+      res.json({ success: true, locked: result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 解锁文件
+  app.post('/api/unlock-file', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+      }
+
+      const result = await configManager.unlockFile(filePath);
+      res.json({ success: true, unlocked: result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 检查文件是否锁定
+  app.post('/api/check-file-lock', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+      }
+
+      const isLocked = await configManager.isFileLocked(filePath);
+      res.json({ success: true, isLocked });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 添加命令历史的清空API
+  app.post('/api/clear-command-history', async (req, res) => {
+    try {
+      const result = clearCommandHistory();
+      res.json({ success: result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
   
   // Socket.io 实时更新
   io.on('connection', (socket) => {
@@ -2696,7 +2764,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       try {
         // 等待1秒，避免快速尝试多个端口
         if (currentPort > startPort) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
           console.log(`尝试端口 ${currentPort}...`);
         }
         
@@ -2766,72 +2834,6 @@ async function startUIServer(noOpen = false, savePort = false) {
     process.exit(1);
   }
 
-  // ========== 文件锁定相关 API ==========
-
-  // 获取锁定文件列表
-  app.get('/api/locked-files', async (req, res) => {
-    try {
-      const lockedFiles = await configManager.getLockedFiles();
-      res.json({ success: true, lockedFiles });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // 锁定文件
-  app.post('/api/lock-file', async (req, res) => {
-    try {
-      const { filePath } = req.body;
-      if (!filePath) {
-        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
-      }
-
-      const result = await configManager.lockFile(filePath);
-      res.json({ success: true, locked: result });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // 解锁文件
-  app.post('/api/unlock-file', async (req, res) => {
-    try {
-      const { filePath } = req.body;
-      if (!filePath) {
-        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
-      }
-
-      const result = await configManager.unlockFile(filePath);
-      res.json({ success: true, unlocked: result });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // 检查文件是否锁定
-  app.post('/api/check-file-lock', async (req, res) => {
-    try {
-      const { filePath } = req.body;
-      if (!filePath) {
-        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
-      }
-
-      const isLocked = await configManager.isFileLocked(filePath);
-      res.json({ success: true, isLocked });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  // 添加命令历史的清空API
-  app.post('/api/clear-command-history', async (req, res) => {
-    try {
-      const result = clearCommandHistory();
-      res.json({ success: result });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
 }
 
 export default startUIServer;
