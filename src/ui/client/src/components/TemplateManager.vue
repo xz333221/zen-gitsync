@@ -352,7 +352,7 @@ defineExpose({
 }
 
 .template-list-scroll::-webkit-scrollbar-track {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
 }
 
 .template-item {
@@ -471,7 +471,7 @@ defineExpose({
 }
 
 .templates-scroll-area::-webkit-scrollbar-track {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
 }
 
 /* 对话框整体视觉优化（仅作用于当前组件内的 el-dialog） */
@@ -531,10 +531,9 @@ defineExpose({
 .template-list h3 {
   position: sticky;
   top: 0;
-  background: #fff;
   z-index: 2;
   padding: 8px 0 10px 0;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--bg-icon);
 }
 
 /* 卡片列表的细节优化 */
@@ -561,10 +560,9 @@ defineExpose({
 .message-templates-list h3 {
   position: sticky;
   top: 0;
-  background: #fff;
   z-index: 2;
   padding: 8px 0 10px 0;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--bg-icon);
 }
 
 .templates-scroll-area {

@@ -9,11 +9,6 @@
    全局文字颜色应用
    ======================================================= */
 
-/* 全局文字颜色 */
-body, * {
-  color: var(--color-text);
-}
-
 /* 次要文字 */
 .text-secondary {
   color: var(--color-text-secondary) !important;
@@ -363,4 +358,12 @@ body, * {
   transition: var(--transition-transform);
   z-index: 1;
   position: relative;
+}
+
+.el-card__header {
+  padding: 0;
+}
+
+.el-card__body {
+  padding: 0;
 }

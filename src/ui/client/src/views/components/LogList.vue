@@ -1709,19 +1709,11 @@ function toggleFullscreen() {
 
 /* 优化表格区域 */
 .el-table {
-  --el-table-border-color: #f0f0f0;
-  --el-table-header-bg-color: #f8f9fa;
   border-radius: 8px;
   overflow: hidden;
 }
 
-:deep(.el-table__header-wrapper) {
-  background-color: #f8f9fa;
-}
-
 :deep(.el-table__header) th {
-  background-color: #f8f9fa;
-  color: #606266;
   font-weight: 600;
   height: 36px;
   font-size: 13px;
@@ -1903,7 +1895,7 @@ function toggleFullscreen() {
 
 .commit-info {
   padding: 12px;
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   border-radius: 8px;
   font-size: 14px;
   display: flex;
@@ -1991,7 +1983,7 @@ function toggleFullscreen() {
 }
 
 .filter-panel-header {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   padding: 8px;
   margin-bottom: 8px;
   border-radius: 8px;
@@ -2227,7 +2219,7 @@ function toggleFullscreen() {
 }
 
 .context-menu-item:hover {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   color: #409eff;
 }
 

@@ -109,7 +109,46 @@
   /* 容器背景 */
   --bg-container: var(--color-white);
   --bg-container-hover: #f8fafc;
+  --bg-container-hover-dark: rgba(255, 255, 255, 0.08);
   --bg-container-dark: #24292e;
+  
+  /* 表单和输入框背景 */
+  --bg-input: #f8fafc;
+  --bg-input-dark: rgba(255, 255, 255, 0.05);
+  --bg-input-hover: #f1f5f9;
+  --bg-input-hover-dark: rgba(255, 255, 255, 0.08);
+  
+  /* 面板和区域背景 */
+  --bg-panel: #f5f7fa;
+  --bg-panel-dark: rgba(255, 255, 255, 0.03);
+  --bg-panel-hover: #eef2f6;
+  --bg-panel-hover-dark: rgba(255, 255, 255, 0.06);
+  
+  /* 文件路径背景 */
+  --bg-file-path: var(--color-gray-100);
+  --bg-file-path-dark: rgba(255, 255, 255, 0.08);
+  --bg-file-path-hover: #e0e7ff;
+  --bg-file-path-hover-dark: rgba(99, 102, 241, 0.2);
+  
+  /* 图标和装饰背景 */
+  --bg-icon: #f0f2f5;
+  --bg-icon-dark: rgba(255, 255, 255, 0.1);
+  --bg-icon-hover: #e8eaed;
+  --bg-icon-hover-dark: rgba(255, 255, 255, 0.15);
+  
+  /* 组件悬浮背景 */
+  --bg-component-hover: #e9ecef;
+  --bg-component-hover-dark: rgba(255, 255, 255, 0.12);
+  
+  /* 卡片和面板背景 */
+  --bg-card: var(--color-white);
+  --bg-card-dark: #24292e;
+  --bg-card-hover: #f8fafc;
+  --bg-card-hover-dark: rgba(255, 255, 255, 0.05);
+  
+  /* 操作区域背景 */
+  --bg-action: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  --bg-action-dark: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.03) 100%);
   
   /* 浮层背景 */
   --bg-overlay: rgba(40, 44, 52, 0.7);
@@ -127,6 +166,24 @@
   --border-color-light: rgba(0, 0, 0, 0.03);
   --border-color-medium: #e1e4e8;
   --border-color-dark: rgba(255, 255, 255, 0.15);
+  
+  /* 输入框边框 */
+  --border-input: #e5e7eb;
+  --border-input-dark: rgba(255, 255, 255, 0.15);
+  --border-input-hover: #cbd5e1;
+  --border-input-hover-dark: rgba(255, 255, 255, 0.25);
+  
+  /* 卡片边框 */
+  --border-card: #e5e7eb;
+  --border-card-dark: rgba(255, 255, 255, 0.15);
+  --border-card-hover: #cbd5e1;
+  --border-card-hover-dark: rgba(255, 255, 255, 0.25);
+  
+  /* 组件边框 */
+  --border-component: #e9ecef;
+  --border-component-dark: rgba(255, 255, 255, 0.12);
+  --border-component-light: #dee2e6;
+  --border-component-light-dark: rgba(255, 255, 255, 0.08);
   
   /* 交互边框 */
   --border-hover: rgba(102, 126, 234, 0.15);
@@ -156,6 +213,10 @@
   --text-primary: #303133;
   --text-primary-dark: #e4e7ed;
   
+  /* 标题文字 */
+  --text-title: #374151;
+  --text-title-dark: #d1d5db;
+  
   /* 次要文字 */
   --text-secondary: #606266;
   --text-secondary-dark: #909399;
@@ -170,9 +231,14 @@
   
   /* 全局文字颜色 - 根据主题自动调整 */
   --color-text: var(--text-primary);
+  --color-text-title: var(--text-title);
   --color-text-secondary: var(--text-secondary);
   --color-text-tertiary: var(--text-tertiary);
   --color-text-placeholder: var(--text-placeholder);
+  
+  /* 文件路径文字颜色 */
+  --color-file-path-hover: #6366f1;
+  --color-file-path-hover-dark: #a5b4fc;
   
   /* 链接文字 */
   --text-link: var(--color-primary);

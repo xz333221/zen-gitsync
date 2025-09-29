@@ -102,7 +102,7 @@ async function handleClick() {
 </script>
 
 <template>
-  <el-tooltip :content="tooltipText" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
+  <el-tooltip :content="tooltipText" placement="top">
     <el-button
       type="primary"
       @click="handleClick"

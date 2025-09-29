@@ -67,7 +67,7 @@ async function copyCommand() {
     align-items: center;
     gap: 8px;
     background: var(--bg-container);
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border-card);
     border-radius: 8px;
     padding: 8px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -90,7 +90,7 @@ async function copyCommand() {
     &:hover {
       border-color: #409eff;
       box-shadow: 0 2px 8px rgba(64, 158, 255, 0.12);
-      background: #f8fafc;
+      background: var(--bg-input-hover);
       
       &::before {
         opacity: 1;
@@ -99,7 +99,7 @@ async function copyCommand() {
     
     .preview-title {
       font-size: 12px;
-      color: #374151;
+      color: var(--color-text-title);
       font-weight: 600;
       white-space: nowrap;
       flex-shrink: 0;
@@ -117,9 +117,9 @@ async function copyCommand() {
     
     .preview-content {
       flex: 1;
-      background: #f8fafc;
-      color: #1f2937;
-      border: 1px solid #d1d5db;
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border: 1px solid var(--border-input);
       border-radius: 6px;
       padding: 6px 8px;
       margin: 0;
@@ -148,7 +148,7 @@ async function copyCommand() {
       &:hover {
         border-color: #409eff;
         box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2);
-        background: #f1f5f9;
+        background: var(--bg-input-hover);
         
         &::before {
           opacity: 1;
@@ -156,9 +156,9 @@ async function copyCommand() {
       }
       
       &.code-command {
-        background: #f8fafc;
-        color: #1f2937;
-        border-color: #d1d5db;
+        background: var(--bg-input);
+        color: var(--text-primary);
+        border-color: var(--border-input);
         font-weight: 500;
       }
     }

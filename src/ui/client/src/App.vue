@@ -1174,22 +1174,6 @@ body {
   padding: 0;
 }
 
-
-
-/* el-card样式调整 */
-.el-card {
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.el-card .el-card__body {
-  flex: 1;
-  overflow: auto;
-  padding: 16px;
-}
-
 .main-header {
   position: fixed;
   top: 0;
@@ -1234,14 +1218,14 @@ h1 {
   background: #f8f9fa;
   padding: 8px 14px;
   border-radius: 8px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
   transition: all 0.2s ease;
 }
 
 #user-info:hover {
-  background: #e9ecef;
+  background: var(--border-component);
   border-color: #dee2e6;
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -1256,7 +1240,7 @@ h1 {
   background: #f8f9fa;
   border-radius: 8px;
   padding: 8px 14px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
   transition: all 0.2s ease;
@@ -1264,7 +1248,7 @@ h1 {
 }
 
 .directory-selector:hover {
-  background: #e9ecef;
+  background: var(--border-component);
   border-color: #dee2e6;
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -1295,7 +1279,7 @@ h1 {
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
   position: relative;
   overflow: hidden;
 }
@@ -1313,7 +1297,7 @@ h1 {
 }
 
 .modern-btn:hover {
-  background: #e9ecef;
+  background: var(--border-component);
   color: #343a40;
   border-color: #dee2e6;
   transform: translateY(-1px);
@@ -1419,7 +1403,7 @@ h1 {
 .tips {
   margin-top: 20px;
   padding: 15px;
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   border-radius: 5px;
   border-left: 4px solid #409eff;
 }
@@ -1504,12 +1488,12 @@ h1 {
   border-radius: 4px;
   padding: 8px 12px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
   transition: all 0.3s;
 }
 
 .branch-wrapper:hover {
-  background-color: #e9ecef;
+  background-color: var(--border-component);
 }
 
 .branch-label {
@@ -1530,7 +1514,7 @@ h1 {
     background-color: #f8f9fa;
     padding: 8px;
     border-radius: 4px;
-    border: 1px solid #e9ecef;
+    border: 1px solid var(--border-component);
   }
   .repo-url-label {
     font-weight: bold;
@@ -1762,7 +1746,7 @@ h1 {
 
 :deep(.modern-input .el-input__wrapper) {
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-input);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
   padding: 10px 12px;
@@ -1999,16 +1983,16 @@ h1 {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-input);
+  border: 1px solid var(--border-card);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .recent-dir-item:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: var(--bg-input-hover);
+  border-color: var(--border-card-hover);
   transform: translateX(2px);
 }
 
@@ -2039,7 +2023,7 @@ h1 {
 /* 选择框样式 */
 :deep(.modern-select .el-select__wrapper) {
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-input);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
   padding: 10px 12px;
@@ -2111,7 +2095,7 @@ h1 {
 
 .current-path {
   padding: 10px;
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   border-radius: 4px;
   margin-bottom: 10px;
   border: 1px solid #e4e7ed;
@@ -2178,7 +2162,7 @@ h1 {
 }
 
 .parent-dir {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   font-weight: 500;
 }
 
@@ -2215,7 +2199,7 @@ h1 {
 }
 
 :deep(.directory-browser-dialog .el-message-box__header) {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   padding: 15px 20px;
   border-bottom: 1px solid #e4e7ed;
   position: relative;
@@ -2273,7 +2257,7 @@ h1 {
 }
 
 .directory-browser-dialog .el-message-box__header {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   padding: 15px 20px;
   border-bottom: 1px solid #e4e7ed;
   position: relative;
@@ -2331,7 +2315,7 @@ h1 {
 
 .current-path {
   padding: 10px;
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   border-radius: 4px;
   margin-bottom: 10px;
   border: 1px solid #e4e7ed;
@@ -2398,7 +2382,7 @@ h1 {
 }
 
 .parent-dir {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   font-weight: 500;
 }
 

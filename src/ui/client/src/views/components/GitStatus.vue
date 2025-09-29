@@ -599,9 +599,8 @@ defineExpose({
 </script>
 
 <template>
-  <el-card shadow="hover" class="git-status-card">
-    <template #header>
-      <div class="status-header">
+  <div class="git-status-card flex flex-col">
+    <div class="status-header">
         <h2>Git 状态</h2>
         <div class="header-actions">
         <el-tooltip 
@@ -676,7 +675,6 @@ defineExpose({
         </el-tooltip>
         </div>
       </div>
-    </template>
     
     <div class="card-content" 
       v-loading="gitStore.isGitPulling || gitStore.isGitFetching" 
@@ -777,7 +775,7 @@ defineExpose({
         </div>
       </div>
     </div>
-  </el-card>
+  </div>
   
   <!-- 文件差异对话框 -->
   <CommonDialog
@@ -990,7 +988,7 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f0f2f5;
+  background-color: var(--bg-icon);
   border-radius: 50%;
   margin-bottom: 8px;
   font-size: 28px;
@@ -1261,5 +1259,19 @@ defineExpose({
   transition: all 0.2s ease;
 }
 
+/* Git状态卡片容器 */
+.git-status-card {
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-base);
+  overflow: hidden;
+  transition: var(--transition-all);
+  height: 100%;
+  
+  &:hover {
+    box-shadow: var(--shadow-md);
+  }
+}
 
 </style>

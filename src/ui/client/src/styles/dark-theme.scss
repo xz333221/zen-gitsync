@@ -10,22 +10,85 @@
    ======================================================= */
    
 [data-theme="dark"] {
+  /* Element Plus深色主题CSS变量 */
+  --el-bg-color: var(--bg-container-dark);
+  --el-bg-color-page: var(--bg-page-dark);
+  --el-text-color-primary: var(--text-primary-dark);
+  --el-text-color-regular: var(--text-secondary-dark);
+  --el-text-color-secondary: var(--text-tertiary-dark);
+  --el-text-color-placeholder: var(--text-placeholder-dark);
+  --el-border-color: var(--border-color-dark);
+  --el-border-color-light: rgba(255, 255, 255, 0.08);
+  --el-border-color-lighter: rgba(255, 255, 255, 0.05);
+  --el-fill-color: rgba(255, 255, 255, 0.08);
+  --el-fill-color-light: rgba(255, 255, 255, 0.05);
+  --el-fill-color-lighter: rgba(255, 255, 255, 0.03);
+  --el-fill-color-blank: var(--bg-container-dark);
+  --el-fill-color-dark: rgba(255, 255, 255, 0.12);
+  
+  /* 表格相关变量 */
+  --el-table-bg-color: var(--bg-container-dark);
+  --el-table-tr-bg-color: var(--bg-container-dark);
+  --el-table-header-bg-color: rgba(255, 255, 255, 0.05);
+
   /* 页面背景 */
   --bg-page: var(--bg-page-dark);
   --bg-title: var(--bg-title-dark);
   --bg-container: var(--bg-container-dark);
+  --bg-container-hover: var(--bg-container-hover-dark);
+  
+  /* 表单和输入框背景 */
+  --bg-input: var(--bg-input-dark);
+  --bg-input-hover: var(--bg-input-hover-dark);
+  
+  /* 面板和区域背景 */
+  --bg-panel: var(--bg-panel-dark);
+  --bg-panel-hover: var(--bg-panel-hover-dark);
+  
+  /* 文件路径背景 */
+  --bg-file-path: var(--bg-file-path-dark);
+  --bg-file-path-hover: var(--bg-file-path-hover-dark);
+  
+  /* 图标和装饰背景 */
+  --bg-icon: var(--bg-icon-dark);
+  --bg-icon-hover: var(--bg-icon-hover-dark);
+  
+  /* 组件悬浮背景 */
+  --bg-component-hover: var(--bg-component-hover-dark);
+  
+  /* 卡片和面板背景 */
+  --bg-card: var(--bg-card-dark);
+  --bg-card-hover: var(--bg-card-hover-dark);
+  
+  /* 操作区域背景 */
+  --bg-action: var(--bg-action-dark);
+  
+  /* 边框颜色 */
+  --border-input: var(--border-input-dark);
+  --border-input-hover: var(--border-input-hover-dark);
+  --border-card: var(--border-card-dark);
+  --border-card-hover: var(--border-card-hover-dark);
+  
+  /* 组件边框 */
+  --border-component: var(--border-component-dark);
+  --border-component-light: var(--border-component-light-dark);
   
   /* 文字颜色 */
   --text-primary: var(--text-primary-dark);
+  --text-title: var(--text-title-dark);
   --text-secondary: var(--text-secondary-dark);
   --text-tertiary: var(--text-tertiary-dark);
   --text-placeholder: var(--text-placeholder-dark);
   
   /* 全局文字颜色覆盖 */
   --color-text: var(--text-primary-dark);
+  --color-text-title: var(--text-title-dark);
   --color-text-secondary: var(--text-secondary-dark);
   --color-text-tertiary: var(--text-tertiary-dark);
   --color-text-placeholder: var(--text-placeholder-dark);
+  
+  /* 文件路径文字颜色 */
+  --color-file-path-hover: var(--color-file-path-hover-dark);
   
   /* 边框颜色 */
   --border-color: var(--border-color-dark);
@@ -270,30 +333,7 @@
     background: var(--bg-container-dark);
   }
 
-  /* 输入框深色主题 */
-  .el-input__wrapper {
-    background-color: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.15) !important;
-    box-shadow: none !important;
-  }
-
-  .el-input__wrapper:hover {
-    border-color: rgba(255, 255, 255, 0.25) !important;
-  }
-
-  .el-input__wrapper.is-focus {
-    border-color: #409eff !important;
-    box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2) !important;
-  }
-
-  .el-input__inner {
-    color: rgba(255, 255, 255, 0.9) !important;
-    background-color: transparent !important;
-  }
-
-  .el-input__inner::placeholder {
-    color: rgba(255, 255, 255, 0.5) !important;
-  }
+  /* Element Plus输入框组件使用内置深色主题，通过CSS变量控制 */
 
   .el-textarea__inner {
     background-color: rgba(255, 255, 255, 0.08) !important;
@@ -364,21 +404,65 @@
   }
 
   /* Element Plus Card组件深色主题 */
-  .el-card {
-    background-color: var(--bg-container-dark) !important;
+  // .el-card {
+  //   background-color: var(--bg-container-dark) !important;
+  //   border-color: var(--border-color-dark) !important;
+  // }
+
+  // .el-card__header {
+  //   background-color: var(--bg-container-dark) !important;
+  //   border-bottom-color: var(--border-color-dark) !important;
+  //   color: var(--color-text) !important;
+  // }
+
+  // .el-card__body {
+  //   background-color: var(--bg-container-dark) !important;
+  //   color: var(--color-text) !important;
+  // }
+
+  /* Git状态空状态深色主题 */
+  .empty-status {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    color: var(--color-text) !important;
+  }
+
+  .empty-icon {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+
+  .empty-text {
+    color: var(--color-text) !important;
+  }
+
+  .empty-subtext {
+    color: var(--color-text-secondary) !important;
+  }
+
+  /* Git状态框深色主题 */
+  .status-box {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--color-text) !important;
+  }
+
+  .status-box-wrap {
+    color: var(--color-text) !important;
+  }
+
+  /* 分支同步状态深色主题 */
+  .branch-sync-status {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--color-text) !important;
+  }
+
+  /* 锁定功能说明深色主题 */
+  .lock-feature-description {
+    background-color: rgba(255, 255, 255, 0.03) !important;
     border-color: var(--border-color-dark) !important;
-  }
-
-  .el-card__header {
-    background-color: var(--bg-container-dark) !important;
-    border-bottom-color: var(--border-color-dark) !important;
     color: var(--color-text) !important;
   }
 
-  .el-card__body {
-    background-color: var(--bg-container-dark) !important;
-    color: var(--color-text) !important;
-  }
+  /* 现在这些组件将使用CSS变量，无需样式覆盖 */
 
   /* Element Plus组件深色主题 */
   .el-input .el-input__wrapper {
@@ -519,57 +603,7 @@
     color: #f56c6c !important;
   }
 
-  /* 按钮深色主题 */
-  .el-button {
-    background-color: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.15) !important;
-    color: rgba(255, 255, 255, 0.9) !important;
-  }
-
-  .el-button:hover {
-    background-color: rgba(255, 255, 255, 0.12) !important;
-    border-color: rgba(255, 255, 255, 0.25) !important;
-  }
-
-  .el-button--primary {
-    background-color: #409eff !important;
-    border-color: #409eff !important;
-  }
-
-  .el-button--primary:hover {
-    background-color: #66b1ff !important;
-    border-color: #66b1ff !important;
-  }
-
-  .el-button--success {
-    background-color: #67c23a !important;
-    border-color: #67c23a !important;
-  }
-
-  .el-button--success:hover {
-    background-color: #85ce61 !important;
-    border-color: #85ce61 !important;
-  }
-
-  .el-button--warning {
-    background-color: #e6a23c !important;
-    border-color: #e6a23c !important;
-  }
-
-  .el-button--warning:hover {
-    background-color: #ebb563 !important;
-    border-color: #ebb563 !important;
-  }
-
-  .el-button--danger {
-    background-color: #f56c6c !important;
-    border-color: #f56c6c !important;
-  }
-
-  .el-button--danger:hover {
-    background-color: #f78989 !important;
-    border-color: #f78989 !important;
-  }
+  /* Element Plus按钮组件使用内置深色主题，通过CSS变量控制 */
 
   /* 特定组件深色主题 */
   
@@ -687,11 +721,7 @@
     border-color: rgba(64, 158, 255, 0.3) !important;
   }
 
-  /* 工具提示 */
-  .el-tooltip__popper {
-    background-color: rgba(0, 0, 0, 0.9) !important;
-    border-color: rgba(255, 255, 255, 0.2) !important;
-  }
+  /* Element Plus工具提示使用内置深色主题，无需自定义样式 */
 
   /* 下拉菜单 */
   .el-dropdown-menu {
@@ -707,29 +737,7 @@
     background-color: rgba(64, 158, 255, 0.2) !important;
   }
 
-  /* 表格 */
-  .el-table {
-    background-color: var(--bg-container-dark) !important;
-    color: rgba(255, 255, 255, 0.9) !important;
-  }
-
-  .el-table th {
-    background-color: rgba(255, 255, 255, 0.05) !important;
-    border-color: var(--border-color-dark) !important;
-    color: rgba(255, 255, 255, 0.9) !important;
-  }
-
-  .el-table td {
-    border-color: var(--border-color-dark) !important;
-  }
-
-  .el-table--striped .el-table__body tr.el-table__row--striped td {
-    background-color: rgba(255, 255, 255, 0.02) !important;
-  }
-
-  .el-table__body tr:hover > td {
-    background-color: rgba(64, 158, 255, 0.1) !important;
-  }
+  /* Element Plus表格组件使用内置深色主题，无需额外覆盖 */
 
   /* 分页器 */
   .el-pagination {

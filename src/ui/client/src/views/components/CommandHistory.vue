@@ -566,7 +566,7 @@ onUnmounted(() => {
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
   position: relative;
   overflow: hidden;
 }
@@ -813,7 +813,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  background: linear-gradient(135deg, #f8f9fa 0%, var(--border-component) 100%);
   border-bottom: 1px solid #dee2e6;
   border-radius: 8px 8px 0 0;
 }
@@ -895,13 +895,10 @@ onUnmounted(() => {
 }
 
 .item-header:hover {
-  background-color: #f0f2f5;
+  background-color: var(--bg-icon-hover);
 }
 
-/* 深色主题下的项目头部 */
-[data-theme="dark"] .item-header:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
+/* 深色主题通过CSS变量自动处理，无需手动覆盖 */
 
 .command-info {
   flex: 1;
@@ -1049,7 +1046,7 @@ onUnmounted(() => {
 }
 
 .output-content::-webkit-scrollbar-track {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
 }
 </style>
 

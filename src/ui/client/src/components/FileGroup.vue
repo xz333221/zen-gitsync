@@ -413,15 +413,15 @@ function getStatusLetter(fileType: string): string {
   white-space: nowrap;
   display: block;
   font-weight: var(--font-weight-normal);
-  background: var(--color-gray-100);
+  background: var(--bg-file-path);
   padding: 1px var(--spacing-sm);
   border-radius: var(--radius-sm);
   transition: var(--transition-all);
 }
 
 .file-item:hover .file-directory {
-  background: #e0e7ff;
-  color: #6366f1;
+  background: var(--bg-file-path-hover);
+  color: var(--color-file-path-hover);
 }
 
 .file-actions {

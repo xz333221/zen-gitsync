@@ -274,7 +274,7 @@ watch(() => props.files, (newFiles) => {
 .files-panel {
   width: 300px;
   min-width: 250px;
-  background: #fafbfc;
+  background: var(--bg-icon);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -366,7 +366,7 @@ watch(() => props.files, (newFiles) => {
   font-size: var(--font-size-xs);
   color: #606266;
   font-weight: var(--font-weight-medium);
-  background: #f5f7fa;
+  background: var(--bg-panel);
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-full);
   border: 1px solid #e4e7ed;
@@ -379,7 +379,7 @@ watch(() => props.files, (newFiles) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: #f0f2f5;
+  background: var(--bg-icon);
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-sm);
   border: 1px solid #d9d9d9;
@@ -429,7 +429,7 @@ watch(() => props.files, (newFiles) => {
   }
   
   &:hover {
-    background: #f5f7fa;
+    background: var(--bg-panel);
     transform: translateX(2px);
     
     &::before {

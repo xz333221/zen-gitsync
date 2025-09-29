@@ -1240,7 +1240,7 @@ git config --global user.email "your.email@example.com"</pre>
                     from="drawer"
                   />
                   
-                  <el-tooltip :content="needsPull ? `拉取${gitStore.branchBehind}个远程提交` : 'git pull'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
+                  <el-tooltip :content="needsPull ? `拉取${gitStore.branchBehind}个远程提交` : 'git pull'" placement="top">
                     <el-button 
                       type="primary"
                       :icon="Download"
@@ -1255,7 +1255,7 @@ git config --global user.email "your.email@example.com"</pre>
                     </el-button>
                   </el-tooltip>
                   
-                  <el-tooltip content="git fetch --all" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
+                  <el-tooltip content="git fetch --all" placement="top">
                     <el-button 
                       type="info"
                       :icon="Connection"
@@ -1276,7 +1276,7 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="action-group">
                 <div class="group-title">组合操作</div>
                 <div class="group-buttons">
-                  <el-tooltip content="git add + git commit" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
+                  <el-tooltip content="git add + git commit" placement="top">
                     <el-button 
                       type="primary"
                       :icon="Edit"
@@ -1306,7 +1306,7 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="action-group reset-group">
               <div class="group-title">重置操作</div>
               <div class="group-buttons">
-                <el-tooltip :content="canReset ? `撤销${stagedFilesCount}个已暂存文件` : 'git reset HEAD'" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
+                <el-tooltip :content="canReset ? `撤销${stagedFilesCount}个已暂存文件` : 'git reset HEAD'" placement="top">
                   <el-button 
                     type="warning"
                     :icon="RefreshRight"
@@ -1320,7 +1320,7 @@ git config --global user.email "your.email@example.com"</pre>
                   </el-button>
                 </el-tooltip>
 
-                <el-tooltip content="git reset --hard origin/branch" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
+                <el-tooltip content="git reset --hard origin/branch" placement="top">
                   <el-button 
                     type="danger"
                     :icon="Delete"
@@ -1340,7 +1340,7 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="group-title">分支操作</div>
               <div class="group-buttons">
                 <!-- 合并分支按钮 -->
-                <el-tooltip content="合并其他分支到当前分支" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
+                <el-tooltip content="合并其他分支到当前分支" placement="top">
                   <el-button 
                     type="primary"
                     :icon="Share"
@@ -1358,7 +1358,7 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="action-group">
                 <div class="group-title">储藏操作</div>
                 <div class="group-buttons">
-                  <el-tooltip content="将工作区更改储藏起来" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
+                  <el-tooltip content="将工作区更改储藏起来" placement="top">
                     <el-button 
                       type="warning" 
                       @click="openStashDialog" 
@@ -1370,7 +1370,7 @@ git config --global user.email "your.email@example.com"</pre>
                     </el-button>
                   </el-tooltip>
 
-                  <el-tooltip content="查看和管理所有储藏记录" placement="top" effect="light" popper-class="git-cmd-tooltip" :open-delay="200">
+                  <el-tooltip content="查看和管理所有储藏记录" placement="top">
                     <el-button 
                       type="info"
                       @click="openStashListDialog"
@@ -1976,9 +1976,6 @@ git config --global user.email "your.email@example.com"</pre>
 /* 头部按钮禁用状态样式优化 */
 .header-actions :deep(.el-button:disabled) {
   opacity: 0.4 !important;
-  background-color: #f5f7fa !important;
-  border-color: #e4e7ed !important;
-  color: #c0c4cc !important;
 }
 
 .header-actions :deep(.el-button--primary:disabled) {
@@ -2108,7 +2105,7 @@ git config --global user.email "your.email@example.com"</pre>
   padding: 8px;
   background-color: #f8f9fa;
   border-radius: 6px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
   flex-shrink: 0; /* 不被压缩 */
 }
 
@@ -2129,7 +2126,7 @@ git config --global user.email "your.email@example.com"</pre>
 .stash-id-value {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
   font-size: 12px;
-  background-color: #e9ecef;
+  background-color: var(--border-component);
   color: #495057;
   padding: 2px 6px;
   border-radius: 3px;
@@ -2426,7 +2423,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .template-item:hover {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   transform: translateY(-2px);
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
@@ -2458,7 +2455,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .option-card {
   background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
   border-radius: 8px;
   padding: 8px;
   transition: all 0.3s ease;
@@ -2600,9 +2597,6 @@ git config --global user.email "your.email@example.com"</pre>
 /* 按钮禁用状态样式优化 */
 .top-actions-container :deep(.el-button:disabled) {
   opacity: 0.4 !important;
-  background-color: #f5f7fa !important;
-  border-color: #e4e7ed !important;
-  color: #c0c4cc !important;
 }
 
 .top-actions-container :deep(.el-button--primary:disabled) {
@@ -3151,7 +3145,7 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
   justify-content: center;
   padding: 6px 0;
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -3286,7 +3280,7 @@ git config --global user.email "your.email@example.com"</pre>
   padding: 8px;
   background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
   border-radius: 8px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -3376,7 +3370,7 @@ git config --global user.email "your.email@example.com"</pre>
 .stash-card {
   background: var(--bg-container);
   border-radius: 8px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   transition: all 0.3s ease;
   overflow: hidden;
@@ -3434,7 +3428,7 @@ git config --global user.email "your.email@example.com"</pre>
 .stash-id-text {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
-  background: #f5f7fa;
+  background: var(--bg-panel);
   color: #606266;
   padding: 3px 8px;
   border-radius: 4px;
@@ -3613,7 +3607,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .separator-text {
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   padding: 0 10px;
   font-size: 12px;
   color: #909399;
@@ -3713,18 +3707,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 <!-- 添加全局样式 -->
 <style lang="scss">
-/* Git命令tooltip样式 */
-.git-cmd-tooltip {
-  font-family: 'Consolas', 'Courier New', monospace !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  color: #303133 !important;
-  background-color: #f5f7fa !important;
-  border: 1px solid #dcdfe6 !important;
-  border-radius: 4px !important;
-  padding: 8px 12px !important;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1) !important;
-}
+/* 移除自定义tooltip样式，使用Element Plus默认样式 */
 
 /* Stash详情弹窗样式 */
 .stash-detail-dialog .el-dialog__body {
@@ -3801,7 +3784,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .panel-header {
   padding: 12px 16px;
-  background-color: #f5f7fa;
+  background-color: var(--bg-panel);
   border-bottom: 1px solid #e4e7ed;
   display: flex;
   justify-content: space-between;
@@ -3912,7 +3895,7 @@ git config --global user.email "your.email@example.com"</pre>
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  background: linear-gradient(135deg, #f8f9fa 0%, var(--border-component) 100%);
   border-radius: 8px;
   border: 1px solid #dee2e6;
 }
@@ -3983,7 +3966,7 @@ git config --global user.email "your.email@example.com"</pre>
   padding: 12px 16px;
   background: #f8f9fa;
   border-radius: 8px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-component);
 }
 
 .footer-left {
