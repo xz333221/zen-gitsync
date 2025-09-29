@@ -1995,8 +1995,8 @@ function toggleFullscreen() {
 
 .filter-panel-header {
   background-color: #f5f7fa;
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: 8px;
+  margin-bottom: 8px;
   border-radius: 8px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;

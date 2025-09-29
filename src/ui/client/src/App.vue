@@ -1087,7 +1087,7 @@ body {
   /* 底部footer高度 */
   left: 0;
   right: 0;
-  padding: 12px;
+  padding: 8px;
   overflow: hidden;
   z-index: 1001;
   /* 防止整体滚动 */

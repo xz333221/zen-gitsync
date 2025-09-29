@@ -3451,47 +3451,51 @@ git config --global user.email "your.email@example.com"</pre>
   margin-left: 4px;
 }
 
-.stash-description {
-  flex: 1;
-  min-width: 0;
-}
-
-.description-text {
-  margin: 0;
-  font-size: 14px;
-  color: #303133;
-  line-height: 1.4;
-  word-break: break-word;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stash-card-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-  align-items: center;
-}
-
-.action-btn {
-  border-radius: 6px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  min-width: 60px;
-  padding: 6px 12px;
-  font-size: 12px;
-  
-  &:hover {
-    transform: translateY(-1px);
+  .stash-description {
+    flex: 1;
+    min-width: 0;
   }
-}
+
+ .description-text {
+   margin: 0;
+   font-size: 14px;
+   color: #303133;
+   line-height: 1.4;
+   word-break: break-word;
+   font-weight: 500;
+   overflow: hidden;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+ }
+
+ /* 储藏列表右侧按钮：默认隐藏，hover时显示 */
+ .stash-card-actions {
+   display: none;
+   gap: 6px;
+   flex-shrink: 0;
+   align-items: center;
+ }
+
+ .stash-card:hover .stash-card-actions {
+   display: flex;
+ }
+
+ .action-btn {
+   border-radius: 6px;
+   font-weight: 500;
+   transition: all 0.3s ease;
+   min-width: 60px;
+   padding: 6px 12px;
+   font-size: 12px;
+   
+   &:hover {
+     transform: translateY(-1px);
+   }
+ }
 
 .view-btn:hover {
   box-shadow: 0 4px 12px rgba(144, 147, 153, 0.3);
 }
-
 .apply-btn:hover {
   box-shadow: 0 4px 12px rgba(103, 194, 58, 0.3);
 }
