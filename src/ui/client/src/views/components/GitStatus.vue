@@ -1004,7 +1004,7 @@ defineExpose({
 .empty-text {
   font-size: 18px;
   font-weight: 500;
-  color: #606266;
+  color: var(--text-secondary);
   margin-bottom: 8px;
 }
 

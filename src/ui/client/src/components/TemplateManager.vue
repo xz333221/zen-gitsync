@@ -374,7 +374,7 @@ defineExpose({
 .template-content {
   flex: 1;
   font-size: 14px;
-  color: #606266;
+  color: var(--text-secondary);
   word-break: break-all;
   margin-right: 12px;
 }
@@ -432,7 +432,7 @@ defineExpose({
 
 .default-message-content {
   font-size: 14px;
-  color: #606266;
+  color: var(--text-secondary);
   word-break: break-all;
 }
 
@@ -451,7 +451,7 @@ defineExpose({
 .message-help-text p {
   margin: 0 0 8px 0;
   font-size: 13px;
-  color: #606266;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 

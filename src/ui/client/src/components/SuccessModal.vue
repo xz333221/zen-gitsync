@@ -103,7 +103,7 @@ withDefaults(defineProps<Props>(), {
 
 .success-description {
   font-size: 16px;
-  color: #606266;
+  color: var(--text-secondary);
   margin: 0;
   line-height: 1.5;
 }

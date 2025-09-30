@@ -364,7 +364,7 @@ watch(() => props.files, (newFiles) => {
 
 .file-count {
   font-size: var(--font-size-xs);
-  color: #606266;
+  color: var(--text-secondary);
   font-weight: var(--font-weight-medium);
   background: var(--bg-panel);
   padding: var(--spacing-xs) var(--spacing-sm);
@@ -374,7 +374,7 @@ watch(() => props.files, (newFiles) => {
 
 .selected-file {
   font-size: var(--font-size-sm);
-  color: #606266;
+  color: var(--text-secondary);
   max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;

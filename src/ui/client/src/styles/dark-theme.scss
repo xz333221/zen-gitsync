@@ -26,6 +26,38 @@
   --el-fill-color-blank: var(--bg-container-dark);
   --el-fill-color-dark: rgba(255, 255, 255, 0.12);
   
+  /* 遮罩/Loading 相关变量（修复 el-loading 在深色模式下为白色的问题） */
+  --el-mask-color: rgba(0, 0, 0, 0.6);
+  --el-overlay-color: rgba(0, 0, 0, 0.7);
+  --el-overlay-color-light: rgba(0, 0, 0, 0.55);
+  --el-overlay-color-lighter: rgba(0, 0, 0, 0.4);
+
+  /* 输入/文本域（Input/Textarea）变量映射到项目色板 */
+  --el-input-bg-color: var(--bg-input-dark);
+  --el-input-text-color: var(--color-text);
+  --el-input-border-color: var(--border-input-dark);
+  --el-input-hover-border-color: var(--border-input-hover-dark);
+  --el-input-focus-border-color: #409eff;
+  --el-input-placeholder-color: var(--text-placeholder-dark);
+  --el-input-icon-color: var(--text-tertiary-dark);
+  /* 可选：单独控制 Textarea 背景 */
+  --el-textarea-bg-color: var(--bg-input-dark);
+
+  /* 禁用态 */
+  --el-disabled-bg-color: rgba(255, 255, 255, 0.06);
+  --el-disabled-text-color: rgba(255, 255, 255, 0.4);
+  --el-disabled-border-color: rgba(255, 255, 255, 0.08);
+
+  /* Select/Dropdown 相关 */
+  --el-select-bg-color: var(--bg-container-dark);
+  --el-select-text-color: var(--text-primary-dark);
+  --el-select-border-color: var(--border-input-dark);
+  --el-select-hover-border-color: var(--border-input-hover-dark);
+  --el-select-option-hover-background: rgba(64, 158, 255, 0.2);
+  --el-select-option-selected-font-color: #409eff;
+  /* Popper/Overlay 背景（与弹层保持一致） */
+  --el-bg-color-overlay: var(--bg-container-dark);
+  
   /* 表格相关变量 */
   --el-table-bg-color: var(--bg-container-dark);
   --el-table-tr-bg-color: var(--bg-container-dark);
@@ -722,6 +754,14 @@
     background-color: rgba(0, 0, 0, 0.7) !important;
   }
 
+  /* Loading 蒙层与文本在深色主题下的适配 */
+  .el-loading-mask {
+    background-color: var(--el-mask-color) !important;
+  }
+  .el-loading-spinner .el-loading-text {
+    color: var(--color-text) !important;
+  }
+
   /* 消息提示深色主题 */
   .el-message {
     background-color: var(--bg-container-dark) !important;
@@ -772,6 +812,30 @@
   /* Element Plus按钮组件使用内置深色主题，通过CSS变量控制 */
 
   /* 特定组件深色主题 */
+  
+  /* 全局：在元素级别覆盖 EP 对 .el-input/.el-textarea 设置的变量，防止文本颜色回退为 regular */
+  .el-input,
+  .el-textarea {
+    --el-input-text-color: var(--color-text);
+    --el-input-bg-color: var(--bg-input);
+    --el-input-border-color: var(--border-input);
+    --el-input-hover-border-color: var(--border-input-hover);
+    --el-input-focus-border-color: #409eff;
+    --el-input-placeholder-color: var(--color-text-placeholder);
+    --el-input-icon-color: var(--color-text-tertiary);
+  }
+  /* 对 Select 输入框同步文本色，避免个别场景文字仍偏灰 */
+  .el-select .el-input {
+    --el-input-text-color: var(--color-text);
+  }
+
+  /* 兜底：仅对“绿色(scope)”与“蓝色(description)”两类输入，强制内层输入文字颜色，避免被 .el-input 默认变量覆盖 */
+  .scope-input .el-input__inner,
+  .description-input .el-input__inner,
+  .scope-input .el-autocomplete .el-input__inner,
+  .description-input .el-autocomplete .el-input__inner {
+    color: var(--el-input-text-color, var(--color-text)) !important;
+  }
   
   /* Git状态文件列表 */
   .file-item,

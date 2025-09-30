@@ -266,7 +266,7 @@ function getStatusLetter(fileType: string): string {
 .collapse-icon {
   transition: var(--transition-transform);
   font-size: var(--font-size-sm);
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .collapse-icon.collapsed {

@@ -2118,7 +2118,7 @@ git config --global user.email "your.email@example.com"</pre>
 .info-label {
   font-size: 13px;
   font-weight: 500;
-  color: #606266;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -3118,7 +3118,7 @@ git config --global user.email "your.email@example.com"</pre>
   border-radius: 4px;
   padding: 8px;
   font-size: 14px;
-  color: #606266;
+  color: var(--text-secondary);
   margin-top: auto;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
@@ -3188,7 +3188,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .merge-intro {
   margin-bottom: 8px;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .merge-options {
@@ -3334,7 +3334,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .empty-text {
   font-size: 16px;
-  color: #606266;
+  color: var(--text-secondary);
   margin: 0 0 8px 0;
   font-weight: 500;
 }
@@ -3414,7 +3414,7 @@ git config --global user.email "your.email@example.com"</pre>
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
   background: var(--bg-panel);
-  color: #606266;
+  color: var(--text-secondary);
   padding: 3px 8px;
   border-radius: 4px;
   font-weight: 500;
@@ -3484,7 +3484,7 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .stash-dialog-content p {
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 /* 重置操作组样式 */
@@ -3732,7 +3732,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .stash-description {
   margin: 0;
-  color: #606266;
+  color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -4002,7 +4002,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin: 0;
   font-size: 14px;
   line-height: 1.6;
-  color: #606266;
+  color: var(--text-secondary);
   white-space: pre-line;
 }
 

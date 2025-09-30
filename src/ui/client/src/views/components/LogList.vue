@@ -1650,7 +1650,7 @@ function toggleFullscreen() {
 }
 
 .refresh-button:hover {
-  background: linear-gradient(135deg, #606266 0%, #909399 100%);
+  background: linear-gradient(135deg, var(--text-secondary) 0%, #909399 100%);
 }
 
 /* 图标按钮专用的更小尺寸 */
@@ -1750,7 +1750,7 @@ function toggleFullscreen() {
 .commit-count {
   margin-bottom: 12px;
   font-size: 14px;
-  color: #606266;
+  color: var(--text-secondary);
   text-align: right;
 }
 
@@ -1801,7 +1801,7 @@ function toggleFullscreen() {
 
 .scale-info {
   font-size: 14px;
-  color: #606266;
+  color: var(--text-secondary);
   padding: 4px 10px;
   border-radius: 4px;
   border: 1px solid var(--border-card);
@@ -1909,7 +1909,7 @@ function toggleFullscreen() {
 
 .item-label {
   font-weight: bold;
-  color: #606266;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -1926,7 +1926,7 @@ function toggleFullscreen() {
 
 .message-label {
   font-weight: bold;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 /* 提交详情弹窗样式 */
@@ -2201,7 +2201,7 @@ function toggleFullscreen() {
   display: flex;
   align-items: center;
   transition: all 0.2s ease;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .context-menu-item:hover {
@@ -2317,7 +2317,7 @@ function toggleFullscreen() {
 }
 
 .fullscreen-button.active-fullscreen {
-  background: linear-gradient(135deg, #606266 0%, #909399 100%);
+  background: linear-gradient(135deg, var(--text-secondary) 0%, #909399 100%);
 }
 
 /* 右键菜单样式 */

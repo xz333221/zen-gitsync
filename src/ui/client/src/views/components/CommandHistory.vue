@@ -846,7 +846,7 @@ onUnmounted(() => {
 
 .loading-text {
   font-size: 14px;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .history-list {
@@ -995,7 +995,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 14px;
   font-weight: 500;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 /* 深色主题下的输出头部 */

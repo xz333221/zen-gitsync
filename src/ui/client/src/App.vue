@@ -1731,7 +1731,7 @@ h1 {
 
 :deep(.modern-input .el-input__inner) {
   font-size: 14px;
-  color: var(--color-text-title);
+  color: var(--text-title);
   font-weight: 400;
 }
 
@@ -2185,7 +2185,7 @@ h1 {
 }
 
 :deep(.directory-browser-dialog .el-message-box__headerbtn .el-message-box__close) {
-  color: #606266;
+  color: var(--text-secondary);
   font-weight: bold;
   font-size: 16px;
 }
@@ -2243,7 +2243,7 @@ h1 {
 }
 
 .directory-browser-dialog .el-message-box__headerbtn .el-message-box__close {
-  color: #606266;
+  color: var(--text-secondary);
   font-weight: bold;
   font-size: 16px;
 }
