@@ -1993,7 +1993,6 @@ function toggleFullscreen() {
 
 .filter-form {
   display: flex;
-  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
   justify-content: space-between;
@@ -2001,7 +2000,6 @@ function toggleFullscreen() {
 
 .filter-item {
   flex: 1;
-  min-width: 200px;
 }
 
 .filter-actions {
