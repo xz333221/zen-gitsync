@@ -766,22 +766,24 @@
   .el-message {
     background-color: var(--bg-container-dark) !important;
     border-color: var(--border-color-dark) !important;
-    color: rgba(255, 255, 255, 0.9) !important;
+    color: rgba(255, 255, 255, 0.95) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important; /* 提升对比度 */
   }
 
   .el-message.el-message--success {
-    background-color: rgba(103, 194, 58, 0.1) !important;
-    border-color: rgba(103, 194, 58, 0.3) !important;
+    /* 纯色深色背景（无透明） */
+    background-color: #1f2d1a !important; /* 深绿底 */
+    border-color: #3a5f2a !important;     /* 稍亮边框 */
   }
 
   .el-message.el-message--warning {
-    background-color: rgba(230, 162, 60, 0.1) !important;
-    border-color: rgba(230, 162, 60, 0.3) !important;
+    background-color: #2d2614 !important; /* 深棕底 */
+    border-color: #6b5626 !important;     /* 稍亮边框 */
   }
 
   .el-message.el-message--error {
-    background-color: rgba(245, 108, 108, 0.1) !important;
-    border-color: rgba(245, 108, 108, 0.3) !important;
+    background-color: #2d1a1a !important; /* 深红底 */
+    border-color: #7a2e2e !important;     /* 稍亮边框 */
   }
 
   /* 标签深色主题 */

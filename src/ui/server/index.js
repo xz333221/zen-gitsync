@@ -60,8 +60,9 @@ async function startUIServer(noOpen = false, savePort = false) {
   const io = new Server(httpServer);
   
   // 获取当前项目的唯一标识（使用工作目录路径）
-  const currentProjectPath = process.cwd();
-  const projectRoomId = `project:${currentProjectPath.replace(/[\\/:\s]/g, '_')}`;
+  // 需要在切换目录时更新，故使用 let
+  let currentProjectPath = process.cwd();
+  let projectRoomId = `project:${currentProjectPath.replace(/[\\/:\s]/g, '_')}`;
   
   console.log(chalk.blue(`项目房间ID: ${projectRoomId}`));
   console.log(chalk.blue(`项目路径: ${currentProjectPath}`));
