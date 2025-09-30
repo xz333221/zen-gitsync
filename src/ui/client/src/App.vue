@@ -1099,7 +1099,7 @@ async function selectDirectory(dirPath: string) {
               @click="newDirectoryPath = dir"
             >
               <el-icon class="dir-icon"><Folder /></el-icon>
-              <span class="dir-path">{{ dir }}</span>
+              <span class="dir-path" :title="dir">{{ dir }}</span>
             </div>
           </div>
         </el-form-item>
@@ -1715,7 +1715,6 @@ h1 {
   border: 1px solid var(--border-input);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
-  padding: 10px 12px;
   background: var(--bg-container);
 }
 
@@ -1924,17 +1923,18 @@ h1 {
 }
 
 .recent-directories {
-  display: flex;
-  flex-direction: column;
+  /* 改为两列栅格，提高可用宽度，减少路径被截断 */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
 .recent-dir-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* 文本可换行时顶部对齐 */
   gap: 8px;
   padding: 10px 12px;
   background: var(--bg-input);
@@ -1961,9 +1961,10 @@ h1 {
   color: var(--color-text-title);
   font-family: 'Courier New', monospace;
   word-break: break-all;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 目录选择对话框内允许换行显示，减少信息丢失 */
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
   flex: 1;
   min-width: 0;
 }

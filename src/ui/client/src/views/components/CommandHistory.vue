@@ -717,6 +717,21 @@ onUnmounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+/* 深色主题下：工具栏主按钮（命令 / 全部）配色 */
+[data-theme="dark"] .dialog-toolbar .enhanced-btn {
+  background: var(--bg-container);
+  color: var(--text-primary);
+  border-color: var(--border-component);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .dialog-toolbar .enhanced-btn:hover {
+  background: var(--bg-container-hover);
+  color: #ffffff;
+  border-color: var(--border-component-light);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
 .dialog-toolbar .danger-btn {
   background: rgba(245, 108, 108, 0.08);
   color: #f56c6c;
@@ -728,6 +743,20 @@ onUnmounted(() => {
   color: #f56c6c;
   border-color: rgba(245, 108, 108, 0.25);
   box-shadow: 0 4px 12px rgba(245, 108, 108, 0.15);
+}
+
+/* 深色主题下：危险按钮配色与可读性 */
+[data-theme="dark"] .dialog-toolbar .danger-btn {
+  background: #2d1a1a; /* 深红底（无透明） */
+  color: #f56c6c;
+  border-color: #7a2e2e;
+}
+
+[data-theme="dark"] .dialog-toolbar .danger-btn:hover {
+  background: #3a2020;
+  color: #ff8f8f;
+  border-color: #a33c3c;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
 
 /* 小按钮尺寸 */

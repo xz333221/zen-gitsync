@@ -1530,7 +1530,7 @@ function toggleFullscreen() {
     </div>
   </div>
 </template>
-<style scoped>
+<style scoped lang="scss">
 .card {
   background-color: var(--bg-container);
   border-radius: 8px;
@@ -2079,6 +2079,10 @@ function toggleFullscreen() {
   line-height: var(--line-height-tight);
 }
 
+:deep(.el-table__cell) {
+  color: var(--text-primary);
+}
+
 .copy-message-btn {
   opacity: 0;
   transition: opacity 0.2s ease;
@@ -2242,15 +2246,6 @@ function toggleFullscreen() {
 :deep(.el-table__inner-wrapper::after),
 :deep(.el-table__inner-wrapper::before) {
   display: none !important;
-}
-
-/* 表格背景设置 */
-:deep(.el-table tr) {
-  background-color: transparent !important;
-}
-
-:deep(.el-table--striped .el-table__body tr.el-table__row--striped td) {
-  background-color: rgba(0, 0, 0, 0.02) !important;
 }
 
 /* 添加全屏模式样式 */
