@@ -1914,7 +1914,6 @@ function toggleFullscreen() {
 }
 
 .item-value {
-  color: #333;
   word-break: break-all;
 }
 

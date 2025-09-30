@@ -62,6 +62,13 @@
   --el-table-bg-color: var(--bg-container-dark);
   --el-table-tr-bg-color: var(--bg-container-dark);
   --el-table-header-bg-color: rgba(255, 255, 255, 0.05);
+  /* 适配表格文字/边框/悬浮等颜色 */
+  --el-table-text-color: var(--text-primary-dark);
+  --el-table-header-text-color: var(--text-secondary-dark);
+  --el-table-border-color: var(--border-color-dark);
+  --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.06);
+  --el-table-current-row-bg-color: rgba(64, 158, 255, 0.12);
+  --el-table-header-border-color: var(--border-color-light);
 
   /* 页面背景 */
   --bg-page: var(--bg-page-dark);
