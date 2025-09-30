@@ -473,10 +473,6 @@ defineExpose({
   background-color: var(--bg-panel);
 }
 
-/* 表单区更紧凑、卡片化背景 */
-.template-form {
-  padding: 10px;
-}
 
 .template-input {
   height: 36px;

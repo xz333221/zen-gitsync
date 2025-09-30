@@ -599,7 +599,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="git-status-card flex flex-col">
+  <div class="card git-status-card flex flex-col">
     <div class="status-header">
         <h2>Git 状态</h2>
         <div class="header-actions">
@@ -878,33 +878,6 @@ defineExpose({
 </template>
 
 <style scoped>
-.card {
-  background-color: var(--bg-container);
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.03);
-  height: 100%;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  transition: all 0.3s ease;
-  position: relative;
-}
-
-.status-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px;
-  border-bottom: 1px solid var(--border-card);
-}
-
-.status-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-  
-}
 
 .header-actions {
   display: flex;
@@ -1255,21 +1228,6 @@ defineExpose({
   border: 1px solid #ffd591;
   border-radius: 6px;
   transition: all 0.2s ease;
-}
-
-/* Git状态卡片容器 */
-.git-status-card {
-  background: var(--bg-container);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-base);
-  overflow: hidden;
-  transition: var(--transition-all);
-  height: 100%;
-  
-  &:hover {
-    box-shadow: var(--shadow-md);
-  }
 }
 
 </style>

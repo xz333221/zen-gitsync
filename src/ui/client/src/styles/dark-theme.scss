@@ -687,12 +687,6 @@
     box-shadow: var(--shadow-dark-lg) !important;
   }
 
-  .template-dialog.el-dialog .el-dialog__header,
-  .message-template-dialog.el-dialog .el-dialog__header {
-    background: rgba(255, 255, 255, 0.02) !important;
-    border-bottom: 1px solid var(--border-color-dark) !important;
-  }
-
   .template-dialog.el-dialog .el-dialog__title,
   .message-template-dialog.el-dialog .el-dialog__title {
     color: var(--color-text) !important;

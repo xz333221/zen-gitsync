@@ -1098,18 +1098,6 @@ function toggleFullscreen() {
     <div class="log-header">
       <div class="header-left">
         <h2>提交历史</h2>
-        <!-- <el-tag type="info" effect="plain" size="small" class="record-count" v-if="!showGraphView">
-          <template #icon>
-            <el-icon><Document /></el-icon>
-          </template>
-          {{ filteredLogs.length }}/{{ logs.length }}
-          <el-tag v-if="!showAllCommits" type="warning" size="small" effect="plain" style="margin-left: 5px">
-            分页加载 (每页20条)
-          </el-tag>
-          <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 5px">
-            全部
-          </el-tag>
-        </el-tag> -->
       </div>
 
       <div class="log-actions">
@@ -1531,30 +1519,6 @@ function toggleFullscreen() {
   </div>
 </template>
 <style scoped lang="scss">
-.card {
-  background-color: var(--bg-container);
-  border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  position: relative;
-}
-
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-card);
-  position: sticky;
-  top: 0;
-  background-color: var(--bg-container);
-  z-index: 100;
-}
-
 .fullscreen-mode .log-header {
   margin-bottom: 10px;
   /* AI start Copilot */
@@ -1566,13 +1530,6 @@ function toggleFullscreen() {
   display: flex;
   align-items: center;
   gap: 16px;
-}
-
-.header-left h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  
 }
 
 .log-actions {

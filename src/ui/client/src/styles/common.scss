@@ -210,7 +210,6 @@
    公共布局组件样式 - Header、Footer、Card
    ======================================================= */
 
-/* Header 样式 */
 .app-header {
   background: var(--color-white);
   color: var(--text-primary);
@@ -247,6 +246,44 @@
 
 .app-card:hover {
   box-shadow: var(--shadow-md);
+}
+
+/* 统一的卡片基础样式（供各组件直接使用 class="card"） */
+.card {
+  background-color: var(--bg-container);
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: var(--transition-all, all 0.3s ease);
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* 统一 Card Header 样式，适配不同组件的 header 类名 */
+.card .log-header,
+.card .status-header,
+.card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-card);
+  background-color: var(--bg-container);
+}
+
+.card .log-header h2,
+.card .status-header h2,
+.card .card-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 /* Card Header */

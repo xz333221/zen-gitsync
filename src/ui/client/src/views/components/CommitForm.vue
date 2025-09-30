@@ -1853,66 +1853,6 @@ git config --global user.email "your.email@example.com"</pre>
 </template>
 
 <style scoped lang="scss">
-  /* 添加动画相关的CSS */
-  @keyframes snakeBorder {
-    0%, 100% {
-      border-top: 2px solid #409EFF;
-      border-right: 2px solid transparent;
-      border-bottom: 2px solid transparent;
-      border-left: 2px solid transparent;
-    }
-    25% {
-      border-top: 2px solid #409EFF;
-      border-right: 2px solid #67C23A;
-      border-bottom: 2px solid transparent;
-      border-left: 2px solid transparent;
-    }
-    50% {
-      border-top: 2px solid transparent;
-      border-right: 2px solid #67C23A;
-      border-bottom: 2px solid #409EFF;
-      border-left: 2px solid transparent;
-    }
-    75% {
-      border-top: 2px solid transparent;
-      border-right: 2px solid transparent;
-      border-bottom: 2px solid #409EFF;
-      border-left: 2px solid #67C23A;
-    }
-  }
-
-@keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(64, 158, 255, 0.4); }
-  50% { box-shadow: 0 0 12px rgba(103, 194, 58, 0.5); }
-}
-
-.card {
-  background-color: var(--bg-container);
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.03);
-  height: 100%;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.card-header {
-  padding: 8px;
-  border-bottom: 1px solid var(--border-card);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.card-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-  
-}
-
 .header-actions {
   display: flex;
   align-items: center;
@@ -2372,75 +2312,74 @@ git config --global user.email "your.email@example.com"</pre>
 
 
 
-.template-container {
-  display: flex;
-  flex-direction: column;
-  height: calc(85vh - 100px);
-  overflow-y: auto;
-  padding: 5px;
-}
+// .template-container {
+//   display: flex;
+//   flex-direction: column;
+//   height: calc(85vh - 100px);
+//   overflow-y: auto;
+//   padding: 5px;
+// }
 
-.template-form {
-  margin-bottom: 8px;
-  padding: 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border-card);
-}
+// .template-form {
+//   margin-bottom: 8px;
+//   padding: 8px;
+//   border-radius: 6px;
+//   border: 1px solid var(--border-card);
+// }
 
-.template-form-buttons {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  justify-content: flex-end;
-}
+// .template-form-buttons {
+//   display: flex;
+//   gap: 8px;
+//   margin-top: 8px;
+//   justify-content: flex-end;
+// }
 
-.template-input {
-  flex-grow: 1;
-}
+// .template-input {
+//   flex-grow: 1;
+// }
 
-.template-list {
-  overflow-y: auto;
-  height: 100%;
-}
+// .template-list {
+//   overflow-y: auto;
+//   height: 100%;
+// }
 
-.template-list h3 {
-  margin-top: 0;
-  margin-bottom: 8px;
-  font-size: 16px;
-  font-weight: 500;
+// .template-list h3 {
+//   margin-top: 0;
+//   margin-bottom: 8px;
+//   font-size: 16px;
+//   font-weight: 500;
+//   padding-bottom: 8px;
+//   border-bottom: 1px solid var(--border-card);
+// }
+
+// .template-item {
+//   margin-bottom: 8px;
+//   transition: all 0.2s ease;
+//   border: 1px solid var(--border-card);
+// }
+
+// .template-item:hover {
+//   background-color: var(--bg-panel);
+//   transform: translateY(-2px);
+//   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+// }
+
+// .template-content {
+//   flex-grow: 1;
+//   margin-right: 8px;
+//   word-break: break-all;
+//   padding: 5px 0;
   
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-card);
-}
+//   font-weight: 500;
+// }
 
-.template-item {
-  margin-bottom: 8px;
-  transition: all 0.2s ease;
-  border: 1px solid var(--border-card);
-}
-
-.template-item:hover {
-  background-color: var(--bg-panel);
-  transform: translateY(-2px);
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-.template-content {
-  flex-grow: 1;
-  margin-right: 8px;
-  word-break: break-all;
-  padding: 5px 0;
-  
-  font-weight: 500;
-}
-
-.template-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  min-width: 180px;
-  flex-shrink: 0;
-}
+// .template-actions {
+//   display: flex;
+//   gap: 8px;
+//   justify-content: flex-end;
+//   min-width: 180px;
+//   flex-shrink: 0;
+// }
 
 /* 提交选项卡片样式 */
 .commit-options {
@@ -3032,108 +2971,108 @@ git config --global user.email "your.email@example.com"</pre>
   }
 }
 
-.message-template-container {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 278px);
-  overflow: hidden;
-}
+// .message-template-container {
+//   display: flex;
+//   flex-direction: column;
+//   height: calc(100vh - 278px);
+//   overflow: hidden;
+// }
 
-.templates-container {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  flex: 1;
-  overflow: hidden;
-}
+// .templates-container {
+//   display: flex;
+//   gap: 8px;
+//   margin-top: 8px;
+//   flex: 1;
+//   overflow: hidden;
+// }
 
-.message-templates-list {
-  flex: 3;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--border-card);
-  padding-right: 8px;
-  height: calc(100vh - 432px);
-}
+// .message-templates-list {
+//   flex: 3;
+//   display: flex;
+//   flex-direction: column;
+//   border-right: 1px solid var(--border-card);
+//   padding-right: 8px;
+//   height: calc(100vh - 432px);
+// }
 
-.message-templates-list h3 {
-  margin-top: 0;
-  margin-bottom: 8px;
-  font-size: 16px;
-  font-weight: 500;
+// .message-templates-list h3 {
+//   margin-top: 0;
+//   margin-bottom: 8px;
+//   font-size: 16px;
+//   font-weight: 500;
   
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-card);
-}
+//   padding-bottom: 8px;
+//   border-bottom: 1px solid var(--border-card);
+// }
 
-.current-default-message {
-  flex: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-left: 8px;
-}
+// .current-default-message {
+//   flex: 2;
+//   display: flex;
+//   flex-direction: column;
+//   gap: 8px;
+//   padding-left: 8px;
+// }
 
-.current-default-message h3 {
-  margin-top: 0;
-  margin-bottom: 8px;
-  font-size: 16px;
-  font-weight: 500;
+// .current-default-message h3 {
+//   margin-top: 0;
+//   margin-bottom: 8px;
+//   font-size: 16px;
+//   font-weight: 500;
   
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-card);
-}
+//   padding-bottom: 8px;
+//   border-bottom: 1px solid var(--border-card);
+// }
 
-.templates-scroll-area {
-  overflow-y: auto;
-  padding-right: 5px;
-  flex: 1;
-}
+// .templates-scroll-area {
+//   overflow-y: auto;
+//   padding-right: 5px;
+//   flex: 1;
+// }
 
-.default-message-card {
-  margin-bottom: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  border-radius: 4px;
-  transition: all 0.3s ease;
-}
+// .default-message-card {
+//   margin-bottom: 8px;
+//   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+//   border-radius: 4px;
+//   transition: all 0.3s ease;
+// }
 
-.default-message-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-}
+// .default-message-card:hover {
+//   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+// }
 
-.default-message-content {
-  padding: 8px;
-  background-color: #f0f9eb;
-  border-left: 3px solid #67c23a;
-  font-weight: 500;
-  word-break: break-all;
-  min-height: 60px;
-  display: flex;
-  align-items: center;
-  border-radius: 0 4px 4px 0;
+// .default-message-content {
+//   padding: 8px;
+//   background-color: #f0f9eb;
+//   border-left: 3px solid #67c23a;
+//   font-weight: 500;
+//   word-break: break-all;
+//   min-height: 60px;
+//   display: flex;
+//   align-items: center;
+//   border-radius: 0 4px 4px 0;
   
-}
+// }
 
-.message-help-text {
-  border-radius: 4px;
-  padding: 8px;
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-top: auto;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
+// .message-help-text {
+//   border-radius: 4px;
+//   padding: 8px;
+//   font-size: 14px;
+//   color: var(--text-secondary);
+//   margin-top: auto;
+//   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+// }
 
-.message-help-text h4 {
-  margin-top: 0;
-  margin-bottom: 8px;
+// .message-help-text h4 {
+//   margin-top: 0;
+//   margin-bottom: 8px;
   
-  font-size: 15px;
-}
+//   font-size: 15px;
+// }
 
-.message-help-text p {
-  margin: 8px 0;
-  line-height: 1.5;
-}
+// .message-help-text p {
+//   margin: 8px 0;
+//   line-height: 1.5;
+// }
 
 .advanced-options-toggle {
   display: flex;
@@ -3818,13 +3757,6 @@ git config --global user.email "your.email@example.com"</pre>
   overflow-wrap: break-word;
 }
 
-/* Git diff 样式已提取到全局样式：src/ui/client/src/styles/common.css */
-
-.template-dialog .el-dialog__body,
-.message-template-dialog .el-dialog__body,
-.merge-dialog .el-dialog__body {
-  padding: 20px;
-}
 
 
 
@@ -3877,10 +3809,7 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #f8f9fa 0%, var(--border-component) 100%);
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
+  padding: 4px 8px;
 }
 
 .editor-info {
