@@ -1153,14 +1153,14 @@ body {
 
 .grid-layout {
   display: grid;
-  grid-template-columns: 2fr 4px 3fr;
-  /* 左右区域比例为2:3, 分隔线从8px减少到4px */
-  grid-template-rows: 1fr 4px 1fr;
+  grid-template-columns: 2fr 8px 3fr; /* 左列 Git 状态 | 垂直分隔 | 右列 */
+  grid-template-rows: 1fr 8px 1fr;     /* 右列上下分区 | 水平分隔 | 右列上下分区 */
+  /* 左侧 Git 状态占满两行，右侧上方提交表单，下方提交历史，水平分隔条仅在右侧 */
   grid-template-areas:
     "git-status v-resizer commit-form"
-    "h-resizer h-resizer h-resizer"
-    "log-list log-list log-list";
-  gap: 6px; /* 从10px减少到6px */
+    "git-status v-resizer h-resizer"
+    "git-status v-resizer log-list";
+  gap: 6px; /* 面板间距 */
   height: 100%;
 }
 
