@@ -374,8 +374,6 @@ onUnmounted(() => {
   <CommonDialog
     v-model="dialogVisible"
     title="Git 命令历史"
-    :width="'80%'"
-    :top="'5vh'"
     destroy-on-close
     custom-class="command-history-dialog"
     :append-to-body="true"
@@ -558,7 +556,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border: none;
-  color: #495057;
+  color: var(--color-text);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -842,7 +840,7 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 12px;
   background: linear-gradient(135deg, #f8f9fa 0%, var(--border-component) 100%);
-  border-bottom: 1px solid #dee2e6;
+  border-bottom: 1px solid var(--border-component);
   border-radius: 8px 8px 0 0;
 }
 

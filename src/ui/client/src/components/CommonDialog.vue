@@ -44,7 +44,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   size: 'medium',
   type: 'default',
-  top: '80px',
+  top: '50px',
+  width: '80%',
   closeOnClickModal: false,
   closeOnPressEscape: true,
   destroyOnClose: false,
@@ -52,7 +53,7 @@ const props = withDefaults(defineProps<Props>(), {
   appendToBody: false,
   lockScroll: true,
   heightMode: 'max',
-  heightOffset: '160px',
+  heightOffset: '100px',
   showFooter: false,
   confirmText: '确定',
   cancelText: '取消',
@@ -187,36 +188,6 @@ function handleClosed() {
   </el-dialog>
 </template>
 
-<style lang="scss">
-// 添加全局样式支持
-.file-diff-dialog.common-dialog--flex .el-dialog__body {
-  height: calc(100vh - 200px) !important;
-  padding: 12px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  /* 仅纵向滚动 */
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
-}
-
-.stash-detail-dialog.common-dialog--flex .el-dialog__body {
-  height: calc(100vh - 200px) !important;
-  padding: 12px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
-}
-
-.commit-detail-dialog.common-dialog--flex .el-dialog__body {
-  height: calc(100vh - 200px) !important;
-  padding: 12px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
-}
-</style>
 
 <style scoped lang="scss">
 // flex布局弹窗
@@ -268,33 +239,6 @@ function handleClosed() {
     box-sizing: border-box;
     min-height: 0; /* 关键：允许flex子元素缩小 */
   }
-}
-
-/* 为自定义类名提供更高的优先级 */
-:deep(.commit-detail-dialog.common-dialog--flex .el-dialog__body) {
-  height: calc(100vh - 200px) !important;
-  padding: 12px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-}
-
-/* 文件差异弹窗样式 - 提高优先级 */
-:deep(.file-diff-dialog.common-dialog--flex .el-dialog__body) {
-  height: calc(100vh - 200px) !important;
-  padding: 12px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-}
-
-/* 储藏详情弹窗样式 - 提高优先级 */
-:deep(.stash-detail-dialog.common-dialog--flex .el-dialog__body) {
-  height: calc(100vh - 200px) !important;
-  padding: 12px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
 }
 
 // 通用底部按钮样式

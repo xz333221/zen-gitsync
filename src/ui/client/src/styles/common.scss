@@ -6,6 +6,37 @@
 @use './variables';
 
 /* =======================================================
+   全局滚动条默认样式（适用于所有滚动容器）
+   使用 variables.scss 中的 --scrollbar-* 变量
+   ======================================================= */
+html,
+body {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* WebKit 浏览器（Chrome/Edge/Safari） */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: var(--radius-base);
+  transition: var(--transition-bg);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+/* =======================================================
    全局文字颜色应用
    ======================================================= */
 
@@ -185,8 +216,6 @@
 .el-dialog {
   display: flex;
   flex-direction: column;
-  /* Keep the dialog within viewport */
-  max-height: calc(100% - 160px);
 }
 
 .el-dialog__header,

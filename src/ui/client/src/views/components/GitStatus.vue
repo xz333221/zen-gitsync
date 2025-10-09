@@ -1192,14 +1192,14 @@ defineExpose({
 
 .description-title {
   font-weight: 600;
-  color: #262626;
+  color: var(--color-text-title);
   font-size: 14px;
 }
 
 .description-content {
   font-size: 13px;
   line-height: 1.6;
-  color: #595959;
+  color: var(--el-text-color-regular);
 }
 
 .description-content p {

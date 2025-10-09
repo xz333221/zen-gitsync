@@ -2066,10 +2066,10 @@ git config --global user.email "your.email@example.com"</pre>
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
   font-size: 12px;
   background-color: var(--border-component);
-  color: #495057;
+  color: var(--color-text);
   padding: 2px 6px;
   border-radius: 3px;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border-component);
 }
 
 .stash-description {
@@ -2312,74 +2312,6 @@ git config --global user.email "your.email@example.com"</pre>
 
 
 
-// .template-container {
-//   display: flex;
-//   flex-direction: column;
-//   height: calc(85vh - 100px);
-//   overflow-y: auto;
-//   padding: 5px;
-// }
-
-// .template-form {
-//   margin-bottom: 8px;
-//   padding: 8px;
-//   border-radius: 6px;
-//   border: 1px solid var(--border-card);
-// }
-
-// .template-form-buttons {
-//   display: flex;
-//   gap: 8px;
-//   margin-top: 8px;
-//   justify-content: flex-end;
-// }
-
-// .template-input {
-//   flex-grow: 1;
-// }
-
-// .template-list {
-//   overflow-y: auto;
-//   height: 100%;
-// }
-
-// .template-list h3 {
-//   margin-top: 0;
-//   margin-bottom: 8px;
-//   font-size: 16px;
-//   font-weight: 500;
-//   padding-bottom: 8px;
-//   border-bottom: 1px solid var(--border-card);
-// }
-
-// .template-item {
-//   margin-bottom: 8px;
-//   transition: all 0.2s ease;
-//   border: 1px solid var(--border-card);
-// }
-
-// .template-item:hover {
-//   background-color: var(--bg-panel);
-//   transform: translateY(-2px);
-//   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-// }
-
-// .template-content {
-//   flex-grow: 1;
-//   margin-right: 8px;
-//   word-break: break-all;
-//   padding: 5px 0;
-  
-//   font-weight: 500;
-// }
-
-// .template-actions {
-//   display: flex;
-//   gap: 8px;
-//   justify-content: flex-end;
-//   min-width: 180px;
-//   flex-shrink: 0;
-// }
 
 /* 提交选项卡片样式 */
 .commit-options {
@@ -2971,108 +2903,6 @@ git config --global user.email "your.email@example.com"</pre>
   }
 }
 
-// .message-template-container {
-//   display: flex;
-//   flex-direction: column;
-//   height: calc(100vh - 278px);
-//   overflow: hidden;
-// }
-
-// .templates-container {
-//   display: flex;
-//   gap: 8px;
-//   margin-top: 8px;
-//   flex: 1;
-//   overflow: hidden;
-// }
-
-// .message-templates-list {
-//   flex: 3;
-//   display: flex;
-//   flex-direction: column;
-//   border-right: 1px solid var(--border-card);
-//   padding-right: 8px;
-//   height: calc(100vh - 432px);
-// }
-
-// .message-templates-list h3 {
-//   margin-top: 0;
-//   margin-bottom: 8px;
-//   font-size: 16px;
-//   font-weight: 500;
-  
-//   padding-bottom: 8px;
-//   border-bottom: 1px solid var(--border-card);
-// }
-
-// .current-default-message {
-//   flex: 2;
-//   display: flex;
-//   flex-direction: column;
-//   gap: 8px;
-//   padding-left: 8px;
-// }
-
-// .current-default-message h3 {
-//   margin-top: 0;
-//   margin-bottom: 8px;
-//   font-size: 16px;
-//   font-weight: 500;
-  
-//   padding-bottom: 8px;
-//   border-bottom: 1px solid var(--border-card);
-// }
-
-// .templates-scroll-area {
-//   overflow-y: auto;
-//   padding-right: 5px;
-//   flex: 1;
-// }
-
-// .default-message-card {
-//   margin-bottom: 8px;
-//   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-//   border-radius: 4px;
-//   transition: all 0.3s ease;
-// }
-
-// .default-message-card:hover {
-//   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-// }
-
-// .default-message-content {
-//   padding: 8px;
-//   background-color: #f0f9eb;
-//   border-left: 3px solid #67c23a;
-//   font-weight: 500;
-//   word-break: break-all;
-//   min-height: 60px;
-//   display: flex;
-//   align-items: center;
-//   border-radius: 0 4px 4px 0;
-  
-// }
-
-// .message-help-text {
-//   border-radius: 4px;
-//   padding: 8px;
-//   font-size: 14px;
-//   color: var(--text-secondary);
-//   margin-top: auto;
-//   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-// }
-
-// .message-help-text h4 {
-//   margin-top: 0;
-//   margin-bottom: 8px;
-  
-//   font-size: 15px;
-// }
-
-// .message-help-text p {
-//   margin: 8px 0;
-//   line-height: 1.5;
-// }
 
 .advanced-options-toggle {
   display: flex;

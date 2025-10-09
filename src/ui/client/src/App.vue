@@ -1355,7 +1355,7 @@ h1 {
 
 .directory-path {
   font-family: monospace;
-  color: #495057;
+  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1365,7 +1365,8 @@ h1 {
   padding: 4px 8px;
   border-radius: 3px;
   border-left: 3px solid #409EFF;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border-component);
+
   flex: 1;
   min-width: 0;
   max-width: 500px;
@@ -1503,7 +1504,7 @@ h1 {
 
 .branch-label {
   margin-right: 10px;
-  color: #495057;
+  color: var(--color-text);
 }
 
   .branch-select {
@@ -1514,7 +1515,7 @@ h1 {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #495057;
+    color: var(--color-text);
     font-size: 13px;
     padding: 8px;
     border-radius: 4px;
@@ -1523,7 +1524,7 @@ h1 {
   .repo-url-label {
     font-weight: bold;
     margin-right: 8px;
-    color: #495057;
+    color: var(--color-text);
   }
 
 .repo-url {
@@ -1555,6 +1556,7 @@ h1 {
   left: 50%;
   transform: translate(-50%, -50%);
   width: 2px; /* 从4px减少到2px */
+  background-color: #a0a0a0;
   height: 40px; /* 从50px减少到40px */
   border-radius: 2px; /* 从4px减少到2px */
   transition: background-color 0.2s, width 0.2s, box-shadow 0.2s;
@@ -1623,7 +1625,7 @@ h1 {
 
 .directory-path {
   font-family: monospace;
-  color: #495057;
+  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1633,7 +1635,7 @@ h1 {
   padding: 4px 8px;
   border-radius: 3px;
   border-left: 3px solid #409EFF;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border-component);
   flex: 1;
   min-width: 0;
   /* 防止flex子项溢出 */

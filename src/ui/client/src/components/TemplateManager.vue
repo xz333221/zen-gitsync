@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
+import CommonDialog from '@components/CommonDialog.vue'
 
 export interface TemplateManagerProps {
   visible: boolean
@@ -180,14 +181,11 @@ defineExpose({
 </script>
 
 <template>
-  <el-dialog 
+  <CommonDialog
     v-model="dialogVisible"
     :title="title"
-    width="80vw"
-    top="70px"
-    style="height: calc(100vh - 140px);"
     :close-on-click-modal="false"
-    :class="type === 'message' ? 'message-template-dialog' : 'template-dialog'"
+    :custom-class="type === 'message' ? 'message-template-dialog' : 'template-dialog'"
   >
     <div class="template-container" :class="{ 'message-template-container': type === 'message' }">
       <div class="template-form">
@@ -289,7 +287,7 @@ defineExpose({
         </div>
       </div>
     </div>
-  </el-dialog>
+  </CommonDialog>
 </template>
 
 <style scoped>

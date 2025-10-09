@@ -1441,35 +1441,23 @@ function toggleFullscreen() {
       <div v-loading="isLoadingCommitDetail" class="commit-detail-container">
         <!-- 提交基本信息 -->
         <div v-if="selectedCommit" class="commit-info">
-          <div class="commit-info-header">
-            <div class="info-item">
-              <span class="item-label">哈希:</span>
-              <span class="item-value">{{ selectedCommit.hash }}</span>
+          <div class="commit-info-row">
+            <div class="info-item date-item">
+              <span class="info-label">日期</span>
+              <span class="info-value">{{ selectedCommit.date }}</span>
             </div>
-            <div class="info-item">
-              <span class="item-label">作者:</span>
-              <span class="item-value"
-                >{{ selectedCommit.author }} &lt;{{
-                  selectedCommit.email
-                }}&gt;</span
-              >
+            <div class="info-item message-item">
+              <span class="info-label">提交信息</span>
+              <div
+                class="info-message"
+                v-html="
+                  formatCommitMessage(selectedCommit.message).replace(
+                    /\n/g,
+                    '<br>'
+                  )
+                "
+              ></div>
             </div>
-            <div class="info-item">
-              <span class="item-label">日期:</span>
-              <span class="item-value">{{ selectedCommit.date }}</span>
-            </div>
-          </div>
-          <div class="commit-message-container">
-            <div class="message-label">提交信息:</div>
-            <div
-              class="message-content"
-              v-html="
-                formatCommitMessage(selectedCommit.message).replace(
-                  /\n/g,
-                  '<br>'
-                )
-              "
-            ></div>
           </div>
         </div>
 
@@ -1830,68 +1818,76 @@ function toggleFullscreen() {
 .commit-detail-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  flex: 1; /* 关键：允许在flex父容器中伸缩 */
-  min-height: 0; /* 关键：允许flex子元素收缩 */
-  overflow: hidden; /* 防止内容超出 */
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
+/* 提交信息区域 */
 .commit-info {
-  padding: 12px;
-  background-color: var(--bg-panel);
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--color-warning);
+  border-left: 4px solid var(--color-warning);
   border-radius: 8px;
-  font-size: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  flex-shrink: 0; /* 防止信息区域被压缩 */
-  max-height: 200px; /* 限制最大高度 */
+  padding: 16px;
+  box-shadow: var(--shadow-md);
+  transition: var(--transition-all);
 }
 
-.commit-info-header {
+.commit-info-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  flex-direction: row;
+  gap: 24px;
   align-items: center;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-card);
+  flex-wrap: wrap;
 }
 
 .info-item {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
 }
 
-.item-label {
-  font-weight: bold;
-  color: var(--text-secondary);
+.date-item {
+  flex-shrink: 0;
+}
+
+.message-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.info-label {
+  font-weight: 600;
+  color: var(--color-warning);
+  font-size: 14px;
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
-.item-value {
-  word-break: break-all;
+.info-value {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.commit-message-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.message-label {
-  font-weight: bold;
-  color: var(--text-secondary);
+.info-message {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+  flex: 1;
 }
 
 /* 提交详情弹窗样式 */
 :deep(.commit-detail-dialog .el-dialog__body) {
-  padding: 12px;
-  height: calc(100vh - 200px); /* 给对话框体设置明确高度 */
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background-color: var(--bg-container);
 }
 
 /* 滚动条样式 */
@@ -2052,10 +2048,6 @@ function toggleFullscreen() {
 
 .copy-message-btn:hover {
   color: #409eff;
-}
-
-.fullscreen-mode .table-view-container {
-  height: calc(100vh - 160px); /* 减去头部和可能的筛选面板高度 */
 }
 
 .fullscreen-mode .log-table {
