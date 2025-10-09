@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, defineExpose } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading, Box, Setting, Document } from "@element-plus/icons-vue";
+import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading, Box, Setting } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";
@@ -18,6 +18,7 @@ import CommitButton from "@/components/buttons/CommitButton.vue";
 import PushButton from "@/components/buttons/PushButton.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
 import OptionSwitchCard from "@components/OptionSwitchCard.vue";
+import CommandConsole from "@components/CommandConsole.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -1194,6 +1195,9 @@ git config --global user.email "your.email@example.com"</pre>
                 <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
               </div>
             </div>
+            
+            <!-- 自定义指令执行控制台 -->
+            <CommandConsole />
           </div>
         </template>
       </div>

@@ -95,6 +95,25 @@ async function startUIServer(noOpen = false, savePort = false) {
     console.log(`[${now}] ${req.method} ${req.url}`);
     next();
   });
+
+  // 通用命令执行接口（非流式）
+  app.post('/api/exec', async (req, res) => {
+    try {
+      const { command } = req.body || {};
+      if (!command || typeof command !== 'string' || !command.trim()) {
+        return res.status(400).json({ success: false, error: 'command 不能为空' });
+      }
+
+      try {
+        const { stdout = '', stderr = '' } = await execGitCommand(command, { log: false });
+        return res.json({ success: true, stdout, stderr });
+      } catch (err) {
+        return res.status(400).json({ success: false, error: err?.message || String(err) });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
   
   // 静态文件服务
   app.use(express.static(path.join(__dirname, '../public')));

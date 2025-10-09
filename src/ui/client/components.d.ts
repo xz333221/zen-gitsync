@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    CommandConsole: typeof import('./src/components/CommandConsole.vue')['default']
     CommitButton: typeof import('./src/components/buttons/CommitButton.vue')['default']
     CommonDialog: typeof import('./src/components/CommonDialog.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
