@@ -2912,7 +2912,7 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 0;
+  padding: 7px 0 6px;
   background-color: var(--bg-panel);
   border-radius: 4px;
   cursor: pointer;
