@@ -45,7 +45,6 @@ const props = withDefaults(defineProps<Props>(), {
   size: 'medium',
   type: 'default',
   top: '50px',
-  width: '80%',
   closeOnClickModal: false,
   closeOnPressEscape: true,
   destroyOnClose: false,
