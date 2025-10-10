@@ -727,11 +727,11 @@ async function selectDirectory(dirPath: string) {
 
       <!-- 目录选择卡片 -->
       <InlineCard id="directory-selector" class="directory-selector" compact>
-        <template #icon>
+        <!-- <template #icon>
           <div class="directory-icon">
             <el-icon><Folder /></el-icon>
           </div>
-        </template>
+        </template> -->
         <template #content>
           <div class="directory-display">
             <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
@@ -939,8 +939,17 @@ async function selectDirectory(dirPath: string) {
     <div class="branch-info" v-if="gitStore.currentBranch">
       <InlineCard class="branch-wrapper" compact>
         <template #content>
-          <span class="branch-label">当前分支:</span>
-          <el-select v-model="gitStore.currentBranch" size="small" @change="handleBranchChange"
+          <el-tooltip content="当前分支" placement="top" effect="dark" :open-delay="400">
+            <span class="branch-label" aria-label="当前分支" title="当前分支">
+              <el-icon class="branch-icon">
+                <!-- 简洁的分支图标 -->
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="currentColor" d="M256 160a96 96 0 1 1 0 192 96 96 0 0 1 0-192zm0 512a96 96 0 1 1 0 192 96 96 0 0 1 0-192zm512-480a96 96 0 1 1 0 192 96 96 0 0 1 0-192zM352 256h288a128 128 0 0 1 128 128v48a144 144 0 0 1-144 144H368a16 16 0 0 0-16 16v64h-96v-64a112 112 0 0 1 112-112h256a80 80 0 0 0 80-80v-16a64 64 0 0 0-64-64H352v-64z"/>
+                </svg>
+              </el-icon>
+            </span>
+          </el-tooltip>
+          <el-select v-model="gitStore.currentBranch" @change="handleBranchChange"
             :loading="gitStore.isChangingBranch" class="branch-select">
             <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
           </el-select>
@@ -948,7 +957,6 @@ async function selectDirectory(dirPath: string) {
         <template #actions>
           <button class="modern-btn create-branch-btn" @click="openCreateBranchDialog">
             <el-icon class="btn-icon"><Plus /></el-icon>
-            <span class="btn-text">新建分支</span>
           </button>
         </template>
       </InlineCard>
@@ -1509,7 +1517,6 @@ h1 {
 
   .branch-select {
     width: 200px;
-    margin-right: 10px;
   }
   .footer-right {
     display: flex;
@@ -1663,8 +1670,7 @@ h1 {
 }
 
 .create-branch-btn {
-  padding: 8px 12px;
-  gap: 6px;
+  padding: 6px;
 }
 
 .copy-url-btn {

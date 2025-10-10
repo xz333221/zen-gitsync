@@ -62,7 +62,7 @@ const hasIcon = computed(() => {
   display: inline-flex;
   align-items: center;
   height: 100%;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   flex: 1 1 auto;
 }
