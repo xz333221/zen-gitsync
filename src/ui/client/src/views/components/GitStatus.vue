@@ -475,28 +475,35 @@ async function handleGitFetchAll() {
   }
 }
 
-// 复制“设置上游分支”的命令到剪贴板
-function copyUpstreamPushCommand() {
-  const branch = gitStore.currentBranch || 'HEAD'
-  const cmd = `git push -u origin ${branch}`
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(cmd)
-      .then(() => ElMessage.success('已复制: ' + cmd))
-      .catch(() => ElMessage.success('已生成命令: ' + cmd))
-  } else {
-    ElMessage.success('已生成命令: ' + cmd)
+// 一键设置上游并推送
+const isSettingUpstream = ref(false)
+async function setUpstreamAndPush() {
+  if (!gitStore.currentBranch) {
+    ElMessage.warning('未知当前分支')
+    return
   }
-}
-
-// 复制“自动设置上游”配置命令
-function copyAutoSetupRemoteCommand() {
-  const cmd = 'git config --global push.autoSetupRemote true'
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(cmd)
-      .then(() => ElMessage.success('已复制: ' + cmd))
-      .catch(() => ElMessage.success('已生成命令: ' + cmd))
-  } else {
-    ElMessage.success('已生成命令: ' + cmd)
+  try {
+    isSettingUpstream.value = true
+    const command = `git push -u origin ${gitStore.currentBranch}`
+    const res = await fetch('/api/exec', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command })
+    })
+    const data = await res.json()
+    if (data.success) {
+      ElMessage.success('已推送并设置上游分支')
+      // 刷新分支列表与当前分支，确保 footer 下拉实时更新
+      await gitStore.getAllBranches()
+      await gitStore.getCurrentBranch(true)
+      await gitStore.getBranchStatus(true)
+    } else {
+      ElMessage.error(data.error || '设置上游失败')
+    }
+  } catch (e) {
+    ElMessage.error(`设置上游失败: ${(e as Error).message}`)
+  } finally {
+    isSettingUpstream.value = false
   }
 }
 
@@ -721,12 +728,15 @@ defineExpose({
           <div class="tip-body">
             <div class="tip-text">首次推送后即可建立与远程的跟踪关系，后续可直接 pull/push。</div>
             <div class="tip-actions">
-              <el-button size="small" type="primary" plain @click="copyUpstreamPushCommand">
-                <el-icon style="margin-right:4px"><ArrowUp /></el-icon>
-                复制设置上游命令
-              </el-button>
-              <el-button size="small" plain @click="copyAutoSetupRemoteCommand">
-                开启自动设置上游
+              <el-button 
+                size="small" 
+                type="primary" 
+                plain 
+                :loading="isSettingUpstream"
+                :disabled="isSettingUpstream"
+                @click="setUpstreamAndPush"
+              >
+                设置上游并推送
               </el-button>
             </div>
           </div>
