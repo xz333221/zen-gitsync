@@ -1,7 +1,7 @@
 <template>
   <CommonDialog
     v-model="visible"
-    title="Git 用户设置"
+    title="Git 全局设置"
     size="large"
     :destroy-on-close="true"
     custom-class="user-settings-dialog"
@@ -116,10 +116,7 @@
     
     <template #footer>
       <div class="user-settings-footer">
-        <button type="button" class="footer-btn danger-btn" @click="handleClear" :disabled="isLoading">
-          <el-icon><Delete /></el-icon>
-          <span>清除配置</span>
-        </button>
+        <div></div>
         <div class="footer-actions">
           <button type="button" class="footer-btn cancel-btn" @click="visible = false" :disabled="isLoading">
             取消
@@ -163,6 +160,15 @@ const cfgFetchPrune = ref(false)
 const cfgCoreAutoCrlf = ref<'true' | 'input' | 'false'>('true')
 const cfgInitDefaultBranch = ref('main')
 
+// 初始值（用于仅保存变更项）
+let initUserName = ''
+let initUserEmail = ''
+let initAutoSetupRemote = false
+let initPullRebase: 'false' | 'true' | 'merges' = 'false'
+let initFetchPrune = false
+let initCoreAutoCrlf: 'true' | 'input' | 'false' = 'true'
+let initInitDefaultBranch = 'main'
+
 // 同步 v-model
 watch(() => props.modelValue, async (val) => {
   visible.value = val
@@ -176,6 +182,14 @@ watch(() => props.modelValue, async (val) => {
     } finally {
       isLoading.value = false
     }
+    // 记录初始值
+    initUserName = tempUserName.value
+    initUserEmail = tempUserEmail.value
+    initAutoSetupRemote = cfgAutoSetupRemote.value
+    initPullRebase = cfgPullRebase.value
+    initFetchPrune = cfgFetchPrune.value
+    initCoreAutoCrlf = cfgCoreAutoCrlf.value
+    initInitDefaultBranch = cfgInitDefaultBranch.value
   }
 }, { immediate: true })
 
@@ -231,17 +245,38 @@ async function loadGlobalGitConfigs() {
   cfgInitDefaultBranch.value = defBranch || 'main'
 }
 
-// 保存常用配置
+// 保存常用配置（仅保存已变更项）
 async function saveGlobalGitConfigs() {
+  const tasks: Promise<any>[] = []
   try {
-    await setGlobalConfig('push.autoSetupRemote', cfgAutoSetupRemote.value ? 'true' : 'false')
-    await setGlobalConfig('pull.rebase', cfgPullRebase.value)
-    await setGlobalConfig('fetch.prune', cfgFetchPrune.value ? 'true' : 'false')
-    await setGlobalConfig('core.autocrlf', cfgCoreAutoCrlf.value)
-    if (cfgInitDefaultBranch.value && cfgInitDefaultBranch.value.trim()) {
-      await setGlobalConfig('init.defaultBranch', cfgInitDefaultBranch.value.trim())
+    if (cfgAutoSetupRemote.value !== initAutoSetupRemote) {
+      tasks.push(setGlobalConfig('push.autoSetupRemote', cfgAutoSetupRemote.value ? 'true' : 'false'))
     }
-    ElMessage.success('全局 Git 配置已保存')
+    if (cfgPullRebase.value !== initPullRebase) {
+      tasks.push(setGlobalConfig('pull.rebase', cfgPullRebase.value))
+    }
+    if (cfgFetchPrune.value !== initFetchPrune) {
+      tasks.push(setGlobalConfig('fetch.prune', cfgFetchPrune.value ? 'true' : 'false'))
+    }
+    if (cfgCoreAutoCrlf.value !== initCoreAutoCrlf) {
+      tasks.push(setGlobalConfig('core.autocrlf', cfgCoreAutoCrlf.value))
+    }
+    const trimmed = (cfgInitDefaultBranch.value || '').trim()
+    if (trimmed && trimmed !== initInitDefaultBranch) {
+      tasks.push(setGlobalConfig('init.defaultBranch', trimmed))
+    }
+    if (tasks.length === 0) {
+      // 无需保存
+      return true
+    }
+    await Promise.all(tasks)
+    ElMessage.success('已保存变更的 Git 配置')
+    // 更新初始值为最新
+    initAutoSetupRemote = cfgAutoSetupRemote.value
+    initPullRebase = cfgPullRebase.value
+    initFetchPrune = cfgFetchPrune.value
+    initCoreAutoCrlf = cfgCoreAutoCrlf.value
+    initInitDefaultBranch = trimmed || initInitDefaultBranch
     return true
   } catch (e) {
     ElMessage.error((e as Error).message)
@@ -256,19 +291,26 @@ async function handleSave() {
     return
   }
 
-  const userSaved = await gitStore.restoreUserConfig(tempUserName.value, tempUserEmail.value)
+  // 仅在用户信息发生变化时保存
+  let userSaved = true
+  if (tempUserName.value !== initUserName || tempUserEmail.value !== initUserEmail) {
+    userSaved = await gitStore.restoreUserConfig(tempUserName.value, tempUserEmail.value)
+    if (userSaved) {
+      initUserName = tempUserName.value
+      initUserEmail = tempUserEmail.value
+    }
+  }
+
   const cfgSaved = await saveGlobalGitConfigs()
   if (userSaved && cfgSaved) {
+    if (
+      tempUserName.value === initUserName &&
+      tempUserEmail.value === initUserEmail
+    ) {
+      // 若无任何变更，提示但仍可关闭
+      // ElMessage.info('没有需要保存的变更')
+    }
     visible.value = false
-  }
-}
-
-// 清除配置
-async function handleClear() {
-  const success = await gitStore.clearUserConfig()
-  if (success) {
-    tempUserName.value = ''
-    tempUserEmail.value = ''
   }
 }
 </script>

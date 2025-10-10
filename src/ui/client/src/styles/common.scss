@@ -426,6 +426,31 @@ body {
   position: relative;
 }
 
+/* =======================================================
+   Modern Button 公共尺寸工具类（无 padding，仅宽高）
+   使用方式：<button class="modern-btn btn-icon-32">...</button>
+   ======================================================= */
+
+.btn-icon-28 { width: 28px; height: 28px; padding: 0; }
+.btn-icon-32 { width: 32px; height: 32px; padding: 0; }
+.btn-icon-36 { width: 36px; height: 36px; padding: 0; }
+
+/* 统一图标按钮内图标尺寸（可按需覆盖） */
+.btn-icon-28 .btn-icon,
+.btn-icon-32 .btn-icon,
+.btn-icon-36 .btn-icon {
+  font-size: 16px;
+}
+
+/* 可复用的图标交互效果 */
+.btn-rotate-on-hover:hover .btn-icon {
+  transform: rotate(180deg);
+}
+
+.btn-scale-on-hover:hover .btn-icon {
+  transform: scale(1.1);
+}
+
 .el-card__header {
   padding: 0;
 }

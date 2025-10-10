@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock } from '@element-plus/icons-vue';
+import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock, Loading } from '@element-plus/icons-vue';
 import { useGitStore } from '@stores/gitStore';
 import CommonDialog from '@/components/CommonDialog.vue';
 
@@ -363,7 +363,7 @@ onUnmounted(() => {
 <template>
   <!-- 命令历史按钮 -->
   <el-tooltip content="查看Git命令历史" placement="bottom" effect="dark" :open-delay="500">
-    <button class="modern-btn command-history-button" @click="openCommandHistory">
+    <button class="modern-btn btn-icon-36" @click="openCommandHistory">
       <el-icon class="btn-icon">
         <Clock />
       </el-icon>
@@ -397,9 +397,7 @@ onUnmounted(() => {
               <CopyDocument />
             </el-icon>
             <el-icon class="btn-icon is-loading" v-else>
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
-              </svg>
+              <Loading />
             </el-icon>
             <span class="btn-text">命令</span>
           </button>
@@ -414,9 +412,7 @@ onUnmounted(() => {
               <CopyDocument />
             </el-icon>
             <el-icon class="btn-icon is-loading" v-else>
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
-              </svg>
+              <Loading />
             </el-icon>
             <span class="btn-text">全部</span>
           </button>
@@ -431,9 +427,7 @@ onUnmounted(() => {
               <Delete />
             </el-icon>
             <el-icon class="btn-icon is-loading" v-else>
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
-              </svg>
+              <Loading />
             </el-icon>
             <span class="btn-text">清空</span>
           </button>
@@ -442,11 +436,7 @@ onUnmounted(() => {
       <div class="history-scroll">
       <div v-if="isLoading && commandHistory.length === 0" class="loading-state">
         <el-icon class="loading-icon is-loading">
-          <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor"
-              d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32zM195.2 195.2a32 32 0 0 1 45.248 0L376.32 331.008a32 32 0 0 1-45.248 45.248L195.2 240.448a32 32 0 0 1 0-45.248zm452.544 452.544a32 32 0 0 1 45.248 0L828.8 783.552a32 32 0 0 1-45.248 45.248L647.744 692.992a32 32 0 0 1 0-45.248zM828.8 195.264a32 32 0 0 1 0 45.184L692.992 376.32a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0zm-452.544 452.48a32 32 0 0 1 0 45.248L240.448 828.8a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0z">
-            </path>
-          </svg>
+          <Loading />
         </el-icon>
         <div class="loading-text">加载命令历史...</div>
       </div>

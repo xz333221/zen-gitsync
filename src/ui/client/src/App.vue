@@ -6,9 +6,9 @@ import LogList from '@views/components/LogList.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import InlineCard from '@components/InlineCard.vue'
-import UserSettingsDialog from '@components/UserSettingsDialog.vue'
+import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Menu, Folder, Plus, Setting, Check, Clock } from '@element-plus/icons-vue'
+import { Edit, Menu, Folder, FolderOpened, Plus, Setting, Check, Clock, DocumentCopy, Sunny, Moon } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -692,7 +692,7 @@ async function selectDirectory(dirPath: string) {
         </template>
         <template #actions>
           <el-tooltip content="用户设置" placement="bottom" effect="dark" :open-delay="500">
-            <button class="modern-btn user-settings-btn" @click="openUserSettingsDialog">
+            <button class="modern-btn btn-icon-28" @click="openUserSettingsDialog">
               <el-icon class="btn-icon"><Setting /></el-icon>
             </button>
           </el-tooltip>
@@ -714,23 +714,13 @@ async function selectDirectory(dirPath: string) {
         <template #actions>
           <div class="directory-actions">
             <el-tooltip content="切换目录" placement="bottom" effect="dark" :open-delay="500">
-              <button class="modern-btn dir-btn" @click="openDirectoryDialog">
-                <el-icon class="btn-icon">
-                  <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                    <path fill="currentColor"
-                      d="M128 192v640h768V320H485.76L357.504 192H128zm-32-64h287.872l128.384 128H928a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32z" />
-                  </svg>
-                </el-icon>
+              <button class="modern-btn btn-icon-28" @click="openDirectoryDialog">
+                <el-icon class="btn-icon"><Folder /></el-icon>
               </button>
             </el-tooltip>
             <el-tooltip content="在资源管理器中打开" placement="bottom" effect="dark" :open-delay="500">
-              <button class="modern-btn dir-btn" @click="openInFileExplorer">
-                <el-icon class="btn-icon">
-                  <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                    <path fill="currentColor"
-                      d="M928 444H820V330.4c0-17.7-14.3-32-32-32H473L355.7 186.2a8.15 8.15 0 0 0-5.5-2.2H96c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h698c13 0 24.8-7.9 29.7-20l134-332c1.5-3.8 2.3-7.9 2.3-12 0-17.7-14.3-32-32-32zM136 256h188.5l119.6 114.4H748V444H238c-13 0-24.8 7.9-29.7 20L136 643.2V256zm635.3 512H159l103.3-256h612.4L771.3 768z" />
-                  </svg>
-                </el-icon>
+              <button class="modern-btn btn-icon-28" @click="openInFileExplorer">
+                <el-icon class="btn-icon"><FolderOpened /></el-icon>
               </button>
             </el-tooltip>
           </div>
@@ -744,25 +734,20 @@ async function selectDirectory(dirPath: string) {
           <CommandHistory />
         </div>
         <el-tooltip content="编辑项目配置" placement="bottom" effect="dark" :open-delay="500">
-          <button class="modern-btn config-btn" @click="commitFormRef?.openConfigEditor()">
+          <button class="modern-btn btn-icon-36 btn-scale-on-hover" @click="commitFormRef?.openConfigEditor()">
             <el-icon class="btn-icon"><Edit /></el-icon>
           </button>
         </el-tooltip>
         <el-tooltip :content="isDarkTheme ? '切换到浅色主题' : '切换到深色主题'" placement="bottom" effect="dark" :open-delay="500">
-          <button class="modern-btn theme-toggle-btn" @click="toggleTheme">
+          <button class="modern-btn btn-icon-36" @click="toggleTheme">
             <el-icon class="btn-icon">
-              <svg v-if="isDarkTheme" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M512 128a384 384 0 1 1 0 768 384 384 0 0 1 0-768zm0 64a320 320 0 1 0 0 640 320 320 0 0 0 0-640z"/>
-                <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v64a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 768a32 32 0 0 1 32 32v64a32 32 0 1 1-64 0v-64a32 32 0 0 1 32-32zM195.2 195.2a32 32 0 0 1 45.248 0l45.248 45.248a32 32 0 1 1-45.248 45.248L195.2 240.448a32 32 0 0 1 0-45.248zm543.104 543.104a32 32 0 0 1 45.248 0l45.248 45.248a32 32 0 0 1-45.248 45.248l-45.248-45.248a32 32 0 0 1 0-45.248zM64 512a32 32 0 0 1 32-32h64a32 32 0 0 1 0 64H96a32 32 0 0 1-32-32zm768 0a32 32 0 0 1 32-32h64a32 32 0 1 1 0 64h-64a32 32 0 0 1-32-32zM195.2 828.8a32 32 0 0 1 0-45.248l45.248-45.248a32 32 0 0 1 45.248 45.248L240.448 828.8a32 32 0 0 1-45.248 0zm543.104-543.104a32 32 0 0 1 0-45.248l45.248-45.248a32 32 0 0 1 45.248 45.248l-45.248 45.248a32 32 0 0 1-45.248 0z"/>
-              </svg>
-              <svg v-else viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M240.448 240.448a384 384 0 1 0 559.424 525.696 448 448 0 0 1-542.016-542.08 390.592 390.592 0 0 0-17.408 16.384zm181.056 362.048a384 384 0 0 0 525.632 16.384A448 448 0 1 1 405.056 76.8a384 384 0 0 0 16.448 525.696z"/>
-              </svg>
+              <Sunny v-if="isDarkTheme" />
+              <Moon v-else />
             </el-icon>
           </button>
         </el-tooltip>
         <el-tooltip content="Git 操作" placement="bottom" effect="dark" :open-delay="500">
-          <button class="modern-btn drawer-btn" @click="commitFormRef?.toggleGitOperationsDrawer()">
+          <button class="modern-btn btn-icon-36 btn-rotate-on-hover" @click="commitFormRef?.toggleGitOperationsDrawer()">
             <el-icon class="btn-icon"><Menu /></el-icon>
           </button>
         </el-tooltip>
@@ -930,7 +915,7 @@ async function selectDirectory(dirPath: string) {
           </el-select>
         </template>
         <template #actions>
-          <button class="modern-btn create-branch-btn" @click="openCreateBranchDialog">
+          <button class="modern-btn btn-icon-28" @click="openCreateBranchDialog">
             <el-icon class="btn-icon"><Plus /></el-icon>
           </button>
         </template>
@@ -944,15 +929,8 @@ async function selectDirectory(dirPath: string) {
         </template>
         <template #actions>
           <el-tooltip content="复制仓库地址" placement="top" effect="dark" :open-delay="500">
-            <button class="modern-btn copy-url-btn" @click="gitStore.copyRemoteUrl()">
-              <el-icon class="btn-icon">
-                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                  <path fill="currentColor"
-                    d="M768 832a128 128 0 0 1-128 128H192A128 128 0 0 1 64 832V384a128 128 0 0 1 128-128v64a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64h64z" />
-                  <path fill="currentColor"
-                    d="M384 128a64 64 0 0 0-64 64v448a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64V192a64 64 0 0 0-64-64H384zm0-64h448a128 128 0 0 1 128 128v448a128 128 0 0 1-128 128H384a128 128 0 0 1-128-128V192A128 128 0 0 1 384 64z" />
-                </svg>
-              </el-icon>
+            <button class="modern-btn btn-icon-28" @click="gitStore.copyRemoteUrl()">
+              <el-icon class="btn-icon"><DocumentCopy /></el-icon>
             </button>
           </el-tooltip>
         </template>
@@ -1218,19 +1196,7 @@ h1 {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
-.config-btn {
-  padding: 10px;
-  gap: 8px;
-}
-
-.drawer-btn {
-  padding: 10px;
-}
-
-/* 统一主题切换按钮为与其它图标按钮一致的尺寸与外观 */
-.theme-toggle-btn {
-  padding: 10px;
-}
+/* 按钮尺寸与交互效果已抽为全局工具类（见 styles/common.scss） */
 
 .modern-btn .btn-icon {
   font-size: 16px;
@@ -1246,13 +1212,7 @@ h1 {
   position: relative;
 }
 
-.drawer-btn:hover .btn-icon {
-  transform: rotate(180deg);
-}
-
-.config-btn:hover .btn-icon {
-  transform: scale(1.1);
-}
+/* 交互效果使用 .btn-rotate-on-hover / .btn-scale-on-hover */
 
 .directory-display {
   display: flex;
@@ -1557,28 +1517,7 @@ h1 {
   margin-left: 8px;
 }
 
-.dir-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-}
-
-.user-settings-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  margin-left: 10px;
-}
-
-.create-branch-btn {
-  padding: 6px;
-}
-
-.copy-url-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-}
+/* 图标按钮尺寸使用 .btn-icon-32，间距由父容器 gap 控制 */
 
 
 :deep(.form-item .el-form-item__label) {
