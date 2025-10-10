@@ -450,11 +450,11 @@
     color: rgba(255, 255, 255, 0.5) !important;
   }
 
-  /* 自动完成输入框 */
-  .el-autocomplete .el-input__wrapper {
-    background-color: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.15) !important;
-  }
+  // /* 自动完成输入框 */
+  // .el-autocomplete .el-input__wrapper {
+  //   background-color: rgba(255, 255, 255, 0.08) !important;
+  //   border-color: rgba(255, 255, 255, 0.15) !important;
+  // }
 
   /* 提交信息输入框特殊样式 */
   .commit-message-input .el-textarea__inner {
@@ -510,23 +510,6 @@
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
   }
 
-  /* Element Plus Card组件深色主题 */
-  // .el-card {
-  //   background-color: var(--bg-container-dark) !important;
-  //   border-color: var(--border-color-dark) !important;
-  // }
-
-  // .el-card__header {
-  //   background-color: var(--bg-container-dark) !important;
-  //   border-bottom-color: var(--border-color-dark) !important;
-  //   color: var(--color-text) !important;
-  // }
-
-  // .el-card__body {
-  //   background-color: var(--bg-container-dark) !important;
-  //   color: var(--color-text) !important;
-  // }
-
   /* Git状态空状态深色主题 */
   .empty-status {
     background-color: rgba(255, 255, 255, 0.03) !important;
@@ -570,40 +553,6 @@
   }
 
   /* 现在这些组件将使用CSS变量，无需样式覆盖 */
-
-  /* Element Plus组件深色主题 */
-  .el-input .el-input__wrapper {
-    background-color: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.15) !important;
-  }
-
-  /* 输入框 hover 与 focus 高亮（与浅色保持一致的蓝色描边） */
-  .el-input .el-input__wrapper:hover {
-    border-color: rgba(255, 255, 255, 0.25) !important;
-  }
-
-  /* Element Plus 在 wrapper 上处理 focus，既兼容普通输入，又兼容 autocomplete/select 包装
-     这里对常用类做更强覆盖，确保暗色下也显示蓝色边框和轻微外发光 */
-  .modern-input.is-focus .el-input__wrapper,
-  .el-input.is-focus .el-input__wrapper,
-  .el-autocomplete .el-input.is-focus .el-input__wrapper,
-  .el-autocomplete .el-input__wrapper:focus-within {
-    border-color: #409eff !important;
-    box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.25) !important;
-  }
-
-  /* 保持提交表单三色描边（类型=红、作用域=绿、描述=蓝）在深色主题下仍可见 */
-  .type-select .el-select__wrapper {
-    border-color: #f56c6c !important;
-  }
-
-  .scope-input .el-input__wrapper {
-    border-color: #67c23a !important;
-  }
-
-  .description-input .el-input__wrapper {
-    border-color: #409eff !important;
-  }
 
   .el-select-dropdown {
     background-color: var(--bg-container-dark) !important;

@@ -35,6 +35,7 @@ body {
 /* 统一输入框样式 */
 .el-input__wrapper {
     border: 1px solid var(--border-color);
+    background-color: var(--bg-input);
     transition: var(--transition-border);
 }
 
