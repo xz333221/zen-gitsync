@@ -891,6 +891,7 @@ async function selectDirectory(dirPath: string) {
                 placeholder="请输入新分支名称" 
                 class="modern-input"
                 size="large"
+                @keyup.enter="createNewBranch"
               />
             </el-form-item>
             <el-form-item>
