@@ -7,7 +7,12 @@
     custom-class="user-settings-dialog"
     @update:model-value="handleVisibleChange"
   >
-    <div class="user-settings-content">
+    <div
+      class="user-settings-content"
+      v-loading="isLoading"
+      element-loading-text="正在加载配置..."
+      element-loading-background="rgba(0, 0, 0, 0.15)"
+    >
       <div class="info-section">
         <div class="info-card">
           <div class="info-icon">
@@ -99,15 +104,15 @@
     
     <template #footer>
       <div class="user-settings-footer">
-        <button type="button" class="footer-btn danger-btn" @click="handleClear">
+        <button type="button" class="footer-btn danger-btn" @click="handleClear" :disabled="isLoading">
           <el-icon><Delete /></el-icon>
           <span>清除配置</span>
         </button>
         <div class="footer-actions">
-          <button type="button" class="footer-btn cancel-btn" @click="visible = false">
+          <button type="button" class="footer-btn cancel-btn" @click="visible = false" :disabled="isLoading">
             取消
           </button>
-          <button type="button" class="footer-btn primary-btn" @click="handleSave">
+          <button type="button" class="footer-btn primary-btn" @click="handleSave" :disabled="isLoading">
             <el-icon><Check /></el-icon>
             <span>保存设置</span>
           </button>
@@ -135,6 +140,7 @@ const emit = defineEmits<{
 }>()
 
 const visible = ref(false)
+const isLoading = ref(false)
 const tempUserName = ref('')
 const tempUserEmail = ref('')
 
@@ -152,7 +158,12 @@ watch(() => props.modelValue, async (val) => {
     // 打开时加载数据
     tempUserName.value = gitStore.userName
     tempUserEmail.value = gitStore.userEmail
-    await loadGlobalGitConfigs()
+    try {
+      isLoading.value = true
+      await loadGlobalGitConfigs()
+    } finally {
+      isLoading.value = false
+    }
   }
 }, { immediate: true })
 
