@@ -295,7 +295,7 @@ async function handleClear() {
 .settings-section {
   margin-top: 8px;
   padding-top: 14px;
-  border-top: 1px solid var(--el-border-color-light);
+  border-top: 1px solid var(--el-border-color);
 }
 
 .section-title {
