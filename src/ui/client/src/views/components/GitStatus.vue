@@ -1284,4 +1284,67 @@ defineExpose({
   transition: all 0.2s ease;
 }
 
+/* 无上游分支提示样式 */
+.upstream-tip {
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.05) 0%, rgba(64, 158, 255, 0.02) 100%);
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  transition: all 0.3s ease;
+}
+
+.upstream-tip:hover {
+  border-color: rgba(64, 158, 255, 0.3);
+  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.1);
+}
+
+.upstream-tip .tip-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.upstream-tip .tip-icon {
+  font-size: 20px;
+  color: #409eff;
+  flex-shrink: 0;
+}
+
+.upstream-tip .tip-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-title);
+  letter-spacing: 0.3px;
+}
+
+.upstream-tip .tip-body {
+  padding-left: 30px;
+}
+
+.upstream-tip .tip-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+  margin-bottom: 14px;
+}
+
+.upstream-tip .tip-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* 深色主题适配 */
+html.dark .upstream-tip {
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.08) 0%, rgba(64, 158, 255, 0.03) 100%);
+  border-color: rgba(64, 158, 255, 0.25);
+}
+
+html.dark .upstream-tip:hover {
+  border-color: rgba(64, 158, 255, 0.35);
+  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.15);
+}
+
 </style>
