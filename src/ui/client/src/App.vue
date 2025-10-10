@@ -8,7 +8,7 @@ import CommonDialog from '@components/CommonDialog.vue'
 import InlineCard from '@components/InlineCard.vue'
 import UserSettingsDialog from '@components/UserSettingsDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Menu, Folder, Plus, Setting, Clock } from '@element-plus/icons-vue'
+import { Edit, Menu, Folder, Plus, Setting, Check, Clock } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -1580,6 +1580,98 @@ h1 {
   padding: 0;
 }
 
+
+:deep(.form-item .el-form-item__label) {
+  padding: 0 0 8px 0;
+  font-weight: 500;
+  color: var(--color-text-title);
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-title);
+}
+
+.label-icon {
+  font-size: 16px;
+  color: #6b7280;
+}
+
+.user-settings-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
+}
+
+.footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.footer-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.footer-btn:hover::before {
+  left: 100%;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  color: white;
+  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.25);
+}
+
+.primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
+}
+
+.primary-btn:active {
+  transform: translateY(0);
+}
+
+.danger-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
+}
+
+.danger-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.35);
+}
+
+.danger-btn:active {
+  transform: translateY(0);
+}
 /* 创建分支对话框样式 */
 .create-branch-content {
   padding: 8px 0;
