@@ -65,7 +65,11 @@
           </div>
           <div class="settings-grid">
             <div class="setting-row">
-              <label class="setting-label">自动设置上游</label>
+              <label class="setting-label">自动设置上游
+                <el-tooltip content="首次 git push 时，自动为当前分支创建远程同名分支并建立跟踪关系（等同于 push -u）。" placement="top" :show-after="200">
+                  <el-icon class="qmark"><InfoFilled /></el-icon>
+                </el-tooltip>
+              </label>
               <el-switch v-model="cfgAutoSetupRemote" />
             </div>
 
@@ -79,7 +83,11 @@
             </div>
 
             <div class="setting-row">
-              <label class="setting-label">自动清理远程分支</label>
+              <label class="setting-label">自动清理远程分支
+                <el-tooltip content="在 git fetch 时自动 prune，移除已在远程删除但本地仍保留的远程分支引用。" placement="top" :show-after="200">
+                  <el-icon class="qmark"><InfoFilled /></el-icon>
+                </el-tooltip>
+              </label>
               <el-switch v-model="cfgFetchPrune" />
             </div>
 
@@ -93,7 +101,11 @@
             </div>
 
             <div class="setting-row">
-              <label class="setting-label">默认初始化分支</label>
+              <label class="setting-label">默认初始化分支
+                <el-tooltip content="新建仓库时（git init）默认创建的分支名，常见为 main 或 master。" placement="top" :show-after="200">
+                  <el-icon class="qmark"><InfoFilled /></el-icon>
+                </el-tooltip>
+              </label>
               <el-input v-model="cfgInitDefaultBranch" placeholder="例如: main" class="modern-input" size="default" />
             </div>
           </div>
@@ -309,7 +321,7 @@ async function handleClear() {
 
 .setting-row {
   display: grid;
-  grid-template-columns: 120px 1fr;
+  grid-template-columns: 140px 1fr;
   gap: 12px;
   align-items: center;
 }
@@ -320,6 +332,18 @@ async function handleClear() {
   color: var(--el-text-color-regular);
   text-align: right;
   padding-right: 8px;
+}
+
+.setting-label .qmark {
+  margin-left: 6px;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  vertical-align: -1px;
+  cursor: help;
+}
+
+.setting-label .qmark:hover {
+  color: #409eff;
 }
 
 :deep(.form-item .el-form-item__label) {
