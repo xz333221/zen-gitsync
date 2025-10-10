@@ -1967,7 +1967,7 @@ git config --global user.email "your.email@example.com"</pre>
   margin-top: 0;
   margin-bottom: 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #dcdfe6;
+  border-bottom: 1px solid var(--border-card);
   font-size: 16px;
   
   font-weight: 500;

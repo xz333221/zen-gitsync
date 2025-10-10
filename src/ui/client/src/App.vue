@@ -2077,7 +2077,7 @@ h1 {
   background-color: var(--bg-container);
   padding: 5px 8px;
   border-radius: 3px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--border-card);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
   width: 100%;
 }
@@ -2297,7 +2297,7 @@ h1 {
   background-color: var(--bg-container);
   padding: 5px 8px;
   border-radius: 3px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--border-card);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
   width: 100%;
 }

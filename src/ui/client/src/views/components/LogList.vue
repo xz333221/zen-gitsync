@@ -111,14 +111,13 @@ const availableAuthors = ref<string[]>([]);
 // 添加分支筛选
 const branchFilter = ref<string[]>([]);
 const availableBranches = ref<string[]>([]);
-
 // 添加右键菜单相关变量
 const contextMenuVisible = ref(false);
 const contextMenuTop = ref(0);
 const contextMenuLeft = ref(0);
 const selectedContextCommit = ref<LogItem | null>(null);
-
-
+// 右键菜单元素引用，用于计算尺寸进行防溢出定位
+const contextMenuRef = ref<HTMLElement | null>(null);
 
 // 应用筛选后的日志
 const filteredLogs = computed(() => {
@@ -873,6 +872,32 @@ function handleContextMenu(row: LogItem, _column: any, event: MouseEvent) {
   // 显示右键菜单
   contextMenuVisible.value = true;
 
+  // 在菜单显示后，根据窗口边界调整位置，避免溢出
+  nextTick(() => {
+    const el = contextMenuRef.value;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const padding = 8; // 与边缘保持最小间距
+
+      let left = event.clientX;
+      let top = event.clientY;
+
+      // 若右侧越界，则从左侧弹出
+      if (left + rect.width > vw) {
+        left = Math.max(padding, event.clientX - rect.width);
+      }
+      // 若下方越界，则从上方弹出
+      if (top + rect.height > vh) {
+        top = Math.max(padding, event.clientY - rect.height);
+      }
+
+      contextMenuLeft.value = left;
+      contextMenuTop.value = top;
+    }
+  });
+
   // 点击其他地方时隐藏菜单
   const hideContextMenu = () => {
     contextMenuVisible.value = false;
@@ -1482,6 +1507,7 @@ function toggleFullscreen() {
     class="context-menu"
     :class="{ 'fullscreen-context-menu': isFullscreen }"
     :style="{ top: contextMenuTop + 'px', left: contextMenuLeft + 'px' }"
+    ref="contextMenuRef"
   >
     <div
       class="context-menu-item"
@@ -1978,7 +2004,7 @@ function toggleFullscreen() {
   margin-right: 6px;
   white-space: nowrap;
   font-weight: bold;
-  border-right: 1px solid #dcdfe6;
+  border-right: 1px solid var(--border-card);
   padding-right: 8px;
 }
 
@@ -2081,7 +2107,7 @@ function toggleFullscreen() {
 .loading-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid #dcdfe6;
+  border: 2px solid var(--border-card);
   border-top-color: #409eff;
   border-radius: 50%;
   animation: spinner 1s linear infinite;
@@ -2124,9 +2150,9 @@ function toggleFullscreen() {
 .context-menu {
   position: fixed;
   background: var(--bg-container);
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-base);
+  box-shadow: var(--shadow-md);
   padding: 6px 0;
   z-index: 3000;
   min-width: 200px;
@@ -2265,7 +2291,7 @@ function toggleFullscreen() {
 .context-menu {
   position: fixed;
   background: var(--bg-container);
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--border-card);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   padding: 6px 0;
