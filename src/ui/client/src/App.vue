@@ -1511,7 +1511,7 @@ h1 {
 }
 
 .branch-label {
-  margin-right: 10px;
+  margin-right: 4px;
   color: var(--color-text);
 }
 
@@ -1530,7 +1530,7 @@ h1 {
   }
   .repo-url-label {
     font-weight: bold;
-    margin-right: 8px;
+    margin-right: 4px;
     color: var(--color-text);
   }
 

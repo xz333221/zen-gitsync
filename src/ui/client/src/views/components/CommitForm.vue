@@ -2839,7 +2839,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .one-push-icon {
   font-size: 24px;
-  margin-right: 8px;
+  margin-right: 4px;
 }
 
 .one-push-text {
@@ -3420,7 +3420,7 @@ git config --global user.email "your.email@example.com"</pre>
 
 .one-push-icon {
   font-size: 20px;
-  margin-right: 10px;
+  margin-right: 4px;
 }
 
 .one-push-text {

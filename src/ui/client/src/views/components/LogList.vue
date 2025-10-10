@@ -1699,7 +1699,7 @@ function toggleFullscreen() {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-right: 8px;
+  margin-right: 4px;
   flex-shrink: 0;
 }
 
@@ -2186,7 +2186,7 @@ function toggleFullscreen() {
 }
 
 .context-menu-item i {
-  margin-right: 10px;
+  margin-right: 4px;
   font-size: 16px;
 }
 

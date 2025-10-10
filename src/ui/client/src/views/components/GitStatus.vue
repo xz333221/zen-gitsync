@@ -611,7 +611,7 @@ defineExpose({
         >
           <el-switch 
             v-model="gitStore.autoUpdateEnabled" 
-            style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 8px;"
+            style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 4px;"
             inline-prompt
             :active-icon="Check"
             :inactive-icon="Close"

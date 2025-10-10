@@ -113,8 +113,8 @@
   --bg-container-dark: #24292e;
   
   /* 表单和输入框背景 */
-  --bg-input: #f8fafc;
-  --bg-input-dark: rgba(36, 41, 46, 0.7);
+  --bg-input: white;
+  --bg-input-dark: #24292e;
   --bg-input-hover: #f1f5f9;
   --bg-input-hover-dark: rgba(255, 255, 255, 0.08);
   
@@ -223,15 +223,15 @@
   
   /* 次要文字 */
   --text-secondary: #606266;
-  --text-secondary-dark: #909399;
+  --text-secondary-dark: #bfc3c9; /* 轻度提升：原 #909399 */
   
   /* 辅助文字 */
   --text-tertiary: #909399;
-  --text-tertiary-dark: #a8abb2;
+  --text-tertiary-dark: #aeb3b9; /* 轻度提升：原 #a8abb2 */
   
   /* 占位符文字 */
   --text-placeholder: #c0c4cc;
-  --text-placeholder-dark: #8d9095;
+  --text-placeholder-dark: #9aa0a6; /* 轻度提升：原 #8d9095 */
   
   /* 全局文字颜色 - 根据主题自动调整 */
   --color-text: var(--text-primary);

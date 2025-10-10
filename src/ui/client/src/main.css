@@ -22,7 +22,7 @@ body {
 }
 
 /* 统一卡片样式 */
-.el-card {
+/* .el-card {
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-base);
     transition: var(--transition-all);
@@ -30,20 +30,5 @@ body {
 
 .el-card:hover {
     box-shadow: var(--shadow-hover);
-}
+} */
 
-/* 统一输入框样式 */
-.el-input__wrapper {
-    border: 1px solid var(--border-color);
-    background-color: var(--bg-input);
-    transition: var(--transition-border);
-}
-
-.el-input__wrapper:hover {
-    border-color: var(--border-hover);
-}
-
-.el-input__wrapper.is-focus {
-    border-color: var(--border-focus);
-    box-shadow: var(--shadow-focus);
-}
