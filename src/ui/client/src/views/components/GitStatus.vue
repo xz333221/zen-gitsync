@@ -475,6 +475,31 @@ async function handleGitFetchAll() {
   }
 }
 
+// 复制“设置上游分支”的命令到剪贴板
+function copyUpstreamPushCommand() {
+  const branch = gitStore.currentBranch || 'HEAD'
+  const cmd = `git push -u origin ${branch}`
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cmd)
+      .then(() => ElMessage.success('已复制: ' + cmd))
+      .catch(() => ElMessage.success('已生成命令: ' + cmd))
+  } else {
+    ElMessage.success('已生成命令: ' + cmd)
+  }
+}
+
+// 复制“自动设置上游”配置命令
+function copyAutoSetupRemoteCommand() {
+  const cmd = 'git config --global push.autoSetupRemote true'
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cmd)
+      .then(() => ElMessage.success('已复制: ' + cmd))
+      .catch(() => ElMessage.success('已生成命令: ' + cmd))
+  } else {
+    ElMessage.success('已生成命令: ' + cmd)
+  }
+}
+
 // 添加撤回文件修改的方法
 async function revertFileChanges(filePath: string) {
   try {
@@ -687,6 +712,25 @@ defineExpose({
       </div>
       
       <div class="status-box-wrap" v-else>
+        <!-- 无上游分支提示 -->
+        <div v-if="!gitStore.hasUpstream" class="upstream-tip">
+          <div class="tip-header">
+            <el-icon class="tip-icon"><InfoFilled /></el-icon>
+            <span class="tip-title">当前分支未设置上游分支</span>
+          </div>
+          <div class="tip-body">
+            <div class="tip-text">首次推送后即可建立与远程的跟踪关系，后续可直接 pull/push。</div>
+            <div class="tip-actions">
+              <el-button size="small" type="primary" plain @click="copyUpstreamPushCommand">
+                <el-icon style="margin-right:4px"><ArrowUp /></el-icon>
+                复制设置上游命令
+              </el-button>
+              <el-button size="small" plain @click="copyAutoSetupRemoteCommand">
+                开启自动设置上游
+              </el-button>
+            </div>
+          </div>
+        </div>
         <!-- 分支信息仅在有领先/落后状态时才显示 -->
         <div v-if="gitStore.hasUpstream && (gitStore.branchAhead > 0 || gitStore.branchBehind > 0)" class="branch-status-info">
           <!-- 分支同步状态信息 -->
