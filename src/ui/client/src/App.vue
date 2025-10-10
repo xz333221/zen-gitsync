@@ -6,8 +6,9 @@ import LogList from '@views/components/LogList.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import InlineCard from '@components/InlineCard.vue'
+import UserSettingsDialog from '@components/UserSettingsDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Menu, Folder, Plus, Setting, User, Message, InfoFilled, Check, Delete, Clock } from '@element-plus/icons-vue'
+import { Edit, Menu, Folder, Plus, Setting, Clock } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -174,38 +175,11 @@ async function handleBranchChange(branch: string) {
   }
 }
 
-// 添加用户设置相关状态
+// 用户设置对话框
 const userSettingsDialogVisible = ref(false)
-const tempUserName = ref('')
-const tempUserEmail = ref('')
 
-// 打开用户设置对话框
 function openUserSettingsDialog() {
-  tempUserName.value = gitStore.userName
-  tempUserEmail.value = gitStore.userEmail
   userSettingsDialogVisible.value = true
-}
-
-// 保存用户设置
-async function saveUserSettings() {
-  if (!tempUserName.value || !tempUserEmail.value) {
-    ElMessage.warning('用户名和邮箱不能为空')
-    return
-  }
-
-  const success = await gitStore.restoreUserConfig(tempUserName.value, tempUserEmail.value)
-  if (success) {
-    userSettingsDialogVisible.value = false
-  }
-}
-
-// 清除用户配置
-async function clearUserSettings() {
-  const success = await gitStore.clearUserConfig()
-  if (success) {
-    tempUserName.value = ''
-    tempUserEmail.value = ''
-  }
 }
 
 // 添加分隔条相关逻辑
@@ -987,81 +961,7 @@ async function selectDirectory(dirPath: string) {
   </footer>
 
   <!-- 用户设置对话框 -->
-  <CommonDialog
-    v-model="userSettingsDialogVisible"
-    title="Git 用户设置"
-    size="small"
-    :destroy-on-close="true"
-    custom-class="user-settings-dialog"
-  >
-    <div class="user-settings-content">
-      <el-form class="user-form" :model="{ tempUserName, tempUserEmail }" label-position="top">
-        <div class="form-group">
-          <el-form-item class="form-item">
-            <template #label>
-              <div class="form-label">
-                <el-icon class="label-icon"><User /></el-icon>
-                <span>用户名</span>
-              </div>
-            </template>
-            <el-input 
-              v-model="tempUserName" 
-              placeholder="请输入 Git 用户名" 
-              class="modern-input"
-              size="large"
-            />
-          </el-form-item>
-        </div>
-        
-        <div class="form-group">
-          <el-form-item class="form-item">
-            <template #label>
-              <div class="form-label">
-                <el-icon class="label-icon"><Message /></el-icon>
-                <span>邮箱地址</span>
-              </div>
-            </template>
-            <el-input 
-              v-model="tempUserEmail" 
-              placeholder="请输入 Git 邮箱地址" 
-              class="modern-input"
-              size="large"
-            />
-          </el-form-item>
-        </div>
-        
-        <div class="info-section">
-          <div class="info-card">
-            <div class="info-icon">
-              <el-icon><InfoFilled /></el-icon>
-            </div>
-            <div class="info-content">
-              <p class="info-title">全局配置</p>
-              <p class="info-desc">这些设置将影响全局 Git 配置，对所有 Git 仓库生效</p>
-            </div>
-          </div>
-        </div>
-      </el-form>
-    </div>
-    
-    <template #footer>
-      <div class="user-settings-footer">
-        <button type="button" class="footer-btn danger-btn" @click="clearUserSettings">
-          <el-icon><Delete /></el-icon>
-          <span>清除配置</span>
-        </button>
-        <div class="footer-actions">
-          <button type="button" class="footer-btn cancel-btn" @click="userSettingsDialogVisible = false">
-            取消
-          </button>
-          <button type="button" class="footer-btn primary-btn" @click="saveUserSettings">
-            <el-icon><Check /></el-icon>
-            <span>保存设置</span>
-          </button>
-        </div>
-      </div>
-    </template>
-  </CommonDialog>
+  <UserSettingsDialog v-model="userSettingsDialogVisible" />
 
   <!-- 添加切换目录对话框 -->
   <CommonDialog
@@ -1678,205 +1578,6 @@ h1 {
   width: 32px;
   height: 32px;
   padding: 0;
-}
-
-/* 用户设置对话框样式 */
-.user-settings-content {
-  padding: 8px 0;
-}
-
-.user-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-group {
-  position: relative;
-}
-
-.form-item {
-  margin-bottom: 0;
-}
-
-:deep(.form-item .el-form-item__label) {
-  padding: 0 0 8px 0;
-  font-weight: 500;
-  color: var(--color-text-title);
-}
-
-.form-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-title);
-}
-
-.label-icon {
-  font-size: 16px;
-  color: #6b7280;
-}
-
-:deep(.modern-input .el-input__wrapper) {
-  border-radius: 8px;
-  border: 1px solid var(--border-input);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s ease;
-  background: var(--bg-container);
-}
-
-:deep(.modern-input .el-input__wrapper:hover) {
-  border-color: #d1d5db;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-:deep(.modern-input.is-focus .el-input__wrapper) {
-  border-color: #3498db;
-  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1), 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-:deep(.modern-input .el-input__inner) {
-  font-size: 14px;
-  color: var(--text-title);
-  font-weight: 400;
-}
-
-:deep(.modern-input .el-input__inner::placeholder) {
-  color: #9ca3af;
-  font-weight: 400;
-}
-
-.info-section {
-  margin-top: 4px;
-}
-
-.info-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
-  position: relative;
-  overflow: hidden;
-}
-
-.info-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px;
-  height: 100%;
-  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-}
-
-.info-icon {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #0284c7;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.info-icon .el-icon {
-  font-size: 16px;
-}
-
-.info-content {
-  flex: 1;
-}
-
-.info-title {
-  margin: 0 0 3px 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #0c4a6e;
-}
-
-.info-desc {
-  margin: 0;
-  font-size: 12px;
-  color: #075985;
-  line-height: 1.4;
-}
-
-.user-settings-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0;
-}
-
-.footer-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.footer-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.footer-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  transition: left 0.5s;
-}
-
-.footer-btn:hover::before {
-  left: 100%;
-}
-
-.primary-btn {
-  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-  color: white;
-  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.25);
-}
-
-.primary-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
-}
-
-.primary-btn:active {
-  transform: translateY(0);
-}
-
-.danger-btn {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: white;
-  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
-}
-
-.danger-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.35);
-}
-
-.danger-btn:active {
-  transform: translateY(0);
 }
 
 /* 创建分支对话框样式 */

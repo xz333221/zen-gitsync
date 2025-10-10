@@ -45,6 +45,7 @@ declare module 'vue' {
     StageButton: typeof import('./src/components/buttons/StageButton.vue')['default']
     SuccessModal: typeof import('./src/components/SuccessModal.vue')['default']
     TemplateManager: typeof import('./src/components/TemplateManager.vue')['default']
+    UserSettingsDialog: typeof import('./src/components/UserSettingsDialog.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']
