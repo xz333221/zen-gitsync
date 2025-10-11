@@ -11,6 +11,13 @@ export const useConfigStore = defineStore('config', () => {
   const lockedFiles = ref<string[]>([])
   const isLoading = ref(false)
   const isLoaded = ref(false)
+  // 当前工作目录
+  const currentDirectory = ref('')
+
+  // 设置当前目录
+  function setCurrentDirectory(dir: string) {
+    currentDirectory.value = dir || ''
+  }
 
   // 添加 computed 属性返回完整配置
   const config = computed(() => {
@@ -19,7 +26,8 @@ export const useConfigStore = defineStore('config', () => {
       descriptionTemplates: descriptionTemplates.value,
       scopeTemplates: scopeTemplates.value,
       messageTemplates: messageTemplates.value,
-      lockedFiles: lockedFiles.value
+      lockedFiles: lockedFiles.value,
+      currentDirectory: currentDirectory.value
     }
   })
 
@@ -31,6 +39,7 @@ export const useConfigStore = defineStore('config', () => {
       return config.value
     }
 
+    isLoading.value = true
     try {
       isLoading.value = true
       console.log('加载配置信息...')
@@ -43,6 +52,10 @@ export const useConfigStore = defineStore('config', () => {
       scopeTemplates.value = configData.scopeTemplates || []
       messageTemplates.value = configData.messageTemplates || []
       lockedFiles.value = configData.lockedFiles || []
+      // 若后端返回当前目录，更新
+      if (configData.currentDirectory) {
+        currentDirectory.value = configData.currentDirectory
+      }
       
       // 标记为已加载
       isLoaded.value = true
@@ -310,11 +323,12 @@ export const useConfigStore = defineStore('config', () => {
     lockedFiles,
     isLoading,
     isLoaded,
+    currentDirectory,
     config,
 
     // 方法
     loadConfig,
-    saveDefaultMessage,
+    setCurrentDirectory,
     saveTemplate,
     deleteTemplate,
     updateTemplate,

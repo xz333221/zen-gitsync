@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, h } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import InlineCard from '@components/InlineCard.vue'
+import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Menu, Folder, FolderOpened, Plus, Setting, Check, Clock, DocumentCopy, Sunny, Moon } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Edit, Menu, Plus, Setting, Check, DocumentCopy, Sunny, Moon } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -26,7 +27,8 @@ const configStore = useConfigStore()
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
-const currentDirectory = ref('')
+// 从 configStore 代理当前目录
+const currentDirectory = computed(() => configStore.currentDirectory)
 
 // 主题切换功能
 const isDarkTheme = ref(false)
@@ -67,7 +69,7 @@ async function loadCurrentDirectory() {
   try {
     const responseDir = await fetch('/api/current_directory')
     const dirData = await responseDir.json()
-    currentDirectory.value = dirData.directory || '未知目录'
+    configStore.setCurrentDirectory(dirData.directory || '未知目录')
     return dirData
   } catch (error) {
     console.error('获取当前目录失败:', error)
@@ -398,275 +400,26 @@ function stopHResize() {
   saveLayoutRatios();
 }
 
-// 添加目录切换相关逻辑
-const isDirectoryDialogVisible = ref(false)
-const newDirectoryPath = ref('')
-const isChangingDirectory = ref(false)
-const recentDirectories = ref<string[]>([])
+// 由目录组件回调的目录变化处理
+async function onDirectoryChanged(payload: { directory: string; isGitRepo: boolean }) {
+  configStore.setCurrentDirectory(payload.directory)
+  gitStore.isGitRepo = payload.isGitRepo
 
+  // 切换目录后强制重新加载配置
+  await configStore.loadConfig(true)
 
-// 打开切换目录对话框
-function openDirectoryDialog() {
-  newDirectoryPath.value = currentDirectory.value
-  isDirectoryDialogVisible.value = true
-  
-  // 获取最近使用过的目录
-  getRecentDirectories()
-}
-
-// 获取最近访问的目录
-async function getRecentDirectories() {
-  try {
-    const response = await fetch('/api/recent_directories')
-    const result = await response.json()
-    
-    if (result.success && Array.isArray(result.directories)) {
-      recentDirectories.value = result.directories
-    }
-  } catch (error) {
-    console.error('获取最近目录失败:', error)
-  }
-}
-
-// 切换目录
-async function changeDirectory() {
-  if (!newDirectoryPath.value) {
-    ElMessage.warning('目录路径不能为空')
-    return
-  }
-
-  try {
-    isChangingDirectory.value = true
-    const response = await fetch('/api/change_directory', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ path: newDirectoryPath.value })
-    })
-
-    const result = await response.json()
-
-    if (result.success) {
-      ElMessage.success('已切换工作目录')
-      currentDirectory.value = result.directory
-      isDirectoryDialogVisible.value = false
-
-      // 保存到最近使用的目录
-      await saveRecentDirectory(result.directory)
-      // 立即刷新最近目录列表，确保对话框里立刻可见
-      await getRecentDirectories()
-
-      // 直接使用API返回的Git仓库状态
-      gitStore.isGitRepo = result.isGitRepo
-
-      // 切换目录后，强制重新加载当前项目配置（确保新项目配置被初始化并反映到前端）
-      await configStore.loadConfig(true)
-
-      // 如果是Git仓库，加载Git相关数据
-      if (result.isGitRepo) {
-        // 加载Git分支和用户信息
-        await Promise.all([
-          gitStore.getCurrentBranch(),
-          gitStore.getAllBranches(),
-          gitStore.getUserInfo(),
-          gitStore.getRemoteUrl()
-        ])
-
-        // 刷新Git状态
-        if (gitStatusRef.value) {
-          gitStatusRef.value.refreshStatus()
-        }
-
-        // 刷新提交历史
-        if (logListRef.value) {
-          logListRef.value.refreshLog()
-        }
-      } else {
-        ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
-        // 清空Git相关状态
-        gitStore.$reset()
-      }
-    } else {
-      ElMessage.error(result.error || '切换目录失败')
-    }
-  } catch (error) {
-    ElMessage.error(`切换目录失败: ${(error as Error).message}`)
-  } finally {
-    isChangingDirectory.value = false
-  }
-}
-
-// 保存最近使用的目录
-async function saveRecentDirectory(directory: string) {
-  try {
-    await fetch('/api/save_recent_directory', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ path: directory })
-    })
-  } catch (error) {
-    console.error('保存最近目录失败:', error)
-  }
-}
-
-// 在资源管理器中打开当前目录
-async function openInFileExplorer() {
-  try {
-    if (!currentDirectory.value) {
-      ElMessage.warning('当前目录路径为空')
-      return
-    }
-    
-    const response = await fetch('/api/open_directory', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ path: currentDirectory.value })
-    })
-    
-    const result = await response.json()
-    
-    if (result.success) {
-      ElMessage.success('已在文件管理器中打开目录')
-    } else if (result.error) {
-      ElMessage.error(result.error)
-    }
-  } catch (error) {
-    console.error('打开目录失败:', error)
-    ElMessage.error(`打开目录失败: ${(error as Error).message}`)
-  }
-}
-
-// 添加浏览目录的功能
-async function browseDirectory() {
-  try {
-    const response = await fetch('/api/browse_directory', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ 
-        currentPath: newDirectoryPath.value || currentDirectory.value 
-      })
-    })
-    
-    const result = await response.json()
-    
-    if (result.success) {
-      // 打开目录选择对话框
-      selectDirectoryDialog(result)
-    } else if (result.error) {
-      ElMessage.error(result.error)
-    }
-  } catch (error) {
-    console.error('浏览目录失败:', error)
-    ElMessage.error(`浏览目录失败: ${(error as Error).message}`)
-  }
-}
-
-// 打开目录选择对话框
-function selectDirectoryDialog(directoryData: any) {
-  if (!directoryData || !directoryData.items) return
-  
-  ElMessageBox.alert(
-    h('div', { class: 'directory-browser' }, [
-      h('div', { class: 'current-path' }, [
-        h('span', { class: 'path-label' }, '当前路径: '),
-        h('span', { class: 'path-value' }, directoryData.path)
-      ]),
-      h('div', { class: 'directory-list' }, [
-        // 添加返回上级目录选项
-        directoryData.parentPath ? h('div', { 
-          class: 'directory-item parent-dir',
-          onClick: () => {
-            selectDirectory(directoryData.parentPath)
-          }
-        }, [
-          h('span', { class: 'dir-icon' }, 
-            h('svg', { 
-              class: 'folder-icon', 
-              viewBox: '0 0 24 24',
-              width: '20',
-              height: '20',
-              style: { fill: '#E6A23C' }
-            }, [
-              h('path', { d: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z' })
-            ])
-          ),
-          h('span', { class: 'dir-name' }, '返回上级目录')
-        ]) : null,
-        // 列出当前目录下的所有子目录
-        ...directoryData.items.map((item: any) => h('div', { 
-          class: 'directory-item',
-          onClick: () => {
-            selectDirectory(item.path)
-          }
-        }, [
-          h('span', { class: 'dir-icon' },
-            h('svg', { 
-              class: 'folder-icon', 
-              viewBox: '0 0 24 24',
-              width: '20',
-              height: '20',
-              style: { fill: '#409EFF' }
-            }, [
-              h('path', { d: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z' })
-            ])
-          ),
-          h('span', { class: 'dir-name' }, item.name)
-        ]))
-      ])
-    ]),
-    '浏览并选择目录',
-    {
-      confirmButtonText: '使用当前目录',
-      customClass: 'directory-browser-dialog',
-      callback: (action: string) => {
-        if (action === 'confirm') {
-          newDirectoryPath.value = directoryData.path
-        }
-      }
-    }
-  )
-}
-
-// 选择目录
-async function selectDirectory(dirPath: string) {
-  try {
-    // 先关闭当前对话框
-    ElMessageBox.close();
-    
-    // 延迟一小段时间再打开新对话框，确保旧对话框已完全关闭
-    setTimeout(async () => {
-      try {
-        const response = await fetch('/api/browse_directory', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ currentPath: dirPath })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-          // 重新打开目录选择对话框，显示新的目录内容
-          selectDirectoryDialog(result);
-        } else if (result.error) {
-          ElMessage.error(result.error);
-        }
-      } catch (error) {
-        console.error('浏览目录失败:', error);
-        ElMessage.error(`浏览目录失败: ${(error as Error).message}`);
-      }
-    }, 100);
-  } catch (error) {
-    console.error('处理目录选择时出错:', error);
-    ElMessage.error(`处理目录选择时出错: ${(error as Error).message}`);
+  if (payload.isGitRepo) {
+    await Promise.all([
+      gitStore.getCurrentBranch(),
+      gitStore.getAllBranches(),
+      gitStore.getUserInfo(),
+      gitStore.getRemoteUrl()
+    ])
+    gitStatusRef.value?.refreshStatus()
+    logListRef.value?.refreshLog()
+  } else {
+    ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
+    gitStore.$reset()
   }
 }
 </script>
@@ -699,33 +452,11 @@ async function selectDirectory(dirPath: string) {
         </template>
       </InlineCard>
 
-      <!-- 目录选择卡片 -->
-      <InlineCard id="directory-selector" class="directory-selector" compact>
-        <!-- <template #icon>
-          <div class="directory-icon">
-            <el-icon><Folder /></el-icon>
-          </div>
-        </template> -->
-        <template #content>
-          <div class="directory-display">
-            <div class="directory-path" :title="currentDirectory">{{ currentDirectory }}</div>
-          </div>
-        </template>
-        <template #actions>
-          <div class="directory-actions">
-            <el-tooltip content="切换目录" placement="bottom" effect="dark" :open-delay="500">
-              <button class="modern-btn btn-icon-28" @click="openDirectoryDialog">
-                <el-icon class="btn-icon"><Folder /></el-icon>
-              </button>
-            </el-tooltip>
-            <el-tooltip content="在资源管理器中打开" placement="bottom" effect="dark" :open-delay="500">
-              <button class="modern-btn btn-icon-28" @click="openInFileExplorer">
-                <el-icon class="btn-icon"><FolderOpened /></el-icon>
-              </button>
-            </el-tooltip>
-          </div>
-        </template>
-      </InlineCard>
+      <!-- 目录选择卡片（提取为独立组件） -->
+      <DirectorySelector
+        :current-directory="configStore.currentDirectory"
+        @changed="onDirectoryChanged"
+      />
 
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
@@ -940,77 +671,6 @@ async function selectDirectory(dirPath: string) {
 
   <!-- 用户设置对话框 -->
   <UserSettingsDialog v-model="userSettingsDialogVisible" />
-
-  <!-- 添加切换目录对话框 -->
-  <CommonDialog
-    v-model="isDirectoryDialogVisible"
-    title="切换工作目录"
-    size="medium"
-    :destroy-on-close="true"
-    custom-class="directory-dialog"
-  >
-    <div class="directory-content">
-      <el-form label-position="top">
-        <el-form-item>
-          <template #label>
-            <div class="form-label">
-              <el-icon class="label-icon"><Folder /></el-icon>
-              <span>目录路径</span>
-            </div>
-          </template>
-          <div class="directory-input-group">
-            <el-input 
-              v-model="newDirectoryPath" 
-              placeholder="请输入目录路径" 
-              class="modern-input"
-              size="large"
-            />
-            <button type="button" class="browse-btn" @click="browseDirectory">
-              <el-icon><Folder /></el-icon>
-              <span>浏览</span>
-            </button>
-          </div>
-        </el-form-item>
-        <el-form-item v-if="recentDirectories.length > 0">
-          <template #label>
-            <div class="form-label">
-              <el-icon class="label-icon"><Clock /></el-icon>
-              <span>常用目录</span>
-            </div>
-          </template>
-          <div class="recent-directories">
-            <div 
-              v-for="(dir, index) in recentDirectories" 
-              :key="index" 
-              class="recent-dir-item"
-              @click="newDirectoryPath = dir"
-            >
-              <el-icon class="dir-icon"><Folder /></el-icon>
-              <span class="dir-path" :title="dir">{{ dir }}</span>
-            </div>
-          </div>
-        </el-form-item>
-      </el-form>
-    </div>
-    <template #footer>
-      <div class="directory-footer">
-        <div class="footer-actions">
-          <button type="button" class="footer-btn cancel-btn" @click="isDirectoryDialogVisible = false">
-            取消
-          </button>
-          <button type="button" class="footer-btn primary-btn" @click="changeDirectory()" :disabled="isChangingDirectory">
-            <el-icon v-if="!isChangingDirectory"><Check /></el-icon>
-            <el-icon class="is-loading" v-else>
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
-              </svg>
-            </el-icon>
-            <span>切换</span>
-          </button>
-        </div>
-      </div>
-    </template>
-  </CommonDialog>
 </template>
 
 <style>
@@ -1121,25 +781,6 @@ h1 {
   transition: all 0.2s ease;
 }
 
-/* 添加目录选择器样式 */
-.directory-selector {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  border-radius: 8px;
-  padding: 8px 14px;
-  border: 1px solid var(--border-component);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-  max-width: 420px;
-}
-
-.directory-selector:hover {
-  background: var(--border-component);
-}
-
 .command-history-section {
   display: flex;
   align-items: center;
@@ -1214,43 +855,8 @@ h1 {
 
 /* 交互效果使用 .btn-rotate-on-hover / .btn-scale-on-hover */
 
-.directory-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
 
-.directory-path {
-  font-family: monospace;
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 14px;
-  font-weight: 500;
-  background-color: var(--bg-container);
-  padding: 4px 8px;
-  border-radius: 3px;
-  border-left: 3px solid #409EFF;
-  border: 1px solid var(--border-component);
-
-  flex: 1;
-  min-width: 0;
-  max-width: 500px;
-}
-
-/* 统一 InlineCard 内部内容的垂直尺寸，避免因为内部再套一层有 padding/border 的容器导致高度不一致 */
-.inline-card .directory-path {
-  background: transparent;
-  border: 0;
-  border-left: 0;
-  padding: 0 8px;
-  border-radius: 0;
-  display: flex;
-  align-items: center;
-}
+/* 目录选择器样式由 components/DirectorySelector.vue scoped 管理 */
 
 .branch-label,
 .user-label {
@@ -1622,99 +1228,6 @@ h1 {
   padding: 0;
 }
 
-/* 切换目录对话框样式 */
-.directory-content {
-  padding: 8px 0;
-}
-
-.directory-input-group {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.directory-input-group .modern-input {
-  flex: 1;
-}
-
-.browse-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 16px;
-  border: none;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-  color: white;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  min-height: 40px;
-}
-
-.browse-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
-}
-
-.browse-btn:active {
-  transform: translateY(0);
-}
-
-.recent-directories {
-  /* 改为两列栅格，提高可用宽度，减少路径被截断 */
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  max-height: 240px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.recent-dir-item {
-  display: flex;
-  align-items: flex-start; /* 文本可换行时顶部对齐 */
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-card);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.recent-dir-item:hover {
-  background: var(--bg-input-hover);
-  border-color: var(--border-card-hover);
-  transform: translateX(2px);
-}
-
-.dir-icon {
-  font-size: 16px;
-  color: #3498db;
-  flex-shrink: 0;
-}
-
-.dir-path {
-  font-size: 13px;
-  color: var(--color-text-title);
-  font-family: 'Courier New', monospace;
-  word-break: break-all;
-  /* 目录选择对话框内允许换行显示，减少信息丢失 */
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  flex: 1;
-  min-width: 0;
-}
-
-.directory-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0;
-}
 
 /* 选择框样式 */
 :deep(.modern-select .el-select__wrapper) {
@@ -1750,361 +1263,6 @@ h1 {
   }
 }
 
-.directory-icon {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 3px;
-  background-color: rgba(64, 158, 255, 0.1);
-  color: #409EFF;
-  margin-right: 2px;
-}
-
-.directory-input-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.recent-directories {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.recent-dir-tag {
-  cursor: pointer;
-  background-color: #e6f7ff;
-  border: 1px solid #91d5ff;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.directory-browser {
-  width: 100%;
-  height: 400px;
-  overflow: auto;
-}
-
-.current-path {
-  padding: 10px;
-  background-color: var(--bg-panel);
-  border-radius: 4px;
-  margin-bottom: 10px;
-  border: 1px solid var(--border-card);
-  display: flex;
-  align-items: center;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.path-label {
-  font-weight: bold;
-  margin-right: 5px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.path-value {
-  font-family: monospace;
-  word-break: break-all;
-  flex: 1;
-  min-width: 0;
-  background-color: var(--bg-container);
-  padding: 5px 8px;
-  border-radius: 3px;
-  border: 1px solid var(--border-card);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
-  width: 100%;
-}
-
-.directory-list {
-  list-style: none !important;
-  padding: 0;
-  margin: 0;
-  border: 1px solid var(--border-card);
-  border-radius: 4px;
-  max-height: 300px;
-  overflow-y: auto;
-  background-color: var(--bg-container);
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.directory-item {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-card);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s ease;
-  position: relative;
-  width: 100%;
-  box-sizing: border-box;
-  list-style: none !important; /* 确保列表项没有项目符号 */
-}
-
-.directory-item:hover {
-  background-color: #ecf5ff;
-}
-
-.directory-item:last-child {
-  border-bottom: none;
-}
-
-.parent-dir {
-  background-color: var(--bg-panel);
-  font-weight: 500;
-}
-
-.dir-icon {
-  margin-right: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-}
-
-.dir-name {
-  display: flex;
-  align-items: center;
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.folder-icon {
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
-  transition: all 0.2s ease;
-}
-
-.directory-item:hover .folder-icon {
-  transform: scale(1.1);
-}
-
-/* 目录浏览器对话框样式 */
-:deep(.directory-browser-dialog) {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-:deep(.directory-browser-dialog .el-message-box__header) {
-  background-color: var(--bg-panel);
-  padding: 15px 20px;
-  border-bottom: 1px solid var(--border-card);
-  position: relative;
-}
-
-:deep(.directory-browser-dialog .el-message-box__title) {
-  color: #409EFF;
-  font-weight: 500;
-  font-size: 18px;
-}
-
-:deep(.directory-browser-dialog .el-message-box__headerbtn) {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.05);
-  transition: all 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-:deep(.directory-browser-dialog .el-message-box__headerbtn:hover) {
-  background-color: rgba(0, 0, 0, 0.1);
-  transform: rotate(90deg);
-}
-
-:deep(.directory-browser-dialog .el-message-box__headerbtn .el-message-box__close) {
-  color: var(--text-secondary);
-  font-weight: bold;
-  font-size: 16px;
-}
-
-:deep(.directory-browser-dialog .el-message-box__headerbtn:hover .el-message-box__close) {
-  color: #409EFF;
-}
-
-:deep(.directory-browser-dialog .el-message-box__content) {
-  padding: 20px;
-}
 </style>
 
-<!-- 添加全局样式，确保能影响body下的弹窗 -->
-<style>
-.el-message-box__message{
-  width: 100%;
-}
-/* 目录浏览器全局样式 */
-.directory-browser-dialog {
-  border-radius: 8px;
-  overflow: hidden;
-}
 
-.directory-browser-dialog .el-message-box__header {
-  background-color: var(--bg-panel);
-  padding: 15px 20px;
-  border-bottom: 1px solid var(--border-card);
-  position: relative;
-}
-
-.directory-browser-dialog .el-message-box__title {
-  color: #409EFF;
-  font-weight: 500;
-  font-size: 18px;
-}
-
-.directory-browser-dialog .el-message-box__headerbtn {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.05);
-  transition: all 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.directory-browser-dialog .el-message-box__headerbtn:hover {
-  background-color: rgba(0, 0, 0, 0.1);
-  transform: rotate(90deg);
-}
-
-.directory-browser-dialog .el-message-box__headerbtn .el-message-box__close {
-  color: var(--text-secondary);
-  font-weight: bold;
-  font-size: 16px;
-}
-
-.directory-browser-dialog .el-message-box__headerbtn:hover .el-message-box__close {
-  color: #409EFF;
-}
-
-.directory-browser-dialog .el-message-box__content {
-  padding: 20px;
-}
-
-.directory-browser-dialog .el-message-box__btns {
-  padding: 10px 20px 15px;
-  border-top: 1px solid var(--border-card);
-}
-
-.directory-browser {
-  width: 100%;
-  height: 400px;
-  overflow: auto;
-}
-
-.current-path {
-  padding: 10px;
-  background-color: var(--bg-panel);
-  border-radius: 4px;
-  margin-bottom: 10px;
-  border: 1px solid var(--border-card);
-  display: flex;
-  align-items: center;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.path-label {
-  font-weight: bold;
-  margin-right: 5px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.path-value {
-  font-family: monospace;
-  word-break: break-all;
-  flex: 1;
-  min-width: 0;
-  background-color: var(--bg-container);
-  padding: 5px 8px;
-  border-radius: 3px;
-  border: 1px solid var(--border-card);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
-  width: 100%;
-}
-
-.directory-list {
-  list-style: none !important;
-  padding: 0;
-  margin: 0;
-  border: 1px solid var(--border-card);
-  border-radius: 4px;
-  max-height: 300px;
-  overflow-y: auto;
-  background-color: var(--bg-container);
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.directory-item {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-card);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s ease;
-  position: relative;
-  width: 100%;
-  box-sizing: border-box;
-  list-style: none !important; /* 确保列表项没有项目符号 */
-}
-
-.directory-item:hover {
-  background-color: #ecf5ff;
-}
-
-.directory-item:last-child {
-  border-bottom: none;
-}
-
-.parent-dir {
-  background-color: var(--bg-panel);
-  font-weight: 500;
-}
-
-.dir-icon {
-  margin-right: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-}
-
-.dir-name {
-  display: flex;
-  align-items: center;
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.folder-icon {
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
-  transition: all 0.2s ease;
-}
-
-.directory-item:hover .folder-icon {
-  transform: scale(1.1);
-}
-</style>
