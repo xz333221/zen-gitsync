@@ -261,39 +261,23 @@ async function selectDirectory(dirPath: string) {
 </script>
 
 <template>
-  <InlineCard id="directory-selector" class="directory-selector" compact>
-    <template #content>
-      <div class="directory-display cursor-pointer" @click="onOpenDialog">
-        <div class="directory-path" :title="currentDirectory">
-          {{ currentDirectory }}
-        </div>
-      </div>
-    </template>
-    <template #actions>
-      <div class="directory-actions">
-        <!-- <el-tooltip
-          content="切换目录"
-          placement="bottom"
-          effect="dark"
-          :open-delay="500"
-        >
-          <button class="modern-btn btn-icon-28" @click="onOpenDialog">
-            <el-icon class="btn-icon"><Folder /></el-icon>
-          </button>
-        </el-tooltip> -->
-        <el-tooltip
-          content="在资源管理器中打开"
-          placement="bottom"
-          effect="dark"
-          :open-delay="500"
-        >
-          <button class="modern-btn btn-icon-28" @click="onOpenExplorer">
-            <el-icon class="btn-icon"><FolderOpened /></el-icon>
-          </button>
-        </el-tooltip>
-      </div>
-    </template>
-  </InlineCard>
+  <div id="directory-selector" class="directory-selector">
+    <div class="directory-display cursor-pointer" :title="currentDirectory" @click="onOpenDialog">
+      {{ currentDirectory }}
+    </div>
+    <div class="directory-actions">
+      <el-tooltip
+        content="在资源管理器中打开"
+        placement="bottom"
+        effect="dark"
+        :open-delay="500"
+      >
+        <button class="modern-btn btn-icon-28" @click="onOpenExplorer">
+          <el-icon class="btn-icon"><FolderOpened /></el-icon>
+        </button>
+      </el-tooltip>
+    </div>
+  </div>
 
   <!-- 切换目录对话框 -->
   <CommonDialog
@@ -382,12 +366,14 @@ async function selectDirectory(dirPath: string) {
 
 <style scoped>
 .directory-selector {
+  width: 100%;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
   border-radius: 8px;
   padding: 0px;
+  gap: 8px;
   border: 1px solid var(--border-component);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
@@ -399,14 +385,8 @@ async function selectDirectory(dirPath: string) {
 }
 
 .directory-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   flex: 1;
   min-width: 0;
-}
-
-.directory-path {
   font-family: monospace;
   color: var(--color-text);
   white-space: nowrap;
@@ -421,11 +401,6 @@ async function selectDirectory(dirPath: string) {
   border: 1px solid var(--border-component);
   flex: 1;
   min-width: 0;
-}
-
-.directory-actions {
-  display: flex;
-  gap: 6px;
 }
 
 /* 对话框样式（复用 App.vue 中样式） */

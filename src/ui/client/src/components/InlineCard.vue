@@ -29,7 +29,6 @@ const hasIcon = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px;
   border-radius: 8px;
   background: var(--bg-container);
   border: 1px solid var(--border-component);

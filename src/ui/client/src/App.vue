@@ -780,49 +780,6 @@ h1 {
   overflow: hidden;
 }
 
-.modern-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(102, 177, 255, 0.1) 100%);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.modern-btn:hover {
-  background: var(--border-component);
-  color: #343a40;
-}
-
-.modern-btn:hover::before {
-  opacity: 1;
-}
-
-.modern-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-/* 按钮尺寸与交互效果已抽为全局工具类（见 styles/common.scss） */
-
-.modern-btn .btn-icon {
-  font-size: 16px;
-  transition: transform 0.2s ease;
-  z-index: 1;
-  position: relative;
-}
-
-.modern-btn .btn-text {
-  font-size: 13px;
-  font-weight: 500;
-  z-index: 1;
-  position: relative;
-}
-
-/* 交互效果使用 .btn-rotate-on-hover / .btn-scale-on-hover */
 
 
 /* 目录选择器样式由 components/DirectorySelector.vue scoped 管理 */
@@ -830,7 +787,6 @@ h1 {
 .branch-label,
 .user-label {
   font-weight: bold;
-  margin-right: 5px;
 }
 
 .user-name {
@@ -932,37 +888,14 @@ h1 {
   gap: 8px;
 }
 
-.branch-wrapper {
-  display: flex;
-  align-items: center;
-  border-radius: 4px;
-  padding: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--border-component);
-  transition: all 0.3s;
-}
-
-.branch-wrapper:hover {
-  background-color: var(--border-component);
-}
-
 .branch-label {
-  margin-right: 4px;
   color: var(--color-text);
+  padding-top: 6px;
+  margin-right: 4px;
 }
 
   .branch-select {
     width: 200px;
-  }
-  .footer-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--color-text);
-    font-size: 13px;
-    padding: 8px;
-    border-radius: 4px;
-    border: 1px solid var(--border-component);
   }
   .repo-url-label {
     font-weight: bold;

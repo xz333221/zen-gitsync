@@ -3631,11 +3631,6 @@ git config --global user.email "your.email@example.com"</pre>
   gap: 8px;
 }
 
-.footer-right {
-  display: flex;
-  gap: 8px;
-}
-
 .system-config-btn {
   border-radius: 6px;
   font-weight: 500;

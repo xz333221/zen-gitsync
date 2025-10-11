@@ -641,7 +641,7 @@ defineExpose({
         <h2>Git 状态</h2>
         <div class="header-actions">
           <el-tooltip 
-            :content="gitStore.autoUpdateEnabled ? '禁用自动更新文件状态' : '启用自动更新文件状态'" 
+            :content="gitStore.autoUpdateEnabled ? '自动更新文件状态' : '自动更新文件状态'" 
             placement="top" 
             :hide-after="1000"
             :show-after="200"

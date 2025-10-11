@@ -571,53 +571,6 @@ onUnmounted(() => {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.modern-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(102, 177, 255, 0.1) 100%);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.modern-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.modern-btn:hover::before {
-  opacity: 1;
-}
-
-.modern-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-.modern-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.modern-btn:disabled:hover {
-  background: rgba(255, 255, 255, 0.08);
-  transform: none;
-  box-shadow: none;
-}
-
-.modern-btn .btn-icon {
-  font-size: 16px;
-  transition: transform 0.2s ease;
-  z-index: 1;
-  position: relative;
-}
-
 .history-scroll {
   flex-grow: 1;
   overflow-y: auto;
