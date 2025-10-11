@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import InlineCard from "@components/InlineCard.vue";
 import CommonDialog from "@components/CommonDialog.vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Folder, FolderOpened, Clock } from "@element-plus/icons-vue";

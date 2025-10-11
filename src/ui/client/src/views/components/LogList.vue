@@ -207,34 +207,6 @@ async function loadLog(all = false, page = 1) {
   }
 }
 
-// 图表渲染与视图切换逻辑已移除
-
-// 切换显示所有提交
-function toggleAllCommits() {
-  showAllCommits.value = !showAllCommits.value;
-  
-  // 重置hasMoreData为true（分页模式）
-  if (!showAllCommits.value) {
-    gitStore.hasMoreData = true;
-  }
-  
-  // 重置当前页码
-  gitStore.currentPage = 1;
-  
-  // 加载日志
-  loadLog(showAllCommits.value);
-  
-  // 确保在下一个渲染周期重新设置滚动监听
-  nextTick(() => {
-    setTimeout(() => {
-      if (!showAllCommits.value) {
-        setupTableScrollListener();
-        checkAndLoadMore(); // 检查是否需要加载更多
-      }
-    }, 300);
-  });
-}
-
 // 格式化分支名（实现该函数，因为在模板中调用了）
 function formatBranchName(ref: string) {
   // 处理HEAD、远程分支等情况

@@ -122,7 +122,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { User, Message, InfoFilled, Setting, Check } from '@element-plus/icons-vue'
+import { InfoFilled, Setting, Check } from '@element-plus/icons-vue'
 import CommonDialog from './CommonDialog.vue'
 import { useGitStore } from '@/stores/gitStore'
 

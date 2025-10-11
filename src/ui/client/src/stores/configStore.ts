@@ -330,6 +330,7 @@ export const useConfigStore = defineStore('config', () => {
     loadConfig,
     setCurrentDirectory,
     saveTemplate,
+    saveDefaultMessage,
     deleteTemplate,
     updateTemplate,
     loadLockedFiles,
