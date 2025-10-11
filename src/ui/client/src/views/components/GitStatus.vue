@@ -850,11 +850,18 @@ defineExpose({
       :files="gitFilesForViewer"
       :diffContent="diffContent"
       :selectedFile="selectedFile"
+      :showActionButtons="true"
+      :isFileLocked="isFileLocked"
+      :isLocking="isLocking"
       context="git-status"
       emptyText="选择文件查看差异"
       @file-select="handleGitFileSelect"
       @open-file="handleOpenFile"
       @open-with-vscode="handleOpenWithVSCode"
+      @toggle-lock="toggleFileLock"
+      @stage="stageFile"
+      @unstage="unstageFile"
+      @revert="revertFileChanges"
     />
   </CommonDialog>
 

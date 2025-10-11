@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ArrowDown, Lock, Unlock, RefreshRight, Close } from '@element-plus/icons-vue'
+import { ArrowDown } from '@element-plus/icons-vue'
+import FileActionButtons from './FileActionButtons.vue'
 
 interface FileItem {
   path: string
@@ -46,80 +47,23 @@ function handleFileClick(file: FileItem) {
 }
 
 // 处理文件锁定切换
-function handleToggleFileLock(filePath: string, event: Event) {
-  event.stopPropagation()
+function handleToggleFileLock(filePath: string) {
   emit('toggleFileLock', filePath)
 }
 
 // 处理暂存文件
-function handleStageFile(filePath: string, event: Event) {
-  event.stopPropagation()
+function handleStageFile(filePath: string) {
   emit('stageFile', filePath)
 }
 
 // 处理取消暂存
-function handleUnstageFile(filePath: string, event: Event) {
-  event.stopPropagation()
+function handleUnstageFile(filePath: string) {
   emit('unstageFile', filePath)
 }
 
 // 处理撤回修改
-function handleRevertFile(filePath: string, event: Event) {
-  event.stopPropagation()
+function handleRevertFile(filePath: string) {
   emit('revertFileChanges', filePath)
-}
-
-// 根据文件类型获取操作按钮配置
-function getActionButtons(fileType: string) {
-  switch (fileType) {
-    case 'added':
-      return [
-        {
-          type: 'unstage',
-          tooltip: '取消暂存',
-          buttonType: 'warning',
-          icon: '-',
-          handler: handleUnstageFile
-        }
-      ]
-    case 'modified':
-    case 'deleted':
-      return [
-        {
-          type: 'stage',
-          tooltip: '添加到暂存区',
-          buttonType: 'success',
-          icon: '+',
-          handler: handleStageFile
-        },
-        {
-          type: 'revert',
-          tooltip: '撤回修改',
-          buttonType: 'danger',
-          icon: RefreshRight,
-          handler: handleRevertFile
-        }
-      ]
-    case 'untracked':
-      return [
-        {
-          type: 'stage',
-          tooltip: '添加到暂存区',
-          buttonType: 'success',
-          icon: '+',
-          handler: handleStageFile
-        },
-        {
-          type: 'delete',
-          tooltip: '删除文件',
-          buttonType: 'danger',
-          icon: Close,
-          handler: handleRevertFile
-        }
-      ]
-    default:
-      return []
-  }
 }
 
 // 将文件类型映射为字母标记
@@ -151,7 +95,7 @@ function getStatusLetter(fileType: string): string {
       <div
         v-for="file in files"
         :key="file.path"
-        class="file-item"
+        class="file-item file-group-item"
         :class="{ 'is-loading': props.isLocking(file.path) }"
         @click="handleFileClick(file)"
       >
@@ -187,47 +131,16 @@ function getStatusLetter(fileType: string): string {
             </el-tooltip>
           </div>
         </div>
-        <div class="file-actions">
-          <!-- 锁定/解锁按钮 -->
-          <el-tooltip 
-            :content="props.isLocking(file.path) ? '处理中...' : (props.isFileLocked(file.path) ? '解锁文件' : '锁定文件')" 
-            placement="top" 
-            :hide-after="1000" 
-            :show-after="200"
-          >
-            <el-button
-              :type="props.isFileLocked(file.path) ? 'danger' : 'info'"
-              size="small"
-              text
-              :loading="props.isLocking(file.path)"
-              :disabled="props.isLocking(file.path)"
-              @click="handleToggleFileLock(file.path, $event)"
-              class="file-action-btn"
-            >
-              <el-icon v-if="!props.isLocking(file.path)" size="16">
-                <component :is="props.isFileLocked(file.path) ? Lock : Unlock" />
-              </el-icon>
-            </el-button>
-          </el-tooltip>
-          
-          <!-- 动态操作按钮（文件被锁定时隐藏） -->
-          <template v-if="!props.isFileLocked(file.path)" v-for="action in getActionButtons(file.type)" :key="action.type">
-            <el-tooltip :content="action.tooltip" placement="top" :hide-after="1000" :show-after="200">
-              <el-button
-                :type="action.buttonType"
-                size="small"
-                text
-                @click="action.handler(file.path, $event)"
-                class="file-action-btn"
-              >
-                <el-icon v-if="typeof action.icon !== 'string'" size="16">
-                  <component :is="action.icon" />
-                </el-icon>
-                <span v-else style="font-size: 16px; font-weight: bold;">{{ action.icon }}</span>
-              </el-button>
-            </el-tooltip>
-          </template>
-        </div>
+        <FileActionButtons
+          :file-path="file.path"
+          :file-type="file.type"
+          :is-locked="props.isFileLocked(file.path)"
+          :is-locking="props.isLocking(file.path)"
+          @toggle-lock="handleToggleFileLock"
+          @stage="handleStageFile"
+          @unstage="handleUnstageFile"
+          @revert="handleRevertFile"
+        />
       </div>
     </div>
   </div>

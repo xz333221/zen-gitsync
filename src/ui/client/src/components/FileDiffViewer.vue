@@ -4,6 +4,7 @@ import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage } from 'el
 import { Document, FolderOpened, Lock, DocumentCopy } from '@element-plus/icons-vue';
 import { formatDiff } from '../utils/index.ts';
 import vscodeIcon from '@/assets/images/vscode.webp';
+import FileActionButtons from './FileActionButtons.vue';
 
 // 定义props
 interface FileItem {
@@ -25,6 +26,9 @@ interface Props {
   showFileList?: boolean; // 是否显示文件列表，默认true
   context?: ContextType; // 使用上下文，用于确定打开文件的行为
   showOpenButton?: boolean; // 是否显示打开文件按钮，默认true
+  showActionButtons?: boolean; // 是否显示操作按钮（锁定/暂存/撤回），默认false
+  isFileLocked?: (filePath: string) => boolean; // 判断文件是否锁定
+  isLocking?: (filePath: string) => boolean; // 判断文件是否正在锁定中
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -34,7 +38,10 @@ const props = withDefaults(defineProps<Props>(), {
   height: '100%',
   showFileList: true,
   context: 'git-status',
-  showOpenButton: true
+  showOpenButton: true,
+  showActionButtons: false,
+  isFileLocked: () => false,
+  isLocking: () => false
 });
 
 // 定义事件
@@ -42,6 +49,10 @@ interface Emits {
   (e: 'file-select', filePath: string): void; // 选择文件时触发
   (e: 'open-file', filePath: string, context: ContextType): void; // 打开文件时触发
   (e: 'open-with-vscode', filePath: string, context: ContextType): void; // 用VSCode打开文件时触发
+  (e: 'toggle-lock', filePath: string): void; // 切换文件锁定状态
+  (e: 'stage', filePath: string): void; // 暂存文件
+  (e: 'unstage', filePath: string): void; // 取消暂存
+  (e: 'revert', filePath: string): void; // 撤回修改
 }
 
 const emit = defineEmits<Emits>();
@@ -202,6 +213,18 @@ watch(() => props.files, (newFiles) => {
                 <Lock />
               </el-icon>
             </el-tooltip>
+            <!-- 文件操作按钮 -->
+            <FileActionButtons
+              v-if="showActionButtons"
+              :file-path="file.path"
+              :file-type="file.type || 'modified'"
+              :is-locked="isFileLocked(file.path)"
+              :is-locking="isLocking(file.path)"
+              @toggle-lock="(path) => emit('toggle-lock', path)"
+              @stage="(path) => emit('stage', path)"
+              @unstage="(path) => emit('unstage', path)"
+              @revert="(path) => emit('revert', path)"
+            />
           </div>
         </el-scrollbar>
       </div>
@@ -440,6 +463,7 @@ watch(() => props.files, (newFiles) => {
 .file-item {
   display: flex;
   align-items: center;
+  gap: var(--spacing-sm);
   padding: var(--spacing-base) var(--spacing-lg);
   cursor: pointer;
   transition: var(--transition-all);

@@ -32,6 +32,7 @@ declare module 'vue' {
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    FileActionButtons: typeof import('./src/components/FileActionButtons.vue')['default']
     FileDiffViewer: typeof import('./src/components/FileDiffViewer.vue')['default']
     FileGroup: typeof import('./src/components/FileGroup.vue')['default']
     GitActionButtons: typeof import('./src/components/GitActionButtons.vue')['default']
