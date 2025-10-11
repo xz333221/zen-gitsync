@@ -1127,77 +1127,39 @@ function toggleFullscreen() {
 
       <div class="log-actions">
         <!-- 筛选按钮 - 只显示图标 -->
-        <el-button
+        <button
           v-if="!showGraphView"
-          :type="filterVisible ? 'primary' : 'default'"
-          size="small"
           @click="filterVisible = !filterVisible"
-          class="action-button filter-button icon-only-button"
+          class="modern-btn btn-icon-32 action-button filter-button"
           :class="{ 'active-filter': filterVisible }"
         >
-          <template #icon>
-            <el-icon><Filter /></el-icon>
-          </template>
-        </el-button>
+          <el-icon class="btn-icon"><Filter /></el-icon>
+        </button>
 
         <!-- 视图切换按钮 - 只显示图标 -->
-        <el-button
-          type="primary"
-          size="small"
+        <button
           @click="toggleViewMode"
-          class="action-button view-mode-button icon-only-button"
+          class="modern-btn btn-icon-32 action-button view-mode-button"
           :class="{ 'active-view': showGraphView }"
         >
-          <template #icon>
-            <el-icon
-              ><component :is="showGraphView ? Document : TrendCharts"
-            /></el-icon>
-          </template>
-        </el-button>
-        
-        <!-- 显示所有提交按钮 - 隐藏 -->
-        <el-button
-          v-show="false"
-          type="success"
-          size="small"
-          @click="toggleAllCommits"
-          :loading="isLoading"
-          class="action-button commit-display-button"
-          :class="{ 'active-commits': showAllCommits }"
-        >
-          <template #icon>
-            <el-icon><component :is="showAllCommits ? List : More" /></el-icon>
-          </template>
-          {{ showAllCommits ? "显示分页加载" : "显示所有提交" }}
-        </el-button>
+          <el-icon class="btn-icon"><component :is="showGraphView ? Document : TrendCharts" /></el-icon>
+        </button>
         
         <!-- 全屏按钮 - 只显示图标 -->
-        <el-button
-          type="info"
-          size="small"
+        <button
           @click="toggleFullscreen"
-          class="action-button fullscreen-button icon-only-button"
+          class="modern-btn btn-icon-32 action-button fullscreen-button"
           :class="{ 'active-fullscreen': isFullscreen }"
         >
-          <template #icon>
-            <el-icon><component :is="isFullscreen ? Close : FullScreen" /></el-icon>
-          </template>
-        </el-button>
+          <el-icon class="btn-icon"><component :is="isFullscreen ? Close : FullScreen" /></el-icon>
+        </button>
         
-        <el-button
-          circle
-          size="small"
+        <button
           @click="refreshLog()"
-          :class="{ 'refresh-button-animated': logRefreshed }"
-          class="action-button refresh-button"
+          class="modern-btn btn-icon-32 action-button refresh-button"
         >
-          <template v-if="!isLoading">
-            <el-icon><RefreshRight /></el-icon>
-          </template>
-          <template v-else>
-            <el-icon><Loading /></el-icon>
-          </template>
-        </el-button>
+          <RefreshRight />
+        </button>
       </div>
     </div>
 
@@ -1426,28 +1388,6 @@ function toggleFullscreen() {
               </template>
             </el-table-column>
           </el-table>
-
-          <!-- 添加底部加载状态和加载更多按钮 -->
-          <div v-if="!showAllCommits && false" class="load-more-container">
-            <!-- 显示加载状态和页码信息 -->
-            <div class="pagination-info">
-              <span>第 {{ currentPage }} 页
-                {{ totalCommits > 0 ? `/ 共 ${Math.ceil(totalCommits / 20) || 1} 页` : "" }}
-                (总计 {{ totalCommits }} 条记录)</span>
-            </div>
-
-            <div v-if="isLoadingMore" class="loading-more">
-              <div class="loading-spinner"></div>
-              <span>加载更多...</span>
-            </div>
-            <div v-else-if="hasMoreData" class="load-more-button" @click="loadMoreLogs">
-              <span>加载更多</span>
-            </div>
-            <div v-else class="no-more-data">
-              <span>没有更多数据了</span>
-              <span v-if="logs.length > 0" class="total-loaded">（已加载 {{ logs.length }} 条记录）</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1535,9 +1475,7 @@ function toggleFullscreen() {
 <style scoped lang="scss">
 .fullscreen-mode .log-header {
   margin-bottom: 10px;
-  /* AI start Copilot */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  /* AI end Copilot */
 }
 
 .header-left {
@@ -1571,58 +1509,8 @@ function toggleFullscreen() {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
-/* 筛选按钮样式 */
-.filter-button {
-  background: linear-gradient(135deg, #e6a23c 0%, #f0c78a 100%);
-  color: white;
-  min-width: 90px;
-}
 
-.filter-button.active-filter {
-  background: linear-gradient(135deg, #d48806 0%, #e6a23c 100%);
-}
 
-.filter-button .filter-badge :deep(.el-badge__content) {
-  background-color: #f56c6c;
-  color: white;
-  border: 2px solid white;
-  box-shadow: 0 0 0 1px #e6a23c;
-}
-
-/* 视图切换按钮样式 */
-.view-mode-button {
-  background: linear-gradient(135deg, #409eff 0%, #53a8ff 100%);
-  color: white;
-}
-
-.view-mode-button.active-view {
-  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
-}
-
-/* 提交显示按钮样式 */
-.commit-display-button {
-  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
-  color: white;
-}
-
-.commit-display-button.active-commits {
-  background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
-}
-
-/* 刷新按钮样式 */
-.refresh-button {
-  background: linear-gradient(135deg, #909399 0%, #c0c4cc 100%);
-  color: white;
-  min-width: unset;
-  padding: 6px;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-}
-
-.refresh-button:hover {
-  background: linear-gradient(135deg, var(--text-secondary) 0%, #909399 100%);
-}
 
 /* 图标按钮专用的更小尺寸 */
 .icon-only-button {
@@ -1631,19 +1519,6 @@ function toggleFullscreen() {
   width: 28px !important;
   height: 28px !important;
   border-radius: 6px !important;
-}
-
-.refresh-button-animated {
-  animation: spin 1s linear;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
 }
 
 .content-area {
@@ -1776,40 +1651,6 @@ function toggleFullscreen() {
   padding: 4px 10px;
   border-radius: 4px;
   border: 1px solid var(--border-card);
-}
-
-.refresh-notification {
-  background-color: #f0f9eb;
-  color: #67c23a;
-  padding: 10px 15px;
-  border-radius: 8px;
-  font-size: 14px;
-  border-left: 4px solid #67c23a;
-  animation: fadeOut 2s forwards;
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 9999;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  max-width: 300px;
-  text-align: center;
-}
-
-@keyframes fadeOut {
-  0% {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  20% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  80% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
 }
 
 .author-name {
@@ -2190,37 +2031,6 @@ function toggleFullscreen() {
   font-size: 16px;
 }
 
-
-
-/* 去掉表格行边框 */
-:deep(.el-table--border .el-table__inner-wrapper tr) {
-  border: none !important;
-}
-
-:deep(.el-table--border .el-table__inner-wrapper td) {
-  border-right: none !important;
-  border-bottom: none !important;
-}
-
-:deep(.el-table--border .el-table__inner-wrapper th) {
-  border-right: none !important;
-}
-
-:deep(.el-table--border) {
-  border: none !important;
-}
-
-:deep(.el-table--border .el-table__inner-wrapper) {
-  border: none !important;
-}
-
-:deep(.el-table--border::after),
-:deep(.el-table--border::before),
-:deep(.el-table__inner-wrapper::after),
-:deep(.el-table__inner-wrapper::before) {
-  display: none !important;
-}
-
 /* 添加全屏模式样式 */
 .fullscreen-mode {
   position: fixed;
@@ -2275,16 +2085,6 @@ function toggleFullscreen() {
 /* 全屏模式下图表视图调整 */
 .fullscreen-mode .graph-view {
   height: calc(100vh - 140px); /* 减去头部和控制区域高度 */
-}
-
-/* 全屏按钮样式 */
-.fullscreen-button {
-  background: linear-gradient(135deg, #909399 0%, #c0c4cc 100%);
-  color: white;
-}
-
-.fullscreen-button.active-fullscreen {
-  background: linear-gradient(135deg, var(--text-secondary) 0%, #909399 100%);
 }
 
 /* 右键菜单样式 */
