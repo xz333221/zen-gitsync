@@ -116,7 +116,7 @@ async function handleClick() {
   }
   
   &.from-status {
-    padding: 8px 14px;
+    padding: 8px;
     font-size: 13px;
     height: 36px;
   }

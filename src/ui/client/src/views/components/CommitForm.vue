@@ -944,6 +944,9 @@ async function handleMergeBranch() {
 // 添加抽屉状态变量
 const gitOperationsDrawerVisible = ref(false);
 
+// 添加提交设置弹窗状态变量
+const commitSettingsDialogVisible = ref(false);
+
 // 切换抽屉显示/隐藏
 function toggleGitOperationsDrawer() {
   gitOperationsDrawerVisible.value = !gitOperationsDrawerVisible.value;
@@ -1039,51 +1042,14 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
 <template>
   <div class="card app-card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header app-card-header">
-      <h2>提交更改</h2>
-      <!-- 提交选项开关组 -->
-      <div class="header-switches" v-if="gitStore.userName !== '' && gitStore.userEmail !== ''">
-        <!-- 提交模式开关 -->
-        <OptionSwitchCard
-          v-model="isStandardCommit"
-          title="提交模式"
-          tooltip="选择传统或标准化提交格式"
-          active-text="标准化"
-          inactive-text="普通"
-          active-color="#409eff"
-          compact
-        >
-          <template #icon>
-            <el-icon><Edit /></el-icon>
-          </template>
-        </OptionSwitchCard>
-
-        <!-- Git钩子开关 -->
-        <OptionSwitchCard
-          v-model="skipHooks"
-          title="跳过钩子检查"
-          tooltip="添加 --no-verify 参数"
-          active-color="#f56c6c"
-          icon-class="warning"
-          compact
-        >
-          <template #icon>
-            <el-icon><Warning /></el-icon>
-          </template>
-        </OptionSwitchCard>
-
-        <!-- 回车自动提交开关 -->
-        <OptionSwitchCard
-          v-model="autoQuickPushOnEnter"
-          title="回车自动提交"
-          tooltip="输入提交信息后按回车直接执行一键推送"
-          active-color="#67c23a"
-          icon-class="success"
-          compact
-        >
-          <template #icon>
-            <el-icon><Check /></el-icon>
-          </template>
-        </OptionSwitchCard>
+      <div class="header-left">
+        <h2>提交更改</h2>
+        <el-button
+          v-if="gitStore.userName !== '' && gitStore.userEmail !== ''"
+          :icon="Setting"
+          @click="commitSettingsDialogVisible = true"
+          class="modern-btn btn-icon-24"
+        />
       </div>
       <!-- Git操作按钮组 - 移到标题右侧 -->
       <div class="header-actions" v-if="gitStore.userName !== '' && gitStore.userEmail !== ''">
@@ -1854,9 +1820,71 @@ git config --global user.email "your.email@example.com"</pre>
         :text="successState.text"
         :description="successState.description"
       />
+
+      <!-- 提交设置弹窗 -->
+      <CommonDialog
+        v-model="commitSettingsDialogVisible"
+        title="提交设置"
+        size="medium"
+        :show-footer="false"
+        custom-class="commit-settings-dialog"
+      >
+        <div class="commit-settings-content">
+          <!-- 提交模式开关 -->
+          <OptionSwitchCard
+            v-model="isStandardCommit"
+            title="提交模式"
+            tooltip="选择传统或标准化提交格式"
+            active-text="标准化"
+            inactive-text="普通"
+            active-color="#409eff"
+          >
+            <template #icon>
+              <el-icon><Edit /></el-icon>
+            </template>
+          </OptionSwitchCard>
+
+          <!-- Git钩子开关 -->
+          <OptionSwitchCard
+            v-model="skipHooks"
+            title="跳过钩子检查"
+            tooltip="添加 --no-verify 参数"
+            active-color="#f56c6c"
+            icon-class="warning"
+          >
+            <template #icon>
+              <el-icon><Warning /></el-icon>
+            </template>
+          </OptionSwitchCard>
+
+          <!-- 回车自动提交开关 -->
+          <OptionSwitchCard
+            v-model="autoQuickPushOnEnter"
+            title="回车自动提交"
+            tooltip="输入提交信息后按回车直接执行一键推送"
+            active-color="#67c23a"
+            icon-class="success"
+          >
+            <template #icon>
+              <el-icon><Check /></el-icon>
+            </template>
+          </OptionSwitchCard>
+        </div>
+      </CommonDialog>
 </template>
 
 <style scoped lang="scss">
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  
+  h2 {
+    margin: 0;
+  }
+}
+
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -1864,18 +1892,6 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 /* 头部按钮组样式优化 */
-.header-actions :deep(.form-bottom-actions) {
-  background: var(--bg-container);
-  border: 1px solid var(--border-card);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  margin: 0;
-  padding: 8px;
-}
-
-.header-actions :deep(.form-bottom-actions):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
 
 .header-actions :deep(.actions-flex-container) {
   gap: 8px;
@@ -2411,89 +2427,6 @@ git config --global user.email "your.email@example.com"</pre>
   color: #409eff;
 }
 
-/* 顶部按钮区域样式 */
-.top-actions-container {
-  margin-bottom: 8px;
-}
-
-.top-actions-container :deep(.form-bottom-actions) {
-  background: var(--bg-container);
-  border: 1px solid var(--border-card);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  margin-bottom: 0;
-}
-
-.top-actions-container :deep(.form-bottom-actions):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.top-actions-container :deep(.actions-flex-container) {
-  gap: 8px;
-}
-
-.top-actions-container :deep(.button-grid) {
-  gap: 8px;
-}
-
-/* 按钮样式优化 */
-.top-actions-container :deep(.el-button) {
-  border-radius: 8px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-}
-
-.top-actions-container :deep(.el-button:hover) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-.top-actions-container :deep(.el-button--primary) {
-  background: #409eff;
-  border: none;
-  color: white;
-}
-
-.top-actions-container :deep(.el-button--success) {
-  background: #67c23a;
-  border: none;
-  color: white;
-}
-
-.top-actions-container :deep(.el-button--warning) {
-  background: #e6a23c;
-  border: none;
-  color: white;
-}
-
-/* 按钮禁用状态样式优化 */
-.top-actions-container :deep(.el-button:disabled) {
-  opacity: 0.4 !important;
-}
-
-.top-actions-container :deep(.el-button--primary:disabled) {
-  background-color: #a0cfff !important;
-  border-color: #a0cfff !important;
-  opacity: 0.5 !important;
-}
-
-.top-actions-container :deep(.el-button--success:disabled) {
-  background-color: #b3e19d !important;
-  border-color: #b3e19d !important;
-  opacity: 0.5 !important;
-}
-
-.top-actions-container :deep(.el-button--warning:disabled) {
-  background-color: #f3d19e !important;
-  border-color: #f3d19e !important;
-  opacity: 0.5 !important;
-}
-
-.top-actions-container :deep(.el-button--info) {
-  background: #909399;
-  border: none;
-  color: white;
-}
 
 /* 响应式设计 */
 @media (max-width: 768px) {
@@ -2526,16 +2459,6 @@ git config --global user.email "your.email@example.com"</pre>
     font-size: 9px;
     -webkit-line-clamp: 1;
     line-clamp: 1;
-  }
-  
-  .top-actions-container :deep(.actions-flex-container) {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .top-actions-container :deep(.button-grid) {
-    grid-template-columns: 1fr;
-    gap: 8px;
   }
 }
 
@@ -3473,17 +3396,6 @@ git config --global user.email "your.email@example.com"</pre>
   flex-direction: column;
 }
 
-.use-flex-body .el-dialog__body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.stash-detail-dialog .el-dialog__footer {
-  padding: 15px 20px;
-  border-top: 1px solid var(--border-card);
-}
-
 .stash-detail-content {
   height: 100%;
   display: flex;
@@ -3964,7 +3876,6 @@ git config --global user.email "your.email@example.com"</pre>
 }
 
 .file-count-info .el-tag {
-  font-weight: 500;
   border-radius: 6px;
   padding: 4px 8px;
 }
@@ -3993,5 +3904,13 @@ git config --global user.email "your.email@example.com"</pre>
       }
     }
   }
+}
+
+/* 提交设置弹窗样式 */
+.commit-settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
 }
 </style>

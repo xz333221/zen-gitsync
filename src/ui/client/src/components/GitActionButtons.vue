@@ -92,12 +92,6 @@ function handleClearFields() {
 
 <style scoped lang="scss">
 .form-bottom-actions {
-  padding: 16px;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .form-bottom-actions:hover {

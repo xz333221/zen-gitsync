@@ -6,7 +6,6 @@ import LogList from '@views/components/LogList.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import InlineCard from '@components/InlineCard.vue'
-import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import { ElMessage } from 'element-plus'
 import { Edit, Menu, Plus, Setting, Check, DocumentCopy, Sunny, Moon } from '@element-plus/icons-vue'
@@ -410,8 +409,9 @@ function stopHResize() {
       <InlineCard id="user-info" class="user-info-card" compact>
         <template #content>
           <template v-if="gitStore.userName && gitStore.userEmail">
-            <span class="user-name">{{ gitStore.userName }}</span>
-            <span class="user-email">&lt;{{ gitStore.userEmail }}&gt;</span>
+            <el-tooltip :content="gitStore.userEmail" placement="bottom" effect="dark" :open-delay="300">
+              <span class="user-name">{{ gitStore.userName }}</span>
+            </el-tooltip>
           </template>
           <template v-else>
             <span class="user-label">用户: </span>
@@ -426,9 +426,6 @@ function stopHResize() {
           </el-tooltip>
         </template>
       </InlineCard>
-
-      <!-- 目录选择卡片（完全独立的组件） -->
-      <DirectorySelector />
 
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
@@ -745,7 +742,7 @@ h1 {
 #user-info {
   display: flex;
   align-items: center;
-  padding: 8px 14px;
+  padding: 8px;
   border-radius: 8px;
   border: 1px solid var(--border-component);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -838,12 +835,12 @@ h1 {
 
 .user-name {
   font-weight: bold;
-  margin-right: 5px;
+  cursor: help;
+  transition: color 0.2s ease;
 }
 
-.user-email {
-  color: #6c757d;
-  font-size: 12px;
+.user-name:hover {
+  color: #409EFF;
 }
 
 .branch-name {
@@ -939,7 +936,7 @@ h1 {
   display: flex;
   align-items: center;
   border-radius: 4px;
-  padding: 8px 12px;
+  padding: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   border: 1px solid var(--border-component);
   transition: all 0.3s;
@@ -1067,26 +1064,6 @@ h1 {
   flex: 1;
   min-width: 0;
   /* 防止flex子项溢出 */
-}
-
-.directory-path {
-  font-family: monospace;
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 14px;
-  font-weight: 500;
-  background-color: var(--bg-container);
-  padding: 4px 8px;
-  border-radius: 3px;
-  border-left: 3px solid #409EFF;
-  border: 1px solid var(--border-component);
-  flex: 1;
-  min-width: 0;
-  /* 防止flex子项溢出 */
-  max-width: 350px;
-  /* 控制最大宽度 */
 }
 
 :deep(.form-item .el-form-item__label) {

@@ -639,7 +639,7 @@ onUnmounted(() => {
 .enhanced-btn {
   min-width: 60px;
   height: 36px;
-  padding: 8px 12px;
+  padding: 8px;
   gap: 6px;
   border-radius: 6px;
   font-size: 12px;

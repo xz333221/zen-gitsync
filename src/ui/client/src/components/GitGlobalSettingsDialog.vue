@@ -24,37 +24,25 @@
           </div>
         </div>
       </div>
-      <el-form class="user-form" :model="{ tempUserName, tempUserEmail }" label-position="top">
-        <div class="basic-info-grid">
-          <el-form-item class="form-item">
-            <template #label>
-              <div class="form-label">
-                <el-icon class="label-icon"><User /></el-icon>
-                <span>用户名</span>
-              </div>
-            </template>
-            <el-input 
-              v-model="tempUserName" 
-              placeholder="请输入 Git 用户名" 
-              class="modern-input"
-              size="large"
-            />
-          </el-form-item>
+      <el-form class="user-form" label-width="auto" :model="{ tempUserName, tempUserEmail }">
+        <div class="basic-info-section">
+          <div class="basic-info-grid">
+            <el-form-item class="form-item" label="用户名">
+              <el-input 
+                v-model="tempUserName" 
+                placeholder="请输入 Git 用户名" 
+                class="modern-input"
+              />
+            </el-form-item>
 
-          <el-form-item class="form-item">
-            <template #label>
-              <div class="form-label">
-                <el-icon class="label-icon"><Message /></el-icon>
-                <span>邮箱地址</span>
-              </div>
-            </template>
-            <el-input 
-              v-model="tempUserEmail" 
-              placeholder="请输入 Git 邮箱地址" 
-              class="modern-input"
-              size="large"
-            />
-          </el-form-item>
+            <el-form-item class="form-item" label="邮箱地址">
+              <el-input 
+                v-model="tempUserEmail" 
+                placeholder="请输入 Git 邮箱地址" 
+                class="modern-input"
+              />
+            </el-form-item>
+          </div>
         </div>
         
         <!-- 高级设置：常用全局 Git 配置 -->
@@ -134,7 +122,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { User, Message, InfoFilled, Setting, Delete, Check } from '@element-plus/icons-vue'
+import { User, Message, InfoFilled, Setting, Check } from '@element-plus/icons-vue'
 import CommonDialog from './CommonDialog.vue'
 import { useGitStore } from '@/stores/gitStore'
 
@@ -323,13 +311,18 @@ async function handleSave() {
   gap: 8px;
 }
 
+.basic-info-section {
+  padding-top: 14px;
+}
+
 .basic-info-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  gap: 20px;
+  align-items: center;
 }
 
 .form-item {
+  flex: 1;
   margin-bottom: 0;
 }
 
@@ -388,11 +381,6 @@ async function handleSave() {
   color: #409eff;
 }
 
-:deep(.form-item .el-form-item__label) {
-  padding: 0 0 8px 0;
-  font-weight: 500;
-  color: var(--color-text-title);
-}
 
 :deep(.settings-grid .el-switch) {
   --el-switch-on-color: #409eff;
@@ -418,6 +406,20 @@ html.dark .info-card:hover {
   box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
 }
 
+html.dark .basic-info-section {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .basic-info-section:hover {
+  border-color: rgba(64, 158, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.12);
+}
+
+html.dark .label-icon {
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .form-label {
   display: flex;
   align-items: center;
@@ -429,7 +431,7 @@ html.dark .info-card:hover {
 
 .label-icon {
   font-size: 16px;
-  color: #6b7280;
+  color: #409eff;
 }
 
 :deep(.modern-input .el-input__wrapper) {

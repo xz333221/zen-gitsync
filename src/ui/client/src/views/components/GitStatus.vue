@@ -9,6 +9,7 @@ import { useConfigStore } from '@stores/configStore'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import FileGroup from '@/components/FileGroup.vue'
+import DirectorySelector from '@components/DirectorySelector.vue'
 
 // 定义props
 const props = defineProps({
@@ -633,23 +634,27 @@ defineExpose({
 <template>
   <div class="card git-status-card flex flex-col">
     <div class="status-header">
+      <!-- 目录选择卡片 -->
+      <DirectorySelector />
+      
+      <div class="title-row">
         <h2>Git 状态</h2>
         <div class="header-actions">
-        <el-tooltip 
-          :content="gitStore.autoUpdateEnabled ? '禁用自动更新文件状态' : '启用自动更新文件状态'" 
-          placement="top" 
-          :hide-after="1000"
-          :show-after="200"
-        >
-          <el-switch 
-            v-model="gitStore.autoUpdateEnabled" 
-            style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 4px;"
-            inline-prompt
-            :active-icon="Check"
-            :inactive-icon="Close"
-            class="auto-update-switch"
-          />
-        </el-tooltip>
+          <el-tooltip 
+            :content="gitStore.autoUpdateEnabled ? '禁用自动更新文件状态' : '启用自动更新文件状态'" 
+            placement="top" 
+            :hide-after="1000"
+            :show-after="200"
+          >
+            <el-switch 
+              v-model="gitStore.autoUpdateEnabled" 
+              style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 4px;"
+              inline-prompt
+              :active-icon="Check"
+              :inactive-icon="Close"
+              class="auto-update-switch"
+            />
+          </el-tooltip>
         
         <!-- 添加Git Pull按钮 -->
         <el-tooltip content="Git Pull (拉取远程更新)" placement="top" :hide-after="1000" :show-after="200">
@@ -707,6 +712,7 @@ defineExpose({
         </el-tooltip>
         </div>
       </div>
+    </div>
     
     <div class="card-content" 
       v-loading="gitStore.isGitPulling || gitStore.isGitFetching" 
@@ -933,10 +939,28 @@ defineExpose({
 
 <style scoped>
 
+.status-header {
+  display: flex;
+  flex-direction: column;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.status-header h2 {
+  margin: 0;
+  flex-shrink: 0;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
 .card-content {

@@ -263,7 +263,7 @@ async function selectDirectory(dirPath: string) {
 <template>
   <InlineCard id="directory-selector" class="directory-selector" compact>
     <template #content>
-      <div class="directory-display">
+      <div class="directory-display cursor-pointer" @click="onOpenDialog">
         <div class="directory-path" :title="currentDirectory">
           {{ currentDirectory }}
         </div>
@@ -271,7 +271,7 @@ async function selectDirectory(dirPath: string) {
     </template>
     <template #actions>
       <div class="directory-actions">
-        <el-tooltip
+        <!-- <el-tooltip
           content="切换目录"
           placement="bottom"
           effect="dark"
@@ -280,7 +280,7 @@ async function selectDirectory(dirPath: string) {
           <button class="modern-btn btn-icon-28" @click="onOpenDialog">
             <el-icon class="btn-icon"><Folder /></el-icon>
           </button>
-        </el-tooltip>
+        </el-tooltip> -->
         <el-tooltip
           content="在资源管理器中打开"
           placement="bottom"
@@ -387,12 +387,11 @@ async function selectDirectory(dirPath: string) {
   justify-content: space-between;
   align-items: center;
   border-radius: 8px;
-  padding: 8px 14px;
+  padding: 0px;
   border: 1px solid var(--border-component);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
   transition: all 0.2s ease;
-  max-width: 420px;
 }
 
 .directory-selector:hover {
@@ -422,13 +421,11 @@ async function selectDirectory(dirPath: string) {
   border: 1px solid var(--border-component);
   flex: 1;
   min-width: 0;
-  max-width: 500px;
 }
 
 .directory-actions {
   display: flex;
   gap: 6px;
-  margin-left: 8px;
 }
 
 /* 对话框样式（复用 App.vue 中样式） */
