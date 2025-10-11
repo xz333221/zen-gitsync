@@ -396,28 +396,7 @@ function stopHResize() {
   saveLayoutRatios();
 }
 
-// 由目录组件回调的目录变化处理
-async function onDirectoryChanged(payload: { directory: string; isGitRepo: boolean }) {
-  configStore.setCurrentDirectory(payload.directory)
-  gitStore.isGitRepo = payload.isGitRepo
-
-  // 切换目录后强制重新加载配置
-  await configStore.loadConfig(true)
-
-  if (payload.isGitRepo) {
-    await Promise.all([
-      gitStore.getCurrentBranch(),
-      gitStore.getAllBranches(),
-      gitStore.getUserInfo(),
-      gitStore.getRemoteUrl()
-    ])
-    gitStatusRef.value?.refreshStatus()
-    gitStore.refreshLog()
-  } else {
-    ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
-    gitStore.$reset()
-  }
-}
+// 目录切换逻辑已移到 DirectorySelector 组件内部
 </script>
 
 <template>
@@ -448,11 +427,8 @@ async function onDirectoryChanged(payload: { directory: string; isGitRepo: boole
         </template>
       </InlineCard>
 
-      <!-- 目录选择卡片（提取为独立组件） -->
-      <DirectorySelector
-        :current-directory="configStore.currentDirectory"
-        @changed="onDirectoryChanged"
-      />
+      <!-- 目录选择卡片（完全独立的组件） -->
+      <DirectorySelector />
 
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
@@ -1112,15 +1088,6 @@ h1 {
   max-width: 350px;
   /* 控制最大宽度 */
 }
-
-.directory-actions {
-  display: flex;
-  gap: 6px;
-  margin-left: 8px;
-}
-
-/* 图标按钮尺寸使用 .btn-icon-32，间距由父容器 gap 控制 */
-
 
 :deep(.form-item .el-form-item__label) {
   padding: 0 0 8px 0;

@@ -3,13 +3,16 @@ import InlineCard from "@components/InlineCard.vue";
 import CommonDialog from "@components/CommonDialog.vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Folder, FolderOpened, Clock } from "@element-plus/icons-vue";
-import { defineProps, defineEmits, ref, h } from "vue";
+import { ref, h, computed } from "vue";
+import { useConfigStore } from "@/stores/configStore";
+import { useGitStore } from "@/stores/gitStore";
 
-const props = defineProps<{ currentDirectory: string }>();
+// 使用 store
+const configStore = useConfigStore();
+const gitStore = useGitStore();
 
-const emit = defineEmits<{
-  (e: "changed", payload: { directory: string; isGitRepo: boolean }): void;
-}>();
+// 从 store 中获取当前目录
+const currentDirectory = computed(() => configStore.currentDirectory);
 
 // 对话框与状态
 const isDirectoryDialogVisible = ref(false);
@@ -19,7 +22,7 @@ const recentDirectories = ref<string[]>([]);
 
 // 打开切换目录对话框
 function onOpenDialog() {
-  newDirectoryPath.value = props.currentDirectory;
+  newDirectoryPath.value = currentDirectory.value;
   isDirectoryDialogVisible.value = true;
   getRecentDirectories();
 }
@@ -27,14 +30,14 @@ function onOpenDialog() {
 // 在资源管理器中打开当前目录
 async function onOpenExplorer() {
   try {
-    if (!props.currentDirectory) {
+    if (!currentDirectory.value) {
       ElMessage.warning("当前目录路径为空");
       return;
     }
     const response = await fetch("/api/open_directory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: props.currentDirectory }),
+      body: JSON.stringify({ path: currentDirectory.value }),
     });
     const result = await response.json();
     if (result.success) {
@@ -92,10 +95,26 @@ async function changeDirectory() {
       isDirectoryDialogVisible.value = false;
       await saveRecentDirectory(result.directory);
       await getRecentDirectories();
-      emit("changed", {
-        directory: result.directory,
-        isGitRepo: result.isGitRepo,
-      });
+      
+      // 直接更新 store 状态
+      configStore.setCurrentDirectory(result.directory);
+      gitStore.isGitRepo = result.isGitRepo;
+      
+      // 切换目录后强制重新加载配置
+      await configStore.loadConfig(true);
+      
+      if (result.isGitRepo) {
+        await Promise.all([
+          gitStore.getCurrentBranch(),
+          gitStore.getAllBranches(),
+          gitStore.getUserInfo(),
+          gitStore.getRemoteUrl()
+        ]);
+        gitStore.refreshLog();
+      } else {
+        ElMessage.warning('当前目录不是Git仓库，部分功能将不可用');
+        gitStore.$reset();
+      }
     } else {
       ElMessage.error(result.error || "切换目录失败");
     }
@@ -113,7 +132,7 @@ async function browseDirectory() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        currentPath: newDirectoryPath.value || props.currentDirectory,
+        currentPath: newDirectoryPath.value || currentDirectory.value,
       }),
     });
     const result = await response.json();
@@ -245,8 +264,8 @@ async function selectDirectory(dirPath: string) {
   <InlineCard id="directory-selector" class="directory-selector" compact>
     <template #content>
       <div class="directory-display">
-        <div class="directory-path" :title="props.currentDirectory">
-          {{ props.currentDirectory }}
+        <div class="directory-path" :title="currentDirectory">
+          {{ currentDirectory }}
         </div>
       </div>
     </template>
