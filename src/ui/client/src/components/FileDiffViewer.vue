@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage } from 'element-plus';
-import { Document, FolderOpened, Lock } from '@element-plus/icons-vue';
+import { Document, FolderOpened, Lock, DocumentCopy } from '@element-plus/icons-vue';
 import { formatDiff } from '../utils/index.ts';
 import vscodeIcon from '@/assets/images/vscode.webp';
 
@@ -92,6 +92,23 @@ function handleOpenFile() {
   }
   
   emit('open-file', currentSelectedFile.value, props.context);
+}
+
+// 复制文件路径方法
+function handleCopyPath() {
+  if (!currentSelectedFile.value) {
+    ElMessage.warning('请先选择一个文件');
+    return;
+  }
+  
+  // 复制到剪贴板
+  navigator.clipboard.writeText(currentSelectedFile.value)
+    .then(() => {
+      ElMessage.success('文件路径已复制到剪贴板');
+    })
+    .catch(() => {
+      ElMessage.error('复制失败');
+    });
 }
 
 // 用VSCode打开文件方法
@@ -208,6 +225,19 @@ watch(() => props.files, (newFiles) => {
             </span>
           </el-tooltip>
           <div v-if="showOpenButton && currentSelectedFile" class="action-buttons">
+            <el-tooltip
+              content="复制文件路径"
+              placement="top"
+              effect="light"
+            >
+              <button 
+                class="modern-btn btn-icon-24"
+                @click="handleCopyPath"
+              >
+                <el-icon class="btn-icon"><DocumentCopy /></el-icon>
+              </button>
+            </el-tooltip>
+            
             <el-tooltip
               :content="openButtonTooltip"
               placement="top"

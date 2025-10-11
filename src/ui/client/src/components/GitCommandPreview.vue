@@ -54,11 +54,11 @@ async function copyCommand() {
 </script>
 
 <style scoped lang="scss">
-.modern-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+// .modern-btn {
+//   display: flex;
+//   align-items: center;
+//   justify-content: center;
+// }
 
 .git-command-preview {
   

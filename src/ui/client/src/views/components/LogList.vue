@@ -1210,16 +1210,7 @@ function toggleFullscreen() {
 
 /* 优化按钮样式 */
 .action-button {
-  transition: all 0.3s ease;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  font-weight: 500;
   padding: 4px 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
 }
 
 .action-button:hover {

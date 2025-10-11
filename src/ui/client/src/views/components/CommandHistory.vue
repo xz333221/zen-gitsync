@@ -540,37 +540,6 @@ onUnmounted(() => {
   padding: 0;
 }
 
-/* 现代按钮基础样式 - 白色主题 */
-.modern-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  color: var(--color-text);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  border: 1px solid var(--border-component);
-  position: relative;
-  overflow: hidden;
-}
-
-/* 深色主题下的按钮样式 */
-[data-theme="dark"] .modern-btn {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-[data-theme="dark"] .modern-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: white;
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
 .history-scroll {
   flex-grow: 1;
   overflow-y: auto;

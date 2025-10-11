@@ -31,8 +31,8 @@ const hasIcon = computed(() => {
   gap: 8px;
   border-radius: 8px;
   background: var(--bg-container);
-  border: 1px solid var(--border-component);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  // border: 1px solid var(--border-component);
+  // box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   transition: all 0.2s ease;
   max-width: 100%;
   height: 40px; /* unify card height */

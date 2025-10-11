@@ -405,28 +405,6 @@ function stopHResize() {
       <h1>Zen GitSync</h1>
     </div>
     <div class="header-info">
-      <!-- 用户信息卡片 -->
-      <InlineCard id="user-info" class="user-info-card" compact>
-        <template #content>
-          <template v-if="gitStore.userName && gitStore.userEmail">
-            <el-tooltip :content="gitStore.userEmail" placement="bottom" effect="dark" :open-delay="300">
-              <span class="user-name">{{ gitStore.userName }}</span>
-            </el-tooltip>
-          </template>
-          <template v-else>
-            <span class="user-label">用户: </span>
-            <span class="user-warning">未配置</span>
-          </template>
-        </template>
-        <template #actions>
-          <el-tooltip content="用户设置" placement="bottom" effect="dark" :open-delay="500">
-            <button class="modern-btn btn-icon-28" @click="openUserSettingsDialog">
-              <el-icon class="btn-icon"><Setting /></el-icon>
-            </button>
-          </el-tooltip>
-        </template>
-      </InlineCard>
-
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
         <!-- 命令历史按钮 -->
@@ -452,6 +430,27 @@ function stopHResize() {
           </button>
         </el-tooltip>
       </div>
+      <!-- 用户信息卡片 -->
+      <InlineCard id="user-info" class="user-info-card" compact>
+        <template #content>
+          <template v-if="gitStore.userName && gitStore.userEmail">
+            <el-tooltip :content="gitStore.userEmail" placement="bottom" effect="dark" :open-delay="300">
+              <span class="user-name">{{ gitStore.userName }}</span>
+            </el-tooltip>
+          </template>
+          <template v-else>
+            <span class="user-label">用户: </span>
+            <span class="user-warning">未配置</span>
+          </template>
+        </template>
+        <template #actions>
+          <el-tooltip content="用户设置" placement="bottom" effect="dark" :open-delay="500">
+            <button class="modern-btn btn-icon-28" @click="openUserSettingsDialog">
+              <el-icon class="btn-icon"><Setting /></el-icon>
+            </button>
+          </el-tooltip>
+        </template>
+      </InlineCard>
     </div>
   </header>
 
@@ -661,7 +660,7 @@ body {
   /* 底部footer高度 */
   left: 0;
   right: 0;
-  padding: 8px;
+  padding: 4px 0;
   overflow: hidden;
   z-index: 1001;
   /* 防止整体滚动 */
@@ -762,7 +761,7 @@ h1 {
   gap: 8px;
 }
 
-.modern-btn {
+/* .modern-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -778,7 +777,7 @@ h1 {
   border: 1px solid var(--border-component);
   position: relative;
   overflow: hidden;
-}
+} */
 
 
 

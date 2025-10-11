@@ -205,11 +205,11 @@
   }
 
   /* Modern Button 深色主题 */
-  .modern-btn {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.9);
-    border-color: rgba(255, 255, 255, 0.1);
-  }
+  // .modern-btn {
+  //   background: rgba(255, 255, 255, 0.08);
+  //   color: rgba(255, 255, 255, 0.9);
+  //   border-color: rgba(255, 255, 255, 0.1);
+  // }
 
   .modern-btn:hover {
     background: rgba(255, 255, 255, 0.12);
@@ -984,9 +984,9 @@
 
 [data-theme="dark"] {
   /* 深色主题下的特殊动画效果 */
-  .modern-btn::before {
-    background: linear-gradient(135deg, rgba(64, 158, 255, 0.2) 0%, rgba(102, 177, 255, 0.2) 100%);
-  }
+  // .modern-btn::before {
+  //   background: linear-gradient(135deg, rgba(64, 158, 255, 0.2) 0%, rgba(102, 177, 255, 0.2) 100%);
+  // }
 
   /* 深色主题下的悬浮发光效果 */
   .app-card:hover {
