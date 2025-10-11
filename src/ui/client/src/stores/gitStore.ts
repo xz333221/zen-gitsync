@@ -92,6 +92,11 @@ export const useGitStore = defineStore('git', () => {
   const isCommiting = ref(false)
   const isResetting = ref(false)
   
+  // 提交历史分页状态
+  const currentPage = ref(1)
+  const hasMoreData = ref(true)
+  const totalCommits = ref(0)
+  
   // 在状态部分添加stash相关的状态变量
   const stashes = ref<{ id: string; description: string }[]>([])
   const isLoadingStashes = ref(false)
@@ -135,6 +140,11 @@ export const useGitStore = defineStore('git', () => {
     isAddingFiles.value = false
     isCommiting.value = false
     isResetting.value = false
+    
+    // 重置提交历史分页状态
+    currentPage.value = 1
+    hasMoreData.value = true
+    totalCommits.value = 0
     // 不重置autoUpdateEnabled，保留用户设置
   }
 
@@ -796,6 +806,22 @@ export const useGitStore = defineStore('git', () => {
     } finally {
       isLoadingLog.value = false
     }
+  }
+  
+  // 刷新提交历史（供其他组件使用）
+  async function refreshLog() {
+    console.log('刷新提交历史...')
+    
+    // 重置分页状态
+    currentPage.value = 1
+    hasMoreData.value = false // fetchLog加载的是全量数据，没有更多分页
+    
+    await fetchLog(true)
+    
+    // 更新总数
+    totalCommits.value = log.value.length
+    
+    console.log('提交历史刷新完成')
   }
   
   // 获取Git状态 (优化版本 - 只获取porcelain格式)
@@ -1737,6 +1763,11 @@ export const useGitStore = defineStore('git', () => {
     isResetting,
     autoUpdateEnabled,
     
+    // 提交历史分页状态
+    currentPage,
+    hasMoreData,
+    totalCommits,
+    
     // Git操作状态
     isPushing,
     isGitPulling,
@@ -1760,6 +1791,7 @@ export const useGitStore = defineStore('git', () => {
     toggleAutoUpdate,
     parseStatusPorcelain,
     fetchLog,
+    refreshLog,
     fetchStatus,
     fetchStatusPorcelain,
     addToStage,

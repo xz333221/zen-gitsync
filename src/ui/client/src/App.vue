@@ -147,10 +147,8 @@ async function createNewBranch() {
       gitStatusRef.value.refreshStatus()
     }
 
-    // 刷新提交历史
-    if (logListRef.value) {
-      logListRef.value.refreshLog()
-    }
+    // 刷新提交历史（直接调用store方法）
+    gitStore.refreshLog()
   }
 }
 
@@ -170,10 +168,8 @@ async function handleBranchChange(branch: string) {
       gitStatusRef.value.refreshStatus()
     }
 
-    // 刷新提交历史
-    if (logListRef.value) {
-      logListRef.value.refreshLog()
-    }
+    // 刷新提交历史（直接调用store方法）
+    gitStore.refreshLog()
   }
 }
 
@@ -416,7 +412,7 @@ async function onDirectoryChanged(payload: { directory: string; isGitRepo: boole
       gitStore.getRemoteUrl()
     ])
     gitStatusRef.value?.refreshStatus()
-    logListRef.value?.refreshLog()
+    gitStore.refreshLog()
   } else {
     ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
     gitStore.$reset()

@@ -12,7 +12,6 @@ import {
   ElTableColumn,
   ElTag,
   ElButton,
-  ElSlider,
   ElSelect,
   ElOption,
   ElDatePicker,
@@ -22,10 +21,7 @@ import {
 } from "element-plus";
 import {
   RefreshRight,
-  Loading,
   Filter,
-  List,
-  More,
   FullScreen,
   Close,
   CopyDocument,
@@ -35,17 +31,6 @@ import { useGitStore } from "@stores/gitStore";
 import { formatCommitMessage, extractPureMessage } from "@utils/index.ts";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
-
-// const COLORS = [
-//   "#2196f3", // 蓝色
-//   "#e91e63", // 粉色
-//   "#4caf50", // 绿色
-//   "#ff9800", // 橙色
-//   "#9c27b0", // 紫色
-//   "#00bcd4", // 青色
-//   "#ff5722", // 深橙色
-//   "#607d8b", // 蓝灰色
-// ];
 
 interface LogItem {
   hash: string;
@@ -68,12 +53,9 @@ const errorMessage = ref("");
 const localLoading = ref(false);
 const isLoading = computed(() => gitStore.isLoadingLog || localLoading.value);
 const showAllCommits = ref(false);
-const totalCommits = ref(0);
 // 图表视图相关逻辑已移除
 
-// 添加分页相关变量
-const currentPage = ref(1);
-const hasMoreData = ref(true); // 默认为true，确保初始化时能尝试加载更多
+// 分页相关变量（部分已移到store中）
 const isLoadingMore = ref(false);
 const loadTimerInterval = ref<number | null>(null);
 
@@ -84,10 +66,6 @@ const commitFiles = ref<string[]>([]);
 const commitDiff = ref("");
 const isLoadingCommitDetail = ref(false);
 const selectedCommitFile = ref("");
-
-
-
-// 图表缩放控制已移除
 
 // 添加筛选相关变量
 const filterVisible = ref(false);
@@ -195,11 +173,11 @@ async function loadLog(all = false, page = 1) {
     logs.value = [...logsData];
 
     // 更新当前页码
-    currentPage.value = page;
+    gitStore.currentPage = page;
 
     // 更新总数和分页标记
-    totalCommits.value = result.total || logsData.length;
-    hasMoreData.value = result.hasMore === true;
+    gitStore.totalCommits = result.total || logsData.length;
+    gitStore.hasMoreData = result.hasMore === true;
 
     // 表格视图：设置滚动监听并检查是否需要加载更多
     if (!isLoadMore && !all) {
@@ -217,7 +195,7 @@ async function loadLog(all = false, page = 1) {
 
     // 如果加载更多失败，标记没有更多数据
     if (page > 1) {
-      hasMoreData.value = false;
+      gitStore.hasMoreData = false;
     }
   } finally {
     // 重置加载状态
@@ -237,11 +215,11 @@ function toggleAllCommits() {
   
   // 重置hasMoreData为true（分页模式）
   if (!showAllCommits.value) {
-    hasMoreData.value = true;
+    gitStore.hasMoreData = true;
   }
   
   // 重置当前页码
-  currentPage.value = 1;
+  gitStore.currentPage = 1;
   
   // 加载日志
   loadLog(showAllCommits.value);
@@ -282,7 +260,7 @@ const tableBodyWrapper = ref<HTMLElement | null>(null);
 // 监听表格滚动事件的处理函数
 function handleTableScroll(event: Event) {
   if (
-    !hasMoreData.value ||
+    !gitStore.hasMoreData ||
     isLoadingMore.value ||
     isLoading.value
   ) {
@@ -348,7 +326,7 @@ onMounted(() => {
       gitStore.log.forEach((item) => logsData.push(item));
 
       // 由于TypeScript类型错误，我们直接设置totalCommits而不是使用logs.value.length
-      totalCommits.value = gitStore.log.length;
+      gitStore.totalCommits = gitStore.log.length;
 
       // 图表视图已移除
     } else {
@@ -415,26 +393,25 @@ onBeforeUnmount(() => {
 
 
 
-// 修改refreshLog函数
+// 刷新提交历史
 async function refreshLog() {
-  // 简单调用gitStore的fetchLog方法
-  await gitStore.fetchLog(true);
-
-  // 重新填充本地数据
-  logsData.length = 0;
-  gitStore.log.forEach((item) => logsData.push(item));
-
-  // 触发视图更新
-  logs.value = [...logsData];
-
-  // 设置总条数
-  totalCommits.value = gitStore.log.length;
-
   // 重置分页状态
-  currentPage.value = 1;
-  hasMoreData.value = false; // 使用API直接加载全部日志时，没有更多数据
-
-  // 图表视图已移除
+  gitStore.currentPage = 1;
+  gitStore.hasMoreData = true;
+  
+  // 调用loadLog重新加载第一页数据，这样会正确重置所有状态
+  await loadLog(showAllCommits.value, 1);
+  
+  // 刷新后滚动到表格顶部
+  nextTick(() => {
+    // Element Plus表格实际滚动的是 .el-scrollbar__wrap 元素
+    if (tableRef.value) {
+      const scrollWrapper = tableRef.value.$el.querySelector('.el-scrollbar__wrap');
+      if (scrollWrapper) {
+        scrollWrapper.scrollTop = 0;
+      }
+    }
+  });
 }
 
 // 监听store中的日志变化
@@ -452,10 +429,13 @@ watch(
       }
 
       // 更新计数器
-      totalCommits.value = logsData.length;
+      gitStore.totalCommits = logsData.length;
 
       // 重置当前页为第1页
-      currentPage.value = 1;
+      gitStore.currentPage = 1;
+      
+      // 重置分页标记：如果是通过gitStore.refreshLog()加载的全量数据，没有更多数据
+      gitStore.hasMoreData = false;
 
       // 确保引用更新，触发UI重渲染
       // @ts-ignore - 忽略类型校验
@@ -473,12 +453,6 @@ watch(
 defineExpose({
   refreshLog,
 });
-
-// 图表缩放/自适应逻辑已移除
-
-
-
-
 
 // 查看提交详情
 async function viewCommitDetail(commit: LogItem | null) {
@@ -604,10 +578,6 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   }
 }
 
-
-
-
-
 // 复制纯净的提交信息
 async function copyPureMessage(message: string) {
   try {
@@ -621,11 +591,11 @@ async function copyPureMessage(message: string) {
 
 // 加载更多日志
 function loadMoreLogs() {
-  if (!hasMoreData.value || isLoadingMore.value || isLoading.value) {
+  if (!gitStore.hasMoreData || isLoadingMore.value || isLoading.value) {
     return;
   }
 
-  loadLog(showAllCommits.value, currentPage.value + 1);
+  loadLog(showAllCommits.value, gitStore.currentPage + 1);
 }
 
 // 重置筛选条件并重新加载数据
@@ -636,14 +606,14 @@ function resetFilters() {
   dateRangeFilter.value = null;
 
   // 重置筛选后重新加载数据
-  currentPage.value = 1;
+  gitStore.currentPage = 1;
   loadLog(showAllCommits.value, 1);
 }
 
 // 应用筛选条件
 function applyFilters() {
   // 应用筛选时重置到第一页
-  currentPage.value = 1;
+  gitStore.currentPage = 1;
   loadLog(showAllCommits.value, 1);
 }
 
@@ -677,11 +647,6 @@ function extractAuthorsFromLogs() {
   });
   availableAuthors.value = Array.from(authors).sort();
 }
-
-
-
-
-
 
 // 监听logs.value的变化
 watch(
@@ -901,7 +866,7 @@ async function resetToCommit(commit: LogItem | null) {
 // 检查表格是否滚动到底部并加载更多数据
 function checkAndLoadMore() {
   if (
-    !hasMoreData.value ||
+    !gitStore.hasMoreData ||
     isLoadingMore.value ||
     isLoading.value ||
     showAllCommits.value
