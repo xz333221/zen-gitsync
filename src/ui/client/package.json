@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@gitgraph/js": "^1.4.0",
     "@tailwindcss/vite": "^4.1.13",
     "element-plus": "^2.11.4",
     "pinia": "^3.0.2",

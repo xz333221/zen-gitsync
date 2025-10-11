@@ -23,11 +23,7 @@ import {
 import {
   RefreshRight,
   Loading,
-  ZoomIn,
-  ZoomOut,
   Filter,
-  Document,
-  TrendCharts,
   List,
   More,
   FullScreen,
@@ -35,7 +31,6 @@ import {
   CopyDocument,
 } from "@element-plus/icons-vue";
 import "element-plus/dist/index.css";
-import { createGitgraph } from "@gitgraph/js";
 import { useGitStore } from "@stores/gitStore";
 import { formatCommitMessage, extractPureMessage } from "@utils/index.ts";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
@@ -74,8 +69,7 @@ const localLoading = ref(false);
 const isLoading = computed(() => gitStore.isLoadingLog || localLoading.value);
 const showAllCommits = ref(false);
 const totalCommits = ref(0);
-const showGraphView = ref(false);
-const graphContainer = ref<HTMLElement | null>(null);
+// 图表视图相关逻辑已移除
 
 // 添加分页相关变量
 const currentPage = ref(1);
@@ -93,14 +87,7 @@ const selectedCommitFile = ref("");
 
 
 
-// 添加图表缩放控制
-const graphScale = ref(1);
-const minScale = 0.5;
-const maxScale = 1.5;
-const scaleStep = 0.1;
-
-// 添加日志被刷新的提示状态
-const logRefreshed = ref(false);
+// 图表缩放控制已移除
 
 // 添加筛选相关变量
 const filterVisible = ref(false);
@@ -214,20 +201,8 @@ async function loadLog(all = false, page = 1) {
     totalCommits.value = result.total || logsData.length;
     hasMoreData.value = result.hasMore === true;
 
-    // 设置刷新提示状态（仅在初次加载时）
-    if (!isLoadMore) {
-      logRefreshed.value = true;
-      // 2秒后隐藏提示
-      setTimeout(() => {
-        logRefreshed.value = false;
-      }, 2000);
-    }
-
-    // 加载完数据后渲染图表（仅在初次加载时）
-    if (!isLoadMore && showGraphView.value) {
-      setTimeout(renderGraph, 0);
-    } else if (!isLoadMore && !showGraphView.value && !all) {
-      // 如果是表格视图且是分页模式，设置滚动监听并检查是否需要加载更多
+    // 表格视图：设置滚动监听并检查是否需要加载更多
+    if (!isLoadMore && !all) {
       nextTick(() => {
         setupTableScrollListener();
         setTimeout(checkAndLoadMore, 200);
@@ -254,80 +229,13 @@ async function loadLog(all = false, page = 1) {
   }
 }
 
-// 渲染Git图表
-async function renderGraph() {
-  if (!graphContainer.value) {
-    return;
-  }
-
-  if (logsData.length === 0) {
-    return;
-  }
-
-  try {
-    // 清空容器
-    graphContainer.value.innerHTML = "";
-
-    // 创建gitgraph实例
-    const gitgraph = createGitgraph(graphContainer.value, {
-      // 自定义选项
-      orientation: "vertical-reverse" as any, // 使用类型断言解决类型错误
-      template: "metro" as any, // 使用类型断言解决类型错误
-      author: "提交者 <committer@example.com>",
-    });
-
-    // 处理分支和提交数据
-    const branches: Record<string, any> = {};
-    const mainBranch = gitgraph.branch(gitStore.currentBranch || "main");
-    branches[gitStore.currentBranch || "main"] = mainBranch;
-
-    // 简化示例 - 实际实现需要根据API返回的数据结构调整
-    logsData.forEach((commit) => {
-      // 这里需要根据实际数据结构构建分支图
-      let currentBranch = mainBranch;
-
-      // 如果有分支信息，使用对应的分支
-      if (commit.branch) {
-        const branchName = formatBranchName(commit.branch.split(",")[0]);
-        if (!branches[branchName]) {
-          branches[branchName] = gitgraph.branch(branchName);
-        }
-        currentBranch = branches[branchName];
-      }
-
-      // 创建提交，添加邮箱信息
-      currentBranch.commit({
-        hash: commit.hash,
-        subject: commit.message,
-        author: `${commit.author} <${commit.email}>`,
-      });
-    });
-
-    // 确保渲染完成后调用自适应缩放
-    setTimeout(() => {
-      fitGraphToContainer();
-    }, 100);
-  } catch (error) {
-    errorMessage.value =
-      "渲染图表失败: " +
-      (error instanceof Error ? error.message : String(error));
-  }
-}
-
-// 切换视图模式
-function toggleViewMode() {
-  showGraphView.value = !showGraphView.value;
-  if (showGraphView.value && logsData.length > 0) {
-    // 延迟执行以确保DOM已更新
-    setTimeout(renderGraph, 0);
-  }
-}
+// 图表渲染与视图切换逻辑已移除
 
 // 切换显示所有提交
 function toggleAllCommits() {
   showAllCommits.value = !showAllCommits.value;
   
-  // 如果切换到分页模式，重置hasMoreData为true
+  // 重置hasMoreData为true（分页模式）
   if (!showAllCommits.value) {
     hasMoreData.value = true;
   }
@@ -341,7 +249,7 @@ function toggleAllCommits() {
   // 确保在下一个渲染周期重新设置滚动监听
   nextTick(() => {
     setTimeout(() => {
-      if (!showGraphView.value && !showAllCommits.value) {
+      if (!showAllCommits.value) {
         setupTableScrollListener();
         checkAndLoadMore(); // 检查是否需要加载更多
       }
@@ -367,7 +275,6 @@ function getBranchTagType(ref: string) {
   if (ref.includes("origin/")) return "warning";
   return "info";
 }
-
 // 添加对表格实例的引用
 const tableRef = ref<InstanceType<typeof ElTable> | null>(null);
 const tableBodyWrapper = ref<HTMLElement | null>(null);
@@ -375,7 +282,6 @@ const tableBodyWrapper = ref<HTMLElement | null>(null);
 // 监听表格滚动事件的处理函数
 function handleTableScroll(event: Event) {
   if (
-    showGraphView.value ||
     !hasMoreData.value ||
     isLoadingMore.value ||
     isLoading.value
@@ -444,12 +350,7 @@ onMounted(() => {
       // 由于TypeScript类型错误，我们直接设置totalCommits而不是使用logs.value.length
       totalCommits.value = gitStore.log.length;
 
-      // 确保视图被渲染
-      if (showGraphView.value) {
-        setTimeout(() => {
-          renderGraph();
-        }, 100);
-      }
+      // 图表视图已移除
     } else {
       // 否则加载数据
       loadLog();
@@ -474,7 +375,7 @@ onMounted(() => {
 
   // 添加对表格的监听，确保表格创建后设置滚动监听
   watch(() => tableRef.value, (newTableRef) => {
-    if (newTableRef && !showGraphView.value && !showAllCommits.value) {
+    if (newTableRef && !showAllCommits.value) {
       nextTick(() => {
         setupTableScrollListener();
       });
@@ -533,18 +434,7 @@ async function refreshLog() {
   currentPage.value = 1;
   hasMoreData.value = false; // 使用API直接加载全部日志时，没有更多数据
 
-  // 设置刷新提示
-  logRefreshed.value = true;
-  // 2秒后隐藏提示
-  setTimeout(() => {
-    logRefreshed.value = false;
-  }, 2000);
-
-  // 如果当前是图表视图，刷新图表
-  if (showGraphView.value) {
-    await nextTick();
-    renderGraph();
-  }
+  // 图表视图已移除
 }
 
 // 监听store中的日志变化
@@ -571,15 +461,7 @@ watch(
       // @ts-ignore - 忽略类型校验
       logs.value = [...logsData];
 
-      // 设置刷新提示
-      logRefreshed.value = true;
-      setTimeout(() => {
-        logRefreshed.value = false;
-      }, 2000);
-
-      if (showGraphView.value && logsData.length > 0) {
-        setTimeout(renderGraph, 0);
-      }
+      // 图表视图已移除
     } catch (error) {
       // 静默处理错误
     }
@@ -592,54 +474,7 @@ defineExpose({
   refreshLog,
 });
 
-// 增加/减少缩放比例
-function zoomIn() {
-  if (graphScale.value < maxScale) {
-    graphScale.value = Math.min(maxScale, graphScale.value + scaleStep);
-    applyScale();
-  }
-}
-
-function zoomOut() {
-  if (graphScale.value > minScale) {
-    graphScale.value = Math.max(minScale, graphScale.value - scaleStep);
-    applyScale();
-  }
-}
-
-// 应用缩放比例
-function applyScale() {
-  if (!graphContainer.value) return;
-
-  const svgElement = graphContainer.value.querySelector("svg");
-  if (svgElement) {
-    svgElement.style.transform = `scale(${graphScale.value})`;
-    svgElement.style.transformOrigin = "top left";
-  }
-}
-
-// 自适应图表大小
-function fitGraphToContainer() {
-  if (!graphContainer.value) return;
-
-  const svgElement = graphContainer.value.querySelector("svg");
-  if (!svgElement) return;
-
-  // 获取SVG和容器的宽度
-  const svgWidth = svgElement.getBoundingClientRect().width / graphScale.value;
-  const containerWidth = graphContainer.value.clientWidth;
-
-  // 计算合适的缩放比例
-  if (svgWidth > containerWidth) {
-    // 如果SVG宽度大于容器，需要缩小
-    graphScale.value = Math.max(minScale, containerWidth / svgWidth);
-  } else {
-    // 否则恢复到默认比例
-    graphScale.value = 1;
-  }
-
-  applyScale();
-}
+// 图表缩放/自适应逻辑已移除
 
 
 
@@ -1066,7 +901,6 @@ async function resetToCommit(commit: LogItem | null) {
 // 检查表格是否滚动到底部并加载更多数据
 function checkAndLoadMore() {
   if (
-    showGraphView.value ||
     !hasMoreData.value ||
     isLoadingMore.value ||
     isLoading.value ||
@@ -1088,32 +922,12 @@ function checkAndLoadMore() {
   }
 }
 
-// 在表格视图显示时添加定时检查
-watch(() => showGraphView.value, (isGraphView) => {
-  if (!isGraphView && !showAllCommits.value) {
-    nextTick(() => {
-      setupTableScrollListener();
-
-      // 延迟200ms后检查一次，处理初始渲染时可能需要加载更多数据的情况
-      setTimeout(checkAndLoadMore, 200);
-    });
-  }
-});
-
 // 添加全屏状态变量
 const isFullscreen = ref(false);
 
 // 切换全屏模式
 function toggleFullscreen() {
   isFullscreen.value = !isFullscreen.value;
-  
-  // 使用nextTick确保DOM更新后执行后续操作
-  nextTick(() => {
-    // 如果是图表视图，需要重新计算图表大小
-    if (showGraphView.value && graphContainer.value) {
-      renderGraph();
-    }
-  });
 }
 </script>
 
@@ -1128,21 +942,11 @@ function toggleFullscreen() {
       <div class="log-actions">
         <!-- 筛选按钮 - 只显示图标 -->
         <button
-          v-if="!showGraphView"
           @click="filterVisible = !filterVisible"
           class="modern-btn btn-icon-32 action-button filter-button"
           :class="{ 'active-filter': filterVisible }"
         >
           <el-icon class="btn-icon"><Filter /></el-icon>
-        </button>
-
-        <!-- 视图切换按钮 - 只显示图标 -->
-        <button
-          @click="toggleViewMode"
-          class="modern-btn btn-icon-32 action-button view-mode-button"
-          :class="{ 'active-view': showGraphView }"
-        >
-          <el-icon class="btn-icon"><component :is="showGraphView ? Document : TrendCharts" /></el-icon>
         </button>
         
         <!-- 全屏按钮 - 只显示图标 -->
@@ -1164,7 +968,7 @@ function toggleFullscreen() {
     </div>
 
     <!-- 筛选面板放在头部下方，但在内容区域之前 -->
-    <div v-if="filterVisible && !showGraphView" class="filter-panel-header">
+    <div v-if="filterVisible" class="filter-panel-header">
       <div class="filter-form">
         <div class="filter-item">
           <el-select
@@ -1263,64 +1067,13 @@ function toggleFullscreen() {
 
     <!-- 内容区域，添加上边距以避免被固定头部遮挡 -->
     <div
-      class="content-area"
-      :class="{ 'with-filter': filterVisible && !showGraphView }"
+      class="content-area"  
+      :class="{ 'with-filter': filterVisible }"
     >
       <div v-if="errorMessage">{{ errorMessage }}</div>
       <div class="content-area-content" v-else>
-        <!-- 图表视图 -->
-        <div v-if="showGraphView" class="graph-view">
-          <!-- 添加缩放控制 -->
-          <div class="graph-controls">
-            <div class="zoom-controls">
-              <el-button
-                type="primary"
-                circle
-                size="small"
-                @click="zoomOut"
-                :disabled="graphScale <= minScale"
-              >
-                <el-icon><ZoomOut /></el-icon>
-              </el-button>
-
-              <el-slider
-                v-model="graphScale"
-                :min="minScale"
-                :max="maxScale"
-                :step="scaleStep"
-                @change="applyScale"
-                class="zoom-slider"
-              />
-
-              <el-button
-                type="primary"
-                circle
-                size="small"
-                @click="zoomIn"
-                :disabled="graphScale >= maxScale"
-              >
-                <el-icon><ZoomIn /></el-icon>
-              </el-button>
-
-              <el-button
-                type="primary"
-                size="small"
-                @click="fitGraphToContainer"
-              >
-                自适应大小
-              </el-button>
-            </div>
-
-            <div class="scale-info">
-              缩放: {{ Math.round(graphScale * 100) }}%
-            </div>
-          </div>
-
-          <div ref="graphContainer" class="graph-container"></div>
-        </div>
-
         <!-- 表格视图 -->
-        <div v-else class="table-view-container">
+        <div class="table-view-container">
           <el-table
             ref="tableRef"
             :data="filteredLogs"
