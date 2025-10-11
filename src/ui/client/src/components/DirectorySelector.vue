@@ -371,11 +371,11 @@ async function selectDirectory(dirPath: string) {
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 0px;
   gap: 8px;
-  border: 1px solid var(--border-component);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  /* border: 1px solid var(--border-component);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); */
   flex-shrink: 0;
   transition: all 0.2s ease;
 }
@@ -395,7 +395,7 @@ async function selectDirectory(dirPath: string) {
   font-size: 14px;
   font-weight: 500;
   background-color: var(--bg-container);
-  padding: 4px 8px;
+  /* padding: 4px 8px; */
   border-radius: 3px;
   border-left: 3px solid #409eff;
   border: 1px solid var(--border-component);
