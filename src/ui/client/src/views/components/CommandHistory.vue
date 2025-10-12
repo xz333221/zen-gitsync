@@ -362,7 +362,7 @@ onUnmounted(() => {
 
 <template>
   <!-- 命令历史按钮 -->
-  <el-tooltip content="查看Git命令历史" placement="bottom" effect="dark" :open-delay="500">
+  <el-tooltip content="查看Git命令历史" placement="bottom" effect="dark" :show-after="200">
     <button class="modern-btn btn-icon-36" @click="openCommandHistory">
       <el-icon class="btn-icon">
         <Clock />
@@ -387,7 +387,7 @@ onUnmounted(() => {
         >
           {{ hasSocketConnection ? '实时更新' : '未连接' }}
         </el-tag>
-        <el-tooltip content="只复制命令列表（不含输出）" placement="bottom" effect="dark" :open-delay="300">
+        <el-tooltip content="只复制命令列表（不含输出）" placement="bottom" effect="dark" :show-after="200">
           <button 
             class="modern-btn copy-commands-button enhanced-btn" 
             @click="copyCommandsOnly"
@@ -402,7 +402,7 @@ onUnmounted(() => {
             <span class="btn-text">命令</span>
           </button>
         </el-tooltip>
-        <el-tooltip content="复制完整命令历史（含输出）" placement="bottom" effect="dark" :open-delay="300">
+        <el-tooltip content="复制完整命令历史（含输出）" placement="bottom" effect="dark" :show-after="200">
           <button 
             class="modern-btn copy-all-button enhanced-btn" 
             @click="copyAllHistory"
@@ -417,7 +417,7 @@ onUnmounted(() => {
             <span class="btn-text">全部</span>
           </button>
         </el-tooltip>
-        <el-tooltip content="清空命令历史" placement="bottom" effect="dark" :open-delay="300">
+        <el-tooltip content="清空命令历史" placement="bottom" effect="dark" :show-after="200">
           <button 
             class="modern-btn clear-button enhanced-btn danger-btn" 
             @click="clearCommandHistory"
@@ -459,7 +459,7 @@ onUnmounted(() => {
               </div>
             </div>
             <div class="item-actions">
-              <el-tooltip content="复制命令" placement="bottom" effect="dark" :open-delay="300">
+              <el-tooltip content="复制命令" placement="bottom" effect="dark" :show-after="200">
                 <button 
                   class="modern-btn item-copy-button enhanced-btn" 
                   @click.stop="copyCommand(item.command)"
@@ -469,7 +469,7 @@ onUnmounted(() => {
                   </el-icon>
                 </button>
               </el-tooltip>
-              <el-tooltip content="展开/收起" placement="bottom" effect="dark" :open-delay="300">
+              <el-tooltip content="展开/收起" placement="bottom" effect="dark" :show-after="200">
                 <button 
                   class="modern-btn expand-button enhanced-btn" 
                   :class="{ 'is-expanded': isExpanded(index) }"
@@ -488,7 +488,7 @@ onUnmounted(() => {
             <div v-if="item.stdout" class="output-section">
               <div class="output-header">
                 <h4>标准输出</h4>
-                <el-tooltip content="复制输出" placement="bottom" effect="dark" :open-delay="300">
+                <el-tooltip content="复制输出" placement="bottom" effect="dark" :show-after="200">
                   <button 
                     class="modern-btn output-copy-button enhanced-btn" 
                     @click="copyOutput(item)"

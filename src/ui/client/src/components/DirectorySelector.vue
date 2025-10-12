@@ -269,7 +269,7 @@ async function selectDirectory(dirPath: string) {
         content="在资源管理器中打开"
         placement="bottom"
         effect="dark"
-        :open-delay="500"
+        :show-after="200"
       >
         <button class="modern-btn btn-icon-28" @click="onOpenExplorer">
           <el-icon class="btn-icon"><FolderOpened /></el-icon>

@@ -411,12 +411,12 @@ function stopHResize() {
         <div class="command-history-section" v-if="gitStore.isGitRepo">
           <CommandHistory />
         </div>
-        <el-tooltip content="编辑项目配置" placement="bottom" effect="dark" :open-delay="500">
+        <el-tooltip content="编辑项目配置" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36 btn-scale-on-hover" @click="commitFormRef?.openConfigEditor()">
             <el-icon class="btn-icon"><Edit /></el-icon>
           </button>
         </el-tooltip>
-        <el-tooltip :content="isDarkTheme ? '切换到浅色主题' : '切换到深色主题'" placement="bottom" effect="dark" :open-delay="500">
+        <el-tooltip :content="isDarkTheme ? '切换到浅色主题' : '切换到深色主题'" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36" @click="toggleTheme">
             <el-icon class="btn-icon">
               <Sunny v-if="isDarkTheme" />
@@ -424,7 +424,7 @@ function stopHResize() {
             </el-icon>
           </button>
         </el-tooltip>
-        <el-tooltip content="Git 操作" placement="bottom" effect="dark" :open-delay="500">
+        <el-tooltip content="Git 操作" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36 btn-rotate-on-hover" @click="commitFormRef?.toggleGitOperationsDrawer()">
             <el-icon class="btn-icon"><Menu /></el-icon>
           </button>
@@ -434,7 +434,7 @@ function stopHResize() {
       <InlineCard id="user-info" class="user-info-card" compact>
         <template #content>
           <template v-if="gitStore.userName && gitStore.userEmail">
-            <el-tooltip :content="gitStore.userEmail" placement="bottom" effect="dark" :open-delay="300">
+            <el-tooltip :content="gitStore.userEmail" placement="bottom" effect="dark" :show-after="200">
               <span class="user-name">{{ gitStore.userName }}</span>
             </el-tooltip>
           </template>
@@ -444,7 +444,7 @@ function stopHResize() {
           </template>
         </template>
         <template #actions>
-          <el-tooltip content="用户设置" placement="bottom" effect="dark" :open-delay="500">
+          <el-tooltip content="用户设置" placement="bottom" effect="dark" :show-after="200">
             <button class="modern-btn btn-icon-28" @click="openUserSettingsDialog">
               <el-icon class="btn-icon"><Setting /></el-icon>
             </button>
@@ -598,7 +598,7 @@ function stopHResize() {
     <div class="branch-info" v-if="gitStore.currentBranch">
       <InlineCard class="branch-wrapper" compact>
         <template #content>
-          <el-tooltip content="当前分支" placement="top" effect="dark" :open-delay="400">
+          <el-tooltip content="当前分支" placement="top" effect="dark" :show-after="200">
             <span class="branch-label" aria-label="当前分支" title="当前分支">
               <el-icon class="branch-icon">
                 <!-- 简洁的分支图标 -->
@@ -627,7 +627,7 @@ function stopHResize() {
           <span class="repo-url">{{ gitStore.remoteUrl }}</span>
         </template>
         <template #actions>
-          <el-tooltip content="复制仓库地址" placement="top" effect="dark" :open-delay="500">
+          <el-tooltip content="复制仓库地址" placement="top" effect="dark" :show-after="200">
             <button class="modern-btn btn-icon-28" @click="gitStore.copyRemoteUrl()">
               <el-icon class="btn-icon"><DocumentCopy /></el-icon>
             </button>
