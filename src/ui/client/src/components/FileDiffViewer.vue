@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
-import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage } from 'element-plus';
+import { ref, computed, watch, onMounted } from 'vue';
+import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage, ElSplitter } from 'element-plus';
 import { Document, FolderOpened, Lock, DocumentCopy } from '@element-plus/icons-vue';
 import { formatDiff } from '../utils/index.ts';
 import vscodeIcon from '@/assets/images/vscode.webp';
@@ -59,6 +59,16 @@ const emit = defineEmits<Emits>();
 
 // 内部状态
 const internalSelectedFile = ref<string>('');
+// 分割比例（百分比），持久化到 localStorage
+// 采用与项目一致的命名风格，便于在应用存储中查看
+const LEGACY_SPLIT_KEY = 'fileDiff.splitPercent';
+const SPLIT_KEY = 'zen-gitsync-filediff-ratio';
+const savedSplit = localStorage.getItem(SPLIT_KEY) ?? localStorage.getItem(LEGACY_SPLIT_KEY);
+const initialSplit = (() => {
+  const v = savedSplit ? parseFloat(savedSplit) : 35;
+  return isNaN(v) ? 35 : Math.min(85, Math.max(15, v));
+})();
+const splitPercent = ref<number>(initialSplit);
 
 // 计算属性
 const currentSelectedFile = computed(() => {
@@ -68,7 +78,12 @@ const currentSelectedFile = computed(() => {
 const displayFiles = computed(() => {
   return props.files.map(file => ({
     ...file,
-    displayName: file.name || file.path.split('/').pop() || file.path
+    displayName: file.name || file.path.split('/').pop() || file.path,
+    // 目录路径徽标显示，仿 Git 状态列表
+    dirPath: (() => {
+      const parts = (file.path || '').split('/');
+      return parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+    })()
   }));
 });
 
@@ -160,78 +175,234 @@ watch(() => props.files, (newFiles) => {
     handleFileSelect(firstFile.path);
   }
 }, { immediate: true });
+
+// 工具：范围约束 & 持久化
+const clampPercent = (v: number) => Math.min(85, Math.max(15, v));
+const persistSplit = (v: number) => {
+  try {
+    const val = String(clampPercent(v));
+    localStorage.setItem(SPLIT_KEY, val);
+    // 兼容写入旧键，确保历史逻辑可读取
+    localStorage.setItem(LEGACY_SPLIT_KEY, val);
+  } catch {}
+};
+
+// 持久化分割比例（响应 v-model 变化）
+watch(splitPercent, (v) => {
+  persistSplit(v);
+});
+
+// 确保每次挂载时都应用已保存的比例（对话框 destroy-on-close 时尤为重要）
+onMounted(() => {
+  try {
+    const saved = localStorage.getItem(SPLIT_KEY) ?? localStorage.getItem(LEGACY_SPLIT_KEY);
+    if (saved != null) {
+      const v = parseFloat(saved);
+      if (!isNaN(v)) {
+        splitPercent.value = clampPercent(v);
+      }
+    }
+  } catch {}
+});
+  
+  // Splitter 根元素引用，用于将 px 尺寸转换为百分比
+  const splitterRef = ref<any>(null);
+  const getSplitterWidth = () => {
+    const el = splitterRef.value?.$el ?? splitterRef.value;
+    if (el && el.clientWidth) return el.clientWidth as number;
+    try {
+      return el?.getBoundingClientRect?.().width ?? 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // 从实际DOM计算左面板百分比（用于某些版本返回px或未触发v-model的情况）
+  const updateSplitFromDom = () => {
+    const root = splitterRef.value?.$el ?? splitterRef.value;
+    if (!root) return;
+    const panels = root.querySelectorAll?.('.el-splitter__panel');
+    const width = getSplitterWidth();
+    if (!panels || panels.length < 1 || width <= 0) return;
+    const leftPx = (panels[0] as HTMLElement)?.getBoundingClientRect?.().width ?? 0;
+    if (leftPx > 0) {
+      const percent = clampPercent((leftPx / width) * 100);
+      if (percent !== splitPercent.value) {
+        splitPercent.value = percent;
+        persistSplit(percent);
+      }
+    }
+  };
+  // 面板尺寸（百分比字符串）用于与 SplitterPanel 的 v-model:size 对接
+  const panelSize = computed<string>({
+    get() {
+      return `${clampPercent(splitPercent.value)}%`;
+    },
+    set(val: string | number) {
+      // 兼容百分比、像素与数值："35%" / "420px" / 420
+      let percent = NaN;
+      if (typeof val === 'number') {
+        const px = val;
+        const width = getSplitterWidth();
+        if (width > 0 && !isNaN(px)) {
+          percent = (px / width) * 100;
+        }
+      } else if (typeof val === 'string') {
+        if (val.endsWith('%')) {
+          percent = parseFloat(val);
+        } else if (val.endsWith('px')) {
+          const px = parseFloat(val);
+          const width = getSplitterWidth();
+          if (width > 0 && !isNaN(px)) {
+            percent = (px / width) * 100;
+          }
+        }
+      }
+      if (!isNaN(percent)) {
+        splitPercent.value = clampPercent(percent);
+        persistSplit(splitPercent.value);
+      }
+    }
+  });
 </script>
 
 <template>
   <div class="file-diff-viewer" :style="{ height }">
-    <!-- 文件列表面板 -->
-    <div v-if="showFileList" class="files-panel">
-      <div class="panel-header">
-        <h4>变更文件</h4>
-        <span v-if="files.length > 0" class="file-count">({{ files.length }})</span>
-      </div>
-      
-      <div class="files-list">
-        <el-scrollbar height="100%">
-          <el-empty 
-            v-if="files.length === 0"
-            :description="emptyText"
-            :image-size="60"
-          />
-          
-          <div
-            v-for="file in displayFiles"
-            :key="file.path"
-            class="file-item"
-            :class="{ 
-              'active': file.path === currentSelectedFile,
-              [`file-type-${file.type}`]: file.type,
-              'is-locked': file.locked
-            }"
-            @click="handleFileSelect(file.path)"
-          >
-            <el-icon class="file-icon">
-              <Document />
-            </el-icon>
-            <el-tooltip
-              :content="file.path"
-              placement="top"
-              :disabled="file.displayName.length <= 35"
-              :hide-after="1000"
-              :show-after="200"
-            >
-              <span class="file-name">{{ file.displayName }}</span>
-            </el-tooltip>
-            <el-tooltip
-              v-if="file.locked"
-              content="该文件已被锁定，提交时会被跳过"
-              placement="top"
-              :hide-after="1000"
-              :show-after="200"
-            >
-              <el-icon class="lock-icon" color="#E6A23C">
-                <Lock />
-              </el-icon>
-            </el-tooltip>
-            <!-- 文件操作按钮 -->
-            <FileActionButtons
-              v-if="showActionButtons"
-              :file-path="file.path"
-              :file-type="file.type || 'modified'"
-              :is-locked="isFileLocked(file.path)"
-              :is-locking="isLocking(file.path)"
-              @toggle-lock="(path) => emit('toggle-lock', path)"
-              @stage="(path) => emit('stage', path)"
-              @unstage="(path) => emit('unstage', path)"
-              @revert="(path) => emit('revert', path)"
-            />
+    <!-- 使用 Splitter 控制左右面板比例 -->
+    <el-splitter
+      v-if="showFileList"
+      ref="splitterRef"
+      layout="horizontal"
+      style="height: 100%"
+      @resize="updateSplitFromDom"
+      @resize-end="updateSplitFromDom"
+    >
+      <el-splitter-panel v-model:size="panelSize" :min="'15%'" :max="'85%'">
+        <!-- 左侧：文件列表面板 -->
+        <div class="files-panel">
+          <div class="panel-header">
+            <h4>变更文件</h4>
+            <span v-if="files.length > 0" class="file-count">({{ files.length }})</span>
           </div>
-        </el-scrollbar>
-      </div>
-    </div>
+          <div class="files-list">
+            <el-scrollbar height="100%">
+              <el-empty 
+                v-if="files.length === 0"
+                :description="emptyText"
+                :image-size="60"
+              />
+              <div
+                v-for="file in displayFiles"
+                :key="file.path"
+                class="file-item"
+                :class="{ 
+                  'active': file.path === currentSelectedFile,
+                  [`file-type-${file.type}`]: file.type,
+                  'is-locked': file.locked
+                }"
+                @click="handleFileSelect(file.path)"
+              >
+                <el-icon class="file-icon">
+                  <Document />
+                </el-icon>
+                <el-tooltip
+                  :content="file.path"
+                  placement="top"
+                  :disabled="file.displayName.length <= 35"
+                  
+                  :show-after="200"
+                >
+                  <span class="file-name">{{ file.displayName }}</span>
+                </el-tooltip>
+                <div v-if="file.dirPath" class="file-path-section" :title="file.dirPath">
+                  <el-tooltip
+                    :content="file.dirPath"
+                    placement="top"
+                    :disabled="file.dirPath.length <= 30"
+                    
+                    :show-after="200"
+                  >
+                    <span class="file-directory path-badge">{{ file.dirPath }}</span>
+                  </el-tooltip>
+                </div>
+                <el-tooltip
+                  v-if="file.locked"
+                  content="该文件已被锁定，提交时会被跳过"
+                  placement="top"
+                  
+                  :show-after="200"
+                >
+                  <el-icon class="lock-icon" color="#E6A23C">
+                    <Lock />
+                  </el-icon>
+                </el-tooltip>
+                <!-- 文件操作按钮（悬浮在右侧，不占布局空间） -->
+                <div v-if="showActionButtons" class="file-actions">
+                  <FileActionButtons
+                    :file-path="file.path"
+                    :file-type="file.type || 'modified'"
+                    :is-locked="isFileLocked(file.path)"
+                    :is-locking="isLocking(file.path)"
+                    @toggle-lock="(path) => emit('toggle-lock', path)"
+                    @stage="(path) => emit('stage', path)"
+                    @unstage="(path) => emit('unstage', path)"
+                    @revert="(path) => emit('revert', path)"
+                  />
+                </div>
+              </div>
+            </el-scrollbar>
+          </div>
+        </div>
+      </el-splitter-panel>
+      <el-splitter-panel :min="'15%'" :max="'85%'">
+        <!-- 右侧：差异显示面板 -->
+        <div class="diff-panel">
+          <div class="panel-header">
+            <h4>文件差异</h4>
+            <div class="header-right">
+              <el-tooltip
+                v-if="currentSelectedFile"
+                :content="currentSelectedFile"
+                placement="top"
+                effect="light"
+                
+                :show-after="200"
+              >
+                <span class="selected-file">
+                  <span class="path-dir">{{ selectedFileDir }}</span><span class="path-name">{{ selectedFileName }}</span>
+                </span>
+              </el-tooltip>
+              <div v-if="showOpenButton && currentSelectedFile" class="action-buttons">
+                <el-tooltip content="复制文件路径" placement="top" effect="light">
+                  <button class="modern-btn btn-icon-24" @click="handleCopyPath">
+                    <el-icon class="btn-icon"><DocumentCopy /></el-icon>
+                  </button>
+                </el-tooltip>
+                <el-tooltip :content="openButtonTooltip" placement="top" effect="light">
+                  <el-button type="primary" size="small" :icon="FolderOpened" @click="handleOpenFile" class="open-file-btn" />
+                </el-tooltip>
+                <el-tooltip content="用VSCode打开文件" placement="top" effect="light">
+                  <el-button type="success" size="small" @click="handleOpenWithVSCode" class="vscode-btn">
+                    <img :src="vscodeIcon" alt="VSCode" class="vscode-icon" />
+                  </el-button>
+                </el-tooltip>
+              </div>
+            </div>
+          </div>
+          <div class="diff-content">
+            <el-empty 
+              v-if="!hasDiffContent"
+              :description="currentSelectedFile ? '该文件没有差异内容' : '请选择文件查看差异'"
+              :image-size="80"
+            />
+            <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
+          </div>
+        </div>
+      </el-splitter-panel>
+    </el-splitter>
 
-    <!-- 差异显示面板 -->
-    <div class="diff-panel" :class="{ 'full-width': !showFileList }">
+    <!-- 当隐藏文件列表时，仅显示右侧面板 -->
+    <div v-else class="diff-panel full-width">
       <div class="panel-header">
         <h4>文件差异</h4>
         <div class="header-right">
@@ -240,7 +411,7 @@ watch(() => props.files, (newFiles) => {
             :content="currentSelectedFile"
             placement="top"
             effect="light"
-            :hide-after="1000"
+            
             :show-after="200"
           >
             <span class="selected-file">
@@ -324,8 +495,28 @@ watch(() => props.files, (newFiles) => {
   transition: var(--transition-all);
 }
 
+/* Splitter 容器与面板的基础约束，避免面板被内容强行撑开导致拖拽异常 */
+:deep(.el-splitter) {
+  width: 100%;
+  height: 100%;
+}
+
+:deep(.el-splitter__panel) {
+  flex: 0 0 auto; /* 面板尺寸由 splitter 控制 */
+  overflow: hidden;
+}
+
+/* 左侧面板最小宽度，右侧面板最小宽度，防止拖动瞬间跳边 */
+:deep(.el-splitter__panel:first-child) {
+  min-width: 250px;
+}
+
+:deep(.el-splitter__panel:last-child) {
+  min-width: 360px;
+}
+
 .files-panel {
-  width: 300px;
+  width: 100%; /* 让宽度由 el-splitter 控制 */
   min-width: 250px;
   background: var(--bg-icon);
   border-right: 1px solid var(--border-color);
@@ -461,6 +652,7 @@ watch(() => props.files, (newFiles) => {
 
 
 .file-item {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -585,6 +777,7 @@ watch(() => props.files, (newFiles) => {
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   transition: var(--transition-color);
+  min-width: 40px;
   
   .active & {
     color: #1890ff;
@@ -592,10 +785,49 @@ watch(() => props.files, (newFiles) => {
   }
 }
 
+.path-badge {
+  display: inline-block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  background: var(--bg-file-path);
+  padding: 1px var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  margin-left: var(--spacing-sm);
+}
+
+.file-item:hover .path-badge {
+  background: var(--bg-file-path-hover);
+  color: var(--color-file-path-hover);
+}
+
 .lock-icon {
   margin-left: 8px;
   flex-shrink: 0;
   opacity: 0.9;
+}
+
+/* 右侧悬浮操作区（与 Git 状态列表一致的交互） */
+.file-actions {
+  position: absolute;
+  right: 12px; /* 预留分隔条拖拽区域，避免遮挡 */
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 1px;
+  border-radius: var(--radius-base);
+  background: var(--bg-container);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color-light);
+}
+
+.file-item:hover .file-actions {
+  display: flex;
 }
 
 .diff-content {

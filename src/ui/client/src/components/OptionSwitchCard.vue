@@ -22,7 +22,7 @@ function onChange(val: boolean) {
 
 <template>
   <div class="option-card" :class="{ compact: props.compact }">
-    <el-tooltip :content="tooltip" placement="top" :hide-after="1000" :show-after="200">
+    <el-tooltip :content="tooltip" placement="top"  :show-after="200">
       <div class="option-header">
         <div class="option-icon" :class="iconClass">
           <slot name="icon" />

@@ -1070,7 +1070,7 @@ function toggleFullscreen() {
                 <el-tooltip
                   :content="scope.row.email"
                   placement="top"
-                  :hide-after="1000"
+                  
                   :show-after="200"
                 >
                   <span class="author-name">{{ scope.row.author }}</span>

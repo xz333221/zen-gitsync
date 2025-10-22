@@ -108,7 +108,7 @@ function getStatusLetter(fileType: string): string {
               :content="props.getFileName(file.path)"
               placement="top"
               :disabled="props.getFileName(file.path).length <= 25"
-              :hide-after="1000"
+              
               :show-after="200"
             >
               <span class="file-name" :class="{ 'locked-file-name': props.isFileLocked(file.path), 'deleted-file-name': file.type === 'deleted' }">
@@ -124,7 +124,7 @@ function getStatusLetter(fileType: string): string {
               :content="props.getFileDirectory(file.path)"
               placement="top"
               :disabled="props.getFileDirectory(file.path).length <= 30"
-              :hide-after="1000"
+              
               :show-after="200"
             >
               <span class="file-directory">{{ props.getFileDirectory(file.path) }}</span>

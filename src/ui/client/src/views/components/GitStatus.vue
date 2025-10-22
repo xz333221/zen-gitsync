@@ -643,7 +643,7 @@ defineExpose({
           <el-tooltip 
             :content="gitStore.autoUpdateEnabled ? '自动更新文件状态' : '自动更新文件状态'" 
             placement="top" 
-            :hide-after="1000"
+            
             :show-after="200"
           >
             <el-switch 
@@ -657,7 +657,7 @@ defineExpose({
           </el-tooltip>
         
         <!-- 添加Git Pull按钮 -->
-        <el-tooltip content="Git Pull (拉取远程更新)" placement="top" :hide-after="1000" :show-after="200">
+        <el-tooltip content="Git Pull (拉取远程更新)" placement="top"  :show-after="200">
           <el-button 
             type="primary" 
             :icon="Download" 
@@ -670,7 +670,7 @@ defineExpose({
         </el-tooltip>
         
         <!-- 添加Git Fetch All按钮 -->
-        <el-tooltip content="Git Fetch All (获取所有远程分支)" placement="top" :hide-after="1000" :show-after="200">
+        <el-tooltip content="Git Fetch All (获取所有远程分支)" placement="top"  :show-after="200">
           <el-button 
             v-show="false"
             type="primary" 
@@ -687,7 +687,7 @@ defineExpose({
           v-if="configStore.lockedFiles.length > 0"
           content="管理锁定文件"
           placement="top"
-          :hide-after="1000"
+          
           :show-after="200"
         >
           <el-button
@@ -700,7 +700,7 @@ defineExpose({
           </el-button>
         </el-tooltip>
 
-        <el-tooltip content="刷新状态" placement="top" :hide-after="1000" :show-after="200">
+        <el-tooltip content="刷新状态" placement="top"  :show-after="200">
           <el-button
             type="primary"
             :icon="Refresh"
@@ -926,7 +926,7 @@ defineExpose({
             </div>
           </div>
           <div class="file-actions">
-            <el-tooltip content="解锁文件" placement="top" :hide-after="1000">
+            <el-tooltip content="解锁文件" placement="top" >
               <el-button
                 type="danger"
                 size="small"

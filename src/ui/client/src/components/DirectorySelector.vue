@@ -267,7 +267,7 @@ async function selectDirectory(dirPath: string) {
     <div class="directory-actions">
       <el-tooltip
         content="在资源管理器中打开"
-        placement="bottom"
+        placement="top"
         effect="dark"
         :show-after="200"
       >

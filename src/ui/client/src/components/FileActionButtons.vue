@@ -96,7 +96,7 @@ function handleActionClick(handler: () => void, event: Event) {
       v-if="showLockButton"
       :content="isLocking ? '处理中...' : (isLocked ? '解锁文件' : '锁定文件')" 
       placement="top" 
-      :hide-after="1000" 
+       
       :show-after="200"
     >
       <el-button
@@ -116,7 +116,7 @@ function handleActionClick(handler: () => void, event: Event) {
     
     <!-- 动态操作按钮（文件被锁定时隐藏） -->
     <template v-if="!isLocked" v-for="action in actionButtons" :key="action.type">
-      <el-tooltip :content="action.tooltip" placement="top" :hide-after="1000" :show-after="200">
+      <el-tooltip :content="action.tooltip" placement="top"  :show-after="200">
         <el-button
           :type="action.buttonType"
           size="small"
