@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage, ElSplitter } from 'element-plus';
-import { Document, FolderOpened, Lock, DocumentCopy } from '@element-plus/icons-vue';
+import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage, ElSplitter, ElInput } from 'element-plus';
+import { Document, FolderOpened, Lock, DocumentCopy, Search } from '@element-plus/icons-vue';
 import { formatDiff } from '../utils/index.ts';
 import vscodeIcon from '@/assets/images/vscode.webp';
 import FileActionButtons from './FileActionButtons.vue';
@@ -59,6 +59,7 @@ const emit = defineEmits<Emits>();
 
 // 内部状态
 const internalSelectedFile = ref<string>('');
+const searchQuery = ref<string>(''); // 搜索关键词
 // 分割比例（百分比），持久化到 localStorage
 // 采用与项目一致的命名风格，便于在应用存储中查看
 const LEGACY_SPLIT_KEY = 'fileDiff.splitPercent';
@@ -85,6 +86,19 @@ const displayFiles = computed(() => {
       return parts.length > 1 ? parts.slice(0, -1).join('/') : '';
     })()
   }));
+});
+
+const filteredFiles = computed(() => {
+  if (!searchQuery.value.trim()) {
+    return displayFiles.value;
+  }
+  
+  const query = searchQuery.value.toLowerCase().trim();
+  return displayFiles.value.filter(file => {
+    // 搜索文件名或完整路径
+    return file.displayName.toLowerCase().includes(query) || 
+           file.path.toLowerCase().includes(query);
+  });
 });
 
 const hasDiffContent = computed(() => {
@@ -284,6 +298,16 @@ onMounted(() => {
             <h4>变更文件</h4>
             <span v-if="files.length > 0" class="file-count">({{ files.length }})</span>
           </div>
+          <!-- 搜索框 -->
+          <div class="search-box">
+            <el-input
+              v-model="searchQuery"
+              placeholder="搜索文件名或路径..."
+              :prefix-icon="Search"
+              clearable
+              size="small"
+            />
+          </div>
           <div class="files-list">
             <el-scrollbar height="100%">
               <el-empty 
@@ -291,8 +315,13 @@ onMounted(() => {
                 :description="emptyText"
                 :image-size="60"
               />
+              <el-empty 
+                v-else-if="filteredFiles.length === 0"
+                description="没有找到匹配的文件"
+                :image-size="60"
+              />
               <div
-                v-for="file in displayFiles"
+                v-for="file in filteredFiles"
                 :key="file.path"
                 class="file-item"
                 :class="{ 
@@ -379,12 +408,14 @@ onMounted(() => {
                   </button>
                 </el-tooltip>
                 <el-tooltip :content="openButtonTooltip" placement="top" effect="light">
-                  <el-button type="primary" size="small" :icon="FolderOpened" @click="handleOpenFile" class="open-file-btn" />
+                  <button class="modern-btn btn-icon-24" @click="handleOpenFile">
+                    <el-icon class="btn-icon"><FolderOpened /></el-icon>
+                  </button>
                 </el-tooltip>
                 <el-tooltip content="用VSCode打开文件" placement="top" effect="light">
-                  <el-button type="success" size="small" @click="handleOpenWithVSCode" class="vscode-btn">
-                    <img :src="vscodeIcon" alt="VSCode" class="vscode-icon" />
-                  </el-button>
+                  <button class="modern-btn btn-icon-24" @click="handleOpenWithVSCode">
+                    <img :src="vscodeIcon" alt="VSCode" class="btn-icon vscode-icon" />
+                  </button>
                 </el-tooltip>
               </div>
             </div>
@@ -437,28 +468,24 @@ onMounted(() => {
               placement="top"
               effect="light"
             >
-              <el-button
-                type="primary"
-                size="small"
-                :icon="FolderOpened"
+              <button
+                class="modern-btn btn-icon-24 btn-primary"
                 @click="handleOpenFile"
-                class="open-file-btn"
               >
-              </el-button>
+                <el-icon class="btn-icon"><FolderOpened /></el-icon>
+              </button>
             </el-tooltip>
             <el-tooltip
               content="用VSCode打开文件"
               placement="top"
               effect="light"
             >
-              <el-button
-                type="success"
-                size="small"
+              <button
+                class="modern-btn btn-icon-24 btn-success"
                 @click="handleOpenWithVSCode"
-                class="vscode-btn"
               >
-                <img :src="vscodeIcon" alt="VSCode" class="vscode-icon" />
-              </el-button>
+                <img :src="vscodeIcon" alt="VSCode" class="btn-icon vscode-icon" />
+              </button>
             </el-tooltip>
           </div>
         </div>
@@ -571,39 +598,12 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-}
-
-.open-file-btn {
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  transition: all 0.3s ease;
   
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
+  .vscode-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
   }
-}
-
-.vscode-btn {
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(103, 194, 58, 0.3);
-  }
-}
-
-.vscode-icon {
-  width: 16px;
-  height: 16px;
-  object-fit: contain;
 }
 
 .file-count {
@@ -614,6 +614,54 @@ onMounted(() => {
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-full);
   border: 1px solid var(--border-card);
+}
+
+.search-box {
+  padding: var(--spacing-sm) 0;
+  background: var(--bg-container);
+  border-bottom: 1px solid var(--border-color-light);
+  
+  :deep(.el-input) {
+    .el-input__wrapper {
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
+      border-radius: var(--radius-sm);
+      transition: var(--transition-all);
+      
+      &:hover {
+        background: var(--bg-input-hover);
+        border-color: #409eff;
+      }
+      
+      &.is-focus {
+        background: var(--bg-input);
+        border-color: #409eff;
+        box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+      }
+    }
+    
+    .el-input__inner {
+      color: var(--text-primary);
+      
+      &::placeholder {
+        color: var(--text-tertiary);
+      }
+    }
+    
+    .el-input__prefix {
+      color: var(--text-secondary);
+    }
+    
+    .el-input__suffix {
+      .el-input__clear {
+        color: var(--text-secondary);
+        
+        &:hover {
+          color: #409eff;
+        }
+      }
+    }
+  }
 }
 
 .selected-file {

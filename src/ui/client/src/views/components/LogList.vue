@@ -1376,8 +1376,6 @@ function toggleFullscreen() {
 .commit-info {
   flex-shrink: 0;
   background: var(--bg-panel);
-  border: 1px solid var(--color-warning);
-  border-left: 4px solid var(--color-warning);
   border-radius: 8px;
   padding: 16px;
   box-shadow: var(--shadow-md);
