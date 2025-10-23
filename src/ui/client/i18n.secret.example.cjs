@@ -1,5 +1,5 @@
 // 百度翻译 API 配置示例
-// 复制此文件为 i18n.secret.js 并填入你的真实配置
+// 复制此文件为 i18n.secret.cjs 并填入你的真实配置
 module.exports = {
   appid: 'YOUR_APPID',    // 替换为你的百度翻译 appid
   key: 'YOUR_KEY'         // 替换为你的百度翻译 key

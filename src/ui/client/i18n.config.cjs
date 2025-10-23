@@ -3,9 +3,9 @@ const path = require('path')
 // 从单独的文件加载敏感配置（不提交到 Git）
 let baiduConfig = { appid: '', key: '' }
 try {
-  baiduConfig = require('./i18n.secret.js')
+  baiduConfig = require('./i18n.secret.cjs')
 } catch (e) {
-  console.warn('⚠️  未找到 i18n.secret.js 文件，请参考 i18n.secret.example.js 创建')
+  console.warn('⚠️  未找到 i18n.secret.cjs 文件，请参考 i18n.secret.example.cjs 创建')
 }
 
 module.exports = {
@@ -35,7 +35,7 @@ module.exports = {
     'node_modules'       // 排除依赖
   ],
   
-  // 百度翻译配置（从 i18n.secret.js 加载）
+  // 百度翻译配置（从 i18n.secret.cjs 加载）
   baidu: baiduConfig,
   
   // 语句标识
