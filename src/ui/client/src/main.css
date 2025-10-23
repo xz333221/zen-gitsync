@@ -21,14 +21,3 @@ body {
     transition: var(--transition-all);
 }
 
-/* 统一卡片样式 */
-/* .el-card {
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-base);
-    transition: var(--transition-all);
-}
-
-.el-card:hover {
-    box-shadow: var(--shadow-hover);
-} */
-

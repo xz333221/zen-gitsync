@@ -271,15 +271,13 @@ const getFileIcon = (filePath: string) => {
   margin-right: 4px;
 }
 
-/* 锁定状态保持为圆点，不显示字母 */
+/* 锁定状态显示特殊样式 */
 .file-status-indicator.locked {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-full);
-  border: 2px solid var(--git-status-locked);
-  background: #fef2f2;
-  color: transparent;
-  font-size: 0;
+  color: var(--git-status-locked);
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid var(--git-status-locked);
+  border-radius: var(--radius-sm);
+  padding: 0 2px;
   animation: pulse 2s infinite;
 }
 

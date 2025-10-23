@@ -27,7 +27,7 @@ function getBackendPort() {
   return 3000
 }
 
-const backendPort = getBackendPort()
+// const backendPort = getBackendPort()
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -63,7 +63,7 @@ export default defineConfig({
     open: true,
     proxy: {
       "/api": {
-        target: `http://localhost:${backendPort}`, // 动态设置后端服务地址
+        target: `http://localhost:${getBackendPort()}`, // 动态设置后端服务地址
         changeOrigin: true,
         // rewrite: (path) => path.replace(/^\/api/, '')
       },
@@ -76,10 +76,10 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes("node_modules")) {
-            return "vendor";
+            return "vendor"
           }
         },
       },
     },
   },
-});
+})
