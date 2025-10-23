@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import FileActionButtons from './FileActionButtons.vue'
+import { getFileIconClass } from '../utils/fileIcon'
 
 interface FileItem {
   path: string
@@ -81,6 +82,12 @@ function getStatusLetter(fileType: string): string {
       return ''
   }
 }
+
+// 获取文件图标类名
+const getFileIcon = (filePath: string) => {
+  const fileName = props.getFileName(filePath)
+  return getFileIconClass(fileName)
+}
 </script>
 
 <template>
@@ -100,9 +107,7 @@ function getStatusLetter(fileType: string): string {
         @click="handleFileClick(file)"
       >
         <div class="file-info">
-          <div class="file-status-indicator" :class="[file.type, { 'locked': props.isFileLocked(file.path) }]">
-            {{ getStatusLetter(file.type) }}
-          </div>
+          <span :class="['file-type-icon', getFileIcon(file.path)]"></span>
           <div class="file-name-section">
             <el-tooltip
               :content="props.getFileName(file.path)"
@@ -130,17 +135,23 @@ function getStatusLetter(fileType: string): string {
               <span class="file-directory">{{ props.getFileDirectory(file.path) }}</span>
             </el-tooltip>
           </div>
+          <div class="file-status-indicator" :class="[file.type, { 'locked': props.isFileLocked(file.path) }]">
+            {{ getStatusLetter(file.type) }}
+          </div>
         </div>
-        <FileActionButtons
-          :file-path="file.path"
-          :file-type="file.type"
-          :is-locked="props.isFileLocked(file.path)"
-          :is-locking="props.isLocking(file.path)"
-          @toggle-lock="handleToggleFileLock"
-          @stage="handleStageFile"
-          @unstage="handleUnstageFile"
-          @revert="handleRevertFile"
-        />
+        <!-- 悬浮操作按钮 -->
+        <div class="file-actions">
+          <FileActionButtons
+            :file-path="file.path"
+            :file-type="file.type"
+            :is-locked="props.isFileLocked(file.path)"
+            :is-locking="props.isLocking(file.path)"
+            @toggle-lock="handleToggleFileLock"
+            @stage="handleStageFile"
+            @unstage="handleUnstageFile"
+            @revert="handleRevertFile"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -245,12 +256,20 @@ function getStatusLetter(fileType: string): string {
   font-weight: 700;
   line-height: 1;
   color: var(--text-secondary);
+  margin-left: var(--spacing-md);
 }
 
 .file-status-indicator.added { color: var(--git-status-added); }
 .file-status-indicator.modified { color: var(--git-status-modified); }
 .file-status-indicator.deleted { color: var(--git-status-deleted); }
 .file-status-indicator.untracked { color: var(--git-status-untracked); }
+
+.file-type-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1;
+  margin-right: 4px;
+}
 
 /* 锁定状态保持为圆点，不显示字母 */
 .file-status-indicator.locked {
@@ -313,9 +332,10 @@ function getStatusLetter(fileType: string): string {
 }
 
 .file-path-section {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   margin-left: var(--spacing-md);
+  margin-right: auto;
 }
 
 .file-directory {
@@ -337,32 +357,24 @@ function getStatusLetter(fileType: string): string {
   color: var(--color-file-path-hover);
 }
 
+/* 右侧悬浮操作区 */
 .file-actions {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   display: none;
   align-items: center;
   gap: var(--spacing-xs);
-  flex-shrink: 0;
   padding: 1px;
   border-radius: var(--radius-base);
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--bg-container);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-color-light);
 }
 
 .file-item:hover .file-actions {
   display: flex;
-  animation: slideIn var(--transition-base) ease-out;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(var(--spacing-base));
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 
 .file-action-btn {

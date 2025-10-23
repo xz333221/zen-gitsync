@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElButton, ElMessage, ElSplitter, ElInput } from 'element-plus';
-import { Document, FolderOpened, Lock, DocumentCopy, Search } from '@element-plus/icons-vue';
+import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput } from 'element-plus';
+import { FolderOpened, Lock, DocumentCopy, Search } from '@element-plus/icons-vue';
 import { formatDiff } from '../utils/index.ts';
 import vscodeIcon from '@/assets/images/vscode.webp';
 import FileActionButtons from './FileActionButtons.vue';
+import { getFileIconClass } from '../utils/fileIcon';
 
 // 定义props
 interface FileItem {
@@ -77,15 +78,20 @@ const currentSelectedFile = computed(() => {
 });
 
 const displayFiles = computed(() => {
-  return props.files.map(file => ({
-    ...file,
-    displayName: file.name || file.path.split('/').pop() || file.path,
-    // 目录路径徽标显示，仿 Git 状态列表
-    dirPath: (() => {
-      const parts = (file.path || '').split('/');
-      return parts.length > 1 ? parts.slice(0, -1).join('/') : '';
-    })()
-  }));
+  return props.files.map(file => {
+    const displayName = file.name || file.path.split('/').pop() || file.path;
+    return {
+      ...file,
+      displayName,
+      // 目录路径徽标显示，仿 Git 状态列表
+      dirPath: (() => {
+        const parts = (file.path || '').split('/');
+        return parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+      })(),
+      // 文件图标类名
+      iconClass: getFileIconClass(displayName)
+    };
+  });
 });
 
 const filteredFiles = computed(() => {
@@ -331,9 +337,7 @@ onMounted(() => {
                 }"
                 @click="handleFileSelect(file.path)"
               >
-                <el-icon class="file-icon">
-                  <Document />
-                </el-icon>
+                <span :class="['file-icon', file.iconClass]"></span>
                 <el-tooltip
                   :content="file.path"
                   placement="top"
@@ -810,10 +814,10 @@ onMounted(() => {
 
 .file-icon {
   margin-right: var(--spacing-base);
-  color: var(--text-secondary);
-  font-size: var(--font-size-lg);
   flex-shrink: 0;
-  transition: var(--transition-color);
+  font-size: 16px;
+  line-height: 1;
+  display: inline-block;
 }
 
 .file-name {
