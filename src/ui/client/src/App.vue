@@ -7,11 +7,14 @@ import CommandHistory from '@views/components/CommandHistory.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import InlineCard from '@components/InlineCard.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
-import { ElMessage } from 'element-plus'
+import LanguageSwitcher from '@components/LanguageSwitcher.vue'
+import I18nTest from '@components/I18nTest.vue'
+import { ElMessage, ElConfigProvider } from 'element-plus'
 import { Edit, Menu, Plus, Setting, Check, DocumentCopy, Sunny, Moon } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
+import { useLocaleStore } from '@stores/localeStore'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -23,6 +26,8 @@ const commitFormRef = ref<InstanceType<typeof CommitForm> | null>(null)
 const gitStore = useGitStore()
 // 使用Config Store
 const configStore = useConfigStore()
+// 使用Locale Store
+const localeStore = useLocaleStore()
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
@@ -31,6 +36,9 @@ const currentDirectory = computed(() => configStore.currentDirectory)
 
 // 主题切换功能
 const isDarkTheme = ref(false)
+
+// 国际化测试开关（开发时使用，完成测试后可删除）
+const showI18nTest = ref(false)
 
 // 切换主题
 function toggleTheme() {
@@ -399,6 +407,7 @@ function stopHResize() {
 </script>
 
 <template>
+  <el-config-provider :locale="localeStore.elementPlusLocale">
   <header class="main-header app-header">
     <div class="header-left">
       <img :src="logo" alt="Zen GitSync Logo" class="logo" />
@@ -422,6 +431,14 @@ function stopHResize() {
               <Sunny v-if="isDarkTheme" />
               <Moon v-else />
             </el-icon>
+          </button>
+        </el-tooltip>
+        <!-- 语言切换 -->
+        <LanguageSwitcher />
+        <!-- 测试按钮（开发时使用） -->
+        <el-tooltip content="国际化测试" placement="bottom" effect="dark" :show-after="200">
+          <button class="modern-btn btn-icon-36" @click="showI18nTest = !showI18nTest">
+            <el-icon class="btn-icon">🌐</el-icon>
           </button>
         </el-tooltip>
         <el-tooltip content="Git 操作" placement="bottom" effect="dark" :show-after="200">
@@ -455,6 +472,18 @@ function stopHResize() {
   </header>
 
   <main class="main-container">
+    <!-- 国际化测试组件（临时，测试完成后可删除） -->
+    <div v-if="showI18nTest" class="i18n-test-wrapper">
+      <I18nTest />
+      <el-button 
+        type="danger" 
+        @click="showI18nTest = false"
+        style="position: fixed; top: 80px; right: 20px; z-index: 1000;"
+      >
+        关闭测试
+      </el-button>
+    </div>
+
     <div v-if="!initCompleted" class="loading-container">
       <el-card class="loading-card">
         <div class="loading-spinner">
@@ -639,6 +668,7 @@ function stopHResize() {
 
   <!-- 用户设置对话框 -->
   <UserSettingsDialog v-model="userSettingsDialogVisible" />
+  </el-config-provider>
 </template>
 
 <style>
@@ -1133,6 +1163,18 @@ h1 {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* 国际化测试组件样式 */
+.i18n-test-wrapper {
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-page);
+  z-index: 999;
+  overflow-y: auto;
 }
 
 </style>

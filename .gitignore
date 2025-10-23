@@ -7,6 +7,10 @@ node_modules
 .env.local
 .env.*.local
 
+# i18n secret config (百度翻译 API 密钥)
+i18n.secret.js
+src/ui/client/lib/
+
 # Log files
 npm-debug.log*
 yarn-debug.log*
