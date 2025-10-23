@@ -16,7 +16,7 @@ module.exports = {
   src: path.resolve(__dirname, 'src'),
   
   // 国际化文件输出目录
-  i18n: path.resolve(__dirname, 'src/locales/auto'),
+  i18n: path.resolve(__dirname, 'src/lang'),
   
   // 输出目录，空表示覆盖原文件（建议先测试后再覆盖）
   output: '',
@@ -26,7 +26,8 @@ module.exports = {
   
   // 排除的目录
   exclude: [
-    '/src/locales',      // 排除语言文件目录
+    '/src/locales',      // 排除现有语言文件目录
+    '/src/lang',         // 排除工具生成的语言文件目录
     '/src/assets',       // 排除资源文件
     '/src/styles',       // 排除样式文件
     '/src/types',        // 排除类型声明
