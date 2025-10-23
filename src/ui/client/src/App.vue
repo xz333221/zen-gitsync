@@ -434,13 +434,13 @@ function stopHResize() {
           </button>
         </el-tooltip>
         <!-- 语言切换 -->
-        <LanguageSwitcher />
+        <!-- <LanguageSwitcher /> -->
         <!-- 测试按钮（开发时使用） -->
-        <el-tooltip content="国际化测试" placement="bottom" effect="dark" :show-after="200">
+        <!-- <el-tooltip content="国际化测试" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36" @click="showI18nTest = !showI18nTest">
             <el-icon class="btn-icon">🌐</el-icon>
           </button>
-        </el-tooltip>
+        </el-tooltip> -->
         <el-tooltip content="Git 操作" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36 btn-rotate-on-hover" @click="commitFormRef?.toggleGitOperationsDrawer()">
             <el-icon class="btn-icon"><Menu /></el-icon>

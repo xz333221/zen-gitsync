@@ -1090,6 +1090,7 @@ function toggleFullscreen() {
       }`"
       size="extra-large"
       type="flex"
+      heightMode="fixed"
       destroy-on-close
       custom-class="commit-detail-dialog"
     >

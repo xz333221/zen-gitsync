@@ -1767,6 +1767,7 @@ git config --global user.email "your.email@example.com"</pre>
         custom-class="stash-detail-dialog"
         size="extra-large"
         type="flex"
+        heightMode="fixed"
         :close-on-click-modal="false"
       >
         <div class="stash-content">

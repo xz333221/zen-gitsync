@@ -845,7 +845,8 @@ defineExpose({
     size="extra-large"
     type="flex"
     destroy-on-close
-  >
+    heightMode="fixed"
+    >
     <FileDiffViewer
       :files="gitFilesForViewer"
       :diffContent="diffContent"

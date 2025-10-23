@@ -562,6 +562,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   background: var(--bg-container);
+  height: 100%;
   
   &.full-width {
     width: 100%;
@@ -888,6 +889,8 @@ onMounted(() => {
   overflow: auto;
   background: var(--bg-container);
   min-height: 0; /* 确保 flex 子元素能正确收缩 */
+  // display: flex;
+  // flex-direction: column;
   
   .diff-text {
     font-family: var(--font-mono);
