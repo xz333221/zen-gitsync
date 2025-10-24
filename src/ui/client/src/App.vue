@@ -633,7 +633,9 @@ function stopHResize() {
       <InlineCard class="footer-right" compact>
         <template #content>
           <span class="repo-url-label">{{ $t('@F13B4:远程仓库:') }}</span>
-          <span class="repo-url">{{ gitStore.remoteUrl }}</span>
+          <el-tooltip :content="gitStore.remoteUrl" placement="top" effect="dark" :show-after="300">
+            <span class="repo-url">{{ gitStore.remoteUrl }}</span>
+          </el-tooltip>
         </template>
         <template #actions>
           <el-tooltip :content="$t('@F13B4:复制仓库地址')" placement="top" effect="dark" :show-after="200">
