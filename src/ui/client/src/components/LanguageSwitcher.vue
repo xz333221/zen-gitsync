@@ -20,8 +20,11 @@ const handleLanguageChange = (locale: SupportLocale) => {
   <el-dropdown @command="handleLanguageChange" trigger="click">
     <span class="language-switcher">
       <el-icon class="language-icon">
-        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-          <path fill="currentColor" d="M478.08 601.6a111.68 111.68 0 0 0 67.84 0l-33.92-78.08-33.92 78.08zM512 0C229.248 0 0 229.248 0 512s229.248 512 512 512 512-229.248 512-512S794.752 0 512 0zm94.208 454.4l-94.208 243.2-94.208-243.2H307.2v-51.2h102.4v-51.2H307.2v-51.2h128l-25.6-76.8h51.2l25.6 76.8h25.6l25.6-76.8h51.2l-25.6 76.8h128v51.2H588.8v51.2h102.4v51.2H588.8z"/>
+        <!-- 地球/语言图标 -->
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
         </svg>
       </el-icon>
       <span class="language-text">{{ currentLocaleName }}</span>

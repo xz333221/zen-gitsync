@@ -2149,7 +2149,7 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   align-items: center;
   gap: 5px;
-  width: 120px;
+  width: 130px;
 }
 
 .commit-form {
