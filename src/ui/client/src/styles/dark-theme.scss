@@ -882,10 +882,20 @@
 
   .el-dropdown-menu__item {
     color: rgba(255, 255, 255, 0.9) !important;
+    background-color: var(--bg-container-dark) !important;
   }
 
   .el-dropdown-menu__item:hover {
     background-color: rgba(64, 158, 255, 0.2) !important;
+  }
+  
+  .el-dropdown-menu__item:focus {
+    background-color: var(--bg-container-dark) !important;
+  }
+  
+  .el-dropdown-menu__item.is-disabled {
+    color: rgba(255, 255, 255, 0.4) !important;
+    background-color: var(--bg-container-dark) !important;
   }
 
   /* Element Plus表格组件使用内置深色主题，无需额外覆盖 */
