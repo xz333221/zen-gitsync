@@ -1,6 +1,7 @@
 import { createI18n } from 'vue-i18n'
-import zhCN from './zh-CN'
-import enUS from './en-US'
+// 使用 i18n 工具自动生成的翻译文件
+import zhCN from '@/lang/zh/index.js'
+import enUS from '@/lang/en/index.js'
 
 // 支持的语言列表
 export const SUPPORT_LOCALES = ['zh-CN', 'en-US'] as const

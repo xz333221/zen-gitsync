@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -56,12 +57,12 @@ const isDisabled = computed(() => {
 // 计算提示文本
 const tooltipText = computed(() => {
   if (!hasStagedChanges.value) {
-    return '没有已暂存的更改'
+    return $t('@76A11:没有已暂存的更改')
   }
   if (!props.hasUserCommitMessage) {
-    return '请输入提交信息'
+    return $t('@76A11:请输入提交信息')
   }
-  return `提交${stagedFilesCount.value}个已暂存文件`
+  return `${$t('@76A11:提交')}${stagedFilesCount.value}${$t('@76A11:个已暂存文件')}`
 })
 
 // 处理点击事件
@@ -101,7 +102,7 @@ async function handleClick() {
       :disabled="isDisabled"
       :class="['commit-button', `from-${from}`]"
     >
-      提交
+      {{ $t('@76A11:提交') }}
       <span v-if="stagedFilesCount > 0">({{ stagedFilesCount }})</span>
     </el-button>
   </el-tooltip>

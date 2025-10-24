@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { ref, onMounted, computed } from 'vue'
 import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
@@ -67,7 +68,7 @@ function initTheme() {
 // 更新配置信息显示
 function updateConfigInfo() {
   if (configStore.config) {
-    configInfo.value = `默认提交信息: ${configStore.config.defaultCommitMessage}`
+    configInfo.value = `${$t('@F13B4:默认提交信息: ')}${configStore.config.defaultCommitMessage}`
   }
 }
 
@@ -76,16 +77,16 @@ async function loadCurrentDirectory() {
   try {
     const responseDir = await fetch('/api/current_directory')
     const dirData = await responseDir.json()
-    configStore.setCurrentDirectory(dirData.directory || '未知目录')
+    configStore.setCurrentDirectory(dirData.directory || $t('@F13B4:未知目录'))
     return dirData
   } catch (error) {
     console.error('获取当前目录失败:', error)
-    return { directory: '未知目录', isGitRepo: false }
+    return { directory: $t('@F13B4:未知目录'), isGitRepo: false }
   }
 }
 
 onMounted(async () => {
-  console.log('---------- 页面初始化开始 ----------')
+  console.log($t('@F13B4:---------- 页面初始化开始 ----------'))
 
   // 初始化主题
   initTheme()
@@ -117,14 +118,14 @@ onMounted(async () => {
         gitStore.getBranchStatus(true)   // 强制获取分支状态（页面首次加载）
       ])
     } else {
-      ElMessage.warning('当前目录不是Git仓库，部分功能将不可用')
+      ElMessage.warning($t('@F13B4:当前目录不是Git仓库，部分功能将不可用'))
     }
   } catch (error) {
     console.error('初始化失败:', error)
   } finally {
     // 标记初始化完成
     initCompleted.value = true
-    console.log('---------- 页面初始化完成 ----------')
+    console.log($t('@F13B4:---------- 页面初始化完成 ----------'))
 
     // 无论是否是Git仓库，都应该加载布局比例
     // 使用短延时确保DOM已完全渲染
@@ -223,13 +224,13 @@ function saveLayoutRatios() {
     localStorage.setItem('zen-gitsync-layout-left-ratio', leftRatio.toString());
     localStorage.setItem('zen-gitsync-layout-top-ratio', topRatio.toString());
 
-    console.log(`布局比例已保存 - 左侧: ${(leftRatio * 100).toFixed(0)}%, 上方: ${(topRatio * 100).toFixed(0)}%`);
+    console.log(`${$t('@F13B4:布局比例已保存 - 左侧: ')}${(leftRatio * 100).toFixed(0)}${$t('@F13B4:%, 上方: ')}${(topRatio * 100).toFixed(0)}%`);
     
     // 保存底部左右区域比例
     // 注意：底部的列布局与顶部相同，但需要单独保存以防将来改为不同布局
     localStorage.setItem('zen-gitsync-layout-bottom-left-ratio', leftRatio.toString());
     
-    console.log(`底部布局比例已保存 - 左侧: ${(leftRatio * 100).toFixed(0)}%`);
+    console.log(`${$t('@F13B4:底部布局比例已保存 - 左侧: ')}${(leftRatio * 100).toFixed(0)}%`);
   }
 }
 
@@ -247,7 +248,7 @@ function loadLayoutRatios() {
     const leftRatio = parseFloat(savedLeftRatio);
     const rightRatio = 1 - leftRatio;
     gridLayout.style.gridTemplateColumns = `${leftRatio}fr 8px ${rightRatio}fr`;
-    console.log(`已恢复左侧比例: ${(leftRatio * 100).toFixed(0)}%`);
+    console.log(`${$t('@F13B4:已恢复左侧比例: ')}${(leftRatio * 100).toFixed(0)}%`);
   } else {
     // 默认比例 1:3
     gridLayout.style.gridTemplateColumns = "1fr 8px 3fr";
@@ -258,7 +259,7 @@ function loadLayoutRatios() {
     const topRatio = parseFloat(savedTopRatio);
     const bottomRatio = 1 - topRatio;
     gridLayout.style.gridTemplateRows = `${topRatio}fr 8px ${bottomRatio}fr`;
-    console.log(`已恢复上方比例: ${(topRatio * 100).toFixed(0)}%`);
+    console.log(`${$t('@F13B4:已恢复上方比例: ')}${(topRatio * 100).toFixed(0)}%`);
   }
   
   // 注意：底部的列布局与顶部相同，使用相同的gridTemplateColumns，
@@ -420,12 +421,12 @@ function stopHResize() {
         <div class="command-history-section" v-if="gitStore.isGitRepo">
           <CommandHistory />
         </div>
-        <el-tooltip content="编辑项目配置" placement="bottom" effect="dark" :show-after="200">
+        <el-tooltip :content="$t('@F13B4:编辑项目配置')" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36 btn-scale-on-hover" @click="commitFormRef?.openConfigEditor()">
             <el-icon class="btn-icon"><Edit /></el-icon>
           </button>
         </el-tooltip>
-        <el-tooltip :content="isDarkTheme ? '切换到浅色主题' : '切换到深色主题'" placement="bottom" effect="dark" :show-after="200">
+        <el-tooltip :content="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36" @click="toggleTheme">
             <el-icon class="btn-icon">
               <Sunny v-if="isDarkTheme" />
@@ -434,14 +435,14 @@ function stopHResize() {
           </button>
         </el-tooltip>
         <!-- 语言切换 -->
-        <!-- <LanguageSwitcher /> -->
+        <LanguageSwitcher />
         <!-- 测试按钮（开发时使用） -->
-        <!-- <el-tooltip content="国际化测试" placement="bottom" effect="dark" :show-after="200">
+        <!-- <el-tooltip :content="$t('@F13B4:国际化测试')" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36" @click="showI18nTest = !showI18nTest">
             <el-icon class="btn-icon">🌐</el-icon>
           </button>
         </el-tooltip> -->
-        <el-tooltip content="Git 操作" placement="bottom" effect="dark" :show-after="200">
+        <el-tooltip :content="$t('@F13B4:Git 操作')" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36 btn-rotate-on-hover" @click="commitFormRef?.toggleGitOperationsDrawer()">
             <el-icon class="btn-icon"><Menu /></el-icon>
           </button>
@@ -456,12 +457,12 @@ function stopHResize() {
             </el-tooltip>
           </template>
           <template v-else>
-            <span class="user-label">用户: </span>
-            <span class="user-warning">未配置</span>
+            <span class="user-label">{{ $t('@F13B4:用户: ') }}</span>
+            <span class="user-warning">{{ $t('@F13B4:未配置') }}</span>
           </template>
         </template>
         <template #actions>
-          <el-tooltip content="用户设置" placement="bottom" effect="dark" :show-after="200">
+          <el-tooltip :content="$t('@F13B4:用户设置')" placement="bottom" effect="dark" :show-after="200">
             <button class="modern-btn btn-icon-28" @click="openUserSettingsDialog">
               <el-icon class="btn-icon"><Setting /></el-icon>
             </button>
@@ -480,7 +481,7 @@ function stopHResize() {
         @click="showI18nTest = false"
         style="position: fixed; top: 80px; right: 20px; z-index: 1000;"
       >
-        关闭测试
+        {{ $t('@F13B4:关闭测试') }}
       </el-button>
     </div>
 
@@ -493,7 +494,7 @@ function stopHResize() {
                 </path>
               </svg></el-icon>
         </div>
-        <div class="loading-text">加载中...</div>
+        <div class="loading-text">{{ $t('@F13B4:加载中...') }}</div>
       </el-card>
     </div>
 
@@ -511,21 +512,21 @@ function stopHResize() {
         <!-- 当用户未配置时显示配置提示 -->
         <el-card v-if="!gitStore.userName || !gitStore.userEmail" shadow="hover">
           <template #header>
-            <h2>Git用户未配置</h2>
+            <h2>Git{{ $t('@F13B4:用户未配置') }}</h2>
           </template>
-          <p>请先配置Git用户信息才能进行提交操作。</p>
+          <p>{{ $t('@F13B4:请先配置Git用户信息才能进行提交操作。') }}</p>
           <div class="tips">
-            <h3>您可以通过以下方式配置：</h3>
+            <h3>{{ $t('@F13B4:您可以通过以下方式配置：') }}</h3>
             <ol>
-              <li>点击右上角的设置按钮，配置用户名和邮箱</li>
-              <li>或者使用命令行配置：</li>
+              <li>{{ $t('@F13B4:点击右上角的设置按钮，配置用户名和邮箱') }}</li>
+              <li>{{ $t('@F13B4:或者使用命令行配置：') }}</li>
               <div class="code-block">
-                git config --global user.name "您的用户名"<br>
-                git config --global user.email "您的邮箱"
+                git config {{ $t('@F13B4:--global user.name "您的用户名"') }}<br>
+                git config {{ $t('@F13B4:--global user.email "您的邮箱"') }}
               </div>
             </ol>
             <el-button type="primary" @click="openUserSettingsDialog">
-              立即配置
+              {{ $t('@F13B4:立即配置') }}
             </el-button>
           </div>
         </el-card>
@@ -537,12 +538,12 @@ function stopHResize() {
       <div class="commit-form-panel" v-else>
         <el-card shadow="hover">
           <template #header>
-            <h2>Git仓库初始化</h2>
+            <h2>Git{{ $t('@F13B4:仓库初始化') }}</h2>
           </template>
-          <p>当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。</p>
+          <p>{{ $t('@F13B4:当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。') }}</p>
           <!-- 实用提示 -->
           <div class="tips">
-            <h3>可以使用以下命令初始化仓库：</h3>
+            <h3>{{ $t('@F13B4:可以使用以下命令初始化仓库：') }}</h3>
             <div class="code-block">git init</div>
           </div>
         </el-card>
@@ -559,7 +560,7 @@ function stopHResize() {
       <!-- 创建分支对话框 -->
       <CommonDialog
         v-model="createBranchDialogVisible"
-        title="创建新分支"
+        :title="$t('@F13B4:创建新分支')"
         size="small"
         :destroy-on-close="true"
         custom-class="create-branch-dialog"
@@ -570,12 +571,12 @@ function stopHResize() {
               <template #label>
                 <div class="form-label">
                   <el-icon class="label-icon"><Plus /></el-icon>
-                  <span>新分支名称</span>
+                  <span>{{ $t('@F13B4:新分支名称') }}</span>
                 </div>
               </template>
               <el-input 
                 v-model="newBranchName" 
-                placeholder="请输入新分支名称" 
+                :placeholder="$t('@F13B4:请输入新分支名称')" 
                 class="modern-input"
                 size="large"
                 @keyup.enter="createNewBranch"
@@ -585,12 +586,12 @@ function stopHResize() {
               <template #label>
                 <div class="form-label">
                   <el-icon class="label-icon"><Menu /></el-icon>
-                  <span>基于分支</span>
+                  <span>{{ $t('@F13B4:基于分支') }}</span>
                 </div>
               </template>
               <el-select 
                 v-model="selectedBaseBranch" 
-                placeholder="选择基础分支" 
+                :placeholder="$t('@F13B4:选择基础分支')" 
                 class="modern-select"
                 size="large"
                 style="width: 100%;"
@@ -604,7 +605,7 @@ function stopHResize() {
           <div class="create-branch-footer">
             <div class="footer-actions">
               <button type="button" class="footer-btn cancel-btn" @click="createBranchDialogVisible = false">
-                取消
+                {{ $t('@F13B4:取消') }}
               </button>
               <button type="button" class="footer-btn primary-btn" @click="createNewBranch" :disabled="gitStore.isCreatingBranch">
                 <el-icon v-if="!gitStore.isCreatingBranch"><Check /></el-icon>
@@ -613,7 +614,7 @@ function stopHResize() {
                     <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
                   </svg>
                 </el-icon>
-                <span>创建</span>
+                <span>{{ $t('@F13B4:创建') }}</span>
               </button>
             </div>
           </div>
@@ -627,8 +628,8 @@ function stopHResize() {
     <div class="branch-info" v-if="gitStore.currentBranch">
       <InlineCard class="branch-wrapper" compact>
         <template #content>
-          <el-tooltip content="当前分支" placement="top" effect="dark" :show-after="200">
-            <span class="branch-label" aria-label="当前分支" title="当前分支">
+          <el-tooltip :content="$t('@F13B4:当前分支')" placement="top" effect="dark" :show-after="200">
+            <span class="branch-label" :aria-label="$t('@F13B4:当前分支')" :title="$t('@F13B4:当前分支')">
               <el-icon class="branch-icon">
                 <!-- 简洁的分支图标 -->
                 <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
@@ -652,11 +653,11 @@ function stopHResize() {
     <div v-if="gitStore.remoteUrl">
       <InlineCard class="footer-right" compact>
         <template #content>
-          <span class="repo-url-label">远程仓库:</span>
+          <span class="repo-url-label">{{ $t('@F13B4:远程仓库:') }}</span>
           <span class="repo-url">{{ gitStore.remoteUrl }}</span>
         </template>
         <template #actions>
-          <el-tooltip content="复制仓库地址" placement="top" effect="dark" :show-after="200">
+          <el-tooltip :content="$t('@F13B4:复制仓库地址')" placement="top" effect="dark" :show-after="200">
             <button class="modern-btn btn-icon-28" @click="gitStore.copyRemoteUrl()">
               <el-icon class="btn-icon"><DocumentCopy /></el-icon>
             </button>

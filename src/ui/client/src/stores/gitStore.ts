@@ -1,3 +1,4 @@
+import { $t } from '@/lang/static'
 import { defineStore } from 'pinia'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -15,16 +16,16 @@ function getBackendPort() {
   if (currentPort === '5173' || currentPort === '4173' || currentPort === '5544') {
     const envPort = import.meta.env.VITE_BACKEND_PORT;
     if (envPort) {
-      console.log(`开发环境：从环境变量读取后端端口 ${envPort}`);
+      console.log(`${$t('@C298B:开发环境：从环境变量读取后端端口 ')}${envPort}`);
       return parseInt(envPort, 10);
     }
-    console.log('开发环境：使用默认后端端口 3000');
+    console.log($t('@C298B:开发环境：使用默认后端端口 3000'));
     return 3000;
   }
   
   // 生产环境：直接使用当前页面端口，不读取环境变量
   const port = parseInt(currentPort, 10);
-  console.log(`生产环境：使用当前页面端口 ${port}`);
+  console.log(`${$t('@C298B:生产环境：使用当前页面端口 ')}${port}`);
   return port;
 }
 
@@ -155,12 +156,12 @@ export const useGitStore = defineStore('git', () => {
     // 如果不是强制刷新，且距离上次获取不到30秒，使用缓存
     const now = Date.now();
     if (!forceRefresh && !countOnly && now - lastBranchStatusTime.value < 30000) {
-      console.log('使用缓存的分支状态');
+      console.log($t('@C298B:使用缓存的分支状态'));
       return;
     }
 
     try {
-      console.log('获取分支状态...');
+      console.log($t('@C298B:获取分支状态...'));
       // 构建URL参数
       let url = '/api/branch-status';
       const params = [];
@@ -181,7 +182,7 @@ export const useGitStore = defineStore('git', () => {
         lastBranchStatusTime.value = now;
 
         // 添加调试日志
-        console.log(`分支状态更新：领先 ${branchAhead.value} 个提交，落后 ${branchBehind.value} 个提交，上游分支：${hasUpstream.value ? upstreamBranch.value : '无'}`);
+        console.log(`${$t('@C298B:分支状态更新：领先 ')}${branchAhead.value}${$t('@C298B: 个提交，落后 ')}${branchBehind.value}${$t('@C298B: 个提交，上游分支：')}${hasUpstream.value ? upstreamBranch.value : $t('@C298B:无')}`);
       }
     } catch (error) {
       console.error('获取分支状态失败:', error);
@@ -198,7 +199,7 @@ export const useGitStore = defineStore('git', () => {
     // 如果距离上次检查不到1秒，直接返回缓存的结果
     const now = Date.now()
     if (now - lastCheckedTime.value < 1000) {
-      console.log('使用缓存的Git仓库状态:', isGitRepo.value ? '是' : '不是')
+      console.log('使用缓存的Git仓库状态:', isGitRepo.value ? '是' : $t('@C298B:不是'))
       return isGitRepo.value
     }
     
@@ -207,7 +208,7 @@ export const useGitStore = defineStore('git', () => {
       const data = await response.json()
       isGitRepo.value = data.isGitRepo === true
       lastCheckedTime.value = now // 更新检查时间
-      console.log(`当前目录${isGitRepo.value ? '是' : '不是'}Git仓库`)
+      console.log(`${$t('@C298B:当前目录')}${isGitRepo.value ? $t('@C298B:是') : $t('@C298B:不是')}${$t('@C298B:Git仓库')}`)
       return isGitRepo.value
     } catch (error) {
       console.error('检查Git仓库状态失败:', error)
@@ -226,7 +227,7 @@ export const useGitStore = defineStore('git', () => {
       const data = await response.json();
       if (data.branch) {
         currentBranch.value = data.branch;
-        console.log(`当前分支更新为: ${data.branch}${forceRefresh ? ' (强制刷新)' : ''}`);
+        console.log(`${$t('@C298B:当前分支更新为: ')}${data.branch}${forceRefresh ? $t('@C298B: (强制刷新)') : ''}`);
         // 不再在这里调用 getBranchStatus
       }
     } catch (error) {
@@ -240,14 +241,14 @@ export const useGitStore = defineStore('git', () => {
     
     // 移除时间戳缓存判断，简化逻辑
     try {
-      console.log('获取所有分支...');
+      console.log($t('@C298B:获取所有分支...'));
       const response = await fetch('/api/branches')
       const data = await response.json()
       if (data.branches && Array.isArray(data.branches)) {
         allBranches.value = data.branches
         // 更新获取时间戳
         lastBranchesTime.value = Date.now();
-        console.log(`获取到${data.branches.length}个分支`);
+        console.log(`${$t('@C298B:获取到')}${data.branches.length}${$t('@C298B:个分支')}`);
       }
     } catch (error) {
       console.error('获取所有分支信息失败:', error)
@@ -271,7 +272,7 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json()
       if (result.success) {
         ElMessage({
-          message: `已切换到分支: ${branch}`,
+          message: `${$t('@C298B:已切换到分支: ')}${branch}`,
           type: 'success'
         })
         
@@ -282,14 +283,14 @@ export const useGitStore = defineStore('git', () => {
         return true
       } else {
         ElMessage({
-          message: `切换分支失败: ${result.error}`,
+          message: `${$t('@C298B:切换分支失败: ')}${result.error}`,
           type: 'error'
         })
         return false
       }
     } catch (error) {
       ElMessage({
-        message: `切换分支失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:切换分支失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -316,7 +317,7 @@ export const useGitStore = defineStore('git', () => {
   async function createBranch(newBranchName: string, baseBranch: string) {
     if (!newBranchName.trim()) {
       ElMessage({
-        message: '分支名称不能为空',
+        message: $t('@C298B:分支名称不能为空'),
         type: 'warning'
       })
       return false
@@ -339,7 +340,7 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json()
       if (result.success) {
         ElMessage({
-          message: `已创建并切换到分支: ${newBranchName}`,
+          message: `${$t('@C298B:已创建并切换到分支: ')}${newBranchName}`,
           type: 'success'
         })
         
@@ -351,14 +352,14 @@ export const useGitStore = defineStore('git', () => {
         return true
       } else {
         ElMessage({
-          message: `创建分支失败: ${result.error}`,
+          message: `${$t('@C298B:创建分支失败: ')}${result.error}`,
           type: 'error'
         })
         return false
       }
     } catch (error) {
       ElMessage({
-        message: `创建分支失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:创建分支失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -380,20 +381,20 @@ export const useGitStore = defineStore('git', () => {
         userName.value = '';
         userEmail.value = '';
         ElMessage({
-          message: '已清除Git用户配置',
+          message: $t('@C298B:已清除Git用户配置'),
           type: 'success'
         });
         return true;
       } else {
         ElMessage({
-          message: `清除配置失败: ${result.error}`,
+          message: `${$t('@C298B:清除配置失败: ')}${result.error}`,
           type: 'error'
         });
         return false;
       }
     } catch (error) {
       ElMessage({
-          message: `清除配置失败: ${(error as Error).message}`,
+          message: `${$t('@C298B:清除配置失败: ')}${(error as Error).message}`,
           type: 'error'
         });
       return false;
@@ -417,20 +418,20 @@ export const useGitStore = defineStore('git', () => {
         userName.value = name;
         userEmail.value = email;
         ElMessage({
-          message: '已恢复Git用户配置',
+          message: $t('@C298B:已恢复Git用户配置'),
           type: 'success'
         });
         return true;
       } else {
         ElMessage({
-          message: `恢复配置失败: ${result.error}`,
+          message: `${$t('@C298B:恢复配置失败: ')}${result.error}`,
           type: 'error'
         });
         return false;
       }
     } catch (error) {
       ElMessage({
-          message: `恢复配置失败: ${(error as Error).message}`,
+          message: `${$t('@C298B:恢复配置失败: ')}${(error as Error).message}`,
           type: 'error'
         });
       return false;
@@ -441,7 +442,7 @@ export const useGitStore = defineStore('git', () => {
   async function gitPull() {
     if (!isGitRepo.value) {
       ElMessage({
-        message: '当前目录不是Git仓库',
+        message: $t('@C298B:当前目录不是Git仓库'),
         type: 'warning'
       });
       return false;
@@ -457,7 +458,7 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json();
       if (result.success) {
         ElMessage({
-          message: '拉取成功',
+          message: $t('@C298B:拉取成功'),
           type: 'success'
         });
         
@@ -468,13 +469,13 @@ export const useGitStore = defineStore('git', () => {
         // 改进错误提示
         if (result.needsMerge) {
           ElMessage({
-            message: `需要合并更改: ${result.pullOutput || '存在冲突需要手动解决'}`,
+            message: `${$t('@C298B:需要合并更改: ')}${result.pullOutput || $t('@C298B:存在冲突需要手动解决')}`,
             type: 'warning',
             duration: 5000
           });
         } else {
           ElMessage({
-            message: `拉取失败: ${result.error}`,
+            message: `${$t('@C298B:拉取失败: ')}${result.error}`,
             type: 'error'
           });
         }
@@ -482,7 +483,7 @@ export const useGitStore = defineStore('git', () => {
       }
     } catch (error) {
       ElMessage({
-        message: `拉取失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:拉取失败: ')}${(error as Error).message}`,
         type: 'error'
       });
       return false;
@@ -496,7 +497,7 @@ export const useGitStore = defineStore('git', () => {
   async function gitFetchAll() {
     if (!isGitRepo.value) {
       ElMessage({
-        message: '当前目录不是Git仓库',
+        message: $t('@C298B:当前目录不是Git仓库'),
         type: 'warning'
       });
       return false;
@@ -511,7 +512,7 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json();
       if (result.success) {
         ElMessage({
-          message: '获取所有远程分支信息成功',
+          message: $t('@C298B:获取所有远程分支信息成功'),
           type: 'success'
         });
         
@@ -520,14 +521,14 @@ export const useGitStore = defineStore('git', () => {
         return true;
       } else {
         ElMessage({
-          message: `获取远程分支信息失败: ${result.error}`,
+          message: `${$t('@C298B:获取远程分支信息失败: ')}${result.error}`,
           type: 'error'
         });
         return false;
       }
     } catch (error) {
       ElMessage({
-        message: `获取远程分支信息失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:获取远程分支信息失败: ')}${(error as Error).message}`,
         type: 'error'
       });
       return false;
@@ -566,7 +567,7 @@ export const useGitStore = defineStore('git', () => {
         console.error('Socket.IO初始化失败: socket为null')
         return
       }
-      console.log('Socket.IO客户端已创建，开始注册事件监听器...')
+      console.log($t('@C298B:Socket.IO客户端已创建，开始注册事件监听器...'))
 
       // 监听连接事件
       socketRef.value.on('connect', () => {
@@ -582,13 +583,13 @@ export const useGitStore = defineStore('git', () => {
       socketRef.value.on('project_info', (data) => {
         currentProjectPath.value = data.projectPath
         currentProjectRoomId.value = data.projectRoomId
-        console.log(`当前项目: ${data.projectPath}`)
-        console.log(`房间ID: ${data.projectRoomId}`)
+        console.log(`${$t('@C298B:当前项目: ')}${data.projectPath}`)
+        console.log(`${$t('@C298B:房间ID: ')}${data.projectRoomId}`)
       })
       
       // 监听项目切换事件
       socketRef.value.on('project_changed', (data) => {
-        console.log(`项目已切换: ${data.oldProjectPath} -> ${data.newProjectPath}`)
+        console.log(`${$t('@C298B:项目已切换: ')}${data.oldProjectPath} -> ${data.newProjectPath}`)
         
         // 更新当前项目信息
         currentProjectPath.value = data.newProjectPath
@@ -599,7 +600,7 @@ export const useGitStore = defineStore('git', () => {
           socketRef.value.emit('join_room', data.newProjectRoomId)
         }
         
-        console.log(`已加入新项目房间: ${data.newProjectRoomId}`)
+        console.log(`${$t('@C298B:已加入新项目房间: ')}${data.newProjectRoomId}`)
       })
       
       // 监听断开连接事件
@@ -619,11 +620,11 @@ export const useGitStore = defineStore('git', () => {
         // 验证消息来源，确保只处理当前项目的更新
         if (data.projectPath && currentProjectPath.value && 
             data.projectPath !== currentProjectPath.value) {
-          console.log(`忽略不同项目的状态更新: ${data.projectPath}`)
+          console.log(`${$t('@C298B:忽略不同项目的状态更新: ')}${data.projectPath}`)
           return
         }
         
-        console.log('正在更新 Git 文件状态...')
+        console.log($t('@C298B:正在更新 Git 文件状态...'))
         
         // 更新文件列表
         if (data.porcelain !== undefined) {
@@ -633,7 +634,7 @@ export const useGitStore = defineStore('git', () => {
       
       // 监听监控状态
       socketRef.value.on('monitoring_status', (data) => {
-        console.log('文件监控状态:', data.active ? '已启动' : '已停止')
+        console.log('文件监控状态:', data.active ? '已启动' : $t('@C298B:已停止'))
       })
       
       // 添加额外的连接问题诊断
@@ -642,21 +643,21 @@ export const useGitStore = defineStore('git', () => {
       })
       
       socketRef.value.on('connect_timeout', () => {
-        console.error('Socket连接超时')
+        console.error($t('@C298B:Socket连接超时'))
       })
       
       socketRef.value.on('reconnect', (attemptNumber) => {
-        console.log(`Socket重连成功，尝试次数: ${attemptNumber}`)
+        console.log(`${$t('@C298B:Socket重连成功，尝试次数: ')}${attemptNumber}`)
         
         // 重连后检查自动更新状态
         if (autoUpdateEnabled.value) {
-          console.log('重连后重新发送start_monitoring请求')
+          console.log($t('@C298B:重连后重新发送start_monitoring请求'))
           socketRef.value?.emit('start_monitoring')
         }
       })
       
       socketRef.value.on('reconnect_attempt', (attemptNumber) => {
-        console.log(`Socket尝试重连，第 ${attemptNumber} 次尝试`)
+        console.log(`${$t('@C298B:Socket尝试重连，第 ')}${attemptNumber}${$t('@C298B: 次尝试')}`)
       })
       
       socketRef.value.on('reconnect_error', (error) => {
@@ -664,15 +665,15 @@ export const useGitStore = defineStore('git', () => {
       })
       
       socketRef.value.on('reconnect_failed', () => {
-        console.error('Socket重连失败，已达到最大重试次数')
+        console.error($t('@C298B:Socket重连失败，已达到最大重试次数'))
       })
       
       // 事件监听器注册完成
-      console.log('Socket.IO事件监听器注册完成：connect, project_info, project_changed, git_status_update, monitoring_status')
+      console.log($t('@C298B:Socket.IO事件监听器注册完成：connect, project_info, project_changed, git_status_update, monitoring_status'))
       
       // 手动尝试连接
       if (socketRef.value && !socketRef.value.connected) {
-        console.log('Socket未连接，尝试手动连接...')
+        console.log($t('@C298B:Socket未连接，尝试手动连接...'))
         socketRef.value.connect()
       }
     } catch (error) {
@@ -686,10 +687,10 @@ export const useGitStore = defineStore('git', () => {
     
     if (!socketRef.value) {
       console.error('无法切换自动更新状态: socket连接不存在')
-      ElMessage.error('无法连接到服务器，自动更新可能不会生效')
+      ElMessage.error($t('@C298B:无法连接到服务器，自动更新可能不会生效'))
       
       // 尝试重新初始化socket连接
-      console.log('尝试重新建立socket连接...')
+      console.log($t('@C298B:尝试重新建立socket连接...'))
       initSocketConnection()
       
       // 即使socket可能不存在，也保存设置
@@ -699,13 +700,13 @@ export const useGitStore = defineStore('git', () => {
     
     try {
       if (autoUpdateEnabled.value) {
-        console.log('发送start_monitoring命令...')
+        console.log($t('@C298B:发送start_monitoring命令...'))
         socketRef.value.emit('start_monitoring')
-        ElMessage.success('自动更新已启用')
+        ElMessage.success($t('@C298B:自动更新已启用'))
       } else {
-        console.log('发送stop_monitoring命令...')
+        console.log($t('@C298B:发送stop_monitoring命令...'))
         socketRef.value.emit('stop_monitoring')
-        ElMessage.info('自动更新已禁用')
+        ElMessage.info($t('@C298B:自动更新已禁用'))
       }
       
       // 保存设置到localStorage
@@ -713,7 +714,7 @@ export const useGitStore = defineStore('git', () => {
       console.log('已保存自动更新设置到本地存储:', autoUpdateEnabled.value)
     } catch (error) {
       console.error('切换自动更新状态时出错:', error)
-      ElMessage.error(`切换自动更新失败: ${(error as Error).message}`)
+      ElMessage.error(`${$t('@C298B:切换自动更新失败: ')}${(error as Error).message}`)
     }
   }
   
@@ -774,13 +775,13 @@ export const useGitStore = defineStore('git', () => {
   async function fetchLog(showMessage = true) {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      console.log('当前目录不是Git仓库，跳过加载提交历史')
+      console.log($t('@C298B:当前目录不是Git仓库，跳过加载提交历史'))
       return
     }
     
     try {
       isLoadingLog.value = true
-      console.log('开始加载提交历史...')
+      console.log($t('@C298B:开始加载提交历史...'))
       
       // 增加时间戳参数避免缓存，确保获取最新数据
       const timestamp = new Date().getTime()
@@ -790,7 +791,7 @@ export const useGitStore = defineStore('git', () => {
       if (data && data.data && Array.isArray(data.data)) {
         // 清空并更新日志数组
         log.value = [...data.data]
-        console.log(`提交历史加载完成，共 ${log.value.length} 条记录`)
+        console.log(`${$t('@C298B:提交历史加载完成，共 ')}${log.value.length}${$t('@C298B: 条记录')}`)
       } else {
         console.warn('API返回的提交历史格式不正确:', data)
         log.value = [] // 如果数据格式不对，清空日志
@@ -799,7 +800,7 @@ export const useGitStore = defineStore('git', () => {
       console.error('获取提交历史失败:', error)
       if (showMessage) {
         ElMessage({
-          message: `获取提交历史失败: ${(error as Error).message}`,
+          message: `${$t('@C298B:获取提交历史失败: ')}${(error as Error).message}`,
           type: 'error'
         })
       }
@@ -810,7 +811,7 @@ export const useGitStore = defineStore('git', () => {
   
   // 刷新提交历史（供其他组件使用）
   async function refreshLog() {
-    console.log('刷新提交历史...')
+    console.log($t('@C298B:刷新提交历史...'))
     
     // 重置分页状态
     currentPage.value = 1
@@ -821,14 +822,14 @@ export const useGitStore = defineStore('git', () => {
     // 更新总数
     totalCommits.value = log.value.length
     
-    console.log('提交历史刷新完成')
+    console.log($t('@C298B:提交历史刷新完成'))
   }
   
   // 获取Git状态 (优化版本 - 只获取porcelain格式)
   async function fetchStatus() {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      console.log('当前目录不是Git仓库，跳过加载Git状态')
+      console.log($t('@C298B:当前目录不是Git仓库，跳过加载Git状态'))
       return
     }
 
@@ -839,7 +840,7 @@ export const useGitStore = defineStore('git', () => {
     } catch (error) {
       console.error('获取Git状态失败:', error)
       ElMessage({
-        message: `获取Git状态失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:获取Git状态失败: ')}${(error as Error).message}`,
         type: 'error'
       })
     } finally {
@@ -849,10 +850,10 @@ export const useGitStore = defineStore('git', () => {
   
   // 获取Git状态 (porcelain格式)
   async function fetchStatusPorcelain() {
-    console.log('开始获取Git状态(porcelain格式)...')
+    console.log($t('@C298B:开始获取Git状态(porcelain格式)...'))
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      console.log('当前目录不是Git仓库，跳过加载Git状态')
+      console.log($t('@C298B:当前目录不是Git仓库，跳过加载Git状态'))
       return
     }
     
@@ -868,7 +869,7 @@ export const useGitStore = defineStore('git', () => {
     } catch (error) {
       console.error('获取Git状态(porcelain)失败:', error)
       ElMessage({
-        message: `获取Git状态(porcelain)失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:获取Git状态(porcelain)失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       // 清空文件列表
@@ -880,7 +881,7 @@ export const useGitStore = defineStore('git', () => {
   async function addToStage() {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库')
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
     
@@ -899,7 +900,7 @@ export const useGitStore = defineStore('git', () => {
       
       if (filesToAdd.length === 0) {
         ElMessage({
-          message: '没有需要暂存的文件（所有文件都被锁定）',
+          message: $t('@C298B:没有需要暂存的文件（所有文件都被锁定）'),
           type: 'warning'
         })
         return false
@@ -914,13 +915,13 @@ export const useGitStore = defineStore('git', () => {
         const result = await response.json()
         if (result.success) {
           ElMessage({
-            message: '文件已添加到暂存区',
+            message: $t('@C298B:文件已添加到暂存区'),
             type: 'success'
           })
           return true
         } else {
           ElMessage({
-            message: `添加文件失败: ${result.error}`,
+            message: `${$t('@C298B:添加文件失败: ')}${result.error}`,
             type: 'error'
           })
           return false
@@ -934,9 +935,9 @@ export const useGitStore = defineStore('git', () => {
         const result = await response.json()
         if (result.success) {
           const lockedCount = fileList.value.length - filesToAdd.length
-          let message = `已添加 ${filesToAdd.length} 个文件到暂存区`
+          let message = `${$t('@C298B:已添加 ')}${filesToAdd.length}${$t('@C298B: 个文件到暂存区')}`
           if (lockedCount > 0) {
-            message += `，跳过 ${lockedCount} 个锁定文件`
+            message += `${$t('@C298B:，跳过 ')}${lockedCount}${$t('@C298B: 个锁定文件')}`
           }
           
           ElMessage({
@@ -946,7 +947,7 @@ export const useGitStore = defineStore('git', () => {
           return true
         } else {
           ElMessage({
-            message: `添加文件失败: ${result.error}`,
+            message: `${$t('@C298B:添加文件失败: ')}${result.error}`,
             type: 'error'
           })
           return false
@@ -954,7 +955,7 @@ export const useGitStore = defineStore('git', () => {
       }
     } catch (error) {
       ElMessage({
-        message: `添加文件失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:添加文件失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -967,7 +968,7 @@ export const useGitStore = defineStore('git', () => {
   async function addAllToStage() {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库')
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
     
@@ -980,21 +981,21 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json()
       if (result.success) {
         ElMessage({
-          message: '所有文件已添加到暂存区',
+          message: $t('@C298B:所有文件已添加到暂存区'),
           type: 'success'
         })
 
         return true
       } else {
         ElMessage({
-          message: `添加文件失败: ${result.error}`,
+          message: `${$t('@C298B:添加文件失败: ')}${result.error}`,
           type: 'error'
         })
         return false
       }
     } catch (error) {
       ElMessage({
-        message: `添加文件失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:添加文件失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -1007,7 +1008,7 @@ export const useGitStore = defineStore('git', () => {
   async function addFileToStage(filePath: string) {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库')
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
     
@@ -1024,7 +1025,7 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json()
       if (result.success) {
         ElMessage({
-          message: '文件已暂存',
+          message: $t('@C298B:文件已暂存'),
           type: 'success'
         })
         
@@ -1034,14 +1035,14 @@ export const useGitStore = defineStore('git', () => {
         return true
       } else {
         ElMessage({
-          message: `暂存文件失败: ${result.error}`,
+          message: `${$t('@C298B:暂存文件失败: ')}${result.error}`,
           type: 'error'
         })
         return false
       }
     } catch (error) {
       ElMessage({
-        message: `暂存文件失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:暂存文件失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -1054,7 +1055,7 @@ export const useGitStore = defineStore('git', () => {
   async function unstageFile(filePath: string) {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库')
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
     
@@ -1071,7 +1072,7 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json()
       if (result.success) {
         ElMessage({
-          message: '已取消暂存文件',
+          message: $t('@C298B:已取消暂存文件'),
           type: 'success'
         })
         
@@ -1081,14 +1082,14 @@ export const useGitStore = defineStore('git', () => {
         return true
       } else {
         ElMessage({
-          message: `取消暂存失败: ${result.error}`,
+          message: `${$t('@C298B:取消暂存失败: ')}${result.error}`,
           type: 'error'
         })
         return false
       }
     } catch (error) {
       ElMessage({
-        message: `取消暂存失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:取消暂存失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -1106,7 +1107,7 @@ export const useGitStore = defineStore('git', () => {
   async function commitChanges(message: string, noVerify = false) {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库')
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
     
@@ -1127,7 +1128,7 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json()
       if (result.success) {
         ElMessage({
-          message: '提交成功',
+          message: $t('@C298B:提交成功'),
           type: 'success'
         })
 
@@ -1137,14 +1138,14 @@ export const useGitStore = defineStore('git', () => {
         return true
       } else {
         ElMessage({
-          message: `commitChanges 提交失败: ${result.error}`,
+          message: `${$t('@C298B:commitChanges 提交失败: ')}${result.error}`,
           type: "error",
         });
         return false
       }
     } catch (error) {
       ElMessage({
-        message: `提交失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:提交失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -1157,7 +1158,7 @@ export const useGitStore = defineStore('git', () => {
   async function pushToRemote() {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库')
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
     
@@ -1184,14 +1185,14 @@ export const useGitStore = defineStore('git', () => {
         return true
       } else {
         ElMessage({
-          message: `推送失败: ${result.error}`,
+          message: `${$t('@C298B:推送失败: ')}${result.error}`,
           type: 'error'
         })
         return false
       }
     } catch (error) {
       ElMessage({
-        message: `推送失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:推送失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -1209,7 +1210,7 @@ export const useGitStore = defineStore('git', () => {
   } = {}) {
     if (!isGitRepo.value) {
       ElMessage({
-        message: '当前目录不是Git仓库',
+        message: $t('@C298B:当前目录不是Git仓库'),
         type: 'warning'
       });
       return false;
@@ -1217,7 +1218,7 @@ export const useGitStore = defineStore('git', () => {
 
     if (!branch) {
       ElMessage({
-        message: '请选择要合并的分支',
+        message: $t('@C298B:请选择要合并的分支'),
         type: 'warning'
       });
       return false;
@@ -1226,7 +1227,7 @@ export const useGitStore = defineStore('git', () => {
     // 防止自己合并自己
     if (branch === currentBranch.value) {
       ElMessage({
-        message: '不能合并当前分支到自身',
+        message: $t('@C298B:不能合并当前分支到自身'),
         type: 'warning'
       });
       return false;
@@ -1251,7 +1252,7 @@ export const useGitStore = defineStore('git', () => {
       if (response.status === 409) {
         // 合并冲突
         ElMessage({
-          message: '合并分支时发生冲突，请手动解决',
+          message: $t('@C298B:合并分支时发生冲突，请手动解决'),
           type: 'warning',
           duration: 5000
         });
@@ -1260,7 +1261,7 @@ export const useGitStore = defineStore('git', () => {
       
       if (result.success) {
         ElMessage({
-          message: `成功合并分支 ${branch} 到 ${currentBranch.value}`,
+          message: `${$t('@C298B:成功合并分支 ')}${branch}${$t('@C298B: 到 ')}${currentBranch.value}`,
           type: 'success'
         });
         
@@ -1271,14 +1272,14 @@ export const useGitStore = defineStore('git', () => {
         return true;
       } else {
         ElMessage({
-          message: `合并分支失败: ${result.error}`,
+          message: `${$t('@C298B:合并分支失败: ')}${result.error}`,
           type: 'error'
         });
         return false;
       }
     } catch (error) {
       ElMessage({
-        message: `合并分支失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:合并分支失败: ')}${(error as Error).message}`,
         type: 'error'
       });
       return false;
@@ -1289,17 +1290,17 @@ export const useGitStore = defineStore('git', () => {
   
   // 暂存并提交
   async function addAndCommit(message: string, noVerify = false) {
-    console.log('开始暂存并提交操作...')
+    console.log($t('@C298B:开始暂存并提交操作...'))
     const addResult = await addToStage()
     if (!addResult) return false
 
     // 等待暂存操作完全完成
-    console.log('暂存完成，等待Git操作完成...')
+    console.log($t('@C298B:暂存完成，等待Git操作完成...'))
     await delay(GIT_OPERATION_DELAY)
 
-    console.log('开始提交更改...')
+    console.log($t('@C298B:开始提交更改...'))
     const commitResult = await commitChanges(message, noVerify)
-    console.log('暂存并提交操作完成')
+    console.log($t('@C298B:暂存并提交操作完成'))
     return commitResult
   }
   
@@ -1307,28 +1308,28 @@ export const useGitStore = defineStore('git', () => {
   async function addCommitAndPush(message: string, noVerify = false) {
     try {
       // 第一步：暂存文件
-      console.log('开始暂存文件...')
+      console.log($t('@C298B:开始暂存文件...'))
       const addResult = await addToStage()
       if (!addResult) return false
 
       // 等待暂存操作完全完成
-      console.log('暂存完成，等待Git操作完成...')
+      console.log($t('@C298B:暂存完成，等待Git操作完成...'))
       await delay(GIT_OPERATION_DELAY)
 
       // 第二步：提交更改
-      console.log('开始提交更改...')
+      console.log($t('@C298B:开始提交更改...'))
       const commitResult = await commitChanges(message, noVerify)
       if (!commitResult) return false
 
       // 等待提交操作完全完成
-      console.log('提交完成，等待Git操作完成...')
+      console.log($t('@C298B:提交完成，等待Git操作完成...'))
       await delay(GIT_OPERATION_DELAY)
 
       // 第三步：推送到远程（pushToRemote会统一刷新所有状态）
-      console.log('开始推送到远程...')
+      console.log($t('@C298B:开始推送到远程...'))
       const pushResult = await pushToRemote()
 
-      console.log('一键推送操作完成，状态已统一刷新')
+      console.log($t('@C298B:一键推送操作完成，状态已统一刷新'))
       return pushResult
     } catch (error) {
       console.error('一键推送操作失败:', error)
@@ -1341,7 +1342,7 @@ export const useGitStore = defineStore('git', () => {
         const result = await response.json()
         if (result.success) {
           ElMessage({
-            message: '检测到Git锁定文件冲突，已自动清理，请重试操作',
+            message: $t('@C298B:检测到Git锁定文件冲突，已自动清理，请重试操作'),
             type: 'warning'
           })
         }
@@ -1350,7 +1351,7 @@ export const useGitStore = defineStore('git', () => {
       }
       
       ElMessage({
-        message: `操作失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:操作失败: ')}${(error as Error).message}`,
         type: 'error'
       })
 
@@ -1373,7 +1374,7 @@ export const useGitStore = defineStore('git', () => {
   async function resetHead() {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库')
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
     
@@ -1386,7 +1387,7 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json()
       if (result.success) {
         ElMessage({
-          message: '已重置暂存区',
+          message: $t('@C298B:已重置暂存区'),
           type: 'success'
         })
         
@@ -1396,14 +1397,14 @@ export const useGitStore = defineStore('git', () => {
         return true
       } else {
         ElMessage({
-          message: `重置暂存区失败: ${result.error}`,
+          message: `${$t('@C298B:重置暂存区失败: ')}${result.error}`,
           type: 'error'
         })
         return false
       }
     } catch (error) {
       ElMessage({
-        message: `重置暂存区失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:重置暂存区失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -1416,7 +1417,7 @@ export const useGitStore = defineStore('git', () => {
   async function resetToRemote(branch: string) {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库')
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
     
@@ -1433,7 +1434,7 @@ export const useGitStore = defineStore('git', () => {
       const result = await response.json()
       if (result.success) {
         ElMessage({
-          message: `已重置分支 ${branch} 到远程状态`,
+          message: `${$t('@C298B:已重置分支 ')}${branch}${$t('@C298B: 到远程状态')}`,
           type: 'success'
         })
         
@@ -1444,14 +1445,14 @@ export const useGitStore = defineStore('git', () => {
         return true
       } else {
         ElMessage({
-          message: `重置分支失败: ${result.error}`,
+          message: `${$t('@C298B:重置分支失败: ')}${result.error}`,
           type: 'error'
         })
         return false
       }
     } catch (error) {
       ElMessage({
-        message: `重置分支失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:重置分支失败: ')}${(error as Error).message}`,
         type: 'error'
       })
       return false
@@ -1466,13 +1467,13 @@ export const useGitStore = defineStore('git', () => {
     
     try {
       isLoadingRemoteUrl.value = true;
-      console.log('获取远程仓库地址...');
+      console.log($t('@C298B:获取远程仓库地址...'));
       const response = await fetch('/api/remote-url');
       const data = await response.json();
       
       if (data.success) {
         remoteUrl.value = data.url || '';
-        console.log(`获取到远程仓库地址: ${remoteUrl.value}`);
+        console.log(`${$t('@C298B:获取到远程仓库地址: ')}${remoteUrl.value}`);
       } else {
         console.warn('获取远程仓库地址失败:', data.error);
         remoteUrl.value = '';
@@ -1489,7 +1490,7 @@ export const useGitStore = defineStore('git', () => {
   async function copyRemoteUrl() {
     if (!remoteUrl.value) {
       ElMessage({
-        message: '没有可复制的远程仓库地址',
+        message: $t('@C298B:没有可复制的远程仓库地址'),
         type: 'warning'
       });
       return false;
@@ -1498,14 +1499,14 @@ export const useGitStore = defineStore('git', () => {
     try {
       await navigator.clipboard.writeText(remoteUrl.value);
       ElMessage({
-        message: '已复制远程仓库地址',
+        message: $t('@C298B:已复制远程仓库地址'),
         type: 'success'
       });
       return true;
     } catch (error) {
       console.error('复制远程仓库地址失败:', error);
       ElMessage({
-        message: `复制失败: ${(error as Error).message}`,
+        message: `${$t('@C298B:复制失败: ')}${(error as Error).message}`,
         type: 'error'
       });
       return false;
@@ -1540,7 +1541,7 @@ export const useGitStore = defineStore('git', () => {
   // 获取stash列表
   async function getStashList() {
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库');
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'));
       return [];
     }
     
@@ -1554,12 +1555,12 @@ export const useGitStore = defineStore('git', () => {
         stashes.value = data.stashes;
         return data.stashes;
       } else {
-        ElMessage.error(`获取stash列表失败: ${data.error}`);
+        ElMessage.error(`${$t('@C298B:获取stash列表失败: ')}${data.error}`);
         return [];
       }
     } catch (error) {
       console.error('获取stash列表失败:', error);
-      ElMessage.error(`获取stash列表失败: ${(error as Error).message}`);
+      ElMessage.error(`${$t('@C298B:获取stash列表失败: ')}${(error as Error).message}`);
       return [];
     } finally {
       isLoadingStashes.value = false;
@@ -1569,7 +1570,7 @@ export const useGitStore = defineStore('git', () => {
   // 保存stash
   async function saveStash(message?: string, includeUntracked = false, excludeLocked = true) {
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库');
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'));
       return false;
     }
     
@@ -1602,7 +1603,7 @@ export const useGitStore = defineStore('git', () => {
       }
     } catch (error) {
       console.error('保存stash失败:', error);
-      ElMessage.error(`保存stash失败: ${(error as Error).message}`);
+      ElMessage.error(`${$t('@C298B:保存stash失败: ')}${(error as Error).message}`);
       return false;
     } finally {
       isSavingStash.value = false;
@@ -1612,7 +1613,7 @@ export const useGitStore = defineStore('git', () => {
   // 应用stash
   async function applyStash(stashId: string, pop = false) {
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库');
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'));
       return false;
     }
     
@@ -1631,7 +1632,7 @@ export const useGitStore = defineStore('git', () => {
       
       if (response.status === 409) {
         // 合并冲突
-        ElMessage.warning('应用stash时发生冲突，请手动解决');
+        ElMessage.warning($t('@C298B:应用stash时发生冲突，请手动解决'));
         return false;
       }
       
@@ -1642,12 +1643,12 @@ export const useGitStore = defineStore('git', () => {
         await fetchStatus();
         return true;
       } else {
-        ElMessage.error(`应用stash失败: ${result.error}`);
+        ElMessage.error(`${$t('@C298B:应用stash失败: ')}${result.error}`);
         return false;
       }
     } catch (error) {
       console.error('应用stash失败:', error);
-      ElMessage.error(`应用stash失败: ${(error as Error).message}`);
+      ElMessage.error(`${$t('@C298B:应用stash失败: ')}${(error as Error).message}`);
       return false;
     } finally {
       isApplyingStash.value = false;
@@ -1657,7 +1658,7 @@ export const useGitStore = defineStore('git', () => {
   // 删除stash
   async function dropStash(stashId: string) {
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库');
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'));
       return false;
     }
     
@@ -1680,12 +1681,12 @@ export const useGitStore = defineStore('git', () => {
         await getStashList();
         return true;
       } else {
-        ElMessage.error(`删除stash失败: ${result.error}`);
+        ElMessage.error(`${$t('@C298B:删除stash失败: ')}${result.error}`);
         return false;
       }
     } catch (error) {
       console.error('删除stash失败:', error);
-      ElMessage.error(`删除stash失败: ${(error as Error).message}`);
+      ElMessage.error(`${$t('@C298B:删除stash失败: ')}${(error as Error).message}`);
       return false;
     } finally {
       isDroppingStash.value = false;
@@ -1695,7 +1696,7 @@ export const useGitStore = defineStore('git', () => {
   // 清空所有stash
   async function clearAllStashes() {
     if (!isGitRepo.value) {
-      ElMessage.warning('当前目录不是Git仓库');
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'));
       return false;
     }
     
@@ -1714,12 +1715,12 @@ export const useGitStore = defineStore('git', () => {
         stashes.value = [];
         return true;
       } else {
-        ElMessage.error(`清空stash失败: ${result.error}`);
+        ElMessage.error(`${$t('@C298B:清空stash失败: ')}${result.error}`);
         return false;
       }
     } catch (error) {
       console.error('清空stash失败:', error);
-      ElMessage.error(`清空stash失败: ${(error as Error).message}`);
+      ElMessage.error(`${$t('@C298B:清空stash失败: ')}${(error as Error).message}`);
       return false;
     } finally {
       isDroppingStash.value = false;

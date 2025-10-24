@@ -1,3 +1,4 @@
+import { $t } from '@/lang/static'
 /**
  * 公共工具函数库
  * 包含diff格式化、HTML转义、提交信息处理等通用功能
@@ -142,13 +143,13 @@ export function formatRelativeTime(timestamp: string | number | Date): string {
   const days = Math.floor(hours / 24);
   
   if (days > 0) {
-    return `${days}天前`;
+    return `${days}${$t('@5C735:天前')}`;
   } else if (hours > 0) {
-    return `${hours}小时前`;
+    return `${hours}${$t('@5C735:小时前')}`;
   } else if (minutes > 0) {
-    return `${minutes}分钟前`;
+    return `${minutes}${$t('@5C735:分钟前')}`;
   } else {
-    return '刚刚';
+    return $t('@5C735:刚刚');
   }
 }
 

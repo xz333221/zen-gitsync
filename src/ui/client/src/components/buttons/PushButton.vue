@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { Upload } from '@element-plus/icons-vue'
 import { useGitStore } from '@stores/gitStore'
@@ -45,15 +46,15 @@ const isDisabled = computed(() => {
 // 计算提示文本
 const tooltipText = computed(() => {
   if (!gitStore.hasUpstream) {
-    return '当前分支没有上游分支'
+    return $t('@F4137:当前分支没有上游分支')
   }
   if (!needsPush.value) {
-    return '没有需要推送的提交'
+    return $t('@F4137:没有需要推送的提交')
   }
   if (hasStagedChanges.value) {
-    return '有未提交的暂存更改，请先提交'
+    return $t('@F4137:有未提交的暂存更改，请先提交')
   }
-  return `推送${gitStore.branchAhead}个本地提交`
+  return `${$t('@F4137:推送')}${gitStore.branchAhead}${$t('@F4137:个本地提交')}`
 })
 
 // 计算按钮样式
@@ -93,7 +94,7 @@ async function handleClick() {
       :style="buttonStyle"
       :class="['push-button', `from-${from}`]"
     >
-      推送
+      {{ $t('@F4137:推送') }}
       <span v-if="needsPush">({{ gitStore.branchAhead }})</span>
     </el-button>
   </el-tooltip>

@@ -10,6 +10,7 @@ node_modules
 # i18n secret config (百度翻译 API 密钥)
 i18n.secret.js
 i18n.secret.cjs
+
 src/ui/client/lib/
 
 # Log files

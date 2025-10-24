@@ -1,3 +1,4 @@
+import { $t } from '@/lang/static'
 import { reactive } from 'vue'
 
 interface LoadingState {
@@ -9,7 +10,7 @@ interface LoadingState {
 
 const loadingState = reactive<LoadingState>({
   visible: false,
-  text: '加载中...',
+  text: $t('@F2A3A:加载中...'),
   showProgress: false,
   progress: 0
 })
@@ -21,7 +22,7 @@ export function useGlobalLoading() {
     progress?: number
   }) => {
     loadingState.visible = true
-    loadingState.text = options?.text || '加载中...'
+    loadingState.text = options?.text || $t('@F2A3A:加载中...')
     loadingState.showProgress = options?.showProgress || false
     loadingState.progress = options?.progress || 0
   }

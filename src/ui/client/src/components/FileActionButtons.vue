@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { Lock, Unlock, RefreshRight, Close } from '@element-plus/icons-vue'
 
@@ -30,7 +31,7 @@ const actionButtons = computed(() => {
       return [
         {
           type: 'unstage',
-          tooltip: '取消暂存',
+          tooltip: $t('@0883F:取消暂存'),
           buttonType: 'warning',
           icon: '-',
           handler: () => emit('unstage', props.filePath)
@@ -41,14 +42,14 @@ const actionButtons = computed(() => {
       return [
         {
           type: 'stage',
-          tooltip: '添加到暂存区',
+          tooltip: $t('@0883F:添加到暂存区'),
           buttonType: 'success',
           icon: '+',
           handler: () => emit('stage', props.filePath)
         },
         {
           type: 'revert',
-          tooltip: '撤回修改',
+          tooltip: $t('@0883F:撤回修改'),
           buttonType: 'danger',
           icon: RefreshRight,
           handler: () => emit('revert', props.filePath)
@@ -58,14 +59,14 @@ const actionButtons = computed(() => {
       return [
         {
           type: 'stage',
-          tooltip: '添加到暂存区',
+          tooltip: $t('@0883F:添加到暂存区'),
           buttonType: 'success',
           icon: '+',
           handler: () => emit('stage', props.filePath)
         },
         {
           type: 'delete',
-          tooltip: '删除文件',
+          tooltip: $t('@0883F:删除文件'),
           buttonType: 'danger',
           icon: Close,
           handler: () => emit('revert', props.filePath)
@@ -94,7 +95,7 @@ function handleActionClick(handler: () => void, event: Event) {
     <!-- 锁定/解锁按钮 -->
     <el-tooltip 
       v-if="showLockButton"
-      :content="isLocking ? '处理中...' : (isLocked ? '解锁文件' : '锁定文件')" 
+      :content="isLocking ? $t('@0883F:处理中...') : (isLocked ? $t('@0883F:解锁文件') : $t('@0883F:锁定文件'))" 
       placement="top" 
        
       :show-after="200"

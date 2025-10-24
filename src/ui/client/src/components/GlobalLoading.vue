@@ -24,6 +24,7 @@
 </template>
 
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 interface Props {
   visible?: boolean
   text?: string
@@ -35,7 +36,7 @@ interface Props {
 
 withDefaults(defineProps<Props>(), {
   visible: false,
-  text: '加载中...',
+  text: $t('@2AEBA:加载中...'),
   showProgress: false,
   progress: 0,
   mock: false

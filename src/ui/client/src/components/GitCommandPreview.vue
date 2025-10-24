@@ -15,6 +15,7 @@
 </template>
 
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CopyDocument } from '@element-plus/icons-vue'
@@ -27,8 +28,8 @@ export interface GitCommandPreviewProps {
 }
 
 const props = withDefaults(defineProps<GitCommandPreviewProps>(), {
-  title: 'Git命令预览：',
-  copyButtonText: '复制命令',
+  title: $t('@34292:Git命令预览：'),
+  copyButtonText: $t('@34292:复制命令'),
   placeholder: '<命令内容>'
 })
 
@@ -40,15 +41,15 @@ const displayCommand = computed(() => {
 // 复制命令到剪贴板
 async function copyCommand() {
   if (!props.command) {
-    ElMessage.warning('没有可复制的命令内容')
+    ElMessage.warning($t('@34292:没有可复制的命令内容'))
     return
   }
   
   try {
     await navigator.clipboard.writeText(props.command)
-    ElMessage.success('命令已复制到剪贴板')
+    ElMessage.success($t('@34292:命令已复制到剪贴板'))
   } catch (error) {
-    ElMessage.error(`复制失败: ${(error as Error).message}`)
+    ElMessage.error(`${$t('@34292:复制失败: ')}${(error as Error).message}`)
   }
 }
 </script>

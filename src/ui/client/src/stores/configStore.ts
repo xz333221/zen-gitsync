@@ -1,3 +1,4 @@
+import { $t } from '@/lang/static'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -35,14 +36,14 @@ export const useConfigStore = defineStore('config', () => {
   async function loadConfig(force = false) {
     // 如果已经加载过且未强制刷新，则不再重复加载
     if (!force && isLoaded.value && !isLoading.value) {
-      console.log('使用缓存的配置信息')
+      console.log($t('@D50BB:使用缓存的配置信息'))
       return config.value
     }
 
     isLoading.value = true
     try {
       isLoading.value = true
-      console.log('加载配置信息...')
+      console.log($t('@D50BB:加载配置信息...'))
       const response = await fetch('/api/config/getConfig')
       const configData = await response.json()
       
@@ -60,11 +61,11 @@ export const useConfigStore = defineStore('config', () => {
       // 标记为已加载
       isLoaded.value = true
       
-      console.log('配置信息加载完成')
+      console.log($t('@D50BB:配置信息加载完成'))
       return config.value
     } catch (error) {
       console.error('加载配置失败:', error)
-      ElMessage.error(`加载配置失败: ${(error as Error).message}`)
+      ElMessage.error(`${$t('@D50BB:加载配置失败: ')}${(error as Error).message}`)
       return null
     } finally {
       isLoading.value = false
@@ -85,14 +86,14 @@ export const useConfigStore = defineStore('config', () => {
       const result = await response.json()
       if (result.success) {
         defaultCommitMessage.value = message
-        ElMessage.success('默认提交信息已保存')
+        ElMessage.success($t('@D50BB:默认提交信息已保存'))
         return true
       } else {
-        ElMessage.error(`保存失败: ${result.error}`)
+        ElMessage.error(`${$t('@D50BB:保存失败: ')}${result.error}`)
         return false
       }
     } catch (error) {
-      ElMessage.error(`保存失败: ${(error as Error).message}`)
+      ElMessage.error(`${$t('@D50BB:保存失败: ')}${(error as Error).message}`)
       return false
     }
   }
@@ -125,14 +126,14 @@ export const useConfigStore = defineStore('config', () => {
           }
         }
         
-        ElMessage.success('模板已保存')
+        ElMessage.success($t('@D50BB:模板已保存'))
         return true
       } else {
-        ElMessage.error(`保存模板失败: ${result.error}`)
+        ElMessage.error(`${$t('@D50BB:保存模板失败: ')}${result.error}`)
         return false
       }
     } catch (error) {
-      ElMessage.error(`保存模板失败: ${(error as Error).message}`)
+      ElMessage.error(`${$t('@D50BB:保存模板失败: ')}${(error as Error).message}`)
       return false
     }
   }
@@ -159,14 +160,14 @@ export const useConfigStore = defineStore('config', () => {
           messageTemplates.value = messageTemplates.value.filter(t => t !== template)
         }
         
-        ElMessage.success('模板已删除')
+        ElMessage.success($t('@D50BB:模板已删除'))
         return true
       } else {
-        ElMessage.error(`删除模板失败: ${result.error}`)
+        ElMessage.error(`${$t('@D50BB:删除模板失败: ')}${result.error}`)
         return false
       }
     } catch (error) {
-      ElMessage.error(`删除模板失败: ${(error as Error).message}`)
+      ElMessage.error(`${$t('@D50BB:删除模板失败: ')}${(error as Error).message}`)
       return false
     }
   }
@@ -202,14 +203,14 @@ export const useConfigStore = defineStore('config', () => {
           }
         }
         
-        ElMessage.success('模板已更新')
+        ElMessage.success($t('@D50BB:模板已更新'))
         return true
       } else {
-        ElMessage.error(`更新模板失败: ${result.error}`)
+        ElMessage.error(`${$t('@D50BB:更新模板失败: ')}${result.error}`)
         return false
       }
     } catch (error) {
-      ElMessage.error(`更新模板失败: ${(error as Error).message}`)
+      ElMessage.error(`${$t('@D50BB:更新模板失败: ')}${(error as Error).message}`)
       return false
     }
   }
@@ -224,12 +225,12 @@ export const useConfigStore = defineStore('config', () => {
         lockedFiles.value = result.lockedFiles || []
         return result.lockedFiles
       } else {
-        ElMessage.error(`加载锁定文件列表失败: ${result.error}`)
+        ElMessage.error(`${$t('@D50BB:加载锁定文件列表失败: ')}${result.error}`)
         return []
       }
     } catch (error) {
       console.error('加载锁定文件列表失败:', error)
-      ElMessage.error(`加载锁定文件列表失败: ${(error as Error).message}`)
+      ElMessage.error(`${$t('@D50BB:加载锁定文件列表失败: ')}${(error as Error).message}`)
       return []
     }
   }
@@ -249,15 +250,15 @@ export const useConfigStore = defineStore('config', () => {
       if (result.success) {
         // 重新加载锁定文件列表
         await loadLockedFiles()
-        ElMessage.success(`文件已锁定: ${filePath}`)
+        ElMessage.success(`${$t('@D50BB:文件已锁定: ')}${filePath}`)
         return true
       } else {
-        ElMessage.error(`锁定文件失败: ${result.error}`)
+        ElMessage.error(`${$t('@D50BB:锁定文件失败: ')}${result.error}`)
         return false
       }
     } catch (error) {
       console.error('锁定文件失败:', error)
-      ElMessage.error(`锁定文件失败: ${(error as Error).message}`)
+      ElMessage.error(`${$t('@D50BB:锁定文件失败: ')}${(error as Error).message}`)
       return false
     }
   }
@@ -277,15 +278,15 @@ export const useConfigStore = defineStore('config', () => {
       if (result.success) {
         // 重新加载锁定文件列表
         await loadLockedFiles()
-        ElMessage.success(`文件已解锁: ${filePath}`)
+        ElMessage.success(`${$t('@D50BB:文件已解锁: ')}${filePath}`)
         return true
       } else {
-        ElMessage.error(`解锁文件失败: ${result.error}`)
+        ElMessage.error(`${$t('@D50BB:解锁文件失败: ')}${result.error}`)
         return false
       }
     } catch (error) {
       console.error('解锁文件失败:', error)
-      ElMessage.error(`解锁文件失败: ${(error as Error).message}`)
+      ElMessage.error(`${$t('@D50BB:解锁文件失败: ')}${(error as Error).message}`)
       return false
     }
   }

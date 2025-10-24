@@ -23,6 +23,7 @@
 </template>
 
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 interface Props {
   visible?: boolean
   text?: string
@@ -31,7 +32,7 @@ interface Props {
 
 withDefaults(defineProps<Props>(), {
   visible: false,
-  text: '操作成功！',
+  text: $t('@71545:操作成功！'),
   description: ''
 })
 </script>

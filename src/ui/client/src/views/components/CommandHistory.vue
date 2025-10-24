@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock, Loading } from '@element-plus/icons-vue';
@@ -57,11 +58,11 @@ async function loadHistory() {
       if (result.success) {
         commandHistory.value = result.history;
       } else {
-        ElMessage.error(`加载命令历史失败: ${result.error}`);
+        ElMessage.error(`${$t('@81F0F:加载命令历史失败: ')}${result.error}`);
       }
     }
   } catch (error) {
-    ElMessage.error(`加载命令历史失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@81F0F:加载命令历史失败: ')}${(error as Error).message}`);
   } finally {
     isLoading.value = false;
   }
@@ -70,7 +71,7 @@ async function loadHistory() {
 // 复制所有命令历史
 async function copyAllHistory() {
   if (commandHistory.value.length === 0) {
-    ElMessage.warning('没有可复制的命令历史');
+    ElMessage.warning($t('@81F0F:没有可复制的命令历史'));
     return;
   }
   
@@ -80,7 +81,7 @@ async function copyAllHistory() {
     // 格式化所有命令历史为文本
     const historyText = commandHistory.value.map(item => {
       // 基本格式：命令 + 时间 + 耗时 + 状态
-      let text = `# ${formatTimestamp(item.timestamp)} (耗时: ${formatExecutionTime(item.executionTime)}) - ${item.success ? '成功' : '失败'}\n`;
+      let text = `# ${formatTimestamp(item.timestamp)}${$t('@81F0F: (耗时: ')}${formatExecutionTime(item.executionTime)}) - ${item.success ? $t('@81F0F:成功') : $t('@81F0F:失败')}\n`;
       text += `${item.command}\n`;
       
       // 添加输出（如果需要）
@@ -90,7 +91,7 @@ async function copyAllHistory() {
       
       // 添加stderr输出（根据命令类型决定标签）
       if (item.stderr) {
-        const stderrLabel = isStderrNormalOutput(item.command) ? '输出信息' : '错误输出';
+        const stderrLabel = isStderrNormalOutput(item.command) ? $t('@81F0F:输出信息') : $t('@81F0F:错误输出');
         text += `\n# ${stderrLabel}:\n${item.stderr}\n`;
       }
       
@@ -103,12 +104,12 @@ async function copyAllHistory() {
     
     await navigator.clipboard.writeText(historyText);
     ElMessage({
-      message: '命令历史已复制到剪贴板',
+      message: $t('@81F0F:命令历史已复制到剪贴板'),
       type: 'success',
       zIndex: 100000
     });
   } catch (error) {
-    ElMessage.error(`复制失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@81F0F:复制失败: ')}${(error as Error).message}`);
   } finally {
     isCopyingHistory.value = false;
   }
@@ -117,7 +118,7 @@ async function copyAllHistory() {
 // 只复制命令列表
 async function copyCommandsOnly() {
   if (commandHistory.value.length === 0) {
-    ElMessage.warning('没有可复制的命令');
+    ElMessage.warning($t('@81F0F:没有可复制的命令'));
     return;
   }
   
@@ -131,12 +132,12 @@ async function copyCommandsOnly() {
     
     await navigator.clipboard.writeText(commandsText);
     ElMessage({
-      message: '命令列表已复制到剪贴板',
+      message: $t('@81F0F:命令列表已复制到剪贴板'),
       type: 'success',
       zIndex: 100000
     });
   } catch (error) {
-    ElMessage.error(`复制失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@81F0F:复制失败: ')}${(error as Error).message}`);
   } finally {
     isCopyingCommands.value = false;
   }
@@ -147,11 +148,11 @@ async function clearCommandHistory() {
   try {
     // 先确认是否要清空
     await ElMessageBox.confirm(
-      '确定要清空所有命令历史记录吗？此操作不可恢复。',
-      '清空命令历史',
+      $t('@81F0F:确定要清空所有命令历史记录吗？此操作不可恢复。'),
+      $t('@81F0F:清空命令历史'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: $t('@81F0F:确定'),
+        cancelButtonText: $t('@81F0F:取消'),
         type: 'warning'
       }
     );
@@ -174,15 +175,15 @@ async function clearCommandHistory() {
       
       if (result.success) {
         commandHistory.value = [];
-        ElMessage.success('命令历史已清空');
+        ElMessage.success($t('@81F0F:命令历史已清空'));
       } else {
-        ElMessage.error(`清空命令历史失败: ${result.error}`);
+        ElMessage.error(`${$t('@81F0F:清空命令历史失败: ')}${result.error}`);
       }
     }
   } catch (error: any) {
     // 用户取消操作不显示错误
     if (error !== 'cancel' && error.toString() !== 'Error: cancel') {
-      ElMessage.error(`清空命令历史失败: ${error.message}`);
+      ElMessage.error(`${$t('@81F0F:清空命令历史失败: ')}${error.message}`);
     }
   } finally {
     isClearingHistory.value = false;
@@ -223,12 +224,12 @@ async function copyCommand(command: string) {
   try {
     await navigator.clipboard.writeText(command);
     ElMessage({
-      message: '命令已复制到剪贴板',
+      message: $t('@81F0F:命令已复制到剪贴板'),
       type: 'success',
       zIndex: 100000
     });
   } catch (error) {
-    ElMessage.error(`复制失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@81F0F:复制失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -256,7 +257,7 @@ async function copyOutput(item: CommandHistoryItem) {
 
     if (item.stderr) {
       // 根据命令类型决定标签
-      const stderrLabel = isStderrNormalOutput(item.command) ? '输出信息' : '错误输出';
+      const stderrLabel = isStderrNormalOutput(item.command) ? $t('@81F0F:输出信息') : $t('@81F0F:错误输出');
       outputText += `${stderrLabel}:\n${item.stderr}\n\n`;
     }
 
@@ -264,19 +265,19 @@ async function copyOutput(item: CommandHistoryItem) {
 
     await navigator.clipboard.writeText(outputText.trim());
     ElMessage({
-      message: '输出已复制到剪贴板',
+      message: $t('@81F0F:输出已复制到剪贴板'),
       type: 'success',
       zIndex: 100000
     });
   } catch (error) {
-    ElMessage.error(`复制失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@81F0F:复制失败: ')}${(error as Error).message}`);
   }
 }
 
 // 初始化WebSocket监听
 function initSocketListeners() {
   if (!gitStore.socket) {
-    console.error('Socket实例不可用');
+    console.error($t('@81F0F:Socket实例不可用'));
     return;
   }
   
@@ -313,7 +314,7 @@ function initSocketListeners() {
   gitStore.socket.on('command_history_cleared', (data: { success: boolean }) => {
     if (data.success) {
       commandHistory.value = [];
-      ElMessage.success('命令历史已清空');
+      ElMessage.success($t('@81F0F:命令历史已清空'));
     }
     isClearingHistory.value = false;
   });
@@ -321,12 +322,12 @@ function initSocketListeners() {
   // 监听Socket连接/断开事件
   gitStore.socket.on('connect', () => {
     hasSocketConnection.value = true;
-    ElMessage.success('已连接到实时命令历史');
+    ElMessage.success($t('@81F0F:已连接到实时命令历史'));
   });
   
   gitStore.socket.on('disconnect', () => {
     hasSocketConnection.value = false;
-    ElMessage.warning('实时命令历史连接已断开');
+    ElMessage.warning($t('@81F0F:实时命令历史连接已断开'));
   });
 }
 
@@ -347,7 +348,7 @@ onMounted(() => {
 
   // 确保Socket已初始化
   if (!gitStore.socket) {
-    console.log('尝试初始化Socket连接');
+    console.log($t('@81F0F:尝试初始化Socket连接'));
     gitStore.initSocketConnection();
   }
 
@@ -362,7 +363,7 @@ onUnmounted(() => {
 
 <template>
   <!-- 命令历史按钮 -->
-  <el-tooltip content="查看Git命令历史" placement="bottom" effect="dark" :show-after="200">
+  <el-tooltip :content="$t('@81F0F:查看Git命令历史')" placement="bottom" effect="dark" :show-after="200">
     <button class="modern-btn btn-icon-36" @click="openCommandHistory">
       <el-icon class="btn-icon">
         <Clock />
@@ -373,7 +374,7 @@ onUnmounted(() => {
   <!-- 命令历史弹窗（使用 CommonDialog） -->
   <CommonDialog
     v-model="dialogVisible"
-    title="Git 命令历史"
+    :title="$t('@81F0F:Git 命令历史')"
     destroy-on-close
     custom-class="command-history-dialog"
     :append-to-body="true"
@@ -385,9 +386,9 @@ onUnmounted(() => {
           effect="dark"
           class="socket-status"
         >
-          {{ hasSocketConnection ? '实时更新' : '未连接' }}
+          {{ hasSocketConnection ? $t('@81F0F:实时更新') : $t('@81F0F:未连接') }}
         </el-tag>
-        <el-tooltip content="只复制命令列表（不含输出）" placement="bottom" effect="dark" :show-after="200">
+        <el-tooltip :content="$t('@81F0F:只复制命令列表（不含输出）')" placement="bottom" effect="dark" :show-after="200">
           <button 
             class="modern-btn copy-commands-button enhanced-btn" 
             @click="copyCommandsOnly"
@@ -399,10 +400,10 @@ onUnmounted(() => {
             <el-icon class="btn-icon is-loading" v-else>
               <Loading />
             </el-icon>
-            <span class="btn-text">命令</span>
+            <span class="btn-text">{{ $t('@81F0F:命令') }}</span>
           </button>
         </el-tooltip>
-        <el-tooltip content="复制完整命令历史（含输出）" placement="bottom" effect="dark" :show-after="200">
+        <el-tooltip :content="$t('@81F0F:复制完整命令历史（含输出）')" placement="bottom" effect="dark" :show-after="200">
           <button 
             class="modern-btn copy-all-button enhanced-btn" 
             @click="copyAllHistory"
@@ -414,10 +415,10 @@ onUnmounted(() => {
             <el-icon class="btn-icon is-loading" v-else>
               <Loading />
             </el-icon>
-            <span class="btn-text">全部</span>
+            <span class="btn-text">{{ $t('@81F0F:全部') }}</span>
           </button>
         </el-tooltip>
-        <el-tooltip content="清空命令历史" placement="bottom" effect="dark" :show-after="200">
+        <el-tooltip :content="$t('@81F0F:清空命令历史')" placement="bottom" effect="dark" :show-after="200">
           <button 
             class="modern-btn clear-button enhanced-btn danger-btn" 
             @click="clearCommandHistory"
@@ -429,7 +430,7 @@ onUnmounted(() => {
             <el-icon class="btn-icon is-loading" v-else>
               <Loading />
             </el-icon>
-            <span class="btn-text">清空</span>
+            <span class="btn-text">{{ $t('@81F0F:清空') }}</span>
           </button>
         </el-tooltip>
       </div>
@@ -438,10 +439,10 @@ onUnmounted(() => {
         <el-icon class="loading-icon is-loading">
           <Loading />
         </el-icon>
-        <div class="loading-text">加载命令历史...</div>
+        <div class="loading-text">{{ $t('@81F0F:加载命令历史...') }}</div>
       </div>
 
-      <el-empty v-else-if="commandHistory.length === 0" description="暂无命令历史" />
+      <el-empty v-else-if="commandHistory.length === 0" :description="$t('@81F0F:暂无命令历史')" />
 
       <div v-else class="history-list">
         <div v-for="(item, index) in commandHistory" :key="index" class="history-item" :class="{ 'is-error': !item.success }">
@@ -449,17 +450,17 @@ onUnmounted(() => {
             <div class="command-info">
               <div class="command-text">
                 <el-tag size="small" :type="item.success ? 'success' : 'danger'" effect="dark" class="status-tag">
-                  {{ item.success ? '成功' : '失败' }}
+                  {{ item.success ? $t('@81F0F:成功') : $t('@81F0F:失败') }}
                 </el-tag>
                 <code>{{ item.command }}</code>
               </div>
               <div class="command-meta">
                 <span class="timestamp">{{ formatTimestamp(item.timestamp) }}</span>
-                <span class="duration">耗时: {{ formatExecutionTime(item.executionTime) }}</span>
+                <span class="duration">{{ $t('@81F0F:耗时: ') }}{{ formatExecutionTime(item.executionTime) }}</span>
               </div>
             </div>
             <div class="item-actions">
-              <el-tooltip content="复制命令" placement="bottom" effect="dark" :show-after="200">
+              <el-tooltip :content="$t('@81F0F:复制命令')" placement="bottom" effect="dark" :show-after="200">
                 <button 
                   class="modern-btn item-copy-button enhanced-btn" 
                   @click.stop="copyCommand(item.command)"
@@ -469,7 +470,7 @@ onUnmounted(() => {
                   </el-icon>
                 </button>
               </el-tooltip>
-              <el-tooltip content="展开/收起" placement="bottom" effect="dark" :show-after="200">
+              <el-tooltip :content="$t('@81F0F:展开/收起')" placement="bottom" effect="dark" :show-after="200">
                 <button 
                   class="modern-btn expand-button enhanced-btn" 
                   :class="{ 'is-expanded': isExpanded(index) }"
@@ -487,8 +488,8 @@ onUnmounted(() => {
           <div v-if="isExpanded(index)" class="item-details">
             <div v-if="item.stdout" class="output-section">
               <div class="output-header">
-                <h4>标准输出</h4>
-                <el-tooltip content="复制输出" placement="bottom" effect="dark" :show-after="200">
+                <h4>{{ $t('@81F0F:标准输出') }}</h4>
+                <el-tooltip :content="$t('@81F0F:复制输出')" placement="bottom" effect="dark" :show-after="200">
                   <button 
                     class="modern-btn output-copy-button enhanced-btn" 
                     @click="copyOutput(item)"
@@ -502,26 +503,26 @@ onUnmounted(() => {
               <pre class="output-content">{{ item.stdout }}</pre>
               <div v-if="item.isStdoutTruncated" class="truncation-notice">
                 <el-alert type="info" :closable="false" show-icon>
-                  输出内容过长已被截断，请直接执行命令查看完整输出
+                  {{ $t('@81F0F:输出内容过长已被截断，请直接执行命令查看完整输出') }}
                 </el-alert>
               </div>
             </div>
 
             <div v-if="item.stderr" :class="['output-section', isStderrNormalOutput(item.command) ? '' : 'error']">
               <div class="output-header">
-                <h4>{{ isStderrNormalOutput(item.command) ? '输出信息' : '错误输出' }}</h4>
+                <h4>{{ isStderrNormalOutput(item.command) ? $t('@81F0F:输出信息') : $t('@81F0F:错误输出') }}</h4>
               </div>
               <pre class="output-content">{{ item.stderr }}</pre>
               <div v-if="item.isStderrTruncated" class="truncation-notice">
                 <el-alert type="info" :closable="false" show-icon>
-                  {{ isStderrNormalOutput(item.command) ? '输出信息' : '错误输出' }}内容过长已被截断，请直接执行命令查看完整输出
+                  {{ isStderrNormalOutput(item.command) ? $t('@81F0F:输出信息') : $t('@81F0F:错误输出') }}{{ $t('@81F0F:内容过长已被截断，请直接执行命令查看完整输出') }}
                 </el-alert>
               </div>
             </div>
 
             <div v-if="item.error" class="output-section error">
               <div class="output-header">
-                <h4>错误信息</h4>
+                <h4>{{ $t('@81F0F:错误信息') }}</h4>
               </div>
               <pre class="output-content">{{ item.error }}</pre>
             </div>

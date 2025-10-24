@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static.ts'
 import { ref, computed, watch, onMounted } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput } from 'element-plus';
 import { FolderOpened, Lock, DocumentCopy, Search } from '@element-plus/icons-vue';
@@ -33,7 +34,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  emptyText: '没有找到变更文件',
+  emptyText: $t('@E80AC:没有找到变更文件'),
   diffContent: '',
   selectedFile: '',
   height: '100%',
@@ -133,7 +134,7 @@ function handleFileSelect(filePath: string) {
 // 打开文件方法
 function handleOpenFile() {
   if (!currentSelectedFile.value) {
-    ElMessage.warning('请先选择一个文件');
+    ElMessage.warning($t('@E80AC:请先选择一个文件'));
     return;
   }
   
@@ -143,24 +144,24 @@ function handleOpenFile() {
 // 复制文件路径方法
 function handleCopyPath() {
   if (!currentSelectedFile.value) {
-    ElMessage.warning('请先选择一个文件');
+    ElMessage.warning($t('@E80AC:请先选择一个文件'));
     return;
   }
   
   // 复制到剪贴板
   navigator.clipboard.writeText(currentSelectedFile.value)
     .then(() => {
-      ElMessage.success('文件路径已复制到剪贴板');
+      ElMessage.success($t('@E80AC:文件路径已复制到剪贴板'));
     })
     .catch(() => {
-      ElMessage.error('复制失败');
+      ElMessage.error($t('@E80AC:复制失败'));
     });
 }
 
 // 用VSCode打开文件方法
 function handleOpenWithVSCode() {
   if (!currentSelectedFile.value) {
-    ElMessage.warning('请先选择一个文件');
+    ElMessage.warning($t('@E80AC:请先选择一个文件'));
     return;
   }
   
@@ -171,13 +172,13 @@ function handleOpenWithVSCode() {
 const openButtonTooltip = computed(() => {
   switch (props.context) {
     case 'git-status':
-      return '在系统默认编辑器中打开文件';
+      return $t('@E80AC:在系统默认编辑器中打开文件');
     case 'commit-detail':
-      return '打开该提交时的文件版本';
+      return $t('@E80AC:打开该提交时的文件版本');
     case 'stash-detail':
-      return '打开该stash中的文件版本';
+      return $t('@E80AC:打开该stash中的文件版本');
     default:
-      return '打开文件';
+      return $t('@E80AC:打开文件');
   }
 });
 
@@ -301,14 +302,14 @@ onMounted(() => {
         <!-- 左侧：文件列表面板 -->
         <div class="files-panel">
           <div class="panel-header">
-            <h4>变更文件</h4>
+            <h4>{{ $t('@E80AC:变更文件') }}</h4>
             <span v-if="files.length > 0" class="file-count">({{ files.length }})</span>
           </div>
           <!-- 搜索框 -->
           <div class="search-box">
             <el-input
               v-model="searchQuery"
-              placeholder="搜索文件名或路径..."
+              :placeholder="$t('@E80AC:搜索文件名或路径...')"
               :prefix-icon="Search"
               clearable
               size="small"
@@ -323,7 +324,7 @@ onMounted(() => {
               />
               <el-empty 
                 v-else-if="filteredFiles.length === 0"
-                description="没有找到匹配的文件"
+                :description="$t('@E80AC:没有找到匹配的文件')"
                 :image-size="60"
               />
               <div
@@ -360,7 +361,7 @@ onMounted(() => {
                 </div>
                 <el-tooltip
                   v-if="file.locked"
-                  content="该文件已被锁定，提交时会被跳过"
+                  :content="$t('@E80AC:该文件已被锁定，提交时会被跳过')"
                   placement="top"
                   
                   :show-after="200"
@@ -391,7 +392,7 @@ onMounted(() => {
         <!-- 右侧：差异显示面板 -->
         <div class="diff-panel">
           <div class="panel-header">
-            <h4>文件差异</h4>
+            <h4>{{ $t('@E80AC:文件差异') }}</h4>
             <div class="header-right">
               <el-tooltip
                 v-if="currentSelectedFile"
@@ -406,7 +407,7 @@ onMounted(() => {
                 </span>
               </el-tooltip>
               <div v-if="showOpenButton && currentSelectedFile" class="action-buttons">
-                <el-tooltip content="复制文件路径" placement="top" effect="light">
+                <el-tooltip :content="$t('@E80AC:复制文件路径')" placement="top" effect="light">
                   <button class="modern-btn btn-icon-24" @click="handleCopyPath">
                     <el-icon class="btn-icon"><DocumentCopy /></el-icon>
                   </button>
@@ -416,7 +417,7 @@ onMounted(() => {
                     <el-icon class="btn-icon"><FolderOpened /></el-icon>
                   </button>
                 </el-tooltip>
-                <el-tooltip content="用VSCode打开文件" placement="top" effect="light">
+                <el-tooltip :content="$t('@E80AC:用VSCode打开文件')" placement="top" effect="light">
                   <button class="modern-btn btn-icon-24" @click="handleOpenWithVSCode">
                     <img :src="vscodeIcon" alt="VSCode" class="btn-icon vscode-icon" />
                   </button>
@@ -427,7 +428,7 @@ onMounted(() => {
           <div class="diff-content">
             <el-empty 
               v-if="!hasDiffContent"
-              :description="currentSelectedFile ? '该文件没有差异内容' : '请选择文件查看差异'"
+              :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
               :image-size="80"
             />
             <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
@@ -439,7 +440,7 @@ onMounted(() => {
     <!-- 当隐藏文件列表时，仅显示右侧面板 -->
     <div v-else class="diff-panel full-width">
       <div class="panel-header">
-        <h4>文件差异</h4>
+        <h4>{{ $t('@E80AC:文件差异') }}</h4>
         <div class="header-right">
           <el-tooltip
             v-if="currentSelectedFile"
@@ -455,7 +456,7 @@ onMounted(() => {
           </el-tooltip>
           <div v-if="showOpenButton && currentSelectedFile" class="action-buttons">
             <el-tooltip
-              content="复制文件路径"
+              :content="$t('@E80AC:复制文件路径')"
               placement="top"
               effect="light"
             >
@@ -480,7 +481,7 @@ onMounted(() => {
               </button>
             </el-tooltip>
             <el-tooltip
-              content="用VSCode打开文件"
+              :content="$t('@E80AC:用VSCode打开文件')"
               placement="top"
               effect="light"
             >
@@ -498,7 +499,7 @@ onMounted(() => {
       <div class="diff-content">
         <el-empty 
           v-if="!hasDiffContent"
-          :description="currentSelectedFile ? '该文件没有差异内容' : '请选择文件查看差异'"
+          :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
           :image-size="80"
         />
         

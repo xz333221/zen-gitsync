@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -65,14 +66,14 @@ const isDisabled = computed(() => {
 // 计算提示文本
 const tooltipText = computed(() => {
   if (!hasUnstagedChanges.value) {
-    return '没有需要暂存的更改'
+    return $t('@29974:没有需要暂存的更改')
   }
   
   const hasMatches = hasLockedFileMatches()
   if (hasMatches) {
-    return `暂存${unstagedFilesCount.value}个未暂存文件（逐个添加）`
+    return `${$t('@29974:暂存')}${unstagedFilesCount.value}${$t('@29974:个未暂存文件（逐个添加）')}`
   } else {
-    return `暂存所有更改（git add .）`
+    return `${$t('@29974:暂存所有更改（git add .）')}`
   }
 })
 
@@ -110,7 +111,7 @@ async function handleClick() {
       :disabled="isDisabled"
       :class="['stage-button', `from-${from}`]"
     >
-      暂存更改
+      {{ $t('@29974:暂存更改') }}
       <span v-if="unstagedFilesCount > 0">({{ unstagedFilesCount }})</span>
     </el-button>
   </el-tooltip>

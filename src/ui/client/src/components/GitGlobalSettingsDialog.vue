@@ -1,7 +1,7 @@
 <template>
   <CommonDialog
     v-model="visible"
-    title="Git 全局设置"
+    :title="$t('@42BB9:Git 全局设置')"
     size="large"
     :destroy-on-close="true"
     custom-class="user-settings-dialog"
@@ -10,7 +10,7 @@
     <div
       class="user-settings-content"
       v-loading="isLoading"
-      element-loading-text="正在加载配置..."
+      :element-loading-text="$t('@42BB9:正在加载配置...')"
       element-loading-background="rgba(0, 0, 0, 0.15)"
     >
       <div class="info-section">
@@ -19,26 +19,26 @@
             <el-icon><InfoFilled /></el-icon>
           </div>
           <div class="info-content">
-            <p class="info-title">全局配置</p>
-            <p class="info-desc">这些设置将影响全局 Git 配置，对所有 Git 仓库生效</p>
+            <p class="info-title">{{ $t('@42BB9:全局配置') }}</p>
+            <p class="info-desc">{{ $t('@42BB9:这些设置将影响全局 Git 配置，对所有 Git 仓库生效') }}</p>
           </div>
         </div>
       </div>
       <el-form class="user-form" label-width="auto" :model="{ tempUserName, tempUserEmail }">
         <div class="basic-info-section">
           <div class="basic-info-grid">
-            <el-form-item class="form-item" label="用户名">
+            <el-form-item class="form-item" :label="$t('@42BB9:用户名')">
               <el-input 
                 v-model="tempUserName" 
-                placeholder="请输入 Git 用户名" 
+                :placeholder="$t('@42BB9:请输入 Git 用户名')" 
                 class="modern-input"
               />
             </el-form-item>
 
-            <el-form-item class="form-item" label="邮箱地址">
+            <el-form-item class="form-item" :label="$t('@42BB9:邮箱地址')">
               <el-input 
                 v-model="tempUserEmail" 
-                placeholder="请输入 Git 邮箱地址" 
+                :placeholder="$t('@42BB9:请输入 Git 邮箱地址')" 
                 class="modern-input"
               />
             </el-form-item>
@@ -49,12 +49,12 @@
         <div class="settings-section">
           <div class="section-title">
             <el-icon class="title-icon"><Setting /></el-icon>
-            <span>高级配置</span>
+            <span>{{ $t('@42BB9:高级配置') }}</span>
           </div>
           <div class="settings-grid">
             <div class="setting-row">
-              <label class="setting-label">自动设置上游
-                <el-tooltip content="首次 git push 时，自动为当前分支创建远程同名分支并建立跟踪关系（等同于 push -u）。" placement="top" :show-after="200">
+              <label class="setting-label">{{ $t('@42BB9:自动设置上游') }}
+                <el-tooltip :content="$t('@42BB9:首次 git push 时，自动为当前分支创建远程同名分支并建立跟踪关系（等同于 push -u）。')" placement="top" :show-after="200">
                   <el-icon class="qmark"><InfoFilled /></el-icon>
                 </el-tooltip>
               </label>
@@ -62,17 +62,17 @@
             </div>
 
             <div class="setting-row">
-              <label class="setting-label">拉取策略</label>
+              <label class="setting-label">{{ $t('@42BB9:拉取策略') }}</label>
               <el-select v-model="cfgPullRebase" class="modern-input" size="default">
-                <el-option label="merge (默认)" value="false" />
+                <el-option :label="$t('@42BB9:merge (默认)')" value="false" />
                 <el-option label="rebase" value="true" />
-                <el-option label="rebase(保留合并)" value="merges" />
+                <el-option :label="$t('@42BB9:rebase(保留合并)')" value="merges" />
               </el-select>
             </div>
 
             <div class="setting-row">
-              <label class="setting-label">自动清理远程分支
-                <el-tooltip content="在 git fetch 时自动 prune，移除已在远程删除但本地仍保留的远程分支引用。" placement="top" :show-after="200">
+              <label class="setting-label">{{ $t('@42BB9:自动清理远程分支') }}
+                <el-tooltip :content="$t('@42BB9:在 git fetch 时自动 prune，移除已在远程删除但本地仍保留的远程分支引用。')" placement="top" :show-after="200">
                   <el-icon class="qmark"><InfoFilled /></el-icon>
                 </el-tooltip>
               </label>
@@ -80,7 +80,7 @@
             </div>
 
             <div class="setting-row">
-              <label class="setting-label">换行符处理</label>
+              <label class="setting-label">{{ $t('@42BB9:换行符处理') }}</label>
               <el-select v-model="cfgCoreAutoCrlf" class="modern-input" size="default">
                 <el-option label="true (Windows)" value="true" />
                 <el-option label="input" value="input" />
@@ -89,12 +89,12 @@
             </div>
 
             <div class="setting-row">
-              <label class="setting-label">默认初始化分支
-                <el-tooltip content="新建仓库时（git init）默认创建的分支名，常见为 main 或 master。" placement="top" :show-after="200">
+              <label class="setting-label">{{ $t('@42BB9:默认初始化分支') }}
+                <el-tooltip :content="$t('@42BB9:新建仓库时（git init）默认创建的分支名，常见为 main 或 master。')" placement="top" :show-after="200">
                   <el-icon class="qmark"><InfoFilled /></el-icon>
                 </el-tooltip>
               </label>
-              <el-input v-model="cfgInitDefaultBranch" placeholder="例如: main" class="modern-input" size="default" />
+              <el-input v-model="cfgInitDefaultBranch" :placeholder="$t('@42BB9:例如: main')" class="modern-input" size="default" />
             </div>
           </div>
         </div>
@@ -107,11 +107,11 @@
         <div></div>
         <div class="footer-actions">
           <button type="button" class="footer-btn cancel-btn" @click="visible = false" :disabled="isLoading">
-            取消
+            {{ $t('@42BB9:取消') }}
           </button>
           <button type="button" class="footer-btn primary-btn" @click="handleSave" :disabled="isLoading">
             <el-icon><Check /></el-icon>
-            <span>保存设置</span>
+            <span>{{ $t('@42BB9:保存设置') }}</span>
           </button>
         </div>
       </div>
@@ -120,6 +120,7 @@
 </template>
 
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled, Setting, Check } from '@element-plus/icons-vue'
@@ -211,7 +212,7 @@ async function setGlobalConfig(key: string, value: string) {
     body: JSON.stringify({ command: `git config --global ${key} ${value}` })
   })
   const data = await res.json()
-  if (!data.success) throw new Error(data.error || `设置 ${key} 失败`)
+  if (!data.success) throw new Error(data.error || `${$t('@42BB9:设置 ')}${key}${$t('@42BB9: 失败')}`)
 }
 
 // 加载常用配置
@@ -258,7 +259,7 @@ async function saveGlobalGitConfigs() {
       return true
     }
     await Promise.all(tasks)
-    ElMessage.success('已保存变更的 Git 配置')
+    ElMessage.success($t('@42BB9:已保存变更的 Git 配置'))
     // 更新初始值为最新
     initAutoSetupRemote = cfgAutoSetupRemote.value
     initPullRebase = cfgPullRebase.value
@@ -275,7 +276,7 @@ async function saveGlobalGitConfigs() {
 // 保存设置
 async function handleSave() {
   if (!tempUserName.value || !tempUserEmail.value) {
-    ElMessage.warning('用户名和邮箱不能为空')
+    ElMessage.warning($t('@42BB9:用户名和邮箱不能为空'))
     return
   }
 
@@ -296,7 +297,7 @@ async function handleSave() {
       tempUserEmail.value === initUserEmail
     ) {
       // 若无任何变更，提示但仍可关闭
-      // ElMessage.info('没有需要保存的变更')
+      // ElMessage.info($t('@42BB9:没有需要保存的变更'))
     }
     visible.value = false
   }

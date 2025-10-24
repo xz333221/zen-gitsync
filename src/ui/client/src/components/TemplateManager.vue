@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
@@ -23,9 +24,9 @@ export interface TemplateManagerEmits {
 }
 
 const props = withDefaults(defineProps<TemplateManagerProps>(), {
-  placeholder: '输入新模板内容',
-  editPlaceholder: '编辑模板内容',
-  emptyDescription: '暂无保存的模板',
+  placeholder: $t('@60CAC:输入新模板内容'),
+  editPlaceholder: $t('@60CAC:编辑模板内容'),
+  emptyDescription: $t('@60CAC:暂无保存的模板'),
   showDefaultSection: false,
   showHelpText: false
 })
@@ -68,7 +69,7 @@ const currentPlaceholder = computed(() => {
 
 // 计算属性：按钮文本
 const buttonText = computed(() => {
-  return isEditing.value ? '更新模板' : '添加模板'
+  return isEditing.value ? $t('@60CAC:更新模板') : $t('@60CAC:添加模板')
 })
 
 // 显示/隐藏弹窗
@@ -95,7 +96,7 @@ function resetForm() {
 // 保存模板
 async function saveTemplate() {
   if (!newTemplate.value.trim()) {
-    ElMessage.warning('模板内容不能为空')
+    ElMessage.warning($t('@60CAC:模板内容不能为空'))
     return
   }
 
@@ -115,7 +116,7 @@ async function saveTemplate() {
       }
     }
   } catch (error) {
-    ElMessage.error(`模板保存失败: ${(error as Error).message}`)
+    ElMessage.error(`${$t('@60CAC:模板保存失败: ')}${(error as Error).message}`)
   } finally {
     isSaving.value = false
   }
@@ -151,7 +152,7 @@ async function deleteTemplate(template: string) {
       // 成功提示已在 store 中统一处理
     }
   } catch (error) {
-    ElMessage.error(`模板删除失败: ${(error as Error).message}`)
+    ElMessage.error(`${$t('@60CAC:模板删除失败: ')}${(error as Error).message}`)
   }
 }
 
@@ -168,7 +169,7 @@ async function setAsDefault() {
       emit('set-default', newTemplate.value)
     }
   } catch (error) {
-    ElMessage.error(`设置默认提交信息失败: ${(error as Error).message}`)
+    ElMessage.error(`${$t('@60CAC:设置默认提交信息失败: ')}${(error as Error).message}`)
   } finally {
     isSavingDefault.value = false
   }
@@ -197,7 +198,7 @@ defineExpose({
           @keyup.enter="saveTemplate"
         />
         <div class="template-form-buttons">
-          <el-button v-if="isEditing" @click="cancelEdit">取消</el-button>
+          <el-button v-if="isEditing" @click="cancelEdit">{{ $t('@60CAC:取消') }}</el-button>
           <el-button 
             type="primary" 
             @click="saveTemplate" 
@@ -215,30 +216,30 @@ defineExpose({
             :loading="isSavingDefault"
             plain
           >
-            设为默认提交信息
+            {{ $t('@60CAC:设为默认提交信息') }}
           </el-button>
         </div>
       </div>
 
       <!-- 普通模板布局：固定标题，仅列表滚动 -->
       <div v-if="type !== 'message'" class="template-list">
-        <h3>已保存{{ type === 'description' ? '模板' : '作用域' }}</h3>
+        <h3>{{ $t('@60CAC:已保存') }}{{ type === 'description' ? $t('@60CAC:模板') : $t('@60CAC:作用域') }}</h3>
         <el-empty v-if="templates.length === 0" :description="emptyDescription" />
         <div v-else class="template-list-scroll">
           <el-card v-for="(template, index) in templates" :key="index" class="template-item">
             <el-row justify="space-between" align="middle" style="width: 100%">
               <div class="template-content">{{ template }}</div>
               <div class="template-actions">
-                <el-button type="primary" size="small" @click="useTemplate(template)">使用</el-button>
+                <el-button type="primary" size="small" @click="useTemplate(template)">{{ $t('@60CAC:使用') }}</el-button>
                 <el-button 
                   type="warning" 
                   size="small" 
                   :icon="Edit"
                   @click="startEditTemplate(template, index)"
                 >
-                  编辑
+                  {{ $t('@60CAC:编辑') }}
                 </el-button>
-                <el-button type="danger" size="small" @click="deleteTemplate(template)">删除</el-button>
+                <el-button type="danger" size="small" @click="deleteTemplate(template)">{{ $t('@60CAC:删除') }}</el-button>
               </div>
             </el-row>
           </el-card>
@@ -248,23 +249,23 @@ defineExpose({
       <!-- 提交信息模板的特殊布局 -->
       <div v-else class="templates-container">
         <div class="message-templates-list">
-          <h3>已保存模板</h3>
+          <h3>{{ $t('@60CAC:已保存模板') }}</h3>
           <div class="templates-scroll-area">
             <el-empty v-if="templates.length === 0" :description="emptyDescription" />
             <el-card v-for="(template, index) in templates" :key="index" class="template-item">
               <el-row justify="space-between" align="middle" style="width: 100%">
                 <div class="template-content">{{ template }}</div>
                 <div class="template-actions">
-                  <el-button type="primary" size="small" @click="useTemplate(template)">使用</el-button>
+                  <el-button type="primary" size="small" @click="useTemplate(template)">{{ $t('@60CAC:使用') }}</el-button>
                   <el-button 
                     type="warning" 
                     size="small" 
                     :icon="Edit"
                     @click="startEditTemplate(template, index)"
                   >
-                    编辑
+                    {{ $t('@60CAC:编辑') }}
                   </el-button>
-                  <el-button type="danger" size="small" @click="deleteTemplate(template)">删除</el-button>
+                  <el-button type="danger" size="small" @click="deleteTemplate(template)">{{ $t('@60CAC:删除') }}</el-button>
                 </div>
               </el-row>
             </el-card>
@@ -273,16 +274,16 @@ defineExpose({
         
         <!-- 默认提交信息部分 -->
         <div v-if="showDefaultSection" class="current-default-message">
-          <h3>当前默认提交信息</h3>
+          <h3>{{ $t('@60CAC:当前默认提交信息') }}</h3>
           <el-card class="default-message-card" v-if="defaultCommitMessage">
             <div class="default-message-content">{{ defaultCommitMessage }}</div>
           </el-card>
-          <el-empty v-else description="尚未设置默认提交信息" :image-size="100" />
+          <el-empty v-else :description="$t('@60CAC:尚未设置默认提交信息')" :image-size="100" />
           
           <div v-if="showHelpText" class="message-help-text">
-            <h4>关于默认提交信息</h4>
-            <p>默认提交信息将在未输入提交信息时自动使用。</p>
-            <p>你可以通过点击左侧模板的<el-tag size="small" type="primary">使用</el-tag>按钮先选择喜欢的模板，然后点击上方<el-tag size="small" type="success">设为默认提交信息</el-tag>按钮保存。</p>
+            <h4>{{ $t('@60CAC:关于默认提交信息') }}</h4>
+            <p>{{ $t('@60CAC:默认提交信息将在未输入提交信息时自动使用。') }}</p>
+            <p>{{ $t('@60CAC:你可以通过点击左侧模板的') }}<el-tag size="small" type="primary">{{ $t('@60CAC:使用') }}</el-tag>{{ $t('@60CAC:按钮先选择喜欢的模板，然后点击上方') }}<el-tag size="small" type="success">{{ $t('@60CAC:设为默认提交信息') }}</el-tag>{{ $t('@60CAC:按钮保存。') }}</p>
           </div>
         </div>
       </div>

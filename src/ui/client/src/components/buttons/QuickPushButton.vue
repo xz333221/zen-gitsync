@@ -103,9 +103,9 @@ async function handleQuickPush() {
       <div class="one-push-content">
         <el-icon class="one-push-icon"><Position /></el-icon>
         <div class="one-push-text">
-          <span class="one-push-title">一键推送所有</span>
+          <span class="one-push-title">{{ $t('@2E184:一键推送所有') }}</span>
           <span v-if="from === 'form'" class="one-push-desc"
-            >暂存 + 提交 + 推送</span
+            >{{ $t('@2E184:暂存 + 提交 + 推送') }}</span
           >
         </div>
       </div>

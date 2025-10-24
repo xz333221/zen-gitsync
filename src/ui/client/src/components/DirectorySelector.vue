@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Folder, FolderOpened, Clock } from "@element-plus/icons-vue";
@@ -45,7 +46,7 @@ async function onOpenExplorer() {
       ElMessage.error(result.error);
     }
   } catch (error) {
-    ElMessage.error(`打开目录失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@67CE7:打开目录失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -111,14 +112,14 @@ async function changeDirectory() {
         ]);
         gitStore.refreshLog();
       } else {
-        ElMessage.warning('当前目录不是Git仓库，部分功能将不可用');
+        ElMessage.warning($t('@67CE7:当前目录不是Git仓库，部分功能将不可用'));
         gitStore.$reset();
       }
     } else {
       ElMessage.error(result.error || "切换目录失败");
     }
   } catch (error) {
-    ElMessage.error(`切换目录失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@67CE7:切换目录失败: ')}${(error as Error).message}`);
   } finally {
     isChangingDirectory.value = false;
   }
@@ -141,7 +142,7 @@ async function browseDirectory() {
       ElMessage.error(result.error);
     }
   } catch (error) {
-    ElMessage.error(`浏览目录失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@67CE7:浏览目录失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -250,11 +251,11 @@ async function selectDirectory(dirPath: string) {
           ElMessage.error(result.error);
         }
       } catch (error) {
-        ElMessage.error(`浏览目录失败: ${(error as Error).message}`);
+        ElMessage.error(`${$t('@67CE7:浏览目录失败: ')}${(error as Error).message}`);
       }
     }, 100);
   } catch (error) {
-    ElMessage.error(`处理目录选择时出错: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@67CE7:处理目录选择时出错: ')}${(error as Error).message}`);
   }
 }
 </script>
@@ -266,7 +267,7 @@ async function selectDirectory(dirPath: string) {
     </div>
     <div class="directory-actions">
       <el-tooltip
-        content="在资源管理器中打开"
+        :content="$t('@67CE7:在资源管理器中打开')"
         placement="top"
         effect="dark"
         :show-after="200"
@@ -281,7 +282,7 @@ async function selectDirectory(dirPath: string) {
   <!-- 切换目录对话框 -->
   <CommonDialog
     v-model="isDirectoryDialogVisible"
-    title="切换工作目录"
+    :title="$t('@67CE7:切换工作目录')"
     size="medium"
     :destroy-on-close="true"
     :append-to-body="true"
@@ -293,19 +294,19 @@ async function selectDirectory(dirPath: string) {
           <template #label>
             <div class="form-label">
               <el-icon class="label-icon"><Folder /></el-icon>
-              <span>目录路径</span>
+              <span>{{ $t('@67CE7:目录路径') }}</span>
             </div>
           </template>
           <div class="directory-input-group">
             <el-input
               v-model="newDirectoryPath"
-              placeholder="请输入目录路径"
+              :placeholder="$t('@67CE7:请输入目录路径')"
               class="modern-input"
               size="large"
             />
             <button type="button" class="browse-btn" @click="browseDirectory">
               <el-icon><Folder /></el-icon>
-              <span>浏览</span>
+              <span>{{ $t('@67CE7:浏览') }}</span>
             </button>
           </div>
         </el-form-item>
@@ -313,7 +314,7 @@ async function selectDirectory(dirPath: string) {
           <template #label>
             <div class="form-label">
               <el-icon class="label-icon"><Clock /></el-icon>
-              <span>常用目录</span>
+              <span>{{ $t('@67CE7:常用目录') }}</span>
             </div>
           </template>
           <div class="recent-directories">
@@ -338,7 +339,7 @@ async function selectDirectory(dirPath: string) {
             class="footer-btn cancel-btn"
             @click="isDirectoryDialogVisible = false"
           >
-            取消
+            {{ $t('@67CE7:取消') }}
           </button>
           <button
             type="button"
@@ -355,7 +356,7 @@ async function selectDirectory(dirPath: string) {
                 />
               </svg>
             </el-icon>
-            <span>切换</span>
+            <span>{{ $t('@67CE7:切换') }}</span>
           </button>
         </div>
       </div>

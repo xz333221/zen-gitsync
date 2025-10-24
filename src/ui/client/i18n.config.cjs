@@ -47,6 +47,6 @@ module.exports = {
     disabled: 'i18n-disabled'
   },
   
-  // 并发翻译数量
-  threads: 8
+  // 并发翻译数量（降低避免触发百度API的QPS限制）
+  threads: 4
 }

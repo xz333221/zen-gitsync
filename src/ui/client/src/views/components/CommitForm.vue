@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading, Box, Setting, Document } from "@element-plus/icons-vue";
@@ -80,16 +81,16 @@ const autoQuickPushOnEnter = ref(false);
 // 添加控制正文和页脚显示的状态变量
 const showAdvancedFields = ref(false);
 
-// 提交类型选项
-const commitTypeOptions = [
-  { value: "feat", label: "feat: 新功能" },
-  { value: "fix", label: "fix: 修复bug" },
-  { value: "docs", label: "docs: 文档修改" },
-  { value: "style", label: "style: 样式修改" },
-  { value: "refactor", label: "refactor: 代码重构" },
-  { value: "test", label: "test: 测试代码" },
-  { value: "chore", label: "chore: 构建/工具修改" },
-];
+// 提交类型选项（支持国际化）
+const commitTypeOptions = computed(() => [
+  { value: "feat", label: `feat: ${$t('@76872:新功能')}` },
+  { value: "fix", label: `fix: ${$t('@76872:修复bug')}` },
+  { value: "docs", label: `docs: ${$t('@76872:文档修改')}` },
+  { value: "style", label: `style: ${$t('@76872:样式修改')}` },
+  { value: "refactor", label: `refactor: ${$t('@76872:代码重构')}` },
+  { value: "test", label: `test: ${$t('@76872:测试代码')}` },
+  { value: "chore", label: `chore: ${$t('@76872:构建/工具修改')}` },
+]);
 
 // 添加stash相关的状态
 const isStashDialogVisible = ref(false);
@@ -125,9 +126,9 @@ async function openConfigEditor() {
     let warningMessage = '';
     if (formatResult.success) {
       if (!formatResult.exists) {
-        warningMessage = '系统配置文件不存在，将使用默认配置。';
+        warningMessage = $t('@76872:系统配置文件不存在，将使用默认配置。');
       } else if (!formatResult.isValidJson) {
-        warningMessage = `系统配置文件格式有误：${formatResult.error}\n编辑后保存可能会覆盖原文件内容。`;
+        warningMessage = `${$t('@76872:系统配置文件格式有误：')}${formatResult.error}\n编辑后保存可能会覆盖原文件内容。`;
       }
     }
     
@@ -144,7 +145,7 @@ async function openConfigEditor() {
     
     configEditorVisible.value = true;
   } catch (e) {
-    ElMessage.error('加载配置失败');
+    ElMessage.error($t('@76872:加载配置失败'));
   }
 }
 
@@ -156,7 +157,7 @@ async function saveFullConfig() {
     try {
       parsed = JSON.parse(configEditorText.value);
     } catch (e: any) {
-      ElMessage.error(`JSON 解析失败: ${e.message || e}`);
+      ElMessage.error(`${$t('@76872:JSON 解析失败: ')}${e.message || e}`);
       return;
     }
 
@@ -167,7 +168,7 @@ async function saveFullConfig() {
     });
     const result = await resp.json();
     if (!result.success) {
-      throw new Error(result.error || '保存失败');
+      throw new Error(result.error || $t('@76872:保存失败'));
     }
     // 重新加载配置
     await configStore.loadConfig(true);
@@ -192,10 +193,10 @@ async function saveFullConfig() {
         messageTemplates.value = [...configStore.messageTemplates];
       }
     } catch {}
-    ElMessage.success('配置已保存');
+    ElMessage.success($t('@76872:配置已保存'));
     configEditorVisible.value = false;
   } catch (err: any) {
-    ElMessage.error(`保存配置失败: ${err.message || err}`);
+    ElMessage.error(`${$t('@76872:保存配置失败: ')}${err.message || err}`);
   } finally {
     configEditorSaving.value = false;
   }
@@ -207,11 +208,11 @@ async function openSystemConfigFile() {
     const resp = await fetch('/api/config/open-file', { method: 'POST' });
     const result = await resp.json();
     if (!resp.ok || !result?.success) {
-      throw new Error(result?.error || '打开失败');
+      throw new Error(result?.error || $t('@76872:打开失败'));
     }
-    ElMessage.success('已用系统程序打开配置文件');
+    ElMessage.success($t('@76872:已用系统程序打开配置文件'));
   } catch (err: any) {
-    ElMessage.error(`打开配置文件失败: ${err?.message || err}`);
+    ElMessage.error(`${$t('@76872:打开配置文件失败: ')}${err?.message || err}`);
   }
 }
 
@@ -257,11 +258,11 @@ async function applyStash(stashId: string, pop = false) {
 
 async function confirmDropStash(stashId: string) {
   ElMessageBox.confirm(
-    '确定要删除此储藏吗？此操作不可恢复。',
-    '删除储藏',
+    $t('@76872:确定要删除此储藏吗？此操作不可恢复。'),
+    $t('@76872:删除储藏'),
     {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+      confirmButtonText: $t('@76872:确定'),
+      cancelButtonText: $t('@76872:取消'),
       type: 'warning'
     }
   )
@@ -276,11 +277,11 @@ async function confirmDropStash(stashId: string) {
 
 async function confirmClearAllStashes() {
   ElMessageBox.confirm(
-    '确定要清空所有储藏吗？此操作不可恢复。',
-    '清空所有储藏',
+    $t('@76872:确定要清空所有储藏吗？此操作不可恢复。'),
+    $t('@76872:清空所有储藏'),
     {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+      confirmButtonText: $t('@76872:确定'),
+      cancelButtonText: $t('@76872:取消'),
       type: 'warning'
     }
   )
@@ -307,7 +308,7 @@ async function viewStashDetail(stash: { id: string; description: string }) {
   try {
     // 确保 stash ID 有效
     if (!stash.id || stash.id.length < 7) {
-      stashDiff.value = '无效的stash ID';
+      stashDiff.value = $t('@76872:无效的stash ID');
       isLoadingStashDetail.value = false;
       return;
     }
@@ -323,13 +324,13 @@ async function viewStashDetail(stash: { id: string; description: string }) {
       if (stashFiles.value.length > 0) {
         await getStashFileDiff(stash.id, stashFiles.value[0]);
       } else {
-        stashDiff.value = '该stash没有变更文件';
+        stashDiff.value = $t('@76872:该stash没有变更文件');
       }
     } else {
-      stashDiff.value = `获取文件列表失败: ${filesData.error || '未知错误'}`;
+      stashDiff.value = `${$t('@76872:获取文件列表失败: ')}${filesData.error || $t('@76872:未知错误')}`;
     }
   } catch (error) {
-    stashDiff.value = `获取stash详情失败: ${(error as Error).message}`;
+    stashDiff.value = `${$t('@76872:获取stash详情失败: ')}${(error as Error).message}`;
   } finally {
     isLoadingStashDetail.value = false;
   }
@@ -347,12 +348,12 @@ async function getStashFileDiff(stashId: string, filePath: string) {
     const diffData = await diffResponse.json();
 
     if (diffData.success) {
-      stashDiff.value = diffData.diff || '没有变更内容';
+      stashDiff.value = diffData.diff || $t('@76872:没有变更内容');
     } else {
-      stashDiff.value = `获取差异失败: ${diffData.error || '未知错误'}`;
+      stashDiff.value = `${$t('@76872:获取差异失败: ')}${diffData.error || $t('@76872:未知错误')}`;
     }
   } catch (error) {
-    stashDiff.value = `获取差异失败: ${(error as Error).message}`;
+    stashDiff.value = `${$t('@76872:获取差异失败: ')}${(error as Error).message}`;
   } finally {
     isLoadingStashDetail.value = false;
   }
@@ -384,10 +385,10 @@ async function handleOpenFile(filePath: string, context: string) {
     if (result.success) {
       ElMessage.success(result.message);
     } else {
-      ElMessage.error(result.error || '打开文件失败');
+      ElMessage.error(result.error || $t('@76872:打开文件失败'));
     }
   } catch (error) {
-    ElMessage.error(`打开文件失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@76872:打开文件失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -410,10 +411,10 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
     if (result.success) {
       ElMessage.success(result.message);
     } else {
-      ElMessage.error(result.error || '用VSCode打开文件失败');
+      ElMessage.error(result.error || $t('@76872:用VSCode打开文件失败'));
     }
   } catch (error) {
-    ElMessage.error(`用VSCode打开文件失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@76872:用VSCode打开文件失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -476,14 +477,14 @@ const hasUserCommitMessage = computed(() => {
 
 // 占位符：普通提交输入框，根据是否开启回车自动一键提交显示提示
 const commitMessagePlaceholder = computed(() => {
-  const base = `输入提交信息 (默认: ${defaultCommitMessage.value})`;
-  return autoQuickPushOnEnter.value ? `${base}（按回车一键推送）` : base;
+  const base = `${$t('@76872:输入提交信息 (默认: ')}${defaultCommitMessage.value})`;
+  return autoQuickPushOnEnter.value ? `${base}${$t('@76872:（按回车一键推送）')}` : base;
 });
 
 // 占位符：标准化提交的简短描述输入框，根据是否开启回车自动一键提交显示提示
 const descriptionPlaceholder = computed(() => {
-  const base = '简短描述（必填）';
-  return autoQuickPushOnEnter.value ? '简短描述（必填，按回车一键推送）' : base;
+  const base = $t('@76872:简短描述（必填）');
+  return autoQuickPushOnEnter.value ? $t('@76872:简短描述（必填，按回车一键推送）') : base;
 });
 
 // 为stash组件准备文件列表
@@ -511,7 +512,7 @@ const gitCommandPreview = computed(() => {
 function updateFromConfig() {
   const config = configStore.config;
   if (config) {
-    placeholder.value = `输入提交信息 (默认: ${config.defaultCommitMessage})`;
+    placeholder.value = `${$t('@76872:输入提交信息 (默认: ')}${config.defaultCommitMessage})`;
     defaultCommitMessage.value = config.defaultCommitMessage || "";
 
     // 加载描述模板
@@ -562,8 +563,8 @@ function openScopeSettings() {
 // 显示推送成功提示（保留兼容性）
 function showPushSuccessIndicator() {
   showSuccess({
-    text: '操作成功！',
-    description: '已完成操作',
+    text: $t('@76872:操作成功！'),
+    description: $t('@76872:已完成操作'),
     duration: 2000
   });
 }
@@ -617,7 +618,7 @@ async function addAndCommit() {
     gitStore.fetchLog();
   } catch (error) {
     ElMessage({
-      message: `暂存并提交失败: ${(error as Error).message}`,
+      message: `${$t('@76872:暂存并提交失败: ')}${(error as Error).message}`,
       type: "error",
     });
   }
@@ -627,11 +628,11 @@ async function addAndCommit() {
 async function resetToRemote() {
   try {
     await ElMessageBox.confirm(
-      `确定要重置当前分支 "${gitStore.currentBranch}" 到远程状态吗？这将丢失所有未推送的提交和本地更改。`,
-      '重置到远程分支',
+      `${$t('@76872:确定要重置当前分支 "')}${gitStore.currentBranch}${$t('@76872:" 到远程状态吗？这将丢失所有未推送的提交和本地更改。')}`,
+      $t('@76872:重置到远程分支'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: $t('@76872:确定'),
+        cancelButtonText: $t('@76872:取消'),
         type: 'warning'
       }
     );
@@ -647,7 +648,7 @@ async function resetToRemote() {
     // 用户取消操作，不显示错误
     if ((error as any) !== 'cancel') {
       ElMessage({
-        message: `重置到远程分支失败: ${(error as Error).message}`,
+        message: `${$t('@76872:重置到远程分支失败: ')}${(error as Error).message}`,
         type: 'error'
       });
     }
@@ -666,7 +667,7 @@ function clearCommitFields() {
 function handleQuickPushBefore() {
   // 显示全局loading，初始显示暂存文件
   showLoading({
-    text: '正在暂存文件...',
+    text: $t('@76872:正在暂存文件...'),
     showProgress: false
   });
 }
@@ -684,7 +685,7 @@ function handleQuickPushAfter(success: boolean) {
       setTimeout(async () => {
         try {
           // 分支状态刷新完成，不再显示成功提示
-          console.log('推送成功，状态已更新');
+          console.log($t('@76872:推送成功，状态已更新'));
         } catch (error) {
           console.error('一键推送后处理失败:', error);
         } finally {
@@ -815,29 +816,29 @@ async function setDefaultFromTemplate(template: string) {
   try {
     const success = await configStore.saveDefaultMessage(template);
     if (success) {
-      ElMessage.success('默认提交信息设置成功');
+      ElMessage.success($t('@76872:默认提交信息设置成功'));
     }
   } catch (error) {
-    ElMessage.error(`设置默认提交信息失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@76872:设置默认提交信息失败: ')}${(error as Error).message}`);
   }
 }
 
 // 监听GitStore状态变化，更新loading文字
 watch(() => gitStore.isAddingFiles, (isAdding) => {
   if (isAdding && loadingState.visible) {
-    setLoadingText('正在暂存文件...');
+    setLoadingText($t('@76872:正在暂存文件...'));
   }
 });
 
 watch(() => gitStore.isCommiting, (isCommiting) => {
   if (isCommiting && loadingState.visible) {
-    setLoadingText('正在提交更改...');
+    setLoadingText($t('@76872:正在提交更改...'));
   }
 });
 
 watch(() => gitStore.isPushing, (isPushing) => {
   if (isPushing && loadingState.visible) {
-    setLoadingText('正在推送...');
+    setLoadingText($t('@76872:正在推送...'));
   }
 });
 
@@ -922,7 +923,7 @@ const filteredBranches = computed(() => {
 async function handleMergeBranch() {
   if (!selectedBranch.value) {
     ElMessage({
-      message: '请选择要合并的分支',
+      message: $t('@76872:请选择要合并的分支'),
       type: 'warning'
     });
     return;
@@ -1043,7 +1044,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
   <div class="card app-card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header app-card-header">
       <div class="header-left">
-        <h2>提交更改</h2>
+        <h2>{{ $t('@76872:提交更改') }}</h2>
         <el-button
           v-if="gitStore.userName !== '' && gitStore.userEmail !== ''"
           :icon="Setting"
@@ -1071,12 +1072,12 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
         <!-- 如果没有配置Git用户信息，显示提示 -->
         <div v-if="gitStore.userName === '' || gitStore.userEmail === ''" class="git-config-warning">
           <el-alert
-            title="Git用户信息未配置"
+            :title="$t('@76872:Git用户信息未配置')"
             type="warning"
             :closable="false"
             show-icon
           >
-            <p>您需要配置Git用户名和邮箱才能提交代码。请使用以下命令配置：</p>
+            <p>{{ $t('@76872:您需要配置Git用户名和邮箱才能提交代码。请使用以下命令配置：') }}</p>
             <pre class="config-command">git config --global user.name "Your Name"
 git config --global user.email "your.email@example.com"</pre>
           </el-alert>
@@ -1090,7 +1091,7 @@ git config --global user.email "your.email@example.com"</pre>
 
             <GitCommandPreview 
               :command="gitCommandPreview"
-              title="提交命令预览："
+              :title="$t('@76872:提交命令预览：')"
               placeholder="git commit -m &quot;<提交信息>&quot;"
             />
 
@@ -1115,7 +1116,7 @@ git config --global user.email "your.email@example.com"</pre>
             <div v-else class="standard-commit-form">
               <div class="standard-commit-header">
                 <div class="type-scope-container">
-                  <el-select v-model="commitType" placeholder="提交类型" class="type-select" clearable>
+                  <el-select v-model="commitType" :placeholder="$t('@76872:提交类型')" class="type-select" clearable>
                     <el-option v-for="item in commitTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
                   </el-select>
 
@@ -1123,7 +1124,7 @@ git config --global user.email "your.email@example.com"</pre>
                     <el-autocomplete
                       v-model="commitScope"
                       :fetch-suggestions="queryScopeTemplates"
-                      placeholder="作用域（可选）"
+                      :placeholder="$t('@76872:作用域（可选）')"
                       class="scope-input"
                       clearable
                       @select="handleScopeSelect"
@@ -1147,7 +1148,7 @@ git config --global user.email "your.email@example.com"</pre>
 
               <!-- 添加展开/收起高级选项的控制按钮 -->
               <div class="advanced-options-toggle" @click="showAdvancedFields = !showAdvancedFields">
-                <span>{{ showAdvancedFields ? '收起' : '正文及页脚' }}</span>
+                <span>{{ showAdvancedFields ? $t('@76872:收起') : $t('@76872:正文及页脚') }}</span>
                 <el-icon class="toggle-icon" :class="{ 'is-active': showAdvancedFields }">
                   <arrow-down />
                 </el-icon>
@@ -1155,10 +1156,10 @@ git config --global user.email "your.email@example.com"</pre>
 
               <!-- 使用过渡效果包装高级字段 -->
               <div v-show="showAdvancedFields" class="advanced-fields">
-                <el-input v-model="commitBody" type="textarea" :rows="4" placeholder="正文（可选）：详细描述本次提交的内容和原因" class="body-input"
+                <el-input v-model="commitBody" type="textarea" :rows="4" :placeholder="$t('@76872:正文（可选）：详细描述本次提交的内容和原因')" class="body-input"
                   clearable />
 
-                <el-input v-model="commitFooter" placeholder="页脚（可选）：如 Closes #123" class="footer-input" clearable />
+                <el-input v-model="commitFooter" :placeholder="$t('@76872:页脚（可选）：如 Closes #123')" class="footer-input" clearable />
               </div>
             </div>
             
@@ -1173,7 +1174,7 @@ git config --global user.email "your.email@example.com"</pre>
     <!-- Git操作抽屉 -->
       <el-drawer
         v-model="gitOperationsDrawerVisible"
-        title="Git 操作"
+        :title="$t('@76872:Git 操作')"
         direction="rtl"
         size="362px"
         :with-header="true"
@@ -1186,7 +1187,7 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="operations-wrapper">
               <!-- 基础操作 -->
               <div class="action-group">
-                <div class="group-title">基础操作</div>
+                <div class="group-title">{{ $t('@76872:基础操作') }}</div>
                 <div class="group-buttons">
                   <StageButton
                     @click="() => {}"
@@ -1210,7 +1211,7 @@ git config --global user.email "your.email@example.com"</pre>
                     from="drawer"
                   />
                   
-                  <el-tooltip :content="needsPull ? `拉取${gitStore.branchBehind}个远程提交` : 'git pull'" placement="top">
+                  <el-tooltip :content="needsPull ? `${$t('@76872:拉取')}${gitStore.branchBehind}${$t('@76872:个远程提交')}` : 'git pull'" placement="top">
                     <el-button 
                       type="primary"
                       :icon="Download"
@@ -1220,7 +1221,7 @@ git config --global user.email "your.email@example.com"</pre>
                       class="action-button"
                       :style="gitStore.hasUpstream ? {color: 'white', backgroundColor: '#1e90ff', borderColor: '#1e90ff'} : {}"
                     >
-                      拉取
+                      {{ $t('@76872:拉取') }}
                       <span v-if="needsPull">({{gitStore.branchBehind}})</span>
                     </el-button>
                   </el-tooltip>
@@ -1234,7 +1235,7 @@ git config --global user.email "your.email@example.com"</pre>
                       class="action-button"
                       style="color: white; background-color: #1e90ff; border-color: #1e90ff;"
                     >
-                      获取所有远程分支
+                      {{ $t('@76872:获取所有远程分支') }}
                     </el-button>
                   </el-tooltip>
                 </div>
@@ -1244,7 +1245,7 @@ git config --global user.email "your.email@example.com"</pre>
 
               <!-- 组合操作 -->
               <div class="action-group">
-                <div class="group-title">组合操作</div>
+                <div class="group-title">{{ $t('@76872:组合操作') }}</div>
                 <div class="group-buttons">
                   <el-tooltip content="git add + git commit" placement="top">
                     <el-button 
@@ -1255,7 +1256,7 @@ git config --global user.email "your.email@example.com"</pre>
                       :disabled="!hasUnstagedChanges || !hasUserCommitMessage"
                       class="action-button"
                     >
-                      暂存并提交
+                      {{ $t('@76872:暂存并提交') }}
                     </el-button>
                   </el-tooltip>
 
@@ -1274,9 +1275,9 @@ git config --global user.email "your.email@example.com"</pre>
 
             <!-- 重置操作 -->
             <div class="action-group reset-group">
-              <div class="group-title">重置操作</div>
+              <div class="group-title">{{ $t('@76872:重置操作') }}</div>
               <div class="group-buttons">
-                <el-tooltip :content="canReset ? `撤销${stagedFilesCount}个已暂存文件` : 'git reset HEAD'" placement="top">
+                <el-tooltip :content="canReset ? `${$t('@76872:撤销')}${stagedFilesCount}${$t('@76872:个已暂存文件')}` : 'git reset HEAD'" placement="top">
                   <el-button 
                     type="warning"
                     :icon="RefreshRight"
@@ -1285,7 +1286,7 @@ git config --global user.email "your.email@example.com"</pre>
                     :disabled="!canReset"
                     class="action-button reset-button"
                   >
-                    重置暂存区
+                    {{ $t('@76872:重置暂存区') }}
                     <span v-if="stagedFilesCount > 0">({{stagedFilesCount}})</span>
                   </el-button>
                 </el-tooltip>
@@ -1299,7 +1300,7 @@ git config --global user.email "your.email@example.com"</pre>
                     :disabled="!canResetToRemote"
                     class="action-button danger-button"
                   >
-                    重置到远程
+                    {{ $t('@76872:重置到远程') }}
                   </el-button>
                 </el-tooltip>
               </div>
@@ -1307,10 +1308,10 @@ git config --global user.email "your.email@example.com"</pre>
             
             <!-- 添加单独的分支操作组 -->
             <div class="action-group branch-group">
-              <div class="group-title">分支操作</div>
+              <div class="group-title">{{ $t('@76872:分支操作') }}</div>
               <div class="group-buttons">
                 <!-- 合并分支按钮 -->
-                <el-tooltip content="合并其他分支到当前分支" placement="top">
+                <el-tooltip :content="$t('@76872:合并其他分支到当前分支')" placement="top">
                   <el-button 
                     type="primary"
                     :icon="Share"
@@ -1318,7 +1319,7 @@ git config --global user.email "your.email@example.com"</pre>
                     :loading="gitStore.isGitMerging"
                     class="action-button merge-button"
                   >
-                    合并分支
+                    {{ $t('@76872:合并分支') }}
                   </el-button>
                 </el-tooltip>
               </div>
@@ -1326,9 +1327,9 @@ git config --global user.email "your.email@example.com"</pre>
 
             <!-- 储藏操作 -->
             <div class="action-group">
-                <div class="group-title">储藏操作</div>
+                <div class="group-title">{{ $t('@76872:储藏操作') }}</div>
                 <div class="group-buttons">
-                  <el-tooltip content="将工作区更改储藏起来" placement="top">
+                  <el-tooltip :content="$t('@76872:将工作区更改储藏起来')" placement="top">
                     <el-button 
                       type="warning" 
                       @click="openStashDialog" 
@@ -1336,17 +1337,17 @@ git config --global user.email "your.email@example.com"</pre>
                       :disabled="!anyChangesIncludingLocked"
                       class="action-button"
                     >
-                      储藏更改
+                      {{ $t('@76872:储藏更改') }}
                     </el-button>
                   </el-tooltip>
 
-                  <el-tooltip content="查看和管理所有储藏记录" placement="top">
+                  <el-tooltip :content="$t('@76872:查看和管理所有储藏记录')" placement="top">
                     <el-button 
                       type="info"
                       @click="openStashListDialog"
                       class="action-button"
                     >
-                      储藏列表
+                      {{ $t('@76872:储藏列表') }}
                     </el-button>
                   </el-tooltip>
                 </div>
@@ -1358,7 +1359,7 @@ git config --global user.email "your.email@example.com"</pre>
       <!-- 配置JSON编辑弹窗 -->
       <CommonDialog
         v-model="configEditorVisible"
-        title="编辑配置 JSON"
+        :title="$t('@76872:编辑配置 JSON')"
         size="large"
         height-mode="fixed"
         custom-class="config-editor-dialog"
@@ -1368,10 +1369,10 @@ git config --global user.email "your.email@example.com"</pre>
           <div class="editor-header">
             <div class="editor-info">
               <el-icon class="info-icon"><Edit /></el-icon>
-              <span class="info-text">编辑当前项目的配置文件</span>
+              <span class="info-text">{{ $t('@76872:编辑当前项目的配置文件') }}</span>
             </div>
             <div class="editor-tips">
-              <el-tag size="small" type="info">支持JSON格式</el-tag>
+              <el-tag size="small" type="info">{{ $t('@76872:支持JSON格式') }}</el-tag>
             </div>
           </div>
           
@@ -1382,7 +1383,7 @@ git config --global user.email "your.email@example.com"</pre>
               type="textarea"
               spellcheck="false"
               autocomplete="off"
-              placeholder="在此编辑当前项目配置的 JSON..."
+              :placeholder="$t('@76872:在此编辑当前项目配置的 JSON...')"
               class="json-editor"
             />
           </div>
@@ -1395,11 +1396,11 @@ git config --global user.email "your.email@example.com"</pre>
                 @click="openSystemConfigFile"
                 class="system-config-btn"
               >
-                打开系统配置文件
+                {{ $t('@76872:打开系统配置文件') }}
               </el-button>
             </div>
             <div class="footer-right">
-              <el-button @click="configEditorVisible = false">取消</el-button>
+              <el-button @click="configEditorVisible = false">{{ $t('@76872:取消') }}</el-button>
               <el-button 
                 type="primary" 
                 :loading="configEditorSaving" 
@@ -1407,7 +1408,7 @@ git config --global user.email "your.email@example.com"</pre>
                 @click="saveFullConfig"
                 class="save-btn"
               >
-                保存配置
+                {{ $t('@76872:保存配置') }}
               </el-button>
             </div>
           </div>
@@ -1416,7 +1417,7 @@ git config --global user.email "your.email@example.com"</pre>
       <!-- 配置文件格式警告弹窗 -->
       <el-dialog
         v-model="configWarningVisible"
-        title="配置文件格式提示"
+        :title="$t('@76872:配置文件格式提示')"
         width="500px"
         :close-on-click-modal="false"
         :close-on-press-escape="false"
@@ -1430,9 +1431,9 @@ git config --global user.email "your.email@example.com"</pre>
         </div>
         <template #footer>
           <span class="dialog-footer">
-            <el-button @click="handleConfigWarningAction('cancel')">取消</el-button>
-            <el-button type="info" @click="handleConfigWarningAction('open')">打开系统配置文件</el-button>
-            <el-button type="primary" @click="handleConfigWarningAction('continue')">继续编辑</el-button>
+            <el-button @click="handleConfigWarningAction('cancel')">{{ $t('@76872:取消') }}</el-button>
+            <el-button type="info" @click="handleConfigWarningAction('open')">{{ $t('@76872:打开系统配置文件') }}</el-button>
+            <el-button type="primary" @click="handleConfigWarningAction('continue')">{{ $t('@76872:继续编辑') }}</el-button>
           </span>
         </template>
       </el-dialog>
@@ -1441,10 +1442,10 @@ git config --global user.email "your.email@example.com"</pre>
       <TemplateManager
         v-model:visible="descriptionDialogVisible"
         type="description"
-        title="简短描述模板设置"
-        placeholder="输入新模板内容"
-        edit-placeholder="编辑模板内容"
-        empty-description="暂无保存的模板"
+        :title="$t('@76872:简短描述模板设置')"
+        :placeholder="$t('@76872:输入新模板内容')"
+        :edit-placeholder="$t('@76872:编辑模板内容')"
+        :empty-description="$t('@76872:暂无保存的模板')"
         @use-template="useTemplate"
       />
 
@@ -1453,10 +1454,10 @@ git config --global user.email "your.email@example.com"</pre>
       <TemplateManager
         v-model:visible="scopeDialogVisible"
         type="scope"
-        title="作用域模板设置"
-        placeholder="输入新作用域模板"
-        edit-placeholder="编辑作用域模板内容"
-        empty-description="暂无保存的作用域"
+        :title="$t('@76872:作用域模板设置')"
+        :placeholder="$t('@76872:输入新作用域模板')"
+        :edit-placeholder="$t('@76872:编辑作用域模板内容')"
+        :empty-description="$t('@76872:暂无保存的作用域')"
         @use-template="useScopeTemplate"
       />
 
@@ -1464,10 +1465,10 @@ git config --global user.email "your.email@example.com"</pre>
       <TemplateManager
         v-model:visible="defaultMessageDialogVisible"
         type="message"
-        title="默认提交信息设置"
-        placeholder="输入新模板内容"
-        edit-placeholder="编辑模板内容"
-        empty-description="暂无保存的模板"
+        :title="$t('@76872:默认提交信息设置')"
+        :placeholder="$t('@76872:输入新模板内容')"
+        :edit-placeholder="$t('@76872:编辑模板内容')"
+        :empty-description="$t('@76872:暂无保存的模板')"
         :show-default-section="true"
         :show-help-text="true"
         @use-template="useMessageTemplate"
@@ -1477,12 +1478,12 @@ git config --global user.email "your.email@example.com"</pre>
       <!-- Stash弹窗：创建储藏 -->
       <CommonDialog
         v-model="isStashDialogVisible"
-        title="储藏更改 (Git Stash)"
+        :title="$t('@76872:储藏更改 (Git Stash)')"
         size="medium"
         :close-on-click-modal="false"
         show-footer
-        confirm-text="储藏"
-        cancel-text="取消"
+        :confirm-text="$t('@76872:储藏')"
+        :cancel-text="$t('@76872:取消')"
         :confirm-loading="gitStore.isSavingStash"
         custom-class="stash-dialog"
         @confirm="saveStash"
@@ -1494,16 +1495,16 @@ git config --global user.email "your.email@example.com"</pre>
               <el-icon><Box /></el-icon>
             </div>
             <div class="info-content">
-              <h4>储藏工作区更改</h4>
-              <p>将当前工作区的更改临时保存，稍后可以重新应用到任何分支</p>
+              <h4>{{ $t('@76872:储藏工作区更改') }}</h4>
+              <p>{{ $t('@76872:将当前工作区的更改临时保存，稍后可以重新应用到任何分支') }}</p>
             </div>
           </div>
           
           <el-form label-position="top" class="stash-form">
-            <el-form-item label="储藏说明">
+            <el-form-item :label="$t('@76872:储藏说明')">
               <el-input 
                 v-model="stashMessage" 
-                placeholder="为这次储藏添加描述信息（可选）"
+                :placeholder="$t('@76872:为这次储藏添加描述信息（可选）')"
                 clearable
                 :rows="2"
                 type="textarea"
@@ -1517,22 +1518,22 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="stash-options">
               <h5 class="options-title">
                 <el-icon><Setting /></el-icon>
-                储藏选项
+                {{ $t('@76872:储藏选项') }}
               </h5>
               
               <div class="option-item">
                 <el-checkbox v-model="includeUntracked" size="large">
-                  <span class="option-label">包含未跟踪文件</span>
+                  <span class="option-label">{{ $t('@76872:包含未跟踪文件') }}</span>
                 </el-checkbox>
-                <p class="option-desc">同时储藏新建但未添加到Git的文件 (--include-untracked)</p>
+                <p class="option-desc">{{ $t('@76872:同时储藏新建但未添加到Git的文件 (--include-untracked)') }}</p>
               </div>
 
               <div class="option-item">
                 <el-checkbox v-model="excludeLocked" :disabled="allChangesAreLocked" size="large">
-                  <span class="option-label">排除锁定文件</span>
+                  <span class="option-label">{{ $t('@76872:排除锁定文件') }}</span>
                 </el-checkbox>
                 <p class="option-desc" :class="{ 'disabled': allChangesAreLocked }">
-                  不储藏被锁定的文件，保持其当前状态
+                  {{ $t('@76872:不储藏被锁定的文件，保持其当前状态') }}
                 </p>
               </div>
             </div>
@@ -1541,14 +1542,14 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="stash-preview" v-if="gitStore.status.staged.length > 0 || gitStore.status.unstaged.length > 0">
               <h5 class="preview-title">
                 <el-icon><Document /></el-icon>
-                将要储藏的文件
+                {{ $t('@76872:将要储藏的文件') }}
               </h5>
               <div class="file-count-info">
                 <el-tag type="success" v-if="gitStore.status.staged.length > 0">
-                  已暂存: {{ gitStore.status.staged.length }} 个文件
+                  {{ $t('@76872:已暂存: ') }}{{ gitStore.status.staged.length }} {{ $t('@76872:个文件') }}
                 </el-tag>
                 <el-tag type="warning" v-if="gitStore.status.unstaged.length > 0">
-                  未暂存: {{ gitStore.status.unstaged.length }} 个文件
+                  {{ $t('@76872:未暂存: ') }}{{ gitStore.status.unstaged.length }} {{ $t('@76872:个文件') }}
                 </el-tag>
               </div>
             </div>
@@ -1558,28 +1559,28 @@ git config --global user.email "your.email@example.com"</pre>
       
       <!-- 合并分支对话框 -->
       <el-dialog 
-        title="合并分支" 
+        :title="$t('@76872:合并分支')" 
         v-model="isMergeDialogVisible" 
         width="500px"
         :close-on-click-modal="false"
         class="merge-dialog"
       >
         <div class="merge-dialog-content">
-          <p class="merge-intro">选择要合并到当前分支 ({{ gitStore.currentBranch }}) 的分支:</p>
+          <p class="merge-intro">{{ $t('@76872:选择要合并到当前分支 (') }}{{ gitStore.currentBranch }}{{ $t('@76872:) 的分支:') }}</p>
           
           <el-form label-position="top">
-            <el-form-item label="分支类型">
+            <el-form-item :label="$t('@76872:分支类型')">
               <el-radio-group v-model="branchTypeFilter" size="small">
-                <el-radio-button label="all">所有分支</el-radio-button>
-                <el-radio-button label="local">本地分支</el-radio-button>
-                <el-radio-button label="remote">远程分支</el-radio-button>
+                <el-radio-button label="all">{{ $t('@76872:所有分支') }}</el-radio-button>
+                <el-radio-button label="local">{{ $t('@76872:本地分支') }}</el-radio-button>
+                <el-radio-button label="remote">{{ $t('@76872:远程分支') }}</el-radio-button>
               </el-radio-group>
             </el-form-item>
             
-            <el-form-item label="选择分支">
+            <el-form-item :label="$t('@76872:选择分支')">
               <el-select 
                 v-model="selectedBranch" 
-                placeholder="选择要合并的分支" 
+                :placeholder="$t('@76872:选择要合并的分支')" 
                 style="width: 100%"
                 filterable
               >
@@ -1592,34 +1593,34 @@ git config --global user.email "your.email@example.com"</pre>
               </el-select>
             </el-form-item>
             
-            <el-form-item label="合并选项">
+            <el-form-item :label="$t('@76872:合并选项')">
               <div class="merge-options">
                 <el-checkbox v-model="mergeOptions.noFf">
-                  <el-tooltip content="创建合并提交，即使可以使用快进合并" placement="top">
-                    <span>禁用快进合并 (--no-ff)</span>
+                  <el-tooltip :content="$t('@76872:创建合并提交，即使可以使用快进合并')" placement="top">
+                    <span>{{ $t('@76872:禁用快进合并 (--no-ff)') }}</span>
                   </el-tooltip>
                 </el-checkbox>
                 
                 <el-checkbox v-model="mergeOptions.squash">
-                  <el-tooltip content="将多个提交压缩为一个提交" placement="top">
-                    <span>压缩提交 (--squash)</span>
+                  <el-tooltip :content="$t('@76872:将多个提交压缩为一个提交')" placement="top">
+                    <span>{{ $t('@76872:压缩提交 (--squash)') }}</span>
                   </el-tooltip>
                 </el-checkbox>
                 
                 <el-checkbox v-model="mergeOptions.noCommit">
-                  <el-tooltip content="执行合并但不自动创建提交" placement="top">
-                    <span>不自动提交 (--no-commit)</span>
+                  <el-tooltip :content="$t('@76872:执行合并但不自动创建提交')" placement="top">
+                    <span>{{ $t('@76872:不自动提交 (--no-commit)') }}</span>
                   </el-tooltip>
                 </el-checkbox>
               </div>
             </el-form-item>
             
-            <el-form-item label="合并提交信息 (可选)" v-if="mergeOptions.noFf && !mergeOptions.noCommit">
+            <el-form-item :label="$t('@76872:合并提交信息 (可选)')" v-if="mergeOptions.noFf && !mergeOptions.noCommit">
               <el-input 
                 v-model="mergeOptions.message" 
                 type="textarea" 
                 :rows="3" 
-                placeholder="输入自定义合并提交信息"
+                :placeholder="$t('@76872:输入自定义合并提交信息')"
               />
             </el-form-item>
           </el-form>
@@ -1627,7 +1628,7 @@ git config --global user.email "your.email@example.com"</pre>
         
         <template #footer>
           <div class="dialog-footer">
-            <el-button @click="isMergeDialogVisible = false">取消</el-button>
+            <el-button @click="isMergeDialogVisible = false">{{ $t('@76872:取消') }}</el-button>
             <el-button 
               type="primary" 
               @click="handleMergeBranch" 
@@ -1635,7 +1636,7 @@ git config --global user.email "your.email@example.com"</pre>
               :disabled="!selectedBranch"
               class="merge-confirm-btn"
             >
-              合并
+              {{ $t('@76872:合并') }}
             </el-button>
           </div>
         </template>
@@ -1644,7 +1645,7 @@ git config --global user.email "your.email@example.com"</pre>
       <!-- Stash列表弹窗 -->
       <CommonDialog
         v-model="isStashListDialogVisible"
-        title="储藏列表 (Git Stash)"
+        :title="$t('@76872:储藏列表 (Git Stash)')"
         size="large"
         :show-footer="false"
         custom-class="stash-list-dialog"
@@ -1656,7 +1657,7 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="stat-item">
                 <el-icon class="stat-icon"><Connection /></el-icon>
                 <span class="stat-number">{{ gitStore.stashes.length }}</span>
-                <span class="stat-label">个储藏</span>
+                <span class="stat-label">{{ $t('@76872:个储藏') }}</span>
               </div>
             </div>
             <div class="stash-actions-header" v-if="gitStore.stashes.length > 0">
@@ -1668,7 +1669,7 @@ git config --global user.email "your.email@example.com"</pre>
                 :loading="gitStore.isDroppingStash"
                 class="clear-all-btn"
               >
-                清空所有储藏
+                {{ $t('@76872:清空所有储藏') }}
               </el-button>
             </div>
           </div>
@@ -1677,15 +1678,15 @@ git config --global user.email "your.email@example.com"</pre>
           <div class="stash-list-container" v-loading="gitStore.isLoadingStashes">
             <div v-if="gitStore.stashes.length === 0 && !gitStore.isLoadingStashes" class="empty-state">
               <el-empty
-                description="暂无储藏记录"
+                :description="$t('@76872:暂无储藏记录')"
                 :image-size="120"
               >
                 <template #image>
                   <el-icon class="empty-icon"><Connection /></el-icon>
                 </template>
                 <template #description>
-                  <p class="empty-text">还没有任何储藏记录</p>
-                  <p class="empty-hint">使用 git stash 可以临时保存工作进度</p>
+                  <p class="empty-text">{{ $t('@76872:还没有任何储藏记录') }}</p>
+                  <p class="empty-hint">{{ $t('@76872:使用 git stash 可以临时保存工作进度') }}</p>
                 </template>
               </el-empty>
             </div>
@@ -1703,7 +1704,7 @@ git config --global user.email "your.email@example.com"</pre>
                       <div class="stash-id-badge">
                         <el-icon class="badge-icon"><Connection /></el-icon>
                         <span class="stash-id-text">{{ stash.id }}</span>
-                        <el-tag v-if="index === 0" size="small" type="success" class="latest-tag">最新</el-tag>
+                        <el-tag v-if="index === 0" size="small" type="success" class="latest-tag">{{ $t('@76872:最新') }}</el-tag>
                       </div>
                       <div class="stash-description">
                         <span class="description-text">{{ stash.description }}</span>
@@ -1720,7 +1721,7 @@ git config --global user.email "your.email@example.com"</pre>
                       :loading="isLoadingStashDetail"
                       class="action-btn view-btn"
                     >
-                      查看
+                      {{ $t('@76872:查看') }}
                     </el-button>
                     <el-button
                       size="small"
@@ -1730,7 +1731,7 @@ git config --global user.email "your.email@example.com"</pre>
                       :loading="gitStore.isApplyingStash"
                       class="action-btn apply-btn"
                     >
-                      应用
+                      {{ $t('@76872:应用') }}
                     </el-button>
                     <el-button
                       size="small"
@@ -1740,7 +1741,7 @@ git config --global user.email "your.email@example.com"</pre>
                       :loading="gitStore.isApplyingStash"
                       class="action-btn apply-pop-btn"
                     >
-                      应用并删除
+                      {{ $t('@76872:应用并删除') }}
                     </el-button>
                     <el-button
                       size="small"
@@ -1750,7 +1751,7 @@ git config --global user.email "your.email@example.com"</pre>
                       :loading="gitStore.isDroppingStash"
                       class="action-btn delete-btn"
                     >
-                      删除
+                      {{ $t('@76872:删除') }}
                     </el-button>
                   </div>
                 </div>
@@ -1763,7 +1764,7 @@ git config --global user.email "your.email@example.com"</pre>
       <!-- Stash详情弹窗 -->
       <CommonDialog
         v-model="stashDetailVisible"
-        title="储藏详情"
+        :title="$t('@76872:储藏详情')"
         custom-class="stash-detail-dialog"
         size="extra-large"
         type="flex"
@@ -1778,7 +1779,7 @@ git config --global user.email "your.email@example.com"</pre>
               <code class="stash-id-value">{{ selectedStash.id }}</code>
             </div>
             <div class="stash-description">
-              <span class="info-label">描述:</span>
+              <span class="info-label">{{ $t('@76872:描述:') }}</span>
               <span class="stash-description-value">{{ selectedStash.description }}</span>
             </div>
           </div>
@@ -1790,7 +1791,7 @@ git config --global user.email "your.email@example.com"</pre>
               :diffContent="stashDiff"
               :selectedFile="selectedStashFile"
               context="stash-detail"
-              emptyText="该stash没有变更文件"
+              :emptyText="$t('@76872:该stash没有变更文件')"
               @file-select="handleStashFileSelect"
               @open-file="handleOpenFile"
               @open-with-vscode="handleOpenWithVSCode"
@@ -1803,7 +1804,7 @@ git config --global user.email "your.email@example.com"</pre>
       <transition name="el-fade-in-linear">
         <div v-if="isUpdatingStatus" class="status-updating-indicator">
           <el-icon class="is-loading"><Loading /></el-icon>
-          <span>更新状态中...</span>
+          <span>{{ $t('@76872:更新状态中...') }}</span>
         </div>
       </transition>
 
@@ -1825,7 +1826,7 @@ git config --global user.email "your.email@example.com"</pre>
       <!-- 提交设置弹窗 -->
       <CommonDialog
         v-model="commitSettingsDialogVisible"
-        title="提交设置"
+        :title="$t('@76872:提交设置')"
         size="medium"
         :show-footer="false"
         custom-class="commit-settings-dialog"
@@ -1834,10 +1835,10 @@ git config --global user.email "your.email@example.com"</pre>
           <!-- 提交模式开关 -->
           <OptionSwitchCard
             v-model="isStandardCommit"
-            title="提交模式"
-            tooltip="选择传统或标准化提交格式"
-            active-text="标准化"
-            inactive-text="普通"
+            :title="$t('@76872:提交模式')"
+            :tooltip="$t('@76872:选择传统或标准化提交格式')"
+            :active-text="$t('@76872:标准化')"
+            :inactive-text="$t('@76872:普通')"
             active-color="#409eff"
           >
             <template #icon>
@@ -1848,8 +1849,8 @@ git config --global user.email "your.email@example.com"</pre>
           <!-- Git钩子开关 -->
           <OptionSwitchCard
             v-model="skipHooks"
-            title="跳过钩子检查"
-            tooltip="添加 --no-verify 参数"
+            :title="$t('@76872:跳过钩子检查')"
+            :tooltip="$t('@76872:添加 --no-verify 参数')"
             active-color="#f56c6c"
             icon-class="warning"
           >
@@ -1861,8 +1862,8 @@ git config --global user.email "your.email@example.com"</pre>
           <!-- 回车自动提交开关 -->
           <OptionSwitchCard
             v-model="autoQuickPushOnEnter"
-            title="回车自动提交"
-            tooltip="输入提交信息后按回车直接执行一键推送"
+            :title="$t('@76872:回车自动提交')"
+            :tooltip="$t('@76872:输入提交信息后按回车直接执行一键推送')"
             active-color="#67c23a"
             icon-class="success"
           >

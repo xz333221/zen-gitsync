@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -31,7 +32,7 @@ const showConfirmDialog = () => {
   ).then(() => {
     ElMessage.success(t('common.success'))
   }).catch(() => {
-    ElMessage.info('已取消')
+    ElMessage.info($t('@1D6A1:已取消'))
   })
 }
 
@@ -45,12 +46,12 @@ const handleSubmit = () => {
   <div class="i18n-test-container">
     <el-card class="test-card">
       <template #header>
-        <h2>{{ $t('app.title') }} - 国际化测试</h2>
+        <h2>{{ $t('app.title') }} {{ $t('@1D6A1:- 国际化测试') }}</h2>
       </template>
 
       <!-- 基础翻译测试 -->
       <el-divider content-position="left">
-        <h3>基础翻译测试</h3>
+        <h3>{{ $t('@1D6A1:基础翻译测试') }}</h3>
       </el-divider>
       <div class="test-section">
         <el-descriptions :column="2" border>
@@ -63,7 +64,7 @@ const handleSubmit = () => {
 
       <!-- Git 相关翻译 -->
       <el-divider content-position="left">
-        <h3>Git 模块翻译</h3>
+        <h3>Git {{ $t('@1D6A1:模块翻译') }}</h3>
       </el-divider>
       <div class="test-section">
         <el-space wrap>
@@ -83,7 +84,7 @@ const handleSubmit = () => {
 
       <!-- 动态参数测试 -->
       <el-divider content-position="left">
-        <h3>动态参数测试</h3>
+        <h3>{{ $t('@1D6A1:动态参数测试') }}</h3>
       </el-divider>
       <div class="test-section">
         <el-space direction="vertical" style="width: 100%">
@@ -96,7 +97,7 @@ const handleSubmit = () => {
 
       <!-- 按钮测试 -->
       <el-divider content-position="left">
-        <h3>Element Plus 组件国际化</h3>
+        <h3>Element Plus {{ $t('@1D6A1:组件国际化') }}</h3>
       </el-divider>
       <div class="test-section">
         <el-space wrap>
@@ -113,7 +114,7 @@ const handleSubmit = () => {
 
       <!-- 表单测试 -->
       <el-divider content-position="left">
-        <h3>表单国际化</h3>
+        <h3>{{ $t('@1D6A1:表单国际化') }}</h3>
       </el-divider>
       <div class="test-section">
         <el-form :model="{ message: testMessage }" label-width="120px">
@@ -136,7 +137,7 @@ const handleSubmit = () => {
 
       <!-- 操作翻译 -->
       <el-divider content-position="left">
-        <h3>Git 操作翻译</h3>
+        <h3>Git {{ $t('@1D6A1:操作翻译') }}</h3>
       </el-divider>
       <div class="test-section">
         <el-descriptions :column="1" border>
@@ -157,7 +158,7 @@ const handleSubmit = () => {
 
       <!-- 提交历史 -->
       <el-divider content-position="left">
-        <h3>提交历史翻译</h3>
+        <h3>{{ $t('@1D6A1:提交历史翻译') }}</h3>
       </el-divider>
       <div class="test-section">
         <el-descriptions :column="2" border>
@@ -170,7 +171,7 @@ const handleSubmit = () => {
 
       <!-- 错误信息 -->
       <el-divider content-position="left">
-        <h3>错误信息翻译</h3>
+        <h3>{{ $t('@1D6A1:错误信息翻译') }}</h3>
       </el-divider>
       <div class="test-section">
         <el-alert :title="$t('errors.networkError')" type="error" :closable="false" style="margin-bottom: 8px;" />
@@ -181,14 +182,14 @@ const handleSubmit = () => {
 
       <!-- 脚本中使用测试 -->
       <el-divider content-position="left">
-        <h3>脚本中使用 t() 函数</h3>
+        <h3>{{ $t('@1D6A1:脚本中使用 t() 函数') }}</h3>
       </el-divider>
       <div class="test-section">
         <el-space direction="vertical" style="width: 100%">
-          <p>在 script 中使用: <code>const message = t('git.commitSuccess')</code></p>
-          <p>结果: <el-tag>{{ t('git.commitSuccess') }}</el-tag></p>
-          <p>带参数: <code>t('git.stagedCount', {{ '{' }} count: 10 {{ '}' }})</code></p>
-          <p>结果: <el-tag type="success">{{ t('git.stagedCount', { count: 10 }) }}</el-tag></p>
+          <p>{{ $t('@1D6A1:在 script 中使用: ') }}<code>const message = t('git.commitSuccess')</code></p>
+          <p>{{ $t('@1D6A1:结果: ') }}<el-tag>{{ t('git.commitSuccess') }}</el-tag></p>
+          <p>{{ $t('@1D6A1:带参数: ') }}<code>t('git.stagedCount', {{ '{' }} count: 10 {{ '}' }})</code></p>
+          <p>{{ $t('@1D6A1:结果: ') }}<el-tag type="success">{{ t('git.stagedCount', { count: 10 }) }}</el-tag></p>
         </el-space>
       </div>
 

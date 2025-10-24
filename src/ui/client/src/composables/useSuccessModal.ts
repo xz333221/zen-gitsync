@@ -1,3 +1,4 @@
+import { $t } from '@/lang/static'
 import { reactive } from 'vue'
 
 interface SuccessState {
@@ -8,7 +9,7 @@ interface SuccessState {
 
 const successState = reactive<SuccessState>({
   visible: false,
-  text: '操作成功！',
+  text: $t('@B8591:操作成功！'),
   description: ''
 })
 
@@ -19,7 +20,7 @@ export function useSuccessModal() {
     duration?: number
   }) => {
     successState.visible = true
-    successState.text = options?.text || '操作成功！'
+    successState.text = options?.text || $t('@B8591:操作成功！')
     successState.description = options?.description || ''
     
     // 自动隐藏

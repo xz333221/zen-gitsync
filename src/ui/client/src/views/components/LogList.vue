@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import {
   ref,
   onMounted,
@@ -459,10 +460,10 @@ async function viewCommitDetail(commit: LogItem | null) {
         commitDiff.value = "该提交没有变更文件";
       }
     } else {
-      commitDiff.value = `获取文件列表失败: ${filesData.error || "未知错误"}`;
+      commitDiff.value = `${$t('@A1833:获取文件列表失败: ')}${filesData.error || "未知错误"}`;
     }
   } catch (error) {
-    commitDiff.value = `获取提交详情失败: ${(error as Error).message}`;
+    commitDiff.value = `${$t('@A1833:获取提交详情失败: ')}${(error as Error).message}`;
   } finally {
     isLoadingCommitDetail.value = false;
   }
@@ -482,10 +483,10 @@ async function getCommitFileDiff(hash: string, filePath: string) {
     if (diffData.success) {
       commitDiff.value = diffData.diff || "没有变更内容";
     } else {
-      commitDiff.value = `获取差异失败: ${diffData.error || "未知错误"}`;
+      commitDiff.value = `${$t('@A1833:获取差异失败: ')}${diffData.error || "未知错误"}`;
     }
   } catch (error) {
-    commitDiff.value = `获取差异失败: ${(error as Error).message}`;
+    commitDiff.value = `${$t('@A1833:获取差异失败: ')}${(error as Error).message}`;
   } finally {
     isLoadingCommitDetail.value = false;
   }
@@ -517,10 +518,10 @@ async function handleOpenFile(filePath: string, context: string) {
     if (result.success) {
       ElMessage.success(result.message);
     } else {
-      ElMessage.error(result.error || '打开文件失败');
+      ElMessage.error(result.error || $t('@A1833:打开文件失败'));
     }
   } catch (error) {
-    ElMessage.error(`打开文件失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@A1833:打开文件失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -543,10 +544,10 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
     if (result.success) {
       ElMessage.success(result.message);
     } else {
-      ElMessage.error(result.error || '用VSCode打开文件失败');
+      ElMessage.error(result.error || $t('@A1833:用VSCode打开文件失败'));
     }
   } catch (error) {
-    ElMessage.error(`用VSCode打开文件失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@A1833:用VSCode打开文件失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -555,9 +556,9 @@ async function copyPureMessage(message: string) {
   try {
     const pureMessage = extractPureMessage(message);
     await navigator.clipboard.writeText(pureMessage);
-    ElMessage.success('提交信息已复制到剪贴板');
+    ElMessage.success($t('@A1833:提交信息已复制到剪贴板'));
   } catch (error) {
-    ElMessage.error('复制失败');
+    ElMessage.error($t('@A1833:复制失败'));
   }
 }
 
@@ -689,10 +690,10 @@ async function revertCommit(commit: LogItem | null) {
   try {
     // 询问确认
     await ElMessageBox.confirm(
-      `确定要撤销提交 ${commit.hash.substring(
+      `${$t('@A1833:确定要撤销提交 ')}${commit.hash.substring(
         0,
         7
-      )} 吗？这将创建一个新的提交来撤销这次提交的更改。`,
+      )}${$t('@A1833: 吗？这将创建一个新的提交来撤销这次提交的更改。')}`,
       "撤销提交确认",
       {
         confirmButtonText: "确认",
@@ -737,7 +738,7 @@ async function cherryPickCommit(commit: LogItem | null) {
   try {
     // 询问确认
     await ElMessageBox.confirm(
-      `确定要将提交 ${commit.hash.substring(0, 7)} Cherry-Pick 到当前分支吗？`,
+      `${$t('@A1833:确定要将提交 ')}${commit.hash.substring(0, 7)}${$t('@A1833: Cherry-Pick 到当前分支吗？')}`,
       "Cherry-Pick确认",
       {
         confirmButtonText: "确认",
@@ -781,9 +782,9 @@ async function copyCommitHash(commit: LogItem | null) {
   
   try {
     await navigator.clipboard.writeText(commit.hash);
-    ElMessage.success(`已复制提交哈希: ${commit.hash.substring(0, 7)}`);
+    ElMessage.success(`${$t('@A1833:已复制提交哈希: ')}${commit.hash.substring(0, 7)}`);
   } catch (error) {
-    ElMessage.error(`复制提交哈希失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@A1833:复制提交哈希失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -794,7 +795,7 @@ async function resetToCommit(commit: LogItem | null) {
   try {
     // 询问确认
     await ElMessageBox.confirm(
-      `确定要将当前分支重置(hard)到提交 ${commit.hash.substring(0, 7)} 吗？
+      `${$t('@A1833:确定要将当前分支重置(hard)到提交 ')}${commit.hash.substring(0, 7)} 吗？
       
       警告：这将丢失该提交之后的所有更改！`,
       "重置确认",
@@ -873,7 +874,7 @@ function toggleFullscreen() {
     <!-- 固定头部区域 -->
     <div class="log-header">
       <div class="header-left">
-        <h2>提交历史</h2>
+        <h2>{{ $t('@A1833:提交历史') }}</h2>
       </div>
 
       <div class="log-actions">
@@ -910,7 +911,7 @@ function toggleFullscreen() {
         <div class="filter-item">
           <el-select
             v-model="authorFilter"
-            placeholder="选择作者"
+            :placeholder="$t('@A1833:选择作者')"
             multiple
             clearable
             filterable
@@ -918,7 +919,7 @@ function toggleFullscreen() {
             size="small"
           >
             <template #prefix>
-              <span class="compact-label">作者</span>
+              <span class="compact-label">{{ $t('@A1833:作者') }}</span>
             </template>
             <el-option
               v-for="author in availableAuthors"
@@ -932,7 +933,7 @@ function toggleFullscreen() {
         <div class="filter-item">
           <el-select
             v-model="branchFilter"
-            placeholder="选择分支"
+            :placeholder="$t('@A1833:选择分支')"
             multiple
             clearable
             filterable
@@ -940,7 +941,7 @@ function toggleFullscreen() {
             size="small"
           >
             <template #prefix>
-              <span class="compact-label">分支</span>
+              <span class="compact-label">{{ $t('@A1833:分支') }}</span>
             </template>
             <el-option
               v-for="branch in availableBranches"
@@ -954,13 +955,13 @@ function toggleFullscreen() {
         <div class="filter-item">
           <el-input
             v-model="messageFilter"
-            placeholder="提交信息关键词"
+            :placeholder="$t('@A1833:提交信息关键词')"
             clearable
             class="filter-input"
             size="small"
           >
             <template #prefix>
-              <span class="compact-label">信息</span>
+              <span class="compact-label">{{ $t('@A1833:信息') }}</span>
             </template>
           </el-input>
         </div>
@@ -969,16 +970,16 @@ function toggleFullscreen() {
           <el-date-picker
             v-model="dateRangeFilter"
             type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
+            :range-separator="$t('@A1833:至')"
+            :start-placeholder="$t('@A1833:开始日期')"
+            :end-placeholder="$t('@A1833:结束日期')"
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             class="filter-input date-range"
             size="small"
           >
             <template #prefix>
-              <span class="compact-label">日期</span>
+              <span class="compact-label">{{ $t('@A1833:日期') }}</span>
             </template>
           </el-date-picker>
         </div>
@@ -989,14 +990,14 @@ function toggleFullscreen() {
             size="small"
             @click="applyFilters"
             class="filter-action-button"
-            >应用</el-button
+            >{{ $t('@A1833:应用') }}</el-button
           >
           <el-button
             type="info"
             size="small"
             @click="resetFilters"
             class="filter-action-button"
-            >重置</el-button
+            >{{ $t('@A1833:重置') }}</el-button
           >
         </div>
       </div>
@@ -1018,13 +1019,13 @@ function toggleFullscreen() {
             border
             v-loading="isLoading"
             class="log-table"
-            :empty-text="isLoading ? '加载中...' : '没有匹配的提交记录'"
+            :empty-text="isLoading ? $t('@A1833:加载中...') : $t('@A1833:没有匹配的提交记录')"
             height="450"
             @row-contextmenu="handleContextMenu"
             @row-click="(row) => viewCommitDetail(row)"
           >
 
-            <el-table-column label="哈希" width="80" resizable>
+            <el-table-column :label="$t('@A1833:哈希')" width="80" resizable>
               <template #default="scope">
                 <span
                   class="commit-hash"
@@ -1033,7 +1034,7 @@ function toggleFullscreen() {
                 >
               </template>
             </el-table-column>
-            <el-table-column label="提交信息" min-width="300">
+            <el-table-column :label="$t('@A1833:提交信息')" min-width="300">
               <template #default="scope">
                 <div class="commit-message-cell">
                   <!-- 分支信息和提交信息水平排列 -->
@@ -1058,14 +1059,14 @@ function toggleFullscreen() {
                       size="small"
                       @click.stop="copyPureMessage(scope.row.message)"
                       class="copy-message-btn"
-                      title="复制纯净提交信息（不含类型前缀）"
+                      :title="$t('@A1833:复制纯净提交信息（不含类型前缀）')"
                     />
                   </div>
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="date" label="日期" width="150" resizable />
-            <el-table-column label="作者" width="100" resizable>
+            <el-table-column prop="date" :label="$t('@A1833:日期')" width="150" resizable />
+            <el-table-column :label="$t('@A1833:作者')" width="100" resizable>
               <template #default="scope">
                 <el-tooltip
                   :content="scope.row.email"
@@ -1085,8 +1086,8 @@ function toggleFullscreen() {
     <!-- 提交详情弹窗 -->
     <CommonDialog
       v-model="commitDetailVisible"
-      :title="`提交详情: ${
-        selectedCommit?.hash ? selectedCommit.hash.substring(0, 7) : '未知'
+      :title="`${$t('@A1833:提交详情: ')}${
+        selectedCommit?.hash ? selectedCommit.hash.substring(0, 7) : $t('@A1833:未知')
       }`"
       size="extra-large"
       type="flex"
@@ -1099,11 +1100,11 @@ function toggleFullscreen() {
         <div v-if="selectedCommit" class="commit-info">
           <div class="commit-info-row">
             <div class="info-item date-item">
-              <span class="info-label">日期</span>
+              <span class="info-label">{{ $t('@A1833:日期') }}</span>
               <span class="info-value">{{ selectedCommit.date }}</span>
             </div>
             <div class="info-item message-item">
-              <span class="info-label">提交信息</span>
+              <span class="info-label">{{ $t('@A1833:提交信息') }}</span>
               <div
                 class="info-message"
                 v-html="
@@ -1124,7 +1125,7 @@ function toggleFullscreen() {
           :diffContent="commitDiff"
           :selectedFile="selectedCommitFile"
           context="commit-detail"
-          emptyText="没有找到变更文件"
+          :emptyText="$t('@A1833:没有找到变更文件')"
           @file-select="handleCommitFileSelect"
           @open-file="handleOpenFile"
           @open-with-vscode="handleOpenWithVSCode"
@@ -1144,22 +1145,22 @@ function toggleFullscreen() {
       class="context-menu-item"
       @click="viewCommitDetail(selectedContextCommit)"
     >
-      <i class="el-icon-view"></i> 查看详情
+      <i class="el-icon-view"></i> {{ $t('@A1833:查看详情') }}
     </div>
     <div class="context-menu-item" @click="copyCommitHash(selectedContextCommit)">
-      <i class="el-icon-document-copy"></i> 复制提交哈希
+      <i class="el-icon-document-copy"></i> {{ $t('@A1833:复制提交哈希') }}
     </div>
     <div class="context-menu-item" @click="resetToCommit(selectedContextCommit)">
-      <i class="el-icon-refresh-right"></i> 重置到该提交(hard)
+      <i class="el-icon-refresh-right"></i> {{ $t('@A1833:重置到该提交(hard)') }}
     </div>
     <div class="context-menu-item" @click="revertCommit(selectedContextCommit)">
-      <i class="el-icon-delete"></i> 撤销提交 (Revert)
+      <i class="el-icon-delete"></i> {{ $t('@A1833:撤销提交 (Revert)') }}
     </div>
     <div
       class="context-menu-item"
       @click="cherryPickCommit(selectedContextCommit)"
     >
-      <i class="el-icon-edit"></i> Cherry-Pick 到当前分支
+      <i class="el-icon-edit"></i> Cherry{{ $t('@A1833:-Pick 到当前分支') }}
     </div>
   </div>
 </template>

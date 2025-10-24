@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { ElDialog } from 'element-plus'
 
@@ -54,8 +55,8 @@ const props = withDefaults(defineProps<Props>(), {
   heightMode: 'max',
   heightOffset: '100px',
   showFooter: false,
-  confirmText: '确定',
-  cancelText: '取消',
+  confirmText: $t('@803A9:确定'),
+  cancelText: $t('@803A9:取消'),
   showCancel: true,
   confirmLoading: false
 })

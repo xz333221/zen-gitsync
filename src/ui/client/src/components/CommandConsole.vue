@@ -86,10 +86,10 @@ onMounted(async () => {
     <div class="console-header">
       <div class="header-left">
         <el-icon class="title-icon"><Document /></el-icon>
-        <span class="console-title">自定义指令执行</span>
+        <span class="console-title">{{ $t('@CF05E:自定义指令执行') }}</span>
       </div>
       <div class="header-actions">
-        <el-tooltip :content="isFullscreen ? '退出全屏' : '全屏显示'" placement="bottom">
+        <el-tooltip :content="isFullscreen ? $t('@CF05E:退出全屏') : $t('@CF05E:全屏显示')" placement="bottom">
           <el-button
             text
             @click="isFullscreen = !isFullscreen"
@@ -100,7 +100,7 @@ onMounted(async () => {
             </el-icon>
           </el-button>
         </el-tooltip>
-        <el-tooltip :content="isConsoleExpanded ? '收起' : '展开'" placement="bottom">
+        <el-tooltip :content="isConsoleExpanded ? $t('@CF05E:收起') : $t('@CF05E:展开')" placement="bottom">
           <el-button
             text
             @click="isConsoleExpanded = !isConsoleExpanded"
@@ -119,7 +119,7 @@ onMounted(async () => {
       <div v-show="isConsoleExpanded" class="console-content">
         <!-- 输入区 -->
         <div class="console-input-row">
-      <span class="prompt" title="当前路径">{{ currentDirectory }} &gt;</span>
+      <span class="prompt" :title="$t('@CF05E:当前路径')">{{ currentDirectory }} &gt;</span>
       <el-input
         v-model="consoleInput"
         class="console-input"
@@ -128,7 +128,7 @@ onMounted(async () => {
         :disabled="consoleRunning"
         clearable
       />
-      <el-button type="primary" :loading="consoleRunning" @click="runConsoleCommand">执行</el-button>
+      <el-button type="primary" :loading="consoleRunning" @click="runConsoleCommand">{{ $t('@CF05E:执行') }}</el-button>
     </div>
 
         <!-- 命令历史输出 -->
@@ -141,7 +141,7 @@ onMounted(async () => {
                 <span class="ts">{{ rec.ts }}</span>
               </div>
               <el-tooltip 
-                :content="(rec.stdout || rec.stderr) ? (rec.expanded ? '收起输出' : '展开输出') : '无输出内容'"
+                :content="(rec.stdout || rec.stderr) ? (rec.expanded ? $t('@CF05E:收起输出') : $t('@CF05E:展开输出')) : $t('@CF05E:无输出内容')"
                 placement="left"
               >
                 <el-button

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { $t } from '@/lang/static'
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
@@ -23,7 +24,7 @@ const props = defineProps({
 const gitStore = useGitStore()
 const configStore = useConfigStore()
 // 移除本地status定义，直接使用store中的statusText
-// const status = ref('加载中...')
+// const status = ref($t('@13D1C:加载中...'))
 // const socket = io()
 const isRefreshing = computed(() => gitStore.isLoadingStatus)
 // 移除本地fileList定义，改用store中的fileList
@@ -74,10 +75,10 @@ async function handleOpenFile(filePath: string, context: string) {
     if (result.success) {
       ElMessage.success(result.message);
     } else {
-      ElMessage.error(result.error || '打开文件失败');
+      ElMessage.error(result.error || $t('@13D1C:打开文件失败'));
     }
   } catch (error) {
-    ElMessage.error(`打开文件失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@13D1C:打开文件失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -100,10 +101,10 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
     if (result.success) {
       ElMessage.success(result.message);
     } else {
-      ElMessage.error(result.error || '用VSCode打开文件失败');
+      ElMessage.error(result.error || $t('@13D1C:用VSCode打开文件失败'));
     }
   } catch (error) {
-    ElMessage.error(`用VSCode打开文件失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@13D1C:用VSCode打开文件失败: ')}${(error as Error).message}`);
   }
 }
 // 锁定文件对话框状态
@@ -137,7 +138,7 @@ async function loadStatus() {
     if (!currentDirectory.value) {
       const responseDir = await fetch('/api/current_directory')
       const dirData = await responseDir.json()
-      currentDirectory.value = dirData.directory || '未知目录'
+      currentDirectory.value = dirData.directory || $t('@13D1C:未知目录')
     }
     // 如果不是Git仓库，直接显示提示并返回
     if (!gitStore.isGitRepo) {
@@ -151,7 +152,7 @@ async function loadStatus() {
     await gitStore.getBranchStatus()
 
     ElMessage({
-      message: 'Git 状态已刷新',
+      message: $t('@13D1C:Git 状态已刷新'),
       type: 'success',
     })
   } catch (error) {
@@ -167,11 +168,11 @@ async function confirmUnlockFile(filePath: string) {
   try {
     await ElMessageBox.confirm(
       `确认解锁该文件？\n${filePath}`,
-      '确认解锁',
+      $t('@13D1C:确认解锁'),
       {
         type: 'warning',
-        confirmButtonText: '解锁',
-        cancelButtonText: '取消',
+        confirmButtonText: $t('@13D1C:解锁'),
+        cancelButtonText: $t('@13D1C:取消'),
       }
     )
     await configStore.unlockFile(filePath)
@@ -185,19 +186,19 @@ async function confirmUnlockAll() {
   if (!configStore.lockedFiles.length) return
   try {
     await ElMessageBox.confirm(
-      `确认解锁所有已锁定文件？共 ${configStore.lockedFiles.length} 个。`,
-      '清空全部锁定',
+      `${$t('@13D1C:确认解锁所有已锁定文件？共 ')}${configStore.lockedFiles.length}${$t('@13D1C: 个。')}`,
+      $t('@13D1C:清空全部锁定'),
       {
         type: 'warning',
-        confirmButtonText: '全部解锁',
-        cancelButtonText: '取消',
+        confirmButtonText: $t('@13D1C:全部解锁'),
+        cancelButtonText: $t('@13D1C:取消'),
       }
     )
     // 复制数组，防止过程中列表变化
     const files = [...configStore.lockedFiles]
     await Promise.all(files.map(f => configStore.unlockFile(f)))
     await configStore.loadLockedFiles()
-    ElMessage.success('已清空所有文件锁定')
+    ElMessage.success($t('@13D1C:已清空所有文件锁定'))
   } catch (e) {
     // 用户取消
   }
@@ -226,7 +227,7 @@ async function getFileDiff(filePath: string) {
         if (data.success && data.content) {
           // 构建一个类似diff的格式来显示新文件内容
           diffContent.value = `diff --git a/${filePath} b/${filePath}\n` +
-            `新文件: ${filePath}\n` +
+            `${$t('@13D1C:新文件: ')}${filePath}\n` +
             `--- /dev/null\n` +
             `+++ b/${filePath}\n` +
             `@@ -0,0 +1,${data.content.split('\n').length} @@\n` +
@@ -242,12 +243,12 @@ async function getFileDiff(filePath: string) {
       // 对于已暂存的文件，使用 diff --cached 获取差异
       const response = await fetch(`/api/diff-cached?file=${encodeURIComponent(filePath)}`)
       const data = await response.json()
-      diffContent.value = data.diff || '没有变更'
+      diffContent.value = data.diff || $t('@13D1C:没有变更')
     } else {
       // 对于未暂存的文件，获取常规差异
       const response = await fetch(`/api/diff?file=${encodeURIComponent(filePath)}`)
       const data = await response.json()
-      diffContent.value = data.diff || '没有变更'
+      diffContent.value = data.diff || $t('@13D1C:没有变更')
     }
   } catch (error) {
     ElMessage({
@@ -292,13 +293,13 @@ async function getFileDiff(filePath: string) {
     
 //     if (response.status === 403) {
 //       const data = await response.json()
-//       browseErrorMessage.value = data.error || '目录浏览功能未启用'
+//       browseErrorMessage.value = data.error || $t('@13D1C:目录浏览功能未启用')
 //       return
 //     }
     
 //     if (!response.ok) {
 //       const data = await response.json()
-//       browseErrorMessage.value = data.error || '获取目录内容失败'
+//       browseErrorMessage.value = data.error || $t('@13D1C:获取目录内容失败')
 //       return
 //     }
     
@@ -308,10 +309,10 @@ async function getFileDiff(filePath: string) {
 //       directoryItems.value = data.items
 //       currentBrowsePath.value = data.currentPath
 //     } else {
-//       browseErrorMessage.value = data.error || '获取目录内容失败'
+//       browseErrorMessage.value = data.error || $t('@13D1C:获取目录内容失败')
 //     }
 //   } catch (error) {
-//     browseErrorMessage.value = `获取目录内容失败: ${(error as Error).message}`
+//     browseErrorMessage.value = `${$t('@13D1C:获取目录内容失败: ')}${(error as Error).message}`
 //   } finally {
 //     isBrowsing.value = false
 //   }
@@ -362,7 +363,7 @@ async function getFileDiff(filePath: string) {
 // // 切换工作目录
 // async function changeDirectory() {
 //   if (!newDirectoryPath.value) {
-//     ElMessage.warning('目录路径不能为空')
+//     ElMessage.warning($t('@13D1C:目录路径不能为空'))
 //     return
 //   }
   
@@ -379,7 +380,7 @@ async function getFileDiff(filePath: string) {
 //     const result = await response.json()
     
 //     if (result.success) {
-//       ElMessage.success('已切换工作目录')
+//       ElMessage.success($t('@13D1C:已切换工作目录'))
 //       currentDirectory.value = result.directory
 //       isDirectoryDialogVisible.value = false
       
@@ -401,15 +402,15 @@ async function getFileDiff(filePath: string) {
 //         // 刷新提交历史
 //         await gitStore.fetchLog(false)
 //       } else {
-//         ElMessage.warning('当前目录不是一个Git仓库')
+//         ElMessage.warning($t('@13D1C:当前目录不是一个Git仓库'))
 //         // 清空Git相关状态
 //         gitStore.$reset() // 使用pinia的reset方法重置状态
 //       }
 //     } else {
-//       ElMessage.error(result.error || '切换目录失败')
+//       ElMessage.error(result.error || $t('@13D1C:切换目录失败'))
 //     }
 //   } catch (error) {
-//     ElMessage.error(`切换目录失败: ${(error as Error).message}`)
+//     ElMessage.error(`${$t('@13D1C:切换目录失败: ')}${(error as Error).message}`)
 //   } finally {
 //     isChangingDirectory.value = false
 //   }
@@ -444,7 +445,7 @@ async function refreshStatus() {
     await gitStore.fetchStatus()
     // 强制刷新分支状态（绕过30秒缓存），确保 branchAhead/branchBehind 立即更新
     await gitStore.getBranchStatus(true)
-    ElMessage.success('Git 状态已刷新')
+    ElMessage.success($t('@13D1C:Git 状态已刷新'))
   } catch (error) {
     ElMessage.error('刷新失败: ' + (error as Error).message)
   }
@@ -480,7 +481,7 @@ async function handleGitFetchAll() {
 const isSettingUpstream = ref(false)
 async function setUpstreamAndPush() {
   if (!gitStore.currentBranch) {
-    ElMessage.warning('未知当前分支')
+    ElMessage.warning($t('@13D1C:未知当前分支'))
     return
   }
   try {
@@ -493,16 +494,16 @@ async function setUpstreamAndPush() {
     })
     const data = await res.json()
     if (data.success) {
-      ElMessage.success('已推送并设置上游分支')
+      ElMessage.success($t('@13D1C:已推送并设置上游分支'))
       // 刷新分支列表与当前分支，确保 footer 下拉实时更新
       await gitStore.getAllBranches()
       await gitStore.getCurrentBranch(true)
       await gitStore.getBranchStatus(true)
     } else {
-      ElMessage.error(data.error || '设置上游失败')
+      ElMessage.error(data.error || $t('@13D1C:设置上游失败'))
     }
   } catch (e) {
-    ElMessage.error(`设置上游失败: ${(e as Error).message}`)
+    ElMessage.error(`${$t('@13D1C:设置上游失败: ')}${(e as Error).message}`)
   } finally {
     isSettingUpstream.value = false
   }
@@ -513,11 +514,11 @@ async function revertFileChanges(filePath: string) {
   try {
     // 请求用户确认
     await ElMessageBox.confirm(
-      `确定要撤回文件 "${filePath}" 的所有修改吗？此操作无法撤销。`,
-      '撤回修改',
+      `${$t('@13D1C:确定要撤回文件 "')}${filePath}${$t('@13D1C:" 的所有修改吗？此操作无法撤销。')}`,
+      $t('@13D1C:撤回修改'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: $t('@13D1C:确定'),
+        cancelButtonText: $t('@13D1C:取消'),
         type: 'warning'
       }
     )
@@ -534,12 +535,12 @@ async function revertFileChanges(filePath: string) {
     const result = await response.json()
     
     if (result.success) {
-      ElMessage.success('已撤回文件修改')
+      ElMessage.success($t('@13D1C:已撤回文件修改'))
       // 刷新Git状态
       await loadStatus()
     } else {
       // 使用自定义错误信息，避免显示undefined
-      ElMessage.error(result.error ? `撤回失败: ${result.error}` : '撤回文件修改失败，请重试')
+      ElMessage.error(result.error ? `${$t('@13D1C:撤回失败: ')}${result.error}` : $t('@13D1C:撤回文件修改失败，请重试'))
     }
   } catch (error) {
     // 用户取消操作不显示错误
@@ -550,11 +551,11 @@ async function revertFileChanges(filePath: string) {
     
     // 其他错误情况才显示错误消息
     // 避免显示undefined错误信息
-    const errorMessage = (error as Error).message || '未知错误';
+    const errorMessage = (error as Error).message || $t('@13D1C:未知错误');
     if (errorMessage !== 'undefined') {
-      ElMessage.error(`撤回文件修改失败: ${errorMessage}`)
+      ElMessage.error(`${$t('@13D1C:撤回文件修改失败: ')}${errorMessage}`)
     } else {
-      ElMessage.error('撤回文件修改失败，请重试')
+      ElMessage.error($t('@13D1C:撤回文件修改失败，请重试'))
     }
   }
 }
@@ -617,7 +618,7 @@ onMounted(() => {
 
 // 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
 watch(() => gitStore.autoUpdateEnabled, (newValue, oldValue) => {
-  console.log(`自动更新状态变更: ${oldValue} -> ${newValue}`)
+  console.log(`${$t('@13D1C:自动更新状态变更: ')}${oldValue} -> ${newValue}`)
   // 调用store中的方法来实现服务器通信功能
   gitStore.toggleAutoUpdate()
 }, { immediate: false })
@@ -638,10 +639,10 @@ defineExpose({
       <DirectorySelector />
       
       <div class="title-row">
-        <h2>Git 状态</h2>
+        <h2>Git {{ $t('@13D1C:状态') }}</h2>
         <div class="header-actions">
           <el-tooltip 
-            :content="gitStore.autoUpdateEnabled ? '自动更新文件状态' : '自动更新文件状态'" 
+            :content="gitStore.autoUpdateEnabled ? $t('@13D1C:自动更新文件状态') : $t('@13D1C:自动更新文件状态')" 
             placement="top" 
             
             :show-after="200"
@@ -657,7 +658,7 @@ defineExpose({
           </el-tooltip>
         
         <!-- 添加Git Pull按钮 -->
-        <el-tooltip content="Git Pull (拉取远程更新)" placement="top"  :show-after="200">
+        <el-tooltip :content="$t('@13D1C:Git Pull (拉取远程更新)')" placement="top"  :show-after="200">
           <el-button 
             type="primary" 
             :icon="Download" 
@@ -670,7 +671,7 @@ defineExpose({
         </el-tooltip>
         
         <!-- 添加Git Fetch All按钮 -->
-        <el-tooltip content="Git Fetch All (获取所有远程分支)" placement="top"  :show-after="200">
+        <el-tooltip :content="$t('@13D1C:Git Fetch All (获取所有远程分支)')" placement="top"  :show-after="200">
           <el-button 
             v-show="false"
             type="primary" 
@@ -685,7 +686,7 @@ defineExpose({
         <!-- 锁定文件管理按钮 -->
         <el-tooltip
           v-if="configStore.lockedFiles.length > 0"
-          content="管理锁定文件"
+          :content="$t('@13D1C:管理锁定文件')"
           placement="top"
           
           :show-after="200"
@@ -700,7 +701,7 @@ defineExpose({
           </el-button>
         </el-tooltip>
 
-        <el-tooltip content="刷新状态" placement="top"  :show-after="200">
+        <el-tooltip :content="$t('@13D1C:刷新状态')" placement="top"  :show-after="200">
           <el-button
             type="primary"
             :icon="Refresh"
@@ -716,11 +717,11 @@ defineExpose({
     
     <div class="card-content" 
       v-loading="gitStore.isGitPulling || gitStore.isGitFetching" 
-      :element-loading-text="gitStore.isGitPulling ? '正在拉取代码...' : '正在获取远程分支信息...'"
+      :element-loading-text="gitStore.isGitPulling ? $t('@13D1C:正在拉取代码...') : $t('@13D1C:正在获取远程分支信息...')"
     >
       <div v-if="!gitStore.isGitRepo" class="status-box">
         <div class="empty-status">
-          <p>当前目录不是Git仓库</p>
+          <p>{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
         </div>
       </div>
       
@@ -729,10 +730,10 @@ defineExpose({
         <div v-if="!gitStore.hasUpstream" class="upstream-tip">
           <div class="tip-header">
             <el-icon class="tip-icon"><InfoFilled /></el-icon>
-            <span class="tip-title">当前分支未设置上游分支</span>
+            <span class="tip-title">{{ $t('@13D1C:当前分支未设置上游分支') }}</span>
           </div>
           <div class="tip-body">
-            <div class="tip-text">首次推送后即可建立与远程的跟踪关系，后续可直接 pull/push。</div>
+            <div class="tip-text">{{ $t('@13D1C:首次推送后即可建立与远程的跟踪关系，后续可直接 pull/push。') }}</div>
             <div class="tip-actions">
               <el-button 
                 size="small" 
@@ -742,7 +743,7 @@ defineExpose({
                 :disabled="isSettingUpstream"
                 @click="setUpstreamAndPush"
               >
-                设置上游并推送
+                {{ $t('@13D1C:设置上游并推送') }}
               </el-button>
             </div>
           </div>
@@ -752,19 +753,19 @@ defineExpose({
           <!-- 分支同步状态信息 -->
           <div class="branch-sync-status">
             <div class="sync-status-content">
-              <el-tooltip content="本地分支与远程分支的状态对比" placement="top" :show-after="200">
+              <el-tooltip :content="$t('@13D1C:本地分支与远程分支的状态对比')" placement="top" :show-after="200">
                 <div class="status-badges">
                   <el-tag v-if="gitStore.branchAhead > 0" size="small" type="warning" class="status-badge">
                     <template #default>
                       <span class="badge-content">
-                        <el-icon><ArrowUp /></el-icon> 你的分支领先 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchAhead }} 个提交
+                        <el-icon><ArrowUp /></el-icon> 你的分支领先 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchAhead }} {{ $t('@13D1C:个提交') }}
                       </span>
                     </template>
                   </el-tag>
                   <el-tag v-if="gitStore.branchBehind > 0" size="small" type="info" class="status-badge">
                     <template #default>
                       <span class="badge-content">
-                        <el-icon><ArrowDown /></el-icon> 你的分支落后 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchBehind }} 个提交
+                        <el-icon><ArrowDown /></el-icon> 你的分支落后 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchBehind }} {{ $t('@13D1C:个提交') }}
                       </span>
                     </template>
                   </el-tag>
@@ -779,7 +780,7 @@ defineExpose({
           <!-- 已暂存的更改 -->
           <FileGroup
             :files="gitStore.fileList.filter(f => f.type === 'added')"
-            title="已暂存的更改"
+            :title="$t('@13D1C:已暂存的更改')"
             group-key="staged"
             :collapsed-groups="collapsedGroups"
             :is-file-locked="isFileLocked"
@@ -795,7 +796,7 @@ defineExpose({
           <!-- 未暂存的更改 -->
           <FileGroup
             :files="gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
-            title="未暂存的更改"
+            :title="$t('@13D1C:未暂存的更改')"
             group-key="unstaged"
             :collapsed-groups="collapsedGroups"
             :is-file-locked="isFileLocked"
@@ -812,7 +813,7 @@ defineExpose({
           <!-- 未跟踪的文件 -->
           <FileGroup
             :files="gitStore.fileList.filter(f => f.type === 'untracked')"
-            title="未跟踪的文件"
+            :title="$t('@13D1C:未跟踪的文件')"
             group-key="untracked"
             :collapsed-groups="collapsedGroups"
             :is-file-locked="isFileLocked"
@@ -830,8 +831,8 @@ defineExpose({
           <div class="empty-icon">
             <el-icon><Document /></el-icon>
           </div>
-          <div class="empty-text">没有检测到任何更改</div>
-          <div class="empty-subtext">工作区是干净的</div>
+          <div class="empty-text">{{ $t('@13D1C:没有检测到任何更改') }}</div>
+          <div class="empty-subtext">{{ $t('@13D1C:工作区是干净的') }}</div>
         </div>
       </div>
     </div>
@@ -840,7 +841,7 @@ defineExpose({
   <!-- 文件差异对话框 -->
   <CommonDialog
     v-model="diffDialogVisible"
-    title="文件差异"
+    :title="$t('@13D1C:文件差异')"
     custom-class="file-diff-dialog"
     size="extra-large"
     type="flex"
@@ -855,7 +856,7 @@ defineExpose({
       :isFileLocked="isFileLocked"
       :isLocking="isLocking"
       context="git-status"
-      emptyText="选择文件查看差异"
+      :emptyText="$t('@13D1C:选择文件查看差异')"
       @file-select="handleGitFileSelect"
       @open-file="handleOpenFile"
       @open-with-vscode="handleOpenWithVSCode"
@@ -869,7 +870,7 @@ defineExpose({
   <!-- 锁定文件管理对话框 -->
   <CommonDialog
     v-model="showLockedFilesDialog"
-    title="锁定文件管理"
+    :title="$t('@13D1C:锁定文件管理')"
     size="large"
     destroy-on-close
   >
@@ -877,11 +878,11 @@ defineExpose({
     <div class="lock-feature-description">
       <div class="description-header">
         <el-icon class="description-icon"><InfoFilled /></el-icon>
-        <span class="description-title">文件锁定功能说明</span>
+        <span class="description-title">{{ $t('@13D1C:文件锁定功能说明') }}</span>
       </div>
       <div class="description-content">
         <ul>
-          <li>锁定的文件在执行 Git 提交时会被自动跳过，不会被添加到暂存区</li>
+          <li>{{ $t('@13D1C:锁定的文件在执行 Git 提交时会被自动跳过，不会被添加到暂存区') }}</li>
         </ul>
       </div>
     </div>
@@ -891,14 +892,14 @@ defineExpose({
       <div class="empty-icon">
         <el-icon><Lock /></el-icon>
       </div>
-      <p>当前没有锁定的文件</p>
-      <p class="empty-tip">您可以在文件列表中点击锁定按钮来锁定文件</p>
+      <p>{{ $t('@13D1C:当前没有锁定的文件') }}</p>
+      <p class="empty-tip">{{ $t('@13D1C:您可以在文件列表中点击锁定按钮来锁定文件') }}</p>
     </div>
 
     <div v-else class="locked-files-list">
       <div class="locked-files-header">
-        <span>🔒 已锁定 {{ configStore.lockedFiles.length }} 个文件</span>
-        <el-tooltip content="这些文件在提交时会被自动跳过" placement="top">
+        <span>🔒 已锁定 {{ configStore.lockedFiles.length }} {{ $t('@13D1C:个文件') }}</span>
+        <el-tooltip :content="$t('@13D1C:这些文件在提交时会被自动跳过')" placement="top">
           <el-icon class="info-icon"><InfoFilled /></el-icon>
         </el-tooltip>
         <div style="flex:1"></div>
@@ -909,7 +910,7 @@ defineExpose({
           :disabled="!configStore.lockedFiles.length"
           @click="confirmUnlockAll"
         >
-          清空全部锁定
+          {{ $t('@13D1C:清空全部锁定') }}
         </el-button>
       </div>
 
@@ -927,14 +928,14 @@ defineExpose({
             </div>
           </div>
           <div class="file-actions">
-            <el-tooltip content="解锁文件" placement="top" >
+            <el-tooltip :content="$t('@13D1C:解锁文件')" placement="top" >
               <el-button
                 type="danger"
                 size="small"
                 circle
                 class="file-action-btn"
                 :icon="Unlock"
-                aria-label="解锁"
+                :aria-label="$t('@13D1C:解锁')"
                 @click="confirmUnlockFile(filePath)"
               />
             </el-tooltip>
