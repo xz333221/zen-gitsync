@@ -12,8 +12,6 @@
       "@assets/*": ["./src/assets/*"],
       "@styles/*": ["./src/styles/*"]
     },
-
-    /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
