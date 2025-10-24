@@ -340,6 +340,7 @@ async function buildFrontend() {
         }
       }
     } catch (error) {
+      console.log(`error ==>`, error)
       console.log(chalk.yellow('更新tsconfig失败，继续构建...'));
     }
     
