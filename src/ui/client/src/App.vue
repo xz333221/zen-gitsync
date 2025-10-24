@@ -8,8 +8,7 @@ import CommandHistory from '@views/components/CommandHistory.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import InlineCard from '@components/InlineCard.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
-// import LanguageSwitcher from '@components/LanguageSwitcher.vue'
-import I18nTest from '@components/I18nTest.vue'
+import LanguageSwitcher from '@components/LanguageSwitcher.vue'
 import { ElMessage, ElConfigProvider } from 'element-plus'
 import { Edit, Menu, Plus, Setting, Check, DocumentCopy, Sunny, Moon } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -37,9 +36,6 @@ const currentDirectory = computed(() => configStore.currentDirectory)
 
 // 主题切换功能
 const isDarkTheme = ref(false)
-
-// 国际化测试开关（开发时使用，完成测试后可删除）
-const showI18nTest = ref(false)
 
 // 切换主题
 function toggleTheme() {
@@ -434,20 +430,15 @@ function stopHResize() {
             </el-icon>
           </button>
         </el-tooltip>
-        <!-- 语言切换 -->
-        <LanguageSwitcher />
-        <!-- 测试按钮（开发时使用） -->
-        <!-- <el-tooltip :content="$t('@F13B4:国际化测试')" placement="bottom" effect="dark" :show-after="200">
-          <button class="modern-btn btn-icon-36" @click="showI18nTest = !showI18nTest">
-            <el-icon class="btn-icon">🌐</el-icon>
-          </button>
-        </el-tooltip> -->
+        
         <el-tooltip :content="$t('@F13B4:Git 操作')" placement="bottom" effect="dark" :show-after="200">
           <button class="modern-btn btn-icon-36 btn-rotate-on-hover" @click="commitFormRef?.toggleGitOperationsDrawer()">
             <el-icon class="btn-icon"><Menu /></el-icon>
           </button>
         </el-tooltip>
       </div>
+      <!-- 语言切换 -->
+      <LanguageSwitcher />
       <!-- 用户信息卡片 -->
       <InlineCard id="user-info" class="user-info-card" compact>
         <template #content>
@@ -473,18 +464,6 @@ function stopHResize() {
   </header>
 
   <main class="main-container">
-    <!-- 国际化测试组件（临时，测试完成后可删除） -->
-    <div v-if="showI18nTest" class="i18n-test-wrapper">
-      <I18nTest />
-      <el-button 
-        type="danger" 
-        @click="showI18nTest = false"
-        style="position: fixed; top: 80px; right: 20px; z-index: 1000;"
-      >
-        {{ $t('@F13B4:关闭测试') }}
-      </el-button>
-    </div>
-
     <div v-if="!initCompleted" class="loading-container">
       <el-card class="loading-card">
         <div class="loading-spinner">
