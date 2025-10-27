@@ -25,11 +25,12 @@ export function getFileIconClass(fileName: string): string {
  * @returns 图标类名字符串
  */
 export function getFolderIconClass(folderName: string): string {
-  if (!folderName) return '';
+  if (!folderName) return 'icon-file-directory';
   
   try {
-    // file-icons-js 使用 getClassWithColor 获取带颜色的文件夹图标
-    const iconClass = (FileIcons as any).getClassWithColor(folderName);
+    // file-icons-js 需要在文件夹名后加斜杠才能正确识别为文件夹
+    const folderPath = folderName.endsWith('/') ? folderName : `${folderName}/`;
+    const iconClass = (FileIcons as any).getClassWithColor(folderPath);
     return iconClass || 'icon-file-directory';
   } catch (error) {
     console.warn('Failed to get folder icon class:', error);

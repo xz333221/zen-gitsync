@@ -123,8 +123,11 @@ export default {
   '@E80AC:打开该提交时的文件版本': 'Open the file version at the time of commit',
   '@E80AC:打开该stash中的文件版本': 'Open the file version in this stash',
   '@E80AC:打开文件': 'Open the file',
-  '@E80AC:变更文件': 'Change document',
-  '@E80AC:文件差异': 'File differences',
+  '@E80AC:变更文件': 'Changed Files',
+  '@E80AC:文件差异': 'File Diff',
+  '@E80AC:列表视图': 'List View',
+  '@E80AC:树状视图': 'Tree View',
+  '@E80AC:文件列表': 'File List',
   // @E80AC: file end
   // @34292: file path: components\GitCommandPreview.vue
   '@34292:Git命令预览：': 'Git command preview:',
@@ -629,6 +632,7 @@ export default {
   '@13D1C:当前没有锁定的文件': 'There are currently no locked files',
   '@13D1C:您可以在文件列表中点击锁定按钮来锁定文件': 'You can click the lock button in the file list to lock the file',
   '@13D1C:个文件': 'A file',
+  '@13D1C:文件列表': 'File List',
   // @13D1C: file end
   // @A1833: file path: views\components\LogList.vue
   '@A1833:选择作者': 'Select author',

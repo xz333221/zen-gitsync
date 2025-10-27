@@ -4,13 +4,17 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // import { io } from 'socket.io-client'
 import { Refresh, Document, ArrowUp, ArrowDown, Check, Close, Download, Connection, Lock, Unlock, InfoFilled } from '@element-plus/icons-vue'
+import TreeIcon from '@/components/icons/TreeIcon.vue'
+import ListIcon from '@/components/icons/ListIcon.vue'
 // import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import FileGroup from '@/components/FileGroup.vue'
+import FileTreeView from '@/components/FileTreeView.vue'
 import DirectorySelector from '@components/DirectorySelector.vue'
+import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
 
 // 定义props
 const props = defineProps({
@@ -115,6 +119,10 @@ const collapsedGroups = ref({
   unstaged: false,  // 未暂存的更改
   untracked: false  // 未跟踪的文件
 })
+// 视图模式：列表或树状（从 localStorage 读取）
+const FILE_LIST_VIEW_MODE_KEY = 'zen-gitsync-file-list-view-mode';
+const savedViewMode = localStorage.getItem(FILE_LIST_VIEW_MODE_KEY) as 'list' | 'tree' | null;
+const viewMode = ref<'list' | 'tree'>(savedViewMode || 'list');
 // 添加切换目录相关的状态
 // const isDirectoryDialogVisible = ref(false)
 // const newDirectoryPath = ref('')
@@ -608,12 +616,98 @@ function toggleGroupCollapse(groupType: 'staged' | 'unstaged' | 'untracked') {
   collapsedGroups.value[groupType] = !collapsedGroups.value[groupType]
 }
 
+// 树状视图数据（使用ref保持展开状态）
+const stagedTreeData = ref<TreeNode[]>([]);
+const unstagedTreeData = ref<TreeNode[]>([]);
+const untrackedTreeData = ref<TreeNode[]>([]);
+
+// 更新树状视图数据
+function updateTreeData() {
+  // 已暂存
+  const stagedFiles = gitStore.fileList.filter(f => f.type === 'added').map(file => ({
+    path: file.path,
+    type: file.type,
+    locked: isFileLocked(file.path)
+  }));
+  const newStagedTree = buildFileTree(stagedFiles);
+  if (stagedTreeData.value.length > 0) {
+    mergeTreeExpandState(newStagedTree, stagedTreeData.value);
+  }
+  stagedTreeData.value = newStagedTree;
+  
+  // 未暂存
+  const unstagedFiles = gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted').map(file => ({
+    path: file.path,
+    type: file.type,
+    locked: isFileLocked(file.path)
+  }));
+  const newUnstagedTree = buildFileTree(unstagedFiles);
+  if (unstagedTreeData.value.length > 0) {
+    mergeTreeExpandState(newUnstagedTree, unstagedTreeData.value);
+  }
+  unstagedTreeData.value = newUnstagedTree;
+  
+  // 未跟踪
+  const untrackedFiles = gitStore.fileList.filter(f => f.type === 'untracked').map(file => ({
+    path: file.path,
+    type: file.type,
+    locked: isFileLocked(file.path)
+  }));
+  const newUntrackedTree = buildFileTree(untrackedFiles);
+  if (untrackedTreeData.value.length > 0) {
+    mergeTreeExpandState(newUntrackedTree, untrackedTreeData.value);
+  }
+  untrackedTreeData.value = newUntrackedTree;
+}
+
+// 监听文件列表变化，更新树数据
+watch(() => gitStore.fileList, () => {
+  if (viewMode.value === 'tree') {
+    updateTreeData();
+  }
+}, { deep: true });
+
+// 监听视图模式变化，切换到树视图时初始化数据，并保存到 localStorage
+watch(viewMode, (newMode) => {
+  if (newMode === 'tree') {
+    updateTreeData();
+  }
+  // 保存到 localStorage
+  localStorage.setItem(FILE_LIST_VIEW_MODE_KEY, newMode);
+  
+  // 触发自定义事件，通知其他组件视图模式已变化
+  window.dispatchEvent(new CustomEvent('file-list-view-mode-change', { 
+    detail: { mode: newMode } 
+  }));
+});
+
 onMounted(() => {
   // App.vue已经加载了Git相关数据，此时只需加载状态
   loadStatus()
   // 加载配置和锁定文件列表
   configStore.loadConfig()
   configStore.loadLockedFiles()
+  
+  // 如果初始视图模式是树状，初始化树状数据
+  if (viewMode.value === 'tree') {
+    updateTreeData();
+  }
+  
+  // 监听其他组件的视图模式变化事件，实现同步
+  const handleViewModeChange = (e: Event) => {
+    const customEvent = e as CustomEvent<{ mode: 'list' | 'tree' }>;
+    const newMode = customEvent.detail.mode;
+    if (viewMode.value !== newMode) {
+      viewMode.value = newMode;
+    }
+  };
+  
+  window.addEventListener('file-list-view-mode-change', handleViewModeChange);
+  
+  // 组件卸载时移除监听
+  return () => {
+    window.removeEventListener('file-list-view-mode-change', handleViewModeChange);
+  };
 })
 
 // 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
@@ -776,56 +870,155 @@ defineExpose({
         </div>
         
         <!-- 现代化、简洁的文件列表 -->
-        <div v-if="gitStore.fileList.length" class="file-list-container">
-          <!-- 已暂存的更改 -->
-          <FileGroup
-            :files="gitStore.fileList.filter(f => f.type === 'added')"
-            :title="$t('@13D1C:已暂存的更改')"
-            group-key="staged"
-            :collapsed-groups="collapsedGroups"
-            :is-file-locked="isFileLocked"
-            :is-locking="isLocking"
-            :get-file-name="getFileName"
-            :get-file-directory="getFileDirectory"
-            @toggle-collapse="toggleGroupCollapse"
-            @file-click="handleFileClick"
-            @toggle-file-lock="toggleFileLock"
-            @unstage-file="unstageFile"
-          />
-          
-          <!-- 未暂存的更改 -->
-          <FileGroup
-            :files="gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
-            :title="$t('@13D1C:未暂存的更改')"
-            group-key="unstaged"
-            :collapsed-groups="collapsedGroups"
-            :is-file-locked="isFileLocked"
-            :is-locking="isLocking"
-            :get-file-name="getFileName"
-            :get-file-directory="getFileDirectory"
-            @toggle-collapse="toggleGroupCollapse"
-            @file-click="handleFileClick"
-            @toggle-file-lock="toggleFileLock"
-            @stage-file="stageFile"
-            @revert-file-changes="revertFileChanges"
-          />
-          
-          <!-- 未跟踪的文件 -->
-          <FileGroup
-            :files="gitStore.fileList.filter(f => f.type === 'untracked')"
-            :title="$t('@13D1C:未跟踪的文件')"
-            group-key="untracked"
-            :collapsed-groups="collapsedGroups"
-            :is-file-locked="isFileLocked"
-            :is-locking="isLocking"
-            :get-file-name="getFileName"
-            :get-file-directory="getFileDirectory"
-            @toggle-collapse="toggleGroupCollapse"
-            @file-click="handleFileClick"
-            @toggle-file-lock="toggleFileLock"
-            @stage-file="stageFile"
-            @revert-file-changes="revertFileChanges"
-          />
+        <div v-if="gitStore.fileList.length" class="file-list-wrapper">
+          <div class="file-list-header">
+            <h4>{{ $t('@13D1C:文件列表') }}</h4>
+            <div class="view-mode-toggle">
+              <el-tooltip :content="$t('@E80AC:列表视图')" placement="top" :show-after="200">
+                <button 
+                  class="mode-btn" 
+                  :class="{ active: viewMode === 'list' }"
+                  @click="viewMode = 'list'"
+                >
+                  <ListIcon style="width: 1em; height: 1em;" />
+                </button>
+              </el-tooltip>
+              <el-tooltip :content="$t('@E80AC:树状视图')" placement="top" :show-after="200">
+                <button 
+                  class="mode-btn" 
+                  :class="{ active: viewMode === 'tree' }"
+                  @click="viewMode = 'tree'"
+                >
+                  <TreeIcon style="width: 1em; height: 1em;" />
+                </button>
+              </el-tooltip>
+            </div>
+          </div>
+          <div class="file-list-container">
+            <!-- 列表视图 -->
+            <template v-if="viewMode === 'list'">
+              <!-- 已暂存的更改 -->
+              <FileGroup
+                :files="gitStore.fileList.filter(f => f.type === 'added')"
+                :title="$t('@13D1C:已暂存的更改')"
+                group-key="staged"
+                :collapsed-groups="collapsedGroups"
+                :is-file-locked="isFileLocked"
+                :is-locking="isLocking"
+                :get-file-name="getFileName"
+                :get-file-directory="getFileDirectory"
+                @toggle-collapse="toggleGroupCollapse"
+                @file-click="handleFileClick"
+                @toggle-file-lock="toggleFileLock"
+                @unstage-file="unstageFile"
+              />
+              
+              <!-- 未暂存的更改 -->
+              <FileGroup
+                :files="gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted')"
+                :title="$t('@13D1C:未暂存的更改')"
+                group-key="unstaged"
+                :collapsed-groups="collapsedGroups"
+                :is-file-locked="isFileLocked"
+                :is-locking="isLocking"
+                :get-file-name="getFileName"
+                :get-file-directory="getFileDirectory"
+                @toggle-collapse="toggleGroupCollapse"
+                @file-click="handleFileClick"
+                @toggle-file-lock="toggleFileLock"
+                @stage-file="stageFile"
+                @revert-file-changes="revertFileChanges"
+              />
+              
+              <!-- 未跟踪的文件 -->
+              <FileGroup
+                :files="gitStore.fileList.filter(f => f.type === 'untracked')"
+                :title="$t('@13D1C:未跟踪的文件')"
+                group-key="untracked"
+                :collapsed-groups="collapsedGroups"
+                :is-file-locked="isFileLocked"
+                :is-locking="isLocking"
+                :get-file-name="getFileName"
+                :get-file-directory="getFileDirectory"
+                @toggle-collapse="toggleGroupCollapse"
+                @file-click="handleFileClick"
+                @toggle-file-lock="toggleFileLock"
+                @stage-file="stageFile"
+                @revert-file-changes="revertFileChanges"
+              />
+            </template>
+            
+            <!-- 树状视图 -->
+            <template v-else>
+              <!-- 已暂存的更改 -->
+              <div v-if="gitStore.fileList.filter(f => f.type === 'added').length" class="tree-group">
+                <div class="tree-group-header" @click="toggleGroupCollapse('staged')">
+                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.staged }">
+                    <ArrowDown />
+                  </el-icon>
+                  <h5>{{ $t('@13D1C:已暂存的更改') }}</h5>
+                  <span class="file-count">{{ gitStore.fileList.filter(f => f.type === 'added').length }}</span>
+                </div>
+                <FileTreeView
+                  v-if="!collapsedGroups.staged"
+                  :tree-data="stagedTreeData"
+                  :selected-file="''"
+                  :show-action-buttons="true"
+                  :is-file-locked="isFileLocked"
+                  :is-locking="isLocking"
+                  @file-select="(path: string) => handleFileClick({ path, type: 'added' })"
+                  @toggle-lock="toggleFileLock"
+                  @unstage="unstageFile"
+                />
+              </div>
+              
+              <!-- 未暂存的更改 -->
+              <div v-if="gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted').length" class="tree-group">
+                <div class="tree-group-header" @click="toggleGroupCollapse('unstaged')">
+                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.unstaged }">
+                    <ArrowDown />
+                  </el-icon>
+                  <h5>{{ $t('@13D1C:未暂存的更改') }}</h5>
+                  <span class="file-count">{{ gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted').length }}</span>
+                </div>
+                <FileTreeView
+                  v-if="!collapsedGroups.unstaged"
+                  :tree-data="unstagedTreeData"
+                  :selected-file="''"
+                  :show-action-buttons="true"
+                  :is-file-locked="isFileLocked"
+                  :is-locking="isLocking"
+                  @file-select="(path: string) => handleFileClick({ path, type: 'modified' })"
+                  @toggle-lock="toggleFileLock"
+                  @stage="stageFile"
+                  @revert="revertFileChanges"
+                />
+              </div>
+              
+              <!-- 未跟踪的文件 -->
+              <div v-if="gitStore.fileList.filter(f => f.type === 'untracked').length" class="tree-group">
+                <div class="tree-group-header" @click="toggleGroupCollapse('untracked')">
+                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.untracked }">
+                    <ArrowDown />
+                  </el-icon>
+                  <h5>{{ $t('@13D1C:未跟踪的文件') }}</h5>
+                  <span class="file-count">{{ gitStore.fileList.filter(f => f.type === 'untracked').length }}</span>
+                </div>
+                <FileTreeView
+                  v-if="!collapsedGroups.untracked"
+                  :tree-data="untrackedTreeData"
+                  :selected-file="''"
+                  :show-action-buttons="true"
+                  :is-file-locked="isFileLocked"
+                  :is-locking="isLocking"
+                  @file-select="(path: string) => handleFileClick({ path, type: 'untracked' })"
+                  @toggle-lock="toggleFileLock"
+                  @stage="stageFile"
+                  @revert="revertFileChanges"
+                />
+              </div>
+            </template>
+          </div>
         </div>
         <div v-else-if="gitStore.isGitRepo" class="empty-status">
           <div class="empty-icon">
@@ -973,7 +1166,7 @@ defineExpose({
 }
 
 .card-content {
-  padding: 8px;
+  padding: 4px;
   overflow-y: auto;
   overflow-x: hidden;
   flex: 1;
@@ -998,6 +1191,67 @@ defineExpose({
 }
 
 
+
+/* 文件列表包装器 */
+.file-list-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.file-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm);
+  background: var(--bg-container);
+  border-bottom: 1px solid var(--border-card);
+  
+  h4 {
+    margin: 0;
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+  }
+}
+
+.view-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  background: var(--bg-panel);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-card);
+  
+  .mode-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: var(--transition-all);
+    
+    &:hover {
+      background: var(--bg-container);
+      color: var(--text-primary);
+    }
+    
+    &.active {
+      background: #409eff;
+      color: white;
+      box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
+    }
+    
+    .el-icon {
+      font-size: 16px;
+    }
+  }
+}
 
 /* 文件列表容器 */
 .file-list-container {
@@ -1378,6 +1632,57 @@ html.dark .upstream-tip {
 html.dark .upstream-tip:hover {
   border-color: rgba(64, 158, 255, 0.35);
   box-shadow: 0 2px 12px rgba(64, 158, 255, 0.15);
+}
+
+/* 树状视图分组样式 */
+.tree-group {
+  margin-bottom: var(--spacing-md);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-base);
+  overflow: hidden;
+  background: var(--bg-container);
+}
+
+.tree-group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-base) var(--spacing-lg);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  transition: var(--transition-all);
+  
+  &:hover {
+    background: var(--bg-hover);
+  }
+  
+  .collapse-icon {
+    transition: var(--transition-transform);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    
+    &.collapsed {
+      transform: rotate(-90deg);
+    }
+  }
+  
+  h5 {
+    margin: 0;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+  
+  .file-count {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    background: var(--bg-container);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-card);
+    font-weight: var(--font-weight-medium);
+  }
 }
 
 </style>

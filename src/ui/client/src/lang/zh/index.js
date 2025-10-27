@@ -125,6 +125,8 @@ export default {
   '@E80AC:打开文件': '打开文件',
   '@E80AC:变更文件': '变更文件',
   '@E80AC:文件差异': '文件差异',
+  '@E80AC:列表视图': '列表视图',
+  '@E80AC:树状视图': '树状视图',
   // @E80AC: file end
   // @34292: file path: components\GitCommandPreview.vue
   '@34292:Git命令预览：': 'Git命令预览：',
@@ -629,6 +631,7 @@ export default {
   '@13D1C:当前没有锁定的文件': '当前没有锁定的文件',
   '@13D1C:您可以在文件列表中点击锁定按钮来锁定文件': '您可以在文件列表中点击锁定按钮来锁定文件',
   '@13D1C:个文件': '个文件',
+  '@13D1C:文件列表': '文件列表',
   // @13D1C: file end
   // @A1833: file path: views\components\LogList.vue
   '@A1833:选择作者': '选择作者',

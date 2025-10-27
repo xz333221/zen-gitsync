@@ -3,10 +3,14 @@ import { $t } from '@/lang/static.ts'
 import { ref, computed, watch, onMounted } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput } from 'element-plus';
 import { FolderOpened, Lock, DocumentCopy, Search } from '@element-plus/icons-vue';
+import TreeIcon from '@/components/icons/TreeIcon.vue';
+import ListIcon from '@/components/icons/ListIcon.vue';
 import { formatDiff } from '../utils/index.ts';
 import vscodeIcon from '@/assets/images/vscode.webp';
 import FileActionButtons from './FileActionButtons.vue';
+import FileTreeView from './FileTreeView.vue';
 import { getFileIconClass } from '../utils/fileIcon';
+import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree';
 
 // 定义props
 interface FileItem {
@@ -62,6 +66,10 @@ const emit = defineEmits<Emits>();
 // 内部状态
 const internalSelectedFile = ref<string>('');
 const searchQuery = ref<string>(''); // 搜索关键词
+// 视图模式：列表或树状（从 localStorage 读取，与 GitStatus 同步）
+const FILE_LIST_VIEW_MODE_KEY = 'zen-gitsync-file-list-view-mode';
+const savedViewMode = localStorage.getItem(FILE_LIST_VIEW_MODE_KEY) as 'list' | 'tree' | null;
+const viewMode = ref<'list' | 'tree'>(savedViewMode || 'list');
 // 分割比例（百分比），持久化到 localStorage
 // 采用与项目一致的命名风格，便于在应用存储中查看
 const LEGACY_SPLIT_KEY = 'fileDiff.splitPercent';
@@ -106,6 +114,39 @@ const filteredFiles = computed(() => {
     return file.displayName.toLowerCase().includes(query) || 
            file.path.toLowerCase().includes(query);
   });
+});
+
+// 树状数据（使用ref保持展开状态）
+const treeData = ref<TreeNode[]>([]);
+
+// 更新树状视图数据
+function updateTreeData() {
+  const newTree = buildFileTree(filteredFiles.value);
+  if (treeData.value.length > 0) {
+    mergeTreeExpandState(newTree, treeData.value);
+  }
+  treeData.value = newTree;
+}
+
+// 监听过滤后的文件列表变化，更新树数据
+watch(filteredFiles, () => {
+  if (viewMode.value === 'tree') {
+    updateTreeData();
+  }
+}, { deep: true });
+
+// 监听视图模式变化，切换到树视图时初始化数据，并保存到 localStorage
+watch(viewMode, (newMode) => {
+  if (newMode === 'tree') {
+    updateTreeData();
+  }
+  // 保存到 localStorage，与 GitStatus 同步
+  localStorage.setItem(FILE_LIST_VIEW_MODE_KEY, newMode);
+  
+  // 触发自定义事件，通知其他组件视图模式已变化
+  window.dispatchEvent(new CustomEvent('file-list-view-mode-change', { 
+    detail: { mode: newMode } 
+  }));
 });
 
 const hasDiffContent = computed(() => {
@@ -224,6 +265,27 @@ onMounted(() => {
       }
     }
   } catch {}
+  
+  // 如果初始视图模式是树状，初始化树状数据
+  if (viewMode.value === 'tree') {
+    updateTreeData();
+  }
+  
+  // 监听其他组件的视图模式变化事件，实现同步
+  const handleViewModeChange = (e: Event) => {
+    const customEvent = e as CustomEvent<{ mode: 'list' | 'tree' }>;
+    const newMode = customEvent.detail.mode;
+    if (viewMode.value !== newMode) {
+      viewMode.value = newMode;
+    }
+  };
+  
+  window.addEventListener('file-list-view-mode-change', handleViewModeChange);
+  
+  // 组件卸载时移除监听
+  return () => {
+    window.removeEventListener('file-list-view-mode-change', handleViewModeChange);
+  };
 });
   
   // Splitter 根元素引用，用于将 px 尺寸转换为百分比
@@ -302,8 +364,30 @@ onMounted(() => {
         <!-- 左侧：文件列表面板 -->
         <div class="files-panel">
           <div class="panel-header">
-            <h4>{{ $t('@E80AC:变更文件') }}</h4>
-            <span v-if="files.length > 0" class="file-count">({{ files.length }})</span>
+            <div class="header-left">
+              <h4>{{ $t('@E80AC:变更文件') }}</h4>
+              <span v-if="files.length > 0" class="file-count">({{ files.length }})</span>
+            </div>
+            <div class="view-mode-toggle">
+              <el-tooltip :content="$t('@E80AC:列表视图')" placement="top" :show-after="200">
+                <button 
+                  class="mode-btn" 
+                  :class="{ active: viewMode === 'list' }"
+                  @click="viewMode = 'list'"
+                >
+                  <ListIcon style="width: 1em; height: 1em;" />
+                </button>
+              </el-tooltip>
+              <el-tooltip :content="$t('@E80AC:树状视图')" placement="top" :show-after="200">
+                <button 
+                  class="mode-btn" 
+                  :class="{ active: viewMode === 'tree' }"
+                  @click="viewMode = 'tree'"
+                >
+                  <TreeIcon style="width: 1em; height: 1em;" />
+                </button>
+              </el-tooltip>
+            </div>
           </div>
           <!-- 搜索框 -->
           <div class="search-box">
@@ -327,63 +411,80 @@ onMounted(() => {
                 :description="$t('@E80AC:没有找到匹配的文件')"
                 :image-size="60"
               />
-              <div
-                v-for="file in filteredFiles"
-                :key="file.path"
-                class="file-item"
-                :class="{ 
-                  'active': file.path === currentSelectedFile,
-                  [`file-type-${file.type}`]: file.type,
-                  'is-locked': file.locked
-                }"
-                @click="handleFileSelect(file.path)"
-              >
-                <span :class="['file-icon', file.iconClass]"></span>
-                <el-tooltip
-                  :content="file.path"
-                  placement="top"
-                  :disabled="file.displayName.length <= 35"
-                  
-                  :show-after="200"
+              <!-- 列表视图 -->
+              <template v-else-if="viewMode === 'list'">
+                <div
+                  v-for="file in filteredFiles"
+                  :key="file.path"
+                  class="file-item"
+                  :class="{ 
+                    'active': file.path === currentSelectedFile,
+                    [`file-type-${file.type}`]: file.type,
+                    'is-locked': file.locked
+                  }"
+                  @click="handleFileSelect(file.path)"
                 >
-                  <span class="file-name">{{ file.displayName }}</span>
-                </el-tooltip>
-                <div v-if="file.dirPath" class="file-path-section" :title="file.dirPath">
+                  <span :class="['file-icon', file.iconClass]"></span>
                   <el-tooltip
-                    :content="file.dirPath"
+                    :content="file.path"
                     placement="top"
-                    :disabled="file.dirPath.length <= 30"
+                    :disabled="file.displayName.length <= 35"
                     
                     :show-after="200"
                   >
-                    <span class="file-directory path-badge">{{ file.dirPath }}</span>
+                    <span class="file-name">{{ file.displayName }}</span>
                   </el-tooltip>
+                  <div v-if="file.dirPath" class="file-path-section" :title="file.dirPath">
+                    <el-tooltip
+                      :content="file.dirPath"
+                      placement="top"
+                      :disabled="file.dirPath.length <= 30"
+                      
+                      :show-after="200"
+                    >
+                      <span class="file-directory path-badge">{{ file.dirPath }}</span>
+                    </el-tooltip>
+                  </div>
+                  <el-tooltip
+                    v-if="file.locked"
+                    :content="$t('@E80AC:该文件已被锁定，提交时会被跳过')"
+                    placement="top"
+                    
+                    :show-after="200"
+                  >
+                    <el-icon class="lock-icon" color="#E6A23C">
+                      <Lock />
+                    </el-icon>
+                  </el-tooltip>
+                  <!-- 文件操作按钮（悬浮在右侧，不占布局空间） -->
+                  <div v-if="showActionButtons" class="file-actions">
+                    <FileActionButtons
+                      :file-path="file.path"
+                      :file-type="file.type || 'modified'"
+                      :is-locked="isFileLocked(file.path)"
+                      :is-locking="isLocking(file.path)"
+                      @toggle-lock="(path) => emit('toggle-lock', path)"
+                      @stage="(path) => emit('stage', path)"
+                      @unstage="(path) => emit('unstage', path)"
+                      @revert="(path) => emit('revert', path)"
+                    />
+                  </div>
                 </div>
-                <el-tooltip
-                  v-if="file.locked"
-                  :content="$t('@E80AC:该文件已被锁定，提交时会被跳过')"
-                  placement="top"
-                  
-                  :show-after="200"
-                >
-                  <el-icon class="lock-icon" color="#E6A23C">
-                    <Lock />
-                  </el-icon>
-                </el-tooltip>
-                <!-- 文件操作按钮（悬浮在右侧，不占布局空间） -->
-                <div v-if="showActionButtons" class="file-actions">
-                  <FileActionButtons
-                    :file-path="file.path"
-                    :file-type="file.type || 'modified'"
-                    :is-locked="isFileLocked(file.path)"
-                    :is-locking="isLocking(file.path)"
-                    @toggle-lock="(path) => emit('toggle-lock', path)"
-                    @stage="(path) => emit('stage', path)"
-                    @unstage="(path) => emit('unstage', path)"
-                    @revert="(path) => emit('revert', path)"
-                  />
-                </div>
-              </div>
+              </template>
+              <!-- 树状视图 -->
+              <FileTreeView
+                v-else
+                :tree-data="treeData"
+                :selected-file="currentSelectedFile"
+                :show-action-buttons="showActionButtons"
+                :is-file-locked="isFileLocked"
+                :is-locking="isLocking"
+                @file-select="handleFileSelect"
+                @toggle-lock="(path: string) => emit('toggle-lock', path)"
+                @stage="(path: string) => emit('stage', path)"
+                @unstage="(path: string) => emit('unstage', path)"
+                @revert="(path: string) => emit('revert', path)"
+              />
             </el-scrollbar>
           </div>
         </div>
@@ -591,6 +692,50 @@ onMounted(() => {
     font-size: var(--font-size-md);
     font-weight: var(--font-weight-semibold);
     
+  }
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.view-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  background: var(--bg-panel);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-card);
+  
+  .mode-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: var(--transition-all);
+    
+    &:hover {
+      background: var(--bg-container);
+      color: var(--text-primary);
+    }
+    
+    &.active {
+      background: #409eff;
+      color: white;
+      box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
+    }
+    
+    .el-icon {
+      font-size: 16px;
+    }
   }
 }
 
