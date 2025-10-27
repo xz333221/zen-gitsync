@@ -12,7 +12,7 @@ interface Props {
   isLocking?: (filePath: string) => boolean;
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   selectedFile: '',
   showActionButtons: false,
   isFileLocked: () => false,
