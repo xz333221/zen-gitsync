@@ -442,7 +442,7 @@ onMounted(() => {
                       
                       :show-after="200"
                     >
-                      <span class="file-directory path-badge">{{ file.dirPath }}</span>
+                      <div class="file-directory path-badge">{{ file.dirPath }}</div>
                     </el-tooltip>
                   </div>
                   <el-tooltip
@@ -650,7 +650,6 @@ onMounted(() => {
 
 .files-panel {
   width: 100%; /* 让宽度由 el-splitter 控制 */
-  min-width: 250px;
   background: var(--bg-icon);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -964,7 +963,6 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
@@ -977,9 +975,21 @@ onMounted(() => {
   }
 }
 
+.file-path-section{
+  // flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  
+  :deep(.el-tooltip__trigger) {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
 .path-badge {
-  display: inline-block;
-  max-width: 200px;
+  // display: inline-block;
+  // max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -989,6 +999,7 @@ onMounted(() => {
   padding: 1px var(--spacing-sm);
   border-radius: var(--radius-sm);
   margin-left: var(--spacing-sm);
+  box-sizing: border-box;
 }
 
 .file-item:hover .path-badge {
