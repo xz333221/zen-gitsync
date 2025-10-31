@@ -773,15 +773,36 @@
     background: rgba(255, 255, 255, 0.08) !important;
   }
 
+  // /* 文件列表选中状态 - 深色主题优化 */
+  .file-item.active {
+    background: rgba(64, 158, 255, 0.25) !important;
+    color: #66b1ff !important;
+    
+    .file-icon {
+      color: #66b1ff !important;
+    }
+    
+    .file-name {
+      color: #66b1ff !important;
+      font-weight: 600 !important;
+    }
+    
+    .path-badge {
+      background: rgba(64, 158, 255, 0.15) !important;
+      color: #8cc4ff !important;
+      border-color: rgba(64, 158, 255, 0.3) !important;
+    }
+  }
+
   /* 文件状态标识 */
   .file-status,
   .status-indicator {
     color: rgba(255, 255, 255, 0.8) !important;
   }
 
-  /* 文件路径文本 */
-  .file-path,
-  .file-name {
+  /* 文件路径文本 - 不覆盖选中状态 */
+  .file-item:not(.active) .file-path,
+  .file-item:not(.active) .file-name {
     color: rgba(255, 255, 255, 0.9) !important;
   }
 

@@ -855,7 +855,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-base) var(--spacing-lg);
+  padding: var(--spacing-base) var(--spacing-md);
   cursor: pointer;
   transition: var(--transition-all);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -875,27 +875,20 @@ onMounted(() => {
   
   &:hover {
     background: var(--bg-panel);
-    transform: translateX(2px);
     
     &::before {
       background: #409eff;
     }
   }
   
-  &.active {
-    background: #e6f7ff;
-    color: #1890ff;
-    border-left: 3px solid #1890ff;
+  // &.active {
+  //   background: #e6f7ff;
+  //   color: #1890ff;
     
-    &::before {
-      background: #1890ff;
-      width: 4px;
-    }
-    
-    .file-icon {
-      color: #1890ff;
-    }
-  }
+  //   .file-icon {
+  //     color: #1890ff;
+  //   }
+  // }
   
   // 根据文件类型添加不同样式 - 使用统一的Git状态颜色
   &.file-type-added {
@@ -903,7 +896,7 @@ onMounted(() => {
       background: var(--git-status-added);
     }
     
-    &:not(.active):hover {
+    &:not(.active):hover,&.active {
       background: linear-gradient(90deg, rgba(16, 185, 129, 0.1) 0%, rgba(255, 255, 255, 0.8) 100%);
       
       &::before {
@@ -918,7 +911,7 @@ onMounted(() => {
       background: var(--git-status-modified);
     }
     
-    &:not(.active):hover {
+    &:not(.active):hover,&.active {
       background: linear-gradient(90deg, rgba(245, 158, 11, 0.1) 0%, rgba(255, 255, 255, 0.8) 100%);
       
       &::before {
@@ -933,7 +926,7 @@ onMounted(() => {
       background: var(--git-status-deleted);
     }
     
-    &:not(.active):hover {
+    &:not(.active):hover,&.active {
       background: linear-gradient(90deg, rgba(239, 68, 68, 0.1) 0%, rgba(255, 255, 255, 0.8) 100%);
       
       &::before {
@@ -948,7 +941,7 @@ onMounted(() => {
       background: var(--git-status-untracked);
     }
     
-    &:not(.active):hover {
+    &:not(.active):hover,&.active {
       background: linear-gradient(90deg, rgba(139, 92, 246, 0.1) 0%, rgba(255, 255, 255, 0.8) 100%);
       
       &::before {

@@ -872,7 +872,10 @@ defineExpose({
         <!-- 现代化、简洁的文件列表 -->
         <div v-if="gitStore.fileList.length" class="file-list-wrapper">
           <div class="file-list-header">
-            <h4>{{ $t('@13D1C:文件列表') }}</h4>
+            <div class="header-left">
+              <h4>{{ $t('@13D1C:文件列表') }}</h4>
+              <span v-if="gitStore.fileList.length > 0" class="file-count">({{ gitStore.fileList.length }})</span>
+            </div>
             <div class="view-mode-toggle">
               <el-tooltip :content="$t('@E80AC:列表视图')" placement="top" :show-after="200">
                 <button 
@@ -1212,6 +1215,22 @@ defineExpose({
     margin: 0;
     font-size: var(--font-size-md);
     font-weight: var(--font-weight-semibold);
+  }
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  
+  .file-count {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    font-weight: var(--font-weight-medium);
+    background: var(--bg-panel);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-card);
   }
 }
 

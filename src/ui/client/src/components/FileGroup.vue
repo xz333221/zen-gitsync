@@ -97,6 +97,7 @@ const getFileIcon = (filePath: string) => {
         <ArrowDown />
       </el-icon>
       <span>{{ title }}</span>
+      <span class="file-count">({{ files.length }})</span>
     </div>
     <div v-show="!isCollapsed" class="file-list">
       <div
@@ -116,12 +117,12 @@ const getFileIcon = (filePath: string) => {
               
               :show-after="200"
             >
-              <span class="file-name" :class="{ 'locked-file-name': props.isFileLocked(file.path), 'deleted-file-name': file.type === 'deleted' }">
+              <div class="file-name" :class="{ 'locked-file-name': props.isFileLocked(file.path), 'deleted-file-name': file.type === 'deleted' }">
                 {{ props.getFileName(file.path) }}
                 <el-icon v-if="props.isFileLocked(file.path)" class="lock-indicator">
                   <Lock />
                 </el-icon>
-              </span>
+              </div>
             </el-tooltip>
           </div>
           <div class="file-path-section" :title="props.getFileDirectory(file.path)">
@@ -185,6 +186,17 @@ const getFileIcon = (filePath: string) => {
   
   transition: var(--transition-all);
   position: relative;
+  
+  .file-count {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    font-weight: var(--font-weight-medium);
+    background: var(--bg-panel);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-card);
+    margin-left: auto;
+  }
 }
 
 .collapse-icon {
@@ -288,7 +300,8 @@ const getFileIcon = (filePath: string) => {
 
 .file-name-section {
   min-width: 0;
-  flex: 0 1 auto;
+  flex-shrink: 0;
+  max-width: 50%;
 }
 
 .file-name {
@@ -299,7 +312,6 @@ const getFileIcon = (filePath: string) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  display: flex;
   align-items: center;
   gap: var(--spacing-sm);
   transition: var(--transition-color);
@@ -332,7 +344,6 @@ const getFileIcon = (filePath: string) => {
 .file-path-section {
   flex: 0 1 auto;
   min-width: 0;
-  margin-left: var(--spacing-md);
   margin-right: auto;
 }
 

@@ -726,7 +726,6 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 220px;
   flex: 1;
 }
 
