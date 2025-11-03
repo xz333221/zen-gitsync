@@ -104,7 +104,7 @@ const getFileIcon = (filePath: string) => {
         v-for="file in files"
         :key="file.path"
         class="file-item file-group-item"
-        :class="{ 'is-loading': props.isLocking(file.path) }"
+        :class="{ 'is-loading': props.isLocking(file.path), 'locked': props.isFileLocked(file.path) }"
         @click="handleFileClick(file)"
       >
         <div class="file-info">
@@ -284,18 +284,16 @@ const getFileIcon = (filePath: string) => {
 }
 
 /* 锁定状态显示特殊样式 */
-.file-status-indicator.locked {
-  color: var(--git-status-locked);
-  background: rgba(220, 38, 38, 0.1);
-  border: 1px solid var(--git-status-locked);
-  border-radius: var(--radius-sm);
-  padding: 0 2px;
-  animation: pulse 2s infinite;
+.file-item.locked {
+  opacity: 0.5;
+  
+  &:hover {
+    opacity: 0.65;
+  }
 }
 
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
-  50% { box-shadow: 0 0 0 2px rgba(220, 38, 38, 0); }
+.file-status-indicator.locked {
+  opacity: 1;
 }
 
 .file-name-section {
@@ -319,11 +317,6 @@ const getFileIcon = (filePath: string) => {
 
 .file-item:hover .file-name {
   color: var(--text-link);
-}
-
-.file-name.locked-file-name {
-  color: var(--git-status-locked);
-  font-weight: var(--font-weight-semibold);
 }
 
 .file-name.deleted-file-name {

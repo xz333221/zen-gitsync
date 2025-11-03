@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static.ts'
 import { ref, computed, watch, onMounted } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput } from 'element-plus';
-import { FolderOpened, Lock, DocumentCopy, Search } from '@element-plus/icons-vue';
+import { FolderOpened, DocumentCopy, Search } from '@element-plus/icons-vue';
 import TreeIcon from '@/components/icons/TreeIcon.vue';
 import ListIcon from '@/components/icons/ListIcon.vue';
 import { formatDiff } from '../utils/index.ts';
@@ -445,17 +445,6 @@ onMounted(() => {
                       <div class="file-directory path-badge">{{ file.dirPath }}</div>
                     </el-tooltip>
                   </div>
-                  <el-tooltip
-                    v-if="file.locked"
-                    :content="$t('@E80AC:该文件已被锁定，提交时会被跳过')"
-                    placement="top"
-                    
-                    :show-after="200"
-                  >
-                    <el-icon class="lock-icon" color="#E6A23C">
-                      <Lock />
-                    </el-icon>
-                  </el-tooltip>
                   <!-- 文件操作按钮（悬浮在右侧，不占布局空间） -->
                   <div v-if="showActionButtons" class="file-actions">
                     <FileActionButtons
@@ -949,6 +938,15 @@ onMounted(() => {
       }
     }
   }
+  
+  // 锁定文件样式
+  &.is-locked {
+    opacity: 0.5;
+    
+    &:hover {
+      opacity: 0.65;
+    }
+  }
 }
 
 .file-icon {
@@ -1005,12 +1003,6 @@ onMounted(() => {
 .file-item:hover .path-badge {
   background: var(--bg-file-path-hover);
   color: var(--color-file-path-hover);
-}
-
-.lock-icon {
-  margin-left: 8px;
-  flex-shrink: 0;
-  opacity: 0.9;
 }
 
 /* 右侧悬浮操作区（与 Git 状态列表一致的交互） */
