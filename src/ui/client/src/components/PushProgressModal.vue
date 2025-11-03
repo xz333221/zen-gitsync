@@ -53,41 +53,48 @@ const statusColor = computed(() => {
 
 // 处理进度数据
 function handleProgress(data: any) {
+  console.log('Progress data:', data); // 调试日志
+  
   switch (data.type) {
     case 'progress':
-      messages.value.push(data.message);
-      // 滚动到底部
-      setTimeout(() => {
-        const container = document.querySelector('.progress-messages');
-        if (container) {
-          container.scrollTop = container.scrollHeight;
-        }
-      }, 50);
+      if (data.message) {
+        messages.value.push(data.message);
+        // 滚动到底部
+        setTimeout(() => {
+          const container = document.querySelector('.progress-messages');
+          if (container) {
+            container.scrollTop = container.scrollHeight;
+          }
+        }, 50);
+      }
       break;
       
     case 'percent':
-      percent.value = data.value;
+      if (typeof data.value === 'number') {
+        percent.value = Math.min(100, Math.max(0, data.value));
+      }
       break;
       
     case 'complete':
       if (data.success) {
         status.value = 'success';
         percent.value = 100;
-      } else {
-        status.value = 'error';
-        errorMessage.value = data.error || '未知错误';
-      }
-      
-      // 2秒后自动关闭（成功）或保持打开（失败）
-      if (data.success) {
+        
+        // 2秒后自动关闭
         setTimeout(() => {
           visible.value = false;
           emit('complete', true);
         }, 2000);
       } else {
+        status.value = 'error';
+        errorMessage.value = data.error || '未知错误';
+        // 失败时立即触发complete，但不关闭弹窗
         emit('complete', false);
       }
       break;
+      
+    default:
+      console.warn('Unknown progress type:', data.type);
   }
 }
 

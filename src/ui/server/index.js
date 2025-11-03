@@ -1407,13 +1407,29 @@ async function startUIServer(noOpen = false, savePort = false) {
     };
 
     try {
-      // 获取当前工作目录
-      const workDir = configManager.getWorkingDirectory();
+      // 获取当前工作目录 - 与execGitCommand保持一致
+      const cwdArg = process.argv.find(arg => arg.startsWith('--path')) || process.argv.find(arg => arg.startsWith('--cwd'));
+      let workDir = process.cwd();
+      if (cwdArg) {
+        const [, value] = cwdArg.split('=');
+        workDir = value || process.cwd();
+      }
+      
+      console.log('开始推送，工作目录:', workDir);
+      
+      // 发送开始消息
+      sendProgress({
+        type: 'progress',
+        message: '开始推送到远程仓库...'
+      });
       
       // 使用spawn执行git push --progress
       const gitPush = spawn('git', ['push', '--progress'], {
         cwd: workDir,
-        env: process.env
+        env: {
+          ...process.env,
+          GIT_CONFIG_PARAMETERS: "'core.quotepath=false'" // 关闭路径转义
+        }
       });
 
       let errorOutput = '';
@@ -1451,6 +1467,10 @@ async function startUIServer(noOpen = false, savePort = false) {
       });
 
       gitPush.on('close', (code) => {
+        console.log(`Git push 进程结束，退出码: ${code}`);
+        console.log('标准输出:', standardOutput);
+        console.log('错误输出:', errorOutput);
+        
         if (code === 0) {
           // 推送成功
           recentPushStatus = {
@@ -1462,20 +1482,22 @@ async function startUIServer(noOpen = false, savePort = false) {
           sendProgress({
             type: 'complete',
             success: true,
-            message: standardOutput || 'Push successful'
+            message: standardOutput || errorOutput || 'Push successful'
           });
         } else {
           // 推送失败
+          console.error('推送失败:', errorOutput || standardOutput);
           sendProgress({
             type: 'complete',
             success: false,
-            error: errorOutput || `Push failed with code ${code}`
+            error: errorOutput || standardOutput || `Push failed with code ${code}`
           });
         }
         res.end();
       });
 
       gitPush.on('error', (error) => {
+        console.error('Git push 进程错误:', error);
         sendProgress({
           type: 'complete',
           success: false,
