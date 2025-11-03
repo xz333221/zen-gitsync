@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { ElTooltip } from "element-plus";
 import { Position } from "@element-plus/icons-vue";
 import { useGitStore } from "@stores/gitStore";
 import { useConfigStore } from "@stores/configStore";
+import PushProgressModal from "@components/PushProgressModal.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
+
+// 进度弹窗
+const progressModalVisible = ref(false);
+const progressModalRef = ref<InstanceType<typeof PushProgressModal> | null>(null);
 
 // 定义组件props
 interface Props {
@@ -75,42 +80,77 @@ async function handleQuickPush() {
   emit("beforePush");
 
   try {
-    const result = await gitStore.addCommitAndPush(
+    // 暂存和提交阶段不显示进度
+    const commitResult = await gitStore.addAndCommit(
       props.finalCommitMessage,
       props.skipHooks
     );
-    if (result) {
+    
+    if (!commitResult) {
+      emit("afterPush", false);
+      return;
+    }
+    
+    // 推送阶段显示进度
+    progressModalVisible.value = true;
+    
+    if (progressModalRef.value) {
+      progressModalRef.value.reset();
+    }
+    
+    const pushResult = await gitStore.pushToRemoteWithProgress((data) => {
+      if (progressModalRef.value) {
+        progressModalRef.value.handleProgress(data);
+      }
+    });
+    
+    if (pushResult) {
       emit("clearFields");
     }
-    emit("afterPush", result);
+    
+    emit("afterPush", pushResult);
   } catch (error) {
     console.error("一键推送失败:", error);
     emit("afterPush", false);
   }
 }
+
+// 处理进度完成
+function handleProgressComplete(_success: boolean) {
+  // 可以在这里添加额外的完成处理逻辑
+}
 </script>
 
 <template>
-  <el-tooltip :content="tooltipText" placement="top" :show-after="200">
-    <el-button
-      type="success"
-      @click="handleQuickPush"
-      :loading="isLoading"
-      :disabled="isDisabled"
-      :class="from"
-      class="one-push-button"
-    >
-      <div class="one-push-content">
-        <el-icon class="one-push-icon"><Position /></el-icon>
-        <div class="one-push-text">
-          <span class="one-push-title">{{ $t('@2E184:一键推送所有') }}</span>
-          <span v-if="from === 'form'" class="one-push-desc"
-            >{{ $t('@2E184:暂存 + 提交 + 推送') }}</span
-          >
+  <div>
+    <el-tooltip :content="tooltipText" placement="top" :show-after="200">
+      <el-button
+        type="success"
+        @click="handleQuickPush"
+        :loading="isLoading"
+        :disabled="isDisabled"
+        :class="from"
+        class="one-push-button"
+      >
+        <div class="one-push-content">
+          <el-icon class="one-push-icon"><Position /></el-icon>
+          <div class="one-push-text">
+            <span class="one-push-title">{{ $t('@2E184:一键推送所有') }}</span>
+            <span v-if="from === 'form'" class="one-push-desc"
+              >{{ $t('@2E184:暂存 + 提交 + 推送') }}</span
+            >
+          </div>
         </div>
-      </div>
-    </el-button>
-  </el-tooltip>
+      </el-button>
+    </el-tooltip>
+    
+    <!-- 推送进度弹窗 -->
+    <PushProgressModal
+      ref="progressModalRef"
+      v-model="progressModalVisible"
+      @complete="handleProgressComplete"
+    />
+  </div>
 </template>
 
 <style scoped lang="scss">

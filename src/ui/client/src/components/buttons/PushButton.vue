@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Upload } from '@element-plus/icons-vue'
 import { useGitStore } from '@stores/gitStore'
+import PushProgressModal from '@components/PushProgressModal.vue'
 
 interface Props {
   from?: 'form' | 'drawer' | 'status'
@@ -19,6 +20,10 @@ const emit = defineEmits<{
 }>()
 
 const gitStore = useGitStore()
+
+// 进度弹窗
+const progressModalVisible = ref(false)
+const progressModalRef = ref<InstanceType<typeof PushProgressModal> | null>(null)
 
 // 计算是否需要推送
 const needsPush = computed(() => {
@@ -68,10 +73,24 @@ async function handleClick() {
   emit('click')
 
   try {
-    const result = await gitStore.pushToRemote()
+    // 显示进度弹窗
+    progressModalVisible.value = true
+    
+    // 重置进度状态
+    if (progressModalRef.value) {
+      progressModalRef.value.reset()
+    }
+    
+    // 使用带进度的推送方法
+    const result = await gitStore.pushToRemoteWithProgress((data) => {
+      // 处理进度数据
+      if (progressModalRef.value) {
+        progressModalRef.value.handleProgress(data)
+      }
+    })
     
     if (result) {
-      // pushToRemote已经刷新了分支状态，这里稍等一下确保状态传播
+      // pushToRemoteWithProgress已经刷新了分支状态，这里稍等一下确保状态传播
       await new Promise(resolve => setTimeout(resolve, 200))
     }
     
@@ -81,23 +100,37 @@ async function handleClick() {
     emit('afterPush', false)
   }
 }
+
+// 处理进度完成
+function handleProgressComplete(_success: boolean) {
+  // 可以在这里添加额外的完成处理逻辑
+}
 </script>
 
 <template>
-  <el-tooltip :content="tooltipText" placement="top">
-    <el-button
-      type="primary"
-      :icon="Upload"
-      @click="handleClick"
-      :loading="gitStore.isPushing"
-      :disabled="isDisabled"
-      :style="buttonStyle"
-      :class="['push-button', `from-${from}`]"
-    >
-      {{ $t('@F4137:推送') }}
-      <span v-if="needsPush">({{ gitStore.branchAhead }})</span>
-    </el-button>
-  </el-tooltip>
+  <div>
+    <el-tooltip :content="tooltipText" placement="top">
+      <el-button
+        type="primary"
+        :icon="Upload"
+        @click="handleClick"
+        :loading="gitStore.isPushing"
+        :disabled="isDisabled"
+        :style="buttonStyle"
+        :class="['push-button', `from-${from}`]"
+      >
+        {{ $t('@F4137:推送') }}
+        <span v-if="needsPush">({{ gitStore.branchAhead }})</span>
+      </el-button>
+    </el-tooltip>
+    
+    <!-- 推送进度弹窗 -->
+    <PushProgressModal
+      ref="progressModalRef"
+      v-model="progressModalVisible"
+      @complete="handleProgressComplete"
+    />
+  </div>
 </template>
 
 <style scoped lang="scss">

@@ -10,6 +10,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import { Server } from 'socket.io';
 import chokidar from 'chokidar';
+import { spawn } from 'child_process';
 // import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1390,6 +1391,106 @@ async function startUIServer(noOpen = false, savePort = false) {
       res.json({ success: true, message: stdout });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 带进度的推送更改 (SSE)
+  app.post('/api/push-with-progress', async (req, res) => {
+    // 设置SSE响应头
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const sendProgress = (data) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      // 获取当前工作目录
+      const workDir = configManager.getWorkingDirectory();
+      
+      // 使用spawn执行git push --progress
+      const gitPush = spawn('git', ['push', '--progress'], {
+        cwd: workDir,
+        env: process.env
+      });
+
+      let errorOutput = '';
+      let standardOutput = '';
+
+      // Git的进度信息在stderr中
+      gitPush.stderr.on('data', (data) => {
+        const output = data.toString();
+        errorOutput += output;
+        
+        // 解析进度信息
+        const lines = output.split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            // 发送原始行
+            sendProgress({
+              type: 'progress',
+              message: line.trim()
+            });
+
+            // 尝试解析百分比
+            const percentMatch = line.match(/(\d+)%/);
+            if (percentMatch) {
+              sendProgress({
+                type: 'percent',
+                value: parseInt(percentMatch[1])
+              });
+            }
+          }
+        }
+      });
+
+      gitPush.stdout.on('data', (data) => {
+        standardOutput += data.toString();
+      });
+
+      gitPush.on('close', (code) => {
+        if (code === 0) {
+          // 推送成功
+          recentPushStatus = {
+            justPushed: true,
+            pushTime: Date.now(),
+            validDuration: 10000
+          };
+
+          sendProgress({
+            type: 'complete',
+            success: true,
+            message: standardOutput || 'Push successful'
+          });
+        } else {
+          // 推送失败
+          sendProgress({
+            type: 'complete',
+            success: false,
+            error: errorOutput || `Push failed with code ${code}`
+          });
+        }
+        res.end();
+      });
+
+      gitPush.on('error', (error) => {
+        sendProgress({
+          type: 'complete',
+          success: false,
+          error: error.message
+        });
+        res.end();
+      });
+
+    } catch (error) {
+      sendProgress({
+        type: 'complete',
+        success: false,
+        error: error.message
+      });
+      res.end();
     }
   });
   

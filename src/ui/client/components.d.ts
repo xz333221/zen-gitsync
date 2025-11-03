@@ -46,6 +46,7 @@ declare module 'vue' {
     ListIcon: typeof import('./src/components/icons/ListIcon.vue')['default']
     OptionSwitchCard: typeof import('./src/components/OptionSwitchCard.vue')['default']
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']
+    PushProgressModal: typeof import('./src/components/PushProgressModal.vue')['default']
     QuickPushButton: typeof import('./src/components/buttons/QuickPushButton.vue')['default']
     StageButton: typeof import('./src/components/buttons/StageButton.vue')['default']
     SuccessModal: typeof import('./src/components/SuccessModal.vue')['default']

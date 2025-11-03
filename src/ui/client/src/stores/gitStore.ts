@@ -1200,6 +1200,115 @@ export const useGitStore = defineStore('git', () => {
       isPushing.value = false
     }
   }
+
+  // 带进度的推送到远程
+  async function pushToRemoteWithProgress(onProgress?: (data: any) => void) {
+    // 检查是否是Git仓库
+    if (!isGitRepo.value) {
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
+      return false
+    }
+    
+    return new Promise<boolean>((resolve) => {
+      try {
+        isPushing.value = true
+        
+        // 使用fetch的ReadableStream API接收SSE
+        fetch('/api/push-with-progress', {
+          method: 'POST'
+        }).then(response => {
+          const reader = response.body?.getReader()
+          const decoder = new TextDecoder()
+          
+          if (!reader) {
+            throw new Error('无法读取响应流')
+          }
+
+          const readStream = async () => {
+            try {
+              while (true) {
+                const { done, value } = await reader.read()
+                
+                if (done) {
+                  break
+                }
+                
+                // 解码数据
+                const chunk = decoder.decode(value, { stream: true })
+                const lines = chunk.split('\n')
+                
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    try {
+                      const data = JSON.parse(line.slice(6))
+                      
+                      // 调用进度回调
+                      if (onProgress) {
+                        onProgress(data)
+                      }
+                      
+                      // 处理完成事件
+                      if (data.type === 'complete') {
+                        isPushing.value = false
+                        
+                        if (data.success) {
+                          // 推送成功
+                          branchAhead.value = 0
+                          branchBehind.value = 0
+                          
+                          // 刷新状态
+                          Promise.all([
+                            fetchStatus(),
+                            fetchLog(),
+                          ])
+                          
+                          resolve(true)
+                        } else {
+                          // 推送失败
+                          ElMessage({
+                            message: `${$t('@C298B:推送失败: ')}${data.error}`,
+                            type: 'error'
+                          })
+                          resolve(false)
+                        }
+                      }
+                    } catch (e) {
+                      console.error('解析SSE数据失败:', e)
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('读取流失败:', error)
+              isPushing.value = false
+              ElMessage({
+                message: `${$t('@C298B:推送失败: ')}${(error as Error).message}`,
+                type: 'error'
+              })
+              resolve(false)
+            }
+          }
+          
+          readStream()
+        }).catch(error => {
+          isPushing.value = false
+          ElMessage({
+            message: `${$t('@C298B:推送失败: ')}${error.message}`,
+            type: 'error'
+          })
+          resolve(false)
+        })
+        
+      } catch (error) {
+        isPushing.value = false
+        ElMessage({
+          message: `${$t('@C298B:推送失败: ')}${(error as Error).message}`,
+          type: 'error'
+        })
+        resolve(false)
+      }
+    })
+  }
   
   // 合并分支
   async function mergeBranch(branch: string, options: { 
@@ -1801,6 +1910,7 @@ export const useGitStore = defineStore('git', () => {
     unstageFile,
     commitChanges,
     pushToRemote,
+    pushToRemoteWithProgress,
     addAndCommit,
     addCommitAndPush,
     resetHead,
