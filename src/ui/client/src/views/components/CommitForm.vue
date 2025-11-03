@@ -838,7 +838,8 @@ watch(() => gitStore.isCommiting, (isCommiting) => {
 
 watch(() => gitStore.isPushing, (isPushing) => {
   if (isPushing && loadingState.visible) {
-    setLoadingText($t('@76872:正在推送...'));
+    // 推送阶段关闭loading，让进度弹窗接管
+    hideLoading();
   }
 });
 
