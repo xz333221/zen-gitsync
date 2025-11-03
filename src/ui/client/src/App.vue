@@ -726,7 +726,6 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
 }
 
 .logo {

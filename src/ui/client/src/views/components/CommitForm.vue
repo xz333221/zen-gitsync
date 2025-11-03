@@ -1044,7 +1044,20 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
   <div class="card app-card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header app-card-header">
       <div class="header-left">
-        <h2>{{ $t('@76872:提交更改') }}</h2>
+        <!-- <h2>{{ $t('@76872:提交更改') }}</h2> -->
+        <!-- 提交模式开关 -->
+        <OptionSwitchCard
+          v-model="isStandardCommit"
+          :title="$t('@76872:提交模式')"
+          :tooltip="$t('@76872:选择传统或标准化提交格式')"
+          :active-text="$t('@76872:标准化')"
+          :inactive-text="$t('@76872:普通')"
+          active-color="#409eff"
+        >
+          <template #icon>
+            <el-icon><Edit /></el-icon>
+          </template>
+        </OptionSwitchCard>
         <el-button
           v-if="gitStore.userName !== '' && gitStore.userEmail !== ''"
           :icon="Setting"
@@ -1832,19 +1845,7 @@ git config --global user.email "your.email@example.com"</pre>
         custom-class="commit-settings-dialog"
       >
         <div class="commit-settings-content">
-          <!-- 提交模式开关 -->
-          <OptionSwitchCard
-            v-model="isStandardCommit"
-            :title="$t('@76872:提交模式')"
-            :tooltip="$t('@76872:选择传统或标准化提交格式')"
-            :active-text="$t('@76872:标准化')"
-            :inactive-text="$t('@76872:普通')"
-            active-color="#409eff"
-          >
-            <template #icon>
-              <el-icon><Edit /></el-icon>
-            </template>
-          </OptionSwitchCard>
+          
 
           <!-- Git钩子开关 -->
           <OptionSwitchCard
