@@ -1025,15 +1025,6 @@ function toggleFullscreen() {
             @row-click="(row) => viewCommitDetail(row)"
           >
 
-            <el-table-column :label="$t('@A1833:哈希')" width="80" resizable>
-              <template #default="scope">
-                <span
-                  class="commit-hash"
-                  @click="viewCommitDetail(scope.row)"
-                  >{{ scope.row.hash.substring(0, 6) }}</span
-                >
-              </template>
-            </el-table-column>
             <el-table-column :label="$t('@A1833:提交信息')" min-width="300">
               <template #default="scope">
                 <div class="commit-message-cell">
@@ -1086,9 +1077,7 @@ function toggleFullscreen() {
     <!-- 提交详情弹窗 -->
     <CommonDialog
       v-model="commitDetailVisible"
-      :title="`${$t('@A1833:提交详情: ')}${
-        selectedCommit?.hash ? selectedCommit.hash.substring(0, 7) : $t('@A1833:未知')
-      }`"
+      :title="selectedCommit?.message || $t('@A1833:提交详情')"
       size="extra-large"
       type="flex"
       heightMode="fixed"
@@ -1103,17 +1092,9 @@ function toggleFullscreen() {
               <span class="info-label">{{ $t('@A1833:日期') }}</span>
               <span class="info-value">{{ selectedCommit.date }}</span>
             </div>
-            <div class="info-item message-item">
-              <span class="info-label">{{ $t('@A1833:提交信息') }}</span>
-              <div
-                class="info-message"
-                v-html="
-                  formatCommitMessage(selectedCommit.message).replace(
-                    /\n/g,
-                    '<br>'
-                  )
-                "
-              ></div>
+            <div class="info-item hash-item">
+              <span class="info-label">{{ $t('@A1833:哈希') }}</span>
+              <span class="info-value commit-hash-value">{{ selectedCommit.hash.substring(0, 7) }}</span>
             </div>
           </div>
         </div>
@@ -1428,6 +1409,20 @@ function toggleFullscreen() {
   line-height: 1.6;
   word-break: break-word;
   flex: 1;
+}
+
+.hash-item {
+  flex-shrink: 0;
+}
+
+.commit-hash-value {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  color: #409eff;
+  background-color: #ecf5ff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 13px;
 }
 
 /* 提交详情弹窗样式 */

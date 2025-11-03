@@ -1207,7 +1207,7 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-sm);
+  padding: var(--spacing-sm) 0;
   background: var(--bg-container);
   border-bottom: 1px solid var(--border-card);
   
