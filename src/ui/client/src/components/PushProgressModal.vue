@@ -21,6 +21,9 @@ const status = ref<'progress' | 'success' | 'error'>('progress');
 const messages = ref<string[]>([]);
 const errorMessage = ref('');
 
+// 缓存消息容器引用
+const messagesContainerRef = ref<HTMLElement | null>(null);
+
 // 计算属性
 const visible = computed({
   get: () => props.modelValue,
@@ -53,19 +56,16 @@ const statusColor = computed(() => {
 
 // 处理进度数据
 function handleProgress(data: any) {
-  console.log('Progress data:', data); // 调试日志
-  
   switch (data.type) {
     case 'progress':
       if (data.message) {
         messages.value.push(data.message);
-        // 滚动到底部
+        // 使用nextTick确保DOM更新后再滚动
         setTimeout(() => {
-          const container = document.querySelector('.progress-messages');
-          if (container) {
-            container.scrollTop = container.scrollHeight;
+          if (messagesContainerRef.value) {
+            messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight;
           }
-        }, 50);
+        }, 0);
       }
       break;
       
@@ -92,9 +92,6 @@ function handleProgress(data: any) {
         emit('complete', false);
       }
       break;
-      
-    default:
-      console.warn('Unknown progress type:', data.type);
   }
 }
 
@@ -121,6 +118,8 @@ defineExpose({
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     :show-close="status !== 'progress'"
+    :append-to-body="true"
+    :lock-scroll="false"
     destroy-on-close
   >
     <div class="push-progress-container">
@@ -167,7 +166,7 @@ defineExpose({
       <!-- 进度消息 -->
       <div v-if="messages.length > 0" class="messages-section">
         <div class="messages-title">详细信息：</div>
-        <div class="progress-messages">
+        <div ref="messagesContainerRef" class="progress-messages">
           <div
             v-for="(msg, index) in messages"
             :key="index"
@@ -182,11 +181,25 @@ defineExpose({
 </template>
 
 <style scoped lang="scss">
+// 禁用Dialog的过渡效果，避免闪烁
+:deep(.el-overlay-dialog) {
+  will-change: auto !important;
+}
+
+:deep(.el-dialog) {
+  will-change: auto !important;
+}
+
 .push-progress-container {
   display: flex;
   flex-direction: column;
   gap: 24px;
   padding: 20px 0;
+  
+  // 优化渲染性能
+  * {
+    will-change: auto;
+  }
 }
 
 .status-section {
@@ -223,14 +236,17 @@ defineExpose({
 
 .rotating {
   animation: rotate 1s linear infinite;
+  // 使用GPU加速，优化性能
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 @keyframes rotate {
   from {
-    transform: rotate(0deg);
+    transform: rotate(0deg) translateZ(0);
   }
   to {
-    transform: rotate(360deg);
+    transform: rotate(360deg) translateZ(0);
   }
 }
 
