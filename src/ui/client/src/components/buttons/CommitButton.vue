@@ -3,6 +3,7 @@ import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
+import { Check } from '@element-plus/icons-vue'
 
 interface Props {
   from?: 'form' | 'drawer' | 'status'
@@ -98,6 +99,7 @@ async function handleClick() {
     <el-button
       type="primary"
       @click="handleClick"
+      :icon="Check"
       :loading="gitStore.isLoadingStatus"
       :disabled="isDisabled"
       :class="['commit-button', `from-${from}`]"

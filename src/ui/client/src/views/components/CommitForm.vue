@@ -1910,9 +1910,9 @@ git config --global user.email "your.email@example.com"</pre>
   gap: 8px;
 }
 
-.header-actions :deep(.button-grid) {
-  gap: 8px;
-}
+// .header-actions :deep(.button-grid) {
+//   gap: 8px;
+// }
 
 /* 头部按钮样式优化 */
 .header-actions :deep(.el-button) {
@@ -2707,32 +2707,6 @@ git config --global user.email "your.email@example.com"</pre>
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-
-.button-grid .el-button {
-  margin: 0;
-  height: 100%;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-}
-
-.button-grid .el-button:first-child {
-  grid-column: 1 / 2;
-  grid-row: 1 / 2;
-}
-
-.button-grid .el-button:nth-child(2) {
-  grid-column: 2 / 3;
-  grid-row: 1 / 2;
-}
-
-.button-grid .el-button:last-child {
-  grid-column: 1 / 3;
-  grid-row: 2 / 3;
 }
 
 .one-push-button {

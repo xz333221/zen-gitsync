@@ -91,26 +91,21 @@ function handleClearFields() {
 </template>
 
 <style scoped lang="scss">
-.form-bottom-actions {
-}
 
 .form-bottom-actions:hover {
-  transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
 .actions-flex-container {
   display: flex;
-  // gap: 16px;
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
 }
 
 .button-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  align-items: stretch;
+  display: flex;
+  gap: 8px;
 }
 
 .right-actions {
