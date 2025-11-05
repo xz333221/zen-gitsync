@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, reactive } from 'vue';
 import { ElDialog, ElProgress, ElIcon } from 'element-plus';
-import { Check, Close, Loading } from '@element-plus/icons-vue';
+import { Check, Close, Loading, CircleCheck } from '@element-plus/icons-vue';
 
 interface Props {
   modelValue: boolean;
@@ -15,11 +15,29 @@ interface Emits {
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
+// 阶段定义
+interface Stage {
+  name: string;
+  label: string;
+  status: 'wait' | 'process' | 'finish' | 'error';
+  percent: number;
+}
+
 // 进度数据
-const percent = ref(0);
 const status = ref<'progress' | 'success' | 'error'>('progress');
 const messages = ref<string[]>([]);
 const errorMessage = ref('');
+
+// 推送阶段
+const stages = reactive<Stage[]>([
+  { name: 'counting', label: '计数对象', status: 'wait', percent: 0 },
+  { name: 'compressing', label: '压缩对象', status: 'wait', percent: 0 },
+  { name: 'writing', label: '写入对象', status: 'wait', percent: 0 },
+  { name: 'resolving', label: '解析增量', status: 'wait', percent: 0 }
+]);
+
+// 当前激活的步骤索引
+const activeStep = ref(0);
 
 // 缓存消息容器引用
 const messagesContainerRef = ref<HTMLElement | null>(null);
@@ -69,16 +87,35 @@ function handleProgress(data: any) {
       }
       break;
       
-    case 'percent':
-      if (typeof data.value === 'number') {
-        percent.value = Math.min(100, Math.max(0, data.value));
+    case 'stage-progress':
+      if (data.stage && typeof data.percent === 'number') {
+        const stageIndex = stages.findIndex(s => s.name === data.stage);
+        if (stageIndex !== -1) {
+          // 更新对应阶段的进度
+          stages[stageIndex].percent = data.percent;
+          stages[stageIndex].status = data.percent === 100 ? 'finish' : 'process';
+          
+          // 更新激活步骤
+          activeStep.value = stageIndex;
+          
+          // 完成当前阶段时，将下一阶段设为等待状态
+          if (data.percent === 100 && stageIndex < stages.length - 1) {
+            stages[stageIndex + 1].status = 'wait';
+          }
+        }
       }
       break;
       
     case 'complete':
       if (data.success) {
         status.value = 'success';
-        percent.value = 100;
+        // 标记所有阶段为完成
+        stages.forEach(stage => {
+          if (stage.status === 'process' || stage.status === 'wait') {
+            stage.status = 'finish';
+            stage.percent = 100;
+          }
+        });
         
         // 2秒后自动关闭
         setTimeout(() => {
@@ -88,6 +125,10 @@ function handleProgress(data: any) {
       } else {
         status.value = 'error';
         errorMessage.value = data.error || '未知错误';
+        // 标记当前阶段为错误
+        if (activeStep.value < stages.length) {
+          stages[activeStep.value].status = 'error';
+        }
         // 失败时立即触发complete，但不关闭弹窗
         emit('complete', false);
       }
@@ -97,10 +138,14 @@ function handleProgress(data: any) {
 
 // 重置状态
 function reset() {
-  percent.value = 0;
   status.value = 'progress';
   messages.value = [];
   errorMessage.value = '';
+  activeStep.value = 0;
+  stages.forEach(stage => {
+    stage.status = 'wait';
+    stage.percent = 0;
+  });
 }
 
 // 暴露方法给父组件
@@ -141,20 +186,47 @@ defineExpose({
         </div>
       </div>
 
-      <!-- 进度圆环 -->
-      <div class="progress-section">
-        <el-progress
-          type="circle"
-          :percentage="percent"
-          :width="120"
-          :stroke-width="8"
-          :color="statusColor"
-          :status="status === 'error' ? 'exception' : status === 'success' ? 'success' : undefined"
+      <!-- 多阶段进度 -->
+      <div class="stages-section">
+        <div
+          v-for="(stage, index) in stages"
+          :key="stage.name"
+          class="stage-item"
+          :class="{
+            active: activeStep === index,
+            finished: stage.status === 'finish',
+            error: stage.status === 'error'
+          }"
         >
-          <template #default="{ percentage }">
-            <span class="percentage-value">{{ percentage }}%</span>
-          </template>
-        </el-progress>
+          <div class="stage-header">
+            <div class="stage-icon">
+              <el-icon v-if="stage.status === 'finish'" class="icon-finish">
+                <CircleCheck />
+              </el-icon>
+              <el-icon v-else-if="stage.status === 'error'" class="icon-error">
+                <Close />
+              </el-icon>
+              <el-icon v-else-if="stage.status === 'process'" class="icon-process rotating">
+                <Loading />
+              </el-icon>
+              <div v-else class="icon-wait">{{ index + 1 }}</div>
+            </div>
+            <div class="stage-info">
+              <div class="stage-label">{{ stage.label }}</div>
+              <div v-if="stage.status === 'process' || stage.status === 'finish'" class="stage-percent">
+                {{ stage.percent }}%
+              </div>
+            </div>
+          </div>
+          <div v-if="stage.status === 'process' || stage.status === 'finish'" class="stage-progress">
+            <el-progress
+              :percentage="stage.percent"
+              :stroke-width="6"
+              :show-text="false"
+              :color="stage.status === 'finish' ? '#67c23a' : '#409eff'"
+            />
+          </div>
+        </div>
       </div>
 
       <!-- 错误信息 -->
@@ -255,16 +327,106 @@ defineExpose({
   font-weight: 600;
 }
 
-.progress-section {
+.stages-section {
   display: flex;
-  justify-content: center;
-  padding: 20px 0;
+  flex-direction: column;
+  gap: 16px;
+  padding: 10px 0;
 }
 
-.percentage-value {
-  font-size: 24px;
+.stage-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+  
+  &.active {
+    border-color: #409eff;
+    background: rgba(64, 158, 255, 0.05);
+  }
+  
+  &.finished {
+    border-color: #67c23a;
+    background: rgba(103, 194, 58, 0.05);
+  }
+  
+  &.error {
+    border-color: #f56c6c;
+    background: rgba(245, 108, 108, 0.05);
+  }
+}
+
+.stage-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stage-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 20px;
   font-weight: 600;
+  
+  .icon-finish {
+    color: #67c23a;
+  }
+  
+  .icon-error {
+    color: #f56c6c;
+  }
+  
+  .icon-process {
+    color: #409eff;
+  }
+  
+  .icon-wait {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--border-color);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+}
+
+.stage-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stage-label {
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-primary);
+}
+
+.stage-percent {
+  font-size: 14px;
+  font-weight: 600;
+  color: #409eff;
+  
+  .finished & {
+    color: #67c23a;
+  }
+}
+
+.stage-progress {
+  padding-left: 44px;
 }
 
 .error-section {

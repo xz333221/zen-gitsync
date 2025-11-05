@@ -1450,12 +1450,29 @@ async function startUIServer(noOpen = false, savePort = false) {
               message: line.trim()
             });
 
-            // 尝试解析百分比
+            // 识别不同阶段并解析百分比
             const percentMatch = line.match(/(\d+)%/);
             if (percentMatch) {
+              const percent = parseInt(percentMatch[1]);
+              let stage = 'unknown';
+              
+              if (line.includes('Enumerating objects')) {
+                stage = 'enumerating';
+              } else if (line.includes('Counting objects')) {
+                stage = 'counting';
+              } else if (line.includes('Compressing objects')) {
+                stage = 'compressing';
+              } else if (line.includes('Writing objects')) {
+                stage = 'writing';
+              } else if (line.includes('Resolving deltas')) {
+                stage = 'resolving';
+              }
+              
               sendProgress({
-                type: 'percent',
-                value: parseInt(percentMatch[1])
+                type: 'stage-progress',
+                stage: stage,
+                percent: percent,
+                message: line.trim()
               });
             }
           }
