@@ -314,6 +314,14 @@ defineExpose({
   }
 }
 
+@keyframes rotate-border-light {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
 
 .stages-section {
   display: grid;
@@ -325,11 +333,34 @@ defineExpose({
   border: 2px solid transparent;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  overflow: hidden;
   
   &.is-loading {
-    border-color: rgba(64, 158, 255, 0.3);
+    border-color: rgba(64, 158, 255, 0.2);
     background: linear-gradient(135deg, rgba(64, 158, 255, 0.05), rgba(64, 158, 255, 0.02));
     animation: loading-pulse 2s ease-in-out infinite;
+    
+    &::before {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 12px;
+      background: conic-gradient(
+        from 0deg,
+        transparent 0%,
+        transparent 30%,
+        rgba(64, 158, 255, 0.8) 50%,
+        rgba(64, 158, 255, 0.4) 60%,
+        transparent 70%,
+        transparent 100%
+      );
+      animation: rotate-border-light 3s linear infinite;
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask-composite: exclude;
+      padding: 2px;
+    }
   }
   
   &.is-success {
