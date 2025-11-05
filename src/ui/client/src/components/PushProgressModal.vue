@@ -410,6 +410,11 @@ defineExpose({
   }
 }
 
+[data-theme="dark"]{
+  .stages-section {
+    opacity: 0.8;
+  }
+}
 .stage-item {
   display: flex;
   flex-direction: column;
