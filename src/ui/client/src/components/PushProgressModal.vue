@@ -160,7 +160,7 @@ defineExpose({
 <template>
   <ElDialog
     v-model="visible"
-    title=""
+    :title="statusText"
     width="650px"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
@@ -168,14 +168,9 @@ defineExpose({
     :append-to-body="true"
     :lock-scroll="false"
     destroy-on-close
-    class="push-progress-dialog"
+    :class="['push-progress-dialog', `status-${status}`]"
   >
     <div class="push-progress-container">
-      <!-- 状态标题 -->
-      <div class="status-header">
-        <div class="status-text" :class="status">{{ statusText }}</div>
-      </div>
-
       <!-- 推送阶段（2x2网格） -->
       <div 
         class="stages-section"
@@ -257,6 +252,38 @@ defineExpose({
   overflow: hidden;
 }
 
+// 弹窗标题颜色
+.push-progress-dialog {
+  :deep(.el-dialog__header) {
+    padding: 16px 20px;
+  }
+  
+  :deep(.el-dialog__title) {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+}
+
+// 根据状态设置标题颜色
+.status-progress {
+  :deep(.el-dialog__title) {
+    color: #409eff;
+  }
+}
+
+.status-success {
+  :deep(.el-dialog__title) {
+    color: #67c23a;
+  }
+}
+
+.status-error {
+  :deep(.el-dialog__title) {
+    color: #f56c6c;
+  }
+}
+
 .push-progress-container {
   display: flex;
   flex-direction: column;
@@ -267,12 +294,6 @@ defineExpose({
   * {
     will-change: auto;
   }
-}
-
-.status-header {
-  display: flex;
-  justify-content: center;
-  padding: 8px 0;
 }
 
 @keyframes success-pulse {
@@ -293,24 +314,6 @@ defineExpose({
   }
 }
 
-.status-text {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  transition: all 0.3s ease;
-  
-  &.progress {
-    color: #409eff;
-  }
-  
-  &.success {
-    color: #67c23a;
-  }
-  
-  &.error {
-    color: #f56c6c;
-  }
-}
 
 .stages-section {
   display: grid;
@@ -501,7 +504,7 @@ defineExpose({
 }
 
 .progress-messages {
-  max-height: 120px;
+  max-height: 160px;
   overflow-y: auto;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 8px;
