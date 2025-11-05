@@ -331,6 +331,45 @@ function getCommandHistory() {
   return [...commandHistory];
 }
 
+// Function to manually add command to history (for commands not using execGitCommand)
+function addCommandToHistory(command, stdout = '', stderr = '', error = null, executionTime = 0) {
+  const MAX_OUTPUT_LENGTH = 5000;
+  
+  // Truncate outputs if too long
+  const isStdoutTruncated = stdout.length > MAX_OUTPUT_LENGTH;
+  const isStderrTruncated = stderr.length > MAX_OUTPUT_LENGTH;
+  const truncatedStdout = isStdoutTruncated ? stdout.substring(0, MAX_OUTPUT_LENGTH) + '...[truncated]' : stdout;
+  const truncatedStderr = isStderrTruncated ? stderr.substring(0, MAX_OUTPUT_LENGTH) + '...[truncated]' : stderr;
+  
+  const historyItem = {
+    command,
+    stdout: truncatedStdout || '',
+    stderr: truncatedStderr || '',
+    error: error ? (typeof error === 'string' ? error : error.message) : null,
+    executionTime,
+    timestamp: new Date().toISOString(),
+    success: !error,
+    isStdoutTruncated,
+    isStderrTruncated
+  };
+  
+  // Add to history (limited size)
+  commandHistory.unshift(historyItem);
+  if (commandHistory.length > MAX_HISTORY_SIZE) {
+    commandHistory.pop();
+  }
+  
+  // Broadcast via WebSocket if available
+  if (ioInstance) {
+    ioInstance.emit('command_history_update', { 
+      newCommand: historyItem,
+      fullHistory: commandHistory.slice(0, 10)
+    });
+  }
+  
+  return historyItem;
+}
+
 const getCwd = () => {
   const cwdArg = process.argv.find(arg => arg.startsWith('--path')) || process.argv.find(arg => arg.startsWith('--cwd'));
   if (cwdArg) {
@@ -914,7 +953,7 @@ async function addResetScriptToPackageJson() {
 
 export {
   coloredLog, errorLog, execSyncGitCommand,
-  execGitCommand, getCommandHistory, // Add this export
+  execGitCommand, getCommandHistory, addCommandToHistory, // Add command history exports
   clearCommandHistory,
   registerSocketIO, // 导出注册Socket.io的函数
   getCwd, judgePlatform, showHelp, judgeLog, printGitLog,

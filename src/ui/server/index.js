@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { execGitCommand, getCommandHistory, clearCommandHistory, registerSocketIO, execGitAddWithLockFilter } from '../../utils/index.js';
+import { execGitCommand, getCommandHistory, addCommandToHistory, clearCommandHistory, registerSocketIO, execGitAddWithLockFilter } from '../../utils/index.js';
 import open from 'open';
 import config from '../../config.js';
 import chalk from 'chalk';
@@ -1417,6 +1417,9 @@ async function startUIServer(noOpen = false, savePort = false) {
       
       console.log('开始推送，工作目录:', workDir);
       
+      // 记录开始时间
+      const startTime = Date.now();
+      
       // 发送开始消息
       sendProgress({
         type: 'progress',
@@ -1488,6 +1491,9 @@ async function startUIServer(noOpen = false, savePort = false) {
         console.log('标准输出:', standardOutput);
         console.log('错误输出:', errorOutput);
         
+        // 计算执行时间
+        const executionTime = Date.now() - startTime;
+        
         if (code === 0) {
           // 推送成功
           recentPushStatus = {
@@ -1495,6 +1501,15 @@ async function startUIServer(noOpen = false, savePort = false) {
             pushTime: Date.now(),
             validDuration: 10000
           };
+
+          // 添加到命令历史
+          addCommandToHistory(
+            'git push --progress',
+            standardOutput,
+            errorOutput,
+            null,
+            executionTime
+          );
 
           sendProgress({
             type: 'complete',
@@ -1504,6 +1519,16 @@ async function startUIServer(noOpen = false, savePort = false) {
         } else {
           // 推送失败
           console.error('推送失败:', errorOutput || standardOutput);
+          
+          // 添加到命令历史（失败情况）
+          addCommandToHistory(
+            'git push --progress',
+            standardOutput,
+            errorOutput,
+            errorOutput || standardOutput || `Push failed with code ${code}`,
+            executionTime
+          );
+          
           sendProgress({
             type: 'complete',
             success: false,
@@ -1515,6 +1540,19 @@ async function startUIServer(noOpen = false, savePort = false) {
 
       gitPush.on('error', (error) => {
         console.error('Git push 进程错误:', error);
+        
+        // 计算执行时间
+        const executionTime = Date.now() - startTime;
+        
+        // 添加到命令历史（错误情况）
+        addCommandToHistory(
+          'git push --progress',
+          '',
+          '',
+          error.message,
+          executionTime
+        );
+        
         sendProgress({
           type: 'complete',
           success: false,
@@ -1524,6 +1562,15 @@ async function startUIServer(noOpen = false, savePort = false) {
       });
 
     } catch (error) {
+      // 添加到命令历史（异常情况）
+      addCommandToHistory(
+        'git push --progress',
+        '',
+        '',
+        error.message,
+        0
+      );
+      
       sendProgress({
         type: 'complete',
         success: false,
