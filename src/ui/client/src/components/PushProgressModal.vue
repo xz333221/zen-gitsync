@@ -120,6 +120,8 @@ function handleProgress(data: any) {
             stage.percent = 100;
           }
         });
+        // 清除激活状态，避免已完成阶段继续显示动画
+        activeStep.value = -1;
         
         // 根据配置决定是否自动关闭
         if (configStore.autoClosePushModal) {
@@ -138,6 +140,8 @@ function handleProgress(data: any) {
         if (activeStep.value < stages.length) {
           stages[activeStep.value].status = 'error';
         }
+        // 清除激活状态
+        activeStep.value = -1;
         // 失败时立即触发complete，但不关闭弹窗
         emit('complete', false);
       }
