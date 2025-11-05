@@ -197,7 +197,9 @@ defineExpose({
               <el-icon v-else-if="stage.status === 'process'" class="icon-process rotating">
                 <Loading />
               </el-icon>
-              <div v-else class="icon-wait">{{ index + 1 }}</div>
+              <el-icon v-else class="icon-wait">
+                <Loading />
+              </el-icon>
             </div>
             <div class="stage-info">
               <div class="stage-label">{{ stage.label }}</div>
@@ -478,16 +480,9 @@ defineExpose({
   }
   
   .icon-wait {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.1);
-    color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    opacity: 0.5;
+    color: rgba(128, 128, 128, 0.5);
+    font-size: 16px;
+    animation: rotate 2s linear infinite;
   }
 }
 
