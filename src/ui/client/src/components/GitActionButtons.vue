@@ -101,7 +101,7 @@ function handleClearFields() {
 
 .actions-flex-container {
   display: flex;
-  gap: 16px;
+  // gap: 16px;
   align-items: center;
   justify-content: space-between;
 }

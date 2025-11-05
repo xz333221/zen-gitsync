@@ -1910,12 +1910,6 @@ git config --global user.email "your.email@example.com"</pre>
   gap: 8px;
 }
 
-/* 头部按钮组样式优化 */
-
-.header-actions :deep(.actions-flex-container) {
-  gap: 8px;
-}
-
 .header-actions :deep(.button-grid) {
   gap: 8px;
 }
@@ -2700,13 +2694,6 @@ git config --global user.email "your.email@example.com"</pre>
     transform: scale(0.8);
     opacity: 0.8;
   }
-}
-
-.actions-flex-container {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px; /* 统一到8px */
-  width: 100%;
 }
 
 .left-actions {
