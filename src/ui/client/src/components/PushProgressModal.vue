@@ -113,7 +113,7 @@ defineExpose({
 <template>
   <ElDialog
     v-model="visible"
-    title="推送进度"
+    title=""
     width="600px"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
