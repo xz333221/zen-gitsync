@@ -314,12 +314,60 @@ defineExpose({
   }
 }
 
-@keyframes rotate-border-light {
+@keyframes border-light-run {
   0% {
-    transform: rotate(0deg);
+    top: 0;
+    left: 0;
+    width: 80px;
+    height: 3px;
+  }
+  24.99% {
+    top: 0;
+    left: 100%;
+    width: 80px;
+    height: 3px;
+  }
+  25% {
+    top: 0;
+    left: 100%;
+    width: 3px;
+    height: 80px;
+  }
+  49.99% {
+    top: 100%;
+    left: 100%;
+    width: 3px;
+    height: 80px;
+  }
+  50% {
+    top: 100%;
+    left: 100%;
+    width: 80px;
+    height: 3px;
+  }
+  74.99% {
+    top: 100%;
+    left: 0;
+    width: 80px;
+    height: 3px;
+  }
+  75% {
+    top: 100%;
+    left: 0;
+    width: 3px;
+    height: 80px;
+  }
+  99.99% {
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 80px;
   }
   100% {
-    transform: rotate(360deg);
+    top: 0;
+    left: 0;
+    width: 80px;
+    height: 3px;
   }
 }
 
@@ -343,23 +391,20 @@ defineExpose({
     &::before {
       content: '';
       position: absolute;
-      inset: -3px;
-      border-radius: 12px;
-      background: conic-gradient(
-        from 0deg,
+      top: 0;
+      left: 0;
+      width: 80px;
+      height: 3px;
+      background: linear-gradient(90deg, 
         transparent 0%,
-        transparent 30%,
-        rgba(64, 158, 255, 0.8) 50%,
-        rgba(64, 158, 255, 0.4) 60%,
-        transparent 70%,
+        rgba(64, 158, 255, 0.5) 30%,
+        rgba(64, 158, 255, 1) 50%,
+        rgba(64, 158, 255, 0.5) 70%,
         transparent 100%
       );
-      animation: rotate-border-light 3s linear infinite;
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      mask-composite: exclude;
-      padding: 2px;
+      box-shadow: 0 0 15px rgba(64, 158, 255, 0.9);
+      filter: blur(1px);
+      animation: border-light-run 4s linear infinite;
     }
   }
   
