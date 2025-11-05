@@ -159,13 +159,14 @@ defineExpose({
   <ElDialog
     v-model="visible"
     title=""
-    width="600px"
+    width="550px"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     :show-close="status !== 'progress'"
     :append-to-body="true"
     :lock-scroll="false"
     destroy-on-close
+    class="push-progress-dialog"
   >
     <div class="push-progress-container">
       <!-- 状态图标和文字 -->
@@ -265,8 +266,10 @@ defineExpose({
 .push-progress-container {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 20px 0;
+  gap: 16px;
+  padding: 10px 0;
+  max-height: 70vh;
+  overflow-y: auto;
   
   // 优化渲染性能
   * {
@@ -278,17 +281,17 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .status-icon {
-  width: 60px;
-  height: 60px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  font-size: 28px;
   
   &.progress {
     background: rgba(64, 158, 255, 0.1);
@@ -323,23 +326,23 @@ defineExpose({
 }
 
 .status-text {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 .stages-section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 10px 0;
+  gap: 10px;
+  padding: 5px 0;
 }
 
 .stage-item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
-  border-radius: 8px;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 6px;
   background: var(--bg-panel);
   border: 2px solid transparent;
   transition: all 0.3s ease;
@@ -363,18 +366,18 @@ defineExpose({
 .stage-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .stage-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   
   .icon-finish {
@@ -390,15 +393,15 @@ defineExpose({
   }
   
   .icon-wait {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: var(--border-color);
     color: var(--text-secondary);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: 12px;
   }
 }
 
@@ -410,15 +413,17 @@ defineExpose({
 }
 
 .stage-label {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .stage-percent {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #409eff;
+  min-width: 40px;
+  text-align: right;
   
   .finished & {
     color: #67c23a;
@@ -426,7 +431,7 @@ defineExpose({
 }
 
 .stage-progress {
-  padding-left: 44px;
+  padding-left: 38px;
 }
 
 .error-section {
@@ -452,34 +457,35 @@ defineExpose({
 .messages-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .messages-title {
   font-weight: 600;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .progress-messages {
-  max-height: 200px;
+  max-height: 120px;
   overflow-y: auto;
   background: var(--bg-panel);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: 6px;
+  padding: 8px 10px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .message-item {
   color: var(--text-primary);
-  padding: 2px 0;
+  padding: 1px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   
   &:not(:last-child) {
-    border-bottom: 1px solid var(--border-color-light);
-    padding-bottom: 4px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 }
 
