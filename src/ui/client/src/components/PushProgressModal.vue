@@ -307,10 +307,10 @@ defineExpose({
 
 @keyframes loading-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.4);
+    box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.15);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(64, 158, 255, 0);
+    box-shadow: 0 0 0 6px rgba(64, 158, 255, 0);
   }
 }
 
@@ -318,56 +318,56 @@ defineExpose({
   0% {
     top: 0;
     left: 0;
-    width: 80px;
-    height: 3px;
+    width: 60px;
+    height: 2px;
   }
   24.99% {
     top: 0;
     left: 100%;
-    width: 80px;
-    height: 3px;
+    width: 60px;
+    height: 2px;
   }
   25% {
     top: 0;
     left: 100%;
-    width: 3px;
-    height: 80px;
+    width: 2px;
+    height: 60px;
   }
   49.99% {
     top: 100%;
     left: 100%;
-    width: 3px;
-    height: 80px;
+    width: 2px;
+    height: 60px;
   }
   50% {
     top: 100%;
     left: 100%;
-    width: 80px;
-    height: 3px;
+    width: 60px;
+    height: 2px;
   }
   74.99% {
     top: 100%;
     left: 0;
-    width: 80px;
-    height: 3px;
+    width: 60px;
+    height: 2px;
   }
   75% {
     top: 100%;
     left: 0;
-    width: 3px;
-    height: 80px;
+    width: 2px;
+    height: 60px;
   }
   99.99% {
     top: 0;
     left: 0;
-    width: 3px;
-    height: 80px;
+    width: 2px;
+    height: 60px;
   }
   100% {
     top: 0;
     left: 0;
-    width: 80px;
-    height: 3px;
+    width: 60px;
+    height: 2px;
   }
 }
 
@@ -375,43 +375,38 @@ defineExpose({
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  padding: 16px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.02);
-  border: 2px solid transparent;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 12px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
   
   &.is-loading {
-    border-color: rgba(64, 158, 255, 0.2);
-    background: linear-gradient(135deg, rgba(64, 158, 255, 0.05), rgba(64, 158, 255, 0.02));
-    animation: loading-pulse 2s ease-in-out infinite;
+    border-color: rgba(64, 158, 255, 0.15);
     
     &::before {
       content: '';
       position: absolute;
       top: 0;
       left: 0;
-      width: 80px;
-      height: 3px;
+      width: 60px;
+      height: 2px;
       background: linear-gradient(90deg, 
         transparent 0%,
-        rgba(64, 158, 255, 0.5) 30%,
-        rgba(64, 158, 255, 1) 50%,
-        rgba(64, 158, 255, 0.5) 70%,
+        rgba(64, 158, 255, 0.4) 30%,
+        rgba(64, 158, 255, 0.8) 50%,
+        rgba(64, 158, 255, 0.4) 70%,
         transparent 100%
       );
-      box-shadow: 0 0 15px rgba(64, 158, 255, 0.9);
-      filter: blur(1px);
+      box-shadow: 0 0 10px rgba(64, 158, 255, 0.5);
       animation: border-light-run 4s linear infinite;
     }
   }
   
   &.is-success {
-    border-color: rgba(103, 194, 58, 0.3);
-    background: linear-gradient(135deg, rgba(103, 194, 58, 0.05), rgba(103, 194, 58, 0.02));
-    animation: success-pulse 0.6s ease;
+    border-color: rgba(103, 194, 58, 0.2);
   }
 }
 
@@ -419,27 +414,27 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.5);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   
   &.active {
-    background: rgba(64, 158, 255, 0.08);
-    border-color: rgba(64, 158, 255, 0.2);
-    transform: scale(1.02);
+    background: rgba(64, 158, 255, 0.05);
+    border-color: rgba(64, 158, 255, 0.15);
+    transform: scale(1.01);
   }
   
   &.finished {
-    background: rgba(103, 194, 58, 0.08);
-    border-color: rgba(103, 194, 58, 0.2);
+    background: rgba(103, 194, 58, 0.05);
+    border-color: rgba(103, 194, 58, 0.15);
   }
   
   &.error {
-    background: rgba(245, 108, 108, 0.08);
-    border-color: rgba(245, 108, 108, 0.2);
+    background: rgba(245, 108, 108, 0.05);
+    border-color: rgba(245, 108, 108, 0.15);
   }
 }
 
