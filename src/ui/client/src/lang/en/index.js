@@ -458,6 +458,8 @@ export default {
   '@76872:添加 --no-verify 参数': 'Add -- no verify parameter',
   '@76872:回车自动提交': 'Enter and submit automatically',
   '@76872:输入提交信息后按回车直接执行一键推送': 'After entering the commit information, press Enter to directly execute the one click push',
+  '@76872:Push完成自动关闭': 'Auto-close after push',
+  '@76872:推送成功后自动关闭进度弹窗': 'Automatically close the progress dialog after successful push',
   '@76872:收起': 'Fold up',
   '@76872:正文及页脚': 'Main text and footer',
   '@76872:拉取': 'Pull',

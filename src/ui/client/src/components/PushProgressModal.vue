@@ -2,6 +2,7 @@
 import { ref, computed, reactive } from 'vue';
 import { ElDialog, ElProgress, ElIcon } from 'element-plus';
 import { Check, Close, Loading, CircleCheck } from '@element-plus/icons-vue';
+import { useConfigStore } from '@stores/configStore';
 
 interface Props {
   modelValue: boolean;
@@ -14,6 +15,9 @@ interface Emits {
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
+
+// 从configStore获取配置
+const configStore = useConfigStore();
 
 // 阶段定义
 interface Stage {
@@ -117,11 +121,16 @@ function handleProgress(data: any) {
           }
         });
         
-        // 2秒后自动关闭
-        setTimeout(() => {
-          visible.value = false;
+        // 根据配置决定是否自动关闭
+        if (configStore.autoClosePushModal) {
+          setTimeout(() => {
+            visible.value = false;
+            emit('complete', true);
+          }, 2000);
+        } else {
+          // 不自动关闭，但仍然触发complete事件
           emit('complete', true);
-        }, 2000);
+        }
       } else {
         status.value = 'error';
         errorMessage.value = data.error || '未知错误';

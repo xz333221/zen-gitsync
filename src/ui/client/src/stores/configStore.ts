@@ -1,6 +1,6 @@
 import { $t } from '@/lang/static'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 export const useConfigStore = defineStore('config', () => {
@@ -14,11 +14,24 @@ export const useConfigStore = defineStore('config', () => {
   const isLoaded = ref(false)
   // 当前工作目录
   const currentDirectory = ref('')
+  // Push完成后自动关闭进度弹窗（从localStorage加载，默认true）
+  const autoClosePushModal = ref(true)
 
   // 设置当前目录
   function setCurrentDirectory(dir: string) {
     currentDirectory.value = dir || ''
   }
+
+  // 初始化：从localStorage加载autoClosePushModal配置
+  const savedAutoClosePushModal = localStorage.getItem('zen-gitsync-auto-close-push-modal')
+  if (savedAutoClosePushModal !== null) {
+    autoClosePushModal.value = savedAutoClosePushModal === 'true'
+  }
+
+  // 监听autoClosePushModal变化，自动保存到localStorage
+  watch(autoClosePushModal, (newValue) => {
+    localStorage.setItem('zen-gitsync-auto-close-push-modal', newValue.toString())
+  })
 
   // 添加 computed 属性返回完整配置
   const config = computed(() => {
@@ -326,6 +339,7 @@ export const useConfigStore = defineStore('config', () => {
     isLoaded,
     currentDirectory,
     config,
+    autoClosePushModal,
 
     // 方法
     loadConfig,

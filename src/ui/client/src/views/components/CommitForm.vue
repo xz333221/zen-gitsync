@@ -862,6 +862,8 @@ onMounted(async () => {
     autoQuickPushOnEnter.value = savedAutoQuickPush === "true";
   }
 
+  // autoClosePushModal 现在由 configStore 统一管理，不需要在这里加载
+
   // 监听配置变化并更新
   watch(() => configStore.config, updateFromConfig, { immediate: true });
   
@@ -1868,6 +1870,19 @@ git config --global user.email "your.email@example.com"</pre>
             :tooltip="$t('@76872:输入提交信息后按回车直接执行一键推送')"
             active-color="#67c23a"
             icon-class="success"
+          >
+            <template #icon>
+              <el-icon><Check /></el-icon>
+            </template>
+          </OptionSwitchCard>
+
+          <!-- Push完成后自动关闭弹窗 -->
+          <OptionSwitchCard
+            v-model="configStore.autoClosePushModal"
+            :title="$t('@76872:Push完成自动关闭')"
+            :tooltip="$t('@76872:推送成功后自动关闭进度弹窗')"
+            active-color="#409eff"
+            icon-class="info"
           >
             <template #icon>
               <el-icon><Check /></el-icon>
