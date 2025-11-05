@@ -480,7 +480,7 @@ defineExpose({
   }
   
   .icon-wait {
-    color: rgba(128, 128, 128, 0.5);
+    color: rgba(128, 128, 128, 1);
     font-size: 16px;
     animation: rotate 2s linear infinite;
   }
