@@ -639,4 +639,37 @@ defineExpose({
     color: #f89898;
   }
 }
+
+/* 浅色主题适配 */
+:root:not([data-theme="dark"]) {
+  .progress-messages {
+    background: rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  
+  .message-item {
+    color: rgba(0, 0, 0, 0.75);
+    
+    &:hover {
+      color: rgba(0, 0, 0, 0.9);
+    }
+  }
+  
+  .messages-title {
+    color: rgba(0, 0, 0, 0.65);
+  }
+  
+  .progress-messages::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+  }
+  
+  .progress-messages::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    
+    &:hover {
+      background: rgba(0, 0, 0, 0.3);
+    }
+  }
+}
 </style>
