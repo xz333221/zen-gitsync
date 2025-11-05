@@ -55,10 +55,12 @@ let recentPushStatus = {
   validDuration: 10000 // 推送后10秒内认为分支状态是同步的
 };
 
+const showConsole = true;
 async function startUIServer(noOpen = false, savePort = false) {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer);
+  if (showConsole) console.log(`创建服务成功`)
   
   // 获取当前项目的唯一标识（使用工作目录路径）
   // 需要在切换目录时更新，故使用 let
@@ -78,14 +80,16 @@ async function startUIServer(noOpen = false, savePort = false) {
   try {
     let dirPath = process.cwd();
     try {
+      if(showConsole) console.log(`记录最近打开目录`)
       const { stdout } = await execGitCommand('git rev-parse --show-toplevel');
       const root = stdout?.trim();
       if (root) dirPath = root;
     } catch (_) {
       // 非Git仓库或命令失败，使用 CWD 即可
     }
+    if (showConsole) console.log(`记录最近打开目录: ${dirPath}`)
     await configManager.saveRecentDirectory(dirPath);
-    console.log(chalk.gray(`已记录最近打开目录: ${dirPath}`));
+    if (showConsole) console.log(chalk.gray(`已记录最近打开目录: ${dirPath}`));
   } catch (e) {
     console.warn(chalk.yellow(`记录最近目录失败: ${e?.message || e}`));
   }
@@ -96,6 +100,9 @@ async function startUIServer(noOpen = false, savePort = false) {
     console.log(`[${now}] ${req.method} ${req.url}`);
     next();
   });
+
+  // 静态文件服务
+  app.use(express.static(path.join(__dirname, '../public')));
 
   // 通用命令执行接口（非流式）
   app.post('/api/exec', async (req, res) => {
@@ -115,9 +122,6 @@ async function startUIServer(noOpen = false, savePort = false) {
       res.status(500).json({ success: false, error: error.message });
     }
   });
-  
-  // 静态文件服务
-  app.use(express.static(path.join(__dirname, '../public')));
   
   // API路由
   // 移除了 /api/status 端点，因为前端只使用 porcelain 格式
@@ -996,9 +1000,12 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 获取配置
   app.get('/api/config/getConfig', async (req, res) => {
     try {
+      console.log('获取配置中。。。')
       const config = await configManager.loadConfig()
+      console.log('获取配置成功')
       res.json(config)
     } catch (error) {
+      console.log('获取配置失败')
       res.status(500).json({ error: error.message })
     }
   })
@@ -2971,7 +2978,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       try {
         // 等待1秒，避免快速尝试多个端口
         if (currentPort > startPort) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 800));
           console.log(`尝试端口 ${currentPort}...`);
         }
         
@@ -3014,7 +3021,9 @@ async function startUIServer(noOpen = false, savePort = false) {
             
             // 只有在noOpen为false时才打开浏览器
             if (!noOpen) {
-              open(`http://localhost:${currentPort}`);
+              setTimeout(() => {
+                open(`http://localhost:${currentPort}`);
+              }, 0);
             }
             
             resolve();
