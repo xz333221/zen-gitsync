@@ -270,13 +270,15 @@ defineExpose({
 
 :deep(.el-dialog) {
   will-change: auto !important;
+  border-radius: 12px !important;
+  overflow: hidden;
 }
 
 .push-progress-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 10px 0;
+  gap: 20px;
+  padding: 16px 0;
   max-height: 70vh;
   overflow-y: auto;
   
@@ -290,31 +292,52 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  padding: 8px 0;
 }
 
 .status-icon {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
+  font-size: 32px;
+  position: relative;
+  transition: all 0.3s ease;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    padding: 2px;
+    background: linear-gradient(135deg, currentColor, transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    opacity: 0.3;
+  }
   
   &.progress {
-    background: rgba(64, 158, 255, 0.1);
+    background: linear-gradient(135deg, rgba(64, 158, 255, 0.15), rgba(64, 158, 255, 0.05));
     color: #409eff;
+    box-shadow: 0 4px 12px rgba(64, 158, 255, 0.2);
   }
   
   &.success {
-    background: rgba(103, 194, 58, 0.1);
+    background: linear-gradient(135deg, rgba(103, 194, 58, 0.15), rgba(103, 194, 58, 0.05));
     color: #67c23a;
+    box-shadow: 0 4px 12px rgba(103, 194, 58, 0.25);
+    animation: success-pulse 0.6s ease;
   }
   
   &.error {
-    background: rgba(245, 108, 108, 0.1);
+    background: linear-gradient(135deg, rgba(245, 108, 108, 0.15), rgba(245, 108, 108, 0.05));
     color: #f56c6c;
+    box-shadow: 0 4px 12px rgba(245, 108, 108, 0.2);
   }
 }
 
@@ -334,53 +357,97 @@ defineExpose({
   }
 }
 
+@keyframes success-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
 .status-text {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 .stages-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 5px 0;
+  gap: 12px;
+  padding: 8px 0;
 }
 
 .stage-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
   background: var(--bg-panel);
   border: 2px solid transparent;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: transparent;
+    transition: all 0.3s ease;
+  }
   
   &.active {
-    border-color: #409eff;
-    background: rgba(64, 158, 255, 0.05);
+    border-color: rgba(64, 158, 255, 0.3);
+    background: linear-gradient(135deg, rgba(64, 158, 255, 0.08), rgba(64, 158, 255, 0.02));
+    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+    
+    &::before {
+      background: linear-gradient(90deg, transparent, #409eff, transparent);
+      animation: shimmer 2s infinite;
+    }
   }
   
   &.finished {
-    border-color: #67c23a;
-    background: rgba(103, 194, 58, 0.05);
+    border-color: rgba(103, 194, 58, 0.3);
+    background: linear-gradient(135deg, rgba(103, 194, 58, 0.08), rgba(103, 194, 58, 0.02));
+    box-shadow: 0 2px 8px rgba(103, 194, 58, 0.1);
+    
+    &::before {
+      background: linear-gradient(90deg, #67c23a, #67c23a);
+    }
   }
   
   &.error {
-    border-color: #f56c6c;
-    background: rgba(245, 108, 108, 0.05);
+    border-color: rgba(245, 108, 108, 0.3);
+    background: linear-gradient(135deg, rgba(245, 108, 108, 0.08), rgba(245, 108, 108, 0.02));
+    box-shadow: 0 2px 8px rgba(245, 108, 108, 0.1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
   }
 }
 
 .stage-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .stage-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -388,22 +455,32 @@ defineExpose({
   flex-shrink: 0;
   font-size: 18px;
   font-weight: 600;
+  transition: all 0.3s ease;
   
   .icon-finish {
     color: #67c23a;
+    background: rgba(103, 194, 58, 0.12);
+    padding: 6px;
+    border-radius: 50%;
   }
   
   .icon-error {
     color: #f56c6c;
+    background: rgba(245, 108, 108, 0.12);
+    padding: 6px;
+    border-radius: 50%;
   }
   
   .icon-process {
     color: #409eff;
+    background: rgba(64, 158, 255, 0.12);
+    padding: 6px;
+    border-radius: 50%;
   }
   
   .icon-wait {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     background: var(--border-color);
     color: var(--text-secondary);
@@ -411,6 +488,7 @@ defineExpose({
     align-items: center;
     justify-content: center;
     font-size: 12px;
+    opacity: 0.6;
   }
 }
 
@@ -422,17 +500,20 @@ defineExpose({
 }
 
 .stage-label {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--text-primary);
+  letter-spacing: 0.3px;
 }
 
 .stage-percent {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: #409eff;
-  min-width: 40px;
+  min-width: 45px;
   text-align: right;
+  font-family: 'Consolas', 'Monaco', monospace;
+  letter-spacing: 0.5px;
   
   .finished & {
     color: #67c23a;
@@ -440,7 +521,22 @@ defineExpose({
 }
 
 .stage-progress {
-  padding-left: 38px;
+  padding-left: 44px;
+  
+  :deep(.el-progress-bar__outer) {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
+  
+  :deep(.el-progress-bar__inner) {
+    background: linear-gradient(90deg, #409eff, #66b1ff);
+    box-shadow: 0 0 8px rgba(64, 158, 255, 0.3);
+    transition: all 0.3s ease;
+  }
+  
+  .finished & :deep(.el-progress-bar__inner) {
+    background: linear-gradient(90deg, #67c23a, #85ce61);
+    box-shadow: 0 0 8px rgba(103, 194, 58, 0.3);
+  }
 }
 
 .error-section {
@@ -466,35 +562,64 @@ defineExpose({
 .messages-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .messages-title {
   font-weight: 600;
   color: var(--text-secondary);
   font-size: 13px;
+  letter-spacing: 0.3px;
+  opacity: 0.85;
 }
 
 .progress-messages {
-  max-height: 120px;
+  max-height: 140px;
   overflow-y: auto;
-  background: var(--bg-panel);
-  border-radius: 6px;
-  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 12px 14px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    
+    &:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+  }
 }
 
 .message-item {
-  color: var(--text-primary);
-  padding: 1px 0;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 2px 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+  
+  &:hover {
+    opacity: 1;
+  }
   
   &:not(:last-child) {
-    margin-bottom: 2px;
+    margin-bottom: 3px;
   }
 }
 
