@@ -384,8 +384,8 @@ defineExpose({
   overflow: hidden;
   
   &.is-loading {
-    border-color: rgba(64, 158, 255, 0.2);
-    background: linear-gradient(135deg, rgba(64, 158, 255, 0.05), rgba(64, 158, 255, 0.02));
+    // border-color: rgba(64, 158, 255, 0.2);
+    // background: linear-gradient(135deg, rgba(64, 158, 255, 0.05), rgba(64, 158, 255, 0.02));
     animation: loading-pulse 2s ease-in-out infinite;
     
     &::before {
