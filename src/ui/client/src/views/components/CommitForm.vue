@@ -96,7 +96,7 @@ const commitTypeOptions = computed(() => [
 const isStashDialogVisible = ref(false);
 const isStashListDialogVisible = ref(false);
 const stashMessage = ref('');
-const includeUntracked = ref(false);
+const includeUntracked = ref(true);
 // 新增：排除锁定文件选项（默认勾选）
 const excludeLocked = ref(true);
 
@@ -757,7 +757,9 @@ const canReset = computed(() => {
 });
 
 const canResetToRemote = computed(() => {
-  return gitStore.hasUpstream && (needsPush.value || needsPull.value || hasAnyChanges.value);
+  // 重置到远程会丢弃所有本地修改（包括锁定文件），所以应该检查所有变更
+  const hasAnyLocalChanges = gitStore.fileList.length > 0; // 包括锁定和非锁定文件
+  return gitStore.hasUpstream && (needsPush.value || needsPull.value || hasAnyLocalChanges);
 });
 
 // 使用默认提交信息模板

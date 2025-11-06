@@ -806,6 +806,98 @@ async function startUIServer(noOpen = false, savePort = false) {
       }
   });
   
+  // 在终端中打开当前目录
+  app.post('/api/open_terminal', async (req, res) => {
+      try {
+          // 获取要打开的目录路径，如果没有提供，则使用当前目录
+          const directoryPath = req.body.path || process.cwd();
+          
+          try {
+              // 检查目录是否存在
+              await fs.access(directoryPath);
+              
+              // 根据不同操作系统打开终端
+              const platform = os.platform();
+              let command;
+              let args;
+              
+              switch (platform) {
+                  case 'win32':
+                      // Windows: 将start命令的参数分开传递，避免引号转义问题
+                      // 参数顺序：start [title] /D [path] [command]
+                      command = 'cmd';
+                      args = ['/c', 'start', '', '/D', directoryPath, 'cmd'];
+                      break;
+                  case 'darwin':
+                      // macOS: 使用 Terminal.app
+                      command = 'open';
+                      args = ['-a', 'Terminal', directoryPath];
+                      break;
+                  case 'linux':
+                      // Linux: 尝试使用常见的终端模拟器
+                      // 优先级: gnome-terminal, konsole, xterm
+                      const terminals = [
+                          { cmd: 'gnome-terminal', args: ['--working-directory', directoryPath] },
+                          { cmd: 'konsole', args: ['--workdir', directoryPath] },
+                          { cmd: 'xterm', args: ['-e', `cd "${directoryPath}" && $SHELL`] }
+                      ];
+                      
+                      // 尝试找到可用的终端
+                      let terminalFound = false;
+                      for (const terminal of terminals) {
+                          try {
+                              const { exec } = await import('child_process');
+                              exec(`which ${terminal.cmd}`, (error) => {
+                                  if (!error) {
+                                      command = terminal.cmd;
+                                      args = terminal.args;
+                                      terminalFound = true;
+                                  }
+                              });
+                              if (terminalFound) break;
+                          } catch (e) {
+                              continue;
+                          }
+                      }
+                      
+                      if (!terminalFound) {
+                          return res.status(400).json({
+                              success: false,
+                              error: '未找到可用的终端模拟器'
+                          });
+                      }
+                      break;
+                  default:
+                      return res.status(400).json({
+                          success: false,
+                          error: `不支持的操作系统: ${platform}`
+                      });
+              }
+              
+              // 执行命令打开终端
+              spawn(command, args, {
+                  detached: true,
+                  stdio: 'ignore'
+              }).unref();
+              
+              res.json({
+                  success: true,
+                  message: '已在终端中打开目录'
+              });
+          } catch (error) {
+              res.status(400).json({
+                  success: false,
+                  error: `无法打开终端 "${directoryPath}": ${error.message}`
+              });
+          }
+      } catch (error) {
+          res.status(500).json({ 
+              success: false,
+              error: error.message 
+          });
+      }
+  });
+  
   // 打开文件
   app.post('/api/open-file', async (req, res) => {
     try {

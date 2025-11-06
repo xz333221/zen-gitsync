@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Folder, FolderOpened, Clock } from "@element-plus/icons-vue";
+import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
 import { ref, h, computed } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
@@ -47,6 +47,29 @@ async function onOpenExplorer() {
     }
   } catch (error) {
     ElMessage.error(`${$t('@67CE7:打开目录失败: ')}${(error as Error).message}`);
+  }
+}
+
+// 在终端中打开当前目录
+async function onOpenTerminal() {
+  try {
+    if (!currentDirectory.value) {
+      ElMessage.warning("当前目录路径为空");
+      return;
+    }
+    const response = await fetch("/api/open_terminal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: currentDirectory.value }),
+    });
+    const result = await response.json();
+    if (result.success) {
+      ElMessage.success("已在终端中打开目录");
+    } else if (result.error) {
+      ElMessage.error(result.error);
+    }
+  } catch (error) {
+    ElMessage.error(`${$t('@67CE7:打开终端失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -265,7 +288,7 @@ async function selectDirectory(dirPath: string) {
     <div class="directory-display cursor-pointer" :title="currentDirectory" @click="onOpenDialog">
       {{ currentDirectory }}
     </div>
-    <div class="directory-actions">
+    <div class="directory-actions flex">
       <el-tooltip
         :content="$t('@67CE7:在资源管理器中打开')"
         placement="top"
@@ -274,6 +297,16 @@ async function selectDirectory(dirPath: string) {
       >
         <button class="modern-btn btn-icon-28" @click="onOpenExplorer">
           <el-icon class="btn-icon"><FolderOpened /></el-icon>
+        </button>
+      </el-tooltip>
+      <el-tooltip
+        content="在终端中打开"
+        placement="top"
+        effect="dark"
+        :show-after="200"
+      >
+        <button class="modern-btn btn-icon-28" @click="onOpenTerminal">
+          <el-icon class="btn-icon"><Monitor /></el-icon>
         </button>
       </el-tooltip>
     </div>
