@@ -16,6 +16,8 @@ export const useConfigStore = defineStore('config', () => {
   const currentDirectory = ref('')
   // Push完成后自动关闭进度弹窗（从localStorage加载，默认true）
   const autoClosePushModal = ref(true)
+  // 自动设置默认提交信息（从localStorage加载，默认false）
+  const autoSetDefaultMessage = ref(false)
 
   // 设置当前目录
   function setCurrentDirectory(dir: string) {
@@ -31,6 +33,17 @@ export const useConfigStore = defineStore('config', () => {
   // 监听autoClosePushModal变化，自动保存到localStorage
   watch(autoClosePushModal, (newValue) => {
     localStorage.setItem('zen-gitsync-auto-close-push-modal', newValue.toString())
+  })
+
+  // 初始化：从localStorage加载autoSetDefaultMessage配置
+  const savedAutoSetDefaultMessage = localStorage.getItem('zen-gitsync-auto-set-default-message')
+  if (savedAutoSetDefaultMessage !== null) {
+    autoSetDefaultMessage.value = savedAutoSetDefaultMessage === 'true'
+  }
+
+  // 监听autoSetDefaultMessage变化，自动保存到localStorage
+  watch(autoSetDefaultMessage, (newValue) => {
+    localStorage.setItem('zen-gitsync-auto-set-default-message', newValue.toString())
   })
 
   // 添加 computed 属性返回完整配置
@@ -340,6 +353,7 @@ export const useConfigStore = defineStore('config', () => {
     currentDirectory,
     config,
     autoClosePushModal,
+    autoSetDefaultMessage,
 
     // 方法
     loadConfig,

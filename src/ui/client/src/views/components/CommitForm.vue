@@ -661,6 +661,11 @@ function clearCommitFields() {
   commitDescription.value = "";
   commitBody.value = "";
   commitFooter.value = "";
+  
+  // 如果开启了自动设置默认提交信息，则自动填充
+  if (configStore.autoSetDefaultMessage && configStore.defaultCommitMessage) {
+    commitMessage.value = configStore.defaultCommitMessage;
+  }
 }
 
 // 处理QuickPushButton的推送前事件
@@ -728,10 +733,6 @@ const stagedFilesCount = computed(() => {
 
 const hasStagedChanges = computed(() => {
   return stagedFilesCount.value > 0;
-});
-
-const hasAnyChanges = computed(() => {
-  return gitStore.fileList.some(file => !isFileLocked(file.path));
 });
 
 // 新增：是否存在任何变更（包含锁定文件在内）
@@ -872,6 +873,11 @@ onMounted(async () => {
   // 确保配置已加载
   if (!configStore.config) {
     await configStore.loadConfig();
+  }
+  
+  // 如果开启了自动设置默认提交信息，且当前提交信息为空，则自动填充
+  if (configStore.autoSetDefaultMessage && configStore.defaultCommitMessage && !commitMessage.value) {
+    commitMessage.value = configStore.defaultCommitMessage;
   }
 });
 
@@ -1888,6 +1894,19 @@ git config --global user.email "your.email@example.com"</pre>
           >
             <template #icon>
               <el-icon><Check /></el-icon>
+            </template>
+          </OptionSwitchCard>
+
+          <!-- 自动设置默认提交信息 -->
+          <OptionSwitchCard
+            v-model="configStore.autoSetDefaultMessage"
+            :title="$t('@76872:自动填充默认提交信息')"
+            :tooltip="$t('@76872:打开页面或提交完成后自动填充默认提交信息')"
+            active-color="#67c23a"
+            icon-class="success"
+          >
+            <template #icon>
+              <el-icon><Edit /></el-icon>
             </template>
           </OptionSwitchCard>
         </div>

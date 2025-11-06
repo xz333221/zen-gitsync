@@ -460,6 +460,8 @@ export default {
   '@76872:输入提交信息后按回车直接执行一键推送': 'After entering the commit information, press Enter to directly execute the one click push',
   '@76872:Push完成自动关闭': 'Auto-close after push',
   '@76872:推送成功后自动关闭进度弹窗': 'Automatically close the progress dialog after successful push',
+  '@76872:自动填充默认提交信息': 'Auto-fill default commit message',
+  '@76872:打开页面或提交完成后自动填充默认提交信息': 'Automatically fill in default commit message when opening page or after committing',
   '@76872:收起': 'Fold up',
   '@76872:正文及页脚': 'Main text and footer',
   '@76872:拉取': 'Pull',
