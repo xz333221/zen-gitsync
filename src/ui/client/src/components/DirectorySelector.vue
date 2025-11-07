@@ -358,9 +358,7 @@ async function selectDirectory(dirPath: string) {
         :show-after="200"
       >
         <button class="modern-btn btn-icon-28 npm-btn" @click="onToggleNpmPanel">
-          <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16">
-            <path fill="currentColor" d="M0 0v24h24V0M6.6 19.2V4.8h4.8v9.6h2.4V4.8h4.8v14.4"/>
-          </svg>
+          <img src="@/assets/images/npm-logo.png" alt="npm" class="btn-icon" style="width: 16px; height: 16px;" />
         </button>
       </el-tooltip>
     </div>

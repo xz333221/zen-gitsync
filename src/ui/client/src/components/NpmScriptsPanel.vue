@@ -16,7 +16,6 @@ const props = defineProps<{
   visible: boolean;
 }>();
 
-// Emits
 const emit = defineEmits<{
   close: []
 }>();
@@ -25,6 +24,34 @@ const emit = defineEmits<{
 const packages = ref<PackageInfo[]>([]);
 const isLoading = ref(false);
 const expandedPackages = ref<Set<string>>(new Set());
+
+// 高度调节
+const panelHeight = ref(300);
+const isResizing = ref(false);
+const startY = ref(0);
+const startHeight = ref(0);
+
+function startResize(e: MouseEvent) {
+  isResizing.value = true;
+  startY.value = e.clientY;
+  startHeight.value = panelHeight.value;
+  document.addEventListener('mousemove', handleResize);
+  document.addEventListener('mouseup', stopResize);
+  e.preventDefault();
+}
+
+function handleResize(e: MouseEvent) {
+  if (!isResizing.value) return;
+  const deltaY = startY.value - e.clientY;
+  const newHeight = Math.max(200, Math.min(600, startHeight.value + deltaY));
+  panelHeight.value = newHeight;
+}
+
+function stopResize() {
+  isResizing.value = false;
+  document.removeEventListener('mousemove', handleResize);
+  document.removeEventListener('mouseup', stopResize);
+}
 
 // 加载npm脚本
 async function loadNpmScripts() {
@@ -91,13 +118,14 @@ watch(() => props.visible, (newValue) => {
 
 <template>
   <div v-if="visible" class="npm-scripts-panel">
+    <!-- 调节高度的拖拽条 -->
+    <div class="resize-handle" @mousedown="startResize"></div>
+    
     <div class="panel-header">
       <div class="header-left">
-        <svg class="npm-icon" viewBox="0 0 24 24" width="20" height="20">
-          <path fill="currentColor" d="M0 0v24h24V0M6.6 19.2V4.8h4.8v9.6h2.4V4.8h4.8v14.4"/>
-        </svg>
+        <img src="@/assets/images/npm-logo.png" alt="npm" class="npm-icon" />
         <span class="panel-title">{{ $t('@NPM01:NPM 脚本') }}</span>
-        <span v-if="!isLoading" class="package-count">({{ packages.length }} {{ $t('@NPM01:个包') }})</span>
+        <span v-if="!isLoading" class="package-count">{{ packages.length }} {{ $t('@NPM01:个包') }}</span>
       </div>
       <div class="header-right">
         <button class="refresh-btn" @click="loadNpmScripts" :disabled="isLoading">
@@ -133,7 +161,7 @@ watch(() => props.visible, (newValue) => {
       <p class="empty-text">{{ $t('@NPM01:当前项目中未找到包含 scripts 的 package.json') }}</p>
     </div>
 
-    <div v-else class="packages-container">
+    <div v-else class="packages-container" :style="{ maxHeight: panelHeight + 'px' }">
       <div 
         v-for="pkg in packages" 
         :key="pkg.path" 
@@ -187,6 +215,7 @@ watch(() => props.visible, (newValue) => {
 
 <style scoped>
 .npm-scripts-panel {
+  position: relative;
   background: var(--bg-container);
   border: 1px solid var(--border-card);
   border-radius: 8px;
@@ -195,14 +224,45 @@ watch(() => props.visible, (newValue) => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
+.resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 10;
+  transition: background 0.2s ease;
+}
+
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.resize-handle:hover::before {
+  background: rgba(102, 126, 234, 0.4);
+}
+
+.resize-handle:active::before {
+  background: rgba(102, 126, 234, 0.7);
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border-bottom: 1px solid var(--border-card);
 }
 
 .header-left {
@@ -212,17 +272,24 @@ watch(() => props.visible, (newValue) => {
 }
 
 .npm-icon {
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .panel-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+  color: var(--color-text);
 }
 
 .package-count {
-  font-size: 12px;
-  opacity: 0.9;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  background: var(--bg-container);
+  border-radius: 10px;
+  border: 1px solid var(--border-card);
 }
 
 .header-right {
@@ -236,20 +303,20 @@ watch(() => props.visible, (newValue) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: none;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .refresh-btn:hover,
 .close-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
+  background: var(--bg-container);
+  color: var(--color-text);
 }
 
 .refresh-btn:disabled {
@@ -295,8 +362,8 @@ watch(() => props.visible, (newValue) => {
 
 .packages-container {
   padding: 8px;
-  max-height: 400px;
   overflow-y: auto;
+  transition: max-height 0.1s ease;
 }
 
 .package-item {
