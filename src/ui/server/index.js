@@ -2843,6 +2843,136 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
   
+  // ========== NPM 脚本管理相关 API ==========
+  
+  // 扫描项目目录及子目录下的所有package.json，并提取scripts
+  app.get('/api/scan-npm-scripts', async (req, res) => {
+    try {
+      const projectRoot = process.cwd();
+      const packageJsons = [];
+      
+      // 递归扫描目录查找package.json
+      async function scanDirectory(dir, depth = 0) {
+        // 限制扫描深度，避免扫描过深
+        if (depth > 5) return;
+        
+        try {
+          const items = await fs.readdir(dir, { withFileTypes: true });
+          
+          for (const item of items) {
+            const fullPath = path.join(dir, item.name);
+            
+            // 跳过常见的不需要扫描的目录
+            if (item.isDirectory()) {
+              const dirName = item.name;
+              if (dirName === 'node_modules' || 
+                  dirName === '.git' || 
+                  dirName === 'dist' || 
+                  dirName === 'build' ||
+                  dirName.startsWith('.')) {
+                continue;
+              }
+              
+              // 递归扫描子目录
+              await scanDirectory(fullPath, depth + 1);
+            } else if (item.name === 'package.json') {
+              // 读取package.json文件
+              try {
+                const content = await fs.readFile(fullPath, 'utf8');
+                const packageData = JSON.parse(content);
+                
+                // 只有当scripts存在且至少有一个脚本时才添加
+                if (packageData.scripts && Object.keys(packageData.scripts).length > 0) {
+                  const relativePath = path.relative(projectRoot, dir);
+                  packageJsons.push({
+                    path: dir,
+                    relativePath: relativePath || '.',
+                    name: packageData.name || path.basename(dir),
+                    scripts: packageData.scripts
+                  });
+                }
+              } catch (error) {
+                console.error(`读取package.json失败: ${fullPath}`, error);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`扫描目录失败: ${dir}`, error);
+        }
+      }
+      
+      // 从项目根目录开始扫描
+      await scanDirectory(projectRoot);
+      
+      res.json({ 
+        success: true, 
+        packages: packageJsons,
+        totalScripts: packageJsons.reduce((sum, pkg) => sum + Object.keys(pkg.scripts).length, 0)
+      });
+    } catch (error) {
+      console.error('扫描npm脚本失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `扫描npm脚本失败: ${error.message}` 
+      });
+    }
+  });
+  
+  // 在新终端中执行npm脚本
+  app.post('/api/run-npm-script', async (req, res) => {
+    try {
+      const { packagePath, scriptName } = req.body;
+      
+      if (!packagePath || !scriptName) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少必要参数：packagePath 和 scriptName'
+        });
+      }
+      
+      console.log(`执行npm脚本: ${scriptName} in ${packagePath}`);
+      
+      // 根据操作系统选择合适的终端命令
+      let terminalCommand;
+      const npmCommand = `npm run ${scriptName}`;
+      
+      if (process.platform === 'win32') {
+        // Windows: 使用 start 命令打开新的 cmd 窗口
+        // /K 参数表示执行命令后保持窗口打开
+        terminalCommand = `start cmd /K "cd /d ${packagePath} && ${npmCommand}"`;
+      } else if (process.platform === 'darwin') {
+        // macOS: 使用 osascript 打开 Terminal.app
+        const script = `tell application "Terminal" to do script "cd ${packagePath} && ${npmCommand}"`;
+        terminalCommand = `osascript -e '${script}'`;
+      } else {
+        // Linux: 尝试常见的终端模拟器
+        // 优先使用 gnome-terminal, 然后是 xterm
+        terminalCommand = `gnome-terminal -- bash -c "cd ${packagePath} && ${npmCommand}; exec bash" || xterm -e "cd ${packagePath} && ${npmCommand}; bash"`;
+      }
+      
+      // 执行命令打开新终端
+      const { exec } = await import('child_process');
+      exec(terminalCommand, (error, stdout, stderr) => {
+        if (error) {
+          console.error('打开终端失败:', error);
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `已在新终端中执行: ${scriptName}`,
+        command: npmCommand,
+        path: packagePath
+      });
+    } catch (error) {
+      console.error('执行npm脚本失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `执行npm脚本失败: ${error.message}` 
+      });
+    }
+  });
+  
   // Socket.io 实时更新
   io.on('connection', (socket) => {
     console.log('客户端已连接:', socket.id);

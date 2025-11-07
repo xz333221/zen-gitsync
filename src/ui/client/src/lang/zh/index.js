@@ -97,7 +97,18 @@ export default {
   '@67CE7:常用目录': '常用目录',
   '@67CE7:取消': '取消',
   '@67CE7:切换': '切换',
+  '@67CE7:打开终端失败: ': '打开终端失败: ',
   // @67CE7: file end
+  // @NPM01: file path: components\NpmScriptsPanel.vue
+  '@NPM01:NPM 脚本': 'NPM 脚本',
+  '@NPM01:个包': '个包',
+  '@NPM01:正在扫描项目中的 npm 脚本...': '正在扫描项目中的 npm 脚本...',
+  '@NPM01:当前项目中未找到包含 scripts 的 package.json': '当前项目中未找到包含 scripts 的 package.json',
+  '@NPM01:个脚本': '个脚本',
+  '@NPM01:已在新终端中执行': '已在新终端中执行',
+  '@NPM01:加载npm脚本失败': '加载npm脚本失败',
+  '@NPM01:执行脚本失败': '执行脚本失败',
+  // @NPM01: file end
   // @0883F: file path: components\FileActionButtons.vue
   '@0883F:处理中...': '处理中...',
   '@0883F:解锁文件': '解锁文件',

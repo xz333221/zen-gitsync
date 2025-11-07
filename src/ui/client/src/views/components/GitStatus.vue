@@ -14,6 +14,7 @@ import CommonDialog from '@components/CommonDialog.vue'
 import FileGroup from '@/components/FileGroup.vue'
 import FileTreeView from '@/components/FileTreeView.vue'
 import DirectorySelector from '@components/DirectorySelector.vue'
+import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
 
 // 定义props
@@ -43,6 +44,12 @@ const currentFileIndex = ref(-1)
 const lockingFiles = ref<Record<string, boolean>>({})
 function isLocking(filePath: string) {
   return !!lockingFiles.value[filePath]
+}
+
+// npm脚本面板状态
+const showNpmPanel = ref(false)
+function toggleNpmPanel() {
+  showNpmPanel.value = !showNpmPanel.value
 }
 
 // 为FileDiffViewer组件准备数据
@@ -730,7 +737,7 @@ defineExpose({
   <div class="card git-status-card flex flex-col">
     <div class="status-header">
       <!-- 目录选择卡片 -->
-      <DirectorySelector />
+      <DirectorySelector @toggle-npm-panel="toggleNpmPanel" />
       
       <div class="title-row">
         <h2>Git {{ $t('@13D1C:状态') }}</h2>
@@ -1032,6 +1039,9 @@ defineExpose({
         </div>
       </div>
     </div>
+    
+    <!-- NPM脚本面板 -->
+    <NpmScriptsPanel :visible="showNpmPanel" @close="showNpmPanel = false" />
   </div>
   
   <!-- 文件差异对话框 -->

@@ -3,7 +3,7 @@ import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
-import { ref, h, computed } from "vue";
+import { ref, h, computed, watch, onMounted } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
 
@@ -19,6 +19,15 @@ const isDirectoryDialogVisible = ref(false);
 const newDirectoryPath = ref("");
 const isChangingDirectory = ref(false);
 const recentDirectories = ref<string[]>([]);
+
+// npm脚本相关
+const hasNpmScripts = ref(false);
+const isCheckingNpmScripts = ref(false);
+
+// 定义emits
+const emit = defineEmits<{
+  toggleNpmPanel: []
+}>();
 
 // 打开切换目录对话框
 function onOpenDialog() {
@@ -73,6 +82,28 @@ async function onOpenTerminal() {
   }
 }
 
+// 检查是否有npm脚本
+async function checkNpmScripts() {
+  try {
+    isCheckingNpmScripts.value = true;
+    const response = await fetch("/api/scan-npm-scripts");
+    const result = await response.json();
+    if (result.success) {
+      hasNpmScripts.value = result.totalScripts > 0;
+    }
+  } catch (error) {
+    console.error('检查npm脚本失败:', error);
+    hasNpmScripts.value = false;
+  } finally {
+    isCheckingNpmScripts.value = false;
+  }
+}
+
+// 切换npm脚本面板
+function onToggleNpmPanel() {
+  emit('toggleNpmPanel');
+}
+
 // 获取最近访问的目录
 async function getRecentDirectories() {
   try {
@@ -85,6 +116,16 @@ async function getRecentDirectories() {
     console.error("获取最近目录失败:", error);
   }
 }
+
+// 监听目录变化，重新检查npm脚本
+watch(currentDirectory, () => {
+  checkNpmScripts();
+});
+
+// 组件挂载时检查npm脚本
+onMounted(() => {
+  checkNpmScripts();
+});
 
 // 保存最近使用的目录
 async function saveRecentDirectory(directory: string) {
@@ -307,6 +348,19 @@ async function selectDirectory(dirPath: string) {
       >
         <button class="modern-btn btn-icon-28" @click="onOpenTerminal">
           <el-icon class="btn-icon"><Monitor /></el-icon>
+        </button>
+      </el-tooltip>
+      <el-tooltip
+        v-if="hasNpmScripts"
+        content="NPM脚本"
+        placement="top"
+        effect="dark"
+        :show-after="200"
+      >
+        <button class="modern-btn btn-icon-28 npm-btn" @click="onToggleNpmPanel">
+          <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16">
+            <path fill="currentColor" d="M0 0v24h24V0M6.6 19.2V4.8h4.8v9.6h2.4V4.8h4.8v14.4"/>
+          </svg>
         </button>
       </el-tooltip>
     </div>
