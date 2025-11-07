@@ -183,7 +183,6 @@ watch(() => props.visible, (newValue) => {
             <span class="package-name">{{ pkg.name }}</span>
             <span class="package-path">{{ pkg.relativePath }}</span>
           </div>
-          <span class="script-count">{{ Object.keys(pkg.scripts).length }} {{ $t('@NPM01:个脚本') }}</span>
         </div>
 
         <div 
@@ -409,9 +408,14 @@ watch(() => props.visible, (newValue) => {
 
 .package-info {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  /* flex-direction: column; */
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .package-name {
