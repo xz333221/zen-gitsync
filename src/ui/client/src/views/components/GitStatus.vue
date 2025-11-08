@@ -723,11 +723,22 @@ onMounted(() => {
     }
   };
   
+  // 监听 Git 状态刷新事件（例如解决冲突后）
+  const handleGitStatusRefresh = () => {
+    loadStatus();
+    // 如果当前有选中的文件，重新获取差异
+    if (selectedFile.value) {
+      getFileDiff(selectedFile.value);
+    }
+  };
+  
   window.addEventListener('file-list-view-mode-change', handleViewModeChange);
+  window.addEventListener('git-status-refresh', handleGitStatusRefresh);
   
   // 组件卸载时移除监听
   return () => {
     window.removeEventListener('file-list-view-mode-change', handleViewModeChange);
+    window.removeEventListener('git-status-refresh', handleGitStatusRefresh);
   };
 })
 

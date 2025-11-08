@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { ElTooltip } from "element-plus";
 import { Position } from "@element-plus/icons-vue";
+import { $t } from '@/lang/static';
 import { useGitStore } from "@stores/gitStore";
 import { useConfigStore } from "@stores/configStore";
 import PushProgressModal from "@components/PushProgressModal.vue";
@@ -51,6 +52,10 @@ const hasAnyChanges = computed(() => {
 
 // 计算最终的禁用状态
 const isDisabled = computed(() => {
+  // 如果有冲突文件，禁用一键推送按钮
+  if (gitStore.hasConflictedFiles) {
+    return true;
+  }
   return (
     !hasAnyChanges.value || !props.hasUserCommitMessage || !gitStore.hasUpstream
   );
@@ -63,16 +68,19 @@ const isLoading = computed(() => {
 
 // 计算提示文本
 const tooltipText = computed(() => {
+  if (gitStore.hasConflictedFiles) {
+    return $t('@2E184:存在冲突文件，请先解决冲突');
+  }
   if (!hasAnyChanges.value) {
-    return "没有需要提交的更改";
+    return $t('@2E184:没有需要提交的更改');
   }
   if (!props.hasUserCommitMessage) {
-    return "请输入提交信息";
+    return $t('@2E184:请输入提交信息');
   }
   if (!gitStore.hasUpstream) {
-    return "当前分支没有上游分支";
+    return $t('@2E184:当前分支没有上游分支');
   }
-  return "一键完成：暂存所有更改 → 提交 → 推送到远程仓库";
+  return $t('@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库');
 });
 
 // 一键推送处理函数
