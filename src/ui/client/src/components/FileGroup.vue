@@ -76,6 +76,8 @@ function getStatusLetter(fileType: string): string {
       return 'M'
     case 'deleted':
       return 'D'
+    case 'conflicted':
+      return '!'
     case 'untracked':
       return 'U'
     default:
@@ -104,7 +106,11 @@ const getFileIcon = (filePath: string) => {
         v-for="file in files"
         :key="file.path"
         class="file-item file-group-item"
-        :class="{ 'is-loading': props.isLocking(file.path), 'locked': props.isFileLocked(file.path) }"
+        :class="{ 
+          'is-loading': props.isLocking(file.path), 
+          'locked': props.isFileLocked(file.path),
+          [`file-type-${file.type}`]: file.type
+        }"
         @click="handleFileClick(file)"
       >
         <div class="file-info">
@@ -248,6 +254,32 @@ const getFileIcon = (filePath: string) => {
   border-color: var(--border-hover);
 }
 
+/* 冲突文件样式 - 更明显 */
+.file-item.file-type-conflicted {
+  background-color: rgba(249, 115, 22, 0.1) !important;
+  border-color: rgba(249, 115, 22, 0.3) !important;
+  
+  .file-type-icon {
+    color: var(--git-status-conflicted);
+  }
+  
+  .file-name {
+    color: var(--git-status-conflicted);
+    font-weight: var(--font-weight-semibold);
+  }
+  
+  &:hover {
+    background-color: rgba(249, 115, 22, 0.15) !important;
+    border-left-color: var(--git-status-conflicted) !important;
+    border-color: rgba(249, 115, 22, 0.4) !important;
+    box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.25);
+    
+    &::before {
+      width: 5px !important;
+    }
+  }
+}
+
 .file-info {
   display: flex;
   align-items: center;
@@ -275,6 +307,7 @@ const getFileIcon = (filePath: string) => {
 .file-status-indicator.modified { color: var(--git-status-modified); }
 .file-status-indicator.deleted { color: var(--git-status-deleted); }
 .file-status-indicator.untracked { color: var(--git-status-untracked); }
+.file-status-indicator.conflicted { color: var(--git-status-conflicted); }
 
 .file-type-icon {
   flex-shrink: 0;

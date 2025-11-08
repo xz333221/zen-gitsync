@@ -731,6 +731,8 @@ export const useGitStore = defineStore('git', () => {
     for (const line of lines) {
       // 匹配常见的 git status --porcelain 格式
       // M: 修改, A: 新增, D: 删除, ??: 未跟踪
+      // U: 冲突 (unmerged), UU: 双方都修改, AA: 双方都添加, DD: 双方都删除
+      // AU: 我们添加他们修改, UA: 我们修改他们添加, DU: 我们删除他们修改, UD: 我们修改他们删除
       const match = line.match(/^([ MADRCU\?]{2})\s+(.+)$/)
       if (match) {
         let type = ''
@@ -738,8 +740,12 @@ export const useGitStore = defineStore('git', () => {
         const indexStatus = code.charAt(0)
         const workTreeStatus = code.charAt(1)
         
-        // 根据暂存区状态和工作区状态确定文件类型
-        if (indexStatus === 'A') {
+        // 首先检查冲突文件状态码（优先级最高）
+        if (code === 'UU' || code === 'AA' || code === 'DD' || 
+            code === 'AU' || code === 'UA' || code === 'DU' || code === 'UD') {
+          // 冲突文件（未合并）
+          type = 'conflicted'
+        } else if (indexStatus === 'A') {
           // 已暂存的新文件
           type = 'added'
         } else if (indexStatus === 'M') {

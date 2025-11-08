@@ -939,6 +939,26 @@ onMounted(() => {
     }
   }
   
+  &.file-type-conflicted {
+    // 默认状态就有明显的背景色和更宽的左边条
+    background-color: rgba(249, 115, 22, 0.08) !important;
+    
+    // 文件名使用冲突颜色
+    .file-icon {
+      color: var(--git-status-conflicted);
+    }
+    
+    &:not(.active):hover,&.active {
+      background: linear-gradient(90deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0.08) 100%) !important;
+      border-left-color: var(--git-status-conflicted);
+      box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.2);
+      
+      &::before {
+        background: var(--git-status-conflicted);
+      }
+    }
+  }
+  
   // 锁定文件样式
   &.is-locked {
     opacity: 0.5;

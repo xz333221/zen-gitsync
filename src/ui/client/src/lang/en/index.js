@@ -575,6 +575,7 @@ export default {
   '@13D1C:管理锁定文件': 'Manage Locked Files',
   '@13D1C:刷新状态': 'Refresh status',
   '@13D1C:本地分支与远程分支的状态对比': 'Comparison of Status between Local and Remote Branches',
+  '@13D1C:冲突文件': 'Conflicted files',
   '@13D1C:已暂存的更改': 'Temporarily stored changes',
   '@13D1C:未暂存的更改': 'Untreated changes',
   '@13D1C:未跟踪的文件': 'Untracked files',

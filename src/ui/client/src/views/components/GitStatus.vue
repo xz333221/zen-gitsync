@@ -124,7 +124,8 @@ const showLockedFilesDialog = ref(false)
 const collapsedGroups = ref({
   staged: false,    // 已暂存的更改
   unstaged: false,  // 未暂存的更改
-  untracked: false  // 未跟踪的文件
+  untracked: false, // 未跟踪的文件
+  conflicted: false // 冲突文件
 })
 // 视图模式：列表或树状（从 localStorage 读取）
 const FILE_LIST_VIEW_MODE_KEY = 'zen-gitsync-file-list-view-mode';
@@ -619,17 +620,30 @@ async function toggleFileLock(filePath: string) {
 }
 
 // 切换文件组的折叠状态
-function toggleGroupCollapse(groupType: 'staged' | 'unstaged' | 'untracked') {
+function toggleGroupCollapse(groupType: 'staged' | 'unstaged' | 'untracked' | 'conflicted') {
   collapsedGroups.value[groupType] = !collapsedGroups.value[groupType]
 }
 
 // 树状视图数据（使用ref保持展开状态）
+const conflictedTreeData = ref<TreeNode[]>([]);
 const stagedTreeData = ref<TreeNode[]>([]);
 const unstagedTreeData = ref<TreeNode[]>([]);
 const untrackedTreeData = ref<TreeNode[]>([]);
 
 // 更新树状视图数据
 function updateTreeData() {
+  // 冲突文件（优先级最高）
+  const conflictedFiles = gitStore.fileList.filter(f => f.type === 'conflicted').map(file => ({
+    path: file.path,
+    type: file.type,
+    locked: isFileLocked(file.path)
+  }));
+  const newConflictedTree = buildFileTree(conflictedFiles);
+  if (conflictedTreeData.value.length > 0) {
+    mergeTreeExpandState(newConflictedTree, conflictedTreeData.value);
+  }
+  conflictedTreeData.value = newConflictedTree;
+  
   // 已暂存
   const stagedFiles = gitStore.fileList.filter(f => f.type === 'added').map(file => ({
     path: file.path,
@@ -907,6 +921,23 @@ defineExpose({
           <div class="file-list-container">
             <!-- 列表视图 -->
             <template v-if="viewMode === 'list'">
+              <!-- 冲突文件（优先级最高，显示在最前面） -->
+              <FileGroup
+                :files="gitStore.fileList.filter(f => f.type === 'conflicted')"
+                :title="$t('@13D1C:冲突文件')"
+                group-key="conflicted"
+                :collapsed-groups="collapsedGroups"
+                :is-file-locked="isFileLocked"
+                :is-locking="isLocking"
+                :get-file-name="getFileName"
+                :get-file-directory="getFileDirectory"
+                @toggle-collapse="toggleGroupCollapse"
+                @file-click="handleFileClick"
+                @toggle-file-lock="toggleFileLock"
+                @stage-file="stageFile"
+                @revert-file-changes="revertFileChanges"
+              />
+              
               <!-- 已暂存的更改 -->
               <FileGroup
                 :files="gitStore.fileList.filter(f => f.type === 'added')"
@@ -960,6 +991,29 @@ defineExpose({
             
             <!-- 树状视图 -->
             <template v-else>
+              <!-- 冲突文件（优先级最高，显示在最前面） -->
+              <div v-if="gitStore.fileList.filter(f => f.type === 'conflicted').length" class="tree-group">
+                <div class="tree-group-header" @click="toggleGroupCollapse('conflicted')">
+                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.conflicted }">
+                    <ArrowDown />
+                  </el-icon>
+                  <h5>{{ $t('@13D1C:冲突文件') }}</h5>
+                  <span class="file-count">{{ gitStore.fileList.filter(f => f.type === 'conflicted').length }}</span>
+                </div>
+                <FileTreeView
+                  v-if="!collapsedGroups.conflicted"
+                  :tree-data="conflictedTreeData"
+                  :selected-file="''"
+                  :show-action-buttons="true"
+                  :is-file-locked="isFileLocked"
+                  :is-locking="isLocking"
+                  @file-select="(path: string) => handleFileClick({ path, type: 'conflicted' })"
+                  @toggle-lock="toggleFileLock"
+                  @stage="stageFile"
+                  @revert="revertFileChanges"
+                />
+              </div>
+              
               <!-- 已暂存的更改 -->
               <div v-if="gitStore.fileList.filter(f => f.type === 'added').length" class="tree-group">
                 <div class="tree-group-header" @click="toggleGroupCollapse('staged')">
