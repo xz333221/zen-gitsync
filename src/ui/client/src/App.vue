@@ -10,7 +10,7 @@ import InlineCard from '@components/InlineCard.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import LanguageSwitcher from '@components/LanguageSwitcher.vue'
 import { ElMessage, ElConfigProvider } from 'element-plus'
-import { Edit, Menu, Plus, Setting, Check, DocumentCopy, Sunny, Moon } from '@element-plus/icons-vue'
+import { Edit, Menu, Plus, Setting, Check, DocumentCopy, Sunny, Moon, Download } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -641,6 +641,11 @@ function stopHResize() {
           <el-tooltip :content="$t('@F13B4:复制仓库地址')" placement="top" effect="dark" :show-after="200">
             <button class="modern-btn btn-icon-28" @click="gitStore.copyRemoteUrl()">
               <el-icon class="btn-icon"><DocumentCopy /></el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip :content="$t('@F13B4:复制克隆命令')" placement="top" effect="dark" :show-after="200">
+            <button class="modern-btn btn-icon-28" @click="gitStore.copyCloneCommand()">
+              <el-icon class="btn-icon"><Download /></el-icon>
             </button>
           </el-tooltip>
         </template>

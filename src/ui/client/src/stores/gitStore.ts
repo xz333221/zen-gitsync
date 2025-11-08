@@ -1621,6 +1621,34 @@ export const useGitStore = defineStore('git', () => {
       return false;
     }
   }
+
+  // 复制克隆命令到剪贴板
+  async function copyCloneCommand() {
+    if (!remoteUrl.value) {
+      ElMessage({
+        message: $t('@C298B:没有可复制的远程仓库地址'),
+        type: 'warning'
+      });
+      return false;
+    }
+    
+    try {
+      const cloneCommand = `git clone ${remoteUrl.value}`;
+      await navigator.clipboard.writeText(cloneCommand);
+      ElMessage({
+        message: $t('@F13B4:已复制克隆命令'),
+        type: 'success'
+      });
+      return true;
+    } catch (error) {
+      console.error('复制克隆命令失败:', error);
+      ElMessage({
+        message: `${$t('@C298B:复制失败: ')}${(error as Error).message}`,
+        type: 'error'
+      });
+      return false;
+    }
+  }
   
   // 在组件挂载时初始化socket连接
   onMounted(() => {
@@ -1917,6 +1945,7 @@ export const useGitStore = defineStore('git', () => {
     resetToRemote,
     getRemoteUrl,
     copyRemoteUrl,
+    copyCloneCommand,
     mergeBranch,
     // stash相关方法
     getStashList,

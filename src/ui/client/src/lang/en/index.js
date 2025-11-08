@@ -10,6 +10,8 @@ export default {
   '@F13B4:选择基础分支': 'Select the basic branch',
   '@F13B4:当前分支': 'Current branch',
   '@F13B4:复制仓库地址': 'Copy repository URL',
+  '@F13B4:复制克隆命令': 'Copy clone command',
+  '@F13B4:已复制克隆命令': 'Clone command copied',
   '@F13B4:切换到浅色主题': 'Switch to light theme',
   '@F13B4:切换到深色主题': 'Switch to dark theme',
   '@F13B4:未知目录': 'Unknown directory',
