@@ -1987,6 +1987,51 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
   
+  // 解决冲突：保存解决后的文件内容
+  app.post('/api/resolve-conflict', async (req, res) => {
+    try {
+      const { filePath, content } = req.body;
+      
+      if (!filePath) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少文件路径参数' 
+        });
+      }
+      
+      if (content === undefined) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '缺少文件内容参数' 
+        });
+      }
+      
+      try {
+        // 写入解决后的内容到文件
+        await fs.writeFile(filePath, content, 'utf8');
+        
+        // 将文件添加到暂存区（标记为已解决）
+        await execGitCommand(`git add "${filePath}"`);
+        
+        res.json({ 
+          success: true, 
+          message: '冲突已解决，文件已更新并添加到暂存区' 
+        });
+      } catch (writeError) {
+        res.status(500).json({ 
+          success: false, 
+          error: `保存文件失败: ${writeError.message}` 
+        });
+      }
+    } catch (error) {
+      console.error('解决冲突失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `解决冲突失败: ${error.message}` 
+      });
+    }
+  });
+  
   // 撤回文件修改
   app.post('/api/revert_file', async (req, res) => {
     try {

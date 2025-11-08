@@ -130,6 +130,15 @@ export default {
   '@E80AC:列表视图': 'List View',
   '@E80AC:树状视图': 'Tree View',
   '@E80AC:文件列表': 'File List',
+  '@E80AC:检测到冲突，请选择解决方式': 'Conflict detected, please choose resolution method',
+  '@E80AC:接受当前版本': 'Accept Current',
+  '@E80AC:接受传入版本': 'Accept Incoming',
+  '@E80AC:接受两者': 'Accept Both',
+  '@E80AC:冲突已解决，文件已更新': 'Conflict resolved, file updated',
+  '@E80AC:解决冲突失败: ': 'Failed to resolve conflict: ',
+  '@E80AC:无法读取文件内容': 'Unable to read file content',
+  '@E80AC:保存失败': 'Save failed',
+  '@E80AC:保存失败: ': 'Save failed: ',
   // @E80AC: file end
   // @34292: file path: components\GitCommandPreview.vue
   '@34292:Git命令预览：': 'Git command preview:',

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static.ts'
 import { ref, computed, watch, onMounted } from 'vue';
-import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput } from 'element-plus';
-import { FolderOpened, DocumentCopy, Search } from '@element-plus/icons-vue';
+import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput, ElButton } from 'element-plus';
+import { FolderOpened, DocumentCopy, Search, Warning } from '@element-plus/icons-vue';
 import TreeIcon from '@/components/icons/TreeIcon.vue';
 import ListIcon from '@/components/icons/ListIcon.vue';
 import { formatDiff } from '../utils/index.ts';
@@ -84,6 +84,22 @@ const splitPercent = ref<number>(initialSplit);
 // 计算属性
 const currentSelectedFile = computed(() => {
   return props.selectedFile || internalSelectedFile.value;
+});
+
+// 检测当前文件是否为冲突文件
+const isConflictedFile = computed(() => {
+  if (!currentSelectedFile.value) return false;
+  const currentFile = props.files.find(f => f.path === currentSelectedFile.value);
+  if (currentFile?.type === 'conflicted') return true;
+  // 也检查 diffContent 中是否包含冲突标记
+  if (props.diffContent && (
+    props.diffContent.includes('<<<<<<<') ||
+    props.diffContent.includes('=======') ||
+    props.diffContent.includes('>>>>>>>')
+  )) {
+    return true;
+  }
+  return false;
 });
 
 const displayFiles = computed(() => {
@@ -207,6 +223,186 @@ function handleOpenWithVSCode() {
   }
   
   emit('open-with-vscode', currentSelectedFile.value, props.context);
+}
+
+// 解析冲突内容，提取当前版本和传入版本
+function parseConflict(content: string): Array<{
+  type: 'common' | 'current' | 'incoming' | 'separator';
+  lines: string[];
+}> {
+  const result: Array<{ type: 'common' | 'current' | 'incoming' | 'separator'; lines: string[] }> = [];
+  const lines = content.split('\n');
+  let currentSection: 'common' | 'current' | 'incoming' = 'common';
+  let currentLines: string[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (line.includes('<<<<<<<')) {
+      // 保存之前的公共部分
+      if (currentLines.length > 0) {
+        result.push({ type: 'common', lines: [...currentLines] });
+        currentLines = [];
+      }
+      currentSection = 'current';
+    } else if (line.includes('=======')) {
+      // 保存当前版本
+      if (currentLines.length > 0) {
+        result.push({ type: 'current', lines: [...currentLines] });
+        currentLines = [];
+      }
+      result.push({ type: 'separator', lines: [line] });
+      currentSection = 'incoming';
+    } else if (line.includes('>>>>>>>')) {
+      // 保存传入版本
+      if (currentLines.length > 0) {
+        result.push({ type: 'incoming', lines: [...currentLines] });
+        currentLines = [];
+      }
+      currentSection = 'common';
+    } else {
+      currentLines.push(line);
+    }
+  }
+  
+  // 保存最后的部分
+  if (currentLines.length > 0) {
+    result.push({ type: currentSection, lines: [...currentLines] });
+  }
+  
+  return result;
+}
+
+// 解决冲突：接受当前版本
+async function resolveConflictAcceptCurrent() {
+  if (!currentSelectedFile.value) return;
+  
+  try {
+    // 获取文件内容
+    const response = await fetch(`/api/file-content?file=${encodeURIComponent(currentSelectedFile.value)}`);
+    const data = await response.json();
+    
+    if (!data.success || !data.content) {
+      ElMessage.error($t('@E80AC:无法读取文件内容'));
+      return;
+    }
+    
+    const content = data.content;
+    const sections = parseConflict(content);
+    let resolvedContent = '';
+    
+    for (const section of sections) {
+      if (section.type === 'current' || section.type === 'common') {
+        resolvedContent += section.lines.join('\n') + '\n';
+      } else if (section.type === 'separator' || section.type === 'incoming') {
+        // 跳过传入版本和分隔符
+        continue;
+      }
+    }
+    
+    // 保存解决后的内容
+    await saveResolvedContent(resolvedContent.trim());
+  } catch (error) {
+    ElMessage.error(`${$t('@E80AC:解决冲突失败: ')}${(error as Error).message}`);
+  }
+}
+
+// 解决冲突：接受传入版本
+async function resolveConflictAcceptIncoming() {
+  if (!currentSelectedFile.value) return;
+  
+  try {
+    const response = await fetch(`/api/file-content?file=${encodeURIComponent(currentSelectedFile.value)}`);
+    const data = await response.json();
+    
+    if (!data.success || !data.content) {
+      ElMessage.error($t('@E80AC:无法读取文件内容'));
+      return;
+    }
+    
+    const content = data.content;
+    const sections = parseConflict(content);
+    let resolvedContent = '';
+    
+    for (const section of sections) {
+      if (section.type === 'incoming' || section.type === 'common') {
+        resolvedContent += section.lines.join('\n') + '\n';
+      } else if (section.type === 'separator' || section.type === 'current') {
+        // 跳过当前版本和分隔符
+        continue;
+      }
+    }
+    
+    await saveResolvedContent(resolvedContent.trim());
+  } catch (error) {
+    ElMessage.error(`${$t('@E80AC:解决冲突失败: ')}${(error as Error).message}`);
+  }
+}
+
+// 解决冲突：接受两者
+async function resolveConflictAcceptBoth() {
+  if (!currentSelectedFile.value) return;
+  
+  try {
+    const response = await fetch(`/api/file-content?file=${encodeURIComponent(currentSelectedFile.value)}`);
+    const data = await response.json();
+    
+    if (!data.success || !data.content) {
+      ElMessage.error($t('@E80AC:无法读取文件内容'));
+      return;
+    }
+    
+    const content = data.content;
+    const sections = parseConflict(content);
+    let resolvedContent = '';
+    
+    for (const section of sections) {
+      if (section.type === 'common') {
+        resolvedContent += section.lines.join('\n') + '\n';
+      } else if (section.type === 'current') {
+        resolvedContent += section.lines.join('\n') + '\n';
+      } else if (section.type === 'incoming') {
+        resolvedContent += section.lines.join('\n') + '\n';
+      }
+      // 跳过分隔符
+    }
+    
+    await saveResolvedContent(resolvedContent.trim());
+  } catch (error) {
+    ElMessage.error(`${$t('@E80AC:解决冲突失败: ')}${(error as Error).message}`);
+  }
+}
+
+// 保存解决后的内容
+async function saveResolvedContent(content: string) {
+  if (!currentSelectedFile.value) return;
+  
+  try {
+    const response = await fetch('/api/resolve-conflict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filePath: currentSelectedFile.value,
+        content: content
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      ElMessage.success($t('@E80AC:冲突已解决，文件已更新'));
+      // 触发刷新 - 通过 window 事件通知其他组件刷新 Git 状态
+      window.dispatchEvent(new CustomEvent('git-status-refresh'));
+      // 延迟一下，等待 Git 状态更新后再重新获取差异
+      setTimeout(() => {
+        emit('file-select', currentSelectedFile.value);
+      }, 500);
+    } else {
+      ElMessage.error(result.error || $t('@E80AC:保存失败'));
+    }
+  } catch (error) {
+    ElMessage.error(`${$t('@E80AC:保存失败: ')}${(error as Error).message}`);
+  }
 }
 
 // 计算打开按钮的提示文本
@@ -515,6 +711,24 @@ onMounted(() => {
               </div>
             </div>
           </div>
+          <!-- 冲突解决按钮区域 -->
+          <div v-if="isConflictedFile" class="conflict-resolution-bar">
+            <div class="conflict-warning">
+              <el-icon class="warning-icon"><Warning /></el-icon>
+              <span>{{ $t('@E80AC:检测到冲突，请选择解决方式') }}</span>
+            </div>
+            <div class="conflict-buttons">
+              <el-button type="primary" size="small" @click="resolveConflictAcceptCurrent">
+                {{ $t('@E80AC:接受当前版本') }}
+              </el-button>
+              <el-button type="success" size="small" @click="resolveConflictAcceptIncoming">
+                {{ $t('@E80AC:接受传入版本') }}
+              </el-button>
+              <el-button type="warning" size="small" @click="resolveConflictAcceptBoth">
+                {{ $t('@E80AC:接受两者') }}
+              </el-button>
+            </div>
+          </div>
           <div class="diff-content">
             <el-empty 
               v-if="!hasDiffContent"
@@ -583,6 +797,25 @@ onMounted(() => {
               </button>
             </el-tooltip>
           </div>
+        </div>
+      </div>
+      
+      <!-- 冲突解决按钮区域 -->
+      <div v-if="isConflictedFile" class="conflict-resolution-bar">
+        <div class="conflict-warning">
+          <el-icon class="warning-icon"><Warning /></el-icon>
+          <span>{{ $t('@E80AC:检测到冲突，请选择解决方式') }}</span>
+        </div>
+        <div class="conflict-buttons">
+          <el-button type="primary" size="small" @click="resolveConflictAcceptCurrent">
+            {{ $t('@E80AC:接受当前版本') }}
+          </el-button>
+          <el-button type="success" size="small" @click="resolveConflictAcceptIncoming">
+            {{ $t('@E80AC:接受传入版本') }}
+          </el-button>
+          <el-button type="warning" size="small" @click="resolveConflictAcceptBoth">
+            {{ $t('@E80AC:接受两者') }}
+          </el-button>
         </div>
       </div>
       
@@ -1043,6 +1276,40 @@ onMounted(() => {
 
 .file-item:hover .file-actions {
   display: flex;
+}
+
+/* 冲突解决按钮区域 */
+.conflict-resolution-bar {
+  padding: 12px 16px;
+  background: rgba(249, 115, 22, 0.1);
+  border-left: 4px solid var(--git-status-conflicted);
+  border-bottom: 1px solid rgba(249, 115, 22, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.conflict-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--git-status-conflicted);
+  font-weight: var(--font-weight-medium);
+  flex: 1;
+  min-width: 200px;
+}
+
+.warning-icon {
+  font-size: 18px;
+  color: var(--git-status-conflicted);
+}
+
+.conflict-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .diff-content {
