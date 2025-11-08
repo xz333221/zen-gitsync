@@ -37,6 +37,10 @@ const hasStagedChanges = computed(() => {
 
 // 计算是否可以推送
 const canPush = computed(() => {
+  // 如果有冲突文件，不能推送
+  if (gitStore.hasConflictedFiles) {
+    return false
+  }
   // 1. 如果分支有上游并且领先提交，可以推送
   // 2. 如果有已暂存的更改但未提交，不能推送
   // 3. 如果有已提交未推送的更改，可以推送
@@ -50,6 +54,9 @@ const isDisabled = computed(() => {
 
 // 计算提示文本
 const tooltipText = computed(() => {
+  if (gitStore.hasConflictedFiles) {
+    return $t('@F4137:存在冲突文件，请先解决冲突')
+  }
   if (!gitStore.hasUpstream) {
     return $t('@F4137:当前分支没有上游分支')
   }

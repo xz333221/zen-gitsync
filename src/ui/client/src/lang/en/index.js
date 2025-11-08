@@ -50,6 +50,7 @@ export default {
   '@76A11:请输入提交信息': 'Please enter the commit information',
   '@76A11:提交': 'Commit',
   '@76A11:个已暂存文件': 'A staged file',
+  '@76A11:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',
   // @76A11: file end
   // @F4137: file path: components\buttons\PushButton.vue
   '@F4137:当前分支没有上游分支': 'There is no upstream branch in the current branch',
@@ -57,10 +58,16 @@ export default {
   '@F4137:有未提交的暂存更改，请先提交': 'There are pending temporary changes that have not been submitted. Please submit them first',
   '@F4137:推送': 'Push',
   '@F4137:个本地提交': 'Local commit',
+  '@F4137:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',
   // @F4137: file end
   // @2E184: file path: components\buttons\QuickPushButton.vue
   '@2E184:一键推送所有': 'One click push to all',
   '@2E184:暂存 + 提交 + 推送': 'Stage + Commit + Push',
+  '@2E184:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',
+  '@2E184:没有需要提交的更改': 'No changes to commit',
+  '@2E184:请输入提交信息': 'Please enter commit message',
+  '@2E184:当前分支没有上游分支': 'Current branch has no upstream branch',
+  '@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库': 'One-click: Stage all changes → Commit → Push to remote',
   // @2E184: file end
   // @29974: file path: components\buttons\StageButton.vue
   '@29974:没有需要暂存的更改': 'There are no changes that need to be staged',
@@ -531,6 +538,7 @@ export default {
   '@76872:重置操作': 'Reset operation',
   '@76872:重置暂存区': 'Reset staging area',
   '@76872:重置到远程': 'Reset to remote',
+  '@76872:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',
   '@76872:分支操作': 'Branch operation',
   '@76872:储藏操作': 'Stash operation',
   '@76872:储藏更改': 'Stash changes',

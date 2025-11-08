@@ -52,11 +52,18 @@ const hasStagedChanges = computed(() => {
 
 // 计算按钮禁用状态
 const isDisabled = computed(() => {
+  // 如果有冲突文件，禁用提交按钮
+  if (gitStore.hasConflictedFiles) {
+    return true
+  }
   return !hasStagedChanges.value || !props.hasUserCommitMessage
 })
 
 // 计算提示文本
 const tooltipText = computed(() => {
+  if (gitStore.hasConflictedFiles) {
+    return $t('@76A11:存在冲突文件，请先解决冲突')
+  }
   if (!hasStagedChanges.value) {
     return $t('@76A11:没有已暂存的更改')
   }

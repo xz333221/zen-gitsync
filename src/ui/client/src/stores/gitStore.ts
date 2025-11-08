@@ -1,6 +1,6 @@
 import { $t } from '@/lang/static'
 import { defineStore } from 'pinia'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { io, Socket } from 'socket.io-client'
 import { useConfigStore } from './configStore'
@@ -1870,6 +1870,11 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 计算是否有冲突文件
+  const hasConflictedFiles = computed(() => {
+    return fileList.value.some(file => file.type === 'conflicted')
+  })
+
   return {
     // 状态
     currentBranch,
@@ -1888,6 +1893,7 @@ export const useGitStore = defineStore('git', () => {
     lastBranchesTime,
     remoteUrl,
     isLoadingRemoteUrl,
+    hasConflictedFiles,
     
     // stash相关状态
     stashes,

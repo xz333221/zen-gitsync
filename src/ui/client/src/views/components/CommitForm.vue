@@ -1235,15 +1235,15 @@ git config --global user.email "your.email@example.com"</pre>
                     from="drawer"
                   />
                   
-                  <el-tooltip :content="needsPull ? `${$t('@76872:拉取')}${gitStore.branchBehind}${$t('@76872:个远程提交')}` : 'git pull'" placement="top">
+                  <el-tooltip :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : (needsPull ? `${$t('@76872:拉取')}${gitStore.branchBehind}${$t('@76872:个远程提交')}` : 'git pull')" placement="top">
                     <el-button 
                       type="primary"
                       :icon="Download"
                       @click="handleGitPull"
                       :loading="gitStore.isGitPulling"
-                      :disabled="!gitStore.hasUpstream"
+                      :disabled="!gitStore.hasUpstream || gitStore.hasConflictedFiles"
                       class="action-button"
-                      :style="gitStore.hasUpstream ? {color: 'white', backgroundColor: '#1e90ff', borderColor: '#1e90ff'} : {}"
+                      :style="gitStore.hasUpstream && !gitStore.hasConflictedFiles ? {color: 'white', backgroundColor: '#1e90ff', borderColor: '#1e90ff'} : {}"
                     >
                       {{ $t('@76872:拉取') }}
                       <span v-if="needsPull">({{gitStore.branchBehind}})</span>
@@ -1271,13 +1271,13 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="action-group">
                 <div class="group-title">{{ $t('@76872:组合操作') }}</div>
                 <div class="group-buttons">
-                  <el-tooltip content="git add + git commit" placement="top">
+                  <el-tooltip :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : 'git add + git commit'" placement="top">
                     <el-button 
                       type="primary"
                       :icon="Edit"
                       @click="addAndCommit"
                       :loading="gitStore.isAddingFiles || gitStore.isCommiting"
-                      :disabled="!hasUnstagedChanges || !hasUserCommitMessage"
+                      :disabled="!hasUnstagedChanges || !hasUserCommitMessage || gitStore.hasConflictedFiles"
                       class="action-button"
                     >
                       {{ $t('@76872:暂存并提交') }}
@@ -1301,13 +1301,13 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="action-group reset-group">
               <div class="group-title">{{ $t('@76872:重置操作') }}</div>
               <div class="group-buttons">
-                <el-tooltip :content="canReset ? `${$t('@76872:撤销')}${stagedFilesCount}${$t('@76872:个已暂存文件')}` : 'git reset HEAD'" placement="top">
+                <el-tooltip :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : (canReset ? `${$t('@76872:撤销')}${stagedFilesCount}${$t('@76872:个已暂存文件')}` : 'git reset HEAD')" placement="top">
                   <el-button 
                     type="warning"
                     :icon="RefreshRight"
                     @click="gitStore.resetHead"
                     :loading="gitStore.isResetting"
-                    :disabled="!canReset"
+                    :disabled="!canReset || gitStore.hasConflictedFiles"
                     class="action-button reset-button"
                   >
                     {{ $t('@76872:重置暂存区') }}
@@ -1315,13 +1315,13 @@ git config --global user.email "your.email@example.com"</pre>
                   </el-button>
                 </el-tooltip>
 
-                <el-tooltip content="git reset --hard origin/branch" placement="top">
+                <el-tooltip :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : 'git reset --hard origin/branch'" placement="top">
                   <el-button 
                     type="danger"
                     :icon="Delete"
                     @click="resetToRemote"
                     :loading="gitStore.isResetting"
-                    :disabled="!canResetToRemote"
+                    :disabled="!canResetToRemote || gitStore.hasConflictedFiles"
                     class="action-button danger-button"
                   >
                     {{ $t('@76872:重置到远程') }}
@@ -1335,12 +1335,13 @@ git config --global user.email "your.email@example.com"</pre>
               <div class="group-title">{{ $t('@76872:分支操作') }}</div>
               <div class="group-buttons">
                 <!-- 合并分支按钮 -->
-                <el-tooltip :content="$t('@76872:合并其他分支到当前分支')" placement="top">
+                <el-tooltip :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:合并其他分支到当前分支')" placement="top">
                   <el-button 
                     type="primary"
                     :icon="Share"
                     @click="openMergeDialog"
                     :loading="gitStore.isGitMerging"
+                    :disabled="gitStore.hasConflictedFiles"
                     class="action-button merge-button"
                   >
                     {{ $t('@76872:合并分支') }}
@@ -1353,12 +1354,12 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="action-group">
                 <div class="group-title">{{ $t('@76872:储藏操作') }}</div>
                 <div class="group-buttons">
-                  <el-tooltip :content="$t('@76872:将工作区更改储藏起来')" placement="top">
+                  <el-tooltip :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:将工作区更改储藏起来')" placement="top">
                     <el-button 
                       type="warning" 
                       @click="openStashDialog" 
                       :loading="gitStore.isSavingStash"
-                      :disabled="!anyChangesIncludingLocked"
+                      :disabled="!anyChangesIncludingLocked || gitStore.hasConflictedFiles"
                       class="action-button"
                     >
                       {{ $t('@76872:储藏更改') }}
