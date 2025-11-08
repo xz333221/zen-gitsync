@@ -11,6 +11,7 @@ declare module 'vue' {
     CommandConsole: typeof import('./src/components/CommandConsole.vue')['default']
     CommitButton: typeof import('./src/components/buttons/CommitButton.vue')['default']
     CommonDialog: typeof import('./src/components/CommonDialog.vue')['default']
+    ConflictBlockViewer: typeof import('./src/components/ConflictBlockViewer.vue')['default']
     DirectorySelector: typeof import('./src/components/DirectorySelector.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAutocomplete: typeof import('element-plus/es')['ElAutocomplete']

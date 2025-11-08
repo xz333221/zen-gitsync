@@ -11,6 +11,7 @@ import FileActionButtons from './FileActionButtons.vue';
 import FileTreeView from './FileTreeView.vue';
 import { getFileIconClass } from '../utils/fileIcon';
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree';
+import ConflictBlockViewer, { type ConflictBlock } from './ConflictBlockViewer.vue';
 
 // 定义props
 interface FileItem {
@@ -225,7 +226,85 @@ function handleOpenWithVSCode() {
   emit('open-with-vscode', currentSelectedFile.value, props.context);
 }
 
-// 解析冲突内容，提取当前版本和传入版本
+// 冲突块相关状态
+const conflictBlocks = ref<ConflictBlock[]>([]);
+const blockResolutions = ref<Map<number, string>>(new Map()); // blockId -> resolved content
+const useBlockMode = ref<boolean>(true); // 是否使用逐块模式
+
+// 解析冲突内容为冲突块
+function parseConflictBlocks(content: string): ConflictBlock[] {
+  const blocks: ConflictBlock[] = [];
+  const lines = content.split('\n');
+  let blockId = 0;
+  let i = 0;
+  
+  while (i < lines.length) {
+    const line = lines[i];
+    
+    // 检测冲突开始标记
+    if (line.includes('<<<<<<<')) {
+      blockId++;
+      const currentLabel = line.replace(/^<<<<<<< /, '').trim() || 'HEAD';
+      const beforeLines: string[] = [];
+      const currentLines: string[] = [];
+      const incomingLines: string[] = [];
+      const afterLines: string[] = [];
+      
+      // 收集冲突前的上下文（最多3行）
+      const contextStart = Math.max(0, i - 3);
+      for (let j = contextStart; j < i; j++) {
+        beforeLines.push(lines[j]);
+      }
+      
+      const startLine = i + 1;
+      i++; // 跳过 <<<<<<< 行
+      
+      // 收集当前版本的内容
+      while (i < lines.length && !lines[i].includes('=======')) {
+        currentLines.push(lines[i]);
+        i++;
+      }
+      
+      i++; // 跳过 ======= 行
+      
+      // 收集传入版本的内容
+      let incomingLabel = '';
+      while (i < lines.length && !lines[i].includes('>>>>>>>')) {
+        incomingLines.push(lines[i]);
+        i++;
+      }
+      
+      // 提取传入版本标签
+      if (i < lines.length && lines[i].includes('>>>>>>>')) {
+        incomingLabel = lines[i].replace(/^>>>>>>> /, '').trim() || 'incoming';
+        i++; // 跳过 >>>>>>> 行
+      }
+      
+      // 收集冲突后的上下文（最多3行）
+      const contextEnd = Math.min(lines.length, i + 3);
+      for (let j = i; j < contextEnd && j < lines.length; j++) {
+        afterLines.push(lines[j]);
+      }
+      
+      blocks.push({
+        id: blockId,
+        startLine,
+        currentLines,
+        incomingLines,
+        beforeLines,
+        afterLines,
+        currentLabel,
+        incomingLabel
+      });
+    } else {
+      i++;
+    }
+  }
+  
+  return blocks;
+}
+
+// 解析冲突内容，提取当前版本和传入版本（保留用于全局解决）
 function parseConflict(content: string): Array<{
   type: 'common' | 'current' | 'incoming' | 'separator';
   lines: string[];
@@ -419,12 +498,130 @@ const openButtonTooltip = computed(() => {
   }
 });
 
+// 处理逐块冲突解决
+async function handleBlockResolve(blockId: number, resolution: 'current' | 'incoming' | 'both') {
+  if (!currentSelectedFile.value) return;
+  
+  try {
+    // 获取文件内容
+    const response = await fetch(`/api/file-content?file=${encodeURIComponent(currentSelectedFile.value)}`);
+    const data = await response.json();
+    
+    if (!data.success || !data.content) {
+      ElMessage.error($t('@E80AC:无法读取文件内容'));
+      return;
+    }
+    
+    const block = conflictBlocks.value.find(b => b.id === blockId);
+    if (!block) return;
+    
+    // 根据解决方式生成该块的内容
+    let resolvedBlockContent = '';
+    if (resolution === 'current') {
+      resolvedBlockContent = block.currentLines.join('\n');
+    } else if (resolution === 'incoming') {
+      resolvedBlockContent = block.incomingLines.join('\n');
+    } else if (resolution === 'both') {
+      resolvedBlockContent = [...block.currentLines, ...block.incomingLines].join('\n');
+    }
+    
+    // 保存该块的解决方案
+    blockResolutions.value.set(blockId, resolvedBlockContent);
+  } catch (error) {
+    ElMessage.error(`${$t('@E80AC:操作失败: ')}${(error as Error).message}`);
+  }
+}
+
+// 保存所有块的解决方案
+async function saveAllBlockResolutions() {
+  if (!currentSelectedFile.value) return;
+  
+  // 检查是否所有块都已解决
+  const allResolved = conflictBlocks.value.every(block => blockResolutions.value.has(block.id));
+  if (!allResolved) {
+    ElMessage.warning($t('@E80AC:请先解决所有冲突块'));
+    return;
+  }
+  
+  try {
+    // 获取原始文件内容
+    const response = await fetch(`/api/file-content?file=${encodeURIComponent(currentSelectedFile.value)}`);
+    const data = await response.json();
+    
+    if (!data.success || !data.content) {
+      ElMessage.error($t('@E80AC:无法读取文件内容'));
+      return;
+    }
+    
+    const originalContent = data.content;
+    const lines = originalContent.split('\n');
+    let result: string[] = [];
+    let i = 0;
+    let processedBlockId = 0;
+    
+    while (i < lines.length) {
+      const line = lines[i];
+      
+      if (line.includes('<<<<<<<')) {
+        processedBlockId++;
+        const resolvedContent = blockResolutions.value.get(processedBlockId);
+        
+        if (resolvedContent !== undefined) {
+          // 添加解决后的内容
+          result.push(resolvedContent);
+          
+          // 跳过整个冲突块
+          i++;
+          while (i < lines.length && !lines[i].includes('>>>>>>>')) {
+            i++;
+          }
+          i++; // 跳过 >>>>>>> 行
+        }
+      } else {
+        result.push(line);
+        i++;
+      }
+    }
+    
+    const resolvedContent = result.join('\n');
+    
+    // 保存解决后的内容
+    await saveResolvedContent(resolvedContent);
+    
+    // 清空块解决方案
+    blockResolutions.value.clear();
+  } catch (error) {
+    ElMessage.error(`${$t('@E80AC:保存失败: ')}${(error as Error).message}`);
+  }
+}
+
 // 监听props.selectedFile变化，同步内部状态
 watch(() => props.selectedFile, (newVal) => {
   if (newVal !== undefined) {
     internalSelectedFile.value = newVal;
   }
 });
+
+// 监听文件选择和内容变化，解析冲突块
+watch([() => props.diffContent, currentSelectedFile], async ([newContent]) => {
+  if (isConflictedFile.value && newContent && currentSelectedFile.value) {
+    try {
+      // 获取完整文件内容来解析冲突块
+      const response = await fetch(`/api/file-content?file=${encodeURIComponent(currentSelectedFile.value)}`);
+      const data = await response.json();
+      
+      if (data.success && data.content) {
+        conflictBlocks.value = parseConflictBlocks(data.content);
+        blockResolutions.value.clear();
+      }
+    } catch (error) {
+      console.error('Failed to parse conflict blocks:', error);
+    }
+  } else {
+    conflictBlocks.value = [];
+    blockResolutions.value.clear();
+  }
+}, { immediate: true });
 
 // 当文件列表变化时，如果当前没有选中文件且有文件列表，自动选中第一个
 watch(() => props.files, (newFiles) => {
@@ -711,25 +908,68 @@ onMounted(() => {
               </div>
             </div>
           </div>
-          <!-- 冲突解决按钮区域 -->
-          <div v-if="isConflictedFile" class="conflict-resolution-bar">
-            <div class="conflict-warning">
-              <el-icon class="warning-icon"><Warning /></el-icon>
-              <span>{{ $t('@E80AC:检测到冲突，请选择解决方式') }}</span>
+          <!-- 冲突解决区域 -->
+          <div v-if="isConflictedFile" class="conflict-resolution-container">
+            <!-- 模式切换按钮 -->
+            <div v-if="conflictBlocks.length > 0" class="resolution-mode-switch">
+              <el-button
+                :type="useBlockMode ? 'primary' : 'default'"
+                size="small"
+                @click="useBlockMode = true"
+              >
+                {{ $t('@E80AC:逐块解决') }}
+              </el-button>
+              <el-button
+                :type="!useBlockMode ? 'primary' : 'default'"
+                size="small"
+                @click="useBlockMode = false"
+              >
+                {{ $t('@E80AC:全局解决') }}
+              </el-button>
             </div>
-            <div class="conflict-buttons">
-              <el-button type="primary" size="small" @click="resolveConflictAcceptCurrent">
-                {{ $t('@E80AC:接受当前版本') }}
-              </el-button>
-              <el-button type="success" size="small" @click="resolveConflictAcceptIncoming">
-                {{ $t('@E80AC:接受传入版本') }}
-              </el-button>
-              <el-button type="warning" size="small" @click="resolveConflictAcceptBoth">
-                {{ $t('@E80AC:接受两者') }}
-              </el-button>
+            <!-- 逐块冲突解决 -->
+            <div v-if="conflictBlocks.length > 0 && useBlockMode" class="block-conflict-resolution">
+              <ConflictBlockViewer
+                :file-path="currentSelectedFile"
+                :blocks="conflictBlocks"
+                @resolve="handleBlockResolve"
+              />
+              <div class="save-resolution-bar">
+                <el-button type="primary" size="large" @click="saveAllBlockResolutions">
+                  {{ $t('@E80AC:保存所有解决方案') }}
+                </el-button>
+              </div>
+            </div>
+            <!-- 全局冲突解决 -->
+            <div v-if="!useBlockMode || conflictBlocks.length === 0" class="global-conflict-wrapper">
+              <div class="global-conflict-resolution">
+                <div class="conflict-warning">
+                  <el-icon class="warning-icon"><Warning /></el-icon>
+                  <span>{{ $t('@E80AC:检测到冲突，请选择解决方式') }}</span>
+                </div>
+                <div class="conflict-buttons">
+                  <el-button type="primary" size="small" @click="resolveConflictAcceptCurrent">
+                    {{ $t('@E80AC:接受当前版本') }}
+                  </el-button>
+                  <el-button type="success" size="small" @click="resolveConflictAcceptIncoming">
+                    {{ $t('@E80AC:接受传入版本') }}
+                  </el-button>
+                  <el-button type="warning" size="small" @click="resolveConflictAcceptBoth">
+                    {{ $t('@E80AC:接受两者') }}
+                  </el-button>
+                </div>
+              </div>
+              <div class="diff-content">
+                <el-empty 
+                  v-if="!hasDiffContent"
+                  :description="$t('@E80AC:该文件没有差异内容')"
+                  :image-size="80"
+                />
+                <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
+              </div>
             </div>
           </div>
-          <div class="diff-content">
+          <div v-else-if="!isConflictedFile" class="diff-content">
             <el-empty 
               v-if="!hasDiffContent"
               :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
@@ -800,26 +1040,69 @@ onMounted(() => {
         </div>
       </div>
       
-      <!-- 冲突解决按钮区域 -->
-      <div v-if="isConflictedFile" class="conflict-resolution-bar">
-        <div class="conflict-warning">
-          <el-icon class="warning-icon"><Warning /></el-icon>
-          <span>{{ $t('@E80AC:检测到冲突，请选择解决方式') }}</span>
+      <!-- 冲突解决区域 -->
+      <div v-if="isConflictedFile" class="conflict-resolution-container">
+        <!-- 模式切换按钮 -->
+        <div v-if="conflictBlocks.length > 0" class="resolution-mode-switch">
+          <el-button
+            :type="useBlockMode ? 'primary' : 'default'"
+            size="small"
+            @click="useBlockMode = true"
+          >
+            {{ $t('@E80AC:逐块解决') }}
+          </el-button>
+          <el-button
+            :type="!useBlockMode ? 'primary' : 'default'"
+            size="small"
+            @click="useBlockMode = false"
+          >
+            {{ $t('@E80AC:全局解决') }}
+          </el-button>
         </div>
-        <div class="conflict-buttons">
-          <el-button type="primary" size="small" @click="resolveConflictAcceptCurrent">
-            {{ $t('@E80AC:接受当前版本') }}
-          </el-button>
-          <el-button type="success" size="small" @click="resolveConflictAcceptIncoming">
-            {{ $t('@E80AC:接受传入版本') }}
-          </el-button>
-          <el-button type="warning" size="small" @click="resolveConflictAcceptBoth">
-            {{ $t('@E80AC:接受两者') }}
-          </el-button>
+        <!-- 逐块冲突解决 -->
+        <div v-if="conflictBlocks.length > 0 && useBlockMode" class="block-conflict-resolution">
+          <ConflictBlockViewer
+            :file-path="currentSelectedFile"
+            :blocks="conflictBlocks"
+            @resolve="handleBlockResolve"
+          />
+          <div class="save-resolution-bar">
+            <el-button type="primary" size="large" @click="saveAllBlockResolutions">
+              {{ $t('@E80AC:保存所有解决方案') }}
+            </el-button>
+          </div>
+        </div>
+        <!-- 全局冲突解决 -->
+        <div v-if="!useBlockMode || conflictBlocks.length === 0" class="global-conflict-wrapper">
+          <div class="global-conflict-resolution">
+            <div class="conflict-warning">
+              <el-icon class="warning-icon"><Warning /></el-icon>
+              <span>{{ $t('@E80AC:检测到冲突，请选择解决方式') }}</span>
+            </div>
+            <div class="conflict-buttons">
+              <el-button type="primary" size="small" @click="resolveConflictAcceptCurrent">
+                {{ $t('@E80AC:接受当前版本') }}
+              </el-button>
+              <el-button type="success" size="small" @click="resolveConflictAcceptIncoming">
+                {{ $t('@E80AC:接受传入版本') }}
+              </el-button>
+              <el-button type="warning" size="small" @click="resolveConflictAcceptBoth">
+                {{ $t('@E80AC:接受两者') }}
+              </el-button>
+            </div>
+          </div>
+          <div class="diff-content">
+            <el-empty 
+              v-if="!hasDiffContent"
+              :description="$t('@E80AC:该文件没有差异内容')"
+              :image-size="80"
+            />
+            <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
+          </div>
         </div>
       </div>
       
-      <div class="diff-content">
+      <div v-else-if="!isConflictedFile" class="diff-content">
         <el-empty 
           v-if="!hasDiffContent"
           :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
@@ -1278,8 +1561,66 @@ onMounted(() => {
   display: flex;
 }
 
-/* 冲突解决按钮区域 */
-.conflict-resolution-bar {
+/* 冲突解决容器 */
+.conflict-resolution-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-container);
+}
+
+/* 模式切换按钮 */
+.resolution-mode-switch {
+  padding: 12px 16px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  
+  .el-button {
+    min-width: 120px;
+  }
+}
+
+/* 逐块冲突解决区域 */
+.block-conflict-resolution {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  
+  :deep(.conflict-block-viewer) {
+    flex: 1;
+    overflow-y: auto;
+  }
+}
+
+/* 保存解决方案按钮栏 */
+.save-resolution-bar {
+  padding: 16px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: center;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+  
+  .el-button {
+    min-width: 200px;
+  }
+}
+
+/* 全局冲突解决包装器 */
+.global-conflict-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 全局冲突解决按钮区域 */
+.global-conflict-resolution {
   padding: 12px 16px;
   background: rgba(249, 115, 22, 0.1);
   border-left: 4px solid var(--git-status-conflicted);
@@ -1289,6 +1630,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .conflict-warning {
