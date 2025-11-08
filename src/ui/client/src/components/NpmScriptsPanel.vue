@@ -125,7 +125,6 @@ watch(() => props.visible, (newValue) => {
       <div class="header-left">
         <img src="@/assets/images/npm-logo.png" alt="npm" class="npm-icon" />
         <span class="panel-title">{{ $t('@NPM01:NPM 脚本') }}</span>
-        <span v-if="!isLoading" class="package-count">{{ packages.length }} {{ $t('@NPM01:个包') }}</span>
       </div>
       <div class="header-right">
         <button class="refresh-btn" @click="loadNpmScripts" :disabled="isLoading">
@@ -413,21 +412,25 @@ watch(() => props.visible, (newValue) => {
   /* flex-direction: column; */
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .package-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--color-text);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .package-path {
   font-size: 12px;
   color: var(--text-secondary);
   font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
 
 .script-count {
