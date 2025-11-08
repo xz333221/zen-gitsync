@@ -2010,12 +2010,13 @@ async function startUIServer(noOpen = false, savePort = false) {
         // 写入解决后的内容到文件
         await fs.writeFile(filePath, content, 'utf8');
         
-        // 将文件添加到暂存区（标记为已解决）
-        await execGitCommand(`git add "${filePath}"`);
+        // 不自动添加到暂存区，让用户手动决定
+        // Git 会自动将冲突已解决的文件标记为"已修改"状态
+        // await execGitCommand(`git add "${filePath}"`);
         
         res.json({ 
           success: true, 
-          message: '冲突已解决，文件已更新并添加到暂存区' 
+          message: '冲突已解决，文件已更新' 
         });
       } catch (writeError) {
         res.status(500).json({ 
