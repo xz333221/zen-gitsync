@@ -12,7 +12,7 @@ interface FileItem {
 interface Props {
   files: FileItem[]
   title: string
-  groupKey: 'staged' | 'unstaged' | 'untracked'
+  groupKey: 'staged' | 'unstaged' | 'untracked' | 'conflicted'
   collapsedGroups: Record<string, boolean>
   isFileLocked: (filePath: string) => boolean
   isLocking: (filePath: string) => boolean
@@ -23,7 +23,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  toggleCollapse: [groupKey: 'staged' | 'unstaged' | 'untracked']
+  toggleCollapse: [groupKey: 'staged' | 'unstaged' | 'untracked' | 'conflicted']
   fileClick: [file: FileItem]
   toggleFileLock: [filePath: string]
   stageFile: [filePath: string]

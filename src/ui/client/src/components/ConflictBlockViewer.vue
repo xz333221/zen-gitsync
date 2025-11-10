@@ -249,7 +249,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
                 <span class="line-number">{{ block.startLine + idx }}</span>
                 <span class="line-content">
                   <template v-if="block.incomingLines[idx]">
-                    <template v-for="(part, pIdx) in computeCharDiff(line, block.incomingLines[idx]).old" :key="pIdx">
+                    <template v-for="(part, _pIdx) in computeCharDiff(line, block.incomingLines[idx]).old" :key="_pIdx">
                       <span :class="{'diff-removed-text': part.type === 'removed', 'diff-common-text': part.type === 'common'}">{{ part.text }}</span>
                     </template>
                   </template>
@@ -307,7 +307,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
                 <span class="line-number">{{ block.startLine + idx }}</span>
                 <span class="line-content">
                   <template v-if="block.currentLines[idx]">
-                    <template v-for="(part, pIdx) in computeCharDiff(block.currentLines[idx], line).new" :key="pIdx">
+                    <template v-for="(part, _pIdx) in computeCharDiff(block.currentLines[idx], line).new" :key="_pIdx">
                       <span :class="{'diff-added-text': part.type === 'added', 'diff-common-text': part.type === 'common'}">{{ part.text }}</span>
                     </template>
                   </template>
