@@ -66,6 +66,83 @@ const totalBlocks = computed(() => props.blocks.length);
 
 // 是否所有块都已解决
 const allResolved = computed(() => resolvedCount.value === totalBlocks.value);
+
+// 缩短commit hash（只保留前7位）
+function shortenHash(label: string): string {
+  // 匹配40位的commit hash
+  const hashMatch = label.match(/[0-9a-f]{40}/);
+  if (hashMatch) {
+    return label.replace(hashMatch[0], hashMatch[0].substring(0, 7));
+  }
+  return label;
+}
+
+// 字符级diff对比 - 使用最长公共子序列算法
+interface DiffPart {
+  type: 'common' | 'added' | 'removed';
+  text: string;
+}
+
+function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], new: DiffPart[] } {
+  // 使用字符级别的LCS算法进行精确对比
+  const m = oldText.length;
+  const n = newText.length;
+  
+  // 动态规划矩阵
+  const dp: number[][] = Array(m + 1).fill(0).map(() => Array(n + 1).fill(0));
+  
+  // 填充DP矩阵
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldText[i - 1] === newText[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+  
+  // 回溯构建diff序列
+  let i = m, j = n;
+  const oldDiff: Array<{ char: string; type: 'common' | 'removed' }> = [];
+  const newDiff: Array<{ char: string; type: 'common' | 'added' }> = [];
+  
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldText[i - 1] === newText[j - 1]) {
+      oldDiff.unshift({ char: oldText[i - 1], type: 'common' });
+      newDiff.unshift({ char: newText[j - 1], type: 'common' });
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      newDiff.unshift({ char: newText[j - 1], type: 'added' });
+      j--;
+    } else if (i > 0) {
+      oldDiff.unshift({ char: oldText[i - 1], type: 'removed' });
+      i--;
+    }
+  }
+  
+  // 合并连续的相同类型字符为文本块
+  const mergeOld: DiffPart[] = [];
+  for (const item of oldDiff) {
+    if (mergeOld.length > 0 && mergeOld[mergeOld.length - 1].type === item.type) {
+      mergeOld[mergeOld.length - 1].text += item.char;
+    } else {
+      mergeOld.push({ type: item.type, text: item.char });
+    }
+  }
+  
+  const mergeNew: DiffPart[] = [];
+  for (const item of newDiff) {
+    if (mergeNew.length > 0 && mergeNew[mergeNew.length - 1].type === item.type) {
+      mergeNew[mergeNew.length - 1].text += item.char;
+    } else {
+      mergeNew.push({ type: item.type, text: item.char });
+    }
+  }
+  
+  return { old: mergeOld, new: mergeNew };
+}
 </script>
 
 <template>
@@ -155,64 +232,88 @@ const allResolved = computed(() => resolvedCount.value === totalBlocks.value);
         </div>
       </template>
 
-      <!-- 未解决状态：显示选择按钮 -->
+      <!-- 未解决状态：三栏对比视图 -->
       <template v-else>
-        <!-- 当前版本区域 -->
-        <div class="conflict-section current-section">
-          <div class="section-header">
-            <span class="section-label">{{ $t('@E80AC:当前更改') }} ({{ block.currentLabel }})</span>
-            <el-button
-              size="small"
-              type="primary"
-              @click="handleResolveBlock(block.id, 'current')"
-            >
-              {{ $t('@E80AC:采用当前更改') }}
-            </el-button>
-          </div>
-          <div class="section-content">
-            <div
-              v-for="(line, idx) in block.currentLines"
-              :key="'current-' + idx"
-              class="diff-line added-line"
-            >
-              <span class="line-number">{{ block.startLine + idx }}</span>
-              <span class="line-content">{{ line }}</span>
+        <div class="three-way-merge">
+          <!-- 左栏：当前更改 -->
+          <div class="merge-column current-column">
+            <div class="column-header">
+              <span class="column-title">{{ $t('@E80AC:当前更改') }} ({{ block.currentLabel }})</span>
+            </div>
+            <div class="column-content">
+              <div
+                v-for="(line, idx) in block.currentLines"
+                :key="'current-' + idx"
+                class="merge-line current-line"
+              >
+                <span class="line-number">{{ block.startLine + idx }}</span>
+                <span class="line-content">
+                  <template v-if="block.incomingLines[idx]">
+                    <template v-for="(part, pIdx) in computeCharDiff(line, block.incomingLines[idx]).old" :key="pIdx">
+                      <span :class="{'diff-removed-text': part.type === 'removed', 'diff-common-text': part.type === 'common'}">{{ part.text }}</span>
+                    </template>
+                  </template>
+                  <template v-else>{{ line }}</template>
+                </span>
+                <button 
+                  class="accept-btn left-accept" 
+                  @click="handleResolveBlock(block.id, 'current')"
+                  title="采用当前更改"
+                >
+                  &gt;&gt;
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- 分隔符 -->
-        <div class="conflict-separator">
-          <span>{{ $t('@E80AC:冲突分隔符') }}</span>
-          <el-button
-            size="small"
-            type="warning"
-            @click="handleResolveBlock(block.id, 'both')"
-          >
-            {{ $t('@E80AC:保留双方更改') }}
-          </el-button>
-        </div>
-
-        <!-- 传入版本区域 -->
-        <div class="conflict-section incoming-section">
-          <div class="section-header">
-            <span class="section-label">{{ $t('@E80AC:传入的更改') }} ({{ block.incomingLabel }})</span>
-            <el-button
-              size="small"
-              type="success"
-              @click="handleResolveBlock(block.id, 'incoming')"
-            >
-              {{ $t('@E80AC:采用传入更改') }}
-            </el-button>
+          <!-- 中栏：合并结果 -->
+          <div class="merge-column result-column">
+            <div class="column-header">
+              <span class="column-title">{{ $t('@E80AC:合并结果') }}</span>
+              <el-button
+                size="small"
+                type="warning"
+                @click="handleResolveBlock(block.id, 'both')"
+              >
+                {{ $t('@E80AC:保留双方') }}
+              </el-button>
+            </div>
+            <div class="column-content result-content">
+              <div class="merge-hint">
+                <p>{{ $t('@E80AC:点击左右两侧的') }} <strong>&gt;&gt;</strong> {{ $t('@E80AC:或') }} <strong>&lt;&lt;</strong> {{ $t('@E80AC:按钮') }}</p>
+                <p>{{ $t('@E80AC:选择要保留的内容') }}</p>
+              </div>
+            </div>
           </div>
-          <div class="section-content">
-            <div
-              v-for="(line, idx) in block.incomingLines"
-              :key="'incoming-' + idx"
-              class="diff-line removed-line"
-            >
-              <span class="line-number">{{ block.startLine + block.currentLines.length + idx }}</span>
-              <span class="line-content">{{ line }}</span>
+
+          <!-- 右栏：传入更改 -->
+          <div class="merge-column incoming-column">
+            <div class="column-header">
+              <span class="column-title">{{ $t('@E80AC:传入的更改') }} ({{ shortenHash(block.incomingLabel) }})</span>
+            </div>
+            <div class="column-content">
+              <div
+                v-for="(line, idx) in block.incomingLines"
+                :key="'incoming-' + idx"
+                class="merge-line incoming-line"
+              >
+                <button 
+                  class="accept-btn right-accept" 
+                  @click="handleResolveBlock(block.id, 'incoming')"
+                  title="采用传入更改"
+                >
+                  &lt;&lt;
+                </button>
+                <span class="line-number">{{ block.startLine + idx }}</span>
+                <span class="line-content">
+                  <template v-if="block.currentLines[idx]">
+                    <template v-for="(part, pIdx) in computeCharDiff(block.currentLines[idx], line).new" :key="pIdx">
+                      <span :class="{'diff-added-text': part.type === 'added', 'diff-common-text': part.type === 'common'}">{{ part.text }}</span>
+                    </template>
+                  </template>
+                  <template v-else>{{ line }}</template>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -331,90 +432,174 @@ const allResolved = computed(() => resolvedCount.value === totalBlocks.value);
       }
     }
     
-    .conflict-section {
-      .section-header {
+    // 三栏合并视图样式
+    .three-way-merge {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1px;
+      background-color: var(--border-color);
+      border: 1px solid var(--border-color);
+      min-height: 200px;
+      
+      .merge-column {
+        background-color: var(--bg-container);
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 16px;
-        font-weight: 500;
-        font-size: 13px;
+        flex-direction: column;
         
-        .section-label {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-      }
-      
-      &.current-section {
-        background-color: rgba(var(--color-success-rgb), 0.05);
-        border-top: 2px solid var(--color-success-border);
-        border-bottom: 2px solid var(--color-success-border);
-        
-        .section-header {
-          background-color: rgba(var(--color-success-rgb), 0.1);
-          color: var(--color-success);
-        }
-      }
-      
-      &.incoming-section {
-        background-color: rgba(var(--color-primary-rgb), 0.05);
-        border-bottom: 2px solid var(--color-primary-border);
-        
-        .section-header {
-          background-color: rgba(var(--color-primary-rgb), 0.1);
-          color: var(--color-primary);
-        }
-      }
-      
-      .section-content {
-        .diff-line {
-          display: flex;
-          padding: 2px 8px;
-          font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        .column-header {
+          padding: 8px 12px;
+          font-weight: 600;
           font-size: 13px;
-          line-height: 1.6;
+          background-color: var(--bg-elevated);
+          border-bottom: 1px solid var(--border-color);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
           
-          &.added-line {
-            background-color: rgba(var(--color-success-rgb), 0.15);
-          }
-          
-          &.removed-line {
-            background-color: rgba(var(--color-danger-rgb), 0.15);
-          }
-          
-          .line-number {
-            display: inline-block;
-            width: 50px;
-            color: var(--text-tertiary);
-            text-align: right;
-            padding-right: 16px;
-            user-select: none;
-          }
-          
-          .line-content {
-            flex: 1;
-            white-space: pre;
+          .column-title {
             color: var(--text-primary);
           }
         }
-      }
-    }
-    
-    .conflict-separator {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 16px;
-      background-color: var(--bg-elevated);
-      border-top: 1px dashed var(--border-color);
-      border-bottom: 1px dashed var(--border-color);
-      
-      span {
-        font-size: 12px;
-        color: var(--text-tertiary);
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        
+        .column-content {
+          flex: 1;
+          overflow-y: auto;
+          
+          .merge-line {
+            display: flex;
+            align-items: center;
+            padding: 2px 4px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            position: relative;
+            transition: background-color 0.2s;
+            
+            &:hover {
+              background-color: rgba(100, 100, 100, 0.05);
+              
+              .accept-btn {
+                opacity: 1;
+              }
+            }
+            
+            .line-number {
+              display: inline-block;
+              width: 40px;
+              color: var(--text-tertiary);
+              text-align: right;
+              padding-right: 12px;
+              user-select: none;
+              font-size: 12px;
+            }
+            
+            .line-content {
+              flex: 1;
+              white-space: pre;
+              color: var(--text-primary);
+              padding: 0 4px;
+              
+              // Diff 高亮样式
+              .diff-removed-text {
+                background-color: rgba(248, 81, 73, 0.25);
+                color: #f85149;
+                padding: 0 2px;
+                border-radius: 2px;
+              }
+              
+              .diff-added-text {
+                background-color: rgba(34, 134, 58, 0.25);
+                color: #22863a;
+                padding: 0 2px;
+                border-radius: 2px;
+              }
+            }
+            
+            .accept-btn {
+              border: none;
+              background-color: rgba(64, 158, 255, 0.8);
+              color: white;
+              padding: 2px 6px;
+              cursor: pointer;
+              font-size: 11px;
+              font-weight: bold;
+              border-radius: 3px;
+              opacity: 0;
+              transition: all 0.2s;
+              
+              &:hover {
+                background-color: rgba(64, 158, 255, 1);
+                transform: scale(1.1);
+              }
+              
+              &:active {
+                transform: scale(0.95);
+              }
+              
+              &.left-accept {
+                margin-left: 8px;
+              }
+              
+              &.right-accept {
+                margin-right: 8px;
+              }
+            }
+          }
+        }
+        
+        &.current-column {
+          .column-header {
+            background-color: rgba(64, 200, 174, 0.15);
+            color: #2d6a5d;
+          }
+          
+          .merge-line {
+            background-color: rgba(64, 200, 174, 0.08);
+          }
+        }
+        
+        &.incoming-column {
+          .column-header {
+            background-color: rgba(64, 158, 255, 0.15);
+            color: #2d4a6d;
+          }
+          
+          .merge-line {
+            background-color: rgba(64, 158, 255, 0.08);
+          }
+        }
+        
+        &.result-column {
+          .column-header {
+            background-color: var(--bg-elevated);
+          }
+          
+          .result-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            
+            .merge-hint {
+              text-align: center;
+              color: var(--text-secondary);
+              padding: 20px;
+              
+              p {
+                margin: 8px 0;
+                font-size: 13px;
+                line-height: 1.6;
+                
+                strong {
+                  color: var(--color-primary);
+                  font-family: 'Consolas', 'Monaco', monospace;
+                  background-color: rgba(64, 158, 255, 0.1);
+                  padding: 2px 6px;
+                  border-radius: 3px;
+                }
+              }
+            }
+          }
+        }
       }
     }
     

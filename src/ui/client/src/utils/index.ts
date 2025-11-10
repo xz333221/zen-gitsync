@@ -28,6 +28,10 @@ export function formatDiff(diffText: string): string {
 
   // 将差异内容按行分割
   const lines = diffText.split("\n");
+  
+  // 跟踪是否在冲突区域内
+  let inConflict = false;
+  let conflictSection: 'current' | 'incoming' | null = null;
 
   // 为每行添加适当的CSS类
   return lines
@@ -44,7 +48,33 @@ export function formatDiff(diffText: string): string {
         return `<div class="diff-new-file">${escapedLine}</div>`;
       } else if (line.startsWith("@@")) {
         return `<div class="diff-hunk-header">${escapedLine}</div>`;
-      } else if (line.startsWith("+")) {
+      }
+      // 检测冲突标记
+      else if (line.match(/^[+\-\s]*<{7,}\s+(HEAD|.*)/)) {
+        // <<<<<<< HEAD 或 <<<<<<< 分支名
+        inConflict = true;
+        conflictSection = 'current';
+        return `<div class="diff-conflict-start">${escapedLine}</div>`;
+      } else if (line.match(/^[+\-\s]*={7,}\s*$/)) {
+        // =======
+        conflictSection = 'incoming';
+        return `<div class="diff-conflict-separator">${escapedLine}</div>`;
+      } else if (line.match(/^[+\-\s]*>{7,}\s+.*/)) {
+        // >>>>>>> 分支名/commit
+        inConflict = false;
+        conflictSection = null;
+        return `<div class="diff-conflict-end">${escapedLine}</div>`;
+      }
+      // 冲突区域内的内容行
+      else if (inConflict && conflictSection) {
+        if (conflictSection === 'current') {
+          return `<div class="diff-conflict-current">${escapedLine}</div>`;
+        } else {
+          return `<div class="diff-conflict-incoming">${escapedLine}</div>`;
+        }
+      }
+      // 普通的新增/删除行
+      else if (line.startsWith("+")) {
         return `<div class="diff-added">${escapedLine}</div>`;
       } else if (line.startsWith("-")) {
         return `<div class="diff-removed">${escapedLine}</div>`;

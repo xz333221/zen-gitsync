@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static.ts'
 import { ref, computed, watch, onMounted } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput, ElButton } from 'element-plus';
-import { FolderOpened, DocumentCopy, Search, Warning } from '@element-plus/icons-vue';
+import { FolderOpened, DocumentCopy, Search, Warning, CircleCheck } from '@element-plus/icons-vue';
 import TreeIcon from '@/components/icons/TreeIcon.vue';
 import ListIcon from '@/components/icons/ListIcon.vue';
 import { formatDiff } from '../utils/index.ts';
@@ -91,16 +91,15 @@ const currentSelectedFile = computed(() => {
 const isConflictedFile = computed(() => {
   if (!currentSelectedFile.value) return false;
   const currentFile = props.files.find(f => f.path === currentSelectedFile.value);
-  if (currentFile?.type === 'conflicted') return true;
-  // 也检查 diffContent 中是否包含冲突标记
-  if (props.diffContent && (
-    props.diffContent.includes('<<<<<<<') ||
-    props.diffContent.includes('=======') ||
-    props.diffContent.includes('>>>>>>>')
-  )) {
-    return true;
-  }
-  return false;
+  // 只根据文件类型判断，不检查 diff 内容
+  // 因为 diff 内容中可能包含对冲突标记的修改（如修改 index.ts 中的冲突解析代码）
+  return currentFile?.type === 'conflicted';
+});
+
+// 检测文件内容是否真的包含冲突标记（用于判断用户是否已手动解决）
+const hasActualConflictMarkers = computed(() => {
+  // 如果没有解析到冲突块，说明文件内容中已经没有冲突标记了
+  return conflictBlocks.value.length > 0;
 });
 
 const displayFiles = computed(() => {
@@ -603,23 +602,32 @@ watch(() => props.selectedFile, (newVal) => {
 });
 
 // 监听文件选择和内容变化，解析冲突块
-watch([() => props.diffContent, currentSelectedFile], async ([newContent]) => {
-  if (isConflictedFile.value && newContent && currentSelectedFile.value) {
+watch([() => props.diffContent, currentSelectedFile, isConflictedFile], async ([_, selectedFile, isConflicted]) => {
+  // 清空之前的状态
+  conflictBlocks.value = [];
+  blockResolutions.value.clear();
+  
+  // 只有当文件确实是冲突文件时才解析
+  if (isConflicted && selectedFile) {
     try {
+      console.log('[ConflictParse] Fetching content for conflicted file:', selectedFile);
       // 获取完整文件内容来解析冲突块
-      const response = await fetch(`/api/file-content?file=${encodeURIComponent(currentSelectedFile.value)}`);
+      const response = await fetch(`/api/file-content?file=${encodeURIComponent(selectedFile)}`);
       const data = await response.json();
       
       if (data.success && data.content) {
-        conflictBlocks.value = parseConflictBlocks(data.content);
-        blockResolutions.value.clear();
+        console.log('[ConflictParse] File content loaded, parsing blocks...');
+        const blocks = parseConflictBlocks(data.content);
+        console.log('[ConflictParse] Parsed blocks:', blocks.length);
+        conflictBlocks.value = blocks;
+      } else {
+        console.error('[ConflictParse] Failed to load file content:', data.error);
       }
     } catch (error) {
-      console.error('Failed to parse conflict blocks:', error);
+      console.error('[ConflictParse] Error fetching file content:', error);
     }
   } else {
-    conflictBlocks.value = [];
-    blockResolutions.value.clear();
+    console.log('[ConflictParse] File is not conflicted or no file selected');
   }
 }, { immediate: true });
 
@@ -818,6 +826,8 @@ onMounted(() => {
                   @click="handleFileSelect(file.path)"
                 >
                   <span :class="['file-icon', file.iconClass]"></span>
+                  <!-- 冲突文件标记 -->
+                  <span v-if="file.type === 'conflicted'" class="conflict-marker" title="冲突文件">⚠</span>
                   <el-tooltip
                     :content="file.path"
                     placement="top"
@@ -909,7 +919,7 @@ onMounted(() => {
             </div>
           </div>
           <!-- 冲突解决区域 -->
-          <div v-if="isConflictedFile" class="conflict-resolution-container">
+          <div v-if="isConflictedFile && hasActualConflictMarkers" class="conflict-resolution-container">
             <!-- 模式切换按钮 -->
             <div v-if="conflictBlocks.length > 0" class="resolution-mode-switch">
               <el-button
@@ -967,6 +977,26 @@ onMounted(() => {
                 />
                 <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
               </div>
+            </div>
+          </div>
+          <!-- 冲突已手动解决 -->
+          <div v-else-if="isConflictedFile && !hasActualConflictMarkers" class="conflict-resolved-container">
+            <div class="resolved-notice">
+              <el-icon class="success-icon" style="color: var(--color-success); font-size: 20px;">
+                <CircleCheck />
+              </el-icon>
+              <span class="notice-text">{{ $t('@E80AC:冲突已解决，可以添加到暂存区') }}</span>
+              <el-button type="success" size="default" @click="emit('stage', currentSelectedFile)">
+                {{ $t('@E80AC:添加到暂存区') }}
+              </el-button>
+            </div>
+            <div class="diff-content">
+              <el-empty 
+                v-if="!hasDiffContent"
+                :description="$t('@E80AC:该文件没有差异内容')"
+                :image-size="80"
+              />
+              <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
             </div>
           </div>
           <div v-else-if="!isConflictedFile" class="diff-content">
@@ -1366,6 +1396,14 @@ onMounted(() => {
   position: relative;
   background: transparent;
   
+  .conflict-marker {
+    color: var(--git-status-conflicted);
+    font-size: 16px;
+    margin-left: -4px;
+    margin-right: 2px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  
   &::before {
     content: '';
     position: absolute;
@@ -1570,6 +1608,44 @@ onMounted(() => {
   background: var(--bg-container);
 }
 
+/* 冲突已解决容器 */
+.conflict-resolved-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-container);
+  
+  .resolved-notice {
+    padding: 16px 20px;
+    background: linear-gradient(135deg, rgba(103, 194, 58, 0.1) 0%, rgba(103, 194, 58, 0.05) 100%);
+    border-bottom: 2px solid var(--color-success);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    
+    .success-icon {
+      flex-shrink: 0;
+    }
+    
+    .notice-text {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    
+    .el-button {
+      flex-shrink: 0;
+    }
+  }
+  
+  .diff-content {
+    flex: 1;
+    overflow-y: auto;
+  }
+}
+
 /* 模式切换按钮 */
 .resolution-mode-switch {
   padding: 12px 16px;
@@ -1688,6 +1764,16 @@ onMounted(() => {
     &:hover {
       background-color: var(--scrollbar-thumb-hover);
     }
+  }
+}
+
+/* 冲突标记脉冲动画 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
 

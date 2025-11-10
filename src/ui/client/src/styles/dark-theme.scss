@@ -1056,4 +1056,72 @@
   .directory-dialog .path-label {
     color: rgba(255, 255, 255, 0.85) !important;
   }
+
+  /* 冲突样式 - 暗色主题 */
+  .diff-conflict-start {
+    background-color: rgba(64, 200, 174, 0.15);
+    color: #6ee7b7;
+    border-top: 1px solid rgba(64, 200, 174, 0.3);
+    border-bottom: 1px solid rgba(64, 200, 174, 0.3);
+  }
+
+  .diff-conflict-separator {
+    background-color: rgba(100, 100, 100, 0.1);
+    color: #9ca3af;
+  }
+
+  .diff-conflict-end {
+    background-color: rgba(64, 158, 255, 0.15);
+    color: #93c5fd;
+    border-top: 1px solid rgba(64, 158, 255, 0.3);
+    border-bottom: 1px solid rgba(64, 158, 255, 0.3);
+  }
+
+  .diff-conflict-current {
+    background-color: rgba(64, 200, 174, 0.1);
+  }
+
+  .diff-conflict-incoming {
+    background-color: rgba(64, 158, 255, 0.1);
+  }
+
+  /* 三栏合并视图 - 暗色主题 */
+  .three-way-merge {
+    .merge-column {
+      &.current-column {
+        .column-header {
+          background-color: rgba(64, 200, 174, 0.1);
+          color: #6ee7b7;
+        }
+        
+        .merge-line {
+          background-color: rgba(64, 200, 174, 0.05);
+        }
+      }
+      
+      &.incoming-column {
+        .column-header {
+          background-color: rgba(64, 158, 255, 0.1);
+          color: #93c5fd;
+        }
+        
+        .merge-line {
+          background-color: rgba(64, 158, 255, 0.05);
+        }
+      }
+      
+      // 行内diff高亮 - 暗色主题
+      .line-content {
+        .diff-removed-text {
+          background-color: rgba(248, 81, 73, 0.2);
+          color: #ff7b72;
+        }
+        
+        .diff-added-text {
+          background-color: rgba(34, 134, 58, 0.2);
+          color: #7ee787;
+        }
+      }
+    }
+  }
 }

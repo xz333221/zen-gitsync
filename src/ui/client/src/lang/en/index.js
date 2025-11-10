@@ -168,6 +168,14 @@ export default {
   '@E80AC:重新选择': 'Re-select',
   '@E80AC:逐块解决': 'Block-by-Block',
   '@E80AC:全局解决': 'Global Resolution',
+  '@E80AC:合并结果': 'Merge Result',
+  '@E80AC:保留双方': 'Keep Both',
+  '@E80AC:点击左右两侧的': 'Click the',
+  '@E80AC:或': 'or',
+  '@E80AC:按钮': 'buttons on both sides',
+  '@E80AC:选择要保留的内容': 'to choose which content to keep',
+  '@E80AC:冲突已解决，可以添加到暂存区': 'Conflict resolved, ready to stage',
+  '@E80AC:添加到暂存区': 'Stage File',
   // @E80AC: file end
   // @34292: file path: components\GitCommandPreview.vue
   '@34292:Git命令预览：': 'Git command preview:',
