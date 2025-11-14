@@ -97,8 +97,8 @@ const isStashDialogVisible = ref(false);
 const isStashListDialogVisible = ref(false);
 const stashMessage = ref('');
 const includeUntracked = ref(true);
-// 新增：排除锁定文件选项（默认勾选）
-const excludeLocked = ref(true);
+// 新增：排除锁定文件选项（默认不勾选）
+const excludeLocked = ref(false);
 
 // stash详情弹窗相关状态
 const stashDetailVisible = ref(false);
@@ -111,8 +111,9 @@ const selectedStashFile = ref('');
 // 添加stash相关方法
 function openStashDialog() {
   stashMessage.value = '';
-  includeUntracked.value = false;
-  excludeLocked.value = !allChangesAreLocked.value;
+  if(!allChangesAreLocked.value){
+    excludeLocked.value = false;
+  }
   isStashDialogVisible.value = true;
 }
 
