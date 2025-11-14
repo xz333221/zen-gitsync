@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import StageButton from '@/components/buttons/StageButton.vue'
 import CommitButton from '@/components/buttons/CommitButton.vue'
 import PushButton from '@/components/buttons/PushButton.vue'
@@ -25,6 +26,8 @@ const emit = defineEmits<{
   clearFields: []
 }>()
 
+const quickPushRef = ref<InstanceType<typeof QuickPushButton> | null>(null)
+
 // 处理提交后的事件
 function handleAfterCommit(success: boolean) {
   emit('afterCommit', success)
@@ -44,6 +47,14 @@ function handleBeforePush() {
 function handleClearFields() {
   emit('clearFields')
 }
+
+async function triggerQuickPush() {
+  return quickPushRef.value?.triggerQuickPush()
+}
+
+defineExpose({
+  triggerQuickPush
+})
 </script>
 
 <template>
@@ -77,6 +88,7 @@ function handleClearFields() {
       
       <div class="right-actions">
         <QuickPushButton 
+          ref="quickPushRef"
           :from="from"
           :has-user-commit-message="hasUserCommitMessage"
           :final-commit-message="finalCommitMessage"

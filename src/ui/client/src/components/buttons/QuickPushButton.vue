@@ -123,6 +123,10 @@ async function handleQuickPush() {
   }
 }
 
+defineExpose({
+  triggerQuickPush: handleQuickPush
+});
+
 // 处理进度完成
 function handleProgressComplete(_success: boolean) {
   // 可以在这里添加额外的完成处理逻辑

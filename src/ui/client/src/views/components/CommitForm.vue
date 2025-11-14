@@ -78,6 +78,8 @@ const skipHooks = ref(false);
 // 回车自动一键提交开关
 const autoQuickPushOnEnter = ref(false);
 
+const gitActionButtonsRef = ref<InstanceType<typeof GitActionButtons> | null>(null);
+
 // 添加控制正文和页脚显示的状态变量
 const showAdvancedFields = ref(false);
 
@@ -787,9 +789,10 @@ async function handleEnterKey(event: KeyboardEvent) {
   // 添加与一键推送按钮相同的禁用逻辑判断
   // 检查是否有任何变更
   const hasAnyChangesValue = gitStore.fileList.some(file => !isFileLocked(file.path));
-  
+  const hasConflicts = gitStore.hasConflictedFiles;
+
   // 检查是否满足推送条件（与QuickPushButton.vue中的isDisabled逻辑一致）
-  if (!hasAnyChangesValue || !hasUserCommitMessage.value || !gitStore.hasUpstream) {
+  if (!hasAnyChangesValue || !hasUserCommitMessage.value || !gitStore.hasUpstream || hasConflicts) {
     return;
   }
 
@@ -798,24 +801,14 @@ async function handleEnterKey(event: KeyboardEvent) {
     event.preventDefault(); // 阻止默认的换行行为
 
     try {
-      // 执行一键提交推送
-      handleQuickPushBefore();
-      const result = await gitStore.addCommitAndPush(
-        finalCommitMessage.value,
-        skipHooks.value
-      );
-      if (result) {
-        clearCommitFields();
-      }
-      handleQuickPushAfter(result);
+      await gitActionButtonsRef.value?.triggerQuickPush();
     } catch (error) {
       console.error('回车自动一键提交失败:', error);
-      handleQuickPushAfter(false);
     }
   }
 }
 
-// 设置为默认提交信息（从 TemplateManager 组件调用）
+// ...
 async function setDefaultFromTemplate(template: string) {
   try {
     const success = await configStore.saveDefaultMessage(template);
@@ -1080,10 +1073,10 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
       <!-- Git操作按钮组 - 移到标题右侧 -->
       <div class="header-actions" v-if="gitStore.userName !== '' && gitStore.userEmail !== ''">
         <GitActionButtons
+          ref="gitActionButtonsRef"
           :has-user-commit-message="hasUserCommitMessage"
           :final-commit-message="finalCommitMessage"
           :skip-hooks="skipHooks"
-          from="form"
           @after-commit="(success) => { if (success) clearCommitFields() }"
           @after-push="handleQuickPushAfter"
           @before-push="handleQuickPushBefore"
