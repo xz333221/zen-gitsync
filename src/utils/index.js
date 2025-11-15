@@ -202,6 +202,11 @@ function execSyncGitCommand(command, options = {}) {
     }
     let result = output.trim()
     log && coloredLog(head, result)
+    // 打印当前目录和时间信息
+    if (log) {
+      const currentTime = new Date().toLocaleString('zh-CN', { hour12: false });
+      console.log(chalk.dim(`📁 目录: ${cwd} | ⏰ 时间: ${currentTime}`));
+    }
     return result
   } catch (e) {
     // console.log(`执行命令出错 ==> `, command, e)
@@ -312,8 +317,18 @@ function execGitCommand(command, options = {}) {
       if (stderr) {
         log && coloredLog(head, stderr)
       }
+      // 打印当前目录和时间信息
+      if (log && (stdout || stderr)) {
+        const currentTime = new Date().toLocaleString('zh-CN', { hour12: false });
+        console.log(chalk.dim(`📁 目录: ${cwd} | ⏰ 时间: ${currentTime}`));
+      }
       if (error) {
         log && coloredLog(head, error, 'error')
+        // 错误情况也打印目录和时间
+        if (log) {
+          const currentTime = new Date().toLocaleString('zh-CN', { hour12: false });
+          console.log(chalk.dim(`📁 目录: ${cwd} | ⏰ 时间: ${currentTime}`));
+        }
         reject(error)
         return
       }

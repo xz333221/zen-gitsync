@@ -96,8 +96,41 @@ async function startUIServer(noOpen = false, savePort = false) {
   
   // 添加请求日志中间件
   app.use((req, res, next) => {
-    const now = new Date().toLocaleString();
-    console.log(`[${now}] ${req.method} ${req.url}`);
+    const startTime = Date.now();
+    const requestTime = new Date().toLocaleString('zh-CN', { hour12: false });
+    
+    // 监听响应完成事件
+    res.on('finish', () => {
+      const duration = Date.now() - startTime;
+      const statusCode = res.statusCode;
+      
+      // 根据状态码选择颜色
+      let statusColor = chalk.green;
+      if (statusCode >= 400 && statusCode < 500) {
+        statusColor = chalk.yellow;
+      } else if (statusCode >= 500) {
+        statusColor = chalk.red;
+      }
+      
+      // 根据请求耗时选择颜色
+      let durationColor = chalk.gray;
+      if (duration > 1000) {
+        durationColor = chalk.red;
+      } else if (duration > 500) {
+        durationColor = chalk.yellow;
+      } else if (duration > 200) {
+        durationColor = chalk.cyan;
+      }
+      
+      console.log(
+        chalk.dim(`[${requestTime}]`),
+        chalk.bold(req.method),
+        req.url,
+        statusColor(`[${statusCode}]`),
+        durationColor(`${duration}ms`)
+      );
+    });
+    
     next();
   });
 
