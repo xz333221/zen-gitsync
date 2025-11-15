@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading } from "@element-plus/icons-vue";
+import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading, Setting } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";
