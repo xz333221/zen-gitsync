@@ -625,8 +625,11 @@ async function startUIServer(noOpen = false, savePort = false) {
                     newProjectRoomId: newProjectRoomId
                   });
                   
-                  // 重新初始化文件监控（新路径）
-                  initFileSystemWatcher();
+                  // 不再自动启动文件监控，只在用户手动开启自动更新开关时启动
+                  // console.log('[切换目录] 将在3秒后初始化文件监控器');
+                  // setTimeout(() => {
+                  //   initFileSystemWatcher().catch(err => console.error('[文件监控] 初始化失败:', err));
+                  // }, 3000);
                   
                   res.json({ 
                       success: true, 
@@ -1973,8 +1976,27 @@ async function startUIServer(noOpen = false, savePort = false) {
         return res.status(400).json({ error: '缺少文件路径参数' });
       }
       
+      // 检查是否是编译/压缩文件（通常很大且不需要查看diff）
+      const isCompiledFile = /\.(min\.js|umd\.cjs|bundle\.js|dist\.js|prod\.js)$/i.test(filePath);
+      if (isCompiledFile) {
+        return res.json({ 
+          diff: '⚠️ 检测到编译/打包文件，diff内容过大已跳过显示。\n\n提示：这类文件通常是自动生成的，不建议查看diff。\n如需查看，请使用命令行：git diff -- "' + filePath + '"',
+          isLargeFile: true
+        });
+      }
+      
       // 执行git diff命令获取文件差异
       const { stdout } = await execGitCommand(`git diff -- "${filePath}"`);
+      
+      // 检查diff大小，如果超过500KB，只返回提示
+      const diffSizeKB = Buffer.byteLength(stdout, 'utf8') / 1024;
+      if (diffSizeKB > 500) {
+        return res.json({ 
+          diff: `⚠️ Diff内容过大 (${diffSizeKB.toFixed(1)}KB)，已跳过显示以避免浏览器卡顿。\n\n提示：请使用命令行查看：git diff -- "${filePath}"`,
+          isLargeFile: true,
+          size: diffSizeKB
+        });
+      }
       
       res.json({ diff: stdout });
     } catch (error) {
@@ -1990,8 +2012,27 @@ async function startUIServer(noOpen = false, savePort = false) {
         return res.status(400).json({ error: '缺少文件路径参数' });
       }
       
+      // 检查是否是编译/压缩文件
+      const isCompiledFile = /\.(min\.js|umd\.cjs|bundle\.js|dist\.js|prod\.js)$/i.test(filePath);
+      if (isCompiledFile) {
+        return res.json({ 
+          diff: '⚠️ 检测到编译/打包文件，diff内容过大已跳过显示。\n\n提示：这类文件通常是自动生成的，不建议查看diff。\n如需查看，请使用命令行：git diff --cached -- "' + filePath + '"',
+          isLargeFile: true
+        });
+      }
+      
       // 执行git diff --cached命令获取已暂存文件差异
       const { stdout } = await execGitCommand(`git diff --cached -- "${filePath}"`);
+      
+      // 检查diff大小
+      const diffSizeKB = Buffer.byteLength(stdout, 'utf8') / 1024;
+      if (diffSizeKB > 500) {
+        return res.json({ 
+          diff: `⚠️ Diff内容过大 (${diffSizeKB.toFixed(1)}KB)，已跳过显示以避免浏览器卡顿。\n\n提示：请使用命令行查看：git diff --cached -- "${filePath}"`,
+          isLargeFile: true,
+          size: diffSizeKB
+        });
+      }
       
       res.json({ diff: stdout });
     } catch (error) {
@@ -2924,64 +2965,211 @@ async function startUIServer(noOpen = false, savePort = false) {
   
   // ========== NPM 脚本管理相关 API ==========
   
+  // 存储正在进行的扫描任务
+  let currentScanAbortController = null;
+  
   // 扫描项目目录及子目录下的所有package.json，并提取scripts
   app.get('/api/scan-npm-scripts', async (req, res) => {
+    // 取消之前的扫描
+    if (currentScanAbortController) {
+      currentScanAbortController.aborted = true;
+    }
+    
+    // 创建新的abort controller
+    currentScanAbortController = { 
+      aborted: false,
+      abort() { this.aborted = true; }
+    };
+    const scanController = currentScanAbortController;
     try {
       const projectRoot = process.cwd();
       const packageJsons = [];
+      const startTime = Date.now();
       
-      // 递归扫描目录查找package.json
-      async function scanDirectory(dir, depth = 0) {
-        // 限制扫描深度，避免扫描过深
-        if (depth > 5) return;
+      console.log(`[NPM扫描-后端] 开始扫描项目: ${projectRoot}`);
+      
+      // 需要忽略的目录列表（更全面）
+      const IGNORED_DIRS = new Set([
+        'node_modules',
+        '.git',
+        '.svn',
+        '.hg',
+        'dist',
+        'build',
+        'coverage',
+        'out',
+        'target',
+        'vendor',
+        '__pycache__',
+        '.next',
+        '.nuxt',
+        '.vscode',
+        '.idea',
+        'tmp',
+        'temp',
+        'cache',
+        '.cache'
+      ]);
+      
+      // 优先扫描的子目录（monorepo常见结构）
+      const PRIORITY_DIRS = ['packages', 'apps', 'libs', 'services', 'modules'];
+      
+      let scannedCount = 0;
+      let skippedCount = 0;
+      let fileReadCount = 0; // 统计实际读取的文件数量
+      
+      // 检查指定目录下是否有package.json
+      async function checkPackageJson(dir) {
+        if (scanController.aborted) return false;
         
         try {
-          const items = await fs.readdir(dir, { withFileTypes: true });
+          const packagePath = path.join(dir, 'package.json');
           
-          for (const item of items) {
-            const fullPath = path.join(dir, item.name);
-            
-            // 跳过常见的不需要扫描的目录
-            if (item.isDirectory()) {
-              const dirName = item.name;
-              if (dirName === 'node_modules' || 
-                  dirName === '.git' || 
-                  dirName === 'dist' || 
-                  dirName === 'build' ||
-                  dirName.startsWith('.')) {
-                continue;
-              }
-              
-              // 递归扫描子目录
-              await scanDirectory(fullPath, depth + 1);
-            } else if (item.name === 'package.json') {
-              // 读取package.json文件
-              try {
-                const content = await fs.readFile(fullPath, 'utf8');
-                const packageData = JSON.parse(content);
-                
-                // 只有当scripts存在且至少有一个脚本时才添加
-                if (packageData.scripts && Object.keys(packageData.scripts).length > 0) {
-                  const relativePath = path.relative(projectRoot, dir);
-                  packageJsons.push({
-                    path: dir,
-                    relativePath: relativePath || '.',
-                    name: packageData.name || path.basename(dir),
-                    scripts: packageData.scripts
-                  });
-                }
-              } catch (error) {
-                console.error(`读取package.json失败: ${fullPath}`, error);
-              }
-            }
+          // 先检查文件是否存在，避免不必要的读取
+          try {
+            await fs.access(packagePath);
+          } catch {
+            // 文件不存在，直接返回
+            return false;
+          }
+          
+          // 检查文件大小，避免读取异常大的文件
+          const stats = await fs.stat(packagePath);
+          const fileSizeMB = stats.size / (1024 * 1024);
+          if (fileSizeMB > 1) {
+            // package.json超过1MB是异常情况，跳过
+            console.log(`[NPM扫描] 跳过超大文件 (${fileSizeMB.toFixed(2)}MB): ${packagePath}`);
+            return false;
+          }
+          
+          fileReadCount++; // 只有文件存在且大小合理时才计数
+          const content = await fs.readFile(packagePath, 'utf8');
+          const packageData = JSON.parse(content);
+          
+          // 只有当scripts存在且至少有一个脚本时才添加
+          if (packageData.scripts && Object.keys(packageData.scripts).length > 0) {
+            const relativePath = path.relative(projectRoot, dir);
+            packageJsons.push({
+              path: dir,
+              relativePath: relativePath || '.',
+              name: packageData.name || path.basename(dir),
+              scripts: packageData.scripts
+            });
+            return true;
           }
         } catch (error) {
-          console.error(`扫描目录失败: ${dir}`, error);
+          // 文件不存在或解析失败，忽略
         }
+        return false;
       }
       
-      // 从项目根目录开始扫描
-      await scanDirectory(projectRoot);
+      // 递归扫描目录，最大深度4层
+      const MAX_DEPTH = 4;
+      const MAX_DIRS_PER_LEVEL = 50; // 每层最多扫描50个子目录
+      
+      // 统计每层深度的扫描数量
+      const depthStats = Array(MAX_DEPTH + 1).fill(0).map(() => ({ count: 0, time: 0 }));
+      
+      async function scanDirectory(dir, depth = 0) {
+        if (scanController.aborted) return;
+        if (depth > MAX_DEPTH) return;
+        
+        const depthStart = Date.now();
+        scannedCount++;
+        depthStats[depth].count++;
+        
+        // 检查当前目录的package.json
+        await checkPackageJson(dir);
+        
+        // 如果已经达到最大深度，不再继续
+        if (depth >= MAX_DEPTH) return;
+        
+        // 读取子目录
+        try {
+          if (scanController.aborted) return;
+          
+          const items = await fs.readdir(dir, { withFileTypes: true });
+          const subDirs = [];
+          
+          // 收集所有子目录
+          for (const item of items) {
+            if (scanController.aborted) return;
+            if (!item.isDirectory()) continue;
+            
+            const dirName = item.name;
+            
+            // 跳过忽略的目录
+            if (IGNORED_DIRS.has(dirName) || dirName.startsWith('.')) {
+              skippedCount++;
+              continue;
+            }
+            
+            subDirs.push(item);
+          }
+          
+          // 限制每层扫描的子目录数量
+          const dirsToScan = subDirs.slice(0, MAX_DIRS_PER_LEVEL);
+          if (subDirs.length > MAX_DIRS_PER_LEVEL) {
+            skippedCount += subDirs.length - MAX_DIRS_PER_LEVEL;
+          }
+          
+          // 优先处理优先目录
+          const priorityDirs = dirsToScan.filter(item => PRIORITY_DIRS.includes(item.name));
+          const normalDirs = dirsToScan.filter(item => !PRIORITY_DIRS.includes(item.name));
+          
+          // 先扫描优先目录
+          for (const item of priorityDirs) {
+            if (scanController.aborted) return;
+            const subDirPath = path.join(dir, item.name);
+            await scanDirectory(subDirPath, depth + 1);
+          }
+          
+          // 再扫描普通目录
+          for (const item of normalDirs) {
+            if (scanController.aborted) return;
+            const subDirPath = path.join(dir, item.name);
+            await scanDirectory(subDirPath, depth + 1);
+          }
+          
+        } catch (error) {
+          // 忽略无法访问的目录
+        }
+        
+        // 记录该深度的耗时
+        depthStats[depth].time += Date.now() - depthStart;
+      }
+      
+      // 执行递归扫描
+      console.log(`[NPM扫描-后端] 开始递归扫描（最大深度${MAX_DEPTH}层）`);
+      const scanStart = Date.now();
+      await scanDirectory(projectRoot, 0);
+      console.log(`[NPM扫描-后端] 递归扫描完成，耗时${Date.now() - scanStart}ms`);
+      
+      // 扫描完成，清除abort controller
+      if (currentScanAbortController === scanController) {
+        currentScanAbortController = null;
+      }
+      
+      const scanTime = Date.now() - startTime;
+      
+      if (scanController.aborted) {
+        console.log(`npm脚本扫描被取消，耗时${scanTime}ms`);
+        return res.json({ 
+          success: true, 
+          packages: [],
+          totalScripts: 0,
+          cancelled: true
+        });
+      }
+      
+      // 输出每层深度的统计
+      const depthInfo = depthStats
+        .map((stat, depth) => stat.count > 0 ? `深度${depth}:${stat.count}个(${stat.time}ms)` : null)
+        .filter(Boolean)
+        .join(', ');
+      
+      console.log(`npm脚本扫描完成，耗时${scanTime}ms，扫描了${scannedCount}个目录，读取了${fileReadCount}个package.json文件，跳过${skippedCount}个目录，找到${packageJsons.length}个有效的package.json`);
+      console.log(`[NPM扫描-后端] 深度分布: ${depthInfo}`);
       
       res.json({ 
         success: true, 
@@ -3076,7 +3264,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     // 客户端可以请求开始/停止监控
     socket.on('start_monitoring', () => {
       if (!watcher) {
-        initFileSystemWatcher();
+        initFileSystemWatcher().catch(err => console.error('[文件监控] 初始化失败:', err));
         socket.emit('monitoring_status', { active: true });
       }
     });
@@ -3114,8 +3302,99 @@ async function startUIServer(noOpen = false, savePort = false) {
     });
   });
   
+  // 读取并解析.gitignore文件
+  async function parseGitignore(projectPath) {
+    const gitignorePath = path.join(projectPath, '.gitignore');
+    const ignorePatterns = [
+      /(^|[\/\\])\../, // 始终忽略.开头的文件（除了.gitignore本身）
+      '**/.git/**', // 始终忽略.git目录
+      
+      // 额外排除常见的编译产物和大文件，减少监控开销
+      '**/*.umd.cjs',      // UMD打包文件
+      '**/*.min.js',       // 压缩JS文件
+      '**/*.bundle.js',    // Webpack打包文件
+      '**/*.dist.js',      // 构建产物
+      '**/*.prod.js',      // 生产环境文件
+      '**/lib/**',         // 通常是编译产物
+      '**/es/**',          // ES模块编译产物
+      '**/esm/**',         // ES模块编译产物
+      '**/*.map',          // Source map文件
+      '**/*.chunk.js',     // 代码分割chunk
+    ];
+    
+    try {
+      const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
+      const lines = gitignoreContent.split('\n');
+      let validRules = 0;
+      
+      for (let line of lines) {
+        line = line.trim();
+        
+        // 跳过空行和注释
+        if (!line || line.startsWith('#')) continue;
+        
+        // 移除行尾的空格
+        line = line.replace(/\s+$/, '');
+        
+        // 跳过否定规则（chokidar不支持否定规则，这些规则会被忽略）
+        if (line.startsWith('!')) {
+          continue;
+        }
+        
+        // 将gitignore规则转换为glob模式
+        let pattern;
+        
+        // 如果以/开头，表示从根目录开始匹配
+        if (line.startsWith('/')) {
+          pattern = line.substring(1);
+          // 如果是目录，添加/**后缀
+          if (!pattern.includes('*') && !pattern.includes('.')) {
+            ignorePatterns.push(pattern);
+            ignorePatterns.push(pattern + '/**');
+          } else {
+            ignorePatterns.push(pattern);
+          }
+        } else if (line.endsWith('/')) {
+          // 明确的目录规则
+          const dirName = line.slice(0, -1);
+          ignorePatterns.push('**/' + dirName);
+          ignorePatterns.push('**/' + dirName + '/**');
+        } else {
+          // 文件或目录规则
+          // 如果包含*通配符，直接使用
+          if (line.includes('*')) {
+            ignorePatterns.push('**/' + line);
+          } else {
+            // 既匹配文件也匹配目录
+            ignorePatterns.push('**/' + line);
+            ignorePatterns.push('**/' + line + '/**');
+          }
+        }
+        
+        validRules++;
+      }
+      
+      console.log(`[文件监控] 从.gitignore读取了 ${validRules} 条有效的忽略规则`);
+    } catch (error) {
+      // .gitignore不存在或读取失败，使用默认规则
+      console.log('[文件监控] 未找到.gitignore，使用默认忽略规则');
+      ignorePatterns.push(
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/build/**',
+        '**/coverage/**',
+        '**/.nuxt/**',
+        '**/.next/**',
+        '**/out/**',
+        '**/*.log'
+      );
+    }
+    
+    return ignorePatterns;
+  }
+  
   // 初始化文件系统监控
-  function initFileSystemWatcher() {
+  async function initFileSystemWatcher() {
     // 停止已有的监控器
     if (watcher) {
       watcher.close().catch(err => console.error('关闭旧监控器失败:', err));
@@ -3133,15 +3412,18 @@ async function startUIServer(noOpen = false, savePort = false) {
         return;
       }
       
+      const watcherStartTime = Date.now();
+      console.log('[文件监控] 开始初始化监控器...');
+      
+      // 从.gitignore读取忽略规则
+      const ignorePatterns = await parseGitignore(currentDir);
+      
       // 使用chokidar监控文件变动
       watcher = chokidar.watch(currentDir, {
-        ignored: [
-          /(^|[\/\\])\../, // 忽略.开头的文件和目录
-          '**/node_modules/**', // 忽略node_modules
-          '**/.git/**', // 忽略.git目录
-        ],
+        ignored: ignorePatterns,
         persistent: true,
         ignoreInitial: true, // 忽略初始扫描时的文件
+        depth: 10, // 限制扫描深度，避免过深的目录结构
         awaitWriteFinish: {
           stabilityThreshold: 300, // 等待文件写入完成的时间
           pollInterval: 100 // 轮询间隔
@@ -3157,11 +3439,16 @@ async function startUIServer(noOpen = false, savePort = false) {
         });
       });
       
-      watcher.on('error', error => {
-        console.error('文件监控错误:', error);
+      watcher.on('ready', () => {
+        const initTime = Date.now() - watcherStartTime;
+        console.log(`[文件监控] 监控器初始化完成，耗时 ${initTime}ms`);
       });
       
-      console.log('文件系统监控器已启动');
+      watcher.on('error', error => {
+        console.error('[文件监控] 监控错误:', error);
+      });
+      
+      console.log('[文件监控] 监控器已启动（异步初始化中...）');
     } catch (error) {
       console.error('启动文件监控失败:', error);
     }
@@ -3308,9 +3595,10 @@ async function startUIServer(noOpen = false, savePort = false) {
             console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
             
             if (isGitRepo) {
-              console.log(chalk.green(`  当前目录是Git仓库，文件监控已启动`));
-              // 启动文件监控
-              initFileSystemWatcher();
+              console.log(chalk.green(`  当前目录是Git仓库`));
+              console.log(chalk.yellow(`  文件监控已禁用（默认），需要时请在前端开启自动更新开关`));
+              // 不再自动启动文件监控，只在用户开启自动更新开关时启动
+              // initFileSystemWatcher().catch(err => console.error('[文件监控] 初始化失败:', err));
             } else {
               console.log(chalk.yellow(`  当前目录不是Git仓库，文件监控未启动`));
             }

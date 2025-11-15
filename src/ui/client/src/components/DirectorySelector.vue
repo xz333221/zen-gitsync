@@ -22,7 +22,7 @@ const recentDirectories = ref<string[]>([]);
 
 // npm脚本相关
 const hasNpmScripts = ref(false);
-const isCheckingNpmScripts = ref(false);
+let checkNpmScriptsTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 定义emits
 const emit = defineEmits<{
@@ -82,22 +82,7 @@ async function onOpenTerminal() {
   }
 }
 
-// 检查是否有npm脚本
-async function checkNpmScripts() {
-  try {
-    isCheckingNpmScripts.value = true;
-    const response = await fetch("/api/scan-npm-scripts");
-    const result = await response.json();
-    if (result.success) {
-      hasNpmScripts.value = result.totalScripts > 0;
-    }
-  } catch (error) {
-    console.error('检查npm脚本失败:', error);
-    hasNpmScripts.value = false;
-  } finally {
-    isCheckingNpmScripts.value = false;
-  }
-}
+// npm脚本检查已移至NpmScriptsPanel中，点击按钮时按需加载
 
 // 切换npm脚本面板
 function onToggleNpmPanel() {
@@ -117,15 +102,6 @@ async function getRecentDirectories() {
   }
 }
 
-// 监听目录变化，重新检查npm脚本
-watch(currentDirectory, () => {
-  checkNpmScripts();
-});
-
-// 组件挂载时检查npm脚本
-onMounted(() => {
-  checkNpmScripts();
-});
 
 // 保存最近使用的目录
 async function saveRecentDirectory(directory: string) {
@@ -160,6 +136,20 @@ async function changeDirectory() {
       await saveRecentDirectory(result.directory);
       await getRecentDirectories();
       
+      // 立即清空文件列表和提交历史，避免显示旧目录的数据
+      gitStore.log = [];
+      gitStore.fileList = [];
+      gitStore.status = {
+        staged: [],
+        unstaged: [],
+        untracked: []
+      };
+      gitStore.currentPage = 1;
+      gitStore.totalCommits = 0;
+      
+      // 清空npm脚本状态
+      hasNpmScripts.value = false;
+      
       // 直接更新 store 状态
       configStore.setCurrentDirectory(result.directory);
       gitStore.isGitRepo = result.isGitRepo;
@@ -168,13 +158,19 @@ async function changeDirectory() {
       await configStore.loadConfig(true);
       
       if (result.isGitRepo) {
+        // 并行加载基本信息
         await Promise.all([
           gitStore.getCurrentBranch(),
           gitStore.getAllBranches(),
           gitStore.getUserInfo(),
           gitStore.getRemoteUrl()
         ]);
-        gitStore.refreshLog();
+        
+        // 并行加载提交历史和文件状态，避免串行导致的延迟
+        Promise.all([
+          gitStore.refreshLog(),
+          gitStore.fetchStatus()
+        ]);
       } else {
         ElMessage.warning($t('@67CE7:当前目录不是Git仓库，部分功能将不可用'));
         gitStore.$reset();
@@ -188,6 +184,54 @@ async function changeDirectory() {
     isChangingDirectory.value = false;
   }
 }
+
+// 检查NPM脚本
+async function checkNpmScripts() {
+  // 清除之前的定时器
+  if (checkNpmScriptsTimer) {
+    clearTimeout(checkNpmScriptsTimer);
+  }
+  
+  // 延迟500ms执行，避免频繁调用
+  checkNpmScriptsTimer = setTimeout(async () => {
+    if (!currentDirectory.value) return;
+    
+    try {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 30000); // 30秒超时
+      
+      const response = await fetch('/api/scan-npm-scripts', {
+        signal: abortController.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error('扫描NPM脚本失败');
+      }
+      
+      const data = await response.json();
+      hasNpmScripts.value = data && data.packages && data.packages.length > 0;
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('NPM脚本扫描超时');
+      } else {
+        console.error('检查NPM脚本失败:', error);
+      }
+      hasNpmScripts.value = false;
+    }
+  }, 500);
+}
+
+// 监听目录变化，自动检查NPM脚本
+watch(currentDirectory, () => {
+  checkNpmScripts();
+});
+
+// 组件挂载时检查NPM脚本
+onMounted(() => {
+  checkNpmScripts();
+});
 
 // 浏览目录
 async function browseDirectory() {
@@ -352,7 +396,7 @@ async function selectDirectory(dirPath: string) {
       </el-tooltip>
       <el-tooltip
         v-if="hasNpmScripts"
-        content="NPM脚本"
+        content="NPM 脚本"
         placement="top"
         effect="dark"
         :show-after="200"

@@ -737,19 +737,56 @@ onMounted(() => {
   window.addEventListener('file-list-view-mode-change', handleViewModeChange);
   window.addEventListener('git-status-refresh', handleGitStatusRefresh);
   
+  // 监听页面可见性变化，类似VSCode的做法：标签页激活时自动刷新git状态
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible' && gitStore.isGitRepo) {
+      console.log('[页面可见性] 标签页已激活，刷新Git状态');
+      // 静默刷新，不显示提示信息
+      gitStore.fetchStatus().catch(err => console.error('刷新Git状态失败:', err));
+    }
+  };
+  
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  
   // 组件卸载时移除监听
   return () => {
     window.removeEventListener('file-list-view-mode-change', handleViewModeChange);
     window.removeEventListener('git-status-refresh', handleGitStatusRefresh);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
   };
 })
 
-// 监听autoUpdateEnabled的变化，手动调用toggleAutoUpdate
-watch(() => gitStore.autoUpdateEnabled, (newValue, oldValue) => {
-  console.log(`${$t('@13D1C:自动更新状态变更: ')}${oldValue} -> ${newValue}`)
-  // 调用store中的方法来实现服务器通信功能
-  gitStore.toggleAutoUpdate()
-}, { immediate: false })
+// 自动更新开关已隐藏 - 文件监控默认禁用，改为使用手动刷新和标签页激活刷新
+// watch(() => gitStore.autoUpdateEnabled, async (newValue, oldValue) => {
+//   console.log(`${$t('@13D1C:自动更新状态变更: ')}${oldValue} -> ${newValue}`)
+//   
+//   // 如果是从关闭到打开，显示确认弹窗
+//   if (newValue === true && oldValue === false) {
+//     try {
+//       await ElMessageBox.confirm(
+//         '开启自动更新后，系统将监控文件变化并实时刷新Git状态。\n\n⚠️ 注意：在大型项目（特别是monorepo）中可能会导致：\n• 高CPU占用\n• 初始化耗时较长（可能几分钟）\n• 风扇噪音增大\n\n建议：\n✅ 小型项目可以开启\n❌ 大型项目建议使用手动刷新或标签页激活刷新\n\n确定要开启自动更新吗？',
+//         '性能提示',
+//         {
+//           confirmButtonText: '确定开启',
+//           cancelButtonText: '取消',
+//           type: 'warning',
+//           customClass: 'auto-update-confirm-dialog',
+//           dangerouslyUseHTMLString: false
+//         }
+//       );
+//       
+//       // 用户确认后，调用store中的方法来实现服务器通信功能
+//       gitStore.toggleAutoUpdate()
+//     } catch (error) {
+//       // 用户取消，恢复开关状态
+//       console.log('用户取消开启自动更新');
+//       gitStore.autoUpdateEnabled = false;
+//     }
+//   } else {
+//     // 关闭开关，直接执行
+//     gitStore.toggleAutoUpdate()
+//   }
+// }, { immediate: false })
 
 // onUnmounted(() => {
 //   socket.disconnect()
@@ -769,7 +806,8 @@ defineExpose({
       <div class="title-row">
         <h2>Git {{ $t('@13D1C:状态') }}</h2>
         <div class="header-actions">
-          <el-tooltip 
+          <!-- 自动更新开关已隐藏 - 文件监控默认禁用，改为使用手动刷新和标签页激活刷新 -->
+          <!-- <el-tooltip 
             :content="gitStore.autoUpdateEnabled ? $t('@13D1C:自动更新文件状态') : $t('@13D1C:自动更新文件状态')" 
             placement="top" 
             
@@ -783,7 +821,7 @@ defineExpose({
               :inactive-icon="Close"
               class="auto-update-switch"
             />
-          </el-tooltip>
+          </el-tooltip> -->
         
         <!-- 添加Git Pull按钮 -->
         <el-tooltip :content="$t('@13D1C:Git Pull (拉取远程更新)')" placement="top"  :show-after="200">

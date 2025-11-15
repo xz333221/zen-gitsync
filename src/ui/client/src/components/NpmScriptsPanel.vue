@@ -55,23 +55,70 @@ function stopResize() {
 
 // 加载npm脚本
 async function loadNpmScripts() {
+  const startTime = Date.now();
+  console.log('[NPM面板] 开始加载npm脚本...');
+  
   try {
     isLoading.value = true;
-    const response = await fetch('/api/scan-npm-scripts');
+    
+    // 创建 AbortController 用于超时控制
+    const abortController = new AbortController();
+    const SCAN_TIMEOUT = 30000; // 30秒超时
+    
+    // 设置超时定时器
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+      console.warn(`[NPM面板] 超时${SCAN_TIMEOUT}ms，中断请求`);
+    }, SCAN_TIMEOUT);
+    
+    console.log(`[NPM面板] 发起请求到后端（超时${SCAN_TIMEOUT}ms）...`);
+    const fetchStartTime = Date.now();
+    const response = await fetch('/api/scan-npm-scripts', {
+      signal: abortController.signal
+    });
+    
+    // 清除超时定时器
+    clearTimeout(timeoutId);
+    const fetchTime = Date.now() - fetchStartTime;
+    console.log(`[NPM面板] 后端响应完成，耗时${fetchTime}ms`);
+    
+    const parseStartTime = Date.now();
     const result = await response.json();
+    const parseTime = Date.now() - parseStartTime;
+    console.log(`[NPM面板] JSON解析完成，耗时${parseTime}ms`);
     
     if (result.success) {
+      // 如果扫描被取消，不更新数据
+      if (result.cancelled) {
+        console.log(`[NPM面板] 扫描被取消，总耗时${Date.now() - startTime}ms`);
+        return;
+      }
+      
       packages.value = result.packages;
       // 默认展开所有包
       packages.value.forEach(pkg => {
         expandedPackages.value.add(pkg.path);
       });
+      
+      console.log(`[NPM面板] 加载完成，找到${packages.value.length}个package.json，共${result.totalScripts}个脚本，总耗时${Date.now() - startTime}ms`);
+      
+      // 如果没有找到任何脚本，显示提示
+      if (packages.value.length === 0) {
+        console.log('[NPM面板] 未找到包含scripts的package.json');
+      }
     } else {
+      console.error(`[NPM面板] 加载失败，耗时${Date.now() - startTime}ms`);
       ElMessage.error($t('@NPM01:加载npm脚本失败'));
     }
-  } catch (error) {
-    console.error('加载npm脚本失败:', error);
-    ElMessage.error(`${$t('@NPM01:加载npm脚本失败')}: ${(error as Error).message}`);
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      // 超时
+      console.warn(`[NPM面板] 请求超时被中断，耗时${Date.now() - startTime}ms`);
+      ElMessage.warning('NPM脚本扫描超时，请稍后重试');
+    } else {
+      console.error(`[NPM面板] 加载失败，耗时${Date.now() - startTime}ms，错误:`, error);
+      // 不弹出错误提示，避免打扰用户
+    }
   } finally {
     isLoading.value = false;
   }
@@ -108,7 +155,7 @@ async function runScript(packagePath: string, scriptName: string) {
   }
 }
 
-// 监听visible变化，加载数据
+// 监听visible变化，面板打开时加载数据
 watch(() => props.visible, (newValue) => {
   if (newValue) {
     loadNpmScripts();
