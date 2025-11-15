@@ -51,6 +51,8 @@ declare module 'vue' {
     PushProgressModal: typeof import('./src/components/PushProgressModal.vue')['default']
     QuickPushButton: typeof import('./src/components/buttons/QuickPushButton.vue')['default']
     StageButton: typeof import('./src/components/buttons/StageButton.vue')['default']
+    StashChangesButton: typeof import('./src/components/buttons/StashChangesButton.vue')['default']
+    StashListButton: typeof import('./src/components/buttons/StashListButton.vue')['default']
     SuccessModal: typeof import('./src/components/SuccessModal.vue')['default']
     TemplateManager: typeof import('./src/components/TemplateManager.vue')['default']
     TreeIcon: typeof import('./src/components/icons/TreeIcon.vue')['default']

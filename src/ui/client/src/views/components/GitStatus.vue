@@ -15,6 +15,8 @@ import FileGroup from '@/components/FileGroup.vue'
 import FileTreeView from '@/components/FileTreeView.vue'
 import DirectorySelector from '@components/DirectorySelector.vue'
 import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
+import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
+import StashListButton from '@/components/buttons/StashListButton.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
 
 // 定义props
@@ -808,6 +810,12 @@ defineExpose({
             :loading="gitStore.isGitFetching"
           />
         </el-tooltip>
+
+        <!-- 储藏更改按钮 -->
+        <StashChangesButton />
+        
+        <!-- 储藏列表按钮 -->
+        <StashListButton />
 
         <!-- 锁定文件管理按钮 -->
         <el-tooltip

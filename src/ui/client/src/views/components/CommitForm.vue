@@ -2,14 +2,13 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading, Box, Setting, Document } from "@element-plus/icons-vue";
+import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";
 import { useSuccessModal } from "@/composables/useSuccessModal";
 import { useGitStore } from "@stores/gitStore";
 import { useConfigStore } from "@stores/configStore";
-import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
 import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
@@ -17,9 +16,11 @@ import QuickPushButton from "@/components/buttons/QuickPushButton.vue";
 import StageButton from "@/components/buttons/StageButton.vue";
 import CommitButton from "@/components/buttons/CommitButton.vue";
 import PushButton from "@/components/buttons/PushButton.vue";
-import GitActionButtons from "@/components/GitActionButtons.vue";
-import OptionSwitchCard from "@components/OptionSwitchCard.vue";
-import CommandConsole from "@components/CommandConsole.vue";
+import GitActionButtons from '@/components/GitActionButtons.vue'
+import OptionSwitchCard from '@components/OptionSwitchCard.vue'
+import CommandConsole from '@components/CommandConsole.vue'
+import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
+import StashListButton from '@/components/buttons/StashListButton.vue'
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -93,31 +94,6 @@ const commitTypeOptions = computed(() => [
   { value: "test", label: `test: ${$t('@76872:测试代码')}` },
   { value: "chore", label: `chore: ${$t('@76872:构建/工具修改')}` },
 ]);
-
-// 添加stash相关的状态
-const isStashDialogVisible = ref(false);
-const isStashListDialogVisible = ref(false);
-const stashMessage = ref('');
-const includeUntracked = ref(true);
-// 新增：排除锁定文件选项（默认不勾选）
-const excludeLocked = ref(false);
-
-// stash详情弹窗相关状态
-const stashDetailVisible = ref(false);
-const selectedStash = ref<{ id: string; description: string } | null>(null);
-const stashFiles = ref<string[]>([]);
-const stashDiff = ref('');
-const isLoadingStashDetail = ref(false);
-const selectedStashFile = ref('');
-
-// 添加stash相关方法
-function openStashDialog() {
-  stashMessage.value = '';
-  if(!allChangesAreLocked.value){
-    excludeLocked.value = false;
-  }
-  isStashDialogVisible.value = true;
-}
 
 // 打开配置编辑器
 async function openConfigEditor() {
@@ -233,196 +209,6 @@ function handleConfigWarningAction(action: 'continue' | 'open' | 'cancel') {
   // action === 'cancel' 时什么也不做，只关闭弹窗
 }
 
-function openStashListDialog() {
-  gitStore.getStashList();
-  isStashListDialogVisible.value = true;
-}
-
-async function saveStash() {
-  try {
-    await gitStore.saveStash(stashMessage.value, includeUntracked.value, excludeLocked.value);
-    isStashDialogVisible.value = false;
-  } catch (error) {
-    console.error('储藏失败:', error);
-  }
-}
-
-async function applyStash(stashId: string, pop = false) {
-  try {
-    await gitStore.applyStash(stashId, pop);
-    if (pop) {
-      // 如果是应用并删除，刷新列表
-      await gitStore.getStashList();
-    }
-  } catch (error) {
-    console.error('应用储藏失败:', error);
-  }
-}
-
-async function confirmDropStash(stashId: string) {
-  ElMessageBox.confirm(
-    $t('@76872:确定要删除此储藏吗？此操作不可恢复。'),
-    $t('@76872:删除储藏'),
-    {
-      confirmButtonText: $t('@76872:确定'),
-      cancelButtonText: $t('@76872:取消'),
-      type: 'warning'
-    }
-  )
-  .then(async () => {
-    await gitStore.dropStash(stashId);
-    await gitStore.getStashList();
-  })
-  .catch(() => {
-    // 用户取消操作
-  });
-}
-
-async function confirmClearAllStashes() {
-  ElMessageBox.confirm(
-    $t('@76872:确定要清空所有储藏吗？此操作不可恢复。'),
-    $t('@76872:清空所有储藏'),
-    {
-      confirmButtonText: $t('@76872:确定'),
-      cancelButtonText: $t('@76872:取消'),
-      type: 'warning'
-    }
-  )
-  .then(async () => {
-    await gitStore.clearAllStashes();
-    await gitStore.getStashList();
-  })
-  .catch(() => {
-    // 用户取消操作
-  });
-}
-
-// 查看stash详情
-async function viewStashDetail(stash: { id: string; description: string }) {
-  if (!stash) return;
-
-  selectedStash.value = stash;
-  stashDetailVisible.value = true;
-  isLoadingStashDetail.value = true;
-  stashFiles.value = [];
-  stashDiff.value = '';
-  selectedStashFile.value = '';
-
-  try {
-    // 确保 stash ID 有效
-    if (!stash.id || stash.id.length < 7) {
-      stashDiff.value = $t('@76872:无效的stash ID');
-      isLoadingStashDetail.value = false;
-      return;
-    }
-
-    // 获取stash的变更文件列表
-    const filesResponse = await fetch(`/api/stash-files?stashId=${encodeURIComponent(stash.id)}`);
-    const filesData = await filesResponse.json();
-
-    if (filesData.success && Array.isArray(filesData.files)) {
-      stashFiles.value = filesData.files;
-
-      // 如果有文件，自动加载第一个文件的差异
-      if (stashFiles.value.length > 0) {
-        await getStashFileDiff(stash.id, stashFiles.value[0]);
-      } else {
-        stashDiff.value = $t('@76872:该stash没有变更文件');
-      }
-    } else {
-      stashDiff.value = `${$t('@76872:获取文件列表失败: ')}${filesData.error || $t('@76872:未知错误')}`;
-    }
-  } catch (error) {
-    stashDiff.value = `${$t('@76872:获取stash详情失败: ')}${(error as Error).message}`;
-  } finally {
-    isLoadingStashDetail.value = false;
-  }
-}
-
-// 获取stash中特定文件的差异
-async function getStashFileDiff(stashId: string, filePath: string) {
-  isLoadingStashDetail.value = true;
-  selectedStashFile.value = filePath;
-
-  try {
-    const diffResponse = await fetch(
-      `/api/stash-file-diff?stashId=${encodeURIComponent(stashId)}&file=${encodeURIComponent(filePath)}`
-    );
-    const diffData = await diffResponse.json();
-
-    if (diffData.success) {
-      stashDiff.value = diffData.diff || $t('@76872:没有变更内容');
-    } else {
-      stashDiff.value = `${$t('@76872:获取差异失败: ')}${diffData.error || $t('@76872:未知错误')}`;
-    }
-  } catch (error) {
-    stashDiff.value = `${$t('@76872:获取差异失败: ')}${(error as Error).message}`;
-  } finally {
-    isLoadingStashDetail.value = false;
-  }
-}
-
-// 处理stash文件选择
-function handleStashFileSelect(filePath: string) {
-  if (selectedStash.value) {
-    getStashFileDiff(selectedStash.value.id, filePath);
-  }
-}
-
-// 处理打开文件
-async function handleOpenFile(filePath: string, context: string) {
-  try {
-    const response = await fetch('/api/open-file', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        filePath,
-        context
-      })
-    });
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      ElMessage.success(result.message);
-    } else {
-      ElMessage.error(result.error || $t('@76872:打开文件失败'));
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@76872:打开文件失败: ')}${(error as Error).message}`);
-  }
-}
-
-// 处理用VSCode打开文件
-async function handleOpenWithVSCode(filePath: string, context: string) {
-  try {
-    const response = await fetch('/api/open-with-vscode', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        filePath,
-        context
-      })
-    });
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      ElMessage.success(result.message);
-    } else {
-      ElMessage.error(result.error || $t('@76872:用VSCode打开文件失败'));
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@76872:用VSCode打开文件失败: ')}${(error as Error).message}`);
-  }
-}
-
-
-
 // 添加默认提交信息模板相关变量
 const messageTemplates = ref<string[]>([]);
 
@@ -488,14 +274,6 @@ const commitMessagePlaceholder = computed(() => {
 const descriptionPlaceholder = computed(() => {
   const base = $t('@76872:简短描述（必填）');
   return autoQuickPushOnEnter.value ? $t('@76872:简短描述（必填，按回车一键推送）') : base;
-});
-
-// 为stash组件准备文件列表
-const stashFilesForViewer = computed(() => {
-  return stashFiles.value.map(file => ({
-    path: file,
-    name: file.split('/').pop() || file
-  }));
 });
 
 // 计算Git命令预览
@@ -736,16 +514,6 @@ const stagedFilesCount = computed(() => {
 
 const hasStagedChanges = computed(() => {
   return stagedFilesCount.value > 0;
-});
-
-// 新增：是否存在任何变更（包含锁定文件在内）
-const anyChangesIncludingLocked = computed(() => {
-  return gitStore.fileList.length > 0;
-});
-
-// 新增：是否所有变更均为锁定文件
-const allChangesAreLocked = computed(() => {
-  return gitStore.fileList.length > 0 && gitStore.fileList.every(file => isFileLocked(file.path));
 });
 
 const needsPush = computed(() => {
@@ -1348,27 +1116,8 @@ git config --global user.email "your.email@example.com"</pre>
             <div class="action-group">
                 <div class="group-title">{{ $t('@76872:储藏操作') }}</div>
                 <div class="group-buttons">
-                  <el-tooltip :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:将工作区更改储藏起来')" placement="top">
-                    <el-button 
-                      type="warning" 
-                      @click="openStashDialog" 
-                      :loading="gitStore.isSavingStash"
-                      :disabled="!anyChangesIncludingLocked || gitStore.hasConflictedFiles"
-                      class="action-button"
-                    >
-                      {{ $t('@76872:储藏更改') }}
-                    </el-button>
-                  </el-tooltip>
-
-                  <el-tooltip :content="$t('@76872:查看和管理所有储藏记录')" placement="top">
-                    <el-button 
-                      type="info"
-                      @click="openStashListDialog"
-                      class="action-button"
-                    >
-                      {{ $t('@76872:储藏列表') }}
-                    </el-button>
-                  </el-tooltip>
+                  <StashChangesButton variant="text" />
+                  <StashListButton variant="text" />
                 </div>
               </div>
           </div>
@@ -1494,88 +1243,6 @@ git config --global user.email "your.email@example.com"</pre>
         @set-default="setDefaultFromTemplate"
       />
       
-      <!-- Stash弹窗：创建储藏 -->
-      <CommonDialog
-        v-model="isStashDialogVisible"
-        :title="$t('@76872:储藏更改 (Git Stash)')"
-        size="medium"
-        :close-on-click-modal="false"
-        show-footer
-        :confirm-text="$t('@76872:储藏')"
-        :cancel-text="$t('@76872:取消')"
-        :confirm-loading="gitStore.isSavingStash"
-        custom-class="stash-dialog"
-        @confirm="saveStash"
-      >
-        <div class="stash-dialog-content">
-          <!-- 功能说明卡片 -->
-          <div class="stash-info-card">
-            <div class="info-icon">
-              <el-icon><Box /></el-icon>
-            </div>
-            <div class="info-content">
-              <h4>{{ $t('@76872:储藏工作区更改') }}</h4>
-              <p>{{ $t('@76872:将当前工作区的更改临时保存，稍后可以重新应用到任何分支') }}</p>
-            </div>
-          </div>
-          
-          <el-form label-position="top" class="stash-form">
-            <el-form-item :label="$t('@76872:储藏说明')">
-              <el-input 
-                v-model="stashMessage" 
-                :placeholder="$t('@76872:为这次储藏添加描述信息（可选）')"
-                clearable
-                :rows="2"
-                type="textarea"
-                resize="none"
-                maxlength="200"
-                show-word-limit
-              />
-            </el-form-item>
-            
-            <!-- 选项配置 -->
-            <div class="stash-options">
-              <h5 class="options-title">
-                <el-icon><Setting /></el-icon>
-                {{ $t('@76872:储藏选项') }}
-              </h5>
-              
-              <div class="option-item">
-                <el-checkbox v-model="includeUntracked" size="large">
-                  <span class="option-label">{{ $t('@76872:包含未跟踪文件') }}</span>
-                </el-checkbox>
-                <p class="option-desc">{{ $t('@76872:同时储藏新建但未添加到Git的文件 (--include-untracked)') }}</p>
-              </div>
-
-              <div class="option-item">
-                <el-checkbox v-model="excludeLocked" :disabled="allChangesAreLocked" size="large">
-                  <span class="option-label">{{ $t('@76872:排除锁定文件') }}</span>
-                </el-checkbox>
-                <p class="option-desc" :class="{ 'disabled': allChangesAreLocked }">
-                  {{ $t('@76872:不储藏被锁定的文件，保持其当前状态') }}
-                </p>
-              </div>
-            </div>
-            
-            <!-- 储藏预览信息 -->
-            <div class="stash-preview" v-if="gitStore.status.staged.length > 0 || gitStore.status.unstaged.length > 0">
-              <h5 class="preview-title">
-                <el-icon><Document /></el-icon>
-                {{ $t('@76872:将要储藏的文件') }}
-              </h5>
-              <div class="file-count-info">
-                <el-tag type="success" v-if="gitStore.status.staged.length > 0">
-                  {{ $t('@76872:已暂存: ') }}{{ gitStore.status.staged.length }} {{ $t('@76872:个文件') }}
-                </el-tag>
-                <el-tag type="warning" v-if="gitStore.status.unstaged.length > 0">
-                  {{ $t('@76872:未暂存: ') }}{{ gitStore.status.unstaged.length }} {{ $t('@76872:个文件') }}
-                </el-tag>
-              </div>
-            </div>
-          </el-form>
-        </div>
-      </CommonDialog>
-      
       <!-- 合并分支对话框 -->
       <el-dialog 
         :title="$t('@76872:合并分支')" 
@@ -1660,164 +1327,6 @@ git config --global user.email "your.email@example.com"</pre>
           </div>
         </template>
       </el-dialog>
-      
-      <!-- Stash列表弹窗 -->
-      <CommonDialog
-        v-model="isStashListDialogVisible"
-        :title="$t('@76872:储藏列表 (Git Stash)')"
-        size="large"
-        :show-footer="false"
-        custom-class="stash-list-dialog"
-      >
-        <div class="stash-list-content">
-          <!-- 头部统计信息 -->
-          <div class="stash-header" v-if="!gitStore.isLoadingStashes">
-            <div class="stash-stats">
-              <div class="stat-item">
-                <el-icon class="stat-icon"><Connection /></el-icon>
-                <span class="stat-number">{{ gitStore.stashes.length }}</span>
-                <span class="stat-label">{{ $t('@76872:个储藏') }}</span>
-              </div>
-            </div>
-            <div class="stash-actions-header" v-if="gitStore.stashes.length > 0">
-              <el-button
-                type="danger"
-                size="small"
-                :icon="Delete"
-                @click="confirmClearAllStashes"
-                :loading="gitStore.isDroppingStash"
-                class="clear-all-btn"
-              >
-                {{ $t('@76872:清空所有储藏') }}
-              </el-button>
-            </div>
-          </div>
-
-          <!-- 储藏列表 -->
-          <div class="stash-list-container" v-loading="gitStore.isLoadingStashes">
-            <div v-if="gitStore.stashes.length === 0 && !gitStore.isLoadingStashes" class="empty-state">
-              <el-empty
-                :description="$t('@76872:暂无储藏记录')"
-                :image-size="120"
-              >
-                <template #image>
-                  <el-icon class="empty-icon"><Connection /></el-icon>
-                </template>
-                <template #description>
-                  <p class="empty-text">{{ $t('@76872:还没有任何储藏记录') }}</p>
-                  <p class="empty-hint">{{ $t('@76872:使用 git stash 可以临时保存工作进度') }}</p>
-                </template>
-              </el-empty>
-            </div>
-            
-            <div v-else class="stash-cards">
-              <div 
-                v-for="(stash, index) in gitStore.stashes" 
-                :key="stash.id"
-                class="stash-card"
-                :class="{ 'stash-card-latest': index === 0 }"
-              >
-                <div class="stash-card-content">
-                  <div class="stash-info">
-                    <div class="stash-main-info">
-                      <div class="stash-id-badge">
-                        <el-icon class="badge-icon"><Connection /></el-icon>
-                        <span class="stash-id-text">{{ stash.id }}</span>
-                        <el-tag v-if="index === 0" size="small" type="success" class="latest-tag">{{ $t('@76872:最新') }}</el-tag>
-                      </div>
-                      <div class="stash-description">
-                        <span class="description-text">{{ stash.description }}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div class="stash-card-actions">
-                    <el-button
-                      size="small"
-                      type="info"
-                      :icon="Edit"
-                      @click="viewStashDetail(stash)"
-                      :loading="isLoadingStashDetail"
-                      class="action-btn view-btn"
-                    >
-                      {{ $t('@76872:查看') }}
-                    </el-button>
-                    <el-button
-                      size="small"
-                      type="success"
-                      :icon="Download"
-                      @click="applyStash(stash.id, false)"
-                      :loading="gitStore.isApplyingStash"
-                      class="action-btn apply-btn"
-                    >
-                      {{ $t('@76872:应用') }}
-                    </el-button>
-                    <el-button
-                      size="small"
-                      type="primary"
-                      :icon="Check"
-                      @click="applyStash(stash.id, true)"
-                      :loading="gitStore.isApplyingStash"
-                      class="action-btn apply-pop-btn"
-                    >
-                      {{ $t('@76872:应用并删除') }}
-                    </el-button>
-                    <el-button
-                      size="small"
-                      type="danger"
-                      :icon="Delete"
-                      @click="confirmDropStash(stash.id)"
-                      :loading="gitStore.isDroppingStash"
-                      class="action-btn delete-btn"
-                    >
-                      {{ $t('@76872:删除') }}
-                    </el-button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </CommonDialog>
-      
-      <!-- Stash详情弹窗 -->
-      <CommonDialog
-        v-model="stashDetailVisible"
-        :title="$t('@76872:储藏详情')"
-        custom-class="stash-detail-dialog"
-        size="extra-large"
-        type="flex"
-        heightMode="fixed"
-        :close-on-click-modal="false"
-      >
-        <div class="stash-content">
-          <!-- 储藏信息横向布局 -->
-          <div class="stash-info-row" v-if="selectedStash">
-            <div class="stash-id">
-              <span class="info-label">Stash ID:</span>
-              <code class="stash-id-value">{{ selectedStash.id }}</code>
-            </div>
-            <div class="stash-description">
-              <span class="info-label">{{ $t('@76872:描述:') }}</span>
-              <span class="stash-description-value">{{ selectedStash.description }}</span>
-            </div>
-          </div>
-
-          <!-- 文件差异查看器 -->
-          <div class="stash-main-content">
-            <FileDiffViewer
-              :files="stashFilesForViewer"
-              :diffContent="stashDiff"
-              :selectedFile="selectedStashFile"
-              context="stash-detail"
-              :emptyText="$t('@76872:该stash没有变更文件')"
-              @file-select="handleStashFileSelect"
-              @open-file="handleOpenFile"
-              @open-with-vscode="handleOpenWithVSCode"
-            />
-          </div>
-        </div>
-      </CommonDialog>
       
       <!-- 状态更新指示器 -->
       <transition name="el-fade-in-linear">
