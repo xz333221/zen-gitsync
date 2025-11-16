@@ -746,13 +746,24 @@ onMounted(() => {
     }
   };
   
+  // 监听窗口获得焦点事件：从其他应用（如VSCode）切换回浏览器时刷新
+  const handleWindowFocus = () => {
+    if (gitStore.isGitRepo) {
+      console.log('[窗口焦点] 浏览器窗口已激活，刷新Git状态');
+      // 静默刷新，不显示提示信息
+      gitStore.fetchStatus().catch(err => console.error('刷新Git状态失败:', err));
+    }
+  };
+  
   document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('focus', handleWindowFocus);
   
   // 组件卸载时移除监听
   return () => {
     window.removeEventListener('file-list-view-mode-change', handleViewModeChange);
     window.removeEventListener('git-status-refresh', handleGitStatusRefresh);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('focus', handleWindowFocus);
   };
 })
 
