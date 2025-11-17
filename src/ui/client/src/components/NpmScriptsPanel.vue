@@ -96,9 +96,9 @@ async function loadNpmScripts() {
       
       packages.value = result.packages;
       // 默认展开所有包
-      packages.value.forEach(pkg => {
-        expandedPackages.value.add(pkg.path);
-      });
+      // packages.value.forEach(pkg => {
+      //   expandedPackages.value.add(pkg.path);
+      // });
       
       console.log(`[NPM面板] 加载完成，找到${packages.value.length}个package.json，共${result.totalScripts}个脚本，总耗时${Date.now() - startTime}ms`);
       
