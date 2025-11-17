@@ -17,6 +17,7 @@ import DirectorySelector from '@components/DirectorySelector.vue'
 import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
+import MergeBranchButton from '@/components/buttons/MergeBranchButton.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
 
 // 定义props
@@ -859,6 +860,9 @@ defineExpose({
             :loading="gitStore.isGitFetching"
           />
         </el-tooltip>
+
+        <!-- 合并分支按钮 -->
+        <MergeBranchButton />
 
         <!-- 储藏更改按钮 -->
         <StashChangesButton />

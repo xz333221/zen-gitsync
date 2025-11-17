@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Share, Warning, Loading, Setting } from "@element-plus/icons-vue";
+import { Edit, Check, RefreshRight, Delete, Download, Connection, ArrowDown, Warning, Loading, Setting } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";
@@ -21,6 +21,7 @@ import OptionSwitchCard from '@components/OptionSwitchCard.vue'
 import CommandConsole from '@components/CommandConsole.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
+import MergeBranchButton from '@/components/buttons/MergeBranchButton.vue'
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -52,17 +53,6 @@ const configWarningMessage = ref('');
 const descriptionTemplates = ref<string[]>([]);
 // 添加对话框可见性变量
 const descriptionDialogVisible = ref(false);
-
-
-// 添加合并分支相关的状态
-const isMergeDialogVisible = ref(false);
-const selectedBranch = ref('');
-const mergeOptions = ref({
-  noFf: false,
-  squash: false,
-  noCommit: false,
-  message: ''
-});
 
 // 作用域模板相关变量
 const scopeTemplates = ref<string[]>([]);
@@ -643,86 +633,6 @@ onMounted(async () => {
   }
 });
 
-// 打开合并分支对话框
-function openMergeDialog() {
-  selectedBranch.value = '';
-  mergeOptions.value = {
-    noFf: false,
-    squash: false,
-    noCommit: false,
-    message: ''
-  };
-  branchTypeFilter.value = 'all'; // 默认显示所有分支
-  isMergeDialogVisible.value = true;
-  
-  // 确保已经加载了分支列表
-  if (gitStore.allBranches.length === 0) {
-    gitStore.getAllBranches();
-  }
-  
-  // 设置默认选中的分支：优先选择 origin/master，其次 origin/main
-  const availableBranches = gitStore.allBranches.filter(b => b !== gitStore.currentBranch);
-  if (availableBranches.includes('origin/master')) {
-    selectedBranch.value = 'origin/master';
-  } else if (availableBranches.includes('origin/main')) {
-    selectedBranch.value = 'origin/main';
-  }
-  // 如果都没有，保持为空字符串
-}
-
-// 分支类型过滤器
-const branchTypeFilter = ref('all');
-
-// 根据分支类型过滤分支列表
-const filteredBranches = computed(() => {
-  const branches = gitStore.allBranches.filter(b => b !== gitStore.currentBranch);
-  
-  console.log('筛选分支列表:', {
-    allBranches: gitStore.allBranches,
-    currentBranch: gitStore.currentBranch,
-    branchTypeFilter: branchTypeFilter.value,
-    filteredBranches: branches
-  });
-  
-  if (branchTypeFilter.value === 'local') {
-    // 过滤本地分支（不包含 'origin/' 前缀的分支）
-    const localBranches = branches.filter(b => !b.includes('origin/'));
-    console.log('本地分支:', localBranches);
-    return localBranches;
-  } else if (branchTypeFilter.value === 'remote') {
-    // 过滤远程分支（包含 'origin/' 前缀的分支）
-    const remoteBranches = branches.filter(b => b.includes('origin/'));
-    console.log('远程分支:', remoteBranches);
-    return remoteBranches;
-  } else {
-    // 返回所有分支
-    console.log('所有分支:', branches);
-    return branches;
-  }
-});
-
-// 执行合并分支操作
-async function handleMergeBranch() {
-  if (!selectedBranch.value) {
-    ElMessage({
-      message: $t('@76872:请选择要合并的分支'),
-      type: 'warning'
-    });
-    return;
-  }
-  
-  try {
-    const result = await gitStore.mergeBranch(selectedBranch.value, mergeOptions.value);
-    if (result) {
-      isMergeDialogVisible.value = false;
-      // 刷新Git状态
-      await gitStore.fetchStatus();
-      await gitStore.fetchLog(false);
-    }
-  } catch (error) {
-    console.error('合并分支操作发生错误:', error);
-  }
-}
 
 // 添加抽屉状态变量
 const gitOperationsDrawerVisible = ref(false);
@@ -1101,23 +1011,11 @@ git config --global user.email "your.email@example.com"</pre>
               </div>
             </div>
             
-            <!-- 添加单独的分支操作组 -->
-            <div class="action-group branch-group">
+            <!-- 分支操作 -->
+            <div class="action-group">
               <div class="group-title">{{ $t('@76872:分支操作') }}</div>
               <div class="group-buttons">
-                <!-- 合并分支按钮 -->
-                <el-tooltip :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:合并其他分支到当前分支')" placement="top">
-                  <el-button 
-                    type="primary"
-                    :icon="Share"
-                    @click="openMergeDialog"
-                    :loading="gitStore.isGitMerging"
-                    :disabled="gitStore.hasConflictedFiles"
-                    class="action-button merge-button"
-                  >
-                    {{ $t('@76872:合并分支') }}
-                  </el-button>
-                </el-tooltip>
+                <MergeBranchButton variant="text" />
               </div>
             </div>
 
@@ -1251,91 +1149,6 @@ git config --global user.email "your.email@example.com"</pre>
         @use-template="useMessageTemplate"
         @set-default="setDefaultFromTemplate"
       />
-      
-      <!-- 合并分支对话框 -->
-      <el-dialog 
-        :title="$t('@76872:合并分支')" 
-        v-model="isMergeDialogVisible" 
-        width="500px"
-        :close-on-click-modal="false"
-        class="merge-dialog"
-      >
-        <div class="merge-dialog-content">
-          <p class="merge-intro">{{ $t('@76872:选择要合并到当前分支 (') }}{{ gitStore.currentBranch }}{{ $t('@76872:) 的分支:') }}</p>
-          
-          <el-form label-position="top">
-            <el-form-item :label="$t('@76872:分支类型')">
-              <el-radio-group v-model="branchTypeFilter" size="small">
-                <el-radio-button label="all">{{ $t('@76872:所有分支') }}</el-radio-button>
-                <el-radio-button label="local">{{ $t('@76872:本地分支') }}</el-radio-button>
-                <el-radio-button label="remote">{{ $t('@76872:远程分支') }}</el-radio-button>
-              </el-radio-group>
-            </el-form-item>
-            
-            <el-form-item :label="$t('@76872:选择分支')">
-              <el-select 
-                v-model="selectedBranch" 
-                :placeholder="$t('@76872:选择要合并的分支')" 
-                style="width: 100%"
-                filterable
-              >
-                <el-option 
-                  v-for="branch in filteredBranches" 
-                  :key="branch" 
-                  :label="branch" 
-                  :value="branch" 
-                />
-              </el-select>
-            </el-form-item>
-            
-            <el-form-item :label="$t('@76872:合并选项')">
-              <div class="merge-options">
-                <el-checkbox v-model="mergeOptions.noFf">
-                  <el-tooltip :content="$t('@76872:创建合并提交，即使可以使用快进合并')" placement="top">
-                    <span>{{ $t('@76872:禁用快进合并 (--no-ff)') }}</span>
-                  </el-tooltip>
-                </el-checkbox>
-                
-                <el-checkbox v-model="mergeOptions.squash">
-                  <el-tooltip :content="$t('@76872:将多个提交压缩为一个提交')" placement="top">
-                    <span>{{ $t('@76872:压缩提交 (--squash)') }}</span>
-                  </el-tooltip>
-                </el-checkbox>
-                
-                <el-checkbox v-model="mergeOptions.noCommit">
-                  <el-tooltip :content="$t('@76872:执行合并但不自动创建提交')" placement="top">
-                    <span>{{ $t('@76872:不自动提交 (--no-commit)') }}</span>
-                  </el-tooltip>
-                </el-checkbox>
-              </div>
-            </el-form-item>
-            
-            <el-form-item :label="$t('@76872:合并提交信息 (可选)')" v-if="mergeOptions.noFf && !mergeOptions.noCommit">
-              <el-input 
-                v-model="mergeOptions.message" 
-                type="textarea" 
-                :rows="3" 
-                :placeholder="$t('@76872:输入自定义合并提交信息')"
-              />
-            </el-form-item>
-          </el-form>
-        </div>
-        
-        <template #footer>
-          <div class="dialog-footer">
-            <el-button @click="isMergeDialogVisible = false">{{ $t('@76872:取消') }}</el-button>
-            <el-button 
-              type="primary" 
-              @click="handleMergeBranch" 
-              :loading="gitStore.isGitMerging"
-              :disabled="!selectedBranch"
-              class="merge-confirm-btn"
-            >
-              {{ $t('@76872:合并') }}
-            </el-button>
-          </div>
-        </template>
-      </el-dialog>
       
       <!-- 状态更新指示器 -->
       <transition name="el-fade-in-linear">

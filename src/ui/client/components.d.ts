@@ -45,6 +45,7 @@ declare module 'vue' {
     InlineCard: typeof import('./src/components/InlineCard.vue')['default']
     LanguageSwitcher: typeof import('./src/components/LanguageSwitcher.vue')['default']
     ListIcon: typeof import('./src/components/icons/ListIcon.vue')['default']
+    MergeBranchButton: typeof import('./src/components/buttons/MergeBranchButton.vue')['default']
     NpmScriptsPanel: typeof import('./src/components/NpmScriptsPanel.vue')['default']
     OptionSwitchCard: typeof import('./src/components/OptionSwitchCard.vue')['default']
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']
