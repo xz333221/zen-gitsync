@@ -659,6 +659,15 @@ function openMergeDialog() {
   if (gitStore.allBranches.length === 0) {
     gitStore.getAllBranches();
   }
+  
+  // 设置默认选中的分支：优先选择 origin/master，其次 origin/main
+  const availableBranches = gitStore.allBranches.filter(b => b !== gitStore.currentBranch);
+  if (availableBranches.includes('origin/master')) {
+    selectedBranch.value = 'origin/master';
+  } else if (availableBranches.includes('origin/main')) {
+    selectedBranch.value = 'origin/main';
+  }
+  // 如果都没有，保持为空字符串
 }
 
 // 分支类型过滤器
