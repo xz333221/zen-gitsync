@@ -95,9 +95,12 @@ async function handleMergeBranch() {
     const result = await gitStore.mergeBranch(selectedBranch.value, mergeOptions.value)
     if (result) {
       isMergeDialogVisible.value = false
-      // 刷新Git状态
-      await gitStore.fetchStatus()
-      await gitStore.fetchLog(false)
+      // 刷新Git状态、提交日志和分支状态
+      await Promise.all([
+        gitStore.fetchStatus(),
+        gitStore.fetchLog(false),
+        gitStore.getBranchStatus(true) // 强制刷新分支领先/落后状态
+      ])
     }
   } catch (error) {
     console.error('合并分支操作发生错误:', error)
