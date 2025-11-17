@@ -66,7 +66,6 @@ body {
   border-radius: var(--radius-md);
   color: var(--git-diff-header-color);
   border: 1px solid var(--git-diff-header-border);
-  border-left: 4px solid var(--git-diff-header-color);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
@@ -91,13 +90,11 @@ body {
 .diff-old-file { 
   color: var(--git-diff-removed-color); 
   background-color: var(--git-diff-removed-bg);
-  border-left: 4px solid var(--git-diff-removed-border);
 }
 
 .diff-new-file { 
   color: var(--git-diff-added-color); 
   background-color: var(--git-diff-added-bg);
-  border-left: 4px solid var(--git-diff-added-border);
 }
 
 .diff-hunk-header {
@@ -116,7 +113,6 @@ body {
   background-color: var(--git-diff-added-bg);
   color: var(--git-diff-added-color);
   padding: 2px var(--spacing-base);
-  border-left: 4px solid var(--git-diff-added-border);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
@@ -129,7 +125,6 @@ body {
   background-color: var(--git-diff-removed-bg);
   color: var(--git-diff-removed-color);
   padding: 2px var(--spacing-base);
-  border-left: 4px solid var(--git-diff-removed-border);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);

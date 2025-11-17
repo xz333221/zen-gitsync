@@ -38,6 +38,7 @@ const isRefreshing = computed(() => gitStore.isLoadingStatus)
 // 移除本地fileList定义，改用store中的fileList
 const selectedFile = ref('')
 const diffContent = ref('')
+const diffStats = ref<{added: number, deleted: number} | null>(null)
 const diffDialogVisible = ref(false)
 const isLoadingDiff = ref(false)
 // 添加当前文件索引
@@ -229,6 +230,9 @@ async function confirmUnlockAll() {
 async function getFileDiff(filePath: string) {
   try {
     isLoadingDiff.value = true
+    // 先清空之前的内容
+    diffContent.value = ''
+    diffStats.value = null
     selectedFile.value = filePath
     // 设置当前文件索引
     currentFileIndex.value = gitStore.fileList.findIndex(file => file.path === filePath)
@@ -263,11 +267,13 @@ async function getFileDiff(filePath: string) {
       const response = await fetch(`/api/diff-cached?file=${encodeURIComponent(filePath)}`)
       const data = await response.json()
       diffContent.value = data.diff || $t('@13D1C:没有变更')
+      diffStats.value = data.stats || null
     } else {
       // 对于未暂存的文件，获取常规差异
       const response = await fetch(`/api/diff?file=${encodeURIComponent(filePath)}`)
       const data = await response.json()
       diffContent.value = data.diff || $t('@13D1C:没有变更')
+      diffStats.value = data.stats || null
     }
   } catch (error) {
     ElMessage({
@@ -1183,7 +1189,9 @@ defineExpose({
     <FileDiffViewer
       :files="gitFilesForViewer"
       :diffContent="diffContent"
+      :diffStats="diffStats"
       :selectedFile="selectedFile"
+      :isLoading="isLoadingDiff"
       :showActionButtons="true"
       :isFileLocked="isFileLocked"
       :isLocking="isLocking"

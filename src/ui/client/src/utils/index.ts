@@ -73,11 +73,15 @@ export function formatDiff(diffText: string): string {
           return `<div class="diff-conflict-incoming">${escapedLine}</div>`;
         }
       }
-      // 普通的新增/删除行
+      // 普通的新增/删除行 - 将+/-替换为空格，保持对齐
       else if (line.startsWith("+")) {
-        return `<div class="diff-added">${escapedLine}</div>`;
+        // 将开头的+号替换为空格
+        const contentWithSpace = ' ' + escapedLine.substring(1);
+        return `<div class="diff-added">${contentWithSpace}</div>`;
       } else if (line.startsWith("-")) {
-        return `<div class="diff-removed">${escapedLine}</div>`;
+        // 将开头的-号替换为空格
+        const contentWithSpace = ' ' + escapedLine.substring(1);
+        return `<div class="diff-removed">${contentWithSpace}</div>`;
       } else {
         return `<div class="diff-context">${escapedLine}</div>`;
       }

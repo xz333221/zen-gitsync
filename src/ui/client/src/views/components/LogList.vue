@@ -1847,7 +1847,6 @@ function toggleFullscreen() {
   background-color: #e6ffed;
   color: #22863a;
   padding: 2px 8px;
-  border-left: 4px solid #22863a;
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   display: block;
   margin: 2px 0;
@@ -1857,7 +1856,6 @@ function toggleFullscreen() {
   background-color: #ffeef0;
   color: #cb2431;
   padding: 2px 8px;
-  border-left: 4px solid #cb2431;
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   display: block;
   margin: 2px 0;

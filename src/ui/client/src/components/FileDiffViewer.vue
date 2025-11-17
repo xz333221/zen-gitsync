@@ -24,11 +24,18 @@ interface FileItem {
 // 定义上下文类型
 type ContextType = 'git-status' | 'commit-detail' | 'stash-detail';
 
+interface DiffStats {
+  added: number;
+  deleted: number;
+}
+
 interface Props {
   files: FileItem[]; // 文件列表
   emptyText?: string; // 无文件时的提示文本
   diffContent?: string; // 当前差异内容
+  diffStats?: DiffStats | null; // diff统计信息
   selectedFile?: string; // 当前选中的文件路径
+  isLoading?: boolean; // 是否正在加载diff
   height?: string; // 组件高度
   showFileList?: boolean; // 是否显示文件列表，默认true
   context?: ContextType; // 使用上下文，用于确定打开文件的行为
@@ -41,7 +48,9 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   emptyText: $t('@E80AC:没有找到变更文件'),
   diffContent: '',
+  diffStats: null,
   selectedFile: '',
+  isLoading: false,
   height: '100%',
   showFileList: true,
   context: 'git-status',
@@ -899,6 +908,11 @@ onMounted(() => {
                   <span class="path-dir">{{ selectedFileDir }}</span><span class="path-name">{{ selectedFileName }}</span>
                 </span>
               </el-tooltip>
+              <!-- Diff统计信息 -->
+              <div v-if="diffStats" class="diff-stats-badge">
+                <span class="stats-added">+{{ diffStats.added }}</span>
+                <span class="stats-deleted">-{{ diffStats.deleted }}</span>
+              </div>
               <div v-if="showOpenButton && currentSelectedFile" class="action-buttons">
                 <el-tooltip :content="$t('@E80AC:复制文件路径')" placement="top" effect="light">
                   <button class="modern-btn btn-icon-24" @click="handleCopyPath">
@@ -969,13 +983,13 @@ onMounted(() => {
                   </el-button>
                 </div>
               </div>
-              <div class="diff-content">
+              <div class="diff-content" v-loading="isLoading">
                 <el-empty 
-                  v-if="!hasDiffContent"
+                  v-if="!hasDiffContent && !isLoading"
                   :description="$t('@E80AC:该文件没有差异内容')"
                   :image-size="80"
                 />
-                <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
+                <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
               </div>
             </div>
           </div>
@@ -990,22 +1004,22 @@ onMounted(() => {
                 {{ $t('@E80AC:添加到暂存区') }}
               </el-button>
             </div>
-            <div class="diff-content">
+            <div class="diff-content" v-loading="isLoading">
               <el-empty 
-                v-if="!hasDiffContent"
+                v-if="!hasDiffContent && !isLoading"
                 :description="$t('@E80AC:该文件没有差异内容')"
                 :image-size="80"
               />
-              <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
+              <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
             </div>
           </div>
-          <div v-else-if="!isConflictedFile" class="diff-content">
+          <div v-else-if="!isConflictedFile" class="diff-content" v-loading="isLoading">
             <el-empty 
-              v-if="!hasDiffContent"
+              v-if="!hasDiffContent && !isLoading"
               :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
               :image-size="80"
             />
-            <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
+            <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
           </div>
         </div>
       </el-splitter-panel>
@@ -1121,26 +1135,26 @@ onMounted(() => {
               </el-button>
             </div>
           </div>
-          <div class="diff-content">
+          <div class="diff-content" v-loading="isLoading">
             <el-empty 
-              v-if="!hasDiffContent"
+              v-if="!hasDiffContent && !isLoading"
               :description="$t('@E80AC:该文件没有差异内容')"
               :image-size="80"
             />
-            <div v-else class="diff-text" v-html="formatDiff(diffContent)" />
+            <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
           </div>
         </div>
       </div>
       
-      <div v-else-if="!isConflictedFile" class="diff-content">
+      <div v-else-if="!isConflictedFile" class="diff-content" v-loading="isLoading">
         <el-empty 
-          v-if="!hasDiffContent"
+          v-if="!hasDiffContent && !isLoading"
           :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
           :image-size="80"
         />
         
         <div 
-          v-else
+          v-else-if="hasDiffContent"
           class="diff-text"
           v-html="formatDiff(diffContent)"
         />
@@ -1373,6 +1387,27 @@ onMounted(() => {
 .path-name {
   
   font-weight: var(--font-weight-semibold);
+}
+
+.diff-stats-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.stats-added {
+  color: #52c41a;
+}
+
+.stats-deleted {
+  color: #ff4d4f;
 }
 
 .files-list {
@@ -1736,6 +1771,7 @@ onMounted(() => {
   overflow: auto;
   background: var(--bg-container);
   min-height: 0; /* 确保 flex 子元素能正确收缩 */
+  position: relative; /* 使loading遮罩能够覆盖整个区域 */
   // display: flex;
   // flex-direction: column;
   

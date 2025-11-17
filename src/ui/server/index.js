@@ -1967,6 +1967,115 @@ async function startUIServer(noOpen = false, savePort = false) {
     });
   }
   
+  // ========== Diff 大文件检测和过滤工具函数 ==========
+  
+  /**
+   * 检查文件是否应该跳过diff显示（参考GitLab策略）
+   * @param {string} filePath - 文件路径
+   * @param {string} diffCommand - 要执行的git diff命令
+   * @returns {Promise<{shouldSkip: boolean, reason?: string, stats?: object}>}
+   */
+  async function checkShouldSkipDiff(filePath, diffCommand) {
+    // 1. 检查文件扩展名 - 编译/压缩/二进制文件
+    const skipExtensions = /\.(min\.js|umd\.cjs|bundle\.js|dist\.js|prod\.js|map|wasm|exe|dll|so|dylib|bin|zip|tar|gz|rar|7z|jar|war|ear|pdf|doc|docx|xls|xlsx|ppt|pptx|jpg|jpeg|png|gif|bmp|ico|mp3|mp4|avi|mov|wmv|flv|webm|mkv|ttf|woff|woff2|eot|otf)$/i;
+    if (skipExtensions.test(filePath)) {
+      return {
+        shouldSkip: true,
+        reason: '⚠️ 检测到编译/打包/二进制文件，diff已跳过显示。\n\n提示：这类文件通常是自动生成的或二进制文件，不适合查看diff。\n如需查看，请使用命令行。'
+      };
+    }
+    
+    // 2. 使用 --numstat 快速检查变更量（不获取实际内容，速度快）
+    try {
+      const numstatCommand = diffCommand.replace(/git (diff|show)/, 'git $1 --numstat');
+      const { stdout: numstat } = await execGitCommand(numstatCommand, { log: false });
+      
+      if (numstat.trim()) {
+        const lines = numstat.trim().split('\n');
+        for (const line of lines) {
+          const parts = line.split('\t');
+          if (parts.length >= 3) {
+            const added = parts[0];
+            const deleted = parts[1];
+            
+            // 检查是否是二进制文件（显示为 - -）
+            if (added === '-' && deleted === '-') {
+              return {
+                shouldSkip: true,
+                reason: '⚠️ 检测到二进制文件，diff已跳过显示。\n\n提示：二进制文件无法以文本形式显示diff。'
+              };
+            }
+            
+            // 检查变更行数是否过多（超过3000行）
+            const totalChanges = parseInt(added) + parseInt(deleted);
+            if (!isNaN(totalChanges) && totalChanges > 3000) {
+              return {
+                shouldSkip: true,
+                reason: `⚠️ 变更内容过大 (${totalChanges.toLocaleString()} 行变更)，diff已跳过显示以避免浏览器卡顿。\n\n提示：建议使用命令行或专业diff工具查看大文件变更。\n增加：${parseInt(added).toLocaleString()} 行\n删除：${parseInt(deleted).toLocaleString()} 行`,
+                stats: { added: parseInt(added), deleted: parseInt(deleted), total: totalChanges }
+              };
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // numstat失败不影响后续流程
+      console.log('numstat检查失败，继续执行:', error.message);
+    }
+    
+    // 3. 通过了初步检查
+    return { shouldSkip: false };
+  }
+  
+  /**
+   * 检查diff内容大小，如果过大则跳过
+   * @param {string} diffContent - diff内容
+   * @param {number} maxSizeKB - 最大大小（KB），默认500KB
+   * @returns {object|null} - 如果需要跳过返回提示对象，否则返回null
+   */
+  function checkDiffSize(diffContent, maxSizeKB = 500) {
+    const diffSizeKB = Buffer.byteLength(diffContent, 'utf8') / 1024;
+    if (diffSizeKB > maxSizeKB) {
+      return {
+        diff: `⚠️ Diff内容过大 (${diffSizeKB.toFixed(1)} KB)，已跳过显示以避免浏览器卡顿。\n\n提示：建议使用命令行查看大文件diff。`,
+        isLargeFile: true,
+        size: diffSizeKB
+      };
+    }
+    return null;
+  }
+  
+  /**
+   * 从 diff 内容中统计增加和删除行数
+   * @param {string} diffContent - diff内容
+   * @returns {object} - {added, deleted}
+   */
+  function getDiffStats(diffContent) {
+    if (!diffContent) return { added: 0, deleted: 0 };
+    
+    const lines = diffContent.split('\n');
+    let added = 0;
+    let deleted = 0;
+    
+    for (const line of lines) {
+      // 跳过diff头部信息
+      if (line.startsWith('diff ') || line.startsWith('index ') || 
+          line.startsWith('--- ') || line.startsWith('+++ ') || 
+          line.startsWith('@@ ')) {
+        continue;
+      }
+      
+      // 统计增加和删除的行
+      if (line.startsWith('+')) {
+        added++;
+      } else if (line.startsWith('-')) {
+        deleted++;
+      }
+    }
+    
+    return { added, deleted };
+  }
+  
   // 获取文件差异
   app.get('/api/diff', async (req, res) => {
     try {
@@ -1976,29 +2085,31 @@ async function startUIServer(noOpen = false, savePort = false) {
         return res.status(400).json({ error: '缺少文件路径参数' });
       }
       
-      // 检查是否是编译/压缩文件（通常很大且不需要查看diff）
-      const isCompiledFile = /\.(min\.js|umd\.cjs|bundle\.js|dist\.js|prod\.js)$/i.test(filePath);
-      if (isCompiledFile) {
+      const diffCommand = `git diff -- "${filePath}"`;
+      
+      // 使用优化的检查函数
+      const skipCheck = await checkShouldSkipDiff(filePath, diffCommand);
+      if (skipCheck.shouldSkip) {
         return res.json({ 
-          diff: '⚠️ 检测到编译/打包文件，diff内容过大已跳过显示。\n\n提示：这类文件通常是自动生成的，不建议查看diff。\n如需查看，请使用命令行：git diff -- "' + filePath + '"',
-          isLargeFile: true
+          diff: skipCheck.reason,
+          isLargeFile: true,
+          stats: skipCheck.stats
         });
       }
       
       // 执行git diff命令获取文件差异
-      const { stdout } = await execGitCommand(`git diff -- "${filePath}"`);
+      const { stdout } = await execGitCommand(diffCommand);
       
-      // 检查diff大小，如果超过500KB，只返回提示
-      const diffSizeKB = Buffer.byteLength(stdout, 'utf8') / 1024;
-      if (diffSizeKB > 500) {
-        return res.json({ 
-          diff: `⚠️ Diff内容过大 (${diffSizeKB.toFixed(1)}KB)，已跳过显示以避免浏览器卡顿。\n\n提示：请使用命令行查看：git diff -- "${filePath}"`,
-          isLargeFile: true,
-          size: diffSizeKB
-        });
+      // 检查实际diff大小
+      const sizeCheck = checkDiffSize(stdout, 500);
+      if (sizeCheck) {
+        return res.json(sizeCheck);
       }
       
-      res.json({ diff: stdout });
+      // 统计增加和删除行数
+      const stats = getDiffStats(stdout);
+      
+      res.json({ diff: stdout, stats });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -2012,29 +2123,31 @@ async function startUIServer(noOpen = false, savePort = false) {
         return res.status(400).json({ error: '缺少文件路径参数' });
       }
       
-      // 检查是否是编译/压缩文件
-      const isCompiledFile = /\.(min\.js|umd\.cjs|bundle\.js|dist\.js|prod\.js)$/i.test(filePath);
-      if (isCompiledFile) {
+      const diffCommand = `git diff --cached -- "${filePath}"`;
+      
+      // 使用优化的检查函数
+      const skipCheck = await checkShouldSkipDiff(filePath, diffCommand);
+      if (skipCheck.shouldSkip) {
         return res.json({ 
-          diff: '⚠️ 检测到编译/打包文件，diff内容过大已跳过显示。\n\n提示：这类文件通常是自动生成的，不建议查看diff。\n如需查看，请使用命令行：git diff --cached -- "' + filePath + '"',
-          isLargeFile: true
+          diff: skipCheck.reason,
+          isLargeFile: true,
+          stats: skipCheck.stats
         });
       }
       
       // 执行git diff --cached命令获取已暂存文件差异
-      const { stdout } = await execGitCommand(`git diff --cached -- "${filePath}"`);
+      const { stdout } = await execGitCommand(diffCommand);
       
-      // 检查diff大小
-      const diffSizeKB = Buffer.byteLength(stdout, 'utf8') / 1024;
-      if (diffSizeKB > 500) {
-        return res.json({ 
-          diff: `⚠️ Diff内容过大 (${diffSizeKB.toFixed(1)}KB)，已跳过显示以避免浏览器卡顿。\n\n提示：请使用命令行查看：git diff --cached -- "${filePath}"`,
-          isLargeFile: true,
-          size: diffSizeKB
-        });
+      // 检查实际diff大小
+      const sizeCheck = checkDiffSize(stdout, 500);
+      if (sizeCheck) {
+        return res.json(sizeCheck);
       }
       
-      res.json({ diff: stdout });
+      // 统计增加和删除行数
+      const stats = getDiffStats(stdout);
+      
+      res.json({ diff: stdout, stats });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -2247,18 +2360,40 @@ async function startUIServer(noOpen = false, savePort = false) {
       
       console.log(`获取提交文件差异: hash=${hash}, file=${filePath}`);
       
-      // 执行命令获取文件差异，-p显示补丁，限定文件路径
-      const { stdout } = await execGitCommand(`git show ${hash} -- "${filePath}"`);
+      const diffCommand = `git show ${hash} -- "${filePath}"`;
+      
+      // 使用优化的检查函数
+      const skipCheck = await checkShouldSkipDiff(filePath, diffCommand);
+      if (skipCheck.shouldSkip) {
+        return res.json({ 
+          success: true,
+          diff: skipCheck.reason,
+          isLargeFile: true,
+          stats: skipCheck.stats
+        });
+      }
+      
+      // 执行命令获取文件差异
+      const { stdout } = await execGitCommand(diffCommand);
       
       console.log(`获取到差异内容，长度: ${stdout.length}`);
-      // 如果差异内容太长，只打印前100个字符
-      if (stdout.length > 100) {
-        console.log(`差异内容预览: ${stdout.substring(0, 100)}...`);
+      
+      // 检查实际diff大小
+      const sizeCheck = checkDiffSize(stdout, 500);
+      if (sizeCheck) {
+        return res.json({ 
+          success: true, 
+          ...sizeCheck 
+        });
       }
+      
+      // 统计增加和删除行数
+      const stats = getDiffStats(stdout);
       
       res.json({ 
         success: true, 
-        diff: stdout 
+        diff: stdout,
+        stats
       });
     } catch (error) {
       console.error('获取提交文件差异失败:', error);
@@ -2862,8 +2997,26 @@ async function startUIServer(noOpen = false, savePort = false) {
       if (isFromThirdParent) {
         // 未跟踪文件：读取第三父中的内容，构造新增文件的统一diff
         const { stdout: blob } = await execGitCommand(`git show ${parent3}:"${file}"`, { log: false });
+        
+        // 检查文件大小
+        const sizeCheck = checkDiffSize(blob, 500);
+        if (sizeCheck) {
+          return res.json({ success: true, ...sizeCheck });
+        }
+        
         const lines = blob.endsWith('\n') ? blob.slice(0, -1).split('\n') : blob.split('\n');
-        const lineCount = lines.filter(() => true).length; // 保持计数正确
+        const lineCount = lines.length;
+        
+        // 检查行数
+        if (lineCount > 10000) {
+          return res.json({
+            success: true,
+            diff: `⚠️ 变更内容过大 (${lineCount.toLocaleString()} 行)，diff已跳过显示以避免浏览器卡顿。\n\n提示：建议使用命令行查看大文件变更。`,
+            isLargeFile: true,
+            stats: { added: lineCount, deleted: 0, total: lineCount }
+          });
+        }
+        
         const plusLines = lines.map(l => `+${l}`).join('\n');
         const diffText = [
           `diff --git a/${file} b/${file}`,
@@ -2877,15 +3030,34 @@ async function startUIServer(noOpen = false, savePort = false) {
         return res.json({ success: true, diff: diffText });
       }
 
-      // 否则，使用原有方式获取与父1的变更（直接针对 stash 提交显示该文件的变化）
-      const { stdout } = await execGitCommand(`git show ${stashCommit} -- "${file}"`);
+      // 否则，使用原有方式获取与父1的变更
+      const diffCommand = `git show ${stashCommit} -- "${file}"`;
       
-      console.log(`获取到差异内容，长度: ${stdout.length}`);
-      if (stdout.length > 100) {
-        console.log(`差异内容预览: ${stdout.substring(0, 100)}...`);
+      // 使用优化的检查函数
+      const skipCheck = await checkShouldSkipDiff(file, diffCommand);
+      if (skipCheck.shouldSkip) {
+        return res.json({ 
+          success: true,
+          diff: skipCheck.reason,
+          isLargeFile: true,
+          stats: skipCheck.stats
+        });
       }
       
-      res.json({ success: true, diff: stdout });
+      const { stdout } = await execGitCommand(diffCommand);
+      
+      console.log(`获取到差异内容，长度: ${stdout.length}`);
+      
+      // 检查实际diff大小
+      const sizeCheck = checkDiffSize(stdout, 500);
+      if (sizeCheck) {
+        return res.json({ success: true, ...sizeCheck });
+      }
+      
+      // 统计增加和删除行数
+      const stats = getDiffStats(stdout);
+      
+      res.json({ success: true, diff: stdout, stats });
     } catch (error) {
       console.error('获取stash文件差异失败:', error);
       res.status(500).json({ 
