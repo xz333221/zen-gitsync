@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { Document, ArrowDown, FullScreen } from '@element-plus/icons-vue';
+import { Document, ArrowDown, FullScreen, Setting } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import CustomCommandManager from '@components/CustomCommandManager.vue';
+import type { CustomCommand } from '@components/CustomCommandManager.vue';
 
 // 控制台相关状态
 const currentDirectory = ref("");
@@ -26,11 +29,42 @@ const isConsoleExpanded = ref(false);
 // 控制全屏状态
 const isFullscreen = ref(false);
 
+// 控制是否使用终端执行（默认开启）
+const useTerminal = ref(true);
+
+// 控制自定义命令管理弹窗
+const commandManagerVisible = ref(false);
+
 // 执行控制台命令
 async function runConsoleCommand() {
   const cmd = consoleInput.value.trim();
   if (!cmd || consoleRunning.value) return;
   consoleRunning.value = true;
+  
+  // 如果使用终端执行
+  if (useTerminal.value) {
+    try {
+      const resp = await fetch('/api/exec-in-terminal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd })
+      });
+      const result = await resp.json();
+      if (result?.success) {
+        ElMessage.success('已在新终端中执行命令');
+      } else {
+        ElMessage.error(result?.error || '执行失败');
+      }
+    } catch (e: any) {
+      ElMessage.error(e?.message || '执行失败');
+    } finally {
+      consoleRunning.value = false;
+      consoleInput.value = '';
+    }
+    return;
+  }
+  
+  // 原有的后台执行逻辑
   const rec: ConsoleRecord = {
     id: ++consoleIdCounter, // 使用递增计数器确保唯一性
     command: cmd,
@@ -69,6 +103,78 @@ function toggleCommandOutput(rec: ConsoleRecord) {
   }
 }
 
+// 打开自定义命令管理
+function openCommandManager() {
+  commandManagerVisible.value = true;
+}
+
+// 执行自定义命令
+async function executeCustomCommand(command: CustomCommand) {
+  const targetDir = command.directory || currentDirectory.value;
+  const cmd = command.command;
+  
+  consoleRunning.value = true;
+  
+  // 如果使用终端执行
+  if (useTerminal.value) {
+    try {
+      // 如果有指定目录，需要修改命令以包含 cd
+      const finalCommand = targetDir && targetDir !== currentDirectory.value 
+        ? `cd /d "${targetDir}" && ${cmd}` 
+        : cmd;
+      
+      const resp = await fetch('/api/exec-in-terminal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: finalCommand })
+      });
+      const result = await resp.json();
+      if (result?.success) {
+        ElMessage.success('已在新终端中执行命令');
+        // 关闭弹窗
+        commandManagerVisible.value = false;
+      } else {
+        ElMessage.error(result?.error || '执行失败');
+      }
+    } catch (e: any) {
+      ElMessage.error(e?.message || '执行失败');
+    } finally {
+      consoleRunning.value = false;
+    }
+    return;
+  }
+  
+  // 后台执行逻辑
+  const rec: ConsoleRecord = {
+    id: ++consoleIdCounter,
+    command: cmd,
+    success: false,
+    ts: new Date().toLocaleString(),
+    expanded: true,
+    stdout: '',
+    stderr: '',
+  };
+  consoleHistory.value.unshift(rec);
+  try {
+    const resp = await fetch('/api/exec', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: cmd })
+    });
+    const result = await resp.json();
+    rec.success = !!result?.success;
+    rec.stdout = result?.stdout || '';
+    rec.stderr = result?.error || result?.stderr || '';
+    // 关闭弹窗
+    commandManagerVisible.value = false;
+  } catch (e: any) {
+    rec.success = false;
+    rec.stderr = e?.message || String(e);
+  } finally {
+    consoleRunning.value = false;
+  }
+}
+
 // 获取当前工作目录
 onMounted(async () => {
   try {
@@ -89,6 +195,26 @@ onMounted(async () => {
         <span class="console-title">{{ $t('@CF05E:自定义指令执行') }}</span>
       </div>
       <div class="header-actions">
+        <div class="terminal-switch">
+          <span class="switch-label">{{ $t('@CF05E:使用终端执行') }}</span>
+          <el-switch
+            v-model="useTerminal"
+            size="small"
+            :active-text="$t('@CF05E:开启')"
+            :inactive-text="$t('@CF05E:关闭')"
+          />
+        </div>
+        <el-tooltip :content="$t('@CF05E:自定义命令管理')" placement="bottom">
+          <el-button
+            text
+            @click="openCommandManager"
+            class="toggle-console-btn command-manager-btn"
+          >
+            <el-icon>
+              <Setting />
+            </el-icon>
+          </el-button>
+        </el-tooltip>
         <el-tooltip :content="isFullscreen ? $t('@CF05E:退出全屏') : $t('@CF05E:全屏显示')" placement="bottom">
           <el-button
             text
@@ -168,6 +294,12 @@ onMounted(async () => {
       </div>
     </transition>
   </div>
+  
+  <!-- 自定义命令管理弹窗 -->
+  <CustomCommandManager 
+    v-model:visible="commandManagerVisible"
+    @execute-command="executeCustomCommand"
+  />
 </template>
 
 <style lang="scss" scoped>
@@ -247,7 +379,37 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
+}
+
+.terminal-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: rgba(64, 158, 255, 0.05);
+  border-radius: 6px;
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  transition: all 0.3s ease;
+  
+  &:hover {
+    background: rgba(64, 158, 255, 0.1);
+    border-color: rgba(64, 158, 255, 0.3);
+  }
+}
+
+.switch-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  user-select: none;
+}
+
+.command-manager-btn {
+  &:hover {
+    color: #67c23a;
+    background: rgba(103, 194, 58, 0.1);
+  }
 }
 
 .toggle-console-btn {

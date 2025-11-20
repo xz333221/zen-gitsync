@@ -10,7 +10,8 @@ const configPath = path.join(os.homedir(), '.git-commit-tool.json');
 const defaultConfig = {
   defaultCommitMessage: "submit",
   descriptionTemplates: [],  // 添加描述模板数组
-  lockedFiles: []  // 添加锁定文件数组
+  lockedFiles: [],  // 添加锁定文件数组
+  customCommands: []  // 添加自定义命令数组
 };
 
 // 规范化项目路径作为配置键

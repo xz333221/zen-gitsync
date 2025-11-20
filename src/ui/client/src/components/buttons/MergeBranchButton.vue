@@ -5,6 +5,7 @@ import { useGitStore } from '@stores/gitStore'
 import { Share, Setting } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import CommonDialog from '@components/CommonDialog.vue'
+import GitCommandPreview from '@components/GitCommandPreview.vue'
 
 // 定义props
 interface Props {
@@ -79,6 +80,33 @@ watch(branchTypeFilter, () => {
   if (selectedBranch.value && !filteredBranches.value.includes(selectedBranch.value)) {
     selectedBranch.value = ''
   }
+})
+
+// 生成git merge命令预览
+const mergeCommand = computed(() => {
+  if (!selectedBranch.value) {
+    return ''
+  }
+  
+  let cmd = `git merge ${selectedBranch.value}`
+  
+  // 添加选项
+  if (mergeOptions.value.noFf) {
+    cmd += ' --no-ff'
+  }
+  if (mergeOptions.value.squash) {
+    cmd += ' --squash'
+  }
+  if (mergeOptions.value.noCommit) {
+    cmd += ' --no-commit'
+  }
+  
+  // 添加自定义消息
+  if (mergeOptions.value.message && !mergeOptions.value.noCommit) {
+    cmd += ` -m "${mergeOptions.value.message}"`
+  }
+  
+  return cmd
 })
 
 // 执行合并分支操作
@@ -184,6 +212,13 @@ async function handleMergeBranch() {
             </el-select>
           </el-form-item>
 
+          <!-- 命令预览 -->
+          <GitCommandPreview 
+            :command="mergeCommand"
+            :title="$t('@76872:合并命令预览：')"
+            :placeholder="$t('@76872:请先选择要合并的分支')"
+          />
+
           <!-- 合并选项 -->
           <div class="merge-options">
             <h5 class="options-title">
@@ -191,25 +226,36 @@ async function handleMergeBranch() {
               {{ $t('@76872:合并选项') }}
             </h5>
 
-            <div class="option-item">
-              <el-checkbox v-model="mergeOptions.noFf" size="large">
-                <span class="option-label">{{ $t('@76872:禁用快进合并') }}</span>
-              </el-checkbox>
-              <p class="option-desc">{{ $t('@76872:始终创建合并提交，即使可以快进 (--no-ff)') }}</p>
-            </div>
+            <div class="options-horizontal">
+              <el-tooltip 
+                :content="$t('@76872:始终创建合并提交，即使可以快进 (--no-ff)')" 
+                placement="top"
+                :show-after="200"
+              >
+                <el-checkbox v-model="mergeOptions.noFf" size="large">
+                  {{ $t('@76872:禁用快进合并') }}
+                </el-checkbox>
+              </el-tooltip>
 
-            <div class="option-item">
-              <el-checkbox v-model="mergeOptions.squash" size="large">
-                <span class="option-label">{{ $t('@76872:压缩合并') }}</span>
-              </el-checkbox>
-              <p class="option-desc">{{ $t('@76872:将所有提交压缩成一个提交 (--squash)') }}</p>
-            </div>
+              <el-tooltip 
+                :content="$t('@76872:将所有提交压缩成一个提交 (--squash)')" 
+                placement="top"
+                :show-after="200"
+              >
+                <el-checkbox v-model="mergeOptions.squash" size="large">
+                  {{ $t('@76872:压缩合并') }}
+                </el-checkbox>
+              </el-tooltip>
 
-            <div class="option-item">
-              <el-checkbox v-model="mergeOptions.noCommit" size="large">
-                <span class="option-label">{{ $t('@76872:不自动提交') }}</span>
-              </el-checkbox>
-              <p class="option-desc">{{ $t('@76872:执行合并但不自动提交，可以手动检查后提交 (--no-commit)') }}</p>
+              <el-tooltip 
+                :content="$t('@76872:执行合并但不自动提交，可以手动检查后提交 (--no-commit)')" 
+                placement="top"
+                :show-after="200"
+              >
+                <el-checkbox v-model="mergeOptions.noCommit" size="large">
+                  {{ $t('@76872:不自动提交') }}
+                </el-checkbox>
+              </el-tooltip>
             </div>
           </div>
 
@@ -370,7 +416,7 @@ async function handleMergeBranch() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 8px 0;
+  margin: 0 0 12px 0;
   font-size: 15px;
   font-weight: 600;
   color: var(--color-text-title);
@@ -381,30 +427,22 @@ async function handleMergeBranch() {
   font-size: 16px;
 }
 
-.option-item {
-  margin-bottom: 8px;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
+.options-horizontal {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
 }
 
-.option-item :deep(.el-checkbox) {
-  margin-bottom: 8px;
-}
-
-.option-label {
-  font-weight: 500;
-  color: var(--color-text-title);
-  font-size: 14px;
-}
-
-.option-desc {
+.options-horizontal :deep(.el-checkbox) {
   margin: 0;
-  font-size: 13px;
-  color: #6b7280;
-  line-height: 1.4;
-  padding-left: 24px;
+  white-space: nowrap;
+  
+  .el-checkbox__label {
+    font-weight: 500;
+    color: var(--color-text-title);
+    font-size: 14px;
+  }
 }
 
 /* 合并弹窗的CommonDialog样式定制 */

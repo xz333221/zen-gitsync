@@ -10,6 +10,7 @@ export const useConfigStore = defineStore('config', () => {
   const scopeTemplates = ref<string[]>([])
   const messageTemplates = ref<string[]>([])
   const lockedFiles = ref<string[]>([])
+  const customCommands = ref<Array<{id: string, name: string, description?: string, directory: string, command: string}>>([])
   const isLoading = ref(false)
   const isLoaded = ref(false)
   // 当前工作目录
@@ -54,6 +55,7 @@ export const useConfigStore = defineStore('config', () => {
       scopeTemplates: scopeTemplates.value,
       messageTemplates: messageTemplates.value,
       lockedFiles: lockedFiles.value,
+      customCommands: customCommands.value,
       currentDirectory: currentDirectory.value
     }
   })
@@ -79,6 +81,7 @@ export const useConfigStore = defineStore('config', () => {
       scopeTemplates.value = configData.scopeTemplates || []
       messageTemplates.value = configData.messageTemplates || []
       lockedFiles.value = configData.lockedFiles || []
+      customCommands.value = configData.customCommands || []
       // 若后端返回当前目录，更新
       if (configData.currentDirectory) {
         currentDirectory.value = configData.currentDirectory
@@ -341,6 +344,85 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 自定义命令管理函数
+  async function saveCustomCommand(command: { name: string; description?: string; directory: string; command: string }) {
+    try {
+      const response = await fetch('/api/config/save-custom-command', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ command })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        // 重新加载配置获取最新的命令列表
+        await loadConfig(true)
+        ElMessage.success($t('@CMD01:命令已保存'))
+        return true
+      } else {
+        ElMessage.error(`${$t('@CMD01:保存命令失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@CMD01:保存命令失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
+  async function deleteCustomCommand(id: string) {
+    try {
+      const response = await fetch('/api/config/delete-custom-command', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        // 重新加载配置以确保数据同步
+        await loadConfig(true)
+        ElMessage.success($t('@CMD01:命令已删除'))
+        return true
+      } else {
+        ElMessage.error(`${$t('@CMD01:删除命令失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@CMD01:删除命令失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
+  async function updateCustomCommand(id: string, command: { name: string; description?: string; directory: string; command: string }) {
+    try {
+      const response = await fetch('/api/config/update-custom-command', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id, command })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        // 重新加载配置以确保数据同步
+        await loadConfig(true)
+        ElMessage.success($t('@CMD01:命令已更新'))
+        return true
+      } else {
+        ElMessage.error(`${$t('@CMD01:更新命令失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@CMD01:更新命令失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
   return {
     // 状态
     defaultCommitMessage,
@@ -348,6 +430,7 @@ export const useConfigStore = defineStore('config', () => {
     scopeTemplates,
     messageTemplates,
     lockedFiles,
+    customCommands,
     isLoading,
     isLoaded,
     currentDirectory,
@@ -365,6 +448,9 @@ export const useConfigStore = defineStore('config', () => {
     loadLockedFiles,
     lockFile,
     unlockFile,
-    isFileLocked
+    isFileLocked,
+    saveCustomCommand,
+    deleteCustomCommand,
+    updateCustomCommand
   }
 }) 

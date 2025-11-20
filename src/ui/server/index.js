@@ -156,6 +156,55 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
   
+  // 在新终端中执行自定义命令
+  app.post('/api/exec-in-terminal', async (req, res) => {
+    try {
+      const { command } = req.body || {};
+      if (!command || typeof command !== 'string' || !command.trim()) {
+        return res.status(400).json({ success: false, error: 'command 不能为空' });
+      }
+
+      console.log(`在终端中执行命令: ${command}`);
+      
+      // 根据操作系统选择合适的终端命令
+      let terminalCommand;
+      
+      if (process.platform === 'win32') {
+        // Windows: 使用 start 命令打开新的 cmd 窗口
+        // /K 参数表示执行命令后保持窗口打开
+        terminalCommand = `start cmd /K "cd /d ${currentProjectPath} && ${command}"`;
+      } else if (process.platform === 'darwin') {
+        // macOS: 使用 osascript 打开 Terminal.app
+        const script = `tell application "Terminal" to do script "cd ${currentProjectPath} && ${command}"`;
+        terminalCommand = `osascript -e '${script}'`;
+      } else {
+        // Linux: 尝试常见的终端模拟器
+        terminalCommand = `gnome-terminal -- bash -c "cd ${currentProjectPath} && ${command}; exec bash" || xterm -e "cd ${currentProjectPath} && ${command}; bash"`;
+      }
+      
+      // 执行命令打开新终端
+      const { exec } = await import('child_process');
+      exec(terminalCommand, (error, stdout, stderr) => {
+        if (error) {
+          console.error('打开终端失败:', error);
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `已在新终端中执行命令`,
+        command: command,
+        path: currentProjectPath
+      });
+    } catch (error) {
+      console.error('在终端中执行命令失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `在终端中执行命令失败: ${error.message}` 
+      });
+    }
+  });
+  
   // API路由
   // 移除了 /api/status 端点，因为前端只使用 porcelain 格式
   
@@ -1389,6 +1438,101 @@ async function startUIServer(noOpen = false, savePort = false) {
         }
       } else {
         return res.status(400).json({ success: false, error: '不支持的模板类型' })
+      }
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
+  // 保存自定义命令
+  app.post('/api/config/save-custom-command', express.json(), async (req, res) => {
+    try {
+      const { command } = req.body
+      
+      if (!command || !command.name || !command.command) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      // 确保自定义命令数组存在
+      if (!Array.isArray(config.customCommands)) {
+        config.customCommands = []
+      }
+      
+      // 生成唯一ID
+      const id = `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const newCommand = {
+        id,
+        name: command.name,
+        description: command.description || '',
+        directory: command.directory || '',
+        command: command.command
+      }
+      
+      config.customCommands.push(newCommand)
+      await configManager.saveConfig(config)
+      
+      res.json({ success: true, command: newCommand })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
+  // 删除自定义命令
+  app.post('/api/config/delete-custom-command', express.json(), async (req, res) => {
+    try {
+      const { id } = req.body
+      
+      if (!id) {
+        return res.status(400).json({ success: false, error: '缺少命令ID参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      if (Array.isArray(config.customCommands)) {
+        const index = config.customCommands.findIndex(cmd => cmd.id === id)
+        if (index !== -1) {
+          config.customCommands.splice(index, 1)
+          await configManager.saveConfig(config)
+        }
+      }
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
+  // 更新自定义命令
+  app.post('/api/config/update-custom-command', express.json(), async (req, res) => {
+    try {
+      const { id, command } = req.body
+      
+      if (!id || !command || !command.name || !command.command) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      if (Array.isArray(config.customCommands)) {
+        const index = config.customCommands.findIndex(cmd => cmd.id === id)
+        if (index !== -1) {
+          config.customCommands[index] = {
+            id,
+            name: command.name,
+            description: command.description || '',
+            directory: command.directory || '',
+            command: command.command
+          }
+          await configManager.saveConfig(config)
+        } else {
+          return res.status(404).json({ success: false, error: '未找到指定命令' })
+        }
+      } else {
+        return res.status(404).json({ success: false, error: '命令列表不存在' })
       }
       
       res.json({ success: true })
