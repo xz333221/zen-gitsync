@@ -67,9 +67,6 @@ export const useGitStore = defineStore('git', () => {
   const lastBranchesTime = ref(0)
 
   // 从 gitLogStore 导入的状态
-  // 自动更新状态开关（默认关闭，避免性能问题）
-  const autoUpdateEnabled = ref(false)
-  
   // Socket.io 实例
   const socketRef = ref<Socket | null>(null);
   
@@ -146,7 +143,6 @@ export const useGitStore = defineStore('git', () => {
     currentPage.value = 1
     hasMoreData.value = true
     totalCommits.value = 0
-    // 不重置autoUpdateEnabled，保留用户设置
   }
 
   // 获取分支状态（领先/落后远程）- 带缓存优化
@@ -572,11 +568,6 @@ export const useGitStore = defineStore('git', () => {
       // 监听连接事件
       socketRef.value.on('connect', () => {
         console.log('✅ Socket.IO连接成功，事件监听器已生效，Socket ID:', socketRef.value?.id)
-        
-        // 如果自动更新开启，向服务器请求开始监控
-        if (autoUpdateEnabled.value && socketRef.value) {
-          socketRef.value.emit('start_monitoring')
-        }
       })
       
       // 监听项目信息
@@ -610,8 +601,6 @@ export const useGitStore = defineStore('git', () => {
       
       // 监听Git状态更新事件
       socketRef.value.on('git_status_update', (data) => {
-        if (!autoUpdateEnabled.value) return
-
         console.log('✅ 成功监听到 git_status_update 事件:', new Date().toLocaleTimeString())
         console.log(`git_status_update data ==>`, data)
         console.log(`currentProjectPath.value ==>`, currentProjectPath.value)
@@ -632,11 +621,6 @@ export const useGitStore = defineStore('git', () => {
         }
       })
       
-      // 监听监控状态
-      socketRef.value.on('monitoring_status', (data) => {
-        console.log('文件监控状态:', data.active ? '已启动' : $t('@C298B:已停止'))
-      })
-      
       // 添加额外的连接问题诊断
       socketRef.value.on('connect_error', (error) => {
         console.error('Socket连接错误:', error.message)
@@ -648,12 +632,6 @@ export const useGitStore = defineStore('git', () => {
       
       socketRef.value.on('reconnect', (attemptNumber) => {
         console.log(`${$t('@C298B:Socket重连成功，尝试次数: ')}${attemptNumber}`)
-        
-        // 重连后检查自动更新状态
-        if (autoUpdateEnabled.value) {
-          console.log($t('@C298B:重连后重新发送start_monitoring请求'))
-          socketRef.value?.emit('start_monitoring')
-        }
       })
       
       socketRef.value.on('reconnect_attempt', (attemptNumber) => {
@@ -678,43 +656,6 @@ export const useGitStore = defineStore('git', () => {
       }
     } catch (error) {
       console.error('Socket.IO连接初始化失败:', error)
-    }
-  }
-  
-  // 切换自动更新状态
-  function toggleAutoUpdate() {
-    console.log('toggleAutoUpdate调用，当前值:', autoUpdateEnabled.value)
-    
-    if (!socketRef.value) {
-      console.error('无法切换自动更新状态: socket连接不存在')
-      ElMessage.error($t('@C298B:无法连接到服务器，自动更新可能不会生效'))
-      
-      // 尝试重新初始化socket连接
-      console.log($t('@C298B:尝试重新建立socket连接...'))
-      initSocketConnection()
-      
-      // 即使socket可能不存在，也保存设置
-      localStorage.setItem('zen-gitsync-auto-update', autoUpdateEnabled.value.toString())
-      return
-    }
-    
-    try {
-      if (autoUpdateEnabled.value) {
-        console.log($t('@C298B:发送start_monitoring命令...'))
-        socketRef.value.emit('start_monitoring')
-        ElMessage.success($t('@C298B:自动更新已启用'))
-      } else {
-        console.log($t('@C298B:发送stop_monitoring命令...'))
-        socketRef.value.emit('stop_monitoring')
-        ElMessage.info($t('@C298B:自动更新已禁用'))
-      }
-      
-      // 保存设置到localStorage
-      localStorage.setItem('zen-gitsync-auto-update', autoUpdateEnabled.value.toString())
-      console.log('已保存自动更新设置到本地存储:', autoUpdateEnabled.value)
-    } catch (error) {
-      console.error('切换自动更新状态时出错:', error)
-      ElMessage.error(`${$t('@C298B:切换自动更新失败: ')}${(error as Error).message}`)
     }
   }
   
@@ -1658,12 +1599,6 @@ export const useGitStore = defineStore('git', () => {
   
   // 在组件挂载时初始化socket连接
   onMounted(() => {
-    // 从localStorage加载自动更新设置
-    const savedAutoUpdate = localStorage.getItem('zen-gitsync-auto-update')
-    if (savedAutoUpdate !== null) {
-      autoUpdateEnabled.value = savedAutoUpdate === 'true'
-    }
-    
     // 初始化Socket连接
     initSocketConnection()
   })
@@ -1911,7 +1846,6 @@ export const useGitStore = defineStore('git', () => {
     isAddingFiles,
     isCommiting,
     isResetting,
-    autoUpdateEnabled,
     
     // 提交历史分页状态
     currentPage,
@@ -1938,7 +1872,6 @@ export const useGitStore = defineStore('git', () => {
     gitPull,
     gitFetchAll,
     initSocketConnection,
-    toggleAutoUpdate,
     parseStatusPorcelain,
     fetchLog,
     refreshLog,

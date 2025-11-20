@@ -9,21 +9,12 @@ import chalk from 'chalk';
 import fs from 'fs/promises';
 import os from 'os';
 import { Server } from 'socket.io';
-import chokidar from 'chokidar';
 import { spawn } from 'child_process';
 // import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const configManager = config; // 确保 configManager 可用
-
-// 文件系统变动监控器
-let watcher = null;
-// 防抖计时器
-let debounceTimer = null;
-// 防抖延迟时间 (毫秒)
-const DEBOUNCE_DELAY = 1000;
-
 // 分支状态缓存
 let branchStatusCache = {
   currentBranch: null,
@@ -661,12 +652,6 @@ async function startUIServer(noOpen = false, savePort = false) {
                     console.warn('初始化项目配置失败:', e?.message || e);
                   }
                   
-                  // 关闭旧的文件监控
-                  if (watcher) {
-                    watcher.close().catch(err => console.error('关闭旧监控器失败:', err));
-                    watcher = null;
-                  }
-                  
                   // 通知所有旧房间的客户端项目已切换
                   io.to(projectRoomId).emit('project_changed', {
                     oldProjectPath: currentProjectPath,
@@ -693,11 +678,6 @@ async function startUIServer(noOpen = false, savePort = false) {
                   currentProjectPath = newProjectPath;
                   projectRoomId = newProjectRoomId;
                   isGitRepo = false;
-                  
-                  if (watcher) {
-                    watcher.close().catch(err => console.error('关闭监控器失败:', err));
-                    watcher = null;
-                  }
                   
                   // 通知所有旧房间的客户端项目已切换
                   io.to(projectRoomId).emit('project_changed', {
@@ -3571,34 +3551,6 @@ async function startUIServer(noOpen = false, savePort = false) {
     const history = getCommandHistory();
     socket.emit('initial_command_history', { history });
     
-    // 发送项目信息给客户端
-    socket.emit('project_info', {
-      projectPath: currentProjectPath,
-      projectRoomId: projectRoomId
-    });
-    
-    // 客户端可以请求开始/停止监控
-    socket.on('start_monitoring', () => {
-      if (!watcher) {
-        initFileSystemWatcher().catch(err => console.error('[文件监控] 初始化失败:', err));
-        socket.emit('monitoring_status', { active: true });
-      }
-    });
-    
-    // 处理客户端加入新房间的请求
-    socket.on('join_room', (roomId) => {
-      socket.join(roomId);
-      console.log(`客户端 ${socket.id} 已加入房间: ${roomId}`);
-    });
-    
-    socket.on('stop_monitoring', () => {
-      if (watcher) {
-        watcher.close().catch(err => console.error('关闭监控器失败:', err));
-        watcher = null;
-        socket.emit('monitoring_status', { active: false });
-      }
-    });
-    
     // 请求完整命令历史
     socket.on('request_full_history', () => {
       const fullHistory = getCommandHistory();
@@ -3617,158 +3569,6 @@ async function startUIServer(noOpen = false, savePort = false) {
       // Socket.IO 会自动从房间中移除断开的连接
     });
   });
-  
-  // 读取并解析.gitignore文件
-  async function parseGitignore(projectPath) {
-    const gitignorePath = path.join(projectPath, '.gitignore');
-    const ignorePatterns = [
-      /(^|[\/\\])\../, // 始终忽略.开头的文件（除了.gitignore本身）
-      '**/.git/**', // 始终忽略.git目录
-      
-      // 额外排除常见的编译产物和大文件，减少监控开销
-      '**/*.umd.cjs',      // UMD打包文件
-      '**/*.min.js',       // 压缩JS文件
-      '**/*.bundle.js',    // Webpack打包文件
-      '**/*.dist.js',      // 构建产物
-      '**/*.prod.js',      // 生产环境文件
-      '**/lib/**',         // 通常是编译产物
-      '**/es/**',          // ES模块编译产物
-      '**/esm/**',         // ES模块编译产物
-      '**/*.map',          // Source map文件
-      '**/*.chunk.js',     // 代码分割chunk
-    ];
-    
-    try {
-      const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
-      const lines = gitignoreContent.split('\n');
-      let validRules = 0;
-      
-      for (let line of lines) {
-        line = line.trim();
-        
-        // 跳过空行和注释
-        if (!line || line.startsWith('#')) continue;
-        
-        // 移除行尾的空格
-        line = line.replace(/\s+$/, '');
-        
-        // 跳过否定规则（chokidar不支持否定规则，这些规则会被忽略）
-        if (line.startsWith('!')) {
-          continue;
-        }
-        
-        // 将gitignore规则转换为glob模式
-        let pattern;
-        
-        // 如果以/开头，表示从根目录开始匹配
-        if (line.startsWith('/')) {
-          pattern = line.substring(1);
-          // 如果是目录，添加/**后缀
-          if (!pattern.includes('*') && !pattern.includes('.')) {
-            ignorePatterns.push(pattern);
-            ignorePatterns.push(pattern + '/**');
-          } else {
-            ignorePatterns.push(pattern);
-          }
-        } else if (line.endsWith('/')) {
-          // 明确的目录规则
-          const dirName = line.slice(0, -1);
-          ignorePatterns.push('**/' + dirName);
-          ignorePatterns.push('**/' + dirName + '/**');
-        } else {
-          // 文件或目录规则
-          // 如果包含*通配符，直接使用
-          if (line.includes('*')) {
-            ignorePatterns.push('**/' + line);
-          } else {
-            // 既匹配文件也匹配目录
-            ignorePatterns.push('**/' + line);
-            ignorePatterns.push('**/' + line + '/**');
-          }
-        }
-        
-        validRules++;
-      }
-      
-      console.log(`[文件监控] 从.gitignore读取了 ${validRules} 条有效的忽略规则`);
-    } catch (error) {
-      // .gitignore不存在或读取失败，使用默认规则
-      console.log('[文件监控] 未找到.gitignore，使用默认忽略规则');
-      ignorePatterns.push(
-        '**/node_modules/**',
-        '**/dist/**',
-        '**/build/**',
-        '**/coverage/**',
-        '**/.nuxt/**',
-        '**/.next/**',
-        '**/out/**',
-        '**/*.log'
-      );
-    }
-    
-    return ignorePatterns;
-  }
-  
-  // 初始化文件系统监控
-  async function initFileSystemWatcher() {
-    // 停止已有的监控器
-    if (watcher) {
-      watcher.close().catch(err => console.error('关闭旧监控器失败:', err));
-    }
-    
-    try {
-      // 获取当前工作目录
-      const currentDir = process.cwd();
-      
-      console.log(`初始化文件系统监控器，路径: ${currentDir}`);
-      
-      // 检查是否是Git仓库
-      if (!isGitRepo) {
-        console.log('当前目录不是Git仓库，不启动监控');
-        return;
-      }
-      
-      const watcherStartTime = Date.now();
-      console.log('[文件监控] 开始初始化监控器...');
-      
-      // 从.gitignore读取忽略规则
-      const ignorePatterns = await parseGitignore(currentDir);
-      
-      // 使用chokidar监控文件变动
-      watcher = chokidar.watch(currentDir, {
-        ignored: ignorePatterns,
-        persistent: true,
-        ignoreInitial: true, // 忽略初始扫描时的文件
-        depth: 10, // 限制扫描深度，避免过深的目录结构
-        awaitWriteFinish: {
-          stabilityThreshold: 300, // 等待文件写入完成的时间
-          pollInterval: 100 // 轮询间隔
-        }
-      });
-      
-      // 合并所有变动事件到一个处理程序
-      const events = ['add', 'change', 'unlink'];
-      events.forEach(event => {
-        watcher.on(event, path => {
-          console.log(`检测到文件变动 [${event}]: ${path}`);
-          debouncedNotifyChanges();
-        });
-      });
-      
-      watcher.on('ready', () => {
-        const initTime = Date.now() - watcherStartTime;
-        console.log(`[文件监控] 监控器初始化完成，耗时 ${initTime}ms`);
-      });
-      
-      watcher.on('error', error => {
-        console.error('[文件监控] 监控错误:', error);
-      });
-      
-      console.log('[文件监控] 监控器已启动（异步初始化中...）');
-    } catch (error) {
-      console.error('启动文件监控失败:', error);
-    }
-  }
   
   // 获取并广播Git状态 (优化版本 - 只获取porcelain格式)
   async function getAndBroadcastStatus() {
@@ -3799,17 +3599,6 @@ async function startUIServer(noOpen = false, savePort = false) {
     } catch (error) {
       console.error('获取或广播Git状态失败:', error);
     }
-  }
-  
-  // 防抖处理函数
-  function debouncedNotifyChanges() {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-    }
-    
-    debounceTimer = setTimeout(() => {
-      getAndBroadcastStatus();
-    }, DEBOUNCE_DELAY);
   }
   
   // 检查当前目录是否是Git仓库
