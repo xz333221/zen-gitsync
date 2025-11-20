@@ -37,6 +37,7 @@ const newCommand = ref<CustomCommand>({
 const isEditing = ref(false)
 const editingId = ref<string>('')
 const isSaving = ref(false)
+const activeCollapse = ref<string[]>([])
 
 // 计算属性：获取自定义命令列表
 const commands = computed(() => configStore.customCommands || [])
@@ -295,8 +296,10 @@ defineExpose({
   >
     <div class="command-container">
       <!-- 添加/编辑表单 -->
-      <div class="command-form">
-        <!-- 第一行：命令名称和描述 -->
+      <el-collapse v-model="activeCollapse" class="command-form-collapse">
+        <el-collapse-item :title="isEditing ? $t('@CMD01:编辑命令') : $t('@CMD01:添加命令')" name="addCommand">
+          <div class="command-form">
+            <!-- 第一行：命令名称和描述 -->
         <div class="form-row form-row-compact">
           <div class="form-field form-field-half">
             <label class="required">{{ $t('@CMD01:命令名称') }}</label>
@@ -364,7 +367,9 @@ defineExpose({
             {{ isEditing ? $t('@CMD01:更新命令') : $t('@CMD01:添加命令') }}
           </el-button>
         </div>
-      </div>
+          </div>
+        </el-collapse-item>
+      </el-collapse>
 
       <!-- 命令列表 -->
       <div class="command-list">
@@ -491,10 +496,10 @@ defineExpose({
 }
 
 .form-buttons {
-  margin-top: 12px;
+  margin-top: 16px;
   display: flex;
-  gap: 8px;
   justify-content: flex-end;
+  gap: 12px;
 }
 
 .command-list {
