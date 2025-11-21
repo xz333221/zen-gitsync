@@ -148,6 +148,128 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
   
+  // 流式执行命令接口（支持实时输出）
+  app.post('/api/exec-stream', async (req, res) => {
+    try {
+      const { command } = req.body || {};
+      if (!command || typeof command !== 'string' || !command.trim()) {
+        return res.status(400).json({ success: false, error: 'command 不能为空' });
+      }
+
+      console.log(`流式执行命令: ${command}`);
+
+      // 设置响应头为流式传输
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); // 禁用nginx缓冲
+
+      // 使用 spawn 执行命令，支持实时输出
+      console.log(`[流式输出] 准备执行命令: ${command}`);
+      console.log(`[流式输出] 当前平台: ${process.platform}`);
+      console.log(`[流式输出] 工作目录: ${process.cwd()}`);
+      
+      // 解析命令：简单按空格分割（假设不包含复杂引号）
+      const parts = command.trim().split(/\s+/);
+      const cmd = parts[0];
+      const args = parts.slice(1);
+      
+      console.log(`[流式输出] 执行命令: ${cmd}, 参数:`, args);
+      
+      // 完全参照 git push 的方式
+      const childProcess = spawn(cmd, args, {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          GIT_CONFIG_PARAMETERS: "'core.quotepath=false'"
+        }
+      });
+
+      console.log(`[流式输出] childProcess.stdout 是否存在:`, !!childProcess.stdout);
+      console.log(`[流式输出] childProcess.stderr 是否存在:`, !!childProcess.stderr);
+
+      let hasError = false;
+      let outputReceived = false;
+      let processFinished = false; // 标记进程是否已正常结束
+
+      // 发送数据到客户端的辅助函数
+      const sendData = (type, data) => {
+        const message = `data: ${JSON.stringify({ type, data })}\n\n`;
+        console.log(`[流式输出] 发送数据 - 类型: ${type}, 长度: ${data?.length || 0}`);
+        res.write(message);
+      };
+
+      // 设置流编码
+      if (childProcess.stdout) {
+        childProcess.stdout.setEncoding('utf8');
+        console.log(`[流式输出] stdout 编码已设置为 utf8`);
+      }
+      if (childProcess.stderr) {
+        childProcess.stderr.setEncoding('utf8');
+        console.log(`[流式输出] stderr 编码已设置为 utf8`);
+      }
+
+      // 监听标准输出
+      childProcess.stdout?.on('data', (data) => {
+        const output = typeof data === 'string' ? data : data.toString();
+        outputReceived = true;
+        console.log(`[流式输出] 收到stdout:`, output.substring(0, 100));
+        sendData('stdout', output);
+      });
+
+      // 监听标准错误输出
+      childProcess.stderr?.on('data', (data) => {
+        const output = typeof data === 'string' ? data : data.toString();
+        outputReceived = true;
+        hasError = true;
+        console.log(`[流式输出] 收到stderr:`, output.substring(0, 100));
+        sendData('stderr', output);
+      });
+
+      // 监听进程退出（exit 在流关闭前触发）
+      childProcess.on('exit', (code, signal) => {
+        console.log(`[流式输出] 进程 exit 事件 - 代码: ${code}, 信号: ${signal}`);
+      });
+
+      // 监听进程关闭（close 在流关闭后触发）
+      childProcess.on('close', (code, signal) => {
+        console.log(`[流式输出] 进程 close 事件 - 代码: ${code}, 信号: ${signal}, 有错误: ${hasError}, 有输出: ${outputReceived}`);
+        processFinished = true; // 标记进程已结束
+        sendData('exit', { code, success: code === 0 && !hasError });
+        res.end();
+      });
+
+      // 监听错误
+      childProcess.on('error', (error) => {
+        console.error(`[流式输出] 进程错误:`, error);
+        processFinished = true; // 标记进程已结束
+        sendData('error', error.message);
+        res.end();
+      });
+      
+      // 添加spawn事件监听
+      childProcess.on('spawn', () => {
+        console.log(`[流式输出] 进程已启动 - PID: ${childProcess.pid}`);
+      });
+
+      // 客户端断开连接时清理（只在进程未正常结束时kill）
+      req.on('close', () => {
+        console.log(`[流式输出] 客户端断开连接，进程已结束: ${processFinished}, 是否已被kill: ${childProcess.killed}`);
+        if (!processFinished && !childProcess.killed) {
+          console.log(`[流式输出] 客户端提前断开，主动kill进程`);
+          childProcess.kill();
+        }
+      });
+
+    } catch (error) {
+      console.error('流式执行命令失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `流式执行命令失败: ${error.message}` 
+      });
+    }
+  });
+  
   // 在新终端中执行自定义命令
   app.post('/api/exec-in-terminal', async (req, res) => {
     try {

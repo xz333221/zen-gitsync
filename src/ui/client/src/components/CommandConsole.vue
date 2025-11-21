@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { Document, ArrowDown, FullScreen, Setting } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
@@ -7,7 +7,7 @@ import type { CustomCommand } from '@components/CustomCommandManager.vue';
 
 // 控制台相关状态
 const currentDirectory = ref("");
-const consoleInput = ref("");
+const consoleInput = ref("git status"); // 默认命令，方便调试
 const consoleRunning = ref(false);
 
 type ConsoleRecord = { 
@@ -23,14 +23,14 @@ type ConsoleRecord = {
 const consoleHistory = ref<ConsoleRecord[]>([]);
 let consoleIdCounter = 0; // ID计数器，确保唯一性
 
-// 控制整个控制台展开/收起
-const isConsoleExpanded = ref(false);
+// 控制整个控制台展开/收起（从localStorage读取，默认展开）
+const isConsoleExpanded = ref(localStorage.getItem('isConsoleExpanded') !== 'false');
 
 // 控制全屏状态
 const isFullscreen = ref(false);
 
-// 控制是否使用终端执行（默认开启）
-const useTerminal = ref(true);
+// 控制是否使用终端执行（从localStorage读取，默认关闭以使用流式输出）
+const useTerminal = ref(localStorage.getItem('useTerminal') === 'true');
 
 // 控制自定义命令管理弹窗
 const commandManagerVisible = ref(false);
@@ -64,33 +64,110 @@ async function runConsoleCommand() {
     return;
   }
   
-  // 原有的后台执行逻辑
+  // 流式执行逻辑
   const rec: ConsoleRecord = {
-    id: ++consoleIdCounter, // 使用递增计数器确保唯一性
+    id: ++consoleIdCounter,
     command: cmd,
     success: false,
     ts: new Date().toLocaleString(),
-    expanded: true, // 默认展开
-    stdout: '', // 初始化为空字符串，确保响应式
-    stderr: '', // 初始化为空字符串，确保响应式
+    expanded: true,
+    stdout: '',
+    stderr: '',
   };
   consoleHistory.value.unshift(rec);
+  consoleInput.value = '';
+  
   try {
-    const resp = await fetch('/api/exec', {
+    console.log('[前端-控制台] 开始发送流式请求:', cmd);
+    const resp = await fetch('/api/exec-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command: cmd })
     });
-    const result = await resp.json();
-    rec.success = !!result?.success;
-    rec.stdout = result?.stdout || '';
-    rec.stderr = result?.error || result?.stderr || '';
+    
+    console.log('[前端-控制台] 收到响应，状态:', resp.status, resp.statusText);
+    
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+    }
+    
+    const reader = resp.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    if (!reader) {
+      throw new Error('无法读取响应流');
+    }
+    
+    console.log('[前端-控制台] 开始读取流数据');
+    let buffer = ''; // 用于累积不完整的数据
+    let chunkCount = 0;
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      chunkCount++;
+      console.log(`[前端-控制台] 读取数据块 #${chunkCount}, done:`, done, 'size:', value?.length || 0);
+      if (done) break;
+      
+      // 解码数据并追加到缓冲区
+      buffer += decoder.decode(value, { stream: true });
+      
+      // 按照 SSE 格式分割消息（以 \n\n 分隔）
+      const messages = buffer.split('\n\n');
+      
+      // 保留最后一个可能不完整的消息
+      buffer = messages.pop() || '';
+      
+      // 处理完整的消息
+      for (const message of messages) {
+        const lines = message.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              
+              if (data.type === 'stdout') {
+                rec.stdout += data.data;
+              } else if (data.type === 'stderr') {
+                rec.stderr += data.data;
+              } else if (data.type === 'exit') {
+                rec.success = data.data.success;
+              } else if (data.type === 'error') {
+                rec.stderr += `错误: ${data.data}\n`;
+              }
+            } catch (e) {
+              console.warn('解析SSE数据失败:', line, e);
+            }
+          }
+        }
+      }
+    }
+    
+    // 处理可能剩余的数据
+    if (buffer.trim()) {
+      const lines = buffer.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.substring(6));
+            if (data.type === 'stdout') {
+              rec.stdout += data.data;
+            } else if (data.type === 'stderr') {
+              rec.stderr += data.data;
+            }
+          } catch (e) {
+            console.warn('解析剩余SSE数据失败:', e);
+          }
+        }
+      }
+    }
+    console.log('[前端-控制台] 流读取完成，正常退出');
   } catch (e: any) {
+    console.error('[前端-控制台] 捕获异常:', e);
     rec.success = false;
     rec.stderr = e?.message || String(e);
   } finally {
+    console.log('[前端-控制台] finally块执行，设置consoleRunning=false');
     consoleRunning.value = false;
-    consoleInput.value = '';
   }
 }
 
@@ -144,7 +221,7 @@ async function executeCustomCommand(command: CustomCommand) {
     return;
   }
   
-  // 后台执行逻辑
+  // 流式执行逻辑
   const rec: ConsoleRecord = {
     id: ++consoleIdCounter,
     command: cmd,
@@ -155,25 +232,113 @@ async function executeCustomCommand(command: CustomCommand) {
     stderr: '',
   };
   consoleHistory.value.unshift(rec);
+  
+  // 关闭弹窗，让用户可以看到输出
+  commandManagerVisible.value = false;
+  
   try {
-    const resp = await fetch('/api/exec', {
+    console.log('[前端-自定义] 开始发送流式请求:', cmd);
+    const resp = await fetch('/api/exec-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command: cmd })
     });
-    const result = await resp.json();
-    rec.success = !!result?.success;
-    rec.stdout = result?.stdout || '';
-    rec.stderr = result?.error || result?.stderr || '';
-    // 关闭弹窗
-    commandManagerVisible.value = false;
+    
+    console.log('[前端-自定义] 收到响应，状态:', resp.status, resp.statusText);
+    
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+    }
+    
+    const reader = resp.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    if (!reader) {
+      throw new Error('无法读取响应流');
+    }
+    
+    console.log('[前端-自定义] 开始读取流数据');
+    let buffer = ''; // 用于累积不完整的数据
+    let chunkCount = 0;
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      chunkCount++;
+      console.log(`[前端-自定义] 读取数据块 #${chunkCount}, done:`, done, 'size:', value?.length || 0);
+      if (done) break;
+      
+      // 解码数据并追加到缓冲区
+      buffer += decoder.decode(value, { stream: true });
+      
+      // 按照 SSE 格式分割消息（以 \n\n 分隔）
+      const messages = buffer.split('\n\n');
+      
+      // 保留最后一个可能不完整的消息
+      buffer = messages.pop() || '';
+      
+      // 处理完整的消息
+      for (const message of messages) {
+        const lines = message.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              
+              if (data.type === 'stdout') {
+                rec.stdout += data.data;
+              } else if (data.type === 'stderr') {
+                rec.stderr += data.data;
+              } else if (data.type === 'exit') {
+                rec.success = data.data.success;
+              } else if (data.type === 'error') {
+                rec.stderr += `错误: ${data.data}\n`;
+              }
+            } catch (e) {
+              console.warn('解析SSE数据失败:', line, e);
+            }
+          }
+        }
+      }
+    }
+    
+    // 处理可能剩余的数据
+    if (buffer.trim()) {
+      const lines = buffer.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.substring(6));
+            if (data.type === 'stdout') {
+              rec.stdout += data.data;
+            } else if (data.type === 'stderr') {
+              rec.stderr += data.data;
+            }
+          } catch (e) {
+            console.warn('解析剩余SSE数据失败:', e);
+          }
+        }
+      }
+    }
+    console.log('[前端-自定义] 流读取完成，正常退出');
   } catch (e: any) {
+    console.error('[前端-自定义] 捕获异常:', e);
     rec.success = false;
     rec.stderr = e?.message || String(e);
   } finally {
+    console.log('[前端-自定义] finally块执行，设置consoleRunning=false');
     consoleRunning.value = false;
   }
 }
+
+// 监听useTerminal变化并保存到localStorage
+watch(useTerminal, (newValue) => {
+  localStorage.setItem('useTerminal', String(newValue));
+});
+
+// 监听isConsoleExpanded变化并保存到localStorage
+watch(isConsoleExpanded, (newValue) => {
+  localStorage.setItem('isConsoleExpanded', String(newValue));
+});
 
 // 获取当前工作目录
 onMounted(async () => {
