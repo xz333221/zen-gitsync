@@ -190,7 +190,6 @@ async function startUIServer(noOpen = false, savePort = false) {
 
       let hasError = false;
       let outputReceived = false;
-      let processFinished = false; // 标记进程是否已正常结束
 
       // 发送数据到客户端的辅助函数
       const sendData = (type, data) => {
@@ -234,7 +233,6 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 监听进程关闭（close 在流关闭后触发）
       childProcess.on('close', (code, signal) => {
         console.log(`[流式输出] 进程 close 事件 - 代码: ${code}, 信号: ${signal}, 有错误: ${hasError}, 有输出: ${outputReceived}`);
-        processFinished = true; // 标记进程已结束
         sendData('exit', { code, success: code === 0 && !hasError });
         res.end();
       });
@@ -242,7 +240,6 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 监听错误
       childProcess.on('error', (error) => {
         console.error(`[流式输出] 进程错误:`, error);
-        processFinished = true; // 标记进程已结束
         sendData('error', error.message);
         res.end();
       });
@@ -252,14 +249,9 @@ async function startUIServer(noOpen = false, savePort = false) {
         console.log(`[流式输出] 进程已启动 - PID: ${childProcess.pid}`);
       });
 
-      // 客户端断开连接时清理（只在进程未正常结束时kill）
-      req.on('close', () => {
-        console.log(`[流式输出] 客户端断开连接，进程已结束: ${processFinished}, 是否已被kill: ${childProcess.killed}`);
-        if (!processFinished && !childProcess.killed) {
-          console.log(`[流式输出] 客户端提前断开，主动kill进程`);
-          childProcess.kill();
-        }
-      });
+      // 注意：不监听req.on('close')，参考git push的实现
+      // 进程会自然结束，close事件会触发res.end()
+      // 如果监听req.on('close')可能会导致进程被提前kill
 
     } catch (error) {
       console.error('流式执行命令失败:', error);
