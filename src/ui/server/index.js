@@ -7,6 +7,7 @@ import open from 'open';
 import config from '../../config.js';
 import chalk from 'chalk';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import os from 'os';
 import { Server } from 'socket.io';
 import { spawn } from 'child_process';
@@ -1413,6 +1414,53 @@ async function startUIServer(noOpen = false, savePort = false) {
           } else {
             return res.status(404).json({ success: false, error: '未找到原模板' })
           }
+        } else {
+          return res.status(404).json({ success: false, error: '模板列表不存在' })
+        }
+      } else {
+        return res.status(400).json({ success: false, error: '不支持的模板类型' })
+      }
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
+  // 置顶模板
+  app.post('/api/config/pin-template', express.json(), async (req, res) => {
+    try {
+      const { template, type } = req.body
+      
+      if (!template || !type) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      if (type === 'description') {
+        if (config.descriptionTemplates) {
+          // 删除原位置的模板
+          config.descriptionTemplates = config.descriptionTemplates.filter(t => t !== template)
+          // 添加到第一位
+          config.descriptionTemplates.unshift(template)
+          await configManager.saveConfig(config)
+        } else {
+          return res.status(404).json({ success: false, error: '模板列表不存在' })
+        }
+      } else if (type === 'scope') {
+        if (config.scopeTemplates) {
+          config.scopeTemplates = config.scopeTemplates.filter(t => t !== template)
+          config.scopeTemplates.unshift(template)
+          await configManager.saveConfig(config)
+        } else {
+          return res.status(404).json({ success: false, error: '模板列表不存在' })
+        }
+      } else if (type === 'message') {
+        if (config.messageTemplates) {
+          config.messageTemplates = config.messageTemplates.filter(t => t !== template)
+          config.messageTemplates.unshift(template)
+          await configManager.saveConfig(config)
         } else {
           return res.status(404).json({ success: false, error: '模板列表不存在' })
         }
@@ -3349,7 +3397,8 @@ async function startUIServer(noOpen = false, savePort = false) {
               path: dir,
               relativePath: relativePath || '.',
               name: packageData.name || path.basename(dir),
-              scripts: packageData.scripts
+              scripts: packageData.scripts,
+              version: packageData.version || '0.0.0'
             });
             return true;
           }
@@ -3532,6 +3581,340 @@ async function startUIServer(noOpen = false, savePort = false) {
       res.status(500).json({ 
         success: false, 
         error: `执行npm脚本失败: ${error.message}` 
+      });
+    }
+  });
+
+  // API: 更新npm版本号
+  app.post('/api/update-npm-version', async (req, res) => {
+    try {
+      const { packagePath, versionType } = req.body;
+      
+      if (!packagePath || !versionType) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少必要参数: packagePath, versionType'
+        });
+      }
+
+      // 确保路径指向package.json文件
+      let packageJsonPath = path.resolve(packagePath);
+      if (fsSync.existsSync(packageJsonPath) && fsSync.statSync(packageJsonPath).isDirectory()) {
+        packageJsonPath = path.join(packageJsonPath, 'package.json');
+      }
+      
+      // 检查文件是否存在
+      if (!fsSync.existsSync(packageJsonPath)) {
+        return res.status(404).json({
+          success: false,
+          error: '找不到package.json文件'
+        });
+      }
+
+      // 读取package.json
+      const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, 'utf8'));
+      
+      if (!packageJson.version) {
+        return res.status(400).json({
+          success: false,
+          error: 'package.json中没有version字段'
+        });
+      }
+
+      const oldVersion = packageJson.version;
+      const versionParts = oldVersion.split('.').map(Number);
+      
+      // 根据类型增加版本号
+      switch (versionType) {
+        case 'major':
+          versionParts[0]++;
+          versionParts[1] = 0;
+          versionParts[2] = 0;
+          break;
+        case 'minor':
+          versionParts[1]++;
+          versionParts[2] = 0;
+          break;
+        case 'patch':
+          versionParts[2]++;
+          break;
+        default:
+          return res.status(400).json({
+            success: false,
+            error: '无效的版本类型，必须是 major, minor 或 patch'
+          });
+      }
+
+      const newVersion = versionParts.join('.');
+      packageJson.version = newVersion;
+      
+      // 写回文件
+      fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
+      
+      console.log(`已更新npm版本号: ${oldVersion} → ${newVersion} (${packagePath})`);
+      
+      res.json({
+        success: true,
+        oldVersion,
+        newVersion
+      });
+    } catch (error) {
+      console.error('更新版本号失败:', error);
+      res.status(500).json({
+        success: false,
+        error: `更新版本号失败: ${error.message}`
+      });
+    }
+  });
+
+  // API: 添加npm脚本
+  app.post('/api/add-npm-script', async (req, res) => {
+    try {
+      const { packagePath, scriptName, scriptCommand } = req.body;
+      
+      if (!packagePath || !scriptName || !scriptCommand) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少必要参数: packagePath, scriptName, scriptCommand'
+        });
+      }
+
+      // 确保路径指向package.json文件
+      let packageJsonPath = path.resolve(packagePath);
+      if (fsSync.existsSync(packageJsonPath) && fsSync.statSync(packageJsonPath).isDirectory()) {
+        packageJsonPath = path.join(packageJsonPath, 'package.json');
+      }
+      
+      // 检查文件是否存在
+      if (!fsSync.existsSync(packageJsonPath)) {
+        return res.status(404).json({
+          success: false,
+          error: '找不到package.json文件'
+        });
+      }
+      
+      // 读取package.json
+      const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, 'utf8'));
+      
+      // 确保scripts对象存在
+      if (!packageJson.scripts) {
+        packageJson.scripts = {};
+      }
+      
+      // 检查脚本是否已存在
+      if (packageJson.scripts[scriptName]) {
+        return res.status(400).json({
+          success: false,
+          error: `脚本 "${scriptName}" 已存在`
+        });
+      }
+      
+      // 添加脚本
+      packageJson.scripts[scriptName] = scriptCommand;
+      
+      // 写回文件（保持格式化）
+      fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
+      
+      console.log(`已添加npm脚本: ${scriptName} = ${scriptCommand} (${packagePath})`);
+      
+      res.json({
+        success: true,
+        scriptName,
+        scriptCommand
+      });
+    } catch (error) {
+      console.error('添加npm脚本失败:', error);
+      res.status(500).json({
+        success: false,
+        error: `添加npm脚本失败: ${error.message}`
+      });
+    }
+  });
+
+  // API: 更新npm脚本
+  app.post('/api/update-npm-script', async (req, res) => {
+    try {
+      const { packagePath, scriptName, scriptCommand, oldScriptName } = req.body;
+      
+      if (!packagePath || !scriptName || !scriptCommand) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少必要参数: packagePath, scriptName, scriptCommand'
+        });
+      }
+
+      // 确保路径指向package.json文件
+      let packageJsonPath = path.resolve(packagePath);
+      if (fsSync.existsSync(packageJsonPath) && fsSync.statSync(packageJsonPath).isDirectory()) {
+        packageJsonPath = path.join(packageJsonPath, 'package.json');
+      }
+      
+      // 检查文件是否存在
+      if (!fsSync.existsSync(packageJsonPath)) {
+        return res.status(404).json({
+          success: false,
+          error: '找不到package.json文件'
+        });
+      }
+
+      // 读取package.json
+      const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, 'utf8'));
+      
+      // 确保scripts对象存在
+      if (!packageJson.scripts) {
+        packageJson.scripts = {};
+      }
+
+      // 如果改了脚本名称，删除旧的
+      if (oldScriptName && oldScriptName !== scriptName) {
+        delete packageJson.scripts[oldScriptName];
+      }
+
+      // 更新脚本
+      packageJson.scripts[scriptName] = scriptCommand;
+      
+      // 写回文件
+      fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
+      
+      console.log(`已更新npm脚本: ${scriptName} = ${scriptCommand} (${packagePath})`);
+      
+      res.json({
+        success: true,
+        scriptName,
+        scriptCommand
+      });
+    } catch (error) {
+      console.error('更新npm脚本失败:', error);
+      res.status(500).json({
+        success: false,
+        error: `更新npm脚本失败: ${error.message}`
+      });
+    }
+  });
+
+  // API: 删除npm脚本
+  app.post('/api/delete-npm-script', async (req, res) => {
+    try {
+      const { packagePath, scriptName } = req.body;
+      
+      if (!packagePath || !scriptName) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少必要参数: packagePath, scriptName'
+        });
+      }
+
+      // 确保路径指向package.json文件
+      let packageJsonPath = path.resolve(packagePath);
+      if (fsSync.existsSync(packageJsonPath) && fsSync.statSync(packageJsonPath).isDirectory()) {
+        packageJsonPath = path.join(packageJsonPath, 'package.json');
+      }
+      
+      // 检查文件是否存在
+      if (!fsSync.existsSync(packageJsonPath)) {
+        return res.status(404).json({
+          success: false,
+          error: '找不到package.json文件'
+        });
+      }
+
+      // 读取package.json
+      const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, 'utf8'));
+      
+      // 检查scripts对象和脚本是否存在
+      if (!packageJson.scripts || !packageJson.scripts[scriptName]) {
+        return res.status(404).json({
+          success: false,
+          error: `脚本 "${scriptName}" 不存在`
+        });
+      }
+
+      // 删除脚本
+      delete packageJson.scripts[scriptName];
+      
+      // 写回文件
+      fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
+      
+      console.log(`已删除npm脚本: ${scriptName} (${packagePath})`);
+      
+      res.json({
+        success: true,
+        scriptName
+      });
+    } catch (error) {
+      console.error('删除npm脚本失败:', error);
+      res.status(500).json({
+        success: false,
+        error: `删除npm脚本失败: ${error.message}`
+      });
+    }
+  });
+
+  // API: 置顶npm脚本
+  app.post('/api/pin-npm-script', async (req, res) => {
+    try {
+      const { packagePath, scriptName } = req.body;
+      
+      if (!packagePath || !scriptName) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少必要参数: packagePath, scriptName'
+        });
+      }
+
+      // 确保路径指向package.json文件
+      let packageJsonPath = path.resolve(packagePath);
+      if (fsSync.existsSync(packageJsonPath) && fsSync.statSync(packageJsonPath).isDirectory()) {
+        packageJsonPath = path.join(packageJsonPath, 'package.json');
+      }
+      
+      // 检查文件是否存在
+      if (!fsSync.existsSync(packageJsonPath)) {
+        return res.status(404).json({
+          success: false,
+          error: '找不到package.json文件'
+        });
+      }
+
+      // 读取package.json
+      const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, 'utf8'));
+      
+      // 检查scripts对象和脚本是否存在
+      if (!packageJson.scripts || !packageJson.scripts[scriptName]) {
+        return res.status(404).json({
+          success: false,
+          error: `脚本 "${scriptName}" 不存在`
+        });
+      }
+
+      // 保存要置顶的脚本内容
+      const scriptCommand = packageJson.scripts[scriptName];
+      
+      // 删除该脚本
+      delete packageJson.scripts[scriptName];
+      
+      // 创建新的scripts对象，将置顶脚本放在最前面
+      const newScripts = {
+        [scriptName]: scriptCommand,
+        ...packageJson.scripts
+      };
+      
+      packageJson.scripts = newScripts;
+      
+      // 写回文件
+      fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
+      
+      console.log(`已置顶npm脚本: ${scriptName} (${packagePath})`);
+      
+      res.json({
+        success: true,
+        scriptName
+      });
+    } catch (error) {
+      console.error('置顶npm脚本失败:', error);
+      res.status(500).json({
+        success: false,
+        error: `置顶npm脚本失败: ${error.message}`
       });
     }
   });

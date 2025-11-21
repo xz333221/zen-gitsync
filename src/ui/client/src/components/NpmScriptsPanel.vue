@@ -3,6 +3,7 @@ import { ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { FolderOpened } from '@element-plus/icons-vue';
 import { $t } from '@/lang/static';
+import NpmSettingsDialog from './NpmSettingsDialog.vue';
 
 interface PackageInfo {
   path: string;
@@ -24,6 +25,29 @@ const emit = defineEmits<{
 const packages = ref<PackageInfo[]>([]);
 const isLoading = ref(false);
 const expandedPackages = ref<Set<string>>(new Set());
+
+// 设置对话框
+const showSettingsDialog = ref(false);
+const selectedPackagePath = ref('');
+const selectedPackageInfo = ref<PackageInfo | null>(null);
+
+function openSettings(pkg: PackageInfo) {
+  selectedPackagePath.value = pkg.path;
+  selectedPackageInfo.value = pkg;
+  showSettingsDialog.value = true;
+}
+
+function closeSettings() {
+  showSettingsDialog.value = false;
+  selectedPackagePath.value = '';
+  selectedPackageInfo.value = null;
+}
+
+// 设置完成后刷新
+function handleSettingsComplete() {
+  closeSettings();
+  loadNpmScripts();
+}
 
 // 高度调节
 const panelHeight = ref(300);
@@ -95,7 +119,7 @@ async function loadNpmScripts() {
       }
       
       packages.value = result.packages;
-      // 默认展开所有包
+      // // 默认展开所有包
       // packages.value.forEach(pkg => {
       //   expandedPackages.value.add(pkg.path);
       // });
@@ -174,20 +198,24 @@ watch(() => props.visible, (newValue) => {
         <span class="panel-title">{{ $t('@NPM01:NPM 脚本') }}</span>
       </div>
       <div class="header-right">
-        <button class="refresh-btn" @click="loadNpmScripts" :disabled="isLoading">
-          <el-icon :class="{ 'is-rotating': isLoading }">
-            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor" d="M784.512 230.272v-50.56a32 32 0 1 1 64 0v149.056a32 32 0 0 1-32 32H667.52a32 32 0 1 1 0-64h92.992A320 320 0 1 0 524.8 833.152a320 320 0 0 0 320-320h64a384 384 0 0 1-384 384 384 384 0 0 1-384-384 384 384 0 0 1 643.712-282.88z"/>
-            </svg>
-          </el-icon>
-        </button>
-        <button class="close-btn" @click="emit('close')">
-          <el-icon>
-            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/>
-            </svg>
-          </el-icon>
-        </button>
+        <el-tooltip :content="$t('@NPM01:刷新')" placement="bottom" :show-after="300">
+          <button class="refresh-btn" @click="loadNpmScripts" :disabled="isLoading">
+            <el-icon :class="{ 'is-rotating': isLoading }">
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M784.512 230.272v-50.56a32 32 0 1 1 64 0v149.056a32 32 0 0 1-32 32H667.52a32 32 0 1 1 0-64h92.992A320 320 0 1 0 524.8 833.152a320 320 0 0 0 320-320h64a384 384 0 0 1-384 384 384 384 0 0 1-384-384 384 384 0 0 1 643.712-282.88z"/>
+              </svg>
+            </el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip :content="$t('@NPM01:关闭')" placement="bottom" :show-after="300">
+          <button class="close-btn" @click="emit('close')">
+            <el-icon>
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/>
+              </svg>
+            </el-icon>
+          </button>
+        </el-tooltip>
       </div>
     </div>
 
@@ -229,6 +257,11 @@ watch(() => props.visible, (newValue) => {
             <span class="package-name">{{ pkg.name }}</span>
             <span class="package-path">{{ pkg.relativePath }}</span>
           </div>
+          <el-icon class="settings-icon" @click.stop="openSettings(pkg)">
+            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor" d="M600.704 64a32 32 0 0 1 30.464 22.208l35.2 109.376c14.784 7.232 28.928 15.36 42.432 24.512l112.384-24.192a32 32 0 0 1 34.432 15.36L944.32 364.8a32 32 0 0 1-4.032 37.504l-77.12 85.12a357.12 357.12 0 0 1 0 49.024l77.12 85.248a32 32 0 0 1 4.032 37.504l-88.704 153.6a32 32 0 0 1-34.432 15.296L708.8 803.904c-13.44 9.088-27.648 17.28-42.368 24.512l-35.264 109.376A32 32 0 0 1 600.704 960H423.296a32 32 0 0 1-30.464-22.208L357.696 828.48a351.616 351.616 0 0 1-42.56-24.64l-112.32 24.256a32 32 0 0 1-34.432-15.36L79.68 659.2a32 32 0 0 1 4.032-37.504l77.12-85.248a357.12 357.12 0 0 1 0-48.896l-77.12-85.248A32 32 0 0 1 79.68 364.8l88.704-153.6a32 32 0 0 1 34.432-15.296L315.2 220.096c13.568-9.152 27.776-17.408 42.56-24.64l35.2-109.312A32 32 0 0 1 423.232 64H600.64zm-23.424 64H446.72l-36.352 113.088-24.512 11.968a294.113 294.113 0 0 0-34.816 20.096l-22.656 15.36-116.224-25.088-65.28 113.152 79.68 88.192-1.92 27.136a293.12 293.12 0 0 0 0 40.192l1.92 27.136-79.808 88.192 65.344 113.152 116.224-25.024 22.656 15.296a294.113 294.113 0 0 0 34.816 20.096l24.512 11.968L446.72 896h130.688l36.48-113.152 24.448-11.904a288.282 288.282 0 0 0 34.752-20.096l22.592-15.296 116.288 25.024 65.28-113.152-79.744-88.192 1.92-27.136a293.12 293.12 0 0 0 0-40.256l-1.92-27.136 79.808-88.128-65.344-113.152-116.288 24.96-22.592-15.232a287.616 287.616 0 0 0-34.752-20.096l-24.448-11.904L577.344 128zM512 320a192 192 0 1 1 0 384 192 192 0 0 1 0-384zm0 64a128 128 0 1 0 0 256 128 128 0 0 0 0-256z"/>
+            </svg>
+          </el-icon>
         </div>
 
         <div 
@@ -255,6 +288,15 @@ watch(() => props.visible, (newValue) => {
         </div>
       </div>
     </div>
+    
+    <!-- 设置对话框 -->
+    <NpmSettingsDialog 
+      v-if="selectedPackageInfo"
+      :visible="showSettingsDialog"
+      :package-info="selectedPackageInfo"
+      @close="closeSettings"
+      @complete="handleSettingsComplete"
+    />
   </div>
 </template>
 
@@ -478,6 +520,25 @@ watch(() => props.visible, (newValue) => {
   white-space: nowrap;
   min-width: 0;
   flex: 1;
+}
+
+.settings-icon {
+  font-size: 16px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 8px;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.package-header:hover .settings-icon {
+  opacity: 1;
+}
+
+.settings-icon:hover {
+  color: #667eea;
+  transform: rotate(30deg);
 }
 
 .script-count {

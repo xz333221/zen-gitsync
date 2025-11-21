@@ -244,6 +244,43 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 置顶模板
+  async function pinTemplate(template: string, type: 'description' | 'scope' | 'message') {
+    try {
+      const response = await fetch('/api/config/pin-template', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ template, type })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        // 更新本地模板列表，将置顶的模板移到第一位
+        if (type === 'description') {
+          descriptionTemplates.value = descriptionTemplates.value.filter(t => t !== template)
+          descriptionTemplates.value.unshift(template)
+        } else if (type === 'scope') {
+          scopeTemplates.value = scopeTemplates.value.filter(t => t !== template)
+          scopeTemplates.value.unshift(template)
+        } else if (type === 'message') {
+          messageTemplates.value = messageTemplates.value.filter(t => t !== template)
+          messageTemplates.value.unshift(template)
+        }
+        
+        ElMessage.success($t('@D50BB:模板已置顶'))
+        return true
+      } else {
+        ElMessage.error(`${$t('@D50BB:置顶模板失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@D50BB:置顶模板失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
   // 锁定文件相关函数
   async function loadLockedFiles() {
     try {
@@ -445,6 +482,7 @@ export const useConfigStore = defineStore('config', () => {
     saveDefaultMessage,
     deleteTemplate,
     updateTemplate,
+    pinTemplate,
     loadLockedFiles,
     lockFile,
     unlockFile,

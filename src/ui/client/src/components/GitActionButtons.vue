@@ -121,7 +121,6 @@ defineExpose({
 }
 
 .right-actions {
-  min-width: 160px;
   display: flex;
   align-items: stretch;
 }

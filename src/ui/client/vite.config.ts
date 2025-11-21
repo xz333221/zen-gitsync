@@ -5,8 +5,9 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 // import { visualizer } from 'rollup-plugin-visualizer'
-import tailwindcss from "@tailwindcss/vite";
+import tailwindcss from "@tailwindcss/vite"
 import fs from 'fs'
+import createSvgIcon from './vite-plugins/svg-icon'
 
 // 读取后端服务器端口
 function getBackendPort() {
@@ -30,23 +31,27 @@ function getBackendPort() {
 // const backendPort = getBackendPort()
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [
-    AutoImport({
-      resolvers: [ElementPlusResolver()],
-    }),
-    Components({
-      resolvers: [ElementPlusResolver()],
-    }),
-    tailwindcss(),
-    vue(),
-    // visualizer({
-    //   open: true,
-    //   gzipSize: true,
-    //   brotliSize: true,
-    //   filename: 'stats.html'
-    // })
-  ],
+export default defineConfig(({ command }) => {
+  const isBuild = command === 'build'
+  
+  return {
+    plugins: [
+      AutoImport({
+        resolvers: [ElementPlusResolver()],
+      }),
+      Components({
+        resolvers: [ElementPlusResolver()],
+      }),
+      tailwindcss(),
+      vue(),
+      createSvgIcon(isBuild),
+      // visualizer({
+      //   open: true,
+      //   gzipSize: true,
+      //   brotliSize: true,
+      //   filename: 'stats.html'
+      // })
+    ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -69,17 +74,18 @@ export default defineConfig({
       },
     },
   },
-  build: {
-    outDir: path.resolve(__dirname, "../public"),
-    emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules")) {
-            return "vendor"
-          }
+    build: {
+      outDir: path.resolve(__dirname, "../public"),
+      emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("node_modules")) {
+              return "vendor"
+            }
+          },
         },
       },
     },
-  },
+  }
 })

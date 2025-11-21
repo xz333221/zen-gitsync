@@ -51,7 +51,7 @@ function isLocking(filePath: string) {
 }
 
 // npm脚本面板状态
-const showNpmPanel = ref(false)
+const showNpmPanel = ref(true) // 默认打开NPM面板
 function toggleNpmPanel() {
   showNpmPanel.value = !showNpmPanel.value
 }
@@ -876,24 +876,6 @@ defineExpose({
         <!-- 储藏列表按钮 -->
         <StashListButton />
 
-        <!-- 锁定文件管理按钮 -->
-        <el-tooltip
-          v-if="configStore.lockedFiles.length > 0"
-          :content="$t('@13D1C:管理锁定文件')"
-          placement="top"
-          
-          :show-after="200"
-        >
-          <el-button
-            type="warning"
-            circle
-            size="small"
-            @click="showLockedFilesDialog = true"
-          >
-            <el-icon><Lock /></el-icon>
-          </el-button>
-        </el-tooltip>
-
         <el-tooltip :content="$t('@13D1C:刷新状态')" placement="top"  :show-after="200">
           <el-button
             type="primary"
@@ -1047,6 +1029,7 @@ defineExpose({
                 @toggle-file-lock="toggleFileLock"
                 @stage-file="stageFile"
                 @revert-file-changes="revertFileChanges"
+                @manage-locked-files="showLockedFilesDialog = true"
               />
               
               <!-- 未跟踪的文件 -->
@@ -1064,6 +1047,7 @@ defineExpose({
                 @toggle-file-lock="toggleFileLock"
                 @stage-file="stageFile"
                 @revert-file-changes="revertFileChanges"
+                @manage-locked-files="showLockedFilesDialog = true"
               />
             </template>
             

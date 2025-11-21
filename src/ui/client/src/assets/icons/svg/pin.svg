@@ -1,0 +1,6 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- 顶部横线 -->
+  <path fill="currentColor" d="M128 256h768v64H128z"/>
+  <!-- 向上箭头 -->
+  <path fill="currentColor" d="M512 384l-256 256 45.248 45.248L480 506.496V896h64V506.496l178.752 178.752L768 640z"/>
+</svg>

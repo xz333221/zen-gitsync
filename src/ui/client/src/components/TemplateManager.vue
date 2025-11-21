@@ -42,6 +42,7 @@ const originalTemplate = ref('')
 const editingIndex = ref(-1)
 const isSaving = ref(false)
 const isSavingDefault = ref(false)
+const isPinning = ref(false)
 
 // 计算属性：获取当前类型的模板列表
 const templates = computed(() => {
@@ -144,6 +145,21 @@ function cancelEdit() {
   resetForm()
 }
 
+// 置顶模板
+async function pinTemplate(template: string) {
+  try {
+    isPinning.value = true
+    const success = await configStore.pinTemplate(template, props.type)
+    if (success) {
+      // 成功提示已在 store 中统一处理
+    }
+  } catch (error) {
+    ElMessage.error(`${$t('@60CAC:置顶模板失败: ')}${(error as Error).message}`)
+  } finally {
+    isPinning.value = false
+  }
+}
+
 // 删除模板
 async function deleteTemplate(template: string) {
   try {
@@ -230,6 +246,16 @@ defineExpose({
             <el-row justify="space-between" align="middle" style="width: 100%">
               <div class="template-content">{{ template }}</div>
               <div class="template-actions">
+                <el-button 
+                  size="small"
+                  class="pin-button" 
+                  @click="pinTemplate(template)"
+                  :loading="isPinning"
+                  :disabled="index === 0"
+                  title="置顶"
+                >
+                  <svg-icon icon-class="pin" class-name="pin-icon" />
+                </el-button>
                 <el-button type="primary" size="small" @click="useTemplate(template)">{{ $t('@60CAC:使用') }}</el-button>
                 <el-button 
                   type="warning" 
@@ -256,6 +282,16 @@ defineExpose({
               <el-row justify="space-between" align="middle" style="width: 100%">
                 <div class="template-content">{{ template }}</div>
                 <div class="template-actions">
+                  <el-button 
+                    size="small"
+                    class="pin-button" 
+                    @click="pinTemplate(template)"
+                    :loading="isPinning"
+                    :disabled="index === 0"
+                    title="置顶"
+                  >
+                    <svg-icon icon-class="pin" class-name="pin-icon" />
+                  </el-button>
                   <el-button type="primary" size="small" @click="useTemplate(template)">{{ $t('@60CAC:使用') }}</el-button>
                   <el-button 
                     type="warning" 
@@ -508,6 +544,36 @@ defineExpose({
 
 .template-actions .el-button {
   min-width: 66px;
+}
+
+.pin-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.pin-button {
+  color: #909399;
+}
+
+.pin-button:hover {
+  color: #409eff;
+}
+
+.pin-button.is-disabled {
+  color: #c0c4cc;
+}
+
+[data-theme="dark"] .pin-button {
+  color: #a8abb2;
+}
+
+[data-theme="dark"] .pin-button:hover {
+  color: #79bbff;
+}
+
+[data-theme="dark"] .pin-button.is-disabled {
+  color: #6c6e72;
 }
 
 /* message 模式下左侧标题 sticky 与滚动体验优化 */

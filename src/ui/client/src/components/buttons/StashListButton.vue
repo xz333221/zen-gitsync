@@ -3,7 +3,7 @@ import { $t } from '@/lang/static'
 import { ref, computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Connection, Delete, Edit, Download, Check } from '@element-plus/icons-vue'
+import { Box, Delete, Edit, Download, Check } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
 
@@ -237,7 +237,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
         :size="props.variant === 'icon' ? 'small' : 'default'"
         :class="props.variant === 'text' ? 'action-button' : ''"
       >
-        <el-icon v-if="props.variant === 'icon'"><Connection /></el-icon>
+        <el-icon v-if="props.variant === 'icon'"><Box /></el-icon>
         <template v-else>{{ $t('@76872:储藏列表') }}</template>
       </el-button>
     </el-tooltip>
@@ -255,7 +255,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
         <div class="stash-header" v-if="!gitStore.isLoadingStashes">
           <div class="stash-stats">
             <div class="stat-item">
-              <el-icon class="stat-icon"><Connection /></el-icon>
+              <el-icon class="stat-icon"><Box /></el-icon>
               <span class="stat-number">{{ gitStore.stashes.length }}</span>
               <span class="stat-label">{{ $t('@76872:个储藏') }}</span>
             </div>
@@ -282,7 +282,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
               :image-size="120"
             >
               <template #image>
-                <el-icon class="empty-icon"><Connection /></el-icon>
+                <el-icon class="empty-icon"><Box /></el-icon>
               </template>
               <template #description>
                 <p class="empty-text">{{ $t('@76872:还没有任何储藏记录') }}</p>
@@ -302,7 +302,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
                 <div class="stash-info">
                   <div class="stash-main-info">
                     <div class="stash-id-badge">
-                      <el-icon class="badge-icon"><Connection /></el-icon>
+                      <el-icon class="badge-icon"><Box /></el-icon>
                       <span class="stash-id-text">{{ stash.id }}</span>
                       <el-tag v-if="index === 0" size="small" type="success" class="latest-tag">{{ $t('@76872:最新') }}</el-tag>
                     </div>

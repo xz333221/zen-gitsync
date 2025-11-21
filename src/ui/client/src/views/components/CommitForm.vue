@@ -2049,13 +2049,6 @@ git config --global user.email "your.email@example.com"</pre>
   align-items: center;
 }
 
-.right-actions {
-  flex: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .one-push-button {
   height: 100%;
   width: 100%;

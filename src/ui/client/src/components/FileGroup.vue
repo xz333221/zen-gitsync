@@ -29,6 +29,7 @@ const emit = defineEmits<{
   stageFile: [filePath: string]
   unstageFile: [filePath: string]
   revertFileChanges: [filePath: string]
+  manageLockedFiles: []
 }>()
 
 // 计算是否显示该组
@@ -50,6 +51,11 @@ function handleFileClick(file: FileItem) {
 // 处理文件锁定切换
 function handleToggleFileLock(filePath: string) {
   emit('toggleFileLock', filePath)
+}
+
+// 处理管理锁定文件
+function handleManageLockedFiles() {
+  emit('manageLockedFiles')
 }
 
 // 处理暂存文件
@@ -157,6 +163,7 @@ const getFileIcon = (filePath: string) => {
             @stage="handleStageFile"
             @unstage="handleUnstageFile"
             @revert="handleRevertFile"
+            @manage-locked-files="handleManageLockedFiles"
           />
         </div>
       </div>
