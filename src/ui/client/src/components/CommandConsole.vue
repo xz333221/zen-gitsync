@@ -200,8 +200,6 @@ onMounted(async () => {
           <el-switch
             v-model="useTerminal"
             size="small"
-            :active-text="$t('@CF05E:开启')"
-            :inactive-text="$t('@CF05E:关闭')"
           />
         </div>
         <el-tooltip :content="$t('@CF05E:自定义命令管理')" placement="bottom">

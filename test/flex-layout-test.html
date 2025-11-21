@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>横向布局测试 - 内容超出隐藏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        /* 大容器 */
+        .container {
+            display: flex;
+            gap: 10px;
+            padding: 20px;
+            background-color: #fff;
+            border: 2px solid #333;
+            border-radius: 8px;
+        }
+
+        /* 小div */
+        .item {
+            height: 150px;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 6px;
+
+            /* 必要 */
+            overflow: hidden; 
+            
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .item h3 {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .item p {
+            font-size: 14px;
+            line-height: 1.5;
+            overflow: hidden; /* 内容超出隐藏 */
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        /* 不同颜色的小div */
+        .item:nth-child(1) {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .item:nth-child(2) {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .item:nth-child(3) {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .item:nth-child(4) {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+        
+        .item:nth-child(5) {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+        
+        .item:nth-child(6) {
+            background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+        }
+    </style>
+</head>
+<body>
+    <h1>横向排列测试 - 小div内容超出隐藏</h1>
+    
+    <div class="container">
+        <div class="item">
+            <h3>卡片 1</h3>
+            <p>这是一段很长的文字内容，用来测试内容超出隐藏的效果。当文字内容超过容器高度时，多余的部分会被隐藏起来，不会显示出来。这样可以保持布局的整洁美观。</p>
+        </div>
+        
+        <div class="item">
+            <h3>卡片 2</h3>
+            <p>更多的测试内容。overflow: hidden 属性可以有效地隐藏超出容器范围的内容。这是前端开发中常用的CSS技巧之一。</p>
+        </div>
+        
+        <div class="item">
+            <h3>卡片 3</h3>
+            <p>Flexbox布局让元素横向排列变得非常简单。只需要设置 display: flex 即可。gap属性可以方便地设置元素之间的间距。</p>
+        </div>
+        
+        <div class="item">
+            <h3>卡片 4</h3>
+            <p>这些卡片使用了渐变背景色，让页面看起来更加美观。每个卡片都有不同的颜色搭配，增加视觉吸引力。</p>
+        </div>
+        
+        <div class="item">
+            <h3>卡片 5</h3>
+            <p>flex-shrink: 0 确保卡片不会被压缩，保持固定宽度。这样即使容器空间不足，卡片也能保持原有尺寸。</p>
+        </div>
+        
+        <div class="item">
+            <h3>卡片 6</h3>
+            <p>当卡片数量较多时，大容器会出现横向滚动条，方便查看所有内容。这种布局方式在移动端和桌面端都很实用。</p>
+        </div>
+    </div>
+</body>
+</html>

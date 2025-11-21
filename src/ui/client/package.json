@@ -11,7 +11,8 @@
     "i18n:replace-inc": "node lib/package-vue-i18n/bin/trans addZh",
     "i18n:translate": "node lib/package-vue-i18n/bin/trans translate -t en",
     "i18n:add": "node lib/package-vue-i18n/bin/trans add -t en",
-    "i18n:check": "node lib/package-vue-i18n/bin/trans check -t en"
+    "i18n:check": "node lib/package-vue-i18n/bin/trans check -t en",
+    "npmi": "npm i"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.13",

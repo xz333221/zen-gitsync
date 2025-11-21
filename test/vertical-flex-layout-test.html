@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>竖向Flex布局测试 - 上下分割</title>
+    <style>
+        /* 上方div - 高度不固定，根据内容自适应 */
+        .top-section {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom: 2px solid #333;
+        }
+        /* 下方div - 填充剩余空间，内容超出滚动 */
+        .bottom-section {
+            flex: 1; /* 填充剩余空间 */
+            padding: 20px;
+            overflow-y: auto; /* 内容超出时显示滚动条 */
+            background-color: #fafafa;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        /* 大容器 - 竖向flex布局 */
+        .container {
+            display: flex;
+            flex-direction: column; /* 竖向排列 */
+            height: 600px; /* 固定高度以演示效果 */
+            background-color: #fff;
+            border: 2px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        
+
+        .top-section h2 {
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        .top-section p {
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .top-section button {
+            padding: 8px 16px;
+            margin-top: 10px;
+            background-color: white;
+            color: #667eea;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .top-section button:hover {
+            background-color: #f0f0f0;
+        }
+
+        .top-section button:active {
+            transform: scale(0.98);
+        }
+
+        /* 动态添加的内容项 */
+        .dynamic-item {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            border-left: 3px solid white;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+
+        .bottom-section h2 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 20px;
+        }
+
+        /* 内容卡片 */
+        .content-card {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .content-card h3 {
+            margin-bottom: 8px;
+            color: #667eea;
+            font-size: 18px;
+        }
+
+        .content-card p {
+            color: #666;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        /* 滚动条美化 */
+        .bottom-section::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .bottom-section::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .bottom-section::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .bottom-section::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* 说明文字 */
+        .info {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            border-radius: 4px;
+        }
+
+        .info strong {
+            color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <h1>竖向Flex布局测试 - 上下分割布局</h1>
+    
+    <div class="info">
+        <strong>布局说明：</strong>上方div高度根据内容自适应（flex: 0 0 auto），下方div填充剩余空间（flex: 1），内容超出时可以滚动（overflow-y: auto）
+    </div>
+
+    <div class="container">
+        <!-- 上方div：高度不固定，根据内容决定 -->
+        <div class="top-section" id="topSection">
+            <h2>📋 头部区域（高度自适应）</h2>
+            <p>这是上方的div区域，高度由内容决定，不固定。</p>
+            <p>点击下方按钮可以动态添加内容，观察上方区域高度变化时，下方区域会自动调整填充剩余空间。</p>
+            <button onclick="addContent()">➕ 添加内容</button>
+            <button onclick="removeContent()" style="margin-left: 10px; background-color: #ff6b6b; color: white;">➖ 移除内容</button>
+            <div id="dynamicContent"></div>
+        </div>
+
+        <!-- 下方div：填充剩余空间，内容超出可滚动 -->
+        <div class="bottom-section">
+            <h2>📄 内容区域（填充剩余空间）</h2>
+            
+            <div class="content-card">
+                <h3>卡片 1</h3>
+                <p>这是下方的内容区域，使用 flex: 1 填充剩余的全部空间。当内容过多时，会出现滚动条，可以上下滚动查看所有内容。</p>
+            </div>
+
+            <div class="content-card">
+                <h3>卡片 2</h3>
+                <p>Flex布局的 flex: 1 属性非常强大，它会自动计算并占据父容器的剩余空间。这在实现固定头部、可滚动内容的布局时特别有用。</p>
+            </div>
+
+            <div class="content-card">
+                <h3>卡片 3</h3>
+                <p>这种布局方式在后台管理系统、聊天应用、邮件客户端等场景中非常常见。上方是固定的工具栏或标题栏，下方是可滚动的内容列表。</p>
+            </div>
+
+            <div class="content-card">
+                <h3>卡片 4</h3>
+                <p>overflow-y: auto 属性确保只有在内容超出容器高度时才显示滚动条，如果内容不多，则不会显示滚动条，保持界面简洁。</p>
+            </div>
+
+            <div class="content-card">
+                <h3>卡片 5</h3>
+                <p>通过 CSS 还可以美化滚动条的样式，使用 ::-webkit-scrollbar 伪元素可以自定义滚动条的宽度、颜色、圆角等。</p>
+            </div>
+
+            <div class="content-card">
+                <h3>卡片 6</h3>
+                <p>这个布局的优势是响应式友好，无论容器高度如何变化，上方始终显示完整内容，下方自动调整可滚动区域的高度。</p>
+            </div>
+
+            <div class="content-card">
+                <h3>卡片 7</h3>
+                <p>在实际项目中，上方区域可能包含筛选器、搜索框、标签页等交互元素，下方则是数据列表、表格或其他内容展示区域。</p>
+            </div>
+
+            <div class="content-card">
+                <h3>卡片 8</h3>
+                <p>flexbox 布局相比传统的 float 或 position 布局，代码更简洁，逻辑更清晰，维护起来也更方便。这是现代前端开发的标准做法。</p>
+            </div>
+
+            <div class="content-card">
+                <h3>卡片 9</h3>
+                <p>继续添加更多内容来演示滚动效果。当你向下滚动时，上方的头部区域会保持固定不动，只有下方的内容区域在滚动。</p>
+            </div>
+
+            <div class="content-card">
+                <h3>卡片 10</h3>
+                <p>这是最后一张卡片。通过这个示例，你可以清楚地看到竖向 flex 布局的强大之处，以及如何实现上下分割、下方可滚动的经典布局结构。</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let contentCount = 0;
+        const dynamicContent = document.getElementById('dynamicContent');
+
+        // 添加内容
+        function addContent() {
+            contentCount++;
+            const newItem = document.createElement('div');
+            newItem.className = 'dynamic-item';
+            newItem.id = `item-${contentCount}`;
+            newItem.innerHTML = `
+                <strong>动态内容 #${contentCount}</strong><br>
+                这是动态添加的内容，用于演示上方区域高度变化。观察下方区域如何自动调整。
+            `;
+            dynamicContent.appendChild(newItem);
+        }
+
+        // 移除内容
+        function removeContent() {
+            if (dynamicContent.lastChild) {
+                dynamicContent.removeChild(dynamicContent.lastChild);
+                contentCount--;
+            }
+        }
+    </script>
+</body>
+</html>

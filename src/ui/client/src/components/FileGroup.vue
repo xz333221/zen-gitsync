@@ -175,7 +175,7 @@ const getFileIcon = (filePath: string) => {
 /* 使用全局CSS变量 */
 
 .file-group {
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-xs);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-container);
