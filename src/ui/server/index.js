@@ -1800,8 +1800,10 @@ async function startUIServer(noOpen = false, savePort = false) {
         pkgPath = path.join(currentProjectPath, 'package.json')
       }
       
-      // 检查文件是否存在
-      if (!await fs.pathExists(pkgPath)) {
+      // 检查文件是否存在（使用 Node.js 原生方法）
+      try {
+        await fs.access(pkgPath)
+      } catch (err) {
         return res.status(404).json({ 
           success: false, 
           error: `未找到 package.json 文件: ${pkgPath}` 
