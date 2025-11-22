@@ -45,19 +45,41 @@ const dialogVisible = computed({
   set: (value) => emit('update:visible', value)
 })
 
-// 监听 editingOrchestration 变化，加载编辑数据
-watch(() => props.editingOrchestration, (orchestration) => {
+// 加载编排数据的函数
+function loadOrchestrationData(orchestration: any) {
   if (orchestration) {
     orchestrationName.value = orchestration.name
     orchestrationDescription.value = orchestration.description || ''
-    orchestrationSteps.value = JSON.parse(JSON.stringify(orchestration.steps)) // 深拷贝
+    // 深拷贝并确保每个步骤都有 enabled 字段（兼容旧数据）
+    const steps = JSON.parse(JSON.stringify(orchestration.steps)) as OrchestrationStep[]
+    steps.forEach((step) => {
+      // 确保所有必要字段都有默认值
+      if (step.enabled === undefined || step.enabled === null) {
+        step.enabled = true; // 默认启用
+      }
+      if (step.useTerminal === undefined) {
+        step.useTerminal = false; // 默认不使用终端
+      }
+    })
+    orchestrationSteps.value = steps
   } else {
     // 清空表单
     orchestrationName.value = ''
     orchestrationDescription.value = ''
     orchestrationSteps.value = []
   }
-}, { immediate: true })
+}
+
+// 监听 editingOrchestration 变化，加载编辑数据
+watch(() => props.editingOrchestration, loadOrchestrationData, { immediate: true })
+
+// 监听弹窗打开/关闭，重新加载原始数据
+watch(() => props.visible, (isVisible) => {
+  if (isVisible && props.editingOrchestration) {
+    // 弹窗打开时，从原始数据重新加载（丢弃未保存的修改）
+    loadOrchestrationData(props.editingOrchestration)
+  }
+})
 
 // 生成唯一ID
 function generateId() {
@@ -70,7 +92,8 @@ function addCommandStep(command: CustomCommand) {
     id: generateId(),
     type: 'command',
     commandId: command.id,
-    commandName: command.name
+    commandName: command.name,
+    enabled: true  // 默认启用
   }
   orchestrationSteps.value.push(step)
   ElMessage.success(`已添加命令: ${command.name}`)
@@ -85,7 +108,8 @@ function addWaitStep() {
   const step: OrchestrationStep = {
     id: generateId(),
     type: 'wait',
-    waitSeconds: waitSeconds.value
+    waitSeconds: waitSeconds.value,
+    enabled: true  // 默认启用
   }
   orchestrationSteps.value.push(step)
   ElMessage.success(`已添加等待步骤: ${waitSeconds.value}秒`)
@@ -98,7 +122,8 @@ function addVersionStep() {
     id: generateId(),
     type: 'version',
     versionBump: versionBump.value,
-    packageJsonPath: packageJsonPath.value.trim() || undefined
+    packageJsonPath: packageJsonPath.value.trim() || undefined,
+    enabled: true  // 默认启用
   }
   orchestrationSteps.value.push(step)
   ElMessage.success(`已添加版本管理步骤`)
@@ -110,14 +135,14 @@ function addVersionStep() {
 
 // 获取步骤显示文本
 function getStepLabel(step: OrchestrationStep): string {
-  const optionalPrefix = step.optional ? '[可选] ' : ''
+  const terminalPrefix = step.useTerminal ? '[终端] ' : ''
   if (step.type === 'command') {
-    return optionalPrefix + (step.commandName || '自定义命令')
+    return terminalPrefix + (step.commandName || '自定义命令')
   } else if (step.type === 'wait') {
-    return optionalPrefix + `等待 ${step.waitSeconds} 秒`
+    return `等待 ${step.waitSeconds} 秒`
   } else if (step.type === 'version') {
     const bumpText = step.versionBump === 'major' ? '主版本' : step.versionBump === 'minor' ? '次版本' : '补丁版本'
-    return optionalPrefix + `版本号+1 (${bumpText})`
+    return `版本号+1 (${bumpText})`
   }
   return '未知步骤'
 }
@@ -243,6 +268,16 @@ function moveDown(index: number) {
   orchestrationSteps.value[index] = orchestrationSteps.value[index + 1]
   orchestrationSteps.value[index + 1] = temp
 }
+
+// 执行单个步骤
+function executeSingleStep(step: OrchestrationStep) {
+  emit('execute-orchestration', [step])
+}
+
+// 更新步骤启用状态
+function updateStepEnabled(step: OrchestrationStep, value: boolean) {
+  step.enabled = value
+}
 </script>
 
 <template>
@@ -335,14 +370,32 @@ function moveDown(index: number) {
                     <span>{{ getStepDirectory(step) }}</span>
                   </div>
                 </div>
-                <div class="step-optional">
+                <div class="step-options">
+                  <div class="option-item">
+                    <span class="option-label">启用</span>
+                    <el-switch 
+                      :model-value="step.enabled ?? true"
+                      @update:model-value="updateStepEnabled(step, $event)"
+                      size="small"
+                    />
+                  </div>
                   <el-checkbox 
-                    v-model="step.optional" 
-                    label="可选"
+                    v-if="step.type === 'command'"
+                    v-model="step.useTerminal" 
+                    label="终端执行"
                     size="small"
                   />
                 </div>
                 <div class="action-buttons">
+                  <el-button 
+                    type="success" 
+                    size="small" 
+                    :icon="VideoPlay"
+                    text
+                    @click="executeSingleStep(step)"
+                  >
+                    执行
+                  </el-button>
                   <el-button 
                     type="info" 
                     size="small" 
@@ -783,9 +836,24 @@ function moveDown(index: number) {
   }
 }
 
-.step-optional {
+.step-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   flex-shrink: 0;
-  margin-right: 8px;
+  margin-right: 12px;
+
+  .option-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .option-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+  }
 }
 
 .step-type-version {

@@ -66,6 +66,9 @@ export default defineConfig(({ command }) => {
   server: {
     port: 5544,
     open: true,
+    watch: {
+      ignored: ['**/public/**', '**/dist/**'] // 忽略构建输出目录，避免 build 时触发热更新
+    },
     proxy: {
       "/api": {
         target: `http://localhost:${getBackendPort()}`, // 动态设置后端服务地址

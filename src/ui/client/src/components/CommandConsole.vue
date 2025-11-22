@@ -228,6 +228,19 @@ async function executeOrchestration(steps: OrchestrationStep[]) {
   
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
+    
+    // 确保 enabled 字段有默认值（旧数据兼容）
+    if (step.enabled === undefined) {
+      step.enabled = true;
+    }
+    
+    // 跳过未启用的步骤
+    if (step.enabled === false) {
+      const label = step.commandName || step.type;
+      ElMessage.info(`[${i + 1}/${steps.length}] 跳过已禁用的步骤: ${label}`);
+      continue;
+    }
+    
     let stepLabel = '';
     let shouldContinue = true;
     
@@ -243,8 +256,34 @@ async function executeOrchestration(steps: OrchestrationStep[]) {
       stepLabel = step.commandName || command.name;
       const cmd = command.command;
       
-      ElMessage.info(`[${i + 1}/${steps.length}] 执行: ${stepLabel}`);
+      ElMessage.info(`[${i + 1}/${steps.length}] 执行: ${stepLabel}${step.useTerminal ? ' (终端)' : ''}`);
       
+      // 如果标记为终端执行，在新终端窗口执行
+      if (step.useTerminal) {
+        try {
+          const resp = await fetch('/api/exec-in-terminal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: cmd })
+          });
+          const result = await resp.json();
+          if (result?.success) {
+            ElMessage.success(`${stepLabel} 已在新终端中执行`);
+          } else {
+            throw new Error(result?.error || '执行失败');
+          }
+        } catch (e: any) {
+          ElMessage.error(`${stepLabel} 执行失败: ${e?.message}`);
+          shouldContinue = false;
+        }
+        // 如果不是最后一个步骤，等待一小段时间
+        if (i < steps.length - 1 && shouldContinue) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        continue; // 跳过后续的流式执行逻辑
+      }
+      
+      // 流式执行（原有逻辑）
       const rec: ConsoleRecord = {
         id: ++consoleIdCounter,
         command: `[${stepLabel}] ${cmd}`,
@@ -324,22 +363,14 @@ async function executeOrchestration(steps: OrchestrationStep[]) {
         }
         
         if (!rec.success) {
-          if (step.optional) {
-            ElMessage.warning(`[可选] 命令 ${stepLabel} 执行失败，继续执行后续步骤`);
-          } else {
-            ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
-            shouldContinue = false;
-          }
+          ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
+          shouldContinue = false;
         }
       } catch (e: any) {
         rec.success = false;
         rec.stderr = e?.message || String(e);
-        if (step.optional) {
-          ElMessage.warning(`[可选] 命令 ${stepLabel} 执行出错: ${e?.message}，继续执行后续步骤`);
-        } else {
-          ElMessage.error(`命令 ${stepLabel} 执行出错: ${e?.message}`);
-          shouldContinue = false;
-        }
+        ElMessage.error(`命令 ${stepLabel} 执行出错: ${e?.message}`);
+        shouldContinue = false;
       }
     } else if (step.type === 'wait') {
       // 执行等待步骤
@@ -407,12 +438,8 @@ async function executeOrchestration(steps: OrchestrationStep[]) {
       } catch (e: any) {
         rec.success = false;
         rec.stderr = e?.message || String(e);
-        if (step.optional) {
-          ElMessage.warning(`[可选] ${stepLabel} 失败: ${e?.message}，继续执行后续步骤`);
-        } else {
-          ElMessage.error(`${stepLabel} 失败: ${e?.message}`);
-          shouldContinue = false;
-        }
+        ElMessage.error(`${stepLabel} 失败: ${e?.message}`);
+        shouldContinue = false;
       }
     }
     

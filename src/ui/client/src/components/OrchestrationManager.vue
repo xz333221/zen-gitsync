@@ -30,14 +30,15 @@ const orchestrations = computed(() => configStore.orchestrations || [])
 
 // 获取步骤显示文本
 function getStepLabel(step: OrchestrationStep): string {
-  const optionalPrefix = step.optional ? '[可选] ' : ''
+  const disabledPrefix = step.enabled === false ? '[已禁用] ' : ''
+  const terminalPrefix = step.useTerminal ? '[终端] ' : ''
   if (step.type === 'command') {
-    return optionalPrefix + (step.commandName || '未知命令')
+    return disabledPrefix + terminalPrefix + (step.commandName || '未知命令')
   } else if (step.type === 'wait') {
-    return optionalPrefix + `等待 ${step.waitSeconds} 秒`
+    return disabledPrefix + `等待 ${step.waitSeconds} 秒`
   } else if (step.type === 'version') {
     const bumpText = step.versionBump === 'major' ? '主版本' : step.versionBump === 'minor' ? '次版本' : '补丁版本'
-    return optionalPrefix + `版本号+1 (${bumpText})`
+    return disabledPrefix + `版本号+1 (${bumpText})`
   }
   return '未知步骤'
 }
