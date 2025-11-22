@@ -260,7 +260,10 @@ async function executeOrchestration(steps: OrchestrationStep[]) {
         const resp = await fetch('/api/exec-stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: cmd })
+          body: JSON.stringify({ 
+            command: cmd,
+            directory: command.directory || ''
+          })
         });
         
         if (!resp.ok) {
@@ -480,11 +483,14 @@ async function executeCustomCommand(command: CustomCommand) {
   commandManagerVisible.value = false;
   
   try {
-    console.log('[前端-自定义] 开始发送流式请求:', cmd);
+    console.log('[前端-自定义] 开始发送流式请求:', cmd, '目录:', command.directory);
     const resp = await fetch('/api/exec-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command: cmd })
+      body: JSON.stringify({ 
+        command: cmd,
+        directory: command.directory || ''
+      })
     });
     
     console.log('[前端-自定义] 收到响应，状态:', resp.status, resp.statusText);

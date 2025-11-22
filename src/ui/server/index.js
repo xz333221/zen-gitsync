@@ -152,12 +152,18 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 流式执行命令接口（支持实时输出）
   app.post('/api/exec-stream', async (req, res) => {
     try {
-      const { command } = req.body || {};
+      const { command, directory } = req.body || {};
       if (!command || typeof command !== 'string' || !command.trim()) {
         return res.status(400).json({ success: false, error: 'command 不能为空' });
       }
 
+      // 确定执行目录
+      const execDirectory = directory && directory.trim() 
+        ? (path.isAbsolute(directory) ? directory : path.join(currentProjectPath, directory))
+        : currentProjectPath;
+
       console.log(`流式执行命令: ${command}`);
+      console.log(`执行目录: ${execDirectory}`);
 
       // 设置响应头为流式传输
       res.setHeader('Content-Type', 'text/event-stream');
@@ -168,11 +174,11 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 使用 spawn 执行命令，支持实时输出
       console.log(`[流式输出] 准备执行命令: ${command}`);
       console.log(`[流式输出] 当前平台: ${process.platform}`);
-      console.log(`[流式输出] 工作目录: ${process.cwd()}`);
+      console.log(`[流式输出] 工作目录: ${execDirectory}`);
       
       // 使用 shell: true 来支持 Windows 内置命令（如 dir、cd 等）
       const childProcess = spawn(command.trim(), [], {
-        cwd: process.cwd(),
+        cwd: execDirectory,
         shell: true, // 通过 shell 执行，支持 Windows 内置命令
         env: {
           ...process.env,
