@@ -375,7 +375,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                     <span class="option-label">启用</span>
                     <el-switch 
                       :model-value="step.enabled ?? true"
-                      @update:model-value="updateStepEnabled(step, $event)"
+                      @update:model-value="(val: boolean) => updateStepEnabled(step, val)"
                       size="small"
                     />
                   </div>

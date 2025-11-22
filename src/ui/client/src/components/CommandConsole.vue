@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { Document, ArrowDown, FullScreen, Setting, Rank, FolderOpened } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
 import CommandOrchestrator from '@components/CommandOrchestrator.vue';
 import OrchestrationManager from '@components/OrchestrationManager.vue';
@@ -269,16 +269,34 @@ async function executeOrchestration(steps: OrchestrationStep[]) {
           const result = await resp.json();
           if (result?.success) {
             ElMessage.success(`${stepLabel} 已在新终端中执行`);
+            
+            // 等待用户确认命令执行完成（如果不是最后一个步骤）
+            if (i < steps.length - 1 && shouldContinue) {
+              await ElMessageBox.confirm(
+                `终端命令 "${stepLabel}" 已在新窗口中打开。\n\n请在终端中查看命令执行结果，完成后点击"继续"执行下一步。`,
+                '等待终端命令完成',
+                {
+                  confirmButtonText: '继续下一步',
+                  cancelButtonText: '停止执行',
+                  type: 'info',
+                  closeOnClickModal: false,
+                  closeOnPressEscape: false,
+                  showClose: false
+                }
+              ).catch(() => {
+                // 用户点击取消，停止执行
+                shouldContinue = false;
+                throw new Error('用户取消执行');
+              });
+            }
           } else {
             throw new Error(result?.error || '执行失败');
           }
         } catch (e: any) {
-          ElMessage.error(`${stepLabel} 执行失败: ${e?.message}`);
+          if (e?.message !== '用户取消执行') {
+            ElMessage.error(`${stepLabel} 执行失败: ${e?.message}`);
+          }
           shouldContinue = false;
-        }
-        // 如果不是最后一个步骤，等待一小段时间
-        if (i < steps.length - 1 && shouldContinue) {
-          await new Promise(resolve => setTimeout(resolve, 500));
         }
         continue; // 跳过后续的流式执行逻辑
       }

@@ -172,9 +172,9 @@ async function startUIServer(noOpen = false, savePort = false) {
       res.setHeader('X-Accel-Buffering', 'no'); // 禁用nginx缓冲
 
       // 使用 spawn 执行命令，支持实时输出
-      console.log(`[流式输出] 准备执行命令: ${command}`);
-      console.log(`[流式输出] 当前平台: ${process.platform}`);
-      console.log(`[流式输出] 工作目录: ${execDirectory}`);
+      // console.log(`[流式输出] 准备执行命令: ${command}`);
+      // console.log(`[流式输出] 当前平台: ${process.platform}`);
+      // console.log(`[流式输出] 工作目录: ${execDirectory}`);
       
       // 使用 shell: true 来支持 Windows 内置命令（如 dir、cd 等）
       const childProcess = spawn(command.trim(), [], {
@@ -186,22 +186,22 @@ async function startUIServer(noOpen = false, savePort = false) {
         }
       });
 
-      console.log(`[流式输出] childProcess.stdout 是否存在:`, !!childProcess.stdout);
-      console.log(`[流式输出] childProcess.stderr 是否存在:`, !!childProcess.stderr);
+      // console.log(`[流式输出] childProcess.stdout 是否存在:`, !!childProcess.stdout);
+      // console.log(`[流式输出] childProcess.stderr 是否存在:`, !!childProcess.stderr);
 
       let outputReceived = false;
 
       // 发送数据到客户端的辅助函数
       const sendData = (type, data) => {
         const message = `data: ${JSON.stringify({ type, data })}\n\n`;
-        console.log(`[流式输出] 发送数据 - 类型: ${type}, 长度: ${data?.length || 0}`);
+        // console.log(`[流式输出] 发送数据 - 类型: ${type}, 长度: ${data?.length || 0}`);
         res.write(message);
       };
 
       // 在 Windows 上，CMD 默认使用 GBK 编码
       // 不设置 encoding，直接处理 Buffer，然后用 iconv-lite 转换
       const isWindows = process.platform === 'win32';
-      console.log(`[流式输出] 平台: ${process.platform}, 使用编码转换: ${isWindows}`);
+      // console.log(`[流式输出] 平台: ${process.platform}, 使用编码转换: ${isWindows}`);
 
       // 监听标准输出
       childProcess.stdout?.on('data', (data) => {
@@ -210,11 +210,11 @@ async function startUIServer(noOpen = false, savePort = false) {
         if (isWindows) {
           // Windows 系统，从 GBK 转换为 UTF-8
           output = iconv.decode(data, 'gbk');
-          console.log(`[流式输出] 收到stdout(GBK转UTF8):`, output.substring(0, 100));
+          // console.log(`[流式输出] 收到stdout(GBK转UTF8):`, output.substring(0, 100));
         } else {
           // Unix 系统，直接使用 UTF-8
           output = data.toString('utf8');
-          console.log(`[流式输出] 收到stdout(UTF8):`, output.substring(0, 100));
+          // console.log(`[流式输出] 收到stdout(UTF8):`, output.substring(0, 100));
         }
         outputReceived = true;
         sendData('stdout', output);
@@ -227,11 +227,11 @@ async function startUIServer(noOpen = false, savePort = false) {
         if (isWindows) {
           // Windows 系统，从 GBK 转换为 UTF-8
           output = iconv.decode(data, 'gbk');
-          console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 100));
+          // console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 100));
         } else {
           // Unix 系统，直接使用 UTF-8
           output = data.toString('utf8');
-          console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 100));
+          // console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 100));
         }
         outputReceived = true;
         // 不再自动标记为错误，只显示 stderr 输出
@@ -241,12 +241,12 @@ async function startUIServer(noOpen = false, savePort = false) {
 
       // 监听进程退出（exit 在流关闭前触发）
       childProcess.on('exit', (code, signal) => {
-        console.log(`[流式输出] 进程 exit 事件 - 代码: ${code}, 信号: ${signal}`);
+        // console.log(`[流式输出] 进程 exit 事件 - 代码: ${code}, 信号: ${signal}`);
       });
 
       // 监听进程关闭（close 在流关闭后触发）
       childProcess.on('close', (code, signal) => {
-        console.log(`[流式输出] 进程 close 事件 - 代码: ${code}, 信号: ${signal}, 有输出: ${outputReceived}`);
+        // console.log(`[流式输出] 进程 close 事件 - 代码: ${code}, 信号: ${signal}, 有输出: ${outputReceived}`);
         // 只根据退出码判断成功与否，退出码为 0 表示成功
         sendData('exit', { code, success: code === 0 });
         res.end();
@@ -254,14 +254,14 @@ async function startUIServer(noOpen = false, savePort = false) {
 
       // 监听错误
       childProcess.on('error', (error) => {
-        console.error(`[流式输出] 进程错误:`, error);
+        // console.error(`[流式输出] 进程错误:`, error);
         sendData('error', error.message);
         res.end();
       });
       
       // 添加spawn事件监听
       childProcess.on('spawn', () => {
-        console.log(`[流式输出] 进程已启动 - PID: ${childProcess.pid}`);
+        // console.log(`[流式输出] 进程已启动 - PID: ${childProcess.pid}`);
       });
 
       // 注意：不监听req.on('close')，参考git push的实现
@@ -2296,7 +2296,7 @@ async function startUIServer(noOpen = false, savePort = false) {
         formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D%x1E%P';
       }
       
-      console.log(`执行Git命令: git log --all --pretty=format:"${formatString}" --date=format-local:"%Y-%m-%d %H:%M" ${options}`);
+      // console.log(`执行Git命令: git log --all --pretty=format:"${formatString}" --date=format-local:"%Y-%m-%d %H:%M" ${options}`);
 
       // 使用 git log 命令获取提交历史
       let { stdout: logOutput } = await execGitCommand(
@@ -2422,7 +2422,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     // 如果返回的数据量小于limit，说明已经到底了
     const hasMore = data.length === limit;
 
-    console.log(`分页查询 - 页码: ${page}, 每页数量: ${limit}, 返回数量: ${data.length}, 是否有更多: ${hasMore} (优化版本，不计算总数)`);
+    // console.log(`分页查询 - 页码: ${page}, 每页数量: ${limit}, 返回数量: ${data.length}, 是否有更多: ${hasMore} (优化版本，不计算总数)`);
 
     // 返回提交历史数据，包括是否有更多数据的标志
     res.json({
