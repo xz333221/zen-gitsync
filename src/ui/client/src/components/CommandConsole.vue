@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { Document, ArrowDown, FullScreen, Setting } from '@element-plus/icons-vue';
+import { Document, ArrowDown, FullScreen, Setting, Rank, FolderOpened } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
+import CommandOrchestrator from '@components/CommandOrchestrator.vue';
+import OrchestrationManager from '@components/OrchestrationManager.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
+import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
+
+const configStore = useConfigStore();
 
 // 控制台相关状态
 const currentDirectory = ref("");
@@ -34,6 +39,15 @@ const useTerminal = ref(localStorage.getItem('useTerminal') === 'true');
 
 // 控制自定义命令管理弹窗
 const commandManagerVisible = ref(false);
+
+// 控制指令编排弹窗
+const commandOrchestratorVisible = ref(false);
+
+// 控制编排管理弹窗
+const orchestrationManagerVisible = ref(false);
+
+// 当前编辑的编排（用于编辑模式）
+const editingOrchestration = ref<any>(null);
 
 // 执行控制台命令
 async function runConsoleCommand() {
@@ -183,6 +197,259 @@ function toggleCommandOutput(rec: ConsoleRecord) {
 // 打开自定义命令管理
 function openCommandManager() {
   commandManagerVisible.value = true;
+}
+
+// 打开指令编排
+function openCommandOrchestrator() {
+  editingOrchestration.value = null
+  commandOrchestratorVisible.value = true;
+}
+
+// 打开编排管理
+function openOrchestrationManager() {
+  orchestrationManagerVisible.value = true;
+}
+
+// 编辑编排
+function editOrchestration(orchestration: any) {
+  editingOrchestration.value = orchestration
+  commandOrchestratorVisible.value = true
+}
+
+// 执行指令编排（顺序执行多个步骤）
+async function executeOrchestration(steps: OrchestrationStep[]) {
+  if (steps.length === 0) return;
+  
+  commandOrchestratorVisible.value = false;
+  orchestrationManagerVisible.value = false;
+  consoleRunning.value = true;
+  
+  ElMessage.success(`开始执行 ${steps.length} 个步骤...`);
+  
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    let stepLabel = '';
+    let shouldContinue = true;
+    
+    // 根据步骤类型执行不同逻辑
+    if (step.type === 'command') {
+      // 执行自定义命令
+      const command = configStore.customCommands.find(c => c.id === step.commandId);
+      if (!command) {
+        ElMessage.error(`命令已删除: ${step.commandName}`);
+        break;
+      }
+      
+      stepLabel = step.commandName || command.name;
+      const cmd = command.command;
+      
+      ElMessage.info(`[${i + 1}/${steps.length}] 执行: ${stepLabel}`);
+      
+      const rec: ConsoleRecord = {
+        id: ++consoleIdCounter,
+        command: `[${stepLabel}] ${cmd}`,
+        success: false,
+        ts: new Date().toLocaleString(),
+        expanded: true,
+        stdout: '',
+        stderr: '',
+      };
+      consoleHistory.value.unshift(rec);
+      
+      try {
+        const resp = await fetch('/api/exec-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd })
+        });
+        
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        }
+        
+        const reader = resp.body?.getReader();
+        const decoder = new TextDecoder();
+        
+        if (!reader) {
+          throw new Error('无法读取响应流');
+        }
+        
+        let buffer = '';
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const messages = buffer.split('\n\n');
+          buffer = messages.pop() || '';
+          
+          for (const message of messages) {
+            const lines = message.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.substring(6));
+                  if (data.type === 'stdout') {
+                    rec.stdout += data.data;
+                  } else if (data.type === 'stderr') {
+                    rec.stderr += data.data;
+                  } else if (data.type === 'exit') {
+                    rec.success = data.data.success;
+                  } else if (data.type === 'error') {
+                    rec.stderr += `错误: ${data.data}\n`;
+                  }
+                } catch (e) {
+                  console.warn('解析SSE数据失败:', line, e);
+                }
+              }
+            }
+          }
+        }
+        
+        if (buffer.trim()) {
+          const lines = buffer.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.substring(6));
+                if (data.type === 'stdout') rec.stdout += data.data;
+                else if (data.type === 'stderr') rec.stderr += data.data;
+              } catch (e) {}
+            }
+          }
+        }
+        
+        if (!rec.success) {
+          ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
+          shouldContinue = false;
+        }
+      } catch (e: any) {
+        rec.success = false;
+        rec.stderr = e?.message || String(e);
+        ElMessage.error(`命令 ${stepLabel} 执行出错: ${e?.message}`);
+        shouldContinue = false;
+      }
+    } else if (step.type === 'wait') {
+      // 执行等待步骤
+      const seconds = step.waitSeconds || 0;
+      stepLabel = `等待 ${seconds} 秒`;
+      
+      ElMessage.info(`[${i + 1}/${steps.length}] ${stepLabel}`);
+      
+      const rec: ConsoleRecord = {
+        id: ++consoleIdCounter,
+        command: stepLabel,
+        success: true,
+        ts: new Date().toLocaleString(),
+        expanded: true,
+        stdout: `等待 ${seconds} 秒...`,
+        stderr: '',
+      };
+      consoleHistory.value.unshift(rec);
+      
+      await new Promise(resolve => setTimeout(resolve, seconds * 1000));
+      rec.stdout += '\n等待完成';
+    } else if (step.type === 'system') {
+      // 执行系统命令
+      stepLabel = step.systemCommandName || step.systemCommand || '系统命令';
+      const cmd = step.systemCommand || '';
+      
+      ElMessage.info(`[${i + 1}/${steps.length}] 执行: ${stepLabel}`);
+      
+      const rec: ConsoleRecord = {
+        id: ++consoleIdCounter,
+        command: `[${stepLabel}] ${cmd}`,
+        success: false,
+        ts: new Date().toLocaleString(),
+        expanded: true,
+        stdout: '',
+        stderr: '',
+      };
+      consoleHistory.value.unshift(rec);
+      
+      try {
+        const resp = await fetch('/api/exec-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd })
+        });
+        
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        }
+        
+        const reader = resp.body?.getReader();
+        const decoder = new TextDecoder();
+        
+        if (!reader) {
+          throw new Error('无法读取响应流');
+        }
+        
+        let buffer = '';
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const messages = buffer.split('\n\n');
+          buffer = messages.pop() || '';
+          
+          for (const message of messages) {
+            const lines = message.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.substring(6));
+                  if (data.type === 'stdout') rec.stdout += data.data;
+                  else if (data.type === 'stderr') rec.stderr += data.data;
+                  else if (data.type === 'exit') rec.success = data.data.success;
+                  else if (data.type === 'error') rec.stderr += `错误: ${data.data}\n`;
+                } catch (e) {}
+              }
+            }
+          }
+        }
+        
+        if (buffer.trim()) {
+          const lines = buffer.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.substring(6));
+                if (data.type === 'stdout') rec.stdout += data.data;
+                else if (data.type === 'stderr') rec.stderr += data.data;
+              } catch (e) {}
+            }
+          }
+        }
+        
+        if (!rec.success) {
+          ElMessage.error(`系统命令 ${stepLabel} 执行失败，停止后续步骤`);
+          shouldContinue = false;
+        }
+      } catch (e: any) {
+        rec.success = false;
+        rec.stderr = e?.message || String(e);
+        ElMessage.error(`系统命令 ${stepLabel} 执行出错: ${e?.message}`);
+        shouldContinue = false;
+      }
+    }
+    
+    // 如果步骤执行失败，停止后续步骤
+    if (!shouldContinue) {
+      break;
+    }
+    
+    // 如果不是最后一个步骤，等待一小段时间
+    if (i < steps.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  consoleRunning.value = false;
+  ElMessage.success('所有步骤执行完成！');
 }
 
 // 执行自定义命令
@@ -378,6 +645,28 @@ onMounted(async () => {
             </el-icon>
           </el-button>
         </el-tooltip>
+        <el-tooltip :content="$t('@CF05E:指令编排')" placement="bottom">
+          <el-button
+            text
+            @click="openCommandOrchestrator"
+            class="toggle-console-btn orchestrator-btn"
+          >
+            <el-icon>
+              <Rank />
+            </el-icon>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip content="编排管理" placement="bottom">
+          <el-button
+            text
+            @click="openOrchestrationManager"
+            class="toggle-console-btn orchestrator-manager-btn"
+          >
+            <el-icon>
+              <FolderOpened />
+            </el-icon>
+          </el-button>
+        </el-tooltip>
         <el-tooltip :content="isFullscreen ? $t('@CF05E:退出全屏') : $t('@CF05E:全屏显示')" placement="bottom">
           <el-button
             text
@@ -462,6 +751,20 @@ onMounted(async () => {
   <CustomCommandManager 
     v-model:visible="commandManagerVisible"
     @execute-command="executeCustomCommand"
+  />
+  
+  <!-- 指令编排弹窗 -->
+  <CommandOrchestrator
+    v-model:visible="commandOrchestratorVisible"
+    :editing-orchestration="editingOrchestration"
+    @execute-orchestration="executeOrchestration"
+  />
+  
+  <!-- 编排管理弹窗 -->
+  <OrchestrationManager
+    v-model:visible="orchestrationManagerVisible"
+    @execute-orchestration="executeOrchestration"
+    @edit-orchestration="editOrchestration"
   />
 </template>
 
@@ -572,6 +875,20 @@ onMounted(async () => {
   &:hover {
     color: #67c23a;
     background: rgba(103, 194, 58, 0.1);
+  }
+}
+
+.orchestrator-btn {
+  &:hover {
+    color: #e6a23c;
+    background: rgba(230, 162, 60, 0.1);
+  }
+}
+
+.orchestrator-manager-btn {
+  &:hover {
+    color: #409eff;
+    background: rgba(64, 158, 255, 0.1);
   }
 }
 

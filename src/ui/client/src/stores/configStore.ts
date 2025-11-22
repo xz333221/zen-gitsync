@@ -3,6 +3,20 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
+// 指令编排步骤类型
+export interface OrchestrationStep {
+  id: string
+  type: 'command' | 'wait' | 'system'  // command: 自定义命令, wait: 等待, system: 系统命令
+  // 对于 command 类型
+  commandId?: string  // 引用的自定义命令 ID
+  commandName?: string  // 命令名称（用于显示）
+  // 对于 wait 类型
+  waitSeconds?: number  // 等待的秒数
+  // 对于 system 类型
+  systemCommand?: string  // 系统命令字符串
+  systemCommandName?: string  // 系统命令显示名称
+}
+
 export const useConfigStore = defineStore('config', () => {
   // 配置状态
   const defaultCommitMessage = ref('')
@@ -11,6 +25,7 @@ export const useConfigStore = defineStore('config', () => {
   const messageTemplates = ref<string[]>([])
   const lockedFiles = ref<string[]>([])
   const customCommands = ref<Array<{id: string, name: string, description?: string, directory: string, command: string}>>([])
+  const orchestrations = ref<Array<{id: string, name: string, description?: string, steps: OrchestrationStep[]}>>([])
   const isLoading = ref(false)
   const isLoaded = ref(false)
   // 当前工作目录
@@ -56,6 +71,7 @@ export const useConfigStore = defineStore('config', () => {
       messageTemplates: messageTemplates.value,
       lockedFiles: lockedFiles.value,
       customCommands: customCommands.value,
+      orchestrations: orchestrations.value,
       currentDirectory: currentDirectory.value
     }
   })
@@ -82,6 +98,7 @@ export const useConfigStore = defineStore('config', () => {
       messageTemplates.value = configData.messageTemplates || []
       lockedFiles.value = configData.lockedFiles || []
       customCommands.value = configData.customCommands || []
+      orchestrations.value = configData.orchestrations || []
       // 若后端返回当前目录，更新
       if (configData.currentDirectory) {
         currentDirectory.value = configData.currentDirectory
@@ -460,6 +477,82 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 指令编排管理函数
+  async function saveOrchestration(orchestration: { name: string; description?: string; steps: OrchestrationStep[] }) {
+    try {
+      const response = await fetch('/api/config/save-orchestration', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ orchestration })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        await loadConfig(true)
+        ElMessage.success($t('@ORCH:编排已保存'))
+        return true
+      } else {
+        ElMessage.error(`${$t('@ORCH:保存编排失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@ORCH:保存编排失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
+  async function deleteOrchestration(id: string) {
+    try {
+      const response = await fetch('/api/config/delete-orchestration', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        await loadConfig(true)
+        ElMessage.success($t('@ORCH:编排已删除'))
+        return true
+      } else {
+        ElMessage.error(`${$t('@ORCH:删除编排失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@ORCH:删除编排失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
+  async function updateOrchestration(id: string, orchestration: { name: string; description?: string; steps: OrchestrationStep[] }) {
+    try {
+      const response = await fetch('/api/config/update-orchestration', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id, orchestration })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        await loadConfig(true)
+        ElMessage.success($t('@ORCH:编排已更新'))
+        return true
+      } else {
+        ElMessage.error(`${$t('@ORCH:更新编排失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@ORCH:更新编排失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
   return {
     // 状态
     defaultCommitMessage,
@@ -468,6 +561,7 @@ export const useConfigStore = defineStore('config', () => {
     messageTemplates,
     lockedFiles,
     customCommands,
+    orchestrations,
     isLoading,
     isLoaded,
     currentDirectory,
@@ -489,6 +583,9 @@ export const useConfigStore = defineStore('config', () => {
     isFileLocked,
     saveCustomCommand,
     deleteCustomCommand,
-    updateCustomCommand
+    updateCustomCommand,
+    saveOrchestration,
+    deleteOrchestration,
+    updateOrchestration
   }
 }) 

@@ -11,6 +11,7 @@ import fsSync from 'fs';
 import os from 'os';
 import { Server } from 'socket.io';
 import { spawn } from 'child_process';
+import iconv from 'iconv-lite';
 // import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -169,16 +170,10 @@ async function startUIServer(noOpen = false, savePort = false) {
       console.log(`[流式输出] 当前平台: ${process.platform}`);
       console.log(`[流式输出] 工作目录: ${process.cwd()}`);
       
-      // 解析命令：简单按空格分割（假设不包含复杂引号）
-      const parts = command.trim().split(/\s+/);
-      const cmd = parts[0];
-      const args = parts.slice(1);
-      
-      console.log(`[流式输出] 执行命令: ${cmd}, 参数:`, args);
-      
-      // 完全参照 git push 的方式
-      const childProcess = spawn(cmd, args, {
+      // 使用 shell: true 来支持 Windows 内置命令（如 dir、cd 等）
+      const childProcess = spawn(command.trim(), [], {
         cwd: process.cwd(),
+        shell: true, // 通过 shell 执行，支持 Windows 内置命令
         env: {
           ...process.env,
           GIT_CONFIG_PARAMETERS: "'core.quotepath=false'"
@@ -198,30 +193,43 @@ async function startUIServer(noOpen = false, savePort = false) {
         res.write(message);
       };
 
-      // 设置流编码
-      if (childProcess.stdout) {
-        childProcess.stdout.setEncoding('utf8');
-        console.log(`[流式输出] stdout 编码已设置为 utf8`);
-      }
-      if (childProcess.stderr) {
-        childProcess.stderr.setEncoding('utf8');
-        console.log(`[流式输出] stderr 编码已设置为 utf8`);
-      }
+      // 在 Windows 上，CMD 默认使用 GBK 编码
+      // 不设置 encoding，直接处理 Buffer，然后用 iconv-lite 转换
+      const isWindows = process.platform === 'win32';
+      console.log(`[流式输出] 平台: ${process.platform}, 使用编码转换: ${isWindows}`);
 
       // 监听标准输出
       childProcess.stdout?.on('data', (data) => {
-        const output = typeof data === 'string' ? data : data.toString();
+        // data 是 Buffer 对象
+        let output;
+        if (isWindows) {
+          // Windows 系统，从 GBK 转换为 UTF-8
+          output = iconv.decode(data, 'gbk');
+          console.log(`[流式输出] 收到stdout(GBK转UTF8):`, output.substring(0, 100));
+        } else {
+          // Unix 系统，直接使用 UTF-8
+          output = data.toString('utf8');
+          console.log(`[流式输出] 收到stdout(UTF8):`, output.substring(0, 100));
+        }
         outputReceived = true;
-        console.log(`[流式输出] 收到stdout:`, output.substring(0, 100));
         sendData('stdout', output);
       });
 
       // 监听标准错误输出
       childProcess.stderr?.on('data', (data) => {
-        const output = typeof data === 'string' ? data : data.toString();
+        // data 是 Buffer 对象
+        let output;
+        if (isWindows) {
+          // Windows 系统，从 GBK 转换为 UTF-8
+          output = iconv.decode(data, 'gbk');
+          console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 100));
+        } else {
+          // Unix 系统，直接使用 UTF-8
+          output = data.toString('utf8');
+          console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 100));
+        }
         outputReceived = true;
         hasError = true;
-        console.log(`[流式输出] 收到stderr:`, output.substring(0, 100));
         sendData('stderr', output);
       });
 
@@ -1675,6 +1683,99 @@ async function startUIServer(noOpen = false, savePort = false) {
         }
       } else {
         return res.status(404).json({ success: false, error: '命令列表不存在' })
+      }
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
+  // 保存指令编排
+  app.post('/api/config/save-orchestration', express.json(), async (req, res) => {
+    try {
+      const { orchestration } = req.body
+      
+      if (!orchestration || !orchestration.name || !Array.isArray(orchestration.steps)) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      // 确保编排数组存在
+      if (!Array.isArray(config.orchestrations)) {
+        config.orchestrations = []
+      }
+      
+      // 生成唯一ID
+      const id = `orch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const newOrchestration = {
+        id,
+        name: orchestration.name,
+        description: orchestration.description || '',
+        steps: orchestration.steps
+      }
+      
+      config.orchestrations.push(newOrchestration)
+      await configManager.saveConfig(config)
+      
+      res.json({ success: true, orchestration: newOrchestration })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
+  // 删除指令编排
+  app.post('/api/config/delete-orchestration', express.json(), async (req, res) => {
+    try {
+      const { id } = req.body
+      
+      if (!id) {
+        return res.status(400).json({ success: false, error: '缺少编排ID参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      if (Array.isArray(config.orchestrations)) {
+        const index = config.orchestrations.findIndex(orch => orch.id === id)
+        if (index !== -1) {
+          config.orchestrations.splice(index, 1)
+          await configManager.saveConfig(config)
+        }
+      }
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
+  // 更新指令编排
+  app.post('/api/config/update-orchestration', express.json(), async (req, res) => {
+    try {
+      const { id, orchestration } = req.body
+      
+      if (!id || !orchestration || !orchestration.name || !Array.isArray(orchestration.steps)) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+      
+      const config = await configManager.loadConfig()
+      
+      if (Array.isArray(config.orchestrations)) {
+        const index = config.orchestrations.findIndex(orch => orch.id === id)
+        if (index !== -1) {
+          config.orchestrations[index] = {
+            id,
+            name: orchestration.name,
+            description: orchestration.description || '',
+            steps: orchestration.steps
+          }
+          await configManager.saveConfig(config)
+        } else {
+          return res.status(404).json({ success: false, error: '未找到指定编排' })
+        }
+      } else {
+        return res.status(404).json({ success: false, error: '编排列表不存在' })
       }
       
       res.json({ success: true })
