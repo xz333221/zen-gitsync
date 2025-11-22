@@ -112,14 +112,23 @@ async function deleteOrchestration(orchestration: any) {
           :key="orchestration.id"
           class="orchestration-card"
         >
-          <div class="card-header">
-            <div class="header-info">
+          <div class="card-content">
+            <div class="content-left">
               <h3 class="orchestration-name">{{ orchestration.name }}</h3>
-              <p v-if="orchestration.description" class="orchestration-desc">
-                {{ orchestration.description }}
-              </p>
+              <div class="step-tags">
+                <el-tag
+                  v-for="(step, index) in orchestration.steps"
+                  :key="step.id"
+                  :type="step.type === 'command' ? 'primary' : step.type === 'wait' ? 'warning' : 'success'"
+                  size="small"
+                  class="step-tag"
+                >
+                  <el-icon :component="getStepIcon(step)" />
+                  <span>{{ index + 1 }}. {{ getStepLabel(step) }}</span>
+                </el-tag>
+              </div>
             </div>
-            <div class="header-actions">
+            <div class="content-right">
               <el-button 
                 type="primary" 
                 :icon="VideoPlay"
@@ -148,26 +157,6 @@ async function deleteOrchestration(orchestration: any) {
               </el-button>
             </div>
           </div>
-          
-          <div class="card-body">
-            <div class="steps-preview">
-              <div class="steps-label">
-                包含 {{ orchestration.steps.length }} 个步骤：
-              </div>
-              <div class="step-tags">
-                <el-tag
-                  v-for="(step, index) in orchestration.steps"
-                  :key="step.id"
-                  :type="step.type === 'command' ? 'primary' : step.type === 'wait' ? 'warning' : 'success'"
-                  size="small"
-                  class="step-tag"
-                >
-                  <el-icon :component="getStepIcon(step)" />
-                  <span>{{ index + 1 }}. {{ getStepLabel(step) }}</span>
-                </el-tag>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -179,92 +168,70 @@ async function deleteOrchestration(orchestration: any) {
   min-height: 400px;
   max-height: 70vh;
   overflow-y: auto;
-  padding: 8px;
+  padding: 4px;
 }
 
 .orchestration-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 
 .orchestration-card {
   border: 1px solid var(--border-component);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--bg-container);
   overflow: hidden;
   transition: all 0.2s ease;
   
   &:hover {
     border-color: #409eff;
-    box-shadow: 0 2px 12px rgba(64, 158, 255, 0.1);
+    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
   }
 }
 
-.card-header {
+.card-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
-  background: linear-gradient(135deg, var(--bg-panel), var(--bg-container));
-  border-bottom: 1px solid var(--border-component);
+  padding: 12px;
+  gap: 12px;
 }
 
-.header-info {
+.content-left {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .orchestration-name {
-  margin: 0 0 4px 0;
-  font-size: 16px;
+  margin: 0;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-title);
 }
 
-.orchestration-desc {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-style: italic;
-}
-
-.header-actions {
+.content-right {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
-  margin-left: 16px;
-}
-
-.card-body {
-  padding: 16px;
-}
-
-.steps-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.steps-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-weight: 500;
 }
 
 .step-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .step-tag {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   
   .el-icon {
-    font-size: 14px;
+    font-size: 13px;
   }
 }
 </style>

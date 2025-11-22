@@ -1,0 +1,13 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- 左上 -->
+  <rect fill="currentColor" x="128" y="128" width="352" height="352" rx="32"/>
+  
+  <!-- 右上 -->
+  <rect fill="currentColor" x="544" y="128" width="352" height="352" rx="32"/>
+  
+  <!-- 左下 -->
+  <rect fill="currentColor" x="128" y="544" width="352" height="352" rx="32"/>
+  
+  <!-- 右下 -->
+  <rect fill="currentColor" x="544" y="544" width="352" height="352" rx="32"/>
+</svg>

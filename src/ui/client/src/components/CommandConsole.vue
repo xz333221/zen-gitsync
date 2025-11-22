@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { Document, ArrowDown, FullScreen, Setting, Rank, FolderOpened } from '@element-plus/icons-vue';
+import { ArrowDown, FullScreen, VideoPlay } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import SvgIcon from '@components/SvgIcon/index.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
 import CommandOrchestrator from '@components/CommandOrchestrator.vue';
 import OrchestrationManager from '@components/OrchestrationManager.vue';
@@ -12,7 +13,7 @@ const configStore = useConfigStore();
 
 // 控制台相关状态
 const currentDirectory = ref("");
-const consoleInput = ref("git status"); // 默认命令，方便调试
+const consoleInput = ref(""); // 命令输入
 const consoleRunning = ref(false);
 
 type ConsoleRecord = { 
@@ -650,7 +651,6 @@ onMounted(async () => {
     <!-- 标题栏 -->
     <div class="console-header">
       <div class="header-left">
-        <el-icon class="title-icon"><Document /></el-icon>
         <span class="console-title">{{ $t('@CF05E:自定义指令执行') }}</span>
       </div>
       <div class="header-actions">
@@ -667,9 +667,7 @@ onMounted(async () => {
             @click="openCommandManager"
             class="toggle-console-btn command-manager-btn"
           >
-            <el-icon>
-              <Setting />
-            </el-icon>
+            <SvgIcon icon-class="command-list" class-name="icon-btn" />
           </el-button>
         </el-tooltip>
         <el-tooltip :content="$t('@CF05E:指令编排')" placement="bottom">
@@ -678,9 +676,7 @@ onMounted(async () => {
             @click="openCommandOrchestrator"
             class="toggle-console-btn orchestrator-btn"
           >
-            <el-icon>
-              <Rank />
-            </el-icon>
+            <SvgIcon icon-class="command-orchestrate" class-name="icon-btn" />
           </el-button>
         </el-tooltip>
         <el-tooltip content="编排管理" placement="bottom">
@@ -689,9 +685,7 @@ onMounted(async () => {
             @click="openOrchestrationManager"
             class="toggle-console-btn orchestrator-manager-btn"
           >
-            <el-icon>
-              <FolderOpened />
-            </el-icon>
+            <SvgIcon icon-class="command-grid" class-name="icon-btn" />
           </el-button>
         </el-tooltip>
         <el-tooltip :content="isFullscreen ? $t('@CF05E:退出全屏') : $t('@CF05E:全屏显示')" placement="bottom">
@@ -733,7 +727,9 @@ onMounted(async () => {
         :disabled="consoleRunning"
         clearable
       />
-      <el-button type="primary" :loading="consoleRunning" @click="runConsoleCommand">{{ $t('@CF05E:执行') }}</el-button>
+      <el-tooltip :content="$t('@CF05E:执行')" placement="top">
+        <el-button type="primary" :icon="VideoPlay" :loading="consoleRunning" @click="runConsoleCommand" circle />
+      </el-tooltip>
     </div>
 
         <!-- 命令历史输出 -->
@@ -1187,5 +1183,16 @@ pre.stderr {
   color: var(--text-danger, #f56c6c);
   background: rgba(245, 108, 108, 0.05);
   border-left: 3px solid #f56c6c;
+}
+
+/* SVG图标按钮样式 */
+.icon-btn {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+.toggle-console-btn:hover .icon-btn {
+  color: var(--color-primary);
 }
 </style>

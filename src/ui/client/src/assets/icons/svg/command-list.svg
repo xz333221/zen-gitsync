@@ -1,0 +1,16 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- 第一项方框 -->
+  <rect fill="currentColor" x="128" y="192" width="128" height="128" rx="16"/>
+  <!-- 第一项横线 -->
+  <rect fill="currentColor" x="320" y="224" width="576" height="64" rx="8"/>
+  
+  <!-- 第二项方框 -->
+  <rect fill="currentColor" x="128" y="448" width="128" height="128" rx="16"/>
+  <!-- 第二项横线 -->
+  <rect fill="currentColor" x="320" y="480" width="576" height="64" rx="8"/>
+  
+  <!-- 第三项方框 -->
+  <rect fill="currentColor" x="128" y="704" width="128" height="128" rx="16"/>
+  <!-- 第三项横线 -->
+  <rect fill="currentColor" x="320" y="736" width="576" height="64" rx="8"/>
+</svg>
