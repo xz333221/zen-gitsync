@@ -632,7 +632,7 @@ function stopHResize() {
     <div v-if="gitStore.remoteUrl">
       <InlineCard class="footer-right" compact>
         <template #content>
-          <span class="repo-url-label">{{ $t('@F13B4:远程仓库:') }}</span>
+          <svg-icon icon-class="remote-repo" class-name="remote-repo-icon" />
           <el-tooltip :content="gitStore.remoteUrl" placement="top" effect="dark" :show-after="300">
             <span class="repo-url">{{ gitStore.remoteUrl }}</span>
           </el-tooltip>
@@ -911,6 +911,15 @@ h1 {
   .branch-select {
     width: 200px;
   }
+  
+  .remote-repo-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    color: var(--color-text);
+    vertical-align: middle;
+  }
+  
   .repo-url-label {
     font-weight: bold;
     margin-right: 4px;

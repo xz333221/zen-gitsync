@@ -470,18 +470,16 @@ onUnmounted(() => {
                   </el-icon>
                 </button>
               </el-tooltip>
-              <el-tooltip :content="$t('@81F0F:展开/收起')" placement="bottom" effect="dark" :show-after="200">
-                <button 
-                  class="modern-btn expand-button enhanced-btn" 
-                  :class="{ 'is-expanded': isExpanded(index) }"
-                  @click.stop="toggleExpand(index)"
-                >
-                  <el-icon class="btn-icon">
-                    <ArrowUp v-if="isExpanded(index)" />
-                    <ArrowDown v-else />
-                  </el-icon>
-                </button>
-              </el-tooltip>
+              <button 
+                class="modern-btn expand-button enhanced-btn" 
+                :class="{ 'is-expanded': isExpanded(index) }"
+                @click.stop="toggleExpand(index)"
+              >
+                <el-icon class="btn-icon">
+                  <ArrowUp v-if="isExpanded(index)" />
+                  <ArrowDown v-else />
+                </el-icon>
+              </button>
             </div>
           </div>
 

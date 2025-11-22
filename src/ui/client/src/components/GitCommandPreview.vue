@@ -3,13 +3,11 @@
     <div class="preview-container">
       <div class="preview-title">{{ title }}</div>
       <div class="preview-content code-command">{{ displayCommand }}</div>
-      <el-tooltip :content="copyButtonText" placement="bottom" effect="dark" :show-after="200">
-        <button class="modern-btn copy-command-btn" @click="copyCommand">
-          <el-icon class="btn-icon">
-            <CopyDocument />
-          </el-icon>
-        </button>
-      </el-tooltip>
+      <button class="modern-btn copy-command-btn" @click="copyCommand">
+        <el-icon class="btn-icon">
+          <CopyDocument />
+        </el-icon>
+      </button>
     </div>
   </div>
 </template>

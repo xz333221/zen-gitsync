@@ -521,7 +521,6 @@ defineExpose({
 .command-list-scroll {
   flex: 1;
   overflow-y: auto;
-  max-height: 400px;
 
   &::-webkit-scrollbar {
     width: 6px;

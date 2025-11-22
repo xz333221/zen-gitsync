@@ -699,17 +699,15 @@ onMounted(async () => {
             </el-icon>
           </el-button>
         </el-tooltip>
-        <el-tooltip :content="isConsoleExpanded ? $t('@CF05E:收起') : $t('@CF05E:展开')" placement="bottom">
-          <el-button
-            text
-            @click="isConsoleExpanded = !isConsoleExpanded"
-            class="toggle-console-btn"
-          >
-            <el-icon :class="{ 'rotate-icon': !isConsoleExpanded }">
-              <ArrowDown />
-            </el-icon>
-          </el-button>
-        </el-tooltip>
+        <el-button
+          text
+          @click="isConsoleExpanded = !isConsoleExpanded"
+          class="toggle-console-btn"
+        >
+          <el-icon :class="{ 'rotate-icon': !isConsoleExpanded }">
+            <ArrowDown />
+          </el-icon>
+        </el-button>
       </div>
     </div>
 
@@ -727,9 +725,7 @@ onMounted(async () => {
         :disabled="consoleRunning"
         clearable
       />
-      <el-tooltip :content="$t('@CF05E:执行')" placement="top">
-        <el-button type="primary" :icon="VideoPlay" :loading="consoleRunning" @click="runConsoleCommand" circle />
-      </el-tooltip>
+      <el-button type="primary" :icon="VideoPlay" :loading="consoleRunning" @click="runConsoleCommand" circle />
     </div>
 
         <!-- 命令历史输出 -->
@@ -741,22 +737,17 @@ onMounted(async () => {
                 <span class="cmd-text">{{ rec.command }}</span>
                 <span class="ts">{{ rec.ts }}</span>
               </div>
-              <el-tooltip 
-                :content="(rec.stdout || rec.stderr) ? (rec.expanded ? $t('@CF05E:收起输出') : $t('@CF05E:展开输出')) : $t('@CF05E:无输出内容')"
-                placement="left"
+              <el-button
+                text
+                size="small"
+                @click="toggleCommandOutput(rec)"
+                :disabled="!rec.stdout && !rec.stderr"
+                class="toggle-output-btn"
               >
-                <el-button
-                  text
-                  size="small"
-                  @click="toggleCommandOutput(rec)"
-                  :disabled="!rec.stdout && !rec.stderr"
-                  class="toggle-output-btn"
-                >
-                  <el-icon :class="{ 'rotate-icon': !rec.expanded }">
-                    <ArrowDown />
-                  </el-icon>
-                </el-button>
-              </el-tooltip>
+                <el-icon :class="{ 'rotate-icon': !rec.expanded }">
+                  <ArrowDown />
+                </el-icon>
+              </el-button>
             </div>
             <transition name="output-slide">
               <div v-if="rec.expanded && (rec.stdout || rec.stderr)" class="output-content">
@@ -1176,13 +1167,11 @@ pre.stdout, pre.stderr {
 
 pre.stdout {
   color: var(--color-text);
-  border-left: 3px solid #67c23a;
 }
 
 pre.stderr {
   color: var(--text-danger, #f56c6c);
   background: rgba(245, 108, 108, 0.05);
-  border-left: 3px solid #f56c6c;
 }
 
 /* SVG图标按钮样式 */
