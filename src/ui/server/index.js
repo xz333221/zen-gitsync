@@ -183,7 +183,6 @@ async function startUIServer(noOpen = false, savePort = false) {
       console.log(`[流式输出] childProcess.stdout 是否存在:`, !!childProcess.stdout);
       console.log(`[流式输出] childProcess.stderr 是否存在:`, !!childProcess.stderr);
 
-      let hasError = false;
       let outputReceived = false;
 
       // 发送数据到客户端的辅助函数
@@ -229,7 +228,8 @@ async function startUIServer(noOpen = false, savePort = false) {
           console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 100));
         }
         outputReceived = true;
-        hasError = true;
+        // 不再自动标记为错误，只显示 stderr 输出
+        // Git 的警告信息会输出到 stderr 但退出码仍为 0
         sendData('stderr', output);
       });
 
@@ -240,8 +240,9 @@ async function startUIServer(noOpen = false, savePort = false) {
 
       // 监听进程关闭（close 在流关闭后触发）
       childProcess.on('close', (code, signal) => {
-        console.log(`[流式输出] 进程 close 事件 - 代码: ${code}, 信号: ${signal}, 有错误: ${hasError}, 有输出: ${outputReceived}`);
-        sendData('exit', { code, success: code === 0 && !hasError });
+        console.log(`[流式输出] 进程 close 事件 - 代码: ${code}, 信号: ${signal}, 有输出: ${outputReceived}`);
+        // 只根据退出码判断成功与否，退出码为 0 表示成功
+        sendData('exit', { code, success: code === 0 });
         res.end();
       });
 
