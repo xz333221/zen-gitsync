@@ -3693,7 +3693,8 @@ async function startUIServer(noOpen = false, savePort = false) {
               relativePath: relativePath || '.',
               name: packageData.name || path.basename(dir),
               scripts: packageData.scripts,
-              version: packageData.version || '0.0.0'
+              version: packageData.version || '0.0.0',
+              repository: packageData.repository
             });
             return true;
           }

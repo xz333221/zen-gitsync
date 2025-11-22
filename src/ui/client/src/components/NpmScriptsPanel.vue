@@ -10,6 +10,10 @@ interface PackageInfo {
   relativePath: string;
   name: string;
   scripts: Record<string, string>;
+  repository?: {
+    type: string;
+    url: string;
+  } | string;
 }
 
 // Props
@@ -47,6 +51,34 @@ function closeSettings() {
 function handleSettingsComplete() {
   closeSettings();
   loadNpmScripts();
+}
+
+// 解析repository URL
+function getRepositoryUrl(repository: PackageInfo['repository']): string | null {
+  if (!repository) return null;
+  
+  if (typeof repository === 'string') {
+    return repository;
+  }
+  
+  if (typeof repository === 'object' && repository.url) {
+    let url = repository.url;
+    // 移除 git+ 前缀
+    url = url.replace(/^git\+/, '');
+    // 移除 .git 后缀
+    url = url.replace(/\.git$/, '');
+    return url;
+  }
+  
+  return null;
+}
+
+// 打开仓库链接
+function openRepository(pkg: PackageInfo) {
+  const url = getRepositoryUrl(pkg.repository);
+  if (url) {
+    window.open(url, '_blank');
+  }
 }
 
 // 高度调节
@@ -257,6 +289,18 @@ watch(() => props.visible, (newValue) => {
             <span class="package-name">{{ pkg.name }}</span>
             <span class="package-path">{{ pkg.relativePath }}</span>
           </div>
+          <el-tooltip 
+            v-if="getRepositoryUrl(pkg.repository)"
+            :content="getRepositoryUrl(pkg.repository)!"
+            placement="bottom" 
+            :show-after="300"
+          >
+            <el-icon class="repo-icon" @click.stop="openRepository(pkg)">
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M458.64 119.072a84.176 84.176 0 0 1 106.72 0l366.912 300.4a32 32 0 0 1-40.544 49.52L524.816 168.592a20.176 20.176 0 0 0-25.632 0L132.272 468.992a32 32 0 1 1-40.544-49.52L458.64 119.072zM304.32 415.184c0-27.2 22-49.568 49.472-49.568h96.048a49.504 49.504 0 0 1 49.456 49.568v96.544c0 27.2-21.984 49.552-49.456 49.552H353.76a49.504 49.504 0 0 1-49.472-49.552V415.2z m64 14.432v67.68h66.976v-67.68H368.32z m-162.976 36.96a32 32 0 0 1 32 32v307.2c0 21.28 17.12 38.224 37.856 38.224h471.52a38.032 38.032 0 0 0 37.84-38.224v-307.2a32 32 0 1 1 64 0v307.2c0 56.304-45.44 102.224-101.856 102.224H275.2c-56.4 0-101.856-45.92-101.856-102.224v-307.2a32 32 0 0 1 32-32z m98.976 168.048c0-27.216 22-49.568 49.472-49.568h96.048a49.504 49.504 0 0 1 49.456 49.568v96.544c0 27.2-21.984 49.552-49.456 49.552H353.76a49.504 49.504 0 0 1-49.472-49.552v-96.544z m64 14.432v67.68h66.976v-67.68H368.32z m154.288-14.432c0-27.216 21.984-49.568 49.472-49.568h96.048a49.504 49.504 0 0 1 49.456 49.568v96.544c0 27.2-21.984 49.552-49.456 49.552h-96.048a49.504 49.504 0 0 1-49.472-49.552v-96.544z m64 14.432v67.68h66.976v-67.68h-66.976z"/>
+              </svg>
+            </el-icon>
+          </el-tooltip>
           <el-icon class="settings-icon" @click.stop="openSettings(pkg)">
             <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
               <path fill="currentColor" d="M600.704 64a32 32 0 0 1 30.464 22.208l35.2 109.376c14.784 7.232 28.928 15.36 42.432 24.512l112.384-24.192a32 32 0 0 1 34.432 15.36L944.32 364.8a32 32 0 0 1-4.032 37.504l-77.12 85.12a357.12 357.12 0 0 1 0 49.024l77.12 85.248a32 32 0 0 1 4.032 37.504l-88.704 153.6a32 32 0 0 1-34.432 15.296L708.8 803.904c-13.44 9.088-27.648 17.28-42.368 24.512l-35.264 109.376A32 32 0 0 1 600.704 960H423.296a32 32 0 0 1-30.464-22.208L357.696 828.48a351.616 351.616 0 0 1-42.56-24.64l-112.32 24.256a32 32 0 0 1-34.432-15.36L79.68 659.2a32 32 0 0 1 4.032-37.504l77.12-85.248a357.12 357.12 0 0 1 0-48.896l-77.12-85.248A32 32 0 0 1 79.68 364.8l88.704-153.6a32 32 0 0 1 34.432-15.296L315.2 220.096c13.568-9.152 27.776-17.408 42.56-24.64l35.2-109.312A32 32 0 0 1 423.232 64H600.64zm-23.424 64H446.72l-36.352 113.088-24.512 11.968a294.113 294.113 0 0 0-34.816 20.096l-22.656 15.36-116.224-25.088-65.28 113.152 79.68 88.192-1.92 27.136a293.12 293.12 0 0 0 0 40.192l1.92 27.136-79.808 88.192 65.344 113.152 116.224-25.024 22.656 15.296a294.113 294.113 0 0 0 34.816 20.096l24.512 11.968L446.72 896h130.688l36.48-113.152 24.448-11.904a288.282 288.282 0 0 0 34.752-20.096l22.592-15.296 116.288 25.024 65.28-113.152-79.744-88.192 1.92-27.136a293.12 293.12 0 0 0 0-40.256l-1.92-27.136 79.808-88.128-65.344-113.152-116.288 24.96-22.592-15.232a287.616 287.616 0 0 0-34.752-20.096l-24.448-11.904L577.344 128zM512 320a192 192 0 1 1 0 384 192 192 0 0 1 0-384zm0 64a128 128 0 1 0 0 256 128 128 0 0 0 0-256z"/>
@@ -522,6 +566,7 @@ watch(() => props.visible, (newValue) => {
   flex: 1;
 }
 
+.repo-icon,
 .settings-icon {
   font-size: 16px;
   color: var(--text-secondary);
@@ -532,8 +577,14 @@ watch(() => props.visible, (newValue) => {
   opacity: 0;
 }
 
+.package-header:hover .repo-icon,
 .package-header:hover .settings-icon {
   opacity: 1;
+}
+
+.repo-icon:hover {
+  color: #667eea;
+  transform: scale(1.1);
 }
 
 .settings-icon:hover {
