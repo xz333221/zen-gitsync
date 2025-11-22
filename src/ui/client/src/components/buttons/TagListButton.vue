@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Sell, Delete, Upload, InfoFilled, Refresh } from '@element-plus/icons-vue'
