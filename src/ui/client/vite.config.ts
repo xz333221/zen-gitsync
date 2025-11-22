@@ -67,7 +67,17 @@ export default defineConfig(({ command }) => {
     port: 5544,
     open: true,
     watch: {
-      ignored: ['**/public/**', '**/dist/**'] // 忽略构建输出目录，避免 build 时触发热更新
+      // 忽略构建输出目录，避免 build 时触发热更新
+      ignored: [
+        '**/public/**',
+        '**/dist/**',
+        path.resolve(__dirname, '../public/**'),  // 使用绝对路径
+        '**/.git/**',
+        '**/node_modules/**'
+      ],
+      // 使用轮询可能会更稳定，但会消耗更多资源
+      // usePolling: false,
+      // interval: 100
     },
     proxy: {
       "/api": {

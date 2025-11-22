@@ -158,11 +158,33 @@ const tableLog = (commandLine, content, type) => {
     default:
       break;
   }
+  
+  // 限制输出内容
+  const MAX_LINES = 10; // 最大行数
+  const MAX_LINE_LENGTH = 200; // 每行最大字符数
+  let isTruncated = false;
+  
+  if (content.length > MAX_LINES) {
+    content = content.slice(0, MAX_LINES);
+    isTruncated = true;
+  }
+  
   content = content.map(item => {
     let fontColor = calcColor(commandLine, item)
     let row = item.replaceAll('\t', '      ')
+    
+    // 截断过长的行
+    if (row.length > MAX_LINE_LENGTH) {
+      row = row.substring(0, MAX_LINE_LENGTH) + '...';
+    }
+    
     return chalk[fontColor](row)
   })
+  
+  // 如果内容被截断，添加提示
+  if (isTruncated) {
+    content.push(chalk.dim('... (输出内容过多，已省略)'));
+  }
 
   printTableWithHeaderUnderline(head, content, style)
 }

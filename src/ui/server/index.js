@@ -361,7 +361,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
 
     // 缓存失效或强制刷新，重新获取
-    console.log('重新获取当前分支名...');
+    // console.log('重新获取当前分支名...');
     const { stdout } = await execGitCommand('git symbolic-ref --short HEAD');
     const branchName = stdout.trim();
 
@@ -491,7 +491,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       }
 
       // 缓存失效或强制刷新，重新获取分支信息
-      console.log('重新获取分支信息...');
+      // console.log('重新获取分支信息...');
 
       // 分支名缓存和分支状态缓存独立工作
       // 只有在分支状态强制刷新且分支名缓存也失效时，才强制刷新分支名
@@ -570,10 +570,6 @@ async function startUIServer(noOpen = false, savePort = false) {
         ...localBranchList,
         ...remoteBranchList
       ];
-      
-      console.log('本地分支:', localBranchList);
-      console.log('远程分支:', remoteBranchList);
-      console.log('所有分支:', allBranches);
       
       res.json({ branches: allBranches });
     } catch (error) {
@@ -1287,12 +1283,12 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 获取配置
   app.get('/api/config/getConfig', async (req, res) => {
     try {
-      console.log('获取配置中。。。')
+      // console.log('获取配置中。。。')
       const config = await configManager.loadConfig()
-      console.log('获取配置成功')
+      // console.log('获取配置成功')
       res.json(config)
     } catch (error) {
-      console.log('获取配置失败')
+      // console.log('获取配置失败')
       res.status(500).json({ error: error.message })
     }
   })
@@ -3629,7 +3625,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       const packageJsons = [];
       const startTime = Date.now();
       
-      console.log(`[NPM扫描-后端] 开始扫描项目: ${projectRoot}`);
+      // console.log(`[NPM扫描-后端] 开始扫描项目: ${projectRoot}`);
       
       // 需要忽略的目录列表（更全面）
       const IGNORED_DIRS = new Set([
@@ -3784,10 +3780,10 @@ async function startUIServer(noOpen = false, savePort = false) {
       }
       
       // 执行递归扫描
-      console.log(`[NPM扫描-后端] 开始递归扫描（最大深度${MAX_DEPTH}层）`);
+      // console.log(`[NPM扫描-后端] 开始递归扫描（最大深度${MAX_DEPTH}层）`);
       const scanStart = Date.now();
       await scanDirectory(projectRoot, 0);
-      console.log(`[NPM扫描-后端] 递归扫描完成，耗时${Date.now() - scanStart}ms`);
+      // console.log(`[NPM扫描-后端] 递归扫描完成，耗时${Date.now() - scanStart}ms`);
       
       // 扫描完成，清除abort controller
       if (currentScanAbortController === scanController) {
@@ -3812,8 +3808,8 @@ async function startUIServer(noOpen = false, savePort = false) {
         .filter(Boolean)
         .join(', ');
       
-      console.log(`npm脚本扫描完成，耗时${scanTime}ms，扫描了${scannedCount}个目录，读取了${fileReadCount}个package.json文件，跳过${skippedCount}个目录，找到${packageJsons.length}个有效的package.json`);
-      console.log(`[NPM扫描-后端] 深度分布: ${depthInfo}`);
+      // console.log(`npm脚本扫描完成，耗时${scanTime}ms，扫描了${scannedCount}个目录，读取了${fileReadCount}个package.json文件，跳过${skippedCount}个目录，找到${packageJsons.length}个有效的package.json`);
+      // console.log(`[NPM扫描-后端] 深度分布: ${depthInfo}`);
       
       res.json({ 
         success: true, 
@@ -4383,9 +4379,6 @@ async function startUIServer(noOpen = false, savePort = false) {
             
             if (isGitRepo) {
               console.log(chalk.green(`  当前目录是Git仓库`));
-              console.log(chalk.yellow(`  文件监控已禁用（默认），需要时请在前端开启自动更新开关`));
-              // 不再自动启动文件监控，只在用户开启自动更新开关时启动
-              // initFileSystemWatcher().catch(err => console.error('[文件监控] 初始化失败:', err));
             } else {
               console.log(chalk.yellow(`  当前目录不是Git仓库，文件监控未启动`));
             }
