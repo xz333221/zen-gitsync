@@ -41,7 +41,7 @@ const hasIcon = computed(() => {
 
 /* Unified hover for all cards */
 .inline-card:hover {
-  box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+  /* box-shadow: 0 3px 8px rgba(0,0,0,0.1); */
   border-color: var(--border-color-dark);
 }
 
@@ -85,7 +85,7 @@ const hasIcon = computed(() => {
   box-shadow: 0 1px 3px rgba(0,0,0,0.35);
 }
 :global([data-theme="dark"]) .inline-card:hover {
-  box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+  /* box-shadow: 0 3px 10px rgba(0,0,0,0.45); */
   border-color: var(--border-color-dark);
 }
 </style>

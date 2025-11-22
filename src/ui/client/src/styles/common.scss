@@ -454,7 +454,7 @@ body {
   color: var(--text-primary);
   border-color: var(--border-color-dark);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  /* box-shadow: var(--shadow-md); */
 }
 
 .modern-btn:hover::before {

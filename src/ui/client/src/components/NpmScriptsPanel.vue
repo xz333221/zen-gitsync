@@ -512,7 +512,7 @@ watch(() => props.visible, (newValue) => {
 .package-header {
   display: flex;
   align-items: center;
-  padding: 12px;
+  padding: 8px 12px;
   background: var(--bg-input);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -603,13 +603,16 @@ watch(() => props.visible, (newValue) => {
 .scripts-list {
   background: var(--bg-container);
   border-top: 1px solid var(--border-card);
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .script-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px 10px 40px;
+  padding: 6px 22px 6px 20px;
   cursor: pointer;
   transition: all 0.2s ease;
   gap: 12px;
@@ -678,6 +681,26 @@ watch(() => props.visible, (newValue) => {
 }
 
 .packages-container::-webkit-scrollbar-thumb:hover {
+  background: var(--border-card-hover);
+}
+
+/* 脚本列表滚动条样式 */
+.scripts-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scripts-list::-webkit-scrollbar-track {
+  background: var(--bg-input);
+  border-radius: 4px;
+}
+
+.scripts-list::-webkit-scrollbar-thumb {
+  background: var(--border-card);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.scripts-list::-webkit-scrollbar-thumb:hover {
   background: var(--border-card-hover);
 }
 </style>

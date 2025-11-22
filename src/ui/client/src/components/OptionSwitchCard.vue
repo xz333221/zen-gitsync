@@ -75,7 +75,7 @@ function onChange(val: boolean) {
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   background: #409eff;

@@ -104,9 +104,9 @@ defineExpose({
 
 <style scoped lang="scss">
 
-.form-bottom-actions:hover {
+/* .form-bottom-actions:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-}
+} */
 
 .actions-flex-container {
   display: flex;

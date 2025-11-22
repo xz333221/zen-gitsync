@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grid 展开/隐藏过渡效果测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 32px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: all 0.3s ease;
+        }
+
+        .card-header:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .card-header h2 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .toggle-icon {
+            font-size: 24px;
+            transition: transform 0.3s ease;
+            font-weight: bold;
+        }
+
+        .toggle-icon.expanded {
+            transform: rotate(180deg);
+        }
+
+        /* 使用 Grid 实现展开/隐藏 */
+        .card-content-wrapper {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card-content-wrapper.expanded {
+            grid-template-rows: 1fr;
+        }
+
+        .card-content {
+            overflow: hidden;
+        }
+
+        .card-content-inner {
+            padding: 24px;
+            background: #f8f9fa;
+        }
+
+        .content-item {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border-left: 4px solid #667eea;
+        }
+
+        .content-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .content-item h3 {
+            color: #667eea;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .content-item p {
+            color: #666;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        /* 示例2：水平Grid展开 */
+        .horizontal-card {
+            display: grid;
+            grid-template-columns: 200px 0fr;
+            transition: grid-template-columns 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .horizontal-card.expanded {
+            grid-template-columns: 200px 1fr;
+        }
+
+        .side-panel {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .side-panel h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .expand-content {
+            overflow: hidden;
+        }
+
+        .expand-content-inner {
+            padding: 24px;
+            min-width: 400px;
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 2px solid #667eea;
+        }
+
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e83e8c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Grid 展开/隐藏过渡效果演示</h1>
+
+        <!-- 示例1：垂直展开 -->
+        <div class="card">
+            <div class="card-header" onclick="toggleCard(this)">
+                <h2>📦 垂直展开示例（点击展开/收起）</h2>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="card-content-wrapper">
+                <div class="card-content">
+                    <div class="card-content-inner">
+                        <div class="content-item">
+                            <h3>✨ 什么是 Grid 布局？</h3>
+                            <p>CSS Grid 是一个二维布局系统，可以同时处理行和列。它非常适合创建复杂的网页布局。</p>
+                        </div>
+                        <div class="content-item">
+                            <h3>🎨 为什么使用 Grid？</h3>
+                            <p>使用 <code>grid-template-rows: 0fr</code> 到 <code>1fr</code> 的过渡，可以实现流畅的高度动画效果，而不需要知道具体的像素值。</p>
+                        </div>
+                        <div class="content-item">
+                            <h3>⚡ 性能优势</h3>
+                            <p>Grid 布局的过渡效果由浏览器的渲染引擎优化，性能比 JavaScript 控制的动画更好。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header" onclick="toggleCard(this)">
+                <h2>🚀 更多内容展示</h2>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="card-content-wrapper">
+                <div class="card-content">
+                    <div class="card-content-inner">
+                        <div class="content-item">
+                            <h3>🎯 实现原理</h3>
+                            <p>通过切换 <code>grid-template-rows</code> 在 <code>0fr</code> 和 <code>1fr</code> 之间，配合 <code>overflow: hidden</code>，实现平滑的展开收起效果。</p>
+                        </div>
+                        <div class="content-item">
+                            <h3>💡 关键代码</h3>
+                            <p>收起状态：<code>grid-template-rows: 0fr</code></p>
+                            <p>展开状态：<code>grid-template-rows: 1fr</code></p>
+                            <p>过渡效果：<code>transition: grid-template-rows 0.4s ease</code></p>
+                        </div>
+                        <div class="info-box">
+                            <h3>📝 注意事项</h3>
+                            <p>内容区域需要包裹在一个额外的 div 中，这个 div 需要设置 <code>overflow: hidden</code> 才能正确实现过渡效果。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 示例2：水平展开 -->
+        <div class="horizontal-card" id="horizontalCard">
+            <div class="side-panel" onclick="toggleHorizontal()">
+                <h2>👉 点击展开</h2>
+                <p style="font-size: 12px; margin-top: 10px; opacity: 0.8;">水平展开示例</p>
+            </div>
+            <div class="expand-content">
+                <div class="expand-content-inner">
+                    <h2 style="color: #667eea; margin-bottom: 20px;">🎨 水平Grid展开效果</h2>
+                    <p style="margin-bottom: 20px; color: #666;">这个示例展示了如何使用 Grid 实现水平方向的展开效果。原理相同，只是改用 <code>grid-template-columns</code>。</p>
+                    
+                    <ul class="feature-list">
+                        <li>
+                            <span class="feature-icon">✓</span>
+                            <div>
+                                <strong>流畅过渡</strong>
+                                <p style="font-size: 12px; color: #999; margin: 4px 0 0 0;">使用 cubic-bezier 缓动函数</p>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="feature-icon">✓</span>
+                            <div>
+                                <strong>响应式布局</strong>
+                                <p style="font-size: 12px; color: #999; margin: 4px 0 0 0;">自动适应不同屏幕尺寸</p>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="feature-icon">✓</span>
+                            <div>
+                                <strong>易于维护</strong>
+                                <p style="font-size: 12px; color: #999; margin: 4px 0 0 0;">纯CSS实现，无需复杂JS</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 垂直展开/收起
+        function toggleCard(header) {
+            const wrapper = header.nextElementSibling;
+            const icon = header.querySelector('.toggle-icon');
+            
+            wrapper.classList.toggle('expanded');
+            icon.classList.toggle('expanded');
+        }
+
+        // 水平展开/收起
+        function toggleHorizontal() {
+            const card = document.getElementById('horizontalCard');
+            card.classList.toggle('expanded');
+        }
+
+        // 页面加载完成后的提示
+        window.addEventListener('load', () => {
+            console.log('✅ Grid 展开/隐藏效果测试页面加载完成');
+            console.log('💡 点击卡片头部可以展开/收起内容');
+            console.log('📊 使用 grid-template-rows 和 grid-template-columns 实现过渡');
+        });
+    </script>
+</body>
+</html>

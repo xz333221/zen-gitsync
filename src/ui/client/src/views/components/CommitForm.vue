@@ -748,9 +748,6 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
           :inactive-text="$t('@76872:普通')"
           active-color="#409eff"
         >
-          <template #icon>
-            <el-icon><Edit /></el-icon>
-          </template>
         </OptionSwitchCard>
         <el-button
           v-if="gitStore.userName !== '' && gitStore.userEmail !== ''"
@@ -1203,9 +1200,6 @@ git config --global user.email "your.email@example.com"</pre>
             active-color="#f56c6c"
             icon-class="warning"
           >
-            <template #icon>
-              <el-icon><Warning /></el-icon>
-            </template>
           </OptionSwitchCard>
 
           <!-- 回车自动提交开关 -->
@@ -1216,9 +1210,6 @@ git config --global user.email "your.email@example.com"</pre>
             active-color="#67c23a"
             icon-class="success"
           >
-            <template #icon>
-              <el-icon><Check /></el-icon>
-            </template>
           </OptionSwitchCard>
 
           <!-- Push完成后自动关闭弹窗 -->
@@ -1229,9 +1220,6 @@ git config --global user.email "your.email@example.com"</pre>
             active-color="#409eff"
             icon-class="info"
           >
-            <template #icon>
-              <el-icon><Check /></el-icon>
-            </template>
           </OptionSwitchCard>
 
           <!-- 自动设置默认提交信息 -->
@@ -1242,9 +1230,6 @@ git config --global user.email "your.email@example.com"</pre>
             active-color="#67c23a"
             icon-class="success"
           >
-            <template #icon>
-              <el-icon><Edit /></el-icon>
-            </template>
           </OptionSwitchCard>
         </div>
       </CommonDialog>

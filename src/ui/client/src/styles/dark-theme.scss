@@ -215,7 +215,7 @@
     background: rgba(255, 255, 255, 0.12);
     color: white;
     border-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    /* box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); */
   }
 
   .modern-btn:disabled:hover {
@@ -1026,11 +1026,11 @@
       0 0 20px rgba(64, 158, 255, 0.1);
   }
 
-  .modern-btn:hover {
+  /* .modern-btn:hover {
     box-shadow: 
       0 4px 12px rgba(0, 0, 0, 0.15),
       0 0 8px rgba(64, 158, 255, 0.2);
-  }
+  } */
 }
 
 /* 目录切换对话框（Change Directory）文本颜色优化 */

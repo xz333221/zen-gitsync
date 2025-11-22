@@ -65,14 +65,15 @@ async function copyCommand() {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: var(--bg-container);
-    border: 1px solid var(--border-card);
+    background: var(--bg-input-hover);
+    border: 1px solid #409eff;
     border-radius: 8px;
     padding: 8px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
     margin-bottom: 8px;
+    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.12);
     
     &::before {
       content: '';
@@ -82,7 +83,7 @@ async function copyCommand() {
       right: 0;
       height: 2px;
       background: linear-gradient(90deg, #409eff, #66b1ff, #409eff);
-      opacity: 0;
+      opacity: 1;
       transition: opacity 0.3s ease;
     }
     
@@ -116,9 +117,9 @@ async function copyCommand() {
     
     .preview-content {
       flex: 1;
-      background: var(--bg-input);
+      background: var(--bg-input-hover);
       color: var(--text-primary);
-      border: 1px solid var(--border-input);
+      border: 1px solid #409eff;
       border-radius: 6px;
       padding: 6px 8px;
       margin: 0;
@@ -130,6 +131,7 @@ async function copyCommand() {
       white-space: nowrap;
       position: relative;
       transition: all 0.3s ease;
+      box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2);
       
       &::before {
         content: '';
@@ -139,7 +141,7 @@ async function copyCommand() {
         right: 0;
         bottom: 0;
         background: linear-gradient(135deg, rgba(64, 158, 255, 0.03) 0%, rgba(102, 177, 255, 0.03) 100%);
-        opacity: 0;
+        opacity: 1;
         transition: opacity 0.3s ease;
         pointer-events: none;
       }
@@ -155,9 +157,9 @@ async function copyCommand() {
       }
       
       &.code-command {
-        background: var(--bg-input);
+        background: var(--bg-input-hover);
         color: var(--text-primary);
-        border-color: var(--border-input);
+        border-color: #409eff;
         font-weight: 500;
       }
     }

@@ -362,9 +362,9 @@ function handleClose() {
                       text
                       @click="editScript(name, command)"
                       :disabled="isEditMode && editingScriptName === name"
+                      :title="$t('@NPM01:编辑')"
                     >
                       <el-icon><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M832 512a32 32 0 1 1 64 0v352a32 32 0 0 1-32 32H160a32 32 0 0 1-32-32V160a32 32 0 0 1 32-32h352a32 32 0 0 1 0 64H192v640h640V512z"/><path fill="currentColor" d="m469.952 554.24 52.8-7.552L847.104 222.4a32 32 0 1 0-45.248-45.248L477.44 501.44l-7.552 52.8zm422.4-422.4a96 96 0 0 1 0 135.808l-331.84 331.84a32 32 0 0 1-18.112 9.088l-139.456 19.904a32 32 0 0 1-36.224-36.224l19.904-139.456a32 32 0 0 1 9.024-18.112l331.904-331.84a96 96 0 0 1 135.808 0z"/></svg></el-icon>
-                      {{ $t('@NPM01:编辑') }}
                     </el-button>
                     <el-button
                       size="small"
@@ -372,9 +372,9 @@ function handleClose() {
                       text
                       @click="deleteScript(name)"
                       :loading="isDeletingScript"
+                      :title="$t('@NPM01:删除')"
                     >
                       <el-icon><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M160 256H96a32 32 0 0 1 0-64h256V95.936a32 32 0 0 1 32-32h256a32 32 0 0 1 32 32V192h256a32 32 0 1 1 0 64h-64v672a32 32 0 0 1-32 32H192a32 32 0 0 1-32-32V256zm448-64v-64H416v64h192zM224 896h576V256H224v640zm192-128a32 32 0 0 1-32-32V416a32 32 0 0 1 64 0v320a32 32 0 0 1-32 32zm192 0a32 32 0 0 1-32-32V416a32 32 0 0 1 64 0v320a32 32 0 0 1-32 32z"/></svg></el-icon>
-                      {{ $t('@NPM01:删除') }}
                     </el-button>
                   </div>
                 </div>
@@ -416,8 +416,6 @@ function handleClose() {
                     v-model="scriptCommand"
                     :placeholder="$t('@NPM01:例如: vite build, vite dev')"
                     clearable
-                    type="textarea"
-                    :rows="3"
                   />
                 </div>
               </div>
@@ -478,21 +476,17 @@ function handleClose() {
   margin-top: 16px;
 }
 
-.tab-content {
-  padding: 16px 0;
-}
-
 .script-management {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 12px;
 }
 
 .scripts-list-section,
 .script-form-section {
   border: 1px solid var(--border-component);
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px;
   background: var(--bg-panel);
 }
 
@@ -500,8 +494,8 @@ function handleClose() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border-card);
 }
 
@@ -526,22 +520,32 @@ function handleClose() {
 .script-items {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .script-item-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 0fr;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px;
+  gap: 12px;
+  padding: 8px;
   border: 1px solid var(--border-card);
   border-radius: 6px;
   background: var(--bg-container);
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 
   &:hover {
     border-color: #409eff;
     box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+    grid-template-columns: 1fr auto;
+  }
+  
+  &:hover .script-item-actions {
+    opacity: 1;
   }
 }
 
@@ -549,8 +553,7 @@ function handleClose() {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .script-name-tag {
@@ -589,11 +592,14 @@ function handleClose() {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
-  margin-left: 16px;
+  opacity: 0;
+  overflow: hidden;
+  transition: opacity 0.3s ease;
 }
 
 .script-item-actions .el-button {
-  min-width: 70px;
+  min-width: auto;
+  padding: 4px 8px;
 }
 
 .pin-icon {
@@ -608,6 +614,26 @@ function handleClose() {
 
 .pin-button:hover {
   color: #409eff;
+}
+
+/* 滚动条样式 */
+.script-items::-webkit-scrollbar {
+  width: 6px;
+}
+
+.script-items::-webkit-scrollbar-track {
+  background: var(--bg-input);
+  border-radius: 4px;
+}
+
+.script-items::-webkit-scrollbar-thumb {
+  background: var(--border-card);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.script-items::-webkit-scrollbar-thumb:hover {
+  background: var(--border-card-hover);
 }
 
 [data-theme="dark"] .pin-button {
@@ -692,25 +718,34 @@ function handleClose() {
 .script-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 24px;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .form-item {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
 }
 
 .form-label {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+  flex-shrink: 0;
   color: var(--color-text);
 }
 
 .action-button {
+  margin-top: 8px;
   width: 100%;
-  height: 40px;
+  height: 36px;
   font-size: 14px;
   font-weight: 600;
 }

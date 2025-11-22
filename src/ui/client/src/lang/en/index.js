@@ -906,7 +906,7 @@ export default {
   '@A1833:提交历史': 'Commit History',
   '@A1833:分支': 'Branch',
   '@A1833:信息': 'Information',
-  '@A1833:应用': 'Application',
+  '@A1833:应用': 'Search',
   '@A1833:重置': 'Reset',
   '@A1833:查看详情': 'View details',
   '@A1833:复制提交哈希': 'Copy and submit hash',

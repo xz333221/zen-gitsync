@@ -688,17 +688,15 @@ onMounted(async () => {
             <SvgIcon icon-class="command-grid" class-name="icon-btn" />
           </el-button>
         </el-tooltip>
-        <el-tooltip :content="isFullscreen ? $t('@CF05E:退出全屏') : $t('@CF05E:全屏显示')" placement="bottom">
-          <el-button
-            text
-            @click="isFullscreen = !isFullscreen"
-            class="toggle-console-btn"
-          >
-            <el-icon>
-              <FullScreen />
-            </el-icon>
-          </el-button>
-        </el-tooltip>
+        <el-button
+          text
+          @click="isFullscreen = !isFullscreen"
+          class="toggle-console-btn"
+        >
+          <el-icon>
+            <FullScreen />
+          </el-icon>
+        </el-button>
         <el-button
           text
           @click="isConsoleExpanded = !isConsoleExpanded"
@@ -950,7 +948,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 4px 8px;
   background: var(--bg-container);
   margin: 12px;
   border-radius: 8px;
@@ -968,9 +966,8 @@ onMounted(async () => {
   font-size: 13px;
   font-weight: 500;
   color: #67c23a;
-  background: linear-gradient(135deg, rgba(103, 194, 58, 0.1), rgba(103, 194, 58, 0.05));
-  border: 1px solid rgba(103, 194, 58, 0.3);
-  padding: 6px 12px;
+  /* background: linear-gradient(135deg, rgba(103, 194, 58, 0.1), rgba(103, 194, 58, 0.05)); */
+  /* border: 1px solid rgba(103, 194, 58, 0.3); */
   border-radius: 6px;
   max-width: 45%;
   overflow: hidden;
@@ -979,11 +976,11 @@ onMounted(async () => {
   cursor: help;
   transition: all 0.3s ease;
   
-  &:hover {
+  /* &:hover {
     background: linear-gradient(135deg, rgba(103, 194, 58, 0.15), rgba(103, 194, 58, 0.08));
     border-color: rgba(103, 194, 58, 0.5);
     transform: translateX(2px);
-  }
+  } */
 }
 
 .console-input {
