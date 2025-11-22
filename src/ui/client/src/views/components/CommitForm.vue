@@ -22,6 +22,8 @@ import CommandConsole from '@components/CommandConsole.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
 import MergeBranchButton from '@/components/buttons/MergeBranchButton.vue'
+import CreateTagButton from '@/components/buttons/CreateTagButton.vue'
+import TagListButton from '@/components/buttons/TagListButton.vue'
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -1025,6 +1027,15 @@ git config --global user.email "your.email@example.com"</pre>
                 <div class="group-buttons">
                   <StashChangesButton variant="text" />
                   <StashListButton variant="text" />
+                </div>
+              </div>
+
+            <!-- 标签操作 -->
+            <div class="action-group">
+                <div class="group-title">{{ $t('@TAG01:标签操作') }}</div>
+                <div class="group-buttons">
+                  <CreateTagButton variant="text" />
+                  <TagListButton variant="text" />
                 </div>
               </div>
           </div>
