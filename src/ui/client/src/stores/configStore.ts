@@ -3,18 +3,19 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
-// 指令编排步骤类型
+// 编排步骤类型
 export interface OrchestrationStep {
   id: string
-  type: 'command' | 'wait' | 'system'  // command: 自定义命令, wait: 等待, system: 系统命令
+  type: 'command' | 'wait' | 'version'
+  optional?: boolean  // 是否为可选步骤（可选步骤执行失败不会中断后续步骤）
   // 对于 command 类型
   commandId?: string  // 引用的自定义命令 ID
   commandName?: string  // 命令名称（用于显示）
   // 对于 wait 类型
   waitSeconds?: number  // 等待的秒数
-  // 对于 system 类型
-  systemCommand?: string  // 系统命令字符串
-  systemCommandName?: string  // 系统命令显示名称
+  // 对于 version 类型
+  versionBump?: 'patch' | 'minor' | 'major'  // 版本号增量类型
+  packageJsonPath?: string  // package.json 文件路径（可选，默认当前目录）
 }
 
 export const useConfigStore = defineStore('config', () => {

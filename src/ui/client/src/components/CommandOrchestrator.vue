@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Delete, Rank, VideoPlay, Clock, Monitor, Plus, DocumentAdd } from '@element-plus/icons-vue'
+import { Delete, Rank, VideoPlay, Clock, Plus, DocumentAdd, Folder } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 import type { CustomCommand } from '@components/CustomCommandManager.vue'
@@ -32,21 +32,12 @@ const orchestrationDescription = ref('')
 const showAddStepDialog = ref(false)
 // 等待秒数输入
 const waitSeconds = ref(5)
-// 系统命令输入
-const systemCommandInput = ref('')
-const systemCommandName = ref('')
+// 版本管理相关
+const versionBump = ref<'patch' | 'minor' | 'major'>('patch')
+const packageJsonPath = ref('')
 
 // 计算属性：获取所有可用的自定义命令
 const availableCommands = computed(() => configStore.customCommands || [])
-
-// 常用系统命令预设
-const commonSystemCommands = [
-  { name: 'dir - 列出目录', command: 'dir' },
-  { name: 'git status - 查看状态', command: 'git status' },
-  { name: 'git pull - 拉取代码', command: 'git pull' },
-  { name: 'npm install - 安装依赖', command: 'npm install' },
-  { name: 'npm run build - 构建项目', command: 'npm run build' }
-]
 
 // 显示/隐藏弹窗
 const dialogVisible = computed({
@@ -101,37 +92,32 @@ function addWaitStep() {
   showAddStepDialog.value = false
 }
 
-// 添加系统命令步骤
-function addSystemCommandStep(command?: string, name?: string) {
-  const cmd = command || systemCommandInput.value.trim()
-  const cmdName = name || systemCommandName.value.trim() || cmd
-  
-  if (!cmd) {
-    ElMessage.warning('请输入系统命令')
-    return
-  }
-  
+// 添加版本管理步骤
+function addVersionStep() {
   const step: OrchestrationStep = {
     id: generateId(),
-    type: 'system',
-    systemCommand: cmd,
-    systemCommandName: cmdName
+    type: 'version',
+    versionBump: versionBump.value,
+    packageJsonPath: packageJsonPath.value.trim() || undefined
   }
   orchestrationSteps.value.push(step)
-  ElMessage.success(`已添加系统命令: ${cmdName}`)
-  systemCommandInput.value = ''
-  systemCommandName.value = ''
+  ElMessage.success(`已添加版本管理步骤`)
   showAddStepDialog.value = false
+  // 重置表单
+  versionBump.value = 'patch'
+  packageJsonPath.value = ''
 }
 
 // 获取步骤显示文本
 function getStepLabel(step: OrchestrationStep): string {
+  const optionalPrefix = step.optional ? '[可选] ' : ''
   if (step.type === 'command') {
-    return step.commandName || '未知命令'
+    return optionalPrefix + (step.commandName || '自定义命令')
   } else if (step.type === 'wait') {
-    return `等待 ${step.waitSeconds} 秒`
-  } else if (step.type === 'system') {
-    return step.systemCommandName || step.systemCommand || '系统命令'
+    return optionalPrefix + `等待 ${step.waitSeconds} 秒`
+  } else if (step.type === 'version') {
+    const bumpText = step.versionBump === 'major' ? '主版本' : step.versionBump === 'minor' ? '次版本' : '补丁版本'
+    return optionalPrefix + `版本号+1 (${bumpText})`
   }
   return '未知步骤'
 }
@@ -143,8 +129,17 @@ function getStepDetail(step: OrchestrationStep): string {
     return cmd?.command || '命令已删除'
   } else if (step.type === 'wait') {
     return `暂停执行 ${step.waitSeconds} 秒`
-  } else if (step.type === 'system') {
-    return step.systemCommand || ''
+  } else if (step.type === 'version') {
+    return step.packageJsonPath || '当前目录的 package.json'
+  }
+  return ''
+}
+
+// 获取步骤的执行目录
+function getStepDirectory(step: OrchestrationStep): string {
+  if (step.type === 'command') {
+    const cmd = configStore.customCommands.find(c => c.id === step.commandId)
+    return cmd?.directory || ''
   }
   return ''
 }
@@ -330,11 +325,22 @@ function moveDown(index: number) {
                 <div class="step-icon">
                   <el-icon v-if="step.type === 'command'"><Rank /></el-icon>
                   <el-icon v-else-if="step.type === 'wait'"><Clock /></el-icon>
-                  <el-icon v-else-if="step.type === 'system'"><Monitor /></el-icon>
+                  <el-icon v-else-if="step.type === 'version'"><DocumentAdd /></el-icon>
                 </div>
                 <div class="step-info">
                   <div class="step-name">{{ getStepLabel(step) }}</div>
                   <div class="step-detail">{{ getStepDetail(step) }}</div>
+                  <div v-if="getStepDirectory(step)" class="step-dir">
+                    <el-icon><Folder /></el-icon>
+                    <span>{{ getStepDirectory(step) }}</span>
+                  </div>
+                </div>
+                <div class="step-optional">
+                  <el-checkbox 
+                    v-model="step.optional" 
+                    label="可选"
+                    size="small"
+                  />
                 </div>
                 <div class="action-buttons">
                   <el-button 
@@ -396,7 +402,7 @@ function moveDown(index: number) {
   </CommonDialog>
   
   <!-- 添加步骤对话框 -->
-  <el-dialog
+  <CommonDialog
     v-model="showAddStepDialog"
     title="添加步骤"
     width="600px"
@@ -422,7 +428,12 @@ function moveDown(index: number) {
           >
             <div class="step-info">
               <div class="step-name">{{ command.name }}</div>
+              <div v-if="command.description" class="step-desc">{{ command.description }}</div>
               <code class="step-code">{{ command.command }}</code>
+              <div v-if="command.directory" class="step-directory">
+                <el-icon><Folder /></el-icon>
+                <span>{{ command.directory }}</span>
+              </div>
             </div>
             <el-button type="primary" size="small" text>添加</el-button>
           </div>
@@ -441,43 +452,39 @@ function moveDown(index: number) {
         </div>
       </el-tab-pane>
       
-      <!-- 系统命令 -->
-      <el-tab-pane label="系统命令">
+      <!-- 版本管理 -->
+      <el-tab-pane label="版本管理">
         <template #label>
-          <span><el-icon><Monitor /></el-icon> 系统命令</span>
+          <span><el-icon><DocumentAdd /></el-icon> 版本管理</span>
         </template>
-        <div class="system-command-form">
-          <el-input 
-            v-model="systemCommandName"
-            placeholder="命令名称（选填）"
-            clearable
-          />
-          <el-input 
-            v-model="systemCommandInput"
-            placeholder="输入系统命令"
-            clearable
-          />
-          <el-button type="primary" @click="addSystemCommandStep()">添加系统命令</el-button>
-          
-          <el-divider>常用命令</el-divider>
-          <div class="add-step-list">
-            <div
-              v-for="cmd in commonSystemCommands"
-              :key="cmd.command"
-              class="add-step-item"
-              @click="addSystemCommandStep(cmd.command, cmd.name)"
-            >
-              <div class="step-info">
-                <div class="step-name">{{ cmd.name }}</div>
-                <code class="step-code">{{ cmd.command }}</code>
-              </div>
-              <el-button type="primary" size="small" text>添加</el-button>
-            </div>
+        <div class="version-step-form">
+          <div class="form-item">
+            <label>版本增量类型：</label>
+            <el-radio-group v-model="versionBump">
+              <el-radio label="patch">补丁版本 (x.x.+1)</el-radio>
+              <el-radio label="minor">次版本 (x.+1.0)</el-radio>
+              <el-radio label="major">主版本 (+1.0.0)</el-radio>
+            </el-radio-group>
           </div>
+          <div class="form-item">
+            <label>package.json 路径（选填）：</label>
+            <el-input 
+              v-model="packageJsonPath"
+              placeholder="留空则使用当前目录的 package.json"
+              clearable
+            />
+          </div>
+          <el-button type="primary" @click="addVersionStep">添加版本管理步骤</el-button>
+          <el-alert 
+            title="将会修改 package.json 中的 version 字段，并自动递增版本号"
+            type="info"
+            :closable="false"
+            style="margin-top: 16px"
+          />
         </div>
       </el-tab-pane>
     </el-tabs>
-  </el-dialog>
+  </CommonDialog>
 </template>
 
 <style scoped lang="scss">
@@ -655,6 +662,20 @@ function moveDown(index: number) {
   max-width: 100%;
 }
 
+.step-dir {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #67c23a;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+
+  .el-icon {
+    font-size: 12px;
+  }
+}
+
 .action-buttons {
   display: flex;
   gap: 4px;
@@ -695,6 +716,13 @@ function moveDown(index: number) {
     transform: translateX(4px);
   }
 
+  .step-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    font-style: italic;
+  }
+
   .step-code {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -704,6 +732,23 @@ function moveDown(index: number) {
     border-radius: 3px;
     margin-top: 4px;
     display: inline-block;
+  }
+
+  .step-directory {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #67c23a;
+    margin-top: 4px;
+
+    .el-icon {
+      font-size: 12px;
+    }
+
+    span {
+      font-family: var(--font-mono);
+    }
   }
 }
 
@@ -719,10 +764,31 @@ function moveDown(index: number) {
   }
 }
 
-.system-command-form {
+.version-step-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 8px 0;
+  gap: 16px;
+  padding: 20px;
+
+  .form-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-title);
+    }
+  }
+}
+
+.step-optional {
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.step-type-version {
+  border-left: 3px solid #409eff;
 }
 </style>

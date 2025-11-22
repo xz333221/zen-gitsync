@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit, VideoPlay, Clock, Rank, Monitor } from '@element-plus/icons-vue'
+import { Delete, Edit, VideoPlay, Clock, Rank, DocumentAdd } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 
@@ -30,12 +30,14 @@ const orchestrations = computed(() => configStore.orchestrations || [])
 
 // 获取步骤显示文本
 function getStepLabel(step: OrchestrationStep): string {
+  const optionalPrefix = step.optional ? '[可选] ' : ''
   if (step.type === 'command') {
-    return step.commandName || '未知命令'
+    return optionalPrefix + (step.commandName || '未知命令')
   } else if (step.type === 'wait') {
-    return `等待 ${step.waitSeconds} 秒`
-  } else if (step.type === 'system') {
-    return step.systemCommandName || step.systemCommand || '系统命令'
+    return optionalPrefix + `等待 ${step.waitSeconds} 秒`
+  } else if (step.type === 'version') {
+    const bumpText = step.versionBump === 'major' ? '主版本' : step.versionBump === 'minor' ? '次版本' : '补丁版本'
+    return optionalPrefix + `版本号+1 (${bumpText})`
   }
   return '未知步骤'
 }
@@ -44,7 +46,7 @@ function getStepLabel(step: OrchestrationStep): string {
 function getStepIcon(step: OrchestrationStep) {
   if (step.type === 'command') return Rank
   if (step.type === 'wait') return Clock
-  if (step.type === 'system') return Monitor
+  if (step.type === 'version') return DocumentAdd
   return Rank
 }
 

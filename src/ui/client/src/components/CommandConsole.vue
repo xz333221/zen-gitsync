@@ -321,14 +321,22 @@ async function executeOrchestration(steps: OrchestrationStep[]) {
         }
         
         if (!rec.success) {
-          ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
-          shouldContinue = false;
+          if (step.optional) {
+            ElMessage.warning(`[可选] 命令 ${stepLabel} 执行失败，继续执行后续步骤`);
+          } else {
+            ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
+            shouldContinue = false;
+          }
         }
       } catch (e: any) {
         rec.success = false;
         rec.stderr = e?.message || String(e);
-        ElMessage.error(`命令 ${stepLabel} 执行出错: ${e?.message}`);
-        shouldContinue = false;
+        if (step.optional) {
+          ElMessage.warning(`[可选] 命令 ${stepLabel} 执行出错: ${e?.message}，继续执行后续步骤`);
+        } else {
+          ElMessage.error(`命令 ${stepLabel} 执行出错: ${e?.message}`);
+          shouldContinue = false;
+        }
       }
     } else if (step.type === 'wait') {
       // 执行等待步骤
@@ -350,16 +358,17 @@ async function executeOrchestration(steps: OrchestrationStep[]) {
       
       await new Promise(resolve => setTimeout(resolve, seconds * 1000));
       rec.stdout += '\n等待完成';
-    } else if (step.type === 'system') {
-      // 执行系统命令
-      stepLabel = step.systemCommandName || step.systemCommand || '系统命令';
-      const cmd = step.systemCommand || '';
+    } else if (step.type === 'version') {
+      // 执行版本管理
+      const bumpType = step.versionBump || 'patch';
+      const bumpText = bumpType === 'major' ? '主版本' : bumpType === 'minor' ? '次版本' : '补丁版本';
+      stepLabel = `版本号+1 (${bumpText})`;
       
-      ElMessage.info(`[${i + 1}/${steps.length}] 执行: ${stepLabel}`);
+      ElMessage.info(`[${i + 1}/${steps.length}] ${stepLabel}`);
       
       const rec: ConsoleRecord = {
         id: ++consoleIdCounter,
-        command: `[${stepLabel}] ${cmd}`,
+        command: stepLabel,
         success: false,
         ts: new Date().toLocaleString(),
         expanded: true,
@@ -369,71 +378,38 @@ async function executeOrchestration(steps: OrchestrationStep[]) {
       consoleHistory.value.unshift(rec);
       
       try {
-        const resp = await fetch('/api/exec-stream', {
+        const resp = await fetch('/api/version-bump', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: cmd })
+          body: JSON.stringify({ 
+            bumpType: bumpType,
+            packageJsonPath: step.packageJsonPath || ''
+          })
         });
         
         if (!resp.ok) {
           throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         }
         
-        const reader = resp.body?.getReader();
-        const decoder = new TextDecoder();
+        const result = await resp.json();
         
-        if (!reader) {
-          throw new Error('无法读取响应流');
-        }
-        
-        let buffer = '';
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          buffer += decoder.decode(value, { stream: true });
-          const messages = buffer.split('\n\n');
-          buffer = messages.pop() || '';
-          
-          for (const message of messages) {
-            const lines = message.split('\n');
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.substring(6));
-                  if (data.type === 'stdout') rec.stdout += data.data;
-                  else if (data.type === 'stderr') rec.stderr += data.data;
-                  else if (data.type === 'exit') rec.success = data.data.success;
-                  else if (data.type === 'error') rec.stderr += `错误: ${data.data}\n`;
-                } catch (e) {}
-              }
-            }
-          }
-        }
-        
-        if (buffer.trim()) {
-          const lines = buffer.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.substring(6));
-                if (data.type === 'stdout') rec.stdout += data.data;
-                else if (data.type === 'stderr') rec.stderr += data.data;
-              } catch (e) {}
-            }
-          }
-        }
-        
-        if (!rec.success) {
-          ElMessage.error(`系统命令 ${stepLabel} 执行失败，停止后续步骤`);
-          shouldContinue = false;
+        if (result.success) {
+          rec.success = true;
+          rec.stdout = `版本号已更新: ${result.oldVersion} → ${result.newVersion}\n`;
+          rec.stdout += `文件路径: ${result.filePath}`;
+          ElMessage.success(`版本号已更新: ${result.oldVersion} → ${result.newVersion}`);
+        } else {
+          throw new Error(result.error || '版本更新失败');
         }
       } catch (e: any) {
         rec.success = false;
         rec.stderr = e?.message || String(e);
-        ElMessage.error(`系统命令 ${stepLabel} 执行出错: ${e?.message}`);
-        shouldContinue = false;
+        if (step.optional) {
+          ElMessage.warning(`[可选] ${stepLabel} 失败: ${e?.message}，继续执行后续步骤`);
+        } else {
+          ElMessage.error(`${stepLabel} 失败: ${e?.message}`);
+          shouldContinue = false;
+        }
       }
     }
     

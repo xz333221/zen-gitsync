@@ -1785,6 +1785,81 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   })
   
+  // 版本号递增
+  app.post('/api/version-bump', express.json(), async (req, res) => {
+    try {
+      const { bumpType, packageJsonPath } = req.body
+      
+      // 确定 package.json 的路径
+      let pkgPath
+      if (packageJsonPath && packageJsonPath.trim()) {
+        pkgPath = path.isAbsolute(packageJsonPath) 
+          ? packageJsonPath 
+          : path.join(currentProjectPath, packageJsonPath)
+      } else {
+        pkgPath = path.join(currentProjectPath, 'package.json')
+      }
+      
+      // 检查文件是否存在
+      if (!await fs.pathExists(pkgPath)) {
+        return res.status(404).json({ 
+          success: false, 
+          error: `未找到 package.json 文件: ${pkgPath}` 
+        })
+      }
+      
+      // 读取 package.json
+      const pkgContent = await fs.readFile(pkgPath, 'utf8')
+      const pkg = JSON.parse(pkgContent)
+      
+      if (!pkg.version) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'package.json 中未找到 version 字段' 
+        })
+      }
+      
+      const oldVersion = pkg.version
+      
+      // 解析版本号
+      const versionParts = oldVersion.split('.').map(Number)
+      if (versionParts.length !== 3 || versionParts.some(isNaN)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `无效的版本号格式: ${oldVersion}，应为 x.y.z 格式` 
+        })
+      }
+      
+      // 根据类型递增版本号
+      let [major, minor, patch] = versionParts
+      if (bumpType === 'major') {
+        major += 1
+        minor = 0
+        patch = 0
+      } else if (bumpType === 'minor') {
+        minor += 1
+        patch = 0
+      } else { // patch
+        patch += 1
+      }
+      
+      const newVersion = `${major}.${minor}.${patch}`
+      pkg.version = newVersion
+      
+      // 写回 package.json（保持格式化）
+      await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
+      
+      res.json({ 
+        success: true, 
+        oldVersion, 
+        newVersion,
+        filePath: pkgPath
+      })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
   // 提交更改
   app.post('/api/commit', express.json(), async (req, res) => {
     try {
