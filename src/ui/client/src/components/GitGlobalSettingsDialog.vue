@@ -537,8 +537,9 @@ html.dark .label-icon {
   padding: 0;
 }
 
-/* footer-actions 和 footer-btn 基础样式已移至 @/styles/common.scss */
+/* footer-actions、footer-btn、cancel-btn 基础样式已移至 @/styles/common.scss */
 
+/* 此组件特定的按钮样式覆盖 */
 .danger-btn {
   background: transparent;
   color: #f56c6c;
@@ -548,17 +549,6 @@ html.dark .label-icon {
 .danger-btn:hover {
   background: rgba(245, 108, 108, 0.1);
   border-color: #f56c6c;
-}
-
-.cancel-btn {
-  background: var(--bg-container);
-  color: var(--el-text-color-regular);
-  border: 1px solid var(--el-border-color);
-}
-
-.cancel-btn:hover {
-  background: var(--el-fill-color-light);
-  border-color: var(--el-border-color-hover);
 }
 
 .primary-btn {

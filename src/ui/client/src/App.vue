@@ -5,12 +5,13 @@ import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
-import CommonDialog from '@components/CommonDialog.vue'
 import InlineCard from '@components/InlineCard.vue'
+import RemoteRepoCard from '@components/RemoteRepoCard.vue'
+import BranchSelector from '@components/BranchSelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import LanguageSwitcher from '@components/LanguageSwitcher.vue'
 import { ElMessage, ElConfigProvider } from 'element-plus'
-import { Edit, Menu, Plus, Setting, Check, DocumentCopy, Sunny, Moon, Download } from '@element-plus/icons-vue'
+import { Edit, Setting, Sunny, Moon, Menu } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -131,49 +132,11 @@ onMounted(async () => {
   }
 })
 
-const createBranchDialogVisible = ref(false)
-const newBranchName = ref('')
-const selectedBaseBranch = ref('')
-
-// 创建新分支
-async function createNewBranch() {
-  const success = await gitStore.createBranch(newBranchName.value, selectedBaseBranch.value)
-
-  if (success) {
-    // 关闭对话框
-    createBranchDialogVisible.value = false
-
-    // 重置表单
-    newBranchName.value = ''
-
-    // 刷新Git状态
-    if (gitStatusRef.value) {
-      gitStatusRef.value.refreshStatus()
-    }
-
-    // 刷新提交历史（直接调用store方法）
-    gitStore.refreshLog()
-  }
-}
-
-// 打开创建分支对话框
-function openCreateBranchDialog() {
-  selectedBaseBranch.value = gitStore.currentBranch
-  createBranchDialogVisible.value = true
-}
-
-// 切换分支
-async function handleBranchChange(branch: string) {
-  const success = await gitStore.changeBranch(branch)
-
-  if (success) {
-    // 刷新Git状态
-    if (gitStatusRef.value) {
-      gitStatusRef.value.refreshStatus()
-    }
-
-    // 刷新提交历史（直接调用store方法）
-    gitStore.refreshLog()
+// 处理分支变更事件
+function handleBranchChanged() {
+  // 刷新Git状态
+  if (gitStatusRef.value) {
+    gitStatusRef.value.refreshStatus()
   }
 }
 
@@ -536,121 +499,12 @@ function stopHResize() {
         <LogList ref="logListRef" />
       </div>
 
-      <!-- 创建分支对话框 -->
-      <CommonDialog
-        v-model="createBranchDialogVisible"
-        :title="$t('@F13B4:创建新分支')"
-        size="small"
-        :destroy-on-close="true"
-        custom-class="create-branch-dialog"
-      >
-        <div class="create-branch-content">
-          <el-form :model="{ newBranchName, selectedBaseBranch }" label-position="top">
-            <el-form-item>
-              <template #label>
-                <div class="form-label">
-                  <el-icon class="label-icon"><Plus /></el-icon>
-                  <span>{{ $t('@F13B4:新分支名称') }}</span>
-                </div>
-              </template>
-              <el-input 
-                v-model="newBranchName" 
-                :placeholder="$t('@F13B4:请输入新分支名称')" 
-                class="modern-input"
-                size="large"
-                @keyup.enter="createNewBranch"
-              />
-            </el-form-item>
-            <el-form-item>
-              <template #label>
-                <div class="form-label">
-                  <el-icon class="label-icon"><Menu /></el-icon>
-                  <span>{{ $t('@F13B4:基于分支') }}</span>
-                </div>
-              </template>
-              <el-select 
-                v-model="selectedBaseBranch" 
-                :placeholder="$t('@F13B4:选择基础分支')" 
-                class="modern-select"
-                size="large"
-                style="width: 100%;"
-              >
-                <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
-              </el-select>
-            </el-form-item>
-          </el-form>
-        </div>
-        <template #footer>
-          <div class="create-branch-footer">
-            <div class="footer-actions">
-              <button type="button" class="footer-btn cancel-btn" @click="createBranchDialogVisible = false">
-                {{ $t('@F13B4:取消') }}
-              </button>
-              <button type="button" class="footer-btn primary-btn" @click="createNewBranch" :disabled="gitStore.isCreatingBranch">
-                <el-icon v-if="!gitStore.isCreatingBranch"><Check /></el-icon>
-                <el-icon class="is-loading" v-else>
-                  <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                    <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
-                  </svg>
-                </el-icon>
-                <span>{{ $t('@F13B4:创建') }}</span>
-              </button>
-            </div>
-          </div>
-        </template>
-      </CommonDialog>
-
     </div>
   </main>
 
   <footer class="main-footer app-footer p-4">
-    <div class="branch-info" v-if="gitStore.currentBranch">
-      <InlineCard class="branch-wrapper" compact>
-        <template #content>
-          <el-tooltip :content="$t('@F13B4:当前分支')" placement="top" effect="dark" :show-after="200">
-            <span class="branch-label" :aria-label="$t('@F13B4:当前分支')" :title="$t('@F13B4:当前分支')">
-              <el-icon class="branch-icon">
-                <!-- 简洁的分支图标 -->
-                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                  <path fill="currentColor" d="M256 160a96 96 0 1 1 0 192 96 96 0 0 1 0-192zm0 512a96 96 0 1 1 0 192 96 96 0 0 1 0-192zm512-480a96 96 0 1 1 0 192 96 96 0 0 1 0-192zM352 256h288a128 128 0 0 1 128 128v48a144 144 0 0 1-144 144H368a16 16 0 0 0-16 16v64h-96v-64a112 112 0 0 1 112-112h256a80 80 0 0 0 80-80v-16a64 64 0 0 0-64-64H352v-64z"/>
-                </svg>
-              </el-icon>
-            </span>
-          </el-tooltip>
-          <el-select v-model="gitStore.currentBranch" @change="handleBranchChange"
-            :loading="gitStore.isChangingBranch" class="branch-select">
-            <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
-          </el-select>
-        </template>
-        <template #actions>
-          <button class="modern-btn btn-icon-28" @click="openCreateBranchDialog">
-            <el-icon class="btn-icon"><Plus /></el-icon>
-          </button>
-        </template>
-      </InlineCard>
-    </div>
-    <div v-if="gitStore.remoteUrl">
-      <InlineCard class="footer-right" compact>
-        <template #content>
-          <svg-icon icon-class="remote-repo" class-name="remote-repo-icon" />
-          <el-tooltip :content="gitStore.remoteUrl" placement="top" effect="dark" :show-after="300">
-            <span class="repo-url">{{ gitStore.remoteUrl }}</span>
-          </el-tooltip>
-        </template>
-        <template #actions>
-          <el-tooltip :content="$t('@F13B4:复制仓库地址')" placement="top" effect="dark" :show-after="200">
-            <button class="modern-btn btn-icon-28" @click="gitStore.copyRemoteUrl()">
-              <el-icon class="btn-icon"><DocumentCopy /></el-icon>
-            </button>
-          </el-tooltip>
-          <el-tooltip :content="$t('@F13B4:复制克隆命令')" placement="top" effect="dark" :show-after="200">
-            <button class="modern-btn btn-icon-28" @click="gitStore.copyCloneCommand()">
-              <el-icon class="btn-icon"><Download /></el-icon>
-            </button>
-          </el-tooltip>
-        </template>
-      </InlineCard>
-    </div>
+    <BranchSelector @branch-changed="handleBranchChanged" />
+    <RemoteRepoCard />
   </footer>
 
   <!-- 用户设置对话框 -->
@@ -798,7 +652,6 @@ h1 {
 
 /* 目录选择器样式由 components/DirectorySelector.vue scoped 管理 */
 
-.branch-label,
 .user-label {
   font-weight: bold;
 }
@@ -896,44 +749,6 @@ h1 {
   filter: drop-shadow(0 0 2em #42b883aa);
 }
 
-.branch-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.branch-label {
-  color: var(--color-text);
-  padding-top: 6px;
-  margin-right: 4px;
-}
-
-  .branch-select {
-    width: 200px;
-  }
-  
-  .remote-repo-icon {
-    width: 16px;
-    height: 16px;
-    margin-right: 6px;
-    color: var(--color-text);
-    vertical-align: middle;
-  }
-  
-  .repo-url-label {
-    font-weight: bold;
-    margin-right: 4px;
-    color: var(--color-text);
-  }
-
-.repo-url {
-  color: #6c757d;
-  font-family: monospace;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 
 /* 垂直分隔条样式 */
@@ -1049,115 +864,7 @@ h1 {
   padding: 0;
 }
 
-.footer-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.footer-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.footer-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  transition: left 0.5s;
-}
-
-.footer-btn:hover::before {
-  left: 100%;
-}
-
-.primary-btn {
-  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-  color: white;
-  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.25);
-}
-
-.primary-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
-}
-
-.primary-btn:active {
-  transform: translateY(0);
-}
-
-.danger-btn {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: white;
-  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
-}
-
-.danger-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.35);
-}
-
-.danger-btn:active {
-  transform: translateY(0);
-}
-/* 创建分支对话框样式 */
-.create-branch-content {
-  padding: 8px 0;
-}
-
-.create-branch-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0;
-}
-
-
-/* 选择框样式 */
-:deep(.modern-select .el-select__wrapper) {
-  border-radius: 8px;
-  border: 1px solid var(--border-input);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s ease;
-  padding: 10px 12px;
-  background: var(--bg-container);
-}
-
-:deep(.modern-select .el-select__wrapper:hover) {
-  border-color: #d1d5db;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-:deep(.modern-select.is-focus .el-select__wrapper) {
-  border-color: #3498db;
-  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1), 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-/* 加载动画 */
-.is-loading {
-  animation: rotating 2s linear infinite;
-}
-
-@keyframes rotating {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+/* footer-actions、footer-btn、primary-btn、cancel-btn、danger-btn 样式已移至 @/styles/common.scss */
 
 /* 国际化测试组件样式 */
 .i18n-test-wrapper {

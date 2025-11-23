@@ -636,23 +636,10 @@ async function selectDirectory(dirPath: string) {
   padding: 0;
 }
 
-/* footer-actions 和 footer-btn 基础样式已移至 @/styles/common.scss */
+/* footer-actions、footer-btn、primary-btn 基础样式已移至 @/styles/common.scss */
 
 .footer-btn {
   font-size: 13px; /* 此组件需要稍小的字号 */
-}
-
-.primary-btn {
-  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-  color: white;
-  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.25);
-}
-.primary-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
-}
-.primary-btn:active {
-  transform: translateY(0);
 }
 
 /* 目录浏览器 MessageBox 全局类名的内容容器（仍可利用） */

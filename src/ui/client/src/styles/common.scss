@@ -597,3 +597,45 @@ body {
 .footer-btn:hover::before {
   left: 100%;
 }
+
+/* Footer 按钮类型样式 */
+.primary-btn {
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  color: white;
+  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.25);
+}
+
+.primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
+}
+
+.primary-btn:active {
+  transform: translateY(0);
+}
+
+.cancel-btn {
+  background: var(--bg-container);
+  color: var(--el-text-color-regular);
+  border: 1px solid var(--el-border-color);
+}
+
+.cancel-btn:hover {
+  background: var(--el-fill-color-light);
+  border-color: var(--el-border-color-hover);
+}
+
+.danger-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
+}
+
+.danger-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.35);
+}
+
+.danger-btn:active {
+  transform: translateY(0);
+}

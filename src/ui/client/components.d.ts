@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    BranchSelector: typeof import('./src/components/BranchSelector.vue')['default']
     CommandConsole: typeof import('./src/components/CommandConsole.vue')['default']
     CommandOrchestrator: typeof import('./src/components/CommandOrchestrator.vue')['default']
     CommitButton: typeof import('./src/components/buttons/CommitButton.vue')['default']
@@ -64,6 +65,7 @@ declare module 'vue' {
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']
     PushProgressModal: typeof import('./src/components/PushProgressModal.vue')['default']
     QuickPushButton: typeof import('./src/components/buttons/QuickPushButton.vue')['default']
+    RemoteRepoCard: typeof import('./src/components/RemoteRepoCard.vue')['default']
     StageButton: typeof import('./src/components/buttons/StageButton.vue')['default']
     StashChangesButton: typeof import('./src/components/buttons/StashChangesButton.vue')['default']
     StashListButton: typeof import('./src/components/buttons/StashListButton.vue')['default']
