@@ -106,10 +106,10 @@
       <div class="user-settings-footer">
         <div></div>
         <div class="footer-actions">
-          <button type="button" class="footer-btn cancel-btn" @click="visible = false" :disabled="isLoading">
+          <button type="button" class="dialog-cancel-btn" @click="visible = false" :disabled="isLoading">
             {{ $t('@42BB9:取消') }}
           </button>
-          <button type="button" class="footer-btn primary-btn" @click="handleSave" :disabled="isLoading">
+          <button type="button" class="dialog-confirm-btn" @click="handleSave" :disabled="isLoading">
             <el-icon><Check /></el-icon>
             <span>{{ $t('@42BB9:保存设置') }}</span>
           </button>
@@ -537,27 +537,5 @@ html.dark .label-icon {
   padding: 0;
 }
 
-/* footer-actions、footer-btn、cancel-btn 基础样式已移至 @/styles/common.scss */
-
-/* 此组件特定的按钮样式覆盖 */
-.danger-btn {
-  background: transparent;
-  color: #f56c6c;
-  border: 1px solid rgba(245, 108, 108, 0.3);
-}
-
-.danger-btn:hover {
-  background: rgba(245, 108, 108, 0.1);
-  border-color: #f56c6c;
-}
-
-.primary-btn {
-  background: linear-gradient(135deg, #409eff 0%, #3a8ee6 100%);
-  color: white;
-  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
-}
-
-.primary-btn:hover {
-  box-shadow: 0 4px 8px rgba(64, 158, 255, 0.4);
-}
+/* footer-actions、dialog-cancel-btn、dialog-confirm-btn 基础样式已移至 @/styles/common.scss */
 </style>

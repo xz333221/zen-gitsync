@@ -470,16 +470,12 @@ onUnmounted(() => {
                   </el-icon>
                 </button>
               </el-tooltip>
-              <button 
-                class="modern-btn expand-button enhanced-btn" 
-                :class="{ 'is-expanded': isExpanded(index) }"
-                @click.stop="toggleExpand(index)"
-              >
+              <div class="expand-button" :class="{ 'is-expanded': isExpanded(index) }">
                 <el-icon class="btn-icon">
                   <ArrowUp v-if="isExpanded(index)" />
                   <ArrowDown v-else />
                 </el-icon>
-              </button>
+              </div>
             </div>
           </div>
 
@@ -665,46 +661,54 @@ onUnmounted(() => {
   background: #3a2020;
   color: #ff8f8f;
   border-color: #a33c3c;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 16px rgba(245, 108, 108, 0.25);
 }
 
 /* 小按钮尺寸 */
 .item-copy-button,
-.expand-button,
 .output-copy-button {
   width: 32px;
   height: 32px;
-  padding: 0;
-  min-width: 32px;
-  gap: 0;
-  border-radius: 6px;
+  padding: 0 !important;
+}
+
+.item-copy-button .btn-icon,
+.output-copy-button .btn-icon {
+  font-size: 16px;
 }
 
 .item-copy-button .btn-text,
-.expand-button .btn-text,
 .output-copy-button .btn-text {
   display: none;
 }
 
 /* 小按钮的悬浮效果调整 */
 .item-copy-button:hover,
-.expand-button:hover,
 .output-copy-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .item-copy-button:active,
-.expand-button:active,
 .output-copy-button:active {
   transform: translateY(0);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
-/* 按钮悬浮效果增强 */
-.enhanced-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+/* 展开指示器样式（非交互式） */
+.expand-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-secondary);
+  transition: transform 0.3s ease;
+}
+
+.expand-button .btn-icon {
+  font-size: 16px;
+  transition: transform 0.3s ease;
 }
 
 .enhanced-btn:active {

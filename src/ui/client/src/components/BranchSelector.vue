@@ -130,12 +130,12 @@ async function handleBranchChange(branch: string) {
         </el-form>
       </div>
       <template #footer>
-        <div class="create-branch-footer">
+        <div class="dialog-footer">
           <div class="footer-actions">
-            <button type="button" class="footer-btn cancel-btn" @click="createBranchDialogVisible = false">
+            <button type="button" class="dialog-cancel-btn" @click="createBranchDialogVisible = false">
               {{ $t('@F13B4:取消') }}
             </button>
-            <button type="button" class="footer-btn primary-btn" @click="createNewBranch" :disabled="gitStore.isCreatingBranch">
+            <button type="button" class="dialog-confirm-btn" @click="createNewBranch" :disabled="gitStore.isCreatingBranch">
               <el-icon v-if="!gitStore.isCreatingBranch"><Check /></el-icon>
               <el-icon class="is-loading" v-else>
                 <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
@@ -174,11 +174,7 @@ async function handleBranchChange(branch: string) {
   padding: 8px 0;
 }
 
-.create-branch-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0;
-}
+/* dialog-footer 样式已移至 @/styles/common.scss */
 
 /* 加载动画 */
 .is-loading {

@@ -91,6 +91,7 @@ export default {
   '@CF05E:开启': 'On',
   '@CF05E:关闭': 'Off',
   '@CF05E:自定义命令管理': 'Custom Command Manager',
+  '@CF05E:指令编排': 'Command Orchestration',
   // @CF05E: file end
   // @CMD01: file path: components\CustomCommandManager.vue
   '@CMD01:命令名称不能为空': 'Command name cannot be empty',
@@ -132,6 +133,18 @@ export default {
   '@CMD01:返回上级目录': 'Go to parent directory',
   '@CMD01:处理目录选择时出错: ': 'Error handling directory selection: ',
   // @CMD01: file end
+  // @CMD02: file path: components\CommandOrchestrator.vue
+  '@CMD02:指令编排': 'Command Orchestration',
+  '@CMD02:可用命令': 'Available Commands',
+  '@CMD02:暂无可用命令，请先创建命令': 'No available commands, please create commands first',
+  '@CMD02:添加': 'Add',
+  '@CMD02:执行顺序': 'Execution Order',
+  '@CMD02:清空': 'Clear',
+  '@CMD02:请从左侧选择要执行的命令': 'Please select commands to execute from the left',
+  '@CMD02:移除': 'Remove',
+  '@CMD02:开始执行': 'Start Execution',
+  '@CMD02:个命令': 'command(s)',
+  // @CMD02: file end
   // @803A9: file path: components\CommonDialog.vue
   '@803A9:确定': 'Confirm',
   '@803A9:取消': 'Cancel',

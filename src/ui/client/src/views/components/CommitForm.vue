@@ -1046,55 +1046,64 @@ git config --global user.email "your.email@example.com"</pre>
         size="large"
         height-mode="fixed"
         custom-class="config-editor-dialog"
-        :show-footer="false"
       >
-          <!-- 编辑器头部信息 -->
-          <div class="editor-header">
-            <div class="editor-info">
-              <el-icon class="info-icon"><Edit /></el-icon>
-              <span class="info-text">{{ $t('@76872:编辑当前项目的配置文件') }}</span>
-            </div>
-            <div class="editor-tips">
-              <el-tag size="small" type="info">{{ $t('@76872:支持JSON格式') }}</el-tag>
-            </div>
+        <!-- 编辑器头部信息 -->
+        <div class="editor-header">
+          <div class="editor-info">
+            <el-icon class="info-icon"><Edit /></el-icon>
+            <span class="info-text">{{ $t('@76872:编辑当前项目的配置文件') }}</span>
           </div>
-          
-          <!-- JSON编辑器 -->
-          <div class="json-editor-wrapper">
-            <el-input
-              v-model="configEditorText"
-              type="textarea"
-              spellcheck="false"
-              autocomplete="off"
-              :placeholder="$t('@76872:在此编辑当前项目配置的 JSON...')"
-              class="json-editor"
-            />
+          <div class="editor-tips">
+            <el-tag size="small" type="info">{{ $t('@76872:支持JSON格式') }}</el-tag>
           </div>
-          
-          <!-- 底部操作按钮 -->
+        </div>
+        
+        <!-- JSON编辑器 -->
+        <div class="json-editor-wrapper">
+          <el-input
+            v-model="configEditorText"
+            type="textarea"
+            spellcheck="false"
+            autocomplete="off"
+            :placeholder="$t('@76872:在此编辑当前项目配置的 JSON...')"
+            class="json-editor"
+          />
+        </div>
+
+        <template #footer>
           <div class="editor-footer">
-            <div class="footer-left">
-              <el-button 
-                :icon="Connection" 
-                @click="openSystemConfigFile"
-                class="system-config-btn"
+            <button 
+              type="button"
+              class="dialog-cancel-btn system-config-btn"
+              @click="openSystemConfigFile"
+            >
+              <span>{{ $t('@76872:打开系统配置文件') }}</span>
+            </button>
+            <div class="footer-actions">
+              <button 
+                type="button"
+                class="dialog-cancel-btn" 
+                @click="configEditorVisible = false"
               >
-                {{ $t('@76872:打开系统配置文件') }}
-              </el-button>
-            </div>
-            <div class="footer-right">
-              <el-button @click="configEditorVisible = false">{{ $t('@76872:取消') }}</el-button>
-              <el-button 
-                type="primary" 
-                :loading="configEditorSaving" 
-                :icon="Check"
+                {{ $t('@76872:取消') }}
+              </button>
+              <button 
+                type="button"
+                class="dialog-confirm-btn"
+                :disabled="configEditorSaving"
                 @click="saveFullConfig"
-                class="save-btn"
               >
-                {{ $t('@76872:保存配置') }}
-              </el-button>
+                <el-icon v-if="!configEditorSaving"><Check /></el-icon>
+                <el-icon v-else class="is-loading">
+                  <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z" />
+                  </svg>
+                </el-icon>
+                <span>{{ $t('@76872:保存配置') }}</span>
+              </button>
             </div>
           </div>
+        </template>
       </CommonDialog>
 
       <!-- 配置文件格式警告弹窗 -->
@@ -2209,11 +2218,7 @@ git config --global user.email "your.email@example.com"</pre>
   gap: 8px;
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
+/* dialog-footer 样式已移至 @/styles/common.scss */
 
 .merge-confirm-btn {
   margin-left: 10px;
@@ -2933,28 +2938,35 @@ git config --global user.email "your.email@example.com"</pre>
   }
 }
 
+/* 编辑器底部特殊布局（左右两组按钮） */
 .editor-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--border-component);
+  padding: 0;
 }
 
-.footer-left {
-  display: flex;
-  gap: 8px;
-}
-
+/* 系统配置按钮样式 */
 .system-config-btn {
-  border-radius: 6px;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  background: var(--bg-panel) !important;
+  border-color: var(--border-component) !important;
   
   &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(144, 147, 153, 0.3);
+    background: var(--bg-icon-hover) !important;
+  }
+}
+
+/* 加载动画 */
+.is-loading {
+  animation: rotating 2s linear infinite;
+}
+
+@keyframes rotating {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 

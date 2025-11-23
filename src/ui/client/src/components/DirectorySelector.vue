@@ -461,18 +461,18 @@ async function selectDirectory(dirPath: string) {
       </el-form>
     </div>
     <template #footer>
-      <div class="directory-footer">
+      <div class="dialog-footer">
         <div class="footer-actions">
           <button
             type="button"
-            class="footer-btn cancel-btn"
+            class="dialog-cancel-btn"
             @click="isDirectoryDialogVisible = false"
           >
             {{ $t('@67CE7:取消') }}
           </button>
           <button
             type="button"
-            class="footer-btn primary-btn"
+            class="dialog-confirm-btn"
             @click="changeDirectory()"
             :disabled="isChangingDirectory"
           >
@@ -630,17 +630,8 @@ async function selectDirectory(dirPath: string) {
   flex: 1;
   min-width: 0;
 }
-.directory-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0;
-}
 
-/* footer-actions、footer-btn、primary-btn 基础样式已移至 @/styles/common.scss */
-
-.footer-btn {
-  font-size: 13px; /* 此组件需要稍小的字号 */
-}
+/* dialog-footer、footer-actions、dialog-cancel-btn、dialog-confirm-btn 基础样式已移至 @/styles/common.scss */
 
 /* 目录浏览器 MessageBox 全局类名的内容容器（仍可利用） */
 .directory-browser {

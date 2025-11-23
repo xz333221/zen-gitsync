@@ -736,11 +736,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   flex-shrink: 0;
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
+/* dialog-footer 样式已移至 @/styles/common.scss */
 
 // 添加步骤对话框样式
 .add-step-list {

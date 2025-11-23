@@ -549,9 +549,19 @@ body {
 /* =======================================================
    共享组件样式 - Footer 按钮组
    ======================================================= */
+/* 对话框底部容器 */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 0;
+}
+
+/* 按钮组容器 */
 .footer-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 12px; /* 统一按钮间距为 12px */
 }
 
 .footer-btn {
@@ -599,6 +609,86 @@ body {
 }
 
 /* Footer 按钮类型样式 */
+/* 对话框取消按钮 - 统一样式 */
+.dialog-cancel-btn {
+  background: var(--bg-container);
+  color: var(--el-text-color-regular);
+  border: 1px solid var(--el-border-color);
+  min-width: 80px;
+  height: 36px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dialog-cancel-btn:hover {
+  background: var(--el-fill-color-light);
+  border-color: var(--el-border-color-hover);
+  transform: translateY(-1px);
+}
+
+.dialog-cancel-btn:active {
+  transform: translateY(0);
+}
+
+/* 对话框确认按钮 - 统一样式 */
+.dialog-confirm-btn {
+  background: linear-gradient(135deg, #409eff 0%, #3a8ee6 100%);
+  color: white;
+  border: none;
+  min-width: 80px;
+  height: 36px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.dialog-confirm-btn:hover {
+  background: linear-gradient(135deg, #66b1ff 0%, #409eff 100%);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.dialog-confirm-btn:active {
+  transform: translateY(0);
+}
+
+.dialog-confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.dialog-confirm-btn:disabled:hover {
+  transform: none;
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
+}
+
+/* 深色主题下的对话框按钮 */
+[data-theme="dark"] .dialog-cancel-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="dark"] .dialog-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* 兼容旧样式类名 */
 .primary-btn {
   background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
   color: white;
