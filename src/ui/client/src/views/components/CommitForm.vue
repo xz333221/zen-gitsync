@@ -2703,6 +2703,50 @@ git config --global user.email "your.email@example.com"</pre>
 .button-divider {
   display: none;
 }
+
+/* 编辑器底部特殊布局（左右两组按钮） */
+.editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
+}
+
+/* 系统配置按钮样式 */
+.system-config-btn {
+  background: var(--bg-panel) !important;
+  border-color: var(--border-component) !important;
+  
+  &:hover {
+    background: var(--bg-icon-hover) !important;
+  }
+}
+
+/* 配置编辑器加载动画 */
+.is-loading {
+  animation: rotating 2s linear infinite;
+}
+
+@keyframes rotating {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.save-btn {
+  border-radius: 6px;
+  font-weight: 500;
+  min-width: 100px;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(144, 147, 153, 0.3);
+  }
+}
 </style>
 
 <!-- 添加全局样式 -->
@@ -2935,50 +2979,6 @@ git config --global user.email "your.email@example.com"</pre>
       color: #a8abb2;
       font-style: italic;
     }
-  }
-}
-
-/* 编辑器底部特殊布局（左右两组按钮） */
-.editor-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0;
-}
-
-/* 系统配置按钮样式 */
-.system-config-btn {
-  background: var(--bg-panel) !important;
-  border-color: var(--border-component) !important;
-  
-  &:hover {
-    background: var(--bg-icon-hover) !important;
-  }
-}
-
-/* 加载动画 */
-.is-loading {
-  animation: rotating 2s linear infinite;
-}
-
-@keyframes rotating {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.save-btn {
-  border-radius: 6px;
-  font-weight: 500;
-  min-width: 100px;
-  transition: all 0.3s ease;
-  
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
   }
 }
 
