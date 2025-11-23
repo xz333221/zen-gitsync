@@ -1054,7 +1054,6 @@ function toggleFullscreen() {
                     <!-- 提交信息 -->
                     <span class="message-text">{{ scope.row.message }}</span>
                     <el-button
-                      type="text"
                       :icon="CopyDocument"
                       size="small"
                       @click.stop="copyPureMessage(scope.row.message)"

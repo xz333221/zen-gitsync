@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import FileActionButtons from './FileActionButtons.vue'
 import { getFileIconClass } from '../utils/fileIcon'
+import { Lock } from '@element-plus/icons-vue'
 
 interface FileItem {
   path: string
