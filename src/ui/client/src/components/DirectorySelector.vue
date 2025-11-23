@@ -635,42 +635,13 @@ async function selectDirectory(dirPath: string) {
   justify-content: flex-end;
   padding: 0;
 }
-.footer-actions {
-  display: flex;
-  gap: 8px;
-}
+
+/* footer-actions 和 footer-btn 基础样式已移至 @/styles/common.scss */
+
 .footer-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
+  font-size: 13px; /* 此组件需要稍小的字号 */
 }
-.footer-btn::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.2),
-    transparent
-  );
-  transition: left 0.5s;
-}
-.footer-btn:hover::before {
-  left: 100%;
-}
+
 .primary-btn {
   background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
   color: white;

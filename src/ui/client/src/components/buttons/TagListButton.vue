@@ -501,30 +501,7 @@ function formatDate(dateString: string): string {
   min-height: 300px;
 }
 
-/* 空状态样式 */
-.empty-state {
-  padding: 40px 20px;
-  text-align: center;
-}
-
-.empty-icon {
-  font-size: 64px;
-  color: #c0c4cc;
-  margin-bottom: 16px;
-}
-
-.empty-text {
-  font-size: 16px;
-  color: var(--text-secondary);
-  margin: 0 0 8px 0;
-  font-weight: 500;
-}
-
-.empty-hint {
-  font-size: 14px;
-  color: #909399;
-  margin: 0;
-}
+/* 空状态样式已移至 @/styles/common.scss */
 
 /* 标签卡片列表 */
 .tag-cards {

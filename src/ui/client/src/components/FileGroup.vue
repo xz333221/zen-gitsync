@@ -419,26 +419,4 @@ const getFileIcon = (filePath: string) => {
 .file-item:hover .file-actions {
   display: flex;
 }
-
-.file-action-btn {
-  min-width: auto !important;
-  width: 20px !important;
-  height: 20px !important;
-  padding: 0 !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: var(--transition-all);
-  border-radius: var(--radius-sm);
-}
-
-.file-action-btn:hover {
-  transform: scale(1.05);
-  box-shadow: var(--shadow-sm);
-}
-
-.file-action-btn:active {
-  transform: scale(1);
-  transition: var(--transition-fast);
-}
 </style>

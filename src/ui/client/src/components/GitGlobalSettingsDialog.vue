@@ -537,27 +537,7 @@ html.dark .label-icon {
   padding: 0;
 }
 
-.footer-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.footer-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.footer-btn:hover {
-  transform: translateY(-1px);
-}
+/* footer-actions 和 footer-btn 基础样式已移至 @/styles/common.scss */
 
 .danger-btn {
   background: transparent;

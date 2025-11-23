@@ -518,3 +518,82 @@ body {
 .el-card__body {
   padding: 0;
 }
+
+/* =======================================================
+   共享组件样式 - 空状态
+   ======================================================= */
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 64px;
+  color: #c0c4cc;
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.empty-hint {
+  font-size: 14px;
+  color: #909399;
+  margin: 0;
+}
+
+/* =======================================================
+   共享组件样式 - Footer 按钮组
+   ======================================================= */
+.footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.footer-btn:hover {
+  transform: translateY(-1px);
+}
+
+.footer-btn:active {
+  transform: translateY(0);
+}
+
+/* Footer 按钮光效动画 */
+.footer-btn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 0.5s;
+}
+
+.footer-btn:hover::before {
+  left: 100%;
+}

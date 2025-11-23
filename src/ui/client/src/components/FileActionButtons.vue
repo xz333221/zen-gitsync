@@ -178,17 +178,3 @@ function handleManageLockedFiles(event: Event) {
   height: 24px;
 }
 </style>
-
-<style lang="scss">
-// 全局样式：让按钮在hover时显示
-.file-item,
-.file-group-item {
-  .file-action-buttons {
-    display: none;
-  }
-  
-  &:hover .file-action-buttons {
-    display: flex;
-  }
-}
-</style>
