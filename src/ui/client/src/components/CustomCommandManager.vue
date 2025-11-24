@@ -377,7 +377,7 @@ defineExpose({
         <el-empty v-if="commands.length === 0" :description="$t('@CMD01:暂无保存的命令')" />
         <div v-else class="command-list-scroll">
           <el-table :data="commands" style="width: 100%" stripe>
-            <el-table-column prop="name" :label="$t('@CMD01:命令名称')" min-width="120">
+            <el-table-column prop="name" :label="$t('@CMD01:命令名称')" min-width="80">
               <template #default="scope">
                 <div class="name-cell">
                   <span class="name-text">{{ scope.row.name }}</span>
@@ -390,12 +390,12 @@ defineExpose({
                 <code class="command-text">{{ scope.row.command }}</code>
               </template>
             </el-table-column>
-            <el-table-column prop="directory" :label="$t('@CMD01:执行目录')" min-width="150">
+            <el-table-column prop="directory" :label="$t('@CMD01:执行目录')" min-width="200">
               <template #default="scope">
                 <span class="directory-text">{{ scope.row.directory || $t('@CMD01:当前目录') }}</span>
               </template>
             </el-table-column>
-            <el-table-column :label="$t('@CMD01:操作')" width="180" fixed="right">
+            <el-table-column :label="$t('@CMD01:操作')" width="100" fixed="right">
               <template #default="scope">
                 <div class="action-buttons">
                   <el-tooltip :content="$t('@CMD01:执行命令')" placement="top">
