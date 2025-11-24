@@ -114,7 +114,7 @@ export default {
   '@CMD01:可选，简要描述命令用途': 'Optional, briefly describe command purpose',
   '@CMD01:执行目录': 'Execution Directory',
   '@CMD01:留空使用当前目录': 'Leave blank to use current directory',
-  '@CMD01:使用当前目录': 'Use Current Directory',
+  '@CMD01:确定': 'OK',
   '@CMD01:命令': 'Command',
   '@CMD01:输入要执行的命令，例如: npm run build': 'Enter command to execute, e.g.: npm run build',
   '@CMD01:更新命令': 'Update Command',

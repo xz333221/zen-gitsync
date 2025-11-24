@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
@@ -61,6 +61,27 @@ function initTheme() {
     document.documentElement.setAttribute('data-theme', 'dark')
   }
 }
+
+// 从路径中提取文件夹名称
+function getFolderNameFromPath(path: string): string {
+  if (!path) return 'Zen GitSync'
+  // 处理Windows和Unix路径
+  const parts = path.replace(/\\/g, '/').split('/')
+  // 过滤空字符串并返回最后一个部分
+  const filtered = parts.filter(p => p)
+  return filtered.length > 0 ? filtered[filtered.length - 1] : 'Zen GitSync'
+}
+
+// 更新浏览器标签标题
+function updateDocumentTitle() {
+  const folderName = getFolderNameFromPath(currentDirectory.value)
+  document.title = `${folderName} - Zen GitSync`
+}
+
+// 监听目录变化，更新标签标题
+watch(currentDirectory, () => {
+  updateDocumentTitle()
+}, { immediate: true })
 
 // 更新配置信息显示
 function updateConfigInfo() {

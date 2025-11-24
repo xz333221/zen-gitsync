@@ -242,7 +242,7 @@ function selectDirectoryDialog(directoryData: any) {
     ]),
     $t('@CMD01:浏览并选择目录'),
     {
-      confirmButtonText: $t('@CMD01:使用当前目录'),
+      confirmButtonText: $t('@CMD01:确定'),
       customClass: "directory-browser-dialog",
       callback: (action: string) => {
         if (action === "confirm") {
