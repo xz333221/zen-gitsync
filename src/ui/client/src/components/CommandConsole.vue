@@ -218,16 +218,21 @@ function editOrchestration(orchestration: any) {
 }
 
 // 执行指令编排（顺序执行多个步骤）
-async function executeOrchestration(steps: OrchestrationStep[]) {
+async function executeOrchestration(steps: OrchestrationStep[], startIndex: number = 0) {
   if (steps.length === 0) return;
   
   commandOrchestratorVisible.value = false;
   orchestrationManagerVisible.value = false;
   consoleRunning.value = true;
   
-  ElMessage.success(`开始执行 ${steps.length} 个步骤...`);
+  const totalSteps = steps.length - startIndex;
+  if (startIndex > 0) {
+    ElMessage.success(`从第 ${startIndex + 1} 步开始执行，共 ${totalSteps} 个步骤...`);
+  } else {
+    ElMessage.success(`开始执行 ${steps.length} 个步骤...`);
+  }
   
-  for (let i = 0; i < steps.length; i++) {
+  for (let i = startIndex; i < steps.length; i++) {
     const step = steps[i];
     
     // 确保 enabled 字段有默认值（旧数据兼容）

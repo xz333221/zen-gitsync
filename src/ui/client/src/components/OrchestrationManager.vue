@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, VideoPlay, Clock, Rank, DocumentAdd } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
@@ -7,7 +7,7 @@ import CommonDialog from '@components/CommonDialog.vue'
 
 export interface OrchestrationManagerEmits {
   (e: 'update:visible', value: boolean): void
-  (e: 'execute-orchestration', steps: OrchestrationStep[]): void
+  (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number): void
   (e: 'edit-orchestration', orchestration: any): void
 }
 
@@ -27,6 +27,32 @@ const dialogVisible = computed({
 
 // 获取已保存的编排列表
 const orchestrations = computed(() => configStore.orchestrations || [])
+
+// 记录当前打开的 dropdown key（用于确保互斥）
+const activeDropdownKey = ref<string | null>(null)
+
+// 获取步骤的唯一标识
+function getStepKey(orchestrationId: string, stepIndex: number): string {
+  return `${orchestrationId}-${stepIndex}`
+}
+
+// 检查 dropdown 是否应该显示
+function isDropdownActive(orchestrationId: string, stepIndex: number): boolean {
+  return activeDropdownKey.value === getStepKey(orchestrationId, stepIndex)
+}
+
+// 打开指定的 dropdown（会自动关闭其他的）
+function openDropdown(orchestrationId: string, stepIndex: number) {
+  activeDropdownKey.value = getStepKey(orchestrationId, stepIndex)
+}
+
+// 关闭 dropdown
+function closeDropdown(orchestrationId: string, stepIndex: number) {
+  const key = getStepKey(orchestrationId, stepIndex)
+  if (activeDropdownKey.value === key) {
+    activeDropdownKey.value = null
+  }
+}
 
 // 获取步骤显示文本
 function getStepLabel(step: OrchestrationStep): string {
@@ -52,9 +78,14 @@ function getStepIcon(step: OrchestrationStep) {
 }
 
 // 执行编排
-function executeOrchestration(orchestration: any) {
-  emit('execute-orchestration', orchestration.steps)
+function executeOrchestration(orchestration: any, startIndex: number = 0) {
+  emit('execute-orchestration', orchestration.steps, startIndex)
   dialogVisible.value = false
+}
+
+// 从指定步骤开始执行
+function executeFromStep(orchestration: any, stepIndex: number) {
+  executeOrchestration(orchestration, stepIndex)
 }
 
 // 编辑编排
@@ -116,16 +147,31 @@ async function deleteOrchestration(orchestration: any) {
             <div class="content-left">
               <h3 class="orchestration-name">{{ orchestration.name }}</h3>
               <div class="step-tags">
-                <el-tag
+                <el-dropdown
                   v-for="(step, index) in orchestration.steps"
                   :key="step.id"
-                  :type="step.type === 'command' ? 'primary' : step.type === 'wait' ? 'warning' : 'success'"
-                  size="small"
-                  class="step-tag"
+                  trigger="contextmenu"
+                  :hide-on-click="true"
+                  @command="() => { executeFromStep(orchestration, index); closeDropdown(orchestration.id, index) }"
+                  @visible-change="(visible: boolean) => visible ? openDropdown(orchestration.id, index) : closeDropdown(orchestration.id, index)"
                 >
-                  <el-icon :component="getStepIcon(step)" />
-                  <span>{{ index + 1 }}. {{ getStepLabel(step) }}</span>
-                </el-tag>
+                  <el-tag
+                    :type="step.type === 'command' ? 'primary' : step.type === 'wait' ? 'warning' : 'success'"
+                    size="small"
+                    class="step-tag"
+                  >
+                    <el-icon :component="getStepIcon(step)" />
+                    <span>{{ index + 1 }}. {{ getStepLabel(step) }}</span>
+                  </el-tag>
+                  <template #dropdown>
+                    <el-dropdown-menu v-if="isDropdownActive(orchestration.id, index)">
+                      <el-dropdown-item command="execute">
+                        <el-icon><VideoPlay /></el-icon>
+                        从此处开始执行
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </div>
             </div>
             <div class="content-right">
@@ -229,6 +275,7 @@ async function deleteOrchestration(orchestration: any) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  cursor: context-menu;
   
   .el-icon {
     font-size: 13px;
