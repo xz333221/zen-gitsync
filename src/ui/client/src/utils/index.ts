@@ -187,6 +187,9 @@ export function formatRelativeTime(timestamp: string | number | Date): string {
   }
 }
 
+// 重新导出路径工具函数
+export { getFolderNameFromPath } from './path';
+
 // 默认导出所有函数
 export default {
   escapeHtml,

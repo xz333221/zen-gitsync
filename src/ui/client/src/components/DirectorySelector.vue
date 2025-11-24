@@ -6,6 +6,7 @@ import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
 import { ref, h, computed, watch, onMounted } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
+import { getFolderNameFromPath } from "@/utils/path";
 
 // 使用 store
 const configStore = useConfigStore();
@@ -13,6 +14,9 @@ const gitStore = useGitStore();
 
 // 从 store 中获取当前目录
 const currentDirectory = computed(() => configStore.currentDirectory);
+
+// 获取当前文件夹名称（用于显示）
+const currentFolderName = computed(() => getFolderNameFromPath(currentDirectory.value));
 
 // 对话框与状态
 const isDirectoryDialogVisible = ref(false);
@@ -371,7 +375,7 @@ async function selectDirectory(dirPath: string) {
 <template>
   <div id="directory-selector" class="directory-selector">
     <div class="directory-display cursor-pointer" :title="currentDirectory" @click="onOpenDialog">
-      {{ currentDirectory }}
+      {{ currentFolderName }}
     </div>
     <div class="directory-actions flex">
       <el-tooltip
@@ -380,7 +384,7 @@ async function selectDirectory(dirPath: string) {
         effect="dark"
         :show-after="200"
       >
-        <button class="modern-btn btn-icon-28" @click="onOpenExplorer">
+        <button class="modern-btn btn-icon-36" @click="onOpenExplorer">
           <el-icon class="btn-icon"><FolderOpened /></el-icon>
         </button>
       </el-tooltip>
@@ -390,7 +394,7 @@ async function selectDirectory(dirPath: string) {
         effect="dark"
         :show-after="200"
       >
-        <button class="modern-btn btn-icon-28" @click="onOpenTerminal">
+        <button class="modern-btn btn-icon-36" @click="onOpenTerminal">
           <el-icon class="btn-icon"><Monitor /></el-icon>
         </button>
       </el-tooltip>
@@ -401,8 +405,8 @@ async function selectDirectory(dirPath: string) {
         effect="dark"
         :show-after="200"
       >
-        <button class="modern-btn btn-icon-28 npm-btn" @click="onToggleNpmPanel">
-          <img src="@/assets/images/npm-logo.png" alt="npm" class="btn-icon" style="width: 16px; height: 16px;" />
+        <button class="modern-btn btn-icon-36 npm-btn" @click="onToggleNpmPanel">
+          <img src="@/assets/images/npm-logo.png" alt="npm" class="btn-icon" style="width: 18px; height: 18px;" />
         </button>
       </el-tooltip>
     </div>
@@ -500,13 +504,14 @@ async function selectDirectory(dirPath: string) {
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 0px;
-  gap: 8px;
+  gap: 10px;
   /* border: 1px solid var(--border-component);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); */
   flex-shrink: 0;
   transition: all 0.2s ease;
+  margin-bottom: 6px;
 }
 
 .directory-selector:hover {
@@ -521,13 +526,9 @@ async function selectDirectory(dirPath: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 14px;
-  font-weight: 500;
-  background-color: var(--bg-container);
-  /* padding: 4px 8px; */
-  border-radius: 3px;
-  border-left: 3px solid #409eff;
-  border: 1px solid var(--border-component);
+  font-size: 22px;
+  font-weight: 600;
+  font-family: 'Arial', sans-serif;
   flex: 1;
   min-width: 0;
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import { ref, onMounted, computed, watch } from 'vue'
+import { getFolderNameFromPath } from '@/utils/path'
 import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
@@ -60,16 +61,6 @@ function initTheme() {
     isDarkTheme.value = true
     document.documentElement.setAttribute('data-theme', 'dark')
   }
-}
-
-// 从路径中提取文件夹名称
-function getFolderNameFromPath(path: string): string {
-  if (!path) return 'Zen GitSync'
-  // 处理Windows和Unix路径
-  const parts = path.replace(/\\/g, '/').split('/')
-  // 过滤空字符串并返回最后一个部分
-  const filtered = parts.filter(p => p)
-  return filtered.length > 0 ? filtered[filtered.length - 1] : 'Zen GitSync'
 }
 
 // 更新浏览器标签标题
