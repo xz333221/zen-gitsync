@@ -179,28 +179,25 @@ async function deleteOrchestration(orchestration: any) {
                 type="primary" 
                 :icon="VideoPlay"
                 size="small"
+                title="执行"
                 @click="executeOrchestration(orchestration)"
-              >
-                执行
-              </el-button>
+              />
               <el-button 
                 type="info" 
                 :icon="Edit"
                 size="small"
                 text
+                title="编辑"
                 @click="editOrchestration(orchestration)"
-              >
-                编辑
-              </el-button>
+              />
               <el-button 
                 type="danger" 
                 :icon="Delete"
                 size="small"
                 text
+                title="删除"
                 @click="deleteOrchestration(orchestration)"
-              >
-                删除
-              </el-button>
+              />
             </div>
           </div>
         </div>

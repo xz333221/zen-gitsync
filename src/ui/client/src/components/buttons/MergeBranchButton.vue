@@ -188,9 +188,9 @@ async function handleMergeBranch() {
           <!-- 分支类型选择 -->
           <el-form-item :label="$t('@76872:分支类型')">
             <el-radio-group v-model="branchTypeFilter" size="default">
-              <el-radio-button label="all">{{ $t('@76872:所有分支') }}</el-radio-button>
-              <el-radio-button label="local">{{ $t('@76872:本地分支') }}</el-radio-button>
-              <el-radio-button label="remote">{{ $t('@76872:远程分支') }}</el-radio-button>
+              <el-radio-button value="all">{{ $t('@76872:所有分支') }}</el-radio-button>
+              <el-radio-button value="local">{{ $t('@76872:本地分支') }}</el-radio-button>
+              <el-radio-button value="remote">{{ $t('@76872:远程分支') }}</el-radio-button>
             </el-radio-group>
           </el-form-item>
 

@@ -293,7 +293,7 @@ function handleClose() {
                 <el-radio
                   v-for="option in versionOptions"
                   :key="option.value"
-                  :label="option.value"
+                  :value="option.value"
                   border
                   class="version-radio"
                 >

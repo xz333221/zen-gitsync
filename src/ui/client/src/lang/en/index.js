@@ -122,6 +122,7 @@ export default {
   '@CMD01:已保存的命令': 'Saved Commands',
   '@CMD01:暂无保存的命令': 'No saved commands yet',
   '@CMD01:当前目录': 'Current Directory',
+  '@CMD01:使用当前目录': 'Use Current Directory',
   '@CMD01:操作': 'Actions',
   '@CMD01:执行命令': 'Execute Command',
   '@CMD01:编辑': 'Edit',

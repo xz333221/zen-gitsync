@@ -292,7 +292,7 @@ defineExpose({
     :close-on-click-modal="false"
     :append-to-body="true"
     custom-class="custom-command-dialog"
-    width="900px"
+    size="extra-large"
   >
     <div class="command-container">
       <!-- 添加/编辑表单 -->

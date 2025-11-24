@@ -514,9 +514,9 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
           <div class="form-item">
             <label>版本增量类型：</label>
             <el-radio-group v-model="versionBump">
-              <el-radio label="patch">补丁版本 (x.x.+1)</el-radio>
-              <el-radio label="minor">次版本 (x.+1.0)</el-radio>
-              <el-radio label="major">主版本 (+1.0.0)</el-radio>
+              <el-radio value="patch">补丁版本 (x.x.+1)</el-radio>
+              <el-radio value="minor">次版本 (x.+1.0)</el-radio>
+              <el-radio value="major">主版本 (+1.0.0)</el-radio>
             </el-radio-group>
           </div>
           <div class="form-item">

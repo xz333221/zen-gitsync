@@ -157,8 +157,8 @@ const tagTypeDescription = computed(() => {
           <!-- 标签类型 -->
           <el-form-item :label="$t('@TAG01:标签类型')">
             <el-radio-group v-model="tagType" size="default">
-              <el-radio-button label="lightweight">{{ $t('@TAG01:轻量标签') }}</el-radio-button>
-              <el-radio-button label="annotated">{{ $t('@TAG01:附注标签') }}</el-radio-button>
+              <el-radio-button value="lightweight">{{ $t('@TAG01:轻量标签') }}</el-radio-button>
+              <el-radio-button value="annotated">{{ $t('@TAG01:附注标签') }}</el-radio-button>
             </el-radio-group>
             <div class="form-tip">
               <el-icon><InfoFilled /></el-icon>
