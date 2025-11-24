@@ -77,7 +77,7 @@ async function saveStash() {
 </script>
 
 <template>
-  <div class="stash-changes-button">
+  <div class="stash-changes-button" v-if="anyChangesIncludingLocked">
     <!-- 储藏更改按钮 -->
     <el-tooltip 
       :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:将工作区更改储藏起来')" 
@@ -89,7 +89,7 @@ async function saveStash() {
         type="warning" 
         @click="openStashDialog" 
         :loading="gitStore.isSavingStash"
-        :disabled="!anyChangesIncludingLocked || gitStore.hasConflictedFiles"
+        :disabled="gitStore.hasConflictedFiles"
         :circle="props.variant === 'icon'"
         :size="props.variant === 'icon' ? 'small' : 'default'"
         :class="props.variant === 'text' ? 'action-button' : ''"
