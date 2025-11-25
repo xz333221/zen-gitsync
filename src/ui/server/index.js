@@ -176,13 +176,27 @@ async function startUIServer(noOpen = false, savePort = false) {
       // console.log(`[流式输出] 当前平台: ${process.platform}`);
       // console.log(`[流式输出] 工作目录: ${execDirectory}`);
       
+      // 记录执行开始时间（用于命令历史）
+      const startTime = Date.now();
+      
+      // 用于收集输出（用于命令历史）
+      let collectedStdout = '';
+      let collectedStderr = '';
+      
       // 使用 shell: true 来支持 Windows 内置命令（如 dir、cd 等）
       const childProcess = spawn(command.trim(), [], {
         cwd: execDirectory,
         shell: true, // 通过 shell 执行，支持 Windows 内置命令
         env: {
           ...process.env,
-          GIT_CONFIG_PARAMETERS: "'core.quotepath=false'"
+          GIT_CONFIG_PARAMETERS: "'core.quotepath=false'",
+          // 强制 npm/yarn 等工具实时输出，禁用缓冲
+          FORCE_COLOR: '1',
+          NPM_CONFIG_COLOR: 'always',
+          // 禁用进度条和其他交互式输出
+          CI: 'true',
+          // 确保输出不被缓冲
+          PYTHONUNBUFFERED: '1'
         }
       });
 
@@ -198,25 +212,33 @@ async function startUIServer(noOpen = false, savePort = false) {
         res.write(message);
       };
 
-      // 在 Windows 上，CMD 默认使用 GBK 编码
-      // 不设置 encoding，直接处理 Buffer，然后用 iconv-lite 转换
+      // 判断是否需要 GBK 转换
+      // 只有 Windows CMD 内置命令（如 dir、type 等）才需要 GBK 转换
+      // npm、node、git 等现代工具都输出 UTF-8
       const isWindows = process.platform === 'win32';
-      // console.log(`[流式输出] 平台: ${process.platform}, 使用编码转换: ${isWindows}`);
+      const cmdBuiltins = ['dir', 'type', 'echo', 'set', 'path', 'cd', 'md', 'rd', 'del', 'copy', 'move', 'ren'];
+      const needsGbkConversion = isWindows && cmdBuiltins.some(builtin => 
+        command.trim().toLowerCase().startsWith(builtin + ' ') || 
+        command.trim().toLowerCase() === builtin
+      );
+      
+      console.log(`[流式输出] 命令: ${command.substring(0, 50)}, 需要GBK转换: ${needsGbkConversion}`);
 
       // 监听标准输出
       childProcess.stdout?.on('data', (data) => {
         // data 是 Buffer 对象
         let output;
-        if (isWindows) {
-          // Windows 系统，从 GBK 转换为 UTF-8
+        if (needsGbkConversion) {
+          // Windows CMD 内置命令，从 GBK 转换为 UTF-8
           output = iconv.decode(data, 'gbk');
-          // console.log(`[流式输出] 收到stdout(GBK转UTF8):`, output.substring(0, 100));
+          console.log(`[流式输出] 收到stdout(GBK转UTF8):`, output.substring(0, 200));
         } else {
-          // Unix 系统，直接使用 UTF-8
+          // 现代工具或 Unix 系统，直接使用 UTF-8
           output = data.toString('utf8');
-          // console.log(`[流式输出] 收到stdout(UTF8):`, output.substring(0, 100));
+          console.log(`[流式输出] 收到stdout(UTF8):`, output.substring(0, 200));
         }
         outputReceived = true;
+        collectedStdout += output; // 收集输出用于历史记录
         sendData('stdout', output);
       });
 
@@ -224,16 +246,17 @@ async function startUIServer(noOpen = false, savePort = false) {
       childProcess.stderr?.on('data', (data) => {
         // data 是 Buffer 对象
         let output;
-        if (isWindows) {
-          // Windows 系统，从 GBK 转换为 UTF-8
+        if (needsGbkConversion) {
+          // Windows CMD 内置命令，从 GBK 转换为 UTF-8
           output = iconv.decode(data, 'gbk');
-          // console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 100));
+          console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 200));
         } else {
-          // Unix 系统，直接使用 UTF-8
+          // 现代工具或 Unix 系统，直接使用 UTF-8
           output = data.toString('utf8');
-          // console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 100));
+          console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 200));
         }
         outputReceived = true;
+        collectedStderr += output; // 收集错误输出用于历史记录
         // 不再自动标记为错误，只显示 stderr 输出
         // Git 的警告信息会输出到 stderr 但退出码仍为 0
         sendData('stderr', output);
@@ -247,6 +270,20 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 监听进程关闭（close 在流关闭后触发）
       childProcess.on('close', (code, signal) => {
         // console.log(`[流式输出] 进程 close 事件 - 代码: ${code}, 信号: ${signal}, 有输出: ${outputReceived}`);
+        
+        // 计算执行时间
+        const executionTime = Date.now() - startTime;
+        
+        // 添加到命令历史
+        const error = code !== 0 ? `Command exited with code ${code}` : null;
+        addCommandToHistory(
+          command.trim(),
+          collectedStdout,
+          collectedStderr,
+          error,
+          executionTime
+        );
+        
         // 只根据退出码判断成功与否，退出码为 0 表示成功
         sendData('exit', { code, success: code === 0 });
         res.end();
@@ -255,6 +292,17 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 监听错误
       childProcess.on('error', (error) => {
         // console.error(`[流式输出] 进程错误:`, error);
+        
+        // 添加到命令历史（错误情况）
+        const executionTime = Date.now() - startTime;
+        addCommandToHistory(
+          command.trim(),
+          collectedStdout,
+          collectedStderr,
+          error.message,
+          executionTime
+        );
+        
         sendData('error', error.message);
         res.end();
       });

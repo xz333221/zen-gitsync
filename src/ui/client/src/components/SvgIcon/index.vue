@@ -5,7 +5,7 @@
 </template>
 
 <script lang="ts" setup name="SvgIcon">
-  import { computed, defineProps } from 'vue'
+  import { computed } from 'vue'
 const props = defineProps({
     iconClass: {
         type: String,
