@@ -18,6 +18,7 @@ import StashListButton from '@/components/buttons/StashListButton.vue'
 import MergeBranchButton from '@/components/buttons/MergeBranchButton.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
 import GitOperationsButton from '@components/buttons/GitOperationsButton.vue'
+import CommandHistory from '@views/components/CommandHistory.vue'
 
 // 定义props
 const props = defineProps({
@@ -716,7 +717,10 @@ defineExpose({
             />
           </el-tooltip>
         </div>
-        <GitOperationsButton variant="icon" />
+        <div class="flex">
+          <GitOperationsButton variant="icon" />
+          <CommandHistory />
+        </div>
       </div>
     </div>
     

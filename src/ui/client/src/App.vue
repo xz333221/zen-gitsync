@@ -5,7 +5,6 @@ import { getFolderNameFromPath } from '@/utils/path'
 import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
-import CommandHistory from '@views/components/CommandHistory.vue'
 import InlineCard from '@components/InlineCard.vue'
 import RemoteRepoCard from '@components/RemoteRepoCard.vue'
 import BranchSelector from '@components/BranchSelector.vue'
@@ -360,8 +359,6 @@ function stopHResize() {
     <div class="header-info">
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
-        <!-- 命令历史按钮 -->
-        <CommandHistory />
         <ConfigEditorButton variant="icon" />
         <ThemeSwitcher />
       </div>
