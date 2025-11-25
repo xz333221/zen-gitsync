@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { ArrowDown, FullScreen, VideoPlay, Loading } from '@element-plus/icons-vue';
+import { ArrowDown, FullScreen, VideoPlay, Loading, Close } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
@@ -25,6 +25,7 @@ type ConsoleRecord = {
   ts: string; 
   expanded?: boolean;
   running?: boolean;  // 标记命令是否还在运行
+  processId?: number; // 服务端进程ID，用于停止
 };
 
 const consoleHistory = ref<ConsoleRecord[]>([]);
@@ -232,7 +233,12 @@ async function runConsoleCommand() {
               const data = JSON.parse(line.substring(6));
               console.log(`[前端-控制台] 解析到数据:`, data.type, '长度:', data.data?.length || 0);
               
-              if (data.type === 'stdout') {
+              if (data.type === 'process_id') {
+                rec.processId = data.data;
+                console.log(`[前端-控制台] 收到进程ID:`, rec.processId);
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
+              } else if (data.type === 'stdout') {
                 rec.stdout = (rec.stdout || '') + ansiToHtml(data.data);
                 console.log(`[前端-控制台] 当前stdout总长度:`, rec.stdout.length);
                 // 收到第一个输出时关闭loading，表示命令已启动
@@ -310,6 +316,43 @@ function toggleCommandOutput(rec: ConsoleRecord) {
   const index = consoleHistory.value.findIndex(r => r.id === rec.id);
   if (index !== -1) {
     consoleHistory.value[index].expanded = !consoleHistory.value[index].expanded;
+  }
+}
+
+// 停止正在运行的命令
+async function stopCommand(rec: ConsoleRecord) {
+  if (!rec.processId) {
+    ElMessage.warning('无法停止：进程ID不存在');
+    return;
+  }
+
+  if (!rec.running) {
+    ElMessage.info('命令已经结束');
+    return;
+  }
+
+  try {
+    console.log(`[停止命令] 尝试停止进程 #${rec.processId}: ${rec.command}`);
+    
+    const resp = await fetch('/api/kill-process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ processId: rec.processId })
+    });
+
+    const result = await resp.json();
+    
+    if (result.success) {
+      ElMessage.success(`已停止命令: ${rec.command}`);
+      rec.running = false;
+      // 强制触发响应式更新
+      consoleHistory.value = [...consoleHistory.value];
+    } else {
+      ElMessage.error(`停止失败: ${result.error}`);
+    }
+  } catch (error: any) {
+    console.error('[停止命令] 失败:', error);
+    ElMessage.error(`停止失败: ${error.message || '未知错误'}`);
   }
 }
 
@@ -708,7 +751,12 @@ async function executeCustomCommand(command: CustomCommand) {
               const data = JSON.parse(line.substring(6));
               console.log(`[前端-自定义] 解析到数据:`, data.type, '内容长度:', data.data?.length || 0);
               
-              if (data.type === 'stdout') {
+              if (data.type === 'process_id') {
+                rec.processId = data.data;
+                console.log(`[前端-自定义] 收到进程ID:`, rec.processId);
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
+              } else if (data.type === 'stdout') {
                 rec.stdout = (rec.stdout || '') + ansiToHtml(data.data);
                 console.log(`[前端-自定义] 当前stdout总长度:`, rec.stdout.length, '内容预览:', rec.stdout.substring(0, 100));
                 // 收到第一个输出时关闭loading，表示命令已启动
@@ -884,7 +932,7 @@ onMounted(async () => {
         <!-- 命令历史输出 -->
         <div class="console-output" v-if="consoleHistory.length">
           <div v-for="rec in consoleHistory" :key="rec.id" class="console-record">
-            <div class="cmd-header">
+            <div class="cmd-header cursor-pointer" @click="toggleCommandOutput(rec)">
               <div class="cmd-line">
                 <span class="cmd-prefix">&gt;</span>
                 <span class="cmd-text">{{ rec.command }}</span>
@@ -893,17 +941,32 @@ onMounted(async () => {
                 </el-icon>
                 <span class="ts">{{ rec.ts }}</span>
               </div>
-              <el-button
-                text
-                size="small"
-                @click="toggleCommandOutput(rec)"
-                :disabled="!rec.stdout && !rec.stderr"
-                class="toggle-output-btn"
-              >
-                <el-icon :class="{ 'rotate-icon': !rec.expanded }">
-                  <ArrowDown />
-                </el-icon>
-              </el-button>
+              <div class="cmd-actions">
+                <el-tooltip v-if="rec.running" content="停止命令" placement="top">
+                  <el-button
+                    text
+                    size="small"
+                    @click.stop="stopCommand(rec)"
+                    class="stop-btn"
+                    type="danger"
+                  >
+                    <el-icon>
+                      <Close />
+                    </el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-button
+                  text
+                  size="small"
+                  @click.stop="toggleCommandOutput(rec)"
+                  :disabled="!rec.stdout && !rec.stderr"
+                  class="toggle-output-btn"
+                >
+                  <el-icon :class="{ 'rotate-icon': !rec.expanded }">
+                    <ArrowDown />
+                  </el-icon>
+                </el-button>
+              </div>
             </div>
             <transition name="output-slide">
               <div v-if="rec.expanded && (rec.stdout || rec.stderr)" class="output-content">
@@ -1226,6 +1289,21 @@ onMounted(async () => {
   justify-content: space-between;
   padding: 10px 12px;
   gap: 8px;
+}
+
+.cmd-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stop-btn {
+  color: #f56c6c;
+  padding: 4px 8px;
+  
+  &:hover {
+    background: rgba(245, 108, 108, 0.1);
+  }
 }
 
 .cmd-line {

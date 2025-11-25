@@ -670,7 +670,6 @@ defineExpose({
       <DirectorySelector @toggle-npm-panel="toggleNpmPanel" />
       
       <div class="title-row">
-        <h2>Git {{ $t('@13D1C:状态') }}</h2>
         <div class="header-actions">
           <!-- 自动更新开关已隐藏 - 文件监控默认禁用，改为使用手动刷新和标签页激活刷新 -->
           <!-- <el-tooltip 
@@ -1141,7 +1140,6 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
 }
 
 .card-content {
