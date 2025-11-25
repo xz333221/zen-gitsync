@@ -11,8 +11,10 @@ import RemoteRepoCard from '@components/RemoteRepoCard.vue'
 import BranchSelector from '@components/BranchSelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import LanguageSwitcher from '@components/LanguageSwitcher.vue'
+import ThemeSwitcher from '@components/ThemeSwitcher.vue'
+import ConfigEditorButton from '@components/buttons/ConfigEditorButton.vue'
 import { ElMessage, ElConfigProvider } from 'element-plus'
-import { Edit, Setting, Sunny, Moon, Menu } from '@element-plus/icons-vue'
+import { Setting } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -35,33 +37,6 @@ const localeStore = useLocaleStore()
 const initCompleted = ref(false)
 // 从 configStore 代理当前目录
 const currentDirectory = computed(() => configStore.currentDirectory)
-
-// 主题切换功能
-const isDarkTheme = ref(false)
-
-// 切换主题
-function toggleTheme() {
-  isDarkTheme.value = !isDarkTheme.value
-  const html = document.documentElement
-  if (isDarkTheme.value) {
-    html.setAttribute('data-theme', 'dark')
-    localStorage.setItem('theme', 'dark')
-  } else {
-    html.removeAttribute('data-theme')
-    localStorage.setItem('theme', 'light')
-  }
-}
-
-// 初始化主题
-function initTheme() {
-  const savedTheme = localStorage.getItem('theme')
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-  
-  if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-    isDarkTheme.value = true
-    document.documentElement.setAttribute('data-theme', 'dark')
-  }
-}
 
 // 更新浏览器标签标题
 function updateDocumentTitle() {
@@ -96,9 +71,6 @@ async function loadCurrentDirectory() {
 
 onMounted(async () => {
   console.log($t('@F13B4:---------- 页面初始化开始 ----------'))
-
-  // 初始化主题
-  initTheme()
 
   try {
     // 并行加载配置和目录信息
@@ -392,25 +364,8 @@ function stopHResize() {
         <div class="command-history-section" v-if="gitStore.isGitRepo">
           <CommandHistory />
         </div>
-        <el-tooltip :content="$t('@F13B4:编辑项目配置')" placement="bottom" effect="dark" :show-after="200">
-          <button class="modern-btn btn-icon-36 btn-scale-on-hover" @click="commitFormRef?.openConfigEditor()">
-            <el-icon class="btn-icon"><Edit /></el-icon>
-          </button>
-        </el-tooltip>
-        <el-tooltip :content="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')" placement="bottom" effect="dark" :show-after="200">
-          <button class="modern-btn btn-icon-36" @click="toggleTheme">
-            <el-icon class="btn-icon">
-              <Sunny v-if="isDarkTheme" />
-              <Moon v-else />
-            </el-icon>
-          </button>
-        </el-tooltip>
-        
-        <el-tooltip :content="$t('@F13B4:Git 操作')" placement="bottom" effect="dark" :show-after="200">
-          <button class="modern-btn btn-icon-36 btn-rotate-on-hover" @click="commitFormRef?.toggleGitOperationsDrawer()">
-            <el-icon class="btn-icon"><Menu /></el-icon>
-          </button>
-        </el-tooltip>
+        <ConfigEditorButton variant="icon" />
+        <ThemeSwitcher />
       </div>
       <!-- 语言切换 -->
       <LanguageSwitcher />
@@ -641,28 +596,6 @@ h1 {
   align-items: center;
   gap: 8px;
 }
-
-/* .modern-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: var(--bg-title);
-  color: var(--color-text);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  border: 1px solid var(--border-component);
-  position: relative;
-  overflow: hidden;
-} */
-
-
-
-/* 目录选择器样式由 components/DirectorySelector.vue scoped 管理 */
 
 .user-label {
   font-weight: bold;
