@@ -511,7 +511,6 @@ async function selectDirectory(dirPath: string) {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); */
   flex-shrink: 0;
   transition: all 0.2s ease;
-  margin-bottom: 6px;
 }
 
 .directory-selector:hover {
