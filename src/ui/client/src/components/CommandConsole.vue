@@ -113,12 +113,6 @@ function ansiToHtml(text: string): string {
   return result + closeTags;
 }
 
-// 移除 ANSI 转义码（作为备用）
-function stripAnsiCodes(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1b\[[0-9;]*m/g, '');
-}
-
 // 控制全屏状态
 const isFullscreen = ref(false);
 
