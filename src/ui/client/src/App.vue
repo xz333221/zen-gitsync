@@ -361,9 +361,7 @@ function stopHResize() {
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
         <!-- 命令历史按钮 -->
-        <div class="command-history-section" v-if="gitStore.isGitRepo">
-          <CommandHistory />
-        </div>
+        <CommandHistory />
         <ConfigEditorButton variant="icon" />
         <ThemeSwitcher />
       </div>

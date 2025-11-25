@@ -247,51 +247,11 @@ defineExpose({ openConfigEditor })
   display: inline-block;
 }
 
-// 按钮样式
-.modern-btn {
-  &.btn-icon-36 {
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    border-radius: 8px;
-
-    &:hover {
-      background: var(--bg-icon);
-    }
-
-    .btn-icon {
-      font-size: 18px;
-      color: var(--text-primary);
-    }
-  }
-}
-
-.action-button {
-  width: 100%;
-  justify-content: flex-start;
-  padding: 8px 12px;
-  font-size: 13px;
-  border-radius: 6px;
-  transition: all 0.3s ease;
-
-  &:hover {
-    transform: translateX(2px);
-  }
-}
-
 // 编辑器头部
 .editor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
   padding: 12px;
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   border-radius: 8px;
@@ -317,7 +277,7 @@ defineExpose({ openConfigEditor })
 
 // JSON编辑器
 .json-editor-wrapper {
-  height: 400px;
+  flex-grow: 1;
   border-radius: 8px;
   overflow: hidden;
   border: 2px solid #e5e7eb;

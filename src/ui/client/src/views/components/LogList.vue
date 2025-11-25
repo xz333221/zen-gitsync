@@ -1282,51 +1282,6 @@ function toggleFullscreen() {
   text-align: right;
 }
 
-.graph-view {
-  width: 100%;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: 0 8px;
-}
-
-.graph-container {
-  width: 100%;
-  flex: 1;
-  min-height: 500px;
-  border: 1px solid var(--border-card);
-  border-radius: 8px;
-  padding: 16px;
-  position: relative;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-}
-
-.graph-container svg {
-  transform-origin: top left;
-  transition: transform 0.2s ease;
-}
-
-.graph-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-card);
-}
-
-.zoom-controls {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.zoom-slider {
-  width: 200px;
-}
-
 .scale-info {
   font-size: 14px;
   color: var(--text-secondary);
@@ -1617,56 +1572,6 @@ function toggleFullscreen() {
   margin-bottom: 4px;
 }
 
-.loading-more {
-  display: flex;
-  align-items: center;
-  color: #909399;
-  font-size: 13px;
-  gap: 8px;
-}
-
-.loading-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--border-card);
-  border-top-color: #409eff;
-  border-radius: 50%;
-  animation: spinner 1s linear infinite;
-}
-
-@keyframes spinner {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.load-more-button {
-  cursor: pointer;
-  color: #409eff;
-  font-size: 13px;
-  padding: 6px 16px;
-  border: 1px solid #d9ecff;
-  background-color: #ecf5ff;
-  border-radius: 4px;
-  transition: all 0.3s;
-  font-weight: 500;
-}
-
-.no-more-data {
-  color: #909399;
-  font-size: 13px;
-  font-style: italic;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.total-loaded {
-  font-size: 12px;
-  margin-top: 4px;
-  color: #c0c4cc;
-}
-
 /* 右键菜单样式 */
 .context-menu {
   position: fixed;
@@ -1762,11 +1667,6 @@ function toggleFullscreen() {
   height: calc(100vh - 60px); /* 减去头部和可能的筛选面板高度 */
 }
 
-/* 全屏模式下图表视图调整 */
-.fullscreen-mode .graph-view {
-  height: calc(100vh - 140px); /* 减去头部和控制区域高度 */
-}
-
 /* 右键菜单样式 */
 .context-menu {
   position: fixed;
@@ -1806,74 +1706,6 @@ function toggleFullscreen() {
 <style>
 .el-table .el-table__cell .cell {
   word-break: break-all;
-}
-
-/* 优化diff显示样式 */
-.diff-header {
-  font-weight: bold;
-  background-color: #e6f1fc;
-  padding: 10px 16px;
-  margin: 12px 0;
-  border-radius: 6px;
-  color: #0366d6;
-  border-bottom: 1px solid #c8e1ff;
-}
-
-.diff-old-file, .diff-new-file {
-  color: #586069;
-  padding: 4px 8px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-}
-
-.diff-old-file {
-  color: #cb2431;
-}
-
-.diff-new-file {
-  color: #22863a;
-}
-
-.diff-hunk-header {
-  color: #6f42c1;
-  background-color: #f1f8ff;
-  padding: 4px 8px;
-  margin: 8px 0;
-  border-radius: 4px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-}
-
-.diff-added {
-  background-color: #e6ffed;
-  color: #22863a;
-  padding: 2px 8px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  display: block;
-  margin: 2px 0;
-}
-
-.diff-removed {
-  background-color: #ffeef0;
-  color: #cb2431;
-  padding: 2px 8px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  display: block;
-  margin: 2px 0;
-}
-
-.diff-context {
-  color: #444;
-  padding: 2px 8px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  display: block;
-  margin: 2px 0;
-  background-color: #fafbfc;
-}
-</style>
-
-<!-- 底部加载更多按钮悬停效果 -->
-<style>
-.load-more-button:hover {
-  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.15);
 }
 </style>
 

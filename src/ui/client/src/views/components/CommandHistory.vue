@@ -575,7 +575,7 @@ onUnmounted(() => {
 }
 
 .enhanced-btn .btn-icon {
-  font-size: 14px;
+  font-size: 18px;
   z-index: 1;
   position: relative;
 }
