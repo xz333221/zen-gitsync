@@ -168,10 +168,8 @@ function getStepDetail(step: OrchestrationStep): string {
     return `暂停执行 ${step.waitSeconds} 秒`
   } else if (step.type === 'version') {
     if (step.packageJsonPath) {
-      // 显示相对路径，更友好
-      const projectRoot = process.cwd ? process.cwd() : ''
-      const relativePath = step.packageJsonPath.replace(projectRoot, '').replace(/\\/g, '/').replace(/^\//, '')
-      return relativePath || step.packageJsonPath
+      // 显示路径，将反斜杠转换为正斜杠
+      return step.packageJsonPath.replace(/\\/g, '/')
     }
     return '当前目录的 package.json'
   }
