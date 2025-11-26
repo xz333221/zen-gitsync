@@ -347,12 +347,15 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 在新终端中执行自定义命令
   app.post('/api/exec-in-terminal', async (req, res) => {
     try {
-      const { command } = req.body || {};
+      const { command, workingDirectory } = req.body || {};
       if (!command || typeof command !== 'string' || !command.trim()) {
         return res.status(400).json({ success: false, error: 'command 不能为空' });
       }
 
+      // 使用传入的工作目录，如果没有则使用当前项目路径
+      const targetDir = workingDirectory || currentProjectPath;
       console.log(`在终端中执行命令: ${command}`);
+      console.log(`工作目录: ${targetDir}`);
       
       // 根据操作系统选择合适的终端命令
       let terminalCommand;
@@ -360,14 +363,14 @@ async function startUIServer(noOpen = false, savePort = false) {
       if (process.platform === 'win32') {
         // Windows: 使用 start 命令打开新的 cmd 窗口
         // /K 参数表示执行命令后保持窗口打开
-        terminalCommand = `start cmd /K "cd /d ${currentProjectPath} && ${command}"`;
+        terminalCommand = `start cmd /K "cd /d ${targetDir} && ${command}"`;
       } else if (process.platform === 'darwin') {
         // macOS: 使用 osascript 打开 Terminal.app
-        const script = `tell application "Terminal" to do script "cd ${currentProjectPath} && ${command}"`;
+        const script = `tell application "Terminal" to do script "cd ${targetDir} && ${command}"`;
         terminalCommand = `osascript -e '${script}'`;
       } else {
         // Linux: 尝试常见的终端模拟器
-        terminalCommand = `gnome-terminal -- bash -c "cd ${currentProjectPath} && ${command}; exec bash" || xterm -e "cd ${currentProjectPath} && ${command}; bash"`;
+        terminalCommand = `gnome-terminal -- bash -c "cd ${targetDir} && ${command}; exec bash" || xterm -e "cd ${targetDir} && ${command}; bash"`;
       }
       
       // 执行命令打开新终端

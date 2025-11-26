@@ -425,7 +425,10 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
           const resp = await fetch('/api/exec-in-terminal', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: cmd })
+            body: JSON.stringify({ 
+              command: cmd,
+              workingDirectory: command.directory // 传递命令的工作目录
+            })
           });
           const result = await resp.json();
           if (result?.success) {
@@ -647,15 +650,13 @@ async function executeCustomCommand(command: CustomCommand) {
   // 如果使用终端执行
   if (useTerminal.value) {
     try {
-      // 如果有指定目录，需要修改命令以包含 cd
-      const finalCommand = targetDir && targetDir !== currentDirectory.value 
-        ? `cd /d "${targetDir}" && ${cmd}` 
-        : cmd;
-      
       const resp = await fetch('/api/exec-in-terminal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: finalCommand })
+        body: JSON.stringify({ 
+          command: cmd,
+          workingDirectory: targetDir // 传递工作目录到后端
+        })
       });
       const result = await resp.json();
       if (result?.success) {
