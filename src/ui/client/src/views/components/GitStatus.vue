@@ -16,6 +16,7 @@ import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
 import MergeBranchButton from '@/components/buttons/MergeBranchButton.vue'
+import UnstageAllButton from '@/components/buttons/UnstageAllButton.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
 import GitOperationsButton from '@components/buttons/GitOperationsButton.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
@@ -699,6 +700,9 @@ defineExpose({
 
           <!-- 合并分支按钮 -->
           <MergeBranchButton />
+
+          <!-- 取消暂存所有按钮 -->
+          <UnstageAllButton from="status" />
 
           <!-- 储藏更改按钮 -->
           <StashChangesButton />

@@ -68,6 +68,7 @@ declare module 'vue' {
     NpmSettingsDialog: typeof import('./src/components/NpmSettingsDialog.vue')['default']
     OptionSwitchCard: typeof import('./src/components/OptionSwitchCard.vue')['default']
     OrchestrationManager: typeof import('./src/components/OrchestrationManager.vue')['default']
+    OrchestrationWorkspace: typeof import('./src/components/OrchestrationWorkspace.vue')['default']
     PackageJsonSelector: typeof import('./src/components/PackageJsonSelector.vue')['default']
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']
     PushProgressModal: typeof import('./src/components/PushProgressModal.vue')['default']
@@ -83,6 +84,7 @@ declare module 'vue' {
     ThemeSwitcher: typeof import('./src/components/ThemeSwitcher.vue')['default']
     TreeIcon: typeof import('./src/components/icons/TreeIcon.vue')['default']
     TreeNodeItem: typeof import('./src/components/TreeNodeItem.vue')['default']
+    UnstageAllButton: typeof import('./src/components/buttons/UnstageAllButton.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

@@ -4,8 +4,7 @@ import { ArrowDown, FullScreen, VideoPlay, Loading, Close } from '@element-plus/
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
-import CommandOrchestrator from '@components/CommandOrchestrator.vue';
-import OrchestrationManager from '@components/OrchestrationManager.vue';
+import OrchestrationWorkspace from '@components/OrchestrationWorkspace.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
 
@@ -122,14 +121,8 @@ const useTerminal = ref(localStorage.getItem('useTerminal') === 'true');
 // 控制自定义命令管理弹窗
 const commandManagerVisible = ref(false);
 
-// 控制指令编排弹窗
-const commandOrchestratorVisible = ref(false);
-
-// 控制编排管理弹窗
-const orchestrationManagerVisible = ref(false);
-
-// 当前编辑的编排（用于编辑模式）
-const editingOrchestration = ref<any>(null);
+// 控制编排工作台弹窗（合并了指令编排和编排管理）
+const orchestrationWorkspaceVisible = ref(false);
 
 // 执行控制台命令
 async function runConsoleCommand() {
@@ -355,29 +348,16 @@ function openCommandManager() {
   commandManagerVisible.value = true;
 }
 
-// 打开指令编排
-function openCommandOrchestrator() {
-  editingOrchestration.value = null
-  commandOrchestratorVisible.value = true;
-}
-
-// 打开编排管理
-function openOrchestrationManager() {
-  orchestrationManagerVisible.value = true;
-}
-
-// 编辑编排
-function editOrchestration(orchestration: any) {
-  editingOrchestration.value = orchestration
-  commandOrchestratorVisible.value = true
+// 打开编排工作台
+function openOrchestrationWorkspace() {
+  orchestrationWorkspaceVisible.value = true;
 }
 
 // 执行指令编排（顺序执行多个步骤）
 async function executeOrchestration(steps: OrchestrationStep[], startIndex: number = 0) {
   if (steps.length === 0) return;
   
-  commandOrchestratorVisible.value = false;
-  orchestrationManagerVisible.value = false;
+  orchestrationWorkspaceVisible.value = false;
   consoleRunning.value = true;
   
   const totalSteps = steps.length - startIndex;
@@ -868,22 +848,13 @@ onMounted(async () => {
             <SvgIcon icon-class="command-list" class-name="icon-btn" />
           </el-button>
         </el-tooltip>
-        <el-tooltip :content="$t('@CF05E:指令编排')" placement="bottom">
+        <el-tooltip content="编排工作台" placement="bottom">
           <el-button
             text
-            @click="openCommandOrchestrator"
+            @click="openOrchestrationWorkspace"
             class="toggle-console-btn orchestrator-btn"
           >
             <SvgIcon icon-class="command-orchestrate" class-name="icon-btn" />
-          </el-button>
-        </el-tooltip>
-        <el-tooltip content="编排管理" placement="bottom">
-          <el-button
-            text
-            @click="openOrchestrationManager"
-            class="toggle-console-btn orchestrator-manager-btn"
-          >
-            <SvgIcon icon-class="command-grid" class-name="icon-btn" />
           </el-button>
         </el-tooltip>
         <el-button
@@ -981,18 +952,10 @@ onMounted(async () => {
     @execute-command="executeCustomCommand"
   />
   
-  <!-- 指令编排弹窗 -->
-  <CommandOrchestrator
-    v-model:visible="commandOrchestratorVisible"
-    :editing-orchestration="editingOrchestration"
+  <!-- 编排工作台弹窗（合并了指令编排和编排管理） -->
+  <OrchestrationWorkspace
+    v-model:visible="orchestrationWorkspaceVisible"
     @execute-orchestration="executeOrchestration"
-  />
-  
-  <!-- 编排管理弹窗 -->
-  <OrchestrationManager
-    v-model:visible="orchestrationManagerVisible"
-    @execute-orchestration="executeOrchestration"
-    @edit-orchestration="editOrchestration"
   />
 </template>
 

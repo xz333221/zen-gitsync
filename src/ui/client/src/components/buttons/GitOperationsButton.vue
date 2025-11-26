@@ -5,6 +5,7 @@ import { useGitStore } from '@stores/gitStore'
 import { Menu, RefreshRight, Download, Connection, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import StageButton from '@/components/buttons/StageButton.vue'
+import UnstageAllButton from '@/components/buttons/UnstageAllButton.vue'
 import CommitButton from '@/components/buttons/CommitButton.vue'
 import PushButton from '@/components/buttons/PushButton.vue'
 import QuickPushButton from '@/components/buttons/QuickPushButton.vue'
@@ -192,6 +193,11 @@ defineExpose({
             <div class="group-title">{{ $t('@76872:基础操作') }}</div>
               <div class="group-buttons">
                 <StageButton
+                  @click="() => {}"
+                  from="drawer"
+                />
+
+                <UnstageAllButton
                   @click="() => {}"
                   from="drawer"
                 />
