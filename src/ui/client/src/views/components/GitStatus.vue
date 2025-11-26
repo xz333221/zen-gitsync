@@ -2,11 +2,9 @@
 import { $t } from '@/lang/static'
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-// import { io } from 'socket.io-client'
 import { Refresh, Document, ArrowUp, ArrowDown, Download, Connection, Lock, Unlock, InfoFilled } from '@element-plus/icons-vue'
 import TreeIcon from '@/components/icons/TreeIcon.vue'
 import ListIcon from '@/components/icons/ListIcon.vue'
-// import { useGitLogStore } from '../stores/gitLogStore'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
@@ -19,6 +17,8 @@ import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
 import MergeBranchButton from '@/components/buttons/MergeBranchButton.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
+import GitOperationsButton from '@components/buttons/GitOperationsButton.vue'
+import CommandHistory from '@views/components/CommandHistory.vue'
 
 // 定义props
 const props = defineProps({
@@ -670,70 +670,56 @@ defineExpose({
       <DirectorySelector @toggle-npm-panel="toggleNpmPanel" />
       
       <div class="title-row">
-        <h2>Git {{ $t('@13D1C:状态') }}</h2>
         <div class="header-actions">
-          <!-- 自动更新开关已隐藏 - 文件监控默认禁用，改为使用手动刷新和标签页激活刷新 -->
-          <!-- <el-tooltip 
-            :content="gitStore.autoUpdateEnabled ? $t('@13D1C:自动更新文件状态') : $t('@13D1C:自动更新文件状态')" 
-            placement="top" 
-            
-            :show-after="200"
-          >
-            <el-switch 
-              v-model="gitStore.autoUpdateEnabled" 
-              style="--el-switch-on-color: #67C23A; --el-switch-off-color: #909399; margin-right: 4px;"
-              inline-prompt
-              :active-icon="Check"
-              :inactive-icon="Close"
-              class="auto-update-switch"
+          <!-- 添加Git Pull按钮 -->
+          <el-tooltip :content="$t('@13D1C:Git Pull (拉取远程更新)')" placement="top"  :show-after="200">
+            <el-button 
+              type="primary" 
+              :icon="Download" 
+              circle 
+              size="small" 
+              @click="handleGitPull" 
+              :loading="gitStore.isGitPulling"
+              :disabled="!gitStore.hasUpstream"
             />
-          </el-tooltip> -->
-        
-        <!-- 添加Git Pull按钮 -->
-        <el-tooltip :content="$t('@13D1C:Git Pull (拉取远程更新)')" placement="top"  :show-after="200">
-          <el-button 
-            type="primary" 
-            :icon="Download" 
-            circle 
-            size="small" 
-            @click="handleGitPull" 
-            :loading="gitStore.isGitPulling"
-            :disabled="!gitStore.hasUpstream"
-          />
-        </el-tooltip>
-        
-        <!-- 添加Git Fetch All按钮 -->
-        <el-tooltip :content="$t('@13D1C:Git Fetch All (获取所有远程分支)')" placement="top"  :show-after="200">
-          <el-button 
-            v-show="false"
-            type="primary" 
-            :icon="Connection" 
-            circle 
-            size="small" 
-            @click="handleGitFetchAll" 
-            :loading="gitStore.isGitFetching"
-          />
-        </el-tooltip>
+          </el-tooltip>
+          
+          <!-- 添加Git Fetch All按钮 -->
+          <el-tooltip :content="$t('@13D1C:Git Fetch All (获取所有远程分支)')" placement="top"  :show-after="200">
+            <el-button 
+              v-show="false"
+              type="primary" 
+              :icon="Connection" 
+              circle 
+              size="small" 
+              @click="handleGitFetchAll" 
+              :loading="gitStore.isGitFetching"
+            />
+          </el-tooltip>
 
-        <!-- 合并分支按钮 -->
-        <MergeBranchButton />
+          <!-- 合并分支按钮 -->
+          <MergeBranchButton />
 
-        <!-- 储藏更改按钮 -->
-        <StashChangesButton />
-        
-        <!-- 储藏列表按钮 -->
-        <StashListButton />
+          <!-- 储藏更改按钮 -->
+          <StashChangesButton />
+          
+          <!-- 储藏列表按钮 -->
+          <StashListButton />
 
-        <el-tooltip :content="$t('@13D1C:刷新状态')" placement="top"  :show-after="200">
-          <el-button
-            type="primary"
-            :icon="Refresh"
-            circle
-            size="small"
-            @click="refreshStatus"
-            :loading="isRefreshing"
-          />
-        </el-tooltip>
+          <el-tooltip :content="$t('@13D1C:刷新状态')" placement="top"  :show-after="200">
+            <el-button
+              type="primary"
+              :icon="Refresh"
+              circle
+              size="small"
+              @click="refreshStatus"
+              :loading="isRefreshing"
+            />
+          </el-tooltip>
+        </div>
+        <div class="flex">
+          <GitOperationsButton variant="icon" />
+          <CommandHistory />
         </div>
       </div>
     </div>
@@ -1141,7 +1127,6 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
 }
 
 .card-content {
@@ -1396,36 +1381,6 @@ defineExpose({
   align-items: center;
   gap: 8px;
   font-size: 13px;
-}
-
-/* 差异对话框样式 */
-.diff-dialog {
-  height: calc(100vh - 150px);
-}
-
-.use-flex-body .el-dialog__body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 8px;
-}
-
-/* 增加自动更新开关的样式 */
-.auto-update-switch :deep(.el-switch__core) {
-  transition: all 0.3s ease-in-out;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-
-.auto-update-switch :deep(.el-switch__core:hover) {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.auto-update-switch.is-checked :deep(.el-switch__core) {
-  box-shadow: 0 2px 5px rgba(103, 194, 58, 0.3);
-}
-
-.auto-update-switch.is-checked :deep(.el-switch__core:hover) {
-  box-shadow: 0 2px 8px rgba(103, 194, 58, 0.5);
 }
 
 /* 按钮悬停效果 */

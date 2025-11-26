@@ -13,6 +13,7 @@ declare module 'vue' {
     CommandOrchestrator: typeof import('./src/components/CommandOrchestrator.vue')['default']
     CommitButton: typeof import('./src/components/buttons/CommitButton.vue')['default']
     CommonDialog: typeof import('./src/components/CommonDialog.vue')['default']
+    ConfigEditorButton: typeof import('./src/components/buttons/ConfigEditorButton.vue')['default']
     ConflictBlockViewer: typeof import('./src/components/ConflictBlockViewer.vue')['default']
     CreateTagButton: typeof import('./src/components/buttons/CreateTagButton.vue')['default']
     CustomCommandManager: typeof import('./src/components/CustomCommandManager.vue')['default']
@@ -57,6 +58,7 @@ declare module 'vue' {
     GitActionButtons: typeof import('./src/components/GitActionButtons.vue')['default']
     GitCommandPreview: typeof import('./src/components/GitCommandPreview.vue')['default']
     GitGlobalSettingsDialog: typeof import('./src/components/GitGlobalSettingsDialog.vue')['default']
+    GitOperationsButton: typeof import('./src/components/buttons/GitOperationsButton.vue')['default']
     GlobalLoading: typeof import('./src/components/GlobalLoading.vue')['default']
     InlineCard: typeof import('./src/components/InlineCard.vue')['default']
     LanguageSwitcher: typeof import('./src/components/LanguageSwitcher.vue')['default']
@@ -78,6 +80,7 @@ declare module 'vue' {
     SvgIcon: typeof import('./src/components/SvgIcon/index.vue')['default']
     TagListButton: typeof import('./src/components/buttons/TagListButton.vue')['default']
     TemplateManager: typeof import('./src/components/TemplateManager.vue')['default']
+    ThemeSwitcher: typeof import('./src/components/ThemeSwitcher.vue')['default']
     TreeIcon: typeof import('./src/components/icons/TreeIcon.vue')['default']
     TreeNodeItem: typeof import('./src/components/TreeNodeItem.vue')['default']
   }

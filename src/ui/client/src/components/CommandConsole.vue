@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { ArrowDown, FullScreen, VideoPlay } from '@element-plus/icons-vue';
+import { ArrowDown, FullScreen, VideoPlay, Loading, Close } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
@@ -23,7 +23,9 @@ type ConsoleRecord = {
   stderr?: string; 
   success: boolean; 
   ts: string; 
-  expanded?: boolean 
+  expanded?: boolean;
+  running?: boolean;  // 标记命令是否还在运行
+  processId?: number; // 服务端进程ID，用于停止
 };
 
 const consoleHistory = ref<ConsoleRecord[]>([]);
@@ -31,6 +33,85 @@ let consoleIdCounter = 0; // ID计数器，确保唯一性
 
 // 控制整个控制台展开/收起（从localStorage读取，默认展开）
 const isConsoleExpanded = ref(localStorage.getItem('isConsoleExpanded') !== 'false');
+
+// ANSI 颜色码到 CSS 样式的映射
+const ansiColorMap: Record<number, string> = {
+  // 前景色
+  30: 'color: #000000',  // 黑色
+  31: 'color: #cd3131',  // 红色
+  32: 'color: #0dbc79',  // 绿色
+  33: 'color: #e5e510',  // 黄色
+  34: 'color: #2472c8',  // 蓝色
+  35: 'color: #bc3fbc',  // 洋红
+  36: 'color: #11a8cd',  // 青色
+  37: 'color: #e5e5e5',  // 白色
+  // 亮色前景
+  90: 'color: #666666',  // 亮黑（灰色）
+  91: 'color: #f14c4c',  // 亮红
+  92: 'color: #23d18b',  // 亮绿
+  93: 'color: #f5f543',  // 亮黄
+  94: 'color: #3b8eea',  // 亮蓝
+  95: 'color: #d670d6',  // 亮洋红
+  96: 'color: #29b8db',  // 亮青
+  97: 'color: #e5e5e5',  // 亮白
+  // 背景色
+  40: 'background-color: #000000',
+  41: 'background-color: #cd3131',
+  42: 'background-color: #0dbc79',
+  43: 'background-color: #e5e510',
+  44: 'background-color: #2472c8',
+  45: 'background-color: #bc3fbc',
+  46: 'background-color: #11a8cd',
+  47: 'background-color: #e5e5e5',
+};
+
+// 将 ANSI 转义码转换为 HTML
+function ansiToHtml(text: string): string {
+  let openTags = 0;
+  
+  // eslint-disable-next-line no-control-regex
+  const result = text.replace(/\x1b\[([0-9;]*)m/g, (_match, codes) => {
+    if (!codes || codes === '0' || codes === '') {
+      // 重置所有样式 - 关闭之前打开的标签
+      if (openTags > 0) {
+        openTags--;
+        return '</span>';
+      }
+      return '';
+    }
+    
+    const codeList = codes.split(';').map(Number);
+    const styles: string[] = [];
+    
+    for (const code of codeList) {
+      if (code === 1) {
+        // 粗体
+        styles.push('font-weight: bold');
+      } else if (code === 2) {
+        // 暗淡
+        styles.push('opacity: 0.7');
+      } else if (code === 3) {
+        // 斜体
+        styles.push('font-style: italic');
+      } else if (code === 4) {
+        // 下划线
+        styles.push('text-decoration: underline');
+      } else if (ansiColorMap[code]) {
+        styles.push(ansiColorMap[code]);
+      }
+    }
+    
+    if (styles.length > 0) {
+      openTags++;
+      return `<span style="${styles.join('; ')}">`;
+    }
+    return '';
+  });
+  
+  // 关闭所有未闭合的标签
+  const closeTags = '</span>'.repeat(openTags);
+  return result + closeTags;
+}
 
 // 控制全屏状态
 const isFullscreen = ref(false);
@@ -88,6 +169,7 @@ async function runConsoleCommand() {
     expanded: true,
     stdout: '',
     stderr: '',
+    running: true,  // 标记为运行中
   };
   consoleHistory.value.unshift(rec);
   consoleInput.value = '';
@@ -124,13 +206,17 @@ async function runConsoleCommand() {
       if (done) break;
       
       // 解码数据并追加到缓冲区
-      buffer += decoder.decode(value, { stream: true });
+      const chunk = decoder.decode(value, { stream: true });
+      console.log(`[前端-控制台] 解码数据块:`, chunk.substring(0, 200));
+      buffer += chunk;
       
       // 按照 SSE 格式分割消息（以 \n\n 分隔）
       const messages = buffer.split('\n\n');
       
       // 保留最后一个可能不完整的消息
       buffer = messages.pop() || '';
+      
+      console.log(`[前端-控制台] 分割出 ${messages.length} 条消息`);
       
       // 处理完整的消息
       for (const message of messages) {
@@ -139,15 +225,41 @@ async function runConsoleCommand() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.substring(6));
+              console.log(`[前端-控制台] 解析到数据:`, data.type, '长度:', data.data?.length || 0);
               
-              if (data.type === 'stdout') {
-                rec.stdout += data.data;
+              if (data.type === 'process_id') {
+                rec.processId = data.data;
+                console.log(`[前端-控制台] 收到进程ID:`, rec.processId);
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
+              } else if (data.type === 'stdout') {
+                rec.stdout = (rec.stdout || '') + ansiToHtml(data.data);
+                console.log(`[前端-控制台] 当前stdout总长度:`, rec.stdout.length);
+                // 收到第一个输出时关闭loading，表示命令已启动
+                if (consoleRunning.value && rec.stdout.length < 200) {
+                  consoleRunning.value = false;
+                }
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
               } else if (data.type === 'stderr') {
-                rec.stderr += data.data;
+                rec.stderr = (rec.stderr || '') + ansiToHtml(data.data);
+                console.log(`[前端-控制台] 当前stderr总长度:`, rec.stderr.length);
+                // 收到第一个输出时关闭loading
+                if (consoleRunning.value && rec.stderr.length < 200) {
+                  consoleRunning.value = false;
+                }
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
               } else if (data.type === 'exit') {
                 rec.success = data.data.success;
+                rec.running = false;  // 进程已结束
+                console.log(`[前端-控制台] 进程退出，成功:`, rec.success);
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
               } else if (data.type === 'error') {
-                rec.stderr += `错误: ${data.data}\n`;
+                rec.stderr = (rec.stderr || '') + `错误: ${data.data}\n`;
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
               }
             } catch (e) {
               console.warn('解析SSE数据失败:', line, e);
@@ -165,20 +277,26 @@ async function runConsoleCommand() {
           try {
             const data = JSON.parse(line.substring(6));
             if (data.type === 'stdout') {
-              rec.stdout += data.data;
+              rec.stdout = (rec.stdout || '') + ansiToHtml(data.data);
             } else if (data.type === 'stderr') {
-              rec.stderr += data.data;
+              rec.stderr = (rec.stderr || '') + ansiToHtml(data.data);
+            } else if (data.type === 'exit') {
+              rec.success = data.data.success;
+              rec.running = false;
             }
           } catch (e) {
             console.warn('解析剩余SSE数据失败:', e);
           }
         }
       }
+      // 强制触发响应式更新
+      consoleHistory.value = [...consoleHistory.value];
     }
     console.log('[前端-控制台] 流读取完成，正常退出');
   } catch (e: any) {
     console.error('[前端-控制台] 捕获异常:', e);
     rec.success = false;
+    rec.running = false;
     rec.stderr = e?.message || String(e);
   } finally {
     console.log('[前端-控制台] finally块执行，设置consoleRunning=false');
@@ -192,6 +310,43 @@ function toggleCommandOutput(rec: ConsoleRecord) {
   const index = consoleHistory.value.findIndex(r => r.id === rec.id);
   if (index !== -1) {
     consoleHistory.value[index].expanded = !consoleHistory.value[index].expanded;
+  }
+}
+
+// 停止正在运行的命令
+async function stopCommand(rec: ConsoleRecord) {
+  if (!rec.processId) {
+    ElMessage.warning('无法停止：进程ID不存在');
+    return;
+  }
+
+  if (!rec.running) {
+    ElMessage.info('命令已经结束');
+    return;
+  }
+
+  try {
+    console.log(`[停止命令] 尝试停止进程 #${rec.processId}: ${rec.command}`);
+    
+    const resp = await fetch('/api/kill-process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ processId: rec.processId })
+    });
+
+    const result = await resp.json();
+    
+    if (result.success) {
+      ElMessage.success(`已停止命令: ${rec.command}`);
+      rec.running = false;
+      // 强制触发响应式更新
+      consoleHistory.value = [...consoleHistory.value];
+    } else {
+      ElMessage.error(`停止失败: ${result.error}`);
+    }
+  } catch (error: any) {
+    console.error('[停止命令] 失败:', error);
+    ElMessage.error(`停止失败: ${error.message || '未知错误'}`);
   }
 }
 
@@ -527,6 +682,7 @@ async function executeCustomCommand(command: CustomCommand) {
     expanded: true,
     stdout: '',
     stderr: '',
+    running: true,  // 标记为运行中
   };
   consoleHistory.value.unshift(rec);
   
@@ -568,13 +724,17 @@ async function executeCustomCommand(command: CustomCommand) {
       if (done) break;
       
       // 解码数据并追加到缓冲区
-      buffer += decoder.decode(value, { stream: true });
+      const chunk = decoder.decode(value, { stream: true });
+      console.log(`[前端-自定义] 解码数据块:`, chunk.substring(0, 200));
+      buffer += chunk;
       
       // 按照 SSE 格式分割消息（以 \n\n 分隔）
       const messages = buffer.split('\n\n');
       
       // 保留最后一个可能不完整的消息
       buffer = messages.pop() || '';
+      
+      console.log(`[前端-自定义] 分割出 ${messages.length} 条消息, buffer剩余: ${buffer.length} 字符`);
       
       // 处理完整的消息
       for (const message of messages) {
@@ -583,18 +743,44 @@ async function executeCustomCommand(command: CustomCommand) {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.substring(6));
+              console.log(`[前端-自定义] 解析到数据:`, data.type, '内容长度:', data.data?.length || 0);
               
-              if (data.type === 'stdout') {
-                rec.stdout += data.data;
+              if (data.type === 'process_id') {
+                rec.processId = data.data;
+                console.log(`[前端-自定义] 收到进程ID:`, rec.processId);
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
+              } else if (data.type === 'stdout') {
+                rec.stdout = (rec.stdout || '') + ansiToHtml(data.data);
+                console.log(`[前端-自定义] 当前stdout总长度:`, rec.stdout.length, '内容预览:', rec.stdout.substring(0, 100));
+                // 收到第一个输出时关闭loading，表示命令已启动
+                if (consoleRunning.value && rec.stdout.length < 200) {
+                  consoleRunning.value = false;
+                }
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
               } else if (data.type === 'stderr') {
-                rec.stderr += data.data;
+                rec.stderr = (rec.stderr || '') + ansiToHtml(data.data);
+                console.log(`[前端-自定义] 当前stderr总长度:`, rec.stderr.length);
+                // 收到第一个输出时关闭loading
+                if (consoleRunning.value && rec.stderr.length < 200) {
+                  consoleRunning.value = false;
+                }
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
               } else if (data.type === 'exit') {
                 rec.success = data.data.success;
+                rec.running = false;  // 进程已结束
+                console.log(`[前端-自定义] 进程退出，成功:`, rec.success);
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
               } else if (data.type === 'error') {
-                rec.stderr += `错误: ${data.data}\n`;
+                rec.stderr = (rec.stderr || '') + `错误: ${data.data}\n`;
+                // 强制触发响应式更新
+                consoleHistory.value = [...consoleHistory.value];
               }
             } catch (e) {
-              console.warn('解析SSE数据失败:', line, e);
+              console.warn('[前端-自定义] 解析SSE数据失败:', line, e);
             }
           }
         }
@@ -609,20 +795,26 @@ async function executeCustomCommand(command: CustomCommand) {
           try {
             const data = JSON.parse(line.substring(6));
             if (data.type === 'stdout') {
-              rec.stdout += data.data;
+              rec.stdout = (rec.stdout || '') + ansiToHtml(data.data);
             } else if (data.type === 'stderr') {
-              rec.stderr += data.data;
+              rec.stderr = (rec.stderr || '') + ansiToHtml(data.data);
+            } else if (data.type === 'exit') {
+              rec.success = data.data.success;
+              rec.running = false;
             }
           } catch (e) {
             console.warn('解析剩余SSE数据失败:', e);
           }
         }
       }
+      // 强制触发响应式更新
+      consoleHistory.value = [...consoleHistory.value];
     }
     console.log('[前端-自定义] 流读取完成，正常退出');
   } catch (e: any) {
     console.error('[前端-自定义] 捕获异常:', e);
     rec.success = false;
+    rec.running = false;
     rec.stderr = e?.message || String(e);
   } finally {
     console.log('[前端-自定义] finally块执行，设置consoleRunning=false');
@@ -734,28 +926,46 @@ onMounted(async () => {
         <!-- 命令历史输出 -->
         <div class="console-output" v-if="consoleHistory.length">
           <div v-for="rec in consoleHistory" :key="rec.id" class="console-record">
-            <div class="cmd-header">
+            <div class="cmd-header cursor-pointer" @click="toggleCommandOutput(rec)">
               <div class="cmd-line">
                 <span class="cmd-prefix">&gt;</span>
                 <span class="cmd-text">{{ rec.command }}</span>
+                <el-icon v-if="rec.running" class="running-icon is-loading" color="#409eff">
+                  <Loading />
+                </el-icon>
                 <span class="ts">{{ rec.ts }}</span>
               </div>
-              <el-button
-                text
-                size="small"
-                @click="toggleCommandOutput(rec)"
-                :disabled="!rec.stdout && !rec.stderr"
-                class="toggle-output-btn"
-              >
-                <el-icon :class="{ 'rotate-icon': !rec.expanded }">
-                  <ArrowDown />
-                </el-icon>
-              </el-button>
+              <div class="cmd-actions">
+                <el-tooltip v-if="rec.running" content="停止命令" placement="top">
+                  <el-button
+                    text
+                    size="small"
+                    @click.stop="stopCommand(rec)"
+                    class="stop-btn"
+                    type="danger"
+                  >
+                    <el-icon>
+                      <Close />
+                    </el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-button
+                  text
+                  size="small"
+                  @click.stop="toggleCommandOutput(rec)"
+                  :disabled="!rec.stdout && !rec.stderr"
+                  class="toggle-output-btn"
+                >
+                  <el-icon :class="{ 'rotate-icon': !rec.expanded }">
+                    <ArrowDown />
+                  </el-icon>
+                </el-button>
+              </div>
             </div>
             <transition name="output-slide">
               <div v-if="rec.expanded && (rec.stdout || rec.stderr)" class="output-content">
-                <pre v-if="rec.stdout" class="stdout">{{ rec.stdout }}</pre>
-                <pre v-if="rec.stderr" class="stderr">{{ rec.stderr }}</pre>
+                <pre v-if="rec.stdout" class="stdout" v-html="rec.stdout"></pre>
+                <pre v-if="rec.stderr" class="stderr" v-html="rec.stderr"></pre>
               </div>
             </transition>
           </div>
@@ -1075,6 +1285,21 @@ onMounted(async () => {
   gap: 8px;
 }
 
+.cmd-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stop-btn {
+  color: #f56c6c;
+  padding: 4px 8px;
+  
+  &:hover {
+    background: rgba(245, 108, 108, 0.1);
+  }
+}
+
 .cmd-line {
   font-family: var(--font-mono);
   font-size: 13px;
@@ -1098,6 +1323,13 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.running-icon {
+  font-size: 14px;
+  color: #409eff;
+  flex-shrink: 0;
+  margin-left: 4px;
 }
 
 .ts {

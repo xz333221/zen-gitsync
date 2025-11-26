@@ -17,6 +17,10 @@ import iconv from 'iconv-lite';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const configManager = config; // 确保 configManager 可用
+// 存储正在运行的进程（用于停止功能）
+const runningProcesses = new Map(); // key: processId, value: { childProcess, command, startTime }
+let processIdCounter = 0;
+
 // 分支状态缓存
 let branchStatusCache = {
   currentBranch: null,
@@ -165,16 +169,21 @@ async function startUIServer(noOpen = false, savePort = false) {
       console.log(`流式执行命令: ${command}`);
       console.log(`执行目录: ${execDirectory}`);
 
+      // 分配进程 ID
+      const processId = ++processIdCounter;
+
       // 设置响应头为流式传输
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no'); // 禁用nginx缓冲
 
-      // 使用 spawn 执行命令，支持实时输出
-      // console.log(`[流式输出] 准备执行命令: ${command}`);
-      // console.log(`[流式输出] 当前平台: ${process.platform}`);
-      // console.log(`[流式输出] 工作目录: ${execDirectory}`);
+      // 记录执行开始时间（用于命令历史）
+      const startTime = Date.now();
+
+      // 用于收集输出（用于命令历史）
+      let collectedStdout = '';
+      let collectedStderr = '';
       
       // 使用 shell: true 来支持 Windows 内置命令（如 dir、cd 等）
       const childProcess = spawn(command.trim(), [], {
@@ -182,14 +191,25 @@ async function startUIServer(noOpen = false, savePort = false) {
         shell: true, // 通过 shell 执行，支持 Windows 内置命令
         env: {
           ...process.env,
-          GIT_CONFIG_PARAMETERS: "'core.quotepath=false'"
+          GIT_CONFIG_PARAMETERS: "'core.quotepath=false'",
+          // 强制 npm/yarn 等工具实时输出，禁用缓冲
+          FORCE_COLOR: '1',
+          NPM_CONFIG_COLOR: 'always',
+          // 禁用进度条和其他交互式输出
+          CI: 'true',
+          // 确保输出不被缓冲
+          PYTHONUNBUFFERED: '1'
         }
       });
 
-      // console.log(`[流式输出] childProcess.stdout 是否存在:`, !!childProcess.stdout);
-      // console.log(`[流式输出] childProcess.stderr 是否存在:`, !!childProcess.stderr);
-
-      let outputReceived = false;
+      // 存储进程信息
+      runningProcesses.set(processId, {
+        childProcess,
+        command: command.trim(),
+        startTime,
+        directory: execDirectory
+      });
+      console.log(`[进程管理] 创建进程 #${processId}: ${command.substring(0, 50)}`);
 
       // 发送数据到客户端的辅助函数
       const sendData = (type, data) => {
@@ -198,25 +218,38 @@ async function startUIServer(noOpen = false, savePort = false) {
         res.write(message);
       };
 
-      // 在 Windows 上，CMD 默认使用 GBK 编码
-      // 不设置 encoding，直接处理 Buffer，然后用 iconv-lite 转换
+      // 立即发送 processId 给前端
+      sendData('process_id', processId);
+
+      let outputReceived = false;
+
+      // 判断是否需要 GBK 转换
+      // 只有 Windows CMD 内置命令（如 dir、type 等）才需要 GBK 转换
+      // npm、node、git 等现代工具都输出 UTF-8
       const isWindows = process.platform === 'win32';
-      // console.log(`[流式输出] 平台: ${process.platform}, 使用编码转换: ${isWindows}`);
+      const cmdBuiltins = ['dir', 'type', 'echo', 'set', 'path', 'cd', 'md', 'rd', 'del', 'copy', 'move', 'ren'];
+      const needsGbkConversion = isWindows && cmdBuiltins.some(builtin => 
+        command.trim().toLowerCase().startsWith(builtin + ' ') || 
+        command.trim().toLowerCase() === builtin
+      );
+      
+      console.log(`[流式输出] 命令: ${command.substring(0, 50)}, 需要GBK转换: ${needsGbkConversion}`);
 
       // 监听标准输出
       childProcess.stdout?.on('data', (data) => {
         // data 是 Buffer 对象
         let output;
-        if (isWindows) {
-          // Windows 系统，从 GBK 转换为 UTF-8
+        if (needsGbkConversion) {
+          // Windows CMD 内置命令，从 GBK 转换为 UTF-8
           output = iconv.decode(data, 'gbk');
-          // console.log(`[流式输出] 收到stdout(GBK转UTF8):`, output.substring(0, 100));
+          console.log(`[流式输出] 收到stdout(GBK转UTF8):`, output.substring(0, 200));
         } else {
-          // Unix 系统，直接使用 UTF-8
+          // 现代工具或 Unix 系统，直接使用 UTF-8
           output = data.toString('utf8');
-          // console.log(`[流式输出] 收到stdout(UTF8):`, output.substring(0, 100));
+          console.log(`[流式输出] 收到stdout(UTF8):`, output.substring(0, 200));
         }
         outputReceived = true;
+        collectedStdout += output; // 收集输出用于历史记录
         sendData('stdout', output);
       });
 
@@ -224,16 +257,17 @@ async function startUIServer(noOpen = false, savePort = false) {
       childProcess.stderr?.on('data', (data) => {
         // data 是 Buffer 对象
         let output;
-        if (isWindows) {
-          // Windows 系统，从 GBK 转换为 UTF-8
+        if (needsGbkConversion) {
+          // Windows CMD 内置命令，从 GBK 转换为 UTF-8
           output = iconv.decode(data, 'gbk');
-          // console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 100));
+          console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 200));
         } else {
-          // Unix 系统，直接使用 UTF-8
+          // 现代工具或 Unix 系统，直接使用 UTF-8
           output = data.toString('utf8');
-          // console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 100));
+          console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 200));
         }
         outputReceived = true;
+        collectedStderr += output; // 收集错误输出用于历史记录
         // 不再自动标记为错误，只显示 stderr 输出
         // Git 的警告信息会输出到 stderr 但退出码仍为 0
         sendData('stderr', output);
@@ -247,6 +281,24 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 监听进程关闭（close 在流关闭后触发）
       childProcess.on('close', (code, signal) => {
         // console.log(`[流式输出] 进程 close 事件 - 代码: ${code}, 信号: ${signal}, 有输出: ${outputReceived}`);
+        
+        // 从运行进程列表中移除
+        runningProcesses.delete(processId);
+        console.log(`[进程管理] 进程 #${processId} 已结束，剩余进程数: ${runningProcesses.size}`);
+        
+        // 计算执行时间
+        const executionTime = Date.now() - startTime;
+        
+        // 添加到命令历史
+        const error = code !== 0 ? `Command exited with code ${code}` : null;
+        addCommandToHistory(
+          command.trim(),
+          collectedStdout,
+          collectedStderr,
+          error,
+          executionTime
+        );
+        
         // 只根据退出码判断成功与否，退出码为 0 表示成功
         sendData('exit', { code, success: code === 0 });
         res.end();
@@ -255,6 +307,21 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 监听错误
       childProcess.on('error', (error) => {
         // console.error(`[流式输出] 进程错误:`, error);
+        
+        // 从运行进程列表中移除
+        runningProcesses.delete(processId);
+        console.log(`[进程管理] 进程 #${processId} 出错并结束，剩余进程数: ${runningProcesses.size}`);
+        
+        // 添加到命令历史（错误情况）
+        const executionTime = Date.now() - startTime;
+        addCommandToHistory(
+          command.trim(),
+          collectedStdout,
+          collectedStderr,
+          error.message,
+          executionTime
+        );
+        
         sendData('error', error.message);
         res.end();
       });
@@ -322,6 +389,69 @@ async function startUIServer(noOpen = false, savePort = false) {
       res.status(500).json({ 
         success: false, 
         error: `在终端中执行命令失败: ${error.message}` 
+      });
+    }
+  });
+
+  // 停止正在运行的进程
+  app.post('/api/kill-process', async (req, res) => {
+    try {
+      const { processId } = req.body || {};
+      if (!processId || typeof processId !== 'number') {
+        return res.status(400).json({ success: false, error: 'processId 必须是数字' });
+      }
+
+      const processInfo = runningProcesses.get(processId);
+      if (!processInfo) {
+        return res.status(404).json({ 
+          success: false, 
+          error: `进程 #${processId} 不存在或已结束` 
+        });
+      }
+
+      console.log(`[进程管理] 尝试停止进程 #${processId}: ${processInfo.command}`);
+
+      try {
+        // 在 Windows 上需要使用 taskkill 来杀死整个进程树
+        if (process.platform === 'win32') {
+          const { exec } = await import('child_process');
+          // /F 强制终止, /T 终止进程树
+          exec(`taskkill /pid ${processInfo.childProcess.pid} /T /F`, (error) => {
+            if (error) {
+              console.error(`[进程管理] taskkill 失败:`, error);
+            }
+          });
+        } else {
+          // Unix/Linux/Mac 使用 SIGTERM
+          processInfo.childProcess.kill('SIGTERM');
+          
+          // 如果 2 秒后还没结束，使用 SIGKILL 强制终止
+          setTimeout(() => {
+            if (runningProcesses.has(processId)) {
+              console.log(`[进程管理] 进程 #${processId} 未响应 SIGTERM，使用 SIGKILL 强制终止`);
+              processInfo.childProcess.kill('SIGKILL');
+            }
+          }, 2000);
+        }
+
+        res.json({ 
+          success: true, 
+          message: `已发送停止信号到进程 #${processId}`,
+          processId,
+          command: processInfo.command
+        });
+      } catch (killError) {
+        console.error(`[进程管理] 停止进程失败:`, killError);
+        res.status(500).json({ 
+          success: false, 
+          error: `停止进程失败: ${killError.message}` 
+        });
+      }
+    } catch (error) {
+      console.error('停止进程接口失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `停止进程失败: ${error.message}` 
       });
     }
   });
