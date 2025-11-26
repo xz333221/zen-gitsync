@@ -3973,6 +3973,149 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
   
+  // 扫描项目目录下的所有package.json文件（用于版本管理）
+  app.get('/api/scan-package-files', async (req, res) => {
+    try {
+      const projectRoot = process.cwd();
+      const packageFiles = [];
+      const startTime = Date.now();
+      
+      // 需要忽略的目录列表
+      const IGNORED_DIRS = new Set([
+        'node_modules',
+        '.git',
+        '.svn',
+        '.hg',
+        'dist',
+        'build',
+        'coverage',
+        'out',
+        'target',
+        'vendor',
+        '__pycache__',
+        '.next',
+        '.nuxt',
+        '.vscode',
+        '.idea',
+        'tmp',
+        'temp',
+        'cache',
+        '.cache'
+      ]);
+      
+      let scannedCount = 0;
+      let fileReadCount = 0;
+      
+      // 检查指定目录下是否有package.json
+      async function checkPackageJson(dir) {
+        try {
+          const packagePath = path.join(dir, 'package.json');
+          
+          // 先检查文件是否存在
+          try {
+            await fs.access(packagePath);
+          } catch {
+            return false;
+          }
+          
+          // 检查文件大小
+          const stats = await fs.stat(packagePath);
+          const fileSizeMB = stats.size / (1024 * 1024);
+          if (fileSizeMB > 1) {
+            return false;
+          }
+          
+          fileReadCount++;
+          const content = await fs.readFile(packagePath, 'utf8');
+          const packageData = JSON.parse(content);
+          
+          // 添加所有有效的package.json文件（不仅仅是有scripts的）
+          if (packageData.name || packageData.version) {
+            const relativePath = path.relative(projectRoot, dir);
+            packageFiles.push({
+              path: dir,
+              relativePath: relativePath || '.',
+              name: packageData.name || path.basename(dir),
+              version: packageData.version || '0.0.0',
+              displayName: packageData.name ? `${packageData.name} (${packageData.version || '0.0.0'})` : `${path.basename(dir)} (${packageData.version || '0.0.0'})`,
+              fullPath: packagePath
+            });
+            return true;
+          }
+        } catch (error) {
+          // 文件不存在或解析失败，忽略
+        }
+        return false;
+      }
+      
+      // 递归扫描目录，最大深度4层
+      const MAX_DEPTH = 4;
+      const MAX_DIRS_PER_LEVEL = 50;
+      
+      async function scanDirectory(dir, depth = 0) {
+        if (depth > MAX_DEPTH) return;
+        
+        scannedCount++;
+        
+        // 检查当前目录的package.json
+        await checkPackageJson(dir);
+        
+        // 如果已经达到最大深度，不再继续
+        if (depth >= MAX_DEPTH) return;
+        
+        // 读取子目录
+        try {
+          const items = await fs.readdir(dir, { withFileTypes: true });
+          const subDirs = [];
+          
+          // 收集所有子目录
+          for (const item of items) {
+            if (!item.isDirectory()) continue;
+            
+            const dirName = item.name;
+            
+            // 跳过忽略的目录
+            if (IGNORED_DIRS.has(dirName) || dirName.startsWith('.')) {
+              continue;
+            }
+            
+            subDirs.push(item);
+          }
+          
+          // 限制每层扫描的子目录数量
+          const dirsToScan = subDirs.slice(0, MAX_DIRS_PER_LEVEL);
+          
+          // 递归扫描子目录
+          for (const item of dirsToScan) {
+            const subDirPath = path.join(dir, item.name);
+            await scanDirectory(subDirPath, depth + 1);
+          }
+        } catch (error) {
+          // 忽略无法读取的目录
+        }
+      }
+      
+      // 开始扫描
+      await scanDirectory(projectRoot);
+      
+      const scanTime = Date.now() - startTime;
+      
+      res.json({ 
+        success: true, 
+        packages: packageFiles,
+        scanTime,
+        scannedCount,
+        fileReadCount
+      });
+    } catch (error) {
+      console.error('扫描package.json文件失败:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: `扫描package.json文件失败: ${error.message}` 
+      });
+    }
+  });
+  
   // 在新终端中执行npm脚本
   app.post('/api/run-npm-script', async (req, res) => {
     try {

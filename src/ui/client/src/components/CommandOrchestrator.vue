@@ -5,7 +5,9 @@ import { ElMessage } from 'element-plus'
 import { Delete, Rank, VideoPlay, Clock, Plus, DocumentAdd, Folder } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
+import PackageJsonSelector from '@components/PackageJsonSelector.vue'
 import type { CustomCommand } from '@components/CustomCommandManager.vue'
+import type { PackageFile } from '@components/PackageJsonSelector.vue'
 
 export interface CommandOrchestratorEmits {
   (e: 'update:visible', value: boolean): void
@@ -35,6 +37,7 @@ const waitSeconds = ref(5)
 // 版本管理相关
 const versionBump = ref<'patch' | 'minor' | 'major'>('patch')
 const packageJsonPath = ref('')
+const selectedPackageFile = ref<PackageFile | null>(null)
 
 // 计算属性：获取所有可用的自定义命令
 const availableCommands = computed(() => configStore.customCommands || [])
@@ -116,6 +119,14 @@ function addWaitStep() {
   showAddStepDialog.value = false
 }
 
+// 处理package.json文件选择变化
+function handlePackageFileChange(packageFile: PackageFile | null) {
+  selectedPackageFile.value = packageFile
+  if (packageFile) {
+    packageJsonPath.value = packageFile.fullPath
+  }
+}
+
 // 添加版本管理步骤
 function addVersionStep() {
   const step: OrchestrationStep = {
@@ -131,6 +142,7 @@ function addVersionStep() {
   // 重置表单
   versionBump.value = 'patch'
   packageJsonPath.value = ''
+  selectedPackageFile.value = null
 }
 
 // 获取步骤显示文本
@@ -155,7 +167,13 @@ function getStepDetail(step: OrchestrationStep): string {
   } else if (step.type === 'wait') {
     return `暂停执行 ${step.waitSeconds} 秒`
   } else if (step.type === 'version') {
-    return step.packageJsonPath || '当前目录的 package.json'
+    if (step.packageJsonPath) {
+      // 显示相对路径，更友好
+      const projectRoot = process.cwd ? process.cwd() : ''
+      const relativePath = step.packageJsonPath.replace(projectRoot, '').replace(/\\/g, '/').replace(/^\//, '')
+      return relativePath || step.packageJsonPath
+    }
+    return '当前目录的 package.json'
   }
   return ''
 }
@@ -520,11 +538,12 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
             </el-radio-group>
           </div>
           <div class="form-item">
-            <label>package.json 路径（选填）：</label>
-            <el-input 
+            <label>package.json 文件（选填）：</label>
+            <PackageJsonSelector
               v-model="packageJsonPath"
               placeholder="留空则使用当前目录的 package.json"
               clearable
+              @change="handlePackageFileChange"
             />
           </div>
           <el-button type="primary" @click="addVersionStep">添加版本管理步骤</el-button>
