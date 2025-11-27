@@ -17,6 +17,11 @@ export interface OrchestrationStep {
   // 对于 version 类型
   versionBump?: 'patch' | 'minor' | 'major'  // 版本号增量类型
   packageJsonPath?: string  // package.json 文件路径（可选，默认当前目录）
+  versionTarget?: 'version' | 'dependency'  // 修改目标：version字段还是dependency
+  dependencyName?: string  // 要修改的依赖包名称
+  dependencyVersion?: string  // 依赖包的新版本号（手动输入模式）
+  dependencyVersionBump?: 'patch' | 'minor' | 'major'  // 依赖版本号增量类型（自动递增模式）
+  dependencyType?: 'dependencies' | 'devDependencies'  // 依赖类型
 }
 
 export const useConfigStore = defineStore('config', () => {

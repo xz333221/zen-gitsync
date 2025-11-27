@@ -1920,10 +1920,50 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   })
   
-  // 版本号递增
+  // 读取 package.json 文件内容
+  app.post('/api/read-package-json', express.json(), async (req, res) => {
+    try {
+      const { packageJsonPath } = req.body
+      
+      // 确定 package.json 的路径
+      let pkgPath
+      if (packageJsonPath && packageJsonPath.trim()) {
+        pkgPath = path.isAbsolute(packageJsonPath) 
+          ? packageJsonPath 
+          : path.join(currentProjectPath, packageJsonPath)
+      } else {
+        pkgPath = path.join(currentProjectPath, 'package.json')
+      }
+      
+      // 检查文件是否存在
+      try {
+        await fs.access(pkgPath)
+      } catch (err) {
+        return res.status(404).json({ 
+          success: false, 
+          error: `未找到 package.json 文件: ${pkgPath}` 
+        })
+      }
+      
+      // 读取 package.json
+      const pkgContent = await fs.readFile(pkgPath, 'utf8')
+      const pkg = JSON.parse(pkgContent)
+      
+      res.json({ 
+        success: true, 
+        dependencies: pkg.dependencies || {},
+        devDependencies: pkg.devDependencies || {},
+        version: pkg.version
+      })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
+  // 版本号递增或依赖版本修改
   app.post('/api/version-bump', express.json(), async (req, res) => {
     try {
-      const { bumpType, packageJsonPath } = req.body
+      const { bumpType, packageJsonPath, versionTarget, dependencyName, dependencyVersion, dependencyVersionBump, dependencyType } = req.body
       
       // 确定 package.json 的路径
       let pkgPath
@@ -1949,49 +1989,129 @@ async function startUIServer(noOpen = false, savePort = false) {
       const pkgContent = await fs.readFile(pkgPath, 'utf8')
       const pkg = JSON.parse(pkgContent)
       
-      if (!pkg.version) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'package.json 中未找到 version 字段' 
+      // 判断是修改 version 还是 dependency
+      if (versionTarget === 'dependency') {
+        // 修改依赖版本
+        const depType = dependencyType || 'dependencies'
+        
+        if (!pkg[depType]) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `package.json 中未找到 ${depType} 字段` 
+          })
+        }
+        
+        if (!pkg[depType][dependencyName]) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `在 ${depType} 中未找到依赖包: ${dependencyName}` 
+          })
+        }
+        
+        const oldVersion = pkg[depType][dependencyName]
+        let newVersion
+        
+        // 判断是自动递增还是手动输入
+        if (dependencyVersionBump) {
+          // 自动递增模式：解析当前版本号并递增
+          // 提取版本号中的数字部分（去除 ^, ~, >=, 等前缀）
+          const versionMatch = oldVersion.match(/(\^|~|>=|>|<=|<)?(\d+\.\d+\.\d+)/)
+          if (!versionMatch) {
+            return res.status(400).json({ 
+              success: false, 
+              error: `无法解析版本号: ${oldVersion}，应为 x.y.z 格式（可带 ^, ~ 等前缀）` 
+            })
+          }
+          
+          const prefix = versionMatch[1] || ''
+          const versionNumber = versionMatch[2]
+          const versionParts = versionNumber.split('.').map(Number)
+          
+          if (versionParts.length !== 3 || versionParts.some(isNaN)) {
+            return res.status(400).json({ 
+              success: false, 
+              error: `无效的版本号格式: ${versionNumber}` 
+            })
+          }
+          
+          // 根据类型递增版本号
+          let [major, minor, patch] = versionParts
+          if (dependencyVersionBump === 'major') {
+            major += 1
+            minor = 0
+            patch = 0
+          } else if (dependencyVersionBump === 'minor') {
+            minor += 1
+            patch = 0
+          } else { // patch
+            patch += 1
+          }
+          
+          newVersion = `${prefix}${major}.${minor}.${patch}`
+        } else {
+          // 手动输入模式
+          newVersion = dependencyVersion
+        }
+        
+        pkg[depType][dependencyName] = newVersion
+        
+        // 写回 package.json（保持格式化）
+        await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
+        
+        res.json({ 
+          success: true, 
+          oldVersion, 
+          newVersion,
+          filePath: pkgPath,
+          dependencyName,
+          dependencyType: depType
+        })
+      } else {
+        // 修改 version 字段（原有逻辑）
+        if (!pkg.version) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'package.json 中未找到 version 字段' 
+          })
+        }
+        
+        const oldVersion = pkg.version
+        
+        // 解析版本号
+        const versionParts = oldVersion.split('.').map(Number)
+        if (versionParts.length !== 3 || versionParts.some(isNaN)) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `无效的版本号格式: ${oldVersion}，应为 x.y.z 格式` 
+          })
+        }
+        
+        // 根据类型递增版本号
+        let [major, minor, patch] = versionParts
+        if (bumpType === 'major') {
+          major += 1
+          minor = 0
+          patch = 0
+        } else if (bumpType === 'minor') {
+          minor += 1
+          patch = 0
+        } else { // patch
+          patch += 1
+        }
+        
+        const newVersion = `${major}.${minor}.${patch}`
+        pkg.version = newVersion
+        
+        // 写回 package.json（保持格式化）
+        await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
+        
+        res.json({ 
+          success: true, 
+          oldVersion, 
+          newVersion,
+          filePath: pkgPath
         })
       }
-      
-      const oldVersion = pkg.version
-      
-      // 解析版本号
-      const versionParts = oldVersion.split('.').map(Number)
-      if (versionParts.length !== 3 || versionParts.some(isNaN)) {
-        return res.status(400).json({ 
-          success: false, 
-          error: `无效的版本号格式: ${oldVersion}，应为 x.y.z 格式` 
-        })
-      }
-      
-      // 根据类型递增版本号
-      let [major, minor, patch] = versionParts
-      if (bumpType === 'major') {
-        major += 1
-        minor = 0
-        patch = 0
-      } else if (bumpType === 'minor') {
-        minor += 1
-        patch = 0
-      } else { // patch
-        patch += 1
-      }
-      
-      const newVersion = `${major}.${minor}.${patch}`
-      pkg.version = newVersion
-      
-      // 写回 package.json（保持格式化）
-      await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
-      
-      res.json({ 
-        success: true, 
-        oldVersion, 
-        newVersion,
-        filePath: pkgPath
-      })
     } catch (error) {
       res.status(500).json({ success: false, error: error.message })
     }

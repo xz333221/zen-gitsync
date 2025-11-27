@@ -63,8 +63,20 @@ function getStepLabel(step: OrchestrationStep): string {
   } else if (step.type === 'wait') {
     return disabledPrefix + `等待 ${step.waitSeconds} 秒`
   } else if (step.type === 'version') {
-    const bumpText = step.versionBump === 'major' ? '主版本' : step.versionBump === 'minor' ? '次版本' : '补丁版本'
-    return disabledPrefix + `版本号+1 (${bumpText})`
+    if (step.versionTarget === 'dependency') {
+      const depType = step.dependencyType === 'devDependencies' ? 'devDep' : 'dep'
+      if (step.dependencyVersionBump) {
+        // 自动递增模式
+        const bumpText = step.dependencyVersionBump === 'major' ? '主版本' : step.dependencyVersionBump === 'minor' ? '次版本' : '补丁版本'
+        return disabledPrefix + `修改依赖 [${depType}] ${step.dependencyName} 版本+1 (${bumpText})`
+      } else {
+        // 手动输入模式
+        return disabledPrefix + `修改依赖 [${depType}] ${step.dependencyName} → ${step.dependencyVersion}`
+      }
+    } else {
+      const bumpText = step.versionBump === 'major' ? '主版本' : step.versionBump === 'minor' ? '次版本' : '补丁版本'
+      return disabledPrefix + `版本号+1 (${bumpText})`
+    }
   }
   return '未知步骤'
 }

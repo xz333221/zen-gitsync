@@ -558,9 +558,16 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
       rec.stdout += '\n等待完成';
     } else if (step.type === 'version') {
       // 执行版本管理
-      const bumpType = step.versionBump || 'patch';
-      const bumpText = bumpType === 'major' ? '主版本' : bumpType === 'minor' ? '次版本' : '补丁版本';
-      stepLabel = `版本号+1 (${bumpText})`;
+      if (step.versionTarget === 'dependency') {
+        // 修改依赖版本
+        const depType = step.dependencyType === 'devDependencies' ? 'devDep' : 'dep';
+        stepLabel = `修改依赖 [${depType}] ${step.dependencyName} → ${step.dependencyVersion}`;
+      } else {
+        // 修改 version 字段
+        const bumpType = step.versionBump || 'patch';
+        const bumpText = bumpType === 'major' ? '主版本' : bumpType === 'minor' ? '次版本' : '补丁版本';
+        stepLabel = `版本号+1 (${bumpText})`;
+      }
       
       ElMessage.info(`[${i + 1}/${steps.length}] ${stepLabel}`);
       
@@ -580,8 +587,13 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            bumpType: bumpType,
-            packageJsonPath: step.packageJsonPath || ''
+            versionTarget: step.versionTarget || 'version',
+            bumpType: step.versionBump || 'patch',
+            packageJsonPath: step.packageJsonPath || '',
+            dependencyName: step.dependencyName,
+            dependencyVersion: step.dependencyVersion,
+            dependencyVersionBump: step.dependencyVersionBump,
+            dependencyType: step.dependencyType || 'dependencies'
           })
         });
         
@@ -593,9 +605,16 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
         
         if (result.success) {
           rec.success = true;
-          rec.stdout = `版本号已更新: ${result.oldVersion} → ${result.newVersion}\n`;
-          rec.stdout += `文件路径: ${result.filePath}`;
-          ElMessage.success(`版本号已更新: ${result.oldVersion} → ${result.newVersion}`);
+          if (step.versionTarget === 'dependency') {
+            rec.stdout = `依赖版本已更新: ${result.dependencyName} ${result.oldVersion} → ${result.newVersion}\n`;
+            rec.stdout += `依赖类型: ${result.dependencyType}\n`;
+            rec.stdout += `文件路径: ${result.filePath}`;
+            ElMessage.success(`依赖 ${result.dependencyName} 版本已更新: ${result.oldVersion} → ${result.newVersion}`);
+          } else {
+            rec.stdout = `版本号已更新: ${result.oldVersion} → ${result.newVersion}\n`;
+            rec.stdout += `文件路径: ${result.filePath}`;
+            ElMessage.success(`版本号已更新: ${result.oldVersion} → ${result.newVersion}`);
+          }
         } else {
           throw new Error(result.error || '版本更新失败');
         }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, VideoPlay, Clock, Rank, DocumentAdd, Plus, Folder } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
@@ -47,9 +47,16 @@ const showAddStepDialog = ref(false)
 // 等待秒数输入
 const waitSeconds = ref(5)
 // 版本管理相关
+const versionTarget = ref<'version' | 'dependency'>('version')  // 修改目标
 const versionBump = ref<'patch' | 'minor' | 'major'>('patch')
 const packageJsonPath = ref('')
 const selectedPackageFile = ref<PackageFile | null>(null)
+const dependencyName = ref('')  // 依赖包名称
+const dependencyVersion = ref('')  // 依赖包版本
+const dependencyType = ref<'dependencies' | 'devDependencies'>('dependencies')  // 依赖类型
+const dependencyVersionMode = ref<'bump' | 'manual'>('bump')  // 版本号模式：bump=自动递增，manual=手动输入
+const dependencyVersionBump = ref<'patch' | 'minor' | 'major'>('patch')  // 依赖版本递增类型
+const availableDependencies = ref<string[]>([])  // 可选的依赖包列表
 
 // 记录当前打开的 dropdown key（用于确保互斥）
 const activeDropdownKey = ref<string | null>(null)
@@ -89,8 +96,20 @@ function getStepLabel(step: OrchestrationStep): string {
   } else if (step.type === 'wait') {
     return disabledPrefix + `等待 ${step.waitSeconds} 秒`
   } else if (step.type === 'version') {
-    const bumpText = step.versionBump === 'major' ? '主版本' : step.versionBump === 'minor' ? '次版本' : '补丁版本'
-    return disabledPrefix + `版本号+1 (${bumpText})`
+    if (step.versionTarget === 'dependency') {
+      const depType = step.dependencyType === 'devDependencies' ? 'devDep' : 'dep'
+      if (step.dependencyVersionBump) {
+        // 自动递增模式
+        const bumpText = step.dependencyVersionBump === 'major' ? '主版本' : step.dependencyVersionBump === 'minor' ? '次版本' : '补丁版本'
+        return disabledPrefix + `修改依赖 [${depType}] ${step.dependencyName} 版本+1 (${bumpText})`
+      } else {
+        // 手动输入模式
+        return disabledPrefix + `修改依赖 [${depType}] ${step.dependencyName} → ${step.dependencyVersion}`
+      }
+    } else {
+      const bumpText = step.versionBump === 'major' ? '主版本' : step.versionBump === 'minor' ? '次版本' : '补丁版本'
+      return disabledPrefix + `版本号+1 (${bumpText})`
+    }
   }
   return '未知步骤'
 }
@@ -236,25 +255,89 @@ function handlePackageFileChange(packageFile: PackageFile | null) {
   selectedPackageFile.value = packageFile
   if (packageFile) {
     packageJsonPath.value = packageFile.fullPath
+    loadDependenciesFromPackageJson(packageFile.fullPath)
+  } else {
+    availableDependencies.value = []
   }
 }
 
+// 从 package.json 加载依赖列表
+async function loadDependenciesFromPackageJson(pkgPath: string) {
+  try {
+    const response = await fetch('/api/read-package-json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ packageJsonPath: pkgPath })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    
+    const result = await response.json()
+    if (result.success) {
+      const deps = []
+      if (dependencyType.value === 'dependencies' && result.dependencies) {
+        deps.push(...Object.keys(result.dependencies))
+      } else if (dependencyType.value === 'devDependencies' && result.devDependencies) {
+        deps.push(...Object.keys(result.devDependencies))
+      }
+      availableDependencies.value = deps.sort()
+    }
+  } catch (error) {
+    console.error('读取依赖列表失败:', error)
+    availableDependencies.value = []
+  }
+}
+
+// 监听依赖类型变化，重新加载依赖列表
+watch(dependencyType, () => {
+  if (packageJsonPath.value) {
+    loadDependenciesFromPackageJson(packageJsonPath.value)
+  }
+})
+
 // 添加版本管理步骤
 function addVersionStep() {
+  // 验证：如果选择修改依赖
+  if (versionTarget.value === 'dependency') {
+    if (!dependencyName.value.trim()) {
+      ElMessage.warning('请选择依赖包名称')
+      return
+    }
+    // 如果是手动输入模式，需要验证版本号
+    if (dependencyVersionMode.value === 'manual' && !dependencyVersion.value.trim()) {
+      ElMessage.warning('请输入依赖包版本号')
+      return
+    }
+  }
+  
   const step: OrchestrationStep = {
     id: generateId(),
     type: 'version',
+    versionTarget: versionTarget.value,
     versionBump: versionBump.value,
     packageJsonPath: packageJsonPath.value.trim() || undefined,
+    dependencyName: versionTarget.value === 'dependency' ? dependencyName.value.trim() : undefined,
+    dependencyVersion: versionTarget.value === 'dependency' && dependencyVersionMode.value === 'manual' ? dependencyVersion.value.trim() : undefined,
+    dependencyVersionBump: versionTarget.value === 'dependency' && dependencyVersionMode.value === 'bump' ? dependencyVersionBump.value : undefined,
+    dependencyType: versionTarget.value === 'dependency' ? dependencyType.value : undefined,
     enabled: true
   }
   orchestrationSteps.value.push(step)
   ElMessage.success(`已添加版本管理步骤`)
   showAddStepDialog.value = false
   // 重置表单
+  versionTarget.value = 'version'
   versionBump.value = 'patch'
   packageJsonPath.value = ''
   selectedPackageFile.value = null
+  dependencyName.value = ''
+  dependencyVersion.value = ''
+  dependencyType.value = 'dependencies'
+  dependencyVersionMode.value = 'bump'
+  dependencyVersionBump.value = 'patch'
+  availableDependencies.value = []
 }
 
 // 从编排列表移除步骤
@@ -681,14 +764,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
           <span><el-icon><DocumentAdd /></el-icon> 版本管理</span>
         </template>
         <div class="version-step-form">
-          <div class="form-item">
-            <label>版本增量类型：</label>
-            <el-radio-group v-model="versionBump">
-              <el-radio value="patch">补丁版本 (x.x.+1)</el-radio>
-              <el-radio value="minor">次版本 (x.+1.0)</el-radio>
-              <el-radio value="major">主版本 (+1.0.0)</el-radio>
-            </el-radio-group>
-          </div>
+          <!-- package.json 文件选择器（移到最上边） -->
           <div class="form-item">
             <label>package.json 文件（选填）：</label>
             <PackageJsonSelector
@@ -698,9 +774,96 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
               @change="handlePackageFileChange"
             />
           </div>
+          
+          <!-- 修改目标选择 -->
+          <div class="form-item">
+            <label>修改目标：</label>
+            <el-radio-group v-model="versionTarget">
+              <el-radio value="version">version 字段</el-radio>
+              <el-radio value="dependency">dependencies 中的依赖</el-radio>
+            </el-radio-group>
+          </div>
+          
+          <!-- 根据选择显示不同的选项 -->
+          <div v-if="versionTarget === 'version'" class="form-item">
+            <label>版本增量类型：</label>
+            <el-radio-group v-model="versionBump">
+              <el-radio value="patch">补丁版本 (x.x.+1)</el-radio>
+              <el-radio value="minor">次版本 (x.+1.0)</el-radio>
+              <el-radio value="major">主版本 (+1.0.0)</el-radio>
+            </el-radio-group>
+          </div>
+          
+          <!-- 修改依赖的选项 -->
+          <template v-else-if="versionTarget === 'dependency'">
+            <div class="form-item">
+              <label>依赖类型：</label>
+              <el-radio-group v-model="dependencyType">
+                <el-radio value="dependencies">dependencies</el-radio>
+                <el-radio value="devDependencies">devDependencies</el-radio>
+              </el-radio-group>
+            </div>
+            
+            <div class="form-item">
+              <label>依赖包名称：</label>
+              <el-select 
+                v-model="dependencyName" 
+                placeholder="请先选择 package.json，然后选择依赖包"
+                clearable
+                filterable
+                allow-create
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="dep in availableDependencies"
+                  :key="dep"
+                  :label="dep"
+                  :value="dep"
+                />
+              </el-select>
+            </div>
+            
+            <div class="form-item">
+              <label>版本号模式：</label>
+              <el-radio-group v-model="dependencyVersionMode">
+                <el-radio value="bump">自动递增 +1</el-radio>
+                <el-radio value="manual">手动输入</el-radio>
+              </el-radio-group>
+            </div>
+            
+            <!-- 自动递增模式 -->
+            <div v-if="dependencyVersionMode === 'bump'" class="form-item">
+              <label>版本增量类型：</label>
+              <el-radio-group v-model="dependencyVersionBump">
+                <el-radio value="patch">补丁版本 (x.x.+1)</el-radio>
+                <el-radio value="minor">次版本 (x.+1.0)</el-radio>
+                <el-radio value="major">主版本 (+1.0.0)</el-radio>
+              </el-radio-group>
+            </div>
+            
+            <!-- 手动输入模式 -->
+            <div v-else-if="dependencyVersionMode === 'manual'" class="form-item">
+              <label>新版本号：</label>
+              <el-input 
+                v-model="dependencyVersion" 
+                placeholder="例如：^3.5.0、~2.8.0、latest" 
+                clearable
+              />
+            </div>
+          </template>
+          
           <el-button type="primary" @click="addVersionStep">添加版本管理步骤</el-button>
+          
           <el-alert 
+            v-if="versionTarget === 'version'"
             title="将会修改 package.json 中的 version 字段，并自动递增版本号"
+            type="info"
+            :closable="false"
+            style="margin-top: 16px"
+          />
+          <el-alert 
+            v-else-if="versionTarget === 'dependency'"
+            title="将会修改 package.json 中指定依赖的版本号"
             type="info"
             :closable="false"
             style="margin-top: 16px"
