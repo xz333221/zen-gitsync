@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, VideoPlay, Clock, Rank, DocumentAdd, Plus, Folder } from '@element-plus/icons-vue'
+import { Delete, VideoPlay, Clock, DocumentAdd, Plus, Folder } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
+import SvgIcon from '@components/SvgIcon/index.vue'
 import type { CustomCommand } from '@components/CustomCommandManager.vue'
 import type { PackageFile } from '@components/PackageJsonSelector.vue'
 
@@ -114,12 +115,18 @@ function getStepLabel(step: OrchestrationStep): string {
   return '未知步骤'
 }
 
+// 自定义命令图标组件
+const CustomCmdIcon = shallowRef({
+  template: '<svg-icon icon-class="custom-cmd" />',
+  components: { SvgIcon }
+})
+
 // 获取步骤类型图标
 function getStepIcon(step: OrchestrationStep) {
-  if (step.type === 'command') return Rank
+  if (step.type === 'command') return CustomCmdIcon.value
   if (step.type === 'wait') return Clock
   if (step.type === 'version') return DocumentAdd
-  return Rank
+  return CustomCmdIcon.value
 }
 
 // 获取步骤详细信息
@@ -635,7 +642,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
               >
                 <div class="order-number">{{ index + 1 }}</div>
                 <div class="step-icon">
-                  <el-icon v-if="step.type === 'command'"><Rank /></el-icon>
+                  <el-icon v-if="step.type === 'command'"><svg-icon icon-class="custom-cmd" /></el-icon>
                   <el-icon v-else-if="step.type === 'wait'"><Clock /></el-icon>
                   <el-icon v-else-if="step.type === 'version'"><DocumentAdd /></el-icon>
                 </div>
@@ -718,7 +725,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       <!-- 自定义命令 -->
       <el-tab-pane label="自定义命令">
         <template #label>
-          <span><el-icon><Rank /></el-icon> 自定义命令</span>
+          <span><el-icon><svg-icon icon-class="custom-cmd" /></el-icon> 自定义命令</span>
         </template>
         <el-empty 
           v-if="availableCommands.length === 0" 

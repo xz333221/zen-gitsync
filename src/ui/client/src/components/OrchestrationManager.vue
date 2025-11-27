@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit, VideoPlay, Clock, Rank, DocumentAdd } from '@element-plus/icons-vue'
+import { Delete, Edit, VideoPlay, Clock, DocumentAdd } from '@element-plus/icons-vue'
+import SvgIcon from '@components/SvgIcon/index.vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 
@@ -81,12 +82,18 @@ function getStepLabel(step: OrchestrationStep): string {
   return '未知步骤'
 }
 
+// 自定义命令图标组件
+const CustomCmdIcon = shallowRef({
+  template: '<svg-icon icon-class="custom-cmd" />',
+  components: { SvgIcon }
+})
+
 // 获取步骤类型图标
 function getStepIcon(step: OrchestrationStep) {
-  if (step.type === 'command') return Rank
+  if (step.type === 'command') return CustomCmdIcon.value
   if (step.type === 'wait') return Clock
   if (step.type === 'version') return DocumentAdd
-  return Rank
+  return CustomCmdIcon.value
 }
 
 // 执行编排

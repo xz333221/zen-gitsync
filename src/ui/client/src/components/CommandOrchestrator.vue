@@ -2,7 +2,8 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Delete, Rank, VideoPlay, Clock, Plus, DocumentAdd, Folder } from '@element-plus/icons-vue'
+import { Delete, VideoPlay, Clock, Plus, DocumentAdd, Folder } from '@element-plus/icons-vue'
+import SvgIcon from '@components/SvgIcon/index.vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
@@ -457,7 +458,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
               >
                 <div class="order-number">{{ index + 1 }}</div>
                 <div class="step-icon">
-                  <el-icon v-if="step.type === 'command'"><Rank /></el-icon>
+                  <el-icon v-if="step.type === 'command'"><svg-icon icon-class="custom-cmd" /></el-icon>
                   <el-icon v-else-if="step.type === 'wait'"><Clock /></el-icon>
                   <el-icon v-else-if="step.type === 'version'"><DocumentAdd /></el-icon>
                 </div>
@@ -564,7 +565,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       <!-- 自定义命令 -->
       <el-tab-pane label="自定义命令">
         <template #label>
-          <span><el-icon><Rank /></el-icon> 自定义命令</span>
+          <span><el-icon><svg-icon icon-class="custom-cmd" /></el-icon> 自定义命令</span>
         </template>
         <el-empty 
           v-if="availableCommands.length === 0" 
