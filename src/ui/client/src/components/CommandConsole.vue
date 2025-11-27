@@ -354,7 +354,8 @@ function openOrchestrationWorkspace() {
 }
 
 // 执行指令编排（顺序执行多个步骤）
-async function executeOrchestration(steps: OrchestrationStep[], startIndex: number = 0) {
+// isSingleExecution: true表示单个步骤执行，false表示批量执行
+async function executeOrchestration(steps: OrchestrationStep[], startIndex: number = 0, isSingleExecution: boolean = false) {
   if (steps.length === 0) return;
   
   // 不关闭弹窗，让用户可以继续查看或修改编排
@@ -375,8 +376,8 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
       step.enabled = true;
     }
     
-    // 跳过未启用的步骤
-    if (step.enabled === false) {
+    // 跳过未启用的步骤（仅在批量执行时检查，单个执行时不检查）
+    if (step.enabled === false && !isSingleExecution) {
       const label = step.commandName || step.type;
       ElMessage.info(`[${i + 1}/${steps.length}] 跳过已禁用的步骤: ${label}`);
       continue;
@@ -441,6 +442,7 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
             ElMessage.error(`${stepLabel} 执行失败: ${e?.message}`);
           }
           shouldContinue = false;
+          break; // 用户取消或执行失败时，停止整个流程
         }
         continue; // 跳过后续的流式执行逻辑
       }

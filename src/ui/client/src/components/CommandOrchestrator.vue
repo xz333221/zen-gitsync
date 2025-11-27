@@ -11,7 +11,7 @@ import type { PackageFile } from '@components/PackageJsonSelector.vue'
 
 export interface CommandOrchestratorEmits {
   (e: 'update:visible', value: boolean): void
-  (e: 'execute-orchestration', steps: OrchestrationStep[]): void
+  (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean): void
 }
 
 const props = defineProps<{
@@ -287,7 +287,7 @@ function moveDown(index: number) {
 
 // 执行单个步骤
 function executeSingleStep(step: OrchestrationStep) {
-  emit('execute-orchestration', [step])
+  emit('execute-orchestration', [step], 0, true)  // 第三个参数true表示单个执行
 }
 
 // 更新步骤启用状态
