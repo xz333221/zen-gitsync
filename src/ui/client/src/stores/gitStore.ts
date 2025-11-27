@@ -61,8 +61,6 @@ export const useGitStore = defineStore('git', () => {
   const branchBehind = ref(0) // 当前分支落后远程分支的提交数
   const hasUpstream = ref(false) // 当前分支是否有上游分支
   const upstreamBranch = ref('') // 上游分支名称
-  // 添加上次获取分支状态的时间戳
-  const lastBranchStatusTime = ref(0)
   // 添加上次获取分支列表的时间戳
   const lastBranchesTime = ref(0)
 
@@ -116,7 +114,6 @@ export const useGitStore = defineStore('git', () => {
     branchBehind.value = 0
     hasUpstream.value = false
     upstreamBranch.value = ''
-    lastBranchStatusTime.value = 0
     lastBranchesTime.value = 0
     isPushing.value = false
     isGitPulling.value = false
@@ -145,16 +142,9 @@ export const useGitStore = defineStore('git', () => {
     totalCommits.value = 0
   }
 
-  // 获取分支状态（领先/落后远程）- 带缓存优化
+  // 获取分支状态（领先/落后远程）
   async function getBranchStatus(forceRefresh = false, countOnly = false) {
     if (!isGitRepo.value) return;
-
-    // 如果不是强制刷新，且距离上次获取不到30秒，使用缓存
-    const now = Date.now();
-    if (!forceRefresh && !countOnly && now - lastBranchStatusTime.value < 30000) {
-      console.log($t('@C298B:使用缓存的分支状态'));
-      return;
-    }
 
     try {
       console.log($t('@C298B:获取分支状态...'));
@@ -173,9 +163,6 @@ export const useGitStore = defineStore('git', () => {
         branchBehind.value = data.behind || 0;
         hasUpstream.value = data.hasUpstream || false;
         upstreamBranch.value = data.upstreamBranch || '';
-
-        // 更新获取时间戳
-        lastBranchStatusTime.value = now;
 
         // 添加调试日志
         console.log(`${$t('@C298B:分支状态更新：领先 ')}${branchAhead.value}${$t('@C298B: 个提交，落后 ')}${branchBehind.value}${$t('@C298B: 个提交，上游分支：')}${hasUpstream.value ? upstreamBranch.value : $t('@C298B:无')}`);
@@ -1824,7 +1811,6 @@ export const useGitStore = defineStore('git', () => {
     branchBehind,
     hasUpstream,
     upstreamBranch,
-    lastBranchStatusTime,
     lastBranchesTime,
     remoteUrl,
     isLoadingRemoteUrl,

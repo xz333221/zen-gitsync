@@ -357,7 +357,7 @@ function openOrchestrationWorkspace() {
 async function executeOrchestration(steps: OrchestrationStep[], startIndex: number = 0) {
   if (steps.length === 0) return;
   
-  orchestrationWorkspaceVisible.value = false;
+  // 不关闭弹窗，让用户可以继续查看或修改编排
   consoleRunning.value = true;
   
   const totalSteps = steps.length - startIndex;

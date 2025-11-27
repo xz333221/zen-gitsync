@@ -596,18 +596,24 @@ onMounted(() => {
   // 监听页面可见性变化，类似VSCode的做法：标签页激活时自动刷新git状态
   const handleVisibilityChange = () => {
     if (document.visibilityState === 'visible' && gitStore.isGitRepo) {
-      console.log('[页面可见性] 标签页已激活，刷新Git状态');
-      // 静默刷新，不显示提示信息
-      gitStore.fetchStatus().catch(err => console.error('刷新Git状态失败:', err));
+      console.log('[页面可见性] 标签页已激活，刷新Git状态和分支信息');
+      // 静默刷新，不显示提示信息，同时刷新文件状态和上下游信息
+      Promise.all([
+        gitStore.fetchStatus(),      // 刷新文件状态
+        gitStore.getBranchStatus()   // 刷新上下游信息
+      ]).catch(err => console.error('刷新失败:', err));
     }
   };
   
   // 监听窗口获得焦点事件：从其他应用（如VSCode）切换回浏览器时刷新
   const handleWindowFocus = () => {
     if (gitStore.isGitRepo) {
-      console.log('[窗口焦点] 浏览器窗口已激活，刷新Git状态');
-      // 静默刷新，不显示提示信息
-      gitStore.fetchStatus().catch(err => console.error('刷新Git状态失败:', err));
+      console.log('[窗口焦点] 浏览器窗口已激活，刷新Git状态和分支信息');
+      // 静默刷新，不显示提示信息，同时刷新文件状态和上下游信息
+      Promise.all([
+        gitStore.fetchStatus(),      // 刷新文件状态
+        gitStore.getBranchStatus()   // 刷新上下游信息
+      ]).catch(err => console.error('刷新失败:', err));
     }
   };
   
