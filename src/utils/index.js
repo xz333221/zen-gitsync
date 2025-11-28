@@ -29,7 +29,7 @@ import config from '../config.js'
 
 const printTableWithHeaderUnderline = (head, content, style) => {
   // 获取终端的列数（宽度）
-  const terminalWidth = process.stdout.columns;
+  const terminalWidth = process.stdout.columns || 200;
 
   // 计算表格的宽度，保证至少有 2 个字符留给边框
   const tableWidth = terminalWidth - 2; // 左右边框和分隔符的宽度
@@ -172,13 +172,12 @@ const tableLog = (commandLine, content, type) => {
   content = content.map(item => {
     let fontColor = calcColor(commandLine, item)
     let row = item.replaceAll('\t', '      ')
-    
     // 截断过长的行
     if (row.length > MAX_LINE_LENGTH) {
       row = row.substring(0, MAX_LINE_LENGTH) + '...';
     }
-    
-    return chalk[fontColor](row)
+    const result = chalk[fontColor](row)
+    return result
   })
   
   // 如果内容被截断，添加提示
@@ -534,7 +533,7 @@ async function printGitLog() {
   // 使用 ASCII 记录分隔符 %x1E 作为字段分隔符
   const logCommand = `git log -n ${n} --pretty=format:"%C(green)%h%C(reset) %x1E %C(cyan)%an%C(reset) %x1E %C(yellow)%ad%C(reset) %x1E %C(blue)%D%C(reset) %x1E %C(magenta)%s%C(reset)" --date=format:"%Y-%m-%d %H:%M" --graph --decorate --color`
   try {
-    const logOutput = execSyncGitCommand(logCommand, {
+    const logOutput = await execGitCommand(logCommand, {
       head: `git log`
     });
   } catch (error) {
@@ -558,32 +557,32 @@ function judgeUnmerged(statusOutput) {
   }
 }
 
-function exec_push({exit, commitMessage}) {
+async function exec_push({exit, commitMessage}) {
   // 执行 git push
-  // execSyncGitCommand(`git push`);
-  return new Promise((resolve, reject) => {
-    const spinner = ora('正在推送代码...').start();
-    execGitCommand('git push', {
+  const spinner = ora('正在推送代码...').start();
+  try {
+    const {stdout, stderr} = await execGitCommand('git push', {
       spinner
-    }).then(({stdout, stderr}) => {
-      printCommitLog({commitMessage})
-      resolve({stdout, stderr})
-    })
-  });
+    });
+    await printCommitLog({commitMessage});
+    return {stdout, stderr};
+  } catch (error) {
+    throw error;
+  }
 }
 
-function printCommitLog({commitMessage}) {
+async function printCommitLog({commitMessage}) {
   try {
     // 获取项目名称（取git仓库根目录名）
-    const projectRoot = execSyncGitCommand('git rev-parse --show-toplevel', {log: false});
+    const projectRoot = await execGitCommand('git rev-parse --show-toplevel', {log: false});
     const projectName = chalk.blueBright(path.basename(projectRoot.trim()));
 
     // 获取当前提交hash（取前7位）
-    const commitHash = execSyncGitCommand('git rev-parse --short HEAD', {log: false}).trim();
+    const commitHash = (await execGitCommand('git rev-parse --short HEAD', {log: false})).trim();
     const hashDisplay = chalk.yellow(commitHash);
 
     // 获取分支信息
-    const branch = execSyncGitCommand('git branch --show-current', {log: false}).trim();
+    const branch = (await execGitCommand('git branch --show-current', {log: false})).trim();
     const branchDisplay = chalk.magenta(branch);
 
     // 构建信息内容
@@ -967,7 +966,7 @@ async function addResetScriptToPackageJson() {
     }
 
     // 获取当前分支名
-    const branch = execSyncGitCommand('git branch --show-current', {log: false}).trim();
+    const branch = (await execGitCommand('git branch --show-current', {log: false})).trim();
 
     // 添加 g:reset 命令
     if (!packageJson.scripts['g:reset']) {

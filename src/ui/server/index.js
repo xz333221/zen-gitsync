@@ -10,9 +10,8 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import os from 'os';
 import { Server } from 'socket.io';
-import { spawn } from 'child_process';
+import { spawn, exec } from 'child_process';
 import iconv from 'iconv-lite';
-// import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -373,8 +372,7 @@ async function startUIServer(noOpen = false, savePort = false) {
         terminalCommand = `gnome-terminal -- bash -c "cd ${targetDir} && ${command}; exec bash" || xterm -e "cd ${targetDir} && ${command}; bash"`;
       }
       
-      // 执行命令打开新终端
-      const { exec } = await import('child_process');
+      // 执行命令打开新终端（使用已导入的 exec）
       exec(terminalCommand, (error, stdout, stderr) => {
         if (error) {
           console.error('打开终端失败:', error);
@@ -417,7 +415,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       try {
         // 在 Windows 上需要使用 taskkill 来杀死整个进程树
         if (process.platform === 'win32') {
-          const { exec } = await import('child_process');
+          // 使用已导入的 exec
           // /F 强制终止, /T 终止进程树
           exec(`taskkill /pid ${processInfo.childProcess.pid} /T /F`, (error) => {
             if (error) {
@@ -1170,7 +1168,6 @@ async function startUIServer(noOpen = false, savePort = false) {
                       let terminalFound = false;
                       for (const terminal of terminals) {
                           try {
-                              const { exec } = await import('child_process');
                               exec(`which ${terminal.cmd}`, (error) => {
                                   if (!error) {
                                       command = terminal.cmd;
@@ -1327,7 +1324,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       try {
         // 使用VSCode打开文件
         // 尝试使用 'code' 命令打开文件
-        const { spawn } = await import('child_process');
+        // 使用已导入的 spawn
         
         // 创建一个Promise来处理spawn的异步结果
         const spawnPromise = new Promise((resolve, reject) => {
@@ -4420,8 +4417,7 @@ async function startUIServer(noOpen = false, savePort = false) {
         terminalCommand = `gnome-terminal -- bash -c "cd ${packagePath} && ${npmCommand}; exec bash" || xterm -e "cd ${packagePath} && ${npmCommand}; bash"`;
       }
       
-      // 执行命令打开新终端
-      const { exec } = await import('child_process');
+      // 执行命令打开新终端（使用已导入的 exec）
       exec(terminalCommand, (error, stdout, stderr) => {
         if (error) {
           console.error('打开终端失败:', error);
@@ -4953,7 +4949,7 @@ async function startUIServer(noOpen = false, savePort = false) {
         if (childProcess && !childProcess.killed) {
           try {
             if (process.platform === 'win32') {
-              const { exec } = require('child_process');
+              // 使用已导入的 exec（ES Module 不支持 require）
               exec(`taskkill /pid ${childProcess.pid} /T /F`, (error) => {
                 if (error) {
                   console.error(`[交互式命令] taskkill 失败:`, error);

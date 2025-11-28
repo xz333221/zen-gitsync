@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {
-  coloredLog, errorLog, execGitCommand, execSyncGitCommand, showHelp,
+  coloredLog, errorLog, execGitCommand, showHelp,
   getCwd, judgePlatform, judgeLog, judgeHelp, exec_exit, judgeUnmerged, formatDuration,
   exec_push, execPull, judgeRemote, execDiff, execAddAndCommit, delay, addScriptToPackageJson, addResetScriptToPackageJson
 } from './utils/index.js';
