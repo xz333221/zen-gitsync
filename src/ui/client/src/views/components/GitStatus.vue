@@ -715,21 +715,19 @@ defineExpose({
           
           <!-- 储藏列表按钮 -->
           <StashListButton />
-
-          <el-tooltip :content="$t('@13D1C:刷新状态')" placement="top"  :show-after="200">
-            <el-button
-              type="primary"
-              :icon="Refresh"
-              circle
-              size="small"
-              @click="refreshStatus"
-              :loading="isRefreshing"
-            />
-          </el-tooltip>
         </div>
-        <div class="flex">
+        <div class="flex items-center">
           <GitOperationsButton variant="icon" />
           <CommandHistory />
+          <el-tooltip :content="$t('@13D1C:刷新状态')" placement="top"  :show-after="200">
+            <el-button
+              text
+              :icon="Refresh"
+              @click="refreshStatus"
+              :loading="isRefreshing"
+              style="font-size: 20px;"
+            />
+          </el-tooltip>
         </div>
       </div>
     </div>
