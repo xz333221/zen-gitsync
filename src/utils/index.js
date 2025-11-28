@@ -574,16 +574,16 @@ async function exec_push({exit, commitMessage}) {
 async function printCommitLog({commitMessage}) {
   try {
     // 获取项目名称（取git仓库根目录名）
-    const projectRoot = await execGitCommand('git rev-parse --show-toplevel', {log: false});
-    const projectName = chalk.blueBright(path.basename(projectRoot.trim()));
+    const projectRootResult = await execGitCommand('git rev-parse --show-toplevel', {log: false});
+    const projectName = chalk.blueBright(path.basename(projectRootResult.stdout.trim()));
 
     // 获取当前提交hash（取前7位）
-    const commitHash = (await execGitCommand('git rev-parse --short HEAD', {log: false})).trim();
-    const hashDisplay = chalk.yellow(commitHash);
+    const commitHashResult = await execGitCommand('git rev-parse --short HEAD', {log: false});
+    const hashDisplay = chalk.yellow(commitHashResult.stdout.trim());
 
     // 获取分支信息
-    const branch = (await execGitCommand('git branch --show-current', {log: false})).trim();
-    const branchDisplay = chalk.magenta(branch);
+    const branchResult = await execGitCommand('git branch --show-current', {log: false});
+    const branchDisplay = chalk.magenta(branchResult.stdout.trim());
 
     // 构建信息内容
     const message = [
@@ -966,7 +966,8 @@ async function addResetScriptToPackageJson() {
     }
 
     // 获取当前分支名
-    const branch = (await execGitCommand('git branch --show-current', {log: false})).trim();
+    const branchResult = await execGitCommand('git branch --show-current', {log: false});
+    const branch = branchResult.stdout.trim();
 
     // 添加 g:reset 命令
     if (!packageJson.scripts['g:reset']) {
