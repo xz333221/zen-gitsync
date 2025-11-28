@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Folder, Refresh, Loading } from '@element-plus/icons-vue'
+import { ref, watch, computed, h } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Folder, Refresh, Loading, FolderAdd } from '@element-plus/icons-vue'
 
 export interface PackageFile {
   path: string
@@ -55,10 +55,15 @@ const options = computed(() => {
 })
 
 // 扫描package.json文件
-async function scanPackageFiles() {
+async function scanPackageFiles(directory?: string) {
   loading.value = true
   try {
-    const response = await fetch('/api/scan-package-files')
+    // 构建URL，如果提供了目录参数则添加到查询字符串
+    const url = directory 
+      ? `/api/scan-package-files?directory=${encodeURIComponent(directory)}`
+      : '/api/scan-package-files'
+    
+    const response = await fetch(url)
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
@@ -72,7 +77,8 @@ async function scanPackageFiles() {
         computedValue.value = ''
       }
       
-    //   ElMessage.success(`扫描完成，找到 ${packageFiles.value.length} 个 package.json 文件`)
+      const dirInfo = directory ? `目录 ${directory}` : '当前项目'
+      ElMessage.success(`扫描 ${dirInfo} 完成，找到 ${packageFiles.value.length} 个 package.json 文件`)
     } else {
       throw new Error(data.error || '扫描失败')
     }
@@ -82,6 +88,144 @@ async function scanPackageFiles() {
     packageFiles.value = []
   } finally {
     loading.value = false
+  }
+}
+
+// 打开目录浏览器
+async function browseDirectory() {
+  try {
+    const response = await fetch('/api/browse_directory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currentPath: '' // 空字符串表示使用当前工作目录
+      })
+    })
+    const result = await response.json()
+    if (result.success) {
+      selectDirectoryDialog(result)
+    } else if (result.error) {
+      ElMessage.error(result.error)
+    }
+  } catch (error) {
+    ElMessage.error(`浏览目录失败: ${(error as Error).message}`)
+  }
+}
+
+// 显示目录选择对话框
+function selectDirectoryDialog(directoryData: any) {
+  if (!directoryData || !directoryData.items) return
+  
+  ElMessageBox.alert(
+    h('div', { class: 'directory-browser' }, [
+      h('div', { class: 'current-path' }, [
+        h('span', { class: 'path-label' }, '当前路径：'),
+        h('span', { class: 'path-value' }, directoryData.path)
+      ]),
+      h('div', { class: 'directory-list' }, [
+        directoryData.parentPath
+          ? h(
+              'div',
+              {
+                class: 'directory-item parent-dir',
+                onClick: () => selectDirectory(directoryData.parentPath)
+              },
+              [
+                h(
+                  'span',
+                  { class: 'dir-icon' },
+                  h(
+                    'svg',
+                    {
+                      class: 'folder-icon',
+                      viewBox: '0 0 24 24',
+                      width: '20',
+                      height: '20',
+                      style: { fill: '#E6A23C' }
+                    },
+                    [
+                      h('path', {
+                        d: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z'
+                      })
+                    ]
+                  )
+                ),
+                h('span', { class: 'dir-name' }, '返回上级目录')
+              ]
+            )
+          : null,
+        ...directoryData.items.map((item: any) =>
+          h(
+            'div',
+            {
+              class: 'directory-item',
+              onClick: () => selectDirectory(item.path)
+            },
+            [
+              h(
+                'span',
+                { class: 'dir-icon' },
+                h(
+                  'svg',
+                  {
+                    class: 'folder-icon',
+                    viewBox: '0 0 24 24',
+                    width: '20',
+                    height: '20',
+                    style: { fill: '#409EFF' }
+                  },
+                  [
+                    h('path', {
+                      d: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z'
+                    })
+                  ]
+                )
+              ),
+              h('span', { class: 'dir-name' }, item.name)
+            ]
+          )
+        )
+      ])
+    ]),
+    '浏览并选择目录',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      showCancelButton: true,
+      customClass: 'directory-browser-dialog',
+      callback: (action: string) => {
+        if (action === 'confirm') {
+          // 用户确认选择，扫描该目录
+          scanPackageFiles(directoryData.path)
+        }
+      }
+    }
+  )
+}
+
+// 选择目录后刷新对话框
+async function selectDirectory(dirPath: string) {
+  try {
+    ElMessageBox.close()
+    setTimeout(async () => {
+      try {
+        const response = await fetch('/api/browse_directory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPath: dirPath })
+        })
+        const result = await response.json()
+        if (result.success) {
+          selectDirectoryDialog(result)
+        } else if (result.error) {
+          ElMessage.error(result.error)
+        }
+      } catch (error) {
+        ElMessage.error(`浏览目录失败: ${(error as Error).message}`)
+      }
+    }, 100)
+  } catch (error) {
+    ElMessage.error(`处理目录选择时出错: ${(error as Error).message}`)
   }
 }
 
@@ -126,10 +270,22 @@ watch(() => props.modelValue, (newValue) => {
         :loading="loading"
         :disabled="disabled"
         size="default"
-        @click="scanPackageFiles"
+        @click="scanPackageFiles()"
         class="refresh-btn"
+        title="刷新当前项目"
       >
         {{ loading ? '扫描中...' : '刷新' }}
+      </el-button>
+      
+      <el-button
+        :icon="FolderAdd"
+        :disabled="disabled || loading"
+        size="default"
+        @click="browseDirectory"
+        class="custom-dir-btn"
+        title="浏览并选择其他目录"
+      >
+        其他目录
       </el-button>
     </div>
     
@@ -159,7 +315,8 @@ watch(() => props.modelValue, (newValue) => {
   min-width: 0;
 }
 
-.refresh-btn {
+.refresh-btn,
+.custom-dir-btn {
   flex-shrink: 0;
 }
 

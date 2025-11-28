@@ -21,3 +21,6 @@ body {
     transition: var(--transition-all);
 }
 
+.el-message-box__message{
+    width: 100%;
+}

@@ -4229,7 +4229,26 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 扫描项目目录下的所有package.json文件（用于版本管理）
   app.get('/api/scan-package-files', async (req, res) => {
     try {
-      const projectRoot = process.cwd();
+      // 支持通过查询参数指定扫描目录，如果没有指定则使用当前工作目录
+      const customDirectory = req.query.directory;
+      const projectRoot = customDirectory || process.cwd();
+      
+      // 验证目录是否存在且可访问
+      try {
+        const stats = await fs.stat(projectRoot);
+        if (!stats.isDirectory()) {
+          return res.status(400).json({ 
+            success: false, 
+            error: '指定的路径不是一个有效的目录' 
+          });
+        }
+      } catch (error) {
+        return res.status(400).json({ 
+          success: false, 
+          error: `无法访问指定的目录: ${error.message}` 
+        });
+      }
+      
       const packageFiles = [];
       const startTime = Date.now();
       
