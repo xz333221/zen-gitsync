@@ -887,6 +887,7 @@ async function execAddAndCommit({statusOutput, commitMessage, exit}) {
 
     const question = rlPromisify(rl.question.bind(rl))
     commitMessage = await question('请输入提交信息：') || commitMessage;
+    rl.close(); // 关闭 readline 接口
   }
 
   // 使用带锁定文件过滤的 git add
@@ -899,13 +900,16 @@ async function execAddAndCommit({statusOutput, commitMessage, exit}) {
   if (!checkStatus.stdout.trim()) {
     console.log(chalk.yellow('⚠️ 没有检测到可提交的变更'));
     // exec_exit(exit)
-    return;
+    return commitMessage; // 返回提交信息（即使没有提交）
   }
 
   // 执行 git commit
   if (statusOutput.includes('Untracked files:') || statusOutput.includes('Changes not staged for commit') || statusOutput.includes('Changes to be committed')) {
     await execGitCommand(`git commit -m "${commitMessage}"`)
   }
+  
+  // 返回实际使用的提交信息
+  return commitMessage;
 }
 
 // 添加时间格式化函数

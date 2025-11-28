@@ -87,7 +87,8 @@ async function createGitCommit(options) {
     if (hasLocalChanges) {
       // 检查是否有 --no-diff 参数
       await execDiff()
-      await execAddAndCommit({statusOutput, commitMessage, exit})
+      // 获取实际使用的提交信息（可能是用户交互输入的）
+      commitMessage = await execAddAndCommit({statusOutput, commitMessage, exit})
       statusOutput.includes('use "git pull') && await execPull()
 
       // 检查是否有远程更新
@@ -96,7 +97,10 @@ async function createGitCommit(options) {
       await exec_push({exit, commitMessage})
     } else {
       if (statusOutput.includes('use "git push')) {
-        await exec_push({exit, commitMessage})
+        // 获取最近一次提交的实际信息
+        const lastCommitResult = await execGitCommand('git log -1 --pretty=%B', {log: false});
+        const actualCommitMessage = lastCommitResult.stdout.trim();
+        await exec_push({exit, commitMessage: actualCommitMessage || commitMessage})
       } else if (statusOutput.includes('use "git pull')) {
         await execPull()
       } else {
