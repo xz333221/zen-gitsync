@@ -29,7 +29,7 @@ import config from '../config.js'
 
 const printTableWithHeaderUnderline = (head, content, style) => {
   // 获取终端的列数（宽度）
-  const terminalWidth = process.stdout.columns || 200;
+  const terminalWidth = process.stdout.columns || 100;
 
   // 计算表格的宽度，保证至少有 2 个字符留给边框
   const tableWidth = terminalWidth - 2; // 左右边框和分隔符的宽度
