@@ -697,6 +697,118 @@ async function executeCustomCommand(command: CustomCommand) {
     return;
   }
   
+  // 如果使用交互式模式
+  if (interactiveMode.value) {
+    // 生成会话ID
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    currentSessionId.value = sessionId;
+    
+    // 创建命令记录
+    const rec: ConsoleRecord = {
+      id: ++consoleIdCounter,
+      command: cmd,
+      success: false,
+      ts: new Date().toLocaleString(),
+      expanded: true,
+      stdout: '',
+      stderr: '',
+      running: true,
+      sessionId: sessionId,
+      isInteractive: true
+    };
+    consoleHistory.value.unshift(rec);
+    
+    // 关闭弹窗
+    commandManagerVisible.value = false;
+    
+    if (!socket.value || !socket.value.connected) {
+      ElMessage.error('Socket 连接未建立，无法执行交互式命令');
+      consoleRunning.value = false;
+      rec.running = false;
+      rec.stderr = 'Socket 连接未建立';
+      return;
+    }
+    
+    // 发送执行请求
+    socket.value.emit('exec_interactive', {
+      command: cmd,
+      directory: command.directory || '',
+      sessionId
+    });
+    
+    // 监听进程ID
+    const onProcessId = (data: any) => {
+      if (data.sessionId === sessionId) {
+        rec.processId = data.processId;
+        console.log(`[交互式-自定义] 收到进程ID:`, rec.processId);
+        consoleHistory.value = [...consoleHistory.value];
+      }
+    };
+    
+    // 监听标准输出
+    const onStdout = (data: any) => {
+      if (data.sessionId === sessionId) {
+        rec.stdout = (rec.stdout || '') + ansiToHtml(data.data);
+        consoleRunning.value = false;
+        consoleHistory.value = [...consoleHistory.value];
+      }
+    };
+    
+    // 监听标准错误
+    const onStderr = (data: any) => {
+      if (data.sessionId === sessionId) {
+        rec.stderr = (rec.stderr || '') + ansiToHtml(data.data);
+        consoleRunning.value = false;
+        consoleHistory.value = [...consoleHistory.value];
+      }
+    };
+    
+    // 监听进程退出
+    const onExit = (data: any) => {
+      if (data.sessionId === sessionId) {
+        rec.success = data.success;
+        rec.running = false;
+        currentSessionId.value = null;
+        console.log(`[交互式-自定义] 进程退出，成功:`, rec.success);
+        consoleHistory.value = [...consoleHistory.value];
+        
+        // 清理事件监听器
+        socket.value?.off('interactive_process_id', onProcessId);
+        socket.value?.off('interactive_stdout', onStdout);
+        socket.value?.off('interactive_stderr', onStderr);
+        socket.value?.off('interactive_exit', onExit);
+        socket.value?.off('interactive_error', onError);
+      }
+    };
+    
+    // 监听错误
+    const onError = (data: any) => {
+      if (data.sessionId === sessionId) {
+        rec.stderr = (rec.stderr || '') + `错误: ${data.error}\n`;
+        rec.running = false;
+        rec.success = false;
+        currentSessionId.value = null;
+        consoleHistory.value = [...consoleHistory.value];
+        
+        // 清理事件监听器
+        socket.value?.off('interactive_process_id', onProcessId);
+        socket.value?.off('interactive_stdout', onStdout);
+        socket.value?.off('interactive_stderr', onStderr);
+        socket.value?.off('interactive_exit', onExit);
+        socket.value?.off('interactive_error', onError);
+      }
+    };
+    
+    socket.value.on('interactive_process_id', onProcessId);
+    socket.value.on('interactive_stdout', onStdout);
+    socket.value.on('interactive_stderr', onStderr);
+    socket.value.on('interactive_exit', onExit);
+    socket.value.on('interactive_error', onError);
+    
+    consoleRunning.value = false;
+    return;
+  }
+  
   // 流式执行逻辑
   const rec: ConsoleRecord = {
     id: ++consoleIdCounter,
