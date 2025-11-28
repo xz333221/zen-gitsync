@@ -1,19 +1,39 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
-import { ArrowDown, FullScreen, VideoPlay, Loading, Close } from '@element-plus/icons-vue';
+import { ref, onMounted, watch, onUnmounted } from 'vue';
+import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
 import OrchestrationWorkspace from '@components/OrchestrationWorkspace.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
+import { io, Socket } from 'socket.io-client';
 
 const configStore = useConfigStore();
+
+// 获取后端端口
+function getBackendPort() {
+  const currentPort = window.location.port || '80';
+  if (currentPort === '5173' || currentPort === '4173' || currentPort === '5544') {
+    const envPort = import.meta.env.VITE_BACKEND_PORT;
+    if (envPort) return parseInt(envPort, 10);
+    return 3000;
+  }
+  return parseInt(currentPort, 10);
+}
+
+const backendPort = getBackendPort();
+
+// Socket.IO 连接
+const socket = ref<Socket | null>(null);
 
 // 控制台相关状态
 const currentDirectory = ref("");
 const consoleInput = ref(""); // 命令输入
 const consoleRunning = ref(false);
+const interactiveMode = ref(localStorage.getItem('interactiveMode') === 'true'); // 交互式模式开关
+const stdinInput = ref(""); // stdin输入框内容
+const currentSessionId = ref<string | null>(null); // 当前交互式会话ID
 
 type ConsoleRecord = { 
   id: number; 
@@ -25,6 +45,8 @@ type ConsoleRecord = {
   expanded?: boolean;
   running?: boolean;  // 标记命令是否还在运行
   processId?: number; // 服务端进程ID，用于停止
+  sessionId?: string; // 交互式会话ID
+  isInteractive?: boolean; // 是否为交互式命令
 };
 
 const consoleHistory = ref<ConsoleRecord[]>([]);
@@ -824,6 +846,157 @@ async function executeCustomCommand(command: CustomCommand) {
   }
 }
 
+// 执行交互式命令
+async function runInteractiveCommand() {
+  const cmd = consoleInput.value.trim();
+  if (!cmd || consoleRunning.value) return;
+  consoleRunning.value = true;
+  
+  // 生成会话ID
+  const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  currentSessionId.value = sessionId;
+  
+  // 创建命令记录
+  const rec: ConsoleRecord = {
+    id: ++consoleIdCounter,
+    command: cmd,
+    success: false,
+    ts: new Date().toLocaleString(),
+    expanded: true,
+    stdout: '',
+    stderr: '',
+    running: true,
+    sessionId: sessionId,
+    isInteractive: true
+  };
+  consoleHistory.value.unshift(rec);
+  consoleInput.value = '';
+  
+  if (!socket.value || !socket.value.connected) {
+    ElMessage.error('Socket 连接未建立，无法执行交互式命令');
+    consoleRunning.value = false;
+    rec.running = false;
+    rec.stderr = 'Socket 连接未建立';
+    return;
+  }
+  
+  // 发送执行请求
+  socket.value.emit('exec_interactive', {
+    command: cmd,
+    directory: '',
+    sessionId
+  });
+  
+  // 监听进程ID
+  const onProcessId = (data: any) => {
+    if (data.sessionId === sessionId) {
+      rec.processId = data.processId;
+      console.log(`[交互式] 收到进程ID:`, rec.processId);
+      consoleHistory.value = [...consoleHistory.value];
+    }
+  };
+  
+  // 监听标准输出
+  const onStdout = (data: any) => {
+    if (data.sessionId === sessionId) {
+      rec.stdout = (rec.stdout || '') + ansiToHtml(data.data);
+      consoleRunning.value = false; // 收到输出后关闭loading
+      consoleHistory.value = [...consoleHistory.value];
+    }
+  };
+  
+  // 监听标准错误
+  const onStderr = (data: any) => {
+    if (data.sessionId === sessionId) {
+      rec.stderr = (rec.stderr || '') + ansiToHtml(data.data);
+      consoleRunning.value = false;
+      consoleHistory.value = [...consoleHistory.value];
+    }
+  };
+  
+  // 监听进程退出
+  const onExit = (data: any) => {
+    if (data.sessionId === sessionId) {
+      rec.success = data.success;
+      rec.running = false;
+      currentSessionId.value = null;
+      console.log(`[交互式] 进程退出，成功:`, rec.success);
+      consoleHistory.value = [...consoleHistory.value];
+      
+      // 清理事件监听器
+      socket.value?.off('interactive_process_id', onProcessId);
+      socket.value?.off('interactive_stdout', onStdout);
+      socket.value?.off('interactive_stderr', onStderr);
+      socket.value?.off('interactive_exit', onExit);
+      socket.value?.off('interactive_error', onError);
+    }
+  };
+  
+  // 监听错误
+  const onError = (data: any) => {
+    if (data.sessionId === sessionId) {
+      rec.stderr = (rec.stderr || '') + `错误: ${data.error}\n`;
+      rec.running = false;
+      rec.success = false;
+      currentSessionId.value = null;
+      consoleHistory.value = [...consoleHistory.value];
+      
+      // 清理事件监听器
+      socket.value?.off('interactive_process_id', onProcessId);
+      socket.value?.off('interactive_stdout', onStdout);
+      socket.value?.off('interactive_stderr', onStderr);
+      socket.value?.off('interactive_exit', onExit);
+      socket.value?.off('interactive_error', onError);
+    }
+  };
+  
+  socket.value.on('interactive_process_id', onProcessId);
+  socket.value.on('interactive_stdout', onStdout);
+  socket.value.on('interactive_stderr', onStderr);
+  socket.value.on('interactive_exit', onExit);
+  socket.value.on('interactive_error', onError);
+  
+  consoleRunning.value = false;
+}
+
+// 发送stdin输入
+function sendStdinInput() {
+  const input = stdinInput.value.trim();
+  if (!input || !currentSessionId.value) return;
+  
+  if (!socket.value || !socket.value.connected) {
+    ElMessage.error('Socket 连接未建立');
+    return;
+  }
+  
+  console.log(`[交互式] 发送 stdin 输入:`, input);
+  socket.value.emit(`interactive_stdin_${currentSessionId.value}`, { input });
+  stdinInput.value = '';
+}
+
+// 停止交互式命令
+function stopInteractiveCommand(rec: ConsoleRecord) {
+  if (!rec.sessionId || !rec.running) {
+    ElMessage.warning('命令已经结束');
+    return;
+  }
+  
+  if (!socket.value || !socket.value.connected) {
+    ElMessage.error('Socket 连接未建立');
+    return;
+  }
+  
+  console.log(`[交互式] 停止命令:`, rec.sessionId);
+  socket.value.emit(`interactive_stop_${rec.sessionId}`);
+  rec.running = false;
+  consoleHistory.value = [...consoleHistory.value];
+}
+
+// 监听interactiveMode变化并保存到localStorage
+watch(interactiveMode, (newValue) => {
+  localStorage.setItem('interactiveMode', String(newValue));
+});
+
 // 监听useTerminal变化并保存到localStorage
 watch(useTerminal, (newValue) => {
   localStorage.setItem('useTerminal', String(newValue));
@@ -834,6 +1007,31 @@ watch(isConsoleExpanded, (newValue) => {
   localStorage.setItem('isConsoleExpanded', String(newValue));
 });
 
+// 初始化Socket.IO连接
+function initSocket() {
+  const socketUrl = `http://localhost:${backendPort}`;
+  console.log('[控制台] 连接到 Socket.IO:', socketUrl);
+  
+  socket.value = io(socketUrl, {
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: 5
+  });
+  
+  socket.value.on('connect', () => {
+    console.log('[控制台] Socket.IO 已连接');
+  });
+  
+  socket.value.on('disconnect', () => {
+    console.log('[控制台] Socket.IO 已断开');
+  });
+  
+  socket.value.on('connect_error', (error) => {
+    console.error('[控制台] Socket.IO 连接错误:', error);
+  });
+}
+
 // 获取当前工作目录
 onMounted(async () => {
   try {
@@ -841,6 +1039,17 @@ onMounted(async () => {
     const result = await resp.json();
     currentDirectory.value = result?.directory || '';
   } catch {}
+  
+  // 初始化Socket连接
+  initSocket();
+});
+
+// 组件卸载时断开Socket连接
+onUnmounted(() => {
+  if (socket.value) {
+    socket.value.disconnect();
+    socket.value = null;
+  }
 });
 </script>
 
@@ -854,6 +1063,13 @@ onMounted(async () => {
       </div>
       <div class="header-actions">
         <div class="terminal-switch">
+          <span class="switch-label">交互式模式</span>
+          <el-switch
+            v-model="interactiveMode"
+            size="small"
+          />
+        </div>
+        <div class="terminal-switch" v-if="!interactiveMode">
           <span class="switch-label">{{ $t('@CF05E:使用终端执行') }}</span>
           <el-switch
             v-model="useTerminal"
@@ -908,12 +1124,31 @@ onMounted(async () => {
       <el-input
         v-model="consoleInput"
         class="console-input"
-        :placeholder="'输入命令，例如: git status'"
-        @keydown.enter.prevent="runConsoleCommand"
+        :placeholder="interactiveMode ? '交互式模式: 支持需要输入的命令' : '输入命令，例如: git status'"
+        @keydown.enter.prevent="interactiveMode ? runInteractiveCommand() : runConsoleCommand()"
         :disabled="consoleRunning"
         clearable
       />
-      <el-button type="primary" :icon="VideoPlay" :loading="consoleRunning" @click="runConsoleCommand" circle />
+      <el-button 
+        type="primary" 
+        :icon="VideoPlay" 
+        :loading="consoleRunning" 
+        @click="interactiveMode ? runInteractiveCommand() : runConsoleCommand()" 
+        circle 
+      />
+    </div>
+
+    <!-- stdin 输入区（仅在交互式模式且有运行中的会话时显示） -->
+    <div class="stdin-input-row" v-if="interactiveMode && currentSessionId">
+      <el-icon class="stdin-icon"><Position /></el-icon>
+      <el-input
+        v-model="stdinInput"
+        class="stdin-input"
+        placeholder="输入响应内容（如密码、确认等），按回车发送"
+        @keydown.enter.prevent="sendStdinInput"
+        clearable
+      />
+      <el-button type="success" @click="sendStdinInput" size="small">发送</el-button>
     </div>
 
         <!-- 命令历史输出 -->
@@ -933,7 +1168,7 @@ onMounted(async () => {
                   <el-button
                     text
                     size="small"
-                    @click.stop="stopCommand(rec)"
+                    @click.stop="rec.isInteractive ? stopInteractiveCommand(rec) : stopCommand(rec)"
                     class="stop-btn"
                     type="danger"
                   >
@@ -1218,6 +1453,53 @@ onMounted(async () => {
   
   &:active {
     transform: translateY(0);
+  }
+}
+
+/* stdin 输入框样式 */
+.stdin-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  background: linear-gradient(135deg, rgba(103, 194, 58, 0.05), rgba(103, 194, 58, 0.02));
+  margin: 0 12px 12px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(103, 194, 58, 0.3);
+  transition: all 0.3s ease;
+  
+  &:focus-within {
+    border-color: #67c23a;
+    box-shadow: 0 0 0 2px rgba(103, 194, 58, 0.1);
+    background: linear-gradient(135deg, rgba(103, 194, 58, 0.08), rgba(103, 194, 58, 0.03));
+  }
+}
+
+.stdin-icon {
+  color: #67c23a;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.stdin-input {
+  flex: 1;
+  
+  :deep(.el-input__wrapper) {
+    background-color: transparent;
+    box-shadow: none !important;
+    border: none;
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  
+  :deep(.el-input__inner) {
+    color: var(--text-primary);
+    
+    &::placeholder {
+      color: rgba(103, 194, 58, 0.5);
+      font-style: italic;
+    }
   }
 }
 

@@ -4804,6 +4804,176 @@ async function startUIServer(noOpen = false, savePort = false) {
       socket.emit('command_history_cleared', { success: result });
     });
     
+    // 交互式命令执行
+    socket.on('exec_interactive', async (data) => {
+      const { command, directory, sessionId } = data;
+      
+      if (!command || typeof command !== 'string' || !command.trim()) {
+        socket.emit('interactive_error', { 
+          sessionId, 
+          error: 'command 不能为空' 
+        });
+        return;
+      }
+
+      // 确定执行目录
+      const execDirectory = directory && directory.trim() 
+        ? (path.isAbsolute(directory) ? directory : path.join(currentProjectPath, directory))
+        : currentProjectPath;
+
+      console.log(`[交互式命令] ${sessionId}: ${command} (目录: ${execDirectory})`);
+
+      // 分配进程 ID
+      const processId = ++processIdCounter;
+
+      // 记录执行开始时间
+      const startTime = Date.now();
+
+      // 用于收集输出（用于命令历史）
+      let collectedStdout = '';
+      let collectedStderr = '';
+
+      // 使用 spawn 执行命令
+      const childProcess = spawn(command.trim(), [], {
+        cwd: execDirectory,
+        shell: true,
+        env: {
+          ...process.env,
+          GIT_CONFIG_PARAMETERS: "'core.quotepath=false'",
+          FORCE_COLOR: '1',
+          NPM_CONFIG_COLOR: 'always',
+          // 不设置 CI=true，允许交互式输入
+          PYTHONUNBUFFERED: '1'
+        }
+      });
+
+      // 存储进程信息
+      runningProcesses.set(processId, {
+        childProcess,
+        command: command.trim(),
+        startTime,
+        directory: execDirectory,
+        sessionId
+      });
+
+      console.log(`[交互式命令] 创建进程 #${processId}: ${command.substring(0, 50)}`);
+
+      // 发送进程 ID 给客户端
+      socket.emit('interactive_process_id', { sessionId, processId });
+
+      // 判断是否需要 GBK 转换
+      const isWindows = process.platform === 'win32';
+      const cmdBuiltins = ['dir', 'type', 'echo', 'set', 'path', 'cd', 'md', 'rd', 'del', 'copy', 'move', 'ren'];
+      const needsGbkConversion = isWindows && cmdBuiltins.some(builtin => 
+        command.trim().toLowerCase().startsWith(builtin + ' ') || 
+        command.trim().toLowerCase() === builtin
+      );
+
+      // 监听标准输出
+      childProcess.stdout?.on('data', (data) => {
+        let output = needsGbkConversion ? iconv.decode(data, 'gbk') : data.toString('utf8');
+        collectedStdout += output;
+        socket.emit('interactive_stdout', { sessionId, data: output });
+      });
+
+      // 监听标准错误输出
+      childProcess.stderr?.on('data', (data) => {
+        let output = needsGbkConversion ? iconv.decode(data, 'gbk') : data.toString('utf8');
+        collectedStderr += output;
+        socket.emit('interactive_stderr', { sessionId, data: output });
+      });
+
+      // 监听进程关闭
+      childProcess.on('close', (code, signal) => {
+        runningProcesses.delete(processId);
+        console.log(`[交互式命令] 进程 #${processId} 已结束`);
+
+        // 计算执行时间
+        const executionTime = Date.now() - startTime;
+
+        // 添加到命令历史
+        const error = code !== 0 ? `Command exited with code ${code}` : null;
+        addCommandToHistory(
+          command.trim(),
+          collectedStdout,
+          collectedStderr,
+          error,
+          executionTime
+        );
+
+        socket.emit('interactive_exit', { 
+          sessionId, 
+          code, 
+          success: code === 0 
+        });
+      });
+
+      // 监听错误
+      childProcess.on('error', (error) => {
+        runningProcesses.delete(processId);
+        console.error(`[交互式命令] 进程 #${processId} 出错:`, error);
+
+        const executionTime = Date.now() - startTime;
+        addCommandToHistory(
+          command.trim(),
+          collectedStdout,
+          collectedStderr,
+          error.message,
+          executionTime
+        );
+
+        socket.emit('interactive_error', { 
+          sessionId, 
+          error: error.message 
+        });
+      });
+
+      // 监听来自客户端的 stdin 输入
+      socket.on(`interactive_stdin_${sessionId}`, (inputData) => {
+        const { input } = inputData;
+        console.log(`[交互式命令] 收到 stdin 输入 (${sessionId}):`, input);
+        
+        if (childProcess.stdin && !childProcess.stdin.destroyed) {
+          try {
+            childProcess.stdin.write(input + '\n');
+          } catch (err) {
+            console.error(`[交互式命令] 写入 stdin 失败:`, err);
+            socket.emit('interactive_error', { 
+              sessionId, 
+              error: `写入输入失败: ${err.message}` 
+            });
+          }
+        }
+      });
+
+      // 监听停止命令请求
+      socket.on(`interactive_stop_${sessionId}`, () => {
+        console.log(`[交互式命令] 收到停止请求 (${sessionId})`);
+        
+        if (childProcess && !childProcess.killed) {
+          try {
+            if (process.platform === 'win32') {
+              const { exec } = require('child_process');
+              exec(`taskkill /pid ${childProcess.pid} /T /F`, (error) => {
+                if (error) {
+                  console.error(`[交互式命令] taskkill 失败:`, error);
+                }
+              });
+            } else {
+              childProcess.kill('SIGTERM');
+              setTimeout(() => {
+                if (!childProcess.killed) {
+                  childProcess.kill('SIGKILL');
+                }
+              }, 2000);
+            }
+          } catch (err) {
+            console.error(`[交互式命令] 停止进程失败:`, err);
+          }
+        }
+      });
+    });
+    
     // 客户端断开连接
     socket.on('disconnect', () => {
       console.log(`客户端已断开连接: ${socket.id} (房间: ${projectRoomId})`);
