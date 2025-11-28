@@ -31,9 +31,8 @@ const socket = ref<Socket | null>(null);
 const currentDirectory = ref("");
 const consoleInput = ref(""); // 命令输入
 const consoleRunning = ref(false);
-const interactiveMode = ref(localStorage.getItem('interactiveMode') === 'true'); // 交互式模式开关
-const stdinInput = ref(""); // stdin输入框内容
-const currentSessionId = ref<string | null>(null); // 当前交互式会话ID
+const consoleHistory = ref<ConsoleRecord[]>([]);
+let consoleIdCounter = 0; // ID计数器，确保唯一性
 
 type ConsoleRecord = { 
   id: number; 
@@ -42,15 +41,13 @@ type ConsoleRecord = {
   stderr?: string; 
   success: boolean; 
   ts: string; 
-  expanded?: boolean;
-  running?: boolean;  // 标记命令是否还在运行
-  processId?: number; // 服务端进程ID，用于停止
-  sessionId?: string; // 交互式会话ID
+  expanded: boolean;
+  running?: boolean; // 运行中标记
+  processId?: number; // 进程 ID
+  sessionId?: string; // 交互式会话区
   isInteractive?: boolean; // 是否为交互式命令
+  stdinInput?: string; // 每个命令独立的 stdin 输入
 };
-
-const consoleHistory = ref<ConsoleRecord[]>([]);
-let consoleIdCounter = 0; // ID计数器，确保唯一性
 
 // 控制整个控制台展开/收起（从localStorage读取，默认展开）
 const isConsoleExpanded = ref(localStorage.getItem('isConsoleExpanded') !== 'false');
@@ -697,11 +694,10 @@ async function executeCustomCommand(command: CustomCommand) {
     return;
   }
   
-  // 如果使用交互式模式
-  if (interactiveMode.value) {
+  // 非终端模式默认使用交互式执行
+  if (!useTerminal.value) {
     // 生成会话ID
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    currentSessionId.value = sessionId;
     
     // 创建命令记录
     const rec: ConsoleRecord = {
@@ -714,7 +710,8 @@ async function executeCustomCommand(command: CustomCommand) {
       stderr: '',
       running: true,
       sessionId: sessionId,
-      isInteractive: true
+      isInteractive: true,
+      stdinInput: '' // 初始化独立的输入框
     };
     consoleHistory.value.unshift(rec);
     
@@ -768,7 +765,6 @@ async function executeCustomCommand(command: CustomCommand) {
       if (data.sessionId === sessionId) {
         rec.success = data.success;
         rec.running = false;
-        currentSessionId.value = null;
         console.log(`[交互式-自定义] 进程退出，成功:`, rec.success);
         consoleHistory.value = [...consoleHistory.value];
         
@@ -787,7 +783,6 @@ async function executeCustomCommand(command: CustomCommand) {
         rec.stderr = (rec.stderr || '') + `错误: ${data.error}\n`;
         rec.running = false;
         rec.success = false;
-        currentSessionId.value = null;
         consoleHistory.value = [...consoleHistory.value];
         
         // 清理事件监听器
@@ -966,7 +961,6 @@ async function runInteractiveCommand() {
   
   // 生成会话ID
   const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  currentSessionId.value = sessionId;
   
   // 创建命令记录
   const rec: ConsoleRecord = {
@@ -979,7 +973,8 @@ async function runInteractiveCommand() {
     stderr: '',
     running: true,
     sessionId: sessionId,
-    isInteractive: true
+    isInteractive: true,
+    stdinInput: '' // 初始化独立的输入框
   };
   consoleHistory.value.unshift(rec);
   consoleInput.value = '';
@@ -1031,7 +1026,6 @@ async function runInteractiveCommand() {
     if (data.sessionId === sessionId) {
       rec.success = data.success;
       rec.running = false;
-      currentSessionId.value = null;
       console.log(`[交互式] 进程退出，成功:`, rec.success);
       consoleHistory.value = [...consoleHistory.value];
       
@@ -1050,7 +1044,6 @@ async function runInteractiveCommand() {
       rec.stderr = (rec.stderr || '') + `错误: ${data.error}\n`;
       rec.running = false;
       rec.success = false;
-      currentSessionId.value = null;
       consoleHistory.value = [...consoleHistory.value];
       
       // 清理事件监听器
@@ -1072,9 +1065,9 @@ async function runInteractiveCommand() {
 }
 
 // 发送stdin输入
-function sendStdinInput() {
-  const input = stdinInput.value.trim();
-  if (!input || !currentSessionId.value) return;
+function sendStdinInput(rec: ConsoleRecord) {
+  const input = rec.stdinInput?.trim();
+  if (!input || !rec.sessionId) return;
   
   if (!socket.value || !socket.value.connected) {
     ElMessage.error('Socket 连接未建立');
@@ -1082,8 +1075,9 @@ function sendStdinInput() {
   }
   
   console.log(`[交互式] 发送 stdin 输入:`, input);
-  socket.value.emit(`interactive_stdin_${currentSessionId.value}`, { input });
-  stdinInput.value = '';
+  socket.value.emit(`interactive_stdin_${rec.sessionId}`, { input });
+  rec.stdinInput = ''; // 清空输入
+  consoleHistory.value = [...consoleHistory.value]; // 触发响应式更新
 }
 
 // 停止交互式命令
@@ -1103,11 +1097,6 @@ function stopInteractiveCommand(rec: ConsoleRecord) {
   rec.running = false;
   consoleHistory.value = [...consoleHistory.value];
 }
-
-// 监听interactiveMode变化并保存到localStorage
-watch(interactiveMode, (newValue) => {
-  localStorage.setItem('interactiveMode', String(newValue));
-});
 
 // 监听useTerminal变化并保存到localStorage
 watch(useTerminal, (newValue) => {
@@ -1175,13 +1164,6 @@ onUnmounted(() => {
       </div>
       <div class="header-actions">
         <div class="terminal-switch">
-          <span class="switch-label">交互式模式</span>
-          <el-switch
-            v-model="interactiveMode"
-            size="small"
-          />
-        </div>
-        <div class="terminal-switch" v-if="!interactiveMode">
           <span class="switch-label">{{ $t('@CF05E:使用终端执行') }}</span>
           <el-switch
             v-model="useTerminal"
@@ -1236,8 +1218,8 @@ onUnmounted(() => {
       <el-input
         v-model="consoleInput"
         class="console-input"
-        :placeholder="interactiveMode ? '交互式模式: 支持需要输入的命令' : '输入命令，例如: git status'"
-        @keydown.enter.prevent="interactiveMode ? runInteractiveCommand() : runConsoleCommand()"
+        :placeholder="useTerminal ? '在新终端执行' : '交互式模式: 支持需要输入的命令'"
+        @keydown.enter.prevent="useTerminal ? runConsoleCommand() : runInteractiveCommand()"
         :disabled="consoleRunning"
         clearable
       />
@@ -1245,22 +1227,9 @@ onUnmounted(() => {
         type="primary" 
         :icon="VideoPlay" 
         :loading="consoleRunning" 
-        @click="interactiveMode ? runInteractiveCommand() : runConsoleCommand()" 
+        @click="useTerminal ? runConsoleCommand() : runInteractiveCommand()" 
         circle 
       />
-    </div>
-
-    <!-- stdin 输入区（仅在交互式模式且有运行中的会话时显示） -->
-    <div class="stdin-input-row" v-if="interactiveMode && currentSessionId">
-      <el-icon class="stdin-icon"><Position /></el-icon>
-      <el-input
-        v-model="stdinInput"
-        class="stdin-input"
-        placeholder="输入响应内容（如密码、确认等），按回车发送"
-        @keydown.enter.prevent="sendStdinInput"
-        clearable
-      />
-      <el-button type="success" @click="sendStdinInput" size="small">发送</el-button>
     </div>
 
         <!-- 命令历史输出 -->
@@ -1308,6 +1277,20 @@ onUnmounted(() => {
                 <pre v-if="rec.stderr" class="stderr" v-html="rec.stderr"></pre>
               </div>
             </transition>
+            
+            <!-- 每个交互式命令独立的 stdin 输入框 -->
+            <div class="stdin-input-row" v-if="rec.isInteractive && rec.running">
+              <el-icon class="stdin-icon"><Position /></el-icon>
+              <el-input
+                v-model="rec.stdinInput"
+                class="stdin-input"
+                placeholder="输入响应内容（如密码、确认等），按回车发送"
+                @keydown.enter.prevent="sendStdinInput(rec)"
+                clearable
+                size="small"
+              />
+              <el-button type="success" @click="sendStdinInput(rec)" size="small">发送</el-button>
+            </div>
           </div>
         </div>
       </div>
@@ -1572,11 +1555,11 @@ onUnmounted(() => {
 .stdin-input-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 8px;
+  gap: 8px;
+  padding: 8px 12px;
   background: linear-gradient(135deg, rgba(103, 194, 58, 0.05), rgba(103, 194, 58, 0.02));
-  margin: 0 12px 12px 12px;
-  border-radius: 8px;
+  margin: 8px 0 0 0;
+  border-radius: 6px;
   border: 1px solid rgba(103, 194, 58, 0.3);
   transition: all 0.3s ease;
   
