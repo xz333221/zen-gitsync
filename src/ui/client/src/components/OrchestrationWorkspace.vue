@@ -532,7 +532,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                     size="small"
                     class="step-tag"
                   >
-                    <el-icon :component="getStepIcon(step)" />
+                    <!-- <el-icon :component="getStepIcon(step)" /> -->
                     <span>{{ index + 1 }}. {{ getStepLabel(step) }}</span>
                   </el-tag>
                   <template #dropdown>
