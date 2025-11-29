@@ -784,19 +784,7 @@ function handleClose() {
 }
 
 /* 深色主题适配 */
-:deep(.el-dialog) {
-  background: var(--bg-container);
-}
 
-:deep(.el-dialog__header) {
-  background: var(--bg-input);
-  border-bottom: 1px solid var(--border-card);
-}
-
-:deep(.el-dialog__title) {
-  color: var(--color-text);
-  font-weight: 600;
-}
 
 :deep(.el-tabs__item) {
   color: var(--text-secondary);

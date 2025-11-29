@@ -999,16 +999,4 @@ onUnmounted(() => {
   z-index: 1998 !important;
 }
 
-.el-dialog {
-  z-index: 1999 !important;
-}
-
-/* 确保命令历史弹窗的遮罩层在最上层 */
-.el-overlay.is-message-box {
-  z-index: 99998 !important;
-}
-
-.el-dialog.command-history-dialog {
-  z-index: 99999 !important;
-}
 </style>

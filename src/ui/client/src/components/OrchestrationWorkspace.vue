@@ -720,8 +720,9 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     title="添加步骤"
     width="600px"
     :append-to-body="true"
+    custom-class="add-step-dialog"
   >
-    <el-tabs>
+    <el-tabs class="fixed-tab-dialog">
       <!-- 自定义命令 -->
       <el-tab-pane label="自定义命令">
         <template #label>
@@ -1223,8 +1224,6 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 400px;
-  overflow-y: auto;
   padding: 8px 0;
 }
 
@@ -1309,6 +1308,33 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       font-weight: 500;
       color: var(--text-title);
     }
+  }
+}
+
+// 固定tab在顶部的样式
+.fixed-tab-dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  :deep(.el-tabs__header) {
+    flex-shrink: 0; // 防止tab栏被压缩
+    margin-bottom: 0;
+    position: sticky;
+    top: 0;
+    background: var(--bg-container);
+    z-index: 10;
+    padding-bottom: 8px;
+  }
+
+  :deep(.el-tabs__content) {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 8px;
+  }
+
+  :deep(.el-tab-pane) {
+    height: 100%;
   }
 }
 </style>
