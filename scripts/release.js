@@ -431,13 +431,13 @@ async function commitChanges(version) {
     execSync(`git tag v${version}`, { stdio: 'inherit' });
     console.log(chalk.green(`已创建标签: v${version}`));
     
-    // 询问是否推送到远程
-    const rl = createReadlineInterface();
+    // 默认推送到远程（注释掉确认提示）
+    // const rl = createReadlineInterface();
     
     try {
-      const answer = await rl.question(chalk.yellow('是否推送代码和标签到远程仓库? (Y/n): '));
+      // const answer = await rl.question(chalk.yellow('是否推送代码和标签到远程仓库? (Y/n): '));
       
-      if (answer.toLowerCase() !== 'n') {
+      // if (answer.toLowerCase() !== 'n') {
         try {
           // 获取当前分支
           const branch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
@@ -453,11 +453,11 @@ async function commitChanges(version) {
           console.error(chalk.red('推送到远程仓库失败:'), pushError);
           // 继续发布过程，不终止
         }
-      } else {
-        console.log(chalk.yellow('跳过推送到远程仓库'));
-      }
+      // } else {
+      //   console.log(chalk.yellow('跳过推送到远程仓库'));
+      // }
     } finally {
-      rl.close();
+      // rl.close();
       
       // 恢复Git钩子
       if (renamedHooks.length > 0) {
@@ -482,17 +482,17 @@ async function commitChanges(version) {
 async function publishToNpm() {
   console.log(chalk.blue('\n=== 发布到NPM ==='));
   
-  // 创建readline接口
-  const rl = createReadlineInterface();
+  // 默认发布到NPM（注释掉确认提示）
+  // const rl = createReadlineInterface();
   
   try {
     // 等待用户确认
-    const answer = await rl.question(chalk.yellow('是否发布到NPM? (Y/n): '));
+    // const answer = await rl.question(chalk.yellow('是否发布到NPM? (Y/n): '));
     
-    if (answer.toLowerCase() === 'n') {
-      console.log(chalk.yellow('跳过发布到NPM'));
-      return;
-    }
+    // if (answer.toLowerCase() === 'n') {
+    //   console.log(chalk.yellow('跳过发布到NPM'));
+    //   return;
+    // }
     
     // 执行npm发布
     console.log(chalk.gray('执行npm发布...'));
@@ -524,7 +524,7 @@ async function publishToNpm() {
       throw error;
     }
   } finally {
-    rl.close();
+    // rl.close();
   }
 }
 
