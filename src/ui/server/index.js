@@ -190,14 +190,17 @@ async function startUIServer(noOpen = false, savePort = false) {
         shell: true, // 通过 shell 执行，支持 Windows 内置命令
         env: {
           ...process.env,
-          GIT_CONFIG_PARAMETERS: "'core.quotepath=false'",
-          // 强制 npm/yarn 等工具实时输出，禁用缓冲
-          FORCE_COLOR: '1',
+          // Git 配置：启用颜色输出和禁用路径引用
+          GIT_CONFIG_PARAMETERS: "'color.ui=always' 'color.status=always' 'core.quotepath=false'",
+          // 强制启用颜色输出 - 多种工具的配置
+          FORCE_COLOR: '3', // 使用级别3（最强），支持 chalk 等库
           NPM_CONFIG_COLOR: 'always',
-          // 禁用进度条和其他交互式输出
-          CI: 'true',
+          TERM: 'xterm-256color', // 模拟256色终端环境
+          COLORTERM: 'truecolor', // 支持真彩色
+          CLICOLOR_FORCE: '1', // 强制启用颜色（某些工具检测此变量）
           // 确保输出不被缓冲
           PYTHONUNBUFFERED: '1'
+          // 注意：不设置 CI=true 和 NO_COLOR，避免禁用颜色输出
         }
       });
 
@@ -256,12 +259,20 @@ async function startUIServer(noOpen = false, savePort = false) {
       childProcess.stderr?.on('data', (data) => {
         // data 是 Buffer 对象
         let output;
-        if (needsGbkConversion) {
-          // Windows CMD 内置命令，从 GBK 转换为 UTF-8
-          output = iconv.decode(data, 'gbk');
-          console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 200));
+        // Windows平台的stderr总是尝试GBK转换，因为：
+        // 1. CMD shell错误消息（如"命令不存在"）总是GBK
+        // 2. 大部分现代工具的错误输出是UTF-8，但GBK解码通常不会造成严重问题
+        if (isWindows) {
+          try {
+            output = iconv.decode(data, 'gbk');
+            console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 200));
+          } catch (e) {
+            // 如果GBK解码失败，回退到UTF-8
+            output = data.toString('utf8');
+            console.log(`[流式输出] GBK解码失败，使用UTF8:`, output.substring(0, 200));
+          }
         } else {
-          // 现代工具或 Unix 系统，直接使用 UTF-8
+          // Unix系统，直接使用 UTF-8
           output = data.toString('utf8');
           console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 200));
         }
@@ -4835,10 +4846,15 @@ async function startUIServer(noOpen = false, savePort = false) {
         shell: true,
         env: {
           ...process.env,
-          GIT_CONFIG_PARAMETERS: "'core.quotepath=false'",
-          FORCE_COLOR: '1',
+          // Git 配置：启用颜色输出和禁用路径引用
+          GIT_CONFIG_PARAMETERS: "'color.ui=always' 'color.status=always' 'core.quotepath=false'",
+          // 强制启用颜色输出 - 多种工具的配置
+          FORCE_COLOR: '3', // 使用级别3（最强），支持 chalk 等库
           NPM_CONFIG_COLOR: 'always',
-          // 不设置 CI=true，允许交互式输入
+          TERM: 'xterm-256color', // 模拟256色终端环境
+          COLORTERM: 'truecolor', // 支持真彩色
+          CLICOLOR_FORCE: '1', // 强制启用颜色（某些工具检测此变量）
+          // 确保输出不被缓冲（不设置 CI=true，允许交互式输入和颜色输出）
           PYTHONUNBUFFERED: '1'
         }
       });
@@ -4874,7 +4890,17 @@ async function startUIServer(noOpen = false, savePort = false) {
 
       // 监听标准错误输出
       childProcess.stderr?.on('data', (data) => {
-        let output = needsGbkConversion ? iconv.decode(data, 'gbk') : data.toString('utf8');
+        let output;
+        // Windows平台的stderr总是尝试GBK转换
+        if (isWindows) {
+          try {
+            output = iconv.decode(data, 'gbk');
+          } catch (e) {
+            output = data.toString('utf8');
+          }
+        } else {
+          output = data.toString('utf8');
+        }
         collectedStderr += output;
         socket.emit('interactive_stderr', { sessionId, data: output });
       });

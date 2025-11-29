@@ -8,6 +8,7 @@ import OrchestrationWorkspace from '@components/OrchestrationWorkspace.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
 import { io, Socket } from 'socket.io-client';
+import Convert from 'ansi-to-html';
 
 const configStore = useConfigStore();
 
@@ -52,85 +53,36 @@ type ConsoleRecord = {
 // 控制整个控制台展开/收起（从localStorage读取，默认展开）
 const isConsoleExpanded = ref(localStorage.getItem('isConsoleExpanded') !== 'false');
 
-// ANSI 颜色码到 CSS 样式的映射
-const ansiColorMap: Record<number, string> = {
-  // 前景色
-  30: 'color: #000000',  // 黑色
-  31: 'color: #cd3131',  // 红色
-  32: 'color: #0dbc79',  // 绿色
-  33: 'color: #e5e510',  // 黄色
-  34: 'color: #2472c8',  // 蓝色
-  35: 'color: #bc3fbc',  // 洋红
-  36: 'color: #11a8cd',  // 青色
-  37: 'color: #e5e5e5',  // 白色
-  39: 'color: inherit',  // 默认前景色
-  // 亮色前景
-  90: 'color: #666666',  // 亮黑（灰色）
-  91: 'color: #f14c4c',  // 亮红
-  92: 'color: #23d18b',  // 亮绿
-  93: 'color: #f5f543',  // 亮黄
-  94: 'color: #3b8eea',  // 亮蓝
-  95: 'color: #d670d6',  // 亮洋红
-  96: 'color: #29b8db',  // 亮青
-  97: 'color: #e5e5e5',  // 亮白
-  // 背景色
-  40: 'background-color: #000000',
-  41: 'background-color: #cd3131',
-  42: 'background-color: #0dbc79',
-  43: 'background-color: #e5e510',
-  44: 'background-color: #2472c8',
-  45: 'background-color: #bc3fbc',
-  46: 'background-color: #11a8cd',
-  47: 'background-color: #e5e5e5',
-  49: 'background-color: transparent',  // 默认背景色
-};
+// 创建 ANSI 转 HTML 转换器
+const ansiConverter = new Convert({
+  fg: '#e5e5e5',
+  bg: 'transparent',
+  newline: false,
+  escapeXML: false,
+  stream: false,
+  colors: {
+    0: '#000000',
+    1: '#cd3131',
+    2: '#0dbc79',
+    3: '#e5e510',
+    4: '#2472c8',
+    5: '#bc3fbc',
+    6: '#11a8cd',
+    7: '#e5e5e5',
+    8: '#666666',
+    9: '#f14c4c',
+    10: '#23d18b',
+    11: '#f5f543',
+    12: '#3b8eea',
+    13: '#d670d6',
+    14: '#29b8db',
+    15: '#ffffff'
+  }
+});
 
 // 将 ANSI 转义码转换为 HTML
 function ansiToHtml(text: string): string {
-  let openTags = 0;
-  
-  // eslint-disable-next-line no-control-regex
-  const result = text.replace(/\x1b\[([0-9;]*)m/g, (_match, codes) => {
-    if (!codes || codes === '0' || codes === '') {
-      // 重置所有样式 - 关闭之前打开的标签
-      if (openTags > 0) {
-        openTags--;
-        return '</span>';
-      }
-      return '';
-    }
-    
-    const codeList = codes.split(';').map(Number);
-    const styles: string[] = [];
-    
-    for (const code of codeList) {
-      if (code === 1) {
-        // 粗体
-        styles.push('font-weight: bold');
-      } else if (code === 2) {
-        // 暗淡
-        styles.push('opacity: 0.7');
-      } else if (code === 3) {
-        // 斜体
-        styles.push('font-style: italic');
-      } else if (code === 4) {
-        // 下划线
-        styles.push('text-decoration: underline');
-      } else if (ansiColorMap[code]) {
-        styles.push(ansiColorMap[code]);
-      }
-    }
-    
-    if (styles.length > 0) {
-      openTags++;
-      return `<span style="${styles.join('; ')}">`;
-    }
-    return '';
-  });
-  
-  // 关闭所有未闭合的标签
-  const closeTags = '</span>'.repeat(openTags);
-  return result + closeTags;
+  return ansiConverter.toHtml(text);
 }
 
 // 控制全屏状态
@@ -518,13 +470,13 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
                 try {
                   const data = JSON.parse(line.substring(6));
                   if (data.type === 'stdout') {
-                    rec.stdout += data.data;
+                    rec.stdout += ansiToHtml(data.data);
                   } else if (data.type === 'stderr') {
-                    rec.stderr += data.data;
+                    rec.stderr += ansiToHtml(data.data);
                   } else if (data.type === 'exit') {
                     rec.success = data.data.success;
                   } else if (data.type === 'error') {
-                    rec.stderr += `错误: ${data.data}\n`;
+                    rec.stderr += ansiToHtml(`错误: ${data.data}\n`);
                   }
                 } catch (e) {
                   console.warn('解析SSE数据失败:', line, e);
@@ -540,8 +492,8 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.substring(6));
-                if (data.type === 'stdout') rec.stdout += data.data;
-                else if (data.type === 'stderr') rec.stderr += data.data;
+                if (data.type === 'stdout') rec.stdout += ansiToHtml(data.data);
+                else if (data.type === 'stderr') rec.stderr += ansiToHtml(data.data);
               } catch (e) {}
             }
           }
@@ -1763,12 +1715,9 @@ pre.stdout, pre.stderr {
   background: var(--bg-code);
 }
 
-pre.stdout {
-  color: var(--color-text);
-}
-
+/* 不设置固定颜色，让ANSI转换的内联样式生效 */
 pre.stderr {
-  color: var(--text-danger, #f56c6c);
+  /* color由ANSI转换提供，保留背景色提示 */
   background: rgba(245, 108, 108, 0.05);
 }
 

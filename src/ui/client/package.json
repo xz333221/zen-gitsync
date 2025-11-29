@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.13",
+    "ansi-to-html": "^0.7.2",
     "element-plus": "^2.11.4",
     "file-icons-js": "^1.1.0",
     "pinia": "^3.0.2",
