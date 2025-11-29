@@ -63,6 +63,7 @@ const ansiColorMap: Record<number, string> = {
   35: 'color: #bc3fbc',  // 洋红
   36: 'color: #11a8cd',  // 青色
   37: 'color: #e5e5e5',  // 白色
+  39: 'color: inherit',  // 默认前景色
   // 亮色前景
   90: 'color: #666666',  // 亮黑（灰色）
   91: 'color: #f14c4c',  // 亮红
@@ -81,6 +82,7 @@ const ansiColorMap: Record<number, string> = {
   45: 'background-color: #bc3fbc',
   46: 'background-color: #11a8cd',
   47: 'background-color: #e5e5e5',
+  49: 'background-color: transparent',  // 默认背景色
 };
 
 // 将 ANSI 转义码转换为 HTML
