@@ -32,6 +32,7 @@ const socket = ref<Socket | null>(null);
 const currentDirectory = ref("");
 const consoleInput = ref(""); // 命令输入
 const consoleRunning = ref(false);
+const orchestrationPaused = ref(false); // 编排暂停状态
 const consoleHistory = ref<ConsoleRecord[]>([]);
 let consoleIdCounter = 0; // ID计数器，确保唯一性
 
@@ -333,6 +334,7 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
   
   // 不关闭弹窗，让用户可以继续查看或修改编排
   consoleRunning.value = true;
+  orchestrationPaused.value = false; // 重置暂停状态
   
   const totalSteps = steps.length - startIndex;
   if (startIndex > 0) {
@@ -340,6 +342,8 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
   } else {
     ElMessage.success(`开始执行 ${steps.length} 个步骤...`);
   }
+  
+  try {
   
   for (let i = startIndex; i < steps.length; i++) {
     const step = steps[i];
@@ -527,8 +531,12 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
       };
       consoleHistory.value.unshift(rec);
       
-      await new Promise(resolve => setTimeout(resolve, seconds * 1000));
-      rec.stdout += '\n等待完成';
+      // 使用可中断的等待（显示倒计时）
+      for (let countdown = seconds; countdown > 0; countdown--) {
+        rec.stdout = `等待中... 还剩 ${countdown} 秒`;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      rec.stdout = '等待完成';
     } else if (step.type === 'version') {
       // 执行版本管理
       if (step.versionTarget === 'dependency') {
@@ -604,14 +612,49 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
       break;
     }
     
-    // 如果不是最后一个步骤，等待一小段时间
+    // 如果不是最后一个步骤，检查暂停状态
     if (i < steps.length - 1) {
+      // 等待一小段时间
       await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 检查是否被暂停（仅在批量执行时）
+      if (!isSingleExecution && orchestrationPaused.value) {
+        ElMessage.warning('编排已暂停');
+        
+        // 等待用户点击继续
+        await new Promise<void>((resolve, reject) => {
+          const checkInterval = setInterval(() => {
+            if (!orchestrationPaused.value) {
+              clearInterval(checkInterval);
+              ElMessage.success('继续执行');
+              resolve();
+            }
+            // 如果控制台不再运行（用户停止了），则退出等待
+            if (!consoleRunning.value) {
+              clearInterval(checkInterval);
+              reject(new Error('用户停止执行'));
+            }
+          }, 100);
+        }).catch(() => {
+          // 用户停止执行
+          throw new Error('用户停止执行');
+        });
+      }
     }
   }
   
-  consoleRunning.value = false;
-  ElMessage.success('所有步骤执行完成！');
+    consoleRunning.value = false;
+    orchestrationPaused.value = false; // 重置暂停状态
+    ElMessage.success('所有步骤执行完成！');
+  } catch (error: any) {
+    consoleRunning.value = false;
+    orchestrationPaused.value = false; // 重置暂停状态
+    if (error?.message === '用户停止执行') {
+      ElMessage.info('编排执行已停止');
+    } else {
+      ElMessage.error(`编排执行异常: ${error?.message || String(error)}`);
+    }
+  }
 }
 
 // 执行自定义命令
@@ -1117,6 +1160,37 @@ onUnmounted(() => {
         <span class="console-title">{{ $t('@CF05E:自定义指令执行') }}</span>
       </div>
       <div class="header-actions">
+        <!-- 编排暂停/继续按钮 -->
+        <div v-if="consoleRunning" class="execution-controls">
+          <el-tooltip :content="orchestrationPaused ? '继续执行' : '暂停执行'" placement="bottom">
+            <el-button
+              :type="orchestrationPaused ? 'success' : 'warning'"
+              size="small"
+              @click="orchestrationPaused = !orchestrationPaused"
+              class="pause-btn"
+            >
+              <template #icon>
+                <VideoPlay v-if="orchestrationPaused" />
+                <Loading v-else />
+              </template>
+              {{ orchestrationPaused ? '继续' : '暂停' }}
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="停止执行" placement="bottom">
+            <el-button
+              type="danger"
+              size="small"
+              @click="consoleRunning = false; orchestrationPaused = false"
+              class="stop-btn"
+            >
+              <template #icon>
+                <Close />
+              </template>
+              停止
+            </el-button>
+          </el-tooltip>
+        </div>
+        
         <div class="terminal-switch">
           <span class="switch-label">{{ $t('@CF05E:使用终端执行') }}</span>
           <el-switch
@@ -1367,6 +1441,16 @@ onUnmounted(() => {
   user-select: none;
 }
 
+.execution-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pause-btn, .stop-btn {
+  font-weight: 500;
+}
+
 .command-manager-btn {
   &:hover {
     color: #67c23a;
@@ -1608,7 +1692,6 @@ onUnmounted(() => {
 }
 
 .stop-btn {
-  color: #f56c6c;
   padding: 4px 8px;
   
   &:hover {
