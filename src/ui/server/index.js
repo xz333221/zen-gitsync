@@ -259,23 +259,35 @@ async function startUIServer(noOpen = false, savePort = false) {
       childProcess.stderr?.on('data', (data) => {
         // data 是 Buffer 对象
         let output;
-        // Windows平台的stderr总是尝试GBK转换，因为：
-        // 1. CMD shell错误消息（如"命令不存在"）总是GBK
-        // 2. 大部分现代工具的错误输出是UTF-8，但GBK解码通常不会造成严重问题
+        
         if (isWindows) {
-          try {
-            output = iconv.decode(data, 'gbk');
-            console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 200));
-          } catch (e) {
-            // 如果GBK解码失败，回退到UTF-8
-            output = data.toString('utf8');
-            console.log(`[流式输出] GBK解码失败，使用UTF8:`, output.substring(0, 200));
+          // Windows 平台需要智能检测编码
+          // 先尝试 UTF-8 解码
+          const utf8Output = data.toString('utf8');
+          
+          // 检测是否包含 UTF-8 替换字符（�），这通常表示解码失败
+          // 如果没有替换字符且包含正常字符，说明是有效的 UTF-8
+          if (!utf8Output.includes('�') || utf8Output.match(/[\u4e00-\u9fa5]/)) {
+            // UTF-8 解码成功（包含有效中文或没有替换字符）
+            output = utf8Output;
+            console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 200));
+          } else {
+            // UTF-8 解码失败，尝试 GBK（可能是 CMD shell 的系统消息）
+            try {
+              output = iconv.decode(data, 'gbk');
+              console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 200));
+            } catch (e) {
+              // GBK 也失败，使用原始 UTF-8 结果
+              output = utf8Output;
+              console.log(`[流式输出] GBK解码失败，使用UTF8:`, output.substring(0, 200));
+            }
           }
         } else {
           // Unix系统，直接使用 UTF-8
           output = data.toString('utf8');
           console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 200));
         }
+        
         outputReceived = true;
         collectedStderr += output; // 收集错误输出用于历史记录
         // 不再自动标记为错误，只显示 stderr 输出
@@ -4891,16 +4903,30 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 监听标准错误输出
       childProcess.stderr?.on('data', (data) => {
         let output;
-        // Windows平台的stderr总是尝试GBK转换
+        
         if (isWindows) {
-          try {
-            output = iconv.decode(data, 'gbk');
-          } catch (e) {
-            output = data.toString('utf8');
+          // Windows 平台需要智能检测编码
+          // 先尝试 UTF-8 解码
+          const utf8Output = data.toString('utf8');
+          
+          // 检测是否包含 UTF-8 替换字符（�），这通常表示解码失败
+          // 如果没有替换字符且包含正常字符，说明是有效的 UTF-8
+          if (!utf8Output.includes('�') || utf8Output.match(/[\u4e00-\u9fa5]/)) {
+            // UTF-8 解码成功（包含有效中文或没有替换字符）
+            output = utf8Output;
+          } else {
+            // UTF-8 解码失败，尝试 GBK（可能是 CMD shell 的系统消息）
+            try {
+              output = iconv.decode(data, 'gbk');
+            } catch (e) {
+              // GBK 也失败，使用原始 UTF-8 结果
+              output = utf8Output;
+            }
           }
         } else {
           output = data.toString('utf8');
         }
+        
         collectedStderr += output;
         socket.emit('interactive_stderr', { sessionId, data: output });
       });
