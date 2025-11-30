@@ -44,7 +44,6 @@ const handleRefresh = async () => {
 const handleSettings = () => console.log('打开设置')
 const handleDelete = () => console.log('删除')
 const handleAdd = () => console.log('添加')
-const handleSearch = () => console.log('搜索')
 </script>
 
 <template>
