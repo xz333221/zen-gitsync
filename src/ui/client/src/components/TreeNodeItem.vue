@@ -100,7 +100,7 @@ function handleClick() {
         placement="top"
         :show-after="200"
       >
-        <el-icon class="lock-icon" color="#E6A23C">
+        <el-icon class="lock-icon" color="var(--color-warning)">
           <Lock />
         </el-icon>
       </el-tooltip>
@@ -174,7 +174,7 @@ function handleClick() {
     background: var(--bg-panel);
     
     &::before {
-      background: #409eff;
+      background: var(--color-primary);
     }
   }
   
@@ -195,15 +195,15 @@ function handleClick() {
     // 深色模式优化
     [data-theme="dark"] & {
       background: rgba(24, 144, 255, 0.15);
-      color: #409eff;
-      border-left-color: #409eff;
+      color: var(--color-primary);
+      border-left-color: var(--color-primary);
       
       &::before {
-        background: #409eff;
+        background: var(--color-primary);
       }
       
       .node-icon {
-        color: #409eff;
+        color: var(--color-primary);
       }
     }
   }
@@ -306,7 +306,7 @@ function handleClick() {
     
     // 深色模式优化
     [data-theme="dark"] & {
-      color: #409eff;
+      color: var(--color-primary);
     }
   }
   

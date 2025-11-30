@@ -346,7 +346,7 @@ async function handleSave() {
 
 .section-title .title-icon {
   font-size: 16px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .settings-grid {
@@ -379,12 +379,12 @@ async function handleSave() {
 }
 
 .setting-label .qmark:hover {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 
 :deep(.settings-grid .el-switch) {
-  --el-switch-on-color: #409eff;
+  --el-switch-on-color: var(--color-primary);
   --el-switch-off-color: var(--el-border-color);
 }
 
@@ -432,7 +432,7 @@ html.dark .label-icon {
 
 .label-icon {
   font-size: 16px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 :deep(.modern-input .el-input__wrapper) {
@@ -444,7 +444,7 @@ html.dark .label-icon {
 }
 
 :deep(.modern-input .el-input__wrapper:hover) {
-  border-color: #d1d5db;
+  border-color: var(--color-gray-300);
   box-shadow: var(--shadow-md);
 }
 
@@ -460,7 +460,7 @@ html.dark .label-icon {
 }
 
 :deep(.modern-input .el-input__inner::placeholder) {
-  color: #9ca3af;
+  color: var(--color-gray-400);
   font-weight: 400;
 }
 
@@ -493,7 +493,7 @@ html.dark .label-icon {
   left: 0;
   width: 4px;
   height: 100%;
-  background: linear-gradient(135deg, #409eff 0%, #3a8ee6 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%);
 }
 
 .info-icon {
@@ -502,7 +502,7 @@ html.dark .label-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #409eff;
+  color: var(--color-primary);
   flex-shrink: 0;
   margin-top: 0;
 }

@@ -777,7 +777,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 
     .el-icon {
       font-size: 16px;
-      color: #409eff;
+      color: var(--color-primary);
     }
   }
 }
@@ -804,7 +804,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: #c0c4cc;
+    background-color: var(--text-placeholder);
     border-radius: var(--radius-sm);
   }
 
@@ -831,20 +831,20 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   cursor: move;
 
   &:hover {
-    border-color: #67c23a;
+    border-color: var(--color-success);
     background: rgba(103, 194, 58, 0.05);
   }
 
   &.step-type-command {
-    border-left: 3px solid #409eff;
+    border-left: 3px solid var(--color-primary);
   }
 
   &.step-type-wait {
-    border-left: 3px solid #e6a23c;
+    border-left: 3px solid var(--color-warning);
   }
 
   &.step-type-system {
-    border-left: 3px solid #67c23a;
+    border-left: 3px solid var(--color-success);
   }
 }
 
@@ -858,7 +858,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   font-size: 14px;
   font-weight: 600;
   color: white;
-  background: linear-gradient(135deg, #409eff, #79bbff);
+  background: linear-gradient(135deg, var(--color-primary), #79bbff);
   border-radius: 50%;
   box-shadow: var(--shadow-sm);
 }
@@ -866,7 +866,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .step-icon {
   flex-shrink: 0;
   font-size: 20px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .step-info {
@@ -900,7 +900,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   align-items: center;
   gap: var(--spacing-sm);
   font-size: 11px;
-  color: #67c23a;
+  color: var(--color-success);
   margin-top: 6px;
   font-family: var(--font-mono);
 
@@ -940,7 +940,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   transition: all 0.2s ease;
 
   &:hover {
-    border-color: #409eff;
+    border-color: var(--color-primary);
     background: rgba(64, 158, 255, 0.05);
     transform: translateX(4px);
   }
@@ -968,7 +968,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     align-items: center;
     gap: var(--spacing-sm);
     font-size: 11px;
-    color: #67c23a;
+    color: var(--color-success);
     margin-top: var(--spacing-sm);
 
     .el-icon {
@@ -1033,6 +1033,6 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 }
 
 .step-type-version {
-  border-left: 3px solid #409eff;
+  border-left: 3px solid var(--color-primary);
 }
 </style>

@@ -62,7 +62,7 @@ const ansiConverter = new Convert({
   escapeXML: false,
   stream: false,
   colors: {
-    0: '#000000',
+    0: 'var(--color-black)',
     1: '#cd3131',
     2: '#0dbc79',
     3: '#e5e510',
@@ -77,7 +77,7 @@ const ansiConverter = new Convert({
     12: '#3b8eea',
     13: '#d670d6',
     14: '#29b8db',
-    15: '#ffffff'
+    15: 'var(--color-white)'
   }
 });
 
@@ -1271,7 +1271,7 @@ onUnmounted(() => {
               <div class="cmd-line">
                 <span class="cmd-prefix">&gt;</span>
                 <span class="cmd-text">{{ rec.command }}</span>
-                <el-icon v-if="rec.running" class="running-icon is-loading" color="#409eff">
+                <el-icon v-if="rec.running" class="running-icon is-loading" color="var(--color-primary)">
                   <Loading />
                 </el-icon>
                 <span class="ts">{{ rec.ts }}</span>
@@ -1406,7 +1406,7 @@ onUnmounted(() => {
 
 .title-icon {
   font-size: 16px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .console-title {
@@ -1430,7 +1430,7 @@ onUnmounted(() => {
   transition: all 0.3s ease;
   
   .el-icon {
-    color: #909399;
+    color: var(--text-tertiary);
     transition: all 0.3s ease;
   }
   
@@ -1438,7 +1438,7 @@ onUnmounted(() => {
     background-color: rgba(64, 158, 255, 0.1);
     
     .el-icon {
-      color: #409eff;
+      color: var(--color-primary);
     }
   }
   
@@ -1446,7 +1446,7 @@ onUnmounted(() => {
     background-color: rgba(64, 158, 255, 0.15);
     
     .el-icon {
-      color: #409eff;
+      color: var(--color-primary);
     }
     
     &:hover {
@@ -1467,21 +1467,21 @@ onUnmounted(() => {
 
 .command-manager-btn {
   &:hover {
-    color: #67c23a;
+    color: var(--color-success);
     background: rgba(103, 194, 58, 0.1);
   }
 }
 
 .orchestrator-btn {
   &:hover {
-    color: #e6a23c;
+    color: var(--color-warning);
     background: rgba(230, 162, 60, 0.1);
   }
 }
 
 .orchestrator-manager-btn {
   &:hover {
-    color: #409eff;
+    color: var(--color-primary);
     background: rgba(64, 158, 255, 0.1);
   }
 }
@@ -1493,7 +1493,7 @@ onUnmounted(() => {
   transition: all 0.3s ease;
   
   &:hover {
-    color: #409eff;
+    color: var(--color-primary);
     background: rgba(64, 158, 255, 0.1);
   }
   
@@ -1538,7 +1538,7 @@ onUnmounted(() => {
   transition: all 0.3s ease;
   
   &:focus-within {
-    border-color: #409eff;
+    border-color: var(--color-primary);
     box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
   }
 }
@@ -1547,7 +1547,7 @@ onUnmounted(() => {
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
-  color: #67c23a;
+  color: var(--color-success);
   /* background: linear-gradient(135deg, rgba(103, 194, 58, 0.1), rgba(103, 194, 58, 0.05)); */
   /* border: 1px solid rgba(103, 194, 58, 0.3); */
   border-radius: var(--radius-md);
@@ -1616,14 +1616,14 @@ onUnmounted(() => {
   transition: all 0.3s ease;
   
   &:focus-within {
-    border-color: #67c23a;
+    border-color: var(--color-success);
     box-shadow: 0 0 0 2px rgba(103, 194, 58, 0.1);
     background: linear-gradient(135deg, rgba(103, 194, 58, 0.08), rgba(103, 194, 58, 0.03));
   }
 }
 
 .stdin-icon {
-  color: #67c23a;
+  color: var(--color-success);
   font-size: 16px;
   flex-shrink: 0;
 }
@@ -1725,7 +1725,7 @@ onUnmounted(() => {
 }
 
 .cmd-prefix {
-  color: #409eff;
+  color: var(--color-primary);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -1740,7 +1740,7 @@ onUnmounted(() => {
 
 .running-icon {
   font-size: 14px;
-  color: #409eff;
+  color: var(--color-primary);
   flex-shrink: 0;
   margin-left: var(--spacing-sm);
 }
@@ -1764,7 +1764,7 @@ onUnmounted(() => {
   transition: all 0.3s ease;
   
   &:hover {
-    color: #409eff;
+    color: var(--color-primary);
     background: rgba(64, 158, 255, 0.1);
   }
   

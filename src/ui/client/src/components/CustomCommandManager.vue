@@ -197,7 +197,7 @@ function selectDirectoryDialog(directoryData: any) {
                       viewBox: "0 0 24 24",
                       width: "20",
                       height: "20",
-                      style: { fill: "#E6A23C" },
+                      style: { fill: "var(--color-warning)" },
                     },
                     [
                       h("path", {
@@ -228,7 +228,7 @@ function selectDirectoryDialog(directoryData: any) {
                     viewBox: "0 0 24 24",
                     width: "20",
                     height: "20",
-                    style: { fill: "#409EFF" },
+                    style: { fill: "var(--color-primary)" },
                   },
                   [
                     h("path", {
@@ -480,7 +480,7 @@ defineExpose({
     
     &.required::after {
       content: '*';
-      color: #f56c6c;
+      color: var(--color-danger);
       margin-left: var(--spacing-sm);
     }
   }
@@ -530,7 +530,7 @@ defineExpose({
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: #c0c4cc;
+    background-color: var(--text-placeholder);
     border-radius: var(--radius-sm);
   }
 

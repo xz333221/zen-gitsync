@@ -1230,7 +1230,7 @@ defineExpose({
     }
     
     &.active {
-      background: #409eff;
+      background: var(--color-primary);
       color: white;
       box-shadow: var(--shadow-sm);
     }
@@ -1293,7 +1293,7 @@ defineExpose({
   border-radius: 50%;
   margin-bottom: var(--spacing-base);
   font-size: 28px;
-  color: #909399;
+  color: var(--text-tertiary);
   animation: pulse 2s infinite ease-in-out;
 }
 
@@ -1312,7 +1312,7 @@ defineExpose({
 
 .empty-subtext {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-tertiary);
   margin-bottom: var(--spacing-base);
 }
 
@@ -1414,7 +1414,7 @@ defineExpose({
 
 .card-content :deep(.el-loading-text) {
   font-size: 16px;
-  color: #409EFF;
+  color: var(--color-primary);
   font-weight: bold;
   margin-top: var(--spacing-base);
 }
@@ -1471,7 +1471,7 @@ defineExpose({
 
 /* 功能说明样式 */
 .lock-feature-description {
-  background-color: #f6f8fa;
+  background-color: var(--bg-code);
   border: 1px solid #e1e4e8;
   border-radius: var(--radius-lg);
   padding: var(--spacing-base);
@@ -1553,7 +1553,7 @@ defineExpose({
 
 .upstream-tip .tip-icon {
   font-size: 20px;
-  color: #409eff;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 

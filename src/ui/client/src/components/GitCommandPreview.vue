@@ -66,7 +66,7 @@ async function copyCommand() {
     align-items: center;
     gap: var(--spacing-base);
     background: var(--bg-input-hover);
-    border: 1px solid #409eff;
+    border: 1px solid var(--color-primary);
     border-radius: var(--radius-lg);
     padding: var(--spacing-base);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -82,13 +82,13 @@ async function copyCommand() {
       left: 0;
       right: 0;
       height: 2px;
-      background: linear-gradient(90deg, #409eff, #66b1ff, #409eff);
+      background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light), var(--color-primary));
       opacity: 1;
       transition: opacity 0.3s ease;
     }
     
     &:hover {
-      border-color: #409eff;
+      border-color: var(--color-primary);
       box-shadow: var(--shadow-md);
       background: var(--bg-input-hover);
       
@@ -119,7 +119,7 @@ async function copyCommand() {
       flex: 1;
       background: var(--bg-input-hover);
       color: var(--text-primary);
-      border: 1px solid #409eff;
+      border: 1px solid var(--color-primary);
       border-radius: var(--radius-md);
       padding: 6px var(--spacing-base);
       margin: 0;
@@ -147,7 +147,7 @@ async function copyCommand() {
       }
       
       &:hover {
-        border-color: #409eff;
+        border-color: var(--color-primary);
         box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2);
         background: var(--bg-input-hover);
         
@@ -159,7 +159,7 @@ async function copyCommand() {
       &.code-command {
         background: var(--bg-input-hover);
         color: var(--text-primary);
-        border-color: #409eff;
+        border-color: var(--color-primary);
         font-weight: 500;
       }
     }
@@ -191,9 +191,9 @@ async function copyCommand() {
       }
       
       &:hover {
-        background: #f3f4f6;
-        color: #409eff;
-        border-color: #409eff;
+        background: var(--color-gray-100);
+        color: var(--color-primary);
+        border-color: var(--color-primary);
         transform: scale(1.05);
         box-shadow: var(--shadow-md);
         
@@ -229,18 +229,18 @@ async function copyCommand() {
 }
 
 .preview-content::-webkit-scrollbar-track {
-  background: #f3f4f6;
+  background: var(--color-gray-100);
   border-radius: var(--radius-sm);
 }
 
 .preview-content::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: var(--color-gray-300);
   border-radius: var(--radius-sm);
   transition: background 0.3s ease;
 }
 
 .preview-content::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: var(--color-gray-400);
 }
 
 /* 动画关键帧 */

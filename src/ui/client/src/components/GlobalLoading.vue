@@ -115,7 +115,7 @@ withDefaults(defineProps<Props>(), {
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   letter-spacing: 1px;
   text-align: center;
-  color: #fff;
+  color: var(--color-white);
   animation: pulse-text 2s ease-in-out infinite;
 }
 

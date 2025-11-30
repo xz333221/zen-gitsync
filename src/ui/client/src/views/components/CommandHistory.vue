@@ -583,7 +583,7 @@ onUnmounted(() => {
 /* 危险按钮样式 */
 .danger-btn {
   background: rgba(245, 108, 108, 0.1);
-  color: #f56c6c;
+  color: var(--color-danger);
   border-color: rgba(245, 108, 108, 0.2);
 }
 
@@ -593,7 +593,7 @@ onUnmounted(() => {
 
 .danger-btn:hover {
   background: rgba(245, 108, 108, 0.15);
-  color: #f56c6c;
+  color: var(--color-danger);
   border-color: rgba(245, 108, 108, 0.3);
   box-shadow: var(--shadow-md);
 }
@@ -632,20 +632,20 @@ onUnmounted(() => {
 
 [data-theme="dark"] .dialog-toolbar .enhanced-btn:hover {
   background: var(--bg-container-hover);
-  color: #ffffff;
+  color: var(--color-white);
   border-color: var(--border-component-light);
   box-shadow: var(--shadow-lg);
 }
 
 .dialog-toolbar .danger-btn {
   background: rgba(245, 108, 108, 0.08);
-  color: #f56c6c;
+  color: var(--color-danger);
   border-color: rgba(245, 108, 108, 0.15);
 }
 
 .dialog-toolbar .danger-btn:hover {
   background: rgba(245, 108, 108, 0.12);
-  color: #f56c6c;
+  color: var(--color-danger);
   border-color: rgba(245, 108, 108, 0.25);
   box-shadow: var(--shadow-md);
 }
@@ -653,7 +653,7 @@ onUnmounted(() => {
 /* 深色主题下：危险按钮配色与可读性 */
 [data-theme="dark"] .dialog-toolbar .danger-btn {
   background: #2d1a1a; /* 深红底（无透明） */
-  color: #f56c6c;
+  color: var(--color-danger);
   border-color: #7a2e2e;
 }
 
@@ -782,7 +782,7 @@ onUnmounted(() => {
 
 .loading-icon {
   font-size: 36px;
-  color: #409EFF;
+  color: var(--color-primary);
   margin-bottom: 10px;
 }
 
@@ -822,7 +822,7 @@ onUnmounted(() => {
 }
 
 .history-item.is-error {
-  border-left: 3px solid #f56c6c;
+  border-left: 3px solid var(--color-danger);
 }
 
 .item-header {
@@ -873,7 +873,7 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--spacing-lg);
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 /* 深色主题下的命令元数据 */
@@ -917,13 +917,13 @@ onUnmounted(() => {
 }
 
 .output-section.error {
-  border-left: 3px solid #f56c6c;
+  border-left: 3px solid var(--color-danger);
   padding-left: var(--spacing-base);
 }
 
 /* 为正常的stderr输出（如git push）添加不同的样式 */
 .output-section:not(.error) {
-  border-left: 3px solid #67c23a;
+  border-left: 3px solid var(--color-success);
   padding-left: var(--spacing-base);
 }
 
@@ -980,7 +980,7 @@ onUnmounted(() => {
 }
 
 .output-content::-webkit-scrollbar-thumb {
-  background-color: #c0c4cc;
+  background-color: var(--text-placeholder);
   border-radius: var(--radius-sm);
 }
 

@@ -587,7 +587,7 @@ function formatDate(dateString: string): string {
 }
 
 .tag-date {
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 .tag-message {

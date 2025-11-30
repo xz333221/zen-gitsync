@@ -1276,7 +1276,7 @@ onMounted(() => {
     }
     
     &.active {
-      background: #409eff;
+      background: var(--color-primary);
       color: white;
       box-shadow: var(--shadow-sm);
     }
@@ -1329,12 +1329,12 @@ onMounted(() => {
       
       &:hover {
         background: var(--bg-input-hover);
-        border-color: #409eff;
+        border-color: var(--color-primary);
       }
       
       &.is-focus {
         background: var(--bg-input);
-        border-color: #409eff;
+        border-color: var(--color-primary);
         box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
       }
     }
@@ -1356,7 +1356,7 @@ onMounted(() => {
         color: var(--text-secondary);
         
         &:hover {
-          color: #409eff;
+          color: var(--color-primary);
         }
       }
     }
@@ -1381,7 +1381,7 @@ onMounted(() => {
 }
 
 .path-dir {
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 .path-name {
@@ -1454,7 +1454,7 @@ onMounted(() => {
     background: var(--bg-panel);
     
     &::before {
-      background: #409eff;
+      background: var(--color-primary);
     }
   }
   

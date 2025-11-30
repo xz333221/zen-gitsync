@@ -76,7 +76,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .success-circle {
-  stroke: #67c23a;
+  stroke: var(--color-success);
   stroke-width: 2;
   stroke-miterlimit: 10;
   stroke-dasharray: 166;
@@ -86,7 +86,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .success-check {
-  stroke: #67c23a;
+  stroke: var(--color-success);
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;

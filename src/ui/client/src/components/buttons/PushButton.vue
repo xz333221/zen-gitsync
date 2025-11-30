@@ -71,7 +71,7 @@ const tooltipText = computed(() => {
 
 // 计算按钮样式
 const buttonStyle = computed(() => {
-  return canPush.value ? { backgroundColor: '#67c23a', borderColor: '#67c23a' } : {}
+  return canPush.value ? { backgroundColor: 'var(--color-success)', borderColor: 'var(--color-success)' } : {}
 })
 
 // 处理点击事件

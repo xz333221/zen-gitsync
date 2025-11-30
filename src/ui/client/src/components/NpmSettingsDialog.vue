@@ -539,7 +539,7 @@ function handleClose() {
   transition: all 0.3s ease;
 
   &:hover {
-    border-color: #409eff;
+    border-color: var(--color-primary);
     box-shadow: var(--shadow-md);
     grid-template-columns: 1fr auto;
   }
@@ -564,7 +564,7 @@ function handleClose() {
 
 .script-icon {
   font-size: 14px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .name-text {
@@ -609,11 +609,11 @@ function handleClose() {
 }
 
 .pin-button {
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 .pin-button:hover {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 /* 滚动条样式 */
@@ -637,7 +637,7 @@ function handleClose() {
 }
 
 [data-theme="dark"] .pin-button {
-  color: #a8abb2;
+  color: var(--text-placeholder);
 }
 
 [data-theme="dark"] .pin-button:hover {
@@ -762,7 +762,7 @@ function handleClose() {
 }
 
 .error-tip {
-  color: #f56c6c;
+  color: var(--color-danger);
   background: rgba(245, 108, 108, 0.1);
   border: 1px solid rgba(245, 108, 108, 0.2);
 }
@@ -773,7 +773,7 @@ function handleClose() {
 }
 
 .success-tip {
-  color: #67c23a;
+  color: var(--color-success);
   background: rgba(103, 194, 58, 0.1);
   border: 1px solid rgba(103, 194, 58, 0.2);
 }

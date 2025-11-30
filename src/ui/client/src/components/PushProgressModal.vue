@@ -213,7 +213,7 @@ defineExpose({
               :percentage="stage.percent"
               :stroke-width="6"
               :show-text="false"
-              :color="stage.status === 'finish' ? '#67c23a' : '#409eff'"
+              :color="stage.status === 'finish' ? 'var(--color-success)' : 'var(--color-primary)'"
             />
           </div>
         </div>
@@ -270,19 +270,19 @@ defineExpose({
 // 根据状态设置标题颜色
 .status-progress {
   :deep(.el-dialog__title) {
-    color: #409eff;
+    color: var(--color-primary);
   }
 }
 
 .status-success {
   :deep(.el-dialog__title) {
-    color: #67c23a;
+    color: var(--color-success);
   }
 }
 
 .status-error {
   :deep(.el-dialog__title) {
-    color: #f56c6c;
+    color: var(--color-danger);
   }
 }
 
@@ -464,17 +464,17 @@ defineExpose({
   transition: all 0.3s ease;
   
   .icon-finish {
-    color: #67c23a;
+    color: var(--color-success);
     font-size: 16px;
   }
   
   .icon-error {
-    color: #f56c6c;
+    color: var(--color-danger);
     font-size: 16px;
   }
   
   .icon-process {
-    color: #409eff;
+    color: var(--color-primary);
     font-size: 16px;
     animation: rotate 1s linear infinite;
   }
@@ -512,14 +512,14 @@ defineExpose({
 .stage-percent {
   font-size: 13px;
   font-weight: 700;
-  color: #409eff;
+  color: var(--color-primary);
   min-width: 42px;
   text-align: right;
   font-family: 'Consolas', 'Monaco', monospace;
   letter-spacing: 0.5px;
   
   .finished & {
-    color: #67c23a;
+    color: var(--color-success);
   }
 }
 
@@ -531,12 +531,12 @@ defineExpose({
   }
   
   :deep(.el-progress-bar__inner) {
-    background: linear-gradient(90deg, #409eff, #66b1ff);
+    background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
     transition: all 0.3s ease;
   }
   
   .finished & :deep(.el-progress-bar__inner) {
-    background: linear-gradient(90deg, #67c23a, #85ce61);
+    background: linear-gradient(90deg, var(--color-success), var(--color-success));
   }
 }
 
@@ -549,7 +549,7 @@ defineExpose({
 
 .error-title {
   font-weight: 600;
-  color: #f56c6c;
+  color: var(--color-danger);
   margin-bottom: var(--spacing-base);
 }
 

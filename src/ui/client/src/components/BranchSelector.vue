@@ -204,7 +204,7 @@ async function handleBranchChange(branch: string) {
   }
 
   .modern-select .el-select__wrapper:hover {
-    border-color: #d1d5db;
+    border-color: var(--color-gray-300);
     box-shadow: var(--shadow-md);
   }
 

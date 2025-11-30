@@ -529,7 +529,7 @@ body {
 
 .empty-icon {
   font-size: 64px;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
   margin-bottom: var(--spacing-lg);
 }
 
@@ -542,7 +542,7 @@ body {
 
 .empty-hint {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-tertiary);
   margin: 0;
 }
 
@@ -636,7 +636,7 @@ body {
 
 /* 对话框确认按钮 - 统一样式 */
 .dialog-confirm-btn {
-  background: linear-gradient(135deg, #409eff 0%, #3a8ee6 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%);
   color: white;
   border: none;
   min-width: 80px;
@@ -655,7 +655,7 @@ body {
 }
 
 .dialog-confirm-btn:hover {
-  background: linear-gradient(135deg, #66b1ff 0%, #409eff 100%);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
@@ -716,7 +716,7 @@ body {
 }
 
 .danger-btn {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: linear-gradient(135deg, var(--git-status-deleted) 0%, var(--color-danger-dark) 100%);
   color: white;
   box-shadow: var(--shadow-md);
 }

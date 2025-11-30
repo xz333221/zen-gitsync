@@ -377,11 +377,11 @@ async function handleMergeBranch() {
   .el-input__wrapper,
   .el-textarea__inner {
     border-radius: var(--radius-lg);
-    border: 2px solid #e5e7eb;
+    border: 2px solid var(--color-gray-200);
     transition: all 0.3s ease;
     
     &:hover {
-      border-color: #d1d5db;
+      border-color: var(--color-gray-300);
     }
   }
   
@@ -423,7 +423,7 @@ async function handleMergeBranch() {
 }
 
 .options-title :deep(.el-icon) {
-  color: #6b7280;
+  color: var(--color-gray-500);
   font-size: 16px;
 }
 

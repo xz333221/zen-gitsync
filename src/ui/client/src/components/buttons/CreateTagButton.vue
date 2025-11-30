@@ -294,11 +294,11 @@ const tagTypeDescription = computed(() => {
 .tag-form :deep(.el-input) {
   .el-input__inner {
     border-radius: var(--radius-lg);
-    border: 2px solid #e5e7eb;
+    border: 2px solid var(--color-gray-200);
     transition: all 0.3s ease;
     
     &:hover {
-      border-color: #d1d5db;
+      border-color: var(--color-gray-300);
     }
     
     &:focus {
@@ -311,13 +311,13 @@ const tagTypeDescription = computed(() => {
 .tag-form :deep(.el-textarea) {
   .el-textarea__inner {
     border-radius: var(--radius-lg);
-    border: 2px solid #e5e7eb;
+    border: 2px solid var(--color-gray-200);
     transition: all 0.3s ease;
     font-size: 14px;
     line-height: 1.5;
     
     &:hover {
-      border-color: #d1d5db;
+      border-color: var(--color-gray-300);
     }
     
     &:focus {
@@ -347,11 +347,11 @@ const tagTypeDescription = computed(() => {
   gap: 6px;
   margin-top: var(--spacing-base);
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-gray-500);
   line-height: 1.4;
   
   .el-icon {
-    color: #9ca3af;
+    color: var(--color-gray-400);
     font-size: 14px;
     flex-shrink: 0;
     margin-top: 1px;
@@ -360,7 +360,7 @@ const tagTypeDescription = computed(() => {
 
 .commit-prefix {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-gray-500);
   font-family: monospace;
 }
 

@@ -270,13 +270,13 @@ async function saveStash() {
 .stash-form :deep(.el-textarea) {
   .el-textarea__inner {
     border-radius: var(--radius-lg);
-    border: 2px solid #e5e7eb;
+    border: 2px solid var(--color-gray-200);
     transition: all 0.3s ease;
     font-size: 14px;
     line-height: 1.5;
     
     &:hover {
-      border-color: #d1d5db;
+      border-color: var(--color-gray-300);
     }
     
     &:focus {
@@ -302,7 +302,7 @@ async function saveStash() {
 }
 
 .options-title :deep(.el-icon) {
-  color: #6b7280;
+  color: var(--color-gray-500);
   font-size: 16px;
 }
 
@@ -327,12 +327,12 @@ async function saveStash() {
 .option-desc {
   margin: 0;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-gray-500);
   line-height: 1.4;
   padding-left: var(--spacing-2xl);
   
   &.disabled {
-    color: #9ca3af;
+    color: var(--color-gray-400);
   }
 }
 
@@ -351,7 +351,7 @@ async function saveStash() {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+  background: linear-gradient(90deg, var(--git-status-modified) 0%, #d97706 100%);
   border-radius: 12px 12px 0 0;
 }
 

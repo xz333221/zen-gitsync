@@ -286,7 +286,7 @@ function selectDirectoryDialog(directoryData: any) {
                       viewBox: "0 0 24 24",
                       width: "20",
                       height: "20",
-                      style: { fill: "#E6A23C" },
+                      style: { fill: "var(--color-warning)" },
                     },
                     [
                       h("path", {
@@ -317,7 +317,7 @@ function selectDirectoryDialog(directoryData: any) {
                     viewBox: "0 0 24 24",
                     width: "20",
                     height: "20",
-                    style: { fill: "#409EFF" },
+                    style: { fill: "var(--color-primary)" },
                   },
                   [
                     h("path", {
@@ -548,7 +548,7 @@ async function selectDirectory(dirPath: string) {
 
 .label-icon {
   font-size: 16px;
-  color: #6b7280;
+  color: var(--color-gray-500);
 }
 
 .directory-input-group {
@@ -748,7 +748,7 @@ async function selectDirectory(dirPath: string) {
   }
 
   .el-message-box__title {
-    color: #409EFF;
+    color: var(--color-primary);
     font-weight: 500;
     font-size: 18px;
   }
@@ -771,7 +771,7 @@ async function selectDirectory(dirPath: string) {
       transform: rotate(90deg);
 
       .el-message-box__close {
-        color: #409EFF;
+        color: var(--color-primary);
       }
     }
 

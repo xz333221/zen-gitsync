@@ -979,7 +979,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 
     .el-icon {
       font-size: 16px;
-      color: #409eff;
+      color: var(--color-primary);
     }
   }
 }
@@ -1000,7 +1000,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: #c0c4cc;
+    background-color: var(--text-placeholder);
     border-radius: var(--radius-sm);
   }
 }
@@ -1014,7 +1014,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   transition: all 0.2s ease;
   
   &:hover {
-    border-color: #409eff;
+    border-color: var(--color-primary);
     box-shadow: var(--shadow-md);
     
     .item-actions {
@@ -1024,7 +1024,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   }
   
   &.active {
-    border-color: #409eff;
+    border-color: var(--color-primary);
     background: rgba(64, 158, 255, 0.05);
     box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
   }
@@ -1122,7 +1122,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 
     .el-icon {
       font-size: 14px;
-      color: #409eff;
+      color: var(--color-primary);
     }
   }
 }
@@ -1145,7 +1145,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: #c0c4cc;
+    background-color: var(--text-placeholder);
     border-radius: var(--radius-sm);
   }
 }
@@ -1168,7 +1168,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   cursor: move;
 
   &:hover {
-    border-color: #67c23a;
+    border-color: var(--color-success);
     background: rgba(103, 194, 58, 0.05);
     
     .action-buttons {
@@ -1209,7 +1209,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .step-icon {
   flex-shrink: 0;
   font-size: 20px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .step-info {
@@ -1293,7 +1293,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     transition: all 0.3s ease;
     
     .el-icon {
-      color: #909399;
+      color: var(--text-tertiary);
       transition: all 0.3s ease;
     }
     
@@ -1301,7 +1301,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       background-color: rgba(64, 158, 255, 0.1);
       
       .el-icon {
-        color: #409eff;
+        color: var(--color-primary);
       }
     }
     
@@ -1309,7 +1309,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       background-color: rgba(64, 158, 255, 0.15);
       
       .el-icon {
-        color: #409eff;
+        color: var(--color-primary);
       }
       
       &:hover {
@@ -1392,7 +1392,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   transition: all 0.2s ease;
 
   &:hover {
-    border-color: #409eff;
+    border-color: var(--color-primary);
     background: rgba(64, 158, 255, 0.05);
     transform: translateX(4px);
   }
@@ -1420,7 +1420,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     align-items: center;
     gap: var(--spacing-sm);
     font-size: 11px;
-    color: #67c23a;
+    color: var(--color-success);
     margin-top: var(--spacing-sm);
 
     .el-icon {

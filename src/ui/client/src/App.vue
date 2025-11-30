@@ -479,7 +479,7 @@ body {
   font-family: 'Arial', sans-serif;
   margin: 0;
   padding: 0;
-  background-color: #f5f5f5;
+  background-color: var(--bg-page);
   overflow: hidden;
   /* 防止出现滚动条 */
   height: 100vh;
@@ -603,7 +603,7 @@ h1 {
 }
 
 .user-name:hover {
-  color: #409EFF;
+  color: var(--color-primary);
 }
 
 .branch-name {
@@ -611,7 +611,7 @@ h1 {
 }
 
 .status-box {
-  background-color: #f6f8fa;
+  background-color: var(--bg-code);
   border: 1px solid #e1e4e8;
   border-radius: var(--radius-sm);
   padding: 15px;
@@ -625,7 +625,7 @@ h1 {
   padding: 15px;
   background-color: var(--bg-panel);
   border-radius: 5px;
-  border-left: 4px solid #409eff;
+  border-left: 4px solid var(--color-primary);
 }
 
 .tips h3 {
@@ -635,7 +635,7 @@ h1 {
 }
 
 .code-block {
-  background-color: #2d2d2d;
+  background-color: var(--bg-code-dark);
   color: #f8f8f2;
   font-family: monospace;
   padding: 10px 15px;
@@ -659,11 +659,11 @@ h1 {
 
 .loading-spinner {
   font-size: 48px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .user-warning {
-  color: #E6A23C;
+  color: var(--color-warning);
   font-weight: bold;
 }
 
@@ -723,7 +723,7 @@ h1 {
 
 .vertical-resizer:hover::after,
 .vertical-resizer.active::after {
-  background-color: #409EFF;
+  background-color: var(--color-primary);
   width: 3px; /* 从6px减少到3px */
   box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
 }
@@ -761,7 +761,7 @@ h1 {
 
 .horizontal-resizer:hover::after,
 .horizontal-resizer.active::after {
-  background-color: #409EFF;
+  background-color: var(--color-primary);
   height: 3px; /* 从6px减少到3px */
   box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
 }
@@ -794,7 +794,7 @@ h1 {
 
 .label-icon {
   font-size: 16px;
-  color: #6b7280;
+  color: var(--color-gray-500);
 }
 
 .user-settings-footer {

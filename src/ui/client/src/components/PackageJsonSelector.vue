@@ -141,7 +141,7 @@ function selectDirectoryDialog(directoryData: any) {
                       viewBox: '0 0 24 24',
                       width: '20',
                       height: '20',
-                      style: { fill: '#E6A23C' }
+                      style: { fill: 'var(--color-warning)' }
                     },
                     [
                       h('path', {
@@ -172,7 +172,7 @@ function selectDirectoryDialog(directoryData: any) {
                     viewBox: '0 0 24 24',
                     width: '20',
                     height: '20',
-                    style: { fill: '#409EFF' }
+                    style: { fill: 'var(--color-primary)' }
                   },
                   [
                     h('path', {
@@ -335,7 +335,7 @@ watch(() => props.modelValue, (newValue) => {
 
 .folder-icon {
   font-size: 14px;
-  color: #67c23a;
+  color: var(--color-success);
   flex-shrink: 0;
 }
 

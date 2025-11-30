@@ -415,7 +415,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 /* Stash列表弹窗样式 */
 :deep(.stash-list-dialog) {
   .common-dialog__header {
-    background: #409eff;
+    background: var(--color-primary);
     color: white;
     padding: var(--spacing-xl) var(--spacing-2xl);
     border-radius: 8px 8px 0 0;
@@ -462,7 +462,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   align-items: center;
   gap: var(--spacing-base);
   padding: var(--spacing-xs) var(--spacing-base);
-  background: #409eff;
+  background: var(--color-primary);
   border-radius: var(--radius-lg);
   color: white;
 }
@@ -521,16 +521,16 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   
   &:hover {
     transform: translateY(-1px);
-    border-color: #409eff;
+    border-color: var(--color-primary);
   }
 }
 
 .stash-card-latest {
-  border: 2px solid #67c23a;
+  border: 2px solid var(--color-success);
   box-shadow: var(--shadow-md);
   
   &:hover {
-    border-color: #67c23a;
+    border-color: var(--color-success);
     box-shadow: var(--shadow-lg);
   }
 }
@@ -566,7 +566,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 
 .badge-icon {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 .stash-id-text {

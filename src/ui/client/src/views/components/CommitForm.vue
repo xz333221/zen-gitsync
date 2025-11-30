@@ -522,7 +522,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
           :tooltip="$t('@76872:选择传统或标准化提交格式')"
           :active-text="$t('@76872:标准化')"
           :inactive-text="$t('@76872:普通')"
-          active-color="#409eff"
+          active-color="var(--color-primary)"
         >
         </OptionSwitchCard>
         <el-button
@@ -773,7 +773,7 @@ git config --global user.email "your.email@example.com"</pre
         v-model="skipHooks"
         :title="$t('@76872:跳过钩子检查')"
         :tooltip="$t('@76872:添加 --no-verify 参数')"
-        active-color="#f56c6c"
+        active-color="var(--color-danger)"
         icon-class="warning"
       >
       </OptionSwitchCard>
@@ -783,7 +783,7 @@ git config --global user.email "your.email@example.com"</pre
         v-model="autoQuickPushOnEnter"
         :title="$t('@76872:回车自动提交')"
         :tooltip="$t('@76872:输入提交信息后按回车直接执行一键推送')"
-        active-color="#67c23a"
+        active-color="var(--color-success)"
         icon-class="success"
       >
       </OptionSwitchCard>
@@ -793,7 +793,7 @@ git config --global user.email "your.email@example.com"</pre
         v-model="configStore.autoClosePushModal"
         :title="$t('@76872:Push完成自动关闭')"
         :tooltip="$t('@76872:推送成功后自动关闭进度弹窗')"
-        active-color="#409eff"
+        active-color="var(--color-primary)"
         icon-class="info"
       >
       </OptionSwitchCard>
@@ -803,7 +803,7 @@ git config --global user.email "your.email@example.com"</pre
         v-model="configStore.autoSetDefaultMessage"
         :title="$t('@76872:自动填充默认提交信息')"
         :tooltip="$t('@76872:打开页面或提交完成后自动填充默认提交信息')"
-        active-color="#67c23a"
+        active-color="var(--color-success)"
         icon-class="success"
       >
       </OptionSwitchCard>
@@ -843,19 +843,19 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 .header-actions :deep(.el-button--primary) {
-  background: #409eff;
+  background: var(--color-primary);
   border: none;
   color: white;
 }
 
 .header-actions :deep(.el-button--success) {
-  background: #67c23a;
+  background: var(--color-success);
   border: none;
   color: white;
 }
 
 .header-actions :deep(.el-button--warning) {
-  background: #e6a23c;
+  background: var(--color-warning);
   border: none;
   color: white;
 }
@@ -866,20 +866,20 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 .header-actions :deep(.el-button--primary:disabled) {
-  background-color: #a0cfff !important;
-  border-color: #a0cfff !important;
+  background-color: var(--color-primary-light) !important;
+  border-color: var(--color-primary-light) !important;
   opacity: 0.5 !important;
 }
 
 .header-actions :deep(.el-button--success:disabled) {
-  background-color: #b3e19d !important;
-  border-color: #b3e19d !important;
+  background-color: var(--color-success) !important;
+  border-color: var(--color-success) !important;
   opacity: 0.5 !important;
 }
 
 .header-actions :deep(.el-button--warning:disabled) {
-  background-color: #f3d19e !important;
-  border-color: #f3d19e !important;
+  background-color: var(--color-warning) !important;
+  border-color: var(--color-warning) !important;
   opacity: 0.5 !important;
 }
 
@@ -963,7 +963,7 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 .description-container:hover {
-  // border-color: #409eff;
+  // border-color: var(--color-primary);
   box-shadow: var(--shadow-lg);
 }
 
@@ -974,19 +974,19 @@ git config --global user.email "your.email@example.com"</pre
   .el-input__wrapper {
     border-radius: var(--radius-lg);
     background: var(--bg-container);
-    border: 2px solid #409eff;
+    border: 2px solid var(--color-primary);
     box-shadow: var(--shadow-sm);
     transition: all 0.3s ease;
     height: 40px; /* 统一高度，与其它输入保持一致 */
   }
 
   .el-input__wrapper:hover {
-    border-color: #66b1ff;
+    border-color: var(--color-primary-light);
     box-shadow: var(--shadow-md);
   }
 
   .el-input__wrapper.is-focus {
-    border-color: #409eff;
+    border-color: var(--color-primary);
     box-shadow: 0 0 0 4px rgba(64, 158, 255, 0.2);
   }
 
@@ -997,7 +997,7 @@ git config --global user.email "your.email@example.com"</pre
   }
 
   .el-input__inner::placeholder {
-    color: #a8abb2;
+    color: var(--text-placeholder);
     font-weight: normal;
   }
 }
@@ -1007,19 +1007,19 @@ git config --global user.email "your.email@example.com"</pre
   .el-select__wrapper {
     border-radius: var(--radius-lg);
     background: var(--bg-container);
-    border: 2px solid #f56c6c;
+    border: 2px solid var(--color-danger);
     box-shadow: var(--shadow-sm);
     transition: all 0.3s ease;
     height: 40px; /* 统一高度 */
   }
 
   .el-select__wrapper:hover {
-    border-color: #f78989;
+    border-color: var(--color-danger);
     box-shadow: var(--shadow-md);
   }
 
   .el-select__wrapper.is-focus {
-    border-color: #f56c6c;
+    border-color: var(--color-danger);
     box-shadow: 0 0 0 4px rgba(245, 108, 108, 0.2);
   }
 
@@ -1029,7 +1029,7 @@ git config --global user.email "your.email@example.com"</pre
   }
 
   .el-select__inner::placeholder {
-    color: #a8abb2;
+    color: var(--text-placeholder);
     font-weight: normal;
   }
 }
@@ -1041,19 +1041,19 @@ git config --global user.email "your.email@example.com"</pre
   .el-input__wrapper {
     border-radius: var(--radius-lg);
     background: var(--bg-container);
-    border: 2px solid #67c23a;
+    border: 2px solid var(--color-success);
     box-shadow: var(--shadow-sm);
     transition: all 0.3s ease;
     height: 40px; /* 统一高度 */
   }
 
   .el-input__wrapper:hover {
-    border-color: #85ce61;
+    border-color: var(--color-success);
     box-shadow: var(--shadow-md);
   }
 
   .el-input__wrapper.is-focus {
-    border-color: #67c23a;
+    border-color: var(--color-success);
     box-shadow: 0 0 0 4px rgba(103, 194, 58, 0.2);
   }
 
@@ -1063,7 +1063,7 @@ git config --global user.email "your.email@example.com"</pre
   }
 
   .el-input__inner::placeholder {
-    color: #a8abb2;
+    color: var(--text-placeholder);
     font-weight: normal;
   }
 }
@@ -1083,7 +1083,7 @@ git config --global user.email "your.email@example.com"</pre
   .el-textarea__inner {
     border-radius: var(--radius-lg);
     background: var(--bg-container);
-    border: 2px solid #e6a23c;
+    border: 2px solid var(--color-warning);
     box-shadow: var(--shadow-sm);
     font-size: 15px;
     font-weight: 500;
@@ -1091,24 +1091,24 @@ git config --global user.email "your.email@example.com"</pre
   }
 
   .el-textarea__inner:hover {
-    border-color: #ebb563;
+    border-color: var(--color-warning);
     box-shadow: var(--shadow-md);
   }
 
   .el-textarea__inner:focus {
-    border-color: #e6a23c;
+    border-color: var(--color-warning);
     box-shadow: 0 0 0 4px rgba(230, 162, 60, 0.2);
     outline: none;
   }
 
   .el-textarea__inner::placeholder {
-    color: #a8abb2;
+    color: var(--text-placeholder);
     font-weight: normal;
   }
 }
 
 :deep(.commit-message-input):hover {
-  border-color: #e6a23c;
+  border-color: var(--color-warning);
   box-shadow: var(--shadow-lg);
 }
 
@@ -1118,7 +1118,7 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 .config-command {
-  background-color: #2d2d2d;
+  background-color: var(--bg-code-dark);
   color: #f8f8f2;
   font-family: "Courier New", Courier, monospace;
   padding: var(--spacing-base);
@@ -1142,7 +1142,7 @@ git config --global user.email "your.email@example.com"</pre
 
 .advanced-options-toggle:hover {
   background-color: var(--border-card);
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .toggle-icon {

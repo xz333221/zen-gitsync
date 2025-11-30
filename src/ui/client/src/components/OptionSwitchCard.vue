@@ -60,7 +60,7 @@ function onChange(val: boolean) {
 }
 
 .option-card:hover {
-  border-color: #409eff;
+  border-color: var(--color-primary);
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
@@ -78,14 +78,14 @@ function onChange(val: boolean) {
   display: none;
   align-items: center;
   justify-content: center;
-  background: #409eff;
+  background: var(--color-primary);
   color: white;
   font-size: 10px;
   flex-shrink: 0;
 }
 
-.option-icon.warning { background: #f56c6c; }
-.option-icon.success { background: #67c23a; }
+.option-icon.warning { background: var(--color-danger); }
+.option-icon.success { background: var(--color-success); }
 
 .option-info { flex: 1; min-width: 0; }
 
@@ -106,6 +106,6 @@ function onChange(val: boolean) {
 }
 
 .option-switch :deep(.el-switch__label.is-active) {
-  color: #409eff;
+  color: var(--color-primary);
 }
 </style>

@@ -1303,7 +1303,7 @@ function toggleFullscreen() {
 
 .commit-hash {
   cursor: pointer;
-  color: #409eff;
+  color: var(--color-primary);
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-weight: 500;
   border-radius: var(--radius-sm);
@@ -1475,7 +1475,7 @@ function toggleFullscreen() {
 }
 
 .compact-label {
-  color: #909399;
+  color: var(--text-tertiary);
   font-size: 12px;
   margin-right: 6px;
   white-space: nowrap;
@@ -1549,7 +1549,7 @@ function toggleFullscreen() {
 }
 
 .copy-message-btn:hover {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .fullscreen-mode .log-table {
@@ -1568,7 +1568,7 @@ function toggleFullscreen() {
 
 .pagination-info {
   font-size: 13px;
-  color: #909399;
+  color: var(--text-tertiary);
   margin-bottom: var(--spacing-sm);
 }
 
@@ -1608,7 +1608,7 @@ function toggleFullscreen() {
 
 .context-menu-item:hover {
   background-color: var(--bg-panel);
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .context-menu-item i {

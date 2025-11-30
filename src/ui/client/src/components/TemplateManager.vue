@@ -382,7 +382,7 @@ defineExpose({
 }
 
 .template-list-scroll::-webkit-scrollbar-thumb {
-  background-color: #c0c4cc;
+  background-color: var(--text-placeholder);
   border-radius: var(--radius-sm);
 }
 
@@ -474,7 +474,7 @@ defineExpose({
 .message-help-text {
   padding: var(--spacing-lg);
   border-radius: var(--radius-md);
-  border-left: 4px solid #409eff;
+  border-left: 4px solid var(--color-primary);
 }
 
 .message-help-text h4 {
@@ -500,7 +500,7 @@ defineExpose({
 }
 
 .templates-scroll-area::-webkit-scrollbar-thumb {
-  background-color: #c0c4cc;
+  background-color: var(--text-placeholder);
   border-radius: var(--radius-sm);
 }
 
@@ -553,19 +553,19 @@ defineExpose({
 }
 
 .pin-button {
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 .pin-button:hover {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .pin-button.is-disabled {
-  color: #c0c4cc;
+  color: var(--text-placeholder);
 }
 
 [data-theme="dark"] .pin-button {
-  color: #a8abb2;
+  color: var(--text-placeholder);
 }
 
 [data-theme="dark"] .pin-button:hover {

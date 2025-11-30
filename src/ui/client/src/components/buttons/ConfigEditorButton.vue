@@ -226,7 +226,7 @@ defineExpose({ openConfigEditor })
       :show-close="false"
     >
       <div class="config-warning-content">
-        <el-icon class="warning-icon" color="#f56c6c" size="24">
+        <el-icon class="warning-icon" color="var(--color-danger)" size="24">
           <Warning />
         </el-icon>
         <p class="warning-message">{{ configWarningMessage }}</p>
@@ -280,7 +280,7 @@ defineExpose({ openConfigEditor })
   flex-grow: 1;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 2px solid #e5e7eb;
+  border: 2px solid var(--color-gray-200);
   transition: border-color 0.3s ease;
 
   &:focus-within {
@@ -337,12 +337,12 @@ defineExpose({ openConfigEditor })
 }
 
 .dialog-cancel-btn {
-  background: #f3f4f6;
-  color: #374151;
-  border-color: #e5e7eb;
+  background: var(--color-gray-100);
+  color: var(--color-gray-700);
+  border-color: var(--color-gray-200);
 
   &:hover:not(:disabled) {
-    background: #e5e7eb;
+    background: var(--color-gray-200);
   }
 
   &.system-config-btn {
