@@ -350,7 +350,7 @@ watch(() => props.visible, (newValue) => {
   background: var(--bg-container);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
-  margin-top: 12px;
+  margin-top: var(--spacing-md);
   overflow: hidden;
   box-shadow: var(--shadow-md);
 }
@@ -488,7 +488,7 @@ watch(() => props.visible, (newValue) => {
 
 .empty-icon {
   opacity: 0.3;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .packages-container {
@@ -498,7 +498,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .package-item {
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -572,7 +572,7 @@ watch(() => props.visible, (newValue) => {
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
-  margin-left: 8px;
+  margin-left: var(--spacing-base);
   flex-shrink: 0;
   opacity: 0;
 }

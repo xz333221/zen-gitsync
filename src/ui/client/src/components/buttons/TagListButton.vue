@@ -441,7 +441,7 @@ function formatDate(dateString: string): string {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   padding: var(--spacing-base);
   background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
   border-radius: var(--radius-lg);
@@ -565,7 +565,7 @@ function formatDate(dateString: string): string {
 }
 
 .type-tag {
-  margin-left: 4px;
+  margin-left: var(--spacing-sm);
 }
 
 .tag-meta {

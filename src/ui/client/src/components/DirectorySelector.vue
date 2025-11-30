@@ -866,7 +866,7 @@ async function selectDirectory(dirPath: string) {
     }
 
     .dir-icon {
-      margin-right: 12px;
+      margin-right: var(--spacing-md);
       display: flex;
       align-items: center;
       justify-content: center;

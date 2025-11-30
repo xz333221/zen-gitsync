@@ -1435,7 +1435,7 @@ onMounted(() => {
     color: var(--git-status-conflicted);
     font-size: 16px;
     margin-left: -4px;
-    margin-right: 2px;
+    margin-right: var(--spacing-xs);
     animation: pulse 2s ease-in-out infinite;
   }
   

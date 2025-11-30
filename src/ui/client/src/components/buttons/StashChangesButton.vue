@@ -264,7 +264,7 @@ async function saveStash() {
   font-weight: 600;
   color: var(--color-text-title);
   font-size: 14px;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .stash-form :deep(.el-textarea) {
@@ -307,7 +307,7 @@ async function saveStash() {
 }
 
 .option-item {
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   
   &:last-child {
     margin-bottom: 0;
@@ -315,7 +315,7 @@ async function saveStash() {
 }
 
 .option-item :deep(.el-checkbox) {
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .option-label {
@@ -329,7 +329,7 @@ async function saveStash() {
   font-size: 13px;
   color: #6b7280;
   line-height: 1.4;
-  padding-left: 24px;
+  padding-left: var(--spacing-2xl);
   
   &.disabled {
     color: #9ca3af;

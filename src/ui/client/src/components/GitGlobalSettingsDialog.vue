@@ -329,7 +329,7 @@ async function handleSave() {
 
 /* 用户设置-高级配置布局 */
 .settings-section {
-  margin-top: 8px;
+  margin-top: var(--spacing-base);
   padding-top: 14px;
   border-top: 1px solid var(--el-border-color);
 }
@@ -338,7 +338,7 @@ async function handleSave() {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  margin-bottom: 16px;
+  margin-bottom: var(--spacing-lg);
   font-size: 14px;
   font-weight: 600;
   color: var(--color-text-title);
@@ -367,7 +367,7 @@ async function handleSave() {
   font-weight: 500;
   color: var(--el-text-color-regular);
   text-align: right;
-  padding-right: 8px;
+  padding-right: var(--spacing-base);
 }
 
 .setting-label .qmark {
@@ -465,7 +465,7 @@ html.dark .label-icon {
 }
 
 .info-section {
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .info-card {

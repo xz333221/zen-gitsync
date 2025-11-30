@@ -906,7 +906,7 @@ git config --global user.email "your.email@example.com"</pre
   display: flex;
   flex-direction: column;
   gap: var(--spacing-base);
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .standard-commit-header {
@@ -1123,7 +1123,7 @@ git config --global user.email "your.email@example.com"</pre
   font-family: "Courier New", Courier, monospace;
   padding: var(--spacing-base);
   border-radius: var(--radius-base);
-  margin-top: 8px;
+  margin-top: var(--spacing-base);
   white-space: pre;
 }
 
@@ -1146,7 +1146,7 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 .toggle-icon {
-  margin-left: 8px;
+  margin-left: var(--spacing-base);
   transition: transform 0.3s ease;
   font-size: 12px;
 }

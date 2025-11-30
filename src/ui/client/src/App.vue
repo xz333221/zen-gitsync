@@ -621,7 +621,7 @@ h1 {
 }
 
 .tips {
-  margin-top: 20px;
+  margin-top: var(--spacing-xl);
   padding: 15px;
   background-color: var(--bg-panel);
   border-radius: 5px;

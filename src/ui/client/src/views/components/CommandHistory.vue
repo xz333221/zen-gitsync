@@ -850,7 +850,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  margin-bottom: 4px;
+  margin-bottom: var(--spacing-sm);
 }
 
 .command-text code {
@@ -893,7 +893,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: 8px;
+  margin-left: var(--spacing-base);
 }
 
 .item-details {
@@ -918,13 +918,13 @@ onUnmounted(() => {
 
 .output-section.error {
   border-left: 3px solid #f56c6c;
-  padding-left: 8px;
+  padding-left: var(--spacing-base);
 }
 
 /* 为正常的stderr输出（如git push）添加不同的样式 */
 .output-section:not(.error) {
   border-left: 3px solid #67c23a;
-  padding-left: 8px;
+  padding-left: var(--spacing-base);
 }
 
 .output-header {

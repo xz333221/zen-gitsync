@@ -353,7 +353,7 @@ watch(() => props.modelValue, (newValue) => {
   font-size: 11px;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  margin-left: 20px;
+  margin-left: var(--spacing-xl);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

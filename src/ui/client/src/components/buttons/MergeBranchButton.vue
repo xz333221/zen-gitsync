@@ -368,7 +368,7 @@ async function handleMergeBranch() {
   font-weight: 600;
   color: var(--color-text-title);
   font-size: 14px;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .merge-form :deep(.el-select),

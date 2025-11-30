@@ -530,7 +530,7 @@ body {
 .empty-icon {
   font-size: 64px;
   color: #c0c4cc;
-  margin-bottom: 16px;
+  margin-bottom: var(--spacing-lg);
 }
 
 .empty-text {

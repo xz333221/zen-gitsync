@@ -364,7 +364,7 @@ defineExpose({
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-card);
 }

@@ -288,7 +288,7 @@ const tagTypeDescription = computed(() => {
   font-weight: 600;
   color: var(--color-text-title);
   font-size: 14px;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .tag-form :deep(.el-input) {
@@ -345,7 +345,7 @@ const tagTypeDescription = computed(() => {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: var(--spacing-base);
   font-size: 13px;
   color: #6b7280;
   line-height: 1.4;

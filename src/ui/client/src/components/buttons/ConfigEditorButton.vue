@@ -380,7 +380,7 @@ defineExpose({ openConfigEditor })
 
 .warning-icon {
   flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: var(--spacing-xs);
 }
 
 .warning-message {

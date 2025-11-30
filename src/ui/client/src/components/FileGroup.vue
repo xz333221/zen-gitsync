@@ -321,7 +321,7 @@ const getFileIcon = (filePath: string) => {
   flex-shrink: 0;
   font-size: 16px;
   line-height: 1;
-  margin-right: 4px;
+  margin-right: var(--spacing-sm);
 }
 
 /* 锁定状态显示特殊样式 */

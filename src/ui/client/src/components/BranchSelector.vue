@@ -161,7 +161,7 @@ async function handleBranchChange(branch: string) {
 .branch-label {
   color: var(--color-text);
   padding-top: 6px;
-  margin-right: 4px;
+  margin-right: var(--spacing-sm);
   font-weight: bold;
 }
 

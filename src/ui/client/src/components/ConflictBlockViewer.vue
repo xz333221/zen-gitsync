@@ -343,7 +343,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
     border: 1px solid var(--color-warning-border);
     border-radius: var(--radius-lg);
     padding: var(--spacing-md) var(--spacing-lg);
-    margin-bottom: 16px;
+    margin-bottom: var(--spacing-lg);
     
     .progress-info {
       display: flex;
@@ -359,7 +359,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
     }
     
     .progress-hint {
-      margin-top: 8px;
+      margin-top: var(--spacing-base);
       font-size: 12px;
       color: var(--text-secondary);
       
@@ -373,7 +373,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
   .conflict-block {
     border: 2px solid var(--color-warning-border);
     border-radius: var(--radius-lg);
-    margin-bottom: 24px;
+    margin-bottom: var(--spacing-2xl);
     overflow: hidden;
     transition: all 0.3s ease;
     
@@ -420,7 +420,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
           width: 50px;
           color: var(--text-tertiary);
           text-align: right;
-          padding-right: 16px;
+          padding-right: var(--spacing-lg);
           user-select: none;
         }
         
@@ -488,7 +488,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
               width: 40px;
               color: var(--text-tertiary);
               text-align: right;
-              padding-right: 12px;
+              padding-right: var(--spacing-md);
               user-select: none;
               font-size: 12px;
             }
@@ -537,11 +537,11 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
               }
               
               &.left-accept {
-                margin-left: 8px;
+                margin-left: var(--spacing-base);
               }
               
               &.right-accept {
-                margin-right: 8px;
+                margin-right: var(--spacing-base);
               }
             }
           }
@@ -653,7 +653,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
             width: 50px;
             color: var(--text-tertiary);
             text-align: right;
-            padding-right: 16px;
+            padding-right: var(--spacing-lg);
             user-select: none;
           }
           

@@ -374,7 +374,7 @@ defineExpose({
 .template-list-scroll {
   flex: 1;
   overflow-y: auto;
-  padding-right: 8px;
+  padding-right: var(--spacing-base);
 }
 
 .template-list-scroll::-webkit-scrollbar {
@@ -391,7 +391,7 @@ defineExpose({
 }
 
 .template-item {
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   border-radius: var(--radius-md);
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
@@ -411,7 +411,7 @@ defineExpose({
   font-size: 14px;
   color: var(--text-secondary);
   word-break: break-all;
-  margin-right: 12px;
+  margin-right: var(--spacing-md);
 }
 
 .template-actions {
@@ -443,7 +443,7 @@ defineExpose({
 .templates-scroll-area {
   flex: 1;
   overflow-y: auto;
-  padding-right: 8px;
+  padding-right: var(--spacing-base);
   max-height: calc(100vh - 360px);
 }
 
@@ -590,6 +590,6 @@ defineExpose({
 }
 
 .templates-scroll-area {
-  padding-top: 4px;
+  padding-top: var(--spacing-sm);
 }
 </style>

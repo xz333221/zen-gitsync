@@ -550,7 +550,7 @@ defineExpose({
 .error-title {
   font-weight: 600;
   color: #f56c6c;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .error-content {

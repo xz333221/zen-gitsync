@@ -1004,7 +1004,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 }
 
 .orchestration-item {
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   border: 1px solid var(--border-component);
   border-radius: var(--radius-md);
   background: var(--bg-container);
@@ -1036,7 +1036,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   
   h4 {
     margin: 0;
@@ -1193,7 +1193,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 8px;
+  padding-bottom: var(--spacing-base);
   border-bottom: 1px solid var(--border-component);
   gap: var(--spacing-md);
 }
@@ -1398,7 +1398,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   .step-desc {
     font-size: 12px;
     color: var(--text-secondary);
-    margin-top: 2px;
+    margin-top: var(--spacing-xs);
     font-style: italic;
   }
 
@@ -1409,7 +1409,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     background: var(--bg-code);
     padding: var(--spacing-xs) 6px;
     border-radius: var(--radius-sm);
-    margin-top: 4px;
+    margin-top: var(--spacing-sm);
     display: inline-block;
   }
 
@@ -1419,7 +1419,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     gap: var(--spacing-sm);
     font-size: 11px;
     color: #67c23a;
-    margin-top: 4px;
+    margin-top: var(--spacing-sm);
 
     .el-icon {
       font-size: 12px;
@@ -1475,13 +1475,13 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     top: 0;
     background: var(--bg-container);
     z-index: 10;
-    padding-bottom: 8px;
+    padding-bottom: var(--spacing-base);
   }
 
   :deep(.el-tabs__content) {
     flex: 1;
     overflow-y: auto;
-    padding-top: 8px;
+    padding-top: var(--spacing-base);
   }
 
   :deep(.el-tab-pane) {

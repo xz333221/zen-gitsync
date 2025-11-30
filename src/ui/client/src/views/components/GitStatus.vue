@@ -1151,7 +1151,7 @@ defineExpose({
   font-family: monospace;
   padding: var(--spacing-base);
   border-radius: var(--radius-lg);
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   max-height: 200px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1291,7 +1291,7 @@ defineExpose({
   justify-content: center;
   background-color: var(--bg-icon);
   border-radius: 50%;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   font-size: 28px;
   color: #909399;
   animation: pulse 2s infinite ease-in-out;
@@ -1307,13 +1307,13 @@ defineExpose({
   font-size: 18px;
   font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .empty-subtext {
   font-size: 14px;
   color: #909399;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .status-box-wrap {
@@ -1416,7 +1416,7 @@ defineExpose({
   font-size: 16px;
   color: #409EFF;
   font-weight: bold;
-  margin-top: 8px;
+  margin-top: var(--spacing-base);
 }
 
 
@@ -1435,7 +1435,7 @@ defineExpose({
 .empty-locked-files .empty-icon {
   font-size: 48px;
   color: #d9d9d9;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .empty-locked-files p {
@@ -1459,7 +1459,7 @@ defineExpose({
   padding: var(--spacing-base);
   border: 1px solid #ffd591;
   border-radius: var(--radius-md);
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   color: #d46b08;
   font-weight: 500;
 }
@@ -1481,7 +1481,7 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .description-icon {
@@ -1507,7 +1507,7 @@ defineExpose({
 
 .description-content ul {
   margin: var(--spacing-sm) 0 var(--spacing-base) 0;
-  padding-left: 8px;
+  padding-left: var(--spacing-base);
 }
 
 .description-content li {
@@ -1535,7 +1535,7 @@ defineExpose({
   border: 1px solid rgba(64, 158, 255, 0.2);
   border-radius: var(--radius-xl);
   padding: var(--spacing-xl);
-  margin-bottom: 16px;
+  margin-bottom: var(--spacing-lg);
   transition: all 0.3s ease;
 }
 
@@ -1548,7 +1548,7 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: var(--spacing-md);
 }
 
 .upstream-tip .tip-icon {

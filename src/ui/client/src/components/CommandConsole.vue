@@ -1345,7 +1345,7 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 /* 命令控制台容器 */
 .command-console {
-  margin-top: 12px;
+  margin-top: var(--spacing-md);
   background: var(--bg-code);
   border: 1px solid var(--border-component);
   border-radius: 10px;
@@ -1742,7 +1742,7 @@ onUnmounted(() => {
   font-size: 14px;
   color: #409eff;
   flex-shrink: 0;
-  margin-left: 4px;
+  margin-left: var(--spacing-sm);
 }
 
 .ts {

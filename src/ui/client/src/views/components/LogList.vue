@@ -1256,7 +1256,7 @@ function toggleFullscreen() {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-sm);
-  margin-right: 4px;
+  margin-right: var(--spacing-sm);
   flex-shrink: 0;
 }
 
@@ -1276,7 +1276,7 @@ function toggleFullscreen() {
 }
 
 .commit-count {
-  margin-bottom: 12px;
+  margin-bottom: var(--spacing-md);
   font-size: 14px;
   color: var(--text-secondary);
   text-align: right;
@@ -1425,7 +1425,7 @@ function toggleFullscreen() {
 .filter-panel-header {
   background-color: var(--bg-panel);
   padding: var(--spacing-base);
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
@@ -1481,7 +1481,7 @@ function toggleFullscreen() {
   white-space: nowrap;
   font-weight: bold;
   border-right: 1px solid var(--border-card);
-  padding-right: 8px;
+  padding-right: var(--spacing-base);
 }
 
 .filter-action-button {
@@ -1569,7 +1569,7 @@ function toggleFullscreen() {
 .pagination-info {
   font-size: 13px;
   color: #909399;
-  margin-bottom: 4px;
+  margin-bottom: var(--spacing-sm);
 }
 
 /* 右键菜单样式 */
@@ -1612,7 +1612,7 @@ function toggleFullscreen() {
 }
 
 .context-menu-item i {
-  margin-right: 4px;
+  margin-right: var(--spacing-sm);
   font-size: 16px;
 }
 

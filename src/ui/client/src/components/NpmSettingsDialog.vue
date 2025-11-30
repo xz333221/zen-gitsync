@@ -450,7 +450,7 @@ function handleClose() {
   background: var(--bg-input);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
-  margin-bottom: 20px;
+  margin-bottom: var(--spacing-xl);
 }
 
 .info-label {
@@ -473,7 +473,7 @@ function handleClose() {
 }
 
 .settings-tabs {
-  margin-top: 16px;
+  margin-top: var(--spacing-lg);
 }
 
 .script-management {
@@ -494,7 +494,7 @@ function handleClose() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: var(--spacing-md);
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border-card);
 }
@@ -524,7 +524,7 @@ function handleClose() {
   max-height: 400px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
+  padding-right: var(--spacing-sm);
 }
 
 .script-item-card {
@@ -652,7 +652,7 @@ function handleClose() {
   background: var(--bg-input);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
-  margin-bottom: 20px;
+  margin-bottom: var(--spacing-xl);
 }
 
 .version-label {
@@ -669,7 +669,7 @@ function handleClose() {
 }
 
 .version-options {
-  margin-bottom: 24px;
+  margin-bottom: var(--spacing-2xl);
 }
 
 .option-label {
@@ -677,7 +677,7 @@ function handleClose() {
   font-size: 14px;
   font-weight: 600;
   color: var(--color-text);
-  margin-bottom: 12px;
+  margin-bottom: var(--spacing-md);
 }
 
 .version-radio-group {
@@ -694,7 +694,7 @@ function handleClose() {
 
 .version-radio :deep(.el-radio__label) {
   width: 100%;
-  padding-left: 8px;
+  padding-left: var(--spacing-base);
 }
 
 .radio-content {
@@ -720,7 +720,7 @@ function handleClose() {
   flex-direction: column;
   justify-content: center;
   gap: var(--spacing-md);
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 
 .form-group {
@@ -743,7 +743,7 @@ function handleClose() {
 }
 
 .action-button {
-  margin-top: 8px;
+  margin-top: var(--spacing-base);
   width: 100%;
   height: 36px;
   font-size: 14px;

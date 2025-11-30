@@ -476,12 +476,12 @@ defineExpose({
     font-weight: 600;
     color: var(--text-title);
     flex-shrink: 0;
-    padding-right: 8px;
+    padding-right: var(--spacing-base);
     
     &.required::after {
       content: '*';
       color: #f56c6c;
-      margin-left: 4px;
+      margin-left: var(--spacing-sm);
     }
   }
   
@@ -499,7 +499,7 @@ defineExpose({
 }
 
 .form-buttons {
-  margin-top: 16px;
+  margin-top: var(--spacing-lg);
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-md);
@@ -517,7 +517,7 @@ defineExpose({
     font-weight: 600;
     color: var(--text-title);
     border-bottom: 1px solid var(--border-component);
-    padding-bottom: 8px;
+    padding-bottom: var(--spacing-base);
   }
 }
 
@@ -665,7 +665,7 @@ defineExpose({
     }
 
     .dir-icon {
-      margin-right: 12px;
+      margin-right: var(--spacing-md);
       display: flex;
       align-items: center;
       justify-content: center;

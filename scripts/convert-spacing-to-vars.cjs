@@ -1,5 +1,10 @@
 /**
- * 将项目中的 padding、margin、gap 中的 px 值转换为标准的 CSS 变量
+ * 将项目中所有 padding、margin、gap 相关属性的 px 值转换为标准的 CSS 变量
+ * 
+ * 支持的属性：
+ * - padding, padding-top, padding-right, padding-bottom, padding-left
+ * - margin, margin-top, margin-right, margin-bottom, margin-left  
+ * - gap, row-gap, column-gap
  * 
  * 标准间距映射：
  * 1px => 1px (保持原样，边框等特殊用途)
@@ -49,8 +54,22 @@ console.log(`\n运行模式: ${isStrictMode ? '严格模式（只替换标准间
 // 需要处理的文件扩展名
 const TARGET_EXTENSIONS = ['.vue', '.scss', '.css'];
 
-// 需要处理的 CSS 属性
-const TARGET_PROPERTIES = ['padding', 'margin', 'gap'];
+// 需要处理的 CSS 属性（包括所有方向性变体）
+const TARGET_PROPERTIES = [
+  'padding',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'margin',
+  'margin-top',
+  'margin-right',
+  'margin-bottom',
+  'margin-left',
+  'gap',
+  'row-gap',
+  'column-gap',
+];
 
 // 统计信息
 let stats = {
@@ -114,9 +133,11 @@ function processFileContent(content) {
   // 3. padding: 12px 16px 12px 16px;
   // 4. padding: 12px var(--spacing-md);
   TARGET_PROPERTIES.forEach(property => {
+    // 转义属性名中的连字符（如 padding-top 中的 -）
+    const escapedProperty = property.replace(/-/g, '\\-');
     // 匹配属性及其值（包括多个值的情况）
     const regex = new RegExp(
-      `(${property}\\s*:\\s*)([^;{}]+)(;)`,
+      `(${escapedProperty}\\s*:\\s*)([^;{}]+)(;)`,
       'g'
     );
     
