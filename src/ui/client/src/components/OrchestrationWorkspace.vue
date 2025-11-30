@@ -1134,6 +1134,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .steps-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
   min-height: 0;
 
@@ -1320,8 +1321,10 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
   margin-left: auto;
+  overflow: hidden;
 }
 
 
