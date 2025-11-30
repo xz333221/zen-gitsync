@@ -340,18 +340,18 @@ async function handleGitPull() {
   }
 }
 
-// 添加git fetch --all操作方法
-async function handleGitFetchAll() {
-  try {
-    // 使用store中的状态变量，而不是本地变量
-    await gitStore.gitFetchAll()
-    // 刷新Git状态
-    await loadStatus()
-  } catch (error) {
-    // 错误处理已经在store中完成
-    console.error('获取远程分支信息操作发生错误:', error)
-  }
-}
+// 添加git fetch --all操作方法（已禁用）
+// async function handleGitFetchAll() {
+//   try {
+//     // 使用store中的状态变量，而不是本地变量
+//     await gitStore.gitFetchAll()
+//     // 刷新Git状态
+//     await loadStatus()
+//   } catch (error) {
+//     // 错误处理已经在store中完成
+//     console.error('获取远程分支信息操作发生错误:', error)
+//   }
+// }
 
 // 一键设置上游并推送
 const isSettingUpstream = ref(false)

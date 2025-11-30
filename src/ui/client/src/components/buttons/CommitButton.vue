@@ -56,6 +56,10 @@ const isDisabled = computed(() => {
   if (gitStore.hasConflictedFiles) {
     return true
   }
+  // 如果正在提交，禁用按钮
+  if (gitStore.isCommiting) {
+    return true
+  }
   return !hasStagedChanges.value || !props.hasUserCommitMessage
 })
 
@@ -107,7 +111,7 @@ async function handleClick() {
       type="primary"
       @click="handleClick"
       :icon="Check"
-      :loading="gitStore.isLoadingStatus"
+      :loading="gitStore.isCommiting"
       :disabled="isDisabled"
       :class="['commit-button', `from-${from}`]"
     >
