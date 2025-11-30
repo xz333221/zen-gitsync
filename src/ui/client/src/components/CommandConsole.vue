@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted, computed } from 'vue';
+import { ref, onMounted, watch, onUnmounted } from 'vue';
 import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
@@ -8,10 +8,12 @@ import CustomCommandManager from '@components/CustomCommandManager.vue';
 import OrchestrationWorkspace from '@components/OrchestrationWorkspace.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
+import { useGitStore } from '@stores/gitStore';
 import { io, Socket } from 'socket.io-client';
 import Convert from 'ansi-to-html';
 
 const configStore = useConfigStore();
+const gitStore = useGitStore();
 
 // 获取后端端口
 function getBackendPort() {
@@ -326,6 +328,37 @@ function openCommandManager() {
 // 打开编排工作台
 function openOrchestrationWorkspace() {
   orchestrationWorkspaceVisible.value = true;
+}
+
+// 判断命令是否是 git 相关命令
+function isGitCommand(command: string): boolean {
+  if (!command) return false;
+  
+  // 移除首尾空格并转小写
+  const cmd = command.trim().toLowerCase();
+  
+  // 检查是否是 git 命令（以 git 开头，或者常见的 git 别名）
+  return (
+    cmd.startsWith('git ') || 
+    cmd === 'git' ||
+    // Windows 下的 git.exe
+    cmd.startsWith('git.exe ') ||
+    // 常见的 git 别名
+    cmd.startsWith('g ') ||
+    // 其他可能修改 git 状态的命令
+    cmd.includes('git add') ||
+    cmd.includes('git commit') ||
+    cmd.includes('git push') ||
+    cmd.includes('git pull') ||
+    cmd.includes('git checkout') ||
+    cmd.includes('git merge') ||
+    cmd.includes('git rebase') ||
+    cmd.includes('git reset') ||
+    cmd.includes('git stash') ||
+    cmd.includes('git branch') ||
+    cmd.includes('git tag') ||
+    cmd.includes('git fetch')
+  );
 }
 
 // 执行指令编排（顺序执行多个步骤）
@@ -647,6 +680,22 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
     consoleRunning.value = false;
     orchestrationPaused.value = false; // 重置暂停状态
     ElMessage.success('所有步骤执行完成！');
+    
+    // 检查是否执行了 git 相关命令，如果是则刷新 git 状态
+    const hasGitCommand = steps.some(step => {
+      if (step.type === 'command') {
+        const command = configStore.customCommands.find(c => c.id === step.commandId);
+        if (command) {
+          return isGitCommand(command.command);
+        }
+      }
+      return false;
+    });
+    
+    if (hasGitCommand) {
+      await gitStore.fetchStatus();
+      await gitStore.fetchLog();
+    }
   } catch (error: any) {
     consoleRunning.value = false;
     orchestrationPaused.value = false; // 重置暂停状态
@@ -759,12 +808,18 @@ async function executeCustomCommand(command: CustomCommand) {
     };
     
     // 监听进程退出
-    const onExit = (data: any) => {
+    const onExit = async (data: any) => {
       if (data.sessionId === sessionId) {
         rec.success = data.success;
         rec.running = false;
         console.log(`[交互式-自定义] 进程退出，成功:`, rec.success);
         consoleHistory.value = [...consoleHistory.value];
+        
+        // 如果是 git 命令，刷新 git 状态
+        if (isGitCommand(cmd)) {
+          await gitStore.fetchStatus();
+          await gitStore.fetchLog();
+        }
         
         // 清理事件监听器
         socket.value?.off('interactive_process_id', onProcessId);
@@ -948,6 +1003,12 @@ async function executeCustomCommand(command: CustomCommand) {
   } finally {
     console.log('[前端-自定义] finally块执行，设置consoleRunning=false');
     consoleRunning.value = false;
+    
+    // 如果是 git 命令，刷新 git 状态
+    if (isGitCommand(cmd)) {
+      await gitStore.fetchStatus();
+      await gitStore.fetchLog();
+    }
   }
 }
 
@@ -1252,7 +1313,6 @@ onUnmounted(() => {
         clearable
       />
       <IconButton
-        :tooltip="$t('@CF05E:执行')"
         :disabled="consoleRunning"
         hover-color="var(--color-primary)"
         @click="useTerminal ? runConsoleCommand() : runInteractiveCommand()"
