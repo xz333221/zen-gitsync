@@ -67,7 +67,6 @@ declare module 'vue' {
     NpmScriptsPanel: typeof import('./src/components/NpmScriptsPanel.vue')['default']
     NpmSettingsDialog: typeof import('./src/components/NpmSettingsDialog.vue')['default']
     OptionSwitchCard: typeof import('./src/components/OptionSwitchCard.vue')['default']
-    OrchestrationManager: typeof import('./src/components/OrchestrationManager.vue')['default']
     OrchestrationWorkspace: typeof import('./src/components/OrchestrationWorkspace.vue')['default']
     PackageJsonSelector: typeof import('./src/components/PackageJsonSelector.vue')['default']
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']

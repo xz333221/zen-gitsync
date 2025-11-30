@@ -726,7 +726,6 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   display: flex;
   flex-direction: column;
   min-height: 600px;
-  max-height: 70vh;
   gap: 16px;
 }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch, shallowRef } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, VideoPlay, Clock, DocumentAdd, Plus, Folder } from '@element-plus/icons-vue'
+import { Delete, VideoPlay, Clock, DocumentAdd, Plus, Folder, Monitor } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
@@ -113,20 +113,6 @@ function getStepLabel(step: OrchestrationStep): string {
     }
   }
   return '未知步骤'
-}
-
-// 自定义命令图标组件
-const CustomCmdIcon = shallowRef({
-  template: '<svg-icon icon-class="custom-cmd" />',
-  components: { SvgIcon }
-})
-
-// 获取步骤类型图标
-function getStepIcon(step: OrchestrationStep) {
-  if (step.type === 'command') return CustomCmdIcon.value
-  if (step.type === 'wait') return Clock
-  if (step.type === 'version') return DocumentAdd
-  return CustomCmdIcon.value
 }
 
 // 获取步骤详细信息
@@ -446,6 +432,20 @@ function moveDown(index: number) {
   orchestrationSteps.value[index + 1] = temp
 }
 
+// 步骤置顶
+function moveToTop(index: number) {
+  if (index === 0) return
+  const step = orchestrationSteps.value.splice(index, 1)[0]
+  orchestrationSteps.value.unshift(step)
+}
+
+// 步骤置底
+function moveToBottom(index: number) {
+  if (index === orchestrationSteps.value.length - 1) return
+  const step = orchestrationSteps.value.splice(index, 1)[0]
+  orchestrationSteps.value.push(step)
+}
+
 // 执行单个步骤
 function executeSingleStep(step: OrchestrationStep) {
   emit('execute-orchestration', [step], 0, true)  // 第三个参数true表示单个执行
@@ -532,7 +532,15 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                     size="small"
                     class="step-tag"
                   >
-                    <!-- <el-icon :component="getStepIcon(step)" /> -->
+                    <el-icon v-if="step.type === 'command'">
+                      <svg-icon icon-class="custom-cmd" />
+                    </el-icon>
+                    <el-icon v-else-if="step.type === 'wait'">
+                      <Clock />
+                    </el-icon>
+                    <el-icon v-else-if="step.type === 'version'">
+                      <DocumentAdd />
+                    </el-icon>
                     <span>{{ index + 1 }}. {{ getStepLabel(step) }}</span>
                   </el-tag>
                   <template #dropdown>
@@ -640,71 +648,107 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                 @dragover="onDragOver"
                 @drop="onDrop(index)"
               >
-                <div class="order-number">{{ index + 1 }}</div>
-                <div class="step-icon">
-                  <el-icon v-if="step.type === 'command'"><svg-icon icon-class="custom-cmd" /></el-icon>
-                  <el-icon v-else-if="step.type === 'wait'"><Clock /></el-icon>
-                  <el-icon v-else-if="step.type === 'version'"><DocumentAdd /></el-icon>
-                </div>
-                <div class="step-info">
-                  <div class="step-name">{{ getStepLabel(step) }}</div>
-                  <div class="step-detail">{{ getStepDetail(step) }}</div>
-                  <div v-if="getStepDirectory(step)" class="step-dir">
-                    <el-icon><Folder /></el-icon>
-                    <span>{{ getStepDirectory(step) }}</span>
+                <div class="step-item-content">
+                  <div class="step-header-row">
+                    <div class="step-options">
+                      <div class="option-item">
+                        <span class="option-label">启用</span>
+                        <el-switch 
+                          :model-value="step.enabled ?? true"
+                          @update:model-value="(val: boolean) => updateStepEnabled(step, val)"
+                          size="small"
+                        />
+                      </div>
+                      <el-button
+                        v-if="step.type === 'command'"
+                        :class="['terminal-toggle-btn', { 'is-active': step.useTerminal }]"
+                        text
+                        @click="step.useTerminal = !step.useTerminal"
+                        :title="step.useTerminal ? '终端执行' : '普通执行'"
+                      >
+                        <el-icon :size="18">
+                          <Monitor />
+                        </el-icon>
+                      </el-button>
+                    </div>
+                    <div class="action-buttons">
+                      <el-button 
+                        type="success" 
+                        size="small" 
+                        :icon="VideoPlay"
+                        circle
+                        @click="executeSingleStep(step)"
+                        title="执行"
+                      />
+                      <div class="button-divider"></div>
+                      <el-button 
+                        type="info" 
+                        size="small" 
+                        text
+                        :disabled="index === 0"
+                        @click="moveToTop(index)"
+                        title="置顶"
+                      >
+                        ⇈
+                      </el-button>
+                      <el-button 
+                        type="info" 
+                        size="small" 
+                        text
+                        :disabled="index === 0"
+                        @click="moveUp(index)"
+                        title="上移"
+                      >
+                        ↑
+                      </el-button>
+                      <el-button 
+                        type="info" 
+                        size="small" 
+                        text
+                        :disabled="index === orchestrationSteps.length - 1"
+                        @click="moveDown(index)"
+                        title="下移"
+                      >
+                        ↓
+                      </el-button>
+                      <el-button 
+                        type="info" 
+                        size="small" 
+                        text
+                        :disabled="index === orchestrationSteps.length - 1"
+                        @click="moveToBottom(index)"
+                        title="置底"
+                      >
+                        ⇊
+                      </el-button>
+                      <div class="button-divider"></div>
+                      <el-button 
+                        type="danger" 
+                        size="small" 
+                        :icon="Delete"
+                        text
+                        @click="removeStep(index)"
+                        title="删除"
+                      />
+                    </div>
                   </div>
-                </div>
-                <div class="step-options">
-                  <div class="option-item">
-                    <span class="option-label">启用</span>
-                    <el-switch 
-                      :model-value="step.enabled ?? true"
-                      @update:model-value="(val: boolean) => updateStepEnabled(step, val)"
-                      size="small"
-                    />
+                  <div class="step-content-row">
+                    <div class="step-icon">
+                      <el-icon v-if="step.type === 'command'"><svg-icon icon-class="custom-cmd" /></el-icon>
+                      <el-icon v-else-if="step.type === 'wait'"><Clock /></el-icon>
+                      <el-icon v-else-if="step.type === 'version'"><DocumentAdd /></el-icon>
+                    </div>
+                    <div class="step-info">
+                      <div class="step-name">{{ getStepLabel(step) }}</div>
+                    </div>
+                    <div class="step-paths">
+                      <div class="step-detail">{{ getStepDetail(step) }}</div>
+                      <div v-if="getStepDirectory(step)" class="step-dir">
+                        <el-icon><Folder /></el-icon>
+                        <span>{{ getStepDirectory(step) }}</span>
+                      </div>
+                    </div>
                   </div>
-                  <el-checkbox 
-                    v-if="step.type === 'command'"
-                    v-model="step.useTerminal" 
-                    label="终端执行"
-                    size="small"
-                  />
-                </div>
-                <div class="action-buttons">
-                  <el-button 
-                    type="success" 
-                    size="small" 
-                    :icon="VideoPlay"
-                    text
-                    @click="executeSingleStep(step)"
-                  >
-                    执行
-                  </el-button>
-                  <el-button 
-                    type="info" 
-                    size="small" 
-                    text
-                    :disabled="index === 0"
-                    @click="moveUp(index)"
-                  >
-                    ↑
-                  </el-button>
-                  <el-button 
-                    type="info" 
-                    size="small" 
-                    text
-                    :disabled="index === orchestrationSteps.length - 1"
-                    @click="moveDown(index)"
-                  >
-                    ↓
-                  </el-button>
-                  <el-button 
-                    type="danger" 
-                    size="small" 
-                    :icon="Delete"
-                    text
-                    @click="removeStep(index)"
-                  />
                 </div>
               </div>
             </div>
@@ -886,7 +930,6 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .workspace-container {
   display: flex;
   gap: 16px;
-  height: 70vh;
   min-height: 600px;
 }
 
@@ -971,6 +1014,11 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   &:hover {
     border-color: #409eff;
     box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+    
+    .item-actions {
+      opacity: 1;
+      visibility: visible;
+    }
   }
   
   &.active {
@@ -1007,6 +1055,9 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
 }
 
 .step-preview {
@@ -1104,8 +1155,8 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 
 .step-item {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   padding: 12px;
   border: 1px solid var(--border-component);
   border-radius: 6px;
@@ -1116,34 +1167,40 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   &:hover {
     border-color: #67c23a;
     background: rgba(103, 194, 58, 0.05);
+    
+    .action-buttons {
+      width: auto;
+      opacity: 1;
+      visibility: visible;
+    }
   }
 
   &.step-type-command {
-    border-left: 3px solid #409eff;
+    background: rgba(64, 158, 255, 0.08);
   }
 
   &.step-type-wait {
-    border-left: 3px solid #e6a23c;
+    background: rgba(230, 162, 60, 0.08);
   }
 
   &.step-type-version {
-    border-left: 3px solid #67c23a;
+    background: rgba(103, 194, 58, 0.08);
   }
 }
 
-.order-number {
+.step-header-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: white;
-  background: linear-gradient(135deg, #409eff, #79bbff);
-  border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-component);
+  gap: 12px;
+}
+
+.step-content-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .step-icon {
@@ -1153,11 +1210,10 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 }
 
 .step-info {
-  flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .step-name {
@@ -1175,29 +1231,44 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   border-radius: 4px;
   display: inline-block;
   word-break: break-all;
-  max-width: 100%;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .step-dir {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #67c23a;
-  margin-top: 6px;
+  color: var(--text-secondary);
   font-family: var(--font-mono);
+  background: var(--bg-code);
+  padding: 4px 8px;
+  border-radius: 4px;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 
   .el-icon {
     font-size: 12px;
+    flex-shrink: 0;
+  }
+  
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
 .step-options {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 16px;
   flex-shrink: 0;
-  margin-right: 12px;
 
   .option-item {
     display: flex;
@@ -1210,13 +1281,90 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       white-space: nowrap;
     }
   }
+  
+  .terminal-toggle-btn {
+    width: 32px;
+    height: 32px;
+    padding: 6px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    
+    .el-icon {
+      color: #909399;
+      transition: all 0.3s ease;
+    }
+    
+    &:hover {
+      background-color: rgba(64, 158, 255, 0.1);
+      
+      .el-icon {
+        color: #409eff;
+      }
+    }
+    
+    &.is-active {
+      background-color: rgba(64, 158, 255, 0.15);
+      
+      .el-icon {
+        color: #409eff;
+      }
+      
+      &:hover {
+        background-color: rgba(64, 158, 255, 0.2);
+      }
+    }
+  }
 }
+
+.step-paths {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 
 .action-buttons {
   display: flex;
+  flex-direction: row;
   gap: 4px;
   align-items: center;
   flex-shrink: 0;
+  opacity: 0;
+  width: 0;
+  visibility: hidden;
+  // transition: all 0.2s ease;
+  background: var(--bg-container);
+  padding: 4px 6px;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-component);
+  backdrop-filter: blur(8px);
+  
+  .el-button {
+    margin: 0 !important;
+    
+    &.el-button--text {
+      padding: 4px 6px;
+      min-width: 24px;
+      height: 24px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    
+    &:not(.el-button--text) {
+      width: 28px;
+      height: 28px;
+    }
+  }
+  
+  .button-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border-component);
+    margin: 0 2px;
+  }
 }
 
 // 添加步骤对话框样式

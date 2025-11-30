@@ -87,7 +87,10 @@ async function saveCommand() {
         resetForm()
       }
     } else {
-      // 新增命令
+      // 新增命令 - 如果执行目录为空，自动填充当前目录
+      if (!newCommand.value.directory || !newCommand.value.directory.trim()) {
+        newCommand.value.directory = configStore.currentDirectory || ''
+      }
       const success = await configStore.saveCustomCommand(newCommand.value)
       if (success) {
         resetForm()

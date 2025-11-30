@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue';
-import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position } from '@element-plus/icons-vue';
+import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
@@ -1191,13 +1191,17 @@ onUnmounted(() => {
           </el-tooltip>
         </div>
         
-        <div class="terminal-switch">
-          <span class="switch-label">{{ $t('@CF05E:使用终端执行') }}</span>
-          <el-switch
-            v-model="useTerminal"
-            size="small"
-          />
-        </div>
+        <el-tooltip :content="$t('@CF05E:使用终端执行')" placement="bottom">
+          <el-button
+            :class="['terminal-toggle-btn', { 'is-active': useTerminal }]"
+            text
+            @click="useTerminal = !useTerminal"
+          >
+            <el-icon :size="20">
+              <Monitor />
+            </el-icon>
+          </el-button>
+        </el-tooltip>
         <el-tooltip :content="$t('@CF05E:自定义命令管理')" placement="bottom">
           <el-button
             text
@@ -1418,27 +1422,37 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.terminal-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  background: rgba(64, 158, 255, 0.05);
+.terminal-toggle-btn {
+  width: 36px;
+  height: 36px;
+  padding: 8px;
   border-radius: 6px;
-  border: 1px solid rgba(64, 158, 255, 0.2);
   transition: all 0.3s ease;
   
-  &:hover {
-    background: rgba(64, 158, 255, 0.1);
-    border-color: rgba(64, 158, 255, 0.3);
+  .el-icon {
+    color: #909399;
+    transition: all 0.3s ease;
   }
-}
-
-.switch-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 500;
-  user-select: none;
+  
+  &:hover {
+    background-color: rgba(64, 158, 255, 0.1);
+    
+    .el-icon {
+      color: #409eff;
+    }
+  }
+  
+  &.is-active {
+    background-color: rgba(64, 158, 255, 0.15);
+    
+    .el-icon {
+      color: #409eff;
+    }
+    
+    &:hover {
+      background-color: rgba(64, 158, 255, 0.2);
+    }
+  }
 }
 
 .execution-controls {
