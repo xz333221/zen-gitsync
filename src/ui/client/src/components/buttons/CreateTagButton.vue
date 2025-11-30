@@ -250,7 +250,7 @@ const tagTypeDescription = computed(() => {
   background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   border-radius: 10px;
   color: white;
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   flex-shrink: 0;
   box-shadow: var(--shadow-md);
 }
@@ -261,7 +261,7 @@ const tagTypeDescription = computed(() => {
 
 .tag-info-card .info-content h4 {
   margin: 0 0 6px 0;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   color: #14532d;
   line-height: 1.2;
@@ -269,7 +269,7 @@ const tagTypeDescription = computed(() => {
 
 .tag-info-card .info-content p {
   margin: 0;
-  font-size: 14px;
+  
   color: #166534;
   line-height: 1.4;
 }
@@ -287,7 +287,7 @@ const tagTypeDescription = computed(() => {
 .tag-form :deep(.el-form-item__label) {
   font-weight: 600;
   color: var(--color-text-title);
-  font-size: 14px;
+  
   margin-bottom: var(--spacing-base);
 }
 
@@ -313,7 +313,7 @@ const tagTypeDescription = computed(() => {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
     transition: all 0.3s ease;
-    font-size: 14px;
+    
     line-height: 1.5;
     
     &:hover {
@@ -346,20 +346,20 @@ const tagTypeDescription = computed(() => {
   align-items: flex-start;
   gap: 6px;
   margin-top: var(--spacing-base);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--color-gray-500);
   line-height: 1.4;
   
   .el-icon {
     color: var(--color-gray-400);
-    font-size: 14px;
+    
     flex-shrink: 0;
     margin-top: 1px;
   }
 }
 
 .commit-prefix {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--color-gray-500);
   font-family: monospace;
 }

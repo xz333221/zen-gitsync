@@ -261,7 +261,7 @@ defineExpose({
   }
   
   :deep(.el-dialog__title) {
-    font-size: 16px;
+    font-size: var(--font-size-md);
     font-weight: 600;
     letter-spacing: 0.5px;
   }
@@ -459,29 +459,29 @@ defineExpose({
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 14px;
+  
   font-weight: 600;
   transition: all 0.3s ease;
   
   .icon-finish {
     color: var(--color-success);
-    font-size: 16px;
+    font-size: var(--font-size-md);
   }
   
   .icon-error {
     color: var(--color-danger);
-    font-size: 16px;
+    font-size: var(--font-size-md);
   }
   
   .icon-process {
     color: var(--color-primary);
-    font-size: 16px;
+    font-size: var(--font-size-md);
     animation: rotate 1s linear infinite;
   }
   
   .icon-wait {
     color: rgba(128, 128, 128, 1);
-    font-size: 16px;
+    font-size: var(--font-size-md);
     animation: rotate 2s linear infinite;
   }
 }
@@ -503,14 +503,14 @@ defineExpose({
 }
 
 .stage-label {
-  font-size: 14px;
+  
   font-weight: 500;
   color: var(--text-primary);
   letter-spacing: 0.2px;
 }
 
 .stage-percent {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   color: var(--color-primary);
   min-width: 42px;
@@ -555,7 +555,7 @@ defineExpose({
 
 .error-content {
   color: #c45656;
-  font-size: 14px;
+  
   line-height: 1.6;
   word-break: break-word;
 }
@@ -569,7 +569,7 @@ defineExpose({
 .messages-title {
   font-weight: 600;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   letter-spacing: 0.3px;
   opacity: 0.85;
 }

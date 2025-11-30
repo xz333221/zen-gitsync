@@ -834,7 +834,7 @@ git config --global user.email "your.email@example.com"</pre
   font-weight: 500;
   transition: all 0.3s ease;
   padding: 6px var(--spacing-base);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .header-actions :deep(.el-button:hover) {
@@ -991,7 +991,7 @@ git config --global user.email "your.email@example.com"</pre
   }
 
   .el-input__inner {
-    font-size: 15px;
+    
     font-weight: 500;
     height: 34px;
   }
@@ -1024,7 +1024,7 @@ git config --global user.email "your.email@example.com"</pre
   }
 
   .el-select__inner {
-    font-size: 14px;
+    
     font-weight: 500;
   }
 
@@ -1058,7 +1058,7 @@ git config --global user.email "your.email@example.com"</pre
   }
 
   .el-input__inner {
-    font-size: 14px;
+    
     font-weight: 500;
   }
 
@@ -1085,7 +1085,7 @@ git config --global user.email "your.email@example.com"</pre
     background: var(--bg-container);
     border: 2px solid var(--color-warning);
     box-shadow: var(--shadow-sm);
-    font-size: 15px;
+    
     font-weight: 500;
     transition: all 0.3s ease;
   }
@@ -1137,7 +1137,7 @@ git config --global user.email "your.email@example.com"</pre
   cursor: pointer;
   transition: all 0.3s ease;
   user-select: none;
-  font-size: 14px;
+  
 }
 
 .advanced-options-toggle:hover {
@@ -1148,7 +1148,7 @@ git config --global user.email "your.email@example.com"</pre
 .toggle-icon {
   margin-left: var(--spacing-base);
   transition: transform 0.3s ease;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .toggle-icon.is-active {

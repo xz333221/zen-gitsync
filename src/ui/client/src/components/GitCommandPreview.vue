@@ -98,7 +98,7 @@ async function copyCommand() {
     }
     
     .preview-title {
-      font-size: 12px;
+      font-size: var(--font-size-sm);
       color: var(--color-text-title);
       font-weight: 600;
       white-space: nowrap;
@@ -110,7 +110,7 @@ async function copyCommand() {
       
       &::before {
         content: '⚡';
-        font-size: 10px;
+        font-size: var(--font-size-xs);
         opacity: 0.8;
       }
     }
@@ -124,7 +124,7 @@ async function copyCommand() {
       padding: 6px var(--spacing-base);
       margin: 0;
       font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
-      font-size: 12px;
+      font-size: var(--font-size-sm);
       font-weight: 500;
       line-height: 1.3;
       overflow-x: auto;
@@ -212,7 +212,7 @@ async function copyCommand() {
       }
       
       .btn-icon {
-        font-size: 14px;
+        
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 1;
         position: relative;

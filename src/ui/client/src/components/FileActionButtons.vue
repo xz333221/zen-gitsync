@@ -157,7 +157,7 @@ function handleManageLockedFiles(event: Event) {
           <el-icon v-if="typeof action.icon !== 'string'" size="16">
             <component :is="action.icon" />
           </el-icon>
-          <span v-else style="font-size: 16px; font-weight: bold;">{{ action.icon }}</span>
+          <span v-else style="font-size: var(--font-size-md); font-weight: bold;">{{ action.icon }}</span>
         </el-button>
       </el-tooltip>
     </template>

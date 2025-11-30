@@ -62,7 +62,7 @@ const handleLanguageChange = (locale: SupportLocale) => {
 }
 
 .language-icon {
-  font-size: 18px;
+  font-size: var(--font-size-lg);
 }
 
 .language-text {

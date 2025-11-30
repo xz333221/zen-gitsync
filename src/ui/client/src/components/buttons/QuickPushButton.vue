@@ -185,7 +185,7 @@ function handleProgressComplete(_success: boolean) {
       justify-content: center;
       padding-left: 10px;
       .one-push-desc{
-        font-size: 12px;
+        font-size: var(--font-size-sm);
         padding-top: var(--spacing-sm);
       }
     }

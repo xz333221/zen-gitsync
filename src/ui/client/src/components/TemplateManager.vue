@@ -343,7 +343,7 @@ defineExpose({
 }
 
 .template-input {
-  font-size: 14px;
+  
   flex: 1;
   height: 34px;
 }
@@ -365,7 +365,7 @@ defineExpose({
 
 .template-list h3 {
   margin: 0 0 var(--spacing-lg) 0;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   
 }
@@ -408,7 +408,7 @@ defineExpose({
 
 .template-content {
   flex: 1;
-  font-size: 14px;
+  
   color: var(--text-secondary);
   word-break: break-all;
   margin-right: var(--spacing-md);
@@ -456,7 +456,7 @@ defineExpose({
 
 .current-default-message h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   
 }
@@ -466,7 +466,7 @@ defineExpose({
 }
 
 .default-message-content {
-  font-size: 14px;
+  
   color: var(--text-secondary);
   word-break: break-all;
 }
@@ -479,13 +479,13 @@ defineExpose({
 
 .message-help-text h4 {
   margin: 0 0 var(--spacing-base) 0;
-  font-size: 14px;
+  
   
 }
 
 .message-help-text p {
   margin: 0 0 var(--spacing-base) 0;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   line-height: 1.5;
 }

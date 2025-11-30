@@ -559,7 +559,7 @@ onUnmounted(() => {
   padding: var(--spacing-base);
   gap: 6px;
   border-radius: var(--radius-md);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -567,7 +567,7 @@ onUnmounted(() => {
 }
 
 .enhanced-btn .btn-text {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   white-space: nowrap;
   z-index: 1;
@@ -575,7 +575,7 @@ onUnmounted(() => {
 }
 
 .enhanced-btn .btn-icon {
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   z-index: 1;
   position: relative;
 }
@@ -674,7 +674,7 @@ onUnmounted(() => {
 
 .item-copy-button .btn-icon,
 .output-copy-button .btn-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 
 .item-copy-button .btn-text,
@@ -707,7 +707,7 @@ onUnmounted(() => {
 }
 
 .expand-button .btn-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   transition: transform 0.3s ease;
 }
 
@@ -766,7 +766,7 @@ onUnmounted(() => {
 }
 
 .socket-status { 
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   margin-right: auto;
   font-weight: 500;
 }
@@ -787,7 +787,7 @@ onUnmounted(() => {
 }
 
 .loading-text {
-  font-size: 14px;
+  
   color: var(--text-secondary);
 }
 
@@ -855,7 +855,7 @@ onUnmounted(() => {
 
 .command-text code {
   font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   
   white-space: nowrap;
   overflow: hidden;
@@ -872,7 +872,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-lg);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
 }
 
@@ -935,7 +935,7 @@ onUnmounted(() => {
 
 .output-header h4 {
   margin: 0;
-  font-size: 14px;
+  
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -949,7 +949,7 @@ onUnmounted(() => {
   padding: 10px;
   border-radius: var(--radius-base);
   font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;

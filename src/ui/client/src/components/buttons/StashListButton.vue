@@ -423,14 +423,14 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   }
   
   .common-dialog__title {
-    font-size: 18px;
+    font-size: var(--font-size-lg);
     font-weight: 600;
     color: white;
   }
   
   .common-dialog__close {
     color: white;
-    font-size: 18px;
+    font-size: var(--font-size-lg);
     
     &:hover {
       color: var(--border-card);
@@ -468,16 +468,16 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 }
 
 .stat-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 
 .stat-number {
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
 }
 
 .stat-label {
-  font-size: 14px;
+  
   opacity: 0.9;
 }
 
@@ -565,13 +565,13 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 }
 
 .badge-icon {
-  font-size: 14px;
+  
   color: var(--text-tertiary);
 }
 
 .stash-id-text {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   background: var(--bg-panel);
   color: var(--text-secondary);
   padding: 3px var(--spacing-base);
@@ -592,7 +592,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 
 .description-text {
   margin: 0;
-  font-size: 14px;
+  
   line-height: 1.4;
   word-break: break-word;
   font-weight: 500;
@@ -619,7 +619,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   transition: all 0.3s ease;
   min-width: 60px;
   padding: 6px var(--spacing-md);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   
   &:hover {
     transform: translateY(-1px);
@@ -668,7 +668,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 }
 
 .info-label {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -676,7 +676,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 
 .stash-id-value {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   background-color: var(--border-component);
   color: var(--color-text);
   padding: var(--spacing-xs) 6px;
@@ -689,7 +689,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 }
 
 .stash-description-value {
-  font-size: 14px;
+  
   font-weight: 400;
   word-break: break-all;
 }

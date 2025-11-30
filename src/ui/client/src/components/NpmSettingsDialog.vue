@@ -454,19 +454,19 @@ function handleClose() {
 }
 
 .info-label {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .info-value {
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--color-text);
 }
 
 .info-path {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-family: monospace;
   margin-left: auto;
@@ -500,13 +500,13 @@ function handleClose() {
 }
 
 .section-title {
-  font-size: 15px;
+  
   font-weight: 600;
   color: var(--color-text);
 }
 
 .script-count {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   background: var(--bg-input);
   padding: var(--spacing-xs) var(--spacing-base);
@@ -563,12 +563,12 @@ function handleClose() {
 }
 
 .script-icon {
-  font-size: 14px;
+  
   color: var(--color-primary);
 }
 
 .name-text {
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--color-text);
   font-family: monospace;
@@ -581,7 +581,7 @@ function handleClose() {
   border: 1px solid var(--border-card);
   
   code {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-secondary);
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     word-break: break-all;
@@ -656,13 +656,13 @@ function handleClose() {
 }
 
 .version-label {
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--color-text);
 }
 
 .version-value {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   font-weight: 700;
   color: #667eea;
   font-family: monospace;
@@ -674,7 +674,7 @@ function handleClose() {
 
 .option-label {
   display: block;
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--color-text);
   margin-bottom: var(--spacing-md);
@@ -704,13 +704,13 @@ function handleClose() {
 }
 
 .radio-label {
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--color-text);
 }
 
 .radio-desc {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-family: monospace;
 }
@@ -736,7 +736,7 @@ function handleClose() {
 }
 
 .form-label {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   flex-shrink: 0;
   color: var(--color-text);
@@ -746,7 +746,7 @@ function handleClose() {
   margin-top: var(--spacing-base);
   width: 100%;
   height: 36px;
-  font-size: 14px;
+  
   font-weight: 600;
 }
 
@@ -758,7 +758,7 @@ function handleClose() {
   margin-top: 6px;
   padding: 6px 10px;
   border-radius: var(--radius-base);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .error-tip {
@@ -768,7 +768,7 @@ function handleClose() {
 }
 
 .error-tip .el-icon {
-  font-size: 14px;
+  
   flex-shrink: 0;
 }
 
@@ -779,7 +779,7 @@ function handleClose() {
 }
 
 .success-tip .el-icon {
-  font-size: 14px;
+  
   flex-shrink: 0;
 }
 

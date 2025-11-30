@@ -304,7 +304,7 @@ const getFileIcon = (filePath: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   line-height: 1;
   color: var(--text-secondary);
@@ -319,7 +319,7 @@ const getFileIcon = (filePath: string) => {
 
 .file-type-icon {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   line-height: 1;
   margin-right: var(--spacing-sm);
 }

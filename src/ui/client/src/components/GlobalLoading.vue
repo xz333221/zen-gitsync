@@ -110,7 +110,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .loading-text {
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   letter-spacing: 1px;

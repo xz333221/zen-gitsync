@@ -1239,7 +1239,7 @@ function toggleFullscreen() {
 :deep(.el-table__header) th {
   font-weight: 600;
   height: 36px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }
 
 :deep(.el-table__row) {
@@ -1249,7 +1249,7 @@ function toggleFullscreen() {
 
 :deep(.el-table__cell) {
   padding: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .branch-container {
@@ -1264,7 +1264,7 @@ function toggleFullscreen() {
   margin-right: 0;
   border-radius: var(--radius-sm);
   transition: all 0.2s ease;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   padding: 0 var(--spacing-sm);
   height: 14px;
   line-height: 14px;
@@ -1277,13 +1277,13 @@ function toggleFullscreen() {
 
 .commit-count {
   margin-bottom: var(--spacing-md);
-  font-size: 14px;
+  
   color: var(--text-secondary);
   text-align: right;
 }
 
 .scale-info {
-  font-size: 14px;
+  
   color: var(--text-secondary);
   padding: var(--spacing-sm) 10px;
   border-radius: var(--radius-base);
@@ -1298,7 +1298,7 @@ function toggleFullscreen() {
   display: inline-block;
   max-width: 100%;
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .commit-hash {
@@ -1364,21 +1364,21 @@ function toggleFullscreen() {
 .info-label {
   font-weight: 600;
   color: var(--color-warning);
-  font-size: 14px;
+  
   flex-shrink: 0;
   white-space: nowrap;
 }
 
 .info-value {
   color: var(--text-primary);
-  font-size: 14px;
+  
   font-weight: 500;
   white-space: nowrap;
 }
 
 .info-message {
   color: var(--text-primary);
-  font-size: 14px;
+  
   line-height: 1.6;
   word-break: break-word;
   flex: 1;
@@ -1476,7 +1476,7 @@ function toggleFullscreen() {
 
 .compact-label {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   margin-right: 6px;
   white-space: nowrap;
   font-weight: bold;
@@ -1567,7 +1567,7 @@ function toggleFullscreen() {
 }
 
 .pagination-info {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--text-tertiary);
   margin-bottom: var(--spacing-sm);
 }
@@ -1599,7 +1599,7 @@ function toggleFullscreen() {
 .context-menu-item {
   padding: 10px var(--spacing-lg);
   cursor: pointer;
-  font-size: 14px;
+  
   display: flex;
   align-items: center;
   transition: all 0.2s ease;
@@ -1613,7 +1613,7 @@ function toggleFullscreen() {
 
 .context-menu-item i {
   margin-right: var(--spacing-sm);
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 
 /* 添加全屏模式样式 */

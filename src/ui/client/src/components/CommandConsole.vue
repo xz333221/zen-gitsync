@@ -1405,12 +1405,12 @@ onUnmounted(() => {
 }
 
 .title-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: var(--color-primary);
 }
 
 .console-title {
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--text-title);
   letter-spacing: 0.3px;
@@ -1488,7 +1488,7 @@ onUnmounted(() => {
 
 .toggle-console-btn {
   padding: var(--spacing-sm) var(--spacing-base);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   transition: all 0.3s ease;
   
@@ -1499,7 +1499,7 @@ onUnmounted(() => {
   
   .el-icon {
     transition: transform 0.3s ease;
-    font-size: 16px;
+    font-size: var(--font-size-md);
   }
   
   .rotate-icon {
@@ -1545,7 +1545,7 @@ onUnmounted(() => {
 
 .prompt {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-success);
   /* background: linear-gradient(135deg, rgba(103, 194, 58, 0.1), rgba(103, 194, 58, 0.05)); */
@@ -1574,7 +1574,7 @@ onUnmounted(() => {
     border: none;
     padding: var(--spacing-sm) var(--spacing-base);
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--font-size-sm);
   }
   
   :deep(.el-input__inner) {
@@ -1624,7 +1624,7 @@ onUnmounted(() => {
 
 .stdin-icon {
   color: var(--color-success);
-  font-size: 16px;
+  font-size: var(--font-size-md);
   flex-shrink: 0;
 }
 
@@ -1637,7 +1637,7 @@ onUnmounted(() => {
     border: none;
     padding: var(--spacing-sm) var(--spacing-base);
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--font-size-sm);
   }
   
   :deep(.el-input__inner) {
@@ -1715,7 +1715,7 @@ onUnmounted(() => {
 
 .cmd-line {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -1739,7 +1739,7 @@ onUnmounted(() => {
 }
 
 .running-icon {
-  font-size: 14px;
+  
   color: var(--color-primary);
   flex-shrink: 0;
   margin-left: var(--spacing-sm);
@@ -1747,7 +1747,7 @@ onUnmounted(() => {
 
 .ts {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: normal;
   /* background: var(--bg-panel); */
   padding: 0 var(--spacing-sm);
@@ -1770,7 +1770,7 @@ onUnmounted(() => {
   
   .el-icon {
     transition: transform 0.3s ease;
-    font-size: 14px;
+    
   }
   
   .rotate-icon {
@@ -1805,7 +1805,7 @@ pre.stdout, pre.stderr {
   margin: 0;
   padding: var(--spacing-base);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;

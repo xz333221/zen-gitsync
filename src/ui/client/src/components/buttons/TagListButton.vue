@@ -421,14 +421,14 @@ function formatDate(dateString: string): string {
   }
   
   .common-dialog__title {
-    font-size: 18px;
+    font-size: var(--font-size-lg);
     font-weight: 600;
     color: white;
   }
   
   .common-dialog__close {
     color: white;
-    font-size: 18px;
+    font-size: var(--font-size-lg);
     
     &:hover {
       color: var(--border-card);
@@ -466,16 +466,16 @@ function formatDate(dateString: string): string {
 }
 
 .stat-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 
 .stat-number {
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
 }
 
 .stat-label {
-  font-size: 14px;
+  
   opacity: 0.9;
 }
 
@@ -553,13 +553,13 @@ function formatDate(dateString: string): string {
 }
 
 .badge-icon {
-  font-size: 14px;
+  
   color: #22c55e;
 }
 
 .tag-name-text {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--color-text);
 }
@@ -572,7 +572,7 @@ function formatDate(dateString: string): string {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
@@ -591,7 +591,7 @@ function formatDate(dateString: string): string {
 }
 
 .tag-message {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   line-height: 1.4;
   padding: 6px var(--spacing-base);
@@ -618,7 +618,7 @@ function formatDate(dateString: string): string {
   transition: all 0.3s ease;
   min-width: 60px;
   padding: 6px var(--spacing-md);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   
   &:hover {
     transform: translateY(-1px);
@@ -659,7 +659,7 @@ function formatDate(dateString: string): string {
 }
 
 .detail-label {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -667,7 +667,7 @@ function formatDate(dateString: string): string {
 }
 
 .detail-value {
-  font-size: 14px;
+  
   color: var(--color-text);
   
   &:is(code) {
@@ -687,7 +687,7 @@ function formatDate(dateString: string): string {
   border: 1px solid var(--border-card);
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 14px;
+  
   line-height: 1.6;
 }
 </style>

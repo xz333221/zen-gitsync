@@ -339,13 +339,13 @@ async function handleSave() {
   align-items: center;
   gap: var(--spacing-base);
   margin-bottom: var(--spacing-lg);
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--color-text-title);
 }
 
 .section-title .title-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: var(--color-primary);
 }
 
@@ -363,7 +363,7 @@ async function handleSave() {
 }
 
 .setting-label {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--el-text-color-regular);
   text-align: right;
@@ -372,7 +372,7 @@ async function handleSave() {
 
 .setting-label .qmark {
   margin-left: 6px;
-  font-size: 14px;
+  
   color: var(--el-text-color-secondary);
   vertical-align: -1px;
   cursor: help;
@@ -425,13 +425,13 @@ html.dark .label-icon {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  font-size: 14px;
+  
   font-weight: 500;
   color: var(--color-text-title);
 }
 
 .label-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: var(--color-primary);
 }
 
@@ -454,7 +454,7 @@ html.dark .label-icon {
 }
 
 :deep(.modern-input .el-input__inner) {
-  font-size: 14px;
+  
   color: var(--text-title);
   font-weight: 400;
 }
@@ -508,7 +508,7 @@ html.dark .label-icon {
 }
 
 .info-icon .el-icon {
-  font-size: 20px;
+  font-size: var(--font-size-xl);
 }
 
 .info-content {
@@ -517,7 +517,7 @@ html.dark .label-icon {
 
 .info-title {
   margin: 0 0 6px 0;
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--color-text-title);
   letter-spacing: 0.3px;
@@ -525,7 +525,7 @@ html.dark .label-icon {
 
 .info-desc {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--el-text-color-regular);
   line-height: 1.6;
 }

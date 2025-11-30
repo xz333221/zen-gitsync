@@ -96,14 +96,14 @@ withDefaults(defineProps<Props>(), {
 }
 
 .success-text {
-  font-size: 24px;
+  font-size: var(--font-size-3xl);
   font-weight: 700;
   
   margin: 0;
 }
 
 .success-description {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   margin: 0;
   line-height: 1.5;

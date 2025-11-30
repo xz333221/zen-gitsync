@@ -349,18 +349,18 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
       display: flex;
       align-items: center;
       gap: var(--spacing-base);
-      font-size: 14px;
+      
       font-weight: 500;
       color: var(--color-warning);
       
       .warning-icon {
-        font-size: 18px;
+        font-size: var(--font-size-lg);
       }
     }
     
     .progress-hint {
       margin-top: var(--spacing-base);
-      font-size: 12px;
+      font-size: var(--font-size-sm);
       color: var(--text-secondary);
       
       &.success {
@@ -400,7 +400,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
         color: white;
         padding: var(--spacing-xs) var(--spacing-base);
         border-radius: var(--radius-base);
-        font-size: 12px;
+        font-size: var(--font-size-sm);
         font-weight: 500;
       }
     }
@@ -412,7 +412,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
         display: flex;
         padding: var(--spacing-xs) var(--spacing-base);
         font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        font-size: 13px;
+        font-size: var(--font-size-sm);
         line-height: 1.6;
         
         .line-number {
@@ -449,7 +449,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
         .column-header {
           padding: var(--spacing-base) var(--spacing-md);
           font-weight: 600;
-          font-size: 13px;
+          font-size: var(--font-size-sm);
           background-color: var(--bg-elevated);
           border-bottom: 1px solid var(--border-color);
           display: flex;
@@ -470,7 +470,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
             align-items: center;
             padding: var(--spacing-xs) var(--spacing-sm);
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 13px;
+            font-size: var(--font-size-sm);
             line-height: 1.6;
             position: relative;
             transition: background-color 0.2s;
@@ -490,7 +490,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
               text-align: right;
               padding-right: var(--spacing-md);
               user-select: none;
-              font-size: 12px;
+              font-size: var(--font-size-sm);
             }
             
             .line-content {
@@ -586,7 +586,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
               
               p {
                 margin: var(--spacing-base) 0;
-                font-size: 13px;
+                font-size: var(--font-size-sm);
                 line-height: 1.6;
                 
                 strong {
@@ -607,7 +607,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
       padding: var(--spacing-base) var(--spacing-lg);
       background-color: var(--color-success-bg);
       color: var(--color-success);
-      font-size: 12px;
+      font-size: var(--font-size-sm);
       font-weight: 500;
       text-align: center;
       border-top: 1px solid var(--color-success-border);
@@ -631,7 +631,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
         .resolved-label {
           font-weight: 600;
           color: var(--color-success);
-          font-size: 14px;
+          
         }
       }
       
@@ -640,7 +640,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
           display: flex;
           padding: var(--spacing-xs) var(--spacing-base);
           font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-          font-size: 13px;
+          font-size: var(--font-size-sm);
           line-height: 1.6;
           
           &.final-line {

@@ -725,7 +725,7 @@ defineExpose({
               :icon="Refresh"
               @click="refreshStatus"
               :loading="isRefreshing"
-              style="font-size: 20px;"
+              style="font-size: var(--font-size-xl);"
             />
           </el-tooltip>
         </div>
@@ -1156,7 +1156,7 @@ defineExpose({
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid var(--border-card);
-  font-size: 14px;
+  
   line-height: 1.5;
   width: 100%;
   box-sizing: border-box;
@@ -1236,7 +1236,7 @@ defineExpose({
     }
     
     .el-icon {
-      font-size: 16px;
+      font-size: var(--font-size-md);
     }
   }
 }
@@ -1304,14 +1304,14 @@ defineExpose({
 }
 
 .empty-text {
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: var(--spacing-base);
 }
 
 .empty-subtext {
-  font-size: 14px;
+  
   color: var(--text-tertiary);
   margin-bottom: var(--spacing-base);
 }
@@ -1388,7 +1388,7 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }
 
 /* 按钮悬停效果 */
@@ -1413,7 +1413,7 @@ defineExpose({
 }
 
 .card-content :deep(.el-loading-text) {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: var(--color-primary);
   font-weight: bold;
   margin-top: var(--spacing-base);
@@ -1443,7 +1443,7 @@ defineExpose({
 }
 
 .empty-tip {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: #999;
 }
 
@@ -1486,17 +1486,17 @@ defineExpose({
 
 .description-icon {
   color: #1890ff;
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 
 .description-title {
   font-weight: 600;
   color: var(--color-text-title);
-  font-size: 14px;
+  
 }
 
 .description-content {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--el-text-color-regular);
 }
@@ -1552,13 +1552,13 @@ defineExpose({
 }
 
 .upstream-tip .tip-icon {
-  font-size: 20px;
+  font-size: var(--font-size-xl);
   color: var(--color-primary);
   flex-shrink: 0;
 }
 
 .upstream-tip .tip-title {
-  font-size: 15px;
+  
   font-weight: 600;
   color: var(--color-text-title);
   letter-spacing: 0.3px;
@@ -1569,7 +1569,7 @@ defineExpose({
 }
 
 .upstream-tip .tip-text {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--el-text-color-regular);
   margin-bottom: 14px;

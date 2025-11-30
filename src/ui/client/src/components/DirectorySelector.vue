@@ -525,7 +525,7 @@ async function selectDirectory(dirPath: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 22px;
+  font-size: var(--font-size-2xl);
   font-weight: 600;
   font-family: 'Arial', sans-serif;
   flex: 1;
@@ -541,13 +541,13 @@ async function selectDirectory(dirPath: string) {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  font-size: 14px;
+  
   font-weight: 500;
   color: var(--color-text-title);
 }
 
 .label-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: var(--color-gray-500);
 }
 
@@ -571,7 +571,7 @@ async function selectDirectory(dirPath: string) {
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
   color: white;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -613,14 +613,14 @@ async function selectDirectory(dirPath: string) {
 }
 
 .dir-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: #3498db;
   flex-shrink: 0;
   margin-right: 0;
 }
 
 .dir-path {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--color-text-title);
   font-family: "Courier New", monospace;
   word-break: break-all;
@@ -707,7 +707,7 @@ async function selectDirectory(dirPath: string) {
 .dir-name {
   display: flex;
   align-items: center;
-  font-size: 14px;
+  
   line-height: 1.4;
 }
 .folder-icon {
@@ -750,7 +750,7 @@ async function selectDirectory(dirPath: string) {
   .el-message-box__title {
     color: var(--color-primary);
     font-weight: 500;
-    font-size: 18px;
+    font-size: var(--font-size-lg);
   }
 
   .el-message-box__headerbtn {
@@ -778,7 +778,7 @@ async function selectDirectory(dirPath: string) {
     .el-message-box__close {
       color: var(--text-secondary);
       font-weight: bold;
-      font-size: 16px;
+      font-size: var(--font-size-md);
     }
   }
 
@@ -878,7 +878,7 @@ async function selectDirectory(dirPath: string) {
     .dir-name {
       display: flex;
       align-items: center;
-      font-size: 14px;
+      
       line-height: 1.4;
     }
 

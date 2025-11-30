@@ -361,7 +361,7 @@ defineExpose({
 }
 
 .group-title {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: var(--spacing-base);

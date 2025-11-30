@@ -472,7 +472,7 @@ defineExpose({
 
   label {
     display: block;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--text-title);
     flex-shrink: 0;
@@ -513,7 +513,7 @@ defineExpose({
 
   h3 {
     margin: 0 0 var(--spacing-lg) 0;
-    font-size: 16px;
+    font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--text-title);
     border-bottom: 1px solid var(--border-component);
@@ -546,26 +546,26 @@ defineExpose({
 }
 
 .name-text {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-title);
 }
 
 .description-text {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-style: italic;
 }
 
 .directory-text {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   word-break: break-all;
 }
 
 .command-text {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-title);
   background: var(--bg-code);
   padding: var(--spacing-sm) var(--spacing-base);
@@ -677,7 +677,7 @@ defineExpose({
     .dir-name {
       display: flex;
       align-items: center;
-      font-size: 14px;
+      
       line-height: 1.4;
     }
 

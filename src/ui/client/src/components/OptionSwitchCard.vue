@@ -80,7 +80,7 @@ function onChange(val: boolean) {
   justify-content: center;
   background: var(--color-primary);
   color: white;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   flex-shrink: 0;
 }
 
@@ -91,7 +91,7 @@ function onChange(val: boolean) {
 
 .option-title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   
   line-height: 1.2;

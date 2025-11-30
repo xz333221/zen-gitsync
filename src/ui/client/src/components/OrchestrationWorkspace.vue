@@ -970,7 +970,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   
   h3, h4 {
     margin: 0;
-    font-size: 14px;
+    
     font-weight: 600;
     color: var(--text-title);
     display: flex;
@@ -978,7 +978,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     gap: var(--spacing-base);
 
     .el-icon {
-      font-size: 16px;
+      font-size: var(--font-size-md);
       color: var(--color-primary);
     }
   }
@@ -1042,7 +1042,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   
   h4 {
     margin: 0;
-    font-size: 14px;
+    
     font-weight: 600;
     color: var(--text-title);
     flex: 1;
@@ -1073,10 +1073,10 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   align-items: center;
   gap: var(--spacing-sm);
   cursor: context-menu;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   
   .el-icon {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
   }
 }
 
@@ -1113,7 +1113,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   
   h4 {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--text-title);
     display: flex;
@@ -1121,7 +1121,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     gap: var(--spacing-base);
 
     .el-icon {
-      font-size: 14px;
+      
       color: var(--color-primary);
     }
   }
@@ -1129,7 +1129,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 
 .step-count {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: normal;
 }
 
@@ -1208,7 +1208,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 
 .step-icon {
   flex-shrink: 0;
-  font-size: 20px;
+  font-size: var(--font-size-xl);
   color: var(--color-primary);
 }
 
@@ -1220,7 +1220,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 }
 
 .step-name {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-title);
 }
@@ -1256,7 +1256,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   white-space: nowrap;
 
   .el-icon {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     flex-shrink: 0;
   }
   
@@ -1279,7 +1279,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     gap: var(--spacing-base);
 
     .option-label {
-      font-size: 12px;
+      font-size: var(--font-size-sm);
       color: var(--text-secondary);
       white-space: nowrap;
     }
@@ -1354,7 +1354,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       padding: var(--spacing-sm) 6px;
       min-width: 24px;
       height: 24px;
-      font-size: 14px;
+      
       font-weight: bold;
     }
     
@@ -1398,7 +1398,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   }
 
   .step-desc {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-secondary);
     margin-top: var(--spacing-xs);
     font-style: italic;
@@ -1424,7 +1424,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     margin-top: var(--spacing-sm);
 
     .el-icon {
-      font-size: 12px;
+      font-size: var(--font-size-sm);
     }
 
     span {
@@ -1440,7 +1440,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   padding: var(--spacing-xl);
 
   span {
-    font-size: 14px;
+    
     color: var(--text-title);
   }
 }
@@ -1457,7 +1457,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     gap: var(--spacing-base);
 
     label {
-      font-size: 13px;
+      font-size: var(--font-size-sm);
       font-weight: 500;
       color: var(--text-title);
     }

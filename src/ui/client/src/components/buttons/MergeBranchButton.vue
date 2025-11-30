@@ -321,7 +321,7 @@ async function handleMergeBranch() {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   border-radius: 10px;
   color: white;
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   flex-shrink: 0;
   box-shadow: var(--shadow-md);
 }
@@ -332,7 +332,7 @@ async function handleMergeBranch() {
 
 .merge-info-card .info-content h4 {
   margin: 0 0 6px 0;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   color: #1e3a8a;
   line-height: 1.2;
@@ -340,7 +340,7 @@ async function handleMergeBranch() {
 
 .merge-info-card .info-content p {
   margin: 0;
-  font-size: 14px;
+  
   color: #1e40af;
   line-height: 1.4;
 }
@@ -367,7 +367,7 @@ async function handleMergeBranch() {
 .merge-form :deep(.el-form-item__label) {
   font-weight: 600;
   color: var(--color-text-title);
-  font-size: 14px;
+  
   margin-bottom: var(--spacing-base);
 }
 
@@ -417,14 +417,14 @@ async function handleMergeBranch() {
   align-items: center;
   gap: var(--spacing-base);
   margin: 0 0 var(--spacing-md) 0;
-  font-size: 15px;
+  
   font-weight: 600;
   color: var(--color-text-title);
 }
 
 .options-title :deep(.el-icon) {
   color: var(--color-gray-500);
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 
 .options-horizontal {
@@ -441,7 +441,7 @@ async function handleMergeBranch() {
   .el-checkbox__label {
     font-weight: 500;
     color: var(--color-text-title);
-    font-size: 14px;
+    
   }
 }
 

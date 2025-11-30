@@ -280,7 +280,7 @@ function handleClick() {
 
 .node-icon {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   line-height: 1;
   margin-right: var(--spacing-xs);
   

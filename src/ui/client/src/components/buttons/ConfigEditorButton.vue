@@ -266,11 +266,11 @@ defineExpose({ openConfigEditor })
 
 .info-icon {
   color: #0ea5e9;
-  font-size: 18px;
+  font-size: var(--font-size-lg);
 }
 
 .info-text {
-  font-size: 14px;
+  
   font-weight: 500;
   color: #0c4a6e;
 }
@@ -296,7 +296,7 @@ defineExpose({ openConfigEditor })
     border: none;
     border-radius: 0;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 13px;
+    font-size: var(--font-size-sm);
     line-height: 1.6;
     resize: none;
     padding: var(--spacing-lg);
@@ -324,7 +324,7 @@ defineExpose({ openConfigEditor })
 .dialog-confirm-btn {
   padding: var(--spacing-base) var(--spacing-xl);
   border-radius: var(--radius-md);
-  font-size: 14px;
+  
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -386,7 +386,7 @@ defineExpose({ openConfigEditor })
 .warning-message {
   flex: 1;
   margin: 0;
-  font-size: 14px;
+  
   color: #991b1b;
   line-height: 1.6;
 }

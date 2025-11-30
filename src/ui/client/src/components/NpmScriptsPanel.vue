@@ -409,7 +409,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .panel-title {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text);
 }
@@ -481,7 +481,7 @@ watch(() => props.visible, (newValue) => {
 
 .loading-text,
 .empty-text {
-  font-size: 14px;
+  
   color: var(--text-secondary);
   margin: 0;
 }
@@ -524,7 +524,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .expand-icon {
-  font-size: 14px;
+  
   color: var(--text-secondary);
   transition: transform 0.2s ease;
 }
@@ -534,7 +534,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .folder-icon {
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   color: #667eea;
 }
 
@@ -548,7 +548,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .package-name {
-  font-size: 14px;
+  
   font-weight: 600;
   color: var(--color-text);
   white-space: nowrap;
@@ -556,7 +556,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .package-path {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-family: monospace;
   overflow: hidden;
@@ -568,7 +568,7 @@ watch(() => props.visible, (newValue) => {
 
 .repo-icon,
 .settings-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -593,7 +593,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .script-count {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   padding: var(--spacing-xs) var(--spacing-base);
   background: rgba(102, 126, 234, 0.1);
@@ -641,20 +641,20 @@ watch(() => props.visible, (newValue) => {
 }
 
 .play-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: var(--text-secondary);
   transition: all 0.2s ease;
 }
 
 .script-name {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text);
   font-family: monospace;
 }
 
 .script-command {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-family: monospace;
   white-space: nowrap;

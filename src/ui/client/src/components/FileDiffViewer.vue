@@ -996,7 +996,7 @@ onMounted(() => {
           <!-- 冲突已手动解决 -->
           <div v-else-if="isConflictedFile && !hasActualConflictMarkers" class="conflict-resolved-container">
             <div class="resolved-notice">
-              <el-icon class="success-icon" style="color: var(--color-success); font-size: 20px;">
+              <el-icon class="success-icon" style="color: var(--color-success); font-size: var(--font-size-xl);">
                 <CircleCheck />
               </el-icon>
               <span class="notice-text">{{ $t('@E80AC:冲突已解决，可以添加到暂存区') }}</span>
@@ -1282,7 +1282,7 @@ onMounted(() => {
     }
     
     .el-icon {
-      font-size: 16px;
+      font-size: var(--font-size-md);
     }
   }
 }
@@ -1397,7 +1397,7 @@ onMounted(() => {
   border-radius: var(--radius-sm);
   background: var(--bg-container);
   border: 1px solid var(--border-color);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-family: var(--font-mono);
   font-weight: 500;
 }
@@ -1433,7 +1433,7 @@ onMounted(() => {
   
   .conflict-marker {
     color: var(--git-status-conflicted);
-    font-size: 16px;
+    font-size: var(--font-size-md);
     margin-left: -4px;
     margin-right: var(--spacing-xs);
     animation: pulse 2s ease-in-out infinite;
@@ -1561,7 +1561,7 @@ onMounted(() => {
 .file-icon {
   margin-right: var(--spacing-base);
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   line-height: 1;
   display: inline-block;
 }
@@ -1665,7 +1665,7 @@ onMounted(() => {
     
     .notice-text {
       flex: 1;
-      font-size: 14px;
+      
       font-weight: 500;
       color: var(--text-primary);
     }
@@ -1755,7 +1755,7 @@ onMounted(() => {
 }
 
 .warning-icon {
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   color: var(--git-status-conflicted);
 }
 

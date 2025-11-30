@@ -226,7 +226,7 @@ async function saveStash() {
   background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
   border-radius: 10px;
   color: white;
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   flex-shrink: 0;
   box-shadow: var(--shadow-md);
 }
@@ -237,7 +237,7 @@ async function saveStash() {
 
 .stash-info-card .info-content h4 {
   margin: 0 0 6px 0;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   font-weight: 600;
   color: #0c4a6e;
   line-height: 1.2;
@@ -245,7 +245,7 @@ async function saveStash() {
 
 .stash-info-card .info-content p {
   margin: 0;
-  font-size: 14px;
+  
   color: #075985;
   line-height: 1.4;
 }
@@ -263,7 +263,7 @@ async function saveStash() {
 .stash-form :deep(.el-form-item__label) {
   font-weight: 600;
   color: var(--color-text-title);
-  font-size: 14px;
+  
   margin-bottom: var(--spacing-base);
 }
 
@@ -272,7 +272,7 @@ async function saveStash() {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
     transition: all 0.3s ease;
-    font-size: 14px;
+    
     line-height: 1.5;
     
     &:hover {
@@ -296,14 +296,14 @@ async function saveStash() {
   align-items: center;
   gap: var(--spacing-base);
   margin: 0 0 var(--spacing-base) 0;
-  font-size: 15px;
+  
   font-weight: 600;
   color: var(--color-text-title);
 }
 
 .options-title :deep(.el-icon) {
   color: var(--color-gray-500);
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 
 .option-item {
@@ -321,12 +321,12 @@ async function saveStash() {
 .option-label {
   font-weight: 500;
   color: var(--color-text-title);
-  font-size: 14px;
+  
 }
 
 .option-desc {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--color-gray-500);
   line-height: 1.4;
   padding-left: var(--spacing-2xl);
@@ -359,14 +359,14 @@ async function saveStash() {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  font-size: 14px;
+  
   font-weight: 600;
   color: #92400e;
 }
 
 .preview-title :deep(.el-icon) {
   color: #d97706;
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 
 .file-count-info {

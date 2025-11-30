@@ -556,7 +556,7 @@ body {
 
 h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--font-size-3xl);
 }
 
 .header-info {
@@ -630,7 +630,7 @@ h1 {
 
 .tips h3 {
   margin-top: 0;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   margin-bottom: 10px;
 }
 
@@ -787,13 +787,13 @@ h1 {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  font-size: 14px;
+  
   font-weight: 500;
   color: var(--color-text-title);
 }
 
 .label-icon {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   color: var(--color-gray-500);
 }
 

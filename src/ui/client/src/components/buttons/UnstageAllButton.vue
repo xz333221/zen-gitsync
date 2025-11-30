@@ -83,19 +83,19 @@ async function handleClick() {
 .unstage-all-button {
   &.from-drawer {
     padding: 6px var(--spacing-md);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     height: 32px;
   }
   
   &.from-status {
     padding: var(--spacing-base);
-    font-size: 13px;
+    font-size: var(--font-size-sm);
     height: 36px;
   }
   
   &.from-form {
     padding: 10px var(--spacing-lg);
-    font-size: 14px;
+    
     height: 40px;
   }
 }
