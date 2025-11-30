@@ -439,14 +439,14 @@ function handleClose() {
 
 <style scoped>
 .settings-content {
-  padding: 4px 0;
+  padding: var(--spacing-sm) 0;
 }
 
 .package-info-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
   background: var(--bg-input);
   border: 1px solid var(--border-card);
   border-radius: 6px;
@@ -479,14 +479,14 @@ function handleClose() {
 .script-management {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .scripts-list-section,
 .script-form-section {
   border: 1px solid var(--border-component);
   border-radius: 8px;
-  padding: 12px;
+  padding: var(--spacing-md);
   background: var(--bg-panel);
 }
 
@@ -509,12 +509,12 @@ function handleClose() {
   font-size: 13px;
   color: var(--text-secondary);
   background: var(--bg-input);
-  padding: 2px 8px;
+  padding: var(--spacing-xs) var(--spacing-base);
   border-radius: 4px;
 }
 
 .empty-scripts {
-  padding: 20px 0;
+  padding: var(--spacing-xl) 0;
 }
 
 .script-items {
@@ -531,8 +531,8 @@ function handleClose() {
   display: grid;
   grid-template-columns: 1fr 0fr;
   align-items: center;
-  gap: 12px;
-  padding: 8px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-base);
   border: 1px solid var(--border-card);
   border-radius: 6px;
   background: var(--bg-container);
@@ -590,7 +590,7 @@ function handleClose() {
 
 .script-item-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex-shrink: 0;
   opacity: 0;
   overflow: hidden;
@@ -599,7 +599,7 @@ function handleClose() {
 
 .script-item-actions .el-button {
   min-width: auto;
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
 }
 
 .pin-icon {
@@ -647,8 +647,8 @@ function handleClose() {
 .current-version {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
   background: var(--bg-input);
   border: 1px solid var(--border-card);
   border-radius: 6px;
@@ -683,13 +683,13 @@ function handleClose() {
 .version-radio-group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .version-radio {
   width: 100%;
   margin: 0 !important;
-  padding: 12px 16px;
+  padding: var(--spacing-md) var(--spacing-lg);
 }
 
 .version-radio :deep(.el-radio__label) {
@@ -700,7 +700,7 @@ function handleClose() {
 .radio-content {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--spacing-sm);
 }
 
 .radio-label {
@@ -719,14 +719,14 @@ function handleClose() {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 12px;
+  gap: var(--spacing-md);
   margin-bottom: 8px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .form-item {

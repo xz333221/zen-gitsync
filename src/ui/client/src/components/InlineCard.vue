@@ -28,7 +28,7 @@ const hasIcon = computed(() => {
 .inline-card {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   border-radius: 8px;
   background: var(--bg-container);
   // border: 1px solid var(--border-component);
@@ -60,7 +60,7 @@ const hasIcon = computed(() => {
   display: inline-flex;
   align-items: center;
   height: 100%;
-  gap: 4px;
+  gap: var(--spacing-sm);
   min-width: 0;
   flex: 1 1 auto;
 }

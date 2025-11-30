@@ -192,14 +192,14 @@ async function saveStash() {
 .stash-dialog-content {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .stash-info-card {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-base);
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   border: 1px solid #bae6fd;
   border-radius: 12px;
@@ -253,7 +253,7 @@ async function saveStash() {
 .stash-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .stash-form :deep(.el-form-item) {
@@ -287,15 +287,15 @@ async function saveStash() {
 }
 
 .stash-options {
-  padding: 8px;
+  padding: var(--spacing-base);
   border-radius: 12px;
 }
 
 .options-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 8px 0;
+  gap: var(--spacing-base);
+  margin: 0 0 var(--spacing-base) 0;
   font-size: 15px;
   font-weight: 600;
   color: var(--color-text-title);
@@ -337,7 +337,7 @@ async function saveStash() {
 }
 
 .stash-preview {
-  padding: 8px;
+  padding: var(--spacing-base);
   background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
   border: 1px solid #fbbf24;
   border-radius: 12px;
@@ -358,7 +358,7 @@ async function saveStash() {
 .preview-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   font-size: 14px;
   font-weight: 600;
   color: #92400e;
@@ -371,13 +371,13 @@ async function saveStash() {
 
 .file-count-info {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex-wrap: wrap;
 }
 
 .file-count-info :deep(.el-tag) {
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
 }
 
 /* 储藏弹窗的CommonDialog样式定制 */

@@ -442,7 +442,7 @@ defineExpose({
 .command-container {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--spacing-2xl);
   min-height: 400px;
 }
 
@@ -450,7 +450,7 @@ defineExpose({
   background: var(--bg-panel);
   border: 1px solid var(--border-component);
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 14px var(--spacing-lg);
 }
 
 .form-row {
@@ -462,7 +462,7 @@ defineExpose({
   
   &.form-row-compact {
     display: flex;
-    gap: 12px;
+    gap: var(--spacing-md);
   }
 }
 
@@ -493,7 +493,7 @@ defineExpose({
 
 .directory-input-group {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   align-items: center;
   flex-grow: 1;
 }
@@ -502,7 +502,7 @@ defineExpose({
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .command-list {
@@ -512,7 +512,7 @@ defineExpose({
   overflow: hidden;
 
   h3 {
-    margin: 0 0 16px 0;
+    margin: 0 0 var(--spacing-lg) 0;
     font-size: 16px;
     font-weight: 600;
     color: var(--text-title);
@@ -542,7 +542,7 @@ defineExpose({
 .name-cell {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-sm);
 }
 
 .name-text {
@@ -568,7 +568,7 @@ defineExpose({
   font-size: 12px;
   color: var(--text-title);
   background: var(--bg-code);
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
   border-radius: 4px;
   display: inline-block;
   word-break: break-all;
@@ -622,7 +622,7 @@ defineExpose({
     flex: 1;
     min-width: 0;
     background-color: var(--bg-container);
-    padding: 5px 8px;
+    padding: 5px var(--spacing-base);
     border-radius: 3px;
     border: 1px solid var(--border-card);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -645,7 +645,7 @@ defineExpose({
   }
 
   .directory-item {
-    padding: 10px 12px;
+    padding: 10px var(--spacing-md);
     border-bottom: 1px solid var(--border-card);
     cursor: pointer;
     display: flex;

@@ -331,7 +331,7 @@ defineExpose({
 .template-container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--spacing-xl);
   height: 100%;
 }
 
@@ -339,7 +339,7 @@ defineExpose({
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .template-input {
@@ -350,7 +350,7 @@ defineExpose({
 
 .template-form-buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   justify-content: flex-start;
   flex-wrap: nowrap;
 }
@@ -364,7 +364,7 @@ defineExpose({
 }
 
 .template-list h3 {
-  margin: 0 0 16px 0;
+  margin: 0 0 var(--spacing-lg) 0;
   font-size: 16px;
   font-weight: 600;
   
@@ -416,7 +416,7 @@ defineExpose({
 
 .template-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--spacing-sm);
   align-items: center;
   flex-shrink: 0;
 }
@@ -428,7 +428,7 @@ defineExpose({
 
 .templates-container {
   display: flex;
-  gap: 20px;
+  gap: var(--spacing-xl);
   flex: 1;
   overflow: hidden;
 }
@@ -451,7 +451,7 @@ defineExpose({
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--spacing-lg);
 }
 
 .current-default-message h3 {
@@ -472,19 +472,19 @@ defineExpose({
 }
 
 .message-help-text {
-  padding: 16px;
+  padding: var(--spacing-lg);
   border-radius: 6px;
   border-left: 4px solid #409eff;
 }
 
 .message-help-text h4 {
-  margin: 0 0 8px 0;
+  margin: 0 0 var(--spacing-base) 0;
   font-size: 14px;
   
 }
 
 .message-help-text p {
-  margin: 0 0 8px 0;
+  margin: 0 0 var(--spacing-base) 0;
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
@@ -526,13 +526,13 @@ defineExpose({
   position: sticky;
   top: 0;
   z-index: 2;
-  padding: 8px 0 10px 0;
+  padding: var(--spacing-base) 0 10px 0;
   border-bottom: 1px solid var(--bg-icon);
 }
 
 /* 卡片列表的细节优化 */
 :deep(.template-item .el-card__body) {
-  padding: 8px 10px;
+  padding: var(--spacing-base) 10px;
 }
 
 /* Disable transform/shadow hover effects for a flatter look */
@@ -585,7 +585,7 @@ defineExpose({
   position: sticky;
   top: 0;
   z-index: 2;
-  padding: 8px 0 10px 0;
+  padding: var(--spacing-base) 0 10px 0;
   border-bottom: 1px solid var(--bg-icon);
 }
 

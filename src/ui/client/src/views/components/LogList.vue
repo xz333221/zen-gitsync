@@ -1172,18 +1172,18 @@ function toggleFullscreen() {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-lg);
 }
 
 .log-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 /* 优化按钮样式 */
 .action-button {
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
 }
 
 .action-button:hover {
@@ -1197,7 +1197,7 @@ function toggleFullscreen() {
 /* 图标按钮专用的更小尺寸 */
 .icon-only-button {
   min-width: unset !important;
-  padding: 4px !important;
+  padding: var(--spacing-sm) !important;
   width: 28px !important;
   height: 28px !important;
   border-radius: 6px !important;
@@ -1255,7 +1255,7 @@ function toggleFullscreen() {
 .branch-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--spacing-sm);
   margin-right: 4px;
   flex-shrink: 0;
 }
@@ -1265,7 +1265,7 @@ function toggleFullscreen() {
   border-radius: 3px;
   transition: all 0.2s ease;
   font-size: 10px;
-  padding: 0 4px;
+  padding: 0 var(--spacing-sm);
   height: 14px;
   line-height: 14px;
 }
@@ -1285,7 +1285,7 @@ function toggleFullscreen() {
 .scale-info {
   font-size: 14px;
   color: var(--text-secondary);
-  padding: 4px 10px;
+  padding: var(--spacing-sm) 10px;
   border-radius: 4px;
   border: 1px solid var(--border-card);
 }
@@ -1322,7 +1322,7 @@ function toggleFullscreen() {
 .commit-detail-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-md);
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -1333,7 +1333,7 @@ function toggleFullscreen() {
   flex-shrink: 0;
   background: var(--bg-panel);
   border-radius: 8px;
-  padding: 16px;
+  padding: var(--spacing-lg);
   box-shadow: var(--shadow-md);
   transition: var(--transition-all);
 }
@@ -1341,14 +1341,14 @@ function toggleFullscreen() {
 .commit-info-row {
   display: flex;
   flex-direction: row;
-  gap: 24px;
+  gap: var(--spacing-2xl);
   align-items: center;
   flex-wrap: wrap;
 }
 
 .info-item {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   align-items: center;
 }
 
@@ -1424,7 +1424,7 @@ function toggleFullscreen() {
 
 .filter-panel-header {
   background-color: var(--bg-panel);
-  padding: 8px;
+  padding: var(--spacing-base);
   margin-bottom: 8px;
   border-radius: 8px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
@@ -1448,7 +1448,7 @@ function toggleFullscreen() {
 
 .filter-form {
   display: flex;
-  gap: 12px;
+  gap: var(--spacing-md);
   align-items: center;
   justify-content: space-between;
 }
@@ -1485,7 +1485,7 @@ function toggleFullscreen() {
 }
 
 .filter-action-button {
-  padding: 8px 16px;
+  padding: var(--spacing-base) var(--spacing-lg);
   border-radius: 6px;
   transition: all 0.3s;
   min-width: 70px;
@@ -1520,7 +1520,7 @@ function toggleFullscreen() {
 .message-content {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   width: 100%;
 }
 
@@ -1539,7 +1539,7 @@ function toggleFullscreen() {
 .copy-message-btn {
   opacity: 0;
   transition: opacity 0.2s ease;
-  padding: 4px;
+  padding: var(--spacing-sm);
   min-width: auto;
   height: auto;
 }
@@ -1561,9 +1561,9 @@ function toggleFullscreen() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 0;
+  padding: var(--spacing-base) 0;
   border-top: 1px dashed var(--border-card);
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .pagination-info {
@@ -1597,7 +1597,7 @@ function toggleFullscreen() {
 }
 
 .context-menu-item {
-  padding: 10px 16px;
+  padding: 10px var(--spacing-lg);
   cursor: pointer;
   font-size: 14px;
   display: flex;
@@ -1640,7 +1640,7 @@ function toggleFullscreen() {
   top: 0;
   z-index: 10;
   background-color: var(--bg-container);
-  padding: 16px;
+  padding: var(--spacing-lg);
   margin-bottom: 10px;
   width: 100%;
 }
@@ -1690,7 +1690,7 @@ function toggleFullscreen() {
   min-width: unset;
   width: 36px;
   height: 36px;
-  padding: 8px;
+  padding: var(--spacing-base);
   border-radius: 8px;
   display: flex;
   align-items: center;

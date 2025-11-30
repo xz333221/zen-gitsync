@@ -1134,11 +1134,11 @@ defineExpose({
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .card-content {
-  padding: 4px;
+  padding: var(--spacing-sm);
   overflow-y: auto;
   overflow-x: hidden;
   flex: 1;
@@ -1149,7 +1149,7 @@ defineExpose({
 .status-box {
   white-space: pre-wrap;
   font-family: monospace;
-  padding: 8px;
+  padding: var(--spacing-base);
   border-radius: 8px;
   margin-bottom: 8px;
   max-height: 200px;
@@ -1205,8 +1205,8 @@ defineExpose({
 
 .view-mode-toggle {
   display: flex;
-  gap: 4px;
-  padding: 2px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs);
   background: var(--bg-panel);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-card);
@@ -1320,7 +1320,7 @@ defineExpose({
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--spacing-lg);
 }
 
 /* 分支信息样式 */
@@ -1340,7 +1340,7 @@ defineExpose({
 .branch-sync-status {
   display: flex;
   align-items: center;
-  padding: 8px;
+  padding: var(--spacing-base);
   margin-bottom: 0;
 }
 
@@ -1355,7 +1355,7 @@ defineExpose({
 .status-badges {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
   width: 100%;
 }
 
@@ -1364,7 +1364,7 @@ defineExpose({
   align-items: center;
   width: 100%;
   border-radius: 4px;
-  padding: 8px;
+  padding: var(--spacing-base);
   transition: all 0.3s ease;
 }
 
@@ -1387,7 +1387,7 @@ defineExpose({
 .badge-content {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   font-size: 13px;
 }
 
@@ -1428,7 +1428,7 @@ defineExpose({
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  padding: 8px;
+  padding: var(--spacing-base);
   color: #666;
 }
 
@@ -1439,7 +1439,7 @@ defineExpose({
 }
 
 .empty-locked-files p {
-  margin: 8px 0;
+  margin: var(--spacing-base) 0;
 }
 
 .empty-tip {
@@ -1455,8 +1455,8 @@ defineExpose({
 .locked-files-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-base);
   border: 1px solid #ffd591;
   border-radius: 6px;
   margin-bottom: 8px;
@@ -1474,13 +1474,13 @@ defineExpose({
   background-color: #f6f8fa;
   border: 1px solid #e1e4e8;
   border-radius: 8px;
-  padding: 8px;
+  padding: var(--spacing-base);
 }
 
 .description-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   margin-bottom: 8px;
 }
 
@@ -1502,28 +1502,28 @@ defineExpose({
 }
 
 .description-content p {
-  margin: 8px 0;
+  margin: var(--spacing-base) 0;
 }
 
 .description-content ul {
-  margin: 4px 0 8px 0;
+  margin: var(--spacing-sm) 0 var(--spacing-base) 0;
   padding-left: 8px;
 }
 
 .description-content li {
-  margin: 4px 0;
+  margin: var(--spacing-sm) 0;
 }
 
 .locked-file-items {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 .locked-file-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px;
+  padding: var(--spacing-base);
   border: 1px solid #ffd591;
   border-radius: 6px;
   transition: all 0.2s ease;
@@ -1534,7 +1534,7 @@ defineExpose({
   background: linear-gradient(135deg, rgba(64, 158, 255, 0.05) 0%, rgba(64, 158, 255, 0.02) 100%);
   border: 1px solid rgba(64, 158, 255, 0.2);
   border-radius: 12px;
-  padding: 20px;
+  padding: var(--spacing-xl);
   margin-bottom: 16px;
   transition: all 0.3s ease;
 }

@@ -208,7 +208,7 @@ function handleClosed() {
     display: flex;
     flex-direction: column;
     flex: 1;
-    padding: 16px;
+    padding: var(--spacing-lg);
     box-sizing: border-box;
     /* 仅纵向滚动 */
     overflow-x: hidden;
@@ -235,7 +235,7 @@ function handleClosed() {
     flex: 1;
     overflow-x: hidden;
     overflow-y: auto;
-    padding: 12px;
+    padding: var(--spacing-md);
     box-sizing: border-box;
     min-height: 0; /* 关键：允许flex子元素缩小 */
   }
@@ -244,7 +244,7 @@ function handleClosed() {
 // 通用底部按钮样式
 .common-dialog__footer {
   display: flex;
-  gap: 12px;
+  gap: var(--spacing-md);
   justify-content: flex-end;
   
   .el-button {
@@ -261,11 +261,11 @@ function handleClosed() {
 
 
 // :deep(.el-dialog__body) {
-//   padding: 16px 18px 18px 18px;
+//   padding: var(--spacing-lg) 18px 18px 18px;
 //   background: linear-gradient(180deg, var(--bg-container) 0%, #fafbfc 100%);
 // }
 
 :deep(.el-dialog__footer) {
-  padding: 12px 18px;
+  padding: var(--spacing-md) 18px;
 }
 </style>

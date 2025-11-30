@@ -110,14 +110,14 @@ defineExpose({
 
 .actions-flex-container {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   align-items: center;
   justify-content: space-between;
 }
 
 .button-grid {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .right-actions {

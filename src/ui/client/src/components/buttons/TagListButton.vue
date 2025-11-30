@@ -415,7 +415,7 @@ function formatDate(dateString: string): string {
   .common-dialog__header {
     background: #22c55e;
     color: white;
-    padding: 20px 24px;
+    padding: var(--spacing-xl) var(--spacing-2xl);
     border-radius: 8px 8px 0 0;
     margin: 0;
   }
@@ -442,7 +442,7 @@ function formatDate(dateString: string): string {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
-  padding: 8px;
+  padding: var(--spacing-base);
   background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
   border-radius: 8px;
   border: 1px solid var(--border-component);
@@ -452,14 +452,14 @@ function formatDate(dateString: string): string {
 .tag-stats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .stat-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 2px 8px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-xs) var(--spacing-base);
   background: #22c55e;
   border-radius: 8px;
   color: white;
@@ -481,13 +481,13 @@ function formatDate(dateString: string): string {
 
 .tag-actions-header {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .refresh-btn,
 .push-all-btn {
   border-radius: 8px;
-  padding: 2px 8px;
+  padding: var(--spacing-xs) var(--spacing-base);
   font-weight: 500;
   transition: all 0.3s ease;
   
@@ -507,7 +507,7 @@ function formatDate(dateString: string): string {
 .tag-cards {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .tag-card {
@@ -525,16 +525,16 @@ function formatDate(dateString: string): string {
 }
 
 .tag-card-content {
-  padding: 8px;
+  padding: var(--spacing-base);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .tag-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-sm);
   flex: 1;
   min-width: 0;
 }
@@ -548,7 +548,7 @@ function formatDate(dateString: string): string {
 .tag-name-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex-shrink: 0;
 }
 
@@ -571,7 +571,7 @@ function formatDate(dateString: string): string {
 .tag-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-md);
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -579,10 +579,10 @@ function formatDate(dateString: string): string {
 .tag-commit {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--spacing-sm);
   font-family: monospace;
   background: var(--bg-panel);
-  padding: 2px 6px;
+  padding: var(--spacing-xs) 6px;
   border-radius: 4px;
 }
 
@@ -594,7 +594,7 @@ function formatDate(dateString: string): string {
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.4;
-  padding: 6px 8px;
+  padding: 6px var(--spacing-base);
   background: var(--bg-panel);
   border-radius: 6px;
   border-left: 3px solid #22c55e;
@@ -617,7 +617,7 @@ function formatDate(dateString: string): string {
   font-weight: 500;
   transition: all 0.3s ease;
   min-width: 60px;
-  padding: 6px 12px;
+  padding: 6px var(--spacing-md);
   font-size: 12px;
   
   &:hover {
@@ -641,13 +641,13 @@ function formatDate(dateString: string): string {
 .tag-detail-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .detail-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-md);
   padding: 10px;
   background: var(--bg-panel);
   border-radius: 8px;
@@ -673,7 +673,7 @@ function formatDate(dateString: string): string {
   &:is(code) {
     font-family: monospace;
     background: var(--border-component);
-    padding: 2px 8px;
+    padding: var(--spacing-xs) var(--spacing-base);
     border-radius: 4px;
     border: 1px solid var(--border-component);
   }
@@ -681,7 +681,7 @@ function formatDate(dateString: string): string {
 
 .message-content {
   width: 100%;
-  padding: 8px;
+  padding: var(--spacing-base);
   background: white;
   border-radius: 6px;
   border: 1px solid var(--border-card);

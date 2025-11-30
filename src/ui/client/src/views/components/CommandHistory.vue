@@ -556,7 +556,7 @@ onUnmounted(() => {
 .enhanced-btn {
   min-width: 60px;
   height: 36px;
-  padding: 8px;
+  padding: var(--spacing-base);
   gap: 6px;
   border-radius: 6px;
   font-size: 12px;
@@ -749,11 +749,11 @@ onUnmounted(() => {
 
 
 .dialog-toolbar {
-  padding: 16px 20px;
+  padding: var(--spacing-lg) var(--spacing-xl);
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--spacing-md);
   background: linear-gradient(135deg, #f8f9fa 0%, var(--border-component) 100%);
   border-bottom: 1px solid var(--border-component);
   border-radius: 8px 8px 0 0;
@@ -794,7 +794,7 @@ onUnmounted(() => {
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
   overflow-y: auto;
   flex: 1;
 }
@@ -826,7 +826,7 @@ onUnmounted(() => {
 }
 
 .item-header {
-  padding: 10px 12px;
+  padding: 10px var(--spacing-md);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -849,7 +849,7 @@ onUnmounted(() => {
 .command-text {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   margin-bottom: 4px;
 }
 
@@ -871,7 +871,7 @@ onUnmounted(() => {
 .command-meta {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-lg);
   font-size: 12px;
   color: #909399;
 }
@@ -897,11 +897,11 @@ onUnmounted(() => {
 }
 
 .item-details {
-  padding: 10px 12px;
+  padding: 10px var(--spacing-md);
   border-top: 1px solid var(--border-card);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 /* 深色主题下的详情区域 */

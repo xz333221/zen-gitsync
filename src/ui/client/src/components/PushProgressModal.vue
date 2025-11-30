@@ -257,7 +257,7 @@ defineExpose({
 // 弹窗标题颜色
 .push-progress-dialog {
   :deep(.el-dialog__header) {
-    padding: 16px 20px;
+    padding: var(--spacing-lg) var(--spacing-xl);
   }
   
   :deep(.el-dialog__title) {
@@ -289,8 +289,8 @@ defineExpose({
 .push-progress-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 12px;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md);
   
   // 优化渲染性能
   * {
@@ -376,8 +376,8 @@ defineExpose({
 .stages-section {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  padding: 12px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
   border-radius: 10px;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -420,8 +420,8 @@ defineExpose({
 .stage-item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: var(--spacing-base);
+  padding: 10px var(--spacing-md);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -544,7 +544,7 @@ defineExpose({
   background: #fef0f0;
   border: 1px solid #fde2e2;
   border-radius: 8px;
-  padding: 16px;
+  padding: var(--spacing-lg);
 }
 
 .error-title {
@@ -563,7 +563,7 @@ defineExpose({
 .messages-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .messages-title {
@@ -579,7 +579,7 @@ defineExpose({
   overflow-y: auto;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 10px var(--spacing-md);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 11px;
   line-height: 1.5;
@@ -607,7 +607,7 @@ defineExpose({
 
 .message-item {
   color: rgba(255, 255, 255, 0.85);
-  padding: 2px 0;
+  padding: var(--spacing-xs) 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

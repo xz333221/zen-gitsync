@@ -173,7 +173,7 @@ function handleManageLockedFiles(event: Event) {
 }
 
 .file-action-btn {
-  padding: 4px;
+  padding: var(--spacing-sm);
   min-width: 24px;
   height: 24px;
 }

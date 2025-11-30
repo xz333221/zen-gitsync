@@ -335,20 +335,20 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
 
 <style scoped lang="scss">
 .conflict-block-viewer {
-  padding: 16px;
+  padding: var(--spacing-lg);
   background-color: var(--bg-container);
   
   .progress-bar {
     background-color: var(--color-warning-bg);
     border: 1px solid var(--color-warning-border);
     border-radius: 8px;
-    padding: 12px 16px;
+    padding: var(--spacing-md) var(--spacing-lg);
     margin-bottom: 16px;
     
     .progress-info {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--spacing-base);
       font-size: 14px;
       font-weight: 500;
       color: var(--color-warning);
@@ -384,7 +384,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
     
     .block-header {
       background-color: var(--color-warning-bg);
-      padding: 8px 16px;
+      padding: var(--spacing-base) var(--spacing-lg);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -398,7 +398,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
       .resolved-badge {
         background-color: var(--color-success);
         color: white;
-        padding: 2px 8px;
+        padding: var(--spacing-xs) var(--spacing-base);
         border-radius: 4px;
         font-size: 12px;
         font-weight: 500;
@@ -410,7 +410,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
       
       .context-line {
         display: flex;
-        padding: 2px 8px;
+        padding: var(--spacing-xs) var(--spacing-base);
         font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
         font-size: 13px;
         line-height: 1.6;
@@ -447,7 +447,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
         flex-direction: column;
         
         .column-header {
-          padding: 8px 12px;
+          padding: var(--spacing-base) var(--spacing-md);
           font-weight: 600;
           font-size: 13px;
           background-color: var(--bg-elevated);
@@ -468,7 +468,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
           .merge-line {
             display: flex;
             align-items: center;
-            padding: 2px 4px;
+            padding: var(--spacing-xs) var(--spacing-sm);
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 13px;
             line-height: 1.6;
@@ -497,20 +497,20 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
               flex: 1;
               white-space: pre;
               color: var(--text-primary);
-              padding: 0 4px;
+              padding: 0 var(--spacing-sm);
               
               // Diff 高亮样式
               .diff-removed-text {
                 background-color: rgba(248, 81, 73, 0.25);
                 color: #f85149;
-                padding: 0 2px;
+                padding: 0 var(--spacing-xs);
                 border-radius: 2px;
               }
               
               .diff-added-text {
                 background-color: rgba(34, 134, 58, 0.25);
                 color: #22863a;
-                padding: 0 2px;
+                padding: 0 var(--spacing-xs);
                 border-radius: 2px;
               }
             }
@@ -519,7 +519,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
               border: none;
               background-color: rgba(64, 158, 255, 0.8);
               color: white;
-              padding: 2px 6px;
+              padding: var(--spacing-xs) 6px;
               cursor: pointer;
               font-size: 11px;
               font-weight: bold;
@@ -582,10 +582,10 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
             .merge-hint {
               text-align: center;
               color: var(--text-secondary);
-              padding: 20px;
+              padding: var(--spacing-xl);
               
               p {
-                margin: 8px 0;
+                margin: var(--spacing-base) 0;
                 font-size: 13px;
                 line-height: 1.6;
                 
@@ -593,7 +593,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
                   color: var(--color-primary);
                   font-family: 'Consolas', 'Monaco', monospace;
                   background-color: rgba(64, 158, 255, 0.1);
-                  padding: 2px 6px;
+                  padding: var(--spacing-xs) 6px;
                   border-radius: 3px;
                 }
               }
@@ -604,7 +604,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
     }
     
     .block-resolution-info {
-      padding: 8px 16px;
+      padding: var(--spacing-base) var(--spacing-lg);
       background-color: var(--color-success-bg);
       color: var(--color-success);
       font-size: 12px;
@@ -624,7 +624,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 8px 16px;
+        padding: var(--spacing-base) var(--spacing-lg);
         background-color: rgba(var(--color-success-rgb), 0.15);
         border-bottom: 1px solid var(--color-success-border);
         
@@ -638,7 +638,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
       .resolved-lines {
         .diff-line {
           display: flex;
-          padding: 2px 8px;
+          padding: var(--spacing-xs) var(--spacing-base);
           font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
           font-size: 13px;
           line-height: 1.6;

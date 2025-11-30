@@ -155,7 +155,7 @@ async function handleBranchChange(branch: string) {
 .branch-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .branch-label {
@@ -171,7 +171,7 @@ async function handleBranchChange(branch: string) {
 
 /* 创建分支对话框样式 */
 .create-branch-content {
-  padding: 8px 0;
+  padding: var(--spacing-base) 0;
 }
 
 /* dialog-footer 样式已移至 @/styles/common.scss */
@@ -199,7 +199,7 @@ async function handleBranchChange(branch: string) {
     border: 1px solid var(--border-input);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     transition: all 0.2s ease;
-    padding: 10px 12px;
+    padding: 10px var(--spacing-md);
     background: var(--bg-container);
   }
 

@@ -350,13 +350,13 @@ defineExpose({
 .action-groups {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--spacing-lg);
 }
 
 .action-group {
   background: var(--bg-container);
   border-radius: 8px;
-  padding: 12px;
+  padding: var(--spacing-md);
   border: 1px solid var(--border-component);
 }
 
@@ -372,7 +372,7 @@ defineExpose({
 .group-buttons {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 
   // 只确保按钮全宽，其他样式由按钮组件自己的from-drawer样式控制
   :deep(.el-button) {

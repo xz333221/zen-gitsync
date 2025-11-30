@@ -287,14 +287,14 @@ async function handleMergeBranch() {
 .merge-dialog-content {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .merge-info-card {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-base);
   background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
   border: 1px solid #93c5fd;
   border-radius: 12px;
@@ -347,7 +347,7 @@ async function handleMergeBranch() {
 
 .merge-info-card .info-content code {
   background: rgba(59, 130, 246, 0.1);
-  padding: 2px 6px;
+  padding: var(--spacing-xs) 6px;
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-weight: 600;
@@ -357,7 +357,7 @@ async function handleMergeBranch() {
 .merge-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .merge-form :deep(.el-form-item) {
@@ -394,7 +394,7 @@ async function handleMergeBranch() {
 
 .merge-form :deep(.el-radio-group) {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   
   .el-radio-button {
     flex: 1;
@@ -408,15 +408,15 @@ async function handleMergeBranch() {
 }
 
 .merge-options {
-  padding: 8px;
+  padding: var(--spacing-base);
   border-radius: 12px;
 }
 
 .options-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 12px 0;
+  gap: var(--spacing-base);
+  margin: 0 0 var(--spacing-md) 0;
   font-size: 15px;
   font-weight: 600;
   color: var(--color-text-title);
@@ -430,7 +430,7 @@ async function handleMergeBranch() {
 .options-horizontal {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: var(--spacing-2xl);
   flex-wrap: wrap;
 }
 

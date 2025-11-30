@@ -493,7 +493,7 @@ body {
   /* 底部footer高度 */
   left: 0;
   right: 0;
-  padding: 4px 0;
+  padding: var(--spacing-sm) 0;
   overflow: hidden;
   z-index: 1001;
   /* 防止整体滚动 */
@@ -546,7 +546,7 @@ body {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .logo {
@@ -562,7 +562,7 @@ h1 {
 .header-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex: 1;
   justify-content: flex-end;
   min-width: 0;
@@ -572,7 +572,7 @@ h1 {
 #user-info {
   display: flex;
   align-items: center;
-  padding: 8px;
+  padding: var(--spacing-base);
   border-radius: 8px;
   border: 1px solid var(--border-component);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -589,7 +589,7 @@ h1 {
 .header-actions-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .user-label {
@@ -771,14 +771,14 @@ h1 {
 .directory-display {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex: 1;
   min-width: 0;
   /* 防止flex子项溢出 */
 }
 
 :deep(.form-item .el-form-item__label) {
-  padding: 0 0 8px 0;
+  padding: 0 0 var(--spacing-base) 0;
   font-weight: 500;
   color: var(--color-text-title);
 }
@@ -786,7 +786,7 @@ h1 {
 .form-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   font-size: 14px;
   font-weight: 500;
   color: var(--color-text-title);

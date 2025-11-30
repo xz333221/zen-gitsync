@@ -301,12 +301,12 @@ watch(() => props.modelValue, (newValue) => {
 .package-json-selector {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .selector-container {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   align-items: center;
 }
 
@@ -323,7 +323,7 @@ watch(() => props.modelValue, (newValue) => {
 .option-content {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--spacing-xs);
   width: 100%;
 }
 
@@ -360,7 +360,7 @@ watch(() => props.modelValue, (newValue) => {
 }
 
 .empty-hint {
-  padding: 8px 12px;
+  padding: var(--spacing-base) var(--spacing-md);
   background: var(--bg-panel);
   border: 1px solid var(--border-component);
   border-radius: 4px;

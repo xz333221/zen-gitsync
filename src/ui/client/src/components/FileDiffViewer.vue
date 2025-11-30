@@ -1251,8 +1251,8 @@ onMounted(() => {
 
 .view-mode-toggle {
   display: flex;
-  gap: 4px;
-  padding: 2px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs);
   background: var(--bg-panel);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-card);
@@ -1376,7 +1376,7 @@ onMounted(() => {
   border: 1px solid #d9d9d9;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--spacing-xs);
   font-family: var(--font-mono);
 }
 
@@ -1393,7 +1393,7 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 2px 8px;
+  padding: var(--spacing-xs) var(--spacing-base);
   border-radius: var(--radius-sm);
   background: var(--bg-container);
   border: 1px solid var(--border-color);
@@ -1652,12 +1652,12 @@ onMounted(() => {
   background: var(--bg-container);
   
   .resolved-notice {
-    padding: 16px 20px;
+    padding: var(--spacing-lg) var(--spacing-xl);
     background: linear-gradient(135deg, rgba(103, 194, 58, 0.1) 0%, rgba(103, 194, 58, 0.05) 100%);
     border-bottom: 2px solid var(--color-success);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--spacing-md);
     
     .success-icon {
       flex-shrink: 0;
@@ -1683,11 +1683,11 @@ onMounted(() => {
 
 /* 模式切换按钮 */
 .resolution-mode-switch {
-  padding: 12px 16px;
+  padding: var(--spacing-md) var(--spacing-lg);
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-color);
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   justify-content: center;
   
   .el-button {
@@ -1710,7 +1710,7 @@ onMounted(() => {
 
 /* 保存解决方案按钮栏 */
 .save-resolution-bar {
-  padding: 16px;
+  padding: var(--spacing-lg);
   background: var(--bg-elevated);
   border-top: 1px solid var(--border-color);
   display: flex;
@@ -1732,14 +1732,14 @@ onMounted(() => {
 
 /* 全局冲突解决按钮区域 */
 .global-conflict-resolution {
-  padding: 12px 16px;
+  padding: var(--spacing-md) var(--spacing-lg);
   background: rgba(249, 115, 22, 0.1);
   border-left: 4px solid var(--git-status-conflicted);
   border-bottom: 1px solid rgba(249, 115, 22, 0.2);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--spacing-lg);
   flex-wrap: wrap;
   flex-shrink: 0;
 }
@@ -1747,7 +1747,7 @@ onMounted(() => {
 .conflict-warning {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   color: var(--git-status-conflicted);
   font-weight: var(--font-weight-medium);
   flex: 1;
@@ -1761,7 +1761,7 @@ onMounted(() => {
 
 .conflict-buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex-wrap: wrap;
 }
 

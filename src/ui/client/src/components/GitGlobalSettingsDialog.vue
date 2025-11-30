@@ -309,7 +309,7 @@ async function handleSave() {
 .user-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .basic-info-section {
@@ -318,7 +318,7 @@ async function handleSave() {
 
 .basic-info-grid {
   display: flex;
-  gap: 20px;
+  gap: var(--spacing-xl);
   align-items: center;
 }
 
@@ -337,7 +337,7 @@ async function handleSave() {
 .section-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   margin-bottom: 16px;
   font-size: 14px;
   font-weight: 600;
@@ -352,13 +352,13 @@ async function handleSave() {
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px 20px;
+  gap: var(--spacing-md) var(--spacing-xl);
 }
 
 .setting-row {
   display: grid;
   grid-template-columns: 140px 1fr;
-  gap: 12px;
+  gap: var(--spacing-md);
   align-items: center;
 }
 
@@ -424,7 +424,7 @@ html.dark .label-icon {
 .form-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   font-size: 14px;
   font-weight: 500;
   color: var(--color-text-title);
@@ -471,8 +471,8 @@ html.dark .label-icon {
 .info-card {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
   background: linear-gradient(135deg, rgba(64, 158, 255, 0.08) 0%, rgba(64, 158, 255, 0.04) 100%);
   border: 1px solid rgba(64, 158, 255, 0.2);
   border-radius: 12px;

@@ -417,7 +417,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   .common-dialog__header {
     background: #409eff;
     color: white;
-    padding: 20px 24px;
+    padding: var(--spacing-xl) var(--spacing-2xl);
     border-radius: 8px 8px 0 0;
     margin: 0;
   }
@@ -444,7 +444,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
-  padding: 8px;
+  padding: var(--spacing-base);
   background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
   border-radius: 8px;
   border: 1px solid var(--border-component);
@@ -454,14 +454,14 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 .stash-stats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .stat-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 2px 8px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-xs) var(--spacing-base);
   background: #409eff;
   border-radius: 8px;
   color: white;
@@ -483,12 +483,12 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 
 .stash-actions-header {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .clear-all-btn {
   border-radius: 8px;
-  padding: 2px 8px;
+  padding: var(--spacing-xs) var(--spacing-base);
   font-weight: 500;
   transition: all 0.3s ease;
   
@@ -508,7 +508,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 .stash-cards {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .stash-card {
@@ -536,16 +536,16 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 }
 
 .stash-card-content {
-  padding: 8px;
+  padding: var(--spacing-base);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .stash-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-sm);
   flex: 1;
   min-width: 0;
 }
@@ -553,14 +553,14 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 .stash-main-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex-wrap: wrap;
 }
 
 .stash-id-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex-shrink: 0;
 }
 
@@ -574,7 +574,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   font-size: 12px;
   background: var(--bg-panel);
   color: var(--text-secondary);
-  padding: 3px 8px;
+  padding: 3px var(--spacing-base);
   border-radius: 4px;
   font-weight: 500;
   letter-spacing: 0.5px;
@@ -618,7 +618,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   font-weight: 500;
   transition: all 0.3s ease;
   min-width: 60px;
-  padding: 6px 12px;
+  padding: 6px var(--spacing-md);
   font-size: 12px;
   
   &:hover {
@@ -647,14 +647,14 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .stash-info-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-base);
   border-radius: 6px;
   border: 1px solid var(--border-component);
   flex-shrink: 0; /* 不被压缩 */
@@ -664,7 +664,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 .stash-description {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .info-label {
@@ -679,7 +679,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   font-size: 12px;
   background-color: var(--border-component);
   color: var(--color-text);
-  padding: 2px 6px;
+  padding: var(--spacing-xs) 6px;
   border-radius: 3px;
   border: 1px solid var(--border-component);
 }

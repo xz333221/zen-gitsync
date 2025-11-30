@@ -1401,7 +1401,7 @@ onUnmounted(() => {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .title-icon {
@@ -1419,13 +1419,13 @@ onUnmounted(() => {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .terminal-toggle-btn {
   width: 36px;
   height: 36px;
-  padding: 8px;
+  padding: var(--spacing-base);
   border-radius: 6px;
   transition: all 0.3s ease;
   
@@ -1458,7 +1458,7 @@ onUnmounted(() => {
 .execution-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .pause-btn, .stop-btn {
@@ -1487,7 +1487,7 @@ onUnmounted(() => {
 }
 
 .toggle-console-btn {
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
   font-size: 13px;
   color: var(--text-secondary);
   transition: all 0.3s ease;
@@ -1530,9 +1530,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
   background: var(--bg-container);
-  margin: 12px;
+  margin: var(--spacing-md);
   border-radius: 8px;
   border: 1px solid var(--border-component);
   transition: all 0.3s ease;
@@ -1572,7 +1572,7 @@ onUnmounted(() => {
     background-color: transparent;
     box-shadow: none !important;
     border: none;
-    padding: 4px 8px;
+    padding: var(--spacing-sm) var(--spacing-base);
     font-family: var(--font-mono);
     font-size: 13px;
   }
@@ -1588,7 +1588,7 @@ onUnmounted(() => {
 }
 
 .console-input-row .el-button {
-  padding: 8px 20px;
+  padding: var(--spacing-base) var(--spacing-xl);
   font-weight: 500;
   border-radius: 6px;
   transition: all 0.3s ease;
@@ -1607,10 +1607,10 @@ onUnmounted(() => {
 .stdin-input-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-base) var(--spacing-md);
   background: linear-gradient(135deg, rgba(103, 194, 58, 0.05), rgba(103, 194, 58, 0.02));
-  margin: 8px 0 0 0;
+  margin: var(--spacing-base) 0 0 0;
   border-radius: 6px;
   border: 1px solid rgba(103, 194, 58, 0.3);
   transition: all 0.3s ease;
@@ -1635,7 +1635,7 @@ onUnmounted(() => {
     background-color: transparent;
     box-shadow: none !important;
     border: none;
-    padding: 4px 8px;
+    padding: var(--spacing-sm) var(--spacing-base);
     font-family: var(--font-mono);
     font-size: 13px;
   }
@@ -1695,18 +1695,18 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
-  gap: 8px;
+  padding: 10px var(--spacing-md);
+  gap: var(--spacing-base);
 }
 
 .cmd-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--spacing-sm);
 }
 
 .stop-btn {
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
   
   &:hover {
     background: rgba(245, 108, 108, 0.1);
@@ -1719,7 +1719,7 @@ onUnmounted(() => {
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex: 1;
   min-width: 0;
 }
@@ -1750,14 +1750,14 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: normal;
   /* background: var(--bg-panel); */
-  padding: 0 4px;
+  padding: 0 var(--spacing-sm);
   /* border-radius: 4px; */
   flex-shrink: 0;
   opacity: 0.8;
 }
 
 .toggle-output-btn {
-  padding: 4px;
+  padding: var(--spacing-sm);
   min-width: auto;
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -1779,7 +1779,7 @@ onUnmounted(() => {
 }
 
 .output-content {
-  padding: 0 12px 10px 12px;
+  padding: 0 var(--spacing-md) 10px var(--spacing-md);
 }
 
 /* 输出内容滑动动画 */
@@ -1803,7 +1803,7 @@ onUnmounted(() => {
 
 pre.stdout, pre.stderr {
   margin: 0;
-  padding: 8px;
+  padding: var(--spacing-base);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;

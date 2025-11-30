@@ -112,7 +112,7 @@ body {
 .diff-added {
   background-color: var(--git-diff-added-bg);
   color: var(--git-diff-added-color);
-  padding: 2px var(--spacing-base);
+  padding: var(--spacing-xs) var(--spacing-base);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
@@ -124,7 +124,7 @@ body {
 .diff-removed {
   background-color: var(--git-diff-removed-bg);
   color: var(--git-diff-removed-color);
-  padding: 2px var(--spacing-base);
+  padding: var(--spacing-xs) var(--spacing-base);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
@@ -135,7 +135,7 @@ body {
 
 .diff-context {
   color: var(--git-diff-context-color);
-  padding: 2px var(--spacing-base);
+  padding: var(--spacing-xs) var(--spacing-base);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
@@ -149,7 +149,7 @@ body {
 .diff-conflict-start {
   background-color: rgba(64, 200, 174, 0.3);
   color: #2d6a5d;
-  padding: 2px var(--spacing-base);
+  padding: var(--spacing-xs) var(--spacing-base);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
@@ -175,7 +175,7 @@ body {
 .diff-conflict-end {
   background-color: rgba(64, 158, 255, 0.3);
   color: #2d4a6d;
-  padding: 2px var(--spacing-base);
+  padding: var(--spacing-xs) var(--spacing-base);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
@@ -190,7 +190,7 @@ body {
 .diff-conflict-current {
   background-color: rgba(64, 200, 174, 0.2);
   color: var(--text-primary);
-  padding: 2px var(--spacing-base);
+  padding: var(--spacing-xs) var(--spacing-base);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
@@ -201,7 +201,7 @@ body {
 .diff-conflict-incoming {
   background-color: rgba(64, 158, 255, 0.2);
   color: var(--text-primary);
-  padding: 2px var(--spacing-base);
+  padding: var(--spacing-xs) var(--spacing-base);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
@@ -250,7 +250,7 @@ body {
     overflow-x: hidden;
     overflow-y: auto;
     /* keep mild default padding; components can override */
-    padding: 8px 16px;
+    padding: var(--spacing-base) var(--spacing-lg);
     box-sizing: border-box;
   }
 
@@ -285,7 +285,7 @@ body {
 .el-dialog__body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
   /* allow body to take remaining height */
   flex: 1 1 auto;
   min-height: 0;
@@ -361,7 +361,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px;
+  padding: var(--spacing-base);
   border-bottom: 1px solid var(--border-card);
   background-color: var(--bg-container);
 }
@@ -523,7 +523,7 @@ body {
    共享组件样式 - 空状态
    ======================================================= */
 .empty-state {
-  padding: 40px 20px;
+  padding: 40px var(--spacing-xl);
   text-align: center;
 }
 
@@ -536,7 +536,7 @@ body {
 .empty-text {
   font-size: 16px;
   color: var(--text-secondary);
-  margin: 0 0 8px 0;
+  margin: 0 0 var(--spacing-base) 0;
   font-weight: 500;
 }
 
@@ -561,14 +561,14 @@ body {
 .footer-actions {
   display: flex;
   align-items: center;
-  gap: 12px; /* 统一按钮间距为 12px */
+  gap: var(--spacing-md); /* 统一按钮间距为 12px */
 }
 
 .footer-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: var(--spacing-base) var(--spacing-lg);
   border: none;
   border-radius: 6px;
   font-size: 14px;
@@ -616,7 +616,7 @@ body {
   border: 1px solid var(--el-border-color);
   min-width: 80px;
   height: 36px;
-  padding: 8px 16px;
+  padding: var(--spacing-base) var(--spacing-lg);
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
@@ -641,7 +641,7 @@ body {
   border: none;
   min-width: 80px;
   height: 36px;
-  padding: 8px 16px;
+  padding: var(--spacing-base) var(--spacing-lg);
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;

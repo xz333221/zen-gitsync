@@ -317,7 +317,7 @@ function handleClick() {
 
 .file-type-tag {
   font-size: var(--font-size-xs);
-  padding: 2px 8px;
+  padding: var(--spacing-xs) var(--spacing-base);
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
   color: var(--text-tertiary);

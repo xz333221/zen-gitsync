@@ -534,13 +534,13 @@ async function selectDirectory(dirPath: string) {
 
 /* 对话框样式（复用 App.vue 中样式） */
 .directory-content {
-  padding: 8px 0;
+  padding: var(--spacing-base) 0;
 }
 
 .form-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   font-size: 14px;
   font-weight: 500;
   color: var(--color-text-title);
@@ -554,7 +554,7 @@ async function selectDirectory(dirPath: string) {
 .directory-input-group {
   width: 100%;
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   align-items: stretch;
 }
 
@@ -566,7 +566,7 @@ async function selectDirectory(dirPath: string) {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 16px;
+  padding: 0 var(--spacing-lg);
   border: none;
   border-radius: 6px;
   background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
@@ -591,14 +591,14 @@ async function selectDirectory(dirPath: string) {
 .recent-directories {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .recent-dir-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: var(--spacing-base);
+  padding: 10px var(--spacing-md);
   background: var(--bg-input);
   border: 1px solid var(--border-card);
   border-radius: 6px;
@@ -662,7 +662,7 @@ async function selectDirectory(dirPath: string) {
   flex: 1;
   min-width: 0;
   background-color: var(--bg-container);
-  padding: 5px 8px;
+  padding: 5px var(--spacing-base);
   border-radius: 3px;
   border: 1px solid var(--border-card);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -683,7 +683,7 @@ async function selectDirectory(dirPath: string) {
   box-sizing: border-box;
 }
 .directory-item {
-  padding: 10px 12px;
+  padding: 10px var(--spacing-md);
   border-bottom: 1px solid var(--border-card);
   cursor: pointer;
   display: flex;
@@ -742,7 +742,7 @@ async function selectDirectory(dirPath: string) {
 
   .el-message-box__header {
     background-color: var(--bg-panel);
-    padding: 15px 20px;
+    padding: 15px var(--spacing-xl);
     border-bottom: 1px solid var(--border-card);
     position: relative;
   }
@@ -783,11 +783,11 @@ async function selectDirectory(dirPath: string) {
   }
 
   .el-message-box__content {
-    padding: 20px;
+    padding: var(--spacing-xl);
   }
 
   .el-message-box__btns {
-    padding: 10px 20px 15px;
+    padding: 10px var(--spacing-xl) 15px;
     border-top: 1px solid var(--border-card);
   }
 
@@ -823,7 +823,7 @@ async function selectDirectory(dirPath: string) {
     flex: 1;
     min-width: 0;
     background-color: var(--bg-container);
-    padding: 5px 8px;
+    padding: 5px var(--spacing-base);
     border-radius: 3px;
     border: 1px solid var(--border-card);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -846,7 +846,7 @@ async function selectDirectory(dirPath: string) {
   }
 
   .directory-item {
-    padding: 10px 12px;
+    padding: 10px var(--spacing-md);
     border-bottom: 1px solid var(--border-card);
     cursor: pointer;
     display: flex;

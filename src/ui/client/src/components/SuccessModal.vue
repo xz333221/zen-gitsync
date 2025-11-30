@@ -59,7 +59,7 @@ withDefaults(defineProps<Props>(), {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: var(--spacing-xl);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   max-width: 400px;
   text-align: center;

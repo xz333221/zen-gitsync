@@ -815,7 +815,7 @@ git config --global user.email "your.email@example.com"</pre
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-md);
 
   h2 {
     margin: 0;
@@ -825,7 +825,7 @@ git config --global user.email "your.email@example.com"</pre
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 /* 头部按钮样式优化 */
@@ -833,7 +833,7 @@ git config --global user.email "your.email@example.com"</pre
   border-radius: 6px;
   font-weight: 500;
   transition: all 0.3s ease;
-  padding: 6px 8px;
+  padding: 6px var(--spacing-base);
   font-size: 12px;
 }
 
@@ -884,7 +884,7 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 .card-content {
-  padding: 8px;
+  padding: var(--spacing-base);
   overflow-y: auto;
   flex: 1;
 }
@@ -892,7 +892,7 @@ git config --global user.email "your.email@example.com"</pre
 .layout-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
   height: 100%;
 }
 
@@ -905,20 +905,20 @@ git config --global user.email "your.email@example.com"</pre
 .standard-commit-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
   margin-bottom: 8px;
 }
 
 .standard-commit-header {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-sm);
   width: 100%;
 }
 
 .type-scope-container {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
   width: 100%;
   align-items: stretch;
 }
@@ -937,7 +937,7 @@ git config --global user.email "your.email@example.com"</pre
 .commit-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .description-container {
@@ -1121,7 +1121,7 @@ git config --global user.email "your.email@example.com"</pre
   background-color: #2d2d2d;
   color: #f8f8f2;
   font-family: "Courier New", Courier, monospace;
-  padding: 8px;
+  padding: var(--spacing-base);
   border-radius: 4px;
   margin-top: 8px;
   white-space: pre;
@@ -1158,7 +1158,7 @@ git config --global user.email "your.email@example.com"</pre
 .advanced-fields {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
   animation: fade-in 0.3s ease-in-out;
 }
 

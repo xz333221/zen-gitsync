@@ -391,7 +391,7 @@ watch(() => props.visible, (newValue) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
+  padding: 10px var(--spacing-md);
   background: var(--bg-input);
   border-bottom: 1px solid var(--border-card);
 }
@@ -399,7 +399,7 @@ watch(() => props.visible, (newValue) => {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .npm-icon {
@@ -417,7 +417,7 @@ watch(() => props.visible, (newValue) => {
 .package-count {
   font-size: 11px;
   color: var(--text-secondary);
-  padding: 2px 6px;
+  padding: var(--spacing-xs) 6px;
   background: var(--bg-container);
   border-radius: 10px;
   border: 1px solid var(--border-card);
@@ -426,7 +426,7 @@ watch(() => props.visible, (newValue) => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .refresh-btn,
@@ -470,8 +470,8 @@ watch(() => props.visible, (newValue) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 24px;
-  gap: 12px;
+  padding: 48px var(--spacing-2xl);
+  gap: var(--spacing-md);
 }
 
 .loading-icon {
@@ -492,7 +492,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .packages-container {
-  padding: 8px;
+  padding: var(--spacing-base);
   overflow-y: auto;
   transition: max-height 0.1s ease;
 }
@@ -512,11 +512,11 @@ watch(() => props.visible, (newValue) => {
 .package-header {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: var(--spacing-base) var(--spacing-md);
   background: var(--bg-input);
   cursor: pointer;
   transition: all 0.2s ease;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .package-header:hover {
@@ -541,7 +541,7 @@ watch(() => props.visible, (newValue) => {
 .package-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   /* flex-direction: column; */
   flex: 1;
   min-width: 0;
@@ -595,7 +595,7 @@ watch(() => props.visible, (newValue) => {
 .script-count {
   font-size: 12px;
   color: var(--text-secondary);
-  padding: 2px 8px;
+  padding: var(--spacing-xs) var(--spacing-base);
   background: rgba(102, 126, 234, 0.1);
   border-radius: 10px;
 }
@@ -612,10 +612,10 @@ watch(() => props.visible, (newValue) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 22px 6px 20px;
+  padding: 6px 22px 6px var(--spacing-xl);
   cursor: pointer;
   transition: all 0.2s ease;
-  gap: 12px;
+  gap: var(--spacing-md);
   border-bottom: 1px solid var(--border-card);
 }
 
@@ -635,7 +635,7 @@ watch(() => props.visible, (newValue) => {
 .script-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   min-width: 0;
   flex-shrink: 0;
 }

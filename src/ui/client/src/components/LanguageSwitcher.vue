@@ -49,7 +49,7 @@ const handleLanguageChange = (locale: SupportLocale) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
+  padding: var(--spacing-sm) var(--spacing-md);
   cursor: pointer;
   border-radius: var(--radius-base);
   transition: var(--transition-all);

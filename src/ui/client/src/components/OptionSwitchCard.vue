@@ -49,13 +49,13 @@ function onChange(val: boolean) {
   background: linear-gradient(135deg, var(--bg-container) 0%, #f8f9fa 100%);
   border: 1px solid var(--border-component);
   border-radius: 8px;
-  padding: 8px;
+  padding: var(--spacing-base);
   transition: all 0.3s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .option-card.compact {
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
   min-width: 120px;
 }
 
@@ -68,7 +68,7 @@ function onChange(val: boolean) {
 .option-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .option-icon {

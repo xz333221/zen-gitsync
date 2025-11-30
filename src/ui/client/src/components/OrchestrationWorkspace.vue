@@ -929,7 +929,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 <style scoped lang="scss">
 .workspace-container {
   display: flex;
-  gap: 16px;
+  gap: var(--spacing-lg);
   min-height: 600px;
 }
 
@@ -961,7 +961,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: var(--spacing-md) var(--spacing-lg);
   background: linear-gradient(135deg, var(--bg-container), var(--bg-panel));
   border-bottom: 1px solid var(--border-component);
   flex-shrink: 0;
@@ -973,7 +973,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     color: var(--text-title);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--spacing-base);
 
     .el-icon {
       font-size: 16px;
@@ -984,14 +984,14 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 // 编排列表
 .orchestration-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: var(--spacing-base);
   
   &::-webkit-scrollbar {
     width: 6px;
@@ -1029,7 +1029,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 }
 
 .item-content {
-  padding: 12px;
+  padding: var(--spacing-md);
 }
 
 .item-header {
@@ -1053,7 +1053,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 
 .item-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--spacing-sm);
   flex-shrink: 0;
   opacity: 0;
   visibility: hidden;
@@ -1069,7 +1069,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .step-tag {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--spacing-sm);
   cursor: context-menu;
   font-size: 12px;
   
@@ -1082,8 +1082,8 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .orchestration-info {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
   flex-shrink: 0;
 }
 
@@ -1092,7 +1092,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  margin: 0 16px 16px 16px;
+  margin: 0 var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
   border: 1px solid var(--border-component);
   border-radius: 8px;
   background: var(--bg-container);
@@ -1104,7 +1104,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: var(--spacing-md) var(--spacing-lg);
   background: linear-gradient(135deg, var(--bg-panel), var(--bg-container));
   border-bottom: 1px solid var(--border-component);
   flex-shrink: 0;
@@ -1116,7 +1116,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     color: var(--text-title);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--spacing-base);
 
     .el-icon {
       font-size: 14px;
@@ -1135,7 +1135,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px;
+  padding: var(--spacing-md);
   min-height: 0;
 
   &::-webkit-scrollbar {
@@ -1151,14 +1151,14 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .step-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .step-item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-md);
   border: 1px solid var(--border-component);
   border-radius: 6px;
   background: var(--bg-panel);
@@ -1195,13 +1195,13 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   justify-content: space-between;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-component);
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .step-content-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .step-icon {
@@ -1213,7 +1213,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .step-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-sm);
   min-width: 0;
 }
 
@@ -1228,7 +1228,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   font-family: var(--font-mono);
   color: var(--text-secondary);
   background: var(--bg-code);
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
   border-radius: 4px;
   display: inline-block;
   word-break: break-all;
@@ -1241,12 +1241,12 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .step-dir {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--spacing-sm);
   font-size: 11px;
   color: var(--text-secondary);
   font-family: var(--font-mono);
   background: var(--bg-code);
-  padding: 4px 8px;
+  padding: var(--spacing-sm) var(--spacing-base);
   border-radius: 4px;
   max-width: 400px;
   overflow: hidden;
@@ -1268,13 +1268,13 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .step-options {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-lg);
   flex-shrink: 0;
 
   .option-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--spacing-base);
 
     .option-label {
       font-size: 12px;
@@ -1320,7 +1320,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .step-paths {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex-shrink: 1;
   min-width: 0;
   margin-left: auto;
@@ -1331,7 +1331,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .action-buttons {
   display: flex;
   flex-direction: row;
-  gap: 4px;
+  gap: var(--spacing-sm);
   align-items: center;
   flex-shrink: 0;
   opacity: 0;
@@ -1339,7 +1339,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   visibility: hidden;
   // transition: all 0.2s ease;
   background: var(--bg-container);
-  padding: 4px 6px;
+  padding: var(--spacing-sm) 6px;
   border-radius: 6px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
   border: 1px solid var(--border-component);
@@ -1349,7 +1349,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     margin: 0 !important;
     
     &.el-button--text {
-      padding: 4px 6px;
+      padding: var(--spacing-sm) 6px;
       min-width: 24px;
       height: 24px;
       font-size: 14px;
@@ -1366,7 +1366,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     width: 1px;
     height: 20px;
     background: var(--border-component);
-    margin: 0 2px;
+    margin: 0 var(--spacing-xs);
   }
 }
 
@@ -1374,15 +1374,15 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .add-step-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 0;
+  gap: var(--spacing-base);
+  padding: var(--spacing-base) 0;
 }
 
 .add-step-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
+  padding: var(--spacing-md);
   border: 1px solid var(--border-component);
   border-radius: 6px;
   background: var(--bg-container);
@@ -1407,7 +1407,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     font-size: 11px;
     color: var(--text-secondary);
     background: var(--bg-code);
-    padding: 2px 6px;
+    padding: var(--spacing-xs) 6px;
     border-radius: 3px;
     margin-top: 4px;
     display: inline-block;
@@ -1416,7 +1416,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   .step-directory {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--spacing-sm);
     font-size: 11px;
     color: #67c23a;
     margin-top: 4px;
@@ -1434,8 +1434,8 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .wait-step-form {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 20px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl);
 
   span {
     font-size: 14px;
@@ -1446,13 +1446,13 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 .version-step-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 20px;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-xl);
 
   .form-item {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--spacing-base);
 
     label {
       font-size: 13px;

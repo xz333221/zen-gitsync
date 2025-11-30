@@ -252,7 +252,7 @@ defineExpose({ openConfigEditor })
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
+  padding: var(--spacing-md);
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   border-radius: 8px;
   border: 1px solid #bae6fd;
@@ -261,7 +261,7 @@ defineExpose({ openConfigEditor })
 .editor-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .info-icon {
@@ -299,7 +299,7 @@ defineExpose({ openConfigEditor })
     font-size: 13px;
     line-height: 1.6;
     resize: none;
-    padding: 16px;
+    padding: var(--spacing-lg);
 
     &:focus {
       box-shadow: none;
@@ -312,17 +312,17 @@ defineExpose({ openConfigEditor })
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .footer-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .dialog-cancel-btn,
 .dialog-confirm-btn {
-  padding: 8px 20px;
+  padding: var(--spacing-base) var(--spacing-xl);
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
@@ -371,8 +371,8 @@ defineExpose({ openConfigEditor })
 .config-warning-content {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
   background: #fef2f2;
   border-radius: 8px;
   border: 1px solid #fecaca;

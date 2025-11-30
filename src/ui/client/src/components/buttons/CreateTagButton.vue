@@ -216,14 +216,14 @@ const tagTypeDescription = computed(() => {
 .tag-dialog-content {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .tag-info-card {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-base);
   background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
   border: 1px solid #86efac;
   border-radius: 12px;
@@ -277,7 +277,7 @@ const tagTypeDescription = computed(() => {
 .tag-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-base);
 }
 
 .tag-form :deep(.el-form-item) {
