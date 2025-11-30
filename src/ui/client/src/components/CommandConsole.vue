@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue';
+import { ref, onMounted, watch, onUnmounted, computed } from 'vue';
 import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
@@ -1747,12 +1747,13 @@ onUnmounted(() => {
 
 .ts {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: normal;
-  background: var(--bg-panel);
-  padding: 2px 8px;
-  border-radius: 4px;
+  /* background: var(--bg-panel); */
+  padding: 0 4px;
+  /* border-radius: 4px; */
   flex-shrink: 0;
+  opacity: 0.8;
 }
 
 .toggle-output-btn {
