@@ -1607,7 +1607,7 @@ html.dark .upstream-tip:hover {
   gap: var(--spacing-md);
   padding: var(--spacing-base) var(--spacing-lg);
   font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-base);
+  
   cursor: pointer;
   transition: var(--transition-all);
   
@@ -1627,7 +1627,7 @@ html.dark .upstream-tip:hover {
   
   h5 {
     margin: 0;
-    font-size: var(--font-size-base);
+    
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
   }

@@ -9,6 +9,7 @@ body {
     color: var(--text-primary);
     line-height: var(--line-height-normal);
     transition: var(--transition-all);
+    font-size: var(--font-size-base);
 }
 
 /* Element Plus 样式覆盖 - 使用统一变量 */

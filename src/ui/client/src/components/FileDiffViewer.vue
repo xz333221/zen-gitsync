@@ -1623,7 +1623,7 @@ onMounted(() => {
   display: none;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 1px;
+  
   border-radius: var(--radius-base);
   background: var(--bg-container);
   box-shadow: var(--shadow-sm);

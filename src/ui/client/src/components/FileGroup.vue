@@ -196,7 +196,7 @@ const getFileIcon = (filePath: string) => {
   padding: var(--spacing-base) var(--spacing-lg);
   cursor: pointer;
   font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-base);
+  
   
   transition: var(--transition-all);
   position: relative;
@@ -346,7 +346,6 @@ const getFileIcon = (filePath: string) => {
 .file-name {
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
-  font-size: var(--font-size-base);
   line-height: var(--line-height-tight);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -409,7 +408,7 @@ const getFileIcon = (filePath: string) => {
   display: none;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 1px;
+  
   border-radius: var(--radius-base);
   background: var(--bg-container);
   box-shadow: var(--shadow-sm);

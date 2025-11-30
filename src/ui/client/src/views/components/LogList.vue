@@ -1528,7 +1528,7 @@ function toggleFullscreen() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--font-size-base);
+  
   line-height: var(--line-height-tight);
 }
 
