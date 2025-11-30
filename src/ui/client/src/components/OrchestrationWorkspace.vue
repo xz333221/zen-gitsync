@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, VideoPlay, Clock, DocumentAdd, Plus, Folder, Monitor } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
@@ -20,6 +21,7 @@ const props = defineProps<{
 
 const emit = defineEmits<OrchestrationWorkspaceEmits>()
 
+const { t } = useI18n()
 const configStore = useConfigStore()
 
 // 显示/隐藏弹窗
@@ -461,7 +463,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 <template>
   <CommonDialog
     v-model="dialogVisible"
-    title="编排工作台"
+    :title="t('@ORCHWS:编排工作台')"
     :close-on-click-modal="false"
     :append-to-body="true"
     custom-class="orchestration-workspace-dialog"
@@ -471,21 +473,21 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       <!-- 左侧：编排列表 -->
       <div class="left-panel">
         <div class="panel-header">
-          <h3>已保存的编排</h3>
+          <h3>{{ t('@ORCHWS:已保存的编排') }}</h3>
           <el-button 
             type="primary" 
             size="small"
             :icon="Plus"
             @click="createNewOrchestration"
           >
-            新建
+            {{ t('@ORCHWS:新建') }}
           </el-button>
         </div>
         
         <div class="orchestration-list">
           <el-empty 
             v-if="orchestrations.length === 0" 
-            description="暂无编排" 
+            :description="t('@ORCHWS:暂无编排')" 
             :image-size="100"
           />
           
@@ -505,7 +507,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                     :icon="VideoPlay"
                     size="small"
                     circle
-                    title="执行"
+                    :title="t('@ORCHWS:执行')"
                     @click.stop="executeOrchestration(orchestration)"
                   />
                   <el-button 
@@ -513,7 +515,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                     :icon="Delete"
                     size="small"
                     circle
-                    title="删除"
+                    :title="t('@ORCHWS:删除')"
                     @click.stop="deleteOrchestration(orchestration)"
                   />
                 </div>
@@ -561,7 +563,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       <!-- 右侧：编排编辑器 -->
       <div class="right-panel">
         <div class="panel-header">
-          <h3>{{ editingOrchestrationId ? '编辑编排' : '新建编排' }}</h3>
+          <h3>{{ editingOrchestrationId ? t('@ORCHWS:编辑编排') : t('@ORCHWS:新建编排') }}</h3>
           <div class="header-actions">
             <el-button 
               type="success" 
@@ -570,7 +572,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
               :disabled="orchestrationSteps.length === 0"
               @click="saveOrchestration"
             >
-              保存
+              {{ t('@ORCHWS:保存') }}
             </el-button>
             <el-button 
               type="primary" 
@@ -579,7 +581,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
               :disabled="orchestrationSteps.length === 0"
               @click="executeCurrentOrchestration"
             >
-              执行
+              {{ t('@ORCHWS:执行') }}
             </el-button>
           </div>
         </div>
@@ -588,13 +590,13 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
         <div class="orchestration-info">
           <el-input
             v-model="orchestrationName"
-            placeholder="编排名称（必填）"
+            :placeholder="t('@ORCHWS:编排名称（必填）')"
             size="default"
             clearable
           />
           <el-input
             v-model="orchestrationDescription"
-            placeholder="编排描述（选填）"
+            :placeholder="t('@ORCHWS:编排描述（选填）')"
             type="textarea"
             :rows="2"
             clearable
@@ -606,7 +608,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
           <div class="steps-header">
             <h4>
               <el-icon><VideoPlay /></el-icon>
-              执行步骤
+              {{ t('@ORCHWS:执行步骤') }}
               <span class="step-count">({{ orchestrationSteps.length }})</span>
             </h4>
             <div class="header-actions">
@@ -616,7 +618,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                 :icon="Plus"
                 @click="showAddStepDialog = true"
               >
-                添加步骤
+                {{ t('@ORCHWS:添加步骤') }}
               </el-button>
               <el-button 
                 v-if="orchestrationSteps.length > 0"
@@ -633,7 +635,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
           <div class="steps-scroll">
             <el-empty 
               v-if="orchestrationSteps.length === 0" 
-              description="请添加执行步骤" 
+              :description="t('@ORCHWS:请添加执行步骤')" 
               :image-size="80"
             />
             <div v-else class="step-list">
@@ -664,7 +666,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                         :class="['terminal-toggle-btn', { 'is-active': step.useTerminal }]"
                         text
                         @click="step.useTerminal = !step.useTerminal"
-                        :title="step.useTerminal ? '终端执行' : '普通执行'"
+                        :title="step.useTerminal ? t('@ORCHWS:终端执行') : t('@ORCHWS:普通执行')"
                       >
                         <el-icon :size="18">
                           <Monitor />
@@ -678,7 +680,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                         :icon="VideoPlay"
                         circle
                         @click="executeSingleStep(step)"
-                        title="执行"
+                        :title="t('@ORCHWS:执行')"
                       />
                       <div class="button-divider"></div>
                       <el-button 
@@ -687,7 +689,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                         text
                         :disabled="index === 0"
                         @click="moveToTop(index)"
-                        title="置顶"
+                        :title="t('@ORCHWS:置顶')"
                       >
                         ⇈
                       </el-button>
@@ -697,7 +699,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                         text
                         :disabled="index === 0"
                         @click="moveUp(index)"
-                        title="上移"
+                        :title="t('@ORCHWS:上移')"
                       >
                         ↑
                       </el-button>
@@ -707,7 +709,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                         text
                         :disabled="index === orchestrationSteps.length - 1"
                         @click="moveDown(index)"
-                        title="下移"
+                        :title="t('@ORCHWS:下移')"
                       >
                         ↓
                       </el-button>
@@ -717,7 +719,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                         text
                         :disabled="index === orchestrationSteps.length - 1"
                         @click="moveToBottom(index)"
-                        title="置底"
+                        :title="t('@ORCHWS:置底')"
                       >
                         ⇊
                       </el-button>
@@ -728,7 +730,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                         :icon="Delete"
                         text
                         @click="removeStep(index)"
-                        title="删除"
+                        :title="t('@ORCHWS:删除')"
                       />
                     </div>
                   </div>
@@ -761,7 +763,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   <!-- 添加步骤对话框 -->
   <CommonDialog
     v-model="showAddStepDialog"
-    title="添加步骤"
+    :title="t('@ORCHWS:添加步骤')"
     width="600px"
     :append-to-body="true"
     custom-class="add-step-dialog"

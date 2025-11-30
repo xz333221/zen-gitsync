@@ -1211,7 +1211,7 @@ onUnmounted(() => {
             <SvgIcon icon-class="command-list" class-name="icon-btn" />
           </el-button>
         </el-tooltip>
-        <el-tooltip content="编排工作台" placement="bottom">
+        <el-tooltip :content="$t('@ORCHWS:编排工作台')" placement="bottom">
           <el-button
             text
             @click="openOrchestrationWorkspace"
