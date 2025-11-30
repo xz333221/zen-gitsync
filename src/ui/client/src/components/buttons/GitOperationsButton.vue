@@ -355,7 +355,7 @@ defineExpose({
 
 .action-group {
   background: var(--bg-container);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: var(--spacing-md);
   border: 1px solid var(--border-component);
 }

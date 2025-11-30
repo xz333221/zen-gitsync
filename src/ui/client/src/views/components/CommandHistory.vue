@@ -558,7 +558,7 @@ onUnmounted(() => {
   height: 36px;
   padding: var(--spacing-base);
   gap: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 500;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -595,7 +595,7 @@ onUnmounted(() => {
   background: rgba(245, 108, 108, 0.15);
   color: #f56c6c;
   border-color: rgba(245, 108, 108, 0.3);
-  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.2);
+  box-shadow: var(--shadow-md);
 }
 
 /* 工具栏按钮特殊尺寸 */
@@ -612,14 +612,14 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(0, 0, 0, 0.08);
   color: rgba(0, 0, 0, 0.85);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .dialog-toolbar .enhanced-btn:hover {
   background: rgba(255, 255, 255, 1);
   border-color: rgba(0, 0, 0, 0.12);
   color: rgba(0, 0, 0, 1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-lg);
 }
 
 /* 深色主题下：工具栏主按钮（命令 / 全部）配色 */
@@ -627,14 +627,14 @@ onUnmounted(() => {
   background: var(--bg-container);
   color: var(--text-primary);
   border-color: var(--border-component);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-md);
 }
 
 [data-theme="dark"] .dialog-toolbar .enhanced-btn:hover {
   background: var(--bg-container-hover);
   color: #ffffff;
   border-color: var(--border-component-light);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-lg);
 }
 
 .dialog-toolbar .danger-btn {
@@ -647,7 +647,7 @@ onUnmounted(() => {
   background: rgba(245, 108, 108, 0.12);
   color: #f56c6c;
   border-color: rgba(245, 108, 108, 0.25);
-  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.15);
+  box-shadow: var(--shadow-md);
 }
 
 /* 深色主题下：危险按钮配色与可读性 */
@@ -661,7 +661,7 @@ onUnmounted(() => {
   background: #3a2020;
   color: #ff8f8f;
   border-color: #a33c3c;
-  box-shadow: 0 6px 16px rgba(245, 108, 108, 0.25);
+  box-shadow: var(--shadow-lg);
 }
 
 /* 小按钮尺寸 */
@@ -686,13 +686,13 @@ onUnmounted(() => {
 .item-copy-button:hover,
 .output-copy-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-md);
 }
 
 .item-copy-button:active,
 .output-copy-button:active {
   transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
 }
 
 /* 展开指示器样式（非交互式） */
@@ -713,7 +713,7 @@ onUnmounted(() => {
 
 .enhanced-btn:active {
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-md);
 }
 
 /* 按钮加载状态 */
@@ -735,7 +735,7 @@ onUnmounted(() => {
 
 /* 弹窗样式 */
 .command-history-dialog {
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   z-index: 9999 !important;
 }
 
@@ -801,7 +801,7 @@ onUnmounted(() => {
 
 .history-item {
   border: 1px solid var(--border-card);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   transition: all 0.2s;
   overflow: hidden;
 }
@@ -947,7 +947,7 @@ onUnmounted(() => {
 
 .output-content {
   padding: 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   font-family: 'Consolas', 'Courier New', monospace;
   font-size: 12px;
   white-space: pre-wrap;
@@ -981,7 +981,7 @@ onUnmounted(() => {
 
 .output-content::-webkit-scrollbar-thumb {
   background-color: #c0c4cc;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 .output-content::-webkit-scrollbar-track {

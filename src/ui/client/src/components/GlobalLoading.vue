@@ -123,14 +123,14 @@ withDefaults(defineProps<Props>(), {
   width: 200px;
   height: 4px;
   background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
 .progress-bar {
   height: 100%;
   background: linear-gradient(90deg, var(--bg-container) 0%, rgba(255, 255, 255, 0.8) 100%);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   transition: width 0.3s ease;
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }

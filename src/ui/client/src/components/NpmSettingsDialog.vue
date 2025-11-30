@@ -449,7 +449,7 @@ function handleClose() {
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--bg-input);
   border: 1px solid var(--border-card);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-bottom: 20px;
 }
 
@@ -485,7 +485,7 @@ function handleClose() {
 .scripts-list-section,
 .script-form-section {
   border: 1px solid var(--border-component);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: var(--spacing-md);
   background: var(--bg-panel);
 }
@@ -510,7 +510,7 @@ function handleClose() {
   color: var(--text-secondary);
   background: var(--bg-input);
   padding: var(--spacing-xs) var(--spacing-base);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
 }
 
 .empty-scripts {
@@ -534,13 +534,13 @@ function handleClose() {
   gap: var(--spacing-md);
   padding: var(--spacing-base);
   border: 1px solid var(--border-card);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-container);
   transition: all 0.3s ease;
 
   &:hover {
     border-color: #409eff;
-    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+    box-shadow: var(--shadow-md);
     grid-template-columns: 1fr auto;
   }
   
@@ -577,7 +577,7 @@ function handleClose() {
 .script-command {
   padding: 6px 10px;
   background: var(--bg-input);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   border: 1px solid var(--border-card);
   
   code {
@@ -623,12 +623,12 @@ function handleClose() {
 
 .script-items::-webkit-scrollbar-track {
   background: var(--bg-input);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
 }
 
 .script-items::-webkit-scrollbar-thumb {
   background: var(--border-card);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   transition: background 0.2s ease;
 }
 
@@ -651,7 +651,7 @@ function handleClose() {
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--bg-input);
   border: 1px solid var(--border-card);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-bottom: 20px;
 }
 
@@ -757,7 +757,7 @@ function handleClose() {
   gap: 6px;
   margin-top: 6px;
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   font-size: 12px;
 }
 

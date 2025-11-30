@@ -341,7 +341,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
   .progress-bar {
     background-color: var(--color-warning-bg);
     border: 1px solid var(--color-warning-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     padding: var(--spacing-md) var(--spacing-lg);
     margin-bottom: 16px;
     
@@ -372,7 +372,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
   
   .conflict-block {
     border: 2px solid var(--color-warning-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     margin-bottom: 24px;
     overflow: hidden;
     transition: all 0.3s ease;
@@ -399,7 +399,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
         background-color: var(--color-success);
         color: white;
         padding: var(--spacing-xs) var(--spacing-base);
-        border-radius: 4px;
+        border-radius: var(--radius-base);
         font-size: 12px;
         font-weight: 500;
       }
@@ -504,14 +504,14 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
                 background-color: rgba(248, 81, 73, 0.25);
                 color: #f85149;
                 padding: 0 var(--spacing-xs);
-                border-radius: 2px;
+                border-radius: var(--radius-xs);
               }
               
               .diff-added-text {
                 background-color: rgba(34, 134, 58, 0.25);
                 color: #22863a;
                 padding: 0 var(--spacing-xs);
-                border-radius: 2px;
+                border-radius: var(--radius-xs);
               }
             }
             
@@ -523,7 +523,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
               cursor: pointer;
               font-size: 11px;
               font-weight: bold;
-              border-radius: 3px;
+              border-radius: var(--radius-sm);
               opacity: 0;
               transition: all 0.2s;
               
@@ -594,7 +594,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
                   font-family: 'Consolas', 'Monaco', monospace;
                   background-color: rgba(64, 158, 255, 0.1);
                   padding: var(--spacing-xs) 6px;
-                  border-radius: 3px;
+                  border-radius: var(--radius-sm);
                 }
               }
             }
@@ -617,7 +617,7 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
     .resolved-content {
       background-color: rgba(var(--color-success-rgb), 0.05);
       border: 2px solid var(--color-success);
-      border-radius: 4px;
+      border-radius: var(--radius-base);
       overflow: hidden;
       
       .resolved-header {

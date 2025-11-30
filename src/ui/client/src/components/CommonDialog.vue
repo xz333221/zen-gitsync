@@ -254,7 +254,7 @@ function handleClosed() {
 
 /* 通用对话框的细节优化（仅在该组件内生效） */
 :deep(.el-dialog) {
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
   overflow: hidden;
 }

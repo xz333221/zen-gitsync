@@ -444,9 +444,9 @@ function formatDate(dateString: string): string {
   margin-bottom: 8px;
   padding: var(--spacing-base);
   background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .tag-stats {
@@ -461,7 +461,7 @@ function formatDate(dateString: string): string {
   gap: var(--spacing-base);
   padding: var(--spacing-xs) var(--spacing-base);
   background: #22c55e;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: white;
 }
 
@@ -486,7 +486,7 @@ function formatDate(dateString: string): string {
 
 .refresh-btn,
 .push-all-btn {
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: var(--spacing-xs) var(--spacing-base);
   font-weight: 500;
   transition: all 0.3s ease;
@@ -512,9 +512,9 @@ function formatDate(dateString: string): string {
 
 .tag-card {
   background: var(--bg-container);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-md);
   transition: all 0.3s ease;
   overflow: hidden;
   
@@ -583,7 +583,7 @@ function formatDate(dateString: string): string {
   font-family: monospace;
   background: var(--bg-panel);
   padding: var(--spacing-xs) 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
 }
 
 .tag-date {
@@ -596,7 +596,7 @@ function formatDate(dateString: string): string {
   line-height: 1.4;
   padding: 6px var(--spacing-base);
   background: var(--bg-panel);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border-left: 3px solid #22c55e;
 }
 
@@ -613,7 +613,7 @@ function formatDate(dateString: string): string {
 }
 
 .action-btn {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-weight: 500;
   transition: all 0.3s ease;
   min-width: 60px;
@@ -626,15 +626,15 @@ function formatDate(dateString: string): string {
 }
 
 .view-btn:hover {
-  box-shadow: 0 4px 12px rgba(144, 147, 153, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .push-btn:hover {
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .delete-btn:hover {
-  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 /* 标签详情弹窗样式 */
@@ -650,7 +650,7 @@ function formatDate(dateString: string): string {
   gap: var(--spacing-md);
   padding: 10px;
   background: var(--bg-panel);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   
   &.detail-message {
     flex-direction: column;
@@ -674,7 +674,7 @@ function formatDate(dateString: string): string {
     font-family: monospace;
     background: var(--border-component);
     padding: var(--spacing-xs) var(--spacing-base);
-    border-radius: 4px;
+    border-radius: var(--radius-base);
     border: 1px solid var(--border-component);
   }
 }
@@ -683,7 +683,7 @@ function formatDate(dateString: string): string {
   width: 100%;
   padding: var(--spacing-base);
   background: white;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-card);
   white-space: pre-wrap;
   word-break: break-word;

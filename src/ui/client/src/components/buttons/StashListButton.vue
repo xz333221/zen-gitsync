@@ -446,9 +446,9 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   margin-bottom: 8px;
   padding: var(--spacing-base);
   background: linear-gradient(135deg, var(--color-white) 0%, #f8f9fa 100%);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .stash-stats {
@@ -463,7 +463,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   gap: var(--spacing-base);
   padding: var(--spacing-xs) var(--spacing-base);
   background: #409eff;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: white;
 }
 
@@ -487,7 +487,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 }
 
 .clear-all-btn {
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: var(--spacing-xs) var(--spacing-base);
   font-weight: 500;
   transition: all 0.3s ease;
@@ -513,9 +513,9 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 
 .stash-card {
   background: var(--bg-container);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-md);
   transition: all 0.3s ease;
   overflow: hidden;
   
@@ -527,11 +527,11 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 
 .stash-card-latest {
   border: 2px solid #67c23a;
-  box-shadow: 0 2px 12px rgba(103, 194, 58, 0.15);
+  box-shadow: var(--shadow-md);
   
   &:hover {
     border-color: #67c23a;
-    box-shadow: 0 4px 16px rgba(103, 194, 58, 0.25);
+    box-shadow: var(--shadow-lg);
   }
 }
 
@@ -575,7 +575,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   background: var(--bg-panel);
   color: var(--text-secondary);
   padding: 3px var(--spacing-base);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   font-weight: 500;
   letter-spacing: 0.5px;
   border: 1px solid var(--border-card);
@@ -614,7 +614,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 }
 
 .action-btn {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-weight: 500;
   transition: all 0.3s ease;
   min-width: 60px;
@@ -627,19 +627,19 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 }
 
 .view-btn:hover {
-  box-shadow: 0 4px 12px rgba(144, 147, 153, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .apply-btn:hover {
-  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .apply-pop-btn:hover {
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .delete-btn:hover {
-  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 /* 储藏详情弹窗样式 */
@@ -655,7 +655,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   align-items: center;
   gap: var(--spacing-base);
   padding: var(--spacing-base);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-component);
   flex-shrink: 0; /* 不被压缩 */
 }
@@ -680,7 +680,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   background-color: var(--border-component);
   color: var(--color-text);
   padding: var(--spacing-xs) 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-component);
 }
 

@@ -830,7 +830,7 @@ git config --global user.email "your.email@example.com"</pre
 
 /* 头部按钮样式优化 */
 .header-actions :deep(.el-button) {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-weight: 500;
   transition: all 0.3s ease;
   padding: 6px var(--spacing-base);
@@ -839,7 +839,7 @@ git config --global user.email "your.email@example.com"</pre
 
 .header-actions :deep(.el-button:hover) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
 }
 
 .header-actions :deep(.el-button--primary) {
@@ -946,8 +946,8 @@ git config --global user.email "your.email@example.com"</pre
   gap: 5px;
   width: 100%;
   background: linear-gradient(135deg, #f8faff 0%, #eef4ff 100%);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
   transition: all 0.3s ease;
 }
 
@@ -964,7 +964,7 @@ git config --global user.email "your.email@example.com"</pre
 
 .description-container:hover {
   // border-color: #409eff;
-  box-shadow: 0 4px 16px rgba(64, 158, 255, 0.2);
+  box-shadow: var(--shadow-lg);
 }
 
 /* 简短描述输入框样式 */
@@ -972,17 +972,17 @@ git config --global user.email "your.email@example.com"</pre
   flex-grow: 1;
 
   .el-input__wrapper {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--bg-container);
     border: 2px solid #409eff;
-    box-shadow: 0 2px 4px rgba(64, 158, 255, 0.1);
+    box-shadow: var(--shadow-sm);
     transition: all 0.3s ease;
     height: 40px; /* 统一高度，与其它输入保持一致 */
   }
 
   .el-input__wrapper:hover {
     border-color: #66b1ff;
-    box-shadow: 0 4px 8px rgba(64, 158, 255, 0.2);
+    box-shadow: var(--shadow-md);
   }
 
   .el-input__wrapper.is-focus {
@@ -1005,17 +1005,17 @@ git config --global user.email "your.email@example.com"</pre
 /* 提交类型选择框样式 */
 :deep(.type-select) {
   .el-select__wrapper {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--bg-container);
     border: 2px solid #f56c6c;
-    box-shadow: 0 2px 4px rgba(245, 108, 108, 0.1);
+    box-shadow: var(--shadow-sm);
     transition: all 0.3s ease;
     height: 40px; /* 统一高度 */
   }
 
   .el-select__wrapper:hover {
     border-color: #f78989;
-    box-shadow: 0 4px 8px rgba(245, 108, 108, 0.2);
+    box-shadow: var(--shadow-md);
   }
 
   .el-select__wrapper.is-focus {
@@ -1039,17 +1039,17 @@ git config --global user.email "your.email@example.com"</pre
   flex-grow: 1;
 
   .el-input__wrapper {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--bg-container);
     border: 2px solid #67c23a;
-    box-shadow: 0 2px 4px rgba(103, 194, 58, 0.1);
+    box-shadow: var(--shadow-sm);
     transition: all 0.3s ease;
     height: 40px; /* 统一高度 */
   }
 
   .el-input__wrapper:hover {
     border-color: #85ce61;
-    box-shadow: 0 4px 8px rgba(103, 194, 58, 0.2);
+    box-shadow: var(--shadow-md);
   }
 
   .el-input__wrapper.is-focus {
@@ -1076,15 +1076,15 @@ git config --global user.email "your.email@example.com"</pre
     var(--bg-container-hover) 0%,
     #fff2e6 100%
   );
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(230, 162, 60, 0.1);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
   transition: all 0.3s ease;
 
   .el-textarea__inner {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--bg-container);
     border: 2px solid #e6a23c;
-    box-shadow: 0 2px 4px rgba(230, 162, 60, 0.1);
+    box-shadow: var(--shadow-sm);
     font-size: 15px;
     font-weight: 500;
     transition: all 0.3s ease;
@@ -1092,7 +1092,7 @@ git config --global user.email "your.email@example.com"</pre
 
   .el-textarea__inner:hover {
     border-color: #ebb563;
-    box-shadow: 0 4px 8px rgba(230, 162, 60, 0.2);
+    box-shadow: var(--shadow-md);
   }
 
   .el-textarea__inner:focus {
@@ -1109,7 +1109,7 @@ git config --global user.email "your.email@example.com"</pre
 
 :deep(.commit-message-input):hover {
   border-color: #e6a23c;
-  box-shadow: 0 4px 16px rgba(230, 162, 60, 0.2);
+  box-shadow: var(--shadow-lg);
 }
 
 
@@ -1122,7 +1122,7 @@ git config --global user.email "your.email@example.com"</pre
   color: #f8f8f2;
   font-family: "Courier New", Courier, monospace;
   padding: var(--spacing-base);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   margin-top: 8px;
   white-space: pre;
 }
@@ -1133,7 +1133,7 @@ git config --global user.email "your.email@example.com"</pre
   justify-content: center;
   padding: 7px 0 6px;
   background-color: var(--bg-panel);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   cursor: pointer;
   transition: all 0.3s ease;
   user-select: none;
@@ -1195,14 +1195,14 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 .save-btn {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-weight: 500;
   min-width: 100px;
   transition: all 0.3s ease;
 
   &:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(144, 147, 153, 0.3);
+    box-shadow: var(--shadow-md);
   }
 }
 </style>

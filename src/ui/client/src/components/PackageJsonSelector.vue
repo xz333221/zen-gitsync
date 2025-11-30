@@ -363,7 +363,7 @@ watch(() => props.modelValue, (newValue) => {
   padding: var(--spacing-base) var(--spacing-md);
   background: var(--bg-panel);
   border: 1px solid var(--border-component);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   text-align: center;
 }
 

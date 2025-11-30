@@ -1350,12 +1350,12 @@ onUnmounted(() => {
   border: 1px solid var(--border-component);
   border-radius: 10px;
   padding: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-md);
   transition: all 0.3s ease;
   overflow: hidden;
   
   &:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-hover);
     border-color: rgba(64, 158, 255, 0.3);
   }
   
@@ -1426,7 +1426,7 @@ onUnmounted(() => {
   width: 36px;
   height: 36px;
   padding: var(--spacing-base);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all 0.3s ease;
   
   .el-icon {
@@ -1533,7 +1533,7 @@ onUnmounted(() => {
   padding: var(--spacing-sm) var(--spacing-base);
   background: var(--bg-container);
   margin: var(--spacing-md);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
   transition: all 0.3s ease;
   
@@ -1550,7 +1550,7 @@ onUnmounted(() => {
   color: #67c23a;
   /* background: linear-gradient(135deg, rgba(103, 194, 58, 0.1), rgba(103, 194, 58, 0.05)); */
   /* border: 1px solid rgba(103, 194, 58, 0.3); */
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   max-width: 45%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1590,12 +1590,12 @@ onUnmounted(() => {
 .console-input-row .el-button {
   padding: var(--spacing-base) var(--spacing-xl);
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all 0.3s ease;
   
   &:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+    box-shadow: var(--shadow-md);
   }
   
   &:active {
@@ -1611,7 +1611,7 @@ onUnmounted(() => {
   padding: var(--spacing-base) var(--spacing-md);
   background: linear-gradient(135deg, rgba(103, 194, 58, 0.05), rgba(103, 194, 58, 0.02));
   margin: var(--spacing-base) 0 0 0;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid rgba(103, 194, 58, 0.3);
   transition: all 0.3s ease;
   
@@ -1664,12 +1664,12 @@ onUnmounted(() => {
   
   &::-webkit-scrollbar-track {
     background: var(--bg-panel);
-    border-radius: 4px;
+    border-radius: var(--radius-base);
   }
   
   &::-webkit-scrollbar-thumb {
     background: var(--border-component);
-    border-radius: 4px;
+    border-radius: var(--radius-base);
     transition: background 0.3s ease;
     
     &:hover {
@@ -1751,7 +1751,7 @@ onUnmounted(() => {
   font-weight: normal;
   /* background: var(--bg-panel); */
   padding: 0 var(--spacing-sm);
-  /* border-radius: 4px; */
+  /* border-radius: var(--radius-base); */
   flex-shrink: 0;
   opacity: 0.8;
 }
@@ -1809,7 +1809,7 @@ pre.stdout, pre.stderr {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   background: var(--bg-code);
 }
 

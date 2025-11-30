@@ -573,9 +573,9 @@ h1 {
   display: flex;
   align-items: center;
   padding: var(--spacing-base);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
   flex-shrink: 0;
   transition: all 0.2s ease;
 }
@@ -613,7 +613,7 @@ h1 {
 .status-box {
   background-color: #f6f8fa;
   border: 1px solid #e1e4e8;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 15px;
   white-space: pre-wrap;
   font-family: monospace;
@@ -639,7 +639,7 @@ h1 {
   color: #f8f8f2;
   font-family: monospace;
   padding: 10px 15px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   margin-bottom: 10px;
 }
 
@@ -699,7 +699,7 @@ h1 {
   transition: background-color 0.2s, box-shadow 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: 4px; /* 从8px减少到4px */
+  border-radius: var(--radius-base); /* 从8px减少到4px */
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.1); /* 减小阴影 */
 }
 
@@ -712,7 +712,7 @@ h1 {
   width: 2px; /* 从4px减少到2px */
   background-color: #a0a0a0;
   height: 40px; /* 从50px减少到40px */
-  border-radius: 2px; /* 从4px减少到2px */
+  border-radius: var(--radius-xs); /* 从4px减少到2px */
   transition: background-color 0.2s, width 0.2s, box-shadow 0.2s;
 }
 
@@ -736,7 +736,7 @@ h1 {
   transition: background-color 0.2s, box-shadow 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: 4px; /* 从8px减少到4px */
+  border-radius: var(--radius-base); /* 从8px减少到4px */
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.1); /* 减小阴影 */
 }
 
@@ -749,7 +749,7 @@ h1 {
   width: 40px; /* 从50px减少到40px */
   height: 2px; /* 从4px减少到2px */
   background-color: #a0a0a0;
-  border-radius: 2px; /* 从4px减少到2px */
+  border-radius: var(--radius-xs); /* 从4px减少到2px */
   transition: background-color 0.2s, height 0.2s, box-shadow 0.2s;
 }
 

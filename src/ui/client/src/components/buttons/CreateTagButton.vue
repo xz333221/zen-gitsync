@@ -226,7 +226,7 @@ const tagTypeDescription = computed(() => {
   padding: var(--spacing-base);
   background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
   border: 1px solid #86efac;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   position: relative;
   overflow: hidden;
 }
@@ -252,7 +252,7 @@ const tagTypeDescription = computed(() => {
   color: white;
   font-size: 18px;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .tag-info-card .info-content {
@@ -293,7 +293,7 @@ const tagTypeDescription = computed(() => {
 
 .tag-form :deep(.el-input) {
   .el-input__inner {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     border: 2px solid #e5e7eb;
     transition: all 0.3s ease;
     
@@ -310,7 +310,7 @@ const tagTypeDescription = computed(() => {
 
 .tag-form :deep(.el-textarea) {
   .el-textarea__inner {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     border: 2px solid #e5e7eb;
     transition: all 0.3s ease;
     font-size: 14px;
@@ -335,7 +335,7 @@ const tagTypeDescription = computed(() => {
     
     .el-radio-button__inner {
       width: 100%;
-      border-radius: 8px;
+      border-radius: var(--radius-lg);
       transition: all 0.3s ease;
     }
   }
@@ -368,7 +368,7 @@ const tagTypeDescription = computed(() => {
 :deep(.tag-dialog) {
   .common-dialog__footer {
     .el-button {
-      border-radius: 8px;
+      border-radius: var(--radius-lg);
       font-weight: 500;
       transition: all 0.3s ease;
       

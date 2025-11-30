@@ -67,13 +67,13 @@ async function copyCommand() {
     gap: var(--spacing-base);
     background: var(--bg-input-hover);
     border: 1px solid #409eff;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     padding: var(--spacing-base);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
     margin-bottom: 8px;
-    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.12);
+    box-shadow: var(--shadow-md);
     
     &::before {
       content: '';
@@ -89,7 +89,7 @@ async function copyCommand() {
     
     &:hover {
       border-color: #409eff;
-      box-shadow: 0 2px 8px rgba(64, 158, 255, 0.12);
+      box-shadow: var(--shadow-md);
       background: var(--bg-input-hover);
       
       &::before {
@@ -120,7 +120,7 @@ async function copyCommand() {
       background: var(--bg-input-hover);
       color: var(--text-primary);
       border: 1px solid #409eff;
-      border-radius: 6px;
+      border-radius: var(--radius-md);
       padding: 6px var(--spacing-base);
       margin: 0;
       font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
@@ -169,7 +169,7 @@ async function copyCommand() {
       height: 28px;
       padding: 0;
       flex-shrink: 0;
-      border-radius: 6px;
+      border-radius: var(--radius-md);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -195,7 +195,7 @@ async function copyCommand() {
         color: #409eff;
         border-color: #409eff;
         transform: scale(1.05);
-        box-shadow: 0 3px 8px rgba(64, 158, 255, 0.15);
+        box-shadow: var(--shadow-md);
         
         &::before {
           left: 100%;
@@ -208,7 +208,7 @@ async function copyCommand() {
       
       &:active {
         transform: scale(1.02);
-        box-shadow: 0 2px 4px rgba(64, 158, 255, 0.15);
+        box-shadow: var(--shadow-sm);
       }
       
       .btn-icon {
@@ -230,12 +230,12 @@ async function copyCommand() {
 
 .preview-content::-webkit-scrollbar-track {
   background: #f3f4f6;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 .preview-content::-webkit-scrollbar-thumb {
   background: #d1d5db;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   transition: background 0.3s ease;
 }
 

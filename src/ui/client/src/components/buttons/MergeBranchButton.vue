@@ -297,7 +297,7 @@ async function handleMergeBranch() {
   padding: var(--spacing-base);
   background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
   border: 1px solid #93c5fd;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   position: relative;
   overflow: hidden;
 }
@@ -323,7 +323,7 @@ async function handleMergeBranch() {
   color: white;
   font-size: 18px;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .merge-info-card .info-content {
@@ -348,7 +348,7 @@ async function handleMergeBranch() {
 .merge-info-card .info-content code {
   background: rgba(59, 130, 246, 0.1);
   padding: var(--spacing-xs) 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-weight: 600;
   color: #1e40af;
@@ -376,7 +376,7 @@ async function handleMergeBranch() {
 .merge-form :deep(.el-textarea) {
   .el-input__wrapper,
   .el-textarea__inner {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     border: 2px solid #e5e7eb;
     transition: all 0.3s ease;
     
@@ -402,14 +402,14 @@ async function handleMergeBranch() {
   
   .el-radio-button__inner {
     width: 100%;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     transition: all 0.3s ease;
   }
 }
 
 .merge-options {
   padding: var(--spacing-base);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
 }
 
 .options-title {
@@ -449,7 +449,7 @@ async function handleMergeBranch() {
 :deep(.merge-dialog) {
   .common-dialog__footer {
     .el-button {
-      border-radius: 8px;
+      border-radius: var(--radius-lg);
       font-weight: 500;
       transition: all 0.3s ease;
       

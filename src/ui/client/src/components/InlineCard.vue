@@ -29,10 +29,10 @@ const hasIcon = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-base);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg-container);
   // border: 1px solid var(--border-component);
-  // box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  // box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
   max-width: 100%;
   height: 40px; /* unify card height */
@@ -41,7 +41,7 @@ const hasIcon = computed(() => {
 
 /* Unified hover for all cards */
 .inline-card:hover {
-  /* box-shadow: 0 3px 8px rgba(0,0,0,0.1); */
+  /* box-shadow: var(--shadow-md); */
   border-color: var(--border-color-dark);
 }
 
@@ -82,10 +82,10 @@ const hasIcon = computed(() => {
 :global([data-theme="dark"]) .inline-card {
   background: var(--bg-container-dark);
   border-color: var(--border-color-dark);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  box-shadow: var(--shadow-sm);
 }
 :global([data-theme="dark"]) .inline-card:hover {
-  /* box-shadow: 0 3px 10px rgba(0,0,0,0.45); */
+  /* box-shadow: var(--shadow-md); */
   border-color: var(--border-color-dark);
 }
 </style>

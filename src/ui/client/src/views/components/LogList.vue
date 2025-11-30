@@ -1166,7 +1166,7 @@ function toggleFullscreen() {
 <style scoped lang="scss">
 .fullscreen-mode .log-header {
   margin-bottom: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .header-left {
@@ -1188,7 +1188,7 @@ function toggleFullscreen() {
 
 .action-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
 }
 
 
@@ -1232,7 +1232,7 @@ function toggleFullscreen() {
 
 /* 优化表格区域 */
 .el-table {
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -1262,7 +1262,7 @@ function toggleFullscreen() {
 
 .branch-tag {
   margin-right: 0;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   transition: all 0.2s ease;
   font-size: 10px;
   padding: 0 var(--spacing-sm);
@@ -1272,7 +1272,7 @@ function toggleFullscreen() {
 
 .branch-tag:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .commit-count {
@@ -1286,7 +1286,7 @@ function toggleFullscreen() {
   font-size: 14px;
   color: var(--text-secondary);
   padding: var(--spacing-sm) 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   border: 1px solid var(--border-card);
 }
 
@@ -1306,7 +1306,7 @@ function toggleFullscreen() {
   color: #409eff;
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-weight: 500;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 1px 3px;
   background-color: #ecf5ff;
   transition: all 0.2s ease;
@@ -1316,7 +1316,7 @@ function toggleFullscreen() {
 .commit-hash:hover {
   text-decoration: none;
   background-color: #d9ecff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .commit-detail-container {
@@ -1332,7 +1332,7 @@ function toggleFullscreen() {
 .commit-info {
   flex-shrink: 0;
   background: var(--bg-panel);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   box-shadow: var(--shadow-md);
   transition: var(--transition-all);
@@ -1402,7 +1402,7 @@ function toggleFullscreen() {
 .diff-content::-webkit-scrollbar-thumb,
 .files-list::-webkit-scrollbar-thumb {
   background-color: rgba(144, 147, 153, 0.3);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
 }
 
 .diff-content::-webkit-scrollbar-thumb:hover,
@@ -1426,7 +1426,7 @@ function toggleFullscreen() {
   background-color: var(--bg-panel);
   padding: var(--spacing-base);
   margin-bottom: 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
   width: 100%;
@@ -1443,7 +1443,7 @@ function toggleFullscreen() {
   width: 100%;
   border-radius: 0;
   border-bottom: 1px solid var(--border-card);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .filter-form {
@@ -1486,7 +1486,7 @@ function toggleFullscreen() {
 
 .filter-action-button {
   padding: var(--spacing-base) var(--spacing-lg);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all 0.3s;
   min-width: 70px;
   font-weight: 500;
@@ -1494,7 +1494,7 @@ function toggleFullscreen() {
 
 .filter-action-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 /* 表格视图容器简化 */
@@ -1672,8 +1672,8 @@ function toggleFullscreen() {
   position: fixed;
   background: var(--bg-container);
   border: 1px solid var(--border-card);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   padding: 6px 0;
   z-index: 3000;
   min-width: 200px;
@@ -1691,7 +1691,7 @@ function toggleFullscreen() {
   width: 36px;
   height: 36px;
   padding: var(--spacing-base);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;

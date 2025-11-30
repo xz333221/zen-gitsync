@@ -1150,7 +1150,7 @@ defineExpose({
   white-space: pre-wrap;
   font-family: monospace;
   padding: var(--spacing-base);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin-bottom: 8px;
   max-height: 200px;
   overflow-y: auto;
@@ -1232,7 +1232,7 @@ defineExpose({
     &.active {
       background: #409eff;
       color: white;
-      box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
+      box-shadow: var(--shadow-sm);
     }
     
     .el-icon {
@@ -1259,7 +1259,7 @@ defineExpose({
 
 .file-list-container::-webkit-scrollbar-thumb {
   background-color: rgba(144, 147, 153, 0.3);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
 }
 
 .file-list-container::-webkit-scrollbar-thumb:hover {
@@ -1279,7 +1279,7 @@ defineExpose({
   justify-content: center;
   text-align: center;
   background-color: var(--bg-component-area);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   flex-grow: 1;
 }
 
@@ -1327,14 +1327,14 @@ defineExpose({
 .branch-status-info {
   margin-bottom: 0;
   background-color: var(--bg-container);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--border-card);
   transition: all 0.3s ease;
 }
 
 .branch-status-info:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .branch-sync-status {
@@ -1363,7 +1363,7 @@ defineExpose({
   display: flex;
   align-items: center;
   width: 100%;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   padding: var(--spacing-base);
   transition: all 0.3s ease;
 }
@@ -1381,7 +1381,7 @@ defineExpose({
 
 .status-badge:hover {
   transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .badge-content {
@@ -1398,7 +1398,7 @@ defineExpose({
 
 .el-button:not(:disabled):hover {
   transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 /* 自定义Git操作加载样式 */
@@ -1458,7 +1458,7 @@ defineExpose({
   gap: var(--spacing-base);
   padding: var(--spacing-base);
   border: 1px solid #ffd591;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-bottom: 8px;
   color: #d46b08;
   font-weight: 500;
@@ -1473,7 +1473,7 @@ defineExpose({
 .lock-feature-description {
   background-color: #f6f8fa;
   border: 1px solid #e1e4e8;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: var(--spacing-base);
 }
 
@@ -1525,7 +1525,7 @@ defineExpose({
   justify-content: space-between;
   padding: var(--spacing-base);
   border: 1px solid #ffd591;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all 0.2s ease;
 }
 
@@ -1533,7 +1533,7 @@ defineExpose({
 .upstream-tip {
   background: linear-gradient(135deg, rgba(64, 158, 255, 0.05) 0%, rgba(64, 158, 255, 0.02) 100%);
   border: 1px solid rgba(64, 158, 255, 0.2);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   padding: var(--spacing-xl);
   margin-bottom: 16px;
   transition: all 0.3s ease;
@@ -1541,7 +1541,7 @@ defineExpose({
 
 .upstream-tip:hover {
   border-color: rgba(64, 158, 255, 0.3);
-  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .upstream-tip .tip-header {
@@ -1589,7 +1589,7 @@ html.dark .upstream-tip {
 
 html.dark .upstream-tip:hover {
   border-color: rgba(64, 158, 255, 0.35);
-  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.15);
+  box-shadow: var(--shadow-md);
 }
 
 /* 树状视图分组样式 */

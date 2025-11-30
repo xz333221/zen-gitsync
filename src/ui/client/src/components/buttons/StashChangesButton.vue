@@ -202,7 +202,7 @@ async function saveStash() {
   padding: var(--spacing-base);
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   border: 1px solid #bae6fd;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   position: relative;
   overflow: hidden;
 }
@@ -228,7 +228,7 @@ async function saveStash() {
   color: white;
   font-size: 18px;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .stash-info-card .info-content {
@@ -269,7 +269,7 @@ async function saveStash() {
 
 .stash-form :deep(.el-textarea) {
   .el-textarea__inner {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     border: 2px solid #e5e7eb;
     transition: all 0.3s ease;
     font-size: 14px;
@@ -288,7 +288,7 @@ async function saveStash() {
 
 .stash-options {
   padding: var(--spacing-base);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
 }
 
 .options-title {
@@ -340,7 +340,7 @@ async function saveStash() {
   padding: var(--spacing-base);
   background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
   border: 1px solid #fbbf24;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   position: relative;
 }
 
@@ -376,7 +376,7 @@ async function saveStash() {
 }
 
 .file-count-info :deep(.el-tag) {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: var(--spacing-sm) var(--spacing-base);
 }
 
@@ -384,7 +384,7 @@ async function saveStash() {
 :deep(.stash-dialog) {
   .common-dialog__footer {
     .el-button {
-      border-radius: 8px;
+      border-radius: var(--radius-lg);
       font-weight: 500;
       transition: all 0.3s ease;
       

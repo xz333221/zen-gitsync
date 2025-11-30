@@ -504,11 +504,11 @@ async function selectDirectory(dirPath: string) {
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 0px;
   gap: 10px;
   /* border: 1px solid var(--border-component);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); */
+  box-shadow: var(--shadow-sm); */
   flex-shrink: 0;
   transition: all 0.2s ease;
 }
@@ -568,7 +568,7 @@ async function selectDirectory(dirPath: string) {
   gap: 6px;
   padding: 0 var(--spacing-lg);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
   color: white;
   font-size: 13px;
@@ -581,7 +581,7 @@ async function selectDirectory(dirPath: string) {
 
 .browse-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
+  box-shadow: var(--shadow-md);
 }
 
 .browse-btn:active {
@@ -601,7 +601,7 @@ async function selectDirectory(dirPath: string) {
   padding: 10px var(--spacing-md);
   background: var(--bg-input);
   border: 1px solid var(--border-card);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -642,7 +642,7 @@ async function selectDirectory(dirPath: string) {
 .current-path {
   padding: 10px;
   background-color: var(--bg-panel);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   margin-bottom: 10px;
   border: 1px solid var(--border-card);
   display: flex;
@@ -663,7 +663,7 @@ async function selectDirectory(dirPath: string) {
   min-width: 0;
   background-color: var(--bg-container);
   padding: 5px var(--spacing-base);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-card);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
   width: 100%;
@@ -673,7 +673,7 @@ async function selectDirectory(dirPath: string) {
   padding: 0;
   margin: 0;
   border: 1px solid var(--border-card);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   max-height: 300px;
   overflow-y: auto;
   background-color: var(--bg-container);
@@ -737,7 +737,7 @@ async function selectDirectory(dirPath: string) {
 <style lang="scss">
 /* 目录浏览器全局样式（使用嵌套写法） */
 .directory-browser-dialog {
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 
   .el-message-box__header {
@@ -801,7 +801,7 @@ async function selectDirectory(dirPath: string) {
   .current-path {
     padding: 10px;
     background-color: var(--bg-panel);
-    border-radius: 4px;
+    border-radius: var(--radius-base);
     margin-bottom: 10px;
     border: 1px solid var(--border-card);
     display: flex;
@@ -824,7 +824,7 @@ async function selectDirectory(dirPath: string) {
     min-width: 0;
     background-color: var(--bg-container);
     padding: 5px var(--spacing-base);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border-card);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
     width: 100%;
@@ -835,7 +835,7 @@ async function selectDirectory(dirPath: string) {
     padding: 0;
     margin: 0;
     border: 1px solid var(--border-card);
-    border-radius: 4px;
+    border-radius: var(--radius-base);
     max-height: 300px;
     overflow-y: auto;
     background-color: var(--bg-container);

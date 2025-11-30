@@ -349,10 +349,10 @@ watch(() => props.visible, (newValue) => {
   position: relative;
   background: var(--bg-container);
   border: 1px solid var(--border-card);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin-top: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .resize-handle {
@@ -374,7 +374,7 @@ watch(() => props.visible, (newValue) => {
   transform: translate(-50%, -50%);
   width: 40px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: transparent;
   transition: background 0.2s ease;
 }
@@ -437,7 +437,7 @@ watch(() => props.visible, (newValue) => {
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -500,7 +500,7 @@ watch(() => props.visible, (newValue) => {
 .package-item {
   margin-bottom: 8px;
   border: 1px solid var(--border-card);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   transition: all 0.2s ease;
 }
@@ -671,12 +671,12 @@ watch(() => props.visible, (newValue) => {
 
 .packages-container::-webkit-scrollbar-track {
   background: var(--bg-input);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
 }
 
 .packages-container::-webkit-scrollbar-thumb {
   background: var(--border-card);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   transition: background 0.2s ease;
 }
 
@@ -691,12 +691,12 @@ watch(() => props.visible, (newValue) => {
 
 .scripts-list::-webkit-scrollbar-track {
   background: var(--bg-input);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
 }
 
 .scripts-list::-webkit-scrollbar-thumb {
   background: var(--border-card);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   transition: background 0.2s ease;
 }
 

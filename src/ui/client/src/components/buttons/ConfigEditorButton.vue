@@ -254,7 +254,7 @@ defineExpose({ openConfigEditor })
   align-items: center;
   padding: var(--spacing-md);
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid #bae6fd;
 }
 
@@ -278,7 +278,7 @@ defineExpose({ openConfigEditor })
 // JSON编辑器
 .json-editor-wrapper {
   flex-grow: 1;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   border: 2px solid #e5e7eb;
   transition: border-color 0.3s ease;
@@ -323,7 +323,7 @@ defineExpose({ openConfigEditor })
 .dialog-cancel-btn,
 .dialog-confirm-btn {
   padding: var(--spacing-base) var(--spacing-xl);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -363,7 +363,7 @@ defineExpose({ openConfigEditor })
   &:hover:not(:disabled) {
     background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    box-shadow: var(--shadow-md);
   }
 }
 
@@ -374,7 +374,7 @@ defineExpose({ openConfigEditor })
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
   background: #fef2f2;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid #fecaca;
 }
 

@@ -1233,7 +1233,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
   
   h4 {
     margin: 0;
@@ -1278,7 +1278,7 @@ onMounted(() => {
     &.active {
       background: #409eff;
       color: white;
-      box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
+      box-shadow: var(--shadow-sm);
     }
     
     .el-icon {

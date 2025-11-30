@@ -449,7 +449,7 @@ defineExpose({
 .command-form {
   background: var(--bg-panel);
   border: 1px solid var(--border-component);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 14px var(--spacing-lg);
 }
 
@@ -531,7 +531,7 @@ defineExpose({
 
   &::-webkit-scrollbar-thumb {
     background-color: #c0c4cc;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
   }
 
   &::-webkit-scrollbar-track {
@@ -569,7 +569,7 @@ defineExpose({
   color: var(--text-title);
   background: var(--bg-code);
   padding: var(--spacing-sm) var(--spacing-base);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   display: inline-block;
   word-break: break-all;
 }
@@ -600,7 +600,7 @@ defineExpose({
   .current-path {
     padding: 10px;
     background-color: var(--bg-panel);
-    border-radius: 4px;
+    border-radius: var(--radius-base);
     margin-bottom: 10px;
     border: 1px solid var(--border-card);
     display: flex;
@@ -623,7 +623,7 @@ defineExpose({
     min-width: 0;
     background-color: var(--bg-container);
     padding: 5px var(--spacing-base);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border-card);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
     width: 100%;
@@ -634,7 +634,7 @@ defineExpose({
     padding: 0;
     margin: 0;
     border: 1px solid var(--border-card);
-    border-radius: 4px;
+    border-radius: var(--radius-base);
     max-height: 300px;
     overflow-y: auto;
     background-color: var(--bg-container);

@@ -422,7 +422,7 @@ defineExpose({
   flex-direction: column;
   gap: var(--spacing-base);
   padding: 10px var(--spacing-md);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -543,7 +543,7 @@ defineExpose({
 .error-section {
   background: #fef0f0;
   border: 1px solid #fde2e2;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
 }
 
@@ -578,7 +578,7 @@ defineExpose({
   max-height: 160px;
   overflow-y: auto;
   background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 10px var(--spacing-md);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 11px;
@@ -592,12 +592,12 @@ defineExpose({
   
   &::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.1);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
   }
   
   &::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     
     &:hover {
       background: rgba(255, 255, 255, 0.3);

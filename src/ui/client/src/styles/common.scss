@@ -70,7 +70,7 @@ body {
   font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
   font-weight: var(--font-weight-semibold);
-  box-shadow: 0 1px 3px rgba(3, 102, 214, 0.1);
+  box-shadow: var(--shadow-sm);
   transition: var(--transition-all);
 }
 
@@ -340,8 +340,8 @@ body {
 .card {
   background-color: var(--bg-container);
   border: 1px solid var(--border-card);
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   transition: var(--transition-all, all 0.3s ease);
   height: 100%;
   width: 100%;
@@ -351,7 +351,7 @@ body {
 }
 
 .card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-lg);
 }
 
 /* 统一 Card Header 样式，适配不同组件的 header 类名 */
@@ -570,7 +570,7 @@ body {
   gap: 6px;
   padding: var(--spacing-base) var(--spacing-lg);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -617,7 +617,7 @@ body {
   min-width: 80px;
   height: 36px;
   padding: var(--spacing-base) var(--spacing-lg);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -642,12 +642,12 @@ body {
   min-width: 80px;
   height: 36px;
   padding: var(--spacing-base) var(--spacing-lg);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
+  box-shadow: var(--shadow-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -656,7 +656,7 @@ body {
 
 .dialog-confirm-btn:hover {
   background: linear-gradient(135deg, #66b1ff 0%, #409eff 100%);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.4);
+  box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
 
@@ -672,7 +672,7 @@ body {
 
 .dialog-confirm-btn:disabled:hover {
   transform: none;
-  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 /* 深色主题下的对话框按钮 */
@@ -692,12 +692,12 @@ body {
 .primary-btn {
   background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
   color: white;
-  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.25);
+  box-shadow: var(--shadow-md);
 }
 
 .primary-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(52, 152, 219, 0.35);
+  box-shadow: var(--shadow-md);
 }
 
 .primary-btn:active {
@@ -718,12 +718,12 @@ body {
 .danger-btn {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;
-  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
+  box-shadow: var(--shadow-md);
 }
 
 .danger-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.35);
+  box-shadow: var(--shadow-md);
 }
 
 .danger-btn:active {

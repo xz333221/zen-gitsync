@@ -383,7 +383,7 @@ defineExpose({
 
 .template-list-scroll::-webkit-scrollbar-thumb {
   background-color: #c0c4cc;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 .template-list-scroll::-webkit-scrollbar-track {
@@ -392,7 +392,7 @@ defineExpose({
 
 .template-item {
   margin-bottom: 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
@@ -462,7 +462,7 @@ defineExpose({
 }
 
 .default-message-card {
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .default-message-content {
@@ -473,7 +473,7 @@ defineExpose({
 
 .message-help-text {
   padding: var(--spacing-lg);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border-left: 4px solid #409eff;
 }
 
@@ -501,7 +501,7 @@ defineExpose({
 
 .templates-scroll-area::-webkit-scrollbar-thumb {
   background-color: #c0c4cc;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 .templates-scroll-area::-webkit-scrollbar-track {

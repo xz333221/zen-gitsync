@@ -735,7 +735,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
   background: var(--bg-panel);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
 }
 
@@ -752,7 +752,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-component);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   overflow: hidden;
   min-height: 0;
@@ -805,7 +805,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
 
   &::-webkit-scrollbar-thumb {
     background-color: #c0c4cc;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
   }
 
   &::-webkit-scrollbar-track {
@@ -825,7 +825,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   gap: var(--spacing-md);
   padding: var(--spacing-md);
   border: 1px solid var(--border-component);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-container);
   transition: all 0.2s ease;
   cursor: move;
@@ -860,7 +860,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   color: white;
   background: linear-gradient(135deg, #409eff, #79bbff);
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 
 .step-icon {
@@ -889,7 +889,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   color: var(--text-secondary);
   background: var(--bg-code);
   padding: var(--spacing-sm) var(--spacing-base);
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   display: inline-block;
   word-break: break-all;
   max-width: 100%;
@@ -934,7 +934,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
   justify-content: space-between;
   padding: var(--spacing-md);
   border: 1px solid var(--border-component);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-container);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -958,7 +958,7 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
     color: var(--text-secondary);
     background: var(--bg-code);
     padding: var(--spacing-xs) 6px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     margin-top: 4px;
     display: inline-block;
   }

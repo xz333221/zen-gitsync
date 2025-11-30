@@ -404,7 +404,7 @@ html.dark .info-card {
 
 html.dark .info-card:hover {
   border-color: rgba(64, 158, 255, 0.35);
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+  box-shadow: var(--shadow-md);
 }
 
 html.dark .basic-info-section {
@@ -414,7 +414,7 @@ html.dark .basic-info-section {
 
 html.dark .basic-info-section:hover {
   border-color: rgba(64, 158, 255, 0.3);
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.12);
+  box-shadow: var(--shadow-md);
 }
 
 html.dark .label-icon {
@@ -436,16 +436,16 @@ html.dark .label-icon {
 }
 
 :deep(.modern-input .el-input__wrapper) {
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-input);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
   background: var(--bg-container);
 }
 
 :deep(.modern-input .el-input__wrapper:hover) {
   border-color: #d1d5db;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
 }
 
 :deep(.modern-input.is-focus .el-input__wrapper) {
@@ -475,7 +475,7 @@ html.dark .label-icon {
   padding: var(--spacing-lg);
   background: linear-gradient(135deg, rgba(64, 158, 255, 0.08) 0%, rgba(64, 158, 255, 0.04) 100%);
   border: 1px solid rgba(64, 158, 255, 0.2);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   position: relative;
   overflow: hidden;
   transition: all 0.3s ease;
@@ -483,7 +483,7 @@ html.dark .label-icon {
 
 .info-card:hover {
   border-color: rgba(64, 158, 255, 0.3);
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .info-card::before {

@@ -195,9 +195,9 @@ async function handleBranchChange(branch: string) {
 /* 选择框样式（需要非 scoped 才能穿透 Element Plus 组件） */
 .create-branch-dialog {
   .modern-select .el-select__wrapper {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border-input);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--shadow-sm);
     transition: all 0.2s ease;
     padding: 10px var(--spacing-md);
     background: var(--bg-container);
@@ -205,7 +205,7 @@ async function handleBranchChange(branch: string) {
 
   .modern-select .el-select__wrapper:hover {
     border-color: #d1d5db;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
   }
 
   .modern-select.is-focus .el-select__wrapper {

@@ -48,10 +48,10 @@ function onChange(val: boolean) {
 .option-card {
   background: linear-gradient(135deg, var(--bg-container) 0%, #f8f9fa 100%);
   border: 1px solid var(--border-component);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: var(--spacing-base);
   transition: all 0.3s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .option-card.compact {
@@ -61,7 +61,7 @@ function onChange(val: boolean) {
 
 .option-card:hover {
   border-color: #409eff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+  box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
 
@@ -74,7 +74,7 @@ function onChange(val: boolean) {
 .option-icon {
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   display: none;
   align-items: center;
   justify-content: center;
