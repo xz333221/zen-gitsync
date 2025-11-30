@@ -5,6 +5,7 @@ import { useConfigStore } from '@stores/configStore'
 import { ElMessage } from 'element-plus'
 import { Edit, Check, Warning } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
+import IconButton from '@components/IconButton.vue'
 
 interface Props {
   variant?: 'icon' | 'text'
@@ -136,17 +137,22 @@ defineExpose({ openConfigEditor })
 <template>
   <div class="config-editor-button">
     <!-- 编辑配置按钮 -->
-    <el-tooltip :content="$t('@F13B4:编辑项目配置')" placement="bottom" effect="dark" :show-after="200">
-      <button
-        :class="props.variant === 'icon' ? 'modern-btn btn-icon-36' : 'action-button'"
-        @click="openConfigEditor"
-      >
-        <el-icon :class="props.variant === 'icon' ? 'btn-icon' : ''">
-          <Edit />
-        </el-icon>
-        <template v-if="props.variant === 'text'">{{ $t('@F13B4:编辑项目配置') }}</template>
-      </button>
-    </el-tooltip>
+    <IconButton
+      v-if="props.variant === 'icon'"
+      :tooltip="$t('@F13B4:编辑项目配置')"
+      size="medium"
+      @click="openConfigEditor"
+    >
+      <el-icon><Edit /></el-icon>
+    </IconButton>
+    <button
+      v-else
+      class="action-button"
+      @click="openConfigEditor"
+    >
+      <el-icon><Edit /></el-icon>
+      {{ $t('@F13B4:编辑项目配置') }}
+    </button>
 
     <!-- 配置JSON编辑弹窗 -->
     <CommonDialog

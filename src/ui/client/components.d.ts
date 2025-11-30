@@ -60,6 +60,8 @@ declare module 'vue' {
     GitGlobalSettingsDialog: typeof import('./src/components/GitGlobalSettingsDialog.vue')['default']
     GitOperationsButton: typeof import('./src/components/buttons/GitOperationsButton.vue')['default']
     GlobalLoading: typeof import('./src/components/GlobalLoading.vue')['default']
+    IconButton: typeof import('./src/components/IconButton.vue')['default']
+    IconButtonExample: typeof import('./src/components/examples/IconButtonExample.vue')['default']
     InlineCard: typeof import('./src/components/InlineCard.vue')['default']
     LanguageSwitcher: typeof import('./src/components/LanguageSwitcher.vue')['default']
     ListIcon: typeof import('./src/components/icons/ListIcon.vue')['default']

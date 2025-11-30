@@ -92,6 +92,9 @@ export default {
   '@CF05E:关闭': 'Off',
   '@CF05E:自定义命令管理': 'Custom Command Manager',
   '@CF05E:指令编排': 'Command Orchestration',
+  '@CF05E:全屏': 'Fullscreen',
+  '@CF05E:收起控制台': 'Collapse Console',
+  '@CF05E:展开控制台': 'Expand Console',
   // @CF05E: file end
   // @CMD01: file path: components\CustomCommandManager.vue
   '@CMD01:命令名称不能为空': 'Command name cannot be empty',
@@ -1004,5 +1007,10 @@ export default {
   '@A1833:重置到该提交(hard)': 'Reset to this commit (hard)',
   '@A1833:撤销提交 (Revert)': 'Revert Submission',
   '@A1833:-Pick 到当前分支': '-Pick to the current branch',
+  '@A1833:隐藏筛选': 'Hide Filter',
+  '@A1833:显示筛选': 'Show Filter',
+  '@A1833:退出全屏': 'Exit Fullscreen',
+  '@A1833:全屏显示': 'Fullscreen',
+  '@A1833:刷新日志': 'Refresh Log',
   // @A1833: file end
 }

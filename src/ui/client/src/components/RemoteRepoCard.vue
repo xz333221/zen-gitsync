@@ -3,6 +3,7 @@ import { $t } from '@/lang/static'
 import { DocumentCopy, Download } from '@element-plus/icons-vue'
 import InlineCard from '@components/InlineCard.vue'
 import { useGitStore } from '@stores/gitStore'
+import IconButton from '@components/IconButton.vue'
 
 const gitStore = useGitStore()
 </script>
@@ -17,16 +18,18 @@ const gitStore = useGitStore()
         </el-tooltip>
       </template>
       <template #actions>
-        <el-tooltip :content="$t('@F13B4:复制仓库地址')" placement="top" effect="dark" :show-after="200">
-          <button class="modern-btn btn-icon-28" @click="gitStore.copyRemoteUrl()">
-            <el-icon class="btn-icon"><DocumentCopy /></el-icon>
-          </button>
-        </el-tooltip>
-        <el-tooltip :content="$t('@F13B4:复制克隆命令')" placement="top" effect="dark" :show-after="200">
-          <button class="modern-btn btn-icon-28" @click="gitStore.copyCloneCommand()">
-            <el-icon class="btn-icon"><Download /></el-icon>
-          </button>
-        </el-tooltip>
+        <IconButton
+          :tooltip="$t('@F13B4:复制仓库地址')"
+          @click="gitStore.copyRemoteUrl()"
+        >
+          <el-icon><DocumentCopy /></el-icon>
+        </IconButton>
+        <IconButton
+          :tooltip="$t('@F13B4:复制克隆命令')"
+          @click="gitStore.copyCloneCommand()"
+        >
+          <el-icon><Download /></el-icon>
+        </IconButton>
       </template>
     </InlineCard>
   </div>

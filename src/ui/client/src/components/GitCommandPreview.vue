@@ -3,11 +3,13 @@
     <div class="preview-container">
       <div class="preview-title">{{ title }}</div>
       <div class="preview-content code-command">{{ displayCommand }}</div>
-      <button class="modern-btn copy-command-btn" @click="copyCommand">
-        <el-icon class="btn-icon">
-          <CopyDocument />
-        </el-icon>
-      </button>
+      <IconButton
+        :tooltip="copyButtonText"
+        custom-class="copy-command-btn"
+        @click="copyCommand"
+      >
+        <el-icon><CopyDocument /></el-icon>
+      </IconButton>
     </div>
   </div>
 </template>
@@ -17,6 +19,7 @@ import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CopyDocument } from '@element-plus/icons-vue'
+import IconButton from '@components/IconButton.vue'
 
 export interface GitCommandPreviewProps {
   command: string

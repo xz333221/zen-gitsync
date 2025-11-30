@@ -2,10 +2,11 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch } from 'vue'
 import { useGitStore } from '@stores/gitStore'
-import { Share, Setting } from '@element-plus/icons-vue'
+import { Share, Setting, Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import CommonDialog from '@components/CommonDialog.vue'
 import GitCommandPreview from '@components/GitCommandPreview.vue'
+import IconButton from '@components/IconButton.vue'
 
 // 定义props
 interface Props {
@@ -139,25 +140,27 @@ async function handleMergeBranch() {
 <template>
   <div class="merge-branch-button">
     <!-- 合并分支按钮 -->
-    <el-tooltip 
-      :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:合并其他分支到当前分支')" 
-      placement="top"
-      :show-after="200"
-      :disabled="props.variant === 'text'"
+    <IconButton
+      v-if="props.variant === 'icon'"
+      :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:合并其他分支到当前分支')"
+      size="small"
+      :disabled="gitStore.hasConflictedFiles || gitStore.isGitMerging"
+      hover-color="var(--color-primary)"
+      @click="openMergeDialog"
     >
-      <el-button 
-        type="primary"
-        @click="openMergeDialog"
-        :loading="gitStore.isGitMerging"
-        :disabled="gitStore.hasConflictedFiles"
-        :circle="props.variant === 'icon'"
-        :size="props.variant === 'icon' ? 'small' : 'default'"
-        :class="props.variant === 'text' ? 'action-button' : ''"
-      >
-        <el-icon v-if="props.variant === 'icon'"><Share /></el-icon>
-        <template v-else>{{ $t('@76872:合并分支') }}</template>
-      </el-button>
-    </el-tooltip>
+      <el-icon v-if="gitStore.isGitMerging" class="is-loading"><Loading /></el-icon>
+      <el-icon v-else><Share /></el-icon>
+    </IconButton>
+    <el-button
+      v-else
+      type="primary"
+      class="action-button"
+      @click="openMergeDialog"
+      :loading="gitStore.isGitMerging"
+      :disabled="gitStore.hasConflictedFiles"
+    >
+      {{ $t('@76872:合并分支') }}
+    </el-button>
 
     <!-- 合并分支对话框 -->
     <CommonDialog

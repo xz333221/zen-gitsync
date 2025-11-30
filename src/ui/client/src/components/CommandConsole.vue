@@ -3,6 +3,7 @@ import { ref, onMounted, watch, onUnmounted, computed } from 'vue';
 import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
+import IconButton from '@components/IconButton.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
 import OrchestrationWorkspace from '@components/OrchestrationWorkspace.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
@@ -1191,53 +1192,48 @@ onUnmounted(() => {
           </el-tooltip>
         </div>
         
-        <el-tooltip :content="$t('@CF05E:使用终端执行')" placement="bottom">
-          <el-button
-            :class="['terminal-toggle-btn', { 'is-active': useTerminal }]"
-            text
-            @click="useTerminal = !useTerminal"
-          >
-            <el-icon :size="20">
-              <Monitor />
-            </el-icon>
-          </el-button>
-        </el-tooltip>
-        <el-tooltip :content="$t('@CF05E:自定义命令管理')" placement="bottom">
-          <el-button
-            text
-            @click="openCommandManager"
-            class="toggle-console-btn command-manager-btn"
-          >
-            <SvgIcon icon-class="command-list" class-name="icon-btn" />
-          </el-button>
-        </el-tooltip>
-        <el-tooltip :content="$t('@ORCHWS:编排工作台')" placement="bottom">
-          <el-button
-            text
-            @click="openOrchestrationWorkspace"
-            class="toggle-console-btn orchestrator-btn"
-          >
-            <SvgIcon icon-class="command-orchestrate" class-name="icon-btn" />
-          </el-button>
-        </el-tooltip>
-        <el-button
-          text
+        <IconButton
+          :tooltip="$t('@CF05E:使用终端执行')"
+          :active="useTerminal"
+          @click="useTerminal = !useTerminal"
+          custom-class="terminal-toggle-btn"
+        >
+          <el-icon :size="20">
+            <Monitor />
+          </el-icon>
+        </IconButton>
+        <IconButton
+          :tooltip="$t('@CF05E:自定义命令管理')"
+          hover-color="var(--color-success)"
+          @click="openCommandManager"
+          custom-class="command-manager-btn"
+        >
+          <SvgIcon icon-class="command-list" class-name="icon-btn" />
+        </IconButton>
+        <IconButton
+          :tooltip="$t('@ORCHWS:编排工作台')"
+          hover-color="var(--color-warning)"
+          @click="openOrchestrationWorkspace"
+          custom-class="orchestrator-btn"
+        >
+          <SvgIcon icon-class="command-orchestrate" class-name="icon-btn" />
+        </IconButton>
+        <IconButton
+          :tooltip="$t('@CF05E:全屏')"
           @click="isFullscreen = !isFullscreen"
-          class="toggle-console-btn"
         >
           <el-icon>
             <FullScreen />
           </el-icon>
-        </el-button>
-        <el-button
-          text
+        </IconButton>
+        <IconButton
+          :tooltip="isConsoleExpanded ? $t('@CF05E:收起控制台') : $t('@CF05E:展开控制台')"
           @click="isConsoleExpanded = !isConsoleExpanded"
-          class="toggle-console-btn"
         >
           <el-icon :class="{ 'rotate-icon': !isConsoleExpanded }">
             <ArrowDown />
           </el-icon>
-        </el-button>
+        </IconButton>
       </div>
     </div>
 
@@ -1255,13 +1251,15 @@ onUnmounted(() => {
         :disabled="consoleRunning"
         clearable
       />
-      <el-button 
-        type="primary" 
-        :icon="VideoPlay" 
-        :loading="consoleRunning" 
-        @click="useTerminal ? runConsoleCommand() : runInteractiveCommand()" 
-        circle 
-      />
+      <IconButton
+        :tooltip="$t('@CF05E:执行')"
+        :disabled="consoleRunning"
+        hover-color="var(--color-primary)"
+        @click="useTerminal ? runConsoleCommand() : runInteractiveCommand()"
+      >
+        <el-icon v-if="consoleRunning" class="is-loading"><Loading /></el-icon>
+        <el-icon v-else><VideoPlay /></el-icon>
+      </IconButton>
     </div>
 
         <!-- 命令历史输出 -->

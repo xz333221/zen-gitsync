@@ -14,6 +14,7 @@ import GitCommandPreview from "@components/GitCommandPreview.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
 import OptionSwitchCard from "@components/OptionSwitchCard.vue";
 import CommandConsole from "@components/CommandConsole.vue";
+import IconButton from "@components/IconButton.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -525,12 +526,14 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
           active-color="var(--color-primary)"
         >
         </OptionSwitchCard>
-        <el-button
+        <IconButton
           v-if="gitStore.userName !== '' && gitStore.userEmail !== ''"
-          :icon="Setting"
+          :tooltip="$t('@76872:提交设置')"
+          size="small"
           @click="commitSettingsDialogVisible = true"
-          class="modern-btn btn-icon-24"
-        />
+        >
+          <el-icon><Setting /></el-icon>
+        </IconButton>
       </div>
       <!-- Git操作按钮组 - 移到标题右侧 -->
       <div

@@ -32,6 +32,7 @@ import { useGitStore } from "@stores/gitStore";
 import { formatCommitMessage, extractPureMessage } from "@utils/index.ts";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
+import IconButton from "@components/IconButton.vue";
 
 interface LogItem {
   hash: string;
@@ -878,30 +879,34 @@ function toggleFullscreen() {
       </div>
 
       <div class="log-actions">
-        <!-- 筛选按钮 - 只显示图标 -->
-        <button
+        <!-- 筛选按钮 -->
+        <IconButton
+          :tooltip="filterVisible ? $t('@A1833:隐藏筛选') : $t('@A1833:显示筛选')"
+          :active="filterVisible"
+          custom-class="filter-button"
           @click="filterVisible = !filterVisible"
-          class="modern-btn btn-icon-32 action-button filter-button"
-          :class="{ 'active-filter': filterVisible }"
         >
-          <el-icon class="btn-icon"><Filter /></el-icon>
-        </button>
+          <el-icon><Filter /></el-icon>
+        </IconButton>
         
-        <!-- 全屏按钮 - 只显示图标 -->
-        <button
+        <!-- 全屏按钮 -->
+        <IconButton
+          :tooltip="isFullscreen ? $t('@A1833:退出全屏') : $t('@A1833:全屏显示')"
+          :active="isFullscreen"
+          custom-class="fullscreen-button"
           @click="toggleFullscreen"
-          class="modern-btn btn-icon-32 action-button fullscreen-button"
-          :class="{ 'active-fullscreen': isFullscreen }"
         >
-          <el-icon class="btn-icon"><component :is="isFullscreen ? Close : FullScreen" /></el-icon>
-        </button>
+          <el-icon><component :is="isFullscreen ? Close : FullScreen" /></el-icon>
+        </IconButton>
         
-        <button
+        <!-- 刷新按钮 -->
+        <IconButton
+          :tooltip="$t('@A1833:刷新日志')"
+          custom-class="refresh-button"
           @click="refreshLog()"
-          class="modern-btn btn-icon-32 action-button refresh-button"
         >
-          <RefreshRight />
-        </button>
+          <el-icon><RefreshRight /></el-icon>
+        </IconButton>
       </div>
     </div>
 

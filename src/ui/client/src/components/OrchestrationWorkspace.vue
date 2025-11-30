@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, VideoPlay, Clock, DocumentAdd, Plus, Folder, Monitor } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
+import IconButton from '@components/IconButton.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import type { CustomCommand } from '@components/CustomCommandManager.vue'
@@ -502,22 +503,22 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
               <div class="item-header">
                 <h4>{{ orchestration.name }}</h4>
                 <div class="item-actions">
-                  <el-button 
-                    type="primary" 
-                    :icon="VideoPlay"
+                  <IconButton
+                    :tooltip="t('@ORCHWS:执行')"
                     size="small"
-                    circle
-                    :title="t('@ORCHWS:执行')"
+                    hover-color="var(--color-primary)"
                     @click.stop="executeOrchestration(orchestration)"
-                  />
-                  <el-button 
-                    type="danger" 
-                    :icon="Delete"
+                  >
+                    <el-icon><VideoPlay /></el-icon>
+                  </IconButton>
+                  <IconButton
+                    :tooltip="t('@ORCHWS:删除')"
                     size="small"
-                    circle
-                    :title="t('@ORCHWS:删除')"
+                    hover-color="var(--color-danger)"
                     @click.stop="deleteOrchestration(orchestration)"
-                  />
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </IconButton>
                 </div>
               </div>
               <div class="step-preview">
@@ -674,14 +675,14 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
                       </el-button>
                     </div>
                     <div class="action-buttons">
-                      <el-button 
-                        type="success" 
-                        size="small" 
-                        :icon="VideoPlay"
-                        circle
+                      <IconButton
+                        :tooltip="t('@ORCHWS:执行')"
+                        size="small"
+                        hover-color="var(--color-success)"
                         @click="executeSingleStep(step)"
-                        :title="t('@ORCHWS:执行')"
-                      />
+                      >
+                        <el-icon><VideoPlay /></el-icon>
+                      </IconButton>
                       <div class="button-divider"></div>
                       <el-button 
                         type="info" 

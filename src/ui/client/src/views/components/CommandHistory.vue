@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock, Loading } from '@element-plus/icons-vue';
 import { useGitStore } from '@stores/gitStore';
 import CommonDialog from '@/components/CommonDialog.vue';
+import IconButton from '@/components/IconButton.vue';
 
 // 获取Git Store以访问Socket实例
 const gitStore = useGitStore();
@@ -363,13 +364,13 @@ onUnmounted(() => {
 
 <template>
   <!-- 命令历史按钮 -->
-  <el-tooltip :content="$t('@81F0F:查看Git命令历史')" placement="bottom" effect="dark" :show-after="200">
-    <button class="modern-btn btn-icon-36" @click="openCommandHistory">
-      <el-icon class="btn-icon">
-        <Clock />
-      </el-icon>
-    </button>
-  </el-tooltip>
+  <IconButton
+    :tooltip="$t('@81F0F:查看Git命令历史')"
+    size="medium"
+    @click="openCommandHistory"
+  >
+    <el-icon><Clock /></el-icon>
+  </IconButton>
 
   <!-- 命令历史弹窗（使用 CommonDialog） -->
   <CommonDialog
@@ -460,16 +461,13 @@ onUnmounted(() => {
               </div>
             </div>
             <div class="item-actions">
-              <el-tooltip :content="$t('@81F0F:复制命令')" placement="bottom" effect="dark" :show-after="200">
-                <button 
-                  class="modern-btn item-copy-button enhanced-btn" 
-                  @click.stop="copyCommand(item.command)"
-                >
-                  <el-icon class="btn-icon">
-                    <CopyDocument />
-                  </el-icon>
-                </button>
-              </el-tooltip>
+              <IconButton
+                :tooltip="$t('@81F0F:复制命令')"
+                custom-class="item-copy-button"
+                @click.stop="copyCommand(item.command)"
+              >
+                <el-icon><CopyDocument /></el-icon>
+              </IconButton>
               <div class="expand-button" :class="{ 'is-expanded': isExpanded(index) }">
                 <el-icon class="btn-icon">
                   <ArrowUp v-if="isExpanded(index)" />

@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Box, Delete, Edit, Download, Check } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
+import IconButton from '@components/IconButton.vue'
 
 // 定义props
 interface Props {
@@ -224,23 +225,23 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 <template>
   <div class="stash-list-button">
     <!-- 储藏列表按钮 -->
-    <el-tooltip 
-      :content="$t('@76872:查看和管理所有储藏记录')" 
-      placement="top"
-      :show-after="200"
-      :disabled="props.variant === 'text'"
+    <IconButton
+      v-if="props.variant === 'icon'"
+      :tooltip="$t('@76872:查看和管理所有储藏记录')"
+      size="small"
+      hover-color="var(--color-info)"
+      @click="openStashListDialog"
     >
-      <el-button 
-        type="info"
-        @click="openStashListDialog"
-        :circle="props.variant === 'icon'"
-        :size="props.variant === 'icon' ? 'small' : 'default'"
-        :class="props.variant === 'text' ? 'action-button' : ''"
-      >
-        <el-icon v-if="props.variant === 'icon'"><Box /></el-icon>
-        <template v-else>{{ $t('@76872:储藏列表') }}</template>
-      </el-button>
-    </el-tooltip>
+      <el-icon><Box /></el-icon>
+    </IconButton>
+    <el-button
+      v-else
+      type="info"
+      class="action-button"
+      @click="openStashListDialog"
+    >
+      {{ $t('@76872:储藏列表') }}
+    </el-button>
 
     <!-- Stash列表弹窗 -->
     <CommonDialog

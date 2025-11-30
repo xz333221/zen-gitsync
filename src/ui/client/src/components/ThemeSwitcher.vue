@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { Sunny, Moon } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
+import IconButton from '@components/IconButton.vue'
 
 // 主题状态
 const isDarkTheme = ref(false)
@@ -37,19 +38,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <el-tooltip 
-    :content="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')" 
-    placement="bottom" 
-    effect="dark" 
-    :show-after="200"
+  <IconButton
+    :tooltip="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')"
+    size="medium"
+    @click="toggleTheme"
   >
-    <button class="modern-btn btn-icon-36" @click="toggleTheme">
-      <el-icon class="btn-icon">
-        <Sunny v-if="isDarkTheme" />
-        <Moon v-else />
-      </el-icon>
-    </button>
-  </el-tooltip>
+    <el-icon>
+      <Sunny v-if="isDarkTheme" />
+      <Moon v-else />
+    </el-icon>
+  </IconButton>
 </template>
 
 <style scoped>

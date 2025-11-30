@@ -3,8 +3,9 @@ import { $t } from '@/lang/static'
 import { ref, computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
-import { Box, Setting, Document } from '@element-plus/icons-vue'
+import { Box, Setting, Document, Loading } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
+import IconButton from '@components/IconButton.vue'
 
 // 定义props
 interface Props {
@@ -79,25 +80,27 @@ async function saveStash() {
 <template>
   <div class="stash-changes-button" v-if="anyChangesIncludingLocked">
     <!-- 储藏更改按钮 -->
-    <el-tooltip 
-      :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:将工作区更改储藏起来')" 
-      placement="top"
-      :show-after="200"
-      :disabled="props.variant === 'text'"
+    <IconButton
+      v-if="props.variant === 'icon'"
+      :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:将工作区更改储藏起来')"
+      size="small"
+      :disabled="gitStore.hasConflictedFiles || gitStore.isSavingStash"
+      hover-color="var(--color-warning)"
+      @click="openStashDialog"
     >
-      <el-button 
-        type="warning" 
-        @click="openStashDialog" 
-        :loading="gitStore.isSavingStash"
-        :disabled="gitStore.hasConflictedFiles"
-        :circle="props.variant === 'icon'"
-        :size="props.variant === 'icon' ? 'small' : 'default'"
-        :class="props.variant === 'text' ? 'action-button' : ''"
-      >
-        <el-icon v-if="props.variant === 'icon'"><Box /></el-icon>
-        <template v-else>{{ $t('@76872:储藏更改') }}</template>
-      </el-button>
-    </el-tooltip>
+      <el-icon v-if="gitStore.isSavingStash" class="is-loading"><Loading /></el-icon>
+      <el-icon v-else><Box /></el-icon>
+    </IconButton>
+    <el-button
+      v-else
+      type="warning"
+      class="action-button"
+      @click="openStashDialog"
+      :loading="gitStore.isSavingStash"
+      :disabled="gitStore.hasConflictedFiles"
+    >
+      {{ $t('@76872:储藏更改') }}
+    </el-button>
 
     <!-- Stash弹窗：创建储藏 -->
     <CommonDialog

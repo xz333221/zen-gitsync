@@ -5,6 +5,7 @@ import { Plus, Menu, Check } from '@element-plus/icons-vue'
 import InlineCard from '@components/InlineCard.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import { useGitStore } from '@stores/gitStore'
+import IconButton from '@components/IconButton.vue'
 
 const gitStore = useGitStore()
 
@@ -78,9 +79,12 @@ async function handleBranchChange(branch: string) {
         </el-select>
       </template>
       <template #actions>
-        <button class="modern-btn btn-icon-28" @click="openCreateBranchDialog">
-          <el-icon class="btn-icon"><Plus /></el-icon>
-        </button>
+        <IconButton
+          :tooltip="$t('@F13B4:创建新分支')"
+          @click="openCreateBranchDialog"
+        >
+          <el-icon><Plus /></el-icon>
+        </IconButton>
       </template>
     </InlineCard>
 

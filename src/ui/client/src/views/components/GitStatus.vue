@@ -2,8 +2,9 @@
 import { $t } from '@/lang/static'
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Document, ArrowUp, ArrowDown, Download, Connection, Lock, Unlock, InfoFilled } from '@element-plus/icons-vue'
+import { Refresh, Document, ArrowUp, ArrowDown, Download, Connection, Lock, Unlock, InfoFilled, Loading } from '@element-plus/icons-vue'
 import TreeIcon from '@/components/icons/TreeIcon.vue'
+import IconButton from '@/components/IconButton.vue'
 import ListIcon from '@/components/icons/ListIcon.vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -679,30 +680,29 @@ defineExpose({
       <div class="title-row">
         <div class="header-actions">
           <!-- 添加Git Pull按钮 -->
-          <el-tooltip :content="$t('@13D1C:Git Pull (拉取远程更新)')" placement="top"  :show-after="200">
-            <el-button 
-              type="primary" 
-              :icon="Download" 
-              circle 
-              size="small" 
-              @click="handleGitPull" 
-              :loading="gitStore.isGitPulling"
-              :disabled="!gitStore.hasUpstream"
-            />
-          </el-tooltip>
+          <IconButton
+            :tooltip="$t('@13D1C:Git Pull (拉取远程更新)')"
+            size="small"
+            hover-color="var(--color-primary)"
+            :disabled="!gitStore.hasUpstream || gitStore.isGitPulling"
+            @click="handleGitPull"
+          >
+            <el-icon v-if="gitStore.isGitPulling" class="is-loading"><Loading /></el-icon>
+            <el-icon v-else><Download /></el-icon>
+          </IconButton>
           
           <!-- 添加Git Fetch All按钮 -->
-          <el-tooltip :content="$t('@13D1C:Git Fetch All (获取所有远程分支)')" placement="top"  :show-after="200">
-            <el-button 
-              v-show="false"
-              type="primary" 
-              :icon="Connection" 
-              circle 
-              size="small" 
-              @click="handleGitFetchAll" 
-              :loading="gitStore.isGitFetching"
-            />
-          </el-tooltip>
+          <IconButton
+            v-show="false"
+            :tooltip="$t('@13D1C:Git Fetch All (获取所有远程分支)')"
+            size="small"
+            hover-color="var(--color-primary)"
+            :disabled="gitStore.isGitFetching"
+            @click="handleGitFetchAll"
+          >
+            <el-icon v-if="gitStore.isGitFetching" class="is-loading"><Loading /></el-icon>
+            <el-icon v-else><Connection /></el-icon>
+          </IconButton>
 
           <!-- 合并分支按钮 -->
           <MergeBranchButton />
@@ -719,15 +719,15 @@ defineExpose({
         <div class="flex items-center">
           <GitOperationsButton variant="icon" />
           <CommandHistory />
-          <el-tooltip :content="$t('@13D1C:刷新状态')" placement="top"  :show-after="200">
-            <el-button
-              text
-              :icon="Refresh"
-              @click="refreshStatus"
-              :loading="isRefreshing"
-              style="font-size: var(--font-size-xl);"
-            />
-          </el-tooltip>
+          <IconButton
+            :tooltip="$t('@13D1C:刷新状态')"
+            size="large"
+            :disabled="isRefreshing"
+            @click="refreshStatus"
+          >
+            <el-icon v-if="isRefreshing" class="is-loading"><Loading /></el-icon>
+            <el-icon v-else><Refresh /></el-icon>
+          </IconButton>
         </div>
       </div>
     </div>
@@ -1094,17 +1094,15 @@ defineExpose({
             </div>
           </div>
           <div class="file-actions">
-            <el-tooltip :content="$t('@13D1C:解锁文件')" placement="top" >
-              <el-button
-                type="danger"
-                size="small"
-                circle
-                class="file-action-btn"
-                :icon="Unlock"
-                :aria-label="$t('@13D1C:解锁')"
-                @click="confirmUnlockFile(filePath)"
-              />
-            </el-tooltip>
+            <IconButton
+              :tooltip="$t('@13D1C:解锁文件')"
+              size="small"
+              hover-color="var(--color-danger)"
+              custom-class="file-action-btn"
+              @click="confirmUnlockFile(filePath)"
+            >
+              <el-icon><Unlock /></el-icon>
+            </IconButton>
           </div>
         </div>
       </div>

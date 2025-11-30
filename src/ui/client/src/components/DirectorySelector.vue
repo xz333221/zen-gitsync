@@ -6,6 +6,7 @@ import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
 import { ref, h, computed, watch, onMounted } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
+import IconButton from "@components/IconButton.vue";
 import { getFolderNameFromPath } from "@/utils/path";
 
 // 使用 store
@@ -378,37 +379,29 @@ async function selectDirectory(dirPath: string) {
       {{ currentFolderName }}
     </div>
     <div class="directory-actions flex">
-      <el-tooltip
-        :content="$t('@67CE7:在资源管理器中打开')"
-        placement="top"
-        effect="dark"
-        :show-after="200"
+      <IconButton
+        :tooltip="$t('@67CE7:在资源管理器中打开')"
+        size="medium"
+        @click="onOpenExplorer"
       >
-        <button class="modern-btn btn-icon-36" @click="onOpenExplorer">
-          <el-icon class="btn-icon"><FolderOpened /></el-icon>
-        </button>
-      </el-tooltip>
-      <el-tooltip
-        content="在终端中打开"
-        placement="top"
-        effect="dark"
-        :show-after="200"
+        <el-icon><FolderOpened /></el-icon>
+      </IconButton>
+      <IconButton
+        tooltip="在终端中打开"
+        size="medium"
+        @click="onOpenTerminal"
       >
-        <button class="modern-btn btn-icon-36" @click="onOpenTerminal">
-          <el-icon class="btn-icon"><Monitor /></el-icon>
-        </button>
-      </el-tooltip>
-      <el-tooltip
+        <el-icon><Monitor /></el-icon>
+      </IconButton>
+      <IconButton
         v-if="hasNpmScripts"
-        content="NPM 脚本"
-        placement="top"
-        effect="dark"
-        :show-after="200"
+        tooltip="NPM 脚本"
+        size="medium"
+        custom-class="npm-btn"
+        @click="onToggleNpmPanel"
       >
-        <button class="modern-btn btn-icon-36 npm-btn" @click="onToggleNpmPanel">
-          <img src="@/assets/images/npm-logo.png" alt="npm" class="btn-icon" style="width: 18px; height: 18px;" />
-        </button>
-      </el-tooltip>
+        <img src="@/assets/images/npm-logo.png" alt="npm" style="width: 18px; height: 18px;" />
+      </IconButton>
     </div>
   </div>
 

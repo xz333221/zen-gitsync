@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { Menu, RefreshRight, Download, Connection, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
+import IconButton from '@components/IconButton.vue'
 import StageButton from '@/components/buttons/StageButton.vue'
 import UnstageAllButton from '@/components/buttons/UnstageAllButton.vue'
 import CommitButton from '@/components/buttons/CommitButton.vue'
@@ -153,26 +154,23 @@ defineExpose({
 <template>
   <div class="git-operations-button">
     <!-- Git操作按钮 -->
-    <el-tooltip 
-      :content="$t('@F13B4:Git 操作')" 
-      placement="bottom"
-      effect="dark"
-      :show-after="200"
-      :disabled="props.variant === 'text'"
+    <IconButton
+      v-if="props.variant === 'icon'"
+      :tooltip="$t('@F13B4:Git 操作')"
+      size="medium"
+      custom-class="btn-rotate-on-hover"
+      @click="openGitOperationsDrawer"
     >
-      <el-button 
-        @click="openGitOperationsDrawer"
-        :circle="props.variant === 'icon'"
-        :size="props.variant === 'icon' ? 'default' : 'default'"
-        :class="props.variant === 'icon' ? 'modern-btn btn-icon-36 btn-rotate-on-hover' : 'action-button'"
-        :type="props.variant === 'text' ? 'primary' : undefined"
-      >
-        <el-icon :class="props.variant === 'icon' ? 'btn-icon' : ''">
-          <Menu />
-        </el-icon>
-        <template v-if="props.variant === 'text'">{{ $t('@F13B4:Git 操作') }}</template>
-      </el-button>
-    </el-tooltip>
+      <el-icon><Menu /></el-icon>
+    </IconButton>
+    <el-button
+      v-else
+      type="primary"
+      class="action-button"
+      @click="openGitOperationsDrawer"
+    >
+      {{ $t('@F13B4:Git 操作') }}
+    </el-button>
 
     <!-- Git操作抽屉 -->
     <el-drawer

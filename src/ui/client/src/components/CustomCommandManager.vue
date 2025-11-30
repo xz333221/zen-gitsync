@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, VideoPlay, Folder } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
+import IconButton from '@components/IconButton.vue'
 
 export interface CustomCommand {
   id?: string
@@ -401,33 +402,30 @@ defineExpose({
             <el-table-column :label="$t('@CMD01:操作')" width="100" fixed="right">
               <template #default="scope">
                 <div class="action-buttons">
-                  <el-tooltip :content="$t('@CMD01:执行命令')" placement="top">
-                    <el-button 
-                      type="success" 
-                      size="small" 
-                      :icon="VideoPlay"
-                      @click="executeCommand(scope.row)"
-                      circle
-                    />
-                  </el-tooltip>
-                  <el-tooltip :content="$t('@CMD01:编辑')" placement="top">
-                    <el-button 
-                      type="primary" 
-                      size="small" 
-                      :icon="Edit"
-                      @click="startEditCommand(scope.row)"
-                      circle
-                    />
-                  </el-tooltip>
-                  <el-tooltip :content="$t('@CMD01:删除')" placement="top">
-                    <el-button 
-                      type="danger" 
-                      size="small" 
-                      :icon="Delete"
-                      @click="deleteCommand(scope.row.id)"
-                      circle
-                    />
-                  </el-tooltip>
+                  <IconButton
+                    :tooltip="$t('@CMD01:执行命令')"
+                    size="small"
+                    hover-color="var(--color-success)"
+                    @click="executeCommand(scope.row)"
+                  >
+                    <el-icon><VideoPlay /></el-icon>
+                  </IconButton>
+                  <IconButton
+                    :tooltip="$t('@CMD01:编辑')"
+                    size="small"
+                    hover-color="var(--color-primary)"
+                    @click="startEditCommand(scope.row)"
+                  >
+                    <el-icon><Edit /></el-icon>
+                  </IconButton>
+                  <IconButton
+                    :tooltip="$t('@CMD01:删除')"
+                    size="small"
+                    hover-color="var(--color-danger)"
+                    @click="deleteCommand(scope.row.id)"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </IconButton>
                 </div>
               </template>
             </el-table-column>
