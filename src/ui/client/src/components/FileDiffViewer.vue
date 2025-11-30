@@ -5,8 +5,9 @@ import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput
 import { FolderOpened, DocumentCopy, Search, Warning, CircleCheck } from '@element-plus/icons-vue';
 import TreeIcon from '@/components/icons/TreeIcon.vue';
 import ListIcon from '@/components/icons/ListIcon.vue';
+import IconButton from '@/components/IconButton.vue';
+import SvgIcon from '@/components/SvgIcon/index.vue';
 import { formatDiff } from '../utils/index.ts';
-import vscodeIcon from '@/assets/images/vscode.webp';
 import FileActionButtons from './FileActionButtons.vue';
 import FileTreeView from './FileTreeView.vue';
 import { getFileIconClass } from '../utils/fileIcon';
@@ -779,24 +780,22 @@ onMounted(() => {
               <span v-if="files.length > 0" class="file-count">({{ files.length }})</span>
             </div>
             <div class="view-mode-toggle">
-              <el-tooltip :content="$t('@E80AC:列表视图')" placement="top" :show-after="200">
-                <button 
-                  class="mode-btn" 
-                  :class="{ active: viewMode === 'list' }"
-                  @click="viewMode = 'list'"
-                >
-                  <ListIcon style="width: 1em; height: 1em;" />
-                </button>
-              </el-tooltip>
-              <el-tooltip :content="$t('@E80AC:树状视图')" placement="top" :show-after="200">
-                <button 
-                  class="mode-btn" 
-                  :class="{ active: viewMode === 'tree' }"
-                  @click="viewMode = 'tree'"
-                >
-                  <TreeIcon style="width: 1em; height: 1em;" />
-                </button>
-              </el-tooltip>
+              <IconButton
+                :tooltip="$t('@E80AC:列表视图')"
+                size="small"
+                :active="viewMode === 'list'"
+                @click="viewMode = 'list'"
+              >
+                <ListIcon style="width: 1em; height: 1em;" />
+              </IconButton>
+              <IconButton
+                :tooltip="$t('@E80AC:树状视图')"
+                size="small"
+                :active="viewMode === 'tree'"
+                @click="viewMode = 'tree'"
+              >
+                <TreeIcon style="width: 1em; height: 1em;" />
+              </IconButton>
             </div>
           </div>
           <!-- 搜索框 -->
@@ -926,7 +925,7 @@ onMounted(() => {
                 </el-tooltip>
                 <el-tooltip :content="$t('@E80AC:用VSCode打开文件')" placement="top" effect="light">
                   <button class="modern-btn btn-icon-24" @click="handleOpenWithVSCode">
-                    <img :src="vscodeIcon" alt="VSCode" class="btn-icon vscode-icon" />
+                    <svg-icon icon-class="vscode" class="btn-icon" />
                   </button>
                 </el-tooltip>
               </div>
@@ -1077,7 +1076,7 @@ onMounted(() => {
                 class="modern-btn btn-icon-24 btn-success"
                 @click="handleOpenWithVSCode"
               >
-                <img :src="vscodeIcon" alt="VSCode" class="btn-icon vscode-icon" />
+                <svg-icon icon-class="vscode" class="btn-icon" />
               </button>
             </el-tooltip>
           </div>
@@ -1251,40 +1250,11 @@ onMounted(() => {
 
 .view-mode-toggle {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
   padding: var(--spacing-xs);
   background: var(--bg-panel);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-card);
-  
-  .mode-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    transition: var(--transition-all);
-    
-    &:hover {
-      background: var(--bg-container);
-      color: var(--text-primary);
-    }
-    
-    &.active {
-      background: var(--color-primary);
-      color: white;
-      box-shadow: var(--shadow-sm);
-    }
-    
-    .el-icon {
-      font-size: var(--font-size-md);
-    }
-  }
 }
 
 .header-right {
@@ -1297,12 +1267,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  
-  .vscode-icon {
-    width: 16px;
-    height: 16px;
-    object-fit: contain;
-  }
 }
 
 .file-count {

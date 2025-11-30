@@ -475,14 +475,14 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
       <div class="left-panel">
         <div class="panel-header">
           <h3>{{ t('@ORCHWS:已保存的编排') }}</h3>
-          <el-button 
-            type="primary" 
+          <IconButton
+            :tooltip="t('@ORCHWS:新建编排')"
             size="small"
-            :icon="Plus"
+            hover-color="var(--color-primary)"
             @click="createNewOrchestration"
           >
-            {{ t('@ORCHWS:新建') }}
-          </el-button>
+            <el-icon><Plus /></el-icon>
+          </IconButton>
         </div>
         
         <div class="orchestration-list">
@@ -566,24 +566,24 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
         <div class="panel-header">
           <h3>{{ editingOrchestrationId ? t('@ORCHWS:编辑编排') : t('@ORCHWS:新建编排') }}</h3>
           <div class="header-actions">
-            <el-button 
-              type="success" 
+            <IconButton
+              :tooltip="t('@ORCHWS:保存编排')"
               size="small"
-              :icon="DocumentAdd"
               :disabled="orchestrationSteps.length === 0"
+              hover-color="var(--color-success)"
               @click="saveOrchestration"
             >
-              {{ t('@ORCHWS:保存') }}
-            </el-button>
-            <el-button 
-              type="primary" 
+              <el-icon><DocumentAdd /></el-icon>
+            </IconButton>
+            <IconButton
+              :tooltip="t('@ORCHWS:执行编排')"
               size="small"
-              :icon="VideoPlay"
               :disabled="orchestrationSteps.length === 0"
+              hover-color="var(--color-primary)"
               @click="executeCurrentOrchestration"
             >
-              {{ t('@ORCHWS:执行') }}
-            </el-button>
+              <el-icon><VideoPlay /></el-icon>
+            </IconButton>
           </div>
         </div>
         
@@ -613,23 +613,23 @@ function updateStepEnabled(step: OrchestrationStep, value: boolean) {
               <span class="step-count">({{ orchestrationSteps.length }})</span>
             </h4>
             <div class="header-actions">
-              <el-button 
-                type="primary"
+              <IconButton
+                :tooltip="t('@ORCHWS:添加步骤')"
                 size="small"
-                :icon="Plus"
+                hover-color="var(--color-primary)"
                 @click="showAddStepDialog = true"
               >
-                {{ t('@ORCHWS:添加步骤') }}
-              </el-button>
-              <el-button 
+                <el-icon><Plus /></el-icon>
+              </IconButton>
+              <IconButton
                 v-if="orchestrationSteps.length > 0"
-                type="danger" 
-                size="small" 
-                text
+                :tooltip="t('@ORCHWS:清空所有步骤')"
+                size="small"
+                hover-color="var(--color-danger)"
                 @click="clearSteps"
               >
-                清空
-              </el-button>
+                <el-icon><Delete /></el-icon>
+              </IconButton>
             </div>
           </div>
           

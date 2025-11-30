@@ -140,7 +140,7 @@ defineExpose({ openConfigEditor })
     <IconButton
       v-if="props.variant === 'icon'"
       :tooltip="$t('@F13B4:编辑项目配置')"
-      size="medium"
+      size="large"
       @click="openConfigEditor"
     >
       <el-icon><Edit /></el-icon>

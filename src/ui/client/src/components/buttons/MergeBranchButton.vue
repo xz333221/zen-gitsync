@@ -2,11 +2,12 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch } from 'vue'
 import { useGitStore } from '@stores/gitStore'
-import { Share, Setting, Loading } from '@element-plus/icons-vue'
+import { Setting, Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import CommonDialog from '@components/CommonDialog.vue'
 import GitCommandPreview from '@components/GitCommandPreview.vue'
 import IconButton from '@components/IconButton.vue'
+import SvgIcon from '@components/SvgIcon/index.vue'
 
 // 定义props
 interface Props {
@@ -143,13 +144,13 @@ async function handleMergeBranch() {
     <IconButton
       v-if="props.variant === 'icon'"
       :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:合并其他分支到当前分支')"
-      size="small"
+      size="large"
       :disabled="gitStore.hasConflictedFiles || gitStore.isGitMerging"
       hover-color="var(--color-primary)"
       @click="openMergeDialog"
     >
       <el-icon v-if="gitStore.isGitMerging" class="is-loading"><Loading /></el-icon>
-      <el-icon v-else><Share /></el-icon>
+      <svg-icon v-else icon-class="git-merge" />
     </IconButton>
     <el-button
       v-else
@@ -179,7 +180,7 @@ async function handleMergeBranch() {
         <!-- 功能说明卡片 -->
         <div class="merge-info-card">
           <div class="info-icon">
-            <el-icon><Share /></el-icon>
+            <svg-icon icon-class="git-merge" />
           </div>
           <div class="info-content">
             <h4>{{ $t('@76872:合并分支到当前分支') }}</h4>

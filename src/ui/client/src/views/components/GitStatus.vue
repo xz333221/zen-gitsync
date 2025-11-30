@@ -2,10 +2,11 @@
 import { $t } from '@/lang/static'
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Document, ArrowUp, ArrowDown, Download, Connection, Lock, Unlock, InfoFilled, Loading } from '@element-plus/icons-vue'
+import { Refresh, Document, ArrowUp, ArrowDown, Lock, Unlock, InfoFilled, Loading } from '@element-plus/icons-vue'
 import TreeIcon from '@/components/icons/TreeIcon.vue'
 import IconButton from '@/components/IconButton.vue'
 import ListIcon from '@/components/icons/ListIcon.vue'
+import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
@@ -682,17 +683,17 @@ defineExpose({
           <!-- 添加Git Pull按钮 -->
           <IconButton
             :tooltip="$t('@13D1C:Git Pull (拉取远程更新)')"
-            size="small"
+            size="large"
             hover-color="var(--color-primary)"
             :disabled="!gitStore.hasUpstream || gitStore.isGitPulling"
             @click="handleGitPull"
           >
             <el-icon v-if="gitStore.isGitPulling" class="is-loading"><Loading /></el-icon>
-            <el-icon v-else><Download /></el-icon>
+            <svg-icon v-else icon-class="git-pull-request" />
           </IconButton>
           
           <!-- 添加Git Fetch All按钮 -->
-          <IconButton
+          <!-- <IconButton
             v-show="false"
             :tooltip="$t('@13D1C:Git Fetch All (获取所有远程分支)')"
             size="small"
@@ -701,8 +702,8 @@ defineExpose({
             @click="handleGitFetchAll"
           >
             <el-icon v-if="gitStore.isGitFetching" class="is-loading"><Loading /></el-icon>
-            <el-icon v-else><Connection /></el-icon>
-          </IconButton>
+            <svg-icon v-else icon-class="git-fetch" />
+          </IconButton> -->
 
           <!-- 合并分支按钮 -->
           <MergeBranchButton />
@@ -800,24 +801,22 @@ defineExpose({
               <span v-if="gitStore.fileList.length > 0" class="file-count">({{ gitStore.fileList.length }})</span>
             </div>
             <div class="view-mode-toggle">
-              <el-tooltip :content="$t('@E80AC:列表视图')" placement="top" :show-after="200">
-                <button 
-                  class="mode-btn" 
-                  :class="{ active: viewMode === 'list' }"
-                  @click="viewMode = 'list'"
-                >
-                  <ListIcon style="width: 1em; height: 1em;" />
-                </button>
-              </el-tooltip>
-              <el-tooltip :content="$t('@E80AC:树状视图')" placement="top" :show-after="200">
-                <button 
-                  class="mode-btn" 
-                  :class="{ active: viewMode === 'tree' }"
-                  @click="viewMode = 'tree'"
-                >
-                  <TreeIcon style="width: 1em; height: 1em;" />
-                </button>
-              </el-tooltip>
+              <IconButton
+                :tooltip="$t('@E80AC:列表视图')"
+                size="small"
+                :active="viewMode === 'list'"
+                @click="viewMode = 'list'"
+              >
+                <ListIcon style="width: 1em; height: 1em;" />
+              </IconButton>
+              <IconButton
+                :tooltip="$t('@E80AC:树状视图')"
+                size="small"
+                :active="viewMode === 'tree'"
+                @click="viewMode = 'tree'"
+              >
+                <TreeIcon style="width: 1em; height: 1em;" />
+              </IconButton>
             </div>
           </div>
           <div class="file-list-container">
@@ -1203,40 +1202,11 @@ defineExpose({
 
 .view-mode-toggle {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
   padding: var(--spacing-xs);
   background: var(--bg-panel);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-card);
-  
-  .mode-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    transition: var(--transition-all);
-    
-    &:hover {
-      background: var(--bg-container);
-      color: var(--text-primary);
-    }
-    
-    &.active {
-      background: var(--color-primary);
-      color: white;
-      box-shadow: var(--shadow-sm);
-    }
-    
-    .el-icon {
-      font-size: var(--font-size-md);
-    }
-  }
 }
 
 /* 文件列表容器 */

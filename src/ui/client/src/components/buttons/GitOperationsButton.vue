@@ -157,7 +157,7 @@ defineExpose({
     <IconButton
       v-if="props.variant === 'icon'"
       :tooltip="$t('@F13B4:Git 操作')"
-      size="medium"
+      size="large"
       custom-class="btn-rotate-on-hover"
       @click="openGitOperationsDrawer"
     >

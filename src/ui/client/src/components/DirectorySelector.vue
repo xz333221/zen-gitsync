@@ -7,6 +7,7 @@ import { ref, h, computed, watch, onMounted } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
 import IconButton from "@components/IconButton.vue";
+import SvgIcon from "@components/SvgIcon/index.vue";
 import { getFolderNameFromPath } from "@/utils/path";
 
 // 使用 store
@@ -381,14 +382,14 @@ async function selectDirectory(dirPath: string) {
     <div class="directory-actions flex">
       <IconButton
         :tooltip="$t('@67CE7:在资源管理器中打开')"
-        size="medium"
+        size="large"
         @click="onOpenExplorer"
       >
         <el-icon><FolderOpened /></el-icon>
       </IconButton>
       <IconButton
         tooltip="在终端中打开"
-        size="medium"
+        size="large"
         @click="onOpenTerminal"
       >
         <el-icon><Monitor /></el-icon>
@@ -396,11 +397,11 @@ async function selectDirectory(dirPath: string) {
       <IconButton
         v-if="hasNpmScripts"
         tooltip="NPM 脚本"
-        size="medium"
+        size="large"
         custom-class="npm-btn"
         @click="onToggleNpmPanel"
       >
-        <img src="@/assets/images/npm-logo.png" alt="npm" style="width: 18px; height: 18px;" />
+        <svg-icon icon-class="npm" />
       </IconButton>
     </div>
   </div>

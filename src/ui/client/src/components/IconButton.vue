@@ -111,23 +111,23 @@ const handleClick = (event: MouseEvent) => {
   
   // 尺寸变体
   &--small {
-    width: 32px;
-    height: 32px;
-    font-size: 18px; // SVG 图标根据 font-size 显示大小
+    width: 28px;
+    height: 28px;
+    font-size: 16px; // SVG 图标根据 font-size 显示大小
     
     :deep(.svg-icon) {
-      width: 18px;
-      height: 18px;
-      font-size: 18px;
+      width: 16px;
+      height: 16px;
+      font-size: 16px;
     }
     
     :deep(.el-icon) {
-      font-size: 18px;
+      font-size: 16px;
     }
     
     .icon-image {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
     }
   }
   

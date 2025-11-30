@@ -216,23 +216,23 @@
   
   /* 主要文字 */
   --text-primary: #303133;
-  --text-primary-dark: #e4e7ed;
+  --text-primary-dark: #fff;
   
   /* 标题文字 */
   --text-title: #374151;
-  --text-title-dark: #d1d5db;
+  --text-title-dark: #fff; /* 再次提升：原 #d1d5db */
   
   /* 次要文字 */
   --text-secondary: #606266;
-  --text-secondary-dark: #bfc3c9; /* 轻度提升：原 #909399 */
+  --text-secondary-dark: #d8dce2; /* 再次提升：原 #bfc3c9 */
   
   /* 辅助文字 */
   --text-tertiary: #909399;
-  --text-tertiary-dark: #aeb3b9; /* 轻度提升：原 #a8abb2 */
+  --text-tertiary-dark: #cbd0d6; /* 再次提升：原 #aeb3b9 */
   
   /* 占位符文字 */
   --text-placeholder: #c0c4cc;
-  --text-placeholder-dark: #9aa0a6; /* 轻度提升：原 #8d9095 */
+  --text-placeholder-dark: #bac0c6; /* 再次提升：原 #9aa0a6 */
   
   /* 全局文字颜色 - 根据主题自动调整 */
   --color-text: var(--text-primary);

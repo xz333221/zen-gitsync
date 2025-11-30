@@ -40,7 +40,7 @@ onMounted(() => {
 <template>
   <IconButton
     :tooltip="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')"
-    size="medium"
+    size="large"
     @click="toggleTheme"
   >
     <el-icon>

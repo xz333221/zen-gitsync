@@ -4,6 +4,8 @@ import { ElMessage } from 'element-plus';
 import { FolderOpened } from '@element-plus/icons-vue';
 import { $t } from '@/lang/static';
 import NpmSettingsDialog from './NpmSettingsDialog.vue';
+import IconButton from '@components/IconButton.vue';
+import SvgIcon from '@components/SvgIcon/index.vue';
 
 interface PackageInfo {
   path: string;
@@ -226,28 +228,31 @@ watch(() => props.visible, (newValue) => {
     
     <div class="panel-header">
       <div class="header-left">
-        <img src="@/assets/images/npm-logo.png" alt="npm" class="npm-icon" />
+        <svg-icon icon-class="npm" class-name="npm-icon" />
         <span class="panel-title">{{ $t('@NPM01:NPM 脚本') }}</span>
       </div>
       <div class="header-right">
-        <el-tooltip :content="$t('@NPM01:刷新')" placement="bottom" :show-after="300">
-          <button class="refresh-btn" @click="loadNpmScripts" :disabled="isLoading">
-            <el-icon :class="{ 'is-rotating': isLoading }">
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M784.512 230.272v-50.56a32 32 0 1 1 64 0v149.056a32 32 0 0 1-32 32H667.52a32 32 0 1 1 0-64h92.992A320 320 0 1 0 524.8 833.152a320 320 0 0 0 320-320h64a384 384 0 0 1-384 384 384 384 0 0 1-384-384 384 384 0 0 1 643.712-282.88z"/>
-              </svg>
-            </el-icon>
-          </button>
-        </el-tooltip>
-        <el-tooltip :content="$t('@NPM01:关闭')" placement="bottom" :show-after="300">
-          <button class="close-btn" @click="emit('close')">
-            <el-icon>
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/>
-              </svg>
-            </el-icon>
-          </button>
-        </el-tooltip>
+        <IconButton
+          size="small"
+          :disabled="isLoading"
+          @click="loadNpmScripts"
+        >
+          <el-icon :class="{ 'is-rotating': isLoading }">
+            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor" d="M784.512 230.272v-50.56a32 32 0 1 1 64 0v149.056a32 32 0 0 1-32 32H667.52a32 32 0 1 1 0-64h92.992A320 320 0 1 0 524.8 833.152a320 320 0 0 0 320-320h64a384 384 0 0 1-384 384 384 384 0 0 1-384-384 384 384 0 0 1 643.712-282.88z"/>
+            </svg>
+          </el-icon>
+        </IconButton>
+        <IconButton
+          size="small"
+          @click="emit('close')"
+        >
+          <el-icon>
+            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/>
+            </svg>
+          </el-icon>
+        </IconButton>
       </div>
     </div>
 
@@ -405,7 +410,6 @@ watch(() => props.visible, (newValue) => {
 .npm-icon {
   width: 18px;
   height: 18px;
-  object-fit: contain;
 }
 
 .panel-title {
@@ -427,32 +431,6 @@ watch(() => props.visible, (newValue) => {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-}
-
-.refresh-btn,
-.close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: var(--radius-base);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.refresh-btn:hover,
-.close-btn:hover {
-  background: var(--bg-container);
-  color: var(--color-text);
-}
-
-.refresh-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
 }
 
 .is-rotating {

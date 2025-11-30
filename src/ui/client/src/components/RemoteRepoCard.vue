@@ -19,12 +19,14 @@ const gitStore = useGitStore()
       </template>
       <template #actions>
         <IconButton
+          size="small"
           :tooltip="$t('@F13B4:复制仓库地址')"
           @click="gitStore.copyRemoteUrl()"
         >
           <el-icon><DocumentCopy /></el-icon>
         </IconButton>
         <IconButton
+          size="small"
           :tooltip="$t('@F13B4:复制克隆命令')"
           @click="gitStore.copyCloneCommand()"
         >

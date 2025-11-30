@@ -3,9 +3,10 @@ import { $t } from '@/lang/static'
 import { ref, computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
-import { Box, Setting, Document, Loading } from '@element-plus/icons-vue'
+import { Setting, Document, Loading } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import IconButton from '@components/IconButton.vue'
+import SvgIcon from '@components/SvgIcon/index.vue'
 
 // 定义props
 interface Props {
@@ -83,13 +84,13 @@ async function saveStash() {
     <IconButton
       v-if="props.variant === 'icon'"
       :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:将工作区更改储藏起来')"
-      size="small"
+      size="large"
       :disabled="gitStore.hasConflictedFiles || gitStore.isSavingStash"
       hover-color="var(--color-warning)"
       @click="openStashDialog"
     >
       <el-icon v-if="gitStore.isSavingStash" class="is-loading"><Loading /></el-icon>
-      <el-icon v-else><Box /></el-icon>
+      <svg-icon v-else icon-class="git-stash" />
     </IconButton>
     <el-button
       v-else

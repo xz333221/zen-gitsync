@@ -8,7 +8,7 @@
 - ✅ 支持图片图标（通过 URL）
 - ✅ 支持插槽自定义内容
 - ✅ **增强的 hover 效果**：上浮动画 + 阴影 + 背景色变化
-- ✅ 三种尺寸：small (32px)、medium (36px)、large (40px)
+- ✅ 三种尺寸：small (28px)、medium (36px)、large (40px)
 - ✅ 激活状态支持
 - ✅ 禁用状态支持
 - ✅ 提示文本（Tooltip）
@@ -81,10 +81,11 @@ const handleClick = () => {
 
 ## 尺寸说明
 
-### Small (32x32px)
-- 按钮尺寸：32px × 32px
-- 图标尺寸：18px × 18px
-- **font-size: 18px** (SVG 图标根据 font-size 显示大小)
+### Small (28x28px)
+- 按钮尺寸：28px × 28px
+- 图标尺寸：16px × 16px
+- **font-size: 16px** (SVG 图标根据 font-size 显示大小)
+- 适用场景：紧凑布局、工具栏
 
 ```vue
 <IconButton icon-class="git" size="small" />
@@ -94,6 +95,7 @@ const handleClick = () => {
 - 按钮尺寸：36px × 36px
 - 图标尺寸：20px × 20px
 - **font-size: 20px** (SVG 图标根据 font-size 显示大小)
+- 适用场景：标准按钮、主要操作
 
 ```vue
 <IconButton icon-class="git" size="medium" />
@@ -103,6 +105,7 @@ const handleClick = () => {
 - 按钮尺寸：40px × 40px
 - 图标尺寸：22px × 22px
 - **font-size: 22px** (SVG 图标根据 font-size 显示大小)
+- 适用场景：重要操作、触摸友好
 
 ```vue
 <IconButton icon-class="git" size="large" />

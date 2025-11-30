@@ -5,6 +5,7 @@
       <div class="preview-content code-command">{{ displayCommand }}</div>
       <IconButton
         :tooltip="copyButtonText"
+        size="small"
         custom-class="copy-command-btn"
         @click="copyCommand"
       >
