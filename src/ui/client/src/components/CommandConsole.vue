@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue';
-import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor } from '@element-plus/icons-vue';
+import { ref, onMounted, watch, onUnmounted, nextTick } from 'vue';
+import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor, Document, Timer, Ticket, Delete } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
@@ -38,6 +38,28 @@ const consoleRunning = ref(false);
 const orchestrationPaused = ref(false); // 编排暂停状态
 const consoleHistory = ref<ConsoleRecord[]>([]);
 let consoleIdCounter = 0; // ID计数器，确保唯一性
+
+// 清空执行历史
+function clearConsoleHistory() {
+  ElMessageBox.confirm(
+    '确定要清空所有执行历史吗？此操作不可撤销。',
+    '清空历史',
+    {
+      confirmButtonText: '清空',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }
+  ).then(() => {
+    consoleHistory.value = [];
+    ElMessage.success('执行历史已清空');
+  }).catch(() => {
+    // 用户取消
+  });
+}
+
+// 编排执行状态
+const orchestrationSteps = ref<OrchestrationStep[]>([]); // 当前执行的编排步骤列表
+const currentStepIndex = ref(-1); // 当前执行的步骤索引
 
 type ConsoleRecord = { 
   id: number; 
@@ -330,6 +352,16 @@ function openOrchestrationWorkspace() {
   orchestrationWorkspaceVisible.value = true;
 }
 
+// 滚动到当前执行的步骤
+function scrollToCurrentStep() {
+  nextTick(() => {
+    const currentStep = document.querySelector('.step-item.step-current');
+    if (currentStep) {
+      currentStep.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  });
+}
+
 // 判断命令是否是 git 相关命令
 function isGitCommand(command: string): boolean {
   if (!command) return false;
@@ -366,7 +398,13 @@ function isGitCommand(command: string): boolean {
 async function executeOrchestration(steps: OrchestrationStep[], startIndex: number = 0, isSingleExecution: boolean = false) {
   if (steps.length === 0) return;
   
-  // 不关闭弹窗，让用户可以继续查看或修改编排
+  // 关闭编排工作台弹窗
+  orchestrationWorkspaceVisible.value = false;
+  
+  // 设置编排步骤列表和当前步骤
+  orchestrationSteps.value = steps;
+  currentStepIndex.value = startIndex;
+  
   consoleRunning.value = true;
   orchestrationPaused.value = false; // 重置暂停状态
   
@@ -380,7 +418,17 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
   try {
   
   for (let i = startIndex; i < steps.length; i++) {
+    // 检查是否被停止执行
+    if (!consoleRunning.value) {
+      throw new Error('用户停止执行');
+    }
+    
     const step = steps[i];
+    
+    // 更新当前步骤索引并滚动到当前步骤
+    currentStepIndex.value = i;
+    await nextTick();
+    scrollToCurrentStep();
     
     // 确保 enabled 字段有默认值（旧数据兼容）
     if (step.enabled === undefined) {
@@ -567,6 +615,12 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
       
       // 使用可中断的等待（显示倒计时）
       for (let countdown = seconds; countdown > 0; countdown--) {
+        // 检查是否被停止
+        if (!consoleRunning.value) {
+          rec.stdout = `等待已中断（剩余 ${countdown} 秒）`;
+          ElMessage.warning('等待已中断');
+          throw new Error('用户停止执行');
+        }
         rec.stdout = `等待中... 还剩 ${countdown} 秒`;
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
@@ -679,6 +733,8 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
   
     consoleRunning.value = false;
     orchestrationPaused.value = false; // 重置暂停状态
+    currentStepIndex.value = -1; // 重置当前步骤
+    orchestrationSteps.value = []; // 清空步骤列表
     ElMessage.success('所有步骤执行完成！');
     
     // 检查是否执行了 git 相关命令，如果是则刷新 git 状态
@@ -699,6 +755,8 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
   } catch (error: any) {
     consoleRunning.value = false;
     orchestrationPaused.value = false; // 重置暂停状态
+    currentStepIndex.value = -1; // 重置当前步骤
+    orchestrationSteps.value = []; // 清空步骤列表
     if (error?.message === '用户停止执行') {
       ElMessage.info('编排执行已停止');
     } else {
@@ -1242,7 +1300,7 @@ onUnmounted(() => {
             <el-button
               type="danger"
               size="small"
-              @click="consoleRunning = false; orchestrationPaused = false"
+              @click="consoleRunning = false; orchestrationPaused = false; currentStepIndex = -1; orchestrationSteps = []"
               class="stop-btn"
             >
               <template #icon>
@@ -1253,6 +1311,17 @@ onUnmounted(() => {
           </el-tooltip>
         </div>
         
+        <IconButton
+          :tooltip="'清空执行历史'"
+          :disabled="consoleHistory.length === 0"
+          hover-color="var(--color-danger)"
+          @click="clearConsoleHistory"
+          custom-class="clear-history-btn"
+        >
+          <el-icon :size="18">
+            <Delete />
+          </el-icon>
+        </IconButton>
         <IconButton
           :tooltip="$t('@CF05E:使用终端执行')"
           :active="useTerminal"
@@ -1301,6 +1370,64 @@ onUnmounted(() => {
     <!-- 内容区域 -->
     <transition name="console-content-slide">
       <div v-show="isConsoleExpanded" class="console-content">
+        <!-- 编排步骤列表 -->
+        <div v-if="orchestrationSteps.length > 0" class="orchestration-steps-panel">
+          <div class="steps-header">
+            <span class="steps-title">执行步骤 ({{ currentStepIndex + 1 }}/{{ orchestrationSteps.length }})</span>
+          </div>
+          <div class="steps-list">
+            <div
+              v-for="(step, index) in orchestrationSteps"
+              :key="index"
+              class="step-item"
+              :class="{
+                'step-current': index === currentStepIndex,
+                'step-completed': index < currentStepIndex,
+                'step-pending': index > currentStepIndex,
+                'step-disabled': step.enabled === false,
+                [`step-type-${step.type}`]: true
+              }"
+            >
+              <div class="step-indicator">
+                <el-icon v-if="index < currentStepIndex" class="step-icon-check">
+                  <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="currentColor" d="M406.656 706.944L195.84 496.256a32 32 0 1 0-45.248 45.248l256 256 512-512a32 32 0 0 0-45.248-45.248L406.592 706.944z"/>
+                  </svg>
+                </el-icon>
+                <el-icon v-else-if="step.type === 'wait'" class="step-type-icon">
+                  <Timer />
+                </el-icon>
+                <el-icon v-else-if="step.type === 'version'" class="step-type-icon">
+                  <Ticket />
+                </el-icon>
+                <el-icon v-else-if="step.type === 'command'" class="step-type-icon">
+                  <Document />
+                </el-icon>
+                <span v-else class="step-number">{{ index + 1 }}</span>
+              </div>
+              <div class="step-content">
+                <div class="step-header">
+                  <span class="step-type-tag" :class="`type-${step.type}`">
+                    {{ step.type === 'command' ? '命令' : 
+                       step.type === 'wait' ? '等待' : 
+                       step.type === 'version' ? '版本' : step.type }}
+                  </span>
+                  <span v-if="step.enabled === false" class="step-disabled-tag">已禁用</span>
+                </div>
+                <span class="step-name">
+                  {{ step.type === 'command' ? step.commandName : 
+                     step.type === 'wait' ? `${step.waitSeconds} 秒` : 
+                     step.type === 'version' ? (
+                       step.versionTarget === 'dependency' ? 
+                       `${step.dependencyName}` : 
+                       `${step.versionBump || 'patch'}`
+                     ) : step.type }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <!-- 输入区 -->
         <div class="console-input-row">
       <span class="prompt" :title="$t('@CF05E:当前路径')">{{ currentDirectory }} &gt;</span>
@@ -1886,5 +2013,340 @@ pre.stderr {
 
 .toggle-console-btn:hover .icon-btn {
   color: var(--color-primary);
+}
+
+/* 编排步骤列表样式 */
+.orchestration-steps-panel {
+  margin-bottom: var(--spacing-md);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.steps-header {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: linear-gradient(135deg, var(--bg-container), var(--bg-panel));
+  border-bottom: 1px solid var(--border-component);
+}
+
+.steps-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.steps-list {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-card) transparent;
+  
+  &::-webkit-scrollbar {
+    height: 5px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: var(--border-card);
+    border-radius: var(--radius-full);
+    
+    &:hover {
+      background: var(--border-component);
+    }
+  }
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 8px 12px;
+  background: var(--bg-container);
+  border: 1.5px solid var(--border-card);
+  border-radius: var(--radius-md);
+  min-width: 120px;
+  max-width: 200px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: default;
+  
+  // 不同类型步骤的边框颜色
+  &.step-type-command:not(.step-current):not(.step-completed) {
+    border-left: 3px solid rgba(64, 158, 255, 0.4);
+  }
+  
+  &.step-type-wait:not(.step-current):not(.step-completed) {
+    border-left: 3px solid rgba(230, 162, 60, 0.4);
+  }
+  
+  &.step-type-version:not(.step-current):not(.step-completed) {
+    border-left: 3px solid rgba(103, 194, 58, 0.4);
+  }
+  
+  &:hover:not(.step-disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  }
+  
+  &.step-current {
+    border-color: var(--color-primary);
+    border-width: 2px;
+    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2),
+                0 0 0 2px rgba(64, 158, 255, 0.12);
+    
+    // 命令类型
+    &.step-type-command {
+      background: linear-gradient(135deg, 
+        rgba(64, 158, 255, 0.15) 0%, 
+        rgba(64, 158, 255, 0.05) 100%);
+    }
+    
+    // 等待类型
+    &.step-type-wait {
+      background: linear-gradient(135deg, 
+        rgba(230, 162, 60, 0.15) 0%, 
+        rgba(230, 162, 60, 0.05) 100%);
+      border-color: var(--color-warning);
+      box-shadow: 0 2px 8px rgba(230, 162, 60, 0.2),
+                  0 0 0 2px rgba(230, 162, 60, 0.12);
+      
+      .step-indicator {
+        background: linear-gradient(135deg, var(--color-warning), #f0ad4e);
+        box-shadow: 0 0 6px rgba(230, 162, 60, 0.35),
+                    0 0 0 2px rgba(230, 162, 60, 0.15);
+        animation: pulse-ring-warning 1.8s ease-in-out infinite;
+      }
+      
+      .step-name {
+        color: var(--color-warning);
+      }
+    }
+    
+    // 版本类型
+    &.step-type-version {
+      background: linear-gradient(135deg, 
+        rgba(103, 194, 58, 0.15) 0%, 
+        rgba(103, 194, 58, 0.05) 100%);
+      border-color: var(--color-success);
+      box-shadow: 0 2px 8px rgba(103, 194, 58, 0.2),
+                  0 0 0 2px rgba(103, 194, 58, 0.12);
+      
+      .step-indicator {
+        background: linear-gradient(135deg, var(--color-success), #5cb85c);
+        box-shadow: 0 0 6px rgba(103, 194, 58, 0.35),
+                    0 0 0 2px rgba(103, 194, 58, 0.15);
+        animation: pulse-ring-success 1.8s ease-in-out infinite;
+      }
+      
+      .step-name {
+        color: var(--color-success);
+      }
+    }
+    
+    
+    .step-indicator {
+      background: linear-gradient(135deg, var(--color-primary), #3a9eff);
+      color: white;
+      font-weight: 700;
+      box-shadow: 0 0 6px rgba(64, 158, 255, 0.35),
+                  0 0 0 2px rgba(64, 158, 255, 0.15);
+      animation: pulse-ring 1.8s ease-in-out infinite;
+      
+      .step-type-icon {
+        color: white;
+      }
+    }
+    
+    .step-name {
+      color: var(--color-primary);
+      font-weight: 600;
+    }
+  }
+  
+  &.step-completed {
+    opacity: 0.75;
+    background: rgba(103, 194, 58, 0.04);
+    border-color: rgba(103, 194, 58, 0.3);
+    
+    .step-indicator {
+      background: linear-gradient(135deg, var(--color-success), #5cb85c);
+      color: white;
+      font-weight: 600;
+    }
+    
+    .step-name {
+      color: var(--text-tertiary);
+      opacity: 0.8;
+    }
+    
+    .step-type-tag {
+      opacity: 0.6;
+    }
+  }
+  
+  &.step-pending {
+    opacity: 0.65;
+    background: var(--bg-container);
+    
+    .step-indicator {
+      background: var(--bg-panel);
+      border: 2px solid var(--border-component);
+      color: var(--text-tertiary);
+      font-weight: 500;
+    }
+    
+    .step-name {
+      color: var(--text-secondary);
+    }
+    
+    .step-type-tag {
+      opacity: 0.7;
+    }
+  }
+  
+  &.step-disabled {
+    opacity: 0.4;
+    filter: grayscale(0.5);
+    cursor: not-allowed;
+    
+    .step-indicator {
+      background: var(--bg-panel);
+      color: var(--text-disabled);
+    }
+    
+    .step-name {
+      color: var(--text-disabled);
+      text-decoration: line-through;
+    }
+  }
+}
+
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  
+  .step-type-icon {
+    font-size: 14px;
+    color: var(--text-tertiary);
+  }
+  
+  .step-icon-check {
+    font-size: 14px;
+    color: white;
+  }
+}
+
+.step-number {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.step-type-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  
+  &.type-command {
+    background: rgba(64, 158, 255, 0.12);
+    color: var(--color-primary);
+  }
+  
+  &.type-wait {
+    background: rgba(230, 162, 60, 0.12);
+    color: var(--color-warning);
+  }
+  
+  &.type-version {
+    background: rgba(103, 194, 58, 0.12);
+    color: var(--color-success);
+  }
+}
+
+.step-name {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.3s ease;
+  line-height: 1.3;
+}
+
+.step-disabled-tag {
+  font-size: 10px;
+  color: var(--text-disabled);
+  background: var(--bg-panel);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+}
+
+@keyframes pulse-ring {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(64, 158, 255, 0.35),
+                0 0 0 2px rgba(64, 158, 255, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 8px rgba(64, 158, 255, 0.5),
+                0 0 0 4px rgba(64, 158, 255, 0);
+  }
+}
+
+@keyframes pulse-ring-warning {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(230, 162, 60, 0.35),
+                0 0 0 2px rgba(230, 162, 60, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 8px rgba(230, 162, 60, 0.5),
+                0 0 0 4px rgba(230, 162, 60, 0);
+  }
+}
+
+@keyframes pulse-ring-success {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(103, 194, 58, 0.35),
+                0 0 0 2px rgba(103, 194, 58, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 8px rgba(103, 194, 58, 0.5),
+                0 0 0 4px rgba(103, 194, 58, 0);
+  }
 }
 </style>

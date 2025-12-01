@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { RefreshLeft } from '@element-plus/icons-vue'
+import IconButton from '@components/IconButton.vue'
 
 interface Props {
   from?: 'form' | 'drawer' | 'status'
@@ -59,43 +60,46 @@ async function handleClick() {
 
 <template>
   <div class="unstage-all-button" v-if="hasStagedChanges">
-    <el-tooltip :content="tooltipText" placement="top" :show-after="200">
+    <!-- 图标按钮模式 (from === 'status') -->
+    <IconButton
+      v-if="props.from === 'status'"
+      :tooltip="tooltipText"
+      size="large"
+      :disabled="isDisabled"
+      :loading="gitStore.isResetting"
+      hover-color="var(--color-warning)"
+      @click="handleClick"
+    >
+      <el-icon><RefreshLeft /></el-icon>
+    </IconButton>
+    
+    <!-- 文字按钮模式 (from !== 'status') -->
+    <el-tooltip v-else :content="tooltipText" placement="top" :show-after="200">
       <el-button
         type="warning"
         @click="handleClick"
         :loading="gitStore.isResetting"
         :disabled="isDisabled"
-        :circle="props.from === 'status'"
-        :size="props.from === 'status' ? 'small' : 'default'"
-        :class="props.from === 'status' ? '' : `from-${props.from}`"
+        :class="`from-${props.from}`"
       >
-        <el-icon v-if="props.from === 'status'"><RefreshLeft /></el-icon>
-        <template v-else>
-          取消暂存所有
-          <span v-if="stagedFilesCount > 0">({{ stagedFilesCount }})</span>
-        </template>
+        取消暂存所有
+        <span v-if="stagedFilesCount > 0">({{ stagedFilesCount }})</span>
       </el-button>
     </el-tooltip>
   </div>
 </template>
 
 <style scoped lang="scss">
+// 文字按钮模式的样式
 .unstage-all-button {
-  &.from-drawer {
+  :deep(.el-button.from-drawer) {
     padding: 6px var(--spacing-md);
     font-size: var(--font-size-sm);
     height: 32px;
   }
   
-  &.from-status {
-    padding: var(--spacing-base);
-    font-size: var(--font-size-sm);
-    height: 36px;
-  }
-  
-  &.from-form {
+  :deep(.el-button.from-form) {
     padding: 10px var(--spacing-lg);
-    
     height: 40px;
   }
 }
