@@ -57,9 +57,27 @@ function clearConsoleHistory() {
   });
 }
 
+// 处理终端命令确认
+function continueAfterTerminal() {
+  if (terminalConfirmResolve) {
+    terminalConfirmResolve(true);
+  }
+}
+
+function stopAfterTerminal() {
+  if (terminalConfirmResolve) {
+    terminalConfirmResolve(false);
+  }
+}
+
 // 编排执行状态
 const orchestrationSteps = ref<OrchestrationStep[]>([]); // 当前执行的编排步骤列表
 const currentStepIndex = ref(-1); // 当前执行的步骤索引
+
+// 终端命令等待确认状态
+const waitingForTerminalConfirm = ref(false); // 是否正在等待终端命令确认
+const waitingStepName = ref(''); // 当前等待的步骤名称
+let terminalConfirmResolve: ((value: boolean) => void) | null = null; // Promise resolve 函数
 
 type ConsoleRecord = { 
   id: number; 
@@ -476,22 +494,22 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
             
             // 等待用户确认命令执行完成（如果不是最后一个步骤）
             if (i < steps.length - 1 && shouldContinue) {
-              await ElMessageBox.confirm(
-                `终端命令 "${stepLabel}" 已在新窗口中打开。\n\n请在终端中查看命令执行结果，完成后点击"继续"执行下一步。`,
-                '等待终端命令完成',
-                {
-                  confirmButtonText: '继续下一步',
-                  cancelButtonText: '停止执行',
-                  type: 'info',
-                  closeOnClickModal: false,
-                  closeOnPressEscape: false,
-                  showClose: false
-                }
-              ).catch(() => {
-                // 用户点击取消，停止执行
+              waitingForTerminalConfirm.value = true;
+              waitingStepName.value = stepLabel;
+              
+              // 使用 Promise 等待用户确认
+              const userConfirmed = await new Promise<boolean>((resolve) => {
+                terminalConfirmResolve = resolve;
+              });
+              
+              waitingForTerminalConfirm.value = false;
+              waitingStepName.value = '';
+              terminalConfirmResolve = null;
+              
+              if (!userConfirmed) {
                 shouldContinue = false;
                 throw new Error('用户取消执行');
-              });
+              }
             }
           } else {
             throw new Error(result?.error || '执行失败');
@@ -1426,6 +1444,29 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
+          
+          <!-- 终端命令等待确认提示 -->
+          <div v-if="waitingForTerminalConfirm" class="terminal-waiting-panel">
+            <div class="waiting-content">
+              <el-icon class="waiting-icon"><Monitor /></el-icon>
+              <div class="waiting-text">
+                <div class="waiting-title">等待终端命令完成</div>
+                <div class="waiting-desc">
+                  终端命令 "<strong>{{ waitingStepName }}</strong>" 已在新窗口中打开，请在终端中查看命令执行结果
+                </div>
+              </div>
+            </div>
+            <div class="waiting-actions">
+              <el-button type="primary" @click="continueAfterTerminal">
+                <el-icon><VideoPlay /></el-icon>
+                继续下一步
+              </el-button>
+              <el-button type="danger" plain @click="stopAfterTerminal">
+                <el-icon><Close /></el-icon>
+                停止执行
+              </el-button>
+            </div>
+          </div>
         </div>
         
         <!-- 输入区 -->
@@ -2022,6 +2063,76 @@ pre.stderr {
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+/* 终端命令等待确认面板 */
+.terminal-waiting-panel {
+  margin: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: linear-gradient(135deg, 
+    rgba(64, 158, 255, 0.08) 0%, 
+    rgba(64, 158, 255, 0.02) 100%);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  animation: slideDown 0.3s ease-out;
+}
+
+.waiting-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+}
+
+.waiting-icon {
+  font-size: 24px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.waiting-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.waiting-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-primary);
+  line-height: 1.3;
+}
+
+.waiting-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.4;
+  
+  strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+}
+
+.waiting-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .steps-header {
