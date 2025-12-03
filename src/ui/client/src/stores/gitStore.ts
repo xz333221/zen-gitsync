@@ -1675,6 +1675,54 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 保存部分文件的stash
+  async function savePartialStash(files: string[], message?: string, includeUntracked = false) {
+    if (!isGitRepo.value) {
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'));
+      return false;
+    }
+
+    if (!files || files.length === 0) {
+      ElMessage.warning($t('@C298B:请选择要储藏的文件'));
+      return false;
+    }
+    
+    try {
+      isSavingStash.value = true;
+      
+      const response = await fetch('/api/stash-save-partial', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          files,
+          message,
+          includeUntracked
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        ElMessage.success(result.message);
+        // 刷新stash列表和Git状态
+        await getStashList();
+        await fetchStatus();
+        return true;
+      } else {
+        ElMessage.warning(result.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('保存部分stash失败:', error);
+      ElMessage.error(`${$t('@C298B:保存stash失败: ')}${(error as Error).message}`);
+      return false;
+    } finally {
+      isSavingStash.value = false;
+    }
+  }
+
   // 应用stash
   async function applyStash(stashId: string, pop = false) {
     if (!isGitRepo.value) {
@@ -1881,6 +1929,7 @@ export const useGitStore = defineStore('git', () => {
     // stash相关方法
     getStashList,
     saveStash,
+    savePartialStash,
     applyStash,
     dropStash,
     clearAllStashes,

@@ -78,6 +78,7 @@ declare module 'vue' {
     StageButton: typeof import('./src/components/buttons/StageButton.vue')['default']
     StashChangesButton: typeof import('./src/components/buttons/StashChangesButton.vue')['default']
     StashListButton: typeof import('./src/components/buttons/StashListButton.vue')['default']
+    StashSelectedFilesButton: typeof import('./src/components/buttons/StashSelectedFilesButton.vue')['default']
     SuccessModal: typeof import('./src/components/SuccessModal.vue')['default']
     SvgIcon: typeof import('./src/components/SvgIcon/index.vue')['default']
     TagListButton: typeof import('./src/components/buttons/TagListButton.vue')['default']

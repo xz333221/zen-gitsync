@@ -19,6 +19,8 @@ interface Props {
   isLocking: (filePath: string) => boolean
   getFileName: (filePath: string) => string
   getFileDirectory: (filePath: string) => string
+  isSelectionMode?: boolean
+  isFileSelected?: (filePath: string) => boolean
 }
 
 const props = defineProps<Props>()
@@ -31,6 +33,7 @@ const emit = defineEmits<{
   unstageFile: [filePath: string]
   revertFileChanges: [filePath: string]
   manageLockedFiles: []
+  toggleFileSelection: [filePath: string]
 }>()
 
 // 计算是否显示该组
@@ -45,8 +48,19 @@ function handleToggleCollapse() {
 }
 
 // 处理文件点击
-function handleFileClick(file: FileItem) {
-  emit('fileClick', file)
+function handleFileClick(file: FileItem, event?: MouseEvent) {
+  // 如果在选择模式下，点击文件会切换选择状态
+  if (props.isSelectionMode) {
+    event?.stopPropagation()
+    emit('toggleFileSelection', file.path)
+  } else {
+    emit('fileClick', file)
+  }
+}
+
+// 处理复选框变化
+function handleCheckboxChange(filePath: string) {
+  emit('toggleFileSelection', filePath)
 }
 
 // 处理文件锁定切换
@@ -116,11 +130,20 @@ const getFileIcon = (filePath: string) => {
         :class="{ 
           'is-loading': props.isLocking(file.path), 
           'locked': props.isFileLocked(file.path),
+          'selected': props.isSelectionMode && props.isFileSelected?.(file.path),
           [`file-type-${file.type}`]: file.type
         }"
-        @click="handleFileClick(file)"
+        @click="handleFileClick(file, $event)"
       >
         <div class="file-info">
+          <!-- 选择模式下显示复选框 -->
+          <el-checkbox
+            v-if="props.isSelectionMode"
+            :model-value="props.isFileSelected?.(file.path)"
+            @change="handleCheckboxChange(file.path)"
+            @click.stop
+            class="file-checkbox"
+          />
           <span :class="['file-type-icon', getFileIcon(file.path)]"></span>
           <div class="file-name-section">
             <el-tooltip
@@ -153,8 +176,8 @@ const getFileIcon = (filePath: string) => {
             {{ getStatusLetter(file.type) }}
           </div>
         </div>
-        <!-- 悬浮操作按钮 -->
-        <div class="file-actions">
+        <!-- 悬浮操作按钮（非选择模式下显示） -->
+        <div v-if="!props.isSelectionMode" class="file-actions">
           <FileActionButtons
             :file-path="file.path"
             :file-type="file.type"
@@ -417,5 +440,25 @@ const getFileIcon = (filePath: string) => {
 
 .file-item:hover .file-actions {
   display: flex;
+}
+
+/* 选择模式样式 */
+.file-checkbox {
+  margin-right: var(--spacing-sm);
+}
+
+.file-item.selected {
+  background: rgba(64, 158, 255, 0.1);
+  border-color: rgba(64, 158, 255, 0.3);
+}
+
+.file-item.selected::before {
+  width: 3px;
+  background: var(--color-primary);
+}
+
+.file-item.selected:hover {
+  background: rgba(64, 158, 255, 0.15);
+  border-color: rgba(64, 158, 255, 0.4);
 }
 </style>

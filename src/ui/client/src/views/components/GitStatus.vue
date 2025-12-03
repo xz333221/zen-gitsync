@@ -17,6 +17,7 @@ import DirectorySelector from '@components/DirectorySelector.vue'
 import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
+import StashSelectedFilesButton from '@/components/buttons/StashSelectedFilesButton.vue'
 import MergeBranchButton from '@/components/buttons/MergeBranchButton.vue'
 import UnstageAllButton from '@/components/buttons/UnstageAllButton.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
@@ -58,6 +59,46 @@ const showNpmPanel = ref(true) // 默认打开NPM面板
 function toggleNpmPanel() {
   showNpmPanel.value = !showNpmPanel.value
 }
+
+// 文件选择状态
+const selectedFiles = ref<Set<string>>(new Set())
+const isSelectionMode = ref(false)
+
+// 切换选择模式
+function toggleSelectionMode() {
+  isSelectionMode.value = !isSelectionMode.value
+  if (!isSelectionMode.value) {
+    selectedFiles.value.clear()
+  }
+}
+
+// 切换文件选择状态
+function toggleFileSelection(filePath: string) {
+  if (selectedFiles.value.has(filePath)) {
+    selectedFiles.value.delete(filePath)
+  } else {
+    selectedFiles.value.add(filePath)
+  }
+}
+
+// 全选/取消全选
+function toggleSelectAll() {
+  if (selectedFiles.value.size === gitStore.fileList.length) {
+    selectedFiles.value.clear()
+  } else {
+    selectedFiles.value = new Set(gitStore.fileList.map(f => f.path))
+  }
+}
+
+// 检查文件是否被选中
+function isFileSelected(filePath: string): boolean {
+  return selectedFiles.value.has(filePath)
+}
+
+// 计算选中的文件列表
+const selectedFilesList = computed(() => {
+  return Array.from(selectedFiles.value)
+})
 
 // 为FileDiffViewer组件准备数据
 const gitFilesForViewer = computed(() => {
@@ -711,8 +752,27 @@ defineExpose({
           <!-- 取消暂存所有按钮 -->
           <UnstageAllButton from="status" />
 
+          <!-- 选择模式切换按钮 -->
+          <IconButton
+            v-if="gitStore.fileList.length > 0"
+            :tooltip="isSelectionMode ? $t('@13D1C:退出选择模式') : $t('@13D1C:选择文件进行储藏')"
+            size="large"
+            :active="isSelectionMode"
+            hover-color="var(--color-primary)"
+            @click="toggleSelectionMode"
+          >
+            <svg-icon icon-class="muti-choose" />
+          </IconButton>
+
+          <!-- 储藏选中文件按钮 -->
+          <StashSelectedFilesButton 
+            v-if="isSelectionMode && selectedFiles.size > 0"
+            :selected-files="selectedFilesList"
+            @success="toggleSelectionMode"
+          />
+
           <!-- 储藏更改按钮 -->
-          <StashChangesButton />
+          <StashChangesButton v-if="!isSelectionMode" />
           
           <!-- 储藏列表按钮 -->
           <StashListButton />
@@ -819,6 +879,27 @@ defineExpose({
               </IconButton>
             </div>
           </div>
+          
+          <!-- 选择模式提示条 -->
+          <div v-if="isSelectionMode" class="selection-mode-banner">
+            <div class="banner-content">
+              <svg-icon icon-class="muti-choose" class="banner-icon" />
+              <span class="banner-text">
+                {{ $t('@13D1C:已选中') }} <strong>{{ selectedFiles.size }}</strong> {{ $t('@13D1C:个文件') }}
+              </span>
+            </div>
+            <div class="banner-actions">
+              <el-button 
+                size="small" 
+                type="primary" 
+                plain
+                @click="toggleSelectAll"
+              >
+                {{ selectedFiles.size === gitStore.fileList.length ? $t('@13D1C:取消全选') : $t('@13D1C:全选') }}
+              </el-button>
+            </div>
+          </div>
+          
           <div class="file-list-container">
             <!-- 列表视图 -->
             <template v-if="viewMode === 'list'">
@@ -832,9 +913,12 @@ defineExpose({
                 :is-locking="isLocking"
                 :get-file-name="getFileName"
                 :get-file-directory="getFileDirectory"
+                :is-selection-mode="isSelectionMode"
+                :is-file-selected="isFileSelected"
                 @toggle-collapse="toggleGroupCollapse"
                 @file-click="handleFileClick"
                 @toggle-file-lock="toggleFileLock"
+                @toggle-file-selection="toggleFileSelection"
                 @stage-file="stageFile"
                 @revert-file-changes="revertFileChanges"
               />
@@ -849,9 +933,12 @@ defineExpose({
                 :is-locking="isLocking"
                 :get-file-name="getFileName"
                 :get-file-directory="getFileDirectory"
+                :is-selection-mode="isSelectionMode"
+                :is-file-selected="isFileSelected"
                 @toggle-collapse="toggleGroupCollapse"
                 @file-click="handleFileClick"
                 @toggle-file-lock="toggleFileLock"
+                @toggle-file-selection="toggleFileSelection"
                 @unstage-file="unstageFile"
               />
               
@@ -865,9 +952,12 @@ defineExpose({
                 :is-locking="isLocking"
                 :get-file-name="getFileName"
                 :get-file-directory="getFileDirectory"
+                :is-selection-mode="isSelectionMode"
+                :is-file-selected="isFileSelected"
                 @toggle-collapse="toggleGroupCollapse"
                 @file-click="handleFileClick"
                 @toggle-file-lock="toggleFileLock"
+                @toggle-file-selection="toggleFileSelection"
                 @stage-file="stageFile"
                 @revert-file-changes="revertFileChanges"
                 @manage-locked-files="showLockedFilesDialog = true"
@@ -883,9 +973,12 @@ defineExpose({
                 :is-locking="isLocking"
                 :get-file-name="getFileName"
                 :get-file-directory="getFileDirectory"
+                :is-selection-mode="isSelectionMode"
+                :is-file-selected="isFileSelected"
                 @toggle-collapse="toggleGroupCollapse"
                 @file-click="handleFileClick"
                 @toggle-file-lock="toggleFileLock"
+                @toggle-file-selection="toggleFileSelection"
                 @stage-file="stageFile"
                 @revert-file-changes="revertFileChanges"
                 @manage-locked-files="showLockedFilesDialog = true"
@@ -1609,6 +1702,62 @@ html.dark .upstream-tip:hover {
     border: 1px solid var(--border-card);
     font-weight: var(--font-weight-medium);
   }
+}
+
+/* 选择模式提示条样式 */
+.selection-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-base);
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(64, 158, 255, 0.05) 100%);
+  border: 1px solid rgba(64, 158, 255, 0.3);
+  border-radius: var(--radius-lg);
+  margin: var(--spacing-sm) 0;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
+.banner-icon {
+  color: var(--color-primary);
+  font-size: var(--font-size-lg);
+}
+
+.banner-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  
+  strong {
+    color: var(--color-primary);
+    font-weight: var(--font-weight-bold);
+    font-size: var(--font-size-md);
+  }
+}
+
+.banner-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+html.dark .selection-mode-banner {
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.15) 0%, rgba(64, 158, 255, 0.08) 100%);
+  border-color: rgba(64, 158, 255, 0.35);
 }
 
 </style>

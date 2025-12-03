@@ -7,15 +7,21 @@ import { Setting, Document, Loading } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import IconButton from '@components/IconButton.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
+import { ElMessage } from 'element-plus'
 
 // 定义props
 interface Props {
-  variant?: 'icon' | 'text'  // icon: 圆形图标按钮, text: 带文字的普通按钮
+  selectedFiles: string[]
+  variant?: 'icon' | 'text'
 }
 
 const props = withDefaults(defineProps<Props>(), {
   variant: 'icon'
 })
+
+const emit = defineEmits<{
+  success: []
+}>()
 
 const gitStore = useGitStore()
 const configStore = useConfigStore()
@@ -26,31 +32,13 @@ const stashMessage = ref('')
 const includeUntracked = ref(true)
 const excludeLocked = ref(false)
 
-// 计算是否有变更文件（包括锁定的）
-const anyChangesIncludingLocked = computed(() => {
-  return gitStore.fileList.some(file => 
-    file.type === 'modified' || 
-    file.type === 'added' || 
-    file.type === 'deleted' || 
-    file.type === 'untracked'
-  )
-})
+// 计算是否有选中的文件
+const hasSelectedFiles = computed(() => props.selectedFiles.length > 0)
 
-// 计算是否所有变更都是锁定文件
-const allChangesAreLocked = computed(() => {
-  if (!anyChangesIncludingLocked.value) return false
-  
-  const changedFiles = gitStore.fileList.filter(file => 
-    file.type === 'modified' || 
-    file.type === 'added' || 
-    file.type === 'deleted' || 
-    file.type === 'untracked'
-  )
-  
-  if (changedFiles.length === 0) return false
-  
-  return changedFiles.every((file: any) => {
-    const normalizedPath = file.path.replace(/\\/g, '/')
+// 计算选中的文件中有多少是锁定的
+const lockedFilesInSelection = computed(() => {
+  return props.selectedFiles.filter(filePath => {
+    const normalizedPath = filePath.replace(/\\/g, '/')
     return configStore.lockedFiles.some((lockedFile: string) => {
       const normalizedLocked = lockedFile.replace(/\\/g, '/')
       return normalizedPath === normalizedLocked
@@ -60,32 +48,53 @@ const allChangesAreLocked = computed(() => {
 
 // 打开储藏对话框
 function openStashDialog() {
-  stashMessage.value = ''
-  if (!allChangesAreLocked.value) {
-    excludeLocked.value = false
+  if (!hasSelectedFiles.value) {
+    ElMessage.warning($t('@76872:请先选择要储藏的文件'))
+    return
   }
+  stashMessage.value = ''
+  excludeLocked.value = false
   isStashDialogVisible.value = true
 }
 
 // 保存储藏
 async function saveStash() {
   try {
-    await gitStore.saveStash(stashMessage.value, includeUntracked.value, excludeLocked.value)
+    let filesToStash = props.selectedFiles
+    
+    // 如果选择了排除锁定文件，则过滤掉锁定的文件
+    if (excludeLocked.value && lockedFilesInSelection.value.length > 0) {
+      filesToStash = props.selectedFiles.filter(filePath => {
+        const normalizedPath = filePath.replace(/\\/g, '/')
+        return !configStore.lockedFiles.some((lockedFile: string) => {
+          const normalizedLocked = lockedFile.replace(/\\/g, '/')
+          return normalizedPath === normalizedLocked
+        })
+      })
+      
+      if (filesToStash.length === 0) {
+        ElMessage.warning($t('@76872:所有选中的文件都是锁定文件，无法储藏'))
+        return
+      }
+    }
+    
+    await gitStore.savePartialStash(filesToStash, stashMessage.value, includeUntracked.value)
     isStashDialogVisible.value = false
+    emit('success')
   } catch (error) {
-    console.error('储藏失败:', error)
+    console.error('储藏选中文件失败:', error)
   }
 }
 </script>
 
 <template>
-  <div class="stash-changes-button" v-if="anyChangesIncludingLocked">
-    <!-- 储藏更改按钮 -->
+  <div class="stash-selected-files-button" v-if="hasSelectedFiles">
+    <!-- 储藏选中文件按钮 -->
     <IconButton
       v-if="props.variant === 'icon'"
-      :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:将工作区更改储藏起来')"
+      :tooltip="$t('@76872:储藏选中的文件')"
       size="large"
-      :disabled="gitStore.hasConflictedFiles || gitStore.isSavingStash"
+      :disabled="gitStore.isSavingStash || !hasSelectedFiles"
       hover-color="var(--color-warning)"
       @click="openStashDialog"
     >
@@ -98,15 +107,15 @@ async function saveStash() {
       class="action-button"
       @click="openStashDialog"
       :loading="gitStore.isSavingStash"
-      :disabled="gitStore.hasConflictedFiles"
+      :disabled="!hasSelectedFiles"
     >
-      {{ $t('@76872:储藏更改') }}
+      {{ $t('@76872:储藏选中文件') }} ({{ props.selectedFiles.length }})
     </el-button>
 
-    <!-- Stash弹窗：创建储藏 -->
+    <!-- Stash弹窗：储藏选中的文件 -->
     <CommonDialog
       v-model="isStashDialogVisible"
-      :title="$t('@76872:储藏更改 (Git Stash)')"
+      :title="$t('@76872:储藏选中的文件')"
       size="medium"
       :close-on-click-modal="false"
       show-footer
@@ -123,8 +132,8 @@ async function saveStash() {
             <svg-icon icon-class="git-stash" />
           </div>
           <div class="info-content">
-            <h4>{{ $t('@76872:储藏工作区更改') }}</h4>
-            <p>{{ $t('@76872:将当前工作区的更改临时保存，稍后可以重新应用到任何分支') }}</p>
+            <h4>{{ $t('@76872:储藏选中的文件') }}</h4>
+            <p>{{ $t('@76872:将选中的文件更改临时保存，稍后可以重新应用') }}</p>
           </div>
         </div>
         
@@ -153,32 +162,40 @@ async function saveStash() {
               <el-checkbox v-model="includeUntracked" size="large">
                 <span class="option-label">{{ $t('@76872:包含未跟踪文件') }}</span>
               </el-checkbox>
-              <p class="option-desc">{{ $t('@76872:同时储藏新建但未添加到Git的文件 (--include-untracked)') }}</p>
+              <p class="option-desc">{{ $t('@76872:对于未跟踪的文件，同时储藏 (--include-untracked)') }}</p>
             </div>
-
+            
             <div class="option-item">
-              <el-checkbox v-model="excludeLocked" :disabled="allChangesAreLocked" size="large">
+              <el-checkbox v-model="excludeLocked" size="large">
                 <span class="option-label">{{ $t('@76872:排除锁定文件') }}</span>
               </el-checkbox>
-              <p class="option-desc" :class="{ 'disabled': allChangesAreLocked }">
+              <p class="option-desc">
                 {{ $t('@76872:不储藏被锁定的文件，保持其当前状态') }}
+                <span v-if="lockedFilesInSelection.length > 0" class="locked-count">
+                  ({{ $t('@76872:选中') }} {{ lockedFilesInSelection.length }} {{ $t('@76872:个锁定文件') }})
+                </span>
               </p>
             </div>
           </div>
           
           <!-- 储藏预览信息 -->
-          <div class="stash-preview" v-if="gitStore.status.staged.length > 0 || gitStore.status.unstaged.length > 0">
+          <div class="stash-preview">
             <h5 class="preview-title">
-              <el-icon><Document /></el-icon>
+              <svg-icon icon-class="git-stash" style="font-size: 16px;" />
               {{ $t('@76872:将要储藏的文件') }}
             </h5>
             <div class="file-count-info">
-              <el-tag type="success" v-if="gitStore.status.staged.length > 0">
-                {{ $t('@76872:已暂存: ') }}{{ gitStore.status.staged.length }} {{ $t('@76872:个文件') }}
+              <el-tag type="warning">
+                {{ $t('@76872:已选中: ') }}{{ props.selectedFiles.length }} {{ $t('@76872:个文件') }}
               </el-tag>
-              <el-tag type="warning" v-if="gitStore.status.unstaged.length > 0">
-                {{ $t('@76872:未暂存: ') }}{{ gitStore.status.unstaged.length }} {{ $t('@76872:个文件') }}
-              </el-tag>
+            </div>
+            <div class="file-list-preview">
+              <div v-for="file in props.selectedFiles.slice(0, 10)" :key="file" class="file-preview-item">
+                {{ file }}
+              </div>
+              <div v-if="props.selectedFiles.length > 10" class="more-files">
+                {{ $t('@76872:...还有') }} {{ props.selectedFiles.length - 10 }} {{ $t('@76872:个文件') }}
+              </div>
             </div>
           </div>
         </el-form>
@@ -188,7 +205,7 @@ async function saveStash() {
 </template>
 
 <style scoped lang="scss">
-.stash-changes-button {
+.stash-selected-files-button {
   display: inline-block;
 }
 
@@ -249,7 +266,6 @@ async function saveStash() {
 
 .stash-info-card .info-content p {
   margin: 0;
-  
   color: #075985;
   line-height: 1.4;
 }
@@ -267,7 +283,6 @@ async function saveStash() {
 .stash-form :deep(.el-form-item__label) {
   font-weight: 600;
   color: var(--color-text-title);
-  
   margin-bottom: var(--spacing-base);
 }
 
@@ -276,7 +291,6 @@ async function saveStash() {
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-gray-200);
     transition: all 0.3s ease;
-    
     line-height: 1.5;
     
     &:hover {
@@ -300,7 +314,6 @@ async function saveStash() {
   align-items: center;
   gap: var(--spacing-base);
   margin: 0 0 var(--spacing-base) 0;
-  
   font-weight: 600;
   color: var(--color-text-title);
 }
@@ -325,7 +338,6 @@ async function saveStash() {
 .option-label {
   font-weight: 500;
   color: var(--color-text-title);
-  
 }
 
 .option-desc {
@@ -334,10 +346,12 @@ async function saveStash() {
   color: var(--color-gray-500);
   line-height: 1.4;
   padding-left: var(--spacing-2xl);
-  
-  &.disabled {
-    color: var(--color-gray-400);
-  }
+}
+
+.locked-count {
+  color: #f59e0b;
+  font-weight: 600;
+  margin-left: var(--spacing-xs);
 }
 
 .stash-preview {
@@ -363,9 +377,9 @@ async function saveStash() {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  
   font-weight: 600;
   color: #92400e;
+  margin-bottom: var(--spacing-base);
 }
 
 .preview-title :deep(.el-icon) {
@@ -377,11 +391,36 @@ async function saveStash() {
   display: flex;
   gap: var(--spacing-base);
   flex-wrap: wrap;
+  margin-bottom: var(--spacing-base);
 }
 
 .file-count-info :deep(.el-tag) {
   border-radius: var(--radius-md);
   padding: var(--spacing-sm) var(--spacing-base);
+}
+
+.file-list-preview {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: var(--spacing-sm);
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-base);
+}
+
+.file-preview-item {
+  font-size: var(--font-size-sm);
+  color: #92400e;
+  padding: var(--spacing-xs) 0;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.more-files {
+  font-size: var(--font-size-sm);
+  color: #d97706;
+  padding-top: var(--spacing-sm);
+  font-weight: 500;
+  text-align: center;
 }
 
 /* 储藏弹窗的CommonDialog样式定制 */

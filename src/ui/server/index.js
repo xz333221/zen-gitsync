@@ -3567,6 +3567,49 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   });
 
+  // 保存部分文件的stash
+  app.post('/api/stash-save-partial', async (req, res) => {
+    try {
+      const { files, message, includeUntracked } = req.body;
+
+      if (!files || !Array.isArray(files) || files.length === 0) {
+        return res.json({ success: false, message: '请选择要储藏的文件' });
+      }
+
+      // 构建 git stash push 命令
+      let command = 'git stash push';
+      if (message) {
+        command += ` -m "${message}"`;
+      }
+      if (includeUntracked) {
+        command += ' --include-untracked';
+      }
+
+      // 添加文件列表
+      const args = files.map(f => `"${f}"`).join(' ');
+      command += ` -- ${args}`;
+
+      const { stdout } = await execGitCommand(command);
+      
+      if (stdout.includes('No local changes to save')) {
+        return res.json({ success: false, message: '没有本地更改需要保存' });
+      }
+
+      res.json({ 
+        success: true, 
+        message: `成功储藏 ${files.length} 个文件`, 
+        output: stdout 
+      });
+    } catch (error) {
+      const msg = error?.message || '';
+      if (msg.includes('No valid patches in input')) {
+        return res.json({ success: false, message: '没有可储藏的更改' });
+      }
+      console.error('保存部分stash失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // 应用特定的stash
   app.post('/api/stash-apply', async (req, res) => {
     try {
