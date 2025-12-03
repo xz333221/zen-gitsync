@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "2.8.3",
+  "version": "2.8.4",
   "description": "一个 git 提交的工具",
   "main": "index.js",
   "type": "module",
