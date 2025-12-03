@@ -883,7 +883,6 @@ defineExpose({
           <!-- 选择模式提示条 -->
           <div v-if="isSelectionMode" class="selection-mode-banner">
             <div class="banner-content">
-              <svg-icon icon-class="muti-choose" class="banner-icon" />
               <span class="banner-text">
                 {{ $t('@13D1C:已选中') }} <strong>{{ selectedFiles.size }}</strong> {{ $t('@13D1C:个文件') }}
               </span>
