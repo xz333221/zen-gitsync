@@ -16,6 +16,10 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.13",
+    "@vue-flow/background": "^1.3.2",
+    "@vue-flow/controls": "^1.1.3",
+    "@vue-flow/core": "^1.48.0",
+    "@vue-flow/minimap": "^1.5.4",
     "ansi-to-html": "^0.7.2",
     "element-plus": "^2.11.4",
     "file-icons-js": "^1.1.0",

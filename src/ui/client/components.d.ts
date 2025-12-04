@@ -8,8 +8,10 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    BaseNode: typeof import('./src/components/flow/nodes/BaseNode.vue')['default']
     BranchSelector: typeof import('./src/components/BranchSelector.vue')['default']
     CommandConsole: typeof import('./src/components/CommandConsole.vue')['default']
+    CommandNode: typeof import('./src/components/flow/nodes/CommandNode.vue')['default']
     CommandOrchestrator: typeof import('./src/components/CommandOrchestrator.vue')['default']
     CommitButton: typeof import('./src/components/buttons/CommitButton.vue')['default']
     CommonDialog: typeof import('./src/components/CommonDialog.vue')['default']
@@ -55,6 +57,7 @@ declare module 'vue' {
     FileDiffViewer: typeof import('./src/components/FileDiffViewer.vue')['default']
     FileGroup: typeof import('./src/components/FileGroup.vue')['default']
     FileTreeView: typeof import('./src/components/FileTreeView.vue')['default']
+    FlowOrchestrationWorkspace: typeof import('./src/components/flow/FlowOrchestrationWorkspace.vue')['default']
     GitActionButtons: typeof import('./src/components/GitActionButtons.vue')['default']
     GitCommandPreview: typeof import('./src/components/GitCommandPreview.vue')['default']
     GitGlobalSettingsDialog: typeof import('./src/components/GitGlobalSettingsDialog.vue')['default']
@@ -66,6 +69,7 @@ declare module 'vue' {
     LanguageSwitcher: typeof import('./src/components/LanguageSwitcher.vue')['default']
     ListIcon: typeof import('./src/components/icons/ListIcon.vue')['default']
     MergeBranchButton: typeof import('./src/components/buttons/MergeBranchButton.vue')['default']
+    NodeConfigPanel: typeof import('./src/components/flow/NodeConfigPanel.vue')['default']
     NpmScriptsPanel: typeof import('./src/components/NpmScriptsPanel.vue')['default']
     NpmSettingsDialog: typeof import('./src/components/NpmSettingsDialog.vue')['default']
     OptionSwitchCard: typeof import('./src/components/OptionSwitchCard.vue')['default']
@@ -76,6 +80,7 @@ declare module 'vue' {
     QuickPushButton: typeof import('./src/components/buttons/QuickPushButton.vue')['default']
     RemoteRepoCard: typeof import('./src/components/RemoteRepoCard.vue')['default']
     StageButton: typeof import('./src/components/buttons/StageButton.vue')['default']
+    StartNode: typeof import('./src/components/flow/nodes/StartNode.vue')['default']
     StashChangesButton: typeof import('./src/components/buttons/StashChangesButton.vue')['default']
     StashListButton: typeof import('./src/components/buttons/StashListButton.vue')['default']
     StashSelectedFilesButton: typeof import('./src/components/buttons/StashSelectedFilesButton.vue')['default']
@@ -87,6 +92,8 @@ declare module 'vue' {
     TreeIcon: typeof import('./src/components/icons/TreeIcon.vue')['default']
     TreeNodeItem: typeof import('./src/components/TreeNodeItem.vue')['default']
     UnstageAllButton: typeof import('./src/components/buttons/UnstageAllButton.vue')['default']
+    VersionNode: typeof import('./src/components/flow/nodes/VersionNode.vue')['default']
+    WaitNode: typeof import('./src/components/flow/nodes/WaitNode.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

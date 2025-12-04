@@ -1869,7 +1869,8 @@ async function startUIServer(noOpen = false, savePort = false) {
         id,
         name: orchestration.name,
         description: orchestration.description || '',
-        steps: orchestration.steps
+        steps: orchestration.steps,
+        flowData: orchestration.flowData || null
       }
       
       config.orchestrations.push(newOrchestration)
@@ -1924,7 +1925,8 @@ async function startUIServer(noOpen = false, savePort = false) {
             id,
             name: orchestration.name,
             description: orchestration.description || '',
-            steps: orchestration.steps
+            steps: orchestration.steps,
+            flowData: orchestration.flowData || null
           }
           await configManager.saveConfig(config)
         } else {

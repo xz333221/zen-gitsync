@@ -6,6 +6,7 @@ import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
 import OrchestrationWorkspace from '@components/OrchestrationWorkspace.vue';
+import FlowOrchestrationWorkspace from '@components/flow/FlowOrchestrationWorkspace.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
 import { useGitStore } from '@stores/gitStore';
@@ -140,6 +141,8 @@ const commandManagerVisible = ref(false);
 
 // 控制编排工作台弹窗（合并了指令编排和编排管理）
 const orchestrationWorkspaceVisible = ref(false);
+// 控制可视化编排工作台
+const flowOrchestrationVisible = ref(false);
 
 // 执行控制台命令
 async function runConsoleCommand() {
@@ -368,6 +371,11 @@ function openCommandManager() {
 // 打开编排工作台
 function openOrchestrationWorkspace() {
   orchestrationWorkspaceVisible.value = true;
+}
+
+// 打开可视化编排工作台
+function openFlowOrchestrationWorkspace() {
+  flowOrchestrationVisible.value = true;
 }
 
 // 滚动到当前执行的步骤
@@ -1370,6 +1378,21 @@ onUnmounted(() => {
           <SvgIcon icon-class="command-orchestrate" class-name="icon-btn" />
         </IconButton>
         <IconButton
+          tooltip="可视化编排"
+          hover-color="#9c27b0"
+          @click="openFlowOrchestrationWorkspace"
+          custom-class="flow-orchestrator-btn"
+        >
+          <el-icon :size="20">
+            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor" d="M288 320a224 224 0 1 0 448 0 224 224 0 1 0-448 0zm544 608H160a32 32 0 1 1 0-64h672a32 32 0 1 1 0 64z"/>
+              <path fill="currentColor" d="M64 832h896v64H64z"/>
+              <path fill="currentColor" d="M512 512m-64 0a64 64 0 1 0 128 0 64 64 0 1 0-128 0Z"/>
+              <path fill="currentColor" d="M512 128L512 448M320 320L512 448M704 320L512 448"/>
+            </svg>
+          </el-icon>
+        </IconButton>
+        <IconButton
           :tooltip="$t('@CF05E:全屏')"
           @click="isFullscreen = !isFullscreen"
         >
@@ -1567,6 +1590,12 @@ onUnmounted(() => {
   <!-- 编排工作台弹窗（合并了指令编排和编排管理） -->
   <OrchestrationWorkspace
     v-model:visible="orchestrationWorkspaceVisible"
+    @execute-orchestration="executeOrchestration"
+  />
+  
+  <!-- 可视化编排工作台（基于 vue-flow） -->
+  <FlowOrchestrationWorkspace
+    v-model:visible="flowOrchestrationVisible"
     @execute-orchestration="executeOrchestration"
   />
 </template>
