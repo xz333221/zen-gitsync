@@ -419,6 +419,9 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
   // 关闭编排工作台弹窗
   orchestrationWorkspaceVisible.value = false;
   
+  // 自动开启全屏模式
+  isFullscreen.value = true;
+  
   // 设置编排步骤列表和当前步骤
   orchestrationSteps.value = steps;
   currentStepIndex.value = startIndex;
