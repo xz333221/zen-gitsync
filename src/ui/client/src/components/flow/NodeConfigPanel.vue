@@ -311,7 +311,7 @@ function saveConfig() {
         <el-form label-width="120px">
           <el-form-item label="package.json">
             <PackageJsonSelector
-              v-model="formData.packageJsonPath"
+              v-model="formData.packageJsonPath!"
               placeholder="留空则使用当前目录的 package.json"
               clearable
               @change="handlePackageFileChange"

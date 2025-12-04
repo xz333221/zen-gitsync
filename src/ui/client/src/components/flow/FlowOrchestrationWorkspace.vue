@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { ref, computed, onMounted } from 'vue'
+// import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { VueFlow, useVueFlow, Panel } from '@vue-flow/core'
+import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { Delete, VideoPlay, Plus, Select, Rank } from '@element-plus/icons-vue'
@@ -54,7 +54,7 @@ const emit = defineEmits<{
   (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number): void
 }>()
 
-const { t } = useI18n()
+// const { t } = useI18n()
 const configStore = useConfigStore()
 
 // 弹窗控制
@@ -64,7 +64,7 @@ const dialogVisible = computed({
 })
 
 // Vue Flow 实例
-const { onConnect, addEdges, getViewport, setViewport, addNodes, project, vueFlowRef } = useVueFlow()
+const { onConnect, addEdges, getViewport, setViewport } = useVueFlow()
 
 // 流程数据
 const nodes = ref<FlowNode[]>([])
@@ -456,7 +456,7 @@ function convertStepsToFlow(steps: OrchestrationStep[]) {
   let yPos = 150
   let prevNodeId = 'start-node'
   
-  steps.forEach((step, index) => {
+  steps.forEach((step) => {
     const id = generateNodeId(step.type)
     const node: FlowNode = {
       id,
