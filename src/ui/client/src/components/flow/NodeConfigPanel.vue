@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Clock, DocumentAdd, Link } from '@element-plus/icons-vue'
+import { Clock, DocumentAdd, Link, Folder, Select } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep, type NodeOutputRef } from '@stores/configStore'
 import type { FlowNode, FlowEdge } from './FlowOrchestrationWorkspace.vue'
 import CommonDialog from '@components/CommonDialog.vue'
@@ -249,6 +249,7 @@ function saveConfig() {
     
     config = {
       id: props.node.data.config?.id || generateId(),
+      nodeId: props.node.id,  // 保存流程图节点 ID，用于节点间引用
       type: 'command',
       commandId: formData.value.commandId,
       commandName: formData.value.commandName || '',
@@ -264,6 +265,7 @@ function saveConfig() {
     
     config = {
       id: props.node.data.config?.id || generateId(),
+      nodeId: props.node.id,  // 保存流程图节点 ID
       type: 'wait',
       waitSeconds: formData.value.waitSeconds,
       enabled: formData.value.enabled ?? true
@@ -287,6 +289,7 @@ function saveConfig() {
     
     config = {
       id: props.node.data.config?.id || generateId(),
+      nodeId: props.node.id,  // 保存流程图节点 ID
       type: 'version',
       versionTarget: formData.value.versionTarget || 'version',
       versionBump: formData.value.versionSource === 'bump' ? (formData.value.versionBump || 'patch') : undefined,
@@ -313,7 +316,7 @@ function saveConfig() {
   <CommonDialog
     v-model="visible"
     title="节点配置"
-    width="600px"
+    size="extra-large"
     :append-to-body="true"
     custom-class="node-config-dialog"
   >
@@ -349,12 +352,18 @@ function saveConfig() {
                 @click="selectCommand(command)"
               >
                 <div class="command-info">
-                  <div class="command-name">{{ command.name }}</div>
-                  <div v-if="command.description" class="command-desc">{{ command.description }}</div>
+                  <div class="command-header">
+                    <span class="command-name">{{ command.name }}</span>
+                    <span v-if="command.description" class="command-desc">{{ command.description }}</span>
+                  </div>
                   <code class="command-code">{{ command.command }}</code>
+                  <div class="command-dir">
+                    <el-icon><Folder /></el-icon>
+                    <span>{{ command.directory ? command.directory.replace(/\\/g, '/') : '当前目录' }}</span>
+                  </div>
                 </div>
                 <el-icon v-if="formData.commandId === command.id" class="check-icon">
-                  <svg-icon icon-class="custom-cmd" />
+                  <Select />
                 </el-icon>
               </div>
             </div>
@@ -547,10 +556,6 @@ function saveConfig() {
 </template>
 
 <style scoped lang="scss">
-.config-content {
-  max-height: 60vh;
-  overflow-y: auto;
-}
 
 .config-section {
   margin-bottom: 20px;
@@ -570,20 +575,24 @@ function saveConfig() {
 }
 
 .command-list {
-  max-height: 300px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-md);
+  max-height: 350px;
   overflow-y: auto;
+  padding-right: var(--spacing-sm);
 }
 
 .command-item {
   padding: var(--spacing-md);
-  margin-bottom: var(--spacing-base);
   border-radius: var(--radius-md);
   border: 2px solid var(--border-component);
   cursor: pointer;
   transition: var(--transition-all);
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: var(--spacing-md);
   
   &:hover {
     border-color: var(--color-primary);
@@ -601,16 +610,24 @@ function saveConfig() {
   
   .command-info {
     flex: 1;
+    min-width: 0;
+    
+    .command-header {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-base);
+      margin-bottom: var(--spacing-sm);
+      flex-wrap: wrap;
+    }
     
     .command-name {
       font-weight: var(--font-weight-semibold);
-      margin-bottom: var(--spacing-sm);
+      font-size: var(--font-size-md);
     }
     
     .command-desc {
       font-size: var(--font-size-sm);
       color: var(--text-tertiary);
-      margin-bottom: var(--spacing-md);
     }
     
     .command-code {
@@ -620,12 +637,32 @@ function saveConfig() {
       border-radius: var(--radius-base);
       font-size: var(--font-size-sm);
       color: var(--text-primary);
+      margin-bottom: var(--spacing-sm);
+      word-break: break-all;
+    }
+    
+    .command-dir {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      font-size: var(--font-size-sm);
+      color: var(--text-tertiary);
+      
+      .el-icon {
+        color: var(--color-warning);
+        font-size: 14px;
+      }
+      
+      span {
+        word-break: break-all;
+      }
     }
   }
   
   .check-icon {
     color: var(--color-primary);
-    font-size: 20px;
+    font-size: 22px;
+    flex-shrink: 0;
   }
 }
 

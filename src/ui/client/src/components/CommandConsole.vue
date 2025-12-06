@@ -649,18 +649,29 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
           ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
           shouldContinue = false;
         } else {
-          // 保存命令输出到 nodeOutputs，供后续节点引用
+                // 保存命令输出到 nodeOutputs，供后续节点引用
           const rawStdout = (rec.stdout || '').replace(/<[^>]*>/g, '').trim(); // 移除 HTML 标签
-          nodeOutputs[step.id] = {
+          const outputData = {
             stdout: rawStdout,
             // 尝试从输出中提取版本号（匹配 semver 格式）
             version: extractVersionFromOutput(rawStdout)
           };
           
+          // 使用 step.id 存储
+          nodeOutputs[step.id] = outputData;
+          
+          // 如果有节点 ID（nodeId），也用节点 ID 存储（用于节点间引用）
+          if (step.nodeId) {
+            nodeOutputs[step.nodeId] = outputData;
+          }
+          
           // 如果节点定义了 outputKey，也保存一份到 outputKey 键
           if (step.outputKey) {
-            nodeOutputs[step.outputKey] = nodeOutputs[step.id];
+            nodeOutputs[step.outputKey] = outputData;
           }
+          
+          console.log(`[DEBUG] 存储输出 - step.id: ${step.id}, step.nodeId: ${step.nodeId}, outputKey: ${step.outputKey}`);
+          console.log(`[DEBUG] nodeOutputs keys:`, Object.keys(nodeOutputs));
         }
       } catch (e: any) {
         rec.success = false;
@@ -701,12 +712,18 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
     } else if (step.type === 'version') {
       // 执行版本管理
       
-      // 处理引用输出：如果版本来源是 'reference'，从 nodeOutputs 中获取版本号
+            // 处理引用输出：如果版本来源是 'reference'，从 nodeOutputs 中获取版本号
       let resolvedDependencyVersion = step.dependencyVersion;
       if (step.versionSource === 'reference' && step.inputRef) {
         const refNodeId = step.inputRef.nodeId;
         const refOutputKey = step.inputRef.outputKey;
+        
+        console.log(`[DEBUG] 引用查找 - refNodeId: ${refNodeId}`);
+        console.log(`[DEBUG] nodeOutputs keys:`, Object.keys(nodeOutputs));
+        
         const refOutput = nodeOutputs[refNodeId];
+        console.log(`refOutput ==>`, refOutput)
+        console.log(`refOutputKey ==>`, refOutputKey)
         
         if (refOutput) {
           if (refOutputKey === 'version' && refOutput.version) {

@@ -422,6 +422,8 @@ function executeCurrentFlow() {
     return
   }
   
+  // 关闭弹窗后执行
+  dialogVisible.value = false
   emit('execute-orchestration', steps)
 }
 
@@ -522,6 +524,8 @@ async function deleteOrchestration(orchestration: any) {
 
 // 执行编排
 function executeOrchestration(orchestration: any) {
+  // 关闭弹窗后执行
+  dialogVisible.value = false
   emit('execute-orchestration', orchestration.steps, 0)
 }
 
