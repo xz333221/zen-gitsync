@@ -726,6 +726,8 @@ onMounted(() => {
     <NodeConfigPanel
       v-model="showConfigPanel"
       :node="selectedNode"
+      :all-nodes="nodes"
+      :edges="edges"
       @update-config="updateNodeConfig"
     />
   </CommonDialog>

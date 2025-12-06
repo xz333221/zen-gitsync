@@ -419,6 +419,34 @@ function isGitCommand(command: string): boolean {
   );
 }
 
+// 从文本中提取版本号（匹配 semver 格式）
+function extractVersionFromOutput(output: string): string | undefined {
+  if (!output) return undefined;
+  
+  // 匹配常见的版本号格式：
+  // - 1.2.3
+  // - v1.2.3
+  // - 1.2.3-beta.1
+  // - ^1.2.3
+  // - ~1.2.3
+  const patterns = [
+    /\bv?(\d+\.\d+\.\d+(?:-[\w.]+)?)\b/,  // 标准 semver
+    /["']?\^?(\d+\.\d+\.\d+)["']?/,        // 带引号或前缀的版本号
+    /version["']?:\s*["']?v?(\d+\.\d+\.\d+)/i  // "version": "1.2.3" 格式
+  ];
+  
+  for (const pattern of patterns) {
+    const match = output.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+  
+  // 如果没有匹配到版本号，返回整个输出的第一行（去除空白）
+  const firstLine = output.split('\n')[0]?.trim();
+  return firstLine || undefined;
+}
+
 // 执行指令编排（顺序执行多个步骤）
 // isSingleExecution: true表示单个步骤执行，false表示批量执行
 async function executeOrchestration(steps: OrchestrationStep[], startIndex: number = 0, isSingleExecution: boolean = false) {
@@ -436,6 +464,9 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
   
   consoleRunning.value = true;
   orchestrationPaused.value = false; // 重置暂停状态
+  
+  // 节点输出存储（用于节点间引用）
+  const nodeOutputs: Record<string, { stdout: string; version?: string }> = {};
   
   const totalSteps = steps.length - startIndex;
   if (startIndex > 0) {
@@ -617,6 +648,19 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
         if (!rec.success) {
           ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
           shouldContinue = false;
+        } else {
+          // 保存命令输出到 nodeOutputs，供后续节点引用
+          const rawStdout = (rec.stdout || '').replace(/<[^>]*>/g, '').trim(); // 移除 HTML 标签
+          nodeOutputs[step.id] = {
+            stdout: rawStdout,
+            // 尝试从输出中提取版本号（匹配 semver 格式）
+            version: extractVersionFromOutput(rawStdout)
+          };
+          
+          // 如果节点定义了 outputKey，也保存一份到 outputKey 键
+          if (step.outputKey) {
+            nodeOutputs[step.outputKey] = nodeOutputs[step.id];
+          }
         }
       } catch (e: any) {
         rec.success = false;
@@ -656,10 +700,37 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
       rec.stdout = '等待完成';
     } else if (step.type === 'version') {
       // 执行版本管理
+      
+      // 处理引用输出：如果版本来源是 'reference'，从 nodeOutputs 中获取版本号
+      let resolvedDependencyVersion = step.dependencyVersion;
+      if (step.versionSource === 'reference' && step.inputRef) {
+        const refNodeId = step.inputRef.nodeId;
+        const refOutputKey = step.inputRef.outputKey;
+        const refOutput = nodeOutputs[refNodeId];
+        
+        if (refOutput) {
+          if (refOutputKey === 'version' && refOutput.version) {
+            resolvedDependencyVersion = refOutput.version;
+          } else if (refOutputKey === 'stdout' && refOutput.stdout) {
+            // 使用标准输出，尝试提取版本号
+            resolvedDependencyVersion = extractVersionFromOutput(refOutput.stdout) || refOutput.stdout;
+          }
+        }
+        
+        if (!resolvedDependencyVersion) {
+          ElMessage.error(`无法从节点 ${refNodeId} 获取输出，请检查前置节点是否执行成功`);
+          break;
+        }
+      }
+      
       if (step.versionTarget === 'dependency') {
         // 修改依赖版本
         const depType = step.dependencyType === 'devDependencies' ? 'devDep' : 'dep';
-        stepLabel = `修改依赖 [${depType}] ${step.dependencyName} → ${step.dependencyVersion}`;
+        if (step.versionSource === 'reference') {
+          stepLabel = `修改依赖 [${depType}] ${step.dependencyName} → ${resolvedDependencyVersion} (引用输出)`;
+        } else {
+          stepLabel = `修改依赖 [${depType}] ${step.dependencyName} → ${resolvedDependencyVersion || '(自动递增)'}`;
+        }
       } else {
         // 修改 version 字段
         const bumpType = step.versionBump || 'patch';
@@ -686,11 +757,11 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             versionTarget: step.versionTarget || 'version',
-            bumpType: step.versionBump || 'patch',
+            bumpType: step.versionSource === 'bump' ? (step.versionBump || 'patch') : undefined,
             packageJsonPath: step.packageJsonPath || '',
             dependencyName: step.dependencyName,
-            dependencyVersion: step.dependencyVersion,
-            dependencyVersionBump: step.dependencyVersionBump,
+            dependencyVersion: resolvedDependencyVersion,  // 使用解析后的版本号（可能来自引用）
+            dependencyVersionBump: step.versionSource === 'bump' ? step.dependencyVersionBump : undefined,
             dependencyType: step.dependencyType || 'dependencies'
           })
         });

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Clock, DocumentAdd } from '@element-plus/icons-vue'
-import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
-import type { FlowNode } from './FlowOrchestrationWorkspace.vue'
+import { Clock, DocumentAdd, Link } from '@element-plus/icons-vue'
+import { useConfigStore, type OrchestrationStep, type NodeOutputRef } from '@stores/configStore'
+import type { FlowNode, FlowEdge } from './FlowOrchestrationWorkspace.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
@@ -13,6 +13,8 @@ import type { PackageFile } from '@components/PackageJsonSelector.vue'
 const props = defineProps<{
   modelValue: boolean
   node: FlowNode | null
+  allNodes?: FlowNode[]  // 所有节点列表
+  edges?: FlowEdge[]     // 所有边列表
 }>()
 
 const emit = defineEmits<{
@@ -34,6 +36,7 @@ const formData = ref<{
   commandId?: string
   commandName?: string
   useTerminal?: boolean
+  outputKey?: string  // 输出键名（命令节点可以输出结果）
   
   // 等待节点
   waitSeconds?: number
@@ -48,6 +51,9 @@ const formData = ref<{
   dependencyType?: 'dependencies' | 'devDependencies'
   dependencyVersionMode?: 'bump' | 'manual'
   dependencyVersionBump?: 'patch' | 'minor' | 'major'
+  // 输入引用功能
+  versionSource?: 'bump' | 'manual' | 'reference'  // 版本号来源
+  inputRef?: NodeOutputRef  // 引用的节点输出
   
   // 通用
   enabled?: boolean
@@ -58,6 +64,68 @@ const availableDependencies = ref<string[]>([])
 
 // 可用的自定义命令
 const availableCommands = computed(() => configStore.customCommands || [])
+
+// 计算前置节点（可以引用输出的节点）
+const predecessorNodes = computed(() => {
+  if (!props.node || !props.allNodes || !props.edges) return []
+  
+  const currentNodeId = props.node.id
+  const allEdges = props.edges
+  const allNodes = props.allNodes
+  
+  // 使用 BFS 查找所有可以到达当前节点的前置节点
+  const predecessors: FlowNode[] = []
+  const visited = new Set<string>()
+  const queue: string[] = [currentNodeId]
+  
+  // 获取指向目标节点的所有源节点
+  function getPredecessors(nodeId: string): string[] {
+    return allEdges
+      .filter(edge => edge.target === nodeId)
+      .map(edge => edge.source)
+  }
+  
+  // BFS 遍历
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!
+    const preds = getPredecessors(nodeId)
+    
+    for (const predId of preds) {
+      if (!visited.has(predId)) {
+        visited.add(predId)
+        queue.push(predId)
+        
+        // 找到节点对象
+        const predNode = allNodes.find(n => n.id === predId)
+        // 只添加命令节点（可以输出结果），排除开始节点
+        if (predNode && predNode.type === 'command' && predNode.data.config) {
+          predecessors.push(predNode)
+        }
+      }
+    }
+  }
+  
+  return predecessors
+})
+
+// 获取节点的可用输出项
+function getNodeOutputOptions(node: FlowNode) {
+  if (node.type === 'command') {
+    return [
+      { key: 'stdout', label: '标准输出 (stdout)' },
+      { key: 'version', label: '提取的版本号' }
+    ]
+  }
+  return []
+}
+
+// 获取节点显示名称
+function getNodeDisplayName(node: FlowNode): string {
+  if (node.type === 'command') {
+    return node.data.config?.commandName || node.data.label || '命令节点'
+  }
+  return node.data.label || node.id
+}
 
 // 监听节点变化，加载配置
 watch(() => props.node, (node) => {
@@ -78,6 +146,16 @@ watch(() => props.node, (node) => {
       enabled: node.data.enabled ?? true
     }
   } else if (node.type === 'version') {
+    // 判断版本来源模式
+    let versionSource: 'bump' | 'manual' | 'reference' = 'bump'
+    if (config?.inputRef) {
+      versionSource = 'reference'
+    } else if (config?.dependencyVersion || (config?.versionTarget !== 'dependency' && !config?.versionBump)) {
+      versionSource = 'manual'
+    } else if (config?.dependencyVersionBump || config?.versionBump) {
+      versionSource = 'bump'
+    }
+    
     formData.value = {
       versionTarget: config?.versionTarget || 'version',
       versionBump: config?.versionBump || 'patch',
@@ -87,6 +165,8 @@ watch(() => props.node, (node) => {
       dependencyType: config?.dependencyType || 'dependencies',
       dependencyVersionMode: config?.dependencyVersionBump ? 'bump' : 'manual',
       dependencyVersionBump: config?.dependencyVersionBump || 'patch',
+      versionSource: versionSource,
+      inputRef: config?.inputRef,
       enabled: node.data.enabled ?? true
     }
     
@@ -173,6 +253,7 @@ function saveConfig() {
       commandId: formData.value.commandId,
       commandName: formData.value.commandName || '',
       useTerminal: formData.value.useTerminal || false,
+      outputKey: formData.value.outputKey || undefined,
       enabled: formData.value.enabled ?? true
     }
   } else if (props.node.type === 'wait') {
@@ -193,8 +274,13 @@ function saveConfig() {
         ElMessage.warning('请选择依赖包名称')
         return
       }
-      if (formData.value.dependencyVersionMode === 'manual' && !formData.value.dependencyVersion?.trim()) {
+      // 根据版本来源验证
+      if (formData.value.versionSource === 'manual' && !formData.value.dependencyVersion?.trim()) {
         ElMessage.warning('请输入依赖包版本号')
+        return
+      }
+      if (formData.value.versionSource === 'reference' && !formData.value.inputRef) {
+        ElMessage.warning('请选择要引用的节点输出')
         return
       }
     }
@@ -203,12 +289,14 @@ function saveConfig() {
       id: props.node.data.config?.id || generateId(),
       type: 'version',
       versionTarget: formData.value.versionTarget || 'version',
-      versionBump: formData.value.versionBump || 'patch',
+      versionBump: formData.value.versionSource === 'bump' ? (formData.value.versionBump || 'patch') : undefined,
       packageJsonPath: formData.value.packageJsonPath?.trim() || undefined,
       dependencyName: formData.value.versionTarget === 'dependency' ? formData.value.dependencyName?.trim() : undefined,
-      dependencyVersion: formData.value.versionTarget === 'dependency' && formData.value.dependencyVersionMode === 'manual' ? formData.value.dependencyVersion?.trim() : undefined,
-      dependencyVersionBump: formData.value.versionTarget === 'dependency' && formData.value.dependencyVersionMode === 'bump' ? formData.value.dependencyVersionBump : undefined,
+      dependencyVersion: formData.value.versionTarget === 'dependency' && formData.value.versionSource === 'manual' ? formData.value.dependencyVersion?.trim() : undefined,
+      dependencyVersionBump: formData.value.versionTarget === 'dependency' && formData.value.versionSource === 'bump' ? formData.value.dependencyVersionBump : undefined,
       dependencyType: formData.value.versionTarget === 'dependency' ? formData.value.dependencyType : undefined,
+      versionSource: formData.value.versionSource,
+      inputRef: formData.value.versionSource === 'reference' ? formData.value.inputRef : undefined,
       enabled: formData.value.enabled ?? true
     }
   }
@@ -277,6 +365,18 @@ function saveConfig() {
               <el-radio :value="false">普通执行</el-radio>
               <el-radio :value="true">终端执行</el-radio>
             </el-radio-group>
+          </el-form-item>
+          
+          <el-form-item label="输出键名">
+            <el-input 
+              v-model="formData.outputKey" 
+              placeholder="可选，用于其他节点引用此命令的输出"
+              clearable
+            />
+            <div class="form-tip">
+              <el-icon><Link /></el-icon>
+              设置后，其他节点可以引用此命令的输出结果
+            </div>
           </el-form-item>
         </el-form>
       </div>
@@ -363,14 +463,20 @@ function saveConfig() {
               </el-select>
             </el-form-item>
             
-            <el-form-item label="版本号模式" required>
-              <el-radio-group v-model="formData.dependencyVersionMode">
+            <el-form-item label="版本号来源" required>
+              <el-radio-group v-model="formData.versionSource">
                 <el-radio value="bump">自动递增</el-radio>
                 <el-radio value="manual">手动输入</el-radio>
+                <el-radio value="reference" :disabled="predecessorNodes.length === 0">
+                  引用输出
+                  <el-tooltip v-if="predecessorNodes.length === 0" content="无可用的前置命令节点" placement="top">
+                    <el-icon style="margin-left: 4px;"><Link /></el-icon>
+                  </el-tooltip>
+                </el-radio>
               </el-radio-group>
             </el-form-item>
             
-            <el-form-item v-if="formData.dependencyVersionMode === 'bump'" label="递增类型" required>
+            <el-form-item v-if="formData.versionSource === 'bump'" label="递增类型" required>
               <el-radio-group v-model="formData.dependencyVersionBump">
                 <el-radio value="patch">补丁版本</el-radio>
                 <el-radio value="minor">次版本</el-radio>
@@ -378,12 +484,56 @@ function saveConfig() {
               </el-radio-group>
             </el-form-item>
             
-            <el-form-item v-if="formData.dependencyVersionMode === 'manual'" label="版本号" required>
+            <el-form-item v-if="formData.versionSource === 'manual'" label="版本号" required>
               <el-input 
                 v-model="formData.dependencyVersion" 
                 placeholder="例如: 1.2.3"
               />
             </el-form-item>
+            
+            <!-- 引用输出配置 -->
+            <template v-if="formData.versionSource === 'reference'">
+              <el-form-item label="引用节点" required>
+                <el-select 
+                  v-model="formData.inputRef"
+                  value-key="nodeId"
+                  placeholder="选择要引用的前置节点"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="predNode in predecessorNodes"
+                    :key="predNode.id"
+                    :label="getNodeDisplayName(predNode)"
+                    :value="{ nodeId: predNode.id, outputKey: 'stdout' }"
+                  >
+                    <div class="node-option">
+                      <span class="node-name">{{ getNodeDisplayName(predNode) }}</span>
+                      <span class="node-id">ID: {{ predNode.id.substring(0, 15) }}...</span>
+                    </div>
+                  </el-option>
+                </el-select>
+              </el-form-item>
+              
+              <el-form-item v-if="formData.inputRef" label="输出字段" required>
+                <el-select 
+                  v-model="formData.inputRef.outputKey"
+                  placeholder="选择要引用的输出字段"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="opt in getNodeOutputOptions(predecessorNodes.find(n => n.id === formData.inputRef?.nodeId)!)"
+                    :key="opt.key"
+                    :label="opt.label"
+                    :value="opt.key"
+                  />
+                </el-select>
+              </el-form-item>
+              
+              <div class="reference-tip">
+                <el-icon><Link /></el-icon>
+                <span>版本号将使用所选节点的输出结果</span>
+              </div>
+            </template>
           </template>
         </el-form>
       </div>
@@ -484,5 +634,54 @@ function saveConfig() {
   font-size: var(--font-size-base);
   padding: 20px;
   text-align: center;
+}
+
+.form-tip {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  
+  .el-icon {
+    font-size: var(--font-size-base);
+    color: var(--color-primary);
+  }
+}
+
+.reference-tip {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+  padding: var(--spacing-md);
+  margin-top: var(--spacing-base);
+  background: rgba(64, 158, 255, 0.08);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  
+  .el-icon {
+    font-size: var(--font-size-md);
+  }
+}
+
+.node-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  
+  .node-name {
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+  
+  .node-id {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+  }
 }
 </style>
