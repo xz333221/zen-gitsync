@@ -34,7 +34,9 @@
     "change:nrm:npm": "nrm use npm",
     "change:nrm:lenovo-nexus": "nrm use lenovo-nexus",
     "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
-    "npm:ls:g": "npm ls -g"
+    "npm:ls:g": "npm ls -g",
+    "npm:2fa:get": "npm profile get",
+    "npm:2fa:disable": "npm profile disable-2fa"
   },
   "files": [
     "src/ui/public/**",
