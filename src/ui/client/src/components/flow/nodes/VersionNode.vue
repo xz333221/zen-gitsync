@@ -40,7 +40,7 @@ const versionInfo = computed(() => {
     <Handle 
       type="target" 
       :position="Position.Left" 
-      class="handle-left"
+      class="flow-node-handle handle-left"
     />
     
     <div class="node-header">
@@ -63,7 +63,7 @@ const versionInfo = computed(() => {
     <Handle 
       type="source" 
       :position="Position.Right" 
-      class="handle-right"
+      class="flow-node-handle handle-right"
     />
   </div>
 </template>
@@ -163,14 +163,19 @@ const versionInfo = computed(() => {
   }
   
   .node-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 999px;
     font-size: 11px;
     font-weight: 500;
-    background: var(--color-info-light);
+    background: rgba(104, 189, 255, 0.15);
     color: var(--color-info);
-    margin-top: 4px;
+    margin-top: 6px;
+    max-width: 100%;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
   }
   
   .node-warning {
@@ -182,17 +187,7 @@ const versionInfo = computed(() => {
 
 .handle-left,
 .handle-right {
-  width: 12px !important;
-  height: 12px !important;
   background: var(--color-success) !important;
-  border: 2px solid var(--bg-page) !important;
-  border-radius: 50% !important;
-  cursor: crosshair !important;
-  
-  &:hover {
-    background: var(--color-success-dark) !important;
-    transform: scale(1.2);
-  }
 }
 
 .handle-left {

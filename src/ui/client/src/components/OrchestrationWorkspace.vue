@@ -366,7 +366,6 @@ async function saveOrchestration() {
   if (editingOrchestrationId.value) {
     // 更新现有编排
     await configStore.updateOrchestration(editingOrchestrationId.value, orchestration)
-    ElMessage.success('编排已更新')
   } else {
     // 保存新编排
     const newOrch = await configStore.saveOrchestration(orchestration) as any

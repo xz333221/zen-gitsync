@@ -40,7 +40,7 @@ const commandInfo = computed(() => {
     <Handle 
       type="target" 
       :position="Position.Left" 
-      class="handle-left"
+      class="flow-node-handle handle-left"
     />
     
     <div class="node-header">
@@ -61,7 +61,7 @@ const commandInfo = computed(() => {
     <Handle 
       type="source" 
       :position="Position.Right" 
-      class="handle-right"
+      class="flow-node-handle handle-right"
     />
   </div>
 </template>
@@ -180,19 +180,10 @@ const commandInfo = computed(() => {
   }
 }
 
+// CommandNode 只覆写颜色，其他尺寸/交互在公共样式中
 .handle-left,
 .handle-right {
-  width: 12px !important;
-  height: 12px !important;
   background: var(--color-primary) !important;
-  border: 2px solid var(--bg-page) !important;
-  border-radius: 50% !important;
-  cursor: crosshair !important;
-  
-  &:hover {
-    background: var(--color-primary-dark) !important;
-    transform: scale(1.2);
-  }
 }
 
 .handle-left {

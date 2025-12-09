@@ -36,7 +36,7 @@ const showHandlesComputed = props.showHandles !== false
       v-if="showHandlesComputed"
       type="target" 
       :position="Position.Left" 
-      class="handle-left"
+      class="flow-node-handle handle-left"
     />
     
     <!-- 节点内容插槽 -->
@@ -50,7 +50,7 @@ const showHandlesComputed = props.showHandles !== false
       v-if="showHandlesComputed"
       type="source" 
       :position="Position.Right" 
-      class="handle-right"
+      class="flow-node-handle handle-right"
     />
   </div>
 </template>
@@ -122,19 +122,13 @@ const showHandlesComputed = props.showHandles !== false
   }
 }
 
-.handle-left,
-.handle-right {
+.flow-node-handle {
   width: 12px !important;
   height: 12px !important;
   background: var(--color-primary) !important;
   border: 2px solid var(--bg-page) !important;
   border-radius: 50% !important;
   cursor: crosshair !important;
-  
-  &:hover {
-    background: var(--color-primary-dark) !important;
-    transform: scale(1.2);
-  }
 }
 
 .handle-left {

@@ -30,7 +30,7 @@ const emit = defineEmits<{
     <Handle 
       type="target" 
       :position="Position.Left" 
-      class="handle-left"
+      class="flow-node-handle handle-left"
     />
     
     <div class="node-header">
@@ -50,7 +50,7 @@ const emit = defineEmits<{
     <Handle 
       type="source" 
       :position="Position.Right" 
-      class="handle-right"
+      class="flow-node-handle handle-right"
     />
   </div>
 </template>
@@ -160,17 +160,7 @@ const emit = defineEmits<{
 
 .handle-left,
 .handle-right {
-  width: 12px !important;
-  height: 12px !important;
   background: var(--color-warning) !important;
-  border: 2px solid var(--bg-page) !important;
-  border-radius: 50% !important;
-  cursor: crosshair !important;
-  
-  &:hover {
-    background: var(--color-warning-dark) !important;
-    transform: scale(1.2);
-  }
 }
 
 .handle-left {

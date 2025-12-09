@@ -64,7 +64,7 @@ const dialogVisible = computed({
 })
 
 // Vue Flow 实例
-const { onConnect, addEdges, getViewport, setViewport } = useVueFlow()
+const { onConnect, addEdges, getViewport, setViewport, onNodeDragStop } = useVueFlow()
 
 // 流程数据
 const nodes = ref<FlowNode[]>([])
@@ -79,6 +79,9 @@ const editingOrchestrationId = ref<string | null>(null)
 const showConfigPanel = ref(false)
 const selectedNode = ref<FlowNode | null>(null)
 
+// 自动保存定时器
+let autoSaveTimer: number | null = null
+
 // 已保存的编排列表
 const orchestrations = computed(() => configStore.orchestrations || [])
 const selectedOrchestrationId = ref<string | null>(null)
@@ -89,6 +92,22 @@ let nodeIdCounter = 1
 // 生成节点ID
 function generateNodeId(type: string): string {
   return `${type}-${Date.now()}-${nodeIdCounter++}`
+}
+
+// 调度自动保存（带简单防抖）
+function scheduleAutoSave() {
+  // 仅在已有已保存的编排时自动保存，避免新建但还没命名/首存就频繁请求
+  if (!editingOrchestrationId.value) return
+  if (!orchestrationName.value.trim()) return
+
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer)
+  }
+
+  autoSaveTimer = window.setTimeout(() => {
+    // 这里复用现有保存逻辑，不修改其内部行为
+    void saveOrchestration()
+  }, 1000)
 }
 
 // 初始化流程（添加起始节点）
@@ -136,11 +155,21 @@ function addNode(type: 'command' | 'wait' | 'version') {
   showConfigPanel.value = true
   
   ElMessage.success(`已添加${newNode.data.label}`)
+
+  // 节点结构变化后自动保存
+  scheduleAutoSave()
 }
 
 // 连接节点
 onConnect((params) => {
   addEdges([params])
+  // 新连接也会影响执行顺序，需自动保存
+  scheduleAutoSave()
+})
+
+// 节点拖拽结束时也需要自动保存（位置变化会影响保存的 flowData）
+onNodeDragStop(() => {
+  scheduleAutoSave()
 })
 
 // 节点点击事件
@@ -158,6 +187,8 @@ function updateNodeConfig(nodeId: string, config: OrchestrationStep) {
   if (node) {
     node.data.config = config
     node.data.label = getNodeLabel(config)
+    // 节点配置更新后自动保存
+    scheduleAutoSave()
   }
 }
 
@@ -203,6 +234,9 @@ function handleNodeDelete(nodeId: string) {
   }
   
   ElMessage.success('节点已删除')
+
+  // 结构变更后自动保存
+  scheduleAutoSave()
 }
 
 // 清空流程
@@ -214,6 +248,8 @@ function clearFlow() {
   }).then(() => {
     initializeFlow()
     ElMessage.success('流程已清空')
+    // 清空后也更新已保存编排
+    scheduleAutoSave()
   }).catch(() => {})
 }
 
@@ -279,9 +315,9 @@ function optimizeLayout() {
     levels.push(unvisitedNodes)
   }
   
-  // 布局参数
-  const levelGap = 200 // 层级间距（水平）
-  const nodeGap = 100 // 同层节点间距（垂直）
+  // 布局参数（适当加大间距，避免节点太挤）
+  const levelGap = 220 // 层级间距（水平）
+  const nodeGap = 120 // 同层节点间距（垂直）
   const startX = 50
   const startY = 150
   
@@ -303,6 +339,9 @@ function optimizeLayout() {
   })
   
   ElMessage.success('布局优化完成')
+
+  // 只调整布局也会影响保存的 flowData，因此需要自动保存
+  scheduleAutoSave()
 }
 
 // 保存编排
@@ -350,7 +389,6 @@ async function saveOrchestration() {
   
   if (editingOrchestrationId.value) {
     await configStore.updateOrchestration(editingOrchestrationId.value, orchestration)
-    ElMessage.success('编排已更新')
   } else {
     const newOrch = await configStore.saveOrchestration(orchestration) as any
     ElMessage.success('编排已保存')
@@ -738,6 +776,16 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
+
+// 统一定义所有节点连接点的基础样式
+:deep(.flow-node-handle) {
+  width: 12px !important;
+  height: 12px !important;
+  border: 2px solid var(--bg-page) !important;
+  border-radius: 50% !important;
+  cursor: crosshair !important;
+}
+
 .flow-workspace-container {
   display: flex;
   height: 75vh;

@@ -16,7 +16,7 @@ defineProps<{
     <Handle 
       type="source" 
       :position="Position.Right" 
-      class="handle-right"
+      class="flow-node-handle handle-right"
     />
   </div>
 </template>
@@ -55,16 +55,6 @@ defineProps<{
 
 .handle-right {
   right: -6px !important;
-  width: 12px !important;
-  height: 12px !important;
   background: var(--color-primary) !important;
-  border: 2px solid var(--bg-page) !important;
-  border-radius: 50% !important;
-  cursor: crosshair !important;
-  
-  &:hover {
-    background: var(--color-primary-dark) !important;
-    transform: scale(1.2);
-  }
 }
 </style>
