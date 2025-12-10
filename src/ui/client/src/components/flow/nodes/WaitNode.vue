@@ -45,7 +45,9 @@ function handleCommand(command: string) {
         @click.stop="emit('delete', id)" 
         title="删除节点"
       >
-        ×
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       </button>
     
     <!-- 输入连接点（左侧） -->
@@ -103,28 +105,45 @@ function handleCommand(command: string) {
   position: relative;
   transition: var(--transition-all);
   
+  // 选中状态
+  &.selected {
+    border-color: #d48806;
+    box-shadow: 0 0 0 3px rgba(250, 173, 20, 0.2), var(--shadow-lg);
+    transform: translateY(-1px);
+  }
+  
   .delete-btn {
     position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 20px;
-    height: 20px;
+    top: -10px;
+    right: -10px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
-    background: var(--color-danger);
+    background: #ff4d4f;
     color: white;
     border: 2px solid var(--bg-page);
-    font-size: 16px;
-    line-height: 1;
     cursor: pointer;
     display: none;
     align-items: center;
     justify-content: center;
-    transition: var(--transition-all);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 10;
+    padding: 0;
+    box-shadow: 0 2px 8px rgba(255, 77, 79, 0.3);
+    
+    svg {
+      width: 12px;
+      height: 12px;
+    }
     
     &:hover {
-      transform: scale(1.1);
-      background: var(--color-danger-dark);
+      transform: scale(1.15) rotate(90deg);
+      background: #ff7875;
+      box-shadow: 0 4px 12px rgba(255, 77, 79, 0.4);
+    }
+    
+    &:active {
+      transform: scale(1.05) rotate(90deg);
     }
   }
   

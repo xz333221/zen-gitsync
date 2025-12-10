@@ -30,17 +30,25 @@ defineProps<{
   text-align: center;
   box-shadow: var(--shadow-lg);
   min-width: 120px;
-  &:hover {
-    background: var(--color-primary-gradient-hover);
-    box-shadow: var(--shadow-xl);
-    transform: scale(1.05);
-  }
   min-height: 120px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   position: relative;
+  transition: var(--transition-all);
+  
+  &:hover {
+    background: var(--color-primary-gradient-hover);
+    box-shadow: var(--shadow-xl);
+    transform: scale(1.05);
+  }
+  
+  // 选中状态
+  &.selected {
+    box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.3), var(--shadow-xl);
+    transform: scale(1.08);
+  }
   
   .flow-node-icon {
     font-size: 32px;
