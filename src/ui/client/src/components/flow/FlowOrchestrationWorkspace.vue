@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 // import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
+import type { EdgeChange } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { Delete, VideoPlay, Plus, Select, Rank } from '@element-plus/icons-vue'
@@ -64,7 +65,7 @@ const dialogVisible = computed({
 })
 
 // Vue Flow 实例
-const { onConnect, addEdges, getViewport, setViewport, onNodeDragStop } = useVueFlow()
+const { onConnect, addEdges, getViewport, setViewport, onNodeDragStop, getSelectedEdges } = useVueFlow()
 
 // 流程数据
 const nodes = ref<FlowNode[]>([])
@@ -237,6 +238,31 @@ function handleNodeDelete(nodeId: string) {
 
   // 结构变更后自动保存
   scheduleAutoSave()
+}
+
+// 处理边的变化（包括删除）
+function onEdgesChange(changes: EdgeChange[]) {
+  for (const change of changes) {
+    if (change.type === 'remove') {
+      edges.value = edges.value.filter(e => e.id !== change.id)
+    }
+  }
+  scheduleAutoSave()
+}
+
+// 键盘删除选中的边
+function handleKeyDown(event: KeyboardEvent) {
+  // 按Delete或Backspace键删除选中的边
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    const selectedEdges = getSelectedEdges.value
+    if (selectedEdges && selectedEdges.length > 0) {
+      // 删除所有选中的边
+      const edgeIdsToRemove = selectedEdges.map(edge => edge.id)
+      edges.value = edges.value.filter(e => !edgeIdsToRemove.includes(e.id))
+      scheduleAutoSave()
+      event.preventDefault() // 阻止默认行为
+    }
+  }
 }
 
 // 清空流程
@@ -613,6 +639,13 @@ function executeOrchestration(orchestration: any) {
 // 初始化
 onMounted(() => {
   initializeFlow()
+  // 添加键盘事件监听以删除选中的边
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+// 清理事件监听
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
 })
 </script>
 
@@ -735,6 +768,7 @@ onMounted(() => {
           :min-zoom="0.2"
           :max-zoom="4"
           @node-click="onNodeClick"
+          @edges-change="onEdgesChange"
         >
           <Background pattern-color="#aaa" :gap="16" />
           <Controls>

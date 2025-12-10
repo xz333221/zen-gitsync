@@ -2,13 +2,15 @@
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Clock, DocumentAdd, Link, Folder, Select } from '@element-plus/icons-vue'
-import { useConfigStore, type OrchestrationStep, type NodeOutputRef } from '@stores/configStore'
+import { useConfigStore, type OrchestrationStep, type NodeOutputRef, type NodeInput } from '@stores/configStore'
 import type { FlowNode, FlowEdge } from './FlowOrchestrationWorkspace.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
+import NodeInputConfig from './NodeInputConfig.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import type { CustomCommand } from '@components/CustomCommandManager.vue'
 import type { PackageFile } from '@components/PackageJsonSelector.vue'
+import { extractVariables } from '@/utils/commandParser'
 
 const props = defineProps<{
   modelValue: boolean
@@ -37,6 +39,7 @@ const formData = ref<{
   commandName?: string
   useTerminal?: boolean
   outputKey?: string  // 输出键名（命令节点可以输出结果）
+  inputs?: NodeInput[]  // 命令输入参数配置
   
   // 等待节点
   waitSeconds?: number
@@ -64,6 +67,14 @@ const availableDependencies = ref<string[]>([])
 
 // 可用的自定义命令
 const availableCommands = computed(() => configStore.customCommands || [])
+
+// 当前命令的变量列表
+const currentCommandVariables = computed(() => {
+  if (!formData.value.commandId) return []
+  const command = availableCommands.value.find(c => c.id === formData.value.commandId)
+  if (!command) return []
+  return extractVariables(command.command)
+})
 
 // 计算前置节点（可以引用输出的节点）
 const predecessorNodes = computed(() => {
@@ -138,6 +149,8 @@ watch(() => props.node, (node) => {
       commandId: config?.commandId,
       commandName: config?.commandName,
       useTerminal: config?.useTerminal || false,
+      inputs: Array.isArray(config?.inputs) ? config.inputs : [],
+      outputKey: config?.outputKey,
       enabled: node.data.enabled ?? true
     }
   } else if (node.type === 'wait') {
@@ -255,6 +268,7 @@ function saveConfig() {
       commandName: formData.value.commandName || '',
       useTerminal: formData.value.useTerminal || false,
       outputKey: formData.value.outputKey || undefined,
+      inputs: formData.value.inputs || [],
       enabled: formData.value.enabled ?? true
     }
   } else if (props.node.type === 'wait') {
@@ -328,7 +342,29 @@ function saveConfig() {
           <el-form-item label="启用节点">
             <el-switch v-model="formData.enabled" />
           </el-form-item>
+          
+          <!-- 命令节点的执行方式 -->
+          <el-form-item v-if="node.type === 'command'" label="执行方式">
+            <el-radio-group v-model="formData.useTerminal">
+              <el-radio :value="false">普通执行</el-radio>
+              <el-radio :value="true">终端执行</el-radio>
+            </el-radio-group>
+          </el-form-item>
         </el-form>
+      </div>
+      
+      <!-- 命令输入参数配置（独立版块） -->
+      <div v-if="node.type === 'command' && formData.commandId && formData.inputs" class="config-section">
+        <div class="section-title">
+          <el-icon><Link /></el-icon>
+          输入配置
+        </div>
+        <NodeInputConfig
+          v-model="formData.inputs"
+          :param-names="currentCommandVariables"
+          :disable-param-name-edit="true"
+          :predecessor-nodes="predecessorNodes"
+        />
       </div>
       
       <!-- 命令节点配置 -->
@@ -367,13 +403,6 @@ function saveConfig() {
                 </el-icon>
               </div>
             </div>
-          </el-form-item>
-          
-          <el-form-item label="执行方式">
-            <el-radio-group v-model="formData.useTerminal">
-              <el-radio :value="false">普通执行</el-radio>
-              <el-radio :value="true">终端执行</el-radio>
-            </el-radio-group>
           </el-form-item>
           
           <el-form-item label="输出键名">

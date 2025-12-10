@@ -9,6 +9,17 @@ export interface NodeOutputRef {
   outputKey: string   // 输出键名（如 'stdout', 'version' 等）
 }
 
+// 节点输入配置类型
+export interface NodeInput {
+  paramName: string      // 参数名
+  inputType: 'reference' | 'manual'  // 引用或手动输入
+  // 引用模式
+  referenceNodeId?: string
+  referenceOutputKey?: string
+  // 手动输入模式
+  manualValue?: string
+}
+
 // 编排步骤类型
 export interface OrchestrationStep {
   id: string
@@ -19,6 +30,7 @@ export interface OrchestrationStep {
   // 对于 command 类型
   commandId?: string  // 引用的自定义命令 ID
   commandName?: string  // 命令名称（用于显示）
+  inputs?: NodeInput[]  // 命令输入参数配置（用于替换命令中的变量）
   // 对于 wait 类型
   waitSeconds?: number  // 等待的秒数
   // 对于 version 类型
