@@ -83,15 +83,10 @@ function getNodeDisplayName(node: FlowNode): string {
 // 获取节点输出选项
 function getNodeOutputOptions(node: FlowNode) {
   if (node.type === 'command') {
-    const options = [
+    return [
       { key: 'stdout', label: '标准输出 (stdout)' },
       { key: 'stderr', label: '标准错误 (stderr)' }
     ]
-    // 如果命令节点有自定义输出键，也加入选项
-    if (node.data.config?.outputKey) {
-      options.push({ key: node.data.config.outputKey, label: `自定义: ${node.data.config.outputKey}` })
-    }
-    return options
   }
   return []
 }
