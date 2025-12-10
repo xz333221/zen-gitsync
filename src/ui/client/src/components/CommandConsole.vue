@@ -12,6 +12,7 @@ import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
 import { useGitStore } from '@stores/gitStore';
 import { io, Socket } from 'socket.io-client';
 import Convert from 'ansi-to-html';
+import { replaceVariables } from '@/utils/commandParser';
 
 const configStore = useConfigStore();
 const gitStore = useGitStore();
@@ -515,7 +516,41 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
       }
       
       stepLabel = step.commandName || command.name;
-      const cmd = command.command;
+      let cmd = command.command;
+      
+      // 处理命令变量替换
+      if (step.inputs && step.inputs.length > 0) {
+        const variableValues: Record<string, string> = {};
+        
+        for (const input of step.inputs) {
+          if (input.inputType === 'manual') {
+            // 手动输入：直接使用输入的值
+            variableValues[input.paramName] = input.manualValue || '';
+          } else if (input.inputType === 'reference') {
+            // 引用节点输出：从nodeOutputs中获取
+            if (input.referenceNodeId && input.referenceOutputKey) {
+              const nodeOutput = nodeOutputs[input.referenceNodeId];
+              if (nodeOutput) {
+                // 根据referenceOutputKey获取对应的输出值
+                if (input.referenceOutputKey === 'stdout') {
+                  variableValues[input.paramName] = nodeOutput.stdout || '';
+                } else if (input.referenceOutputKey === 'version' && nodeOutput.version) {
+                  variableValues[input.paramName] = nodeOutput.version;
+                }
+              } else {
+                console.warn(`[变量替换] 未找到节点 ${input.referenceNodeId} 的输出`);
+                variableValues[input.paramName] = '';
+              }
+            }
+          }
+        }
+        
+        // 替换命令中的变量
+        cmd = replaceVariables(cmd, variableValues);
+        console.log(`[变量替换] 原命令: ${command.command}`);
+        console.log(`[变量替换] 变量值:`, variableValues);
+        console.log(`[变量替换] 替换后: ${cmd}`);
+      }
       
       ElMessage.info(`[${i + 1}/${steps.length}] 执行: ${stepLabel}${step.useTerminal ? ' (终端)' : ''}`);
       
