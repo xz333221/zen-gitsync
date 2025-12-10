@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
-import { VideoPlay } from '@element-plus/icons-vue'
+import { VideoPlay, Close } from '@element-plus/icons-vue'
 import type { FlowNodeData } from '../FlowOrchestrationWorkspace.vue'
 
 const props = defineProps<{
@@ -37,7 +37,7 @@ function handleCommand(command: string) {
   >
     <div 
       class="wait-node" 
-      :class="{ 'disabled': !data.enabled }"
+      :class="{ 'disabled': !data.enabled, 'selected': data.selected }"
     >
       <!-- 删除按钮 -->
       <button 
@@ -45,9 +45,7 @@ function handleCommand(command: string) {
         @click.stop="emit('delete', id)" 
         title="删除节点"
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <el-icon><Close /></el-icon>
       </button>
     
     <!-- 输入连接点（左侧） -->
@@ -131,9 +129,8 @@ function handleCommand(command: string) {
     padding: 0;
     box-shadow: 0 2px 8px rgba(255, 77, 79, 0.3);
     
-    svg {
-      width: 12px;
-      height: 12px;
+    .el-icon {
+      font-size: 14px;
     }
     
     &:hover {

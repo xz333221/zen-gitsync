@@ -700,12 +700,7 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
             nodeOutputs[step.nodeId] = outputData;
           }
           
-          // 如果节点定义了 outputKey，也保存一份到 outputKey 键
-          if (step.outputKey) {
-            nodeOutputs[step.outputKey] = outputData;
-          }
-          
-          console.log(`[DEBUG] 存储输出 - step.id: ${step.id}, step.nodeId: ${step.nodeId}, outputKey: ${step.outputKey}`);
+          console.log(`[DEBUG] 存储输出 - step.id: ${step.id}, step.nodeId: ${step.nodeId}`);
           console.log(`[DEBUG] nodeOutputs keys:`, Object.keys(nodeOutputs));
         }
       } catch (e: any) {

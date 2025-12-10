@@ -29,6 +29,7 @@ export interface FlowNodeData {
   config?: OrchestrationStep
   outputs?: Record<string, any>
   enabled?: boolean
+  selected?: boolean  // 节点是否选中
 }
 
 export interface FlowNode {
@@ -65,7 +66,7 @@ const dialogVisible = computed({
 })
 
 // Vue Flow 实例
-const { onConnect, addEdges, getViewport, setViewport, onNodeDragStop, getSelectedEdges } = useVueFlow()
+const { onConnect, addEdges, getViewport, setViewport, onNodeDragStart, onNodeDragStop, getSelectedEdges } = useVueFlow()
 
 // 流程数据
 const nodes = ref<FlowNode[]>([])
@@ -168,6 +169,20 @@ onConnect((params) => {
   scheduleAutoSave()
 })
 
+// 节点拖拽开始时设置选中状态
+onNodeDragStart((event) => {
+  // 清除所有节点的选中状态
+  nodes.value.forEach(n => {
+    if (n.data) n.data.selected = false
+  })
+  
+  // 设置拖拽的节点为选中
+  const node = nodes.value.find(n => n.id === event.node.id)
+  if (node && node.data) {
+    node.data.selected = true
+  }
+})
+
 // 节点拖拽结束时也需要自动保存（位置变化会影响保存的 flowData）
 onNodeDragStop(() => {
   scheduleAutoSave()
@@ -175,11 +190,28 @@ onNodeDragStop(() => {
 
 // 节点点击事件
 function onNodeClick(event: any) {
+  // 清除所有节点的选中状态
+  nodes.value.forEach(n => {
+    if (n.data) n.data.selected = false
+  })
+  
   const node = nodes.value.find(n => n.id === event.node.id)
-  if (node && node.type !== 'start') {
-    selectedNode.value = node
-    showConfigPanel.value = true
+  if (node) {
+    // 设置当前节点为选中
+    node.data.selected = true
+    
+    if (node.type !== 'start') {
+      selectedNode.value = node
+      showConfigPanel.value = true
+    }
   }
+}
+
+// 画布点击事件（点击空白处清除选中）
+function onPaneClick() {
+  nodes.value.forEach(n => {
+    if (n.data) n.data.selected = false
+  })
 }
 
 // 更新节点配置
@@ -207,12 +239,6 @@ function getNodeLabel(step: OrchestrationStep): string {
     }
   }
   return '未配置'
-}
-
-// 删除选中节点
-function deleteSelectedNode() {
-  if (!selectedNode.value) return
-  handleNodeDelete(selectedNode.value.id)
 }
 
 // 处理节点删除（从节点上的删除按钮触发）
@@ -768,6 +794,7 @@ onUnmounted(() => {
           :min-zoom="0.2"
           :max-zoom="4"
           @node-click="onNodeClick"
+          @pane-click="onPaneClick"
           @edges-change="onEdgesChange"
         >
           <Background pattern-color="#aaa" :gap="16" />
@@ -836,24 +863,6 @@ onUnmounted(() => {
             <div class="tool-icon version">📦</div>
             <div class="tool-label">版本管理</div>
             <div class="tool-desc">修改版本号或依赖</div>
-          </div>
-        </div>
-        
-        <div v-if="selectedNode" class="selected-node-info">
-          <div class="info-header">
-            <h4>选中节点</h4>
-            <IconButton
-              tooltip="删除节点"
-              size="small"
-              hover-color="var(--color-danger)"
-              @click="deleteSelectedNode"
-            >
-              <el-icon><Delete /></el-icon>
-            </IconButton>
-          </div>
-          <div class="info-content">
-            <p><strong>类型：</strong>{{ selectedNode.data.label }}</p>
-            <p><strong>ID：</strong>{{ selectedNode.id }}</p>
           </div>
         </div>
       </div>
@@ -1043,32 +1052,6 @@ onUnmounted(() => {
   .tool-desc {
     font-size: var(--font-size-sm);
     color: var(--text-tertiary);
-  }
-}
-
-.selected-node-info {
-  padding: var(--spacing-lg);
-  border-radius: var(--radius-lg);
-  background: var(--bg-component-area);
-  border: 1px solid var(--border-component);
-  
-  .info-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--spacing-md);
-    
-    h4 {
-      margin: 0;
-      font-size: var(--font-size-base);
-    }
-  }
-  
-  .info-content {
-    p {
-      margin: var(--spacing-sm) 0;
-      font-size: 13px;
-    }
   }
 }
 

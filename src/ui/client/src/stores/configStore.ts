@@ -42,7 +42,6 @@ export interface OrchestrationStep {
   dependencyVersionBump?: 'patch' | 'minor' | 'major'  // 依赖版本号增量类型（自动递增模式）
   dependencyType?: 'dependencies' | 'devDependencies'  // 依赖类型
   // 节点输入输出功能
-  outputKey?: string  // 输出键名（用于其他节点引用此节点的输出）
   inputRef?: NodeOutputRef  // 引用其他节点的输出（当版本号模式为 'reference' 时使用）
   versionSource?: 'bump' | 'manual' | 'reference'  // 版本号来源：自动递增 / 手动输入 / 引用其他节点输出
 }

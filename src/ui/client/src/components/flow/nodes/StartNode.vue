@@ -8,7 +8,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="start-node">
+  <div class="start-node" :class="{ 'selected': data.selected }">
     <div class="flow-node-icon">🚀</div>
     <div class="node-label">开始</div>
     

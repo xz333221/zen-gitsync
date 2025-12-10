@@ -38,7 +38,6 @@ const formData = ref<{
   commandId?: string
   commandName?: string
   useTerminal?: boolean
-  outputKey?: string  // 输出键名（命令节点可以输出结果）
   inputs?: NodeInput[]  // 命令输入参数配置
   
   // 等待节点
@@ -150,7 +149,6 @@ watch(() => props.node, (node) => {
       commandName: config?.commandName,
       useTerminal: config?.useTerminal || false,
       inputs: Array.isArray(config?.inputs) ? config.inputs : [],
-      outputKey: config?.outputKey,
       enabled: node.data.enabled ?? true
     }
   } else if (node.type === 'wait') {
@@ -267,7 +265,6 @@ function saveConfig() {
       commandId: formData.value.commandId,
       commandName: formData.value.commandName || '',
       useTerminal: formData.value.useTerminal || false,
-      outputKey: formData.value.outputKey || undefined,
       inputs: formData.value.inputs || [],
       enabled: formData.value.enabled ?? true
     }
@@ -402,18 +399,6 @@ function saveConfig() {
                   <Select />
                 </el-icon>
               </div>
-            </div>
-          </el-form-item>
-          
-          <el-form-item label="输出键名">
-            <el-input 
-              v-model="formData.outputKey" 
-              placeholder="可选，用于其他节点引用此命令的输出"
-              clearable
-            />
-            <div class="form-tip">
-              <el-icon><Link /></el-icon>
-              设置后，其他节点可以引用此命令的输出结果
             </div>
           </el-form-item>
         </el-form>
