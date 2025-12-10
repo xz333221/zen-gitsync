@@ -368,10 +368,10 @@ function openCommandManager() {
   commandManagerVisible.value = true;
 }
 
-// 打开编排工作台
-function openOrchestrationWorkspace() {
-  orchestrationWorkspaceVisible.value = true;
-}
+// 打开编排工作台（已被可视化编排工作台替代，暂时保留代码）
+// function openOrchestrationWorkspace() {
+//   orchestrationWorkspaceVisible.value = true;
+// }
 
 // 打开可视化编排工作台
 function openFlowOrchestrationWorkspace() {
@@ -1457,14 +1457,15 @@ onUnmounted(() => {
         >
           <SvgIcon icon-class="command-list" class-name="icon-btn" />
         </IconButton>
-        <IconButton
+        <!-- 编排工作台按钮已被可视化编排工作台替代 -->
+        <!-- <IconButton
           :tooltip="$t('@ORCHWS:编排工作台')"
           hover-color="var(--color-warning)"
           @click="openOrchestrationWorkspace"
           custom-class="orchestrator-btn"
         >
           <SvgIcon icon-class="command-orchestrate" class-name="icon-btn" />
-        </IconButton>
+        </IconButton> -->
         <IconButton
           tooltip="可视化编排"
           hover-color="#9c27b0"

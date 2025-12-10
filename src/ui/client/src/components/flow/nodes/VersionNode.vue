@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
+import { VideoPlay } from '@element-plus/icons-vue'
 import type { FlowNodeData } from '../FlowOrchestrationWorkspace.vue'
 
 const props = defineProps<{
@@ -10,7 +11,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'delete', nodeId: string): void
+  (e: 'execute-from-node', nodeId: string): void
+  (e: 'execute-single-node', nodeId: string): void
 }>()
+
+// 控制下拉菜单显示
+const dropdownVisible = ref(false)
 
 // 获取版本管理信息
 const versionInfo = computed(() => {
@@ -20,21 +26,36 @@ const versionInfo = computed(() => {
     dependency: props.data.config.dependencyName
   }
 })
+
+// 处理下拉菜单命令
+function handleCommand(command: string) {
+  if (command === 'executeFrom') {
+    emit('execute-from-node', props.id)
+  } else if (command === 'executeSingle') {
+    emit('execute-single-node', props.id)
+  }
+}
 </script>
 
 <template>
-  <div 
-    class="version-node" 
-    :class="{ 'disabled': !data.enabled }"
+  <el-dropdown
+    trigger="contextmenu"
+    @command="handleCommand"
+    @visible-change="(val: boolean) => dropdownVisible = val"
+    popper-class="flow-node-dropdown"
   >
-    <!-- 删除按钮 -->
-    <button 
-      class="delete-btn" 
-      @click.stop="emit('delete', id)" 
-      title="删除节点"
+    <div 
+      class="version-node" 
+      :class="{ 'disabled': !data.enabled }"
     >
-      ×
-    </button>
+      <!-- 删除按钮 -->
+      <button 
+        class="delete-btn" 
+        @click.stop="emit('delete', id)" 
+        title="删除节点"
+      >
+        ×
+      </button>
     
     <!-- 输入连接点（左侧） -->
     <Handle 
@@ -66,6 +87,20 @@ const versionInfo = computed(() => {
       class="flow-node-handle handle-right"
     />
   </div>
+  
+  <template #dropdown>
+    <el-dropdown-menu>
+      <el-dropdown-item command="executeFrom">
+        <el-icon><VideoPlay /></el-icon>
+        从此处开始执行
+      </el-dropdown-item>
+      <el-dropdown-item command="executeSingle">
+        <el-icon><VideoPlay /></el-icon>
+        只执行此节点
+      </el-dropdown-item>
+    </el-dropdown-menu>
+  </template>
+</el-dropdown>
 </template>
 
 <style scoped lang="scss">

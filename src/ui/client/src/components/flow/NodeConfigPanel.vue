@@ -549,8 +549,17 @@ function saveConfig() {
     </div>
     
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" @click="saveConfig">保存配置</el-button>
+      <div class="dialog-footer">
+        <div class="footer-actions">
+          <button type="button" class="dialog-cancel-btn" @click="visible = false">
+            取消
+          </button>
+          <button type="button" class="dialog-confirm-btn" @click="saveConfig">
+            <el-icon><Select /></el-icon>
+            <span>保存配置</span>
+          </button>
+        </div>
+      </div>
     </template>
   </CommonDialog>
 </template>

@@ -51,7 +51,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
-  (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number): void
+  (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean): void
 }>()
 
 // const { t } = useI18n()
@@ -421,10 +421,11 @@ function convertFlowToSteps(): OrchestrationStep[] {
       return
     }
     
-    // 添加步骤（排除起始节点）
+    // 添加步骤（排除起始节点），并记录nodeId用于定位
     if (node.type !== 'start' && node.data.config) {
       steps.push({
         ...node.data.config,
+        nodeId: node.id,
         enabled: node.data.enabled ?? true
       })
     }
@@ -463,6 +464,48 @@ function executeCurrentFlow() {
   // 关闭弹窗后执行
   dialogVisible.value = false
   emit('execute-orchestration', steps)
+}
+
+// 从某个节点开始执行
+function executeFromNode(nodeId: string) {
+  const steps = convertFlowToSteps()
+  
+  if (steps.length === 0) {
+    ElMessage.warning('请至少添加一个执行步骤')
+    return
+  }
+  
+  // 找到该节点在步骤列表中的索引
+  const nodeIndex = steps.findIndex(step => step.nodeId === nodeId)
+  
+  if (nodeIndex === -1) {
+    ElMessage.warning('未找到该节点对应的步骤')
+    return
+  }
+  
+  // 关闭弹窗后执行
+  dialogVisible.value = false
+  emit('execute-orchestration', steps, nodeIndex)
+}
+
+// 只执行某个节点
+function executeSingleNode(nodeId: string) {
+  const node = nodes.value.find(n => n.id === nodeId)
+  
+  if (!node || node.type === 'start' || !node.data.config) {
+    ElMessage.warning('该节点无法执行')
+    return
+  }
+  
+  const step: OrchestrationStep = {
+    ...node.data.config,
+    nodeId: node.id,
+    enabled: node.data.enabled ?? true
+  }
+  
+  // 关闭弹窗后执行
+  dialogVisible.value = false
+  emit('execute-orchestration', [step], 0, true)
 }
 
 // 加载编排
@@ -705,15 +748,33 @@ onMounted(() => {
           </template>
           
           <template #node-command="{ data, id }">
-            <CommandNode :data="data" :id="id" @delete="handleNodeDelete" />
+            <CommandNode 
+              :data="data" 
+              :id="id" 
+              @delete="handleNodeDelete"
+              @execute-from-node="executeFromNode"
+              @execute-single-node="executeSingleNode"
+            />
           </template>
           
           <template #node-wait="{ data, id }">
-            <WaitNode :data="data" :id="id" @delete="handleNodeDelete" />
+            <WaitNode 
+              :data="data" 
+              :id="id" 
+              @delete="handleNodeDelete"
+              @execute-from-node="executeFromNode"
+              @execute-single-node="executeSingleNode"
+            />
           </template>
           
           <template #node-version="{ data, id }">
-            <VersionNode :data="data" :id="id" @delete="handleNodeDelete" />
+            <VersionNode 
+              :data="data" 
+              :id="id" 
+              @delete="handleNodeDelete"
+              @execute-from-node="executeFromNode"
+              @execute-single-node="executeSingleNode"
+            />
           </template>
         </VueFlow>
       </div>
@@ -1008,6 +1069,47 @@ onMounted(() => {
     .el-icon {
       font-size: 16px;
       color: var(--text-primary);
+    }
+  }
+}
+
+// 节点右键菜单样式
+:deep(.flow-node-dropdown) {
+  z-index: 9999 !important;
+}
+
+// 确保dropdown menu能够正确显示（非scoped样式）
+</style>
+
+<style lang="scss">
+// 全局样式用于dropdown菜单
+.flow-node-dropdown {
+  z-index: 9999 !important;
+  
+  .el-dropdown-menu {
+    background: var(--bg-container) !important;
+    border: 1px solid var(--border-component) !important;
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3) !important;
+    padding: 4px 0 !important;
+    min-width: 150px !important;
+    
+    .el-dropdown-menu__item {
+      color: var(--text-primary) !important;
+      display: flex !important;
+      align-items: center !important;
+      padding: 8px 16px !important;
+      font-size: 14px !important;
+      
+      &:hover {
+        background: var(--bg-component-hover) !important;
+        color: var(--color-primary) !important;
+      }
+      
+      .el-icon {
+        margin-right: 8px !important;
+        color: currentColor !important;
+        font-size: 16px !important;
+      }
     }
   }
 }
