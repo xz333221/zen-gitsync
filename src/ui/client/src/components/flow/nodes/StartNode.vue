@@ -29,13 +29,13 @@ defineProps<{
   color: var(--color-white);
   text-align: center;
   box-shadow: var(--shadow-lg);
-  min-width: 100px;
+  min-width: 120px;
   &:hover {
     background: var(--color-primary-gradient-hover);
     box-shadow: var(--shadow-xl);
     transform: scale(1.05);
   }
-  min-height: 100px;
+  min-height: 120px;
   display: flex;
   flex-direction: column;
   align-items: center;
