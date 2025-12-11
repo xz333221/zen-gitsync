@@ -1100,34 +1100,34 @@ onUnmounted(() => {
 
 <style lang="scss">
 // 全局样式用于dropdown菜单
-.flow-node-dropdown {
-  z-index: 9999 !important;
+// .flow-node-dropdown {
+//   z-index: 9999 !important;
   
-  .el-dropdown-menu {
-    background: var(--bg-container) !important;
-    border: 1px solid var(--border-component) !important;
-    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3) !important;
-    padding: 4px 0 !important;
-    min-width: 150px !important;
+//   .el-dropdown-menu {
+//     background: var(--bg-container) !important;
+//     border: 1px solid var(--border-component) !important;
+//     box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3) !important;
+//     padding: 4px 0 !important;
+//     min-width: 150px !important;
     
-    .el-dropdown-menu__item {
-      color: var(--text-primary) !important;
-      display: flex !important;
-      align-items: center !important;
-      padding: 8px 16px !important;
-      font-size: 14px !important;
+//     .el-dropdown-menu__item {
+//       color: var(--text-primary) !important;
+//       display: flex !important;
+//       align-items: center !important;
+//       padding: 8px 16px !important;
+//       font-size: 14px !important;
       
-      &:hover {
-        background: var(--bg-component-hover) !important;
-        color: var(--color-primary) !important;
-      }
+//       &:hover {
+//         background: var(--bg-component-hover) !important;
+//         color: var(--color-primary) !important;
+//       }
       
-      .el-icon {
-        margin-right: 8px !important;
-        color: currentColor !important;
-        font-size: 16px !important;
-      }
-    }
-  }
-}
+//       .el-icon {
+//         margin-right: 8px !important;
+//         color: currentColor !important;
+//         font-size: 16px !important;
+//       }
+//     }
+//   }
+// }
 </style>

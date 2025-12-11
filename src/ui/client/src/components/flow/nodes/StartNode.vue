@@ -14,6 +14,7 @@ defineProps<{
     
     <!-- 输出连接点（右侧） -->
     <Handle 
+      id="source"
       type="source" 
       :position="Position.Right" 
       class="flow-node-handle handle-right"
@@ -23,14 +24,14 @@ defineProps<{
 
 <style scoped lang="scss">
 .start-node {
-  padding: var(--spacing-lg) 25px;
-  border-radius: var(--radius-full);
+  width: 100px;
+  height: 100px;
+  padding: var(--spacing-md);
+  border-radius: 50%;
   background: var(--color-primary-gradient);
   color: var(--color-white);
   text-align: center;
   box-shadow: var(--shadow-lg);
-  min-width: 120px;
-  min-height: 120px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -41,13 +42,11 @@ defineProps<{
   &:hover {
     background: var(--color-primary-gradient-hover);
     box-shadow: var(--shadow-xl);
-    transform: scale(1.05);
   }
   
   // 选中状态
   &.selected {
     box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.3), var(--shadow-xl);
-    transform: scale(1.08);
   }
   
   .flow-node-icon {
@@ -62,7 +61,7 @@ defineProps<{
 }
 
 .handle-right {
-  right: -6px !important;
+  right: -4px !important;
   background: var(--color-primary) !important;
 }
 </style>

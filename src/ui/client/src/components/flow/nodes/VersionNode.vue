@@ -59,6 +59,7 @@ function handleCommand(command: string) {
     
     <!-- 输入连接点（左侧） -->
     <Handle 
+      id="target"
       type="target" 
       :position="Position.Left" 
       class="flow-node-handle handle-left"
@@ -82,6 +83,7 @@ function handleCommand(command: string) {
     
     <!-- 输出连接点（右侧） -->
     <Handle 
+      id="source"
       type="source" 
       :position="Position.Right" 
       class="flow-node-handle handle-right"

@@ -34,6 +34,7 @@ const showHandlesComputed = props.showHandles !== false
     <!-- 输入连接点（左侧） -->
     <Handle 
       v-if="showHandlesComputed"
+      id="target"
       type="target" 
       :position="Position.Left" 
       class="flow-node-handle handle-left"
@@ -48,6 +49,7 @@ const showHandlesComputed = props.showHandles !== false
     <!-- 输出连接点（右侧） -->
     <Handle 
       v-if="showHandlesComputed"
+      id="source"
       type="source" 
       :position="Position.Right" 
       class="flow-node-handle handle-right"
