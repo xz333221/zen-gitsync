@@ -219,6 +219,8 @@ function clearCommitFields() {
   commitDescription.value = "";
   commitBody.value = "";
   commitFooter.value = "";
+  // 重置提交类型为 feat
+  commitType.value = "feat";
 
   // 如果开启了自动设置默认提交信息，则自动填充
   if (configStore.autoSetDefaultMessage && configStore.defaultCommitMessage) {
