@@ -1438,6 +1438,25 @@ async function startUIServer(noOpen = false, savePort = false) {
     try {
       // console.log('获取配置中。。。')
       const config = await configManager.loadConfig()
+
+      // 兼容旧数据：补齐自定义命令 id，避免前端编辑/删除/编排引用异常
+      if (Array.isArray(config.customCommands)) {
+        let changed = false
+        config.customCommands = config.customCommands.map((cmd) => {
+          if (cmd && typeof cmd === 'object' && !cmd.id) {
+            changed = true
+            return {
+              ...cmd,
+              id: `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            }
+          }
+          return cmd
+        })
+        if (changed) {
+          await configManager.saveConfig(config)
+        }
+      }
+
       // console.log('获取配置成功')
       res.json(config)
     } catch (error) {

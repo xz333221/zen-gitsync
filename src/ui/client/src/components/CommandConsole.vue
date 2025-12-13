@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted, nextTick } from 'vue';
-import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor, Document, Timer, Ticket, Delete } from '@element-plus/icons-vue';
+import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor, Document, Timer, Ticket, Delete, RefreshRight, Folder } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
@@ -91,6 +91,7 @@ type ConsoleRecord = {
   expanded: boolean;
   running?: boolean; // 运行中标记
   processId?: number; // 进程 ID
+  directory?: string; // 执行目录（用于重新执行保持一致）
   sessionId?: string; // 交互式会话区
   isInteractive?: boolean; // 是否为交互式命令
   stdinInput?: string; // 每个命令独立的 stdin 输入
@@ -149,6 +150,11 @@ const flowOrchestrationVisible = ref(false);
 async function runConsoleCommand() {
   const cmd = consoleInput.value.trim();
   if (!cmd || consoleRunning.value) return;
+  consoleInput.value = '';
+  await runConsoleCommandWithCmd(cmd, currentDirectory.value);
+}
+
+async function runConsoleCommandWithCmd(cmd: string, directory: string = currentDirectory.value) {
   consoleRunning.value = true;
   
   // 如果使用终端执行
@@ -169,7 +175,6 @@ async function runConsoleCommand() {
       ElMessage.error(e?.message || '执行失败');
     } finally {
       consoleRunning.value = false;
-      consoleInput.value = '';
     }
     return;
   }
@@ -178,6 +183,7 @@ async function runConsoleCommand() {
   const rec: ConsoleRecord = {
     id: ++consoleIdCounter,
     command: cmd,
+    directory,
     success: false,
     ts: new Date().toLocaleString(),
     expanded: true,
@@ -193,7 +199,7 @@ async function runConsoleCommand() {
     const resp = await fetch('/api/exec-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command: cmd })
+      body: JSON.stringify({ command: cmd, directory: rec.directory })
     });
     
     console.log('[前端-控制台] 收到响应，状态:', resp.status, resp.statusText);
@@ -315,6 +321,33 @@ async function runConsoleCommand() {
   } finally {
     console.log('[前端-控制台] finally块执行，设置consoleRunning=false');
     consoleRunning.value = false;
+  }
+}
+
+function closeConsoleRecord(rec: ConsoleRecord) {
+  consoleHistory.value = consoleHistory.value.filter(r => r.id !== rec.id);
+}
+
+async function rerunConsoleRecord(rec: ConsoleRecord) {
+  const cmd = (rec.command || '').trim();
+  if (!cmd) return;
+
+  const directory = rec.directory || currentDirectory.value;
+
+  if (rec.running) {
+    if (rec.isInteractive) {
+      stopInteractiveCommand(rec);
+    } else {
+      await stopCommand(rec);
+    }
+  }
+
+  closeConsoleRecord(rec);
+
+  if (rec.isInteractive) {
+    await runInteractiveCommandWithCmd(cmd, directory);
+  } else {
+    await runConsoleCommandWithCmd(cmd, directory);
   }
 }
 
@@ -955,6 +988,7 @@ async function executeCustomCommand(command: CustomCommand) {
     const rec: ConsoleRecord = {
       id: ++consoleIdCounter,
       command: cmd,
+      directory: targetDir,
       success: false,
       ts: new Date().toLocaleString(),
       expanded: true,
@@ -981,7 +1015,7 @@ async function executeCustomCommand(command: CustomCommand) {
     // 发送执行请求
     socket.value.emit('exec_interactive', {
       command: cmd,
-      directory: command.directory || '',
+      directory: targetDir,
       sessionId
     });
     
@@ -1057,15 +1091,16 @@ async function executeCustomCommand(command: CustomCommand) {
     socket.value.on('interactive_stderr', onStderr);
     socket.value.on('interactive_exit', onExit);
     socket.value.on('interactive_error', onError);
-    
+
     consoleRunning.value = false;
     return;
   }
-  
+
   // 流式执行逻辑
   const rec: ConsoleRecord = {
     id: ++consoleIdCounter,
     command: cmd,
+    directory: targetDir,
     success: false,
     ts: new Date().toLocaleString(),
     expanded: true,
@@ -1085,7 +1120,7 @@ async function executeCustomCommand(command: CustomCommand) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         command: cmd,
-        directory: command.directory || ''
+        directory: targetDir
       })
     });
     
@@ -1221,6 +1256,11 @@ async function executeCustomCommand(command: CustomCommand) {
 async function runInteractiveCommand() {
   const cmd = consoleInput.value.trim();
   if (!cmd || consoleRunning.value) return;
+  consoleInput.value = '';
+  await runInteractiveCommandWithCmd(cmd);
+}
+
+async function runInteractiveCommandWithCmd(cmd: string, directory: string = currentDirectory.value) {
   consoleRunning.value = true;
   
   // 生成会话ID
@@ -1230,6 +1270,7 @@ async function runInteractiveCommand() {
   const rec: ConsoleRecord = {
     id: ++consoleIdCounter,
     command: cmd,
+    directory,
     success: false,
     ts: new Date().toLocaleString(),
     expanded: true,
@@ -1241,7 +1282,7 @@ async function runInteractiveCommand() {
     stdinInput: '' // 初始化独立的输入框
   };
   consoleHistory.value.unshift(rec);
-  consoleInput.value = '';
+  
   
   if (!socket.value || !socket.value.connected) {
     ElMessage.error('Socket 连接未建立，无法执行交互式命令');
@@ -1254,7 +1295,7 @@ async function runInteractiveCommand() {
   // 发送执行请求
   socket.value.emit('exec_interactive', {
     command: cmd,
-    directory: '',
+    directory,
     sessionId
   });
   
@@ -1642,12 +1683,28 @@ onUnmounted(() => {
               <div class="cmd-line">
                 <span class="cmd-prefix">&gt;</span>
                 <span class="cmd-text">{{ rec.command }}</span>
+                <span v-if="rec.directory" class="cmd-dir" :title="rec.directory">
+                  <el-icon class="cmd-dir-icon"><Folder /></el-icon>
+                  {{ rec.directory }}
+                </span>
                 <el-icon v-if="rec.running" class="running-icon is-loading" color="var(--color-primary)">
                   <Loading />
                 </el-icon>
                 <span class="ts">{{ rec.ts }}</span>
               </div>
               <div class="cmd-actions">
+                <el-tooltip content="重新执行" placement="top">
+                  <el-button
+                    text
+                    size="small"
+                    @click.stop="rerunConsoleRecord(rec)"
+                    class="rerun-btn"
+                  >
+                    <el-icon>
+                      <RefreshRight />
+                    </el-icon>
+                  </el-button>
+                </el-tooltip>
                 <el-tooltip v-if="rec.running" content="停止命令" placement="top">
                   <el-button
                     text
@@ -2113,6 +2170,24 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cmd-dir {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  font-weight: normal;
+  padding: 0 var(--spacing-sm);
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cmd-dir-icon {
+  font-size: 14px;
+  margin-right: 2px;
+  vertical-align: -2px;
 }
 
 .running-icon {

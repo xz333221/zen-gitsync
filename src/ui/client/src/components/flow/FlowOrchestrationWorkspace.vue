@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 // import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
@@ -66,7 +66,16 @@ const dialogVisible = computed({
 })
 
 // Vue Flow 实例
-const { onConnect, addEdges, getViewport, setViewport, onNodeDragStart, onNodeDragStop, getSelectedEdges } = useVueFlow()
+const {
+  onConnect,
+  addEdges,
+  getViewport,
+  setViewport,
+  onNodeDragStart,
+  onNodeDragStop,
+  getSelectedEdges,
+  updateNodeInternals
+} = useVueFlow()
 
 // 流程数据
 const nodes = ref<FlowNode[]>([])
@@ -94,6 +103,37 @@ let nodeIdCounter = 1
 // 生成节点ID
 function generateNodeId(type: string): string {
   return `${type}-${Date.now()}-${nodeIdCounter++}`
+}
+
+function sanitizeNodesForSave(inputNodes: any[]) {
+  // 只保存业务需要的字段，避免把 VueFlow 的运行时内部字段（dimensions/handleBounds 等）持久化
+  return inputNodes.map((n) => ({
+    id: n.id,
+    type: n.type,
+    position: n.position,
+    data: n.data
+  }))
+}
+
+function sanitizeEdgesForSave(inputEdges: any[]) {
+  // addEdges 可能会注入 type/animated/selected 等运行时字段；这里保持最小字段集
+  return inputEdges.map((e) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    sourceHandle: e.sourceHandle,
+    targetHandle: e.targetHandle
+  }))
+}
+
+async function refreshNodeInternals(nodeIds?: string[]) {
+  // 选中态/弹窗显示/加载数据后，节点 DOM 尺寸与 handleBounds 可能变化，需主动触发重新测量
+  await nextTick()
+  const ids = nodeIds && nodeIds.length ? nodeIds : nodes.value.map((n) => n.id)
+  // requestAnimationFrame 可避免在布局尚未稳定时测量到异常尺寸
+  requestAnimationFrame(() => {
+    updateNodeInternals(ids)
+  })
 }
 
 // 调度自动保存（带简单防抖）
@@ -205,6 +245,9 @@ function onNodeClick(event: any) {
       showConfigPanel.value = true
     }
   }
+
+  // 选中态会影响节点样式（部分节点包含 transform），需要刷新 internals 以更新 handle 命中区域
+  void refreshNodeInternals([event.node.id])
 }
 
 // 画布点击事件（点击空白处清除选中）
@@ -212,6 +255,9 @@ function onPaneClick() {
   nodes.value.forEach(n => {
     if (n.data) n.data.selected = false
   })
+
+  // 取消选中也会触发布局样式变化，刷新 internals
+  void refreshNodeInternals()
 }
 
 // 更新节点配置
@@ -429,8 +475,8 @@ async function saveOrchestration() {
     steps,
     // 保存流程图数据以便后续编辑
     flowData: {
-      nodes: nodes.value,
-      edges: edges.value,
+      nodes: sanitizeNodesForSave(nodes.value as any),
+      edges: sanitizeEdgesForSave(edges.value as any),
       viewport: {
         x: viewport.x,
         y: viewport.y,
@@ -571,6 +617,9 @@ function loadOrchestration(orchestration: any) {
   if (orchestration.flowData) {
     nodes.value = JSON.parse(JSON.stringify(orchestration.flowData.nodes))
     edges.value = JSON.parse(JSON.stringify(orchestration.flowData.edges))
+
+    // 加载后强制刷新 internals，确保 dimensions/handleBounds 来自当前 DOM 实际尺寸
+    void refreshNodeInternals()
     
     // 恢复画布视图状态
     if (orchestration.flowData.viewport) {
@@ -581,6 +630,7 @@ function loadOrchestration(orchestration: any) {
   } else {
     // 否则从步骤列表转换为流程图（线性布局）
     convertStepsToFlow(orchestration.steps)
+    void refreshNodeInternals()
   }
 }
 
@@ -667,6 +717,9 @@ onMounted(() => {
   initializeFlow()
   // 添加键盘事件监听以删除选中的边
   window.addEventListener('keydown', handleKeyDown)
+
+  // 首次渲染后刷新 internals，避免初次测量尺寸不稳定
+  void refreshNodeInternals()
 })
 
 // 清理事件监听

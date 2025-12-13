@@ -3,7 +3,7 @@ import { $t } from '@/lang/static'
 import { ref, computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
-import { Setting, Document, Loading } from '@element-plus/icons-vue'
+import { Setting, Document, Loading, Check } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import IconButton from '@components/IconButton.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
@@ -76,6 +76,18 @@ async function saveStash() {
     console.error('储藏失败:', error)
   }
 }
+
+function handleStashMessageKeydown(e: KeyboardEvent) {
+  // 避免中文输入法/IME 组合输入时按回车选词误触发
+  if ((e as any).isComposing || (e as any).keyCode === 229) return
+
+  // textarea 下保留 Shift+Enter 换行；仅 Enter 触发储藏
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    if (gitStore.isSavingStash || gitStore.hasConflictedFiles) return
+    saveStash()
+  }
+}
 </script>
 
 <template>
@@ -109,12 +121,7 @@ async function saveStash() {
       :title="$t('@76872:储藏更改 (Git Stash)')"
       size="medium"
       :close-on-click-modal="false"
-      show-footer
-      :confirm-text="$t('@76872:储藏')"
-      :cancel-text="$t('@76872:取消')"
-      :confirm-loading="gitStore.isSavingStash"
       custom-class="stash-dialog"
-      @confirm="saveStash"
     >
       <div class="stash-dialog-content">
         <!-- 功能说明卡片 -->
@@ -134,6 +141,7 @@ async function saveStash() {
               v-model="stashMessage" 
               :placeholder="$t('@76872:为这次储藏添加描述信息（可选）')"
               clearable
+              @keydown="handleStashMessageKeydown"
               :rows="2"
               type="textarea"
               resize="none"
@@ -183,6 +191,26 @@ async function saveStash() {
           </div>
         </el-form>
       </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <div class="footer-actions">
+            <button type="button" class="dialog-cancel-btn" @click="isStashDialogVisible = false">
+              {{ $t('@76872:取消') }}
+            </button>
+            <button
+              type="button"
+              class="dialog-confirm-btn"
+              @click="saveStash"
+              :disabled="gitStore.isSavingStash || gitStore.hasConflictedFiles"
+            >
+              <el-icon v-if="!gitStore.isSavingStash"><Check /></el-icon>
+              <el-icon class="is-loading" v-else><Loading /></el-icon>
+              <span>{{ $t('@76872:储藏') }}</span>
+            </button>
+          </div>
+        </div>
+      </template>
     </CommonDialog>
   </div>
 </template>

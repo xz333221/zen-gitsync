@@ -104,7 +104,7 @@ function handleManageLockedFiles(event: Event) {
       v-if="showLockButton"
       :content="isLocking ? $t('@0883F:处理中...') : (isLocked ? $t('@0883F:解锁文件') : $t('@0883F:锁定文件'))" 
       placement="top" 
-       
+      :disabled="isLocking"
       :show-after="200"
     >
       <el-button
