@@ -2,6 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref } from 'vue'
 import { useConfigStore } from '@stores/configStore'
+import { useGitStore } from '@stores/gitStore'
 import { ElMessage } from 'element-plus'
 import { Edit, Check, Warning } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
@@ -84,7 +85,6 @@ async function saveFullConfig() {
 
     // 尝试刷新Git状态
     try {
-      const { useGitStore } = await import('@stores/gitStore')
       const gitStore = useGitStore()
       if (gitStore.fetchStatus) {
         await gitStore.fetchStatus()
