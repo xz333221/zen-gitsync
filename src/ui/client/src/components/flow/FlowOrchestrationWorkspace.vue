@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, provide, inject, defineComponent, h } from 'vue'
+import type { PropType } from 'vue'
 // import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
-import type { EdgeChange } from '@vue-flow/core'
+import type { EdgeChange, NodeTypesObject } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { Delete, VideoPlay, Plus, Select, Rank } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 import IconButton from '@components/IconButton.vue'
+import BaseNode from './nodes/BaseNode.vue'
 import CommandNode from './nodes/CommandNode.vue'
 import WaitNode from './nodes/WaitNode.vue'
 import VersionNode from './nodes/VersionNode.vue'
 import StartNode from './nodes/StartNode.vue'
+import NodeContextMenu from './nodes/NodeContextMenu.vue'
 import NodeConfigPanel from './NodeConfigPanel.vue'
 
 // 导入样式
@@ -46,6 +49,74 @@ export interface FlowEdge {
   sourceHandle?: string
   targetHandle?: string
 }
+
+type FlowNodeActions = {
+  deleteNode: (nodeId: string) => void
+  executeFromNode: (nodeId: string) => void
+  executeSingleNode: (nodeId: string) => void
+}
+
+const FLOW_NODE_ACTIONS_KEY: unique symbol = Symbol('FLOW_NODE_ACTIONS')
+
+function createWrappedNode(Inner: any) {
+  return defineComponent({
+    name: 'FlowWrappedNode',
+    props: {
+      id: { type: String, required: true },
+      data: { type: Object as PropType<FlowNodeData>, required: true }
+    },
+    setup(props) {
+      const actions = inject<FlowNodeActions | null>(FLOW_NODE_ACTIONS_KEY, null)
+
+      return () =>
+        h(
+          NodeContextMenu,
+          {
+            nodeId: props.id,
+            onExecuteFromNode: (nodeId: string) => actions?.executeFromNode(nodeId),
+            onExecuteSingleNode: (nodeId: string) => actions?.executeSingleNode(nodeId)
+          },
+          {
+            default: () =>
+              h(
+                BaseNode,
+                {
+                  id: props.id,
+                  enabled: props.data?.enabled,
+                  selected: props.data?.selected,
+                  onDelete: (nodeId: string) => actions?.deleteNode(nodeId)
+                },
+                {
+                  default: () =>
+                    h(Inner, {
+                      data: props.data,
+                      id: props.id
+                    })
+                }
+              )
+          }
+        )
+    }
+  })
+}
+
+const StartNodeRenderer = defineComponent({
+  name: 'FlowStartNodeRenderer',
+  props: {
+    id: { type: String, required: true },
+    data: { type: Object as PropType<FlowNodeData>, required: true }
+  },
+  setup(props) {
+    return () => h(StartNode, { data: props.data })
+  }
+})
+
+const nodeTypes: NodeTypesObject = {
+  start: StartNodeRenderer,
+  command: createWrappedNode(CommandNode),
+  wait: createWrappedNode(WaitNode),
+  version: createWrappedNode(VersionNode)
+} as unknown as NodeTypesObject
 
 const props = defineProps<{
   visible: boolean
@@ -606,6 +677,12 @@ function executeSingleNode(nodeId: string) {
   emit('execute-orchestration', [step], 0, true)
 }
 
+provide<FlowNodeActions>(FLOW_NODE_ACTIONS_KEY, {
+  deleteNode: handleNodeDelete,
+  executeFromNode,
+  executeSingleNode
+})
+
 // 加载编排
 function loadOrchestration(orchestration: any) {
   selectedOrchestrationId.value = orchestration.id
@@ -693,7 +770,6 @@ async function deleteOrchestration(orchestration: any) {
     )
     
     await configStore.deleteOrchestration(orchestration.id)
-    ElMessage.success('编排已删除')
     
     if (editingOrchestrationId.value === orchestration.id) {
       createNewOrchestration()
@@ -846,6 +922,7 @@ onUnmounted(() => {
           :default-zoom="1"
           :min-zoom="0.2"
           :max-zoom="4"
+          :node-types="nodeTypes"
           @node-click="onNodeClick"
           @pane-click="onPaneClick"
           @edges-change="onEdgesChange"
@@ -856,40 +933,6 @@ onUnmounted(() => {
               <el-icon><Rank /></el-icon>
             </button>
           </Controls>
-          
-          <template #node-start="{ data }">
-            <StartNode :data="data" />
-          </template>
-          
-          <template #node-command="{ data, id }">
-            <CommandNode 
-              :data="data" 
-              :id="id" 
-              @delete="handleNodeDelete"
-              @execute-from-node="executeFromNode"
-              @execute-single-node="executeSingleNode"
-            />
-          </template>
-          
-          <template #node-wait="{ data, id }">
-            <WaitNode 
-              :data="data" 
-              :id="id" 
-              @delete="handleNodeDelete"
-              @execute-from-node="executeFromNode"
-              @execute-single-node="executeSingleNode"
-            />
-          </template>
-          
-          <template #node-version="{ data, id }">
-            <VersionNode 
-              :data="data" 
-              :id="id" 
-              @delete="handleNodeDelete"
-              @execute-from-node="executeFromNode"
-              @execute-single-node="executeSingleNode"
-            />
-          </template>
         </VueFlow>
       </div>
       

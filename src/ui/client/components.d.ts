@@ -71,6 +71,7 @@ declare module 'vue' {
     ListIcon: typeof import('./src/components/icons/ListIcon.vue')['default']
     MergeBranchButton: typeof import('./src/components/buttons/MergeBranchButton.vue')['default']
     NodeConfigPanel: typeof import('./src/components/flow/NodeConfigPanel.vue')['default']
+    NodeContextMenu: typeof import('./src/components/flow/nodes/NodeContextMenu.vue')['default']
     NodeInputConfig: typeof import('./src/components/flow/NodeInputConfig.vue')['default']
     NpmScriptsPanel: typeof import('./src/components/NpmScriptsPanel.vue')['default']
     NpmSettingsDialog: typeof import('./src/components/NpmSettingsDialog.vue')['default']
@@ -96,6 +97,9 @@ declare module 'vue' {
     UnstageAllButton: typeof import('./src/components/buttons/UnstageAllButton.vue')['default']
     VersionNode: typeof import('./src/components/flow/nodes/VersionNode.vue')['default']
     WaitNode: typeof import('./src/components/flow/nodes/WaitNode.vue')['default']
+    WrappedCommandNode: typeof import('./src/components/flow/nodes/WrappedCommandNode.vue')['default']
+    WrappedVersionNode: typeof import('./src/components/flow/nodes/WrappedVersionNode.vue')['default']
+    WrappedWaitNode: typeof import('./src/components/flow/nodes/WrappedWaitNode.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

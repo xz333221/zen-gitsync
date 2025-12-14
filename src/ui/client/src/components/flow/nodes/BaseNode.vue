@@ -1,143 +1,93 @@
 <script setup lang="ts">
-import { Handle, Position } from '@vue-flow/core'
+import { Close } from '@element-plus/icons-vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   id: string
   enabled?: boolean
-  borderColor?: string
-  showHandles?: boolean
-}>()
+  selected?: boolean
+  deletable?: boolean
+  showDeleteOnSelected?: boolean
+}>(), {
+  enabled: true,
+  selected: false,
+  deletable: true,
+  showDeleteOnSelected: false
+})
 
 const emit = defineEmits<{
   (e: 'delete', nodeId: string): void
 }>()
-
-// 默认显示连接点
-const showHandlesComputed = props.showHandles !== false
 </script>
 
 <template>
   <div 
-    class="base-node" 
-    :class="{ 'disabled': !enabled }"
-    :style="{ '--node-border-color': borderColor || 'var(--color-primary)' }"
+    class="flow-node-wrapper" 
+    :class="{ 'disabled': !enabled, 'is-selected': selected, 'show-delete-on-selected': showDeleteOnSelected }"
   >
-    <!-- 删除按钮 -->
-    <button 
-      class="delete-btn" 
-      @click.stop="emit('delete', id)" 
+    <button
+      v-if="deletable !== false"
+      class="flow-node-delete-btn"
+      @click.stop="emit('delete', id)"
       title="删除节点"
     >
-      ×
+      <el-icon><Close /></el-icon>
     </button>
-    
-    <!-- 输入连接点（左侧） -->
-    <Handle 
-      v-if="showHandlesComputed"
-      id="target"
-      type="target" 
-      :position="Position.Left" 
-      class="flow-node-handle handle-left"
-    />
     
     <!-- 节点内容插槽 -->
     <slot></slot>
     
     <!-- 禁用遮罩 -->
     <div v-if="!enabled" class="disabled-overlay">已禁用</div>
-    
-    <!-- 输出连接点（右侧） -->
-    <Handle 
-      v-if="showHandlesComputed"
-      id="source"
-      type="source" 
-      :position="Position.Right" 
-      class="flow-node-handle handle-right"
-    />
   </div>
 </template>
 
 <style scoped lang="scss">
-.base-node {
-  padding: var(--spacing-md);
-  border-radius: var(--radius-lg);
-  background: var(--bg-container);
-  border: 2px solid var(--node-border-color);
-  box-shadow: var(--shadow-md);
-  min-width: 180px;
-  max-width: 250px;
+.flow-node-wrapper {
   position: relative;
-  transition: var(--transition-all);
-  
-  .delete-btn {
-    position: absolute;
+  display: inline-block;
+}
+
+.flow-node-delete-btn {
+  position: absolute;
     top: -8px;
     right: -8px;
     width: 20px;
     height: 20px;
-    border-radius: 50%;
-    background: var(--color-danger);
-    color: white;
-    border: 2px solid var(--bg-page);
-    font-size: 16px;
-    line-height: 1;
-    cursor: pointer;
-    display: none;
+  border-radius: 50%;
+  background: #ff4d4f;
+  color: white;
+  border: 2px solid var(--bg-page);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-all);
+  z-index: 20;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.flow-node-wrapper:hover .flow-node-delete-btn,
+.flow-node-wrapper.show-delete-on-selected.is-selected .flow-node-delete-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.flow-node-wrapper.disabled {
+  .disabled-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.1);
+    display: flex;
     align-items: center;
     justify-content: center;
-    transition: var(--transition-all);
-    z-index: 10;
-    
-    &:hover {
-      transform: scale(1.1);
-      background: var(--color-danger-dark);
-    }
+    font-size: var(--font-size-sm);
+    color: var(--text-tertiary);
+    border-radius: var(--radius-md);
+    z-index: 5;
   }
-  
-  &:hover {
-    box-shadow: var(--shadow-lg);
-    
-    .delete-btn {
-      display: flex;
-    }
-  }
-  
-  &.disabled {
-    opacity: 0.6;
-    border-color: var(--border-component);
-    
-    .disabled-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.1);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: var(--font-size-sm);
-      color: var(--text-tertiary);
-      border-radius: var(--radius-md);
-      z-index: 5;
-    }
-  }
-}
-
-.flow-node-handle {
-  width: 12px !important;
-  height: 12px !important;
-  background: var(--color-primary) !important;
-  border: 2px solid var(--bg-page) !important;
-  border-radius: 50% !important;
-  cursor: crosshair !important;
-}
-
-.handle-left {
-  left: -6px !important;
-}
-
-.handle-right {
-  right: -6px !important;
 }
 </style>

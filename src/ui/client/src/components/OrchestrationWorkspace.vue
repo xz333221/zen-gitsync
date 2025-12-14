@@ -202,7 +202,6 @@ async function deleteOrchestration(orchestration: any) {
     )
     
     await configStore.deleteOrchestration(orchestration.id)
-    ElMessage.success('编排已删除')
     
     // 如果删除的是当前编辑的编排，清空编辑器
     if (editingOrchestrationId.value === orchestration.id) {
