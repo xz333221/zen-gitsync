@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Close } from '@element-plus/icons-vue'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   id: string
   enabled?: boolean
   selected?: boolean

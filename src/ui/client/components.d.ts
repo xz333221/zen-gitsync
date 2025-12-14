@@ -97,9 +97,6 @@ declare module 'vue' {
     UnstageAllButton: typeof import('./src/components/buttons/UnstageAllButton.vue')['default']
     VersionNode: typeof import('./src/components/flow/nodes/VersionNode.vue')['default']
     WaitNode: typeof import('./src/components/flow/nodes/WaitNode.vue')['default']
-    WrappedCommandNode: typeof import('./src/components/flow/nodes/WrappedCommandNode.vue')['default']
-    WrappedVersionNode: typeof import('./src/components/flow/nodes/WrappedVersionNode.vue')['default']
-    WrappedWaitNode: typeof import('./src/components/flow/nodes/WrappedWaitNode.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
 import type { FlowNodeData } from '../FlowOrchestrationWorkspace.vue'
-
-const props = defineProps<{
+defineProps<{
   data: FlowNodeData
   id: string
 }>()
