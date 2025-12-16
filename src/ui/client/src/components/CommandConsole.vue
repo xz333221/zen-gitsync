@@ -1555,10 +1555,9 @@ onUnmounted(() => {
             </el-button>
           </el-tooltip>
         </div>
-        
         <IconButton
           :tooltip="'清空执行历史'"
-          :disabled="consoleHistory.length === 0"
+          v-if="consoleHistory.length > 0"
           hover-color="var(--color-danger)"
           @click="clearConsoleHistory"
           custom-class="clear-history-btn"

@@ -7,7 +7,8 @@ import { VueFlow, useVueFlow } from '@vue-flow/core'
 import type { EdgeChange, NodeTypesObject } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
-import { Delete, VideoPlay, Plus, Select, Rank } from '@element-plus/icons-vue'
+import { Delete, VideoPlay, Plus, Select, Grid } from '@element-plus/icons-vue'
+import dagre from 'dagre'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 import IconButton from '@components/IconButton.vue'
@@ -432,92 +433,67 @@ function clearFlow() {
   }).catch(() => {})
 }
 
-// 优化布局 - 自动排列节点
+// 优化布局 - 使用 dagre 自动排列节点
 function optimizeLayout() {
   if (nodes.value.length <= 1) {
     ElMessage.info('节点太少，无需优化布局')
     return
   }
   
-  // 构建邻接表（有向图）
-  const adjacencyList = new Map<string, string[]>()
-  const inDegree = new Map<string, number>()
+  // 创建 dagre 图
+  const dagreGraph = new dagre.graphlib.Graph()
+  dagreGraph.setDefaultEdgeLabel(() => ({}))
   
-  // 初始化所有节点
+  // 设置图的布局方向和间距
+  dagreGraph.setGraph({
+    rankdir: 'LR', // 从左到右布局（Left to Right）
+    nodesep: 80,   // 同层节点间距
+    ranksep: 80,  // 层级间距
+    marginx: 50,
+    marginy: 50
+  })
+  
+  // 添加节点到 dagre 图（需要指定节点宽高）
   nodes.value.forEach((node: FlowNode) => {
-    adjacencyList.set(node.id, [])
-    inDegree.set(node.id, 0)
+    // 根据节点类型设置不同的尺寸
+    let width = 220
+    let height = 100
+    
+    if (node.type === 'start') {
+      width = 100
+      height = 100
+    } else if (node.type === 'wait' || node.type === 'confirm') {
+      width = 200
+      height = 120
+    } else if (node.type === 'version') {
+      width = 250
+      height = 120
+    }
+    
+    dagreGraph.setNode(node.id, { width, height })
   })
   
-  // 构建图
+  // 添加边到 dagre 图
   edges.value.forEach((edge: any) => {
-    adjacencyList.get(edge.source)?.push(edge.target)
-    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1)
+    dagreGraph.setEdge(edge.source, edge.target)
   })
   
-  // 拓扑排序分层
-  const levels: string[][] = []
-  const visited = new Set<string>()
+  // 运行 dagre 布局算法
+  dagre.layout(dagreGraph)
   
-  // 找到入度为0的节点作为第一层
-  let currentLevel = nodes.value
-    .filter((node: FlowNode) => inDegree.get(node.id) === 0)
-    .map((node: FlowNode) => node.id)
-  
-  while (currentLevel.length > 0) {
-    levels.push([...currentLevel])
-    currentLevel.forEach(id => visited.add(id))
-    
-    // 找下一层节点
-    const nextLevel = new Set<string>()
-    currentLevel.forEach(nodeId => {
-      adjacencyList.get(nodeId)?.forEach(targetId => {
-        // 检查该节点的所有前驱是否都已访问
-        const allPredecessorsVisited = edges.value
-          .filter((e: any) => e.target === targetId)
-          .every((e: any) => visited.has(e.source))
-        
-        if (allPredecessorsVisited && !visited.has(targetId)) {
-          nextLevel.add(targetId)
-        }
-      })
-    })
-    
-    currentLevel = Array.from(nextLevel)
-  }
-  
-  // 如果有节点没被访问到（可能有环或孤立节点），单独处理
-  const unvisitedNodes = nodes.value
-    .filter((node: FlowNode) => !visited.has(node.id))
-    .map((node: FlowNode) => node.id)
-  if (unvisitedNodes.length > 0) {
-    levels.push(unvisitedNodes)
-  }
-  
-  // 布局参数（适当加大间距，避免节点太挤）
-  const levelGap = 220 // 层级间距（水平）
-  const nodeGap = 120 // 同层节点间距（垂直）
-  const startX = 50
-  const startY = 150
-  
-  // 应用布局
-  levels.forEach((level, levelIndex) => {
-    const x = startX + levelIndex * levelGap
-    const totalHeight = (level.length - 1) * nodeGap
-    const startYForLevel = startY + (400 - totalHeight) / 2 // 居中对齐
-    
-    level.forEach((nodeId, nodeIndex) => {
-      const node = nodes.value.find((n: FlowNode) => n.id === nodeId)
-      if (node) {
-        node.position = {
-          x,
-          y: Math.max(startY, startYForLevel + nodeIndex * nodeGap)
-        }
+  // 将计算后的位置应用到节点
+  nodes.value.forEach((node: FlowNode) => {
+    const nodeWithPosition = dagreGraph.node(node.id)
+    if (nodeWithPosition) {
+      // dagre 返回的是节点中心点坐标，需要转换为左上角坐标
+      node.position = {
+        x: nodeWithPosition.x - nodeWithPosition.width / 2,
+        y: nodeWithPosition.y - nodeWithPosition.height / 2
       }
-    })
+    }
   })
   
-  ElMessage.success('布局优化完成')
+  ElMessage.success('布局优化完成（dagre）')
 
   // 只调整布局也会影响保存的 flowData，因此需要自动保存
   scheduleAutoSave()
@@ -884,7 +860,7 @@ onUnmounted(() => {
       <!-- 中间：流程画布 -->
       <div class="flow-canvas">
         <div class="canvas-header">
-          <div class="header-info">
+          <div class="flow-header-info">
             <el-input
               v-model="orchestrationName"
               placeholder="编排名称（必填）"
@@ -939,9 +915,9 @@ onUnmounted(() => {
           @edges-change="onEdgesChange"
         >
           <Background pattern-color="#aaa" :gap="16" />
-          <Controls>
+          <Controls :showInteractive="false">
             <button class="vue-flow__controls-button" @click="optimizeLayout" title="优化布局">
-              <el-icon><Rank /></el-icon>
+              <el-icon><Grid /></el-icon>
             </button>
           </Controls>
         </VueFlow>
@@ -1111,7 +1087,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   
-  .header-info {
+  .flow-header-info {
     display: flex;
     align-items: center;
   }
