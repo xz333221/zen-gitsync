@@ -15,6 +15,7 @@ import BaseNode from './nodes/BaseNode.vue'
 import CommandNode from './nodes/CommandNode.vue'
 import WaitNode from './nodes/WaitNode.vue'
 import VersionNode from './nodes/VersionNode.vue'
+import ConfirmNode from './nodes/ConfirmNode.vue'
 import StartNode from './nodes/StartNode.vue'
 import NodeContextMenu from './nodes/NodeContextMenu.vue'
 import NodeConfigPanel from './NodeConfigPanel.vue'
@@ -27,7 +28,7 @@ import '@vue-flow/controls/dist/style.css'
 // 定义节点数据类型
 export interface FlowNodeData {
   id: string
-  type: 'start' | 'command' | 'wait' | 'version'
+  type: 'start' | 'command' | 'wait' | 'version' | 'confirm'
   label: string
   config?: OrchestrationStep
   outputs?: Record<string, any>
@@ -115,7 +116,8 @@ const nodeTypes: NodeTypesObject = {
   start: StartNodeRenderer,
   command: createWrappedNode(CommandNode),
   wait: createWrappedNode(WaitNode),
-  version: createWrappedNode(VersionNode)
+  version: createWrappedNode(VersionNode),
+  confirm: createWrappedNode(ConfirmNode)
 } as unknown as NodeTypesObject
 
 const props = defineProps<{
@@ -243,8 +245,14 @@ function initializeFlow() {
 }
 
 // 添加节点
-function addNode(type: 'command' | 'wait' | 'version') {
+function addNode(type: 'command' | 'wait' | 'version' | 'confirm') {
   const id = generateNodeId(type)
+  const labelMap = {
+    command: '命令节点',
+    wait: '等待节点',
+    version: '版本管理',
+    confirm: '用户确认'
+  }
   const newNode: FlowNode = {
     id,
     type,
@@ -255,17 +263,19 @@ function addNode(type: 'command' | 'wait' | 'version') {
     data: {
       id,
       type,
-      label: type === 'command' ? '命令节点' : type === 'wait' ? '等待节点' : '版本管理',
+      label: labelMap[type],
       enabled: true,
-      config: undefined
+      config: type === 'confirm' ? { id, type: 'confirm' } : undefined
     }
   }
   
   nodes.value.push(newNode)
   
-  // 自动打开配置面板
-  selectedNode.value = newNode
-  showConfigPanel.value = true
+  // confirm 节点不需要配置，其他节点自动打开配置面板
+  if (type !== 'confirm') {
+    selectedNode.value = newNode
+    showConfigPanel.value = true
+  }
   
   ElMessage.success(`已添加${newNode.data.label}`)
 
@@ -810,6 +820,7 @@ onUnmounted(() => {
     title="可视化编排工作台"
     :close-on-click-modal="false"
     :append-to-body="true"
+    heightMode="fixed"
     custom-class="flow-orchestration-dialog"
     width="95vw"
   >
@@ -960,6 +971,12 @@ onUnmounted(() => {
             <div class="tool-label">版本管理</div>
             <div class="tool-desc">修改版本号或依赖</div>
           </div>
+          
+          <div class="tool-item" @click="addNode('confirm')">
+            <div class="tool-icon confirm">✋</div>
+            <div class="tool-label">用户确认</div>
+            <div class="tool-desc">等待用户确认后继续</div>
+          </div>
         </div>
       </div>
     </div>
@@ -988,27 +1005,28 @@ onUnmounted(() => {
 
 .flow-workspace-container {
   display: flex;
-  height: 75vh;
+  padding: var(--spacing-md);
   gap: var(--spacing-md);
   background: var(--bg-page);
+  height: 100%;
 }
 
 .left-sidebar,
 .right-sidebar {
   background: var(--bg-container);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   box-shadow: var(--shadow-md);
 }
 
 .left-sidebar {
-  width: 250px;
+  width: 200px;
   display: flex;
   flex-direction: column;
 }
 
 .right-sidebar {
-  width: 280px;
+  width: 160px;
   display: flex;
   flex-direction: column;
 }
@@ -1017,8 +1035,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-lg);
-  padding-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
   border-bottom: 2px solid var(--border-component);
   
   h3 {
@@ -1034,8 +1052,8 @@ onUnmounted(() => {
 }
 
 .orchestration-item {
-  padding: var(--spacing-md);
-  margin-bottom: var(--spacing-base);
+  padding: var(--spacing-sm) var(--spacing-base);
+  margin-bottom: var(--spacing-sm);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: var(--transition-all);
@@ -1112,14 +1130,14 @@ onUnmounted(() => {
 .node-toolbox {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
-  margin-bottom: 20px;
+  gap: var(--spacing-sm);
+  margin-bottom: 12px;
 }
 
 .tool-item {
-  padding: var(--spacing-lg);
-  border-radius: var(--radius-lg);
-  border: 2px solid var(--border-component);
+  padding: var(--spacing-sm) var(--spacing-base);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-component);
   cursor: pointer;
   transition: var(--transition-all);
   text-align: center;
@@ -1135,8 +1153,8 @@ onUnmounted(() => {
   }
   
   .tool-icon {
-    font-size: 32px;
-    margin-bottom: var(--spacing-base);
+    font-size: 20px;
+    margin-bottom: var(--spacing-sm);
   }
   
   .tool-label {

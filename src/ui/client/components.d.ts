@@ -16,6 +16,7 @@ declare module 'vue' {
     CommitButton: typeof import('./src/components/buttons/CommitButton.vue')['default']
     CommonDialog: typeof import('./src/components/CommonDialog.vue')['default']
     ConfigEditorButton: typeof import('./src/components/buttons/ConfigEditorButton.vue')['default']
+    ConfirmNode: typeof import('./src/components/flow/nodes/ConfirmNode.vue')['default']
     ConflictBlockViewer: typeof import('./src/components/ConflictBlockViewer.vue')['default']
     CreateTagButton: typeof import('./src/components/buttons/CreateTagButton.vue')['default']
     CustomCommandManager: typeof import('./src/components/CustomCommandManager.vue')['default']

@@ -24,7 +24,7 @@ export interface NodeInput {
 export interface OrchestrationStep {
   id: string
   nodeId?: string  // 流程图中的节点 ID（用于节点间引用）
-  type: 'command' | 'wait' | 'version'
+  type: 'command' | 'wait' | 'version' | 'confirm'
   enabled?: boolean  // 是否启用该步骤（默认 true），禁用的步骤不会执行
   useTerminal?: boolean  // 是否在新终端窗口中执行（仅对 command 类型有效）
   // 对于 command 类型

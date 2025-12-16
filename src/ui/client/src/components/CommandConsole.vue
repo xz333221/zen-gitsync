@@ -72,6 +72,19 @@ function stopAfterTerminal() {
   }
 }
 
+// 处理用户确认节点
+function continueUserConfirm() {
+  if (userConfirmResolve) {
+    userConfirmResolve(true);
+  }
+}
+
+function stopUserConfirm() {
+  if (userConfirmResolve) {
+    userConfirmResolve(false);
+  }
+}
+
 // 编排执行状态
 const orchestrationSteps = ref<OrchestrationStep[]>([]); // 当前执行的编排步骤列表
 const currentStepIndex = ref(-1); // 当前执行的步骤索引
@@ -80,6 +93,11 @@ const currentStepIndex = ref(-1); // 当前执行的步骤索引
 const waitingForTerminalConfirm = ref(false); // 是否正在等待终端命令确认
 const waitingStepName = ref(''); // 当前等待的步骤名称
 let terminalConfirmResolve: ((value: boolean) => void) | null = null; // Promise resolve 函数
+
+// 用户确认节点等待状态
+const waitingForUserConfirm = ref(false); // 是否正在等待用户确认节点
+const waitingConfirmMessage = ref(''); // 确认消息
+let userConfirmResolve: ((value: boolean) => void) | null = null; // Promise resolve 函数
 
 type ConsoleRecord = { 
   id: number; 
@@ -873,6 +891,45 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
         ElMessage.error(`${stepLabel} 失败: ${e?.message}`);
         shouldContinue = false;
       }
+    } else if (step.type === 'confirm') {
+      // 执行用户确认节点
+      stepLabel = '用户确认';
+      
+      ElMessage.info(`[${i + 1}/${steps.length}] ${stepLabel}`);
+      
+      const rec: ConsoleRecord = {
+        id: ++consoleIdCounter,
+        command: stepLabel,
+        success: true,
+        ts: new Date().toLocaleString(),
+        expanded: true,
+        stdout: '等待用户确认...',
+        stderr: '',
+      };
+      consoleHistory.value.unshift(rec);
+      
+      // 使用内联确认条（不遮罩页面）
+      waitingForUserConfirm.value = true;
+      waitingConfirmMessage.value = `执行到确认节点（第 ${i + 1}/${steps.length} 步），是否继续执行后续步骤？`;
+      
+      // 使用 Promise 等待用户确认
+      const userConfirmed = await new Promise<boolean>((resolve) => {
+        userConfirmResolve = resolve;
+      });
+      
+      waitingForUserConfirm.value = false;
+      waitingConfirmMessage.value = '';
+      userConfirmResolve = null;
+      
+      if (userConfirmed) {
+        rec.stdout = '用户已确认，继续执行';
+        ElMessage.success('已确认，继续执行');
+      } else {
+        rec.success = false;
+        rec.stdout = '用户取消执行';
+        ElMessage.warning('用户取消执行');
+        shouldContinue = false;
+      }
     }
     
     // 如果步骤执行失败，停止后续步骤
@@ -1650,6 +1707,29 @@ onUnmounted(() => {
               <el-button type="danger" plain @click="stopAfterTerminal">
                 <el-icon><Close /></el-icon>
                 停止执行
+              </el-button>
+            </div>
+          </div>
+          
+          <!-- 用户确认节点等待提示 -->
+          <div v-if="waitingForUserConfirm" class="terminal-waiting-panel user-confirm-panel">
+            <div class="waiting-content">
+              <el-icon class="waiting-icon" style="color: #ff9800;">✋</el-icon>
+              <div class="waiting-text">
+                <div class="waiting-title">用户确认节点</div>
+                <div class="waiting-desc">
+                  {{ waitingConfirmMessage }}
+                </div>
+              </div>
+            </div>
+            <div class="waiting-actions">
+              <el-button type="primary" @click="continueUserConfirm">
+                <el-icon><VideoPlay /></el-icon>
+                继续执行
+              </el-button>
+              <el-button type="danger" plain @click="stopUserConfirm">
+                <el-icon><Close /></el-icon>
+                取消执行
               </el-button>
             </div>
           </div>
