@@ -3,6 +3,7 @@ import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
+import { Plus } from '@element-plus/icons-vue'
 
 interface Props {
   from?: 'form' | 'drawer' | 'status'
@@ -106,6 +107,7 @@ async function handleClick() {
   <el-tooltip :content="tooltipText" placement="top">
     <el-button
       type="primary"
+      :icon="Plus"
       @click="handleClick"
       :loading="gitStore.isAddingFiles"
       :disabled="isDisabled"
