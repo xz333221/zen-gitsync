@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import { useGitStore } from '@stores/gitStore'
+import { computed } from 'vue'
 import { Delete } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import IconButton from '@components/IconButton.vue'
@@ -14,6 +15,11 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const gitStore = useGitStore()
+
+const shouldShowReset = computed(() => {
+  // 工作区无任何变更时不显示；如果本地有未推送提交（ahead）也允许显示
+  return gitStore.fileList.length > 0 || gitStore.branchAhead > 0
+})
 
 async function resetToRemote() {
   try {
@@ -41,6 +47,7 @@ async function resetToRemote() {
 </script>
 
 <template>
+  <template v-if="shouldShowReset">
   <IconButton
     v-if="props.variant === 'icon'"
     :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:重置到远程')"
@@ -68,4 +75,5 @@ async function resetToRemote() {
       {{ $t('@76872:重置到远程') }}
     </el-button>
   </el-tooltip>
+  </template>
 </template>
