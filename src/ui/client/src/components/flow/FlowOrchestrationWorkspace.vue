@@ -434,11 +434,15 @@ function clearFlow() {
 }
 
 // 优化布局 - 使用 dagre 自动排列节点
-function optimizeLayout() {
+async function optimizeLayout() {
   if (nodes.value.length <= 1) {
     ElMessage.info('节点太少，无需优化布局')
     return
   }
+
+  // 先让 VueFlow 完成节点尺寸测量（dimensions/handleBounds），否则只能使用预估宽高
+  await refreshNodeInternals()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   
   // 创建 dagre 图
   const dagreGraph = new dagre.graphlib.Graph()
@@ -468,6 +472,19 @@ function optimizeLayout() {
     } else if (node.type === 'version') {
       width = 250
       height = 120
+    }
+
+    // 优先使用实际渲染后的 DOM 尺寸（offsetWidth/offsetHeight 不受 zoom transform 影响）
+    const nodeEl = document.querySelector(
+      `.vue-flow__node[data-id="${node.id}"]`
+    ) as HTMLElement | null
+    if (nodeEl) {
+      const measuredW = nodeEl.offsetWidth
+      const measuredH = nodeEl.offsetHeight
+      if (measuredW > 0 && measuredH > 0) {
+        width = measuredW
+        height = measuredH
+      }
     }
     
     dagreGraph.setNode(node.id, { width, height })
