@@ -111,27 +111,48 @@ const handleClick = (event: MouseEvent) => {
   
   // 尺寸变体
   &--small {
-    width: 28px;
-    height: 28px;
-    font-size: 16px; // SVG 图标根据 font-size 显示大小
+    width: 24px;
+    height: 24px;
+    font-size: 14px; // SVG 图标根据 font-size 显示大小
     
     :deep(.svg-icon) {
-      width: 16px;
-      height: 16px;
-      font-size: 16px;
+      width: 14px;
+      height: 14px;
+      font-size: 14px;
     }
     
     :deep(.el-icon) {
-      font-size: 16px;
+      font-size: 14px;
     }
     
     .icon-image {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
     }
   }
   
   &--medium {
+    width: 32px;
+    height: 32px;
+    font-size: 18px; // SVG 图标根据 font-size 显示大小
+    
+    :deep(.svg-icon) {
+      width: 18px;
+      height: 18px;
+      font-size: 18px;
+    }
+    
+    :deep(.el-icon) {
+      font-size: 18px;
+    }
+    
+    .icon-image {
+      width: 18px;
+      height: 18px;
+    }
+  }
+  
+  &--large {
     width: 36px;
     height: 36px;
     font-size: 20px; // SVG 图标根据 font-size 显示大小
@@ -149,27 +170,6 @@ const handleClick = (event: MouseEvent) => {
     .icon-image {
       width: 20px;
       height: 20px;
-    }
-  }
-  
-  &--large {
-    width: 40px;
-    height: 40px;
-    font-size: 22px; // SVG 图标根据 font-size 显示大小
-    
-    :deep(.svg-icon) {
-      width: 22px;
-      height: 22px;
-      font-size: 22px;
-    }
-    
-    :deep(.el-icon) {
-      font-size: 22px;
-    }
-    
-    .icon-image {
-      width: 22px;
-      height: 22px;
     }
   }
   

@@ -23,7 +23,6 @@ import UnstageAllButton from '@/components/buttons/UnstageAllButton.vue'
 import ResetToRemoteButton from '@/components/buttons/ResetToRemoteButton.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
 import GitOperationsButton from '@components/buttons/GitOperationsButton.vue'
-import CommandHistory from '@views/components/CommandHistory.vue'
 
 // 定义props
 const props = defineProps({
@@ -783,7 +782,6 @@ defineExpose({
         </div>
         <div class="flex items-center">
           <GitOperationsButton variant="icon" />
-          <CommandHistory />
           <IconButton
             :tooltip="$t('@13D1C:刷新状态')"
             size="large"
