@@ -2,8 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
-import { Menu, RefreshRight, Download, Connection, Edit, Delete } from '@element-plus/icons-vue'
-import { ElMessageBox } from 'element-plus'
+import { Menu, RefreshRight, Download, Connection, Edit } from '@element-plus/icons-vue'
 import IconButton from '@components/IconButton.vue'
 import StageButton from '@/components/buttons/StageButton.vue'
 import UnstageAllButton from '@/components/buttons/UnstageAllButton.vue'
@@ -15,6 +14,7 @@ import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
 import CreateTagButton from '@/components/buttons/CreateTagButton.vue'
 import TagListButton from '@/components/buttons/TagListButton.vue'
+import ResetToRemoteButton from '@/components/buttons/ResetToRemoteButton.vue'
 
 // 定义props
 interface Props {
@@ -101,32 +101,6 @@ async function addAndCommit() {
     emit('clearFields')
   } catch (error) {
     console.error('暂存并提交失败:', error)
-  }
-}
-
-// 重置到远程
-async function resetToRemote() {
-  try {
-    await ElMessageBox.confirm(
-      `${$t('@76872:确定要重置当前分支 "')}${gitStore.currentBranch}${$t('@76872:" 到远程状态吗？这将丢失所有未推送的提交和本地更改。')}`,
-      $t('@76872:重置到远程分支'),
-      {
-        confirmButtonText: $t('@76872:确定'),
-        cancelButtonText: $t('@76872:取消'),
-        type: 'warning'
-      }
-    )
-
-    const result = await gitStore.resetToRemote(gitStore.currentBranch)
-    if (result) {
-      gitStore.fetchStatus()
-      gitStore.fetchLog()
-    }
-  } catch (error) {
-    // 用户取消操作
-    if (error !== 'cancel') {
-      console.error('重置到远程失败:', error)
-    }
   }
 }
 
@@ -294,18 +268,7 @@ defineExpose({
                   </el-button>
                 </el-tooltip>
 
-                <el-tooltip :content="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : 'git reset --hard origin/branch'" placement="top">
-                  <el-button 
-                    type="danger"
-                    :icon="Delete"
-                    @click="resetToRemote"
-                    :loading="gitStore.isResetting"
-                    :disabled="!gitStore.hasUpstream || gitStore.hasConflictedFiles"
-                    class="action-button danger-button"
-                  >
-                    {{ $t('@76872:重置到远程') }}
-                  </el-button>
-                </el-tooltip>
+                <ResetToRemoteButton variant="text" />
               </div>
             </div>
           

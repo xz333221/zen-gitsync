@@ -20,6 +20,7 @@ import StashListButton from '@/components/buttons/StashListButton.vue'
 import StashSelectedFilesButton from '@/components/buttons/StashSelectedFilesButton.vue'
 import MergeBranchButton from '@/components/buttons/MergeBranchButton.vue'
 import UnstageAllButton from '@/components/buttons/UnstageAllButton.vue'
+import ResetToRemoteButton from '@/components/buttons/ResetToRemoteButton.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
 import GitOperationsButton from '@components/buttons/GitOperationsButton.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
@@ -776,6 +777,9 @@ defineExpose({
           
           <!-- 储藏列表按钮 -->
           <StashListButton />
+          
+          <!-- 重置到远程按钮 -->
+          <ResetToRemoteButton v-if="!isSelectionMode" />
         </div>
         <div class="flex items-center">
           <GitOperationsButton variant="icon" />
