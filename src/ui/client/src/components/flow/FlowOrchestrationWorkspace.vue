@@ -84,6 +84,7 @@ function createWrappedNode(Inner: any) {
                 BaseNode,
                 {
                   id: props.id,
+                  nodeType: props.data?.type,
                   enabled: props.data?.enabled,
                   selected: props.data?.selected,
                   onDelete: (nodeId: string) => actions?.deleteNode(nodeId)
@@ -109,7 +110,20 @@ const StartNodeRenderer = defineComponent({
     data: { type: Object as PropType<FlowNodeData>, required: true }
   },
   setup(props) {
-    return () => h(StartNode, { data: props.data })
+    return () =>
+      h(
+        BaseNode,
+        {
+          id: props.id,
+          nodeType: 'start',
+          enabled: props.data?.enabled,
+          selected: props.data?.selected,
+          deletable: false
+        },
+        {
+          default: () => h(StartNode, { data: props.data })
+        }
+      )
   }
 })
 

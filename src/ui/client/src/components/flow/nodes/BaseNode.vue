@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { Close } from '@element-plus/icons-vue'
+import { Handle, Position } from '@vue-flow/core'
 
 withDefaults(defineProps<{
   id: string
+  nodeType?: 'start' | 'command' | 'wait' | 'version' | 'confirm'
   enabled?: boolean
   selected?: boolean
   deletable?: boolean
@@ -11,7 +13,8 @@ withDefaults(defineProps<{
   enabled: true,
   selected: false,
   deletable: true,
-  showDeleteOnSelected: false
+  showDeleteOnSelected: false,
+  nodeType: 'command'
 })
 
 const emit = defineEmits<{
@@ -22,8 +25,20 @@ const emit = defineEmits<{
 <template>
   <div 
     class="flow-node-wrapper" 
-    :class="{ 'disabled': !enabled, 'is-selected': selected, 'show-delete-on-selected': showDeleteOnSelected }"
+    :class="[
+      { 'disabled': !enabled, 'is-selected': selected, 'show-delete-on-selected': showDeleteOnSelected },
+      nodeType ? `node-type-${nodeType}` : ''
+    ]"
   >
+    <!-- 输入连接点（左侧） -->
+    <Handle
+      v-if="nodeType !== 'start'"
+      id="target"
+      type="target"
+      :position="Position.Left"
+      class="flow-node-handle handle-left"
+    />
+
     <button
       v-if="deletable !== false"
       class="flow-node-delete-btn"
@@ -38,6 +53,14 @@ const emit = defineEmits<{
     
     <!-- 禁用遮罩 -->
     <div v-if="!enabled" class="disabled-overlay">已禁用</div>
+
+    <!-- 输出连接点（右侧） -->
+    <Handle
+      id="source"
+      type="source"
+      :position="Position.Right"
+      class="flow-node-handle handle-right"
+    />
   </div>
 </template>
 
@@ -45,6 +68,58 @@ const emit = defineEmits<{
 .flow-node-wrapper {
   position: relative;
   display: inline-block;
+}
+
+// 连接点（Handle）通用样式：集中处理，避免每个节点重复定义
+.flow-node-handle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-container);
+  z-index: 10;
+}
+
+.handle-left {
+  left: -6px !important;
+}
+
+.handle-right {
+  right: -6px !important;
+}
+
+// 不同节点类型的连接点颜色
+.node-type-command {
+  .flow-node-handle {
+    background: var(--color-primary) !important;
+  }
+}
+
+.node-type-wait {
+  .flow-node-handle {
+    background: var(--color-warning) !important;
+  }
+}
+
+.node-type-version {
+  .flow-node-handle {
+    background: var(--color-success) !important;
+  }
+}
+
+.node-type-confirm {
+  .flow-node-handle {
+    background: #ff9800 !important;
+  }
+}
+
+.node-type-start {
+  .flow-node-handle {
+    background: var(--color-primary) !important;
+  }
+
+  .handle-right {
+    right: -4px !important;
+  }
 }
 
 .flow-node-delete-btn {

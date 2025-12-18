@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Handle, Position } from '@vue-flow/core'
 import type { FlowNodeData } from '../FlowOrchestrationWorkspace.vue'
 
 defineProps<{
@@ -11,14 +10,6 @@ defineProps<{
   <div class="start-node" :class="{ 'selected': data.selected }">
     <div class="flow-node-icon">🚀</div>
     <div class="node-label">开始</div>
-    
-    <!-- 输出连接点（右侧） -->
-    <Handle 
-      id="source"
-      type="source" 
-      :position="Position.Right" 
-      class="flow-node-handle handle-right"
-    />
   </div>
 </template>
 
@@ -58,10 +49,5 @@ defineProps<{
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-semibold);
   }
-}
-
-.handle-right {
-  right: -4px !important;
-  background: var(--color-primary) !important;
 }
 </style>

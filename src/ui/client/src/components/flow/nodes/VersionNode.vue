@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
 import type { FlowNodeData } from '../FlowOrchestrationWorkspace.vue'
 
 const props = defineProps<{
@@ -24,14 +23,6 @@ const versionInfo = computed(() => {
     class="version-node"
     :class="{ 'disabled': !data.enabled, 'selected': data.selected }"
   >
-    <!-- 输入连接点（左侧） -->
-    <Handle 
-      id="target"
-      type="target" 
-      :position="Position.Left" 
-      class="flow-node-handle handle-left"
-    />
-    
     <div class="node-header">
       <div class="flow-node-icon">📦</div>
       <div class="node-type">版本管理</div>
@@ -44,17 +35,6 @@ const versionInfo = computed(() => {
       </div>
       <div v-if="!data.config" class="node-warning">未配置</div>
     </div>
-    
-    <!-- 禁用遮罩 -->
-    <div v-if="!data.enabled" class="disabled-overlay">已禁用</div>
-    
-    <!-- 输出连接点（右侧） -->
-    <Handle 
-      id="source"
-      type="source" 
-      :position="Position.Right" 
-      class="flow-node-handle handle-right"
-    />
   </div>
 </template>
 
@@ -80,22 +60,6 @@ const versionInfo = computed(() => {
   &.disabled {
     opacity: 0.6;
     border-color: var(--border-component);
-    
-    .disabled-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.1);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: var(--font-size-sm);
-      color: var(--text-tertiary);
-      border-radius: var(--radius-md);
-      z-index: 5;
-    }
   }
 }
 
@@ -149,16 +113,4 @@ const versionInfo = computed(() => {
   }
 }
 
-.handle-left,
-.handle-right {
-  background: var(--color-success) !important;
-}
-
-.handle-left {
-  left: -6px !important;
-}
-
-.handle-right {
-  right: -6px !important;
-}
 </style>
