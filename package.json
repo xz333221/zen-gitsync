@@ -5,6 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
     "pull": "git pull",
     "start:server:no-open": "node server.js --no-open",
     "start:vue": "cd ./src/ui/client && npm run dev",
@@ -33,7 +34,6 @@
     "nrm:ls": "nrm ls",
     "change:nrm:npm": "nrm use npm",
     "change:nrm:lenovo-nexus": "nrm use lenovo-nexus",
-    "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
     "npm:ls:g": "npm ls -g",
     "npm:2fa:get": "npm profile get",
     "npm:2fa:disable": "npm profile disable-2fa"
