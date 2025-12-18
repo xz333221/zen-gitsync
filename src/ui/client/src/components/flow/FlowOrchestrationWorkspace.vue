@@ -84,6 +84,7 @@ function createWrappedNode(Inner: any) {
                 BaseNode,
                 {
                   id: props.id,
+                  nodeId: props.id,
                   nodeType: props.data?.type,
                   enabled: props.data?.enabled,
                   selected: props.data?.selected,
@@ -115,6 +116,7 @@ const StartNodeRenderer = defineComponent({
         BaseNode,
         {
           id: props.id,
+          nodeId: props.id,
           nodeType: 'start',
           enabled: props.data?.enabled,
           selected: props.data?.selected,
@@ -385,11 +387,12 @@ function getNodeLabel(step: OrchestrationStep): string {
 
 // 处理节点删除（从节点上的删除按钮触发）
 function handleNodeDelete(nodeId: string) {
+  console.log(`nodeId ==>`, nodeId)
   if (nodeId === 'start-node') {
     ElMessage.warning('不能删除起始节点')
     return
   }
-  
+  console.log(`nodes ==>`, nodes)
   // 删除节点
   nodes.value = nodes.value.filter((n: FlowNode) => n.id !== nodeId)
   

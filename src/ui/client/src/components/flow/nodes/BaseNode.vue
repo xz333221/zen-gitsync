@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Close } from '@element-plus/icons-vue'
+import { CircleCloseFilled } from '@element-plus/icons-vue'
 import { Handle, Position } from '@vue-flow/core'
 
 withDefaults(defineProps<{
   id: string
+  nodeId: string
   nodeType?: 'start' | 'command' | 'wait' | 'version' | 'confirm'
   enabled?: boolean
   selected?: boolean
@@ -39,14 +40,16 @@ const emit = defineEmits<{
       class="flow-node-handle handle-left"
     />
 
-    <button
+    <el-icon
       v-if="deletable !== false"
       class="flow-node-delete-btn"
-      @click.stop="emit('delete', id)"
+      @click.stop="emit('delete', nodeId)"
       title="删除节点"
+      role="button"
+      tabindex="0"
     >
-      <el-icon><Close /></el-icon>
-    </button>
+      <CircleCloseFilled />
+    </el-icon>
     
     <!-- 节点内容插槽 -->
     <slot></slot>
@@ -80,11 +83,11 @@ const emit = defineEmits<{
 }
 
 .handle-left {
-  left: -6px !important;
+  left: -4px !important;
 }
 
 .handle-right {
-  right: -6px !important;
+  right: -4px !important;
 }
 
 // 不同节点类型的连接点颜色
@@ -124,22 +127,17 @@ const emit = defineEmits<{
 
 .flow-node-delete-btn {
   position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 20px;
-    height: 20px;
-  border-radius: 50%;
-  background: #ff4d4f;
-  color: white;
-  border: 2px solid var(--bg-page);
+  top: -10px;
+  right: -10px;
+  color: #ff4d4f;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background-color: white;
+  border-radius: 50%;
   transition: var(--transition-all);
   z-index: 20;
   opacity: 0;
   pointer-events: none;
+  font-size: 24px;
 }
 
 .flow-node-wrapper:hover .flow-node-delete-btn,
