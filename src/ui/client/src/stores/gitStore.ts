@@ -852,6 +852,8 @@ export const useGitStore = defineStore('git', () => {
             message: $t('@C298B:文件已添加到暂存区'),
             type: 'success'
           })
+          // 刷新porcelain状态，确保fileList及时更新（避免一键提交流程中按钮状态不变）
+          await fetchStatusPorcelain()
           return true
         } else {
           ElMessage({
@@ -878,6 +880,8 @@ export const useGitStore = defineStore('git', () => {
             message,
             type: 'success'
           })
+          // 刷新porcelain状态，确保fileList及时更新
+          await fetchStatusPorcelain()
           return true
         } else {
           ElMessage({
@@ -918,6 +922,9 @@ export const useGitStore = defineStore('git', () => {
           message: $t('@C298B:所有文件已添加到暂存区'),
           type: 'success'
         })
+
+        // 刷新porcelain状态，确保fileList及时更新（避免一键提交流程中按钮状态不变）
+        await fetchStatusPorcelain()
 
         return true
       } else {

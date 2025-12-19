@@ -82,21 +82,16 @@ const tooltipText = computed(() => {
 async function handleClick() {
   emit('click')
   try {
-    let result
     const hasMatches = hasLockedFileMatches()
     
     if (hasMatches) {
       // 有锁定文件匹配，使用原有的逐个添加逻辑
-      result = await gitStore.addToStage()
+      await gitStore.addToStage()
     } else {
       // 没有锁定文件匹配，直接使用 git add .
-      result = await gitStore.addAllToStage()
+      await gitStore.addAllToStage()
     }
     
-    if (result) {
-      // 触发状态更新事件
-      gitStore.fetchStatus()
-    }
   } catch (error) {
     console.error('添加文件失败:', error)
   }
