@@ -1045,12 +1045,18 @@ export const useGitStore = defineStore('git', () => {
   }
   
   // 提交更改 (git commit)
-  async function commitChanges(message: string, noVerify = false) {
+  async function commitChanges(
+    message: string,
+    noVerify = false,
+    options: { autoRefresh?: boolean } = {}
+  ) {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
       ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
+
+    const { autoRefresh = true } = options
     
     try {
       isCommiting.value = true
@@ -1075,6 +1081,15 @@ export const useGitStore = defineStore('git', () => {
 
         // 在一键操作中，状态刷新会在最后统一进行，避免重复调用
         // 如果是单独的提交操作，会在CommitForm.vue中单独刷新状态
+
+        if (autoRefresh) {
+          // 1) 立刻刷新porcelain状态，保证fileList/未暂存数量等UI正确
+          await fetchStatusPorcelain()
+          // 2) 刷新提交历史
+          await fetchLog(false)
+          // 3) 更新分支ahead/behind（不阻塞返回）
+          void getBranchStatus(true)
+        }
 
         return true
       } else {

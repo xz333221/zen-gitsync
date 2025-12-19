@@ -89,14 +89,6 @@ async function handleClick() {
   try {
     const result = await gitStore.commitChanges(props.finalCommitMessage, props.skipHooks)
     
-    if (result) {
-      // 触发状态更新事件
-      gitStore.fetchStatus()
-      gitStore.fetchLog()
-      // 手动更新分支状态（不需要等待，因为只是提交操作）
-      gitStore.getBranchStatus(true)
-    }
-    
     emit('afterCommit', result)
   } catch (error) {
     console.error('提交失败:', error)
