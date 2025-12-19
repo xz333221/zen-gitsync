@@ -1082,6 +1082,8 @@ export const useGitStore = defineStore('git', () => {
         // 在一键操作中，状态刷新会在最后统一进行，避免重复调用
         // 如果是单独的提交操作，会在CommitForm.vue中单独刷新状态
 
+        console.log(`autoRefresh ==>`, autoRefresh)
+
         if (autoRefresh) {
           // 1) 立刻刷新porcelain状态，保证fileList/未暂存数量等UI正确
           await fetchStatusPorcelain()
