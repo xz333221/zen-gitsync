@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
+    "npm:login": "npm login --registry https://registry.npmjs.org/",
     "pull": "git pull",
     "start:server:no-open": "node server.js --no-open",
     "start:vue": "cd ./src/ui/client && npm run dev",
