@@ -1050,6 +1050,7 @@ export const useGitStore = defineStore('git', () => {
     noVerify = false,
     options: { autoRefresh?: boolean } = {}
   ) {
+    console.log(`commitChanges`)
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
       ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
@@ -1073,6 +1074,7 @@ export const useGitStore = defineStore('git', () => {
       })
       
       const result = await response.json()
+      console.log(`result ==>`, result)
       if (result.success) {
         ElMessage({
           message: $t('@C298B:提交成功'),
