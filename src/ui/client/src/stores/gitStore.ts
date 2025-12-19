@@ -1050,7 +1050,6 @@ export const useGitStore = defineStore('git', () => {
     noVerify = false,
     options: { autoRefresh?: boolean } = {}
   ) {
-    console.log(`commitChanges`)
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
       ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
@@ -1074,17 +1073,11 @@ export const useGitStore = defineStore('git', () => {
       })
       
       const result = await response.json()
-      console.log(`result ==>`, result)
       if (result.success) {
         ElMessage({
           message: $t('@C298B:提交成功'),
           type: 'success'
         })
-
-        // 在一键操作中，状态刷新会在最后统一进行，避免重复调用
-        // 如果是单独的提交操作，会在CommitForm.vue中单独刷新状态
-
-        console.log(`autoRefresh ==>`, autoRefresh)
 
         if (autoRefresh) {
           // 1) 立刻刷新porcelain状态，保证fileList/未暂存数量等UI正确
