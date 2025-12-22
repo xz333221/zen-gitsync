@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, watch, onUnmounted, nextTick, computed } from 'vue';
 import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor, Document, Timer, Ticket, Delete, RefreshRight, Folder } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
@@ -115,6 +115,16 @@ type ConsoleRecord = {
   stdinInput?: string; // 每个命令独立的 stdin 输入
 };
 
+type TerminalSession = {
+  id: number;
+  command: string;
+  workingDirectory?: string;
+  pid?: number | null;
+  createdAt?: number;
+  lastStartedAt?: number;
+  alive?: boolean;
+};
+
 // 控制整个控制台展开/收起（从localStorage读取，默认展开）
 const isConsoleExpanded = ref(localStorage.getItem('isConsoleExpanded') !== 'false');
 
@@ -156,6 +166,187 @@ const isFullscreen = ref(false);
 // 控制是否使用终端执行（从localStorage读取，默认关闭以使用流式输出）
 const useTerminal = ref(localStorage.getItem('useTerminal') === 'true');
 
+const terminalSessions = ref<TerminalSession[]>([]);
+const terminalSessionsLoading = ref(false);
+const savedShowTerminalSessions = localStorage.getItem('showTerminalSessions');
+const showTerminalSessions = ref(savedShowTerminalSessions == null ? true : savedShowTerminalSessions === 'true');
+const terminalSessionsCount = computed(() => terminalSessions.value.length);
+const terminalSessionsPollTimer = ref<number | null>(null);
+
+const COMMAND_CONSOLE_SPLIT_KEY = 'zen-gitsync-commandconsole-ratio';
+const clampPercent = (v: number) => Math.min(85, Math.max(15, v));
+const savedSplit = localStorage.getItem(COMMAND_CONSOLE_SPLIT_KEY);
+const initialSplit = (() => {
+  const v = savedSplit ? parseFloat(savedSplit) : 25;
+  return isNaN(v) ? 25 : clampPercent(v);
+})();
+const splitPercent = ref<number>(initialSplit);
+
+const splitterRef = ref<any>(null);
+const getSplitterWidth = () => {
+  const el = splitterRef.value?.$el ?? splitterRef.value;
+  if (el && el.clientWidth) return el.clientWidth as number;
+  try {
+    return el?.getBoundingClientRect?.().width ?? 0;
+  } catch {
+    return 0;
+  }
+};
+
+const persistSplit = (v: number) => {
+  try {
+    localStorage.setItem(COMMAND_CONSOLE_SPLIT_KEY, String(clampPercent(v)));
+  } catch {}
+};
+
+const updateSplitFromDom = () => {
+  const root = splitterRef.value?.$el ?? splitterRef.value;
+  if (!root) return;
+  const panels = root.querySelectorAll?.('.el-splitter__panel');
+  const width = getSplitterWidth();
+  if (!panels || panels.length < 1 || width <= 0) return;
+  const leftPx = (panels[0] as HTMLElement)?.getBoundingClientRect?.().width ?? 0;
+  if (leftPx > 0) {
+    const percent = clampPercent((leftPx / width) * 100);
+    if (percent !== splitPercent.value) {
+      splitPercent.value = percent;
+      persistSplit(percent);
+    }
+  }
+};
+
+const panelSize = computed<string>({
+  get() {
+    return `${clampPercent(splitPercent.value)}%`;
+  },
+  set(val: string | number) {
+    let percent = NaN;
+    if (typeof val === 'number') {
+      const width = getSplitterWidth();
+      if (width > 0 && !isNaN(val)) {
+        percent = (val / width) * 100;
+      }
+    } else if (typeof val === 'string') {
+      if (val.endsWith('%')) {
+        percent = parseFloat(val);
+      } else if (val.endsWith('px')) {
+        const px = parseFloat(val);
+        const width = getSplitterWidth();
+        if (width > 0 && !isNaN(px)) {
+          percent = (px / width) * 100;
+        }
+      }
+    }
+    if (!isNaN(percent)) {
+      splitPercent.value = clampPercent(percent);
+      persistSplit(splitPercent.value);
+    }
+  }
+});
+
+async function loadTerminalSessionsStatus(cleanup: boolean = true) {
+  try {
+    const resp = await fetch(`/api/terminal-sessions/status?cleanup=${cleanup ? 'true' : 'false'}`);
+    const result = await resp.json();
+    if (result?.success) {
+      terminalSessions.value = Array.isArray(result.sessions) ? result.sessions : [];
+    }
+  } catch {
+  }
+}
+
+function startTerminalSessionsPolling() {
+  if (terminalSessionsPollTimer.value) return;
+  terminalSessionsPollTimer.value = window.setInterval(() => {
+    if (showTerminalSessions.value) {
+      loadTerminalSessionsStatus(true);
+    }
+  }, 2000);
+}
+
+function stopTerminalSessionsPolling() {
+  if (terminalSessionsPollTimer.value) {
+    window.clearInterval(terminalSessionsPollTimer.value);
+    terminalSessionsPollTimer.value = null;
+  }
+}
+
+function upsertTerminalSession(session: TerminalSession) {
+  if (!session || typeof session.id !== 'number') return;
+  const idx = terminalSessions.value.findIndex(s => s.id === session.id);
+  if (idx !== -1) {
+    terminalSessions.value[idx] = session;
+  } else {
+    terminalSessions.value.unshift(session);
+  }
+  terminalSessions.value = [...terminalSessions.value];
+}
+
+async function loadTerminalSessions() {
+  try {
+    terminalSessionsLoading.value = true;
+    const resp = await fetch('/api/terminal-sessions');
+    const result = await resp.json();
+    if (result?.success) {
+      terminalSessions.value = Array.isArray(result.sessions) ? result.sessions : [];
+    } else {
+      ElMessage.error(result?.error || '获取终端会话失败');
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message || '获取终端会话失败');
+  } finally {
+    terminalSessionsLoading.value = false;
+  }
+}
+
+async function restartTerminalSession(session: TerminalSession) {
+  try {
+    terminalSessionsLoading.value = true;
+    const resp = await fetch(`/api/terminal-sessions/${session.id}/restart`, { method: 'POST' });
+    const result = await resp.json();
+    if (result?.success) {
+      ElMessage.success('已重新启动终端');
+      await loadTerminalSessions();
+    } else {
+      ElMessage.error(result?.error || '重新启动失败');
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message || '重新启动失败');
+  } finally {
+    terminalSessionsLoading.value = false;
+  }
+}
+
+async function deleteTerminalSession(session: TerminalSession) {
+  try {
+    await ElMessageBox.confirm(
+      '确定要删除该终端会话记录吗？如果该终端仍在运行，将尝试结束进程。',
+      '删除终端会话',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    );
+
+    terminalSessionsLoading.value = true;
+    const resp = await fetch(`/api/terminal-sessions/${session.id}`, { method: 'DELETE' });
+    const result = await resp.json();
+    if (result?.success) {
+      ElMessage.success('已删除');
+      await loadTerminalSessions();
+    } else {
+      ElMessage.error(result?.error || '删除失败');
+    }
+  } catch (e: any) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.message || '删除失败');
+    }
+  } finally {
+    terminalSessionsLoading.value = false;
+  }
+}
+
 // 控制自定义命令管理弹窗
 const commandManagerVisible = ref(false);
 
@@ -181,11 +372,16 @@ async function runConsoleCommandWithCmd(cmd: string, directory: string = current
       const resp = await fetch('/api/exec-in-terminal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: cmd })
+        body: JSON.stringify({ command: cmd, workingDirectory: directory })
       });
       const result = await resp.json();
       if (result?.success) {
         ElMessage.success('已在新终端中执行命令');
+        if (result?.session) {
+          upsertTerminalSession(result.session);
+        } else {
+          await loadTerminalSessions();
+        }
       } else {
         ElMessage.error(result?.error || '执行失败');
       }
@@ -619,6 +815,11 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
           const result = await resp.json();
           if (result?.success) {
             ElMessage.success(`${stepLabel} 已在新终端中执行`);
+            if (result?.session) {
+              upsertTerminalSession(result.session);
+            } else {
+              await loadTerminalSessions();
+            }
             
             // 等待用户确认命令执行完成（如果不是最后一个步骤）
             if (i < steps.length - 1 && shouldContinue) {
@@ -1023,6 +1224,11 @@ async function executeCustomCommand(command: CustomCommand) {
       const result = await resp.json();
       if (result?.success) {
         ElMessage.success('已在新终端中执行命令');
+        if (result?.session) {
+          upsertTerminalSession(result.session);
+        } else {
+          await loadTerminalSessions();
+        }
         // 关闭弹窗
         commandManagerVisible.value = false;
       } else {
@@ -1465,6 +1671,20 @@ watch(useTerminal, (newValue) => {
   localStorage.setItem('useTerminal', String(newValue));
 });
 
+watch(showTerminalSessions, (newValue) => {
+  localStorage.setItem('showTerminalSessions', String(newValue));
+  if (newValue) {
+    loadTerminalSessionsStatus(true);
+    startTerminalSessionsPolling();
+  } else {
+    stopTerminalSessionsPolling();
+  }
+});
+
+watch(splitPercent, (v) => {
+  persistSplit(v);
+});
+
 // 监听isConsoleExpanded变化并保存到localStorage
 watch(isConsoleExpanded, (newValue) => {
   localStorage.setItem('isConsoleExpanded', String(newValue));
@@ -1505,10 +1725,16 @@ onMounted(async () => {
   
   // 初始化Socket连接
   initSocket();
+
+  await loadTerminalSessions();
+  if (showTerminalSessions.value) {
+    startTerminalSessionsPolling();
+  }
 });
 
 // 组件卸载时断开Socket连接
 onUnmounted(() => {
+  stopTerminalSessionsPolling();
   if (socket.value) {
     socket.value.disconnect();
     socket.value = null;
@@ -1630,208 +1856,285 @@ onUnmounted(() => {
     <!-- 内容区域 -->
     <transition name="console-content-slide">
       <div v-show="isConsoleExpanded" class="console-content">
-        <!-- 编排步骤列表 -->
-        <div v-if="orchestrationSteps.length > 0" class="orchestration-steps-panel">
-          <div class="steps-header">
-            <span class="steps-title">执行步骤 ({{ currentStepIndex + 1 }}/{{ orchestrationSteps.length }})</span>
-          </div>
-          <div class="steps-list">
-            <div
-              v-for="(step, index) in orchestrationSteps"
-              :key="index"
-              class="step-item"
-              :class="{
-                'step-current': index === currentStepIndex,
-                'step-completed': index < currentStepIndex,
-                'step-pending': index > currentStepIndex,
-                'step-disabled': step.enabled === false,
-                [`step-type-${step.type}`]: true
-              }"
-            >
-              <div class="step-indicator">
-                <el-icon v-if="index < currentStepIndex" class="step-icon-check">
-                  <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                    <path fill="currentColor" d="M406.656 706.944L195.84 496.256a32 32 0 1 0-45.248 45.248l256 256 512-512a32 32 0 0 0-45.248-45.248L406.592 706.944z"/>
-                  </svg>
-                </el-icon>
-                <el-icon v-else-if="step.type === 'wait'" class="step-type-icon">
-                  <Timer />
-                </el-icon>
-                <el-icon v-else-if="step.type === 'version'" class="step-type-icon">
-                  <Ticket />
-                </el-icon>
-                <el-icon v-else-if="step.type === 'command'" class="step-type-icon">
-                  <Document />
-                </el-icon>
-                <span v-else class="step-number">{{ index + 1 }}</span>
-              </div>
-              <div class="step-content">
-                <div class="step-header">
-                  <span class="step-type-tag" :class="`type-${step.type}`">
-                    {{ step.type === 'command' ? '命令' : 
-                       step.type === 'wait' ? '等待' : 
-                       step.type === 'version' ? '版本' : step.type }}
-                  </span>
-                  <span v-if="step.enabled === false" class="step-disabled-tag">已禁用</span>
+        <el-splitter
+          ref="splitterRef"
+          layout="horizontal"
+          style="height: 100%"
+          @resize="updateSplitFromDom"
+          @resize-end="updateSplitFromDom"
+        >
+          <el-splitter-panel v-model:size="panelSize" :min="'15%'" :max="'85%'">
+            <div class="termial-session">
+              <div v-if="showTerminalSessions" class="terminal-sessions-panel">
+                <div class="terminal-sessions-header">
+                  <div class="terminal-sessions-title">
+                    <span>终端会话</span>
+                    <span class="terminal-sessions-count">({{ terminalSessionsCount }})</span>
+                  </div>
+                  <div class="terminal-sessions-actions">
+                    <el-tooltip content="刷新" placement="bottom">
+                      <el-button text size="small" @click="loadTerminalSessions" :disabled="terminalSessionsLoading">
+                        <el-icon><RefreshRight /></el-icon>
+                      </el-button>
+                    </el-tooltip>
+                    <el-tooltip content="隐藏" placement="bottom">
+                      <el-button text size="small" @click="showTerminalSessions = false">
+                        <el-icon><ArrowDown /></el-icon>
+                      </el-button>
+                    </el-tooltip>
+                  </div>
                 </div>
-                <span class="step-name">
-                  {{ step.type === 'command' ? step.commandName : 
-                     step.type === 'wait' ? `${step.waitSeconds} 秒` : 
-                     step.type === 'version' ? (
-                       step.versionTarget === 'dependency' ? 
-                       `${step.dependencyName}` : 
-                       `${step.versionBump || 'patch'}`
-                     ) : step.type }}
-                </span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- 终端命令等待确认提示 -->
-          <div v-if="waitingForTerminalConfirm" class="terminal-waiting-panel">
-            <div class="waiting-content">
-              <el-icon class="waiting-icon"><Monitor /></el-icon>
-              <div class="waiting-text">
-                <div class="waiting-title">等待终端命令完成</div>
-                <div class="waiting-desc">
-                  终端命令 "<strong>{{ waitingStepName }}</strong>" 已在新窗口中打开，请在终端中查看命令执行结果
-                </div>
-              </div>
-            </div>
-            <div class="waiting-actions">
-              <el-button type="primary" @click="continueAfterTerminal">
-                <el-icon><VideoPlay /></el-icon>
-                继续下一步
-              </el-button>
-              <el-button type="danger" plain @click="stopAfterTerminal">
-                <el-icon><Close /></el-icon>
-                停止执行
-              </el-button>
-            </div>
-          </div>
-          
-          <!-- 用户确认节点等待提示 -->
-          <div v-if="waitingForUserConfirm" class="terminal-waiting-panel user-confirm-panel">
-            <div class="waiting-content">
-              <el-icon class="waiting-icon" style="color: #ff9800;">✋</el-icon>
-              <div class="waiting-text">
-                <div class="waiting-title">用户确认节点</div>
-                <div class="waiting-desc">
-                  {{ waitingConfirmMessage }}
-                </div>
-              </div>
-            </div>
-            <div class="waiting-actions">
-              <el-button type="primary" @click="continueUserConfirm">
-                <el-icon><VideoPlay /></el-icon>
-                继续执行
-              </el-button>
-              <el-button type="danger" plain @click="stopUserConfirm">
-                <el-icon><Close /></el-icon>
-                取消执行
-              </el-button>
-            </div>
-          </div>
-        </div>
-        
-        <!-- 输入区 -->
-        <div class="console-input-row">
-      <span class="prompt" :title="$t('@CF05E:当前路径')">{{ currentDirectory }} &gt;</span>
-      <el-input
-        v-model="consoleInput"
-        class="console-input"
-        :placeholder="useTerminal ? '在新终端执行' : '交互式模式: 支持需要输入的命令'"
-        @keydown.enter.prevent="useTerminal ? runConsoleCommand() : runInteractiveCommand()"
-        :disabled="consoleRunning"
-        clearable
-      />
-      <IconButton
-        :disabled="consoleRunning"
-        hover-color="var(--color-primary)"
-        @click="useTerminal ? runConsoleCommand() : runInteractiveCommand()"
-      >
-        <el-icon v-if="consoleRunning" class="is-loading"><Loading /></el-icon>
-        <el-icon v-else><VideoPlay /></el-icon>
-      </IconButton>
-    </div>
 
-        <!-- 命令历史输出 -->
-        <div class="console-output" v-if="consoleHistory.length">
-          <div v-for="rec in consoleHistory" :key="rec.id" class="console-record">
-            <div class="cmd-header cursor-pointer" @click="toggleCommandOutput(rec)">
-              <div class="cmd-line">
-                <span class="cmd-prefix">&gt;</span>
-                <span class="cmd-text">{{ rec.command }}</span>
-                <span v-if="rec.directory" class="cmd-dir" :title="rec.directory">
-                  <el-icon class="cmd-dir-icon"><Folder /></el-icon>
-                  {{ rec.directory }}
-                </span>
-                <el-icon v-if="rec.running" class="running-icon is-loading" color="var(--color-primary)">
-                  <Loading />
-                </el-icon>
-                <span class="ts">{{ rec.ts }}</span>
+                <div v-loading="terminalSessionsLoading" class="terminal-sessions-body">
+                  <div v-if="terminalSessions.length === 0" class="terminal-sessions-empty">
+                    暂无终端会话
+                  </div>
+
+                  <div v-else class="terminal-sessions-list">
+                    <div v-for="session in terminalSessions" :key="session.id" class="terminal-session-item">
+                      <div class="terminal-session-main">
+                        <div class="terminal-session-command" :title="session.command">{{ session.command }}<span class="terminal-session-pid"> PID: {{ session.pid ?? '-' }}</span></div>
+                        <div class="terminal-session-meta">
+                          <span v-if="session.workingDirectory" class="terminal-session-dir" :title="session.workingDirectory">
+                            <el-icon class="cmd-dir-icon"><Folder /></el-icon>
+                            {{ session.workingDirectory }}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="terminal-session-actions">
+                        <el-tooltip content="重新启动" placement="top">
+                          <el-button text size="small" @click="restartTerminalSession(session)">
+                            <el-icon><RefreshRight /></el-icon>
+                          </el-button>
+                        </el-tooltip>
+                        <el-tooltip content="删除" placement="top">
+                          <el-button text size="small" type="danger" @click="deleteTerminalSession(session)">
+                            <el-icon><Delete /></el-icon>
+                          </el-button>
+                        </el-tooltip>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="cmd-actions">
-                <el-tooltip content="重新执行" placement="top">
-                  <el-button
-                    text
-                    size="small"
-                    @click.stop="rerunConsoleRecord(rec)"
-                    class="rerun-btn"
-                  >
-                    <el-icon>
-                      <RefreshRight />
-                    </el-icon>
-                  </el-button>
-                </el-tooltip>
-                <el-tooltip v-if="rec.running" content="停止命令" placement="top">
-                  <el-button
-                    text
-                    size="small"
-                    @click.stop="rec.isInteractive ? stopInteractiveCommand(rec) : stopCommand(rec)"
-                    class="stop-btn"
-                    type="danger"
-                  >
-                    <el-icon>
-                      <Close />
-                    </el-icon>
-                  </el-button>
-                </el-tooltip>
-                <el-button
-                  text
-                  size="small"
-                  @click.stop="toggleCommandOutput(rec)"
-                  :disabled="!rec.stdout && !rec.stderr"
-                  class="toggle-output-btn"
-                >
-                  <el-icon :class="{ 'rotate-icon': !rec.expanded }">
-                    <ArrowDown />
-                  </el-icon>
+              <div v-else class="terminal-sessions-collapsed">
+                <el-button text size="small" @click="showTerminalSessions = true">
+                  显示终端会话 ({{ terminalSessionsCount }})
                 </el-button>
               </div>
             </div>
-            <transition name="output-slide">
-              <div v-if="rec.expanded && (rec.stdout || rec.stderr)" class="output-content">
-                <pre v-if="rec.stdout" class="stdout" v-html="rec.stdout"></pre>
-                <pre v-if="rec.stderr" class="stderr" v-html="rec.stderr"></pre>
+          </el-splitter-panel>
+          <el-splitter-panel :min="'15%'" :max="'85%'">
+            <div class="console-content-main">
+          <!-- 编排步骤列表 -->
+          <div v-if="orchestrationSteps.length > 0" class="orchestration-steps-panel">
+            <div class="steps-header">
+              <span class="steps-title">执行步骤 ({{ currentStepIndex + 1 }}/{{ orchestrationSteps.length }})</span>
+            </div>
+            <div class="steps-list">
+              <div
+                v-for="(step, index) in orchestrationSteps"
+                :key="index"
+                class="step-item"
+                :class="{
+                  'step-current': index === currentStepIndex,
+                  'step-completed': index < currentStepIndex,
+                  'step-pending': index > currentStepIndex,
+                  'step-disabled': step.enabled === false,
+                  [`step-type-${step.type}`]: true
+                }"
+              >
+                <div class="step-indicator">
+                  <el-icon v-if="index < currentStepIndex" class="step-icon-check">
+                    <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                      <path fill="currentColor" d="M406.656 706.944L195.84 496.256a32 32 0 1 0-45.248 45.248l256 256 512-512a32 32 0 0 0-45.248-45.248L406.592 706.944z"/>
+                    </svg>
+                  </el-icon>
+                  <el-icon v-else-if="step.type === 'wait'" class="step-type-icon">
+                    <Timer />
+                  </el-icon>
+                  <el-icon v-else-if="step.type === 'version'" class="step-type-icon">
+                    <Ticket />
+                  </el-icon>
+                  <el-icon v-else-if="step.type === 'command'" class="step-type-icon">
+                    <Document />
+                  </el-icon>
+                  <span v-else class="step-number">{{ index + 1 }}</span>
+                </div>
+                <div class="step-content">
+                  <div class="step-header">
+                    <span class="step-type-tag" :class="`type-${step.type}`">
+                      {{ step.type === 'command' ? '命令' : 
+                         step.type === 'wait' ? '等待' : 
+                         step.type === 'version' ? '版本' : step.type }}
+                    </span>
+                    <span v-if="step.useTerminal" class="step-terminal-tag" title="终端执行">
+                      <el-icon class="step-terminal-icon"><Monitor /></el-icon>
+                      终端
+                    </span>
+                    <span v-if="step.enabled === false" class="step-disabled-tag">已禁用</span>
+                  </div>
+                  <span class="step-name">
+                    {{ step.type === 'command' ? step.commandName : 
+                       step.type === 'wait' ? `${step.waitSeconds} 秒` : 
+                       step.type === 'version' ? (
+                         step.versionTarget === 'dependency' ? 
+                         `${step.dependencyName}` : 
+                         `${step.versionBump || 'patch'}`
+                       ) : step.type }}
+                  </span>
+                </div>
               </div>
-            </transition>
+            </div>
             
-            <!-- 每个交互式命令独立的 stdin 输入框 -->
-            <div class="stdin-input-row" v-if="rec.isInteractive && rec.running">
-              <el-icon class="stdin-icon"><Position /></el-icon>
-              <el-input
-                v-model="rec.stdinInput"
-                class="stdin-input"
-                placeholder="输入响应内容（如密码、确认等），按回车发送"
-                @keydown.enter.prevent="sendStdinInput(rec)"
-                clearable
-                size="small"
-              />
-              <el-button type="success" @click="sendStdinInput(rec)" size="small">发送</el-button>
+            <!-- 终端命令等待确认提示 -->
+            <div v-if="waitingForTerminalConfirm" class="terminal-waiting-panel">
+              <div class="waiting-content">
+                <el-icon class="waiting-icon"><Monitor /></el-icon>
+                <div class="waiting-text">
+                  <div class="waiting-title">等待终端命令完成</div>
+                  <div class="waiting-desc">
+                    终端命令 "<strong>{{ waitingStepName }}</strong>" 已在新窗口中打开，请在终端中查看命令执行结果
+                  </div>
+                </div>
+              </div>
+              <div class="waiting-actions">
+                <el-button type="primary" @click="continueAfterTerminal">
+                  <el-icon><VideoPlay /></el-icon>
+                  继续下一步
+                </el-button>
+                <el-button type="danger" plain @click="stopAfterTerminal">
+                  <el-icon><Close /></el-icon>
+                  停止执行
+                </el-button>
+              </div>
+            </div>
+            
+            <!-- 用户确认节点等待提示 -->
+            <div v-if="waitingForUserConfirm" class="terminal-waiting-panel user-confirm-panel">
+              <div class="waiting-content">
+                <el-icon class="waiting-icon" style="color: #ff9800;">✋</el-icon>
+                <div class="waiting-text">
+                  <div class="waiting-title">用户确认节点</div>
+                  <div class="waiting-desc">
+                    {{ waitingConfirmMessage }}
+                  </div>
+                </div>
+              </div>
+              <div class="waiting-actions">
+                <el-button type="primary" @click="continueUserConfirm">
+                  <el-icon><VideoPlay /></el-icon>
+                  继续执行
+                </el-button>
+                <el-button type="danger" plain @click="stopUserConfirm">
+                  <el-icon><Close /></el-icon>
+                  取消执行
+                </el-button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 输入区 -->
+          <div class="console-input-row">
+            <span class="prompt" :title="$t('@CF05E:当前路径')">{{ currentDirectory }} &gt;</span>
+            <el-input
+              v-model="consoleInput"
+              class="console-input"
+              :placeholder="useTerminal ? '在新终端执行' : '交互式模式: 支持需要输入的命令'"
+              @keydown.enter.prevent="useTerminal ? runConsoleCommand() : runInteractiveCommand()"
+              :disabled="consoleRunning"
+              clearable
+            />
+            <IconButton
+              :disabled="consoleRunning"
+              hover-color="var(--color-primary)"
+              @click="useTerminal ? runConsoleCommand() : runInteractiveCommand()"
+            >
+              <el-icon v-if="consoleRunning" class="is-loading"><Loading /></el-icon>
+              <el-icon v-else><VideoPlay /></el-icon>
+            </IconButton>
+          </div>
+  
+          <!-- 命令历史输出 -->
+          <div class="console-output" v-if="consoleHistory.length">
+            <div v-for="rec in consoleHistory" :key="rec.id" class="console-record">
+              <div class="cmd-header cursor-pointer" @click="toggleCommandOutput(rec)">
+                <div class="cmd-line">
+                  <span class="cmd-prefix">&gt;</span>
+                  <span class="cmd-text">{{ rec.command }}</span>
+                  <span v-if="rec.directory" class="cmd-dir" :title="rec.directory">
+                    <el-icon class="cmd-dir-icon"><Folder /></el-icon>
+                    {{ rec.directory }}
+                  </span>
+                  <el-icon v-if="rec.running" class="running-icon is-loading" color="var(--color-primary)">
+                    <Loading />
+                  </el-icon>
+                  <span class="ts">{{ rec.ts }}</span>
+                </div>
+                <div class="cmd-actions">
+                  <el-tooltip content="重新执行" placement="top">
+                    <el-button
+                      text
+                      size="small"
+                      @click.stop="rerunConsoleRecord(rec)"
+                      class="rerun-btn"
+                    >
+                      <el-icon>
+                        <RefreshRight />
+                      </el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip v-if="rec.running" content="停止命令" placement="top">
+                    <el-button
+                      text
+                      size="small"
+                      @click.stop="rec.isInteractive ? stopInteractiveCommand(rec) : stopCommand(rec)"
+                      class="stop-btn"
+                      type="danger"
+                    >
+                      <el-icon>
+                        <Close />
+                      </el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-button
+                    text
+                    size="small"
+                    @click.stop="toggleCommandOutput(rec)"
+                    :disabled="!rec.stdout && !rec.stderr"
+                    class="toggle-output-btn"
+                  >
+                    <el-icon :class="{ 'rotate-icon': !rec.expanded }">
+                      <ArrowDown />
+                    </el-icon>
+                  </el-button>
+                </div>
+              </div>
+              <transition name="output-slide">
+                <div v-if="rec.expanded && (rec.stdout || rec.stderr)" class="output-content">
+                  <pre v-if="rec.stdout" class="stdout" v-html="rec.stdout"></pre>
+                  <pre v-if="rec.stderr" class="stderr" v-html="rec.stderr"></pre>
+                </div>
+              </transition>
+              
+              <!-- 每个交互式命令独立的 stdin 输入框 -->
+              <div class="stdin-input-row" v-if="rec.isInteractive && rec.running">
+                <el-icon class="stdin-icon"><Position /></el-icon>
+                <el-input
+                  v-model="rec.stdinInput"
+                  class="stdin-input"
+                  placeholder="输入响应内容（如密码、确认等），按回车发送"
+                  @keydown.enter.prevent="sendStdinInput(rec)"
+                  clearable
+                  size="small"
+                />
+                <el-button type="success" @click="sendStdinInput(rec)" size="small">发送</el-button>
+              </div>
             </div>
           </div>
         </div>
+          </el-splitter-panel>
+        </el-splitter>
       </div>
     </transition>
   </div>
@@ -1871,6 +2174,23 @@ onUnmounted(() => {
     box-shadow: var(--shadow-hover);
     border-color: rgba(64, 158, 255, 0.3);
   }
+
+  .console-content {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .termial-session {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .console-content-main {
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
   
   /* 全屏模式 */
   &.fullscreen {
@@ -1889,7 +2209,6 @@ onUnmounted(() => {
     .console-content {
       flex: 1;
       display: flex;
-      flex-direction: column;
       overflow: hidden;
     }
     
@@ -1928,6 +2247,126 @@ onUnmounted(() => {
   color: var(--text-title);
   letter-spacing: 0.3px;
 }
+
+ .terminal-sessions-panel {
+   background: var(--bg-panel);
+   border-bottom: 1px solid var(--border-component);
+ }
+
+ .terminal-sessions-header {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   padding: 8px 12px;
+ }
+
+ .terminal-sessions-title {
+   display: flex;
+   align-items: baseline;
+   gap: 6px;
+   font-weight: 600;
+   color: var(--text-title);
+ }
+
+ .terminal-sessions-count {
+   font-weight: 500;
+   color: var(--text-secondary);
+ }
+
+ .terminal-sessions-actions {
+   display: flex;
+   align-items: center;
+   gap: 4px;
+ }
+
+ .terminal-sessions-body {
+   padding: 8px 12px 12px;
+ }
+
+ .terminal-sessions-empty {
+   padding: 10px 0;
+   color: var(--text-secondary);
+   font-size: 13px;
+ }
+
+ .terminal-sessions-list {
+   display: flex;
+   flex-direction: column;
+   gap: 8px;
+ }
+
+ .terminal-session-item {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 10px;
+   padding: 10px 12px;
+   background: var(--bg-container);
+   border: 1px solid var(--border-component);
+   border-radius: 8px;
+ }
+
+ .terminal-session-main {
+   flex: 1;
+   min-width: 0;
+ }
+
+ .terminal-session-command {
+   font-size: var(--font-size-md);
+   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+   color: var(--el-text-color-primary);
+   white-space: nowrap;
+   overflow: hidden;
+   text-overflow: ellipsis;
+ }
+
+ .terminal-session-meta {
+   margin-top: 6px;
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 4px;
+   font-size: 12px;
+   color: var(--text-secondary);
+ }
+
+ .terminal-session-dir {
+   display: inline-flex;
+   align-items: center;
+   gap: 4px;
+   overflow: hidden;
+   text-overflow: ellipsis;
+   width: 100%;
+   font-size: 12px;
+ }
+
+ .terminal-session-pid {
+   display: inline-flex;
+   align-items: center;
+   white-space: nowrap;
+   font-size: 11px;
+   font-weight: 600;
+   color: var(--text-secondary);
+   background: rgba(64, 158, 255, 0.10);
+   border: 1px solid rgba(64, 158, 255, 0.20);
+   padding: 1px 6px;
+   border-radius: 999px;
+   margin-left: 6px;
+   line-height: 1;
+   vertical-align: middle;
+ }
+
+ .terminal-session-actions {
+   display: flex;
+   align-items: center;
+   gap: 4px;
+ }
+
+ .terminal-sessions-collapsed {
+   padding: 8px 12px;
+   border-bottom: 1px solid var(--border-component);
+   background: var(--bg-panel);
+ }
 
 .header-actions {
   display: flex;
@@ -2712,6 +3151,25 @@ pre.stderr {
     background: rgba(103, 194, 58, 0.12);
     color: var(--color-success);
   }
+}
+
+.step-terminal-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  color: #0ea5e9;
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+}
+
+.step-terminal-icon {
+  font-size: 11px;
 }
 
 .step-name {
