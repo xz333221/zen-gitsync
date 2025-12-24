@@ -1130,4 +1130,8 @@ export default {
   '@PUSH:详细信息': '详细信息',
   '@PUSH:错误详情': '错误详情',
   // @PUSH: file end
+  // @13D1C: file path: views\components\GitStatus.vue (branch status)
+  '@13D1C:你的分支领先': "你的分支领先 '{branch}' {count} 个提交",
+  '@13D1C:你的分支落后': "你的分支落后 '{branch}' {count} 个提交",
+  // @13D1C: file end
 }

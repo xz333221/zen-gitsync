@@ -1126,4 +1126,8 @@ export default {
   '@PUSH:详细信息': 'Details',
   '@PUSH:错误详情': 'Error details',
   // @PUSH: file end
+  // @13D1C: file path: views\components\GitStatus.vue (branch status)
+  '@13D1C:你的分支领先': "Your branch is ahead of '{branch}' by {count} commit(s)",
+  '@13D1C:你的分支落后': "Your branch is behind '{branch}' by {count} commit(s)",
+  // @13D1C: file end
 }

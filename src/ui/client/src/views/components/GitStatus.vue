@@ -838,14 +838,14 @@ defineExpose({
                   <el-tag v-if="gitStore.branchAhead > 0" size="small" type="warning" class="status-badge">
                     <template #default>
                       <span class="badge-content">
-                        <el-icon><ArrowUp /></el-icon> 你的分支领先 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchAhead }} {{ $t('@13D1C:个提交') }}
+                        <el-icon><ArrowUp /></el-icon> {{ $t('@13D1C:你的分支领先', { branch: `origin/${gitStore.currentBranch}`, count: gitStore.branchAhead }) }}
                       </span>
                     </template>
                   </el-tag>
                   <el-tag v-if="gitStore.branchBehind > 0" size="small" type="info" class="status-badge">
                     <template #default>
                       <span class="badge-content">
-                        <el-icon><ArrowDown /></el-icon> 你的分支落后 'origin/{{ gitStore.currentBranch }}' {{ gitStore.branchBehind }} {{ $t('@13D1C:个提交') }}
+                        <el-icon><ArrowDown /></el-icon> {{ $t('@13D1C:你的分支落后', { branch: `origin/${gitStore.currentBranch}`, count: gitStore.branchBehind }) }}
                       </span>
                     </template>
                   </el-tag>
