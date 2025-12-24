@@ -360,6 +360,11 @@ const panelSize = computed<string>({
 });
 
 async function loadTerminalSessionsStatus(cleanup: boolean = true) {
+  // 只在有会话时才执行请求
+  if (terminalSessions.value.length === 0) {
+    return;
+  }
+  
   try {
     const resp = await fetch(`/api/terminal-sessions/status?cleanup=${cleanup ? 'true' : 'false'}`);
     const result = await resp.json();
@@ -367,22 +372,6 @@ async function loadTerminalSessionsStatus(cleanup: boolean = true) {
       terminalSessions.value = Array.isArray(result.sessions) ? result.sessions : [];
     }
   } catch {
-  }
-}
-
-function startTerminalSessionsPolling() {
-  if (terminalSessionsPollTimer.value) return;
-  terminalSessionsPollTimer.value = window.setInterval(() => {
-    if (showTerminalSessions.value) {
-      loadTerminalSessionsStatus(true);
-    }
-  }, 2000);
-}
-
-function stopTerminalSessionsPolling() {
-  if (terminalSessionsPollTimer.value) {
-    window.clearInterval(terminalSessionsPollTimer.value);
-    terminalSessionsPollTimer.value = null;
   }
 }
 
@@ -1797,9 +1786,6 @@ watch(showTerminalSessions, (newValue) => {
   localStorage.setItem('showTerminalSessions', String(newValue));
   if (newValue) {
     loadTerminalSessionsStatus(true);
-    startTerminalSessionsPolling();
-  } else {
-    stopTerminalSessionsPolling();
   }
 });
 
@@ -1851,16 +1837,37 @@ onMounted(async () => {
   await configStore.loadConfig(false);
 
   await loadTerminalSessions();
-  if (showTerminalSessions.value) {
-    startTerminalSessionsPolling();
-  }
 
   await autoRunProjectStartupItems();
+  
+  // 监听页面可见性变化：标签页激活时刷新终端会话状态
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible' && showTerminalSessions.value) {
+      console.log('[页面可见性] 标签页已激活，刷新终端会话状态');
+      loadTerminalSessionsStatus(true);
+    }
+  };
+  
+  // 监听窗口获得焦点事件：从其他应用切换回浏览器时刷新
+  const handleWindowFocus = () => {
+    if (showTerminalSessions.value) {
+      console.log('[窗口焦点] 浏览器窗口已激活，刷新终端会话状态');
+      loadTerminalSessionsStatus(true);
+    }
+  };
+  
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('focus', handleWindowFocus);
+  
+  // 组件卸载时移除监听
+  onUnmounted(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('focus', handleWindowFocus);
+  });
 });
 
-// 组件卸载时断开Socket连接
+// Socket连接断开在onMounted中的onUnmounted回调中处理
 onUnmounted(() => {
-  stopTerminalSessionsPolling();
   if (socket.value) {
     socket.value.disconnect();
     socket.value = null;
