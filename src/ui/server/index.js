@@ -2511,7 +2511,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       // 发送开始消息
       sendProgress({
         type: 'progress',
-        message: '开始推送到远程仓库...'
+        message: 'Starting to push to the remote repository...'
       });
       
       // 使用spawn执行git push --progress
