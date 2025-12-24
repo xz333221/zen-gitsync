@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
+import ProjectStartupButton from '@components/ProjectStartupButton.vue';
 import OrchestrationWorkspace from '@components/OrchestrationWorkspace.vue';
 import FlowOrchestrationWorkspace from '@components/flow/FlowOrchestrationWorkspace.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
@@ -172,6 +173,120 @@ const savedShowTerminalSessions = localStorage.getItem('showTerminalSessions');
 const showTerminalSessions = ref(savedShowTerminalSessions == null ? true : savedShowTerminalSessions === 'true');
 const terminalSessionsCount = computed(() => terminalSessions.value.length);
 const terminalSessionsPollTimer = ref<number | null>(null);
+
+const PROJECT_START_ITEMS_KEY = 'zen-gitsync-project-start-items';
+const PROJECT_START_AUTO_RUN_KEY = 'zen-gitsync-project-start-auto-run';
+const startupAutoRunTriggered = ref(false);
+
+type ProjectStartupItem = {
+  id: string;
+  type: 'command' | 'workflow';
+  refId: string;
+  createdAt: number;
+};
+
+function safeParseStartupItems(raw: string | null): ProjectStartupItem[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x: any) => x && typeof x === 'object')
+      .map((x: any) => ({
+        id: String(x.id ?? ''),
+        type: (x.type === 'workflow' ? 'workflow' : 'command') as 'command' | 'workflow',
+        refId: String(x.refId ?? x.commandId ?? ''),
+        createdAt: Number(x.createdAt ?? Date.now()),
+      }))
+      .filter((x: any) => x.id && x.refId);
+  } catch {
+    return [];
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForSocketConnected(timeoutMs: number = 8000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (socket.value && socket.value.connected) return true;
+    await sleep(100);
+  }
+  return false;
+}
+
+async function runStartupCommandById(commandId: string) {
+  const cmd = configStore.customCommands.find((c) => String(c.id) === String(commandId));
+  if (!cmd) {
+    ElMessage.warning(`启动项命令不存在: ${commandId}`);
+    return;
+  }
+
+  const targetDir = cmd.directory || currentDirectory.value;
+  const commandText = cmd.command;
+
+  if (useTerminal.value) {
+    try {
+      const resp = await fetch('/api/exec-in-terminal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: commandText, workingDirectory: targetDir })
+      });
+      const result = await resp.json();
+      if (result?.success) {
+        if (result?.session) {
+          upsertTerminalSession(result.session);
+        } else {
+          await loadTerminalSessions();
+        }
+      } else {
+        ElMessage.error(result?.error || '启动项命令执行失败');
+      }
+    } catch (e: any) {
+      ElMessage.error(e?.message || '启动项命令执行失败');
+    }
+    return;
+  }
+
+  const ok = await waitForSocketConnected();
+  if (!ok) {
+    ElMessage.error('Socket 连接未就绪，无法自动执行交互式启动项');
+    return;
+  }
+  await runInteractiveCommandWithCmd(commandText, targetDir);
+}
+
+async function runStartupWorkflowById(orchestrationId: string) {
+  const wf = configStore.orchestrations.find((o) => String(o.id) === String(orchestrationId));
+  if (!wf) {
+    ElMessage.warning(`启动项工作流不存在: ${orchestrationId}`);
+    return;
+  }
+  await executeOrchestration(wf.steps || [], 0, false);
+}
+
+async function autoRunProjectStartupItems() {
+  if (startupAutoRunTriggered.value) return;
+  startupAutoRunTriggered.value = true;
+
+  const enabled = localStorage.getItem(PROJECT_START_AUTO_RUN_KEY) === 'true';
+  if (!enabled) return;
+
+  await configStore.loadConfig(false);
+
+  const items = safeParseStartupItems(localStorage.getItem(PROJECT_START_ITEMS_KEY));
+  if (items.length === 0) return;
+
+  for (const it of items) {
+    if (it.type === 'workflow') {
+      await runStartupWorkflowById(it.refId);
+    } else {
+      await runStartupCommandById(it.refId);
+    }
+  }
+}
 
 const COMMAND_CONSOLE_SPLIT_KEY = 'zen-gitsync-commandconsole-ratio';
 const clampPercent = (v: number) => Math.min(85, Math.max(15, v));
@@ -857,11 +972,13 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
       const rec: ConsoleRecord = {
         id: ++consoleIdCounter,
         command: `[${stepLabel}] ${cmd}`,
+        directory: command.directory || '',
         success: false,
         ts: new Date().toLocaleString(),
         expanded: true,
         stdout: '',
         stderr: '',
+        running: true,
       };
       consoleHistory.value.unshift(rec);
       
@@ -902,12 +1019,17 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
               if (line.startsWith('data: ')) {
                 try {
                   const data = JSON.parse(line.substring(6));
-                  if (data.type === 'stdout') {
+                  if (data.type === 'process_id') {
+                    rec.processId = data.data;
+                    consoleHistory.value = [...consoleHistory.value];
+                  } else if (data.type === 'stdout') {
                     rec.stdout += ansiToHtml(data.data);
                   } else if (data.type === 'stderr') {
                     rec.stderr += ansiToHtml(data.data);
                   } else if (data.type === 'exit') {
                     rec.success = data.data.success;
+                    rec.running = false;
+                    consoleHistory.value = [...consoleHistory.value];
                   } else if (data.type === 'error') {
                     rec.stderr += ansiToHtml(`错误: ${data.data}\n`);
                   }
@@ -1726,10 +1848,14 @@ onMounted(async () => {
   // 初始化Socket连接
   initSocket();
 
+  await configStore.loadConfig(false);
+
   await loadTerminalSessions();
   if (showTerminalSessions.value) {
     startTerminalSessionsPolling();
   }
+
+  await autoRunProjectStartupItems();
 });
 
 // 组件卸载时断开Socket连接
@@ -1810,6 +1936,7 @@ onUnmounted(() => {
         >
           <SvgIcon icon-class="command-list" class-name="icon-btn" />
         </IconButton>
+        <ProjectStartupButton />
         <!-- 编排工作台按钮已被可视化编排工作台替代 -->
         <!-- <IconButton
           :tooltip="$t('@ORCHWS:编排工作台')"
@@ -1820,7 +1947,7 @@ onUnmounted(() => {
           <SvgIcon icon-class="command-orchestrate" class-name="icon-btn" />
         </IconButton> -->
         <IconButton
-          tooltip="可视化编排"
+          :tooltip="$t('@ORCH:可视化编排')"
           hover-color="#9c27b0"
           @click="openFlowOrchestrationWorkspace"
           custom-class="flow-orchestrator-btn"
@@ -1868,16 +1995,16 @@ onUnmounted(() => {
               <div v-if="showTerminalSessions" class="terminal-sessions-panel">
                 <div class="terminal-sessions-header">
                   <div class="terminal-sessions-title">
-                    <span>终端会话</span>
+                    <span>{{ $t('@CMDCON:终端会话') }}</span>
                     <span class="terminal-sessions-count">({{ terminalSessionsCount }})</span>
                   </div>
                   <div class="terminal-sessions-actions">
-                    <el-tooltip content="刷新" placement="bottom">
+                    <el-tooltip :content="$t('@CMDCON:刷新')" placement="bottom">
                       <el-button text size="small" @click="loadTerminalSessions" :disabled="terminalSessionsLoading">
                         <el-icon><RefreshRight /></el-icon>
                       </el-button>
                     </el-tooltip>
-                    <el-tooltip content="隐藏" placement="bottom">
+                    <el-tooltip :content="$t('@CMDCON:隐藏')" placement="bottom">
                       <el-button text size="small" @click="showTerminalSessions = false">
                         <el-icon><ArrowDown /></el-icon>
                       </el-button>
@@ -1887,7 +2014,7 @@ onUnmounted(() => {
 
                 <div v-loading="terminalSessionsLoading" class="terminal-sessions-body">
                   <div v-if="terminalSessions.length === 0" class="terminal-sessions-empty">
-                    暂无终端会话
+                    {{ $t('@CMDCON:暂无终端会话') }}
                   </div>
 
                   <div v-else class="terminal-sessions-list">
@@ -1902,12 +2029,12 @@ onUnmounted(() => {
                         </div>
                       </div>
                       <div class="terminal-session-actions">
-                        <el-tooltip content="重新启动" placement="top">
+                        <el-tooltip :content="$t('@CMDCON:重新启动')" placement="top">
                           <el-button text size="small" @click="restartTerminalSession(session)">
                             <el-icon><RefreshRight /></el-icon>
                           </el-button>
                         </el-tooltip>
-                        <el-tooltip content="删除" placement="top">
+                        <el-tooltip :content="$t('@CMDCON:删除')" placement="top">
                           <el-button text size="small" type="danger" @click="deleteTerminalSession(session)">
                             <el-icon><Delete /></el-icon>
                           </el-button>
@@ -1919,7 +2046,7 @@ onUnmounted(() => {
               </div>
               <div v-else class="terminal-sessions-collapsed">
                 <el-button text size="small" @click="showTerminalSessions = true">
-                  显示终端会话 ({{ terminalSessionsCount }})
+                  {{ $t('@CMDCON:显示终端会话', { count: terminalSessionsCount }) }}
                 </el-button>
               </div>
             </div>
@@ -2040,7 +2167,7 @@ onUnmounted(() => {
             <el-input
               v-model="consoleInput"
               class="console-input"
-              :placeholder="useTerminal ? '在新终端执行' : '交互式模式: 支持需要输入的命令'"
+              :placeholder="useTerminal ? $t('@CMDCON:在新终端执行') : $t('@CMDCON:交互式模式')"
               @keydown.enter.prevent="useTerminal ? runConsoleCommand() : runInteractiveCommand()"
               :disabled="consoleRunning"
               clearable
@@ -2421,6 +2548,13 @@ onUnmounted(() => {
   &:hover {
     color: var(--color-success);
     background: rgba(103, 194, 58, 0.1);
+  }
+}
+
+.project-startup-btn {
+  &:hover {
+    color: var(--color-primary);
+    background: rgba(64, 158, 255, 0.1);
   }
 }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, provide, inject, defineComponent, h } from 'vue'
 import type { PropType } from 'vue'
-// import { useI18n } from 'vue-i18n'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import type { EdgeChange, NodeTypesObject } from '@vue-flow/core'
@@ -146,7 +146,7 @@ const emit = defineEmits<{
   (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean): void
 }>()
 
-// const { t } = useI18n()
+const { t } = useI18n()
 const configStore = useConfigStore()
 
 // 弹窗控制
@@ -827,7 +827,7 @@ onUnmounted(() => {
 <template>
   <CommonDialog
     v-model="dialogVisible"
-    title="可视化编排工作台"
+    :title="t('@ORCH:可视化编排工作台')"
     :close-on-click-modal="false"
     :append-to-body="true"
     heightMode="fixed"
@@ -838,9 +838,9 @@ onUnmounted(() => {
       <!-- 左侧：编排列表 -->
       <div class="left-sidebar">
         <div class="sidebar-header">
-          <h3>已保存的编排</h3>
+          <h3>{{ t('@ORCH:已保存的编排') }}</h3>
           <IconButton
-            tooltip="新建编排"
+            :tooltip="t('@ORCH:新建编排')"
             size="small"
             hover-color="var(--color-primary)"
             @click="createNewOrchestration"
@@ -852,7 +852,7 @@ onUnmounted(() => {
         <div class="orchestration-list">
           <el-empty 
             v-if="orchestrations.length === 0" 
-            description="暂无编排" 
+            :description="t('@ORCH:暂无编排')" 
             :image-size="80"
           />
           
@@ -870,7 +870,7 @@ onUnmounted(() => {
               </p>
               <div class="item-actions">
                 <IconButton
-                  tooltip="执行"
+                  :tooltip="t('@ORCH:执行')"
                   size="small"
                   hover-color="var(--color-primary)"
                   @click.stop="executeOrchestration(orchestration)"
@@ -878,7 +878,7 @@ onUnmounted(() => {
                   <el-icon><VideoPlay /></el-icon>
                 </IconButton>
                 <IconButton
-                  tooltip="删除"
+                  :tooltip="t('@ORCH:删除')"
                   size="small"
                   hover-color="var(--color-danger)"
                   @click.stop="deleteOrchestration(orchestration)"
@@ -897,20 +897,20 @@ onUnmounted(() => {
           <div class="flow-header-info">
             <el-input
               v-model="orchestrationName"
-              placeholder="编排名称（必填）"
+              :placeholder="t('@ORCH:编排名称（必填）')"
               size="large"
               style="width: 300px; margin-right: 10px;"
             />
             <el-input
               v-model="orchestrationDescription"
-              placeholder="编排描述（选填）"
+              :placeholder="t('@ORCH:编排描述（选填）')"
               size="large"
               style="width: 400px;"
             />
           </div>
           <div class="header-actions">
             <IconButton
-              tooltip="保存编排"
+              :tooltip="t('@ORCH:保存编排')"
               size="large"
               hover-color="var(--color-success)"
               @click="saveOrchestration"
@@ -960,32 +960,32 @@ onUnmounted(() => {
       <!-- 右侧：节点工具栏 -->
       <div class="right-sidebar">
         <div class="sidebar-header">
-          <h3>节点工具箱</h3>
+          <h3>{{ t('@ORCH:节点工具箱') }}</h3>
         </div>
         
         <div class="node-toolbox">
           <div class="tool-item" @click="addNode('command')">
             <div class="tool-icon command">📋</div>
-            <div class="tool-label">命令节点</div>
-            <div class="tool-desc">执行自定义命令</div>
+            <div class="tool-label">{{ t('@ORCH:命令节点') }}</div>
+            <div class="tool-desc">{{ t('@ORCH:执行自定义命令') }}</div>
           </div>
           
           <div class="tool-item" @click="addNode('wait')">
             <div class="tool-icon wait">⏰</div>
-            <div class="tool-label">等待节点</div>
-            <div class="tool-desc">暂停指定时间</div>
+            <div class="tool-label">{{ t('@ORCH:等待节点') }}</div>
+            <div class="tool-desc">{{ t('@ORCH:暂停指定时间') }}</div>
           </div>
           
           <div class="tool-item" @click="addNode('version')">
             <div class="tool-icon version">📦</div>
-            <div class="tool-label">版本管理</div>
-            <div class="tool-desc">修改版本号或依赖</div>
+            <div class="tool-label">{{ t('@ORCH:版本管理') }}</div>
+            <div class="tool-desc">{{ t('@ORCH:修改版本号或依赖') }}</div>
           </div>
           
           <div class="tool-item" @click="addNode('confirm')">
             <div class="tool-icon confirm">✋</div>
-            <div class="tool-label">用户确认</div>
-            <div class="tool-desc">等待用户确认后继续</div>
+            <div class="tool-label">{{ t('@ORCH:用户确认') }}</div>
+            <div class="tool-desc">{{ t('@ORCH:等待用户确认后继续') }}</div>
           </div>
         </div>
       </div>
