@@ -1119,4 +1119,15 @@ export default {
   '@CMDCON:在新终端执行': '在新终端执行',
   '@CMDCON:交互式模式': '交互式模式: 支持需要输入的命令',
   // @CMDCON: file end
+  // @PUSH: file path: components\PushProgressModal.vue
+  '@PUSH:正在推送': '正在推送...',
+  '@PUSH:推送成功': '推送成功',
+  '@PUSH:推送失败': '推送失败',
+  '@PUSH:计数对象': '计数对象',
+  '@PUSH:压缩对象': '压缩对象',
+  '@PUSH:写入对象': '写入对象',
+  '@PUSH:解析增量': '解析增量',
+  '@PUSH:详细信息': '详细信息',
+  '@PUSH:错误详情': '错误详情',
+  // @PUSH: file end
 }

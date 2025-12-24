@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { ElDialog, ElProgress, ElIcon } from 'element-plus';
 import { Close, Loading, CircleCheck } from '@element-plus/icons-vue';
 import { useConfigStore } from '@stores/configStore';
+
+const { t } = useI18n();
 
 interface Props {
   modelValue: boolean;
@@ -34,10 +37,10 @@ const errorMessage = ref('');
 
 // 推送阶段
 const stages = reactive<Stage[]>([
-  { name: 'counting', label: '计数对象', status: 'wait', percent: 0 },
-  { name: 'compressing', label: '压缩对象', status: 'wait', percent: 0 },
-  { name: 'writing', label: '写入对象', status: 'wait', percent: 0 },
-  { name: 'resolving', label: '解析增量', status: 'wait', percent: 0 }
+  { name: 'counting', label: t('@PUSH:计数对象'), status: 'wait', percent: 0 },
+  { name: 'compressing', label: t('@PUSH:压缩对象'), status: 'wait', percent: 0 },
+  { name: 'writing', label: t('@PUSH:写入对象'), status: 'wait', percent: 0 },
+  { name: 'resolving', label: t('@PUSH:解析增量'), status: 'wait', percent: 0 }
 ]);
 
 // 当前激活的步骤索引
@@ -55,11 +58,11 @@ const visible = computed({
 const statusText = computed(() => {
   switch (status.value) {
     case 'progress':
-      return '正在推送...';
+      return t('@PUSH:正在推送');
     case 'success':
-      return '推送成功';
+      return t('@PUSH:推送成功');
     case 'error':
-      return '推送失败';
+      return t('@PUSH:推送失败');
     default:
       return '';
   }
@@ -221,13 +224,13 @@ defineExpose({
 
       <!-- 错误信息 -->
       <div v-if="status === 'error' && errorMessage" class="error-section">
-        <div class="error-title">错误详情：</div>
+        <div class="error-title">{{ t('@PUSH:错误详情') }}：</div>
         <div class="error-content">{{ errorMessage }}</div>
       </div>
 
       <!-- 进度消息 -->
       <div v-if="messages.length > 0" class="messages-section">
-        <div class="messages-title">详细信息：</div>
+        <div class="messages-title">{{ t('@PUSH:详细信息') }}：</div>
         <div ref="messagesContainerRef" class="progress-messages">
           <div
             v-for="(msg, index) in messages"
