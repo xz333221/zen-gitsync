@@ -1,12 +1,13 @@
 {
   "name": "zen-gitsync",
-  "version": "2.9.6",
+  "version": "2.9.7",
   "description": "一个 git 提交的工具",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
     "npm:login": "npm login --registry https://registry.npmjs.org/",
+    "npm:whoami": "npm whoami --registry https://registry.npmjs.org/",
     "pull": "git pull",
     "start:server:no-open": "node server.js --no-open",
     "start:vue": "cd ./src/ui/client && npm run dev",
