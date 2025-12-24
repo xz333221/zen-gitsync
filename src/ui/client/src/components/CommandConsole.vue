@@ -172,7 +172,6 @@ const terminalSessionsLoading = ref(false);
 const savedShowTerminalSessions = localStorage.getItem('showTerminalSessions');
 const showTerminalSessions = ref(savedShowTerminalSessions == null ? true : savedShowTerminalSessions === 'true');
 const terminalSessionsCount = computed(() => terminalSessions.value.length);
-const terminalSessionsPollTimer = ref<number | null>(null);
 
 const PROJECT_START_ITEMS_KEY = 'zen-gitsync-project-start-items';
 const PROJECT_START_AUTO_RUN_KEY = 'zen-gitsync-project-start-auto-run';
