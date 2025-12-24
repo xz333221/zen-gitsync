@@ -1082,6 +1082,11 @@ export default {
   '@PSTART:取消': 'Cancel',
   '@PSTART:已清理N个失效启动项': 'Cleaned up {count} invalid item(s)',
   '@PSTART:没有需要清理的启动项': 'No items to clean up',
+  '@PSTART:执行': 'Execute',
+  '@PSTART:命令不存在': 'Command does not exist',
+  '@PSTART:工作流不存在': 'Workflow does not exist',
+  '@PSTART:已触发命令执行': 'Command execution triggered',
+  '@PSTART:已触发工作流执行': 'Workflow execution triggered',
   // @PSTART: file end
   // @ORCH: file path: components\CommandConsole.vue, components\flow\FlowOrchestrationWorkspace.vue
   '@ORCH:可视化编排': 'Visual Orchestration',

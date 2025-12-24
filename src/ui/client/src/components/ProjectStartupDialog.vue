@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Plus, RefreshRight } from '@element-plus/icons-vue'
+import { Delete, Plus, RefreshRight, VideoPlay } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import { useConfigStore } from '@stores/configStore'
 
@@ -17,6 +17,8 @@ export type ProjectStartupItem = {
 
 export interface ProjectStartupDialogEmits {
   (e: 'update:visible', value: boolean): void
+  (e: 'execute-command', command: any): void
+  (e: 'execute-workflow', workflow: any): void
 }
 
 const props = defineProps<{
@@ -182,6 +184,27 @@ function cleanupMissingItems() {
     ElMessage.info(t('@PSTART:没有需要清理的启动项'))
   }
 }
+
+// 执行启动项
+function executeItem(item: any) {
+  if (item.type === 'command') {
+    const cmd = item.cmd
+    if (!cmd) {
+      ElMessage.warning(t('@PSTART:命令不存在'))
+      return
+    }
+    emit('execute-command', cmd)
+    ElMessage.success(t('@PSTART:已触发命令执行'))
+  } else if (item.type === 'workflow') {
+    const wf = item.wf
+    if (!wf) {
+      ElMessage.warning(t('@PSTART:工作流不存在'))
+      return
+    }
+    emit('execute-workflow', wf)
+    ElMessage.success(t('@PSTART:已触发工作流执行'))
+  }
+}
 </script>
 
 <template>
@@ -259,6 +282,11 @@ function cleanupMissingItems() {
             </div>
           </div>
           <div class="startup-item__actions">
+            <el-tooltip :content="t('@PSTART:执行')" placement="top">
+              <el-button text type="primary" size="small" @click="executeItem(it)">
+                <el-icon><VideoPlay /></el-icon>
+              </el-button>
+            </el-tooltip>
             <el-tooltip :content="t('@PSTART:删除')" placement="top">
               <el-button text type="danger" size="small" @click="removeItem(it)">
                 <el-icon><Delete /></el-icon>

@@ -7,10 +7,23 @@ import ProjectStartupDialog from '@components/ProjectStartupDialog.vue'
 
 const { t } = useI18n()
 
+const emit = defineEmits<{
+  'execute-command': [command: any]
+  'execute-workflow': [workflow: any]
+}>()
+
 const dialogVisible = ref(false)
 
 function openDialog() {
   dialogVisible.value = true
+}
+
+function handleExecuteCommand(command: any) {
+  emit('execute-command', command)
+}
+
+function handleExecuteWorkflow(workflow: any) {
+  emit('execute-workflow', workflow)
 }
 </script>
 
@@ -25,7 +38,11 @@ function openDialog() {
       <SvgIcon icon-class="start-run-command" class-name="icon-btn" />
     </IconButton>
 
-    <ProjectStartupDialog v-model:visible="dialogVisible" />
+    <ProjectStartupDialog 
+      v-model:visible="dialogVisible"
+      @execute-command="handleExecuteCommand"
+      @execute-workflow="handleExecuteWorkflow"
+    />
   </div>
 </template>
 

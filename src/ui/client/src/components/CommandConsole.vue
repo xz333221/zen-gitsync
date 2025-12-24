@@ -1943,7 +1943,10 @@ onUnmounted(() => {
         >
           <SvgIcon icon-class="command-list" class-name="icon-btn" />
         </IconButton>
-        <ProjectStartupButton />
+        <ProjectStartupButton 
+          @execute-command="executeCustomCommand"
+          @execute-workflow="(wf) => executeOrchestration(wf.steps || [], 0, false)"
+        />
         <!-- 编排工作台按钮已被可视化编排工作台替代 -->
         <!-- <IconButton
           :tooltip="$t('@ORCHWS:编排工作台')"

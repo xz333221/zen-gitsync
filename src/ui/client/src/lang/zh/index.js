@@ -1086,6 +1086,11 @@ export default {
   '@PSTART:取消': '取消',
   '@PSTART:已清理N个失效启动项': '已清理 {count} 个失效启动项',
   '@PSTART:没有需要清理的启动项': '没有需要清理的启动项',
+  '@PSTART:执行': '执行',
+  '@PSTART:命令不存在': '命令不存在',
+  '@PSTART:工作流不存在': '工作流不存在',
+  '@PSTART:已触发命令执行': '已触发命令执行',
+  '@PSTART:已触发工作流执行': '已触发工作流执行',
   // @PSTART: file end
   // @ORCH: file path: components\CommandConsole.vue, components\flow\FlowOrchestrationWorkspace.vue
   '@ORCH:可视化编排': '可视化编排',
