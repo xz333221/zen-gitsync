@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, RefreshRight, VideoPlay } from '@element-plus/icons-vue'
@@ -29,66 +29,29 @@ const emit = defineEmits<ProjectStartupDialogEmits>()
 
 const configStore = useConfigStore()
 
-const STORAGE_KEY = 'zen-gitsync-project-start-items'
-const AUTO_RUN_KEY = 'zen-gitsync-project-start-auto-run'
-
 const dialogVisible = computed({
   get: () => props.visible,
   set: (v: boolean) => emit('update:visible', v)
 })
 
-const autoRunEnabled = ref(localStorage.getItem(AUTO_RUN_KEY) === 'true')
-
-watch(autoRunEnabled, (v) => {
-  try {
-    localStorage.setItem(AUTO_RUN_KEY, String(v))
-  } catch {
-    // ignore
+const autoRunEnabled = computed({
+  get: () => configStore.startupAutoRun,
+  set: async (v: boolean) => {
+    autoRunSaving.value = true
+    try {
+      await configStore.saveStartupItems(items.value, v)
+    } finally {
+      autoRunSaving.value = false
+    }
   }
 })
 
-const items = ref<ProjectStartupItem[]>([])
-
-function safeParseItems(raw: string | null): ProjectStartupItem[] {
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter((x) => x && typeof x === 'object')
-      .map((x) => ({
-        id: String((x as any).id ?? ''),
-        type: ((x as any).type === 'workflow' ? 'workflow' : 'command') as 'command' | 'workflow',
-        refId: String((x as any).refId ?? (x as any).commandId ?? ''),
-        createdAt: Number((x as any).createdAt ?? Date.now())
-      }))
-      .filter((x) => x.id && x.refId)
-  } catch {
-    return []
+const items = computed({
+  get: () => configStore.startupItems,
+  set: (v: ProjectStartupItem[]) => {
+    configStore.saveStartupItems(v, autoRunEnabled.value)
   }
-}
-
-function loadItems() {
-  items.value = safeParseItems(localStorage.getItem(STORAGE_KEY))
-}
-
-function persistItems() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items.value))
-  } catch {
-    // ignore
-  }
-}
-
-watch(
-  dialogVisible,
-  (v) => {
-    if (v) {
-      loadItems()
-    }
-  },
-  { immediate: true }
-)
+})
 
 const customCommands = computed(() => configStore.customCommands || [])
 const customCommandById = computed(() => {
@@ -127,58 +90,62 @@ const missingItemsCount = computed(() => {
 
 const selectedType = ref<'command' | 'workflow'>('command')
 const selectedRefId = ref<string>('')
-
-function genId() {
-  return `ps_${Date.now()}_${Math.random().toString(16).slice(2)}`
-}
+const autoRunSaving = ref(false)
 
 function addSelectedItem() {
-  const id = selectedRefId.value
-  if (!id) {
-    ElMessage.warning(selectedType.value === 'workflow' ? t('@PSTART:请选择一个工作流') : t('@PSTART:请选择一个命令'))
+  if (!selectedRefId.value) {
+    if (selectedType.value === 'workflow') {
+      ElMessage.warning(t('@PSTART:请选择一个工作流'))
+    } else {
+      ElMessage.warning(t('@PSTART:请选择一个命令'))
+    }
     return
   }
 
-  const exists = items.value.some((x) => x.type === selectedType.value && x.refId === id)
+  const exists = items.value.some((it) => it.type === selectedType.value && it.refId === selectedRefId.value)
   if (exists) {
     ElMessage.info(t('@PSTART:该启动项已存在'))
     return
   }
 
-  items.value.unshift({
-    id: genId(),
+  const newItem: ProjectStartupItem = {
+    id: `startup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     type: selectedType.value,
-    refId: id,
+    refId: selectedRefId.value,
     createdAt: Date.now()
-  })
-  persistItems()
+  }
+
+  const newItems = [...items.value, newItem]
+  configStore.saveStartupItems(newItems, autoRunEnabled.value)
+  selectedRefId.value = ''
   ElMessage.success(t('@PSTART:已添加启动项'))
 }
 
-async function removeItem(item: ProjectStartupItem) {
+async function removeItem(item: any) {
   try {
     await ElMessageBox.confirm(t('@PSTART:删除确认'), t('@PSTART:删除启动项'), {
-      confirmButtonText: t('@PSTART:删除'),
+      confirmButtonText: t('@PSTART:确定'),
       cancelButtonText: t('@PSTART:取消'),
       type: 'warning'
     })
-    items.value = items.value.filter((x) => x.id !== item.id)
-    persistItems()
+
+    const newItems = items.value.filter((it) => it.id !== item.id)
+    configStore.saveStartupItems(newItems, autoRunEnabled.value)
     ElMessage.success(t('@PSTART:已删除启动项'))
   } catch {
-    // cancel
+    // 用户取消
   }
 }
 
 function cleanupMissingItems() {
   const before = items.value.length
-  items.value = items.value.filter((it) => {
+  const newItems = items.value.filter((it) => {
     if (it.type === 'workflow') return !!orchestrationById.value.get(it.refId)
     return !!customCommandById.value.get(it.refId)
   })
-  const after = items.value.length
-  persistItems()
+  const after = newItems.length
   if (after !== before) {
+    configStore.saveStartupItems(newItems, autoRunEnabled.value)
     ElMessage.success(t('@PSTART:已清理N个失效启动项', { count: before - after }))
   } else {
     ElMessage.info(t('@PSTART:没有需要清理的启动项'))
@@ -228,7 +195,7 @@ function executeItem(item: any) {
         <div class="startup-toolbar__right">
           <div class="startup-auto-run">
             <span class="startup-auto-run__label">{{ t('@PSTART:刷新页面自动执行') }}</span>
-            <el-switch v-model="autoRunEnabled" size="small" />
+            <el-switch v-model="autoRunEnabled" size="small" :loading="autoRunSaving" />
           </div>
           <el-tooltip :content="t('@PSTART:清理失效启动项')" placement="bottom">
             <el-button size="small" @click="cleanupMissingItems" :disabled="missingItemsCount === 0">

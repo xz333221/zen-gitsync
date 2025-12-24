@@ -2153,6 +2153,28 @@ async function startUIServer(noOpen = false, savePort = false) {
     }
   })
   
+  // 保存项目启动项
+  app.post('/api/config/save-startup-items', express.json(), async (req, res) => {
+    try {
+      const { startupItems, startupAutoRun } = req.body
+      
+      if (!Array.isArray(startupItems)) {
+        return res.status(400).json({ success: false, error: '启动项必须是数组' })
+      }
+      
+      const config = await configManager.loadConfig()
+      config.startupItems = startupItems
+      if (typeof startupAutoRun === 'boolean') {
+        config.startupAutoRun = startupAutoRun
+      }
+      await configManager.saveConfig(config)
+      
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+  
   // 读取 package.json 文件内容
   app.post('/api/read-package-json', express.json(), async (req, res) => {
     try {

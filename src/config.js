@@ -11,7 +11,9 @@ const defaultConfig = {
   defaultCommitMessage: "submit",
   descriptionTemplates: [],  // 添加描述模板数组
   lockedFiles: [],  // 添加锁定文件数组
-  customCommands: []  // 添加自定义命令数组
+  customCommands: [],  // 添加自定义命令数组
+  startupItems: [],  // 添加项目启动项数组
+  startupAutoRun: false  // 添加启动项自动执行开关
 };
 
 // 规范化项目路径作为配置键

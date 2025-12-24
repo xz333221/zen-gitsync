@@ -1059,7 +1059,7 @@ export default {
   '@PSTART:项目启动项': 'Project Startup Items',
   '@PSTART:启动项列表': 'Startup Items',
   '@PSTART:有N项已失效': '{count} item(s) invalid',
-  '@PSTART:刷新页面自动执行': 'Auto-run on page refresh',
+  '@PSTART:刷新页面自动执行': 'Auto-run on startup',
   '@PSTART:清理失效启动项': 'Clean up invalid items',
   '@PSTART:清理': 'Clean',
   '@PSTART:暂无启动项': 'No startup items',

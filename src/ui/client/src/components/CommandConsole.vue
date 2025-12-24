@@ -173,35 +173,7 @@ const savedShowTerminalSessions = localStorage.getItem('showTerminalSessions');
 const showTerminalSessions = ref(savedShowTerminalSessions == null ? true : savedShowTerminalSessions === 'true');
 const terminalSessionsCount = computed(() => terminalSessions.value.length);
 
-const PROJECT_START_ITEMS_KEY = 'zen-gitsync-project-start-items';
-const PROJECT_START_AUTO_RUN_KEY = 'zen-gitsync-project-start-auto-run';
 const startupAutoRunTriggered = ref(false);
-
-type ProjectStartupItem = {
-  id: string;
-  type: 'command' | 'workflow';
-  refId: string;
-  createdAt: number;
-};
-
-function safeParseStartupItems(raw: string | null): ProjectStartupItem[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((x: any) => x && typeof x === 'object')
-      .map((x: any) => ({
-        id: String(x.id ?? ''),
-        type: (x.type === 'workflow' ? 'workflow' : 'command') as 'command' | 'workflow',
-        refId: String(x.refId ?? x.commandId ?? ''),
-        createdAt: Number(x.createdAt ?? Date.now()),
-      }))
-      .filter((x: any) => x.id && x.refId);
-  } catch {
-    return [];
-  }
-}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -270,12 +242,12 @@ async function autoRunProjectStartupItems() {
   if (startupAutoRunTriggered.value) return;
   startupAutoRunTriggered.value = true;
 
-  const enabled = localStorage.getItem(PROJECT_START_AUTO_RUN_KEY) === 'true';
-  if (!enabled) return;
-
   await configStore.loadConfig(false);
 
-  const items = safeParseStartupItems(localStorage.getItem(PROJECT_START_ITEMS_KEY));
+  const enabled = configStore.startupAutoRun;
+  if (!enabled) return;
+
+  const items = configStore.startupItems;
   if (items.length === 0) return;
 
   for (const it of items) {

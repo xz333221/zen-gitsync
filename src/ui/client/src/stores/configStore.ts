@@ -55,6 +55,8 @@ export const useConfigStore = defineStore('config', () => {
   const lockedFiles = ref<string[]>([])
   const customCommands = ref<Array<{id: string, name: string, description?: string, directory: string, command: string}>>([])
   const orchestrations = ref<Array<{id: string, name: string, description?: string, steps: OrchestrationStep[]}>>([])
+  const startupItems = ref<Array<{id: string, type: 'command' | 'workflow', refId: string, createdAt: number}>>([])
+  const startupAutoRun = ref(false)
   const isLoading = ref(false)
   const isLoaded = ref(false)
   // 当前工作目录
@@ -101,6 +103,8 @@ export const useConfigStore = defineStore('config', () => {
       lockedFiles: lockedFiles.value,
       customCommands: customCommands.value,
       orchestrations: orchestrations.value,
+      startupItems: startupItems.value,
+      startupAutoRun: startupAutoRun.value,
       currentDirectory: currentDirectory.value
     }
   })
@@ -128,6 +132,8 @@ export const useConfigStore = defineStore('config', () => {
       lockedFiles.value = configData.lockedFiles || []
       customCommands.value = configData.customCommands || []
       orchestrations.value = configData.orchestrations || []
+      startupItems.value = configData.startupItems || []
+      startupAutoRun.value = configData.startupAutoRun || false
       // 若后端返回当前目录，更新
       if (configData.currentDirectory) {
         currentDirectory.value = configData.currentDirectory
@@ -582,6 +588,37 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 保存项目启动项
+  async function saveStartupItems(items: Array<{id: string, type: 'command' | 'workflow', refId: string, createdAt: number}>, autoRun?: boolean) {
+    try {
+      const response = await fetch('/api/config/save-startup-items', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          startupItems: items,
+          startupAutoRun: autoRun !== undefined ? autoRun : startupAutoRun.value
+        })
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        startupItems.value = items
+        if (autoRun !== undefined) {
+          startupAutoRun.value = autoRun
+        }
+        return true
+      } else {
+        ElMessage.error(`保存启动项失败: ${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`保存启动项失败: ${(error as Error).message}`)
+      return false
+    }
+  }
+
   return {
     // 状态
     defaultCommitMessage,
@@ -591,6 +628,8 @@ export const useConfigStore = defineStore('config', () => {
     lockedFiles,
     customCommands,
     orchestrations,
+    startupItems,
+    startupAutoRun,
     isLoading,
     isLoaded,
     currentDirectory,
@@ -615,6 +654,7 @@ export const useConfigStore = defineStore('config', () => {
     updateCustomCommand,
     saveOrchestration,
     deleteOrchestration,
-    updateOrchestration
+    updateOrchestration,
+    saveStartupItems
   }
 }) 
