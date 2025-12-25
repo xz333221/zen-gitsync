@@ -1,6 +1,6 @@
 # zen-gitsync
 
-`zen-gitsync` 是一个简单的命令行工具，用于自动化 Git 提交和推送操作。只需在控制台输入 `g`，并输入提交内容，即可自动执行 `git add`、`git commit` 和 `git push` 操作，极大提升 Git 工作流程的效率。
+`zen-gitsync` 是一个工作平台工具，集成部分 git 功能，可自定义命令，编排命令，设置自启动
 
 ## 安装
 
@@ -10,14 +10,15 @@
 npm install -g zen-gitsync
 ```
 
-## 使用方法
+## v2.x.x
+- 新增图形用户界面(GUI)模式
+- 支持标准化的提交信息格式
 
-1. 在终端中，输入 `g` 并按回车。
-2. 输入提交信息，按回车确认提交。
-3. 工具将自动查看远程分支并自动提交
-
-
-### 示例：
+### 启动图形界面：
+```shell
+$ g ui
+```
+### 其他命令：
 #### 交互式提交：
 ```bash
 $ g
@@ -47,21 +48,6 @@ $ g -h
 $ g --help
 ```
 
-#### 文件锁定功能
-```shell
-# 锁定文件（锁定后的文件不会被包含在提交中）
-$ g --lock-file=config.json
-
-# 解锁文件
-$ g --unlock-file=config.json
-
-# 查看所有锁定的文件
-$ g --list-locked
-
-# 检查文件是否被锁定
-$ g --check-lock=config.json
-```
-
 #### 定时执行自动提交，默认间隔1小时
 ```bash
 $ g -y --interval
@@ -74,15 +60,6 @@ $ g --path=<path>
 或
 ```bash
 $ g --cwd=<path> 
-```
-
-#### 添加项目script
-```json
-{
-   "scripts": {
-      "g:y": "g -y"
-   }
-}
 ```
 
 #### cmd同步文件夹
@@ -106,43 +83,18 @@ $ g --no-diff
 $ g log
 $ g log --n=5
 ```
+#### 文件锁定功能(仅在工具中有效)
 
-## ✨ 新特性 (v2.0.0)
-- 新增图形用户界面(GUI)模式
-- 支持标准化的提交信息格式
-
-### 启动图形界面：
 ```shell
-$ g ui
-```
-![Zen GitSync UI](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/zen-gitsync-ui.png)
+# 锁定文件（锁定后的文件不会被包含在提交中）
+$ g --lock-file=config.json
 
-## 🔒 文件锁定功能
+# 解锁文件
+$ g --unlock-file=config.json
 
-文件锁定功能允许您临时排除某些文件不被包含在 Git 提交中，而无需修改 `.gitignore` 文件。这对于以下场景特别有用：
-
-- 临时排除配置文件（如包含敏感信息的配置）
-- 跳过正在开发中的实验性文件
-- 避免提交临时的调试文件
-
-### 特点：
-- ✅ 不修改 `.gitignore` 文件
-- ✅ 支持命令行和 Web UI 操作
-- ✅ 锁定状态持久保存
-- ✅ 支持相对路径和绝对路径
-- ✅ 自动跳过锁定文件，显示清晰的提示信息
-
-### 使用场景示例：
-```shell
-# 锁定配置文件，避免提交敏感信息
-$ g --lock-file=.env
-
-# 锁定正在开发的功能文件
-$ g --lock-file=src/experimental-feature.js
-
-# 查看当前锁定的文件
+# 查看所有锁定的文件
 $ g --list-locked
 
-# 开发完成后解锁文件
-$ g --unlock-file=src/experimental-feature.js
+# 检查文件是否被锁定
+$ g --check-lock=config.json
 ```
