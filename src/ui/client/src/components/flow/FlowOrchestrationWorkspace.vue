@@ -252,7 +252,7 @@ function initializeFlow() {
       data: {
         id: 'start-node',
         type: 'start',
-        label: '开始',
+        label: t('@FLOWNODE:开始'),
         enabled: true
       }
     }
@@ -265,10 +265,10 @@ function initializeFlow() {
 function addNode(type: 'command' | 'wait' | 'version' | 'confirm') {
   const id = generateNodeId(type)
   const labelMap = {
-    command: '命令节点',
-    wait: '等待节点',
-    version: '版本管理',
-    confirm: '用户确认'
+    command: t('@FLOWNODE:命令节点'),
+    wait: t('@FLOWNODE:等待节点'),
+    version: t('@FLOWNODE:版本管理'),
+    confirm: t('@FLOWNODE:用户确认')
   }
   const newNode: FlowNode = {
     id,
@@ -294,7 +294,7 @@ function addNode(type: 'command' | 'wait' | 'version' | 'confirm') {
     showConfigPanel.value = true
   }
   
-  ElMessage.success(`已添加${newNode.data.label}`)
+  ElMessage.success(`${t('@FLOWNODE:已添加')}${newNode.data.label}`)
 
   // 节点结构变化后自动保存
   scheduleAutoSave()
@@ -372,24 +372,24 @@ function updateNodeConfig(nodeId: string, config: OrchestrationStep) {
 // 获取节点显示标签
 function getNodeLabel(step: OrchestrationStep): string {
   if (step.type === 'command') {
-    return step.commandName || '未知命令'
+    return step.commandName || t('@FLOWNODE:未知命令')
   } else if (step.type === 'wait') {
-    return `等待 ${step.waitSeconds} 秒`
+    return t('@FLOWNODE:等待 {seconds} 秒', { seconds: step.waitSeconds })
   } else if (step.type === 'version') {
     if (step.versionTarget === 'dependency') {
-      return `修改依赖: ${step.dependencyName}`
+      return t('@FLOWNODE:修改依赖: {name}', { name: step.dependencyName })
     } else {
-      return `版本号 +1 (${step.versionBump})`
+      return t('@FLOWNODE:版本号 +1 ({bump})', { bump: step.versionBump })
     }
   }
-  return '未配置'
+  return t('@FLOWNODE:未配置')
 }
 
 // 处理节点删除（从节点上的删除按钮触发）
 function handleNodeDelete(nodeId: string) {
   console.log(`nodeId ==>`, nodeId)
   if (nodeId === 'start-node') {
-    ElMessage.warning('不能删除起始节点')
+    ElMessage.warning(t('@FLOWNODE:不能删除起始节点'))
     return
   }
   console.log(`nodes ==>`, nodes)
@@ -405,7 +405,7 @@ function handleNodeDelete(nodeId: string) {
     showConfigPanel.value = false
   }
   
-  ElMessage.success('节点已删除')
+  ElMessage.success(t('@FLOWNODE:节点已删除'))
 
   // 结构变更后自动保存
   scheduleAutoSave()

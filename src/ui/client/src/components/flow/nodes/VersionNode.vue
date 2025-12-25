@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FlowNodeData } from '../FlowOrchestrationWorkspace.vue'
+import { $t } from '@/lang/static'
 
 const props = defineProps<{
   data: FlowNodeData
@@ -25,15 +26,15 @@ const versionInfo = computed(() => {
   >
     <div class="node-header">
       <div class="flow-node-icon">📦</div>
-      <div class="node-type">版本管理</div>
+      <div class="node-type">{{ $t('@FLOWNODE:版本管理') }}</div>
     </div>
     
     <div class="node-content">
       <div class="node-label">{{ data.label }}</div>
       <div v-if="versionInfo?.target === 'dependency'" class="node-badge">
-        依赖: {{ versionInfo.dependency }}
+        {{ $t('@FLOWNODE:依赖') }}: {{ versionInfo.dependency }}
       </div>
-      <div v-if="!data.config" class="node-warning">未配置</div>
+      <div v-if="!data.config" class="node-warning">{{ $t('@FLOWNODE:未配置') }}</div>
     </div>
   </div>
 </template>

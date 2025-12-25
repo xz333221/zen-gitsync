@@ -11,6 +11,7 @@ import SvgIcon from '@components/SvgIcon/index.vue'
 import type { CustomCommand } from '@components/CustomCommandManager.vue'
 import type { PackageFile } from '@components/PackageJsonSelector.vue'
 import { extractVariables } from '@/utils/commandParser'
+import { $t } from '@/lang/static'
 
 const props = defineProps<{
   modelValue: boolean
@@ -123,8 +124,8 @@ const predecessorNodes = computed(() => {
 function getNodeOutputOptions(node: FlowNode) {
   if (node.type === 'command') {
     return [
-      { key: 'stdout', label: '标准输出 (stdout)' },
-      { key: 'version', label: '提取的版本号' }
+      { key: 'stdout', label: $t('@NODECFG:标准输出(stdout)') },
+      { key: 'version', label: $t('@NODECFG:提取的版本号') }
     ]
   }
   return []
@@ -133,7 +134,7 @@ function getNodeOutputOptions(node: FlowNode) {
 // 获取节点显示名称
 function getNodeDisplayName(node: FlowNode): string {
   if (node.type === 'command') {
-    return node.data.config?.commandName || node.data.label || '命令节点'
+    return node.data.config?.commandName || node.data.label || $t('@NODECFG:命令节点')
   }
   return node.data.label || node.id
 }
@@ -214,7 +215,7 @@ async function loadDependenciesFromPackageJson(pkgPath: string) {
       availableDependencies.value = deps.sort()
     }
   } catch (error) {
-    console.error('读取依赖列表失败:', error)
+    console.error($t('@NODECFG:读取依赖列表失败'), error)
     availableDependencies.value = []
   }
 }
@@ -256,7 +257,7 @@ function saveConfig() {
   
   if (props.node.type === 'command') {
     if (!formData.value.commandId) {
-      ElMessage.warning('请选择要执行的命令')
+      ElMessage.warning($t('@NODECFG:请选择要执行的命令'))
       return
     }
     
@@ -273,7 +274,7 @@ function saveConfig() {
     }
   } else if (props.node.type === 'wait') {
     if (!formData.value.waitSeconds || formData.value.waitSeconds <= 0) {
-      ElMessage.warning('等待时间必须大于0秒')
+      ElMessage.warning($t('@NODECFG:等待时间必须大于0秒'))
       return
     }
     
@@ -287,16 +288,16 @@ function saveConfig() {
   } else if (props.node.type === 'version') {
     if (formData.value.versionTarget === 'dependency') {
       if (!formData.value.dependencyName?.trim()) {
-        ElMessage.warning('请选择依赖包名称')
+        ElMessage.warning($t('@NODECFG:请选择依赖包名称'))
         return
       }
       // 根据版本来源验证
       if (formData.value.versionSource === 'manual' && !formData.value.dependencyVersion?.trim()) {
-        ElMessage.warning('请输入依赖包版本号')
+        ElMessage.warning($t('@NODECFG:请输入依赖包版本号'))
         return
       }
       if (formData.value.versionSource === 'reference' && !formData.value.inputRef) {
-        ElMessage.warning('请选择要引用的节点输出')
+        ElMessage.warning($t('@NODECFG:请选择要引用的节点输出'))
         return
       }
     }
@@ -320,7 +321,7 @@ function saveConfig() {
   
   if (config) {
     emit('update-config', props.node.id, config)
-    ElMessage.success('节点配置已保存')
+    ElMessage.success($t('@NODECFG:节点配置已保存'))
     visible.value = false
   }
 }
@@ -329,7 +330,7 @@ function saveConfig() {
 <template>
   <CommonDialog
     v-model="visible"
-    title="节点配置"
+    :title="$t('@NODECFG:节点配置')"
     size="extra-large"
     :append-to-body="true"
     custom-class="node-config-dialog"
@@ -337,22 +338,22 @@ function saveConfig() {
     <div v-if="node" class="config-content">
       <!-- 通用配置 -->
       <div class="config-section">
-        <div class="section-title">通用设置</div>
+        <div class="section-title">{{ $t('@NODECFG:通用设置') }}</div>
         <el-form label-width="100px">
-          <el-form-item label="启用节点">
+          <el-form-item :label="$t('@NODECFG:启用节点')">
             <el-switch v-model="formData.enabled" />
           </el-form-item>
           
           <!-- 命令节点的执行方式 -->
-          <el-form-item v-if="node.type === 'command'" label="执行方式">
+          <el-form-item v-if="node.type === 'command'" :label="$t('@NODECFG:执行方式')">
             <el-radio-group v-model="formData.useTerminal">
-              <el-radio :value="false">普通执行</el-radio>
-              <el-radio :value="true">终端执行</el-radio>
+              <el-radio :value="false">{{ $t('@NODECFG:普通执行') }}</el-radio>
+              <el-radio :value="true">{{ $t('@NODECFG:终端执行') }}</el-radio>
             </el-radio-group>
           </el-form-item>
 
-          <el-form-item v-if="node.type === 'command' && formData.useTerminal" label="终端选项">
-            <el-checkbox v-model="formData.restartExistingTerminal">重启现存终端命令</el-checkbox>
+          <el-form-item v-if="node.type === 'command' && formData.useTerminal" :label="$t('@NODECFG:终端选项')">
+            <el-checkbox v-model="formData.restartExistingTerminal">{{ $t('@NODECFG:重启现存终端命令') }}</el-checkbox>
           </el-form-item>
         </el-form>
       </div>
@@ -361,7 +362,7 @@ function saveConfig() {
       <div v-if="node.type === 'command' && formData.commandId && formData.inputs" class="config-section">
         <div class="section-title">
           <el-icon><Link /></el-icon>
-          输入配置
+          {{ $t('@NODECFG:输入配置') }}
         </div>
         <NodeInputConfig
           v-model="formData.inputs"
@@ -375,13 +376,13 @@ function saveConfig() {
       <div v-if="node.type === 'command'" class="config-section">
         <div class="section-title">
           <el-icon><svg-icon icon-class="custom-cmd" /></el-icon>
-          命令配置
+          {{ $t('@NODECFG:命令配置') }}
         </div>
         
         <el-form label-width="100px">
-          <el-form-item label="选择命令" required>
+          <el-form-item :label="$t('@NODECFG:选择命令')" required>
             <div v-if="availableCommands.length === 0" class="empty-tip">
-              暂无可用命令，请先创建命令
+              {{ $t('@NODECFG:暂无可用命令请先创建命令') }}
             </div>
             <div v-else class="command-list">
               <div
@@ -399,7 +400,7 @@ function saveConfig() {
                   <code class="command-code">{{ command.command }}</code>
                   <div class="command-dir">
                     <el-icon><Folder /></el-icon>
-                    <span>{{ command.directory ? command.directory.replace(/\\/g, '/') : '当前目录' }}</span>
+                    <span>{{ command.directory ? command.directory.replace(/\\/g, '/') : $t('@NODECFG:当前目录') }}</span>
                   </div>
                 </div>
                 <el-icon v-if="formData.commandId === command.id" class="check-icon">
@@ -415,18 +416,18 @@ function saveConfig() {
       <div v-if="node.type === 'wait'" class="config-section">
         <div class="section-title">
           <el-icon><Clock /></el-icon>
-          等待配置
+          {{ $t('@NODECFG:等待配置') }}
         </div>
         
         <el-form label-width="100px">
-          <el-form-item label="等待时间" required>
+          <el-form-item :label="$t('@NODECFG:等待时间')" required>
             <el-input-number 
               v-model="formData.waitSeconds" 
               :min="1" 
               :max="3600" 
               :step="1"
             />
-            <span style="margin-left: var(--spacing-md);">秒</span>
+            <span style="margin-left: var(--spacing-md);">{{ $t('@NODECFG:秒') }}</span>
           </el-form-item>
         </el-form>
       </div>
@@ -435,50 +436,50 @@ function saveConfig() {
       <div v-if="node.type === 'version'" class="config-section">
         <div class="section-title">
           <el-icon><DocumentAdd /></el-icon>
-          版本配置
+          {{ $t('@NODECFG:版本配置') }}
         </div>
         
         <el-form label-width="120px">
-          <el-form-item label="package.json">
+          <el-form-item :label="$t('@NODECFG:package.json')">
             <PackageJsonSelector
               v-model="formData.packageJsonPath!"
-              placeholder="留空则使用当前目录的 package.json"
+              :placeholder="$t('@NODECFG:留空则使用当前目录的package.json')"
               clearable
               @change="handlePackageFileChange"
             />
           </el-form-item>
           
-          <el-form-item label="修改目标" required>
+          <el-form-item :label="$t('@NODECFG:修改目标')" required>
             <el-radio-group v-model="formData.versionTarget">
-              <el-radio value="version">version 字段</el-radio>
-              <el-radio value="dependency">dependencies 中的依赖</el-radio>
+              <el-radio value="version">{{ $t('@NODECFG:version字段') }}</el-radio>
+              <el-radio value="dependency">{{ $t('@NODECFG:dependencies中的依赖') }}</el-radio>
             </el-radio-group>
           </el-form-item>
           
           <!-- version 字段配置 -->
           <template v-if="formData.versionTarget === 'version'">
-            <el-form-item label="版本增量类型" required>
+            <el-form-item :label="$t('@NODECFG:版本增量类型')" required>
               <el-radio-group v-model="formData.versionBump">
-                <el-radio value="patch">补丁版本 (x.x.+1)</el-radio>
-                <el-radio value="minor">次版本 (x.+1.0)</el-radio>
-                <el-radio value="major">主版本 (+1.0.0)</el-radio>
+                <el-radio value="patch">{{ $t('@NODECFG:补丁版本x.x.+1') }}</el-radio>
+                <el-radio value="minor">{{ $t('@NODECFG:次版本x.+1.0') }}</el-radio>
+                <el-radio value="major">{{ $t('@NODECFG:主版本+1.0.0') }}</el-radio>
               </el-radio-group>
             </el-form-item>
           </template>
           
           <!-- dependency 配置 -->
           <template v-if="formData.versionTarget === 'dependency'">
-            <el-form-item label="依赖类型" required>
+            <el-form-item :label="$t('@NODECFG:依赖类型')" required>
               <el-radio-group v-model="formData.dependencyType">
                 <el-radio value="dependencies">dependencies</el-radio>
                 <el-radio value="devDependencies">devDependencies</el-radio>
               </el-radio-group>
             </el-form-item>
             
-            <el-form-item label="依赖包名称" required>
+            <el-form-item :label="$t('@NODECFG:依赖包名称')" required>
               <el-select 
                 v-model="formData.dependencyName" 
-                placeholder="请先选择 package.json"
+                :placeholder="$t('@NODECFG:请先选择package.json')"
                 clearable
                 filterable
                 allow-create
@@ -493,41 +494,41 @@ function saveConfig() {
               </el-select>
             </el-form-item>
             
-            <el-form-item label="版本号来源" required>
+            <el-form-item :label="$t('@NODECFG:版本号来源')" required>
               <el-radio-group v-model="formData.versionSource">
-                <el-radio value="bump">自动递增</el-radio>
-                <el-radio value="manual">手动输入</el-radio>
+                <el-radio value="bump">{{ $t('@NODECFG:自动递增') }}</el-radio>
+                <el-radio value="manual">{{ $t('@NODECFG:手动输入') }}</el-radio>
                 <el-radio value="reference" :disabled="predecessorNodes.length === 0">
-                  引用输出
-                  <el-tooltip v-if="predecessorNodes.length === 0" content="无可用的前置命令节点" placement="top">
+                  {{ $t('@NODECFG:引用输出') }}
+                  <el-tooltip v-if="predecessorNodes.length === 0" :content="$t('@NODECFG:无可用的前置命令节点')" placement="top">
                     <el-icon style="margin-left: 4px;"><Link /></el-icon>
                   </el-tooltip>
                 </el-radio>
               </el-radio-group>
             </el-form-item>
             
-            <el-form-item v-if="formData.versionSource === 'bump'" label="递增类型" required>
+            <el-form-item v-if="formData.versionSource === 'bump'" :label="$t('@NODECFG:递增类型')" required>
               <el-radio-group v-model="formData.dependencyVersionBump">
-                <el-radio value="patch">补丁版本</el-radio>
-                <el-radio value="minor">次版本</el-radio>
-                <el-radio value="major">主版本</el-radio>
+                <el-radio value="patch">{{ $t('@NODECFG:补丁版本') }}</el-radio>
+                <el-radio value="minor">{{ $t('@NODECFG:次版本') }}</el-radio>
+                <el-radio value="major">{{ $t('@NODECFG:主版本') }}</el-radio>
               </el-radio-group>
             </el-form-item>
             
-            <el-form-item v-if="formData.versionSource === 'manual'" label="版本号" required>
+            <el-form-item v-if="formData.versionSource === 'manual'" :label="$t('@NODECFG:版本号')" required>
               <el-input 
                 v-model="formData.dependencyVersion" 
-                placeholder="例如: 1.2.3"
+                :placeholder="$t('@NODECFG:例如1.2.3')"
               />
             </el-form-item>
             
             <!-- 引用输出配置 -->
             <template v-if="formData.versionSource === 'reference'">
-              <el-form-item label="引用节点" required>
+              <el-form-item :label="$t('@NODECFG:引用节点')" required>
                 <el-select 
                   v-model="formData.inputRef"
                   value-key="nodeId"
-                  placeholder="选择要引用的前置节点"
+                  :placeholder="$t('@NODECFG:选择要引用的前置节点')"
                   style="width: 100%"
                 >
                   <el-option
@@ -538,16 +539,16 @@ function saveConfig() {
                   >
                     <div class="node-option">
                       <span class="node-name">{{ getNodeDisplayName(predNode) }}</span>
-                      <span class="node-id">ID: {{ predNode.id.substring(0, 15) }}...</span>
+                      <span class="node-id">{{ $t('@NODECFG:ID') }}: {{ predNode.id.substring(0, 15) }}...</span>
                     </div>
                   </el-option>
                 </el-select>
               </el-form-item>
               
-              <el-form-item v-if="formData.inputRef" label="输出字段" required>
+              <el-form-item v-if="formData.inputRef" :label="$t('@NODECFG:输出字段')" required>
                 <el-select 
                   v-model="formData.inputRef.outputKey"
-                  placeholder="选择要引用的输出字段"
+                  :placeholder="$t('@NODECFG:选择要引用的输出字段')"
                   style="width: 100%"
                 >
                   <el-option
@@ -561,7 +562,7 @@ function saveConfig() {
               
               <div class="reference-tip">
                 <el-icon><Link /></el-icon>
-                <span>版本号将使用所选节点的输出结果</span>
+                <span>{{ $t('@NODECFG:版本号将使用所选节点的输出结果') }}</span>
               </div>
             </template>
           </template>
@@ -573,11 +574,11 @@ function saveConfig() {
       <div class="dialog-footer">
         <div class="footer-actions">
           <button type="button" class="dialog-cancel-btn" @click="visible = false">
-            取消
+            {{ $t('@NODECFG:取消') }}
           </button>
           <button type="button" class="dialog-confirm-btn" @click="saveConfig">
             <el-icon><Select /></el-icon>
-            <span>保存配置</span>
+            <span>{{ $t('@NODECFG:保存配置') }}</span>
           </button>
         </div>
       </div>

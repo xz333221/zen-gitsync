@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { Monitor, Folder } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
 import type { FlowNodeData } from '../FlowOrchestrationWorkspace.vue'
+import { $t } from '@/lang/static'
 
 const props = defineProps<{
   data: FlowNodeData
@@ -22,7 +23,7 @@ const commandDetail = computed(() => {
 const commandInfo = computed(() => {
   if (!props.data.config) return null
   return {
-    name: props.data.config.commandName || '未配置',
+    name: props.data.config.commandName || $t('@FLOWNODE:未配置'),
     terminal: props.data.config.useTerminal || false,
     command: commandDetail.value?.command || '',
     directory: commandDetail.value?.directory || ''
@@ -38,7 +39,7 @@ const commandInfo = computed(() => {
   >
     <div class="node-header">
       <div class="flow-node-icon">📋</div>
-      <div class="node-type">命令节点</div>
+      <div class="node-type">{{ $t('@FLOWNODE:命令节点') }}</div>
     </div>
     
     <div class="node-content">
@@ -46,10 +47,10 @@ const commandInfo = computed(() => {
       <div class="node-badges">
         <div v-if="commandInfo?.terminal" class="node-badge terminal">
           <el-icon><Monitor /></el-icon>
-          <span>终端</span>
+          <span>{{ $t('@FLOWNODE:终端') }}</span>
         </div>
       </div>
-      <div v-if="!data.config" class="node-warning">未配置</div>
+      <div v-if="!data.config" class="node-warning">{{ $t('@FLOWNODE:未配置') }}</div>
       
       <!-- 显示命令详细信息 -->
       <div v-if="commandInfo?.command" class="command-details">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FlowNodeData } from '../FlowOrchestrationWorkspace.vue'
+import { $t } from '@/lang/static'
 
 defineProps<{
   data: FlowNodeData
@@ -9,7 +10,7 @@ defineProps<{
 <template>
   <div class="start-node" :class="{ 'selected': data.selected }">
     <div class="flow-node-icon">🚀</div>
-    <div class="node-label">开始</div>
+    <div class="node-label">{{ $t('@FLOWNODE:开始') }}</div>
   </div>
 </template>
 

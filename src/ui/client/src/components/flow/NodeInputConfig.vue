@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { Link } from '@element-plus/icons-vue'
 import type { NodeInput } from '@stores/configStore'
 import type { FlowNode } from './FlowOrchestrationWorkspace.vue'
+import { $t } from '@/lang/static'
 
 const props = defineProps<{
   modelValue: NodeInput[]
@@ -75,7 +76,7 @@ function updateInput(index: number, field: keyof NodeInput, value: any) {
 // 获取节点显示名称
 function getNodeDisplayName(node: FlowNode): string {
   if (node.type === 'command') {
-    return node.data.config?.commandName || node.data.label || '命令节点'
+    return node.data.config?.commandName || node.data.label || $t('@FLOWNODE:命令节点')
   }
   return node.data.label || node.id
 }
@@ -84,8 +85,8 @@ function getNodeDisplayName(node: FlowNode): string {
 function getNodeOutputOptions(node: FlowNode) {
   if (node.type === 'command') {
     return [
-      { key: 'stdout', label: '标准输出 (stdout)' },
-      { key: 'stderr', label: '标准错误 (stderr)' }
+      { key: 'stdout', label: $t('@NODEINPUT:标准输出(stdout)') },
+      { key: 'stderr', label: $t('@NODEINPUT:标准错误(stderr)') }
     ]
   }
   return []
@@ -137,7 +138,7 @@ function getCurrentReferenceValue(input: NodeInput): string {
 <template>
   <div class="node-input-config">
     <div v-if="inputs.length === 0" class="empty-tip">
-      命令中未检测到变量参数
+      {{ $t('@NODEINPUT:命令中未检测到变量参数') }}
     </div>
     
     <div v-else class="input-list">
@@ -145,11 +146,11 @@ function getCurrentReferenceValue(input: NodeInput): string {
         <div class="input-row">
           <!-- 参数名 -->
           <div class="input-field param-name-field">
-            <label class="field-label">参数名</label>
+            <label class="field-label">{{ $t('@NODEINPUT:参数名') }}</label>
             <el-input 
               :model-value="input.paramName"
               :disabled="disableParamNameEdit"
-              placeholder="参数名"
+              :placeholder="$t('@NODEINPUT:参数名')"
               size="default"
               @update:model-value="(val: string) => updateInput(index, 'paramName', val)"
             />
@@ -157,27 +158,27 @@ function getCurrentReferenceValue(input: NodeInput): string {
           
           <!-- 输入类型选择 -->
           <div class="input-field type-field">
-            <label class="field-label">类型</label>
+            <label class="field-label">{{ $t('@NODEINPUT:类型') }}</label>
             <el-select 
               :model-value="input.inputType"
-              placeholder="选择类型"
+              :placeholder="$t('@NODEINPUT:选择类型')"
               size="default"
               @update:model-value="(val: 'reference' | 'manual') => updateInput(index, 'inputType', val)"
             >
-              <el-option value="manual" label="手动输入" />
-              <el-option value="reference" label="引用节点" :disabled="!predecessorNodes || predecessorNodes.length === 0" />
+              <el-option value="manual" :label="$t('@NODEINPUT:手动输入')" />
+              <el-option value="reference" :label="$t('@NODEINPUT:引用节点')" :disabled="!predecessorNodes || predecessorNodes.length === 0" />
             </el-select>
           </div>
           
           <!-- 值配置 -->
           <div class="input-field value-field">
-            <label class="field-label">值</label>
+            <label class="field-label">{{ $t('@NODEINPUT:值') }}</label>
             
             <!-- 手动输入 -->
             <el-input 
               v-if="input.inputType === 'manual'"
               :model-value="input.manualValue"
-              placeholder="输入参数值"
+              :placeholder="$t('@NODEINPUT:输入参数值')"
               size="default"
               clearable
               @update:model-value="(val: string) => updateInput(index, 'manualValue', val)"
@@ -188,7 +189,7 @@ function getCurrentReferenceValue(input: NodeInput): string {
               v-else
               :model-value="getCurrentReferenceValue(input)"
               :data="treeSelectOptions"
-              placeholder="选择节点输出"
+              :placeholder="$t('@NODEINPUT:选择节点输出')"
               size="default"
               clearable
               filterable

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FlowNodeData } from '../FlowOrchestrationWorkspace.vue'
+import { $t } from '@/lang/static'
 defineProps<{
   data: FlowNodeData
   id: string
@@ -13,12 +14,12 @@ defineProps<{
   >
     <div class="node-header">
       <div class="flow-node-icon">⏰</div>
-      <div class="node-type">等待节点</div>
+      <div class="node-type">{{ $t('@FLOWNODE:等待节点') }}</div>
     </div>
     
     <div class="node-content">
       <div class="node-label">{{ data.label }}</div>
-      <div v-if="!data.config" class="node-warning">未配置</div>
+      <div v-if="!data.config" class="node-warning">{{ $t('@FLOWNODE:未配置') }}</div>
     </div>
   </div>
 </template>
