@@ -38,6 +38,7 @@ const formData = ref<{
   commandId?: string
   commandName?: string
   useTerminal?: boolean
+  restartExistingTerminal?: boolean
   inputs?: NodeInput[]  // 命令输入参数配置
   
   // 等待节点
@@ -148,6 +149,7 @@ watch(() => props.node, (node) => {
       commandId: config?.commandId,
       commandName: config?.commandName,
       useTerminal: config?.useTerminal || false,
+      restartExistingTerminal: config?.restartExistingTerminal || false,
       inputs: Array.isArray(config?.inputs) ? config.inputs : [],
       enabled: node.data.enabled ?? true
     }
@@ -265,6 +267,7 @@ function saveConfig() {
       commandId: formData.value.commandId,
       commandName: formData.value.commandName || '',
       useTerminal: formData.value.useTerminal || false,
+      restartExistingTerminal: formData.value.useTerminal ? (formData.value.restartExistingTerminal || false) : false,
       inputs: formData.value.inputs || [],
       enabled: formData.value.enabled ?? true
     }
@@ -346,6 +349,10 @@ function saveConfig() {
               <el-radio :value="false">普通执行</el-radio>
               <el-radio :value="true">终端执行</el-radio>
             </el-radio-group>
+          </el-form-item>
+
+          <el-form-item v-if="node.type === 'command' && formData.useTerminal" label="终端选项">
+            <el-checkbox v-model="formData.restartExistingTerminal">重启现存终端命令</el-checkbox>
           </el-form-item>
         </el-form>
       </div>

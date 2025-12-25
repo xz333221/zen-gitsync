@@ -357,6 +357,14 @@ function upsertTerminalSession(session: TerminalSession) {
   terminalSessions.value = [...terminalSessions.value];
 }
 
+function getLastDirName(p?: string) {
+  const raw = String(p || '').trim();
+  if (!raw) return '';
+  const normalized = raw.replace(/\/+$/g, '').replace(/\+$/g, '');
+  const parts = normalized.split(/[\\/]+/).filter(Boolean);
+  return parts[parts.length - 1] || normalized;
+}
+
 async function loadTerminalSessions() {
   try {
     terminalSessionsLoading.value = true;
@@ -879,22 +887,50 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
       // 如果标记为终端执行，在新终端窗口执行
       if (step.useTerminal) {
         try {
-          const resp = await fetch('/api/exec-in-terminal', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              command: cmd,
-              workingDirectory: command.directory // 传递命令的工作目录
-            })
-          });
-          const result = await resp.json();
-          if (result?.success) {
-            ElMessage.success(`${stepLabel} 已在新终端中执行`);
-            if (result?.session) {
-              upsertTerminalSession(result.session);
-            } else {
-              await loadTerminalSessions();
+          const workingDirectory = command.directory; // 传递命令的工作目录
+          const shouldRestartExisting = step.restartExistingTerminal === true;
+
+          if (shouldRestartExisting) {
+            await loadTerminalSessionsStatus(false);
+            const matched = terminalSessions.value.find((s) => {
+              const sameCommand = (s?.command || '').trim() === String(cmd).trim();
+              const sameDir = (s?.workingDirectory || '') === (workingDirectory || '');
+              return sameCommand && sameDir;
+            });
+
+            if (matched) {
+              const restartResp = await fetch(`/api/terminal-sessions/${matched.id}/restart`, { method: 'POST' });
+              const restartResult = await restartResp.json();
+              if (restartResult?.success) {
+                ElMessage.success(`${stepLabel} 已重启现存终端命令`);
+                await loadTerminalSessions();
+              } else {
+                throw new Error(restartResult?.error || '重启失败');
+              }
             }
+          }
+
+          if (!shouldRestartExisting || !terminalSessions.value.some((s) => (s?.command || '').trim() === String(cmd).trim() && (s?.workingDirectory || '') === (workingDirectory || ''))) {
+            const resp = await fetch('/api/exec-in-terminal', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                command: cmd,
+                workingDirectory
+              })
+            });
+            const result = await resp.json();
+            if (result?.success) {
+              ElMessage.success(`${stepLabel} 已在新终端中执行`);
+              if (result?.session) {
+                upsertTerminalSession(result.session);
+              } else {
+                await loadTerminalSessions();
+              }
+            } else {
+              throw new Error(result?.error || '执行失败');
+            }
+          }
             
             // 等待用户确认命令执行完成（如果不是最后一个步骤）
             if (i < steps.length - 1 && shouldContinue) {
@@ -915,9 +951,6 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
                 throw new Error('用户取消执行');
               }
             }
-          } else {
-            throw new Error(result?.error || '执行失败');
-          }
         } catch (e: any) {
           if (e?.message !== '用户取消执行') {
             ElMessage.error(`${stepLabel} 执行失败: ${e?.message}`);
@@ -2003,10 +2036,12 @@ onUnmounted(() => {
                       <div class="terminal-session-main">
                         <div class="terminal-session-command" :title="session.command">{{ session.command }}<span class="terminal-session-pid"> PID: {{ session.pid ?? '-' }}</span></div>
                         <div class="terminal-session-meta">
-                          <span v-if="session.workingDirectory" class="terminal-session-dir" :title="session.workingDirectory">
-                            <el-icon class="cmd-dir-icon"><Folder /></el-icon>
-                            {{ session.workingDirectory }}
-                          </span>
+                          <el-tooltip v-if="session.workingDirectory" :content="session.workingDirectory" placement="top">
+                            <span class="terminal-session-dir">
+                              <el-icon class="cmd-dir-icon"><Folder /></el-icon>
+                              {{ getLastDirName(session.workingDirectory) }}
+                            </span>
+                          </el-tooltip>
                         </div>
                       </div>
                       <div class="terminal-session-actions">

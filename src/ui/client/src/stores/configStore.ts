@@ -27,6 +27,7 @@ export interface OrchestrationStep {
   type: 'command' | 'wait' | 'version' | 'confirm'
   enabled?: boolean  // 是否启用该步骤（默认 true），禁用的步骤不会执行
   useTerminal?: boolean  // 是否在新终端窗口中执行（仅对 command 类型有效）
+  restartExistingTerminal?: boolean  // 终端执行时：是否重启现存的同命令同目录终端会话（仅对 command 类型有效）
   // 对于 command 类型
   commandId?: string  // 引用的自定义命令 ID
   commandName?: string  // 命令名称（用于显示）
