@@ -1,13 +1,14 @@
+import path from 'path';
+import iconv from 'iconv-lite';
+import { spawn } from 'child_process';
+
 export function registerExecRoutes({
   app,
   execGitCommand,
   addCommandToHistory,
   getCurrentProjectPath,
   nextProcessId,
-  runningProcesses,
-  spawn,
-  path,
-  iconv
+  runningProcesses
 }) {
   // 通用命令执行接口（非流式）
   app.post('/api/exec', async (req, res) => {

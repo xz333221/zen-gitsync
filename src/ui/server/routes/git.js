@@ -1,6 +1,7 @@
+import express from 'express';
+
 export function registerGitRoutes({
   app,
-  express,
   execGitCommand,
   clearBranchCache
 }) {

@@ -1,10 +1,10 @@
+import { spawn, exec } from 'child_process';
+
 export function registerTerminalRoutes({
   app,
   getCurrentProjectPath,
   nextTerminalSessionId,
-  terminalSessions,
-  spawn,
-  exec
+  terminalSessions
 }) {
   async function startTerminalProcess({ command, workingDirectory }) {
     const targetDir = workingDirectory || getCurrentProjectPath();

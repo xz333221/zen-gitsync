@@ -1,15 +1,15 @@
+import chalk from 'chalk';
+import fs from 'fs/promises';
+import path from 'path';
+import open from 'open';
+import os from 'os';
+import { spawn, exec } from 'child_process';
+
 export function registerFsRoutes({
   app,
   execGitCommand,
   configManager,
   io,
-  chalk,
-  fs,
-  path,
-  open,
-  os,
-  spawn,
-  exec,
   getCurrentProjectPath,
   setCurrentProjectPath,
   getProjectRoomId,
@@ -381,6 +381,63 @@ export function registerFsRoutes({
         success: false,
         error: error.message
       });
+    }
+  });
+
+  // ========== 文件锁定相关 API ==========
+
+  // 获取锁定文件列表
+  app.get('/api/locked-files', async (req, res) => {
+    try {
+      const lockedFiles = await configManager.getLockedFiles();
+      res.json({ success: true, lockedFiles });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 锁定文件
+  app.post('/api/lock-file', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+      }
+
+      const result = await configManager.lockFile(filePath);
+      res.json({ success: true, locked: result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 解锁文件
+  app.post('/api/unlock-file', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+      }
+
+      const result = await configManager.unlockFile(filePath);
+      res.json({ success: true, unlocked: result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 检查文件是否锁定
+  app.post('/api/check-file-lock', async (req, res) => {
+    try {
+      const { filePath } = req.body;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+      }
+
+      const isLocked = await configManager.isFileLocked(filePath);
+      res.json({ success: true, isLocked });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 }

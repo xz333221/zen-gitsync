@@ -1,11 +1,12 @@
+import express from 'express';
+import path from 'path';
+import os from 'os';
+import fs from 'fs/promises';
+import open from 'open';
+
 export function registerConfigRoutes({
   app,
-  express,
-  configManager,
-  path,
-  os,
-  fs,
-  open
+  configManager
 }) {
   // 保存最近访问的目录
   app.post('/api/save_recent_directory', async (req, res) => {

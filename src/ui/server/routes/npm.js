@@ -1,10 +1,11 @@
+import express from 'express';
+import fs from 'fs/promises';
+import fsSync from 'fs';
+import path from 'path';
+import { exec } from 'child_process';
+
 export function registerNpmRoutes({
   app,
-  express,
-  fs,
-  fsSync,
-  path,
-  exec,
   getCurrentProjectPath
 }) {
   // 读取 package.json 文件内容
