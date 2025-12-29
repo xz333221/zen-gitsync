@@ -248,9 +248,10 @@ async function autoRunProjectStartupItems() {
   if (!enabled) return;
 
   const items = configStore.startupItems;
-  if (items.length === 0) return;
+  const enabledItems = (items || []).filter((it: any) => it?.enabled !== false);
+  if (enabledItems.length === 0) return;
 
-  for (const it of items) {
+  for (const it of enabledItems) {
     if (it.type === 'workflow') {
       await runStartupWorkflowById(it.refId);
     } else {

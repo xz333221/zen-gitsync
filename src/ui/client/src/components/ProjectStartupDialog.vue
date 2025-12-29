@@ -13,6 +13,7 @@ export type ProjectStartupItem = {
   type: 'command' | 'workflow'
   refId: string
   createdAt: number
+  enabled: boolean
 }
 
 export interface ProjectStartupDialogEmits {
@@ -91,6 +92,18 @@ const missingItemsCount = computed(() => {
 const selectedType = ref<'command' | 'workflow'>('command')
 const selectedRefId = ref<string>('')
 const autoRunSaving = ref(false)
+const itemSavingMap = ref<Record<string, boolean>>({})
+
+async function setItemEnabled(itemId: string, enabled: boolean) {
+  itemSavingMap.value = { ...itemSavingMap.value, [itemId]: true }
+  try {
+    const nextItems = items.value.map((it) => (it.id === itemId ? { ...it, enabled } : it))
+    await configStore.saveStartupItems(nextItems, autoRunEnabled.value)
+  } finally {
+    const { [itemId]: _omit, ...rest } = itemSavingMap.value
+    itemSavingMap.value = rest
+  }
+}
 
 function addSelectedItem() {
   if (!selectedRefId.value) {
@@ -112,7 +125,8 @@ function addSelectedItem() {
     id: `startup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     type: selectedType.value,
     refId: selectedRefId.value,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    enabled: true
   }
 
   const newItems = [...items.value, newItem]
@@ -249,6 +263,14 @@ function executeItem(item: any) {
             </div>
           </div>
           <div class="startup-item__actions">
+            <el-tooltip :content="t('@PSTART:刷新页面自动执行')" placement="top">
+              <el-switch
+                :model-value="it.enabled !== false"
+                size="small"
+                :loading="!!itemSavingMap[it.id]"
+                @update:model-value="(v: boolean) => setItemEnabled(it.id, !!v)"
+              />
+            </el-tooltip>
             <el-tooltip :content="t('@PSTART:执行')" placement="top">
               <el-button text type="primary" size="small" @click="executeItem(it)">
                 <el-icon><VideoPlay /></el-icon>

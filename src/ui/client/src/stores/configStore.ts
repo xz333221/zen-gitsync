@@ -56,7 +56,7 @@ export const useConfigStore = defineStore('config', () => {
   const lockedFiles = ref<string[]>([])
   const customCommands = ref<Array<{id: string, name: string, description?: string, directory: string, command: string}>>([])
   const orchestrations = ref<Array<{id: string, name: string, description?: string, steps: OrchestrationStep[]}>>([])
-  const startupItems = ref<Array<{id: string, type: 'command' | 'workflow', refId: string, createdAt: number}>>([])
+  const startupItems = ref<Array<{id: string, type: 'command' | 'workflow', refId: string, createdAt: number, enabled: boolean}>>([])
   const startupAutoRun = ref(false)
   const isLoading = ref(false)
   const isLoaded = ref(false)
@@ -133,7 +133,13 @@ export const useConfigStore = defineStore('config', () => {
       lockedFiles.value = configData.lockedFiles || []
       customCommands.value = configData.customCommands || []
       orchestrations.value = configData.orchestrations || []
-      startupItems.value = configData.startupItems || []
+      startupItems.value = (configData.startupItems || []).map((it: any) => ({
+        id: String(it?.id ?? ''),
+        type: (it?.type === 'workflow' ? 'workflow' : 'command') as 'command' | 'workflow',
+        refId: String(it?.refId ?? it?.commandId ?? ''),
+        createdAt: Number(it?.createdAt ?? Date.now()),
+        enabled: typeof it?.enabled === 'boolean' ? it.enabled : true
+      })).filter((it: any) => it.id && it.refId)
       startupAutoRun.value = configData.startupAutoRun || false
       // 若后端返回当前目录，更新
       if (configData.currentDirectory) {
@@ -590,7 +596,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 保存项目启动项
-  async function saveStartupItems(items: Array<{id: string, type: 'command' | 'workflow', refId: string, createdAt: number}>, autoRun?: boolean) {
+  async function saveStartupItems(items: Array<{id: string, type: 'command' | 'workflow', refId: string, createdAt: number, enabled: boolean}>, autoRun?: boolean) {
     try {
       const response = await fetch('/api/config/save-startup-items', {
         method: 'POST',
