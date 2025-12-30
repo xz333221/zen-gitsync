@@ -7,6 +7,7 @@
   "scripts": {
     "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
     "npm:login": "npm login --registry https://registry.npmjs.org/",
+    "npm:publish": "npm publish --registry https://registry.npmjs.org/",
     "npm:whoami": "npm whoami --registry https://registry.npmjs.org/",
     "pull": "git pull",
     "start:server:no-open": "node server.js --no-open",
