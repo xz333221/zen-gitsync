@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { Link } from '@element-plus/icons-vue'
 import type { NodeInput } from '@stores/configStore'
 import type { FlowNode } from './FlowOrchestrationWorkspace.vue'
+import ParamListContainer from './ParamListContainer.vue'
 import { $t } from '@/lang/static'
 
 const props = defineProps<{
@@ -158,17 +159,16 @@ function getCurrentReferenceValue(input: NodeInput): string {
 
 <template>
   <div class="node-input-config">
-    <div v-if="inputs.length === 0" class="empty-tip">
-      {{ $t('@NODEINPUT:命令中未检测到变量参数') }}
-    </div>
-    
-    <div v-else class="input-list">
-      <div v-for="(input, index) in inputs" :key="input.paramName" class="input-item">
+    <ParamListContainer :model-value="inputs" :title="undefined" :addable="false" :removable="false">
+      <template #empty>
+        {{ $t('@NODEINPUT:命令中未检测到变量参数') }}
+      </template>
+
+      <template #row="{ item: input, index }">
         <div class="input-row">
-          <!-- 参数名 -->
           <div class="input-field param-name-field">
             <label class="field-label">{{ $t('@NODEINPUT:参数名') }}</label>
-            <el-input 
+            <el-input
               :model-value="input.paramName"
               :disabled="disableParamNameEdit"
               :placeholder="$t('@NODEINPUT:参数名')"
@@ -176,11 +176,10 @@ function getCurrentReferenceValue(input: NodeInput): string {
               @update:model-value="(val: string) => updateInput(index, 'paramName', val)"
             />
           </div>
-          
-          <!-- 输入类型选择 -->
+
           <div class="input-field type-field">
             <label class="field-label">{{ $t('@NODEINPUT:类型') }}</label>
-            <el-select 
+            <el-select
               :model-value="input.inputType"
               :placeholder="$t('@NODEINPUT:选择类型')"
               size="default"
@@ -190,13 +189,11 @@ function getCurrentReferenceValue(input: NodeInput): string {
               <el-option value="reference" :label="$t('@NODEINPUT:引用节点')" :disabled="!predecessorNodes || predecessorNodes.length === 0" />
             </el-select>
           </div>
-          
-          <!-- 值配置 -->
+
           <div class="input-field value-field">
             <label class="field-label">{{ $t('@NODEINPUT:值') }}</label>
-            
-            <!-- 手动输入 -->
-            <el-input 
+
+            <el-input
               v-if="input.inputType === 'manual'"
               :model-value="input.manualValue"
               :placeholder="$t('@NODEINPUT:输入参数值')"
@@ -204,8 +201,7 @@ function getCurrentReferenceValue(input: NodeInput): string {
               clearable
               @update:model-value="(val: string) => updateInput(index, 'manualValue', val)"
             />
-            
-            <!-- 引用选择 -->
+
             <el-tree-select
               v-else
               :model-value="getCurrentReferenceValue(input)"
@@ -227,8 +223,8 @@ function getCurrentReferenceValue(input: NodeInput): string {
             </el-tree-select>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </ParamListContainer>
   </div>
 </template>
 

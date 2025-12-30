@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Clock, DocumentAdd, Link, Folder, Select, Plus, Delete } from '@element-plus/icons-vue'
+import { Clock, DocumentAdd, Link, Folder, Select, Plus } from '@element-plus/icons-vue'
 import { useConfigStore, type OrchestrationStep, type NodeOutputRef, type NodeInput, type CodeNodeInput, type CodeNodeOutputParam } from '@stores/configStore'
 import type { FlowNode, FlowEdge } from './FlowOrchestrationWorkspace.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
 import NodeInputConfig from './NodeInputConfig.vue'
 import CodeNodeInputConfig from './CodeNodeInputConfig.vue'
+import ParamListContainer from './ParamListContainer.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import type { CustomCommand } from '@components/CustomCommandManager.vue'
 import type { PackageFile } from '@components/PackageJsonSelector.vue'
@@ -86,6 +87,8 @@ const visible = computed({
   set: (value) => emit('update:modelValue', value)
 })
 
+const codeInputRef = ref<InstanceType<typeof CodeNodeInputConfig> | null>(null)
+
 // 表单数据
 const formData = ref<{
   // 命令节点
@@ -128,12 +131,12 @@ function normalizeCodeInputs(list: CodeNodeInput[] | undefined) {
   const arr = Array.isArray(list) ? list : []
   const normalized = arr
     .map((it) => ({
-      name: String((it as any)?.name || '').trim(),
-      source: ((it as any)?.source === 'manual' ? 'manual' : 'reference') as 'reference' | 'manual',
-      manualValue: String((it as any)?.manualValue || ''),
-      ref: (it as any)?.ref
+      name: String(it?.name || '').trim(),
+      source: (it?.source === 'manual' ? 'manual' : 'reference') as 'manual' | 'reference',
+      manualValue: it?.manualValue === undefined || it?.manualValue === null ? '' : String(it.manualValue),
+      ref: it?.ref ? { nodeId: String(it.ref.nodeId || ''), outputKey: String(it.ref.outputKey || 'stdout') } : undefined
     }))
-    .filter((it) => Boolean(it.name))
+    .filter((it) => Boolean(it.name) || Boolean(it.manualValue) || Boolean(it.ref?.nodeId))
 
   const seen = new Set<string>()
   const unique: CodeNodeInput[] = []
@@ -165,15 +168,13 @@ function normalizeCodeOutputs(list: CodeNodeOutputParam[] | undefined) {
   return unique.slice(0, 30)
 }
 
-function addCodeOutputRow() {
-  const cur = Array.isArray(formData.value.codeOutputParams) ? [...formData.value.codeOutputParams] : []
-  cur.push({ key: '', type: 'String' })
-  formData.value.codeOutputParams = cur
+function createCodeOutputParam(): CodeNodeOutputParam {
+  return { key: '', type: 'String' }
 }
 
-function removeCodeOutputRow(index: number) {
+function addCodeOutputRow() {
   const cur = Array.isArray(formData.value.codeOutputParams) ? [...formData.value.codeOutputParams] : []
-  cur.splice(index, 1)
+  cur.push(createCodeOutputParam())
   formData.value.codeOutputParams = cur
 }
 
@@ -596,6 +597,23 @@ function saveConfig() {
           :predecessor-nodes="predecessorNodes"
         />
       </div>
+
+      <!-- 代码节点输入参数配置（节点级独立版块） -->
+      <div v-if="node?.type === 'code'" class="config-section">
+        <div class="section-title">
+          <el-icon><Link /></el-icon>
+          {{ $t('@NODECFG:输入配置') }}
+          <el-button type="primary" plain :icon="Plus" style="margin-left: auto;" @click="codeInputRef?.addRow()" />
+        </div>
+        <CodeNodeInputConfig
+          ref="codeInputRef"
+          :model-value="formData.codeInputs || []"
+          @update:model-value="(v) => (formData.codeInputs = v)"
+          :predecessor-nodes="predecessorNodes"
+          :title="undefined"
+          :addable="false"
+        />
+      </div>
       
       <!-- 命令节点配置 -->
       <div v-if="node?.type === 'command'" class="config-section">
@@ -664,14 +682,6 @@ function saveConfig() {
         </div>
 
         <div class="sub-section">
-          <CodeNodeInputConfig
-            :model-value="formData.codeInputs || []"
-            @update:model-value="(v) => (formData.codeInputs = v)"
-            :predecessor-nodes="predecessorNodes"
-          />
-        </div>
-
-        <div class="sub-section" style="margin-top: var(--spacing-lg);">
           <div class="sub-title">
             <span>{{ $t('@NODECFG:代码') }}</span>
           </div>
@@ -845,31 +855,40 @@ function saveConfig() {
         <div class="section-title">
           <el-icon><Link /></el-icon>
           {{ $t('@NODECFG:输出') }}
-          <el-button type="primary" plain :icon="Plus" @click="addCodeOutputRow" style="margin-left: auto;" />
+          <el-button type="primary" plain :icon="Plus" style="margin-left: auto;" @click="addCodeOutputRow" />
         </div>
 
-        <div class="table-rows">
-          <div class="table-row table-header">
-            <div class="col-title">{{ $t('@NODECFG:参数名') }}</div>
-            <div class="col-title">{{ $t('@NODECFG:参数类型') }}</div>
-            <div class="col-actions"></div>
-          </div>
+        <ParamListContainer
+          :model-value="formData.codeOutputParams || []"
+          :title="undefined"
+          :addable="false"
+          :removable="true"
+          :min-items="0"
+          :create-item="createCodeOutputParam"
+          @update:modelValue="(v: CodeNodeOutputParam[]) => (formData.codeOutputParams = v)"
+        >
+          <template #empty>
+            {{ $t('@NODECFG:暂无输出参数') || '' }}
+          </template>
 
-          <div v-for="(row, idx) in (formData.codeOutputParams || [])" :key="idx" class="table-row">
-            <el-input v-model="row.key" :placeholder="$t('@NODECFG:参数名')" />
-
-            <el-select v-model="row.type" style="width: 180px">
-              <el-option label="String" value="String" />
-              <el-option label="Number" value="Number" />
-              <el-option label="Boolean" value="Boolean" />
-              <el-option label="JSON" value="JSON" />
-            </el-select>
-
-            <div class="col-actions">
-              <el-button type="danger" plain :icon="Delete" @click="removeCodeOutputRow(idx)" />
+          <template #row="{ item: row }">
+            <div class="output-param-row">
+              <div class="output-param-field">
+                <label class="field-label">{{ $t('@NODECFG:参数名') }}</label>
+                <el-input v-model="row.key" :placeholder="$t('@NODECFG:参数名')" />
+              </div>
+              <div class="output-param-field">
+                <label class="field-label">{{ $t('@NODECFG:参数类型') }}</label>
+                <el-select v-model="row.type" style="width: 180px">
+                  <el-option label="String" value="String" />
+                  <el-option label="Number" value="Number" />
+                  <el-option label="Boolean" value="Boolean" />
+                  <el-option label="JSON" value="JSON" />
+                </el-select>
+              </div>
             </div>
-          </div>
-        </div>
+          </template>
+        </ParamListContainer>
       </div>
 
       <div v-if="node?.type === 'command'" class="config-section">
@@ -878,22 +897,30 @@ function saveConfig() {
           {{ $t('@NODECFG:输出配置') }}
         </div>
 
-        <el-form label-width="100px">
-          <el-form-item :label="$t('@NODECFG:参数名')">
-            <div class="output-rows">
-              <div class="output-row output-row-header">
-                <div class="output-col-title">{{ $t('@NODECFG:参数名') }}</div>
-                <div class="output-col-title">{{ $t('@NODECFG:参数描述') }}</div>
-                <div class="output-col-actions"></div>
-              </div>
-              <div v-for="row in (formData.commandOutputParams || [])" :key="row.key" class="output-row">
+        <ParamListContainer
+          :model-value="formData.commandOutputParams || []"
+          :title="undefined"
+          :addable="false"
+          :removable="false"
+          @update:modelValue="(v: Array<{ key: string; desc?: string }>) => (formData.commandOutputParams = v)"
+        >
+          <template #empty>
+            {{ $t('@NODECFG:暂无输出参数') || '' }}
+          </template>
+
+          <template #row="{ item: row }">
+            <div class="output-param-row">
+              <div class="output-param-field">
+                <label class="field-label">{{ $t('@NODECFG:参数名') }}</label>
                 <el-input v-model="row.key" disabled />
+              </div>
+              <div class="output-param-field">
+                <label class="field-label">{{ $t('@NODECFG:参数描述') }}</label>
                 <el-input v-model="row.desc" :placeholder="$t('@NODECFG:参数描述')" />
-                <div class="output-col-actions"></div>
               </div>
             </div>
-          </el-form-item>
-        </el-form>
+          </template>
+        </ParamListContainer>
       </div>
     </div>
     
@@ -1112,11 +1139,44 @@ function saveConfig() {
   display: grid;
   grid-template-columns: 160px 1fr 44px;
   gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-component-area);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-component);
+  transition: var(--transition-all);
+}
+
+.output-row:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .output-row.output-row-header {
   grid-template-columns: 160px 1fr 44px;
   align-items: center;
+  padding: 2px 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.output-param-row {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--spacing-md);
+  align-items: end;
+}
+
+.output-param-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.field-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
 }
 
 .output-row.output-row-footer {

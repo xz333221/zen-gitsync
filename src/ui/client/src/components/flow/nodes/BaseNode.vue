@@ -6,6 +6,8 @@ withDefaults(defineProps<{
   id: string
   nodeId: string
   nodeType?: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code'
+  title?: string
+  icon?: string
   enabled?: boolean
   selected?: boolean
   deletable?: boolean
@@ -50,9 +52,15 @@ const emit = defineEmits<{
     >
       <CircleCloseFilled />
     </el-icon>
+
+    <div v-if="title || icon" class="node-header">
+      <div class="flow-node-icon">{{ icon }}</div>
+      <div class="node-title">{{ title }}</div>
+    </div>
     
-    <!-- 节点内容插槽 -->
-    <slot></slot>
+    <div class="node-body">
+      <slot></slot>
+    </div>
     
     <!-- 禁用遮罩 -->
     <div v-if="!enabled" class="disabled-overlay">已禁用</div>
@@ -71,6 +79,45 @@ const emit = defineEmits<{
 .flow-node-wrapper {
   position: relative;
   display: inline-block;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-lg);
+  background: var(--bg-container);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  transition: var(--transition-all);
+  border: 2px solid var(--border-component);
+
+  &.is-selected {
+    transform: translateY(-1px);
+  }
+
+  &.disabled {
+    opacity: 0.6;
+  }
+}
+
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+  margin-bottom: var(--spacing-base);
+
+  .flow-node-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .node-title {
+    font-size: var(--font-size-base);
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
+    word-break: break-word;
+  }
+}
+
+.node-body {
+  font-size: 13px;
+  color: var(--text-primary);
 }
 
 // 连接点（Handle）通用样式：集中处理，避免每个节点重复定义
@@ -92,36 +139,90 @@ const emit = defineEmits<{
 
 // 不同节点类型的连接点颜色
 .node-type-command {
+  min-width: 220px;
+  max-width: 320px;
+  border-color: #06b6d4;
+
+  &.is-selected {
+    border-color: #0891b2;
+    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.22), var(--shadow-lg);
+  }
+
   .flow-node-handle {
-    background: var(--color-primary) !important;
+    background: #06b6d4 !important;
   }
 }
 
 .node-type-wait {
+  min-width: 200px;
+  max-width: 250px;
+  border-color: var(--color-warning);
+
+  &.is-selected {
+    border-color: #d48806;
+    box-shadow: 0 0 0 3px rgba(250, 173, 20, 0.2), var(--shadow-lg);
+  }
+
   .flow-node-handle {
     background: var(--color-warning) !important;
   }
 }
 
 .node-type-version {
+  min-width: 200px;
+  max-width: 250px;
+  border-color: var(--color-success);
+
+  &.is-selected {
+    border-color: #389e0d;
+    box-shadow: 0 0 0 3px rgba(82, 196, 26, 0.2), var(--shadow-lg);
+  }
+
   .flow-node-handle {
     background: var(--color-success) !important;
   }
 }
 
 .node-type-confirm {
+  min-width: 200px;
+  max-width: 250px;
+  border-color: #ec4899;
+
+  &.is-selected {
+    border-color: #db2777;
+    box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.22), var(--shadow-lg);
+  }
+
   .flow-node-handle {
     background: #ec4899 !important;
   }
 }
 
 .node-type-code {
+  min-width: 220px;
+  max-width: 320px;
+  border-color: #7c3aed;
+
+  &.is-selected {
+    border-color: #6d28d9;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.22), var(--shadow-lg);
+  }
+
   .flow-node-handle {
     background: #7c3aed !important;
   }
 }
 
 .node-type-start {
+  min-width: 200px;
+  max-width: 250px;
+  border-color: var(--color-primary);
+
+  &.is-selected {
+    border-color: var(--color-primary-dark);
+    box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.22), var(--shadow-lg);
+  }
+
   .flow-node-handle {
     background: var(--color-primary) !important;
   }
@@ -133,8 +234,8 @@ const emit = defineEmits<{
 
 .flow-node-delete-btn {
   position: absolute;
-  top: -10px;
-  right: -10px;
+  top: -8px;
+  right: -8px;
   color: #ff4d4f;
   cursor: pointer;
   background-color: white;
@@ -143,7 +244,7 @@ const emit = defineEmits<{
   z-index: 20;
   opacity: 0;
   pointer-events: none;
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .flow-node-wrapper:hover .flow-node-delete-btn,

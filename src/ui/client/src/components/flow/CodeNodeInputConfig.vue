@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Plus, Delete } from '@element-plus/icons-vue'
 import type { CodeNodeInput, NodeOutputRef } from '@stores/configStore'
 import type { FlowNode } from './FlowOrchestrationWorkspace.vue'
+import ParamListContainer from './ParamListContainer.vue'
 import { $t } from '@/lang/static'
 
 const props = defineProps<{
   modelValue: CodeNodeInput[]
   predecessorNodes?: FlowNode[]
+  title?: string | undefined
+  addable?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -63,19 +65,17 @@ const treeSelectOptions = computed(() => {
   }))
 })
 
+function createDefaultRow(): CodeNodeInput {
+  return { name: '', source: 'reference', ref: { nodeId: '', outputKey: 'stdout' } }
+}
+
 function addRow() {
-  const updated = [...inputs.value]
-  updated.push({ name: '', source: 'reference', ref: { nodeId: '', outputKey: 'stdout' } })
+  const updated = [...inputs.value, createDefaultRow()]
   inputs.value = updated
   emit('update:modelValue', updated)
 }
 
-function removeRow(index: number) {
-  const updated = [...inputs.value]
-  updated.splice(index, 1)
-  inputs.value = updated
-  emit('update:modelValue', updated)
-}
+defineExpose({ addRow })
 
 function updateRow(index: number, patch: Partial<CodeNodeInput>) {
   if (!inputs.value[index]) return
@@ -115,26 +115,37 @@ function getCurrentReferenceValue(input: CodeNodeInput): string {
 
 <template>
   <div class="code-node-input-config">
-    <div class="sub-title">
-      <span>{{ $t('@NODECFG:输入') }}</span>
-      <el-button type="primary" plain :icon="Plus" @click="addRow" />
-    </div>
+    <ParamListContainer
+      :model-value="inputs"
+      :title="title"
+      :addable="addable !== false"
+      :removable="true"
+      :min-items="0"
+      :create-item="createDefaultRow"
+      @update:modelValue="(v: CodeNodeInput[]) => emit('update:modelValue', v)"
+    >
+      <template #empty>
+        {{ $t('@NODECFG:暂无输入参数') }}
+      </template>
 
-    <div v-if="inputs.length === 0" class="empty-tip">
-      {{ $t('@NODECFG:暂无输入参数') }}
-    </div>
-
-    <div v-else class="input-list">
-      <div v-for="(row, idx) in inputs" :key="idx" class="input-item">
+      <template #row="{ item: row, index: idx }">
         <div class="input-row">
           <div class="input-field name-field">
             <label class="field-label">{{ $t('@NODECFG:参数名') }}</label>
-            <el-input v-model="row.name" :placeholder="$t('@NODECFG:参数名')" @update:model-value="(v: string) => updateRow(idx, { name: v })" />
+            <el-input
+              v-model="row.name"
+              :placeholder="$t('@NODECFG:参数名')"
+              @update:model-value="(v: string) => updateRow(idx, { name: v })"
+            />
           </div>
 
           <div class="input-field type-field">
             <label class="field-label">{{ $t('@NODECFG:参数值') }}</label>
-            <el-select v-model="row.source" style="width: 110px" @update:model-value="(v: 'reference' | 'manual') => updateRow(idx, { source: v })">
+            <el-select
+              v-model="row.source"
+              style="width: 110px"
+              @update:model-value="(v: 'reference' | 'manual') => updateRow(idx, { source: v })"
+            >
               <el-option :label="$t('@NODECFG:引用')" value="reference" :disabled="!predecessorNodes || predecessorNodes.length === 0" />
               <el-option :label="$t('@NODECFG:手动')" value="manual" />
             </el-select>
@@ -162,13 +173,9 @@ function getCurrentReferenceValue(input: CodeNodeInput): string {
               @update:model-value="(v: string) => handleReferenceSelect(idx, v)"
             />
           </div>
-
-          <div class="input-field action-field">
-            <el-button type="danger" plain :icon="Delete" @click="removeRow(idx)" />
-          </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </ParamListContainer>
   </div>
 </template>
 

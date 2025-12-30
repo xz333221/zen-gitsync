@@ -82,6 +82,7 @@ declare module 'vue' {
     OptionSwitchCard: typeof import('./src/components/OptionSwitchCard.vue')['default']
     OrchestrationWorkspace: typeof import('./src/components/OrchestrationWorkspace.vue')['default']
     PackageJsonSelector: typeof import('./src/components/PackageJsonSelector.vue')['default']
+    ParamListContainer: typeof import('./src/components/flow/ParamListContainer.vue')['default']
     ProjectStartupButton: typeof import('./src/components/ProjectStartupButton.vue')['default']
     ProjectStartupDialog: typeof import('./src/components/ProjectStartupDialog.vue')['default']
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']

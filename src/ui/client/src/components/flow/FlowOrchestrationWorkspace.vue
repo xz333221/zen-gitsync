@@ -18,9 +18,9 @@ import WaitNode from './nodes/WaitNode.vue'
 import VersionNode from './nodes/VersionNode.vue'
 import ConfirmNode from './nodes/ConfirmNode.vue'
 import CodeNode from './nodes/CodeNode.vue'
-import StartNode from './nodes/StartNode.vue'
 import NodeContextMenu from './nodes/NodeContextMenu.vue'
 import NodeConfigPanel from './NodeConfigPanel.vue'
+import { $t } from '@/lang/static'
 
 // 导入样式
 import '@vue-flow/core/dist/style.css'
@@ -61,6 +61,25 @@ type FlowNodeActions = {
 
 const FLOW_NODE_ACTIONS_KEY: unique symbol = Symbol('FLOW_NODE_ACTIONS')
 
+function getNodeIcon(nodeType?: string): string {
+  switch (nodeType) {
+    case 'command':
+      return '📋'
+    case 'wait':
+      return '⏰'
+    case 'version':
+      return '📦'
+    case 'confirm':
+      return '✋'
+    case 'code':
+      return '🧩'
+    case 'start':
+      return '🚀'
+    default:
+      return ''
+  }
+}
+
 function createWrappedNode(Inner: any) {
   return defineComponent({
     name: 'FlowWrappedNode',
@@ -87,6 +106,8 @@ function createWrappedNode(Inner: any) {
                   id: props.id,
                   nodeId: props.id,
                   nodeType: props.data?.type,
+                  title: props.data?.label,
+                  icon: getNodeIcon(props.data?.type),
                   enabled: props.data?.enabled,
                   selected: props.data?.selected,
                   onDelete: (nodeId: string) => actions?.deleteNode(nodeId)
@@ -119,13 +140,13 @@ const StartNodeRenderer = defineComponent({
           id: props.id,
           nodeId: props.id,
           nodeType: 'start',
+          title: $t('@FLOWNODE:开始'),
+          icon: getNodeIcon('start'),
           enabled: props.data?.enabled,
           selected: props.data?.selected,
           deletable: false
         },
-        {
-          default: () => h(StartNode, { data: props.data })
-        }
+        {}
       )
   }
 })
