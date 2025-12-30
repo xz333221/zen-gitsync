@@ -90,6 +90,10 @@ function stopUserConfirm() {
 const orchestrationSteps = ref<OrchestrationStep[]>([]); // 当前执行的编排步骤列表
 const currentStepIndex = ref(-1); // 当前执行的步骤索引
 
+// 当前执行的编排信息（用于“执行步骤”面板展示）
+const currentOrchestrationName = ref<string>('')
+const currentOrchestrationId = ref<string>('')
+
 // 终端命令等待确认状态
 const waitingForTerminalConfirm = ref(false); // 是否正在等待终端命令确认
 const waitingStepName = ref(''); // 当前等待的步骤名称
@@ -781,7 +785,12 @@ function extractVersionFromOutput(output: string): string | undefined {
 
 // 执行指令编排（顺序执行多个步骤）
 // isSingleExecution: true表示单个步骤执行，false表示批量执行
-async function executeOrchestration(steps: OrchestrationStep[], startIndex: number = 0, isSingleExecution: boolean = false) {
+async function executeOrchestration(
+  steps: OrchestrationStep[],
+  startIndex: number = 0,
+  isSingleExecution: boolean = false,
+  orchestrationMeta?: { id?: string; name?: string }
+) {
   if (steps.length === 0) return;
   
   // 关闭编排工作台弹窗
@@ -793,12 +802,15 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
   // 设置编排步骤列表和当前步骤
   orchestrationSteps.value = steps;
   currentStepIndex.value = startIndex;
+
+  currentOrchestrationName.value = (orchestrationMeta?.name || '').trim()
+  currentOrchestrationId.value = (orchestrationMeta?.id || '').trim()
   
   consoleRunning.value = true;
   orchestrationPaused.value = false; // 重置暂停状态
   
   // 节点输出存储（用于节点间引用）
-  const nodeOutputs: Record<string, { stdout: string; version?: string }> = {};
+  const nodeOutputs: Record<string, Record<string, string>> = {};
   
   const totalSteps = steps.length - startIndex;
   if (startIndex > 0) {
@@ -862,12 +874,7 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
             if (input.referenceNodeId && input.referenceOutputKey) {
               const nodeOutput = nodeOutputs[input.referenceNodeId];
               if (nodeOutput) {
-                // 根据referenceOutputKey获取对应的输出值
-                if (input.referenceOutputKey === 'stdout') {
-                  variableValues[input.paramName] = nodeOutput.stdout || '';
-                } else if (input.referenceOutputKey === 'version' && nodeOutput.version) {
-                  variableValues[input.paramName] = nodeOutput.version;
-                }
+                variableValues[input.paramName] = nodeOutput[input.referenceOutputKey] || '';
               } else {
                 console.warn(`[变量替换] 未找到节点 ${input.referenceNodeId} 的输出`);
                 variableValues[input.paramName] = '';
@@ -1052,12 +1059,13 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
           ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
           shouldContinue = false;
         } else {
-                // 保存命令输出到 nodeOutputs，供后续节点引用
+          // 保存命令输出到 nodeOutputs，供后续节点引用
           const rawStdout = (rec.stdout || '').replace(/<[^>]*>/g, '').trim(); // 移除 HTML 标签
-          const outputData = {
+          const rawStderr = (rec.stderr || '').replace(/<[^>]*>/g, '').trim(); // 移除 HTML 标签
+          const outputData: Record<string, string> = {
             stdout: rawStdout,
-            // 尝试从输出中提取版本号（匹配 semver 格式）
-            version: extractVersionFromOutput(rawStdout)
+            stderr: rawStderr,
+            error: ''
           };
           
           // 使用 step.id 存储
@@ -1107,6 +1115,86 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
       rec.stdout = '等待完成';
+    } else if (step.type === 'code') {
+      stepLabel = '代码节点';
+      ElMessage.info(`[${i + 1}/${steps.length}] ${stepLabel}`);
+
+      const rec: ConsoleRecord = {
+        id: ++consoleIdCounter,
+        command: stepLabel,
+        success: false,
+        ts: new Date().toLocaleString(),
+        expanded: true,
+        stdout: '',
+        stderr: ''
+      };
+      consoleHistory.value.unshift(rec);
+
+      try {
+        if (!step.codeScript || !String(step.codeScript).trim()) {
+          throw new Error('未配置脚本')
+        }
+
+        const param: Record<string, string> = {}
+        const inputs = Array.isArray((step as any).codeInputs) ? (step as any).codeInputs : []
+        for (const it of inputs) {
+          const name = String(it?.name || '').trim()
+          if (!name) continue
+          const source = it?.source === 'manual' ? 'manual' : 'reference'
+          if (source === 'manual') {
+            param[name] = it?.manualValue === undefined || it?.manualValue === null ? '' : String(it.manualValue)
+            continue
+          }
+          const refNodeId = it?.ref?.nodeId
+          const refKey = it?.ref?.outputKey
+          if (!refNodeId || !refKey) {
+            throw new Error(`输入参数 ${name} 未配置引用来源`)
+          }
+          const refOutput = nodeOutputs[refNodeId]
+          const v = refOutput ? (refOutput[refKey] || '') : ''
+          if (!v) {
+            throw new Error(`无法获取输入：${refNodeId}::${refKey}`)
+          }
+          param[name] = v
+        }
+
+        const resp = await fetch('/api/execute-code-node', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            script: step.codeScript,
+            param
+          })
+        });
+
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
+        }
+
+        const result = await resp.json();
+        if (!result?.success) {
+          throw new Error(result?.error || '代码节点执行失败')
+        }
+
+        const outputs: Record<string, string> = result?.outputs && typeof result.outputs === 'object' ? result.outputs : {};
+        const outputKeys = Object.keys(outputs);
+        if (outputKeys.length === 0) {
+          throw new Error('代码节点未返回任何输出')
+        }
+
+        nodeOutputs[step.id] = { ...outputs };
+        if (step.nodeId) {
+          nodeOutputs[step.nodeId] = { ...outputs };
+        }
+
+        rec.success = true;
+        rec.stdout = outputKeys.map((k) => `${k}=${outputs[k] ?? ''}`).join('\n');
+      } catch (e: any) {
+        rec.success = false;
+        rec.stderr = e?.message || String(e);
+        ElMessage.error(`${stepLabel} 失败: ${e?.message || e}`);
+        shouldContinue = false;
+      }
     } else if (step.type === 'version') {
       // 执行版本管理
       
@@ -1124,11 +1212,10 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
         console.log(`refOutputKey ==>`, refOutputKey)
         
         if (refOutput) {
-          if (refOutputKey === 'version' && refOutput.version) {
-            resolvedDependencyVersion = refOutput.version;
-          } else if (refOutputKey === 'stdout' && refOutput.stdout) {
-            // 使用标准输出，尝试提取版本号
-            resolvedDependencyVersion = extractVersionFromOutput(refOutput.stdout) || refOutput.stdout;
+          const v = refOutput[refOutputKey];
+          if (typeof v === 'string' && v) {
+            const shouldExtract = (step as any)?.extractVersionFromRefOutput !== false;
+            resolvedDependencyVersion = shouldExtract ? (extractVersionFromOutput(v) || v) : v;
           }
         }
         
@@ -1289,6 +1376,8 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
     orchestrationPaused.value = false; // 重置暂停状态
     currentStepIndex.value = -1; // 重置当前步骤
     orchestrationSteps.value = []; // 清空步骤列表
+    currentOrchestrationName.value = ''
+    currentOrchestrationId.value = ''
     ElMessage.success('所有步骤执行完成！');
     
     // 检查是否执行了 git 相关命令，如果是则刷新 git 状态
@@ -1311,6 +1400,8 @@ async function executeOrchestration(steps: OrchestrationStep[], startIndex: numb
     orchestrationPaused.value = false; // 重置暂停状态
     currentStepIndex.value = -1; // 重置当前步骤
     orchestrationSteps.value = []; // 清空步骤列表
+    currentOrchestrationName.value = ''
+    currentOrchestrationId.value = ''
     if (error?.message === '用户停止执行') {
       ElMessage.info('编排执行已停止');
     } else {
@@ -2073,7 +2164,13 @@ onUnmounted(() => {
           <!-- 编排步骤列表 -->
           <div v-if="orchestrationSteps.length > 0" class="orchestration-steps-panel">
             <div class="steps-header">
-              <span class="steps-title">执行步骤 ({{ currentStepIndex + 1 }}/{{ orchestrationSteps.length }})</span>
+              <span class="steps-title">
+                执行步骤
+                <span v-if="currentOrchestrationName || currentOrchestrationId" class="steps-orchestration">
+                  - {{ currentOrchestrationName || currentOrchestrationId }}
+                </span>
+                ({{ currentStepIndex + 1 }}/{{ orchestrationSteps.length }})
+              </span>
             </div>
             <div class="steps-list">
               <div
@@ -3040,7 +3137,6 @@ pre.stderr {
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
-  text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 

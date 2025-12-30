@@ -17,6 +17,7 @@ import CommandNode from './nodes/CommandNode.vue'
 import WaitNode from './nodes/WaitNode.vue'
 import VersionNode from './nodes/VersionNode.vue'
 import ConfirmNode from './nodes/ConfirmNode.vue'
+import CodeNode from './nodes/CodeNode.vue'
 import StartNode from './nodes/StartNode.vue'
 import NodeContextMenu from './nodes/NodeContextMenu.vue'
 import NodeConfigPanel from './NodeConfigPanel.vue'
@@ -29,7 +30,7 @@ import '@vue-flow/controls/dist/style.css'
 // 定义节点数据类型
 export interface FlowNodeData {
   id: string
-  type: 'start' | 'command' | 'wait' | 'version' | 'confirm'
+  type: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code'
   label: string
   config?: OrchestrationStep
   outputs?: Record<string, any>
@@ -134,7 +135,8 @@ const nodeTypes: NodeTypesObject = {
   command: createWrappedNode(CommandNode),
   wait: createWrappedNode(WaitNode),
   version: createWrappedNode(VersionNode),
-  confirm: createWrappedNode(ConfirmNode)
+  confirm: createWrappedNode(ConfirmNode),
+  code: createWrappedNode(CodeNode)
 } as unknown as NodeTypesObject
 
 const props = defineProps<{
@@ -143,7 +145,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
-  (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean): void
+  (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean, orchestrationMeta?: { id?: string; name?: string }): void
 }>()
 
 const { t } = useI18n()
@@ -193,6 +195,32 @@ let nodeIdCounter = 1
 // 生成节点ID
 function generateNodeId(type: string): string {
   return `${type}-${Date.now()}-${nodeIdCounter++}`
+}
+
+function escapeRegExp(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function generateUniqueNodeLabel(type: string, baseLabel: string): string {
+  const sameTypeNodes = nodes.value.filter((n) => n.type === type)
+  const labels = sameTypeNodes
+    .map((n) => String((n as any)?.data?.label || '').trim())
+    .filter((s) => Boolean(s))
+
+  const base = String(baseLabel || '').trim()
+  if (!base) return base
+
+  // 规则：base、base1、base2...
+  const re = new RegExp(`^${escapeRegExp(base)}(\\d+)?$`)
+  let max = -1
+  for (const l of labels) {
+    const m = l.match(re)
+    if (!m) continue
+    const n = m[1] ? Number(m[1]) : 0
+    if (Number.isFinite(n)) max = Math.max(max, n)
+  }
+  if (max < 0) return base
+  return `${base}${max + 1}`
 }
 
 function sanitizeNodesForSave(inputNodes: any[]) {
@@ -262,14 +290,17 @@ function initializeFlow() {
 }
 
 // 添加节点
-function addNode(type: 'command' | 'wait' | 'version' | 'confirm') {
+function addNode(type: 'command' | 'wait' | 'version' | 'confirm' | 'code') {
   const id = generateNodeId(type)
   const labelMap = {
     command: t('@FLOWNODE:命令节点'),
     wait: t('@FLOWNODE:等待节点'),
     version: t('@FLOWNODE:版本管理'),
-    confirm: t('@FLOWNODE:用户确认')
+    confirm: t('@FLOWNODE:用户确认'),
+    code: t('@FLOWNODE:代码节点')
   }
+  const baseLabel = labelMap[type]
+  const uniqueLabel = generateUniqueNodeLabel(type, baseLabel)
   const newNode: FlowNode = {
     id,
     type,
@@ -280,7 +311,7 @@ function addNode(type: 'command' | 'wait' | 'version' | 'confirm') {
     data: {
       id,
       type,
-      label: labelMap[type],
+      label: uniqueLabel,
       enabled: true,
       config: type === 'confirm' ? { id, type: 'confirm' } : undefined
     }
@@ -371,6 +402,9 @@ function updateNodeConfig(nodeId: string, config: OrchestrationStep) {
 
 // 获取节点显示标签
 function getNodeLabel(step: OrchestrationStep): string {
+  if (step.displayName && String(step.displayName).trim()) {
+    return String(step.displayName).trim()
+  }
   if (step.type === 'command') {
     return step.commandName || t('@FLOWNODE:未知命令')
   } else if (step.type === 'wait') {
@@ -381,6 +415,10 @@ function getNodeLabel(step: OrchestrationStep): string {
     } else {
       return t('@FLOWNODE:版本号 +1 ({bump})', { bump: step.versionBump })
     }
+  } else if (step.type === 'confirm') {
+    return t('@FLOWNODE:用户确认')
+  } else if (step.type === 'code') {
+    return t('@FLOWNODE:代码节点')
   }
   return t('@FLOWNODE:未配置')
 }
@@ -652,7 +690,7 @@ function executeCurrentFlow() {
   
   // 关闭弹窗后执行
   dialogVisible.value = false
-  emit('execute-orchestration', steps)
+  emit('execute-orchestration', steps, 0, false, { id: editingOrchestrationId.value || undefined, name: orchestrationName.value || undefined })
 }
 
 // 从某个节点开始执行
@@ -674,7 +712,7 @@ function executeFromNode(nodeId: string) {
   
   // 关闭弹窗后执行
   dialogVisible.value = false
-  emit('execute-orchestration', steps, nodeIndex)
+  emit('execute-orchestration', steps, nodeIndex, false, { id: editingOrchestrationId.value || undefined, name: orchestrationName.value || undefined })
 }
 
 // 只执行某个节点
@@ -694,7 +732,7 @@ function executeSingleNode(nodeId: string) {
   
   // 关闭弹窗后执行
   dialogVisible.value = false
-  emit('execute-orchestration', [step], 0, true)
+  emit('execute-orchestration', [step], 0, true, { id: editingOrchestrationId.value || undefined, name: orchestrationName.value || undefined })
 }
 
 provide<FlowNodeActions>(FLOW_NODE_ACTIONS_KEY, {
@@ -805,7 +843,7 @@ async function deleteOrchestration(orchestration: any) {
 function executeOrchestration(orchestration: any) {
   // 关闭弹窗后执行
   dialogVisible.value = false
-  emit('execute-orchestration', orchestration.steps, 0)
+  emit('execute-orchestration', orchestration.steps, 0, false, { id: orchestration?.id, name: orchestration?.name })
 }
 
 // 初始化
@@ -980,6 +1018,12 @@ onUnmounted(() => {
             <div class="tool-icon version">📦</div>
             <div class="tool-label">{{ t('@ORCH:版本管理') }}</div>
             <div class="tool-desc">{{ t('@ORCH:修改版本号或依赖') }}</div>
+          </div>
+
+          <div class="tool-item" @click="addNode('code')">
+            <div class="tool-icon code">🧩</div>
+            <div class="tool-label">{{ t('@FLOWNODE:代码节点') }}</div>
+            <div class="tool-desc">{{ t('@ORCH:执行自定义代码') }}</div>
           </div>
           
           <div class="tool-item" @click="addNode('confirm')">

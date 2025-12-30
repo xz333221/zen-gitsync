@@ -30,7 +30,7 @@ defineProps<{
   padding: var(--spacing-md);
   border-radius: var(--radius-lg);
   background: var(--bg-container);
-  border: 2px solid #ff9800;
+  border: 2px solid #ec4899;
   box-shadow: var(--shadow-md);
   min-width: 200px;
   max-width: 250px;
@@ -39,8 +39,8 @@ defineProps<{
   
   // 选中状态
   &.selected {
-    border-color: #f57c00;
-    box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.2), var(--shadow-lg);
+    border-color: #db2777;
+    box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.22), var(--shadow-lg);
     transform: translateY(-1px);
   }
   

@@ -1,17 +1,56 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Clock, DocumentAdd, Link, Folder, Select } from '@element-plus/icons-vue'
-import { useConfigStore, type OrchestrationStep, type NodeOutputRef, type NodeInput } from '@stores/configStore'
+import { Clock, DocumentAdd, Link, Folder, Select, Plus, Delete } from '@element-plus/icons-vue'
+import { useConfigStore, type OrchestrationStep, type NodeOutputRef, type NodeInput, type CodeNodeInput, type CodeNodeOutputParam } from '@stores/configStore'
 import type { FlowNode, FlowEdge } from './FlowOrchestrationWorkspace.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
 import NodeInputConfig from './NodeInputConfig.vue'
+import CodeNodeInputConfig from './CodeNodeInputConfig.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import type { CustomCommand } from '@components/CustomCommandManager.vue'
 import type { PackageFile } from '@components/PackageJsonSelector.vue'
 import { extractVariables } from '@/utils/commandParser'
 import { $t } from '@/lang/static'
+
+const codeScriptExample = 'function main(param) {\n  const out = new Object()\n  out.key0 = param.input\n  return out\n}'
+
+const codeScriptExamples = [
+  {
+    key: 'extractVersion',
+    title: $t('@NODECFG:提取版本号'),
+    script:
+      'function main(param) {\n'
+      + '  const text = String((param && param.input) ?? "")\n'
+      + '  // 匹配形如 2.10.73 / v2.10.73 的版本号\n'
+      + '  const m = text.match(/\\bv?(\\d+\\.\\d+\\.\\d+)\\b/)\n'
+      + '  const out = new Object()\n'
+      + '  out.version = m ? m[1] : ""\n'
+      + '  return out\n'
+      + '}'
+  },
+  {
+    key: 'commitMessage',
+    title: $t('@NODECFG:生成提交信息'),
+    script:
+      'function main(param) {\n'
+      + '  const text = String((param && param.input) ?? "")\n'
+      + '  // 兼容：@scope/workflow@2.10.73 或 workflow@2.10.73 或 workflow 2.10.73\n'
+      + '  const m = text.match(/(?:@[^\\/\\s]+\\/)?([A-Za-z0-9._-]+)(?:@|\\s+)(v?\\d+\\.\\d+\\.\\d+)/)\n'
+      + '  const name = m ? m[1] : ""\n'
+      + '  const ver = m ? m[2].replace(/^v/, "") : ""\n'
+      + '  const out = new Object()\n'
+      + '  out.message = (name && ver) ? `【${name}】更新版本到${ver}` : ""\n'
+      + '  return out\n'
+      + '}'
+  }
+]
+
+function applyCodeExample(script: string) {
+  formData.value.codeScript = script
+  ElMessage.success($t('@NODECFG:已应用示例'))
+}
 
 const props = defineProps<{
   modelValue: boolean
@@ -26,6 +65,20 @@ const emit = defineEmits<{
 }>()
 
 const configStore = useConfigStore()
+
+const dialogTitle = computed(() => {
+  const base = $t('@NODECFG:节点配置')
+  if (!props.node) return base
+  const map: Record<string, string> = {
+    command: $t('@FLOWNODE:命令节点'),
+    wait: $t('@FLOWNODE:等待节点'),
+    version: $t('@FLOWNODE:版本管理'),
+    confirm: $t('@FLOWNODE:用户确认'),
+    code: $t('@FLOWNODE:代码节点')
+  }
+  const typeLabel = map[props.node.type] || props.node.type
+  return `${base} - ${typeLabel}`
+})
 
 // 弹窗显示控制
 const visible = computed({
@@ -58,10 +111,71 @@ const formData = ref<{
   // 输入引用功能
   versionSource?: 'bump' | 'manual' | 'reference'  // 版本号来源
   inputRef?: NodeOutputRef  // 引用的节点输出
+  extractVersionFromRefOutput?: boolean
+
+  // 代码节点
+  codeScript?: string
+  codeInputs?: CodeNodeInput[]
+  codeOutputParams?: CodeNodeOutputParam[]
+  commandOutputParams?: Array<{ key: string; desc?: string }>
   
   // 通用
+  nodeName?: string
   enabled?: boolean
 }>({})
+
+function normalizeCodeInputs(list: CodeNodeInput[] | undefined) {
+  const arr = Array.isArray(list) ? list : []
+  const normalized = arr
+    .map((it) => ({
+      name: String((it as any)?.name || '').trim(),
+      source: ((it as any)?.source === 'manual' ? 'manual' : 'reference') as 'reference' | 'manual',
+      manualValue: String((it as any)?.manualValue || ''),
+      ref: (it as any)?.ref
+    }))
+    .filter((it) => Boolean(it.name))
+
+  const seen = new Set<string>()
+  const unique: CodeNodeInput[] = []
+  for (const it of normalized) {
+    if (seen.has(it.name)) continue
+    seen.add(it.name)
+    unique.push(it)
+  }
+  return unique.slice(0, 30)
+}
+
+function normalizeCodeOutputs(list: CodeNodeOutputParam[] | undefined) {
+  const arr = Array.isArray(list) ? list : []
+  const normalized = arr
+    .map((it) => ({
+      key: String((it as any)?.key || '').trim(),
+      type: ((it as any)?.type || 'String') as 'String' | 'Number' | 'Boolean' | 'JSON',
+      desc: String((it as any)?.desc || '').trim()
+    }))
+    .filter((it) => Boolean(it.key))
+
+  const seen = new Set<string>()
+  const unique: CodeNodeOutputParam[] = []
+  for (const it of normalized) {
+    if (seen.has(it.key)) continue
+    seen.add(it.key)
+    unique.push(it)
+  }
+  return unique.slice(0, 30)
+}
+
+function addCodeOutputRow() {
+  const cur = Array.isArray(formData.value.codeOutputParams) ? [...formData.value.codeOutputParams] : []
+  cur.push({ key: '', type: 'String' })
+  formData.value.codeOutputParams = cur
+}
+
+function removeCodeOutputRow(index: number) {
+  const cur = Array.isArray(formData.value.codeOutputParams) ? [...formData.value.codeOutputParams] : []
+  cur.splice(index, 1)
+  formData.value.codeOutputParams = cur
+}
 
 // 可用的依赖列表
 const availableDependencies = ref<string[]>([])
@@ -109,8 +223,8 @@ const predecessorNodes = computed(() => {
         
         // 找到节点对象
         const predNode = allNodes.find(n => n.id === predId)
-        // 只添加命令节点（可以输出结果），排除开始节点
-        if (predNode && predNode.type === 'command' && predNode.data.config) {
+        // 只添加可输出结果的节点，排除开始节点
+        if (predNode && (predNode.type === 'command' || predNode.type === 'code') && predNode.data.config) {
           predecessors.push(predNode)
         }
       }
@@ -121,12 +235,31 @@ const predecessorNodes = computed(() => {
 })
 
 // 获取节点的可用输出项
-function getNodeOutputOptions(node: FlowNode) {
+function getNodeOutputOptions(node?: FlowNode) {
+  if (!node) return []
   if (node.type === 'command') {
     return [
       { key: 'stdout', label: $t('@NODECFG:标准输出(stdout)') },
-      { key: 'version', label: $t('@NODECFG:提取的版本号') }
+      { key: 'stderr', label: $t('@NODECFG:标准错误(stderr)') },
+      { key: 'error', label: $t('@NODECFG:错误(error)') }
     ]
+  }
+  if (node.type === 'code') {
+    const cfg: any = (node.data as any)?.config
+    const params = Array.isArray(cfg?.codeOutputParams) ? cfg.codeOutputParams : []
+    if (params.length > 0) {
+      return params
+        .map((p: any) => String(p?.key || '').trim())
+        .filter((k: string) => Boolean(k))
+        .map((k: string) => ({ key: k, label: k }))
+    }
+
+    const keys = cfg?.codeOutputKeys
+    const list = Array.isArray(keys) ? keys : []
+    return list
+      .map((k: any) => String(k || '').trim())
+      .filter((k: string) => Boolean(k))
+      .map((k: string) => ({ key: k, label: k }))
   }
   return []
 }
@@ -136,7 +269,24 @@ function getNodeDisplayName(node: FlowNode): string {
   if (node.type === 'command') {
     return node.data.config?.commandName || node.data.label || $t('@NODECFG:命令节点')
   }
+  if (node.type === 'code') {
+    return node.data.label || $t('@FLOWNODE:代码节点')
+  }
   return node.data.label || node.id
+}
+
+function ensureCommandOutputParams(list: Array<{ key: string; desc?: string }> | undefined) {
+  const map = new Map<string, string>()
+  for (const it of Array.isArray(list) ? list : []) {
+    const k = String(it?.key || '').trim()
+    if (!k) continue
+    map.set(k, String(it?.desc || '').trim())
+  }
+  return [
+    { key: 'stdout', desc: map.get('stdout') || '' },
+    { key: 'stderr', desc: map.get('stderr') || '' },
+    { key: 'error', desc: map.get('error') || '' }
+  ]
 }
 
 // 监听节点变化，加载配置
@@ -152,11 +302,14 @@ watch(() => props.node, (node) => {
       useTerminal: config?.useTerminal || false,
       restartExistingTerminal: config?.restartExistingTerminal || false,
       inputs: Array.isArray(config?.inputs) ? config.inputs : [],
+      commandOutputParams: ensureCommandOutputParams((config as any)?.commandOutputParams),
+      nodeName: (config as any)?.displayName || node.data.label || '',
       enabled: node.data.enabled ?? true
     }
   } else if (node.type === 'wait') {
     formData.value = {
       waitSeconds: config?.waitSeconds || 5,
+      nodeName: (config as any)?.displayName || node.data.label || '',
       enabled: node.data.enabled ?? true
     }
   } else if (node.type === 'version') {
@@ -181,11 +334,28 @@ watch(() => props.node, (node) => {
       dependencyVersionBump: config?.dependencyVersionBump || 'patch',
       versionSource: versionSource,
       inputRef: config?.inputRef,
+      extractVersionFromRefOutput: (config as any)?.extractVersionFromRefOutput ?? true,
+      nodeName: (config as any)?.displayName || node.data.label || '',
       enabled: node.data.enabled ?? true
     }
     
     if (config?.packageJsonPath) {
       loadDependenciesFromPackageJson(config.packageJsonPath)
+    }
+  } else if (node.type === 'code') {
+    const inputs = Array.isArray((config as any)?.codeInputs) ? (config as any).codeInputs : []
+    const outputs = Array.isArray((config as any)?.codeOutputParams) ? (config as any).codeOutputParams : []
+    formData.value = {
+      codeScript: (config as any)?.codeScript || '',
+      codeInputs: inputs,
+      codeOutputParams: outputs,
+      nodeName: (config as any)?.displayName || node.data.label || '',
+      enabled: node.data.enabled ?? true
+    }
+  } else if (node.type === 'confirm') {
+    formData.value = {
+      nodeName: (config as any)?.displayName || node.data.label || '',
+      enabled: node.data.enabled ?? true
     }
   }
 }, { immediate: true })
@@ -265,11 +435,13 @@ function saveConfig() {
       id: props.node.data.config?.id || generateId(),
       nodeId: props.node.id,  // 保存流程图节点 ID，用于节点间引用
       type: 'command',
+      displayName: formData.value.nodeName?.trim() || undefined,
       commandId: formData.value.commandId,
       commandName: formData.value.commandName || '',
       useTerminal: formData.value.useTerminal || false,
       restartExistingTerminal: formData.value.useTerminal ? (formData.value.restartExistingTerminal || false) : false,
       inputs: formData.value.inputs || [],
+      commandOutputParams: ensureCommandOutputParams(formData.value.commandOutputParams),
       enabled: formData.value.enabled ?? true
     }
   } else if (props.node.type === 'wait') {
@@ -282,6 +454,7 @@ function saveConfig() {
       id: props.node.data.config?.id || generateId(),
       nodeId: props.node.id,  // 保存流程图节点 ID
       type: 'wait',
+      displayName: formData.value.nodeName?.trim() || undefined,
       waitSeconds: formData.value.waitSeconds,
       enabled: formData.value.enabled ?? true
     }
@@ -306,6 +479,7 @@ function saveConfig() {
       id: props.node.data.config?.id || generateId(),
       nodeId: props.node.id,  // 保存流程图节点 ID
       type: 'version',
+      displayName: formData.value.nodeName?.trim() || undefined,
       versionTarget: formData.value.versionTarget || 'version',
       versionBump: formData.value.versionSource === 'bump' ? (formData.value.versionBump || 'patch') : undefined,
       packageJsonPath: formData.value.packageJsonPath?.trim() || undefined,
@@ -315,6 +489,41 @@ function saveConfig() {
       dependencyType: formData.value.versionTarget === 'dependency' ? formData.value.dependencyType : undefined,
       versionSource: formData.value.versionSource,
       inputRef: formData.value.versionSource === 'reference' ? formData.value.inputRef : undefined,
+      extractVersionFromRefOutput: formData.value.versionSource === 'reference' ? (formData.value.extractVersionFromRefOutput ?? true) : undefined,
+      enabled: formData.value.enabled ?? true
+    }
+  } else if (props.node.type === 'code') {
+    if (!formData.value.codeScript || !String(formData.value.codeScript).trim()) {
+      ElMessage.warning($t('@NODECFG:请输入脚本'))
+      return
+    }
+
+    const inputs = normalizeCodeInputs(formData.value.codeInputs)
+    const outputs = normalizeCodeOutputs(formData.value.codeOutputParams)
+    if (outputs.length === 0) {
+      ElMessage.warning($t('@NODECFG:请配置输出键'))
+      return
+    }
+
+    const keys = outputs.map((p: CodeNodeOutputParam) => p.key)
+
+    config = {
+      id: props.node.data.config?.id || generateId(),
+      nodeId: props.node.id,
+      type: 'code',
+      displayName: formData.value.nodeName?.trim() || undefined,
+      codeScript: formData.value.codeScript,
+      codeInputs: inputs,
+      codeOutputParams: outputs,
+      codeOutputKeys: keys,
+      enabled: formData.value.enabled ?? true
+    }
+  } else if (props.node.type === 'confirm') {
+    config = {
+      id: props.node.data.config?.id || generateId(),
+      nodeId: props.node.id,
+      type: 'confirm',
+      displayName: formData.value.nodeName?.trim() || undefined,
       enabled: formData.value.enabled ?? true
     }
   }
@@ -330,7 +539,7 @@ function saveConfig() {
 <template>
   <CommonDialog
     v-model="visible"
-    :title="$t('@NODECFG:节点配置')"
+    :title="dialogTitle"
     size="extra-large"
     :append-to-body="true"
     custom-class="node-config-dialog"
@@ -338,28 +547,44 @@ function saveConfig() {
     <div v-if="node" class="config-content">
       <!-- 通用配置 -->
       <div class="config-section">
-        <div class="section-title">{{ $t('@NODECFG:通用设置') }}</div>
-        <el-form label-width="100px">
+        <div class="section-title">
+          <el-icon><Select /></el-icon>
+          {{ $t('@NODECFG:通用设置') }}
+        </div>
+
+        <el-form label-width="120px">
+          <el-form-item :label="$t('@NODECFG:节点名称')">
+            <el-input v-model="formData.nodeName" :placeholder="$t('@NODECFG:请输入节点名称')" />
+          </el-form-item>
+
           <el-form-item :label="$t('@NODECFG:启用节点')">
             <el-switch v-model="formData.enabled" />
           </el-form-item>
-          
-          <!-- 命令节点的执行方式 -->
-          <el-form-item v-if="node.type === 'command'" :label="$t('@NODECFG:执行方式')">
+        </el-form>
+      </div>
+
+      <div v-if="node?.type === 'command'" class="config-section">
+        <div class="section-title">
+          <el-icon><Select /></el-icon>
+          {{ $t('@NODECFG:执行方式') }}
+        </div>
+
+        <el-form label-width="120px">
+          <el-form-item :label="$t('@NODECFG:执行方式')">
             <el-radio-group v-model="formData.useTerminal">
               <el-radio :value="false">{{ $t('@NODECFG:普通执行') }}</el-radio>
               <el-radio :value="true">{{ $t('@NODECFG:终端执行') }}</el-radio>
             </el-radio-group>
           </el-form-item>
 
-          <el-form-item v-if="node.type === 'command' && formData.useTerminal" :label="$t('@NODECFG:终端选项')">
+          <el-form-item v-if="formData.useTerminal" :label="$t('@NODECFG:终端选项')">
             <el-checkbox v-model="formData.restartExistingTerminal">{{ $t('@NODECFG:重启现存终端命令') }}</el-checkbox>
           </el-form-item>
         </el-form>
       </div>
-      
+
       <!-- 命令输入参数配置（独立版块） -->
-      <div v-if="node.type === 'command' && formData.commandId && formData.inputs" class="config-section">
+      <div v-if="node?.type === 'command' && formData.commandId && formData.inputs" class="config-section">
         <div class="section-title">
           <el-icon><Link /></el-icon>
           {{ $t('@NODECFG:输入配置') }}
@@ -373,7 +598,7 @@ function saveConfig() {
       </div>
       
       <!-- 命令节点配置 -->
-      <div v-if="node.type === 'command'" class="config-section">
+      <div v-if="node?.type === 'command'" class="config-section">
         <div class="section-title">
           <el-icon><svg-icon icon-class="custom-cmd" /></el-icon>
           {{ $t('@NODECFG:命令配置') }}
@@ -413,7 +638,7 @@ function saveConfig() {
       </div>
       
       <!-- 等待节点配置 -->
-      <div v-if="node.type === 'wait'" class="config-section">
+      <div v-if="node?.type === 'wait'" class="config-section">
         <div class="section-title">
           <el-icon><Clock /></el-icon>
           {{ $t('@NODECFG:等待配置') }}
@@ -431,9 +656,52 @@ function saveConfig() {
           </el-form-item>
         </el-form>
       </div>
+
+      <div v-if="node?.type === 'code'" class="config-section">
+        <div class="section-title">
+          <el-icon><DocumentAdd /></el-icon>
+          {{ $t('@NODECFG:代码配置') }}
+        </div>
+
+        <div class="sub-section">
+          <CodeNodeInputConfig
+            :model-value="formData.codeInputs || []"
+            @update:model-value="(v) => (formData.codeInputs = v)"
+            :predecessor-nodes="predecessorNodes"
+          />
+        </div>
+
+        <div class="sub-section" style="margin-top: var(--spacing-lg);">
+          <div class="sub-title">
+            <span>{{ $t('@NODECFG:代码') }}</span>
+          </div>
+
+          <el-input
+            v-model="formData.codeScript"
+            type="textarea"
+            :rows="10"
+            :placeholder="codeScriptExample"
+          />
+
+          <div class="code-examples">
+            <div class="examples-title">{{ $t('@NODECFG:示例代码') }}</div>
+            <div class="examples-actions">
+              <el-button
+                v-for="ex in codeScriptExamples"
+                :key="ex.key"
+                type="primary"
+                plain
+                @click="applyCodeExample(ex.script)"
+              >
+                {{ ex.title }}
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </div>
       
       <!-- 版本节点配置 -->
-      <div v-if="node.type === 'version'" class="config-section">
+      <div v-if="node?.type === 'version'" class="config-section">
         <div class="section-title">
           <el-icon><DocumentAdd /></el-icon>
           {{ $t('@NODECFG:版本配置') }}
@@ -552,12 +820,16 @@ function saveConfig() {
                   style="width: 100%"
                 >
                   <el-option
-                    v-for="opt in getNodeOutputOptions(predecessorNodes.find(n => n.id === formData.inputRef?.nodeId)!)"
+                    v-for="opt in getNodeOutputOptions(predecessorNodes.find(n => n.id === formData.inputRef?.nodeId))"
                     :key="opt.key"
                     :label="opt.label"
                     :value="opt.key"
                   />
                 </el-select>
+              </el-form-item>
+
+              <el-form-item v-if="formData.inputRef" :label="$t('@NODECFG:提取版本号')">
+                <el-switch v-model="formData.extractVersionFromRefOutput" />
               </el-form-item>
               
               <div class="reference-tip">
@@ -566,6 +838,61 @@ function saveConfig() {
               </div>
             </template>
           </template>
+        </el-form>
+      </div>
+
+      <div v-if="node?.type === 'code'" class="config-section">
+        <div class="section-title">
+          <el-icon><Link /></el-icon>
+          {{ $t('@NODECFG:输出') }}
+          <el-button type="primary" plain :icon="Plus" @click="addCodeOutputRow" style="margin-left: auto;" />
+        </div>
+
+        <div class="table-rows">
+          <div class="table-row table-header">
+            <div class="col-title">{{ $t('@NODECFG:参数名') }}</div>
+            <div class="col-title">{{ $t('@NODECFG:参数类型') }}</div>
+            <div class="col-actions"></div>
+          </div>
+
+          <div v-for="(row, idx) in (formData.codeOutputParams || [])" :key="idx" class="table-row">
+            <el-input v-model="row.key" :placeholder="$t('@NODECFG:参数名')" />
+
+            <el-select v-model="row.type" style="width: 180px">
+              <el-option label="String" value="String" />
+              <el-option label="Number" value="Number" />
+              <el-option label="Boolean" value="Boolean" />
+              <el-option label="JSON" value="JSON" />
+            </el-select>
+
+            <div class="col-actions">
+              <el-button type="danger" plain :icon="Delete" @click="removeCodeOutputRow(idx)" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="node?.type === 'command'" class="config-section">
+        <div class="section-title">
+          <el-icon><Link /></el-icon>
+          {{ $t('@NODECFG:输出配置') }}
+        </div>
+
+        <el-form label-width="100px">
+          <el-form-item :label="$t('@NODECFG:参数名')">
+            <div class="output-rows">
+              <div class="output-row output-row-header">
+                <div class="output-col-title">{{ $t('@NODECFG:参数名') }}</div>
+                <div class="output-col-title">{{ $t('@NODECFG:参数描述') }}</div>
+                <div class="output-col-actions"></div>
+              </div>
+              <div v-for="row in (formData.commandOutputParams || [])" :key="row.key" class="output-row">
+                <el-input v-model="row.key" disabled />
+                <el-input v-model="row.desc" :placeholder="$t('@NODECFG:参数描述')" />
+                <div class="output-col-actions"></div>
+              </div>
+            </div>
+          </el-form-item>
         </el-form>
       </div>
     </div>
@@ -607,11 +934,32 @@ function saveConfig() {
 
 .command-list {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--spacing-md);
-  max-height: 350px;
-  overflow-y: auto;
-  padding-right: var(--spacing-sm);
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--spacing-lg);
+  width: 100%;
+}
+
+.code-examples {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px dashed var(--border-component);
+}
+
+.examples-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.examples-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+/* 让 el-form-item 内容区撑满，避免 grid 容器被内容宽度收缩导致只显示单列 */
+:deep(.el-form-item__content) {
+  width: 100%;
 }
 
 .command-item {
@@ -751,5 +1099,88 @@ function saveConfig() {
     color: var(--text-tertiary);
     font-family: var(--font-mono);
   }
+}
+
+.output-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  width: 100%;
+}
+
+.output-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 44px;
+  gap: var(--spacing-md);
+}
+
+.output-row.output-row-header {
+  grid-template-columns: 160px 1fr 44px;
+  align-items: center;
+}
+
+.output-row.output-row-footer {
+  grid-template-columns: 1fr;
+}
+
+.output-col-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+
+.output-col-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sub-section {
+  background: var(--bg-container);
+  border: 1px solid var(--border-component);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+}
+
+.sub-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.table-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 220px 1fr 44px;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.table-row.table-header {
+  grid-template-columns: 220px 1fr 44px;
+  padding: 2px 0;
+}
+
+.col-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+
+.col-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.value-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-width: 0;
 }
 </style>

@@ -20,11 +20,25 @@ export interface NodeInput {
   manualValue?: string
 }
 
+export interface CodeNodeInput {
+  name: string
+  source: 'reference' | 'manual'
+  manualValue?: string
+  ref?: NodeOutputRef
+}
+
+export interface CodeNodeOutputParam {
+  key: string
+  type?: 'String' | 'Number' | 'Boolean' | 'JSON'
+  desc?: string
+}
+
 // 编排步骤类型
 export interface OrchestrationStep {
   id: string
   nodeId?: string  // 流程图中的节点 ID（用于节点间引用）
-  type: 'command' | 'wait' | 'version' | 'confirm'
+  type: 'command' | 'wait' | 'version' | 'confirm' | 'code'
+  displayName?: string  // 节点自定义名称（用于显示与引用）
   enabled?: boolean  // 是否启用该步骤（默认 true），禁用的步骤不会执行
   useTerminal?: boolean  // 是否在新终端窗口中执行（仅对 command 类型有效）
   restartExistingTerminal?: boolean  // 终端执行时：是否重启现存的同命令同目录终端会话（仅对 command 类型有效）
@@ -45,6 +59,15 @@ export interface OrchestrationStep {
   // 节点输入输出功能
   inputRef?: NodeOutputRef  // 引用其他节点的输出（当版本号模式为 'reference' 时使用）
   versionSource?: 'bump' | 'manual' | 'reference'  // 版本号来源：自动递增 / 手动输入 / 引用其他节点输出
+  extractVersionFromRefOutput?: boolean  // 引用输出时是否自动提取版本号（默认 true）
+
+  // 对于 code 类型
+  codeScript?: string
+  codeInputs?: CodeNodeInput[]
+  codeOutputParams?: CodeNodeOutputParam[]
+  codeOutputKeys?: string[]
+
+  commandOutputParams?: Array<{ key: string; desc?: string }>
 }
 
 export const useConfigStore = defineStore('config', () => {

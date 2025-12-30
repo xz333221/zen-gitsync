@@ -13,7 +13,7 @@ import type { PackageFile } from '@components/PackageJsonSelector.vue'
 
 export interface OrchestrationWorkspaceEmits {
   (e: 'update:visible', value: boolean): void
-  (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean): void
+  (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean, orchestrationMeta?: { id?: string; name?: string }): void
 }
 
 const props = defineProps<{
@@ -179,7 +179,7 @@ function loadOrchestration(orchestration: any) {
 
 // 执行编排
 function executeOrchestration(orchestration: any, startIndex: number = 0) {
-  emit('execute-orchestration', orchestration.steps, startIndex)
+  emit('execute-orchestration', orchestration.steps, startIndex, false, { id: orchestration?.id, name: orchestration?.name })
   // 不关闭弹窗，让用户可以继续查看或修改编排
 }
 

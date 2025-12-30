@@ -25,6 +25,7 @@ import { registerFsRoutes } from './routes/fs.js';
 import { registerNpmRoutes } from './routes/npm.js';
 import { registerFileOpenRoutes } from './routes/fileOpen.js';
 import { registerGitOpsRoutes } from './routes/gitOps.js';
+import { registerCodeRoutes } from './routes/code.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
 
@@ -121,6 +122,10 @@ async function startUIServer(noOpen = false, savePort = false) {
     getCurrentProjectPath: () => currentProjectPath,
     nextProcessId: () => processIdCounter++,
     runningProcesses
+  });
+
+  registerCodeRoutes({
+    app
   });
 
   registerTerminalRoutes({

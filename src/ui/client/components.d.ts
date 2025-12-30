@@ -10,6 +10,8 @@ declare module 'vue' {
   export interface GlobalComponents {
     BaseNode: typeof import('./src/components/flow/nodes/BaseNode.vue')['default']
     BranchSelector: typeof import('./src/components/BranchSelector.vue')['default']
+    CodeNode: typeof import('./src/components/flow/nodes/CodeNode.vue')['default']
+    CodeNodeInputConfig: typeof import('./src/components/flow/CodeNodeInputConfig.vue')['default']
     CommandConsole: typeof import('./src/components/CommandConsole.vue')['default']
     CommandNode: typeof import('./src/components/flow/nodes/CommandNode.vue')['default']
     CommandOrchestrator: typeof import('./src/components/CommandOrchestrator.vue')['default']

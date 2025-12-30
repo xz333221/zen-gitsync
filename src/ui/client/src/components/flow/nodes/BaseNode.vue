@@ -5,7 +5,7 @@ import { Handle, Position } from '@vue-flow/core'
 withDefaults(defineProps<{
   id: string
   nodeId: string
-  nodeType?: 'start' | 'command' | 'wait' | 'version' | 'confirm'
+  nodeType?: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code'
   enabled?: boolean
   selected?: boolean
   deletable?: boolean
@@ -111,7 +111,13 @@ const emit = defineEmits<{
 
 .node-type-confirm {
   .flow-node-handle {
-    background: #ff9800 !important;
+    background: #ec4899 !important;
+  }
+}
+
+.node-type-code {
+  .flow-node-handle {
+    background: #7c3aed !important;
   }
 }
 

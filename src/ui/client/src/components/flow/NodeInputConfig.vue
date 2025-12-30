@@ -76,7 +76,10 @@ function updateInput(index: number, field: keyof NodeInput, value: any) {
 // 获取节点显示名称
 function getNodeDisplayName(node: FlowNode): string {
   if (node.type === 'command') {
-    return node.data.config?.commandName || node.data.label || $t('@FLOWNODE:命令节点')
+    return (node.data.config as any)?.displayName || node.data.config?.commandName || node.data.label || $t('@FLOWNODE:命令节点')
+  }
+  if (node.type === 'code') {
+    return (node.data.config as any)?.displayName || node.data.label || $t('@FLOWNODE:代码节点')
   }
   return node.data.label || node.id
 }
@@ -86,8 +89,26 @@ function getNodeOutputOptions(node: FlowNode) {
   if (node.type === 'command') {
     return [
       { key: 'stdout', label: $t('@NODEINPUT:标准输出(stdout)') },
-      { key: 'stderr', label: $t('@NODEINPUT:标准错误(stderr)') }
+      { key: 'stderr', label: $t('@NODEINPUT:标准错误(stderr)') },
+      { key: 'error', label: $t('@NODEINPUT:错误(error)') }
     ]
+  }
+  if (node.type === 'code') {
+    const cfg: any = (node.data as any)?.config
+    const params = Array.isArray(cfg?.codeOutputParams) ? cfg.codeOutputParams : []
+    if (params.length > 0) {
+      return params
+        .map((p: any) => String(p?.key || '').trim())
+        .filter((k: string) => Boolean(k))
+        .map((k: string) => ({ key: k, label: k }))
+    }
+
+    const keys = cfg?.codeOutputKeys
+    const list = Array.isArray(keys) ? keys : []
+    return list
+      .map((k: any) => String(k || '').trim())
+      .filter((k: string) => Boolean(k))
+      .map((k: string) => ({ key: k, label: k }))
   }
   return []
 }
@@ -101,7 +122,7 @@ const treeSelectOptions = computed(() => {
   return props.predecessorNodes.map(node => ({
     value: node.id,
     label: getNodeDisplayName(node),
-    children: getNodeOutputOptions(node).map(opt => ({
+    children: getNodeOutputOptions(node).map((opt: any) => ({
       value: `${node.id}::${opt.key}`,
       label: opt.label
     }))
