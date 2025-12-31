@@ -6,7 +6,6 @@ import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
 import ProjectStartupButton from '@components/ProjectStartupButton.vue';
-import OrchestrationWorkspace from '@components/OrchestrationWorkspace.vue';
 import FlowOrchestrationWorkspace from '@components/flow/FlowOrchestrationWorkspace.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
@@ -438,8 +437,6 @@ async function deleteTerminalSession(session: TerminalSession) {
 // 控制自定义命令管理弹窗
 const commandManagerVisible = ref(false);
 
-// 控制编排工作台弹窗（合并了指令编排和编排管理）
-const orchestrationWorkspaceVisible = ref(false);
 // 控制可视化编排工作台
 const flowOrchestrationVisible = ref(false);
 
@@ -792,9 +789,6 @@ async function executeOrchestration(
   orchestrationMeta?: { id?: string; name?: string }
 ) {
   if (steps.length === 0) return;
-  
-  // 关闭编排工作台弹窗
-  orchestrationWorkspaceVisible.value = false;
   
   // 自动开启全屏模式
   isFullscreen.value = true;
@@ -2384,12 +2378,6 @@ onUnmounted(() => {
   <CustomCommandManager 
     v-model:visible="commandManagerVisible"
     @execute-command="executeCustomCommand"
-  />
-  
-  <!-- 编排工作台弹窗（合并了指令编排和编排管理） -->
-  <OrchestrationWorkspace
-    v-model:visible="orchestrationWorkspaceVisible"
-    @execute-orchestration="executeOrchestration"
   />
   
   <!-- 可视化编排工作台（基于 vue-flow） -->
