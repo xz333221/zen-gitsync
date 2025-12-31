@@ -2320,11 +2320,12 @@ onUnmounted(() => {
           <SvgIcon icon-class="workflow" class-name="icon-btn" />
         </IconButton>
         <IconButton
-          :tooltip="$t('@CF05E:全屏')"
+          :tooltip="isFullscreen ? $t('@CF05E:退出全屏') : $t('@CF05E:全屏显示')"
           @click="isFullscreen = !isFullscreen"
         >
           <el-icon>
-            <FullScreen />
+            <Close v-if="isFullscreen" />
+            <FullScreen v-else />
           </el-icon>
         </IconButton>
         <IconButton
