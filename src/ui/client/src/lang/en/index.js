@@ -96,6 +96,32 @@ export default {
   '@CF05E:收起控制台': 'Collapse Console',
   '@CF05E:展开控制台': 'Expand Console',
   // @CF05E: file end
+
+  // @FLOWNODE: condition
+  '@FLOWNODE:条件': 'Condition',
+
+  // @ORCH: condition
+  '@ORCH:条件分支': 'Conditional branching',
+
+  // @COND: condition config
+  '@COND:条件配置': 'Condition Config',
+  '@COND:分支列表': 'Branches',
+  '@COND:添加分支': 'Add branch',
+  '@COND:默认分支': 'Default branch',
+  '@COND:分支名称': 'Branch name',
+  '@COND:优先级': 'Priority',
+  '@COND:规则组合': 'Combine',
+  '@COND:且(ALL)': 'ALL',
+  '@COND:或(ANY)': 'ANY',
+  '@COND:规则': 'Rules',
+  '@COND:添加规则': 'Add rule',
+  '@COND:左值(引用输出)': 'Left (output ref)',
+  '@COND:操作符': 'Operator',
+  '@COND:右值': 'Right',
+  '@COND:删除分支': 'Delete branch',
+  '@COND:删除规则': 'Delete rule',
+  '@COND:请至少保留一个默认分支': 'At least one default branch is required',
+  '@COND:默认分支必须使用handleId=default': 'Default branch must use handleId=default',
   // @CMD01: file path: components\CustomCommandManager.vue
   '@CMD01:命令名称不能为空': 'Command name cannot be empty',
   '@CMD01:命令内容不能为空': 'Command content cannot be empty',

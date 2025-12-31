@@ -18,6 +18,7 @@ import WaitNode from './nodes/WaitNode.vue'
 import VersionNode from './nodes/VersionNode.vue'
 import ConfirmNode from './nodes/ConfirmNode.vue'
 import CodeNode from './nodes/CodeNode.vue'
+import ConditionNode from './nodes/ConditionNode.vue'
 import NodeContextMenu from './nodes/NodeContextMenu.vue'
 import NodeConfigPanel from './NodeConfigPanel.vue'
 import { $t } from '@/lang/static'
@@ -30,7 +31,7 @@ import '@vue-flow/controls/dist/style.css'
 // 定义节点数据类型
 export interface FlowNodeData {
   id: string
-  type: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code'
+  type: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition'
   label: string
   config?: OrchestrationStep
   outputs?: Record<string, any>
@@ -52,6 +53,12 @@ export interface FlowEdge {
   sourceHandle?: string
   targetHandle?: string
 }
+
+ export type FlowData = {
+   nodes: FlowNode[]
+   edges: FlowEdge[]
+   viewport?: { x: number; y: number; zoom: number }
+ }
 
 type FlowNodeActions = {
   deleteNode: (nodeId: string) => void
@@ -75,6 +82,8 @@ function getNodeIcon(nodeType?: string): string {
       return '🧩'
     case 'start':
       return '🚀'
+    case 'condition':
+      return '🔀'
     default:
       return ''
   }
@@ -89,6 +98,21 @@ function createWrappedNode(Inner: any) {
     },
     setup(props) {
       const actions = inject<FlowNodeActions | null>(FLOW_NODE_ACTIONS_KEY, null)
+
+      const conditionHandleIds = computed(() => {
+        const cfg: any = props.data?.config
+        const branches = Array.isArray(cfg?.conditionBranches) ? cfg.conditionBranches : []
+        const sorted = [...branches].sort((a: any, b: any) => {
+          const aIsDefault = a?.handleId === 'default' || a?.isDefault
+          const bIsDefault = b?.handleId === 'default' || b?.isDefault
+          if (aIsDefault && !bIsDefault) return 1
+          if (!aIsDefault && bIsDefault) return -1
+          return Number(a?.priority ?? 0) - Number(b?.priority ?? 0)
+        })
+        const ids = sorted.map((b: any) => String(b?.handleId || '').trim()).filter((s: string) => Boolean(s))
+        if (!ids.includes('default')) ids.push('default')
+        return ids.length ? ids : ['default']
+      })
 
       return () =>
         h(
@@ -108,8 +132,9 @@ function createWrappedNode(Inner: any) {
                   nodeType: props.data?.type,
                   title: props.data?.label,
                   icon: getNodeIcon(props.data?.type),
-                  enabled: props.data?.enabled,
-                  selected: props.data?.selected,
+                  enabled: props.data?.enabled ?? true,
+                  selected: props.data?.selected ?? false,
+                  sourceHandleIds: props.data?.type === 'condition' ? conditionHandleIds.value : undefined,
                   onDelete: (nodeId: string) => actions?.deleteNode(nodeId)
                 },
                 {
@@ -157,7 +182,8 @@ const nodeTypes: NodeTypesObject = {
   wait: createWrappedNode(WaitNode),
   version: createWrappedNode(VersionNode),
   confirm: createWrappedNode(ConfirmNode),
-  code: createWrappedNode(CodeNode)
+  code: createWrappedNode(CodeNode),
+  condition: createWrappedNode(ConditionNode)
 } as unknown as NodeTypesObject
 
 const props = defineProps<{
@@ -167,6 +193,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
   (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean, orchestrationMeta?: { id?: string; name?: string }): void
+  (e: 'execute-flow', payload: { flowData: FlowData; startNodeId?: string; isSingleExecution?: boolean; orchestrationMeta?: { id?: string; name?: string } }): void
 }>()
 
 const { t } = useI18n()
@@ -220,6 +247,28 @@ function generateNodeId(type: string): string {
 
 function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function estimateNodeSize(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition') {
+  if (type === 'version') return { w: 250, h: 120 }
+  if (type === 'wait' || type === 'confirm') return { w: 200, h: 120 }
+  if (type === 'condition') return { w: 260, h: 160 }
+  return { w: 220, h: 120 }
+}
+
+function getViewportCenterPosition(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition') {
+  const viewport = getViewport()
+  const el = document.querySelector('.vue-flow-container') as HTMLElement | null
+  const rect = el?.getBoundingClientRect()
+  const centerX = rect ? rect.width / 2 : 500
+  const centerY = rect ? rect.height / 2 : 300
+
+  const zoom = viewport.zoom || 1
+  const flowX = (centerX - viewport.x) / zoom
+  const flowY = (centerY - viewport.y) / zoom
+
+  const { w, h } = estimateNodeSize(type)
+  return { x: flowX - w / 2, y: flowY - h / 2 }
 }
 
 function generateUniqueNodeLabel(type: string, baseLabel: string): string {
@@ -311,30 +360,50 @@ function initializeFlow() {
 }
 
 // 添加节点
-function addNode(type: 'command' | 'wait' | 'version' | 'confirm' | 'code') {
+function addNode(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition') {
   const id = generateNodeId(type)
   const labelMap = {
     command: t('@FLOWNODE:命令节点'),
     wait: t('@FLOWNODE:等待节点'),
     version: t('@FLOWNODE:版本管理'),
     confirm: t('@FLOWNODE:用户确认'),
-    code: t('@FLOWNODE:代码节点')
+    code: t('@FLOWNODE:代码节点'),
+    condition: t('@FLOWNODE:条件')
   }
   const baseLabel = labelMap[type]
   const uniqueLabel = generateUniqueNodeLabel(type, baseLabel)
+  const centerPos = getViewportCenterPosition(type)
   const newNode: FlowNode = {
     id,
     type,
     position: {
-      x: Math.random() * 600 + 250,
-      y: Math.random() * 200 + 100
+      x: centerPos.x,
+      y: centerPos.y
     },
     data: {
       id,
       type,
       label: uniqueLabel,
       enabled: true,
-      config: type === 'confirm' ? { id, type: 'confirm' } : undefined
+      config: type === 'confirm'
+        ? { id, type: 'confirm' }
+        : type === 'condition'
+          ? {
+              id,
+              type: 'condition',
+              conditionBranches: [
+                {
+                  id: `branch-${Date.now()}`,
+                  name: $t('@COND:默认分支'),
+                  handleId: 'default',
+                  priority: 999,
+                  combine: 'all',
+                  rules: [],
+                  isDefault: true
+                }
+              ]
+            }
+          : undefined
     }
   }
   
@@ -711,7 +780,19 @@ function executeCurrentFlow() {
   
   // 关闭弹窗后执行
   dialogVisible.value = false
-  emit('execute-orchestration', steps, 0, false, { id: editingOrchestrationId.value || undefined, name: orchestrationName.value || undefined })
+  const viewport = getViewport()
+  const startNode = nodes.value.find((n) => n.type === 'start')
+  emit('execute-flow', {
+    flowData: {
+      nodes: JSON.parse(JSON.stringify(nodes.value)),
+      edges: JSON.parse(JSON.stringify(edges.value)),
+      viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom }
+    },
+    startNodeId: startNode?.id,
+    isSingleExecution: false,
+    orchestrationMeta: { id: editingOrchestrationId.value || undefined, name: orchestrationName.value || undefined }
+  })
+  return
 }
 
 // 从某个节点开始执行
@@ -733,7 +814,18 @@ function executeFromNode(nodeId: string) {
   
   // 关闭弹窗后执行
   dialogVisible.value = false
-  emit('execute-orchestration', steps, nodeIndex, false, { id: editingOrchestrationId.value || undefined, name: orchestrationName.value || undefined })
+  const viewport = getViewport()
+  emit('execute-flow', {
+    flowData: {
+      nodes: JSON.parse(JSON.stringify(nodes.value)),
+      edges: JSON.parse(JSON.stringify(edges.value)),
+      viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom }
+    },
+    startNodeId: nodeId,
+    isSingleExecution: false,
+    orchestrationMeta: { id: editingOrchestrationId.value || undefined, name: orchestrationName.value || undefined }
+  })
+  return
 }
 
 // 只执行某个节点
@@ -745,15 +837,20 @@ function executeSingleNode(nodeId: string) {
     return
   }
   
-  const step: OrchestrationStep = {
-    ...node.data.config,
-    nodeId: node.id,
-    enabled: node.data.enabled ?? true
-  }
-  
   // 关闭弹窗后执行
   dialogVisible.value = false
-  emit('execute-orchestration', [step], 0, true, { id: editingOrchestrationId.value || undefined, name: orchestrationName.value || undefined })
+  const viewport = getViewport()
+  emit('execute-flow', {
+    flowData: {
+      nodes: JSON.parse(JSON.stringify(nodes.value)),
+      edges: JSON.parse(JSON.stringify(edges.value)),
+      viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom }
+    },
+    startNodeId: nodeId,
+    isSingleExecution: true,
+    orchestrationMeta: { id: editingOrchestrationId.value || undefined, name: orchestrationName.value || undefined }
+  })
+  return
 }
 
 provide<FlowNodeActions>(FLOW_NODE_ACTIONS_KEY, {
@@ -864,6 +961,18 @@ async function deleteOrchestration(orchestration: any) {
 function executeOrchestration(orchestration: any) {
   // 关闭弹窗后执行
   dialogVisible.value = false
+  if (orchestration?.flowData) {
+    const startNode = Array.isArray(orchestration.flowData.nodes)
+      ? orchestration.flowData.nodes.find((n: any) => n?.type === 'start')
+      : undefined
+    emit('execute-flow', {
+      flowData: orchestration.flowData,
+      startNodeId: startNode?.id,
+      isSingleExecution: false,
+      orchestrationMeta: { id: orchestration?.id, name: orchestration?.name }
+    })
+    return
+  }
   emit('execute-orchestration', orchestration.steps, 0, false, { id: orchestration?.id, name: orchestration?.name })
 }
 
@@ -1039,6 +1148,12 @@ onUnmounted(() => {
             <div class="tool-icon version">📦</div>
             <div class="tool-label">{{ t('@ORCH:版本管理') }}</div>
             <div class="tool-desc">{{ t('@ORCH:修改版本号或依赖') }}</div>
+          </div>
+
+          <div class="tool-item" @click="addNode('condition')">
+            <div class="tool-icon condition">🔀</div>
+            <div class="tool-label">{{ t('@FLOWNODE:条件') }}</div>
+            <div class="tool-desc">{{ t('@ORCH:条件分支') }}</div>
           </div>
 
           <div class="tool-item" @click="addNode('code')">

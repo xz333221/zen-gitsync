@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Clock, DocumentAdd, Link, Folder, Select, Plus } from '@element-plus/icons-vue'
-import { useConfigStore, type OrchestrationStep, type NodeOutputRef, type NodeInput, type CodeNodeInput, type CodeNodeOutputParam } from '@stores/configStore'
+import { Clock, DocumentAdd, Link, Folder, Select, Plus, Delete, Minus } from '@element-plus/icons-vue'
+import { useConfigStore, type OrchestrationStep, type NodeOutputRef, type NodeInput, type CodeNodeInput, type CodeNodeOutputParam, type ConditionBranch, type ConditionRule } from '@stores/configStore'
 import type { FlowNode, FlowEdge } from './FlowOrchestrationWorkspace.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
@@ -75,7 +75,8 @@ const dialogTitle = computed(() => {
     wait: $t('@FLOWNODE:等待节点'),
     version: $t('@FLOWNODE:版本管理'),
     confirm: $t('@FLOWNODE:用户确认'),
-    code: $t('@FLOWNODE:代码节点')
+    code: $t('@FLOWNODE:代码节点'),
+    condition: $t('@FLOWNODE:条件')
   }
   const typeLabel = map[props.node.type] || props.node.type
   return `${base} - ${typeLabel}`
@@ -125,7 +126,99 @@ const formData = ref<{
   // 通用
   nodeName?: string
   enabled?: boolean
+
+  // 条件节点
+  conditionBranches?: ConditionBranch[]
 }>({})
+
+type NormalizedConditionBranch = Omit<ConditionBranch, 'isDefault'> & { isDefault: boolean }
+
+function createDefaultBranch(): NormalizedConditionBranch {
+  return {
+    id: `branch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    name: $t('@COND:默认分支'),
+    handleId: 'default',
+    priority: 999,
+    combine: 'all',
+    rules: [],
+    isDefault: true
+  }
+}
+
+function normalizeBranches(list: ConditionBranch[] | undefined): NormalizedConditionBranch[] {
+  const arr = Array.isArray(list) ? list : []
+  const normalized: NormalizedConditionBranch[] = arr
+    .map((b) => ({
+      id: String(b?.id || `branch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`),
+      name: String(b?.name || '').trim() || $t('@COND:分支名称'),
+      handleId: String(b?.handleId || '').trim() || 'branch',
+      priority: Number.isFinite(Number(b?.priority)) ? Number(b?.priority) : 0,
+      combine: (b?.combine === 'any' ? 'any' : 'all') as 'all' | 'any',
+      rules: Array.isArray(b?.rules) ? b.rules : [],
+      isDefault: Boolean(b?.isDefault)
+    }))
+
+  let hasDefault = normalized.some((b) => b.handleId === 'default' || b.isDefault)
+  if (!hasDefault) normalized.push(createDefaultBranch())
+
+  // 强制 default
+  for (const b of normalized) {
+    if (b.handleId === 'default') {
+      b.isDefault = true
+      if (!b.name) b.name = $t('@COND:默认分支')
+    }
+  }
+
+  return normalized
+}
+
+function createRule(): ConditionRule {
+  return {
+    left: { nodeId: '', outputKey: 'stdout' },
+    op: 'contains',
+    right: ''
+  }
+}
+
+function addBranch() {
+  const cur = normalizeBranches(formData.value.conditionBranches)
+  cur.push({
+    id: `branch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    name: $t('@COND:分支名称'),
+    handleId: `branch-${cur.length}`,
+    priority: cur.length,
+    combine: 'all',
+    rules: [createRule()],
+    isDefault: false
+  })
+  formData.value.conditionBranches = cur as any
+}
+
+function removeBranch(branchId: string) {
+  const cur = normalizeBranches(formData.value.conditionBranches)
+  const target = cur.find((b) => b.id === branchId)
+  if (target?.handleId === 'default' || target?.isDefault) {
+    ElMessage.warning($t('@COND:请至少保留一个默认分支'))
+    return
+  }
+  formData.value.conditionBranches = cur.filter((b) => b.id !== branchId) as any
+}
+
+function addRuleRow(branchId: string) {
+  const cur = normalizeBranches(formData.value.conditionBranches)
+  const b = cur.find((it) => it.id === branchId)
+  if (!b) return
+  b.rules = Array.isArray(b.rules) ? [...b.rules, createRule()] : [createRule()]
+  formData.value.conditionBranches = cur as any
+}
+
+function removeRuleRow(branchId: string, idx: number) {
+  const cur = normalizeBranches(formData.value.conditionBranches)
+  const b = cur.find((it) => it.id === branchId)
+  if (!b) return
+  b.rules = (Array.isArray(b.rules) ? b.rules : []).filter((_, i) => i !== idx)
+  formData.value.conditionBranches = cur as any
+}
 
 function normalizeCodeInputs(list: CodeNodeInput[] | undefined) {
   const arr = Array.isArray(list) ? list : []
@@ -226,6 +319,9 @@ const predecessorNodes = computed(() => {
         const predNode = allNodes.find(n => n.id === predId)
         // 只添加可输出结果的节点，排除开始节点
         if (predNode && (predNode.type === 'command' || predNode.type === 'code') && predNode.data.config) {
+          if (predNode.type === 'command' && (predNode.data.config as any)?.useTerminal === true) {
+            continue
+          }
           predecessors.push(predNode)
         }
       }
@@ -355,6 +451,13 @@ watch(() => props.node, (node) => {
     }
   } else if (node.type === 'confirm') {
     formData.value = {
+      nodeName: (config as any)?.displayName || node.data.label || '',
+      enabled: node.data.enabled ?? true
+    }
+  } else if (node.type === 'condition') {
+    const branches = normalizeBranches((config as any)?.conditionBranches)
+    formData.value = {
+      conditionBranches: branches,
       nodeName: (config as any)?.displayName || node.data.label || '',
       enabled: node.data.enabled ?? true
     }
@@ -527,6 +630,29 @@ function saveConfig() {
       displayName: formData.value.nodeName?.trim() || undefined,
       enabled: formData.value.enabled ?? true
     }
+  } else if (props.node.type === 'condition') {
+    const branches = normalizeBranches(formData.value.conditionBranches)
+    const hasDefault = branches.some((b) => b.handleId === 'default' || b.isDefault)
+    if (!hasDefault) {
+      ElMessage.warning($t('@COND:请至少保留一个默认分支'))
+      return
+    }
+    // 强制 default handleId
+    for (const b of branches) {
+      if (b.isDefault && b.handleId !== 'default') {
+        ElMessage.warning($t('@COND:默认分支必须使用handleId=default'))
+        return
+      }
+    }
+
+    config = {
+      id: props.node.data.config?.id || generateId(),
+      nodeId: props.node.id,
+      type: 'condition',
+      displayName: formData.value.nodeName?.trim() || undefined,
+      conditionBranches: branches,
+      enabled: formData.value.enabled ?? true
+    }
   }
   
   if (config) {
@@ -562,6 +688,118 @@ function saveConfig() {
             <el-switch v-model="formData.enabled" />
           </el-form-item>
         </el-form>
+      </div>
+
+      <!-- 条件节点配置 -->
+      <div v-if="node?.type === 'condition'" class="config-section">
+        <div class="section-title">
+          <el-icon><Link /></el-icon>
+          {{ $t('@COND:条件配置') }}
+          <el-button class="icon-btn" type="primary" plain circle :icon="Plus" style="margin-left: auto;" :title="$t('@COND:添加分支')" @click="addBranch" />
+        </div>
+
+        <div class="sub-section">
+          <div class="sub-title">
+            <span>{{ $t('@COND:分支列表') }}</span>
+          </div>
+
+          <div v-if="!formData.conditionBranches || formData.conditionBranches.length === 0" class="empty-tip">
+            {{ $t('@COND:请至少保留一个默认分支') }}
+          </div>
+
+          <div v-else class="condition-branch-list">
+            <div v-for="b in formData.conditionBranches" :key="b.id" class="condition-branch-card">
+              <div class="branch-main">
+                <div class="branch-header">
+                  <div class="branch-title">
+                    <span class="branch-badge" v-if="b.handleId === 'default' || b.isDefault">{{ $t('@COND:默认分支') }}</span>
+                    <el-input v-model="b.name" size="small" :disabled="b.handleId === 'default' || b.isDefault" :placeholder="$t('@COND:分支名称')" />
+                  </div>
+                </div>
+
+                <div class="branch-meta">
+                  <el-form label-width="80px">
+                    <el-form-item :label="$t('@COND:优先级')">
+                      <el-input-number v-model="b.priority" :min="0" :max="9999" size="small" />
+                    </el-form-item>
+                    <el-form-item :label="$t('@COND:规则组合')">
+                      <el-radio-group v-model="b.combine" size="small">
+                        <el-radio value="all">{{ $t('@COND:且(ALL)') }}</el-radio>
+                        <el-radio value="any">{{ $t('@COND:或(ANY)') }}</el-radio>
+                      </el-radio-group>
+                    </el-form-item>
+                  </el-form>
+                </div>
+
+                <div v-if="b.handleId !== 'default' && !b.isDefault" class="branch-rules">
+                  <div class="rules-header">
+                    <span>{{ $t('@COND:规则') }}</span>
+                    <el-button class="icon-btn" type="primary" plain circle :icon="Plus" :title="$t('@COND:添加规则')" @click="addRuleRow(b.id)" />
+                  </div>
+
+                  <div v-for="(r, idx) in b.rules" :key="idx" class="rule-row">
+                    <div class="rule-col">
+                      <div class="field-label">{{ $t('@COND:左值(引用输出)') }}</div>
+                      <el-select v-model="r.left.nodeId" filterable clearable size="small" style="width: 100%" :placeholder="$t('@NODECFG:引用节点')">
+                        <el-option
+                          v-for="pn in predecessorNodes"
+                          :key="pn.id"
+                          :label="getNodeDisplayName(pn)"
+                          :value="pn.id"
+                        />
+                      </el-select>
+                      <el-select v-model="r.left.outputKey" filterable size="small" style="width: 100%; margin-top: 6px" :placeholder="$t('@NODECFG:输出')">
+                        <el-option
+                          v-for="opt in getNodeOutputOptions(predecessorNodes.find((n) => n.id === r.left.nodeId))"
+                          :key="opt.key"
+                          :label="opt.label"
+                          :value="opt.key"
+                        />
+                      </el-select>
+                    </div>
+                    <div class="rule-col">
+                      <div class="field-label">{{ $t('@COND:操作符') }}</div>
+                      <el-select v-model="r.op" size="small" style="width: 100%">
+                        <el-option label="==" value="==" />
+                        <el-option label="!=" value="!=" />
+                        <el-option label=">" value=">" />
+                        <el-option label=">=" value=">=" />
+                        <el-option label="<" value="<" />
+                        <el-option label="<=" value="<=" />
+                        <el-option label="contains" value="contains" />
+                        <el-option label="not_contains" value="not_contains" />
+                        <el-option label="isEmpty" value="isEmpty" />
+                        <el-option label="isNotEmpty" value="isNotEmpty" />
+                      </el-select>
+                    </div>
+                    <div class="rule-col">
+                      <div class="field-label">{{ $t('@COND:右值') }}</div>
+                      <el-input v-model="r.right" size="small" :disabled="r.op === 'isEmpty' || r.op === 'isNotEmpty'" />
+                    </div>
+                    <div class="rule-col" style="align-self: flex-end;">
+                      <el-button class="icon-btn" type="danger" plain circle :icon="Minus" :title="$t('@COND:删除规则')" @click="removeRuleRow(b.id, idx)" />
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="branch-default-tip">
+                  {{ $t('@COND:默认分支') }}：不配置规则，未命中其它分支时走这里
+                </div>
+              </div>
+
+              <div class="branch-actions" v-if="!(b.handleId === 'default' || b.isDefault)">
+                <el-button
+                  class="icon-btn"
+                  type="danger"
+                  plain
+                  circle
+                  :icon="Delete"
+                  :title="$t('@COND:删除分支')"
+                  @click="removeBranch(b.id)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-if="node?.type === 'command'" class="config-section">
@@ -1077,6 +1315,162 @@ function saveConfig() {
   font-size: var(--font-size-base);
   padding: 20px;
   text-align: center;
+}
+
+.condition-branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.condition-branch-card {
+  border: 1px solid var(--border-component);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  padding: var(--spacing-md);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--spacing-md);
+}
+
+.branch-main {
+  min-width: 0;
+}
+
+.branch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.branch-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 1;
+  min-width: 0;
+
+  :deep(.el-input) {
+    width: 100%;
+  }
+}
+
+.branch-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  flex-shrink: 0;
+}
+
+.branch-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: var(--spacing-md);
+  border-left: 1px solid var(--border-component);
+}
+
+:deep(.icon-btn.el-button) {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.icon-btn.el-button.is-circle) {
+  padding: 0;
+}
+
+:deep(.icon-btn.el-button.is-plain) {
+  background: transparent;
+}
+
+:deep(.icon-btn.el-button:hover) {
+  filter: brightness(1.03);
+}
+
+:deep(.icon-btn.el-button:active) {
+  transform: translateY(0.5px);
+}
+
+.branch-meta {
+  margin-bottom: var(--spacing-md);
+
+  :deep(.el-form) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-md);
+    align-items: start;
+  }
+
+  :deep(.el-form-item) {
+    margin-bottom: 0;
+  }
+
+  :deep(.el-form-item__content) {
+    width: 100%;
+  }
+}
+
+.rules-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.rule-row {
+  display: grid;
+  grid-template-columns: minmax(280px, 2fr) minmax(140px, 1fr) minmax(220px, 2fr) auto;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-component);
+  border-radius: var(--radius-md);
+  background: var(--bg-container);
+  margin-bottom: var(--spacing-sm);
+}
+
+.rule-row .rule-col:last-child {
+  display: flex;
+  justify-content: center;
+}
+
+.rule-col {
+  min-width: 0;
+
+  :deep(.el-select),
+  :deep(.el-input),
+  :deep(.el-input-number) {
+    width: 100%;
+  }
+}
+
+.field-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.branch-default-tip {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  background: rgba(64, 158, 255, 0.08);
+  border: 1px solid rgba(64, 158, 255, 0.18);
 }
 
 .form-tip {

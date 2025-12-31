@@ -96,6 +96,32 @@ export default {
   '@CF05E:收起控制台': '收起控制台',
   '@CF05E:展开控制台': '展开控制台',
   // @CF05E: file end
+
+  // @FLOWNODE: condition
+  '@FLOWNODE:条件': '条件',
+
+  // @ORCH: condition
+  '@ORCH:条件分支': '条件分支',
+
+  // @COND: condition config
+  '@COND:条件配置': '条件配置',
+  '@COND:分支列表': '分支列表',
+  '@COND:添加分支': '添加分支',
+  '@COND:默认分支': '默认分支',
+  '@COND:分支名称': '分支名称',
+  '@COND:优先级': '优先级',
+  '@COND:规则组合': '规则组合',
+  '@COND:且(ALL)': '且(ALL)',
+  '@COND:或(ANY)': '或(ANY)',
+  '@COND:规则': '规则',
+  '@COND:添加规则': '添加规则',
+  '@COND:左值(引用输出)': '左值(引用输出)',
+  '@COND:操作符': '操作符',
+  '@COND:右值': '右值',
+  '@COND:删除分支': '删除分支',
+  '@COND:删除规则': '删除规则',
+  '@COND:请至少保留一个默认分支': '请至少保留一个默认分支',
+  '@COND:默认分支必须使用handleId=default': '默认分支必须使用handleId=default',
   // @CMD01: file path: components\CustomCommandManager.vue
   '@CMD01:命令名称不能为空': '命令名称不能为空',
   '@CMD01:命令内容不能为空': '命令内容不能为空',

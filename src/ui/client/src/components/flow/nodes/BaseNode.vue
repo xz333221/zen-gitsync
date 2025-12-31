@@ -1,24 +1,30 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { CircleCloseFilled } from '@element-plus/icons-vue'
 import { Handle, Position } from '@vue-flow/core'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   id: string
   nodeId: string
-  nodeType?: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code'
+  nodeType?: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition'
   title?: string
   icon?: string
   enabled?: boolean
   selected?: boolean
   deletable?: boolean
   showDeleteOnSelected?: boolean
+  sourceHandleIds?: string[]
 }>(), {
   enabled: true,
   selected: false,
   deletable: true,
   showDeleteOnSelected: false,
-  nodeType: 'command'
+  nodeType: 'command',
+  sourceHandleIds: () => ['source']
 })
+
+const hasHeader = computed(() => Boolean((props.title && String(props.title).trim()) || (props.icon && String(props.icon).trim())))
+const conditionHandleYOffset = computed(() => (hasHeader.value ? 16 : 0))
 
 const emit = defineEmits<{
   (e: 'delete', nodeId: string): void
@@ -66,7 +72,19 @@ const emit = defineEmits<{
     <div v-if="!enabled" class="disabled-overlay">已禁用</div>
 
     <!-- 输出连接点（右侧） -->
+    <template v-if="nodeType === 'condition'">
+      <Handle
+        v-for="hid in sourceHandleIds"
+        :key="hid"
+        :id="hid"
+        type="source"
+        :position="Position.Right"
+        class="flow-node-handle handle-right"
+        :style="{ top: `calc(50% + ${conditionHandleYOffset}px + ${(sourceHandleIds.indexOf(hid) - (sourceHandleIds.length - 1) / 2) * 18}px)` }"
+      />
+    </template>
     <Handle
+      v-else
       id="source"
       type="source"
       :position="Position.Right"
@@ -96,19 +114,34 @@ const emit = defineEmits<{
   }
 }
 
+.node-type-condition {
+  min-width: 220px;
+  max-width: 320px;
+  border-color: #f59e0b;
+
+  &.is-selected {
+    border-color: #d97706;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2), var(--shadow-lg);
+  }
+
+  .flow-node-handle {
+    background: #f59e0b !important;
+  }
+}
+
 .node-header {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  margin-bottom: var(--spacing-base);
+  margin-bottom: 0;
 
   .flow-node-icon {
-    font-size: 20px;
+    font-size: 18px;
     line-height: 1;
   }
 
   .node-title {
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-lg);
     color: var(--text-primary);
     font-weight: var(--font-weight-semibold);
     word-break: break-word;
@@ -118,6 +151,11 @@ const emit = defineEmits<{
 .node-body {
   font-size: 13px;
   color: var(--text-primary);
+  margin-top: var(--spacing-base);
+}
+
+.node-body:empty {
+  display: none;
 }
 
 // 连接点（Handle）通用样式：集中处理，避免每个节点重复定义

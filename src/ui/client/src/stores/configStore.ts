@@ -33,11 +33,39 @@ export interface CodeNodeOutputParam {
   desc?: string
 }
 
+export type ConditionOperator =
+  | '=='
+  | '!='
+  | '>'
+  | '>='
+  | '<'
+  | '<='
+  | 'contains'
+  | 'not_contains'
+  | 'isEmpty'
+  | 'isNotEmpty'
+
+export interface ConditionRule {
+  left: NodeOutputRef
+  op: ConditionOperator
+  right?: string
+}
+
+export interface ConditionBranch {
+  id: string
+  name: string
+  handleId: string
+  priority: number
+  combine: 'all' | 'any'
+  rules: ConditionRule[]
+  isDefault?: boolean
+}
+
 // 编排步骤类型
 export interface OrchestrationStep {
   id: string
   nodeId?: string  // 流程图中的节点 ID（用于节点间引用）
-  type: 'command' | 'wait' | 'version' | 'confirm' | 'code'
+  type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition'
   displayName?: string  // 节点自定义名称（用于显示与引用）
   enabled?: boolean  // 是否启用该步骤（默认 true），禁用的步骤不会执行
   useTerminal?: boolean  // 是否在新终端窗口中执行（仅对 command 类型有效）
@@ -68,6 +96,9 @@ export interface OrchestrationStep {
   codeOutputKeys?: string[]
 
   commandOutputParams?: Array<{ key: string; desc?: string }>
+
+  // 对于 condition 类型
+  conditionBranches?: ConditionBranch[]
 }
 
 export const useConfigStore = defineStore('config', () => {
