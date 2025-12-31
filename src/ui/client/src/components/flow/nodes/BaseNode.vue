@@ -14,6 +14,7 @@ const props = withDefaults(defineProps<{
   deletable?: boolean
   showDeleteOnSelected?: boolean
   sourceHandleIds?: string[]
+  execStatus?: 'running' | 'success' | 'failed'
 }>(), {
   enabled: true,
   selected: false,
@@ -58,6 +59,16 @@ const emit = defineEmits<{
     >
       <CircleCloseFilled />
     </el-icon>
+
+    <div
+      v-if="execStatus"
+      class="flow-node-status"
+      :class="[`status-${execStatus}`]"
+    >
+      <span v-if="execStatus === 'running'">执行中</span>
+      <span v-else-if="execStatus === 'success'">成功</span>
+      <span v-else>失败</span>
+    </div>
 
     <div v-if="title || icon" class="node-header">
       <div class="flow-node-icon">{{ icon }}</div>
@@ -112,6 +123,39 @@ const emit = defineEmits<{
   &.disabled {
     opacity: 0.6;
   }
+}
+
+.flow-node-status {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 12;
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-component);
+  background: var(--bg-container);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.flow-node-status.status-running {
+  border-color: rgba(64, 158, 255, 0.45);
+  color: var(--color-primary);
+  background: rgba(64, 158, 255, 0.08);
+}
+
+.flow-node-status.status-success {
+  border-color: rgba(103, 194, 58, 0.5);
+  color: var(--color-success);
+  background: rgba(103, 194, 58, 0.1);
+}
+
+.flow-node-status.status-failed {
+  border-color: rgba(245, 108, 108, 0.55);
+  color: var(--color-danger);
+  background: rgba(245, 108, 108, 0.1);
 }
 
 .node-type-condition {

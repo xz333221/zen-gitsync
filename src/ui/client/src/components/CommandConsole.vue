@@ -57,9 +57,11 @@ async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; 
   currentStepIndex.value = -1
 
   executionFlowData.value = flowData
+  showExecutionFlowPanel.value = true
   currentExecutingNodeId.value = null
   executedNodeIds.value = []
   executedEdgeIds.value = []
+  failedNodeIds.value = []
 
   currentOrchestrationName.value = (payload?.orchestrationMeta?.name || '').trim()
   currentOrchestrationId.value = (payload?.orchestrationMeta?.id || '').trim()
@@ -259,6 +261,9 @@ async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; 
     }
   } catch (err: any) {
     if (String(err?.message || err) !== '用户停止执行') {
+      if (currentExecutingNodeId.value && !failedNodeIds.value.includes(currentExecutingNodeId.value)) {
+        failedNodeIds.value = [...failedNodeIds.value, currentExecutingNodeId.value]
+      }
       ElMessage.error(err?.message || String(err))
     }
   } finally {
@@ -339,9 +344,11 @@ const orchestrationSteps = ref<OrchestrationStep[]>([]); // 当前执行的编�
 const currentStepIndex = ref(-1); // 当前执行的步骤索引
 
 const executionFlowData = ref<FlowData | null>(null)
+const showExecutionFlowPanel = ref(true)
 const currentExecutingNodeId = ref<string | null>(null)
 const executedNodeIds = ref<string[]>([])
 const executedEdgeIds = ref<string[]>([])
+const failedNodeIds = ref<string[]>([])
 
 // 当前执行的编排信息（用于“执行步骤”面板展示）
 const currentOrchestrationName = ref<string>('')
@@ -2407,11 +2414,25 @@ onUnmounted(() => {
           <el-splitter-panel :min="'15%'" :max="'85%'">
             <div class="console-content-main">
           <!-- 执行画布（只读，高亮执行路径） -->
-          <div v-if="executionFlowData" class="orchestration-flow-panel">
+          <div v-if="executionFlowData && showExecutionFlowPanel" class="orchestration-flow-panel">
+            <div class="flow-panel-header">
+              <div class="flow-panel-title">
+                {{ currentOrchestrationName || currentOrchestrationId }}
+              </div>
+              <IconButton
+                :tooltip="$t('@CMDCON:隐藏')"
+                hover-color="var(--color-danger)"
+                custom-class="flow-panel-close-btn"
+                @click="showExecutionFlowPanel = false"
+              >
+                <el-icon :size="18"><Close /></el-icon>
+              </IconButton>
+            </div>
             <FlowExecutionViewer
               :flow-data="executionFlowData"
               :current-node-id="currentExecutingNodeId || undefined"
               :executed-node-ids="executedNodeIds"
+              :failed-node-ids="failedNodeIds"
               :executed-edge-ids="executedEdgeIds"
             />
           </div>
@@ -3298,12 +3319,36 @@ pre.stderr {
 }
 
 /* 编排步骤列表样式 */
-.orchestration-steps-panel {
+.orchestration-flow-panel {
   margin-bottom: var(--spacing-md);
   background: var(--bg-panel);
   border: 1px solid var(--border-card);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  position: relative;
+}
+
+.flow-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-component);
+}
+
+.flow-panel-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-secondary);
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-panel-close-btn {
+  flex-shrink: 0;
 }
 
 /* 终端命令等待确认面板 */

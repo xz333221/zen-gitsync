@@ -60,6 +60,7 @@ const StartNodeRenderer = defineComponent({
           icon: getNodeIcon('start'),
           enabled: props.data?.enabled,
           selected: props.data?.selected,
+          execStatus: (props.data as any)?.execStatus,
           deletable: false
         },
         {}
@@ -101,6 +102,7 @@ function createWrappedNode(Inner: any) {
             icon: getNodeIcon(props.data?.type),
             enabled: props.data?.enabled,
             selected: props.data?.selected,
+            execStatus: (props.data as any)?.execStatus,
             sourceHandleIds: props.data?.type === 'condition' ? conditionHandleIds.value : undefined,
             deletable: false
           },
@@ -130,6 +132,7 @@ const props = defineProps({
   flowData: { type: Object as PropType<FlowData>, required: true },
   currentNodeId: { type: String as PropType<string | undefined>, default: undefined },
   executedNodeIds: { type: Array as PropType<string[]>, default: () => [] },
+  failedNodeIds: { type: Array as PropType<string[]>, default: () => [] },
   executedEdgeIds: { type: Array as PropType<string[]>, default: () => [] }
 })
 
@@ -137,6 +140,41 @@ const flowId = 'flow-execution-viewer'
 const { onPaneReady } = useVueFlow({ id: flowId })
 
 let flowInstance: any = null
+let pendingFocusNodeId: string | null = null
+
+async function focusNode(nodeId: string) {
+  if (!nodeId) return
+  if (!flowInstance) {
+    pendingFocusNodeId = nodeId
+    return
+  }
+
+  // 节点初次渲染时 findNode 可能拿不到，做少量重试
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await nextTick()
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+    const n = typeof flowInstance?.findNode === 'function' ? flowInstance.findNode(nodeId) : null
+    if (!n) {
+      await new Promise<void>((resolve) => window.setTimeout(() => resolve(), 60))
+      continue
+    }
+
+    try {
+      await flowInstance.fitView({
+        nodes: [nodeId],
+        padding: 0.35,
+        includeHiddenNodes: true,
+        minZoom: 0.35,
+        maxZoom: 1.2,
+        duration: 200
+      } as any)
+    } catch {
+      // ignore
+    }
+    break
+  }
+}
 
 onPaneReady((instance) => {
   flowInstance = instance
@@ -148,6 +186,12 @@ onPaneReady((instance) => {
     void flowInstance.fitView({ padding: 0.2, includeHiddenNodes: true, duration: 0 } as any)
   } catch {
     // ignore
+  }
+
+  const nodeId = (props.currentNodeId || pendingFocusNodeId || '').trim()
+  if (nodeId) {
+    pendingFocusNodeId = null
+    void focusNode(nodeId)
   }
 })
 
@@ -164,34 +208,14 @@ watch(
     }
 
     focusTimer = window.setTimeout(async () => {
-      await nextTick()
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-
       console.log('[FlowExecutionViewer] focus request, flowId=', flowId, 'nodeId=', nodeId)
       if (!flowInstance) {
-        console.log('[FlowExecutionViewer] flowInstance not ready, skip')
+        pendingFocusNodeId = nodeId
+        console.log('[FlowExecutionViewer] flowInstance not ready, pendingFocusNodeId=', pendingFocusNodeId)
         return
       }
 
-      const n = typeof flowInstance?.findNode === 'function' ? flowInstance.findNode(nodeId) : null
-      console.log('[FlowExecutionViewer] findNode result=', n)
-      if (!n) return
-
-      try {
-        const vp = typeof flowInstance?.getViewport === 'function' ? flowInstance.getViewport() : null
-        console.log('[FlowExecutionViewer] viewport=', vp)
-
-        await flowInstance.fitView({
-          nodes: [nodeId],
-          padding: 0.35,
-          includeHiddenNodes: true,
-          minZoom: 0.35,
-          maxZoom: 1.2,
-          duration: 200
-        } as any)
-      } catch {
-        // ignore
-      }
+      void focusNode(nodeId)
     }, 150)
   }
 )
@@ -206,15 +230,24 @@ onUnmounted(() => {
 const nodesForRender = computed(() => {
   const nodes = Array.isArray(props.flowData?.nodes) ? props.flowData.nodes : []
   const executed = new Set(props.executedNodeIds)
+  const failed = new Set(props.failedNodeIds)
   const current = props.currentNodeId
 
   return nodes.map((n: FlowNode) => {
+    let execStatus: 'running' | 'success' | 'failed' | undefined
+    if (current && n.id === current) execStatus = 'running'
+    else if (failed.has(n.id)) execStatus = 'failed'
+    else if (executed.has(n.id)) execStatus = 'success'
+
     const cls: string[] = []
-    if (current && n.id === current) cls.push('exec-node-current')
     if (executed.has(n.id)) cls.push('exec-node-done')
 
     return {
       ...n,
+      data: {
+        ...(n as any).data,
+        execStatus
+      },
       class: cls.join(' ')
     } as any
   })
@@ -262,13 +295,8 @@ const edgesForRender = computed(() => {
 .flow-exec-viewer {
   height: 240px;
   border: 1px solid var(--border-component);
-  border-radius: 10px;
   overflow: hidden;
   background: var(--bg-code);
-}
-
-:deep(.vue-flow__node.exec-node-current) {
-  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.5);
 }
 
 :deep(.vue-flow__node.exec-node-done) {
