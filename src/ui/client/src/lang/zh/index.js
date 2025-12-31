@@ -166,6 +166,11 @@ export default {
   '@CMD01:添加命令': '添加命令',
   '@CMD01:编辑命令': '编辑命令',
   '@CMD01:更新命令': '更新命令',
+  '@CMD01:命令模板': '命令模板',
+  '@CMD01:命令模板管理': '命令模板管理',
+  '@CMD01:输入命令模板，例如: npm run build': '输入命令模板，例如: npm run build',
+  '@CMD01:编辑命令模板': '编辑命令模板',
+  '@CMD01:暂无保存的命令模板': '暂无保存的命令模板',
   // @CMD01: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
   '@CMD02:指令编排': '指令编排',

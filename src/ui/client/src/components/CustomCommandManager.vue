@@ -6,6 +6,7 @@ import { Edit, Delete, VideoPlay, Folder } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 import IconButton from '@components/IconButton.vue'
+import TemplateManager from '@components/TemplateManager.vue'
 
 export interface CustomCommand {
   id?: string
@@ -27,6 +28,31 @@ const props = defineProps<{
 const emit = defineEmits<CustomCommandManagerEmits>()
 
 const configStore = useConfigStore()
+
+const commandTemplates = computed(() => (configStore as any).commandTemplates || [])
+const commandTemplateDialogVisible = ref(false)
+
+function queryCommandTemplates(queryString: string, callback: (suggestions: any[]) => void) {
+  const list = Array.isArray(commandTemplates.value) ? commandTemplates.value : []
+
+  const templateResults = queryString
+    ? list
+        .filter((template: string) => template.toLowerCase().includes(queryString.toLowerCase()))
+        .map((template: string) => ({ value: template }))
+    : list.map((template: string) => ({ value: template }))
+
+  const results = [...templateResults, { value: '⚙️ 管理模板...', isSettings: true }]
+  callback(results)
+}
+
+function handleCommandSelect(item: { value: string; isSettings?: boolean }) {
+  if (item.isSettings) {
+    commandTemplateDialogVisible.value = true
+    newCommand.value.command = ''
+    return
+  }
+  newCommand.value.command = item.value
+}
 
 // 组件内部状态
 const newCommand = ref<CustomCommand>({
@@ -349,11 +375,14 @@ defineExpose({
         <div class="form-row">
           <div class="form-field">
             <label class="required">{{ $t('@CMD01:命令') }}</label>
-            <el-input 
-              v-model="newCommand.command" 
+            <el-autocomplete
+              v-model="newCommand.command"
+              :fetch-suggestions="queryCommandTemplates"
               :placeholder="$t('@CMD01:输入要执行的命令，例如: npm run build')"
               clearable
               size="default"
+              trigger-on-focus
+              @select="handleCommandSelect"
               @keyup.enter="saveCommand"
             />
           </div>
@@ -434,6 +463,15 @@ defineExpose({
       </div>
     </div>
   </CommonDialog>
+
+  <TemplateManager
+    v-model:visible="commandTemplateDialogVisible"
+    type="command"
+    :title="$t('@CMD01:命令模板管理')"
+    :placeholder="$t('@CMD01:输入命令模板，例如: npm run build')"
+    :edit-placeholder="$t('@CMD01:编辑命令模板')"
+    :empty-description="$t('@CMD01:暂无保存的命令模板')"
+  />
 </template>
 
 <style scoped lang="scss">

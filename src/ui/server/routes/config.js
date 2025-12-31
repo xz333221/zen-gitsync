@@ -58,6 +58,21 @@ export function registerConfigRoutes({
         }
       }
 
+      // 初始化命令模板（首次安装/旧配置兼容）
+      if (!Array.isArray(config.commandTemplates)) {
+        config.commandTemplates = []
+      }
+
+      if (config.commandTemplates.length === 0) {
+        config.commandTemplates = [
+          'echo "{{cmd}}"',
+          'npm run dev',
+          'npm run build',
+          'git status'
+        ]
+        await configManager.saveConfig(config)
+      }
+
       // console.log('获取配置成功')
       res.json(config)
     } catch (error) {
@@ -207,6 +222,14 @@ export function registerConfigRoutes({
           config.messageTemplates.push(template)
           await configManager.saveConfig(config)
         }
+      } else if (type === 'command') {
+        if (!config.commandTemplates) {
+          config.commandTemplates = []
+        }
+        if (!config.commandTemplates.includes(template)) {
+          config.commandTemplates.push(template)
+          await configManager.saveConfig(config)
+        }
       } else {
         return res.status(400).json({ success: false, error: '不支持的模板类型' })
       }
@@ -252,6 +275,14 @@ export function registerConfigRoutes({
           const index = config.messageTemplates.indexOf(template)
           if (index !== -1) {
             config.messageTemplates.splice(index, 1)
+            await configManager.saveConfig(config)
+          }
+        }
+      } else if (type === 'command') {
+        if (config.commandTemplates) {
+          const index = config.commandTemplates.indexOf(template)
+          if (index !== -1) {
+            config.commandTemplates.splice(index, 1)
             await configManager.saveConfig(config)
           }
         }
@@ -315,6 +346,18 @@ export function registerConfigRoutes({
         } else {
           return res.status(404).json({ success: false, error: '模板列表不存在' })
         }
+      } else if (type === 'command') {
+        if (config.commandTemplates) {
+          const index = config.commandTemplates.indexOf(oldTemplate)
+          if (index !== -1) {
+            config.commandTemplates[index] = newTemplate
+            await configManager.saveConfig(config)
+          } else {
+            return res.status(404).json({ success: false, error: '未找到原模板' })
+          }
+        } else {
+          return res.status(404).json({ success: false, error: '模板列表不存在' })
+        }
       } else {
         return res.status(400).json({ success: false, error: '不支持的模板类型' })
       }
@@ -358,6 +401,14 @@ export function registerConfigRoutes({
         if (config.messageTemplates) {
           config.messageTemplates = config.messageTemplates.filter(t => t !== template)
           config.messageTemplates.unshift(template)
+          await configManager.saveConfig(config)
+        } else {
+          return res.status(404).json({ success: false, error: '模板列表不存在' })
+        }
+      } else if (type === 'command') {
+        if (config.commandTemplates) {
+          config.commandTemplates = config.commandTemplates.filter(t => t !== template)
+          config.commandTemplates.unshift(template)
           await configManager.saveConfig(config)
         } else {
           return res.status(404).json({ success: false, error: '模板列表不存在' })

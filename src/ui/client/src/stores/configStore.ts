@@ -107,6 +107,7 @@ export const useConfigStore = defineStore('config', () => {
   const descriptionTemplates = ref<string[]>([])
   const scopeTemplates = ref<string[]>([])
   const messageTemplates = ref<string[]>([])
+  const commandTemplates = ref<string[]>([])
   const lockedFiles = ref<string[]>([])
   const customCommands = ref<Array<{id: string, name: string, description?: string, directory: string, command: string}>>([])
   const orchestrations = ref<Array<{id: string, name: string, description?: string, steps: OrchestrationStep[]}>>([])
@@ -155,6 +156,7 @@ export const useConfigStore = defineStore('config', () => {
       descriptionTemplates: descriptionTemplates.value,
       scopeTemplates: scopeTemplates.value,
       messageTemplates: messageTemplates.value,
+      commandTemplates: commandTemplates.value,
       lockedFiles: lockedFiles.value,
       customCommands: customCommands.value,
       orchestrations: orchestrations.value,
@@ -184,6 +186,7 @@ export const useConfigStore = defineStore('config', () => {
       descriptionTemplates.value = configData.descriptionTemplates || []
       scopeTemplates.value = configData.scopeTemplates || []
       messageTemplates.value = configData.messageTemplates || []
+      commandTemplates.value = configData.commandTemplates || []
       lockedFiles.value = configData.lockedFiles || []
       customCommands.value = configData.customCommands || []
       orchestrations.value = configData.orchestrations || []
@@ -241,7 +244,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 保存模板
-  async function saveTemplate(template: string, type: 'description' | 'scope' | 'message') {
+  async function saveTemplate(template: string, type: 'description' | 'scope' | 'message' | 'command') {
     try {
       const response = await fetch('/api/config/save-template', {
         method: 'POST',
@@ -266,6 +269,10 @@ export const useConfigStore = defineStore('config', () => {
           if (!messageTemplates.value.includes(template)) {
             messageTemplates.value.push(template)
           }
+        } else if (type === 'command') {
+          if (!commandTemplates.value.includes(template)) {
+            commandTemplates.value.push(template)
+          }
         }
         
         ElMessage.success($t('@D50BB:模板已保存'))
@@ -281,7 +288,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 删除模板
-  async function deleteTemplate(template: string, type: 'description' | 'scope' | 'message') {
+  async function deleteTemplate(template: string, type: 'description' | 'scope' | 'message' | 'command') {
     try {
       const response = await fetch('/api/config/delete-template', {
         method: 'POST',
@@ -300,6 +307,8 @@ export const useConfigStore = defineStore('config', () => {
           scopeTemplates.value = scopeTemplates.value.filter(t => t !== template)
         } else if (type === 'message') {
           messageTemplates.value = messageTemplates.value.filter(t => t !== template)
+        } else if (type === 'command') {
+          commandTemplates.value = commandTemplates.value.filter(t => t !== template)
         }
         
         ElMessage.success($t('@D50BB:模板已删除'))
@@ -315,7 +324,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 更新模板
-  async function updateTemplate(oldTemplate: string, newTemplate: string, type: 'description' | 'scope' | 'message') {
+  async function updateTemplate(oldTemplate: string, newTemplate: string, type: 'description' | 'scope' | 'message' | 'command') {
     try {
       const response = await fetch('/api/config/update-template', {
         method: 'POST',
@@ -343,6 +352,11 @@ export const useConfigStore = defineStore('config', () => {
           if (index !== -1) {
             messageTemplates.value[index] = newTemplate
           }
+        } else if (type === 'command') {
+          const index = commandTemplates.value.indexOf(oldTemplate)
+          if (index !== -1) {
+            commandTemplates.value[index] = newTemplate
+          }
         }
         
         ElMessage.success($t('@D50BB:模板已更新'))
@@ -358,7 +372,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 置顶模板
-  async function pinTemplate(template: string, type: 'description' | 'scope' | 'message') {
+  async function pinTemplate(template: string, type: 'description' | 'scope' | 'message' | 'command') {
     try {
       const response = await fetch('/api/config/pin-template', {
         method: 'POST',
@@ -380,6 +394,9 @@ export const useConfigStore = defineStore('config', () => {
         } else if (type === 'message') {
           messageTemplates.value = messageTemplates.value.filter(t => t !== template)
           messageTemplates.value.unshift(template)
+        } else if (type === 'command') {
+          commandTemplates.value = commandTemplates.value.filter(t => t !== template)
+          commandTemplates.value.unshift(template)
         }
         
         ElMessage.success($t('@D50BB:模板已置顶'))
@@ -686,6 +703,7 @@ export const useConfigStore = defineStore('config', () => {
     descriptionTemplates,
     scopeTemplates,
     messageTemplates,
+    commandTemplates,
     lockedFiles,
     customCommands,
     orchestrations,

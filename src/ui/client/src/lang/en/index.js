@@ -162,6 +162,11 @@ export default {
   '@CMD01:当前路径: ': 'Current path: ',
   '@CMD01:返回上级目录': 'Go to parent directory',
   '@CMD01:处理目录选择时出错: ': 'Error handling directory selection: ',
+  '@CMD01:命令模板': 'Command templates',
+  '@CMD01:命令模板管理': 'Command Template Manager',
+  '@CMD01:输入命令模板，例如: npm run build': 'Enter a command template, e.g.: npm run build',
+  '@CMD01:编辑命令模板': 'Edit command template',
+  '@CMD01:暂无保存的命令模板': 'No saved command templates yet',
   // @CMD01: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
   '@CMD02:指令编排': 'Command Orchestration',
