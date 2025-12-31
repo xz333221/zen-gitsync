@@ -7,7 +7,7 @@ import { VueFlow, useVueFlow } from '@vue-flow/core'
 import type { EdgeChange, NodeTypesObject } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
-import { Delete, VideoPlay, Plus, Select, Grid } from '@element-plus/icons-vue'
+import { Delete, VideoPlay, Plus, Select, Grid, CopyDocument } from '@element-plus/icons-vue'
 import dagre from 'dagre'
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
@@ -247,6 +247,46 @@ function generateNodeId(type: string): string {
 
 function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function generateCopyName(originalName: string) {
+  const base = String(originalName || '').trim() || t('@ORCH:未命名')
+  const existingNames = new Set(
+    (Array.isArray(orchestrations.value) ? orchestrations.value : []).map((o: any) => String(o?.name || '').trim())
+  )
+
+  const first = `${base}（复制）`
+  if (!existingNames.has(first)) return first
+
+  let i = 2
+  while (i < 1000) {
+    const name = `${base}（复制${i}）`
+    if (!existingNames.has(name)) return name
+    i += 1
+  }
+  return `${base}（复制${Date.now()}）`
+}
+
+async function duplicateOrchestration(orchestration: any) {
+  try {
+    const newName = generateCopyName(orchestration?.name)
+    const payload = {
+      name: newName,
+      description: orchestration?.description || '',
+      steps: Array.isArray(orchestration?.steps) ? JSON.parse(JSON.stringify(orchestration.steps)) : [],
+      flowData: orchestration?.flowData ? JSON.parse(JSON.stringify(orchestration.flowData)) : null
+    }
+
+    const created = await configStore.saveOrchestration(payload)
+    if (created && typeof created === 'object' && 'id' in created) {
+      selectedOrchestrationId.value = (created as any).id
+      editingOrchestrationId.value = (created as any).id
+      loadOrchestration(created)
+      ElMessage.success(t('@ORCH:已复制'))
+    }
+  } catch (error: any) {
+    ElMessage.error(`${t('@ORCH:错误')}: ${error?.message || error}`)
+  }
 }
 
 function estimateNodeSize(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition') {
@@ -1044,6 +1084,14 @@ onUnmounted(() => {
                   @click.stop="executeOrchestration(orchestration)"
                 >
                   <el-icon><VideoPlay /></el-icon>
+                </IconButton>
+                <IconButton
+                  :tooltip="t('@ORCH:复制')"
+                  size="small"
+                  hover-color="var(--color-primary)"
+                  @click.stop="duplicateOrchestration(orchestration)"
+                >
+                  <el-icon><CopyDocument /></el-icon>
                 </IconButton>
                 <IconButton
                   :tooltip="t('@ORCH:删除')"

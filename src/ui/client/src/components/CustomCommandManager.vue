@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, computed, watch, h } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, computed, watch, h, reactive, defineComponent } from 'vue'
+import { ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, VideoPlay, Folder } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
@@ -53,6 +53,52 @@ function handleCommandSelect(item: { value: string; isSettings?: boolean }) {
   }
   newCommand.value.command = item.value
 }
+
+function extractTemplateVariables(command: string): string[] {
+  const vars: string[] = []
+  const re = /{{\s*([a-zA-Z0-9_]+)\s*}}/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(command))) {
+    const key = String(m[1] || '').trim()
+    if (key && !vars.includes(key)) vars.push(key)
+  }
+  return vars
+}
+
+function applyTemplateVariables(command: string, values: Record<string, string>): string {
+  return command.replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_match, p1) => {
+    const key = String(p1 || '').trim()
+    return Object.prototype.hasOwnProperty.call(values, key) ? String(values[key] ?? '') : ''
+  })
+}
+
+const CmdParamForm = defineComponent({
+  name: 'CmdParamForm',
+  props: {
+    vars: { type: Array as any, required: true },
+    values: { type: Object as any, required: true }
+  },
+  setup(props) {
+    return () =>
+      h(
+        'div',
+        { class: 'cmd-param-form' },
+        (props.vars as string[]).map((v) =>
+          h('div', { class: 'cmd-param-row' }, [
+            h('div', { class: 'cmd-param-label' }, v),
+            h(ElInput, {
+              modelValue: (props.values as any)[v],
+              'onUpdate:modelValue': (val: any) => {
+                ;(props.values as any)[v] = String(val ?? '')
+              },
+              placeholder: $t('@CMD01:请输入变量值', { var: v }),
+              clearable: true
+            })
+          ])
+        )
+      )
+  }
+})
 
 // 组件内部状态
 const newCommand = ref<CustomCommand>({
@@ -166,8 +212,34 @@ async function deleteCommand(id: string) {
 }
 
 // 执行命令
-function executeCommand(command: CustomCommand) {
-  emit('execute-command', command)
+async function executeCommand(command: CustomCommand) {
+  const raw = String(command?.command || '')
+  const vars = extractTemplateVariables(raw)
+
+  if (!vars.length) {
+    emit('execute-command', command)
+    return
+  }
+
+  const values = reactive<Record<string, string>>({})
+  try {
+    for (const v of vars) values[v] = ''
+
+    await ElMessageBox({
+      title: $t('@CMD01:执行参数'),
+      message: h(CmdParamForm, { vars, values }),
+      showCancelButton: true,
+      confirmButtonText: $t('@CMD01:确定'),
+      cancelButtonText: $t('@CMD01:取消'),
+      closeOnClickModal: false,
+      customClass: 'cmd-param-message-box'
+    })
+
+    const resolved = applyTemplateVariables(raw, values)
+    emit('execute-command', { ...command, command: resolved })
+  } catch {
+    // 用户取消
+  }
 }
 
 // 使用当前目录
@@ -730,6 +802,39 @@ defineExpose({
   .parent-dir {
     background-color: var(--bg-panel);
     font-weight: 500;
+  }
+}
+
+/* 命令执行参数弹窗 */
+.cmd-param-message-box {
+  z-index: 3002 !important;
+
+  width: 620px;
+  max-width: calc(100vw - 48px);
+
+  .cmd-param-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 6px;
+  }
+
+  .cmd-param-row {
+    display: grid;
+    grid-template-columns: minmax(80px, 140px) 1fr;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .cmd-param-label {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    word-break: break-all;
+  }
+
+  .el-input__wrapper {
+    min-height: 40px;
   }
 }
 </style>

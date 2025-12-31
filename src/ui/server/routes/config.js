@@ -68,7 +68,10 @@ export function registerConfigRoutes({
           'echo "{{cmd}}"',
           'npm run dev',
           'npm run build',
-          'git status'
+          'git status',
+          'git add .',
+          'git commit -m "{{message}}" --no-verify',
+          'git push',
         ]
         await configManager.saveConfig(config)
       }

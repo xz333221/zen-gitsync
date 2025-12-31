@@ -591,7 +591,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 指令编排管理函数
-  async function saveOrchestration(orchestration: { name: string; description?: string; steps: OrchestrationStep[] }) {
+  async function saveOrchestration(orchestration: { name: string; description?: string; steps: OrchestrationStep[]; flowData?: any }) {
     try {
       const response = await fetch('/api/config/save-orchestration', {
         method: 'POST',
@@ -605,14 +605,14 @@ export const useConfigStore = defineStore('config', () => {
       if (result.success) {
         await loadConfig(true)
         ElMessage.success($t('@ORCH:编排已保存'))
-        return true
+        return result.orchestration || null
       } else {
         ElMessage.error(`${$t('@ORCH:保存编排失败: ')}${result.error}`)
-        return false
+        return null
       }
     } catch (error) {
       ElMessage.error(`${$t('@ORCH:保存编排失败: ')}${(error as Error).message}`)
-      return false
+      return null
     }
   }
 

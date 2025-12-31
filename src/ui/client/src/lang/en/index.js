@@ -167,6 +167,8 @@ export default {
   '@CMD01:输入命令模板，例如: npm run build': 'Enter a command template, e.g.: npm run build',
   '@CMD01:编辑命令模板': 'Edit command template',
   '@CMD01:暂无保存的命令模板': 'No saved command templates yet',
+  '@CMD01:执行参数': 'Execution parameters',
+  '@CMD01:请输入变量值': 'Please enter a value for {var}',
   // @CMD01: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
   '@CMD02:指令编排': 'Command Orchestration',
@@ -1245,6 +1247,9 @@ export default {
   '@ORCH:暂无编排': 'No orchestrations',
   '@ORCH:执行': 'Execute',
   '@ORCH:删除': 'Delete',
+  '@ORCH:复制': 'Duplicate',
+  '@ORCH:已复制': 'Duplicated',
+  '@ORCH:未命名': 'Untitled',
   '@ORCH:编排名称（必填）': 'Orchestration Name (Required)',
   '@ORCH:编排描述（选填）': 'Description (Optional)',
   '@ORCH:保存编排': 'Save Orchestration',

@@ -171,6 +171,8 @@ export default {
   '@CMD01:输入命令模板，例如: npm run build': '输入命令模板，例如: npm run build',
   '@CMD01:编辑命令模板': '编辑命令模板',
   '@CMD01:暂无保存的命令模板': '暂无保存的命令模板',
+  '@CMD01:执行参数': '执行参数',
+  '@CMD01:请输入变量值': '请输入 {var} 的值',
   // @CMD01: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
   '@CMD02:指令编排': '指令编排',
@@ -1249,6 +1251,9 @@ export default {
   '@ORCH:暂无编排': '暂无编排',
   '@ORCH:执行': '执行',
   '@ORCH:删除': '删除',
+  '@ORCH:复制': '复制',
+  '@ORCH:已复制': '已复制',
+  '@ORCH:未命名': '未命名',
   '@ORCH:编排名称（必填）': '编排名称（必填）',
   '@ORCH:编排描述（选填）': '编排描述（选填）',
   '@ORCH:保存编排': '保存编排',
