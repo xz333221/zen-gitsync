@@ -308,6 +308,7 @@ export default {
   '@NODECFG:请输入': 'Please enter',
   '@NODECFG:值': 'Value',
   '@NODECFG:暂无输入参数': 'No input parameters',
+  '@NODECFG:暂无输出参数': 'No output parameters',
   '@NODECFG:参数类型': 'Type',
   '@NODECFG:示例代码': 'Examples',
   '@NODECFG:提取版本号': 'Extract version',

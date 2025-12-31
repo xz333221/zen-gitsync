@@ -231,7 +231,7 @@ async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; 
       // 复用现有顺序执行器：只执行一个 step
       const outsForForceConfirm = outgoingEdgesBySource.get(node.id) || []
       const forceTerminalConfirm = payload?.isSingleExecution !== true && Boolean(outsForForceConfirm[0]?.target)
-      await executeOrchestration([
+      const ok = await executeOrchestration([
         {
           ...(step as any),
           nodeId: node.id,
@@ -243,6 +243,14 @@ async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; 
         skipUiTeardown: true,
         forceTerminalConfirm
       })
+
+      // 单步执行失败：必须立刻停止图遍历，否则会继续调度后续节点
+      if (!ok) {
+        if (node.id && !failedNodeIds.value.includes(node.id)) {
+          failedNodeIds.value = [...failedNodeIds.value, node.id]
+        }
+        break
+      }
 
       // 用户确认节点点了“取消执行”会将 consoleRunning 置为 false，此处必须立刻停止图遍历
       if (!consoleRunning.value) {
@@ -1049,8 +1057,8 @@ async function executeOrchestration(
   isSingleExecution: boolean = false,
   orchestrationMeta?: { id?: string; name?: string },
   runtime?: { nodeOutputs?: Record<string, Record<string, string>>; skipUiSetup?: boolean; skipUiTeardown?: boolean; forceTerminalConfirm?: boolean }
-) {
-  if (steps.length === 0) return;
+) : Promise<boolean> {
+  if (steps.length === 0) return true;
   
   if (!runtime?.skipUiSetup) {
     // 自动开启全屏模式
@@ -1069,6 +1077,8 @@ async function executeOrchestration(
   
   // 节点输出存储（用于节点间引用）
   const nodeOutputs: Record<string, Record<string, string>> = runtime?.nodeOutputs || {};
+  
+  let hasFailure = false;
   
   if (!runtime?.skipUiSetup) {
     const totalSteps = steps.length - startIndex;
@@ -1117,6 +1127,7 @@ async function executeOrchestration(
       const command = configStore.customCommands.find(c => c.id === step.commandId);
       if (!command) {
         ElMessage.error(`命令已删除: ${step.commandName}`);
+        hasFailure = true;
         break;
       }
       
@@ -1227,6 +1238,7 @@ async function executeOrchestration(
             ElMessage.error(`${stepLabel} 执行失败: ${e?.message}`);
           }
           shouldContinue = false;
+          hasFailure = true;
           break; // 用户取消或执行失败时，停止整个流程
         }
         continue; // 跳过后续的流式执行逻辑
@@ -1321,6 +1333,7 @@ async function executeOrchestration(
         if (!rec.success) {
           ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
           shouldContinue = false;
+          hasFailure = true;
         } else {
           // 保存命令输出到 nodeOutputs，供后续节点引用
           const rawStdout = (rec.stdout || '').replace(/<[^>]*>/g, '').trim(); // 移除 HTML 标签
@@ -1347,6 +1360,7 @@ async function executeOrchestration(
         rec.stderr = e?.message || String(e);
         ElMessage.error(`命令 ${stepLabel} 执行出错: ${e?.message}`);
         shouldContinue = false;
+        hasFailure = true;
       }
     } else if (step.type === 'wait') {
       // 执行等待步骤
@@ -1457,6 +1471,7 @@ async function executeOrchestration(
         rec.stderr = e?.message || String(e);
         ElMessage.error(`${stepLabel} 失败: ${e?.message || e}`);
         shouldContinue = false;
+        hasFailure = true;
       }
     } else if (step.type === 'version') {
       // 执行版本管理
@@ -1484,6 +1499,7 @@ async function executeOrchestration(
         
         if (!resolvedDependencyVersion) {
           ElMessage.error(`无法从节点 ${refNodeId} 获取输出，请检查前置节点是否执行成功`);
+          hasFailure = true;
           break;
         }
       }
@@ -1596,6 +1612,7 @@ async function executeOrchestration(
         rec.stdout = '用户取消执行';
         ElMessage.warning('用户取消执行');
         shouldContinue = false;
+        hasFailure = true;
         consoleRunning.value = false;
       }
     }
@@ -1643,7 +1660,11 @@ async function executeOrchestration(
       orchestrationSteps.value = []; // 清空步骤列表
       currentOrchestrationName.value = ''
       currentOrchestrationId.value = ''
-      ElMessage.success('所有步骤执行完成！');
+      if (hasFailure) {
+        ElMessage.error('编排执行失败，已停止后续步骤');
+      } else {
+        ElMessage.success('所有步骤执行完成！');
+      }
     }
     
     // 检查是否执行了 git 相关命令，如果是则刷新 git 状态
@@ -1661,6 +1682,8 @@ async function executeOrchestration(
       await gitStore.fetchStatus();
       await gitStore.fetchLog();
     }
+
+    return !hasFailure;
   } catch (error: any) {
     if (!runtime?.skipUiTeardown) {
       consoleRunning.value = false;
@@ -1675,6 +1698,8 @@ async function executeOrchestration(
     } else {
       ElMessage.error(`编排执行异常: ${error?.message || String(error)}`);
     }
+
+    return false;
   }
 }
 

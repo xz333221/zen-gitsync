@@ -312,6 +312,7 @@ export default {
   '@NODECFG:请输入': '请输入',
   '@NODECFG:值': '值',
   '@NODECFG:暂无输入参数': '暂无输入参数',
+  '@NODECFG:暂无输出参数': '暂无输出参数',
   '@NODECFG:参数类型': '参数类型',
   '@NODECFG:示例代码': '示例代码',
   '@NODECFG:提取版本号': '提取版本号',
