@@ -33,11 +33,39 @@ export interface CodeNodeOutputParam {
   desc?: string
 }
 
+export type ConditionOperator =
+  | '=='
+  | '!='
+  | '>'
+  | '>='
+  | '<'
+  | '<='
+  | 'contains'
+  | 'not_contains'
+  | 'isEmpty'
+  | 'isNotEmpty'
+
+export interface ConditionRule {
+  left: NodeOutputRef
+  op: ConditionOperator
+  right?: string
+}
+
+export interface ConditionBranch {
+  id: string
+  name: string
+  handleId: string
+  priority: number
+  combine: 'all' | 'any'
+  rules: ConditionRule[]
+  isDefault?: boolean
+}
+
 // 编排步骤类型
 export interface OrchestrationStep {
   id: string
   nodeId?: string  // 流程图中的节点 ID（用于节点间引用）
-  type: 'command' | 'wait' | 'version' | 'confirm' | 'code'
+  type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition'
   displayName?: string  // 节点自定义名称（用于显示与引用）
   enabled?: boolean  // 是否启用该步骤（默认 true），禁用的步骤不会执行
   useTerminal?: boolean  // 是否在新终端窗口中执行（仅对 command 类型有效）
@@ -68,6 +96,9 @@ export interface OrchestrationStep {
   codeOutputKeys?: string[]
 
   commandOutputParams?: Array<{ key: string; desc?: string }>
+
+  // 对于 condition 类型
+  conditionBranches?: ConditionBranch[]
 }
 
 export const useConfigStore = defineStore('config', () => {
@@ -76,6 +107,7 @@ export const useConfigStore = defineStore('config', () => {
   const descriptionTemplates = ref<string[]>([])
   const scopeTemplates = ref<string[]>([])
   const messageTemplates = ref<string[]>([])
+  const commandTemplates = ref<string[]>([])
   const lockedFiles = ref<string[]>([])
   const customCommands = ref<Array<{id: string, name: string, description?: string, directory: string, command: string}>>([])
   const orchestrations = ref<Array<{id: string, name: string, description?: string, steps: OrchestrationStep[]}>>([])
@@ -124,6 +156,7 @@ export const useConfigStore = defineStore('config', () => {
       descriptionTemplates: descriptionTemplates.value,
       scopeTemplates: scopeTemplates.value,
       messageTemplates: messageTemplates.value,
+      commandTemplates: commandTemplates.value,
       lockedFiles: lockedFiles.value,
       customCommands: customCommands.value,
       orchestrations: orchestrations.value,
@@ -153,6 +186,7 @@ export const useConfigStore = defineStore('config', () => {
       descriptionTemplates.value = configData.descriptionTemplates || []
       scopeTemplates.value = configData.scopeTemplates || []
       messageTemplates.value = configData.messageTemplates || []
+      commandTemplates.value = configData.commandTemplates || []
       lockedFiles.value = configData.lockedFiles || []
       customCommands.value = configData.customCommands || []
       orchestrations.value = configData.orchestrations || []
@@ -210,7 +244,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 保存模板
-  async function saveTemplate(template: string, type: 'description' | 'scope' | 'message') {
+  async function saveTemplate(template: string, type: 'description' | 'scope' | 'message' | 'command') {
     try {
       const response = await fetch('/api/config/save-template', {
         method: 'POST',
@@ -235,6 +269,10 @@ export const useConfigStore = defineStore('config', () => {
           if (!messageTemplates.value.includes(template)) {
             messageTemplates.value.push(template)
           }
+        } else if (type === 'command') {
+          if (!commandTemplates.value.includes(template)) {
+            commandTemplates.value.push(template)
+          }
         }
         
         ElMessage.success($t('@D50BB:模板已保存'))
@@ -250,7 +288,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 删除模板
-  async function deleteTemplate(template: string, type: 'description' | 'scope' | 'message') {
+  async function deleteTemplate(template: string, type: 'description' | 'scope' | 'message' | 'command') {
     try {
       const response = await fetch('/api/config/delete-template', {
         method: 'POST',
@@ -269,6 +307,8 @@ export const useConfigStore = defineStore('config', () => {
           scopeTemplates.value = scopeTemplates.value.filter(t => t !== template)
         } else if (type === 'message') {
           messageTemplates.value = messageTemplates.value.filter(t => t !== template)
+        } else if (type === 'command') {
+          commandTemplates.value = commandTemplates.value.filter(t => t !== template)
         }
         
         ElMessage.success($t('@D50BB:模板已删除'))
@@ -284,7 +324,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 更新模板
-  async function updateTemplate(oldTemplate: string, newTemplate: string, type: 'description' | 'scope' | 'message') {
+  async function updateTemplate(oldTemplate: string, newTemplate: string, type: 'description' | 'scope' | 'message' | 'command') {
     try {
       const response = await fetch('/api/config/update-template', {
         method: 'POST',
@@ -312,6 +352,11 @@ export const useConfigStore = defineStore('config', () => {
           if (index !== -1) {
             messageTemplates.value[index] = newTemplate
           }
+        } else if (type === 'command') {
+          const index = commandTemplates.value.indexOf(oldTemplate)
+          if (index !== -1) {
+            commandTemplates.value[index] = newTemplate
+          }
         }
         
         ElMessage.success($t('@D50BB:模板已更新'))
@@ -327,7 +372,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 置顶模板
-  async function pinTemplate(template: string, type: 'description' | 'scope' | 'message') {
+  async function pinTemplate(template: string, type: 'description' | 'scope' | 'message' | 'command') {
     try {
       const response = await fetch('/api/config/pin-template', {
         method: 'POST',
@@ -349,6 +394,9 @@ export const useConfigStore = defineStore('config', () => {
         } else if (type === 'message') {
           messageTemplates.value = messageTemplates.value.filter(t => t !== template)
           messageTemplates.value.unshift(template)
+        } else if (type === 'command') {
+          commandTemplates.value = commandTemplates.value.filter(t => t !== template)
+          commandTemplates.value.unshift(template)
         }
         
         ElMessage.success($t('@D50BB:模板已置顶'))
@@ -543,7 +591,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 指令编排管理函数
-  async function saveOrchestration(orchestration: { name: string; description?: string; steps: OrchestrationStep[] }) {
+  async function saveOrchestration(orchestration: { name: string; description?: string; steps: OrchestrationStep[]; flowData?: any }) {
     try {
       const response = await fetch('/api/config/save-orchestration', {
         method: 'POST',
@@ -557,14 +605,14 @@ export const useConfigStore = defineStore('config', () => {
       if (result.success) {
         await loadConfig(true)
         ElMessage.success($t('@ORCH:编排已保存'))
-        return true
+        return result.orchestration || null
       } else {
         ElMessage.error(`${$t('@ORCH:保存编排失败: ')}${result.error}`)
-        return false
+        return null
       }
     } catch (error) {
       ElMessage.error(`${$t('@ORCH:保存编排失败: ')}${(error as Error).message}`)
-      return false
+      return null
     }
   }
 
@@ -655,6 +703,7 @@ export const useConfigStore = defineStore('config', () => {
     descriptionTemplates,
     scopeTemplates,
     messageTemplates,
+    commandTemplates,
     lockedFiles,
     customCommands,
     orchestrations,

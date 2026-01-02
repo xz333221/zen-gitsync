@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, computed, watch, h } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, computed, watch, h, reactive, defineComponent } from 'vue'
+import { ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, VideoPlay, Folder } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
 import CommonDialog from '@components/CommonDialog.vue'
 import IconButton from '@components/IconButton.vue'
+import TemplateManager from '@components/TemplateManager.vue'
 
 export interface CustomCommand {
   id?: string
@@ -27,6 +28,77 @@ const props = defineProps<{
 const emit = defineEmits<CustomCommandManagerEmits>()
 
 const configStore = useConfigStore()
+
+const commandTemplates = computed(() => (configStore as any).commandTemplates || [])
+const commandTemplateDialogVisible = ref(false)
+
+function queryCommandTemplates(queryString: string, callback: (suggestions: any[]) => void) {
+  const list = Array.isArray(commandTemplates.value) ? commandTemplates.value : []
+
+  const templateResults = queryString
+    ? list
+        .filter((template: string) => template.toLowerCase().includes(queryString.toLowerCase()))
+        .map((template: string) => ({ value: template }))
+    : list.map((template: string) => ({ value: template }))
+
+  const results = [...templateResults, { value: '⚙️ 管理模板...', isSettings: true }]
+  callback(results)
+}
+
+function handleCommandSelect(item: { value: string; isSettings?: boolean }) {
+  if (item.isSettings) {
+    commandTemplateDialogVisible.value = true
+    newCommand.value.command = ''
+    return
+  }
+  newCommand.value.command = item.value
+}
+
+function extractTemplateVariables(command: string): string[] {
+  const vars: string[] = []
+  const re = /{{\s*([a-zA-Z0-9_]+)\s*}}/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(command))) {
+    const key = String(m[1] || '').trim()
+    if (key && !vars.includes(key)) vars.push(key)
+  }
+  return vars
+}
+
+function applyTemplateVariables(command: string, values: Record<string, string>): string {
+  return command.replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_match, p1) => {
+    const key = String(p1 || '').trim()
+    return Object.prototype.hasOwnProperty.call(values, key) ? String(values[key] ?? '') : ''
+  })
+}
+
+const CmdParamForm = defineComponent({
+  name: 'CmdParamForm',
+  props: {
+    vars: { type: Array as any, required: true },
+    values: { type: Object as any, required: true }
+  },
+  setup(props) {
+    return () =>
+      h(
+        'div',
+        { class: 'cmd-param-form' },
+        (props.vars as string[]).map((v) =>
+          h('div', { class: 'cmd-param-row' }, [
+            h('div', { class: 'cmd-param-label' }, v),
+            h(ElInput, {
+              modelValue: (props.values as any)[v],
+              'onUpdate:modelValue': (val: any) => {
+                ;(props.values as any)[v] = String(val ?? '')
+              },
+              placeholder: $t('@CMD01:请输入变量值', { var: v }),
+              clearable: true
+            })
+          ])
+        )
+      )
+  }
+})
 
 // 组件内部状态
 const newCommand = ref<CustomCommand>({
@@ -140,8 +212,34 @@ async function deleteCommand(id: string) {
 }
 
 // 执行命令
-function executeCommand(command: CustomCommand) {
-  emit('execute-command', command)
+async function executeCommand(command: CustomCommand) {
+  const raw = String(command?.command || '')
+  const vars = extractTemplateVariables(raw)
+
+  if (!vars.length) {
+    emit('execute-command', command)
+    return
+  }
+
+  const values = reactive<Record<string, string>>({})
+  try {
+    for (const v of vars) values[v] = ''
+
+    await ElMessageBox({
+      title: $t('@CMD01:执行参数'),
+      message: h(CmdParamForm, { vars, values }),
+      showCancelButton: true,
+      confirmButtonText: $t('@CMD01:确定'),
+      cancelButtonText: $t('@CMD01:取消'),
+      closeOnClickModal: false,
+      customClass: 'cmd-param-message-box'
+    })
+
+    const resolved = applyTemplateVariables(raw, values)
+    emit('execute-command', { ...command, command: resolved })
+  } catch {
+    // 用户取消
+  }
 }
 
 // 使用当前目录
@@ -349,11 +447,14 @@ defineExpose({
         <div class="form-row">
           <div class="form-field">
             <label class="required">{{ $t('@CMD01:命令') }}</label>
-            <el-input 
-              v-model="newCommand.command" 
+            <el-autocomplete
+              v-model="newCommand.command"
+              :fetch-suggestions="queryCommandTemplates"
               :placeholder="$t('@CMD01:输入要执行的命令，例如: npm run build')"
               clearable
               size="default"
+              trigger-on-focus
+              @select="handleCommandSelect"
               @keyup.enter="saveCommand"
             />
           </div>
@@ -434,6 +535,15 @@ defineExpose({
       </div>
     </div>
   </CommonDialog>
+
+  <TemplateManager
+    v-model:visible="commandTemplateDialogVisible"
+    type="command"
+    :title="$t('@CMD01:命令模板管理')"
+    :placeholder="$t('@CMD01:输入命令模板，例如: npm run build')"
+    :edit-placeholder="$t('@CMD01:编辑命令模板')"
+    :empty-description="$t('@CMD01:暂无保存的命令模板')"
+  />
 </template>
 
 <style scoped lang="scss">
@@ -692,6 +802,39 @@ defineExpose({
   .parent-dir {
     background-color: var(--bg-panel);
     font-weight: 500;
+  }
+}
+
+/* 命令执行参数弹窗 */
+.cmd-param-message-box {
+  z-index: 3002 !important;
+
+  width: 620px;
+  max-width: calc(100vw - 48px);
+
+  .cmd-param-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 6px;
+  }
+
+  .cmd-param-row {
+    display: grid;
+    grid-template-columns: minmax(80px, 140px) 1fr;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .cmd-param-label {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    word-break: break-all;
+  }
+
+  .el-input__wrapper {
+    min-height: 40px;
   }
 }
 </style>

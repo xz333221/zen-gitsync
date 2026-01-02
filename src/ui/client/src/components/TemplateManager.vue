@@ -8,7 +8,7 @@ import CommonDialog from '@components/CommonDialog.vue'
 
 export interface TemplateManagerProps {
   visible: boolean
-  type: 'description' | 'scope' | 'message'
+  type: 'description' | 'scope' | 'message' | 'command'
   title: string
   placeholder?: string
   editPlaceholder?: string
@@ -53,6 +53,8 @@ const templates = computed(() => {
       return configStore.scopeTemplates || []
     case 'message':
       return configStore.messageTemplates || []
+    case 'command':
+      return (configStore as any).commandTemplates || []
     default:
       return []
   }
@@ -202,6 +204,7 @@ defineExpose({
     v-model="dialogVisible"
     :title="title"
     :close-on-click-modal="false"
+    :append-to-body="true"
     :custom-class="type === 'message' ? 'message-template-dialog' : 'template-dialog'"
   >
     <div class="template-container" :class="{ 'message-template-container': type === 'message' }">
@@ -239,7 +242,18 @@ defineExpose({
 
       <!-- 普通模板布局：固定标题，仅列表滚动 -->
       <div v-if="type !== 'message'" class="template-list">
-        <h3>{{ $t('@60CAC:已保存') }}{{ type === 'description' ? $t('@60CAC:模板') : $t('@60CAC:作用域') }}</h3>
+        <h3>
+          {{ $t('@60CAC:已保存') }}
+          {{
+            type === 'description'
+              ? $t('@60CAC:模板')
+              : type === 'scope'
+                ? $t('@60CAC:作用域')
+                : type === 'command'
+                  ? $t('@CMD01:命令模板')
+                  : ''
+          }}
+        </h3>
         <el-empty v-if="templates.length === 0" :description="emptyDescription" />
         <div v-else class="template-list-scroll">
           <el-card v-for="(template, index) in templates" :key="index" class="template-item">
@@ -261,7 +275,7 @@ defineExpose({
                   type="warning" 
                   size="small" 
                   :icon="Edit"
-                  @click="startEditTemplate(template, index)"
+                  @click="startEditTemplate(template, Number(index))"
                 >
                   {{ $t('@60CAC:编辑') }}
                 </el-button>
@@ -297,7 +311,7 @@ defineExpose({
                     type="warning" 
                     size="small" 
                     :icon="Edit"
-                    @click="startEditTemplate(template, index)"
+                    @click="startEditTemplate(template, Number(index))"
                   >
                     {{ $t('@60CAC:编辑') }}
                   </el-button>

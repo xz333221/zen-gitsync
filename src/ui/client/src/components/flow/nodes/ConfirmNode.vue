@@ -9,17 +9,21 @@ defineProps<{
 </script>
 
 <template>
-  <div class="confirm-node-content">
-    <div v-if="!data.config" class="node-warning">{{ $t('@FLOWNODE:未配置') }}</div>
+  <div v-if="!data.config" class="confirm-node-content">
+    <div class="node-warning">{{ $t('@FLOWNODE:未配置') }}</div>
   </div>
 </template>
 
 <style scoped lang="scss">
 .confirm-node-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
   .node-warning {
     color: var(--color-error);
     font-size: 12px;
-    margin-top: 4px;
+    line-height: 1.2;
   }
 }
 

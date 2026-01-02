@@ -6,8 +6,9 @@ import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
 import CustomCommandManager from '@components/CustomCommandManager.vue';
 import ProjectStartupButton from '@components/ProjectStartupButton.vue';
-import OrchestrationWorkspace from '@components/OrchestrationWorkspace.vue';
 import FlowOrchestrationWorkspace from '@components/flow/FlowOrchestrationWorkspace.vue';
+import type { FlowData, FlowEdge, FlowNode } from '@components/flow/FlowOrchestrationWorkspace.vue';
+import FlowExecutionViewer from '@components/flow/FlowExecutionViewer.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
 import { useGitStore } from '@stores/gitStore';
@@ -27,6 +28,260 @@ function getBackendPort() {
     return 3000;
   }
   return parseInt(currentPort, 10);
+}
+
+async function runWorkflow(wf: any) {
+  const flowData = wf?.flowData
+  const meta = { id: String(wf?.id || '').trim(), name: String(wf?.name || '').trim() }
+  if (flowData && Array.isArray(flowData?.nodes) && Array.isArray(flowData?.edges)) {
+    await executeFlow({ flowData, orchestrationMeta: meta })
+    return
+  }
+  await executeOrchestration(wf?.steps || [], 0, false, meta)
+}
+
+async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; isSingleExecution?: boolean; orchestrationMeta?: { id?: string; name?: string } }) {
+  const flowData = payload?.flowData
+  if (!flowData || !Array.isArray(flowData.nodes) || !Array.isArray(flowData.edges)) return
+
+  const nodes: FlowNode[] = flowData.nodes
+  const edges: FlowEdge[] = flowData.edges
+
+  // 自动开启全屏模式
+  isFullscreen.value = true
+  consoleRunning.value = true
+  orchestrationPaused.value = false
+
+  // 图执行不展示“步骤列表”（未来条件分支会导致步骤序列无法预知）
+  orchestrationSteps.value = []
+  currentStepIndex.value = -1
+
+  executionFlowData.value = flowData
+  showExecutionFlowPanel.value = true
+  currentExecutingNodeId.value = null
+  executedNodeIds.value = []
+  executedEdgeIds.value = []
+  failedNodeIds.value = []
+
+  currentOrchestrationName.value = (payload?.orchestrationMeta?.name || '').trim()
+  currentOrchestrationId.value = (payload?.orchestrationMeta?.id || '').trim()
+
+  // 节点输出存储（用于节点间引用）
+  const nodeOutputs: Record<string, Record<string, string>> = {}
+
+  const nodeById = new Map(nodes.map((n) => [n.id, n]))
+
+  const startNodeId = (payload?.startNodeId || '').trim() || nodes.find((n) => n.type === 'start')?.id
+  if (!startNodeId) {
+    ElMessage.error('未找到 start 节点')
+    return
+  }
+
+  // 普通节点暂不允许多出边
+  const outgoingEdgesBySource = new Map<string, FlowEdge[]>()
+  for (const e of edges) {
+    if (!outgoingEdgesBySource.has(e.source)) outgoingEdgesBySource.set(e.source, [])
+    outgoingEdgesBySource.get(e.source)!.push(e)
+  }
+  for (const [source, outs] of outgoingEdgesBySource.entries()) {
+    const srcNode = nodeById.get(source)
+    if (!srcNode) continue
+    if (srcNode.type !== 'start' && srcNode.type !== 'condition' && outs.length > 1) {
+      ElMessage.error(`节点 ${srcNode.data?.label || srcNode.id} 出边超过 1 条，当前版本不支持`)
+      return
+    }
+  }
+
+  // 执行保护：最大步数 + 简单循环检测
+  const maxSteps = Math.max(100, nodes.length * 10)
+  const visitCount = new Map<string, number>()
+
+  const opCompare = (left: string, op: string, right?: string) => {
+    const l = left ?? ''
+    const r = right ?? ''
+    switch (op) {
+      case 'contains':
+        return l.includes(r)
+      case 'not_contains':
+        return !l.includes(r)
+      case 'isEmpty':
+        return String(l).trim().length === 0
+      case 'isNotEmpty':
+        return String(l).trim().length > 0
+      case '==':
+        return l === r
+      case '!=':
+        return l !== r
+      case '>':
+      case '>=':
+      case '<':
+      case '<=': {
+        const ln = Number(l)
+        const rn = Number(r)
+        if (Number.isNaN(ln) || Number.isNaN(rn)) return false
+        if (op === '>') return ln > rn
+        if (op === '>=') return ln >= rn
+        if (op === '<') return ln < rn
+        return ln <= rn
+      }
+      default:
+        return false
+    }
+  }
+
+  const pickConditionEdge = (nodeId: string, step: any) => {
+    const outs = outgoingEdgesBySource.get(nodeId) || []
+    const branches = Array.isArray(step?.conditionBranches) ? step.conditionBranches : []
+    const normalized = branches
+      .map((b: any) => ({
+        id: String(b?.id || ''),
+        name: String(b?.name || ''),
+        handleId: String(b?.handleId || ''),
+        priority: typeof b?.priority === 'number' ? b.priority : Number(b?.priority ?? 0),
+        combine: b?.combine === 'any' ? 'any' : 'all',
+        rules: Array.isArray(b?.rules) ? b.rules : [],
+        isDefault: Boolean(b?.isDefault) || String(b?.handleId || '') === 'default'
+      }))
+      .filter((b: any) => Boolean(b.handleId))
+
+    const defaultBranch = normalized.find((b: any) => b.isDefault) || normalized.find((b: any) => b.handleId === 'default')
+    const candidates = normalized
+      .filter((b: any) => !b.isDefault && b.handleId !== 'default')
+      .sort((a: any, b: any) => (a.priority ?? 0) - (b.priority ?? 0))
+
+    const evalBranch = (b: any) => {
+      const rules = Array.isArray(b.rules) ? b.rules : []
+      if (rules.length === 0) return false
+      const results = rules.map((r: any) => {
+        const refNodeId = String(r?.left?.nodeId || '').trim()
+        const refKey = String(r?.left?.outputKey || 'stdout').trim() || 'stdout'
+        const leftVal = refNodeId ? (nodeOutputs?.[refNodeId]?.[refKey] || '') : ''
+        return opCompare(String(leftVal ?? ''), String(r?.op || ''), r?.right)
+      })
+      return b.combine === 'any' ? results.some(Boolean) : results.every(Boolean)
+    }
+
+    let chosen = candidates.find((b: any) => evalBranch(b))
+    if (!chosen && defaultBranch) chosen = defaultBranch
+
+    const handleId = String(chosen?.handleId || '')
+    const edge = handleId ? outs.find((e) => String((e as any).sourceHandle || '').trim() === handleId) : undefined
+
+    console.log('[FLOW][condition]', {
+      nodeId,
+      chosen: chosen ? { name: chosen.name, handleId: chosen.handleId, priority: chosen.priority, isDefault: chosen.isDefault } : null,
+      outs: outs.map((e) => ({ id: e.id, sourceHandle: (e as any).sourceHandle, target: e.target })),
+      nodeOutputsKeys: Object.keys(nodeOutputs || {})
+    })
+
+    return edge
+  }
+
+  let currentNodeId: string | undefined = startNodeId
+  let stepCounter = 0
+
+  try {
+    while (currentNodeId) {
+      if (!consoleRunning.value) throw new Error('用户停止执行')
+      if (stepCounter++ > maxSteps) throw new Error(`执行步数超过上限(${maxSteps})，可能存在循环`)
+
+      const prevCount = visitCount.get(currentNodeId) || 0
+      visitCount.set(currentNodeId, prevCount + 1)
+      if (prevCount >= 10) throw new Error(`检测到节点 ${currentNodeId} 被重复执行过多次，可能存在循环`)
+
+      const node = nodeById.get(currentNodeId)
+      if (!node) throw new Error(`节点不存在: ${currentNodeId}`)
+
+      currentExecutingNodeId.value = node.id
+
+      // start 节点不执行，直接走下一跳
+      if (node.type === 'start') {
+        const outs = outgoingEdgesBySource.get(node.id) || []
+        executedNodeIds.value = executedNodeIds.value.includes(node.id) ? executedNodeIds.value : [...executedNodeIds.value, node.id]
+        if (outs[0]?.id) {
+          executedEdgeIds.value = executedEdgeIds.value.includes(outs[0].id) ? executedEdgeIds.value : [...executedEdgeIds.value, outs[0].id]
+        }
+        currentNodeId = outs[0]?.target
+        continue
+      }
+
+      const step = node.data?.config
+      if (!step) throw new Error(`节点未配置: ${node.data?.label || node.id}`)
+
+      // enabled 默认 true；单节点执行不跳过
+      if ((step as any).enabled === undefined) (step as any).enabled = node.data?.enabled ?? true
+      const isSingleExecution = payload?.isSingleExecution === true
+      if ((step as any).enabled === false && !isSingleExecution) {
+        const outs = outgoingEdgesBySource.get(node.id) || []
+        currentNodeId = outs[0]?.target
+        continue
+      }
+
+      if (node.type === 'condition') {
+        const edge = pickConditionEdge(node.id, step)
+        executedNodeIds.value = executedNodeIds.value.includes(node.id) ? executedNodeIds.value : [...executedNodeIds.value, node.id]
+        if (edge?.id) {
+          executedEdgeIds.value = executedEdgeIds.value.includes(edge.id) ? executedEdgeIds.value : [...executedEdgeIds.value, edge.id]
+        }
+        currentNodeId = edge?.target
+        if (isSingleExecution) break
+        continue
+      }
+
+      // 复用现有顺序执行器：只执行一个 step
+      const outsForForceConfirm = outgoingEdgesBySource.get(node.id) || []
+      const forceTerminalConfirm = payload?.isSingleExecution !== true && Boolean(outsForForceConfirm[0]?.target)
+      const ok = await executeOrchestration([
+        {
+          ...(step as any),
+          nodeId: node.id,
+          enabled: (step as any).enabled
+        }
+      ], 0, true, payload?.orchestrationMeta, {
+        nodeOutputs,
+        skipUiSetup: true,
+        skipUiTeardown: true,
+        forceTerminalConfirm
+      })
+
+      // 单步执行失败：必须立刻停止图遍历，否则会继续调度后续节点
+      if (!ok) {
+        if (node.id && !failedNodeIds.value.includes(node.id)) {
+          failedNodeIds.value = [...failedNodeIds.value, node.id]
+        }
+        break
+      }
+
+      // 用户确认节点点了“取消执行”会将 consoleRunning 置为 false，此处必须立刻停止图遍历
+      if (!consoleRunning.value) {
+        break
+      }
+
+      executedNodeIds.value = executedNodeIds.value.includes(node.id) ? executedNodeIds.value : [...executedNodeIds.value, node.id]
+
+      const outs = outgoingEdgesBySource.get(node.id) || []
+      if (outs[0]?.id) {
+        executedEdgeIds.value = executedEdgeIds.value.includes(outs[0].id) ? executedEdgeIds.value : [...executedEdgeIds.value, outs[0].id]
+      }
+      currentNodeId = outs[0]?.target
+
+      if (isSingleExecution) break
+    }
+  } catch (err: any) {
+    if (String(err?.message || err) !== '用户停止执行') {
+      if (currentExecutingNodeId.value && !failedNodeIds.value.includes(currentExecutingNodeId.value)) {
+        failedNodeIds.value = [...failedNodeIds.value, currentExecutingNodeId.value]
+      }
+      ElMessage.error(err?.message || String(err))
+    }
+  } finally {
+    // 图执行收尾：保留当前编排名/ID（按你的要求不清空），但结束运行态
+    consoleRunning.value = false
+    orchestrationPaused.value = false
+    currentStepIndex.value = -1
+    orchestrationSteps.value = []
+    currentExecutingNodeId.value = null
+  }
 }
 
 const backendPort = getBackendPort();
@@ -71,6 +326,9 @@ function stopAfterTerminal() {
   if (terminalConfirmResolve) {
     terminalConfirmResolve(false);
   }
+  // 图执行时：终端确认点“停止执行”应立即终止整个执行循环
+  consoleRunning.value = false
+  orchestrationPaused.value = false
 }
 
 // 处理用户确认节点
@@ -84,11 +342,21 @@ function stopUserConfirm() {
   if (userConfirmResolve) {
     userConfirmResolve(false);
   }
+  // 图执行时：用户取消应立即停止整个执行循环
+  consoleRunning.value = false
+  orchestrationPaused.value = false
 }
 
 // 编排执行状态
 const orchestrationSteps = ref<OrchestrationStep[]>([]); // 当前执行的编排步骤列表
 const currentStepIndex = ref(-1); // 当前执行的步骤索引
+
+const executionFlowData = ref<FlowData | null>(null)
+const showExecutionFlowPanel = ref(true)
+const currentExecutingNodeId = ref<string | null>(null)
+const executedNodeIds = ref<string[]>([])
+const executedEdgeIds = ref<string[]>([])
+const failedNodeIds = ref<string[]>([])
 
 // 当前执行的编排信息（用于“执行步骤”面板展示）
 const currentOrchestrationName = ref<string>('')
@@ -233,13 +501,13 @@ async function runStartupCommandById(commandId: string) {
   await runInteractiveCommandWithCmd(commandText, targetDir);
 }
 
-async function runStartupWorkflowById(orchestrationId: string) {
-  const wf = configStore.orchestrations.find((o) => String(o.id) === String(orchestrationId));
+async function runStartupWorkflow(orchestrationId: string) {
+  const wf = configStore.orchestrations.find((w) => w.id === orchestrationId)
   if (!wf) {
     ElMessage.warning(`启动项工作流不存在: ${orchestrationId}`);
     return;
   }
-  await executeOrchestration(wf.steps || [], 0, false);
+  await runWorkflow(wf)
 }
 
 async function autoRunProjectStartupItems() {
@@ -257,7 +525,7 @@ async function autoRunProjectStartupItems() {
 
   for (const it of enabledItems) {
     if (it.type === 'workflow') {
-      await runStartupWorkflowById(it.refId);
+      await runStartupWorkflow(it.refId);
     } else {
       await runStartupCommandById(it.refId);
     }
@@ -438,8 +706,6 @@ async function deleteTerminalSession(session: TerminalSession) {
 // 控制自定义命令管理弹窗
 const commandManagerVisible = ref(false);
 
-// 控制编排工作台弹窗（合并了指令编排和编排管理）
-const orchestrationWorkspaceVisible = ref(false);
 // 控制可视化编排工作台
 const flowOrchestrationVisible = ref(false);
 
@@ -789,34 +1055,38 @@ async function executeOrchestration(
   steps: OrchestrationStep[],
   startIndex: number = 0,
   isSingleExecution: boolean = false,
-  orchestrationMeta?: { id?: string; name?: string }
-) {
-  if (steps.length === 0) return;
+  orchestrationMeta?: { id?: string; name?: string },
+  runtime?: { nodeOutputs?: Record<string, Record<string, string>>; skipUiSetup?: boolean; skipUiTeardown?: boolean; forceTerminalConfirm?: boolean }
+) : Promise<boolean> {
+  if (steps.length === 0) return true;
   
-  // 关闭编排工作台弹窗
-  orchestrationWorkspaceVisible.value = false;
-  
-  // 自动开启全屏模式
-  isFullscreen.value = true;
-  
-  // 设置编排步骤列表和当前步骤
-  orchestrationSteps.value = steps;
-  currentStepIndex.value = startIndex;
+  if (!runtime?.skipUiSetup) {
+    // 自动开启全屏模式
+    isFullscreen.value = true;
+    
+    // 设置编排步骤列表和当前步骤
+    orchestrationSteps.value = steps;
+    currentStepIndex.value = startIndex;
 
-  currentOrchestrationName.value = (orchestrationMeta?.name || '').trim()
-  currentOrchestrationId.value = (orchestrationMeta?.id || '').trim()
-  
-  consoleRunning.value = true;
-  orchestrationPaused.value = false; // 重置暂停状态
+    currentOrchestrationName.value = (orchestrationMeta?.name || '').trim()
+    currentOrchestrationId.value = (orchestrationMeta?.id || '').trim()
+    
+    consoleRunning.value = true;
+    orchestrationPaused.value = false; // 重置暂停状态
+  }
   
   // 节点输出存储（用于节点间引用）
-  const nodeOutputs: Record<string, Record<string, string>> = {};
+  const nodeOutputs: Record<string, Record<string, string>> = runtime?.nodeOutputs || {};
   
-  const totalSteps = steps.length - startIndex;
-  if (startIndex > 0) {
-    ElMessage.success(`从第 ${startIndex + 1} 步开始执行，共 ${totalSteps} 个步骤...`);
-  } else {
-    ElMessage.success(`开始执行 ${steps.length} 个步骤...`);
+  let hasFailure = false;
+  
+  if (!runtime?.skipUiSetup) {
+    const totalSteps = steps.length - startIndex;
+    if (startIndex > 0) {
+      ElMessage.success(`从第 ${startIndex + 1} 步开始执行，共 ${totalSteps} 个步骤...`);
+    } else {
+      ElMessage.success(`开始执行 ${steps.length} 个步骤...`);
+    }
   }
   
   try {
@@ -829,10 +1099,12 @@ async function executeOrchestration(
     
     const step = steps[i];
     
-    // 更新当前步骤索引并滚动到当前步骤
-    currentStepIndex.value = i;
-    await nextTick();
-    scrollToCurrentStep();
+    // 更新当前步骤索引并滚动到当前步骤（图执行复用单步时不需要，也避免高亮抖动）
+    if (!runtime?.skipUiSetup) {
+      currentStepIndex.value = i;
+      await nextTick();
+      scrollToCurrentStep();
+    }
     
     // 确保 enabled 字段有默认值（旧数据兼容）
     if (step.enabled === undefined) {
@@ -855,6 +1127,7 @@ async function executeOrchestration(
       const command = configStore.customCommands.find(c => c.id === step.commandId);
       if (!command) {
         ElMessage.error(`命令已删除: ${step.commandName}`);
+        hasFailure = true;
         break;
       }
       
@@ -940,8 +1213,8 @@ async function executeOrchestration(
             }
           }
             
-            // 等待用户确认命令执行完成（如果不是最后一个步骤）
-            if (i < steps.length - 1 && shouldContinue) {
+            // 等待用户确认命令执行完成（如果不是最后一个步骤；图执行单步复用时用 forceTerminalConfirm 强制出现）
+            if ((i < steps.length - 1 || runtime?.forceTerminalConfirm) && shouldContinue) {
               waitingForTerminalConfirm.value = true;
               waitingStepName.value = stepLabel;
               
@@ -956,6 +1229,7 @@ async function executeOrchestration(
               
               if (!userConfirmed) {
                 shouldContinue = false;
+                consoleRunning.value = false;
                 throw new Error('用户取消执行');
               }
             }
@@ -964,6 +1238,7 @@ async function executeOrchestration(
             ElMessage.error(`${stepLabel} 执行失败: ${e?.message}`);
           }
           shouldContinue = false;
+          hasFailure = true;
           break; // 用户取消或执行失败时，停止整个流程
         }
         continue; // 跳过后续的流式执行逻辑
@@ -1058,6 +1333,7 @@ async function executeOrchestration(
         if (!rec.success) {
           ElMessage.error(`命令 ${stepLabel} 执行失败，停止后续步骤`);
           shouldContinue = false;
+          hasFailure = true;
         } else {
           // 保存命令输出到 nodeOutputs，供后续节点引用
           const rawStdout = (rec.stdout || '').replace(/<[^>]*>/g, '').trim(); // 移除 HTML 标签
@@ -1084,6 +1360,7 @@ async function executeOrchestration(
         rec.stderr = e?.message || String(e);
         ElMessage.error(`命令 ${stepLabel} 执行出错: ${e?.message}`);
         shouldContinue = false;
+        hasFailure = true;
       }
     } else if (step.type === 'wait') {
       // 执行等待步骤
@@ -1194,6 +1471,7 @@ async function executeOrchestration(
         rec.stderr = e?.message || String(e);
         ElMessage.error(`${stepLabel} 失败: ${e?.message || e}`);
         shouldContinue = false;
+        hasFailure = true;
       }
     } else if (step.type === 'version') {
       // 执行版本管理
@@ -1221,6 +1499,7 @@ async function executeOrchestration(
         
         if (!resolvedDependencyVersion) {
           ElMessage.error(`无法从节点 ${refNodeId} 获取输出，请检查前置节点是否执行成功`);
+          hasFailure = true;
           break;
         }
       }
@@ -1333,6 +1612,8 @@ async function executeOrchestration(
         rec.stdout = '用户取消执行';
         ElMessage.warning('用户取消执行');
         shouldContinue = false;
+        hasFailure = true;
+        consoleRunning.value = false;
       }
     }
     
@@ -1372,13 +1653,19 @@ async function executeOrchestration(
     }
   }
   
-    consoleRunning.value = false;
-    orchestrationPaused.value = false; // 重置暂停状态
-    currentStepIndex.value = -1; // 重置当前步骤
-    orchestrationSteps.value = []; // 清空步骤列表
-    currentOrchestrationName.value = ''
-    currentOrchestrationId.value = ''
-    ElMessage.success('所有步骤执行完成！');
+    if (!runtime?.skipUiTeardown) {
+      consoleRunning.value = false;
+      orchestrationPaused.value = false; // 重置暂停状态
+      currentStepIndex.value = -1; // 重置当前步骤
+      orchestrationSteps.value = []; // 清空步骤列表
+      currentOrchestrationName.value = ''
+      currentOrchestrationId.value = ''
+      if (hasFailure) {
+        ElMessage.error('编排执行失败，已停止后续步骤');
+      } else {
+        ElMessage.success('所有步骤执行完成！');
+      }
+    }
     
     // 检查是否执行了 git 相关命令，如果是则刷新 git 状态
     const hasGitCommand = steps.some(step => {
@@ -1395,18 +1682,24 @@ async function executeOrchestration(
       await gitStore.fetchStatus();
       await gitStore.fetchLog();
     }
+
+    return !hasFailure;
   } catch (error: any) {
-    consoleRunning.value = false;
-    orchestrationPaused.value = false; // 重置暂停状态
-    currentStepIndex.value = -1; // 重置当前步骤
-    orchestrationSteps.value = []; // 清空步骤列表
-    currentOrchestrationName.value = ''
-    currentOrchestrationId.value = ''
+    if (!runtime?.skipUiTeardown) {
+      consoleRunning.value = false;
+      orchestrationPaused.value = false; // 重置暂停状态
+      currentStepIndex.value = -1; // 重置当前步骤
+      orchestrationSteps.value = []; // 清空步骤列表
+      currentOrchestrationName.value = ''
+      currentOrchestrationId.value = ''
+    }
     if (error?.message === '用户停止执行') {
       ElMessage.info('编排执行已停止');
     } else {
       ElMessage.error(`编排执行异常: ${error?.message || String(error)}`);
     }
+
+    return false;
   }
 }
 
@@ -2041,38 +2334,23 @@ onUnmounted(() => {
         </IconButton>
         <ProjectStartupButton 
           @execute-command="executeCustomCommand"
-          @execute-workflow="(wf) => executeOrchestration(wf.steps || [], 0, false)"
+          @execute-workflow="(wf) => runWorkflow(wf)"
         />
-        <!-- 编排工作台按钮已被可视化编排工作台替代 -->
-        <!-- <IconButton
-          :tooltip="$t('@ORCHWS:编排工作台')"
-          hover-color="var(--color-warning)"
-          @click="openOrchestrationWorkspace"
-          custom-class="orchestrator-btn"
-        >
-          <SvgIcon icon-class="command-orchestrate" class-name="icon-btn" />
-        </IconButton> -->
         <IconButton
           :tooltip="$t('@ORCH:可视化编排')"
           hover-color="#9c27b0"
           @click="openFlowOrchestrationWorkspace"
           custom-class="flow-orchestrator-btn"
         >
-          <el-icon :size="20">
-            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor" d="M288 320a224 224 0 1 0 448 0 224 224 0 1 0-448 0zm544 608H160a32 32 0 1 1 0-64h672a32 32 0 1 1 0 64z"/>
-              <path fill="currentColor" d="M64 832h896v64H64z"/>
-              <path fill="currentColor" d="M512 512m-64 0a64 64 0 1 0 128 0 64 64 0 1 0-128 0Z"/>
-              <path fill="currentColor" d="M512 128L512 448M320 320L512 448M704 320L512 448"/>
-            </svg>
-          </el-icon>
+          <SvgIcon icon-class="workflow" class-name="icon-btn" />
         </IconButton>
         <IconButton
-          :tooltip="$t('@CF05E:全屏')"
+          :tooltip="isFullscreen ? $t('@CF05E:退出全屏') : $t('@CF05E:全屏显示')"
           @click="isFullscreen = !isFullscreen"
         >
           <el-icon>
-            <FullScreen />
+            <Close v-if="isFullscreen" />
+            <FullScreen v-else />
           </el-icon>
         </IconButton>
         <IconButton
@@ -2161,8 +2439,31 @@ onUnmounted(() => {
           </el-splitter-panel>
           <el-splitter-panel :min="'15%'" :max="'85%'">
             <div class="console-content-main">
+          <!-- 执行画布（只读，高亮执行路径） -->
+          <div v-if="executionFlowData && showExecutionFlowPanel" class="orchestration-flow-panel">
+            <div class="flow-panel-header">
+              <div class="flow-panel-title">
+                {{ currentOrchestrationName || currentOrchestrationId }}
+              </div>
+              <IconButton
+                :tooltip="$t('@CMDCON:隐藏')"
+                hover-color="var(--color-danger)"
+                custom-class="flow-panel-close-btn"
+                @click="showExecutionFlowPanel = false"
+              >
+                <el-icon :size="18"><Close /></el-icon>
+              </IconButton>
+            </div>
+            <FlowExecutionViewer
+              :flow-data="executionFlowData"
+              :current-node-id="currentExecutingNodeId || undefined"
+              :executed-node-ids="executedNodeIds"
+              :failed-node-ids="failedNodeIds"
+              :executed-edge-ids="executedEdgeIds"
+            />
+          </div>
           <!-- 编排步骤列表 -->
-          <div v-if="orchestrationSteps.length > 0" class="orchestration-steps-panel">
+          <div v-if="orchestrationSteps.length > 0 || waitingForTerminalConfirm || waitingForUserConfirm" class="orchestration-steps-panel">
             <div class="steps-header">
               <span class="steps-title">
                 执行步骤
@@ -2172,7 +2473,7 @@ onUnmounted(() => {
                 ({{ currentStepIndex + 1 }}/{{ orchestrationSteps.length }})
               </span>
             </div>
-            <div class="steps-list">
+            <div v-if="orchestrationSteps.length > 0" class="steps-list">
               <div
                 v-for="(step, index) in orchestrationSteps"
                 :key="index"
@@ -2386,16 +2687,11 @@ onUnmounted(() => {
     @execute-command="executeCustomCommand"
   />
   
-  <!-- 编排工作台弹窗（合并了指令编排和编排管理） -->
-  <OrchestrationWorkspace
-    v-model:visible="orchestrationWorkspaceVisible"
-    @execute-orchestration="executeOrchestration"
-  />
-  
   <!-- 可视化编排工作台（基于 vue-flow） -->
   <FlowOrchestrationWorkspace
     v-model:visible="flowOrchestrationVisible"
     @execute-orchestration="executeOrchestration"
+    @execute-flow="executeFlow"
   />
 </template>
 
@@ -3049,12 +3345,36 @@ pre.stderr {
 }
 
 /* 编排步骤列表样式 */
-.orchestration-steps-panel {
+.orchestration-flow-panel {
   margin-bottom: var(--spacing-md);
   background: var(--bg-panel);
   border: 1px solid var(--border-card);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  position: relative;
+}
+
+.flow-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-component);
+}
+
+.flow-panel-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-secondary);
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-panel-close-btn {
+  flex-shrink: 0;
 }
 
 /* 终端命令等待确认面板 */
