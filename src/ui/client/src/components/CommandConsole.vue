@@ -2212,6 +2212,22 @@ function initSocket() {
   });
 }
 
+// 监听页面可见性变化：标签页激活时刷新终端会话状态
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'visible' && showTerminalSessions.value) {
+    console.log('[页面可见性] 标签页已激活，刷新终端会话状态');
+    loadTerminalSessionsStatus(true);
+  }
+};
+
+// 监听窗口获得焦点事件：从其他应用切换回浏览器时刷新
+const handleWindowFocus = () => {
+  if (showTerminalSessions.value) {
+    console.log('[窗口焦点] 浏览器窗口已激活，刷新终端会话状态');
+    loadTerminalSessionsStatus(true);
+  }
+};
+
 // 获取当前工作目录
 onMounted(async () => {
   try {
@@ -2228,35 +2244,15 @@ onMounted(async () => {
   await loadTerminalSessions();
 
   await autoRunProjectStartupItems();
-  
-  // 监听页面可见性变化：标签页激活时刷新终端会话状态
-  const handleVisibilityChange = () => {
-    if (document.visibilityState === 'visible' && showTerminalSessions.value) {
-      console.log('[页面可见性] 标签页已激活，刷新终端会话状态');
-      loadTerminalSessionsStatus(true);
-    }
-  };
-  
-  // 监听窗口获得焦点事件：从其他应用切换回浏览器时刷新
-  const handleWindowFocus = () => {
-    if (showTerminalSessions.value) {
-      console.log('[窗口焦点] 浏览器窗口已激活，刷新终端会话状态');
-      loadTerminalSessionsStatus(true);
-    }
-  };
-  
+
   document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('focus', handleWindowFocus);
-  
-  // 组件卸载时移除监听
-  onUnmounted(() => {
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
-    window.removeEventListener('focus', handleWindowFocus);
-  });
 });
 
 // Socket连接断开在onMounted中的onUnmounted回调中处理
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  window.removeEventListener('focus', handleWindowFocus);
   if (socket.value) {
     socket.value.disconnect();
     socket.value = null;

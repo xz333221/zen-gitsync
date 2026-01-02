@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineComponent, h, nextTick, onUnmounted, watch } from 'vue'
+import { computed, defineComponent, h, nextTick, onUnmounted, watch, markRaw } from 'vue'
 import type { PropType } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import type { NodeTypesObject } from '@vue-flow/core'
@@ -119,13 +119,13 @@ function createWrappedNode(Inner: any) {
 }
 
 const nodeTypes: NodeTypesObject = {
-  start: StartNodeRenderer,
-  command: createWrappedNode(CommandNode),
-  wait: createWrappedNode(WaitNode),
-  version: createWrappedNode(VersionNode),
-  confirm: createWrappedNode(ConfirmNode),
-  code: createWrappedNode(CodeNode),
-  condition: createWrappedNode(ConditionNode)
+  start: markRaw(StartNodeRenderer),
+  command: markRaw(createWrappedNode(CommandNode)),
+  wait: markRaw(createWrappedNode(WaitNode)),
+  version: markRaw(createWrappedNode(VersionNode)),
+  confirm: markRaw(createWrappedNode(ConfirmNode)),
+  code: markRaw(createWrappedNode(CodeNode)),
+  condition: markRaw(createWrappedNode(ConditionNode))
 } as unknown as NodeTypesObject
 
 const props = defineProps({

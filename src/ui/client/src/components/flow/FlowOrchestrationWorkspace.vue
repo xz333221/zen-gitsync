@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, provide, inject, defineComponent, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, provide, inject, defineComponent, h, markRaw } from 'vue'
 import type { PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -177,13 +177,13 @@ const StartNodeRenderer = defineComponent({
 })
 
 const nodeTypes: NodeTypesObject = {
-  start: StartNodeRenderer,
-  command: createWrappedNode(CommandNode),
-  wait: createWrappedNode(WaitNode),
-  version: createWrappedNode(VersionNode),
-  confirm: createWrappedNode(ConfirmNode),
-  code: createWrappedNode(CodeNode),
-  condition: createWrappedNode(ConditionNode)
+  start: markRaw(StartNodeRenderer),
+  command: markRaw(createWrappedNode(CommandNode)),
+  wait: markRaw(createWrappedNode(WaitNode)),
+  version: markRaw(createWrappedNode(VersionNode)),
+  confirm: markRaw(createWrappedNode(ConfirmNode)),
+  code: markRaw(createWrappedNode(CodeNode)),
+  condition: markRaw(createWrappedNode(ConditionNode))
 } as unknown as NodeTypesObject
 
 const props = defineProps<{
