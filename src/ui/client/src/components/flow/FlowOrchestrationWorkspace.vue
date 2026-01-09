@@ -449,11 +449,13 @@ function addNode(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'co
   
   nodes.value.push(newNode)
   
-  // confirm 节点不需要配置，其他节点自动打开配置面板
-  if (type !== 'confirm') {
-    selectedNode.value = newNode
-    showConfigPanel.value = true
-  }
+  // 新增节点时默认仅选中，不自动打开配置面板（避免打断添加流程）
+  nodes.value.forEach(n => {
+    if (n.data) n.data.selected = false
+  })
+  if (newNode.data) newNode.data.selected = true
+  selectedNode.value = newNode
+  showConfigPanel.value = false
   
   ElMessage.success(`${t('@FLOWNODE:已添加')}${newNode.data.label}`)
 
