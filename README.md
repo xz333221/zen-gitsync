@@ -18,6 +18,11 @@ npm install -g zen-gitsync
 ```shell
 $ g ui
 ```
+![ui](https://home.flowdash.cn/upload/VditorFiles/2026-1/image_zbQZpiL6.png)
+### 命令编排
+
+![命令编排](https://home.flowdash.cn/upload/VditorFiles/2026-1/zen-gitsync_SBAJdlvm.png)
+
 ### 其他命令：
 #### 交互式提交：
 ```bash

@@ -65,10 +65,8 @@ async function safeLoadRaw() {
 
 // 异步读取配置文件
 async function loadConfig() {
-  console.log('读取配置文件中。。。')
   const key = getCurrentProjectKey();
   const raw = await readRawConfigFile();
-  console.log('读取配置文件成功')
   // 兼容旧版（全局扁平结构）
   if (raw && !raw.projects) {
     return { ...defaultConfig, ...raw };
