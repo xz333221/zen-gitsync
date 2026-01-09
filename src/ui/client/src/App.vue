@@ -12,7 +12,6 @@ import BranchSelector from '@components/BranchSelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import LanguageSwitcher from '@components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@components/ThemeSwitcher.vue'
-import ConfigEditorButton from '@components/buttons/ConfigEditorButton.vue'
 import { ElMessage, ElConfigProvider } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -360,7 +359,6 @@ function stopHResize() {
     <div class="header-info">
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
-        <ConfigEditorButton variant="icon" />
         <ThemeSwitcher />
         <CommandHistory />
       </div>

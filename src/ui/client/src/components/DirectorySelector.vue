@@ -8,6 +8,7 @@ import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
 import IconButton from "@components/IconButton.vue";
 import SvgIcon from "@components/SvgIcon/index.vue";
+import ConfigEditorButton from "@components/buttons/ConfigEditorButton.vue";
 import { getFolderNameFromPath } from "@/utils/path";
 
 // 使用 store
@@ -380,6 +381,7 @@ async function selectDirectory(dirPath: string) {
       {{ currentFolderName }}
     </div>
     <div class="directory-actions flex">
+      <ConfigEditorButton variant="icon" />
       <IconButton
         :tooltip="$t('@67CE7:在资源管理器中打开')"
         size="large"
