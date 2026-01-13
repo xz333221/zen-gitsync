@@ -1040,9 +1040,10 @@ onUnmounted(() => {
     :title="t('@ORCH:可视化编排工作台')"
     :close-on-click-modal="false"
     :append-to-body="true"
+    size="fullscreen"
+    type="flex"
     heightMode="fixed"
     custom-class="flow-orchestration-dialog"
-    width="95vw"
   >
     <div class="flow-workspace-container">
       <!-- 左侧：编排列表 -->

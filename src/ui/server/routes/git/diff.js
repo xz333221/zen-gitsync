@@ -8,6 +8,9 @@ export function registerGitDiffRoutes({
 }) {
   const { checkShouldSkipDiff, checkDiffSize, getDiffStats } = createDiffHelpers({ execGitCommand });
 
+  const skipExtensions = /\.(min\.js|umd\.cjs|bundle\.js|dist\.js|prod\.js|map|wasm|exe|dll|so|dylib|bin|zip|tar|gz|rar|7z|jar|war|ear|pdf|doc|docx|xls|xlsx|ppt|pptx|jpg|jpeg|png|gif|bmp|ico|mp3|mp4|avi|mov|wmv|flv|webm|mkv|ttf|woff|woff2|eot|otf)$/i;
+  const maxBytes = 1024 * 1024;
+
   // 获取文件差异
   app.get('/api/diff', async (req, res) => {
     try {
@@ -103,6 +106,50 @@ export function registerGitDiffRoutes({
       }
     } catch (error) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/git-file-content', async (req, res) => {
+    try {
+      const filePath = req.query.file;
+      const rev = req.query.rev;
+
+      if (!filePath || !rev) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' });
+      }
+
+      if (skipExtensions.test(String(filePath))) {
+        return res.json({
+          success: true,
+          isBinary: true,
+          content: '⚠️ 检测到二进制/编译产物文件，不支持以文本形式显示完整内容。'
+        });
+      }
+
+      const r = String(rev);
+      const spec = r === ':' ? `:${filePath}` : `${r}:${filePath}`;
+
+      let sizeBytes = 0;
+      try {
+        const { stdout: sizeOut } = await execGitCommand(`git cat-file -s "${spec}"`, { log: false });
+        sizeBytes = parseInt(String(sizeOut).trim(), 10) || 0;
+      } catch (e) {
+        return res.json({ success: true, notFound: true, content: '' });
+      }
+
+      if (sizeBytes > maxBytes) {
+        return res.json({
+          success: true,
+          isLargeFile: true,
+          size: sizeBytes,
+          content: `⚠️ 文件内容过大 (${(sizeBytes / 1024).toFixed(1)} KB)，已跳过显示以避免浏览器卡顿。`
+        });
+      }
+
+      const { stdout } = await execGitCommand(`git show "${spec}"`, { log: false });
+      return res.json({ success: true, content: stdout ?? '' });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 

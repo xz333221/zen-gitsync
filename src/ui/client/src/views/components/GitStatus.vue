@@ -48,6 +48,11 @@ const isLoadingDiff = ref(false)
 // 添加当前文件索引
 const currentFileIndex = ref(-1)
 
+type DiffViewMode = 'diff' | 'compare'
+const diffViewMode = ref<DiffViewMode>('compare')
+const compareOriginal = ref('')
+const compareModified = ref('')
+
 // 每个文件的锁定/解锁加载状态
 const lockingFiles = ref<Record<string, boolean>>({})
 function isLocking(filePath: string) {
@@ -112,7 +117,11 @@ const gitFilesForViewer = computed(() => {
 
 // 处理FileDiffViewer组件的文件选择
 async function handleGitFileSelect(filePath: string) {
-  await getFileDiff(filePath)
+  if (diffViewMode.value === 'compare') {
+    await getFileCompare(filePath)
+  } else {
+    await getFileDiff(filePath)
+  }
 }
 
 // 处理打开文件
@@ -276,6 +285,8 @@ async function getFileDiff(filePath: string) {
     isLoadingDiff.value = true
     // 先清空之前的内容
     diffContent.value = ''
+    compareOriginal.value = ''
+    compareModified.value = ''
     diffStats.value = null
     selectedFile.value = filePath
     // 设置当前文件索引
@@ -330,6 +341,64 @@ async function getFileDiff(filePath: string) {
   }
 }
 
+async function fetchGitFileContent(filePath: string, rev: 'HEAD' | ':') {
+  const response = await fetch(`/api/git-file-content?rev=${encodeURIComponent(rev)}&file=${encodeURIComponent(filePath)}`)
+  const data = await response.json()
+  if (data && data.success) return data.content || ''
+  return data?.error ? `⚠️ ${data.error}` : ''
+}
+
+async function fetchWorkspaceFileContent(filePath: string) {
+  const response = await fetch(`/api/file-content?file=${encodeURIComponent(filePath)}`)
+  const data = await response.json()
+  if (data && data.success) return data.content || ''
+  return data?.error ? `⚠️ ${data.error}` : ''
+}
+
+async function getFileCompare(filePath: string) {
+  try {
+    isLoadingDiff.value = true
+    diffContent.value = ''
+    diffStats.value = null
+    selectedFile.value = filePath
+    currentFileIndex.value = gitStore.fileList.findIndex(file => file.path === filePath)
+    const currentFile = gitStore.fileList[currentFileIndex.value]
+
+    // untracked: old为空，new=工作区
+    if (currentFile && currentFile.type === 'untracked') {
+      compareOriginal.value = ''
+      compareModified.value = await fetchWorkspaceFileContent(filePath)
+      return
+    }
+
+    // deleted: old=HEAD, new为空
+    if (currentFile && currentFile.type === 'deleted') {
+      compareOriginal.value = await fetchGitFileContent(filePath, 'HEAD')
+      compareModified.value = ''
+      return
+    }
+
+    // added(已暂存的更改): old=HEAD(不存在则视为新增为空), new=index(:)
+    if (currentFile && currentFile.type === 'added') {
+      const oldText = await fetchGitFileContent(filePath, 'HEAD')
+      compareOriginal.value = oldText
+      compareModified.value = await fetchGitFileContent(filePath, ':')
+      return
+    }
+
+    // 其他：
+    // - 未暂存修改：old=HEAD, new=工作区
+    // - 已暂存修改：old=HEAD, new=index(:)
+    const isStaged = currentFile && (currentFile.type === 'staged' || currentFile.type === 'modified-staged' || currentFile.type === 'added')
+    compareOriginal.value = await fetchGitFileContent(filePath, 'HEAD')
+    compareModified.value = isStaged
+      ? await fetchGitFileContent(filePath, ':')
+      : await fetchWorkspaceFileContent(filePath)
+  } finally {
+    isLoadingDiff.value = false
+  }
+}
+
 
 
 
@@ -337,11 +406,22 @@ async function getFileDiff(filePath: string) {
 function handleFileClick(file: {path: string, type: string}) {
   // 打开差异对话框，然后获取首个文件的差异
   diffDialogVisible.value = true
+  diffViewMode.value = 'compare'
   // 如果有文件列表，默认选中点击的文件，否则选中第一个
   if (gitStore.fileList.length > 0) {
     const targetFile = gitStore.fileList.find(f => f.path === file.path) || gitStore.fileList[0]
-    getFileDiff(targetFile.path)
+    getFileCompare(targetFile.path)
   }
+}
+
+function showDiffOnly() {
+  diffViewMode.value = 'diff'
+  if (selectedFile.value) void getFileDiff(selectedFile.value)
+}
+
+function showFullCompare() {
+  diffViewMode.value = 'compare'
+  if (selectedFile.value) void getFileCompare(selectedFile.value)
 }
 
 // 暂存单个文件
@@ -1100,7 +1180,7 @@ defineExpose({
     v-model="diffDialogVisible"
     :title="$t('@13D1C:文件差异')"
     custom-class="file-diff-dialog"
-    size="extra-large"
+    size="fullscreen"
     type="flex"
     destroy-on-close
     heightMode="fixed"
@@ -1111,11 +1191,14 @@ defineExpose({
       :diffStats="diffStats"
       :selectedFile="selectedFile"
       :isLoading="isLoadingDiff"
+      :compareMode="diffViewMode === 'compare'"
+      :compareOriginal="compareOriginal"
+      :compareModified="compareModified"
+      context="git-status"
+      :showOpenButton="true"
       :showActionButtons="true"
       :isFileLocked="isFileLocked"
       :isLocking="isLocking"
-      context="git-status"
-      :emptyText="$t('@13D1C:选择文件查看差异')"
       @file-select="handleGitFileSelect"
       @open-file="handleOpenFile"
       @open-with-vscode="handleOpenWithVSCode"
@@ -1123,7 +1206,16 @@ defineExpose({
       @stage="stageFile"
       @unstage="unstageFile"
       @revert="revertFileChanges"
-    />
+    >
+      <template #header-extra>
+        <el-button size="small" :type="diffViewMode === 'diff' ? 'primary' : 'default'" @click="showDiffOnly">
+          {{ $t('@13D1C:仅显示差异') }}
+        </el-button>
+        <el-button size="small" :type="diffViewMode === 'compare' ? 'primary' : 'default'" @click="showFullCompare">
+          {{ $t('@13D1C:显示完整对比') }}
+        </el-button>
+      </template>
+    </FileDiffViewer>
   </CommonDialog>
 
   <!-- 锁定文件管理对话框 -->

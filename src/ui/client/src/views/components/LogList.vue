@@ -69,6 +69,12 @@ const commitDiff = ref("");
 const isLoadingCommitDetail = ref(false);
 const selectedCommitFile = ref("");
 
+type CommitFileViewMode = 'diff' | 'full-new' | 'full-old'
+const commitFileViewMode = ref<CommitFileViewMode>('full-new')
+
+const commitCompareOriginal = ref('')
+const commitCompareModified = ref('')
+
 // 添加筛选相关变量
 const filterVisible = ref(false);
 const authorFilter = ref<string[]>([]);
@@ -438,6 +444,9 @@ async function viewCommitDetail(commit: LogItem | null) {
   commitFiles.value = [];
   commitDiff.value = "";
   selectedCommitFile.value = "";
+  commitFileViewMode.value = 'full-new'
+  commitCompareOriginal.value = ''
+  commitCompareModified.value = ''
 
   try {
     // 确保哈希值有效
@@ -456,7 +465,7 @@ async function viewCommitDetail(commit: LogItem | null) {
 
       // 如果有文件，自动加载第一个文件的差异
       if (commitFiles.value.length > 0) {
-        await getCommitFileDiff(commit.hash, commitFiles.value[0]);
+        await loadCommitFileCompare(commit.hash, commitFiles.value[0])
       } else {
         commitDiff.value = "该提交没有变更文件";
       }
@@ -468,6 +477,79 @@ async function viewCommitDetail(commit: LogItem | null) {
   } finally {
     isLoadingCommitDetail.value = false;
   }
+}
+
+async function getCommitFileContent(hash: string, filePath: string, version: 'new' | 'old') {
+  isLoadingCommitDetail.value = true
+  selectedCommitFile.value = filePath
+
+  try {
+    const resp = await fetch(
+      `/api/commit-file-content?hash=${hash}&file=${encodeURIComponent(filePath)}&version=${version}`
+    )
+    const data = await resp.json()
+
+    if (data.success) {
+      commitDiff.value = data.content || ''
+    } else {
+      commitDiff.value = `${$t('@A1833:获取文件内容失败: ')}${data.error || '未知错误'}`
+    }
+  } catch (error) {
+    commitDiff.value = `${$t('@A1833:获取文件内容失败: ')}${(error as Error).message}`
+  } finally {
+    isLoadingCommitDetail.value = false
+  }
+}
+
+async function getCommitCompareContent(hash: string, filePath: string) {
+  isLoadingCommitDetail.value = true
+  selectedCommitFile.value = filePath
+
+  try {
+    const [oldResp, newResp] = await Promise.all([
+      fetch(`/api/commit-file-content?hash=${hash}&file=${encodeURIComponent(filePath)}&version=old`),
+      fetch(`/api/commit-file-content?hash=${hash}&file=${encodeURIComponent(filePath)}&version=new`),
+    ])
+    const [oldData, newData] = await Promise.all([oldResp.json(), newResp.json()])
+
+    commitCompareOriginal.value = oldData?.success
+      ? (oldData.content || '')
+      : `${$t('@A1833:获取文件内容失败: ')}${oldData?.error || '未知错误'}`
+    commitCompareModified.value = newData?.success
+      ? (newData.content || '')
+      : `${$t('@A1833:获取文件内容失败: ')}${newData?.error || '未知错误'}`
+
+    commitDiff.value = ''
+  } catch (error) {
+    const msg = `${$t('@A1833:获取文件内容失败: ')}${(error as Error).message}`
+    commitCompareOriginal.value = msg
+    commitCompareModified.value = msg
+    commitDiff.value = ''
+  } finally {
+    isLoadingCommitDetail.value = false
+  }
+}
+
+async function loadCommitFileView(hash: string, filePath: string, mode: CommitFileViewMode) {
+  commitFileViewMode.value = mode
+  if (mode === 'diff') {
+    commitCompareOriginal.value = ''
+    commitCompareModified.value = ''
+    await getCommitFileDiff(hash, filePath)
+  } else if (mode === 'full-old') {
+    commitCompareOriginal.value = ''
+    commitCompareModified.value = ''
+    await getCommitFileContent(hash, filePath, 'old')
+  } else {
+    commitCompareOriginal.value = ''
+    commitCompareModified.value = ''
+    await getCommitFileContent(hash, filePath, 'new')
+  }
+}
+
+async function loadCommitFileCompare(hash: string, filePath: string) {
+  commitFileViewMode.value = 'full-new'
+  await getCommitCompareContent(hash, filePath)
 }
 
 // 获取提交中特定文件的差异
@@ -496,8 +578,28 @@ async function getCommitFileDiff(hash: string, filePath: string) {
 // 处理提交文件选择
 function handleCommitFileSelect(filePath: string) {
   if (selectedCommit.value) {
-    getCommitFileDiff(selectedCommit.value.hash, filePath);
+    if (commitFileViewMode.value === 'diff') {
+      loadCommitFileView(selectedCommit.value.hash, filePath, 'diff')
+    } else {
+      loadCommitFileCompare(selectedCommit.value.hash, filePath)
+    }
   }
+}
+
+function handleCommitDiffOnly() {
+  if (!selectedCommit.value || !selectedCommitFile.value) {
+    commitFileViewMode.value = 'diff'
+    return
+  }
+  loadCommitFileView(selectedCommit.value.hash, selectedCommitFile.value, 'diff')
+}
+
+function handleCommitFullCompare() {
+  if (!selectedCommit.value || !selectedCommitFile.value) {
+    commitFileViewMode.value = 'full-new'
+    return
+  }
+  loadCommitFileCompare(selectedCommit.value.hash, selectedCommitFile.value)
 }
 
 // 处理打开文件
@@ -1093,7 +1195,7 @@ function toggleFullscreen() {
       :title="`${$t('@A1833:提交详情: ')}${
         selectedCommit?.hash ? selectedCommit.hash : $t('@A1833:未知')
       }`"
-      size="extra-large"
+      size="fullscreen"
       type="flex"
       heightMode="fixed"
       destroy-on-close
@@ -1128,12 +1230,25 @@ function toggleFullscreen() {
           :loading="isLoadingCommitDetail"
           :diffContent="commitDiff"
           :selectedFile="selectedCommitFile"
+          :plainText="false"
+          :compareMode="commitFileViewMode !== 'diff'"
+          :compareOriginal="commitCompareOriginal"
+          :compareModified="commitCompareModified"
           context="commit-detail"
           :emptyText="$t('@A1833:没有找到变更文件')"
           @file-select="handleCommitFileSelect"
           @open-file="handleOpenFile"
           @open-with-vscode="handleOpenWithVSCode"
-        />
+        >
+          <template #header-extra>
+            <el-button size="small" :type="commitFileViewMode === 'diff' ? 'primary' : 'default'" @click="handleCommitDiffOnly">
+              {{ $t('@A1833:仅显示差异') }}
+            </el-button>
+            <el-button size="small" :type="commitFileViewMode !== 'diff' ? 'primary' : 'default'" @click="handleCommitFullCompare">
+              {{ $t('@A1833:显示完整对比') }}
+            </el-button>
+          </template>
+        </FileDiffViewer>
       </div>
     </CommonDialog>
   </div>

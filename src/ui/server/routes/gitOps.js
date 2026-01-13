@@ -742,6 +742,79 @@ export function registerGitOpsRoutes({
     }
   });
 
+  app.get('/api/commit-file-content', async (req, res) => {
+    try {
+      const hash = req.query.hash;
+      const filePath = req.query.file;
+      const version = req.query.version;
+
+      if (!hash || !filePath) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少必要参数'
+        });
+      }
+
+      const isOld = String(version || 'new') === 'old';
+      const targetHash = isOld ? `${hash}^` : `${hash}`;
+
+      const skipExtensions = /\.(min\.js|umd\.cjs|bundle\.js|dist\.js|prod\.js|map|wasm|exe|dll|so|dylib|bin|zip|tar|gz|rar|7z|jar|war|ear|pdf|doc|docx|xls|xlsx|ppt|pptx|jpg|jpeg|png|gif|bmp|ico|mp3|mp4|avi|mov|wmv|flv|webm|mkv|ttf|woff|woff2|eot|otf)$/i;
+      if (skipExtensions.test(String(filePath))) {
+        return res.json({
+          success: true,
+          isBinary: true,
+          content: '⚠️ 检测到二进制/编译产物文件，不支持以文本形式显示完整内容。\n\n提示：建议使用专业工具或命令行查看。'
+        });
+      }
+
+      const spec = `${targetHash}:${filePath}`;
+      const sizeCmd = `git cat-file -s "${spec}"`;
+
+      let sizeBytes = 0;
+      try {
+        const { stdout: sizeOut } = await execGitCommand(sizeCmd, { log: false });
+        sizeBytes = parseInt(String(sizeOut).trim(), 10) || 0;
+      } catch (e) {
+        return res.json({
+          success: true,
+          notFound: true,
+          content: isOld
+            ? '该文件在该提交的上一个版本中不存在（可能是新增文件）。'
+            : '该文件在该提交版本中不存在（可能是删除文件或重命名）。'
+        });
+      }
+
+      const maxBytes = 1024 * 1024;
+      if (sizeBytes > maxBytes) {
+        return res.json({
+          success: true,
+          isLargeFile: true,
+          size: sizeBytes,
+          content: `⚠️ 文件内容过大 (${(sizeBytes / 1024).toFixed(1)} KB)，已跳过显示以避免浏览器卡顿。\n\n提示：建议使用命令行或编辑器打开查看。`
+        });
+      }
+
+      const showCmd = `git show "${spec}"`;
+      try {
+        const { stdout } = await execGitCommand(showCmd, { log: false });
+        res.json({
+          success: true,
+          content: stdout ?? ''
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          error: `获取文件内容失败: ${error.message}`
+        });
+      }
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
   // 撤销某个提交 (revert)
   app.post('/api/revert-commit', async (req, res) => {
     try {

@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { ElDialog } from 'element-plus'
 
 // 定义弹窗尺寸枚举
-type DialogSize = 'small' | 'medium' | 'large' | 'extra-large'
+type DialogSize = 'small' | 'medium' | 'large' | 'extra-large' | 'fullscreen'
 type DialogType = 'default' | 'flex' | 'full-height'
 
 interface Props {
@@ -86,9 +86,16 @@ const dialogWidth = computed(() => {
       return '80%'
     case 'extra-large':
       return '90%'
+    case 'fullscreen':
+      return '100vw'
     default:
       return '50%'
   }
+})
+
+const dialogTop = computed(() => {
+  if (props.size === 'fullscreen') return '0'
+  return props.top
 })
 
 // 计算弹窗高度
@@ -109,12 +116,19 @@ const dialogClass = computed(() => {
   if (props.type === 'full-height') {
     classes.push('common-dialog--full-height')
   }
+
+  if (props.size === 'fullscreen') {
+    classes.push('common-dialog--fullscreen')
+  }
   
   return classes.join(' ')
 })
 
 // 计算高度/最大高度的内联样式，覆盖全局默认 max-height
 const dialogStyle = computed(() => {
+  if (props.size === 'fullscreen') {
+    return { height: '100vh', maxHeight: '100vh' }
+  }
   const calc = `calc(100% - ${props.heightOffset})`
   if (props.heightMode === 'fixed') {
     return { height: calc }
@@ -152,8 +166,9 @@ function handleClosed() {
     :model-value="modelValue"
     :title="title"
     :width="dialogWidth"
-    :top="top"
+    :top="dialogTop"
     :style="dialogStyle"
+    :fullscreen="size === 'fullscreen'"
     :close-on-click-modal="closeOnClickModal"
     :close-on-press-escape="closeOnPressEscape"
     :destroy-on-close="destroyOnClose"
@@ -214,6 +229,22 @@ function handleClosed() {
     overflow-x: hidden;
     overflow-y: auto;
     min-height: 0; /* 关键：允许flex子元素缩小 */
+  }
+}
+
+:deep(.common-dialog--fullscreen) {
+  .el-dialog {
+    margin: 0;
+    border-radius: 0;
+    width: 100vw;
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
+
+  &.common-dialog--flex {
+    .el-dialog {
+      max-height: 100vh !important;
+    }
   }
 }
 

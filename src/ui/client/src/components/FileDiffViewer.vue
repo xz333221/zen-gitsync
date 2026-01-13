@@ -13,6 +13,7 @@ import FileTreeView from './FileTreeView.vue';
 import { getFileIconClass } from '../utils/fileIcon';
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree';
 import ConflictBlockViewer, { type ConflictBlock } from './ConflictBlockViewer.vue';
+import MonacoDiffViewer from '@/components/MonacoDiffViewer.vue'
 
 // 定义props
 interface FileItem {
@@ -37,6 +38,10 @@ interface Props {
   diffStats?: DiffStats | null; // diff统计信息
   selectedFile?: string; // 当前选中的文件路径
   isLoading?: boolean; // 是否正在加载diff
+  plainText?: boolean;
+  compareMode?: boolean;
+  compareOriginal?: string;
+  compareModified?: string;
   height?: string; // 组件高度
   showFileList?: boolean; // 是否显示文件列表，默认true
   context?: ContextType; // 使用上下文，用于确定打开文件的行为
@@ -52,6 +57,10 @@ const props = withDefaults(defineProps<Props>(), {
   diffStats: null,
   selectedFile: '',
   isLoading: false,
+  plainText: false,
+  compareMode: false,
+  compareOriginal: '',
+  compareModified: '',
   height: '100%',
   showFileList: true,
   context: 'git-status',
@@ -176,6 +185,9 @@ watch(viewMode, (newMode) => {
 });
 
 const hasDiffContent = computed(() => {
+  if (props.compareMode) {
+    return true
+  }
   return props.diffContent && props.diffContent.trim() !== '';
 });
 
@@ -895,6 +907,7 @@ onMounted(() => {
           <div class="panel-header">
             <h4>{{ $t('@E80AC:文件差异') }}</h4>
             <div class="header-right">
+              <slot name="header-extra" />
               <el-tooltip
                 v-if="currentSelectedFile"
                 :content="currentSelectedFile"
@@ -988,6 +1001,7 @@ onMounted(() => {
                   :description="$t('@E80AC:该文件没有差异内容')"
                   :image-size="80"
                 />
+                <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
                 <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
               </div>
             </div>
@@ -1009,6 +1023,7 @@ onMounted(() => {
                 :description="$t('@E80AC:该文件没有差异内容')"
                 :image-size="80"
               />
+              <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
               <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
             </div>
           </div>
@@ -1018,6 +1033,17 @@ onMounted(() => {
               :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
               :image-size="80"
             />
+            <div v-else-if="compareMode" class="compare-view">
+              <MonacoDiffViewer
+                :original="compareOriginal"
+                :modified="compareModified"
+                language="auto"
+                :file-path="currentSelectedFile"
+                theme="auto"
+                :read-only="true"
+              />
+            </div>
+            <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
             <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
           </div>
         </div>
@@ -1029,6 +1055,7 @@ onMounted(() => {
       <div class="panel-header">
         <h4>{{ $t('@E80AC:文件差异') }}</h4>
         <div class="header-right">
+          <slot name="header-extra" />
           <el-tooltip
             v-if="currentSelectedFile"
             :content="currentSelectedFile"
@@ -1140,6 +1167,7 @@ onMounted(() => {
               :description="$t('@E80AC:该文件没有差异内容')"
               :image-size="80"
             />
+            <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
             <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
           </div>
         </div>
@@ -1151,12 +1179,18 @@ onMounted(() => {
           :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
           :image-size="80"
         />
-        
-        <div 
-          v-else-if="hasDiffContent"
-          class="diff-text"
-          v-html="formatDiff(diffContent)"
-        />
+        <div v-else-if="compareMode" class="compare-view">
+          <MonacoDiffViewer
+            :original="compareOriginal"
+            :modified="compareModified"
+            language="auto"
+            :file-path="currentSelectedFile"
+            theme="auto"
+            :read-only="true"
+          />
+        </div>
+        <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
+        <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
       </div>
     </div>
   </div>
@@ -1174,6 +1208,18 @@ onMounted(() => {
   min-height: 0; /* 关键：允许flex子元素收缩 */
   box-shadow: var(--shadow-base);
   transition: var(--transition-all);
+}
+
+.plain-text {
+  white-space: pre;
+  word-break: break-word;
+}
+
+.compare-view {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  min-height: 320px;
 }
 
 /* Splitter 容器与面板的基础约束，避免面板被内容强行撑开导致拖拽异常 */
