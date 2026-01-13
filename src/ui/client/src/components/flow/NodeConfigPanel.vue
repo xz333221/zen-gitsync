@@ -534,6 +534,27 @@ function saveConfig() {
       ElMessage.warning($t('@NODECFG:请选择要执行的命令'))
       return
     }
+
+    const inputsToCheck = Array.isArray(formData.value.inputs) ? formData.value.inputs : []
+    for (const it of inputsToCheck) {
+      if (!it || !it.required) continue
+      const name = String((it as any).paramName || '').trim() || $t('@NODEINPUT:参数名')
+      const type = (it as any).inputType
+      if (type === 'reference') {
+        const nodeId = String((it as any).referenceNodeId || '').trim()
+        const key = String((it as any).referenceOutputKey || '').trim()
+        if (!nodeId || !key) {
+          ElMessage.warning($t('@NODECFG:必填参数未选择引用输出', { name }))
+          return
+        }
+      } else {
+        const v = (it as any).manualValue
+        if (v === undefined || v === null || String(v).trim() === '') {
+          ElMessage.warning($t('@NODECFG:请输入必填参数的值', { name }))
+          return
+        }
+      }
+    }
     
     config = {
       id: props.node.data.config?.id || generateId(),
@@ -603,6 +624,25 @@ function saveConfig() {
     }
 
     const inputs = normalizeCodeInputs(formData.value.codeInputs)
+    for (const it of Array.isArray(inputs) ? inputs : []) {
+      if (!it || !(it as any).required) continue
+      const name = String((it as any).name || '').trim() || $t('@NODECFG:参数名')
+      const source = (it as any).source
+      if (source === 'reference') {
+        const nodeId = String((it as any).ref?.nodeId || '').trim()
+        const key = String((it as any).ref?.outputKey || '').trim()
+        if (!nodeId || !key) {
+          ElMessage.warning($t('@NODECFG:必填参数未选择引用输出', { name }))
+          return
+        }
+      } else {
+        const v = (it as any).manualValue
+        if (v === undefined || v === null || String(v).trim() === '') {
+          ElMessage.warning($t('@NODECFG:请输入必填参数的值', { name }))
+          return
+        }
+      }
+    }
     const outputs = normalizeCodeOutputs(formData.value.codeOutputParams)
     if (outputs.length === 0) {
       ElMessage.warning($t('@NODECFG:请配置输出键'))

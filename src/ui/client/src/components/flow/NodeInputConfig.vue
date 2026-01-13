@@ -44,6 +44,7 @@ watch(() => props.paramNames, (newParams) => {
       newInputs.push({
         paramName,
         inputType: 'manual',
+        required: false,
         manualValue: ''
       })
     }
@@ -222,6 +223,14 @@ function getCurrentReferenceValue(input: NodeInput): string {
               </template>
             </el-tree-select>
           </div>
+
+          <div class="input-field required-field">
+            <label class="field-label">{{ $t('@NODEINPUT:必填') }}</label>
+            <el-switch
+              :model-value="Boolean(input.required)"
+              @update:model-value="(val: boolean) => updateInput(index, 'required', val)"
+            />
+          </div>
         </div>
       </template>
     </ParamListContainer>
@@ -260,9 +269,14 @@ function getCurrentReferenceValue(input: NodeInput): string {
   
   .input-row {
     display: grid;
-    grid-template-columns: 200px 150px 1fr;
+    grid-template-columns: 200px 150px 1fr 90px;
     gap: var(--spacing-md);
     align-items: end;
+  }
+
+  .required-field {
+    align-items: center;
+    justify-content: flex-end;
   }
   
   .input-field {

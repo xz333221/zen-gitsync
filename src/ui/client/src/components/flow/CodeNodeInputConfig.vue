@@ -66,7 +66,7 @@ const treeSelectOptions = computed(() => {
 })
 
 function createDefaultRow(): CodeNodeInput {
-  return { name: '', source: 'reference', ref: { nodeId: '', outputKey: 'stdout' } }
+  return { name: '', source: 'reference', required: false, ref: { nodeId: '', outputKey: 'stdout' } }
 }
 
 function addRow() {
@@ -173,6 +173,14 @@ function getCurrentReferenceValue(input: CodeNodeInput): string {
               @update:model-value="(v: string) => handleReferenceSelect(idx, v)"
             />
           </div>
+
+          <div class="input-field action-field">
+            <label class="field-label">{{ $t('@NODEINPUT:必填') }}</label>
+            <el-switch
+              :model-value="Boolean(row.required)"
+              @update:model-value="(v: boolean) => updateRow(idx, { required: v })"
+            />
+          </div>
         </div>
       </template>
     </ParamListContainer>
@@ -207,7 +215,7 @@ function getCurrentReferenceValue(input: CodeNodeInput): string {
 
 .input-row {
   display: grid;
-  grid-template-columns: 220px 130px 1fr 44px;
+  grid-template-columns: 220px 130px 1fr 90px;
   gap: var(--spacing-md);
   align-items: end;
 }

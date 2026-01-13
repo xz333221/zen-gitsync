@@ -449,7 +449,8 @@ export function registerConfigRoutes({
         name: command.name,
         description: command.description || '',
         directory: command.directory || '',
-        command: command.command
+        command: command.command,
+        params: Array.isArray(command.params) ? command.params : []
       }
       
       config.customCommands.push(newCommand)
@@ -505,7 +506,8 @@ export function registerConfigRoutes({
             name: command.name,
             description: command.description || '',
             directory: command.directory || '',
-            command: command.command
+            command: command.command,
+            params: Array.isArray(command.params) ? command.params : []
           }
           await configManager.saveConfig(config)
         } else {

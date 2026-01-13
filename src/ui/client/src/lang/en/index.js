@@ -122,6 +122,11 @@ export default {
   '@COND:删除规则': 'Delete rule',
   '@COND:请至少保留一个默认分支': 'At least one default branch is required',
   '@COND:默认分支必须使用handleId=default': 'Default branch must use handleId=default',
+  // @NODEINPUT: input config
+  '@NODEINPUT:必填': 'Required',
+  // @NODECFG: node config validation
+  '@NODECFG:必填参数未选择引用输出': 'Required parameter "{name}" has no output reference selected',
+  '@NODECFG:请输入必填参数的值': 'Please enter a value for required parameter "{name}"',
   // @CMD01: file path: components\CustomCommandManager.vue
   '@CMD01:命令名称不能为空': 'Command name cannot be empty',
   '@CMD01:命令内容不能为空': 'Command content cannot be empty',
@@ -169,6 +174,11 @@ export default {
   '@CMD01:暂无保存的命令模板': 'No saved command templates yet',
   '@CMD01:执行参数': 'Execution parameters',
   '@CMD01:请输入变量值': 'Please enter a value for {var}',
+  '@CMD01:变量配置': 'Variables',
+  '@CMD01:变量名': 'Variable',
+  '@CMD01:默认值': 'Default value',
+  '@CMD01:必填': 'Required',
+  '@CMD01:请输入必填变量: ': 'Please enter required variable: {var}',
   // @CMD01: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
   '@CMD02:指令编排': 'Command Orchestration',

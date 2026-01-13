@@ -13,6 +13,7 @@ export interface NodeOutputRef {
 export interface NodeInput {
   paramName: string      // 参数名
   inputType: 'reference' | 'manual'  // 引用或手动输入
+  required?: boolean     // 是否必填（默认 false）
   // 引用模式
   referenceNodeId?: string
   referenceOutputKey?: string
@@ -23,6 +24,7 @@ export interface NodeInput {
 export interface CodeNodeInput {
   name: string
   source: 'reference' | 'manual'
+  required?: boolean     // 是否必填（默认 false）
   manualValue?: string
   ref?: NodeOutputRef
 }
@@ -512,7 +514,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 自定义命令管理函数
-  async function saveCustomCommand(command: { name: string; description?: string; directory: string; command: string }) {
+  async function saveCustomCommand(command: { name: string; description?: string; directory: string; command: string; params?: any[] }) {
     try {
       const response = await fetch('/api/config/save-custom-command', {
         method: 'POST',
@@ -564,7 +566,7 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  async function updateCustomCommand(id: string, command: { name: string; description?: string; directory: string; command: string }) {
+  async function updateCustomCommand(id: string, command: { name: string; description?: string; directory: string; command: string; params?: any[] }) {
     try {
       const response = await fetch('/api/config/update-custom-command', {
         method: 'POST',

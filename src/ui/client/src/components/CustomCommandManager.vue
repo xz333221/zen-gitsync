@@ -14,6 +14,12 @@ export interface CustomCommand {
   description?: string
   directory: string
   command: string
+  params?: Array<{
+    name: string
+    defaultValue?: string
+    required?: boolean
+    description?: string
+  }>
 }
 
 export interface CustomCommandManagerEmits {
@@ -76,9 +82,16 @@ const CmdParamForm = defineComponent({
   name: 'CmdParamForm',
   props: {
     vars: { type: Array as any, required: true },
-    values: { type: Object as any, required: true }
+    values: { type: Object as any, required: true },
+    params: { type: Array as any, required: false }
   },
   setup(props) {
+    function getParamDesc(name: string) {
+      const arr = Array.isArray((props as any).params) ? ((props as any).params as any[]) : []
+      const found = arr.find((p) => String(p?.name || '') === name)
+      return found ? String(found?.description || '').trim() : ''
+    }
+
     return () =>
       h(
         'div',
@@ -93,19 +106,48 @@ const CmdParamForm = defineComponent({
               },
               placeholder: $t('@CMD01:请输入变量值', { var: v }),
               clearable: true
-            })
+            }),
+            getParamDesc(v) ? h('div', { class: 'cmd-param-desc' }, getParamDesc(v)) : null
           ])
         )
       )
   }
 })
 
+function normalizeCommandParams(command: CustomCommand) {
+  const raw = String(command?.command || '')
+  const vars = extractTemplateVariables(raw)
+  const existing = Array.isArray(command?.params) ? command.params : []
+  const map = new Map<string, any>()
+  for (const p of existing) {
+    const key = String((p as any)?.name || '').trim()
+    if (!key) continue
+    map.set(key, {
+      name: key,
+      defaultValue: String((p as any)?.defaultValue ?? ''),
+      required: Boolean((p as any)?.required),
+      description: String((p as any)?.description ?? '')
+    })
+  }
+
+  return vars.map((v) => {
+    if (map.has(v)) return map.get(v)
+    return {
+      name: v,
+      defaultValue: '',
+      required: false,
+      description: ''
+    }
+  })
+}
+
 // 组件内部状态
 const newCommand = ref<CustomCommand>({
   name: '',
   description: '',
   directory: '',
-  command: ''
+  command: '',
+  params: []
 })
 const isEditing = ref(false)
 const editingId = ref<string>('')
@@ -134,11 +176,36 @@ function resetForm() {
     name: '',
     description: '',
     directory: '',
-    command: ''
+    command: '',
+    params: []
   }
   isEditing.value = false
   editingId.value = ''
 }
+
+watch(
+  () => newCommand.value.command,
+  (cmd) => {
+    const raw = String(cmd || '')
+    const vars = extractTemplateVariables(raw)
+    if (!vars.length) {
+      newCommand.value.params = []
+      return
+    }
+    const cur = Array.isArray(newCommand.value.params) ? newCommand.value.params : []
+    const map = new Map(cur.map((p) => [String((p as any)?.name || ''), p]))
+    newCommand.value.params = vars.map((v) => {
+      const old = map.get(v)
+      return {
+        name: v,
+        defaultValue: old ? String((old as any).defaultValue ?? '') : '',
+        required: old ? Boolean((old as any).required) : false,
+        description: old ? String((old as any).description ?? '') : ''
+      }
+    })
+  },
+  { immediate: true }
+)
 
 // 保存命令
 async function saveCommand() {
@@ -184,7 +251,8 @@ function startEditCommand(command: CustomCommand) {
     name: command.name,
     description: command.description || '',
     directory: command.directory,
-    command: command.command
+    command: command.command,
+    params: normalizeCommandParams(command)
   }
 }
 
@@ -223,17 +291,38 @@ async function executeCommand(command: CustomCommand) {
 
   const values = reactive<Record<string, string>>({})
   try {
-    for (const v of vars) values[v] = ''
+    const params = normalizeCommandParams(command)
+    const map = new Map(params.map((p) => [String(p.name), p]))
+    for (const v of vars) {
+      const p = map.get(v)
+      values[v] = p ? String((p as any).defaultValue ?? '') : ''
+    }
 
     await ElMessageBox({
       title: $t('@CMD01:执行参数'),
-      message: h(CmdParamForm, { vars, values }),
+      message: h(CmdParamForm, { vars, values, params }),
       showCancelButton: true,
       confirmButtonText: $t('@CMD01:确定'),
       cancelButtonText: $t('@CMD01:取消'),
       closeOnClickModal: false,
       customClass: 'cmd-param-message-box'
     })
+
+    const requiredList = (Array.isArray(command?.params) ? command.params : [])
+      .map((p) => ({
+        name: String((p as any)?.name || '').trim(),
+        required: Boolean((p as any)?.required)
+      }))
+      .filter((p) => p.name)
+
+    for (const p of requiredList) {
+      if (!p.required) continue
+      const v = values[p.name]
+      if (v === undefined || v === null || String(v).trim() === '') {
+        ElMessage.warning($t('@CMD01:请输入必填变量: ', { var: p.name }))
+        return
+      }
+    }
 
     const resolved = applyTemplateVariables(raw, values)
     emit('execute-command', { ...command, command: resolved })
@@ -447,30 +536,63 @@ defineExpose({
         <div class="form-row">
           <div class="form-field">
             <label class="required">{{ $t('@CMD01:命令') }}</label>
-            <el-autocomplete
-              v-model="newCommand.command"
-              :fetch-suggestions="queryCommandTemplates"
-              :placeholder="$t('@CMD01:输入要执行的命令，例如: npm run build')"
-              clearable
-              size="default"
-              trigger-on-focus
-              @select="handleCommandSelect"
-              @keyup.enter="saveCommand"
-            />
+            <div class="command-input-group">
+              <el-autocomplete
+                v-model="newCommand.command"
+                :fetch-suggestions="queryCommandTemplates"
+                :placeholder="$t('@CMD01:输入要执行的命令，例如: npm run build')"
+                clearable
+                size="default"
+                trigger-on-focus
+                @select="handleCommandSelect"
+                @keyup.enter="saveCommand"
+              />
+              <div class="command-action-buttons">
+                <el-button v-if="isEditing" @click="cancelEdit" size="default">{{ $t('@CMD01:取消') }}</el-button>
+                <el-button
+                  type="primary"
+                  @click="saveCommand"
+                  :disabled="!newCommand.name.trim() || !newCommand.command.trim() || isSaving"
+                  :loading="isSaving"
+                  size="default"
+                >
+                  {{ isEditing ? $t('@CMD01:更新命令') : $t('@CMD01:添加命令') }}
+                </el-button>
+              </div>
+            </div>
+
+            <div v-if="newCommand.params && newCommand.params.length > 0" class="command-params">
+              <div class="params-title">{{ $t('@CMD01:变量配置') }}</div>
+              <el-table :data="newCommand.params" style="width: 100%" size="small" stripe>
+                <el-table-column prop="name" :label="$t('@CMD01:变量名')" width="160" />
+                <el-table-column :label="$t('@CMD01:默认值')" min-width="180">
+                  <template #default="scope">
+                    <el-input
+                      v-model="scope.row.defaultValue"
+                      size="small"
+                      clearable
+                      :placeholder="$t('@CMD01:默认值')"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column :label="$t('@CMD01:必填')" width="90" align="center">
+                  <template #default="scope">
+                    <el-switch v-model="scope.row.required" />
+                  </template>
+                </el-table-column>
+                <el-table-column :label="$t('@CMD01:描述')" min-width="220">
+                  <template #default="scope">
+                    <el-input
+                      v-model="scope.row.description"
+                      size="small"
+                      clearable
+                      :placeholder="$t('@CMD01:描述')"
+                    />
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
-        </div>
-        <!-- 按钮 -->
-        <div class="form-buttons">
-          <el-button v-if="isEditing" @click="cancelEdit" size="default">{{ $t('@CMD01:取消') }}</el-button>
-          <el-button 
-            type="primary" 
-            @click="saveCommand" 
-            :disabled="!newCommand.name.trim() || !newCommand.command.trim() || isSaving"
-            :loading="isSaving"
-            size="default"
-          >
-            {{ isEditing ? $t('@CMD01:更新命令') : $t('@CMD01:添加命令') }}
-          </el-button>
         </div>
           </div>
         </el-collapse-item>
@@ -606,11 +728,35 @@ defineExpose({
   flex-grow: 1;
 }
 
-.form-buttons {
-  margin-top: var(--spacing-lg);
+.command-input-group {
   display: flex;
-  justify-content: flex-end;
+  gap: var(--spacing-base);
+  align-items: center;
+  flex-grow: 1;
+  flex-wrap: wrap;
+}
+
+.command-input-group :deep(.el-autocomplete) {
+  flex: 1;
+  min-width: 260px;
+}
+
+.command-action-buttons {
+  display: flex;
   gap: var(--spacing-md);
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.command-params {
+  margin-top: var(--spacing-base);
+}
+
+.params-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-title);
+  margin-bottom: var(--spacing-base);
 }
 
 .command-list {
