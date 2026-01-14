@@ -576,6 +576,7 @@ export default {
   '@E80AC:逐块解决': 'Block-by-Block',
   '@E80AC:全局解决': 'Global Resolution',
   '@E80AC:合并结果': 'Merge Result',
+  '@E80AC:可直接编辑合并结果（整文件）': 'Editable merged result (whole file)',
   '@E80AC:保留双方': 'Keep Both',
   '@E80AC:点击左右两侧的': 'Click the',
   '@E80AC:或': 'or',

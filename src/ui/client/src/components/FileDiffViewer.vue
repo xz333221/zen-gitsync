@@ -12,8 +12,9 @@ import FileActionButtons from './FileActionButtons.vue';
 import FileTreeView from './FileTreeView.vue';
 import { getFileIconClass } from '../utils/fileIcon';
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree';
-import ConflictBlockViewer, { type ConflictBlock } from './ConflictBlockViewer.vue';
+import type { ConflictBlock } from './ConflictBlockViewer.vue';
 import MonacoDiffViewer from '@/components/MonacoDiffViewer.vue'
+import MonacoEditor from '@/components/MonacoEditor.vue'
 
 // 定义props
 interface FileItem {
@@ -249,8 +250,151 @@ function handleOpenWithVSCode() {
 
 // 冲突块相关状态
 const conflictBlocks = ref<ConflictBlock[]>([]);
-const blockResolutions = ref<Map<number, string>>(new Map()); // blockId -> resolved content
 const useBlockMode = ref<boolean>(true); // 是否使用逐块模式
+
+// 单一合并结果编辑框
+const mergedEditorContent = ref<string>('')
+const mergedEditorDirty = ref(false)
+
+const currentVersionContent = ref<string>('')
+const incomingVersionContent = ref<string>('')
+const bothVersionContent = ref<string>('')
+
+const conflictOriginalContent = ref<string>('')
+const blockChoice = ref<Map<number, 'current' | 'incoming' | 'both'>>(new Map())
+const activeBlockId = ref<number | null>(null)
+
+const anchorsCurrent = ref<Map<number, { startLine: number; endLine: number }>>(new Map())
+const anchorsIncoming = ref<Map<number, { startLine: number; endLine: number }>>(new Map())
+const anchorsMerged = ref<Map<number, { startLine: number; endLine: number }>>(new Map())
+
+async function loadConflictFileContent(filePath: string): Promise<string> {
+  const response = await fetch(`/api/file-content?file=${encodeURIComponent(filePath)}`)
+  const data = await response.json()
+  if (!data.success) throw new Error(data.error || $t('@E80AC:无法读取文件内容'))
+  return String(data.content ?? '')
+}
+
+function buildTextAndAnchors(
+  content: string,
+  chooser: (blockId: number) => 'current' | 'incoming' | 'both'
+): { text: string; anchors: Map<number, { startLine: number; endLine: number }> } {
+  const lines = content.split('\n')
+  const out: string[] = []
+  const anchors = new Map<number, { startLine: number; endLine: number }>()
+  let i = 0
+  let blockId = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+    if (line.includes('<<<<<<<')) {
+      blockId++
+      const current: string[] = []
+      const incoming: string[] = []
+      i++
+      while (i < lines.length && !lines[i].includes('=======')) {
+        current.push(lines[i])
+        i++
+      }
+      i++
+      while (i < lines.length && !lines[i].includes('>>>>>>>')) {
+        incoming.push(lines[i])
+        i++
+      }
+      if (i < lines.length && lines[i].includes('>>>>>>>')) i++
+
+      const choice = chooser(blockId)
+      const chosenLines =
+        choice === 'incoming' ? incoming : choice === 'both' ? [...current, ...incoming] : current
+
+      const startLine = out.length + 1
+      out.push(...chosenLines)
+      const endLine = Math.max(startLine, out.length)
+      anchors.set(blockId, { startLine, endLine })
+      continue
+    }
+
+    out.push(line)
+    i++
+  }
+
+  return { text: out.join('\n'), anchors }
+}
+
+const activeAnchorCurrent = computed(() => {
+  if (!activeBlockId.value) return null
+  return anchorsCurrent.value.get(activeBlockId.value) || null
+})
+
+const activeAnchorIncoming = computed(() => {
+  if (!activeBlockId.value) return null
+  return anchorsIncoming.value.get(activeBlockId.value) || null
+})
+
+const activeAnchorMerged = computed(() => {
+  if (!activeBlockId.value) return null
+  return anchorsMerged.value.get(activeBlockId.value) || null
+})
+
+const dimAnchorsCurrent = computed(() => {
+  const act = activeBlockId.value
+  return conflictBlocks.value
+    .filter((b) => b.id !== act)
+    .map((b) => anchorsCurrent.value.get(b.id))
+    .filter(Boolean) as Array<{ startLine: number; endLine: number }>
+})
+
+const dimAnchorsIncoming = computed(() => {
+  const act = activeBlockId.value
+  return conflictBlocks.value
+    .filter((b) => b.id !== act)
+    .map((b) => anchorsIncoming.value.get(b.id))
+    .filter(Boolean) as Array<{ startLine: number; endLine: number }>
+})
+
+const dimAnchorsMerged = computed(() => {
+  const act = activeBlockId.value
+  return conflictBlocks.value
+    .filter((b) => b.id !== act)
+    .map((b) => anchorsMerged.value.get(b.id))
+    .filter(Boolean) as Array<{ startLine: number; endLine: number }>
+})
+
+const revealLineCurrent = computed(() => activeAnchorCurrent.value?.startLine ?? null)
+const revealLineIncoming = computed(() => activeAnchorIncoming.value?.startLine ?? null)
+const revealLineMerged = computed(() => activeAnchorMerged.value?.startLine ?? null)
+
+const rightActionsCurrent = computed(() => {
+  return conflictBlocks.value
+    .map((b) => {
+      const a = anchorsCurrent.value.get(b.id)
+      return a ? { blockId: b.id, line: a.startLine, kind: 'current' as const } : null
+    })
+    .filter(Boolean) as Array<{ blockId: number; line: number; kind: 'current' }>
+})
+
+const gutterItemsIncoming = computed(() => {
+  return conflictBlocks.value
+    .map((b) => {
+      const a = anchorsIncoming.value.get(b.id)
+      return a ? { blockId: b.id, line: a.startLine, kind: 'incoming' as const } : null
+    })
+    .filter(Boolean) as Array<{ blockId: number; line: number; kind: 'incoming' }>
+})
+
+function rebuildMergedFromChoices() {
+  if (!conflictOriginalContent.value) return
+  const { text, anchors } = buildTextAndAnchors(conflictOriginalContent.value, (id) => blockChoice.value.get(id) || 'current')
+  mergedEditorContent.value = text
+  anchorsMerged.value = anchors
+  mergedEditorDirty.value = true
+}
+
+function applyBlockChoice(blockId: number, choice: 'current' | 'incoming' | 'both') {
+  blockChoice.value.set(blockId, choice)
+  activeBlockId.value = blockId
+  rebuildMergedFromChoices()
+}
 
 // 解析冲突内容为冲突块
 function parseConflictBlocks(content: string): ConflictBlock[] {
@@ -519,100 +663,20 @@ const openButtonTooltip = computed(() => {
   }
 });
 
-// 处理逐块冲突解决
-async function handleBlockResolve(blockId: number, resolution: 'current' | 'incoming' | 'both') {
-  if (!currentSelectedFile.value) return;
-  
-  try {
-    // 获取文件内容
-    const response = await fetch(`/api/file-content?file=${encodeURIComponent(currentSelectedFile.value)}`);
-    const data = await response.json();
-    
-    if (!data.success || !data.content) {
-      ElMessage.error($t('@E80AC:无法读取文件内容'));
-      return;
-    }
-    
-    const block = conflictBlocks.value.find(b => b.id === blockId);
-    if (!block) return;
-    
-    // 根据解决方式生成该块的内容
-    let resolvedBlockContent = '';
-    if (resolution === 'current') {
-      resolvedBlockContent = block.currentLines.join('\n');
-    } else if (resolution === 'incoming') {
-      resolvedBlockContent = block.incomingLines.join('\n');
-    } else if (resolution === 'both') {
-      resolvedBlockContent = [...block.currentLines, ...block.incomingLines].join('\n');
-    }
-    
-    // 保存该块的解决方案
-    blockResolutions.value.set(blockId, resolvedBlockContent);
-  } catch (error) {
-    ElMessage.error(`${$t('@E80AC:操作失败: ')}${(error as Error).message}`);
-  }
-}
-
 // 保存所有块的解决方案
 async function saveAllBlockResolutions() {
   if (!currentSelectedFile.value) return;
-  
-  // 检查是否所有块都已解决
-  const allResolved = conflictBlocks.value.every(block => blockResolutions.value.has(block.id));
-  if (!allResolved) {
-    ElMessage.warning($t('@E80AC:请先解决所有冲突块'));
-    return;
-  }
-  
-  try {
-    // 获取原始文件内容
-    const response = await fetch(`/api/file-content?file=${encodeURIComponent(currentSelectedFile.value)}`);
-    const data = await response.json();
-    
-    if (!data.success || !data.content) {
-      ElMessage.error($t('@E80AC:无法读取文件内容'));
-      return;
+
+  // 如果使用了合并编辑框，则以编辑框内容为准（允许一次性编辑整文件，不拆块）
+  if (useBlockMode.value) {
+    if (mergedEditorContent.value.trim().length === 0) {
+      ElMessage.warning($t('@E80AC:保存失败'));
+      return
     }
-    
-    const originalContent = data.content;
-    const lines = originalContent.split('\n');
-    let result: string[] = [];
-    let i = 0;
-    let processedBlockId = 0;
-    
-    while (i < lines.length) {
-      const line = lines[i];
-      
-      if (line.includes('<<<<<<<')) {
-        processedBlockId++;
-        const resolvedContent = blockResolutions.value.get(processedBlockId);
-        
-        if (resolvedContent !== undefined) {
-          // 添加解决后的内容
-          result.push(resolvedContent);
-          
-          // 跳过整个冲突块
-          i++;
-          while (i < lines.length && !lines[i].includes('>>>>>>>')) {
-            i++;
-          }
-          i++; // 跳过 >>>>>>> 行
-        }
-      } else {
-        result.push(line);
-        i++;
-      }
-    }
-    
-    const resolvedContent = result.join('\n');
-    
-    // 保存解决后的内容
-    await saveResolvedContent(resolvedContent);
-    
-    // 清空块解决方案
-    blockResolutions.value.clear();
-  } catch (error) {
-    ElMessage.error(`${$t('@E80AC:保存失败: ')}${(error as Error).message}`);
+
+    await saveResolvedContent(mergedEditorContent.value)
+    mergedEditorDirty.value = false
+    return
   }
 }
 
@@ -627,23 +691,51 @@ watch(() => props.selectedFile, (newVal) => {
 watch([() => props.diffContent, currentSelectedFile, isConflictedFile], async ([_, selectedFile, isConflicted]) => {
   // 清空之前的状态
   conflictBlocks.value = [];
-  blockResolutions.value.clear();
+  mergedEditorContent.value = ''
+  mergedEditorDirty.value = false
+  currentVersionContent.value = ''
+  incomingVersionContent.value = ''
+  bothVersionContent.value = ''
+  conflictOriginalContent.value = ''
+  blockChoice.value.clear()
+  activeBlockId.value = null
+  anchorsCurrent.value = new Map()
+  anchorsIncoming.value = new Map()
+  anchorsMerged.value = new Map()
   
   // 只有当文件确实是冲突文件时才解析
   if (isConflicted && selectedFile) {
     try {
       console.log('[ConflictParse] Fetching content for conflicted file:', selectedFile);
       // 获取完整文件内容来解析冲突块
-      const response = await fetch(`/api/file-content?file=${encodeURIComponent(selectedFile)}`);
-      const data = await response.json();
+      const dataContent = await loadConflictFileContent(selectedFile)
       
-      if (data.success && data.content) {
+      if (dataContent) {
         console.log('[ConflictParse] File content loaded, parsing blocks...');
-        const blocks = parseConflictBlocks(data.content);
+        conflictOriginalContent.value = dataContent
+        const blocks = parseConflictBlocks(dataContent);
         console.log('[ConflictParse] Parsed blocks:', blocks.length);
         conflictBlocks.value = blocks;
+
+        // 默认就高亮第一块，便于未点击时也能看出正在对比哪一块
+        activeBlockId.value = blocks.length > 0 ? blocks[0].id : null
+
+        // 初始化单一合并结果：默认使用当前分支内容，用户可在编辑框中直接修改
+        const cur = buildTextAndAnchors(dataContent, () => 'current')
+        const inc = buildTextAndAnchors(dataContent, () => 'incoming')
+        const both = buildTextAndAnchors(dataContent, () => 'both')
+        const mer = buildTextAndAnchors(dataContent, (id) => blockChoice.value.get(id) || 'current')
+
+        currentVersionContent.value = cur.text
+        incomingVersionContent.value = inc.text
+        bothVersionContent.value = both.text
+        mergedEditorContent.value = mer.text
+
+        anchorsCurrent.value = cur.anchors
+        anchorsIncoming.value = inc.anchors
+        anchorsMerged.value = mer.anchors
       } else {
-        console.error('[ConflictParse] Failed to load file content:', data.error);
+        console.error('[ConflictParse] Failed to load file content');
       }
     } catch (error) {
       console.error('[ConflictParse] Error fetching file content:', error);
@@ -965,11 +1057,75 @@ onMounted(() => {
             </div>
             <!-- 逐块冲突解决 -->
             <div v-if="conflictBlocks.length > 0 && useBlockMode" class="block-conflict-resolution">
-              <ConflictBlockViewer
-                :file-path="currentSelectedFile"
-                :blocks="conflictBlocks"
-                @resolve="handleBlockResolve"
-              />
+              <div class="merge-three-pane">
+                <div class="pane">
+                  <div class="pane-header">
+                    <div class="pane-title">{{ $t('@E80AC:当前更改') }}</div>
+                  </div>
+                  <div class="pane-body">
+                    <MonacoEditor
+                      :model-value="currentVersionContent"
+                      language="auto"
+                      :file-path="currentSelectedFile"
+                      theme="auto"
+                      :read-only="true"
+                      min-height="360px"
+                      :reveal-line="revealLineCurrent"
+                      :highlight-range="activeAnchorCurrent"
+                      :dim-highlight-ranges="dimAnchorsCurrent"
+                      highlight-kind="current"
+                      @gutter-click="(id) => applyBlockChoice(id, 'current')"
+                      :right-actions="rightActionsCurrent"
+                      @update:model-value="() => {}"
+                    />
+                  </div>
+                </div>
+
+                <div class="pane pane-merged">
+                  <div class="pane-header">
+                    <div class="pane-title">{{ $t('@E80AC:合并结果') }}</div>
+                  </div>
+                  <div class="pane-subhint">{{ $t('@E80AC:可直接编辑合并结果（整文件）') }}</div>
+                  <div class="pane-body">
+                    <MonacoEditor
+                      v-model="mergedEditorContent"
+                      language="auto"
+                      :file-path="currentSelectedFile"
+                      theme="auto"
+                      :read-only="false"
+                      min-height="360px"
+                      :reveal-line="revealLineMerged"
+                      :highlight-range="activeAnchorMerged"
+                      :dim-highlight-ranges="dimAnchorsMerged"
+                      highlight-kind="merged"
+                      @update:model-value="() => (mergedEditorDirty = true)"
+                    />
+                  </div>
+                </div>
+
+                <div class="pane">
+                  <div class="pane-header">
+                    <div class="pane-title">{{ $t('@E80AC:传入的更改') }}</div>
+                  </div>
+                  <div class="pane-body">
+                    <MonacoEditor
+                      :model-value="incomingVersionContent"
+                      language="auto"
+                      :file-path="currentSelectedFile"
+                      theme="auto"
+                      :read-only="true"
+                      min-height="360px"
+                      :reveal-line="revealLineIncoming"
+                      :highlight-range="activeAnchorIncoming"
+                      :dim-highlight-ranges="dimAnchorsIncoming"
+                      highlight-kind="incoming"
+                      :gutter-items="gutterItemsIncoming"
+                      @gutter-click="(id) => applyBlockChoice(id, 'incoming')"
+                      @update:model-value="() => {}"
+                    />
+                  </div>
+                </div>
+              </div>
               <div class="save-resolution-bar">
                 <el-button type="primary" size="large" @click="saveAllBlockResolutions">
                   {{ $t('@E80AC:保存所有解决方案') }}
@@ -1131,11 +1287,73 @@ onMounted(() => {
         </div>
         <!-- 逐块冲突解决 -->
         <div v-if="conflictBlocks.length > 0 && useBlockMode" class="block-conflict-resolution">
-          <ConflictBlockViewer
-            :file-path="currentSelectedFile"
-            :blocks="conflictBlocks"
-            @resolve="handleBlockResolve"
-          />
+          <div class="merge-three-pane">
+            <div class="pane">
+              <div class="pane-header">
+                <div class="pane-title">{{ $t('@E80AC:当前更改') }}</div>
+              </div>
+              <div class="pane-body">
+                <MonacoEditor
+                  v-model="currentVersionContent"
+                  language="auto"
+                  :file-path="currentSelectedFile"
+                  theme="auto"
+                  :read-only="true"
+                  min-height="360px"
+                  :reveal-line="revealLineCurrent"
+                  :highlight-range="activeAnchorCurrent"
+                  :dim-highlight-ranges="dimAnchorsCurrent"
+                  highlight-kind="current"
+                  :right-actions="rightActionsCurrent"
+                  @update:model-value="() => {}"
+                />
+              </div>
+            </div>
+
+            <div class="pane pane-merged">
+              <div class="pane-header">
+                <div class="pane-title">{{ $t('@E80AC:合并结果') }}</div>
+              </div>
+              <div class="pane-subhint">{{ $t('@E80AC:可直接编辑合并结果（整文件）') }}</div>
+              <div class="pane-body">
+                <MonacoEditor
+                  v-model="mergedEditorContent"
+                  language="auto"
+                  :file-path="currentSelectedFile"
+                  theme="auto"
+                  :read-only="false"
+                  min-height="360px"
+                  :reveal-line="revealLineMerged"
+                  :highlight-range="activeAnchorMerged"
+                  :dim-highlight-ranges="dimAnchorsMerged"
+                  highlight-kind="merged"
+                  @update:model-value="() => (mergedEditorDirty = true)"
+                />
+              </div>
+            </div>
+
+            <div class="pane">
+              <div class="pane-header">
+                <div class="pane-title">{{ $t('@E80AC:传入的更改') }}</div>
+              </div>
+              <div class="pane-body">
+                <MonacoEditor
+                  v-model="incomingVersionContent"
+                  language="auto"
+                  :file-path="currentSelectedFile"
+                  theme="auto"
+                  :read-only="true"
+                  min-height="360px"
+                  :reveal-line="revealLineIncoming"
+                  :highlight-range="activeAnchorIncoming"
+                  :dim-highlight-ranges="dimAnchorsIncoming"
+                  highlight-kind="incoming"
+                  @update:model-value="() => {}"
+                />
+              </div>
+            </div>
+          </div>
+
           <div class="save-resolution-bar">
             <el-button type="primary" size="large" @click="saveAllBlockResolutions">
               {{ $t('@E80AC:保存所有解决方案') }}
@@ -1705,18 +1923,60 @@ onMounted(() => {
   }
 }
 
-/* 逐块冲突解决区域 */
 .block-conflict-resolution {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  
-  :deep(.conflict-block-viewer) {
-    flex: 1;
-    overflow-y: auto;
-  }
+  gap: var(--spacing-lg);
 }
+
+.merge-three-pane {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: var(--spacing-md);
+}
+
+.pane {
+  border: 1px solid var(--border-component);
+  border-radius: var(--radius-lg);
+  background: var(--bg-container);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.pane-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-component);
+}
+
+
+.pane-subhint {
+  padding: var(--spacing-sm) var(--spacing-lg) 0 var(--spacing-lg);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-container);
+}
+
+.pane-title {
+  font-weight: 600;
+  color: var(--text-title);
+}
+
+.pane-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pane-body {
+  padding: var(--spacing-md);
+  background: var(--bg-container);
+}
+
 
 /* 保存解决方案按钮栏 */
 .save-resolution-bar {

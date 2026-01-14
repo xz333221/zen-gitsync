@@ -76,6 +76,7 @@ declare module 'vue' {
     ListIcon: typeof import('./src/components/icons/ListIcon.vue')['default']
     MergeBranchButton: typeof import('./src/components/buttons/MergeBranchButton.vue')['default']
     MonacoDiffViewer: typeof import('./src/components/MonacoDiffViewer.vue')['default']
+    MonacoEditor: typeof import('./src/components/MonacoEditor.vue')['default']
     NodeConfigPanel: typeof import('./src/components/flow/NodeConfigPanel.vue')['default']
     NodeContextMenu: typeof import('./src/components/flow/nodes/NodeContextMenu.vue')['default']
     NodeInputConfig: typeof import('./src/components/flow/NodeInputConfig.vue')['default']
