@@ -295,6 +295,21 @@ const emit = defineEmits<{
   }
 }
 
+.node-type-user_input {
+  min-width: 220px;
+  max-width: 320px;
+  border-color: #64748b;
+
+  &.is-selected {
+    border-color: #475569;
+    box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.22), var(--shadow-lg);
+  }
+
+  .flow-node-handle {
+    background: #64748b !important;
+  }
+}
+
 .node-type-start {
   min-width: 200px;
   max-width: 250px;
