@@ -672,19 +672,20 @@ defineExpose({
 .command-container {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2xl);
-  min-height: 400px;
+  gap: var(--spacing-xl);
+  min-height: 440px;
 }
 
 .command-form {
   background: var(--bg-panel);
   border: 1px solid var(--border-component);
   border-radius: var(--radius-lg);
-  padding: 14px var(--spacing-lg);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .form-row {
-  margin-bottom: 10px;
+  margin-bottom: var(--spacing-lg);
 
   &:last-of-type {
     margin-bottom: 0;
@@ -698,15 +699,16 @@ defineExpose({
 
 .form-field {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--spacing-sm);
 
   label {
     display: block;
     font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--text-title);
-    flex-shrink: 0;
-    padding-right: var(--spacing-base);
+    line-height: 1.2;
     
     &.required::after {
       content: '*';
@@ -726,6 +728,7 @@ defineExpose({
   gap: var(--spacing-base);
   align-items: center;
   flex-grow: 1;
+  flex-wrap: wrap;
 }
 
 .command-input-group {
@@ -750,6 +753,10 @@ defineExpose({
 
 .command-params {
   margin-top: var(--spacing-base);
+  padding: var(--spacing-base);
+  border-radius: var(--radius-lg);
+  background: var(--bg-component-area);
+  border: 1px solid var(--border-component);
 }
 
 .params-title {
@@ -764,20 +771,25 @@ defineExpose({
   flex-direction: column;
   flex: 1;
   overflow: hidden;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-component);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
 
   h3 {
     margin: 0 0 var(--spacing-lg) 0;
     font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--text-title);
-    border-bottom: 1px solid var(--border-component);
-    padding-bottom: var(--spacing-base);
+    padding-bottom: var(--spacing-sm);
   }
 }
 
 .command-list-scroll {
   flex: 1;
   overflow-y: auto;
+  border-radius: var(--radius-lg);
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -832,6 +844,37 @@ defineExpose({
   display: flex;
   gap: 6px;
   justify-content: center;
+}
+
+:deep(.command-form-collapse) {
+  .el-collapse-item__header {
+    border-radius: var(--radius-lg);
+    background: var(--bg-panel);
+    border: 1px solid var(--border-component);
+    padding: 0 var(--spacing-lg);
+    height: 44px;
+    line-height: 44px;
+  }
+
+  .el-collapse-item__wrap {
+    border: none;
+  }
+}
+
+:deep(.el-table) {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+:deep(.el-table thead th) {
+  background: var(--bg-component-area);
+  color: var(--text-title);
+  font-weight: 600;
+}
+
+:deep(.el-table__row:hover td) {
+  background: var(--bg-component-area);
 }
 </style>
 

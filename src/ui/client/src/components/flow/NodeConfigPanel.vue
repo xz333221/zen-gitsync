@@ -2,12 +2,13 @@
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Clock, DocumentAdd, Link, Folder, Select, Plus, Delete, Minus } from '@element-plus/icons-vue'
-import { useConfigStore, type OrchestrationStep, type NodeOutputRef, type NodeInput, type CodeNodeInput, type CodeNodeOutputParam, type ConditionBranch, type ConditionRule } from '@stores/configStore'
+import { useConfigStore, type OrchestrationStep, type NodeOutputRef, type NodeInput, type CodeNodeInput, type CodeNodeOutputParam, type ConditionBranch, type ConditionRule, type UserInputParam } from '@stores/configStore'
 import type { FlowNode, FlowEdge } from './FlowOrchestrationWorkspace.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import PackageJsonSelector from '@components/PackageJsonSelector.vue'
 import NodeInputConfig from './NodeInputConfig.vue'
 import CodeNodeInputConfig from './CodeNodeInputConfig.vue'
+import UserInputParamConfig from './UserInputParamConfig.vue'
 import ParamListContainer from './ParamListContainer.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import type { CustomCommand } from '@components/CustomCommandManager.vue'
@@ -76,7 +77,8 @@ const dialogTitle = computed(() => {
     version: $t('@FLOWNODE:版本管理'),
     confirm: $t('@FLOWNODE:用户确认'),
     code: $t('@FLOWNODE:代码节点'),
-    condition: $t('@FLOWNODE:条件')
+    condition: $t('@FLOWNODE:条件'),
+    user_input: $t('@FLOWNODE:用户输入')
   }
   const typeLabel = map[props.node.type] || props.node.type
   return `${base} - ${typeLabel}`
@@ -89,6 +91,7 @@ const visible = computed({
 })
 
 const codeInputRef = ref<InstanceType<typeof CodeNodeInputConfig> | null>(null)
+const userInputRef = ref<InstanceType<typeof UserInputParamConfig> | null>(null)
 
 // 表单数据
 const formData = ref<{
@@ -129,6 +132,9 @@ const formData = ref<{
 
   // 条件节点
   conditionBranches?: ConditionBranch[]
+
+  // 用户输入节点
+  userInputParams?: UserInputParam[]
 }>({})
 
 type NormalizedConditionBranch = Omit<ConditionBranch, 'isDefault'> & { isDefault: boolean }
@@ -318,7 +324,7 @@ const predecessorNodes = computed(() => {
         // 找到节点对象
         const predNode = allNodes.find(n => n.id === predId)
         // 只添加可输出结果的节点，排除开始节点
-        if (predNode && (predNode.type === 'command' || predNode.type === 'code') && predNode.data.config) {
+        if (predNode && (predNode.type === 'command' || predNode.type === 'code' || predNode.type === 'user_input') && predNode.data.config) {
           if (predNode.type === 'command' && (predNode.data.config as any)?.useTerminal === true) {
             continue
           }
@@ -358,6 +364,14 @@ function getNodeOutputOptions(node?: FlowNode) {
       .filter((k: string) => Boolean(k))
       .map((k: string) => ({ key: k, label: k }))
   }
+  if (node.type === 'user_input') {
+    const cfg: any = (node.data as any)?.config
+    const list = Array.isArray(cfg?.userInputParams) ? cfg.userInputParams : []
+    return list
+      .map((p: any) => String(p?.name || '').trim())
+      .filter((k: string) => Boolean(k))
+      .map((k: string) => ({ key: k, label: k }))
+  }
   return []
 }
 
@@ -368,6 +382,9 @@ function getNodeDisplayName(node: FlowNode): string {
   }
   if (node.type === 'code') {
     return node.data.label || $t('@FLOWNODE:代码节点')
+  }
+  if (node.type === 'user_input') {
+    return node.data.label || $t('@FLOWNODE:用户输入')
   }
   return node.data.label || node.id
 }
@@ -458,6 +475,12 @@ watch(() => props.node, (node) => {
     const branches = normalizeBranches((config as any)?.conditionBranches)
     formData.value = {
       conditionBranches: branches,
+      nodeName: (config as any)?.displayName || node.data.label || '',
+      enabled: node.data.enabled ?? true
+    }
+  } else if (node.type === 'user_input') {
+    formData.value = {
+      userInputParams: Array.isArray((config as any)?.userInputParams) ? (config as any).userInputParams : [],
       nodeName: (config as any)?.displayName || node.data.label || '',
       enabled: node.data.enabled ?? true
     }
@@ -693,6 +716,47 @@ function saveConfig() {
       conditionBranches: branches,
       enabled: formData.value.enabled ?? true
     }
+  } else if (props.node.type === 'user_input') {
+    const list = Array.isArray(formData.value.userInputParams) ? formData.value.userInputParams : []
+    const cleaned = list
+      .map((it: any) => ({
+        name: String(it?.name || '').trim(),
+        source: (it?.source === 'reference' ? 'reference' : 'manual') as 'reference' | 'manual',
+        required: Boolean(it?.required),
+        defaultValue: it?.defaultValue === undefined || it?.defaultValue === null ? '' : String(it.defaultValue),
+        ref: it?.ref ? { nodeId: String(it.ref.nodeId || ''), outputKey: String(it.ref.outputKey || 'stdout') } : undefined
+      }))
+      .filter((it: any) => Boolean(it.name))
+
+    const seen = new Set<string>()
+    const unique: UserInputParam[] = []
+    for (const it of cleaned) {
+      if (!it.name) continue
+      if (seen.has(it.name)) continue
+      seen.add(it.name)
+      unique.push(it)
+    }
+
+    for (const it of unique) {
+      if (!it.required) continue
+      if (it.source === 'reference') {
+        const nodeId = String(it?.ref?.nodeId || '').trim()
+        const key = String(it?.ref?.outputKey || '').trim()
+        if (!nodeId || !key) {
+          ElMessage.warning($t('@NODECFG:必填参数未选择引用输出', { name: it.name }))
+          return
+        }
+      }
+    }
+
+    config = {
+      id: props.node.data.config?.id || generateId(),
+      nodeId: props.node.id,
+      type: 'user_input',
+      displayName: formData.value.nodeName?.trim() || undefined,
+      userInputParams: unique,
+      enabled: formData.value.enabled ?? true
+    }
   }
   
   if (config) {
@@ -887,6 +951,23 @@ function saveConfig() {
           ref="codeInputRef"
           :model-value="formData.codeInputs || []"
           @update:model-value="(v) => (formData.codeInputs = v)"
+          :predecessor-nodes="predecessorNodes"
+          :title="undefined"
+          :addable="false"
+        />
+      </div>
+
+      <!-- 用户输入节点参数配置（节点级独立版块） -->
+      <div v-if="node?.type === 'user_input'" class="config-section">
+        <div class="section-title">
+          <el-icon><Link /></el-icon>
+          {{ $t('@NODECFG:输入配置') }}
+          <el-button type="primary" plain :icon="Plus" style="margin-left: auto;" @click="userInputRef?.addRow()" />
+        </div>
+        <UserInputParamConfig
+          ref="userInputRef"
+          :model-value="formData.userInputParams || []"
+          @update:model-value="(v) => (formData.userInputParams = v)"
           :predecessor-nodes="predecessorNodes"
           :title="undefined"
           :addable="false"

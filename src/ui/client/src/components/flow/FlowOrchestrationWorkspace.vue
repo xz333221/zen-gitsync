@@ -19,6 +19,7 @@ import VersionNode from './nodes/VersionNode.vue'
 import ConfirmNode from './nodes/ConfirmNode.vue'
 import CodeNode from './nodes/CodeNode.vue'
 import ConditionNode from './nodes/ConditionNode.vue'
+import UserInputNode from './nodes/UserInputNode.vue'
 import NodeContextMenu from './nodes/NodeContextMenu.vue'
 import NodeConfigPanel from './NodeConfigPanel.vue'
 import { $t } from '@/lang/static'
@@ -31,7 +32,7 @@ import '@vue-flow/controls/dist/style.css'
 // 定义节点数据类型
 export interface FlowNodeData {
   id: string
-  type: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition'
+  type: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition' | 'user_input'
   label: string
   config?: OrchestrationStep
   outputs?: Record<string, any>
@@ -84,6 +85,8 @@ function getNodeIcon(nodeType?: string): string {
       return '🚀'
     case 'condition':
       return '🔀'
+    case 'user_input':
+      return '⌨️'
     default:
       return ''
   }
@@ -183,7 +186,8 @@ const nodeTypes: NodeTypesObject = {
   version: markRaw(createWrappedNode(VersionNode)),
   confirm: markRaw(createWrappedNode(ConfirmNode)),
   code: markRaw(createWrappedNode(CodeNode)),
-  condition: markRaw(createWrappedNode(ConditionNode))
+  condition: markRaw(createWrappedNode(ConditionNode)),
+  user_input: markRaw(createWrappedNode(UserInputNode))
 } as unknown as NodeTypesObject
 
 const props = defineProps<{
@@ -289,14 +293,14 @@ async function duplicateOrchestration(orchestration: any) {
   }
 }
 
-function estimateNodeSize(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition') {
+function estimateNodeSize(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition' | 'user_input') {
   if (type === 'version') return { w: 250, h: 120 }
-  if (type === 'wait' || type === 'confirm') return { w: 200, h: 120 }
+  if (type === 'wait' || type === 'confirm' || type === 'user_input') return { w: 200, h: 120 }
   if (type === 'condition') return { w: 260, h: 160 }
   return { w: 220, h: 120 }
 }
 
-function getViewportCenterPosition(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition') {
+function getViewportCenterPosition(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition' | 'user_input') {
   const viewport = getViewport()
   const el = document.querySelector('.vue-flow-container') as HTMLElement | null
   const rect = el?.getBoundingClientRect()
@@ -400,7 +404,7 @@ function initializeFlow() {
 }
 
 // 添加节点
-function addNode(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition') {
+function addNode(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition' | 'user_input') {
   const id = generateNodeId(type)
   const labelMap = {
     command: t('@FLOWNODE:命令节点'),
@@ -408,7 +412,8 @@ function addNode(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'co
     version: t('@FLOWNODE:版本管理'),
     confirm: t('@FLOWNODE:用户确认'),
     code: t('@FLOWNODE:代码节点'),
-    condition: t('@FLOWNODE:条件')
+    condition: t('@FLOWNODE:条件'),
+    user_input: t('@FLOWNODE:用户输入')
   }
   const baseLabel = labelMap[type]
   const uniqueLabel = generateUniqueNodeLabel(type, baseLabel)
@@ -443,6 +448,12 @@ function addNode(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'co
                 }
               ]
             }
+          : type === 'user_input'
+            ? {
+                id,
+                type: 'user_input',
+                userInputParams: []
+              }
           : undefined
     }
   }
@@ -549,6 +560,8 @@ function getNodeLabel(step: OrchestrationStep): string {
     }
   } else if (step.type === 'confirm') {
     return t('@FLOWNODE:用户确认')
+  } else if (step.type === 'user_input') {
+    return t('@FLOWNODE:用户输入')
   } else if (step.type === 'code') {
     return t('@FLOWNODE:代码节点')
   }
@@ -1217,6 +1230,12 @@ onUnmounted(() => {
             <div class="tool-icon confirm">✋</div>
             <div class="tool-label">{{ t('@ORCH:用户确认') }}</div>
             <div class="tool-desc">{{ t('@ORCH:等待用户确认后继续') }}</div>
+          </div>
+
+          <div class="tool-item" @click="addNode('user_input')">
+            <div class="tool-icon confirm">⌨️</div>
+            <div class="tool-label">{{ t('@FLOWNODE:用户输入') }}</div>
+            <div class="tool-desc">{{ t('@UINPUT:执行到该节点暂停并等待输入') }}</div>
           </div>
         </div>
       </div>

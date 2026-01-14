@@ -4,6 +4,7 @@ import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor, Do
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
+import CommonDialog from '@components/CommonDialog.vue'
 import CustomCommandManager from '@components/CustomCommandManager.vue';
 import ProjectStartupButton from '@components/ProjectStartupButton.vue';
 import FlowOrchestrationWorkspace from '@components/flow/FlowOrchestrationWorkspace.vue';
@@ -15,6 +16,7 @@ import { useGitStore } from '@stores/gitStore';
 import { io, Socket } from 'socket.io-client';
 import Convert from 'ansi-to-html';
 import { replaceVariables } from '@/utils/commandParser';
+import { $t } from '@/lang/static'
 
 const configStore = useConfigStore();
 const gitStore = useGitStore();
@@ -371,6 +373,39 @@ let terminalConfirmResolve: ((value: boolean) => void) | null = null; // Promise
 const waitingForUserConfirm = ref(false); // 是否正在等待用户确认节点
 const waitingConfirmMessage = ref(''); // 确认消息
 let userConfirmResolve: ((value: boolean) => void) | null = null; // Promise resolve 函数
+
+// 用户输入节点等待状态
+const waitingForUserInput = ref(false)
+const waitingUserInputTitle = ref('')
+const userInputParams = ref<Array<{ name: string; required?: boolean }>>([])
+const userInputValues = ref<Record<string, string>>({})
+let userInputResolve: ((value: boolean) => void) | null = null
+
+const userInputDialogVisible = computed({
+  get: () => waitingForUserInput.value,
+  set: (v: boolean) => {
+    waitingForUserInput.value = v
+  }
+})
+
+function confirmUserInput() {
+  const params = Array.isArray(userInputParams.value) ? userInputParams.value : []
+  for (const p of params) {
+    if (!p?.required) continue
+    const v = userInputValues.value?.[p.name]
+    if (v === undefined || v === null || String(v).trim() === '') {
+      ElMessage.warning($t('@UINPUT:请输入必填参数的值', { name: p.name }))
+      return
+    }
+  }
+  if (userInputResolve) userInputResolve(true)
+}
+
+function cancelUserInput() {
+  if (userInputResolve) userInputResolve(false)
+  consoleRunning.value = false
+  orchestrationPaused.value = false
+}
 
 type ConsoleRecord = { 
   id: number; 
@@ -1615,6 +1650,72 @@ async function executeOrchestration(
         hasFailure = true;
         consoleRunning.value = false;
       }
+    } else if (step.type === 'user_input') {
+      stepLabel = '用户输入'
+      ElMessage.info(`[${i + 1}/${steps.length}] ${stepLabel}`)
+
+      const rec: ConsoleRecord = {
+        id: ++consoleIdCounter,
+        command: stepLabel,
+        success: true,
+        ts: new Date().toLocaleString(),
+        expanded: true,
+        stdout: $t('@UINPUT:等待用户输入...'),
+        stderr: ''
+      }
+      consoleHistory.value.unshift(rec)
+
+      const rawParams = Array.isArray((step as any)?.userInputParams) ? ((step as any).userInputParams as any[]) : []
+      const normalized = rawParams
+        .map((p) => ({
+          name: String(p?.name || '').trim(),
+          required: Boolean(p?.required),
+          source: p?.source === 'reference' ? 'reference' : 'manual',
+          defaultValue: p?.defaultValue === undefined || p?.defaultValue === null ? '' : String(p.defaultValue),
+          ref: p?.ref
+        }))
+        .filter((p) => Boolean(p.name))
+
+      const values: Record<string, string> = {}
+      for (const p of normalized) {
+        if (p.source === 'reference') {
+          const nodeId = String(p?.ref?.nodeId || '').trim()
+          const key = String(p?.ref?.outputKey || '').trim()
+          const v = nodeId && key ? (nodeOutputs?.[nodeId]?.[key] || '') : ''
+          values[p.name] = String(v ?? '')
+        } else {
+          values[p.name] = String(p.defaultValue ?? '')
+        }
+      }
+
+      waitingUserInputTitle.value = (step.displayName || '').trim() || $t('@UINPUT:用户输入节点')
+      userInputParams.value = normalized.map((p) => ({ name: p.name, required: p.required }))
+      userInputValues.value = values
+      waitingForUserInput.value = true
+
+      const ok = await new Promise<boolean>((resolve) => {
+        userInputResolve = resolve
+      })
+
+      waitingForUserInput.value = false
+      userInputResolve = null
+
+      if (!ok) {
+        rec.success = false
+        rec.stdout = $t('@UINPUT:用户取消执行')
+        ElMessage.warning($t('@UINPUT:用户取消执行'))
+        shouldContinue = false
+        hasFailure = true
+        consoleRunning.value = false
+      } else {
+        const out: Record<string, string> = {}
+        for (const p of normalized) {
+          out[p.name] = String(userInputValues.value?.[p.name] ?? '')
+        }
+        nodeOutputs[step.id] = { ...out }
+        if (step.nodeId) nodeOutputs[step.nodeId] = { ...out }
+        rec.stdout = Object.keys(out).length ? Object.keys(out).map((k) => `${k}=${out[k] ?? ''}`).join('\n') : $t('@UINPUT:无输入')
+      }
     }
     
     // 如果步骤执行失败，停止后续步骤
@@ -2501,28 +2602,29 @@ onUnmounted(() => {
                 </div>
                 <div class="step-content">
                   <div class="step-header">
-                    <span class="step-type-tag" :class="`type-${step.type}`">
-                      {{ step.type === 'command' ? '命令' : 
-                         step.type === 'wait' ? '等待' : 
-                         step.type === 'version' ? '版本' : step.type }}
-                    </span>
-                    <span v-if="step.useTerminal" class="step-terminal-tag" title="终端执行">
-                      <el-icon class="step-terminal-icon"><Monitor /></el-icon>
-                      终端
-                    </span>
-                    <span v-if="step.enabled === false" class="step-disabled-tag">已禁用</span>
-                  </div>
-                  <span class="step-name">
-                    {{ step.type === 'command' ? step.commandName : 
-                       step.type === 'wait' ? `${step.waitSeconds} 秒` : 
-                       step.type === 'version' ? (
-                         step.versionTarget === 'dependency' ? 
-                         `${step.dependencyName}` : 
-                         `${step.versionBump || 'patch'}`
-                       ) : step.type }}
+                  <span class="step-type-tag" :class="`type-${step.type}`">
+                    {{ step.type === 'command' ? '命令' : 
+                       step.type === 'wait' ? '等待' : 
+                       step.type === 'version' ? '版本' :
+                       step.type === 'user_input' ? '输入' : step.type }}
                   </span>
+                  <span v-if="step.useTerminal" class="step-terminal-tag" title="终端执行">
+                    <el-icon class="step-terminal-icon"><Monitor /></el-icon>
+                    终端
+                  </span>
+                  <span v-if="step.enabled === false" class="step-disabled-tag">已禁用</span>
                 </div>
+                <span class="step-name">
+                  {{ step.type === 'command' ? step.commandName : 
+                     step.type === 'wait' ? `${step.waitSeconds} 秒` : 
+                     step.type === 'version' ? (
+                       step.versionTarget === 'dependency' ? 
+                       `${step.dependencyName}` : 
+                       `${step.versionBump || 'patch'}`
+                      ) : step.type === 'user_input' ? (step.displayName || '用户输入') : step.type }}
+                </span>
               </div>
+            </div>
             </div>
             
             <!-- 终端命令等待确认提示 -->
@@ -2689,6 +2791,37 @@ onUnmounted(() => {
     @execute-orchestration="executeOrchestration"
     @execute-flow="executeFlow"
   />
+
+  <CommonDialog
+    v-model="userInputDialogVisible"
+    :title="waitingUserInputTitle"
+    size="small"
+    type="flex"
+    width="520px"
+    :append-to-body="true"
+    :close-on-click-modal="false"
+    :close-on-press-escape="false"
+    :show-footer="true"
+    :confirm-text="$t('@803A9:确定')"
+    :cancel-text="$t('@803A9:取消')"
+    @confirm="confirmUserInput"
+    @cancel="cancelUserInput"
+  >
+    <div class="user-input-dialog-content">
+      <div v-if="userInputParams.length === 0" class="user-input-empty">
+        {{ $t('@UINPUT:暂无输入参数') }}
+      </div>
+      <div v-else class="user-input-form">
+        <div v-for="p in userInputParams" :key="p.name" class="user-input-row">
+          <div class="user-input-label">
+            <span class="required" v-if="p.required">*</span>
+            {{ p.name }}
+          </div>
+          <el-input v-model="userInputValues[p.name]" :placeholder="p.name" clearable />
+        </div>
+      </div>
+    </div>
+  </CommonDialog>
 </template>
 
 <style lang="scss" scoped>
@@ -3752,6 +3885,44 @@ pre.stderr {
   padding: 1px 4px;
   border-radius: var(--radius-sm);
   align-self: flex-start;
+}
+
+.user-input-dialog-content {
+  padding: 8px 2px;
+}
+
+.user-input-empty {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 10px 0;
+}
+
+.user-input-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  max-height: 55vh;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.user-input-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.user-input-label {
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.2;
+  word-break: break-all;
+}
+
+.user-input-label .required {
+  color: var(--color-danger);
+  margin-right: 4px;
 }
 
 @keyframes pulse-ring {

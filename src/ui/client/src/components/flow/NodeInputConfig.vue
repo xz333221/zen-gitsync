@@ -112,6 +112,14 @@ function getNodeOutputOptions(node: FlowNode) {
       .filter((k: string) => Boolean(k))
       .map((k: string) => ({ key: k, label: k }))
   }
+  if (node.type === 'user_input') {
+    const cfg: any = (node.data as any)?.config
+    const list = Array.isArray(cfg?.userInputParams) ? cfg.userInputParams : []
+    return list
+      .map((p: any) => String(p?.name || '').trim())
+      .filter((k: string) => Boolean(k))
+      .map((k: string) => ({ key: k, label: k }))
+  }
   return []
 }
 

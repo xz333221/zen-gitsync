@@ -1,26 +1,68 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { CodeNodeInput, NodeOutputRef } from '@stores/configStore'
+import { Link } from '@element-plus/icons-vue'
+import type { UserInputParam } from '@stores/configStore'
 import type { FlowNode } from './FlowOrchestrationWorkspace.vue'
 import ParamListContainer from './ParamListContainer.vue'
 import { $t } from '@/lang/static'
 
 const props = defineProps<{
-  modelValue: CodeNodeInput[]
+  modelValue: UserInputParam[]
   predecessorNodes?: FlowNode[]
   title?: string | undefined
   addable?: boolean
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: CodeNodeInput[]): void
+  (e: 'update:modelValue', value: UserInputParam[]): void
 }>()
 
-const inputs = ref<CodeNodeInput[]>([])
+const params = ref<UserInputParam[]>([])
 
-watch(() => props.modelValue, (val) => {
-  inputs.value = Array.isArray(val) ? [...val] : []
-}, { immediate: true, deep: true })
+watch(
+  () => props.modelValue,
+  (val) => {
+    params.value = Array.isArray(val) ? [...val] : []
+  },
+  { immediate: true, deep: true }
+)
+
+function createDefaultRow(): UserInputParam {
+  return {
+    name: '',
+    source: 'manual',
+    defaultValue: '',
+    required: false
+  }
+}
+
+function addRow() {
+  const updated = [...params.value, createDefaultRow()]
+  params.value = updated
+  emit('update:modelValue', updated)
+}
+
+defineExpose({ addRow })
+
+function updateRow(index: number, patch: Partial<UserInputParam>) {
+  if (!params.value[index]) return
+
+  const updated = [...params.value]
+  updated[index] = { ...updated[index], ...patch }
+
+  if (patch.source) {
+    if (patch.source === 'manual') {
+      updated[index].ref = undefined
+      if (updated[index].defaultValue === undefined) updated[index].defaultValue = ''
+    } else {
+      updated[index].defaultValue = undefined
+      if (!updated[index].ref) updated[index].ref = { nodeId: '', outputKey: 'stdout' }
+    }
+  }
+
+  params.value = updated
+  emit('update:modelValue', updated)
+}
 
 function getNodeDisplayName(node: FlowNode): string {
   if (node.type === 'command') {
@@ -28,6 +70,9 @@ function getNodeDisplayName(node: FlowNode): string {
   }
   if (node.type === 'code') {
     return (node.data.config as any)?.displayName || node.data.label || $t('@FLOWNODE:代码节点')
+  }
+  if (node.type === 'user_input') {
+    return (node.data.config as any)?.displayName || node.data.label || $t('@FLOWNODE:用户输入')
   }
   return node.data.label || node.id
 }
@@ -63,7 +108,7 @@ function getNodeOutputOptions(node?: FlowNode) {
 const treeSelectOptions = computed(() => {
   if (!props.predecessorNodes || props.predecessorNodes.length === 0) return []
 
-  return props.predecessorNodes.map(node => ({
+  return props.predecessorNodes.map((node) => ({
     value: node.id,
     label: getNodeDisplayName(node),
     children: getNodeOutputOptions(node).map((opt: any) => ({
@@ -73,100 +118,67 @@ const treeSelectOptions = computed(() => {
   }))
 })
 
-function createDefaultRow(): CodeNodeInput {
-  return { name: '', source: 'reference', required: false, ref: { nodeId: '', outputKey: 'stdout' } }
-}
-
-function addRow() {
-  const updated = [...inputs.value, createDefaultRow()]
-  inputs.value = updated
-  emit('update:modelValue', updated)
-}
-
-defineExpose({ addRow })
-
-function updateRow(index: number, patch: Partial<CodeNodeInput>) {
-  if (!inputs.value[index]) return
-
-  const updated = [...inputs.value]
-  updated[index] = { ...updated[index], ...patch }
-
-  // 切换来源时清理对应字段
-  if (patch.source) {
-    if (patch.source === 'manual') {
-      updated[index].ref = undefined
-      if (updated[index].manualValue === undefined) updated[index].manualValue = ''
-    } else {
-      updated[index].manualValue = undefined
-      if (!updated[index].ref) updated[index].ref = { nodeId: '', outputKey: 'stdout' }
-    }
-  }
-
-  inputs.value = updated
-  emit('update:modelValue', updated)
-}
-
 function handleReferenceSelect(index: number, value: string) {
   if (!value) return
   const [nodeId, outputKey] = value.split('::')
-  const ref: NodeOutputRef = { nodeId, outputKey }
-  updateRow(index, { ref })
+  updateRow(index, { ref: { nodeId, outputKey } })
 }
 
-function getCurrentReferenceValue(input: CodeNodeInput): string {
-  if (input.ref?.nodeId && input.ref?.outputKey) {
-    return `${input.ref.nodeId}::${input.ref.outputKey}`
+function getCurrentReferenceValue(row: UserInputParam): string {
+  if (row.ref?.nodeId && row.ref?.outputKey) {
+    return `${row.ref.nodeId}::${row.ref.outputKey}`
   }
   return ''
 }
 </script>
 
 <template>
-  <div class="code-node-input-config">
+  <div class="user-input-param-config">
     <ParamListContainer
-      :model-value="inputs"
+      :model-value="params"
       :title="title"
       :addable="addable !== false"
       :removable="true"
       :min-items="0"
       :create-item="createDefaultRow"
-      @update:modelValue="(v: CodeNodeInput[]) => emit('update:modelValue', v)"
+      @update:modelValue="(v: UserInputParam[]) => emit('update:modelValue', v)"
     >
       <template #empty>
-        {{ $t('@NODECFG:暂无输入参数') }}
+        {{ $t('@UINPUT:暂无输入参数') }}
       </template>
 
       <template #row="{ item: row, index: idx }">
         <div class="input-row">
           <div class="input-field name-field">
-            <label class="field-label">{{ $t('@NODECFG:参数名') }}</label>
+            <label class="field-label">{{ $t('@UINPUT:参数名') }}</label>
             <el-input
               v-model="row.name"
-              :placeholder="$t('@NODECFG:参数名')"
+              :placeholder="$t('@UINPUT:参数名')"
               @update:model-value="(v: string) => updateRow(idx, { name: v })"
             />
           </div>
 
           <div class="input-field type-field">
-            <label class="field-label">{{ $t('@NODECFG:参数值') }}</label>
+            <label class="field-label">{{ $t('@UINPUT:类型') }}</label>
             <el-select
               v-model="row.source"
-              style="width: 110px"
+              style="width: 130px"
               @update:model-value="(v: 'reference' | 'manual') => updateRow(idx, { source: v })"
             >
-              <el-option :label="$t('@NODECFG:引用')" value="reference" :disabled="!predecessorNodes || predecessorNodes.length === 0" />
-              <el-option :label="$t('@NODECFG:手动')" value="manual" />
+              <el-option :label="$t('@UINPUT:手动输入')" value="manual" />
+              <el-option :label="$t('@UINPUT:引用')" value="reference" :disabled="!props.predecessorNodes || props.predecessorNodes.length === 0" />
             </el-select>
           </div>
 
           <div class="input-field value-field">
-            <label class="field-label">{{ $t('@NODECFG:值') }}</label>
+            <label class="field-label">{{ row.source === 'manual' ? $t('@UINPUT:默认值') : $t('@UINPUT:引用输出') }}</label>
 
             <el-input
               v-if="row.source === 'manual'"
-              v-model="row.manualValue"
-              :placeholder="$t('@NODECFG:请输入')"
-              @update:model-value="(v: string) => updateRow(idx, { manualValue: v })"
+              v-model="row.defaultValue"
+              :placeholder="$t('@UINPUT:默认值')"
+              clearable
+              @update:model-value="(v: string) => updateRow(idx, { defaultValue: v })"
             />
 
             <el-tree-select
@@ -179,51 +191,40 @@ function getCurrentReferenceValue(input: CodeNodeInput): string {
               check-strictly
               :render-after-expand="false"
               @update:model-value="(v: string) => handleReferenceSelect(idx, v)"
-            />
+            >
+              <template #default="{ data }">
+                <span class="tree-node-label">
+                  <el-icon v-if="!data.children"><Link /></el-icon>
+                  {{ data.label }}
+                </span>
+              </template>
+            </el-tree-select>
           </div>
 
           <div class="input-field action-field">
             <label class="field-label">{{ $t('@NODEINPUT:必填') }}</label>
-            <el-switch
-              :model-value="Boolean(row.required)"
-              @update:model-value="(v: boolean) => updateRow(idx, { required: v })"
-            />
+            <el-switch :model-value="Boolean(row.required)" @update:model-value="(v: boolean) => updateRow(idx, { required: v })" />
           </div>
         </div>
+      </template>
+
+      <template #actions>
+        <el-button v-if="addable !== false" type="primary" plain size="small" @click="addRow">
+          {{ $t('@UINPUT:添加参数') }}
+        </el-button>
       </template>
     </ParamListContainer>
   </div>
 </template>
 
 <style scoped lang="scss">
-.code-node-input-config {
+.user-input-param-config {
   width: 100%;
-}
-
-.sub-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.empty-tip {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-base);
-  padding: 12px 0;
-}
-
-.input-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
 }
 
 .input-row {
   display: grid;
-  grid-template-columns: 220px 130px 1fr 90px;
+  grid-template-columns: 220px 150px 1fr 90px;
   gap: var(--spacing-md);
   align-items: end;
 }
@@ -242,5 +243,16 @@ function getCurrentReferenceValue(input: CodeNodeInput): string {
 .action-field {
   display: flex;
   justify-content: flex-end;
+}
+
+.tree-node-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .el-icon {
+    color: var(--color-primary);
+    font-size: 14px;
+  }
 }
 </style>

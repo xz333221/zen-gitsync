@@ -29,6 +29,16 @@ export interface CodeNodeInput {
   ref?: NodeOutputRef
 }
 
+export interface UserInputParam {
+  name: string
+  source: 'reference' | 'manual'
+  required?: boolean     // 是否必填（默认 false）
+  // 手动输入模式：默认值
+  defaultValue?: string
+  // 引用模式
+  ref?: NodeOutputRef
+}
+
 export interface CodeNodeOutputParam {
   key: string
   type?: 'String' | 'Number' | 'Boolean' | 'JSON'
@@ -67,7 +77,7 @@ export interface ConditionBranch {
 export interface OrchestrationStep {
   id: string
   nodeId?: string  // 流程图中的节点 ID（用于节点间引用）
-  type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition'
+  type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition' | 'user_input'
   displayName?: string  // 节点自定义名称（用于显示与引用）
   enabled?: boolean  // 是否启用该步骤（默认 true），禁用的步骤不会执行
   useTerminal?: boolean  // 是否在新终端窗口中执行（仅对 command 类型有效）
@@ -101,6 +111,9 @@ export interface OrchestrationStep {
 
   // 对于 condition 类型
   conditionBranches?: ConditionBranch[]
+
+  // 对于 user_input 类型
+  userInputParams?: UserInputParam[]
 }
 
 export const useConfigStore = defineStore('config', () => {

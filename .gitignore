@@ -23,7 +23,6 @@ pnpm-debug.log*
 .idea
 .vscode
 .qoder
-.windsurf
 
 *.suo
 *.ntvs*

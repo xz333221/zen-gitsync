@@ -6,7 +6,7 @@ import { Handle, Position } from '@vue-flow/core'
 const props = withDefaults(defineProps<{
   id: string
   nodeId: string
-  nodeType?: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition'
+  nodeType?: 'start' | 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition' | 'user_input'
   title?: string
   icon?: string
   enabled?: boolean
@@ -20,12 +20,12 @@ const props = withDefaults(defineProps<{
   selected: false,
   deletable: true,
   showDeleteOnSelected: false,
-  nodeType: 'command',
-  sourceHandleIds: () => ['source']
+  nodeType: 'command'
 })
 
 const hasHeader = computed(() => Boolean((props.title && String(props.title).trim()) || (props.icon && String(props.icon).trim())))
 const conditionHandleYOffset = computed(() => (hasHeader.value ? 16 : 0))
+const safeSourceHandleIds = computed(() => (props.sourceHandleIds && props.sourceHandleIds.length ? props.sourceHandleIds : ['source']))
 
 const emit = defineEmits<{
   (e: 'delete', nodeId: string): void
@@ -85,13 +85,13 @@ const emit = defineEmits<{
     <!-- 输出连接点（右侧） -->
     <template v-if="nodeType === 'condition'">
       <Handle
-        v-for="hid in sourceHandleIds"
+        v-for="hid in safeSourceHandleIds"
         :key="hid"
         :id="hid"
         type="source"
         :position="Position.Right"
         class="flow-node-handle handle-right"
-        :style="{ top: `calc(50% + ${conditionHandleYOffset}px + ${(sourceHandleIds.indexOf(hid) - (sourceHandleIds.length - 1) / 2) * 18}px)` }"
+        :style="{ top: `calc(50% + ${conditionHandleYOffset}px + ${(safeSourceHandleIds.indexOf(hid) - (safeSourceHandleIds.length - 1) / 2) * 18}px)` }"
       />
     </template>
     <Handle
