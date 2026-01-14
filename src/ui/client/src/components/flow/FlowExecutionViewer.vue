@@ -17,6 +17,7 @@ import VersionNode from './nodes/VersionNode.vue'
 import ConfirmNode from './nodes/ConfirmNode.vue'
 import CodeNode from './nodes/CodeNode.vue'
 import ConditionNode from './nodes/ConditionNode.vue'
+import UserInputNode from './nodes/UserInputNode.vue'
 
 import type { FlowData, FlowNodeData, FlowNode, FlowEdge } from './FlowOrchestrationWorkspace.vue'
 import { $t } from '@/lang/static'
@@ -37,6 +38,8 @@ function getNodeIcon(nodeType?: string): string {
       return '🚀'
     case 'condition':
       return '🔀'
+    case 'user_input':
+      return '⌨️'
     default:
       return ''
   }
@@ -125,7 +128,8 @@ const nodeTypes: NodeTypesObject = {
   version: markRaw(createWrappedNode(VersionNode)),
   confirm: markRaw(createWrappedNode(ConfirmNode)),
   code: markRaw(createWrappedNode(CodeNode)),
-  condition: markRaw(createWrappedNode(ConditionNode))
+  condition: markRaw(createWrappedNode(ConditionNode)),
+  user_input: markRaw(createWrappedNode(UserInputNode))
 } as unknown as NodeTypesObject
 
 const props = defineProps({
