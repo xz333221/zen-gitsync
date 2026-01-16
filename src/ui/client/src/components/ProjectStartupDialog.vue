@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, RefreshRight, VideoPlay } from '@element-plus/icons-vue'
@@ -71,6 +71,70 @@ const orchestrationById = computed(() => {
   }
   return map
 })
+
+const afterQuickPushAction = computed({
+  get: () => configStore.afterQuickPushAction,
+  set: (v: { enabled: boolean; type: 'command' | 'workflow'; refId: string }) => {
+    configStore.saveAfterQuickPushAction(v)
+  }
+})
+
+const afterActionEnabled = computed({
+  get: () => Boolean(afterQuickPushAction.value?.enabled),
+  set: async (v: boolean) => {
+    afterActionSaving.value = true
+    try {
+      await configStore.saveAfterQuickPushAction({
+        enabled: v,
+        type: afterActionType.value,
+        refId: afterActionRefId.value
+      })
+    } finally {
+      afterActionSaving.value = false
+    }
+  }
+})
+
+const afterActionType = computed<'command' | 'workflow'>({
+  get: () => (afterQuickPushAction.value?.type === 'workflow' ? 'workflow' : 'command'),
+  set: async (v) => {
+    afterActionSaving.value = true
+    try {
+      afterActionRefId.value = ''
+      await configStore.saveAfterQuickPushAction({
+        enabled: afterActionEnabled.value,
+        type: v,
+        refId: ''
+      })
+    } finally {
+      afterActionSaving.value = false
+    }
+  }
+})
+
+const afterActionRefId = ref<string>('')
+const afterActionSaving = ref(false)
+
+watch(
+  () => configStore.afterQuickPushAction,
+  (v: { enabled: boolean; type: 'command' | 'workflow'; refId: string } | any) => {
+    afterActionRefId.value = String(v?.refId || '')
+  },
+  { immediate: true }
+)
+
+async function saveAfterActionRefId(refId: string) {
+  afterActionSaving.value = true
+  try {
+    await configStore.saveAfterQuickPushAction({
+      enabled: afterActionEnabled.value,
+      type: afterActionType.value,
+      refId
+    })
+  } finally {
+    afterActionSaving.value = false
+  }
+}
 
 const displayItems = computed(() => {
   return items.value
@@ -198,6 +262,44 @@ function executeItem(item: any) {
     :height-offset="'140px'"
   >
     <div class="project-startup-dialog">
+      <div class="after-quick-push">
+        <div class="after-quick-push__header">
+          <div class="after-quick-push__title">{{ t('@PSTART:一键推送成功后执行') }}</div>
+          <div class="after-quick-push__switch">
+            <span class="after-quick-push__label">{{ t('@PSTART:启用') }}</span>
+            <el-switch v-model="afterActionEnabled" size="small" :loading="afterActionSaving" />
+          </div>
+        </div>
+
+        <div class="after-quick-push__row">
+          <el-radio-group v-model="afterActionType" size="small" :disabled="afterActionSaving">
+            <el-radio-button label="command">{{ t('@PSTART:命令') }}</el-radio-button>
+            <el-radio-button label="workflow">{{ t('@PSTART:工作流') }}</el-radio-button>
+          </el-radio-group>
+
+          <el-select
+            v-model="afterActionRefId"
+            class="after-quick-push__select"
+            :placeholder="afterActionType === 'workflow' ? t('@PSTART:选择一个工作流') : t('@PSTART:选择一个自定义命令')"
+            filterable
+            clearable
+            :disabled="afterActionSaving"
+            @change="(v: any) => saveAfterActionRefId(String(v || ''))"
+          >
+            <template v-if="afterActionType === 'workflow'">
+              <el-option v-for="wf in orchestrations" :key="wf.id" :label="wf.name" :value="wf.id" />
+            </template>
+            <template v-else>
+              <el-option v-for="cmd in customCommands" :key="cmd.id" :label="cmd.name" :value="cmd.id" />
+            </template>
+          </el-select>
+        </div>
+
+        <div class="after-quick-push__hint">
+          {{ t('@PSTART:仅在一键推送成功后触发，不影响主流程') }}
+        </div>
+      </div>
+
       <div class="startup-toolbar">
         <div class="startup-toolbar__left">
           <div class="startup-toolbar__title">{{ t('@PSTART:启动项列表') }}</div>
@@ -346,6 +448,53 @@ function executeItem(item: any) {
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+}
+
+.after-quick-push {
+  padding: 10px 12px;
+  border: 1px solid var(--border-component);
+  border-radius: 10px;
+  background: var(--bg-panel);
+}
+
+.after-quick-push__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.after-quick-push__title {
+  font-weight: 700;
+  color: var(--text-title);
+}
+
+.after-quick-push__switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.after-quick-push__label {
+  font-size: 12px;
+}
+
+.after-quick-push__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.after-quick-push__select {
+  flex: 1;
+}
+
+.after-quick-push__hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .startup-toolbar {

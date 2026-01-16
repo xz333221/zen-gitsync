@@ -69,6 +69,11 @@ export default {
   '@2E184:当前分支没有上游分支': 'Current branch has no upstream branch',
   '@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库': 'One-click: Stage all changes → Commit → Push to remote',
   // @2E184: file end
+
+  // @PSTART: Project startup
+  '@PSTART:一键推送成功后执行': 'Run after one-click push succeeds',
+  '@PSTART:启用': 'Enable',
+  '@PSTART:仅在一键推送成功后触发，不影响主流程': 'Only triggers after one-click push succeeds and does not affect the main flow',
   // @29974: file path: components\buttons\StageButton.vue
   '@29974:没有需要暂存的更改': 'There are no changes that need to be staged',
   '@29974:暂存': 'Stage',

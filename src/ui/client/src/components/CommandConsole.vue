@@ -32,6 +32,12 @@ function getBackendPort() {
   return parseInt(currentPort, 10);
 }
 
+function handleAfterQuickPushSuccessEvent() {
+  runAfterQuickPushAction().catch((e: any) => {
+    ElMessage.error(e?.message || '提交后启动项执行失败')
+  })
+}
+
 async function runWorkflow(wf: any) {
   const flowData = wf?.flowData
   const meta = { id: String(wf?.id || '').trim(), name: String(wf?.name || '').trim() }
@@ -543,6 +549,19 @@ async function runStartupWorkflow(orchestrationId: string) {
     return;
   }
   await runWorkflow(wf)
+}
+
+async function runAfterQuickPushAction() {
+  await configStore.loadConfig(false)
+  const action = configStore.afterQuickPushAction
+  if (!action?.enabled) return
+  if (!action?.refId) return
+
+  if (action.type === 'workflow') {
+    await runStartupWorkflow(action.refId)
+  } else {
+    await runStartupCommandById(action.refId)
+  }
 }
 
 async function autoRunProjectStartupItems() {
@@ -2348,12 +2367,14 @@ onMounted(async () => {
 
   document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('focus', handleWindowFocus);
+  window.addEventListener('zen-gitsync:after-quick-push-success', handleAfterQuickPushSuccessEvent as any);
 });
 
 // Socket连接断开在onMounted中的onUnmounted回调中处理
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   window.removeEventListener('focus', handleWindowFocus);
+  window.removeEventListener('zen-gitsync:after-quick-push-success', handleAfterQuickPushSuccessEvent as any);
   if (socket.value) {
     socket.value.disconnect();
     socket.value = null;

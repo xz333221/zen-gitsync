@@ -639,4 +639,31 @@ export function registerConfigRoutes({
       res.status(500).json({ success: false, error: error.message })
     }
   })
+
+  // 保存“一键推送成功后启动项”
+  app.post('/api/config/save-after-quick-push-action', express.json(), async (req, res) => {
+    try {
+      const { afterQuickPushAction } = req.body
+
+      if (!afterQuickPushAction || typeof afterQuickPushAction !== 'object') {
+        return res.status(400).json({ success: false, error: '缺少必要参数' })
+      }
+
+      const enabled = Boolean(afterQuickPushAction.enabled)
+      const type = afterQuickPushAction.type === 'workflow' ? 'workflow' : 'command'
+      const refId = String(afterQuickPushAction.refId || '').trim()
+
+      const config = await configManager.loadConfig()
+      config.afterQuickPushAction = {
+        enabled,
+        type,
+        refId
+      }
+      await configManager.saveConfig(config)
+
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
 }

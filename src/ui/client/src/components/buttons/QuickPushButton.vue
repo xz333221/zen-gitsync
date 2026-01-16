@@ -113,6 +113,11 @@ async function handleQuickPush() {
     });
     
     if (pushResult) {
+      try {
+        window.dispatchEvent(new CustomEvent('zen-gitsync:after-quick-push-success'));
+      } catch {
+        // ignore
+      }
       emit("clearFields");
     }
     

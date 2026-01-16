@@ -128,6 +128,11 @@ export const useConfigStore = defineStore('config', () => {
   const orchestrations = ref<Array<{id: string, name: string, description?: string, steps: OrchestrationStep[]}>>([])
   const startupItems = ref<Array<{id: string, type: 'command' | 'workflow', refId: string, createdAt: number, enabled: boolean}>>([])
   const startupAutoRun = ref(false)
+  const afterQuickPushAction = ref<{ enabled: boolean; type: 'command' | 'workflow'; refId: string }>({
+    enabled: false,
+    type: 'command',
+    refId: ''
+  })
   const isLoading = ref(false)
   const isLoaded = ref(false)
   // 当前工作目录
@@ -177,6 +182,7 @@ export const useConfigStore = defineStore('config', () => {
       orchestrations: orchestrations.value,
       startupItems: startupItems.value,
       startupAutoRun: startupAutoRun.value,
+      afterQuickPushAction: afterQuickPushAction.value,
       currentDirectory: currentDirectory.value
     }
   })
@@ -213,6 +219,11 @@ export const useConfigStore = defineStore('config', () => {
         enabled: typeof it?.enabled === 'boolean' ? it.enabled : true
       })).filter((it: any) => it.id && it.refId)
       startupAutoRun.value = configData.startupAutoRun || false
+      afterQuickPushAction.value = {
+        enabled: Boolean(configData?.afterQuickPushAction?.enabled),
+        type: configData?.afterQuickPushAction?.type === 'workflow' ? 'workflow' : 'command',
+        refId: String(configData?.afterQuickPushAction?.refId || '').trim()
+      }
       // 若后端返回当前目录，更新
       if (configData.currentDirectory) {
         currentDirectory.value = configData.currentDirectory
@@ -254,6 +265,40 @@ export const useConfigStore = defineStore('config', () => {
       }
     } catch (error) {
       ElMessage.error(`${$t('@D50BB:保存失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
+  async function saveAfterQuickPushAction(action: { enabled: boolean; type: 'command' | 'workflow'; refId: string }) {
+    try {
+      const response = await fetch('/api/config/save-after-quick-push-action', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          afterQuickPushAction: {
+            enabled: Boolean(action?.enabled),
+            type: action?.type === 'workflow' ? 'workflow' : 'command',
+            refId: String(action?.refId || '').trim()
+          }
+        })
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        afterQuickPushAction.value = {
+          enabled: Boolean(action?.enabled),
+          type: action?.type === 'workflow' ? 'workflow' : 'command',
+          refId: String(action?.refId || '').trim()
+        }
+        return true
+      } else {
+        ElMessage.error(`保存提交后启动项失败: ${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`保存提交后启动项失败: ${(error as Error).message}`)
       return false
     }
   }
@@ -724,6 +769,7 @@ export const useConfigStore = defineStore('config', () => {
     orchestrations,
     startupItems,
     startupAutoRun,
+    afterQuickPushAction,
     isLoading,
     isLoaded,
     currentDirectory,
@@ -749,6 +795,7 @@ export const useConfigStore = defineStore('config', () => {
     saveOrchestration,
     deleteOrchestration,
     updateOrchestration,
-    saveStartupItems
+    saveStartupItems,
+    saveAfterQuickPushAction
   }
 }) 
