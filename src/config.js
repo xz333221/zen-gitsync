@@ -10,10 +10,28 @@ const configPath = path.join(os.homedir(), '.git-commit-tool.json');
 const defaultConfig = {
   defaultCommitMessage: "submit",
   descriptionTemplates: [],  // 添加描述模板数组
+  scopeTemplates: [],
+  messageTemplates: [],
+  commandTemplates: [
+    'echo "{{cmd}}"',
+    'npm run dev',
+    'npm run build',
+    'git status',
+    'git add .',
+    'git commit -m "{{message}}" --no-verify',
+    'git push',
+  ],
   lockedFiles: [],  // 添加锁定文件数组
   customCommands: [],  // 添加自定义命令数组
+  orchestrations: [],
   startupItems: [],  // 添加项目启动项数组
-  startupAutoRun: false  // 添加启动项自动执行开关
+  startupAutoRun: false,  // 添加启动项自动执行开关
+  afterQuickPushAction: {
+    enabled: false,
+    type: 'command',
+    refId: ''
+  },
+  currentDirectory: ''
 };
 
 // 规范化项目路径作为配置键
@@ -48,6 +66,20 @@ async function writeRawConfigFile(obj) {
   await fs.writeFile(configPath, JSON.stringify(obj, null, 2), 'utf-8');
 }
 
+async function backupConfigFileIfExists() {
+  try {
+    await fs.access(configPath);
+  } catch (_) {
+    return;
+  }
+
+  try {
+    await fs.copyFile(configPath, `${configPath}.bak`);
+  } catch (_) {
+    // 备份失败不阻断主流程
+  }
+}
+
 // 更安全的读取，区分“文件不存在”和“解析失败”
 async function safeLoadRaw() {
   try {
@@ -79,6 +111,16 @@ async function loadConfig() {
 
 // 异步保存配置
 async function saveConfig(config) {
+  if(!config || typeof config !== 'object' || Array.isArray(config)){
+    console.warn(chalk.yellow('⚠️ 配置文件为空，已取消写入以避免覆盖。')); 
+    console.warn(chalk.gray(`文件: ${configPath}`));
+    return;
+  }
+  if (Object.keys(config).length === 0) {
+    console.warn(chalk.yellow('⚠️ 配置文件为空，已取消写入以避免覆盖。')); 
+    console.warn(chalk.gray(`文件: ${configPath}`));
+    return;
+  }
   const key = getCurrentProjectKey();
   const state = await safeLoadRaw();
   if (!state.ok) {
@@ -95,7 +137,9 @@ async function saveConfig(config) {
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
-  raw.projects[key] = { ...defaultConfig, ...config };
+  const existingProjectConfig = (raw.projects[key] && typeof raw.projects[key] === 'object') ? raw.projects[key] : {};
+  raw.projects[key] = { ...defaultConfig, ...existingProjectConfig, ...config };
+  await backupConfigFileIfExists();
   await writeRawConfigFile(raw);
 }
 // 文件锁定管理函数
