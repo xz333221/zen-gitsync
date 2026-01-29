@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import 'monaco-editor/min/vs/editor/editor.main.css'
+
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
+import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
+import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 
 const props = withDefaults(
   defineProps<{
@@ -29,59 +36,26 @@ let themeObserver: MutationObserver | null = null
 
 let monacoLoaderPromise: Promise<any> | null = null
 
-function loadScript(src: string) {
-  return new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null
-    if (existing) {
-      if ((existing as any)._loaded) return resolve()
-      existing.addEventListener('load', () => resolve())
-      existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)))
-      return
-    }
-
-    const s = document.createElement('script')
-    s.src = src
-    s.async = true
-    s.addEventListener('load', () => {
-      ;(s as any)._loaded = true
-      resolve()
-    })
-    s.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)))
-    document.head.appendChild(s)
-  })
-}
-
-function loadCss(href: string) {
-  const existing = document.querySelector(`link[href="${href}"]`) as HTMLLinkElement | null
-  if (existing) return
-  const link = document.createElement('link')
-  link.rel = 'stylesheet'
-  link.href = href
-  document.head.appendChild(link)
-}
-
 async function ensureMonacoLoaded() {
   if (monaco) return monaco
   if (monacoLoaderPromise) return monacoLoaderPromise
 
-  const version = '0.55.1'
-  const base = `https://cdn.jsdelivr.net/npm/monaco-editor@${version}/min/vs`
-  const cssHref = `${base}/editor/editor.main.min.css`
-  const loaderSrc = `${base}/loader.js`
-
   monacoLoaderPromise = (async () => {
-    loadCss(cssHref)
-    await loadScript(loaderSrc)
+    const w = self as any
+    if (!w.MonacoEnvironment) {
+      w.MonacoEnvironment = {
+        getWorker(_workerId: string, label: string) {
+          if (label === 'json') return new JsonWorker()
+          if (label === 'css' || label === 'scss' || label === 'less') return new CssWorker()
+          if (label === 'html' || label === 'handlebars' || label === 'razor') return new HtmlWorker()
+          if (label === 'typescript' || label === 'javascript') return new TsWorker()
+          return new EditorWorker()
+        },
+      }
+    }
 
-    const w = window as any
-    if (!w.require) throw new Error('Monaco loader not found')
-
-    w.require.config({ paths: { vs: base } })
-    await new Promise<void>((resolve, reject) => {
-      w.require(['vs/editor/editor.main'], () => resolve(), reject)
-    })
-
-    monaco = w.monaco
+    const m = await import('monaco-editor')
+    monaco = m
     return monaco
   })()
 
