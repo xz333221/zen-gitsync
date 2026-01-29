@@ -469,10 +469,9 @@ function selectDirectoryDialog(directoryData: any) {
         ),
       ]),
     ]),
-    $t('@CMD01:浏览并选择目录'),
     {
+      title: $t('@CMD01:浏览并选择目录'),
       confirmButtonText: $t('@CMD01:确定'),
-      zIndex: 3000010,
       customClass: "directory-browser-dialog",
       modalClass: "directory-browser-overlay",
       callback: (action: string) => {
