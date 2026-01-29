@@ -472,7 +472,9 @@ function selectDirectoryDialog(directoryData: any) {
     $t('@CMD01:浏览并选择目录'),
     {
       confirmButtonText: $t('@CMD01:确定'),
+      zIndex: 3000010,
       customClass: "directory-browser-dialog",
+      modalClass: "directory-browser-overlay",
       callback: (action: string) => {
         if (action === "confirm") {
           newCommand.value.directory = directoryData.path;
@@ -949,8 +951,12 @@ defineExpose({
 }
 
 /* 目录浏览器全局样式 */
+
+.el-overlay.directory-browser-overlay {
+  z-index: 3000010 !important;
+}
+
 .directory-browser-dialog {
-  z-index: 3001 !important;
   .directory-browser {
     width: 100%;
     height: 400px;
