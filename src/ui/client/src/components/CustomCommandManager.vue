@@ -2,9 +2,8 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch, h, reactive, defineComponent } from 'vue'
 import { ElInput, ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Delete, VideoPlay, Folder } from '@element-plus/icons-vue'
+import { Edit, Delete, VideoPlay, Folder, CopyDocument } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
-import CommonDialog from '@components/CommonDialog.vue'
 import IconButton from '@components/IconButton.vue'
 import TemplateManager from '@components/TemplateManager.vue'
 
@@ -22,6 +21,45 @@ export interface CustomCommand {
   }>
 }
 
+function buildDuplicateName(originalName: string) {
+  const base = `${originalName}(copy)`
+  const list = Array.isArray(commands.value) ? commands.value : []
+  const exists = (name: string) => list.some((c: any) => String(c?.name || '') === name)
+  if (!exists(base)) return base
+
+  let i = 2
+  while (i < 1000) {
+    const next = `${originalName}(copy${i})`
+    if (!exists(next)) return next
+    i++
+  }
+  return `${base}-${Date.now()}`
+}
+
+async function duplicateCommand(command: CustomCommand) {
+  try {
+    const copiedParams = normalizeCommandParams(command)
+    const payload: CustomCommand = {
+      name: buildDuplicateName(String(command?.name || '').trim() || $t('@CMD01:命令名称')),
+      description: String(command?.description || ''),
+      directory: String(command?.directory || ''),
+      command: String(command?.command || ''),
+      params: JSON.parse(JSON.stringify(copiedParams || []))
+    }
+
+    if (!payload.directory || !payload.directory.trim()) {
+      payload.directory = configStore.currentDirectory || ''
+    }
+
+    const ok = await configStore.saveCustomCommand(payload)
+    if (ok) {
+      // 保存成功提示由 store 统一处理
+    }
+  } catch (error) {
+    ElMessage.error(`${$t('@CMD01:保存命令失败: ')}${(error as Error).message}`)
+  }
+}
+
 export interface CustomCommandManagerEmits {
   (e: 'update:visible', value: boolean): void
   (e: 'execute-command', command: CustomCommand): void
@@ -29,6 +67,7 @@ export interface CustomCommandManagerEmits {
 
 const props = defineProps<{
   visible: boolean
+  fullscreen?: boolean
 }>()
 
 const emit = defineEmits<CustomCommandManagerEmits>()
@@ -152,7 +191,6 @@ const newCommand = ref<CustomCommand>({
 const isEditing = ref(false)
 const editingId = ref<string>('')
 const isSaving = ref(false)
-const activeCollapse = ref<string[]>([])
 
 // 计算属性：获取自定义命令列表
 const commands = computed(() => configStore.customCommands || [])
@@ -477,186 +515,201 @@ defineExpose({
 </script>
 
 <template>
-  <CommonDialog
+  <el-dialog
     v-model="dialogVisible"
     :title="$t('@CMD01:自定义命令管理')"
     :close-on-click-modal="false"
     :append-to-body="true"
-    custom-class="custom-command-dialog"
-    size="extra-large"
+    :modal-append-to-body="true"
+    :fullscreen="!!fullscreen"
+    :width="fullscreen ? '100vw' : '90%'"
+    :top="fullscreen ? '0' : '50px'"
+    :z-index="3000000"
+    modal-class="custom-command-overlay"
+    class="custom-command-dialog"
   >
     <div class="command-container">
-      <!-- 添加/编辑表单 -->
-      <el-collapse v-model="activeCollapse" class="command-form-collapse">
-        <el-collapse-item :title="isEditing ? $t('@CMD01:编辑命令') : $t('@CMD01:添加命令')" name="addCommand">
-          <div class="command-form">
-            <!-- 第一行：命令名称和描述 -->
-        <div class="form-row form-row-compact">
-          <div class="form-field form-field-half">
-            <label class="required">{{ $t('@CMD01:命令名称') }}</label>
-            <el-input 
-              v-model="newCommand.name" 
-              :placeholder="$t('@CMD01:输入命令名称，例如: 拉取代码')"
-              clearable
-              size="default"
-            />
+      <div class="left-panel">
+        <div class="command-form">
+          <div class="left-title">
+            {{ isEditing ? $t('@CMD01:编辑命令') : $t('@CMD01:添加命令') }}
           </div>
-          <div class="form-field form-field-half">
-            <label>{{ $t('@CMD01:描述') }}</label>
-            <el-input 
-              v-model="newCommand.description" 
-              :placeholder="$t('@CMD01:可选，简要描述命令用途')"
-              clearable
-              size="default"
-            />
-          </div>
-        </div>
-        <!-- 第二行：执行目录 -->
-        <div class="form-row">
-          <div class="form-field">
-            <label>{{ $t('@CMD01:执行目录') }}</label>
-            <div class="directory-input-group">
-              <el-input 
-                v-model="newCommand.directory" 
-                :placeholder="$t('@CMD01:留空使用当前目录')"
-                clearable
-                size="default"
-              />
-              <el-button @click="useCurrentDirectory" type="primary" plain size="small">
-                {{ $t('@CMD01:使用当前目录') }}
-              </el-button>
-              <el-button @click="browseDirectory" type="info" plain size="small">
-                <el-icon><Folder /></el-icon>
-                {{ $t('@CMD01:选择目录') }}
-              </el-button>
-            </div>
-          </div>
-        </div>
-        <!-- 第三行：命令 -->
-        <div class="form-row">
-          <div class="form-field">
-            <label class="required">{{ $t('@CMD01:命令') }}</label>
-            <div class="command-input-group">
-              <el-autocomplete
-                v-model="newCommand.command"
-                :fetch-suggestions="queryCommandTemplates"
-                :placeholder="$t('@CMD01:输入要执行的命令，例如: npm run build')"
-                clearable
-                size="default"
-                trigger-on-focus
-                @select="handleCommandSelect"
-                @keyup.enter="saveCommand"
-              />
-              <div class="command-action-buttons">
-                <el-button v-if="isEditing" @click="cancelEdit" size="default">{{ $t('@CMD01:取消') }}</el-button>
-                <el-button
-                  type="primary"
-                  @click="saveCommand"
-                  :disabled="!newCommand.name.trim() || !newCommand.command.trim() || isSaving"
-                  :loading="isSaving"
-                  size="default"
-                >
-                  {{ isEditing ? $t('@CMD01:更新命令') : $t('@CMD01:添加命令') }}
-                </el-button>
+              <!-- 第一行：命令名称和描述 -->
+              <div class="form-row form-row-compact">
+                <div class="form-field form-field-half">
+                  <label class="required">{{ $t('@CMD01:命令名称') }}</label>
+                  <el-input 
+                    v-model="newCommand.name" 
+                    :placeholder="$t('@CMD01:输入命令名称，例如: 拉取代码')"
+                    clearable
+                    size="default"
+                  />
+                </div>
+                <div class="form-field form-field-half">
+                  <label>{{ $t('@CMD01:描述') }}</label>
+                  <el-input 
+                    v-model="newCommand.description" 
+                    :placeholder="$t('@CMD01:可选，简要描述命令用途')"
+                    clearable
+                    size="default"
+                  />
+                </div>
               </div>
-            </div>
+              <!-- 第二行：执行目录 -->
+              <div class="form-row">
+                <div class="form-field">
+                  <label>{{ $t('@CMD01:执行目录') }}</label>
+                  <div class="directory-input-group">
+                    <el-input 
+                      v-model="newCommand.directory" 
+                      :placeholder="$t('@CMD01:留空使用当前目录')"
+                      clearable
+                      size="default"
+                    />
+                    <el-button @click="useCurrentDirectory" type="primary" plain size="small">
+                      {{ $t('@CMD01:使用当前目录') }}
+                    </el-button>
+                    <el-button @click="browseDirectory" type="info" plain size="small">
+                      <el-icon><Folder /></el-icon>
+                      {{ $t('@CMD01:选择目录') }}
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+              <!-- 第三行：命令 -->
+              <div class="form-row">
+                <div class="form-field">
+                  <label class="required">{{ $t('@CMD01:命令') }}</label>
+                  <div class="command-input-group">
+                    <el-autocomplete
+                      v-model="newCommand.command"
+                      :fetch-suggestions="queryCommandTemplates"
+                      :placeholder="$t('@CMD01:输入要执行的命令，例如: npm run build')"
+                      clearable
+                      size="default"
+                      trigger-on-focus
+                      @select="handleCommandSelect"
+                      @keyup.enter="saveCommand"
+                    />
+                    <div class="command-action-buttons">
+                      <el-button v-if="isEditing" @click="cancelEdit" size="default">{{ $t('@CMD01:取消') }}</el-button>
+                      <el-button
+                        type="primary"
+                        @click="saveCommand"
+                        :disabled="!newCommand.name.trim() || !newCommand.command.trim() || isSaving"
+                        :loading="isSaving"
+                        size="default"
+                      >
+                        {{ isEditing ? $t('@CMD01:更新命令') : $t('@CMD01:添加命令') }}
+                      </el-button>
+                    </div>
+                  </div>
 
-            <div v-if="newCommand.params && newCommand.params.length > 0" class="command-params">
-              <div class="params-title">{{ $t('@CMD01:变量配置') }}</div>
-              <el-table :data="newCommand.params" style="width: 100%" size="small" stripe>
-                <el-table-column prop="name" :label="$t('@CMD01:变量名')" width="160" />
-                <el-table-column :label="$t('@CMD01:默认值')" min-width="180">
-                  <template #default="scope">
-                    <el-input
-                      v-model="scope.row.defaultValue"
-                      size="small"
-                      clearable
-                      :placeholder="$t('@CMD01:默认值')"
-                    />
-                  </template>
-                </el-table-column>
-                <el-table-column :label="$t('@CMD01:必填')" width="90" align="center">
-                  <template #default="scope">
-                    <el-switch v-model="scope.row.required" />
-                  </template>
-                </el-table-column>
-                <el-table-column :label="$t('@CMD01:描述')" min-width="220">
-                  <template #default="scope">
-                    <el-input
-                      v-model="scope.row.description"
-                      size="small"
-                      clearable
-                      :placeholder="$t('@CMD01:描述')"
-                    />
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-          </div>
+                  <div v-if="newCommand.params && newCommand.params.length > 0" class="command-params">
+                    <div class="params-title">{{ $t('@CMD01:变量配置') }}</div>
+                    <el-table :data="newCommand.params" style="width: 100%" size="small" stripe>
+                      <el-table-column prop="name" :label="$t('@CMD01:变量名')" width="160" />
+                      <el-table-column :label="$t('@CMD01:默认值')" min-width="180">
+                        <template #default="scope">
+                          <el-input
+                            v-model="scope.row.defaultValue"
+                            size="small"
+                            clearable
+                            :placeholder="$t('@CMD01:默认值')"
+                          />
+                        </template>
+                      </el-table-column>
+                      <el-table-column :label="$t('@CMD01:必填')" width="90" align="center">
+                        <template #default="scope">
+                          <el-switch v-model="scope.row.required" />
+                        </template>
+                      </el-table-column>
+                      <el-table-column :label="$t('@CMD01:描述')" min-width="220">
+                        <template #default="scope">
+                          <el-input
+                            v-model="scope.row.description"
+                            size="small"
+                            clearable
+                            :placeholder="$t('@CMD01:描述')"
+                          />
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </div>
+                </div>
+              </div>
         </div>
-          </div>
-        </el-collapse-item>
-      </el-collapse>
+      </div>
 
-      <!-- 命令列表 -->
-      <div class="command-list">
-        <h3>{{ $t('@CMD01:已保存的命令') }}</h3>
-        <el-empty v-if="commands.length === 0" :description="$t('@CMD01:暂无保存的命令')" />
-        <div v-else class="command-list-scroll">
-          <el-table :data="commands" style="width: 100%" stripe>
-            <el-table-column prop="name" :label="$t('@CMD01:命令名称')" min-width="80">
-              <template #default="scope">
-                <div class="name-cell">
-                  <span class="name-text">{{ scope.row.name }}</span>
-                  <span v-if="scope.row.description" class="description-text">{{ scope.row.description }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="command" :label="$t('@CMD01:命令')" min-width="200">
-              <template #default="scope">
-                <code class="command-text">{{ scope.row.command }}</code>
-              </template>
-            </el-table-column>
-            <el-table-column prop="directory" :label="$t('@CMD01:执行目录')" min-width="200">
-              <template #default="scope">
-                <span class="directory-text">{{ scope.row.directory || $t('@CMD01:当前目录') }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column :label="$t('@CMD01:操作')" width="100" fixed="right">
-              <template #default="scope">
-                <div class="action-buttons">
-                  <IconButton
-                    :tooltip="$t('@CMD01:执行命令')"
-                    size="small"
-                    hover-color="var(--color-success)"
-                    @click="executeCommand(scope.row)"
-                  >
-                    <el-icon><VideoPlay /></el-icon>
-                  </IconButton>
-                  <IconButton
-                    :tooltip="$t('@CMD01:编辑')"
-                    size="small"
-                    hover-color="var(--color-primary)"
-                    @click="startEditCommand(scope.row)"
-                  >
-                    <el-icon><Edit /></el-icon>
-                  </IconButton>
-                  <IconButton
-                    :tooltip="$t('@CMD01:删除')"
-                    size="small"
-                    hover-color="var(--color-danger)"
-                    @click="deleteCommand(scope.row.id)"
-                  >
-                    <el-icon><Delete /></el-icon>
-                  </IconButton>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
+      <div class="right-panel">
+        <!-- 命令列表 -->
+        <div class="command-list">
+          <h3>{{ $t('@CMD01:已保存的命令') }}</h3>
+          <el-empty v-if="commands.length === 0" :description="$t('@CMD01:暂无保存的命令')" />
+          <div v-else class="command-list-scroll">
+            <el-table :data="commands" style="width: 100%;height: 100%;" stripe>
+              <el-table-column prop="name" :label="$t('@CMD01:命令名称')" min-width="80">
+                <template #default="scope">
+                  <div class="name-cell">
+                    <span class="name-text">{{ scope.row.name }}</span>
+                    <span v-if="scope.row.description" class="description-text">{{ scope.row.description }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="command" :label="$t('@CMD01:命令')" min-width="200">
+                <template #default="scope">
+                  <code class="command-text">{{ scope.row.command }}</code>
+                </template>
+              </el-table-column>
+              <el-table-column prop="directory" :label="$t('@CMD01:执行目录')" min-width="200">
+                <template #default="scope">
+                  <span class="directory-text">{{ scope.row.directory }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column :label="$t('@CMD01:操作')" width="110" fixed="right">
+                <template #default="scope">
+                  <div class="action-buttons">
+                    <IconButton
+                      :tooltip="$t('@CMD01:执行命令')"
+                      size="small"
+                      hover-color="var(--color-success)"
+                      @click="executeCommand(scope.row)"
+                    >
+                      <el-icon><VideoPlay /></el-icon>
+                    </IconButton>
+                    <IconButton
+                      :tooltip="$t('@CMD01:编辑')"
+                      size="small"
+                      hover-color="var(--color-primary)"
+                      @click="startEditCommand(scope.row)"
+                    >
+                      <el-icon><Edit /></el-icon>
+                    </IconButton>
+                    <IconButton
+                      :tooltip="$t('@CMD01:复制命令')"
+                      size="small"
+                      hover-color="var(--color-warning)"
+                      @click="duplicateCommand(scope.row)"
+                    >
+                      <el-icon><CopyDocument /></el-icon>
+                    </IconButton>
+                    <IconButton
+                      :tooltip="$t('@CMD01:删除')"
+                      size="small"
+                      hover-color="var(--color-danger)"
+                      @click="deleteCommand(scope.row.id)"
+                    >
+                      <el-icon><Delete /></el-icon>
+                    </IconButton>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </div>
       </div>
     </div>
-  </CommonDialog>
+  </el-dialog>
 
   <TemplateManager
     v-model:visible="commandTemplateDialogVisible"
@@ -671,9 +724,31 @@ defineExpose({
 <style scoped lang="scss">
 .command-container {
   display: flex;
+  flex-direction: row;
+  gap: var(--spacing-lg);
+  height: 100%;
+  min-height: 0;
+}
+
+:deep(.custom-command-dialog .el-dialog__body) {
+  overflow: hidden;
+}
+
+.left-panel,
+.right-panel {
+  min-height: 0;
+  display: flex;
   flex-direction: column;
-  gap: var(--spacing-xl);
-  min-height: 440px;
+}
+
+.left-panel {
+  flex: 0 0 460px;
+  overflow-y: auto;
+}
+
+.right-panel {
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .command-form {
@@ -682,6 +757,13 @@ defineExpose({
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   box-shadow: var(--shadow-sm);
+}
+
+.left-title {
+  margin: 0 0 var(--spacing-lg) 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text-title);
 }
 
 .form-row {
@@ -790,19 +872,6 @@ defineExpose({
   flex: 1;
   overflow-y: auto;
   border-radius: var(--radius-lg);
-
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background-color: var(--text-placeholder);
-    border-radius: var(--radius-sm);
-  }
-
-  &::-webkit-scrollbar-track {
-    background-color: var(--bg-panel);
-  }
 }
 
 .name-cell {
@@ -846,21 +915,6 @@ defineExpose({
   justify-content: center;
 }
 
-:deep(.command-form-collapse) {
-  .el-collapse-item__header {
-    border-radius: var(--radius-lg);
-    background: var(--bg-panel);
-    border: 1px solid var(--border-component);
-    padding: 0 var(--spacing-lg);
-    height: 44px;
-    line-height: 44px;
-  }
-
-  .el-collapse-item__wrap {
-    border: none;
-  }
-}
-
 :deep(.el-table) {
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -881,8 +935,17 @@ defineExpose({
 <!-- 添加全局样式支持目录浏览器对话框 -->
 <style lang="scss">
 /* 确保弹窗在全屏模式下显示在最上层 */
-.custom-command-dialog {
-  z-index: 3000 !important;
+/* 强制提高自定义命令管理的遮罩层级（Element Plus overlay） */
+.el-overlay.custom-command-overlay {
+  z-index: 3000000 !important;
+}
+
+.el-overlay.custom-command-overlay .el-overlay-dialog {
+  z-index: 3000001 !important;
+}
+
+.el-overlay.custom-command-overlay .el-dialog {
+  z-index: 3000002 !important;
 }
 
 /* 目录浏览器全局样式 */

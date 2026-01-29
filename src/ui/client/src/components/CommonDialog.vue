@@ -29,6 +29,7 @@ interface Props {
   customClass?: string
   appendToBody?: boolean
   lockScroll?: boolean
+  zIndex?: number
   // 高度控制：'fixed' 使用固定高度 calc(100% - offset)；'max' 使用最大高度
   heightMode?: 'fixed' | 'max'
   // 计算高度时的偏移量（例如头尾合计占用高度），默认 '160px'
@@ -168,6 +169,7 @@ function handleClosed() {
     :width="dialogWidth"
     :top="dialogTop"
     :style="dialogStyle"
+    :z-index="zIndex"
     :fullscreen="size === 'fullscreen'"
     :close-on-click-modal="closeOnClickModal"
     :close-on-press-escape="closeOnPressEscape"

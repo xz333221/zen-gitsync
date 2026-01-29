@@ -64,7 +64,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
   (e: 'update-config', nodeId: string, config: OrchestrationStep): void
+  (e: 'open-command-manager'): void
 }>()
+
+function openCommandManager() {
+  emit('open-command-manager')
+}
 
 const configStore = useConfigStore()
 
@@ -773,6 +778,7 @@ function saveConfig() {
     :title="dialogTitle"
     size="extra-large"
     :append-to-body="true"
+    :z-index="800000"
     custom-class="node-config-dialog"
   >
     <div v-if="node" class="config-content">
@@ -979,6 +985,15 @@ function saveConfig() {
         <div class="section-title">
           <el-icon><svg-icon icon-class="custom-cmd" /></el-icon>
           {{ $t('@NODECFG:命令配置') }}
+          <el-button
+            type="primary"
+            plain
+            size="small"
+            style="margin-left: auto;"
+            @click="openCommandManager"
+          >
+            {{ $t('@NODECFG:管理命令') }}
+          </el-button>
         </div>
         
         <el-form label-width="100px">

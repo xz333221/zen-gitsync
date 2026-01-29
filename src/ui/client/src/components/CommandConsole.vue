@@ -2803,6 +2803,7 @@ onUnmounted(() => {
   <!-- 自定义命令管理弹窗 -->
   <CustomCommandManager 
     v-model:visible="commandManagerVisible"
+    :fullscreen="true"
     @execute-command="executeCustomCommand"
   />
   
@@ -2811,6 +2812,7 @@ onUnmounted(() => {
     v-model:visible="flowOrchestrationVisible"
     @execute-orchestration="executeOrchestration"
     @execute-flow="executeFlow"
+    @open-command-manager="commandManagerVisible = true"
   />
 
   <CommonDialog

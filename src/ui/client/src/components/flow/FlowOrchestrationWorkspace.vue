@@ -198,6 +198,7 @@ const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
   (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean, orchestrationMeta?: { id?: string; name?: string }): void
   (e: 'execute-flow', payload: { flowData: FlowData; startNodeId?: string; isSingleExecution?: boolean; orchestrationMeta?: { id?: string; name?: string } }): void
+  (e: 'open-command-manager'): void
 }>()
 
 const { t } = useI18n()
@@ -1248,6 +1249,7 @@ onUnmounted(() => {
       :all-nodes="nodes"
       :edges="edges"
       @update-config="updateNodeConfig"
+      @open-command-manager="() => emit('open-command-manager')"
     />
   </CommonDialog>
 </template>
@@ -1289,6 +1291,7 @@ onUnmounted(() => {
   width: 160px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .sidebar-header {
@@ -1392,6 +1395,9 @@ onUnmounted(() => {
   flex-direction: column;
   gap: var(--spacing-sm);
   margin-bottom: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .tool-item {
