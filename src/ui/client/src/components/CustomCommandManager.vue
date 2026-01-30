@@ -532,31 +532,39 @@ defineExpose({
     <div class="command-container">
       <div class="left-panel">
         <div class="command-form">
-          <div class="left-title">
-            {{ isEditing ? $t('@CMD01:编辑命令') : $t('@CMD01:添加命令') }}
+          <div class="form-header">
+            <div class="left-title">
+              {{ isEditing ? $t('@CMD01:编辑命令') : $t('@CMD01:添加命令') }}
+            </div>
           </div>
-              <!-- 第一行：命令名称和描述 -->
-              <div class="form-row form-row-compact">
-                <div class="form-field form-field-half">
+          <div class="form-content">
+              <!-- 命令名称 -->
+              <div class="form-row">
+                <div class="form-field">
                   <label class="required">{{ $t('@CMD01:命令名称') }}</label>
                   <el-input 
                     v-model="newCommand.name" 
                     :placeholder="$t('@CMD01:输入命令名称，例如: 拉取代码')"
                     clearable
-                    size="default"
+                    size="large"
                   />
                 </div>
-                <div class="form-field form-field-half">
+              </div>
+              
+              <!-- 描述 -->
+              <div class="form-row">
+                  <div class="form-field">
                   <label>{{ $t('@CMD01:描述') }}</label>
                   <el-input 
                     v-model="newCommand.description" 
                     :placeholder="$t('@CMD01:可选，简要描述命令用途')"
                     clearable
-                    size="default"
+                    size="large"
                   />
                 </div>
               </div>
-              <!-- 第二行：执行目录 -->
+
+              <!-- 执行目录 -->
               <div class="form-row">
                 <div class="form-field">
                   <label>{{ $t('@CMD01:执行目录') }}</label>
@@ -565,46 +573,34 @@ defineExpose({
                       v-model="newCommand.directory" 
                       :placeholder="$t('@CMD01:留空使用当前目录')"
                       clearable
-                      size="default"
+                      size="large"
                     />
-                    <el-button @click="useCurrentDirectory" type="primary" plain size="small">
+                    <el-button @click="useCurrentDirectory" type="primary" plain size="default">
                       {{ $t('@CMD01:使用当前目录') }}
                     </el-button>
-                    <el-button @click="browseDirectory" type="info" plain size="small">
+                    <el-button @click="browseDirectory" type="info" plain size="default">
                       <el-icon><Folder /></el-icon>
                       {{ $t('@CMD01:选择目录') }}
                     </el-button>
                   </div>
                 </div>
               </div>
-              <!-- 第三行：命令 -->
+              <!-- 命令 -->
               <div class="form-row">
                 <div class="form-field">
                   <label class="required">{{ $t('@CMD01:命令') }}</label>
-                  <div class="command-input-group">
-                    <el-autocomplete
-                      v-model="newCommand.command"
-                      :fetch-suggestions="queryCommandTemplates"
-                      :placeholder="$t('@CMD01:输入要执行的命令，例如: npm run build')"
-                      clearable
-                      size="default"
-                      trigger-on-focus
-                      @select="handleCommandSelect"
-                      @keyup.enter="saveCommand"
-                    />
-                    <div class="command-action-buttons">
-                      <el-button v-if="isEditing" @click="cancelEdit" size="default">{{ $t('@CMD01:取消') }}</el-button>
-                      <el-button
-                        type="primary"
-                        @click="saveCommand"
-                        :disabled="!newCommand.name.trim() || !newCommand.command.trim() || isSaving"
-                        :loading="isSaving"
-                        size="default"
-                      >
-                        {{ isEditing ? $t('@CMD01:更新命令') : $t('@CMD01:添加命令') }}
-                      </el-button>
-                    </div>
-                  </div>
+                  <el-autocomplete
+                    v-model="newCommand.command"
+                    :fetch-suggestions="queryCommandTemplates"
+                    :placeholder="$t('@CMD01:输入要执行的命令，例如: npm run build')"
+                    clearable
+                    size="large"
+                    trigger-on-focus
+                    popper-class="custom-command-popper"
+                    @select="handleCommandSelect"
+                    @keyup.enter="saveCommand"
+                    style="width: 100%"
+                  />
 
                   <div v-if="newCommand.params && newCommand.params.length > 0" class="command-params">
                     <div class="params-title">{{ $t('@CMD01:变量配置') }}</div>
@@ -639,15 +635,34 @@ defineExpose({
                   </div>
                 </div>
               </div>
+
+              <!-- 按钮区域 -->
+              <div class="form-actions">
+                <el-button v-if="isEditing" @click="cancelEdit" size="large">{{ $t('@CMD01:取消') }}</el-button>
+                <el-button
+                  type="primary"
+                  @click="saveCommand"
+                  :disabled="!newCommand.name.trim() || !newCommand.command.trim() || isSaving"
+                  :loading="isSaving"
+                  size="large"
+                  class="save-btn"
+                >
+                  {{ isEditing ? $t('@CMD01:更新命令') : $t('@CMD01:添加命令') }}
+                </el-button>
+              </div>
+          </div>
         </div>
       </div>
 
       <div class="right-panel">
         <!-- 命令列表 -->
         <div class="command-list">
-          <h3>{{ $t('@CMD01:已保存的命令') }}</h3>
-          <el-empty v-if="commands.length === 0" :description="$t('@CMD01:暂无保存的命令')" />
-          <div v-else class="command-list-scroll">
+          <div class="list-header">
+            <h3>{{ $t('@CMD01:已保存的命令') }}</h3>
+          </div>
+          <div class="list-content">
+            <el-empty v-if="commands.length === 0" :description="$t('@CMD01:暂无保存的命令')" />
+            <div v-else class="command-list-scroll">
             <el-table :data="commands" style="width: 100%;height: 100%;" stripe>
               <el-table-column prop="name" :label="$t('@CMD01:命令名称')" min-width="80">
                 <template #default="scope">
@@ -707,6 +722,7 @@ defineExpose({
               </el-table-column>
             </el-table>
           </div>
+          </div>
         </div>
       </div>
     </div>
@@ -756,19 +772,63 @@ defineExpose({
   background: var(--bg-panel);
   border: 1px solid var(--border-component);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.command-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-component);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
 
+.form-header,
+.list-header {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--bg-component-area);
+  border-bottom: 1px solid var(--border-component);
+  flex-shrink: 0;
+}
+
+.form-content {
+  padding: var(--spacing-lg);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.list-content {
+  padding: var(--spacing-lg); // 保持原有内边距
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.command-list h3 {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text-title);
+}
+
 .left-title {
-  margin: 0 0 var(--spacing-lg) 0;
+  margin: 0;
   font-size: var(--font-size-md);
   font-weight: 600;
   color: var(--text-title);
 }
 
 .form-row {
-  margin-bottom: var(--spacing-lg);
+  margin-bottom: 32px;
 
   &:last-of-type {
     margin-bottom: 0;
@@ -776,7 +836,7 @@ defineExpose({
   
   &.form-row-compact {
     display: flex;
-    gap: var(--spacing-md);
+    gap: var(--spacing-lg); // 增加列间距
   }
 }
 
@@ -784,11 +844,11 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: var(--spacing-sm);
+  gap: 10px; // 增加标签和输入框的间距
 
   label {
     display: block;
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-sm); // 从 md 改为 sm
     font-weight: 600;
     color: var(--text-title);
     line-height: 1.2;
@@ -814,25 +874,24 @@ defineExpose({
   flex-wrap: wrap;
 }
 
-.command-input-group {
+/* 按钮区域样式 */
+.form-actions {
   display: flex;
-  gap: var(--spacing-base);
-  align-items: center;
-  flex-grow: 1;
-  flex-wrap: wrap;
-}
-
-.command-input-group :deep(.el-autocomplete) {
-  flex: 1;
-  min-width: 260px;
-}
-
-.command-action-buttons {
-  display: flex;
-  gap: var(--spacing-md);
   justify-content: flex-end;
-  flex: 0 0 auto;
+  margin-top: auto;
+  padding-top: var(--spacing-lg);
+  gap: var(--spacing-md);
 }
+
+.save-btn {
+  width: 100%; // 如果是 isEditing 可能会有取消按钮，这里如果是单按钮则全宽
+}
+
+/* 如果有多个按钮，让主按钮占据剩余空间 */
+.form-actions .el-button.save-btn {
+  flex: 1;
+}
+
 
 .command-params {
   margin-top: var(--spacing-base);
@@ -849,25 +908,7 @@ defineExpose({
   margin-bottom: var(--spacing-base);
 }
 
-.command-list {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow: hidden;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-component);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
-  box-shadow: var(--shadow-sm);
 
-  h3 {
-    margin: 0 0 var(--spacing-lg) 0;
-    font-size: var(--font-size-md);
-    font-weight: 600;
-    color: var(--text-title);
-    padding-bottom: var(--spacing-sm);
-  }
-}
 
 .command-list-scroll {
   flex: 1;
@@ -947,6 +988,11 @@ defineExpose({
 
 .el-overlay.custom-command-overlay .el-dialog {
   z-index: 3000002 !important;
+}
+
+/* 提高自动补全下拉框层级，确保在弹窗之上 */
+.el-popper.custom-command-popper {
+  z-index: 3000003 !important;
 }
 
 /* 目录浏览器全局样式 */
