@@ -13,8 +13,8 @@ const gitStore = useGitStore()
     <InlineCard class="footer-right" compact>
       <template #content>
         <svg-icon icon-class="remote-repo" class-name="remote-repo-icon" />
-        <el-tooltip :content="gitStore.remoteUrl" placement="top" effect="dark" :show-after="300">
-          <span class="repo-url">{{ gitStore.remoteUrl }}</span>
+        <el-tooltip :content="$t('@F13B4:复制克隆命令')" placement="top" effect="dark" :show-after="300">
+          <span class="repo-url clickable" @click="gitStore.copyCloneCommand()">{{ gitStore.remoteUrl }}</span>
         </el-tooltip>
       </template>
       <template #actions>
@@ -24,13 +24,6 @@ const gitStore = useGitStore()
           @click="gitStore.copyRemoteUrl()"
         >
           <el-icon><DocumentCopy /></el-icon>
-        </IconButton>
-        <IconButton
-          size="small"
-          :tooltip="$t('@F13B4:复制克隆命令')"
-          @click="gitStore.copyCloneCommand()"
-        >
-          <el-icon><Download /></el-icon>
         </IconButton>
       </template>
     </InlineCard>
@@ -53,5 +46,15 @@ const gitStore = useGitStore()
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  &.clickable {
+    cursor: pointer;
+    transition: color 0.2s;
+
+    &:hover {
+      color: var(--el-color-primary);
+      text-decoration: underline;
+    }
+  }
 }
 </style>

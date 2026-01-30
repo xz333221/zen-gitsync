@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import { ref } from 'vue'
-import { Plus, Menu, Check } from '@element-plus/icons-vue'
+import { Plus, Menu, Check, Refresh } from '@element-plus/icons-vue'
 import InlineCard from '@components/InlineCard.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import { useGitStore } from '@stores/gitStore'
@@ -53,6 +53,25 @@ async function handleBranchChange(branch: string) {
     gitStore.refreshLog()
   }
 }
+
+// 刷新当前分支
+const isRefreshingBranch = ref(false)
+async function refreshCurrentBranch() {
+  if (isRefreshingBranch.value) return
+  
+  isRefreshingBranch.value = true
+  try {
+    await Promise.all([
+      gitStore.getCurrentBranch(true),
+      gitStore.getBranchStatus(true),
+      gitStore.getAllBranches()
+    ])
+    emit('branchChanged')
+    gitStore.refreshLog()
+  } finally {
+    isRefreshingBranch.value = false
+  }
+}
 </script>
 
 <template>
@@ -84,6 +103,12 @@ async function handleBranchChange(branch: string) {
           @click="openCreateBranchDialog"
         >
           <el-icon><Plus /></el-icon>
+        </IconButton>
+        <IconButton
+          :tooltip="$t('@CMDCON:刷新')"
+          @click="refreshCurrentBranch"
+        >
+          <el-icon :class="{ 'is-loading': isRefreshingBranch }"><Refresh /></el-icon>
         </IconButton>
       </template>
     </InlineCard>
