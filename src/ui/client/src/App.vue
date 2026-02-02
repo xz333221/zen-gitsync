@@ -12,8 +12,8 @@ import BranchSelector from '@components/BranchSelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import LanguageSwitcher from '@components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@components/ThemeSwitcher.vue'
-import { ElMessage, ElConfigProvider } from 'element-plus'
-import { Setting } from '@element-plus/icons-vue'
+import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
+import { Setting, WarningFilled } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
@@ -388,7 +388,31 @@ function stopHResize() {
     </div>
   </header>
 
-  <main class="main-container">
+  <div v-if="configStore.hasConfigLoadError" class="config-broken-banner">
+    <div class="banner-left">
+      <el-icon class="banner-icon"><WarningFilled /></el-icon>
+      <div class="banner-text">
+        <span class="banner-title">{{ $t('@CFGERR:系统配置文件有问题') }}</span>
+        <el-tooltip
+          v-if="configStore.configLoadError"
+          :content="configStore.configLoadError"
+          placement="bottom"
+          effect="dark"
+          :show-after="200"
+        >
+          <span class="banner-detail">{{ $t('@CFGERR:查看原因') }}</span>
+        </el-tooltip>
+        <span v-if="configStore.configFilePath" class="banner-path">{{ configStore.configFilePath }}</span>
+      </div>
+    </div>
+    <div class="banner-actions">
+      <el-button size="small" type="warning" @click="configStore.openSystemConfigFile()">
+        {{ $t('@CFGERR:打开系统配置文件') }}
+      </el-button>
+    </div>
+  </div>
+
+  <main class="main-container" :style="{ top: configStore.hasConfigLoadError ? '104px' : '64px' }">
     <div v-if="!initCompleted" class="loading-container">
       <el-card class="loading-card">
         <div class="loading-spinner">
@@ -497,6 +521,70 @@ body {
   overflow: hidden;
   z-index: 1001;
   /* 防止整体滚动 */
+}
+
+.config-broken-banner {
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  height: 40px;
+  z-index: 1002;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacing-lg);
+  background: rgba(245, 158, 11, 0.12);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .config-broken-banner {
+  background: rgba(245, 158, 11, 0.14);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.config-broken-banner .banner-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.config-broken-banner .banner-icon {
+  color: rgba(245, 158, 11, 0.95);
+}
+
+.config-broken-banner .banner-text {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.config-broken-banner .banner-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.config-broken-banner .banner-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.config-broken-banner .banner-path {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55vw;
+}
+
+.config-broken-banner .banner-actions {
+  flex-shrink: 0;
 }
 
 .grid-layout {

@@ -135,6 +135,9 @@ export const useConfigStore = defineStore('config', () => {
   })
   const isLoading = ref(false)
   const isLoaded = ref(false)
+  // 系统配置文件异常（JSON损坏等）
+  const configLoadError = ref('')
+  const configFilePath = ref('')
   // 当前工作目录
   const currentDirectory = ref('')
   // Push完成后自动关闭进度弹窗（从localStorage加载，默认true）
@@ -187,6 +190,31 @@ export const useConfigStore = defineStore('config', () => {
     }
   })
 
+  const hasConfigLoadError = computed(() => {
+    return Boolean(configLoadError.value && configLoadError.value.trim())
+  })
+
+  async function openSystemConfigFile() {
+    try {
+      const response = await fetch('/api/config/open-file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      const result = await response.json().catch(() => ({} as any))
+      if (response.ok && result?.success) {
+        ElMessage.success($t('@D50BB:已打开系统配置文件'))
+        return true
+      }
+      ElMessage.error(`${$t('@D50BB:打开系统配置文件失败: ')}${result?.error || ''}`)
+      return false
+    } catch (error) {
+      ElMessage.error(`${$t('@D50BB:打开系统配置文件失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
   // 加载配置（可强制刷新）
   async function loadConfig(force = false) {
     // 如果已经加载过且未强制刷新，则不再重复加载
@@ -200,7 +228,23 @@ export const useConfigStore = defineStore('config', () => {
       isLoading.value = true
       console.log($t('@D50BB:加载配置信息...'))
       const response = await fetch('/api/config/getConfig')
-      const configData = await response.json()
+      const configData = await response.json().catch(() => ({} as any))
+
+      if (!response.ok || (configData && configData.success === false)) {
+        const errMsg = String(configData?.error || $t('@D50BB:加载配置失败'))
+        const configPath = String(configData?.configPath || '')
+        const hint = configPath ? `\n${$t('@D50BB:配置文件')}: ${configPath}` : ''
+        ElMessage.error(`${$t('@D50BB:加载配置失败: ')}${errMsg}${hint}`)
+
+        // 记录异常状态供Header提示
+        configLoadError.value = errMsg
+        configFilePath.value = configPath
+        return null
+      }
+
+      // 读取成功，清空异常状态
+      configLoadError.value = ''
+      configFilePath.value = ''
       
       // 更新状态
       defaultCommitMessage.value = configData.defaultCommitMessage || ''
@@ -237,6 +281,9 @@ export const useConfigStore = defineStore('config', () => {
     } catch (error) {
       console.error('加载配置失败:', error)
       ElMessage.error(`${$t('@D50BB:加载配置失败: ')}${(error as Error).message}`)
+
+      // 记录异常状态供Header提示
+      configLoadError.value = (error as Error).message
       return null
     } finally {
       isLoading.value = false
@@ -772,6 +819,9 @@ export const useConfigStore = defineStore('config', () => {
     afterQuickPushAction,
     isLoading,
     isLoaded,
+    configLoadError,
+    configFilePath,
+    hasConfigLoadError,
     currentDirectory,
     config,
     autoClosePushModal,
@@ -780,6 +830,7 @@ export const useConfigStore = defineStore('config', () => {
     // 方法
     loadConfig,
     setCurrentDirectory,
+    openSystemConfigFile,
     saveTemplate,
     saveDefaultMessage,
     deleteTemplate,

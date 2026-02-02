@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { DocumentCopy, Download } from '@element-plus/icons-vue'
+import { DocumentCopy } from '@element-plus/icons-vue'
 import InlineCard from '@components/InlineCard.vue'
 import { useGitStore } from '@stores/gitStore'
 import IconButton from '@components/IconButton.vue'

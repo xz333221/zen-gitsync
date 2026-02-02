@@ -695,6 +695,9 @@ export default {
   '@D50BB:模板已置顶': 'Template pinned to top',
   '@D50BB:置顶模板失败: ': 'Failed to pin template:',
   '@D50BB:加载配置失败: ': 'Loading configuration failed:',
+  '@D50BB:配置文件': 'Config file',
+  '@D50BB:已打开系统配置文件': 'System config file opened',
+  '@D50BB:打开系统配置文件失败: ': 'Failed to open system config file: ',
   '@D50BB:保存失败: ': 'Save failed:',
   '@D50BB:保存模板失败: ': 'Failed to save template:',
   '@D50BB:删除模板失败: ': 'Template deletion failed:',
@@ -705,6 +708,11 @@ export default {
   '@D50BB:文件已解锁: ': 'File unlocked:',
   '@D50BB:解锁文件失败: ': 'Unlocking file failed:',
   // @D50BB: file end
+
+  // @CFGERR: config error banner
+  '@CFGERR:系统配置文件有问题': 'System config file has an issue',
+  '@CFGERR:查看原因': 'View reason',
+  '@CFGERR:打开系统配置文件': 'Open system config file',
   // @C298B: file path: stores\gitStore.ts
   '@C298B:开发环境：使用默认后端端口 3000': 'Development environment: Use default backend port 3000',
   '@C298B:使用缓存的分支状态': 'Using cached branch states',

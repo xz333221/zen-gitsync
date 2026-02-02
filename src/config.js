@@ -53,12 +53,11 @@ function getCurrentProjectKey() {
 
 // 从磁盘读取原始配置对象
 async function readRawConfigFile() {
-  try {
-    const data = await fs.readFile(configPath, 'utf-8');
-    return JSON.parse(data);
-  } catch (_) {
-    return null;
+  const state = await safeLoadRaw();
+  if (!state.ok) {
+    throw state.error;
   }
+  return state.obj;
 }
 
 // 将原始配置对象写回磁盘
@@ -98,7 +97,13 @@ async function safeLoadRaw() {
 // 异步读取配置文件
 async function loadConfig() {
   const key = getCurrentProjectKey();
-  const raw = await readRawConfigFile();
+  let raw = null;
+  try {
+    raw = await readRawConfigFile();
+  } catch (err) {
+    const msg = err?.message ? String(err.message) : String(err);
+    throw new Error(`系统配置文件JSON格式错误，请修复后重试。\n文件: ${configPath}\n原因: ${msg}`);
+  }
   // 兼容旧版（全局扁平结构）
   if (raw && !raw.projects) {
     return { ...defaultConfig, ...raw };

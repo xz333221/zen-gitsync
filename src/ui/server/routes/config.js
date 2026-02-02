@@ -80,7 +80,13 @@ export function registerConfigRoutes({
       res.json(config)
     } catch (error) {
       // console.log('获取配置失败')
-      res.status(500).json({ error: error.message })
+      const configPath = path.join(os.homedir(), '.git-commit-tool.json')
+      res.status(500).json({
+        success: false,
+        code: 'CONFIG_LOAD_FAILED',
+        error: error?.message || String(error),
+        configPath
+      })
     }
   })
   
