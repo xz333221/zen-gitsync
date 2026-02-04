@@ -1530,47 +1530,121 @@ async function executeOrchestration(
     } else if (step.type === 'version') {
       // 执行版本管理
       
-            // 处理引用输出：如果版本来源是 'reference'，从 nodeOutputs 中获取版本号
-      let resolvedDependencyVersion = step.dependencyVersion;
-      if (step.versionSource === 'reference' && step.inputRef) {
-        const refNodeId = step.inputRef.nodeId;
-        const refOutputKey = step.inputRef.outputKey;
-        
-        console.log(`[DEBUG] 引用查找 - refNodeId: ${refNodeId}`);
-        console.log(`[DEBUG] nodeOutputs keys:`, Object.keys(nodeOutputs));
-        
-        const refOutput = nodeOutputs[refNodeId];
-        console.log(`refOutput ==>`, refOutput)
-        console.log(`refOutputKey ==>`, refOutputKey)
-        
-        if (refOutput) {
-          const v = refOutput[refOutputKey];
-          if (typeof v === 'string' && v) {
-            const shouldExtract = (step as any)?.extractVersionFromRefOutput !== false;
-            resolvedDependencyVersion = shouldExtract ? (extractVersionFromOutput(v) || v) : v;
+      // 解析版本节点“输入配置”（同代码节点）：支持手动输入 / 引用前置节点输出
+      // 约定：
+      // - name=version => 直接设置 package.json 的 version 字段
+      // - name=dependencyVersion => 设置依赖版本
+      const resolvedByInputs: Record<string, string> = {}
+      const versionInputs = Array.isArray((step as any).versionInputs) ? (step as any).versionInputs : []
+      if (versionInputs.length > 0) {
+        for (const it of versionInputs) {
+          const name = String(it?.name || '').trim()
+          if (!name) continue
+
+          if (it?.source === 'manual') {
+            resolvedByInputs[name] = String(it?.manualValue ?? '')
+            continue
+          }
+
+          const refNodeId = String(it?.ref?.nodeId || '').trim()
+          const refKey = String(it?.ref?.outputKey || 'stdout').trim() || 'stdout'
+          const refOutput = refNodeId ? nodeOutputs?.[refNodeId] : undefined
+          const v = refOutput ? refOutput[refKey] : undefined
+          resolvedByInputs[name] = typeof v === 'string' ? v : String(v ?? '')
+        }
+      }
+
+      const versionSource = (step as any)?.versionSource === 'manual' || (step as any)?.versionSource === 'reference' || (step as any)?.versionSource === 'input'
+        ? (step as any).versionSource
+        : 'bump'
+      const shouldExtract = (step as any)?.extractVersionFromRefOutput !== false
+      const applyExtract = (v: string) => (shouldExtract ? (extractVersionFromOutput(v) || v) : v)
+
+      // 输入配置优先（支持在 dependency 下覆盖 dependencyVersion；在 version 下直接设置 version）
+      let resolvedVersion = ''
+      if (step.versionTarget !== 'dependency') {
+        if (versionSource === 'input') {
+          const k = String((step as any)?.versionInputKey || 'version').trim() || 'version'
+          resolvedVersion = String(resolvedByInputs[k] ?? '').trim()
+          if (resolvedVersion) resolvedVersion = applyExtract(resolvedVersion)
+        } else {
+          resolvedVersion = String(resolvedByInputs.version ?? '').trim()
+          if (resolvedVersion) resolvedVersion = applyExtract(resolvedVersion)
+        }
+      }
+
+      let resolvedDependencyVersion = step.dependencyVersion
+      if (step.versionTarget === 'dependency') {
+        if (versionSource === 'input') {
+          const k = String((step as any)?.dependencyVersionInputKey || 'dependencyVersion').trim() || 'dependencyVersion'
+          const v = String(resolvedByInputs[k] ?? '').trim()
+          resolvedDependencyVersion = v ? applyExtract(v) : ''
+        } else {
+          const resolvedDepVersionFromInputs = String(resolvedByInputs.dependencyVersion ?? '').trim()
+          if (resolvedDepVersionFromInputs) {
+            resolvedDependencyVersion = applyExtract(resolvedDepVersionFromInputs)
+          }
+
+          // 处理引用输出：如果版本来源是 'reference'，从 nodeOutputs 中获取版本号（兼容旧配置）
+          if (!resolvedByInputs.dependencyVersion && versionSource === 'reference' && step.inputRef) {
+            const refNodeId = step.inputRef.nodeId
+            const refOutputKey = step.inputRef.outputKey
+            const refOutput = nodeOutputs[refNodeId]
+            if (refOutput) {
+              const vv = refOutput[refOutputKey]
+              if (typeof vv === 'string' && vv) {
+                resolvedDependencyVersion = applyExtract(vv)
+              }
+            }
+
+            if (!resolvedDependencyVersion) {
+              ElMessage.error(`无法从节点 ${refNodeId} 获取输出，请检查前置节点是否执行成功`)
+              hasFailure = true
+              break
+            }
           }
         }
-        
-        if (!resolvedDependencyVersion) {
-          ElMessage.error(`无法从节点 ${refNodeId} 获取输出，请检查前置节点是否执行成功`);
-          hasFailure = true;
-          break;
+      }
+
+      // 需要显式版本号的模式：校验必填
+      if (step.versionTarget === 'dependency') {
+        if (versionSource === 'manual' && !String(step.dependencyVersion || '').trim() && !String(resolvedByInputs.dependencyVersion || '').trim()) {
+          ElMessage.error('依赖版本号为空，请检查输入/手动输入配置')
+          hasFailure = true
+          break
+        }
+        if ((versionSource === 'reference' || versionSource === 'input') && !String(resolvedDependencyVersion || '').trim()) {
+          ElMessage.error('依赖版本号为空，请检查引用配置')
+          hasFailure = true
+          break
+        }
+      } else {
+        if ((versionSource === 'manual' || versionSource === 'reference' || versionSource === 'input') && !String(resolvedVersion || '').trim()) {
+          ElMessage.error('版本号为空，请检查输入/引用配置')
+          hasFailure = true
+          break
         }
       }
       
       if (step.versionTarget === 'dependency') {
         // 修改依赖版本
         const depType = step.dependencyType === 'devDependencies' ? 'devDep' : 'dep';
-        if (step.versionSource === 'reference') {
+        if (versionSource === 'reference') {
           stepLabel = `修改依赖 [${depType}] ${step.dependencyName} → ${resolvedDependencyVersion} (引用输出)`;
+        } else if (versionSource === 'input') {
+          stepLabel = `修改依赖 [${depType}] ${step.dependencyName} → ${resolvedDependencyVersion} (引用输入)`;
         } else {
           stepLabel = `修改依赖 [${depType}] ${step.dependencyName} → ${resolvedDependencyVersion || '(自动递增)'}`;
         }
       } else {
         // 修改 version 字段
-        const bumpType = step.versionBump || 'patch';
-        const bumpText = bumpType === 'major' ? '主版本' : bumpType === 'minor' ? '次版本' : '补丁版本';
-        stepLabel = `版本号+1 (${bumpText})`;
+        if (resolvedVersion) {
+          stepLabel = versionSource === 'input' ? `设置版本号 → ${resolvedVersion} (引用输入)` : `设置版本号 → ${resolvedVersion}`
+        } else {
+          const bumpType = step.versionBump || 'patch';
+          const bumpText = bumpType === 'major' ? '主版本' : bumpType === 'minor' ? '次版本' : '补丁版本';
+          stepLabel = `版本号+1 (${bumpText})`;
+        }
       }
       
       ElMessage.info(`[${i + 1}/${steps.length}] ${stepLabel}`);
@@ -1592,11 +1666,12 @@ async function executeOrchestration(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             versionTarget: step.versionTarget || 'version',
-            bumpType: step.versionSource === 'bump' ? (step.versionBump || 'patch') : undefined,
+            bumpType: step.versionTarget !== 'dependency' && !resolvedVersion && versionSource === 'bump' ? (step.versionBump || 'patch') : undefined,
+            versionValue: step.versionTarget !== 'dependency' ? resolvedVersion : undefined,
             packageJsonPath: step.packageJsonPath || '',
             dependencyName: step.dependencyName,
             dependencyVersion: resolvedDependencyVersion,  // 使用解析后的版本号（可能来自引用）
-            dependencyVersionBump: step.versionSource === 'bump' ? step.dependencyVersionBump : undefined,
+            dependencyVersionBump: versionSource === 'bump' ? step.dependencyVersionBump : undefined,
             dependencyType: step.dependencyType || 'dependencies'
           })
         });

@@ -96,10 +96,16 @@ export interface OrchestrationStep {
   dependencyVersion?: string  // 依赖包的新版本号（手动输入模式）
   dependencyVersionBump?: 'patch' | 'minor' | 'major'  // 依赖版本号增量类型（自动递增模式）
   dependencyType?: 'dependencies' | 'devDependencies'  // 依赖类型
+  // 版本节点输入配置（同代码节点）：可用于配置 version / dependencyVersion 等参数
+  versionInputs?: CodeNodeInput[]
   // 节点输入输出功能
   inputRef?: NodeOutputRef  // 引用其他节点的输出（当版本号模式为 'reference' 时使用）
-  versionSource?: 'bump' | 'manual' | 'reference'  // 版本号来源：自动递增 / 手动输入 / 引用其他节点输出
+  versionSource?: 'bump' | 'manual' | 'reference' | 'input'  // 版本号来源：自动递增 / 手动输入 / 引用其他节点输出 / 引用本节点输入
   extractVersionFromRefOutput?: boolean  // 引用输出时是否自动提取版本号（默认 true）
+
+  // 当 versionSource='input' 时：从本节点输入参数中取值
+  versionInputKey?: string
+  dependencyVersionInputKey?: string
 
   // 对于 code 类型
   codeScript?: string

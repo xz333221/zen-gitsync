@@ -24,7 +24,13 @@ const versionInfo = computed(() => {
 
   rows.push({
     label: $t('@FLOWNODE:来源'),
-    value: source === 'reference' ? $t('@FLOWNODE:引用输出') : source === 'manual' ? $t('@FLOWNODE:手动输入') : $t('@FLOWNODE:自动递增')
+    value: source === 'reference'
+      ? $t('@FLOWNODE:引用输出')
+      : source === 'input'
+        ? $t('@FLOWNODE:引用输入')
+        : source === 'manual'
+          ? $t('@FLOWNODE:手动输入')
+          : $t('@FLOWNODE:自动递增')
   })
 
   const pkg = String(cfg?.packageJsonPath || '').trim()
@@ -51,6 +57,9 @@ const versionInfo = computed(() => {
       const refKey = String(cfg?.inputRef?.outputKey || '').trim()
       const refText = refNodeId && refKey ? `${refNodeId}::${refKey}` : ''
       if (refText) rows.push({ label: $t('@FLOWNODE:引用'), value: refText })
+    } else if (source === 'input') {
+      const k = String(cfg?.dependencyVersionInputKey || cfg?.versionInputKey || '').trim()
+      if (k) rows.push({ label: $t('@FLOWNODE:引用'), value: k })
     }
   } else {
     const bump = String(cfg?.versionBump || 'patch')

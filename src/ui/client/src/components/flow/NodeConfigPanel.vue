@@ -96,6 +96,7 @@ const visible = computed({
 })
 
 const codeInputRef = ref<InstanceType<typeof CodeNodeInputConfig> | null>(null)
+const versionInputRef = ref<InstanceType<typeof CodeNodeInputConfig> | null>(null)
 const userInputRef = ref<InstanceType<typeof UserInputParamConfig> | null>(null)
 
 // 表单数据
@@ -120,10 +121,15 @@ const formData = ref<{
   dependencyType?: 'dependencies' | 'devDependencies'
   dependencyVersionMode?: 'bump' | 'manual'
   dependencyVersionBump?: 'patch' | 'minor' | 'major'
+  versionInputs?: CodeNodeInput[]
   // 输入引用功能
-  versionSource?: 'bump' | 'manual' | 'reference'  // 版本号来源
+  versionSource?: 'bump' | 'manual' | 'reference' | 'input'  // 版本号来源
   inputRef?: NodeOutputRef  // 引用的节点输出
   extractVersionFromRefOutput?: boolean
+
+  // versionSource = 'input'
+  versionInputKey?: string
+  dependencyVersionInputKey?: string
 
   // 代码节点
   codeScript?: string
@@ -141,6 +147,49 @@ const formData = ref<{
   // 用户输入节点
   userInputParams?: UserInputParam[]
 }>({})
+
+const userInputOutputParams = computed(() => {
+  const list = Array.isArray(formData.value.userInputParams) ? formData.value.userInputParams : []
+  const names = list
+    .map((p: any) => String(p?.name || '').trim())
+    .filter((n: string) => Boolean(n))
+  const unique = Array.from(new Set(names))
+  return unique.map((key) => ({ key }))
+})
+
+const availableVersionInputKeys = computed(() => {
+  const list = Array.isArray(formData.value.versionInputs) ? formData.value.versionInputs : []
+  const keys = list
+    .map((it) => String((it as any)?.name || '').trim())
+    .filter((n) => Boolean(n))
+  return Array.from(new Set(keys))
+})
+
+function ensureDefaultVersionInputKey() {
+  const keys = availableVersionInputKeys.value
+  if (keys.length === 0) {
+    formData.value.versionInputKey = ''
+    return
+  }
+  const cur = String(formData.value.versionInputKey || '').trim()
+  if (cur && keys.includes(cur)) return
+  formData.value.versionInputKey = keys.includes('version') ? 'version' : keys[0]
+}
+
+function ensureDefaultDependencyVersionInputKey() {
+  const keys = availableVersionInputKeys.value
+  if (keys.length === 0) {
+    formData.value.dependencyVersionInputKey = ''
+    return
+  }
+  const cur = String(formData.value.dependencyVersionInputKey || '').trim()
+  if (cur && keys.includes(cur)) return
+  if (keys.includes('dependencyVersion')) {
+    formData.value.dependencyVersionInputKey = 'dependencyVersion'
+    return
+  }
+  formData.value.dependencyVersionInputKey = keys.includes('version') ? 'version' : keys[0]
+}
 
 type NormalizedConditionBranch = Omit<ConditionBranch, 'isDefault'> & { isDefault: boolean }
 
@@ -250,6 +299,56 @@ function normalizeCodeInputs(list: CodeNodeInput[] | undefined) {
     unique.push(it)
   }
   return unique.slice(0, 30)
+}
+
+function getVersionFieldInput(list?: CodeNodeInput[]) {
+  const arr = Array.isArray(list) ? list : []
+  return arr.find((it) => String(it?.name || '').trim() === 'version')
+}
+
+function upsertVersionFieldInput(patch: Partial<CodeNodeInput>) {
+  const cur = Array.isArray(formData.value.versionInputs) ? [...formData.value.versionInputs] : []
+  const idx = cur.findIndex((it) => String(it?.name || '').trim() === 'version')
+  const base: CodeNodeInput = idx >= 0
+    ? cur[idx]
+    : { name: 'version', source: 'manual', manualValue: '', ref: { nodeId: '', outputKey: 'stdout' } }
+
+  const merged: CodeNodeInput = { ...base, ...patch, name: 'version' }
+
+  // 切换来源时清理对应字段
+  if (patch.source) {
+    if (patch.source === 'manual') {
+      merged.ref = undefined
+      if (merged.manualValue === undefined) merged.manualValue = ''
+    } else {
+      merged.manualValue = undefined
+      if (!merged.ref) merged.ref = { nodeId: '', outputKey: 'stdout' }
+    }
+  }
+
+  if (idx >= 0) {
+    cur[idx] = merged
+  } else {
+    cur.push(merged)
+  }
+
+  formData.value.versionInputs = normalizeCodeInputs(cur)
+}
+
+function removeVersionFieldInput() {
+  const cur = Array.isArray(formData.value.versionInputs) ? formData.value.versionInputs : []
+  formData.value.versionInputs = cur.filter((it) => String(it?.name || '').trim() !== 'version')
+}
+
+function getVersionFieldRefValue(input?: CodeNodeInput): string {
+  if (!input?.ref?.nodeId || !input?.ref?.outputKey) return ''
+  return `${input.ref.nodeId}::${input.ref.outputKey}`
+}
+
+function handleVersionFieldRefSelect(value: string) {
+  if (!value) return
+  const [nodeId, outputKey] = value.split('::')
+  upsertVersionFieldInput({ source: 'reference', ref: { nodeId, outputKey } })
 }
 
 function normalizeCodeOutputs(list: CodeNodeOutputParam[] | undefined) {
@@ -433,13 +532,22 @@ watch(() => props.node, (node) => {
     }
   } else if (node.type === 'version') {
     // 判断版本来源模式
-    let versionSource: 'bump' | 'manual' | 'reference' = 'bump'
-    if (config?.inputRef) {
-      versionSource = 'reference'
-    } else if (config?.dependencyVersion || (config?.versionTarget !== 'dependency' && !config?.versionBump)) {
-      versionSource = 'manual'
-    } else if (config?.dependencyVersionBump || config?.versionBump) {
-      versionSource = 'bump'
+    let versionSource: 'bump' | 'manual' | 'reference' | 'input' = 'bump'
+    const storedSource = (config as any)?.versionSource
+    if (storedSource === 'input') {
+      versionSource = 'input'
+    }
+    const vInput = getVersionFieldInput((config as any)?.versionInputs)
+    if (versionSource !== 'input') {
+      if (config?.versionTarget !== 'dependency' && vInput) {
+        versionSource = vInput.source === 'manual' ? 'manual' : 'reference'
+      } else if (config?.inputRef) {
+        versionSource = 'reference'
+      } else if (config?.dependencyVersion || (config?.versionTarget !== 'dependency' && !config?.versionBump)) {
+        versionSource = 'manual'
+      } else if (config?.dependencyVersionBump || config?.versionBump) {
+        versionSource = 'bump'
+      }
     }
     
     formData.value = {
@@ -451,11 +559,20 @@ watch(() => props.node, (node) => {
       dependencyType: config?.dependencyType || 'dependencies',
       dependencyVersionMode: config?.dependencyVersionBump ? 'bump' : 'manual',
       dependencyVersionBump: config?.dependencyVersionBump || 'patch',
+      versionInputs: normalizeCodeInputs((config as any)?.versionInputs),
       versionSource: versionSource,
       inputRef: config?.inputRef,
       extractVersionFromRefOutput: (config as any)?.extractVersionFromRefOutput ?? true,
+      versionInputKey: String((config as any)?.versionInputKey || '').trim() || undefined,
+      dependencyVersionInputKey: String((config as any)?.dependencyVersionInputKey || '').trim() || undefined,
       nodeName: (config as any)?.displayName || node.data.label || '',
       enabled: node.data.enabled ?? true
+    }
+
+    // 自动补齐默认引用输入字段
+    if (versionSource === 'input') {
+      if (formData.value.versionTarget === 'dependency') ensureDefaultDependencyVersionInputKey()
+      else ensureDefaultVersionInputKey()
     }
     
     if (config?.packageJsonPath) {
@@ -626,6 +743,22 @@ function saveConfig() {
         ElMessage.warning($t('@NODECFG:请选择要引用的节点输出'))
         return
       }
+      if (formData.value.versionSource === 'input') {
+        const key = String(formData.value.dependencyVersionInputKey || '').trim()
+        if (!key) {
+          ElMessage.warning($t('@NODECFG:请选择要引用的输入字段'))
+          return
+        }
+      }
+    } else {
+      // version 字段
+      if (formData.value.versionSource === 'input') {
+        const key = String(formData.value.versionInputKey || '').trim()
+        if (!key) {
+          ElMessage.warning($t('@NODECFG:请选择要引用的输入字段'))
+          return
+        }
+      }
     }
     
     config = {
@@ -640,9 +773,12 @@ function saveConfig() {
       dependencyVersion: formData.value.versionTarget === 'dependency' && formData.value.versionSource === 'manual' ? formData.value.dependencyVersion?.trim() : undefined,
       dependencyVersionBump: formData.value.versionTarget === 'dependency' && formData.value.versionSource === 'bump' ? formData.value.dependencyVersionBump : undefined,
       dependencyType: formData.value.versionTarget === 'dependency' ? formData.value.dependencyType : undefined,
+      versionInputs: normalizeCodeInputs(formData.value.versionInputs),
       versionSource: formData.value.versionSource,
       inputRef: formData.value.versionSource === 'reference' ? formData.value.inputRef : undefined,
       extractVersionFromRefOutput: formData.value.versionSource === 'reference' ? (formData.value.extractVersionFromRefOutput ?? true) : undefined,
+      versionInputKey: formData.value.versionSource === 'input' && formData.value.versionTarget !== 'dependency' ? String(formData.value.versionInputKey || '').trim() || undefined : undefined,
+      dependencyVersionInputKey: formData.value.versionSource === 'input' && formData.value.versionTarget === 'dependency' ? String(formData.value.dependencyVersionInputKey || '').trim() || undefined : undefined,
       enabled: formData.value.enabled ?? true
     }
   } else if (props.node.type === 'code') {
@@ -798,6 +934,23 @@ function saveConfig() {
             <el-switch v-model="formData.enabled" />
           </el-form-item>
         </el-form>
+      </div>
+
+      <!-- 版本节点输入参数配置（同代码节点） -->
+      <div v-if="node?.type === 'version'" class="config-section">
+        <div class="section-title">
+          <el-icon><Link /></el-icon>
+          {{ $t('@NODECFG:输入配置') }}
+          <el-button type="primary" plain :icon="Plus" style="margin-left: auto;" @click="versionInputRef?.addRow()" />
+        </div>
+        <CodeNodeInputConfig
+          ref="versionInputRef"
+          :model-value="formData.versionInputs || []"
+          @update:model-value="(v) => (formData.versionInputs = v)"
+          :predecessor-nodes="predecessorNodes"
+          :title="undefined"
+          :addable="false"
+        />
       </div>
 
       <!-- 条件节点配置 -->
@@ -979,6 +1132,29 @@ function saveConfig() {
           :addable="false"
         />
       </div>
+
+      <!-- 用户输入节点输出配置（字段与输入一致，禁用） -->
+      <div v-if="node?.type === 'user_input'" class="config-section">
+        <div class="section-title">
+          <el-icon><Link /></el-icon>
+          {{ $t('@NODECFG:输出配置') }}
+        </div>
+
+        <ParamListContainer :model-value="userInputOutputParams" :title="undefined" :addable="false" :removable="false">
+          <template #empty>
+            {{ $t('@NODECFG:暂无输出参数') || '' }}
+          </template>
+
+          <template #row="{ item: row }">
+            <div class="output-param-row">
+              <div class="output-param-field">
+                <label class="field-label">{{ $t('@NODECFG:参数名') }}</label>
+                <el-input :model-value="row.key" disabled />
+              </div>
+            </div>
+          </template>
+        </ParamListContainer>
+      </div>
       
       <!-- 命令节点配置 -->
       <div v-if="node?.type === 'command'" class="config-section">
@@ -1110,13 +1286,98 @@ function saveConfig() {
           
           <!-- version 字段配置 -->
           <template v-if="formData.versionTarget === 'version'">
-            <el-form-item :label="$t('@NODECFG:版本增量类型')" required>
+            <el-form-item :label="$t('@NODECFG:版本号来源')" required>
+              <el-radio-group
+                v-model="formData.versionSource"
+                @change="(v: any) => {
+                  if (v === 'bump') {
+                    removeVersionFieldInput()
+                  } else if (v === 'manual') {
+                    upsertVersionFieldInput({ source: 'manual', manualValue: getVersionFieldInput(formData.versionInputs)?.manualValue ?? '' })
+                  } else if (v === 'reference') {
+                    upsertVersionFieldInput({ source: 'reference', ref: getVersionFieldInput(formData.versionInputs)?.ref || { nodeId: '', outputKey: 'stdout' } })
+                  } else if (v === 'input') {
+                    ensureDefaultVersionInputKey()
+                  }
+                }"
+              >
+                <el-radio value="bump">{{ $t('@NODECFG:自动递增') }}</el-radio>
+                <el-radio value="manual">{{ $t('@NODECFG:手动输入') }}</el-radio>
+                <el-radio value="reference" :disabled="predecessorNodes.length === 0">
+                  {{ $t('@NODECFG:引用输出') }}
+                  <el-tooltip v-if="predecessorNodes.length === 0" :content="$t('@NODECFG:无可用的前置命令节点')" placement="top">
+                    <el-icon style="margin-left: 4px;"><Link /></el-icon>
+                  </el-tooltip>
+                </el-radio>
+                <el-radio value="input" :disabled="availableVersionInputKeys.length === 0">
+                  {{ $t('@NODECFG:引用输入') }}
+                </el-radio>
+              </el-radio-group>
+            </el-form-item>
+
+            <el-form-item v-if="formData.versionSource === 'bump'" :label="$t('@NODECFG:版本增量类型')" required>
               <el-radio-group v-model="formData.versionBump">
                 <el-radio value="patch">{{ $t('@NODECFG:补丁版本x.x.+1') }}</el-radio>
                 <el-radio value="minor">{{ $t('@NODECFG:次版本x.+1.0') }}</el-radio>
                 <el-radio value="major">{{ $t('@NODECFG:主版本+1.0.0') }}</el-radio>
               </el-radio-group>
             </el-form-item>
+
+            <el-form-item v-if="formData.versionSource === 'manual'" :label="$t('@NODECFG:版本号')" required>
+              <el-input
+                :model-value="getVersionFieldInput(formData.versionInputs)?.manualValue"
+                :placeholder="$t('@NODECFG:例如1.2.3')"
+                @update:model-value="(v: string) => upsertVersionFieldInput({ source: 'manual', manualValue: v })"
+              />
+            </el-form-item>
+
+            <template v-if="formData.versionSource === 'reference'">
+              <el-form-item :label="$t('@NODECFG:引用节点')" required>
+                <el-tree-select
+                  :model-value="getVersionFieldRefValue(getVersionFieldInput(formData.versionInputs))"
+                  :data="predecessorNodes.map(n => ({
+                    value: n.id,
+                    label: getNodeDisplayName(n),
+                    children: getNodeOutputOptions(n).map((opt: any) => ({ value: `${n.id}::${opt.key}`, label: opt.label }))
+                  }))"
+                  :placeholder="$t('@NODECFG:选择要引用的前置节点')"
+                  clearable
+                  filterable
+                  check-strictly
+                  :render-after-expand="false"
+                  @update:model-value="(v: string) => handleVersionFieldRefSelect(v)"
+                />
+              </el-form-item>
+
+              <el-form-item :label="$t('@NODECFG:提取版本号')">
+                <el-switch v-model="formData.extractVersionFromRefOutput" />
+              </el-form-item>
+
+              <div class="reference-tip">
+                <el-icon><Link /></el-icon>
+                <span>{{ $t('@NODECFG:版本号将使用所选节点的输出结果') }}</span>
+              </div>
+            </template>
+
+            <template v-if="formData.versionSource === 'input'">
+              <el-form-item :label="$t('@NODECFG:引用输入')" required>
+                <el-select
+                  v-model="formData.versionInputKey"
+                  filterable
+                  clearable
+                  style="width: 100%"
+                  :placeholder="$t('@NODECFG:选择要引用的输入字段')"
+                  @change="ensureDefaultVersionInputKey"
+                >
+                  <el-option v-for="k in availableVersionInputKeys" :key="k" :label="k" :value="k" />
+                </el-select>
+              </el-form-item>
+
+              <div class="reference-tip">
+                <el-icon><Link /></el-icon>
+                <span>{{ $t('@NODECFG:版本号将使用本节点输入参数的值') }}</span>
+              </div>
+            </template>
           </template>
           
           <!-- dependency 配置 -->
@@ -1147,7 +1408,12 @@ function saveConfig() {
             </el-form-item>
             
             <el-form-item :label="$t('@NODECFG:版本号来源')" required>
-              <el-radio-group v-model="formData.versionSource">
+              <el-radio-group
+                v-model="formData.versionSource"
+                @change="(v: any) => {
+                  if (v === 'input') ensureDefaultDependencyVersionInputKey()
+                }"
+              >
                 <el-radio value="bump">{{ $t('@NODECFG:自动递增') }}</el-radio>
                 <el-radio value="manual">{{ $t('@NODECFG:手动输入') }}</el-radio>
                 <el-radio value="reference" :disabled="predecessorNodes.length === 0">
@@ -1155,6 +1421,9 @@ function saveConfig() {
                   <el-tooltip v-if="predecessorNodes.length === 0" :content="$t('@NODECFG:无可用的前置命令节点')" placement="top">
                     <el-icon style="margin-left: 4px;"><Link /></el-icon>
                   </el-tooltip>
+                </el-radio>
+                <el-radio value="input" :disabled="availableVersionInputKeys.length === 0">
+                  {{ $t('@NODECFG:引用输入') }}
                 </el-radio>
               </el-radio-group>
             </el-form-item>
@@ -1219,6 +1488,26 @@ function saveConfig() {
               <div class="reference-tip">
                 <el-icon><Link /></el-icon>
                 <span>{{ $t('@NODECFG:版本号将使用所选节点的输出结果') }}</span>
+              </div>
+            </template>
+
+            <template v-if="formData.versionSource === 'input'">
+              <el-form-item :label="$t('@NODECFG:引用输入')" required>
+                <el-select
+                  v-model="formData.dependencyVersionInputKey"
+                  filterable
+                  clearable
+                  style="width: 100%"
+                  :placeholder="$t('@NODECFG:选择要引用的输入字段')"
+                  @change="ensureDefaultDependencyVersionInputKey"
+                >
+                  <el-option v-for="k in availableVersionInputKeys" :key="k" :label="k" :value="k" />
+                </el-select>
+              </el-form-item>
+
+              <div class="reference-tip">
+                <el-icon><Link /></el-icon>
+                <span>{{ $t('@NODECFG:版本号将使用本节点输入参数的值') }}</span>
               </div>
             </template>
           </template>

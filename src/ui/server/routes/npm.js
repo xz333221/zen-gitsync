@@ -51,7 +51,7 @@ export function registerNpmRoutes({
   // 版本号递增或依赖版本修改
   app.post('/api/version-bump', express.json(), async (req, res) => {
     try {
-      const { bumpType, packageJsonPath, versionTarget, dependencyName, dependencyVersion, dependencyVersionBump, dependencyType } = req.body
+      const { bumpType, packageJsonPath, versionTarget, dependencyName, dependencyVersion, dependencyVersionBump, dependencyType, versionValue } = req.body
       
       // 确定 package.json 的路径
       let pkgPath
@@ -155,7 +155,7 @@ export function registerNpmRoutes({
           dependencyType: depType
         })
       } else {
-        // 修改 version 字段（原有逻辑）
+        // 修改 version 字段
         if (!pkg.version) {
           return res.status(400).json({ 
             success: false, 
@@ -164,6 +164,28 @@ export function registerNpmRoutes({
         }
         
         const oldVersion = pkg.version
+
+        // 直接设置版本号（来自版本节点输入配置）
+        const direct = typeof versionValue === 'string' ? versionValue.trim() : ''
+        if (direct) {
+          const versionParts = direct.split('.').map(Number)
+          if (versionParts.length !== 3 || versionParts.some(isNaN)) {
+            return res.status(400).json({
+              success: false,
+              error: `无效的版本号格式: ${direct}，应为 x.y.z 格式`
+            })
+          }
+
+          pkg.version = direct
+          await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
+
+          return res.json({
+            success: true,
+            oldVersion,
+            newVersion: direct,
+            filePath: pkgPath
+          })
+        }
         
         // 解析版本号
         const versionParts = oldVersion.split('.').map(Number)
