@@ -25,6 +25,10 @@ export function registerNpmRoutes({
       
       // 检查文件是否存在
       try {
+        const stats = await fs.stat(pkgPath)
+        if (stats.isDirectory()) {
+          pkgPath = path.join(pkgPath, 'package.json')
+        }
         await fs.access(pkgPath)
       } catch (err) {
         return res.status(404).json({ 
@@ -42,6 +46,7 @@ export function registerNpmRoutes({
         dependencies: pkg.dependencies || {},
         devDependencies: pkg.devDependencies || {},
         peerDependencies: pkg.peerDependencies || {},
+        peerDependenciesMeta: pkg.peerDependenciesMeta || {},
         version: pkg.version
       })
     } catch (error) {

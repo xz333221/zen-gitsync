@@ -131,7 +131,7 @@ export const useConfigStore = defineStore('config', () => {
   const commandTemplates = ref<string[]>([])
   const lockedFiles = ref<string[]>([])
   const customCommands = ref<Array<{id: string, name: string, description?: string, directory: string, command: string}>>([])
-  const orchestrations = ref<Array<{id: string, name: string, description?: string, steps: OrchestrationStep[]}>>([])
+  const orchestrations = ref<Array<{id: string, name: string, description?: string, flowData?: any}>>([])
   const startupItems = ref<Array<{id: string, type: 'command' | 'workflow', refId: string, createdAt: number, enabled: boolean}>>([])
   const startupAutoRun = ref(false)
   const afterQuickPushAction = ref<{ enabled: boolean; type: 'command' | 'workflow'; refId: string }>({
@@ -704,7 +704,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 指令编排管理函数
-  async function saveOrchestration(orchestration: { name: string; description?: string; steps: OrchestrationStep[]; flowData?: any }) {
+  async function saveOrchestration(orchestration: { name: string; description?: string; flowData?: any }) {
     try {
       const response = await fetch('/api/config/save-orchestration', {
         method: 'POST',
@@ -754,7 +754,7 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  async function updateOrchestration(id: string, orchestration: { name: string; description?: string; steps: OrchestrationStep[] }) {
+  async function updateOrchestration(id: string, orchestration: { name: string; description?: string; flowData?: any }) {
     try {
       const response = await fetch('/api/config/update-orchestration', {
         method: 'POST',

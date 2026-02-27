@@ -630,8 +630,13 @@ async function loadDependenciesFromPackageJson(pkgPath: string) {
         deps.push(...Object.keys(result.dependencies))
       } else if (depType === 'devDependencies' && result.devDependencies) {
         deps.push(...Object.keys(result.devDependencies))
-      } else if (depType === 'peerDependencies' && result.peerDependencies) {
-        deps.push(...Object.keys(result.peerDependencies))
+      } else if (depType === 'peerDependencies') {
+        const peerDeps = result.peerDependencies && Object.keys(result.peerDependencies).length > 0
+          ? result.peerDependencies
+          : result.peerDependenciesMeta
+        if (peerDeps) {
+          deps.push(...Object.keys(peerDeps))
+        }
       }
       availableDependencies.value = deps.sort()
     }

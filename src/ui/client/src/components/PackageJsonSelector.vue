@@ -115,12 +115,42 @@ async function browseDirectory() {
 // 显示目录选择对话框
 function selectDirectoryDialog(directoryData: any) {
   if (!directoryData || !directoryData.items) return
+  let manualPath = String(directoryData.path || '')
+  const jumpToPath = () => {
+    const target = String(manualPath || '').trim()
+    if (!target) {
+      ElMessage.warning('请输入目录路径')
+      return
+    }
+    selectDirectory(target)
+  }
   
   ElMessageBox.alert(
     h('div', { class: 'directory-browser' }, [
       h('div', { class: 'current-path' }, [
         h('span', { class: 'path-label' }, '当前路径：'),
-        h('span', { class: 'path-value' }, directoryData.path)
+        h('input', {
+          class: 'path-value',
+          value: manualPath,
+          onInput: (event: Event) => {
+            manualPath = (event.target as HTMLInputElement).value
+          },
+          onKeydown: (event: KeyboardEvent) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              jumpToPath()
+            }
+          }
+        }),
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'path-jump-btn',
+            onClick: jumpToPath
+          },
+          '跳转'
+        )
       ]),
       h('div', { class: 'directory-list' }, [
         directoryData.parentPath
@@ -196,7 +226,12 @@ function selectDirectoryDialog(directoryData: any) {
       callback: (action: string) => {
         if (action === 'confirm') {
           // 用户确认选择，扫描该目录
-          scanPackageFiles(directoryData.path)
+          const target = String(manualPath || directoryData.path || '').trim()
+          if (!target) {
+            ElMessage.warning('请输入目录路径')
+            return
+          }
+          scanPackageFiles(target)
         }
       }
     }

@@ -196,7 +196,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
-  (e: 'execute-orchestration', steps: OrchestrationStep[], startIndex?: number, isSingleExecution?: boolean, orchestrationMeta?: { id?: string; name?: string }): void
   (e: 'execute-flow', payload: { flowData: FlowData; startNodeId?: string; isSingleExecution?: boolean; orchestrationMeta?: { id?: string; name?: string } }): void
   (e: 'open-command-manager'): void
 }>()
@@ -278,7 +277,6 @@ async function duplicateOrchestration(orchestration: any) {
     const payload = {
       name: newName,
       description: orchestration?.description || '',
-      steps: Array.isArray(orchestration?.steps) ? JSON.parse(JSON.stringify(orchestration.steps)) : [],
       flowData: orchestration?.flowData ? JSON.parse(JSON.stringify(orchestration.flowData)) : null
     }
 
@@ -292,6 +290,10 @@ async function duplicateOrchestration(orchestration: any) {
   } catch (error: any) {
     ElMessage.error(`${t('@ORCH:错误')}: ${error?.message || error}`)
   }
+}
+
+function getExecutableNodes() {
+  return nodes.value.filter((n: FlowNode) => n.type !== 'start' && n.data?.config)
 }
 
 function estimateNodeSize(type: 'command' | 'wait' | 'version' | 'confirm' | 'code' | 'condition' | 'user_input') {
@@ -733,10 +735,8 @@ async function saveOrchestration() {
     ElMessage.warning(`以下节点还未配置：${nodeLabels}。未配置的节点不会被保存。`)
   }
   
-  // 转换流程为步骤列表（通过拓扑排序）
-  const steps = convertFlowToSteps()
-  
-  if (steps.length === 0) {
+  const executableNodes = getExecutableNodes()
+  if (executableNodes.length === 0) {
     ElMessage.warning('请至少添加一个执行步骤')
     return
   }
@@ -747,7 +747,6 @@ async function saveOrchestration() {
   const orchestration = {
     name: orchestrationName.value.trim(),
     description: orchestrationDescription.value.trim(),
-    steps,
     // 保存流程图数据以便后续编辑
     flowData: {
       nodes: sanitizeNodesForSave(nodes.value as any),
@@ -772,64 +771,9 @@ async function saveOrchestration() {
   }
 }
 
-// 将流程图转换为执行步骤（拓扑排序）
-function convertFlowToSteps(): OrchestrationStep[] {
-  const steps: OrchestrationStep[] = []
-  const visited = new Set<string>()
-  const visiting = new Set<string>()
-  
-  // 深度优先搜索进行拓扑排序
-  function dfs(nodeId: string) {
-    if (visited.has(nodeId)) return
-    if (visiting.has(nodeId)) {
-      ElMessage.warning('检测到循环依赖，请检查流程图')
-      return
-    }
-    
-    visiting.add(nodeId)
-    
-    const node = nodes.value.find(n => n.id === nodeId)
-    if (!node) {
-      visiting.delete(nodeId)
-      return
-    }
-    
-    // 添加步骤（排除起始节点），并记录nodeId用于定位
-    if (node.type !== 'start' && node.data.config) {
-      steps.push({
-        ...node.data.config,
-        nodeId: node.id,
-        enabled: node.data.enabled ?? true
-      })
-    }
-    
-    visiting.delete(nodeId)
-    visited.add(nodeId)
-    
-    // 递归处理该节点的所有后续节点
-    const outgoingEdges = edges.value.filter(e => e.source === nodeId)
-    for (const edge of outgoingEdges) {
-      dfs(edge.target)
-    }
-  }
-  
-  // 从起始节点开始遍历
-  const startNode = nodes.value.find(n => n.type === 'start')
-  if (startNode) {
-    const outgoingEdges = edges.value.filter(e => e.source === startNode.id)
-    for (const edge of outgoingEdges) {
-      dfs(edge.target)
-    }
-  }
-  
-  return steps
-}
-
 // 执行当前流程
 function executeCurrentFlow() {
-  const steps = convertFlowToSteps()
-  
-  if (steps.length === 0) {
+  if (getExecutableNodes().length === 0) {
     ElMessage.warning('请至少添加一个执行步骤')
     return
   }
@@ -853,18 +797,9 @@ function executeCurrentFlow() {
 
 // 从某个节点开始执行
 function executeFromNode(nodeId: string) {
-  const steps = convertFlowToSteps()
-  
-  if (steps.length === 0) {
-    ElMessage.warning('请至少添加一个执行步骤')
-    return
-  }
-  
-  // 找到该节点在步骤列表中的索引
-  const nodeIndex = steps.findIndex(step => step.nodeId === nodeId)
-  
-  if (nodeIndex === -1) {
-    ElMessage.warning('未找到该节点对应的步骤')
+  const node = nodes.value.find(n => n.id === nodeId)
+  if (!node || node.type === 'start' || !node.data.config) {
+    ElMessage.warning('该节点无法执行')
     return
   }
   
@@ -937,46 +872,8 @@ function loadOrchestration(orchestration: any) {
       }, 100)
     }
   } else {
-    // 否则从步骤列表转换为流程图（线性布局）
-    convertStepsToFlow(orchestration.steps)
-    void refreshNodeInternals()
+    initializeFlow()
   }
-}
-
-// 将步骤列表转换为流程图
-function convertStepsToFlow(steps: OrchestrationStep[]) {
-  initializeFlow()
-  
-  let yPos = 150
-  let prevNodeId = 'start-node'
-  
-  steps.forEach((step) => {
-    const id = generateNodeId(step.type)
-    const node: FlowNode = {
-      id,
-      type: step.type,
-      position: { x: 250, y: yPos },
-      data: {
-        id,
-        type: step.type,
-        label: getNodeLabel(step),
-        config: step,
-        enabled: step.enabled ?? true
-      }
-    }
-    
-    nodes.value.push(node)
-    
-    // 添加连接边
-    edges.value.push({
-      id: `edge-${prevNodeId}-${id}`,
-      source: prevNodeId,
-      target: id
-    })
-    
-    prevNodeId = id
-    yPos += 120
-  })
 }
 
 // 创建新编排
@@ -1029,7 +926,7 @@ function executeOrchestration(orchestration: any) {
     })
     return
   }
-  emit('execute-orchestration', orchestration.steps, 0, false, { id: orchestration?.id, name: orchestration?.name })
+  ElMessage.warning('该编排缺少流程数据，无法执行')
 }
 
 // 初始化

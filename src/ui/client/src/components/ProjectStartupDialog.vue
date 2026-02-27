@@ -359,9 +359,9 @@ function executeItem(item: any) {
             <div
               v-else
               class="startup-item__dir"
-              :title="String(it.wf?.steps?.length || 0)"
+              :title="String(it.wf?.flowData?.nodes?.length || 0)"
             >
-              {{ t('@PSTART:步骤') }}：{{ it.wf?.steps?.length || 0 }}
+              {{ t('@PSTART:步骤') }}：{{ it.wf?.flowData?.nodes?.length || 0 }}
             </div>
           </div>
           <div class="startup-item__actions">
@@ -413,7 +413,7 @@ function executeItem(item: any) {
                 <div class="startup-option">
                   <div class="startup-option__name">{{ wf.name }}</div>
                   <div class="startup-option__cmd">
-                    {{ wf.description || `步骤: ${wf.steps?.length || 0}` }}
+                    {{ wf.description || `步骤: ${wf.flowData?.nodes?.length || 0}` }}
                   </div>
                 </div>
               </el-option>

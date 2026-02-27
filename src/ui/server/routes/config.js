@@ -534,7 +534,7 @@ export function registerConfigRoutes({
     try {
       const { orchestration } = req.body
       
-      if (!orchestration || !orchestration.name || !Array.isArray(orchestration.steps)) {
+    if (!orchestration || !orchestration.name) {
         return res.status(400).json({ success: false, error: '缺少必要参数' })
       }
       
@@ -547,13 +547,12 @@ export function registerConfigRoutes({
       
       // 生成唯一ID
       const id = `orch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      const newOrchestration = {
-        id,
-        name: orchestration.name,
-        description: orchestration.description || '',
-        steps: orchestration.steps,
-        flowData: orchestration.flowData || null
-      }
+    const newOrchestration = {
+      id,
+      name: orchestration.name,
+      description: orchestration.description || '',
+      flowData: orchestration.flowData || null
+    }
       
       config.orchestrations.push(newOrchestration)
       await configManager.saveConfig(config)
@@ -594,7 +593,7 @@ export function registerConfigRoutes({
     try {
       const { id, orchestration } = req.body
       
-      if (!id || !orchestration || !orchestration.name || !Array.isArray(orchestration.steps)) {
+    if (!id || !orchestration || !orchestration.name) {
         return res.status(400).json({ success: false, error: '缺少必要参数' })
       }
       
@@ -603,13 +602,12 @@ export function registerConfigRoutes({
       if (Array.isArray(config.orchestrations)) {
         const index = config.orchestrations.findIndex(orch => orch.id === id)
         if (index !== -1) {
-          config.orchestrations[index] = {
-            id,
-            name: orchestration.name,
-            description: orchestration.description || '',
-            steps: orchestration.steps,
-            flowData: orchestration.flowData || null
-          }
+        config.orchestrations[index] = {
+          id,
+          name: orchestration.name,
+          description: orchestration.description || '',
+          flowData: orchestration.flowData || null
+        }
           await configManager.saveConfig(config)
         } else {
           return res.status(404).json({ success: false, error: '未找到指定编排' })

@@ -45,7 +45,7 @@ async function runWorkflow(wf: any) {
     await executeFlow({ flowData, orchestrationMeta: meta })
     return
   }
-  await executeOrchestration(wf?.steps || [], 0, false, meta)
+  ElMessage.warning('该编排缺少流程数据，无法执行')
 }
 
 async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; isSingleExecution?: boolean; orchestrationMeta?: { id?: string; name?: string } }) {
@@ -2889,7 +2889,6 @@ onUnmounted(() => {
   <!-- 可视化编排工作台（基于 vue-flow） -->
   <FlowOrchestrationWorkspace
     v-model:visible="flowOrchestrationVisible"
-    @execute-orchestration="executeOrchestration"
     @execute-flow="executeFlow"
     @open-command-manager="commandManagerVisible = true"
   />
