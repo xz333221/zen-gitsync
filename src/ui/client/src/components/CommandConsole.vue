@@ -1628,7 +1628,11 @@ async function executeOrchestration(
       
       if (step.versionTarget === 'dependency') {
         // 修改依赖版本
-        const depType = step.dependencyType === 'devDependencies' ? 'devDep' : 'dep';
+        const depType = step.dependencyType === 'devDependencies'
+          ? 'devDep'
+          : step.dependencyType === 'peerDependencies'
+            ? 'peerDep'
+            : 'dep';
         if (versionSource === 'reference') {
           stepLabel = `修改依赖 [${depType}] ${step.dependencyName} → ${resolvedDependencyVersion} (引用输出)`;
         } else if (versionSource === 'input') {

@@ -95,7 +95,7 @@ export interface OrchestrationStep {
   dependencyName?: string  // 要修改的依赖包名称
   dependencyVersion?: string  // 依赖包的新版本号（手动输入模式）
   dependencyVersionBump?: 'patch' | 'minor' | 'major'  // 依赖版本号增量类型（自动递增模式）
-  dependencyType?: 'dependencies' | 'devDependencies'  // 依赖类型
+  dependencyType?: 'dependencies' | 'devDependencies' | 'peerDependencies'  // 依赖类型
   // 版本节点输入配置（同代码节点）：可用于配置 version / dependencyVersion 等参数
   versionInputs?: CodeNodeInput[]
   // 节点输入输出功能

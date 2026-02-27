@@ -118,7 +118,7 @@ const formData = ref<{
   selectedPackageFile?: PackageFile | null
   dependencyName?: string
   dependencyVersion?: string
-  dependencyType?: 'dependencies' | 'devDependencies'
+  dependencyType?: 'dependencies' | 'devDependencies' | 'peerDependencies'
   dependencyVersionMode?: 'bump' | 'manual'
   dependencyVersionBump?: 'patch' | 'minor' | 'major'
   versionInputs?: CodeNodeInput[]
@@ -630,6 +630,8 @@ async function loadDependenciesFromPackageJson(pkgPath: string) {
         deps.push(...Object.keys(result.dependencies))
       } else if (depType === 'devDependencies' && result.devDependencies) {
         deps.push(...Object.keys(result.devDependencies))
+      } else if (depType === 'peerDependencies' && result.peerDependencies) {
+        deps.push(...Object.keys(result.peerDependencies))
       }
       availableDependencies.value = deps.sort()
     }
@@ -1386,6 +1388,7 @@ function saveConfig() {
               <el-radio-group v-model="formData.dependencyType">
                 <el-radio value="dependencies">dependencies</el-radio>
                 <el-radio value="devDependencies">devDependencies</el-radio>
+                <el-radio value="peerDependencies">peerDependencies</el-radio>
               </el-radio-group>
             </el-form-item>
             

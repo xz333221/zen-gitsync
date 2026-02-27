@@ -41,6 +41,7 @@ export function registerNpmRoutes({
         success: true, 
         dependencies: pkg.dependencies || {},
         devDependencies: pkg.devDependencies || {},
+        peerDependencies: pkg.peerDependencies || {},
         version: pkg.version
       })
     } catch (error) {
