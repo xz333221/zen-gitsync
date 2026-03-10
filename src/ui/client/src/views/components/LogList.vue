@@ -1066,6 +1066,7 @@ function toggleFullscreen() {
             clearable
             class="filter-input"
             size="small"
+            @keyup.enter="applyFilters"
           >
             <template #prefix>
               <span class="compact-label">{{ $t('@A1833:信息') }}</span>
