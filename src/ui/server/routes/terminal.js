@@ -10,11 +10,65 @@ export function registerTerminalRoutes({
     const targetDir = workingDirectory || getCurrentProjectPath();
 
     if (process.platform === 'win32') {
-      const cmdToRun = command.trim();
+      const cmdToRun = String(command || '').trim();
       const safeWorkingDir = String(targetDir).replace(/"/g, '""');
-      const safeCmd = String(cmdToRun).replace(/"/g, '""');
 
-      const psScript = `$p = Start-Process -FilePath "cmd.exe" -ArgumentList "/K", "${safeCmd}" -WorkingDirectory "${safeWorkingDir}" -PassThru; Write-Output $p.Id`;
+      const splitArgs = (input) => {
+        const s = String(input || '');
+        const out = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < s.length; i++) {
+          const ch = s[i];
+          if (ch === '"') {
+            if (inQuotes && s[i + 1] === '"') {
+              cur += '"';
+              i++;
+              continue;
+            }
+            inQuotes = !inQuotes;
+            continue;
+          }
+          if (!inQuotes && /\s/.test(ch)) {
+            if (cur) out.push(cur);
+            cur = '';
+            continue;
+          }
+          cur += ch;
+        }
+        if (cur) out.push(cur);
+        return out;
+      };
+
+      const isUrl = (v) => /^https?:\/\//i.test(String(v || '').trim());
+
+      const tokens = splitArgs(cmdToRun);
+      const isStartCommand = tokens.length > 0 && String(tokens[0]).toLowerCase() === 'start';
+
+      let psScript;
+      if (isStartCommand) {
+        const args = tokens.slice(1);
+        const first = args[0];
+        const second = args[1];
+        const candidateExe = first === '' ? second : first;
+        const candidateUrl = isUrl(first) ? first : isUrl(second) ? second : null;
+        const exe = candidateExe && !isUrl(candidateExe) ? String(candidateExe) : null;
+
+        if (!exe && candidateUrl) {
+          const safeUrl = String(candidateUrl).replace(/"/g, '""');
+          psScript = `$p = Start-Process -FilePath "${safeUrl}" -WorkingDirectory "${safeWorkingDir}" -PassThru; Write-Output $p.Id`;
+        } else if (exe && candidateUrl) {
+          const safeExe = String(exe).replace(/"/g, '""');
+          const safeUrl = String(candidateUrl).replace(/"/g, '""');
+          psScript = `$p = Start-Process -FilePath "${safeExe}" -ArgumentList "${safeUrl}" -WorkingDirectory "${safeWorkingDir}" -PassThru; Write-Output $p.Id`;
+        } else {
+          const safeCmd = String(cmdToRun).replace(/"/g, '""');
+          psScript = `$p = Start-Process -FilePath "cmd.exe" -ArgumentList "/C", "${safeCmd}" -WorkingDirectory "${safeWorkingDir}" -WindowStyle Hidden -PassThru; Write-Output $p.Id`;
+        }
+      } else {
+        const safeCmd = String(cmdToRun).replace(/"/g, '""');
+        psScript = `$p = Start-Process -FilePath "cmd.exe" -ArgumentList "/K", "${safeCmd}" -WorkingDirectory "${safeWorkingDir}" -PassThru; Write-Output $p.Id`;
+      }
 
       return await new Promise((resolve, reject) => {
         const child = spawn('powershell.exe', ['-NoProfile', '-Command', psScript], {
