@@ -208,34 +208,74 @@ async function main() {
     const intervalArg = process.argv.find(arg => arg.startsWith('--cmd-interval='));
     
     if (atArg) {
-      // 定点执行
       const atMatch = atArg.match(/^--at=(['"]?)(.*)\1$/);
       const atTime = atMatch ? atMatch[2] : '';
-      const now = new Date();
-      let target;
-      if (/^\d{2}:\d{2}$/.test(atTime)) {
-        // 只给了时:分，今天的
-        const [h, m] = atTime.split(':');
-        target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
-      } else {
-        target = new Date(atTime);
-      }
-      const delay = target - now;
-      if (delay > 0) {
-        console.log(`将在 ${target.toLocaleString()} 执行: ${cmd}`);
-        setTimeout(() => {
-          console.log(`\n[自定义命令执行] ${new Date().toLocaleString()}\n> ${cmd}`);
-          exec(cmd, (err, stdout, stderr) => {
-            if (err) {
-              console.error(`[自定义命令错误]`, err.message);
-            }
-            if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
-            if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
-          });
+      const repeatDaily = process.argv.includes('--daily') || process.argv.includes('--repeat=daily') || process.argv.includes('--at-repeat=daily');
+
+      const runOnce = () => {
+        console.log(`\n[自定义命令执行] ${new Date().toLocaleString()}\n> ${cmd}`);
+        exec(cmd, (err, stdout, stderr) => {
+          if (err) {
+            console.error(`[自定义命令错误]`, err.message);
+          }
+          if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
+          if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
+        });
+      };
+
+      const getNextTarget = (now) => {
+        if (/^\d{2}:\d{2}$/.test(atTime)) {
+          const [h, m] = atTime.split(':').map((v) => parseInt(v, 10));
+          if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+          const base = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+          if (base.getTime() > now.getTime()) return base;
+          return new Date(base.getTime() + 24 * 60 * 60 * 1000);
+        }
+
+        const parsed = new Date(atTime);
+        if (!Number.isFinite(parsed.getTime())) return null;
+
+        if (!repeatDaily) return parsed;
+
+        const base = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parsed.getHours(), parsed.getMinutes(), parsed.getSeconds(), 0);
+        if (base.getTime() > now.getTime()) return base;
+        return new Date(base.getTime() + 24 * 60 * 60 * 1000);
+      };
+
+      let atTimer = null;
+      const scheduleNext = () => {
+        const now = new Date();
+        const target = getNextTarget(now);
+        if (!target) {
+          console.error('无效的时间参数');
+          return;
+        }
+
+        let delay = target.getTime() - now.getTime();
+        if (!Number.isFinite(delay)) {
+          console.error('无效的时间参数');
+          return;
+        }
+
+        if (!repeatDaily && delay <= 0) {
+          console.log('指定时间已过，不执行自定义命令');
+          return;
+        }
+
+        if (delay < 0) delay = 0;
+        console.log(`将在 ${target.toLocaleString()} 执行: ${cmd}${repeatDaily ? '（每日循环）' : ''}`);
+        atTimer = setTimeout(() => {
+          runOnce();
+          if (repeatDaily) scheduleNext();
         }, delay);
-      } else {
-        console.log('指定时间已过，不执行自定义命令');
-      }
+      };
+
+      scheduleNext();
+
+      process.on('SIGINT', () => {
+        if (atTimer) clearTimeout(atTimer);
+        process.exit();
+      });
     } else if (intervalArg) {
       // 定时循环执行
       const intervalMatch = intervalArg.match(/^--cmd-interval=(['"]?)(.*)\1$/);

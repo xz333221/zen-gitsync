@@ -462,10 +462,12 @@ File Locking:
   --cmd="your-cmd"            Execute custom cmd command (immediately, at a time, or periodically)
   --cmd-interval=<seconds>    Execute custom cmd every N seconds
   --at="HH:MM"                Execute custom cmd at a specific time (today) or --at="YYYY-MM-DD HH:MM:SS"
+  --daily                     Repeat with --at every day at the same time
 
 Example:
   g --cmd="echo hello" --cmd-interval=5      # 每5秒执行一次echo hello
   g --cmd="echo at-time" --at=23:59          # 在23:59执行一次echo at-time
+  g --cmd="echo daily" --at=23:59 --daily    # 每天23:59执行一次echo daily
   g --cmd="echo now"                         # 立即执行一次echo now
   g --cmd="echo hi" --cmd-interval=10 --interval=60  # cmd和git自动提交并行
   g -m "Initial commit"      Commit with a custom message

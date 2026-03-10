@@ -76,6 +76,7 @@ start /min cmd /k "g -y --path=你要同步的文件夹 --interval"
 ```shell
 start /min cmd /k "g --cmd=\"echo hello\" --cmd-interval=5"     # 每5秒执行一次echo hello
 start /min cmd /k "g --cmd=\"echo at-time\" --at=23:59" # 在23:59执行一次echo at-time
+start /min cmd /k "g --cmd=\"echo daily\" --at=23:59 --daily" # 每天23:59执行一次echo daily
 ```
 
 #### 不显示git diff内容
