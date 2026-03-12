@@ -2,8 +2,9 @@
 import { ref, computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElDialog, ElProgress, ElIcon } from 'element-plus';
-import { Close, Loading, CircleCheck } from '@element-plus/icons-vue';
+import { Close, Loading, CircleCheck, Download } from '@element-plus/icons-vue';
 import { useConfigStore } from '@stores/configStore';
+import { useGitStore } from '@stores/gitStore';
 
 const { t } = useI18n();
 
@@ -14,6 +15,7 @@ interface Props {
 interface Emits {
   (e: 'update:modelValue', value: boolean): void;
   (e: 'complete', success: boolean): void;
+  (e: 'pull-requested'): void;
 }
 
 const props = defineProps<Props>();
@@ -21,6 +23,7 @@ const emit = defineEmits<Emits>();
 
 // 从configStore获取配置
 const configStore = useConfigStore();
+const gitStore = useGitStore();
 
 // 阶段定义
 interface Stage {
@@ -34,6 +37,28 @@ interface Stage {
 const status = ref<'progress' | 'success' | 'error'>('progress');
 const messages = ref<string[]>([]);
 const errorMessage = ref('');
+
+// 是否是 non-fast-forward 错误
+const isNonFastForwardError = computed(() => {
+  return errorMessage.value.includes('non-fast-forward') || 
+         errorMessage.value.includes('rejected') && errorMessage.value.includes('fetch first');
+});
+
+// 处理拉取并重试
+const isPulling = ref(false);
+async function handlePullAndRetry() {
+  isPulling.value = true;
+  try {
+    const success = await gitStore.gitPull();
+    if (success) {
+      // 拉取成功后关闭弹窗，由父组件决定是否重试推送或由用户手动重推
+      visible.value = false;
+      emit('pull-requested');
+    }
+  } finally {
+    isPulling.value = false;
+  }
+}
 
 // 推送阶段
 const stages = reactive<Stage[]>([
@@ -224,8 +249,24 @@ defineExpose({
 
       <!-- 错误信息 -->
       <div v-if="status === 'error' && errorMessage" class="error-section">
-        <div class="error-title">{{ t('@PUSH:错误详情') }}：</div>
+        <div class="error-header">
+          <div class="error-title">{{ t('@PUSH:错误详情') }}：</div>
+          <el-button 
+            v-if="isNonFastForwardError" 
+            type="primary" 
+            size="small" 
+            :loading="isPulling"
+            @click="handlePullAndRetry"
+            class="pull-button"
+          >
+            <el-icon><Download /></el-icon>
+            {{ t('@PUSH:先拉取更新') }}
+          </el-button>
+        </div>
         <div class="error-content">{{ errorMessage }}</div>
+        <div v-if="isNonFastForwardError" class="error-suggestion">
+          {{ t('@PUSH:检测到远程有新提交，请先拉取更新后再推送。') }}
+        </div>
       </div>
 
       <!-- 进度消息 -->
@@ -548,19 +589,43 @@ defineExpose({
   border: 1px solid #fde2e2;
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-base);
+}
+
+.error-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .error-title {
   font-weight: 600;
   color: var(--color-danger);
-  margin-bottom: var(--spacing-base);
+}
+
+.pull-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .error-content {
   color: #c45656;
-  
+  font-size: 13px;
   line-height: 1.6;
   word-break: break-word;
+  background: rgba(0, 0, 0, 0.03);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+}
+
+.error-suggestion {
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  font-weight: 500;
+  margin-top: 4px;
 }
 
 .messages-section {

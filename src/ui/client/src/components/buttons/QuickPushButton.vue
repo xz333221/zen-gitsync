@@ -56,8 +56,12 @@ const isDisabled = computed(() => {
   if (gitStore.hasConflictedFiles) {
     return true;
   }
+  
+  // 如果没有本地变更，也没有领先提交，禁用
+  const noWorkToDo = !hasAnyChanges.value && gitStore.branchAhead === 0;
+  
   return (
-    !hasAnyChanges.value || !props.hasUserCommitMessage || !gitStore.hasUpstream
+    noWorkToDo || !props.hasUserCommitMessage || !gitStore.hasUpstream
   );
 });
 
@@ -71,16 +75,26 @@ const tooltipText = computed(() => {
   if (gitStore.hasConflictedFiles) {
     return $t('@2E184:存在冲突文件，请先解决冲突');
   }
-  if (!hasAnyChanges.value) {
-    return $t('@2E184:没有需要提交的更改');
+  
+  const hasCommitsToPush = gitStore.branchAhead > 0;
+  
+  if (!hasAnyChanges.value && !hasCommitsToPush) {
+    return $t('@2E184:没有需要提交或推送的更改');
   }
+  
   if (!props.hasUserCommitMessage) {
     return $t('@2E184:请输入提交信息');
   }
+  
   if (!gitStore.hasUpstream) {
     return $t('@2E184:当前分支没有上游分支');
   }
-  return $t('@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库');
+  
+  if (hasAnyChanges.value) {
+    return $t('@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库');
+  } else {
+    return $t('@2E184:本地已提交，一键推送到远程仓库');
+  }
 });
 
 // 一键推送处理函数
@@ -88,15 +102,17 @@ async function handleQuickPush() {
   emit("beforePush");
 
   try {
-    // 暂存和提交阶段不显示进度
-    const commitResult = await gitStore.addAndCommit(
-      props.finalCommitMessage,
-      props.skipHooks
-    );
-    
-    if (!commitResult) {
-      emit("afterPush", false);
-      return;
+    // 只有在有本地变更时才执行暂存和提交阶段
+    if (hasAnyChanges.value) {
+      const commitResult = await gitStore.addAndCommit(
+        props.finalCommitMessage,
+        props.skipHooks
+      );
+      
+      if (!commitResult) {
+        emit("afterPush", false);
+        return;
+      }
     }
     
     // 推送阶段显示进度
@@ -166,6 +182,7 @@ function handleProgressComplete(_success: boolean) {
       ref="progressModalRef"
       v-model="progressModalVisible"
       @complete="handleProgressComplete"
+      @pull-requested="handleQuickPush"
     />
   </div>
 </template>
