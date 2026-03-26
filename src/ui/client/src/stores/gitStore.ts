@@ -55,7 +55,7 @@ export const useGitStore = defineStore('git', () => {
   const isGitPulling = ref(false)      // 拉取中状态
   const isGitFetching = ref(false)     // 获取远程分支信息状态
   const isGitMerging = ref(false)      // 合并分支状态
-  
+
   // 添加分支状态相关变量
   const branchAhead = ref(0) // 当前分支领先远程分支的提交数
   const branchBehind = ref(0) // 当前分支落后远程分支的提交数
@@ -63,6 +63,9 @@ export const useGitStore = defineStore('git', () => {
   const upstreamBranch = ref('') // 上游分支名称
   // 添加上次获取分支列表的时间戳
   const lastBranchesTime = ref(0)
+
+  // 合并失败时待填充的默认合并消息
+  const pendingMergeMessage = ref('')
 
   // 从 gitLogStore 导入的状态
   // Socket.io 实例
@@ -1295,24 +1298,28 @@ export const useGitStore = defineStore('git', () => {
       return false;
     }
 
+    // 生成默认合并消息（用于冲突时自动填充）
+    const defaultMergeMsg = `Merge branch '${branch}' into ${currentBranch.value}`
+
     try {
       isGitMerging.value = true;
-      
+
       const response = await fetch('/api/merge', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           branch,
           ...options
         })
       });
-      
+
       const result = await response.json();
-      
+
       if (response.status === 409) {
-        // 合并冲突
+        // 合并冲突，保存默认合并消息供后续使用
+        pendingMergeMessage.value = options.message || defaultMergeMsg
         ElMessage({
           message: $t('@C298B:合并分支时发生冲突，请手动解决'),
           type: 'warning',
@@ -1320,17 +1327,20 @@ export const useGitStore = defineStore('git', () => {
         });
         return false;
       }
-      
+
+      // 合并成功，清空待处理消息
+      pendingMergeMessage.value = ''
+
       if (result.success) {
         ElMessage({
           message: `${$t('@C298B:成功合并分支 ')}${branch}${$t('@C298B: 到 ')}${currentBranch.value}`,
           type: 'success'
         });
-        
+
         // 刷新Git状态
         await fetchStatus();
         await getBranchStatus();
-        
+
         return true;
       } else {
         ElMessage({
@@ -1910,7 +1920,10 @@ export const useGitStore = defineStore('git', () => {
     isGitPulling,
     isGitFetching,
     isGitMerging,
-    
+
+    // 合并相关
+    pendingMergeMessage,
+
     // 方法
     $reset,
     checkGitRepo,

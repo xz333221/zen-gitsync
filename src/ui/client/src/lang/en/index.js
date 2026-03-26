@@ -935,6 +935,7 @@ export default {
   '@76872:执行合并但不自动提交，可以手动检查后提交 (--no-commit)': 'Merge but do not auto commit, manually review before committing (--no-commit)',
   '@76872:合并消息（可选）': 'Merge message (optional)',
   '@76872:自定义合并提交消息': 'Custom merge commit message',
+  '@76872:默认消息：': 'Default message: ',
   '@76872:合并': 'Merge',
   '@76872:创建合并提交，即使可以使用快进合并': 'Create merge commit, even if fast forward merge can be used',
   '@76872:将多个提交压缩为一个提交': 'Compress multiple commits into one commit',

@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch } from 'vue'
 import { useGitStore } from '@stores/gitStore'
-import { Setting, Loading } from '@element-plus/icons-vue'
+import { Setting, Loading, InfoFilled, DocumentCopy } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import CommonDialog from '@components/CommonDialog.vue'
 import GitCommandPreview from '@components/GitCommandPreview.vue'
@@ -60,12 +60,12 @@ function openMergeDialog() {
   }
   branchTypeFilter.value = 'all' // 默认显示所有分支
   isMergeDialogVisible.value = true
-  
+
   // 确保已经加载了分支列表
   if (gitStore.allBranches.length === 0) {
     gitStore.getAllBranches()
   }
-  
+
   // 设置默认选中的分支：优先选择 origin/master，其次 origin/main
   const availableBranches = gitStore.allBranches.filter(b => b !== gitStore.currentBranch)
   if (availableBranches.includes('origin/master')) {
@@ -76,12 +76,30 @@ function openMergeDialog() {
   // 如果都没有，保持为空字符串
 }
 
+// 复制默认合并消息
+async function copyDefaultMessage() {
+  if (!defaultMergeMessage.value) return
+  try {
+    await navigator.clipboard.writeText(defaultMergeMessage.value)
+    ElMessage.success($t('@76872:默认合并消息已复制'))
+  } catch {
+    ElMessage.error($t('@76872:复制失败'))
+  }
+}
+
 // 监听分支类型切换，如果当前选中的分支不在新的过滤列表中，则清空选择
 watch(branchTypeFilter, () => {
   // 如果当前有选中的分支，检查它是否在新的过滤列表中
   if (selectedBranch.value && !filteredBranches.value.includes(selectedBranch.value)) {
     selectedBranch.value = ''
   }
+})
+
+// 生成默认合并消息
+const defaultMergeMessage = computed(() => {
+  if (!selectedBranch.value) return ''
+  const currentBranch = gitStore.currentBranch || 'current'
+  return `Merge branch '${selectedBranch.value}' into ${currentBranch}`
 })
 
 // 生成git merge命令预览
@@ -103,9 +121,12 @@ const mergeCommand = computed(() => {
     cmd += ' --no-commit'
   }
   
-  // 添加自定义消息
-  if (mergeOptions.value.message && !mergeOptions.value.noCommit) {
-    cmd += ` -m "${mergeOptions.value.message}"`
+  // 添加自定义消息（如果有），否则使用默认消息
+  if (!mergeOptions.value.noCommit) {
+    const message = mergeOptions.value.message || defaultMergeMessage.value
+    if (message) {
+      cmd += ` -m "${message}"`
+    }
   }
   
   return cmd
@@ -275,6 +296,21 @@ async function handleMergeBranch() {
               maxlength="200"
               show-word-limit
             />
+            <div v-if="selectedBranch && !mergeOptions.message" class="default-message-hint">
+              <div class="hint-content">
+                <el-icon><Info-Filled /></el-icon>
+                <span>{{ $t('@76872:默认消息：') }}{{ defaultMergeMessage }}</span>
+              </div>
+              <el-button 
+                type="primary" 
+                link 
+                size="small" 
+                @click="copyDefaultMessage"
+                class="copy-btn"
+              >
+                <el-icon><Document-Copy /></el-icon>
+              </el-button>
+            </div>
           </el-form-item>
         </el-form>
       </div>
@@ -446,6 +482,43 @@ async function handleMergeBranch() {
     font-weight: 500;
     color: var(--color-text-title);
     
+  }
+}
+
+/* 默认合并消息提示 */
+.default-message-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+
+  .hint-content {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    flex: 1;
+    min-width: 0;
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .el-icon {
+    font-size: var(--font-size-md);
+    color: var(--color-info);
+    flex-shrink: 0;
+  }
+
+  .copy-btn {
+    flex-shrink: 0;
+    padding: 0;
+    height: auto;
   }
 }
 

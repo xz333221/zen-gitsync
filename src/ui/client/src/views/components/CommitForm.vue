@@ -407,6 +407,20 @@ onMounted(async () => {
   ) {
     commitMessage.value = configStore.defaultCommitMessage;
   }
+
+  // 检查是否有待处理的合并消息（合并冲突时自动填充）
+  if (gitStore.pendingMergeMessage) {
+    if (isStandardCommit.value) {
+      // 标准化提交模式：填入简短描述
+      commitDescription.value = gitStore.pendingMergeMessage;
+    } else {
+      // 普通提交模式：填入提交信息
+      commitMessage.value = gitStore.pendingMergeMessage;
+    }
+    // 清空待处理消息，避免重复填充
+    gitStore.pendingMergeMessage = '';
+    ElMessage.info($t('@76872:已自动填充合并提交信息'));
+  }
 });
 
 // 添加提交设置弹窗状态变量
