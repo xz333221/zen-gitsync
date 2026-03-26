@@ -23,6 +23,7 @@ const props = withDefaults(
     gutterPlacement?: 'glyph' | 'line'
     gutterItems?: Array<{ blockId: number; line: number; kind: 'current' | 'incoming' }>
     rightActions?: Array<{ blockId: number; line: number; kind: 'current' | 'incoming' }>
+    appliedBlocks?: Array<{ blockId: number; choice: 'current' | 'incoming' | 'both' }>
   }>(),
   {
     language: 'plaintext',
@@ -36,7 +37,8 @@ const props = withDefaults(
     highlightKind: '',
     gutterPlacement: 'glyph',
     gutterItems: () => [],
-    rightActions: () => []
+    rightActions: () => [],
+    appliedBlocks: () => []
   }
 )
 
@@ -117,6 +119,16 @@ function layoutRightActions() {
   }
 }
 
+function isBlockApplied(blockId: number, kind: 'current' | 'incoming'): boolean {
+  const applied = props.appliedBlocks || []
+  const block = applied.find(b => b.blockId === blockId)
+  if (!block) return false
+  if (kind === 'current') {
+    return block.choice === 'current' || block.choice === 'both'
+  }
+  return block.choice === 'incoming' || block.choice === 'both'
+}
+
 function applyRightActions() {
   if (!editor) return
   ensureRightActionsContainer()
@@ -131,9 +143,16 @@ function applyRightActions() {
   // 重建（数量很少，简单可靠）
   clearRightActions()
   for (const a of actions) {
+    const isApplied = isBlockApplied(a.blockId, a.kind)
     const btn = document.createElement('div')
-    btn.className = a.kind === 'incoming' ? 'merge-right-action merge-right-action-incoming' : 'merge-right-action merge-right-action-current'
-    btn.textContent = a.kind === 'incoming' ? '←' : '→'
+    btn.className = a.kind === 'incoming' 
+      ? `merge-right-action merge-right-action-incoming${isApplied ? ' is-applied' : ''}` 
+      : `merge-right-action merge-right-action-current${isApplied ? ' is-applied' : ''}`
+    // 如果已应用，显示对勾，否则显示箭头
+    btn.textContent = isApplied ? '✓' : (a.kind === 'incoming' ? '←' : '→')
+    btn.title = isApplied 
+      ? (a.kind === 'incoming' ? '已采用传入更改' : '已采用当前更改')
+      : (a.kind === 'incoming' ? '采用传入更改' : '采用当前更改')
     btn.addEventListener('mousedown', (e) => {
       e.preventDefault()
       e.stopPropagation()
@@ -329,7 +348,10 @@ function applyGutterItems() {
     items
       .filter((it) => it && it.line && it.line > 0)
       .map((it) => {
-        const className = it.kind === 'current' ? 'merge-glyph-current' : 'merge-glyph-incoming'
+        const isApplied = isBlockApplied(it.blockId, it.kind)
+        const className = it.kind === 'current' 
+          ? (isApplied ? 'merge-glyph-current is-applied' : 'merge-glyph-current')
+          : (isApplied ? 'merge-glyph-incoming is-applied' : 'merge-glyph-incoming')
         return {
           range: new monaco.Range(it.line, 1, it.line, 1),
           options: {
@@ -449,6 +471,15 @@ watch(
   () => props.rightActions,
   () => {
     applyRightActions()
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.appliedBlocks,
+  () => {
+    applyRightActions()
+    applyGutterItems()
   },
   { deep: true },
 )
@@ -608,6 +639,23 @@ onBeforeUnmount(() => {
 }
 
 .monaco-editor-container :deep(.merge-right-action-incoming) {
+  color: rgba(34, 197, 94, 0.95);
+}
+
+/* 已应用状态样式 */
+.monaco-editor-container :deep(.merge-right-action.is-applied) {
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: rgba(34, 197, 94, 1) !important;
+  font-weight: 700;
+}
+
+.monaco-editor-container :deep(.merge-glyph-current.is-applied)::before {
+  content: '✓';
+  color: rgba(34, 197, 94, 0.95);
+}
+
+.monaco-editor-container :deep(.merge-glyph-incoming.is-applied)::before {
+  content: '✓';
   color: rgba(34, 197, 94, 0.95);
 }
 </style>

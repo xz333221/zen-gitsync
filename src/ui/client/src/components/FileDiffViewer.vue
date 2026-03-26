@@ -382,6 +382,15 @@ const gutterItemsIncoming = computed(() => {
     .filter(Boolean) as Array<{ blockId: number; line: number; kind: 'incoming' }>
 })
 
+// 将 blockChoice 转换为 appliedBlocks 格式
+const appliedBlocks = computed(() => {
+  const result: Array<{ blockId: number; choice: 'current' | 'incoming' | 'both' }> = []
+  blockChoice.value.forEach((choice, blockId) => {
+    result.push({ blockId, choice })
+  })
+  return result
+})
+
 function rebuildMergedFromChoices() {
   if (!conflictOriginalContent.value) return
   const { text, anchors } = buildTextAndAnchors(conflictOriginalContent.value, (id) => blockChoice.value.get(id) || 'current')
@@ -391,7 +400,49 @@ function rebuildMergedFromChoices() {
 }
 
 function applyBlockChoice(blockId: number, choice: 'current' | 'incoming' | 'both') {
-  blockChoice.value.set(blockId, choice)
+  const currentChoice = blockChoice.value.get(blockId)
+  
+  // 切换逻辑：支持同时应用两边
+  let newChoice: 'current' | 'incoming' | 'both' | null = choice
+  
+  if (choice === 'current') {
+    // 点击左侧箭头
+    if (currentChoice === 'current') {
+      // 当前已是 current，取消选择（回到默认 current）
+      newChoice = null
+    } else if (currentChoice === 'incoming') {
+      // 当前是 incoming，变成 both
+      newChoice = 'both'
+    } else if (currentChoice === 'both') {
+      // 当前是 both，移除 current 部分，变成 incoming
+      newChoice = 'incoming'
+    } else {
+      // 当前无选择，设置为 current
+      newChoice = 'current'
+    }
+  } else if (choice === 'incoming') {
+    // 点击右侧箭头
+    if (currentChoice === 'incoming') {
+      // 当前已是 incoming，取消选择（回到默认 current）
+      newChoice = null
+    } else if (currentChoice === 'current') {
+      // 当前是 current，变成 both
+      newChoice = 'both'
+    } else if (currentChoice === 'both') {
+      // 当前是 both，移除 incoming 部分，变成 current
+      newChoice = 'current'
+    } else {
+      // 当前无选择，设置为 incoming
+      newChoice = 'incoming'
+    }
+  }
+  
+  if (newChoice === null) {
+    blockChoice.value.delete(blockId)
+  } else {
+    blockChoice.value.set(blockId, newChoice)
+  }
+  
   activeBlockId.value = blockId
   rebuildMergedFromChoices()
 }
@@ -1063,21 +1114,22 @@ onMounted(() => {
                     <div class="pane-title">{{ $t('@E80AC:当前更改') }}</div>
                   </div>
                   <div class="pane-body">
-                    <MonacoEditor
-                      :model-value="currentVersionContent"
-                      language="auto"
-                      :file-path="currentSelectedFile"
-                      theme="auto"
-                      :read-only="true"
-                      min-height="360px"
-                      :reveal-line="revealLineCurrent"
-                      :highlight-range="activeAnchorCurrent"
-                      :dim-highlight-ranges="dimAnchorsCurrent"
-                      highlight-kind="current"
-                      @gutter-click="(id) => applyBlockChoice(id, 'current')"
-                      :right-actions="rightActionsCurrent"
-                      @update:model-value="() => {}"
-                    />
+                <MonacoEditor
+                  :model-value="currentVersionContent"
+                  language="auto"
+                  :file-path="currentSelectedFile"
+                  theme="auto"
+                  :read-only="true"
+                  min-height="360px"
+                  :reveal-line="revealLineCurrent"
+                  :highlight-range="activeAnchorCurrent"
+                  :dim-highlight-ranges="dimAnchorsCurrent"
+                  highlight-kind="current"
+                  @gutter-click="(id) => applyBlockChoice(id, 'current')"
+                  :right-actions="rightActionsCurrent"
+                  :applied-blocks="appliedBlocks"
+                  @update:model-value="() => {}"
+                />
                   </div>
                 </div>
 
@@ -1108,21 +1160,22 @@ onMounted(() => {
                     <div class="pane-title">{{ $t('@E80AC:传入的更改') }}</div>
                   </div>
                   <div class="pane-body">
-                    <MonacoEditor
-                      :model-value="incomingVersionContent"
-                      language="auto"
-                      :file-path="currentSelectedFile"
-                      theme="auto"
-                      :read-only="true"
-                      min-height="360px"
-                      :reveal-line="revealLineIncoming"
-                      :highlight-range="activeAnchorIncoming"
-                      :dim-highlight-ranges="dimAnchorsIncoming"
-                      highlight-kind="incoming"
-                      :gutter-items="gutterItemsIncoming"
-                      @gutter-click="(id) => applyBlockChoice(id, 'incoming')"
-                      @update:model-value="() => {}"
-                    />
+                <MonacoEditor
+                  :model-value="incomingVersionContent"
+                  language="auto"
+                  :file-path="currentSelectedFile"
+                  theme="auto"
+                  :read-only="true"
+                  min-height="360px"
+                  :reveal-line="revealLineIncoming"
+                  :highlight-range="activeAnchorIncoming"
+                  :dim-highlight-ranges="dimAnchorsIncoming"
+                  highlight-kind="incoming"
+                  :gutter-items="gutterItemsIncoming"
+                  :applied-blocks="appliedBlocks"
+                  @gutter-click="(id) => applyBlockChoice(id, 'incoming')"
+                  @update:model-value="() => {}"
+                />
                   </div>
                 </div>
               </div>
@@ -1305,6 +1358,8 @@ onMounted(() => {
                   :dim-highlight-ranges="dimAnchorsCurrent"
                   highlight-kind="current"
                   :right-actions="rightActionsCurrent"
+                  :applied-blocks="appliedBlocks"
+                  @gutter-click="(id) => applyBlockChoice(id, 'current')"
                   @update:model-value="() => {}"
                 />
               </div>
@@ -1348,6 +1403,9 @@ onMounted(() => {
                   :highlight-range="activeAnchorIncoming"
                   :dim-highlight-ranges="dimAnchorsIncoming"
                   highlight-kind="incoming"
+                  :gutter-items="gutterItemsIncoming"
+                  :applied-blocks="appliedBlocks"
+                  @gutter-click="(id) => applyBlockChoice(id, 'incoming')"
                   @update:model-value="() => {}"
                 />
               </div>
