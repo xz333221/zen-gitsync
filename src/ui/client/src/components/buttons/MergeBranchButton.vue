@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch } from 'vue'
 import { useGitStore } from '@stores/gitStore'
-import { Setting, Loading, InfoFilled, DocumentCopy } from '@element-plus/icons-vue'
+import { Setting, Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import CommonDialog from '@components/CommonDialog.vue'
 import GitCommandPreview from '@components/GitCommandPreview.vue'

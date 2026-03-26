@@ -24,6 +24,8 @@ const props = withDefaults(
     gutterItems?: Array<{ blockId: number; line: number; kind: 'current' | 'incoming' }>
     rightActions?: Array<{ blockId: number; line: number; kind: 'current' | 'incoming' }>
     appliedBlocks?: Array<{ blockId: number; choice: 'current' | 'incoming' | 'both' }>
+    syncGroup?: string | null
+    syncScrollTop?: number | null
   }>(),
   {
     language: 'plaintext',
@@ -38,13 +40,16 @@ const props = withDefaults(
     gutterPlacement: 'glyph',
     gutterItems: () => [],
     rightActions: () => [],
-    appliedBlocks: () => []
+    appliedBlocks: () => [],
+    syncGroup: null,
+    syncScrollTop: null
   }
 )
 
 const emit = defineEmits<{
   'update:modelValue': [v: string]
   'gutter-click': [blockId: number]
+  'scroll-change': [scrollTop: number]
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -401,8 +406,12 @@ onMounted(async () => {
   applyGutterItems()
   applyRightActions()
 
-  scrollDisposable = editor.onDidScrollChange(() => {
+  scrollDisposable = editor.onDidScrollChange((e: any) => {
     layoutRightActions()
+    // 同步滚动：如果属于同步组，通知父组件
+    if (props.syncGroup && e.scrollTopChanged) {
+      emit('scroll-change', e.scrollTop)
+    }
   })
   layoutDisposable = editor.onDidLayoutChange(() => {
     layoutRightActions()
@@ -484,6 +493,20 @@ watch(
   { deep: true },
 )
 
+// 监听同步滚动位置
+watch(
+  () => props.syncScrollTop,
+  (newScrollTop) => {
+    if (newScrollTop !== null && newScrollTop !== undefined && editor) {
+      const currentScrollTop = editor.getScrollTop()
+      // 只有差异较大时才同步，避免循环
+      if (Math.abs(currentScrollTop - newScrollTop) > 5) {
+        editor.setScrollTop(newScrollTop)
+      }
+    }
+  }
+)
+
 watch(
   () => props.gutterPlacement,
   () => {
@@ -550,7 +573,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="monaco-editor-container" :style="{ minHeight }" />
+  <div ref="containerRef" class="monaco-editor-container" :style="minHeight ? { minHeight } : { flex: 1, minHeight: '200px' }" />
 </template>
 
 <style scoped>
