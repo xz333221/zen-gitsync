@@ -253,8 +253,15 @@ export function registerTerminalRoutes({
       }));
 
       if (cleanup) {
+        const PROTECT_DURATION_MS = 10000; // 刚启动的进程保护期 10 秒
+        const now = Date.now();
         for (const s of results) {
           if (s.pid && !s.alive) {
+            // 如果会话刚刚启动（10秒内），即使检测不到进程也不删除，给进程启动留时间
+            const lastStarted = s.lastStartedAt || s.createdAt || 0;
+            if (now - lastStarted < PROTECT_DURATION_MS) {
+              continue;
+            }
             terminalSessions.delete(s.id);
           }
         }
