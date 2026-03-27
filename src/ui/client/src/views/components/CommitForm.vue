@@ -337,6 +337,25 @@ async function setDefaultFromTemplate(template: string) {
   }
 }
 
+// 监听待处理的合并消息，当合并失败时自动填充到提交表单
+watch(
+  () => gitStore.pendingMergeMessage,
+  (newMessage) => {
+    if (newMessage) {
+      if (isStandardCommit.value) {
+        // 标准化提交模式：填入简短描述
+        commitDescription.value = newMessage;
+      } else {
+        // 普通提交模式：填入提交信息
+        commitMessage.value = newMessage;
+      }
+      // 清空待处理消息，避免重复填充
+      gitStore.pendingMergeMessage = '';
+      ElMessage.info($t('@76872:已自动填充合并提交信息'));
+    }
+  }
+);
+
 // 监听GitStore状态变化，更新loading文字
 watch(
   () => gitStore.isAddingFiles,
