@@ -414,83 +414,115 @@ function rebuildMergedFromChoices() {
 function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', action?: 'accept' | 'discard') {
   const currentChoice = blockChoice.value.get(blockId)
   
-  // 切换逻辑：支持同时应用两边，以及两边都删除
+  // 状态机：管理合并结果的5种状态
+  // null: 未选择（默认显示本地）
+  // 'current': 只保留本地
+  // 'incoming': 只保留远程  
+  // 'both': 保留两边
+  // 'none': 两边都删除
   let newChoice: 'current' | 'incoming' | 'both' | 'none' | null = null
   
   if (choice === 'current') {
+    // 操作本地侧（左侧）
     if (action === 'discard') {
-      // 点击左侧面板的关闭按钮（丢弃当前）
-      if (currentChoice === 'incoming') {
-        // 已经是传入，再丢弃当前 → 两边都删除
-        newChoice = 'none'
-      } else if (currentChoice === 'both') {
-        // 两边都有，移除当前，只剩传入
-        newChoice = 'incoming'
-      } else if (currentChoice === 'current') {
-        // 原来是当前，丢弃当前 → 切换到传入
-        newChoice = 'incoming'
-      } else if (currentChoice === 'none') {
-        // 已经是 none（两边都删），保持删除状态
-        newChoice = 'none'
-      } else {
-        // 无选择，默认当前，丢弃当前 → 切换到传入
-        newChoice = 'incoming'
+      // 左叉叉：丢弃本地，切换到远程
+      switch (currentChoice) {
+        case 'current':
+        case null:
+        case undefined:
+          // 当前是本地或未选择，丢弃本地 → 只保留远程
+          newChoice = 'incoming'
+          break
+        case 'incoming':
+          // 当前已是远程，再丢弃本地 → 两边都删
+          newChoice = 'none'
+          break
+        case 'both':
+          // 两边都有，丢弃本地 → 只保留远程
+          newChoice = 'incoming'
+          break
+        case 'none':
+          // 两边都已删，保持
+          newChoice = 'none'
+          break
       }
     } else {
-      // 点击左侧箭头（接受当前）
-      if (currentChoice === 'current') {
-        // 当前已是 current，取消选择（回到默认 current）
-        newChoice = null
-      } else if (currentChoice === 'incoming') {
-        // 当前是 incoming，变成 both
-        newChoice = 'both'
-      } else if (currentChoice === 'both') {
-        // 当前是 both，移除 current 部分，变成 incoming
-        newChoice = 'incoming'
-      } else if (currentChoice === 'none') {
-        // 当前是 none（两边都删），添加 current
-        newChoice = 'current'
-      } else {
-        // 当前无选择，设置为 current
-        newChoice = 'current'
+      // 左箭头：接受本地
+      switch (currentChoice) {
+        case 'current':
+          // 已是本地，取消选择
+          newChoice = null
+          break
+        case null:
+        case undefined:
+          // 未选择，设为本地
+          newChoice = 'current'
+          break
+        case 'incoming':
+          // 当前是远程，加本地 → 两边都有
+          newChoice = 'both'
+          break
+        case 'both':
+          // 两边都有，移除远程 → 只保留本地
+          newChoice = 'current'
+          break
+        case 'none':
+          // 两边都删，加本地 → 只保留本地
+          newChoice = 'current'
+          break
       }
     }
   } else if (choice === 'incoming') {
+    // 操作远程侧（右侧）
     if (action === 'discard') {
-      // 点击右侧面板的关闭按钮（丢弃传入）
-      if (currentChoice === 'current') {
-        // 已经是当前，再丢弃传入 → 两边都删除
-        newChoice = 'none'
-      } else if (currentChoice === 'both') {
-        // 两边都有，移除传入，只剩当前
-        newChoice = 'current'
-      } else if (currentChoice === 'incoming') {
-        // 原来是传入，丢弃传入 → 切换到当前
-        newChoice = 'current'
-      } else if (currentChoice === 'none') {
-        // 已经是 none（两边都删），保持删除状态
-        newChoice = 'none'
-      } else {
-        // 无选择，默认当前，丢弃传入 → 切换到当前（保持当前）
-        newChoice = 'current'
+      // 右叉叉：丢弃远程，切换到本地
+      switch (currentChoice) {
+        case 'incoming':
+          // 当前是远程，丢弃远程 → 只保留本地
+          newChoice = 'current'
+          break
+        case null:
+        case undefined:
+          // 未选择（默认本地），丢弃远程 → 保持本地
+          newChoice = 'current'
+          break
+        case 'current':
+          // 当前是本地，再丢弃远程 → 两边都删
+          newChoice = 'none'
+          break
+        case 'both':
+          // 两边都有，丢弃远程 → 只保留本地
+          newChoice = 'current'
+          break
+        case 'none':
+          // 两边都已删，保持
+          newChoice = 'none'
+          break
       }
     } else {
-      // 点击右侧箭头（接受传入）
-      if (currentChoice === 'incoming') {
-        // 当前已是 incoming，取消选择（回到默认 current）
-        newChoice = null
-      } else if (currentChoice === 'current') {
-        // 当前是 current，变成 both
-        newChoice = 'both'
-      } else if (currentChoice === 'both') {
-        // 当前是 both，移除 incoming 部分，变成 current
-        newChoice = 'current'
-      } else if (currentChoice === 'none') {
-        // 当前是 none（两边都删），添加 incoming
-        newChoice = 'incoming'
-      } else {
-        // 当前无选择，设置为 incoming
-        newChoice = 'incoming'
+      // 右箭头：接受远程
+      switch (currentChoice) {
+        case 'incoming':
+          // 已是远程，取消选择
+          newChoice = null
+          break
+        case null:
+        case undefined:
+          // 未选择，设为远程
+          newChoice = 'incoming'
+          break
+        case 'current':
+          // 当前是本地，加远程 → 两边都有
+          newChoice = 'both'
+          break
+        case 'both':
+          // 两边都有，移除本地 → 只保留远程
+          newChoice = 'incoming'
+          break
+        case 'none':
+          // 两边都删，加远程 → 只保留远程
+          newChoice = 'incoming'
+          break
       }
     }
   }
