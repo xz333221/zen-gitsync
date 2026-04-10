@@ -396,9 +396,11 @@ const rightActionsIncoming = computed(() => {
 
 // 将 blockChoice 转换为 appliedBlocks 格式
 const appliedBlocks = computed(() => {
-  const result: Array<{ blockId: number; choice: 'current' | 'incoming' | 'both' | 'none' }> = []
+  const result: Array<{ blockId: number; choice: 'current' | 'incoming' | 'both' }> = []
   blockChoice.value.forEach((choice, blockId) => {
-    result.push({ blockId, choice })
+    if (choice !== 'none') {
+      result.push({ blockId, choice })
+    }
   })
   return result
 })

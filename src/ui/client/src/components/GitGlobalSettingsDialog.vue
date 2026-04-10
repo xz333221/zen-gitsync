@@ -202,7 +202,7 @@ import CommonDialog from './CommonDialog.vue'
 import { useGitStore } from '@/stores/gitStore'
 import { useLocaleStore } from '@/stores/localeStore'
 import { useConfigStore } from '@/stores/configStore'
-import { SUPPORT_LOCALES, type SupportLocale } from '@/locales'
+import { type SupportLocale } from '@/locales'
 
 const gitStore = useGitStore()
 const localeStore = useLocaleStore()

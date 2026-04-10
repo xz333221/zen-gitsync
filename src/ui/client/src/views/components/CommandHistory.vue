@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock, Loading, Search, Filter } from '@element-plus/icons-vue';
+import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock, Loading, Search } from '@element-plus/icons-vue';
 import { useGitStore } from '@stores/gitStore';
 import CommonDialog from '@/components/CommonDialog.vue';
 import IconButton from '@/components/IconButton.vue';
