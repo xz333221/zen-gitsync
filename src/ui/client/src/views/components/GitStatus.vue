@@ -448,15 +448,29 @@ async function refreshStatus() {
   }
 }
 
+// Pull 错误弹窗
+const pullErrorDialogVisible = ref(false)
+const pullErrorInfo = ref({ needsMerge: false, error: '', fullError: '', pullOutput: '' })
+
 // 添加git pull操作方法
 async function handleGitPull() {
   try {
     // 使用store中的状态变量，而不是本地变量
-    await gitStore.gitPull()
-    // 刷新Git状态
-    await loadStatus()
+    const result = await gitStore.gitPull()
+    if (result.success) {
+      // 刷新Git状态
+      await loadStatus()
+    } else {
+      // 弹窗展示完整错误信息
+      pullErrorInfo.value = {
+        needsMerge: result.needsMerge,
+        error: result.error,
+        fullError: result.fullError,
+        pullOutput: result.pullOutput
+      }
+      pullErrorDialogVisible.value = true
+    }
   } catch (error) {
-    // 错误处理已经在store中完成
     console.error('拉取操作发生错误:', error)
   }
 }
@@ -1293,6 +1307,34 @@ defineExpose({
       </div>
     </div>
   </CommonDialog>
+
+  <!-- Pull 失败错误详情弹窗 -->
+  <CommonDialog
+    v-model="pullErrorDialogVisible"
+    :title="pullErrorInfo.needsMerge ? $t('@13D1C:需要合并更改') : $t('@13D1C:拉取失败')"
+    size="medium"
+    :show-footer="true"
+    :show-cancel="false"
+    :confirm-text="$t('@13D1C:我知道了')"
+    @confirm="pullErrorDialogVisible = false"
+  >
+    <div class="pull-error-content">
+      <!-- 错误类型提示 -->
+      <div class="pull-error-type" :class="pullErrorInfo.needsMerge ? 'is-warning' : 'is-error'">
+        <el-icon class="pull-error-icon">
+          <InfoFilled />
+        </el-icon>
+        <span v-if="pullErrorInfo.needsMerge">{{ $t('@13D1C:本地存在未提交的更改，与远程内容冲突，请先处理本地更改后再拉取。') }}</span>
+        <span v-else>{{ $t('@13D1C:执行 git pull 时发生错误，请查看详细信息。') }}</span>
+      </div>
+
+      <!-- 完整错误信息 -->
+      <div class="pull-error-detail">
+        <div class="pull-error-label">{{ $t('@13D1C:错误详情') }}：</div>
+        <pre class="pull-error-pre">{{ pullErrorInfo.fullError || pullErrorInfo.error }}</pre>
+      </div>
+    </div>
+  </CommonDialog>
 </template>
 
 <style scoped>
@@ -1851,6 +1893,86 @@ html.dark .upstream-tip:hover {
 html.dark .selection-mode-banner {
   background: linear-gradient(135deg, rgba(64, 158, 255, 0.15) 0%, rgba(64, 158, 255, 0.08) 100%);
   border-color: rgba(64, 158, 255, 0.35);
+}
+
+/* Pull 错误弹窗样式 */
+.pull-error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pull-error-type {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+
+  &.is-warning {
+    background: rgba(250, 173, 20, 0.1);
+    border: 1px solid rgba(250, 173, 20, 0.4);
+    color: #b45309;
+  }
+
+  &.is-error {
+    background: rgba(245, 108, 108, 0.08);
+    border: 1px solid rgba(245, 108, 108, 0.35);
+    color: #c0392b;
+  }
+}
+
+.pull-error-icon {
+  margin-top: 2px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.pull-error-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pull-error-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pull-error-pre {
+  margin: 0;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+html.dark .pull-error-pre {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .pull-error-type.is-warning {
+  background: rgba(250, 173, 20, 0.12);
+  border-color: rgba(250, 173, 20, 0.3);
+  color: #fbbf24;
+}
+
+html.dark .pull-error-type.is-error {
+  background: rgba(245, 108, 108, 0.12);
+  border-color: rgba(245, 108, 108, 0.3);
+  color: #f87171;
 }
 
 </style>

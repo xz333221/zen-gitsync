@@ -1142,6 +1142,12 @@ export default {
   '@76872:选中': 'Selected',
   '@76872:个锁定文件': 'locked file(s)',
   '@76872:所有选中的文件都是锁定文件，无法储藏': 'All selected files are locked and cannot be stashed',
+  '@76872:需要合并更改': 'Merge Required',
+  '@76872:拉取失败': 'Pull Failed',
+  '@76872:本地存在未提交的更改，与远程内容冲突，请先处理本地更改后再拉取。': 'You have uncommitted local changes that conflict with remote. Please commit or stash your changes before pulling.',
+  '@76872:执行 git pull 时发生错误，请查看详细信息。': 'An error occurred while running git pull. See details below.',
+  '@76872:错误详情': 'Error Details',
+  '@76872:我知道了': 'Got it',
   // @76872: file end
   // @13D1C: file path: views\components\GitStatus.vue
   '@13D1C:Git Pull (拉取远程更新)': 'GitPull (Pull Remote Updates)',
@@ -1358,5 +1364,11 @@ export default {
   // @13D1C: file path: views\components\GitStatus.vue (branch status)
   '@13D1C:你的分支领先': "Your branch is ahead of '{branch}' by {count} commit(s)",
   '@13D1C:你的分支落后': "Your branch is behind '{branch}' by {count} commit(s)",
+  '@13D1C:需要合并更改': 'Merge Required',
+  '@13D1C:拉取失败': 'Pull Failed',
+  '@13D1C:本地存在未提交的更改，与远程内容冲突，请先处理本地更改后再拉取。': 'You have uncommitted local changes that conflict with remote. Please commit or stash your changes before pulling.',
+  '@13D1C:执行 git pull 时发生错误，请查看详细信息。': 'An error occurred while running git pull. See details below.',
+  '@13D1C:错误详情': 'Error Details',
+  '@13D1C:我知道了': 'Got it',
   // @13D1C: file end
 }

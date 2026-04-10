@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
-import { Menu, RefreshRight, Download, Connection, Edit } from '@element-plus/icons-vue'
+import { Menu, RefreshRight, Download, Connection, Edit, InfoFilled } from '@element-plus/icons-vue'
 import IconButton from '@components/IconButton.vue'
 import StageButton from '@/components/buttons/StageButton.vue'
 import UnstageAllButton from '@/components/buttons/UnstageAllButton.vue'
@@ -15,6 +15,7 @@ import StashListButton from '@/components/buttons/StashListButton.vue'
 import CreateTagButton from '@/components/buttons/CreateTagButton.vue'
 import TagListButton from '@/components/buttons/TagListButton.vue'
 import ResetToRemoteButton from '@/components/buttons/ResetToRemoteButton.vue'
+import CommonDialog from '@components/CommonDialog.vue'
 
 // 定义props
 interface Props {
@@ -43,6 +44,10 @@ const gitStore = useGitStore()
 // Git操作抽屉状态
 const gitOperationsDrawerVisible = ref(false)
 
+// Pull 错误弹窗状态
+const pullErrorDialogVisible = ref(false)
+const pullErrorInfo = ref({ needsMerge: false, error: '', fullError: '', pullOutput: '' })
+
 // 打开Git操作抽屉
 function openGitOperationsDrawer() {
   gitOperationsDrawerVisible.value = true
@@ -68,9 +73,19 @@ const hasUnstagedChanges = computed(() => {
 // 处理Git拉取
 async function handleGitPull() {
   try {
-    await gitStore.gitPull()
-    await gitStore.fetchStatus()
-    await gitStore.fetchLog(false)
+    const result = await gitStore.gitPull()
+    if (result.success) {
+      await gitStore.fetchStatus()
+      await gitStore.fetchLog(false)
+    } else {
+      pullErrorInfo.value = {
+        needsMerge: result.needsMerge,
+        error: result.error,
+        fullError: result.fullError,
+        pullOutput: result.pullOutput
+      }
+      pullErrorDialogVisible.value = true
+    }
   } catch (error) {
     console.error('拉取失败:', error)
   }
@@ -300,6 +315,30 @@ defineExpose({
         </div>
       </div>
     </el-drawer>
+
+    <!-- Pull 失败错误详情弹窗 -->
+    <CommonDialog
+      v-model="pullErrorDialogVisible"
+      :title="pullErrorInfo.needsMerge ? $t('@76872:需要合并更改') : $t('@76872:拉取失败')"
+      size="medium"
+      :show-footer="true"
+      :show-cancel="false"
+      :confirm-text="$t('@76872:我知道了')"
+      :append-to-body="true"
+      @confirm="pullErrorDialogVisible = false"
+    >
+      <div class="pull-error-content">
+        <div class="pull-error-type" :class="pullErrorInfo.needsMerge ? 'is-warning' : 'is-error'">
+          <el-icon class="pull-error-icon"><InfoFilled /></el-icon>
+          <span v-if="pullErrorInfo.needsMerge">{{ $t('@76872:本地存在未提交的更改，与远程内容冲突，请先处理本地更改后再拉取。') }}</span>
+          <span v-else>{{ $t('@76872:执行 git pull 时发生错误，请查看详细信息。') }}</span>
+        </div>
+        <div class="pull-error-detail">
+          <div class="pull-error-label">{{ $t('@76872:错误详情') }}：</div>
+          <pre class="pull-error-pre">{{ pullErrorInfo.fullError || pullErrorInfo.error }}</pre>
+        </div>
+      </div>
+    </CommonDialog>
   </div>
 </template>
 
@@ -342,6 +381,69 @@ defineExpose({
     align-items: center;
     justify-content: center;
   }
+}
+
+/* Pull 错误弹窗样式 */
+.pull-error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pull-error-type {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+
+  &.is-warning {
+    background: rgba(250, 173, 20, 0.1);
+    border: 1px solid rgba(250, 173, 20, 0.4);
+    color: #b45309;
+  }
+
+  &.is-error {
+    background: rgba(245, 108, 108, 0.08);
+    border: 1px solid rgba(245, 108, 108, 0.35);
+    color: #c0392b;
+  }
+}
+
+.pull-error-icon {
+  margin-top: 2px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.pull-error-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pull-error-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pull-error-pre {
+  margin: 0;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 </style>

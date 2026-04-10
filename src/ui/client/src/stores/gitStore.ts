@@ -425,13 +425,14 @@ export const useGitStore = defineStore('git', () => {
   }
 
   // 执行git pull操作
+  // 返回值：成功返回 { success: true }，失败返回 { success: false, needsMerge, error, fullError, pullOutput }
   async function gitPull() {
     if (!isGitRepo.value) {
       ElMessage({
         message: $t('@C298B:当前目录不是Git仓库'),
         type: 'warning'
       });
-      return false;
+      return { success: false, needsMerge: false, error: $t('@C298B:当前目录不是Git仓库'), fullError: '', pullOutput: '' };
     }
 
     try {
@@ -450,29 +451,25 @@ export const useGitStore = defineStore('git', () => {
         
         // 刷新分支状态
         await getBranchStatus();
-        return true;
+        return { success: true };
       } else {
-        // 改进错误提示
-        if (result.needsMerge) {
-          ElMessage({
-            message: `${$t('@C298B:需要合并更改: ')}${result.pullOutput || $t('@C298B:存在冲突需要手动解决')}`,
-            type: 'warning',
-            duration: 5000
-          });
-        } else {
-          ElMessage({
-            message: `${$t('@C298B:拉取失败: ')}${result.error}`,
-            type: 'error'
-          });
-        }
-        return false;
+        // 返回结构化错误信息，由调用方决定如何展示
+        return {
+          success: false,
+          needsMerge: result.needsMerge || false,
+          error: result.error || '',
+          fullError: result.fullError || result.error || '',
+          pullOutput: result.pullOutput || ''
+        };
       }
     } catch (error) {
-      ElMessage({
-        message: `${$t('@C298B:拉取失败: ')}${(error as Error).message}`,
-        type: 'error'
-      });
-      return false;
+      return {
+        success: false,
+        needsMerge: false,
+        error: (error as Error).message,
+        fullError: (error as Error).message,
+        pullOutput: ''
+      };
     } finally {
       // 隐藏加载中状态
       isGitPulling.value = false;

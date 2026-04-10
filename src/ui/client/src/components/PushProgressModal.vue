@@ -49,8 +49,8 @@ const isPulling = ref(false);
 async function handlePullAndRetry() {
   isPulling.value = true;
   try {
-    const success = await gitStore.gitPull();
-    if (success) {
+    const result = await gitStore.gitPull();
+    if (result.success) {
       // 拉取成功后关闭弹窗，由父组件决定是否重试推送或由用户手动重推
       visible.value = false;
       emit('pull-requested');
