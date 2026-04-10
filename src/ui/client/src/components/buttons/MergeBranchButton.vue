@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch } from 'vue'
 import { useGitStore } from '@stores/gitStore'
-import { Setting, Loading, InfoFilled, DocumentCopy } from '@element-plus/icons-vue'
+import { Setting, Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import CommonDialog from '@components/CommonDialog.vue'
 import GitCommandPreview from '@components/GitCommandPreview.vue'
@@ -141,7 +141,7 @@ async function handleMergeBranch() {
     })
     return
   }
-  
+
   try {
     const result = await gitStore.mergeBranch(selectedBranch.value, mergeOptions.value)
     if (result) {
@@ -152,9 +152,27 @@ async function handleMergeBranch() {
         gitStore.fetchLog(false),
         gitStore.getBranchStatus(true) // 强制刷新分支领先/落后状态
       ])
+    } else {
+      // 合并失败（包括冲突），保存默认合并消息供提交表单使用
+      gitStore.pendingMergeMessage = mergeOptions.value.message || defaultMergeMessage.value
+      // 关闭弹窗并刷新状态
+      isMergeDialogVisible.value = false
+      await Promise.all([
+        gitStore.fetchStatus(),
+        gitStore.fetchLog(false),
+        gitStore.getBranchStatus(true)
+      ])
     }
   } catch (error) {
     console.error('合并分支操作发生错误:', error)
+    // 发生异常时也保存默认合并消息并关闭弹窗
+    gitStore.pendingMergeMessage = mergeOptions.value.message || defaultMergeMessage.value
+    isMergeDialogVisible.value = false
+    await Promise.all([
+      gitStore.fetchStatus(),
+      gitStore.fetchLog(false),
+      gitStore.getBranchStatus(true)
+    ])
   }
 }
 </script>

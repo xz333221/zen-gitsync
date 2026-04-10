@@ -1238,6 +1238,10 @@ async function executeOrchestration(
               const restartResult = await restartResp.json();
               if (restartResult?.success) {
                 ElMessage.success(`${stepLabel} 已重启现存终端命令`);
+                // 立即使用返回的 session 更新本地状态，避免状态不同步
+                if (restartResult?.session) {
+                  upsertTerminalSession(restartResult.session);
+                }
                 await loadTerminalSessions();
               } else {
                 throw new Error(restartResult?.error || '重启失败');

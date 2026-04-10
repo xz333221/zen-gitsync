@@ -77,7 +77,11 @@ function runBasicTests() {
   return { okCount, failCount, results };
 }
 // AI end Copilot
+<<<<<<< HEAD
+let aaa = 1;
+=======
 let bbb = 1
+>>>>>>> 7b32aeb44ee1c79e9e3102aa310583154804d017
 // 当以 ts-node 或类似方式执行时，自动运行示例测试
 if (typeof require !== "undefined" && require.main === module) {
   try {

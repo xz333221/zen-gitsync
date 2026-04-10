@@ -264,6 +264,10 @@ const conflictOriginalContent = ref<string>('')
 const blockChoice = ref<Map<number, 'current' | 'incoming' | 'both'>>(new Map())
 const activeBlockId = ref<number | null>(null)
 
+// 同步滚动位置
+const syncScrollTop = ref<number | null>(null)
+const SYNC_GROUP = 'merge-three-pane'
+
 const anchorsCurrent = ref<Map<number, { startLine: number; endLine: number }>>(new Map())
 const anchorsIncoming = ref<Map<number, { startLine: number; endLine: number }>>(new Map())
 const anchorsMerged = ref<Map<number, { startLine: number; endLine: number }>>(new Map())
@@ -1113,6 +1117,7 @@ onMounted(() => {
                   <div class="pane-header">
                     <div class="pane-title">{{ $t('@E80AC:当前更改') }}</div>
                   </div>
+                  <div class="pane-subhint placeholder"></div>
                   <div class="pane-body">
                 <MonacoEditor
                   :model-value="currentVersionContent"
@@ -1120,7 +1125,7 @@ onMounted(() => {
                   :file-path="currentSelectedFile"
                   theme="auto"
                   :read-only="true"
-                  min-height="360px"
+                  min-height="280px"
                   :reveal-line="revealLineCurrent"
                   :highlight-range="activeAnchorCurrent"
                   :dim-highlight-ranges="dimAnchorsCurrent"
@@ -1128,6 +1133,9 @@ onMounted(() => {
                   @gutter-click="(id) => applyBlockChoice(id, 'current')"
                   :right-actions="rightActionsCurrent"
                   :applied-blocks="appliedBlocks"
+                  :sync-group="SYNC_GROUP"
+                  :sync-scroll-top="syncScrollTop"
+                  @scroll-change="(top) => syncScrollTop = top"
                   @update:model-value="() => {}"
                 />
                   </div>
@@ -1145,11 +1153,14 @@ onMounted(() => {
                       :file-path="currentSelectedFile"
                       theme="auto"
                       :read-only="false"
-                      min-height="360px"
+                      min-height="280px"
                       :reveal-line="revealLineMerged"
                       :highlight-range="activeAnchorMerged"
                       :dim-highlight-ranges="dimAnchorsMerged"
                       highlight-kind="merged"
+                      :sync-group="SYNC_GROUP"
+                      :sync-scroll-top="syncScrollTop"
+                      @scroll-change="(top) => syncScrollTop = top"
                       @update:model-value="() => (mergedEditorDirty = true)"
                     />
                   </div>
@@ -1159,6 +1170,7 @@ onMounted(() => {
                   <div class="pane-header">
                     <div class="pane-title">{{ $t('@E80AC:传入的更改') }}</div>
                   </div>
+                  <div class="pane-subhint placeholder"></div>
                   <div class="pane-body">
                 <MonacoEditor
                   :model-value="incomingVersionContent"
@@ -1166,13 +1178,16 @@ onMounted(() => {
                   :file-path="currentSelectedFile"
                   theme="auto"
                   :read-only="true"
-                  min-height="360px"
+                  min-height="280px"
                   :reveal-line="revealLineIncoming"
                   :highlight-range="activeAnchorIncoming"
                   :dim-highlight-ranges="dimAnchorsIncoming"
                   highlight-kind="incoming"
                   :gutter-items="gutterItemsIncoming"
                   :applied-blocks="appliedBlocks"
+                  :sync-group="SYNC_GROUP"
+                  :sync-scroll-top="syncScrollTop"
+                  @scroll-change="(top) => syncScrollTop = top"
                   @gutter-click="(id) => applyBlockChoice(id, 'incoming')"
                   @update:model-value="() => {}"
                 />
@@ -1969,15 +1984,16 @@ onMounted(() => {
 
 /* 模式切换按钮 */
 .resolution-mode-switch {
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   gap: var(--spacing-base);
   justify-content: center;
-  
+  flex-shrink: 0;
+
   .el-button {
-    min-width: 120px;
+    min-width: 100px;
   }
 }
 
@@ -1985,13 +2001,17 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-sm);
+  min-height: 0;
 }
 
 .merge-three-pane {
   display: grid;
   grid-template-columns: 1fr 1.2fr 1fr;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pane {
@@ -2000,24 +2020,35 @@ onMounted(() => {
   background: var(--bg-container);
   overflow: hidden;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
 }
 
 .pane-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md) var(--spacing-lg);
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border-component);
+  flex-shrink: 0;
 }
 
-
 .pane-subhint {
-  padding: var(--spacing-sm) var(--spacing-lg) 0 var(--spacing-lg);
-  font-size: 12px;
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: 11px;
   color: var(--text-secondary);
   background: var(--bg-container);
+  flex-shrink: 0;
+  height: 20px;
+  line-height: 20px;
+  box-sizing: border-box;
+
+  &.placeholder {
+    visibility: hidden;
+  }
 }
 
 .pane-title {
@@ -2031,22 +2062,27 @@ onMounted(() => {
 }
 
 .pane-body {
-  padding: var(--spacing-md);
+  padding: var(--spacing-sm);
   background: var(--bg-container);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
-
 
 /* 保存解决方案按钮栏 */
 .save-resolution-bar {
-  padding: var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--bg-elevated);
   border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: center;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
-  
+  flex-shrink: 0;
+
   .el-button {
-    min-width: 200px;
+    min-width: 160px;
   }
 }
 
