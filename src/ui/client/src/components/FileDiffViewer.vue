@@ -425,17 +425,17 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
   if (choice === 'current') {
     // 操作本地侧（左侧）
     if (action === 'discard') {
-      // 左叉叉：丢弃本地，切换到远程
+      // 左叉叉：丢弃本地（删除本地内容）
       switch (currentChoice) {
         case 'current':
         case null:
         case undefined:
-          // 当前是本地或未选择，丢弃本地 → 只保留远程
-          newChoice = 'incoming'
+          // 当前是本地或未选择，丢弃本地 → 空
+          newChoice = 'none'
           break
         case 'incoming':
-          // 当前已是远程，再丢弃本地 → 两边都删
-          newChoice = 'none'
+          // 当前已是远程，丢弃本地 → 保持远程
+          newChoice = 'incoming'
           break
         case 'both':
           // 两边都有，丢弃本地 → 只保留远程
@@ -447,11 +447,11 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
           break
       }
     } else {
-      // 左箭头：接受本地
+      // 左箭头：接受本地（添加本地内容）
       switch (currentChoice) {
         case 'current':
-          // 已是本地，取消选择
-          newChoice = null
+          // 已是本地，保持
+          newChoice = 'current'
           break
         case null:
         case undefined:
@@ -463,8 +463,8 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
           newChoice = 'both'
           break
         case 'both':
-          // 两边都有，移除远程 → 只保留本地
-          newChoice = 'current'
+          // 两边都有，保持
+          newChoice = 'both'
           break
         case 'none':
           // 两边都删，加本地 → 只保留本地
@@ -475,11 +475,11 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
   } else if (choice === 'incoming') {
     // 操作远程侧（右侧）
     if (action === 'discard') {
-      // 右叉叉：丢弃远程，切换到本地
+      // 右叉叉：丢弃远程（删除远程内容）
       switch (currentChoice) {
         case 'incoming':
-          // 当前是远程，丢弃远程 → 只保留本地
-          newChoice = 'current'
+          // 当前是远程，丢弃远程 → 空
+          newChoice = 'none'
           break
         case null:
         case undefined:
@@ -487,8 +487,8 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
           newChoice = 'current'
           break
         case 'current':
-          // 当前是本地，再丢弃远程 → 两边都删
-          newChoice = 'none'
+          // 当前是本地，丢弃远程 → 保持本地
+          newChoice = 'current'
           break
         case 'both':
           // 两边都有，丢弃远程 → 只保留本地
@@ -500,11 +500,11 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
           break
       }
     } else {
-      // 右箭头：接受远程
+      // 右箭头：接受远程（添加远程内容）
       switch (currentChoice) {
         case 'incoming':
-          // 已是远程，取消选择
-          newChoice = null
+          // 已是远程，保持
+          newChoice = 'incoming'
           break
         case null:
         case undefined:
@@ -516,8 +516,8 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
           newChoice = 'both'
           break
         case 'both':
-          // 两边都有，移除本地 → 只保留远程
-          newChoice = 'incoming'
+          // 两边都有，保持
+          newChoice = 'both'
           break
         case 'none':
           // 两边都删，加远程 → 只保留远程

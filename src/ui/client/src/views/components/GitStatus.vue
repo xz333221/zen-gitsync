@@ -1333,6 +1333,12 @@ defineExpose({
         <div class="pull-error-label">{{ $t('@13D1C:错误详情') }}：</div>
         <pre class="pull-error-pre">{{ pullErrorInfo.fullError || pullErrorInfo.error }}</pre>
       </div>
+
+      <!-- Pull 输出信息（包含冲突详情） -->
+      <div v-if="pullErrorInfo.pullOutput" class="pull-error-detail">
+        <div class="pull-error-label">{{ $t('@13D1C:冲突详情') }}：</div>
+        <pre class="pull-error-pre">{{ pullErrorInfo.pullOutput }}</pre>
+      </div>
     </div>
   </CommonDialog>
 </template>
