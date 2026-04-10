@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock, Loading } from '@element-plus/icons-vue';
+import { Delete, CopyDocument, ArrowDown, ArrowUp, Clock, Loading, Search, Filter } from '@element-plus/icons-vue';
 import { useGitStore } from '@stores/gitStore';
 import CommonDialog from '@/components/CommonDialog.vue';
 import IconButton from '@/components/IconButton.vue';
@@ -33,6 +33,50 @@ const expandedItems = ref<Set<number>>(new Set());
 const isCopyingCommands = ref(false);
 // 弹窗显示状态
 const dialogVisible = ref(false);
+
+// 筛选状态
+const filterStatus = ref<'all' | 'success' | 'error'>('all');
+const filterCommandType = ref<'all' | 'git' | 'other'>('all');
+const searchKeyword = ref('');
+
+// 计算属性：筛选后的命令历史
+const filteredCommandHistory = computed(() => {
+  let result = commandHistory.value;
+  
+  // 按状态筛选
+  if (filterStatus.value !== 'all') {
+    result = result.filter(item => 
+      filterStatus.value === 'success' ? item.success : !item.success
+    );
+  }
+  
+  // 按命令类型筛选
+  if (filterCommandType.value !== 'all') {
+    result = result.filter(item => {
+      const isGitCommand = item.command.trim().startsWith('git ');
+      return filterCommandType.value === 'git' ? isGitCommand : !isGitCommand;
+    });
+  }
+  
+  // 按关键词搜索
+  if (searchKeyword.value.trim()) {
+    const keyword = searchKeyword.value.toLowerCase();
+    result = result.filter(item => 
+      item.command.toLowerCase().includes(keyword) ||
+      (item.stdout && item.stdout.toLowerCase().includes(keyword)) ||
+      (item.stderr && item.stderr.toLowerCase().includes(keyword)) ||
+      (item.error && item.error.toLowerCase().includes(keyword))
+    );
+  }
+  
+  return result;
+});
+
+// 统计数量
+const successCount = computed(() => commandHistory.value.filter(item => item.success).length);
+const errorCount = computed(() => commandHistory.value.filter(item => !item.success).length);
+const gitCommandCount = computed(() => commandHistory.value.filter(item => item.command.trim().startsWith('git ')).length);
+const otherCommandCount = computed(() => commandHistory.value.filter(item => !item.command.trim().startsWith('git ')).length);
 
 // 打开命令历史弹窗
 function openCommandHistory() {
@@ -71,7 +115,7 @@ async function loadHistory() {
 
 // 复制所有命令历史
 async function copyAllHistory() {
-  if (commandHistory.value.length === 0) {
+  if (filteredCommandHistory.value.length === 0) {
     ElMessage.warning($t('@81F0F:没有可复制的命令历史'));
     return;
   }
@@ -79,8 +123,8 @@ async function copyAllHistory() {
   try {
     isCopyingHistory.value = true;
     
-    // 格式化所有命令历史为文本
-    const historyText = commandHistory.value.map(item => {
+    // 格式化筛选后的命令历史为文本
+    const historyText = filteredCommandHistory.value.map(item => {
       // 基本格式：命令 + 时间 + 耗时 + 状态
       let text = `# ${formatTimestamp(item.timestamp)}${$t('@81F0F: (耗时: ')}${formatExecutionTime(item.executionTime)}) - ${item.success ? $t('@81F0F:成功') : $t('@81F0F:失败')}\n`;
       text += `${item.command}\n`;
@@ -118,7 +162,7 @@ async function copyAllHistory() {
 
 // 只复制命令列表
 async function copyCommandsOnly() {
-  if (commandHistory.value.length === 0) {
+  if (filteredCommandHistory.value.length === 0) {
     ElMessage.warning($t('@81F0F:没有可复制的命令'));
     return;
   }
@@ -126,8 +170,8 @@ async function copyCommandsOnly() {
   try {
     isCopyingCommands.value = true;
     
-    // 只提取命令部分
-    const commandsText = commandHistory.value
+    // 只提取筛选后的命令部分
+    const commandsText = filteredCommandHistory.value
       .map(item => item.command)
       .join('\n');
     
@@ -389,51 +433,84 @@ onUnmounted(() => {
         >
           {{ hasSocketConnection ? $t('@81F0F:实时更新') : $t('@81F0F:未连接') }}
         </el-tag>
-        <el-tooltip :content="$t('@81F0F:只复制命令列表（不含输出）')" placement="bottom" effect="dark" :show-after="200">
-          <button 
-            class="modern-btn copy-commands-button enhanced-btn" 
-            @click="copyCommandsOnly"
-            :disabled="commandHistory.length === 0 || isCopyingCommands"
+        
+        <!-- 筛选控件 -->
+        <div class="filter-controls">
+          <!-- 状态筛选 -->
+          <el-select v-model="filterStatus" size="small" class="filter-select">
+            <el-option label="全部状态" value="all" />
+            <el-option :label="`成功 (${successCount})`" value="success" />
+            <el-option :label="`失败 (${errorCount})`" value="error" />
+          </el-select>
+          
+          <!-- 命令类型筛选 -->
+          <el-select v-model="filterCommandType" size="small" class="filter-select">
+            <el-option label="全部命令" value="all" />
+            <el-option :label="`Git 命令 (${gitCommandCount})`" value="git" />
+            <el-option :label="`其他命令 (${otherCommandCount})`" value="other" />
+          </el-select>
+          
+          <!-- 搜索框 -->
+          <el-input
+            v-model="searchKeyword"
+            size="small"
+            placeholder="搜索命令或输出..."
+            clearable
+            class="search-input"
           >
-            <el-icon class="btn-icon" v-if="!isCopyingCommands">
-              <CopyDocument />
-            </el-icon>
-            <el-icon class="btn-icon is-loading" v-else>
-              <Loading />
-            </el-icon>
-            <span class="btn-text">{{ $t('@81F0F:命令') }}</span>
-          </button>
-        </el-tooltip>
-        <el-tooltip :content="$t('@81F0F:复制完整命令历史（含输出）')" placement="bottom" effect="dark" :show-after="200">
-          <button 
-            class="modern-btn copy-all-button enhanced-btn" 
-            @click="copyAllHistory"
-            :disabled="commandHistory.length === 0 || isCopyingHistory"
-          >
-            <el-icon class="btn-icon" v-if="!isCopyingHistory">
-              <CopyDocument />
-            </el-icon>
-            <el-icon class="btn-icon is-loading" v-else>
-              <Loading />
-            </el-icon>
-            <span class="btn-text">{{ $t('@81F0F:全部') }}</span>
-          </button>
-        </el-tooltip>
-        <el-tooltip :content="$t('@81F0F:清空命令历史')" placement="bottom" effect="dark" :show-after="200">
-          <button 
-            class="modern-btn clear-button enhanced-btn danger-btn" 
-            @click="clearCommandHistory"
-            :disabled="commandHistory.length === 0 || isClearingHistory"
-          >
-            <el-icon class="btn-icon" v-if="!isClearingHistory">
-              <Delete />
-            </el-icon>
-            <el-icon class="btn-icon is-loading" v-else>
-              <Loading />
-            </el-icon>
-            <span class="btn-text">{{ $t('@81F0F:清空') }}</span>
-          </button>
-        </el-tooltip>
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
+        
+        <div class="toolbar-actions">
+          <el-tooltip :content="$t('@81F0F:只复制命令列表（不含输出）')" placement="bottom" effect="dark" :show-after="200">
+            <button 
+              class="modern-btn copy-commands-button enhanced-btn" 
+              @click="copyCommandsOnly"
+              :disabled="filteredCommandHistory.length === 0 || isCopyingCommands"
+            >
+              <el-icon class="btn-icon" v-if="!isCopyingCommands">
+                <CopyDocument />
+              </el-icon>
+              <el-icon class="btn-icon is-loading" v-else>
+                <Loading />
+              </el-icon>
+              <span class="btn-text">{{ $t('@81F0F:命令') }}</span>
+            </button>
+          </el-tooltip>
+          <el-tooltip :content="$t('@81F0F:复制完整命令历史（含输出）')" placement="bottom" effect="dark" :show-after="200">
+            <button 
+              class="modern-btn copy-all-button enhanced-btn" 
+              @click="copyAllHistory"
+              :disabled="filteredCommandHistory.length === 0 || isCopyingHistory"
+            >
+              <el-icon class="btn-icon" v-if="!isCopyingHistory">
+                <CopyDocument />
+              </el-icon>
+              <el-icon class="btn-icon is-loading" v-else>
+                <Loading />
+              </el-icon>
+              <span class="btn-text">{{ $t('@81F0F:全部') }}</span>
+            </button>
+          </el-tooltip>
+          <el-tooltip :content="$t('@81F0F:清空命令历史')" placement="bottom" effect="dark" :show-after="200">
+            <button 
+              class="modern-btn clear-button enhanced-btn danger-btn" 
+              @click="clearCommandHistory"
+              :disabled="commandHistory.length === 0 || isClearingHistory"
+            >
+              <el-icon class="btn-icon" v-if="!isClearingHistory">
+                <Delete />
+              </el-icon>
+              <el-icon class="btn-icon is-loading" v-else>
+                <Loading />
+              </el-icon>
+              <span class="btn-text">{{ $t('@81F0F:清空') }}</span>
+            </button>
+          </el-tooltip>
+        </div>
       </div>
       <div class="history-scroll">
       <div v-if="isLoading && commandHistory.length === 0" class="loading-state">
@@ -444,9 +521,11 @@ onUnmounted(() => {
       </div>
 
       <el-empty v-else-if="commandHistory.length === 0" :description="$t('@81F0F:暂无命令历史')" />
+      
+      <el-empty v-else-if="filteredCommandHistory.length === 0" :description="$t('@81F0F:没有匹配的命令')" />
 
       <div v-else class="history-list">
-        <div v-for="(item, index) in commandHistory" :key="index" class="history-item" :class="{ 'is-error': !item.success }">
+        <div v-for="(item, index) in filteredCommandHistory" :key="index" class="history-item" :class="{ 'is-error': !item.success }">
           <div class="item-header" @click="toggleExpand(index)">
             <div class="command-info">
               <div class="command-text">
@@ -750,17 +829,55 @@ onUnmounted(() => {
   padding: var(--spacing-lg) var(--spacing-xl);
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: var(--spacing-md);
   background: linear-gradient(135deg, #f8f9fa 0%, var(--border-component) 100%);
   border-bottom: 1px solid var(--border-component);
   border-radius: 8px 8px 0 0;
+  flex-wrap: wrap;
+}
+
+.filter-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 1;
+  min-width: 300px;
+}
+
+.filter-select {
+  width: 120px;
+}
+
+.search-input {
+  width: 200px;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 /* 深色主题下的工具栏 */
 [data-theme="dark"] .dialog-toolbar {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
   border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 深色主题下的筛选控件 */
+[data-theme="dark"] .filter-controls .el-input__wrapper,
+[data-theme="dark"] .filter-controls .el-select .el-input__wrapper {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .filter-controls .el-input__inner {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="dark"] .filter-controls .el-input__inner::placeholder {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .socket-status { 

@@ -344,11 +344,17 @@ export function registerGitOpsRoutes({
       res.json({ success: true, message: stdout });
     } catch (error) {
       // 改进错误处理，检查是否需要合并
-      const errorMsg = error.message || '';
-      const needsMerge = errorMsg.includes('merge') ||
-                         errorMsg.includes('需要合并') ||
-                         errorMsg.includes('CONFLICT') ||
-                         errorMsg.includes('冲突');
+      // 合并冲突信息可能在 message 或 stderr 中
+      const errorMsg = (error.message || '').toLowerCase();
+      const stderrMsg = (error.stderr || '').toLowerCase();
+      const stdoutMsg = (error.stdout || '').toLowerCase();
+      const fullOutput = errorMsg + ' ' + stderrMsg + ' ' + stdoutMsg;
+      
+      const needsMerge = fullOutput.includes('merge') ||
+                         fullOutput.includes('需要合并') ||
+                         fullOutput.includes('conflict') ||
+                         fullOutput.includes('冲突') ||
+                         fullOutput.includes('automatic merge failed');
 
       // 返回更详细的错误信息和标记
       res.status(500).json({

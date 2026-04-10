@@ -48,7 +48,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:modelValue': [v: string]
-  'gutter-click': [blockId: number]
+  'gutter-click': [blockId: number, action?: 'accept' | 'discard']
   'scroll-change': [scrollTop: number]
 }>()
 
@@ -105,22 +105,22 @@ function layoutRightActions() {
   const info = editor.getLayoutInfo?.()
   const contentLeft = info?.contentLeft ?? 0
   const contentWidth = info?.contentWidth ?? 0
-  const targetLeft = Math.max(0, contentLeft + contentWidth - 22)
+  // WebStorm风格：两个按钮并排，总宽度44px（每个22px）
+  const targetLeft = Math.max(0, contentLeft + contentWidth - 44)
 
   for (const a of actions) {
-    const node = rightActionNodes.get(a.blockId)
-    if (!node) continue
+    const wrapper = rightActionNodes.get(a.blockId)
+    if (!wrapper) continue
     const col = model?.getLineMaxColumn?.(a.line) ?? 1
     const pos = editor.getScrolledVisiblePosition?.({ lineNumber: a.line, column: col })
     if (!pos) {
-      node.style.display = 'none'
+      wrapper.style.display = 'none'
       continue
     }
-    node.style.display = ''
-    node.style.top = `${pos.top}px`
-    node.style.left = `${targetLeft}px`
-    node.style.height = `${pos.height}px`
-    node.style.lineHeight = `${pos.height}px`
+    wrapper.style.display = ''
+    wrapper.style.top = `${pos.top}px`
+    wrapper.style.left = `${targetLeft}px`
+    wrapper.style.height = `${pos.height}px`
   }
 }
 
@@ -132,6 +132,17 @@ function isBlockApplied(blockId: number, kind: 'current' | 'incoming'): boolean 
     return block.choice === 'current' || block.choice === 'both'
   }
   return block.choice === 'incoming' || block.choice === 'both'
+}
+
+function isBlockDiscarded(blockId: number, kind: 'current' | 'incoming'): boolean {
+  const applied = props.appliedBlocks || []
+  const block = applied.find(b => b.blockId === blockId)
+  if (!block) return false
+  // 当选择了相反的一方时，当前这一方被视为"丢弃"
+  if (kind === 'current') {
+    return block.choice === 'incoming'
+  }
+  return block.choice === 'current'
 }
 
 function applyRightActions() {
@@ -149,26 +160,86 @@ function applyRightActions() {
   clearRightActions()
   for (const a of actions) {
     const isApplied = isBlockApplied(a.blockId, a.kind)
-    const btn = document.createElement('div')
-    btn.className = a.kind === 'incoming' 
-      ? `merge-right-action merge-right-action-incoming${isApplied ? ' is-applied' : ''}` 
-      : `merge-right-action merge-right-action-current${isApplied ? ' is-applied' : ''}`
-    // 如果已应用，显示对勾，否则显示箭头
-    btn.textContent = isApplied ? '✓' : (a.kind === 'incoming' ? '←' : '→')
-    btn.title = isApplied 
-      ? (a.kind === 'incoming' ? '已采用传入更改' : '已采用当前更改')
-      : (a.kind === 'incoming' ? '采用传入更改' : '采用当前更改')
-    btn.addEventListener('mousedown', (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-    })
-    btn.addEventListener('click', (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      emit('gutter-click', a.blockId)
-    })
-    rightActionsContainer!.appendChild(btn)
-    rightActionNodes.set(a.blockId, btn)
+    const isDiscarded = isBlockDiscarded(a.blockId, a.kind)
+    
+    // WebStorm风格：创建按钮包装器，包含两个按钮
+    const wrapper = document.createElement('div')
+    wrapper.className = 'merge-right-action-wrapper'
+    
+    // 左侧面板（current）：显示 →（接受）和 ✕（丢弃）
+    // 右侧面板（incoming）：显示 ✕（丢弃）和 ←（接受）
+    // 注意：这里的"左/右"是从用户视角看的按钮排列顺序
+    
+    if (a.kind === 'current') {
+      // 左侧面板：箭头按钮（接受当前）在左，关闭按钮（丢弃当前）在右
+      const arrowBtn = document.createElement('div')
+      arrowBtn.className = `merge-right-action merge-right-action-current${isApplied ? ' is-applied' : ''}`
+      arrowBtn.textContent = isApplied ? '✓' : '→'
+      arrowBtn.title = isApplied ? '已采用当前更改' : '采用当前更改'
+      arrowBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      })
+      arrowBtn.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        emit('gutter-click', a.blockId, 'accept')
+      })
+      
+      const closeBtn = document.createElement('div')
+      closeBtn.className = `merge-right-action merge-right-action-close${isDiscarded ? ' is-discarded' : ''}`
+      closeBtn.textContent = '✕'
+      closeBtn.title = isDiscarded ? '已丢弃当前更改' : '丢弃当前更改'
+      closeBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      })
+      closeBtn.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        // 丢弃当前 = 采用传入
+        emit('gutter-click', a.blockId, 'discard')
+      })
+      
+      wrapper.appendChild(arrowBtn)
+      wrapper.appendChild(closeBtn)
+    } else {
+      // 右侧面板（incoming）：关闭按钮（丢弃传入）在左，箭头按钮（接受传入）在右
+      const closeBtn = document.createElement('div')
+      closeBtn.className = `merge-right-action merge-right-action-close${isDiscarded ? ' is-discarded' : ''}`
+      closeBtn.textContent = '✕'
+      closeBtn.title = isDiscarded ? '已丢弃传入更改' : '丢弃传入更改'
+      closeBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      })
+      closeBtn.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        // 丢弃传入 = 采用当前
+        emit('gutter-click', a.blockId, 'discard')
+      })
+      
+      const arrowBtn = document.createElement('div')
+      arrowBtn.className = `merge-right-action merge-right-action-incoming${isApplied ? ' is-applied' : ''}`
+      arrowBtn.textContent = isApplied ? '✓' : '←'
+      arrowBtn.title = isApplied ? '已采用传入更改' : '采用传入更改'
+      arrowBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      })
+      arrowBtn.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        emit('gutter-click', a.blockId, 'accept')
+      })
+      
+      wrapper.appendChild(closeBtn)
+      wrapper.appendChild(arrowBtn)
+    }
+    
+    rightActionsContainer!.appendChild(wrapper)
+    rightActionNodes.set(a.blockId, wrapper)
   }
 
   layoutRightActions()
@@ -642,8 +713,16 @@ onBeforeUnmount(() => {
   z-index: 5;
 }
 
-.monaco-editor-container :deep(.merge-right-action) {
+/* WebStorm风格：按钮包装器，包含两个并排按钮 */
+.monaco-editor-container :deep(.merge-right-action-wrapper) {
   position: absolute;
+  display: flex;
+  flex-direction: row;
+  width: 44px;
+  pointer-events: auto;
+}
+
+.monaco-editor-container :deep(.merge-right-action) {
   width: 22px;
   text-align: center;
   font-weight: 700;
@@ -651,6 +730,9 @@ onBeforeUnmount(() => {
   pointer-events: auto;
   user-select: none;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .monaco-editor-container :deep(.merge-right-action:hover) {
@@ -665,10 +747,26 @@ onBeforeUnmount(() => {
   color: rgba(34, 197, 94, 0.95);
 }
 
+.monaco-editor-container :deep(.merge-right-action-close) {
+  color: rgba(239, 68, 68, 0.85);
+}
+
+.monaco-editor-container :deep(.merge-right-action-close:hover) {
+  background: rgba(239, 68, 68, 0.1);
+  color: rgba(239, 68, 68, 1);
+}
+
 /* 已应用状态样式 */
 .monaco-editor-container :deep(.merge-right-action.is-applied) {
   background: rgba(34, 197, 94, 0.15) !important;
   color: rgba(34, 197, 94, 1) !important;
+  font-weight: 700;
+}
+
+/* 已丢弃状态样式 */
+.monaco-editor-container :deep(.merge-right-action.is-discarded) {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: rgba(239, 68, 68, 1) !important;
   font-weight: 700;
 }
 

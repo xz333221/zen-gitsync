@@ -377,7 +377,7 @@ const rightActionsCurrent = computed(() => {
     .filter(Boolean) as Array<{ blockId: number; line: number; kind: 'current' }>
 })
 
-const gutterItemsIncoming = computed(() => {
+const rightActionsIncoming = computed(() => {
   return conflictBlocks.value
     .map((b) => {
       const a = anchorsIncoming.value.get(b.id)
@@ -403,41 +403,75 @@ function rebuildMergedFromChoices() {
   mergedEditorDirty.value = true
 }
 
-function applyBlockChoice(blockId: number, choice: 'current' | 'incoming' | 'both') {
+function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', action?: 'accept' | 'discard') {
   const currentChoice = blockChoice.value.get(blockId)
   
   // 切换逻辑：支持同时应用两边
-  let newChoice: 'current' | 'incoming' | 'both' | null = choice
+  let newChoice: 'current' | 'incoming' | 'both' | null = null
   
   if (choice === 'current') {
-    // 点击左侧箭头
-    if (currentChoice === 'current') {
-      // 当前已是 current，取消选择（回到默认 current）
-      newChoice = null
-    } else if (currentChoice === 'incoming') {
-      // 当前是 incoming，变成 both
-      newChoice = 'both'
-    } else if (currentChoice === 'both') {
-      // 当前是 both，移除 current 部分，变成 incoming
-      newChoice = 'incoming'
+    if (action === 'discard') {
+      // 点击左侧面板的关闭按钮（丢弃当前 = 采用传入）
+      if (currentChoice === 'incoming') {
+        // 已经是传入，取消选择
+        newChoice = null
+      } else if (currentChoice === 'both') {
+        // 两边都有，移除当前，只剩传入
+        newChoice = 'incoming'
+      } else if (currentChoice === 'current') {
+        // 原来是当前，直接切换到传入
+        newChoice = 'incoming'
+      } else {
+        // 无选择，设置为传入
+        newChoice = 'incoming'
+      }
     } else {
-      // 当前无选择，设置为 current
-      newChoice = 'current'
+      // 点击左侧箭头（接受当前）
+      if (currentChoice === 'current') {
+        // 当前已是 current，取消选择（回到默认 current）
+        newChoice = null
+      } else if (currentChoice === 'incoming') {
+        // 当前是 incoming，变成 both
+        newChoice = 'both'
+      } else if (currentChoice === 'both') {
+        // 当前是 both，移除 current 部分，变成 incoming
+        newChoice = 'incoming'
+      } else {
+        // 当前无选择，设置为 current
+        newChoice = 'current'
+      }
     }
   } else if (choice === 'incoming') {
-    // 点击右侧箭头
-    if (currentChoice === 'incoming') {
-      // 当前已是 incoming，取消选择（回到默认 current）
-      newChoice = null
-    } else if (currentChoice === 'current') {
-      // 当前是 current，变成 both
-      newChoice = 'both'
-    } else if (currentChoice === 'both') {
-      // 当前是 both，移除 incoming 部分，变成 current
-      newChoice = 'current'
+    if (action === 'discard') {
+      // 点击右侧面板的关闭按钮（丢弃传入 = 采用当前）
+      if (currentChoice === 'current') {
+        // 已经是当前，取消选择
+        newChoice = null
+      } else if (currentChoice === 'both') {
+        // 两边都有，移除传入，只剩当前
+        newChoice = 'current'
+      } else if (currentChoice === 'incoming') {
+        // 原来是传入，直接切换到当前
+        newChoice = 'current'
+      } else {
+        // 无选择，设置为当前
+        newChoice = 'current'
+      }
     } else {
-      // 当前无选择，设置为 incoming
-      newChoice = 'incoming'
+      // 点击右侧箭头（接受传入）
+      if (currentChoice === 'incoming') {
+        // 当前已是 incoming，取消选择（回到默认 current）
+        newChoice = null
+      } else if (currentChoice === 'current') {
+        // 当前是 current，变成 both
+        newChoice = 'both'
+      } else if (currentChoice === 'both') {
+        // 当前是 both，移除 incoming 部分，变成 current
+        newChoice = 'current'
+      } else {
+        // 当前无选择，设置为 incoming
+        newChoice = 'incoming'
+      }
     }
   }
   
@@ -1130,7 +1164,7 @@ onMounted(() => {
                   :highlight-range="activeAnchorCurrent"
                   :dim-highlight-ranges="dimAnchorsCurrent"
                   highlight-kind="current"
-                  @gutter-click="(id) => applyBlockChoice(id, 'current')"
+                  @gutter-click="(id, action) => applyBlockChoice(id, 'current', action)"
                   :right-actions="rightActionsCurrent"
                   :applied-blocks="appliedBlocks"
                   :sync-group="SYNC_GROUP"
@@ -1183,12 +1217,12 @@ onMounted(() => {
                   :highlight-range="activeAnchorIncoming"
                   :dim-highlight-ranges="dimAnchorsIncoming"
                   highlight-kind="incoming"
-                  :gutter-items="gutterItemsIncoming"
+                  :right-actions="rightActionsIncoming"
                   :applied-blocks="appliedBlocks"
                   :sync-group="SYNC_GROUP"
                   :sync-scroll-top="syncScrollTop"
                   @scroll-change="(top) => syncScrollTop = top"
-                  @gutter-click="(id) => applyBlockChoice(id, 'incoming')"
+                  @gutter-click="(id, action) => applyBlockChoice(id, 'incoming', action)"
                   @update:model-value="() => {}"
                 />
                   </div>
@@ -1374,7 +1408,7 @@ onMounted(() => {
                   highlight-kind="current"
                   :right-actions="rightActionsCurrent"
                   :applied-blocks="appliedBlocks"
-                  @gutter-click="(id) => applyBlockChoice(id, 'current')"
+                  @gutter-click="(id, action) => applyBlockChoice(id, 'current', action)"
                   @update:model-value="() => {}"
                 />
               </div>
@@ -1418,9 +1452,9 @@ onMounted(() => {
                   :highlight-range="activeAnchorIncoming"
                   :dim-highlight-ranges="dimAnchorsIncoming"
                   highlight-kind="incoming"
-                  :gutter-items="gutterItemsIncoming"
+                  :right-actions="rightActionsIncoming"
                   :applied-blocks="appliedBlocks"
-                  @gutter-click="(id) => applyBlockChoice(id, 'incoming')"
+                  @gutter-click="(id, action) => applyBlockChoice(id, 'incoming', action)"
                   @update:model-value="() => {}"
                 />
               </div>

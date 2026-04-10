@@ -31,7 +31,10 @@ const defaultConfig = {
     type: 'command',
     refId: ''
   },
-  currentDirectory: ''
+  currentDirectory: '',
+  // 通用设置
+  theme: 'light',  // 主题: light | dark | auto
+  locale: 'zh-CN'  // 语言: zh-CN | en-US
 };
 
 // 规范化项目路径作为配置键
@@ -109,9 +112,15 @@ async function loadConfig() {
     return { ...defaultConfig, ...raw };
   }
 
-  // 新版结构：{ projects: { [key]: projectConfig }, global?: {...} }
+  // 新版结构：{ projects: { [key]: projectConfig }, theme?, locale?, recentDirectories? }
   const projectConfig = raw?.projects?.[key];
-  return { ...defaultConfig, ...(projectConfig || {}) };
+  // 合并：默认配置 + 项目配置 + 全局通用设置（theme, locale）
+  return {
+    ...defaultConfig,
+    ...(projectConfig || {}),
+    theme: raw?.theme ?? defaultConfig.theme,
+    locale: raw?.locale ?? defaultConfig.locale
+  };
 }
 
 // 异步保存配置
@@ -141,9 +150,20 @@ async function saveConfig(config) {
     raw.projects = {};
   }
 
+  // 分离全局设置和项目设置
+  const { theme, locale, ...projectConfig } = config;
+
+  // 保存全局设置到根级别
+  if (theme !== undefined) {
+    raw.theme = theme;
+  }
+  if (locale !== undefined) {
+    raw.locale = locale;
+  }
+
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
   const existingProjectConfig = (raw.projects[key] && typeof raw.projects[key] === 'object') ? raw.projects[key] : {};
-  raw.projects[key] = { ...defaultConfig, ...existingProjectConfig, ...config };
+  raw.projects[key] = { ...defaultConfig, ...existingProjectConfig, ...projectConfig };
   await backupConfigFileIfExists();
   await writeRawConfigFile(raw);
 }
@@ -263,5 +283,7 @@ export default {
   listLockedFiles,
   getLockedFiles,
   getRecentDirectories,
-  saveRecentDirectory
+  saveRecentDirectory,
+  readRawConfigFile,
+  writeRawConfigFile
 };

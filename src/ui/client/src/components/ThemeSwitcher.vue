@@ -1,33 +1,49 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { Sunny, Moon } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import IconButton from '@components/IconButton.vue'
+import { useConfigStore } from '@/stores/configStore'
+
+const configStore = useConfigStore()
 
 // 主题状态
 const isDarkTheme = ref(false)
 
-// 切换主题
-function toggleTheme() {
-  isDarkTheme.value = !isDarkTheme.value
-  const html = document.documentElement
-  if (isDarkTheme.value) {
-    html.setAttribute('data-theme', 'dark')
-    localStorage.setItem('theme', 'dark')
+// 同步 configStore 的主题状态
+watch(() => configStore.theme, (newTheme) => {
+  if (newTheme === 'dark') {
+    isDarkTheme.value = true
+  } else if (newTheme === 'light') {
+    isDarkTheme.value = false
   } else {
-    html.removeAttribute('data-theme')
-    localStorage.setItem('theme', 'light')
+    // auto: 跟随系统
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    isDarkTheme.value = prefersDark
   }
+}, { immediate: true })
+
+// 切换主题
+async function toggleTheme() {
+  isDarkTheme.value = !isDarkTheme.value
+  const newTheme = isDarkTheme.value ? 'dark' : 'light'
+  // 更新 configStore 并保存到服务器
+  configStore.theme = newTheme
+  await configStore.saveGeneralSettings({ theme: newTheme })
 }
 
 // 初始化主题
 function initTheme() {
-  const savedTheme = localStorage.getItem('theme')
+  // 优先使用 configStore 的主题（已经从 localStorage 或服务器加载）
+  const currentTheme = configStore.theme
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
   
-  if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+  if (currentTheme === 'dark' || (currentTheme === 'auto' && prefersDark)) {
     isDarkTheme.value = true
     document.documentElement.setAttribute('data-theme', 'dark')
+  } else {
+    isDarkTheme.value = false
+    document.documentElement.removeAttribute('data-theme')
   }
 }
 

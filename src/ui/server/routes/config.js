@@ -644,7 +644,7 @@ export function registerConfigRoutes({
     }
   })
 
-  // 保存“一键推送成功后启动项”
+  // 保存"一键推送成功后启动项"
   app.post('/api/config/save-after-quick-push-action', express.json(), async (req, res) => {
     try {
       const { afterQuickPushAction } = req.body
@@ -665,6 +665,30 @@ export function registerConfigRoutes({
       }
       await configManager.saveConfig(config)
 
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+
+  // 保存通用设置（主题和语言）
+  app.post('/api/config/save-general-settings', express.json(), async (req, res) => {
+    try {
+      const { theme, locale } = req.body
+
+      // 读取原始配置以保留项目设置
+      const rawConfig = await configManager.readRawConfigFile()
+      
+      // 更新全局设置
+      if (theme && ['light', 'dark', 'auto'].includes(theme)) {
+        rawConfig.theme = theme
+      }
+      if (locale && ['zh-CN', 'en-US'].includes(locale)) {
+        rawConfig.locale = locale
+      }
+      
+      // 直接写入原始配置，避免覆盖项目设置
+      await configManager.writeRawConfigFile(rawConfig)
       res.json({ success: true })
     } catch (error) {
       res.status(500).json({ success: false, error: error.message })

@@ -2,6 +2,9 @@ import { $t } from '@/lang/static'
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import type { SupportLocale } from '@/locales'
+import { setLocale } from '@/locales'
+import { useLocaleStore } from './localeStore'
 
 // 节点输出引用类型
 export interface NodeOutputRef {
@@ -150,6 +153,10 @@ export const useConfigStore = defineStore('config', () => {
   const autoClosePushModal = ref(true)
   // 自动设置默认提交信息（从localStorage加载，默认false）
   const autoSetDefaultMessage = ref(false)
+  // 主题设置（从localStorage加载，默认light）
+  const theme = ref<'light' | 'dark' | 'auto'>('light')
+  // 语言设置（从localStorage加载，默认zh-CN）
+  const locale = ref<SupportLocale>('zh-CN')
 
   // 设置当前目录
   function setCurrentDirectory(dir: string) {
@@ -177,6 +184,50 @@ export const useConfigStore = defineStore('config', () => {
   watch(autoSetDefaultMessage, (newValue) => {
     localStorage.setItem('zen-gitsync-auto-set-default-message', newValue.toString())
   })
+
+  // 初始化：从localStorage加载theme配置
+  const savedTheme = localStorage.getItem('zen-gitsync-theme') as 'light' | 'dark' | 'auto' | null
+  if (savedTheme && ['light', 'dark', 'auto'].includes(savedTheme)) {
+    theme.value = savedTheme
+  }
+
+  // 监听theme变化，自动保存到localStorage并应用
+  watch(theme, (newValue) => {
+    localStorage.setItem('zen-gitsync-theme', newValue)
+    applyTheme(newValue)
+  })
+
+  // 初始化：从localStorage加载locale配置
+  const savedLocale = localStorage.getItem('zen-gitsync-locale') as SupportLocale | null
+  if (savedLocale && ['zh-CN', 'en-US'].includes(savedLocale)) {
+    locale.value = savedLocale
+  }
+
+  // 监听locale变化，自动保存到localStorage
+  watch(locale, (newValue) => {
+    localStorage.setItem('zen-gitsync-locale', newValue)
+  })
+
+  // 应用主题
+  function applyTheme(themeValue: 'light' | 'dark' | 'auto') {
+    const html = document.documentElement
+    if (themeValue === 'dark') {
+      html.setAttribute('data-theme', 'dark')
+    } else if (themeValue === 'light') {
+      html.removeAttribute('data-theme')
+    } else {
+      // 跟随系统
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+      if (prefersDark) {
+        html.setAttribute('data-theme', 'dark')
+      } else {
+        html.removeAttribute('data-theme')
+      }
+    }
+  }
+
+  // 初始化时应用主题
+  applyTheme(theme.value)
 
   // 添加 computed 属性返回完整配置
   const config = computed(() => {
@@ -274,6 +325,20 @@ export const useConfigStore = defineStore('config', () => {
         type: configData?.afterQuickPushAction?.type === 'workflow' ? 'workflow' : 'command',
         refId: String(configData?.afterQuickPushAction?.refId || '').trim()
       }
+      
+      // 加载通用设置
+      if (configData.theme && ['light', 'dark', 'auto'].includes(configData.theme)) {
+        theme.value = configData.theme
+        applyTheme(configData.theme)
+      }
+      if (configData.locale && ['zh-CN', 'en-US'].includes(configData.locale)) {
+        locale.value = configData.locale
+        // 同步更新 localeStore 和 i18n
+        setLocale(configData.locale)
+        const localeStore = useLocaleStore()
+        localeStore.currentLocale = configData.locale
+      }
+      
       // 若后端返回当前目录，更新
       if (configData.currentDirectory) {
         currentDirectory.value = configData.currentDirectory
@@ -810,6 +875,41 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 保存通用设置
+  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale }) {
+    try {
+      const response = await fetch('/api/config/save-general-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        if (settings.theme) {
+          theme.value = settings.theme
+          applyTheme(settings.theme)
+        }
+        if (settings.locale) {
+          locale.value = settings.locale
+          // 同步更新 i18n 和 localeStore
+          setLocale(settings.locale)
+          const localeStore = useLocaleStore()
+          localeStore.currentLocale = settings.locale
+        }
+        return true
+      } else {
+        ElMessage.error(`保存通用设置失败: ${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`保存通用设置失败: ${(error as Error).message}`)
+      return false
+    }
+  }
+
   return {
     // 状态
     defaultCommitMessage,
@@ -832,12 +932,16 @@ export const useConfigStore = defineStore('config', () => {
     config,
     autoClosePushModal,
     autoSetDefaultMessage,
+    theme,
+    locale,
 
     // 方法
     loadConfig,
     setCurrentDirectory,
     openSystemConfigFile,
     saveTemplate,
+    saveGeneralSettings,
+    applyTheme,
     saveDefaultMessage,
     deleteTemplate,
     updateTemplate,
