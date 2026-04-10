@@ -26,14 +26,14 @@ const props = defineProps<Props>();
 
 // Emits
 interface Emits {
-  (e: 'resolve', blockId: number, resolution: 'current' | 'incoming' | 'both'): void;
+  (e: 'resolve', blockId: number, resolution: 'current' | 'incoming' | 'both' | 'none'): void;
   (e: 'refresh'): void; // 刷新整个文件
 }
 
 const emit = defineEmits<Emits>();
 
 // 每个块的解决状态
-const blockResolutions = ref<Map<number, 'current' | 'incoming' | 'both' | null>>(new Map());
+const blockResolutions = ref<Map<number, 'current' | 'incoming' | 'both' | 'none' | null>>(new Map());
 
 // 判断某个块是否已解决
 function isBlockResolved(blockId: number): boolean {
@@ -41,12 +41,12 @@ function isBlockResolved(blockId: number): boolean {
 }
 
 // 获取块的解决方式
-function getBlockResolution(blockId: number): 'current' | 'incoming' | 'both' | null {
+function getBlockResolution(blockId: number): 'current' | 'incoming' | 'both' | 'none' | null {
   return blockResolutions.value.get(blockId) || null;
 }
 
 // 处理块解决
-async function handleResolveBlock(blockId: number, resolution: 'current' | 'incoming' | 'both') {
+async function handleResolveBlock(blockId: number, resolution: 'current' | 'incoming' | 'both' | 'none') {
   try {
     emit('resolve', blockId, resolution);
     blockResolutions.value.set(blockId, resolution);
@@ -228,6 +228,12 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
                 <span class="line-content">{{ line }}</span>
               </div>
             </template>
+            <template v-else-if="getBlockResolution(block.id) === 'none'">
+              <div class="diff-line final-line empty-line">
+                <span class="line-number">-</span>
+                <span class="line-content">{{ $t('@E80AC:（已删除）') }}</span>
+              </div>
+            </template>
           </div>
         </div>
       </template>
@@ -270,18 +276,27 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
           <div class="merge-column result-column">
             <div class="column-header">
               <span class="column-title">{{ $t('@E80AC:合并结果') }}</span>
-              <el-button
-                size="small"
-                type="warning"
-                @click="handleResolveBlock(block.id, 'both')"
-              >
-                {{ $t('@E80AC:保留双方') }}
-              </el-button>
+              <div class="result-actions">
+                <el-button
+                  size="small"
+                  type="warning"
+                  @click="handleResolveBlock(block.id, 'both')"
+                >
+                  {{ $t('@E80AC:保留双方') }}
+                </el-button>
+                <el-button
+                  size="small"
+                  type="danger"
+                  @click="handleResolveBlock(block.id, 'none')"
+                >
+                  {{ $t('@E80AC:删除双方') }}
+                </el-button>
+              </div>
             </div>
             <div class="column-content result-content">
               <div class="merge-hint">
                 <p>{{ $t('@E80AC:点击左右两侧的') }} <strong>&gt;&gt;</strong> {{ $t('@E80AC:或') }} <strong>&lt;&lt;</strong> {{ $t('@E80AC:按钮') }}</p>
-                <p>{{ $t('@E80AC:选择要保留的内容') }}</p>
+                <p>{{ $t('@E80AC:或选择上方操作') }}</p>
               </div>
             </div>
           </div>
@@ -572,6 +587,11 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
         &.result-column {
           .column-header {
             background-color: var(--bg-elevated);
+            
+            .result-actions {
+              display: flex;
+              gap: var(--spacing-xs);
+            }
           }
           
           .result-content {
@@ -646,6 +666,16 @@ function computeCharDiff(oldText: string, newText: string): { old: DiffPart[], n
           &.final-line {
             background-color: rgba(var(--color-success-rgb), 0.12);
             border-left: 3px solid var(--color-success);
+          }
+          
+          &.empty-line {
+            background-color: rgba(var(--color-danger-rgb), 0.08);
+            border-left: 3px solid var(--color-danger);
+            
+            .line-content {
+              color: var(--color-danger);
+              font-style: italic;
+            }
           }
           
           .line-number {

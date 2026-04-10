@@ -261,7 +261,7 @@ const incomingVersionContent = ref<string>('')
 const bothVersionContent = ref<string>('')
 
 const conflictOriginalContent = ref<string>('')
-const blockChoice = ref<Map<number, 'current' | 'incoming' | 'both'>>(new Map())
+const blockChoice = ref<Map<number, 'current' | 'incoming' | 'both' | 'none'>>(new Map())
 const activeBlockId = ref<number | null>(null)
 
 // 同步滚动位置
@@ -281,7 +281,7 @@ async function loadConflictFileContent(filePath: string): Promise<string> {
 
 function buildTextAndAnchors(
   content: string,
-  chooser: (blockId: number) => 'current' | 'incoming' | 'both'
+  chooser: (blockId: number) => 'current' | 'incoming' | 'both' | 'none'
 ): { text: string; anchors: Map<number, { startLine: number; endLine: number }> } {
   const lines = content.split('\n')
   const out: string[] = []
@@ -308,8 +308,16 @@ function buildTextAndAnchors(
       if (i < lines.length && lines[i].includes('>>>>>>>')) i++
 
       const choice = chooser(blockId)
-      const chosenLines =
-        choice === 'incoming' ? incoming : choice === 'both' ? [...current, ...incoming] : current
+      let chosenLines: string[] = []
+      if (choice === 'incoming') {
+        chosenLines = incoming
+      } else if (choice === 'both') {
+        chosenLines = [...current, ...incoming]
+      } else if (choice === 'none') {
+        chosenLines = [] // 两边都删除，不添加任何行
+      } else {
+        chosenLines = current
+      }
 
       const startLine = out.length + 1
       out.push(...chosenLines)
@@ -388,7 +396,7 @@ const rightActionsIncoming = computed(() => {
 
 // 将 blockChoice 转换为 appliedBlocks 格式
 const appliedBlocks = computed(() => {
-  const result: Array<{ blockId: number; choice: 'current' | 'incoming' | 'both' }> = []
+  const result: Array<{ blockId: number; choice: 'current' | 'incoming' | 'both' | 'none' }> = []
   blockChoice.value.forEach((choice, blockId) => {
     result.push({ blockId, choice })
   })
@@ -406,23 +414,26 @@ function rebuildMergedFromChoices() {
 function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', action?: 'accept' | 'discard') {
   const currentChoice = blockChoice.value.get(blockId)
   
-  // 切换逻辑：支持同时应用两边
-  let newChoice: 'current' | 'incoming' | 'both' | null = null
+  // 切换逻辑：支持同时应用两边，以及两边都删除
+  let newChoice: 'current' | 'incoming' | 'both' | 'none' | null = null
   
   if (choice === 'current') {
     if (action === 'discard') {
-      // 点击左侧面板的关闭按钮（丢弃当前 = 采用传入）
+      // 点击左侧面板的关闭按钮（丢弃当前）
       if (currentChoice === 'incoming') {
-        // 已经是传入，取消选择
-        newChoice = null
+        // 已经是传入，再丢弃当前 → 两边都删除
+        newChoice = 'none'
       } else if (currentChoice === 'both') {
         // 两边都有，移除当前，只剩传入
         newChoice = 'incoming'
       } else if (currentChoice === 'current') {
-        // 原来是当前，直接切换到传入
+        // 原来是当前，丢弃当前 → 切换到传入
         newChoice = 'incoming'
+      } else if (currentChoice === 'none') {
+        // 已经是 none（两边都删），保持删除状态
+        newChoice = 'none'
       } else {
-        // 无选择，设置为传入
+        // 无选择，默认当前，丢弃当前 → 切换到传入
         newChoice = 'incoming'
       }
     } else {
@@ -436,6 +447,9 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
       } else if (currentChoice === 'both') {
         // 当前是 both，移除 current 部分，变成 incoming
         newChoice = 'incoming'
+      } else if (currentChoice === 'none') {
+        // 当前是 none（两边都删），添加 current
+        newChoice = 'current'
       } else {
         // 当前无选择，设置为 current
         newChoice = 'current'
@@ -443,18 +457,21 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
     }
   } else if (choice === 'incoming') {
     if (action === 'discard') {
-      // 点击右侧面板的关闭按钮（丢弃传入 = 采用当前）
+      // 点击右侧面板的关闭按钮（丢弃传入）
       if (currentChoice === 'current') {
-        // 已经是当前，取消选择
-        newChoice = null
+        // 已经是当前，再丢弃传入 → 两边都删除
+        newChoice = 'none'
       } else if (currentChoice === 'both') {
         // 两边都有，移除传入，只剩当前
         newChoice = 'current'
       } else if (currentChoice === 'incoming') {
-        // 原来是传入，直接切换到当前
+        // 原来是传入，丢弃传入 → 切换到当前
         newChoice = 'current'
+      } else if (currentChoice === 'none') {
+        // 已经是 none（两边都删），保持删除状态
+        newChoice = 'none'
       } else {
-        // 无选择，设置为当前
+        // 无选择，默认当前，丢弃传入 → 切换到当前（保持当前）
         newChoice = 'current'
       }
     } else {
@@ -468,6 +485,9 @@ function applyBlockChoice(blockId: number, choice: 'current' | 'incoming', actio
       } else if (currentChoice === 'both') {
         // 当前是 both，移除 incoming 部分，变成 current
         newChoice = 'current'
+      } else if (currentChoice === 'none') {
+        // 当前是 none（两边都删），添加 incoming
+        newChoice = 'incoming'
       } else {
         // 当前无选择，设置为 incoming
         newChoice = 'incoming'

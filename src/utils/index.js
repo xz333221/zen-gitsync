@@ -350,6 +350,9 @@ function execGitCommand(command, options = {}) {
           const currentTime = new Date().toLocaleString('zh-CN', { hour12: false });
           console.log(chalk.dim(`📁 目录: ${cwd} | ⏰ 时间: ${currentTime}`));
         }
+        // 将 stdout 和 stderr 附加到 error 对象，以便上层可以获取完整输出
+        error.stdout = stdout
+        error.stderr = stderr
         reject(error)
         return
       }
