@@ -852,7 +852,6 @@ defineExpose({
           
           <!-- 重置到远程按钮 -->
           <ResetToRemoteButton v-if="!isSelectionMode" />
-          <DiscardAllChangesButton v-if="!isSelectionMode" />
         </div>
         <div class="flex items-center">
           <GitOperationsButton variant="icon" />
@@ -952,6 +951,7 @@ defineExpose({
               />
               <h4>{{ $t('@13D1C:文件列表') }}</h4>
               <span v-if="gitStore.fileList.length > 0" class="file-count">({{ gitStore.fileList.length }})</span>
+              <DiscardAllChangesButton v-if="!isSelectionMode" size="small" />
             </div>
             <div class="view-mode-toggle">
               <IconButton

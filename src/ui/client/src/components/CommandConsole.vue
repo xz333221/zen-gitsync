@@ -2938,17 +2938,17 @@ onUnmounted(() => {
 /* 命令控制台容器 */
 .command-console {
   margin-top: var(--spacing-sm);
-  background: var(--bg-terminal);
-  border: 1px solid var(--border-terminal);
+  background: var(--bg-console);
+  border: 1px solid var(--border-console);
   border-radius: 10px;
   padding: 0;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--console-shadow);
   transition: all 0.3s ease;
   overflow: hidden;
   
   &:hover {
-    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.45);
-    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: var(--console-shadow-hover);
+    border-color: var(--border-console-hover);
   }
 
   .console-content {
@@ -2959,8 +2959,8 @@ onUnmounted(() => {
   .termial-session {
     height: 100%;
     overflow: hidden;
-    background: var(--bg-terminal-output);
-    border-right: 1px solid var(--border-terminal);
+    background: var(--bg-console-output);
+    border-right: 1px solid var(--border-console);
   }
 
   .console-content-main {
@@ -3004,8 +3004,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  background: var(--bg-terminal-header);
-  border-bottom: 1px solid var(--border-terminal);
+  background: var(--bg-console-header);
+  border-bottom: 1px solid var(--border-console);
 }
 
 .console-window-dots {
@@ -3035,7 +3035,7 @@ onUnmounted(() => {
 .console-title {
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--text-console-secondary);
   letter-spacing: 0.3px;
   font-family: var(--font-mono);
 }
@@ -3044,7 +3044,7 @@ onUnmounted(() => {
    height: 100%;
    display: flex;
    flex-direction: column;
-   background: var(--bg-terminal-output);
+   background: var(--bg-console-output);
    border-bottom: none;
  }
 
@@ -3053,8 +3053,8 @@ onUnmounted(() => {
    align-items: center;
    justify-content: space-between;
    padding: 8px 12px;
-   background: var(--bg-terminal-cmd);
-   border-bottom: 1px solid var(--border-terminal);
+   background: var(--bg-console-cmd);
+   border-bottom: 1px solid var(--border-console);
  }
 
  .terminal-sessions-title {
@@ -3062,12 +3062,12 @@ onUnmounted(() => {
    align-items: baseline;
    gap: 6px;
    font-weight: 600;
-   color: rgba(255, 255, 255, 0.75);
+   color: var(--text-console-secondary);
  }
 
  .terminal-sessions-count {
    font-weight: 500;
-   color: rgba(255, 255, 255, 0.45);
+   color: var(--text-console-muted);
  }
 
  .terminal-sessions-actions {
@@ -3079,13 +3079,13 @@ onUnmounted(() => {
  .terminal-sessions-body {
    flex: 1;
    padding: 8px 12px 12px;
-   background: var(--bg-terminal-output);
+   background: var(--bg-console-output);
    overflow: auto;
  }
 
  .terminal-sessions-empty {
    padding: 10px 0;
-   color: rgba(255, 255, 255, 0.45);
+   color: var(--text-console-muted);
    font-size: 13px;
  }
 
@@ -3101,8 +3101,8 @@ onUnmounted(() => {
    justify-content: space-between;
    gap: 10px;
    padding: 10px 12px;
-   background: rgba(255, 255, 255, 0.03);
-   border: 1px solid rgba(255, 255, 255, 0.08);
+   background: var(--bg-console-subtle);
+   border: 1px solid var(--border-console);
    border-radius: 8px;
  }
 
@@ -3114,7 +3114,7 @@ onUnmounted(() => {
  .terminal-session-command {
    font-size: var(--font-size-md);
    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-   color: var(--text-terminal);
+   color: var(--text-console);
    white-space: nowrap;
    overflow: hidden;
    text-overflow: ellipsis;
@@ -3127,7 +3127,7 @@ onUnmounted(() => {
    align-items: flex-start;
    gap: 4px;
    font-size: 12px;
-   color: rgba(255, 255, 255, 0.5);
+   color: var(--text-console-muted);
  }
 
  .terminal-session-dir {
@@ -3164,16 +3164,16 @@ onUnmounted(() => {
 
  .terminal-sessions-collapsed {
    padding: 8px 12px;
-   border-bottom: 1px solid var(--border-terminal);
-   background: var(--bg-terminal-cmd);
+   border-bottom: 1px solid var(--border-console);
+   background: var(--bg-console-cmd);
  }
 
  :deep(.el-splitter-panel) {
-   background: var(--bg-terminal-output);
+   background: var(--bg-console-output);
  }
 
  :deep(.el-splitter-bar) {
-   background: rgba(255, 255, 255, 0.08);
+   background: var(--border-console);
  }
 
 .header-actions {
@@ -3181,11 +3181,11 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--spacing-md);
 
-  /* 终端深色背景上图标用浅色 */
+  /* 控制台图标颜色 */
   :deep(.icon-button),
   :deep(.el-button.is-text) {
-    color: rgba(255, 255, 255, 0.55);
-    &:hover { color: rgba(255, 255, 255, 0.9); }
+    color: var(--text-console-muted);
+    &:hover { color: var(--text-console); }
     &.is-active { color: var(--color-primary-light); }
   }
 }
@@ -3306,10 +3306,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: var(--spacing-xs) var(--spacing-sm);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-console-input);
   margin: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-lg);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-console-input);
   transition: all 0.3s ease;
   
   &:focus-within {
@@ -3353,10 +3353,10 @@ onUnmounted(() => {
   }
   
   :deep(.el-input__inner) {
-    color: var(--text-terminal);
+    color: var(--text-console);
     
     &::placeholder {
-      color: rgba(255, 255, 255, 0.25);
+      color: var(--text-console-faint);
       font-style: italic;
     }
   }
@@ -3428,8 +3428,8 @@ onUnmounted(() => {
 .console-output {
   max-height: 280px;
   overflow: auto;
-  background: var(--bg-terminal-output);
-  border-top: 1px solid var(--border-terminal);
+  background: var(--bg-console-output);
+  border-top: 1px solid var(--border-console);
   
   /* 美化滚动条 */
   &::-webkit-scrollbar {
@@ -3443,22 +3443,22 @@ onUnmounted(() => {
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--console-scrollbar);
     border-radius: var(--radius-base);
     transition: background 0.3s ease;
     
     &:hover {
-      background: rgba(255, 255, 255, 0.28);
+      background: var(--console-scrollbar-hover);
     }
   }
 }
 
 .console-record {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border-console-faint);
   transition: background 0.2s ease;
   
   &:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--bg-console-soft);
   }
   
   &:last-child {
@@ -3472,7 +3472,7 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 10px var(--spacing-md);
   gap: var(--spacing-base);
-  background: var(--bg-terminal-cmd);
+  background: var(--bg-console-cmd);
 }
 
 .cmd-actions {
@@ -3507,7 +3507,7 @@ onUnmounted(() => {
 }
 
 .cmd-text {
-  color: var(--text-terminal);
+  color: var(--text-console);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3515,7 +3515,7 @@ onUnmounted(() => {
 }
 
 .cmd-dir {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-console-muted);
   font-size: var(--font-size-sm);
   font-weight: normal;
   padding: 0 var(--spacing-sm);
@@ -3540,7 +3540,7 @@ onUnmounted(() => {
 }
 
 .ts {
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--text-console-very-faint);
   font-size: var(--font-size-sm);
   font-weight: normal;
   padding: 0 var(--spacing-sm);
@@ -3602,7 +3602,7 @@ pre.stdout, pre.stderr {
   word-break: break-word;
   border-radius: var(--radius-base);
   background: transparent;
-  color: var(--text-terminal);
+  color: var(--text-console);
 }
 
 /* 不设置固定颜色，让ANSI转换的内联样式生效 */

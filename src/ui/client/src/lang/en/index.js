@@ -62,7 +62,7 @@ export default {
   // @F4137: file end
   // @2E184: file path: components\buttons\QuickPushButton.vue
   '@2E184:一键推送所有': 'One click push all',
-  '@2E184:一键提交所有': 'One click commit all',
+  '@2E184:一键提交': 'Quick Commit',
   '@2E184:暂存 + 提交 + 推送': 'Stage + Commit + Push',
   '@2E184:暂存 + 提交': 'Stage + Commit',
   '@2E184:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',

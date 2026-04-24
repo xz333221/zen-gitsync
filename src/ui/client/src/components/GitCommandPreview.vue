@@ -65,14 +65,14 @@ async function copyCommand() {
   display: flex;
   align-items: center;
   gap: 0;
-  background: var(--bg-terminal);
-  border: 1px solid var(--border-terminal);
+  background: var(--bg-console);
+  border: 1px solid var(--border-console);
   border-radius: var(--radius-lg);
   overflow: hidden;
   transition: border-color 0.2s ease;
 
   &:hover {
-    border-color: rgba(255, 255, 255, 0.18);
+    border-color: var(--border-console-hover);
   }
 }
 
@@ -83,16 +83,16 @@ async function copyCommand() {
   padding: 7px 10px 7px 14px;
   font-size: var(--font-size-xs);
   font-family: var(--font-mono);
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--text-console-muted);
   white-space: nowrap;
   flex-shrink: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.15);
+  border-right: 1px solid var(--border-console);
+  background: var(--bg-console-cmd);
 
   /* 绿色 $ 提示符 */
   &::before {
     content: '$';
-    color: var(--text-terminal-prompt);
+    color: var(--text-console-prompt);
     font-weight: 700;
     font-size: 13px;
   }
@@ -104,7 +104,7 @@ async function copyCommand() {
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--text-terminal);
+  color: var(--text-console);
   white-space: nowrap;
   overflow-x: auto;
   background: transparent;
@@ -113,19 +113,19 @@ async function copyCommand() {
   &::-webkit-scrollbar { height: 3px; }
   &::-webkit-scrollbar-track { background: transparent; }
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--console-scrollbar);
     border-radius: 2px;
   }
 }
 
-:deep(.copy-command-btn) {
+::deep(.copy-command-btn) {
   flex-shrink: 0;
   margin-right: 6px;
-  color: rgba(255, 255, 255, 0.35) !important;
+  color: var(--text-console-muted) !important;
 
   &:hover {
-    color: rgba(255, 255, 255, 0.75) !important;
-    background: rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-console) !important;
+    background: var(--bg-console-soft) !important;
   }
 }
 </style>

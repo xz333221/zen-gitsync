@@ -8,10 +8,12 @@ import IconButton from '@components/IconButton.vue'
 
 interface Props {
   variant?: 'icon' | 'text'
+  size?: 'small' | 'default' | 'large'
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  variant: 'icon'
+  variant: 'icon',
+  size: 'large'
 })
 
 const gitStore = useGitStore()
@@ -53,7 +55,7 @@ async function discardAllChanges() {
     <IconButton
       v-if="props.variant === 'icon'"
       :tooltip="$t('@76872:清除所有本地更改')"
-      size="large"
+      :size="props.size"
       hover-color="#f56c6c"
       :disabled="gitStore.isResetting"
       @click="discardAllChanges"

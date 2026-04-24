@@ -167,19 +167,63 @@
   --bg-code-dark: #1a2035;
   --bg-code-line: #fafbfc;
 
-  /* 终端/控制台区域背景（亮色主题也保持近终端风格） */
-  --bg-terminal: #1e2030;
+  /* 控制台/命令预览区域（亮色主题用浅色） */
+  --bg-console: #f0f2f5;
+  --bg-console-dark: #0d1117;
+  --bg-console-header: #e4e7ed;
+  --bg-console-header-dark: #161b22;
+  --bg-console-output: #f7f8fa;
+  --bg-console-output-dark: #090d12;
+  --text-console: #374151;
+  --text-console-dark: #c9d1d9;
+  --text-console-prompt: #16a34a;
+  --text-console-prompt-dark: #4ade80;
+  --border-console: rgba(0, 0, 0, 0.08);
+  --border-console-dark: rgba(255, 255, 255, 0.06);
+  --bg-console-cmd: rgba(0, 0, 0, 0.03);
+  --bg-console-cmd-dark: rgba(255, 255, 255, 0.06);
+  --text-console-secondary: rgba(0, 0, 0, 0.55);
+  --text-console-secondary-dark: rgba(255, 255, 255, 0.65);
+  --text-console-muted: rgba(0, 0, 0, 0.35);
+  --text-console-muted-dark: rgba(255, 255, 255, 0.35);
+  --text-console-faint: rgba(0, 0, 0, 0.25);
+  --text-console-faint-dark: rgba(255, 255, 255, 0.25);
+  --text-console-very-faint: rgba(0, 0, 0, 0.15);
+  --text-console-very-faint-dark: rgba(255, 255, 255, 0.15);
+  --border-console-hover: rgba(0, 0, 0, 0.15);
+  --border-console-hover-dark: rgba(255, 255, 255, 0.15);
+  --border-console-faint: rgba(0, 0, 0, 0.05);
+  --border-console-faint-dark: rgba(255, 255, 255, 0.05);
+  --bg-console-subtle: rgba(0, 0, 0, 0.02);
+  --bg-console-subtle-dark: rgba(255, 255, 255, 0.03);
+  --bg-console-soft: rgba(0, 0, 0, 0.04);
+  --bg-console-soft-dark: rgba(255, 255, 255, 0.04);
+  --bg-console-input: rgba(0, 0, 0, 0.03);
+  --bg-console-input-dark: rgba(255, 255, 255, 0.04);
+  --border-console-input: rgba(0, 0, 0, 0.06);
+  --border-console-input-dark: rgba(255, 255, 255, 0.08);
+  --console-scrollbar: rgba(0, 0, 0, 0.15);
+  --console-scrollbar-dark: rgba(255, 255, 255, 0.15);
+  --console-scrollbar-hover: rgba(0, 0, 0, 0.28);
+  --console-scrollbar-hover-dark: rgba(255, 255, 255, 0.28);
+  --console-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  --console-shadow-dark: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --console-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --console-shadow-hover-dark: 0 6px 28px rgba(0, 0, 0, 0.45);
+
+  /* 终端/控制台区域背景（保留向后兼容，部分旧代码可能引用） */
+  --bg-terminal: var(--bg-console);
   --bg-terminal-dark: #0d1117;
-  --bg-terminal-header: #252840;
+  --bg-terminal-header: var(--bg-console-header);
   --bg-terminal-header-dark: #161b22;
-  --bg-terminal-output: #12141e;
+  --bg-terminal-output: var(--bg-console-output);
   --bg-terminal-output-dark: #090d12;
-  --text-terminal: #d4d4d8;
+  --text-terminal: var(--text-console);
   --text-terminal-dark: #c9d1d9;
-  --text-terminal-prompt: #4ade80;
-  --border-terminal: rgba(255, 255, 255, 0.10);
+  --text-terminal-prompt: var(--text-console-prompt);
+  --border-terminal: var(--border-console);
   --border-terminal-dark: rgba(255, 255, 255, 0.06);
-  --bg-terminal-cmd: rgba(255, 255, 255, 0.06);
+  --bg-terminal-cmd: var(--bg-console-cmd);
   
   /* ===== 边框颜色 ===== */
   

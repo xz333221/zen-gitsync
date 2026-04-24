@@ -13,7 +13,6 @@ import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
 import OptionSwitchCard from "@components/OptionSwitchCard.vue";
-import CommandConsole from "@components/CommandConsole.vue";
 import IconButton from "@components/IconButton.vue";
 
 const gitStore = useGitStore();
@@ -576,7 +575,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
         <!-- 提交模式开关 -->
         <OptionSwitchCard
           v-model="isStandardCommit"
-          :title="$t('@76872:提交模式')"
+          title=""
           :tooltip="$t('@76872:选择传统或标准化提交格式')"
           :active-text="$t('@76872:标准化')"
           :inactive-text="$t('@76872:普通')"
@@ -752,9 +751,6 @@ git config --global user.email "your.email@example.com"</pre
                 />
               </div>
             </div>
-
-            <!-- 自定义指令执行控制台 -->
-            <CommandConsole />
           </div>
         </template>
       </div>

@@ -108,7 +108,7 @@ async function handleClick() {
       :disabled="isDisabled"
       :class="['stage-button', `from-${from}`]"
     >
-      {{ $t('@29974:暂存更改') }}
+      {{ $t('@29974:暂存') }}
       <span v-if="unstagedFilesCount > 0">({{ unstagedFilesCount }})</span>
     </el-button>
   </el-tooltip>

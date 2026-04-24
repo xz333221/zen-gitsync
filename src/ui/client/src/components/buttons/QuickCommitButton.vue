@@ -120,7 +120,7 @@ defineExpose({
         <div class="one-commit-content">
           <el-icon class="one-commit-icon"><Edit /></el-icon>
           <div class="one-commit-text">
-            <span class="one-commit-title">{{ $t('@2E184:一键提交所有') }}</span>
+            <span class="one-commit-title">{{ $t('@2E184:一键提交') }}</span>
             <span v-if="from === 'form'" class="one-commit-desc">{{ $t('@2E184:暂存 + 提交') }}</span>
           </div>
         </div>

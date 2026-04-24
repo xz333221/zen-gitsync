@@ -5,6 +5,7 @@ import { getFolderNameFromPath } from '@/utils/path'
 import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
+import CommandConsole from '@components/CommandConsole.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
 import InlineCard from '@components/InlineCard.vue'
 import RemoteRepoCard from '@components/RemoteRepoCard.vue'
@@ -133,30 +134,33 @@ function openUserSettingsDialog() {
 }
 
 // 添加分隔条相关逻辑
-let isVResizing = false;
-let isVBottomResizing = false;
+let isVResizing = false;       // 第一条竖分隔条（GitStatus | 中间列）
+let isV2Resizing = false;      // 第二条竖分隔条（中间列 | LogList）
 let isHResizing = false;
 let initialX = 0;
 let initialY = 0;
 let initialGridTemplateColumns = '';
 let initialGridTemplateRows = '';
-let activeResizer = null;
+let activeResizer: string | null = null;
 
 // 保存布局比例到localStorage
 function saveLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
 
-  // 获取当前的列和行比例
   const columns = getComputedStyle(gridLayout).gridTemplateColumns.split(' ');
   const rows = getComputedStyle(gridLayout).gridTemplateRows.split(' ');
 
-  if (columns.length >= 3 && rows.length >= 3) {
-    // 解析左右区域比例
+  if (columns.length >= 5 && rows.length >= 3) {
+    // 解析三列区域比例
     const leftColWidth = parseFloat(columns[0]);
-    const rightColWidth = parseFloat(columns[2]);
-    const totalWidth = leftColWidth + rightColWidth;
+    const midColWidth = parseFloat(columns[2]);
+    const rightColWidth = parseFloat(columns[4]);
+    const totalWidth = leftColWidth + midColWidth + rightColWidth;
+
     const leftRatio = leftColWidth / totalWidth;
+    const midRatio = midColWidth / totalWidth;
+    const rightRatio = rightColWidth / totalWidth;
 
     // 解析上下区域比例
     const topRowHeight = parseFloat(rows[0]);
@@ -166,15 +170,11 @@ function saveLayoutRatios() {
 
     // 保存到localStorage
     localStorage.setItem('zen-gitsync-layout-left-ratio', leftRatio.toString());
+    localStorage.setItem('zen-gitsync-layout-mid-ratio', midRatio.toString());
+    localStorage.setItem('zen-gitsync-layout-right-ratio', rightRatio.toString());
     localStorage.setItem('zen-gitsync-layout-top-ratio', topRatio.toString());
 
-    console.log(`${$t('@F13B4:布局比例已保存 - 左侧: ')}${(leftRatio * 100).toFixed(0)}${$t('@F13B4:%, 上方: ')}${(topRatio * 100).toFixed(0)}%`);
-    
-    // 保存底部左右区域比例
-    // 注意：底部的列布局与顶部相同，但需要单独保存以防将来改为不同布局
-    localStorage.setItem('zen-gitsync-layout-bottom-left-ratio', leftRatio.toString());
-    
-    console.log(`${$t('@F13B4:底部布局比例已保存 - 左侧: ')}${(leftRatio * 100).toFixed(0)}%`);
+    console.log(`${$t('@F13B4:布局比例已保存 - 左侧: ')}${(leftRatio * 100).toFixed(0)}${$t('@F13B4:%, 中间: ')}${(midRatio * 100).toFixed(0)}${$t('@F13B4:%, 右侧: ')}${(rightRatio * 100).toFixed(0)}${$t('@F13B4:%, 上方: ')}${(topRatio * 100).toFixed(0)}%`);
   }
 }
 
@@ -183,19 +183,20 @@ function loadLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
 
-  // 从localStorage获取保存的比例
   const savedLeftRatio = localStorage.getItem('zen-gitsync-layout-left-ratio');
+  const savedMidRatio = localStorage.getItem('zen-gitsync-layout-mid-ratio');
+  const savedRightRatio = localStorage.getItem('zen-gitsync-layout-right-ratio');
   const savedTopRatio = localStorage.getItem('zen-gitsync-layout-top-ratio');
 
-  // 应用左右区域比例
-  if (savedLeftRatio) {
+  // 应用三列区域比例
+  if (savedLeftRatio && savedMidRatio && savedRightRatio) {
     const leftRatio = parseFloat(savedLeftRatio);
-    const rightRatio = 1 - leftRatio;
-    gridLayout.style.gridTemplateColumns = `${leftRatio}fr 8px ${rightRatio}fr`;
-    console.log(`${$t('@F13B4:已恢复左侧比例: ')}${(leftRatio * 100).toFixed(0)}%`);
+    const midRatio = parseFloat(savedMidRatio);
+    const rightRatio = parseFloat(savedRightRatio);
+    gridLayout.style.gridTemplateColumns = `${leftRatio}fr 8px ${midRatio}fr 8px ${rightRatio}fr`;
   } else {
-    // 默认比例 1:3
-    gridLayout.style.gridTemplateColumns = "1fr 8px 3fr";
+    // 默认比例 2:3:3
+    gridLayout.style.gridTemplateColumns = "2fr 8px 3fr 8px 3fr";
   }
 
   // 应用上下区域比例
@@ -203,88 +204,115 @@ function loadLayoutRatios() {
     const topRatio = parseFloat(savedTopRatio);
     const bottomRatio = 1 - topRatio;
     gridLayout.style.gridTemplateRows = `${topRatio}fr 8px ${bottomRatio}fr`;
-    console.log(`${$t('@F13B4:已恢复上方比例: ')}${(topRatio * 100).toFixed(0)}%`);
   }
-  
-  // 注意：底部的列布局与顶部相同，使用相同的gridTemplateColumns，
-  // 但如果将来需要独立控制，可以使用savedBottomLeftRatio
 }
 
+// 第一条竖分隔条拖拽（调整 GitStatus 与 中间列+右侧列 的比例）
 function startVResize(event: MouseEvent) {
-  // 记录当前操作的分隔条
-  const target = event.currentTarget as HTMLElement;
-  if (!target || !target.id) return;
-  
-  activeResizer = target.id;
-  
-  // 根据分隔条位置，设置不同的状态
-  if (activeResizer === 'v-resizer') {
-    isVResizing = true;
-  } else if (activeResizer === 'v-resizer-bottom') {
-    isVBottomResizing = true;
-  }
-  
+  activeResizer = 'v-resizer';
+  isVResizing = true;
   initialX = event.clientX;
 
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   initialGridTemplateColumns = getComputedStyle(gridLayout).gridTemplateColumns;
 
-  // 标记当前激活的分隔条
-  document.getElementById(activeResizer)?.classList.add('active');
-
+  document.getElementById('v-resizer')?.classList.add('active');
   document.addEventListener('mousemove', handleVResize);
   document.addEventListener('mouseup', stopVResize);
-
-  // 防止文本选择
   event.preventDefault();
 }
 
 function handleVResize(event: MouseEvent) {
-  if (!isVResizing && !isVBottomResizing) return;
+  if (!isVResizing) return;
 
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   const delta = event.clientX - initialX;
-
-  // 解析当前的网格模板列值
   const columns = initialGridTemplateColumns.split(' ');
 
-  // 确保我们有足够的列
-  if (columns.length >= 3) {
-    // 计算新的左列宽度
+  if (columns.length >= 5) {
     const leftColWidth = parseFloat(columns[0]);
-    const rightColWidth = parseFloat(columns[2]);
+    const midColWidth = parseFloat(columns[2]);
+    const rightColWidth = parseFloat(columns[4]);
+    const totalWidth = leftColWidth + midColWidth + rightColWidth;
 
-    // 计算新的左右列比例
-    const totalWidth = leftColWidth + rightColWidth;
     const newLeftRatio = (leftColWidth + delta / gridLayout.clientWidth * totalWidth) / totalWidth;
-    const newRightRatio = 1 - newLeftRatio;
+    const restRatio = 1 - newLeftRatio;
+    // 按原有中间/右侧比例分配剩余空间
+    const midShare = midColWidth / (midColWidth + rightColWidth);
+    const rightShare = rightColWidth / (midColWidth + rightColWidth);
 
-    // 确保左侧宽度不小于总宽度的10%且不大于50%
-    const minLeftRatio = 0.1;
-    const maxLeftRatio = 0.5;
+    const minLeftRatio = 0.08;
+    const maxLeftRatio = 0.4;
 
     if (newLeftRatio < minLeftRatio) {
-      gridLayout.style.gridTemplateColumns = `${minLeftRatio}fr 8px ${1 - minLeftRatio}fr`;
+      gridLayout.style.gridTemplateColumns = `${minLeftRatio}fr 8px ${(1 - minLeftRatio) * midShare}fr 8px ${(1 - minLeftRatio) * rightShare}fr`;
     } else if (newLeftRatio > maxLeftRatio) {
-      gridLayout.style.gridTemplateColumns = `${maxLeftRatio}fr 8px ${1 - maxLeftRatio}fr`;
+      gridLayout.style.gridTemplateColumns = `${maxLeftRatio}fr 8px ${(1 - maxLeftRatio) * midShare}fr 8px ${(1 - maxLeftRatio) * rightShare}fr`;
     } else {
-      gridLayout.style.gridTemplateColumns = `${newLeftRatio}fr 8px ${newRightRatio}fr`;
+      gridLayout.style.gridTemplateColumns = `${newLeftRatio}fr 8px ${restRatio * midShare}fr 8px ${restRatio * rightShare}fr`;
+    }
+  }
+}
+
+// 第二条竖分隔条拖拽（调整 中间列 与 LogList 的比例）
+function startV2Resize(event: MouseEvent) {
+  activeResizer = 'v-resizer-2';
+  isV2Resizing = true;
+  initialX = event.clientX;
+
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
+  initialGridTemplateColumns = getComputedStyle(gridLayout).gridTemplateColumns;
+
+  document.getElementById('v-resizer-2')?.classList.add('active');
+  document.addEventListener('mousemove', handleV2Resize);
+  document.addEventListener('mouseup', stopVResize);
+  event.preventDefault();
+}
+
+function handleV2Resize(event: MouseEvent) {
+  if (!isV2Resizing) return;
+
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
+  const delta = event.clientX - initialX;
+  const columns = initialGridTemplateColumns.split(' ');
+
+  if (columns.length >= 5) {
+    const leftColWidth = parseFloat(columns[0]);
+    const midColWidth = parseFloat(columns[2]);
+    const rightColWidth = parseFloat(columns[4]);
+    const totalWidth = leftColWidth + midColWidth + rightColWidth;
+
+    // 右侧列新比例
+    const newRightRatio = (rightColWidth - delta / gridLayout.clientWidth * totalWidth) / totalWidth;
+    const restRatio = 1 - newRightRatio;
+    // 按原有左侧/中间比例分配剩余空间
+    const leftShare = leftColWidth / (leftColWidth + midColWidth);
+    const midShare = midColWidth / (leftColWidth + midColWidth);
+
+    const minRightRatio = 0.1;
+    const maxRightRatio = 0.5;
+
+    if (newRightRatio < minRightRatio) {
+      gridLayout.style.gridTemplateColumns = `${(1 - minRightRatio) * leftShare}fr 8px ${(1 - minRightRatio) * midShare}fr 8px ${minRightRatio}fr`;
+    } else if (newRightRatio > maxRightRatio) {
+      gridLayout.style.gridTemplateColumns = `${(1 - maxRightRatio) * leftShare}fr 8px ${(1 - maxRightRatio) * midShare}fr 8px ${maxRightRatio}fr`;
+    } else {
+      gridLayout.style.gridTemplateColumns = `${restRatio * leftShare}fr 8px ${restRatio * midShare}fr 8px ${newRightRatio}fr`;
     }
   }
 }
 
 function stopVResize() {
   isVResizing = false;
-  isVBottomResizing = false;
-  
-  // 移除所有分隔条的active类
+  isV2Resizing = false;
+
   document.getElementById('v-resizer')?.classList.remove('active');
-  document.getElementById('v-resizer-bottom')?.classList.remove('active');
-  
+  document.getElementById('v-resizer-2')?.classList.remove('active');
+
   document.removeEventListener('mousemove', handleVResize);
+  document.removeEventListener('mousemove', handleV2Resize);
   document.removeEventListener('mouseup', stopVResize);
 
-  // 保存布局比例
   saveLayoutRatios();
 }
 
@@ -296,11 +324,8 @@ function startHResize(event: MouseEvent) {
   initialGridTemplateRows = getComputedStyle(gridLayout).gridTemplateRows;
 
   document.getElementById('h-resizer')?.classList.add('active');
-
   document.addEventListener('mousemove', handleHResize);
   document.addEventListener('mouseup', stopHResize);
-
-  // 防止文本选择
   event.preventDefault();
 }
 
@@ -309,22 +334,15 @@ function handleHResize(event: MouseEvent) {
 
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   const delta = event.clientY - initialY;
-
-  // 解析当前的网格模板行值
   const rows = initialGridTemplateRows.split(' ');
 
-  // 确保我们有足够的行
   if (rows.length >= 3) {
-    // 计算新的上行高度
     const topRowHeight = parseFloat(rows[0]);
     const bottomRowHeight = parseFloat(rows[2]);
-
-    // 计算新的上下行比例
     const totalHeight = topRowHeight + bottomRowHeight;
     const newTopRatio = (topRowHeight + delta / gridLayout.clientHeight * totalHeight) / totalHeight;
     const newBottomRatio = 1 - newTopRatio;
 
-    // 确保上方区域不小于总高度的20%且不大于80%
     const minTopRatio = 0.2;
     const maxTopRatio = 0.8;
 
@@ -343,8 +361,6 @@ function stopHResize() {
   document.getElementById('h-resizer')?.classList.remove('active');
   document.removeEventListener('mousemove', handleHResize);
   document.removeEventListener('mouseup', stopHResize);
-
-  // 保存布局比例
   saveLayoutRatios();
 }
 
@@ -429,15 +445,15 @@ function stopHResize() {
     </div>
 
     <div v-else class="grid-layout">
-      <!-- 上方左侧Git状态 -->
+      <!-- 左侧Git状态 -->
       <div class="git-status-panel">
         <GitStatus ref="gitStatusRef" :initial-directory="currentDirectory" />
       </div>
 
-      <!-- 垂直分隔条 -->
+      <!-- 第一条垂直分隔条（GitStatus | 中间列） -->
       <div class="vertical-resizer" id="v-resizer" @mousedown="startVResize"></div>
 
-      <!-- 上方右侧提交表单 -->
+      <!-- 中间上方提交表单 -->
       <div class="commit-form-panel" v-if="gitStore.isGitRepo">
         <!-- 当用户未配置时显示配置提示 -->
         <el-card v-if="!gitStore.userName || !gitStore.userEmail" shadow="hover">
@@ -479,10 +495,18 @@ function stopHResize() {
         </el-card>
       </div>
 
-      <!-- 水平分隔条 -->
+      <!-- 水平分隔条（提交表单 | 自定义指令） -->
       <div class="horizontal-resizer" id="h-resizer" @mousedown="startHResize"></div>
 
-      <!-- 下方提交历史 -->
+      <!-- 中间下方自定义指令 -->
+      <div class="cmd-console-panel" v-if="gitStore.isGitRepo">
+        <CommandConsole />
+      </div>
+
+      <!-- 第二条垂直分隔条（中间列 | 提交历史） -->
+      <div class="vertical-resizer-2" id="v-resizer-2" @mousedown="startV2Resize"></div>
+
+      <!-- 右侧提交历史 -->
       <div class="log-list-panel" v-if="gitStore.isGitRepo">
         <LogList />
       </div>
@@ -588,12 +612,12 @@ body {
 
 .grid-layout {
   display: grid;
-  grid-template-columns: 2fr 8px 3fr;
+  grid-template-columns: 2fr 8px 3fr 8px 3fr;
   grid-template-rows: 1fr 8px 1fr;
   grid-template-areas:
-    "git-status v-resizer commit-form"
-    "git-status v-resizer h-resizer"
-    "git-status v-resizer log-list";
+    "git-status v-resizer commit-form v-resizer-2 log-list"
+    "git-status v-resizer h-resizer   v-resizer-2 log-list"
+    "git-status v-resizer cmd-console  v-resizer-2 log-list";
   gap: 0;
   height: 100%;
 }
@@ -611,6 +635,17 @@ body {
 
 .commit-form-panel {
   grid-area: commit-form;
+  overflow: hidden;
+  max-height: 100%;
+  padding: 0;
+  background: var(--bg-container);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.cmd-console-panel {
+  grid-area: cmd-console;
   overflow: hidden;
   max-height: 100%;
   padding: 0;
@@ -874,6 +909,44 @@ h1 {
 
 .vertical-resizer:hover::after,
 .vertical-resizer.active::after {
+  background-color: var(--color-primary);
+  width: 4px;
+  height: 48px;
+  border-radius: 2px;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.45);
+}
+
+/* 第二条垂直分隔条样式 */
+.vertical-resizer-2 {
+  grid-area: v-resizer-2;
+  background-color: transparent;
+  cursor: col-resize;
+  transition: background-color 0.2s;
+  position: relative;
+  z-index: 10;
+  border-radius: var(--radius-base);
+}
+
+.vertical-resizer-2::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  background-color: var(--color-gray-300);
+  height: 32px;
+  border-radius: 2px;
+  transition: background-color 0.2s, width 0.2s, height 0.2s, box-shadow 0.2s;
+}
+
+.vertical-resizer-2:hover,
+.vertical-resizer-2.active {
+  background-color: rgba(59, 130, 246, 0.06);
+}
+
+.vertical-resizer-2:hover::after,
+.vertical-resizer-2.active::after {
   background-color: var(--color-primary);
   width: 4px;
   height: 48px;

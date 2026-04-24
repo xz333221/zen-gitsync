@@ -68,7 +68,6 @@ function onChange(val: boolean) {
 .option-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
 }
 
 .option-icon {

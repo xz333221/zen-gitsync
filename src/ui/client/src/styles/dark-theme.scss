@@ -106,6 +106,29 @@
   /* 操作区域背景 */
   --bg-action: var(--bg-action-dark);
 
+  /* 控制台区域背景 */
+  --bg-console: var(--bg-console-dark);
+  --bg-console-header: var(--bg-console-header-dark);
+  --bg-console-output: var(--bg-console-output-dark);
+  --text-console: var(--text-console-dark);
+  --text-console-prompt: var(--text-console-prompt-dark);
+  --border-console: var(--border-console-dark);
+  --bg-console-cmd: var(--bg-console-cmd-dark);
+  --text-console-secondary: var(--text-console-secondary-dark);
+  --text-console-muted: var(--text-console-muted-dark);
+  --text-console-faint: var(--text-console-faint-dark);
+  --text-console-very-faint: var(--text-console-very-faint-dark);
+  --border-console-hover: var(--border-console-hover-dark);
+  --border-console-faint: var(--border-console-faint-dark);
+  --bg-console-subtle: var(--bg-console-subtle-dark);
+  --bg-console-soft: var(--bg-console-soft-dark);
+  --bg-console-input: var(--bg-console-input-dark);
+  --border-console-input: var(--border-console-input-dark);
+  --console-scrollbar: var(--console-scrollbar-dark);
+  --console-scrollbar-hover: var(--console-scrollbar-hover-dark);
+  --console-shadow: var(--console-shadow-dark);
+  --console-shadow-hover: var(--console-shadow-hover-dark);
+
   /* 终端区域背景 */
   --bg-terminal: var(--bg-terminal-dark);
   --bg-terminal-header: var(--bg-terminal-header-dark);
@@ -262,63 +285,30 @@
     color: rgba(255, 255, 255, 0.7);
   }
 
-  /* Git命令预览深色主题 */
-  .git-command-preview .preview-container {
-    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-    border-color: #4a5568;
-  }
-
-  .git-command-preview .preview-container:hover {
-    background: linear-gradient(135deg, #2d3748 0%, #2c5282 100%);
-    border-color: #409eff;
-  }
-
-  .git-command-preview .preview-title {
-    color: #e2e8f0;
-  }
-
-  .git-command-preview .preview-content {
-    background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
-    color: #e8f4fd;
-    border-color: #404040;
-  }
-
-  .git-command-preview .copy-command-btn {
-    background: linear-gradient(135deg, rgba(64, 158, 255, 0.12) 0%, rgba(102, 177, 255, 0.12) 100%) !important;
-    border-color: rgba(64, 158, 255, 0.35) !important;
-    color: #8cc4ff !important;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
-  }
-
-  .git-command-preview .copy-command-btn:hover {
-    background: linear-gradient(135deg, rgba(64, 158, 255, 0.22) 0%, rgba(102, 177, 255, 0.22) 100%) !important;
-    border-color: rgba(64, 158, 255, 0.6) !important;
-    color: #a6d2ff !important;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35) !important;
-  }
+  /* Git命令预览深色主题 - 通过CSS变量自动切换，无需额外覆盖 */
 
   /* 分隔条（上下/左右）深色主题 */
   .vertical-resizer,
-  .vertical-resizer-bottom {
+  .vertical-resizer-2 {
     background-color: transparent !important;
   }
 
   .vertical-resizer::after,
-  .vertical-resizer-bottom::after {
+  .vertical-resizer-2::after {
     background-color: rgba(255, 255, 255, 0.2) !important;
   }
 
   .vertical-resizer:hover,
   .vertical-resizer.active,
-  .vertical-resizer-bottom:hover,
-  .vertical-resizer-bottom.active {
+  .vertical-resizer-2:hover,
+  .vertical-resizer-2.active {
     background-color: rgba(64, 158, 255, 0.08) !important;
   }
 
   .vertical-resizer:hover::after,
   .vertical-resizer.active::after,
-  .vertical-resizer-bottom:hover::after,
-  .vertical-resizer-bottom.active::after {
+  .vertical-resizer-2:hover::after,
+  .vertical-resizer-2.active::after {
     background-color: #57a0ff !important;
     box-shadow: 0 0 8px rgba(87, 160, 255, 0.5) !important;
   }
@@ -363,6 +353,7 @@
   /* 面板圆角卡片深色主题 */
   .git-status-panel,
   .commit-form-panel,
+  .cmd-console-panel,
   .log-list-panel {
     background: var(--bg-container-dark) !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
