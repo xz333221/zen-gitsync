@@ -1529,6 +1529,40 @@ export const useGitStore = defineStore('git', () => {
       isResetting.value = false
     }
   }
+
+  // 清除本地所有更改 (包括未跟踪文件)
+  async function discardAllChanges() {
+    if (!isGitRepo.value) {
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
+      return false
+    }
+    
+    try {
+      isResetting.value = true
+      const response = await fetch('/api/discard-all-changes', {
+        method: 'POST'
+      })
+      
+      const result = await response.json()
+      if (result.success) {
+        ElMessage.success($t('@C298B:已清除所有本地更改'))
+        
+        // 刷新状态和日志
+        fetchStatus()
+        fetchLog()
+        
+        return true
+      } else {
+        ElMessage.error(`${$t('@C298B:操作失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:操作失败: ')}${(error as Error).message}`)
+      return false
+    } finally {
+      isResetting.value = false
+    }
+  }
   
   // 获取远程仓库地址
   async function getRemoteUrl() {
@@ -1951,6 +1985,7 @@ export const useGitStore = defineStore('git', () => {
     addCommitAndPush,
     resetHead,
     resetToRemote,
+    discardAllChanges,
     getRemoteUrl,
     copyRemoteUrl,
     copyCloneCommand,

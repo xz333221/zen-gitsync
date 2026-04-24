@@ -655,6 +655,25 @@ export function registerGitOpsRoutes({
     }
   });
 
+  // 清除本地所有更改，包括未跟踪文件 (git reset --hard && git clean -fd)
+  app.post('/api/discard-all-changes', async (req, res) => {
+    try {
+      // 1. 执行 git reset --hard 丢弃已跟踪文件的更改
+      await execGitCommand('git reset --hard');
+      
+      // 2. 执行 git clean -fd 移除未跟踪的文件和目录
+      await execGitCommand('git clean -fd');
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('清除所有更改失败:', error);
+      res.status(500).json({
+        success: false,
+        error: `清除所有更改失败: ${error.message}`
+      });
+    }
+  });
+
   // 获取提交的文件列表
   app.get('/api/commit-files', async (req, res) => {
     try {

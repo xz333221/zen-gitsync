@@ -23,6 +23,7 @@ declare module 'vue' {
     CreateTagButton: typeof import('./src/components/buttons/CreateTagButton.vue')['default']
     CustomCommandManager: typeof import('./src/components/CustomCommandManager.vue')['default']
     DirectorySelector: typeof import('./src/components/DirectorySelector.vue')['default']
+    DiscardAllChangesButton: typeof import('./src/components/buttons/DiscardAllChangesButton.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAutocomplete: typeof import('element-plus/es')['ElAutocomplete']
     ElButton: typeof import('element-plus/es')['ElButton']
