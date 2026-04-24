@@ -10,6 +10,8 @@
     "npm:publish": "npm publish --registry https://registry.npmjs.org/",
     "npm:whoami": "npm whoami --registry https://registry.npmjs.org/",
     "pull": "git pull",
+    "dev:server": "nodemon server.js --no-open",
+    "dev": "concurrently \"npm run dev:server\" \"npm run start:vue\"",
     "start:server:no-open": "node server.js --no-open",
     "start:vue": "cd ./src/ui/client && npm run dev",
     "release": "node ./scripts/release.js",
@@ -81,5 +83,9 @@
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
     "string-width": "^7.2.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.14"
   }
 }
