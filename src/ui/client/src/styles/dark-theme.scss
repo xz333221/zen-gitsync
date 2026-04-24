@@ -105,6 +105,13 @@
   
   /* 操作区域背景 */
   --bg-action: var(--bg-action-dark);
+
+  /* 终端区域背景 */
+  --bg-terminal: var(--bg-terminal-dark);
+  --bg-terminal-header: var(--bg-terminal-header-dark);
+  --bg-terminal-output: var(--bg-terminal-output-dark);
+  --text-terminal: var(--text-terminal-dark);
+  --border-terminal: var(--border-terminal-dark);
   
   /* 边框颜色 */
   --border-input: var(--border-input-dark);

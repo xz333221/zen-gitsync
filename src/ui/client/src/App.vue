@@ -9,6 +9,7 @@ import CommandHistory from '@views/components/CommandHistory.vue'
 import InlineCard from '@components/InlineCard.vue'
 import RemoteRepoCard from '@components/RemoteRepoCard.vue'
 import BranchSelector from '@components/BranchSelector.vue'
+import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
@@ -20,9 +21,7 @@ import { useLocaleStore } from '@stores/localeStore'
 
 const configInfo = ref('')
 // 添加组件实例类型
-const logListRef = ref<InstanceType<typeof LogList> | null>(null)
 const gitStatusRef = ref<InstanceType<typeof GitStatus> | null>(null)
-const commitFormRef = ref<InstanceType<typeof CommitForm> | null>(null)
 
 // 使用Git Store
 const gitStore = useGitStore()
@@ -120,6 +119,10 @@ function handleBranchChanged() {
   if (gitStatusRef.value) {
     gitStatusRef.value.refreshStatus()
   }
+}
+
+function handleToggleNpmPanel() {
+  gitStatusRef.value?.toggleNpmPanel?.()
 }
 
 // 用户设置对话框
@@ -355,6 +358,9 @@ function stopHResize() {
       <img :src="logo" alt="Zen GitSync Logo" class="logo" />
       <h1>Zen GitSync</h1>
     </div>
+    <div class="header-center" v-if="gitStore.isGitRepo">
+      <DirectorySelector variant="header" @toggle-npm-panel="handleToggleNpmPanel" />
+    </div>
     <div class="header-info">
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
@@ -456,7 +462,7 @@ function stopHResize() {
         </el-card>
         <!-- 用户已配置显示提交表单 -->
         <template v-else>
-          <CommitForm ref="commitFormRef" />
+          <CommitForm />
         </template>
       </div>
       <div class="commit-form-panel" v-else>
@@ -478,7 +484,7 @@ function stopHResize() {
 
       <!-- 下方提交历史 -->
       <div class="log-list-panel" v-if="gitStore.isGitRepo">
-        <LogList ref="logListRef" />
+        <LogList />
       </div>
 
     </div>
@@ -633,12 +639,34 @@ body {
   z-index: 1000;
   height: 64px;
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacing-lg);
+  position: fixed;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.header-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(720px, calc(100% - 520px));
+  max-width: calc(100% - 520px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  overflow: visible;
 }
 
 .logo {
@@ -669,9 +697,11 @@ h1 {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  flex: 1;
   justify-content: flex-end;
   min-width: 0;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 /* 调整用户信息和目录选择的排列 */

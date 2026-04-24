@@ -11,6 +11,12 @@ import IconButton from "@components/IconButton.vue";
 import SvgIcon from "@components/SvgIcon/index.vue";
 import { getFolderNameFromPath } from "@/utils/path";
 
+const props = withDefaults(defineProps<{
+  variant?: 'default' | 'header'
+}>(), {
+  variant: 'default'
+})
+
 // 使用 store
 const configStore = useConfigStore();
 const gitStore = useGitStore();
@@ -276,7 +282,7 @@ function onBrowserSelect(path: string) {
 </script>
 
 <template>
-  <div id="directory-selector" class="directory-selector">
+<div id="directory-selector" class="directory-selector" :class="[`directory-selector--${props.variant}`]">
     <div class="directory-display cursor-pointer" :title="currentDirectory" @click="onOpenDialog">
       {{ currentFolderName }}
     </div>
@@ -424,6 +430,54 @@ function onBrowserSelect(path: string) {
 
 .directory-selector:hover {
   background: var(--border-component);
+}
+
+.directory-selector--header {
+  padding: 4px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(59, 130, 246, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 1) 100%);
+  box-shadow:
+    0 14px 34px rgba(15, 23, 42, 0.14),
+    0 4px 12px rgba(15, 23, 42, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.75) inset;
+}
+
+.directory-selector--header:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(241, 245, 249, 1) 100%);
+  box-shadow:
+    0 16px 38px rgba(15, 23, 42, 0.16),
+    0 6px 14px rgba(15, 23, 42, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.82) inset,
+    0 0 0 3px rgba(59, 130, 246, 0.08);
+}
+
+.directory-selector--header .directory-display {
+  font-size: 18px;
+}
+
+.directory-selector--header .directory-actions {
+  flex-shrink: 0;
+  padding-left: 8px;
+  border-left: 1px solid rgba(59, 130, 246, 0.12);
+}
+
+[data-theme="dark"] .directory-selector--header {
+  background: linear-gradient(180deg, rgba(28, 33, 48, 0.92) 0%, rgba(22, 27, 40, 0.96) 100%);
+  border-color: rgba(147, 197, 253, 0.12);
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.34),
+    0 6px 14px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+[data-theme="dark"] .directory-selector--header:hover {
+  background: linear-gradient(180deg, rgba(33, 39, 56, 0.96) 0%, rgba(24, 29, 44, 0.98) 100%);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.4),
+    0 8px 16px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 0 0 3px rgba(96, 165, 250, 0.08);
 }
 
 .directory-display {

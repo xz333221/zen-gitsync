@@ -129,6 +129,13 @@ const hasUserCommitMessage = computed(() => {
   }
 });
 
+// 提交按钮禁用状态（与 QuickCommitButton 保持一致）
+const isCommitDisabled = computed(() => {
+  if (gitStore.hasConflictedFiles) return true;
+  const hasAnyChanges = gitStore.fileList.some((f) => !isFileLocked(f.path));
+  return !hasAnyChanges || !hasUserCommitMessage.value;
+});
+
 // 占位符：普通提交输入框，根据是否开启回车自动一键提交显示提示
 const commitMessagePlaceholder = computed(() => {
   const base = `${$t("@76872:输入提交信息 (默认: ")}${
@@ -639,6 +646,7 @@ git config --global user.email "your.email@example.com"</pre
           <!-- 左侧：提交表单 -->
           <div class="commit-section">
             <GitCommandPreview
+              v-if="!isCommitDisabled"
               :command="gitCommandPreview"
               :title="$t('@76872:提交命令预览：')"
               placeholder='git commit -m "<提交信息>"'

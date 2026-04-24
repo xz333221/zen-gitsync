@@ -13,7 +13,6 @@ import FileDiffViewer from '@components/FileDiffViewer.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import FileGroup from '@/components/FileGroup.vue'
 import FileTreeView from '@/components/FileTreeView.vue'
-import DirectorySelector from '@components/DirectorySelector.vue'
 import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
@@ -804,16 +803,14 @@ onMounted(() => {
 // })
 // 暴露刷新方法给父组件
 defineExpose({
-  refreshStatus
+  refreshStatus,
+  toggleNpmPanel
 })
 </script>
 
 <template>
   <div class="card git-status-card flex flex-col">
     <div class="status-header">
-      <!-- 目录选择卡片 -->
-      <DirectorySelector @toggle-npm-panel="toggleNpmPanel" />
-      
       <div class="title-row">
         <div class="header-actions">
           <!-- 添加Git Pull按钮 -->

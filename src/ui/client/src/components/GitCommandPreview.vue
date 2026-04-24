@@ -57,208 +57,75 @@ async function copyCommand() {
 </script>
 
 <style scoped lang="scss">
-// .modern-btn {
-//   display: flex;
-//   align-items: center;
-//   justify-content: center;
-// }
-
 .git-command-preview {
-  
-  .preview-container {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-base);
-    background: var(--bg-input-hover);
-    border: 1px solid var(--color-primary);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-base);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-    margin-bottom: var(--spacing-base);
-    box-shadow: var(--shadow-md);
-    
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light), var(--color-primary));
-      opacity: 1;
-      transition: opacity 0.3s ease;
-    }
-    
-    &:hover {
-      border-color: var(--color-primary);
-      box-shadow: var(--shadow-md);
-      background: var(--bg-input-hover);
-      
-      &::before {
-        opacity: 1;
-      }
-    }
-    
-    .preview-title {
-      font-size: var(--font-size-sm);
-      color: var(--color-text-title);
-      font-weight: 600;
-      white-space: nowrap;
-      flex-shrink: 0;
-      min-width: fit-content;
-      display: flex;
-      align-items: center;
-      gap: var(--spacing-sm);
-      
-      &::before {
-        content: '⚡';
-        font-size: var(--font-size-xs);
-        opacity: 0.8;
-      }
-    }
-    
-    .preview-content {
-      flex: 1;
-      background: var(--bg-input-hover);
-      color: var(--text-primary);
-      border: 1px solid var(--color-primary);
-      border-radius: var(--radius-md);
-      padding: 6px var(--spacing-base);
-      margin: 0;
-      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
-      font-size: var(--font-size-sm);
-      font-weight: 500;
-      line-height: 1.3;
-      overflow-x: auto;
-      white-space: nowrap;
-      position: relative;
-      transition: all 0.3s ease;
-      box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2);
-      
-      &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: linear-gradient(135deg, rgba(64, 158, 255, 0.03) 0%, rgba(102, 177, 255, 0.03) 100%);
-        opacity: 1;
-        transition: opacity 0.3s ease;
-        pointer-events: none;
-      }
-      
-      &:hover {
-        border-color: var(--color-primary);
-        box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2);
-        background: var(--bg-input-hover);
-        
-        &::before {
-          opacity: 1;
-        }
-      }
-      
-      &.code-command {
-        background: var(--bg-input-hover);
-        color: var(--text-primary);
-        border-color: var(--color-primary);
-        font-weight: 500;
-      }
-    }
-    
-    .copy-command-btn {
-      width: 28px;
-      height: 28px;
-      padding: 0;
-      flex-shrink: 0;
-      border-radius: var(--radius-md);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      font-family: inherit;
-      position: relative;
-      overflow: hidden;
-      
-      &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-        transition: left 0.5s ease;
-      }
-      
-      &:hover {
-        background: var(--color-gray-100);
-        color: var(--color-primary);
-        border-color: var(--color-primary);
-        transform: scale(1.05);
-        box-shadow: var(--shadow-md);
-        
-        &::before {
-          left: 100%;
-        }
-        
-        .btn-icon {
-          transform: scale(1.1);
-        }
-      }
-      
-      &:active {
-        transform: scale(1.02);
-        box-shadow: var(--shadow-sm);
-      }
-      
-      .btn-icon {
-        
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        z-index: 1;
-        position: relative;
-      }
-    }
+  margin-bottom: var(--spacing-base);
+}
+
+.preview-container {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border-terminal);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.18);
   }
 }
 
-/* 白色主题专用样式 */
+.preview-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px 7px 14px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
 
-/* 滚动条样式 */
-.preview-content::-webkit-scrollbar {
-  height: 6px;
-}
-
-.preview-content::-webkit-scrollbar-track {
-  background: var(--color-gray-100);
-  border-radius: var(--radius-sm);
-}
-
-.preview-content::-webkit-scrollbar-thumb {
-  background: var(--color-gray-300);
-  border-radius: var(--radius-sm);
-  transition: background 0.3s ease;
-}
-
-.preview-content::-webkit-scrollbar-thumb:hover {
-  background: var(--color-gray-400);
-}
-
-/* 动画关键帧 */
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
+  /* 绿色 $ 提示符 */
+  &::before {
+    content: '$';
+    color: var(--text-terminal-prompt);
+    font-weight: 700;
+    font-size: 13px;
   }
 }
 
-.copy-command-btn:active .btn-icon {
-  animation: pulse 0.3s ease-in-out;
+.preview-content {
+  flex: 1;
+  padding: 7px var(--spacing-base);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-terminal);
+  white-space: nowrap;
+  overflow-x: auto;
+  background: transparent;
+  line-height: 1.4;
+
+  &::-webkit-scrollbar { height: 3px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+  }
 }
 
+:deep(.copy-command-btn) {
+  flex-shrink: 0;
+  margin-right: 6px;
+  color: rgba(255, 255, 255, 0.35) !important;
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.75) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+}
 </style>

@@ -2471,6 +2471,11 @@ onUnmounted(() => {
     <!-- 标题栏 -->
     <div class="console-header">
       <div class="header-left">
+        <span class="console-window-dots">
+          <span class="dot dot-red"></span>
+          <span class="dot dot-yellow"></span>
+          <span class="dot dot-green"></span>
+        </span>
         <span class="console-title">{{ $t('@CF05E:自定义指令执行') }}</span>
       </div>
       <div class="header-actions">
@@ -2933,17 +2938,17 @@ onUnmounted(() => {
 /* 命令控制台容器 */
 .command-console {
   margin-top: var(--spacing-sm);
-  background: var(--bg-code);
-  border: 1px solid var(--border-component);
+  background: var(--bg-terminal);
+  border: 1px solid var(--border-terminal);
   border-radius: 10px;
   padding: 0;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
   transition: all 0.3s ease;
   overflow: hidden;
   
   &:hover {
-    box-shadow: var(--shadow-hover);
-    border-color: rgba(59, 130, 246, 0.25);
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.45);
+    border-color: rgba(255, 255, 255, 0.15);
   }
 
   .console-content {
@@ -2954,6 +2959,8 @@ onUnmounted(() => {
   .termial-session {
     height: 100%;
     overflow: hidden;
+    background: var(--bg-terminal-output);
+    border-right: 1px solid var(--border-terminal);
   }
 
   .console-content-main {
@@ -2997,8 +3004,26 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  background: linear-gradient(135deg, var(--bg-panel), var(--bg-container));
-  border-bottom: 1px solid var(--border-component);
+  background: var(--bg-terminal-header);
+  border-bottom: 1px solid var(--border-terminal);
+}
+
+.console-window-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 10px;
+  flex-shrink: 0;
+
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    opacity: 0.85;
+  }
+  .dot-red    { background: #ff5f57; }
+  .dot-yellow { background: #ffbd2e; }
+  .dot-green  { background: #28c840; }
 }
 
 .header-left {
@@ -3007,21 +3032,20 @@ onUnmounted(() => {
   gap: var(--spacing-base);
 }
 
-.title-icon {
-  font-size: var(--font-size-md);
-  color: var(--color-primary);
-}
-
 .console-title {
-  
-  font-weight: 600;
-  color: var(--text-title);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
   letter-spacing: 0.3px;
+  font-family: var(--font-mono);
 }
 
  .terminal-sessions-panel {
-   background: var(--bg-panel);
-   border-bottom: 1px solid var(--border-component);
+   height: 100%;
+   display: flex;
+   flex-direction: column;
+   background: var(--bg-terminal-output);
+   border-bottom: none;
  }
 
  .terminal-sessions-header {
@@ -3029,6 +3053,8 @@ onUnmounted(() => {
    align-items: center;
    justify-content: space-between;
    padding: 8px 12px;
+   background: var(--bg-terminal-cmd);
+   border-bottom: 1px solid var(--border-terminal);
  }
 
  .terminal-sessions-title {
@@ -3036,12 +3062,12 @@ onUnmounted(() => {
    align-items: baseline;
    gap: 6px;
    font-weight: 600;
-   color: var(--text-title);
+   color: rgba(255, 255, 255, 0.75);
  }
 
  .terminal-sessions-count {
    font-weight: 500;
-   color: var(--text-secondary);
+   color: rgba(255, 255, 255, 0.45);
  }
 
  .terminal-sessions-actions {
@@ -3051,12 +3077,15 @@ onUnmounted(() => {
  }
 
  .terminal-sessions-body {
+   flex: 1;
    padding: 8px 12px 12px;
+   background: var(--bg-terminal-output);
+   overflow: auto;
  }
 
  .terminal-sessions-empty {
    padding: 10px 0;
-   color: var(--text-secondary);
+   color: rgba(255, 255, 255, 0.45);
    font-size: 13px;
  }
 
@@ -3072,8 +3101,8 @@ onUnmounted(() => {
    justify-content: space-between;
    gap: 10px;
    padding: 10px 12px;
-   background: var(--bg-container);
-   border: 1px solid var(--border-component);
+   background: rgba(255, 255, 255, 0.03);
+   border: 1px solid rgba(255, 255, 255, 0.08);
    border-radius: 8px;
  }
 
@@ -3085,7 +3114,7 @@ onUnmounted(() => {
  .terminal-session-command {
    font-size: var(--font-size-md);
    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-   color: var(--el-text-color-primary);
+   color: var(--text-terminal);
    white-space: nowrap;
    overflow: hidden;
    text-overflow: ellipsis;
@@ -3098,7 +3127,7 @@ onUnmounted(() => {
    align-items: flex-start;
    gap: 4px;
    font-size: 12px;
-   color: var(--text-secondary);
+   color: rgba(255, 255, 255, 0.5);
  }
 
  .terminal-session-dir {
@@ -3117,9 +3146,9 @@ onUnmounted(() => {
    white-space: nowrap;
    font-size: 11px;
    font-weight: 600;
-   color: var(--text-secondary);
-   background: rgba(64, 158, 255, 0.10);
-   border: 1px solid rgba(64, 158, 255, 0.20);
+   color: rgba(191, 219, 254, 0.9);
+   background: rgba(59, 130, 246, 0.18);
+   border: 1px solid rgba(59, 130, 246, 0.3);
    padding: 1px 6px;
    border-radius: 999px;
    margin-left: 6px;
@@ -3135,14 +3164,30 @@ onUnmounted(() => {
 
  .terminal-sessions-collapsed {
    padding: 8px 12px;
-   border-bottom: 1px solid var(--border-component);
-   background: var(--bg-panel);
+   border-bottom: 1px solid var(--border-terminal);
+   background: var(--bg-terminal-cmd);
+ }
+
+ :deep(.el-splitter-panel) {
+   background: var(--bg-terminal-output);
+ }
+
+ :deep(.el-splitter-bar) {
+   background: rgba(255, 255, 255, 0.08);
  }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
+
+  /* 终端深色背景上图标用浅色 */
+  :deep(.icon-button),
+  :deep(.el-button.is-text) {
+    color: rgba(255, 255, 255, 0.55);
+    &:hover { color: rgba(255, 255, 255, 0.9); }
+    &.is-active { color: var(--color-primary-light); }
+  }
 }
 
 .terminal-toggle-btn {
@@ -3261,15 +3306,15 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--bg-container);
+  background: rgba(255, 255, 255, 0.04);
   margin: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-component);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.3s ease;
   
   &:focus-within {
-    border-color: var(--color-primary);
-    box-shadow: var(--shadow-focus);
+    border-color: rgba(74, 222, 128, 0.4);
+    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.12);
   }
 }
 
@@ -3308,10 +3353,10 @@ onUnmounted(() => {
   }
   
   :deep(.el-input__inner) {
-    color: var(--text-primary);
+    color: var(--text-terminal);
     
     &::placeholder {
-      color: var(--text-tertiary);
+      color: rgba(255, 255, 255, 0.25);
       font-style: italic;
     }
   }
@@ -3383,8 +3428,8 @@ onUnmounted(() => {
 .console-output {
   max-height: 280px;
   overflow: auto;
-  background: var(--bg-container);
-  border-top: 1px solid var(--border-component);
+  background: var(--bg-terminal-output);
+  border-top: 1px solid var(--border-terminal);
   
   /* 美化滚动条 */
   &::-webkit-scrollbar {
@@ -3393,27 +3438,27 @@ onUnmounted(() => {
   }
   
   &::-webkit-scrollbar-track {
-    background: var(--bg-panel);
+    background: transparent;
     border-radius: var(--radius-base);
   }
   
   &::-webkit-scrollbar-thumb {
-    background: var(--border-component);
+    background: rgba(255, 255, 255, 0.15);
     border-radius: var(--radius-base);
     transition: background 0.3s ease;
     
     &:hover {
-      background: var(--text-tertiary);
+      background: rgba(255, 255, 255, 0.28);
     }
   }
 }
 
 .console-record {
-  border-bottom: 1px solid var(--border-component);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   transition: background 0.2s ease;
   
   &:hover {
-    background: var(--bg-icon);
+    background: rgba(255, 255, 255, 0.04);
   }
   
   &:last-child {
@@ -3427,6 +3472,7 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 10px var(--spacing-md);
   gap: var(--spacing-base);
+  background: var(--bg-terminal-cmd);
 }
 
 .cmd-actions {
@@ -3461,7 +3507,7 @@ onUnmounted(() => {
 }
 
 .cmd-text {
-  color: var(--text-title);
+  color: var(--text-terminal);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3469,7 +3515,7 @@ onUnmounted(() => {
 }
 
 .cmd-dir {
-  color: var(--text-tertiary);
+  color: rgba(255, 255, 255, 0.35);
   font-size: var(--font-size-sm);
   font-weight: normal;
   padding: 0 var(--spacing-sm);
@@ -3494,14 +3540,11 @@ onUnmounted(() => {
 }
 
 .ts {
-  color: var(--text-tertiary);
+  color: rgba(255, 255, 255, 0.28);
   font-size: var(--font-size-sm);
   font-weight: normal;
-  /* background: var(--bg-panel); */
   padding: 0 var(--spacing-sm);
-  /* border-radius: var(--radius-base); */
   flex-shrink: 0;
-  opacity: 0.8;
 }
 
 .toggle-output-btn {
@@ -3558,13 +3601,14 @@ pre.stdout, pre.stderr {
   white-space: pre-wrap;
   word-break: break-word;
   border-radius: var(--radius-base);
-  background: var(--bg-code);
+  background: transparent;
+  color: var(--text-terminal);
 }
 
 /* 不设置固定颜色，让ANSI转换的内联样式生效 */
 pre.stderr {
   /* color由ANSI转换提供，保留背景色提示 */
-  background: rgba(245, 108, 108, 0.05);
+  background: rgba(245, 108, 108, 0.08);
 }
 
 /* SVG图标按钮样式 */

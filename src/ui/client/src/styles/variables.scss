@@ -166,6 +166,20 @@
   --bg-code: #f6f8fa;
   --bg-code-dark: #1a2035;
   --bg-code-line: #fafbfc;
+
+  /* 终端/控制台区域背景（亮色主题也保持近终端风格） */
+  --bg-terminal: #1e2030;
+  --bg-terminal-dark: #0d1117;
+  --bg-terminal-header: #252840;
+  --bg-terminal-header-dark: #161b22;
+  --bg-terminal-output: #12141e;
+  --bg-terminal-output-dark: #090d12;
+  --text-terminal: #d4d4d8;
+  --text-terminal-dark: #c9d1d9;
+  --text-terminal-prompt: #4ade80;
+  --border-terminal: rgba(255, 255, 255, 0.10);
+  --border-terminal-dark: rgba(255, 255, 255, 0.06);
+  --bg-terminal-cmd: rgba(255, 255, 255, 0.06);
   
   /* ===== 边框颜色 ===== */
   
