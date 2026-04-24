@@ -664,7 +664,7 @@ function handleClose() {
 .version-value {
   font-size: var(--font-size-md);
   font-weight: 700;
-  color: #667eea;
+  color: var(--color-primary);
   font-family: monospace;
 }
 
@@ -791,14 +791,14 @@ function handleClose() {
 }
 
 :deep(.el-tabs__item.is-active) {
-  color: #667eea;
+  color: var(--color-primary);
 }
 
 :deep(.el-tabs__active-bar) {
-  background-color: #667eea;
+  background-color: var(--color-primary);
 }
 
 :deep(.el-radio.is-bordered.is-checked) {
-  border-color: #667eea;
+  border-color: var(--color-primary);
 }
 </style>

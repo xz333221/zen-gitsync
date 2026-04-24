@@ -170,4 +170,33 @@ export function registerFileOpenRoutes({
       });
     }
   });
+
+  // 用 VSCode 打开目录
+  app.post('/api/open-directory-with-vscode', async (req, res) => {
+    try {
+      const { path: dirPath } = req.body;
+      if (!dirPath) {
+        return res.status(400).json({ success: false, error: '目录路径不能为空' });
+      }
+
+      try {
+        await new Promise((resolve, reject) => {
+          const vscodeProcess = spawn('code', [dirPath], { detached: true, stdio: 'ignore' });
+          vscodeProcess.on('error', reject);
+          vscodeProcess.on('spawn', () => { vscodeProcess.unref(); resolve('success'); });
+        });
+        res.json({ success: true, message: '已用 VSCode 打开目录' });
+      } catch {
+        // fallback：通过 open 模块指定 code 应用
+        try {
+          await open(dirPath, { app: { name: 'code' } });
+          res.json({ success: true, message: '已用 VSCode 打开目录' });
+        } catch (openError) {
+          res.status(400).json({ success: false, error: 'VSCode 可能未安装或未添加到 PATH' });
+        }
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 }

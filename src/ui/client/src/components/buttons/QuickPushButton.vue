@@ -158,7 +158,7 @@ function handleProgressComplete(_success: boolean) {
   <div>
     <el-tooltip :content="tooltipText" placement="top" :show-after="200">
       <el-button
-        type="success"
+        type="primary"
         @click="handleQuickPush"
         :loading="isLoading"
         :disabled="isDisabled"
@@ -169,9 +169,7 @@ function handleProgressComplete(_success: boolean) {
           <el-icon class="one-push-icon"><Position /></el-icon>
           <div class="one-push-text">
             <span class="one-push-title">{{ $t('@2E184:一键推送所有') }}</span>
-            <span v-if="from === 'form'" class="one-push-desc"
-              >{{ $t('@2E184:暂存 + 提交 + 推送') }}</span
-            >
+            <span v-if="from === 'form'" class="one-push-desc">{{ $t('@2E184:暂存 + 提交 + 推送') }}</span>
           </div>
         </div>
       </el-button>
@@ -200,15 +198,17 @@ function handleProgressComplete(_success: boolean) {
   .one-push-content {
     display: flex;
     align-items: center;
+    gap: 8px;
     .one-push-text {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding-left: 10px;
-      .one-push-desc{
-        font-size: var(--font-size-sm);
-        padding-top: var(--spacing-sm);
+      align-items: flex-start;
+      gap: 2px;
+      .one-push-desc {
+        font-size: var(--font-size-xs);
+        opacity: 0.72;
+        font-weight: 400;
+        letter-spacing: 0.1px;
       }
     }
   }

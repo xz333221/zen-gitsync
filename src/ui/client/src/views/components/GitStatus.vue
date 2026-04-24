@@ -847,25 +847,6 @@ defineExpose({
           <!-- 取消暂存所有按钮 -->
           <UnstageAllButton from="status" />
 
-          <!-- 选择模式切换按钮 -->
-          <IconButton
-            v-if="gitStore.fileList.length > 0"
-            :tooltip="isSelectionMode ? $t('@13D1C:退出选择模式') : $t('@13D1C:选择文件进行储藏')"
-            size="large"
-            :active="isSelectionMode"
-            hover-color="var(--color-primary)"
-            @click="toggleSelectionMode"
-          >
-            <svg-icon icon-class="muti-choose" />
-          </IconButton>
-
-          <!-- 储藏选中文件按钮 -->
-          <StashSelectedFilesButton 
-            v-if="isSelectionMode && selectedFiles.size > 0"
-            :selected-files="selectedFilesList"
-            @success="toggleSelectionMode"
-          />
-
           <!-- 储藏更改按钮 -->
           <StashChangesButton v-if="!isSelectionMode" />
           
@@ -955,6 +936,23 @@ defineExpose({
         <div v-if="gitStore.fileList.length" class="file-list-wrapper">
           <div class="file-list-header">
             <div class="header-left">
+              <!-- 选择模式切换按钮 -->
+              <IconButton
+                v-if="gitStore.fileList.length > 0"
+                :tooltip="isSelectionMode ? $t('@13D1C:退出选择模式') : $t('@13D1C:选择文件进行储藏')"
+                size="small"
+                :active="isSelectionMode"
+                hover-color="var(--color-primary)"
+                @click="toggleSelectionMode"
+              >
+                <svg-icon icon-class="muti-choose" />
+              </IconButton>
+              <!-- 储藏选中文件按钮 -->
+              <StashSelectedFilesButton 
+                v-if="isSelectionMode && selectedFiles.size > 0"
+                :selected-files="selectedFilesList"
+                @success="toggleSelectionMode"
+              />
               <h4>{{ $t('@13D1C:文件列表') }}</h4>
               <span v-if="gitStore.fileList.length > 0" class="file-count">({{ gitStore.fileList.length }})</span>
             </div>
@@ -1357,6 +1355,10 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-card);
+  border-bottom: 1px solid var(--border-card);
 }
 
 .status-header h2 {
@@ -1367,7 +1369,7 @@ defineExpose({
 .header-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-base);
+  gap: var(--spacing-xs);
 }
 
 .card-content {
@@ -1409,21 +1411,23 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-sm) 0;
+  padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-container);
   border-bottom: 1px solid var(--border-card);
   
   h4 {
     margin: 0;
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-base);
     font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading, -0.25px);
+    color: var(--color-text-title);
   }
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
   
   .file-count {
     font-size: var(--font-size-xs);
@@ -1452,7 +1456,7 @@ defineExpose({
   width: 100%;
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 /* Webkit浏览器的滚动条样式 */

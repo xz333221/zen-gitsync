@@ -121,9 +121,7 @@ defineExpose({
           <el-icon class="one-commit-icon"><Edit /></el-icon>
           <div class="one-commit-text">
             <span class="one-commit-title">{{ $t('@2E184:一键提交所有') }}</span>
-            <span v-if="from === 'form'" class="one-commit-desc"
-              >{{ $t('@2E184:暂存 + 提交') }}</span
-            >
+            <span v-if="from === 'form'" class="one-commit-desc">{{ $t('@2E184:暂存 + 提交') }}</span>
           </div>
         </div>
       </el-button>
@@ -144,15 +142,17 @@ defineExpose({
   .one-commit-content {
     display: flex;
     align-items: center;
+    gap: 8px;
     .one-commit-text {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding-left: 10px;
-      .one-commit-desc{
-        font-size: var(--font-size-sm);
-        padding-top: var(--spacing-sm);
+      align-items: flex-start;
+      gap: 2px;
+      .one-commit-desc {
+        font-size: var(--font-size-xs);
+        opacity: 0.72;
+        font-weight: 400;
+        letter-spacing: 0.1px;
       }
     }
   }

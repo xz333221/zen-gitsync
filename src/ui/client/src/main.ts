@@ -6,6 +6,7 @@ import './main.css'
 import './styles/tailwindcss.css'
 import './styles/common.scss'
 import './styles/dark-theme.scss'
+import './styles/unified-dialogs.scss'
 import 'file-icons-js/css/style.css'
 // 导入 SVG 图标
 import 'virtual:svg-icons-register'

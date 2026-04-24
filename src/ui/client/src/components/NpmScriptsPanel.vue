@@ -454,7 +454,7 @@ watch(() => props.visible, (newValue) => {
 
 .loading-icon {
   font-size: 32px;
-  color: #667eea;
+  color: var(--color-primary);
 }
 
 .loading-text,
@@ -513,7 +513,7 @@ watch(() => props.visible, (newValue) => {
 
 .folder-icon {
   font-size: var(--font-size-lg);
-  color: #667eea;
+  color: var(--color-primary);
 }
 
 .package-info {
@@ -561,12 +561,12 @@ watch(() => props.visible, (newValue) => {
 }
 
 .repo-icon:hover {
-  color: #667eea;
+  color: var(--color-primary);
   transform: scale(1.1);
 }
 
 .settings-icon:hover {
-  color: #667eea;
+  color: var(--color-primary);
   transform: rotate(30deg);
 }
 
@@ -574,7 +574,7 @@ watch(() => props.visible, (newValue) => {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   padding: var(--spacing-xs) var(--spacing-base);
-  background: rgba(102, 126, 234, 0.1);
+  background: rgba(59, 130, 246, 0.1);
   border-radius: 10px;
 }
 
@@ -606,7 +606,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .script-item:hover .play-icon {
-  color: #667eea;
+  color: var(--color-primary);
   transform: scale(1.1);
 }
 

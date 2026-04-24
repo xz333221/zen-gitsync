@@ -10,8 +10,7 @@ import InlineCard from '@components/InlineCard.vue'
 import RemoteRepoCard from '@components/RemoteRepoCard.vue'
 import BranchSelector from '@components/BranchSelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
-import LanguageSwitcher from '@components/LanguageSwitcher.vue'
-import ThemeSwitcher from '@components/ThemeSwitcher.vue'
+
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -359,11 +358,8 @@ function stopHResize() {
     <div class="header-info">
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
-        <ThemeSwitcher />
         <CommandHistory />
       </div>
-      <!-- 语言切换 -->
-      <LanguageSwitcher />
       <!-- 用户信息卡片 -->
       <InlineCard id="user-info" class="user-info-card" compact>
         <template #content>
@@ -653,16 +649,17 @@ body {
 h1 {
   margin: 0;
   font-size: var(--font-size-xl);
-  font-weight: 600;
-  letter-spacing: -0.3px;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: linear-gradient(135deg, #0f2244 0%, #1e3a5f 45%, #1d4ed8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 [data-theme="dark"] h1 {
-  background: linear-gradient(135deg, #e2e8f0 0%, #f7fafc 50%, #edf2f7 100%);
+  background: linear-gradient(135deg, #e2e8f0 0%, #bfdbfe 50%, #93c5fd 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -686,13 +683,14 @@ h1 {
   border: 1px solid var(--border-component);
   box-shadow: none;
   flex-shrink: 0;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
   background: rgba(0, 0, 0, 0.02);
 }
 
 #user-info:hover {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.1);
+  background: rgba(59, 130, 246, 0.04);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
 }
 
 .command-history-section {
@@ -841,7 +839,7 @@ h1 {
 
 .vertical-resizer:hover,
 .vertical-resizer.active {
-  background-color: rgba(64, 158, 255, 0.06);
+  background-color: rgba(59, 130, 246, 0.06);
 }
 
 .vertical-resizer:hover::after,
@@ -850,7 +848,7 @@ h1 {
   width: 4px;
   height: 48px;
   border-radius: 2px;
-  box-shadow: 0 0 8px rgba(64, 158, 255, 0.4);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.45);
 }
 
 /* 水平分隔条样式 */
@@ -879,7 +877,7 @@ h1 {
 
 .horizontal-resizer:hover,
 .horizontal-resizer.active {
-  background-color: rgba(64, 158, 255, 0.06);
+  background-color: rgba(59, 130, 246, 0.06);
 }
 
 .horizontal-resizer:hover::after,
@@ -888,7 +886,7 @@ h1 {
   height: 4px;
   width: 48px;
   border-radius: 2px;
-  box-shadow: 0 0 8px rgba(64, 158, 255, 0.4);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.45);
 }
 
 

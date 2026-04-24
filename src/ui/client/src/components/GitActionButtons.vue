@@ -124,6 +124,11 @@ defineExpose({
   justify-content: space-between;
 }
 
+.left-actions {
+  display: flex;
+  align-self: center;
+}
+
 .button-grid {
   display: flex;
   gap: var(--spacing-base);
@@ -133,6 +138,7 @@ defineExpose({
   display: flex;
   align-items: stretch;
   gap: var(--spacing-base);
+  height: 52px;
 }
 
 </style>

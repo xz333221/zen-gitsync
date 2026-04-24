@@ -31,6 +31,14 @@
           <el-icon><InfoFilled /></el-icon>
           <span>{{ $t('@42BB9:Git 全局设置') }}</span>
         </div>
+        <div 
+          class="tab-item" 
+          :class="{ active: activeTab === 'config' }"
+          @click="onClickConfigTab"
+        >
+          <el-icon><Edit /></el-icon>
+          <span>{{ $t('@42BB9:编辑配置') }}</span>
+        </div>
       </div>
 
       <!-- 右侧内容区域 -->
@@ -173,6 +181,36 @@
 
           </el-form>
         </div>
+
+        <!-- 编辑配置 JSON 面板 -->
+        <div v-show="activeTab === 'config'" class="settings-panel config-panel">
+          <div class="info-section">
+            <div class="info-card">
+              <div class="info-icon">
+                <el-icon><Edit /></el-icon>
+              </div>
+              <div class="info-content">
+                <p class="info-title">{{ $t('@42BB9:编辑当前项目的配置文件') }}</p>
+                <p class="info-desc">{{ $t('@42BB9:直接编辑 JSON，支持所有配置项') }}</p>
+              </div>
+            </div>
+          </div>
+          <div class="config-json-editor-wrap">
+            <el-input
+              v-model="configEditorText"
+              type="textarea"
+              spellcheck="false"
+              autocomplete="off"
+              :placeholder="$t('@42BB9:加载中...')"
+              class="config-json-editor"
+            />
+          </div>
+          <div class="config-panel-actions">
+            <button type="button" class="dialog-cancel-btn system-config-btn" @click="openSystemConfigFile">
+              {{ $t('@42BB9:打开系统配置文件') }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -185,7 +223,7 @@
           </button>
           <button type="button" class="dialog-confirm-btn" @click="handleSave" :disabled="isLoading">
             <el-icon><Check /></el-icon>
-            <span>{{ $t('@42BB9:保存设置') }}</span>
+            <span>{{ activeTab === 'config' ? $t('@42BB9:保存配置') : $t('@42BB9:保存设置') }}</span>
           </button>
         </div>
       </div>
@@ -197,7 +235,7 @@
 import { $t } from '@/lang/static'
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { InfoFilled, Setting, Check, Sunny, ChatDotRound } from '@element-plus/icons-vue'
+import { InfoFilled, Setting, Check, Sunny, ChatDotRound, Edit } from '@element-plus/icons-vue'
 import CommonDialog from './CommonDialog.vue'
 import { useGitStore } from '@/stores/gitStore'
 import { useLocaleStore } from '@/stores/localeStore'
@@ -218,7 +256,7 @@ const emit = defineEmits<{
 
 const visible = ref(false)
 const isLoading = ref(false)
-const activeTab = ref<'general' | 'git'>('general')
+const activeTab = ref<'general' | 'git' | 'config'>('general')
 
 // 通用设置
 const tempTheme = ref<'light' | 'dark' | 'auto'>('light')
@@ -227,6 +265,10 @@ const tempLocale = ref<SupportLocale>('zh-CN')
 // Git 设置
 const tempUserName = ref('')
 const tempUserEmail = ref('')
+
+// 配置编辑器
+const configEditorText = ref('')
+const configEditorSaving = ref(false)
 
 // 常用全局 Git 配置
 const cfgAutoSetupRemote = ref(false)
@@ -253,6 +295,7 @@ watch(() => props.modelValue, async (val) => {
     // 打开时加载数据
     tempUserName.value = gitStore.userName
     tempUserEmail.value = gitStore.userEmail
+    configEditorText.value = '' // 延迟加载，点击 tab 时才加载
     
     // 加载通用设置
     tempTheme.value = configStore.theme
@@ -399,7 +442,11 @@ async function saveGeneralSettings() {
 }
 
 // 保存设置
-async function handleSave() {
+async function handleSave() {  // 配置编辑 tab 单独处理
+  if (activeTab.value === 'config') {
+    await saveConfigJson()
+    return
+  }
   // 保存通用设置
   const generalSaved = await saveGeneralSettings()
   if (!generalSaved) return
@@ -423,6 +470,68 @@ async function handleSave() {
   const cfgSaved = await saveGlobalGitConfigs()
   if (userSaved && cfgSaved) {
     visible.value = false
+  }
+}
+
+// 点击配置 tab：加载配置 JSON
+async function onClickConfigTab() {
+  activeTab.value = 'config'
+  if (configEditorText.value) return
+  try {
+    const formatResp = await fetch('/api/config/check-file-format')
+    const formatData = await formatResp.json()
+    if (!formatData.success) {
+      ElMessage.warning(formatData.message || $t('@42BB9:配置文件格式可能有问题'))
+    }
+    configEditorText.value = JSON.stringify(configStore.config, null, 2)
+  } catch {
+    ElMessage.error($t('@42BB9:加载配置失败'))
+  }
+}
+
+// 保存配置 JSON
+async function saveConfigJson() {
+  let parsed: any
+  try {
+    parsed = JSON.parse(configEditorText.value)
+  } catch (e: any) {
+    ElMessage.error(`${$t('@42BB9:JSON 解析失败: ')}${e.message || e}`)
+    return
+  }
+  try {
+    configEditorSaving.value = true
+    const resp = await fetch('/api/config/saveAll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: parsed })
+    })
+    const data = await resp.json()
+    if (!data.success) {
+      ElMessage.error(`${$t('@42BB9:保存失败: ')}${data.error || $t('@42BB9:未知错误')}`)
+      return
+    }
+    await configStore.loadConfig()
+    ElMessage.success($t('@42BB9:配置已保存'))
+    visible.value = false
+  } catch (err: any) {
+    ElMessage.error(`${$t('@42BB9:保存配置失败: ')}${err.message || err}`)
+  } finally {
+    configEditorSaving.value = false
+  }
+}
+
+// 打开系统配置文件
+async function openSystemConfigFile() {
+  try {
+    const resp = await fetch('/api/config/open-file', { method: 'POST' })
+    const data = await resp.json()
+    if (data.success) {
+      ElMessage.success($t('@42BB9:已用系统程序打开配置文件'))
+    } else {
+      ElMessage.error(data.error || $t('@42BB9:打开文件失败'))
+    }
+  } catch (err: any) {
+    ElMessage.error(`${$t('@42BB9:打开文件失败: ')}${err.message || err}`)
   }
 }
 </script>
@@ -737,6 +846,59 @@ html.dark .label-icon {
   justify-content: space-between;
   align-items: center;
   padding: 0;
+}
+
+/* 配置编辑面板 */
+.config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.config-json-editor-wrap {
+  flex: 1;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1.5px solid var(--border-color-medium);
+  transition: border-color 0.2s ease;
+  min-height: 280px;
+}
+
+.config-json-editor-wrap:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+:deep(.config-json-editor) {
+  height: 100%;
+  .el-textarea__inner {
+    height: 280px;
+    min-height: 280px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+    border: none;
+    box-shadow: none;
+    resize: none;
+    border-radius: var(--radius-lg);
+  }
+}
+
+.config-panel-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.system-config-btn {
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color-medium);
+}
+
+.system-config-btn:hover {
+  background: var(--bg-panel-hover);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 /* footer-actions、dialog-cancel-btn、dialog-confirm-btn 基础样式已移至 @/styles/common.scss */

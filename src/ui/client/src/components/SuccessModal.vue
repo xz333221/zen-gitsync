@@ -44,8 +44,8 @@ withDefaults(defineProps<Props>(), {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -54,13 +54,13 @@ withDefaults(defineProps<Props>(), {
 
 .success-container {
   background: var(--bg-container);
-  border-radius: 16px;
+  border-radius: var(--dialog-radius);
   padding: 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-xl);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--dialog-shadow-hover);
   max-width: 400px;
   text-align: center;
 }
@@ -82,7 +82,7 @@ withDefaults(defineProps<Props>(), {
   stroke-dasharray: 166;
   stroke-dashoffset: 166;
   fill: none;
-  animation: success-circle-animation 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+  animation: success-circle-animation 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .success-check {
@@ -92,21 +92,21 @@ withDefaults(defineProps<Props>(), {
   stroke-linejoin: round;
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
-  animation: success-check-animation 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+  animation: success-check-animation 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.8s forwards;
 }
 
 .success-text {
-  font-size: var(--font-size-3xl);
-  font-weight: 700;
-  
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
   margin: 0;
+  color: var(--text-title);
 }
 
 .success-description {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-base);
   color: var(--text-secondary);
   margin: 0;
-  line-height: 1.5;
+  line-height: var(--line-height-relaxed);
 }
 
 /* 动画效果 */
@@ -125,7 +125,7 @@ withDefaults(defineProps<Props>(), {
 /* 过渡动画 */
 .success-fade-enter-active,
 .success-fade-leave-active {
-  transition: all 0.3s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .success-fade-enter-from,
@@ -137,18 +137,18 @@ withDefaults(defineProps<Props>(), {
 .success-fade-enter-to,
 .success-fade-leave-from {
   opacity: 1;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(6px);
 }
 
 .success-fade-enter-active .success-container,
 .success-fade-leave-active .success-container {
-  transition: all 0.3s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .success-fade-enter-from .success-container,
 .success-fade-leave-to .success-container {
   opacity: 0;
-  transform: scale(0.8) translateY(20px);
+  transform: scale(0.95) translateY(10px);
 }
 
 .success-fade-enter-to .success-container,

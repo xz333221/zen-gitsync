@@ -207,14 +207,25 @@ function handleClosed() {
 
 
 <style scoped lang="scss">
+// 通用底部按钮样式
+.common-dialog__footer {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  
+  .el-button {
+    min-width: 80px;
+    border-radius: var(--btn-radius);
+  }
+}
+
 // flex布局弹窗
 :deep(.common-dialog--flex) {
   .el-dialog {
     display: flex;
     flex-direction: column;
-    /* 使用全局的 .el-dialog 高度策略，这里不再设置变量高度 */
     height: auto !important;
-    max-height: 90vh; /* 防止超出屏幕 */
+    max-height: 90vh;
   }
   .el-dialog__header,
   .el-dialog__footer {
@@ -227,10 +238,9 @@ function handleClosed() {
     flex: 1;
     padding: var(--spacing-lg);
     box-sizing: border-box;
-    /* 仅纵向滚动 */
     overflow-x: hidden;
     overflow-y: auto;
-    min-height: 0; /* 关键：允许flex子元素缩小 */
+    min-height: 0;
   }
 }
 
@@ -270,35 +280,7 @@ function handleClosed() {
     overflow-y: auto;
     padding: var(--spacing-md);
     box-sizing: border-box;
-    min-height: 0; /* 关键：允许flex子元素缩小 */
+    min-height: 0;
   }
-}
-
-// 通用底部按钮样式
-.common-dialog__footer {
-  display: flex;
-  gap: var(--spacing-md);
-  justify-content: flex-end;
-  
-  .el-button {
-    min-width: 80px;
-  }
-}
-
-/* 通用对话框的细节优化（仅在该组件内生效） */
-:deep(.el-dialog) {
-  border-radius: var(--radius-xl);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-}
-
-
-// :deep(.el-dialog__body) {
-//   padding: var(--spacing-lg) 18px 18px 18px;
-//   background: linear-gradient(180deg, var(--bg-container) 0%, #fafbfc 100%);
-// }
-
-:deep(.el-dialog__footer) {
-  padding: var(--spacing-md) 18px;
 }
 </style>

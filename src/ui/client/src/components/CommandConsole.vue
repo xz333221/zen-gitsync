@@ -2932,7 +2932,7 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 /* 命令控制台容器 */
 .command-console {
-  margin-top: var(--spacing-md);
+  margin-top: var(--spacing-sm);
   background: var(--bg-code);
   border: 1px solid var(--border-component);
   border-radius: 10px;
@@ -2943,7 +2943,7 @@ onUnmounted(() => {
   
   &:hover {
     box-shadow: var(--shadow-hover);
-    border-color: rgba(64, 158, 255, 0.3);
+    border-color: rgba(59, 130, 246, 0.25);
   }
 
   .console-content {
@@ -2996,7 +2996,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 6px 12px;
   background: linear-gradient(135deg, var(--bg-panel), var(--bg-container));
   border-bottom: 1px solid var(--border-component);
 }
@@ -3259,17 +3259,17 @@ onUnmounted(() => {
 .console-input-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: var(--spacing-sm) var(--spacing-base);
+  gap: 8px;
+  padding: var(--spacing-xs) var(--spacing-sm);
   background: var(--bg-container);
-  margin: var(--spacing-md);
+  margin: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
   transition: all 0.3s ease;
   
   &:focus-within {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+    box-shadow: var(--shadow-focus);
   }
 }
 

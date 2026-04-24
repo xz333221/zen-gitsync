@@ -6,11 +6,12 @@
   /* ===== 基础颜色定义 ===== */
   
   /* 主色调 */
-  --color-primary: #409eff;
-  --color-primary-light: #5a67d8;
-  --color-primary-dark: #337ecc;
-  --color-primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --color-primary-gradient-hover: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+  --color-primary: #3b82f6;
+  --color-primary-light: #60a5fa;
+  --color-primary-dark: #2563eb;
+  /* 设计感渐变：深蓝到青蓝，去掉 AI 紫蓝 slop 配色 */
+  --color-primary-gradient: linear-gradient(135deg, #1e3a5f 0%, #2563eb 60%, #0ea5e9 100%);
+  --color-primary-gradient-hover: linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 60%, #0284c7 100%);
   
   /* 语义颜色 */
   --color-success: #67c23a;
@@ -102,16 +103,18 @@
   /* ===== 背景颜色 ===== */
   
   /* 页面背景 */
-  --bg-page: #f5f5f5;
-  --bg-page-dark: #2d2d2d;
+  --bg-page: #f0f2f5;
+  /* 深色背景：深蓝炭黑，比纯灰更有质感 */
+  --bg-page-dark: #141820;
   --bg-title: #eeeeee;
   --bg-title-dark: #474747;
   
   /* 容器背景 */
   --bg-container: var(--color-white);
   --bg-container-hover: #f8fafc;
-  --bg-container-hover-dark: rgba(255, 255, 255, 0.08);
-  --bg-container-dark: #24292e;
+  --bg-container-hover-dark: rgba(255, 255, 255, 0.07);
+  /* 深色容器：带轻微蓝调，与深色背景形成层次 */
+  --bg-container-dark: #1c2130;
   
   /* 表单和输入框背景 */
   --bg-input: white;
@@ -147,7 +150,7 @@
   
   /* 卡片和面板背景 */
   --bg-card: var(--color-white);
-  --bg-card-dark: #24292e;
+  --bg-card-dark: #1c2130;
   --bg-card-hover: #f8fafc;
   --bg-card-hover-dark: rgba(255, 255, 255, 0.05);
   
@@ -161,7 +164,7 @@
   
   /* 代码区域背景 */
   --bg-code: #f6f8fa;
-  --bg-code-dark: #2d2d2d;
+  --bg-code-dark: #1a2035;
   --bg-code-line: #fafbfc;
   
   /* ===== 边框颜色 ===== */
@@ -191,26 +194,26 @@
   --border-component-light-dark: rgba(255, 255, 255, 0.08);
   
   /* 交互边框 */
-  --border-hover: rgba(102, 126, 234, 0.15);
+  --border-hover: rgba(59, 130, 246, 0.18);
   --border-focus: var(--color-primary);
   --border-active: var(--color-primary-dark);
   
   /* ===== 阴影 ===== */
   
-  /* 基础阴影 */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
-  --shadow-base: 0 1px 4px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.12);
+  /* 基础阴影（着色：带轻微冷蓝调而非纯黑） */
+  --shadow-sm: 0 1px 3px rgba(30, 58, 95, 0.05);
+  --shadow-base: 0 1px 4px rgba(30, 58, 95, 0.06);
+  --shadow-md: 0 2px 8px rgba(30, 58, 95, 0.09);
+  --shadow-lg: 0 4px 16px rgba(30, 58, 95, 0.10);
+  --shadow-xl: 0 8px 32px rgba(30, 58, 95, 0.13);
   
   /* 交互阴影 */
-  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-active: 0 2px 6px rgba(0, 0, 0, 0.12);
-  --shadow-focus: 0 0 0 2px rgba(64, 158, 255, 0.2);
+  --shadow-hover: 0 4px 16px rgba(30, 58, 95, 0.12);
+  --shadow-active: 0 2px 6px rgba(30, 58, 95, 0.14);
+  --shadow-focus: 0 0 0 3px rgba(59, 130, 246, 0.22);
   
-  --shadow-dark: 0 2px 10px rgba(0, 0, 0, 0.2);
-  --shadow-dark-lg: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-dark: 0 2px 12px rgba(5, 10, 25, 0.36);
+  --shadow-dark-lg: 0 6px 24px rgba(5, 10, 25, 0.48);
   
   /* ===== 文字颜色 ===== */
   
@@ -242,8 +245,8 @@
   --color-text-placeholder: var(--text-placeholder);
   
   /* 文件路径文字颜色 */
-  --color-file-path-hover: #6366f1;
-  --color-file-path-hover-dark: #a5b4fc;
+  --color-file-path-hover: var(--color-primary);
+  --color-file-path-hover-dark: #93c5fd;
   
   /* 链接文字 */
   --text-link: var(--color-primary);
@@ -296,6 +299,13 @@
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
+
+  /* 字距 */
+  --letter-spacing-tight: -0.4px;
+  --letter-spacing-heading: -0.25px;
+  --letter-spacing-base: -0.1px;
+  --letter-spacing-wide: 0.3px;
+  --letter-spacing-wider: 0.6px;
   
   /* ===== 动画与过渡 ===== */
   
@@ -334,14 +344,14 @@
   
   /* 滚动条颜色 */
   --scrollbar-track: transparent;
-  --scrollbar-thumb: rgba(144, 147, 153, 0.3);
-  --scrollbar-thumb-hover: rgba(144, 147, 153, 0.5);
+  --scrollbar-thumb: rgba(100, 116, 139, 0.28);
+  --scrollbar-thumb-hover: rgba(100, 116, 139, 0.48);
   --scrollbar-width: 6px;
   
   /* ===== 代码字体 ===== */
   
-  /* 等宽字体族 */
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Droid Sans Mono", Consolas, "Courier New", monospace;
+  /* 等宽字体族（JetBrains Mono 优先） */
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Courier New", monospace;
 }
 
 /* =======================================================

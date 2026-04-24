@@ -8,7 +8,6 @@ import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
 import IconButton from "@components/IconButton.vue";
 import SvgIcon from "@components/SvgIcon/index.vue";
-import ConfigEditorButton from "@components/buttons/ConfigEditorButton.vue";
 import { getFolderNameFromPath } from "@/utils/path";
 
 // 使用 store
@@ -63,6 +62,29 @@ async function onOpenExplorer() {
     }
   } catch (error) {
     ElMessage.error(`${$t('@67CE7:打开目录失败: ')}${(error as Error).message}`);
+  }
+}
+
+// 用 VSCode 打开当前目录
+async function onOpenInVscode() {
+  try {
+    if (!currentDirectory.value) {
+      ElMessage.warning('当前目录路径为空');
+      return;
+    }
+    const response = await fetch('/api/open-directory-with-vscode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: currentDirectory.value }),
+    });
+    const result = await response.json();
+    if (result.success) {
+      ElMessage.success('已用 VSCode 打开目录');
+    } else if (result.error) {
+      ElMessage.error(result.error);
+    }
+  } catch (error) {
+    ElMessage.error(`打开失败: ${(error as Error).message}`);
   }
 }
 
@@ -381,7 +403,6 @@ async function selectDirectory(dirPath: string) {
       {{ currentFolderName }}
     </div>
     <div class="directory-actions flex">
-      <ConfigEditorButton variant="icon" />
       <IconButton
         :tooltip="$t('@67CE7:在资源管理器中打开')"
         size="large"
@@ -395,6 +416,13 @@ async function selectDirectory(dirPath: string) {
         @click="onOpenTerminal"
       >
         <el-icon><Monitor /></el-icon>
+      </IconButton>
+      <IconButton
+        tooltip="用 VSCode 打开"
+        size="large"
+        @click="onOpenInVscode"
+      >
+        <svg-icon icon-class="vscode" />
       </IconButton>
       <IconButton
         v-if="hasNpmScripts"
@@ -516,16 +544,15 @@ async function selectDirectory(dirPath: string) {
 .directory-display {
   flex: 1;
   min-width: 0;
-  font-family: monospace;
+  padding-left: var(--spacing-base);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  letter-spacing: var(--letter-spacing-tight, -0.4px);
   color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: var(--font-size-2xl);
-  font-weight: 600;
-  font-family: 'Arial', sans-serif;
-  flex: 1;
-  min-width: 0;
 }
 
 /* 对话框样式（复用 App.vue 中样式） */
@@ -565,7 +592,7 @@ async function selectDirectory(dirPath: string) {
   padding: 0 var(--spacing-lg);
   border: none;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  background: var(--color-primary-gradient);
   color: white;
   font-size: var(--font-size-sm);
   font-weight: 500;

@@ -224,7 +224,13 @@ function clearCommitFields() {
 
   // 如果开启了自动设置默认提交信息，则自动填充
   if (configStore.autoSetDefaultMessage && configStore.defaultCommitMessage) {
-    commitMessage.value = configStore.defaultCommitMessage;
+    if (isStandardCommit.value) {
+      // 标准化提交模式：填充到简短描述
+      commitDescription.value = configStore.defaultCommitMessage;
+    } else {
+      // 普通提交模式：填充到提交信息
+      commitMessage.value = configStore.defaultCommitMessage;
+    }
   }
 }
 
@@ -421,10 +427,19 @@ onMounted(async () => {
   // 如果开启了自动设置默认提交信息，且当前提交信息为空，则自动填充
   if (
     configStore.autoSetDefaultMessage &&
-    configStore.defaultCommitMessage &&
-    !commitMessage.value
+    configStore.defaultCommitMessage
   ) {
-    commitMessage.value = configStore.defaultCommitMessage;
+    if (isStandardCommit.value) {
+      // 标准化提交模式：填充到简短描述
+      if (!commitDescription.value) {
+        commitDescription.value = configStore.defaultCommitMessage;
+      }
+    } else {
+      // 普通提交模式：填充到提交信息
+      if (!commitMessage.value) {
+        commitMessage.value = configStore.defaultCommitMessage;
+      }
+    }
   }
 
   // 检查是否有待处理的合并消息（合并冲突时自动填充）
@@ -812,7 +827,6 @@ git config --global user.email "your.email@example.com"</pre
         :title="$t('@76872:跳过钩子检查')"
         :tooltip="$t('@76872:添加 --no-verify 参数')"
         active-color="var(--color-danger)"
-        icon-class="warning"
       >
       </OptionSwitchCard>
 
@@ -822,7 +836,6 @@ git config --global user.email "your.email@example.com"</pre
         :title="$t('@76872:回车自动提交')"
         :tooltip="$t('@76872:输入提交信息后按回车直接执行一键推送')"
         active-color="var(--color-success)"
-        icon-class="success"
       >
       </OptionSwitchCard>
 
@@ -832,7 +845,6 @@ git config --global user.email "your.email@example.com"</pre
         :title="$t('@76872:Push完成自动关闭')"
         :tooltip="$t('@76872:推送成功后自动关闭进度弹窗')"
         active-color="var(--color-primary)"
-        icon-class="info"
       >
       </OptionSwitchCard>
 
@@ -842,7 +854,6 @@ git config --global user.email "your.email@example.com"</pre
         :title="$t('@76872:自动填充默认提交信息')"
         :tooltip="$t('@76872:打开页面或提交完成后自动填充默认提交信息')"
         active-color="var(--color-success)"
-        icon-class="success"
       >
       </OptionSwitchCard>
     </div>
@@ -880,16 +891,25 @@ git config --global user.email "your.email@example.com"</pre
   box-shadow: var(--shadow-md);
 }
 
+/* 左侧3个普通操作按钮 - 标准主色蓝 */
 .header-actions :deep(.el-button--primary) {
   background: var(--color-primary);
   border: none;
   color: white;
 }
 
-.header-actions :deep(.el-button--success) {
-  background: var(--color-success);
-  border: none;
-  color: white;
+/* 一键提交 - 深蓝渐变，区分层次 */
+.header-actions :deep(.one-commit-button) {
+  background: linear-gradient(135deg, var(--color-primary-dark, #2563eb) 0%, #1d4ed8 100%) !important;
+  border: none !important;
+  color: white !important;
+}
+
+/* 一键推送 - 靛蓝渐变，最深最突出 */
+.header-actions :deep(.one-push-button) {
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  border: none !important;
+  color: white !important;
 }
 
 .header-actions :deep(.el-button--warning) {
@@ -906,12 +926,6 @@ git config --global user.email "your.email@example.com"</pre
 .header-actions :deep(.el-button--primary:disabled) {
   background-color: var(--color-primary-light) !important;
   border-color: var(--color-primary-light) !important;
-  opacity: 0.5 !important;
-}
-
-.header-actions :deep(.el-button--success:disabled) {
-  background-color: var(--color-success) !important;
-  border-color: var(--color-success) !important;
   opacity: 0.5 !important;
 }
 
@@ -983,9 +997,9 @@ git config --global user.email "your.email@example.com"</pre
   align-items: center;
   gap: 5px;
   width: 100%;
-  background: linear-gradient(135deg, #f8faff 0%, #eef4ff 100%);
+  background: transparent;
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
   transition: all 0.3s ease;
 }
 
@@ -1002,7 +1016,7 @@ git config --global user.email "your.email@example.com"</pre
 
 .description-container:hover {
   // border-color: var(--color-primary);
-  box-shadow: var(--shadow-lg);
+  box-shadow: none;
 }
 
 /* 简短描述输入框样式 */
@@ -1025,7 +1039,7 @@ git config --global user.email "your.email@example.com"</pre
 
   .el-input__wrapper.is-focus {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 4px rgba(64, 158, 255, 0.2);
+    box-shadow: var(--shadow-focus);
   }
 
   .el-input__inner {
@@ -1058,7 +1072,7 @@ git config --global user.email "your.email@example.com"</pre
 
   .el-select__wrapper.is-focus {
     border-color: var(--color-danger);
-    box-shadow: 0 0 0 4px rgba(245, 108, 108, 0.2);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
   }
 
   .el-select__inner {
@@ -1092,7 +1106,7 @@ git config --global user.email "your.email@example.com"</pre
 
   .el-input__wrapper.is-focus {
     border-color: var(--color-success);
-    box-shadow: 0 0 0 4px rgba(103, 194, 58, 0.2);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
   }
 
   .el-input__inner {
@@ -1108,15 +1122,7 @@ git config --global user.email "your.email@example.com"</pre
 
 /* 提交信息输入框样式 */
 :deep(.commit-message-input) {
-  /* 添加背景和边框，让容器更明显 */
-  background: linear-gradient(
-    135deg,
-    var(--bg-container-hover) 0%,
-    #fff2e6 100%
-  );
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
-  transition: all 0.3s ease;
 
   .el-textarea__inner {
     border-radius: var(--radius-lg);
@@ -1135,7 +1141,7 @@ git config --global user.email "your.email@example.com"</pre
 
   .el-textarea__inner:focus {
     border-color: var(--color-warning);
-    box-shadow: 0 0 0 4px rgba(230, 162, 60, 0.2);
+    box-shadow: 0 0 0 3px rgba(230, 162, 60, 0.18);
     outline: none;
   }
 
@@ -1146,8 +1152,7 @@ git config --global user.email "your.email@example.com"</pre
 }
 
 :deep(.commit-message-input):hover {
-  border-color: var(--color-warning);
-  box-shadow: var(--shadow-lg);
+  box-shadow: none;
 }
 
 

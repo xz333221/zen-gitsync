@@ -96,8 +96,8 @@ const handleClick = (event: MouseEvent) => {
   border: none;
   background: transparent;
   cursor: pointer;
-  transition: all 0.3s ease;
-  border-radius: var(--radius-base);
+  transition: var(--dialog-transition);
+  border-radius: var(--btn-radius-sm);
   color: var(--text-secondary);
   padding: 0;
   
@@ -106,14 +106,15 @@ const handleClick = (event: MouseEvent) => {
   }
   
   &:focus-visible {
-    box-shadow: 0 0 0 2px var(--color-primary-light);
+    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.3);
   }
   
   // 尺寸变体
   &--small {
-    width: 24px;
-    height: 24px;
-    font-size: 14px; // SVG 图标根据 font-size 显示大小
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+    border-radius: var(--btn-radius-sm);
     
     :deep(.svg-icon) {
       width: 14px;
@@ -132,9 +133,10 @@ const handleClick = (event: MouseEvent) => {
   }
   
   &--medium {
-    width: 32px;
-    height: 32px;
-    font-size: 18px; // SVG 图标根据 font-size 显示大小
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+    border-radius: var(--btn-radius);
     
     :deep(.svg-icon) {
       width: 18px;
@@ -153,32 +155,33 @@ const handleClick = (event: MouseEvent) => {
   }
   
   &--large {
-    width: 36px;
-    height: 36px;
-    font-size: 20px; // SVG 图标根据 font-size 显示大小
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+    border-radius: var(--btn-radius);
     
     :deep(.svg-icon) {
-      width: 20px;
-      height: 20px;
-      font-size: 20px;
+      width: 22px;
+      height: 22px;
+      font-size: 22px;
     }
     
     :deep(.el-icon) {
-      font-size: 20px;
+      font-size: 22px;
     }
     
     .icon-image {
-      width: 20px;
-      height: 20px;
+      width: 22px;
+      height: 22px;
     }
   }
   
   // Hover 效果
   &:hover:not(.is-disabled) {
     color: v-bind(hoverColor);
-    background: rgba(64, 158, 255, 0.15);
-    transform: translateY(-2px);
-    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+    background: rgba(64, 158, 255, 0.1);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
     
     :deep(.svg-icon) {
       color: v-bind(hoverColor);
@@ -188,29 +191,29 @@ const handleClick = (event: MouseEvent) => {
   // Active 效果
   &:active:not(.is-disabled) {
     transform: translateY(0);
-    background: rgba(64, 158, 255, 0.2);
-    box-shadow: 0 1px 4px rgba(64, 158, 255, 0.15);
+    background: rgba(64, 158, 255, 0.15);
+    box-shadow: none;
   }
   
   // 激活状态
   &.is-active {
     color: v-bind(hoverColor);
-    background: rgba(64, 158, 255, 0.15);
+    background: rgba(64, 158, 255, 0.12);
     
     :deep(.svg-icon) {
       color: v-bind(hoverColor);
     }
     
     &:hover {
-      background: rgba(64, 158, 255, 0.25);
-      box-shadow: 0 2px 8px rgba(64, 158, 255, 0.25);
+      background: rgba(64, 158, 255, 0.18);
+      box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
     }
   }
   
   // 禁用状态
   &.is-disabled {
     cursor: not-allowed;
-    opacity: 0.5;
+    opacity: 0.4;
     color: var(--text-disabled);
     
     :deep(.svg-icon) {
@@ -222,7 +225,7 @@ const handleClick = (event: MouseEvent) => {
   .icon-image {
     display: block;
     object-fit: contain;
-    transition: all 0.3s ease;
+    transition: var(--dialog-transition);
   }
 }
 </style>

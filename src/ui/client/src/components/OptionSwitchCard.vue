@@ -24,7 +24,7 @@ function onChange(val: boolean) {
   <div class="option-card" :class="{ compact: props.compact }">
     <el-tooltip :content="tooltip" placement="top"  :show-after="200">
       <div class="option-header">
-        <div class="option-icon" :class="iconClass">
+        <div v-if="iconClass || $slots.icon" class="option-icon" :class="iconClass">
           <slot name="icon" />
         </div>
         <div class="option-info">
@@ -46,16 +46,16 @@ function onChange(val: boolean) {
 
 <style scoped>
 .option-card {
-  background: linear-gradient(135deg, var(--bg-container) 0%, #f8f9fa 100%);
+  background: var(--bg-container);
   border: 1px solid var(--border-component);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-base);
-  transition: all 0.3s ease;
+  border-radius: var(--dialog-radius-sm);
+  padding: var(--spacing-md);
+  transition: var(--dialog-transition);
   box-shadow: var(--shadow-sm);
 }
 
 .option-card.compact {
-  padding: var(--spacing-sm) var(--spacing-base);
+  padding: var(--spacing-sm) var(--spacing-md);
   min-width: 120px;
 }
 
@@ -68,44 +68,51 @@ function onChange(val: boolean) {
 .option-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-base);
+  gap: var(--spacing-md);
 }
 
 .option-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-base);
-  display: none;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--btn-radius-sm);
+  display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-primary);
   color: white;
   font-size: var(--font-size-xs);
   flex-shrink: 0;
+  transition: var(--dialog-transition);
 }
 
 .option-icon.warning { background: var(--color-danger); }
 .option-icon.success { background: var(--color-success); }
+.option-icon.info { background: var(--color-info); }
 
 .option-info { flex: 1; min-width: 0; }
 
 .option-title {
   margin: 0;
   font-size: var(--font-size-sm);
-  font-weight: 600;
-  
-  line-height: 1.2;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .option-switch :deep(.el-switch__label) {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .option-switch :deep(.el-switch__label.is-active) {
   color: var(--color-primary);
+}
+
+/* Switch 样式统一 */
+.option-switch :deep(.el-switch) {
+  --el-switch-off-color: var(--border-color-medium);
 }
 </style>
