@@ -8,7 +8,7 @@ import IconButton from '@components/IconButton.vue'
 
 interface Props {
   variant?: 'icon' | 'text'
-  size?: 'small' | 'default' | 'large'
+  size?: 'small' | 'medium' | 'large'
 }
 
 const props = withDefaults(defineProps<Props>(), {

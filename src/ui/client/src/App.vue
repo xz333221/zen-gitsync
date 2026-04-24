@@ -141,7 +141,6 @@ let initialX = 0;
 let initialY = 0;
 let initialGridTemplateColumns = '';
 let initialGridTemplateRows = '';
-let activeResizer: string | null = null;
 
 // 保存布局比例到localStorage
 function saveLayoutRatios() {
@@ -209,7 +208,6 @@ function loadLayoutRatios() {
 
 // 第一条竖分隔条拖拽（调整 GitStatus 与 中间列+右侧列 的比例）
 function startVResize(event: MouseEvent) {
-  activeResizer = 'v-resizer';
   isVResizing = true;
   initialX = event.clientX;
 
@@ -256,7 +254,6 @@ function handleVResize(event: MouseEvent) {
 
 // 第二条竖分隔条拖拽（调整 中间列 与 LogList 的比例）
 function startV2Resize(event: MouseEvent) {
-  activeResizer = 'v-resizer-2';
   isV2Resizing = true;
   initialX = event.clientX;
 
