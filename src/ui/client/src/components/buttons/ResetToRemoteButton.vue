@@ -24,8 +24,8 @@ const shouldShowReset = computed(() => {
 async function resetToRemote() {
   try {
     await ElMessageBox.confirm(
-      $t('@76872:确定要重置当前分支吗？').replace('{branch}', gitStore.currentBranch),
-      $t('@76872:重置到远程'),
+      $t('@76872:确定要重置当前分支吗？', { branch: gitStore.currentBranch || 'unknown' }),
+      $t('@76872:重置到远程') + (gitStore.currentBranch ? ` origin/${gitStore.currentBranch}` : ''),
       {
         confirmButtonText: $t('@76872:确定'),
         cancelButtonText: $t('@76872:取消'),

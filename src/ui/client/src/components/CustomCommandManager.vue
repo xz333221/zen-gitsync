@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, computed, watch, h, reactive, defineComponent } from 'vue'
+import { ref, computed, watch, reactive, defineComponent } from 'vue'
 import { ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, VideoPlay, Folder, CopyDocument } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
 import IconButton from '@components/IconButton.vue'
 import TemplateManager from '@components/TemplateManager.vue'
+import DirectoryBrowserDialog from '@components/DirectoryBrowserDialog.vue'
 
 export interface CustomCommand {
   id?: string
@@ -369,144 +370,22 @@ async function executeCommand(command: CustomCommand) {
   }
 }
 
+// 浏览目录弹窗状态
+const isBrowserDialogVisible = ref(false)
+
+// 打开目录浏览器
+function browseDirectory() {
+  isBrowserDialogVisible.value = true
+}
+
+// 目录浏览器选定回调
+function onBrowserSelect(path: string) {
+  newCommand.value.directory = path
+}
+
 // 使用当前目录
 function useCurrentDirectory() {
   newCommand.value.directory = configStore.currentDirectory || ''
-}
-
-// 浏览目录
-async function browseDirectory() {
-  try {
-    const response = await fetch("/api/browse_directory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        currentPath: newCommand.value.directory || configStore.currentDirectory,
-      }),
-    });
-    const result = await response.json();
-    if (result.success) {
-      selectDirectoryDialog(result);
-    } else if (result.error) {
-      ElMessage.error(result.error);
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@CMD01:浏览目录失败: ')}${(error as Error).message}`);
-  }
-}
-
-// 打开目录选择弹窗
-function selectDirectoryDialog(directoryData: any) {
-  if (!directoryData || !directoryData.items) return;
-  ElMessageBox.alert(
-    h("div", { class: "directory-browser" }, [
-      h("div", { class: "current-path" }, [
-        h("span", { class: "path-label" }, $t('@CMD01:当前路径: ')),
-        h("span", { class: "path-value" }, directoryData.path),
-      ]),
-      h("div", { class: "directory-list" }, [
-        directoryData.parentPath
-          ? h(
-              "div",
-              {
-                class: "directory-item parent-dir",
-                onClick: () => selectDirectory(directoryData.parentPath),
-              },
-              [
-                h(
-                  "span",
-                  { class: "dir-icon" },
-                  h(
-                    "svg",
-                    {
-                      class: "folder-icon",
-                      viewBox: "0 0 24 24",
-                      width: "20",
-                      height: "20",
-                      style: { fill: "var(--color-warning)" },
-                    },
-                    [
-                      h("path", {
-                        d: "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z",
-                      }),
-                    ]
-                  )
-                ),
-                h("span", { class: "dir-name" }, $t('@CMD01:返回上级目录')),
-              ]
-            )
-          : null,
-        ...directoryData.items.map((item: any) =>
-          h(
-            "div",
-            {
-              class: "directory-item",
-              onClick: () => selectDirectory(item.path),
-            },
-            [
-              h(
-                "span",
-                { class: "dir-icon" },
-                h(
-                  "svg",
-                  {
-                    class: "folder-icon",
-                    viewBox: "0 0 24 24",
-                    width: "20",
-                    height: "20",
-                    style: { fill: "var(--color-primary)" },
-                  },
-                  [
-                    h("path", {
-                      d: "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z",
-                    }),
-                  ]
-                )
-              ),
-              h("span", { class: "dir-name" }, item.name),
-            ]
-          )
-        ),
-      ]),
-    ]),
-    {
-      title: $t('@CMD01:浏览并选择目录'),
-      confirmButtonText: $t('@CMD01:确定'),
-      customClass: "directory-browser-dialog",
-      modalClass: "directory-browser-overlay",
-      callback: (action: string) => {
-        if (action === "confirm") {
-          newCommand.value.directory = directoryData.path;
-        }
-      },
-    }
-  );
-}
-
-// 选择目录后刷新对话框
-async function selectDirectory(dirPath: string) {
-  try {
-    ElMessageBox.close();
-    setTimeout(async () => {
-      try {
-        const response = await fetch("/api/browse_directory", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ currentPath: dirPath }),
-        });
-        const result = await response.json();
-        if (result.success) {
-          selectDirectoryDialog(result);
-        } else if (result.error) {
-          ElMessage.error(result.error);
-        }
-      } catch (error) {
-        ElMessage.error(`${$t('@CMD01:浏览目录失败: ')}${(error as Error).message}`);
-      }
-    }, 100);
-  } catch (error) {
-    ElMessage.error(`${$t('@CMD01:处理目录选择时出错: ')}${(error as Error).message}`);
-  }
 }
 
 // 暴露方法给父组件
@@ -735,6 +614,13 @@ defineExpose({
     :placeholder="$t('@CMD01:输入命令模板，例如: npm run build')"
     :edit-placeholder="$t('@CMD01:编辑命令模板')"
     :empty-description="$t('@CMD01:暂无保存的命令模板')"
+  />
+
+  <!-- 目录浏览器弹窗 -->
+  <DirectoryBrowserDialog
+    v-model="isBrowserDialogVisible"
+    :initial-path="newCommand.directory || configStore.currentDirectory"
+    @select="onBrowserSelect"
   />
 </template>
 

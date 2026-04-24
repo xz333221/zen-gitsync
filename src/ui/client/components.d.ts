@@ -22,6 +22,7 @@ declare module 'vue' {
     ConflictBlockViewer: typeof import('./src/components/ConflictBlockViewer.vue')['default']
     CreateTagButton: typeof import('./src/components/buttons/CreateTagButton.vue')['default']
     CustomCommandManager: typeof import('./src/components/CustomCommandManager.vue')['default']
+    DirectoryBrowserDialog: typeof import('./src/components/DirectoryBrowserDialog.vue')['default']
     DirectorySelector: typeof import('./src/components/DirectorySelector.vue')['default']
     DiscardAllChangesButton: typeof import('./src/components/buttons/DiscardAllChangesButton.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']

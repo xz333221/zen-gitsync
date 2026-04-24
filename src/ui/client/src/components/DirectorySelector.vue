@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import DirectoryBrowserDialog from "@components/DirectoryBrowserDialog.vue";
+import { ElMessage } from "element-plus";
 import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
-import { ref, h, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
 import IconButton from "@components/IconButton.vue";
@@ -25,6 +26,7 @@ const isDirectoryDialogVisible = ref(false);
 const newDirectoryPath = ref("");
 const isChangingDirectory = ref(false);
 const recentDirectories = ref<string[]>([]);
+const isBrowserDialogVisible = ref(false);
 
 // npm脚本相关
 const hasNpmScripts = ref(false);
@@ -264,136 +266,12 @@ onMounted(() => {
 
 // 浏览目录
 async function browseDirectory() {
-  try {
-    const response = await fetch("/api/browse_directory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        currentPath: newDirectoryPath.value || currentDirectory.value,
-      }),
-    });
-    const result = await response.json();
-    if (result.success) {
-      selectDirectoryDialog(result);
-    } else if (result.error) {
-      ElMessage.error(result.error);
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:浏览目录失败: ')}${(error as Error).message}`);
-  }
+  isBrowserDialogVisible.value = true;
 }
 
-// 打开目录选择弹窗（使用 MessageBox）
-function selectDirectoryDialog(directoryData: any) {
-  if (!directoryData || !directoryData.items) return;
-  ElMessageBox.alert(
-    h("div", { class: "directory-browser" }, [
-      h("div", { class: "current-path" }, [
-        h("span", { class: "path-label" }, "当前路径: "),
-        h("span", { class: "path-value" }, directoryData.path),
-      ]),
-      h("div", { class: "directory-list" }, [
-        directoryData.parentPath
-          ? h(
-              "div",
-              {
-                class: "directory-item parent-dir",
-                onClick: () => selectDirectory(directoryData.parentPath),
-              },
-              [
-                h(
-                  "span",
-                  { class: "dir-icon" },
-                  h(
-                    "svg",
-                    {
-                      class: "folder-icon",
-                      viewBox: "0 0 24 24",
-                      width: "20",
-                      height: "20",
-                      style: { fill: "var(--color-warning)" },
-                    },
-                    [
-                      h("path", {
-                        d: "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z",
-                      }),
-                    ]
-                  )
-                ),
-                h("span", { class: "dir-name" }, "返回上级目录"),
-              ]
-            )
-          : null,
-        ...directoryData.items.map((item: any) =>
-          h(
-            "div",
-            {
-              class: "directory-item",
-              onClick: () => selectDirectory(item.path),
-            },
-            [
-              h(
-                "span",
-                { class: "dir-icon" },
-                h(
-                  "svg",
-                  {
-                    class: "folder-icon",
-                    viewBox: "0 0 24 24",
-                    width: "20",
-                    height: "20",
-                    style: { fill: "var(--color-primary)" },
-                  },
-                  [
-                    h("path", {
-                      d: "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z",
-                    }),
-                  ]
-                )
-              ),
-              h("span", { class: "dir-name" }, item.name),
-            ]
-          )
-        ),
-      ]),
-    ]),
-    "浏览并选择目录",
-    {
-      confirmButtonText: $t('@CMD01:确定'),
-      customClass: "directory-browser-dialog",
-      callback: (action: string) => {
-        if (action === "confirm") {
-          newDirectoryPath.value = directoryData.path;
-        }
-      },
-    }
-  );
-}
-
-// 选择目录后刷新对话框
-async function selectDirectory(dirPath: string) {
-  try {
-    ElMessageBox.close();
-    setTimeout(async () => {
-      try {
-        const response = await fetch("/api/browse_directory", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ currentPath: dirPath }),
-        });
-        const result = await response.json();
-        if (result.success) {
-          selectDirectoryDialog(result);
-        } else if (result.error) {
-          ElMessage.error(result.error);
-        }
-      } catch (error) {
-        ElMessage.error(`${$t('@67CE7:浏览目录失败: ')}${(error as Error).message}`);
-      }
-    }, 100);
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:处理目录选择时出错: ')}${(error as Error).message}`);
-  }
+// 目录浏览器选定回调
+function onBrowserSelect(path: string) {
+  newDirectoryPath.value = path;
 }
 </script>
 
@@ -519,6 +397,13 @@ async function selectDirectory(dirPath: string) {
       </div>
     </template>
   </CommonDialog>
+
+  <!-- 目录浏览器弹窗 -->
+  <DirectoryBrowserDialog
+    v-model="isBrowserDialogVisible"
+    :initial-path="newDirectoryPath || currentDirectory"
+    @select="onBrowserSelect"
+  />
 </template>
 
 <style scoped>
@@ -590,10 +475,10 @@ async function selectDirectory(dirPath: string) {
   align-items: center;
   gap: 6px;
   padding: 0 var(--spacing-lg);
-  border: none;
+  border: 1px solid var(--color-primary);
   border-radius: var(--radius-md);
-  background: var(--color-primary-gradient);
-  color: white;
+  background: transparent;
+  color: var(--color-primary);
   font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
@@ -603,12 +488,11 @@ async function selectDirectory(dirPath: string) {
 }
 
 .browse-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .browse-btn:active {
-  transform: translateY(0);
+  background: rgba(59, 130, 246, 0.15);
 }
 
 .recent-directories {
@@ -637,7 +521,7 @@ async function selectDirectory(dirPath: string) {
 
 .dir-icon {
   font-size: var(--font-size-md);
-  color: #3498db;
+  color: var(--color-primary);
   flex-shrink: 0;
   margin-right: 0;
 }
@@ -656,92 +540,6 @@ async function selectDirectory(dirPath: string) {
 
 /* dialog-footer、footer-actions、dialog-cancel-btn、dialog-confirm-btn 基础样式已移至 @/styles/common.scss */
 
-/* 目录浏览器 MessageBox 全局类名的内容容器（仍可利用） */
-.directory-browser {
-  width: 100%;
-  height: 400px;
-  overflow: auto;
-}
-.current-path {
-  padding: 10px;
-  background-color: var(--bg-panel);
-  border-radius: var(--radius-base);
-  margin-bottom: 10px;
-  border: 1px solid var(--border-card);
-  display: flex;
-  align-items: center;
-  width: 100%;
-  box-sizing: border-box;
-}
-.path-label {
-  font-weight: bold;
-  margin-right: 5px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.path-value {
-  font-family: monospace;
-  word-break: break-all;
-  flex: 1;
-  min-width: 0;
-  background-color: var(--bg-container);
-  padding: 5px var(--spacing-base);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-card);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
-  width: 100%;
-}
-.directory-list {
-  list-style: none !important;
-  padding: 0;
-  margin: 0;
-  border: 1px solid var(--border-card);
-  border-radius: var(--radius-base);
-  max-height: 300px;
-  overflow-y: auto;
-  background-color: var(--bg-container);
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  box-sizing: border-box;
-}
-.directory-item {
-  padding: 10px var(--spacing-md);
-  border-bottom: 1px solid var(--border-card);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s ease;
-  position: relative;
-  width: 100%;
-  box-sizing: border-box;
-  list-style: none !important;
-}
-.directory-item:hover {
-  background-color: #ecf5ff;
-}
-.directory-item:last-child {
-  border-bottom: none;
-}
-.parent-dir {
-  background-color: var(--bg-panel);
-  font-weight: 500;
-}
-.dir-name {
-  display: flex;
-  align-items: center;
-  
-  line-height: 1.4;
-}
-.folder-icon {
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
-  transition: all 0.2s ease;
-}
-
-.directory-item:hover .folder-icon {
-  transform: scale(1.1);
-}
-
 /* 加载动画 */
 .is-loading {
   animation: rotating 2s linear infinite;
@@ -756,168 +554,4 @@ async function selectDirectory(dirPath: string) {
   }
 }
 </style>
-<!-- 添加全局样式，确保能影响body下的弹窗 -->
-<style lang="scss">
-/* 目录浏览器全局样式（使用嵌套写法） */
-.directory-browser-dialog {
-  border-radius: var(--radius-lg);
-  overflow: hidden;
 
-  .el-message-box__header {
-    background-color: var(--bg-panel);
-    padding: 15px var(--spacing-xl);
-    border-bottom: 1px solid var(--border-card);
-    position: relative;
-  }
-
-  .el-message-box__title {
-    color: var(--color-primary);
-    font-weight: 500;
-    font-size: var(--font-size-lg);
-  }
-
-  .el-message-box__headerbtn {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background-color: rgba(0, 0, 0, 0.05);
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    &:hover {
-      background-color: rgba(0, 0, 0, 0.1);
-      transform: rotate(90deg);
-
-      .el-message-box__close {
-        color: var(--color-primary);
-      }
-    }
-
-    .el-message-box__close {
-      color: var(--text-secondary);
-      font-weight: bold;
-      font-size: var(--font-size-md);
-    }
-  }
-
-  .el-message-box__content {
-    padding: var(--spacing-xl);
-  }
-
-  .el-message-box__btns {
-    padding: 10px var(--spacing-xl) 15px;
-    border-top: 1px solid var(--border-card);
-  }
-
-  /* 对话框内部内容区域 */
-  .directory-browser {
-    width: 100%;
-    height: 400px;
-    overflow: auto;
-  }
-
-  .current-path {
-    padding: 10px;
-    background-color: var(--bg-panel);
-    border-radius: var(--radius-base);
-    margin-bottom: 10px;
-    border: 1px solid var(--border-card);
-    display: flex;
-    align-items: center;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .path-label {
-    font-weight: bold;
-    margin-right: 5px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .path-value {
-    font-family: monospace;
-    word-break: break-all;
-    flex: 1;
-    min-width: 0;
-    background-color: var(--bg-container);
-    padding: 5px var(--spacing-base);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-card);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
-    width: 100%;
-  }
-
-  .directory-list {
-    list-style: none !important;
-    padding: 0;
-    margin: 0;
-    border: 1px solid var(--border-card);
-    border-radius: var(--radius-base);
-    max-height: 300px;
-    overflow-y: auto;
-    background-color: var(--bg-container);
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .directory-item {
-    padding: 10px var(--spacing-md);
-    border-bottom: 1px solid var(--border-card);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    transition: all 0.2s ease;
-    position: relative;
-    width: 100%;
-    box-sizing: border-box;
-    list-style: none !important; // 确保列表项没有项目符号
-
-    &:hover {
-      background-color: #ecf5ff;
-    }
-
-    &:last-child {
-      border-bottom: none;
-    }
-
-    .dir-icon {
-      margin-right: var(--spacing-md);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 24px;
-      height: 24px;
-      flex-shrink: 0;
-    }
-
-    .dir-name {
-      display: flex;
-      align-items: center;
-      
-      line-height: 1.4;
-    }
-
-    .folder-icon {
-      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
-      transition: all 0.2s ease;
-    }
-
-    &:hover .folder-icon {
-      transform: scale(1.1);
-    }
-  }
-
-  .parent-dir {
-    background-color: var(--bg-panel);
-    font-weight: 500;
-  }
-}
-</style>

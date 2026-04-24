@@ -2549,10 +2549,10 @@ onUnmounted(() => {
           :tooltip="isFullscreen ? $t('@CF05E:退出全屏') : $t('@CF05E:全屏显示')"
           @click="isFullscreen = !isFullscreen"
         >
-          <el-icon>
-            <Close v-if="isFullscreen" />
-            <FullScreen v-else />
-          </el-icon>
+          <el-icon v-if="!isFullscreen"><FullScreen /></el-icon>
+          <svg v-else viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" style="display:block">
+            <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+          </svg>
         </IconButton>
         <IconButton
           :tooltip="isConsoleExpanded ? $t('@CF05E:收起控制台') : $t('@CF05E:展开控制台')"

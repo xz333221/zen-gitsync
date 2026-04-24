@@ -760,4 +760,34 @@ body {
   letter-spacing: var(--letter-spacing-heading, -0.25px);
 }
 
+/* 统一 ElMessageBox 按钮样式 */
+.el-message-box__btns {
+  .el-button--primary {
+    background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%);
+    border: none;
+    box-shadow: var(--shadow-md);
+
+    &:hover {
+      background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+    }
+  }
+
+  .el-button--danger {
+    background: linear-gradient(135deg, var(--color-danger) 0%, var(--color-danger-dark, #c0392b) 100%);
+    border: none;
+    box-shadow: var(--shadow-md);
+  }
+
+  .el-button:not(.el-button--primary):not(.el-button--danger) {
+    background: var(--bg-container);
+    border: 1px solid var(--el-border-color);
+    color: var(--text-secondary);
+
+    &:hover {
+      color: var(--color-primary);
+      border-color: var(--color-primary);
+      background: var(--bg-container);
+    }
+  }
+}
 
