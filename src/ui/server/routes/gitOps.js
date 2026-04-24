@@ -16,6 +16,7 @@ export function registerGitOpsRoutes({
   execGitAddWithLockFilter,
   addCommandToHistory,
   clearCommandHistory,
+  checkAndClearGitLock,
   getIsGitRepo,
   setRecentPushStatus
 }) {
@@ -643,6 +644,9 @@ export function registerGitOpsRoutes({
         });
       }
 
+      // 尝试清理 Git 锁文件
+      await checkAndClearGitLock();
+
       // 执行 git reset --hard origin/branch 命令
       await execGitCommand(`git reset --hard origin/${branch}`);
       res.json({ success: true });
@@ -658,6 +662,9 @@ export function registerGitOpsRoutes({
   // 清除本地所有更改，包括未跟踪文件 (git reset --hard && git clean -fd)
   app.post('/api/discard-all-changes', async (req, res) => {
     try {
+      // 尝试清理 Git 锁文件
+      await checkAndClearGitLock();
+
       // 1. 执行 git reset --hard 丢弃已跟踪文件的更改
       await execGitCommand('git reset --hard');
       

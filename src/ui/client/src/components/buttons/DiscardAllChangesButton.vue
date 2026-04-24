@@ -30,6 +30,7 @@ async function discardAllChanges() {
         confirmButtonText: $t('@76872:确定'),
         cancelButtonText: $t('@76872:取消'),
         confirmButtonClass: 'el-button--danger',
+        dangerouslyUseHTMLString: true,
         type: 'warning'
       }
     )

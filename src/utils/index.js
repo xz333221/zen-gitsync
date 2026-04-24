@@ -365,6 +365,39 @@ function execGitCommand(command, options = {}) {
   })
 }
 
+/**
+ * 检查并尝试清理 Git 锁文件
+ * @returns {Promise<boolean>} 是否清理成功
+ */
+async function checkAndClearGitLock() {
+  try {
+    const cwd = getCwd();
+    let gitRoot;
+    try {
+      // 使用 execSync 快速获取 Git 根目录
+      const rootOutput = execSync('git rev-parse --show-toplevel', { cwd, encoding: 'utf-8' });
+      gitRoot = rootOutput.trim();
+    } catch (e) {
+      gitRoot = cwd;
+    }
+
+    const lockFilePath = path.join(gitRoot, '.git', 'index.lock');
+    try {
+      await fs.access(lockFilePath);
+      // 如果文件存在，尝试删除它
+      await fs.unlink(lockFilePath);
+      console.log(chalk.green(`✅ 已清理 Git 锁文件: ${lockFilePath}`));
+      return true;
+    } catch (e) {
+      // 文件不存在，不需要清理
+      return false;
+    }
+  } catch (error) {
+    console.error(chalk.red('清理 Git 锁文件失败:'), error.message);
+    return false;
+  }
+}
+
 // Function to get command history
 function getCommandHistory() {
   return [...commandHistory];
@@ -1001,6 +1034,7 @@ export {
   coloredLog, errorLog, execSyncGitCommand,
   execGitCommand, getCommandHistory, addCommandToHistory, // Add command history exports
   clearCommandHistory,
+  checkAndClearGitLock,
   registerSocketIO, // 导出注册Socket.io的函数
   getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
   judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,

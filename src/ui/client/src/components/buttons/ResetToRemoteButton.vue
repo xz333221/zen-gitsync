@@ -24,11 +24,13 @@ const shouldShowReset = computed(() => {
 async function resetToRemote() {
   try {
     await ElMessageBox.confirm(
-      `${$t('@76872:确定要重置当前分支 "')}${gitStore.currentBranch}${$t('@76872:" 到远程状态吗？这将丢失所有未推送的提交和本地更改。')}`,
-      $t('@76872:重置到远程分支'),
+      $t('@76872:确定要重置当前分支吗？').replace('{branch}', gitStore.currentBranch),
+      $t('@76872:重置到远程'),
       {
         confirmButtonText: $t('@76872:确定'),
         cancelButtonText: $t('@76872:取消'),
+        confirmButtonClass: 'el-button--danger',
+        dangerouslyUseHTMLString: true,
         type: 'warning'
       }
     )

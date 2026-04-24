@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { execGitCommand, getCommandHistory, addCommandToHistory, clearCommandHistory, registerSocketIO, execGitAddWithLockFilter } from '../../utils/index.js';
+import { execGitCommand, getCommandHistory, addCommandToHistory, clearCommandHistory, registerSocketIO, execGitAddWithLockFilter, checkAndClearGitLock } from '../../utils/index.js';
 import open from 'open';
 import config from '../../config.js';
 import chalk from 'chalk';
@@ -230,6 +230,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     execGitAddWithLockFilter,
     addCommandToHistory,
     clearCommandHistory,
+    checkAndClearGitLock,
     getIsGitRepo: () => isGitRepo,
     setRecentPushStatus: (v) => { recentPushStatus = v; }
   });
