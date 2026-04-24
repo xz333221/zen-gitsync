@@ -61,15 +61,19 @@ export default {
   '@F4137:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',
   // @F4137: file end
   // @2E184: file path: components\buttons\QuickPushButton.vue
-  '@2E184:一键推送所有': 'One click push to all',
+  '@2E184:一键推送所有': 'One click push all',
+  '@2E184:一键提交所有': 'One click commit all',
   '@2E184:暂存 + 提交 + 推送': 'Stage + Commit + Push',
+  '@2E184:暂存 + 提交': 'Stage + Commit',
   '@2E184:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',
   '@2E184:没有需要提交的更改': 'No changes to commit',
   '@2E184:请输入提交信息': 'Please enter commit message',
   '@2E184:当前分支没有上游分支': 'Current branch has no upstream branch',
   '@2E184:没有需要提交或推送的更改': 'No changes to commit or push',
+  '@2E184:没有需要提交的更改': 'No changes to commit',
   '@2E184:本地已提交，一键推送到远程仓库': 'Local changes committed, push to remote',
   '@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库': 'One-click: Stage all changes → Commit → Push to remote',
+  '@2E184:一键完成：暂存所有更改 → 提交': 'One-click: Stage all changes → Commit',
   // @2E184: file end
 
   // @PSTART: Project startup

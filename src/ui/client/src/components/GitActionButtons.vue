@@ -4,6 +4,7 @@ import StageButton from '@/components/buttons/StageButton.vue'
 import CommitButton from '@/components/buttons/CommitButton.vue'
 import PushButton from '@/components/buttons/PushButton.vue'
 import QuickPushButton from '@/components/buttons/QuickPushButton.vue'
+import QuickCommitButton from '@/components/buttons/QuickCommitButton.vue'
 
 interface Props {
   hasUserCommitMessage?: boolean
@@ -87,6 +88,14 @@ defineExpose({
       </div>
       
       <div class="right-actions">
+        <QuickCommitButton 
+          :from="from"
+          :has-user-commit-message="hasUserCommitMessage"
+          :final-commit-message="finalCommitMessage"
+          :skip-hooks="skipHooks"
+          @after-commit="handleAfterCommit"
+          @clear-fields="handleClearFields"
+        />
         <QuickPushButton 
           ref="quickPushRef"
           :from="from"
@@ -123,6 +132,7 @@ defineExpose({
 .right-actions {
   display: flex;
   align-items: stretch;
+  gap: var(--spacing-base);
 }
 
 </style>

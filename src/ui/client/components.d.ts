@@ -87,6 +87,7 @@ declare module 'vue' {
     ProjectStartupDialog: typeof import('./src/components/ProjectStartupDialog.vue')['default']
     PushButton: typeof import('./src/components/buttons/PushButton.vue')['default']
     PushProgressModal: typeof import('./src/components/PushProgressModal.vue')['default']
+    QuickCommitButton: typeof import('./src/components/buttons/QuickCommitButton.vue')['default']
     QuickPushButton: typeof import('./src/components/buttons/QuickPushButton.vue')['default']
     RemoteRepoCard: typeof import('./src/components/RemoteRepoCard.vue')['default']
     ResetToRemoteButton: typeof import('./src/components/buttons/ResetToRemoteButton.vue')['default']
