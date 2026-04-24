@@ -439,27 +439,27 @@ async function handleSave() {
 .settings-tabs {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 4px;
   width: 180px;
   flex-shrink: 0;
-  padding: var(--spacing-md);
-  background: linear-gradient(180deg, var(--el-fill-color-lighter) 0%, var(--el-fill-color-light) 100%);
+  padding: var(--spacing-sm);
+  background: var(--bg-container);
   border-radius: var(--radius-xl);
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--border-color);
 }
 
 .tab-item {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 10px 14px;
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
   color: var(--el-text-color-regular);
   font-size: var(--font-size-sm);
   position: relative;
-  overflow: hidden;
+  user-select: none;
 }
 
 .tab-item::before {
@@ -471,42 +471,31 @@ async function handleSave() {
   width: 3px;
   height: 0;
   background: var(--color-primary);
-  border-radius: 0 2px 2px 0;
-  transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0 3px 3px 0;
+  transition: height 0.2s ease;
 }
 
 .tab-item:hover {
-  background: var(--el-fill-color);
+  background: rgba(0, 0, 0, 0.04);
   color: var(--el-text-color-primary);
-  transform: translateX(2px);
 }
 
 .tab-item:hover::before {
-  height: 40%;
+  height: 50%;
 }
 
 .tab-item.active {
-  background: linear-gradient(135deg, var(--color-primary-light) 0%, rgba(64, 158, 255, 0.08) 100%);
+  background: rgba(64, 158, 255, 0.08);
   color: var(--color-primary);
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
 }
 
 .tab-item.active::before {
-  height: 70%;
+  height: 60%;
 }
 
 .tab-item .el-icon {
   font-size: var(--font-size-md);
-  transition: transform 0.2s ease;
-}
-
-.tab-item:hover .el-icon {
-  transform: scale(1.1);
-}
-
-.tab-item.active .el-icon {
-  transform: scale(1.15);
 }
 
 /* 右侧面板 */

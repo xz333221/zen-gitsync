@@ -488,7 +488,7 @@ function stopHResize() {
     </div>
   </main>
 
-  <footer class="main-footer app-footer p-4">
+  <footer class="main-footer app-footer px-4 py-2">
     <BranchSelector @branch-changed="handleBranchChanged" />
     <RemoteRepoCard />
   </footer>
@@ -500,27 +500,24 @@ function stopHResize() {
 
 <style>
 body {
-  font-family: 'Arial', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   margin: 0;
   padding: 0;
   background-color: var(--bg-page);
   overflow: hidden;
-  /* 防止出现滚动条 */
   height: 100vh;
 }
 
 .main-container {
   position: fixed;
   top: 64px;
-  /* 顶部导航栏高度 */
-  bottom: 60px;
-  /* 底部footer高度 */
+  bottom: 48px;
   left: 0;
   right: 0;
-  padding: var(--spacing-sm) 0;
+  padding: 8px;
   overflow: hidden;
   z-index: 1001;
-  /* 防止整体滚动 */
+  background: var(--bg-page);
 }
 
 .config-broken-banner {
@@ -589,14 +586,13 @@ body {
 
 .grid-layout {
   display: grid;
-  grid-template-columns: 2fr 8px 3fr; /* 左列 Git 状态 | 垂直分隔 | 右列 */
-  grid-template-rows: 1fr 8px 1fr;     /* 右列上下分区 | 水平分隔 | 右列上下分区 */
-  /* 左侧 Git 状态占满两行，右侧上方提交表单，下方提交历史，水平分隔条仅在右侧 */
+  grid-template-columns: 2fr 8px 3fr;
+  grid-template-rows: 1fr 8px 1fr;
   grid-template-areas:
     "git-status v-resizer commit-form"
     "git-status v-resizer h-resizer"
     "git-status v-resizer log-list";
-  gap: 6px; /* 面板间距 */
+  gap: 0;
   height: 100%;
 }
 
@@ -605,6 +601,10 @@ body {
   overflow: hidden;
   max-height: 100%;
   padding: 0;
+  background: var(--bg-container);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
 }
 
 .commit-form-panel {
@@ -612,6 +612,10 @@ body {
   overflow: hidden;
   max-height: 100%;
   padding: 0;
+  background: var(--bg-container);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
 }
 
 .log-list-panel {
@@ -619,6 +623,10 @@ body {
   overflow: hidden;
   max-height: 100%;
   padding: 0;
+  background: var(--bg-container);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
 }
 
 .main-header {
@@ -644,7 +652,20 @@ body {
 
 h1 {
   margin: 0;
-  font-size: var(--font-size-3xl);
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="dark"] h1 {
+  background: linear-gradient(135deg, #e2e8f0 0%, #f7fafc 50%, #edf2f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .header-info {
@@ -660,12 +681,18 @@ h1 {
 #user-info {
   display: flex;
   align-items: center;
-  padding: var(--spacing-base);
+  padding: 6px var(--spacing-base);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-component);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   flex-shrink: 0;
   transition: all 0.2s ease;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+#user-info:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.1);
 }
 
 .command-history-section {
@@ -709,26 +736,28 @@ h1 {
 }
 
 .tips {
-  margin-top: var(--spacing-xl);
-  padding: 15px;
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-lg);
   background-color: var(--bg-panel);
-  border-radius: 5px;
-  border-left: 4px solid var(--color-primary);
+  border-radius: var(--radius-lg);
+  border-left: 3px solid var(--color-primary);
 }
 
 .tips h3 {
   margin-top: 0;
   font-size: var(--font-size-md);
-  margin-bottom: 10px;
+  font-weight: 600;
+  margin-bottom: var(--spacing-base);
 }
 
 .code-block {
   background-color: var(--bg-code-dark);
   color: #f8f8f2;
-  font-family: monospace;
-  padding: 10px 15px;
-  border-radius: var(--radius-base);
-  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  padding: var(--spacing-base) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-base);
+  font-size: var(--font-size-sm);
 }
 
 /* 加载中样式 */
@@ -740,14 +769,23 @@ h1 {
 }
 
 .loading-card {
-  width: 300px;
+  width: 280px;
   text-align: center;
-  padding: 30px;
+  padding: 40px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
 }
 
 .loading-spinner {
-  font-size: 48px;
+  font-size: 40px;
   color: var(--color-primary);
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .user-warning {
@@ -761,7 +799,7 @@ h1 {
   left: 0;
   right: 0;
   z-index: 100;
-  height: 60px;
+  height: 48px;
   box-sizing: border-box;
 }
 
@@ -777,18 +815,15 @@ h1 {
   filter: drop-shadow(0 0 2em #42b883aa);
 }
 
-
-
 /* 垂直分隔条样式 */
 .vertical-resizer {
   grid-area: v-resizer;
-  background-color: #e8e8e8;
+  background-color: transparent;
   cursor: col-resize;
-  transition: background-color 0.2s, box-shadow 0.2s;
+  transition: background-color 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: var(--radius-base); /* 从8px减少到4px */
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.1); /* 减小阴影 */
+  border-radius: var(--radius-base);
 }
 
 .vertical-resizer::after {
@@ -797,35 +832,36 @@ h1 {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 2px; /* 从4px减少到2px */
-  background-color: #a0a0a0;
-  height: 40px; /* 从50px减少到40px */
-  border-radius: var(--radius-xs); /* 从4px减少到2px */
-  transition: background-color 0.2s, width 0.2s, box-shadow 0.2s;
+  width: 3px;
+  background-color: var(--color-gray-300);
+  height: 32px;
+  border-radius: 2px;
+  transition: background-color 0.2s, width 0.2s, height 0.2s, box-shadow 0.2s;
 }
 
 .vertical-resizer:hover,
 .vertical-resizer.active {
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2); /* 减小阴影 */
+  background-color: rgba(64, 158, 255, 0.06);
 }
 
 .vertical-resizer:hover::after,
 .vertical-resizer.active::after {
   background-color: var(--color-primary);
-  width: 3px; /* 从6px减少到3px */
-  box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
+  width: 4px;
+  height: 48px;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(64, 158, 255, 0.4);
 }
 
 /* 水平分隔条样式 */
 .horizontal-resizer {
   grid-area: h-resizer;
-  background-color: #e8e8e8;
+  background-color: transparent;
   cursor: row-resize;
-  transition: background-color 0.2s, box-shadow 0.2s;
+  transition: background-color 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: var(--radius-base); /* 从8px减少到4px */
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.1); /* 减小阴影 */
+  border-radius: var(--radius-base);
 }
 
 .horizontal-resizer::after {
@@ -834,24 +870,25 @@ h1 {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 40px; /* 从50px减少到40px */
-  height: 2px; /* 从4px减少到2px */
-  background-color: #a0a0a0;
-  border-radius: var(--radius-xs); /* 从4px减少到2px */
-  transition: background-color 0.2s, height 0.2s, box-shadow 0.2s;
+  width: 32px;
+  height: 3px;
+  background-color: var(--color-gray-300);
+  border-radius: 2px;
+  transition: background-color 0.2s, height 0.2s, width 0.2s, box-shadow 0.2s;
 }
 
 .horizontal-resizer:hover,
 .horizontal-resizer.active {
-  background-color: #d0d0d0;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2); /* 减小阴影 */
+  background-color: rgba(64, 158, 255, 0.06);
 }
 
 .horizontal-resizer:hover::after,
 .horizontal-resizer.active::after {
   background-color: var(--color-primary);
-  height: 3px; /* 从6px减少到3px */
-  box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); /* 减小阴影 */
+  height: 4px;
+  width: 48px;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(64, 158, 255, 0.4);
 }
 
 

@@ -166,18 +166,22 @@
 [data-theme="dark"] {
   /* Header 深色主题 */
   .app-header {
-    background: var(--bg-container-dark);
+    background: rgba(36, 41, 46, 0.82);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
     color: var(--text-primary-dark);
-    border-bottom-color: var(--border-color-dark);
-    box-shadow: var(--shadow-dark);
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   }
 
   /* Footer 深色主题 */
   .app-footer {
-    background: var(--bg-container-dark);
+    background: rgba(36, 41, 46, 0.82);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
     color: var(--text-primary-dark);
-    border-top-color: var(--border-color-dark);
-    box-shadow: var(--shadow-dark);
+    border-top-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.15);
   }
 
   /* Card 深色主题 */
@@ -289,50 +293,46 @@
   /* 分隔条（上下/左右）深色主题 */
   .vertical-resizer,
   .vertical-resizer-bottom {
-    background-color: #2b2f36 !important; /* 外层轨道 */
-    box-shadow: 0 0 2px rgba(0, 0, 0, 0.5) !important;
+    background-color: transparent !important;
   }
 
   .vertical-resizer::after,
   .vertical-resizer-bottom::after {
-    background-color: #5b6470 !important; /* 中间把手 */
+    background-color: rgba(255, 255, 255, 0.2) !important;
   }
 
   .vertical-resizer:hover,
   .vertical-resizer.active,
   .vertical-resizer-bottom:hover,
   .vertical-resizer-bottom.active {
-    background-color: #323741 !important;
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6) !important;
+    background-color: rgba(64, 158, 255, 0.08) !important;
   }
 
   .vertical-resizer:hover::after,
   .vertical-resizer.active::after,
   .vertical-resizer-bottom:hover::after,
   .vertical-resizer-bottom.active::after {
-    background-color: #57a0ff !important; /* 高亮为蓝色 */
-    box-shadow: 0 0 8px rgba(87, 160, 255, 0.65) !important;
+    background-color: #57a0ff !important;
+    box-shadow: 0 0 8px rgba(87, 160, 255, 0.5) !important;
   }
 
   .horizontal-resizer {
-    background-color: #2b2f36 !important;
-    box-shadow: 0 0 2px rgba(0, 0, 0, 0.5) !important;
+    background-color: transparent !important;
   }
 
   .horizontal-resizer::after {
-    background-color: #5b6470 !important;
+    background-color: rgba(255, 255, 255, 0.2) !important;
   }
 
   .horizontal-resizer:hover,
   .horizontal-resizer.active {
-    background-color: #323741 !important;
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6) !important;
+    background-color: rgba(64, 158, 255, 0.08) !important;
   }
 
   .horizontal-resizer:hover::after,
   .horizontal-resizer.active::after {
     background-color: #57a0ff !important;
-    box-shadow: 0 0 8px rgba(87, 160, 255, 0.65) !important;
+    box-shadow: 0 0 8px rgba(87, 160, 255, 0.5) !important;
   }
 
   /* 滚动条深色主题 */
@@ -351,6 +351,15 @@
   /* 主容器深色主题 */
   .main-container {
     background: var(--bg-page-dark);
+  }
+
+  /* 面板圆角卡片深色主题 */
+  .git-status-panel,
+  .commit-form-panel,
+  .log-list-panel {
+    background: var(--bg-container-dark) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
   }
 
   /* 提交表单容器深色主题 */
