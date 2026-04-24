@@ -24,7 +24,6 @@ import {
   RefreshRight,
   Filter,
   FullScreen,
-  Close,
   CopyDocument,
 } from "@element-plus/icons-vue";
 import "element-plus/dist/index.css";

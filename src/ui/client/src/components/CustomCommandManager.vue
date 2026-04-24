@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, computed, watch, reactive, defineComponent } from 'vue'
+import { ref, computed, watch, h, reactive, defineComponent } from 'vue'
 import { ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, VideoPlay, Folder, CopyDocument } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
