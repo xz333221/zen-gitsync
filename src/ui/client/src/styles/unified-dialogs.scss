@@ -3,6 +3,11 @@
    面向工具型产品的克制高级弹层语言
    ======================================================= */
 
+/* ===== Element Plus 变量覆盖 ===== */
+.el-dialog {
+  --el-dialog-padding-primary: 8px !important;
+}
+
 /* ===== Element Plus Dialog 全局样式覆盖 ===== */
 .el-overlay {
   background: var(--dialog-overlay) !important;
