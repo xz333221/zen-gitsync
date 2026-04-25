@@ -874,3 +874,19 @@ body {
   }
 }
 
+/* 提交历史表格紧凑样式 */
+.compact-table.el-table {
+  --el-table-row-height: 36px;
+  
+  .el-table__row {
+    height: var(--el-table-row-height);
+    td.el-table__cell {
+      padding: 4px 0;
+    }
+  }
+  
+  .el-table__header th.el-table__cell {
+    padding: 6px 0;
+  }
+}
+

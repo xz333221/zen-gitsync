@@ -1131,8 +1131,9 @@ function toggleFullscreen() {
             :data="filteredLogs"
             stripe
             border
+            size="small"
             v-loading="isLoading"
-            class="log-table"
+            class="log-table compact-table"
             :empty-text="isLoading ? $t('@A1833:加载中...') : $t('@A1833:没有匹配的提交记录')"
             height="450"
             @row-contextmenu="handleContextMenu"
@@ -1581,7 +1582,7 @@ function toggleFullscreen() {
 
 .filter-panel-header {
   background-color: var(--bg-panel);
-  padding: var(--spacing-base);
+  padding: var(--spacing-sm);
   margin-bottom: var(--spacing-base);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
@@ -1605,7 +1606,7 @@ function toggleFullscreen() {
 
 .filter-form {
   display: flex;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   align-items: center;
   justify-content: space-between;
 }
@@ -1628,24 +1629,33 @@ function toggleFullscreen() {
 
 .filter-input.date-range {
   width: 100%;
-  max-width: 280px;
+  max-width: 230px;
+}
+
+:deep(.el-range-editor.el-range-editor--small) {
+  width: 230px !important;
+  min-width: 230px !important;
+}
+
+:deep(.el-date-editor.date-range) {
+  width: 230px !important;
 }
 
 .compact-label {
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
-  margin-right: 6px;
+  margin-right: 4px;
   white-space: nowrap;
   font-weight: bold;
   border-right: 1px solid var(--border-card);
-  padding-right: var(--spacing-base);
+  padding-right: var(--spacing-sm);
 }
 
 .filter-action-button {
-  padding: var(--spacing-base) var(--spacing-lg);
+  padding: var(--spacing-xs) var(--spacing-md);
   border-radius: var(--radius-md);
   transition: all 0.3s;
-  min-width: 70px;
+  min-width: 60px;
   font-weight: 500;
 }
 
