@@ -289,6 +289,7 @@ body {
 .el-dialog {
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .el-dialog__header,
@@ -306,6 +307,7 @@ body {
   /* scroll only vertically by default */
   overflow-x: hidden;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 /* =======================================================
@@ -876,12 +878,12 @@ body {
 
 /* 提交历史表格紧凑样式 */
 .compact-table.el-table {
-  --el-table-row-height: 36px;
-  
+  --el-table-row-height: 32px;
+
   .el-table__row {
     height: var(--el-table-row-height);
     td.el-table__cell {
-      padding: 4px 0;
+      padding: 3px 0;
     }
   }
   

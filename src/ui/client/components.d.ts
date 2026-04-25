@@ -110,8 +110,6 @@ declare module 'vue' {
     UserInputParamConfig: typeof import('./src/components/flow/UserInputParamConfig.vue')['default']
     VersionNode: typeof import('./src/components/flow/nodes/VersionNode.vue')['default']
     WaitNode: typeof import('./src/components/flow/nodes/WaitNode.vue')['default']
-    ZenButton: typeof import('./src/components/ZenButton.vue')['default']
-    ZenCard: typeof import('./src/components/ZenCard.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

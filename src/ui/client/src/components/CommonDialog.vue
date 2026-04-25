@@ -210,11 +210,13 @@ function handleClosed() {
 // 通用底部按钮样式
 .common-dialog__footer {
   display: flex;
-  gap: var(--spacing-md);
+  align-items: center;
   justify-content: flex-end;
-  
+  gap: var(--spacing-md);
+  width: 100%;
+
   .el-button {
-    min-width: 80px;
+    min-width: 88px;
     border-radius: var(--btn-radius);
   }
 }
@@ -224,6 +226,7 @@ function handleClosed() {
   .el-dialog {
     display: flex;
     flex-direction: column;
+    min-height: 0;
     height: auto !important;
     max-height: 90vh;
   }
@@ -231,16 +234,16 @@ function handleClosed() {
   .el-dialog__footer {
     flex: 0 0 auto;
   }
-  
+
   .el-dialog__body {
     display: flex;
     flex-direction: column;
     flex: 1;
-    padding: var(--spacing-lg);
+    min-height: 0;
+    padding: var(--spacing-md);
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
-    min-height: 0;
   }
 }
 
@@ -256,6 +259,8 @@ function handleClosed() {
   &.common-dialog--flex {
     .el-dialog {
       max-height: 100vh !important;
+      width: 100vw;
+      height: 100vh !important;
     }
   }
 }
@@ -265,22 +270,23 @@ function handleClosed() {
   .el-dialog {
     display: flex;
     flex-direction: column;
+    min-height: 0;
     height: auto;
   }
   .el-dialog__header,
   .el-dialog__footer {
     flex: 0 0 auto;
   }
-  
+
   .el-dialog__body {
     display: flex;
     flex-direction: column;
     flex: 1;
+    min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
-    padding: var(--spacing-md);
+    padding: 8px var(--spacing-md) var(--spacing-md);
     box-sizing: border-box;
-    min-height: 0;
   }
 }
 </style>

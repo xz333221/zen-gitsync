@@ -40,39 +40,45 @@ withDefaults(defineProps<Props>(), {
 <style scoped lang="scss">
 .success-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(6px);
+  inset: 0;
+  background: var(--dialog-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: var(--spacing-2xl);
   z-index: 9999;
 }
 
 .success-container {
+  width: min(92vw, 420px);
   background: var(--bg-container);
+  border: 1px solid var(--dialog-border-color);
   border-radius: var(--dialog-radius);
-  padding: 40px;
+  padding: 32px 30px 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-xl);
-  box-shadow: var(--dialog-shadow-hover);
-  max-width: 400px;
+  gap: 18px;
+  box-shadow: var(--dialog-shadow);
   text-align: center;
 }
 
 .success-icon {
-  width: 80px;
-  height: 80px;
+  width: 76px;
+  height: 76px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-success) 10%, var(--bg-container) 90%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-success) 18%, transparent 82%);
 }
 
 .success-svg {
-  width: 100%;
-  height: 100%;
+  width: 48px;
+  height: 48px;
 }
 
 .success-circle {
@@ -82,7 +88,7 @@ withDefaults(defineProps<Props>(), {
   stroke-dasharray: 166;
   stroke-dashoffset: 166;
   fill: none;
-  animation: success-circle-animation 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: success-circle-animation 0.58s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .success-check {
@@ -92,17 +98,21 @@ withDefaults(defineProps<Props>(), {
   stroke-linejoin: round;
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
-  animation: success-check-animation 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.8s forwards;
+  animation: success-check-animation 0.24s cubic-bezier(0.22, 1, 0.36, 1) 0.5s forwards;
 }
 
 .success-text {
-  font-size: var(--font-size-2xl);
-  font-weight: 600;
+  max-width: 18ch;
+  font-size: clamp(20px, 2vw, 22px);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+  letter-spacing: var(--letter-spacing-heading);
   margin: 0;
   color: var(--text-title);
 }
 
 .success-description {
+  max-width: 28ch;
   font-size: var(--font-size-base);
   color: var(--text-secondary);
   margin: 0;
@@ -125,35 +135,35 @@ withDefaults(defineProps<Props>(), {
 /* 过渡动画 */
 .success-fade-enter-active,
 .success-fade-leave-active {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .success-fade-enter-from,
 .success-fade-leave-to {
   opacity: 0;
-  backdrop-filter: blur(0px);
 }
 
 .success-fade-enter-to,
 .success-fade-leave-from {
   opacity: 1;
-  backdrop-filter: blur(6px);
 }
 
 .success-fade-enter-active .success-container,
 .success-fade-leave-active .success-container {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .success-fade-enter-from .success-container,
 .success-fade-leave-to .success-container {
   opacity: 0;
-  transform: scale(0.95) translateY(10px);
+  transform: translateY(8px) scale(0.985);
 }
 
 .success-fade-enter-to .success-container,
 .success-fade-leave-from .success-container {
   opacity: 1;
-  transform: scale(1) translateY(0);
+  transform: translateY(0) scale(1);
 }
 </style>

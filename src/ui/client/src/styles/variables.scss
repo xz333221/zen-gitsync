@@ -269,10 +269,48 @@
   --shadow-hover: 0 4px 16px rgba(30, 58, 95, 0.12);
   --shadow-active: 0 2px 6px rgba(30, 58, 95, 0.14);
   --shadow-focus: 0 0 0 3px rgba(59, 130, 246, 0.22);
-  
+
   --shadow-dark: 0 2px 12px rgba(5, 10, 25, 0.36);
   --shadow-dark-lg: 0 6px 24px rgba(5, 10, 25, 0.48);
-  
+
+  /* Dialog / Overlay */
+  --dialog-radius: 16px;
+  --dialog-radius-sm: 12px;
+  --dialog-border-color: rgba(15, 23, 42, 0.08);
+  --dialog-border-color-dark: rgba(255, 255, 255, 0.08);
+  --dialog-shadow:
+    0 20px 48px rgba(15, 23, 42, 0.16),
+    0 6px 18px rgba(15, 23, 42, 0.08),
+    0 0 0 1px rgba(15, 23, 42, 0.04);
+  --dialog-shadow-hover:
+    0 24px 56px rgba(15, 23, 42, 0.18),
+    0 8px 24px rgba(15, 23, 42, 0.09),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+  --dialog-shadow-active:
+    0 14px 32px rgba(15, 23, 42, 0.14),
+    0 4px 12px rgba(15, 23, 42, 0.07),
+    0 0 0 1px rgba(15, 23, 42, 0.04);
+  --dialog-overlay: rgba(17, 24, 39, 0.44);
+  --dialog-overlay-dark: rgba(3, 7, 18, 0.68);
+  --dialog-header-bg: color-mix(in srgb, var(--bg-container) 92%, var(--color-primary) 8%);
+  --dialog-footer-bg: color-mix(in srgb, var(--bg-panel) 86%, var(--bg-container) 14%);
+  --dialog-close-hover-bg: color-mix(in srgb, var(--bg-component-hover) 82%, var(--color-primary) 18%);
+  --dialog-close-hover-color: var(--text-primary);
+  --dialog-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.16);
+
+  /* Dialog buttons */
+  --btn-radius: 10px;
+  --btn-radius-sm: 8px;
+  --btn-radius-lg: 12px;
+  --btn-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --btn-shadow-hover: 0 8px 18px rgba(37, 99, 235, 0.16);
+  --btn-shadow-active: 0 2px 6px rgba(15, 23, 42, 0.08);
+  --btn-success-shadow-hover: 0 8px 18px rgba(16, 185, 129, 0.16);
+  --btn-warning-shadow-hover: 0 8px 18px rgba(245, 158, 11, 0.16);
+  --btn-danger-shadow-hover: 0 8px 18px rgba(239, 68, 68, 0.16);
+  --dialog-transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  --dialog-transition-fast: all 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+
   /* ===== 文字颜色 ===== */
   
   /* 主要文字 */

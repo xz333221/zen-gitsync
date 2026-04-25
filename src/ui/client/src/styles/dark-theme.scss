@@ -174,8 +174,26 @@
   --shadow-md: var(--shadow-dark-lg);
   --shadow-lg: var(--shadow-dark-lg);
   --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.4);
-  
-  /* Git差异显示 - 深色主题调整 */
+
+  /* Dialog */
+  --dialog-border-color: var(--dialog-border-color-dark);
+  --dialog-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.46),
+    0 10px 28px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+  --dialog-shadow-hover:
+    0 28px 64px rgba(0, 0, 0, 0.5),
+    0 12px 32px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  --dialog-shadow-active:
+    0 16px 40px rgba(0, 0, 0, 0.4),
+    0 6px 16px rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+  --dialog-overlay: var(--dialog-overlay-dark);
+  --dialog-header-bg: color-mix(in srgb, var(--bg-container-dark) 88%, white 12%);
+  --dialog-footer-bg: color-mix(in srgb, var(--bg-panel-dark) 74%, var(--bg-container-dark) 26%);
+  --dialog-close-hover-bg: rgba(255, 255, 255, 0.08);
+  --dialog-close-hover-color: var(--text-primary-dark);
   --git-diff-context-bg: #24292e;
   --git-diff-context-color: #f8f8f2;
   --git-diff-header-bg: #1f2937;
