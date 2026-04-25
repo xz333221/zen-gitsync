@@ -762,14 +762,20 @@ onUnmounted(() => {
 /* 小按钮的悬浮效果调整 */
 .item-copy-button:hover,
 .output-copy-button:hover {
-  transform: translateY(-1px);
+  transform: scale(1.02);
   box-shadow: var(--shadow-md);
 }
 
 .item-copy-button:active,
 .output-copy-button:active {
-  transform: translateY(0);
+  transform: scale(0.98);
   box-shadow: var(--shadow-md);
+}
+
+.item-copy-button:focus-visible,
+.output-copy-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* 展开指示器样式（非交互式） */
@@ -789,8 +795,13 @@ onUnmounted(() => {
 }
 
 .enhanced-btn:active {
-  transform: translateY(-1px);
+  transform: scale(0.98);
   box-shadow: var(--shadow-md);
+}
+
+.enhanced-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* 按钮加载状态 */

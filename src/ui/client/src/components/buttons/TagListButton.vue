@@ -492,7 +492,16 @@ function formatDate(dateString: string): string {
   transition: all 0.3s ease;
   
   &:hover {
-    transform: translateY(-1px);
+    transform: scale(1.02);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 
@@ -519,8 +528,17 @@ function formatDate(dateString: string): string {
   overflow: hidden;
   
   &:hover {
-    transform: translateY(-1px);
+    transform: scale(1.02);
     border-color: #22c55e;
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid #22c55e;
+    outline-offset: 2px;
   }
 }
 
@@ -621,7 +639,16 @@ function formatDate(dateString: string): string {
   font-size: var(--font-size-sm);
   
   &:hover {
-    transform: translateY(-1px);
+    transform: scale(1.02);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid #22c55e;
+    outline-offset: 2px;
   }
 }
 

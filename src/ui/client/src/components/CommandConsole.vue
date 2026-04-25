@@ -3376,12 +3376,17 @@ onUnmounted(() => {
   transition: all 0.3s ease;
   
   &:hover {
-    transform: translateY(-1px);
+    transform: scale(1.02);
     box-shadow: var(--shadow-md);
   }
   
   &:active {
-    transform: translateY(0);
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 
@@ -3801,8 +3806,17 @@ pre.stderr {
   }
   
   &:hover:not(.step-disabled) {
-    transform: translateY(-1px);
+    transform: scale(1.02);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  }
+  
+  &:active:not(.step-disabled) {
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
   
   &.step-current {

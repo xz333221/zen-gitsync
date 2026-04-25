@@ -179,16 +179,17 @@
   
   &:hover {
     box-shadow: var(--btn-shadow-hover) !important;
-    transform: translateY(-1px);
+    transform: scale(1.02);
   }
   
   &:active {
     box-shadow: var(--btn-shadow-active) !important;
-    transform: translateY(0);
+    transform: scale(0.98);
   }
   
-  &:focus {
-    box-shadow: var(--btn-shadow) !important;
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 
@@ -202,12 +203,12 @@
   
   &:hover {
     box-shadow: var(--btn-success-shadow-hover) !important;
-    transform: translateY(-1px);
+    transform: scale(1.02);
   }
   
   &:active {
     box-shadow: var(--btn-shadow-active) !important;
-    transform: translateY(0);
+    transform: scale(0.98);
   }
 }
 
@@ -221,12 +222,17 @@
   
   &:hover {
     box-shadow: var(--btn-warning-shadow-hover) !important;
-    transform: translateY(-1px);
+    transform: scale(1.02);
   }
   
   &:active {
     box-shadow: var(--btn-shadow-active) !important;
-    transform: translateY(0);
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-warning);
+    outline-offset: 2px;
   }
 }
 
@@ -240,12 +246,17 @@
   
   &:hover {
     box-shadow: var(--btn-danger-shadow-hover) !important;
-    transform: translateY(-1px);
+    transform: scale(1.02);
   }
   
   &:active {
     box-shadow: var(--btn-shadow-active) !important;
-    transform: translateY(0);
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-danger);
+    outline-offset: 2px;
   }
 }
 
@@ -261,10 +272,17 @@
     border-color: var(--color-primary) !important;
     color: var(--color-primary) !important;
     background: rgba(64, 158, 255, 0.05) !important;
+    transform: scale(1.02);
   }
   
   &:active {
     background: rgba(64, 158, 255, 0.1) !important;
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 

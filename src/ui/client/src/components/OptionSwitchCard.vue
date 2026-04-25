@@ -62,7 +62,16 @@ function onChange(val: boolean) {
 .option-card:hover {
   border-color: var(--color-primary);
   box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  transform: scale(1.02);
+}
+
+.option-card:active {
+  transform: scale(0.98);
+}
+
+.option-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .option-header {

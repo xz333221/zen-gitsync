@@ -307,7 +307,7 @@ defineExpose({ openConfigEditor })
     resize: none;
     padding: var(--spacing-lg);
 
-    &:focus {
+    &:focus-visible {
       box-shadow: none;
     }
   }
@@ -368,8 +368,17 @@ defineExpose({ openConfigEditor })
 
   &:hover:not(:disabled) {
     background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-    transform: translateY(-1px);
+    transform: scale(1.02);
     box-shadow: var(--shadow-md);
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 

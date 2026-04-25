@@ -249,7 +249,7 @@
     background: rgba(255, 255, 255, 0.12);
     color: white;
     border-color: rgba(255, 255, 255, 0.2);
-    /* box-shadow: var(--shadow-md); */
+    transform: scale(1.02);
   }
 
   .modern-btn:disabled:hover {
@@ -412,9 +412,11 @@
     border-color: rgba(255, 255, 255, 0.25) !important;
   }
 
-  .el-textarea__inner:focus {
+  .el-textarea__inner:focus-visible {
     border-color: #409eff !important;
     box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.2) !important;
+    outline: 2px solid rgba(64, 158, 255, 0.3);
+    outline-offset: 2px;
   }
 
   .el-textarea__inner::placeholder {
@@ -440,9 +442,11 @@
     box-shadow: 0 4px 8px rgba(230, 162, 60, 0.2) !important;
   }
 
-  .commit-message-input .el-textarea__inner:focus {
+  .commit-message-input .el-textarea__inner:focus-visible {
     border-color: #e6a23c !important;
     box-shadow: 0 0 0 1px rgba(230, 162, 60, 0.28) !important;
+    outline: 2px solid rgba(230, 162, 60, 0.3);
+    outline-offset: 2px;
   }
 
   /* 提交信息输入框容器深色主题 */
@@ -732,6 +736,114 @@
     color: #f56c6c !important;
   }
 
+  /* 自定义对话框按钮深色主题 - 使用实色替代渐变 */
+  .dialog-confirm-btn {
+    background: var(--color-primary) !important;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3) !important;
+  }
+
+  .dialog-confirm-btn:hover {
+    background: var(--color-primary-light) !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
+  }
+
+  .primary-btn {
+    background: var(--color-primary) !important;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3) !important;
+  }
+
+  .primary-btn:hover {
+    background: var(--color-primary-light) !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
+  }
+
+  .danger-btn {
+    background: var(--color-danger) !important;
+    box-shadow: 0 2px 8px rgba(245, 108, 108, 0.3) !important;
+  }
+
+  .danger-btn:hover {
+    background: var(--color-danger-light) !important;
+    box-shadow: 0 4px 12px rgba(245, 108, 108, 0.4) !important;
+  }
+
+  .dialog-cancel-btn {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .dialog-cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
+    color: white !important;
+  }
+
+  /* ElMessageBox 按钮深色主题 */
+  .el-message-box__btns {
+    .el-button--primary {
+      background: var(--color-primary) !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3) !important;
+
+      &:hover {
+        background: var(--color-primary-light) !important;
+        transform: scale(1.02);
+      }
+
+      &:active {
+        transform: scale(0.98);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
+      }
+    }
+
+    .el-button--danger {
+      background: var(--color-danger) !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(245, 108, 108, 0.3) !important;
+
+      &:hover {
+        background: var(--color-danger-light) !important;
+        transform: scale(1.02);
+      }
+
+      &:active {
+        transform: scale(0.98);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--color-danger);
+        outline-offset: 2px;
+      }
+    }
+
+    .el-button:not(.el-button--primary):not(.el-button--danger) {
+      background: rgba(255, 255, 255, 0.08) !important;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      color: rgba(255, 255, 255, 0.9) !important;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.12) !important;
+        border-color: rgba(255, 255, 255, 0.25) !important;
+        color: white !important;
+        transform: scale(1.02);
+      }
+
+      &:active {
+        transform: scale(0.98);
+      }
+
+      &:focus-visible {
+        outline: 2px solid rgba(255, 255, 255, 0.5);
+        outline-offset: 2px;
+      }
+    }
+  }
+
   /* Element Plus按钮组件使用内置深色主题，通过CSS变量控制 */
 
   /* 特定组件深色主题 */
@@ -912,8 +1024,10 @@
     background-color: rgba(64, 158, 255, 0.2) !important;
   }
   
-  .el-dropdown-menu__item:focus {
+  .el-dropdown-menu__item:focus-visible {
     background-color: var(--bg-container-dark) !important;
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
   }
   
   .el-dropdown-menu__item.is-disabled {

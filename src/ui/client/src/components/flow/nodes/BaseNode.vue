@@ -117,7 +117,8 @@ const emit = defineEmits<{
   border: 2px solid var(--border-component);
 
   &.is-selected {
-    transform: translateY(-1px);
+    transform: scale(1.02);
+    box-shadow: var(--shadow-md);
   }
 
   &.disabled {

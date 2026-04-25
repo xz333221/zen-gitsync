@@ -888,11 +888,34 @@ git config --global user.email "your.email@example.com"</pre
   transition: all 0.3s ease;
   padding: 6px var(--spacing-base);
   font-size: var(--font-size-sm);
+
+  &:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-md);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
 }
 
 .header-actions :deep(.el-button:hover) {
-  transform: translateY(-1px);
+  transform: scale(1.02);
   box-shadow: var(--shadow-md);
+}
+
+.header-actions :deep(.el-button:active) {
+  transform: scale(0.98);
+}
+
+.header-actions :deep(.el-button:focus-visible) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* 左侧3个普通操作按钮 - 标准主色蓝 */
@@ -1143,7 +1166,7 @@ git config --global user.email "your.email@example.com"</pre
     box-shadow: var(--shadow-md);
   }
 
-  .el-textarea__inner:focus {
+  .el-textarea__inner:focus-visible {
     border-color: var(--color-warning);
     box-shadow: 0 0 0 3px rgba(230, 162, 60, 0.18);
     outline: none;
@@ -1248,8 +1271,17 @@ git config --global user.email "your.email@example.com"</pre
   transition: all 0.3s ease;
 
   &:hover {
-    transform: translateY(-1px);
+    transform: scale(1.02);
     box-shadow: var(--shadow-md);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 </style>

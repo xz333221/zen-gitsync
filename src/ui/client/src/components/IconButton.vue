@@ -107,6 +107,8 @@ const handleClick = (event: MouseEvent) => {
   
   &:focus-visible {
     box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.3);
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
   
   // 尺寸变体
@@ -180,7 +182,7 @@ const handleClick = (event: MouseEvent) => {
   &:hover:not(.is-disabled) {
     color: v-bind(hoverColor);
     background: rgba(64, 158, 255, 0.1);
-    transform: translateY(-1px);
+    transform: scale(1.02);
     box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
     
     :deep(.svg-icon) {
@@ -190,9 +192,15 @@ const handleClick = (event: MouseEvent) => {
   
   // Active 效果
   &:active:not(.is-disabled) {
-    transform: translateY(0);
+    transform: scale(0.98);
     background: rgba(64, 158, 255, 0.15);
     box-shadow: none;
+  }
+  
+  // Focus 效果
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
   
   // 激活状态

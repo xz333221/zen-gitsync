@@ -1419,8 +1419,17 @@ function toggleFullscreen() {
 }
 
 .branch-tag:hover {
-  transform: translateY(-1px);
+  transform: scale(1.02);
   box-shadow: var(--shadow-sm);
+}
+
+.branch-tag:active {
+  transform: scale(0.98);
+}
+
+.branch-tag:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .commit-count {

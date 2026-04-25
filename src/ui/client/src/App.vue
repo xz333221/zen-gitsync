@@ -540,7 +540,7 @@ function copyGitInit() {
 
 <style>
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'Plus Jakarta Sans', sans-serif;
   margin: 0;
   padding: 0;
   background-color: var(--bg-page);
@@ -729,17 +729,11 @@ h1 {
   font-weight: 700;
   letter-spacing: -0.6px;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  background: linear-gradient(135deg, #0f2244 0%, #1e3a5f 45%, #1d4ed8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #1e3a5f;
 }
 
 [data-theme="dark"] h1 {
-  background: linear-gradient(135deg, #e2e8f0 0%, #bfdbfe 50%, #93c5fd 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #93c5fd;
 }
 
 .header-info {

@@ -6,6 +6,20 @@
 @use './variables';
 
 /* =======================================================
+   尊重用户运动偏好 (prefers-reduced-motion)
+   ======================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* =======================================================
    全局滚动条默认样式（适用于所有滚动容器）
    使用 variables.scss 中的 --scrollbar-* 变量
    ======================================================= */
@@ -457,8 +471,7 @@ body {
   background: var(--color-gray-100);
   color: var(--text-primary);
   border-color: var(--border-color-dark);
-  transform: translateY(-1px);
-  /* box-shadow: var(--shadow-md); */
+  transform: scale(1.02);
 }
 
 .modern-btn:hover::before {
@@ -466,8 +479,12 @@ body {
 }
 
 .modern-btn:active {
-  transform: translateY(0);
-  box-shadow: var(--shadow-sm);
+  transform: scale(0.98);
+}
+
+.modern-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .modern-btn:disabled {
@@ -578,17 +595,22 @@ body {
   
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: var(--transition-all);
   position: relative;
   overflow: hidden;
 }
 
 .footer-btn:hover {
-  transform: translateY(-1px);
+  transform: scale(1.02);
 }
 
 .footer-btn:active {
-  transform: translateY(0);
+  transform: scale(0.98);
+}
+
+.footer-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* Footer 按钮光效动画 */
@@ -631,11 +653,16 @@ body {
 .dialog-cancel-btn:hover {
   background: var(--el-fill-color-light);
   border-color: var(--el-border-color-hover);
-  transform: translateY(-1px);
+  transform: scale(1.02);
 }
 
 .dialog-cancel-btn:active {
-  transform: translateY(0);
+  transform: scale(0.98);
+}
+
+.dialog-cancel-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* 对话框确认按钮 - 统一样式 */
@@ -661,11 +688,16 @@ body {
 .dialog-confirm-btn:hover {
   background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
   box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  transform: scale(1.02);
 }
 
 .dialog-confirm-btn:active {
-  transform: translateY(0);
+  transform: scale(0.98);
+}
+
+.dialog-confirm-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .dialog-confirm-btn:disabled {
@@ -700,12 +732,17 @@ body {
 }
 
 .primary-btn:hover {
-  transform: translateY(-1px);
+  transform: scale(1.02);
   box-shadow: var(--shadow-md);
 }
 
 .primary-btn:active {
-  transform: translateY(0);
+  transform: scale(0.98);
+}
+
+.primary-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .cancel-btn {
@@ -719,6 +756,11 @@ body {
   border-color: var(--el-border-color-hover);
 }
 
+.cancel-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .danger-btn {
   background: linear-gradient(135deg, var(--git-status-deleted) 0%, var(--color-danger-dark) 100%);
   color: white;
@@ -726,12 +768,17 @@ body {
 }
 
 .danger-btn:hover {
-  transform: translateY(-1px);
+  transform: scale(1.02);
   box-shadow: var(--shadow-md);
 }
 
 .danger-btn:active {
-  transform: translateY(0);
+  transform: scale(0.98);
+}
+
+.danger-btn:focus-visible {
+  outline: 2px solid var(--color-danger);
+  outline-offset: 2px;
 }
 
 /* =======================================================
@@ -766,9 +813,20 @@ body {
     background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%);
     border: none;
     box-shadow: var(--shadow-md);
+    transition: var(--transition-all);
 
     &:hover {
       background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+      transform: scale(1.02);
+    }
+
+    &:active {
+      transform: scale(0.98);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
     }
   }
 
@@ -776,17 +834,42 @@ body {
     background: linear-gradient(135deg, var(--color-danger) 0%, var(--color-danger-dark, #c0392b) 100%);
     border: none;
     box-shadow: var(--shadow-md);
+    transition: var(--transition-all);
+
+    &:hover {
+      transform: scale(1.02);
+    }
+
+    &:active {
+      transform: scale(0.98);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-danger);
+      outline-offset: 2px;
+    }
   }
 
   .el-button:not(.el-button--primary):not(.el-button--danger) {
     background: var(--bg-container);
     border: 1px solid var(--el-border-color);
     color: var(--text-secondary);
+    transition: var(--transition-all);
 
     &:hover {
       color: var(--color-primary);
       border-color: var(--color-primary);
       background: var(--bg-container);
+      transform: scale(1.02);
+    }
+
+    &:active {
+      transform: scale(0.98);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
     }
   }
 }

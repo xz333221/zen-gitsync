@@ -311,7 +311,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
       border-color: var(--color-gray-300);
     }
     
-    &:focus {
+    &:focus-visible {
       border-color: #3b82f6;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
@@ -421,7 +421,16 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
       transition: all 0.3s ease;
       
       &:hover {
-        transform: translateY(-1px);
+        transform: scale(1.02);
+      }
+      
+      &:active {
+        transform: scale(0.98);
+      }
+      
+      &:focus-visible {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
       }
     }
   }

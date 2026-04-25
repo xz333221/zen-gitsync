@@ -494,7 +494,16 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   transition: all 0.3s ease;
   
   &:hover {
-    transform: translateY(-1px);
+    transform: scale(1.02);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 
@@ -521,8 +530,17 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   overflow: hidden;
   
   &:hover {
-    transform: translateY(-1px);
+    transform: scale(1.02);
     border-color: var(--color-primary);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 
@@ -623,7 +641,16 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   font-size: var(--font-size-sm);
   
   &:hover {
-    transform: translateY(-1px);
+    transform: scale(1.02);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+  
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 

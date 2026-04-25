@@ -301,7 +301,7 @@ const tagTypeDescription = computed(() => {
       border-color: var(--color-gray-300);
     }
     
-    &:focus {
+    &:focus-visible {
       border-color: #22c55e;
       box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
     }
@@ -320,7 +320,7 @@ const tagTypeDescription = computed(() => {
       border-color: var(--color-gray-300);
     }
     
-    &:focus {
+    &:focus-visible {
       border-color: #22c55e;
       box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
     }
@@ -373,7 +373,16 @@ const tagTypeDescription = computed(() => {
       transition: all 0.3s ease;
       
       &:hover {
-        transform: translateY(-1px);
+        transform: scale(1.02);
+      }
+      
+      &:active {
+        transform: scale(0.98);
+      }
+      
+      &:focus-visible {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
       }
     }
   }
