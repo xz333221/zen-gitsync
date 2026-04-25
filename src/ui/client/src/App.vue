@@ -362,6 +362,14 @@ function stopHResize() {
 }
 
 // 目录切换逻辑已移到 DirectorySelector 组件内部
+
+function copyGitInit() {
+  navigator.clipboard.writeText('git init').then(() => {
+    ElMessage.success($t('@F13B4:已复制'))
+  }).catch(() => {
+    ElMessage.error('复制失败')
+  })
+}
 </script>
 
 <template>
@@ -371,7 +379,7 @@ function stopHResize() {
       <img :src="logo" alt="Zen GitSync Logo" class="logo" />
       <h1>Zen GitSync</h1>
     </div>
-    <div class="header-center" v-if="gitStore.isGitRepo">
+    <div class="header-center">
       <DirectorySelector variant="header" @toggle-npm-panel="handleToggleNpmPanel" />
     </div>
     <div class="header-info">
@@ -479,24 +487,33 @@ function stopHResize() {
         </template>
       </div>
       <div class="commit-form-panel" v-else>
-        <el-card shadow="hover">
-          <template #header>
-            <h2>Git{{ $t('@F13B4:仓库初始化') }}</h2>
-          </template>
-          <p>{{ $t('@F13B4:当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。') }}</p>
-          <!-- 实用提示 -->
-          <div class="tips">
-            <h3>{{ $t('@F13B4:可以使用以下命令初始化仓库：') }}</h3>
-            <div class="code-block">git init</div>
+        <div class="not-git-repo-card">
+          <div class="not-git-repo-icon">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/>
+              <path d="M14 2v6h6"/>
+              <path d="M2 15h10"/>
+              <path d="M5 12l-3 3 3 3"/>
+              <path d="M9 12l3 3-3 3"/>
+            </svg>
           </div>
-        </el-card>
+          <h2 class="not-git-repo-title">Git{{ $t('@F13B4:仓库初始化') }}</h2>
+          <p class="not-git-repo-desc">{{ $t('@F13B4:当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。') }}</p>
+          <div class="not-git-repo-tip">
+            <span class="tip-label">{{ $t('@F13B4:可以使用以下命令初始化仓库：') }}</span>
+            <div class="not-git-repo-code" @click="copyGitInit">
+              <code>git init</code>
+              <span class="copy-hint">{{ $t('@F13B4:点击复制') }}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 水平分隔条（提交表单 | 自定义指令） -->
       <div class="horizontal-resizer" id="h-resizer" @mousedown="startHResize"></div>
 
       <!-- 中间下方自定义指令 -->
-      <div class="cmd-console-panel" v-if="gitStore.isGitRepo">
+      <div class="cmd-console-panel">
         <CommandConsole />
       </div>
 
@@ -504,7 +521,7 @@ function stopHResize() {
       <div class="vertical-resizer-2" id="v-resizer-2" @mousedown="startV2Resize"></div>
 
       <!-- 右侧提交历史 -->
-      <div class="log-list-panel" v-if="gitStore.isGitRepo">
+      <div class="log-list-panel">
         <LogList />
       </div>
 
@@ -851,6 +868,89 @@ h1 {
 .user-warning {
   color: var(--color-warning);
   font-weight: bold;
+}
+
+/* 非Git仓库初始化提示卡片 */
+.not-git-repo-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--spacing-xl);
+  text-align: center;
+  background: var(--bg-container);
+  border-radius: var(--radius-xl);
+}
+
+.not-git-repo-icon {
+  color: var(--color-gray-400);
+  margin-bottom: var(--spacing-lg);
+  opacity: 0.7;
+}
+
+.not-git-repo-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.not-git-repo-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-lg) 0;
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+.not-git-repo-tip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.not-git-repo-tip .tip-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.not-git-repo-code {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--bg-code);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: all;
+}
+
+.not-git-repo-code:hover {
+  border-color: var(--color-primary);
+  background: var(--bg-hover);
+}
+
+.not-git-repo-code code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  background: transparent;
+  padding: 0;
+}
+
+.not-git-repo-code .copy-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.not-git-repo-code:hover .copy-hint {
+  opacity: 1;
 }
 
 .main-footer {

@@ -2559,20 +2559,12 @@ onUnmounted(() => {
             <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
           </svg>
         </IconButton>
-        <IconButton
-          :tooltip="isConsoleExpanded ? $t('@CF05E:收起控制台') : $t('@CF05E:展开控制台')"
-          @click="isConsoleExpanded = !isConsoleExpanded"
-        >
-          <el-icon :class="{ 'rotate-icon': !isConsoleExpanded }">
-            <ArrowDown />
-          </el-icon>
-        </IconButton>
+
       </div>
     </div>
 
     <!-- 内容区域 -->
-    <transition name="console-content-slide">
-      <div v-show="isConsoleExpanded" class="console-content">
+    <div class="console-content">
         <el-splitter
           ref="splitterRef"
           layout="horizontal"
@@ -2885,7 +2877,6 @@ onUnmounted(() => {
           </el-splitter-panel>
         </el-splitter>
       </div>
-    </transition>
   </div>
   
   <!-- 自定义命令管理弹窗 -->
@@ -2937,7 +2928,6 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 /* 命令控制台容器 */
 .command-console {
-  margin-top: var(--spacing-sm);
   background: var(--bg-console);
   border: 1px solid var(--border-console);
   border-radius: 10px;
@@ -2945,6 +2935,9 @@ onUnmounted(() => {
   box-shadow: var(--console-shadow);
   transition: all 0.3s ease;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   
   &:hover {
     box-shadow: var(--console-shadow-hover);
@@ -2954,6 +2947,7 @@ onUnmounted(() => {
   .console-content {
     flex: 1;
     overflow: hidden;
+    min-height: 0;
   }
 
   .termial-session {
@@ -2968,6 +2962,21 @@ onUnmounted(() => {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+
+    .orchestration-flow-panel,
+    .orchestration-steps-panel {
+      flex-shrink: 0;
+    }
+
+    .console-input-row {
+      flex-shrink: 0;
+    }
+
+    .console-output {
+      flex: 1;
+      max-height: none;
+      min-height: 80px;
+    }
   }
   
   /* 全屏模式 */
@@ -3307,8 +3316,6 @@ onUnmounted(() => {
   gap: 8px;
   padding: var(--spacing-xs) var(--spacing-sm);
   background: var(--bg-console-input);
-  margin: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--radius-lg);
   border: 1px solid var(--border-console-input);
   transition: all 0.3s ease;
   

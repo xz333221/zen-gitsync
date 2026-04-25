@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Document, ArrowUp, ArrowDown, Lock, Unlock, InfoFilled, Loading } from '@element-plus/icons-vue'
+import { Refresh, Document, ArrowUp, ArrowDown, Lock, Unlock, InfoFilled, Loading, Folder } from '@element-plus/icons-vue'
 import TreeIcon from '@/components/icons/TreeIcon.vue'
 import IconButton from '@/components/IconButton.vue'
 import ListIcon from '@/components/icons/ListIcon.vue'
@@ -872,9 +872,11 @@ defineExpose({
       v-loading="gitStore.isGitPulling || gitStore.isGitFetching" 
       :element-loading-text="gitStore.isGitPulling ? $t('@13D1C:正在拉取代码...') : $t('@13D1C:正在获取远程分支信息...')"
     >
-      <div v-if="!gitStore.isGitRepo" class="status-box">
+      <div v-if="!gitStore.isGitRepo" class="status-box not-git-repo">
         <div class="empty-status">
-          <p>{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
+          <el-icon class="empty-icon"><Folder /></el-icon>
+          <p class="empty-title">{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
+          <p class="empty-desc">{{ $t('@13D1C:请初始化Git仓库或切换到Git仓库目录') }}</p>
         </div>
       </div>
       
@@ -1526,6 +1528,44 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+}
+
+/* 非Git仓库空状态 */
+.status-box.not-git-repo {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+}
+
+.status-box.not-git-repo .empty-status {
+  background: transparent;
+}
+
+.status-box.not-git-repo .empty-icon {
+  width: 72px;
+  height: 72px;
+  font-size: 36px;
+  background: var(--bg-icon);
+  color: var(--color-gray-400);
+  margin-bottom: var(--spacing-lg);
+}
+
+.status-box.not-git-repo .empty-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-xs) 0;
+}
+
+.status-box.not-git-repo .empty-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 /* 分支信息样式 */

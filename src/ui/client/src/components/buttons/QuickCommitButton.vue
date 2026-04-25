@@ -134,6 +134,7 @@ defineExpose({
   height: 100%;
   &.form {
     width: 100%;
+    padding: 4px 12px;
   }
   &.drawer {
     width: auto;
@@ -142,14 +143,20 @@ defineExpose({
   .one-commit-content {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    .one-commit-icon {
+      font-size: 14px;
+    }
     .one-commit-text {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 2px;
+      gap: 1px;
+      .one-commit-title {
+        font-size: 13px;
+      }
       .one-commit-desc {
-        font-size: var(--font-size-xs);
+        font-size: 11px;
         opacity: 0.72;
         font-weight: 400;
         letter-spacing: 0.1px;

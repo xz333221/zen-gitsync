@@ -1118,7 +1118,11 @@ function toggleFullscreen() {
       class="content-area"  
       :class="{ 'with-filter': filterVisible }"
     >
-      <div v-if="errorMessage">{{ errorMessage }}</div>
+      <div v-if="errorMessage && gitStore.isGitRepo">{{ errorMessage }}</div>
+      <div v-else-if="!gitStore.isGitRepo" class="log-empty-state">
+        <el-icon class="log-empty-icon"><Document /></el-icon>
+        <span class="log-empty-text">{{ $t('@A1833:暂无提交记录') }}</span>
+      </div>
       <div class="content-area-content" v-else>
         <!-- 表格视图 -->
         <div class="table-view-container">
@@ -1339,6 +1343,27 @@ function toggleFullscreen() {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/* 空状态 */
+.log-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-base);
+  color: var(--text-tertiary);
+}
+
+.log-empty-icon {
+  font-size: 40px;
+  opacity: 0.5;
+}
+
+.log-empty-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
 }
 
 .content-area.with-filter {

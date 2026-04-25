@@ -190,6 +190,7 @@ function handleProgressComplete(_success: boolean) {
   height: 100%;
   &.form {
     width: 100%;
+    padding: 4px 12px;
   }
   &.drawer {
     width: auto;
@@ -198,14 +199,20 @@ function handleProgressComplete(_success: boolean) {
   .one-push-content {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    .one-push-icon {
+      font-size: 14px;
+    }
     .one-push-text {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 2px;
+      gap: 1px;
+      .one-push-title {
+        font-size: 13px;
+      }
       .one-push-desc {
-        font-size: var(--font-size-xs);
+        font-size: 11px;
         opacity: 0.72;
         font-weight: 400;
         letter-spacing: 0.1px;
