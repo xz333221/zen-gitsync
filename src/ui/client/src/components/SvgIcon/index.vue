@@ -60,5 +60,6 @@ const props = defineProps({
   vertical-align: -0.15em;
   fill: currentColor;
   overflow: hidden;
+  color: var(--text-secondary);
 }
 </style>

@@ -8,6 +8,12 @@
   --el-dialog-padding-primary: 8px !important;
 }
 
+/* ===== 图标统一颜色 ===== */
+// .el-icon,
+.svg-icon {
+  color: var(--text-secondary);
+}
+
 /* ===== Element Plus Dialog 全局样式覆盖 ===== */
 .el-overlay {
   background: var(--dialog-overlay) !important;
