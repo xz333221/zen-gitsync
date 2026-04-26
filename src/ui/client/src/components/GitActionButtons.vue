@@ -5,6 +5,7 @@ import CommitButton from '@/components/buttons/CommitButton.vue'
 import PushButton from '@/components/buttons/PushButton.vue'
 import QuickPushButton from '@/components/buttons/QuickPushButton.vue'
 import QuickCommitButton from '@/components/buttons/QuickCommitButton.vue'
+import GitOperationsButton from '@/components/buttons/GitOperationsButton.vue'
 
 interface Props {
   hasUserCommitMessage?: boolean

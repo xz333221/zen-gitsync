@@ -92,6 +92,14 @@
   /* 图标和装饰背景 */
   --bg-icon: var(--bg-icon-dark);
   --bg-icon-hover: var(--bg-icon-hover-dark);
+
+  /* 极浅背景 */
+  --bg-subtle: var(--bg-subtle-dark);
+  --bg-subtle-hover: var(--bg-subtle-hover-dark);
+
+  /* Header / Footer 毛玻璃背景 */
+  --bg-header: var(--bg-header-dark);
+  --bg-footer: var(--bg-footer-dark);
   
   /* 组件悬浮背景 */
   --bg-component-hover: var(--bg-component-hover-dark);
@@ -214,7 +222,7 @@
 [data-theme="dark"] {
   /* Header 深色主题 */
   .app-header {
-    background: rgba(18, 22, 32, 0.90);
+    background: var(--bg-header-dark);
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
     color: var(--text-primary-dark);
@@ -224,7 +232,7 @@
 
   /* Footer 深色主题 */
   .app-footer {
-    background: rgba(18, 22, 32, 0.90);
+    background: var(--bg-footer-dark);
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
     color: var(--text-primary-dark);
@@ -257,31 +265,24 @@
   }
 
   /* Modern Button 深色主题 */
-  // .modern-btn {
-  //   background: rgba(255, 255, 255, 0.08);
-  //   color: rgba(255, 255, 255, 0.9);
-  //   border-color: rgba(255, 255, 255, 0.1);
-  // }
-
   .modern-btn:hover {
     background: rgba(255, 255, 255, 0.12);
     color: white;
-    border-color: rgba(255, 255, 255, 0.2);
     transform: scale(1.02);
   }
 
   .modern-btn:disabled:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: transparent;
   }
 
   /* 用户信息区域深色主题 */
   #user-info {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--bg-subtle-dark);
     border-color: rgba(255, 255, 255, 0.1);
   }
 
   #user-info:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-subtle-hover-dark);
     border-color: rgba(255, 255, 255, 0.2);
   }
 
@@ -376,6 +377,13 @@
     background: var(--bg-container-dark) !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .git-status-panel:hover,
+  .commit-form-panel:hover,
+  .cmd-console-panel:hover,
+  .log-list-panel:hover {
+    box-shadow: var(--shadow-dark-lg) !important;
   }
 
   /* 提交表单容器深色主题 */

@@ -4,6 +4,7 @@
     :title="$t('@42BB9:设置')"
     size="large"
     :destroy-on-close="true"
+    :show-footer="activeTab !== 'commit'"
     custom-class="user-settings-dialog"
     @update:model-value="handleVisibleChange"
   >
@@ -28,6 +29,13 @@
           @click="activeTab = 'git'"
         >
           <span>{{ $t('@42BB9:Git 全局设置') }}</span>
+        </div>
+        <div
+          class="tab-item"
+          :class="{ active: activeTab === 'commit' }"
+          @click="activeTab = 'commit'"
+        >
+          <span>{{ $t('@42BB9:提交设置') }}</span>
         </div>
         <div
           class="tab-item"
@@ -170,6 +178,62 @@
           </el-form>
         </div>
 
+        <!-- 提交设置面板 -->
+        <div v-show="activeTab === 'commit'" class="settings-panel">
+          <div class="info-section">
+            <div class="info-card">
+              <div class="info-content">
+                <p class="info-title">{{ $t('@76872:提交设置') }}</p>
+                <p class="info-desc">{{ $t('@76872:这些设置实时生效') }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-title">
+              <span>{{ $t('@76872:提交格式与行为') }}</span>
+            </div>
+            <div class="settings-grid commit-settings-grid">
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@76872:标准化提交') }}</label>
+                <el-switch v-model="configStore.isStandardCommit" />
+              </div>
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@76872:跳过钩子检查') }}
+                  <el-tooltip :content="$t('@76872:添加 --no-verify 参数')" placement="top" :show-after="200">
+                    <el-icon class="qmark"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </label>
+                <el-switch v-model="configStore.skipHooks" />
+              </div>
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@76872:回车自动提交') }}
+                  <el-tooltip :content="$t('@76872:输入提交信息后按回车直接执行一键推送')" placement="top" :show-after="200">
+                    <el-icon class="qmark"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </label>
+                <el-switch v-model="configStore.autoQuickPushOnEnter" />
+              </div>
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@76872:Push完成自动关闭') }}
+                  <el-tooltip :content="$t('@76872:推送成功后自动关闭进度弹窗')" placement="top" :show-after="200">
+                    <el-icon class="qmark"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </label>
+                <el-switch v-model="configStore.autoClosePushModal" />
+              </div>
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@76872:自动填充默认提交信息') }}
+                  <el-tooltip :content="$t('@76872:打开页面或提交完成后自动填充默认提交信息')" placement="top" :show-after="200">
+                    <el-icon class="qmark"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </label>
+                <el-switch v-model="configStore.autoSetDefaultMessage" />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 编辑配置 JSON 面板 -->
         <div v-show="activeTab === 'config'" class="settings-panel config-panel">
           <div class="info-section">
@@ -200,7 +264,7 @@
     </div>
     
     <template #footer>
-      <div class="user-settings-footer">
+      <div v-if="activeTab !== 'commit'" class="user-settings-footer">
         <div></div>
         <div class="footer-actions">
           <button type="button" class="dialog-cancel-btn" @click="visible = false" :disabled="isLoading">
@@ -220,7 +284,7 @@
 import { $t } from '@/lang/static'
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Check } from '@element-plus/icons-vue'
+import { Check, InfoFilled } from '@element-plus/icons-vue'
 import CommonDialog from './CommonDialog.vue'
 import { useGitStore } from '@/stores/gitStore'
 import { useLocaleStore } from '@/stores/localeStore'
@@ -241,7 +305,7 @@ const emit = defineEmits<{
 
 const visible = ref(false)
 const isLoading = ref(false)
-const activeTab = ref<'general' | 'git' | 'config'>('general')
+const activeTab = ref<'general' | 'git' | 'commit' | 'config'>('general')
 
 // 通用设置
 const tempTheme = ref<'light' | 'dark' | 'auto'>('light')
@@ -261,6 +325,11 @@ const cfgPullRebase = ref<'false' | 'true' | 'merges'>('false')
 const cfgFetchPrune = ref(false)
 const cfgCoreAutoCrlf = ref<'true' | 'input' | 'false'>('true')
 const cfgInitDefaultBranch = ref('main')
+
+// ===== 提交设置（由 configStore 统一管理，实时持久化） =====
+// commitIsStandard → configStore.isStandardCommit
+// commitSkipHooks → configStore.skipHooks
+// commitAutoQuickPush → configStore.autoQuickPushOnEnter
 
 // 初始值（用于仅保存变更项）
 let initUserName = ''
@@ -879,4 +948,14 @@ html.dark .label-icon {
 }
 
 /* footer-actions、dialog-cancel-btn、dialog-confirm-btn 基础样式已移至 @/styles/common.scss */
+
+/* 提交设置 - 单列布局 */
+.commit-settings-grid {
+  grid-template-columns: 1fr !important;
+}
+
+.commit-settings-grid .setting-label {
+  text-align: left;
+  padding-right: 0;
+}
 </style>

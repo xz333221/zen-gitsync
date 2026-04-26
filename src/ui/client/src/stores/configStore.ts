@@ -153,6 +153,12 @@ export const useConfigStore = defineStore('config', () => {
   const autoClosePushModal = ref(true)
   // 自动设置默认提交信息（从localStorage加载，默认false）
   const autoSetDefaultMessage = ref(false)
+  // 标准化提交（从localStorage加载，默认false）
+  const isStandardCommit = ref(false)
+  // 跳过钩子检查（从localStorage加载，默认false）
+  const skipHooks = ref(false)
+  // 回车自动一键提交（从localStorage加载，默认false）
+  const autoQuickPushOnEnter = ref(false)
   // 主题设置（从localStorage加载，默认light）
   const theme = ref<'light' | 'dark' | 'auto'>('light')
   // 语言设置（从localStorage加载，默认zh-CN）
@@ -184,6 +190,27 @@ export const useConfigStore = defineStore('config', () => {
   watch(autoSetDefaultMessage, (newValue) => {
     localStorage.setItem('zen-gitsync-auto-set-default-message', newValue.toString())
   })
+
+  // 初始化：从localStorage加载isStandardCommit
+  const savedIsStandardCommit = localStorage.getItem('zen-gitsync-standard-commit')
+  if (savedIsStandardCommit !== null) {
+    isStandardCommit.value = savedIsStandardCommit === 'true'
+  }
+  watch(isStandardCommit, (v) => localStorage.setItem('zen-gitsync-standard-commit', v.toString()))
+
+  // 初始化：从localStorage加载skipHooks
+  const savedSkipHooks = localStorage.getItem('zen-gitsync-skip-hooks')
+  if (savedSkipHooks !== null) {
+    skipHooks.value = savedSkipHooks === 'true'
+  }
+  watch(skipHooks, (v) => localStorage.setItem('zen-gitsync-skip-hooks', v.toString()))
+
+  // 初始化：从localStorage加载autoQuickPushOnEnter
+  const savedAutoQuickPush = localStorage.getItem('zen-gitsync-auto-quick-push')
+  if (savedAutoQuickPush !== null) {
+    autoQuickPushOnEnter.value = savedAutoQuickPush === 'true'
+  }
+  watch(autoQuickPushOnEnter, (v) => localStorage.setItem('zen-gitsync-auto-quick-push', v.toString()))
 
   // 初始化：从localStorage加载theme配置
   const savedTheme = localStorage.getItem('zen-gitsync-theme') as 'light' | 'dark' | 'auto' | null
@@ -932,6 +959,9 @@ export const useConfigStore = defineStore('config', () => {
     config,
     autoClosePushModal,
     autoSetDefaultMessage,
+    isStandardCommit,
+    skipHooks,
+    autoQuickPushOnEnter,
     theme,
     locale,
 

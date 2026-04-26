@@ -2,7 +2,6 @@
 import { $t } from '@/lang/static'
 import { ref } from 'vue'
 import { Plus, Menu, Check, Refresh } from '@element-plus/icons-vue'
-import InlineCard from '@components/InlineCard.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import { useGitStore } from '@stores/gitStore'
 import IconButton from '@components/IconButton.vue'
@@ -76,42 +75,38 @@ async function refreshCurrentBranch() {
 
 <template>
   <div class="branch-info" v-if="gitStore.currentBranch">
-    <InlineCard class="branch-wrapper" compact>
-      <template #content>
-        <el-tooltip :content="$t('@F13B4:当前分支')" placement="top" effect="dark" :show-after="200">
-          <span class="branch-label" :aria-label="$t('@F13B4:当前分支')" :title="$t('@F13B4:当前分支')">
-            <el-icon class="branch-icon">
-              <!-- 简洁的分支图标 -->
-              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M256 160a96 96 0 1 1 0 192 96 96 0 0 1 0-192zm0 512a96 96 0 1 1 0 192 96 96 0 0 1 0-192zm512-480a96 96 0 1 1 0 192 96 96 0 0 1 0-192zM352 256h288a128 128 0 0 1 128 128v48a144 144 0 0 1-144 144H368a16 16 0 0 0-16 16v64h-96v-64a112 112 0 0 1 112-112h256a80 80 0 0 0 80-80v-16a64 64 0 0 0-64-64H352v-64z"/>
-              </svg>
-            </el-icon>
-          </span>
-        </el-tooltip>
-        <el-select 
-          v-model="gitStore.currentBranch" 
-          @change="handleBranchChange"
-          :loading="gitStore.isChangingBranch" 
-          class="branch-select"
-        >
-          <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
-        </el-select>
-      </template>
-      <template #actions>
-        <IconButton
-          :tooltip="$t('@F13B4:创建新分支')"
-          @click="openCreateBranchDialog"
-        >
-          <el-icon><Plus /></el-icon>
-        </IconButton>
-        <IconButton
-          :tooltip="$t('@CMDCON:刷新')"
-          @click="refreshCurrentBranch"
-        >
-          <el-icon :class="{ 'is-loading': isRefreshingBranch }"><Refresh /></el-icon>
-        </IconButton>
-      </template>
-    </InlineCard>
+    <div class="branch-wrapper">
+      <el-tooltip :content="$t('@F13B4:当前分支')" placement="top" effect="dark" :show-after="200">
+        <span class="branch-label" :aria-label="$t('@F13B4:当前分支')" :title="$t('@F13B4:当前分支')">
+          <el-icon class="branch-icon">
+            <!-- 简洁的分支图标 -->
+            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor" d="M256 160a96 96 0 1 1 0 192 96 96 0 0 1 0-192zm0 512a96 96 0 1 1 0 192 96 96 0 0 1 0-192zm512-480a96 96 0 1 1 0 192 96 96 0 0 1 0-192zM352 256h288a128 128 0 0 1 128 128v48a144 144 0 0 1-144 144H368a16 16 0 0 0-16 16v64h-96v-64a112 112 0 0 1 112-112h256a80 80 0 0 0 80-80v-16a64 64 0 0 0-64-64H352v-64z"/>
+            </svg>
+          </el-icon>
+        </span>
+      </el-tooltip>
+      <el-select 
+        v-model="gitStore.currentBranch" 
+        @change="handleBranchChange"
+        :loading="gitStore.isChangingBranch" 
+        class="branch-select"
+      >
+        <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
+      </el-select>
+      <IconButton
+        :tooltip="$t('@F13B4:创建新分支')"
+        @click="openCreateBranchDialog"
+      >
+        <el-icon><Plus /></el-icon>
+      </IconButton>
+      <IconButton
+        :tooltip="$t('@CMDCON:刷新')"
+        @click="refreshCurrentBranch"
+      >
+        <el-icon :class="{ 'is-loading': isRefreshingBranch }"><Refresh /></el-icon>
+      </IconButton>
+    </div>
 
     <!-- 创建分支对话框 -->
     <CommonDialog
@@ -192,6 +187,12 @@ async function refreshCurrentBranch() {
   padding-top: 6px;
   margin-right: var(--spacing-sm);
   font-weight: bold;
+}
+
+.branch-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-base);
 }
 
 .branch-select {

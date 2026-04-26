@@ -315,7 +315,7 @@ body {
    ======================================================= */
 
 .app-header {
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--bg-header);
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
   color: var(--text-primary);
@@ -330,7 +330,7 @@ body {
 
 /* Footer 样式 */
 .app-footer {
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--bg-footer);
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
   color: var(--text-primary);
@@ -444,40 +444,23 @@ body {
   align-items: center;
   justify-content: center;
   border: none;
-  // background: var(--color-gray-50);
-  // color: var(--text-secondary);
+  background: transparent;
+  color: var(--text-secondary);
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: var(--transition-all);
   font-family: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  // border: 1px solid var(--border-color-medium);
+  border: none;
   position: relative;
   overflow: hidden;
 }
 
-// .modern-btn::before {
-//   content: '';
-//   position: absolute;
-//   top: 0;
-//   left: 0;
-//   right: 0;
-//   bottom: 0;
-//   background: linear-gradient(135deg, rgba(64, 158, 255, 0.1) 0%, rgba(102, 177, 255, 0.1) 100%);
-//   opacity: 0;
-//   transition: opacity var(--transition-base) ease;
-// }
-
 .modern-btn:hover {
-  background: var(--color-gray-100);
+  background: var(--bg-component-hover);
   color: var(--text-primary);
-  border-color: var(--border-color-dark);
   transform: scale(1.02);
-}
-
-.modern-btn:hover::before {
-  opacity: 1;
 }
 
 .modern-btn:active {
@@ -496,9 +479,8 @@ body {
 }
 
 .modern-btn:disabled:hover {
-  background: var(--color-gray-50);
+  background: transparent;
   transform: none;
-  box-shadow: none;
 }
 
 .modern-btn .btn-icon {

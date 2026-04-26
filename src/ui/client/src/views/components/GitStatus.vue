@@ -854,7 +854,7 @@ defineExpose({
           <ResetToRemoteButton v-if="!isSelectionMode" />
         </div>
         <div class="flex items-center">
-          <GitOperationsButton variant="icon" />
+          <!-- <GitOperationsButton variant="icon" /> -->
           <IconButton
             :tooltip="$t('@13D1C:刷新状态')"
             size="large"

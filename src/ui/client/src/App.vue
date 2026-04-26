@@ -7,12 +7,10 @@ import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
 import CommandConsole from '@components/CommandConsole.vue'
 import CommandHistory from '@views/components/CommandHistory.vue'
-import InlineCard from '@components/InlineCard.vue'
 import RemoteRepoCard from '@components/RemoteRepoCard.vue'
 import BranchSelector from '@components/BranchSelector.vue'
 import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
-
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -387,27 +385,23 @@ function copyGitInit() {
       <div class="header-actions" v-if="gitStore.isGitRepo">
         <CommandHistory />
       </div>
-      <!-- 用户信息卡片 -->
-      <InlineCard id="user-info" class="user-info-card" compact>
-        <template #content>
-          <template v-if="gitStore.userName && gitStore.userEmail">
-            <el-tooltip :content="gitStore.userEmail" placement="bottom" effect="dark" :show-after="200">
-              <span class="user-name">{{ gitStore.userName }}</span>
-            </el-tooltip>
-          </template>
-          <template v-else>
-            <span class="user-label">{{ $t('@F13B4:用户: ') }}</span>
-            <span class="user-warning">{{ $t('@F13B4:未配置') }}</span>
-          </template>
-        </template>
-        <template #actions>
-          <el-tooltip :content="$t('@F13B4:用户设置')" placement="bottom" effect="dark" :show-after="200">
-            <button class="modern-btn btn-icon-28" @click="openUserSettingsDialog">
-              <el-icon class="btn-icon"><Setting /></el-icon>
-            </button>
+      <!-- 用户信息 -->
+      <div id="user-info" class="user-info-card">
+        <template v-if="gitStore.userName && gitStore.userEmail">
+          <el-tooltip :content="gitStore.userEmail" placement="bottom" effect="dark" :show-after="200">
+            <span class="user-name">{{ gitStore.userName }}</span>
           </el-tooltip>
         </template>
-      </InlineCard>
+        <template v-else>
+          <span class="user-label">{{ $t('@F13B4:用户: ') }}</span>
+          <span class="user-warning">{{ $t('@F13B4:未配置') }}</span>
+        </template>
+        <el-tooltip :content="$t('@F13B4:用户设置')" placement="bottom" effect="dark" :show-after="200">
+          <button class="modern-btn btn-icon-28" @click="openUserSettingsDialog">
+            <el-icon class="btn-icon"><Setting /></el-icon>
+          </button>
+        </el-tooltip>
+      </div>
     </div>
   </header>
 
@@ -645,6 +639,11 @@ body {
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.git-status-panel:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .commit-form-panel {
@@ -656,6 +655,11 @@ body {
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.commit-form-panel:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .cmd-console-panel {
@@ -667,6 +671,11 @@ body {
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.cmd-console-panel:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .log-list-panel {
@@ -678,6 +687,11 @@ body {
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.log-list-panel:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .main-header {
@@ -757,12 +771,12 @@ h1 {
   box-shadow: none;
   flex-shrink: 0;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--bg-subtle);
 }
 
 #user-info:hover {
   border-color: var(--color-primary);
-  background: rgba(59, 130, 246, 0.04);
+  background: rgba(59, 130, 246, 0.08);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
 }
 
@@ -798,11 +812,11 @@ h1 {
 
 .status-box {
   background-color: var(--bg-code);
-  border: 1px solid #e1e4e8;
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-medium);
+  border-radius: var(--radius-md);
   padding: 15px;
   white-space: pre-wrap;
-  font-family: monospace;
+  font-family: var(--font-mono);
   overflow-y: auto;
 }
 
@@ -812,6 +826,7 @@ h1 {
   background-color: var(--bg-panel);
   border-radius: var(--radius-lg);
   border-left: 3px solid var(--color-primary);
+  transition: var(--transition-all);
 }
 
 .tips h3 {
@@ -823,12 +838,13 @@ h1 {
 
 .code-block {
   background-color: var(--bg-code-dark);
-  color: #f8f8f2;
+  color: #e2e8f0;
   font-family: var(--font-mono);
   padding: var(--spacing-base) var(--spacing-lg);
   border-radius: var(--radius-md);
   margin-bottom: var(--spacing-base);
   font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
 }
 
 /* 加载中样式 */
@@ -907,7 +923,7 @@ h1 {
 
 .not-git-repo-tip .tip-label {
   font-size: var(--font-size-xs);
-  color: var(--text-muted);
+  color: var(--text-tertiary);
 }
 
 .not-git-repo-code {
@@ -925,7 +941,7 @@ h1 {
 
 .not-git-repo-code:hover {
   border-color: var(--color-primary);
-  background: var(--bg-hover);
+  background: var(--bg-panel);
 }
 
 .not-git-repo-code code {
@@ -938,7 +954,7 @@ h1 {
 
 .not-git-repo-code .copy-hint {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   opacity: 0;
   transition: opacity 0.2s ease;
 }

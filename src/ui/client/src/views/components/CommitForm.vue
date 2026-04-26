@@ -2,7 +2,7 @@
 import { $t } from "@/lang/static";
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage } from "element-plus";
-import { ArrowDown, Loading, Setting } from "@element-plus/icons-vue";
+import { ArrowDown, Loading } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";
@@ -12,8 +12,6 @@ import { useConfigStore } from "@stores/configStore";
 import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
-import OptionSwitchCard from "@components/OptionSwitchCard.vue";
-import IconButton from "@components/IconButton.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -30,7 +28,10 @@ const isUpdatingStatus = ref(false); // 添加状态更新中的标识
 const placeholder = ref("输入提交信息...");
 // 添加默认提交信息变量
 const defaultCommitMessage = ref("");
-const isStandardCommit = ref(false);
+const isStandardCommit = computed({
+  get: () => configStore.isStandardCommit,
+  set: (v) => { configStore.isStandardCommit = v }
+})
 const commitType = ref("feat");
 const commitScope = ref("");
 const commitDescription = ref("");
@@ -49,10 +50,16 @@ const scopeDialogVisible = ref(false);
 const defaultMessageDialogVisible = ref(false);
 
 // 跳过钩子
-const skipHooks = ref(false);
+const skipHooks = computed({
+  get: () => configStore.skipHooks,
+  set: (v) => { configStore.skipHooks = v }
+})
 
 // 回车自动一键提交开关
-const autoQuickPushOnEnter = ref(false);
+const autoQuickPushOnEnter = computed({
+  get: () => configStore.autoQuickPushOnEnter,
+  set: (v) => { configStore.autoQuickPushOnEnter = v }
+})
 
 const gitActionButtonsRef = ref<InstanceType<typeof GitActionButtons> | null>(
   null
@@ -74,21 +81,6 @@ const commitTypeOptions = computed(() => [
 
 // 添加默认提交信息模板相关变量
 const messageTemplates = ref<string[]>([]);
-
-// 监听标准化提交状态变化，保存到localStorage
-watch(isStandardCommit, (newValue) => {
-  localStorage.setItem("zen-gitsync-standard-commit", newValue.toString());
-});
-
-// 监听跳过钩子状态变化，保存到localStorage
-watch(skipHooks, (newValue) => {
-  localStorage.setItem("zen-gitsync-skip-hooks", newValue.toString());
-});
-
-// 监听回车自动一键提交状态变化，保存到localStorage
-watch(autoQuickPushOnEnter, (newValue) => {
-  localStorage.setItem("zen-gitsync-auto-quick-push", newValue.toString());
-});
 
 // 计算最终的提交信息
 const finalCommitMessage = computed(() => {
@@ -398,27 +390,7 @@ watch(
 );
 
 onMounted(async () => {
-  // 从localStorage加载标准化提交选项
-  const savedStandardCommit = localStorage.getItem(
-    "zen-gitsync-standard-commit"
-  );
-  if (savedStandardCommit !== null) {
-    isStandardCommit.value = savedStandardCommit === "true";
-  }
-
-  // 从localStorage加载跳过钩子选项
-  const savedSkipHooks = localStorage.getItem("zen-gitsync-skip-hooks");
-  if (savedSkipHooks !== null) {
-    skipHooks.value = savedSkipHooks === "true";
-  }
-
-  // 从localStorage加载回车自动一键提交选项
-  const savedAutoQuickPush = localStorage.getItem(
-    "zen-gitsync-auto-quick-push"
-  );
-  if (savedAutoQuickPush !== null) {
-    autoQuickPushOnEnter.value = savedAutoQuickPush === "true";
-  }
+  // 标准化提交、跳过钩子、回车自动提交现在由 configStore 统一管理
 
   // autoClosePushModal 现在由 configStore 统一管理，不需要在这里加载
 
@@ -463,8 +435,7 @@ onMounted(async () => {
   }
 });
 
-// 添加提交设置弹窗状态变量
-const commitSettingsDialogVisible = ref(false);
+// 添加提交设置弹窗状态变量（已移至用户设置弹窗）
 
 // 向父组件暴露方法已移除，配置编辑器已封装到ConfigEditorButton组件中
 
@@ -572,31 +543,8 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
   <div class="card app-card" :class="{ 'is-pushing': gitStore.isPushing }">
     <div class="card-header app-card-header">
       <div class="header-left">
-        <!-- 提交模式开关 -->
-        <OptionSwitchCard
-          v-model="isStandardCommit"
-          title=""
-          :tooltip="$t('@76872:选择传统或标准化提交格式')"
-          :active-text="$t('@76872:标准化')"
-          :inactive-text="$t('@76872:普通')"
-          active-color="var(--color-primary)"
-        >
-        </OptionSwitchCard>
-        <IconButton
-          v-if="gitStore.userName !== '' && gitStore.userEmail !== ''"
-          :tooltip="$t('@76872:提交设置')"
-          size="small"
-          @click="commitSettingsDialogVisible = true"
-        >
-          <el-icon><Setting /></el-icon>
-        </IconButton>
-      </div>
-      <!-- Git操作按钮组 - 移到标题右侧 -->
-      <div
-        class="header-actions"
-        v-if="gitStore.userName !== '' && gitStore.userEmail !== ''"
-      >
         <GitActionButtons
+          v-if="gitStore.userName !== '' && gitStore.userEmail !== ''"
           ref="gitActionButtonsRef"
           :has-user-commit-message="hasUserCommitMessage"
           :final-commit-message="finalCommitMessage"
@@ -610,6 +558,9 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
           @before-push="handleQuickPushBefore"
           @clear-fields="clearCommitFields"
         />
+      </div>
+      <div class="header-right">
+        <GitOperationsButton class="ml-auto" variant="icon" />
       </div>
     </div>
 
@@ -816,52 +767,13 @@ git config --global user.email "your.email@example.com"</pre
     :description="successState.description"
   />
 
-  <!-- 提交设置弹窗 -->
-  <CommonDialog
-    v-model="commitSettingsDialogVisible"
-    :title="$t('@76872:提交设置')"
-    size="medium"
-    :show-footer="false"
-    custom-class="commit-settings-dialog"
-  >
-    <div class="commit-settings-content">
-      <!-- Git钩子开关 -->
-      <OptionSwitchCard
-        v-model="skipHooks"
-        :title="$t('@76872:跳过钩子检查')"
-        :tooltip="$t('@76872:添加 --no-verify 参数')"
-        active-color="var(--color-danger)"
-      >
-      </OptionSwitchCard>
-
-      <!-- 回车自动提交开关 -->
-      <OptionSwitchCard
-        v-model="autoQuickPushOnEnter"
-        :title="$t('@76872:回车自动提交')"
-        :tooltip="$t('@76872:输入提交信息后按回车直接执行一键推送')"
-        active-color="var(--color-success)"
-      >
-      </OptionSwitchCard>
-
-      <!-- Push完成后自动关闭弹窗 -->
-      <OptionSwitchCard
-        v-model="configStore.autoClosePushModal"
-        :title="$t('@76872:Push完成自动关闭')"
-        :tooltip="$t('@76872:推送成功后自动关闭进度弹窗')"
-        active-color="var(--color-primary)"
-      >
-      </OptionSwitchCard>
-
-      <!-- 自动设置默认提交信息 -->
-      <OptionSwitchCard
-        v-model="configStore.autoSetDefaultMessage"
-        :title="$t('@76872:自动填充默认提交信息')"
-        :tooltip="$t('@76872:打开页面或提交完成后自动填充默认提交信息')"
-        active-color="var(--color-success)"
-      >
-      </OptionSwitchCard>
+  <!-- 状态更新指示器 -->
+  <transition name="el-fade-in-linear">
+    <div v-if="isUpdatingStatus" class="status-updating-indicator">
+      <el-icon class="is-loading"><Loading /></el-icon>
+      <span>{{ $t("@76872:更新状态中...") }}</span>
     </div>
-  </CommonDialog>
+  </transition>
 </template>
 
 <style scoped lang="scss">

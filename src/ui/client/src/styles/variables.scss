@@ -139,6 +139,18 @@
   --bg-icon-dark: rgba(255, 255, 255, 0.1);
   --bg-icon-hover: #e8eaed;
   --bg-icon-hover-dark: rgba(255, 255, 255, 0.15);
+
+  /* 极浅背景（用于嵌入型组件如 Header 内的 inline card） */
+  --bg-subtle: rgba(0, 0, 0, 0.02);
+  --bg-subtle-dark: rgba(255, 255, 255, 0.05);
+  --bg-subtle-hover: rgba(0, 0, 0, 0.04);
+  --bg-subtle-hover-dark: rgba(255, 255, 255, 0.09);
+
+  /* Header / Footer 毛玻璃背景 */
+  --bg-header: rgba(255, 255, 255, 0.82);
+  --bg-header-dark: rgba(18, 22, 32, 0.90);
+  --bg-footer: rgba(255, 255, 255, 0.82);
+  --bg-footer-dark: rgba(18, 22, 32, 0.90);
   
   /* 组件悬浮背景 */
   --bg-component-hover: #e9ecef;

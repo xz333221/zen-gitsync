@@ -668,6 +668,7 @@ export default {
   '@42BB9:已用系统程序打开配置文件': 'Opened config file in system app',
   '@42BB9:打开文件失败': 'Failed to open file',
   '@42BB9:打开文件失败: ': 'Failed to open file: ',
+  '@42BB9:提交设置': 'Commit Settings',
   // @42BB9: file end
   // @2AEBA: file path: components\GlobalLoading.vue
   '@2AEBA:加载中...': 'Loading...',
@@ -1002,6 +1003,9 @@ export default {
   '@76872:Push完成自动关闭': 'Auto-close after push',
   '@76872:推送成功后自动关闭进度弹窗': 'Automatically close the progress dialog after successful push',
   '@76872:自动填充默认提交信息': 'Auto-fill default commit message',
+  '@76872:提交格式与行为': 'Commit Format & Behavior',
+  '@76872:标准化提交': 'Standardized Commit',
+  '@76872:这些设置实时生效': 'These settings take effect instantly',
   '@76872:打开页面或提交完成后自动填充默认提交信息': 'Automatically fill in default commit message when opening page or after committing',
   '@76872:收起': 'Fold up',
   '@76872:正文及页脚': 'Main text and footer',
