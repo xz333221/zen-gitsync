@@ -4,7 +4,6 @@
     :title="$t('@42BB9:设置')"
     size="large"
     :destroy-on-close="true"
-    :show-footer="activeTab !== 'commit'"
     custom-class="user-settings-dialog"
     @update:model-value="handleVisibleChange"
   >
@@ -263,8 +262,8 @@
       </div>
     </div>
     
-    <template #footer>
-      <div v-if="activeTab !== 'commit'" class="user-settings-footer">
+    <template #footer v-if="activeTab !== 'commit'">
+      <div class="user-settings-footer">
         <div></div>
         <div class="footer-actions">
           <button type="button" class="dialog-cancel-btn" @click="visible = false" :disabled="isLoading">
