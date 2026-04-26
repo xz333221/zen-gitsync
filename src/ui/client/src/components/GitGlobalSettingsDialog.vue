@@ -15,28 +15,25 @@
     >
       <!-- 左侧标签页切换 -->
       <div class="settings-tabs">
-        <div 
-          class="tab-item" 
+        <div
+          class="tab-item"
           :class="{ active: activeTab === 'general' }"
           @click="activeTab = 'general'"
         >
-          <el-icon><Setting /></el-icon>
           <span>{{ $t('@42BB9:通用设置') }}</span>
         </div>
-        <div 
-          class="tab-item" 
+        <div
+          class="tab-item"
           :class="{ active: activeTab === 'git' }"
           @click="activeTab = 'git'"
         >
-          <el-icon><InfoFilled /></el-icon>
           <span>{{ $t('@42BB9:Git 全局设置') }}</span>
         </div>
-        <div 
-          class="tab-item" 
+        <div
+          class="tab-item"
           :class="{ active: activeTab === 'config' }"
           @click="onClickConfigTab"
         >
-          <el-icon><Edit /></el-icon>
           <span>{{ $t('@42BB9:编辑配置') }}</span>
         </div>
       </div>
@@ -47,9 +44,6 @@
         <div v-show="activeTab === 'general'" class="settings-panel">
           <div class="info-section">
             <div class="info-card">
-              <div class="info-icon">
-                <el-icon><Setting /></el-icon>
-              </div>
               <div class="info-content">
                 <p class="info-title">{{ $t('@42BB9:通用配置') }}</p>
                 <p class="info-desc">{{ $t('@42BB9:自定义应用的外观和语言') }}</p>
@@ -59,7 +53,6 @@
 
           <div class="settings-section">
             <div class="section-title">
-              <el-icon class="title-icon"><Sunny /></el-icon>
               <span>{{ $t('@42BB9:外观') }}</span>
             </div>
             <div class="settings-grid">
@@ -76,7 +69,6 @@
 
           <div class="settings-section">
             <div class="section-title">
-              <el-icon class="title-icon"><ChatDotRound /></el-icon>
               <span>{{ $t('@42BB9:语言') }}</span>
             </div>
             <div class="settings-grid">
@@ -95,9 +87,6 @@
         <div v-show="activeTab === 'git'" class="settings-panel">
           <div class="info-section">
             <div class="info-card">
-              <div class="info-icon">
-                <el-icon><InfoFilled /></el-icon>
-              </div>
               <div class="info-content">
                 <p class="info-title">{{ $t('@42BB9:全局配置') }}</p>
                 <p class="info-desc">{{ $t('@42BB9:这些设置将影响全局 Git 配置，对所有 Git 仓库生效') }}</p>
@@ -128,7 +117,6 @@
             <!-- 高级设置：常用全局 Git 配置 -->
             <div class="settings-section">
               <div class="section-title">
-                <el-icon class="title-icon"><Setting /></el-icon>
                 <span>{{ $t('@42BB9:高级配置') }}</span>
               </div>
               <div class="settings-grid">
@@ -186,9 +174,6 @@
         <div v-show="activeTab === 'config'" class="settings-panel config-panel">
           <div class="info-section">
             <div class="info-card">
-              <div class="info-icon">
-                <el-icon><Edit /></el-icon>
-              </div>
               <div class="info-content">
                 <p class="info-title">{{ $t('@42BB9:编辑当前项目的配置文件') }}</p>
                 <p class="info-desc">{{ $t('@42BB9:直接编辑 JSON，支持所有配置项') }}</p>
@@ -235,7 +220,7 @@
 import { $t } from '@/lang/static'
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { InfoFilled, Setting, Check, Sunny, ChatDotRound, Edit } from '@element-plus/icons-vue'
+import { Check } from '@element-plus/icons-vue'
 import CommonDialog from './CommonDialog.vue'
 import { useGitStore } from '@/stores/gitStore'
 import { useLocaleStore } from '@/stores/localeStore'
@@ -560,7 +545,6 @@ async function openSystemConfigFile() {
 .tab-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
   padding: 10px 14px;
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -648,16 +632,9 @@ async function openSystemConfigFile() {
 .section-title {
   display: flex;
   align-items: center;
-  gap: var(--spacing-base);
   margin-bottom: var(--spacing-lg);
-  
   font-weight: 600;
   color: var(--color-text-title);
-}
-
-.section-title .title-icon {
-  font-size: var(--font-size-md);
-  color: var(--color-primary);
 }
 
 .settings-grid {

@@ -9,6 +9,7 @@ import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
 import IconButton from "@components/IconButton.vue";
 import SvgIcon from "@components/SvgIcon/index.vue";
+import claudeCodeIcon from "@/assets/icons/svg/claudecode-color.svg";
 import { getFolderNameFromPath } from "@/utils/path";
 
 const props = withDefaults(defineProps<{
@@ -88,6 +89,29 @@ async function onOpenInVscode() {
     const result = await response.json();
     if (result.success) {
       ElMessage.success('已用 VSCode 打开目录');
+    } else if (result.error) {
+      ElMessage.error(result.error);
+    }
+  } catch (error) {
+    ElMessage.error(`打开失败: ${(error as Error).message}`);
+  }
+}
+
+// 用 Claude Code 打开当前目录
+async function onOpenInClaudeCode() {
+  try {
+    if (!currentDirectory.value) {
+      ElMessage.warning('当前目录路径为空');
+      return;
+    }
+    const response = await fetch('/api/open-directory-with-claude-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: currentDirectory.value }),
+    });
+    const result = await response.json();
+    if (result.success) {
+      ElMessage.success('已用 Claude Code 打开目录');
     } else if (result.error) {
       ElMessage.error(result.error);
     }
@@ -309,6 +333,17 @@ function onBrowserSelect(path: string) {
         <svg-icon icon-class="vscode" />
       </IconButton>
       <IconButton
+        tooltip="用 Claude Code 打开"
+        size="large"
+        @click="onOpenInClaudeCode"
+      >
+        <img
+          :src="claudeCodeIcon"
+          alt="Claude Code"
+          class="claude-code-btn__icon"
+        />
+      </IconButton>
+      <IconButton
         v-if="hasNpmScripts"
         tooltip="NPM 脚本"
         size="large"
@@ -458,6 +493,9 @@ function onBrowserSelect(path: string) {
 
 .directory-selector--header .directory-actions {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding-left: 8px;
   border-left: 1px solid rgba(59, 130, 246, 0.12);
 }
@@ -492,6 +530,14 @@ function onBrowserSelect(path: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.claude-code-btn__icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 /* 对话框样式（复用 App.vue 中样式） */

@@ -3,6 +3,34 @@ import path from 'path';
 import open from 'open';
 import { spawn } from 'child_process';
 
+function spawnDetached(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: 'ignore',
+      ...options
+    });
+
+    child.on('error', reject);
+    child.on('spawn', () => {
+      child.unref();
+      resolve('success');
+    });
+  });
+}
+
+async function launchClaudeCode(dirPath) {
+  if (process.platform === 'win32') {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'claude'], {
+      cwd: dirPath
+    });
+  }
+
+  return spawnDetached('claude', [], {
+    cwd: dirPath
+  });
+}
+
 export function registerFileOpenRoutes({
   app
 }) {
@@ -180,11 +208,7 @@ export function registerFileOpenRoutes({
       }
 
       try {
-        await new Promise((resolve, reject) => {
-          const vscodeProcess = spawn('code', [dirPath], { detached: true, stdio: 'ignore' });
-          vscodeProcess.on('error', reject);
-          vscodeProcess.on('spawn', () => { vscodeProcess.unref(); resolve('success'); });
-        });
+        await spawnDetached('code', [dirPath]);
         res.json({ success: true, message: '已用 VSCode 打开目录' });
       } catch {
         // fallback：通过 open 模块指定 code 应用
@@ -194,6 +218,34 @@ export function registerFileOpenRoutes({
         } catch (openError) {
           res.status(400).json({ success: false, error: 'VSCode 可能未安装或未添加到 PATH' });
         }
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 用 Claude Code 打开目录
+  app.post('/api/open-directory-with-claude-code', async (req, res) => {
+    try {
+      const { path: dirPath } = req.body;
+      if (!dirPath) {
+        return res.status(400).json({ success: false, error: '目录路径不能为空' });
+      }
+
+      try {
+        await fs.access(dirPath);
+      } catch (error) {
+        return res.status(400).json({ success: false, error: `目录不存在或不可访问: ${dirPath}` });
+      }
+
+      try {
+        await launchClaudeCode(dirPath);
+        res.json({ success: true, message: '已用 Claude Code 打开目录' });
+      } catch (error) {
+        res.status(400).json({
+          success: false,
+          error: '未检测到 Claude Code，请先安装并确保可以在终端中直接运行 claude'
+        });
       }
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });

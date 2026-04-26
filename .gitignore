@@ -31,4 +31,31 @@ pnpm-debug.log*
 *.sw?
 
 package-lock.json
+yarn.lock
+pnpm-lock.yaml
 .port
+
+# Auto-generated log
+git-autocommit.log
+
+# Claude / AI worktrees
+.claude/
+
+# CodeBuddy project data
+.codebuddy/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# ESLint cache
+.eslintcache
+
+# Test coverage
+coverage/
+
+# Windows thumbnail cache
+Thumbs.db
+
+# Temp directories
+.temp/
+tmp/
