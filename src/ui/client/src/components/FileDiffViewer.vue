@@ -12,7 +12,7 @@ import FileActionButtons from './FileActionButtons.vue';
 import FileTreeView from './FileTreeView.vue';
 import { getFileIconClass } from '../utils/fileIcon';
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree';
-import type { ConflictBlock } from './ConflictBlockViewer.vue';
+import type { ConflictBlock } from '@/types/conflict';
 import MonacoDiffViewer from '@/components/MonacoDiffViewer.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 
