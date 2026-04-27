@@ -149,15 +149,15 @@ export const useConfigStore = defineStore('config', () => {
   const configFilePath = ref('')
   // 当前工作目录
   const currentDirectory = ref('')
-  // Push完成后自动关闭进度弹窗（从localStorage加载，默认true）
-  const autoClosePushModal = ref(true)
-  // 自动设置默认提交信息（从localStorage加载，默认false）
+  // Push完成后自动关闭进度弹窗（从文件配置加载，默认false）
+  const autoClosePushModal = ref(false)
+  // 自动设置默认提交信息（从文件配置加载，默认false）
   const autoSetDefaultMessage = ref(false)
-  // 标准化提交（从localStorage加载，默认false）
-  const isStandardCommit = ref(false)
-  // 跳过钩子检查（从localStorage加载，默认false）
+  // 标准化提交（从文件配置加载，默认true）
+  const isStandardCommit = ref(true)
+  // 跳过钩子检查（从文件配置加载，默认false）
   const skipHooks = ref(false)
-  // 回车自动一键提交（从localStorage加载，默认false）
+  // 回车自动一键提交（从文件配置加载，默认false）
   const autoQuickPushOnEnter = ref(false)
   // 主题设置（从localStorage加载，默认light）
   const theme = ref<'light' | 'dark' | 'auto'>('light')
@@ -168,49 +168,6 @@ export const useConfigStore = defineStore('config', () => {
   function setCurrentDirectory(dir: string) {
     currentDirectory.value = dir || ''
   }
-
-  // 初始化：从localStorage加载autoClosePushModal配置
-  const savedAutoClosePushModal = localStorage.getItem('zen-gitsync-auto-close-push-modal')
-  if (savedAutoClosePushModal !== null) {
-    autoClosePushModal.value = savedAutoClosePushModal === 'true'
-  }
-
-  // 监听autoClosePushModal变化，自动保存到localStorage
-  watch(autoClosePushModal, (newValue) => {
-    localStorage.setItem('zen-gitsync-auto-close-push-modal', newValue.toString())
-  })
-
-  // 初始化：从localStorage加载autoSetDefaultMessage配置
-  const savedAutoSetDefaultMessage = localStorage.getItem('zen-gitsync-auto-set-default-message')
-  if (savedAutoSetDefaultMessage !== null) {
-    autoSetDefaultMessage.value = savedAutoSetDefaultMessage === 'true'
-  }
-
-  // 监听autoSetDefaultMessage变化，自动保存到localStorage
-  watch(autoSetDefaultMessage, (newValue) => {
-    localStorage.setItem('zen-gitsync-auto-set-default-message', newValue.toString())
-  })
-
-  // 初始化：从localStorage加载isStandardCommit
-  const savedIsStandardCommit = localStorage.getItem('zen-gitsync-standard-commit')
-  if (savedIsStandardCommit !== null) {
-    isStandardCommit.value = savedIsStandardCommit === 'true'
-  }
-  watch(isStandardCommit, (v) => localStorage.setItem('zen-gitsync-standard-commit', v.toString()))
-
-  // 初始化：从localStorage加载skipHooks
-  const savedSkipHooks = localStorage.getItem('zen-gitsync-skip-hooks')
-  if (savedSkipHooks !== null) {
-    skipHooks.value = savedSkipHooks === 'true'
-  }
-  watch(skipHooks, (v) => localStorage.setItem('zen-gitsync-skip-hooks', v.toString()))
-
-  // 初始化：从localStorage加载autoQuickPushOnEnter
-  const savedAutoQuickPush = localStorage.getItem('zen-gitsync-auto-quick-push')
-  if (savedAutoQuickPush !== null) {
-    autoQuickPushOnEnter.value = savedAutoQuickPush === 'true'
-  }
-  watch(autoQuickPushOnEnter, (v) => localStorage.setItem('zen-gitsync-auto-quick-push', v.toString()))
 
   // 初始化：从localStorage加载theme配置
   const savedTheme = localStorage.getItem('zen-gitsync-theme') as 'light' | 'dark' | 'auto' | null
@@ -353,6 +310,13 @@ export const useConfigStore = defineStore('config', () => {
         refId: String(configData?.afterQuickPushAction?.refId || '').trim()
       }
       
+      // 加载提交设置
+      if (configData.isStandardCommit !== undefined) isStandardCommit.value = Boolean(configData.isStandardCommit)
+      if (configData.skipHooks !== undefined) skipHooks.value = Boolean(configData.skipHooks)
+      if (configData.autoQuickPushOnEnter !== undefined) autoQuickPushOnEnter.value = Boolean(configData.autoQuickPushOnEnter)
+      if (configData.autoSetDefaultMessage !== undefined) autoSetDefaultMessage.value = Boolean(configData.autoSetDefaultMessage)
+      if (configData.autoClosePushModal !== undefined) autoClosePushModal.value = Boolean(configData.autoClosePushModal)
+
       // 加载通用设置
       if (configData.theme && ['light', 'dark', 'auto'].includes(configData.theme)) {
         theme.value = configData.theme
@@ -387,6 +351,30 @@ export const useConfigStore = defineStore('config', () => {
       isLoading.value = false
     }
   }
+
+  // 保存提交设置到文件配置
+  async function saveCommitSettings() {
+    try {
+      await fetch('/api/config/save-commit-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isStandardCommit: isStandardCommit.value,
+          skipHooks: skipHooks.value,
+          autoQuickPushOnEnter: autoQuickPushOnEnter.value,
+          autoSetDefaultMessage: autoSetDefaultMessage.value,
+          autoClosePushModal: autoClosePushModal.value
+        })
+      })
+    } catch (error) {
+      console.error('保存提交设置失败:', error)
+    }
+  }
+
+  // 监听提交设置变化，自动保存到文件配置
+  watch([isStandardCommit, skipHooks, autoQuickPushOnEnter, autoSetDefaultMessage, autoClosePushModal], () => {
+    if (isLoaded.value) saveCommitSettings()
+  })
 
   // 保存默认提交信息
   async function saveDefaultMessage(message: string) {
@@ -987,6 +975,7 @@ export const useConfigStore = defineStore('config', () => {
     deleteOrchestration,
     updateOrchestration,
     saveStartupItems,
-    saveAfterQuickPushAction
+    saveAfterQuickPushAction,
+    saveCommitSettings
   }
 }) 

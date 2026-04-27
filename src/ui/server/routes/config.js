@@ -644,6 +644,23 @@ export function registerConfigRoutes({
     }
   })
 
+  // 保存提交设置
+  app.post('/api/config/save-commit-settings', express.json(), async (req, res) => {
+    try {
+      const { isStandardCommit, skipHooks, autoQuickPushOnEnter, autoSetDefaultMessage, autoClosePushModal } = req.body
+      const config = await configManager.loadConfig()
+      if (isStandardCommit !== undefined) config.isStandardCommit = Boolean(isStandardCommit)
+      if (skipHooks !== undefined) config.skipHooks = Boolean(skipHooks)
+      if (autoQuickPushOnEnter !== undefined) config.autoQuickPushOnEnter = Boolean(autoQuickPushOnEnter)
+      if (autoSetDefaultMessage !== undefined) config.autoSetDefaultMessage = Boolean(autoSetDefaultMessage)
+      if (autoClosePushModal !== undefined) config.autoClosePushModal = Boolean(autoClosePushModal)
+      await configManager.saveConfig(config)
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+
   // 保存"一键推送成功后启动项"
   app.post('/api/config/save-after-quick-push-action', express.json(), async (req, res) => {
     try {

@@ -32,6 +32,12 @@ const defaultConfig = {
     refId: ''
   },
   currentDirectory: '',
+  // 提交设置
+  isStandardCommit: true,
+  skipHooks: false,
+  autoQuickPushOnEnter: false,
+  autoSetDefaultMessage: false,
+  autoClosePushModal: false,
   // 通用设置
   theme: 'light',  // 主题: light | dark | auto
   locale: 'zh-CN'  // 语言: zh-CN | en-US

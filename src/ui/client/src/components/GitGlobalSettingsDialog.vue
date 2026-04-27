@@ -713,7 +713,7 @@ async function openSystemConfigFile() {
 
 .setting-row {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: 160px 1fr;
   gap: var(--spacing-md);
   align-items: center;
 }
