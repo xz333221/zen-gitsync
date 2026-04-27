@@ -373,8 +373,10 @@ function copyGitInit() {
   <el-config-provider :locale="localeStore.elementPlusLocale">
   <header class="main-header app-header">
     <div class="header-left">
-      <img :src="logo" alt="Zen GitSync Logo" class="logo" />
-      <h1>Zen GitSync</h1>
+      <a href="https://github.com/xz333221/zen-gitsync" target="_blank" class="header-brand-link">
+        <img :src="logo" alt="Zen GitSync Logo" class="logo" />
+        <h1>Zen GitSync</h1>
+      </a>
     </div>
     <div class="header-center">
       <DirectorySelector variant="header" @toggle-npm-panel="handleToggleNpmPanel" />
@@ -715,6 +717,15 @@ body {
   flex-shrink: 0;
   position: relative;
   z-index: 2;
+}
+
+.header-brand-link {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
 
 .header-center {

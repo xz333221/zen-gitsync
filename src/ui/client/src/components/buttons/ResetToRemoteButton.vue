@@ -2,9 +2,9 @@
 import { $t } from '@/lang/static'
 import { useGitStore } from '@stores/gitStore'
 import { computed } from 'vue'
-import { Delete } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import IconButton from '@components/IconButton.vue'
+import SvgIcon from '@components/SvgIcon/index.vue'
 
 interface Props {
   variant?: 'icon' | 'text'
@@ -52,14 +52,13 @@ async function resetToRemote() {
   <template v-if="shouldShowReset">
   <IconButton
     v-if="props.variant === 'icon'"
+    icon-class="git-reset"
     :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:重置到远程')"
     size="large"
     hover-color="#f56c6c"
     :disabled="!gitStore.hasUpstream || gitStore.hasConflictedFiles || gitStore.isResetting"
     @click="resetToRemote"
-  >
-    <el-icon><Delete /></el-icon>
-  </IconButton>
+  />
 
   <el-tooltip
     v-else
@@ -68,14 +67,23 @@ async function resetToRemote() {
   >
     <el-button
       type="danger"
-      :icon="Delete"
       @click="resetToRemote"
       :loading="gitStore.isResetting"
       :disabled="!gitStore.hasUpstream || gitStore.hasConflictedFiles"
       class="action-button danger-button"
     >
+      <svg-icon icon-class="git-reset" class-name="git-reset-icon" />
       {{ $t('@76872:重置到远程') }}
     </el-button>
   </el-tooltip>
   </template>
 </template>
+
+<style scoped lang="scss">
+:deep(.git-reset-icon) {
+  width: 1em;
+  height: 1em;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+</style>
