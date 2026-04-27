@@ -260,6 +260,19 @@ async function saveRecentDirectory(dirPath) {
   return list;
 }
 
+async function removeRecentDirectory(dirPath) {
+  if (!dirPath || typeof dirPath !== 'string') return;
+  const state = await safeLoadRaw();
+  if (!state.ok) return [];
+  const raw = state.obj;
+  let list = Array.isArray(raw.recentDirectories) ? raw.recentDirectories.slice() : [];
+  const normalized = normalizeProjectPath(dirPath);
+  list = list.filter(p => normalizeProjectPath(p) !== normalized);
+  raw.recentDirectories = list;
+  await writeRawConfigFile(raw);
+  return list;
+}
+
 // 添加配置管理函数
 async function handleConfigCommands() {
   if (process.argv.includes('get-config')) {
@@ -290,6 +303,7 @@ export default {
   getLockedFiles,
   getRecentDirectories,
   saveRecentDirectory,
+  removeRecentDirectory,
   readRawConfigFile,
   writeRawConfigFile
 };

@@ -249,9 +249,22 @@ export function registerFsRoutes({
     try {
       // 尝试从配置中获取最近的目录
       const recentDirs = await configManager.getRecentDirectories();
+      // 并行检查每个目录是否存在
+      const checked = await Promise.all(
+        (recentDirs || []).map(async (dir) => {
+          let exists = false;
+          try {
+            await fs.access(dir);
+            exists = true;
+          } catch {
+            exists = false;
+          }
+          return { path: dir, exists };
+        })
+      );
       res.json({
         success: true,
-        directories: recentDirs || []
+        directories: checked
       });
     } catch (error) {
       res.status(500).json({
@@ -381,6 +394,43 @@ export function registerFsRoutes({
         success: false,
         error: error.message
       });
+    }
+  });
+
+  // 新开 cmd 标签并在目标路径执行 g ui
+  app.post('/api/open-new-tab-gui', async (req, res) => {
+    try {
+      const directoryPath = req.body.path || process.cwd();
+
+      try {
+        await fs.access(directoryPath);
+
+        const platform = os.platform();
+
+        if (platform === 'win32') {
+          // Windows: start 第一个参数是窗口标题，必须用 "" 占位，否则 cmd 会被当成标题
+          // start "" /D "path" cmd /k g ui
+          const winPath = directoryPath.replace(/\//g, '\\').replace(/"/g, '\\"');
+          exec(`start "" /D "${winPath}" cmd /k g ui`);
+        } else if (platform === 'darwin') {
+          spawn('open', ['-a', 'Terminal', directoryPath], {
+            detached: true,
+            stdio: 'ignore'
+          }).unref();
+        } else {
+          // Linux fallback
+          spawn('bash', ['-c', `gnome-terminal -- bash -c "cd '${directoryPath}' && g ui; exec bash" &`], {
+            detached: true,
+            stdio: 'ignore'
+          }).unref();
+        }
+
+        res.json({ success: true });
+      } catch (error) {
+        res.status(400).json({ success: false, error: `无法打开: ${error.message}` });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 

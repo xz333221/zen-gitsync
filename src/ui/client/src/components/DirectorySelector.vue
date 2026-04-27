@@ -32,7 +32,7 @@ const currentFolderName = computed(() => getFolderNameFromPath(currentDirectory.
 const isDirectoryDialogVisible = ref(false);
 const newDirectoryPath = ref("");
 const isChangingDirectory = ref(false);
-const recentDirectories = ref<string[]>([]);
+const recentDirectories = ref<{ path: string; exists: boolean }[]>([]);
 const isBrowserDialogVisible = ref(false);
 
 // npm脚本相关
@@ -160,6 +160,24 @@ async function getRecentDirectories() {
     }
   } catch (error) {
     console.error("获取最近目录失败:", error);
+  }
+}
+
+// 删除最近目录
+async function removeRecentDirectory(dirPath: string, event: MouseEvent) {
+  event.stopPropagation();
+  try {
+    const response = await fetch('/api/remove_recent_directory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: dirPath }),
+    });
+    const result = await response.json();
+    if (result.success) {
+      await getRecentDirectories();
+    }
+  } catch (error) {
+    console.error('删除目录失败:', error);
   }
 }
 
@@ -294,6 +312,27 @@ onMounted(() => {
   checkNpmScripts();
 });
 
+// 新开 cmd 标签并在目标路径执行 g ui
+async function openNewTabGui() {
+  if (!newDirectoryPath.value) {
+    ElMessage.warning("目录路径不能为空");
+    return;
+  }
+  try {
+    const response = await fetch('/api/open-new-tab-gui', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: newDirectoryPath.value }),
+    });
+    const result = await response.json();
+    if (!result.success) {
+      ElMessage.error(result.error || '打开失败');
+    }
+  } catch (error) {
+    ElMessage.error(`打开失败: ${(error as Error).message}`);
+  }
+}
+
 // 浏览目录
 async function browseDirectory() {
   isBrowserDialogVisible.value = true;
@@ -395,13 +434,25 @@ function onBrowserSelect(path: string) {
           </template>
           <div class="recent-directories">
             <div
-              v-for="(dir, index) in recentDirectories"
+              v-for="(item, index) in recentDirectories"
               :key="index"
               class="recent-dir-item"
-              @click="newDirectoryPath = dir"
+              :class="{ 'recent-dir-item--missing': !item.exists }"
+              @click="newDirectoryPath = item.path"
             >
               <el-icon class="dir-icon"><Folder /></el-icon>
-              <span class="dir-path" :title="dir">{{ dir }}</span>
+              <span class="dir-path" :title="item.path">{{ item.path }}</span>
+              <span v-if="!item.exists" class="dir-missing-badge">不存在</span>
+              <button
+                type="button"
+                class="dir-delete-btn"
+                title="从常用目录中移除"
+                @click="removeRecentDirectory(item.path, $event)"
+              >
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="12" height="12">
+                  <path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/>
+                </svg>
+              </button>
             </div>
           </div>
         </el-form-item>
@@ -433,6 +484,13 @@ function onBrowserSelect(path: string) {
               </svg>
             </el-icon>
             <span>{{ $t('@67CE7:切换') }}</span>
+          </button>
+          <button
+            type="button"
+            class="dialog-newtab-btn"
+            @click="openNewTabGui()"
+          >
+            <span>使用新标签打开</span>
           </button>
         </div>
       </div>
@@ -602,6 +660,7 @@ function onBrowserSelect(path: string) {
 }
 
 .recent-dir-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
@@ -610,13 +669,61 @@ function onBrowserSelect(path: string) {
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .recent-dir-item:hover {
   background: var(--bg-input-hover);
   border-color: var(--border-card-hover);
-  transform: translateX(2px);
+}
+
+.recent-dir-item--missing {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.recent-dir-item--missing .dir-icon {
+  color: var(--color-text-secondary, #888);
+}
+
+.dir-missing-badge {
+  font-size: 10px;
+  color: #f87171;
+  border: 1px solid #f87171;
+  border-radius: 3px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.dir-delete-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: var(--bg-input, #fff);
+  border: 1px solid var(--border-card);
+  border-radius: 50%;
+  color: var(--color-text-secondary, #888);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  z-index: 1;
+}
+
+.recent-dir-item:hover .dir-delete-btn {
+  opacity: 1;
+}
+
+.dir-delete-btn:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #f87171;
 }
 
 .dir-icon {

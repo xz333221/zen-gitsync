@@ -33,6 +33,20 @@ export function registerConfigRoutes({
           });
       }
   });
+
+  // 删除最近访问的目录
+  app.post('/api/remove_recent_directory', async (req, res) => {
+    try {
+      const { path: dirPath } = req.body;
+      if (!dirPath) {
+        return res.status(400).json({ success: false, error: '目录路径不能为空' });
+      }
+      const list = await configManager.removeRecentDirectory(dirPath);
+      res.json({ success: true, directories: list });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
   
   // 获取配置
   app.get('/api/config/getConfig', async (req, res) => {

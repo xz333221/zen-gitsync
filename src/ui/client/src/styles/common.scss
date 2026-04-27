@@ -695,6 +695,42 @@ body {
   box-shadow: var(--shadow-md);
 }
 
+/* 新标签打开按钮 */
+.dialog-newtab-btn {
+  background: transparent;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  min-width: 100px;
+  height: 36px;
+  padding: var(--spacing-base) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.dialog-newtab-btn:hover {
+  background: rgba(var(--color-primary-rgb, 64, 128, 255), 0.08);
+  transform: scale(1.02);
+}
+
+.dialog-newtab-btn:active {
+  transform: scale(0.98);
+}
+
+[data-theme="dark"] .dialog-newtab-btn {
+  color: #5b9ef0;
+  border-color: #5b9ef0;
+}
+
+[data-theme="dark"] .dialog-newtab-btn:hover {
+  background: rgba(91, 158, 240, 0.12);
+}
+
 /* 深色主题下的对话框按钮 */
 [data-theme="dark"] .dialog-cancel-btn {
   background: rgba(255, 255, 255, 0.08);
