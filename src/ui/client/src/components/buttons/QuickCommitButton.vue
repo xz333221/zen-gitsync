@@ -132,6 +132,9 @@ defineExpose({
 <style scoped lang="scss">
 .one-commit-button {
   height: 100%;
+  background: linear-gradient(135deg, var(--color-primary-dark, #2563eb) 0%, #1d4ed8 100%) !important;
+  border: none !important;
+  color: white !important;
   &.form {
     width: 100%;
     padding: 4px 12px;

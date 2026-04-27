@@ -69,7 +69,6 @@ declare module 'vue' {
     GitOperationsButton: typeof import('./src/components/buttons/GitOperationsButton.vue')['default']
     GlobalLoading: typeof import('./src/components/GlobalLoading.vue')['default']
     IconButton: typeof import('./src/components/IconButton.vue')['default']
-    InlineCard: typeof import('./src/components/InlineCard.vue')['default']
     LanguageSwitcher: typeof import('./src/components/LanguageSwitcher.vue')['default']
     ListIcon: typeof import('./src/components/icons/ListIcon.vue')['default']
     MergeBranchButton: typeof import('./src/components/buttons/MergeBranchButton.vue')['default']

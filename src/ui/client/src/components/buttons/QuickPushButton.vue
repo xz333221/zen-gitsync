@@ -188,6 +188,9 @@ function handleProgressComplete(_success: boolean) {
 <style scoped lang="scss">
 .one-push-button {
   height: 100%;
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  border: none !important;
+  color: white !important;
   &.form {
     width: 100%;
     padding: 4px 12px;

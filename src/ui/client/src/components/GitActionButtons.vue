@@ -114,6 +114,56 @@ defineExpose({
 
 <style scoped lang="scss">
 
+:deep(.el-button) {
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  transition: all 0.3s ease;
+  padding: 6px var(--spacing-base);
+  font-size: var(--font-size-sm);
+
+  &:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-md);
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  &.is-disabled {
+    opacity: 0.4 !important;
+  }
+}
+
+:deep(.el-button--primary) {
+  background: var(--color-primary);
+  border: none;
+  color: white;
+
+  &.is-disabled {
+    background-color: var(--color-primary-light) !important;
+    border-color: var(--color-primary-light) !important;
+    opacity: 0.5 !important;
+  }
+}
+
+:deep(.el-button--warning) {
+  background: var(--color-warning);
+  border: none;
+  color: white;
+
+  &.is-disabled {
+    background-color: var(--color-warning) !important;
+    border-color: var(--color-warning) !important;
+    opacity: 0.5 !important;
+  }
+}
+
 /* .form-bottom-actions:hover {
   box-shadow: var(--shadow-lg);
 } */
