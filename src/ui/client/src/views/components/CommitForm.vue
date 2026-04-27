@@ -12,6 +12,7 @@ import { useConfigStore } from "@stores/configStore";
 import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
+import CommandHistory from "@/views/components/CommandHistory.vue";
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -560,6 +561,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
         />
       </div>
       <div class="header-right">
+        <CommandHistory />
         <GitOperationsButton class="ml-auto" variant="icon" />
       </div>
     </div>
@@ -785,6 +787,11 @@ git config --global user.email "your.email@example.com"</pre
   h2 {
     margin: 0;
   }
+}
+.header-right{
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .card-content {

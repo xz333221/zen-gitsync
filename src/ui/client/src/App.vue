@@ -383,7 +383,7 @@ function copyGitInit() {
     <div class="header-info">
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
-        <CommandHistory />
+        <!-- <CommandHistory /> -->
       </div>
       <!-- 用户信息 -->
       <div id="user-info" class="user-info-card">

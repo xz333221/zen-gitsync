@@ -410,7 +410,7 @@ onUnmounted(() => {
   <!-- 命令历史按钮 -->
   <IconButton
     :tooltip="$t('@81F0F:查看Git命令历史')"
-    size="medium"
+    size="large"
     @click="openCommandHistory"
   >
     <el-icon><Clock /></el-icon>
@@ -729,15 +729,15 @@ onUnmounted(() => {
 
 /* 深色主题下：危险按钮配色与可读性 */
 [data-theme="dark"] .dialog-toolbar .danger-btn {
-  background: #2d1a1a; /* 深红底（无透明） */
-  color: var(--color-danger);
-  border-color: #7a2e2e;
+  background: #c0392b;
+  color: #ffffff;
+  border-color: #e74c3c;
 }
 
 [data-theme="dark"] .dialog-toolbar .danger-btn:hover {
-  background: #3a2020;
-  color: #ff8f8f;
-  border-color: #a33c3c;
+  background: #e74c3c;
+  color: #ffffff;
+  border-color: #ff6b6b;
   box-shadow: var(--shadow-lg);
 }
 
