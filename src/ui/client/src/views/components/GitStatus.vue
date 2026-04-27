@@ -22,7 +22,6 @@ import UnstageAllButton from '@/components/buttons/UnstageAllButton.vue'
 import ResetToRemoteButton from '@/components/buttons/ResetToRemoteButton.vue'
 import DiscardAllChangesButton from '@/components/buttons/DiscardAllChangesButton.vue'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree'
-import GitOperationsButton from '@components/buttons/GitOperationsButton.vue'
 
 // 定义props
 const props = defineProps({
