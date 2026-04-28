@@ -597,13 +597,6 @@ git config --global user.email "your.email@example.com"</pre
         <template v-else>
           <!-- 左侧：提交表单 -->
           <div class="commit-section">
-            <GitCommandPreview
-              v-if="!isCommitDisabled"
-              :command="gitCommandPreview"
-              :title="$t('@76872:提交命令预览：')"
-              placeholder='git commit -m "<提交信息>"'
-            />
-
             <!-- 普通提交表单 -->
             <div v-if="!isStandardCommit" class="commit-form">
               <div class="description-container">
@@ -704,6 +697,13 @@ git config --global user.email "your.email@example.com"</pre
                 />
               </div>
             </div>
+
+            <GitCommandPreview
+              v-if="!isCommitDisabled"
+              :command="gitCommandPreview"
+              :title="$t('@76872:提交命令预览：')"
+              placeholder='git commit -m "<提交信息>"'
+            />
           </div>
         </template>
       </div>
