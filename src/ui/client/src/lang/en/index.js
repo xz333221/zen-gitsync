@@ -990,6 +990,8 @@ export default {
   '@76872:储藏列表 (Git Stash)': 'Stash List (Git Stash)',
   '@76872:暂无储藏记录': 'No stash records available at the moment',
   '@76872:储藏详情': 'Stash Details',
+  '@76872:仅显示差异': 'Diff only',
+  '@76872:显示完整对比': 'Full comparison',
   '@76872:该stash没有变更文件': 'The stash has not changed the file',
   '@76872:提交设置': 'Commit Settings',
   '@76872:提交模式': 'Submission mode',

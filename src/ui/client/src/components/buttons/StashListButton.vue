@@ -30,6 +30,12 @@ const stashDiff = ref('')
 const isLoadingStashDetail = ref(false)
 const selectedStashFile = ref('')
 
+// 差异视图模式：diff=仅显示差异，compare=显示完整对比
+type StashDiffViewMode = 'diff' | 'compare'
+const stashDiffViewMode = ref<StashDiffViewMode>('compare')
+const stashCompareOriginal = ref('')
+const stashCompareModified = ref('')
+
 // 为stash组件准备文件列表
 const stashFilesForViewer = computed(() => {
   return stashFiles.value.map(file => ({
@@ -106,6 +112,8 @@ async function viewStashDetail(stash: { id: string; description: string }) {
   isLoadingStashDetail.value = true
   stashFiles.value = []
   stashDiff.value = ''
+  stashCompareOriginal.value = ''
+  stashCompareModified.value = ''
   selectedStashFile.value = ''
 
   try {
@@ -123,9 +131,13 @@ async function viewStashDetail(stash: { id: string; description: string }) {
     if (filesData.success && Array.isArray(filesData.files)) {
       stashFiles.value = filesData.files
 
-      // 如果有文件，自动加载第一个文件的差异
+      // 如果有文件，自动加载第一个文件的内容（根据当前视图模式）
       if (stashFiles.value.length > 0) {
-        await getStashFileDiff(stash.id, stashFiles.value[0])
+        if (stashDiffViewMode.value === 'compare') {
+          await getStashFileCompare(stash.id, stashFiles.value[0])
+        } else {
+          await getStashFileDiff(stash.id, stashFiles.value[0])
+        }
       } else {
         stashDiff.value = $t('@76872:该stash没有变更文件')
       }
@@ -162,10 +174,57 @@ async function getStashFileDiff(stashId: string, filePath: string) {
   }
 }
 
+// 获取stash中特定文件的完整内容对比
+async function getStashFileCompare(stashId: string, filePath: string) {
+  isLoadingStashDetail.value = true
+  selectedStashFile.value = filePath
+  stashDiff.value = ''
+
+  try {
+    const response = await fetch(
+      `/api/stash-file-compare?stashId=${encodeURIComponent(stashId)}&file=${encodeURIComponent(filePath)}`
+    )
+    const data = await response.json()
+
+    if (data.success) {
+      stashCompareOriginal.value = data.original ?? ''
+      stashCompareModified.value = data.modified ?? ''
+    } else {
+      stashCompareOriginal.value = ''
+      stashCompareModified.value = ''
+    }
+  } catch (error) {
+    stashCompareOriginal.value = ''
+    stashCompareModified.value = ''
+  } finally {
+    isLoadingStashDetail.value = false
+  }
+}
+
+// 切换为仅显示差异模式
+function showStashDiffOnly() {
+  stashDiffViewMode.value = 'diff'
+  if (selectedStash.value && selectedStashFile.value) {
+    getStashFileDiff(selectedStash.value.id, selectedStashFile.value)
+  }
+}
+
+// 切换为显示完整对比模式
+function showStashFullCompare() {
+  stashDiffViewMode.value = 'compare'
+  if (selectedStash.value && selectedStashFile.value) {
+    getStashFileCompare(selectedStash.value.id, selectedStashFile.value)
+  }
+}
+
 // 处理stash文件选择
 function handleStashFileSelect(filePath: string) {
   if (selectedStash.value) {
-    getStashFileDiff(selectedStash.value.id, filePath)
+    if (stashDiffViewMode.value === 'compare') {
+      getStashFileCompare(selectedStash.value.id, filePath)
+    } else {
+      getStashFileDiff(selectedStash.value.id, filePath)
+    }
   }
 }
 
@@ -391,12 +450,25 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
             :files="stashFilesForViewer"
             :diffContent="stashDiff"
             :selectedFile="selectedStashFile"
+            :isLoading="isLoadingStashDetail"
+            :compareMode="stashDiffViewMode === 'compare'"
+            :compareOriginal="stashCompareOriginal"
+            :compareModified="stashCompareModified"
             context="stash-detail"
             :emptyText="$t('@76872:该stash没有变更文件')"
             @file-select="handleStashFileSelect"
             @open-file="handleOpenFile"
             @open-with-vscode="handleOpenWithVSCode"
-          />
+          >
+            <template #header-extra>
+              <el-button size="small" :type="stashDiffViewMode === 'diff' ? 'primary' : 'default'" @click="showStashDiffOnly">
+                {{ $t('@76872:仅显示差异') }}
+              </el-button>
+              <el-button size="small" :type="stashDiffViewMode === 'compare' ? 'primary' : 'default'" @click="showStashFullCompare">
+                {{ $t('@76872:显示完整对比') }}
+              </el-button>
+            </template>
+          </FileDiffViewer>
         </div>
       </div>
     </CommonDialog>
