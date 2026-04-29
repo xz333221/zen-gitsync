@@ -1021,6 +1021,24 @@ export function registerGitOpsRoutes({
     }
   });
 
+  // 添加远程仓库的API
+  app.post('/api/add-remote', express.json(), async (req, res) => {
+    try {
+      if (!getIsGitRepo()) {
+        return res.json({ success: false, error: '当前目录不是Git仓库' });
+      }
+      const { name = 'origin', url } = req.body;
+      if (!url || !url.trim()) {
+        return res.json({ success: false, error: '远程仓库地址不能为空' });
+      }
+      await execGitCommand(`git remote add ${name} ${url.trim()}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('添加远程仓库失败:', error);
+      res.json({ success: false, error: error.message || '添加远程仓库失败' });
+    }
+  });
+
   // 获取远程仓库URL的API
   app.get('/api/remote-url', async (req, res) => {
     try {

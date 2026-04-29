@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Document, ArrowUp, ArrowDown, Lock, Unlock, InfoFilled, Loading, Folder } from '@element-plus/icons-vue'
+import { Refresh, Document, ArrowUp, ArrowDown, Lock, Unlock, InfoFilled, WarningFilled, Loading, Folder } from '@element-plus/icons-vue'
 import TreeIcon from '@/components/icons/TreeIcon.vue'
 import IconButton from '@/components/IconButton.vue'
 import ListIcon from '@/components/icons/ListIcon.vue'
@@ -489,6 +489,27 @@ async function handleGitPull() {
 
 // 一键设置上游并推送
 const isSettingUpstream = ref(false)
+
+// 添加远程仓库
+const newRemoteUrl = ref('')
+const isAddingRemote = ref(false)
+async function addRemoteAndSetUpstream() {
+  if (!newRemoteUrl.value.trim()) {
+    ElMessage.warning($t('@13D1C:请输入远程仓库地址'))
+    return
+  }
+  isAddingRemote.value = true
+  try {
+    const ok = await gitStore.addRemote(newRemoteUrl.value.trim())
+    if (ok) {
+      ElMessage.success($t('@13D1C:已添加远程仓库'))
+      newRemoteUrl.value = ''
+    }
+  } finally {
+    isAddingRemote.value = false
+  }
+}
+
 async function setUpstreamAndPush() {
   if (!gitStore.currentBranch) {
     ElMessage.warning($t('@13D1C:未知当前分支'))
@@ -880,6 +901,35 @@ defineExpose({
       </div>
       
       <div class="status-box-wrap" v-else>
+        <!-- 未配置远程仓库提示 -->
+        <div v-if="!gitStore.remoteUrl && !gitStore.hasUpstream" class="no-remote-tip">
+          <div class="tip-header">
+            <el-icon class="tip-icon"><WarningFilled /></el-icon>
+            <span class="tip-title">{{ $t('@13D1C:尚未配置远程仓库') }}</span>
+          </div>
+          <div class="tip-body">
+            <div class="tip-text">{{ $t('@13D1C:添加远程仓库后，即可推送分支并与团队协作。') }}</div>
+            <div class="tip-input-row">
+              <el-input
+                v-model="newRemoteUrl"
+                size="small"
+                :placeholder="$t('@13D1C:输入远程仓库地址，例如 https://github.com/user/repo.git')"
+                :disabled="isAddingRemote"
+                @keyup.enter="addRemoteAndSetUpstream"
+              />
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                :loading="isAddingRemote"
+                :disabled="isAddingRemote || !newRemoteUrl.trim()"
+                @click="addRemoteAndSetUpstream"
+              >
+                {{ $t('@13D1C:添加远程仓库') }}
+              </el-button>
+            </div>
+          </div>
+        </div>
         <!-- 无上游分支提示 -->
         <div v-if="!gitStore.hasUpstream" class="upstream-tip">
           <div class="tip-header">
@@ -1771,6 +1821,71 @@ defineExpose({
   border: 1px solid #ffd591;
   border-radius: var(--radius-md);
   transition: all 0.2s ease;
+}
+
+/* 未配置远程仓库提示样式 */
+.no-remote-tip {
+  background: linear-gradient(135deg, rgba(230, 162, 60, 0.07) 0%, rgba(230, 162, 60, 0.02) 100%);
+  border: 1px solid rgba(230, 162, 60, 0.3);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  transition: all 0.3s ease;
+}
+
+.no-remote-tip:hover {
+  border-color: rgba(230, 162, 60, 0.45);
+  box-shadow: var(--shadow-md);
+}
+
+.no-remote-tip .tip-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--spacing-md);
+}
+
+.no-remote-tip .tip-icon {
+  font-size: var(--font-size-xl);
+  color: var(--el-color-warning);
+  flex-shrink: 0;
+}
+
+.no-remote-tip .tip-title {
+  font-weight: 600;
+  color: var(--color-text-title);
+  letter-spacing: 0.3px;
+}
+
+.no-remote-tip .tip-body {
+  padding-left: 30px;
+}
+
+.no-remote-tip .tip-text {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+  margin-bottom: 12px;
+}
+
+.no-remote-tip .tip-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.no-remote-tip .tip-input-row .el-input {
+  flex: 1;
+}
+
+html.dark .no-remote-tip {
+  background: linear-gradient(135deg, rgba(230, 162, 60, 0.1) 0%, rgba(230, 162, 60, 0.04) 100%);
+  border-color: rgba(230, 162, 60, 0.35);
+}
+
+html.dark .no-remote-tip:hover {
+  border-color: rgba(230, 162, 60, 0.5);
+  box-shadow: var(--shadow-md);
 }
 
 /* 无上游分支提示样式 */

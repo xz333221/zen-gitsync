@@ -1589,6 +1589,28 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 添加远程仓库
+  async function addRemote(url: string, name = 'origin') {
+    try {
+      const response = await fetch('/api/add-remote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, url })
+      });
+      const data = await response.json();
+      if (data.success) {
+        await getRemoteUrl();
+        return true;
+      } else {
+        ElMessage.error(data.error || $t('@C298B:添加远程仓库失败'));
+        return false;
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:添加远程仓库失败: ')}${(error as Error).message}`);
+      return false;
+    }
+  }
+
   // 复制远程仓库地址到剪贴板
   async function copyRemoteUrl() {
     if (!remoteUrl.value) {
@@ -1987,6 +2009,7 @@ export const useGitStore = defineStore('git', () => {
     resetToRemote,
     discardAllChanges,
     getRemoteUrl,
+    addRemote,
     copyRemoteUrl,
     copyCloneCommand,
     mergeBranch,
