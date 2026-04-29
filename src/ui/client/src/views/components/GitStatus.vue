@@ -929,7 +929,7 @@ defineExpose({
           </el-button>
         </div>
         <!-- 非Git仓库时也提供配置远程仓库入口 -->
-        <div class="no-remote-tip" style="margin-top: 16px;">
+        <div class="no-remote-tip">
           <div class="tip-header">
             <el-icon class="tip-icon"><WarningFilled /></el-icon>
             <span class="tip-title">{{ $t('@13D1C:尚未配置远程仓库') }}</span>
@@ -1642,16 +1642,22 @@ defineExpose({
 .status-box.not-git-repo {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  margin: 0;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: var(--spacing-xl);
+  gap: var(--spacing-lg);
   background: transparent;
   border: none;
 }
 
 .status-box.not-git-repo .empty-status {
   background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl) 0 var(--spacing-md);
 }
 
 .status-box.not-git-repo .empty-icon {
