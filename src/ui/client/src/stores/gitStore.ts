@@ -1589,6 +1589,24 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 初始化Git仓库
+  async function gitInit() {
+    try {
+      const response = await fetch('/api/git-init', { method: 'POST' });
+      const data = await response.json();
+      if (data.success) {
+        await checkGitRepo();
+        return true;
+      } else {
+        ElMessage.error(data.error || $t('@C298B:Git仓库初始化失败'));
+        return false;
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:Git仓库初始化失败: ')}${(error as Error).message}`);
+      return false;
+    }
+  }
+
   // 添加远程仓库
   async function addRemote(url: string, name = 'origin') {
     try {
@@ -2010,6 +2028,7 @@ export const useGitStore = defineStore('git', () => {
     discardAllChanges,
     getRemoteUrl,
     addRemote,
+    gitInit,
     copyRemoteUrl,
     copyCloneCommand,
     mergeBranch,

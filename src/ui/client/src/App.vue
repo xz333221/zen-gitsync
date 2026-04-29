@@ -388,8 +388,8 @@ function copyGitInit() {
       </div>
       <!-- 用户信息 -->
       <div id="user-info" class="user-info-card">
-        <template v-if="gitStore.userName && gitStore.userEmail">
-          <el-tooltip :content="gitStore.userEmail" placement="bottom" effect="dark" :show-after="200">
+        <template v-if="gitStore.userName">
+          <el-tooltip :content="gitStore.userEmail || gitStore.userName" placement="bottom" effect="dark" :show-after="200">
             <span class="user-name">{{ gitStore.userName }}</span>
           </el-tooltip>
         </template>

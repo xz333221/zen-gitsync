@@ -1021,6 +1021,17 @@ export function registerGitOpsRoutes({
     }
   });
 
+  // 初始化Git仓库
+  app.post('/api/git-init', async (req, res) => {
+    try {
+      const { stdout } = await execGitCommand('git init');
+      res.json({ success: true, output: stdout.trim() });
+    } catch (error) {
+      console.error('git init 失败:', error);
+      res.json({ success: false, error: error.message || 'git init 失败' });
+    }
+  });
+
   // 添加远程仓库的API
   app.post('/api/add-remote', express.json(), async (req, res) => {
     try {

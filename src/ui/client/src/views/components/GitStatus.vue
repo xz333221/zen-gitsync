@@ -510,6 +510,25 @@ async function addRemoteAndSetUpstream() {
   }
 }
 
+// 初始化Git仓库
+const isInitializingRepo = ref(false)
+async function initGitRepo() {
+  isInitializingRepo.value = true
+  try {
+    const ok = await gitStore.gitInit()
+    if (ok) {
+      ElMessage.success($t('@13D1C:Git仓库初始化成功'))
+      if (newRemoteUrl.value.trim()) {
+        await gitStore.addRemote(newRemoteUrl.value.trim())
+        newRemoteUrl.value = ''
+      }
+      await loadStatus()
+    }
+  } finally {
+    isInitializingRepo.value = false
+  }
+}
+
 async function setUpstreamAndPush() {
   if (!gitStore.currentBranch) {
     ElMessage.warning($t('@13D1C:未知当前分支'))
@@ -897,6 +916,46 @@ defineExpose({
           <el-icon class="empty-icon"><Folder /></el-icon>
           <p class="empty-title">{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
           <p class="empty-desc">{{ $t('@13D1C:请初始化Git仓库或切换到Git仓库目录') }}</p>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            :loading="isInitializingRepo"
+            :disabled="isInitializingRepo"
+            style="margin-top: 12px;"
+            @click="initGitRepo"
+          >
+            {{ $t('@13D1C:初始化Git仓库') }}
+          </el-button>
+        </div>
+        <!-- 非Git仓库时也提供配置远程仓库入口 -->
+        <div class="no-remote-tip" style="margin-top: 16px;">
+          <div class="tip-header">
+            <el-icon class="tip-icon"><WarningFilled /></el-icon>
+            <span class="tip-title">{{ $t('@13D1C:尚未配置远程仓库') }}</span>
+          </div>
+          <div class="tip-body">
+            <div class="tip-text">{{ $t('@13D1C:添加远程仓库后，即可推送分支并与团队协作。') }}</div>
+            <div class="tip-input-row">
+              <el-input
+                v-model="newRemoteUrl"
+                size="small"
+                :placeholder="$t('@13D1C:输入远程仓库地址，例如 https://github.com/user/repo.git')"
+                :disabled="isInitializingRepo"
+                @keyup.enter="initGitRepo"
+              />
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                :loading="isInitializingRepo"
+                :disabled="isInitializingRepo"
+                @click="initGitRepo"
+              >
+                {{ $t('@13D1C:初始化并添加远程') }}
+              </el-button>
+            </div>
+          </div>
         </div>
       </div>
       
