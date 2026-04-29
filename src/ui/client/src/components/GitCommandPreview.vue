@@ -58,7 +58,7 @@ async function copyCommand() {
 
 <style scoped lang="scss">
 .git-command-preview {
-  margin-bottom: var(--spacing-base);
+  margin-top: var(--spacing-base);
 }
 
 .preview-container {

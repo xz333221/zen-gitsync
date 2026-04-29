@@ -478,4 +478,61 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       });
     }
   });
+
+  // 获取stash中特定文件的完整内容对比（原始 vs 储藏后）
+  app.get('/api/stash-file-compare', async (req, res) => {
+    try {
+      const { stashId, file } = req.query;
+
+      if (!stashId || !file) {
+        return res.status(400).json({ success: false, error: '缺少必要参数' });
+      }
+
+      // 解析父提交哈希
+      const { stdout: parentsLine } = await execGitCommand(`git rev-list --parents -n 1 ${stashId}`, { log: false });
+      const hashes = parentsLine.trim().split(/\s+/).filter(Boolean);
+      const stashCommit = hashes[0] || '';
+      const parent1 = hashes[1] || '';
+      const parent3 = hashes[3] || '';
+
+      // 检查是否为未跟踪文件（来自第三父）
+      let isFromThirdParent = false;
+      if (parent3) {
+        try {
+          await execGitCommand(`git cat-file -e ${parent3}:"${file}"`, { log: false });
+          isFromThirdParent = true;
+        } catch (_) {
+          isFromThirdParent = false;
+        }
+      }
+
+      // 获取原始内容（储藏前，来自 parent1）
+      let original = '';
+      if (!isFromThirdParent && parent1) {
+        try {
+          const { stdout: origOut } = await execGitCommand(`git show ${parent1}:"${file}"`, { log: false });
+          original = origOut ?? '';
+        } catch (_) {
+          original = ''; // 文件在储藏前不存在
+        }
+      }
+
+      // 获取储藏后的内容
+      let modified = '';
+      const modRef = isFromThirdParent ? parent3 : stashCommit;
+      if (modRef) {
+        try {
+          const { stdout: modOut } = await execGitCommand(`git show ${modRef}:"${file}"`, { log: false });
+          modified = modOut ?? '';
+        } catch (_) {
+          modified = ''; // 文件已被删除
+        }
+      }
+
+      res.json({ success: true, original, modified });
+    } catch (error) {
+      console.error('获取stash文件对比失败:', error);
+      res.status(500).json({ success: false, error: `获取stash文件对比失败: ${error.message}` });
+    }
+  });
 }
