@@ -108,7 +108,7 @@ declare module 'vue' {
     VersionNode: typeof import('./src/components/flow/nodes/VersionNode.vue')['default']
     WaitNode: typeof import('./src/components/flow/nodes/WaitNode.vue')['default']
   }
-  export interface ComponentCustomProperties {
+  export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }
