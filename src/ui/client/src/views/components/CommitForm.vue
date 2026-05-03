@@ -13,6 +13,67 @@ import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
 import CommandHistory from "@/views/components/CommandHistory.vue";
+import SvgIcon from "@components/SvgIcon/index.vue";
+import IconButton from "@components/IconButton.vue";
+
+// AI 生成提交信息
+const aiGenerating = ref(false);
+
+async function handleAiGenerateCommit() {
+  if (aiGenerating.value) return;
+  aiGenerating.value = true;
+  try {
+    // 获取 staged diff
+    let diff = '';
+    try {
+      const diffRes = await fetch('/api/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'git diff --staged' })
+      });
+      const diffData = await diffRes.json();
+      diff = diffData.stdout || '';
+    } catch {
+      // diff 获取失败不影响主流程
+    }
+
+    const fileList = gitStore.fileList.map(f => `${f.type} ${f.path}`);
+
+    const res = await fetch('/api/config/generate-commit-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ diff, fileList })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      ElMessage.error(data.error || $t('@76872:AI生成失败'));
+      return;
+    }
+
+    const validTypes = ['feat', 'fix', 'docs', 'style', 'refactor', 'test', 'chore'];
+    if (isStandardCommit.value) {
+      if (data.type && validTypes.includes(data.type)) {
+        commitType.value = data.type;
+      }
+      if (data.scope !== undefined) {
+        commitScope.value = data.scope;
+      }
+      if (data.description) {
+        commitDescription.value = data.description;
+      }
+    } else {
+      const msg = data.type && data.description
+        ? (data.scope ? `${data.type}(${data.scope}): ${data.description}` : `${data.type}: ${data.description}`)
+        : (data.description || '');
+      if (msg) commitMessage.value = msg;
+    }
+    ElMessage.success($t('@76872:AI已生成提交信息'));
+  } catch (error) {
+    ElMessage.error(`${$t('@76872:AI生成失败')}: ${(error as Error).message}`);
+  } finally {
+    aiGenerating.value = false;
+  }
+}
 
 const gitStore = useGitStore();
 const configStore = useConfigStore();
@@ -561,6 +622,15 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
         />
       </div>
       <div class="header-right">
+        <IconButton
+          :tooltip="$t('@76872:AI生成提交信息')"
+          :icon-class="aiGenerating ? '' : 'ai-commit'"
+          size="large"
+          :disabled="aiGenerating"
+          @click="handleAiGenerateCommit"
+        >
+          <el-icon v-if="aiGenerating" class="is-loading"><Loading /></el-icon>
+        </IconButton>
         <CommandHistory />
         <GitOperationsButton class="ml-auto" variant="icon" />
       </div>

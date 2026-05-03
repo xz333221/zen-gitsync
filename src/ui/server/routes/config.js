@@ -725,4 +725,153 @@ export function registerConfigRoutes({
       res.status(500).json({ success: false, error: error.message })
     }
   })
+
+  // 保存 AI 模型配置
+  app.post('/api/config/save-models', express.json(), async (req, res) => {
+    try {
+      const { models } = req.body
+      if (!Array.isArray(models)) {
+        return res.status(400).json({ success: false, error: '缺少 models 参数' })
+      }
+      const rawConfig = await configManager.readRawConfigFile()
+      rawConfig.models = models
+      await configManager.writeRawConfigFile(rawConfig)
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+
+  // 测试 AI 模型是否可用
+  app.post('/api/config/test-model', express.json(), async (req, res) => {
+    const { baseURL, model, apiKey } = req.body || {}
+    if (!baseURL || !model) {
+      return res.status(400).json({ success: false, error: '缺少 baseURL 或 model 参数' })
+    }
+    try {
+      const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
+      const url = `${baseURL.replace(/\/$/, '')}/chat/completions`
+      const headers = { 'Content-Type': 'application/json' }
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+      const body = JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'Hello, reply with just "ok".' }],
+        max_tokens: 16,
+        stream: false
+      })
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 15000)
+      let response
+      try {
+        response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
+      } finally {
+        clearTimeout(timer)
+      }
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const msg = data?.error?.message || data?.message || `HTTP ${response.status}`
+        return res.json({ success: false, error: msg })
+      }
+      const reply = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || '✅'
+      res.json({ success: true, reply: reply.trim().slice(0, 100) })
+    } catch (error) {
+      const msg = error.name === 'AbortError' ? '请求超时（15s）' : error.message
+      res.json({ success: false, error: msg })
+    }
+  })
+
+  // AI 生成提交信息
+  app.post('/api/config/generate-commit-message', express.json(), async (req, res) => {
+    const { diff, fileList } = req.body || {}
+    try {
+      const rawConfig = await configManager.readRawConfigFile()
+      const models = Array.isArray(rawConfig.models) ? rawConfig.models : []
+      const defaultModel = models.find(m => m.isDefault) || models[0]
+      if (!defaultModel) {
+        return res.json({ success: false, error: '未配置 AI 模型，请先在通用设置中添加模型' })
+      }
+
+      const diffText = (diff || '').trim().slice(0, 8000)
+      const filesText = Array.isArray(fileList) ? fileList.slice(0, 30).join('\n') : ''
+      const prompt = `你是一个 Git 提交信息生成助手。根据以下 git diff 信息，生成一条符合 Conventional Commits 规范的提交信息。
+
+要求：
+1. type 只能是：feat/fix/docs/style/refactor/test/chore 之一
+2. scope 可选，表示影响范围，简短英文或中文，如果改动范围明确就填
+3. description 用中文简短描述本次变更（不超过50字）
+4. 只返回 JSON，格式：{"type":"feat","scope":"","description":"xxx"}
+
+变更文件：
+${filesText}
+
+git diff --staged：
+${diffText || '（无 staged 内容，请根据文件列表推断）'}`
+
+      const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
+      const url = `${defaultModel.baseURL.replace(/\/$/, '')}/chat/completions`
+      const headers = { 'Content-Type': 'application/json' }
+      if (defaultModel.apiKey) headers['Authorization'] = `Bearer ${defaultModel.apiKey}`
+      const body = JSON.stringify({
+        model: defaultModel.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1024,
+        temperature: 0.3,
+        stream: false
+      })
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 30000)
+      let response
+      try {
+        response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
+      } finally {
+        clearTimeout(timer)
+      }
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const msg = data?.error?.message || data?.message || `HTTP ${response.status}`
+        return res.json({ success: false, error: msg })
+      }
+      const content = data?.choices?.[0]?.message?.content || ''
+      console.log('[generate-commit] raw content length:', content.length, JSON.stringify(content).slice(0, 600))
+
+      // 在整个原始内容里找 JSON（包括 think 块内部），取最后一个不含嵌套 {} 的对象
+      // 优先匹配代码块，再取最后一个裸 {}
+      const codeBlockMatch = content.match(/```(?:json)?\s*(\{[^`]*?\})\s*```/)
+      const jsonMatch = codeBlockMatch
+        ? [codeBlockMatch[1]]
+        : [...content.matchAll(/\{[^{}]*\}/g)].at(-1)
+
+      if (!jsonMatch) {
+        console.error('[generate-commit] no JSON found, full content:', content)
+        return res.json({ success: false, error: `模型未返回有效 JSON，请检查模型是否支持（原始内容前300字）: ${content.slice(0, 300)}` })
+      }
+      let parsed
+      try {
+        parsed = JSON.parse(jsonMatch[0])
+      } catch {
+        // JSON 不合法时用正则手动提取字段
+        const typeM = jsonMatch[0].match(/"type"\s*:\s*"([^"]+)"/)
+        const scopeM = jsonMatch[0].match(/"scope"\s*:\s*"([^"]*)"/)
+        const descM = jsonMatch[0].match(/"description"\s*:\s*"([^"]+)"/)
+        if (typeM || descM) {
+          return res.json({
+            success: true,
+            type: (typeM?.[1] || 'feat').trim(),
+            scope: (scopeM?.[1] || '').trim(),
+            description: (descM?.[1] || '').trim()
+          })
+        }
+        return res.json({ success: false, error: `JSON 解析失败: ${jsonMatch[0].slice(0, 200)}` })
+      }
+      res.json({
+        success: true,
+        type: String(parsed.type || 'feat').trim(),
+        scope: String(parsed.scope || '').trim(),
+        description: String(parsed.description || '').trim()
+      })
+    } catch (error) {
+      const msg = error.name === 'AbortError' ? '请求超时（30s）' : error.message
+      res.json({ success: false, error: msg })
+    }
+  })
 }

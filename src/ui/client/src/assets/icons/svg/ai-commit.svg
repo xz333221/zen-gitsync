@@ -1,0 +1,8 @@
+<svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+  <!-- Large 4-pointed sparkle, center (380,520), half-length=340 -->
+  <path d="M 380,180 Q 380,520 720,520 Q 380,520 380,860 Q 380,520 40,520 Q 380,520 380,180 Z" fill="currentColor"/>
+  <!-- Medium 4-pointed sparkle, center (800,195), half-length=155 -->
+  <path d="M 800,40 Q 800,195 955,195 Q 800,195 800,350 Q 800,195 645,195 Q 800,195 800,40 Z" fill="currentColor"/>
+  <!-- Small 4-pointed sparkle, center (880,678), half-length=72 -->
+  <path d="M 880,606 Q 880,678 952,678 Q 880,678 880,750 Q 880,678 808,678 Q 880,678 880,606 Z" fill="currentColor"/>
+</svg>

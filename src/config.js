@@ -40,7 +40,9 @@ const defaultConfig = {
   autoClosePushModal: false,
   // 通用设置
   theme: 'light',  // 主题: light | dark | auto
-  locale: 'zh-CN'  // 语言: zh-CN | en-US
+  locale: 'zh-CN',  // 语言: zh-CN | en-US
+  // AI 模型配置
+  models: []
 };
 
 // 规范化项目路径作为配置键

@@ -6,6 +6,16 @@ import type { SupportLocale } from '@/locales'
 import { setLocale } from '@/locales'
 import { useLocaleStore } from './localeStore'
 
+// AI 模型配置
+export interface ModelInfo {
+  id: string
+  name: string
+  baseURL: string
+  model: string
+  isDefault: boolean
+  apiKey: string
+}
+
 // 节点输出引用类型
 export interface NodeOutputRef {
   nodeId: string      // 引用的节点 ID
@@ -163,6 +173,8 @@ export const useConfigStore = defineStore('config', () => {
   const theme = ref<'light' | 'dark' | 'auto'>('light')
   // 语言设置（从localStorage加载，默认zh-CN）
   const locale = ref<SupportLocale>('zh-CN')
+  // AI 模型列表
+  const models = ref<ModelInfo[]>([])
 
   // 设置当前目录
   function setCurrentDirectory(dir: string) {
@@ -316,6 +328,11 @@ export const useConfigStore = defineStore('config', () => {
       if (configData.autoQuickPushOnEnter !== undefined) autoQuickPushOnEnter.value = Boolean(configData.autoQuickPushOnEnter)
       if (configData.autoSetDefaultMessage !== undefined) autoSetDefaultMessage.value = Boolean(configData.autoSetDefaultMessage)
       if (configData.autoClosePushModal !== undefined) autoClosePushModal.value = Boolean(configData.autoClosePushModal)
+
+      // 加载模型配置
+      if (Array.isArray(configData.models)) {
+        models.value = configData.models
+      }
 
       // 加载通用设置
       if (configData.theme && ['light', 'dark', 'auto'].includes(configData.theme)) {
@@ -890,6 +907,28 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 保存模型配置
+  async function saveModels(updatedModels: ModelInfo[]): Promise<boolean> {
+    try {
+      const response = await fetch('/api/config/save-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ models: updatedModels })
+      })
+      const result = await response.json()
+      if (result.success) {
+        models.value = updatedModels
+        return true
+      } else {
+        ElMessage.error(`${$t('@D50BB:保存模型失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@D50BB:保存模型失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
   // 保存通用设置
   async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale }) {
     try {
@@ -927,6 +966,7 @@ export const useConfigStore = defineStore('config', () => {
 
   return {
     // 状态
+    models,
     defaultCommitMessage,
     descriptionTemplates,
     scopeTemplates,
@@ -958,6 +998,7 @@ export const useConfigStore = defineStore('config', () => {
     setCurrentDirectory,
     openSystemConfigFile,
     saveTemplate,
+    saveModels,
     saveGeneralSettings,
     applyTheme,
     saveDefaultMessage,
