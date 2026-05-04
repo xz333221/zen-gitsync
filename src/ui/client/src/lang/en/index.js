@@ -471,6 +471,8 @@ export default {
   '@67CE7:常用目录': 'Common Directories',
   '@67CE7:取消': 'Cancel',
   '@67CE7:切换': 'Switch',
+  '@67CE7:已复制目录路径': 'Directory path copied',
+  '@67CE7:复制失败': 'Copy failed',
   // @67CE7: file end
   // @NPM01: file path: components\NpmScriptsPanel.vue
   '@NPM01:NPM 脚本': 'NPM Scripts',

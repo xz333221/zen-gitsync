@@ -28,6 +28,17 @@ const currentDirectory = computed(() => configStore.currentDirectory);
 // 获取当前文件夹名称（用于显示）
 const currentFolderName = computed(() => getFolderNameFromPath(currentDirectory.value));
 
+// 右键复制目录路径
+async function onCopyDirectory() {
+  if (!currentDirectory.value) return;
+  try {
+    await navigator.clipboard.writeText(currentDirectory.value);
+    ElMessage.success($t('@67CE7:已复制目录路径'));
+  } catch {
+    ElMessage.error($t('@67CE7:复制失败'));
+  }
+}
+
 // 对话框与状态
 const isDirectoryDialogVisible = ref(false);
 const newDirectoryPath = ref("");
@@ -346,7 +357,7 @@ function onBrowserSelect(path: string) {
 
 <template>
 <div id="directory-selector" class="directory-selector" :class="[`directory-selector--${props.variant}`]">
-    <div class="directory-display cursor-pointer" :title="currentDirectory" @click="onOpenDialog">
+    <div class="directory-display cursor-pointer" :title="currentDirectory" @click="onOpenDialog" @contextmenu.prevent="onCopyDirectory">
       {{ currentFolderName }}
     </div>
     <div class="directory-actions flex">

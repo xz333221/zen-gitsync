@@ -476,6 +476,8 @@ export default {
   '@67CE7:取消': '取消',
   '@67CE7:切换': '切换',
   '@67CE7:打开终端失败: ': '打开终端失败: ',
+  '@67CE7:已复制目录路径': '已复制目录路径',
+  '@67CE7:复制失败': '复制失败',
   // @67CE7: file end
   // @NPM01: file path: components\NpmScriptsPanel.vue
   '@NPM01:NPM 脚本': 'NPM 脚本',
