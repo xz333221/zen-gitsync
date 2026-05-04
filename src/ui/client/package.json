@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "tsc": "vue-tsc -b --noEmit",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "i18n:replace": "node lib/package-vue-i18n/bin/trans",

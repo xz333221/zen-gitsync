@@ -59,3 +59,5 @@ Thumbs.db
 # Temp directories
 .temp/
 tmp/
+
+.npmrc

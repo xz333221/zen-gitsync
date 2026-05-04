@@ -13,7 +13,6 @@ import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
 import CommandHistory from "@/views/components/CommandHistory.vue";
-import SvgIcon from "@components/SvgIcon/index.vue";
 import IconButton from "@components/IconButton.vue";
 
 // AI 生成提交信息
