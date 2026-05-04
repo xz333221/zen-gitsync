@@ -223,7 +223,7 @@ onBeforeUnmount(() => {
 })
 
 // ── 保存文件 ───────────────────────────────────────────
-async function saveCurrentFile() {
+async function saveCurrentFile(silent = false) {
   const tab = activeTab()
   if (!tab) return
   try {
@@ -239,7 +239,7 @@ async function saveCurrentFile() {
     }
     tab.originalContent = tab.content
     tab.isDirty = false
-    ElMessage.success($t('@EDITOR:已保存'))
+    if (!silent) ElMessage.success($t('@EDITOR:已保存'))
   } catch (e: any) {
     ElMessage.error(`${$t('@EDITOR:保存失败: ')}${e.message}`)
   }
