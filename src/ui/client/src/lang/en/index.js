@@ -638,6 +638,7 @@ export default {
   '@42BB9:换行符处理': 'Line break processing',
   '@42BB9:默认初始化分支': 'Default initialization branch',
   '@42BB9:取消': 'Cancel',
+  '@42BB9:关闭': 'Close',
   '@42BB9:保存设置': 'Save Settings',
   '@42BB9:设置': 'Settings',
   '@42BB9:通用设置': 'General Settings',
@@ -697,6 +698,7 @@ export default {
   '@42BB9:测试中...': 'Testing...',
   '@42BB9:测试失败': 'Test failed',
   '@42BB9:请先填写接口地址和模型名称': 'Please fill in base URL and model name first',
+  '@42BB9:模型尚未保存，请先保存或取消模型编辑': 'Model not saved yet, please save or cancel the model form first',
   // @42BB9: file end
   // @2AEBA: file path: components\GlobalLoading.vue
   '@2AEBA:加载中...': 'Loading...',
@@ -1369,7 +1371,10 @@ export default {
   '@A1833:应用': 'Search',
   '@A1833:重置': 'Reset',
   '@A1833:查看详情': 'View details',
-  '@A1833:复制提交哈希': 'Copy and submit hash',
+  '@A1833:复制提交哈希': 'Copy commit hash',
+  '@A1833:复制提交内容': 'Copy commit content',
+  '@A1833:已复制提交内容: ': 'Copied commit content: ',
+  '@A1833:复制提交内容失败: ': 'Copy commit content failed: ',
   '@A1833:重置到该提交(hard)': 'Reset to this commit (hard)',
   '@A1833:撤销提交 (Revert)': 'Revert Submission',
   '@A1833:-Pick 到当前分支': '-Pick to the current branch',

@@ -937,6 +937,23 @@ export function registerGitOpsRoutes({
     }
   });
 
+  // 获取提交完整 diff（用于复制提交内容）
+  app.get('/api/commit-diff-full', async (req, res) => {
+    try {
+      const hash = req.query.hash;
+      if (!hash) {
+        return res.status(400).json({ success: false, error: '缺少提交哈希参数' });
+      }
+      const { stdout } = await execGitCommand(`git show ${hash}`);
+      // 限制最大 200KB 防止内容过大
+      const MAX = 200 * 1024;
+      const content = stdout.length > MAX ? stdout.slice(0, MAX) + '\n\n[内容过大，已截断]' : stdout;
+      res.json({ success: true, content });
+    } catch (error) {
+      res.status(500).json({ success: false, error: `获取提交内容失败: ${error.message}` });
+    }
+  });
+
   // 添加清理Git锁定文件的接口
   app.post('/api/remove-lock', async (req, res) => {
     try {

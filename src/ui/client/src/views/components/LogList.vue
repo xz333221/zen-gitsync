@@ -878,6 +878,23 @@ async function cherryPickCommit(commit: LogItem | null) {
   }
 }
 
+// 复制提交完整内容（diff）
+async function copyCommitContent(commit: LogItem | null) {
+  if (!commit) return;
+  try {
+    const response = await fetch(`/api/commit-diff-full?hash=${encodeURIComponent(commit.hash)}`);
+    const result = await response.json();
+    if (!result.success) {
+      ElMessage.error(`${$t('@A1833:复制提交内容失败: ')}${result.error}`);
+      return;
+    }
+    await navigator.clipboard.writeText(result.content);
+    ElMessage.success(`${$t('@A1833:已复制提交内容: ')}${commit.hash.substring(0, 7)}`);
+  } catch (error) {
+    ElMessage.error(`${$t('@A1833:复制提交内容失败: ')}${(error as Error).message}`);
+  }
+}
+
 // 复制提交哈希
 async function copyCommitHash(commit: LogItem | null) {
   if (!commit) return;
@@ -1276,6 +1293,9 @@ function toggleFullscreen() {
     </div>
     <div class="context-menu-item" @click="copyCommitHash(selectedContextCommit)">
       <i class="el-icon-document-copy"></i> {{ $t('@A1833:复制提交哈希') }}
+    </div>
+    <div class="context-menu-item" @click="copyCommitContent(selectedContextCommit)">
+      <i class="el-icon-document"></i> {{ $t('@A1833:复制提交内容') }}
     </div>
     <div class="context-menu-item" @click="resetToCommit(selectedContextCommit)">
       <i class="el-icon-refresh-right"></i> {{ $t('@A1833:重置到该提交(hard)') }}

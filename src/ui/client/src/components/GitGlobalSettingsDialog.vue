@@ -353,9 +353,9 @@
         <div></div>
         <div class="footer-actions">
           <button type="button" class="dialog-cancel-btn" @click="visible = false" :disabled="isLoading">
-            {{ $t('@42BB9:取消') }}
+            {{ hasChanges ? $t('@42BB9:取消') : $t('@42BB9:关闭') }}
           </button>
-          <button type="button" class="dialog-confirm-btn" @click="handleSave" :disabled="isLoading">
+          <button v-if="hasChanges" type="button" class="dialog-confirm-btn" @click="handleSave" :disabled="isLoading">
             <el-icon><Check /></el-icon>
             <span>{{ activeTab === 'config' ? $t('@42BB9:保存配置') : $t('@42BB9:保存设置') }}</span>
           </button>
@@ -427,6 +427,25 @@ const currentModelOptions = computed(() => {
   const matched = providerPresets.find(p => p.url === modelEditForm.value.baseURL)
   const pool = matched ? matched.models : providerPresets.flatMap(p => p.models)
   return [...new Set(pool)]
+})
+
+const hasChanges = computed(() => {
+  if (activeTab.value === 'config') return true
+  if (activeTab.value === 'general') {
+    return tempTheme.value !== initTheme || tempLocale.value !== initLocale || editingModelId.value !== undefined
+  }
+  if (activeTab.value === 'git') {
+    return (
+      tempUserName.value !== initUserName ||
+      tempUserEmail.value !== initUserEmail ||
+      cfgAutoSetupRemote.value !== initAutoSetupRemote ||
+      cfgPullRebase.value !== initPullRebase ||
+      cfgFetchPrune.value !== initFetchPrune ||
+      cfgCoreAutoCrlf.value !== initCoreAutoCrlf ||
+      (cfgInitDefaultBranch.value || '').trim() !== initInitDefaultBranch
+    )
+  }
+  return false
 })
 
 function onBaseURLChange(val: string) {
@@ -727,6 +746,11 @@ async function saveGeneralSettings() {
 
 // 保存设置
 async function handleSave() {  // 配置编辑 tab 单独处理
+  // 模型表单尚未保存时拦截
+  if (editingModelId.value !== undefined) {
+    ElMessage.warning($t('@42BB9:模型尚未保存，请先保存或取消模型编辑'))
+    return
+  }
   if (activeTab.value === 'config') {
     await saveConfigJson()
     return

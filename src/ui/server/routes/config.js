@@ -726,7 +726,7 @@ export function registerConfigRoutes({
     }
   })
 
-  // 保存 AI 模型配置
+  // 保存 AI 模型配置（models 是全局配置，存在配置文件顶层，跨项目共享）
   app.post('/api/config/save-models', express.json(), async (req, res) => {
     try {
       const { models } = req.body

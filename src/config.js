@@ -122,12 +122,14 @@ async function loadConfig() {
 
   // 新版结构：{ projects: { [key]: projectConfig }, theme?, locale?, recentDirectories? }
   const projectConfig = raw?.projects?.[key];
-  // 合并：默认配置 + 项目配置 + 全局通用设置（theme, locale）
+  // 合并：默认配置 + 项目配置 + 全局通用设置（theme, locale, models）
+  // models 是全局配置（跨项目共享），优先取项目级，否则回退顶层（兼容旧数据）
   return {
     ...defaultConfig,
     ...(projectConfig || {}),
     theme: raw?.theme ?? defaultConfig.theme,
-    locale: raw?.locale ?? defaultConfig.locale
+    locale: raw?.locale ?? defaultConfig.locale,
+    models: projectConfig?.models ?? raw?.models ?? defaultConfig.models
   };
 }
 
@@ -159,7 +161,8 @@ async function saveConfig(config) {
   }
 
   // 分离全局设置和项目设置
-  const { theme, locale, ...projectConfig } = config;
+  // models 也是全局配置（跨项目共享），和 theme/locale 一样存到顶层
+  const { theme, locale, models, ...projectConfig } = config;
 
   // 保存全局设置到根级别
   if (theme !== undefined) {
@@ -167,6 +170,9 @@ async function saveConfig(config) {
   }
   if (locale !== undefined) {
     raw.locale = locale;
+  }
+  if (models !== undefined) {
+    raw.models = models;
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
