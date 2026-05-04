@@ -1,4 +1,4 @@
-// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
+﻿// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
 export default {
   // @F13B4: file path: App.vue
   '@F13B4:编辑项目配置': 'Edit project configuration',
@@ -701,6 +701,12 @@ export default {
   '@42BB9:测试失败': 'Test failed',
   '@42BB9:请先填写接口地址和模型名称': 'Please fill in base URL and model name first',
   '@42BB9:模型尚未保存，请先保存或取消模型编辑': 'Model not saved yet, please save or cancel the model form first',
+  '@42BB9:编辑器设置': 'Editor Settings',
+  '@42BB9:自定义编辑器行为': 'Customize editor behavior',
+  '@42BB9:文件编辑': 'File Editing',
+  '@42BB9:自动保存': 'Auto Save',
+  '@42BB9:失去焦点时自动保存当前文件': 'Automatically save the current file when it loses focus',
+  '@42BB9:编辑器设置已保存': 'Editor settings saved',
   // @42BB9: file end
   // @2AEBA: file path: components\GlobalLoading.vue
   '@2AEBA:加载中...': 'Loading...',
@@ -1478,4 +1484,42 @@ export default {
   '@13D1C:错误详情': 'Error Details',
   '@13D1C:我知道了': 'Got it',
   // @13D1C: file end
+  // @ACTBAR: file path: components\ActivityBar.vue
+  '@ACTBAR:Git': 'Git',
+  '@ACTBAR:编辑器': 'Editor',
+  '@ACTBAR:源码地图（即将推出）': 'Source Map (Coming Soon)',
+  '@ACTBAR:源码地图': 'Source Map',
+  // @ACTBAR: file end
+  // @SRCMAP: file path: views\SourceMapView.vue
+  '@SRCMAP:源码地图': 'Source Map',
+  '@SRCMAP:输入项目目录路径': 'Enter project directory path',
+  '@SRCMAP:开始分析': 'Analyze',
+  '@SRCMAP:重新分析': 'Re-analyze',
+  '@SRCMAP:分析中...': 'Analyzing...',
+  '@SRCMAP:请先输入项目路径': 'Please enter project path first',
+  '@SRCMAP:开始分析项目...': 'Starting project analysis...',
+  '@SRCMAP:分析失败': 'Analysis failed',
+  '@SRCMAP:文件列表': 'Files',
+  '@SRCMAP:调用图': 'Call Graph',
+  '@SRCMAP:源码面板': 'Source Panel',
+  '@SRCMAP:暂无文件，请先开始分析': 'No files yet, start analysis first',
+  '@SRCMAP:Agent 日志': 'Agent Log',
+  '@SRCMAP:等待开始分析': 'Waiting to start analysis',
+  '@SRCMAP:加载中...': 'Loading...',
+  '@SRCMAP:加载失败': 'Load failed',
+  '@SRCMAP:点击调用图中的节点查看源码': 'Click a node in the call graph to view source',
+  '@SRCMAP:输入项目路径后点击开始分析': 'Enter a project path and click Analyze',
+  '@SRCMAP:AI 正在分析项目结构...': 'AI is analyzing project structure...',
+  // @SRCMAP: file end
+  // @EDITOR: file path: views\EditorView.vue
+  '@EDITOR:资源管理器': 'Explorer',
+  '@EDITOR:刷新': 'Refresh',
+  '@EDITOR:打开文件失败: ': 'Failed to open file: ',
+  '@EDITOR:文件未保存，确认关闭？': 'File has unsaved changes. Close anyway?',
+  '@EDITOR:保存失败: ': 'Save failed: ',
+  '@EDITOR:已保存': 'Saved',
+  '@EDITOR:暂无文件': 'No files',
+  '@EDITOR:从左侧选择文件打开': 'Select a file from the sidebar to open',
+  '@EDITOR:Ctrl+S 保存': 'Ctrl+S to save',
+  // @EDITOR: file end
 }

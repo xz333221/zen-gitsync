@@ -1,3 +1,4 @@
+import express from 'express';
 import chalk from 'chalk';
 import fs from 'fs/promises';
 import path from 'path';
@@ -490,4 +491,48 @@ export function registerFsRoutes({
       res.status(500).json({ success: false, error: error.message });
     }
   });
+
+  // ── 编辑器：读取文件内容 ────────────────────────────────────────
+  app.get('/api/editor/file', async (req, res) => {
+    try {
+      const filePath = req.query.path;
+      if (!filePath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+      // 安全：只允许读取当前工作目录内的文件
+      const cwd = getCurrentProjectPath() || process.cwd();
+      const resolved = path.resolve(filePath);
+      if (!resolved.startsWith(path.resolve(cwd))) {
+        return res.status(403).json({ success: false, error: '禁止访问工作目录以外的文件' });
+      }
+      const stat = await fs.stat(resolved);
+      if (!stat.isFile()) return res.status(400).json({ success: false, error: '目标不是文件' });
+      // 超过 2MB 不读取
+      if (stat.size > 2 * 1024 * 1024) {
+        return res.json({ success: false, error: '文件过大（> 2 MB），暂不支持在线编辑' });
+      }
+      const content = await fs.readFile(resolved, 'utf-8');
+      res.json({ success: true, content });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── 编辑器：写入文件内容 ────────────────────────────────────────
+  app.put('/api/editor/file', express.json(), async (req, res) => {
+    try {
+      const { path: filePath, content } = req.body;
+      if (!filePath || content === undefined) {
+        return res.status(400).json({ success: false, error: '缺少 path 或 content 参数' });
+      }
+      const cwd = getCurrentProjectPath() || process.cwd();
+      const resolved = path.resolve(filePath);
+      if (!resolved.startsWith(path.resolve(cwd))) {
+        return res.status(403).json({ success: false, error: '禁止写入工作目录以外的文件' });
+      }
+      await fs.writeFile(resolved, content, 'utf-8');
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 }
+

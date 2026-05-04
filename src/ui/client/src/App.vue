@@ -10,6 +10,9 @@ import RemoteRepoCard from '@components/RemoteRepoCard.vue'
 import BranchSelector from '@components/BranchSelector.vue'
 import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
+import ActivityBar from '@/components/ActivityBar.vue'
+import EditorView from '@/views/EditorView.vue'
+import SourceMapView from '@/views/SourceMapView.vue'
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -122,6 +125,9 @@ function handleBranchChanged() {
 function handleToggleNpmPanel() {
   gitStatusRef.value?.toggleNpmPanel?.()
 }
+
+// 活动视图切换
+const activeView = ref<'git' | 'editor' | 'source-map'>('git')
 
 // 用户设置对话框
 const userSettingsDialogVisible = ref(false)
@@ -444,7 +450,12 @@ function copyGitInit() {
       </el-card>
     </div>
 
-    <div v-else class="grid-layout">
+    <div v-else class="app-body">
+      <!-- VS Code 风格活动栏 -->
+      <ActivityBar v-model:activeView="activeView" />
+
+      <!-- Git 视图 -->
+      <div v-show="activeView === 'git'" class="view-pane grid-layout">
       <!-- 左侧Git状态 -->
       <div class="git-status-panel">
         <GitStatus ref="gitStatusRef" :initial-directory="currentDirectory" />
@@ -520,7 +531,19 @@ function copyGitInit() {
         <LogList />
       </div>
 
-    </div>
+      </div><!-- /view-pane git -->
+
+      <!-- 编辑器视图 -->
+      <div v-show="activeView === 'editor'" class="view-pane editor-pane">
+        <EditorView />
+      </div>
+
+      <!-- 源码地图视图 -->
+      <div v-show="activeView === 'source-map'" class="view-pane source-map-pane">
+        <SourceMapView />
+      </div>
+
+    </div><!-- /app-body -->
   </main>
 
   <footer class="main-footer app-footer px-4 py-2">
@@ -981,6 +1004,34 @@ h1 {
   z-index: 100;
   height: 48px;
   box-sizing: border-box;
+}
+
+/* app body 包含活动栏 + 内容区 */
+.app-body {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* 视图面板 - 占满剩余空间 */
+.view-pane {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 编辑器面板不用 grid */
+.editor-pane {
+  display: flex;
+}
+
+/* 源码地图面板 */
+.source-map-pane {
+  display: flex;
+  overflow: hidden;
 }
 
 </style>

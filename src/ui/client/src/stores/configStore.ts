@@ -175,6 +175,8 @@ export const useConfigStore = defineStore('config', () => {
   const locale = ref<SupportLocale>('zh-CN')
   // AI 模型列表
   const models = ref<ModelInfo[]>([])
+  // 编辑器自动保存（从localStorage加载，默认false）
+  const editorAutoSave = ref(false)
 
   // 设置当前目录
   function setCurrentDirectory(dir: string) {
@@ -202,6 +204,17 @@ export const useConfigStore = defineStore('config', () => {
   // 监听locale变化，自动保存到localStorage
   watch(locale, (newValue) => {
     localStorage.setItem('zen-gitsync-locale', newValue)
+  })
+
+  // 初始化：从localStorage加载editorAutoSave
+  const savedEditorAutoSave = localStorage.getItem('zen-gitsync-editor-auto-save')
+  if (savedEditorAutoSave !== null) {
+    editorAutoSave.value = savedEditorAutoSave === 'true'
+  }
+
+  // 监听editorAutoSave变化，自动保存到localStorage
+  watch(editorAutoSave, (newValue) => {
+    localStorage.setItem('zen-gitsync-editor-auto-save', String(newValue))
   })
 
   // 应用主题
@@ -992,6 +1005,7 @@ export const useConfigStore = defineStore('config', () => {
     autoQuickPushOnEnter,
     theme,
     locale,
+    editorAutoSave,
 
     // 方法
     loadConfig,

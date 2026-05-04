@@ -1,4 +1,4 @@
-// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
+﻿// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
 export default {
   // @F13B4: file path: App.vue
   '@F13B4:编辑项目配置': '编辑项目配置',
@@ -705,6 +705,12 @@ export default {
   '@42BB9:测试失败': '测试失败',
   '@42BB9:请先填写接口地址和模型名称': '请先填写接口地址和模型名称',
   '@42BB9:模型尚未保存，请先保存或取消模型编辑': '模型尚未保存，请先保存或取消模型编辑',
+  '@42BB9:编辑器设置': '编辑器设置',
+  '@42BB9:自定义编辑器行为': '自定义编辑器行为',
+  '@42BB9:文件编辑': '文件编辑',
+  '@42BB9:自动保存': '自动保存',
+  '@42BB9:失去焦点时自动保存当前文件': '失去焦点时自动保存当前文件',
+  '@42BB9:编辑器设置已保存': '编辑器设置已保存',
   // @42BB9: file end
   // @2AEBA: file path: components\GlobalLoading.vue
   '@2AEBA:加载中...': '加载中...',
@@ -1485,4 +1491,42 @@ export default {
   '@13D1C:错误详情': '错误详情',
   '@13D1C:我知道了': '我知道了',
   // @13D1C: file end
+  // @ACTBAR: file path: components\ActivityBar.vue
+  '@ACTBAR:Git': 'Git',
+  '@ACTBAR:编辑器': '编辑器',
+  '@ACTBAR:源码地图（即将推出）': '源码地图（即将推出）',
+  '@ACTBAR:源码地图': '源码地图',
+  // @ACTBAR: file end
+  // @SRCMAP: file path: views\SourceMapView.vue
+  '@SRCMAP:源码地图': '源码地图',
+  '@SRCMAP:输入项目目录路径': '输入项目目录路径',
+  '@SRCMAP:开始分析': '开始分析',
+  '@SRCMAP:重新分析': '重新分析',
+  '@SRCMAP:分析中...': '分析中...',
+  '@SRCMAP:请先输入项目路径': '请先输入项目路径',
+  '@SRCMAP:开始分析项目...': '开始分析项目...',
+  '@SRCMAP:分析失败': '分析失败',
+  '@SRCMAP:文件列表': '文件列表',
+  '@SRCMAP:调用图': '调用图',
+  '@SRCMAP:源码面板': '源码面板',
+  '@SRCMAP:暂无文件，请先开始分析': '暂无文件，请先开始分析',
+  '@SRCMAP:Agent 日志': 'Agent 日志',
+  '@SRCMAP:等待开始分析': '等待开始分析',
+  '@SRCMAP:加载中...': '加载中...',
+  '@SRCMAP:加载失败': '加载失败',
+  '@SRCMAP:点击调用图中的节点查看源码': '点击调用图中的节点查看源码',
+  '@SRCMAP:输入项目路径后点击开始分析': '输入项目路径后点击开始分析',
+  '@SRCMAP:AI 正在分析项目结构...': 'AI 正在分析项目结构...',
+  // @SRCMAP: file end
+  // @EDITOR: file path: views\EditorView.vue
+  '@EDITOR:资源管理器': '资源管理器',
+  '@EDITOR:刷新': '刷新',
+  '@EDITOR:打开文件失败: ': '打开文件失败: ',
+  '@EDITOR:文件未保存，确认关闭？': '文件未保存，确认关闭？',
+  '@EDITOR:保存失败: ': '保存失败: ',
+  '@EDITOR:已保存': '已保存',
+  '@EDITOR:暂无文件': '暂无文件',
+  '@EDITOR:从左侧选择文件打开': '从左侧选择文件打开',
+  '@EDITOR:Ctrl+S 保存': 'Ctrl+S 保存',
+  // @EDITOR: file end
 }

@@ -43,6 +43,13 @@
         >
           <span>{{ $t('@42BB9:编辑配置') }}</span>
         </div>
+        <div
+          class="tab-item"
+          :class="{ active: activeTab === 'editor' }"
+          @click="activeTab = 'editor'"
+        >
+          <span>{{ $t('@42BB9:编辑器设置') }}</span>
+        </div>
       </div>
 
       <!-- 右侧内容区域 -->
@@ -345,6 +352,32 @@
             </button>
           </div>
         </div>
+
+        <!-- 编辑器设置面板 -->
+        <div v-show="activeTab === 'editor'" class="settings-panel">
+          <div class="info-section">
+            <div class="info-card">
+              <div class="info-content">
+                <p class="info-title">{{ $t('@42BB9:编辑器设置') }}</p>
+                <p class="info-desc">{{ $t('@42BB9:自定义编辑器行为') }}</p>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="section-title">
+              <span>{{ $t('@42BB9:文件编辑') }}</span>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@42BB9:自动保存') }}</label>
+                <el-switch v-model="tempEditorAutoSave" />
+              </div>
+              <div class="setting-row setting-row--hint" v-if="tempEditorAutoSave">
+                <span class="setting-hint">{{ $t('@42BB9:失去焦点时自动保存当前文件') }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -390,11 +423,14 @@ const emit = defineEmits<{
 
 const visible = ref(false)
 const isLoading = ref(false)
-const activeTab = ref<'general' | 'git' | 'commit' | 'config'>('general')
+const activeTab = ref<'general' | 'git' | 'commit' | 'config' | 'editor'>('general')
 
 // 通用设置
 const tempTheme = ref<'light' | 'dark' | 'auto'>('light')
 const tempLocale = ref<SupportLocale>('zh-CN')
+
+// 编辑器设置
+const tempEditorAutoSave = ref(false)
 
 // AI 模型配置
 const aiModels = ref<ModelInfo[]>([])
@@ -444,6 +480,9 @@ const hasChanges = computed(() => {
       cfgCoreAutoCrlf.value !== initCoreAutoCrlf ||
       (cfgInitDefaultBranch.value || '').trim() !== initInitDefaultBranch
     )
+  }
+  if (activeTab.value === 'editor') {
+    return tempEditorAutoSave.value !== configStore.editorAutoSave
   }
   return false
 })
@@ -603,6 +642,8 @@ watch(() => props.modelValue, async (val) => {
     tempLocale.value = configStore.locale
     aiModels.value = [...configStore.models]
     editingModelId.value = undefined
+    // 加载编辑器设置
+    tempEditorAutoSave.value = configStore.editorAutoSave
     
     try {
       isLoading.value = true
@@ -753,6 +794,13 @@ async function handleSave() {  // 配置编辑 tab 单独处理
   }
   if (activeTab.value === 'config') {
     await saveConfigJson()
+    return
+  }
+  // 编辑器设置直接写入 store（localStorage 自动持久化）
+  if (activeTab.value === 'editor') {
+    configStore.editorAutoSave = tempEditorAutoSave.value
+    ElMessage.success($t('@42BB9:编辑器设置已保存'))
+    visible.value = false
     return
   }
   // 保存通用设置
