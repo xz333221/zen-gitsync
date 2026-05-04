@@ -160,7 +160,7 @@ export const useConfigStore = defineStore('config', () => {
   // 当前工作目录
   const currentDirectory = ref('')
   // Push完成后自动关闭进度弹窗（从文件配置加载，默认false）
-  const autoClosePushModal = ref(false)
+  const autoClosePushModal = ref(true)
   // 自动设置默认提交信息（从文件配置加载，默认false）
   const autoSetDefaultMessage = ref(false)
   // 标准化提交（从文件配置加载，默认true）
