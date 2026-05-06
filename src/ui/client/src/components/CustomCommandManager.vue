@@ -441,7 +441,6 @@ interface NpmScriptItem {
   isDuplicate: boolean
 }
 
-const isSyncingNpm = ref(false)
 const npmDialogVisible = ref(false)
 const npmScriptItems = ref<NpmScriptItem[]>([])
 const npmSelected = ref<NpmScriptItem[]>([])

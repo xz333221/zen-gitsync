@@ -10,7 +10,7 @@ import { replaceVariables } from '@/utils/commandParser'
 
 // @CMDPANEL: file path: components\CustomCommandsPanel.vue
 
-const props = defineProps<{
+defineProps<{
   visible: boolean
 }>()
 
