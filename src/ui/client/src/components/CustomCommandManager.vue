@@ -310,7 +310,7 @@ async function deleteCommand(id: string) {
         confirmButtonText: $t('@CMD01:确定'),
         cancelButtonText: $t('@CMD01:取消'),
         type: 'warning',
-        zIndex: 3100000
+        customClass: 'cmd-confirm-box'
       }
     )
     await configStore.deleteCustomCommand(id)
@@ -409,7 +409,7 @@ async function batchDeleteCommands() {
         confirmButtonText: $t('@CMD01:确定'),
         cancelButtonText: $t('@CMD01:取消'),
         type: 'warning',
-        zIndex: 3100000
+        customClass: 'cmd-confirm-box'
       }
     )
     let deletedCount = 0
@@ -696,7 +696,7 @@ defineExpose({
         <div class="command-list">
           <div class="list-header">
             <div class="list-header-left">
-              <h3>{{ $t('@CMD01:已保存的命令') }}</h3>
+              <h3 class="list-title">{{ $t('@CMD01:已保存的命令') }}</h3>
               <span v-if="selectedCommands.length > 0" class="selection-count">
                 {{ $t('@CMD01:已选择', { count: selectedCommands.length }) }}
               </span>
@@ -1058,8 +1058,6 @@ defineExpose({
   margin-bottom: var(--spacing-base);
 }
 
-
-
 .command-list-scroll {
   flex: 1;
   overflow-y: auto;
@@ -1124,10 +1122,8 @@ defineExpose({
 }
 </style>
 
-<!-- 添加全局样式支持目录浏览器对话框 -->
+<!-- 全局样式：层级控制 -->
 <style lang="scss">
-/* 确保弹窗在全屏模式下显示在最上层 */
-/* 强制提高自定义命令管理的遮罩层级（Element Plus overlay） */
 .el-overlay.custom-command-overlay {
   z-index: 3000000 !important;
 }
@@ -1140,12 +1136,10 @@ defineExpose({
   z-index: 3000002 !important;
 }
 
-/* 提高自动补全下拉框层级，确保在弹窗之上 */
 .el-popper.custom-command-popper {
   z-index: 3000003 !important;
 }
 
-/* NPM 同步选择弹窗 */
 .el-overlay.npm-sync-overlay {
   z-index: 3000010 !important;
 }
@@ -1166,123 +1160,18 @@ defineExpose({
   color: var(--color-primary);
 }
 
-/* 目录浏览器全局样式 */
-
-.el-overlay.directory-browser-overlay {
-  z-index: 3000010 !important;
+/* 删除确认框层级：高于主弹窗 */
+.el-overlay:has(.cmd-confirm-box) {
+  z-index: 3100000 !important;
 }
 
-.directory-browser-dialog {
-  .directory-browser {
-    width: 100%;
-    height: 400px;
-    overflow: auto;
-  }
-
-  .current-path {
-    padding: 10px;
-    background-color: var(--bg-panel);
-    border-radius: var(--radius-base);
-    margin-bottom: 10px;
-    border: 1px solid var(--border-card);
-    display: flex;
-    align-items: center;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .path-label {
-    font-weight: bold;
-    margin-right: 5px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .path-value {
-    font-family: monospace;
-    word-break: break-all;
-    flex: 1;
-    min-width: 0;
-    background-color: var(--bg-container);
-    padding: 5px var(--spacing-base);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-card);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
-    width: 100%;
-  }
-
-  .directory-list {
-    list-style: none !important;
-    padding: 0;
-    margin: 0;
-    border: 1px solid var(--border-card);
-    border-radius: var(--radius-base);
-    max-height: 300px;
-    overflow-y: auto;
-    background-color: var(--bg-container);
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .directory-item {
-    padding: 10px var(--spacing-md);
-    border-bottom: 1px solid var(--border-card);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    transition: all 0.2s ease;
-    position: relative;
-    width: 100%;
-    box-sizing: border-box;
-    list-style: none !important;
-
-    &:hover {
-      background-color: #ecf5ff;
-    }
-
-    &:last-child {
-      border-bottom: none;
-    }
-
-    .dir-icon {
-      margin-right: var(--spacing-md);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 24px;
-      height: 24px;
-      flex-shrink: 0;
-    }
-
-    .dir-name {
-      display: flex;
-      align-items: center;
-      
-      line-height: 1.4;
-    }
-
-    .folder-icon {
-      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
-      transition: all 0.2s ease;
-    }
-
-    &:hover .folder-icon {
-      transform: scale(1.1);
-    }
-  }
-
-  .parent-dir {
-    background-color: var(--bg-panel);
-    font-weight: 500;
-  }
+.cmd-confirm-box {
+  z-index: 3100001 !important;
 }
 
-/* 命令执行参数弹窗 */
+/* 执行参数弹窗 */
 .cmd-param-message-box {
-  z-index: 3002 !important;
-
+  z-index: 3100001 !important;
   width: 620px;
   max-width: calc(100vw - 48px);
 
