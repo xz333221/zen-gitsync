@@ -126,10 +126,6 @@
               <div class="model-form-title">{{ editingModelId === null ? $t('@42BB9:添加模型') : $t('@42BB9:编辑模型') }}</div>
               <div class="model-form-grid">
                 <div class="model-form-row">
-                  <label class="model-form-label">{{ $t('@42BB9:显示名称') }}</label>
-                  <el-input v-model="modelEditForm.name" :placeholder="autoModelName || $t('@42BB9:默认使用模型名称')" class="modern-input" size="default" />
-                </div>
-                <div class="model-form-row">
                   <label class="model-form-label">{{ $t('@42BB9:接口地址') }} <span class="req">*</span></label>
                   <el-select
                     v-model="modelEditForm.baseURL"
@@ -161,6 +157,10 @@
                   >
                     <el-option v-for="mn in currentModelOptions" :key="mn" :label="mn" :value="mn" />
                   </el-select>
+                </div>
+                <div class="model-form-row">
+                  <label class="model-form-label">{{ $t('@42BB9:显示名称') }}</label>
+                  <el-input v-model="modelEditForm.name" :placeholder="autoModelName || $t('@42BB9:默认使用模型名称')" class="modern-input" size="default" />
                 </div>
                 <div class="model-form-row">
                   <label class="model-form-label">API Key</label>
