@@ -396,7 +396,7 @@ watch(() => props.visible, (newValue) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px var(--spacing-md);
+  padding: 5px 8px 5px var(--spacing-md);
   background: var(--bg-input);
   border-bottom: 1px solid var(--border-card);
 }
@@ -448,8 +448,8 @@ watch(() => props.visible, (newValue) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px var(--spacing-2xl);
-  gap: var(--spacing-md);
+  padding: 20px var(--spacing-md);
+  gap: var(--spacing-base);
 }
 
 .loading-icon {
@@ -470,13 +470,13 @@ watch(() => props.visible, (newValue) => {
 }
 
 .packages-container {
-  padding: var(--spacing-base);
+  padding: 4px;
   overflow-y: auto;
   transition: max-height 0.1s ease;
 }
 
 .package-item {
-  margin-bottom: var(--spacing-base);
+  margin-bottom: 3px;
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -490,11 +490,11 @@ watch(() => props.visible, (newValue) => {
 .package-header {
   display: flex;
   align-items: center;
-  padding: var(--spacing-base) var(--spacing-md);
+  padding: 5px 8px;
   background: var(--bg-input);
   cursor: pointer;
   transition: all 0.2s ease;
-  gap: var(--spacing-base);
+  gap: 6px;
 }
 
 .package-header:hover {
@@ -590,7 +590,7 @@ watch(() => props.visible, (newValue) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 22px 6px var(--spacing-xl);
+  padding: 4px 12px 4px 20px;
   cursor: pointer;
   transition: all 0.2s ease;
   gap: var(--spacing-md);

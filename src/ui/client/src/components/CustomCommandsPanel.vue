@@ -216,7 +216,7 @@ async function runCommand(cmd: any) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px var(--spacing-md);
+  padding: 5px 4px 5px var(--spacing-md);
   background: var(--bg-input);
   border-bottom: 1px solid var(--border-card);
 }
@@ -250,8 +250,8 @@ async function runCommand(cmd: any) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
-  gap: 8px;
+  padding: 16px 12px;
+  gap: 6px;
 }
 
 .empty-icon {
@@ -274,7 +274,7 @@ async function runCommand(cmd: any) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px var(--spacing-md);
+  padding: 5px var(--spacing-md);
   cursor: pointer;
   transition: background 0.15s ease;
   border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04));
@@ -297,13 +297,13 @@ async function runCommand(cmd: any) {
 .command-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .play-icon {
   flex-shrink: 0;
-  font-size: 18px;
+  font-size: 15px;
   color: var(--color-primary);
   opacity: 0.85;
   transition: opacity 0.15s;

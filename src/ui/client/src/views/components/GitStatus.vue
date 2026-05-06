@@ -60,7 +60,7 @@ function isLocking(filePath: string) {
 }
 
 // npm脚本面板状态
-const showNpmPanel = ref(true) // 默认打开NPM面板
+const showNpmPanel = ref(false) // 默认关闭NPM面板
 function toggleNpmPanel() {
   showNpmPanel.value = !showNpmPanel.value
 }
