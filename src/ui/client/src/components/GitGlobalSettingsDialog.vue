@@ -387,11 +387,7 @@
     
     <template #footer v-if="activeTab !== 'commit'">
       <div class="user-settings-footer">
-        <div class="footer-model-info" v-if="defaultModelDisplay">
-          <span class="footer-model-label">{{ $t('@42BB9:默认模型') }}</span>
-          <span class="footer-model-name">{{ defaultModelDisplay }}</span>
-        </div>
-        <div v-else></div>
+        <div></div>
         <div class="footer-actions">
           <button type="button" class="dialog-cancel-btn" @click="visible = false" :disabled="isLoading">
             {{ hasChanges ? $t('@42BB9:取消') : $t('@42BB9:关闭') }}
@@ -478,12 +474,6 @@ const autoModelName = computed(() => {
   const modelVal = modelEditForm.value.model.trim()
   if (!modelVal) return ''
   return provider ? `${provider.name} / ${modelVal}` : modelVal
-})
-
-const defaultModelDisplay = computed(() => {
-  const m = aiModels.value.find(m => m.isDefault)
-  if (!m) return ''
-  return m.name || m.model
 })
 
 const hasChanges = computed(() => {
@@ -1216,29 +1206,6 @@ html.dark .label-icon {
   justify-content: space-between;
   align-items: center;
   padding: 0;
-}
-
-.footer-model-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.footer-model-label {
-  font-size: var(--font-size-xs);
-  color: var(--el-text-color-secondary);
-  flex-shrink: 0;
-}
-
-.footer-model-name {
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  color: var(--color-text-title);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 220px;
 }
 
 /* 配置编辑面板 */

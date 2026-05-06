@@ -123,13 +123,13 @@ async function loadConfig() {
   // 新版结构：{ projects: { [key]: projectConfig }, theme?, locale?, recentDirectories? }
   const projectConfig = raw?.projects?.[key];
   // 合并：默认配置 + 项目配置 + 全局通用设置（theme, locale, models）
-  // models 是全局配置（跨项目共享），优先取项目级，否则回退顶层（兼容旧数据）
+  // models 是全局配置（跨项目共享），始终取顶层，不使用项目级的（防止旧数据 models:[] 覆盖）
   return {
     ...defaultConfig,
     ...(projectConfig || {}),
     theme: raw?.theme ?? defaultConfig.theme,
     locale: raw?.locale ?? defaultConfig.locale,
-    models: projectConfig?.models ?? raw?.models ?? defaultConfig.models
+    models: raw?.models ?? defaultConfig.models
   };
 }
 

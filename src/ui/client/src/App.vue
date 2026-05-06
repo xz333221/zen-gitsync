@@ -36,6 +36,12 @@ const initCompleted = ref(false)
 // 从 configStore 代理当前目录
 const currentDirectory = computed(() => configStore.currentDirectory)
 
+const defaultModelName = computed(() => {
+  const m = configStore.models.find((m: any) => m.isDefault)
+  if (!m) return ''
+  return m.name || m.model
+})
+
 // 更新浏览器标签标题
 function updateDocumentTitle() {
   const folderName = getFolderNameFromPath(currentDirectory.value)
@@ -548,6 +554,10 @@ function copyGitInit() {
 
   <footer class="main-footer app-footer px-4 py-2">
     <BranchSelector @branch-changed="handleBranchChanged" />
+    <div class="footer-model-hint" v-if="defaultModelName">
+      <span class="footer-model-hint__label">{{ $t('@F13B4:默认模型') }}</span>
+      <span class="footer-model-hint__name">{{ defaultModelName }}</span>
+    </div>
     <RemoteRepoCard />
   </footer>
 
@@ -1004,6 +1014,30 @@ h1 {
   z-index: 100;
   height: 48px;
   box-sizing: border-box;
+}
+
+.footer-model-hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.footer-model-hint__label {
+  font-size: 11px;
+  opacity: 0.55;
+}
+
+.footer-model-hint__name {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.85;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* app body 包含活动栏 + 内容区 */
