@@ -677,6 +677,7 @@ export default {
   '@42BB9:添加模型': 'Add Model',
   '@42BB9:编辑模型': 'Edit Model',
   '@42BB9:默认': 'Default',
+  '@42BB9:默认模型': 'Default Model',
   '@42BB9:设为默认': 'Set as Default',
   '@42BB9:编辑': 'Edit',
   '@42BB9:删除': 'Delete',
