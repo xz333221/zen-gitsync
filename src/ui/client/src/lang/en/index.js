@@ -682,6 +682,7 @@ export default {
   '@42BB9:删除': 'Delete',
   '@42BB9:模型 ID': 'Model ID',
   '@42BB9:显示名称': 'Display Name',
+  '@42BB9:默认使用模型名称': 'Defaults to model name',
   '@42BB9:接口地址': 'Base URL',
   '@42BB9:模型名称': 'Model Name',
   '@42BB9:如 deepseek、openai': 'e.g. deepseek, openai',

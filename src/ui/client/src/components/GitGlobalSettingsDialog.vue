@@ -126,6 +126,10 @@
               <div class="model-form-title">{{ editingModelId === null ? $t('@42BB9:添加模型') : $t('@42BB9:编辑模型') }}</div>
               <div class="model-form-grid">
                 <div class="model-form-row">
+                  <label class="model-form-label">{{ $t('@42BB9:显示名称') }}</label>
+                  <el-input v-model="modelEditForm.name" :placeholder="autoModelName || $t('@42BB9:默认使用模型名称')" class="modern-input" size="default" />
+                </div>
+                <div class="model-form-row">
                   <label class="model-form-label">{{ $t('@42BB9:接口地址') }} <span class="req">*</span></label>
                   <el-select
                     v-model="modelEditForm.baseURL"
@@ -465,6 +469,13 @@ const currentModelOptions = computed(() => {
   return [...new Set(pool)]
 })
 
+const autoModelName = computed(() => {
+  const provider = providerPresets.find(p => p.url === modelEditForm.value.baseURL)
+  const modelVal = modelEditForm.value.model.trim()
+  if (!modelVal) return ''
+  return provider ? `${provider.name} / ${modelVal}` : modelVal
+})
+
 const hasChanges = computed(() => {
   if (activeTab.value === 'config') return true
   if (activeTab.value === 'general') {
@@ -549,20 +560,21 @@ async function handleSaveModelForm() {
     return
   }
   const wasAdding = editingModelId.value === null
-  // 自动生成 id 和 name
+  // 自动生成 id；name 优先使用用户填写的，否则 fallback 到自动生成
   const provider = providerPresets.find(p => p.url === f.baseURL.trim())
   const autoName = provider ? `${provider.name} / ${f.model.trim()}` : f.model.trim()
+  const finalName = f.name.trim() || autoName
   const autoId = wasAdding
     ? `${(provider?.name || 'custom').toLowerCase().replace(/[^a-z0-9]/g, '-')}-${f.model.trim().toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 20)}-${Date.now().toString(36)}`
     : editingModelId.value!
   let updated: ModelInfo[]
   if (wasAdding) {
     const isFirst = aiModels.value.length === 0
-    updated = [...aiModels.value, { id: autoId, name: autoName, apiKey: f.apiKey, baseURL: f.baseURL.trim(), model: f.model.trim(), isDefault: isFirst }]
+    updated = [...aiModels.value, { id: autoId, name: finalName, apiKey: f.apiKey, baseURL: f.baseURL.trim(), model: f.model.trim(), isDefault: isFirst }]
   } else {
     updated = aiModels.value.map(m =>
       m.id === editingModelId.value
-        ? { ...m, name: autoName, apiKey: f.apiKey || m.apiKey, baseURL: f.baseURL.trim(), model: f.model.trim() }
+        ? { ...m, name: finalName, apiKey: f.apiKey || m.apiKey, baseURL: f.baseURL.trim(), model: f.model.trim() }
         : m
     )
   }
