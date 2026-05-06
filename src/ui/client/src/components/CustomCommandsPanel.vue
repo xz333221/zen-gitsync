@@ -80,6 +80,7 @@ async function runCommand(cmd: any) {
     const result = await resp.json()
     if (result?.success) {
       ElMessage.success($t('@CMDPANEL:已在新终端中执行', { name: cmd.name }))
+      window.dispatchEvent(new Event('zen-gitsync:terminal-session-created'))
     } else {
       ElMessage.error(result?.error || $t('@CMDPANEL:执行失败'))
     }

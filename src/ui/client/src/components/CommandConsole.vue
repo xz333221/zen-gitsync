@@ -2415,6 +2415,13 @@ function initSocket() {
   });
 }
 
+// 监听外部组件执行命令后的刺激事件
+const handleExternalTerminalCreated = () => {
+  if (showTerminalSessions.value) {
+    loadTerminalSessions();
+  }
+};
+
 // 监听页面可见性变化：标签页激活时刷新终端会话状态
 const handleVisibilityChange = () => {
   if (document.visibilityState === 'visible' && showTerminalSessions.value) {
@@ -2451,6 +2458,7 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('focus', handleWindowFocus);
   window.addEventListener('zen-gitsync:after-quick-push-success', handleAfterQuickPushSuccessEvent as any);
+  window.addEventListener('zen-gitsync:terminal-session-created', handleExternalTerminalCreated);
 });
 
 // Socket连接断开在onMounted中的onUnmounted回调中处理
@@ -2458,6 +2466,7 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   window.removeEventListener('focus', handleWindowFocus);
   window.removeEventListener('zen-gitsync:after-quick-push-success', handleAfterQuickPushSuccessEvent as any);
+  window.removeEventListener('zen-gitsync:terminal-session-created', handleExternalTerminalCreated);
   if (socket.value) {
     socket.value.disconnect();
     socket.value = null;
