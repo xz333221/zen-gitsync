@@ -198,6 +198,11 @@ export default {
   '@CMD01:默认值': '默认值',
   '@CMD01:必填': '必填',
   '@CMD01:请输入必填变量: ': '请输入必填变量: {var}',
+  '@CMD01:同步NPM命令': '同步NPM命令',
+  '@CMD01:正在同步NPM命令...': '正在同步NPM命令...',
+  '@CMD01:NPM命令同步完成': 'NPM命令同步完成，共添加 {count} 个命令（跳过 {skip} 个重复）',
+  '@CMD01:NPM命令同步失败: ': 'NPM命令同步失败: ',
+  '@CMD01:未找到任何NPM脚本': '未找到任何NPM脚本',
   // @CMD01: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
   '@CMD02:指令编排': '指令编排',

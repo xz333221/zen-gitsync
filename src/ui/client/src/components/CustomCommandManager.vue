@@ -388,6 +388,67 @@ function useCurrentDirectory() {
   newCommand.value.directory = configStore.currentDirectory || ''
 }
 
+// 同步NPM命令
+const isSyncingNpm = ref(false)
+
+async function syncNpmCommands() {
+  try {
+    isSyncingNpm.value = true
+    const response = await fetch('/api/scan-npm-scripts')
+    const result = await response.json()
+
+    if (!result.success) {
+      ElMessage.error(`${$t('@CMD01:NPM命令同步失败: ')}${result.error || ''}`)
+      return
+    }
+
+    const packages = result.packages || []
+    if (packages.length === 0) {
+      ElMessage.warning($t('@CMD01:未找到任何NPM脚本'))
+      return
+    }
+
+    // 收集当前已有命令名称（用于跳过重复）
+    const existingNames = new Set(
+      (Array.isArray(commands.value) ? commands.value : []).map((c: any) =>
+        String(c?.name || '').trim()
+      )
+    )
+
+    let addedCount = 0
+    let skippedCount = 0
+
+    for (const pkg of packages) {
+      const scripts: Record<string, string> = pkg.scripts || {}
+      for (const [scriptName] of Object.entries(scripts)) {
+        const cmdName = `${pkg.name}: ${scriptName}`
+        if (existingNames.has(cmdName)) {
+          skippedCount++
+          continue
+        }
+        const ok = await configStore.saveCustomCommand({
+          name: cmdName,
+          description: `npm run ${scriptName}`,
+          directory: pkg.path,
+          command: `npm run ${scriptName}`
+        })
+        if (ok) {
+          existingNames.add(cmdName)
+          addedCount++
+        }
+      }
+    }
+
+    ElMessage.success(
+      $t('@CMD01:NPM命令同步完成', { count: addedCount, skip: skippedCount })
+    )
+  } catch (error) {
+    ElMessage.error(`${$t('@CMD01:NPM命令同步失败: ')}${(error as Error).message}`)
+  } finally {
+    isSyncingNpm.value = false
+  }
+}
+
 // 暴露方法给父组件
 defineExpose({
   resetForm
@@ -538,6 +599,15 @@ defineExpose({
         <div class="command-list">
           <div class="list-header">
             <h3>{{ $t('@CMD01:已保存的命令') }}</h3>
+            <el-button
+              type="primary"
+              plain
+              size="small"
+              :loading="isSyncingNpm"
+              @click="syncNpmCommands"
+            >
+              {{ $t('@CMD01:同步NPM命令') }}
+            </el-button>
           </div>
           <div class="list-content">
             <el-empty v-if="commands.length === 0" :description="$t('@CMD01:暂无保存的命令')" />

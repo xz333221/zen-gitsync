@@ -194,6 +194,11 @@ export default {
   '@CMD01:默认值': 'Default value',
   '@CMD01:必填': 'Required',
   '@CMD01:请输入必填变量: ': 'Please enter required variable: {var}',
+  '@CMD01:同步NPM命令': 'Sync NPM Commands',
+  '@CMD01:正在同步NPM命令...': 'Syncing NPM commands...',
+  '@CMD01:NPM命令同步完成': 'NPM commands synced, {count} added ({skip} duplicates skipped)',
+  '@CMD01:NPM命令同步失败: ': 'Failed to sync NPM commands: ',
+  '@CMD01:未找到任何NPM脚本': 'No NPM scripts found',
   // @CMD01: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
   '@CMD02:指令编排': 'Command Orchestration',
