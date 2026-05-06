@@ -388,64 +388,158 @@ function useCurrentDirectory() {
   newCommand.value.directory = configStore.currentDirectory || ''
 }
 
-// 同步NPM命令
+// ── 多选 & 批量删除 ──────────────────────────────────────────
+const commandTableRef = ref<any>(null)
+const selectedCommands = ref<CustomCommand[]>([])
+
+function onSelectionChange(selection: CustomCommand[]) {
+  selectedCommands.value = selection
+}
+
+async function batchDeleteCommands() {
+  const count = selectedCommands.value.length
+  if (!count) return
+  try {
+    await ElMessageBox.confirm(
+      $t('@CMD01:确定要删除所选命令吗', { count }),
+      $t('@CMD01:删除确认'),
+      {
+        confirmButtonText: $t('@CMD01:确定'),
+        cancelButtonText: $t('@CMD01:取消'),
+        type: 'warning'
+      }
+    )
+    let deletedCount = 0
+    for (const cmd of selectedCommands.value) {
+      if (!cmd.id) continue
+      const response = await fetch('/api/config/delete-custom-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: cmd.id })
+      })
+      const result = await response.json()
+      if (result.success) deletedCount++
+    }
+    await configStore.loadConfig(true)
+    selectedCommands.value = []
+    ElMessage.success($t('@CMD01:批量删除成功', { count: deletedCount }))
+  } catch {
+    // 用户取消
+  }
+}
+
+// ── 同步NPM命令（带选择弹窗）───────────────────────────────────
+interface NpmScriptItem {
+  key: string
+  label: string
+  packageName: string
+  packagePath: string
+  scriptName: string
+  isDuplicate: boolean
+}
+
 const isSyncingNpm = ref(false)
+const npmDialogVisible = ref(false)
+const npmScriptItems = ref<NpmScriptItem[]>([])
+const npmSelected = ref<NpmScriptItem[]>([])
+const npmTableRef = ref<any>(null)
+const isLoadingNpm = ref(false)
+const isDoingSyncNpm = ref(false)
 
 async function syncNpmCommands() {
   try {
-    isSyncingNpm.value = true
+    isLoadingNpm.value = true
+    npmDialogVisible.value = true
+    npmScriptItems.value = []
+    npmSelected.value = []
+
     const response = await fetch('/api/scan-npm-scripts')
     const result = await response.json()
 
     if (!result.success) {
       ElMessage.error(`${$t('@CMD01:NPM命令同步失败: ')}${result.error || ''}`)
+      npmDialogVisible.value = false
       return
     }
 
     const packages = result.packages || []
     if (packages.length === 0) {
       ElMessage.warning($t('@CMD01:未找到任何NPM脚本'))
+      npmDialogVisible.value = false
       return
     }
 
-    // 收集当前已有命令名称（用于跳过重复）
     const existingNames = new Set(
       (Array.isArray(commands.value) ? commands.value : []).map((c: any) =>
         String(c?.name || '').trim()
       )
     )
 
-    let addedCount = 0
-    let skippedCount = 0
-
+    const items: NpmScriptItem[] = []
     for (const pkg of packages) {
       const scripts: Record<string, string> = pkg.scripts || {}
-      for (const [scriptName] of Object.entries(scripts)) {
+      for (const scriptName of Object.keys(scripts)) {
         const cmdName = `${pkg.name}: ${scriptName}`
-        if (existingNames.has(cmdName)) {
-          skippedCount++
-          continue
-        }
-        const ok = await configStore.saveCustomCommand({
-          name: cmdName,
-          description: `npm run ${scriptName}`,
-          directory: pkg.path,
-          command: `npm run ${scriptName}`
+        items.push({
+          key: cmdName,
+          label: cmdName,
+          packageName: pkg.name,
+          packagePath: pkg.path,
+          scriptName,
+          isDuplicate: existingNames.has(cmdName)
         })
-        if (ok) {
-          existingNames.add(cmdName)
-          addedCount++
-        }
       }
     }
+    npmScriptItems.value = items
+  } catch (error) {
+    ElMessage.error(`${$t('@CMD01:NPM命令同步失败: ')}${(error as Error).message}`)
+    npmDialogVisible.value = false
+  } finally {
+    isLoadingNpm.value = false
+  }
+}
 
-    ElMessage.success(
-      $t('@CMD01:NPM命令同步完成', { count: addedCount, skip: skippedCount })
+function onNpmSelectionChange(selection: NpmScriptItem[]) {
+  npmSelected.value = selection
+}
+
+async function doSyncSelectedNpm() {
+  if (!npmSelected.value.length) {
+    ElMessage.warning($t('@CMD01:请至少选择一项'))
+    return
+  }
+  try {
+    isDoingSyncNpm.value = true
+    const existingNames = new Set(
+      (Array.isArray(commands.value) ? commands.value : []).map((c: any) =>
+        String(c?.name || '').trim()
+      )
     )
+    let addedCount = 0
+    let skippedCount = 0
+    for (const item of npmSelected.value) {
+      if (existingNames.has(item.key)) {
+        skippedCount++
+        continue
+      }
+      const ok = await configStore.saveCustomCommand({
+        name: item.key,
+        description: `npm run ${item.scriptName}`,
+        directory: item.packagePath,
+        command: `npm run ${item.scriptName}`
+      })
+      if (ok) {
+        existingNames.add(item.key)
+        addedCount++
+      }
+    }
+    ElMessage.success($t('@CMD01:NPM命令同步完成2', { count: addedCount, skip: skippedCount }))
+    npmDialogVisible.value = false
+    npmSelected.value = []
   } catch (error) {
     ElMessage.error(`${$t('@CMD01:NPM命令同步失败: ')}${(error as Error).message}`)
   } finally {
-    isSyncingNpm.value = false
+    isDoingSyncNpm.value = false
   }
 }
 
@@ -598,21 +692,44 @@ defineExpose({
         <!-- 命令列表 -->
         <div class="command-list">
           <div class="list-header">
-            <h3>{{ $t('@CMD01:已保存的命令') }}</h3>
-            <el-button
-              type="primary"
-              plain
-              size="small"
-              :loading="isSyncingNpm"
-              @click="syncNpmCommands"
-            >
-              {{ $t('@CMD01:同步NPM命令') }}
-            </el-button>
+            <div class="list-header-left">
+              <h3>{{ $t('@CMD01:已保存的命令') }}</h3>
+              <span v-if="selectedCommands.length > 0" class="selection-count">
+                {{ $t('@CMD01:已选择', { count: selectedCommands.length }) }}
+              </span>
+            </div>
+            <div class="list-header-actions">
+              <el-button
+                v-if="selectedCommands.length > 0"
+                type="danger"
+                plain
+                size="small"
+                @click="batchDeleteCommands"
+              >
+                {{ $t('@CMD01:批量删除') }}
+              </el-button>
+              <el-button
+                type="primary"
+                plain
+                size="small"
+                :loading="isLoadingNpm"
+                @click="syncNpmCommands"
+              >
+                {{ $t('@CMD01:同步NPM命令') }}
+              </el-button>
+            </div>
           </div>
           <div class="list-content">
             <el-empty v-if="commands.length === 0" :description="$t('@CMD01:暂无保存的命令')" />
             <div v-else class="command-list-scroll">
-            <el-table :data="commands" style="width: 100%;height: 100%;" stripe>
+            <el-table
+              ref="commandTableRef"
+              :data="commands"
+              style="width: 100%;height: 100%;"
+              stripe
+              @selection-change="onSelectionChange"
+            >
+              <el-table-column type="selection" width="40" />
               <el-table-column prop="name" :label="$t('@CMD01:命令名称')" min-width="80">
                 <template #default="scope">
                   <div class="name-cell">
@@ -692,6 +809,59 @@ defineExpose({
     :initial-path="newCommand.directory || configStore.currentDirectory"
     @select="onBrowserSelect"
   />
+
+  <!-- NPM 命令选择弹窗 -->
+  <el-dialog
+    v-model="npmDialogVisible"
+    :title="$t('@CMD01:选择NPM命令')"
+    :close-on-click-modal="false"
+    :append-to-body="true"
+    :modal-append-to-body="true"
+    width="680px"
+    :z-index="3000010"
+    modal-class="npm-sync-overlay"
+    class="npm-sync-dialog"
+  >
+    <div v-loading="isLoadingNpm" class="npm-dialog-body">
+      <el-table
+        ref="npmTableRef"
+        :data="npmScriptItems"
+        style="width: 100%"
+        max-height="420"
+        stripe
+        @selection-change="onNpmSelectionChange"
+      >
+        <el-table-column type="selection" width="44" :selectable="() => true" />
+        <el-table-column prop="packageName" :label="$t('@CMD01:包名')" min-width="140" />
+        <el-table-column prop="scriptName" :label="$t('@CMD01:脚本名')" min-width="120" />
+        <el-table-column prop="scriptName" :label="$t('@CMD01:命令')" min-width="160">
+          <template #default="scope">
+            <code class="command-text">npm run {{ scope.row.scriptName }}</code>
+          </template>
+        </el-table-column>
+        <el-table-column :label="$t('@CMD01:状态')" width="80" align="center">
+          <template #default="scope">
+            <el-tag v-if="scope.row.isDuplicate" type="warning" size="small">{{ $t('@CMD01:已存在') }}</el-tag>
+            <el-tag v-else type="success" size="small">{{ $t('@CMD01:新增') }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+    <template #footer>
+      <div class="npm-dialog-footer">
+        <span class="npm-selected-count">{{ $t('@CMD01:已选择', { count: npmSelected.length }) }}</span>
+        <el-button @click="npmDialogVisible = false">{{ $t('@CMD01:取消') }}</el-button>
+        <el-button
+          type="primary"
+          :loading="isDoingSyncNpm"
+          :disabled="npmSelected.length === 0"
+          @click="doSyncSelectedNpm"
+        >
+          {{ $t('@CMD01:开始同步') }}
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped lang="scss">
@@ -752,6 +922,27 @@ defineExpose({
   background: var(--bg-component-area);
   border-bottom: 1px solid var(--border-component);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.list-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
+.list-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
+.selection-count {
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  font-weight: 500;
 }
 
 .form-content {
@@ -949,6 +1140,27 @@ defineExpose({
 /* 提高自动补全下拉框层级，确保在弹窗之上 */
 .el-popper.custom-command-popper {
   z-index: 3000003 !important;
+}
+
+/* NPM 同步选择弹窗 */
+.el-overlay.npm-sync-overlay {
+  z-index: 3000010 !important;
+}
+
+.npm-sync-dialog .npm-dialog-body {
+  min-height: 100px;
+}
+
+.npm-sync-dialog .npm-dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.npm-sync-dialog .npm-selected-count {
+  flex: 1;
+  font-size: 13px;
+  color: var(--color-primary);
 }
 
 /* 目录浏览器全局样式 */
