@@ -132,6 +132,10 @@ function handleToggleNpmPanel() {
   gitStatusRef.value?.toggleNpmPanel?.()
 }
 
+function handleToggleCustomCmdsPanel() {
+  gitStatusRef.value?.toggleCustomCmdsPanel?.()
+}
+
 // 活动视图切换
 const activeView = ref<'git' | 'editor' | 'source-map'>('git')
 
@@ -391,7 +395,7 @@ function copyGitInit() {
       </a>
     </div>
     <div class="header-center">
-      <DirectorySelector variant="header" @toggle-npm-panel="handleToggleNpmPanel" />
+      <DirectorySelector variant="header" @toggle-npm-panel="handleToggleNpmPanel" @toggle-custom-cmds-panel="handleToggleCustomCmdsPanel" />
     </div>
     <div class="header-info">
       <!-- 顶部右侧动作 -->

@@ -53,6 +53,7 @@ let checkNpmScriptsTimer: ReturnType<typeof setTimeout> | null = null;
 // 定义emits
 const emit = defineEmits<{
   toggleNpmPanel: []
+  toggleCustomCmdsPanel: []
 }>();
 
 // 打开切换目录对话框
@@ -160,7 +161,10 @@ async function onOpenTerminal() {
 function onToggleNpmPanel() {
   emit('toggleNpmPanel');
 }
-
+// 切换自定义命令面板
+function onToggleCustomCmdsPanel() {
+  emit('toggleCustomCmdsPanel')
+}
 // 获取最近访问的目录
 async function getRecentDirectories() {
   try {
@@ -401,6 +405,14 @@ function onBrowserSelect(path: string) {
         @click="onToggleNpmPanel"
       >
         <svg-icon icon-class="npm" />
+      </IconButton>
+      <IconButton
+        tooltip="自定义命令"
+        size="large"
+        custom-class="custom-cmds-btn"
+        @click="onToggleCustomCmdsPanel"
+      >
+        <svg-icon icon-class="command-list" />
       </IconButton>
     </div>
   </div>
