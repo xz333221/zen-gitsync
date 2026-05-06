@@ -310,6 +310,7 @@ async function deleteCommand(id: string) {
         confirmButtonText: $t('@CMD01:确定'),
         cancelButtonText: $t('@CMD01:取消'),
         type: 'warning',
+        zIndex: 3100000
       }
     )
     await configStore.deleteCustomCommand(id)
@@ -397,7 +398,8 @@ function onSelectionChange(selection: CustomCommand[]) {
 }
 
 async function batchDeleteCommands() {
-  const count = selectedCommands.value.length
+  const toDelete = [...selectedCommands.value]
+  const count = toDelete.length
   if (!count) return
   try {
     await ElMessageBox.confirm(
@@ -406,11 +408,12 @@ async function batchDeleteCommands() {
       {
         confirmButtonText: $t('@CMD01:确定'),
         cancelButtonText: $t('@CMD01:取消'),
-        type: 'warning'
+        type: 'warning',
+        zIndex: 3100000
       }
     )
     let deletedCount = 0
-    for (const cmd of selectedCommands.value) {
+    for (const cmd of toDelete) {
       if (!cmd.id) continue
       const response = await fetch('/api/config/delete-custom-command', {
         method: 'POST',
