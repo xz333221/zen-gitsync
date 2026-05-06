@@ -858,6 +858,8 @@ export default {
   '@C298B:Git仓库初始化失败: ': 'Git repository initialization failed: ',
   '@C298B:没有可复制的远程仓库地址': 'There are no replicable remote repository addresses available',
   '@C298B:已复制远程仓库地址': 'The remote repository address has been copied',
+  '@C298B:没有可复制的 Diff': 'No diff to copy',
+  '@C298B:已复制全量 Diff': 'Full diff copied',
   '@C298B:应用stash时发生冲突，请手动解决': 'There was a conflict while applying \'stash\', please manually resolve it',
   '@C298B:开发环境：从环境变量读取后端端口 ': 'Development environment: Read backend ports from environment variables',
   '@C298B:生产环境：使用当前页面端口 ': 'Production environment: Use the current page port',
@@ -1250,6 +1252,7 @@ export default {
   '@76872:我知道了': 'Got it',
   // @76872: file end
   // @13D1C: file path: views\components\GitStatus.vue
+  '@13D1C:复制全量 Diff': 'Copy full diff',
   '@13D1C:Git Pull (拉取远程更新)': 'GitPull (Pull Remote Updates)',
   '@13D1C:Git Fetch All (获取所有远程分支)': 'Gitfetch All (Get all remote branches)',
   '@13D1C:管理锁定文件': 'Manage Locked Files',

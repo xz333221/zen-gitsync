@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Document, ArrowUp, ArrowDown, Lock, Unlock, InfoFilled, WarningFilled, Loading, Folder } from '@element-plus/icons-vue'
+import { Refresh, Document, ArrowUp, ArrowDown, Lock, Unlock, InfoFilled, WarningFilled, Loading, Folder, CopyDocument } from '@element-plus/icons-vue'
 import TreeIcon from '@/components/icons/TreeIcon.vue'
 import IconButton from '@/components/IconButton.vue'
 import ListIcon from '@/components/icons/ListIcon.vue'
@@ -894,6 +894,14 @@ defineExpose({
         </div>
         <div class="flex items-center">
           <!-- <GitOperationsButton variant="icon" /> -->
+          <IconButton
+            :tooltip="$t('@13D1C:复制全量 Diff')"
+            size="large"
+            hover-color="var(--color-primary)"
+            @click="gitStore.copyCurrentDiff()"
+          >
+            <el-icon><CopyDocument /></el-icon>
+          </IconButton>
           <IconButton
             :tooltip="$t('@13D1C:刷新状态')"
             size="large"

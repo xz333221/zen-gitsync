@@ -1629,6 +1629,28 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 复制当前全量 Diff 到剪贴板
+  async function copyCurrentDiff() {
+    try {
+      const response = await fetch('/api/diff-head');
+      const data = await response.json();
+      if (!data.success) {
+        ElMessage({ message: `${$t('@C298B:复制失败: ')}${data.error}`, type: 'error' });
+        return false;
+      }
+      if (!data.diff) {
+        ElMessage({ message: $t('@C298B:没有可复制的 Diff'), type: 'warning' });
+        return false;
+      }
+      await navigator.clipboard.writeText(data.diff);
+      ElMessage({ message: $t('@C298B:已复制全量 Diff'), type: 'success' });
+      return true;
+    } catch (error) {
+      ElMessage({ message: `${$t('@C298B:复制失败: ')}${(error as Error).message}`, type: 'error' });
+      return false;
+    }
+  }
+
   // 复制远程仓库地址到剪贴板
   async function copyRemoteUrl() {
     if (!remoteUrl.value) {
@@ -2031,6 +2053,7 @@ export const useGitStore = defineStore('git', () => {
     gitInit,
     copyRemoteUrl,
     copyCloneCommand,
+    copyCurrentDiff,
     mergeBranch,
     // stash相关方法
     getStashList,

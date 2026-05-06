@@ -88,6 +88,20 @@ export function registerGitDiffRoutes({
     }
   });
 
+  // 获取全量 diff（git diff HEAD，含已暂存与未暂存的所有变更）
+  app.get('/api/diff-head', async (req, res) => {
+    try {
+      const { stdout } = await execGitCommand('git diff HEAD');
+      const MAX = 500 * 1024;
+      const content = stdout.length > MAX
+        ? stdout.slice(0, MAX) + '\n\n[内容过大，已截断]'
+        : stdout;
+      res.json({ success: true, diff: content });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // 获取文件内容 (用于未跟踪文件)
   app.get('/api/file-content', async (req, res) => {
     try {
