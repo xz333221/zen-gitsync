@@ -14,6 +14,7 @@ import CommonDialog from '@components/CommonDialog.vue'
 import FileGroup from '@/components/FileGroup.vue'
 import FileTreeView from '@/components/FileTreeView.vue'
 import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
+import CustomCommandsPanel from '@components/CustomCommandsPanel.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
 import StashSelectedFilesButton from '@/components/buttons/StashSelectedFilesButton.vue'
@@ -62,6 +63,12 @@ function isLocking(filePath: string) {
 const showNpmPanel = ref(true) // 默认打开NPM面板
 function toggleNpmPanel() {
   showNpmPanel.value = !showNpmPanel.value
+}
+
+// 自定义命令面板状态
+const showCustomCmdsPanel = ref(true)
+function toggleCustomCmdsPanel() {
+  showCustomCmdsPanel.value = !showCustomCmdsPanel.value
 }
 
 // 文件选择状态
@@ -843,7 +850,8 @@ onMounted(() => {
 // 暴露刷新方法给父组件
 defineExpose({
   refreshStatus,
-  toggleNpmPanel
+  toggleNpmPanel,
+  toggleCustomCmdsPanel
 })
 </script>
 
@@ -1302,6 +1310,9 @@ defineExpose({
     
     <!-- NPM脚本面板 -->
     <NpmScriptsPanel :visible="showNpmPanel" @close="showNpmPanel = false" />
+
+    <!-- 自定义命令快捷面板 -->
+    <CustomCommandsPanel :visible="showCustomCmdsPanel" @close="showCustomCmdsPanel = false" />
   </div>
   
   <!-- 文件差异对话框 -->

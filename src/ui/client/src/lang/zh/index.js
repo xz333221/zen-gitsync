@@ -219,6 +219,14 @@ export default {
   '@CMD01:请至少选择一项': '请至少选择一个命令',
   '@CMD01:NPM命令同步完成2': 'NPM命令同步完成，共添加 {count} 个命令（跳过 {skip} 个重复）',
   // @CMD01: file end
+  // @CMDPANEL: file path: components\CustomCommandsPanel.vue
+  '@CMDPANEL:自定义命令': '自定义命令',
+  '@CMDPANEL:管理命令': '管理命令',
+  '@CMDPANEL:暂无自定义命令': '暂无自定义命令',
+  '@CMDPANEL:去添加': '去添加',
+  '@CMDPANEL:已在新终端中执行': '已在新终端中执行: {name}',
+  '@CMDPANEL:执行失败': '执行失败',
+  // @CMDPANEL: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
   '@CMD02:指令编排': '指令编排',
   '@CMD02:可用命令': '可用命令',
