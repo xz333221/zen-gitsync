@@ -22,6 +22,7 @@ declare module 'vue' {
     ConfirmNode: typeof import('./src/components/flow/nodes/ConfirmNode.vue')['default']
     CreateTagButton: typeof import('./src/components/buttons/CreateTagButton.vue')['default']
     CustomCommandManager: typeof import('./src/components/CustomCommandManager.vue')['default']
+    CustomCommandsPanel: typeof import('./src/components/CustomCommandsPanel.vue')['default']
     DirectoryBrowserDialog: typeof import('./src/components/DirectoryBrowserDialog.vue')['default']
     DirectorySelector: typeof import('./src/components/DirectorySelector.vue')['default']
     DiscardAllChangesButton: typeof import('./src/components/buttons/DiscardAllChangesButton.vue')['default']
@@ -109,7 +110,7 @@ declare module 'vue' {
     VersionNode: typeof import('./src/components/flow/nodes/VersionNode.vue')['default']
     WaitNode: typeof import('./src/components/flow/nodes/WaitNode.vue')['default']
   }
-  export interface ComponentCustomProperties {
+  export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }
