@@ -1,6 +1,6 @@
 ---
 name: auto-commit
-description: zen-gitsync 专属 Git 自动提交 skill。大模型完成一轮代码修改并通过全部验证（get_errors / TSC / i18n）之后，立即执行 Git 暂存 → 生成符合项目风格的 Conventional Commits 提交信息 → git commit。每次涉及代码修改的回答结束、验证全部通过后必须自动执行，无需用户主动触发。适用触发词：提交代码、git commit、自动提交、commit 一下、帮我提交。
+description: zen-gitsync 专属 Git 自动提交 skill。大模型完成一轮代码修改并通过全部验证（get_errors / TSC / i18n）之后，立即执行 Git 暂存 → 生成符合项目风格的 Conventional Commits 提交信息 → git commit → git push。每次涉及代码修改的回答结束、验证全部通过后必须自动执行，无需用户主动触发。适用触发词：提交代码、git commit、自动提交、commit 一下、帮我提交。
 ---
 
 # zen-gitsync 自动 Git 提交流程
@@ -94,14 +94,15 @@ git commit -m "<生成的提交信息>"
 
 ---
 
-## 步骤 5 — 询问是否推送
+## 步骤 5 — 推送到远端
 
-提交完成后，**主动询问用户**是否需要推送到远端：
+提交完成后，**直接执行推送**，无需询问用户：
 
-> "已提交 `<hash> <message>`，是否推送到 origin/main？"
+```bash
+git push
+```
 
-- 用户确认后执行：`git push origin main`（或当前分支）
-- 用户拒绝则停止，不主动推送
+推送完成后，输出推送结果并告知用户。
 
 ---
 
