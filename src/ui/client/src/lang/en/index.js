@@ -157,6 +157,7 @@ export default {
   '@CMD01:删除确认': 'Delete Confirmation',
   '@CMD01:确定': 'Confirm',
   '@CMD01:取消': 'Cancel',
+  '@CMD01:置顶': 'Pin to top',
   '@CMD01:自定义命令管理': 'Custom Command Manager',
   '@CMD01:命令名称': 'Command Name',
   '@CMD01:输入命令名称，例如: 拉取代码': 'Enter command name, e.g.: Pull Code',

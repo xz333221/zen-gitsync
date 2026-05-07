@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch, h, reactive, defineComponent } from 'vue'
 import { ElInput, ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Delete, VideoPlay, Folder, CopyDocument } from '@element-plus/icons-vue'
+import { Edit, Delete, VideoPlay, Folder, CopyDocument, Top } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
 import IconButton from '@components/IconButton.vue'
 import TemplateManager from '@components/TemplateManager.vue'
@@ -317,6 +317,11 @@ async function deleteCommand(id: string) {
   } catch (error) {
     // 用户取消删除
   }
+}
+
+// 置顶命令
+async function pinCommandToTop(id: string) {
+  await configStore.pinCustomCommand(id)
 }
 
 // 执行命令
@@ -750,9 +755,17 @@ defineExpose({
                   <span class="directory-text">{{ scope.row.directory }}</span>
                 </template>
               </el-table-column>
-              <el-table-column :label="$t('@CMD01:操作')" width="110" fixed="right">
+              <el-table-column :label="$t('@CMD01:操作')" width="138" fixed="right">
                 <template #default="scope">
                   <div class="action-buttons">
+                    <IconButton
+                      :tooltip="$t('@CMD01:置顶')"
+                      size="small"
+                      hover-color="var(--color-info)"
+                      @click="pinCommandToTop(scope.row.id)"
+                    >
+                      <el-icon><Top /></el-icon>
+                    </IconButton>
                     <IconButton
                       :tooltip="$t('@CMD01:执行命令')"
                       size="small"

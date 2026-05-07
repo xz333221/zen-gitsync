@@ -507,6 +507,32 @@ export function registerConfigRoutes({
     }
   })
   
+  // 置顶自定义命令（移到数组首位）
+  app.post('/api/config/pin-custom-command', express.json(), async (req, res) => {
+    try {
+      const { id } = req.body
+
+      if (!id) {
+        return res.status(400).json({ success: false, error: '缺少命令ID参数' })
+      }
+
+      const config = await configManager.loadConfig()
+
+      if (Array.isArray(config.customCommands)) {
+        const index = config.customCommands.findIndex(cmd => cmd.id === id)
+        if (index > 0) {
+          const [cmd] = config.customCommands.splice(index, 1)
+          config.customCommands.unshift(cmd)
+          await configManager.saveConfig(config)
+        }
+      }
+
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+
   // 更新自定义命令
   app.post('/api/config/update-custom-command', express.json(), async (req, res) => {
     try {

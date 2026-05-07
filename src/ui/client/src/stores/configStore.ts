@@ -813,6 +813,27 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  async function pinCustomCommand(id: string) {
+    try {
+      const response = await fetch('/api/config/pin-custom-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      })
+      const result = await response.json()
+      if (result.success) {
+        await loadConfig(true)
+        return true
+      } else {
+        ElMessage.error(result.error)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error((error as Error).message)
+      return false
+    }
+  }
+
   // 指令编排管理函数
   async function saveOrchestration(orchestration: { name: string; description?: string; flowData?: any }) {
     try {
@@ -1026,6 +1047,7 @@ export const useConfigStore = defineStore('config', () => {
     saveCustomCommand,
     deleteCustomCommand,
     updateCustomCommand,
+    pinCustomCommand,
     saveOrchestration,
     deleteOrchestration,
     updateOrchestration,
