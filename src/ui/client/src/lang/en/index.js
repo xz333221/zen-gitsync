@@ -6,6 +6,8 @@ export default {
   '@F13B4:Git 操作': 'Git operation',
   '@F13B4:用户设置': 'User Settings',
   '@F13B4:创建新分支': 'Create a new branch',
+  '@F13B4:搜索或签出分支': 'Search or checkout branch',
+  '@F13B4:没有匹配的分支': 'No matching branches',
   '@F13B4:请输入新分支名称': 'Please enter the new branch name',
   '@F13B4:选择基础分支': 'Select the basic branch',
   '@F13B4:当前分支': 'Current branch',

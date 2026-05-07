@@ -1153,32 +1153,60 @@ h1 {
 /* 垂直分隔条样式 */
 .vertical-resizer {
   grid-area: v-resizer;
-  background-color: var(--border-color);
   cursor: col-resize;
-  width: 1px !important;
-  transition: background-color 0.2s;
+  width: 8px !important;
   position: relative;
   z-index: 10;
+  background-color: transparent;
+  transition: background-color 0.15s;
 }
 
-.vertical-resizer:hover,
-.vertical-resizer.active {
+.vertical-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  background-color: var(--border-color);
+  transition: background-color 0.15s, width 0.15s;
+  pointer-events: none;
+}
+
+.vertical-resizer:hover::after,
+.vertical-resizer.active::after {
+  width: 2px;
   background-color: var(--color-primary);
 }
 
 /* 第二条垂直分隔条样式 */
 .vertical-resizer-2 {
   grid-area: v-resizer-2;
-  background-color: var(--border-color);
   cursor: col-resize;
-  width: 1px !important;
-  transition: background-color 0.2s;
+  width: 8px !important;
   position: relative;
   z-index: 10;
+  background-color: transparent;
+  transition: background-color 0.15s;
 }
 
-.vertical-resizer-2:hover,
-.vertical-resizer-2.active {
+.vertical-resizer-2::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  background-color: var(--border-color);
+  transition: background-color 0.15s, width 0.15s;
+  pointer-events: none;
+}
+
+.vertical-resizer-2:hover::after,
+.vertical-resizer-2.active::after {
+  width: 2px;
   background-color: var(--color-primary);
 }
 
