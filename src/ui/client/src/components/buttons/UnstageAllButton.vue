@@ -64,7 +64,7 @@ async function handleClick() {
     <IconButton
       v-if="props.from === 'status'"
       :tooltip="tooltipText"
-      size="large"
+      size="medium"
       :disabled="isDisabled"
       :loading="gitStore.isResetting"
       hover-color="var(--color-warning)"

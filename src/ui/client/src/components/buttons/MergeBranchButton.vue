@@ -183,7 +183,7 @@ async function handleMergeBranch() {
     <IconButton
       v-if="props.variant === 'icon'"
       :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:合并其他分支到当前分支')"
-      size="large"
+      size="medium"
       :disabled="gitStore.hasConflictedFiles || gitStore.isGitMerging"
       hover-color="var(--color-primary)"
       @click="openMergeDialog"

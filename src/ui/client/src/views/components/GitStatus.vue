@@ -863,7 +863,7 @@ defineExpose({
           <!-- 添加Git Pull按钮 -->
           <IconButton
             :tooltip="$t('@13D1C:Git Pull (拉取远程更新)')"
-            size="large"
+            size="medium"
             hover-color="var(--color-primary)"
             :disabled="!gitStore.hasUpstream || gitStore.isGitPulling"
             @click="handleGitPull"
@@ -904,7 +904,7 @@ defineExpose({
           <!-- <GitOperationsButton variant="icon" /> -->
           <IconButton
             :tooltip="$t('@13D1C:复制全量 Diff')"
-            size="large"
+            size="medium"
             hover-color="var(--color-primary)"
             @click="gitStore.copyCurrentDiff()"
           >
@@ -912,7 +912,7 @@ defineExpose({
           </IconButton>
           <IconButton
             :tooltip="$t('@13D1C:刷新状态')"
-            size="large"
+            size="medium"
             :disabled="isRefreshing"
             @click="refreshStatus"
           >

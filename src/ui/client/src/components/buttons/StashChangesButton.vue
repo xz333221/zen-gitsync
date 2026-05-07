@@ -96,7 +96,7 @@ function handleStashMessageKeydown(e: KeyboardEvent) {
     <IconButton
       v-if="props.variant === 'icon'"
       :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:将工作区更改储藏起来')"
-      size="large"
+      size="medium"
       :disabled="gitStore.hasConflictedFiles || gitStore.isSavingStash"
       hover-color="var(--color-warning)"
       @click="openStashDialog"

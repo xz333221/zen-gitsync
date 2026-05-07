@@ -54,7 +54,7 @@ async function resetToRemote() {
     v-if="props.variant === 'icon'"
     icon-class="git-reset"
     :tooltip="gitStore.hasConflictedFiles ? $t('@76872:存在冲突文件，请先解决冲突') : $t('@76872:重置到远程')"
-    size="large"
+    size="medium"
     hover-color="#f56c6c"
     :disabled="!gitStore.hasUpstream || gitStore.hasConflictedFiles || gitStore.isResetting"
     @click="resetToRemote"

@@ -287,7 +287,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
     <IconButton
       v-if="props.variant === 'icon'"
       :tooltip="$t('@76872:查看和管理所有储藏记录')"
-      size="large"
+      size="medium"
       hover-color="var(--color-info)"
       @click="openStashListDialog"
     >

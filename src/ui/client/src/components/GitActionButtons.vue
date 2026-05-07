@@ -188,7 +188,7 @@ defineExpose({
   display: flex;
   align-items: stretch;
   gap: 6px;
-  height: 44px;
+  height: 36px;
 }
 
 </style>

@@ -624,7 +624,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
         <IconButton
           :tooltip="$t('@76872:AI生成提交信息')"
           :icon-class="aiGenerating ? '' : 'ai-commit'"
-          size="large"
+          size="medium"
           :disabled="aiGenerating"
           @click="handleAiGenerateCommit"
         >
