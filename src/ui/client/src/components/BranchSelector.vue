@@ -25,12 +25,6 @@ const filteredBranches = computed(() => {
   return gitStore.allBranches.filter((b: string) => b.toLowerCase().includes(kw))
 })
 
-// 打开分支弹出列表
-function openBranchPopover() {
-  branchFilter.value = ''
-  branchPopoverVisible.value = true
-}
-
 // 选择/切换分支
 async function selectBranch(branch: string) {
   if (branch === gitStore.currentBranch) {
