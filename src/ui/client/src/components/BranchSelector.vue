@@ -102,7 +102,7 @@ async function refreshCurrentBranch() {
         @show="branchFilter = ''"
       >
         <template #reference>
-          <button class="branch-btn" @click="openBranchPopover">
+          <button class="branch-btn">
             <svg-icon icon-class="git-branch" class-name="branch-btn-icon" />
             <span class="branch-btn-name">{{ gitStore.currentBranch }}</span>
             <span class="branch-btn-caret">
