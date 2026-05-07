@@ -135,24 +135,24 @@ const handleClick = (event: MouseEvent) => {
   }
   
   &--medium {
-    width: 36px;
-    height: 36px;
-    font-size: 18px;
+    width: 38px;
+    height: 38px;
+    font-size: 19px;
     border-radius: var(--btn-radius);
     
     :deep(.svg-icon) {
-      width: 18px;
-      height: 18px;
-      font-size: 18px;
+      width: 19px;
+      height: 19px;
+      font-size: 19px;
     }
     
     :deep(.el-icon) {
-      font-size: 18px;
+      font-size: 19px;
     }
     
     .icon-image {
-      width: 18px;
-      height: 18px;
+      width: 19px;
+      height: 19px;
     }
   }
   

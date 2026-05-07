@@ -117,7 +117,7 @@ defineExpose({
   border-radius: var(--radius-md);
   font-weight: 500;
   transition: all 0.3s ease;
-  padding: 6px var(--spacing-base);
+  padding: 6px 10px;
   font-size: var(--font-size-sm);
 
   &:hover {
