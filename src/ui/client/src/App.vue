@@ -477,26 +477,33 @@ function copyGitInit() {
       <!-- 中间上方提交表单 -->
       <div class="commit-form-panel" v-if="gitStore.isGitRepo">
         <!-- 当用户未配置时显示配置提示 -->
-        <el-card v-if="!gitStore.userName || !gitStore.userEmail" shadow="hover">
-          <template #header>
-            <h2>Git{{ $t('@F13B4:用户未配置') }}</h2>
-          </template>
-          <p>{{ $t('@F13B4:请先配置Git用户信息才能进行提交操作。') }}</p>
-          <div class="tips">
-            <h3>{{ $t('@F13B4:您可以通过以下方式配置：') }}</h3>
-            <ol>
-              <li>{{ $t('@F13B4:点击右上角的设置按钮，配置用户名和邮箱') }}</li>
-              <li>{{ $t('@F13B4:或者使用命令行配置：') }}</li>
-              <div class="code-block">
-                git config {{ $t('@F13B4:--global user.name "您的用户名"') }}<br>
-                git config {{ $t('@F13B4:--global user.email "您的邮箱"') }}
-              </div>
-            </ol>
-            <el-button type="primary" @click="openUserSettingsDialog">
-              {{ $t('@F13B4:立即配置') }}
-            </el-button>
+        <div v-if="!gitStore.userName || !gitStore.userEmail" class="user-unconfigured-card">
+          <div class="user-unconfigured-icon">
+            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="4"/>
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+              <path d="M17 13.5l1.5 1.5 3-3" stroke="var(--color-warning)" stroke-width="2"/>
+            </svg>
           </div>
-        </el-card>
+          <h2 class="user-unconfigured-title">Git {{ $t('@F13B4:用户未配置') }}</h2>
+          <p class="user-unconfigured-desc">{{ $t('@F13B4:请先配置Git用户信息才能进行提交操作。') }}</p>
+          <div class="user-unconfigured-actions">
+            <button class="user-unconfigured-primary-btn" @click="openUserSettingsDialog">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              {{ $t('@F13B4:立即配置') }}
+            </button>
+          </div>
+          <div class="user-unconfigured-divider">
+            <span>{{ $t('@F13B4:或者使用命令行配置：') }}</span>
+          </div>
+          <div class="user-unconfigured-code">
+            <span class="code-prompt">$</span> git config {{ $t('@F13B4:--global user.name "您的用户名"') }}<br>
+            <span class="code-prompt">$</span> git config {{ $t('@F13B4:--global user.email "您的邮箱"') }}
+          </div>
+        </div>
         <!-- 用户已配置显示提交表单 -->
         <template v-else>
           <CommitForm />
@@ -867,31 +874,114 @@ h1 {
   overflow-y: auto;
 }
 
-.tips {
-  margin-top: var(--spacing-lg);
-  padding: var(--spacing-lg);
-  background-color: var(--bg-panel);
-  border-radius: var(--radius-lg);
-  border-left: 3px solid var(--color-primary);
-  transition: var(--transition-all);
+/* 用户未配置提示卡片 */
+.user-unconfigured-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--spacing-xl);
+  text-align: center;
 }
 
-.tips h3 {
-  margin-top: 0;
-  font-size: var(--font-size-md);
+.user-unconfigured-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  color: var(--color-warning);
+  margin-bottom: var(--spacing-lg);
+  border: 1.5px solid color-mix(in srgb, var(--color-warning) 25%, transparent);
+}
+
+.user-unconfigured-title {
+  font-size: var(--font-size-lg);
   font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.user-unconfigured-desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-xl) 0;
+  line-height: 1.6;
+}
+
+.user-unconfigured-actions {
+  margin-bottom: var(--spacing-xl);
+}
+
+.user-unconfigured-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 8px 20px;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.user-unconfigured-primary-btn:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.user-unconfigured-primary-btn:active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.user-unconfigured-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  max-width: 360px;
   margin-bottom: var(--spacing-base);
 }
 
-.code-block {
-  background-color: var(--bg-code-dark);
+.user-unconfigured-divider::before,
+.user-unconfigured-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+
+.user-unconfigured-divider span {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.user-unconfigured-code {
+  background: var(--bg-code-dark);
   color: #e2e8f0;
   font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.8;
   padding: var(--spacing-base) var(--spacing-lg);
   border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-base);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
+  text-align: left;
+  width: 100%;
+  max-width: 360px;
+  user-select: text;
+}
+
+.user-unconfigured-code .code-prompt {
+  color: var(--color-success, #52c41a);
+  margin-right: 6px;
+  user-select: none;
 }
 
 /* 加载中样式 */
