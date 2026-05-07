@@ -155,7 +155,6 @@ function handleProgressComplete(_success: boolean) {
   }
   
   &.from-form {
-    padding: 6px 14px;
     font-size: 13px;
     height: 32px;
   }

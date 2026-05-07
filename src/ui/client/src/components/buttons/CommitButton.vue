@@ -128,7 +128,6 @@ async function handleClick() {
   }
   
   &.from-form {
-    padding: 6px 14px;
     font-size: 13px;
     height: 32px;
   }

@@ -210,7 +210,7 @@ function handleProgressComplete(_success: boolean) {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 1px;
+      gap: 2px;
       .one-push-title {
         font-size: 13px;
       }

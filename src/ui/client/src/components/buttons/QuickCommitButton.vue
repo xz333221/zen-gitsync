@@ -154,7 +154,7 @@ defineExpose({
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 1px;
+      gap: 2px;
       .one-commit-title {
         font-size: 13px;
       }
