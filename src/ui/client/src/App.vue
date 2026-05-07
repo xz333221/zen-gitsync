@@ -563,7 +563,7 @@ function copyGitInit() {
     </div><!-- /app-body -->
   </main>
 
-  <footer class="main-footer app-footer px-4 py-2">
+  <footer class="main-footer app-footer">
     <BranchSelector @branch-changed="handleBranchChanged" />
     <div class="footer-model-hint" v-if="defaultModelName">
       <span class="footer-model-hint__label">{{ $t('@F13B4:默认模型') }}</span>
@@ -590,10 +590,10 @@ body {
 .main-container {
   position: fixed;
   top: 64px;
-  bottom: 48px;
+  bottom: 32px;
   left: 0;
   right: 0;
-  padding: 8px;
+  padding: 0;
   overflow: hidden;
   z-index: 1001;
   background: var(--bg-page);
@@ -681,14 +681,8 @@ body {
   max-height: 100%;
   padding: 0;
   background: var(--bg-container);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.25s ease, border-color 0.25s ease;
-}
-
-.git-status-panel:hover {
-  box-shadow: var(--shadow-md);
+  border-radius: 0;
+  border-right: 1px solid var(--border-color);
 }
 
 .commit-form-panel {
@@ -697,14 +691,7 @@ body {
   max-height: 100%;
   padding: 0;
   background: var(--bg-container);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.25s ease, border-color 0.25s ease;
-}
-
-.commit-form-panel:hover {
-  box-shadow: var(--shadow-md);
+  border-radius: 0;
 }
 
 .cmd-console-panel {
@@ -713,14 +700,8 @@ body {
   max-height: 100%;
   padding: 0;
   background: var(--bg-container);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.25s ease, border-color 0.25s ease;
-}
-
-.cmd-console-panel:hover {
-  box-shadow: var(--shadow-md);
+  border-radius: 0;
+  border-top: 1px solid var(--border-color);
 }
 
 .log-list-panel {
@@ -729,14 +710,8 @@ body {
   max-height: 100%;
   padding: 0;
   background: var(--bg-container);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.25s ease, border-color 0.25s ease;
-}
-
-.log-list-panel:hover {
-  box-shadow: var(--shadow-md);
+  border-radius: 0;
+  border-left: 1px solid var(--border-color);
 }
 
 .main-header {
@@ -1106,8 +1081,9 @@ h1 {
   left: 0;
   right: 0;
   z-index: 100;
-  height: 48px;
+  height: 32px;
   box-sizing: border-box;
+  padding: 0 var(--spacing-lg);
 }
 
 .footer-model-hint {
@@ -1177,77 +1153,33 @@ h1 {
 /* 垂直分隔条样式 */
 .vertical-resizer {
   grid-area: v-resizer;
-  background-color: transparent;
+  background-color: var(--border-color);
   cursor: col-resize;
+  width: 1px !important;
   transition: background-color 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: var(--radius-base);
-}
-
-.vertical-resizer::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 3px;
-  background-color: var(--color-gray-300);
-  height: 32px;
-  border-radius: 2px;
-  transition: background-color 0.2s, width 0.2s, height 0.2s, box-shadow 0.2s;
 }
 
 .vertical-resizer:hover,
 .vertical-resizer.active {
-  background-color: rgba(59, 130, 246, 0.06);
-}
-
-.vertical-resizer:hover::after,
-.vertical-resizer.active::after {
   background-color: var(--color-primary);
-  width: 4px;
-  height: 48px;
-  border-radius: 2px;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.45);
 }
 
 /* 第二条垂直分隔条样式 */
 .vertical-resizer-2 {
   grid-area: v-resizer-2;
-  background-color: transparent;
+  background-color: var(--border-color);
   cursor: col-resize;
+  width: 1px !important;
   transition: background-color 0.2s;
   position: relative;
   z-index: 10;
-  border-radius: var(--radius-base);
-}
-
-.vertical-resizer-2::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 3px;
-  background-color: var(--color-gray-300);
-  height: 32px;
-  border-radius: 2px;
-  transition: background-color 0.2s, width 0.2s, height 0.2s, box-shadow 0.2s;
 }
 
 .vertical-resizer-2:hover,
 .vertical-resizer-2.active {
-  background-color: rgba(59, 130, 246, 0.06);
-}
-
-.vertical-resizer-2:hover::after,
-.vertical-resizer-2.active::after {
   background-color: var(--color-primary);
-  width: 4px;
-  height: 48px;
-  border-radius: 2px;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.45);
 }
 
 /* 水平分隔条样式 */

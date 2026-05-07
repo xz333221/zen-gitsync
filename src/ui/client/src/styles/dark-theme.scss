@@ -369,21 +369,14 @@
     background: var(--bg-page-dark);
   }
 
-  /* 面板圆角卡片深色主题 */
+  /* 面板深色主题 */
   .git-status-panel,
   .commit-form-panel,
   .cmd-console-panel,
   .log-list-panel {
     background: var(--bg-container-dark) !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
-  }
-
-  .git-status-panel:hover,
-  .commit-form-panel:hover,
-  .cmd-console-panel:hover,
-  .log-list-panel:hover {
-    box-shadow: var(--shadow-dark-lg) !important;
+    box-shadow: none !important;
   }
 
   /* 提交表单容器深色主题 */

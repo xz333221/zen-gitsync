@@ -87,6 +87,9 @@ async function refreshCurrentBranch() {
         @change="handleBranchChange"
         :loading="gitStore.isChangingBranch" 
         class="branch-select"
+        placement="top"
+        teleported
+        :popper-options="{ modifiers: [{ name: 'offset', options: { offset: [0, 8] } }] }"
       >
         <el-option v-for="branch in gitStore.allBranches" :key="branch" :label="branch" :value="branch" />
       </el-select>
