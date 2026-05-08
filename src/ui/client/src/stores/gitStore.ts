@@ -802,6 +802,10 @@ export const useGitStore = defineStore('git', () => {
         fileList.value = []
       }
       isMergeInProgress.value = Boolean(data.isMergeInProgress)
+      // 若处于 MERGING 状态且有默认合并信息，且用户尚未手动填写，则自动填入
+      if (data.isMergeInProgress && data.mergeMessage && !pendingMergeMessage.value) {
+        pendingMergeMessage.value = String(data.mergeMessage)
+      }
     } catch (error) {
       console.error('获取Git状态(porcelain)失败:', error)
       ElMessage({

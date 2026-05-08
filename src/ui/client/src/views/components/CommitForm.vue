@@ -414,13 +414,12 @@ watch(
   () => gitStore.pendingMergeMessage,
   (newMessage) => {
     if (newMessage) {
+      // 合并信息是完整一行（如 Merge branch 'main' of ...），统一填到普通提交信息框
+      // 若当前是标准化模式，切换为普通模式后填入
       if (isStandardCommit.value) {
-        // 标准化提交模式：填入简短描述
-        commitDescription.value = newMessage;
-      } else {
-        // 普通提交模式：填入提交信息
-        commitMessage.value = newMessage;
+        configStore.isStandardCommit = false;
       }
+      commitMessage.value = newMessage;
       // 清空待处理消息，避免重复填充
       gitStore.pendingMergeMessage = '';
       ElMessage.info($t('@76872:已自动填充合并提交信息'));
@@ -490,14 +489,11 @@ onMounted(async () => {
 
   // 检查是否有待处理的合并消息（合并冲突时自动填充）
   if (gitStore.pendingMergeMessage) {
+    // 合并信息是完整一行，统一填到普通提交信息框
     if (isStandardCommit.value) {
-      // 标准化提交模式：填入简短描述
-      commitDescription.value = gitStore.pendingMergeMessage;
-    } else {
-      // 普通提交模式：填入提交信息
-      commitMessage.value = gitStore.pendingMergeMessage;
+      configStore.isStandardCommit = false;
     }
-    // 清空待处理消息，避免重复填充
+    commitMessage.value = gitStore.pendingMergeMessage;
     gitStore.pendingMergeMessage = '';
     ElMessage.info($t('@76872:已自动填充合并提交信息'));
   }
