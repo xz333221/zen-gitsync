@@ -210,8 +210,16 @@ defineExpose({
     <div class="push-progress-container">
       <!-- 拉取中提示 -->
       <div v-if="isPullingRemote" class="pulling-section">
-        <el-icon class="rotating"><Loading /></el-icon>
-        <span>{{ t('@PUSH:正在拉取远程更新') }}...</span>
+        <div class="pulling-icon-wrap">
+          <svg class="pulling-spinner" viewBox="0 0 50 50">
+            <circle class="pulling-spinner-track" cx="25" cy="25" r="20" fill="none" stroke-width="4"/>
+            <circle class="pulling-spinner-arc" cx="25" cy="25" r="20" fill="none" stroke-width="4"/>
+          </svg>
+        </div>
+        <div class="pulling-text-wrap">
+          <div class="pulling-title">{{ t('@PUSH:正在拉取远程更新') }}</div>
+          <div class="pulling-sub">{{ t('@PUSH:拉取完成后自动继续推送') }}</div>
+        </div>
       </div>
       <!-- 推送阶段（2x2网格） -->
       <div 
@@ -435,17 +443,82 @@ defineExpose({
 .pulling-section {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xl) var(--spacing-md);
-  color: var(--color-primary);
-  font-size: var(--font-size-sm);
+  gap: var(--spacing-lg);
+  padding: var(--spacing-xl) var(--spacing-xl);
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: transparent;
-  .el-icon {
-    font-size: 18px;
+  border: 1px solid rgba(64, 158, 255, 0.18);
+  background: rgba(64, 158, 255, 0.04);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 60px;
+    height: 2px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(64, 158, 255, 0.4) 30%,
+      rgba(64, 158, 255, 0.9) 50%,
+      rgba(64, 158, 255, 0.4) 70%,
+      transparent 100%
+    );
+    box-shadow: 0 0 10px rgba(64, 158, 255, 0.5);
+    animation: border-light-run 2.5s linear infinite;
   }
+}
+
+.pulling-icon-wrap {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+}
+
+.pulling-spinner {
+  width: 44px;
+  height: 44px;
+  animation: pulling-rotate 1.4s linear infinite;
+
+  .pulling-spinner-track {
+    stroke: rgba(64, 158, 255, 0.15);
+  }
+
+  .pulling-spinner-arc {
+    stroke: rgba(64, 158, 255, 0.9);
+    stroke-linecap: round;
+    stroke-dasharray: 80 126;
+    animation: pulling-dash 1.4s ease-in-out infinite;
+  }
+}
+
+.pulling-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pulling-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: rgba(64, 158, 255, 0.95);
+  letter-spacing: 0.3px;
+}
+
+.pulling-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+@keyframes pulling-rotate {
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulling-dash {
+  0%   { stroke-dasharray: 1 126; stroke-dashoffset: 0; }
+  50%  { stroke-dasharray: 90 126; stroke-dashoffset: -35; }
+  100% { stroke-dasharray: 90 126; stroke-dashoffset: -124; }
 }
 
 .stages-section {

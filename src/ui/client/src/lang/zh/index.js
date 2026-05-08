@@ -1511,7 +1511,8 @@ export default {
   // @CMDCON: file end
   // @PUSH: file path: components\PushProgressModal.vue
   '@PUSH:正在推送': '正在推送...',
-  '@PUSH:正在拉取远程更新': '正在拉取远程更新...',
+  '@PUSH:正在拉取远程更新': '正在拉取远程更新',
+  '@PUSH:拉取完成后自动继续推送': '拉取完成后自动继续推送',
   '@PUSH:推送成功': '推送成功',
   '@PUSH:推送失败': '推送失败',
   '@PUSH:计数对象': '计数对象',
