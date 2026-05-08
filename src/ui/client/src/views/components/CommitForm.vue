@@ -184,6 +184,8 @@ const hasUserCommitMessage = computed(() => {
 // 提交按钮禁用状态（与 QuickCommitButton 保持一致）
 const isCommitDisabled = computed(() => {
   if (gitStore.hasConflictedFiles) return true;
+  // MERGING 状态：只需要有提交信息即可
+  if (gitStore.isMergeInProgress) return !hasUserCommitMessage.value;
   const hasAnyChanges = gitStore.fileList.some((f) => !isFileLocked(f.path));
   return !hasAnyChanges || !hasUserCommitMessage.value;
 });
