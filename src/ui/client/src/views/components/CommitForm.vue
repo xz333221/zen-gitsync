@@ -664,6 +664,17 @@ git config --global user.email "your.email@example.com"</pre
 
         <!-- 正常的提交区域，仅在Git用户信息已配置时显示 -->
         <template v-else>
+          <!-- MERGING 状态提示 -->
+          <div v-if="gitStore.isMergeInProgress" class="merge-in-progress-banner">
+            <el-alert
+              :title="$t('@76872:合并进行中')"
+              type="warning"
+              :closable="false"
+              show-icon
+            >
+              <span>{{ $t('@76872:分支合并尚未完成，请输入提交信息后点击「提交」按钮完成合并。') }}</span>
+            </el-alert>
+          </div>
           <!-- 左侧：提交表单 -->
           <div class="commit-section">
             <!-- 普通提交表单 -->
@@ -1086,6 +1097,11 @@ git config --global user.email "your.email@example.com"</pre
 
 .git-config-warning {
   width: 100%;
+}
+
+.merge-in-progress-banner {
+  width: 100%;
+  margin-bottom: var(--spacing-base);
 }
 
 .config-command {

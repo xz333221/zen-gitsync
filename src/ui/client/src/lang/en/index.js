@@ -56,6 +56,7 @@ export default {
   '@76A11:提交': 'Commit',
   '@76A11:个已暂存文件': 'A staged file',
   '@76A11:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',
+  '@76A11:提交并完成合并': 'Commit and complete merge',
   // @76A11: file end
   // @F4137: file path: components\buttons\PushButton.vue
   '@F4137:当前分支没有上游分支': 'There is no upstream branch in the current branch',
@@ -1012,6 +1013,8 @@ export default {
   // @81F0F: file end
   // @76872: file path: views\components\CommitForm.vue
   '@76872:Git用户信息未配置': 'Git user information not configured',
+  '@76872:合并进行中': 'Merge in progress',
+  '@76872:分支合并尚未完成，请输入提交信息后点击「提交」按钮完成合并。': 'Branch merge is not complete. Please enter a commit message and click "Commit" to finish the merge.',
   '@76872:提交命令预览：': 'Commit command preview:',
   '@76872:提交类型': 'Submission Type',
   '@76872:作用域（可选）': 'Scope (optional)',

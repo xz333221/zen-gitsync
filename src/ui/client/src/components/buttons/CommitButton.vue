@@ -60,6 +60,10 @@ const isDisabled = computed(() => {
   if (gitStore.isCommiting) {
     return true
   }
+  // MERGING 状态：只需要有提交信息即可提交
+  if (gitStore.isMergeInProgress) {
+    return !props.hasUserCommitMessage
+  }
   return !hasStagedChanges.value || !props.hasUserCommitMessage
 })
 
@@ -67,6 +71,11 @@ const isDisabled = computed(() => {
 const tooltipText = computed(() => {
   if (gitStore.hasConflictedFiles) {
     return $t('@76A11:存在冲突文件，请先解决冲突')
+  }
+  if (gitStore.isMergeInProgress) {
+    return props.hasUserCommitMessage
+      ? $t('@76A11:提交并完成合并')
+      : $t('@76A11:请输入提交信息')
   }
   if (!hasStagedChanges.value) {
     return $t('@76A11:没有已暂存的更改')

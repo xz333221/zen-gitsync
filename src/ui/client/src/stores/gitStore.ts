@@ -55,6 +55,7 @@ export const useGitStore = defineStore('git', () => {
   const isGitPulling = ref(false)      // 拉取中状态
   const isGitFetching = ref(false)     // 获取远程分支信息状态
   const isGitMerging = ref(false)      // 合并分支状态
+  const isMergeInProgress = ref(false) // 是否处于 MERGING 中间状态（需要提交合并）
 
   // 添加分支状态相关变量
   const branchAhead = ref(0) // 当前分支领先远程分支的提交数
@@ -800,6 +801,7 @@ export const useGitStore = defineStore('git', () => {
         // 如果没有收到有效的 status 字段，清空文件列表
         fileList.value = []
       }
+      isMergeInProgress.value = Boolean(data.isMergeInProgress)
     } catch (error) {
       console.error('获取Git状态(porcelain)失败:', error)
       ElMessage({
@@ -2013,6 +2015,7 @@ export const useGitStore = defineStore('git', () => {
     isGitPulling,
     isGitFetching,
     isGitMerging,
+    isMergeInProgress,
 
     // 合并相关
     pendingMergeMessage,
