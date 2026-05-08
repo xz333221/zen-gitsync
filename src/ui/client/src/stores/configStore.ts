@@ -169,6 +169,8 @@ export const useConfigStore = defineStore('config', () => {
   const skipHooks = ref(false)
   // 回车自动一键提交（从文件配置加载，默认false）
   const autoQuickPushOnEnter = ref(false)
+  // 推送前自动拉取远程更新（从文件配置加载，默认true）
+  const pullBeforePush = ref(true)
   // 主题设置（从localStorage加载，默认light）
   const theme = ref<'light' | 'dark' | 'auto'>('light')
   // 语言设置（从localStorage加载，默认zh-CN）
@@ -341,6 +343,7 @@ export const useConfigStore = defineStore('config', () => {
       if (configData.autoQuickPushOnEnter !== undefined) autoQuickPushOnEnter.value = Boolean(configData.autoQuickPushOnEnter)
       if (configData.autoSetDefaultMessage !== undefined) autoSetDefaultMessage.value = Boolean(configData.autoSetDefaultMessage)
       if (configData.autoClosePushModal !== undefined) autoClosePushModal.value = Boolean(configData.autoClosePushModal)
+      if (configData.pullBeforePush !== undefined) pullBeforePush.value = Boolean(configData.pullBeforePush)
 
       // 加载模型配置
       if (Array.isArray(configData.models)) {
@@ -393,7 +396,8 @@ export const useConfigStore = defineStore('config', () => {
           skipHooks: skipHooks.value,
           autoQuickPushOnEnter: autoQuickPushOnEnter.value,
           autoSetDefaultMessage: autoSetDefaultMessage.value,
-          autoClosePushModal: autoClosePushModal.value
+          autoClosePushModal: autoClosePushModal.value,
+          pullBeforePush: pullBeforePush.value
         })
       })
     } catch (error) {
@@ -402,7 +406,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 监听提交设置变化，自动保存到文件配置
-  watch([isStandardCommit, skipHooks, autoQuickPushOnEnter, autoSetDefaultMessage, autoClosePushModal], () => {
+  watch([isStandardCommit, skipHooks, autoQuickPushOnEnter, autoSetDefaultMessage, autoClosePushModal, pullBeforePush], () => {
     if (isLoaded.value) saveCommitSettings()
   })
 
@@ -1024,6 +1028,7 @@ export const useConfigStore = defineStore('config', () => {
     isStandardCommit,
     skipHooks,
     autoQuickPushOnEnter,
+    pullBeforePush,
     theme,
     locale,
     editorAutoSave,

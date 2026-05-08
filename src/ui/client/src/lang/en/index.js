@@ -79,6 +79,7 @@ export default {
   '@2E184:本地已提交，一键推送到远程仓库': 'Local changes committed, push to remote',
   '@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库': 'One-click: Stage all changes → Commit → Push to remote',
   '@2E184:一键完成：暂存所有更改 → 提交': 'One-click: Stage all changes → Commit',
+  '@2E184:拉取远程更新失败，已停止推送': 'Failed to pull remote updates, push aborted',
   // @2E184: file end
 
   // @PSTART: Project startup
@@ -1081,6 +1082,8 @@ export default {
   '@76872:输入提交信息后按回车直接执行一键推送': 'After entering the commit information, press Enter to directly execute the one click push',
   '@76872:Push完成自动关闭': 'Auto-close after push',
   '@76872:推送成功后自动关闭进度弹窗': 'Automatically close the progress dialog after successful push',
+  '@76872:推送前拉取更新': 'Pull before push',
+  '@76872:推送前自动拉取远程更新，有冲突则停止推送': 'Automatically pull remote updates before pushing, stop if conflicts',
   '@76872:自动填充默认提交信息': 'Auto-fill default commit message',
   '@76872:提交格式与行为': 'Commit Format & Behavior',
   '@76872:标准化提交': 'Standardized Commit',

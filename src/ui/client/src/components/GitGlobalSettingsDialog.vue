@@ -319,6 +319,14 @@
                 <el-switch v-model="configStore.autoClosePushModal" />
               </div>
               <div class="setting-row">
+                <label class="setting-label">{{ $t('@76872:推送前拉取更新') }}
+                  <el-tooltip :content="$t('@76872:推送前自动拉取远程更新，有冲突则停止推送')" placement="top" :show-after="200">
+                    <el-icon class="qmark"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </label>
+                <el-switch v-model="configStore.pullBeforePush" />
+              </div>
+              <div class="setting-row">
                 <label class="setting-label">{{ $t('@76872:自动填充默认提交信息') }}
                   <el-tooltip :content="$t('@76872:打开页面或提交完成后自动填充默认提交信息')" placement="top" :show-after="200">
                     <el-icon class="qmark"><InfoFilled /></el-icon>

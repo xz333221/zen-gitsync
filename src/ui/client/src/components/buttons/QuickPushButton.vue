@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ElTooltip } from "element-plus";
+import { ElTooltip, ElMessage } from "element-plus";
 import { Position } from "@element-plus/icons-vue";
 import { $t } from '@/lang/static';
 import { useGitStore } from "@stores/gitStore";
@@ -117,6 +117,17 @@ async function handleQuickPush() {
     
     // 推送阶段显示进度
     progressModalVisible.value = true;
+    
+    // 如果开启“推送前拉取”，先拉取远程更新
+    if (configStore.pullBeforePush) {
+      const pullResult = await gitStore.gitPull();
+      if (!pullResult.success) {
+        ElMessage.error($t('@2E184:拉取远程更新失败，已停止推送'));
+        progressModalVisible.value = false;
+        emit("afterPush", false);
+        return;
+      }
+    }
     
     if (progressModalRef.value) {
       progressModalRef.value.reset();

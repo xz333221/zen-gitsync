@@ -38,6 +38,7 @@ const defaultConfig = {
   autoQuickPushOnEnter: false,
   autoSetDefaultMessage: false,
   autoClosePushModal: false,
+  pullBeforePush: true,
   // 通用设置
   theme: 'light',  // 主题: light | dark | auto
   locale: 'zh-CN',  // 语言: zh-CN | en-US
