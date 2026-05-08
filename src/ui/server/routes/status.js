@@ -1,6 +1,5 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 
 export function registerStatusRoutes({
   app,
@@ -29,8 +28,8 @@ export function registerStatusRoutes({
         if (isMergeInProgress) {
           // 读取 Git 自动生成的合并提交信息
           try {
-            const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf8' }).trim();
-            const mergeMsgPath = path.resolve(gitDir, 'MERGE_MSG');
+            const { stdout: gitDir } = await execGitCommand('git rev-parse --git-dir');
+            const mergeMsgPath = path.resolve(gitDir.trim(), 'MERGE_MSG');
             const raw = await fs.readFile(mergeMsgPath, 'utf-8');
             // 过滤掉以 # 开头的注释行，取第一个非空行
             mergeMessage = raw

@@ -176,7 +176,7 @@ const hasUserCommitMessage = computed(() => {
   } else {
     // 标准化提交模式：必须有提交类型和描述
     return (
-      commitType.value.trim() !== "" && commitDescription.value.trim() !== ""
+      (commitType.value || '').trim() !== "" && (commitDescription.value || '').trim() !== ""
     );
   }
 });
@@ -414,12 +414,13 @@ watch(
   () => gitStore.pendingMergeMessage,
   (newMessage) => {
     if (newMessage) {
-      // 合并信息是完整一行（如 Merge branch 'main' of ...），统一填到普通提交信息框
-      // 若当前是标准化模式，切换为普通模式后填入
+      // 标准化模式：清空类型，填入简短描述；普通模式：填入提交信息框
       if (isStandardCommit.value) {
-        configStore.isStandardCommit = false;
+        commitType.value = '';
+        commitDescription.value = newMessage;
+      } else {
+        commitMessage.value = newMessage;
       }
-      commitMessage.value = newMessage;
       // 清空待处理消息，避免重复填充
       gitStore.pendingMergeMessage = '';
       ElMessage.info($t('@76872:已自动填充合并提交信息'));
@@ -489,11 +490,12 @@ onMounted(async () => {
 
   // 检查是否有待处理的合并消息（合并冲突时自动填充）
   if (gitStore.pendingMergeMessage) {
-    // 合并信息是完整一行，统一填到普通提交信息框
     if (isStandardCommit.value) {
-      configStore.isStandardCommit = false;
+      commitType.value = '';
+      commitDescription.value = gitStore.pendingMergeMessage;
+    } else {
+      commitMessage.value = gitStore.pendingMergeMessage;
     }
-    commitMessage.value = gitStore.pendingMergeMessage;
     gitStore.pendingMergeMessage = '';
     ElMessage.info($t('@76872:已自动填充合并提交信息'));
   }
