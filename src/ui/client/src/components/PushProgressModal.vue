@@ -37,6 +37,7 @@ interface Stage {
 const status = ref<'progress' | 'success' | 'error'>('progress');
 const messages = ref<string[]>([]);
 const errorMessage = ref('');
+const isPullingRemote = ref(false); // 推送前拉取状态
 
 // 是否是 non-fast-forward 错误
 const isNonFastForwardError = computed(() => {
@@ -81,6 +82,7 @@ const visible = computed({
 });
 
 const statusText = computed(() => {
+  if (isPullingRemote.value) return t('@PUSH:正在拉取远程更新');
   switch (status.value) {
     case 'progress':
       return t('@PUSH:正在推送');
@@ -172,16 +174,23 @@ function reset() {
   messages.value = [];
   errorMessage.value = '';
   activeStep.value = 0;
+  isPullingRemote.value = false;
   stages.forEach(stage => {
     stage.status = 'wait';
     stage.percent = 0;
   });
 }
 
+// 设置拉取状态
+function setPulling(pulling: boolean) {
+  isPullingRemote.value = pulling;
+}
+
 // 暴露方法给父组件
 defineExpose({
   handleProgress,
-  reset
+  reset,
+  setPulling
 });
 </script>
 
@@ -199,8 +208,14 @@ defineExpose({
     :class="['push-progress-dialog', `status-${status}`]"
   >
     <div class="push-progress-container">
+      <!-- 拉取中提示 -->
+      <div v-if="isPullingRemote" class="pulling-section">
+        <el-icon class="rotating"><Loading /></el-icon>
+        <span>{{ t('@PUSH:正在拉取远程更新') }}...</span>
+      </div>
       <!-- 推送阶段（2x2网格） -->
       <div 
+        v-else
         class="stages-section"
         :class="{ 'is-loading': status === 'progress', 'is-success': status === 'success' }"
       >
@@ -414,6 +429,22 @@ defineExpose({
     left: 0;
     width: 60px;
     height: 2px;
+  }
+}
+
+.pulling-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl) var(--spacing-md);
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent;
+  .el-icon {
+    font-size: 18px;
   }
 }
 

@@ -122,10 +122,15 @@ async function handleQuickPush() {
     
     // 如果开启“推送前拉取”，先拉取远程更新
     if (configStore.pullBeforePush) {
+      progressModalRef.value?.setPulling(true);
       const pullResult = await gitStore.gitPull();
+      progressModalRef.value?.setPulling(false);
       if (!pullResult.success) {
         ElMessage.error($t('@2E184:拉取远程更新失败，已停止推送'));
         progressModalVisible.value = false;
+        // 刷新左侧 git 状态
+        gitStore.fetchStatus();
+        gitStore.getBranchStatus(true);
         emit("afterPush", false);
         return;
       }
