@@ -304,6 +304,11 @@ function handleQuickPushBefore() {
   });
 }
 
+// 处理QuickPushButton的推送开始事件（进度弹窗就要显示，关闭全局loading）
+function handlePushStart() {
+  hideLoading();
+}
+
 // 处理QuickPushButton的推送后事件
 function handleQuickPushAfter(success: boolean) {
   // 关闭loading
@@ -619,6 +624,7 @@ function handleMessageSelect(item: { value: string; isSettings?: boolean }) {
           "
           @after-push="handleQuickPushAfter"
           @before-push="handleQuickPushBefore"
+          @push-start="handlePushStart"
           @clear-fields="clearCommitFields"
         />
       </div>

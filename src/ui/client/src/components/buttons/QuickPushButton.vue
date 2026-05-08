@@ -32,6 +32,7 @@ const props = withDefaults(defineProps<Props>(), {
 // 定义事件
 const emit = defineEmits<{
   beforePush: [];
+  pushStart: [];
   afterPush: [success: boolean];
   clearFields: [];
 }>();
@@ -116,6 +117,7 @@ async function handleQuickPush() {
     }
     
     // 推送阶段显示进度
+    emit("pushStart");
     progressModalVisible.value = true;
     
     // 如果开启“推送前拉取”，先拉取远程更新

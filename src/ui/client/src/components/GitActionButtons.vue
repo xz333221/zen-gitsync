@@ -24,6 +24,7 @@ const emit = defineEmits<{
   afterCommit: [success: boolean]
   afterPush: [success: boolean]
   beforePush: []
+  pushStart: []
   clearFields: []
 }>()
 
@@ -42,6 +43,11 @@ function handleAfterPush(success: boolean) {
 // 处理推送前的事件
 function handleBeforePush() {
   emit('beforePush')
+}
+
+// 处理推送开始事件
+function handlePushStart() {
+  emit('pushStart')
 }
 
 // 处理清空字段的事件
@@ -103,6 +109,7 @@ defineExpose({
           :final-commit-message="finalCommitMessage"
           :skip-hooks="skipHooks"
           @before-push="handleBeforePush"
+          @push-start="handlePushStart"
           @after-push="handleAfterPush"
           @clear-fields="handleClearFields"
         />
