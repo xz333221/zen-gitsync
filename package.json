@@ -1,7 +1,7 @@
 {
   "name": "zen-gitsync",
   "version": "2.11.19",
-  "description": "Git 自动化工作平台：支持交互式提交、定时同步、自定义命令编排、文件锁定与可视化 GUI 界面",
+  "description": "A Git automation platform with interactive commits, scheduled sync, command orchestration, file locking, and a visual GUI.",
   "main": "index.js",
   "type": "module",
   "scripts": {
