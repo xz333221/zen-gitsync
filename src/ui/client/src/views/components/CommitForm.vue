@@ -174,7 +174,10 @@ const hasUserCommitMessage = computed(() => {
     // 普通提交模式：只有用户输入的提交信息才算有效
     return commitMessage.value.trim() !== "";
   } else {
-    // 标准化提交模式：必须有提交类型和描述
+    // 标准化提交模式：合并进行中时只需有描述，正常时需要类型+描述
+    if (gitStore.isMergeInProgress) {
+      return (commitDescription.value || '').trim() !== "";
+    }
     return (
       (commitType.value || '').trim() !== "" && (commitDescription.value || '').trim() !== ""
     );
