@@ -10,13 +10,12 @@ import { replaceVariables } from '@/utils/commandParser'
 
 // @CMDPANEL: file path: components\CustomCommandsPanel.vue
 
-defineProps<{
-  visible: boolean
-}>()
+// 手风琴折叠状态（仿 VS Code 抽屉）
+const collapsed = ref(false)
 
-const emit = defineEmits<{
-  close: []
-}>()
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+}
 
 // 管理弹窗
 const managerVisible = ref(false)
@@ -93,16 +92,18 @@ async function runCommand(cmd: any) {
 </script>
 
 <template>
-  <div v-if="visible" class="custom-commands-panel">
-    <!-- 拖拽调高度 -->
-    <div class="resize-handle" @mousedown="startResize" />
-
-    <div class="panel-header">
+  <div class="custom-commands-panel">
+    <div class="panel-header accordion-header" @click="toggleCollapsed">
       <div class="header-left">
+        <el-icon class="accordion-chevron" :class="{ 'is-collapsed': collapsed }">
+          <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <path fill="currentColor" d="M340.864 149.312a30.592 30.592 0 0 0 0 42.752L652.736 512 340.864 831.872a30.592 30.592 0 0 0 0 42.752 29.12 29.12 0 0 0 41.728 0L714.24 534.336a32 32 0 0 0 0-44.672L382.592 149.376a29.12 29.12 0 0 0-41.728 0z"/>
+          </svg>
+        </el-icon>
         <SvgIcon icon-class="command-list" class-name="cmd-panel-icon" />
         <span class="panel-title">{{ $t('@CMDPANEL:自定义命令') }}</span>
       </div>
-      <div class="header-right">
+      <div class="header-right" @click.stop>
         <IconButton
           size="small"
           :tooltip="$t('@CMDPANEL:管理命令')"
@@ -114,17 +115,13 @@ async function runCommand(cmd: any) {
             </svg>
           </el-icon>
         </IconButton>
-        <IconButton size="small" @click="emit('close')">
-          <el-icon>
-            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/>
-            </svg>
-          </el-icon>
-        </IconButton>
       </div>
     </div>
 
-    <div v-if="commands.length === 0" class="empty-container">
+    <!-- 拖拽调高度（展开时显示） -->
+    <div v-show="!collapsed" class="resize-handle" @mousedown="startResize" />
+
+    <div v-if="!collapsed && commands.length === 0" class="empty-container">
       <svg class="empty-icon" viewBox="0 0 1024 1024" width="40" height="40">
         <path fill="currentColor" d="M832 384H576V128H192v768h640V384zm-26.496-64L640 154.496V320h165.504zM160 64h480l256 256v608a32 32 0 0 1-32 32H160a32 32 0 0 1-32-32V96a32 32 0 0 1 32-32z"/>
       </svg>
@@ -134,7 +131,7 @@ async function runCommand(cmd: any) {
       </el-button>
     </div>
 
-    <div v-else class="commands-list" :style="{ maxHeight: panelHeight + 'px' }">
+    <div v-else-if="!collapsed" class="commands-list" :style="{ maxHeight: panelHeight + 'px' }">
       <div
         v-for="cmd in commands"
         :key="cmd.id || cmd.name"
@@ -210,6 +207,26 @@ async function runCommand(cmd: any) {
 
 .resize-handle:active::before {
   background: rgba(102, 126, 234, 0.7);
+}
+
+.accordion-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.accordion-header:hover {
+  background: var(--bg-input-hover) !important;
+}
+
+.accordion-chevron {
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+  transform: rotate(90deg);
+  flex-shrink: 0;
+}
+
+.accordion-chevron.is-collapsed {
+  transform: rotate(0deg);
 }
 
 .panel-header {

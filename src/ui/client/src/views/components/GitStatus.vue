@@ -59,17 +59,7 @@ function isLocking(filePath: string) {
   return !!lockingFiles.value[filePath]
 }
 
-// npm脚本面板状态
-const showNpmPanel = ref(false) // 默认关闭NPM面板
-function toggleNpmPanel() {
-  showNpmPanel.value = !showNpmPanel.value
-}
-
-// 自定义命令面板状态
-const showCustomCmdsPanel = ref(true)
-function toggleCustomCmdsPanel() {
-  showCustomCmdsPanel.value = !showCustomCmdsPanel.value
-}
+// npm脚本面板状态（已移至面板内部）
 
 // 文件选择状态
 const selectedFiles = ref<Set<string>>(new Set())
@@ -849,9 +839,7 @@ onMounted(() => {
 // })
 // 暴露刷新方法给父组件
 defineExpose({
-  refreshStatus,
-  toggleNpmPanel,
-  toggleCustomCmdsPanel
+  refreshStatus
 })
 </script>
 
@@ -1309,10 +1297,10 @@ defineExpose({
     </div>
     
     <!-- NPM脚本面板 -->
-    <NpmScriptsPanel :visible="showNpmPanel" @close="showNpmPanel = false" />
+    <NpmScriptsPanel />
 
     <!-- 自定义命令快捷面板 -->
-    <CustomCommandsPanel :visible="showCustomCmdsPanel" @close="showCustomCmdsPanel = false" />
+    <CustomCommandsPanel />
   </div>
   
   <!-- 文件差异对话框 -->

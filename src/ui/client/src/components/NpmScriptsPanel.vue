@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { FolderOpened } from '@element-plus/icons-vue';
 import { $t } from '@/lang/static';
@@ -18,14 +18,12 @@ interface PackageInfo {
   } | string;
 }
 
-// Props
-const props = defineProps<{
-  visible: boolean;
-}>();
+// 手风琴折叠状态（仿 VS Code 抽屉）
+const collapsed = ref(false)
 
-const emit = defineEmits<{
-  close: []
-}>();
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+}
 
 // 状态
 const packages = ref<PackageInfo[]>([]);
@@ -213,25 +211,24 @@ async function runScript(packagePath: string, scriptName: string) {
   }
 }
 
-// 监听visible变化，面板打开时加载数据
-watch(() => props.visible, (newValue) => {
-  if (newValue) {
-    loadNpmScripts();
-  }
-}, { immediate: true });
+onMounted(() => {
+  loadNpmScripts();
+});
 </script>
 
 <template>
-  <div v-if="visible" class="npm-scripts-panel">
-    <!-- 调节高度的拖拽条 -->
-    <div class="resize-handle" @mousedown="startResize"></div>
-    
-    <div class="panel-header">
+  <div class="npm-scripts-panel">
+    <div class="panel-header accordion-header" @click="toggleCollapsed">
       <div class="header-left">
+        <el-icon class="accordion-chevron" :class="{ 'is-collapsed': collapsed }">
+          <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <path fill="currentColor" d="M340.864 149.312a30.592 30.592 0 0 0 0 42.752L652.736 512 340.864 831.872a30.592 30.592 0 0 0 0 42.752 29.12 29.12 0 0 0 41.728 0L714.24 534.336a32 32 0 0 0 0-44.672L382.592 149.376a29.12 29.12 0 0 0-41.728 0z"/>
+          </svg>
+        </el-icon>
         <svg-icon icon-class="npm" class-name="npm-icon" />
         <span class="panel-title">{{ $t('@NPM01:NPM 脚本') }}</span>
       </div>
-      <div class="header-right">
+      <div class="header-right" @click.stop>
         <IconButton
           size="small"
           :disabled="isLoading"
@@ -243,20 +240,13 @@ watch(() => props.visible, (newValue) => {
             </svg>
           </el-icon>
         </IconButton>
-        <IconButton
-          size="small"
-          @click="emit('close')"
-        >
-          <el-icon>
-            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/>
-            </svg>
-          </el-icon>
-        </IconButton>
       </div>
     </div>
 
-    <div v-if="isLoading" class="loading-container">
+    <!-- 调节高度的拖拽条（展开时显示） -->
+    <div v-show="!collapsed" class="resize-handle" @mousedown="startResize"></div>
+
+    <div v-if="!collapsed && isLoading" class="loading-container">
       <el-icon class="is-loading loading-icon">
         <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
           <path fill="currentColor" d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32z"/>
@@ -265,14 +255,14 @@ watch(() => props.visible, (newValue) => {
       <p class="loading-text">{{ $t('@NPM01:正在扫描项目中的 npm 脚本...') }}</p>
     </div>
 
-    <div v-else-if="packages.length === 0" class="empty-container">
+    <div v-else-if="!collapsed && packages.length === 0" class="empty-container">
       <svg class="empty-icon" viewBox="0 0 1024 1024" width="64" height="64">
         <path fill="currentColor" d="M832 384H576V128H192v768h640V384zm-26.496-64L640 154.496V320h165.504zM160 64h480l256 256v608a32 32 0 0 1-32 32H160a32 32 0 0 1-32-32V96a32 32 0 0 1 32-32z"/>
       </svg>
       <p class="empty-text">{{ $t('@NPM01:当前项目中未找到包含 scripts 的 package.json') }}</p>
     </div>
 
-    <div v-else class="packages-container" :style="{ maxHeight: panelHeight + 'px' }">
+    <div v-else-if="!collapsed" class="packages-container" :style="{ maxHeight: panelHeight + 'px' }">
       <div 
         v-for="pkg in packages" 
         :key="pkg.path" 
@@ -390,6 +380,26 @@ watch(() => props.visible, (newValue) => {
 
 .resize-handle:active::before {
   background: rgba(102, 126, 234, 0.7);
+}
+
+.accordion-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.accordion-header:hover {
+  background: var(--bg-input-hover) !important;
+}
+
+.accordion-chevron {
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+  transform: rotate(90deg);
+  flex-shrink: 0;
+}
+
+.accordion-chevron.is-collapsed {
+  transform: rotate(0deg);
 }
 
 .panel-header {
