@@ -257,6 +257,26 @@ async function checkEnvironment() {
   }
 }
 
+// TSC 类型检查
+async function runTypeCheck() {
+  console.log(chalk.blue('\n=== TypeScript 类型检查 ==='));
+
+  const frontendDir = path.join(rootDir, 'src', 'ui', 'client');
+  if (!fs.existsSync(frontendDir)) {
+    console.log(chalk.yellow('前端项目目录不存在，跳过 TSC 检查'));
+    return;
+  }
+
+  try {
+    console.log(chalk.gray('执行 tsc --noEmit...'));
+    execSync('npx tsc --noEmit', { cwd: frontendDir, stdio: 'inherit' });
+    console.log(chalk.green('TSC 类型检查通过'));
+  } catch (error) {
+    console.error(chalk.red('TSC 类型检查失败，请修复以上错误后重新发布'));
+    process.exit(1);
+  }
+}
+
 // 更新版本号
 function updateVersion() {
   console.log(chalk.blue('=== 更新版本号 ==='));
@@ -535,17 +555,20 @@ async function main() {
   try {
     // 1. 检查环境
     await checkEnvironment();
-    
-    // 2. 更新版本号
+
+    // 2. TSC 类型检查
+    await runTypeCheck();
+
+    // 3. 更新版本号
     const newVersion = updateVersion();
-    
-    // 3. 构建前端项目
+
+    // 4. 构建前端项目
     await buildFrontend();
-    
-    // 4. 提交更改到Git
+
+    // 5. 提交更改到Git
     await commitChanges(newVersion);
-    
-    // 5. 发布到NPM
+
+    // 6. 发布到NPM
     await publishToNpm();
     
     console.log(chalk.green('\n🎉 发布完成！'));
