@@ -162,6 +162,7 @@ async function runCommand(cmd: any) {
   <!-- 命令管理弹窗 -->
   <CustomCommandManager
     v-model:visible="managerVisible"
+    :fullscreen="true"
     @execute-command="runCommand"
   />
 </template>
