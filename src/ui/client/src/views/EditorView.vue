@@ -399,7 +399,7 @@ function getNodeIconClass(node: TreeNode): string {
   height: 100%;
   overflow: hidden;
   background: var(--bg-container);
-  border-radius: var(--radius-xl);
+  border-radius: 0;
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
 }
