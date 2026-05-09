@@ -19,7 +19,7 @@ interface PackageInfo {
 }
 
 // 手风琴折叠状态（仿 VS Code 抽屉）
-const collapsed = ref(false)
+const collapsed = ref(true)
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value
