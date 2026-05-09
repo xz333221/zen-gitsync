@@ -47,7 +47,7 @@ const recentDirectories = ref<{ path: string; exists: boolean }[]>([]);
 const isBrowserDialogVisible = ref(false);
 
 // 定义emits
-const emit = defineEmits<{
+defineEmits<{
   toggleNpmPanel: []
   toggleCustomCmdsPanel: []
 }>();
