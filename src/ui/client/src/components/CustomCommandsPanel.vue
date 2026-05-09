@@ -171,8 +171,7 @@ async function runCommand(cmd: any) {
   position: relative;
   background: var(--bg-container);
   border: 1px solid var(--border-card);
-  border-radius: var(--radius-lg);
-  margin-top: var(--spacing-md);
+  border-radius: 0;
   overflow: hidden;
   box-shadow: var(--shadow-md);
 }

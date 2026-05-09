@@ -78,7 +78,7 @@ function select(view: 'git' | 'editor' | 'source-map') {
   gap: 4px;
   background: var(--bg-container);
   border-right: 1px solid var(--border-color);
-  border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+  border-radius: 0;
   box-shadow: var(--shadow-sm);
 }
 
