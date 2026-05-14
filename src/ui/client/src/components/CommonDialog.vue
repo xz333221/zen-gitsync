@@ -51,7 +51,7 @@ const props = withDefaults(defineProps<Props>(), {
   closeOnPressEscape: true,
   destroyOnClose: false,
   draggable: false,
-  appendToBody: false,
+  appendToBody: true,
   lockScroll: true,
   heightMode: 'max',
   heightOffset: '100px',
