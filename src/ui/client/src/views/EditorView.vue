@@ -92,7 +92,10 @@ interface Tab {
 const tabs = ref<Tab[]>([])
 const activeTabPath = ref<string | null>(null)
 
+const selectedNode = ref<TreeNode | null>(null)
+
 async function openFile(node: TreeNode) {
+  selectedNode.value = node
   if (node.type !== 'file') {
     toggleDir(node)
     return
@@ -294,14 +297,11 @@ function getNodeIconClass(node: TreeNode): string {
 // ── 新建 / 重命名 / 删除 ────────────────────────────────
 // inline 输入状态
 interface InlineInput {
-  // 所在父目录路径（根目录时为 configStore.currentDirectory）
   parentPath: string
-  // 在哪个 node 后面插入（用于定位渲染位置），null 表示插在最前
-  afterNode: TreeNode | null
-  // 'file' | 'directory'
+  afterNode: TreeNode | null   // 在此节点后面插入
   kind: 'file' | 'directory'
-  // 输入框绑定值
   value: string
+  depth: number               // 缩进层级
 }
 
 interface RenameInput {
@@ -314,32 +314,40 @@ const renameInput = ref<RenameInput | null>(null)
 const inlineInputRef = ref<HTMLInputElement | null>(null)
 const renameInputRef = ref<HTMLInputElement | null>(null)
 
-// 获取当前「焦点目录」：若选中的节点是目录则用它，否则取其父目录（简化处理：取 parentPath）
-function getTargetDir(kind: 'file' | 'directory'): { parentPath: string; afterNode: TreeNode | null } {
-  const flat = flattenTree(treeNodes.value)
-  const active = flat.find(n => n.path === activeTabPath.value)
-  if (active) {
-    if (active.type === 'directory') {
-      return { parentPath: active.path, afterNode: active }
+// 根据 selectedNode 计算插入目标
+function getTargetDir(): { parentPath: string; afterNode: TreeNode | null; depth: number } {
+  const sel = selectedNode.value
+  if (sel) {
+    if (sel.type === 'directory') {
+      // 在选中目录内创建 → afterNode 是该目录，depth+1
+      return { parentPath: sel.path, afterNode: sel, depth: sel.depth + 1 }
+    } else {
+      // 与选中文件同级创建
+      const parent = sel.path.includes('/') || sel.path.includes('\\')
+        ? sel.path.replace(/[\\/][^\\/]+$/, '')
+        : configStore.currentDirectory ?? ''
+      return { parentPath: parent, afterNode: sel, depth: sel.depth }
     }
-    // 文件：取父目录
-    const parent = active.path.includes('/') || active.path.includes('\\')
-      ? active.path.replace(/[\\/][^\\/]+$/, '')
-      : configStore.currentDirectory ?? ''
-    const parentNode = flat.find(n => n.path === parent && n.type === 'directory')
-    return { parentPath: parent, afterNode: parentNode ?? active }
   }
-  return { parentPath: configStore.currentDirectory ?? '', afterNode: null }
+  return { parentPath: configStore.currentDirectory ?? '', afterNode: null, depth: 0 }
 }
 
 async function startNewFile() {
-  inlineInput.value = { ...getTargetDir('file'), kind: 'file', value: '' }
+  const target = getTargetDir()
+  if (selectedNode.value?.type === 'directory' && !selectedNode.value.expanded) {
+    await toggleDir(selectedNode.value)
+  }
+  inlineInput.value = { ...target, kind: 'file', value: '' }
   await nextTick()
   inlineInputRef.value?.focus()
 }
 
 async function startNewFolder() {
-  inlineInput.value = { ...getTargetDir('directory'), kind: 'directory', value: '' }
+  const target = getTargetDir()
+  if (selectedNode.value?.type === 'directory' && !selectedNode.value.expanded) {
+    await toggleDir(selectedNode.value)
+  }
+  inlineInput.value = { ...target, kind: 'directory', value: '' }
   await nextTick()
   inlineInputRef.value?.focus()
 }
@@ -401,10 +409,10 @@ function closeContextMenu() {
 async function ctxNewFile() {
   const node = ctxMenu.value?.node
   closeContextMenu()
-  const parentPath = node
-    ? (node.type === 'directory' ? node.path : node.path.replace(/[\\/][^\\/]+$/, ''))
-    : (configStore.currentDirectory ?? '')
-  inlineInput.value = { parentPath, afterNode: node ?? null, kind: 'file', value: '' }
+  if (node) selectedNode.value = node
+  if (node?.type === 'directory' && !node.expanded) await toggleDir(node)
+  const target = getTargetDir()
+  inlineInput.value = { ...target, kind: 'file', value: '' }
   await nextTick()
   inlineInputRef.value?.focus()
 }
@@ -412,10 +420,10 @@ async function ctxNewFile() {
 async function ctxNewFolder() {
   const node = ctxMenu.value?.node
   closeContextMenu()
-  const parentPath = node
-    ? (node.type === 'directory' ? node.path : node.path.replace(/[\\/][^\\/]+$/, ''))
-    : (configStore.currentDirectory ?? '')
-  inlineInput.value = { parentPath, afterNode: node ?? null, kind: 'directory', value: '' }
+  if (node) selectedNode.value = node
+  if (node?.type === 'directory' && !node.expanded) await toggleDir(node)
+  const target = getTargetDir()
+  inlineInput.value = { ...target, kind: 'directory', value: '' }
   await nextTick()
   inlineInputRef.value?.focus()
 }
@@ -661,6 +669,7 @@ function stopPreviewResize() {
               'tree-node--dir': node.type === 'directory',
               'tree-node--file': node.type === 'file',
               'tree-node--active': activeTabPath === node.path,
+              'tree-node--selected': selectedNode?.path === node.path && activeTabPath !== node.path,
             }"
             :style="{ paddingLeft: (12 + node.depth * 14) + 'px' }"
             @click="openFile(node)"
@@ -684,13 +693,37 @@ function stopPreviewResize() {
             <span class="tree-name" :title="node.path">{{ node.name }}</span>
             <span v-if="node.loading" class="tree-loading" />
           </div>
+
+          <!-- 内联新建输入框：紧跟在 afterNode 之后 -->
+          <div
+            v-if="inlineInput && inlineInput.afterNode?.path === node.path"
+            class="tree-node tree-inline-input-row"
+            :style="{ paddingLeft: (12 + inlineInput.depth * 14) + 'px' }"
+          >
+            <span class="tree-arrow-spacer" />
+            <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--color-warning)">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-tertiary)">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <input
+              ref="inlineInputRef"
+              class="tree-inline-input"
+              v-model="inlineInput.value"
+              :placeholder="inlineInput.kind === 'file' ? $t('@EDITOR:输入文件名') : $t('@EDITOR:输入文件夹名')"
+              @keydown="handleInlineKeydown"
+              @blur="cancelInlineInput"
+              @click.stop
+            />
+          </div>
         </template>
 
-        <!-- 内联新建输入框（插在列表末尾，简化实现） -->
+        <!-- 根级输入框（无选中节点时出现在列表末尾） -->
         <div
-          v-if="inlineInput"
+          v-if="inlineInput && inlineInput.afterNode === null"
           class="tree-node tree-inline-input-row"
-          :style="{ paddingLeft: (12) + 'px' }"
+          :style="{ paddingLeft: '12px' }"
         >
           <span class="tree-arrow-spacer" />
           <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--color-warning)">
@@ -949,6 +982,10 @@ function stopPreviewResize() {
 .tree-node--active {
   background: rgba(59, 130, 246, 0.12);
   color: var(--color-primary);
+}
+
+.tree-node--selected {
+  background: var(--bg-hover);
 }
 
 .tree-arrow {
