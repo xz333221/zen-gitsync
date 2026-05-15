@@ -50,6 +50,44 @@ async function initTree() {
   }
 }
 
+// 刷新树时保留已展开的目录
+function collectExpandedPaths(nodes: TreeNode[], result = new Set<string>()): Set<string> {
+  for (const n of nodes) {
+    if (n.type === 'directory' && n.expanded) {
+      result.add(n.path)
+      if (n.children) collectExpandedPaths(n.children, result)
+    }
+  }
+  return result
+}
+
+async function restoreExpanded(nodes: TreeNode[], expandedPaths: Set<string>): Promise<void> {
+  for (const n of nodes) {
+    if (n.type === 'directory' && expandedPaths.has(n.path)) {
+      if (!n.children) {
+        n.children = await loadDir(n.path, n.depth + 1)
+      }
+      n.expanded = true
+      await restoreExpanded(n.children!, expandedPaths)
+    }
+  }
+}
+
+async function refreshTree() {
+  const root = configStore.currentDirectory
+  if (!root) return
+  const expandedPaths = collectExpandedPaths(treeNodes.value)
+  treeLoading.value = true
+  try {
+    treeNodes.value = await loadDir(root, 0)
+    if (expandedPaths.size > 0) {
+      await restoreExpanded(treeNodes.value, expandedPaths)
+    }
+  } finally {
+    treeLoading.value = false
+  }
+}
+
 async function toggleDir(node: TreeNode) {
   if (node.type !== 'directory') return
   if (!node.expanded) {
@@ -384,7 +422,7 @@ async function confirmInlineInput() {
     ElMessage.success($t('@EDITOR:创建成功'))
   }
   inlineInput.value = null
-  await initTree()
+  await refreshTree()
 }
 
 function handleInlineKeydown(e: KeyboardEvent) {
@@ -462,7 +500,7 @@ async function confirmRename() {
     if (activeTabPath.value === r.node.path) activeTabPath.value = newPath
   }
   renameInput.value = null
-  await initTree()
+  await refreshTree()
 }
 
 function handleRenameKeydown(e: KeyboardEvent) {
@@ -488,7 +526,7 @@ async function ctxDelete() {
     }
   }
   ElMessage.success($t('@EDITOR:已删除'))
-  await initTree()
+  await refreshTree()
 }
 
 // 点击全局关闭右键菜单
@@ -985,7 +1023,9 @@ function stopPreviewResize() {
 }
 
 .tree-node--selected {
-  background: var(--bg-hover);
+  background: rgba(99, 179, 237, 0.15);
+  outline: 1px solid rgba(99, 179, 237, 0.35);
+  outline-offset: -1px;
 }
 
 .tree-arrow {
