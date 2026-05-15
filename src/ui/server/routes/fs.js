@@ -516,6 +516,35 @@ export function registerFsRoutes({
     }
   });
 
+  // ── 编辑器：读取原始文件（用于图片等二进制文件预览）────────────────────
+  app.get('/api/editor/raw', async (req, res) => {
+    try {
+      const filePath = req.query.path;
+      if (!filePath) return res.status(400).end();
+      const cwd = getCurrentProjectPath() || process.cwd();
+      const resolved = path.resolve(filePath);
+      if (!resolved.startsWith(path.resolve(cwd))) {
+        return res.status(403).end();
+      }
+      const stat = await fs.stat(resolved);
+      if (!stat.isFile()) return res.status(400).end();
+      if (stat.size > 20 * 1024 * 1024) return res.status(413).end();
+      const ext = path.extname(resolved).toLowerCase().slice(1);
+      const mimeMap = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        gif: 'image/gif', webp: 'image/webp', ico: 'image/x-icon',
+        svg: 'image/svg+xml', bmp: 'image/bmp', tiff: 'image/tiff',
+      };
+      const mime = mimeMap[ext] || 'application/octet-stream';
+      const content = await fs.readFile(resolved);
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(content);
+    } catch (error) {
+      res.status(500).end();
+    }
+  });
+
   // ── 编辑器：写入文件内容 ────────────────────────────────────────
   app.put('/api/editor/file', express.json(), async (req, res) => {
     try {

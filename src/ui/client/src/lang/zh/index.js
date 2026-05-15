@@ -1571,5 +1571,8 @@ export default {
   '@EDITOR:暂无文件': '暂无文件',
   '@EDITOR:从左侧选择文件打开': '从左侧选择文件打开',
   '@EDITOR:Ctrl+S 保存': 'Ctrl+S 保存',
+  '@EDITOR:预览': '预览',
+  '@EDITOR:打开预览': '打开预览',
+  '@EDITOR:关闭预览': '关闭预览',
   // @EDITOR: file end
 }

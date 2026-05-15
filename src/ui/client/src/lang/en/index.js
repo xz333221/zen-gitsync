@@ -1565,5 +1565,8 @@ export default {
   '@EDITOR:暂无文件': 'No files',
   '@EDITOR:从左侧选择文件打开': 'Select a file from the sidebar to open',
   '@EDITOR:Ctrl+S 保存': 'Ctrl+S to save',
+  '@EDITOR:预览': 'Preview',
+  '@EDITOR:打开预览': 'Open Preview',
+  '@EDITOR:关闭预览': 'Close Preview',
   // @EDITOR: file end
 }

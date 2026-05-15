@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, shallowRef, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElTooltip } from 'element-plus'
 import * as monaco from 'monaco-editor'
+import { marked } from 'marked'
 import { useConfigStore } from '@/stores/configStore'
 import { getLanguageByExt } from '@/utils/editorLang'
 import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
@@ -289,6 +290,110 @@ function getNodeIconClass(node: TreeNode): string {
   if (node.type === 'directory') return getFolderIconClass(node.name)
   return getFileIconClass(node.name)
 }
+
+// ── 预览面板 ────────────────────────────────────────────
+const PREVIEW_TEXT_EXTS = new Set(['md', 'html', 'htm', 'svg'])
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp'])
+
+const showPreview = ref(false)
+const previewWidth = ref(400)
+
+const activeTabRef = computed(() => tabs.value.find(t => t.path === activeTabPath.value) ?? null)
+
+const activeExt = computed(() => {
+  const name = activeTabRef.value?.name ?? ''
+  return name.split('.').pop()?.toLowerCase() ?? ''
+})
+
+const isPreviewable = computed(() =>
+  PREVIEW_TEXT_EXTS.has(activeExt.value) || IMAGE_EXTS.has(activeExt.value)
+)
+
+// 切换文件时，若当前文件不可预览则自动关闭预览
+watch(activeTabPath, () => {
+  if (showPreview.value && !isPreviewable.value) showPreview.value = false
+})
+
+function togglePreview() {
+  if (!isPreviewable.value) return
+  showPreview.value = !showPreview.value
+}
+
+// 生成 iframe srcdoc（md / html / htm / svg）
+const previewSrcdoc = computed(() => {
+  const tab = activeTabRef.value
+  if (!tab) return ''
+  const ext = activeExt.value
+
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light'
+  const bg = isDark ? '#0d1117' : '#ffffff'
+  const fg = isDark ? '#c9d1d9' : '#1f2328'
+  const border = isDark ? '#30363d' : '#d0d7de'
+  const codeBg = isDark ? '#161b22' : '#f6f8fa'
+  const blockquoteFg = isDark ? '#8b949e' : '#656d76'
+  const linkColor = isDark ? '#58a6ff' : '#0969da'
+
+  const baseStyle = `
+    html, body { margin: 0; padding: 0; background: ${bg}; color: ${fg}; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.6; padding: 20px 24px; }
+    * { box-sizing: border-box; }
+    h1, h2, h3, h4, h5, h6 { border-bottom: 1px solid ${border}; padding-bottom: .3em; margin-top: 24px; margin-bottom: 16px; }
+    h1 { font-size: 2em; } h2 { font-size: 1.5em; } h3 { font-size: 1.25em; }
+    p { margin: 0 0 16px; }
+    code { background: ${codeBg}; padding: 2px 5px; border-radius: 4px; font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 87%; }
+    pre { background: ${codeBg}; padding: 14px 16px; border-radius: 6px; overflow: auto; margin: 0 0 16px; }
+    pre code { background: none; padding: 0; font-size: 100%; }
+    a { color: ${linkColor}; }
+    blockquote { border-left: 3px solid ${border}; margin: 0 0 16px; padding: 0 16px; color: ${blockquoteFg}; }
+    img { max-width: 100%; border-radius: 4px; }
+    hr { border: none; border-top: 1px solid ${border}; margin: 24px 0; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+    th, td { border: 1px solid ${border}; padding: 6px 13px; }
+    thead tr { background: ${codeBg}; }
+    tbody tr:nth-child(even) { background: ${codeBg}; }
+    ul, ol { padding-left: 2em; margin-bottom: 16px; }
+    li { margin: 4px 0; }
+  `
+
+  if (ext === 'md') {
+    const html = marked.parse(tab.content) as string
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseStyle}</style></head><body>${html}</body></html>`
+  }
+  if (ext === 'html' || ext === 'htm') {
+    // 直接将用户 HTML 作为 srcdoc，沙箱内运行（无 JS）
+    return tab.content
+  }
+  if (ext === 'svg') {
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:${bg};display:flex;align-items:center;justify-content:center;min-height:100vh;}svg{max-width:100%;max-height:90vh;}</style></head><body>${tab.content}</body></html>`
+  }
+  return ''
+})
+
+// 预览面板拖拽调整宽度
+let isPreviewResizing = false
+let previewResizeStartX = 0
+let previewResizeStartW = 0
+
+function startPreviewResize(e: MouseEvent) {
+  isPreviewResizing = true
+  previewResizeStartX = e.clientX
+  previewResizeStartW = previewWidth.value
+  document.addEventListener('mousemove', onPreviewResize)
+  document.addEventListener('mouseup', stopPreviewResize)
+  e.preventDefault()
+}
+
+function onPreviewResize(e: MouseEvent) {
+  if (!isPreviewResizing) return
+  const delta = previewResizeStartX - e.clientX
+  previewWidth.value = Math.max(200, Math.min(900, previewResizeStartW + delta))
+}
+
+function stopPreviewResize() {
+  isPreviewResizing = false
+  document.removeEventListener('mousemove', onPreviewResize)
+  document.removeEventListener('mouseup', stopPreviewResize)
+}
 </script>
 
 <template>
@@ -370,6 +475,21 @@ function getNodeIconClass(node: TreeNode): string {
             </svg>
           </button>
         </div>
+        <div class="editor-tabs-spacer" />
+        <!-- 预览切换按钮 -->
+        <button
+          v-if="isPreviewable"
+          class="preview-toggle-btn"
+          :class="{ active: showPreview }"
+          :title="showPreview ? $t('@EDITOR:关闭预览') : $t('@EDITOR:打开预览')"
+          @click="togglePreview"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span>{{ $t('@EDITOR:预览') }}</span>
+        </button>
       </div>
 
       <!-- 无文件打开时的提示 -->
@@ -383,11 +503,52 @@ function getNodeIconClass(node: TreeNode): string {
       </div>
 
       <!-- Monaco 容器（始终挂载，tab 为空时隐藏） -->
-      <div
-        class="monaco-container"
-        :class="{ hidden: tabs.length === 0 }"
-        ref="editorContainerRef"
-      />
+      <div class="editor-body">
+        <div
+          class="monaco-container"
+          :class="{ hidden: tabs.length === 0 }"
+          ref="editorContainerRef"
+        />
+        <!-- 预览分隔条 -->
+        <div
+          v-if="showPreview && tabs.length > 0"
+          class="preview-resizer"
+          @mousedown="startPreviewResize"
+        />
+        <!-- 预览面板 -->
+        <div
+          v-if="showPreview && tabs.length > 0"
+          class="preview-panel"
+          :style="{ width: previewWidth + 'px' }"
+        >
+          <div class="preview-header">
+            <span class="preview-title">{{ $t('@EDITOR:预览') }}</span>
+            <span class="preview-ext-badge">{{ activeExt.toUpperCase() }}</span>
+            <div class="preview-header-spacer" />
+            <button class="preview-close-btn" :title="$t('@EDITOR:关闭预览')" @click="showPreview = false">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <div class="preview-body">
+            <!-- Markdown / HTML / SVG → sandboxed iframe -->
+            <iframe
+              v-if="['md', 'html', 'htm', 'svg'].includes(activeExt)"
+              class="preview-iframe"
+              sandbox="allow-same-origin"
+              :srcdoc="previewSrcdoc"
+            />
+            <!-- 图片预览 -->
+            <div v-else-if="IMAGE_EXTS.has(activeExt)" class="preview-image-wrap">
+              <img
+                :src="`/api/editor/raw?path=${encodeURIComponent(activeTabRef?.path ?? '')}`"
+                :alt="activeTabRef?.name"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -704,9 +865,177 @@ function getNodeIconClass(node: TreeNode): string {
 .monaco-container {
   flex: 1;
   overflow: hidden;
+  min-width: 0;
 }
 
 .monaco-container.hidden {
   display: none;
+}
+
+/* ── 预览面板 ──────────────────────────────── */
+.editor-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.preview-resizer {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+  background: transparent;
+  transition: background 0.15s;
+  z-index: 2;
+}
+
+.preview-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 32px;
+  background: var(--color-gray-300);
+  border-radius: 2px;
+  transition: background 0.15s, height 0.15s;
+}
+
+.preview-resizer:hover {
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.preview-resizer:hover::after {
+  background: var(--color-primary);
+  height: 48px;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+}
+
+.preview-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border-color);
+  background: var(--bg-panel);
+  overflow: hidden;
+  min-width: 200px;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 34px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  background: var(--bg-panel);
+}
+
+.preview-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.preview-ext-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-primary);
+  letter-spacing: 0.04em;
+}
+
+.preview-header-spacer {
+  flex: 1;
+}
+
+.preview-close-btn {
+  background: none;
+  border: none;
+  padding: 3px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-base);
+  display: flex;
+  align-items: center;
+  transition: color 0.1s, background 0.1s;
+}
+
+.preview-close-btn:hover {
+  color: var(--color-danger);
+  background: var(--bg-hover);
+}
+
+.preview-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-iframe {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+}
+
+.preview-image-wrap {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg-container);
+}
+
+.preview-image-wrap img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* ── tabs 右侧预览按钮 ─────────────────────── */
+.editor-tabs-spacer {
+  flex: 1;
+}
+
+.preview-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  border-left: 1px solid var(--border-color);
+  transition: background 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+
+.preview-toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.preview-toggle-btn.active {
+  color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.08);
 }
 </style>
