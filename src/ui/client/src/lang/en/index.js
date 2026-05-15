@@ -1568,5 +1568,16 @@ export default {
   '@EDITOR:预览': 'Preview',
   '@EDITOR:打开预览': 'Open Preview',
   '@EDITOR:关闭预览': 'Close Preview',
+  '@EDITOR:新建文件': 'New File',
+  '@EDITOR:新建文件夹': 'New Folder',
+  '@EDITOR:重命名': 'Rename',
+  '@EDITOR:删除': 'Delete',
+  '@EDITOR:文件': 'file',
+  '@EDITOR:文件夹': 'folder',
+  '@EDITOR:确认删除': 'Delete',
+  '@EDITOR:已删除': 'Deleted',
+  '@EDITOR:创建成功': 'Created successfully',
+  '@EDITOR:输入文件名': 'Enter file name (Enter to confirm, Esc to cancel)',
+  '@EDITOR:输入文件夹名': 'Enter folder name (Enter to confirm, Esc to cancel)',
   // @EDITOR: file end
 }

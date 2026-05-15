@@ -1574,5 +1574,16 @@ export default {
   '@EDITOR:预览': '预览',
   '@EDITOR:打开预览': '打开预览',
   '@EDITOR:关闭预览': '关闭预览',
+  '@EDITOR:新建文件': '新建文件',
+  '@EDITOR:新建文件夹': '新建文件夹',
+  '@EDITOR:重命名': '重命名',
+  '@EDITOR:删除': '删除',
+  '@EDITOR:文件': '文件',
+  '@EDITOR:文件夹': '文件夹',
+  '@EDITOR:确认删除': '确认删除',
+  '@EDITOR:已删除': '已删除',
+  '@EDITOR:创建成功': '创建成功',
+  '@EDITOR:输入文件名': '输入文件名（回车确认，Esc 取消）',
+  '@EDITOR:输入文件夹名': '输入文件夹名（回车确认，Esc 取消）',
   // @EDITOR: file end
 }

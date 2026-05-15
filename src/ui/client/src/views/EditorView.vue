@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, shallowRef, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElTooltip } from 'element-plus'
 import * as monaco from 'monaco-editor'
 import { marked } from 'marked'
@@ -291,6 +291,202 @@ function getNodeIconClass(node: TreeNode): string {
   return getFileIconClass(node.name)
 }
 
+// ── 新建 / 重命名 / 删除 ────────────────────────────────
+// inline 输入状态
+interface InlineInput {
+  // 所在父目录路径（根目录时为 configStore.currentDirectory）
+  parentPath: string
+  // 在哪个 node 后面插入（用于定位渲染位置），null 表示插在最前
+  afterNode: TreeNode | null
+  // 'file' | 'directory'
+  kind: 'file' | 'directory'
+  // 输入框绑定值
+  value: string
+}
+
+interface RenameInput {
+  node: TreeNode
+  value: string
+}
+
+const inlineInput = ref<InlineInput | null>(null)
+const renameInput = ref<RenameInput | null>(null)
+const inlineInputRef = ref<HTMLInputElement | null>(null)
+const renameInputRef = ref<HTMLInputElement | null>(null)
+
+// 获取当前「焦点目录」：若选中的节点是目录则用它，否则取其父目录（简化处理：取 parentPath）
+function getTargetDir(kind: 'file' | 'directory'): { parentPath: string; afterNode: TreeNode | null } {
+  const flat = flattenTree(treeNodes.value)
+  const active = flat.find(n => n.path === activeTabPath.value)
+  if (active) {
+    if (active.type === 'directory') {
+      return { parentPath: active.path, afterNode: active }
+    }
+    // 文件：取父目录
+    const parent = active.path.includes('/') || active.path.includes('\\')
+      ? active.path.replace(/[\\/][^\\/]+$/, '')
+      : configStore.currentDirectory ?? ''
+    const parentNode = flat.find(n => n.path === parent && n.type === 'directory')
+    return { parentPath: parent, afterNode: parentNode ?? active }
+  }
+  return { parentPath: configStore.currentDirectory ?? '', afterNode: null }
+}
+
+async function startNewFile() {
+  inlineInput.value = { ...getTargetDir('file'), kind: 'file', value: '' }
+  await nextTick()
+  inlineInputRef.value?.focus()
+}
+
+async function startNewFolder() {
+  inlineInput.value = { ...getTargetDir('directory'), kind: 'directory', value: '' }
+  await nextTick()
+  inlineInputRef.value?.focus()
+}
+
+function cancelInlineInput() {
+  inlineInput.value = null
+}
+
+async function confirmInlineInput() {
+  const inp = inlineInput.value
+  if (!inp || !inp.value.trim()) {
+    inlineInput.value = null
+    return
+  }
+  const name = inp.value.trim()
+  const newPath = inp.parentPath.replace(/[/\\]$/, '') + '/' + name
+  if (inp.kind === 'file') {
+    const resp = await fetch('/api/editor/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: newPath }),
+    })
+    const data = await resp.json()
+    if (!data.success) { ElMessage.error(data.error); return }
+    ElMessage.success($t('@EDITOR:创建成功'))
+  } else {
+    const resp = await fetch('/api/editor/directory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: newPath }),
+    })
+    const data = await resp.json()
+    if (!data.success) { ElMessage.error(data.error); return }
+    ElMessage.success($t('@EDITOR:创建成功'))
+  }
+  inlineInput.value = null
+  await initTree()
+}
+
+function handleInlineKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmInlineInput() }
+  if (e.key === 'Escape') { e.preventDefault(); cancelInlineInput() }
+}
+
+// 右键菜单
+interface CtxMenu { x: number; y: number; node: TreeNode }
+const ctxMenu = ref<CtxMenu | null>(null)
+const ctxMenuRef = ref<HTMLElement | null>(null)
+
+function openContextMenu(e: MouseEvent, node: TreeNode) {
+  e.preventDefault()
+  ctxMenu.value = { x: e.clientX, y: e.clientY, node }
+}
+
+function closeContextMenu() {
+  ctxMenu.value = null
+}
+
+async function ctxNewFile() {
+  const node = ctxMenu.value?.node
+  closeContextMenu()
+  const parentPath = node
+    ? (node.type === 'directory' ? node.path : node.path.replace(/[\\/][^\\/]+$/, ''))
+    : (configStore.currentDirectory ?? '')
+  inlineInput.value = { parentPath, afterNode: node ?? null, kind: 'file', value: '' }
+  await nextTick()
+  inlineInputRef.value?.focus()
+}
+
+async function ctxNewFolder() {
+  const node = ctxMenu.value?.node
+  closeContextMenu()
+  const parentPath = node
+    ? (node.type === 'directory' ? node.path : node.path.replace(/[\\/][^\\/]+$/, ''))
+    : (configStore.currentDirectory ?? '')
+  inlineInput.value = { parentPath, afterNode: node ?? null, kind: 'directory', value: '' }
+  await nextTick()
+  inlineInputRef.value?.focus()
+}
+
+async function ctxRename() {
+  const node = ctxMenu.value?.node
+  closeContextMenu()
+  if (!node) return
+  renameInput.value = { node, value: node.name }
+  await nextTick()
+  renameInputRef.value?.focus()
+  renameInputRef.value?.select()
+}
+
+async function confirmRename() {
+  const r = renameInput.value
+  if (!r || !r.value.trim() || r.value.trim() === r.node.name) {
+    renameInput.value = null
+    return
+  }
+  const newName = r.value.trim()
+  const dir = r.node.path.replace(/[\\/][^\\/]+$/, '')
+  const newPath = dir.replace(/[/\\]$/, '') + '/' + newName
+  const resp = await fetch('/api/editor/rename', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ oldPath: r.node.path, newPath }),
+  })
+  const data = await resp.json()
+  if (!data.success) { ElMessage.error(data.error); return }
+  // 如果重命名的是当前打开的 tab，更新 tab 信息
+  const tab = tabs.value.find(t => t.path === r.node.path)
+  if (tab) {
+    tab.path = newPath
+    tab.name = newName
+    if (activeTabPath.value === r.node.path) activeTabPath.value = newPath
+  }
+  renameInput.value = null
+  await initTree()
+}
+
+function handleRenameKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmRename() }
+  if (e.key === 'Escape') { e.preventDefault(); renameInput.value = null }
+}
+
+async function ctxDelete() {
+  const node = ctxMenu.value?.node
+  closeContextMenu()
+  if (!node) return
+  const label = node.type === 'directory' ? $t('@EDITOR:文件夹') : $t('@EDITOR:文件')
+  if (!confirm(`${$t('@EDITOR:确认删除')} ${label} "${node.name}"？`)) return
+  const resp = await fetch(`/api/editor/entry?path=${encodeURIComponent(node.path)}`, { method: 'DELETE' })
+  const data = await resp.json()
+  if (!data.success) { ElMessage.error(data.error); return }
+  // 关掉已打开的 tab
+  const idx = tabs.value.findIndex(t => t.path === node.path)
+  if (idx !== -1) {
+    tabs.value.splice(idx, 1)
+    if (activeTabPath.value === node.path) {
+      activeTabPath.value = tabs.value[Math.max(0, idx - 1)]?.path ?? null
+    }
+  }
+  ElMessage.success($t('@EDITOR:已删除'))
+  await initTree()
+}
+
+// 点击全局关闭右键菜单
+onMounted(() => document.addEventListener('click', closeContextMenu))
+onBeforeUnmount(() => document.removeEventListener('click', closeContextMenu))
+
 // ── 预览面板 ────────────────────────────────────────────
 const PREVIEW_TEXT_EXTS = new Set(['md', 'html', 'htm', 'svg'])
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp'])
@@ -402,48 +598,119 @@ function stopPreviewResize() {
     <div class="editor-sidebar" :style="{ width: sidebarWidth + 'px' }">
       <div class="sidebar-header">
         <span class="sidebar-title">{{ $t('@EDITOR:资源管理器') }}</span>
-        <el-tooltip :content="$t('@EDITOR:刷新')" placement="bottom" :show-after="300">
-          <button class="sidebar-action-btn" @click="initTree">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
-              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
-            </svg>
-          </button>
-        </el-tooltip>
+        <div class="sidebar-actions">
+          <el-tooltip :content="$t('@EDITOR:新建文件')" placement="bottom" :show-after="300">
+            <button class="sidebar-action-btn" @click="startNewFile">
+              <!-- new-file icon -->
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="12" y1="13" x2="12" y2="19"/><line x1="9" y1="16" x2="15" y2="16"/>
+              </svg>
+            </button>
+          </el-tooltip>
+          <el-tooltip :content="$t('@EDITOR:新建文件夹')" placement="bottom" :show-after="300">
+            <button class="sidebar-action-btn" @click="startNewFolder">
+              <!-- new-folder icon -->
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+              </svg>
+            </button>
+          </el-tooltip>
+          <el-tooltip :content="$t('@EDITOR:刷新')" placement="bottom" :show-after="300">
+            <button class="sidebar-action-btn" @click="initTree">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
+                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+              </svg>
+            </button>
+          </el-tooltip>
+        </div>
       </div>
 
       <div class="sidebar-tree" v-if="!treeLoading">
+        <template v-for="node in flattenTree(treeNodes)" :key="node.path">
+          <!-- 重命名时用输入框替换节点 -->
+          <div
+            v-if="renameInput && renameInput.node.path === node.path"
+            class="tree-node tree-inline-input-row"
+            :style="{ paddingLeft: (12 + node.depth * 14) + 'px' }"
+          >
+            <span v-if="node.type === 'directory'" class="tree-arrow" :class="{ expanded: node.expanded }">
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </span>
+            <span v-else class="tree-arrow-spacer" />
+            <span class="tree-icon" :class="['icon', getNodeIconClass(node)]" />
+            <input
+              ref="renameInputRef"
+              class="tree-inline-input"
+              v-model="renameInput.value"
+              @keydown="handleRenameKeydown"
+              @blur="confirmRename"
+              @click.stop
+            />
+          </div>
+          <!-- 普通节点 -->
+          <div
+            v-else
+            class="tree-node"
+            :class="{
+              'tree-node--dir': node.type === 'directory',
+              'tree-node--file': node.type === 'file',
+              'tree-node--active': activeTabPath === node.path,
+            }"
+            :style="{ paddingLeft: (12 + node.depth * 14) + 'px' }"
+            @click="openFile(node)"
+            @contextmenu="openContextMenu($event, node)"
+          >
+            <!-- 展开箭头 -->
+            <span v-if="node.type === 'directory'" class="tree-arrow" :class="{ expanded: node.expanded }">
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </span>
+            <span v-else class="tree-arrow-spacer" />
+            <!-- 图标 -->
+            <span
+              v-if="node.type === 'directory'"
+              class="tree-icon"
+              :class="['icon', getNodeIconClass(node)]"
+            />
+            <span v-else class="tree-icon" :class="['icon', getNodeIconClass(node)]" />
+            <!-- 名称 -->
+            <span class="tree-name" :title="node.path">{{ node.name }}</span>
+            <span v-if="node.loading" class="tree-loading" />
+          </div>
+        </template>
+
+        <!-- 内联新建输入框（插在列表末尾，简化实现） -->
         <div
-          v-for="node in flattenTree(treeNodes)"
-          :key="node.path"
-          class="tree-node"
-          :class="{
-            'tree-node--dir': node.type === 'directory',
-            'tree-node--file': node.type === 'file',
-            'tree-node--active': activeTabPath === node.path,
-          }"
-          :style="{ paddingLeft: (12 + node.depth * 14) + 'px' }"
-          @click="openFile(node)"
+          v-if="inlineInput"
+          class="tree-node tree-inline-input-row"
+          :style="{ paddingLeft: (12) + 'px' }"
         >
-          <!-- 展开箭头 -->
-          <span v-if="node.type === 'directory'" class="tree-arrow" :class="{ expanded: node.expanded }">
-            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </span>
-          <span v-else class="tree-arrow-spacer" />
-          <!-- 图标 -->
-          <span
-            v-if="node.type === 'directory'"
-            class="tree-icon"
-            :class="['icon', getNodeIconClass(node)]"
+          <span class="tree-arrow-spacer" />
+          <svg v-if="inlineInput.kind === 'directory'" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--color-warning)">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-tertiary)">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <input
+            ref="inlineInputRef"
+            class="tree-inline-input"
+            v-model="inlineInput.value"
+            :placeholder="inlineInput.kind === 'file' ? $t('@EDITOR:输入文件名') : $t('@EDITOR:输入文件夹名')"
+            @keydown="handleInlineKeydown"
+            @blur="cancelInlineInput"
+            @click.stop
           />
-          <span v-else class="tree-icon" :class="['icon', getNodeIconClass(node)]" />
-          <!-- 名称 -->
-          <span class="tree-name" :title="node.path">{{ node.name }}</span>
-          <span v-if="node.loading" class="tree-loading" />
         </div>
-        <div v-if="treeNodes.length === 0" class="tree-empty">
+
+        <div v-if="treeNodes.length === 0 && !inlineInput" class="tree-empty">
           {{ $t('@EDITOR:暂无文件') }}
         </div>
       </div>
@@ -551,6 +818,49 @@ function stopPreviewResize() {
       </div>
     </div>
   </div>
+
+  <!-- 右键菜单 -->
+  <teleport to="body">
+    <div
+      v-if="ctxMenu"
+      ref="ctxMenuRef"
+      class="ctx-menu"
+      :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
+      @click.stop
+    >
+      <button class="ctx-menu-item" @click="ctxNewFile">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="13" x2="12" y2="19"/><line x1="9" y1="16" x2="15" y2="16"/>
+        </svg>
+        {{ $t('@EDITOR:新建文件') }}
+      </button>
+      <button class="ctx-menu-item" @click="ctxNewFolder">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+        </svg>
+        {{ $t('@EDITOR:新建文件夹') }}
+      </button>
+      <div class="ctx-menu-sep" />
+      <button class="ctx-menu-item" @click="ctxRename">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        {{ $t('@EDITOR:重命名') }}
+      </button>
+      <button class="ctx-menu-item ctx-menu-item--danger" @click="ctxDelete">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/><path d="M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+        {{ $t('@EDITOR:删除') }}
+      </button>
+    </div>
+  </teleport>
 </template>
 
 <style scoped>
@@ -1037,5 +1347,79 @@ function stopPreviewResize() {
 .preview-toggle-btn.active {
   color: var(--color-primary);
   background: rgba(59, 130, 246, 0.08);
+}
+
+/* ── sidebar header actions ─────────────────── */
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── 内联输入框 ─────────────────────────────── */
+.tree-inline-input-row {
+  cursor: default;
+  background: var(--bg-hover);
+}
+
+.tree-inline-input {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  font-size: 12.5px;
+  background: var(--bg-container);
+  border: 1px solid var(--color-primary);
+  border-radius: 3px;
+  color: var(--text-primary);
+  padding: 0 5px;
+  outline: none;
+  font-family: inherit;
+}
+
+/* ── 右键菜单 ────────────────────────────────── */
+.ctx-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: 4px;
+  min-width: 160px;
+  user-select: none;
+}
+
+.ctx-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.ctx-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.ctx-menu-item--danger {
+  color: var(--color-danger);
+}
+
+.ctx-menu-item--danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ctx-menu-sep {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 2px;
 }
 </style>

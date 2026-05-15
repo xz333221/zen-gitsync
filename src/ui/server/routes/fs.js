@@ -563,5 +563,93 @@ export function registerFsRoutes({
       res.status(500).json({ success: false, error: error.message });
     }
   });
+
+  // ── 编辑器：新建文件 ───────────────────────────────────────────
+  app.post('/api/editor/file', express.json(), async (req, res) => {
+    try {
+      const { path: filePath } = req.body;
+      if (!filePath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+      const cwd = getCurrentProjectPath() || process.cwd();
+      const resolved = path.resolve(filePath);
+      if (!resolved.startsWith(path.resolve(cwd))) {
+        return res.status(403).json({ success: false, error: '禁止在工作目录以外创建文件' });
+      }
+      // 如果已存在则拒绝
+      try {
+        await fs.access(resolved);
+        return res.status(409).json({ success: false, error: '文件已存在' });
+      } catch { /* 不存在，继续 */ }
+      await fs.mkdir(path.dirname(resolved), { recursive: true });
+      await fs.writeFile(resolved, '', 'utf-8');
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── 编辑器：新建文件夹 ─────────────────────────────────────────
+  app.post('/api/editor/directory', express.json(), async (req, res) => {
+    try {
+      const { path: dirPath } = req.body;
+      if (!dirPath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+      const cwd = getCurrentProjectPath() || process.cwd();
+      const resolved = path.resolve(dirPath);
+      if (!resolved.startsWith(path.resolve(cwd))) {
+        return res.status(403).json({ success: false, error: '禁止在工作目录以外创建目录' });
+      }
+      try {
+        await fs.access(resolved);
+        return res.status(409).json({ success: false, error: '目录已存在' });
+      } catch { /* 不存在，继续 */ }
+      await fs.mkdir(resolved, { recursive: true });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── 编辑器：删除文件或文件夹 ───────────────────────────────────
+  app.delete('/api/editor/entry', express.json(), async (req, res) => {
+    try {
+      const filePath = req.query.path;
+      if (!filePath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+      const cwd = getCurrentProjectPath() || process.cwd();
+      const resolved = path.resolve(filePath);
+      if (!resolved.startsWith(path.resolve(cwd))) {
+        return res.status(403).json({ success: false, error: '禁止删除工作目录以外的内容' });
+      }
+      const stat = await fs.stat(resolved);
+      if (stat.isDirectory()) {
+        await fs.rm(resolved, { recursive: true, force: true });
+      } else {
+        await fs.unlink(resolved);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── 编辑器：重命名文件或文件夹 ────────────────────────────────
+  app.put('/api/editor/rename', express.json(), async (req, res) => {
+    try {
+      const { oldPath, newPath } = req.body;
+      if (!oldPath || !newPath) return res.status(400).json({ success: false, error: '缺少参数' });
+      const cwd = getCurrentProjectPath() || process.cwd();
+      const resolvedOld = path.resolve(oldPath);
+      const resolvedNew = path.resolve(newPath);
+      if (!resolvedOld.startsWith(path.resolve(cwd)) || !resolvedNew.startsWith(path.resolve(cwd))) {
+        return res.status(403).json({ success: false, error: '禁止操作工作目录以外的内容' });
+      }
+      try {
+        await fs.access(resolvedNew);
+        return res.status(409).json({ success: false, error: '目标名称已存在' });
+      } catch { /* 不存在，继续 */ }
+      await fs.rename(resolvedOld, resolvedNew);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 }
 
