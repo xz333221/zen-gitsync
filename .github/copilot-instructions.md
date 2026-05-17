@@ -14,6 +14,16 @@
 
 **全部通过后才能进入下一步。**
 
+### 第一点五步：执行 auto-update-readme（README 同步）
+
+加载并执行 `.agents/skills/auto-update-readme/SKILL.md` 中定义的检查流程：
+
+1. 读取当前 README.md，对比本轮新增/修改的功能
+2. 判断是否需要更新文档
+3. 若需要：用 `replace_string_in_file` 更新英文和中文两个章节，将 `README.md` 纳入本轮提交
+
+> 纯重构、样式微调、依赖升级、配置变更等不触发此步骤。
+
 ### 第二步：执行 auto-commit（Git 提交）
 
 加载并执行 `.agents/skills/auto-commit/SKILL.md` 中定义的提交流程：
