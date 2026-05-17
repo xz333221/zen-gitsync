@@ -1297,6 +1297,8 @@ export default {
   // @13D1C: file path: views\components\GitStatus.vue
   '@13D1C:复制全量 Diff': '复制全量 Diff',
   '@13D1C:Git Pull (拉取远程更新)': 'Git Pull (拉取远程更新)',
+  '@13D1C:Stash → Pull → Stash Pop (储藏后拉取再还原)': 'Stash → Pull → Stash Pop (储藏后拉取再还原)',
+  '@13D1C:正在执行 Stash → Pull → Stash Pop...': '正在执行 Stash → Pull → Stash Pop...',
   '@13D1C:Git Fetch All (获取所有远程分支)': 'Git Fetch All (获取所有远程分支)',
   '@13D1C:管理锁定文件': '管理锁定文件',
   '@13D1C:刷新状态': '刷新状态',

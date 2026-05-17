@@ -448,6 +448,9 @@ async function refreshStatus() {
 const pullErrorDialogVisible = ref(false)
 const pullErrorInfo = ref({ needsMerge: false, error: '', fullError: '', pullOutput: '' })
 
+// Stash Pull Pop 操作状态
+const isStashPulling = ref(false)
+
 // 添加git pull操作方法
 async function handleGitPull() {
   try {
@@ -468,6 +471,43 @@ async function handleGitPull() {
     }
   } catch (error) {
     console.error('拉取操作发生错误:', error)
+  }
+}
+
+// Stash → Pull → Stash Pop 一键操作
+async function handleStashPullPop() {
+  if (isStashPulling.value) return
+  isStashPulling.value = true
+  try {
+    // 1. stash 储藏当前更改
+    const stashOk = await gitStore.saveStash()
+    if (!stashOk) {
+      isStashPulling.value = false
+      return
+    }
+
+    // 2. git pull
+    const pullResult = await gitStore.gitPull()
+
+    // 3. stash pop 还原储藏（无论 pull 是否成功都要还原）
+    await gitStore.applyStash('stash@{0}', true)
+
+    if (!pullResult.success) {
+      pullErrorInfo.value = {
+        needsMerge: pullResult.needsMerge,
+        error: pullResult.error,
+        fullError: pullResult.fullError,
+        pullOutput: pullResult.pullOutput
+      }
+      pullErrorDialogVisible.value = true
+      return
+    }
+
+    await loadStatus()
+  } catch (error) {
+    console.error('Stash Pull Pop 操作发生错误:', error)
+  } finally {
+    isStashPulling.value = false
   }
 }
 
@@ -858,6 +898,19 @@ defineExpose({
           >
             <el-icon v-if="gitStore.isGitPulling" class="is-loading"><Loading /></el-icon>
             <svg-icon v-else icon-class="git-pull-request" />
+          </IconButton>
+
+          <!-- Stash → Pull → Stash Pop 按钮（仅工作区有变更时显示） -->
+          <IconButton
+            v-if="gitStore.fileList.length > 0"
+            :tooltip="$t('@13D1C:Stash → Pull → Stash Pop (储藏后拉取再还原)')"
+            size="medium"
+            hover-color="var(--color-primary)"
+            :disabled="!gitStore.hasUpstream || gitStore.isGitPulling || isStashPulling"
+            @click="handleStashPullPop"
+          >
+            <el-icon v-if="isStashPulling" class="is-loading"><Loading /></el-icon>
+            <svg-icon v-else icon-class="git-pull-request-with-stash" />
           </IconButton>
           
           <!-- 添加Git Fetch All按钮 -->
