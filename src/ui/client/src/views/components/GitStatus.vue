@@ -479,8 +479,8 @@ async function handleStashPullPop() {
   if (isStashPulling.value) return
   isStashPulling.value = true
   try {
-    // 1. stash 储藏当前更改
-    const stashOk = await gitStore.saveStash()
+    // 1. stash 储藏当前更改（不排除锁定文件）
+    const stashOk = await gitStore.saveStash(undefined, false, false)
     if (!stashOk) {
       isStashPulling.value = false
       return
