@@ -63,7 +63,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-![ui](https://home.flowdash.cn/upload/VditorFiles/2026-1/image_zbQZpiL6.png)
+![ui](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/zen-gitsync-ui-git.png)
 
 The GUI runs as a local web server and opens in your default browser. It attaches to the current Git repository automatically. The activity bar on the left switches between three views: **Git**, **Editor**, and **Source Map**.
 
@@ -398,7 +398,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-![ui](https://home.flowdash.cn/upload/VditorFiles/2026-1/image_zbQZpiL6.png)
+![ui](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/zen-gitsync-ui-git.png)
 
 GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。左侧 Activity Bar 可在三个视图之间切换：**Git**、**编辑器**、**源码地图**。
 
