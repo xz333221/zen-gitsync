@@ -10,6 +10,26 @@
    ======================================================= */
    
 [data-theme="dark"] {
+  /* 主色调覆盖：深色模式使用高亮青碧，明度足够与深色背景形成对比 */
+  --color-primary: #4aefd4;
+  --color-primary-light: #7df5e0;
+  --color-primary-dark: #00c9ad;
+  --color-primary-gradient: linear-gradient(135deg, #063a3a 0%, #00b89a 60%, #4aefd4 100%);
+  --color-primary-gradient-hover: linear-gradient(135deg, #063a3a 0%, #009e8a 60%, #00c9ad 100%);
+
+  /* Element Plus 主色调（深色模式） */
+  --el-color-primary: #4aefd4;
+  --el-color-primary-light-3: rgba(74, 239, 212, 0.7);
+  --el-color-primary-light-5: rgba(74, 239, 212, 0.5);
+  --el-color-primary-light-7: rgba(74, 239, 212, 0.3);
+  --el-color-primary-light-8: rgba(74, 239, 212, 0.2);
+  --el-color-primary-light-9: rgba(74, 239, 212, 0.1);
+  --el-color-primary-dark-2: #00c9ad;
+
+  /* 阴影 focus ring */
+  --shadow-focus: 0 0 0 3px rgba(74, 239, 212, 0.22);
+  --dialog-focus-ring: 0 0 0 3px rgba(74, 239, 212, 0.18);
+
   /* Element Plus深色主题CSS变量 */
   --el-bg-color: var(--bg-container-dark);
   --el-bg-color-page: var(--bg-page-dark);
@@ -53,8 +73,8 @@
   --el-select-text-color: var(--text-primary-dark);
   --el-select-border-color: var(--border-input-dark);
   --el-select-hover-border-color: var(--border-input-hover-dark);
-  --el-select-option-hover-background: rgba(64, 158, 255, 0.2);
-  --el-select-option-selected-font-color: #409eff;
+  --el-select-option-hover-background: rgba(74, 239, 212, 0.12);
+  --el-select-option-selected-font-color: #4aefd4;
   /* Popper/Overlay 背景（与弹层保持一致） */
   --el-bg-color-overlay: var(--bg-container-dark);
   
@@ -66,8 +86,8 @@
   --el-table-text-color: var(--text-primary-dark);
   --el-table-header-text-color: var(--text-secondary-dark);
   --el-table-border-color: var(--border-color-dark);
-  --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.06);
-  --el-table-current-row-bg-color: rgba(64, 158, 255, 0.12);
+  --el-table-row-hover-bg-color: rgba(74, 239, 212, 0.04);
+  --el-table-current-row-bg-color: rgba(74, 239, 212, 0.09);
   --el-table-header-border-color: var(--border-color-light);
 
   /* 页面背景 */
@@ -186,32 +206,32 @@
   /* Dialog */
   --dialog-border-color: var(--dialog-border-color-dark);
   --dialog-shadow:
-    0 24px 56px rgba(0, 0, 0, 0.46),
-    0 10px 28px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
+    0 24px 56px rgba(0, 8, 28, 0.55),
+    0 10px 28px rgba(0, 8, 28, 0.35),
+    0 0 0 1px rgba(74, 239, 212, 0.08);
   --dialog-shadow-hover:
-    0 28px 64px rgba(0, 0, 0, 0.5),
-    0 12px 32px rgba(0, 0, 0, 0.3),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+    0 28px 64px rgba(0, 8, 28, 0.60),
+    0 12px 32px rgba(0, 8, 28, 0.38),
+    0 0 0 1px rgba(74, 239, 212, 0.12);
   --dialog-shadow-active:
-    0 16px 40px rgba(0, 0, 0, 0.4),
-    0 6px 16px rgba(0, 0, 0, 0.22),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
+    0 16px 40px rgba(0, 8, 28, 0.48),
+    0 6px 16px rgba(0, 8, 28, 0.28),
+    0 0 0 1px rgba(74, 239, 212, 0.08);
   --dialog-overlay: var(--dialog-overlay-dark);
   --dialog-header-bg: color-mix(in srgb, var(--bg-container-dark) 88%, white 12%);
   --dialog-footer-bg: color-mix(in srgb, var(--bg-panel-dark) 74%, var(--bg-container-dark) 26%);
   --dialog-close-hover-bg: rgba(255, 255, 255, 0.08);
   --dialog-close-hover-color: var(--text-primary-dark);
-  --git-diff-context-bg: #24292e;
-  --git-diff-context-color: #f8f8f2;
-  --git-diff-header-bg: #1f2937;
-  --git-diff-header-color: #60a5fa;
-  --git-diff-header-border: #374151;
-  --git-diff-added-bg: rgba(34, 134, 58, 0.15);
-  --git-diff-added-color: #56d364;
-  --git-diff-removed-bg: rgba(248, 81, 73, 0.15);
-  --git-diff-removed-color: #f85149;
-  --git-diff-hunk-bg: #1f2937;
+  --git-diff-context-bg: #091020;
+  --git-diff-context-color: #e8f4f8;
+  --git-diff-header-bg: #0a1830;
+  --git-diff-header-color: #4aefd4;
+  --git-diff-header-border: rgba(74, 239, 212, 0.2);
+  --git-diff-added-bg: rgba(34, 197, 94, 0.12);
+  --git-diff-added-color: #4ade80;
+  --git-diff-removed-bg: rgba(248, 81, 73, 0.12);
+  --git-diff-removed-color: #f87171;
+  --git-diff-hunk-bg: #0a1830;
   --git-diff-hunk-color: #a78bfa;
 }
 
