@@ -5,25 +5,13 @@
 :root {
   /* ===== 基础颜色定义 ===== */
   
-  /* 主色调 - 青碧系，科技感强，黑白双模均可读 */
-  --color-primary: #0891b2;
-  --color-primary-light: #06b6d4;
-  --color-primary-dark: #0e7490;
-  /* 渐变：深海蓝到青碧，cyber/terminal 质感 */
-  --color-primary-gradient: linear-gradient(135deg, #0c4a6e 0%, #0891b2 60%, #06b6d4 100%);
-  --color-primary-gradient-hover: linear-gradient(135deg, #0c4a6e 0%, #0e7490 60%, #0891b2 100%);
-
-  /* Element Plus 主色调（亮色模式） */
-  --el-color-primary: #0891b2;
-  --el-color-primary-light-3: rgba(8, 145, 178, 0.7);
-  --el-color-primary-light-5: rgba(8, 145, 178, 0.5);
-  --el-color-primary-light-7: rgba(8, 145, 178, 0.3);
-  --el-color-primary-light-8: rgba(8, 145, 178, 0.2);
-  --el-color-primary-light-9: rgba(8, 145, 178, 0.1);
-  --el-color-primary-dark-2: #0e7490;
-  --el-input-focus-border-color: #0891b2;
-  --el-select-option-selected-font-color: #0891b2;
-  --el-select-option-hover-background: rgba(8, 145, 178, 0.08);
+  /* 主色调 */
+  --color-primary: #3b82f6;
+  --color-primary-light: #60a5fa;
+  --color-primary-dark: #2563eb;
+  /* 设计感渐变：深蓝到青蓝，去掉 AI 紫蓝 slop 配色 */
+  --color-primary-gradient: linear-gradient(135deg, #1e3a5f 0%, #2563eb 60%, #0ea5e9 100%);
+  --color-primary-gradient-hover: linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 60%, #0284c7 100%);
   
   /* 语义颜色 */
   --color-success: #67c23a;
@@ -34,7 +22,7 @@
   --color-danger-light: #ef4444;
   --color-danger-dark: #dc2626;
   --color-info: #909399;
-  --color-info-light: #7c3aed;
+  --color-info-light: #8b5cf6;
   
   /* 中性颜色 */
   --color-white: #ffffff;
@@ -115,81 +103,81 @@
   /* ===== 背景颜色 ===== */
   
   /* 页面背景 */
-  --bg-page: #eef3fa;
-  /* 深色背景：深海军黑，cyber/terminal 级深度 */
-  --bg-page-dark: #06091a;
-  --bg-title: #e8f3fa;
-  --bg-title-dark: #0d1526;
+  --bg-page: #f0f2f5;
+  /* 深色背景：深蓝炭黑，比纯灰更有质感 */
+  --bg-page-dark: #141820;
+  --bg-title: #eeeeee;
+  --bg-title-dark: #474747;
   
   /* 容器背景 */
   --bg-container: var(--color-white);
-  --bg-container-hover: #f0f7ff;
-  --bg-container-hover-dark: rgba(74, 239, 212, 0.05);
-  /* 深色容器：比页面背景亮一层，形成面板感 */
-  --bg-container-dark: #0d1526;
+  --bg-container-hover: #f8fafc;
+  --bg-container-hover-dark: rgba(255, 255, 255, 0.07);
+  /* 深色容器：带轻微蓝调，与深色背景形成层次 */
+  --bg-container-dark: #1c2130;
   
   /* 表单和输入框背景 */
   --bg-input: white;
-  --bg-input-dark: #091020;
-  --bg-input-hover: #e8f0fb;
-  --bg-input-hover-dark: rgba(74, 239, 212, 0.08);
+  --bg-input-dark: #24292e;
+  --bg-input-hover: #f1f5f9;
+  --bg-input-hover-dark: rgba(255, 255, 255, 0.08);
   
   /* 面板和区域背景 */
-  --bg-panel: #eef5fb;
-  --bg-panel-dark: rgba(74, 239, 212, 0.02);
-  --bg-panel-hover: #e4f0f8;
-  --bg-panel-hover-dark: rgba(74, 239, 212, 0.05);
+  --bg-panel: #f5f7fa;
+  --bg-panel-dark: rgba(255, 255, 255, 0.03);
+  --bg-panel-hover: #eef2f6;
+  --bg-panel-hover-dark: rgba(255, 255, 255, 0.06);
   
   /* 文件路径背景 */
   --bg-file-path: var(--color-gray-100);
-  --bg-file-path-dark: rgba(74, 239, 212, 0.06);
-  --bg-file-path-hover: #d1f0f7;
-  --bg-file-path-hover-dark: rgba(74, 239, 212, 0.15);
+  --bg-file-path-dark: rgba(255, 255, 255, 0.08);
+  --bg-file-path-hover: #e0e7ff;
+  --bg-file-path-hover-dark: rgba(99, 102, 241, 0.2);
   
   /* 图标和装饰背景 */
-  --bg-icon: #eef6fa;
-  --bg-icon-dark: rgba(74, 239, 212, 0.08);
-  --bg-icon-hover: #d1eef7;
-  --bg-icon-hover-dark: rgba(74, 239, 212, 0.14);
+  --bg-icon: #f0f2f5;
+  --bg-icon-dark: rgba(255, 255, 255, 0.1);
+  --bg-icon-hover: #e8eaed;
+  --bg-icon-hover-dark: rgba(255, 255, 255, 0.15);
 
   /* 极浅背景（用于嵌入型组件如 Header 内的 inline card） */
   --bg-subtle: rgba(0, 0, 0, 0.02);
-  --bg-subtle-dark: rgba(74, 239, 212, 0.03);
-  --bg-subtle-hover: rgba(0, 0, 0, 0.03);
-  --bg-subtle-hover-dark: rgba(74, 239, 212, 0.07);
+  --bg-subtle-dark: rgba(255, 255, 255, 0.05);
+  --bg-subtle-hover: rgba(0, 0, 0, 0.04);
+  --bg-subtle-hover-dark: rgba(255, 255, 255, 0.09);
 
   /* Header / Footer 毛玻璃背景 */
-  --bg-header: rgba(255, 255, 255, 0.90);
-  --bg-header-dark: rgba(6, 9, 26, 0.94);
-  --bg-footer: rgba(255, 255, 255, 0.90);
-  --bg-footer-dark: rgba(6, 9, 26, 0.94);
+  --bg-header: rgba(255, 255, 255, 0.82);
+  --bg-header-dark: rgba(18, 22, 32, 0.90);
+  --bg-footer: rgba(255, 255, 255, 0.82);
+  --bg-footer-dark: rgba(18, 22, 32, 0.90);
   
   /* 组件悬浮背景 */
-  --bg-component-hover: #d1f0f7;
-  --bg-component-hover-dark: rgba(74, 239, 212, 0.08);
+  --bg-component-hover: #e9ecef;
+  --bg-component-hover-dark: rgba(255, 255, 255, 0.12);
   
   /* 组件区域背景 */
-  --bg-component-area: #f4fafd;
-  --bg-component-area-dark: rgba(74, 239, 212, 0.03);
+  --bg-component-area: #f9f9f9;
+  --bg-component-area-dark: rgba(255, 255, 255, 0.06);
   
   /* 卡片和面板背景 */
   --bg-card: var(--color-white);
-  --bg-card-dark: #0d1526;
-  --bg-card-hover: #f0f7ff;
-  --bg-card-hover-dark: rgba(74, 239, 212, 0.04);
+  --bg-card-dark: #1c2130;
+  --bg-card-hover: #f8fafc;
+  --bg-card-hover-dark: rgba(255, 255, 255, 0.05);
   
   /* 操作区域背景 */
-  --bg-action: linear-gradient(135deg, #f0f9ff 0%, #d8eef7 100%);
-  --bg-action-dark: linear-gradient(135deg, rgba(74, 239, 212, 0.04) 0%, rgba(74, 239, 212, 0.02) 100%);
+  --bg-action: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  --bg-action-dark: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.03) 100%);
   
   /* 浮层背景 */
-  --bg-overlay: rgba(6, 9, 26, 0.75);
+  --bg-overlay: rgba(40, 44, 52, 0.7);
   --bg-overlay-light: rgba(0, 0, 0, 0.2);
   
   /* 代码区域背景 */
-  --bg-code: #f0f8ff;
-  --bg-code-dark: #070d1c;
-  --bg-code-line: #f7fbff;
+  --bg-code: #f6f8fa;
+  --bg-code-dark: #1a2035;
+  --bg-code-line: #fafbfc;
 
   /* 控制台/命令预览区域（亮色主题用浅色） */
   --bg-console: #f0f2f5;
@@ -254,54 +242,54 @@
   /* 基础边框 */
   --border-color: rgba(0, 0, 0, 0.06);
   --border-color-light: rgba(0, 0, 0, 0.03);
-  --border-color-medium: #cde8f0;
-  --border-color-dark: rgba(74, 239, 212, 0.12);
+  --border-color-medium: #e1e4e8;
+  --border-color-dark: rgba(255, 255, 255, 0.15);
   
   /* 输入框边框 */
-  --border-input: #cde8f0;
-  --border-input-dark: rgba(74, 239, 212, 0.15);
-  --border-input-hover: #9dd5e8;
-  --border-input-hover-dark: rgba(74, 239, 212, 0.35);
+  --border-input: #e5e7eb;
+  --border-input-dark: rgba(255, 255, 255, 0.15);
+  --border-input-hover: #cbd5e1;
+  --border-input-hover-dark: rgba(255, 255, 255, 0.25);
   
   /* 卡片边框 */
-  --border-card: #cde8f0;
-  --border-card-dark: rgba(74, 239, 212, 0.1);
-  --border-card-hover: #9dd5e8;
-  --border-card-hover-dark: rgba(74, 239, 212, 0.25);
+  --border-card: #e5e7eb;
+  --border-card-dark: rgba(255, 255, 255, 0.15);
+  --border-card-hover: #cbd5e1;
+  --border-card-hover-dark: rgba(255, 255, 255, 0.25);
   
   /* 组件边框 */
-  --border-component: #d5eef5;
-  --border-component-dark: rgba(74, 239, 212, 0.08);
-  --border-component-light: #e5f4f9;
-  --border-component-light-dark: rgba(74, 239, 212, 0.05);
+  --border-component: #e9ecef;
+  --border-component-dark: rgba(255, 255, 255, 0.12);
+  --border-component-light: #dee2e6;
+  --border-component-light-dark: rgba(255, 255, 255, 0.08);
   
   /* 交互边框 */
-  --border-hover: rgba(8, 145, 178, 0.18);
+  --border-hover: rgba(59, 130, 246, 0.18);
   --border-focus: var(--color-primary);
   --border-active: var(--color-primary-dark);
   
   /* ===== 阴影 ===== */
   
-  /* 基础阴影（青碧冷调，与主色调呼应） */
-  --shadow-sm: 0 1px 3px rgba(8, 60, 80, 0.06);
-  --shadow-base: 0 1px 4px rgba(8, 60, 80, 0.07);
-  --shadow-md: 0 2px 8px rgba(8, 60, 80, 0.10);
-  --shadow-lg: 0 4px 16px rgba(8, 60, 80, 0.11);
-  --shadow-xl: 0 8px 32px rgba(8, 60, 80, 0.14);
+  /* 基础阴影（着色：带轻微冷蓝调而非纯黑） */
+  --shadow-sm: 0 1px 3px rgba(30, 58, 95, 0.05);
+  --shadow-base: 0 1px 4px rgba(30, 58, 95, 0.06);
+  --shadow-md: 0 2px 8px rgba(30, 58, 95, 0.09);
+  --shadow-lg: 0 4px 16px rgba(30, 58, 95, 0.10);
+  --shadow-xl: 0 8px 32px rgba(30, 58, 95, 0.13);
   
   /* 交互阴影 */
-  --shadow-hover: 0 4px 16px rgba(8, 60, 80, 0.13);
-  --shadow-active: 0 2px 6px rgba(8, 60, 80, 0.15);
-  --shadow-focus: 0 0 0 3px rgba(8, 145, 178, 0.22);
+  --shadow-hover: 0 4px 16px rgba(30, 58, 95, 0.12);
+  --shadow-active: 0 2px 6px rgba(30, 58, 95, 0.14);
+  --shadow-focus: 0 0 0 3px rgba(59, 130, 246, 0.22);
 
-  --shadow-dark: 0 2px 16px rgba(0, 8, 28, 0.55);
-  --shadow-dark-lg: 0 6px 28px rgba(0, 8, 28, 0.65);
+  --shadow-dark: 0 2px 12px rgba(5, 10, 25, 0.36);
+  --shadow-dark-lg: 0 6px 24px rgba(5, 10, 25, 0.48);
 
   /* Dialog / Overlay */
   --dialog-radius: 16px;
   --dialog-radius-sm: 12px;
-  --dialog-border-color: rgba(8, 60, 80, 0.08);
-  --dialog-border-color-dark: rgba(74, 239, 212, 0.1);
+  --dialog-border-color: rgba(15, 23, 42, 0.08);
+  --dialog-border-color-dark: rgba(255, 255, 255, 0.08);
   --dialog-shadow:
     0 20px 48px rgba(15, 23, 42, 0.16),
     0 6px 18px rgba(15, 23, 42, 0.08),
@@ -315,20 +303,20 @@
     0 4px 12px rgba(15, 23, 42, 0.07),
     0 0 0 1px rgba(15, 23, 42, 0.04);
   --dialog-overlay: rgba(17, 24, 39, 0.44);
-  --dialog-overlay-dark: rgba(3, 7, 18, 0.78);
+  --dialog-overlay-dark: rgba(3, 7, 18, 0.68);
   --dialog-header-bg: color-mix(in srgb, var(--bg-container) 92%, var(--color-primary) 8%);
   --dialog-footer-bg: color-mix(in srgb, var(--bg-panel) 86%, var(--bg-container) 14%);
   --dialog-close-hover-bg: color-mix(in srgb, var(--bg-component-hover) 82%, var(--color-primary) 18%);
   --dialog-close-hover-color: var(--text-primary);
-  --dialog-focus-ring: 0 0 0 3px rgba(8, 145, 178, 0.16);
+  --dialog-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.16);
 
   /* Dialog buttons */
   --btn-radius: 10px;
   --btn-radius-sm: 8px;
   --btn-radius-lg: 12px;
-  --btn-shadow: 0 1px 2px rgba(8, 60, 80, 0.06);
-  --btn-shadow-hover: 0 8px 18px rgba(8, 145, 178, 0.20);
-  --btn-shadow-active: 0 2px 6px rgba(8, 60, 80, 0.09);
+  --btn-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --btn-shadow-hover: 0 8px 18px rgba(37, 99, 235, 0.16);
+  --btn-shadow-active: 0 2px 6px rgba(15, 23, 42, 0.08);
   --btn-success-shadow-hover: 0 8px 18px rgba(16, 185, 129, 0.16);
   --btn-warning-shadow-hover: 0 8px 18px rgba(245, 158, 11, 0.16);
   --btn-danger-shadow-hover: 0 8px 18px rgba(239, 68, 68, 0.16);
@@ -366,7 +354,7 @@
   
   /* 文件路径文字颜色 */
   --color-file-path-hover: var(--color-primary);
-  --color-file-path-hover-dark: #4aefd4;
+  --color-file-path-hover-dark: #93c5fd;
   
   /* 链接文字 */
   --text-link: var(--color-primary);
