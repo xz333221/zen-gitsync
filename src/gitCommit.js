@@ -9,7 +9,7 @@ import ora from 'ora';
 import chalk from 'chalk';
 import boxen from 'boxen';
 import config from './config.js';
-import dateFormat from 'date-fns/format';
+import { format as dateFormat } from 'date-fns/format';
 import logUpdate from 'log-update';
 import startUIServer from './ui/server/index.js';
 import { exec } from 'child_process';
