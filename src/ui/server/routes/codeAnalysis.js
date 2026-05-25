@@ -74,6 +74,72 @@ async function safeReadFile(filePath, maxBytes = 200000) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * 根据文件路径推断模块的语义角色（用于 AI 分析失败时的兜底描述）
+ */
+function inferModuleRole(filePath, inDegree = 0) {
+  const base = path.basename(filePath, path.extname(filePath));
+  const ext  = path.extname(filePath).toLowerCase();
+  const fwd  = filePath.replace(/\\/g, '/');
+  const low  = fwd.toLowerCase();
+
+  // ── 特殊文件名 ──
+  if (/^(main|app)$/i.test(base))   return 'Vue 应用入口';
+  if (/^server$/i.test(base))        return 'HTTP 服务主入口';
+  if (/^index$/i.test(base)) {
+    const parentDir = fwd.split('/').slice(-2, -1)[0] || '';
+    if (low.includes('/server') || low.includes('/backend')) return '服务端应用入口';
+    if (low.includes('/stores'))    return `${parentDir} 状态模块`;
+    if (low.includes('/routes'))    return `${parentDir} 路由入口`;
+    if (low.includes('/utils'))     return `${parentDir} 工具集`;
+    return `${parentDir} 模块入口`;
+  }
+
+  // ── Pinia / Vuex Store ──
+  if (low.includes('/stores/') || /store$/i.test(base)) {
+    const name = base.replace(/store$/i, '').replace(/([A-Z])/g, ' $1').trim();
+    return `${name} 状态管理`;
+  }
+
+  // ── Vue 组件 ──
+  if (ext === '.vue' || low.includes('/components/')) return `${base} 组件`;
+
+  // ── Views / Pages ──
+  if (low.includes('/views/') || /view$/i.test(base) || /page$/i.test(base)) return `${base} 页面`;
+
+  // ── Routes ──
+  if (low.includes('/routes/') || /route[s]?$/i.test(base)) {
+    const name = base.replace(/route[s]?$/i, '').trim();
+    return name ? `${name} 路由模块` : '路由处理模块';
+  }
+
+  // ── Lang / i18n ──
+  if (low.includes('/lang/') || low.includes('/i18n/') || low.includes('/locale')) return '国际化文案资源';
+
+  // ── Utils / Helpers ──
+  if (low.includes('/utils/') || /util[s]?$/i.test(base) || /helper[s]?$/i.test(base)) return `${base} 工具集`;
+
+  // ── Composables / Hooks ──
+  if (low.includes('/composables/') || low.includes('/hooks/') || /^use[A-Z]/.test(base)) return `${base} 组合式函数`;
+
+  // ── API / Services ──
+  if (low.includes('/api/') || low.includes('/services/') || /service[s]?$/i.test(base) || /api$/i.test(base)) return `${base} API 服务`;
+
+  // ── Middleware ──
+  if (low.includes('/middleware/') || /middleware$/i.test(base)) return `${base} 中间件`;
+
+  // ── Config ──
+  if (/config$/i.test(base) || low.includes('/config/')) return `${base} 配置`;
+
+  // ── Types ──
+  if (/types?$/i.test(base) || low.includes('/types/')) return `${base} 类型定义`;
+
+  // ── 按引用次数降级 ──
+  if (inDegree >= 20) return `高频共享模块（被引用 ${inDegree} 次）`;
+  if (inDegree >= 5)  return `核心共享模块（被引用 ${inDegree} 次）`;
+  return `${base} 功能模块`;
+}
+
+/**
  * 正则提取 import / require / dynamic-import 的模块路径（TypeScript/Vue 通用）
  */
 function parseImportsRegex(src) {
@@ -772,14 +838,14 @@ ${hubContentText || '（无）'}
           for (const f of staticEntryCandidates.slice(0, 3)) {
             if (!seen.has(f)) {
               seen.add(f);
-              fbNodes.push({ id: `fe_${fbNodes.length}`, label: path.basename(f, path.extname(f)), file: f, line: 1, type: 'module', importance: 'high', description: '入口模块' });
+              fbNodes.push({ id: `fe_${fbNodes.length}`, label: path.basename(f, path.extname(f)), file: f, line: 1, type: 'module', importance: 'high', description: inferModuleRole(f, 0) });
             }
           }
           // Hub 节点（入度最高）
           for (const h of hubFiles.slice(0, 10)) {
             if (!seen.has(h.file)) {
               seen.add(h.file);
-              fbNodes.push({ id: `fh_${fbNodes.length}`, label: path.basename(h.file, path.extname(h.file)), file: h.file, line: 1, type: 'module', importance: h.inDegree >= 5 ? 'high' : h.inDegree >= 2 ? 'medium' : 'low', description: `核心模块（被引用${h.inDegree}次，${h.lines}行）` });
+              fbNodes.push({ id: `fh_${fbNodes.length}`, label: path.basename(h.file, path.extname(h.file)), file: h.file, line: 1, type: 'module', importance: h.inDegree >= 5 ? 'high' : h.inDegree >= 2 ? 'medium' : 'low', description: inferModuleRole(h.file, h.inDegree) });
             }
           }
           rawNodes = fbNodes;

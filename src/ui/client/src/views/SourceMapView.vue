@@ -3,6 +3,7 @@ import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch, nextTick 
 import * as monaco from 'monaco-editor'
 import { $t } from '@/lang/static'
 import { useVueFlow, VueFlow, Handle, Position, type Node as FlowNode, type Edge as FlowEdge, MarkerType } from '@vue-flow/core'
+import dagre from 'dagre'
 import { Background, BackgroundVariant } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
@@ -82,6 +83,7 @@ const expandedFolders = ref<Set<string>>(new Set())
 
 // 面板可见性
 const panelVisible = ref({ files: true, graph: true, source: true })
+const isOptimizing = ref(false)
 
 // 面板尺寸（可拖拽调整）
 const filesWidth = ref(220)
@@ -128,7 +130,7 @@ const monacoContainerRef = ref<HTMLElement | null>(null)
 const monacoInstance = shallowRef<monaco.editor.IStandaloneCodeEditor | null>(null)
 
 // VueFlow
-const { fitView, setNodes, setEdges } = useVueFlow()
+const { fitView, setNodes, setEdges, getNodes, getEdges, updateNodeInternals } = useVueFlow()
 
 // ── 计算属性 ──────────────────────────────────────────────────────────────────
 
@@ -327,6 +329,71 @@ function buildFlowGraph(graphNodes: GraphNode[], graphEdges: GraphEdge[]) {
   return { flowNodes, flowEdges }
 }
 
+// ── 布局优化（dagre） ─────────────────────────────────────────────────────────
+
+async function optimizeLayout() {
+  const flowNodes = getNodes.value
+  const flowEdges = getEdges.value
+  if (flowNodes.length === 0) return
+
+  isOptimizing.value = true
+  try {
+    // 等待 VueFlow 完成 DOM 渲染并测量节点尺寸
+    await nextTick()
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+    updateNodeInternals(flowNodes.map(n => n.id))
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+
+    // 按子系统分组，各自跑一遍 dagre，然后水平排列
+    const subsystemGroups = new Map<string, FlowNode[]>()
+    flowNodes.forEach(n => {
+      const key = (n.data?.subsystem as string) ?? '__default__'
+      if (!subsystemGroups.has(key)) subsystemGroups.set(key, [])
+      subsystemGroups.get(key)!.push(n)
+    })
+
+    const updatedPositions = new Map<string, { x: number; y: number }>()
+    let subsystemOffsetX = 0
+    const SUBSYSTEM_GAP = 120
+
+    for (const [, groupNodes] of subsystemGroups) {
+      const g = new dagre.graphlib.Graph()
+      g.setDefaultEdgeLabel(() => ({}))
+      g.setGraph({ rankdir: 'TB', nodesep: 55, ranksep: 75, marginx: 40, marginy: 40 })
+
+      const groupIds = new Set(groupNodes.map(n => n.id))
+      groupNodes.forEach(n => {
+        let w = 190, h = n.data?.description ? 68 : 48
+        const el = document.querySelector(`.vue-flow__node[data-id="${n.id}"]`) as HTMLElement | null
+        if (el && el.offsetWidth > 0) { w = el.offsetWidth; h = el.offsetHeight }
+        g.setNode(n.id, { width: w, height: h })
+      })
+      flowEdges.forEach(e => {
+        if (groupIds.has(e.source) && groupIds.has(e.target)) g.setEdge(e.source, e.target)
+      })
+
+      dagre.layout(g)
+
+      let maxX = 0
+      groupNodes.forEach(n => {
+        const pos = g.node(n.id)
+        if (pos) {
+          updatedPositions.set(n.id, { x: subsystemOffsetX + pos.x - pos.width / 2, y: pos.y - pos.height / 2 })
+          maxX = Math.max(maxX, pos.x + pos.width / 2)
+        }
+      })
+      subsystemOffsetX += maxX + SUBSYSTEM_GAP
+    }
+
+    const newNodes = flowNodes.map(n => ({ ...n, position: updatedPositions.get(n.id) ?? n.position }))
+    setNodes(newNodes)
+    await nextTick()
+    fitView({ padding: 0.18 })
+  } finally {
+    isOptimizing.value = false
+  }
+}
+
 // ── 分析核心 ──────────────────────────────────────────────────────────────────
 
 async function startAnalysis() {
@@ -429,7 +496,7 @@ function handleSseEvent(event: string, payload: any) {
     const { flowNodes, flowEdges } = buildFlowGraph(result.value.nodes, result.value.edges)
     setNodes(flowNodes)
     setEdges(flowEdges)
-    nextTick(() => fitView({ padding: 0.2 }))
+    nextTick(() => optimizeLayout())
   } else if (event === 'done') {
     if (payload.error) {
       addLog(`${$t('@SRCMAP:分析失败')}: ${payload.error}`, 'error')
@@ -735,6 +802,16 @@ onBeforeUnmount(() => {
 
         <!-- Vue Flow 调用图 -->
         <div class="sm-graph-container">
+          <!-- 布局优化按钮 -->
+          <div class="sm-layout-btn-wrap">
+            <button class="sm-layout-btn" :disabled="isOptimizing || !result" @click="optimizeLayout">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+              {{ isOptimizing ? $t('@SRCMAP:布局中...') : $t('@SRCMAP:优化布局') }}
+            </button>
+          </div>
           <VueFlow
             class="sm-vue-flow"
             :default-viewport="{ zoom: 1 }"
@@ -1451,6 +1528,42 @@ onBeforeUnmount(() => {
 
 :deep(.vue-flow__node.selected) {
   box-shadow: 0 0 0 2px #f59e0b;
+}
+
+/* ── 布局优化按钮 ─────────────────────────── */
+.sm-layout-btn-wrap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+}
+
+.sm-layout-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-container, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 6px;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.sm-layout-btn:hover:not(:disabled) {
+  color: #f59e0b;
+  border-color: #f59e0b50;
+  background: #f59e0b08;
+}
+
+.sm-layout-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── 自定义节点内容 ──────────────────── */

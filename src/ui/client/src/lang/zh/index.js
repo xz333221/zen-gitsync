@@ -1565,6 +1565,8 @@ export default {
   '@SRCMAP:大纲': '大纲',
   '@SRCMAP:暂无分析结果': '暂无分析结果',
   '@SRCMAP:默认': '默认',
+  '@SRCMAP:优化布局': '优化布局',
+  '@SRCMAP:布局中...': '布局中...',
   // @SRCMAP: file end
   // @EDITOR: file path: views\EditorView.vue
   '@EDITOR:资源管理器': '资源管理器',

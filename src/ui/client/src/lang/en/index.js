@@ -1559,6 +1559,8 @@ export default {
   '@SRCMAP:大纲': 'Outline',
   '@SRCMAP:暂无分析结果': 'No analysis result yet',
   '@SRCMAP:默认': 'Default',
+  '@SRCMAP:优化布局': 'Auto Layout',
+  '@SRCMAP:布局中...': 'Laying out...',
   // @SRCMAP: file end
   // @EDITOR: file path: views\EditorView.vue
   '@EDITOR:资源管理器': 'Explorer',
