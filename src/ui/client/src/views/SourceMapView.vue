@@ -2,7 +2,7 @@
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import * as monaco from 'monaco-editor'
 import { $t } from '@/lang/static'
-import { useVueFlow, VueFlow, type Node as FlowNode, type Edge as FlowEdge, MarkerType } from '@vue-flow/core'
+import { useVueFlow, VueFlow, Handle, Position, type Node as FlowNode, type Edge as FlowEdge, MarkerType } from '@vue-flow/core'
 import { Background, BackgroundVariant } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
@@ -71,6 +71,7 @@ let logIdCounter = 0
 // 分析结果
 const result = ref<AnalysisResult | null>(null)
 const selectedNodeId = ref<string | null>(null)
+const leftTab = ref<'files' | 'outline'>('files')
 const sourceCode = ref('')
 const sourceFile = ref('')
 const sourceLoading = ref(false)
@@ -136,6 +137,24 @@ const isAnalyzing = computed(() => status.value === 'scanning' || status.value =
 const selectedNode = computed(() =>
   result.value?.nodes.find(n => n.id === selectedNodeId.value) ?? null
 )
+
+const outlineGroups = computed(() => {
+  if (!result.value) return []
+  const groups = new Map<string, { displayName: string; color: string; nodes: GraphNode[] }>()
+  for (const n of result.value.nodes) {
+    const key = n.subsystem ?? '__default__'
+    if (!groups.has(key)) {
+      const sub = result.value.subsystems?.find(s => s.name === key)
+      groups.set(key, {
+        displayName: sub?.displayName || n.subsystem || $t('@SRCMAP:默认'),
+        color: n.subsystemColor || SUBSYSTEM_COLORS[0],
+        nodes: [],
+      })
+    }
+    groups.get(key)!.nodes.push(n)
+  }
+  return [...groups.entries()].map(([, g]) => g)
+})
 
 // ── 辅助函数 ─────────────────────────────────────────────────────────────────
 
@@ -346,6 +365,9 @@ async function startAnalysis() {
 
     status.value = 'analyzing'
 
+    let currentEvent = ''
+    let dataLines: string[] = []
+
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -353,9 +375,6 @@ async function startAnalysis() {
 
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
-
-      let currentEvent = ''
-      let dataLines: string[] = []
 
       for (const line of lines) {
         if (line.startsWith('event:')) {
@@ -609,14 +628,32 @@ onBeforeUnmount(() => {
 
       <!-- 左侧：文件树 -->
       <div v-show="panelVisible.files" class="sm-panel sm-panel-files" :style="{ width: filesWidth + 'px' }">
-        <div class="sm-panel-header">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
-          {{ $t('@SRCMAP:文件列表') }}
-          <span v-if="result" class="sm-badge">{{ result.allFiles.length }}</span>
+        <div class="sm-panel-header sm-panel-header--tabs">
+          <button
+            class="sm-tab-btn"
+            :class="{ active: leftTab === 'files' }"
+            @click="leftTab = 'files'"
+          >
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            {{ $t('@SRCMAP:文件列表') }}
+            <span v-if="result" class="sm-badge">{{ result.allFiles.length }}</span>
+          </button>
+          <button
+            class="sm-tab-btn"
+            :class="{ active: leftTab === 'outline' }"
+            @click="leftTab = 'outline'"
+          >
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            {{ $t('@SRCMAP:大纲') }}
+          </button>
         </div>
-        <div class="sm-panel-body sm-file-tree">
+        <!-- 文件树 -->
+        <div v-show="leftTab === 'files'" class="sm-panel-body sm-file-tree">
           <template v-if="flatTree.length > 0">
             <div
               v-for="node in flatTree"
@@ -646,6 +683,30 @@ onBeforeUnmount(() => {
             </div>
           </template>
           <div v-else class="sm-tree-empty">{{ $t('@SRCMAP:暂无文件，请先开始分析') }}</div>
+        </div>
+        <!-- 大纲视图 -->
+        <div v-show="leftTab === 'outline'" class="sm-panel-body sm-outline-body">
+          <template v-if="outlineGroups.length > 0">
+            <div v-for="group in outlineGroups" :key="group.displayName" class="sm-outline-group">
+              <div class="sm-outline-group-header" :style="{ color: group.color }">
+                <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>
+                {{ group.displayName }}
+                <span class="sm-badge" style="margin-left:auto">{{ group.nodes.length }}</span>
+              </div>
+              <div
+                v-for="node in group.nodes"
+                :key="node.id"
+                class="sm-outline-node"
+                :class="{ 'sm-outline-node--active': selectedNodeId === node.id }"
+                @click="selectedNodeId = node.id; node.file && openFile(node.file)"
+              >
+                <span class="sm-outline-dot" :style="{ background: group.color }"></span>
+                <span class="sm-outline-label" :title="node.file || node.label">{{ node.label }}</span>
+                <span v-if="node.description" class="sm-outline-desc">{{ (node.description as string).length > 18 ? (node.description as string).slice(0, 18) + '\u2026' : node.description }}</span>
+              </div>
+            </div>
+          </template>
+          <div v-else class="sm-tree-empty">{{ $t('@SRCMAP:暂无分析结果') }}</div>
         </div>
       </div>
 
@@ -682,6 +743,14 @@ onBeforeUnmount(() => {
             fit-view-on-init
             @node-click="onNodeClick"
           >
+            <template #node-default="{ data, label }">
+              <Handle type="target" :position="Position.Top" />
+              <div class="sm-fn-inner">
+                <div class="sm-fn-label">{{ label }}</div>
+                <div v-if="data?.description" class="sm-fn-desc">{{ (data.description as string).length > 22 ? (data.description as string).slice(0, 22) + '\u2026' : data.description }}</div>
+              </div>
+              <Handle type="source" :position="Position.Bottom" />
+            </template>
             <Background :variant="BackgroundVariant.Dots" :gap="20" :size="1" pattern-color="#334155" />
             <Controls />
             <MiniMap node-color="#3b82f6" />
@@ -1382,5 +1451,141 @@ onBeforeUnmount(() => {
 
 :deep(.vue-flow__node.selected) {
   box-shadow: 0 0 0 2px #f59e0b;
+}
+
+/* ── 自定义节点内容 ──────────────────── */
+.sm-fn-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: center;
+}
+
+.sm-fn-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.sm-fn-desc {
+  font-size: 10px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+/* ── 面板 Tab 头 ─────────────────────── */
+.sm-panel-header--tabs {
+  padding: 0;
+  gap: 0;
+  height: 32px;
+  min-height: 32px;
+}
+
+.sm-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  height: 100%;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.sm-tab-btn:hover {
+  color: var(--text-secondary, #94a3b8);
+  background: var(--bg-hover);
+}
+
+.sm-tab-btn.active {
+  color: #f59e0b;
+  border-bottom-color: #f59e0b;
+}
+
+/* ── 大纲视图 ─────────────────────────── */
+.sm-outline-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+}
+
+.sm-outline-group {
+  margin-bottom: 2px;
+}
+
+.sm-outline-group-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  position: sticky;
+  top: 0;
+  background: var(--bg-container, #1e293b);
+  z-index: 1;
+}
+
+.sm-outline-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 16px;
+  cursor: pointer;
+  transition: background 0.1s;
+  overflow: hidden;
+}
+
+.sm-outline-node:hover {
+  background: var(--bg-hover);
+}
+
+.sm-outline-node--active {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.sm-outline-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.sm-outline-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary, #e2e8f0);
+  font-family: 'Consolas', monospace;
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sm-outline-desc {
+  flex: 1;
+  font-size: 10px;
+  color: var(--text-tertiary, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

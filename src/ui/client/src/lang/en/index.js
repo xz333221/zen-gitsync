@@ -1556,6 +1556,9 @@ export default {
   '@SRCMAP:点击调用图中的节点查看源码': 'Click a node in the call graph to view source',
   '@SRCMAP:输入项目路径后点击开始分析': 'Enter a project path and click Analyze',
   '@SRCMAP:AI 正在分析项目结构...': 'AI is analyzing project structure...',
+  '@SRCMAP:大纲': 'Outline',
+  '@SRCMAP:暂无分析结果': 'No analysis result yet',
+  '@SRCMAP:默认': 'Default',
   // @SRCMAP: file end
   // @EDITOR: file path: views\EditorView.vue
   '@EDITOR:资源管理器': 'Explorer',

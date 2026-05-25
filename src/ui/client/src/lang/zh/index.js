@@ -1562,6 +1562,9 @@ export default {
   '@SRCMAP:点击调用图中的节点查看源码': '点击调用图中的节点查看源码',
   '@SRCMAP:输入项目路径后点击开始分析': '输入项目路径后点击开始分析',
   '@SRCMAP:AI 正在分析项目结构...': 'AI 正在分析项目结构...',
+  '@SRCMAP:大纲': '大纲',
+  '@SRCMAP:暂无分析结果': '暂无分析结果',
+  '@SRCMAP:默认': '默认',
   // @SRCMAP: file end
   // @EDITOR: file path: views\EditorView.vue
   '@EDITOR:资源管理器': '资源管理器',
