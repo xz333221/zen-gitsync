@@ -155,11 +155,13 @@ function tryResolveWithExts(base, allFilesSet) {
 
 /**
  * 将 import 路径解析为项目内相对路径
- * 支持相对路径（./xxx）和路径别名（@/xxx）
+ * 支持相对路径（./xxx）和路径别名（@/xxx、@components/xxx 等）
+ * 别名按长度降序匹配，避免 @/ 抢占 @components/ 等更长别名
  */
 function resolveImportPath(fromFile, importPath, allFilesSet, aliasMap) {
-  // 路径别名（如 @/ → src/ui/client/src/）
-  for (const [alias, target] of Object.entries(aliasMap)) {
+  // 按别名长度降序排列，优先匹配最长别名（@components/ 优先于 @/）
+  const sortedAliases = Object.entries(aliasMap).sort((a, b) => b[0].length - a[0].length);
+  for (const [alias, target] of sortedAliases) {
     if (importPath.startsWith(alias)) {
       const resolved = (target + importPath.slice(alias.length)).replace(/\\/g, '/');
       return tryResolveWithExts(resolved, allFilesSet);
@@ -174,32 +176,59 @@ function resolveImportPath(fromFile, importPath, allFilesSet, aliasMap) {
 }
 
 /**
- * 从 vite.config / tsconfig 启发式检测路径别名
- * 返回形如 { '@/': 'src/ui/client/src/' } 的映射
+ * 从 vite.config 解析路径别名（支持多别名：@、@components、@views 等）
+ * @param {string} resolvedDir  项目根目录（绝对路径）
+ * @param {string[]} subFiles   子系统文件列表（相对路径）
+ * @param {string} rootPath     子系统 rootPath（相对路径，如 src/ui/client/src）
+ * @returns {Record<string, string>}  { 'alias/' → 'target/dir/' }
  */
-async function detectAliasMap(resolvedDir, subFiles) {
+async function detectAliasMap(resolvedDir, subFiles, rootPath = '') {
   const aliasMap = {};
-  const srcCandidates = ['src/ui/client/src', 'src/client/src', 'client/src', 'src'];
 
-  for (const cfgName of ['vite.config.ts', 'vite.config.js', 'vite.config.mjs']) {
-    try {
-      const content = await fs.readFile(path.join(resolvedDir, cfgName), 'utf8');
-      if (content.includes("'@'") || content.includes('"@"')) {
-        // 找到 @ 别名定义，推断目标目录
-        for (const c of srcCandidates) {
-          if (subFiles.some(f => f.startsWith(c + '/'))) {
-            aliasMap['@/'] = c + '/';
-            break;
-          }
-        }
-        break;
-      }
-    } catch { /* ignore */ }
+  // 计算要搜索 vite.config 的候选目录
+  // 通常 vite.config.ts 在 rootPath 的父目录（如 src/ui/client）
+  const searchDirs = [resolvedDir];
+  if (rootPath) {
+    const parent = path.dirname(rootPath);
+    if (parent && parent !== '.' && parent !== rootPath) {
+      searchDirs.push(path.resolve(resolvedDir, parent));
+    }
+    // rootPath 本身也搜一下
+    searchDirs.push(path.resolve(resolvedDir, rootPath));
   }
 
-  // 兜底：如果文件中有 @/ 用法但未检测到配置，用最深公共路径猜测
-  if (!aliasMap['@/'] && subFiles.some(f => f.includes('@/'))) {
-    for (const c of srcCandidates) {
+  for (const searchDir of searchDirs) {
+    for (const cfgName of ['vite.config.ts', 'vite.config.js', 'vite.config.mjs']) {
+      try {
+        const cfgPath = path.join(searchDir, cfgName);
+        const content = await fs.readFile(cfgPath, 'utf8');
+
+        // 提取 alias 对象块（支持跨行）
+        const aliasBlockMatch = content.match(/alias\s*:\s*\{([^}]+)\}/s);
+        if (!aliasBlockMatch) continue;
+
+        const aliasBody = aliasBlockMatch[1];
+        // 匹配 "@xxx": path.resolve(__dirname, "./relpath")  或  path.resolve(xxx, "relpath")
+        const entryRe = /["'](@[^"']*)["']\s*:\s*path\.resolve\s*\([^,)]+,\s*["']([^"']+)["']\s*\)/g;
+        let m;
+        const cfgDir = path.dirname(cfgPath);
+        while ((m = entryRe.exec(aliasBody)) !== null) {
+          const aliasKey = m[1];  // e.g. '@', '@components'
+          const relTarget = m[2]; // e.g. './src', './src/components'
+          const absTarget = path.resolve(cfgDir, relTarget);
+          const relToProject = path.relative(resolvedDir, absTarget).replace(/\\/g, '/');
+          aliasMap[aliasKey + '/'] = relToProject + '/';
+        }
+
+        if (Object.keys(aliasMap).length > 0) return aliasMap;
+      } catch { /* ignore */ }
+    }
+    if (Object.keys(aliasMap).length > 0) break;
+  }
+
+  // 兜底：启发式推断 @/ 指向文件数最多的 src 目录
+  if (!aliasMap['@/']) {
+    for (const c of ['src/ui/client/src', 'src/client/src', 'client/src', 'src']) {
       if (subFiles.some(f => f.startsWith(c + '/'))) {
         aliasMap['@/'] = c + '/';
         break;
@@ -212,11 +241,14 @@ async function detectAliasMap(resolvedDir, subFiles) {
 
 /**
  * 构建完整模块依赖图
+ * @param {string[]} subFiles     子系统文件列表（相对路径）
+ * @param {string}   resolvedDir  项目根目录（绝对路径）
+ * @param {string}   rootPath     子系统 rootPath（用于定位 vite.config）
  * @returns {{ graph, inDegree, hubFiles, entryCandidates, totalEdges, fileSizes }}
  */
-async function buildDependencyGraph(subFiles, resolvedDir) {
+async function buildDependencyGraph(subFiles, resolvedDir, rootPath = '') {
   const allFilesSet = new Set(subFiles);
-  const aliasMap = await detectAliasMap(resolvedDir, subFiles);
+  const aliasMap = await detectAliasMap(resolvedDir, subFiles, rootPath);
 
   const graph = {};      // file → string[]（它 import 的项目内文件）
   const fileSizes = {};  // file → 行数
@@ -488,7 +520,8 @@ export function registerCodeAnalysisRoutes({ app, configManager }) {
       } else {
         // 无多个 package.json，尝试已知路径模式
         for (const pattern of KNOWN_PATTERNS) {
-          const hasMatch = codeFiles.some(f => f.startsWith(pattern.pathPattern + '/') || f.startsWith(pattern.pathPattern));
+          // 必须是目录前缀匹配（加 / 后缀），避免 'server' 误匹配 'server.js'
+          const hasMatch = codeFiles.some(f => f.startsWith(pattern.pathPattern + '/'));
           if (hasMatch) {
             // 避免重复添加同名模式
             if (!programmaticSubsystems.find(s => s.rootPath === pattern.pathPattern)) {
@@ -575,7 +608,7 @@ ${JSON.stringify(codeFiles.slice(0, 300))}
         // ── Step 2.5: 静态 import 解析 → 构建真实模块依赖图 ───────────────
         log(`[${subsystemName}] 正在静态解析 import 依赖（${subFiles.length} 个文件）...`, 'info');
         const { graph: depGraph, inDegree, hubFiles, entryCandidates, totalEdges, fileSizes } =
-          await buildDependencyGraph(subFiles, resolved);
+          await buildDependencyGraph(subFiles, resolved, sub.rootPath || '');
         log(`[${subsystemName}] 依赖图完成：${totalEdges} 条 import 关系，${hubFiles.length} 个核心模块`, 'success');
         if (stopped) break;
 
@@ -727,8 +760,40 @@ ${hubContentText || '（无）'}
         if (stopped) break;
 
         // 合并节点/边，加子系统标识，ID 加前缀避免冲突
-        const rawNodes = Array.isArray(chainData.nodes) ? chainData.nodes : [];
-        const rawEdges = Array.isArray(chainData.edges) ? chainData.edges : [];
+        let rawNodes = Array.isArray(chainData?.nodes) ? chainData.nodes : [];
+        let rawEdges = Array.isArray(chainData?.edges) ? chainData.edges : [];
+
+        // ── 兜底：AI 未返回节点时，直接从静态依赖图生成基础节点 ────────────
+        if (rawNodes.length === 0) {
+          log(`[${subsystemName}] AI 未返回节点，从静态依赖图生成基础可视化...`, 'info');
+          const seen = new Set();
+          const fbNodes = [];
+          // 入口节点
+          for (const f of staticEntryCandidates.slice(0, 3)) {
+            if (!seen.has(f)) {
+              seen.add(f);
+              fbNodes.push({ id: `fe_${fbNodes.length}`, label: path.basename(f, path.extname(f)), file: f, line: 1, type: 'module', importance: 'high', description: '入口模块' });
+            }
+          }
+          // Hub 节点（入度最高）
+          for (const h of hubFiles.slice(0, 10)) {
+            if (!seen.has(h.file)) {
+              seen.add(h.file);
+              fbNodes.push({ id: `fh_${fbNodes.length}`, label: path.basename(h.file, path.extname(h.file)), file: h.file, line: 1, type: 'module', importance: h.inDegree >= 5 ? 'high' : h.inDegree >= 2 ? 'medium' : 'low', description: `核心模块（被引用${h.inDegree}次，${h.lines}行）` });
+            }
+          }
+          rawNodes = fbNodes;
+          // 从静态依赖图生成边
+          const nodeFileMap = {};
+          rawNodes.forEach(n => { nodeFileMap[n.file] = n.id; });
+          rawEdges = [];
+          for (const [srcFile, dstFiles] of Object.entries(depGraph)) {
+            if (!nodeFileMap[srcFile]) continue;
+            for (const dstFile of dstFiles) {
+              if (nodeFileMap[dstFile]) rawEdges.push({ source: nodeFileMap[srcFile], target: nodeFileMap[dstFile] });
+            }
+          }
+        }
         const idMap = {};
         rawNodes.forEach((n, i) => { idMap[n.id] = `sub${si}_${n.id || i}`; });
 
