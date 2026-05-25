@@ -69,6 +69,196 @@ async function safeReadFile(filePath, maxBytes = 200000) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 静态 import 解析 & 模块依赖图
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 正则提取 import / require / dynamic-import 的模块路径（TypeScript/Vue 通用）
+ */
+function parseImportsRegex(src) {
+  const results = new Set();
+  // import ... from '...'  |  export ... from '...'  |  import type ... from '...'
+  const importRe = /(?:^|;|\n)\s*(?:import|export)(?:\s+type)?\s+(?:[^'"`;\n]*?\bfrom\s+)?['"]([^'"` \n]+)['"]/gm;
+  let m;
+  while ((m = importRe.exec(src)) !== null) { if (m[1]) results.add(m[1]); }
+  // require('...')
+  const requireRe = /\brequire\s*\(\s*['"]([^'"` \n]+)['"]\s*\)/g;
+  while ((m = requireRe.exec(src)) !== null) { if (m[1]) results.add(m[1]); }
+  // dynamic import('...')
+  const dynRe = /\bimport\s*\(\s*['"]([^'"` \n]+)['"]\s*\)/g;
+  while ((m = dynRe.exec(src)) !== null) { if (m[1]) results.add(m[1]); }
+  return [...results];
+}
+
+/**
+ * 从源码中静态提取 import 路径
+ * - JS/MJS/CJS/JSX：优先用 acorn AST 解析，失败则正则兜底
+ * - TS/TSX/Vue：正则（import 语法与 JS 相同，acorn 不支持 TypeScript 类型语法）
+ */
+async function parseStaticImports(filePath, content) {
+  const ext = path.extname(filePath).toLowerCase();
+  let src = content || '';
+
+  // Vue SFC：提取 <script> 块
+  if (ext === '.vue') {
+    const m = src.match(/<script(?:[^>]*)>([\s\S]*?)<\/script>/i);
+    src = m ? m[1] : '';
+  }
+
+  // JS / MJS / CJS / JSX → 尝试 acorn AST（最准确）
+  if (['.js', '.mjs', '.cjs', '.jsx'].includes(ext)) {
+    try {
+      const acorn = await import('acorn');
+      const ast = acorn.parse(src, {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        allowImportExportEverywhere: true,
+        allowHashBang: true,
+      });
+      const imports = [];
+      for (const node of ast.body) {
+        if (node.type === 'ImportDeclaration') imports.push(node.source.value);
+        if (node.type === 'ExportNamedDeclaration' && node.source) imports.push(node.source.value);
+        if (node.type === 'ExportAllDeclaration' && node.source) imports.push(node.source.value);
+        // CommonJS require('...')
+        if (node.type === 'ExpressionStatement') {
+          const expr = node.expression;
+          if (expr?.type === 'CallExpression' && expr.callee?.name === 'require' &&
+              expr.arguments?.[0]?.type === 'Literal') {
+            imports.push(expr.arguments[0].value);
+          }
+        }
+      }
+      return imports;
+    } catch { /* fallthrough to regex */ }
+  }
+
+  // TS / TSX / Vue / 其他 → 正则解析
+  return parseImportsRegex(src);
+}
+
+/** 可解析的扩展名（按优先级） */
+const RESOLVE_EXTS = ['.ts', '.tsx', '.js', '.mjs', '.jsx', '.vue'];
+
+/**
+ * 尝试在文件集合中找到匹配的实际文件（带扩展名推断 + index 文件）
+ */
+function tryResolveWithExts(base, allFilesSet) {
+  if (allFilesSet.has(base)) return base;
+  for (const ext of RESOLVE_EXTS) {
+    if (allFilesSet.has(base + ext)) return base + ext;
+    if (allFilesSet.has(base + '/index' + ext)) return base + '/index' + ext;
+  }
+  return null;
+}
+
+/**
+ * 将 import 路径解析为项目内相对路径
+ * 支持相对路径（./xxx）和路径别名（@/xxx）
+ */
+function resolveImportPath(fromFile, importPath, allFilesSet, aliasMap) {
+  // 路径别名（如 @/ → src/ui/client/src/）
+  for (const [alias, target] of Object.entries(aliasMap)) {
+    if (importPath.startsWith(alias)) {
+      const resolved = (target + importPath.slice(alias.length)).replace(/\\/g, '/');
+      return tryResolveWithExts(resolved, allFilesSet);
+    }
+  }
+  // 非相对路径（node_modules 包）—— 不解析
+  if (!importPath.startsWith('.')) return null;
+
+  const fromDir = path.dirname(fromFile).replace(/\\/g, '/');
+  const joined = path.posix.normalize(fromDir + '/' + importPath);
+  return tryResolveWithExts(joined, allFilesSet);
+}
+
+/**
+ * 从 vite.config / tsconfig 启发式检测路径别名
+ * 返回形如 { '@/': 'src/ui/client/src/' } 的映射
+ */
+async function detectAliasMap(resolvedDir, subFiles) {
+  const aliasMap = {};
+  const srcCandidates = ['src/ui/client/src', 'src/client/src', 'client/src', 'src'];
+
+  for (const cfgName of ['vite.config.ts', 'vite.config.js', 'vite.config.mjs']) {
+    try {
+      const content = await fs.readFile(path.join(resolvedDir, cfgName), 'utf8');
+      if (content.includes("'@'") || content.includes('"@"')) {
+        // 找到 @ 别名定义，推断目标目录
+        for (const c of srcCandidates) {
+          if (subFiles.some(f => f.startsWith(c + '/'))) {
+            aliasMap['@/'] = c + '/';
+            break;
+          }
+        }
+        break;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 兜底：如果文件中有 @/ 用法但未检测到配置，用最深公共路径猜测
+  if (!aliasMap['@/'] && subFiles.some(f => f.includes('@/'))) {
+    for (const c of srcCandidates) {
+      if (subFiles.some(f => f.startsWith(c + '/'))) {
+        aliasMap['@/'] = c + '/';
+        break;
+      }
+    }
+  }
+
+  return aliasMap;
+}
+
+/**
+ * 构建完整模块依赖图
+ * @returns {{ graph, inDegree, hubFiles, entryCandidates, totalEdges, fileSizes }}
+ */
+async function buildDependencyGraph(subFiles, resolvedDir) {
+  const allFilesSet = new Set(subFiles);
+  const aliasMap = await detectAliasMap(resolvedDir, subFiles);
+
+  const graph = {};      // file → string[]（它 import 的项目内文件）
+  const fileSizes = {};  // file → 行数
+
+  for (const file of subFiles) {
+    const content = await safeReadFile(path.resolve(resolvedDir, file), 150000);
+    fileSizes[file] = content ? content.split('\n').length : 0;
+    const rawImports = await parseStaticImports(file, content);
+    const resolved = [];
+    for (const imp of rawImports) {
+      const r = resolveImportPath(file, imp, allFilesSet, aliasMap);
+      if (r) resolved.push(r);
+    }
+    graph[file] = [...new Set(resolved)];
+  }
+
+  // 计算入度（被多少文件 import）
+  const inDegree = {};
+  for (const file of subFiles) inDegree[file] = 0;
+  for (const deps of Object.values(graph)) {
+    for (const dep of deps) { if (dep in inDegree) inDegree[dep]++; }
+  }
+
+  // Hub files = 被最多模块依赖的核心文件
+  const hubFiles = Object.entries(inDegree)
+    .sort((a, b) => b[1] - a[1])
+    .filter(([, d]) => d > 0)
+    .slice(0, 8)
+    .map(([file, inDeg]) => ({ file, inDegree: inDeg, lines: fileSizes[file] || 0 }));
+
+  // 入口候选 = 出度 > 0 且入度 = 0（项目根节点，没有被其他文件 import）
+  const entryCandidates = subFiles.filter(
+    f => (graph[f]?.length || 0) > 0 && (inDegree[f] || 0) === 0
+  );
+
+  const totalEdges = Object.values(graph).reduce((s, d) => s + d.length, 0);
+
+  return { graph, inDegree, hubFiles, entryCandidates, totalEdges, fileSizes };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * 调用 OpenAI 兼容 API，返回 JSON
  */
@@ -382,14 +572,46 @@ ${JSON.stringify(codeFiles.slice(0, 300))}
           continue;
         }
 
+        // ── Step 2.5: 静态 import 解析 → 构建真实模块依赖图 ───────────────
+        log(`[${subsystemName}] 正在静态解析 import 依赖（${subFiles.length} 个文件）...`, 'info');
+        const { graph: depGraph, inDegree, hubFiles, entryCandidates, totalEdges, fileSizes } =
+          await buildDependencyGraph(subFiles, resolved);
+        log(`[${subsystemName}] 依赖图完成：${totalEdges} 条 import 关系，${hubFiles.length} 个核心模块`, 'success');
+        if (stopped) break;
+
+        // 向前端推送静态依赖图数据
+        sendSse(res, 'depgraph', {
+          subsystem: sub.name,
+          graph: depGraph,
+          hubFiles,
+          entryCandidates,
+          inDegree,
+          fileSizes,
+        });
+
+        // ── Step 3: 识别入口文件（优先静态分析结论，AI 作为兜底） ──────────
         log(`[${subsystemName}] 正在识别入口文件...`, 'thinking');
 
-        // Step 3: 识别子系统入口
-        const subEntryPrompt = `你是软件架构师。以下是子系统的代码文件列表，请识别语言和入口文件。
+        // 静态入口候选（入度=0 且有出度的根节点）按常见命名排序
+        const ENTRY_NAME_PRIORITY = ['main', 'index', 'app', 'server', 'start', 'entry'];
+        const staticEntryCandidates = [...entryCandidates].sort((a, b) => {
+          const aScore = ENTRY_NAME_PRIORITY.findIndex(n => path.basename(a, path.extname(a)).toLowerCase().includes(n));
+          const bScore = ENTRY_NAME_PRIORITY.findIndex(n => path.basename(b, path.extname(b)).toLowerCase().includes(n));
+          return (aScore === -1 ? 99 : aScore) - (bScore === -1 ? 99 : bScore);
+        });
+
+        let subLang = sub.language || 'Unknown';
+        let subSummary = '';
+        let subEntryFiles = staticEntryCandidates.slice(0, 3);
+        let subEntryFunctions = ['main'];
+
+        // 仅当静态分析无法确定入口时，才调用 AI
+        if (subEntryFiles.length === 0) {
+          const subEntryPrompt = `你是软件架构师。以下是子系统的代码文件列表，请识别语言和入口文件。
 
 子系统: ${subsystemName}
 文件列表:
-${JSON.stringify(subFiles.slice(0, 200))}
+${JSON.stringify(subFiles.slice(0, 150))}
 
 返回 JSON：
 {
@@ -398,14 +620,18 @@ ${JSON.stringify(subFiles.slice(0, 200))}
   "potentialEntryFunctions": ["main"],
   "projectSummary": "简短中文描述"
 }`;
-
-        const subEntryData = await callLlmJson(model, subEntryPrompt);
-        if (stopped) break;
-
-        const subLang = String(subEntryData.language || sub.language || 'Unknown');
-        const subEntryFiles = Array.isArray(subEntryData.potentialEntryFiles) ? subEntryData.potentialEntryFiles.slice(0, 3) : [];
-        const subEntryFunctions = Array.isArray(subEntryData.potentialEntryFunctions) ? subEntryData.potentialEntryFunctions : ['main'];
-        const subSummary = String(subEntryData.projectSummary || '');
+          const subEntryData = await callLlmJson(model, subEntryPrompt);
+          if (stopped) break;
+          subLang = String(subEntryData.language || sub.language || 'Unknown');
+          subEntryFiles = Array.isArray(subEntryData.potentialEntryFiles) ? subEntryData.potentialEntryFiles.slice(0, 3) : [];
+          subEntryFunctions = Array.isArray(subEntryData.potentialEntryFunctions) ? subEntryData.potentialEntryFunctions : ['main'];
+          subSummary = String(subEntryData.projectSummary || '');
+        } else {
+          // 从文件扩展名推断语言
+          const extLangMap = { '.ts': 'TypeScript', '.tsx': 'TypeScript', '.vue': 'TypeScript', '.js': 'JavaScript', '.mjs': 'JavaScript', '.py': 'Python', '.go': 'Go', '.rs': 'Rust', '.java': 'Java' };
+          const firstExt = path.extname(subEntryFiles[0]).toLowerCase();
+          subLang = extLangMap[firstExt] || sub.language || 'Unknown';
+        }
 
         if (!primaryLanguage || primaryLanguage === 'Unknown') primaryLanguage = subLang;
 
@@ -415,7 +641,7 @@ ${JSON.stringify(subFiles.slice(0, 200))}
         for (const candidate of subEntryFiles) {
           if (stopped) break;
           const candidatePath = path.resolve(resolved, candidate);
-          if (!candidatePath.startsWith(resolved)) continue;
+          if (!candidatePath.startsWith(resolved + path.sep) && candidatePath !== resolved) continue;
           const content = await safeReadFile(candidatePath);
           if (content) { entryFile = candidate; entryContent = content; break; }
         }
@@ -426,37 +652,76 @@ ${JSON.stringify(subFiles.slice(0, 200))}
         if (!primaryEntryFile) primaryEntryFile = entryFile;
         if (!overallSummary) overallSummary = subSummary;
 
-        log(`[${subsystemName}] 确认入口: ${entryFile}，正在分析调用链...`, 'thinking');
+        // ── Step 4: AI 语义分析（以静态依赖图为骨架） ──────────────────────
+        log(`[${subsystemName}] AI 正在基于依赖图做语义分析...`, 'thinking');
+
+        // 读取 Hub 文件内容（被引用最多的核心模块，每个最多 2500 字符）
+        const hubContents = [];
+        for (const { file: hubFile } of hubFiles.slice(0, 4)) {
+          if (stopped) break;
+          const hubPath = path.resolve(resolved, hubFile);
+          if (!hubPath.startsWith(resolved)) continue;
+          const content = await safeReadFile(hubPath, 80000);
+          if (content) hubContents.push({ file: hubFile, content: content.slice(0, 2500) });
+        }
+
+        // 构建依赖图文本摘要（展示文件间 import 关系，仅展示有边的节点）
+        const graphLines = Object.entries(depGraph)
+          .filter(([, deps]) => deps.length > 0)
+          .sort((a, b) => b[1].length - a[1].length)
+          .slice(0, 60)
+          .map(([f, deps]) => `  ${f} (${fileSizes[f] || '?'}行) → [${deps.join(', ')}]`);
+
+        const hubSummary = hubFiles
+          .map(h => `  ${h.file} (被引用${h.inDegree}次, ${h.lines}行)`)
+          .join('\n');
 
         const entryFunction = subEntryFunctions[0] || 'main';
-        const snippet = entryContent.slice(0, 5000);
+        const entrySnippet = entryContent.slice(0, 3000);
 
-        // Step 4: 分析调用链
-        const chainPrompt = `你是代码调用链分析器。请分析以下代码的函数调用关系，输出调用图。
+        const hubContentText = hubContents.map(h =>
+          `\n--- ${h.file} ---\n${h.content}`
+        ).join('\n');
+
+        // Step 4: 分析调用链（基于真实依赖图）
+        const chainPrompt = `你是代码架构分析师。以下是通过静态 import 解析得到的真实模块依赖图，请基于此输出调用图节点和语义描述。
 
 语言: ${subLang}
 子系统: ${subsystemName}
-入口文件: ${entryFile}
-入口函数: ${entryFunction}
+入口文件: ${entryFile}（入口函数: ${entryFunction}）
 
-文件内容（截取前5000字符）：
-${snippet}
+## 真实模块依赖图（静态 import 解析结果）
+共 ${subFiles.length} 个文件，${totalEdges} 条 import 关系
+格式：文件(行数) → [它所 import 的文件]
 
-返回 JSON：
+${graphLines.join('\n') || '（无内部 import 关系）'}
+
+## 核心模块（按被引用次数排序）
+${hubSummary || '（未检测到高频被引用模块）'}
+
+## 入口文件内容（截取前3000字符）
+${entrySnippet}
+
+## 核心模块文件内容
+${hubContentText || '（无）'}
+
+返回 JSON（基于真实依赖图，不要凭空猜测）：
 {
   "entryFunction": "函数名",
   "nodes": [
-    { "id": "n1", "label": "函数名", "file": "文件路径", "line": 1, "type": "function", "importance": "high", "description": "职责中文描述" }
+    { "id": "n1", "label": "模块/函数名", "file": "文件路径（必须来自依赖图）", "line": 1, "type": "module|function|store|component|api", "importance": "high|medium|low", "description": "职责中文描述（10-30字）" }
   ],
   "edges": [{ "source": "n1", "target": "n2" }],
   "techStack": ["Vue3", "TypeScript"],
-  "summary": "子系统中文概要"
+  "summary": "子系统架构中文概要（50-100字）"
 }
 
 要求：
-1. 最多 15 个节点，深度不超过 3 层
-2. 只包含项目自身函数，不含库函数
-3. importance: high/medium/low`;
+1. 节点必须对应依赖图中真实存在的文件，不要编造节点
+2. edges 必须反映真实 import 关系（A import B → A→B 有边）
+3. 最多 25 个节点，优先选择高入度的核心模块
+4. importance: high（核心/hub）/ medium（普通）/ low（叶子/工具）
+5. type 可选: module / function / store / component / api / util / config`;
 
         const chainData = await callLlmJson(model, chainPrompt);
         if (stopped) break;
