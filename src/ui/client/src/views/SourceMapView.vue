@@ -822,7 +822,7 @@ onBeforeUnmount(() => {
           >
             <template #node-default="{ data, label }">
               <Handle type="target" :position="Position.Top" />
-              <div class="sm-fn-inner">
+              <div class="sm-fn-inner" :title="`${label}${data?.description ? '\n' + data.description : ''}`">
                 <div class="sm-fn-label">{{ label }}</div>
                 <div v-if="data?.description" class="sm-fn-desc">{{ (data.description as string).length > 22 ? (data.description as string).slice(0, 22) + '\u2026' : data.description }}</div>
               </div>
@@ -1572,6 +1572,9 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 3px;
   text-align: center;
+  overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
 .sm-fn-label {
@@ -1579,6 +1582,9 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: #e2e8f0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .sm-fn-desc {
