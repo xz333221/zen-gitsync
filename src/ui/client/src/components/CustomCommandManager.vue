@@ -6,7 +6,7 @@ import { Edit, Delete, VideoPlay, Folder, CopyDocument, Top } from '@element-plu
 import { useConfigStore } from '@stores/configStore'
 import IconButton from '@components/IconButton.vue'
 import TemplateManager from '@components/TemplateManager.vue'
-import FilePicker from 'local-file-picker/client'
+import { FilePickerModal as FilePicker } from 'local-file-picker/client'
 
 export interface CustomCommand {
   id?: string

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
-import FilePicker from 'local-file-picker/client';
+import { FilePickerModal as FilePicker } from 'local-file-picker/client';
 import { ElMessage } from "element-plus";
 import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
 import { ref, computed } from "vue";
@@ -27,6 +27,14 @@ const currentDirectory = computed(() => configStore.currentDirectory);
 
 // 获取当前文件夹名称（用于显示）
 const currentFolderName = computed(() => getFolderNameFromPath(currentDirectory.value));
+
+// 当前是否为深色主题
+const isDark = computed(() => {
+  const t = configStore.theme
+  if (t === 'dark') return true
+  if (t === 'light') return false
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+})
 
 // 右键复制目录路径
 async function onCopyDirectory() {
@@ -299,10 +307,17 @@ function onBrowserSelect(path: string) {
 
 <template>
 <div id="directory-selector" class="directory-selector" :class="[`directory-selector--${props.variant}`]">
-    <div class="directory-display cursor-pointer" :title="currentDirectory" @click="onOpenDialog" @contextmenu.prevent="onCopyDirectory">
+    <div class="directory-display" :title="$t('@67CE7:切换工作目录') + '\n' + currentDirectory" @click="onOpenDialog" @contextmenu.prevent="onCopyDirectory">
       {{ currentFolderName }}
     </div>
     <div class="directory-actions flex">
+      <IconButton
+        :tooltip="$t('@67CE7:切换工作目录')"
+        size="large"
+        @click="onOpenDialog"
+      >
+        <el-icon><Folder /></el-icon>
+      </IconButton>
       <IconButton
         :tooltip="$t('@67CE7:在资源管理器中打开')"
         size="large"
@@ -444,6 +459,8 @@ function onBrowserSelect(path: string) {
   <!-- 目录浏览器弹窗 -->
   <FilePicker
     :visible="isBrowserDialogVisible"
+    mode="directory"
+    :theme="isDark ? 'dark' : 'light'"
     @close="isBrowserDialogVisible = false"
     @confirm="(paths: string[]) => { onBrowserSelect(paths[0]); isBrowserDialogVisible = false }"
   />
@@ -532,6 +549,20 @@ function onBrowserSelect(path: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 8px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.directory-display:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-primary, #3b82f6);
+}
+
+[data-theme="dark"] .directory-display:hover {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
 }
 
 .claude-code-btn__icon {
