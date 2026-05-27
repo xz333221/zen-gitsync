@@ -450,8 +450,8 @@ export const useGitStore = defineStore('git', () => {
           type: 'success'
         });
         
-        // 刷新分支状态
-        await getBranchStatus();
+        // 刷新分支状态（强制刷新，避免外部切换分支后缓存仍为旧分支名）
+        await getBranchStatus(true);
         return { success: true };
       } else {
         // 返回结构化错误信息，由调用方决定如何展示

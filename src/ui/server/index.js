@@ -48,22 +48,6 @@ let branchStatusCache = {
   cacheTimeout: 5000 // 5秒缓存
 };
 
-// 当前分支缓存 - 只在特定情况下更新
-let currentBranchCache = {
-  branchName: null,
-  lastUpdate: 0,
-  // 分支名缓存时间更长，因为分支切换不频繁
-  cacheTimeout: 300000 // 5分钟缓存，或者直到主动清除
-};
-
-// 上游分支缓存 - 只在特定情况下更新
-let upstreamBranchCache = {
-  upstreamBranch: null,
-  lastUpdate: 0,
-  // 上游分支缓存时间也较长，因为上游分支设置不频繁
-  cacheTimeout: 300000 // 5分钟缓存，或者直到主动清除
-};
-
 // 推送状态标记 - 用于优化推送后的分支状态查询
 let recentPushStatus = {
   justPushed: false,
@@ -153,10 +137,6 @@ async function startUIServer(noOpen = false, savePort = false) {
     app,
     execGitCommand,
     getIsGitRepo: () => isGitRepo,
-    getCurrentBranchCache: () => currentBranchCache,
-    setCurrentBranchCache: (v) => { currentBranchCache = v; },
-    getUpstreamBranchCache: () => upstreamBranchCache,
-    setUpstreamBranchCache: (v) => { upstreamBranchCache = v; },
     getBranchStatusCache: () => branchStatusCache,
     setBranchStatusCache: (v) => { branchStatusCache = v; },
     getRecentPushStatus: () => recentPushStatus,
@@ -166,18 +146,7 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 清除分支缓存的函数（在分支切换时调用）
   function clearBranchCache() {
     console.log('清除分支缓存');
-    currentBranchCache = {
-      branchName: null,
-      lastUpdate: 0,
-      cacheTimeout: 300000
-    };
-    // 清除上游分支缓存
-    upstreamBranchCache = {
-      upstreamBranch: null,
-      lastUpdate: 0,
-      cacheTimeout: 300000
-    };
-    // 同时清除分支状态缓存
+    // 清除5秒分支状态缓存
     branchStatusCache = {
       currentBranch: null,
       upstreamBranch: null,
