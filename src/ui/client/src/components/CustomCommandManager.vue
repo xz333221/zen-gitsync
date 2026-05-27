@@ -6,7 +6,7 @@ import { Edit, Delete, VideoPlay, Folder, CopyDocument, Top } from '@element-plu
 import { useConfigStore } from '@stores/configStore'
 import IconButton from '@components/IconButton.vue'
 import TemplateManager from '@components/TemplateManager.vue'
-import DirectoryBrowserDialog from '@components/DirectoryBrowserDialog.vue'
+import FilePicker from 'local-file-picker/client'
 
 export interface CustomCommand {
   id?: string
@@ -819,10 +819,10 @@ defineExpose({
   />
 
   <!-- 目录浏览器弹窗 -->
-  <DirectoryBrowserDialog
-    v-model="isBrowserDialogVisible"
-    :initial-path="newCommand.directory || configStore.currentDirectory"
-    @select="onBrowserSelect"
+  <FilePicker
+    :visible="isBrowserDialogVisible"
+    @close="isBrowserDialogVisible = false"
+    @confirm="(paths: string[]) => { onBrowserSelect(paths[0]); isBrowserDialogVisible = false }"
   />
 
   <!-- NPM 命令选择弹窗 -->

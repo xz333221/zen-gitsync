@@ -29,6 +29,7 @@ import { registerCodeRoutes } from './routes/code.js';
 import { registerCodeAnalysisRoutes } from './routes/codeAnalysis.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
+import { createFilePickerMiddleware } from 'local-file-picker';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -192,6 +193,9 @@ async function startUIServer(noOpen = false, savePort = false) {
   registerFileOpenRoutes({
     app
   });
+
+  // local-file-picker 中间件，提供 /api/fs/* 文件浏览路由
+  app.use('/api', createFilePickerMiddleware());
 
   registerCodeAnalysisRoutes({ app, configManager });
 

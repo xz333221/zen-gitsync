@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
-import DirectoryBrowserDialog from "@components/DirectoryBrowserDialog.vue";
+import FilePicker from 'local-file-picker/client';
 import { ElMessage } from "element-plus";
 import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
 import { ref, computed } from "vue";
@@ -442,10 +442,10 @@ function onBrowserSelect(path: string) {
   </CommonDialog>
 
   <!-- 目录浏览器弹窗 -->
-  <DirectoryBrowserDialog
-    v-model="isBrowserDialogVisible"
-    :initial-path="newDirectoryPath || currentDirectory"
-    @select="onBrowserSelect"
+  <FilePicker
+    :visible="isBrowserDialogVisible"
+    @close="isBrowserDialogVisible = false"
+    @confirm="(paths: string[]) => { onBrowserSelect(paths[0]); isBrowserDialogVisible = false }"
   />
 </template>
 
