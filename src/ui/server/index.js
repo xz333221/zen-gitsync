@@ -30,6 +30,7 @@ import { registerCodeAnalysisRoutes } from './routes/codeAnalysis.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
 import { createFilePickerMiddleware } from 'local-file-picker';
+import { createAiModelMiddleware } from 'ai-model-form';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -196,6 +197,9 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   // local-file-picker 中间件，提供 /api/fs/* 文件浏览路由
   app.use('/api', createFilePickerMiddleware());
+
+  // ai-model-form 中间件：提供 /api/ai-model/* 路由（模型列表/测试/暂存保存）
+  app.use('/api', createAiModelMiddleware());
 
   registerCodeAnalysisRoutes({ app, configManager });
 

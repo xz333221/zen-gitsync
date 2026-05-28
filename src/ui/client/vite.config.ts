@@ -52,6 +52,9 @@ export default defineConfig(({ command }) => {
       //   filename: 'stats.html'
       // })
     ],
+  optimizeDeps: {
+    exclude: ['ai-model-form'],
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

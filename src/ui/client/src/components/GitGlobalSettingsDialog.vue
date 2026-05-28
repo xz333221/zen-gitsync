@@ -121,68 +121,15 @@
               </div>
             </div>
 
-            <!-- 新增 / 编辑表单 -->
-            <div v-if="editingModelId !== undefined" class="model-form">
-              <div class="model-form-title">{{ editingModelId === null ? $t('@42BB9:添加模型') : $t('@42BB9:编辑模型') }}</div>
-              <div class="model-form-grid">
-                <div class="model-form-row">
-                  <label class="model-form-label">{{ $t('@42BB9:接口地址') }} <span class="req">*</span></label>
-                  <el-select
-                    v-model="modelEditForm.baseURL"
-                    filterable
-                    allow-create
-                    :placeholder="$t('@42BB9:选择或输入接口地址')"
-                    class="modern-input"
-                    style="width:100%"
-                    @change="onBaseURLChange"
-                  >
-                    <el-option v-for="p in providerPresets" :key="p.url" :label="p.url" :value="p.url">
-                      <div style="line-height:1.3;padding:3px 0">
-                        <div style="font-size:13px;font-weight:500">{{ p.name }}</div>
-                        <div style="font-size:11px;opacity:0.6;margin-top:2px">{{ p.url }}</div>
-                      </div>
-                    </el-option>
-                  </el-select>
-                </div>
-                <div class="model-form-row">
-                  <label class="model-form-label">{{ $t('@42BB9:模型名称') }} <span class="req">*</span></label>
-                  <el-select
-                    v-model="modelEditForm.model"
-                    filterable
-                    allow-create
-                    :placeholder="$t('@42BB9:选择或输入模型名称')"
-                    class="modern-input"
-                    style="width:100%"
-                    @change="onModelChange"
-                  >
-                    <el-option v-for="mn in currentModelOptions" :key="mn" :label="mn" :value="mn" />
-                  </el-select>
-                </div>
-                <div class="model-form-row">
-                  <label class="model-form-label">{{ $t('@42BB9:显示名称') }}</label>
-                  <el-input v-model="modelEditForm.name" :placeholder="autoModelName || $t('@42BB9:默认使用模型名称')" class="modern-input" size="default" />
-                </div>
-                <div class="model-form-row">
-                  <label class="model-form-label">API Key</label>
-                  <el-input v-model="modelEditForm.apiKey" type="password" show-password :placeholder="$t('@42BB9:输入 API Key')" class="modern-input" size="default" />
-                </div>
-              </div>
-              <div class="model-form-actions">
-                <div class="model-test-result" v-if="modelTestResult !== null">
-                  <span :class="['model-test-badge', modelTestResult.ok ? 'model-test-badge--ok' : 'model-test-badge--fail']">
-                    {{ modelTestResult.ok ? '✅' : '❌' }}
-                    {{ modelTestResult.ok ? modelTestResult.reply : modelTestResult.error }}
-                  </span>
-                </div>
-                <button type="button" class="dialog-cancel-btn" @click="cancelEditModel">{{ $t('@42BB9:取消') }}</button>
-                <button type="button" class="model-test-btn" :disabled="modelTesting" @click="handleTestModel">
-                  <span v-if="modelTesting" class="model-test-spin"></span>
-                  {{ modelTesting ? $t('@42BB9:测试中...') : $t('@42BB9:测试') }}
-                </button>
-                <button type="button" class="dialog-confirm-btn" :disabled="modelSaving" @click="handleSaveModelForm">
-                  {{ $t('@42BB9:保存模型') }}
-                </button>
-              </div>
+            <!-- 新增 / 编辑表单：使用 ai-model-form 组件 -->
+            <div v-if="editingModelId !== undefined" class="ai-model-form-wrapper">
+              <AddModelForm
+                api-base="/api/ai-model"
+                :initial="editingModelInitial"
+                :theme="currentThemeForForm"
+                @save="handleAddModelSave"
+                @cancel="cancelEditModel"
+              />
             </div>
           </div>
         </div>
@@ -420,6 +367,9 @@ import { useGitStore } from '@/stores/gitStore'
 import { useLocaleStore } from '@/stores/localeStore'
 import { useConfigStore, type ModelInfo } from '@/stores/configStore'
 import { type SupportLocale } from '@/locales'
+import { AddModelForm } from 'ai-model-form/client'
+import type { AiModelFormSaveData } from 'ai-model-form/client'
+import 'ai-model-form/dist/ai-model-form.css'
 
 const gitStore = useGitStore()
 const localeStore = useLocaleStore()
@@ -447,41 +397,16 @@ const tempEditorAutoSave = ref(false)
 // AI 模型配置
 const aiModels = ref<ModelInfo[]>([])
 const editingModelId = ref<string | null | undefined>(undefined) // undefined=隐藏, null=新增, string=编辑
-const modelEditForm = ref({ id: '', name: '', apiKey: '', baseURL: '', model: '' })
-const modelSaving = ref(false)
-const modelTesting = ref(false)
-const modelTestResult = ref<{ ok: boolean; reply?: string; error?: string } | null>(null)
 
-interface ProviderPreset { name: string; url: string; models: string[] }
-const providerPresets: ProviderPreset[] = [
-  { name: 'OpenAI', url: 'https://api.openai.com/v1', models: ['gpt-5.5', 'gpt-5.5-turbo', 'gpt-5.5-xhigh', 'gpt-4.1', 'gpt-4o'] },
-  { name: 'Anthropic (Claude)', url: 'https://api.anthropic.com/v1', models: ['claude-opus-4-7-20250416', 'claude-sonnet-4-7-20250416', 'claude-sonnet-4-20250514'] },
-  { name: 'DeepSeek', url: 'https://api.deepseek.com/v1', models: ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-chat', 'deepseek-reasoner'] },
-  { name: 'Google (Gemini)', url: 'https://generativelanguage.googleapis.com/v1beta/openai', models: ['gemini-3.1-pro', 'gemini-3.1-ultra', 'gemini-2.5-pro'] },
-  { name: 'xAI (Grok)', url: 'https://api.x.ai/v1', models: ['grok-4.1', 'grok-4.20'] },
-  { name: 'Meta (Llama)', url: 'https://api.llama-api.com/v1', models: ['llama-4-maverick', 'llama-4-scout', 'llama-3.1-70b'] },
-  { name: 'Mistral AI', url: 'https://api.mistral.ai/v1', models: ['mistral-medium-3', 'mistral-small-4', 'mistral-large-2'] },
-  { name: 'MiniMax', url: 'https://api.minimaxi.com/v1', models: ['minimax-m2.7', 'minimax-m2.5', 'minimax-m1', 'abab7-chat'] },
-  { name: 'Moonshot (Kimi)', url: 'https://api.moonshot.cn/v1', models: ['kimi-k2.6', 'kimi-k2', 'moonshot-v1-128k'] },
-  { name: '智谱 (GLM)', url: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-5.1', 'glm-4-plus', 'glm-4-air'] },
-  { name: '阿里 (Qwen)', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen3.6-max', 'qwen3.6-plus', 'qwen-plus', 'qwen-max'] },
-  { name: 'Cohere', url: 'https://api.cohere.com/v2', models: ['command-r-plus-4', 'command-r-4'] },
-  { name: 'Groq', url: 'https://api.groq.com/openai/v1', models: ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant'] },
-  { name: 'Together AI', url: 'https://api.together.xyz/v1', models: ['meta-llama/Llama-4-Maverick', 'Qwen/Qwen3-72B'] },
-  { name: 'Ollama (本地)', url: 'http://localhost:11434/v1', models: ['qwen2.5', 'llama3.1', 'mistral', 'deepseek-r1:7b'] },
-]
+const currentThemeForForm = computed(() =>
+  configStore.theme === 'light' ? 'light' : 'dark'
+)
 
-const currentModelOptions = computed(() => {
-  const matched = providerPresets.find(p => p.url === modelEditForm.value.baseURL)
-  const pool = matched ? matched.models : providerPresets.flatMap(p => p.models)
-  return [...new Set(pool)]
-})
-
-const autoModelName = computed(() => {
-  const provider = providerPresets.find(p => p.url === modelEditForm.value.baseURL)
-  const modelVal = modelEditForm.value.model.trim()
-  if (!modelVal) return ''
-  return provider ? `${provider.name} / ${modelVal}` : modelVal
+const editingModelInitial = computed(() => {
+  if (editingModelId.value === null) return null
+  const m = aiModels.value.find(x => x.id === editingModelId.value)
+  if (!m) return null
+  return { endpoint: m.baseURL, modelName: m.model, displayName: m.name, apiKey: m.apiKey }
 })
 
 const hasChanges = computed(() => {
@@ -506,96 +431,46 @@ const hasChanges = computed(() => {
   return false
 })
 
-function onBaseURLChange(val: string) {
-  const matched = providerPresets.find(p => p.url === val)
-  if (matched && !modelEditForm.value.model) {
-    modelEditForm.value.model = matched.models[0] || ''
-  }
-}
-
-function onModelChange(_val: string) {
-  // reserved for future use
-}
+function onBaseURLChange(_val: string) { /* unused, kept for safety */ }
+function onModelChange(_val: string) { /* unused */ }
 
 function startAddModel() {
   editingModelId.value = null
-  modelEditForm.value = { id: '', name: '', apiKey: '', baseURL: '', model: '' }
-  modelTestResult.value = null
 }
 
 function startEditModel(m: ModelInfo) {
   editingModelId.value = m.id
-  modelEditForm.value = { id: m.id, name: m.name, apiKey: '', baseURL: m.baseURL, model: m.model }
-  modelTestResult.value = null
 }
 
 function cancelEditModel() {
   editingModelId.value = undefined
-  modelTestResult.value = null
 }
 
-async function handleTestModel() {
-  const f = modelEditForm.value
-  if (!f.baseURL.trim() || !f.model.trim()) {
-    ElMessage.warning($t('@42BB9:请先填写接口地址和模型名称'))
-    return
-  }
-  modelTesting.value = true
-  modelTestResult.value = null
-  try {
-    const resp = await fetch('/api/config/test-model', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ baseURL: f.baseURL.trim(), model: f.model.trim(), apiKey: f.apiKey })
-    })
-    const data = await resp.json()
-    if (data.success) {
-      modelTestResult.value = { ok: true, reply: data.reply || 'ok' }
-    } else {
-      modelTestResult.value = { ok: false, error: data.error || $t('@42BB9:测试失败') }
-    }
-  } catch (e: any) {
-    modelTestResult.value = { ok: false, error: e.message }
-  } finally {
-    modelTesting.value = false
-  }
-}
-
-async function handleSaveModelForm() {
-  const f = modelEditForm.value
-  if (!f.baseURL.trim() || !f.model.trim()) {
-    ElMessage.warning($t('@42BB9:请填写所有必填字段'))
-    return
-  }
+async function handleAddModelSave(data: AiModelFormSaveData) {
   const wasAdding = editingModelId.value === null
-  // 自动生成 id；name 优先使用用户填写的，否则 fallback 到自动生成
-  const provider = providerPresets.find(p => p.url === f.baseURL.trim())
-  const autoName = provider ? `${provider.name} / ${f.model.trim()}` : f.model.trim()
-  const finalName = f.name.trim() || autoName
+  const finalName = data.displayName || data.modelName
   const autoId = wasAdding
-    ? `${(provider?.name || 'custom').toLowerCase().replace(/[^a-z0-9]/g, '-')}-${f.model.trim().toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 20)}-${Date.now().toString(36)}`
+    ? `model-${finalName.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 24)}-${Date.now().toString(36)}`
     : editingModelId.value!
   let updated: ModelInfo[]
   if (wasAdding) {
     const isFirst = aiModels.value.length === 0
-    updated = [...aiModels.value, { id: autoId, name: finalName, apiKey: f.apiKey, baseURL: f.baseURL.trim(), model: f.model.trim(), isDefault: isFirst }]
+    updated = [...aiModels.value, {
+      id: autoId, name: finalName, apiKey: data.apiKey,
+      baseURL: data.endpoint, model: data.modelName, isDefault: isFirst
+    }]
   } else {
     updated = aiModels.value.map(m =>
       m.id === editingModelId.value
-        ? { ...m, name: finalName, apiKey: f.apiKey || m.apiKey, baseURL: f.baseURL.trim(), model: f.model.trim() }
+        ? { ...m, name: finalName, apiKey: data.apiKey || m.apiKey, baseURL: data.endpoint, model: data.modelName }
         : m
     )
   }
-  modelSaving.value = true
-  try {
-    const ok = await configStore.saveModels(updated)
-    if (ok) {
-      aiModels.value = updated
-      editingModelId.value = undefined
-      ElMessage.success(wasAdding ? $t('@42BB9:已添加模型') : $t('@42BB9:已更新模型'))
-    }
-  } finally {
-    modelSaving.value = false
+  const ok = await configStore.saveModels(updated)
+  if (ok) {
+    aiModels.value = updated
+    editingModelId.value = undefined
+    ElMessage.success(wasAdding ? $t('@42BB9:已添加模型') : $t('@42BB9:已更新模型'))
   }
 }
 

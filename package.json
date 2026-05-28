@@ -72,6 +72,7 @@
   "homepage": "https://github.com/xz333221/zen-gitsync#readme",
   "dependencies": {
     "acorn": "^8.16.0",
+    "ai-model-form": "^0.1.0",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "cli-table3": "^0.6.5",
