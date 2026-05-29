@@ -601,6 +601,19 @@ function handleCommitFullCompare() {
   loadCommitFileCompare(selectedCommit.value.hash, selectedCommitFile.value)
 }
 
+function copyCommitFileDiff() {
+  if (!commitDiff.value) {
+    return
+  }
+  navigator.clipboard.writeText(commitDiff.value)
+    .then(() => {
+      ElMessage.success($t('@A1833:差异已复制到剪贴板'))
+    })
+    .catch(() => {
+      ElMessage.error($t('@A1833:复制失败'))
+    })
+}
+
 // 处理打开文件
 async function handleOpenFile(filePath: string, context: string) {
   try {
@@ -1271,6 +1284,9 @@ function toggleFullscreen() {
             </el-button>
             <el-button size="small" :type="commitFileViewMode !== 'diff' ? 'primary' : 'default'" @click="handleCommitFullCompare">
               {{ $t('@A1833:显示完整对比') }}
+            </el-button>
+            <el-button size="small" :disabled="!commitDiff" @click="copyCommitFileDiff">
+              {{ $t('@A1833:复制差异') }}
             </el-button>
           </template>
         </FileDiffViewer>

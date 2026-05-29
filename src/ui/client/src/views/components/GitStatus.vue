@@ -420,6 +420,20 @@ function showFullCompare() {
   if (selectedFile.value) void getFileCompare(selectedFile.value)
 }
 
+function copyCurrentFileDiff() {
+  if (!diffContent.value) {
+    ElMessage.warning($t('@13D1C:没有变更'))
+    return
+  }
+  navigator.clipboard.writeText(diffContent.value)
+    .then(() => {
+      ElMessage.success($t('@13D1C:差异已复制到剪贴板'))
+    })
+    .catch(() => {
+      ElMessage.error($t('@13D1C:复制失败'))
+    })
+}
+
 // 暂存单个文件
 async function stageFile(filePath: string) {
   await gitStore.addFileToStage(filePath)
@@ -1394,6 +1408,9 @@ defineExpose({
         </el-button>
         <el-button size="small" :type="diffViewMode === 'compare' ? 'primary' : 'default'" @click="showFullCompare">
           {{ $t('@13D1C:显示完整对比') }}
+        </el-button>
+        <el-button size="small" :disabled="!diffContent" @click="copyCurrentFileDiff">
+          {{ $t('@13D1C:复制差异') }}
         </el-button>
       </template>
     </FileDiffViewer>
