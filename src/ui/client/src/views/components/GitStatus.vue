@@ -420,12 +420,34 @@ function showFullCompare() {
   if (selectedFile.value) void getFileCompare(selectedFile.value)
 }
 
-function copyCurrentFileDiff() {
-  if (!diffContent.value) {
+async function copyCurrentFileDiff() {
+  if (!selectedFile.value) {
     ElMessage.warning($t('@13D1C:没有变更'))
     return
   }
-  navigator.clipboard.writeText(diffContent.value)
+  let content = diffContent.value
+  if (!content) {
+    // 比较模式下 diffContent 为空，按需获取 diff
+    try {
+      const currentFile = gitStore.fileList.find(f => f.path === selectedFile.value)
+      if (currentFile?.type === 'added') {
+        const response = await fetch(`/api/diff-cached?file=${encodeURIComponent(selectedFile.value)}`)
+        const data = await response.json()
+        content = data.diff || ''
+      } else if (currentFile?.type !== 'untracked') {
+        const response = await fetch(`/api/diff?file=${encodeURIComponent(selectedFile.value)}`)
+        const data = await response.json()
+        content = data.diff || ''
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!content) {
+    ElMessage.warning($t('@13D1C:没有变更'))
+    return
+  }
+  navigator.clipboard.writeText(content)
     .then(() => {
       ElMessage.success($t('@13D1C:差异已复制到剪贴板'))
     })
@@ -1409,7 +1431,7 @@ defineExpose({
         <el-button size="small" :type="diffViewMode === 'compare' ? 'primary' : 'default'" @click="showFullCompare">
           {{ $t('@13D1C:显示完整对比') }}
         </el-button>
-        <el-button size="small" :disabled="!diffContent" @click="copyCurrentFileDiff">
+        <el-button size="small" :disabled="!selectedFile" @click="copyCurrentFileDiff">
           {{ $t('@13D1C:复制差异') }}
         </el-button>
       </template>

@@ -601,11 +601,27 @@ function handleCommitFullCompare() {
   loadCommitFileCompare(selectedCommit.value.hash, selectedCommitFile.value)
 }
 
-function copyCommitFileDiff() {
-  if (!commitDiff.value) {
+async function copyCommitFileDiff() {
+  if (!selectedCommit.value || !selectedCommitFile.value) {
     return
   }
-  navigator.clipboard.writeText(commitDiff.value)
+  let content = commitDiff.value
+  if (!content) {
+    // 比较模式下 commitDiff 为空，按需获取 diff
+    try {
+      const response = await fetch(
+        `/api/commit-file-diff?hash=${selectedCommit.value.hash}&file=${encodeURIComponent(selectedCommitFile.value)}`
+      )
+      const data = await response.json()
+      content = data.diff || ''
+    } catch {
+      // ignore
+    }
+  }
+  if (!content) {
+    return
+  }
+  navigator.clipboard.writeText(content)
     .then(() => {
       ElMessage.success($t('@A1833:差异已复制到剪贴板'))
     })
@@ -1285,7 +1301,7 @@ function toggleFullscreen() {
             <el-button size="small" :type="commitFileViewMode !== 'diff' ? 'primary' : 'default'" @click="handleCommitFullCompare">
               {{ $t('@A1833:显示完整对比') }}
             </el-button>
-            <el-button size="small" :disabled="!commitDiff" @click="copyCommitFileDiff">
+            <el-button size="small" :disabled="!selectedCommitFile" @click="copyCommitFileDiff">
               {{ $t('@A1833:复制差异') }}
             </el-button>
           </template>
