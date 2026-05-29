@@ -980,6 +980,7 @@ defineExpose({
         <div class="flex items-center">
           <!-- <GitOperationsButton variant="icon" /> -->
           <IconButton
+            v-if="gitStore.fileList.length > 0"
             :tooltip="$t('@13D1C:复制全量 Diff')"
             size="medium"
             hover-color="var(--color-primary)"
