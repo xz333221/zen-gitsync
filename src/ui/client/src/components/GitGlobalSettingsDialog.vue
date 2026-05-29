@@ -431,9 +431,6 @@ const hasChanges = computed(() => {
   return false
 })
 
-function onBaseURLChange(_val: string) { /* unused, kept for safety */ }
-function onModelChange(_val: string) { /* unused */ }
-
 function startAddModel() {
   editingModelId.value = null
 }
