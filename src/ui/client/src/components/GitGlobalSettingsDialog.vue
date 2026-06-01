@@ -124,6 +124,7 @@
             <!-- 新增 / 编辑表单：使用 ai-model-form 组件 -->
             <div v-if="editingModelId !== undefined" class="ai-model-form-wrapper">
               <AddModelForm
+                :key="editingModelId ?? '__new__'"
                 api-base="/api/ai-model"
                 :initial="editingModelInitial"
                 :theme="currentThemeForForm"
