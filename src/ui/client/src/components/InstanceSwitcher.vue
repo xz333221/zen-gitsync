@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ElDropdown, ElDropdownMenu, ElDropdownItem, ElIcon, ElTag } from 'element-plus'
+import { $t } from '@/lang/static'
 import { useInstancesStore } from '@/stores/instancesStore'
 import { getFolderNameFromPath } from '@/utils/path'
 import type { InstanceInfo } from '@/types/instances'

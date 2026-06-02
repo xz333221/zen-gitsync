@@ -26,7 +26,9 @@
       "Bash(timeout 12 node server.js --no-open)",
       "Bash(awk '{print $NF}')",
       "Bash(curl -s http://localhost:3001/api/instances)",
-      "Bash(rm -rf /tmp/zen-test-proj-b)"
+      "Bash(rm -rf /tmp/zen-test-proj-b)",
+      "Bash(node_modules/.bin/vue-tsc -b)",
+      "Bash(timeout 60 node_modules/.bin/vite build)"
     ]
   }
 }
