@@ -28,7 +28,10 @@
       "Bash(curl -s http://localhost:3001/api/instances)",
       "Bash(rm -rf /tmp/zen-test-proj-b)",
       "Bash(node_modules/.bin/vue-tsc -b)",
-      "Bash(timeout 60 node_modules/.bin/vite build)"
+      "Bash(timeout 60 node_modules/.bin/vite build)",
+      "Bash(npx vue-tsc *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(grep -E \"index-.*\\\\.\\(js|css\\)$\")"
     ]
   }
 }

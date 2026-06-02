@@ -31,6 +31,7 @@ import { registerInstancesRoutes } from './routes/instances.js';
 import { createInstanceRegistry } from './utils/instanceRegistry.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
+import { resolveStartPort } from './utils/randomStartPort.js';
 import { createFilePickerMiddleware } from 'local-file-picker';
 import { createAiModelMiddleware } from 'ai-model-form';
 
@@ -293,7 +294,14 @@ async function startUIServer(noOpen = false, savePort = false) {
   }
   
   // 启动服务器
-  const PORT = 3000;
+  // 端口策略：默认从 [4000, 6000) 随机挑起点，再顺序扫描 EADDRINUSE；
+  // 可通过 PORT 环境变量强制使用固定端口（向后兼容 + 便于书签/调试）
+  const portStrategy = resolveStartPort();
+  if (portStrategy.source === 'env') {
+    console.log(chalk.cyan(`[端口] 使用环境变量 PORT=${portStrategy.startPort}`));
+  } else {
+    console.log(chalk.cyan(`[端口] 随机起点 ${portStrategy.startPort}（范围 ${portStrategy.min}-${portStrategy.max}，遇到占用会顺延）`));
+  }
 
   // 创建一个函数来保存端口号到文件和环境变量
   // 使用闭包保存端口状态，防止多次写入相同端口
@@ -315,7 +323,7 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 尝试在可用端口上启动服务器（不等待；listen 事件会驱动后续逻辑）
   startServerOnAvailablePort({
     httpServer,
-    startPort: PORT,
+    startPort: portStrategy.startPort,
     chalk,
     open,
     noOpen,

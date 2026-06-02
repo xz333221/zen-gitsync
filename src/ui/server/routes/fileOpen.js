@@ -19,14 +19,22 @@ function spawnDetached(command, args, options = {}) {
   });
 }
 
-async function launchClaudeCode(dirPath) {
+async function launchClaudeCode(dirPath, { permissionMode } = {}) {
+  // 透传可选的权限模式参数到 claude CLI（如 acceptEdits）
+  // 注意：permissionMode 必须是一个 token 字符串，避免 shell 注入
+  const SAFE_MODE = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+  const cliArgs = [];
+  if (permissionMode && typeof permissionMode === 'string' && SAFE_MODE.test(permissionMode)) {
+    cliArgs.push('--permission-mode', permissionMode);
+  }
+
   if (process.platform === 'win32') {
-    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'claude'], {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'claude', ...cliArgs], {
       cwd: dirPath
     });
   }
 
-  return spawnDetached('claude', [], {
+  return spawnDetached('claude', cliArgs, {
     cwd: dirPath
   });
 }
@@ -227,7 +235,7 @@ export function registerFileOpenRoutes({
   // 用 Claude Code 打开目录
   app.post('/api/open-directory-with-claude-code', async (req, res) => {
     try {
-      const { path: dirPath } = req.body;
+      const { path: dirPath, permissionMode } = req.body || {};
       if (!dirPath) {
         return res.status(400).json({ success: false, error: '目录路径不能为空' });
       }
@@ -239,8 +247,11 @@ export function registerFileOpenRoutes({
       }
 
       try {
-        await launchClaudeCode(dirPath);
-        res.json({ success: true, message: '已用 Claude Code 打开目录' });
+        await launchClaudeCode(dirPath, { permissionMode });
+        const message = permissionMode
+          ? `已用 Claude Code 打开目录（permission-mode=${permissionMode}）`
+          : '已用 Claude Code 打开目录';
+        res.json({ success: true, message });
       } catch (error) {
         res.status(400).json({
           success: false,

@@ -2,9 +2,9 @@
 import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { FilePickerModal as FilePicker } from 'local-file-picker/client';
-import { ElMessage } from "element-plus";
-import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
-import { ref, computed } from "vue";
+import { ElMessage, ElPopover } from "element-plus";
+import { Folder, FolderOpened, Clock, Monitor, Warning } from "@element-plus/icons-vue";
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
 import IconButton from "@components/IconButton.vue";
@@ -114,7 +114,10 @@ async function onOpenInVscode() {
 }
 
 // 用 Claude Code 打开当前目录
-async function onOpenInClaudeCode() {
+// permissionMode 可选：透传到 claude CLI（例：'acceptEdits' = 完全批准）
+async function onOpenInClaudeCode(permissionMode?: string) {
+  // 触发时也顺手关掉右键菜单
+  closeClaudeMenu()
   try {
     if (!currentDirectory.value) {
       ElMessage.warning('当前目录路径为空');
@@ -123,11 +126,14 @@ async function onOpenInClaudeCode() {
     const response = await fetch('/api/open-directory-with-claude-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: currentDirectory.value }),
+      body: JSON.stringify({
+        path: currentDirectory.value,
+        ...(permissionMode ? { permissionMode } : {})
+      }),
     });
     const result = await response.json();
     if (result.success) {
-      ElMessage.success('已用 Claude Code 打开目录');
+      ElMessage.success(result.message || '已用 Claude Code 打开目录');
     } else if (result.error) {
       ElMessage.error(result.error);
     }
@@ -135,6 +141,48 @@ async function onOpenInClaudeCode() {
     ElMessage.error(`打开失败: ${(error as Error).message}`);
   }
 }
+
+// 右键菜单（el-popover manual 模式）—— 避开 el-dropdown 在 el-tooltip 嵌套下的 contextmenu 失效问题
+const claudeMenuVisible = ref(false)
+const claudeTriggerRef = ref<HTMLElement | null>(null)
+
+function openClaudeMenu() {
+  // @contextmenu.prevent 已经阻止了浏览器默认菜单
+  claudeMenuVisible.value = !claudeMenuVisible.value
+}
+function pickClaudeMode(mode: 'default' | 'acceptEdits' | 'bypassPermissions') {
+  claudeMenuVisible.value = false
+  if (mode === 'default') {
+    onOpenInClaudeCode()
+  } else {
+    onOpenInClaudeCode(mode)
+  }
+}
+// 关闭菜单（在选完菜单项、左键点击 trigger、或点击外部时调用）
+function closeClaudeMenu() {
+  if (claudeMenuVisible.value) claudeMenuVisible.value = false
+}
+
+// manual trigger 下"点外面关闭"要自己挂 document 监听：
+// - target 在 trigger 内 → 不关（避免和右键 toggle / 左键 click 冲突）
+// - target 在 popover 内容内（teleport 到 body）→ 不关
+// - 否则 → 关闭
+function onDocumentMouseDown(e: MouseEvent) {
+  if (!claudeMenuVisible.value) return
+  const target = e.target as Node | null
+  if (!target) return
+  if (claudeTriggerRef.value && claudeTriggerRef.value.contains(target)) return
+  const popoverEl = document.querySelector('.claude-menu-popover')
+  if (popoverEl && popoverEl.contains(target)) return
+  claudeMenuVisible.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onDocumentMouseDown, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocumentMouseDown, true)
+})
 
 // 在终端中打开当前目录
 async function onOpenTerminal() {
@@ -339,17 +387,68 @@ function onBrowserSelect(path: string) {
       >
         <svg-icon icon-class="vscode" />
       </IconButton>
-      <IconButton
-        tooltip="用 Claude Code 打开"
-        size="large"
-        @click="onOpenInClaudeCode"
+      <!--
+        用 Claude Code 打开：左键 = 默认；右键 = 弹出菜单（默认 / 完全批准）。
+        用 el-popover + manual trigger 自己接管右键事件，绕开 el-dropdown contextmenu
+        在 IconButton(el-tooltip) 嵌套下的失效问题。
+      -->
+      <el-popover
+        :visible="claudeMenuVisible"
+        :trigger="('manual' as any)"
+        placement="bottom-end"
+        :width="220"
+        :show-arrow="false"
+        popper-class="claude-menu-popover"
       >
-        <img
-          :src="claudeCodeIcon"
-          alt="Claude Code"
-          class="claude-code-btn__icon"
-        />
-      </IconButton>
+        <template #reference>
+          <span
+            ref="claudeTriggerRef"
+            class="claude-code-trigger"
+            @contextmenu.prevent.stop="openClaudeMenu"
+          >
+            <IconButton
+              tooltip="用 Claude Code 打开（左键默认，右键选择权限模式）"
+              size="large"
+              @click="onOpenInClaudeCode()"
+            >
+              <img
+                :src="claudeCodeIcon"
+                alt="Claude Code"
+                class="claude-code-btn__icon"
+              />
+            </IconButton>
+          </span>
+        </template>
+        <ul class="claude-menu" role="menu">
+          <li
+            class="claude-menu__item"
+            role="menuitem"
+            @click="pickClaudeMode('default')"
+          >
+            <span class="claude-menu__label">用 Claude Code 打开</span>
+            <span class="claude-menu__hint">默认权限</span>
+          </li>
+          <li
+            class="claude-menu__item claude-menu__item--accent"
+            role="menuitem"
+            @click="pickClaudeMode('acceptEdits')"
+          >
+            <span class="claude-menu__label">用 Claude Code 打开</span>
+            <span class="claude-menu__hint">批准文件编辑</span>
+          </li>
+          <li
+            class="claude-menu__item claude-menu__item--danger"
+            role="menuitem"
+            @click="pickClaudeMode('bypassPermissions')"
+          >
+            <span class="claude-menu__label">
+              用 Claude Code 打开
+              <el-icon class="claude-menu__warn"><Warning /></el-icon>
+            </span>
+            <span class="claude-menu__hint">真·完全批准（含 Shell）</span>
+          </li>
+        </ul>
+      </el-popover>
     </div>
   </div>
 
@@ -571,6 +670,74 @@ function onBrowserSelect(path: string) {
   display: block;
   object-fit: contain;
   flex-shrink: 0;
+  -webkit-user-drag: none;
+}
+
+/* 右键菜单触发器：包裹 IconButton，统一处理 contextmenu */
+.claude-code-trigger {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 右键弹出的菜单（el-popover 内容） */
+.claude-menu {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-primary);
+}
+
+.claude-menu__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.claude-menu__item:hover {
+  background-color: rgba(64, 158, 255, 0.12);
+}
+
+.claude-menu__item:active {
+  background-color: rgba(64, 158, 255, 0.2);
+}
+
+.claude-menu__label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.claude-menu__hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+}
+
+.claude-menu__item--accent .claude-menu__hint {
+  color: var(--color-primary, #409eff);
+  font-weight: 600;
+}
+
+.claude-menu__item--danger .claude-menu__label {
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.claude-menu__warn {
+  color: #e6a23c;
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.claude-menu__item--danger .claude-menu__hint {
+  color: #e6a23c;
+  font-weight: 600;
 }
 
 /* 对话框样式（复用 App.vue 中样式） */
