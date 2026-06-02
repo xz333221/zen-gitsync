@@ -8,7 +8,25 @@
       "WebSearch",
       "WebFetch(domain:docs.anthropic.com)",
       "WebFetch(domain:www.anthropic.com)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(node_modules/.bin/vue-tsc --noEmit -p tsconfig.json)",
+      "Read(//c/Users/xuze/**)",
+      "Read(//e//**)",
+      "Bash(ls \"C:\\\\\\\\Users\\\\\\\\xuze\\\\\\\\.zen-gitsync-instances.json\")",
+      "Bash(rm -f ~/.zen-gitsync-instances.json)",
+      "Read(//tmp/**)",
+      "Bash(wait)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist)",
+      "Bash(awk '{print $2}')",
+      "Bash(xargs -I {} taskkill /F /PID {})",
+      "Bash(cmd //c \"taskkill /F /IM node.exe\")",
+      "Bash(cmd //c \"taskkill /F /PID 34672\")",
+      "Bash(curl -s http://localhost:3000/api/instances)",
+      "Bash(timeout 12 node server.js --no-open)",
+      "Bash(awk '{print $NF}')",
+      "Bash(curl -s http://localhost:3001/api/instances)",
+      "Bash(rm -rf /tmp/zen-test-proj-b)"
     ]
   }
 }

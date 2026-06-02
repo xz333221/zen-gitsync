@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { getFolderNameFromPath } from '@/utils/path'
 import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
@@ -11,6 +11,7 @@ import BranchSelector from '@components/BranchSelector.vue'
 import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import ActivityBar from '@/components/ActivityBar.vue'
+import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 import EditorView from '@/views/EditorView.vue'
 import SourceMapView from '@/views/SourceMapView.vue'
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
@@ -19,6 +20,7 @@ import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
 import { useLocaleStore } from '@stores/localeStore'
+import { useInstancesStore } from '@stores/instancesStore'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -30,6 +32,8 @@ const gitStore = useGitStore()
 const configStore = useConfigStore()
 // 使用Locale Store
 const localeStore = useLocaleStore()
+// 使用实例注册 Store
+const instancesStore = useInstancesStore()
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
@@ -76,6 +80,9 @@ async function loadCurrentDirectory() {
 onMounted(async () => {
   console.log($t('@F13B4:---------- 页面初始化开始 ----------'))
 
+  // 启动实例注册表轮询 + Socket.IO 监听
+  instancesStore.start()
+
   try {
     // 并行加载配置和目录信息
     const dirData = await loadCurrentDirectory()
@@ -118,6 +125,11 @@ onMounted(async () => {
       loadLayoutRatios();
     }, 100);
   }
+})
+
+onBeforeUnmount(() => {
+  // 停止实例注册表轮询 + 断开 Socket.IO
+  instancesStore.stop()
 })
 
 // 处理分支变更事件
@@ -394,6 +406,8 @@ function copyGitInit() {
       <div class="header-actions" v-if="gitStore.isGitRepo">
         <!-- <CommandHistory /> -->
       </div>
+      <!-- 实例切换器：显示所有运行中的 GUI 项目 -->
+      <InstanceSwitcher />
       <!-- 用户信息 -->
       <div id="user-info" class="user-info-card">
         <template v-if="gitStore.userName">

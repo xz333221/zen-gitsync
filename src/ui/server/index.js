@@ -27,6 +27,8 @@ import { registerFileOpenRoutes } from './routes/fileOpen.js';
 import { registerGitOpsRoutes } from './routes/gitOps.js';
 import { registerCodeRoutes } from './routes/code.js';
 import { registerCodeAnalysisRoutes } from './routes/codeAnalysis.js';
+import { registerInstancesRoutes } from './routes/instances.js';
+import { createInstanceRegistry } from './utils/instanceRegistry.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
 import { createFilePickerMiddleware } from 'local-file-picker';
@@ -74,7 +76,16 @@ async function startUIServer(noOpen = false, savePort = false) {
   
   // 注册Socket.io实例，用于命令历史通知
   registerSocketIO(io);
-  
+
+  // 构建实例注册表（用于跨进程共享"当前运行中的 GUI"信息）
+  // 注册表文件位于用户主目录，所有 g ui 进程共享写入
+  const instanceRegistry = createInstanceRegistry({
+    fs,
+    path,
+    os,
+    registryPath: path.join(os.homedir(), '.zen-gitsync-instances.json')
+  });
+
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
 
@@ -203,6 +214,13 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   registerCodeAnalysisRoutes({ app, configManager });
 
+  // 实例注册表 API：列出当前所有运行中的 GUI
+  registerInstancesRoutes({
+    app,
+    registry: instanceRegistry,
+    getCurrentInstanceId: () => process.pid
+  });
+
   registerGitOpsRoutes({
     app,
     execGitCommand,
@@ -276,15 +294,26 @@ async function startUIServer(noOpen = false, savePort = false) {
   
   // 启动服务器
   const PORT = 3000;
-  
+
   // 创建一个函数来保存端口号到文件和环境变量
   // 使用闭包保存端口状态，防止多次写入相同端口
   const savePortToFile = createSavePortToFile({ savePort, fs, path });
   // 使用变量标记回调是否已执行，防止多次触发
   const callbackExecutedRef = { value: false };
-  
-  // 尝试在可用端口上启动服务器
-  await startServerOnAvailablePort({
+
+  // 用 'listening' 事件做注册触发：startServerOnAvailablePort 的 await
+  // 在端口重试场景下不一定按时返回，但 'listening' 事件只在服务器真正绑定端口时触发
+  let registerDone = false;
+  httpServer.once('listening', () => {
+    if (registerDone) return;
+    registerDone = true;
+    registerCurrentInstance().catch((e) => {
+      console.warn(chalk.yellow(`[instanceRegistry] 启动注册流程失败: ${e?.message || e}`));
+    });
+  });
+
+  // 尝试在可用端口上启动服务器（不等待；listen 事件会驱动后续逻辑）
+  startServerOnAvailablePort({
     httpServer,
     startPort: PORT,
     chalk,
@@ -294,7 +323,63 @@ async function startUIServer(noOpen = false, savePort = false) {
     savePortToFile,
     maxTries: 100,
     callbackExecutedRef
+  }).catch((e) => {
+    console.error('启动服务器失败:', e);
   });
+
+  // 把所有注册/心跳/watch 逻辑封装到独立函数，由 listening 事件触发
+  async function registerCurrentInstance() {
+    const addr = httpServer.address();
+    const currentPort = addr && addr.port;
+    if (!currentPort) {
+      console.warn(chalk.yellow('[instanceRegistry] 无法获取当前端口，跳过注册'));
+      return;
+    }
+
+    try {
+      const projectName = await instanceRegistry._resolveProjectName(currentProjectPath);
+      await instanceRegistry.register({
+        pid: process.pid,
+        port: currentPort,
+        projectPath: currentProjectPath,
+        projectName,
+        hostname: os.hostname()
+      });
+      console.log(chalk.green(`[instanceRegistry] 已注册 pid=${process.pid} port=${currentPort} name=${projectName}`));
+    } catch (e) {
+      console.warn(chalk.yellow(`[instanceRegistry] 注册失败: ${e?.message || e}`));
+      return;
+    }
+
+    // 5 秒心跳
+    const heartbeatTimer = setInterval(() => {
+      instanceRegistry.heartbeat(process.pid, { projectPath: currentProjectPath })
+        .catch((e) => console.warn(chalk.yellow(`[instanceRegistry] 心跳失败: ${e?.message || e}`)));
+    }, 5000);
+
+    // 监听注册表文件变化：任何进程写入都会触发，向本进程的所有客户端广播
+    // fs.watch 在 Windows 上偶有不可靠，Socket.IO 推送 + 前端轮询（15s）兜底
+    const stopWatcher = instanceRegistry.watch(async (fresh) => {
+      try {
+        io.emit('instances_changed', { instances: fresh });
+      } catch (e) {
+        console.warn(chalk.yellow(`[instanceRegistry] 广播失败: ${e?.message || e}`));
+      }
+    }, fsSync.watch);
+
+    // 优雅退出：SIGINT/SIGTERM 触发异步 unregister + 清心跳
+    const shutdown = async (signal) => {
+      try { clearInterval(heartbeatTimer); } catch (_) {}
+      try { await instanceRegistry.unregister(process.pid); } catch (_) {}
+      console.log(chalk.gray(`[instanceRegistry] 收到 ${signal}，已清理本实例`));
+    };
+    process.on('SIGINT', () => { shutdown('SIGINT'); });
+    process.on('SIGTERM', () => { shutdown('SIGTERM'); });
+    // 'exit' 是同步钩子，无法 await：仅关闭 watcher；kill -9 走心跳超时
+    process.on('exit', () => {
+      try { stopWatcher && stopWatcher(); } catch (_) {}
+    });
+  }
 
  }
 

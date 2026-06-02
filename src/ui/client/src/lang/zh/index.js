@@ -1598,4 +1598,9 @@ export default {
   '@EDITOR:输入文件名': '输入文件名（回车确认，Esc 取消）',
   '@EDITOR:输入文件夹名': '输入文件夹名（回车确认，Esc 取消）',
   // @EDITOR: file end
+  // @INSSW: file path: components/InstanceSwitcher.vue
+  '@INSSW:个实例': '个实例',
+  '@INSSW:当前': '当前',
+  '@INSSW:无其他运行中的实例': '无其他运行中的实例',
+  // @INSSW: file end
 }

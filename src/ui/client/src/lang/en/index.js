@@ -1592,4 +1592,9 @@ export default {
   '@EDITOR:输入文件名': 'Enter file name (Enter to confirm, Esc to cancel)',
   '@EDITOR:输入文件夹名': 'Enter folder name (Enter to confirm, Esc to cancel)',
   // @EDITOR: file end
+  // @INSSW: file path: components/InstanceSwitcher.vue
+  '@INSSW:个实例': ' instances',
+  '@INSSW:当前': 'Current',
+  '@INSSW:无其他运行中的实例': 'No other running instances',
+  // @INSSW: file end
 }
