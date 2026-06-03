@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "2.11.35",
+  "version": "2.11.36",
   "description": "A Git automation platform with interactive commits, scheduled sync, command orchestration, file locking, and a visual GUI.",
   "main": "index.js",
   "type": "module",
