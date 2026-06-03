@@ -350,21 +350,21 @@ defineExpose({
 .action-groups {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: 16px;  // 从 --spacing-lg (16px) 保持不变,组之间空气感
 }
 
 .action-group {
   background: var(--bg-container);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-md);
+  padding: 16px;  // 从 --spacing-md (12px) 提到 16px,组内更舒展
   border: 1px solid var(--border-component);
 }
 
 .group-title {
-  font-size: var(--font-size-sm);
+  font-size: 14px;  // 从 --font-size-sm (12px) 提到 14px,标题更突出
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: var(--spacing-base);
+  margin-bottom: 10px;  // 略增,标题和按钮间距更舒展
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-card);
 }
@@ -372,7 +372,7 @@ defineExpose({
 .group-buttons {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-base);
+  gap: 10px;  // 从 --spacing-base (8px) 略增到 10px,按钮之间更分明
 
   // 只确保按钮全宽，其他样式由按钮组件自己的from-drawer样式控制
   :deep(.el-button) {
@@ -380,6 +380,7 @@ defineExpose({
     display: flex;
     align-items: center;
     justify-content: center;
+    height: 40px;  // 统一按钮高度,大拇指友好
   }
 }
 

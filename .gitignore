@@ -53,6 +53,12 @@ git-autocommit.log
 # Test coverage
 coverage/
 
+# Playwright
+src/ui/client/playwright-report/
+src/ui/client/test-results/
+src/ui/client/blob-report/
+src/ui/client/playwright/.cache/
+
 # Windows thumbnail cache
 Thumbs.db
 

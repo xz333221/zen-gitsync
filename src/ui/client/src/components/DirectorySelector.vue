@@ -342,6 +342,15 @@ async function openNewTabGui() {
   }
 }
 
+// 检测是否 Mac(用于 title 提示)
+const isMac = computed(() => {
+  if (typeof navigator === 'undefined') return false
+  // 优先用 userAgentData(Chrome 新 API),fallback 到 platform
+  const uaData = (navigator as any).userAgentData
+  if (uaData?.platform) return /mac/i.test(uaData.platform)
+  return /mac/i.test(navigator.platform || '')
+})
+
 // 在常用目录卡片上 Ctrl/Cmd + 点击 → 直接用新标签打开
 async function openRecentDirInNewTab(dirPath: string) {
   if (!dirPath) return;
@@ -527,7 +536,7 @@ function onBrowserSelect(path: string) {
               :key="index"
               class="recent-dir-item"
               :class="{ 'recent-dir-item--missing': !item.exists }"
-              :title="(navigator.platform.toLowerCase().includes('mac') ? '按住 ⌘ 点击用新标签打开' : '按住 Ctrl 点击用新标签打开') + '\n' + item.path"
+              :title="(isMac ? '按住 ⌘ 点击用新标签打开' : '按住 Ctrl 点击用新标签打开') + '\n' + item.path"
               @click="onRecentDirClick(item, $event)"
             >
               <el-icon class="dir-icon"><Folder /></el-icon>
