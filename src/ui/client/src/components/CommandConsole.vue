@@ -477,8 +477,8 @@ function ansiToHtml(text: string): string {
 // 控制全屏状态
 const isFullscreen = ref(false);
 
-// 控制是否使用终端执行（从localStorage读取，默认关闭以使用流式输出）
-const useTerminal = ref(localStorage.getItem('useTerminal') === 'true');
+// 控制是否使用终端执行（从localStorage读取，默认开启以使用终端执行）
+const useTerminal = ref(localStorage.getItem('useTerminal') !== 'false');
 
 const terminalSessions = ref<TerminalSession[]>([]);
 const terminalSessionsLoading = ref(false);
