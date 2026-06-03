@@ -13,6 +13,7 @@ import FileTreeView from './FileTreeView.vue';
 import { getFileIconClass } from '../utils/fileIcon';
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree';
 import type { ConflictBlock } from '@/types/conflict';
+import { useConfigStore } from '@stores/configStore';
 import MonacoDiffViewer from '@/components/MonacoDiffViewer.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 
@@ -85,22 +86,26 @@ interface Emits {
 const emit = defineEmits<Emits>();
 
 // 内部状态
+const configStore = useConfigStore();
 const internalSelectedFile = ref<string>('');
 const searchQuery = ref<string>(''); // 搜索关键词
-// 视图模式：列表或树状（从 localStorage 读取，与 GitStatus 同步）
-const FILE_LIST_VIEW_MODE_KEY = 'zen-gitsync-file-list-view-mode';
-const savedViewMode = localStorage.getItem(FILE_LIST_VIEW_MODE_KEY) as 'list' | 'tree' | null;
-const viewMode = ref<'list' | 'tree'>(savedViewMode || 'list');
-// 分割比例（百分比），持久化到 localStorage
-// 采用与项目一致的命名风格，便于在应用存储中查看
-const LEGACY_SPLIT_KEY = 'fileDiff.splitPercent';
-const SPLIT_KEY = 'zen-gitsync-filediff-ratio';
-const savedSplit = localStorage.getItem(SPLIT_KEY) ?? localStorage.getItem(LEGACY_SPLIT_KEY);
-const initialSplit = (() => {
-  const v = savedSplit ? parseFloat(savedSplit) : 35;
-  return isNaN(v) ? 35 : Math.min(85, Math.max(15, v));
-})();
-const splitPercent = ref<number>(initialSplit);
+
+// 工具：范围约束（前置声明，computed 中需要使用）
+const clampPercent = (v: number) => Math.min(85, Math.max(15, v));
+
+// 视图模式：列表或树状（从 configStore.ui.fileListViewMode 读取，与 GitStatus 通过同一个 ref 自动同步）
+// 之前用 localStorage 持久化，因随机端口启动失效，改为 configStore 写入 ~/.git-commit-tool.json
+const viewMode = computed<'list' | 'tree'>({
+  get: () => configStore.ui.fileListViewMode,
+  set: (v) => { configStore.ui.fileListViewMode = v }
+});
+// 分割比例（百分比），持久化到 configStore.ui.fileDiffSplitPercent
+// 旧实现：localStorage 键 'zen-gitsync-filediff-ratio' / 兼容键 'fileDiff.splitPercent'——已删除
+// 双向 computed：读时 clamp，写时同步到 configStore（自动 watch 防抖落盘）
+const splitPercent = computed<number>({
+  get: () => clampPercent(configStore.ui.fileDiffSplitPercent),
+  set: (v) => { configStore.ui.fileDiffSplitPercent = clampPercent(v) }
+});
 
 // 计算属性
 const currentSelectedFile = computed(() => {
@@ -171,17 +176,16 @@ watch(filteredFiles, () => {
   }
 }, { deep: true });
 
-// 监听视图模式变化，切换到树视图时初始化数据，并保存到 localStorage
+// 监听视图模式变化，切换到树视图时初始化数据
+// 持久化由 configStore 的 watch(ui.value.fileListViewMode) 自动处理
+// 保留自定义事件作为冗余通知通道
 watch(viewMode, (newMode) => {
   if (newMode === 'tree') {
     updateTreeData();
   }
-  // 保存到 localStorage，与 GitStatus 同步
-  localStorage.setItem(FILE_LIST_VIEW_MODE_KEY, newMode);
-  
   // 触发自定义事件，通知其他组件视图模式已变化
-  window.dispatchEvent(new CustomEvent('file-list-view-mode-change', { 
-    detail: { mode: newMode } 
+  window.dispatchEvent(new CustomEvent('file-list-view-mode-change', {
+    detail: { mode: newMode }
   }));
 });
 
@@ -896,34 +900,11 @@ watch(() => props.files, (newFiles) => {
   }
 }, { immediate: true });
 
-// 工具：范围约束 & 持久化
-const clampPercent = (v: number) => Math.min(85, Math.max(15, v));
-const persistSplit = (v: number) => {
-  try {
-    const val = String(clampPercent(v));
-    localStorage.setItem(SPLIT_KEY, val);
-    // 兼容写入旧键，确保历史逻辑可读取
-    localStorage.setItem(LEGACY_SPLIT_KEY, val);
-  } catch {}
-};
-
-// 持久化分割比例（响应 v-model 变化）
-watch(splitPercent, (v) => {
-  persistSplit(v);
-});
+// splitPercent 已用 computed 双向绑定到 configStore，无需额外 watch 或 onMounted 重读
+// configStore.watch 会自动防抖落盘到 ~/.git-commit-tool.json
 
 // 确保每次挂载时都应用已保存的比例（对话框 destroy-on-close 时尤为重要）
 onMounted(() => {
-  try {
-    const saved = localStorage.getItem(SPLIT_KEY) ?? localStorage.getItem(LEGACY_SPLIT_KEY);
-    if (saved != null) {
-      const v = parseFloat(saved);
-      if (!isNaN(v)) {
-        splitPercent.value = clampPercent(v);
-      }
-    }
-  } catch {}
-  
   // 如果初始视图模式是树状，初始化树状数据
   if (viewMode.value === 'tree') {
     updateTreeData();
@@ -970,7 +951,7 @@ onMounted(() => {
       const percent = clampPercent((leftPx / width) * 100);
       if (percent !== splitPercent.value) {
         splitPercent.value = percent;
-        persistSplit(percent);
+        // 持久化由 watch(splitPercent) 自动处理
       }
     }
   };
@@ -1001,7 +982,7 @@ onMounted(() => {
       }
       if (!isNaN(percent)) {
         splitPercent.value = clampPercent(percent);
-        persistSplit(splitPercent.value);
+        // 持久化由 watch(splitPercent) 自动处理
       }
     }
   });

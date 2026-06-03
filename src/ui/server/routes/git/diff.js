@@ -264,4 +264,62 @@ export function registerGitDiffRoutes({
       });
     }
   });
+
+  // 批量撤回文件修改（未跟踪删除，已修改 checkout 还原）
+  // body: { filePaths: string[] }
+  // 返回: { success, count, results: [{ path, success, error? }] }
+  app.post('/api/revert_files', async (req, res) => {
+    const filePaths = Array.isArray(req.body?.filePaths) ? req.body.filePaths : []
+    if (filePaths.length === 0) {
+      return res.status(400).json({ success: false, error: '缺少文件路径参数' })
+    }
+
+    const results = []
+    let successCount = 0
+
+    for (const filePath of filePaths) {
+      try {
+        // 检查文件状态：未跟踪 ??、已暂存 A/M/D、已修改（空状态会返回空字符串）
+        const { stdout: statusOutput } = await execGitCommand(`git status --porcelain -- "${filePath}"`)
+
+        // 未跟踪的文件 (??) → 直接删除
+        if (statusOutput.startsWith('??')) {
+          try {
+            await fs.unlink(filePath)
+            results.push({ path: filePath, success: true, message: '未跟踪的文件已删除' })
+            successCount++
+            continue
+          } catch (err) {
+            results.push({ path: filePath, success: false, error: `删除文件失败: ${err?.message || err}` })
+            continue
+          }
+        }
+
+        // 已暂存的文件，先取消暂存（不影响工作区）
+        if (statusOutput.startsWith('A ') || statusOutput.startsWith('M ') || statusOutput.startsWith('D ')) {
+          await execGitCommand(`git reset HEAD -- "${filePath}"`)
+        }
+
+        // 已修改文件：丢弃工作区修改
+        if (statusOutput) {
+          await execGitCommand(`git checkout -- "${filePath}"`)
+          results.push({ path: filePath, success: true, message: '文件修改已撤回' })
+          successCount++
+        } else {
+          // 文件已无修改（可能在并发中被处理掉了）
+          results.push({ path: filePath, success: true, message: '文件无修改' })
+          successCount++
+        }
+      } catch (err) {
+        results.push({ path: filePath, success: false, error: err?.message || String(err) })
+      }
+    }
+
+    res.json({
+      success: true,
+      count: filePaths.length,
+      successCount,
+      results
+    })
+  });
 }

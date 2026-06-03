@@ -43,7 +43,21 @@ const defaultConfig = {
   theme: 'light',  // 主题: light | dark | auto
   locale: 'zh-CN',  // 语言: zh-CN | en-US
   // AI 模型配置
-  models: []
+  models: [],
+  // UI 状态（跨项目共享，存到顶层 ui 对象）
+  // 之前散落在 localStorage，因随机端口启动而失效，迁到文件持久化
+  ui: {
+    layout: { leftRatio: 0.25, midRatio: 0.375, rightRatio: 0.375, topRatio: 0.5 },
+    fileListViewMode: 'list',          // 'list' | 'tree'
+    fileDiffSplitPercent: 35,          // 15-85
+    commandConsole: {
+      expanded: true,
+      useTerminal: true,
+      showTerminalSessions: true,
+      splitPercent: 25,                // 15-85
+    },
+    editorAutoSave: false,
+  }
 };
 
 // 规范化项目路径作为配置键
@@ -121,16 +135,17 @@ async function loadConfig() {
     return { ...defaultConfig, ...raw };
   }
 
-  // 新版结构：{ projects: { [key]: projectConfig }, theme?, locale?, recentDirectories? }
+  // 新版结构：{ projects: { [key]: projectConfig }, theme?, locale?, ui?, recentDirectories? }
   const projectConfig = raw?.projects?.[key];
-  // 合并：默认配置 + 项目配置 + 全局通用设置（theme, locale, models）
-  // models 是全局配置（跨项目共享），始终取顶层，不使用项目级的（防止旧数据 models:[] 覆盖）
+  // 合并：默认配置 + 项目配置 + 全局通用设置（theme, locale, models, ui）
+  // models / ui 是全局配置（跨项目共享），始终取顶层，不使用项目级的（防止旧数据覆盖）
   return {
     ...defaultConfig,
     ...(projectConfig || {}),
     theme: raw?.theme ?? defaultConfig.theme,
     locale: raw?.locale ?? defaultConfig.locale,
-    models: raw?.models ?? defaultConfig.models
+    models: raw?.models ?? defaultConfig.models,
+    ui: raw?.ui ?? defaultConfig.ui
   };
 }
 
@@ -162,8 +177,8 @@ async function saveConfig(config) {
   }
 
   // 分离全局设置和项目设置
-  // models 也是全局配置（跨项目共享），和 theme/locale 一样存到顶层
-  const { theme, locale, models, ...projectConfig } = config;
+  // models / ui 也是全局配置（跨项目共享），和 theme/locale 一样存到顶层
+  const { theme, locale, models, ui, ...projectConfig } = config;
 
   // 保存全局设置到根级别
   if (theme !== undefined) {
@@ -174,6 +189,9 @@ async function saveConfig(config) {
   }
   if (models !== undefined) {
     raw.models = models;
+  }
+  if (ui !== undefined) {
+    raw.ui = ui;
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）

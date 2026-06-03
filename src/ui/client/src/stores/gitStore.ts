@@ -1542,21 +1542,70 @@ export const useGitStore = defineStore('git', () => {
       ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
-    
+
     try {
       isResetting.value = true
       const response = await fetch('/api/discard-all-changes', {
         method: 'POST'
       })
-      
+
       const result = await response.json()
       if (result.success) {
         ElMessage.success($t('@C298B:已清除所有本地更改'))
-        
+
         // 刷新状态和日志
         fetchStatus()
         fetchLog()
-        
+
+        return true
+      } else {
+        ElMessage.error(`${$t('@C298B:操作失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:操作失败: ')}${(error as Error).message}`)
+      return false
+    } finally {
+      isResetting.value = false
+    }
+  }
+
+  // 清除所选文件的本地更改（未跟踪的删除，已修改的 checkout 还原）
+  // 调用后端 /api/revert_files，传入 paths 数组
+  async function discardSelectedFiles(paths: string[]) {
+    if (!isGitRepo.value) {
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
+      return false
+    }
+    if (!Array.isArray(paths) || paths.length === 0) {
+      ElMessage.warning($t('@C298B:未选择任何文件'))
+      return false
+    }
+
+    try {
+      isResetting.value = true
+      const response = await fetch('/api/revert_files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePaths: paths })
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        const count = Number(result?.count ?? paths.length)
+        const failed: string[] = Array.isArray(result?.results)
+          ? result.results.filter((r: any) => !r?.success).map((r: any) => String(r?.path || ''))
+          : []
+        if (failed.length > 0) {
+          ElMessage.warning(
+            `${$t('@C298B:已清除 ')}${count - failed.length}${$t('@C298B: 个文件，失败 ')}${failed.length}${$t('@C298B: 个')}`,
+          )
+        } else {
+          ElMessage.success(`${$t('@C298B:已清除 ')}${count}${$t('@C298B: 个所选文件')}`)
+        }
+
+        fetchStatus()
+        fetchLog()
         return true
       } else {
         ElMessage.error(`${$t('@C298B:操作失败: ')}${result.error}`)
@@ -2055,6 +2104,7 @@ export const useGitStore = defineStore('git', () => {
     resetHead,
     resetToRemote,
     discardAllChanges,
+    discardSelectedFiles,
     getRemoteUrl,
     addRemote,
     gitInit,

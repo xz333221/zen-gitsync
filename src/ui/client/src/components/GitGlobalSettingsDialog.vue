@@ -96,6 +96,80 @@
             </div>
           </div>
 
+          <!-- 界面（视图模式 / 分割比例 / 控制台 / 布局比例） -->
+          <div class="settings-section">
+            <div class="section-title">
+              <span>{{ $t('@42BB9:界面') }}</span>
+            </div>
+            <div class="settings-grid">
+              <!-- 文件列表视图模式 -->
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@42BB9:文件列表视图') }}</label>
+                <el-radio-group v-model="configStore.ui.fileListViewMode" size="default">
+                  <el-radio-button value="list">{{ $t('@42BB9:列表') }}</el-radio-button>
+                  <el-radio-button value="tree">{{ $t('@42BB9:树状') }}</el-radio-button>
+                </el-radio-group>
+              </div>
+
+              <!-- 文件差异分割比例 -->
+              <div class="setting-row">
+                <label class="setting-label">
+                  {{ $t('@42BB9:文件差异分割') }}
+                  <span class="setting-hint-inline">{{ configStore.ui.fileDiffSplitPercent }}%</span>
+                </label>
+                <el-slider
+                  v-model="configStore.ui.fileDiffSplitPercent"
+                  :min="15"
+                  :max="85"
+                  :step="1"
+                  class="setting-slider"
+                />
+              </div>
+
+              <!-- 命令控制台（跨整行的复合控件） -->
+              <div class="setting-row setting-row--full">
+                <label class="setting-label">{{ $t('@42BB9:命令控制台') }}</label>
+                <div class="console-sub-options">
+                  <el-switch
+                    v-model="configStore.ui.commandConsole.expanded"
+                    :active-text="$t('@42BB9:默认展开')"
+                  />
+                  <el-switch
+                    v-model="configStore.ui.commandConsole.useTerminal"
+                    :active-text="$t('@42BB9:使用终端执行')"
+                  />
+                  <el-switch
+                    v-model="configStore.ui.commandConsole.showTerminalSessions"
+                    :active-text="$t('@42BB9:显示终端会话')"
+                  />
+                  <div class="console-split-row">
+                    <span class="setting-hint-block">
+                      {{ $t('@42BB9:控制台高度比例') }}: {{ configStore.ui.commandConsole.splitPercent }}%
+                    </span>
+                    <el-slider
+                      v-model="configStore.ui.commandConsole.splitPercent"
+                      :min="15"
+                      :max="85"
+                      :step="1"
+                      class="setting-slider"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- 布局比例重置 -->
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@42BB9:布局比例') }}</label>
+                <div class="layout-actions">
+                  <el-button @click="onResetUiLayout" size="default">
+                    {{ $t('@42BB9:重置为默认布局') }}
+                  </el-button>
+                  <span class="setting-hint-block">{{ $t('@42BB9:恢复默认的左/中/右/上面板比例') }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- AI 模型配置 -->
           <div class="settings-section">
             <div class="section-title model-section-title">
@@ -427,7 +501,7 @@ const hasChanges = computed(() => {
     )
   }
   if (activeTab.value === 'editor') {
-    return tempEditorAutoSave.value !== configStore.editorAutoSave
+    return tempEditorAutoSave.value !== configStore.ui.editorAutoSave
   }
   return false
 })
@@ -536,7 +610,7 @@ watch(() => props.modelValue, async (val) => {
     aiModels.value = [...configStore.models]
     editingModelId.value = undefined
     // 加载编辑器设置
-    tempEditorAutoSave.value = configStore.editorAutoSave
+    tempEditorAutoSave.value = configStore.ui.editorAutoSave
     
     try {
       isLoading.value = true
@@ -652,20 +726,20 @@ async function saveGlobalGitConfigs() {
 // 保存通用设置
 async function saveGeneralSettings() {
   const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale } = {}
-  
+
   // 保存主题设置（如果与初始值不同或需要强制保存）
   if (tempTheme.value !== initTheme) {
     settings.theme = tempTheme.value
     initTheme = tempTheme.value
   }
-  
+
   // 保存语言设置（如果与初始值不同）
   if (tempLocale.value !== initLocale) {
     settings.locale = tempLocale.value
     localeStore.changeLocale(tempLocale.value)
     initLocale = tempLocale.value
   }
-  
+
   // 只要有设置项就保存（包括主题或语言）
   if (settings.theme !== undefined || settings.locale !== undefined) {
     const saved = await configStore.saveGeneralSettings(settings)
@@ -674,8 +748,25 @@ async function saveGeneralSettings() {
     }
     return saved
   }
-  
+
   return true
+}
+
+// 重置界面布局比例（左/中/右/上面板比例）
+// configStore.resetUiLayout() 会：
+//   1) 把 ui.layout 改回 defaultUiSettings.layout
+//   2) 立即落盘到 ~/.git-commit-tool.json（不走防抖）
+//   3) 返回新的 layout 让 App.vue 重新应用比例
+async function onResetUiLayout() {
+  try {
+    // 触发 configStore 内置的 resetUiLayout（落盘 + 内存更新）
+    const newLayout = await configStore.resetUiLayout()
+    // 通知 App.vue 立刻把新比例应用到 DOM
+    window.dispatchEvent(new CustomEvent('ui-layout-reset', { detail: { layout: newLayout } }))
+    ElMessage.success($t('@42BB9:布局比例已重置为默认值'))
+  } catch (e) {
+    ElMessage.error(`${$t('@42BB9:重置布局失败: ')}${(e as Error).message}`)
+  }
 }
 
 // 保存设置
@@ -689,9 +780,9 @@ async function handleSave() {  // 配置编辑 tab 单独处理
     await saveConfigJson()
     return
   }
-  // 编辑器设置直接写入 store（localStorage 自动持久化）
+  // 编辑器设置直接写入 store（watch 自动持久化到文件）
   if (activeTab.value === 'editor') {
-    configStore.editorAutoSave = tempEditorAutoSave.value
+    configStore.ui.editorAutoSave = tempEditorAutoSave.value
     ElMessage.success($t('@42BB9:编辑器设置已保存'))
     visible.value = false
     return
@@ -946,6 +1037,47 @@ async function openSystemConfigFile() {
 
 ::deep(.settings-grid .el-input) {
   width: 100%;
+}
+
+/* "界面" 子分区专用样式 */
+/* 命令控制台不跨整行——让它在 col 1 单元格内，避免里面的 slider 撑满整个对话框宽度。
+   保持默认的 .setting-row 布局（160px label + 1fr control），
+   1fr 区域 = col 1 宽度 - 160px，与"文件差异分割"slider 所在 col 2 的 1fr 区域等宽，
+   两个 slider 自然对齐。 */
+.setting-row--full {
+  align-items: start; /* label 顶部对齐到 sub-options 顶部 */
+}
+.console-sub-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+.console-split-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: var(--spacing-xs);
+}
+.layout-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+.setting-hint-inline {
+  margin-left: 8px;
+  font-size: var(--font-size-xs);
+  color: var(--el-text-color-secondary);
+  font-weight: 400;
+}
+.setting-hint-block {
+  font-size: var(--font-size-xs);
+  color: var(--el-text-color-secondary);
+}
+.setting-slider {
+  width: 100%;
+}
+::deep(.setting-slider .el-slider__runway) {
+  margin: 0;
 }
 
 /* 深色主题适配 */

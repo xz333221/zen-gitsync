@@ -13,15 +13,21 @@ export const LOCALE_NAMES: Record<SupportLocale, string> = {
   'en-US': 'English',
 }
 
-// 从 localStorage 获取保存的语言，默认为中文
+// 从 localStorage 读取已保存的语言作为 i18n bootstrap 兜底
+// 注意：localStorage 只是早期 bootstrap 阶段能拿到的最快来源；
+// 文件 ~/.git-commit-tool.json 是唯一真相源。configStore.loadConfig()
+// 完成后会调 setLocale(configData.locale) 覆盖此值。
+// 一次性迁移：setLocale 不再写 localStorage；configStore 启动时会清掉旧 'locale' 键。
 const getDefaultLocale = (): SupportLocale => {
-  const savedLocale = localStorage.getItem('locale') as SupportLocale
-  if (savedLocale && SUPPORT_LOCALES.includes(savedLocale)) {
-    return savedLocale
-  }
+  let saved: SupportLocale | null = null
+  try {
+    const raw = localStorage.getItem('locale') as SupportLocale | null
+    if (raw && SUPPORT_LOCALES.includes(raw)) saved = raw
+  } catch { /* localStorage 不可用时静默 */ }
+  if (saved) return saved
   // 检测浏览器语言
-  const browserLang = navigator.language
-  if (browserLang.startsWith('zh')) {
+  const browserLang = typeof navigator !== 'undefined' ? navigator.language : ''
+  if (browserLang && browserLang.startsWith('zh')) {
     return 'zh-CN'
   }
   return 'zh-CN' // 默认中文
@@ -39,12 +45,15 @@ const i18n = createI18n({
   globalInjection: true, // 全局注入 $t 函数
 })
 
-// 切换语言
+// 切换语言（i18n 运行时）
+// 持久化由 configStore.saveGeneralSettings({ locale }) 统一负责，写到 ~/.git-commit-tool.json
+// 此函数不再写 localStorage；setLocale 只负责更新 i18n 运行时和 html[lang] 属性
 export function setLocale(locale: SupportLocale) {
   i18n.global.locale.value = locale
-  localStorage.setItem('locale', locale)
   // 更新 HTML lang 属性
-  document.querySelector('html')?.setAttribute('lang', locale)
+  if (typeof document !== 'undefined') {
+    document.querySelector('html')?.setAttribute('lang', locale)
+  }
 }
 
 // 获取当前语言

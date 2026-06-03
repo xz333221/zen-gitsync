@@ -9,17 +9,24 @@ import IconButton from '@components/IconButton.vue'
 interface Props {
   variant?: 'icon' | 'text'
   size?: 'small' | 'medium' | 'large'
+  // 传入时切换为"清除所选"模式：tooltip / 确认弹窗 / 行为都改为只重置 selectedFiles
+  selectedFiles?: string[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
   variant: 'icon',
-  size: 'large'
+  size: 'large',
+  selectedFiles: () => []
 })
 
 const gitStore = useGitStore()
 
+// 是否处于"清除所选"模式（传入了非空的 selectedFiles）
+const isSelectiveMode = computed(() => Array.isArray(props.selectedFiles) && props.selectedFiles.length > 0)
+const selectedCount = computed(() => props.selectedFiles?.length ?? 0)
+
 const shouldShowDiscard = computed(() => {
-  // 如果有任何文件变更（包括未跟踪），就显示
+  // 任何文件变更（包括未跟踪）就显示
   return gitStore.fileList.length > 0
 })
 
@@ -48,34 +55,70 @@ async function discardAllChanges() {
     }
   }
 }
+
+async function discardSelectedChanges() {
+  const paths = props.selectedFiles ?? []
+  if (paths.length === 0) return
+  try {
+    await ElMessageBox.confirm(
+      $t('@76872:确定要清除所选的 {count} 个文件吗？', { count: paths.length }),
+      $t('@76872:清除所选文件'),
+      {
+        confirmButtonText: $t('@76872:确定'),
+        cancelButtonText: $t('@76872:取消'),
+        confirmButtonClass: 'el-button--danger',
+        dangerouslyUseHTMLString: true,
+        type: 'warning'
+      }
+    )
+
+    const result = await gitStore.discardSelectedFiles(paths)
+    if (result) {
+      gitStore.fetchStatus()
+      gitStore.fetchLog()
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('清除所选文件失败:', error)
+    }
+  }
+}
 </script>
 
 <template>
   <template v-if="shouldShowDiscard">
     <IconButton
       v-if="props.variant === 'icon'"
-      :tooltip="$t('@76872:清除所有本地更改')"
+      :tooltip="isSelectiveMode
+        ? $t('@76872:清除所选 {count} 个文件', { count: selectedCount })
+        : $t('@76872:清除所有本地更改')"
       :size="props.size"
       hover-color="#f56c6c"
       :disabled="gitStore.isResetting"
-      @click="discardAllChanges"
+      @click="isSelectiveMode ? discardSelectedChanges() : discardAllChanges()"
     >
       <el-icon><DeleteFilled /></el-icon>
     </IconButton>
 
     <el-tooltip
       v-else
-      :content="'git reset --hard && git clean -fd'"
+      :content="isSelectiveMode
+        ? $t('@76872:对所选文件执行 git checkout / git clean')
+        : 'git reset --hard && git clean -fd'"
       placement="top"
     >
       <el-button
         type="danger"
         :icon="DeleteFilled"
-        @click="discardAllChanges"
+        @click="isSelectiveMode ? discardSelectedChanges() : discardAllChanges()"
         :loading="gitStore.isResetting"
         class="action-button danger-button"
       >
-        {{ $t('@76872:清除所有本地更改') }}
+        {{
+          isSelectiveMode
+            ? $t('@76872:清除所选 {count} 个文件', { count: selectedCount })
+            : $t('@76872:清除所有本地更改')
+        }}
       </el-button>
     </el-tooltip>
   </template>
@@ -85,7 +128,7 @@ async function discardAllChanges() {
 .danger-button {
   background-color: var(--el-color-danger);
   border-color: var(--el-color-danger);
-  
+
   &:hover {
     background-color: var(--el-color-danger-light-3);
     border-color: var(--el-color-danger-light-3);

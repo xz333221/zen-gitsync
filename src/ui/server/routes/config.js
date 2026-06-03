@@ -736,7 +736,7 @@ export function registerConfigRoutes({
 
       // 读取原始配置以保留项目设置
       const rawConfig = await configManager.readRawConfigFile()
-      
+
       // 更新全局设置
       if (theme && ['light', 'dark', 'auto'].includes(theme)) {
         rawConfig.theme = theme
@@ -744,8 +744,33 @@ export function registerConfigRoutes({
       if (locale && ['zh-CN', 'en-US'].includes(locale)) {
         rawConfig.locale = locale
       }
-      
+
       // 直接写入原始配置，避免覆盖项目设置
+      await configManager.writeRawConfigFile(rawConfig)
+      res.json({ success: true })
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+
+  // 保存 UI 状态（视图模式/分割比例/控制台状态/布局比例/编辑器自动保存等）
+  // 接受 partial body，浅合并到顶层 ui 对象。例：{ layout: {...} } / { commandConsole: {...} } / { fileListViewMode: 'tree' }
+  app.post('/api/config/save-ui-settings', express.json(), async (req, res) => {
+    try {
+      const partial = req.body && typeof req.body === 'object' ? req.body : {}
+
+      const rawConfig = await configManager.readRawConfigFile()
+
+      // 确保 ui 容器存在
+      if (!rawConfig.ui || typeof rawConfig.ui !== 'object' || Array.isArray(rawConfig.ui)) {
+        rawConfig.ui = {}
+      }
+
+      // 浅合并顶层 ui 字段（支持嵌套对象整体替换，如 commandConsole）
+      for (const key of Object.keys(partial)) {
+        rawConfig.ui[key] = partial[key]
+      }
+
       await configManager.writeRawConfigFile(rawConfig)
       res.json({ success: true })
     } catch (error) {

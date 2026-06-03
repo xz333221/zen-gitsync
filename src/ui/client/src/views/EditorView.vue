@@ -229,7 +229,7 @@ function mountEditor() {
 
   // 失去焦点时，如果开启自动保存则保存
   editorInstance.value.onDidBlurEditorText(() => {
-    if (configStore.editorAutoSave) {
+    if (configStore.ui.editorAutoSave) {
       const tab = activeTab()
       if (tab?.isDirty) saveCurrentFile(false)
     }

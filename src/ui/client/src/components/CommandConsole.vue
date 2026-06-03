@@ -439,8 +439,9 @@ type TerminalSession = {
   alive?: boolean;
 };
 
-// 控制整个控制台展开/收起（从localStorage读取，默认展开）
-const isConsoleExpanded = ref(localStorage.getItem('isConsoleExpanded') !== 'false');
+// 控制整个控制台展开/收起的开关不再在本组件内维护：
+// `configStore.ui.commandConsole.expanded` 由设置菜单的"命令控制台 > 默认展开"开关控制
+// 需要读这个值的地方直接读 configStore.ui.commandConsole.expanded
 
 // 创建 ANSI 转 HTML 转换器
 const ansiConverter = new Convert({
@@ -477,13 +478,19 @@ function ansiToHtml(text: string): string {
 // 控制全屏状态
 const isFullscreen = ref(false);
 
-// 控制是否使用终端执行（从localStorage读取，默认开启以使用终端执行）
-const useTerminal = ref(localStorage.getItem('useTerminal') !== 'false');
+// 控制是否使用终端执行（从 configStore.ui.commandConsole.useTerminal 读取，默认开启）
+const useTerminal = computed<boolean>({
+  get: () => configStore.ui.commandConsole.useTerminal,
+  set: (v) => { configStore.ui.commandConsole.useTerminal = v }
+});
 
 const terminalSessions = ref<TerminalSession[]>([]);
 const terminalSessionsLoading = ref(false);
-const savedShowTerminalSessions = localStorage.getItem('showTerminalSessions');
-const showTerminalSessions = ref(savedShowTerminalSessions == null ? true : savedShowTerminalSessions === 'true');
+// 是否显示终端会话面板（从 configStore.ui.commandConsole.showTerminalSessions 读取）
+const showTerminalSessions = computed<boolean>({
+  get: () => configStore.ui.commandConsole.showTerminalSessions,
+  set: (v) => { configStore.ui.commandConsole.showTerminalSessions = v }
+});
 const terminalSessionsCount = computed(() => terminalSessions.value.length);
 
 const startupAutoRunTriggered = ref(false);
@@ -586,14 +593,14 @@ async function autoRunProjectStartupItems() {
   }
 }
 
-const COMMAND_CONSOLE_SPLIT_KEY = 'zen-gitsync-commandconsole-ratio';
 const clampPercent = (v: number) => Math.min(85, Math.max(15, v));
-const savedSplit = localStorage.getItem(COMMAND_CONSOLE_SPLIT_KEY);
-const initialSplit = (() => {
-  const v = savedSplit ? parseFloat(savedSplit) : 25;
-  return isNaN(v) ? 25 : clampPercent(v);
-})();
-const splitPercent = ref<number>(initialSplit);
+// 命令控制台上下分割比例（从 configStore.ui.commandConsole.splitPercent 读取）
+// 旧实现：localStorage 键 'zen-gitsync-commandconsole-ratio'——已删除
+// 双向 computed：读时 clamp，写时同步到 configStore（自动 watch 防抖落盘）
+const splitPercent = computed<number>({
+  get: () => clampPercent(configStore.ui.commandConsole.splitPercent),
+  set: (v) => { configStore.ui.commandConsole.splitPercent = clampPercent(v) }
+});
 
 const splitterRef = ref<any>(null);
 const getSplitterWidth = () => {
@@ -604,12 +611,6 @@ const getSplitterWidth = () => {
   } catch {
     return 0;
   }
-};
-
-const persistSplit = (v: number) => {
-  try {
-    localStorage.setItem(COMMAND_CONSOLE_SPLIT_KEY, String(clampPercent(v)));
-  } catch {}
 };
 
 const updateSplitFromDom = () => {
@@ -623,7 +624,7 @@ const updateSplitFromDom = () => {
     const percent = clampPercent((leftPx / width) * 100);
     if (percent !== splitPercent.value) {
       splitPercent.value = percent;
-      persistSplit(percent);
+      // 持久化由 computed setter 自动处理
     }
   }
 };
@@ -652,7 +653,7 @@ const panelSize = computed<string>({
     }
     if (!isNaN(percent)) {
       splitPercent.value = clampPercent(percent);
-      persistSplit(splitPercent.value);
+      // 持久化由 computed setter 自动处理
     }
   }
 });
@@ -2369,25 +2370,12 @@ function stopInteractiveCommand(rec: ConsoleRecord) {
   consoleHistory.value = [...consoleHistory.value];
 }
 
-// 监听useTerminal变化并保存到localStorage
-watch(useTerminal, (newValue) => {
-  localStorage.setItem('useTerminal', String(newValue));
-});
-
+// 监听 showTerminalSessions 变化，保留刷新会话状态的副作用
+// 持久化由 computed setter 写入 configStore，再由 configStore 的 watch 防抖落盘
 watch(showTerminalSessions, (newValue) => {
-  localStorage.setItem('showTerminalSessions', String(newValue));
   if (newValue) {
     loadTerminalSessionsStatus(true);
   }
-});
-
-watch(splitPercent, (v) => {
-  persistSplit(v);
-});
-
-// 监听isConsoleExpanded变化并保存到localStorage
-watch(isConsoleExpanded, (newValue) => {
-  localStorage.setItem('isConsoleExpanded', String(newValue));
 });
 
 // 初始化Socket.IO连接

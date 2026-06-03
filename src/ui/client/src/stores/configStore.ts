@@ -171,53 +171,62 @@ export const useConfigStore = defineStore('config', () => {
   const autoQuickPushOnEnter = ref(false)
   // 推送前自动拉取远程更新（从文件配置加载，默认true）
   const pullBeforePush = ref(true)
-  // 主题设置（从localStorage加载，默认light）
+  // 主题设置（从文件配置加载，默认light）
   const theme = ref<'light' | 'dark' | 'auto'>('light')
-  // 语言设置（从localStorage加载，默认zh-CN）
+  // 语言设置（从文件配置加载，默认zh-CN）
   const locale = ref<SupportLocale>('zh-CN')
   // AI 模型列表
   const models = ref<ModelInfo[]>([])
-  // 编辑器自动保存（从localStorage加载，默认false）
-  const editorAutoSave = ref(false)
+
+  // ============================================================
+  // UI 状态（持久化到 ~/.git-commit-tool.json 的顶层 ui 字段）
+  // ============================================================
+  // 之前散落在 localStorage 里的视图模式/分割比例/控制台状态/布局比例
+  // 因随机端口启动而失效，迁到文件持久化。
+  type UiLayout = {
+    leftRatio: number
+    midRatio: number
+    rightRatio: number
+    topRatio: number
+  }
+
+  type UiCommandConsole = {
+    expanded: boolean
+    useTerminal: boolean
+    showTerminalSessions: boolean
+    splitPercent: number
+  }
+
+  type UiSettings = {
+    layout: UiLayout
+    fileListViewMode: 'list' | 'tree'
+    fileDiffSplitPercent: number
+    commandConsole: UiCommandConsole
+    editorAutoSave: boolean
+  }
+
+  const defaultUiSettings: UiSettings = {
+    layout: { leftRatio: 0.25, midRatio: 0.375, rightRatio: 0.375, topRatio: 0.5 },
+    fileListViewMode: 'list',
+    fileDiffSplitPercent: 35,
+    commandConsole: {
+      expanded: true,
+      useTerminal: true,
+      showTerminalSessions: true,
+      splitPercent: 25,
+    },
+    editorAutoSave: false,
+  }
+
+  // 浅拷贝默认值（避免外部 mutate 到 defaultUiSettings）
+  const ui = ref<UiSettings>(JSON.parse(JSON.stringify(defaultUiSettings)))
+  // UI 配置是否已从文件加载（防止 loadConfig 期间回写造成脏数据）
+  const isUiLoaded = ref(false)
 
   // 设置当前目录
   function setCurrentDirectory(dir: string) {
     currentDirectory.value = dir || ''
   }
-
-  // 初始化：从localStorage加载theme配置
-  const savedTheme = localStorage.getItem('zen-gitsync-theme') as 'light' | 'dark' | 'auto' | null
-  if (savedTheme && ['light', 'dark', 'auto'].includes(savedTheme)) {
-    theme.value = savedTheme
-  }
-
-  // 监听theme变化，自动保存到localStorage并应用
-  watch(theme, (newValue) => {
-    localStorage.setItem('zen-gitsync-theme', newValue)
-    applyTheme(newValue)
-  })
-
-  // 初始化：从localStorage加载locale配置
-  const savedLocale = localStorage.getItem('zen-gitsync-locale') as SupportLocale | null
-  if (savedLocale && ['zh-CN', 'en-US'].includes(savedLocale)) {
-    locale.value = savedLocale
-  }
-
-  // 监听locale变化，自动保存到localStorage
-  watch(locale, (newValue) => {
-    localStorage.setItem('zen-gitsync-locale', newValue)
-  })
-
-  // 初始化：从localStorage加载editorAutoSave
-  const savedEditorAutoSave = localStorage.getItem('zen-gitsync-editor-auto-save')
-  if (savedEditorAutoSave !== null) {
-    editorAutoSave.value = savedEditorAutoSave === 'true'
-  }
-
-  // 监听editorAutoSave变化，自动保存到localStorage
-  watch(editorAutoSave, (newValue) => {
-    localStorage.setItem('zen-gitsync-editor-auto-save', String(newValue))
-  })
 
   // 应用主题
   function applyTheme(themeValue: 'light' | 'dark' | 'auto') {
@@ -367,7 +376,119 @@ export const useConfigStore = defineStore('config', () => {
       if (configData.currentDirectory) {
         currentDirectory.value = configData.currentDirectory
       }
-      
+
+      // ============================================================
+      // 加载 UI 状态
+      // ============================================================
+      // 一次性迁移：若文件 ui 字段从未写入过，从 localStorage 旧键搬过来
+      // 搬完即清空 localStorage 旧键，避免下次再触发
+      if (configData.ui == null) {
+        const ls = (k: string) => {
+          try { return localStorage.getItem(k) } catch { return null }
+        }
+        const legacy: Partial<UiSettings> = {}
+
+        // 布局比例
+        const lLeft = ls('zen-gitsync-layout-left-ratio')
+        const lMid = ls('zen-gitsync-layout-mid-ratio')
+        const lRight = ls('zen-gitsync-layout-right-ratio')
+        const lTop = ls('zen-gitsync-layout-top-ratio')
+        if (lLeft || lMid || lRight || lTop) {
+          const num = (s: string | null, fallback: number) => {
+            const v = s == null ? NaN : parseFloat(s)
+            return Number.isFinite(v) ? v : fallback
+          }
+          legacy.layout = {
+            leftRatio: num(lLeft, defaultUiSettings.layout.leftRatio),
+            midRatio: num(lMid, defaultUiSettings.layout.midRatio),
+            rightRatio: num(lRight, defaultUiSettings.layout.rightRatio),
+            topRatio: num(lTop, defaultUiSettings.layout.topRatio),
+          }
+        }
+
+        // 文件列表视图模式
+        const lView = ls('zen-gitsync-file-list-view-mode')
+        if (lView === 'list' || lView === 'tree') {
+          legacy.fileListViewMode = lView
+        }
+
+        // 文件差异分割比例（兼容 fileDiff.splitPercent 旧键）
+        const lDiff = ls('zen-gitsync-filediff-ratio') ?? ls('fileDiff.splitPercent')
+        if (lDiff != null) {
+          const v = parseFloat(lDiff)
+          if (Number.isFinite(v)) legacy.fileDiffSplitPercent = Math.min(85, Math.max(15, v))
+        }
+
+        // 命令控制台 4 个字段
+        const lUse = ls('useTerminal')
+        const lExp = ls('isConsoleExpanded')
+        const lShow = ls('showTerminalSessions')
+        const lSplit = ls('zen-gitsync-commandconsole-ratio')
+        if (lUse !== null || lExp !== null || lShow !== null || lSplit != null) {
+          const split = lSplit != null ? parseFloat(lSplit) : NaN
+          legacy.commandConsole = {
+            useTerminal: lUse !== 'false',
+            expanded: lExp !== 'false',
+            showTerminalSessions: lShow == null ? true : lShow === 'true',
+            splitPercent: Number.isFinite(split) ? Math.min(85, Math.max(15, split)) : defaultUiSettings.commandConsole.splitPercent,
+          }
+        }
+
+        // 编辑器自动保存
+        const lAuto = ls('zen-gitsync-editor-auto-save')
+        if (lAuto != null) {
+          legacy.editorAutoSave = lAuto === 'true'
+        }
+
+        // 合并到 ref（先于保存，保证内存里就是迁移后的值）
+        if (Object.keys(legacy).length > 0) {
+          ui.value = { ...ui.value, ...legacy } as UiSettings
+        }
+
+        // 立即落盘（不等防抖）
+        if (Object.keys(legacy).length > 0) {
+          saveUiSettings(legacy, { immediate: true }).catch((e) => {
+            console.error('迁移 UI 设置到文件失败:', e)
+          })
+        }
+
+        // 清空所有旧 localStorage 键（一次性清理）
+        try {
+          ;[
+            'zen-gitsync-theme', 'zen-gitsync-locale', 'zen-gitsync-editor-auto-save',
+            'zen-gitsync-file-list-view-mode', 'zen-gitsync-filediff-ratio', 'fileDiff.splitPercent',
+            'isConsoleExpanded', 'useTerminal', 'showTerminalSessions',
+            'zen-gitsync-commandconsole-ratio',
+            'zen-gitsync-layout-left-ratio', 'zen-gitsync-layout-mid-ratio',
+            'zen-gitsync-layout-right-ratio', 'zen-gitsync-layout-top-ratio',
+            'locale',
+          ].forEach((k) => localStorage.removeItem(k))
+        } catch (e) {
+          // localStorage 不可用时静默忽略
+        }
+      } else {
+        // 已有 ui 字段：从响应合并到 ref（缺字段走默认值补齐）
+        ui.value = {
+          layout: { ...defaultUiSettings.layout, ...(configData.ui.layout || {}) },
+          fileListViewMode: configData.ui.fileListViewMode === 'tree' ? 'tree' : 'list',
+          fileDiffSplitPercent: Number.isFinite(Number(configData.ui.fileDiffSplitPercent))
+            ? Math.min(85, Math.max(15, Number(configData.ui.fileDiffSplitPercent)))
+            : defaultUiSettings.fileDiffSplitPercent,
+          commandConsole: {
+            expanded: typeof configData.ui.commandConsole?.expanded === 'boolean' ? configData.ui.commandConsole.expanded : defaultUiSettings.commandConsole.expanded,
+            useTerminal: typeof configData.ui.commandConsole?.useTerminal === 'boolean' ? configData.ui.commandConsole.useTerminal : defaultUiSettings.commandConsole.useTerminal,
+            showTerminalSessions: typeof configData.ui.commandConsole?.showTerminalSessions === 'boolean' ? configData.ui.commandConsole.showTerminalSessions : defaultUiSettings.commandConsole.showTerminalSessions,
+            splitPercent: Number.isFinite(Number(configData.ui.commandConsole?.splitPercent))
+              ? Math.min(85, Math.max(15, Number(configData.ui.commandConsole.splitPercent)))
+              : defaultUiSettings.commandConsole.splitPercent,
+          },
+          editorAutoSave: typeof configData.ui.editorAutoSave === 'boolean' ? configData.ui.editorAutoSave : defaultUiSettings.editorAutoSave,
+        }
+      }
+
+      // 标记 UI 配置已加载（启动防抖写入的 watch）
+      isUiLoaded.value = true
+
       // 标记为已加载
       isLoaded.value = true
       
@@ -409,6 +530,71 @@ export const useConfigStore = defineStore('config', () => {
   watch([isStandardCommit, skipHooks, autoQuickPushOnEnter, autoSetDefaultMessage, autoClosePushModal, pullBeforePush], () => {
     if (isLoaded.value) saveCommitSettings()
   })
+
+  // ============================================================
+  // UI 状态自动持久化（防抖 + 浅合并 partial body）
+  // ============================================================
+  // 多个 ui 子字段可能同时变化（拖拽布局时尤其），合并到一次请求避免抖动
+  let _uiSaveTimer: ReturnType<typeof setTimeout> | null = null
+  let _uiSavePending: Record<string, any> = {}
+  const UI_SAVE_DEBOUNCE_MS = 300
+
+  async function flushUiSaveNow() {
+    if (_uiSaveTimer) {
+      clearTimeout(_uiSaveTimer)
+      _uiSaveTimer = null
+    }
+    if (Object.keys(_uiSavePending).length === 0) return
+    const partial = _uiSavePending
+    _uiSavePending = {}
+    try {
+      await fetch('/api/config/save-ui-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(partial)
+      })
+    } catch (e) {
+      console.error('保存 UI 设置失败:', e)
+    }
+  }
+
+  /**
+   * 持久化 UI 状态的一部分到文件
+   * @param partial 顶层 ui 字段的浅合并片段，例如 { fileListViewMode: 'tree' } 或 { commandConsole: {...} }
+   * @param options.immediate 立即发送请求（用于一次性操作如 resetUiLayout、迁移），跳过防抖
+   */
+  async function saveUiSettings(partial: Record<string, any>, options: { immediate?: boolean } = {}) {
+    if (!isUiLoaded.value) return // 未加载完前不要回写
+    if (options.immediate) {
+      // 合并 pending（防止与正在排队的防抖请求冲突）
+      Object.assign(_uiSavePending, partial)
+      await flushUiSaveNow()
+      return
+    }
+    Object.assign(_uiSavePending, partial)
+    if (_uiSaveTimer) clearTimeout(_uiSaveTimer)
+    _uiSaveTimer = setTimeout(() => { flushUiSaveNow() }, UI_SAVE_DEBOUNCE_MS)
+  }
+
+  /** 重置布局比例到默认（应用到 DOM + 立即落盘） */
+  async function resetUiLayout() {
+    ui.value.layout = { ...defaultUiSettings.layout }
+    // 落盘
+    await saveUiSettings({ layout: ui.value.layout }, { immediate: true })
+    return ui.value.layout
+  }
+
+  // 监听 ui 子字段变化，自动落盘
+  watch(() => ui.value.fileListViewMode, (v) => { if (isUiLoaded.value) saveUiSettings({ fileListViewMode: v }) })
+  watch(() => ui.value.fileDiffSplitPercent, (v) => { if (isUiLoaded.value) saveUiSettings({ fileDiffSplitPercent: v }) })
+  watch(() => ui.value.editorAutoSave, (v) => { if (isUiLoaded.value) saveUiSettings({ editorAutoSave: v }) })
+  watch(() => ui.value.layout, (v) => { if (isUiLoaded.value) saveUiSettings({ layout: v }) }, { deep: true })
+  watch(() => ui.value.commandConsole, (v) => { if (isUiLoaded.value) saveUiSettings({ commandConsole: v }) }, { deep: true })
+
+  // 页面卸载时强制 flush 待发送的请求，避免拖拽松手后立刻关闭导致丢数据
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', () => { flushUiSaveNow() })
+  }
 
   // 保存默认提交信息
   async function saveDefaultMessage(message: string) {
@@ -1031,7 +1217,8 @@ export const useConfigStore = defineStore('config', () => {
     pullBeforePush,
     theme,
     locale,
-    editorAutoSave,
+    ui,
+    isUiLoaded,
 
     // 方法
     loadConfig,
@@ -1040,6 +1227,8 @@ export const useConfigStore = defineStore('config', () => {
     saveTemplate,
     saveModels,
     saveGeneralSettings,
+    saveUiSettings,
+    resetUiLayout,
     applyTheme,
     saveDefaultMessage,
     deleteTemplate,

@@ -180,10 +180,12 @@ const collapsedGroups = ref({
   untracked: false, // 未跟踪的文件
   conflicted: false // 冲突文件
 })
-// 视图模式：列表或树状（从 localStorage 读取）
-const FILE_LIST_VIEW_MODE_KEY = 'zen-gitsync-file-list-view-mode';
-const savedViewMode = localStorage.getItem(FILE_LIST_VIEW_MODE_KEY) as 'list' | 'tree' | null;
-const viewMode = ref<'list' | 'tree'>(savedViewMode || 'list');
+// 视图模式：列表或树状（从 configStore.ui.fileListViewMode 读取）
+// 该值持久化到 ~/.git-commit-tool.json（之前在 localStorage，因随机端口启动失效）
+const viewMode = computed<'list' | 'tree'>({
+  get: () => configStore.ui.fileListViewMode,
+  set: (v) => { configStore.ui.fileListViewMode = v }
+});
 // 添加切换目录相关的状态
 // const isDirectoryDialogVisible = ref(false)
 // const newDirectoryPath = ref('')
@@ -795,17 +797,16 @@ watch(() => gitStore.fileList, () => {
   }
 }, { deep: true });
 
-// 监听视图模式变化，切换到树视图时初始化数据，并保存到 localStorage
+// 监听视图模式变化，切换到树视图时初始化数据
+// 持久化由 configStore 的 watch(ui.value.fileListViewMode) 自动处理
+// 保留自定义事件作为冗余通知通道（防其他未直接绑 store 的组件）
 watch(viewMode, (newMode) => {
   if (newMode === 'tree') {
     updateTreeData();
   }
-  // 保存到 localStorage
-  localStorage.setItem(FILE_LIST_VIEW_MODE_KEY, newMode);
-  
   // 触发自定义事件，通知其他组件视图模式已变化
-  window.dispatchEvent(new CustomEvent('file-list-view-mode-change', { 
-    detail: { mode: newMode } 
+  window.dispatchEvent(new CustomEvent('file-list-view-mode-change', {
+    detail: { mode: newMode }
   }));
 });
 
@@ -1155,7 +1156,14 @@ defineExpose({
               />
               <h4>{{ $t('@13D1C:文件列表') }}</h4>
               <span v-if="gitStore.fileList.length > 0" class="file-count">({{ gitStore.fileList.length }})</span>
-              <DiscardAllChangesButton v-if="!isSelectionMode" size="small" />
+              <!-- 始终显示"重置"按钮：
+                   - 非选择模式：清除所有本地更改
+                   - 选择模式且有勾选文件：只清除勾选的文件
+                   - 选择模式但未勾选任何文件：仍按"清除所有"兜底（按钮态由按钮内部根据 selectedFiles 长度决定） -->
+              <DiscardAllChangesButton
+                :selected-files="isSelectionMode ? selectedFilesList : []"
+                size="small"
+              />
             </div>
             <div class="view-mode-toggle">
               <IconButton

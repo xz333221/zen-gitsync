@@ -132,6 +132,18 @@ onBeforeUnmount(() => {
   instancesStore.stop()
 })
 
+// 监听设置菜单的"重置布局"事件：把新比例立刻应用到 DOM
+// 事件由 GitGlobalSettingsDialog.vue 的 onResetUiLayout 派发
+function handleUiLayoutReset() {
+  // configStore.ui.layout 已经被 resetUiLayout 改回默认值
+  // 直接重读即可（loadLayoutRatios 内部已读 configStore.ui.layout）
+  loadLayoutRatios()
+}
+window.addEventListener('ui-layout-reset', handleUiLayoutReset)
+onBeforeUnmount(() => {
+  window.removeEventListener('ui-layout-reset', handleUiLayoutReset)
+})
+
 // 处理分支变更事件
 function handleBranchChanged() {
   // 刷新Git状态
@@ -159,7 +171,7 @@ let initialY = 0;
 let initialGridTemplateColumns = '';
 let initialGridTemplateRows = '';
 
-// 保存布局比例到localStorage
+// 保存布局比例到 configStore（持久化到 ~/.git-commit-tool.json 的 ui.layout 字段）
 function saveLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
@@ -184,42 +196,36 @@ function saveLayoutRatios() {
     const totalHeight = topRowHeight + bottomRowHeight;
     const topRatio = topRowHeight / totalHeight;
 
-    // 保存到localStorage
-    localStorage.setItem('zen-gitsync-layout-left-ratio', leftRatio.toString());
-    localStorage.setItem('zen-gitsync-layout-mid-ratio', midRatio.toString());
-    localStorage.setItem('zen-gitsync-layout-right-ratio', rightRatio.toString());
-    localStorage.setItem('zen-gitsync-layout-top-ratio', topRatio.toString());
+    // 写入 configStore（watch 自动防抖落盘）
+    configStore.ui.layout = { leftRatio, midRatio, rightRatio, topRatio };
 
     console.log(`${$t('@F13B4:布局比例已保存 - 左侧: ')}${(leftRatio * 100).toFixed(0)}${$t('@F13B4:%, 中间: ')}${(midRatio * 100).toFixed(0)}${$t('@F13B4:%, 右侧: ')}${(rightRatio * 100).toFixed(0)}${$t('@F13B4:%, 上方: ')}${(topRatio * 100).toFixed(0)}%`);
   }
 }
 
-// 加载布局比例
+// 加载布局比例（从 configStore.ui.layout 读取）
 function loadLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
 
-  const savedLeftRatio = localStorage.getItem('zen-gitsync-layout-left-ratio');
-  const savedMidRatio = localStorage.getItem('zen-gitsync-layout-mid-ratio');
-  const savedRightRatio = localStorage.getItem('zen-gitsync-layout-right-ratio');
-  const savedTopRatio = localStorage.getItem('zen-gitsync-layout-top-ratio');
+  const layout = configStore.ui.layout;
+  const savedLeftRatio = Number.isFinite(layout?.leftRatio) ? layout.leftRatio : null;
+  const savedMidRatio = Number.isFinite(layout?.midRatio) ? layout.midRatio : null;
+  const savedRightRatio = Number.isFinite(layout?.rightRatio) ? layout.rightRatio : null;
+  const savedTopRatio = Number.isFinite(layout?.topRatio) ? layout.topRatio : null;
 
   // 应用三列区域比例
-  if (savedLeftRatio && savedMidRatio && savedRightRatio) {
-    const leftRatio = parseFloat(savedLeftRatio);
-    const midRatio = parseFloat(savedMidRatio);
-    const rightRatio = parseFloat(savedRightRatio);
-    gridLayout.style.gridTemplateColumns = `${leftRatio}fr 8px ${midRatio}fr 8px ${rightRatio}fr`;
+  if (savedLeftRatio != null && savedMidRatio != null && savedRightRatio != null) {
+    gridLayout.style.gridTemplateColumns = `${savedLeftRatio}fr 8px ${savedMidRatio}fr 8px ${savedRightRatio}fr`;
   } else {
     // 默认比例 2:3:3
     gridLayout.style.gridTemplateColumns = "2fr 8px 3fr 8px 3fr";
   }
 
   // 应用上下区域比例
-  if (savedTopRatio) {
-    const topRatio = parseFloat(savedTopRatio);
-    const bottomRatio = 1 - topRatio;
-    gridLayout.style.gridTemplateRows = `${topRatio}fr 8px ${bottomRatio}fr`;
+  if (savedTopRatio != null) {
+    const bottomRatio = 1 - savedTopRatio;
+    gridLayout.style.gridTemplateRows = `${savedTopRatio}fr 8px ${bottomRatio}fr`;
   }
 }
 
