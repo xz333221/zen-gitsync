@@ -8,6 +8,24 @@ import { useConfigStore } from '@/stores/configStore'
 import { getLanguageByExt } from '@/utils/editorLang'
 import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
 
+// 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
+// 使用 Vite 的 ?worker 语法为 Monaco 创建 web worker
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
+import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
+import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+
+;(self as any).MonacoEnvironment = {
+  getWorker(_: any, label: string) {
+    if (label === 'json') return new JsonWorker()
+    if (label === 'css' || label === 'scss' || label === 'less') return new CssWorker()
+    if (label === 'html' || label === 'handlebars' || label === 'razor') return new HtmlWorker()
+    if (label === 'typescript' || label === 'javascript') return new TsWorker()
+    return new EditorWorker()
+  }
+}
+
 // ── 文件树 ─────────────────────────────────────────────
 interface FsItem {
   name: string

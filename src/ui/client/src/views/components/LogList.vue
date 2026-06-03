@@ -25,6 +25,7 @@ import {
   Filter,
   FullScreen,
   CopyDocument,
+  Document,
 } from "@element-plus/icons-vue";
 import "element-plus/dist/index.css";
 import { useGitStore } from "@stores/gitStore";

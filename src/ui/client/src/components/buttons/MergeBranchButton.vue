@@ -2,7 +2,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed, watch } from 'vue'
 import { useGitStore } from '@stores/gitStore'
-import { Setting, Loading } from '@element-plus/icons-vue'
+import { Setting, Loading, InfoFilled, DocumentCopy } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import CommonDialog from '@components/CommonDialog.vue'
 import GitCommandPreview from '@components/GitCommandPreview.vue'
@@ -316,7 +316,7 @@ async function handleMergeBranch() {
             />
             <div v-if="selectedBranch && !mergeOptions.message" class="default-message-hint">
               <div class="hint-content">
-                <el-icon><Info-Filled /></el-icon>
+                <el-icon><InfoFilled /></el-icon>
                 <span>{{ $t('@76872:默认消息：') }}{{ defaultMergeMessage }}</span>
               </div>
               <el-button 
@@ -326,7 +326,7 @@ async function handleMergeBranch() {
                 @click="copyDefaultMessage"
                 class="copy-btn"
               >
-                <el-icon><Document-Copy /></el-icon>
+                <el-icon><DocumentCopy /></el-icon>
               </el-button>
             </div>
           </el-form-item>
