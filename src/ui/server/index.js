@@ -195,7 +195,9 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   registerConfigRoutes({
     app,
-    configManager
+    configManager,
+    execGitCommand,
+    getCurrentProjectPath: () => currentProjectPath
   });
 
   registerNpmRoutes({

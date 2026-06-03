@@ -4,9 +4,217 @@ import os from 'os';
 import fs from 'fs/promises';
 import open from 'open';
 
+// 跳过的产物/资源/lock 文件(用 stat 一行带过,不打 patch)
+const SKIP_FILE_PATTERNS = [
+  /(^|[\\/])dist[\\/]/,
+  /(^|[\\/])build[\\/]/,
+  /(^|[\\/])\.next[\\/]/,
+  /(^|[\\/])coverage[\\/]/,
+  /(^|[\\/])node_modules[\\/]/,
+  /\.lock$/,
+  /package-lock\.json$/,
+  /yarn\.lock$/,
+  /pnpm-lock\.yaml$/,
+  /min\.js$/,
+  /min\.css$/,
+  /\.bundle\.js$/,
+  /\.map$/,
+  /\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff)$/,
+  /\.(mp4|mov|avi|mkv|webm)$/,
+  /\.(mp3|wav|ogg|flac)$/,
+  /\.(woff2?|ttf|otf|eot)$/,
+  /\.(pdf|zip|tar|gz|7z|rar)$/
+]
+
+// 文件优先级:数字越大越重要
+function filePriority(p) {
+  if (/\.(test|spec)\.(js|ts|jsx|tsx|vue)$/i.test(p)) return 1 // 测试文件
+  if (/^docs?\//i.test(p) || /\.md$/i.test(p)) return 2 // 文档
+  if (/\.(json|ya?ml|toml|env|ini|cfg|conf)$/i.test(p)) return 3 // 配置
+  if (/\.(css|scss|sass|less|html|vue|jsx|tsx)$/i.test(p)) return 4 // 前端
+  if (/\.(ts|js|mjs|cjs)$/i.test(p)) return 5 // 后端/脚本
+  return 3 // 其它(资源、未知)
+}
+
+function isSkippedFile(path) {
+  return SKIP_FILE_PATTERNS.some(re => re.test(path))
+}
+
+// 从 git diff 文本解析出 per-file 块
+// git diff 输出格式: "diff --git a/path b/path\n...一系列 header...\n--- a/path\n+++ b/path\n@@ ...\n<patch>"
+function parseDiffByFile(diffText) {
+  if (!diffText) return []
+  const files = []
+  // 按 "diff --git " 切分,首段可能为空(文本以这个开头则第一段空)
+  const parts = diffText.split(/^diff --git /m).filter(Boolean)
+  for (const part of parts) {
+    const headerEnd = part.indexOf('\n')
+    const headerLine = (headerEnd >= 0 ? part.slice(0, headerEnd) : part).trim()
+    // 从 header 里抓路径: "a/path b/path" -> 优先 b
+    const m = headerLine.match(/^a\/(.+?)\s+b\/(.+)$/)
+    if (!m) continue
+    const bPath = m[2]
+    const patch = part.slice(headerEnd + 1)
+    // 统计 +/- 行数
+    let added = 0, removed = 0
+    for (const line of patch.split('\n')) {
+      if (line.startsWith('+') && !line.startsWith('+++')) added++
+      else if (line.startsWith('-') && !line.startsWith('---')) removed++
+    }
+    files.push({ path: bPath, patch, added, removed })
+  }
+  return files
+}
+
+// 收集 AI 生成提交信息所需的 diff 和文件列表
+// 关键: untracked 文件默认不会出现在 git diff --staged 输出里,
+//       所以先对所有 untracked 文件做 git add -N(intent to add),
+//       这样它们会以 "new file" 形式出现在 diff 里
+async function collectDiffForAi({ execGitCommand, getCurrentProjectPath }) {
+  if (typeof execGitCommand !== 'function') {
+    return { diff: '', fileList: [] }
+  }
+  const projectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : ''
+  const cwdOpts = projectPath ? { cwd: projectPath, log: false } : { log: false }
+
+  let fileList = []
+  try {
+    // 1. 拿到工作区状态,识别 untracked 文件
+    const { stdout: statusOut } = await execGitCommand('git status --porcelain=1 --untracked-files=all', cwdOpts)
+    const untracked = []
+    const trackedChanges = []
+    for (const line of (statusOut || '').split('\n')) {
+      if (!line || line.length < 3) continue
+      // porcelain=1 格式: "XY path"  X=index状态, Y=worktree状态
+      const x = line[0]
+      const y = line[1]
+      const path = line.slice(3)
+      if (x === '?' && y === '?') {
+        untracked.push(path)
+      } else if (x !== ' ' || y !== ' ') {
+        // 有改动(暂存或工作区)
+        trackedChanges.push(`${x !== ' ' ? x : ' '} ${path}`.trim())
+      }
+    }
+    fileList = [...trackedChanges, ...untracked.map(p => `? ${p}`)]
+
+    // 2. 对 untracked 文件做 intent to add(只在内存中,不会真的暂存内容)
+    if (untracked.length > 0) {
+      // 加上 --force 以防某些文件已经在 index 中
+      // 分批处理,避免命令行过长
+      const batchSize = 20
+      for (let i = 0; i < untracked.length; i += batchSize) {
+        const batch = untracked.slice(i, i + batchSize)
+        const quoted = batch.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ')
+        try {
+          await execGitCommand(`git add -N --force ${quoted}`, cwdOpts)
+        } catch (e) {
+          // 单批失败不影响整体
+          console.warn('[generate-commit] git add -N failed for batch:', e?.message)
+        }
+      }
+    }
+
+    // 3. 合并 staged + unstaged diff
+    //    用 --no-color 避免 ANSI 干扰, --no-ext-diff 避免外接 diff 工具
+    const [stagedRes, unstagedRes] = await Promise.all([
+      execGitCommand('git diff --staged --no-color --no-ext-diff', cwdOpts).catch(() => ({ stdout: '' })),
+      execGitCommand('git diff --no-color --no-ext-diff', cwdOpts).catch(() => ({ stdout: '' }))
+    ])
+    let combined = ''
+    if (stagedRes?.stdout) combined += stagedRes.stdout.trim() + '\n'
+    if (unstagedRes?.stdout) combined += unstagedRes.stdout.trim() + '\n'
+
+    return { diff: combined.trim(), fileList }
+  } catch (error) {
+    console.error('[generate-commit] collectDiffForAi error:', error?.message)
+    return { diff: '', fileList }
+  }
+}
+
+// 把 diff 压缩成给 LLM 的紧凑文本
+// 策略: 跳过产物/资源文件(用一行 stat 带过),源码按优先级排序,每个文件 patch 限 1500 字,总预算 6000 字
+function prepareDiffForPrompt(diffText, fileList) {
+  const safeFileList = Array.isArray(fileList) ? fileList : []
+  const files = parseDiffByFile(diffText)
+
+  // 如果 parse 出来是空的(diff 可能是空或非标准格式),退回到 fileList 推断
+  if (files.length === 0) {
+    const list = safeFileList.slice(0, 30).map(s => {
+      // fileList 形如 "M src/foo.ts" 或 "? new-file.ts"
+      const m = s.match(/^[A-Z?\s]+\s+(.+)$/)
+      return m ? m[1] : s
+    })
+    if (list.length === 0) return ''
+    return list.map(p => {
+      if (isSkippedFile(p)) return `${p} [产物/资源，已跳过]`
+      return p
+    }).join('\n')
+  }
+
+  // 拆分: 跳过的 vs 保留的
+  const skipped = []
+  const kept = []
+  for (const f of files) {
+    if (isSkippedFile(f.path)) {
+      skipped.push(f)
+    } else {
+      kept.push(f)
+    }
+  }
+
+  // 保留的文件按优先级降序,同优先级按 +/- 总数降序(改得多的优先)
+  kept.sort((a, b) => {
+    const dp = filePriority(b.path) - filePriority(a.path)
+    if (dp !== 0) return dp
+    return (b.added + b.removed) - (a.added + a.removed)
+  })
+
+  const TOTAL_BUDGET = 6000
+  const PER_FILE_LIMIT = 1500
+  const lines = []
+  let budget = TOTAL_BUDGET
+
+  // 先把跳过的文件用一行 stat 总结
+  for (const f of skipped) {
+    if (budget < 80) break
+    lines.push(`${f.path} [+${f.added}/-${f.removed}, 已跳过产物/资源]`)
+    budget -= 80
+  }
+
+  // 再装源码,带预算控制
+  for (const f of kept) {
+    if (budget <= 50) break
+    let patch = f.patch
+    let truncated = false
+    if (patch.length > PER_FILE_LIMIT) {
+      patch = patch.slice(0, PER_FILE_LIMIT) + '\n... (diff 已截断)'
+      truncated = true
+    }
+    const block = `--- ${f.path} (+${f.added}/-${f.removed})${truncated ? ' [截断]' : ''}\n${patch}`
+    if (block.length > budget) {
+      // 单个文件塞不下了,截到能塞下为止
+      const sliceLen = Math.max(0, budget - 80)
+      if (sliceLen < 100) break
+      lines.push(`--- ${f.path} (+${f.added}/-${f.removed}) [预算耗尽，已截断]\n${patch.slice(0, sliceLen)}`)
+      budget = 0
+      break
+    }
+    lines.push(block)
+    budget -= block.length
+  }
+
+  if (lines.length === 0) return ''
+  return lines.join('\n\n')
+}
+
+export { prepareDiffForPrompt, parseDiffByFile, isSkippedFile, filePriority, collectDiffForAi }
+
 export function registerConfigRoutes({
   app,
-  configManager
+  configManager,
+  execGitCommand,
+  getCurrentProjectPath
 }) {
   // 保存最近访问的目录
   app.post('/api/save_recent_directory', async (req, res) => {
@@ -834,7 +1042,7 @@ export function registerConfigRoutes({
 
   // AI 生成提交信息
   app.post('/api/config/generate-commit-message', express.json(), async (req, res) => {
-    const { diff, fileList } = req.body || {}
+    const { fileList } = req.body || {}
     try {
       const rawConfig = await configManager.readRawConfigFile()
       const models = Array.isArray(rawConfig.models) ? rawConfig.models : []
@@ -843,8 +1051,11 @@ export function registerConfigRoutes({
         return res.json({ success: false, error: '未配置 AI 模型，请先在通用设置中添加模型' })
       }
 
-      const diffText = (diff || '').trim().slice(0, 8000)
-      const filesText = Array.isArray(fileList) ? fileList.slice(0, 30).join('\n') : ''
+      // 后端自己收集 diff,确保 untracked 文件也能进 prompt
+      const { diff: rawDiff, fileList: serverFileList } = await collectDiffForAi({ execGitCommand, getCurrentProjectPath })
+      const safeFileList = Array.isArray(fileList) && fileList.length > 0 ? fileList : serverFileList
+      const diffText = prepareDiffForPrompt(rawDiff, safeFileList)
+      const filesText = safeFileList.slice(0, 30).join('\n')
       const prompt = `你是一个 Git 提交信息生成助手。根据以下 git diff 信息，生成一条符合 Conventional Commits 规范的提交信息。
 
 要求：
@@ -858,6 +1069,10 @@ ${filesText}
 
 git diff --staged：
 ${diffText || '（无 staged 内容，请根据文件列表推断）'}`
+
+      console.log('[generate-commit] ===== PROMPT START (length: ' + prompt.length + ') =====')
+      console.log(prompt)
+      console.log('[generate-commit] ===== PROMPT END =====')
 
       const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
       const url = `${defaultModel.baseURL.replace(/\/$/, '')}/chat/completions`
@@ -886,8 +1101,6 @@ ${diffText || '（无 staged 内容，请根据文件列表推断）'}`
       const content = data?.choices?.[0]?.message?.content || ''
       console.log('[generate-commit] raw content length:', content.length, JSON.stringify(content).slice(0, 600))
 
-      // 在整个原始内容里找 JSON（包括 think 块内部），取最后一个不含嵌套 {} 的对象
-      // 优先匹配代码块，再取最后一个裸 {}
       const codeBlockMatch = content.match(/```(?:json)?\s*(\{[^`]*?\})\s*```/)
       const jsonMatch = codeBlockMatch
         ? [codeBlockMatch[1]]
@@ -895,13 +1108,12 @@ ${diffText || '（无 staged 内容，请根据文件列表推断）'}`
 
       if (!jsonMatch) {
         console.error('[generate-commit] no JSON found, full content:', content)
-        return res.json({ success: false, error: `模型未返回有效 JSON，请检查模型是否支持（原始内容前300字）: ${content.slice(0, 300)}` })
+        return res.json({ success: false, error: 'model returned no valid JSON' })
       }
       let parsed
       try {
         parsed = JSON.parse(jsonMatch[0])
       } catch {
-        // JSON 不合法时用正则手动提取字段
         const typeM = jsonMatch[0].match(/"type"\s*:\s*"([^"]+)"/)
         const scopeM = jsonMatch[0].match(/"scope"\s*:\s*"([^"]*)"/)
         const descM = jsonMatch[0].match(/"description"\s*:\s*"([^"]+)"/)
@@ -913,7 +1125,7 @@ ${diffText || '（无 staged 内容，请根据文件列表推断）'}`
             description: (descM?.[1] || '').trim()
           })
         }
-        return res.json({ success: false, error: `JSON 解析失败: ${jsonMatch[0].slice(0, 200)}` })
+        return res.json({ success: false, error: 'JSON parse failed' })
       }
       res.json({
         success: true,
@@ -922,7 +1134,7 @@ ${diffText || '（无 staged 内容，请根据文件列表推断）'}`
         description: String(parsed.description || '').trim()
       })
     } catch (error) {
-      const msg = error.name === 'AbortError' ? '请求超时（30s）' : error.message
+      const msg = error.name === 'AbortError' ? 'timeout 30s' : error.message
       res.json({ success: false, error: msg })
     }
   })
