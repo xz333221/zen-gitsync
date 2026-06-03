@@ -342,6 +342,37 @@ async function openNewTabGui() {
   }
 }
 
+// 在常用目录卡片上 Ctrl/Cmd + 点击 → 直接用新标签打开
+async function openRecentDirInNewTab(dirPath: string) {
+  if (!dirPath) return;
+  try {
+    const response = await fetch('/api/open-new-tab-gui', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: dirPath }),
+    });
+    const result = await response.json();
+    if (!result.success) {
+      ElMessage.error(result.error || '打开失败');
+    }
+  } catch (error) {
+    ElMessage.error(`打开失败: ${(error as Error).message}`);
+  }
+}
+
+// 常用目录卡片点击: Ctrl/Cmd 点击 = 新标签打开,普通点击 = 填到输入框
+function onRecentDirClick(item: { path: string; exists: boolean }, event: MouseEvent) {
+  if (event.ctrlKey || event.metaKey) {
+    if (!item.exists) {
+      ElMessage.warning('目录不存在,无法打开');
+      return;
+    }
+    openRecentDirInNewTab(item.path);
+  } else {
+    newDirectoryPath.value = item.path;
+  }
+}
+
 // 浏览目录
 async function browseDirectory() {
   isBrowserDialogVisible.value = true;
@@ -496,7 +527,8 @@ function onBrowserSelect(path: string) {
               :key="index"
               class="recent-dir-item"
               :class="{ 'recent-dir-item--missing': !item.exists }"
-              @click="newDirectoryPath = item.path"
+              :title="(navigator.platform.toLowerCase().includes('mac') ? '按住 ⌘ 点击用新标签打开' : '按住 Ctrl 点击用新标签打开') + '\n' + item.path"
+              @click="onRecentDirClick(item, $event)"
             >
               <el-icon class="dir-icon"><Folder /></el-icon>
               <span class="dir-path" :title="item.path">{{ item.path }}</span>
@@ -817,6 +849,11 @@ function onBrowserSelect(path: string) {
 .recent-dir-item:hover {
   background: var(--bg-input-hover);
   border-color: var(--border-card-hover);
+}
+
+.recent-dir-item:active {
+  background: var(--bg-input-active, var(--bg-input-hover));
+  transform: scale(0.98);
 }
 
 .recent-dir-item--missing {
