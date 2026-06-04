@@ -113,6 +113,46 @@ export function registerGitOpsRoutes({
     }
   });
 
+  // 批量添加文件到暂存区（一次 git add 命令，避免 index.lock 竞争）
+  app.post('/api/add-files', async (req, res) => {
+    try {
+      const { filePaths } = req.body || {};
+
+      if (!Array.isArray(filePaths) || filePaths.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少文件路径参数',
+          successCount: 0,
+          failedCount: 0
+        });
+      }
+
+      // 过滤掉空路径与重复路径
+      const uniquePaths = [...new Set(filePaths.filter(p => typeof p === 'string' && p.length > 0))];
+      if (uniquePaths.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: '没有有效的文件路径',
+          successCount: 0,
+          failedCount: 0
+        });
+      }
+
+      // 用一个 git add 命令暂存所有文件（按路径转义双引号防注入）
+      const escaped = uniquePaths.map(p => `"${String(p).replace(/"/g, '\\"')}"`).join(' ');
+      await execGitCommand(`git add ${escaped}`);
+
+      res.json({
+        success: true,
+        successCount: uniquePaths.length,
+        failedCount: 0,
+        filePaths: uniquePaths
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message, successCount: 0, failedCount: 0 });
+    }
+  });
+
   // 从暂存区移除单个文件
   app.post('/api/unstage-file', async (req, res) => {
     try {

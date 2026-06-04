@@ -2022,6 +2022,116 @@ export const useGitStore = defineStore('git', () => {
     return fileList.value.some(file => file.type === 'conflicted')
   })
 
+  // ============= 文件多选状态（与 GitStatus 选择模式共享） =============
+  // 选择模式开关：开启后文件列表出现复选框
+  const isSelectionMode = ref(false)
+  // 已勾选的文件路径集合
+  const selectedFiles = ref<Set<string>>(new Set())
+
+  // 切换选择模式
+  function toggleSelectionMode() {
+    isSelectionMode.value = !isSelectionMode.value
+    if (!isSelectionMode.value) {
+      selectedFiles.value = new Set()
+    }
+  }
+
+  // 进入选择模式（不清空已有选择）
+  function enterSelectionMode() {
+    isSelectionMode.value = true
+  }
+
+  // 退出选择模式并清空
+  function exitSelectionMode() {
+    isSelectionMode.value = false
+    selectedFiles.value = new Set()
+  }
+
+  // 切换单个文件的选择状态
+  function toggleFileSelection(filePath: string) {
+    const next = new Set(selectedFiles.value)
+    if (next.has(filePath)) {
+      next.delete(filePath)
+    } else {
+      next.add(filePath)
+    }
+    selectedFiles.value = next
+  }
+
+  // 全选当前文件列表
+  function selectAllFiles() {
+    selectedFiles.value = new Set(fileList.value.map(f => f.path))
+  }
+
+  // 清空选择（不退出选择模式）
+  function clearSelection() {
+    selectedFiles.value = new Set()
+  }
+
+  // 计算"勾选且需要暂存"的文件路径（即已勾选、类型属于可暂存、未被锁定）
+  const selectedUnstagedPaths = computed<string[]>(() => {
+    if (!isSelectionMode.value) return []
+    const lockedSet = new Set(configStore.lockedFiles.map(f => f.replace(/\\/g, '/')))
+    const out: string[] = []
+    for (const path of selectedFiles.value) {
+      const normalized = path.replace(/\\/g, '/')
+      if (lockedSet.has(normalized)) continue
+      const file = fileList.value.find(f => f.path === path)
+      if (!file) continue
+      if (!['modified', 'deleted', 'untracked'].includes(file.type)) continue
+      out.push(path)
+    }
+    return out
+  })
+
+  // 是否有"需要被暂存"的勾选文件
+  const hasSelectableFiles = computed(() => selectedUnstagedPaths.value.length > 0)
+
+  // 批量暂存指定文件列表（调用 /api/add-files，一次 git add 避免 index.lock）
+  async function stageFiles(filePaths: string[]) {
+    if (!isGitRepo.value) {
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
+      return false
+    }
+    const unique = [...new Set(filePaths.filter(p => typeof p === 'string' && p.length > 0))]
+    if (unique.length === 0) {
+      ElMessage.warning($t('@C298B:请选择要暂存的文件'))
+      return false
+    }
+
+    try {
+      isAddingFiles.value = true
+      const response = await fetch('/api/add-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePaths: unique })
+      })
+      const result = await response.json()
+      if (result.success) {
+        const count = result.successCount ?? unique.length
+        ElMessage.success(
+          count > 0
+            ? `${$t('@C298B:已暂存 ')}${count}${$t('@C298B: 个所选文件')}`
+            : $t('@C298B:文件已添加到暂存区')
+        )
+        // 成功暂存后，从选择集合中移除已暂存的文件，避免重复点击
+        const next = new Set(selectedFiles.value)
+        for (const p of unique) next.delete(p)
+        selectedFiles.value = next
+        await fetchStatusPorcelain()
+        return true
+      } else {
+        ElMessage.error(`${$t('@C298B:暂存失败: ')}${result.error || ''}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:暂存失败: ')}${(error as Error).message}`)
+      return false
+    } finally {
+      isAddingFiles.value = false
+    }
+  }
+
   return {
     // 状态
     currentBranch,
@@ -2073,6 +2183,18 @@ export const useGitStore = defineStore('git', () => {
     // 合并相关
     pendingMergeMessage,
 
+    // 选择状态
+    isSelectionMode,
+    selectedFiles,
+    selectedUnstagedPaths,
+    hasSelectableFiles,
+    toggleSelectionMode,
+    enterSelectionMode,
+    exitSelectionMode,
+    toggleFileSelection,
+    selectAllFiles,
+    clearSelection,
+
     // 方法
     $reset,
     checkGitRepo,
@@ -2095,6 +2217,7 @@ export const useGitStore = defineStore('git', () => {
     addToStage,
     addAllToStage,
     addFileToStage,
+    stageFiles,
     unstageFile,
     commitChanges,
     pushToRemote,

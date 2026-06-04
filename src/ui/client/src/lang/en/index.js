@@ -90,6 +90,9 @@ export default {
   // @29974: file path: components\buttons\StageButton.vue
   '@29974:没有需要暂存的更改': 'There are no changes that need to be staged',
   '@29974:暂存': 'Stage',
+  '@29974:暂存所选': 'Stage Selected',
+  '@29974:暂存所选 ': 'Stage selected ',
+  '@29974: 个文件': ' file(s)',
   '@29974:个未暂存文件（逐个添加）': 'Unstaged files (added one by one)',
   '@29974:暂存所有更改（git add .）': 'Stage all changes (git add .)',
   '@29974:暂存更改': 'Stage changes',
@@ -884,6 +887,8 @@ export default {
   '@C298B:文件已添加到暂存区': 'The file has been added to the staging area',
   '@C298B:所有文件已添加到暂存区': 'All files have been added to the staging area',
   '@C298B:文件已暂存': 'The file has been staged',
+  '@C298B:已暂存 ': 'Staged ',
+  '@C298B:请选择要暂存的文件': 'Please select files to stage',
   '@C298B:已取消暂存文件': 'The temporary file has been cancelled',
   '@C298B:提交成功': 'Submission successful',
   '@C298B:请选择要合并的分支': 'Please select the branch to merge',

@@ -61,44 +61,37 @@ function isLocking(filePath: string) {
 
 // npm脚本面板状态（已移至面板内部）
 
-// 文件选择状态
-const selectedFiles = ref<Set<string>>(new Set())
-const isSelectionMode = ref(false)
+// 文件选择状态 — 已迁移到 gitStore，便于 StageButton 等其它组件读取
+const selectedFiles = computed<Set<string>>(() => gitStore.selectedFiles)
+const isSelectionMode = computed<boolean>(() => gitStore.isSelectionMode)
 
 // 切换选择模式
 function toggleSelectionMode() {
-  isSelectionMode.value = !isSelectionMode.value
-  if (!isSelectionMode.value) {
-    selectedFiles.value.clear()
-  }
+  gitStore.toggleSelectionMode()
 }
 
 // 切换文件选择状态
 function toggleFileSelection(filePath: string) {
-  if (selectedFiles.value.has(filePath)) {
-    selectedFiles.value.delete(filePath)
-  } else {
-    selectedFiles.value.add(filePath)
-  }
+  gitStore.toggleFileSelection(filePath)
 }
 
 // 全选/取消全选
 function toggleSelectAll() {
-  if (selectedFiles.value.size === gitStore.fileList.length) {
-    selectedFiles.value.clear()
+  if (gitStore.selectedFiles.size === gitStore.fileList.length) {
+    gitStore.clearSelection()
   } else {
-    selectedFiles.value = new Set(gitStore.fileList.map(f => f.path))
+    gitStore.selectAllFiles()
   }
 }
 
 // 检查文件是否被选中
 function isFileSelected(filePath: string): boolean {
-  return selectedFiles.value.has(filePath)
+  return gitStore.selectedFiles.has(filePath)
 }
 
 // 计算选中的文件列表
 const selectedFilesList = computed(() => {
-  return Array.from(selectedFiles.value)
+  return Array.from(gitStore.selectedFiles)
 })
 
 // 为FileDiffViewer组件准备数据
