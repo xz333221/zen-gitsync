@@ -155,6 +155,16 @@ function handleBranchChanged() {
 // 活动视图切换
 const activeView = ref<'git' | 'editor' | 'source-map'>('git')
 
+// 切换到 Git 视图时静默刷新状态（与窗口焦点/标签页可见时一致）
+watch(activeView, (view) => {
+  if (view === 'git' && gitStatusRef.value && gitStore.isGitRepo) {
+    Promise.all([
+      gitStore.fetchStatus(),
+      gitStore.getBranchStatus()
+    ]).catch(err => console.error('切换到Git视图刷新失败:', err))
+  }
+})
+
 // 用户设置对话框
 const userSettingsDialogVisible = ref(false)
 
