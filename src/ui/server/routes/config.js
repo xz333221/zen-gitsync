@@ -136,7 +136,24 @@ async function collectDiffForAi({ execGitCommand, getCurrentProjectPath }) {
 // 策略: 跳过产物/资源文件(用一行 stat 带过),源码按优先级排序,每个文件 patch 限 1500 字,总预算 6000 字
 function prepareDiffForPrompt(diffText, fileList) {
   const safeFileList = Array.isArray(fileList) ? fileList : []
-  const files = parseDiffByFile(diffText)
+  let files = parseDiffByFile(diffText)
+
+  // 如果客户端明确指定了文件列表，则只保留与所选文件匹配的 diff 块
+  if (safeFileList.length > 0 && files.length > 0) {
+    const selectedPaths = new Set(
+      safeFileList
+        .map(s => {
+          if (typeof s !== 'string') return ''
+          // fileList 形如 "M src/foo.ts" 或 "? new-file.ts"，取最后的路径部分
+          const m = s.match(/^[A-Z?\s]+\s+(.+)$/)
+          return (m ? m[1] : s).replace(/\\/g, '/')
+        })
+        .filter(Boolean)
+    )
+    if (selectedPaths.size > 0) {
+      files = files.filter(f => selectedPaths.has(f.path.replace(/\\/g, '/')))
+    }
+  }
 
   // 如果 parse 出来是空的(diff 可能是空或非标准格式),退回到 fileList 推断
   if (files.length === 0) {

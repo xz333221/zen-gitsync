@@ -51,16 +51,31 @@ const hasAnyChanges = computed(() => {
   return gitStore.fileList.some((file) => !isFileLocked(file.path));
 });
 
+// 选择模式下是否有可暂存/提交的勾选文件
+const hasSelectedToStage = computed(() => {
+  return gitStore.isSelectionMode && gitStore.selectedFiles.size > 0
+    && gitStore.selectedUnstagedPaths.length > 0
+});
+
 // 计算最终的禁用状态
 const isDisabled = computed(() => {
   // 如果有冲突文件，禁用一键推送按钮
   if (gitStore.hasConflictedFiles) {
     return true;
   }
-  
+
+  // 选择模式：要求所选文件有可暂存内容
+  if (gitStore.isSelectionMode) {
+    return (
+      !hasSelectedToStage.value
+      || !props.hasUserCommitMessage
+      || !gitStore.hasUpstream
+    );
+  }
+
   // 如果没有本地变更，也没有领先提交，禁用
   const noWorkToDo = !hasAnyChanges.value && gitStore.branchAhead === 0;
-  
+
   return (
     noWorkToDo || !props.hasUserCommitMessage || !gitStore.hasUpstream
   );
@@ -76,21 +91,37 @@ const tooltipText = computed(() => {
   if (gitStore.hasConflictedFiles) {
     return $t('@2E184:存在冲突文件，请先解决冲突');
   }
-  
+
+  if (gitStore.isSelectionMode) {
+    if (gitStore.selectedFiles.size === 0) {
+      return $t('@2E184:请先勾选要推送的文件');
+    }
+    if (gitStore.selectedUnstagedPaths.length === 0) {
+      return $t('@2E184:所选文件无需暂存或被锁定');
+    }
+    if (!props.hasUserCommitMessage) {
+      return $t('@2E184:请输入提交信息');
+    }
+    if (!gitStore.hasUpstream) {
+      return $t('@2E184:当前分支没有上游分支');
+    }
+    return $t('@2E184:一键完成：仅暂存所选文件 → 提交 → 推送到远程仓库');
+  }
+
   const hasCommitsToPush = gitStore.branchAhead > 0;
-  
+
   if (!hasAnyChanges.value && !hasCommitsToPush) {
     return $t('@2E184:没有需要提交或推送的更改');
   }
-  
+
   if (!props.hasUserCommitMessage) {
     return $t('@2E184:请输入提交信息');
   }
-  
+
   if (!gitStore.hasUpstream) {
     return $t('@2E184:当前分支没有上游分支');
   }
-  
+
   if (hasAnyChanges.value) {
     return $t('@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库');
   } else {
@@ -98,29 +129,54 @@ const tooltipText = computed(() => {
   }
 });
 
+// 按钮标题与副标题：随选择模式动态切换
+const buttonTitle = computed(() => {
+  return gitStore.isSelectionMode && hasSelectedToStage.value
+    ? $t('@2E184:一键推送所选')
+    : $t('@2E184:一键推送所有');
+});
+
+const buttonDesc = computed(() => {
+  if (props.from !== 'form') return '';
+  return gitStore.isSelectionMode && hasSelectedToStage.value
+    ? $t('@2E184:暂存所选 + 提交 + 推送')
+    : $t('@2E184:暂存 + 提交 + 推送');
+});
+
 // 一键推送处理函数
 async function handleQuickPush() {
   emit("beforePush");
 
   try {
+    const isSelectedMode = gitStore.isSelectionMode && hasSelectedToStage.value;
+
     // 只有在有本地变更时才执行暂存和提交阶段
-    if (hasAnyChanges.value) {
-      const commitResult = await gitStore.addAndCommit(
-        props.finalCommitMessage,
-        props.skipHooks
-      );
-      
+    const hasLocalChanges = isSelectedMode
+      ? true  // 选择模式：必定要暂存并提交所选
+      : hasAnyChanges.value;
+
+    if (hasLocalChanges) {
+      const commitResult = isSelectedMode
+        ? await gitStore.stageSelectedAndCommit(
+            props.finalCommitMessage,
+            props.skipHooks
+          )
+        : await gitStore.addAndCommit(
+            props.finalCommitMessage,
+            props.skipHooks
+          );
+
       if (!commitResult) {
         emit("afterPush", false);
         return;
       }
     }
-    
+
     // 推送阶段显示进度
     emit("pushStart");
     progressModalVisible.value = true;
-    
-    // 如果开启“推送前拉取”，先拉取远程更新
+
+    // 如果开启"推送前拉取"，先拉取远程更新
     if (configStore.pullBeforePush) {
       progressModalRef.value?.setPulling(true);
       const pullResult = await gitStore.gitPull();
@@ -135,17 +191,17 @@ async function handleQuickPush() {
         return;
       }
     }
-    
+
     if (progressModalRef.value) {
       progressModalRef.value.reset();
     }
-    
+
     const pushResult = await gitStore.pushToRemoteWithProgress((data) => {
       if (progressModalRef.value) {
         progressModalRef.value.handleProgress(data);
       }
     });
-    
+
     if (pushResult) {
       try {
         window.dispatchEvent(new CustomEvent('zen-gitsync:after-quick-push-success'));
@@ -154,7 +210,7 @@ async function handleQuickPush() {
       }
       emit("clearFields");
     }
-    
+
     emit("afterPush", pushResult);
   } catch (error) {
     console.error("一键推送失败:", error);
@@ -186,8 +242,8 @@ function handleProgressComplete(_success: boolean) {
         <div class="one-push-content">
           <el-icon class="one-push-icon"><Position /></el-icon>
           <div class="one-push-text">
-            <span class="one-push-title">{{ $t('@2E184:一键推送所有') }}</span>
-            <span v-if="from === 'form'" class="one-push-desc">{{ $t('@2E184:暂存 + 提交 + 推送') }}</span>
+            <span class="one-push-title">{{ buttonTitle }}</span>
+            <span v-if="from === 'form'" class="one-push-desc">{{ buttonDesc }}</span>
           </div>
         </div>
       </el-button>

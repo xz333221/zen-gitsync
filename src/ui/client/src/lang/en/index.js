@@ -69,8 +69,12 @@ export default {
   // @2E184: file path: components\buttons\QuickPushButton.vue
   '@2E184:一键推送所有': 'One click push all',
   '@2E184:一键提交': 'Quick Commit',
+  '@2E184:一键提交所选': 'Commit Selected',
+  '@2E184:一键推送所选': 'Push Selected',
   '@2E184:暂存 + 提交 + 推送': 'Stage + Commit + Push',
+  '@2E184:暂存所选 + 提交 + 推送': 'Stage Selected + Commit + Push',
   '@2E184:暂存 + 提交': 'Stage + Commit',
+  '@2E184:暂存所选 + 提交': 'Stage Selected + Commit',
   '@2E184:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',
   '@2E184:没有需要提交的更改': 'No changes to commit',
   '@2E184:请输入提交信息': 'Please enter commit message',
@@ -79,7 +83,12 @@ export default {
   '@2E184:没有需要提交的更改': 'No changes to commit',
   '@2E184:本地已提交，一键推送到远程仓库': 'Local changes committed, push to remote',
   '@2E184:一键完成：暂存所有更改 → 提交 → 推送到远程仓库': 'One-click: Stage all changes → Commit → Push to remote',
+  '@2E184:一键完成：仅暂存所选文件 → 提交 → 推送到远程仓库': 'One-click: Stage selected files → Commit → Push to remote',
   '@2E184:一键完成：暂存所有更改 → 提交': 'One-click: Stage all changes → Commit',
+  '@2E184:一键完成：仅暂存所选文件 → 提交': 'One-click: Stage selected files → Commit',
+  '@2E184:请先勾选要提交的文件': 'Please select files to commit first',
+  '@2E184:请先勾选要推送的文件': 'Please select files to push first',
+  '@2E184:所选文件无需暂存或被锁定': 'Selected files need no staging or are locked',
   '@2E184:拉取远程更新失败，已停止推送': 'Failed to pull remote updates, push aborted',
   // @2E184: file end
 
@@ -895,6 +904,7 @@ export default {
   '@C298B:不能合并当前分支到自身': 'Cannot merge the current branch into itself',
   '@C298B:合并分支时发生冲突，请手动解决': 'Conflict occurred during branch merging, please manually resolve it',
   '@C298B:开始暂存并提交操作...': 'Starting stage and commit operation...',
+  '@C298B:开始暂存所选文件并提交...': 'Starting stage selected and commit... ({n} files)',
   '@C298B:暂存完成，等待Git操作完成...': 'Staging completed, waiting for Git operation to complete...',
   '@C298B:开始提交更改...': 'Start submitting changes ..',
   '@C298B:暂存并提交操作完成': 'Stage and commit operation completed',

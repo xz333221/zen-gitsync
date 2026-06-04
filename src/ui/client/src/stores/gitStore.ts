@@ -1444,7 +1444,44 @@ export const useGitStore = defineStore('git', () => {
       return false
     }
   }
-  
+
+  // 选择模式下：仅暂存并提交已勾选的文件
+  async function stageSelectedAndCommit(message: string, noVerify = false) {
+    if (!isSelectionMode.value || selectedFiles.value.size === 0) {
+      // 未进入选择模式或未勾选文件，回退到全量
+      return addAndCommit(message, noVerify)
+    }
+    const paths = selectedUnstagedPaths.value
+    if (paths.length === 0) {
+      ElMessage.warning($t('@C298B:请选择要暂存的文件'))
+      return false
+    }
+    console.log($t('@C298B:开始暂存所选文件并提交...', { n: paths.length }))
+    const stageResult = await stageFiles(paths)
+    if (!stageResult) return false
+    await delay(GIT_OPERATION_DELAY)
+    return commitChanges(message, noVerify)
+  }
+
+  // 选择模式下：仅暂存所选 → 提交 → 推送
+  async function stageSelectedAndCommitAndPush(message: string, noVerify = false) {
+    if (!isSelectionMode.value || selectedFiles.value.size === 0) {
+      return addCommitAndPush(message, noVerify)
+    }
+    const paths = selectedUnstagedPaths.value
+    if (paths.length === 0) {
+      ElMessage.warning($t('@C298B:请选择要暂存的文件'))
+      return false
+    }
+    const stageResult = await stageFiles(paths)
+    if (!stageResult) return false
+    await delay(GIT_OPERATION_DELAY)
+    const commitResult = await commitChanges(message, noVerify)
+    if (!commitResult) return false
+    await delay(GIT_OPERATION_DELAY)
+    return pushToRemote()
+  }
+
   // 重置暂存区 (git reset HEAD)
   async function resetHead() {
     // 检查是否是Git仓库
@@ -2224,6 +2261,8 @@ export const useGitStore = defineStore('git', () => {
     pushToRemoteWithProgress,
     addAndCommit,
     addCommitAndPush,
+    stageSelectedAndCommit,
+    stageSelectedAndCommitAndPush,
     resetHead,
     resetToRemote,
     discardAllChanges,

@@ -45,14 +45,25 @@ const hasAnyChanges = computed(() => {
   return gitStore.fileList.some((file) => !isFileLocked(file.path));
 });
 
+// 选择模式下是否有可暂存/提交的勾选文件
+const hasSelectedToStage = computed(() => {
+  return gitStore.isSelectionMode && gitStore.selectedFiles.size > 0
+    && gitStore.selectedUnstagedPaths.length > 0
+});
+
 // 计算最终的禁用状态
 const isDisabled = computed(() => {
   // 如果有冲突文件，禁用
   if (gitStore.hasConflictedFiles) {
     return true;
   }
-  
-  // 如果没有本地变更，禁用
+
+  // 选择模式开启时：要求至少有一个可暂存的勾选文件
+  if (gitStore.isSelectionMode) {
+    return !hasSelectedToStage.value || !props.hasUserCommitMessage;
+  }
+
+  // 否则按"全部变更"判断
   return (
     !hasAnyChanges.value || !props.hasUserCommitMessage
   );
@@ -68,16 +79,43 @@ const tooltipText = computed(() => {
   if (gitStore.hasConflictedFiles) {
     return $t('@2E184:存在冲突文件，请先解决冲突');
   }
-  
+
+  if (gitStore.isSelectionMode) {
+    if (gitStore.selectedFiles.size === 0) {
+      return $t('@2E184:请先勾选要提交的文件');
+    }
+    if (gitStore.selectedUnstagedPaths.length === 0) {
+      return $t('@2E184:所选文件无需暂存或被锁定');
+    }
+    if (!props.hasUserCommitMessage) {
+      return $t('@2E184:请输入提交信息');
+    }
+    return $t('@2E184:一键完成：仅暂存所选文件 → 提交');
+  }
+
   if (!hasAnyChanges.value) {
     return $t('@2E184:没有需要提交的更改');
   }
-  
+
   if (!props.hasUserCommitMessage) {
     return $t('@2E184:请输入提交信息');
   }
-  
+
   return $t('@2E184:一键完成：暂存所有更改 → 提交');
+});
+
+// 按钮标题与副标题：随选择模式动态切换
+const buttonTitle = computed(() => {
+  return gitStore.isSelectionMode && hasSelectedToStage.value
+    ? $t('@2E184:一键提交所选')
+    : $t('@2E184:一键提交');
+});
+
+const buttonDesc = computed(() => {
+  if (props.from !== 'form') return '';
+  return gitStore.isSelectionMode && hasSelectedToStage.value
+    ? $t('@2E184:暂存所选 + 提交')
+    : $t('@2E184:暂存 + 提交');
 });
 
 // 一键提交处理函数
@@ -85,15 +123,15 @@ async function handleQuickCommit() {
   emit("beforeCommit");
 
   try {
-    const commitResult = await gitStore.addAndCommit(
+    const commitResult = await gitStore.stageSelectedAndCommit(
       props.finalCommitMessage,
       props.skipHooks
     );
-    
+
     if (commitResult) {
       emit("clearFields");
     }
-    
+
     emit("afterCommit", commitResult);
   } catch (error) {
     console.error("一键提交失败:", error);
@@ -120,8 +158,8 @@ defineExpose({
         <div class="one-commit-content">
           <el-icon class="one-commit-icon"><Edit /></el-icon>
           <div class="one-commit-text">
-            <span class="one-commit-title">{{ $t('@2E184:一键提交') }}</span>
-            <span v-if="from === 'form'" class="one-commit-desc">{{ $t('@2E184:暂存 + 提交') }}</span>
+            <span class="one-commit-title">{{ buttonTitle }}</span>
+            <span v-if="from === 'form'" class="one-commit-desc">{{ buttonDesc }}</span>
           </div>
         </div>
       </el-button>
