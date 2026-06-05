@@ -23,10 +23,11 @@ export function getNodeIcon(name: string, isDirectory: boolean, expanded = false
 
 /* ── 旧 API 兼容（仅供尚未迁移到 inline SVG 的位置使用） ──────────── */
 
-/**
- * 旧 API：返回与 file-icons-js 兼容的 CSS class 名（已废弃，文件树用 getNodeIcon）
- * 现将解析为 mit- 前缀的类名，便于内嵌到 .icon 选择器中
- */
+// 历史说明：早期版本使用 file-icons-js 通过 CSS 字体伪元素渲染文件图标。
+// 现已迁移到 Material Icon Theme SVG sprite（见 ./materialFileIcons.ts）。
+// 以下两个函数仍导出，是因为 FileGroup / FileDiffViewer / SourceMapView / EditorView
+// 的 inline 树仍以 `<use :xlink:href="#${...}">` 形式消费返回值。
+// 它们的"返回值类型"从 CSS class 名（`icon-xxx`）变成了完整的 sprite id（含 `mit-` 前缀）。
 export function getFileIconClass(fileName: string): string {
   return toSpriteId(resolveMaterialIcon(fileName, false, false))
 }
