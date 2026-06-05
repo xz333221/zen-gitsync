@@ -14,8 +14,8 @@ import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
 import { useGitStore } from '@stores/gitStore';
 import { io, Socket } from 'socket.io-client';
-import Convert from 'ansi-to-html';
 import { replaceVariables } from '@/utils/commandParser';
+import { useAnsiToHtml } from '@/composables/useAnsiToHtml';
 import { $t } from '@/lang/static'
 
 const configStore = useConfigStore();
@@ -443,37 +443,8 @@ type TerminalSession = {
 // `configStore.ui.commandConsole.expanded` 由设置菜单的"命令控制台 > 默认展开"开关控制
 // 需要读这个值的地方直接读 configStore.ui.commandConsole.expanded
 
-// 创建 ANSI 转 HTML 转换器
-const ansiConverter = new Convert({
-  fg: '#e5e5e5',
-  bg: 'transparent',
-  newline: false,
-  escapeXML: false,
-  stream: false,
-  colors: {
-    0: 'var(--color-black)',
-    1: '#cd3131',
-    2: '#0dbc79',
-    3: '#e5e510',
-    4: '#2472c8',
-    5: '#bc3fbc',
-    6: '#11a8cd',
-    7: '#e5e5e5',
-    8: '#666666',
-    9: '#f14c4c',
-    10: '#23d18b',
-    11: '#f5f543',
-    12: '#3b8eea',
-    13: '#d670d6',
-    14: '#29b8db',
-    15: 'var(--color-white)'
-  }
-});
-
-// 将 ANSI 转义码转换为 HTML
-function ansiToHtml(text: string): string {
-  return ansiConverter.toHtml(text);
-}
+// 将 ANSI 转义码转换为 HTML（实现见 useAnsiToHtml composable）
+const { ansiToHtml } = useAnsiToHtml()
 
 // 控制全屏状态
 const isFullscreen = ref(false);
