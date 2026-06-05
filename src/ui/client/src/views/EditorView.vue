@@ -7,6 +7,7 @@ import { marked } from 'marked'
 import { useConfigStore } from '@/stores/configStore'
 import { getLanguageByExt } from '@/utils/editorLang'
 import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
+import ImagePreview from '@/components/ImagePreview.vue'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
 // 使用 Vite 的 ?worker 语法为 Monaco 创建 web worker
@@ -162,6 +163,24 @@ async function openFile(node: TreeNode) {
     activeTabPath.value = node.path
     return
   }
+  // 图片：跳过 Monaco，直接建一个只读 tab，content 留空字符串（不渲染 Monaco）
+  // 由 preview 自动打开，ImagePreview 通过 /api/editor/raw 读取二进制
+  const ext = node.name.split('.').pop() || ''
+  if (IMAGE_EXTS.has(ext.toLowerCase())) {
+    const tab: Tab = {
+      path: node.path,
+      name: node.name,
+      content: '',
+      originalContent: '',
+      isDirty: false,
+      language: 'plaintext',
+    }
+    tabs.value.push(tab)
+    activeTabPath.value = node.path
+    // 图片自动打开预览
+    showPreview.value = true
+    return
+  }
   try {
     const resp = await fetch(`/api/editor/file?path=${encodeURIComponent(node.path)}`)
     const data = await resp.json()
@@ -169,7 +188,6 @@ async function openFile(node: TreeNode) {
       ElMessage.error(`${$t('@EDITOR:打开文件失败: ')}${data.error}`)
       return
     }
-    const ext = node.name.split('.').pop() || ''
     const lang = getLanguageByExt(ext)
     const tab: Tab = {
       path: node.path,
@@ -344,8 +362,9 @@ function stopSidebarResize() {
   document.removeEventListener('mouseup', stopSidebarResize)
 }
 
-// ── 文件图标（file-icons-js） ──────────────────────────
-function getNodeIconClass(node: TreeNode): string {
+// ── 文件图标 ──────────────────────────────────────
+// 给 inline SVG 用的 sprite id（已包含 icon- 前缀），EditorView 自己的 inline 树用这个
+function getNodeSpriteId(node: TreeNode): string {
   if (node.type === 'directory') return getFolderIconClass(node.name)
   return getFileIconClass(node.name)
 }
@@ -547,6 +566,23 @@ async function ctxDelete() {
   await refreshTree()
 }
 
+async function ctxRevealInExplorer() {
+  const node = ctxMenu.value?.node
+  closeContextMenu()
+  if (!node) return
+  try {
+    const resp = await fetch('/api/editor/reveal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: node.path }),
+    })
+    const data = await resp.json()
+    if (!data.success) ElMessage.error(data.error)
+  } catch (error: any) {
+    ElMessage.error(error?.message || String(error))
+  }
+}
+
 // 点击全局关闭右键菜单
 onMounted(() => document.addEventListener('click', closeContextMenu))
 onBeforeUnmount(() => document.removeEventListener('click', closeContextMenu))
@@ -559,6 +595,9 @@ const showPreview = ref(false)
 const previewWidth = ref(400)
 
 const activeTabRef = computed(() => tabs.value.find(t => t.path === activeTabPath.value) ?? null)
+
+/** 当前 tab 是否为图片（content 为空、language 为 'plaintext'，由 openFile 设置） */
+const activeTabIsImage = computed(() => activeTabRef.value?.language === 'plaintext' && activeTabRef.value?.content === '')
 
 const activeExt = computed(() => {
   const name = activeTabRef.value?.name ?? ''
@@ -707,10 +746,11 @@ function stopPreviewResize() {
               </svg>
             </span>
             <span v-else class="tree-arrow-spacer" />
-            <span class="tree-icon" :class="['icon', getNodeIconClass(node)]" />
+            <svg class="tree-icon mit-icon" aria-hidden="true">
+              <use :xlink:href="`#${getNodeSpriteId(node)}`" />
+            </svg>
             <input
               ref="renameInputRef"
-              class="tree-inline-input"
               v-model="renameInput.value"
               @keydown="handleRenameKeydown"
               @blur="confirmRename"
@@ -739,12 +779,16 @@ function stopPreviewResize() {
             </span>
             <span v-else class="tree-arrow-spacer" />
             <!-- 图标 -->
-            <span
+            <svg
               v-if="node.type === 'directory'"
-              class="tree-icon"
-              :class="['icon', getNodeIconClass(node)]"
-            />
-            <span v-else class="tree-icon" :class="['icon', getNodeIconClass(node)]" />
+              class="tree-icon mit-icon"
+              aria-hidden="true"
+            >
+              <use :xlink:href="`#${getNodeSpriteId(node)}`" />
+            </svg>
+            <svg v-else class="tree-icon mit-icon" aria-hidden="true">
+              <use :xlink:href="`#${getNodeSpriteId(node)}`" />
+            </svg>
             <!-- 名称 -->
             <span class="tree-name" :title="node.path">{{ node.name }}</span>
             <span v-if="node.loading" class="tree-loading" />
@@ -858,13 +902,26 @@ function stopPreviewResize() {
         <p class="editor-empty-hint">{{ $t('@EDITOR:Ctrl+S 保存') }}</p>
       </div>
 
-      <!-- Monaco 容器（始终挂载，tab 为空时隐藏） -->
+      <!-- Monaco 容器（始终挂载，tab 为空或 image tab 时隐藏） -->
       <div class="editor-body">
         <div
           class="monaco-container"
-          :class="{ hidden: tabs.length === 0 }"
+          :class="{ hidden: tabs.length === 0 || activeTabIsImage }"
           ref="editorContainerRef"
         />
+        <!-- 图片 tab 时的占位提示（主预览区在右侧 preview-panel） -->
+        <div
+          v-if="activeTabIsImage && tabs.length > 0 && !showPreview"
+          class="image-tab-placeholder"
+        >
+          <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="9" cy="9" r="2"/>
+            <path d="m21 15-5-5L5 21"/>
+          </svg>
+          <p class="image-tab-placeholder-title">{{ activeTabRef?.name }}</p>
+          <p class="image-tab-placeholder-hint">{{ $t('@EDITOR:这是图片文件，已在右侧预览面板中打开') }}</p>
+        </div>
         <!-- 预览分隔条 -->
         <div
           v-if="showPreview && tabs.length > 0"
@@ -895,13 +952,12 @@ function stopPreviewResize() {
               sandbox="allow-same-origin"
               :srcdoc="previewSrcdoc"
             />
-            <!-- 图片预览 -->
-            <div v-else-if="IMAGE_EXTS.has(activeExt)" class="preview-image-wrap">
-              <img
-                :src="`/api/editor/raw?path=${encodeURIComponent(activeTabRef?.path ?? '')}`"
-                :alt="activeTabRef?.name"
-              />
-            </div>
+            <!-- 图片预览（使用增强版 ImagePreview，支持缩放/拖拽） -->
+            <ImagePreview
+              v-else-if="IMAGE_EXTS.has(activeExt) && activeTabRef"
+              :file-path="activeTabRef.path"
+              :file-name="activeTabRef.name"
+            />
           </div>
         </div>
       </div>
@@ -933,6 +989,13 @@ function stopPreviewResize() {
         {{ $t('@EDITOR:新建文件夹') }}
       </button>
       <div class="ctx-menu-sep" />
+      <button class="ctx-menu-item" @click="ctxRevealInExplorer">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2"/>
+        </svg>
+        {{ $t('@EDITOR:在资源管理器中打开') }}
+      </button>
       <button class="ctx-menu-item" @click="ctxRename">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -1070,6 +1133,14 @@ function stopPreviewResize() {
   align-items: center;
   font-size: 14px;
   line-height: 1;
+}
+
+.tree-icon.mit-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .tree-icon--dir {
@@ -1275,6 +1346,34 @@ function stopPreviewResize() {
 
 .monaco-container.hidden {
   display: none;
+}
+
+/* 图片 tab 时的占位（无预览时显示） */
+.image-tab-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+  background: var(--bg-container);
+  text-align: center;
+  padding: var(--spacing-lg);
+}
+
+.image-tab-placeholder-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  margin: 0;
+  word-break: break-all;
+}
+
+.image-tab-placeholder-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  margin: 0;
 }
 
 /* ── 预览面板 ──────────────────────────────── */

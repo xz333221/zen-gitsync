@@ -11,11 +11,13 @@ import { formatDiff } from '../utils/index.ts';
 import FileActionButtons from './FileActionButtons.vue';
 import FileTreeView from './FileTreeView.vue';
 import { getFileIconClass } from '../utils/fileIcon';
+import { isImageFile } from '../utils/fileKind';
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree';
 import type { ConflictBlock } from '@/types/conflict';
 import { useConfigStore } from '@stores/configStore';
 import MonacoDiffViewer from '@/components/MonacoDiffViewer.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
+import ImagePreview from '@/components/ImagePreview.vue'
 
 // 定义props
 interface FileItem {
@@ -111,6 +113,9 @@ const splitPercent = computed<number>({
 const currentSelectedFile = computed(() => {
   return props.selectedFile || internalSelectedFile.value;
 });
+
+// 当前选中文件是否是图片
+const isCurrentImage = computed(() => isImageFile(currentSelectedFile.value || ''))
 
 // 检测当前文件是否为冲突文件
 const isConflictedFile = computed(() => {
@@ -1061,7 +1066,9 @@ onMounted(() => {
                   }"
                   @click="handleFileSelect(file.path)"
                 >
-                  <span :class="['file-icon', file.iconClass]"></span>
+                  <svg class="file-icon mit-icon" aria-hidden="true">
+                    <use :xlink:href="`#${file.iconClass}`" />
+                  </svg>
                   <!-- 冲突文件标记 -->
                   <span v-if="file.type === 'conflicted'" class="conflict-marker" title="冲突文件">⚠</span>
                   <el-tooltip
@@ -1321,12 +1328,16 @@ onMounted(() => {
             </div>
           </div>
           <div v-else-if="!isConflictedFile" class="diff-content" v-loading="isLoading">
-            <el-empty 
-              v-if="!hasDiffContent && !isLoading"
+            <ImagePreview
+              v-if="isCurrentImage"
+              :file-path="currentSelectedFile || ''"
+            />
+            <el-empty
+              v-else-if="!hasDiffContent && !isLoading"
               :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
               :image-size="80"
             />
-            <div v-else-if="compareMode" class="compare-view">
+            <div v-else-if="compareMode && !isCurrentImage" class="compare-view">
               <MonacoDiffViewer
                 :original="compareOriginal"
                 :modified="compareModified"
@@ -1534,12 +1545,16 @@ onMounted(() => {
       </div>
       
       <div v-else-if="!isConflictedFile" class="diff-content" v-loading="isLoading">
-        <el-empty 
-          v-if="!hasDiffContent && !isLoading"
+        <ImagePreview
+          v-if="isCurrentImage"
+          :file-path="currentSelectedFile || ''"
+        />
+        <el-empty
+          v-else-if="!hasDiffContent && !isLoading"
           :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
           :image-size="80"
         />
-        <div v-else-if="compareMode" class="compare-view">
+        <div v-else-if="compareMode && !isCurrentImage" class="compare-view">
           <MonacoDiffViewer
             :original="compareOriginal"
             :modified="compareModified"
@@ -1934,6 +1949,13 @@ onMounted(() => {
   font-size: var(--font-size-md);
   line-height: 1;
   display: inline-block;
+}
+
+.file-icon.mit-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  vertical-align: middle;
 }
 
 .file-name {

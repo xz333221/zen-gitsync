@@ -7,10 +7,9 @@ import './styles/tailwindcss.css'
 import './styles/common.scss'
 import './styles/dark-theme.scss'
 import './styles/unified-dialogs.scss'
+import 'virtual:svg-icons-register'
 import 'file-icons-js/css/style.css'
 import 'local-file-picker/dist/file-picker.css'
-// 导入 SVG 图标
-import 'virtual:svg-icons-register'
 import { initSvg } from './components/SvgIcon'
 
 const app = createApp(App)

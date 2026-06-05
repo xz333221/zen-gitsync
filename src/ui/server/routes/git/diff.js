@@ -112,6 +112,19 @@ export function registerGitDiffRoutes({
       }
 
       try {
+        // 二进制/产物文件：直接告知前端 isBinary，不读取内容
+        if (skipExtensions.test(String(filePath))) {
+          const isImage = /\.(png|jpg|jpeg|gif|webp|bmp|ico|svg)$/i.test(String(filePath))
+          return res.json({
+            success: true,
+            isBinary: true,
+            isImage,
+            content: isImage
+              ? '⚠️ 该文件是图片，建议在预览中查看。'
+              : '⚠️ 检测到二进制/编译产物文件，不支持以文本形式显示完整内容。'
+          });
+        }
+
         // 读取文件内容
         const content = await fs.readFile(filePath, 'utf8');
         res.json({ success: true, content });

@@ -1626,6 +1626,7 @@ export default {
   '@EDITOR:新建文件夹': 'New Folder',
   '@EDITOR:重命名': 'Rename',
   '@EDITOR:删除': 'Delete',
+  '@EDITOR:在资源管理器中打开': 'Open in File Explorer',
   '@EDITOR:文件': 'file',
   '@EDITOR:文件夹': 'folder',
   '@EDITOR:确认删除': 'Delete',

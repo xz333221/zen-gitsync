@@ -13,6 +13,7 @@ import FileDiffViewer from '@components/FileDiffViewer.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import FileGroup from '@/components/FileGroup.vue'
 import FileTreeView from '@/components/FileTreeView.vue'
+import { isImageFile } from '@/utils/fileKind'
 import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
 import CustomCommandsPanel from '@components/CustomCommandsPanel.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
@@ -285,7 +286,14 @@ async function getFileDiff(filePath: string) {
     
     // 获取当前文件的状态类型
     const currentFile = gitStore.fileList[currentFileIndex.value]
-    
+
+    // 对图片文件：清空 diff 内容，FileDiffViewer 会检测 isImage 显示图片预览
+    if (isImageFile(filePath)) {
+      diffContent.value = ''
+      diffStats.value = null
+      return
+    }
+
     // 对未跟踪文件特殊处理
     if (currentFile && currentFile.type === 'untracked') {
       try {

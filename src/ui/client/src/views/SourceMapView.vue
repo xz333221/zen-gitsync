@@ -741,10 +741,20 @@ onBeforeUnmount(() => {
               </span>
               <span v-else class="sm-tree-arrow-spacer" />
               <!-- 图标 -->
-              <span
-                class="sm-tree-icon"
-                :class="node.kind === 'dir' ? ['icon', 'icon-folder'] : ['icon', getFileIconClass(node.name)]"
-              />
+              <svg
+                v-if="node.kind === 'dir'"
+                class="sm-tree-icon mit-icon"
+                aria-hidden="true"
+              >
+                <use :xlink:href="`#${getFileIconClass(node.name) || 'icon-folder'}`" />
+              </svg>
+              <svg
+                v-else
+                class="sm-tree-icon mit-icon"
+                aria-hidden="true"
+              >
+                <use :xlink:href="`#${getFileIconClass(node.name)}`" />
+              </svg>
               <!-- 名称 -->
               <span class="sm-tree-name" :title="node.path">{{ node.name }}</span>
             </div>
@@ -1359,6 +1369,14 @@ onBeforeUnmount(() => {
   align-items: center;
   font-size: 14px;
   line-height: 1;
+}
+
+.sm-tree-icon.mit-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .sm-tree-name {

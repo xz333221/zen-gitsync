@@ -144,7 +144,9 @@ const getFileIcon = (filePath: string) => {
             @click.stop
             class="file-checkbox"
           />
-          <span :class="['file-type-icon', getFileIcon(file.path)]"></span>
+          <svg class="file-type-icon mit-icon" aria-hidden="true">
+            <use :xlink:href="`#${getFileIcon(file.path)}`" />
+          </svg>
           <div class="file-name-section">
             <el-tooltip
               :content="props.getFileName(file.path)"
@@ -345,6 +347,14 @@ const getFileIcon = (filePath: string) => {
   font-size: var(--font-size-md);
   line-height: 1;
   margin-right: var(--spacing-sm);
+}
+
+.file-type-icon.mit-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 /* 锁定状态显示特殊样式 */

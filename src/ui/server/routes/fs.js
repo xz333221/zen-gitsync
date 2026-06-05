@@ -651,5 +651,49 @@ export function registerFsRoutes({
       res.status(500).json({ success: false, error: error.message });
     }
   });
+
+  // ── 编辑器：在系统文件管理器中打开 / 选中 ───────────────────
+  // 行为：
+  //   - 目录：直接用系统文件管理器打开
+  //   - 文件：Windows / macOS 上在文件管理器中选中该文件；Linux 无标准接口，退化为打开所在目录
+  app.post('/api/editor/reveal', express.json(), async (req, res) => {
+    try {
+      const targetPath = req.body?.path;
+      if (!targetPath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+
+      const cwd = getCurrentProjectPath() || process.cwd();
+      const resolved = path.resolve(targetPath);
+      if (!resolved.startsWith(path.resolve(cwd))) {
+        return res.status(403).json({ success: false, error: '禁止访问工作目录以外的内容' });
+      }
+
+      try {
+        await fs.access(resolved);
+      } catch {
+        return res.status(404).json({ success: false, error: '目标不存在' });
+      }
+
+      const stat = await fs.stat(resolved);
+      const isDirectory = stat.isDirectory();
+
+      const platform = process.platform;
+      if (isDirectory) {
+        await open(resolved, { wait: false });
+      } else if (platform === 'win32') {
+        // Windows: explorer.exe /select,"<path>"
+        spawn('explorer.exe', [`/select,"${resolved}"`], { detached: true, stdio: 'ignore' }).unref();
+      } else if (platform === 'darwin') {
+        // macOS: open -R "<path>" 在 Finder 中选中
+        spawn('open', ['-R', resolved], { detached: true, stdio: 'ignore' }).unref();
+      } else {
+        // Linux / 其它: 没有统一标准，打开所在目录
+        await open(path.dirname(resolved), { wait: false });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 }
 

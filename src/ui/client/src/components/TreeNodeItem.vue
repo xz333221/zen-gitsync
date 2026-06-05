@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static.ts'
 import { ElIcon, ElTooltip } from 'element-plus';
-import { Lock, Folder } from '@element-plus/icons-vue';
-import { getFileIconClass } from '../utils/fileIcon';
+import { Lock } from '@element-plus/icons-vue';
+import { getNodeIcon } from '../utils/fileIcon';
 import type { TreeNode } from '@/utils/fileTree';
 import FileActionButtons from './FileActionButtons.vue';
 
@@ -38,13 +38,9 @@ function getIndent(level: number): string {
   return `${level * 20 + 10}px`;
 }
 
-// 获取图标class
-function getIconClass(node: TreeNode): string {
-  if (node.isDirectory) {
-    // 文件夹统一使用file-icons-js的文件夹图标
-    return 'icon-file-directory';
-  }
-  return getFileIconClass(node.name);
+// 获取图标信息（Material Icon Theme 风格）
+function getIconInfo(node: TreeNode) {
+  return getNodeIcon(node.name, node.isDirectory, !!node.expanded)
 }
 
 // 判断是否选中
@@ -73,10 +69,9 @@ function handleClick() {
       @click="handleClick"
     >
       <!-- 文件/文件夹图标 -->
-      <el-icon v-if="node.isDirectory" class="folder-icon">
-        <Folder />
-      </el-icon>
-      <span v-else :class="['node-icon', 'file-icon', getIconClass(node)]"></span>
+      <svg class="node-icon mit-icon" :class="{ 'folder-icon': getIconInfo(node).key.startsWith('folder-') }" aria-hidden="true">
+        <use :xlink:href="`#${getIconInfo(node).spriteId}`" />
+      </svg>
       
       <!-- 节点名称 -->
       <el-tooltip
@@ -283,10 +278,18 @@ function handleClick() {
   font-size: var(--font-size-md);
   line-height: 1;
   margin-right: var(--spacing-xs);
-  
+
   &.folder-icon {
     color: #faad14;
   }
+}
+
+.mit-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .node-name {
