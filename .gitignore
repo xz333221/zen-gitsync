@@ -13,6 +13,14 @@ i18n.secret.cjs
 
 src/ui/client/lib/
 
+# 前端 build 产物（每个 hash 命名的文件都进 git 会污染 history；本地 build 后会重新生成）
+src/ui/public/index.html
+src/ui/public/assets/*
+
+# 旧版被删除的 font-awesome/file-icons/devopicons/mfixx/octicons 字体
+src/ui/public/assets/*.woff2
+src/ui/public/assets/*.ttf
+
 # Log files
 npm-debug.log*
 yarn-debug.log*
