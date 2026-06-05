@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, defineAsyncComponent } from 'vue'
 import { getFolderNameFromPath } from '@/utils/path'
 import GitStatus from '@views/components/GitStatus.vue'
 import CommitForm from '@views/components/CommitForm.vue'
@@ -12,8 +12,9 @@ import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import ActivityBar from '@/components/ActivityBar.vue'
 import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
-import EditorView from '@/views/EditorView.vue'
-import SourceMapView from '@/views/SourceMapView.vue'
+// 编辑器 / 源码地图视图延迟加载（首屏不下载）
+const EditorView = defineAsyncComponent(() => import('@/views/EditorView.vue'))
+const SourceMapView = defineAsyncComponent(() => import('@/views/SourceMapView.vue'))
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -572,13 +573,13 @@ function copyGitInit() {
 
       </div><!-- /view-pane git -->
 
-      <!-- 编辑器视图 -->
-      <div v-show="activeView === 'editor'" class="view-pane editor-pane">
+      <!-- 编辑器视图（延迟加载） -->
+      <div v-if="activeView === 'editor'" class="view-pane editor-pane">
         <EditorView />
       </div>
 
-      <!-- 源码地图视图 -->
-      <div v-show="activeView === 'source-map'" class="view-pane source-map-pane">
+      <!-- 源码地图视图（延迟加载） -->
+      <div v-if="activeView === 'source-map'" class="view-pane source-map-pane">
         <SourceMapView />
       </div>
 
