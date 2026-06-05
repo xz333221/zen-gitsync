@@ -592,7 +592,8 @@ const PREVIEW_TEXT_EXTS = new Set(['md', 'html', 'htm', 'svg'])
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp'])
 
 const showPreview = ref(false)
-const previewWidth = ref(400)
+// 0 = 默认占满右半边（flex: 1 1 0%），用户拖动 resizer 后会写入实际像素值
+const previewWidth = ref(0)
 
 const activeTabRef = computed(() => tabs.value.find(t => t.path === activeTabPath.value) ?? null)
 
@@ -684,7 +685,8 @@ function startPreviewResize(e: MouseEvent) {
 
 function onPreviewResize(e: MouseEvent) {
   if (!isPreviewResizing) return
-  const delta = previewResizeStartX - e.clientX
+  // resizer 在面板右侧：向右拖动 → 面板变宽
+  const delta = e.clientX - previewResizeStartX
   previewWidth.value = Math.max(200, Math.min(900, previewResizeStartW + delta))
 }
 
@@ -922,7 +924,7 @@ function stopPreviewResize() {
           <p class="image-tab-placeholder-title">{{ activeTabRef?.name }}</p>
           <p class="image-tab-placeholder-hint">{{ $t('@EDITOR:这是图片文件，已在右侧预览面板中打开') }}</p>
         </div>
-        <!-- 预览分隔条 -->
+        <!-- 预览分隔条（在面板右侧，拉动调整面板宽度） -->
         <div
           v-if="showPreview && tabs.length > 0"
           class="preview-resizer"
@@ -932,7 +934,7 @@ function stopPreviewResize() {
         <div
           v-if="showPreview && tabs.length > 0"
           class="preview-panel"
-          :style="{ width: previewWidth + 'px' }"
+          :style="{ flexBasis: previewWidth + 'px' }"
         >
           <div class="preview-header">
             <span class="preview-title">{{ $t('@EDITOR:预览') }}</span>
@@ -1392,6 +1394,10 @@ function stopPreviewResize() {
   background: transparent;
   transition: background 0.15s;
   z-index: 2;
+  /* resizer 视觉上位于面板右边缘：让 monaco / 面板保持原 DOM 顺序，
+     借助 flex order 把它推到 flex 容器的最右端 */
+  order: 99;
+  margin-left: auto;
 }
 
 .preview-resizer::after {
@@ -1420,7 +1426,9 @@ function stopPreviewResize() {
 .preview-panel {
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
+  flex-grow: 1;             /* 默认占满右侧剩余空间 */
+  flex-shrink: 1;
+  flex-basis: 0;            /* 让 flex-grow 均匀分配，避免首屏从 0 起跳 */
   border-left: 1px solid var(--border-color);
   background: var(--bg-panel);
   overflow: hidden;
