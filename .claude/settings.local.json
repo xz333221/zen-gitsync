@@ -31,7 +31,8 @@
       "Bash(timeout 60 node_modules/.bin/vite build)",
       "Bash(npx vue-tsc *)",
       "Bash(echo \"EXIT=$?\")",
-      "Bash(grep -E \"index-.*\\\\.\\(js|css\\)$\")"
+      "Bash(grep -E \"index-.*\\\\.\\(js|css\\)$\")",
+      "Bash(grep -o '\"\\\\./\\\\.\\\\./icons/[^\"]*\\\\.svg\"' D:/xz_workspace/github_workspace/zen-gitsync/src/ui/client/src/utils/material-icons.json)"
     ]
   }
 }
