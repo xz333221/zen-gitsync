@@ -245,6 +245,20 @@ Configure the model endpoint, API key, and model name in **Settings → AI**.
 
 ---
 
+## Development Notes
+
+### Line endings
+
+The repo ships a `.gitattributes` that locks source files to **LF** and Windows scripts (`.bat` / `.cmd` / `.ps1`) to **CRLF**. This takes precedence over `core.autocrlf`, so the working tree is identical on Windows, macOS, and Linux — generated files like `auto-imports.d.ts` and `components.d.ts` will not show up as "modified" just because the dev server rewrote them with different line endings.
+
+If you change `.gitattributes` rules, renormalize the index in one shot:
+
+```bash
+git add --renormalize .
+```
+
+---
+
 ## CLI Commands
 
 ### Interactive commit:
@@ -578,6 +592,20 @@ Activity Bar 第三个视图，调用 AI 模型将项目代码库生成可交互
 | 语言 | 中文 / English |
 | 文件锁定 | 锁定文件，使其永远不被暂存或储藏 |
 | NPM 路径 | 配置 `package.json` 的扫描位置 |
+
+---
+
+## 开发约定
+
+### 行尾规范
+
+仓库根的 `.gitattributes` 把**所有源代码锁定为 LF**（`.ts` `.js` `.vue` `.json` `.md` 等），**Windows 脚本锁定为 CRLF**（`.bat` / `.cmd` / `.ps1`）。`.gitattributes` 的优先级高于 `core.autocrlf`，所以无论本地 git 怎么配，签出与提交的行尾都一致；dev server 重新生成的 `auto-imports.d.ts`、`components.d.ts` 不会再因为行尾不一致而显示为"内容相同的 modified"。
+
+如果你修改了 `.gitattributes` 的规则，需要一次性重新归一索引：
+
+```bash
+git add --renormalize .
+```
 
 ---
 

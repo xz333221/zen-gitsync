@@ -1,0 +1,72 @@
+# ── 行尾规范 ────────────────────────────────
+# 本仓库所有源代码强制 LF；Windows 脚本保持 CRLF；图片/字体标记为二进制。
+# 不管 core.autocrlf 设什么值，.gitattributes 都会优先生效。
+# 修改本文件后需要执行：git add --renormalize .
+
+# ── 源代码：统一 LF ─────────────────────────
+*.d.ts       text eol=lf
+*.ts         text eol=lf
+*.tsx        text eol=lf
+*.js         text eol=lf
+*.cjs        text eol=lf
+*.mjs        text eol=lf
+*.vue        text eol=lf
+*.json       text eol=lf
+*.jsonc      text eol=lf
+*.scss       text eol=lf
+*.css        text eol=lf
+*.html       text eol=lf
+*.htm        text eol=lf
+*.md         text eol=lf
+*.mdx        text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+*.svg        text eol=lf
+*.txt        text eol=lf
+*.csv        text eol=lf
+*.xml        text eol=lf
+*.gitignore  text eol=lf
+*.npmignore  text eol=lf
+*.npmrc      text eol=lf
+*.editorconfig text eol=lf
+*.prettierrc* text eol=lf
+*.eslintrc*  text eol=lf
+
+# Vite / TypeScript 配置类
+vite.config.*  text eol=lf
+tsconfig*.json text eol=lf
+package.json   text eol=lf
+package-lock.json text eol=lf -diff
+
+# ── 自动生成的声明文件：标注为生成产物 ───────
+# unplugin-auto-import / unplugin-vue-components 输出的 .d.ts，
+# LF 锁定后不会再因 core.autocrlf 抖动出现"内容相同但 modified"。
+src/ui/client/auto-imports.d.ts linguist-generated=true
+src/ui/client/components.d.ts  linguist-generated=true
+
+# ── Windows 脚本：保留 CRLF ────────────────
+*.bat        text eol=crlf
+*.cmd        text eol=crlf
+*.ps1        text eol=crlf
+
+# ── Shell 脚本：LF ────────────────────────
+*.sh         text eol=lf
+
+# ── 二进制：禁止 git 触碰换行 ──────────────
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.webp       binary
+*.ico        binary
+*.bmp        binary
+*.woff       binary
+*.woff2      binary
+*.ttf        binary
+*.otf        binary
+*.eot        binary
+*.pdf        binary
+*.zip        binary
+*.gz         binary
+*.tar        binary
+*.7z         binary
