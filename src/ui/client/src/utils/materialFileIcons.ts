@@ -19,13 +19,14 @@ const manifest = icons as MaterialIconManifest
 const DEFINITIONS = manifest.iconDefinitions || {}
 
 // 项目内自有的 AI IDE 工具 dotfolder，官方未收录，复用官方现有 SVG
+// 注意：这里返回的是 Vite sprite 真实 id（带 mit- 前缀），与 src/assets/icons/material/*.svg 文件名一致
 const CUSTOM_FOLDER_OVERRIDES: Record<string, string> = {
-  '.qoder': 'folder-config',
-  '.codebuddy': 'folder-config',
-  '.windsurf': 'folder-config',
-  '.workbuddy': 'folder-config',
-  '.trae': 'folder-config',
-  '.iflow': 'folder-config',
+  '.qoder': 'mit-folder-config',
+  '.codebuddy': 'mit-folder-config',
+  '.windsurf': 'mit-folder-config',
+  '.workbuddy': 'mit-folder-config',
+  '.trae': 'mit-folder-config',
+  '.iflow': 'mit-folder-config',
 }
 
 /**
@@ -50,6 +51,16 @@ function extractKey(def: string | undefined): string | null {
 
 const FALLBACK_FOLDER = 'folder'
 const FALLBACK_FILE = 'file'
+
+// 把 manifest 中的 'file' / 'folder' 引用解析为 Vite sprite 真正注册的 id（'mit-file' / 'mit-folder'）。
+// 若解析失败则用字面量 'mit-file' / 'mit-folder' 作为兜底，确保 <use href="#icon-mit-file"> 一定命中。
+const FALLBACK_FOLDER_KEY: string =
+  extractKey(DEFINITIONS[FALLBACK_FOLDER]?.iconPath) || 'mit-folder'
+const FALLBACK_FILE_KEY: string =
+  extractKey(DEFINITIONS[FALLBACK_FILE]?.iconPath) || 'mit-file'
+// 万一默认 sprite 也没找到，再用通用默认图标（mit-folder-open / mit-text 等也已收录）
+const ULTIMATE_FALLBACK_FILE = 'mit-file'
+const ULTIMATE_FALLBACK_FOLDER = 'mit-folder'
 
 const cache = new Map<string, string>()
 
@@ -86,11 +97,11 @@ function resolveFolder(name: string, expanded: boolean): string {
   }
 
   if (DEFINITIONS[FALLBACK_FOLDER]) {
-    cache.set(cacheKey, FALLBACK_FOLDER)
-    return FALLBACK_FOLDER
+    cache.set(cacheKey, FALLBACK_FOLDER_KEY)
+    return FALLBACK_FOLDER_KEY
   }
-  cache.set(cacheKey, 'default')
-  return 'default'
+  cache.set(cacheKey, ULTIMATE_FALLBACK_FOLDER)
+  return ULTIMATE_FALLBACK_FOLDER
 }
 
 function resolveFile(name: string): string {
@@ -126,11 +137,11 @@ function resolveFile(name: string): string {
   }
 
   if (DEFINITIONS[FALLBACK_FILE]) {
-    cache.set(name, FALLBACK_FILE)
-    return FALLBACK_FILE
+    cache.set(name, FALLBACK_FILE_KEY)
+    return FALLBACK_FILE_KEY
   }
-  cache.set(name, 'default')
-  return 'default'
+  cache.set(name, ULTIMATE_FALLBACK_FILE)
+  return ULTIMATE_FALLBACK_FILE
 }
 
 /**
