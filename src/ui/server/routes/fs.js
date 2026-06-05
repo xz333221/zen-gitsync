@@ -5,6 +5,7 @@ import path from 'path';
 import open from 'open';
 import os from 'os';
 import { spawn, exec } from 'child_process';
+import { ensureWithinCwd } from '../utils/pathGuard.js';
 
 export function registerFsRoutes({
   app,
@@ -17,6 +18,12 @@ export function registerFsRoutes({
   setProjectRoomId,
   setIsGitRepo
 }) {
+  // ── 解析并校验 user 输入路径在当前项目 cwd 内（防 ../ 父目录逃逸、startsWith 假阳性、Windows 大小写）──
+  const safePathInProject = async (userPath) => {
+    const cwd = getCurrentProjectPath() || process.cwd()
+    return ensureWithinCwd(userPath, cwd)
+  }
+
   // 新增获取当前工作目录接口
   app.get('/api/current_directory', async (req, res) => {
     try {
@@ -497,12 +504,9 @@ export function registerFsRoutes({
     try {
       const filePath = req.query.path;
       if (!filePath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
-      // 安全：只允许读取当前工作目录内的文件
-      const cwd = getCurrentProjectPath() || process.cwd();
-      const resolved = path.resolve(filePath);
-      if (!resolved.startsWith(path.resolve(cwd))) {
-        return res.status(403).json({ success: false, error: '禁止访问工作目录以外的文件' });
-      }
+      const safe = await safePathInProject(filePath);
+      if (!safe) return res.status(403).json({ success: false, error: '禁止访问工作目录以外的文件' });
+      const resolved = safe.safePath;
       const stat = await fs.stat(resolved);
       if (!stat.isFile()) return res.status(400).json({ success: false, error: '目标不是文件' });
       // 超过 2MB 不读取
@@ -521,11 +525,9 @@ export function registerFsRoutes({
     try {
       const filePath = req.query.path;
       if (!filePath) return res.status(400).end();
-      const cwd = getCurrentProjectPath() || process.cwd();
-      const resolved = path.resolve(filePath);
-      if (!resolved.startsWith(path.resolve(cwd))) {
-        return res.status(403).end();
-      }
+      const safe = await safePathInProject(filePath);
+      if (!safe) return res.status(403).end();
+      const resolved = safe.safePath;
       const stat = await fs.stat(resolved);
       if (!stat.isFile()) return res.status(400).end();
       if (stat.size > 20 * 1024 * 1024) return res.status(413).end();
@@ -552,12 +554,9 @@ export function registerFsRoutes({
       if (!filePath || content === undefined) {
         return res.status(400).json({ success: false, error: '缺少 path 或 content 参数' });
       }
-      const cwd = getCurrentProjectPath() || process.cwd();
-      const resolved = path.resolve(filePath);
-      if (!resolved.startsWith(path.resolve(cwd))) {
-        return res.status(403).json({ success: false, error: '禁止写入工作目录以外的文件' });
-      }
-      await fs.writeFile(resolved, content, 'utf-8');
+      const safe = await safePathInProject(filePath);
+      if (!safe) return res.status(403).json({ success: false, error: '禁止写入工作目录以外的文件' });
+      await fs.writeFile(safe.safePath, content, 'utf-8');
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -569,11 +568,9 @@ export function registerFsRoutes({
     try {
       const { path: filePath } = req.body;
       if (!filePath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
-      const cwd = getCurrentProjectPath() || process.cwd();
-      const resolved = path.resolve(filePath);
-      if (!resolved.startsWith(path.resolve(cwd))) {
-        return res.status(403).json({ success: false, error: '禁止在工作目录以外创建文件' });
-      }
+      const safe = await safePathInProject(filePath);
+      if (!safe) return res.status(403).json({ success: false, error: '禁止在工作目录以外创建文件' });
+      const resolved = safe.safePath;
       // 如果已存在则拒绝
       try {
         await fs.access(resolved);
@@ -592,11 +589,9 @@ export function registerFsRoutes({
     try {
       const { path: dirPath } = req.body;
       if (!dirPath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
-      const cwd = getCurrentProjectPath() || process.cwd();
-      const resolved = path.resolve(dirPath);
-      if (!resolved.startsWith(path.resolve(cwd))) {
-        return res.status(403).json({ success: false, error: '禁止在工作目录以外创建目录' });
-      }
+      const safe = await safePathInProject(dirPath);
+      if (!safe) return res.status(403).json({ success: false, error: '禁止在工作目录以外创建目录' });
+      const resolved = safe.safePath;
       try {
         await fs.access(resolved);
         return res.status(409).json({ success: false, error: '目录已存在' });
@@ -613,11 +608,9 @@ export function registerFsRoutes({
     try {
       const filePath = req.query.path;
       if (!filePath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
-      const cwd = getCurrentProjectPath() || process.cwd();
-      const resolved = path.resolve(filePath);
-      if (!resolved.startsWith(path.resolve(cwd))) {
-        return res.status(403).json({ success: false, error: '禁止删除工作目录以外的内容' });
-      }
+      const safe = await safePathInProject(filePath);
+      if (!safe) return res.status(403).json({ success: false, error: '禁止删除工作目录以外的内容' });
+      const resolved = safe.safePath;
       const stat = await fs.stat(resolved);
       if (stat.isDirectory()) {
         await fs.rm(resolved, { recursive: true, force: true });
@@ -635,17 +628,14 @@ export function registerFsRoutes({
     try {
       const { oldPath, newPath } = req.body;
       if (!oldPath || !newPath) return res.status(400).json({ success: false, error: '缺少参数' });
-      const cwd = getCurrentProjectPath() || process.cwd();
-      const resolvedOld = path.resolve(oldPath);
-      const resolvedNew = path.resolve(newPath);
-      if (!resolvedOld.startsWith(path.resolve(cwd)) || !resolvedNew.startsWith(path.resolve(cwd))) {
-        return res.status(403).json({ success: false, error: '禁止操作工作目录以外的内容' });
-      }
+      const safeOld = await safePathInProject(oldPath)
+      const safeNew = await safePathInProject(newPath)
+      if (!safeOld || !safeNew) return res.status(403).json({ success: false, error: '禁止操作工作目录以外的内容' });
       try {
-        await fs.access(resolvedNew);
+        await fs.access(safeNew.safePath);
         return res.status(409).json({ success: false, error: '目标名称已存在' });
       } catch { /* 不存在，继续 */ }
-      await fs.rename(resolvedOld, resolvedNew);
+      await fs.rename(safeOld.safePath, safeNew.safePath);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -661,11 +651,9 @@ export function registerFsRoutes({
       const targetPath = req.body?.path;
       if (!targetPath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
 
-      const cwd = getCurrentProjectPath() || process.cwd();
-      const resolved = path.resolve(targetPath);
-      if (!resolved.startsWith(path.resolve(cwd))) {
-        return res.status(403).json({ success: false, error: '禁止访问工作目录以外的内容' });
-      }
+      const safe = await safePathInProject(targetPath);
+      if (!safe) return res.status(403).json({ success: false, error: '禁止访问工作目录以外的内容' });
+      const resolved = safe.safePath;
 
       try {
         await fs.access(resolved);
