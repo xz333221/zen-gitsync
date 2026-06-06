@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 测试截图 / 一次性产物
+# 验证脚本应输出到 verify/ 目录或用 -o 指定；
+# 这里兜底防止根目录误放
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.bmp
+*.verify-*
