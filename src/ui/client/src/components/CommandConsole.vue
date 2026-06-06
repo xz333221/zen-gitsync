@@ -16,6 +16,7 @@ import { useGitStore } from '@stores/gitStore';
 import { io, Socket } from 'socket.io-client';
 import { replaceVariables } from '@/utils/commandParser';
 import { useAnsiToHtml } from '@/composables/useAnsiToHtml';
+import { useTerminalSessions } from '@/composables/useTerminalSessions';
 import { $t } from '@/lang/static'
 
 const configStore = useConfigStore();
@@ -429,16 +430,6 @@ type ConsoleRecord = {
   stdinInput?: string; // 每个命令独立的 stdin 输入
 };
 
-type TerminalSession = {
-  id: number;
-  command: string;
-  workingDirectory?: string;
-  pid?: number | null;
-  createdAt?: number;
-  lastStartedAt?: number;
-  alive?: boolean;
-};
-
 // 控制整个控制台展开/收起的开关不再在本组件内维护：
 // `configStore.ui.commandConsole.expanded` 由设置菜单的"命令控制台 > 默认展开"开关控制
 // 需要读这个值的地方直接读 configStore.ui.commandConsole.expanded
@@ -455,8 +446,16 @@ const useTerminal = computed<boolean>({
   set: (v) => { configStore.ui.commandConsole.useTerminal = v }
 });
 
-const terminalSessions = ref<TerminalSession[]>([]);
-const terminalSessionsLoading = ref(false);
+// 终端会话管理（composable，详见 ./composables/useTerminalSessions.ts）
+const {
+  sessions: terminalSessions,
+  loading: terminalSessionsLoading,
+  refresh: loadTerminalSessions,
+  restart: restartTerminalSession,
+  remove: deleteTerminalSession,
+  upsert: upsertTerminalSession,
+} = useTerminalSessions()
+
 // 是否显示终端会话面板（从 configStore.ui.commandConsole.showTerminalSessions 读取）
 const showTerminalSessions = computed<boolean>({
   get: () => configStore.ui.commandConsole.showTerminalSessions,
@@ -645,16 +644,9 @@ async function loadTerminalSessionsStatus(cleanup: boolean = true) {
   }
 }
 
-function upsertTerminalSession(session: TerminalSession) {
-  if (!session || typeof session.id !== 'number') return;
-  const idx = terminalSessions.value.findIndex(s => s.id === session.id);
-  if (idx !== -1) {
-    terminalSessions.value[idx] = session;
-  } else {
-    terminalSessions.value.unshift(session);
-  }
-  terminalSessions.value = [...terminalSessions.value];
-}
+// 终端会话的 3 个 API 调用（load / restart / delete）已抽离到 useTerminalSessions composable。
+// 状态 refs (terminalSessions / terminalSessionsLoading) 和 upsert 工具也从 composable 解构出来。
+// 这里只保留局部工具函数：
 
 function getLastDirName(p?: string) {
   const raw = String(p || '').trim();
@@ -662,71 +654,6 @@ function getLastDirName(p?: string) {
   const normalized = raw.replace(/\/+$/g, '').replace(/\+$/g, '');
   const parts = normalized.split(/[\\/]+/).filter(Boolean);
   return parts[parts.length - 1] || normalized;
-}
-
-async function loadTerminalSessions() {
-  try {
-    terminalSessionsLoading.value = true;
-    const resp = await fetch('/api/terminal-sessions');
-    const result = await resp.json();
-    if (result?.success) {
-      terminalSessions.value = Array.isArray(result.sessions) ? result.sessions : [];
-    } else {
-      ElMessage.error(result?.error || '获取终端会话失败');
-    }
-  } catch (e: any) {
-    ElMessage.error(e?.message || '获取终端会话失败');
-  } finally {
-    terminalSessionsLoading.value = false;
-  }
-}
-
-async function restartTerminalSession(session: TerminalSession) {
-  try {
-    terminalSessionsLoading.value = true;
-    const resp = await fetch(`/api/terminal-sessions/${session.id}/restart`, { method: 'POST' });
-    const result = await resp.json();
-    if (result?.success) {
-      ElMessage.success('已重新启动终端');
-      await loadTerminalSessions();
-    } else {
-      ElMessage.error(result?.error || '重新启动失败');
-    }
-  } catch (e: any) {
-    ElMessage.error(e?.message || '重新启动失败');
-  } finally {
-    terminalSessionsLoading.value = false;
-  }
-}
-
-async function deleteTerminalSession(session: TerminalSession) {
-  try {
-    await ElMessageBox.confirm(
-      '确定要删除该终端会话记录吗？如果该终端仍在运行，将尝试结束进程。',
-      '删除终端会话',
-      {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    );
-
-    terminalSessionsLoading.value = true;
-    const resp = await fetch(`/api/terminal-sessions/${session.id}`, { method: 'DELETE' });
-    const result = await resp.json();
-    if (result?.success) {
-      ElMessage.success('已删除');
-      await loadTerminalSessions();
-    } else {
-      ElMessage.error(result?.error || '删除失败');
-    }
-  } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e?.message || '删除失败');
-    }
-  } finally {
-    terminalSessionsLoading.value = false;
-  }
 }
 
 // 控制自定义命令管理弹窗
