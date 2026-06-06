@@ -1,4 +1,5 @@
 import icons from './material-icons.json'
+import materialFallbackMap from './materialFallbackMap.json'
 
 interface IconDefinition {
   iconPath: string
@@ -17,6 +18,11 @@ interface MaterialIconManifest {
 
 const manifest = icons as MaterialIconManifest
 const DEFINITIONS = manifest.iconDefinitions || {}
+
+// Build-time 生成的 fallback map：JSON 引用的 key 在 material 目录缺失时 → 通用 file/folder。
+// 由 verify 脚本维护（verify/audit-real.mjs），任何缺失的 key 都会自动加入。
+// 注意：所有 fallback target 只有两种值（'file' 或 'folder'），这两个 key 必存在于 material 目录。
+const FALLBACK_MAP = materialFallbackMap as Record<string, string>
 
 // 项目内自有的 AI IDE 工具 dotfolder，官方未收录，复用官方现有 SVG
 // 注意：这里返回的是 Vite sprite 真实 id（带 mit- 前缀），与 src/assets/icons/material/*.svg 文件名一致
@@ -40,12 +46,23 @@ function pathToKey(iconPath: string | undefined): string | null {
 }
 
 /**
- * 把 iconDefinitions 中的引用（key 或 iconPath）解析为最终 sprite id key（不含 icon- 前缀）
+ * 把 iconDefinitions 中的引用（key 或 iconPath）解析为最终 sprite id key（不含 icon- 前缀）。
+ *
+ * 如果 JSON 引用的 key 在 material/ 目录没对应 SVG，fallback 到通用 file/folder。
+ * Fallback target 必存在于 material 目录（来自 materialFallbackMap.json 的值）。
  */
 function extractKey(def: string | undefined): string | null {
   if (!def) return null
   // 先看是否为 iconDefinitions 中的 key（直接以文件名作为 key 也合法）
-  if (DEFINITIONS[def]) return pathToKey(DEFINITIONS[def].iconPath) || def
+  if (DEFINITIONS[def]) {
+    const key = pathToKey(DEFINITIONS[def].iconPath) || def
+    // 检查该 key 是否需要 fallback
+    if (FALLBACK_MAP[def] || FALLBACK_MAP[key]) {
+      // JSON 引用了这个 key，但 material 目录没 SVG → 用 fallback
+      return FALLBACK_MAP[def] || FALLBACK_MAP[key]
+    }
+    return key
+  }
   return pathToKey(def)
 }
 
