@@ -73,11 +73,13 @@ function extractKey(def: string | undefined): string | null {
     // 检查该 key 是否需要 fallback
     if (FALLBACK_MAP[def] || FALLBACK_MAP[key]) {
       // JSON 引用了这个 key，但 material 目录没 SVG → 用 fallback
-      return FALLBACK_MAP[def] || FALLBACK_MAP[key]
+      // 再走一次 extractKey，把 fallback value（'file' / 'folder' / 完整 key）解析成 sprite key
+      return extractKey(FALLBACK_MAP[def] || FALLBACK_MAP[key])
     }
     return key
   }
-  return pathToKey(def)
+  // def 可能是 fallback value（'file' / 'folder'），也可能是已带 mit- 前缀的完整 key
+  return pathToKey(def) || def
 }
 
 const FALLBACK_FOLDER = 'folder'
