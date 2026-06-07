@@ -24,6 +24,7 @@ import { useGlobalLoading } from "@/composables/useGlobalLoading";
 import { useSuccessModal } from "@/composables/useSuccessModal";
 import { useGitStore } from "@stores/gitStore";
 import { useConfigStore } from "@stores/configStore";
+import { useLocaleStore } from "@stores/localeStore";
 import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
@@ -68,10 +69,11 @@ async function handleAiGenerateCommit() {
       // diff 获取失败不影响主流程
     }
 
+    const localeStore = useLocaleStore();
     const res = await fetch('/api/config/generate-commit-message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ diff, fileList })
+      body: JSON.stringify({ diff, fileList, locale: localeStore.currentLocale })
     });
     const data = await res.json();
     if (!data.success) {

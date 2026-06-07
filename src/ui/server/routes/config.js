@@ -1073,9 +1073,10 @@ export function registerConfigRoutes({
 
   // AI 生成提交信息
   app.post('/api/config/generate-commit-message', express.json(), async (req, res) => {
-    const { fileList } = req.body || {}
+    const { fileList, locale: reqLocale } = req.body || {}
     try {
       const rawConfig = await configManager.readRawConfigFile()
+      const userLocale = reqLocale || rawConfig.locale || 'zh-CN'
       const models = Array.isArray(rawConfig.models) ? rawConfig.models : []
       const defaultModel = models.find(m => m.isDefault) || models[0]
       if (!defaultModel) {
@@ -1087,7 +1088,8 @@ export function registerConfigRoutes({
       const safeFileList = Array.isArray(fileList) && fileList.length > 0 ? fileList : serverFileList
       const diffText = prepareDiffForPrompt(rawDiff, safeFileList)
       const filesText = safeFileList.slice(0, 30).join('\n')
-      const prompt = `你是一个 Git 提交信息生成助手。根据以下 git diff 信息，生成一条符合 Conventional Commits 规范的提交信息。
+
+      const promptZh = `你是一个 Git 提交信息生成助手。根据以下 git diff 信息，生成一条符合 Conventional Commits 规范的提交信息。
 
 要求：
 1. type 只能是：feat/fix/docs/style/refactor/test/chore 之一
@@ -1101,10 +1103,26 @@ ${filesText}
 git diff --staged：
 ${diffText || '（无 staged 内容，请根据文件列表推断）'}`
 
-      console.log('[generate-commit] ===== PROMPT START (length: ' + prompt.length + ') =====')
+      const promptEn = `You are a Git commit message generation assistant. Based on the following git diff, generate a commit message that follows the Conventional Commits specification.
+
+Requirements:
+1. type must be one of: feat/fix/docs/style/refactor/test/chore
+2. scope is optional; use a short English word or short noun phrase to indicate the affected area. Leave empty if unclear.
+3. description must be a concise English summary of the change (no more than 50 characters). Use the imperative mood (e.g. "add login button", not "added" or "adding").
+4. Return ONLY a JSON object in the format: {"type":"feat","scope":"","description":"xxx"}
+
+Changed files:
+${filesText}
+
+git diff --staged:
+${diffText || '(no staged content, please infer from the file list)'}`
+
+      const prompt = userLocale.startsWith('en') ? promptEn : promptZh
+
+      console.log('[generate-commit] locale:', userLocale, '| prompt length:', prompt.length)
+      console.log('[generate-commit] ===== PROMPT START =====')
       console.log(prompt)
       console.log('[generate-commit] ===== PROMPT END =====')
-
       const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
       const url = `${defaultModel.baseURL.replace(/\/$/, '')}/chat/completions`
       const headers = { 'Content-Type': 'application/json' }
