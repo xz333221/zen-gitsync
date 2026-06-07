@@ -65,7 +65,7 @@
     "git"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/xz333221/zen-gitsync/issues"
   },
