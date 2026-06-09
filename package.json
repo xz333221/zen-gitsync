@@ -1,7 +1,7 @@
 {
   "name": "zen-gitsync",
-  "version": "2.12.2",
-  "description": "A Git automation platform with interactive commits, scheduled sync, command orchestration, file locking, and a visual GUI.",
+  "version": "2.12.4",
+  "description": "Auto commit, scheduled sync, and visual GUI for Git. Run `g` in any repo for one-key commit & push, AI commit messages, scheduled background sync, and a drag-and-drop workflow builder.",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -61,8 +61,21 @@
     "url": "git+https://github.com/xz333221/zen-gitsync.git"
   },
   "keywords": [
-    "gitsync",
-    "git"
+    "git",
+    "git-auto-commit",
+    "git-sync",
+    "git-gui",
+    "git-cli",
+    "git-automation",
+    "git-workflow",
+    "commit-message",
+    "conventional-commits",
+    "ai-commit",
+    "cron",
+    "automation",
+    "developer-tools",
+    "productivity",
+    "gitsync"
   ],
   "author": "",
   "license": "Apache-2.0",
