@@ -23,6 +23,8 @@ import { useConfigStore } from '@/stores/configStore'
 import { getLanguageByExt } from '@/utils/editorLang'
 import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
 import ImagePreview from '@/components/ImagePreview.vue'
+import MarkdownPreview from '@/components/MarkdownPreview.vue'
+import MindmapPreview from '@/components/MindmapPreview.vue'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
 // 使用 Vite 的 ?worker 语法为 Monaco 创建 web worker
@@ -607,6 +609,8 @@ const PREVIEW_TEXT_EXTS = new Set(['md', 'html', 'htm', 'svg'])
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp'])
 
 const showPreview = ref(false)
+// 思维导图模式:整篇 markdown 渲染为一张大导图。与 showPreview 互斥。
+const showMindmap = ref(false)
 // 0 = 默认占满右半边（flex: 1 1 0%），用户拖动 resizer 后会写入实际像素值
 const previewWidth = ref(0)
 
@@ -623,15 +627,30 @@ const activeExt = computed(() => {
 const isPreviewable = computed(() =>
   PREVIEW_TEXT_EXTS.has(activeExt.value) || IMAGE_EXTS.has(activeExt.value)
 )
+// 思维导图只对 markdown 开放,且需要至少有一个 # 标题才值得预览
+const mindmapTitleCount = computed(() => {
+  const md = activeTabRef.value?.content ?? ''
+  return (md.match(/^#{1,6}\s+/gm) || []).length
+})
+const isMindmapable = computed(() => activeExt.value === 'md' && mindmapTitleCount.value > 0)
 
-// 切换文件时，若当前文件不可预览则自动关闭预览
+// 切换文件时,若当前文件不可预览则自动关闭预览 / 思维导图
 watch(activeTabPath, () => {
   if (showPreview.value && !isPreviewable.value) showPreview.value = false
+  if (showMindmap.value && !isMindmapable.value) showMindmap.value = false
 })
 
 function togglePreview() {
   if (!isPreviewable.value) return
+  // 互斥:打开 HTML 预览时关掉思维导图
+  if (!showPreview.value) showMindmap.value = false
   showPreview.value = !showPreview.value
+}
+
+function toggleMindmap() {
+  if (!isMindmapable.value) return
+  if (!showMindmap.value) showPreview.value = false
+  showMindmap.value = !showMindmap.value
 }
 
 // 生成 iframe srcdoc（md / html / htm / svg）
@@ -670,10 +689,6 @@ const previewSrcdoc = computed(() => {
     li { margin: 4px 0; }
   `
 
-  if (ext === 'md') {
-    const html = marked.parse(tab.content) as string
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseStyle}</style></head><body>${html}</body></html>`
-  }
   if (ext === 'html' || ext === 'htm') {
     // 直接将用户 HTML 作为 srcdoc，沙箱内运行（无 JS）
     return tab.content
@@ -907,6 +922,28 @@ function stopPreviewResize() {
           </svg>
           <span>{{ $t('@EDITOR:预览') }}</span>
         </button>
+        <!-- 思维导图:整篇 markdown 渲染为一张大导图 -->
+        <button
+          v-if="isMindmapable"
+          class="preview-toggle-btn mindmap-toggle-btn"
+          :class="{ active: showMindmap, disabled: !isMindmapable }"
+          :disabled="!isMindmapable"
+          :title="isMindmapable ? (showMindmap ? $t('@EDITOR:关闭思维导图') : $t('@EDITOR:打开思维导图')) : $t('@EDITOR:需要至少一个 # 标题')"
+          @click="toggleMindmap"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="2"/>
+            <circle cx="5" cy="6" r="1.6"/>
+            <circle cx="19" cy="6" r="1.6"/>
+            <circle cx="5" cy="18" r="1.6"/>
+            <circle cx="19" cy="18" r="1.6"/>
+            <line x1="11" y1="11" x2="6.4" y2="7"/>
+            <line x1="13" y1="11" x2="17.6" y2="7"/>
+            <line x1="11" y1="13" x2="6.4" y2="17"/>
+            <line x1="13" y1="13" x2="17.6" y2="17"/>
+          </svg>
+          <span>{{ $t('@EDITOR:思维导图') }}</span>
+        </button>
       </div>
 
       <!-- 无文件打开时的提示 -->
@@ -928,7 +965,7 @@ function stopPreviewResize() {
         />
         <!-- 图片 tab 时的占位提示（主预览区在右侧 preview-panel） -->
         <div
-          v-if="activeTabIsImage && tabs.length > 0 && !showPreview"
+          v-if="activeTabIsImage && tabs.length > 0 && !showPreview && !showMindmap"
           class="image-tab-placeholder"
         >
           <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35">
@@ -941,37 +978,53 @@ function stopPreviewResize() {
         </div>
         <!-- 预览分隔条（在面板右侧，拉动调整面板宽度） -->
         <div
-          v-if="showPreview && tabs.length > 0"
+          v-if="(showPreview || showMindmap) && tabs.length > 0"
           class="preview-resizer"
           @mousedown="startPreviewResize"
         />
         <!-- 预览面板 -->
         <div
-          v-if="showPreview && tabs.length > 0"
+          v-if="(showPreview || showMindmap) && tabs.length > 0"
           class="preview-panel"
           :style="{ flexBasis: previewWidth + 'px' }"
         >
           <div class="preview-header">
-            <span class="preview-title">{{ $t('@EDITOR:预览') }}</span>
+            <span class="preview-title">{{ showMindmap ? $t('@EDITOR:思维导图') : $t('@EDITOR:预览') }}</span>
             <span class="preview-ext-badge">{{ activeExt.toUpperCase() }}</span>
             <div class="preview-header-spacer" />
-            <button class="preview-close-btn" :title="$t('@EDITOR:关闭预览')" @click="showPreview = false">
+            <button
+              class="preview-close-btn"
+              :title="showMindmap ? $t('@EDITOR:关闭思维导图') : $t('@EDITOR:关闭预览')"
+              @click="showMindmap ? (showMindmap = false) : (showPreview = false)"
+            >
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
           </div>
           <div class="preview-body">
-            <!-- Markdown / HTML / SVG → sandboxed iframe -->
+            <!-- 思维导图:整篇 markdown → 一张大导图 -->
+            <MindmapPreview
+              v-if="showMindmap && activeExt === 'md' && activeTabRef"
+              :content="activeTabRef.content"
+              class="preview-mindmap"
+            />
+            <!-- Markdown → in-app 渲染 -->
+            <MarkdownPreview
+              v-else-if="showPreview && activeExt === 'md' && activeTabRef"
+              :content="activeTabRef.content"
+              class="preview-markdown"
+            />
+            <!-- HTML / SVG → sandboxed iframe -->
             <iframe
-              v-if="['md', 'html', 'htm', 'svg'].includes(activeExt)"
+              v-else-if="showPreview && ['html', 'htm', 'svg'].includes(activeExt)"
               class="preview-iframe"
               sandbox="allow-same-origin"
               :srcdoc="previewSrcdoc"
             />
             <!-- 图片预览（使用增强版 ImagePreview，支持缩放/拖拽） -->
             <ImagePreview
-              v-else-if="IMAGE_EXTS.has(activeExt) && activeTabRef"
+              v-else-if="showPreview && IMAGE_EXTS.has(activeExt) && activeTabRef"
               :file-path="activeTabRef.path"
               :file-name="activeTabRef.name"
             />
@@ -1514,6 +1567,36 @@ function stopPreviewResize() {
   height: 100%;
   border: none;
   background: transparent;
+}
+
+.preview-markdown {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-container, #ffffff);
+  color: var(--text-primary, #1f2328);
+}
+
+.preview-mindmap {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-container, #ffffff);
+  display: flex;
+  flex-direction: column;
+}
+
+.mindmap-toggle-btn.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.mindmap-toggle-btn.active {
+  /* Override accent for mindmap so it reads as a separate mode */
+  background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+  color: #fff;
+  border-color: #4f46e5;
 }
 
 .preview-image-wrap {
