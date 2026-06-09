@@ -23,6 +23,7 @@ import {
   onBeforeUnmount,
   nextTick,
 } from "vue";
+import type { TableInstance } from "element-plus";
 import {
   ElTable,
   ElTableColumn,
@@ -249,7 +250,7 @@ function getBranchTagType(ref: string) {
   return "info";
 }
 // 添加对表格实例的引用
-const tableRef = ref<InstanceType<typeof ElTable> | null>(null);
+const tableRef = ref<TableInstance | null>(null);
 const tableBodyWrapper = ref<HTMLElement | null>(null);
 
 // 监听表格滚动事件的处理函数

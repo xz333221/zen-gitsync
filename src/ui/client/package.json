@@ -30,7 +30,7 @@
     "ansi-to-html": "^0.7.2",
     "dagre": "^0.8.5",
     "element-plus": "^2.11.4",
-    "flow-mindmap": "^0.2.1",
+    "flow-mindmap": "^0.2.2",
     "local-file-picker": "^0.1.6",
     "marked": "^18.0.3",
     "monaco-editor": "^0.55.1",

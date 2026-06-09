@@ -18,7 +18,6 @@ import { $t } from '@/lang/static'
 import { ref, shallowRef, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElTooltip } from 'element-plus'
 import * as monaco from 'monaco-editor'
-import { marked } from 'marked'
 import { useConfigStore } from '@/stores/configStore'
 import { getLanguageByExt } from '@/utils/editorLang'
 import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
@@ -661,33 +660,6 @@ const previewSrcdoc = computed(() => {
 
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light'
   const bg = isDark ? '#0d1117' : '#ffffff'
-  const fg = isDark ? '#c9d1d9' : '#1f2328'
-  const border = isDark ? '#30363d' : '#d0d7de'
-  const codeBg = isDark ? '#161b22' : '#f6f8fa'
-  const blockquoteFg = isDark ? '#8b949e' : '#656d76'
-  const linkColor = isDark ? '#58a6ff' : '#0969da'
-
-  const baseStyle = `
-    html, body { margin: 0; padding: 0; background: ${bg}; color: ${fg}; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.6; padding: 20px 24px; }
-    * { box-sizing: border-box; }
-    h1, h2, h3, h4, h5, h6 { border-bottom: 1px solid ${border}; padding-bottom: .3em; margin-top: 24px; margin-bottom: 16px; }
-    h1 { font-size: 2em; } h2 { font-size: 1.5em; } h3 { font-size: 1.25em; }
-    p { margin: 0 0 16px; }
-    code { background: ${codeBg}; padding: 2px 5px; border-radius: 4px; font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 87%; }
-    pre { background: ${codeBg}; padding: 14px 16px; border-radius: 6px; overflow: auto; margin: 0 0 16px; }
-    pre code { background: none; padding: 0; font-size: 100%; }
-    a { color: ${linkColor}; }
-    blockquote { border-left: 3px solid ${border}; margin: 0 0 16px; padding: 0 16px; color: ${blockquoteFg}; }
-    img { max-width: 100%; border-radius: 4px; }
-    hr { border: none; border-top: 1px solid ${border}; margin: 24px 0; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
-    th, td { border: 1px solid ${border}; padding: 6px 13px; }
-    thead tr { background: ${codeBg}; }
-    tbody tr:nth-child(even) { background: ${codeBg}; }
-    ul, ol { padding-left: 2em; margin-bottom: 16px; }
-    li { margin: 4px 0; }
-  `
 
   if (ext === 'html' || ext === 'htm') {
     // 直接将用户 HTML 作为 srcdoc，沙箱内运行（无 JS）
