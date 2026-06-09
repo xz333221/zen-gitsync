@@ -84,12 +84,18 @@ function parseDiffByFile(diffText) {
 // 关键: untracked 文件默认不会出现在 git diff --staged 输出里,
 //       所以先对所有 untracked 文件做 git add -N(intent to add),
 //       这样它们会以 "new file" 形式出现在 diff 里
-async function collectDiffForAi({ execGitCommand, getCurrentProjectPath }) {
+// selectedPaths: 若给定且非空,则只收集这些路径的 diff,且 git add -N 也仅作用于所选 untracked,
+//                避免污染整个 index
+async function collectDiffForAi({ execGitCommand, getCurrentProjectPath, selectedPaths }) {
   if (typeof execGitCommand !== 'function') {
     return { diff: '', fileList: [] }
   }
   const projectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : ''
   const cwdOpts = projectPath ? { cwd: projectPath, log: false } : { log: false }
+
+  const selectedSet = Array.isArray(selectedPaths) && selectedPaths.length > 0
+    ? new Set(selectedPaths.map(p => String(p).replace(/\\/g, '/')))
+    : null
 
   let fileList = []
   try {
@@ -103,6 +109,8 @@ async function collectDiffForAi({ execGitCommand, getCurrentProjectPath }) {
       const x = line[0]
       const y = line[1]
       const path = line.slice(3)
+      // 选择模式: 只保留所选路径
+      if (selectedSet && !selectedSet.has(path.replace(/\\/g, '/'))) continue
       if (x === '?' && y === '?') {
         untracked.push(path)
       } else if (x !== ' ' || y !== ' ') {
@@ -113,6 +121,7 @@ async function collectDiffForAi({ execGitCommand, getCurrentProjectPath }) {
     fileList = [...trackedChanges, ...untracked.map(p => `? ${p}`)]
 
     // 2. 对 untracked 文件做 intent to add(只在内存中,不会真的暂存内容)
+    //    选择模式下 untracked 已被裁剪,只会对所选的做 -N,不污染整个 index
     if (untracked.length > 0) {
       // 加上 --force 以防某些文件已经在 index 中
       // 分批处理,避免命令行过长
@@ -131,9 +140,13 @@ async function collectDiffForAi({ execGitCommand, getCurrentProjectPath }) {
 
     // 3. 合并 staged + unstaged diff
     //    用 --no-color 避免 ANSI 干扰, --no-ext-diff 避免外接 diff 工具
+    //    选择模式下用 `-- <paths>` 限定,避免拉取无关 staged 改动
+    const pathArgs = selectedSet
+      ? ' -- ' + [...selectedSet].map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ')
+      : ''
     const [stagedRes, unstagedRes] = await Promise.all([
-      execGitCommand('git diff --staged --no-color --no-ext-diff', cwdOpts).catch(() => ({ stdout: '' })),
-      execGitCommand('git diff --no-color --no-ext-diff', cwdOpts).catch(() => ({ stdout: '' }))
+      execGitCommand(`git diff --staged --no-color --no-ext-diff${pathArgs}`, cwdOpts).catch(() => ({ stdout: '' })),
+      execGitCommand(`git diff --no-color --no-ext-diff${pathArgs}`, cwdOpts).catch(() => ({ stdout: '' }))
     ])
     let combined = ''
     if (stagedRes?.stdout) combined += stagedRes.stdout.trim() + '\n'
@@ -1073,7 +1086,7 @@ export function registerConfigRoutes({
 
   // AI 生成提交信息
   app.post('/api/config/generate-commit-message', express.json(), async (req, res) => {
-    const { fileList, locale: reqLocale } = req.body || {}
+    const { selectedPaths, locale: reqLocale } = req.body || {}
     try {
       const rawConfig = await configManager.readRawConfigFile()
       const userLocale = reqLocale || rawConfig.locale || 'zh-CN'
@@ -1084,10 +1097,14 @@ export function registerConfigRoutes({
       }
 
       // 后端自己收集 diff,确保 untracked 文件也能进 prompt
-      const { diff: rawDiff, fileList: serverFileList } = await collectDiffForAi({ execGitCommand, getCurrentProjectPath })
-      const safeFileList = Array.isArray(fileList) && fileList.length > 0 ? fileList : serverFileList
-      const diffText = prepareDiffForPrompt(rawDiff, safeFileList)
-      const filesText = safeFileList.slice(0, 30).join('\n')
+      // 选择模式下传入 selectedPaths,后端在 git 层面就过滤,避免污染 index
+      const { diff: rawDiff, fileList: serverFileList } = await collectDiffForAi({
+        execGitCommand,
+        getCurrentProjectPath,
+        selectedPaths
+      })
+      const diffText = prepareDiffForPrompt(rawDiff, serverFileList)
+      const filesText = serverFileList.slice(0, 30).join('\n')
 
       const promptZh = `你是一个 Git 提交信息生成助手。根据以下 git diff 信息，生成一条符合 Conventional Commits 规范的提交信息。
 

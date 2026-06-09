@@ -38,42 +38,15 @@ async function handleAiGenerateCommit() {
   if (aiGenerating.value) return;
   aiGenerating.value = true;
   try {
-    // 选择模式下：仅按所选文件生成
+    // 选择模式下：仅按所选文件生成,把路径下发后端,后端在 git 层面裁剪 diff
     const isSelectedMode = gitStore.isSelectionMode && gitStore.selectedFiles.size > 0;
-
-    // 准备 fileList：选择模式只包含所选文件的 porcelain 行；否则维持原行为（全量）
-    const fileList = isSelectedMode
-      ? gitStore.fileList
-          .filter(f => gitStore.selectedFiles.has(f.path))
-          .map(f => {
-            // git status --porcelain 单字符 + 空格 + path
-            const code = f.type === 'untracked' ? '?' : (f.type === 'conflicted' ? 'U' : 'M')
-            return `${code} ${f.path}`
-          })
-      : gitStore.fileList.map(f => `${f.type} ${f.path}`);
-
-    // 获取 diff：选择模式按所选文件缩小范围，避免无关 staged 改动干扰 AI
-    let diff = '';
-    try {
-      const diffCommand = isSelectedMode && gitStore.selectedUnstagedPaths.length > 0
-        ? `git diff --staged -- ${gitStore.selectedUnstagedPaths.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ')}`
-        : 'git diff --staged';
-      const diffRes = await fetch('/api/exec', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: diffCommand })
-      });
-      const diffData = await diffRes.json();
-      diff = diffData.stdout || '';
-    } catch {
-      // diff 获取失败不影响主流程
-    }
+    const selectedPaths = isSelectedMode ? [...gitStore.selectedFiles] : [];
 
     const localeStore = useLocaleStore();
     const res = await fetch('/api/config/generate-commit-message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ diff, fileList, locale: localeStore.currentLocale })
+      body: JSON.stringify({ selectedPaths, locale: localeStore.currentLocale })
     });
     const data = await res.json();
     if (!data.success) {
