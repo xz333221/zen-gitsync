@@ -19,6 +19,8 @@ import { ref, computed, watch, h, reactive, defineComponent } from 'vue'
 import { ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, VideoPlay, Folder, CopyDocument, Top } from '@element-plus/icons-vue'
 import { useConfigStore } from '@stores/configStore'
+import { useLocaleStore } from '@stores/localeStore'
+import { storeToRefs } from 'pinia'
 import IconButton from '@components/IconButton.vue'
 import TemplateManager from '@components/TemplateManager.vue'
 import { FilePickerModal as FilePicker } from 'local-file-picker/client'
@@ -89,6 +91,7 @@ const props = defineProps<{
 const emit = defineEmits<CustomCommandManagerEmits>()
 
 const configStore = useConfigStore()
+const { currentLocale } = storeToRefs(useLocaleStore())
 
 const commandTemplates = computed(() => (configStore as any).commandTemplates || [])
 const commandTemplateDialogVisible = ref(false)
@@ -836,6 +839,7 @@ defineExpose({
   <!-- 目录浏览器弹窗 -->
   <FilePicker
     :visible="isBrowserDialogVisible"
+    :locale="currentLocale"
     @close="isBrowserDialogVisible = false"
     @confirm="(paths: string[]) => { onBrowserSelect(paths[0]); isBrowserDialogVisible = false }"
   />

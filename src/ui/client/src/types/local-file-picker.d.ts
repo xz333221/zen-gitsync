@@ -21,6 +21,8 @@ declare module 'local-file-picker/client' {
       multiple?: boolean;
       theme?: 'dark' | 'light';
       apiBase?: string;
+      locale?: 'zh-CN' | 'en-US';
+      messages?: Record<string, Record<string, string>> | null;
     },
     object,
     object

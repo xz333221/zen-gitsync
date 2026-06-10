@@ -22,6 +22,8 @@ import { Folder, FolderOpened, Clock, Monitor, Warning } from "@element-plus/ico
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
+import { useLocaleStore } from "@/stores/localeStore";
+import { storeToRefs } from "pinia";
 import IconButton from "@components/IconButton.vue";
 import SvgIcon from "@components/SvgIcon/index.vue";
 import claudeCodeIcon from "@/assets/icons/svg/claudecode-color.svg";
@@ -36,6 +38,7 @@ const props = withDefaults(defineProps<{
 // 使用 store
 const configStore = useConfigStore();
 const gitStore = useGitStore();
+const { currentLocale } = storeToRefs(useLocaleStore());
 
 // 从 store 中获取当前目录
 const currentDirectory = computed(() => configStore.currentDirectory);
@@ -616,6 +619,7 @@ function onBrowserSelect(path: string) {
     :visible="isBrowserDialogVisible"
     mode="directory"
     :theme="isDark ? 'dark' : 'light'"
+    :locale="currentLocale"
     @close="isBrowserDialogVisible = false"
     @confirm="(paths: string[]) => { onBrowserSelect(paths[0]); isBrowserDialogVisible = false }"
   />

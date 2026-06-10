@@ -33,6 +33,7 @@ declare module 'ai-model-form/client' {
         apiKey?: string
       } | null
       theme?: 'dark' | 'light'
+      locale?: 'zh-CN' | 'en-US'
     },
     object,
     object

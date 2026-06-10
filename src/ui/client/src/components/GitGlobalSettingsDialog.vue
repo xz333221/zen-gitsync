@@ -217,6 +217,7 @@
                 api-base="/api/ai-model"
                 :initial="editingModelInitial"
                 :theme="currentThemeForForm"
+                :locale="localeStore.currentLocale"
                 @save="handleAddModelSave"
                 @cancel="cancelEditModel"
               />
