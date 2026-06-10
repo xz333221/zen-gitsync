@@ -1563,11 +1563,14 @@ export const useGitStore = defineStore('git', () => {
           message: `${$t('@C298B:已重置分支 ')}${branch}${$t('@C298B: 到远程状态')}`,
           type: 'success'
         })
-        
-        // 刷新状态和日志
+
+        // 刷新状态、日志以及当前分支信息
+        // 强制刷新分支名与分支列表，避免左下角状态条停留在 reset 之前的旧分支
         fetchStatus()
         fetchLog()
-        
+        await getCurrentBranch(true)
+        await getAllBranches()
+
         return true
       } else {
         ElMessage({

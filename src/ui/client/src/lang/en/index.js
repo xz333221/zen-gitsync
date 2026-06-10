@@ -1190,6 +1190,7 @@ export default {
   '@76872:重置操作': 'Reset operation',
   '@76872:重置暂存区': 'Reset staging area',
   '@76872:重置到远程': 'Reset to remote',
+  '@76872:无法获取当前分支，请稍后重试': 'Unable to fetch current branch, please try again later',
   '@76872:清除所有本地更改': 'Discard all local changes',
   '@76872:确定要清除本地所有更改吗？': 'Are you sure you want to discard all local changes? This will execute:<br/><code style="color: #f56c6c;">git reset --hard && git clean -fd</code><br/>This includes all modifications to tracked files and all untracked files. This action cannot be undone.',
   // Selected-files batch discard (DiscardAllChangesButton selection mode)

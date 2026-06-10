@@ -17,7 +17,7 @@
 import { $t } from '@/lang/static'
 import { useGitStore } from '@stores/gitStore'
 import { computed } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import IconButton from '@components/IconButton.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 
@@ -38,9 +38,23 @@ const shouldShowReset = computed(() => {
 
 async function resetToRemote() {
   try {
+    // 在打开确认弹窗前先强制刷新分支信息，
+    // 避免其它软件已切换分支而本应用未及时更新 currentBranch，
+    // 导致 reset 错把当前分支重置到 origin/<陈旧分支名>
+    await Promise.all([
+      gitStore.getCurrentBranch(true),
+      gitStore.getAllBranches()
+    ])
+
+    const targetBranch = gitStore.currentBranch
+    if (!targetBranch) {
+      ElMessage.warning($t('@76872:无法获取当前分支，请稍后重试'))
+      return
+    }
+
     await ElMessageBox.confirm(
-      $t('@76872:确定要重置当前分支吗？', { branch: gitStore.currentBranch || 'unknown' }),
-      $t('@76872:重置到远程') + (gitStore.currentBranch ? ` origin/${gitStore.currentBranch}` : ''),
+      $t('@76872:确定要重置当前分支吗？', { branch: targetBranch }),
+      $t('@76872:重置到远程') + ` origin/${targetBranch}`,
       {
         confirmButtonText: $t('@76872:确定'),
         cancelButtonText: $t('@76872:取消'),
@@ -50,7 +64,7 @@ async function resetToRemote() {
       }
     )
 
-    const result = await gitStore.resetToRemote(gitStore.currentBranch)
+    const result = await gitStore.resetToRemote(targetBranch)
     if (result) {
       gitStore.fetchStatus()
       gitStore.fetchLog()
