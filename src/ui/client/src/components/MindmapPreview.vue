@@ -44,8 +44,7 @@ const data = computed(() => markdownToRichMindMap(props.content || '', '未命�
     <div class="mindmap-preview-canvas">
       <MindMap
         :data="data"
-        :readonly="true"
-        :preview-mode="true"
+        preview-mode
       />
     </div>
   </div>

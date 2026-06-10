@@ -97,8 +97,7 @@ const segments = computed<Segment[]>(() => {
         <div class="md-mindmap-title">四维导图</div>
         <MindMap
           :data="seg.data"
-          :readonly="true"
-          :preview-mode="true"
+          preview-mode
           class="md-mindmap-canvas"
         />
       </div>
