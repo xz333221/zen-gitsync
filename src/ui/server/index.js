@@ -38,6 +38,7 @@ import { registerGitRoutes } from './routes/git.js';
 import { registerFsRoutes } from './routes/fs.js';
 import { registerNpmRoutes } from './routes/npm.js';
 import { registerFileOpenRoutes } from './routes/fileOpen.js';
+import { registerWorkbenchRoutes } from './routes/workbench.js';
 import { registerGitOpsRoutes } from './routes/gitOps.js';
 import { registerCodeRoutes } from './routes/code.js';
 import { registerCodeAnalysisRoutes } from './routes/codeAnalysis.js';
@@ -221,6 +222,13 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   registerFileOpenRoutes({
     app
+  });
+
+  registerWorkbenchRoutes({
+    app,
+    getCurrentProjectPath: () => currentProjectPath,
+    getProjectRoomId: () => projectRoomId,
+    io
   });
 
   // local-file-picker 中间件，提供 /api/fs/* 文件浏览路由

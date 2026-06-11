@@ -21,6 +21,7 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
   - [Project Startup](#project-startup)
   - [Built-in Code Editor](#built-in-code-editor)
   - [Source Map](#source-map-ai-codebase-visualization)
+  - [Workbench](#workbench-task-driven-claude-execution)
   - [Settings](#settings)
 - [CLI Commands](#cli-commands)
 
@@ -50,6 +51,7 @@ npm install -g zen-gitsync
 - **Project startup** — Auto-run commands or workflows when a project opens
 - **Built-in code editor** — Monaco-based file editor with Markdown preview
 - **Source map** — AI-generated interactive codebase dependency graph
+- **Workbench** — task-driven Claude execution with prompt presets, subtask splitting, and isolated bypass-permissions windows
 - **AI commit message** — Generate commit message from staged diff automatically
 - **Commit templates** — Save type/scope/description/message templates
 - **Theme & language** — Light/dark theme and Chinese/English UI
@@ -65,7 +67,7 @@ $ g ui
 
 ![ui](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/zen-gitsync-ui-git.png)
 
-The GUI runs as a local web server and opens in your default browser. It attaches to the current Git repository automatically. The activity bar on the left switches between three views: **Git**, **Editor**, and **Source Map**.
+The GUI runs as a local web server and opens in your default browser. It attaches to the current Git repository automatically. The activity bar on the left switches between four views: **Git**, **Editor**, **Source Map**, and **Workbench**.
 
 ---
 
@@ -229,6 +231,25 @@ A dedicated view (third icon in the activity bar) that uses an AI model to build
 | Resizable panels | File tree, graph, and source panels are all independently resizable |
 
 Configure the model endpoint, API key, and model name in **Settings → AI**.
+
+---
+
+### Workbench (Task-Driven Claude Execution)
+
+A dedicated view (fourth icon in the activity bar) for batch-running Claude against your repo. Define a task, split it into ordered subtasks, attach a reusable prompt preset, then click **Run task** — each subtask launches in its own terminal window with `claude --permission-mode bypassPermissions`, so context never piles up.
+
+| Feature | Description |
+|---|---|
+| Task list | Create, edit, delete tasks; each shows its subtask count |
+| Subtask breakdown | Add / edit / remove subtasks per task, with per-subtask status |
+| Prompt presets | Reusable prompt templates with `{{task.title}}` / `{{task.desc}}` / `{{sub.title}}` / `{{sub.desc}}` / `{{repo.path}}` / `{{branch}}` variable interpolation |
+| Per-subtask override | Override the preset's content for a specific subtask in its description field |
+| Sequential execution | Runs subtasks in declared order; the next one starts only after the previous window closes |
+| Isolated windows | Every subtask launches in a new OS terminal window — fresh context each time |
+| Bypass permissions | Invokes `claude --permission-mode bypassPermissions --dangerously-skip-permissions` so the agent can edit / run shell without manual approval |
+| Live status | Subtask status (todo / running / done / error) and PID stream in real time over SSE |
+
+Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.zen-gitsync/tasks.json` (cross-project, shared across repos).
 
 ---
 

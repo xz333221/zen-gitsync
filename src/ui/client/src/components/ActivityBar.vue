@@ -18,14 +18,14 @@ import { $t } from '@/lang/static'
 import { ElTooltip } from 'element-plus'
 
 const props = defineProps<{
-  activeView: 'git' | 'editor' | 'source-map'
+  activeView: 'git' | 'editor' | 'source-map' | 'workbench'
 }>()
 
 const emit = defineEmits<{
-  'update:activeView': [view: 'git' | 'editor' | 'source-map']
+  'update:activeView': [view: 'git' | 'editor' | 'source-map' | 'workbench']
 }>()
 
-function select(view: 'git' | 'editor' | 'source-map') {
+function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   emit('update:activeView', view)
 }
 </script>
@@ -76,6 +76,22 @@ function select(view: 'git' | 'editor' | 'source-map') {
           <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
           <line x1="9" y1="3" x2="9" y2="18"/>
           <line x1="15" y1="6" x2="15" y2="21"/>
+        </svg>
+      </button>
+    </el-tooltip>
+
+    <!-- 工作台 -->
+    <el-tooltip :content="$t('@ACTBAR:工作台')" placement="right" :show-after="300">
+      <button
+        class="activity-btn"
+        :class="{ active: props.activeView === 'workbench' }"
+        @click="select('workbench')"
+        :aria-label="$t('@ACTBAR:工作台')"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="4" width="18" height="14" rx="2"/>
+          <line x1="3" y1="9" x2="21" y2="9"/>
+          <line x1="9" y1="9" x2="9" y2="18"/>
         </svg>
       </button>
     </el-tooltip>

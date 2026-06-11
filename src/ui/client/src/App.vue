@@ -30,6 +30,7 @@ import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 // 编辑器 / 源码地图视图延迟加载（首屏不下载）
 const EditorView = defineAsyncComponent(() => import('@/views/EditorView.vue'))
 const SourceMapView = defineAsyncComponent(() => import('@/views/SourceMapView.vue'))
+const WorkbenchView = defineAsyncComponent(() => import('@/views/WorkbenchView.vue'))
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -169,7 +170,7 @@ function handleBranchChanged() {
 }
 
 // 活动视图切换
-const activeView = ref<'git' | 'editor' | 'source-map'>('git')
+const activeView = ref<'git' | 'editor' | 'source-map' | 'workbench'>('git')
 
 // 切换到 Git 视图时静默刷新状态（与窗口焦点/标签页可见时一致）
 watch(activeView, (view) => {
@@ -596,6 +597,11 @@ function copyGitInit() {
       <!-- 源码地图视图（延迟加载） -->
       <div v-if="activeView === 'source-map'" class="view-pane source-map-pane">
         <SourceMapView />
+      </div>
+
+      <!-- 工作台视图（延迟加载） -->
+      <div v-if="activeView === 'workbench'" class="view-pane workbench-pane">
+        <WorkbenchView />
       </div>
 
     </div><!-- /app-body -->

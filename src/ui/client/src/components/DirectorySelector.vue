@@ -465,9 +465,9 @@ function onBrowserSelect(path: string) {
             @contextmenu.prevent.stop="openClaudeMenu"
           >
             <IconButton
-              tooltip="用 Claude Code 打开（左键默认，右键选择权限模式）"
+              tooltip="用 Claude Code 打开（完全批准）"
               size="large"
-              @click="onOpenInClaudeCode()"
+              @click="onOpenInClaudeCode('bypassPermissions')"
             >
               <img
                 :src="claudeCodeIcon"
