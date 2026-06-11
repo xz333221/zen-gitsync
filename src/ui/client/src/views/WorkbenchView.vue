@@ -154,8 +154,16 @@ async function aiGeneratePrompt() {
   try {
     const res = await fetch('/api/workbench/prompts/ai-generate', { method: 'POST' }).then(r => r.json())
     if (res.success) {
-      promptDialog.name = res.name || promptDialog.name
-      promptDialog.content = res.content || promptDialog.content
+      // 后端把 template + 实际生成的 result 拼成 content 返回
+      // 这里也手动拼一份，避免后端 content 字段缺失时拿不到完整结果
+      const name = res.name || promptDialog.name
+      let content = res.content || res.template || ''
+      if (res.template && res.result) {
+        // 强制按"模板 + 当前项目架构总结"的形式展示
+        content = `${res.template}\n\n## 当前项目架构总结\n\n${res.result}`
+      }
+      promptDialog.name = name
+      promptDialog.content = content
       ElMessage.success($t('@WORKBENCH:已生成，可继续编辑'))
     } else {
       ElMessage.error(res.error || $t('@WORKBENCH:生成失败'))

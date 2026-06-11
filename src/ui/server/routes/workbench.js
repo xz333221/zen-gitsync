@@ -365,23 +365,6 @@ export function registerWorkbenchRoutes({ app, getCurrentProjectPath, getProject
 
       const projectName = path.basename(projectPath);
 
-      const systemPrompt = `你是一名资深软件架构师。任务：根据用户提供的项目目录结构、README、manifest 文件，输出一段**可复用的提示词**。
-这段提示词将被注入到大模型的 system prompt 中，用来指导大模型对**当前项目**做「项目架构总结」。
-
-要求：
-1. 提示词主体使用中文，语气专业、具体
-2. 必须明确告诉大模型：项目根目录是 {{repo.path}}，当前 git 分支是 {{branch}}
-3. 必须用 {{task.title}} / {{task.desc}} / {{sub.title}} / {{sub.desc}} 这 4 个变量，让大模型知道具体任务是做什么
-4. 提示词应包含：阅读项目目录、识别语言与框架、找出入口文件、画出主要模块依赖关系、输出 200-400 字的中文总结
-5. 提示词长度控制在 300-600 字之间
-6. 只返回 JSON，不要任何额外解释
-
-返回 JSON：
-{
-  "name": "提示词名称（10-20字）",
-  "content": "提示词正文"
-}`;
-
       const userPayload = `项目根目录：${projectPath}
 项目名称：${projectName}
 
@@ -394,13 +377,84 @@ ${readme || '（无）'}
 ## 关键 manifest
 ${manifestBlock || '（无）'}`;
 
-      const data = await callLlmJson(model, `${systemPrompt}\n\n${userPayload}`);
-      const name = String(data.name || '').trim() || '项目架构总结';
-      const content = String(data.content || '').trim();
-      if (!content) {
-        return res.status(500).json({ success: false, error: 'AI 未返回有效内容' });
+      // 第一阶段：让 LLM 写一段「可复用的提示词模板」
+      const templateSystemPrompt = `你是一名资深软件架构师。任务：根据用户提供的项目目录结构、README、manifest 文件，输出一段**可复用的提示词模板**。
+这段模板将作为指令注入到大模型的 system prompt 中，用来指导大模型对**当前项目**做「项目架构总结」。
+
+要求：
+1. 模板主体使用中文，语气专业、具体
+2. 模板中必须明确使用 4 个变量占位符：
+   - {{task.title}}  - 任务标题
+   - {{task.desc}}   - 任务详细描述
+   - {{sub.title}}   - 子任务标题
+   - {{sub.desc}}    - 子任务详细描述
+   并向大模型说明：项目根目录是 {{repo.path}}，当前 git 分支是 {{branch}}
+3. 模板应指导大模型：阅读项目目录、识别语言与框架、找出入口文件、画出主要模块依赖关系、输出 200-400 字的中文总结
+4. 模板长度控制在 300-600 字之间
+5. 只返回 JSON，不要任何额外解释
+
+返回 JSON：
+{
+  "name": "模板名称（10-20字）",
+  "template": "模板正文"
+}`;
+
+      const first = await callLlmJson(model, `${templateSystemPrompt}\n\n${userPayload}`);
+      const templateName = String(first.name || '').trim() || '项目架构总结';
+      const template = String(first.template || '').trim();
+      if (!template) {
+        return res.status(500).json({ success: false, error: 'AI 未返回有效模板' });
       }
-      res.json({ success: true, name, content });
+
+      // 第二阶段：以模板为指令，喂入项目上下文，跑一次实际生成
+      const execPrompt = `${template}
+
+---
+
+以下是你需要分析的项目实际数据（请直接基于这些数据输出最终结果）：
+
+项目根目录：${projectPath}
+项目名称：${projectName}
+
+## 目录结构（前 2 层）
+${dirTree || '（无）'}
+
+## README.md
+${readme || '（无）'}
+
+## 关键 manifest
+${manifestBlock || '（无）'}
+
+请输出一份 200-400 字的中文架构总结，包含：项目整体定位、技术栈、模块划分、核心流程、关键设计决策。只返回 JSON：
+
+{
+  "summary": "架构总结正文"
+}`;
+
+      const second = await callLlmJson(model, execPrompt);
+      const summary = String(second.summary || '').trim();
+
+      if (!summary) {
+        // 兜底：仅返回模板，结果留空
+        return res.json({
+          success: true,
+          name: templateName,
+          template,
+          result: '',
+          content: template
+        });
+      }
+
+      // 把模板和实际结果拼到一起，作为预置提示词存进 prompts.json
+      const content = `${template}\n\n## 当前项目架构总结（已生成于 ${nowIso()}）\n\n${summary}`;
+
+      res.json({
+        success: true,
+        name: templateName,
+        template,
+        result: summary,
+        content
+      });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
