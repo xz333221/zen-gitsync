@@ -27,12 +27,23 @@ interface Prompt {
   createdAt?: string
   updatedAt?: string
 }
+interface Attachment {
+  id: string
+  originalName: string
+  mimeType: string
+  size: number
+  ext: string
+  storedName: string
+  absolutePath: string
+  createdAt?: string
+}
 interface SubTask {
   id: string
   title: string
   desc: string
   status: 'todo' | 'running' | 'done' | 'error'
   promptOverride: string
+  attachments?: Attachment[]
 }
 interface Task {
   id: string
@@ -107,7 +118,7 @@ function applyJobEvent(evt: string, payload: any) {
     if (i >= 0) tasks.value[i] = payload
   }
   if (evt === 'task:error') {
-    ElMessage.error(payload.error || '执行出错')
+    ElMessage.error(payload.error || $t('@WORKBENCH:执行出错'))
   }
 }
 
@@ -188,7 +199,7 @@ async function aiGeneratePrompt() {
 }
 async function savePrompt() {
   if (!promptDialog.name.trim() || !promptDialog.content.trim()) {
-    ElMessage.warning('名称和内容不能为空')
+    ElMessage.warning($t('@WORKBENCH:名称和内容不能为空'))
     return
   }
   const body = {
@@ -202,15 +213,19 @@ async function savePrompt() {
     body: JSON.stringify(body)
   }).then(r => r.json())
   if (res.success) {
-    ElMessage.success('已保存')
+    ElMessage.success($t('@WORKBENCH:已保存'))
     promptDialog.visible = false
     loadPrompts()
   } else {
-    ElMessage.error(res.error || '保存失败')
+    ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
   }
 }
 async function deletePrompt(p: Prompt) {
-  await ElMessageBox.confirm(`删除提示词「${p.name}」？`, '确认', { type: 'warning' })
+  await ElMessageBox.confirm(
+    $t('@WORKBENCH:删除提示词「{name}」？', { name: p.name }),
+    $t('@WORKBENCH:确认'),
+    { type: 'warning' }
+  )
   await fetch(`/api/workbench/prompts/${p.id}`, { method: 'DELETE' })
   loadPrompts()
   // 清掉引用
@@ -237,7 +252,7 @@ function openCreateTask() {
 }
 async function saveTask() {
   if (!taskDialog.title.trim()) {
-    ElMessage.warning('标题必填')
+    ElMessage.warning($t('@WORKBENCH:标题必填'))
     return
   }
   const body = {
@@ -253,16 +268,20 @@ async function saveTask() {
     body: JSON.stringify(body)
   }).then(r => r.json())
   if (res.success) {
-    ElMessage.success('已保存')
+    ElMessage.success($t('@WORKBENCH:已保存'))
     taskDialog.visible = false
     loadTasks()
     if (!selectedTaskId.value) selectedTaskId.value = res.task.id
   } else {
-    ElMessage.error(res.error || '保存失败')
+    ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
   }
 }
 async function deleteTask(t: Task) {
-  await ElMessageBox.confirm(`删除任务「${t.title}」及其所有子任务？`, '确认', { type: 'warning' })
+  await ElMessageBox.confirm(
+    $t('@WORKBENCH:删除任务「{title}」及其所有子任务？', { title: t.title }),
+    $t('@WORKBENCH:确认'),
+    { type: 'warning' }
+  )
   await fetch(`/api/workbench/tasks/${t.id}`, { method: 'DELETE' })
   if (selectedTaskId.value === t.id) selectedTaskId.value = null
   loadTasks()
@@ -276,53 +295,84 @@ function addSubtask() {
   if (!selectedTask.value) return
   const sub: SubTask = {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    title: '新子任务',
+    title: $t('@WORKBENCH:新子任务'),
     desc: '',
     status: 'todo',
     promptOverride: ''
   }
   selectedTask.value.subtasks.push(sub)
+  // 新子任务立刻落盘，避免后续「执行任务」时后端找不到 id。
+  // 失败也不影响 UI：用户可以再点「保存拆分」补救。
+  persistTask(false)
 }
 function removeSubtask(sub: SubTask) {
   if (!selectedTask.value) return
   selectedTask.value.subtasks = selectedTask.value.subtasks.filter(s => s.id !== sub.id)
+  persistTask(false)
 }
-async function saveSubtasks() {
-  if (!selectedTask.value) return
+
+/**
+ * 把 selectedTask 整 task 体提交到后端。
+ * 成功 → 静默刷新 selectedTaskId 指向的任务（保留 attachments 等后端规范化字段）。
+ * 失败 → 弹错误条。
+ * @param showSuccess 是否弹「已保存」提示（手动点保存时为 true，隐式保存为 false）
+ */
+async function persistTask(showSuccess: boolean): Promise<boolean> {
+  if (!selectedTask.value) return false
   const res = await fetch('/api/workbench/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(selectedTask.value)
   }).then(r => r.json())
   if (res.success) {
-    ElMessage.success('已保存拆分')
-    loadTasks()
+    if (showSuccess) ElMessage.success($t('@WORKBENCH:已保存拆分'))
+    await loadTasks()
+    return true
   } else {
-    ElMessage.error(res.error || '保存失败')
+    ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
+    return false
   }
+}
+
+async function saveSubtasks() {
+  await persistTask(true)
 }
 
 // ── 执行 ───────────────────────────────────────────────────────────────────
 async function runTask(t: Task) {
   if (!t.subtasks || t.subtasks.length === 0) {
-    ElMessage.warning('请先拆分任务')
+    ElMessage.warning($t('@WORKBENCH:请先拆分任务'))
     return
+  }
+  // 若用户编辑过 task 但没点保存，先静默持久化一次。
+  if (selectedTask.value && selectedTask.value.id === t.id) {
+    // 通过 ref 代理对比：title/desc/subtasks 任意一项与磁盘快照不同就写一次
+    const onDisk = tasks.value.find(x => x.id === t.id)
+    const dirty = !onDisk
+      || onDisk.title !== selectedTask.value.title
+      || onDisk.desc !== selectedTask.value.desc
+      || JSON.stringify(onDisk.subtasks) !== JSON.stringify(selectedTask.value.subtasks)
+      || onDisk.promptId !== selectedTask.value.promptId
+    if (dirty) {
+      const ok = await persistTask(false)
+      if (!ok) return
+    }
   }
   const res = await fetch(`/api/workbench/tasks/${t.id}/run`, { method: 'POST' }).then(r => r.json())
   if (res.success) {
-    ElMessage.success(res.message || '已加入执行队列')
+    ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
   } else {
-    ElMessage.error(res.error || '执行失败')
+    ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
   }
 }
 
 function statusLabel(s: string) {
   switch (s) {
-    case 'todo': return '待执行'
-    case 'running': return '执行中'
-    case 'done': return '已完成'
-    case 'error': return '出错'
-    case 'pending': return '排队中'
+    case 'todo': return $t('@WORKBENCH:待执行')
+    case 'running': return $t('@WORKBENCH:执行中')
+    case 'done': return $t('@WORKBENCH:已完成')
+    case 'error': return $t('@WORKBENCH:出错')
+    case 'pending': return $t('@WORKBENCH:排队中')
     default: return s
   }
 }
@@ -369,7 +419,148 @@ const MAX_LOG_DISPLAY = 64 * 1024
 function displayOutput(raw: string | undefined | null): string {
   if (!raw) return ''
   if (raw.length <= MAX_LOG_DISPLAY) return raw
-  return `…（前文已截断）\n${raw.slice(-MAX_LOG_DISPLAY)}`
+  return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
+}
+
+// ── 附件上传 ───────────────────────────────────────────────────────────
+const ALLOWED_MIME = new Set([
+  'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
+  'image/bmp', 'image/svg+xml',
+  'application/pdf',
+  'text/plain', 'text/markdown', 'text/x-markdown', 'text/csv',
+  'application/json', 'text/json', 'text/x-log'
+])
+const ALLOWED_EXT_HINT = '.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.pdf,.txt,.md,.csv,.json,.log'
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+const uploadingSubs = ref<Record<string, boolean>>({})
+const pasteHoverSubId = ref<string | null>(null)
+
+function isUploading(subId: string): boolean { return !!uploadingSubs.value[subId] }
+
+// 把任意输入的文件 / Blob 转成 File（如果没有文件名就给个临时名）
+function ensureFile(blob: Blob, fallbackName: string): File {
+  if (blob instanceof File) return blob
+  // 截图粘贴时浏览器只给 Blob 而没有 File 实例
+  const mime = blob.type || 'application/octet-stream'
+  return new File([blob], fallbackName, { type: mime })
+}
+
+// 监听子任务卡片的 paste 事件
+function onSubtaskPaste(e: ClipboardEvent, sub: SubTask) {
+  if (!e.clipboardData) return
+  // 1) 优先取 image/* Blob（截图、复制图片）
+  const imageItems = Array.from(e.clipboardData.items).filter(
+    it => it.kind === 'file' && it.type.startsWith('image/')
+  )
+  if (imageItems.length > 0) {
+    e.preventDefault()
+    for (const it of imageItems) {
+      const blob = it.getAsFile()
+      if (!blob) continue
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      uploadAttachment(sub, ensureFile(blob, `paste-${stamp}.${ext}`))
+    }
+    return
+  }
+  // 2) 否则看非图片文件（部分浏览器复制文件走这个）
+  const fileItems = Array.from(e.clipboardData.items).filter(
+    it => it.kind === 'file' && !it.type.startsWith('image/')
+  )
+  if (fileItems.length > 0) {
+    e.preventDefault()
+    for (const it of fileItems) {
+      const blob = it.getAsFile()
+      if (!blob) continue
+      uploadAttachment(sub, ensureFile(blob, blob.name || 'pasted-file'))
+    }
+  }
+}
+
+// 监听 drop 事件
+function onSubtaskDrop(e: DragEvent, sub: SubTask) {
+  pasteHoverSubId.value = null
+  const files = Array.from(e.dataTransfer?.files || [])
+  files.forEach(f => uploadAttachment(sub, f))
+}
+
+async function uploadAttachment(sub: SubTask, file: File) {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    ElMessage.error(`「${file.name}」${$t('@WORKBENCH:超过 5MB 限制')}`)
+    return
+  }
+  if (!ALLOWED_MIME.has(file.type) && !file.name.match(/\.(png|jpg|jpeg|gif|webp|bmp|svg|pdf|txt|md|markdown|csv|json|log)$/i)) {
+    ElMessage.error(`${$t('@WORKBENCH:不支持的文件类型')}（${file.name}）`)
+    return
+  }
+  const existing = sub.attachments || []
+  if (existing.length >= 9) {
+    ElMessage.error($t('@WORKBENCH:单个子任务最多 9 个附件'))
+    return
+  }
+  uploadingSubs.value[sub.id] = true
+  try {
+    const res = await fetch(`/api/workbench/subtasks/${sub.id}/attachments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Original-Name': file.name,
+        'X-Mime-Type': file.type || 'application/octet-stream'
+      },
+      body: file
+    }).then(r => r.json())
+    if (res.success) {
+      if (!Array.isArray(sub.attachments)) sub.attachments = []
+      sub.attachments.push(res.attachment)
+      ElMessage.success(`${$t('@WORKBENCH:已添加：')}${file.name}`)
+    } else {
+      ElMessage.error(res.error || $t('@WORKBENCH:上传失败'))
+    }
+  } catch (err) {
+    ElMessage.error($t('@WORKBENCH:上传失败') + '：' + (err && err.message || err))
+  } finally {
+    uploadingSubs.value[sub.id] = false
+  }
+}
+
+async function removeAttachment(sub: SubTask, att: Attachment) {
+  try {
+    await ElMessageBox.confirm(
+      $t('@WORKBENCH:删除附件「{name}」？', { name: att.originalName }),
+      $t('@WORKBENCH:确认'),
+      { type: 'warning' }
+    )
+  } catch { return }
+  const res = await fetch(`/api/workbench/subtasks/${sub.id}/attachments/${att.id}`, { method: 'DELETE' }).then(r => r.json())
+  if (res.success) {
+    sub.attachments = (sub.attachments || []).filter(a => a.id !== att.id)
+    ElMessage.success($t('@WORKBENCH:已删除'))
+  } else {
+    ElMessage.error(res.error || $t('@WORKBENCH:删除失败'))
+  }
+}
+
+function pickAttachmentFile(sub: SubTask) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = ALLOWED_EXT_HINT
+  input.multiple = true
+  input.onchange = () => {
+    const files = Array.from(input.files || [])
+    files.forEach(f => uploadAttachment(sub, f))
+  }
+  input.click()
+}
+
+const IMAGE_EXTS_UI = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'])
+function isImageAttachment(att: Attachment): boolean {
+  return IMAGE_EXTS_UI.has(String(att.ext || '').toLowerCase())
+}
+
+function humanSize(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(2)} MB`
 }
 </script>
 
@@ -462,7 +653,7 @@ function displayOutput(raw: string | undefined | null): string {
               <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
                 {{ statusLabel(sub.status) }}
               </span>
-              <input class="wb-input" v-model="sub.title" :placeholder="$t('@WORKBENCH:子任务标题')" />
+              <input class="wb-input" v-model="sub.title" :placeholder="$t('@WORKBENCH:子任务标题')" @paste="onSubtaskPaste($event, sub)" />
               <span v-if="jobOf(sub.id)" class="wb-sub-item__pid" :title="$t('@WORKBENCH:进程ID')">
                 PID: {{ jobOf(sub.id)?.pid }}
               </span>
@@ -473,6 +664,7 @@ function displayOutput(raw: string | undefined | null): string {
               v-model="sub.desc"
               :placeholder="$t('@WORKBENCH:子任务描述 / 独立提示词覆盖')"
               rows="2"
+              @paste="onSubtaskPaste($event, sub)"
             />
             <details
               v-if="jobOf(sub.id)"
@@ -489,6 +681,50 @@ function displayOutput(raw: string | undefined | null): string {
               </summary>
               <pre :ref="setLogRef(sub.id)" class="wb-log-pre">{{ displayOutput(jobOf(sub.id)?.output) || $t('@WORKBENCH:（暂无输出）') }}</pre>
             </details>
+            <div
+              class="wb-attachments"
+              :class="{ 'is-paste-hover': pasteHoverSubId === sub.id }"
+              @paste="onSubtaskPaste($event, sub)"
+              @dragover.prevent="pasteHoverSubId = sub.id"
+              @dragenter.prevent="pasteHoverSubId = sub.id"
+              @dragleave="pasteHoverSubId = (pasteHoverSubId === sub.id ? null : pasteHoverSubId)"
+              @drop.prevent="onSubtaskDrop($event, sub)"
+            >
+              <div class="wb-attachments__head">
+                <span class="wb-attachments__label">
+                  {{ $t('@WORKBENCH:附件') }}
+                  <span class="wb-attachments__count">{{ (sub.attachments || []).length }} / 9</span>
+                </span>
+                <button
+                  class="wb-attachments__add"
+                  :disabled="isUploading(sub.id) || (sub.attachments || []).length >= 9"
+                  @click="pickAttachmentFile(sub)"
+                >
+                  {{ isUploading(sub.id) ? $t('@WORKBENCH:上传中…') : $t('@WORKBENCH:添加附件') }}
+                </button>
+              </div>
+              <div v-if="pasteHoverSubId === sub.id" class="wb-attachments__paste-hint">
+                {{ $t('@WORKBENCH:粘贴图片以快速添加') }}
+              </div>
+              <ul v-if="(sub.attachments || []).length > 0" class="wb-attachments__list">
+                <li v-for="att in sub.attachments" :key="att.id" class="wb-attachment">
+                  <div class="wb-attachment__icon" :class="{ 'wb-attachment__icon--img': isImageAttachment(att) }">
+                    <img
+                      v-if="isImageAttachment(att)"
+                      :src="`/api/workbench/attachments/${att.id}/raw`"
+                      :alt="att.originalName"
+                      loading="lazy"
+                    />
+                    <span v-else>{{ att.ext.toUpperCase() }}</span>
+                  </div>
+                  <div class="wb-attachment__meta">
+                    <div class="wb-attachment__name" :title="att.originalName">{{ att.originalName }}</div>
+                    <div class="wb-attachment__sub">{{ humanSize(att.size) }} · {{ att.mimeType }}</div>
+                  </div>
+                  <button class="wb-attachment__del" @click="removeAttachment(sub, att)" :title="$t('@WORKBENCH:删除')">×</button>
+                </li>
+              </ul>
+            </div>
           </li>
           <li v-if="selectedTask.subtasks.length === 0" class="wb-empty">
             {{ $t('@WORKBENCH:暂无子任务，点击上方按钮添加') }}
@@ -814,4 +1050,123 @@ function displayOutput(raw: string | undefined | null): string {
   word-break: break-word;
   border-top: 1px solid var(--border-color);
 }
+
+/* ── 子任务附件 ───────────────────────────────────────────────── */
+.wb-attachments {
+  margin-top: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-subtle, var(--bg-container));
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s;
+}
+.wb-attachments.is-paste-hover {
+  border-color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.06);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+.wb-attachments__paste-hint {
+  padding: 4px 10px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  border-top: 1px solid var(--border-color);
+}
+.wb-attachments__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+.wb-attachments__label { display: inline-flex; gap: 6px; align-items: center; }
+.wb-attachments__count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+.wb-attachments__add {
+  border: 1px solid var(--border-color);
+  background: var(--bg-container);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.wb-attachments__add:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.wb-attachments__add:disabled { opacity: 0.5; cursor: not-allowed; }
+.wb-attachments__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.wb-attachment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 4px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-container);
+  max-width: 240px;
+  min-width: 0;
+}
+.wb-attachment__icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  background: var(--bg-code);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  overflow: hidden;
+}
+.wb-attachment__icon--img { background: var(--bg-code); }
+.wb-attachment__icon img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.wb-attachment__meta { min-width: 0; flex: 1; }
+.wb-attachment__name {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-attachment__sub {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-attachment__del {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  width: 20px; height: 20px;
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.wb-attachment__del:hover { color: #ef4444; background: rgba(239,68,68,0.08); }
 </style>

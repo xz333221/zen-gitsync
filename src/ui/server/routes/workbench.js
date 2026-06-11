@@ -22,37 +22,66 @@ import path from 'path';
 import os from 'os';
 import { spawn, execFileSync } from 'child_process';
 import { EventEmitter } from 'events';
+import express from 'express';
 
 const DATA_DIR = path.join(os.homedir(), '.zen-gitsync');
 const PROMPTS_FILE = path.join(DATA_DIR, 'prompts.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
 
-// 单张图片最大 5MB（解码后字节数）
+// 单个附件最大 5MB；与 Anthropic Messages API 文档约束一致
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// 一个子任务最多挂 9 个附件
+const MAX_ATTACHMENTS_PER_SUBTASK = 9;
+// 白名单后缀：图片 + 常见文档（PDF / 纯文本 / Markdown）
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
+const DOC_EXTS = new Set(['pdf', 'txt', 'md', 'markdown', 'csv', 'json', 'log']);
+const ALLOWED_EXTS = new Set([...IMAGE_EXTS, ...DOC_EXTS]);
 
 // mime → 文件后缀；与前端 el-upload accept 对齐
 const MIME_TO_EXT = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
   'image/gif': 'gif',
   'image/webp': 'webp',
   'image/bmp': 'bmp',
   'image/svg+xml': 'svg',
   'image/x-icon': 'ico',
-  'image/vnd.microsoft.icon': 'ico'
+  'image/vnd.microsoft.icon': 'ico',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'text/markdown': 'md',
+  'text/x-markdown': 'md',
+  'text/csv': 'csv',
+  'application/json': 'json',
+  'text/json': 'json',
+  'text/x-log': 'log',
 };
 
-function sanitizeExt(name, fallback = 'png') {
+function sanitizeExt(name, fallback = 'bin') {
   if (typeof name !== 'string') return fallback;
   const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
   if (!m) return fallback;
-  return IMAGE_EXTS.has(m[1]) ? m[1] : fallback;
+  return ALLOWED_EXTS.has(m[1]) ? m[1] : fallback;
+}
+
+function isImageExt(ext) {
+  return IMAGE_EXTS.has(String(ext || '').toLowerCase());
 }
 
 async function ensureImagesDir() {
   await fsp.mkdir(IMAGES_DIR, { recursive: true });
+}
+
+// 把 mime 或文件名规范成统一后缀；遇到不在白名单的情况返回 null
+function resolveExt({ originalName, mime }) {
+  if (mime && MIME_TO_EXT[mime.toLowerCase()]) {
+    return MIME_TO_EXT[mime.toLowerCase()];
+  }
+  const fromName = sanitizeExt(originalName, '');
+  if (fromName) return fromName;
+  return null;
 }
 
 // 解析 manifest 文件名（按优先级）
@@ -295,7 +324,20 @@ async function runTaskQueue(task, repoPath, branch) {
     };
     const interpolated = interpolate(promptTemplate, ctx);
     const parts = [interpolated, sub.title, sub.desc].filter(s => s && s.trim());
-    const prompt = parts.join('\n\n');
+    let prompt = parts.join('\n\n');
+
+    // ── 附件：把 sub.attachments 列表里的本地绝对路径拼到 prompt 末尾 ──
+    // claude -p 字符串模式会扫描 prompt 中出现的本地文件路径并自动
+    // 识别为附件（图片 / PDF / 文本均可）。
+    const attachments = Array.isArray(sub.attachments) ? sub.attachments : [];
+    if (attachments.length > 0) {
+      const lines = attachments
+        .filter(a => a && a.absolutePath)
+        .map((a, i) => `  ${i + 1}. [${a.mimeType || 'application/octet-stream'}] ${a.absolutePath}`);
+      if (lines.length > 0) {
+        prompt += `\n\n---\n本子任务包含 ${lines.length} 个附件（请按文件路径读取，不要让用户重新提供）：\n${lines.join('\n')}\n---`;
+      }
+    }
 
     const jobId = genId();
     const job = {
@@ -612,7 +654,18 @@ ${manifestBlock || '（无）'}
             title: s.title || '',
             desc: s.desc || '',
             status: s.status || 'todo',
-            promptOverride: s.promptOverride || ''
+            promptOverride: s.promptOverride || '',
+            // 保留附件元数据（仅保留基础字段，丢弃客户端临时字段）
+            attachments: Array.isArray(s.attachments) ? s.attachments.map(a => ({
+              id: a.id,
+              originalName: a.originalName,
+              mimeType: a.mimeType,
+              size: a.size,
+              ext: a.ext,
+              storedName: a.storedName,
+              absolutePath: a.absolutePath,
+              createdAt: a.createdAt
+            })) : (tasks[i].subtasks.find(x => x.id === s.id)?.attachments || [])
           })) : tasks[i].subtasks,
           updatedAt: now
         };
@@ -629,7 +682,8 @@ ${manifestBlock || '（无）'}
           title: s.title || '',
           desc: s.desc || '',
           status: s.status || 'todo',
-          promptOverride: s.promptOverride || ''
+          promptOverride: s.promptOverride || '',
+          attachments: Array.isArray(s.attachments) ? s.attachments : []
         })) : [],
         status: 'todo',
         createdAt: now,
@@ -677,5 +731,143 @@ ${manifestBlock || '（无）'}
   // ── 进程状态查询（兜底，SSE 断了也能拉） ────────────────────────────
   app.get('/api/workbench/jobs', (_req, res) => {
     res.json({ success: true, jobs: snapshotJobs() });
+  });
+
+  // ── 子任务附件：上传 / 删除 / 列表 ───────────────────────────────
+  // 上传：POST /api/workbench/subtasks/:subId/attachments
+  //   header: X-Original-Name, X-Mime-Type
+  //   body:   raw binary
+  // 删除：DELETE /api/workbench/subtasks/:subId/attachments/:attId
+  // 列表：GET    /api/workbench/subtasks/:subId/attachments
+  //
+  // 文件存到 ~/.zen-gitsync/workbench-images/{subId}/{attId}.{ext}
+  // 元数据（id / originalName / mime / size / storedName）通过 sub.attachments
+  // 跟随 tasks.json 一起持久化。
+  const rawAttachment = express.raw({
+    type: '*/*',
+    limit: MAX_IMAGE_BYTES * 4 // 整体路由上限 20MB；单文件大小由业务再卡
+  });
+
+  app.post('/api/workbench/subtasks/:subId/attachments', rawAttachment, async (req, res) => {
+    try {
+      const { subId } = req.params;
+      if (!req.body || !(req.body instanceof Buffer) || req.body.length === 0) {
+        return res.status(400).json({ success: false, error: '请求体为空' });
+      }
+      if (req.body.length > MAX_IMAGE_BYTES) {
+        return res.status(413).json({ success: false, error: `单文件不得超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB` });
+      }
+      const originalName = String(req.get('X-Original-Name') || 'attachment').slice(0, 200);
+      const mimeType = String(req.get('X-Mime-Type') || 'application/octet-stream').slice(0, 120);
+      const ext = resolveExt({ originalName, mime: mimeType });
+      if (!ext) {
+        return res.status(400).json({ success: false, error: `不支持的文件类型（仅允许 ${[...ALLOWED_EXTS].join(', ')}）` });
+      }
+
+      // 找到子任务，校验数量
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      let foundTask = null;
+      let foundSub = null;
+      for (const t of data.tasks || []) {
+        const s = (t.subtasks || []).find(x => x.id === subId);
+        if (s) { foundTask = t; foundSub = s; break; }
+      }
+      if (!foundSub) {
+        return res.status(404).json({ success: false, error: '子任务不存在' });
+      }
+      if (!Array.isArray(foundSub.attachments)) foundSub.attachments = [];
+      if (foundSub.attachments.length >= MAX_ATTACHMENTS_PER_SUBTASK) {
+        return res.status(400).json({
+          success: false,
+          error: `每个子任务最多 ${MAX_ATTACHMENTS_PER_SUBTASK} 个附件`
+        });
+      }
+
+      // 写入磁盘：~/.zen-gitsync/workbench-images/{subId}/{attId}.{ext}
+      const attId = genId();
+      const subDir = path.join(IMAGES_DIR, subId);
+      await fsp.mkdir(subDir, { recursive: true });
+      const storedName = `${attId}.${ext}`;
+      const storedPath = path.join(subDir, storedName);
+      await fsp.writeFile(storedPath, req.body);
+
+      const attachment = {
+        id: attId,
+        originalName,
+        mimeType,
+        size: req.body.length,
+        ext,
+        storedName,
+        // 绝对路径供 claude CLI 读取；同机直接读本地
+        absolutePath: storedPath,
+        createdAt: nowIso()
+      };
+      foundSub.attachments.push(attachment);
+      foundSub.updatedAt = nowIso();
+      await writeJson(TASKS_FILE, data);
+
+      res.json({ success: true, attachment });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/workbench/subtasks/:subId/attachments/:attId', async (req, res) => {
+    try {
+      const { subId, attId } = req.params;
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      let foundTask = null;
+      let foundSub = null;
+      for (const t of data.tasks || []) {
+        const s = (t.subtasks || []).find(x => x.id === subId);
+        if (s) { foundTask = t; foundSub = s; break; }
+      }
+      if (!foundSub) return res.status(404).json({ success: false, error: '子任务不存在' });
+      const list = Array.isArray(foundSub.attachments) ? foundSub.attachments : [];
+      const i = list.findIndex(a => a.id === attId);
+      if (i < 0) return res.status(404).json({ success: false, error: '附件不存在' });
+      const [removed] = list.splice(i, 1);
+      // 删磁盘文件
+      try {
+        await fsp.unlink(path.join(IMAGES_DIR, subId, removed.storedName));
+      } catch { /* 文件可能已不存在，忽略 */ }
+      foundSub.updatedAt = nowIso();
+      await writeJson(TASKS_FILE, data);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 附件原文件读取（前端 <img> 缩略图用）
+  app.get('/api/workbench/attachments/:attId/raw', async (req, res) => {
+    try {
+      const { attId } = req.params;
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      let found = null;
+      let parentSubId = null;
+      for (const t of data.tasks || []) {
+        for (const s of t.subtasks || []) {
+          const a = (s.attachments || []).find(x => x.id === attId);
+          if (a) { found = a; parentSubId = s.id; break; }
+        }
+        if (found) break;
+      }
+      if (!found) return res.status(404).json({ success: false, error: '附件不存在' });
+      const filePath = path.join(IMAGES_DIR, parentSubId, found.storedName);
+      try {
+        const stat = await fsp.stat(filePath);
+        res.set('Content-Type', found.mimeType || 'application/octet-stream');
+        res.set('Content-Length', String(stat.size));
+        res.set('Cache-Control', 'private, max-age=3600');
+        const stream = (await import('fs')).createReadStream(filePath);
+        stream.on('error', () => res.end());
+        stream.pipe(res);
+      } catch {
+        res.status(404).json({ success: false, error: '文件已丢失' });
+      }
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 }
