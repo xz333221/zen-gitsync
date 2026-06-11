@@ -191,7 +191,7 @@ async function aiGeneratePrompt() {
     } else {
       ElMessage.error(res.error || $t('@WORKBENCH:生成失败'))
     }
-  } catch (err) {
+  } catch (err: any) {
     ElMessage.error($t('@WORKBENCH:网络错误: ') + (err && err.message || err))
   } finally {
     promptDialog.aiLoading = false
@@ -516,7 +516,7 @@ async function uploadAttachment(sub: SubTask, file: File) {
     } else {
       ElMessage.error(res.error || $t('@WORKBENCH:上传失败'))
     }
-  } catch (err) {
+  } catch (err: any) {
     ElMessage.error($t('@WORKBENCH:上传失败') + '：' + (err && err.message || err))
   } finally {
     uploadingSubs.value[sub.id] = false
