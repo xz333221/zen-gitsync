@@ -16,6 +16,7 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import { ElTooltip } from 'element-plus'
+import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
 
 const props = defineProps<{
   activeView: 'git' | 'editor' | 'source-map' | 'workbench'
@@ -24,6 +25,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:activeView': [view: 'git' | 'editor' | 'source-map' | 'workbench']
 }>()
+
+const wbStatus = useWorkbenchStatusStore()
 
 function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   emit('update:activeView', view)
@@ -118,6 +121,12 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
           <rect x="11" y="13" width="3.7" height="5" rx="1"/>
           <rect x="15.3" y="13" width="3.7" height="5" rx="1"/>
         </svg>
+        <span
+          v-if="wbStatus.hasRunning"
+          class="wb-running-dot"
+          :title="$t('@ACTBAR:有任务正在执行')"
+          aria-hidden="true"
+        />
       </button>
     </el-tooltip>
   </div>
@@ -184,5 +193,26 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
 .activity-btn--soon:hover {
   background: transparent;
   color: var(--text-tertiary);
+}
+
+/* ── Workbench 任务运行指示器 ─────────────────────────────────── */
+.wb-running-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--bg-container);
+  animation: wb-dot-pulse 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes wb-dot-pulse {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%      { transform: scale(1.3); opacity: 0.55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-running-dot { animation: none; }
 }
 </style>

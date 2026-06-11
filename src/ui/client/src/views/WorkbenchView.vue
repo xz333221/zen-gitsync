@@ -14,9 +14,10 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, reactive } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, reactive, nextTick, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
 
 // ── 类型 ────────────────────────────────────────────────────────────────────
 interface Prompt {
@@ -49,6 +50,8 @@ interface Job {
   subId: string
   title: string
   status: 'pending' | 'running' | 'done' | 'error'
+  prompt?: string
+  output: string
   pid: number | null
   startedAt: string | null
   endedAt: string | null
@@ -69,6 +72,12 @@ const taskDialog = reactive({ visible: false, editing: null as Task | null, titl
 
 let es: EventSource | null = null
 
+const wbStatus = useWorkbenchStatusStore()
+
+function syncRunningCount() {
+  wbStatus.setRunning(jobs.value.filter(j => j.status === 'running').length)
+}
+
 function jobOf(subId: string): Job | null {
   return jobs.value.find(j => j.subId === subId) || null
 }
@@ -76,6 +85,7 @@ function jobOf(subId: string): Job | null {
 function applyJobEvent(evt: string, payload: any) {
   if (evt === 'hello') {
     jobs.value = payload.jobs || []
+    syncRunningCount()
     return
   }
   if (evt === 'job:update') {
@@ -83,6 +93,7 @@ function applyJobEvent(evt: string, payload: any) {
     const i = jobs.value.findIndex(x => x.id === j.id)
     if (i >= 0) jobs.value[i] = j
     else jobs.value.push(j)
+    syncRunningCount()
   }
   if (evt === 'sub:update') {
     const t = tasks.value.find(x => x.id === payload.taskId)
@@ -115,6 +126,7 @@ async function loadTasks() {
 async function loadJobs() {
   const res = await fetch('/api/workbench/jobs').then(r => r.json()).catch(() => ({ jobs: [] }))
   jobs.value = res.jobs || []
+  syncRunningCount()
 }
 
 function connectSSE() {
@@ -331,6 +343,34 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (es) { es.close(); es = null }
 })
+
+// ── 日志自动滚动 ─────────────────────────────────────────────────────────
+const logRefs = ref<Record<string, HTMLElement | null>>({})
+function setLogRef(subId: string) {
+  return (el: any) => { logRefs.value[subId] = el as HTMLElement | null }
+}
+watch(
+  () => jobs.value.map(j => ({ id: j.id, len: (j.output || '').length })),
+  (next) => {
+    // 仅当对应子任务日志面板展开（is-open）时滚到底
+    next.forEach(({ id }) => {
+      const job = jobs.value.find(j => j.id === id)
+      if (!job || job.status !== 'running') return
+      const el = logRefs.value[job.subId]
+      if (!el) return
+      nextTick(() => { el.scrollTop = el.scrollHeight })
+    })
+  },
+  { deep: true, flush: 'post' }
+)
+
+// 客户端展示上限：镜像后端 256KB，避免渲染超大段文本卡顿
+const MAX_LOG_DISPLAY = 64 * 1024
+function displayOutput(raw: string | undefined | null): string {
+  if (!raw) return ''
+  if (raw.length <= MAX_LOG_DISPLAY) return raw
+  return `…（前文已截断）\n${raw.slice(-MAX_LOG_DISPLAY)}`
+}
 </script>
 
 <template>
@@ -434,6 +474,21 @@ onBeforeUnmount(() => {
               :placeholder="$t('@WORKBENCH:子任务描述 / 独立提示词覆盖')"
               rows="2"
             />
+            <details
+              v-if="jobOf(sub.id)"
+              class="wb-log-details"
+              :open="jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending'"
+            >
+              <summary class="wb-log-summary">
+                <span v-if="jobOf(sub.id)?.status === 'running'">● {{ $t('@WORKBENCH:正在执行…') }}</span>
+                <span v-else-if="jobOf(sub.id)?.status === 'pending'">{{ $t('@WORKBENCH:排队中…') }}</span>
+                <span v-else>{{ $t('@WORKBENCH:查看执行日志') }}</span>
+                <span class="wb-log-summary__meta">
+                  {{ (jobOf(sub.id)?.output || '').length }} {{ $t('@WORKBENCH:字符') }}
+                </span>
+              </summary>
+              <pre :ref="setLogRef(sub.id)" class="wb-log-pre">{{ displayOutput(jobOf(sub.id)?.output) || $t('@WORKBENCH:（暂无输出）') }}</pre>
+            </details>
           </li>
           <li v-if="selectedTask.subtasks.length === 0" class="wb-empty">
             {{ $t('@WORKBENCH:暂无子任务，点击上方按钮添加') }}
@@ -717,4 +772,46 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .wb-sub-item__row .wb-input { flex: 1; }
+
+/* ── 流式执行日志面板 ───────────────────────────────────────────── */
+.wb-log-details {
+  margin-top: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-code);
+  overflow: hidden;
+}
+.wb-log-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wb-log-summary::-webkit-details-marker { display: none; }
+.wb-log-summary:hover { background: rgba(59, 130, 246, 0.06); }
+.wb-log-summary__meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.wb-log-pre {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  background: var(--bg-code);
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px solid var(--border-color);
+}
 </style>

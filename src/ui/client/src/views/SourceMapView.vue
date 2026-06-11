@@ -26,6 +26,15 @@ import { ElMessage } from 'element-plus'
 import { useConfigStore } from '@/stores/configStore'
 import { getFileIconClass } from '@/utils/fileIcon'
 
+// 当前主题（'light' | 'dark'），会随 data-theme 变化实时更新
+const currentTheme = ref<'light' | 'dark'>(
+  document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+)
+function syncCurrentTheme() {
+  currentTheme.value = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+}
+let themeObserver: MutationObserver | null = null
+
 // ── 类型定义 ─────────────────────────────────────────────────────────────────
 
 interface GraphNode {
@@ -151,6 +160,9 @@ const { fitView, setNodes, setEdges, getNodes, getEdges, updateNodeInternals } =
 
 const isAnalyzing = computed(() => status.value === 'scanning' || status.value === 'analyzing')
 
+// VueFlow Background dot pattern 颜色：跟随主题，浅色主题用更柔和的中性灰
+const dotColor = computed(() => currentTheme.value === 'dark' ? '#334155' : '#cbd5e1')
+
 const selectedNode = computed(() =>
   result.value?.nodes.find(n => n.id === selectedNodeId.value) ?? null
 )
@@ -241,11 +253,10 @@ function getLanguageFromFile(filePath: string): string {
 
 function mountMonaco() {
   if (!monacoContainerRef.value || monacoInstance.value) return
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   monacoInstance.value = monaco.editor.create(monacoContainerRef.value, {
     value: '',
     language: 'plaintext',
-    theme: isDark ? 'vs-dark' : 'vs',
+    theme: currentTheme.value === 'dark' ? 'vs-dark' : 'vs',
     readOnly: true,
     fontSize: 12,
     lineHeight: 19,
@@ -258,6 +269,14 @@ function mountMonaco() {
     scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
   })
 }
+
+// 主题切换时同步 Monaco 主题；节点 / 边 / MiniMap 等通过 CSS 变量或响应式 prop 自动跟随
+watch(currentTheme, (t) => {
+  const inst = monacoInstance.value
+  if (inst) {
+    monaco.editor.setTheme(t === 'dark' ? 'vs-dark' : 'vs')
+  }
+})
 
 function buildFlowGraph(graphNodes: GraphNode[], graphEdges: GraphEdge[]) {
   // 按子系统分组布局：每个子系统独立一列区域，内部按 BFS 深度排列
@@ -314,18 +333,11 @@ function buildFlowGraph(graphNodes: GraphNode[], graphEdges: GraphEdge[]) {
         type: 'default',
         position: { x, y },
         label: n.label,
-        data: { ...n },
+        class: 'sm-fn-node',
+        data: { ...n, _accentColor: color },
         style: {
-          background: '#1e293b',
-          border: `2px solid ${color}`,
-          borderRadius: '8px',
-          color: '#e2e8f0',
-          fontSize: '12px',
-          padding: '8px 12px',
-          minWidth: '140px',
-          maxWidth: '200px',
-          cursor: 'pointer',
-        }
+          '--node-accent': color,
+        } as Record<string, string>,
       })
     })
     subsystemIdx++
@@ -337,8 +349,8 @@ function buildFlowGraph(graphNodes: GraphNode[], graphEdges: GraphEdge[]) {
     target: e.target,
     type: 'smoothstep',
     animated: false,
-    style: { stroke: '#475569', strokeWidth: 1.5 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#475569' },
+    class: 'sm-fn-edge',
+    markerEnd: { type: MarkerType.ArrowClosed },
   }))
 
   return { flowNodes, flowEdges }
@@ -613,12 +625,20 @@ onMounted(() => {
   if (!projectPath.value && configStore.currentDirectory) {
     projectPath.value = configStore.currentDirectory
   }
+  // 监听 data-theme 属性变化以同步 Monaco / 画布主题
+  themeObserver = new MutationObserver(() => syncCurrentTheme())
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  })
 })
 
 onBeforeUnmount(() => {
   monacoInstance.value?.getModel()?.dispose()
   monacoInstance.value?.dispose()
   stopPanelResize()
+  themeObserver?.disconnect()
+  themeObserver = null
 })
 </script>
 
@@ -853,9 +873,12 @@ onBeforeUnmount(() => {
               </div>
               <Handle type="source" :position="Position.Bottom" />
             </template>
-            <Background :variant="BackgroundVariant.Dots" :gap="20" :size="1" pattern-color="#334155" />
+            <Background :variant="BackgroundVariant.Dots" :gap="20" :size="1" :pattern-color="dotColor" />
             <Controls />
-            <MiniMap node-color="#3b82f6" />
+            <MiniMap
+              node-color="#3b82f6"
+              :mask-color="currentTheme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(15,23,42,0.06)'"
+            />
           </VueFlow>
 
           <!-- 空状态 -->
@@ -945,8 +968,8 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-page, #0f172a);
-  color: var(--text-primary, #e2e8f0);
+  background: var(--sm-graph-bg);
+  color: var(--text-primary);
   font-size: 13px;
 }
 
@@ -956,8 +979,8 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   padding: 8px 16px;
-  background: var(--bg-container, #1e293b);
-  border-bottom: 1px solid var(--border-color, #334155);
+  background: var(--sm-canvas-bg);
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
@@ -989,17 +1012,17 @@ onBeforeUnmount(() => {
 .sm-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary, #e2e8f0);
+  color: var(--text-primary);
 }
 
 .sm-path-input {
   flex: 1;
   height: 30px;
   padding: 0 10px;
-  background: var(--bg-page, #0f172a);
-  border: 1px solid var(--border-color, #334155);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
   border-radius: 6px;
-  color: var(--text-primary, #e2e8f0);
+  color: var(--text-primary);
   font-size: 12px;
   outline: none;
   transition: border-color 0.15s;
@@ -1054,14 +1077,14 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
   border-radius: 5px;
   cursor: pointer;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   transition: all 0.15s;
 }
 
 .sm-panel-btn:hover, .sm-panel-btn.active {
-  background: var(--bg-hover, #1e293b);
-  border-color: var(--border-color, #334155);
-  color: var(--text-primary, #e2e8f0);
+  background: var(--bg-component-hover);
+  border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 .sm-panel-btn.active {
@@ -1102,7 +1125,7 @@ onBeforeUnmount(() => {
   left: 50%;
   transform: translate(-50%, -50%);
   border-radius: 2px;
-  background: var(--border-color, #334155);
+  background: var(--border-color);
   transition: background 0.15s;
 }
 
@@ -1144,21 +1167,21 @@ onBeforeUnmount(() => {
 .sm-panel-files {
   min-width: 0;
   flex-shrink: 0;
-  background: var(--bg-container, #1e293b);
-  border-right: 1px solid var(--border-color, #334155);
+  background: var(--sm-canvas-bg);
+  border-right: 1px solid var(--border-color);
   overflow: hidden;
 }
 
 .sm-panel-graph {
   flex: 1;
   min-width: 300px;
-  background: var(--bg-page, #0f172a);
+  background: var(--sm-graph-bg);
 }
 
 .sm-panel-source {
   flex-shrink: 0;
-  background: var(--bg-container, #1e293b);
-  border-left: 1px solid var(--border-color, #334155);
+  background: var(--sm-canvas-bg);
+  border-left: 1px solid var(--border-color);
 }
 
 .sm-panel-header {
@@ -1168,11 +1191,11 @@ onBeforeUnmount(() => {
   padding: 6px 10px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border-color, #334155);
-  background: var(--bg-container, #1e293b);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--sm-canvas-bg);
   flex-shrink: 0;
 }
 
@@ -1188,8 +1211,8 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--bg-container, #1e293b);
-  border-bottom: 1px solid var(--border-color, #334155);
+  background: var(--sm-canvas-bg);
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -1235,7 +1258,7 @@ onBeforeUnmount(() => {
 
 .sm-summary-text {
   font-size: 11px;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1264,7 +1287,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   font-size: 13px;
   pointer-events: none;
 }
@@ -1273,9 +1296,9 @@ onBeforeUnmount(() => {
 .sm-log-panel {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--border-color, #334155);
+  border-top: 1px solid var(--border-color);
   flex-shrink: 0;
-  background: var(--bg-container, #1e293b);
+  background: var(--sm-canvas-bg);
   min-height: 60px;
 }
 
@@ -1286,10 +1309,10 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border-color, #334155);
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
@@ -1320,9 +1343,9 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
-.sm-log-entry--info { color: #94a3b8; }
-.sm-log-entry--success { color: #4ade80; }
-.sm-log-entry--error { color: #f87171; }
+.sm-log-entry--info { color: var(--text-tertiary); }
+.sm-log-entry--success { color: var(--text-success, #16a34a); }
+.sm-log-entry--error { color: var(--text-danger, #dc2626); }
 .sm-log-entry--thinking { color: #f59e0b; }
 
 /* ── 文件树 ─────────────────────────────── */
@@ -1342,7 +1365,7 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   padding-right: 8px;
   user-select: none;
-  color: var(--text-primary, #e2e8f0);
+  color: var(--text-primary);
   font-size: 13px;
   transition: background 0.1s;
   white-space: nowrap;
@@ -1351,19 +1374,19 @@ onBeforeUnmount(() => {
 }
 
 .sm-tree-node:hover {
-  background: var(--bg-hover);
+  background: var(--bg-component-hover);
 }
 
 .sm-tree-node--active {
   background: rgba(59, 130, 246, 0.12);
-  color: var(--color-primary, #3b82f6);
+  color: var(--color-primary);
 }
 
 .sm-tree-arrow {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   transition: transform 0.15s;
   width: 12px;
 }
@@ -1404,7 +1427,7 @@ onBeforeUnmount(() => {
 
 .sm-tree-empty {
   font-size: 12px;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   text-align: center;
   padding: 24px 12px;
 }
@@ -1412,8 +1435,8 @@ onBeforeUnmount(() => {
 /* ── 源码面板 ──────────────────────────── */
 .sm-node-detail {
   padding: 8px 12px;
-  background: #f59e0b0c;
-  border-bottom: 1px solid #f59e0b22;
+  background: rgba(245, 158, 11, 0.06);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.22);
   flex-shrink: 0;
 }
 
@@ -1426,20 +1449,20 @@ onBeforeUnmount(() => {
 
 .sm-node-file {
   font-size: 10px;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   font-family: 'Consolas', monospace;
   margin-top: 2px;
 }
 
 .sm-node-desc {
   font-size: 11px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-secondary);
   margin-top: 4px;
   line-height: 1.4;
 }
 
 .sm-source-body {
-  background: #0d1117;
+  background: var(--sm-source-bg);
   position: relative;
   overflow: hidden;
 }
@@ -1455,15 +1478,15 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0d111799;
+  background: var(--sm-source-overlay-bg);
   z-index: 10;
   font-size: 12px;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   pointer-events: none;
 }
 
 .sm-source-placeholder {
-  background: #0d1117;
+  background: var(--sm-source-bg);
   pointer-events: none;
 }
 
@@ -1474,7 +1497,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   height: 100%;
   min-height: 60px;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   font-size: 12px;
   text-align: center;
   padding: 12px;
@@ -1484,12 +1507,12 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   padding: 1px 6px;
-  background: var(--bg-page, #0f172a);
-  border: 1px solid var(--border-color, #334155);
+  background: var(--bg-page);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-secondary);
   margin-left: 4px;
 }
 
@@ -1524,12 +1547,12 @@ onBeforeUnmount(() => {
 
 /* ── VueFlow 深度覆盖 ─────────────────── */
 :deep(.vue-flow__background) {
-  background: #0f172a;
+  background: var(--sm-graph-bg);
 }
 
 :deep(.vue-flow__controls) {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--sm-controls-bg);
+  border: 1px solid var(--sm-controls-border);
   border-radius: 8px;
   box-shadow: none;
 }
@@ -1537,18 +1560,40 @@ onBeforeUnmount(() => {
 :deep(.vue-flow__controls-button) {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--sm-controls-color);
 }
 
 :deep(.vue-flow__controls-button:hover) {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--sm-controls-hover-bg);
+  color: var(--sm-controls-hover-color);
 }
 
 :deep(.vue-flow__minimap) {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--sm-minimap-bg);
+  border: 1px solid var(--sm-controls-border);
   border-radius: 6px;
+}
+
+:deep(.vue-flow__minimap-mask) {
+  fill: var(--sm-minimap-mask);
+  stroke: var(--sm-minimap-mask-stroke);
+}
+
+:deep(.vue-flow__edge-path),
+:deep(.vue-flow__connection-path) {
+  stroke: var(--sm-edge-color);
+}
+
+:deep(.vue-flow__arrowhead polyline),
+:deep(.vue-flow__arrowhead path),
+:deep(.vue-flow__marker polyline),
+:deep(.vue-flow__marker path) {
+  stroke: var(--sm-edge-color);
+  fill: var(--sm-edge-color);
+}
+
+:deep(.vue-flow__edge) {
+  stroke: var(--sm-edge-color);
 }
 
 :deep(.vue-flow__node) {
@@ -1556,11 +1601,38 @@ onBeforeUnmount(() => {
 }
 
 :deep(.vue-flow__node:hover) {
-  box-shadow: 0 0 0 2px #f59e0b80;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.55);
 }
 
 :deep(.vue-flow__node.selected) {
   box-shadow: 0 0 0 2px #f59e0b;
+}
+
+/* ── 自定义节点（class 注入） ──────────────────── */
+:deep(.sm-fn-node) {
+  background: var(--sm-node-bg);
+  color: var(--sm-node-text);
+  border: 2px solid var(--node-accent, #3b82f6);
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 8px 12px;
+  min-width: 140px;
+  max-width: 200px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.06);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+[data-theme="dark"] :deep(.sm-fn-node) {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32), 0 6px 14px rgba(0, 0, 0, 0.28);
+}
+
+:deep(.sm-fn-node:hover) {
+  transform: translateY(-1px);
+}
+
+:deep(.sm-fn-edge .vue-flow__edge-path) {
+  stroke-width: 1.5;
 }
 
 /* ── 布局优化按钮 ─────────────────────────── */
@@ -1577,10 +1649,10 @@ onBeforeUnmount(() => {
   gap: 5px;
   height: 28px;
   padding: 0 10px;
-  background: var(--bg-container, #1e293b);
-  border: 1px solid var(--border-color, #334155);
+  background: var(--sm-controls-bg);
+  border: 1px solid var(--sm-controls-border);
   border-radius: 6px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -1613,7 +1685,7 @@ onBeforeUnmount(() => {
 .sm-fn-label {
   font-size: 12px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--sm-node-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1622,7 +1694,7 @@ onBeforeUnmount(() => {
 
 .sm-fn-desc {
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--sm-node-desc);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1650,7 +1722,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   transition: all 0.15s;
@@ -1658,8 +1730,8 @@ onBeforeUnmount(() => {
 }
 
 .sm-tab-btn:hover {
-  color: var(--text-secondary, #94a3b8);
-  background: var(--bg-hover);
+  color: var(--text-secondary);
+  background: var(--bg-component-hover);
 }
 
 .sm-tab-btn.active {
@@ -1690,7 +1762,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.06em;
   position: sticky;
   top: 0;
-  background: var(--bg-container, #1e293b);
+  background: var(--sm-canvas-bg);
   z-index: 1;
 }
 
@@ -1706,7 +1778,7 @@ onBeforeUnmount(() => {
 }
 
 .sm-outline-node:hover {
-  background: var(--bg-hover);
+  background: var(--bg-component-hover);
 }
 
 .sm-outline-node--active {
@@ -1724,7 +1796,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-primary, #e2e8f0);
+  color: var(--text-primary);
   font-family: 'Consolas', monospace;
   white-space: nowrap;
   max-width: 80px;
@@ -1735,7 +1807,7 @@ onBeforeUnmount(() => {
 .sm-outline-desc {
   flex: 1;
   font-size: 10px;
-  color: var(--text-tertiary, #64748b);
+  color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

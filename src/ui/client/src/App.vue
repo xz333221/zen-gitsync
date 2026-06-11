@@ -589,20 +589,26 @@ function copyGitInit() {
 
       </div><!-- /view-pane git -->
 
-      <!-- 编辑器视图（延迟加载） -->
-      <div v-if="activeView === 'editor'" class="view-pane editor-pane">
-        <EditorView />
-      </div>
+      <!-- 编辑器视图（延迟加载，KeepAlive 缓存实例） -->
+      <KeepAlive>
+        <div v-show="activeView === 'editor'" class="view-pane editor-pane">
+          <EditorView />
+        </div>
+      </KeepAlive>
 
-      <!-- 源码地图视图（延迟加载） -->
-      <div v-if="activeView === 'source-map'" class="view-pane source-map-pane">
-        <SourceMapView />
-      </div>
+      <!-- 源码地图视图（延迟加载，KeepAlive 缓存实例） -->
+      <KeepAlive>
+        <div v-show="activeView === 'source-map'" class="view-pane source-map-pane">
+          <SourceMapView />
+        </div>
+      </KeepAlive>
 
-      <!-- 工作台视图（延迟加载） -->
-      <div v-if="activeView === 'workbench'" class="view-pane workbench-pane">
-        <WorkbenchView />
-      </div>
+      <!-- 工作台视图（延迟加载，KeepAlive 缓存实例） -->
+      <KeepAlive>
+        <div v-show="activeView === 'workbench'" class="view-pane workbench-pane">
+          <WorkbenchView />
+        </div>
+      </KeepAlive>
 
     </div><!-- /app-body -->
   </main>

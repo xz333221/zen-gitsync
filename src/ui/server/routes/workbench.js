@@ -26,6 +26,34 @@ import { EventEmitter } from 'events';
 const DATA_DIR = path.join(os.homedir(), '.zen-gitsync');
 const PROMPTS_FILE = path.join(DATA_DIR, 'prompts.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
+const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
+
+// 单张图片最大 5MB（解码后字节数）
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
+
+// mime → 文件后缀；与前端 el-upload accept 对齐
+const MIME_TO_EXT = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/bmp': 'bmp',
+  'image/svg+xml': 'svg',
+  'image/x-icon': 'ico',
+  'image/vnd.microsoft.icon': 'ico'
+};
+
+function sanitizeExt(name, fallback = 'png') {
+  if (typeof name !== 'string') return fallback;
+  const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
+  if (!m) return fallback;
+  return IMAGE_EXTS.has(m[1]) ? m[1] : fallback;
+}
+
+async function ensureImagesDir() {
+  await fsp.mkdir(IMAGES_DIR, { recursive: true });
+}
 
 // 解析 manifest 文件名（按优先级）
 const MANIFEST_FILES = [
@@ -186,6 +214,7 @@ function snapshotJobs() {
     title: j.title,
     status: j.status,
     prompt: j.prompt || '',
+    output: j.output || '',
     pid: j.pid || null,
     startedAt: j.startedAt || null,
     endedAt: j.endedAt || null,

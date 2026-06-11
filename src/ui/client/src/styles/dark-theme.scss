@@ -213,6 +213,26 @@
   --git-diff-removed-color: #f85149;
   --git-diff-hunk-bg: #1f2937;
   --git-diff-hunk-color: #a78bfa;
+
+  /* 源码地图主题变量（深色覆盖） */
+  --sm-canvas-bg: var(--bg-container-dark);
+  --sm-canvas-bg-alt: var(--bg-page-dark);
+  --sm-graph-bg: var(--bg-page-dark);
+  --sm-bg-pattern: #334155;
+  --sm-node-bg: #1e293b;
+  --sm-node-text: var(--text-primary-dark);
+  --sm-node-desc: var(--text-tertiary-dark);
+  --sm-edge-color: #475569;
+  --sm-controls-bg: var(--bg-container-dark);
+  --sm-controls-border: var(--border-color-dark);
+  --sm-controls-color: var(--text-tertiary-dark);
+  --sm-controls-hover-bg: var(--bg-page-dark);
+  --sm-controls-hover-color: var(--text-primary-dark);
+  --sm-minimap-bg: var(--bg-container-dark);
+  --sm-minimap-mask: rgba(0, 0, 0, 0.55);
+  --sm-minimap-mask-stroke: rgba(255, 255, 255, 0.18);
+  --sm-source-bg: #0d1117;
+  --sm-source-overlay-bg: rgba(13, 17, 23, 0.85);
 }
 
 /* =======================================================

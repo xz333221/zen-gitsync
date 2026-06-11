@@ -457,9 +457,41 @@
   --scrollbar-width: 6px;
   
   /* ===== 代码字体 ===== */
-  
+
   /* 等宽字体族（JetBrains Mono 优先） */
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Courier New", monospace;
+
+  /* ===== 源码地图 (SourceMap) 主题变量 =====
+     画布、VueFlow 节点、边、Controls、MiniMap、源码面板等都通过
+     这组变量适配浅色 / 深色主题，避免在组件内硬编码颜色。 */
+
+  /* 画布背景：左 / 右两侧面板 */
+  --sm-canvas-bg: var(--bg-container);
+  --sm-canvas-bg-alt: var(--bg-panel);
+
+  /* 调用图（VueFlow 容器）背景 */
+  --sm-graph-bg: var(--bg-page);
+
+  /* Background 图案点颜色 + 节点 / 边 */
+  --sm-bg-pattern: #cbd5e1;
+  --sm-node-bg: #ffffff;
+  --sm-node-text: var(--text-primary);
+  --sm-node-desc: var(--text-tertiary);
+  --sm-edge-color: #cbd5e1;
+
+  /* Controls / MiniMap */
+  --sm-controls-bg: #ffffff;
+  --sm-controls-border: var(--border-color-medium);
+  --sm-controls-color: var(--text-tertiary);
+  --sm-controls-hover-bg: var(--bg-container-hover);
+  --sm-controls-hover-color: var(--text-primary);
+  --sm-minimap-bg: #ffffff;
+  --sm-minimap-mask: rgba(15, 23, 42, 0.06);
+  --sm-minimap-mask-stroke: rgba(15, 23, 42, 0.18);
+
+  /* 源码 Monaco 区域 */
+  --sm-source-bg: #ffffff;
+  --sm-source-overlay-bg: rgba(255, 255, 255, 0.78);
 }
 
 /* =======================================================
