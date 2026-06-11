@@ -1681,5 +1681,9 @@ export default {
   '@WORKBENCH:标题': 'Title',
   '@WORKBENCH:描述': 'Description',
   '@WORKBENCH:不绑定': 'Unset',
+  '@WORKBENCH:AI 生成（基于当前项目）': 'AI generate (based on current project)',
+  '@WORKBENCH:已生成，可继续编辑': 'Generated. You can keep editing.',
+  '@WORKBENCH:生成失败': 'Generation failed',
+  '@WORKBENCH:网络错误: ': 'Network error: ',
   // @WORKBENCH: file end
 }

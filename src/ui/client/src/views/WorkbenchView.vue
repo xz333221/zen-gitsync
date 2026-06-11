@@ -64,7 +64,7 @@ const jobs = ref<Job[]>([])
 const selectedTaskId = ref<string | null>(null)
 const selectedTask = computed<Task | null>(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
 
-const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '' })
+const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false })
 const taskDialog = reactive({ visible: false, editing: null as Task | null, title: '', desc: '', promptId: null as string | null })
 
 let es: EventSource | null = null
@@ -138,13 +138,33 @@ function openCreatePrompt() {
   promptDialog.editing = null
   promptDialog.name = ''
   promptDialog.content = ''
+  promptDialog.aiLoading = false
   promptDialog.visible = true
 }
 function openEditPrompt(p: Prompt) {
   promptDialog.editing = p
   promptDialog.name = p.name
   promptDialog.content = p.content
+  promptDialog.aiLoading = false
   promptDialog.visible = true
+}
+async function aiGeneratePrompt() {
+  if (promptDialog.aiLoading) return
+  promptDialog.aiLoading = true
+  try {
+    const res = await fetch('/api/workbench/prompts/ai-generate', { method: 'POST' }).then(r => r.json())
+    if (res.success) {
+      promptDialog.name = res.name || promptDialog.name
+      promptDialog.content = res.content || promptDialog.content
+      ElMessage.success($t('@WORKBENCH:已生成，可继续编辑'))
+    } else {
+      ElMessage.error(res.error || $t('@WORKBENCH:生成失败'))
+    }
+  } catch (err) {
+    ElMessage.error($t('@WORKBENCH:网络错误: ') + (err && err.message || err))
+  } finally {
+    promptDialog.aiLoading = false
+  }
 }
 async function savePrompt() {
   if (!promptDialog.name.trim() || !promptDialog.content.trim()) {
@@ -423,6 +443,16 @@ onBeforeUnmount(() => {
       <el-form label-position="top">
         <el-form-item :label="$t('@WORKBENCH:名称')">
           <el-input v-model="promptDialog.name" :placeholder="$t('@WORKBENCH:如：代码审查 / 写测试')" />
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="primary"
+            plain
+            :loading="promptDialog.aiLoading"
+            @click="aiGeneratePrompt"
+          >
+            {{ $t('@WORKBENCH:AI 生成（基于当前项目）') }}
+          </el-button>
         </el-form-item>
         <el-form-item :label="$t('@WORKBENCH:内容')">
           <el-input

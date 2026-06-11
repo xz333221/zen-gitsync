@@ -228,7 +228,8 @@ async function startUIServer(noOpen = false, savePort = false) {
     app,
     getCurrentProjectPath: () => currentProjectPath,
     getProjectRoomId: () => projectRoomId,
-    io
+    io,
+    configManager
   });
 
   // local-file-picker 中间件，提供 /api/fs/* 文件浏览路由

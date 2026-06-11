@@ -1688,5 +1688,9 @@ export default {
   '@WORKBENCH:标题': '标题',
   '@WORKBENCH:描述': '描述',
   '@WORKBENCH:不绑定': '不绑定',
+  '@WORKBENCH:AI 生成（基于当前项目）': 'AI 生成（基于当前项目）',
+  '@WORKBENCH:已生成，可继续编辑': '已生成，可继续编辑',
+  '@WORKBENCH:生成失败': '生成失败',
+  '@WORKBENCH:网络错误: ': '网络错误: ',
   // @WORKBENCH: file end
 }

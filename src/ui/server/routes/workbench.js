@@ -27,6 +27,106 @@ const DATA_DIR = path.join(os.homedir(), '.zen-gitsync');
 const PROMPTS_FILE = path.join(DATA_DIR, 'prompts.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 
+// 解析 manifest 文件名（按优先级）
+const MANIFEST_FILES = [
+  'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml',
+  'pom.xml', 'build.gradle', 'build.gradle.kts', 'composer.json',
+  'Gemfile', 'pubspec.yaml'
+];
+
+async function readProjectManifest(projectPath) {
+  const out = {};
+  for (const f of MANIFEST_FILES) {
+    const p = path.join(projectPath, f);
+    try {
+      const stat = await fsp.stat(p);
+      if (!stat.isFile()) continue;
+      // 限制大小，避免巨型 pom.xml 把上下文打爆
+      const content = stat.size > 20000
+        ? (await safeReadFile(p, 20000))
+        : (await fsp.readFile(p, 'utf8'));
+      out[f] = content;
+    } catch { /* 不存在就跳过 */ }
+  }
+  return out;
+}
+
+async function safeReadFile(filePath, maxBytes = 200000) {
+  try {
+    const stat = await fsp.stat(filePath);
+    if (stat.size > maxBytes) {
+      const buf = Buffer.alloc(maxBytes);
+      const fd = await fsp.open(filePath, 'r');
+      await fd.read(buf, 0, maxBytes, 0);
+      await fd.close();
+      return buf.toString('utf8').slice(0, maxBytes);
+    }
+    return await fsp.readFile(filePath, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+async function listDirTree(projectPath, maxDepth = 2, maxEntries = 400) {
+  const lines = [];
+  async function walk(dir, depth) {
+    if (depth > maxDepth || lines.length >= maxEntries) return;
+    let entries;
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); }
+    catch { return; }
+    const filtered = entries.filter(e => {
+      if (e.name.startsWith('.')) return false;
+      if (['node_modules', 'dist', 'build', '.next', '.nuxt', '__pycache__', 'target', 'out', 'coverage', 'vendor'].includes(e.name)) return false;
+      return true;
+    });
+    const indent = '  '.repeat(depth);
+    for (const e of filtered) {
+      if (lines.length >= maxEntries) return;
+      if (e.isDirectory()) {
+        lines.push(`${indent}${e.name}/`);
+        await walk(path.join(dir, e.name), depth + 1);
+      } else if (e.isFile()) {
+        lines.push(`${indent}${e.name}`);
+      }
+    }
+  }
+  await walk(projectPath, 0);
+  return lines.join('\n');
+}
+
+async function callLlmJson(model, prompt) {
+  const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
+  const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
+
+  const body = JSON.stringify({
+    model: model.model,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 1500,
+    temperature: 0.4,
+    response_format: { type: 'json_object' },
+    stream: false,
+  });
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
+    const content = data?.choices?.[0]?.message?.content || '{}';
+    try {
+      const m = content.match(/```json\s*([\s\S]*?)```/) || content.match(/({[\s\S]*})/);
+      return JSON.parse(m ? m[1] : content);
+    } catch {
+      return {};
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -225,7 +325,87 @@ function waitProcessExit(pid) {
   });
 }
 
-export function registerWorkbenchRoutes({ app, getCurrentProjectPath, getProjectRoomId, io }) {
+export function registerWorkbenchRoutes({ app, getCurrentProjectPath, getProjectRoomId, io, configManager }) {
+  // ── AI 生成提示词（基于当前项目） ─────────────────────────────────────
+  app.post('/api/workbench/prompts/ai-generate', async (req, res) => {
+    try {
+      const projectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+      if (!projectPath) {
+        return res.status(400).json({ success: false, error: '未选中项目' });
+      }
+      let stat;
+      try { stat = await fsp.stat(projectPath); }
+      catch { return res.status(400).json({ success: false, error: '项目路径不存在' }); }
+      if (!stat.isDirectory()) {
+        return res.status(400).json({ success: false, error: '项目路径不是目录' });
+      }
+
+      // 取模型
+      let model;
+      try {
+        if (!configManager) throw new Error('configManager 不可用');
+        const rawConfig = await configManager.readRawConfigFile();
+        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+        model = models.find(m => m.isDefault) || models[0];
+      } catch (err) {
+        return res.status(500).json({ success: false, error: '读取 AI 配置失败: ' + err.message });
+      }
+      if (!model) {
+        return res.status(400).json({ success: false, error: '未配置 AI 模型，请先在通用设置中添加模型' });
+      }
+
+      // 收集项目上下文
+      const dirTree = await listDirTree(projectPath, 2, 400);
+      const manifest = await readProjectManifest(projectPath);
+      const readme = await safeReadFile(path.join(projectPath, 'README.md'), 8000);
+
+      const manifestBlock = Object.entries(manifest)
+        .map(([name, content]) => `\n--- ${name} ---\n${content}`)
+        .join('\n');
+
+      const projectName = path.basename(projectPath);
+
+      const systemPrompt = `你是一名资深软件架构师。任务：根据用户提供的项目目录结构、README、manifest 文件，输出一段**可复用的提示词**。
+这段提示词将被注入到大模型的 system prompt 中，用来指导大模型对**当前项目**做「项目架构总结」。
+
+要求：
+1. 提示词主体使用中文，语气专业、具体
+2. 必须明确告诉大模型：项目根目录是 {{repo.path}}，当前 git 分支是 {{branch}}
+3. 必须用 {{task.title}} / {{task.desc}} / {{sub.title}} / {{sub.desc}} 这 4 个变量，让大模型知道具体任务是做什么
+4. 提示词应包含：阅读项目目录、识别语言与框架、找出入口文件、画出主要模块依赖关系、输出 200-400 字的中文总结
+5. 提示词长度控制在 300-600 字之间
+6. 只返回 JSON，不要任何额外解释
+
+返回 JSON：
+{
+  "name": "提示词名称（10-20字）",
+  "content": "提示词正文"
+}`;
+
+      const userPayload = `项目根目录：${projectPath}
+项目名称：${projectName}
+
+## 目录结构（前 2 层，截断）
+${dirTree || '（无）'}
+
+## README.md
+${readme || '（无）'}
+
+## 关键 manifest
+${manifestBlock || '（无）'}`;
+
+      const data = await callLlmJson(model, `${systemPrompt}\n\n${userPayload}`);
+      const name = String(data.name || '').trim() || '项目架构总结';
+      const content = String(data.content || '').trim();
+      if (!content) {
+        return res.status(500).json({ success: false, error: 'AI 未返回有效内容' });
+      }
+      res.json({ success: true, name, content });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // SSE 事件流
   app.get('/api/workbench/events', (req, res) => {
     res.set({
