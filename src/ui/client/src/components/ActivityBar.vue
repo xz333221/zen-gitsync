@@ -40,8 +40,14 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         @click="select('git')"
         :aria-label="$t('@ACTBAR:Git')"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-          <path d="M23.546 10.93L13.067.452a1.55 1.55 0 0 0-2.188 0L8.708 2.627l2.76 2.76a1.838 1.838 0 0 1 2.327 2.341l2.658 2.66a1.838 1.838 0 1 1-1.101 1.103l-2.48-2.48v6.511a1.84 1.84 0 1 1-1.512-.035V9.003a1.839 1.839 0 0 1-.997-2.415L7.617 3.83 .45 10.928a1.55 1.55 0 0 0 0 2.188l10.48 10.478a1.55 1.55 0 0 0 2.187 0l10.428-10.43a1.55 1.55 0 0 0 0-2.233z"/>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <!-- 分支图：左下 main，右下 feature，右上 head 合并 -->
+          <circle cx="6" cy="19" r="2.2" fill="var(--bg-container)"/>
+          <circle cx="18" cy="19" r="2.2" fill="var(--bg-container)"/>
+          <circle cx="18" cy="5" r="2.2" fill="var(--bg-container)"/>
+          <line x1="6" y1="16.8" x2="6" y2="11"/>
+          <line x1="6" y1="11" x2="18" y2="11"/>
+          <line x1="18" y1="11" x2="18" y2="7.2"/>
         </svg>
       </button>
     </el-tooltip>
@@ -54,12 +60,14 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         @click="select('editor')"
         :aria-label="$t('@ACTBAR:编辑器')"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-          <line x1="10" y1="9" x2="8" y2="9"/>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <!-- 文件折角：轮廓 + 折页 -->
+          <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/>
+          <polyline points="14 3 14 8 19 8"/>
+          <!-- 代码标记 </> -->
+          <polyline points="9.5 12 7 14.5 9.5 17"/>
+          <polyline points="14.5 12 17 14.5 14.5 17"/>
+          <line x1="13.5" y1="11" x2="10.5" y2="18"/>
         </svg>
       </button>
     </el-tooltip>
@@ -72,10 +80,17 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         @click="select('source-map')"
         :aria-label="$t('@ACTBAR:源码地图')"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
-          <line x1="9" y1="3" x2="9" y2="18"/>
-          <line x1="15" y1="6" x2="15" y2="21"/>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <!-- 中心节点 + 四个外围节点 + 连线（关系图谱） -->
+          <circle cx="12" cy="12" r="2.2"/>
+          <circle cx="4.5" cy="4.5" r="1.7" fill="var(--bg-container)"/>
+          <circle cx="19.5" cy="4.5" r="1.7" fill="var(--bg-container)"/>
+          <circle cx="4.5" cy="19.5" r="1.7" fill="var(--bg-container)"/>
+          <circle cx="19.5" cy="19.5" r="1.7" fill="var(--bg-container)"/>
+          <line x1="6.3" y1="6.3" x2="10.1" y2="10.1"/>
+          <line x1="17.7" y1="6.3" x2="13.9" y2="10.1"/>
+          <line x1="6.3" y1="17.7" x2="10.1" y2="13.9"/>
+          <line x1="17.7" y1="17.7" x2="13.9" y2="13.9"/>
         </svg>
       </button>
     </el-tooltip>
@@ -88,10 +103,20 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         @click="select('workbench')"
         :aria-label="$t('@ACTBAR:工作台')"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="4" width="18" height="14" rx="2"/>
-          <line x1="3" y1="9" x2="21" y2="9"/>
-          <line x1="9" y1="9" x2="9" y2="18"/>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <!-- 仪表板：外框 + 左侧导航 + 右侧 2x2 卡片网格 -->
+          <rect x="3" y="4" width="18" height="16" rx="2.2"/>
+          <line x1="9" y1="4" x2="9" y2="20"/>
+          <!-- 导航条：活动指示点 + 菜单行 -->
+          <circle cx="6" cy="7.5" r="0.7" fill="currentColor" stroke="none"/>
+          <line x1="4.6" y1="11.5" x2="7.4" y2="11.5"/>
+          <line x1="4.6" y1="14.5" x2="7.4" y2="14.5"/>
+          <line x1="4.6" y1="17.5" x2="7.4" y2="17.5"/>
+          <!-- 右上卡片 -->
+          <rect x="11" y="6" width="8" height="5" rx="1"/>
+          <!-- 右下两个小卡片 -->
+          <rect x="11" y="13" width="3.7" height="5" rx="1"/>
+          <rect x="15.3" y="13" width="3.7" height="5" rx="1"/>
         </svg>
       </button>
     </el-tooltip>

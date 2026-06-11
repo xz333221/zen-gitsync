@@ -20,7 +20,7 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import { EventEmitter } from 'events';
 
 const DATA_DIR = path.join(os.homedir(), '.zen-gitsync');
@@ -185,6 +185,7 @@ function snapshotJobs() {
     subId: j.subId,
     title: j.title,
     status: j.status,
+    prompt: j.prompt || '',
     pid: j.pid || null,
     startedAt: j.startedAt || null,
     endedAt: j.endedAt || null,
@@ -193,47 +194,59 @@ function snapshotJobs() {
   }));
 }
 
-// 用 detached 进程 + start 弹一个新窗口跑 claude；进程退出时回填状态。
+// 用 detached 进程跑 claude；进程退出时回填状态。
+// 返回 { pid, child }：调用方可以监听 child.stdout/stderr 实时收集输出。
+// 不再走 cmd /k 弹窗——claude -p 是非交互模式，输出通过 stdout pipe 实时回传
+// 到前端面板展示。
 function launchClaudeInNewWindow(cwd, promptText) {
   return new Promise((resolve, reject) => {
     const args = [
+      '-p', promptText,
+      '--output-format', 'text',
       '--permission-mode', 'bypassPermissions',
       '--dangerously-skip-permissions'
     ];
-    // 初始 prompt 通过 stdin 喂入，避免命令行长度 / 转义问题
     let child;
+    let spawnedExe = 'claude';
     if (process.platform === 'win32') {
-      // start "" cmd /c "echo ... | claude ..."
-      const encoded = promptText.replace(/"/g, '\\"');
-      const cmd = `echo "${encoded}" | claude ${args.map(a => `"${a}"`).join(' ')}`;
-      child = spawn('cmd.exe', ['/c', 'start', '""', 'cmd', '/c', cmd], {
+      // 直接 spawn claude.exe（npm 全局 @anthropic-ai/claude-code 里的真实二进制），
+      // 避开两件事：
+      //  1. Node 23 在 Windows 上拒绝 spawn .cmd/.bat（EINVAL）
+      //  2. shell:true 会把 argv 拼成命令行交给 cmd 解释，prompt 里的 \n 被切成多段
+      // 用 `where claude` 找到 claude.cmd，再从 cmd 内容推断对应 .exe 路径。
+      let claudeExe = 'claude.exe';
+      try {
+        const cmdShim = execFileSync('where', ['claude'], { encoding: 'utf8' })
+          .split(/\r?\n/).map(s => s.trim()).find(s => /\.cmd$/i.test(s));
+        if (cmdShim) {
+          const txt = fs.readFileSync(cmdShim, 'utf8');
+          if (/%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude\.exe/i.test(txt)) {
+            claudeExe = path.join(path.dirname(cmdShim), 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
+          }
+        }
+      } catch { /* fallback */ }
+      spawnedExe = claudeExe;
+      child = spawn(claudeExe, args, {
         cwd,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: false
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: false,
+        env: { ...process.env, LANG: 'zh_CN.UTF-8' }
       });
     } else {
-      // macOS / Linux：尝试 osascript 弹 Terminal.app 窗口；否则直接 spawn 后台
-      if (process.platform === 'darwin') {
-        const escaped = promptText.replace(/"/g, '\\"');
-        const cmd = `printf "%s" "${escaped}" | claude ${args.join(' ')}`;
-        child = spawn('osascript', ['-e', `tell application "Terminal" to do script "${cmd.replace(/"/g, '\\"')}"`], {
-          detached: true,
-          stdio: 'ignore'
-        });
-      } else {
-        const encoded = promptText.replace(/'/g, `'\\''`);
-        child = spawn('sh', ['-c', `printf "%s" '${encoded}' | xargs -0 -I {} claude ${args.join(' ')}`], {
-          cwd,
-          detached: true,
-          stdio: 'ignore'
-        });
-      }
+      // macOS / Linux：直接 spawn claude（Node spawn 不走 shell，
+      // prompt 中的引号 / 反斜杠无需手动 escape）
+      child = spawn('claude', args, {
+        cwd,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, LANG: 'zh_CN.UTF-8' }
+      });
     }
     child.on('error', reject);
     child.on('spawn', () => {
+      // unref 让 claude 独立于父进程事件循环；返回 child 引用让调用方继续读 stdout。
       child.unref();
-      resolve(child.pid);
+      resolve({ pid: child.pid, child });
     });
   });
 }
@@ -251,7 +264,9 @@ async function runTaskQueue(task, repoPath, branch) {
       repo: { path: repoPath || '' },
       branch: branch || ''
     };
-    const prompt = interpolate(promptTemplate, ctx) + (sub.desc ? `\n\n${sub.desc}` : '');
+    const interpolated = interpolate(promptTemplate, ctx);
+    const parts = [interpolated, sub.title, sub.desc].filter(s => s && s.trim());
+    const prompt = parts.join('\n\n');
 
     const jobId = genId();
     const job = {
@@ -268,11 +283,22 @@ async function runTaskQueue(task, repoPath, branch) {
     publish('job:update', job);
 
     try {
-      const pid = await launchClaudeInNewWindow(repoPath || process.cwd(), prompt);
+      const { pid, child } = await launchClaudeInNewWindow(repoPath || process.cwd(), prompt);
       job.pid = pid;
       job.startedAt = nowIso();
       job.status = 'running';
       publish('job:update', job);
+
+      // 累积子进程输出到 job.output，定期推送给前端；过长时截断尾部避免内存膨胀。
+      const MAX_OUTPUT = 256 * 1024;
+      const onChunk = (buf) => {
+        const text = buf.toString('utf8');
+        job.output = (job.output + text).slice(-MAX_OUTPUT);
+        publish('job:update', job);
+      };
+      if (child.stdout) child.stdout.on('data', onChunk);
+      if (child.stderr) child.stderr.on('data', onChunk);
+
       // 等待进程退出（detached 不阻塞主进程，用 polling /proc 兜底）
       await waitProcessExit(pid);
       job.endedAt = nowIso();
@@ -307,15 +333,13 @@ function waitProcessExit(pid) {
       try {
         process.kill(pid, 0); // 信号 0 = 探测存活
       } catch (err) {
-        if (err && err.code === 'ESRCH') {
+        // 只在进程真的消失（ESRCH / EPERM）时才 resolve；
+        // 其他错误（比如参数类型）保留 polling 状态，由超时兜底。
+        if (err && (err.code === 'ESRCH' || err.code === 'EPERM')) {
           exited = true;
           resolve();
           return;
         }
-        // EPERM 等也算不可访问
-        exited = true;
-        resolve();
-        return;
       }
       setTimeout(tryCheck, 1500);
     };
