@@ -79,6 +79,7 @@ const selectedTaskId = ref<string | null>(null)
 const selectedTask = computed<Task | null>(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
 
 const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false })
+const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
 const taskDialog = reactive({ visible: false, editing: null as Task | null, title: '', desc: '', promptId: null as string | null })
 
 let es: EventSource | null = null
@@ -177,16 +178,9 @@ async function aiGeneratePrompt() {
   try {
     const res = await fetch('/api/workbench/prompts/ai-generate', { method: 'POST' }).then(r => r.json())
     if (res.success) {
-      // 后端把 template + 实际生成的 result 拼成 content 返回
-      // 这里也手动拼一份，避免后端 content 字段缺失时拿不到完整结果
-      const name = res.name || promptDialog.name
-      let content = res.content || res.template || ''
-      if (res.template && res.result) {
-        // 强制按"模板 + 当前项目架构总结"的形式展示
-        content = `${res.template}\n\n## 当前项目架构总结\n\n${res.result}`
-      }
-      promptDialog.name = name
-      promptDialog.content = content
+      // 后端只回 summary（架构说明纯文本），不再拼接 template
+      promptDialog.name = res.name || promptDialog.name
+      promptDialog.content = res.result || ''
       ElMessage.success($t('@WORKBENCH:已生成，可继续编辑'))
     } else {
       ElMessage.error(res.error || $t('@WORKBENCH:生成失败'))
@@ -195,6 +189,46 @@ async function aiGeneratePrompt() {
     ElMessage.error($t('@WORKBENCH:网络错误: ') + (err && err.message || err))
   } finally {
     promptDialog.aiLoading = false
+  }
+}
+async function openEditInstruction() {
+  instructionDialog.visible = true
+  instructionDialog.loading = true
+  try {
+    const res = await fetch('/api/workbench/prompts/ai-instruction').then(r => r.json())
+    if (res.success) {
+      instructionDialog.text = res.instruction || ''
+    } else {
+      ElMessage.error(res.error || $t('@WORKBENCH:读取指令失败'))
+    }
+  } catch (err: any) {
+    ElMessage.error($t('@WORKBENCH:读取指令失败') + ': ' + (err && err.message || err))
+  } finally {
+    instructionDialog.loading = false
+  }
+}
+async function saveInstruction() {
+  if (!instructionDialog.text.trim()) {
+    ElMessage.warning($t('@WORKBENCH:指令内容不能为空'))
+    return
+  }
+  instructionDialog.saving = true
+  try {
+    const res = await fetch('/api/workbench/prompts/ai-instruction', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instruction: instructionDialog.text })
+    }).then(r => r.json())
+    if (res.success) {
+      ElMessage.success($t('@WORKBENCH:已保存指令'))
+      instructionDialog.visible = false
+    } else {
+      ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
+    }
+  } catch (err: any) {
+    ElMessage.error($t('@WORKBENCH:网络错误: ') + (err && err.message || err))
+  } finally {
+    instructionDialog.saving = false
   }
 }
 async function savePrompt() {
@@ -744,14 +778,19 @@ function humanSize(n: number): string {
           <el-input v-model="promptDialog.name" :placeholder="$t('@WORKBENCH:如：代码审查 / 写测试')" />
         </el-form-item>
         <el-form-item>
-          <el-button
-            type="primary"
-            plain
-            :loading="promptDialog.aiLoading"
-            @click="aiGeneratePrompt"
-          >
-            {{ $t('@WORKBENCH:AI 生成（基于当前项目）') }}
-          </el-button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <el-button
+              type="primary"
+              plain
+              :loading="promptDialog.aiLoading"
+              @click="aiGeneratePrompt"
+            >
+              {{ $t('@WORKBENCH:AI 生成项目架构说明') }}
+            </el-button>
+            <el-button @click="openEditInstruction">
+              {{ $t('@WORKBENCH:编辑指令') }}
+            </el-button>
+          </div>
         </el-form-item>
         <el-form-item :label="$t('@WORKBENCH:内容')">
           <el-input
@@ -765,6 +804,29 @@ function humanSize(n: number): string {
       <template #footer>
         <el-button @click="promptDialog.visible = false">{{ $t('@WORKBENCH:取消') }}</el-button>
         <el-button type="primary" @click="savePrompt">{{ $t('@WORKBENCH:保存') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 生成指令编辑对话框 -->
+    <el-dialog
+      v-model="instructionDialog.visible"
+      :title="$t('@WORKBENCH:编辑生成指令')"
+      width="720px"
+      append-to-body
+    >
+      <el-form label-position="top">
+        <el-form-item :label="$t('@WORKBENCH:指令内容')">
+          <el-input
+            v-model="instructionDialog.text"
+            type="textarea"
+            :rows="18"
+            :placeholder="$t('@WORKBENCH:指令内容')"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="instructionDialog.visible = false">{{ $t('@WORKBENCH:取消') }}</el-button>
+        <el-button type="primary" :loading="instructionDialog.saving" @click="saveInstruction">{{ $t('@WORKBENCH:保存') }}</el-button>
       </template>
     </el-dialog>
 

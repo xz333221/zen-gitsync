@@ -625,7 +625,7 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 子任务拆分 | 增删改子任务，实时显示每个子任务的执行状态 |
 | 子任务附件 | 每个子任务最多挂 9 个附件（图片 / PDF / 文本 / Markdown / CSV / JSON / log，单个 ≤ 5 MB）；执行时绝对路径会自动追加到 prompt 末尾，Claude 直接按路径读取 |
 | 提示词预置 | 可复用提示词模板，支持 `{{task.title}}` / `{{task.desc}}` / `{{sub.title}}` / `{{sub.desc}}` / `{{repo.path}}` / `{{branch}}` 变量插值 |
-| AI 生成预置 | 「新建 / 编辑预置」对话框内置 **AI 生成** 按钮：服务端读取当前项目目录树（depth=2）+ README + 9 种 manifest（package.json / pyproject.toml / go.mod / Cargo.toml …），调用已配置的 LLM 一键产出贴合项目结构的提示词（名称 + 正文），生成后用户可继续手动调整再保存 |
+| AI 生成预置 | 「新建 / 编辑预置」对话框内置 **AI 生成项目架构说明** 按钮 + **编辑指令** 按钮：服务端递归识别当前项目里的所有子项目（含 `.git` 或 9 种 manifest 之一的目录），为每个子项目独立读取关键文件（manifest 20 KB / README 8 KB / 2 层目录树），并发调 LLM 产出各子项目架构说明，多子项目场景再合并成一份整体说明；用户可点「编辑指令」自定义生成策略（持久化到 `~/.zen-gitsync/ai-instruction.json`）；`max_tokens=4000`，单次请求最多 20 分钟 |
 | 子任务覆盖 | 在子任务描述框可独立覆盖预置提示词的内容 |
 | 顺序执行 | 按声明顺序依次执行子任务；上一个进程退出后才启动下一个 |
 | 管道模式启动 | 直接以 `claude -p "<prompt>" --output-format text --permission-mode bypassPermissions --dangerously-skip-permissions` 拉起进程，stdout / stderr 通过管道回传服务端，不再弹外部终端窗口 |

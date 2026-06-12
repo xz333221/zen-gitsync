@@ -28,6 +28,35 @@ const DATA_DIR = path.join(os.homedir(), '.zen-gitsync');
 const PROMPTS_FILE = path.join(DATA_DIR, 'prompts.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
+const INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-instruction.json');
+
+// 子项目识别 / 文件扫描时需要跳过的目录
+const SKIP_DIRS = new Set([
+  'node_modules', 'dist', 'build', '.next', '.nuxt', '__pycache__',
+  'target', 'out', 'coverage', 'vendor', '.git', '.svn', '.hg',
+  '.idea', '.vscode', '.gradle', '.terraform', '.cache', '.parcel-cache',
+  '.turbo', '.svelte-kit', 'storybook-static'
+]);
+
+// 默认生成指令：用户首次使用时作为可编辑指令的初始值
+const DEFAULT_INSTRUCTION = `你是一名资深软件架构师。
+
+【探索步骤】
+1. 先识别项目结构：扫描根目录是否包含 .git 目录，以及 package.json / pyproject.toml / go.mod / Cargo.toml / pom.xml / build.gradle{,.kts} / composer.json / Gemfile / pubspec.yaml 这 9 种 manifest。
+2. 如果根目录含 manifest，就把整个根目录视为一个子项目。
+3. 如果根目录不含 manifest、但子目录（含一层 .git 或上述 manifest）形成多个子项目，对每个子项目分别探索。
+4. 对每个子项目，重点读取：
+   - 所有识别到的 manifest（限制单文件 20KB）
+   - README.md（限制 8KB）
+   - 入口文件：package.json 的 main / scripts / workspaces 字段；pyproject.toml 的 [project.scripts]；go.mod 的 module；Cargo.toml 的 [[bin]]；pom.xml 的 <modules>
+   - 2 层目录树（最多 200 行）
+
+【输出要求】
+1. 给出一段 400-800 字的中文「项目架构说明」，覆盖：项目整体定位、技术栈、模块划分、核心流程、关键设计决策。
+2. 必须引用子项目里实际存在的文件路径、目录名、依赖名，不要编造。
+3. 多个子项目时：先逐个说明，最后输出一段「整体架构」总结它们之间的关系。
+4. 语气专业、具体、面向接手这个项目的开发者。
+5. 只返回 JSON：{ "name": "项目名（10-20字）", "summary": "架构说明正文" }。`;
 
 // 单个附件最大 5MB；与 Anthropic Messages API 文档约束一致
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -151,7 +180,8 @@ async function listDirTree(projectPath, maxDepth = 2, maxEntries = 400) {
   return lines.join('\n');
 }
 
-async function callLlmJson(model, prompt) {
+async function callLlmJson(model, prompt, opts = {}) {
+  const { maxTokens = 1500, timeoutMs = 60000 } = opts;
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
   const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`;
   const headers = { 'Content-Type': 'application/json' };
@@ -160,14 +190,14 @@ async function callLlmJson(model, prompt) {
   const body = JSON.stringify({
     model: model.model,
     messages: [{ role: 'user', content: prompt }],
-    max_tokens: 1500,
+    max_tokens: maxTokens,
     temperature: 0.4,
     response_format: { type: 'json_object' },
     stream: false,
   });
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
     const data = await resp.json().catch(() => ({}));
@@ -230,6 +260,108 @@ function interpolate(template, ctx) {
 // ── 进程表：记录每个子任务的运行状态 ──────────────────────────────────────
 const bus = new EventEmitter();
 const jobs = new Map(); // jobId -> { id, taskId, subId, status, pid, startedAt, endedAt, exitCode, error, prompt }
+
+// ── 生成指令持久化（~/.zen-gitsync/ai-instruction.json） ────────────────────
+async function readInstruction() {
+  try {
+    const buf = await fsp.readFile(INSTRUCTION_FILE, 'utf-8');
+    const obj = JSON.parse(buf);
+    if (obj && typeof obj.instruction === 'string' && obj.instruction.trim()) {
+      return obj.instruction;
+    }
+  } catch { /* 文件不存在或解析失败 */ }
+  return DEFAULT_INSTRUCTION;
+}
+
+async function writeInstruction(instruction) {
+  await ensureDataDir();
+  const text = String(instruction || '').trim() || DEFAULT_INSTRUCTION;
+  const tmp = `${INSTRUCTION_FILE}.tmp`;
+  await fsp.writeFile(tmp, JSON.stringify({ instruction: text, updatedAt: nowIso() }, null, 2), 'utf-8');
+  await fsp.rename(tmp, INSTRUCTION_FILE);
+}
+
+// ── 子项目识别：递归找 .git / manifest；A 是 B 的祖先时只保留 B ─────────────
+async function findSubProjects(projectPath, opts = {}) {
+  const { maxDepth = 4 } = opts;
+  const candidates = [];
+
+  async function walk(dir, depth) {
+    if (depth > maxDepth) return;
+    let entries;
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); }
+    catch { return; }
+
+    let hasManifest = false;
+    let hasGit = false;
+    const subDirs = [];
+    for (const e of entries) {
+      if (!e.isDirectory() && !e.isFile()) continue;
+      if (e.name.startsWith('.')) {
+        if (e.name === '.git' && e.isDirectory()) hasGit = true;
+        continue;
+      }
+      if (e.isDirectory()) {
+        if (SKIP_DIRS.has(e.name)) continue;
+        subDirs.push(path.join(dir, e.name));
+      } else if (e.isFile() && MANIFEST_FILES.includes(e.name)) {
+        hasManifest = true;
+      }
+    }
+    if (hasManifest || hasGit) {
+      candidates.push(dir);
+      return; // 子目录里若还有 manifest，会被自己发现；这里不再下钻避免冗余
+    }
+    if (depth >= maxDepth) return;
+    for (const sub of subDirs) {
+      await walk(sub, depth + 1);
+    }
+  }
+
+  await walk(projectPath, 0);
+
+  // 去重：若 candidates 里 A 是 B 的祖先，只保留更深一级的 B
+  candidates.sort((a, b) => a.length - b.length);
+  const kept = [];
+  for (const c of candidates) {
+    let dominated = false;
+    for (const k of kept) {
+      if (c === k || c.startsWith(k + path.sep)) { dominated = true; break; }
+    }
+    if (!dominated) kept.push(c);
+  }
+
+  // 收集每个子项目的关键文件
+  const result = [];
+  for (const root of kept) {
+    const manifests = {};
+    for (const m of MANIFEST_FILES) {
+      const p = path.join(root, m);
+      try {
+        const stat = await fsp.stat(p);
+        if (stat.isFile()) {
+          manifests[m] = stat.size > 20000
+            ? await safeReadFile(p, 20000)
+            : await fsp.readFile(p, 'utf8');
+        }
+      } catch { /* 不存在就跳过 */ }
+    }
+    let readme = '';
+    try {
+      const stat = await fsp.stat(path.join(root, 'README.md'));
+      if (stat.isFile()) readme = await safeReadFile(path.join(root, 'README.md'), 8000);
+    } catch { /* 不存在就跳过 */ }
+    const dirTree = await listDirTree(root, 2, 200);
+    result.push({
+      root,
+      name: path.basename(root) || path.basename(projectPath),
+      manifests,
+      readme,
+      dirTree
+    });
+  }
+  return result;
+}
 
 function publish(event, payload) {
   bus.emit('event', { event, payload, ts: nowIso() });
@@ -449,107 +581,170 @@ export function registerWorkbenchRoutes({ app, getCurrentProjectPath, getProject
         return res.status(400).json({ success: false, error: '未配置 AI 模型，请先在通用设置中添加模型' });
       }
 
-      // 收集项目上下文
-      const dirTree = await listDirTree(projectPath, 2, 400);
-      const manifest = await readProjectManifest(projectPath);
-      const readme = await safeReadFile(path.join(projectPath, 'README.md'), 8000);
+      // 读取用户可编辑的生成指令；没存就用默认
+      const userInstruction = await readInstruction();
 
-      const manifestBlock = Object.entries(manifest)
-        .map(([name, content]) => `\n--- ${name} ---\n${content}`)
-        .join('\n');
-
-      const projectName = path.basename(projectPath);
-
-      const userPayload = `项目根目录：${projectPath}
-项目名称：${projectName}
-
-## 目录结构（前 2 层，截断）
-${dirTree || '（无）'}
-
-## README.md
-${readme || '（无）'}
-
-## 关键 manifest
-${manifestBlock || '（无）'}`;
-
-      // 第一阶段：让 LLM 写一段「可复用的提示词模板」
-      const templateSystemPrompt = `你是一名资深软件架构师。任务：根据用户提供的项目目录结构、README、manifest 文件，输出一段**可复用的提示词模板**。
-这段模板将作为指令注入到大模型的 system prompt 中，用来指导大模型对**当前项目**做「项目架构总结」。
-
-要求：
-1. 模板主体使用中文，语气专业、具体
-2. 模板中必须明确使用 4 个变量占位符：
-   - {{task.title}}  - 任务标题
-   - {{task.desc}}   - 任务详细描述
-   - {{sub.title}}   - 子任务标题
-   - {{sub.desc}}    - 子任务详细描述
-   并向大模型说明：项目根目录是 {{repo.path}}，当前 git 分支是 {{branch}}
-3. 模板应指导大模型：阅读项目目录、识别语言与框架、找出入口文件、画出主要模块依赖关系、输出 200-400 字的中文总结
-4. 模板长度控制在 300-600 字之间
-5. 只返回 JSON，不要任何额外解释
-
-返回 JSON：
-{
-  "name": "模板名称（10-20字）",
-  "template": "模板正文"
-}`;
-
-      const first = await callLlmJson(model, `${templateSystemPrompt}\n\n${userPayload}`);
-      const templateName = String(first.name || '').trim() || '项目架构总结';
-      const template = String(first.template || '').trim();
-      if (!template) {
-        return res.status(500).json({ success: false, error: 'AI 未返回有效模板' });
+      // 递归识别多子项目
+      const subProjects = await findSubProjects(projectPath);
+      if (subProjects.length === 0) {
+        // 没识别到任何子项目：回退到根目录本身
+        const fallbackTree = await listDirTree(projectPath, 2, 400);
+        const fallbackManifest = await readProjectManifest(projectPath);
+        const fallbackReadme = await safeReadFile(path.join(projectPath, 'README.md'), 8000);
+        subProjects.push({
+          root: projectPath,
+          name: path.basename(projectPath),
+          manifests: fallbackManifest,
+          readme: fallbackReadme,
+          dirTree: fallbackTree
+        });
       }
 
-      // 第二阶段：以模板为指令，喂入项目上下文，跑一次实际生成
-      const execPrompt = `${template}
+      const projectName = path.basename(projectPath);
+      const LLM_OPTS = { maxTokens: 4000, timeoutMs: 1200000 };
+
+      // ── 第一阶段：基于可编辑指令 + 根目录概览，生成「可复用的提示词模板」 ──
+      const overviewBlock = subProjects.map(sp =>
+        `### 子项目 ${sp.name} (${sp.root})\n目录：\n${sp.dirTree || '（无）'}`
+      ).join('\n\n');
+
+      const firstPrompt = `${userInstruction}
 
 ---
 
-以下是你需要分析的项目实际数据（请直接基于这些数据输出最终结果）：
+以下是你需要分析的项目（请先生成「可复用的提示词模板」，不要直接给总结）：
 
 项目根目录：${projectPath}
 项目名称：${projectName}
+子项目数：${subProjects.length}
 
-## 目录结构（前 2 层）
-${dirTree || '（无）'}
+## 子项目概览
+${overviewBlock || '（无）'}
 
-## README.md
-${readme || '（无）'}
+## 各子项目 manifest 与 README
+${subProjects.map(sp => {
+  const manifestBlock = Object.entries(sp.manifests)
+    .map(([n, c]) => `\n--- ${n} ---\n${c}`)
+    .join('\n');
+  return `\n### ${sp.name}\n${manifestBlock || '（无 manifest）'}\n\nREADME（前 8KB）：\n${sp.readme || '（无）'}`;
+}).join('\n')}
 
-## 关键 manifest
-${manifestBlock || '（无）'}
-
-请输出一份 200-400 字的中文架构总结，包含：项目整体定位、技术栈、模块划分、核心流程、关键设计决策。只返回 JSON：
-
+只返回 JSON：
 {
-  "summary": "架构总结正文"
+  "name": "项目名（10-20字）",
+  "template": "可复用的提示词模板（300-600字），应明确使用 {{task.title}} / {{task.desc}} / {{sub.title}} / {{sub.desc}} / {{repo.path}} / {{branch}} 这 6 个变量"
 }`;
 
-      const second = await callLlmJson(model, execPrompt);
-      const summary = String(second.summary || '').trim();
+      const first = await callLlmJson(model, firstPrompt, LLM_OPTS);
+      const templateName = String(first.name || '').trim() || projectName || '项目架构说明';
+      const template = String(first.template || '').trim();
 
-      if (!summary) {
-        // 兜底：仅返回模板，结果留空
+      // ── 第二阶段：为每个子项目分别生成总结（单子项目 = 现在的行为） ──
+      async function summarizeOneSub(sp) {
+        const manifestBlock = Object.entries(sp.manifests)
+          .map(([n, c]) => `\n--- ${n} ---\n${c}`)
+          .join('\n');
+        const subPrompt = `${template}
+
+---
+
+以下是你需要分析的一个子项目（请直接基于这些数据输出该子项目的架构说明）：
+
+子项目根目录：${sp.root}
+子项目名称：${sp.name}
+
+## 目录结构（前 2 层）
+${sp.dirTree || '（无）'}
+
+## manifest
+${manifestBlock || '（无）'}
+
+## README
+${sp.readme || '（无）'}
+
+只返回 JSON：
+{
+  "summary": "该子项目的架构说明（300-600字）"
+}`;
+        const r = await callLlmJson(model, subPrompt, LLM_OPTS);
+        return { name: sp.name, root: sp.root, summary: String(r.summary || '').trim() };
+      }
+
+      const subSummaries = await Promise.all(subProjects.map(summarizeOneSub));
+
+      // ── 第三阶段：仅多子项目时合并（单子项目直接拿它的 summary） ──
+      let finalSummary = '';
+      let finalName = templateName;
+
+      if (subSummaries.length === 1) {
+        finalSummary = subSummaries[0].summary;
+      } else {
+        const mergePrompt = `你是项目架构师。下列是同一仓库下 N 个子项目的架构说明，请合并输出**单一**的「项目架构说明」（800-1500字），覆盖：项目整体定位、技术栈、模块划分、子项目间关系、核心流程、关键设计决策。
+子项目之间用清晰的小标题或编号分隔。最后输出一段「整体架构」总结它们如何协同。
+只引用实际出现的子项目名 / 文件路径 / 依赖名，不要编造。只返回 JSON：
+
+{
+  "name": "项目名（10-20字）",
+  "summary": "合并后的架构说明"
+}
+
+## 子项目说明
+${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summary || '（空）'}`).join('\n')}`;
+
+        const merged = await callLlmJson(model, mergePrompt, LLM_OPTS);
+        finalSummary = String(merged.summary || '').trim()
+          || subSummaries.map(s => `### ${s.name}\n${s.summary}`).join('\n\n');
+        finalName = String(merged.name || '').trim() || templateName;
+      }
+
+      if (!finalSummary) {
+        // 兜底：仅返回模板
         return res.json({
           success: true,
-          name: templateName,
+          name: finalName,
           template,
           result: '',
           content: template
         });
       }
 
-      // 把模板和实际结果拼到一起，作为预置提示词存进 prompts.json
-      const content = `${template}\n\n## 当前项目架构总结（已生成于 ${nowIso()}）\n\n${summary}`;
-
+      // 顶层 request 已经自带 20 分钟（1200s）超时；
+      // 这里在 express 处理器内部不再额外加整体超时。
       res.json({
         success: true,
-        name: templateName,
+        name: finalName,
         template,
-        result: summary,
-        content
+        result: finalSummary,
+        content: finalSummary
       });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ── 生成指令：读 / 写（用户可在弹窗里自定义） ───────────────────────
+  app.get('/api/workbench/prompts/ai-instruction', async (_req, res) => {
+    try {
+      const instruction = await readInstruction();
+      res.json({ success: true, instruction, isDefault: instruction === DEFAULT_INSTRUCTION });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put('/api/workbench/prompts/ai-instruction', async (req, res) => {
+    try {
+      const text = req.body && typeof req.body.instruction === 'string'
+        ? req.body.instruction.trim()
+        : '';
+      if (!text) {
+        return res.status(400).json({ success: false, error: '指令不能为空' });
+      }
+      if (text.length > 50000) {
+        return res.status(413).json({ success: false, error: '指令过长（最多 50000 字符）' });
+      }
+      await writeInstruction(text);
+      res.json({ success: true });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
