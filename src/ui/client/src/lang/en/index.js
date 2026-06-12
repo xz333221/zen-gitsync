@@ -1720,6 +1720,8 @@ export default {
   '@WORKBENCH:字符': 'chars',
   '@WORKBENCH:用户提示词': 'User prompt',
   '@WORKBENCH:Claude 思考': 'Claude thinking',
+  '@WORKBENCH:未保存': 'Unsaved',
+  '@WORKBENCH:有未保存的更改': 'Unsaved changes',
   '@WORKBENCH:（暂无输出）': '(no output yet)',
   '@WORKBENCH:执行出错': 'Execution error',
   '@WORKBENCH:名称和内容不能为空': 'Name and content cannot be empty',

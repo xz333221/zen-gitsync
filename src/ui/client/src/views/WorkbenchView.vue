@@ -79,6 +79,41 @@ const jobs = ref<Job[]>([])
 const selectedTaskId = ref<string | null>(null)
 const selectedTask = computed<Task | null>(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
 
+// 当前选中 task 在磁盘上的子任务快照（仅含参与 dirty 比较的字段）。
+// 用于标记哪些 sub 被改过但没点"保存拆分"。
+// - captureSnapshot()  在 loadTasks / persistTask 成功后 / 切换 selectedTaskId 时调用
+// - dirtySubIds 是计算属性，对比 selectedTask.subtasks 与 diskSnapshot
+const diskSnapshot = ref<Map<string, { id: string; title: string; desc: string; promptOverride: string }>>(new Map())
+
+function captureSnapshot() {
+  const m = new Map<string, { id: string; title: string; desc: string; promptOverride: string }>()
+  if (selectedTask.value) {
+    for (const s of selectedTask.value.subtasks) {
+      m.set(s.id, { id: s.id, title: s.title, desc: s.desc, promptOverride: s.promptOverride })
+    }
+  }
+  diskSnapshot.value = m
+}
+
+const dirtySubIds = computed<Set<string>>(() => {
+  const dirty = new Set<string>()
+  if (!selectedTask.value) return dirty
+  for (const s of selectedTask.value.subtasks) {
+    const snap = diskSnapshot.value.get(s.id)
+    if (!snap) {
+      // 新增的 sub（快照里没有）也算 dirty
+      dirty.add(s.id)
+      continue
+    }
+    if (snap.title !== s.title || snap.desc !== s.desc || snap.promptOverride !== s.promptOverride) {
+      dirty.add(s.id)
+    }
+  }
+  return dirty
+})
+
+const hasDirtySubtasks = computed(() => dirtySubIds.value.size > 0)
+
 const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false })
 const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
 const taskDialog = reactive({ visible: false, editing: null as Task | null, title: '', desc: '', promptId: null as string | null })
@@ -135,6 +170,8 @@ async function loadTasks() {
   if (!selectedTaskId.value && tasks.value.length > 0) {
     selectedTaskId.value = tasks.value[0].id
   }
+  // 重新加载后立即拍快照——此时 UI 与磁盘一致
+  captureSnapshot()
 }
 async function loadJobs() {
   const res = await fetch('/api/workbench/jobs').then(r => r.json()).catch(() => ({ jobs: [] }))
@@ -322,7 +359,10 @@ async function deleteTask(t: Task) {
   loadTasks()
 }
 function selectTask(t: Task) {
+  if (selectedTaskId.value === t.id) return
   selectedTaskId.value = t.id
+  // 切换后立刻拍快照，避免新 task 误标为 dirty
+  captureSnapshot()
 }
 
 // ── 子任务编辑（拆分） ─────────────────────────────────────────────────────
@@ -679,16 +719,31 @@ function humanSize(n: number): string {
           <h4>{{ $t('@WORKBENCH:子任务拆分') }}</h4>
           <div>
             <el-button size="small" @click="addSubtask">+ {{ $t('@WORKBENCH:添加子任务') }}</el-button>
-            <el-button size="small" type="primary" @click="saveSubtasks">{{ $t('@WORKBENCH:保存拆分') }}</el-button>
+            <el-button
+              size="small"
+              :type="hasDirtySubtasks ? 'primary' : 'default'"
+              @click="saveSubtasks"
+            >
+              {{ $t('@WORKBENCH:保存拆分') }}
+              <span v-if="hasDirtySubtasks" class="wb-dirty-badge">{{ dirtySubIds.size }}</span>
+            </el-button>
           </div>
         </div>
         <ul class="wb-sub-list">
-          <li v-for="sub in selectedTask.subtasks" :key="sub.id" class="wb-sub-item">
+          <li
+            v-for="sub in selectedTask.subtasks"
+            :key="sub.id"
+            class="wb-sub-item"
+            :class="{ 'is-dirty': dirtySubIds.has(sub.id) }"
+          >
             <div class="wb-sub-item__row">
               <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
                 {{ statusLabel(sub.status) }}
               </span>
               <input class="wb-input" v-model="sub.title" :placeholder="$t('@WORKBENCH:子任务标题')" @paste="onSubtaskPaste($event, sub)" />
+              <span v-if="dirtySubIds.has(sub.id)" class="wb-sub-item__dirty" :title="$t('@WORKBENCH:有未保存的更改')">
+                {{ $t('@WORKBENCH:未保存') }}
+              </span>
               <span v-if="jobOf(sub.id)" class="wb-sub-item__pid" :title="$t('@WORKBENCH:进程ID')">
                 PID: {{ jobOf(sub.id)?.pid }}
               </span>
@@ -1077,6 +1132,49 @@ function humanSize(n: number): string {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 10px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.wb-sub-item.is-dirty {
+  border-color: rgba(245, 158, 11, 0.55);
+  box-shadow: inset 3px 0 0 0 #f59e0b;
+  background: rgba(245, 158, 11, 0.03);
+}
+.wb-sub-item__dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.15);
+  padding: 2px 7px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  letter-spacing: 0.2px;
+}
+.wb-sub-item__dirty::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+.wb-dirty-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: #ef4444;
+  border-radius: 8px;
+  vertical-align: middle;
 }
 .wb-sub-item__row {
   display: flex;
