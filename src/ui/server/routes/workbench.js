@@ -20,7 +20,7 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { spawn, execFileSync } from 'child_process';
+import { spawn, execFileSync, execFile } from 'child_process';
 import { EventEmitter } from 'events';
 import express from 'express';
 
@@ -260,6 +260,11 @@ function interpolate(template, ctx) {
 // ── 进程表：记录每个子任务的运行状态 ──────────────────────────────────────
 const bus = new EventEmitter();
 const jobs = new Map(); // jobId -> { id, taskId, subId, status, pid, startedAt, endedAt, exitCode, error, prompt }
+// 被用户主动取消的 jobId 集合——runTaskQueue 在 waitProcessExit 之后检查这个集合
+// 来决定把 job 标为 'cancelled' 还是 'done'。
+// 用 Set 而不是 job.cancelled 标志，是为了在 SIGTERM 发出后到 child 真正退出之间
+// 有一个简洁的"待回收"窗口。
+const cancelledJobs = new Set();
 
 // ── 生成指令持久化（~/.zen-gitsync/ai-instruction.json） ────────────────────
 async function readInstruction() {
@@ -490,6 +495,8 @@ async function runTaskQueue(task, repoPath, branch) {
     try {
       const { pid, child } = await launchClaudeInNewWindow(repoPath || process.cwd(), prompt);
       job.pid = pid;
+      // 保存 child 引用，供 cancel 接口调用 kill
+      job.child = child;
       job.startedAt = nowIso();
       job.status = 'running';
       publish('job:update', job);
@@ -539,6 +546,8 @@ async function runTaskQueue(task, repoPath, branch) {
 
       // 等待进程退出（detached 不阻塞主进程，用 polling /proc 兜底）
       await waitProcessExit(pid);
+      const wasCancelled = cancelledJobs.has(jobId)
+      if (wasCancelled) cancelledJobs.delete(jobId)
       // 进程退出时 stdout 可能残留最后一段未换行的 NDJSON，flush 一次
       if (lineBuf.stdout.trim()) {
         try {
@@ -555,14 +564,23 @@ async function runTaskQueue(task, repoPath, branch) {
         } catch { /* 不是 JSON，忽略 */ }
       }
       job.endedAt = nowIso();
-      job.exitCode = 0;
-      job.status = 'done';
-      sub.status = 'done';
+      if (wasCancelled) {
+        job.exitCode = 130; // 128 + SIGINT(2)，约定俗成的"用户取消"退出码
+        job.status = 'cancelled';
+        job.error = '用户已停止执行';
+        // sub 不改状态——cancelled 是 job 维度，同 task 后续 sub 仍可继续执行
+      } else {
+        job.exitCode = 0;
+        job.status = 'done';
+        sub.status = 'done';
+      }
     } catch (err) {
       job.error = err && err.message ? err.message : String(err);
       job.status = 'error';
       sub.status = 'error';
     } finally {
+      // 移除 child 引用——避免后续被 SSE 序列化到前端
+      delete job.child
       publish('job:update', job);
       publish('sub:update', { taskId: task.id, sub });
     }
@@ -976,6 +994,49 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   // ── 进程状态查询（兜底，SSE 断了也能拉） ────────────────────────────
   app.get('/api/workbench/jobs', (_req, res) => {
     res.json({ success: true, jobs: snapshotJobs() });
+  });
+
+  // ── 取消正在执行的 job ───────────────────────────────────────────
+  // POST /api/workbench/jobs/:id/cancel
+  // 行为：
+  //   - 找到正在运行的 job，调 child.kill() 终止 claude 进程
+  //   - Windows 下用 taskkill /T /F 杀进程树（claude 进程可能 fork 出子进程）
+  //   - 加入 cancelledJobs 集合，runTaskQueue 退出循环后会把 job 标为 'cancelled'
+  //   - 只影响这一个 sub；同 task 后续 sub 仍按队列顺序继续执行
+  app.post('/api/workbench/jobs/:id/cancel', (req, res) => {
+    const job = jobs.get(req.params.id)
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'job 不存在' })
+    }
+    if (job.status !== 'running' && job.status !== 'pending') {
+      return res.status(400).json({ success: false, error: `当前状态 ${job.status} 不可取消` })
+    }
+    cancelledJobs.add(job.id)
+    // 立即给前端一个状态反馈（不等 child 真正退出）
+    job.status = 'cancelled'
+    job.error = '用户已停止执行'
+    job.endedAt = nowIso()
+    publish('job:update', { ...job }) // 用浅拷贝避免序列化 child 引用
+    const child = job.child
+    if (!child) {
+      return res.json({ success: true, message: '已标记取消，进程将尽快结束' })
+    }
+    try {
+      if (process.platform === 'win32') {
+        // Windows: child.kill(SIGTERM) 经常无效，用 taskkill 杀进程树
+        execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], (err) => {
+          if (err) {
+            console.warn(`[workbench] taskkill ${child.pid} 失败:`, err.message)
+          }
+        })
+      } else {
+        child.kill('SIGTERM')
+      }
+      res.json({ success: true, message: '已发送停止信号' })
+    } catch (err) {
+      cancelledJobs.delete(job.id)
+      res.status(500).json({ success: false, error: '发送停止信号失败: ' + err.message })
+    }
   });
 
   // ── 子任务附件：上传 / 删除 / 列表 ───────────────────────────────

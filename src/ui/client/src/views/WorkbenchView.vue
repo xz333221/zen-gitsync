@@ -60,7 +60,7 @@ interface Job {
   taskId: string
   subId: string
   title: string
-  status: 'pending' | 'running' | 'done' | 'error'
+  status: 'pending' | 'running' | 'done' | 'error' | 'cancelled'
   prompt?: string
   output: string
   thinking?: string
@@ -447,6 +447,7 @@ function statusLabel(s: string) {
     case 'running': return $t('@WORKBENCH:执行中')
     case 'done': return $t('@WORKBENCH:已完成')
     case 'error': return $t('@WORKBENCH:出错')
+    case 'cancelled': return $t('@WORKBENCH:已取消')
     case 'pending': return $t('@WORKBENCH:排队中')
     default: return s
   }
@@ -456,8 +457,37 @@ function statusColor(s: string) {
     case 'running': return 'var(--color-primary)'
     case 'done': return '#22c55e'
     case 'error': return '#ef4444'
+    case 'cancelled': return '#9ca3af' // 灰色——与"未完成"区分开
     case 'pending': return '#f59e0b'
     default: return 'var(--text-tertiary)'
+  }
+}
+
+/**
+ * 取消正在执行的 job。点击后会弹确认，确认后调后端 cancel 接口。
+ * 取消的语义只影响这一个 sub：已输出的内容保留，同 task 后续 sub 仍按队列继续执行。
+ */
+async function cancelJob(j: Job) {
+  try {
+    await ElMessageBox.confirm(
+      $t('@WORKBENCH:确认停止执行？已输出的内容会保留。'),
+      $t('@WORKBENCH:停止执行'),
+      {
+        confirmButtonText: $t('@WORKBENCH:停止'),
+        cancelButtonText: $t('@WORKBENCH:取消'),
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+  const res = await fetch(`/api/workbench/jobs/${j.id}/cancel`, { method: 'POST' })
+    .then(r => r.json())
+    .catch(err => ({ success: false, error: err?.message || String(err) }))
+  if (res.success) {
+    ElMessage.success($t('@WORKBENCH:已发送停止信号'))
+  } else {
+    ElMessage.error(res.error || $t('@WORKBENCH:停止失败'))
   }
 }
 
@@ -747,6 +777,12 @@ function humanSize(n: number): string {
               <span v-if="jobOf(sub.id)" class="wb-sub-item__pid" :title="$t('@WORKBENCH:进程ID')">
                 PID: {{ jobOf(sub.id)?.pid }}
               </span>
+              <button
+                v-if="jobOf(sub.id) && (jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending')"
+                class="wb-sub-item__stop"
+                :title="$t('@WORKBENCH:停止执行')"
+                @click="cancelJob(jobOf(sub.id)!)"
+              >{{ $t('@WORKBENCH:停止') }}</button>
               <button class="wb-sub-item__del" @click="removeSubtask(sub)">×</button>
             </div>
             <textarea
@@ -1194,6 +1230,23 @@ function humanSize(n: number): string {
   color: var(--text-tertiary);
   font-family: ui-monospace, monospace;
   flex-shrink: 0;
+}
+.wb-sub-item__stop {
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.wb-sub-item__stop:hover {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
 }
 .wb-sub-item__row .wb-input { flex: 1; }
 
