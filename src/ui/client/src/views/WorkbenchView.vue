@@ -63,6 +63,7 @@ interface Job {
   status: 'pending' | 'running' | 'done' | 'error'
   prompt?: string
   output: string
+  thinking?: string
   pid: number | null
   startedAt: string | null
   endedAt: string | null
@@ -713,6 +714,33 @@ function humanSize(n: number): string {
                   {{ (jobOf(sub.id)?.output || '').length }} {{ $t('@WORKBENCH:字符') }}
                 </span>
               </summary>
+
+              <!-- 用户提示词（发给 Claude 的 prompt） -->
+              <details v-if="jobOf(sub.id)?.prompt" class="wb-log-section">
+                <summary class="wb-log-section__summary">
+                  <span class="wb-log-section__tag wb-log-section__tag--user">
+                    {{ $t('@WORKBENCH:用户提示词') }}
+                  </span>
+                  <span class="wb-log-section__count">
+                    {{ (jobOf(sub.id)?.prompt || '').length }} {{ $t('@WORKBENCH:字符') }}
+                  </span>
+                </summary>
+                <pre class="wb-log-section__pre wb-log-section__pre--user">{{ jobOf(sub.id)?.prompt }}</pre>
+              </details>
+
+              <!-- Claude 思考过程（折叠避免噪声） -->
+              <details v-if="jobOf(sub.id)?.thinking" class="wb-log-section">
+                <summary class="wb-log-section__summary">
+                  <span class="wb-log-section__tag wb-log-section__tag--think">
+                    {{ $t('@WORKBENCH:Claude 思考') }}
+                  </span>
+                  <span class="wb-log-section__count">
+                    {{ (jobOf(sub.id)?.thinking || '').length }} {{ $t('@WORKBENCH:字符') }}
+                  </span>
+                </summary>
+                <pre class="wb-log-section__pre wb-log-section__pre--think">{{ jobOf(sub.id)?.thinking }}</pre>
+              </details>
+
               <pre :ref="setLogRef(sub.id)" class="wb-log-pre">{{ displayOutput(jobOf(sub.id)?.output) || $t('@WORKBENCH:（暂无输出）') }}</pre>
             </details>
             <div
@@ -1111,6 +1139,73 @@ function humanSize(n: number): string {
   white-space: pre-wrap;
   word-break: break-word;
   border-top: 1px solid var(--border-color);
+}
+
+/* ── 日志面板内的子块（用户提示词 / Claude 思考） ─────────────── */
+.wb-log-section {
+  border-top: 1px solid var(--border-color);
+}
+.wb-log-section:first-of-type {
+  border-top: 1px solid var(--border-color);
+}
+.wb-log-section__summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-subtle, var(--bg-container));
+}
+.wb-log-section__summary::-webkit-details-marker { display: none; }
+.wb-log-section__summary:hover { background: rgba(59, 130, 246, 0.06); }
+.wb-log-section__tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.wb-log-section__tag--user {
+  background: rgba(245, 158, 11, 0.18);
+  color: #b45309;
+}
+.wb-log-section__tag--think {
+  background: rgba(139, 92, 246, 0.18);
+  color: #6d28d9;
+}
+.wb-log-section__count {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.wb-log-section__pre {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 200px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wb-log-section__pre--user {
+  background: rgba(245, 158, 11, 0.06);
+  color: var(--text-primary);
+  border-left: 2px solid rgba(245, 158, 11, 0.45);
+}
+.wb-log-section__pre--think {
+  background: rgba(139, 92, 246, 0.06);
+  color: var(--text-secondary);
+  border-left: 2px solid rgba(139, 92, 246, 0.45);
+  font-style: italic;
 }
 
 /* ── 子任务附件 ───────────────────────────────────────────────── */

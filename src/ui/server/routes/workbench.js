@@ -392,7 +392,9 @@ function launchClaudeInNewWindow(cwd, promptText) {
   return new Promise((resolve, reject) => {
     const args = [
       '-p', promptText,
-      '--output-format', 'text',
+      '--input-format', 'text',
+      '--output-format', 'stream-json',
+      '--verbose',
       '--permission-mode', 'bypassPermissions',
       '--dangerously-skip-permissions'
     ];
@@ -492,18 +494,66 @@ async function runTaskQueue(task, repoPath, branch) {
       job.status = 'running';
       publish('job:update', job);
 
-      // 累积子进程输出到 job.output，定期推送给前端；过长时截断尾部避免内存膨胀。
+      // 流式 NDJSON 解析：把 stdout 当作 stream-json 协议处理
+      //   assistant.text       → job.output    （用户主要关心的内容）
+      //   assistant.thinking   → job.thinking  （折叠展示，让用户知道 Claude 在想）
+      //   其他事件（init / tool_use / result 等）忽略，避免噪声
+      // 解析失败的行原样进 output，便于排查协议异常。
+      // 过长时（>256KB）只截断尾部 256KB，避免内存膨胀。
       const MAX_OUTPUT = 256 * 1024;
-      const onChunk = (buf) => {
-        const text = buf.toString('utf8');
-        job.output = (job.output + text).slice(-MAX_OUTPUT);
+      const MAX_THINKING = 64 * 1024;
+      job.output = '';
+      job.thinking = '';
+      const lineBuf = { stdout: '', stderr: '' };
+
+      const parseLines = (channel, buf) => {
+        const chunk = buf.toString('utf8');
+        lineBuf[channel] += chunk;
+        const lines = lineBuf[channel].split('\n');
+        lineBuf[channel] = lines.pop() ?? ''; // 最后一段可能不完整，留给下次
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          if (channel === 'stderr' || !trimmed.startsWith('{')) {
+            // 非 stream-json 行：原样塞进 output（兼容老版本 claude / 错误信息）
+            job.output = (job.output + trimmed + '\n').slice(-MAX_OUTPUT);
+            continue;
+          }
+          let evt;
+          try { evt = JSON.parse(trimmed) } catch { continue }
+          if (evt.type !== 'assistant') continue;
+          const blocks = evt.message?.content;
+          if (!Array.isArray(blocks)) continue;
+          for (const b of blocks) {
+            if (b.type === 'text' && typeof b.text === 'string') {
+              job.output = (job.output + b.text).slice(-MAX_OUTPUT);
+            } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
+              job.thinking = (job.thinking + b.thinking).slice(-MAX_THINKING);
+            }
+          }
+        }
         publish('job:update', job);
       };
-      if (child.stdout) child.stdout.on('data', onChunk);
-      if (child.stderr) child.stderr.on('data', onChunk);
+      if (child.stdout) child.stdout.on('data', (buf) => parseLines('stdout', buf));
+      if (child.stderr) child.stderr.on('data', (buf) => parseLines('stderr', buf));
 
       // 等待进程退出（detached 不阻塞主进程，用 polling /proc 兜底）
       await waitProcessExit(pid);
+      // 进程退出时 stdout 可能残留最后一段未换行的 NDJSON，flush 一次
+      if (lineBuf.stdout.trim()) {
+        try {
+          const evt = JSON.parse(lineBuf.stdout.trim())
+          if (evt.type === 'assistant' && Array.isArray(evt.message?.content)) {
+            for (const b of evt.message.content) {
+              if (b.type === 'text' && typeof b.text === 'string') {
+                job.output = (job.output + b.text).slice(-MAX_OUTPUT)
+              } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
+                job.thinking = (job.thinking + b.thinking).slice(-MAX_THINKING)
+              }
+            }
+          }
+        } catch { /* 不是 JSON，忽略 */ }
+      }
       job.endedAt = nowIso();
       job.exitCode = 0;
       job.status = 'done';

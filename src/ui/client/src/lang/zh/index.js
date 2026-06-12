@@ -1725,6 +1725,8 @@ export default {
   '@WORKBENCH:排队中…': '排队中…',
   '@WORKBENCH:查看执行日志': '查看执行日志',
   '@WORKBENCH:字符': '字符',
+  '@WORKBENCH:用户提示词': '用户提示词',
+  '@WORKBENCH:Claude 思考': 'Claude 思考',
   '@WORKBENCH:（暂无输出）': '（暂无输出）',
   '@WORKBENCH:执行出错': '执行出错',
   '@WORKBENCH:名称和内容不能为空': '名称和内容不能为空',

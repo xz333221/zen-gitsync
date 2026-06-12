@@ -1718,6 +1718,8 @@ export default {
   '@WORKBENCH:排队中…': 'Queued…',
   '@WORKBENCH:查看执行日志': 'View execution log',
   '@WORKBENCH:字符': 'chars',
+  '@WORKBENCH:用户提示词': 'User prompt',
+  '@WORKBENCH:Claude 思考': 'Claude thinking',
   '@WORKBENCH:（暂无输出）': '(no output yet)',
   '@WORKBENCH:执行出错': 'Execution error',
   '@WORKBENCH:名称和内容不能为空': 'Name and content cannot be empty',
