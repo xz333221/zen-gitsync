@@ -758,7 +758,7 @@ function humanSize(n: number): string {
             v-model="promptDialog.content"
             type="textarea"
             :rows="10"
-            :placeholder="$t('@WORKBENCH:可用变量：{{task.title}} {{task.desc}} {{sub.title}} {{sub.desc}} {{repo.path}} {{branch}}')"
+            :placeholder="$t('@WORKBENCH:可用变量：') + '｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛sub.title｝｝ ｛｛sub.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝'"
           />
         </el-form-item>
       </el-form>

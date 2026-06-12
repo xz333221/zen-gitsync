@@ -1681,7 +1681,7 @@ export default {
   '@WORKBENCH:名称': '名称',
   '@WORKBENCH:如：代码审查 / 写测试': '如：代码审查 / 写测试',
   '@WORKBENCH:内容': '内容',
-  '@WORKBENCH:可用变量：{{task.title}} {{task.desc}} {{sub.title}} {{sub.desc}} {{repo.path}} {{branch}}': '可用变量：{{task.title}} {{task.desc}} {{sub.title}} {{sub.desc}} {{repo.path}} {{branch}}',
+  '@WORKBENCH:可用变量：{{task.title}} {{task.desc}} {{sub.title}} {{sub.desc}} {{repo.path}} {{branch}}': '可用变量：｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛sub.title｝｝ ｛｛sub.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝',
   '@WORKBENCH:取消': '取消',
   '@WORKBENCH:保存': '保存',
   '@WORKBENCH:编辑任务': '编辑任务',
