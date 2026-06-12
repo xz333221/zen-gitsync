@@ -36,19 +36,40 @@ function getBackendPort() {
   } catch (error) {
     console.error('读取后端端口失败:', error)
   }
-  
+
   // 默认端口
   console.log('使用默认后端端口: 3000')
   return 3000
 }
+
+// 读取外层 package.json 的版本号，构建时注入到 import.meta.env.PKG_VERSION
+// vite.config.ts 位于 src/ui/client/，外层 package.json 在 ../../../package.json
+function getPackageVersion(): string {
+  try {
+    const pkgPath = path.resolve(__dirname, '../../..', 'package.json')
+    if (fs.existsSync(pkgPath)) {
+      const raw = fs.readFileSync(pkgPath, 'utf8')
+      const pkg = JSON.parse(raw)
+      return pkg.version || '0.0.0'
+    }
+  } catch (error) {
+    console.error('读取 package.json 版本失败:', error)
+  }
+  return '0.0.0'
+}
+
+const pkgVersion = getPackageVersion()
 
 // const backendPort = getBackendPort()
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
   const isBuild = command === 'build'
-  
+
   return {
+    define: {
+      'import.meta.env.PKG_VERSION': JSON.stringify(pkgVersion),
+    },
     plugins: [
       AutoImport({
         resolvers: [ElementPlusResolver()],

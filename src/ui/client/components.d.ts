@@ -9,6 +9,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     ActivityBar: typeof import('./src/components/ActivityBar.vue')['default']
+    AppVersionBadge: typeof import('./src/components/AppVersionBadge.vue')['default']
     BaseNode: typeof import('./src/components/flow/nodes/BaseNode.vue')['default']
     BranchSelector: typeof import('./src/components/BranchSelector.vue')['default']
     CodeNode: typeof import('./src/components/flow/nodes/CodeNode.vue')['default']
@@ -111,12 +112,13 @@ declare module 'vue' {
     TreeIcon: typeof import('./src/components/icons/TreeIcon.vue')['default']
     TreeNodeItem: typeof import('./src/components/TreeNodeItem.vue')['default']
     UnstageAllButton: typeof import('./src/components/buttons/UnstageAllButton.vue')['default']
+    UpgradeDialog: typeof import('./src/components/UpgradeDialog.vue')['default']
     UserInputNode: typeof import('./src/components/flow/nodes/UserInputNode.vue')['default']
     UserInputParamConfig: typeof import('./src/components/flow/UserInputParamConfig.vue')['default']
     VersionNode: typeof import('./src/components/flow/nodes/VersionNode.vue')['default']
     WaitNode: typeof import('./src/components/flow/nodes/WaitNode.vue')['default']
   }
-  export interface ComponentCustomProperties {
+  export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }

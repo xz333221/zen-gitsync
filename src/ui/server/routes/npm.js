@@ -16,12 +16,181 @@ import express from 'express';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
+import https from 'https';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export function registerNpmRoutes({
   app,
   getCurrentProjectPath
 }) {
+  // 标记是否有升级任务在跑（防并发）
+  let activeUpgrade = false;
+
+  // ========== 应用自升级相关 API ==========
+
+  // 当前安装的版本（从外层 package.json 读取）
+  function getCurrentVersion() {
+    try {
+      // src/ui/server/routes/npm.js -> ../../../../package.json
+      const pkgPath = path.resolve(__dirname, '../../../..', 'package.json')
+      if (fsSync.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fsSync.readFileSync(pkgPath, 'utf8'))
+        return pkg.version || '0.0.0'
+      }
+    } catch (err) {
+      console.error('读取本地 package.json 版本失败:', err)
+    }
+    return '0.0.0'
+  }
+
+  // 简单的 semver 比较：a > b 返回 1, a < b 返回 -1, 相等返回 0
+  function compareSemver(a, b) {
+    const pa = a.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0)
+    const pb = b.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0)
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return 1
+      if ((pa[i] || 0) < (pb[i] || 0)) return -1
+    }
+    return 0
+  }
+
+  // 缓存 npm registry latest 结果 10 分钟
+  let latestVersionCache = { value: null, at: 0 }
+  const LATEST_TTL_MS = 10 * 60 * 1000
+
+  function fetchLatestFromRegistry() {
+    return new Promise((resolve, reject) => {
+      const req = https.get(
+        'https://registry.npmjs.org/zen-gitsync/latest',
+        { timeout: 5000, headers: { 'User-Agent': 'zen-gitsync-app' } },
+        (res) => {
+          let data = ''
+          res.on('data', chunk => { data += chunk })
+          res.on('end', () => {
+            if (res.statusCode !== 200) {
+              return reject(new Error(`registry 返回状态 ${res.statusCode}`))
+            }
+            try {
+              const pkg = JSON.parse(data)
+              resolve(pkg.version || null)
+            } catch (e) {
+              reject(new Error('解析 registry 响应失败'))
+            }
+          })
+        }
+      )
+      req.on('timeout', () => {
+        req.destroy(new Error('registry 请求超时'))
+      })
+      req.on('error', err => reject(err))
+    })
+  }
+
+  async function getLatestVersion() {
+    const now = Date.now()
+    if (latestVersionCache.value && now - latestVersionCache.at < LATEST_TTL_MS) {
+      return latestVersionCache.value
+    }
+    const v = await fetchLatestFromRegistry()
+    latestVersionCache = { value: v, at: now }
+    return v
+  }
+
+  // GET /api/app-version
+  app.get('/api/app-version', async (_req, res) => {
+    const current = getCurrentVersion()
+    try {
+      const latest = await getLatestVersion()
+      const hasUpdate = !!latest && compareSemver(latest, current) > 0
+      res.json({ success: true, current, latest, hasUpdate })
+    } catch (err) {
+      // 拉取失败时仍返回当前版本，前端据此决定是否显示升级按钮
+      res.json({
+        success: false,
+        current,
+        latest: null,
+        hasUpdate: false,
+        error: err.message
+      })
+    }
+  })
+
+  // POST /api/app-upgrade  - 流式 NDJSON: { type: 'stdout'|'stderr'|'done'|'error', ... }
+  app.post('/api/app-upgrade', (req, res) => {
+    // 防并发：同一时刻只允许一个升级任务
+    if (activeUpgrade) {
+      res.status(409).json({ success: false, error: '已有升级任务在进行中' })
+      return
+    }
+
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.flushHeaders?.()
+
+    const send = (obj) => {
+      res.write(JSON.stringify(obj) + '\n')
+    }
+
+    // Windows 上 npm install -g 通常不需要管理员；*nix 需要 sudo。
+    // 用 sudo -n（非交互式）检测是否可免密，失败时让用户用 sudo 重启 GUI
+    const isWin = process.platform === 'win32'
+    const npmCmd = isWin ? 'npm.cmd' : 'npm'
+    const args = ['install', '-g', 'zen-gitsync', '--registry', 'https://registry.npmjs.org/']
+    const cmd = isWin ? npmCmd : 'sudo'
+    const finalArgs = isWin ? args : ['-n', npmCmd, ...args]
+
+    activeUpgrade = send
+    const cleanup = () => { activeUpgrade = null }
+
+    let child
+    try {
+      child = spawn(cmd, finalArgs, {
+        env: { ...process.env, FORCE_COLOR: '0' },
+        windowsHide: true,
+        // Windows 下调用 .cmd 必须 shell:true
+        shell: isWin
+      })
+    } catch (err) {
+      send({ type: 'error', message: `启动升级进程失败: ${err.message}` })
+      send({ type: 'done', code: -1 })
+      res.end()
+      cleanup()
+      return
+    }
+
+    send({ type: 'stdout', message: `$ ${cmd} ${finalArgs.join(' ')}\n` })
+
+    child.stdout.on('data', (buf) => send({ type: 'stdout', message: buf.toString() }))
+    child.stderr.on('data', (buf) => send({ type: 'stderr', message: buf.toString() }))
+
+    child.on('error', (err) => {
+      send({ type: 'error', message: `升级进程错误: ${err.message}` })
+    })
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        send({ type: 'stdout', message: '\n✅ 升级完成，新版本已全局安装。\n' })
+        // 清理缓存，强制下次重新拉 latest
+        latestVersionCache = { value: null, at: 0 }
+      } else {
+        let hint = ''
+        if (!isWin) {
+          hint = '（提示：在 macOS/Linux 上全局安装需要 sudo，请用管理员权限重启 GUI 后再试）'
+        }
+        send({ type: 'error', message: `\n升级失败，退出码 ${code}${hint ? ' ' + hint : ''}\n` })
+      }
+      send({ type: 'done', code })
+      res.end()
+      cleanup()
+    })
+  })
+
+
   // 读取 package.json 文件内容
   app.post('/api/read-package-json', express.json(), async (req, res) => {
     try {

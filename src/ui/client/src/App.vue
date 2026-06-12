@@ -22,6 +22,7 @@ import CommitForm from '@views/components/CommitForm.vue'
 import LogList from '@views/components/LogList.vue'
 import CommandConsole from '@components/CommandConsole.vue'
 import RemoteRepoCard from '@components/RemoteRepoCard.vue'
+import AppVersionBadge from '@components/AppVersionBadge.vue'
 import BranchSelector from '@components/BranchSelector.vue'
 import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
@@ -620,6 +621,7 @@ function copyGitInit() {
       <span class="footer-model-hint__name">{{ defaultModelName }}</span>
     </div>
     <RemoteRepoCard />
+    <AppVersionBadge />
   </footer>
 
   <!-- 用户设置对话框 -->
