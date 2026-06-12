@@ -1675,6 +1675,7 @@ export default {
   '@WORKBENCH:如：代码审查 / 写测试': 'e.g. Code review / Write tests',
   '@WORKBENCH:内容': 'Content',
   '@WORKBENCH:可用变量：{{task.title}} {{task.desc}} {{sub.title}} {{sub.desc}} {{repo.path}} {{branch}}': 'Variables: ｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛sub.title｝｝ ｛｛sub.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝',
+  '@WORKBENCH:可用变量：': 'Variables:',
   '@WORKBENCH:取消': 'Cancel',
   '@WORKBENCH:保存': 'Save',
   '@WORKBENCH:编辑任务': 'Edit task',
