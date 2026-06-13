@@ -254,6 +254,7 @@ A dedicated view (fourth icon in the activity bar) for batch-running Claude agai
 | Isolated windows | Every subtask runs as its own detached process with fresh context, so memory and conversation state never accumulate across subtasks |
 | Live log | Each running subtask has an expandable "执行日志 / Execution log" panel that auto-scrolls and shows accumulated `stdout` + `stderr` (capped at 256 KB server-side, last 64 KB rendered client-side) |
 | Live status | Subtask status (todo / pending / running / done / error) and PID stream in real time over SSE |
+| Running animation | Subtasks in `running` state get a breathing primary-color glow + a sliding progress bar on top of the card; the status badge uses a shimmer gradient with a pulsing white dot and outer halo, easing back to neutral on completion |
 | Cross-view indicator | While any Workbench subtask is running, a pulsing dot appears on the Workbench icon in the Activity Bar so you can see job state from the Git or Editor view |
 
 Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.zen-gitsync/tasks.json` (cross-project, shared across repos).
@@ -632,6 +633,7 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 独立上下文 | 每个子任务都是独立的 detached 进程，上下文与状态不会跨子任务累积 |
 | 实时日志 | 正在执行的子任务可展开「执行日志」面板，自动滚到底，展示累积的 stdout / stderr（服务端缓存 256 KB，客户端渲染最近 64 KB） |
 | 实时状态 | 子任务状态（todo / pending / running / done / error）和 PID 通过 SSE 实时推送 |
+| 执行中动效 | 状态为 `running` 的子任务卡片整体呈现蓝色呼吸光晕 + 顶部流动进度光带；状态徽章为渐变 shimmer + 脉冲白点 + 外发光，停下后平滑恢复 |
 | 跨视图指示 | 任意子任务运行中时，Activity Bar 上的工作台图标会显示脉动小圆点；切换到 Git 或编辑器视图也能看到运行状态 |
 
 提示词预置与任务数据持久化到 `~/.zen-gitsync/prompts.json` 和 `~/.zen-gitsync/tasks.json`（跨项目共享）。子任务附件落盘在 `~/.zen-gitsync/workbench-images/<subId>/`。

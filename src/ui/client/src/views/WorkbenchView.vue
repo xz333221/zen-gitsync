@@ -968,8 +968,10 @@ function humanSize(n: number): string {
             v-for="sub in selectedTask.subtasks"
             :key="sub.id"
             class="wb-sub-item"
-            :class="{ 'is-dirty': dirtySubIds.has(sub.id) }"
-          >
+            :class="{
+              'is-dirty': dirtySubIds.has(sub.id),
+              'is-running': sub.status === 'running'
+            }"
           >
             <div class="wb-sub-item__row">
               <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
@@ -1383,9 +1385,7 @@ function humanSize(n: number): string {
 .wb-task-item.active {
   background: color-mix(in srgb, var(--color-primary) 9%, var(--bg-container));
   border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04),
-              inset 2px 0 0 0 var(--color-primary);
-  padding-left: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .wb-task-item.active .wb-task-item__title { color: var(--color-primary); }
 .wb-task-item.active .wb-task-item__del { opacity: 1; color: var(--color-primary); }
@@ -1866,16 +1866,93 @@ function humanSize(n: number): string {
   overflow-y: auto;
 }
 .wb-sub-item {
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 10px;
   transition: border-color 0.15s, box-shadow 0.15s;
+  overflow: hidden;
 }
 .wb-sub-item.is-dirty {
   border-color: rgba(245, 158, 11, 0.55);
-  box-shadow: inset 3px 0 0 0 #f59e0b;
-  background: rgba(245, 158, 11, 0.03);
+  background: rgba(245, 158, 11, 0.04);
+}
+
+/* ── 执行中：卡片整体光环 + 顶部流动光带 ────────────────── */
+.wb-sub-item.is-running {
+  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-primary) 6%, var(--bg-surface)) 0%,
+      var(--bg-surface) 60%
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent),
+    0 4px 18px -4px color-mix(in srgb, var(--color-primary) 25%, transparent);
+  animation: wb-card-glow 2.4s ease-in-out infinite;
+}
+.wb-sub-item.is-running::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-primary) 50%,
+    transparent 100%
+  );
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  animation: wb-progress-slide 1.6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+.wb-sub-item.is-running::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-primary) 10%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: wb-card-sweep 3.2s linear infinite;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+@keyframes wb-progress-slide {
+  0%   { background-position: -50% 0; }
+  100% { background-position: 150% 0; }
+}
+@keyframes wb-card-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent),
+      0 4px 18px -4px color-mix(in srgb, var(--color-primary) 25%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-primary) 50%, transparent),
+      0 6px 24px -2px color-mix(in srgb, var(--color-primary) 38%, transparent);
+  }
+}
+@keyframes wb-card-sweep {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-sub-item.is-running,
+  .wb-sub-item.is-running::before,
+  .wb-sub-item.is-running::after {
+    animation: none;
+  }
 }
 .wb-sub-item__dirty {
   display: inline-flex;
@@ -1921,11 +1998,90 @@ function humanSize(n: number): string {
   margin-bottom: 6px;
 }
 .wb-sub-item__status {
+  position: relative;
   font-size: 11px;
   color: #fff;
   padding: 2px 8px;
   border-radius: 10px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  overflow: hidden;
+}
+
+/* ── 执行中：徽章呼吸 + 闪烁圆点 + shimmer 高光 ─────────── */
+.wb-sub-item.is-running .wb-sub-item__status {
+  background: linear-gradient(
+    90deg,
+    var(--color-primary) 0%,
+    color-mix(in srgb, var(--color-primary) 70%, #fff) 50%,
+    var(--color-primary) 100%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: wb-status-shimmer 2.4s linear infinite;
+  box-shadow:
+    0 0 0 0 color-mix(in srgb, var(--color-primary) 45%, transparent),
+    0 0 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
+  animation: wb-status-pulse 2.4s ease-in-out infinite,
+             wb-status-shimmer 2.4s linear infinite;
+}
+.wb-sub-item.is-running .wb-sub-item__status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+  animation: wb-status-dot 1.2s ease-in-out infinite;
+}
+.wb-sub-item.is-running .wb-sub-item__status::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  animation: wb-status-sweep 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes wb-status-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes wb-status-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--color-primary) 45%, transparent),
+      0 0 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--color-primary) 0%, transparent),
+      0 0 18px color-mix(in srgb, var(--color-primary) 55%, transparent);
+  }
+}
+@keyframes wb-status-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.7); }
+}
+@keyframes wb-status-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-sub-item.is-running .wb-sub-item__status,
+  .wb-sub-item.is-running .wb-sub-item__status::before,
+  .wb-sub-item.is-running .wb-sub-item__status::after {
+    animation: none;
+  }
 }
 .wb-sub-item__pid {
   font-size: 11px;
