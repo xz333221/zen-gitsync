@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, reactive, nextTick, watch, markRaw } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, reactive, markRaw } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -31,7 +31,11 @@ import {
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
+import JobLogDetails from '@components/JobLogDetails.vue'
+import ExecutionLogManager from '@components/ExecutionLogManager.vue'
 import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
+import { statusLabel, statusColor } from '@/utils/jobStatus'
+import type { Job } from '@/types/workbench'
 
 // ── 类型 ────────────────────────────────────────────────────────────────────
 interface Prompt {
@@ -71,26 +75,13 @@ interface Task {
   createdAt?: string
   updatedAt?: string
 }
-interface Job {
-  id: string
-  taskId: string
-  subId: string
-  title: string
-  status: 'pending' | 'running' | 'done' | 'error' | 'cancelled'
-  prompt?: string
-  output: string
-  thinking?: string
-  pid: number | null
-  startedAt: string | null
-  endedAt: string | null
-  exitCode: number | null
-  error: string | null
-}
 
 // ── 状态 ────────────────────────────────────────────────────────────────────
 const prompts = ref<Prompt[]>([])
 const tasks = ref<Task[]>([])
 const jobs = ref<Job[]>([])
+// 顶部 tab 切换：'editor' = 现有任务执行视图，'logs' = 执行日志管理
+const activeView = ref<'editor' | 'logs'>('editor')
 
 const selectedTaskId = ref<string | null>(null)
 const selectedTask = computed<Task | null>(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
@@ -589,28 +580,6 @@ async function runTask(t: Task) {
   }
 }
 
-function statusLabel(s: string) {
-  switch (s) {
-    case 'todo': return $t('@WORKBENCH:待执行')
-    case 'running': return $t('@WORKBENCH:执行中')
-    case 'done': return $t('@WORKBENCH:已完成')
-    case 'error': return $t('@WORKBENCH:出错')
-    case 'cancelled': return $t('@WORKBENCH:已取消')
-    case 'pending': return $t('@WORKBENCH:排队中')
-    default: return s
-  }
-}
-function statusColor(s: string) {
-  switch (s) {
-    case 'running': return 'var(--color-primary)'
-    case 'done': return '#22c55e'
-    case 'error': return '#ef4444'
-    case 'cancelled': return '#9ca3af' // 灰色——与"未完成"区分开
-    case 'pending': return '#f59e0b'
-    default: return 'var(--text-tertiary)'
-  }
-}
-
 // ── 已完成子任务折叠 ─────────────────────────────────────────────────────
 // 已完成的 sub 默认折叠成单行（只显示徽标 + 标题 + 展开 + 取消完成），
 // 长任务下让用户聚焦于未完成项。点"展开"手动打开看 desc/附件/历史日志。
@@ -673,93 +642,7 @@ onBeforeUnmount(() => {
   if (es) { es.close(); es = null }
 })
 
-// ── 日志自动滚动 ─────────────────────────────────────────────────────────
-const logRefs = ref<Record<string, HTMLElement | null>>({})
-function setLogRef(subId: string) {
-  return (el: any) => { logRefs.value[subId] = el as HTMLElement | null }
-}
-watch(
-  () => jobs.value.map(j => ({ id: j.id, len: (j.output || '').length })),
-  (next) => {
-    // 仅当对应子任务日志面板展开（is-open）时滚到底
-    next.forEach(({ id }) => {
-      const job = jobs.value.find(j => j.id === id)
-      if (!job || job.status !== 'running') return
-      const el = logRefs.value[job.subId]
-      if (!el) return
-      nextTick(() => { el.scrollTop = el.scrollHeight })
-    })
-  },
-  { deep: true, flush: 'post' }
-)
-
-// 客户端展示上限：镜像后端 256KB，避免渲染超大段文本卡顿
-const MAX_LOG_DISPLAY = 64 * 1024
-function displayOutput(raw: string | undefined | null): string {
-  if (!raw) return ''
-  if (raw.length <= MAX_LOG_DISPLAY) return raw
-  return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
-}
-
-/**
- * 复制指定子任务 job 的某个字段（prompt / thinking / output）到剪贴板。
- * 用 navigator.clipboard.writeText，回退到 execCommand('copy') 兼容老浏览器 / 非 HTTPS。
- */
-async function copyJobField(subId: string, field: 'prompt' | 'thinking' | 'output') {
-  const job = jobOf(subId)
-  const text = (job as any)?.[field] || ''
-  if (!text) {
-    ElMessage.warning($t('@WORKBENCH:暂无内容可复制'))
-    return
-  }
-  const ok = await copyToClipboard(text)
-  if (ok) ElMessage.success($t('@WORKBENCH:已复制到剪贴板'))
-  else ElMessage.error($t('@WORKBENCH:复制失败'))
-}
-
-/**
- * 一键复制完整对话：用户提示词 + 模型思考 + 模型输出，三段拼接。
- * 用 --- 分隔 + 字段标签，方便粘贴到 issue / 笔记里追溯。
- */
-async function copyJobAll(subId: string) {
-  const job = jobOf(subId)
-  if (!job) return
-  const sections: string[] = []
-  if (job.prompt) sections.push(`## ${$t('@WORKBENCH:用户提示词')}\n\n${job.prompt}`)
-  if (job.thinking) sections.push(`## ${$t('@WORKBENCH:Claude 思考')}\n\n${job.thinking}`)
-  if (job.output) sections.push(`## ${$t('@WORKBENCH:模型返回')}\n\n${job.output}`)
-  if (!sections.length) {
-    ElMessage.warning($t('@WORKBENCH:暂无内容可复制'))
-    return
-  }
-  const ok = await copyToClipboard(sections.join('\n\n---\n\n'))
-  if (ok) ElMessage.success($t('@WORKBENCH:已复制到剪贴板'))
-  else ElMessage.error($t('@WORKBENCH:复制失败'))
-}
-
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-      return true
-    }
-  } catch { /* 权限拒绝 / 非安全上下文 → 走 textarea 兜底 */ }
-  // 兜底：临时 textarea + execCommand，仅在非 HTTPS / 旧浏览器生效
-  try {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.style.position = 'fixed'
-    ta.style.opacity = '0'
-    ta.style.left = '-9999px'
-    document.body.appendChild(ta)
-    ta.select()
-    const ok = document.execCommand('copy')
-    document.body.removeChild(ta)
-    return ok
-  } catch {
-    return false
-  }
-}
+// ── 日志详情面板已抽到 components/JobLogDetails.vue（自动滚动 / 复制 / 截断都在那里）
 
 // ── 附件上传（主任务 + 子任务共用） ────────────────────────────────────
 const ALLOWED_MIME = new Set([
@@ -930,6 +813,28 @@ function humanSize(n: number): string {
 
 <template>
   <div class="workbench">
+    <!-- 顶部 tab 切换：editor = 任务执行（默认），logs = 执行日志管理 -->
+    <header class="wb-tabs">
+      <button
+        type="button"
+        class="wb-tab"
+        :class="{ 'is-active': activeView === 'editor' }"
+        @click="activeView = 'editor'"
+      >
+        {{ $t('@WORKBENCH:任务执行') }}
+      </button>
+      <button
+        type="button"
+        class="wb-tab"
+        :class="{ 'is-active': activeView === 'logs' }"
+        @click="activeView = 'logs'"
+      >
+        {{ $t('@WORKBENCH:执行日志') }}
+      </button>
+    </header>
+
+    <template v-if="activeView === 'editor'">
+    <div class="workbench__editor-row">
     <!-- 左：任务列表 -->
     <aside class="wb-sidebar">
       <!-- ── 分组 1：任务列表 ── -->
@@ -1249,90 +1154,10 @@ function humanSize(n: number): string {
               rows="2"
               @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub })"
             />
-            <details
+            <JobLogDetails
               v-if="jobOf(sub.id)"
-              class="wb-log-details"
-              :open="jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending'"
-            >
-              <summary class="wb-log-summary">
-                <span class="wb-log-summary__left">
-                  <span v-if="jobOf(sub.id)?.status === 'running'">● {{ $t('@WORKBENCH:正在执行…') }}</span>
-                  <span v-else-if="jobOf(sub.id)?.status === 'pending'">{{ $t('@WORKBENCH:排队中…') }}</span>
-                  <span v-else>{{ $t('@WORKBENCH:查看执行日志') }}</span>
-                </span>
-                <span class="wb-log-summary__right">
-                  <span class="wb-log-summary__meta">
-                    {{ (jobOf(sub.id)?.output || '').length }} {{ $t('@WORKBENCH:字符') }}
-                  </span>
-                  <button
-                    type="button"
-                    class="wb-log-copy"
-                    :title="$t('@WORKBENCH:复制全部（含提示词与输出）')"
-                    @click.stop="copyJobAll(sub.id)"
-                  >
-                    ⧉ {{ $t('@WORKBENCH:复制全部') }}
-                  </button>
-                </span>
-              </summary>
-
-              <!-- 用户提示词（发给 Claude 的 prompt） -->
-              <details v-if="jobOf(sub.id)?.prompt" class="wb-log-section">
-                <summary class="wb-log-section__summary">
-                  <span class="wb-log-section__tag wb-log-section__tag--user">
-                    {{ $t('@WORKBENCH:用户提示词') }}
-                  </span>
-                  <span class="wb-log-section__count">
-                    {{ (jobOf(sub.id)?.prompt || '').length }} {{ $t('@WORKBENCH:字符') }}
-                  </span>
-                  <button
-                    type="button"
-                    class="wb-log-copy wb-log-copy--sm"
-                    :title="$t('@WORKBENCH:复制用户提示词')"
-                    @click.stop="copyJobField(sub.id, 'prompt')"
-                  >
-                    ⧉ {{ $t('@WORKBENCH:复制') }}
-                  </button>
-                </summary>
-                <pre class="wb-log-section__pre wb-log-section__pre--user">{{ jobOf(sub.id)?.prompt }}</pre>
-              </details>
-
-              <!-- Claude 思考过程（折叠避免噪声） -->
-              <details v-if="jobOf(sub.id)?.thinking" class="wb-log-section">
-                <summary class="wb-log-section__summary">
-                  <span class="wb-log-section__tag wb-log-section__tag--think">
-                    {{ $t('@WORKBENCH:Claude 思考') }}
-                  </span>
-                  <span class="wb-log-section__count">
-                    {{ (jobOf(sub.id)?.thinking || '').length }} {{ $t('@WORKBENCH:字符') }}
-                  </span>
-                  <button
-                    type="button"
-                    class="wb-log-copy wb-log-copy--sm"
-                    :title="$t('@WORKBENCH:复制思考内容')"
-                    @click.stop="copyJobField(sub.id, 'thinking')"
-                  >
-                    ⧉ {{ $t('@WORKBENCH:复制') }}
-                  </button>
-                </summary>
-                <pre class="wb-log-section__pre wb-log-section__pre--think">{{ jobOf(sub.id)?.thinking }}</pre>
-              </details>
-
-              <div class="wb-log-pre__head">
-                <span class="wb-log-pre__label">{{ $t('@WORKBENCH:模型返回') }}</span>
-                <span class="wb-log-pre__meta">
-                  {{ (jobOf(sub.id)?.output || '').length }} {{ $t('@WORKBENCH:字符') }}
-                </span>
-                <button
-                  type="button"
-                  class="wb-log-copy wb-log-copy--sm"
-                  :title="$t('@WORKBENCH:复制模型返回')"
-                  @click.stop="copyJobField(sub.id, 'output')"
-                >
-                  ⧉ {{ $t('@WORKBENCH:复制') }}
-                </button>
-              </div>
-              <pre :ref="setLogRef(sub.id)" class="wb-log-pre">{{ displayOutput(jobOf(sub.id)?.output) || $t('@WORKBENCH:（暂无输出）') }}</pre>
-            </details>
+              :job="jobOf(sub.id)!"
+            />
             <AttachmentZone
               :attachments="sub.attachments || []"
               :is-image="isImageAttachment"
@@ -1375,6 +1200,10 @@ function humanSize(n: number): string {
         </ul>
       </template>
     </section>
+    </div>
+    </template>
+    <!-- v-else 视图：执行日志管理。tab 切换到 logs 时挂载，editor 视图 v-show 保活避免 SSE 重连 -->
+    <ExecutionLogManager v-else />
 
     <!-- 提示词编辑对话框 -->
     <el-dialog
@@ -1485,9 +1314,59 @@ function humanSize(n: number): string {
 <style scoped>
 .workbench {
   display: flex;
+  flex-direction: column;
   height: 100%;
   background: var(--bg-container);
   color: var(--text-primary);
+}
+
+/* 顶部 tab 切换条：editor / logs 两栏；用下划线标记激活 */
+.wb-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-subtle, var(--bg-container));
+  flex-shrink: 0;
+  min-height: 40px;
+}
+.wb-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+  user-select: none;
+}
+.wb-tab:hover {
+  color: var(--text-primary);
+}
+.wb-tab.is-active {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.wb-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--color-primary);
+  border-radius: 2px;
+}
+
+/* editor 视图的子行容器：把 sidebar + split 重新横向排列（workbench 改成 column 后需要这一层） */
+.workbench__editor-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 .wb-sidebar {
@@ -2552,184 +2431,7 @@ function humanSize(n: number): string {
 }
 .wb-sub-item__row .wb-input { flex: 1; }
 
-/* ── 流式执行日志面板 ───────────────────────────────────────────── */
-.wb-log-details {
-  margin-top: 6px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm, 4px);
-  background: var(--bg-code);
-  overflow: hidden;
-}
-.wb-log-summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  user-select: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.wb-log-summary::-webkit-details-marker { display: none; }
-.wb-log-summary:hover { background: rgba(59, 130, 246, 0.06); }
-.wb-log-summary__left {
-  flex: 1;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.wb-log-summary__right {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.wb-log-summary__meta {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 复制按钮：通用样式（日志面板 summary 上的小按钮） */
-.wb-log-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 7px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--bg-container);
-  border: 1px solid var(--border-color-medium);
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  user-select: none;
-  flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-.wb-log-copy:hover {
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
-  color: var(--color-primary);
-}
-.wb-log-copy:active {
-  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
-}
-.wb-log-copy:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
-  outline-offset: 1px;
-}
-.wb-log-copy--sm {
-  padding: 1px 6px;
-  font-size: 10px;
-}
-
-/* 模型返回区头部（替代原先的 pre 顶部空白，给输出加个可复制的标签行） */
-.wb-log-pre__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-subtle, var(--bg-container));
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-.wb-log-pre__label {
-  flex: 1;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-.wb-log-pre__meta {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-.wb-log-pre {
-  margin: 0;
-  padding: 8px 10px;
-  max-height: 600px;
-  overflow: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-primary);
-  background: var(--bg-code);
-  white-space: pre-wrap;
-  word-break: break-word;
-  /* 顶部边框由 .wb-log-pre__head 提供，避免重复 */
-}
-
-/* ── 日志面板内的子块（用户提示词 / Claude 思考） ─────────────── */
-.wb-log-section {
-  border-top: 1px solid var(--border-color);
-}
-.wb-log-section:first-of-type {
-  border-top: 1px solid var(--border-color);
-}
-.wb-log-section__summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 5px 10px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  user-select: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  background: var(--bg-subtle, var(--bg-container));
-}
-.wb-log-section__summary::-webkit-details-marker { display: none; }
-.wb-log-section__summary:hover { background: rgba(59, 130, 246, 0.06); }
-.wb-log-section__tag {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-.wb-log-section__tag--user {
-  background: rgba(245, 158, 11, 0.18);
-  color: #b45309;
-}
-.wb-log-section__tag--think {
-  background: rgba(139, 92, 246, 0.18);
-  color: #6d28d9;
-}
-.wb-log-section__count {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-.wb-log-section__pre {
-  margin: 0;
-  padding: 8px 10px;
-  max-height: 800px;
-  overflow: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.wb-log-section__pre--user {
-  background: rgba(245, 158, 11, 0.06);
-  color: var(--text-primary);
-  border-left: 2px solid rgba(245, 158, 11, 0.45);
-}
-.wb-log-section__pre--think {
-  background: rgba(139, 92, 246, 0.06);
-  color: var(--text-secondary);
-  border-left: 2px solid rgba(139, 92, 246, 0.45);
-  font-style: italic;
-}
+/* 日志面板样式已抽到 components/JobLogDetails.vue（self-contained scoped） */
 
 /* ── 子任务附件 ───────────────────────────────────────────────── */
 .wb-attachments {

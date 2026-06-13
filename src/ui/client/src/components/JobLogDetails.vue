@@ -1,0 +1,343 @@
+<!--
+  JobLogDetails.vue
+  共享的"执行日志"折叠面板，WorkbenchView 子任务行 + ExecutionLogManager 卡片复用。
+  - 单 prop: job（Job 或 JobFull，结构兼容）
+  - 自带 copy / displayOutput 截断（不依赖父组件），彻底解耦
+  - 替换原 WorkbenchView L1252-1335 的 <details> 块
+-->
+<template>
+  <details
+    class="wb-log-details"
+    :open="autoOpen"
+  >
+    <summary class="wb-log-summary">
+      <span class="wb-log-summary__left">
+        <span v-if="job.status === 'running'">● {{ $t('@WORKBENCH:正在执行…') }}</span>
+        <span v-else-if="job.status === 'pending'">{{ $t('@WORKBENCH:排队中…') }}</span>
+        <span v-else>{{ $t('@WORKBENCH:查看执行日志') }}</span>
+      </span>
+      <span class="wb-log-summary__right">
+        <span class="wb-log-summary__meta">
+          {{ (job.output || '').length }} {{ $t('@WORKBENCH:字符') }}
+        </span>
+        <button
+          type="button"
+          class="wb-log-copy"
+          :title="$t('@WORKBENCH:复制全部（含提示词与输出）')"
+          @click.stop="copyAll"
+        >
+          ⧉ {{ $t('@WORKBENCH:复制全部') }}
+        </button>
+      </span>
+    </summary>
+
+    <!-- 用户提示词 -->
+    <details v-if="job.prompt" class="wb-log-section">
+      <summary class="wb-log-section__summary">
+        <span class="wb-log-section__tag wb-log-section__tag--user">
+          {{ $t('@WORKBENCH:用户提示词') }}
+        </span>
+        <span class="wb-log-section__count">
+          {{ (job.prompt || '').length }} {{ $t('@WORKBENCH:字符') }}
+        </span>
+        <button
+          type="button"
+          class="wb-log-copy wb-log-copy--sm"
+          :title="$t('@WORKBENCH:复制用户提示词')"
+          @click.stop="copyField('prompt')"
+        >
+          ⧉ {{ $t('@WORKBENCH:复制') }}
+        </button>
+      </summary>
+      <pre class="wb-log-section__pre wb-log-section__pre--user">{{ job.prompt }}</pre>
+    </details>
+
+    <!-- Claude 思考过程 -->
+    <details v-if="job.thinking" class="wb-log-section">
+      <summary class="wb-log-section__summary">
+        <span class="wb-log-section__tag wb-log-section__tag--think">
+          {{ $t('@WORKBENCH:Claude 思考') }}
+        </span>
+        <span class="wb-log-section__count">
+          {{ (job.thinking || '').length }} {{ $t('@WORKBENCH:字符') }}
+        </span>
+        <button
+          type="button"
+          class="wb-log-copy wb-log-copy--sm"
+          :title="$t('@WORKBENCH:复制思考内容')"
+          @click.stop="copyField('thinking')"
+        >
+          ⧉ {{ $t('@WORKBENCH:复制') }}
+        </button>
+      </summary>
+      <pre class="wb-log-section__pre wb-log-section__pre--think">{{ job.thinking }}</pre>
+    </details>
+
+    <!-- 模型返回 -->
+    <div class="wb-log-pre__head">
+      <span class="wb-log-pre__label">{{ $t('@WORKBENCH:模型返回') }}</span>
+      <span class="wb-log-pre__meta">
+        {{ (job.output || '').length }} {{ $t('@WORKBENCH:字符') }}
+      </span>
+      <button
+        type="button"
+        class="wb-log-copy wb-log-copy--sm"
+        :title="$t('@WORKBENCH:复制模型返回')"
+        @click.stop="copyField('output')"
+      >
+        ⧉ {{ $t('@WORKBENCH:复制') }}
+      </button>
+    </div>
+    <pre ref="preRef" class="wb-log-pre">{{ displayOutput() || $t('@WORKBENCH:（暂无输出）') }}</pre>
+  </details>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
+import { $t } from '@/lang/static'
+import type { Job } from '@/types/workbench'
+
+const props = defineProps<{ job: Job }>()
+
+// 展开策略：运行中/排队中默认展开（沿用 WorkbenchView 原行为）
+const autoOpen = computed(() => props.job.status === 'running' || props.job.status === 'pending')
+
+const MAX_LOG_DISPLAY = 64 * 1024
+function displayOutput(): string {
+  const raw = props.job.output || ''
+  if (!raw) return ''
+  if (raw.length <= MAX_LOG_DISPLAY) return raw
+  return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* 权限拒绝 / 非安全上下文 → 走 textarea 兜底 */ }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+async function copyField(field: 'prompt' | 'thinking' | 'output') {
+  const text = (props.job as any)[field] || ''
+  if (!text) {
+    ElMessage.warning($t('@WORKBENCH:暂无内容可复制'))
+    return
+  }
+  const ok = await copyToClipboard(text)
+  if (ok) ElMessage.success($t('@WORKBENCH:已复制到剪贴板'))
+  else ElMessage.error($t('@WORKBENCH:复制失败'))
+}
+
+async function copyAll() {
+  const sections: string[] = []
+  if (props.job.prompt) sections.push(`## ${$t('@WORKBENCH:用户提示词')}\n\n${props.job.prompt}`)
+  if (props.job.thinking) sections.push(`## ${$t('@WORKBENCH:Claude 思考')}\n\n${props.job.thinking}`)
+  if (props.job.output) sections.push(`## ${$t('@WORKBENCH:模型返回')}\n\n${props.job.output}`)
+  if (!sections.length) {
+    ElMessage.warning($t('@WORKBENCH:暂无内容可复制'))
+    return
+  }
+  const ok = await copyToClipboard(sections.join('\n\n---\n\n'))
+  if (ok) ElMessage.success($t('@WORKBENCH:已复制到剪贴板'))
+  else ElMessage.error($t('@WORKBENCH:复制失败'))
+}
+
+// 流式追加时自动滚到底：仅当面板展开时滚动
+const preRef = ref<HTMLElement | null>(null)
+watch(
+  () => (props.job.output || '').length,
+  async () => {
+    if (!autoOpen.value) return
+    await nextTick()
+    if (preRef.value) preRef.value.scrollTop = preRef.value.scrollHeight
+  }
+)
+</script>
+
+<style scoped>
+/* 与原 WorkbenchView wb-log-* 同款，scoped 到本组件，互不污染 */
+.wb-log-details {
+  margin-top: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-code);
+  overflow: hidden;
+}
+.wb-log-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wb-log-summary::-webkit-details-marker { display: none; }
+.wb-log-summary:hover { background: rgba(59, 130, 246, 0.06); }
+.wb-log-summary__left {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.wb-log-summary__right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.wb-log-summary__meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.wb-log-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-container);
+  border: 1px solid var(--border-color-medium);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.wb-log-copy:hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  color: var(--color-primary);
+}
+.wb-log-copy:active {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+.wb-log-copy:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
+  outline-offset: 1px;
+}
+.wb-log-copy--sm {
+  padding: 1px 6px;
+  font-size: 10px;
+}
+.wb-log-pre__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-subtle, var(--bg-container));
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.wb-log-pre__label {
+  flex: 1;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.wb-log-pre__meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.wb-log-pre {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 600px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  background: var(--bg-code);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wb-log-section {
+  border-top: 1px solid var(--border-color);
+}
+.wb-log-section__summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-subtle, var(--bg-container));
+}
+.wb-log-section__summary::-webkit-details-marker { display: none; }
+.wb-log-section__summary:hover { background: rgba(59, 130, 246, 0.06); }
+.wb-log-section__tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.wb-log-section__tag--user {
+  background: rgba(245, 158, 11, 0.18);
+  color: #b45309;
+}
+.wb-log-section__tag--think {
+  background: rgba(139, 92, 246, 0.18);
+  color: #6d28d9;
+}
+.wb-log-section__count {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.wb-log-section__pre {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 800px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wb-log-section__pre--user {
+  background: rgba(245, 158, 11, 0.06);
+  color: var(--text-primary);
+  border-left: 2px solid rgba(245, 158, 11, 0.45);
+}
+.wb-log-section__pre--think {
+  background: rgba(139, 92, 246, 0.06);
+  color: var(--text-secondary);
+  border-left: 2px solid rgba(139, 92, 246, 0.45);
+  font-style: italic;
+}
+</style>
