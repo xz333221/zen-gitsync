@@ -59,3 +59,13 @@ body {
   color: var(--color-text-placeholder);
   opacity: 1;
 }
+
+/* 文本选中色统一品牌色，避免默认蓝与主色冲突 */
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  color: var(--text-primary);
+}
+::-moz-selection {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  color: var(--text-primary);
+}

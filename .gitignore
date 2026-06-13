@@ -47,7 +47,16 @@ pnpm-lock.yaml
 git-autocommit.log
 
 # Claude / AI worktrees
-.claude/
+.claude/*
+# 例外：ui-ux-pro-max 是项目级设计规范 skill（`uipro init --ai claude` 装入）
+!.claude/skills/
+.claude/settings.json
+.claude/settings.local.json
+.claude/launch.json
+
+# Python 编译缓存（ui-ux-pro-max skill 的 search.py 生成的 .pyc）
+__pycache__/
+*.pyc
 
 # CodeBuddy project data
 .codebuddy/

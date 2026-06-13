@@ -1467,10 +1467,24 @@ function humanSize(n: number): string {
 .wb-task-item__meta-item--accent { color: var(--color-primary); }
 .wb-task-item__meta-icon { font-size: 11px; opacity: 0.85; }
 .wb-task-item__num {
+  /* 数字小徽标：与 .wb-section__count 风格对齐（圆角胶囊 + tnum） */
   font-weight: 600;
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  min-width: 14px;
+  text-align: center;
+  line-height: 1.4;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  transition: background var(--transition-fast) var(--ease-custom),
+              color var(--transition-fast) var(--ease-custom);
 }
-.wb-task-item.active .wb-task-item__num { color: var(--color-primary); }
+.wb-task-item.active .wb-task-item__num {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
 
 /* 删除按钮：默认隐藏，hover 卡片时淡入 */
 .wb-task-item__del {
@@ -1629,9 +1643,9 @@ function humanSize(n: number): string {
   margin-bottom: 2px;
 }
 .wb-empty__title {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.1px;
+  letter-spacing: var(--letter-spacing-heading, -0.25px);
   color: var(--text-secondary);
   line-height: 1.4;
 }
@@ -1653,12 +1667,16 @@ function humanSize(n: number): string {
   appearance: none;
   background: none;
   border: 0;
-  padding: 4px 2px;
+  /* 提升到 ≥32px 命中区，更接近 44px 触摸目标规范（ui-ux-pro-max） */
+  min-height: 32px;
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 500;
   color: var(--color-primary);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
   transition: color 0.15s ease-out, background-color 0.15s ease-out;
 }
 .wb-empty__link:hover:not(:disabled) {
@@ -2219,7 +2237,7 @@ function humanSize(n: number): string {
 
 /* ── 子任务附件 ───────────────────────────────────────────────── */
 .wb-attachments {
-  margin-top: 6px;
+  margin-top: 8px;
   border: 1px solid var(--border-color-medium);
   border-radius: var(--radius-md);
   background: var(--bg-container);
@@ -2236,7 +2254,7 @@ function humanSize(n: number): string {
   box-shadow: inset 0 0 0 1px var(--color-primary);
 }
 .wb-attachments__paste-hint {
-  padding: 5px 10px;
+  padding: 6px 10px;
   background: var(--color-primary);
   color: #fff;
   font-size: 12px;
@@ -2249,11 +2267,11 @@ function humanSize(n: number): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 9px 12px;
   font-size: 12.5px;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color);
-  min-height: 36px;
+  min-height: 38px;
   box-sizing: border-box;
 }
 .wb-attachments__label {

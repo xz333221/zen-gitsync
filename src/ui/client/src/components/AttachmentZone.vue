@@ -138,7 +138,7 @@ function closePreview() {
 /* 非 scoped：让父组件 wb-attachments 样式生效。父组件的 .wb-attachments 块需要改为非 scoped，
    或使用 :deep() 包裹。简化方案：样式与父组件重复（保持非 scoped 即可）。 */
 .wb-attachments {
-  margin-top: 6px;
+  margin-top: 8px;
   border: 1px solid var(--border-color-medium);
   border-radius: var(--radius-md);
   background: var(--bg-container);
@@ -155,7 +155,7 @@ function closePreview() {
   box-shadow: inset 0 0 0 1px var(--color-primary);
 }
 .wb-attachments__paste-hint {
-  padding: 5px 10px;
+  padding: 6px 10px;
   background: var(--color-primary);
   color: #fff;
   font-size: 12px;
@@ -168,11 +168,11 @@ function closePreview() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 9px 12px;
   font-size: 12.5px;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color);
-  min-height: 36px;
+  min-height: 38px;
   box-sizing: border-box;
 }
 .wb-attachments__label {
@@ -251,6 +251,7 @@ function closePreview() {
   background: var(--bg-container);
   max-width: 240px;
   min-width: 0;
+  cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .wb-attachment:hover {
