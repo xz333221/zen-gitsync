@@ -30,6 +30,15 @@ const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
 const INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-instruction.json');
 const SUBTASK_INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-subtask-instruction.json');
+// 执行日志持久化：jobs.json 是历史档案，jobs-config.json 是保留策略。
+// jobs Map 仍只承载当前进程产出的活跃 job；管理页直接读 jobs.json。
+const JOBS_FILE = path.join(DATA_DIR, 'jobs.json');
+const JOBS_CONFIG_FILE = path.join(DATA_DIR, 'jobs-config.json');
+// 流式 chunk 写盘会撑爆 IO；用 1.5s debounce 把高频写入折叠成一次。
+// 终态时由 flushJobsSaveNow() 强制立即落盘。
+const JOBS_SAVE_DEBOUNCE_MS = 1500;
+let jobsSaveTimer = null;
+const DEFAULT_JOBS_CONFIG = { maxCount: 500, maxSizeMB: 256 };
 
 // 子项目识别 / 文件扫描时需要跳过的目录
 const SKIP_DIRS = new Set([
@@ -434,6 +443,131 @@ async function writeJson(file, data) {
   await fsp.rename(tmp, file);
 }
 
+// ── 执行日志持久化 ────────────────────────────────────────────
+// 设计要点：
+//   - 写盘在流式 chunk 阶段走 1.5s debounce；终态时（finally / cancel）强制 flush。
+//   - 永不持久化 child 引用（参考 cancel 路由的浅拷贝模式）。
+//   - hydrate 时把 running/pending 降级为 error：原 child 进程已不存在。
+//   - enforceRetention 在每次落盘后跑，按 endedAt desc FIFO 裁剪。
+
+function serializeJob(j, taskMap) {
+  // child 是 ChildProcess 引用，序列化会爆；剥离后 size 用三字段累加预计算
+  const { child, ...rest } = j
+  const t = taskMap ? taskMap.get(rest.taskId) : null
+  const sub = t && Array.isArray(t.subtasks) ? t.subtasks.find(s => s.id === rest.subId) : null
+  const size = ((rest.prompt || '').length
+    + (rest.output || '').length
+    + (rest.thinking || '').length)
+  return {
+    ...rest,
+    taskTitle: t ? t.title : '',
+    subTitle: sub ? sub.title : '',
+    size
+  }
+}
+
+function scheduleJobsSave() {
+  if (jobsSaveTimer) clearTimeout(jobsSaveTimer)
+  jobsSaveTimer = setTimeout(() => {
+    jobsSaveTimer = null
+    flushJobsSaveNow().catch(err => console.warn('[workbench] jobs save failed:', err.message))
+  }, JOBS_SAVE_DEBOUNCE_MS)
+}
+
+async function flushJobsSaveNow() {
+  if (jobsSaveTimer) { clearTimeout(jobsSaveTimer); jobsSaveTimer = null }
+  // 读 tasks.json 给落盘 job 反范式 taskTitle/subTitle——父任务被删后管理页仍可读
+  const tasksData = await readJson(TASKS_FILE, { tasks: [] })
+  const taskMap = new Map((tasksData.tasks || []).map(t => [t.id, t]))
+  const payload = {
+    version: 1,
+    jobs: Array.from(jobs.values()).map(j => serializeJob(j, taskMap))
+  }
+  await writeJson(JOBS_FILE, payload)
+  await enforceRetention()
+}
+
+async function readJobsConfig() {
+  const cfg = await readJson(JOBS_CONFIG_FILE, null)
+  if (!cfg || typeof cfg !== 'object') return { ...DEFAULT_JOBS_CONFIG }
+  return {
+    maxCount: Number.isFinite(cfg.maxCount) ? Math.max(0, Math.floor(cfg.maxCount)) : DEFAULT_JOBS_CONFIG.maxCount,
+    maxSizeMB: Number.isFinite(cfg.maxSizeMB) ? Math.max(0, Math.floor(cfg.maxSizeMB)) : DEFAULT_JOBS_CONFIG.maxSizeMB
+  }
+}
+
+async function writeJobsConfig(cfg) {
+  // 校验：非负整数；硬上限防误填爆盘
+  const out = {}
+  if (cfg.maxCount !== undefined) {
+    const n = Math.floor(Number(cfg.maxCount))
+    if (!Number.isFinite(n) || n < 0 || n > 10000) throw new Error('maxCount 必须在 0-10000 之间')
+    out.maxCount = n
+  }
+  if (cfg.maxSizeMB !== undefined) {
+    const n = Math.floor(Number(cfg.maxSizeMB))
+    if (!Number.isFinite(n) || n < 0 || n > 10240) throw new Error('maxSizeMB 必须在 0-10240 之间')
+    out.maxSizeMB = n
+  }
+  const merged = { ...(await readJobsConfig()), ...out }
+  await writeJson(JOBS_CONFIG_FILE, merged)
+  return merged
+}
+
+// 进程启动时把磁盘上的历史拉回内存 Map；陈旧的 running/pending 强制降级。
+// 陈旧 job 的 child 进程已退出，标记为 error 方便用户识别。
+async function hydrateJobs() {
+  let data
+  try {
+    data = await readJson(JOBS_FILE, null)
+  } catch (err) {
+    // 损坏文件：改名备份避免下次 flush 静默覆盖用户数据
+    console.warn('[workbench] jobs.json 解析失败，备份原文件后重置:', err.message)
+    try { await fsp.rename(JOBS_FILE, `${JOBS_FILE}.bak-${Date.now()}`) } catch { /* 文件可能已不在 */ }
+    return
+  }
+  if (!data || !Array.isArray(data.jobs)) return
+  for (const j of data.jobs) {
+    if (j.status === 'running' || j.status === 'pending') {
+      j.status = 'error'
+      j.error = (j.error || '') + ' [重启后回收：原进程已退出]'
+      j.endedAt = j.endedAt || nowIso()
+      j.exitCode = typeof j.exitCode === 'number' ? j.exitCode : 1
+    }
+    // 旧版本可能没 size 字段；补齐以兼容历史文件
+    if (typeof j.size !== 'number') {
+      j.size = ((j.prompt || '').length + (j.output || '').length + (j.thinking || '').length)
+    }
+    jobs.set(j.id, j)
+  }
+  // 启动后也跑一遍保留策略，让历史文件立刻缩到当前配置
+  try { await enforceRetention() } catch (err) { console.warn('[workbench] 启动时 enforceRetention 失败:', err.message) }
+}
+
+// 保留策略：按 endedAt desc（fallback startedAt / id）排序，先按 maxCount 截，
+// 再按 maxSizeMB 累计裁，淘汰同步从内存 Map 删除。
+async function enforceRetention() {
+  const cfg = await readJobsConfig()
+  const data = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+  if (!data || !Array.isArray(data.jobs) || data.jobs.length === 0) return
+  const sortKey = (j) => j.endedAt || j.startedAt || j.id || ''
+  data.jobs.sort((a, b) => sortKey(b).localeCompare(sortKey(a)))
+  if (cfg.maxCount > 0) data.jobs = data.jobs.slice(0, cfg.maxCount)
+  if (cfg.maxSizeMB > 0) {
+    const cap = cfg.maxSizeMB * 1024 * 1024
+    let total = data.jobs.reduce((s, j) => s + (j.size || 0), 0)
+    while (total > cap && data.jobs.length > 1) {
+      const dropped = data.jobs.pop()
+      total -= (dropped && dropped.size) || 0
+    }
+  }
+  await writeJson(JOBS_FILE, data)
+  const keepIds = new Set(data.jobs.map(j => j.id))
+  for (const id of Array.from(jobs.keys())) {
+    if (!keepIds.has(id)) jobs.delete(id)
+  }
+}
+
 // 简单的 Mustache 风格变量插值：{{task.title}} / {{task.desc}} / {{repo.path}} / {{branch}}
 function interpolate(template, ctx) {
   if (typeof template !== 'string') return template;
@@ -456,6 +590,8 @@ const jobs = new Map(); // jobId -> { id, taskId, subId, status, pid, startedAt,
 // 用 Set 而不是 job.cancelled 标志，是为了在 SIGTERM 发出后到 child 真正退出之间
 // 有一个简洁的"待回收"窗口。
 const cancelledJobs = new Set();
+// 启动时从磁盘拉回历史 job（陈旧 running/pending 自动降级 error）
+hydrateJobs().catch(err => console.warn('[workbench] hydrate jobs failed:', err.message))
 
 // ── 生成指令持久化（~/.zen-gitsync/ai-instruction.json） ────────────────────
 async function readInstruction() {
@@ -847,6 +983,8 @@ ${prompt}`
       delete job.child
       publish('job:update', job);
       publish('sub:update', { taskId: task.id, sub });
+      // 终态：fire-and-forget 同步落盘，确保 done/cancelled/error 都立即归档
+      flushJobsSaveNow().catch(err => console.warn('[workbench] jobs save failed:', err.message))
     }
   }
   // 写回 tasks.json
@@ -1519,6 +1657,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     job.error = '用户已停止执行'
     job.endedAt = nowIso()
     publish('job:update', { ...job }) // 用浅拷贝避免序列化 child 引用
+    // 终态：fire-and-forget 同步落盘，cancel 是显式操作，要保证不丢
+    flushJobsSaveNow().catch(err => console.warn('[workbench] jobs save failed:', err.message))
     const child = job.child
     if (!child) {
       return res.json({ success: true, message: '已标记取消，进程将尽快结束' })
@@ -1540,6 +1680,183 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       res.status(500).json({ success: false, error: '发送停止信号失败: ' + err.message })
     }
   });
+
+  // ── 执行日志管理 API（持久化 + 清理） ────────────────────────────
+  // 路径都在 /api/workbench/jobs/* 下；/list、/config、/batch-delete、/clear
+  // 是字面路径，必须排在 :id 路由之前注册，避免被 :id 匹配吞掉。
+  //
+  // 数据来源：
+  //   - 文件 jobs.json：已落盘的历史 job（含反范式 taskTitle/subTitle）
+  //   - 内存 jobs Map：当前进程刚创建还没刷盘的（尤其是 running/pending）
+  // 合并后再过滤分页，保证管理页能看到"刚启动还没结束"的任务。
+
+  async function loadAllJobs() {
+    // 读 tasks.json 一次，给内存里没落盘的 job 反范式补 title
+    const tasksData = await readJson(TASKS_FILE, { tasks: [] })
+    const taskMap = new Map((tasksData.tasks || []).map(t => [t.id, t]))
+    const data = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+    const fileJobs = (data && Array.isArray(data.jobs)) ? data.jobs : []
+    const fileIds = new Set(fileJobs.map(j => j.id))
+    // 内存里有但文件里没有：running/pending 或最近刚起还没刷盘的
+    const liveOnly = Array.from(jobs.values())
+      .filter(j => !fileIds.has(j.id))
+      .map(j => serializeJob(j, taskMap))
+    return [...fileJobs, ...liveOnly]
+  }
+
+  function applyJobsFilter(list, q) {
+    const status = (q.status || '').trim()
+    const taskId = (q.taskId || '').trim()
+    const term = (q.q || '').trim().toLowerCase()
+    return list.filter(j => {
+      if (status && j.status !== status) return false
+      if (taskId && j.taskId !== taskId) return false
+      if (term) {
+        const hay = `${j.title || ''} ${j.taskTitle || ''} ${j.subTitle || ''}`.toLowerCase()
+        if (!hay.includes(term)) return false
+      }
+      return true
+    })
+  }
+
+  // GET /api/workbench/jobs/list?status=&q=&taskId=&limit=&offset=
+  app.get('/api/workbench/jobs/list', async (req, res) => {
+    try {
+      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50))
+      const offset = Math.max(0, parseInt(req.query.offset, 10) || 0)
+      const all = await loadAllJobs()
+      const filtered = applyJobsFilter(all, req.query)
+      // 按 endedAt desc；没有就 startedAt desc；都没有就 id desc（id 时间戳前缀可比）
+      const sortKey = (j) => j.endedAt || j.startedAt || j.id || ''
+      filtered.sort((a, b) => sortKey(b).localeCompare(sortKey(a)))
+      const total = filtered.length
+      const page = filtered.slice(offset, offset + limit)
+      // 统计：按 status 分组 + 总 size（基于全集，给顶部条用）
+      const byStatus = {}
+      let totalSize = 0
+      for (const j of all) {
+        byStatus[j.status] = (byStatus[j.status] || 0) + 1
+        totalSize += j.size || 0
+      }
+      res.json({
+        success: true,
+        jobs: page,
+        total,
+        stats: { count: all.length, sizeMB: +(totalSize / 1024 / 1024).toFixed(2), byStatus }
+      })
+    } catch (err) {
+      res.status(500).json({ success: false, error: 'list jobs 失败: ' + (err.message || String(err)) })
+    }
+  })
+
+  // GET /api/workbench/jobs/config
+  app.get('/api/workbench/jobs/config', async (_req, res) => {
+    try {
+      res.json({ success: true, config: await readJobsConfig() })
+    } catch (err) {
+      res.status(500).json({ success: false, error: '读取配置失败: ' + err.message })
+    }
+  })
+
+  // PUT /api/workbench/jobs/config
+  app.put('/api/workbench/jobs/config', async (req, res) => {
+    try {
+      const cfg = await writeJobsConfig(req.body || {})
+      // 配置变更后立刻 enforce，让已落盘的多余记录立刻被裁掉
+      await enforceRetention()
+      res.json({ success: true, config: cfg })
+    } catch (err) {
+      res.status(400).json({ success: false, error: err.message || String(err) })
+    }
+  })
+
+  // POST /api/workbench/jobs/batch-delete
+  app.post('/api/workbench/jobs/batch-delete', async (req, res) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(s => typeof s === 'string') : []
+      if (ids.length === 0) return res.json({ success: true, removed: 0 })
+      // 1) 删内存 Map
+      let removed = 0
+      for (const id of ids) {
+        if (jobs.delete(id)) removed++
+      }
+      // 2) 改写文件
+      const data = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+      if (data && Array.isArray(data.jobs)) {
+        const set = new Set(ids)
+        const before = data.jobs.length
+        data.jobs = data.jobs.filter(j => !set.has(j.id))
+        removed += before - data.jobs.length
+        await writeJson(JOBS_FILE, data)
+      }
+      res.json({ success: true, removed })
+    } catch (err) {
+      res.status(500).json({ success: false, error: '批量删除失败: ' + (err.message || String(err)) })
+    }
+  })
+
+  // POST /api/workbench/jobs/clear
+  app.post('/api/workbench/jobs/clear', async (req, res) => {
+    try {
+      if (req.body?.confirm !== true) {
+        return res.status(400).json({ success: false, error: '需要 confirm: true' })
+      }
+      let removed = 0
+      for (const j of jobs.values()) {
+        // 不清当前还在跑/排队的（防止误清活跃 job；用户应逐个取消或等结束）
+        if (j.status === 'running' || j.status === 'pending') continue
+        jobs.delete(j.id)
+        removed++
+      }
+      // 写一个空 jobs.json
+      await writeJson(JOBS_FILE, { version: 1, jobs: [] })
+      res.json({ success: true, removed })
+    } catch (err) {
+      res.status(500).json({ success: false, error: '清空失败: ' + (err.message || String(err)) })
+    }
+  })
+
+  // GET /api/workbench/jobs/:id
+  app.get('/api/workbench/jobs/:id', async (req, res) => {
+    try {
+      // 优先查内存（含活跃）
+      const live = jobs.get(req.params.id)
+      if (live) {
+        const tasksData = await readJson(TASKS_FILE, { tasks: [] })
+        const taskMap = new Map((tasksData.tasks || []).map(t => [t.id, t]))
+        return res.json({ success: true, job: serializeJob(live, taskMap) })
+      }
+      // 退回文件
+      const data = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+      const j = (data.jobs || []).find(x => x.id === req.params.id)
+      if (!j) return res.status(404).json({ success: false, error: 'job 不存在' })
+      res.json({ success: true, job: j })
+    } catch (err) {
+      res.status(500).json({ success: false, error: '查询失败: ' + (err.message || String(err)) })
+    }
+  })
+
+  // DELETE /api/workbench/jobs/:id
+  app.delete('/api/workbench/jobs/:id', async (req, res) => {
+    try {
+      const id = req.params.id
+      let removed = false
+      if (jobs.delete(id)) removed = true
+      const data = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+      if (data && Array.isArray(data.jobs)) {
+        const before = data.jobs.length
+        data.jobs = data.jobs.filter(j => j.id !== id)
+        if (data.jobs.length !== before) {
+          removed = true
+          await writeJson(JOBS_FILE, data)
+        }
+      }
+      if (!removed) return res.status(404).json({ success: false, error: 'job 不存在' })
+      res.json({ success: true, removed: 1 })
+    } catch (err) {
+      res.status(500).json({ success: false, error: '删除失败: ' + (err.message || String(err)) })
+    }
+  })
 
   // ── 子任务附件：上传 / 删除 / 列表 ───────────────────────────────
   // 上传：POST /api/workbench/subtasks/:subId/attachments
