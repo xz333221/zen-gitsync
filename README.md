@@ -244,7 +244,7 @@ A dedicated view (fourth icon in the activity bar) for batch-running Claude agai
 | Feature | Description |
 |---|---|
 | Task list | Create, edit, delete tasks; each shows its subtask count |
-| Subtask breakdown | Add / edit / remove subtasks per task, with per-subtask status |
+| Subtask breakdown | Add / edit / remove subtasks per task, with per-subtask status; the empty state ships a centered illustration card with a primary "Add subtask" CTA and a secondary "Split with AI" shortcut |
 | Subtask attachments | Attach up to 9 files per subtask (image / PDF / text / Markdown / CSV / JSON / log, ≤ 5 MB each); their absolute paths are appended to the prompt so Claude reads them directly |
 | Prompt presets | Reusable prompt templates with `{{task.title}}` / `{{task.desc}}` / `{{sub.title}}` / `{{sub.desc}}` / `{{repo.path}}` / `{{branch}}` variable interpolation |
 | AI prompt generation | "New / Edit preset" dialog has an **AI Generate** button — the server reads the current project tree (depth 2) + README + manifests (package.json / pyproject.toml / go.mod / Cargo.toml / …) and asks the configured LLM to draft a project-aware preset (name + body) |
@@ -622,7 +622,7 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 功能 | 说明 |
 |---|---|
 | 任务列表 | 新建、编辑、删除任务；每条任务显示子任务数量 |
-| 子任务拆分 | 增删改子任务，实时显示每个子任务的执行状态 |
+| 子任务拆分 | 增删改子任务，实时显示每个子任务的执行状态；空态提供居中插画卡片、主 CTA「添加子任务」与「用 AI 自动拆分」次级入口 |
 | 子任务附件 | 每个子任务最多挂 9 个附件（图片 / PDF / 文本 / Markdown / CSV / JSON / log，单个 ≤ 5 MB）；执行时绝对路径会自动追加到 prompt 末尾，Claude 直接按路径读取 |
 | 提示词预置 | 可复用提示词模板，支持 `{{task.title}}` / `{{task.desc}}` / `{{sub.title}}` / `{{sub.desc}}` / `{{repo.path}}` / `{{branch}}` 变量插值 |
 | AI 生成预置 | 「新建 / 编辑预置」对话框内置 **AI 生成项目架构说明** 按钮 + **编辑指令** 按钮：服务端递归识别当前项目里的所有子项目（含 `.git` 或 9 种 manifest 之一的目录），为每个子项目独立读取关键文件（manifest 20 KB / README 8 KB / 2 层目录树），并发调 LLM 产出各子项目架构说明，多子项目场景再合并成一份整体说明；用户可点「编辑指令」自定义生成策略（持久化到 `~/.zen-gitsync/ai-instruction.json`）；`max_tokens=4000`，单次请求最多 20 分钟 |

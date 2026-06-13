@@ -942,11 +942,20 @@ function humanSize(n: number): string {
         />
         <div class="wb-split__sub-header">
           <h4>{{ $t('@WORKBENCH:子任务拆分') }}</h4>
-          <div>
-            <el-button size="small" @click="addSubtask">+ {{ $t('@WORKBENCH:添加子任务') }}</el-button>
+          <div class="wb-split__sub-actions">
+            <el-button
+              size="small"
+              plain
+              :icon="Plus"
+              :disabled="selectedTask.subtasks.length === 0"
+              @click="addSubtask"
+            >
+              {{ $t('@WORKBENCH:添加子任务') }}
+            </el-button>
             <el-button
               size="small"
               :type="hasDirtySubtasks ? 'primary' : 'default'"
+              :disabled="selectedTask.subtasks.length === 0"
               @click="saveSubtasks"
             >
               {{ $t('@WORKBENCH:保存拆分') }}
@@ -1046,8 +1055,27 @@ function humanSize(n: number): string {
               @dragleave="pasteHoverId = (pasteHoverId === sub.id ? null : pasteHoverId)"
             />
           </li>
-          <li v-if="selectedTask.subtasks.length === 0" class="wb-empty">
-            {{ $t('@WORKBENCH:暂无子任务，点击上方按钮添加') }}
+          <li v-if="selectedTask.subtasks.length === 0" class="wb-empty wb-empty--rich">
+            <div class="wb-empty__art" aria-hidden="true">
+              <el-icon><List /></el-icon>
+            </div>
+            <div class="wb-empty__title">{{ $t('@WORKBENCH:拆分任务，逐项执行') }}</div>
+            <div class="wb-empty__hint">
+              {{ $t('@WORKBENCH:手动添加子任务，或让 AI 帮你自动拆分') }}
+            </div>
+            <div class="wb-empty__cta">
+              <el-button type="primary" size="small" :icon="Plus" @click="addSubtask">
+                {{ $t('@WORKBENCH:添加子任务') }}
+              </el-button>
+              <button
+                type="button"
+                class="wb-empty__link"
+                :disabled="!selectedTask.title || !selectedTask.title.trim()"
+                @click="openAiSplitDialog"
+              >
+                {{ $t('@WORKBENCH:用 AI 自动拆分') }}
+              </button>
+            </div>
           </li>
         </ul>
       </template>
@@ -1579,6 +1607,79 @@ function humanSize(n: number): string {
   color: var(--text-tertiary);
 }
 
+/* ── 空状态：富卡片版（子任务拆分） ────────────────── */
+.wb-empty--rich {
+  padding: 32px 28px 28px;
+  gap: 10px;
+  border-style: solid;
+  border-color: var(--border-color);
+  background: var(--bg-container);
+  margin: 4px 2px 2px;
+}
+.wb-empty__art {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  font-size: 22px;
+  margin-bottom: 2px;
+}
+.wb-empty__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.wb-empty--rich .wb-empty__hint {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-tertiary);
+  max-width: 280px;
+}
+.wb-empty__cta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.wb-empty__link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 4px 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-primary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s ease-out, background-color 0.15s ease-out;
+}
+.wb-empty__link:hover:not(:disabled) {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+.wb-empty__link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.wb-empty__link:disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-empty__link {
+    transition: none;
+  }
+}
+
 .wb-split {
   flex: 1;
   min-height: 0;
@@ -1746,6 +1847,11 @@ function humanSize(n: number): string {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
+}
+.wb-split__sub-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .wb-sub-list {
