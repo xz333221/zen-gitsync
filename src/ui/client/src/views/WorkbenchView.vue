@@ -17,6 +17,8 @@
 import { ref, computed, onMounted, onBeforeUnmount, reactive, nextTick, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AISplitDialog from '@components/AISplitDialog.vue'
+import AttachmentZone from '@components/AttachmentZone.vue'
 import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
 
 // ── 类型 ────────────────────────────────────────────────────────────────────
@@ -52,6 +54,7 @@ interface Task {
   promptId: string | null
   subtasks: SubTask[]
   status: string
+  attachments?: Attachment[]
   createdAt?: string
   updatedAt?: string
 }
@@ -414,6 +417,41 @@ async function saveSubtasks() {
 }
 
 // ── 执行 ───────────────────────────────────────────────────────────────────
+// AI 拆分子任务：打开对话框，所有过程在 AISplitDialog 内部完成
+const aiSplitDialogVisible = ref(false)
+
+function openAiSplitDialog() {
+  if (!selectedTask.value) return
+  const title = (selectedTask.value.title || '').trim()
+  if (!title) {
+    ElMessage.warning($t('@WORKBENCH:请先填写任务标题'))
+    return
+  }
+  // 若已有子任务，用户在 confirm 时直接追加
+  aiSplitDialogVisible.value = true
+}
+
+/**
+ * 用户在 AI 拆分对话框点"确认入库"：把拆分结果追加到当前 task 的 subtasks 列表。
+ * 自动标 dirty（已有的未保存机制会捕捉）。
+ */
+function applySplitResult(newSubs: { title: string; desc: string }[]) {
+  if (!selectedTask.value) return
+  for (const s of newSubs) {
+    selectedTask.value.subtasks.push({
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      title: s.title,
+      desc: s.desc || '',
+      status: 'todo',
+      promptOverride: '',
+      attachments: []
+    })
+  }
+  ElMessage.success(
+    $t('@WORKBENCH:已生成 {n} 个子任务，请审阅后保存', { n: newSubs.length })
+  )
+}
+
 async function runTask(t: Task) {
   if (!t.subtasks || t.subtasks.length === 0) {
     ElMessage.warning($t('@WORKBENCH:请先拆分任务'))
@@ -527,7 +565,7 @@ function displayOutput(raw: string | undefined | null): string {
   return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
 }
 
-// ── 附件上传 ───────────────────────────────────────────────────────────
+// ── 附件上传（主任务 + 子任务共用） ────────────────────────────────────
 const ALLOWED_MIME = new Set([
   'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
   'image/bmp', 'image/svg+xml',
@@ -537,23 +575,46 @@ const ALLOWED_MIME = new Set([
 ])
 const ALLOWED_EXT_HINT = '.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.pdf,.txt,.md,.csv,.json,.log'
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
-const uploadingSubs = ref<Record<string, boolean>>({})
-const pasteHoverSubId = ref<string | null>(null)
+const uploadingTargets = ref<Record<string, boolean>>({})
+const pasteHoverId = ref<string | null>(null)
 
-function isUploading(subId: string): boolean { return !!uploadingSubs.value[subId] }
+function isUploading(id: string): boolean { return !!uploadingTargets.value[id] }
 
-// 把任意输入的文件 / Blob 转成 File（如果没有文件名就给个临时名）
 function ensureFile(blob: Blob, fallbackName: string): File {
   if (blob instanceof File) return blob
-  // 截图粘贴时浏览器只给 Blob 而没有 File 实例
   const mime = blob.type || 'application/octet-stream'
   return new File([blob], fallbackName, { type: mime })
 }
 
-// 监听子任务卡片的 paste 事件
-function onSubtaskPaste(e: ClipboardEvent, sub: SubTask) {
+/** 附件归属：主任务 或 子任务，决定 URL/存储位置 */
+type AttachmentTarget =
+  | { kind: 'task'; task: Task }
+  | { kind: 'sub'; task: Task; sub: SubTask }
+
+function targetKey(t: AttachmentTarget): string {
+  return t.kind === 'task' ? `task-${t.task.id}` : `sub-${t.sub.id}`
+}
+function targetAttachments(t: AttachmentTarget): Attachment[] {
+  const arr = t.kind === 'task' ? t.task.attachments : t.sub.attachments
+  return Array.isArray(arr) ? (arr as Attachment[]) : []
+}
+function setTargetAttachments(t: AttachmentTarget, att: Attachment[]) {
+  if (t.kind === 'task') t.task.attachments = att
+  else t.sub.attachments = att
+}
+function targetUploadUrl(t: AttachmentTarget): string {
+  return t.kind === 'task'
+    ? `/api/workbench/tasks/${t.task.id}/attachments`
+    : `/api/workbench/subtasks/${t.sub.id}/attachments`
+}
+function targetDeleteUrl(t: AttachmentTarget, attId: string): string {
+  return t.kind === 'task'
+    ? `/api/workbench/tasks/${t.task.id}/attachments/${attId}`
+    : `/api/workbench/subtasks/${t.sub.id}/attachments/${attId}`
+}
+
+function onAttachmentPaste(e: ClipboardEvent, t: AttachmentTarget) {
   if (!e.clipboardData) return
-  // 1) 优先取 image/* Blob（截图、复制图片）
   const imageItems = Array.from(e.clipboardData.items).filter(
     it => it.kind === 'file' && it.type.startsWith('image/')
   )
@@ -564,11 +625,10 @@ function onSubtaskPaste(e: ClipboardEvent, sub: SubTask) {
       if (!blob) continue
       const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
       const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-      uploadAttachment(sub, ensureFile(blob, `paste-${stamp}.${ext}`))
+      uploadAttachment(t, ensureFile(blob, `paste-${stamp}.${ext}`))
     }
     return
   }
-  // 2) 否则看非图片文件（部分浏览器复制文件走这个）
   const fileItems = Array.from(e.clipboardData.items).filter(
     it => it.kind === 'file' && !it.type.startsWith('image/')
   )
@@ -577,19 +637,18 @@ function onSubtaskPaste(e: ClipboardEvent, sub: SubTask) {
     for (const it of fileItems) {
       const blob = it.getAsFile()
       if (!blob) continue
-      uploadAttachment(sub, ensureFile(blob, blob.name || 'pasted-file'))
+      uploadAttachment(t, ensureFile(blob, blob.name || 'pasted-file'))
     }
   }
 }
 
-// 监听 drop 事件
-function onSubtaskDrop(e: DragEvent, sub: SubTask) {
-  pasteHoverSubId.value = null
+function onAttachmentDrop(e: DragEvent, t: AttachmentTarget) {
+  pasteHoverId.value = null
   const files = Array.from(e.dataTransfer?.files || [])
-  files.forEach(f => uploadAttachment(sub, f))
+  files.forEach(f => uploadAttachment(t, f))
 }
 
-async function uploadAttachment(sub: SubTask, file: File) {
+async function uploadAttachment(t: AttachmentTarget, file: File) {
   if (file.size > MAX_ATTACHMENT_BYTES) {
     ElMessage.error(`「${file.name}」${$t('@WORKBENCH:超过 5MB 限制')}`)
     return
@@ -598,14 +657,15 @@ async function uploadAttachment(sub: SubTask, file: File) {
     ElMessage.error(`${$t('@WORKBENCH:不支持的文件类型')}（${file.name}）`)
     return
   }
-  const existing = sub.attachments || []
+  const existing = targetAttachments(t)
   if (existing.length >= 9) {
-    ElMessage.error($t('@WORKBENCH:单个子任务最多 9 个附件'))
+    ElMessage.error($t('@WORKBENCH:单个任务最多 9 个附件'))
     return
   }
-  uploadingSubs.value[sub.id] = true
+  const key = targetKey(t)
+  uploadingTargets.value[key] = true
   try {
-    const res = await fetch(`/api/workbench/subtasks/${sub.id}/attachments`, {
+    const res = await fetch(targetUploadUrl(t), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/octet-stream',
@@ -615,8 +675,9 @@ async function uploadAttachment(sub: SubTask, file: File) {
       body: file
     }).then(r => r.json())
     if (res.success) {
-      if (!Array.isArray(sub.attachments)) sub.attachments = []
-      sub.attachments.push(res.attachment)
+      const list = targetAttachments(t)
+      list.push(res.attachment)
+      setTargetAttachments(t, list)
       ElMessage.success(`${$t('@WORKBENCH:已添加：')}${file.name}`)
     } else {
       ElMessage.error(res.error || $t('@WORKBENCH:上传失败'))
@@ -624,11 +685,11 @@ async function uploadAttachment(sub: SubTask, file: File) {
   } catch (err: any) {
     ElMessage.error($t('@WORKBENCH:上传失败') + '：' + (err && err.message || err))
   } finally {
-    uploadingSubs.value[sub.id] = false
+    uploadingTargets.value[key] = false
   }
 }
 
-async function removeAttachment(sub: SubTask, att: Attachment) {
+async function removeAttachment(t: AttachmentTarget, att: Attachment) {
   try {
     await ElMessageBox.confirm(
       $t('@WORKBENCH:删除附件「{name}」？', { name: att.originalName }),
@@ -636,26 +697,28 @@ async function removeAttachment(sub: SubTask, att: Attachment) {
       { type: 'warning' }
     )
   } catch { return }
-  const res = await fetch(`/api/workbench/subtasks/${sub.id}/attachments/${att.id}`, { method: 'DELETE' }).then(r => r.json())
+  const res = await fetch(targetDeleteUrl(t, att.id), { method: 'DELETE' }).then(r => r.json())
   if (res.success) {
-    sub.attachments = (sub.attachments || []).filter(a => a.id !== att.id)
+    const list = targetAttachments(t).filter(a => a.id !== att.id)
+    setTargetAttachments(t, list)
     ElMessage.success($t('@WORKBENCH:已删除'))
   } else {
     ElMessage.error(res.error || $t('@WORKBENCH:删除失败'))
   }
 }
 
-function pickAttachmentFile(sub: SubTask) {
+function pickAttachmentFile(t: AttachmentTarget) {
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = ALLOWED_EXT_HINT
   input.multiple = true
   input.onchange = () => {
     const files = Array.from(input.files || [])
-    files.forEach(f => uploadAttachment(sub, f))
+    files.forEach(f => uploadAttachment(t, f))
   }
   input.click()
 }
+
 
 const IMAGE_EXTS_UI = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'])
 function isImageAttachment(att: Attachment): boolean {
@@ -735,6 +798,14 @@ function humanSize(n: number): string {
             <option :value="null">{{ $t('@WORKBENCH:不绑定预置提示词') }}</option>
             <option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
+          <el-button
+            type="info"
+            plain
+            :disabled="!selectedTask.title || !selectedTask.title.trim()"
+            @click="openAiSplitDialog"
+          >
+            {{ $t('@WORKBENCH:AI 拆分') }}
+          </el-button>
           <el-button type="primary" :loading="false" @click="runTask(selectedTask)">
             {{ $t('@WORKBENCH:执行任务') }}
           </el-button>
@@ -744,6 +815,22 @@ function humanSize(n: number): string {
           v-model="selectedTask.desc"
           :placeholder="$t('@WORKBENCH:任务描述（可选）')"
           rows="3"
+          @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
+        />
+        <AttachmentZone
+          :attachments="selectedTask.attachments || []"
+          :is-image="isImageAttachment"
+          :human-size="humanSize"
+          :is-uploading="isUploading('task-' + selectedTask.id)"
+          :is-paste-hover="pasteHoverId === 'task-' + selectedTask.id"
+          :max-count="9"
+          :on-pick="() => pickAttachmentFile({ kind: 'task', task: selectedTask })"
+          :on-remove="(att) => removeAttachment({ kind: 'task', task: selectedTask }, att)"
+          @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
+          @drop.prevent="onAttachmentDrop($event, { kind: 'task', task: selectedTask })"
+          @dragover.prevent="pasteHoverId = 'task-' + selectedTask.id"
+          @dragenter.prevent="pasteHoverId = 'task-' + selectedTask.id"
+          @dragleave="pasteHoverId = (pasteHoverId === 'task-' + selectedTask.id ? null : pasteHoverId)"
         />
         <div class="wb-split__sub-header">
           <h4>{{ $t('@WORKBENCH:子任务拆分') }}</h4>
@@ -766,11 +853,12 @@ function humanSize(n: number): string {
             class="wb-sub-item"
             :class="{ 'is-dirty': dirtySubIds.has(sub.id) }"
           >
+          >
             <div class="wb-sub-item__row">
               <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
                 {{ statusLabel(sub.status) }}
               </span>
-              <input class="wb-input" v-model="sub.title" :placeholder="$t('@WORKBENCH:子任务标题')" @paste="onSubtaskPaste($event, sub)" />
+              <input class="wb-input" v-model="sub.title" :placeholder="$t('@WORKBENCH:子任务标题')" @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub })" />
               <span v-if="dirtySubIds.has(sub.id)" class="wb-sub-item__dirty" :title="$t('@WORKBENCH:有未保存的更改')">
                 {{ $t('@WORKBENCH:未保存') }}
               </span>
@@ -790,7 +878,7 @@ function humanSize(n: number): string {
               v-model="sub.desc"
               :placeholder="$t('@WORKBENCH:子任务描述 / 独立提示词覆盖')"
               rows="2"
-              @paste="onSubtaskPaste($event, sub)"
+              @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub })"
             />
             <details
               v-if="jobOf(sub.id)"
@@ -834,50 +922,21 @@ function humanSize(n: number): string {
 
               <pre :ref="setLogRef(sub.id)" class="wb-log-pre">{{ displayOutput(jobOf(sub.id)?.output) || $t('@WORKBENCH:（暂无输出）') }}</pre>
             </details>
-            <div
-              class="wb-attachments"
-              :class="{ 'is-paste-hover': pasteHoverSubId === sub.id }"
-              @paste="onSubtaskPaste($event, sub)"
-              @dragover.prevent="pasteHoverSubId = sub.id"
-              @dragenter.prevent="pasteHoverSubId = sub.id"
-              @dragleave="pasteHoverSubId = (pasteHoverSubId === sub.id ? null : pasteHoverSubId)"
-              @drop.prevent="onSubtaskDrop($event, sub)"
-            >
-              <div class="wb-attachments__head">
-                <span class="wb-attachments__label">
-                  {{ $t('@WORKBENCH:附件') }}
-                  <span class="wb-attachments__count">{{ (sub.attachments || []).length }} / 9</span>
-                </span>
-                <button
-                  class="wb-attachments__add"
-                  :disabled="isUploading(sub.id) || (sub.attachments || []).length >= 9"
-                  @click="pickAttachmentFile(sub)"
-                >
-                  {{ isUploading(sub.id) ? $t('@WORKBENCH:上传中…') : $t('@WORKBENCH:添加附件') }}
-                </button>
-              </div>
-              <div v-if="pasteHoverSubId === sub.id" class="wb-attachments__paste-hint">
-                {{ $t('@WORKBENCH:粘贴图片以快速添加') }}
-              </div>
-              <ul v-if="(sub.attachments || []).length > 0" class="wb-attachments__list">
-                <li v-for="att in sub.attachments" :key="att.id" class="wb-attachment">
-                  <div class="wb-attachment__icon" :class="{ 'wb-attachment__icon--img': isImageAttachment(att) }">
-                    <img
-                      v-if="isImageAttachment(att)"
-                      :src="`/api/workbench/attachments/${att.id}/raw`"
-                      :alt="att.originalName"
-                      loading="lazy"
-                    />
-                    <span v-else>{{ att.ext.toUpperCase() }}</span>
-                  </div>
-                  <div class="wb-attachment__meta">
-                    <div class="wb-attachment__name" :title="att.originalName">{{ att.originalName }}</div>
-                    <div class="wb-attachment__sub">{{ humanSize(att.size) }} · {{ att.mimeType }}</div>
-                  </div>
-                  <button class="wb-attachment__del" @click="removeAttachment(sub, att)" :title="$t('@WORKBENCH:删除')">×</button>
-                </li>
-              </ul>
-            </div>
+            <AttachmentZone
+              :attachments="sub.attachments || []"
+              :is-image="isImageAttachment"
+              :human-size="humanSize"
+              :is-uploading="isUploading('sub-' + sub.id)"
+              :is-paste-hover="pasteHoverId === sub.id"
+              :max-count="9"
+              :on-pick="() => pickAttachmentFile({ kind: 'sub', task: selectedTask, sub })"
+              :on-remove="(att) => removeAttachment({ kind: 'sub', task: selectedTask, sub }, att)"
+              @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub })"
+              @drop.prevent="onAttachmentDrop($event, { kind: 'sub', task: selectedTask, sub })"
+              @dragover.prevent="pasteHoverId = sub.id"
+              @dragenter.prevent="pasteHoverId = sub.id"
+              @dragleave="pasteHoverId = (pasteHoverId === sub.id ? null : pasteHoverId)"
+            />
           </li>
           <li v-if="selectedTask.subtasks.length === 0" class="wb-empty">
             {{ $t('@WORKBENCH:暂无子任务，点击上方按钮添加') }}
@@ -978,6 +1037,16 @@ function humanSize(n: number): string {
         <el-button type="primary" @click="saveTask">{{ $t('@WORKBENCH:保存') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- AI 拆分对话框：流式展示 LLM 思考 + 原始结果 + 入库确认 -->
+    <AISplitDialog
+      v-if="selectedTask"
+      v-model="aiSplitDialogVisible"
+      :title="selectedTask.title"
+      :desc="selectedTask.desc"
+      :task-id="selectedTask.id"
+      @confirm="applySplitResult"
+    />
   </div>
 </template>
 
@@ -1088,8 +1157,9 @@ function humanSize(n: number): string {
 
 .wb-split {
   flex: 1;
+  min-height: 0;
   padding: 16px 20px;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1106,6 +1176,7 @@ function humanSize(n: number): string {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
 }
 .wb-input {
   background: var(--bg-base);
@@ -1138,6 +1209,7 @@ function humanSize(n: number): string {
   outline: none;
   width: 100%;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 .wb-textarea:focus { border-color: var(--color-primary); }
 .wb-textarea--sm { min-height: 40px; }
@@ -1147,6 +1219,7 @@ function humanSize(n: number): string {
   justify-content: space-between;
   align-items: center;
   margin-top: 8px;
+  flex-shrink: 0;
 }
 .wb-split__sub-header h4 {
   margin: 0;
@@ -1162,6 +1235,9 @@ function humanSize(n: number): string {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .wb-sub-item {
   background: var(--bg-surface);
@@ -1365,6 +1441,7 @@ function humanSize(n: number): string {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-subtle, var(--bg-container));
+  flex-shrink: 0;
   overflow: hidden;
   transition: border-color 0.15s, background 0.15s;
 }

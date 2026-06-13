@@ -29,6 +29,7 @@ const PROMPTS_FILE = path.join(DATA_DIR, 'prompts.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
 const INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-instruction.json');
+const SUBTASK_INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-subtask-instruction.json');
 
 // 子项目识别 / 文件扫描时需要跳过的目录
 const SKIP_DIRS = new Set([
@@ -62,6 +63,57 @@ const DEFAULT_INSTRUCTION = `你是一名资深软件架构师。
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 // 一个子任务最多挂 9 个附件
 const MAX_ATTACHMENTS_PER_SUBTASK = 9;
+
+// AI 拆分子任务：默认系统指令（用户在 GUI 可编辑覆盖）。
+// 国际化：根据请求 Accept-Language 在 zh / en 之间选默认。
+// 中英两份都内置——用户保存到 ~/.zen-gitsync/ai-subtask-instruction.json 后覆盖。
+const DEFAULT_SUBTASK_INSTRUCTION_ZH = `你是一名任务拆分助手。
+
+【拆分原则】
+1. 单一职责：每个子任务只做一件事，避免"做 A 和 B"。
+2. 粒度适中：单个子任务应当能在一次会话里完成（既不要"实现整个登录功能"这么大，也不要"打印 hello"这么琐碎）。
+3. 顺序合理：子任务按依赖关系和执行顺序排列（先准备、后实现、最后验证）。
+4. 可验证：每个子任务都有明确的完成标志（"输出文件 xxx"、"通过测试 yyy"、"控制台打印 zzz"）。
+5. 数量：拆成 3-6 个子任务为宜。任务很简单时 2-3 个；复杂时 5-6 个，不要超过 8 个。
+
+【输出要求】
+只返回 JSON，结构：
+{
+  "subtasks": [
+    { "title": "子任务标题（10-20字）", "desc": "子任务的具体描述，包含要做什么、输入是什么、输出/验证标志是什么" }
+  ]
+}
+
+不要输出 JSON 之外的任何内容（不要解释、不要 markdown 代码块包裹）。`;
+
+const DEFAULT_SUBTASK_INSTRUCTION_EN = `You are a task breakdown assistant.
+
+[Breakdown principles]
+1. Single responsibility: each subtask does only one thing, avoid bundling "do A and B".
+2. Right granularity: a subtask should finish in one Claude session (not as big as "implement the whole login flow", not as trivial as "print hello").
+3. Sensible order: arrange subtasks by dependency / execution order (prepare first, implement, then verify).
+4. Verifiable: every subtask has a clear completion signal (e.g. "produce file xxx", "pass test yyy", "log zzz to console").
+5. Quantity: prefer 3-6 subtasks. Very simple tasks 2-3, complex ones 5-6, never exceed 8.
+
+[Output requirements]
+Return JSON only, structure:
+{
+  "subtasks": [
+    { "title": "subtask title (10-20 chars)", "desc": "concrete description: what to do, what the input is, what the output / verification signal is" }
+  ]
+}
+
+Return nothing outside JSON (no explanation, no markdown fences wrapping the JSON).`;
+
+// 兼容旧引用
+const DEFAULT_SUBTASK_INSTRUCTION = DEFAULT_SUBTASK_INSTRUCTION_ZH
+
+// 根据请求 Accept-Language 选默认（zh / en）
+function pickDefaultSubtaskInstruction(req) {
+  const al = String(req?.headers?.['accept-language'] || '').toLowerCase()
+  if (al.startsWith('en')) return DEFAULT_SUBTASK_INSTRUCTION_EN
+  return DEFAULT_SUBTASK_INSTRUCTION_ZH
+}
 // 白名单后缀：图片 + 常见文档（PDF / 纯文本 / Markdown）
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
 const DOC_EXTS = new Set(['pdf', 'txt', 'md', 'markdown', 'csv', 'json', 'log']);
@@ -119,6 +171,19 @@ const MANIFEST_FILES = [
   'pom.xml', 'build.gradle', 'build.gradle.kts', 'composer.json',
   'Gemfile', 'pubspec.yaml'
 ];
+
+// 轻量级：仅告诉 LLM 项目的主 manifest 是什么（用于 AI 拆分时让 LLM 知道项目类型）。
+// 不读内容，只 stat 存在性——拆分子任务不需要细节。
+async function detectProjectManifest(projectPath) {
+  if (!projectPath) return ''
+  for (const f of MANIFEST_FILES) {
+    try {
+      const stat = await fsp.stat(path.join(projectPath, f))
+      if (stat.isFile()) return f
+    } catch { /* 不存在，继续 */ }
+  }
+  return ''
+}
 
 async function readProjectManifest(projectPath) {
   const out = {};
@@ -181,15 +246,27 @@ async function listDirTree(projectPath, maxDepth = 2, maxEntries = 400) {
 }
 
 async function callLlmJson(model, prompt, opts = {}) {
-  const { maxTokens = 1500, timeoutMs = 60000 } = opts;
+  const { maxTokens = 1500, timeoutMs = 60000, images = [] } = opts;
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
   const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`;
   const headers = { 'Content-Type': 'application/json' };
   if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
 
+  // 有图片时改用 OpenAI multimodal content 数组（text + image_url）。
+  // 非多模态模型遇到 image_url 会忽略图片块，相当于退化成纯文本，不会报错。
+  let userContent;
+  if (Array.isArray(images) && images.length > 0) {
+    userContent = [
+      { type: 'text', text: prompt },
+      ...images.map(img => ({ type: 'image_url', image_url: { url: img } }))
+    ];
+  } else {
+    userContent = prompt;
+  }
+
   const body = JSON.stringify({
     model: model.model,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [{ role: 'user', content: userContent }],
     max_tokens: maxTokens,
     temperature: 0.4,
     response_format: { type: 'json_object' },
@@ -212,6 +289,92 @@ async function callLlmJson(model, prompt, opts = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * 流式调用 OpenAI 兼容 LLM。每收到一个 chunk 调 onDelta 回调。
+ * onDelta 接收 { thinking?: string, content?: string }，二选一。
+ *   - reasoning_content / reasoning：部分模型（如 deepseek）放在 delta.reasoning_content
+ *   - reasoning / reasoning_text：openai o1 风格
+ *   - content：普通输出
+ * 返回完整 content 字符串。
+ */
+async function callLlmStream(model, prompt, onDelta, opts = {}) {
+  const { maxTokens = 2000, timeoutMs = 600000, signal } = opts
+  const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
+  const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`
+  const headers = { 'Content-Type': 'application/json' }
+  if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`
+
+  const body = JSON.stringify({
+    model: model.model,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: maxTokens,
+    temperature: 0.4,
+    // 注意：stream: true 模式下不能同时使用 response_format:{type:'json_object'}，
+    // 部分 provider 会在收到两个一起时报错/静默卡住。改在 prompt 里约束 JSON 输出即可。
+    stream: true,
+  })
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  // 允许外部 signal 触发取消（用户在 GUI 点停止）
+  const onAbort = () => controller.abort()
+  if (signal) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener('abort', onAbort)
+  }
+
+  let fullContent = ''
+  let aborted = false
+  try {
+    const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
+    if (!resp.ok || !resp.body) {
+      const errText = await resp.text().catch(() => '')
+      throw new Error(errText || `HTTP ${resp.status}`)
+    }
+
+    // SSE 格式：每行 "data: {...}"，最后 "data: [DONE]"
+    const decoder = new TextDecoder('utf-8')
+    let buf = ''
+    for await (const chunk of resp.body) {
+      buf += decoder.decode(chunk, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data:')) continue
+        const payload = trimmed.slice(5).trim()
+        if (payload === '[DONE]') continue
+        try {
+          const evt = JSON.parse(payload)
+          const delta = evt.choices?.[0]?.delta || {}
+          // thinking 在不同 provider 字段名不同，全部尝试
+          const thinkingChunk = delta.reasoning_content
+            || delta.reasoning
+            || delta.reasoning_text
+            || ''
+          const contentChunk = delta.content || ''
+          if (thinkingChunk) onDelta({ thinking: thinkingChunk })
+          if (contentChunk) {
+            fullContent += contentChunk
+            onDelta({ content: contentChunk })
+          }
+        } catch { /* 跳过无法解析的行 */ }
+      }
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError' || controller.signal.aborted) {
+      aborted = true
+      // 中断不算错误——上层会决定怎么处理
+    } else {
+      throw err
+    }
+  } finally {
+    clearTimeout(timer)
+    if (signal) signal.removeEventListener('abort', onAbort)
+  }
+  return { content: fullContent, aborted }
 }
 
 function nowIso() {
@@ -284,6 +447,28 @@ async function writeInstruction(instruction) {
   const tmp = `${INSTRUCTION_FILE}.tmp`;
   await fsp.writeFile(tmp, JSON.stringify({ instruction: text, updatedAt: nowIso() }, null, 2), 'utf-8');
   await fsp.rename(tmp, INSTRUCTION_FILE);
+}
+
+// AI 拆分子任务的指令：与生成项目架构说明的指令分开持久化，
+// 因为它面向的输出形态（subtask 列表）和任务粒度完全不同。
+// 支持传入 req：根据 Accept-Language 选默认（zh/en）
+async function readSubtaskInstruction(req) {
+  try {
+    const buf = await fsp.readFile(SUBTASK_INSTRUCTION_FILE, 'utf-8');
+    const obj = JSON.parse(buf);
+    if (obj && typeof obj.instruction === 'string' && obj.instruction.trim()) {
+      return obj.instruction;
+    }
+  } catch { /* 文件不存在或解析失败 */ }
+  return pickDefaultSubtaskInstruction(req);
+}
+async function writeSubtaskInstruction(instruction) {
+  await ensureDataDir();
+  // 写入时如果与当前 locale 默认一致，不写文件——这样前端"isDefault"判定永远准确
+  const text = String(instruction || '').trim() || DEFAULT_SUBTASK_INSTRUCTION_ZH;
+  const tmp = `${SUBTASK_INSTRUCTION_FILE}.tmp`;
+  await fsp.writeFile(tmp, JSON.stringify({ instruction: text, updatedAt: nowIso() }, null, 2), 'utf-8');
+  await fsp.rename(tmp, SUBTASK_INSTRUCTION_FILE);
 }
 
 // ── 子项目识别：递归找 .git / manifest；A 是 B 的祖先时只保留 B ─────────────
@@ -450,6 +635,12 @@ function launchClaudeInNewWindow(cwd, promptText) {
 
 // 顺序执行一个任务下所有子任务；上一个结束再启动下一个
 async function runTaskQueue(task, repoPath, branch) {
+  // 前序上下文：跑完一个 sub 后把它"完成态"摘要存到这里，下一个 sub 启动时
+  // 拼到 prompt 头部，让 Claude 知道前面做了什么、产出了什么。
+  // 故意不用 raw output 全文——LLM 已经习惯"摘要 + 关键结论"的格式，且不会
+  // 一次塞几 MB 进 prompt 烧 token。truncate 到每条 MAX_PREV_OUTPUT_CHARS。
+  const MAX_PREV_OUTPUT_CHARS = 2000
+  const priorOutputs = []
   for (const sub of task.subtasks) {
     if (sub.status === 'done') continue;
     const promptTemplate = sub.promptOverride || (task.promptId
@@ -465,16 +656,36 @@ async function runTaskQueue(task, repoPath, branch) {
     const parts = [interpolated, sub.title, sub.desc].filter(s => s && s.trim());
     let prompt = parts.join('\n\n');
 
-    // ── 附件：把 sub.attachments 列表里的本地绝对路径拼到 prompt 末尾 ──
+    // ── 前序上下文：把前几个 done 子任务的输出摘要拼到 prompt 头部 ──
+    if (priorOutputs.length > 0) {
+      const prevBlock = priorOutputs.map((p, i) => {
+        const text = (p.output || '').slice(0, MAX_PREV_OUTPUT_CHARS)
+        const truncated = (p.output || '').length > MAX_PREV_OUTPUT_CHARS ? '\n…（前文已截断）' : ''
+        return `### [${i + 1}] ${p.title}\n${text}${truncated}`
+      }).join('\n\n')
+      prompt = `以下是同一任务下已经完成的前序子任务输出（仅作上下文参考，请基于这些结论继续当前子任务，无需重复执行它们）：
+
+${prevBlock}
+
+---
+
+${prompt}`
+    }
+
+    // ── 附件：合并 sub.attachments + task.attachments 后拼到 prompt 末尾 ──
     // claude -p 字符串模式会扫描 prompt 中出现的本地文件路径并自动
     // 识别为附件（图片 / PDF / 文本均可）。
-    const attachments = Array.isArray(sub.attachments) ? sub.attachments : [];
-    if (attachments.length > 0) {
-      const lines = attachments
+    // 主任务附件对所有 sub 都可见；子任务自己的附件只对该 sub 可见。
+    const allAttachments = [
+      ...(Array.isArray(task.attachments) ? task.attachments : []),
+      ...(Array.isArray(sub.attachments) ? sub.attachments : [])
+    ];
+    if (allAttachments.length > 0) {
+      const lines = allAttachments
         .filter(a => a && a.absolutePath)
         .map((a, i) => `  ${i + 1}. [${a.mimeType || 'application/octet-stream'}] ${a.absolutePath}`);
       if (lines.length > 0) {
-        prompt += `\n\n---\n本子任务包含 ${lines.length} 个附件（请按文件路径读取，不要让用户重新提供）：\n${lines.join('\n')}\n---`;
+        prompt += `\n\n---\n本任务包含 ${lines.length} 个附件（请按文件路径读取，不要让用户重新提供）：\n${lines.join('\n')}\n---`;
       }
     }
 
@@ -573,6 +784,8 @@ async function runTaskQueue(task, repoPath, branch) {
         job.exitCode = 0;
         job.status = 'done';
         sub.status = 'done';
+        // 把这个 sub 的输出累积到前序上下文，喂给下一个 sub
+        priorOutputs.push({ title: sub.title, output: job.output || '' })
       }
     } catch (err) {
       job.error = err && err.message ? err.message : String(err);
@@ -818,6 +1031,160 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     }
   });
 
+  // ── AI 拆分子任务：独立的指令文件、独立的端点 ───────────────────────
+  // GET /api/workbench/tasks/ai-subtask-instruction
+  //   →  { success, instruction, isDefault }
+  // PUT /api/workbench/tasks/ai-subtask-instruction
+  //   body: { instruction: string }
+  //   →  { success }
+  app.get('/api/workbench/tasks/ai-subtask-instruction', async (req, res) => {
+    try {
+      const def = pickDefaultSubtaskInstruction(req);
+      const instruction = await readSubtaskInstruction(req);
+      // isDefault：当前 instruction 和 locale 默认完全一致
+      res.json({ success: true, instruction, isDefault: instruction === def });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put('/api/workbench/tasks/ai-subtask-instruction', async (req, res) => {
+    try {
+      const text = req.body && typeof req.body.instruction === 'string'
+        ? req.body.instruction.trim()
+        : '';
+      if (!text) {
+        return res.status(400).json({ success: false, error: '指令不能为空' });
+      }
+      if (text.length > 50000) {
+        return res.status(413).json({ success: false, error: '指令过长（最多 50000 字符）' });
+      }
+      // 如果保存的文本正好等于当前 locale 的默认——不写文件，保持 fallback 行为
+      const def = pickDefaultSubtaskInstruction(req);
+      if (text === def) {
+        // 删除已存在的自定义文件
+        try { await fsp.unlink(SUBTASK_INSTRUCTION_FILE) } catch {}
+        return res.json({ success: true, isDefault: true });
+      }
+      await writeSubtaskInstruction(text);
+      res.json({ success: true, isDefault: false });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // POST /api/workbench/tasks/ai-split-subtasks
+  //   body: { title, desc }
+  //   →  { success, prompt: { system, user }, subtasks: [{title, desc}], raw }
+  // 注：早期版本曾尝试 SSE 流式（真 LLM stream + 模拟流分块），但在 SSE 模式下 LLM 调用
+  // 出现无法解释的"卡住"现象（怀疑 Express 5 + res.write() + 长 await 的交互问题）。
+  // 为保证稳定性，本接口退回一次性 JSON 响应；前端 AISplitDialog 拿到结果后用 setInterval
+  // 在前端"打字机"显示——视觉效果与 SSE 流式几乎一致，且不依赖后端实现。
+  app.post('/api/workbench/tasks/ai-split-subtasks', async (req, res) => {
+    const title = String(req.body?.title || '').trim();
+    const desc = String(req.body?.desc || '').trim();
+    const taskId = String(req.body?.taskId || '').trim();
+    if (!title) {
+      return res.status(400).json({ success: false, error: '任务标题不能为空' });
+    }
+
+    try {
+      let model;
+      try {
+        if (!configManager) throw new Error('configManager 不可用');
+        const rawConfig = await configManager.readRawConfigFile();
+        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+        model = models.find(m => m.isDefault) || models[0];
+      } catch (err) {
+        return res.status(500).json({ success: false, error: '读取 AI 配置失败: ' + err.message });
+      }
+      if (!model) {
+        return res.status(400).json({ success: false, error: '未配置 AI 模型，请先在通用设置中添加模型' });
+      }
+
+      const userInstruction = await readSubtaskInstruction(req);
+      const projectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+      const projectName = projectPath ? path.basename(projectPath) : '（未指定项目）';
+      const manifestHint = await detectProjectManifest(projectPath);
+
+      // 取任务附件：让 LLM 在拆分时能"看见"用户上传的图片/文档
+      // 图片：转 data URL 走 OpenAI multimodal；非图片：在 prompt 里列出路径
+      let attachmentBlock = '';
+      const imageDataUrls = [];
+      if (taskId) {
+        try {
+          const data = await readJson(TASKS_FILE, { tasks: [] });
+          const task = (data.tasks || []).find(t => t.id === taskId);
+          const atts = Array.isArray(task?.attachments) ? task.attachments : [];
+          if (atts.length > 0) {
+            const lines = [];
+            for (let i = 0; i < atts.length; i++) {
+              const a = atts[i];
+              if (!a || !a.absolutePath) continue;
+              lines.push(`  ${i + 1}. [${a.mimeType || 'application/octet-stream'}] ${a.absolutePath}`);
+              if (isImageExt(a.ext)) {
+                try {
+                  const buf = await fsp.readFile(a.absolutePath);
+                  const mime = a.mimeType || 'image/png';
+                  imageDataUrls.push(`data:${mime};base64,${buf.toString('base64')}`);
+                } catch { /* 文件丢失就跳过这张图 */ }
+              }
+            }
+            if (lines.length > 0) {
+              const imgNote = imageDataUrls.length > 0
+                ? `（其中 ${imageDataUrls.length} 张图片已随消息一并发送，请直接基于图片内容拆分）`
+                : '';
+              attachmentBlock = `\n\n## 任务附件${imgNote}\n${lines.join('\n')}`;
+            }
+          }
+        } catch { /* 没拿到附件不影响拆分 */ }
+      }
+
+      const userBlock = `${userInstruction}
+
+---
+
+## 待拆分的任务
+标题：${title}
+${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}
+
+## 项目上下文（仅供参考，便于拆分时考虑项目特性）
+- 项目名称：${projectName}
+- 项目根目录：${projectPath || '（未指定）'}
+- 主要 manifest：${manifestHint || '（未识别到）'}
+
+只返回 JSON（不要 markdown 代码块包裹）：
+{
+  "subtasks": [
+    { "title": "子任务标题（10-20字）", "desc": "具体描述" }
+  ]
+}`;
+
+      const result = await callLlmJson(model, userBlock, { maxTokens: 2000, timeoutMs: 600000, images: imageDataUrls });
+      const list = Array.isArray(result?.subtasks) ? result.subtasks : [];
+      const subtasks = list
+        .map(s => ({
+          title: String(s?.title || '').trim().slice(0, 80),
+          desc: String(s?.desc || '').trim().slice(0, 500)
+        }))
+        .filter(s => s.title)
+        .slice(0, 8);
+
+      // 同时返回完整原文 + 拼好的 prompt，让前端可以"模拟流"展示给用户
+      let raw = '';
+      try { raw = JSON.stringify(result, null, 2) } catch {}
+
+      res.json({
+        success: true,
+        prompt: { system: userInstruction, user: userBlock },
+        subtasks,
+        raw
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: 'AI 拆分失败: ' + (err?.message || String(err)) });
+    }
+  });
+
   // SSE 事件流
   app.get('/api/workbench/events', (req, res) => {
     res.set({
@@ -1054,65 +1421,92 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     limit: MAX_IMAGE_BYTES * 4 // 整体路由上限 20MB；单文件大小由业务再卡
   });
 
+  // 共享 helper：找到一个 attachment 所在的位置（task 主附件 或 sub 附件）
+  // 返回 { owner, task, sub?, list, att, storageDir } 或 null
+  async function findAttachmentLocation(attId) {
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    for (const t of data.tasks || []) {
+      const list = Array.isArray(t.attachments) ? t.attachments : [];
+      const att = list.find(x => x.id === attId);
+      if (att) {
+        return { owner: 'task', task: t, list, att, storageDir: path.join(IMAGES_DIR, '_task-' + t.id) };
+      }
+    }
+    for (const t of data.tasks || []) {
+      for (const s of t.subtasks || []) {
+        const list = Array.isArray(s.attachments) ? s.attachments : [];
+        const att = list.find(x => x.id === attId);
+        if (att) {
+          return { owner: 'sub', task: t, sub: s, list, att, storageDir: path.join(IMAGES_DIR, s.id) };
+        }
+      }
+    }
+    return null;
+  }
+
+  // 共享 helper：写入新附件（参数化以支持 task / sub）
+  async function writeAttachmentTo({ req, target, maxCount }) {
+    if (!req.body || !(req.body instanceof Buffer) || req.body.length === 0) {
+      return { error: '请求体为空', status: 400 };
+    }
+    if (req.body.length > MAX_IMAGE_BYTES) {
+      return { error: `单文件不得超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB`, status: 413 };
+    }
+    const originalName = String(req.get('X-Original-Name') || 'attachment').slice(0, 200);
+    const mimeType = String(req.get('X-Mime-Type') || 'application/octet-stream').slice(0, 120);
+    const ext = resolveExt({ originalName, mime: mimeType });
+    if (!ext) {
+      return { error: `不支持的文件类型（仅允许 ${[...ALLOWED_EXTS].join(', ')}）`, status: 400 };
+    }
+    if (!Array.isArray(target.attachments)) target.attachments = [];
+    if (target.attachments.length >= maxCount) {
+      return { error: `附件已达上限 ${maxCount} 个`, status: 400 };
+    }
+
+    const attId = genId();
+    await fsp.mkdir(target.storageDir, { recursive: true });
+    const storedName = `${attId}.${ext}`;
+    const storedPath = path.join(target.storageDir, storedName);
+    await fsp.writeFile(storedPath, req.body);
+
+    const attachment = {
+      id: attId,
+      originalName,
+      mimeType,
+      size: req.body.length,
+      ext,
+      storedName,
+      absolutePath: storedPath,
+      createdAt: nowIso()
+    };
+    target.attachments.push(attachment);
+    target.updatedAt = nowIso();
+    return { attachment };
+  }
+
+  // 子任务附件
   app.post('/api/workbench/subtasks/:subId/attachments', rawAttachment, async (req, res) => {
     try {
       const { subId } = req.params;
-      if (!req.body || !(req.body instanceof Buffer) || req.body.length === 0) {
-        return res.status(400).json({ success: false, error: '请求体为空' });
-      }
-      if (req.body.length > MAX_IMAGE_BYTES) {
-        return res.status(413).json({ success: false, error: `单文件不得超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB` });
-      }
-      const originalName = String(req.get('X-Original-Name') || 'attachment').slice(0, 200);
-      const mimeType = String(req.get('X-Mime-Type') || 'application/octet-stream').slice(0, 120);
-      const ext = resolveExt({ originalName, mime: mimeType });
-      if (!ext) {
-        return res.status(400).json({ success: false, error: `不支持的文件类型（仅允许 ${[...ALLOWED_EXTS].join(', ')}）` });
-      }
-
-      // 找到子任务，校验数量
       const data = await readJson(TASKS_FILE, { tasks: [] });
-      let foundTask = null;
       let foundSub = null;
       for (const t of data.tasks || []) {
         const s = (t.subtasks || []).find(x => x.id === subId);
-        if (s) { foundTask = t; foundSub = s; break; }
+        if (s) { foundSub = s; break; }
       }
       if (!foundSub) {
         return res.status(404).json({ success: false, error: '子任务不存在' });
       }
-      if (!Array.isArray(foundSub.attachments)) foundSub.attachments = [];
-      if (foundSub.attachments.length >= MAX_ATTACHMENTS_PER_SUBTASK) {
-        return res.status(400).json({
-          success: false,
-          error: `每个子任务最多 ${MAX_ATTACHMENTS_PER_SUBTASK} 个附件`
-        });
-      }
-
-      // 写入磁盘：~/.zen-gitsync/workbench-images/{subId}/{attId}.{ext}
-      const attId = genId();
-      const subDir = path.join(IMAGES_DIR, subId);
-      await fsp.mkdir(subDir, { recursive: true });
-      const storedName = `${attId}.${ext}`;
-      const storedPath = path.join(subDir, storedName);
-      await fsp.writeFile(storedPath, req.body);
-
-      const attachment = {
-        id: attId,
-        originalName,
-        mimeType,
-        size: req.body.length,
-        ext,
-        storedName,
-        // 绝对路径供 claude CLI 读取；同机直接读本地
-        absolutePath: storedPath,
-        createdAt: nowIso()
-      };
-      foundSub.attachments.push(attachment);
+      const target = { ...foundSub, storageDir: path.join(IMAGES_DIR, subId) };
+      const result = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_SUBTASK });
+      if (result.error) return res.status(result.status).json({ success: false, error: result.error });
+      // target 是 spread 出来的浅拷贝，data 引用里的 foundSub 没改；显式 push 回去
+      const att = result.attachment;
+      foundSub.attachments = Array.isArray(foundSub.attachments) ? foundSub.attachments : [];
+      foundSub.attachments.push(att);
       foundSub.updatedAt = nowIso();
       await writeJson(TASKS_FILE, data);
-
-      res.json({ success: true, attachment });
+      res.json({ success: true, attachment: att });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -1122,21 +1516,19 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     try {
       const { subId, attId } = req.params;
       const data = await readJson(TASKS_FILE, { tasks: [] });
-      let foundTask = null;
       let foundSub = null;
       for (const t of data.tasks || []) {
         const s = (t.subtasks || []).find(x => x.id === subId);
-        if (s) { foundTask = t; foundSub = s; break; }
+        if (s) { foundSub = s; break; }
       }
       if (!foundSub) return res.status(404).json({ success: false, error: '子任务不存在' });
       const list = Array.isArray(foundSub.attachments) ? foundSub.attachments : [];
       const i = list.findIndex(a => a.id === attId);
       if (i < 0) return res.status(404).json({ success: false, error: '附件不存在' });
       const [removed] = list.splice(i, 1);
-      // 删磁盘文件
       try {
         await fsp.unlink(path.join(IMAGES_DIR, subId, removed.storedName));
-      } catch { /* 文件可能已不存在，忽略 */ }
+      } catch { /* 文件可能已不存在 */ }
       foundSub.updatedAt = nowIso();
       await writeJson(TASKS_FILE, data);
       res.json({ success: true });
@@ -1145,25 +1537,58 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     }
   });
 
-  // 附件原文件读取（前端 <img> 缩略图用）
+  // 主任务附件
+  app.post('/api/workbench/tasks/:taskId/attachments', rawAttachment, async (req, res) => {
+    try {
+      const { taskId } = req.params;
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const task = (data.tasks || []).find(t => t.id === taskId);
+      if (!task) return res.status(404).json({ success: false, error: '任务不存在' });
+      const target = { ...task, storageDir: path.join(IMAGES_DIR, '_task-' + taskId) };
+      const result = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_SUBTASK });
+      if (result.error) return res.status(result.status).json({ success: false, error: result.error });
+      const att = result.attachment;
+      task.attachments = Array.isArray(task.attachments) ? task.attachments : [];
+      task.attachments.push(att);
+      task.updatedAt = nowIso();
+      await writeJson(TASKS_FILE, data);
+      res.json({ success: true, attachment: att });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/workbench/tasks/:taskId/attachments/:attId', async (req, res) => {
+    try {
+      const { taskId, attId } = req.params;
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const task = (data.tasks || []).find(t => t.id === taskId);
+      if (!task) return res.status(404).json({ success: false, error: '任务不存在' });
+      const list = Array.isArray(task.attachments) ? task.attachments : [];
+      const i = list.findIndex(a => a.id === attId);
+      if (i < 0) return res.status(404).json({ success: false, error: '附件不存在' });
+      const [removed] = list.splice(i, 1);
+      try {
+        await fsp.unlink(path.join(IMAGES_DIR, '_task-' + taskId, removed.storedName));
+      } catch { /* 文件可能已不存在 */ }
+      task.updatedAt = nowIso();
+      await writeJson(TASKS_FILE, data);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 附件原文件读取（前端 <img> 缩略图用）—— 支持 task 和 sub 两种归属
   app.get('/api/workbench/attachments/:attId/raw', async (req, res) => {
     try {
       const { attId } = req.params;
-      const data = await readJson(TASKS_FILE, { tasks: [] });
-      let found = null;
-      let parentSubId = null;
-      for (const t of data.tasks || []) {
-        for (const s of t.subtasks || []) {
-          const a = (s.attachments || []).find(x => x.id === attId);
-          if (a) { found = a; parentSubId = s.id; break; }
-        }
-        if (found) break;
-      }
-      if (!found) return res.status(404).json({ success: false, error: '附件不存在' });
-      const filePath = path.join(IMAGES_DIR, parentSubId, found.storedName);
+      const loc = await findAttachmentLocation(attId);
+      if (!loc) return res.status(404).json({ success: false, error: '附件不存在' });
+      const filePath = path.join(loc.storageDir, loc.att.storedName);
       try {
         const stat = await fsp.stat(filePath);
-        res.set('Content-Type', found.mimeType || 'application/octet-stream');
+        res.set('Content-Type', loc.att.mimeType || 'application/octet-stream');
         res.set('Content-Length', String(stat.size));
         res.set('Cache-Control', 'private, max-age=3600');
         const stream = (await import('fs')).createReadStream(filePath);

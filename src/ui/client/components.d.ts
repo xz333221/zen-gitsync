@@ -9,7 +9,9 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     ActivityBar: typeof import('./src/components/ActivityBar.vue')['default']
+    AISplitDialog: typeof import('./src/components/AISplitDialog.vue')['default']
     AppVersionBadge: typeof import('./src/components/AppVersionBadge.vue')['default']
+    AttachmentZone: typeof import('./src/components/AttachmentZone.vue')['default']
     BaseNode: typeof import('./src/components/flow/nodes/BaseNode.vue')['default']
     BranchSelector: typeof import('./src/components/BranchSelector.vue')['default']
     CodeNode: typeof import('./src/components/flow/nodes/CodeNode.vue')['default']
