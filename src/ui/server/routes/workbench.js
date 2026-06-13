@@ -69,24 +69,40 @@ const MAX_ATTACHMENTS_PER_SUBTASK = 9;
 // 中英两份都内置——用户保存到 ~/.zen-gitsync/ai-subtask-instruction.json 后覆盖。
 const DEFAULT_SUBTASK_INSTRUCTION_ZH = `你是一名任务拆分助手。
 
+【思考过程】
+在给出 JSON 之前，请先在内部仔细思考（如果模型支持，把思考放在 reasoning 中；否则可以先输出一段简短分析，再输出 JSON）：
+- 任务的真实目标是什么？用户提供的描述/图片/上下文里有哪些关键信息？
+- 涉及哪些技术栈、模块、文件、约束？是否有易被忽略的边界条件？
+- 自然的执行顺序是什么？哪些步骤是前置依赖？哪些可以并行？
+- 哪些步骤可能失败、需要单独验证？
+
 【拆分原则】
 1. 单一职责：每个子任务只做一件事，避免"做 A 和 B"。
 2. 粒度适中：单个子任务应当能在一次会话里完成（既不要"实现整个登录功能"这么大，也不要"打印 hello"这么琐碎）。
 3. 顺序合理：子任务按依赖关系和执行顺序排列（先准备、后实现、最后验证）。
 4. 可验证：每个子任务都有明确的完成标志（"输出文件 xxx"、"通过测试 yyy"、"控制台打印 zzz"）。
 5. 数量：拆成 3-6 个子任务为宜。任务很简单时 2-3 个；复杂时 5-6 个，不要超过 8 个。
+6. 描述具体：desc 字段要写清楚"要做什么、参考什么、产出什么"，不要只是把 title 改写一遍。
+7. 如果任务里附带了图片，必须基于图片的实际内容拆分（例如指出图片中的哪个区域、哪个元素需要改），而不是泛泛而谈。
 
 【输出要求】
-只返回 JSON，结构：
+最后必须输出 JSON，结构：
 {
   "subtasks": [
     { "title": "子任务标题（10-20字）", "desc": "子任务的具体描述，包含要做什么、输入是什么、输出/验证标志是什么" }
   ]
 }
 
-不要输出 JSON 之外的任何内容（不要解释、不要 markdown 代码块包裹）。`;
+JSON 要用 \`\`\`json ... \`\`\` 代码块包裹，前面可以有分析文字，但 JSON 必须完整、合法、可解析。`;
 
 const DEFAULT_SUBTASK_INSTRUCTION_EN = `You are a task breakdown assistant.
+
+[Thinking process]
+Before producing JSON, think carefully (put your thoughts in reasoning if the model supports it; otherwise output a short analysis first, then JSON):
+- What is the real goal? What key information is in the description / images / context?
+- Which stack, modules, files, constraints are involved? Any easily missed edge cases?
+- What is the natural execution order? What blocks what? What can run in parallel?
+- Which steps may fail and need separate verification?
 
 [Breakdown principles]
 1. Single responsibility: each subtask does only one thing, avoid bundling "do A and B".
@@ -94,16 +110,18 @@ const DEFAULT_SUBTASK_INSTRUCTION_EN = `You are a task breakdown assistant.
 3. Sensible order: arrange subtasks by dependency / execution order (prepare first, implement, then verify).
 4. Verifiable: every subtask has a clear completion signal (e.g. "produce file xxx", "pass test yyy", "log zzz to console").
 5. Quantity: prefer 3-6 subtasks. Very simple tasks 2-3, complex ones 5-6, never exceed 8.
+6. Concrete desc: write what to do, what to reference, what to produce — don't just paraphrase the title.
+7. If the task includes images, the breakdown must reference the actual image content (which region, which element to change), not just generic talk.
 
 [Output requirements]
-Return JSON only, structure:
+End with JSON, structure:
 {
   "subtasks": [
     { "title": "subtask title (10-20 chars)", "desc": "concrete description: what to do, what the input is, what the output / verification signal is" }
   ]
 }
 
-Return nothing outside JSON (no explanation, no markdown fences wrapping the JSON).`;
+Wrap the JSON in \`\`\`json ... \`\`\`. Analysis text before it is allowed, but the JSON must be complete and parseable.`;
 
 // 兼容旧引用
 const DEFAULT_SUBTASK_INSTRUCTION = DEFAULT_SUBTASK_INSTRUCTION_ZH
@@ -300,15 +318,25 @@ async function callLlmJson(model, prompt, opts = {}) {
  * 返回完整 content 字符串。
  */
 async function callLlmStream(model, prompt, onDelta, opts = {}) {
-  const { maxTokens = 2000, timeoutMs = 600000, signal } = opts
+  const { maxTokens = 2000, timeoutMs = 600000, signal, images = [] } = opts
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
   const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`
   const headers = { 'Content-Type': 'application/json' }
   if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`
 
+  let userContent
+  if (Array.isArray(images) && images.length > 0) {
+    userContent = [
+      { type: 'text', text: prompt },
+      ...images.map(img => ({ type: 'image_url', image_url: { url: img } }))
+    ]
+  } else {
+    userContent = prompt
+  }
+
   const body = JSON.stringify({
     model: model.model,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [{ role: 'user', content: userContent }],
     max_tokens: maxTokens,
     temperature: 0.4,
     // 注意：stream: true 模式下不能同时使用 response_format:{type:'json_object'}，
@@ -1074,18 +1102,49 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   });
 
   // POST /api/workbench/tasks/ai-split-subtasks
-  //   body: { title, desc }
-  //   →  { success, prompt: { system, user }, subtasks: [{title, desc}], raw }
-  // 注：早期版本曾尝试 SSE 流式（真 LLM stream + 模拟流分块），但在 SSE 模式下 LLM 调用
-  // 出现无法解释的"卡住"现象（怀疑 Express 5 + res.write() + 长 await 的交互问题）。
-  // 为保证稳定性，本接口退回一次性 JSON 响应；前端 AISplitDialog 拿到结果后用 setInterval
-  // 在前端"打字机"显示——视觉效果与 SSE 流式几乎一致，且不依赖后端实现。
+  //   body: { title, desc, taskId? }
+  //   →  SSE 流：
+  //        data:{"type":"meta","prompt":{system,user}}\n\n
+  //        data:{"type":"thinking","delta":"..."}\n\n   （多次）
+  //        data:{"type":"content","delta":"..."}\n\n    （多次）
+  //        data:{"type":"done","subtasks":[...],"raw":"..."}\n\n
+  //        data:{"type":"error","error":"..."}\n\n      （失败时）
+  //
+  // 走流式是为了让用户看到模型真实的 reasoning_content（如果模型支持），
+  // 而不是前端用 setInterval 假装"打字机"——拆分质量也会因为给了模型
+  // 充分的思考空间而显著提升。
   app.post('/api/workbench/tasks/ai-split-subtasks', async (req, res) => {
     const title = String(req.body?.title || '').trim();
     const desc = String(req.body?.desc || '').trim();
     const taskId = String(req.body?.taskId || '').trim();
+    const promptId = String(req.body?.promptId || '').trim();
     if (!title) {
       return res.status(400).json({ success: false, error: '任务标题不能为空' });
+    }
+
+    // 建立 SSE
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    res.flushHeaders?.();
+    const send = (obj) => {
+      try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {}
+    };
+
+    const abortController = new AbortController();
+    let finished = false; // 标记响应是否已正常结束
+    // 客户端真实断开：监听 socket close，而不是 req.close。
+    // Node 22+ 的 req 'close' 事件会在 HTTP keep-alive socket 池回收时过早触发，
+    // 导致正常请求中途被 abort。这里改用 socket 真实断开事件，
+    // 并只在响应还没 end 时才取消上游 LLM。
+    const onSocketClose = () => {
+      if (!finished) abortController.abort()
+    };
+    if (req.socket) {
+      req.socket.once('close', onSocketClose);
     }
 
     try {
@@ -1096,10 +1155,14 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
         const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
         model = models.find(m => m.isDefault) || models[0];
       } catch (err) {
-        return res.status(500).json({ success: false, error: '读取 AI 配置失败: ' + err.message });
+        send({ type: 'error', error: '读取 AI 配置失败: ' + err.message });
+        finished = true;
+        return res.end();
       }
       if (!model) {
-        return res.status(400).json({ success: false, error: '未配置 AI 模型，请先在通用设置中添加模型' });
+        send({ type: 'error', error: '未配置 AI 模型，请先在通用设置中添加模型' });
+        finished = true;
+        return res.end();
       }
 
       const userInstruction = await readSubtaskInstruction(req);
@@ -1107,8 +1170,20 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       const projectName = projectPath ? path.basename(projectPath) : '（未指定项目）';
       const manifestHint = await detectProjectManifest(projectPath);
 
-      // 取任务附件：让 LLM 在拆分时能"看见"用户上传的图片/文档
-      // 图片：转 data URL 走 OpenAI multimodal；非图片：在 prompt 里列出路径
+      // 取绑定的预置模板（promptId）：模板内容作为"执行模板"提示
+      // 让 LLM 拆分时知道：每个 sub 最终都会被这套模板包裹后送进 claude
+      let templateBlock = '';
+      if (promptId) {
+        try {
+          const promptData = await readJson(PROMPTS_FILE, { prompts: [] });
+          const p = (promptData.prompts || []).find(x => x.id === promptId);
+          if (p && p.content) {
+            templateBlock = `\n\n## 子任务执行模板（每个拆出的子任务最终会被这套模板包裹后送给 claude 执行；拆分时请确保子任务能让模板里的 {{sub.title}} / {{sub.desc}} 等变量填得有意义）\n模板名：${p.name || '（未命名）'}\n---\n${p.content}\n---`;
+          }
+        } catch { /* 模板读取失败不影响拆分 */ }
+      }
+
+      // 取任务附件
       let attachmentBlock = '';
       const imageDataUrls = [];
       if (taskId) {
@@ -1146,22 +1221,50 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
 
 ## 待拆分的任务
 标题：${title}
-${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}
+${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateBlock}
 
 ## 项目上下文（仅供参考，便于拆分时考虑项目特性）
 - 项目名称：${projectName}
 - 项目根目录：${projectPath || '（未指定）'}
 - 主要 manifest：${manifestHint || '（未识别到）'}
 
-只返回 JSON（不要 markdown 代码块包裹）：
+请先简要分析（可以放在 reasoning 中或直接写出来），然后给出 JSON。JSON 用 \`\`\`json ... \`\`\` 包裹：
 {
   "subtasks": [
     { "title": "子任务标题（10-20字）", "desc": "具体描述" }
   ]
 }`;
 
-      const result = await callLlmJson(model, userBlock, { maxTokens: 2000, timeoutMs: 600000, images: imageDataUrls });
-      const list = Array.isArray(result?.subtasks) ? result.subtasks : [];
+      // 先把 prompt 元信息推给前端
+      send({ type: 'meta', prompt: { system: userInstruction, user: userBlock } });
+
+      // 流式调用 LLM，把 thinking / content 实时回传
+      const { content, aborted } = await callLlmStream(
+        model,
+        userBlock,
+        (delta) => {
+          if (delta.thinking) send({ type: 'thinking', delta: delta.thinking });
+          if (delta.content) send({ type: 'content', delta: delta.content });
+        },
+        { maxTokens: 4000, timeoutMs: 600000, images: imageDataUrls, signal: abortController.signal }
+      );
+
+      if (aborted) {
+        send({ type: 'error', error: '已取消' });
+        finished = true;
+        return res.end();
+      }
+
+      // 解析 JSON：兼容 ```json ... ``` 代码块或裸 JSON
+      let parsed = {};
+      try {
+        const m = content.match(/```json\s*([\s\S]*?)```/i)
+          || content.match(/```\s*([\s\S]*?)```/)
+          || content.match(/(\{[\s\S]*\})/);
+        parsed = JSON.parse(m ? m[1] : content);
+      } catch { parsed = {}; }
+
+      const list = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
       const subtasks = list
         .map(s => ({
           title: String(s?.title || '').trim().slice(0, 80),
@@ -1170,18 +1273,13 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}
         .filter(s => s.title)
         .slice(0, 8);
 
-      // 同时返回完整原文 + 拼好的 prompt，让前端可以"模拟流"展示给用户
-      let raw = '';
-      try { raw = JSON.stringify(result, null, 2) } catch {}
-
-      res.json({
-        success: true,
-        prompt: { system: userInstruction, user: userBlock },
-        subtasks,
-        raw
-      });
+      send({ type: 'done', subtasks, raw: content });
+      finished = true;
+      res.end();
     } catch (err) {
-      res.status(500).json({ success: false, error: 'AI 拆分失败: ' + (err?.message || String(err)) });
+      send({ type: 'error', error: 'AI 拆分失败: ' + (err?.message || String(err)) });
+      finished = true;
+      res.end();
     }
   });
 

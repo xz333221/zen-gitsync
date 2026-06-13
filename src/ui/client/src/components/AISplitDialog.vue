@@ -31,6 +31,7 @@ const props = defineProps<{
   title: string
   desc: string
   taskId?: string
+  promptId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -50,8 +51,10 @@ const rawResponse = ref('')
 const subtasks = ref<SplitSubtask[]>([])
 const errorMessage = ref('')
 
-let typingTimer: number | null = null
 let abortController: AbortController | null = null
+// 每次 start 自增，回调里判断 nonce 是否匹配，过期请求的结果直接丢弃，
+// 避免连点 / watch 重复触发时旧流的 abort 把 phase 推到 error
+let runNonce = 0
 
 // ── 派生 ─────────────────────────────────────────────────────────────────
 const thinkingLen = computed(() => thinkingText.value.length)
@@ -60,16 +63,15 @@ const canConfirm = computed(() => phase.value === 'result' && subtasks.value.len
 const isRunning = computed(() => phase.value === 'running')
 
 // ── 行为 ─────────────────────────────────────────────────────────────────
+// 关闭意图只走 close()（用户点 X / 取消按钮 / ESC / 点遮罩）；
+// 不在 watch 的 else 里 abort——el-dialog 在打开瞬间会回弹一次 false，
+// 那种"假关闭"会把刚启动的 LLM 流打断。
 function close() {
   abortTyping()
   emit('update:modelValue', false)
 }
 
 function abortTyping() {
-  if (typingTimer) {
-    clearInterval(typingTimer)
-    typingTimer = null
-  }
   if (abortController) {
     abortController.abort()
     abortController = null
@@ -95,69 +97,92 @@ async function start() {
     return
   }
   reset()
+  const myNonce = ++runNonce
   phase.value = 'running'
   activeTab.value = 'thinking' // 默认展示"思考"tab
 
   abortController = new AbortController()
+  const myController = abortController
   try {
     const resp = await fetch('/api/workbench/tasks/ai-split-subtasks', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: props.title, desc: props.desc, taskId: props.taskId || '' }),
-      signal: abortController.signal
+      headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+      body: JSON.stringify({
+        title: props.title,
+        desc: props.desc,
+        taskId: props.taskId || '',
+        promptId: props.promptId || ''
+      }),
+      signal: myController.signal
     })
-    if (!resp.ok) {
+    if (myNonce !== runNonce) return // 已被新的 start 接替
+    if (!resp.ok || !resp.body) {
       const errText = await resp.text().catch(() => '')
       throw new Error(errText || `HTTP ${resp.status}`)
     }
-    const data = await resp.json()
-    if (!data.success) {
-      throw new Error(data.error || 'AI 拆分失败')
-    }
-    // 一次性拿到结果：前端"打字机"模拟流
-    systemPrompt.value = data.prompt?.system || ''
-    userPrompt.value = data.prompt?.user || ''
-    rawResponse.value = data.raw || ''
-    subtasks.value = Array.isArray(data.subtasks) ? data.subtasks : []
 
-    // thinking 用 LLM 原始 content 的"摘要"（用 raw 的前 N 字模拟"思考"过程）
-    // 真实 LLM 流才有真 thinking；这里取 raw 的 markdown 块之外的前缀作为"思考"
-    const fakeThinking = (() => {
-      // raw 形如 {"subtasks": [...]}，没有 thinking 字段
-      // 我们给"思考"一个 placeholder 提示，承认这是 LLM 的隐藏工作
-      return $t('@WORKBENCH:（AI 内部思考过程，模型未直接返回。可切换到「原始结果」查看 LLM 完整输出。）')
-    })()
-    thinkingText.value = fakeThinking
+    // ── 消费 SSE 流：每个 "data: {...}" 一帧 ──
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buf = ''
+    let doneEvent: { subtasks?: SplitSubtask[]; raw?: string } | null = null
 
-    // 用 setInterval 把 contentText 一字一字显示——"打字机"效果
-    const fullText = rawResponse.value
-    let i = 0
-    const chunkSize = 30
-    const interval = 20
-    typingTimer = window.setInterval(() => {
-      if (i >= fullText.length) {
-        if (typingTimer) { clearInterval(typingTimer); typingTimer = null }
-        // 打字完成 → 切到入库确认
-        if (subtasks.value.length > 0) {
-          activeTab.value = 'confirm'
-        } else {
-          activeTab.value = 'raw'
+    while (true) {
+      const { value, done } = await reader.read()
+      if (myNonce !== runNonce) return
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data:')) continue
+        const payload = trimmed.slice(5).trim()
+        if (!payload) continue
+        let evt: any
+        try { evt = JSON.parse(payload) } catch { continue }
+        switch (evt.type) {
+          case 'meta':
+            systemPrompt.value = evt.prompt?.system || ''
+            userPrompt.value = evt.prompt?.user || ''
+            break
+          case 'thinking':
+            thinkingText.value += String(evt.delta || '')
+            break
+          case 'content':
+            contentText.value += String(evt.delta || '')
+            break
+          case 'done':
+            doneEvent = evt
+            break
+          case 'error':
+            throw new Error(evt.error || 'AI 拆分失败')
         }
-        phase.value = 'result'
-        return
       }
-      contentText.value = fullText.slice(0, i + chunkSize)
-      i += chunkSize
-    }, interval)
-  } catch (err: any) {
-    if (err?.name === 'AbortError') {
-      // 用户主动关闭弹窗
-    } else {
-      phase.value = 'error'
-      errorMessage.value = err?.message || String(err)
     }
+
+    if (myNonce !== runNonce) return
+    if (!doneEvent) throw new Error($t('@WORKBENCH:AI 未返回结果'))
+
+    subtasks.value = Array.isArray(doneEvent.subtasks) ? doneEvent.subtasks : []
+    rawResponse.value = doneEvent.raw || contentText.value
+    // 若模型没吐 reasoning_content，给一个占位说明，避免空 tab 误导用户
+    if (!thinkingText.value) {
+      thinkingText.value = $t('@WORKBENCH:（当前模型未返回独立的思考内容，可切换到「原始结果」查看完整输出）')
+    }
+    phase.value = 'result'
+    activeTab.value = subtasks.value.length > 0 ? 'confirm' : 'raw'
+  } catch (err: any) {
+    console.log('[AI Split] catch err:', { name: err?.name, msg: err?.message, aborted: myController.signal.aborted, nonce: { mine: myNonce, cur: runNonce } })
+    if (myNonce !== runNonce) return // 旧请求被替代，不影响当前
+    if (err?.name === 'AbortError' || myController.signal.aborted) {
+      // 用户主动关闭/被替代——不刷成 error
+      return
+    }
+    phase.value = 'error'
+    errorMessage.value = err?.message || String(err)
   } finally {
-    abortController = null
+    if (myNonce === runNonce) abortController = null
   }
 }
 
@@ -171,13 +196,9 @@ function retry() {
   start()
 }
 
-// 打开弹窗时自动启动
+// 打开弹窗时自动启动；关闭意图由 close() 处理（见上注释）
 watch(() => props.modelValue, (v) => {
-  if (v) {
-    if (phase.value === 'idle') start()
-  } else {
-    if (isRunning.value) abortTyping()
-  }
+  if (v && phase.value === 'idle') start()
 })
 
 // ── 提示词编辑 ──────────────────────────────────────────────────────

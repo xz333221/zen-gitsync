@@ -1045,6 +1045,7 @@ function humanSize(n: number): string {
       :title="selectedTask.title"
       :desc="selectedTask.desc"
       :task-id="selectedTask.id"
+      :prompt-id="selectedTask.promptId"
       @confirm="applySplitResult"
     />
   </div>
