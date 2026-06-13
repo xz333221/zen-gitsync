@@ -63,6 +63,8 @@ interface Task {
   title: string
   desc: string
   promptId: string | null
+  // 任务所属项目根路径（创建时记录），用于侧边栏按项目分组显示
+  projectPath?: string
   subtasks: SubTask[]
   status: string
   attachments?: Attachment[]
@@ -156,6 +158,19 @@ function applyJobEvent(evt: string, payload: any) {
     if (i >= 0) jobs.value[i] = j
     else jobs.value.push(j)
     syncRunningCount()
+    return
+  }
+  if (evt === 'job:thinking-delta' || evt === 'job:output-delta') {
+    // 流式增量：服务端只发新增片段，避免每帧重复广播整段累积文本。
+    // 客户端按 id 找到对应 job，append 到对应字段即可。
+    const field = evt === 'job:thinking-delta' ? 'thinking' : 'output'
+    const delta: string = payload?.delta || ''
+    if (!delta) return
+    const i = jobs.value.findIndex(x => x.id === payload.id)
+    if (i < 0) return
+    const cur = (jobs.value[i] as any)[field] || ''
+    ;(jobs.value[i] as any)[field] = cur + delta
+    return
   }
   if (evt === 'sub:update') {
     const t = tasks.value.find(x => x.id === payload.taskId)
@@ -222,6 +237,50 @@ async function loadTasks() {
   }
   // 重新加载后立即拍快照——此时 UI 与磁盘一致
   captureSnapshot()
+}
+
+// 当前选中的项目路径 + 项目短名（用于侧边栏按项目分组显示）
+const currentProject = ref<{ path: string; name: string }>({ path: '', name: '' })
+async function loadCurrentProject() {
+  const res = await fetch('/api/workbench/current-project').then(r => r.json()).catch(() => ({}))
+  if (res && typeof res.projectPath === 'string') {
+    currentProject.value = { path: res.projectPath, name: res.projectName || '' }
+  }
+}
+// 任务列表按 projectPath 分组；同组内保持原有顺序
+const NO_PROJECT_KEY = '__no_project__'
+const groupedTasksList = computed(() => {
+  const list = tasks.value
+  const groups = new Map<string, Task[]>()
+  for (const t of list) {
+    const raw = (t.projectPath || '').trim()
+    const key = raw || NO_PROJECT_KEY
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(t)
+  }
+  const cur = currentProject.value.path
+  const keys = Array.from(groups.keys()).sort((a, b) => {
+    if (a === cur) return -1
+    if (b === cur) return 1
+    if (a === NO_PROJECT_KEY) return 1
+    if (b === NO_PROJECT_KEY) return -1
+    return a.localeCompare(b)
+  })
+  return {
+    groups: keys.map(path => ({
+      path,
+      label: path === NO_PROJECT_KEY ? $t('@WORKBENCH:未关联项目') : path,
+      tasks: groups.get(path)!
+    })),
+    hasMultiple: keys.length > 1
+  }
+})
+// 把完整路径压缩成"~/.../末级目录"形式，便于侧边栏显示
+function shortProjectLabel(fullPath: string): string {
+  if (!fullPath || fullPath === NO_PROJECT_KEY) return fullPath
+  const parts = fullPath.split(/[\\/]/).filter(Boolean)
+  if (parts.length <= 1) return fullPath
+  return parts.slice(-2).join('/')
 }
 async function loadJobs() {
   const res = await fetch('/api/workbench/jobs').then(r => r.json()).catch(() => ({ jobs: [] }))
@@ -377,12 +436,16 @@ async function saveTask() {
     ElMessage.warning($t('@WORKBENCH:标题必填'))
     return
   }
-  const body = {
+  const body: any = {
     id: taskDialog.editing?.id,
     title: taskDialog.title.trim(),
     desc: taskDialog.desc,
     promptId: taskDialog.promptId,
     subtasks: taskDialog.editing?.subtasks || []
+  }
+  // 新建任务时附带当前项目路径；编辑已有任务不覆盖 projectPath
+  if (!taskDialog.editing?.id && currentProject.value.path) {
+    body.projectPath = currentProject.value.path
   }
   const res = await fetch('/api/workbench/tasks', {
     method: 'POST',
@@ -603,7 +666,7 @@ async function cancelJob(j: Job) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadPrompts(), loadTasks(), loadJobs()])
+  await Promise.all([loadPrompts(), loadTasks(), loadCurrentProject(), loadJobs()])
   connectSSE()
 })
 onBeforeUnmount(() => {
@@ -636,6 +699,66 @@ function displayOutput(raw: string | undefined | null): string {
   if (!raw) return ''
   if (raw.length <= MAX_LOG_DISPLAY) return raw
   return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
+}
+
+/**
+ * 复制指定子任务 job 的某个字段（prompt / thinking / output）到剪贴板。
+ * 用 navigator.clipboard.writeText，回退到 execCommand('copy') 兼容老浏览器 / 非 HTTPS。
+ */
+async function copyJobField(subId: string, field: 'prompt' | 'thinking' | 'output') {
+  const job = jobOf(subId)
+  const text = (job as any)?.[field] || ''
+  if (!text) {
+    ElMessage.warning($t('@WORKBENCH:暂无内容可复制'))
+    return
+  }
+  const ok = await copyToClipboard(text)
+  if (ok) ElMessage.success($t('@WORKBENCH:已复制到剪贴板'))
+  else ElMessage.error($t('@WORKBENCH:复制失败'))
+}
+
+/**
+ * 一键复制完整对话：用户提示词 + 模型思考 + 模型输出，三段拼接。
+ * 用 --- 分隔 + 字段标签，方便粘贴到 issue / 笔记里追溯。
+ */
+async function copyJobAll(subId: string) {
+  const job = jobOf(subId)
+  if (!job) return
+  const sections: string[] = []
+  if (job.prompt) sections.push(`## ${$t('@WORKBENCH:用户提示词')}\n\n${job.prompt}`)
+  if (job.thinking) sections.push(`## ${$t('@WORKBENCH:Claude 思考')}\n\n${job.thinking}`)
+  if (job.output) sections.push(`## ${$t('@WORKBENCH:模型返回')}\n\n${job.output}`)
+  if (!sections.length) {
+    ElMessage.warning($t('@WORKBENCH:暂无内容可复制'))
+    return
+  }
+  const ok = await copyToClipboard(sections.join('\n\n---\n\n'))
+  if (ok) ElMessage.success($t('@WORKBENCH:已复制到剪贴板'))
+  else ElMessage.error($t('@WORKBENCH:复制失败'))
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* 权限拒绝 / 非安全上下文 → 走 textarea 兜底 */ }
+  // 兜底：临时 textarea + execCommand，仅在非 HTTPS / 旧浏览器生效
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
 }
 
 // ── 附件上传（主任务 + 子任务共用） ────────────────────────────────────
@@ -824,51 +947,81 @@ function humanSize(n: number): string {
           <span class="wb-new-btn__shortcut">N</span>
         </button>
 
+        <div v-if="tasks.length > 0 && currentProject.name" class="wb-current-project">
+          <el-icon class="wb-current-project__icon"><Folder /></el-icon>
+          <span class="wb-current-project__label">{{ $t('@WORKBENCH:当前项目') }}</span>
+          <span class="wb-current-project__name" :title="currentProject.path">{{ currentProject.name }}</span>
+        </div>
+
         <ul class="wb-task-list">
-          <li
-            v-for="t in tasks"
-            :key="t.id"
-            class="wb-task-item"
-            :class="{ active: t.id === selectedTaskId, 'has-attachment': attachmentCount(t) > 0 }"
-            :data-icon="pickTaskIcon(t.title)"
-            @click="selectTask(t)"
-          >
-            <div class="wb-task-item__avatar" :data-icon="pickTaskIcon(t.title)">
-              <el-icon><component :is="taskIconFor(t)" /></el-icon>
-            </div>
-            <div class="wb-task-item__body">
-              <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
-              <div class="wb-task-item__meta">
-                <span class="wb-task-item__meta-item" :title="$t('@WORKBENCH:个子任务')">
-                  <el-icon class="wb-task-item__meta-icon"><List /></el-icon>
-                  <span class="wb-task-item__num">{{ subtaskCount(t) }}</span>
-                </span>
-                <span
-                  v-if="attachmentCount(t) > 0"
-                  class="wb-task-item__meta-item"
-                  :title="$t('@WORKBENCH:附件')"
-                >
-                  <el-icon class="wb-task-item__meta-icon"><PictureIcon /></el-icon>
-                  <span class="wb-task-item__num">{{ attachmentCount(t) }}</span>
-                </span>
-                <span
-                  v-if="t.promptId"
-                  class="wb-task-item__meta-item wb-task-item__meta-item--accent"
-                  :title="$t('@WORKBENCH:已绑定预置提示词')"
-                >
-                  <el-icon class="wb-task-item__meta-icon"><Memo /></el-icon>
-                </span>
-              </div>
-            </div>
-            <button
-              class="wb-task-item__del"
-              @click.stop="deleteTask(t)"
-              :title="$t('@WORKBENCH:删除')"
-              :aria-label="$t('@WORKBENCH:删除')"
+          <template v-for="group in groupedTasksList.groups" :key="group.path">
+            <li
+              v-if="groupedTasksList.hasMultiple"
+              class="wb-task-group__head"
+              :class="{ 'is-current': group.path === currentProject.path }"
             >
-              <el-icon><Close /></el-icon>
-            </button>
-          </li>
+              <el-icon class="wb-task-group__icon"><Folder /></el-icon>
+              <span class="wb-task-group__name" :title="group.path === currentProject.path ? currentProject.path : group.label">
+                {{ group.path === currentProject.path ? currentProject.name : shortProjectLabel(group.label) }}
+              </span>
+              <span class="wb-task-group__count">{{ group.tasks.length }}</span>
+            </li>
+            <li
+              v-for="t in group.tasks"
+              :key="t.id"
+              class="wb-task-item"
+              :class="{
+                active: t.id === selectedTaskId,
+                'has-attachment': attachmentCount(t) > 0,
+                'is-other-project': t.projectPath && t.projectPath !== currentProject.path
+              }"
+              :data-icon="pickTaskIcon(t.title)"
+              @click="selectTask(t)"
+            >
+              <div class="wb-task-item__avatar" :data-icon="pickTaskIcon(t.title)">
+                <el-icon><component :is="taskIconFor(t)" /></el-icon>
+              </div>
+              <div class="wb-task-item__body">
+                <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
+                <div class="wb-task-item__meta">
+                  <span class="wb-task-item__meta-item" :title="$t('@WORKBENCH:个子任务')">
+                    <el-icon class="wb-task-item__meta-icon"><List /></el-icon>
+                    <span class="wb-task-item__num">{{ subtaskCount(t) }}</span>
+                  </span>
+                  <span
+                    v-if="attachmentCount(t) > 0"
+                    class="wb-task-item__meta-item"
+                    :title="$t('@WORKBENCH:附件')"
+                  >
+                    <el-icon class="wb-task-item__meta-icon"><PictureIcon /></el-icon>
+                    <span class="wb-task-item__num">{{ attachmentCount(t) }}</span>
+                  </span>
+                  <span
+                    v-if="t.promptId"
+                    class="wb-task-item__meta-item wb-task-item__meta-item--accent"
+                    :title="$t('@WORKBENCH:已绑定预置提示词')"
+                  >
+                    <el-icon class="wb-task-item__meta-icon"><Memo /></el-icon>
+                  </span>
+                  <span
+                    v-if="t.projectPath && t.projectPath !== currentProject.path"
+                    class="wb-task-item__meta-item wb-task-item__meta-item--project"
+                    :title="t.projectPath"
+                  >
+                    {{ shortProjectLabel(t.projectPath) }}
+                  </span>
+                </div>
+              </div>
+              <button
+                class="wb-task-item__del"
+                @click.stop="deleteTask(t)"
+                :title="$t('@WORKBENCH:删除')"
+                :aria-label="$t('@WORKBENCH:删除')"
+              >
+                <el-icon><Close /></el-icon>
+              </button>
+            </li>
+          </template>
           <li v-if="tasks.length === 0" class="wb-empty">
             <div class="wb-empty__icon">
               <el-icon><DocumentAdd /></el-icon>
@@ -901,6 +1054,13 @@ function humanSize(n: number): string {
             </div>
             <span class="wb-prompt-item__name" @click="openEditPrompt(p)" :title="p.content">
               {{ p.name }}
+            </span>
+            <span
+              v-if="currentProject.name"
+              class="wb-prompt-item__project"
+              :title="$t('@WORKBENCH:适用于当前项目') + '：' + currentProject.path"
+            >
+              {{ currentProject.name }}
             </span>
             <button
               class="wb-prompt-item__del"
@@ -1000,8 +1160,10 @@ function humanSize(n: number): string {
               'is-dirty': dirtySubIds.has(sub.id),
               'is-running': sub.status === 'running',
               'is-done': sub.status === 'done',
-              'is-collapsed': isSubCollapsed(sub)
+              'is-collapsed': isSubCollapsed(sub),
+              'is-clickable': isSubCollapsed(sub)
             }"
+            @click="isSubCollapsed(sub) && toggleSubExpand(sub)"
           >
             <!-- 折叠态：只显示徽标 + 标题 + 展开 + 取消完成 + 删除 -->
             <template v-if="isSubCollapsed(sub)">
@@ -1023,7 +1185,7 @@ function humanSize(n: number): string {
                   class="wb-sub-item__toggle"
                   :title="$t('@WORKBENCH:展开')"
                   :aria-label="$t('@WORKBENCH:展开')"
-                  @click="toggleSubExpand(sub)"
+                  @click.stop="toggleSubExpand(sub)"
                 >
                   <el-icon><ArrowDown /></el-icon>
                 </button>
@@ -1031,7 +1193,7 @@ function humanSize(n: number): string {
                   class="wb-sub-item__undo"
                   :title="$t('@WORKBENCH:取消完成')"
                   :aria-label="$t('@WORKBENCH:取消完成')"
-                  @click="cancelDone(sub)"
+                  @click.stop="cancelDone(sub)"
                 >
                   {{ $t('@WORKBENCH:取消完成') }}
                 </button>
@@ -1039,7 +1201,7 @@ function humanSize(n: number): string {
                   class="wb-sub-item__del"
                   :title="$t('@WORKBENCH:删除')"
                   :aria-label="$t('@WORKBENCH:删除')"
-                  @click="removeSubtask(sub)"
+                  @click.stop="removeSubtask(sub)"
                 >×</button>
               </div>
             </template>
@@ -1093,11 +1255,23 @@ function humanSize(n: number): string {
               :open="jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending'"
             >
               <summary class="wb-log-summary">
-                <span v-if="jobOf(sub.id)?.status === 'running'">● {{ $t('@WORKBENCH:正在执行…') }}</span>
-                <span v-else-if="jobOf(sub.id)?.status === 'pending'">{{ $t('@WORKBENCH:排队中…') }}</span>
-                <span v-else>{{ $t('@WORKBENCH:查看执行日志') }}</span>
-                <span class="wb-log-summary__meta">
-                  {{ (jobOf(sub.id)?.output || '').length }} {{ $t('@WORKBENCH:字符') }}
+                <span class="wb-log-summary__left">
+                  <span v-if="jobOf(sub.id)?.status === 'running'">● {{ $t('@WORKBENCH:正在执行…') }}</span>
+                  <span v-else-if="jobOf(sub.id)?.status === 'pending'">{{ $t('@WORKBENCH:排队中…') }}</span>
+                  <span v-else>{{ $t('@WORKBENCH:查看执行日志') }}</span>
+                </span>
+                <span class="wb-log-summary__right">
+                  <span class="wb-log-summary__meta">
+                    {{ (jobOf(sub.id)?.output || '').length }} {{ $t('@WORKBENCH:字符') }}
+                  </span>
+                  <button
+                    type="button"
+                    class="wb-log-copy"
+                    :title="$t('@WORKBENCH:复制全部（含提示词与输出）')"
+                    @click.stop="copyJobAll(sub.id)"
+                  >
+                    ⧉ {{ $t('@WORKBENCH:复制全部') }}
+                  </button>
                 </span>
               </summary>
 
@@ -1110,6 +1284,14 @@ function humanSize(n: number): string {
                   <span class="wb-log-section__count">
                     {{ (jobOf(sub.id)?.prompt || '').length }} {{ $t('@WORKBENCH:字符') }}
                   </span>
+                  <button
+                    type="button"
+                    class="wb-log-copy wb-log-copy--sm"
+                    :title="$t('@WORKBENCH:复制用户提示词')"
+                    @click.stop="copyJobField(sub.id, 'prompt')"
+                  >
+                    ⧉ {{ $t('@WORKBENCH:复制') }}
+                  </button>
                 </summary>
                 <pre class="wb-log-section__pre wb-log-section__pre--user">{{ jobOf(sub.id)?.prompt }}</pre>
               </details>
@@ -1123,10 +1305,32 @@ function humanSize(n: number): string {
                   <span class="wb-log-section__count">
                     {{ (jobOf(sub.id)?.thinking || '').length }} {{ $t('@WORKBENCH:字符') }}
                   </span>
+                  <button
+                    type="button"
+                    class="wb-log-copy wb-log-copy--sm"
+                    :title="$t('@WORKBENCH:复制思考内容')"
+                    @click.stop="copyJobField(sub.id, 'thinking')"
+                  >
+                    ⧉ {{ $t('@WORKBENCH:复制') }}
+                  </button>
                 </summary>
                 <pre class="wb-log-section__pre wb-log-section__pre--think">{{ jobOf(sub.id)?.thinking }}</pre>
               </details>
 
+              <div class="wb-log-pre__head">
+                <span class="wb-log-pre__label">{{ $t('@WORKBENCH:模型返回') }}</span>
+                <span class="wb-log-pre__meta">
+                  {{ (jobOf(sub.id)?.output || '').length }} {{ $t('@WORKBENCH:字符') }}
+                </span>
+                <button
+                  type="button"
+                  class="wb-log-copy wb-log-copy--sm"
+                  :title="$t('@WORKBENCH:复制模型返回')"
+                  @click.stop="copyJobField(sub.id, 'output')"
+                >
+                  ⧉ {{ $t('@WORKBENCH:复制') }}
+                </button>
+              </div>
               <pre :ref="setLogRef(sub.id)" class="wb-log-pre">{{ displayOutput(jobOf(sub.id)?.output) || $t('@WORKBENCH:（暂无输出）') }}</pre>
             </details>
             <AttachmentZone
@@ -1554,6 +1758,26 @@ function humanSize(n: number): string {
   font-weight: 500;
 }
 .wb-task-item__meta-item--accent { color: var(--color-primary); }
+/* 跨项目的任务：在 meta 行内加一个简短的项目名徽标，提示"这条是别的项目的" */
+.wb-task-item__meta-item--project {
+  display: inline-flex;
+  align-items: center;
+  height: 15px;
+  padding: 0 5px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 14%, transparent);
+  color: color-mix(in srgb, var(--color-warning, #f59e0b) 80%, var(--text-primary));
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 其他项目的任务卡片整体降饱和度，与当前项目任务视觉区分 */
+.wb-task-item.is-other-project { opacity: 0.78; }
+.wb-task-item.is-other-project:hover { opacity: 1; }
 .wb-task-item__meta-icon { font-size: 11px; opacity: 0.85; }
 .wb-task-item__num {
   /* 数字小徽标：与 .wb-section__count 风格对齐（圆角胶囊 + tnum） */
@@ -1639,6 +1863,7 @@ function humanSize(n: number): string {
 }
 .wb-prompt-item__name {
   flex: 1;
+  min-width: 0;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -1646,6 +1871,24 @@ function humanSize(n: number): string {
   color: var(--text-primary);
   font-weight: 500;
   letter-spacing: -0.05px;
+}
+/* 提示词项右侧的项目徽标——提示词本体跨项目共享，仅做"适用于当前项目"的视觉提示 */
+.wb-prompt-item__project {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wb-prompt-item__del {
   border: none;
@@ -1979,7 +2222,11 @@ function humanSize(n: number): string {
   border-radius: var(--radius-md);
   padding: 10px;
   transition: border-color 0.15s, box-shadow 0.15s;
-  overflow: hidden;
+  /* 单卡允许内部纵向滚动：执行中子任务展开日志/思考/附件后可能非常高，
+     让卡片自身在超出可视区时出现滚动条，避免把列表下方卡片挤出屏幕。
+     border-radius 配合 overflow:hidden 保持圆角裁切效果。 */
+  max-height: min(70vh, 720px);
+  overflow: auto;
 }
 .wb-sub-item.is-dirty {
   border-color: rgba(245, 158, 11, 0.55);
@@ -2187,6 +2434,13 @@ function humanSize(n: number): string {
 .wb-sub-item.is-done.is-collapsed {
   padding: 8px 10px;
 }
+/* 折叠态的整行可点击展开：cursor + hover 反馈，避免和展开态冲突 */
+.wb-sub-item.is-clickable { cursor: pointer; }
+.wb-sub-item.is-clickable:hover {
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--border-color));
+}
+.wb-sub-item.is-clickable:hover .wb-sub-item__title-compact { color: var(--color-primary); }
 .wb-sub-item__status {
   position: relative;
   font-size: 11px;
@@ -2320,7 +2574,77 @@ function humanSize(n: number): string {
 }
 .wb-log-summary::-webkit-details-marker { display: none; }
 .wb-log-summary:hover { background: rgba(59, 130, 246, 0.06); }
+.wb-log-summary__left {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.wb-log-summary__right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
 .wb-log-summary__meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 复制按钮：通用样式（日志面板 summary 上的小按钮） */
+.wb-log-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-container);
+  border: 1px solid var(--border-color-medium);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.wb-log-copy:hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  color: var(--color-primary);
+}
+.wb-log-copy:active {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+.wb-log-copy:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
+  outline-offset: 1px;
+}
+.wb-log-copy--sm {
+  padding: 1px 6px;
+  font-size: 10px;
+}
+
+/* 模型返回区头部（替代原先的 pre 顶部空白，给输出加个可复制的标签行） */
+.wb-log-pre__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-subtle, var(--bg-container));
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.wb-log-pre__label {
+  flex: 1;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.wb-log-pre__meta {
   font-size: 11px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
@@ -2328,7 +2652,7 @@ function humanSize(n: number): string {
 .wb-log-pre {
   margin: 0;
   padding: 8px 10px;
-  max-height: 240px;
+  max-height: 600px;
   overflow: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
@@ -2337,7 +2661,7 @@ function humanSize(n: number): string {
   background: var(--bg-code);
   white-space: pre-wrap;
   word-break: break-word;
-  border-top: 1px solid var(--border-color);
+  /* 顶部边框由 .wb-log-pre__head 提供，避免重复 */
 }
 
 /* ── 日志面板内的子块（用户提示词 / Claude 思考） ─────────────── */
@@ -2387,7 +2711,7 @@ function humanSize(n: number): string {
 .wb-log-section__pre {
   margin: 0;
   padding: 8px 10px;
-  max-height: 200px;
+  max-height: 800px;
   overflow: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
@@ -2569,4 +2893,81 @@ function humanSize(n: number): string {
   flex-shrink: 0;
 }
 .wb-attachment__del:hover { color: #ef4444; background: rgba(239,68,68,0.08); }
+
+/* ── 当前项目条（侧边栏任务列表上方） ─────────────────────── */
+.wb-current-project {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.wb-current-project__icon { color: var(--color-primary); font-size: 13px; flex-shrink: 0; }
+.wb-current-project__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+.wb-current-project__name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 任务分组头（多项目时按项目分组显示） ───────────────────────── */
+.wb-task-group__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  border-top: 1px dashed var(--border-color);
+}
+.wb-task-group__head:first-child { border-top: none; margin-top: 0; padding-top: 4px; }
+.wb-task-group__head.is-current {
+  color: var(--color-primary);
+  border-top-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+.wb-task-group__icon { font-size: 12px; flex-shrink: 0; opacity: 0.8; }
+.wb-task-group__name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-task-group__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.wb-task-group__head.is-current .wb-task-group__count {
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  color: var(--color-primary);
+}
 </style>

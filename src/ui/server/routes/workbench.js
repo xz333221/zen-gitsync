@@ -745,9 +745,11 @@ ${prompt}`
       //   assistant.thinking   → job.thinking  （折叠展示，让用户知道 Claude 在想）
       //   其他事件（init / tool_use / result 等）忽略，避免噪声
       // 解析失败的行原样进 output，便于排查协议异常。
-      // 过长时（>256KB）只截断尾部 256KB，避免内存膨胀。
-      const MAX_OUTPUT = 256 * 1024;
-      const MAX_THINKING = 64 * 1024;
+      // thinking 几乎不做服务端截断：Claude reasoning 一般在 KB~几十 MB 之间，
+// 100MB 兜底只是为了防止内存爆炸。流式 publish 时改推增量 delta（仅新拼接的
+// 那部分），终态或重连时才随 job:update 全量同步，避免每帧重复广播整个累积文本。
+      const MAX_OUTPUT = 100 * 1024 * 1024;
+      const MAX_THINKING = 100 * 1024 * 1024;
       job.output = '';
       job.thinking = '';
       const lineBuf = { stdout: '', stderr: '' };
@@ -757,12 +759,17 @@ ${prompt}`
         lineBuf[channel] += chunk;
         const lines = lineBuf[channel].split('\n');
         lineBuf[channel] = lines.pop() ?? ''; // 最后一段可能不完整，留给下次
+        let pendingThinkingDelta = '';
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed) continue;
           if (channel === 'stderr' || !trimmed.startsWith('{')) {
             // 非 stream-json 行：原样塞进 output（兼容老版本 claude / 错误信息）
+            const prevLen = job.output.length;
             job.output = (job.output + trimmed + '\n').slice(-MAX_OUTPUT);
+            // output 也用 delta 推送，前端按"以 length 为锚追加"语义合并
+            const delta = job.output.slice(prevLen);
+            if (delta) publish('job:output-delta', { id: job.id, delta });
             continue;
           }
           let evt;
@@ -772,13 +779,22 @@ ${prompt}`
           if (!Array.isArray(blocks)) continue;
           for (const b of blocks) {
             if (b.type === 'text' && typeof b.text === 'string') {
+              const prevLen = job.output.length;
               job.output = (job.output + b.text).slice(-MAX_OUTPUT);
+              const delta = job.output.slice(prevLen);
+              if (delta) publish('job:output-delta', { id: job.id, delta });
             } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
+              const prevLen = job.thinking.length;
               job.thinking = (job.thinking + b.thinking).slice(-MAX_THINKING);
+              const delta = job.thinking.slice(prevLen);
+              if (delta) pendingThinkingDelta += delta;
             }
           }
         }
-        publish('job:update', job);
+        // 一批 NDJSON 处理完后统一发一次 thinking delta，避免高频小块 socket 占用
+        if (pendingThinkingDelta) {
+          publish('job:thinking-delta', { id: job.id, delta: pendingThinkingDelta });
+        }
       };
       if (child.stdout) child.stdout.on('data', (buf) => parseLines('stdout', buf));
       if (child.stderr) child.stderr.on('data', (buf) => parseLines('stderr', buf));
@@ -788,7 +804,10 @@ ${prompt}`
       const wasCancelled = cancelledJobs.has(jobId)
       if (wasCancelled) cancelledJobs.delete(jobId)
       // 进程退出时 stdout 可能残留最后一段未换行的 NDJSON，flush 一次
+      // flush 内部也按 delta 推送，保持与流式阶段一致
       if (lineBuf.stdout.trim()) {
+        const outPrev = job.output.length;
+        const thinkPrev = job.thinking.length;
         try {
           const evt = JSON.parse(lineBuf.stdout.trim())
           if (evt.type === 'assistant' && Array.isArray(evt.message?.content)) {
@@ -801,6 +820,10 @@ ${prompt}`
             }
           }
         } catch { /* 不是 JSON，忽略 */ }
+        const outDelta = job.output.slice(outPrev);
+        if (outDelta) publish('job:output-delta', { id: job.id, delta: outDelta });
+        const thinkDelta = job.thinking.slice(thinkPrev);
+        if (thinkDelta) publish('job:thinking-delta', { id: job.id, delta: thinkDelta });
       }
       job.endedAt = nowIso();
       if (wasCancelled) {
@@ -1362,6 +1385,17 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
   });
 
+  // 当前选中的项目路径（侧边栏按项目分组时要用）
+  app.get('/api/workbench/current-project', async (_req, res) => {
+    try {
+      const projectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+      const projectName = projectPath ? projectPath.split(/[\\/]/).filter(Boolean).pop() : '';
+      res.json({ success: true, projectPath, projectName });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.post('/api/workbench/tasks', async (req, res) => {
     try {
       const { id, title, desc, promptId, subtasks } = req.body || {};
@@ -1369,6 +1403,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       const data = await readJson(TASKS_FILE, { tasks: [] });
       const tasks = data.tasks || [];
       const now = nowIso();
+      // 创建任务时记录当时所属项目；编辑已有任务不覆盖（避免切换项目后老任务被改归属）
+      const currentProjectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
       if (id) {
         const i = tasks.findIndex(t => t.id === id);
         if (i < 0) return res.status(404).json({ success: false, error: '任务不存在' });
@@ -1405,6 +1441,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         title,
         desc: desc || '',
         promptId: promptId || null,
+        projectPath: currentProjectPath || '',
         subtasks: Array.isArray(subtasks) ? subtasks.map(s => ({
           id: s.id || genId(),
           title: s.title || '',

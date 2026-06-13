@@ -102,7 +102,9 @@ export default defineConfig(({ command }) => {
     },
   },
   server: {
+    // 默认 5544；如果被占用则自动顺延下一个可用端口，避免与已有的 zen-git 实例冲突
     port: 5544,
+    strictPort: false,
     open: true,
     // watch: {
     //   // 忽略构建输出目录，避免 build 时触发热更新
