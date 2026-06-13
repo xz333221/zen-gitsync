@@ -1071,6 +1071,13 @@ function humanSize(n: number): string {
               >
                 <el-icon><ArrowUp /></el-icon>
               </button>
+              <button
+                v-if="sub.status === 'done'"
+                class="wb-sub-item__undo"
+                :title="$t('@WORKBENCH:取消完成')"
+                :aria-label="$t('@WORKBENCH:取消完成')"
+                @click="cancelDone(sub)"
+              >{{ $t('@WORKBENCH:取消完成') }}</button>
               <button class="wb-sub-item__del" @click="removeSubtask(sub)">×</button>
             </div>
             <textarea
