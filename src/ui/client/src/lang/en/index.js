@@ -1783,5 +1783,9 @@ export default {
   '@WORKBENCH:排队中': 'Queued',
   '@WORKBENCH:新子任务': 'New subtask',
   '@WORKBENCH:…（前文已截断）': '…(earlier output truncated)',
+  '@WORKBENCH:取消完成': 'Mark as not done',
+  '@WORKBENCH:展开': 'Expand',
+  '@WORKBENCH:收起': 'Collapse',
+  '@WORKBENCH:未命名子任务': 'Untitled subtask',
   // @WORKBENCH: file end
 }

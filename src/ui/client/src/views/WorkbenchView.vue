@@ -25,7 +25,9 @@ import {
   Document as DocumentIcon,
   DocumentAdd,
   Memo,
-  EditPen
+  EditPen,
+  ArrowDown,
+  ArrowUp
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
@@ -546,6 +548,32 @@ function statusColor(s: string) {
   }
 }
 
+// ── 已完成子任务折叠 ─────────────────────────────────────────────────────
+// 已完成的 sub 默认折叠成单行（只显示徽标 + 标题 + 展开 + 取消完成），
+// 长任务下让用户聚焦于未完成项。点"展开"手动打开看 desc/附件/历史日志。
+const expandedSubIds = ref<Set<string>>(new Set())
+function isSubCollapsed(sub: SubTask): boolean {
+  if (sub.status !== 'done') return false
+  return !expandedSubIds.value.has(sub.id)
+}
+function toggleSubExpand(sub: SubTask) {
+  if (expandedSubIds.value.has(sub.id)) expandedSubIds.value.delete(sub.id)
+  else expandedSubIds.value.add(sub.id)
+  // 触发响应式更新（Set 本身不响应）
+  expandedSubIds.value = new Set(expandedSubIds.value)
+}
+async function cancelDone(sub: SubTask) {
+  if (!selectedTask.value) return
+  // 把磁盘快照里这条 sub 的 status 一起改回 todo，避免 dirty 误标
+  const snap = diskSnapshot.value.get(sub.id)
+  if (snap) {
+    diskSnapshot.value.set(sub.id, { ...snap, status: 'todo' } as any)
+  }
+  sub.status = 'todo'
+  // 静默落盘：让后端 runTaskQueue 在下次执行时把这 sub 重新纳入队列
+  await persistTask(false)
+}
+
 /**
  * 取消正在执行的 job。点击后会弹确认，确认后调后端 cancel 接口。
  * 取消的语义只影响这一个 sub：已输出的内容保留，同 task 后续 sub 仍按队列继续执行。
@@ -970,9 +998,53 @@ function humanSize(n: number): string {
             class="wb-sub-item"
             :class="{
               'is-dirty': dirtySubIds.has(sub.id),
-              'is-running': sub.status === 'running'
+              'is-running': sub.status === 'running',
+              'is-done': sub.status === 'done',
+              'is-collapsed': isSubCollapsed(sub)
             }"
           >
+            <!-- 折叠态：只显示徽标 + 标题 + 展开 + 取消完成 + 删除 -->
+            <template v-if="isSubCollapsed(sub)">
+              <div class="wb-sub-item__row wb-sub-item__row--compact">
+                <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
+                  {{ statusLabel(sub.status) }}
+                </span>
+                <span class="wb-sub-item__title-compact" :title="sub.title">
+                  {{ sub.title || $t('@WORKBENCH:未命名子任务') }}
+                </span>
+                <span
+                  v-if="jobOf(sub.id)"
+                  class="wb-sub-item__pid"
+                  :title="$t('@WORKBENCH:进程ID')"
+                >
+                  PID: {{ jobOf(sub.id)?.pid }}
+                </span>
+                <button
+                  class="wb-sub-item__toggle"
+                  :title="$t('@WORKBENCH:展开')"
+                  :aria-label="$t('@WORKBENCH:展开')"
+                  @click="toggleSubExpand(sub)"
+                >
+                  <el-icon><ArrowDown /></el-icon>
+                </button>
+                <button
+                  class="wb-sub-item__undo"
+                  :title="$t('@WORKBENCH:取消完成')"
+                  :aria-label="$t('@WORKBENCH:取消完成')"
+                  @click="cancelDone(sub)"
+                >
+                  {{ $t('@WORKBENCH:取消完成') }}
+                </button>
+                <button
+                  class="wb-sub-item__del"
+                  :title="$t('@WORKBENCH:删除')"
+                  :aria-label="$t('@WORKBENCH:删除')"
+                  @click="removeSubtask(sub)"
+                >×</button>
+              </div>
+            </template>
+            <!-- 展开态：完整表单 -->
+            <template v-else>
             <div class="wb-sub-item__row">
               <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
                 {{ statusLabel(sub.status) }}
@@ -990,6 +1062,15 @@ function humanSize(n: number): string {
                 :title="$t('@WORKBENCH:停止执行')"
                 @click="cancelJob(jobOf(sub.id)!)"
               >{{ $t('@WORKBENCH:停止') }}</button>
+              <button
+                v-if="sub.status === 'done'"
+                class="wb-sub-item__toggle"
+                :title="$t('@WORKBENCH:收起')"
+                :aria-label="$t('@WORKBENCH:收起')"
+                @click="toggleSubExpand(sub)"
+              >
+                <el-icon><ArrowUp /></el-icon>
+              </button>
               <button class="wb-sub-item__del" @click="removeSubtask(sub)">×</button>
             </div>
             <textarea
@@ -1056,6 +1137,7 @@ function humanSize(n: number): string {
               @dragenter.prevent="pasteHoverId = sub.id"
               @dragleave="pasteHoverId = (pasteHoverId === sub.id ? null : pasteHoverId)"
             />
+            </template>
           </li>
           <li v-if="selectedTask.subtasks.length === 0" class="wb-empty wb-empty--rich">
             <div class="wb-empty__art" aria-hidden="true">
@@ -2014,6 +2096,89 @@ function humanSize(n: number): string {
   gap: 8px;
   align-items: center;
   margin-bottom: 6px;
+}
+
+/* ── 折叠态：紧凑单行 ─────────────────────────────────────── */
+.wb-sub-item__row--compact {
+  margin-bottom: 0;
+  cursor: default;
+  gap: 6px;
+}
+.wb-sub-item__title-compact {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.05px;
+  line-height: 1.3;
+  /* 已完成的标题：略灰，区别于进行中 */
+  text-decoration: line-through;
+  text-decoration-color: var(--border-color);
+  text-decoration-thickness: 1px;
+}
+.wb-sub-item__toggle {
+  border: 1px solid var(--border-color-medium);
+  background: var(--bg-container);
+  color: var(--text-tertiary);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm, 4px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: background var(--transition-fast) var(--ease-custom),
+              border-color var(--transition-fast) var(--ease-custom),
+              color var(--transition-fast) var(--ease-custom);
+}
+.wb-sub-item__toggle:hover {
+  background: var(--bg-container-hover);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.wb-sub-item__toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.wb-sub-item__undo {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  padding: 0 8px;
+  height: 24px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast) var(--ease-custom),
+              border-color var(--transition-fast) var(--ease-custom),
+              color var(--transition-fast) var(--ease-custom);
+}
+.wb-sub-item__undo:hover {
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container));
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark, var(--color-primary));
+}
+.wb-sub-item__undo:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* ── 已完成态：绿色微底 + 圆角柔化（与执行中红色脉冲对比） ─────────── */
+.wb-sub-item.is-done:not(.is-running) {
+  border-color: color-mix(in srgb, #22c55e 30%, transparent);
+  background: color-mix(in srgb, #22c55e 4%, var(--bg-container));
+}
+.wb-sub-item.is-done.is-collapsed {
+  padding: 8px 10px;
 }
 .wb-sub-item__status {
   position: relative;

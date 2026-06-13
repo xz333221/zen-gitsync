@@ -1790,5 +1790,9 @@ export default {
   '@WORKBENCH:排队中': '排队中',
   '@WORKBENCH:新子任务': '新子任务',
   '@WORKBENCH:…（前文已截断）': '…（前文已截断）',
+  '@WORKBENCH:取消完成': '取消完成',
+  '@WORKBENCH:展开': '展开',
+  '@WORKBENCH:收起': '收起',
+  '@WORKBENCH:未命名子任务': '未命名子任务',
   // @WORKBENCH: file end
 }
