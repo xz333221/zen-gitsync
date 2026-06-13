@@ -139,57 +139,100 @@ function closePreview() {
    或使用 :deep() 包裹。简化方案：样式与父组件重复（保持非 scoped 即可）。 */
 .wb-attachments {
   margin-top: 6px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm, 4px);
-  background: var(--bg-subtle, var(--bg-container));
+  border: 1px solid var(--border-color-medium);
+  border-radius: var(--radius-md);
+  background: var(--bg-container);
   overflow: hidden;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color var(--transition-fast) var(--ease-custom),
+    background var(--transition-fast) var(--ease-custom),
+    box-shadow var(--transition-fast) var(--ease-custom);
   flex-shrink: 0;
 }
 .wb-attachments.is-paste-hover {
   border-color: var(--color-primary);
-  background: rgba(59, 130, 246, 0.06);
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
   box-shadow: inset 0 0 0 1px var(--color-primary);
 }
 .wb-attachments__paste-hint {
-  padding: 4px 10px;
+  padding: 5px 10px;
   background: var(--color-primary);
   color: #fff;
   font-size: 12px;
+  font-weight: 500;
   text-align: center;
   border-top: 1px solid var(--border-color);
+  letter-spacing: 0.2px;
 }
 .wb-attachments__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 8px 12px;
+  font-size: 12.5px;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color);
+  min-height: 36px;
+  box-sizing: border-box;
 }
-.wb-attachments__label { display: inline-flex; gap: 6px; align-items: center; }
+.wb-attachments__label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.1px;
+}
 .wb-attachments__count {
   font-variant-numeric: tabular-nums;
   color: var(--text-tertiary);
   font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  line-height: 1.4;
+  letter-spacing: 0.2px;
 }
 .wb-attachments__add {
-  border: 1px solid var(--border-color);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color-medium);
   background: var(--bg-container);
-  color: var(--text-primary);
+  color: var(--color-primary);
   font-size: 12px;
-  padding: 3px 10px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
-  transition: background 0.15s;
+  transition:
+    background var(--transition-fast) var(--ease-custom),
+    border-color var(--transition-fast) var(--ease-custom),
+    color var(--transition-fast) var(--ease-custom),
+    box-shadow var(--transition-fast) var(--ease-custom),
+    transform var(--transition-fast) var(--ease-custom);
 }
 .wb-attachments__add:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.08);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-container));
+  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  color: var(--color-primary-dark);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
-.wb-attachments__add:disabled { opacity: 0.5; cursor: not-allowed; }
+.wb-attachments__add:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+.wb-attachments__add:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.wb-attachments__add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .wb-attachments__list {
   list-style: none;
   margin: 0;
