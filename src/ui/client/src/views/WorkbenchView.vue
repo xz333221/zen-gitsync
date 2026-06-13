@@ -35,8 +35,7 @@ interface Attachment {
   mimeType: string
   size: number
   ext: string
-  storedName: string
-  absolutePath: string
+  absolutePath?: string
   createdAt?: string
 }
 interface SubTask {
@@ -588,28 +587,28 @@ function ensureFile(blob: Blob, fallbackName: string): File {
 
 /** 附件归属：主任务 或 子任务，决定 URL/存储位置 */
 type AttachmentTarget =
-  | { kind: 'task'; task: Task }
-  | { kind: 'sub'; task: Task; sub: SubTask }
+  | { kind: 'task'; task: Task | null }
+  | { kind: 'sub'; task: Task | null; sub: SubTask }
 
 function targetKey(t: AttachmentTarget): string {
-  return t.kind === 'task' ? `task-${t.task.id}` : `sub-${t.sub.id}`
+  return t.kind === 'task' ? `task-${t.task?.id ?? ''}` : `sub-${t.sub.id}`
 }
 function targetAttachments(t: AttachmentTarget): Attachment[] {
-  const arr = t.kind === 'task' ? t.task.attachments : t.sub.attachments
+  const arr = t.kind === 'task' ? t.task?.attachments : t.sub.attachments
   return Array.isArray(arr) ? (arr as Attachment[]) : []
 }
 function setTargetAttachments(t: AttachmentTarget, att: Attachment[]) {
-  if (t.kind === 'task') t.task.attachments = att
+  if (t.kind === 'task') { if (t.task) t.task.attachments = att }
   else t.sub.attachments = att
 }
 function targetUploadUrl(t: AttachmentTarget): string {
   return t.kind === 'task'
-    ? `/api/workbench/tasks/${t.task.id}/attachments`
+    ? `/api/workbench/tasks/${t.task?.id ?? ''}/attachments`
     : `/api/workbench/subtasks/${t.sub.id}/attachments`
 }
 function targetDeleteUrl(t: AttachmentTarget, attId: string): string {
   return t.kind === 'task'
-    ? `/api/workbench/tasks/${t.task.id}/attachments/${attId}`
+    ? `/api/workbench/tasks/${t.task?.id ?? ''}/attachments/${attId}`
     : `/api/workbench/subtasks/${t.sub.id}/attachments/${attId}`
 }
 
