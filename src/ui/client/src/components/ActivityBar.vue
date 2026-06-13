@@ -42,8 +42,9 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         :class="{ active: props.activeView === 'git' }"
         @click="select('git')"
         :aria-label="$t('@ACTBAR:Git')"
+        :aria-pressed="props.activeView === 'git'"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
           <!-- 分支图：左下 main，右下 feature，右上 head 合并 -->
           <circle cx="6" cy="19" r="2.2" fill="var(--bg-container)"/>
           <circle cx="18" cy="19" r="2.2" fill="var(--bg-container)"/>
@@ -62,8 +63,9 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         :class="{ active: props.activeView === 'editor' }"
         @click="select('editor')"
         :aria-label="$t('@ACTBAR:编辑器')"
+        :aria-pressed="props.activeView === 'editor'"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
           <!-- 文件折角：轮廓 + 折页 -->
           <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/>
           <polyline points="14 3 14 8 19 8"/>
@@ -82,8 +84,9 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         :class="{ active: props.activeView === 'source-map' }"
         @click="select('source-map')"
         :aria-label="$t('@ACTBAR:源码地图')"
+        :aria-pressed="props.activeView === 'source-map'"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
           <!-- 中心节点 + 四个外围节点 + 连线（关系图谱） -->
           <circle cx="12" cy="12" r="2.2"/>
           <circle cx="4.5" cy="4.5" r="1.7" fill="var(--bg-container)"/>
@@ -105,8 +108,9 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         :class="{ active: props.activeView === 'workbench' }"
         @click="select('workbench')"
         :aria-label="$t('@ACTBAR:工作台')"
+        :aria-pressed="props.activeView === 'workbench'"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
           <!-- 仪表板：外框 + 左侧导航 + 右侧 2x2 卡片网格 -->
           <rect x="3" y="4" width="18" height="16" rx="2.2"/>
           <line x1="9" y1="4" x2="9" y2="20"/>
@@ -139,14 +143,15 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 0;
-  gap: 4px;
+  padding: 10px 0;
+  gap: 6px;
   background: var(--bg-container);
   border-right: 1px solid var(--border-color);
   border-radius: 0;
   box-shadow: var(--shadow-sm);
 }
 
+/* ── 单个活动按钮 ─────────────────────────────────────────────── */
 .activity-btn {
   width: 36px;
   height: 36px;
@@ -155,36 +160,69 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   justify-content: center;
   border: none;
   background: transparent;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
   padding: 0;
   position: relative;
+  /* 颜色 + 背景平滑过渡 */
+  transition:
+    color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
 }
 
+/* hover：图标变深灰 */
 .activity-btn:hover {
+  color: var(--text-secondary);
   background: var(--bg-hover);
-  color: var(--text-primary);
 }
 
+/* 键盘聚焦：可见焦点环 */
+.activity-btn:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 55%, transparent);
+}
+
+/* ── 选中态：品牌色图标 + 淡色背景填充 ─────────────────────────── */
 .activity-btn.active {
   color: var(--color-primary);
-  background: rgba(59, 130, 246, 0.1);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
+/* 左侧高亮指示条（VS Code 风格） */
 .activity-btn.active::before {
   content: '';
   position: absolute;
-  left: -4px;
+  left: -6px;
   top: 50%;
-  transform: translateY(-50%);
   width: 3px;
-  height: 20px;
+  height: 24px;
   background: var(--color-primary);
   border-radius: 0 2px 2px 0;
+  transform: translateY(-50%) scaleY(1);
+  box-shadow: 0 0 8px 0 color-mix(in srgb, var(--color-primary) 55%, transparent);
+  /* 从 0 高度展开，避免初次渲染跳动 */
+  animation: actbar-indicator-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
 }
 
+/* active 态的图标轻微缩放，增强反馈 */
+.activity-btn.active svg {
+  transform: scale(1.06);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.activity-btn svg {
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 按下反馈 */
+.activity-btn:active:not(.active) {
+  transform: scale(0.94);
+}
+
+/* ── 预留样式：暂未启用的 Tab ─────────────────────────────────── */
 .activity-btn--soon {
   opacity: 0.35;
   cursor: not-allowed;
@@ -208,11 +246,33 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   animation: wb-dot-pulse 1.5s ease-in-out infinite;
   pointer-events: none;
 }
+
 @keyframes wb-dot-pulse {
   0%, 100% { transform: scale(1);   opacity: 1; }
   50%      { transform: scale(1.3); opacity: 0.55; }
 }
+
+/* 左侧指示条进入动画 */
+@keyframes actbar-indicator-in {
+  from {
+    transform: translateY(-50%) scaleY(0.2);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(-50%) scaleY(1);
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .wb-running-dot { animation: none; }
+  .wb-running-dot,
+  .activity-btn.active::before {
+    animation: none;
+  }
+  .activity-btn,
+  .activity-btn svg,
+  .activity-btn.active svg {
+    transition: none;
+  }
 }
 </style>
