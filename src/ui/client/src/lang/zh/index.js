@@ -1723,6 +1723,8 @@ export default {
   '@WORKBENCH:添加附件': '添加附件',
   '@WORKBENCH:上传中…': '上传中…',
   '@WORKBENCH:已添加：': '已添加：',
+  '@WORKBENCH:已存在，已复用': '已存在，已复用',
+  '@WORKBENCH:保存中…': '保存中…',
   '@WORKBENCH:不支持的文件类型': '不支持的文件类型',
   '@WORKBENCH:粘贴图片以快速添加': '可直接粘贴图片（Ctrl/⌘ + V）',
   '@WORKBENCH:超过 5MB 限制': '超过 5MB 限制',

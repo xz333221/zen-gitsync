@@ -1716,6 +1716,8 @@ export default {
   '@WORKBENCH:添加附件': 'Add attachment',
   '@WORKBENCH:上传中…': 'Uploading…',
   '@WORKBENCH:已添加：': 'Added: ',
+  '@WORKBENCH:已存在，已复用': 'already attached, reused',
+  '@WORKBENCH:保存中…': 'Saving…',
   '@WORKBENCH:不支持的文件类型': 'Unsupported file type',
   '@WORKBENCH:粘贴图片以快速添加': 'You can paste images (Ctrl/⌘ + V)',
   '@WORKBENCH:超过 5MB 限制': 'exceeds the 5MB limit',

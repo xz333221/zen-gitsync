@@ -88,11 +88,15 @@ const activeView = ref<'editor' | 'logs'>('editor')
 const selectedTaskId = ref<string | null>(null)
 const selectedTask = computed<Task | null>(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
 
-// 当前选中 task 在磁盘上的子任务快照（仅含参与 dirty 比较的字段）。
-// 用于标记哪些 sub 被改过但没点"保存拆分"。
+// 当前选中 task 在磁盘上的快照（参与 dirty 比较的字段）。
+// 拆为两份：subSnapshot 记每个 sub 的 title/desc/promptOverride，
+// metaSnapshot 记 task 自身的 title/desc/promptId。
+// 任务级 title/desc/promptId 改动走"防抖自动保存"，不在这里 dirty 提示。
 // - captureSnapshot()  在 loadTasks / persistTask 成功后 / 切换 selectedTaskId 时调用
-// - dirtySubIds 是计算属性，对比 selectedTask.subtasks 与 diskSnapshot
-const diskSnapshot = ref<Map<string, { id: string; title: string; desc: string; promptOverride: string }>>(new Map())
+// - dirtySubIds 对比 selectedTask.subtasks 与 subSnapshot
+// - metaDirty    对比 selectedTask.{title,desc,promptId} 与 metaSnapshot
+const subSnapshot = ref<Map<string, { id: string; title: string; desc: string; promptOverride: string }>>(new Map())
+const metaSnapshot = ref<{ title: string; desc: string; promptId: string | null }>({ title: '', desc: '', promptId: null })
 
 function captureSnapshot() {
   const m = new Map<string, { id: string; title: string; desc: string; promptOverride: string }>()
@@ -101,14 +105,23 @@ function captureSnapshot() {
       m.set(s.id, { id: s.id, title: s.title, desc: s.desc, promptOverride: s.promptOverride })
     }
   }
-  diskSnapshot.value = m
+  subSnapshot.value = m
+  if (selectedTask.value) {
+    metaSnapshot.value = {
+      title: selectedTask.value.title,
+      desc: selectedTask.value.desc,
+      promptId: selectedTask.value.promptId
+    }
+  } else {
+    metaSnapshot.value = { title: '', desc: '', promptId: null }
+  }
 }
 
 const dirtySubIds = computed<Set<string>>(() => {
   const dirty = new Set<string>()
   if (!selectedTask.value) return dirty
   for (const s of selectedTask.value.subtasks) {
-    const snap = diskSnapshot.value.get(s.id)
+    const snap = subSnapshot.value.get(s.id)
     if (!snap) {
       // 新增的 sub（快照里没有）也算 dirty
       dirty.add(s.id)
@@ -122,6 +135,86 @@ const dirtySubIds = computed<Set<string>>(() => {
 })
 
 const hasDirtySubtasks = computed(() => dirtySubIds.value.size > 0)
+
+// ── 任务级字段（title / desc / promptId）自动保存 ────────────────────
+// 改动后 1.5s 防抖自动落盘；切走/关页面前再 flush 一次。
+// 状态机：idle → saving → saved(显示时间) → idle；失败回到 idle + 弹错。
+type MetaSaveState = 'idle' | 'saving' | 'saved' | 'error'
+const metaSaveState = ref<MetaSaveState>('idle')
+const metaSavedAt = ref<number>(0)  // 上次成功落盘的时间戳
+let metaSaveTimer: number | null = null
+let metaFlushTimer: number | null = null
+
+const metaDirty = computed(() => {
+  if (!selectedTask.value) return false
+  const t = selectedTask.value
+  return metaSnapshot.value.title !== t.title
+    || metaSnapshot.value.desc !== t.desc
+    || metaSnapshot.value.promptId !== t.promptId
+})
+
+function clearMetaSaveTimers() {
+  if (metaSaveTimer !== null) { clearTimeout(metaSaveTimer); metaSaveTimer = null }
+  if (metaFlushTimer !== null) { clearTimeout(metaFlushTimer); metaFlushTimer = null }
+}
+
+async function flushMetaSave(): Promise<boolean> {
+  if (!selectedTask.value) return false
+  if (!metaDirty.value) return true
+  metaSaveState.value = 'saving'
+  const ok = await persistTask(false)
+  if (ok) {
+    metaSavedAt.value = Date.now()
+    metaSaveState.value = 'saved'
+    // 4s 后自动回到 idle，避免 UI 长期挂着 "已保存"
+    setTimeout(() => {
+      if (metaSaveState.value === 'saved' && Date.now() - metaSavedAt.value >= 4000) {
+        metaSaveState.value = 'idle'
+      }
+    }, 4000)
+    return true
+  }
+  metaSaveState.value = 'error'
+  return false
+}
+
+// 监听 title/desc/promptId 变化 → 1.5s 防抖 → flushMetaSave
+// 任何字段任一变化都重置计时器（写操作高频时合并）
+watch(
+  () => selectedTask.value
+    ? { id: selectedTask.value.id, title: selectedTask.value.title, desc: selectedTask.value.desc, promptId: selectedTask.value.promptId }
+    : null,
+  (cur, prev) => {
+    // 首次建立 / 切换 task：prev 为 undefined 或 id 变了 → 不自动保存
+    if (!cur || !prev || cur.id !== prev.id) return
+    if (metaSaveTimer !== null) clearTimeout(metaSaveTimer)
+    metaSaveTimer = window.setTimeout(() => { flushMetaSave() }, 1500)
+  },
+  { deep: true }
+)
+
+// 切换 selectedTaskId 时立刻 flush 当前 task 的未保存改动
+// 避免「改了 desc 立刻点别的任务 → desc 丢失」
+watch(selectedTaskId, async (_n, _o) => {
+  clearMetaSaveTimers()
+  // 新 task 选中时 captureSnapshot() 会在 selectTask() 内同步调用；
+  // 但要先把上一个 task 的未保存内容落盘
+  // （loadTasks 之后 diskSnapshot 也会重新拍，避免下次切回时误标 dirty）
+})
+
+// 离开页面 / 切到别的 task 前尝试 flush（best-effort）
+// 用 sendBeacon 保证 fetch 在 unload 后也能完成
+function beaconPersist(task: Task) {
+  try {
+    const blob = new Blob([JSON.stringify(task)], { type: 'application/json' })
+    navigator.sendBeacon?.('/api/workbench/tasks', blob)
+  } catch { /* swallow */ }
+}
+function onBeforeUnloadPersist() {
+  if (selectedTask.value && metaDirty.value) {
+    beaconPersist(selectedTask.value)
+  }
+}
 
 const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false })
 const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
@@ -501,8 +594,13 @@ async function deleteTask(t: Task) {
   if (selectedTaskId.value === t.id) selectedTaskId.value = null
   loadTasks()
 }
-function selectTask(t: Task) {
+async function selectTask(t: Task) {
   if (selectedTaskId.value === t.id) return
+  // 切换前先把当前 task 的未保存 title/desc/promptId 落盘
+  clearMetaSaveTimers()
+  if (selectedTask.value && metaDirty.value) {
+    await flushMetaSave()
+  }
   selectedTaskId.value = t.id
   // 切换后立刻拍快照，避免新 task 误标为 dirty
   captureSnapshot()
@@ -636,9 +734,9 @@ function toggleSubExpand(sub: SubTask) {
 async function cancelDone(sub: SubTask) {
   if (!selectedTask.value) return
   // 把磁盘快照里这条 sub 的 status 一起改回 todo，避免 dirty 误标
-  const snap = diskSnapshot.value.get(sub.id)
+  const snap = subSnapshot.value.get(sub.id)
   if (snap) {
-    diskSnapshot.value.set(sub.id, { ...snap, status: 'todo' } as any)
+    subSnapshot.value.set(sub.id, { ...snap, status: 'todo' } as any)
   }
   sub.status = 'todo'
   // 静默落盘：让后端 runTaskQueue 在下次执行时把这 sub 重新纳入队列
@@ -676,9 +774,15 @@ async function cancelJob(j: Job) {
 onMounted(async () => {
   await Promise.all([loadPrompts(), loadTasks(), loadCurrentProject(), loadJobs()])
   connectSSE()
+  window.addEventListener('beforeunload', onBeforeUnloadPersist)
 })
 onBeforeUnmount(() => {
   if (es) { es.close(); es = null }
+  window.removeEventListener('beforeunload', onBeforeUnloadPersist)
+  // 卸载时同步 flush 一次（sendBeacon 不支持时也能尽量保住）
+  if (selectedTask.value && metaDirty.value) {
+    beaconPersist(selectedTask.value)
+  }
 })
 
 // ── 日志详情面板已抽到 components/JobLogDetails.vue（自动滚动 / 复制 / 截断都在那里）
@@ -778,6 +882,14 @@ async function uploadAttachment(t: AttachmentTarget, file: File) {
   const existing = targetAttachments(t)
   if (existing.length >= 9) {
     ElMessage.error($t('@WORKBENCH:单个任务最多 9 个附件'))
+    return
+  }
+  // 客户端去重：相同 originalName + size 已存在则直接复用，重复上传/粘贴不会
+  // 再产生第二条记录。key 不用 mimeType——同名同 size 的不同文件几乎不可能，
+  // 但万一真撞了，后端会原样落盘，本地去重后用户看到的就是同一条（acceptable）。
+  const dup = existing.find(a => a.originalName === file.name && a.size === file.size)
+  if (dup) {
+    ElMessage.info(`${file.name} ${$t('@WORKBENCH:已存在，已复用')}`)
     return
   }
   const key = targetKey(t)
@@ -1049,6 +1161,31 @@ function humanSize(n: number): string {
             v-model="selectedTask.title"
             :placeholder="$t('@WORKBENCH:任务标题')"
           />
+          <span
+            v-if="metaSaveState !== 'idle' || metaDirty"
+            class="wb-meta-save"
+            :class="{
+              'is-saving': metaSaveState === 'saving',
+              'is-saved': metaSaveState === 'saved',
+              'is-error': metaSaveState === 'error',
+              'is-dirty': metaDirty && metaSaveState === 'idle'
+            }"
+            :title="metaSaveState === 'saving' ? $t('@WORKBENCH:保存中…')
+              : metaSaveState === 'error' ? $t('@WORKBENCH:保存失败')
+              : metaSaveState === 'saved' ? $t('@WORKBENCH:已保存')
+              : ''"
+          >
+            <span v-if="metaSaveState === 'saving'" class="wb-meta-save__dot" />
+            <span v-else-if="metaSaveState === 'saved'" class="wb-meta-save__check">✓</span>
+            <span v-else-if="metaSaveState === 'error'" class="wb-meta-save__bang">!</span>
+            <span v-else class="wb-meta-save__dot" />
+            {{
+              metaSaveState === 'saving' ? $t('@WORKBENCH:保存中…')
+              : metaSaveState === 'saved' ? $t('@WORKBENCH:已保存')
+              : metaSaveState === 'error' ? $t('@WORKBENCH:保存失败')
+              : $t('@WORKBENCH:有未保存的更改')
+            }}
+          </span>
           <select class="wb-select" v-model="selectedTask.promptId">
             <option :value="null">{{ $t('@WORKBENCH:不绑定预置提示词') }}</option>
             <option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</option>
@@ -2758,5 +2895,79 @@ function humanSize(n: number): string {
 .wb-task-group__head.is-current .wb-task-group__count {
   background: color-mix(in srgb, var(--color-primary) 16%, transparent);
   color: var(--color-primary);
+}
+
+/* ── 任务级字段自动保存指示器（title / desc / promptId） ─────────── */
+.wb-meta-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color-medium);
+  background: var(--bg-container);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  user-select: none;
+  transition:
+    background var(--transition-fast) var(--ease-custom),
+    border-color var(--transition-fast) var(--ease-custom),
+    color var(--transition-fast) var(--ease-custom);
+}
+.wb-meta-save__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
+}
+.wb-meta-save__check { font-size: 12px; line-height: 1; }
+.wb-meta-save__bang {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 800;
+  background: currentColor;
+  color: #fff;
+  line-height: 1;
+}
+.wb-meta-save.is-saving {
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-container));
+}
+.wb-meta-save.is-saving .wb-meta-save__dot {
+  animation: wb-meta-pulse 1.2s ease-in-out infinite;
+}
+.wb-meta-save.is-saved {
+  color: #047857;
+  border-color: color-mix(in srgb, #10b981 35%, transparent);
+  background: color-mix(in srgb, #10b981 8%, var(--bg-container));
+}
+.wb-meta-save.is-dirty {
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.06);
+}
+.wb-meta-save.is-error {
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.06);
+}
+@keyframes wb-meta-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50%      { opacity: 1;   transform: scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-meta-save.is-saving .wb-meta-save__dot { animation: none; }
 }
 </style>
