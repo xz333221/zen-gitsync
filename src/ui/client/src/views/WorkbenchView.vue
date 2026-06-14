@@ -1107,7 +1107,7 @@ function humanSize(n: number): string {
         <header class="wb-section__head">
           <span class="wb-section__tag">{{ $t('@WORKBENCH:任务') }}</span>
           <h3 class="wb-section__title">{{ $t('@WORKBENCH:任务列表') }}</h3>
-          <span class="wb-section__count">{{ tasks.length }}</span>
+          <span class="wb-pill wb-section__count">{{ tasks.length }}</span>
         </header>
 
         <!-- 顶部主操作：新建任务 -->
@@ -1147,7 +1147,7 @@ function humanSize(n: number): string {
               <span class="wb-task-group__name" :title="group.path === currentProject.path ? currentProject.path : group.label">
                 {{ group.path === currentProject.path ? currentProject.name : shortProjectLabel(group.label) }}
               </span>
-              <span class="wb-task-group__count">{{ group.tasks.length }}</span>
+              <span class="wb-pill wb-task-group__count">{{ group.tasks.length }}</span>
             </li>
             <template v-if="!isGroupCollapsed(group.path)">
               <li
@@ -1170,7 +1170,7 @@ function humanSize(n: number): string {
                   <div class="wb-task-item__meta">
                     <span class="wb-task-item__meta-item" :title="$t('@WORKBENCH:个子任务')">
                       <el-icon class="wb-task-item__meta-icon"><List /></el-icon>
-                      <span class="wb-task-item__num">{{ subtaskCount(t) }}</span>
+                      <span class="wb-pill wb-task-item__num">{{ subtaskCount(t) }}</span>
                     </span>
                     <span
                       v-if="attachmentCount(t) > 0"
@@ -1178,7 +1178,7 @@ function humanSize(n: number): string {
                       :title="$t('@WORKBENCH:附件')"
                     >
                       <el-icon class="wb-task-item__meta-icon"><PictureIcon /></el-icon>
-                      <span class="wb-task-item__num">{{ attachmentCount(t) }}</span>
+                      <span class="wb-pill wb-task-item__num">{{ attachmentCount(t) }}</span>
                     </span>
                     <span
                       v-if="t.promptId"
@@ -1229,7 +1229,7 @@ function humanSize(n: number): string {
         <header class="wb-section__head">
           <span class="wb-section__tag wb-section__tag--accent">{{ $t('@WORKBENCH:提示') }}</span>
           <h3 class="wb-section__title">{{ $t('@WORKBENCH:预置提示词') }}</h3>
-          <span class="wb-section__count">{{ prompts.length }}</span>
+          <span class="wb-pill wb-section__count">{{ prompts.length }}</span>
           <button
             class="wb-section__action"
             @click="openCreatePrompt"
@@ -1741,7 +1741,7 @@ function humanSize(n: number): string {
   bottom: -1px;
   height: 2px;
   background: var(--color-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-2xs);
 }
 
 /* editor 视图的子行容器：把 sidebar + split 重新横向排列（workbench 改成 column 后需要这一层） */
@@ -1802,7 +1802,7 @@ function humanSize(n: number): string {
 .wb-section__tag--accent {
   color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 9%, transparent);
-  border-color: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border-color: var(--tint-primary-22);
 }
 .wb-section__title {
   margin: 0;
@@ -1812,16 +1812,6 @@ function humanSize(n: number): string {
   letter-spacing: 0.2px;
   flex: 1;
   min-width: 0;
-}
-.wb-section__count {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-  padding: 1px 6px;
-  border-radius: 8px;
-  background: var(--bg-subtle);
-  flex-shrink: 0;
 }
 .wb-section__action {
   border: none;
@@ -1840,7 +1830,7 @@ function humanSize(n: number): string {
               color var(--transition-fast) var(--ease-custom);
 }
 .wb-section__action:hover {
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  background: var(--tint-primary-12);
   color: var(--color-primary);
 }
 
@@ -1852,7 +1842,7 @@ function humanSize(n: number): string {
   width: 100%;
   height: 34px;
   padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
+  border: 1px solid var(--tint-primary-30);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-container));
   color: var(--color-primary);
@@ -1886,9 +1876,9 @@ function humanSize(n: number): string {
 }
 .wb-new-btn:hover {
   background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container));
-  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04),
-              0 0 0 3px color-mix(in srgb, var(--color-primary) 10%, transparent);
+  border-color: var(--tint-primary-50);
+  box-shadow: var(--wb-card-shadow-hover),
+              0 0 0 3px var(--tint-primary-10);
 }
 .wb-new-btn:hover .wb-new-btn__icon {
   transform: rotate(90deg);
@@ -1900,8 +1890,8 @@ function humanSize(n: number): string {
   transform: scale(0.99);
 }
 .wb-new-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset-lg);
 }
 
 /* ── 任务列表 ───────────────────────────────────────── */
@@ -1933,7 +1923,7 @@ function humanSize(n: number): string {
 .wb-task-item:hover {
   background: var(--bg-container-hover);
   border-color: var(--border-color-medium);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--wb-card-shadow-hover);
 }
 .wb-task-item:hover .wb-task-item__del {
   opacity: 1;
@@ -1941,8 +1931,8 @@ function humanSize(n: number): string {
 }
 .wb-task-item.active {
   background: color-mix(in srgb, var(--color-primary) 9%, var(--bg-container));
-  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  border-color: var(--tint-primary-45);
+  box-shadow: var(--wb-card-shadow-hover);
 }
 .wb-task-item.active .wb-task-item__title { color: var(--color-primary); }
 .wb-task-item.active .wb-task-item__del { opacity: 1; color: var(--color-primary); }
@@ -1955,7 +1945,7 @@ function humanSize(n: number): string {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: var(--font-size-15);
   flex-shrink: 0;
   background: var(--bg-subtle);
   color: var(--text-tertiary);
@@ -2058,23 +2048,17 @@ function humanSize(n: number): string {
 .wb-task-item.is-other-project:hover { opacity: 1; }
 .wb-task-item__meta-icon { font-size: 11px; opacity: 0.85; }
 .wb-task-item__num {
-  /* 数字小徽标：与 .wb-section__count 风格对齐（圆角胶囊 + tnum） */
-  font-weight: 600;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
+  /* 数字小徽标：基础样式由 .wb-pill 提供（圆角胶囊 + tnum），
+     这里仅覆盖：去掉 min-width/padding 让数字紧凑显示 */
   min-width: 14px;
-  text-align: center;
-  line-height: 1.4;
   padding: 0 4px;
-  border-radius: 4px;
-  background: var(--bg-subtle);
+  color: var(--text-secondary);
   transition: background var(--transition-fast) var(--ease-custom),
               color var(--transition-fast) var(--ease-custom);
 }
 .wb-task-item.active .wb-task-item__num {
   color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  background: var(--tint-primary-14);
 }
 
 /* 删除按钮：默认隐藏，hover 卡片时淡入 */
@@ -2103,8 +2087,8 @@ function humanSize(n: number): string {
   color: var(--color-danger);
 }
 .wb-task-item__del:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
   opacity: 1;
 }
 .wb-task-item__del,
@@ -2118,7 +2102,7 @@ function humanSize(n: number): string {
   gap: 8px;
   padding: 7px 8px;
   border-radius: var(--radius-md);
-  font-size: 12.5px;
+  font-size: var(--font-size-125);
   color: var(--text-primary);
   transition: background var(--transition-fast) var(--ease-custom);
   position: relative;
@@ -2131,7 +2115,7 @@ function humanSize(n: number): string {
   width: 22px;
   height: 22px;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  background: var(--tint-primary-08);
   color: var(--color-primary);
   display: inline-flex;
   align-items: center;
@@ -2157,7 +2141,7 @@ function humanSize(n: number): string {
   height: 16px;
   padding: 0 6px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  background: var(--tint-primary-12);
   color: var(--color-primary);
   font-size: 10px;
   font-weight: 600;
@@ -2191,8 +2175,8 @@ function humanSize(n: number): string {
   color: var(--color-danger);
 }
 .wb-prompt-item__del:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
   opacity: 1;
 }
 
@@ -2222,7 +2206,7 @@ function humanSize(n: number): string {
   margin-bottom: 2px;
 }
 .wb-empty__text {
-  font-size: 12.5px;
+  font-size: var(--font-size-125);
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -2247,7 +2231,7 @@ function humanSize(n: number): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  background: var(--tint-primary-12);
   color: var(--color-primary);
   font-size: 22px;
   margin-bottom: 2px;
@@ -2291,11 +2275,11 @@ function humanSize(n: number): string {
 }
 .wb-empty__link:hover:not(:disabled) {
   color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  background: var(--tint-primary-08);
 }
 .wb-empty__link:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset-lg);
 }
 .wb-empty__link:disabled {
   color: var(--text-tertiary);
@@ -2346,7 +2330,7 @@ function humanSize(n: number): string {
   background: var(--bg-container);
   border: 1px solid var(--border-color-medium);
   border-radius: var(--radius-md);
-  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.015);
+  box-shadow: var(--wb-card-inset-shadow);
   transition:
     border-color var(--transition-fast) var(--ease-custom),
     box-shadow var(--transition-fast) var(--ease-custom),
@@ -2365,7 +2349,7 @@ function humanSize(n: number): string {
 .wb-input {
   height: 36px;
   padding: 0 12px;
-  font-size: 13.5px;
+  font-size: var(--font-size-135);
   line-height: 1.2;
   letter-spacing: -0.05px;
 }
@@ -2377,15 +2361,15 @@ function humanSize(n: number): string {
   border-color: var(--color-primary);
   background: var(--bg-container);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent),
-    inset 0 1px 0 rgba(15, 23, 42, 0.015);
+    0 0 0 3px var(--tint-primary-18),
+    var(--wb-card-inset-shadow);
 }
 
 /* ── 标题：hero 级单行输入 ─────────────────────────── */
 .wb-input--title {
   height: 42px;
   flex: 1;
-  font-size: 17px;
+  font-size: var(--font-size-17);
   font-weight: 600;
   letter-spacing: -0.4px;
   padding: 0 14px;
@@ -2398,8 +2382,8 @@ function humanSize(n: number): string {
 .wb-input--title:focus {
   border-color: var(--color-primary);
   box-shadow:
-    0 0 0 4px color-mix(in srgb, var(--color-primary) 14%, transparent),
-    inset 0 1px 0 rgba(15, 23, 42, 0.015);
+    0 0 0 4px var(--tint-primary-14),
+    var(--wb-card-inset-shadow);
 }
 .wb-input--title::placeholder {
   font-weight: 500;
@@ -2427,7 +2411,7 @@ function humanSize(n: number): string {
 }
 .wb-select:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+  box-shadow: 0 0 0 3px var(--tint-primary-18);
 }
 /* 标记「不绑定」之类的占位符选项——当值为 null 时 option label 会更浅，
    但 select 自身无法读到 selectedIndex 状态，用一个轻量颜色 hack：
@@ -2437,7 +2421,7 @@ function humanSize(n: number): string {
 .wb-textarea {
   display: block;
   padding: 12px 14px;
-  font-size: 13.5px;
+  font-size: var(--font-size-135);
   line-height: 1.65;
   letter-spacing: -0.05px;
   resize: vertical;
@@ -2458,8 +2442,8 @@ function humanSize(n: number): string {
   border-color: var(--color-primary);
   background: var(--bg-container);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent),
-    inset 0 1px 0 rgba(15, 23, 42, 0.015);
+    0 0 0 3px var(--tint-primary-18),
+    var(--wb-card-inset-shadow);
 }
 .wb-textarea--sm { min-height: 44px; padding: 8px 12px; font-size: 13px; }
 
@@ -2497,7 +2481,7 @@ function humanSize(n: number): string {
   color: var(--text-secondary);
 }
 .wb-simple__hint {
-  font-size: 11.5px;
+  font-size: var(--font-size-115);
   color: var(--text-tertiary);
 }
 .wb-form-item {
@@ -2544,7 +2528,7 @@ function humanSize(n: number): string {
 
 /* ── 执行中：卡片整体光环 + 顶部流动光带 ────────────────── */
 .wb-sub-item.is-running {
-  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+  border-color: var(--tint-primary-55);
   background:
     linear-gradient(
       135deg,
@@ -2552,7 +2536,7 @@ function humanSize(n: number): string {
       var(--bg-surface) 60%
     );
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent),
+    0 0 0 1px var(--tint-primary-30),
     0 4px 18px -4px color-mix(in srgb, var(--color-primary) 25%, transparent);
   animation: wb-card-glow 2.4s ease-in-out infinite;
 }
@@ -2581,7 +2565,7 @@ function humanSize(n: number): string {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, var(--color-primary) 10%, transparent) 50%,
+    var(--tint-primary-10) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
@@ -2597,12 +2581,12 @@ function humanSize(n: number): string {
 @keyframes wb-card-glow {
   0%, 100% {
     box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent),
+      0 0 0 1px var(--tint-primary-30),
       0 4px 18px -4px color-mix(in srgb, var(--color-primary) 25%, transparent);
   }
   50% {
     box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--color-primary) 50%, transparent),
+      0 0 0 1px var(--tint-primary-50),
       0 6px 24px -2px color-mix(in srgb, var(--color-primary) 38%, transparent);
   }
 }
@@ -2706,11 +2690,11 @@ function humanSize(n: number): string {
   color: var(--color-primary);
 }
 .wb-sub-item__toggle:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }
 .wb-sub-item__undo {
-  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  border: 1px solid var(--tint-primary-35);
   background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
   color: var(--color-primary);
   font-size: 11px;
@@ -2731,8 +2715,8 @@ function humanSize(n: number): string {
   color: var(--color-primary-dark, var(--color-primary));
 }
 .wb-sub-item__undo:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }
 
 /* ── 已完成态：绿色微底 + 圆角柔化（与执行中红色脉冲对比） ─────────── */
@@ -2776,8 +2760,8 @@ function humanSize(n: number): string {
   background-size: 200% 100% !important;
   animation: wb-status-shimmer 2.4s linear infinite;
   box-shadow:
-    0 0 0 0 color-mix(in srgb, var(--color-primary) 45%, transparent),
-    0 0 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
+    0 0 0 0 var(--tint-primary-45),
+    0 0 12px var(--tint-primary-35);
   animation: wb-status-pulse 2.4s ease-in-out infinite,
              wb-status-shimmer 2.4s linear infinite;
 }
@@ -2812,13 +2796,13 @@ function humanSize(n: number): string {
 @keyframes wb-status-pulse {
   0%, 100% {
     box-shadow:
-      0 0 0 0 color-mix(in srgb, var(--color-primary) 45%, transparent),
-      0 0 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
+      0 0 0 0 var(--tint-primary-45),
+      0 0 12px var(--tint-primary-35);
   }
   50% {
     box-shadow:
       0 0 0 4px color-mix(in srgb, var(--color-primary) 0%, transparent),
-      0 0 18px color-mix(in srgb, var(--color-primary) 55%, transparent);
+      0 0 18px var(--tint-primary-55);
   }
 }
 @keyframes wb-status-dot {
@@ -2879,168 +2863,9 @@ function humanSize(n: number): string {
 
 /* 日志面板样式已抽到 components/JobLogDetails.vue（self-contained scoped） */
 
-/* ── 子任务附件 ───────────────────────────────────────────────── */
-.wb-attachments {
-  margin-top: 8px;
-  border: 1px solid var(--border-color-medium);
-  border-radius: var(--radius-md);
-  background: var(--bg-container);
-  flex-shrink: 0;
-  overflow: hidden;
-  transition:
-    border-color var(--transition-fast) var(--ease-custom),
-    background var(--transition-fast) var(--ease-custom),
-    box-shadow var(--transition-fast) var(--ease-custom);
-}
-.wb-attachments.is-paste-hover {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
-  box-shadow: inset 0 0 0 1px var(--color-primary);
-}
-.wb-attachments__paste-hint {
-  padding: 6px 10px;
-  background: var(--color-primary);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 500;
-  text-align: center;
-  border-top: 1px solid var(--border-color);
-  letter-spacing: 0.2px;
-}
-.wb-attachments__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 12px;
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
-  min-height: 38px;
-  box-sizing: border-box;
-}
-.wb-attachments__label {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: -0.1px;
-}
-.wb-attachments__count {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-  line-height: 1.4;
-  letter-spacing: 0.2px;
-}
-.wb-attachments__add {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid var(--border-color-medium);
-  background: var(--bg-container);
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1px;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  transition:
-    background var(--transition-fast) var(--ease-custom),
-    border-color var(--transition-fast) var(--ease-custom),
-    color var(--transition-fast) var(--ease-custom),
-    box-shadow var(--transition-fast) var(--ease-custom),
-    transform var(--transition-fast) var(--ease-custom);
-}
-.wb-attachments__add:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-container));
-  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
-  color: var(--color-primary-dark);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
-}
-.wb-attachments__add:active:not(:disabled) {
-  transform: translateY(0.5px);
-}
-.wb-attachments__add:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
-}
-.wb-attachments__add:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.wb-attachments__list {
-  list-style: none;
-  margin: 0;
-  padding: 4px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.wb-attachment {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px 4px 4px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm, 4px);
-  background: var(--bg-container);
-  max-width: 240px;
-  min-width: 0;
-}
-.wb-attachment__icon {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-  background: var(--bg-code);
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  overflow: hidden;
-}
-.wb-attachment__icon--img { background: var(--bg-code); }
-.wb-attachment__icon img {
-  width: 100%; height: 100%; object-fit: cover;
-}
-.wb-attachment__meta { min-width: 0; flex: 1; }
-.wb-attachment__name {
-  font-size: 12px;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.wb-attachment__sub {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.wb-attachment__del {
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 16px;
-  line-height: 1;
-  width: 20px; height: 20px;
-  border-radius: 3px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.wb-attachment__del:hover { color: #ef4444; background: rgba(239,68,68,0.08); }
+/* ── 子任务附件（wb-attachments 系列已抽到 styles/workbench.scss 全局样式） ──
+   按钮的视觉风格由 .wb-soft-btn 提供，子组件 AttachmentZone 在模板中合并使用
+   `class="wb-attachments__add wb-soft-btn"`。本作用域内不再重复定义。 */
 
 /* ── 当前项目条（侧边栏任务列表上方） ─────────────────────── */
 .wb-current-project {
@@ -3050,8 +2875,8 @@ function humanSize(n: number): string {
   padding: 6px 10px;
   margin-bottom: 8px;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  background: var(--tint-primary-10);
+  border: 1px solid var(--tint-primary-22);
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -3094,16 +2919,16 @@ function humanSize(n: number): string {
 }
 .wb-task-group__head:first-child { border-top: none; margin-top: 0; padding-top: 4px; }
 .wb-task-group__head:hover {
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  background: var(--tint-primary-08);
   color: var(--text-secondary);
 }
 .wb-task-group__head:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }
 .wb-task-group__head.is-current {
   color: var(--color-primary);
-  border-top-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  border-top-color: var(--tint-primary-30);
 }
 .wb-task-group__head.is-collapsed {
   /* 折叠时给一个更紧凑的高度 + 轻底色，暗示"点开看更多" */
@@ -3131,21 +2956,11 @@ function humanSize(n: number): string {
   text-overflow: ellipsis;
 }
 .wb-task-group__count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  /* 基础样式由 .wb-pill 提供（圆角胶囊 + tnum），这里仅调整 min-width */
   min-width: 18px;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: 8px;
-  background: var(--bg-subtle);
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
 }
 .wb-task-group__head.is-current .wb-task-group__count {
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  background: var(--tint-primary-16, color-mix(in srgb, var(--color-primary) 16%, transparent));
   color: var(--color-primary);
 }
 
@@ -3194,7 +3009,7 @@ function humanSize(n: number): string {
 }
 .wb-meta-save.is-saving {
   color: var(--color-primary);
-  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  border-color: var(--tint-primary-35);
   background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-container));
 }
 .wb-meta-save.is-saving .wb-meta-save__dot {

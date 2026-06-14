@@ -492,6 +492,127 @@
   /* 源码 Monaco 区域 */
   --sm-source-bg: #ffffff;
   --sm-source-overlay-bg: rgba(255, 255, 255, 0.78);
+
+  /* ===== 扩展字号（Workbench 等密集 UI 专用） =====
+     基础档已在上面定义为 xs/sm/base/md/lg/xl/2xl/3xl（10/12/14/16/18/20/22/24），
+     这里追加中档细分档，避免在 WorkbenchView 等组件中再写 11.5/12.5/13.5/15/17。 */
+  --font-size-11: 11px;
+  --font-size-115: 11.5px;
+  --font-size-125: 12.5px;
+  --font-size-135: 13.5px;
+  --font-size-15: 15px;
+  --font-size-17: 17px;
+
+  /* ===== 扩展圆角 =====
+     基础档：xs 2 / sm 3 / base 4 / md 6 / lg 8 / xl 12 / full 50%。
+     追加 2xs(2)/pill(999) 以支持 tab 下划线 / 胶囊型徽标等场景。 */
+  --radius-2xs: 2px;
+  --radius-pill: 999px;
+
+  /* ===== 焦点 / 交互 ring 复合 token ===== */
+  --focus-ring-color: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  --focus-ring-color-soft: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --focus-ring-color-strong: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  --focus-ring: 0 0 0 3px var(--focus-ring-color);
+  --focus-ring-soft: 0 0 0 3px var(--focus-ring-color-soft);
+  --focus-ring-strong: 0 0 0 4px var(--focus-ring-color);
+  --focus-outline: 2px solid var(--color-primary);
+  --focus-outline-offset: 1px;
+  --focus-outline-offset-lg: 2px;
+
+  /* ===== primary tint 复合 token（替代散落的 color-mix 表达式） ===== */
+  --tint-primary-04: color-mix(in srgb, var(--color-primary) 4%, transparent);
+  --tint-primary-06: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  --tint-primary-08: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  --tint-primary-10: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  --tint-primary-12: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --tint-primary-14: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  --tint-primary-16: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  --tint-primary-18: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  --tint-primary-22: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  --tint-primary-30: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  --tint-primary-35: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  --tint-primary-45: color-mix(in srgb, var(--color-primary) 45%, transparent);
+  --tint-primary-50: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  --tint-primary-55: color-mix(in srgb, var(--color-primary) 55%, transparent);
+
+  /* ===== 状态色 tint 复合 token ===== */
+  --tint-success-04: color-mix(in srgb, var(--color-success) 4%, transparent);
+  --tint-success-08: color-mix(in srgb, var(--color-success) 8%, transparent);
+  --tint-success-14: color-mix(in srgb, var(--color-success) 14%, transparent);
+  --tint-success-30: color-mix(in srgb, var(--color-success) 30%, transparent);
+  --tint-success-35: color-mix(in srgb, var(--color-success) 35%, transparent);
+
+  --tint-warning-06: color-mix(in srgb, var(--color-warning) 6%, transparent);
+  --tint-warning-14: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  --tint-warning-45: color-mix(in srgb, var(--color-warning) 45%, transparent);
+  --tint-warning-80: color-mix(in srgb, var(--color-warning) 80%, var(--text-primary));
+
+  --tint-danger-06: color-mix(in srgb, var(--color-danger) 6%, transparent);
+  --tint-danger-08: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  --tint-danger-14: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  --tint-danger-45: color-mix(in srgb, var(--color-danger) 45%, transparent);
+  --tint-danger-50: color-mix(in srgb, var(--color-danger) 50%, transparent);
+
+  --tint-info-12: color-mix(in srgb, var(--color-info) 12%, transparent);
+  --tint-info-28: color-mix(in srgb, var(--color-info) 28%, transparent);
+
+  /* ===== Workbench 专用语义 token ===== */
+  --wb-card-bg: var(--bg-container);
+  --wb-card-border: var(--border-color);
+  --wb-card-border-active: var(--tint-primary-45);
+  --wb-card-bg-active: var(--tint-primary-08);
+  --wb-card-radius: var(--radius-lg);
+  --wb-card-radius-md: var(--radius-md);
+  --wb-card-shadow-hover: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --wb-card-inset-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.015);
+
+  /* badge / pill 通用基线（Workbench 列表项、附件计数等复用） */
+  --badge-bg: var(--bg-subtle);
+  --badge-color: var(--text-tertiary);
+  --badge-border: var(--border-color);
+  --badge-radius: var(--radius-lg);
+  --badge-radius-sm: 7px;
+  --badge-radius-pill: var(--radius-pill);
+  --badge-font-size: var(--font-size-xs);
+  --badge-font-weight: 600;
+  --badge-line-height: 1.4;
+
+  /* icon button 通用基线（透明方形按钮） */
+  --icon-btn-size-sm: 20px;
+  --icon-btn-size-md: 22px;
+  --icon-btn-size-lg: 24px;
+  --icon-btn-radius: var(--radius-sm);
+  --icon-btn-color: var(--text-tertiary);
+  --icon-btn-color-hover: var(--color-danger);
+  --icon-btn-bg-hover: var(--tint-danger-14);
+
+  /* soft button 通用基线（primary 染色描边按钮） */
+  --soft-btn-height-sm: 24px;
+  --soft-btn-height-md: 32px;
+  --soft-btn-radius: var(--radius-sm);
+  --soft-btn-radius-md: var(--radius-md);
+  --soft-btn-padding-x: 10px;
+  --soft-btn-border: var(--border-color-medium);
+  --soft-btn-bg: var(--bg-container);
+  --soft-btn-color: var(--color-primary);
+  --soft-btn-bg-hover: var(--tint-primary-10);
+  --soft-btn-border-hover: var(--tint-primary-50);
+  --soft-btn-color-hover: var(--color-primary-dark);
+  --soft-btn-shadow-hover: var(--focus-ring-soft);
+
+  /* 表单 input 共用基线 */
+  --input-height: 36px;
+  --input-height-lg: 42px;
+  --input-border: var(--border-color-medium);
+  --input-border-hover: var(--border-input-hover, #cbd5e1);
+  --input-border-focus: var(--color-primary);
+  --input-radius: var(--radius-md);
+  --input-padding-x: 12px;
+  --input-font-size: var(--font-size-135);
+  --input-bg: var(--bg-container);
+  --input-bg-hover: var(--bg-container-hover);
+  --input-shadow-focus: var(--focus-ring), var(--wb-card-inset-shadow);
 }
 
 /* =======================================================

@@ -97,6 +97,10 @@
   --bg-subtle: var(--bg-subtle-dark);
   --bg-subtle-hover: var(--bg-subtle-hover-dark);
 
+  /* Workbench 阴影 token 暗色覆写（浅色主题下的冷蓝阴影在深色背景上消失） */
+  --wb-card-shadow-hover: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --wb-card-inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
   /* Header / Footer 毛玻璃背景 */
   --bg-header: var(--bg-header-dark);
   --bg-footer: var(--bg-footer-dark);
