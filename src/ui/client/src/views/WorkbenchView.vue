@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, reactive, markRaw } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, reactive, markRaw, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -26,8 +26,10 @@ import {
   DocumentAdd,
   Memo,
   EditPen,
+  Folder,
   ArrowDown,
-  ArrowUp
+  ArrowUp,
+  ArrowRight
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
@@ -240,6 +242,17 @@ async function loadCurrentProject() {
 }
 // 任务列表按 projectPath 分组；同组内保持原有顺序
 const NO_PROJECT_KEY = '__no_project__'
+// 折叠状态：记录哪些项目分组当前是收起的。用户可手动展开/收起。
+// 初次出现 / 切换当前项目时，非当前项目分组默认收起，避免侧栏一眼被别处任务占满。
+const collapsedGroupPaths = ref<Set<string>>(new Set())
+function isGroupCollapsed(path: string): boolean {
+  return collapsedGroupPaths.value.has(path)
+}
+function toggleGroupCollapsed(path: string) {
+  if (collapsedGroupPaths.value.has(path)) collapsedGroupPaths.value.delete(path)
+  else collapsedGroupPaths.value.add(path)
+  collapsedGroupPaths.value = new Set(collapsedGroupPaths.value)
+}
 const groupedTasksList = computed(() => {
   const list = tasks.value
   const groups = new Map<string, Task[]>()
@@ -273,6 +286,25 @@ function shortProjectLabel(fullPath: string): string {
   if (parts.length <= 1) return fullPath
   return parts.slice(-2).join('/')
 }
+
+// 首次出现 / 切换当前项目时，把所有「非当前项目」分组默认折叠收起。
+// 用户手动展开过的会保留展开；这里只在新增 / 变更路径时补齐折叠状态。
+watch(
+  () => groupedTasksList.value.groups.map(g => g.path),
+  (paths) => {
+    const cur = currentProject.value.path
+    const next = new Set(collapsedGroupPaths.value)
+    let changed = false
+    for (const p of paths) {
+      if (p !== cur && !next.has(p)) {
+        next.add(p)
+        changed = true
+      }
+    }
+    if (changed) collapsedGroupPaths.value = next
+  },
+  { immediate: true }
+)
 async function loadJobs() {
   const res = await fetch('/api/workbench/jobs').then(r => r.json()).catch(() => ({ jobs: [] }))
   jobs.value = res.jobs || []
@@ -870,69 +902,84 @@ function humanSize(n: number): string {
             <li
               v-if="groupedTasksList.hasMultiple"
               class="wb-task-group__head"
-              :class="{ 'is-current': group.path === currentProject.path }"
+              :class="{
+                'is-current': group.path === currentProject.path,
+                'is-collapsed': isGroupCollapsed(group.path)
+              }"
+              role="button"
+              tabindex="0"
+              :aria-expanded="!isGroupCollapsed(group.path)"
+              :title="isGroupCollapsed(group.path) ? $t('@WORKBENCH:展开') : $t('@WORKBENCH:收起')"
+              @click="toggleGroupCollapsed(group.path)"
+              @keydown.enter.prevent="toggleGroupCollapsed(group.path)"
+              @keydown.space.prevent="toggleGroupCollapsed(group.path)"
             >
+              <el-icon class="wb-task-group__caret">
+                <component :is="isGroupCollapsed(group.path) ? ArrowRight : ArrowDown" />
+              </el-icon>
               <el-icon class="wb-task-group__icon"><Folder /></el-icon>
               <span class="wb-task-group__name" :title="group.path === currentProject.path ? currentProject.path : group.label">
                 {{ group.path === currentProject.path ? currentProject.name : shortProjectLabel(group.label) }}
               </span>
               <span class="wb-task-group__count">{{ group.tasks.length }}</span>
             </li>
-            <li
-              v-for="t in group.tasks"
-              :key="t.id"
-              class="wb-task-item"
-              :class="{
-                active: t.id === selectedTaskId,
-                'has-attachment': attachmentCount(t) > 0,
-                'is-other-project': t.projectPath && t.projectPath !== currentProject.path
-              }"
-              :data-icon="pickTaskIcon(t.title)"
-              @click="selectTask(t)"
-            >
-              <div class="wb-task-item__avatar" :data-icon="pickTaskIcon(t.title)">
-                <el-icon><component :is="taskIconFor(t)" /></el-icon>
-              </div>
-              <div class="wb-task-item__body">
-                <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
-                <div class="wb-task-item__meta">
-                  <span class="wb-task-item__meta-item" :title="$t('@WORKBENCH:个子任务')">
-                    <el-icon class="wb-task-item__meta-icon"><List /></el-icon>
-                    <span class="wb-task-item__num">{{ subtaskCount(t) }}</span>
-                  </span>
-                  <span
-                    v-if="attachmentCount(t) > 0"
-                    class="wb-task-item__meta-item"
-                    :title="$t('@WORKBENCH:附件')"
-                  >
-                    <el-icon class="wb-task-item__meta-icon"><PictureIcon /></el-icon>
-                    <span class="wb-task-item__num">{{ attachmentCount(t) }}</span>
-                  </span>
-                  <span
-                    v-if="t.promptId"
-                    class="wb-task-item__meta-item wb-task-item__meta-item--accent"
-                    :title="$t('@WORKBENCH:已绑定预置提示词')"
-                  >
-                    <el-icon class="wb-task-item__meta-icon"><Memo /></el-icon>
-                  </span>
-                  <span
-                    v-if="t.projectPath && t.projectPath !== currentProject.path"
-                    class="wb-task-item__meta-item wb-task-item__meta-item--project"
-                    :title="t.projectPath"
-                  >
-                    {{ shortProjectLabel(t.projectPath) }}
-                  </span>
-                </div>
-              </div>
-              <button
-                class="wb-task-item__del"
-                @click.stop="deleteTask(t)"
-                :title="$t('@WORKBENCH:删除')"
-                :aria-label="$t('@WORKBENCH:删除')"
+            <template v-if="!isGroupCollapsed(group.path)">
+              <li
+                v-for="t in group.tasks"
+                :key="t.id"
+                class="wb-task-item"
+                :class="{
+                  active: t.id === selectedTaskId,
+                  'has-attachment': attachmentCount(t) > 0,
+                  'is-other-project': t.projectPath && t.projectPath !== currentProject.path
+                }"
+                :data-icon="pickTaskIcon(t.title)"
+                @click="selectTask(t)"
               >
-                <el-icon><Close /></el-icon>
-              </button>
-            </li>
+                <div class="wb-task-item__avatar" :data-icon="pickTaskIcon(t.title)">
+                  <el-icon><component :is="taskIconFor(t)" /></el-icon>
+                </div>
+                <div class="wb-task-item__body">
+                  <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
+                  <div class="wb-task-item__meta">
+                    <span class="wb-task-item__meta-item" :title="$t('@WORKBENCH:个子任务')">
+                      <el-icon class="wb-task-item__meta-icon"><List /></el-icon>
+                      <span class="wb-task-item__num">{{ subtaskCount(t) }}</span>
+                    </span>
+                    <span
+                      v-if="attachmentCount(t) > 0"
+                      class="wb-task-item__meta-item"
+                      :title="$t('@WORKBENCH:附件')"
+                    >
+                      <el-icon class="wb-task-item__meta-icon"><PictureIcon /></el-icon>
+                      <span class="wb-task-item__num">{{ attachmentCount(t) }}</span>
+                    </span>
+                    <span
+                      v-if="t.promptId"
+                      class="wb-task-item__meta-item wb-task-item__meta-item--accent"
+                      :title="$t('@WORKBENCH:已绑定预置提示词')"
+                    >
+                      <el-icon class="wb-task-item__meta-icon"><Memo /></el-icon>
+                    </span>
+                    <span
+                      v-if="t.projectPath && t.projectPath !== currentProject.path"
+                      class="wb-task-item__meta-item wb-task-item__meta-item--project"
+                      :title="t.projectPath"
+                    >
+                      {{ shortProjectLabel(t.projectPath) }}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  class="wb-task-item__del"
+                  @click.stop="deleteTask(t)"
+                  :title="$t('@WORKBENCH:删除')"
+                  :aria-label="$t('@WORKBENCH:删除')"
+                >
+                  <el-icon><Close /></el-icon>
+                </button>
+              </li>
+            </template>
           </template>
           <li v-if="tasks.length === 0" class="wb-empty">
             <div class="wb-empty__icon">
@@ -2650,11 +2697,41 @@ function humanSize(n: number): string {
   letter-spacing: 0.3px;
   text-transform: uppercase;
   border-top: 1px dashed var(--border-color);
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast) var(--ease-custom),
+              color var(--transition-fast) var(--ease-custom);
 }
 .wb-task-group__head:first-child { border-top: none; margin-top: 0; padding-top: 4px; }
+.wb-task-group__head:hover {
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: var(--text-secondary);
+}
+.wb-task-group__head:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
 .wb-task-group__head.is-current {
   color: var(--color-primary);
   border-top-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+.wb-task-group__head.is-collapsed {
+  /* 折叠时给一个更紧凑的高度 + 轻底色，暗示"点开看更多" */
+  background: var(--bg-subtle);
+  padding-top: 6px;
+  padding-bottom: 6px;
+  margin-top: 6px;
+  border-top-style: solid;
+}
+.wb-task-group__head.is-collapsed.is-current {
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-subtle));
+}
+.wb-task-group__caret {
+  font-size: 11px;
+  flex-shrink: 0;
+  opacity: 0.75;
+  transition: transform var(--transition-fast) var(--ease-custom);
 }
 .wb-task-group__icon { font-size: 12px; flex-shrink: 0; opacity: 0.8; }
 .wb-task-group__name {
