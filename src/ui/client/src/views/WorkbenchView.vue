@@ -1640,7 +1640,7 @@ function humanSize(n: number): string {
         </el-form-item>
         <el-form-item
           v-if="taskDialog.type === 'simple'"
-          :label="$t('@WORKBENCH:任务描述')"
+          :label="$t('@WORKBENCH:描述')"
         >
           <el-input
             v-model="taskDialog.desc"
