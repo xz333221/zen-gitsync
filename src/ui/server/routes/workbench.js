@@ -942,187 +942,209 @@ async function runTaskQueue(task, repoPath, branch) {
   const priorOutputs = []
   for (const sub of task.subtasks) {
     if (sub.status === 'done') continue;
-    const promptTemplate = sub.promptOverride || (task.promptId
-      ? (await readJson(PROMPTS_FILE, { prompts: [] })).prompts.find(p => p.id === task.promptId)?.content
-      : null) || '';
-    const ctx = {
-      task: { title: task.title, desc: task.desc || '' },
-      sub: { title: sub.title, desc: sub.desc || '' },
-      repo: { path: repoPath || '' },
-      branch: branch || ''
-    };
-    const interpolated = interpolate(promptTemplate, ctx);
-    const parts = [interpolated, sub.title, sub.desc].filter(s => s && s.trim());
-    let prompt = parts.join('\n\n');
+    await runSingleSubtask(task, sub, repoPath, branch, priorOutputs)
+  }
+  // 写回 tasks.json
+  await persistTaskAfterRun(task)
+}
 
-    // ── 前序上下文：把前几个 done 子任务的输出摘要拼到 prompt 头部 ──
-    if (priorOutputs.length > 0) {
-      const prevBlock = priorOutputs.map((p, i) => {
-        const text = (p.output || '').slice(0, MAX_PREV_OUTPUT_CHARS)
-        const truncated = (p.output || '').length > MAX_PREV_OUTPUT_CHARS ? '\n…（前文已截断）' : ''
-        return `### [${i + 1}] ${p.title}\n${text}${truncated}`
-      }).join('\n\n')
-      prompt = `以下是同一任务下已经完成的前序子任务输出（仅作上下文参考，请基于这些结论继续当前子任务，无需重复执行它们）：
+/**
+ * 执行单个子任务。被 runTaskQueue(整批)和"单 sub 执行"endpoint 共用。
+ *
+ * @param {object} task         主任务对象
+ * @param {object} sub          要跑的子任务
+ * @param {string} repoPath     仓库路径
+ * @param {string} branch       分支名（可空）
+ * @param {Array<{title:string,output:string}>} priorOutputs
+ *        前序 done 子任务的输出摘要（in-place 追加）。用于把同一任务下
+ *        前面已完成的 sub 产物拼到当前 sub 的 prompt 头部，让 Claude
+ *        知道上下文。单独跑一个 sub 时，这个数组里只会有"前面 done 的 sub"。
+ */
+async function runSingleSubtask(task, sub, repoPath, branch, priorOutputs) {
+  const MAX_PREV_OUTPUT_CHARS = 2000
+  const promptTemplate = sub.promptOverride || (task.promptId
+    ? (await readJson(PROMPTS_FILE, { prompts: [] })).prompts.find(p => p.id === task.promptId)?.content
+    : null) || '';
+  const ctx = {
+    task: { title: task.title, desc: task.desc || '' },
+    sub: { title: sub.title, desc: sub.desc || '' },
+    repo: { path: repoPath || '' },
+    branch: branch || ''
+  };
+  const interpolated = interpolate(promptTemplate, ctx);
+  const parts = [interpolated, sub.title, sub.desc].filter(s => s && s.trim());
+  let prompt = parts.join('\n\n');
+
+  // ── 前序上下文：把前几个 done 子任务的输出摘要拼到 prompt 头部 ──
+  if (priorOutputs && priorOutputs.length > 0) {
+    const prevBlock = priorOutputs.map((p, i) => {
+      const text = (p.output || '').slice(0, MAX_PREV_OUTPUT_CHARS)
+      const truncated = (p.output || '').length > MAX_PREV_OUTPUT_CHARS ? '\n…（前文已截断）' : ''
+      return `### [${i + 1}] ${p.title}\n${text}${truncated}`
+    }).join('\n\n')
+    prompt = `以下是同一任务下已经完成的前序子任务输出（仅作上下文参考，请基于这些结论继续当前子任务，无需重复执行它们）：
 
 ${prevBlock}
 
 ---
 
 ${prompt}`
-    }
+  }
 
-    // ── 附件：合并 sub.attachments + task.attachments 后拼到 prompt 末尾 ──
-    // claude -p 字符串模式会扫描 prompt 中出现的本地文件路径并自动
-    // 识别为附件（图片 / PDF / 文本均可）。
-    // 主任务附件对所有 sub 都可见；子任务自己的附件只对该 sub 可见。
-    const allAttachments = [
-      ...(Array.isArray(task.attachments) ? task.attachments : []),
-      ...(Array.isArray(sub.attachments) ? sub.attachments : [])
-    ];
-    if (allAttachments.length > 0) {
-      const lines = allAttachments
-        .filter(a => a && a.absolutePath)
-        .map((a, i) => `  ${i + 1}. [${a.mimeType || 'application/octet-stream'}] ${a.absolutePath}`);
-      if (lines.length > 0) {
-        prompt += `\n\n---\n本任务包含 ${lines.length} 个附件（请按文件路径读取，不要让用户重新提供）：\n${lines.join('\n')}\n---`;
-      }
-    }
-
-    const jobId = genId();
-    const job = {
-      id: jobId,
-      taskId: task.id,
-      subId: sub.id,
-      title: `${task.title} / ${sub.title}`,
-      status: 'pending',
-      prompt
-    };
-    jobs.set(jobId, job);
-    sub.status = 'running';
-    publish('sub:update', { taskId: task.id, sub });
-    publish('job:update', job);
-
-    try {
-      const { pid, child } = await launchClaudeInNewWindow(repoPath || process.cwd(), prompt);
-      job.pid = pid;
-      // 保存 child 引用，供 cancel 接口调用 kill
-      job.child = child;
-      job.startedAt = nowIso();
-      job.status = 'running';
-      publish('job:update', job);
-
-      // 流式 NDJSON 解析：把 stdout 当作 stream-json 协议处理
-      //   assistant.text       → job.output    （用户主要关心的内容）
-      //   assistant.thinking   → job.thinking  （折叠展示，让用户知道 Claude 在想）
-      //   其他事件（init / tool_use / result 等）忽略，避免噪声
-      // 解析失败的行原样进 output，便于排查协议异常。
-      // thinking 几乎不做服务端截断：Claude reasoning 一般在 KB~几十 MB 之间，
-// 100MB 兜底只是为了防止内存爆炸。流式 publish 时改推增量 delta（仅新拼接的
-// 那部分），终态或重连时才随 job:update 全量同步，避免每帧重复广播整个累积文本。
-      const MAX_OUTPUT = 100 * 1024 * 1024;
-      const MAX_THINKING = 100 * 1024 * 1024;
-      job.output = '';
-      job.thinking = '';
-      const lineBuf = { stdout: '', stderr: '' };
-
-      const parseLines = (channel, buf) => {
-        const chunk = buf.toString('utf8');
-        lineBuf[channel] += chunk;
-        const lines = lineBuf[channel].split('\n');
-        lineBuf[channel] = lines.pop() ?? ''; // 最后一段可能不完整，留给下次
-        let pendingThinkingDelta = '';
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          if (channel === 'stderr' || !trimmed.startsWith('{')) {
-            // 非 stream-json 行：原样塞进 output（兼容老版本 claude / 错误信息）
-            const prevLen = job.output.length;
-            job.output = (job.output + trimmed + '\n').slice(-MAX_OUTPUT);
-            // output 也用 delta 推送，前端按"以 length 为锚追加"语义合并
-            const delta = job.output.slice(prevLen);
-            if (delta) publish('job:output-delta', { id: job.id, delta });
-            continue;
-          }
-          let evt;
-          try { evt = JSON.parse(trimmed) } catch { continue }
-          if (evt.type !== 'assistant') continue;
-          const blocks = evt.message?.content;
-          if (!Array.isArray(blocks)) continue;
-          for (const b of blocks) {
-            if (b.type === 'text' && typeof b.text === 'string') {
-              const prevLen = job.output.length;
-              job.output = (job.output + b.text).slice(-MAX_OUTPUT);
-              const delta = job.output.slice(prevLen);
-              if (delta) publish('job:output-delta', { id: job.id, delta });
-            } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
-              const prevLen = job.thinking.length;
-              job.thinking = (job.thinking + b.thinking).slice(-MAX_THINKING);
-              const delta = job.thinking.slice(prevLen);
-              if (delta) pendingThinkingDelta += delta;
-            }
-          }
-        }
-        // 一批 NDJSON 处理完后统一发一次 thinking delta，避免高频小块 socket 占用
-        if (pendingThinkingDelta) {
-          publish('job:thinking-delta', { id: job.id, delta: pendingThinkingDelta });
-        }
-      };
-      if (child.stdout) child.stdout.on('data', (buf) => parseLines('stdout', buf));
-      if (child.stderr) child.stderr.on('data', (buf) => parseLines('stderr', buf));
-
-      // 等待进程退出（detached 不阻塞主进程，用 polling /proc 兜底）
-      await waitProcessExit(pid);
-      const wasCancelled = cancelledJobs.has(jobId)
-      if (wasCancelled) cancelledJobs.delete(jobId)
-      // 进程退出时 stdout 可能残留最后一段未换行的 NDJSON，flush 一次
-      // flush 内部也按 delta 推送，保持与流式阶段一致
-      if (lineBuf.stdout.trim()) {
-        const outPrev = job.output.length;
-        const thinkPrev = job.thinking.length;
-        try {
-          const evt = JSON.parse(lineBuf.stdout.trim())
-          if (evt.type === 'assistant' && Array.isArray(evt.message?.content)) {
-            for (const b of evt.message.content) {
-              if (b.type === 'text' && typeof b.text === 'string') {
-                job.output = (job.output + b.text).slice(-MAX_OUTPUT)
-              } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
-                job.thinking = (job.thinking + b.thinking).slice(-MAX_THINKING)
-              }
-            }
-          }
-        } catch { /* 不是 JSON，忽略 */ }
-        const outDelta = job.output.slice(outPrev);
-        if (outDelta) publish('job:output-delta', { id: job.id, delta: outDelta });
-        const thinkDelta = job.thinking.slice(thinkPrev);
-        if (thinkDelta) publish('job:thinking-delta', { id: job.id, delta: thinkDelta });
-      }
-      job.endedAt = nowIso();
-      if (wasCancelled) {
-        job.exitCode = 130; // 128 + SIGINT(2)，约定俗成的"用户取消"退出码
-        job.status = 'cancelled';
-        job.error = '用户已停止执行';
-        // sub 不改状态——cancelled 是 job 维度，同 task 后续 sub 仍可继续执行
-      } else {
-        job.exitCode = 0;
-        job.status = 'done';
-        sub.status = 'done';
-        // 把这个 sub 的输出累积到前序上下文，喂给下一个 sub
-        priorOutputs.push({ title: sub.title, output: job.output || '' })
-      }
-    } catch (err) {
-      job.error = err && err.message ? err.message : String(err);
-      job.status = 'error';
-      sub.status = 'error';
-    } finally {
-      // 移除 child 引用——避免后续被 SSE 序列化到前端
-      delete job.child
-      publish('job:update', job);
-      publish('sub:update', { taskId: task.id, sub });
-      // 终态：fire-and-forget 同步落盘，确保 done/cancelled/error 都立即归档
-      flushJobsSaveNow().catch(err => console.warn('[workbench] jobs save failed:', err.message))
+  // ── 附件：合并 sub.attachments + task.attachments 后拼到 prompt 末尾 ──
+  // claude -p 字符串模式会扫描 prompt 中出现的本地文件路径并自动
+  // 识别为附件（图片 / PDF / 文本均可）。
+  // 主任务附件对所有 sub 都可见；子任务自己的附件只对该 sub 可见。
+  const allAttachments = [
+    ...(Array.isArray(task.attachments) ? task.attachments : []),
+    ...(Array.isArray(sub.attachments) ? sub.attachments : [])
+  ];
+  if (allAttachments.length > 0) {
+    const lines = allAttachments
+      .filter(a => a && a.absolutePath)
+      .map((a, i) => `  ${i + 1}. [${a.mimeType || 'application/octet-stream'}] ${a.absolutePath}`);
+    if (lines.length > 0) {
+      prompt += `\n\n---\n本任务包含 ${lines.length} 个附件（请按文件路径读取，不要让用户重新提供）：\n${lines.join('\n')}\n---`;
     }
   }
-  // 写回 tasks.json
+
+  const jobId = genId();
+  const job = {
+    id: jobId,
+    taskId: task.id,
+    subId: sub.id,
+    title: `${task.title} / ${sub.title}`,
+    status: 'pending',
+    prompt
+  };
+  jobs.set(jobId, job);
+  sub.status = 'running';
+  publish('sub:update', { taskId: task.id, sub });
+  publish('job:update', job);
+
+  try {
+    const { pid, child } = await launchClaudeInNewWindow(repoPath || process.cwd(), prompt);
+    job.pid = pid;
+    // 保存 child 引用，供 cancel 接口调用 kill
+    job.child = child;
+    job.startedAt = nowIso();
+    job.status = 'running';
+    publish('job:update', job);
+
+    // 流式 NDJSON 解析：把 stdout 当作 stream-json 协议处理
+    //   assistant.text       → job.output    （用户主要关心的内容）
+    //   assistant.thinking   → job.thinking  （折叠展示，让用户知道 Claude 在想）
+    //   其他事件（init / tool_use / result 等）忽略，避免噪声
+    // 解析失败的行原样进 output，便于排查协议异常。
+    // thinking 几乎不做服务端截断：Claude reasoning 一般在 KB~几十 MB 之间，
+    // 100MB 兜底只是为了防止内存爆炸。流式 publish 时改推增量 delta（仅新拼接的
+    // 那部分），终态或重连时才随 job:update 全量同步，避免每帧重复广播整个累积文本。
+    const MAX_OUTPUT = 100 * 1024 * 1024;
+    const MAX_THINKING = 100 * 1024 * 1024;
+    job.output = '';
+    job.thinking = '';
+    const lineBuf = { stdout: '', stderr: '' };
+
+    const parseLines = (channel, buf) => {
+      const chunk = buf.toString('utf8');
+      lineBuf[channel] += chunk;
+      const lines = lineBuf[channel].split('\n');
+      lineBuf[channel] = lines.pop() ?? ''; // 最后一段可能不完整，留给下次
+      let pendingThinkingDelta = '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (channel === 'stderr' || !trimmed.startsWith('{')) {
+          // 非 stream-json 行：原样塞进 output（兼容老版本 claude / 错误信息）
+          const prevLen = job.output.length;
+          job.output = (job.output + trimmed + '\n').slice(-MAX_OUTPUT);
+          // output 也用 delta 推送，前端按"以 length 为锚追加"语义合并
+          const delta = job.output.slice(prevLen);
+          if (delta) publish('job:output-delta', { id: job.id, delta });
+          continue;
+        }
+        let evt;
+        try { evt = JSON.parse(trimmed) } catch { continue }
+        if (evt.type !== 'assistant') continue;
+        const blocks = evt.message?.content;
+        if (!Array.isArray(blocks)) continue;
+        for (const b of blocks) {
+          if (b.type === 'text' && typeof b.text === 'string') {
+            const prevLen = job.output.length;
+            job.output = (job.output + b.text).slice(-MAX_OUTPUT);
+            const delta = job.output.slice(prevLen);
+            if (delta) publish('job:output-delta', { id: job.id, delta });
+          } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
+            const prevLen = job.thinking.length;
+            job.thinking = (job.thinking + b.thinking).slice(-MAX_THINKING);
+            const delta = job.thinking.slice(prevLen);
+            if (delta) pendingThinkingDelta += delta;
+          }
+        }
+      }
+      // 一批 NDJSON 处理完后统一发一次 thinking delta，避免高频小块 socket 占用
+      if (pendingThinkingDelta) {
+        publish('job:thinking-delta', { id: job.id, delta: pendingThinkingDelta });
+      }
+    };
+    if (child.stdout) child.stdout.on('data', (buf) => parseLines('stdout', buf));
+    if (child.stderr) child.stderr.on('data', (buf) => parseLines('stderr', buf));
+
+    // 等待进程退出（detached 不阻塞主进程，用 polling /proc 兜底）
+    await waitProcessExit(pid);
+    const wasCancelled = cancelledJobs.has(jobId)
+    if (wasCancelled) cancelledJobs.delete(jobId)
+    // 进程退出时 stdout 可能残留最后一段未换行的 NDJSON，flush 一次
+    // flush 内部也按 delta 推送，保持与流式阶段一致
+    if (lineBuf.stdout.trim()) {
+      const outPrev = job.output.length;
+      const thinkPrev = job.thinking.length;
+      try {
+        const evt = JSON.parse(lineBuf.stdout.trim())
+        if (evt.type === 'assistant' && Array.isArray(evt.message?.content)) {
+          for (const b of evt.message.content) {
+            if (b.type === 'text' && typeof b.text === 'string') {
+              job.output = (job.output + b.text).slice(-MAX_OUTPUT)
+            } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
+              job.thinking = (job.thinking + b.thinking).slice(-MAX_THINKING)
+            }
+          }
+        }
+      } catch { /* 不是 JSON，忽略 */ }
+      const outDelta = job.output.slice(outPrev);
+      if (outDelta) publish('job:output-delta', { id: job.id, delta: outDelta });
+      const thinkDelta = job.thinking.slice(thinkPrev);
+      if (thinkDelta) publish('job:thinking-delta', { id: job.id, delta: thinkDelta });
+    }
+    job.endedAt = nowIso();
+    if (wasCancelled) {
+      job.exitCode = 130; // 128 + SIGINT(2)，约定俗成的"用户取消"退出码
+      job.status = 'cancelled';
+      job.error = '用户已停止执行';
+      // sub 不改状态——cancelled 是 job 维度，同 task 后续 sub 仍可继续执行
+    } else {
+      job.exitCode = 0;
+      job.status = 'done';
+      sub.status = 'done';
+      // 把这个 sub 的输出累积到前序上下文，喂给下一个 sub
+      if (priorOutputs) priorOutputs.push({ title: sub.title, output: job.output || '' })
+    }
+  } catch (err) {
+    job.error = err && err.message ? err.message : String(err);
+    job.status = 'error';
+    sub.status = 'error';
+  } finally {
+    // 移除 child 引用——避免后续被 SSE 序列化到前端
+    delete job.child
+    publish('job:update', job);
+    publish('sub:update', { taskId: task.id, sub });
+    // 终态：fire-and-forget 同步落盘，确保 done/cancelled/error 都立即归档
+    flushJobsSaveNow().catch(err => console.warn('[workbench] jobs save failed:', err.message))
+  }
+}
+
+/** 把 task.subtasks 写回 tasks.json,并广播 task:update。runTaskQueue 和"单 sub 执行"共用。 */
+async function persistTaskAfterRun(task) {
   const data = await readJson(TASKS_FILE, { tasks: [] });
   const t = data.tasks.find(x => x.id === task.id);
   if (t) {
@@ -1131,6 +1153,31 @@ ${prompt}`
     await writeJson(TASKS_FILE, data);
     publish('task:update', t);
   }
+}
+
+/**
+ * 构建单 sub 执行时的 priorOutputs：把同一 task 下"排在当前 sub 之前"且已 done 的
+ * 子任务输出摘要收集起来。这样单独跑一个 sub 时,它也能拿到前序上下文。
+ */
+async function collectPriorOutputs(task, targetSub) {
+  const MAX_PREV_OUTPUT_CHARS = 2000
+  const prior = []
+  const targetIdx = task.subtasks.findIndex(s => s.id === targetSub.id)
+  if (targetIdx < 0) return prior
+  for (let i = 0; i < targetIdx; i++) {
+    const s = task.subtasks[i]
+    if (s.status !== 'done') continue
+    // 从 jobs 列表里找最近一个属于这个 sub 且 status=done 的 job,
+    // 取其 output 作为"前序上下文摘要"
+    const job = snapshotJobs()
+      .filter(j => j.subId === s.id && j.status === 'done')
+      .sort((a, b) => (b.endedAt || '').localeCompare(a.endedAt || ''))[0]
+    if (!job) continue
+    const text = (job.output || '').slice(0, MAX_PREV_OUTPUT_CHARS)
+    const truncated = (job.output || '').length > MAX_PREV_OUTPUT_CHARS ? '\n…（前文已截断）' : ''
+    prior.push({ title: s.title, output: text + truncated })
+  }
+  return prior
 }
 
 function waitProcessExit(pid) {
@@ -1784,6 +1831,55 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       runTaskQueue(task, repoPath, '').catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });
       });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ── 执行单个子任务 ────────────────────────────────────────────────────
+  // POST /api/workbench/subtasks/:id/run
+  // 行为：
+  //   - 仅执行指定 id 的这一个 sub，不再遍历 task 下其他 sub
+  //   - 拼 prompt 时会把"前面已 done 的 sub"输出摘要作为前序上下文塞进去,
+  //     跟整批执行的语义保持一致
+  //   - 整批"执行任务"队列和单 sub 执行共用 runSingleSubtask,所以日志/状态
+  //     /取消/落盘逻辑完全一致
+  // 限制：
+  //   - 该 sub 处于 running/pending 时拒绝(并发跑同一个 sub 会出现状态混乱)
+  app.post('/api/workbench/subtasks/:id/run', async (req, res) => {
+    try {
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const subId = req.params.id;
+      let foundTask = null;
+      let foundSub = null;
+      for (const t of (data.tasks || [])) {
+        if (!Array.isArray(t.subtasks)) continue;
+        const s = t.subtasks.find(x => x.id === subId);
+        if (s) { foundTask = t; foundSub = s; break; }
+      }
+      if (!foundTask || !foundSub) {
+        return res.status(404).json({ success: false, error: '子任务不存在' });
+      }
+      if (foundSub.status === 'running') {
+        return res.status(400).json({ success: false, error: '该子任务正在执行中' });
+      }
+      // 兜底:即便磁盘状态是 todo,如果磁盘里还没归档的 job 还在跑(进程被孤儿),也拦一下
+      const liveJob = snapshotJobs().find(j => j.subId === subId && (j.status === 'running' || j.status === 'pending'));
+      if (liveJob) {
+        return res.status(400).json({ success: false, error: '该子任务已有正在执行的 job' });
+      }
+      const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+      // 异步执行,立即返回
+      res.json({ success: true, message: `已开始执行子任务：${foundSub.title || subId}` });
+      (async () => {
+        try {
+          const priorOutputs = await collectPriorOutputs(foundTask, foundSub);
+          await runSingleSubtask(foundTask, foundSub, repoPath, '', priorOutputs);
+          await persistTaskAfterRun(foundTask);
+        } catch (err) {
+          publish('task:error', { taskId: foundTask.id, error: err.message });
+        }
+      })();
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }

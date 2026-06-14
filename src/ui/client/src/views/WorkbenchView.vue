@@ -717,6 +717,56 @@ async function runTask(t: Task) {
   }
 }
 
+/**
+ * 单 sub 执行：仅跑指定 subId 那一个，不会触发其他 todo sub。
+ * 跟整批"执行任务"走同一套后端逻辑(prompt 拼装 / job 跟踪 / 取消 / 落盘),
+ * 唯一区别是不遍历 task.subtasks。
+ *
+ * 静默落盘行为跟 runTask 一致:用户编辑过但没点"保存拆分"时,先把当前
+ * selectedTask 写盘,保证后端拿到的 sub 描述/title 是最新的。
+ */
+async function runSubtask(sub: SubTask) {
+  if (!selectedTask.value) return
+  const t = selectedTask.value
+  // 已经在跑 → 拒绝,UI 上按钮也应该隐藏,这里再兜底一次
+  const live = jobOf(sub.id)
+  if (live && (live.status === 'running' || live.status === 'pending')) {
+    ElMessage.warning($t('@WORKBENCH:该子任务正在执行中'))
+    return
+  }
+  // 静默落盘:title/desc/subtasks 有变更就先写一次
+  const onDisk = tasks.value.find(x => x.id === t.id)
+  const dirty = !onDisk
+    || onDisk.title !== t.title
+    || onDisk.desc !== t.desc
+    || JSON.stringify(onDisk.subtasks) !== JSON.stringify(t.subtasks)
+    || onDisk.promptId !== t.promptId
+  if (dirty) {
+    const ok = await persistTask(false)
+    if (!ok) return
+  }
+  const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, { method: 'POST' })
+    .then(r => r.json())
+    .catch(err => ({ success: false, error: err?.message || String(err) }))
+  if (res.success) {
+    ElMessage.success(res.message || $t('@WORKBENCH:已开始执行子任务'))
+  } else {
+    ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
+  }
+}
+
+/**
+ * 决定某个 sub 行是否需要显示"执行"按钮。
+ * 规则:sub 不在 done 状态 && 当前没有 running/pending 的 job。
+ * (UI 上和后端 endpoint 的拒绝条件保持一致)
+ */
+function canRunSubtask(sub: SubTask): boolean {
+  if (sub.status === 'done') return false
+  const j = jobOf(sub.id)
+  if (j && (j.status === 'running' || j.status === 'pending')) return false
+  return true
+}
+
 // ── 已完成子任务折叠 ─────────────────────────────────────────────────────
 // 已完成的 sub 默认折叠成单行（只显示徽标 + 标题 + 展开 + 取消完成），
 // 长任务下让用户聚焦于未完成项。点"展开"手动打开看 desc/附件/历史日志。
@@ -1278,6 +1328,15 @@ function humanSize(n: number): string {
                   PID: {{ jobOf(sub.id)?.pid }}
                 </span>
                 <button
+                  v-if="canRunSubtask(sub)"
+                  class="wb-sub-item__run"
+                  :title="$t('@WORKBENCH:单独执行此子任务')"
+                  :aria-label="$t('@WORKBENCH:单独执行此子任务')"
+                  @click.stop="runSubtask(sub)"
+                >
+                  {{ $t('@WORKBENCH:执行') }}
+                </button>
+                <button
                   class="wb-sub-item__toggle"
                   :title="$t('@WORKBENCH:展开')"
                   :aria-label="$t('@WORKBENCH:展开')"
@@ -1314,6 +1373,13 @@ function humanSize(n: number): string {
               <span v-if="jobOf(sub.id)" class="wb-sub-item__pid" :title="$t('@WORKBENCH:进程ID')">
                 PID: {{ jobOf(sub.id)?.pid }}
               </span>
+              <button
+                v-if="canRunSubtask(sub)"
+                class="wb-sub-item__run"
+                :title="$t('@WORKBENCH:单独执行此子任务')"
+                :aria-label="$t('@WORKBENCH:单独执行此子任务')"
+                @click="runSubtask(sub)"
+              >{{ $t('@WORKBENCH:执行') }}</button>
               <button
                 v-if="jobOf(sub.id) && (jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending')"
                 class="wb-sub-item__stop"
@@ -2622,6 +2688,22 @@ function humanSize(n: number): string {
   background: #ef4444;
   color: #fff;
   border-color: #ef4444;
+}
+.wb-sub-item__run {
+  border: 1px solid var(--el-color-primary, #409eff);
+  background: var(--el-color-primary, #409eff);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s, filter 0.15s;
+}
+.wb-sub-item__run:hover {
+  opacity: 0.88;
+  filter: brightness(1.05);
 }
 .wb-sub-item__row .wb-input { flex: 1; }
 
