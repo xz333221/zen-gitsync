@@ -445,9 +445,16 @@ async function saveTask() {
   }).then(r => r.json())
   if (res.success) {
     ElMessage.success($t('@WORKBENCH:已保存'))
+    const isCreate = !taskDialog.editing?.id
     taskDialog.visible = false
-    loadTasks()
-    if (!selectedTaskId.value) selectedTaskId.value = res.task.id
+    await loadTasks()
+    // 新建后自动切到新任务；编辑场景保持原选中（loadTasks 兜底确保至少有一个选中）
+    if (isCreate && res.task?.id) {
+      selectedTaskId.value = res.task.id
+      captureSnapshot()
+    } else if (!selectedTaskId.value) {
+      selectedTaskId.value = res.task.id
+    }
   } else {
     ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
   }
@@ -1387,6 +1394,9 @@ function humanSize(n: number): string {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  /* 侧栏整体 overflow: auto 已经能滚动；不要让 flex 把分组压扁，
+     否则任务列表最后一项会被下方"预置提示词"分组压上来形成重叠。 */
+  flex-shrink: 0;
 }
 .wb-section + .wb-section {
   padding-top: 16px;

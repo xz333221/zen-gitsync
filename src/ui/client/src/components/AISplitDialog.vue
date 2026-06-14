@@ -50,6 +50,10 @@ const contentText = ref('')
 const rawResponse = ref('')
 const subtasks = ref<SplitSubtask[]>([])
 const errorMessage = ref('')
+// 拆分流跑完但 JSON 解析失败：单独存解析错误，
+// "确认入库" tab 上展示 + 引导用户去看「原始结果」/「编辑指令」
+const parseError = ref('')
+const parseStage = ref('')
 
 let abortController: AbortController | null = null
 // 每次 start 自增，回调里判断 nonce 是否匹配，过期请求的结果直接丢弃，
@@ -89,6 +93,8 @@ function reset() {
   rawResponse.value = ''
   subtasks.value = []
   errorMessage.value = ''
+  parseError.value = ''
+  parseStage.value = ''
 }
 
 async function start() {
@@ -125,7 +131,7 @@ async function start() {
     const reader = resp.body.getReader()
     const decoder = new TextDecoder('utf-8')
     let buf = ''
-    let doneEvent: { subtasks?: SplitSubtask[]; raw?: string } | null = null
+    let doneEvent: { subtasks?: SplitSubtask[]; raw?: string; parseError?: string; parseStage?: string } | null = null
 
     while (true) {
       const { value, done } = await reader.read()
@@ -166,12 +172,17 @@ async function start() {
 
     subtasks.value = Array.isArray(doneEvent.subtasks) ? doneEvent.subtasks : []
     rawResponse.value = doneEvent.raw || contentText.value
+    parseError.value = String(doneEvent.parseError || '')
+    parseStage.value = String(doneEvent.parseStage || '')
     // 若模型没吐 reasoning_content，给一个占位说明，避免空 tab 误导用户
     if (!thinkingText.value) {
       thinkingText.value = $t('@WORKBENCH:（当前模型未返回独立的思考内容，可切换到「原始结果」查看完整输出）')
     }
     phase.value = 'result'
-    activeTab.value = subtasks.value.length > 0 ? 'confirm' : 'raw'
+    // 解析失败 → 直接把用户引到「原始结果」，那里能看到模型实际吐了什么
+    activeTab.value = subtasks.value.length > 0
+      ? 'confirm'
+      : (parseError.value ? 'raw' : 'raw')
   } catch (err: any) {
     console.log('[AI Split] catch err:', { name: err?.name, msg: err?.message, aborted: myController.signal.aborted, nonce: { mine: myNonce, cur: runNonce } })
     if (myNonce !== runNonce) return // 旧请求被替代，不影响当前
@@ -194,6 +205,43 @@ function confirmImport() {
 
 function retry() {
   start()
+}
+
+// 编辑「原始结果」文本框直接重跑后端的多级解析（不再走 LLM）。
+// 用户场景：模型输出里夹了 ASCII 双引号导致解析失败 → 用户在文本框
+// 里把引号改成中文「」或加 \ 转义 → 点「重新解析」就能入库。
+const reparsing = ref(false)
+async function reparse() {
+  if (!contentText.value.trim()) {
+    ElMessage.warning($t('@WORKBENCH:原始结果为空，无法解析'))
+    return
+  }
+  reparsing.value = true
+  try {
+    const res = await fetch('/api/workbench/tasks/parse-subtasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw: contentText.value })
+    }).then(r => r.json())
+    if (!res.success) {
+      ElMessage.error(res.error || $t('@WORKBENCH:解析失败'))
+      return
+    }
+    subtasks.value = Array.isArray(res.subtasks) ? res.subtasks : []
+    parseError.value = String(res.parseError || '')
+    parseStage.value = String(res.parseStage || '')
+    rawResponse.value = contentText.value
+    if (subtasks.value.length > 0) {
+      ElMessage.success($t('@WORKBENCH:解析成功，已识别 {n} 个子任务', { n: subtasks.value.length }))
+      activeTab.value = 'confirm'
+    } else {
+      ElMessage.warning($t('@WORKBENCH:仍未解析到子任务，请继续修改原始结果'))
+    }
+  } catch (err: any) {
+    ElMessage.error($t('@WORKBENCH:解析失败: ') + (err?.message || err))
+  } finally {
+    reparsing.value = false
+  }
 }
 
 // 打开弹窗时自动启动；关闭意图由 close() 处理（见上注释）
@@ -308,7 +356,43 @@ function cancelEditPrompt() {
             <span v-if="contentLen > 0" class="ai-split-tab-count">({{ contentLen }})</span>
           </span>
         </template>
-        <pre class="ai-split-pre">{{ contentText || $t('@WORKBENCH:（暂无输出）') }}</pre>
+        <el-alert
+          v-if="parseError && phase === 'result'"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="ai-split-parse-error"
+        >
+          <template #title>
+            {{ $t('@WORKBENCH:模型返回内容解析失败，无法识别为有效的子任务 JSON') }}
+          </template>
+          <div class="ai-split-parse-error__detail">{{ parseError }}</div>
+          <div class="ai-split-parse-error__hint">
+            {{ $t('@WORKBENCH:常见原因：desc 内夹杂了 ASCII 双引号、出现尾随逗号，或输出被截断。可在下方文本框中手动修改后点「重新解析」，或重新生成。') }}
+          </div>
+          <div class="ai-split-parse-error__actions">
+            <el-button size="small" type="primary" :loading="reparsing" @click="reparse">{{ $t('@WORKBENCH:重新解析') }}</el-button>
+            <el-button size="small" @click="retry">{{ $t('@WORKBENCH:重新生成') }}</el-button>
+            <el-button size="small" @click="activeTab = 'prompt'">{{ $t('@WORKBENCH:去编辑指令') }}</el-button>
+          </div>
+        </el-alert>
+        <div class="ai-split-raw-toolbar" v-if="phase === 'result' || contentText">
+          <span class="ai-split-raw-tip">
+            {{ $t('@WORKBENCH:可直接编辑下方文本，修正后点「重新解析」即可入库') }}
+          </span>
+          <el-button size="small" type="primary" :loading="reparsing" :disabled="!contentText.trim()" @click="reparse">
+            {{ $t('@WORKBENCH:重新解析') }}
+          </el-button>
+        </div>
+        <el-input
+          v-model="contentText"
+          type="textarea"
+          :rows="14"
+          :placeholder="$t('@WORKBENCH:（暂无输出）')"
+          :readonly="isRunning"
+          class="ai-split-raw-editor"
+          resize="none"
+        />
       </el-tab-pane>
 
       <!-- 4. 确认入库 -->
@@ -334,8 +418,14 @@ function cancelEditPrompt() {
       </el-tab-pane>
     </el-tabs>
 
+    <!-- footer 上方的解析失败横幅：用户在任意 tab 都能看到 -->
+    <div v-if="parseError && phase === 'result' && subtasks.length === 0" class="ai-split-footer-hint">
+      <el-icon color="#e6a23c"><CircleClose /></el-icon>
+      <span>{{ $t('@WORKBENCH:解析失败，未能从模型输出中提取出子任务 — 请查看「原始结果」') }}</span>
+    </div>
+
     <template #footer>
-      <el-button v-if="phase === 'error'" @click="retry">
+      <el-button v-if="phase === 'error' || (phase === 'result' && parseError && subtasks.length === 0)" @click="retry">
         {{ $t('@WORKBENCH:重新生成') }}
       </el-button>
       <el-button @click="close">
@@ -473,5 +563,59 @@ function cancelEditPrompt() {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.ai-split-parse-error {
+  margin-bottom: 10px;
+}
+.ai-split-parse-error__detail {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  margin: 4px 0 6px;
+  word-break: break-word;
+  color: var(--text-primary);
+}
+.ai-split-parse-error__hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 8px;
+}
+.ai-split-parse-error__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-split-footer-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: rgba(230, 162, 60, 0.1);
+  color: var(--el-color-warning);
+  font-size: 12px;
+}
+
+.ai-split-raw-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(64, 158, 255, 0.06);
+  font-size: 12px;
+}
+.ai-split-raw-tip {
+  color: var(--text-secondary);
+}
+.ai-split-raw-editor :deep(.el-textarea__inner) {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 360px;
 }
 </style>

@@ -414,6 +414,141 @@ async function callLlmStream(model, prompt, onDelta, opts = {}) {
   return { content: fullContent, aborted }
 }
 
+// AI 拆分子任务 JSON 多级降级解析。
+// 模型经常会犯几类格式错：在 desc 里用 ASCII 双引号引用术语 / 末尾留尾随逗号 /
+// 输出被 token 上限截断导致代码块未闭合。直接 JSON.parse 一旦失败就会让前端的
+// "确认入库" 按钮永远是 (0)，用户看不到原因。这里按"越简单越优先"的顺序尝试：
+//   ① ```json``` 代码块 / ```any``` 代码块 / 第一个完整 { ... } 范围
+//   ② 把候选片段去掉尾随逗号 + 块/行注释 再 parse
+//   ③ 用括号深度扫描，从开头找一个语法平衡的 { ... } 子串
+//   ④ 启发式转义模型夹在字符串内部的未转义 ASCII 双引号
+//      （这是实战里最常见的失败：模型用 ASCII " 引用"和书籍对话"这种术语，
+//       直接打断外层 JSON。本级在字符串中遇到 " 时往后看一个非空白字符，
+//       不是 ,}]: 就把它当作字面量，转义成 \"。）
+// 任一步成功就返回 parsed，全部失败时返回最后一次 JSON.parse 的错误，
+// 用 parseStage 告知前端"模型输出哪一步崩了"，并把原始 raw 一并回传。
+function parseSubtaskJson(content) {
+  const src = String(content || '');
+  if (!src.trim()) {
+    return { parsed: null, parseError: '模型未返回任何内容', parseStage: 'empty' };
+  }
+
+  const candidates = [];
+  const fenced = src.match(/```json\s*([\s\S]*?)```/i) || src.match(/```\s*([\s\S]*?)```/);
+  if (fenced) candidates.push(fenced[1]);
+  const bracePair = src.match(/\{[\s\S]*\}/);
+  if (bracePair) candidates.push(bracePair[0]);
+  // 兜底：整段当 JSON 试
+  candidates.push(src);
+
+  let lastErr = null;
+  for (const raw of candidates) {
+    const txt = String(raw || '').trim();
+    if (!txt) continue;
+    // ① 直 parse
+    try { return { parsed: JSON.parse(txt), parseError: '', parseStage: '' }; }
+    catch (e) { lastErr = e; }
+    // ② 清洗：去 //…/* */ 注释 + 尾随逗号
+    const cleaned = txt
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:"'\\])\/\/[^\n]*/g, '$1')
+      .replace(/,(\s*[}\]])/g, '$1');
+    try { return { parsed: JSON.parse(cleaned), parseError: '', parseStage: 'cleaned' }; }
+    catch (e) { lastErr = e; }
+    // ③ 平衡花括号扫描
+    const balanced = extractBalancedJson(cleaned);
+    if (balanced && balanced !== cleaned) {
+      try { return { parsed: JSON.parse(balanced), parseError: '', parseStage: 'balanced' }; }
+      catch (e) { lastErr = e; }
+    }
+    // ④ 启发式转义字符串内的未转义双引号
+    const base = balanced || cleaned;
+    const reescaped = reescapeUnescapedQuotes(base);
+    if (reescaped && reescaped !== base) {
+      try { return { parsed: JSON.parse(reescaped), parseError: '', parseStage: 'reescaped' }; }
+      catch (e) { lastErr = e; }
+    }
+  }
+
+  return {
+    parsed: null,
+    parseError: lastErr ? (lastErr.message || String(lastErr)) : '未能从模型输出中提取出 JSON',
+    parseStage: 'failed'
+  };
+}
+
+// 从字符串中提取首个语法平衡的 { ... } 子串。
+// 跟踪字符串字面量（含转义），避免把 desc 里的 } 当成结束。
+function extractBalancedJson(text) {
+  const s = String(text || '');
+  const start = s.indexOf('{');
+  if (start < 0) return '';
+  let depth = 0;
+  let inStr = false;
+  let strCh = '';
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === strCh) { inStr = false; }
+      continue;
+    }
+    if (c === '"' || c === "'") { inStr = true; strCh = c; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return '';
+}
+
+// ④ 级降级：把字符串字面量内部出现的、未转义的 ASCII 双引号自动转义。
+// 实战中模型最常见的错误是 "desc": "...用户点击"保存"按钮..." 这种—
+// 中间的 "保存" 把外层字符串截断成两段，后面变成裸文本，JSON.parse 必崩。
+//
+// 启发式判断：扫描时若处于字符串中且遇到 "，往后看第一个非空白字符：
+//   - 是 , } ] : 或文本结尾 → 这是真闭合，正常退出字符串
+//   - 否则 → 是模型乱写的字面量引号，改写为 \" 并继续留在字符串里
+// 不依赖正则、不破坏已经转义的 \"，对嵌套 / 多行字符串都安全。
+function reescapeUnescapedQuotes(text) {
+  const s = String(text || '');
+  if (!s) return '';
+  const out = [];
+  let inStr = false;
+  let strCh = '';
+  let esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (!inStr) {
+      out.push(c);
+      if (c === '"' || c === "'") { inStr = true; strCh = c; }
+      continue;
+    }
+    // 字符串内部
+    if (esc) { out.push(c); esc = false; continue; }
+    if (c === '\\') { out.push(c); esc = true; continue; }
+    if (c !== strCh) { out.push(c); continue; }
+    // 遇到与开闭引号相同的字符——往后看下一个非空白
+    let j = i + 1;
+    while (j < s.length && (s[j] === ' ' || s[j] === '\t')) j++;
+    const next = j < s.length ? s[j] : '';
+    if (next === '' || next === ',' || next === '}' || next === ']'
+        || next === ':' || next === '\n' || next === '\r') {
+      // 真闭合
+      out.push(c);
+      inStr = false;
+      strCh = '';
+    } else {
+      // 字面量裸引号——转义
+      out.push('\\', c);
+    }
+  }
+  return out.join('');
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -1394,7 +1529,13 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   "subtasks": [
     { "title": "子任务标题（10-20字）", "desc": "具体描述" }
   ]
-}`;
+}
+
+**JSON 输出严格要求**（不遵守会导致解析失败、用户无法入库）：
+1. title 和 desc 内如需引用术语 / 页面名 / 状态名，**必须使用中文引号「」或『』**，禁止使用 ASCII 双引号、单引号或反引号，否则会破坏外层 JSON 结构。
+2. JSON 中不允许尾随逗号（最后一个元素后面不能跟逗号）。
+3. JSON 中不允许写注释。
+4. 所有字符串字段必须用 ASCII 双引号包裹，字符串内部如有换行用 \\n 转义。`;
 
       // 先把 prompt 元信息推给前端
       send({ type: 'meta', prompt: { system: userInstruction, user: userBlock } });
@@ -1416,15 +1557,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         return res.end();
       }
 
-      // 解析 JSON：兼容 ```json ... ``` 代码块或裸 JSON
-      let parsed = {};
-      try {
-        const m = content.match(/```json\s*([\s\S]*?)```/i)
-          || content.match(/```\s*([\s\S]*?)```/)
-          || content.match(/(\{[\s\S]*\})/);
-        parsed = JSON.parse(m ? m[1] : content);
-      } catch { parsed = {}; }
-
+      // 解析 JSON：兼容 ```json ... ``` 代码块或裸 JSON，多级降级
+      const { parsed, parseError, parseStage } = parseSubtaskJson(content);
       const list = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
       const subtasks = list
         .map(s => ({
@@ -1434,13 +1568,37 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         .filter(s => s.title)
         .slice(0, 8);
 
-      send({ type: 'done', subtasks, raw: content });
+      send({ type: 'done', subtasks, raw: content, parseError, parseStage });
       finished = true;
       res.end();
     } catch (err) {
       send({ type: 'error', error: 'AI 拆分失败: ' + (err?.message || String(err)) });
       finished = true;
       res.end();
+    }
+  });
+
+  // POST /api/workbench/tasks/parse-subtasks
+  //   body: { raw: string }
+  //   →   { success, subtasks, parseError, parseStage }
+  // 让前端在 AI 拆分对话框里把"原始结果"作为可编辑文本——用户手改完
+  // （比如把 ASCII 双引号改成中文「」、删尾随逗号）后直接调这个接口，
+  // 不必再发起一次 LLM 调用，省 token 也省等待。
+  app.post('/api/workbench/tasks/parse-subtasks', async (req, res) => {
+    try {
+      const raw = String(req.body?.raw || '');
+      const { parsed, parseError, parseStage } = parseSubtaskJson(raw);
+      const list = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
+      const subtasks = list
+        .map(s => ({
+          title: String(s?.title || '').trim().slice(0, 80),
+          desc: String(s?.desc || '').trim().slice(0, 500)
+        }))
+        .filter(s => s.title)
+        .slice(0, 8);
+      res.json({ success: true, subtasks, parseError, parseStage });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || String(err) });
     }
   });
 
