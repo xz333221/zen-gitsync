@@ -1741,8 +1741,11 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
 
   app.post('/api/workbench/tasks', async (req, res) => {
     try {
-      const { id, title, desc, promptId, subtasks } = req.body || {};
+      const { id, title, desc, promptId, subtasks, type: rawType, simpleOverride } = req.body || {};
       if (!title) return res.status(400).json({ success: false, error: 'title 必填' });
+      // type 归一化:仅接受 'simple' | 'complex'，缺省/未知一律按 complex
+      const taskType = rawType === 'simple' ? 'simple' : 'complex';
+      const safeOverride = typeof simpleOverride === 'string' ? simpleOverride.slice(0, 8000) : '';
       const data = await readJson(TASKS_FILE, { tasks: [] });
       const tasks = data.tasks || [];
       const now = nowIso();
@@ -1756,6 +1759,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
           title,
           desc: desc || '',
           promptId: promptId || null,
+          type: taskType,
+          simpleOverride: taskType === 'simple' ? safeOverride : '',
           subtasks: Array.isArray(subtasks) ? subtasks.map(s => ({
             id: s.id || genId(),
             title: s.title || '',
@@ -1784,6 +1789,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         title,
         desc: desc || '',
         promptId: promptId || null,
+        type: taskType,
+        simpleOverride: taskType === 'simple' ? safeOverride : '',
         projectPath: currentProjectPath || '',
         subtasks: Array.isArray(subtasks) ? subtasks.map(s => ({
           id: s.id || genId(),
@@ -1829,6 +1836,42 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       // 异步执行，立即返回
       res.json({ success: true, message: '已开始执行' });
       runTaskQueue(task, repoPath, '').catch(err => {
+        publish('task:error', { taskId: task.id, error: err.message });
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ── 执行简单任务（无子任务直接跑） ──────────────────────────────────
+  // POST /api/workbench/tasks/:id/run-simple
+  // 行为：
+  //   - 适用于 type==='simple' 的任务，无需拆分子任务
+  //   - 在内存里合成一个虚拟 sub{title=task.title, desc=task.desc,
+  //     promptOverride=task.simpleOverride, status='todo'},
+  //     复用 runSingleSubtask(同一套 prompt 拼装、附件、job 跟踪、取消、落盘)
+  //   - 不会修改 task.subtasks 持久化结构
+  app.post('/api/workbench/tasks/:id/run-simple', async (req, res) => {
+    try {
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const task = (data.tasks || []).find(t => t.id === req.params.id);
+      if (!task) return res.status(404).json({ success: false, error: '任务不存在' });
+      if (task.type !== 'simple') {
+        return res.status(400).json({ success: false, error: '该任务不是简单任务,请使用普通执行接口' });
+      }
+      const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+      // 虚拟 sub:不写回 tasks.json,只用一次
+      const virtualSub = {
+        id: `${task.id}__simple`,
+        title: task.title,
+        desc: task.desc || '',
+        status: 'todo',
+        promptOverride: task.simpleOverride || '',
+        attachments: Array.isArray(task.attachments) ? task.attachments : []
+      };
+      // 简单任务本身没有 subtasks 列表,直接调 runSingleSubtask(不再走 runTaskQueue 循环)
+      res.json({ success: true, message: '已开始执行简单任务' });
+      runSingleSubtask(task, virtualSub, repoPath, '', []).catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });
       });
     } catch (err) {

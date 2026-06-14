@@ -69,6 +69,10 @@ interface Task {
   title: string
   desc: string
   promptId: string | null
+  // 'simple'=不需要拆分,执行时直接跑 desc; 'complex'=需要拆子任务
+  type?: 'simple' | 'complex'
+  // 仅 simple 任务有效:覆盖预置提示词的内容,留空走 task.promptId
+  simpleOverride?: string
   // 任务所属项目根路径（创建时记录），用于侧边栏按项目分组显示
   projectPath?: string
   subtasks: SubTask[]
@@ -87,16 +91,23 @@ const activeView = ref<'editor' | 'logs'>('editor')
 
 const selectedTaskId = ref<string | null>(null)
 const selectedTask = computed<Task | null>(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
+// 兼容历史数据:缺 type 字段一律按 complex 处理
+const isSimpleTask = computed(() => selectedTask.value?.type === 'simple')
 
 // 当前选中 task 在磁盘上的快照（参与 dirty 比较的字段）。
 // 拆为两份：subSnapshot 记每个 sub 的 title/desc/promptOverride，
-// metaSnapshot 记 task 自身的 title/desc/promptId。
-// 任务级 title/desc/promptId 改动走"防抖自动保存"，不在这里 dirty 提示。
+// metaSnapshot 记 task 自身的 title/desc/promptId/simpleOverride。
+// 任务级 title/desc/promptId/simpleOverride 改动走"防抖自动保存"。
 // - captureSnapshot()  在 loadTasks / persistTask 成功后 / 切换 selectedTaskId 时调用
 // - dirtySubIds 对比 selectedTask.subtasks 与 subSnapshot
-// - metaDirty    对比 selectedTask.{title,desc,promptId} 与 metaSnapshot
+// - metaDirty    对比 selectedTask.{title,desc,promptId,simpleOverride} 与 metaSnapshot
 const subSnapshot = ref<Map<string, { id: string; title: string; desc: string; promptOverride: string }>>(new Map())
-const metaSnapshot = ref<{ title: string; desc: string; promptId: string | null }>({ title: '', desc: '', promptId: null })
+const metaSnapshot = ref<{
+  title: string
+  desc: string
+  promptId: string | null
+  simpleOverride: string
+}>({ title: '', desc: '', promptId: null, simpleOverride: '' })
 
 function captureSnapshot() {
   const m = new Map<string, { id: string; title: string; desc: string; promptOverride: string }>()
@@ -110,10 +121,11 @@ function captureSnapshot() {
     metaSnapshot.value = {
       title: selectedTask.value.title,
       desc: selectedTask.value.desc,
-      promptId: selectedTask.value.promptId
+      promptId: selectedTask.value.promptId,
+      simpleOverride: selectedTask.value.simpleOverride || ''
     }
   } else {
-    metaSnapshot.value = { title: '', desc: '', promptId: null }
+    metaSnapshot.value = { title: '', desc: '', promptId: null, simpleOverride: '' }
   }
 }
 
@@ -151,6 +163,7 @@ const metaDirty = computed(() => {
   return metaSnapshot.value.title !== t.title
     || metaSnapshot.value.desc !== t.desc
     || metaSnapshot.value.promptId !== t.promptId
+    || metaSnapshot.value.simpleOverride !== (t.simpleOverride || '')
 })
 
 function clearMetaSaveTimers() {
@@ -178,11 +191,17 @@ async function flushMetaSave(): Promise<boolean> {
   return false
 }
 
-// 监听 title/desc/promptId 变化 → 1.5s 防抖 → flushMetaSave
+// 监听 title/desc/promptId/simpleOverride 变化 → 1.5s 防抖 → flushMetaSave
 // 任何字段任一变化都重置计时器（写操作高频时合并）
 watch(
   () => selectedTask.value
-    ? { id: selectedTask.value.id, title: selectedTask.value.title, desc: selectedTask.value.desc, promptId: selectedTask.value.promptId }
+    ? {
+        id: selectedTask.value.id,
+        title: selectedTask.value.title,
+        desc: selectedTask.value.desc,
+        promptId: selectedTask.value.promptId,
+        simpleOverride: selectedTask.value.simpleOverride || ''
+      }
     : null,
   (cur, prev) => {
     // 首次建立 / 切换 task：prev 为 undefined 或 id 变了 → 不自动保存
@@ -218,7 +237,18 @@ function onBeforeUnloadPersist() {
 
 const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false })
 const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
-const taskDialog = reactive({ visible: false, editing: null as Task | null, title: '', desc: '', promptId: null as string | null })
+// 任务编辑对话框:同时支持「简单任务」和「复杂任务」两种模式
+// - type='simple' 时 simpleOverride 启用,执行走 /run-simple,不进入子任务拆分
+// - type='complex' 时 simpleOverride 无意义,UI 隐藏
+const taskDialog = reactive({
+  visible: false,
+  editing: null as Task | null,
+  title: '',
+  desc: '',
+  promptId: null as string | null,
+  type: 'complex' as 'simple' | 'complex',
+  simpleOverride: ''
+})
 
 let es: EventSource | null = null
 
@@ -545,6 +575,8 @@ function openCreateTask() {
   taskDialog.title = ''
   taskDialog.desc = ''
   taskDialog.promptId = null
+  taskDialog.type = 'complex'
+  taskDialog.simpleOverride = ''
   taskDialog.visible = true
 }
 async function saveTask() {
@@ -557,6 +589,9 @@ async function saveTask() {
     title: taskDialog.title.trim(),
     desc: taskDialog.desc,
     promptId: taskDialog.promptId,
+    type: taskDialog.type,
+    // 简单任务才需要覆盖;复杂任务后端会忽略
+    simpleOverride: taskDialog.type === 'simple' ? taskDialog.simpleOverride : '',
     subtasks: taskDialog.editing?.subtasks || []
   }
   // 新建任务时附带当前项目路径；编辑已有任务不覆盖 projectPath
@@ -691,6 +726,10 @@ function applySplitResult(newSubs: { title: string; desc: string }[]) {
 }
 
 async function runTask(t: Task) {
+  // 简单任务:不需要子任务,直接走 /run-simple
+  if (t.type === 'simple') {
+    return runSimpleTask(t)
+  }
   if (!t.subtasks || t.subtasks.length === 0) {
     ElMessage.warning($t('@WORKBENCH:请先拆分任务'))
     return
@@ -710,6 +749,31 @@ async function runTask(t: Task) {
     }
   }
   const res = await fetch(`/api/workbench/tasks/${t.id}/run`, { method: 'POST' }).then(r => r.json())
+  if (res.success) {
+    ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
+  } else {
+    ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
+  }
+}
+
+/**
+ * 简单任务执行:不需要任何子任务,后端用 task.desc 合成虚拟 sub 跑。
+ * 静默落盘行为跟 runTask 一致:title/desc/simpleOverride/promptId 有改动先 flush。
+ */
+async function runSimpleTask(t: Task) {
+  if (selectedTask.value && selectedTask.value.id === t.id) {
+    const onDisk = tasks.value.find(x => x.id === t.id)
+    const dirty = !onDisk
+      || onDisk.title !== selectedTask.value.title
+      || onDisk.desc !== selectedTask.value.desc
+      || onDisk.promptId !== selectedTask.value.promptId
+      || (onDisk.simpleOverride || '') !== (selectedTask.value.simpleOverride || '')
+    if (dirty) {
+      const ok = await persistTask(false)
+      if (!ok) return
+    }
+  }
+  const res = await fetch(`/api/workbench/tasks/${t.id}/run-simple`, { method: 'POST' }).then(r => r.json())
   if (res.success) {
     ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
   } else {
@@ -1124,6 +1188,13 @@ function humanSize(n: number): string {
                       <el-icon class="wb-task-item__meta-icon"><Memo /></el-icon>
                     </span>
                     <span
+                      v-if="t.type === 'simple'"
+                      class="wb-task-item__meta-item wb-task-item__meta-item--simple"
+                      :title="$t('@WORKBENCH:简单任务 - 无需拆分直接执行')"
+                    >
+                      {{ $t('@WORKBENCH:简单') }}
+                    </span>
+                    <span
                       v-if="t.projectPath && t.projectPath !== currentProject.path"
                       class="wb-task-item__meta-item wb-task-item__meta-item--project"
                       :title="t.projectPath"
@@ -1241,6 +1312,7 @@ function humanSize(n: number): string {
             <option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
           <el-button
+            v-if="!isSimpleTask"
             type="info"
             plain
             :disabled="!selectedTask.title || !selectedTask.title.trim()"
@@ -1249,7 +1321,7 @@ function humanSize(n: number): string {
             {{ $t('@WORKBENCH:AI 拆分') }}
           </el-button>
           <el-button type="primary" :loading="false" @click="runTask(selectedTask)">
-            {{ $t('@WORKBENCH:执行任务') }}
+            {{ isSimpleTask ? $t('@WORKBENCH:执行') : $t('@WORKBENCH:执行任务') }}
           </el-button>
         </div>
         <textarea
@@ -1274,6 +1346,8 @@ function humanSize(n: number): string {
           @dragenter.prevent="pasteHoverId = 'task-' + selectedTask.id"
           @dragleave="pasteHoverId = (pasteHoverId === 'task-' + selectedTask.id ? null : pasteHoverId)"
         />
+        <!-- ── 复杂任务：子任务拆分 + 列表 ── -->
+        <template v-if="!isSimpleTask">
         <div class="wb-split__sub-header">
           <h4>{{ $t('@WORKBENCH:子任务拆分') }}</h4>
           <div class="wb-split__sub-actions">
@@ -1455,6 +1529,29 @@ function humanSize(n: number): string {
             </div>
           </li>
         </ul>
+        </template>
+
+        <!-- ── 简单任务：覆盖预置提示词 + 附件(执行时塞 prompt) ── -->
+        <template v-else>
+          <div class="wb-simple__header">
+            <h4>{{ $t('@WORKBENCH:简单任务') }}</h4>
+            <span class="wb-simple__hint">{{ $t('@WORKBENCH:无需拆分子任务;点执行后直接用上方描述驱动 Claude') }}</span>
+          </div>
+          <div class="wb-form-item">
+            <label class="wb-form-item__label">{{ $t('@WORKBENCH:覆盖预置提示词（可选）') }}</label>
+            <textarea
+              class="wb-textarea"
+              v-model="selectedTask.simpleOverride"
+              :placeholder="$t('@WORKBENCH:留空则使用上方选定的「预置提示词」模板;可用变量同子任务:｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝')"
+              rows="6"
+            />
+          </div>
+          <!-- 简单任务的执行日志：用 task 的虚拟 sub id 查 job -->
+          <JobLogDetails
+            v-if="jobOf(`${selectedTask.id}__simple`)"
+            :job="jobOf(`${selectedTask.id}__simple`)!"
+          />
+        </template>
       </template>
     </section>
     </div>
@@ -1529,14 +1626,42 @@ function humanSize(n: number): string {
     <el-dialog
       v-model="taskDialog.visible"
       :title="taskDialog.editing ? $t('@WORKBENCH:编辑任务') : $t('@WORKBENCH:新建任务')"
-      width="560px"
+      width="600px"
     >
       <el-form label-position="top">
         <el-form-item :label="$t('@WORKBENCH:标题')">
           <el-input v-model="taskDialog.title" />
         </el-form-item>
-        <el-form-item :label="$t('@WORKBENCH:描述')">
+        <el-form-item :label="$t('@WORKBENCH:类型')">
+          <el-radio-group v-model="taskDialog.type">
+            <el-radio-button value="complex">{{ $t('@WORKBENCH:复杂任务（需要拆分子任务）') }}</el-radio-button>
+            <el-radio-button value="simple">{{ $t('@WORKBENCH:简单任务（直接执行）') }}</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item
+          v-if="taskDialog.type === 'simple'"
+          :label="$t('@WORKBENCH:任务描述')"
+        >
+          <el-input
+            v-model="taskDialog.desc"
+            type="textarea"
+            :rows="4"
+            :placeholder="$t('@WORKBENCH:把要做的事直接写在这里,执行时会把这段描述作为 prompt 喂给 Claude')"
+          />
+        </el-form-item>
+        <el-form-item
+          v-else
+          :label="$t('@WORKBENCH:描述')"
+        >
           <el-input v-model="taskDialog.desc" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item v-if="taskDialog.type === 'simple'" :label="$t('@WORKBENCH:覆盖预置提示词（可选）')">
+          <el-input
+            v-model="taskDialog.simpleOverride"
+            type="textarea"
+            :rows="5"
+            :placeholder="$t('@WORKBENCH:留空则使用「预置提示词」下拉里选定的模板;可用变量同子任务覆盖。')"
+          />
         </el-form-item>
         <el-form-item :label="$t('@WORKBENCH:预置提示词')">
           <el-select v-model="taskDialog.promptId" clearable :placeholder="$t('@WORKBENCH:不绑定')" style="width: 100%;">
@@ -1897,6 +2022,20 @@ function humanSize(n: number): string {
   font-weight: 500;
 }
 .wb-task-item__meta-item--accent { color: var(--color-primary); }
+/* 简单任务徽标：紧凑圆角胶囊,弱色调以不抢戏 */
+.wb-task-item__meta-item--simple {
+  display: inline-flex;
+  align-items: center;
+  height: 15px;
+  padding: 0 6px;
+  border-radius: 7px;
+  background: color-mix(in srgb, #10b981 14%, transparent);
+  color: #047857;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
 /* 跨项目的任务：在 meta 行内加一个简短的项目名徽标，提示"这条是别的项目的" */
 .wb-task-item__meta-item--project {
   display: inline-flex;
@@ -2341,6 +2480,37 @@ function humanSize(n: number): string {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ── 简单任务编辑区 ─────────────────────────── */
+.wb-simple__header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+.wb-simple__header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.wb-simple__hint {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.wb-form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.wb-form-item__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: -0.05px;
 }
 
 .wb-sub-list {
