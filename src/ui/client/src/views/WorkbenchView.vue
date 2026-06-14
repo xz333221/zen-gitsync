@@ -155,7 +155,6 @@ type MetaSaveState = 'idle' | 'saving' | 'saved' | 'error'
 const metaSaveState = ref<MetaSaveState>('idle')
 const metaSavedAt = ref<number>(0)  // 上次成功落盘的时间戳
 let metaSaveTimer: number | null = null
-let metaFlushTimer: number | null = null
 
 const metaDirty = computed(() => {
   if (!selectedTask.value) return false
@@ -168,7 +167,6 @@ const metaDirty = computed(() => {
 
 function clearMetaSaveTimers() {
   if (metaSaveTimer !== null) { clearTimeout(metaSaveTimer); metaSaveTimer = null }
-  if (metaFlushTimer !== null) { clearTimeout(metaFlushTimer); metaFlushTimer = null }
 }
 
 async function flushMetaSave(): Promise<boolean> {
@@ -188,6 +186,13 @@ async function flushMetaSave(): Promise<boolean> {
     return true
   }
   metaSaveState.value = 'error'
+  // 失败也走 4s 自动归位，避免"保存失败"标签一直挂在标题旁
+  const failedAt = Date.now()
+  setTimeout(() => {
+    if (metaSaveState.value === 'error' && Date.now() - failedAt >= 4000) {
+      metaSaveState.value = 'idle'
+    }
+  }, 4000)
   return false
 }
 
@@ -213,12 +218,15 @@ watch(
 )
 
 // 切换 selectedTaskId 时立刻 flush 当前 task 的未保存改动
-// 避免「改了 desc 立刻点别的任务 → desc 丢失」
+// 避免「改了 desc 立刻点别的任务 → desc 丢失」/「程序式切换(创建/删除后)丢改动」
 watch(selectedTaskId, async (_n, _o) => {
   clearMetaSaveTimers()
-  // 新 task 选中时 captureSnapshot() 会在 selectTask() 内同步调用；
-  // 但要先把上一个 task 的未保存内容落盘
-  // （loadTasks 之后 diskSnapshot 也会重新拍，避免下次切回时误标 dirty）
+  // selectTask() 自己会负责 flush；这里作为兜底：捕获那些没经过 selectTask
+  // 直接改 selectedTaskId 的路径(创建后切到新 task、删除当前 task 后切走等)。
+  if (selectedTask.value && metaDirty.value) {
+    await flushMetaSave()
+  }
+  // 新 task 选中时 captureSnapshot() 会在 selectTask() / loadTasks() 内同步调用
 })
 
 // 离开页面 / 切到别的 task 前尝试 flush（best-effort）
@@ -642,7 +650,19 @@ async function selectTask(t: Task) {
 }
 
 // ── 子任务编辑（拆分） ─────────────────────────────────────────────────────
-function addSubtask() {
+// 子任务行内的"持久化中"集合：避免连续点击同一行触发并发落盘
+const subtaskPersistingIds = ref<Set<string>>(new Set())
+function isSubtaskPersisting(id: string): boolean {
+  return subtaskPersistingIds.value.has(id)
+}
+function setSubtaskPersisting(id: string, on: boolean) {
+  if (on) subtaskPersistingIds.value.add(id)
+  else subtaskPersistingIds.value.delete(id)
+  // 触发响应式（Set 本身不响应）
+  subtaskPersistingIds.value = new Set(subtaskPersistingIds.value)
+}
+
+async function addSubtask() {
   if (!selectedTask.value) return
   const sub: SubTask = {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
@@ -653,13 +673,23 @@ function addSubtask() {
   }
   selectedTask.value.subtasks.push(sub)
   // 新子任务立刻落盘，避免后续「执行任务」时后端找不到 id。
-  // 失败也不影响 UI：用户可以再点「保存拆分」补救。
-  persistTask(false)
+  // await 是为了保证「点完添加立刻点执行」时，后端已经能看到这条 sub。
+  setSubtaskPersisting(sub.id, true)
+  try {
+    await persistTask(false)
+  } finally {
+    setSubtaskPersisting(sub.id, false)
+  }
 }
-function removeSubtask(sub: SubTask) {
+async function removeSubtask(sub: SubTask) {
   if (!selectedTask.value) return
   selectedTask.value.subtasks = selectedTask.value.subtasks.filter(s => s.id !== sub.id)
-  persistTask(false)
+  setSubtaskPersisting(sub.id, true)
+  try {
+    await persistTask(false)
+  } finally {
+    setSubtaskPersisting(sub.id, false)
+  }
 }
 
 /**
@@ -847,14 +877,21 @@ function toggleSubExpand(sub: SubTask) {
 }
 async function cancelDone(sub: SubTask) {
   if (!selectedTask.value) return
-  // 把磁盘快照里这条 sub 的 status 一起改回 todo，避免 dirty 误标
-  const snap = subSnapshot.value.get(sub.id)
-  if (snap) {
-    subSnapshot.value.set(sub.id, { ...snap, status: 'todo' } as any)
+  // 防止连续点击触发并发落盘 + 状态抖动
+  if (isSubtaskPersisting(sub.id)) return
+  setSubtaskPersisting(sub.id, true)
+  try {
+    // 把磁盘快照里这条 sub 的 status 一起改回 todo，避免 dirty 误标
+    const snap = subSnapshot.value.get(sub.id)
+    if (snap) {
+      subSnapshot.value.set(sub.id, { ...snap, status: 'todo' } as any)
+    }
+    sub.status = 'todo'
+    // 静默落盘：让后端 runTaskQueue 在下次执行时把这 sub 重新纳入队列
+    await persistTask(false)
+  } finally {
+    setSubtaskPersisting(sub.id, false)
   }
-  sub.status = 'todo'
-  // 静默落盘：让后端 runTaskQueue 在下次执行时把这 sub 重新纳入队列
-  await persistTask(false)
 }
 
 /**
@@ -1117,12 +1154,6 @@ function humanSize(n: number): string {
           <span class="wb-new-btn__shortcut">N</span>
         </button>
 
-        <div v-if="tasks.length > 0 && currentProject.name" class="wb-current-project">
-          <el-icon class="wb-current-project__icon"><Folder /></el-icon>
-          <span class="wb-current-project__label">{{ $t('@WORKBENCH:当前项目') }}</span>
-          <span class="wb-current-project__name" :title="currentProject.path">{{ currentProject.name }}</span>
-        </div>
-
         <ul class="wb-task-list">
           <template v-for="group in groupedTasksList.groups" :key="group.path">
             <li
@@ -1214,12 +1245,17 @@ function humanSize(n: number): string {
               </li>
             </template>
           </template>
-          <li v-if="tasks.length === 0" class="wb-empty">
-            <div class="wb-empty__icon">
+          <li v-if="tasks.length === 0" class="wb-empty wb-empty--rich">
+            <div class="wb-empty__art" aria-hidden="true">
               <el-icon><DocumentAdd /></el-icon>
             </div>
-            <div class="wb-empty__text">{{ $t('@WORKBENCH:暂无任务') }}</div>
+            <div class="wb-empty__title">{{ $t('@WORKBENCH:暂无任务') }}</div>
             <div class="wb-empty__hint">{{ $t('@WORKBENCH:点击上方按钮新建') }}</div>
+            <div class="wb-empty__cta">
+              <el-button type="primary" size="small" :icon="Plus" @click="openCreateTask">
+                {{ $t('@WORKBENCH:新建任务') }}
+              </el-button>
+            </div>
           </li>
         </ul>
       </section>
@@ -1381,9 +1417,8 @@ function humanSize(n: number): string {
               'is-running': sub.status === 'running',
               'is-done': sub.status === 'done',
               'is-collapsed': isSubCollapsed(sub),
-              'is-clickable': isSubCollapsed(sub)
+              'is-persisting': isSubtaskPersisting(sub.id)
             }"
-            @click="isSubCollapsed(sub) && toggleSubExpand(sub)"
           >
             <!-- 折叠态：只显示徽标 + 标题 + 展开 + 取消完成 + 删除 -->
             <template v-if="isSubCollapsed(sub)">
@@ -1422,6 +1457,7 @@ function humanSize(n: number): string {
                   class="wb-sub-item__undo"
                   :title="$t('@WORKBENCH:取消完成')"
                   :aria-label="$t('@WORKBENCH:取消完成')"
+                  :disabled="isSubtaskPersisting(sub.id)"
                   @click.stop="cancelDone(sub)"
                 >
                   {{ $t('@WORKBENCH:取消完成') }}
@@ -1430,6 +1466,7 @@ function humanSize(n: number): string {
                   class="wb-sub-item__del"
                   :title="$t('@WORKBENCH:删除')"
                   :aria-label="$t('@WORKBENCH:删除')"
+                  :disabled="isSubtaskPersisting(sub.id)"
                   @click.stop="removeSubtask(sub)"
                 >×</button>
               </div>
@@ -1474,9 +1511,16 @@ function humanSize(n: number): string {
                 class="wb-sub-item__undo"
                 :title="$t('@WORKBENCH:取消完成')"
                 :aria-label="$t('@WORKBENCH:取消完成')"
+                :disabled="isSubtaskPersisting(sub.id)"
                 @click="cancelDone(sub)"
               >{{ $t('@WORKBENCH:取消完成') }}</button>
-              <button class="wb-sub-item__del" @click="removeSubtask(sub)">×</button>
+              <button
+                class="wb-sub-item__del"
+                :title="$t('@WORKBENCH:删除')"
+                :aria-label="$t('@WORKBENCH:删除')"
+                :disabled="isSubtaskPersisting(sub.id)"
+                @click="removeSubtask(sub)"
+              >×</button>
             </div>
             <textarea
               class="wb-textarea wb-textarea--sm"
@@ -1817,8 +1861,8 @@ function humanSize(n: number): string {
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
@@ -1861,18 +1905,9 @@ function humanSize(n: number): string {
   transition: transform var(--transition-fast) var(--ease-custom);
 }
 .wb-new-btn__shortcut {
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: var(--text-tertiary);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xs);
-  padding: 1px 5px;
-  font-family: var(--font-mono);
-  opacity: 0;
-  transition: opacity var(--transition-fast) var(--ease-custom);
+  /* N 快捷键徽标：当前版本未注册全局快捷键，避免误导用户。
+     样式保留以便后续接入快捷键时直接恢复。 */
+  display: none;
 }
 .wb-new-btn:hover {
   background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container));
@@ -1882,9 +1917,6 @@ function humanSize(n: number): string {
 }
 .wb-new-btn:hover .wb-new-btn__icon {
   transform: rotate(90deg);
-}
-.wb-new-btn:hover .wb-new-btn__shortcut {
-  opacity: 1;
 }
 .wb-new-btn:active {
   transform: scale(0.99);
@@ -2066,8 +2098,8 @@ function humanSize(n: number): string {
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
@@ -2671,8 +2703,8 @@ function humanSize(n: number): string {
   border: 1px solid var(--border-color-medium);
   background: var(--bg-container);
   color: var(--text-tertiary);
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm, 4px);
   display: inline-flex;
   align-items: center;
@@ -2700,8 +2732,8 @@ function humanSize(n: number): string {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.1px;
-  padding: 0 8px;
-  height: 24px;
+  padding: 0 10px;
+  height: 28px;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   flex-shrink: 0;
@@ -2718,6 +2750,15 @@ function humanSize(n: number): string {
   outline: var(--focus-outline);
   outline-offset: var(--focus-outline-offset);
 }
+.wb-sub-item__toggle:disabled,
+.wb-sub-item__undo:disabled,
+.wb-sub-item__del:disabled,
+.wb-sub-item__run:disabled,
+.wb-sub-item__stop:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
 /* ── 已完成态：绿色微底 + 圆角柔化（与执行中红色脉冲对比） ─────────── */
 .wb-sub-item.is-done:not(.is-running) {
@@ -2727,13 +2768,6 @@ function humanSize(n: number): string {
 .wb-sub-item.is-done.is-collapsed {
   padding: 8px 10px;
 }
-/* 折叠态的整行可点击展开：cursor + hover 反馈，避免和展开态冲突 */
-.wb-sub-item.is-clickable { cursor: pointer; }
-.wb-sub-item.is-clickable:hover {
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-surface));
-  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--border-color));
-}
-.wb-sub-item.is-clickable:hover .wb-sub-item__title-compact { color: var(--color-primary); }
 .wb-sub-item__status {
   position: relative;
   font-size: 11px;
@@ -2832,8 +2866,9 @@ function humanSize(n: number): string {
   color: #ef4444;
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 3px;
+  padding: 2px 10px;
+  height: 28px;
+  border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s, color 0.15s;
@@ -2849,8 +2884,9 @@ function humanSize(n: number): string {
   color: #fff;
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 3px;
+  padding: 2px 10px;
+  height: 28px;
+  border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   flex-shrink: 0;
   transition: opacity 0.15s, filter 0.15s;
@@ -2867,36 +2903,8 @@ function humanSize(n: number): string {
    按钮的视觉风格由 .wb-soft-btn 提供，子组件 AttachmentZone 在模板中合并使用
    `class="wb-attachments__add wb-soft-btn"`。本作用域内不再重复定义。 */
 
-/* ── 当前项目条（侧边栏任务列表上方） ─────────────────────── */
-.wb-current-project {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  margin-bottom: 8px;
-  border-radius: var(--radius-md);
-  background: var(--tint-primary-10);
-  border: 1px solid var(--tint-primary-22);
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.wb-current-project__icon { color: var(--color-primary); font-size: 13px; flex-shrink: 0; }
-.wb-current-project__label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-}
-.wb-current-project__name {
-  flex: 1;
-  min-width: 0;
-  font-weight: 600;
-  color: var(--color-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* 当前项目名已通过 .wb-task-group__head.is-current 在分组头中突出展示，
+   侧栏顶部不再重复渲染"当前项目"条以避免信息冗余。 */
 
 /* ── 任务分组头（多项目时按项目分组显示） ───────────────────────── */
 .wb-task-group__head {
