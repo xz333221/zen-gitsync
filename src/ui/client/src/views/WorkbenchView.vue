@@ -28,7 +28,6 @@ import {
   EditPen,
   Folder,
   ArrowDown,
-  ArrowUp,
   ArrowRight
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
@@ -951,20 +950,6 @@ function canRunSubtask(sub: SubTask): boolean {
   return true
 }
 
-// ── 已完成子任务折叠 ─────────────────────────────────────────────────────
-// 已完成的 sub 默认折叠成单行（只显示徽标 + 标题 + 展开 + 取消完成），
-// 长任务下让用户聚焦于未完成项。点"展开"手动打开看 desc/附件/历史日志。
-const expandedSubIds = ref<Set<string>>(new Set())
-function isSubCollapsed(sub: SubTask): boolean {
-  if (sub.status !== 'done') return false
-  return !expandedSubIds.value.has(sub.id)
-}
-function toggleSubExpand(sub: SubTask) {
-  if (expandedSubIds.value.has(sub.id)) expandedSubIds.value.delete(sub.id)
-  else expandedSubIds.value.add(sub.id)
-  // 触发响应式更新（Set 本身不响应）
-  expandedSubIds.value = new Set(expandedSubIds.value)
-}
 async function cancelDone(sub: SubTask) {
   if (!selectedTask.value) return
   // 防止连续点击触发并发落盘 + 状态抖动
@@ -1607,8 +1592,8 @@ function humanSize(n: number): string {
                   :is-uploading="isUploading('sub-' + activeSubtask.id)"
                   :is-paste-hover="pasteHoverId === activeSubtask.id"
                   :max-count="9"
-                  :on-pick="() => pickAttachmentFile({ kind: 'sub', task: selectedTask, sub: activeSubtask })"
-                  :on-remove="(att) => removeAttachment({ kind: 'sub', task: selectedTask, sub: activeSubtask }, att)"
+                  :on-pick="() => pickAttachmentFile({ kind: 'sub', task: selectedTask, sub: activeSubtask! })"
+                  :on-remove="(att) => removeAttachment({ kind: 'sub', task: selectedTask, sub: activeSubtask! }, att)"
                   @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub: activeSubtask })"
                   @drop.prevent="onAttachmentDrop($event, { kind: 'sub', task: selectedTask, sub: activeSubtask })"
                   @dragover.prevent="pasteHoverId = activeSubtask.id"
