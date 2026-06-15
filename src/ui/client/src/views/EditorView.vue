@@ -252,8 +252,10 @@ function onSearchEscape() {
     clearSearch()
     searchInputRef.value?.focus()
   } else {
-    // 已经是空:失焦,把键盘焦点让给编辑器
+    // 已经是空:失焦并把键盘焦点交还给 Monaco 编辑器,
+    // 避免用户 Esc 后继续打字却输入到 body(导致空格等键“看似失效”)
     searchInputRef.value?.blur()
+    editorInstance.value?.focus()
   }
 }
 

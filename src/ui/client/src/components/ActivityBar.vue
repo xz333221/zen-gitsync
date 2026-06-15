@@ -31,8 +31,14 @@ const emit = defineEmits<{
 const wbStatus = useWorkbenchStatusStore()
 const gitStore = useGitStore()
 
-// 未提交文件数（staged + unstaged + untracked 等价于 fileList 长度）
-const uncommittedCount = computed(() => gitStore.fileList?.length ?? 0)
+// 未提交文件数：只统计已纳入 git 跟踪的变更（staged + unstaged）
+// 排除 untracked —— 刚新建/尚未保存的空文件出现在文件树里属于正常状态，
+// 不该让徽标过早提示“未提交”，避免和编辑器里“未保存”的 dirty dot 混淆。
+const uncommittedCount = computed(() => {
+  const list = gitStore.fileList
+  if (!list || list.length === 0) return 0
+  return list.filter(f => f.type !== 'untracked').length
+})
 const uncommittedBadge = computed(() => {
   const n = uncommittedCount.value
   return n > 99 ? '99+' : String(n)
