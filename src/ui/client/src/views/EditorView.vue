@@ -1325,7 +1325,7 @@ function stopPreviewResize() {
   color: var(--text-primary);
 }
 
-// 节点名搜索命中高亮(沿用主题色 + 柔和背景)
+/* 节点名搜索命中高亮(沿用主题色 + 柔和背景) */
 .tree-name-hit {
   color: var(--accent-color, #f59e0b);
   background: rgba(245, 158, 11, 0.15);
