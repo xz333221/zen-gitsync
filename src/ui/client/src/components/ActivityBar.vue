@@ -16,7 +16,9 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import { ElTooltip } from 'element-plus'
+import { computed } from 'vue'
 import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
+import { useGitStore } from '@stores/gitStore'
 
 const props = defineProps<{
   activeView: 'git' | 'editor' | 'source-map' | 'workbench'
@@ -27,6 +29,14 @@ const emit = defineEmits<{
 }>()
 
 const wbStatus = useWorkbenchStatusStore()
+const gitStore = useGitStore()
+
+// 未提交文件数（staged + unstaged + untracked 等价于 fileList 长度）
+const uncommittedCount = computed(() => gitStore.fileList?.length ?? 0)
+const uncommittedBadge = computed(() => {
+  const n = uncommittedCount.value
+  return n > 99 ? '99+' : String(n)
+})
 
 function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   emit('update:activeView', view)
@@ -36,7 +46,11 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
 <template>
   <div class="activity-bar">
     <!-- Git 页面 -->
-    <el-tooltip :content="$t('@ACTBAR:Git')" placement="right" :show-after="300">
+    <el-tooltip
+      :content="uncommittedCount > 0 ? `${$t('@ACTBAR:Git')} · ${uncommittedCount} ${$t('@ACTBAR:个未提交文件')}` : $t('@ACTBAR:Git')"
+      placement="right"
+      :show-after="300"
+    >
       <button
         class="activity-btn"
         :class="{ active: props.activeView === 'git' }"
@@ -48,6 +62,12 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         <svg viewBox="0 0 1025 1024" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
           <path d="M1004.728 466.4l-447.104-447.072c-25.728-25.76-67.488-25.76-93.28 0l-103.872 103.872 78.176 78.176c12.544-5.984 26.56-9.376 41.376-9.376 53.024 0 96 42.976 96 96 0 14.816-3.36 28.864-9.376 41.376l127.968 127.968c12.544-5.984 26.56-9.376 41.376-9.376 53.024 0 96 42.976 96 96s-42.976 96-96 96-96-42.976-96-96c0-14.816 3.36-28.864 9.376-41.376l-127.968-127.968c-3.04 1.472-6.176 2.752-9.376 3.872l0 266.976c37.28 13.184 64 48.704 64 90.528 0 53.024-42.976 96-96 96s-96-42.976-96-96c0-41.792 26.72-77.344 64-90.528l0-266.976c-37.28-13.184-64-48.704-64-90.528 0-14.816 3.36-28.864 9.376-41.376l-78.176-78.176-295.904 295.872c-25.76 25.792-25.76 67.52 0 93.28l447.136 447.072c25.728 25.76 67.488 25.76 93.28 0l444.992-444.992c25.76-25.76 25.76-67.552 0-93.28z"/>
         </svg>
+        <span
+          v-if="uncommittedCount > 0"
+          class="git-uncommitted-badge"
+          :title="`${uncommittedCount} ${$t('@ACTBAR:个未提交文件')}`"
+          aria-hidden="true"
+        >{{ uncommittedBadge }}</span>
       </button>
     </el-tooltip>
 
@@ -223,6 +243,36 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   50%      { transform: scale(1.3); opacity: 0.55; }
 }
 
+/* ── Git 未提交文件数量徽标 ─────────────────────────────────────── */
+.git-uncommitted-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  background: var(--color-primary);
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--bg-container);
+  pointer-events: none;
+  /* 数字变化时的入场动画 */
+  animation: git-badge-pop-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1;
+}
+
+@keyframes git-badge-pop-in {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
 /* 左侧指示条进入动画 */
 @keyframes actbar-indicator-in {
   from {
@@ -237,6 +287,7 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
 
 @media (prefers-reduced-motion: reduce) {
   .wb-running-dot,
+  .git-uncommitted-badge,
   .activity-btn.active::before {
     animation: none;
   }

@@ -1598,6 +1598,7 @@ export default {
   '@ACTBAR:编辑器': 'Editor',
   '@ACTBAR:源码地图（即将推出）': 'Source Map (Coming Soon)',
   '@ACTBAR:源码地图': 'Source Map',
+  '@ACTBAR:个未提交文件': 'uncommitted files',
   // @ACTBAR: file end
   // @SRCMAP: file path: views\SourceMapView.vue
   '@SRCMAP:源码地图': 'Source Map',
