@@ -1703,6 +1703,7 @@ export default {
   '@WORKBENCH:进程ID': 'PID',
   '@WORKBENCH:拆分任务，逐项执行': 'Break down the task, execute step by step',
   '@WORKBENCH:手动添加子任务，或让 AI 帮你自动拆分': 'Add subtasks manually, or let AI split it for you',
+  '@WORKBENCH:左侧选择子任务查看详情': 'Select a subtask on the left to view details',
   '@WORKBENCH:用 AI 自动拆分': 'Split with AI',
   '@WORKBENCH:编辑提示词': 'Edit prompt preset',
   '@WORKBENCH:新建提示词': 'New prompt preset',
@@ -1867,5 +1868,6 @@ export default {
   '@WORKBENCH:未命名子任务': 'Untitled subtask',
   '@WORKBENCH:点击展开详情': 'Click to expand details',
   '@WORKBENCH:点击收起详情': 'Click to collapse details',
+  '@WORKBENCH:子任务详情': 'Subtask details',
   // @WORKBENCH: file end
 }

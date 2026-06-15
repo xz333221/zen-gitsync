@@ -1710,6 +1710,7 @@ export default {
   '@WORKBENCH:进程ID': '进程ID',
   '@WORKBENCH:拆分任务，逐项执行': '拆分任务，逐项执行',
   '@WORKBENCH:手动添加子任务，或让 AI 帮你自动拆分': '手动添加子任务，或让 AI 帮你自动拆分',
+  '@WORKBENCH:左侧选择子任务查看详情': '左侧选择子任务查看详情',
   '@WORKBENCH:用 AI 自动拆分': '用 AI 自动拆分',
   '@WORKBENCH:编辑提示词': '编辑提示词',
   '@WORKBENCH:新建提示词': '新建提示词',
@@ -1874,5 +1875,6 @@ export default {
   '@WORKBENCH:未命名子任务': '未命名子任务',
   '@WORKBENCH:点击展开详情': '点击展开详情',
   '@WORKBENCH:点击收起详情': '点击收起详情',
+  '@WORKBENCH:子任务详情': '子任务详情',
   // @WORKBENCH: file end
 }
