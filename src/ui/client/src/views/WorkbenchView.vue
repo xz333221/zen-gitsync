@@ -341,6 +341,35 @@ function taskIconFor(t: Task) {
   return ICON_COMPONENT[pickTaskIcon(t.title)]
 }
 
+// 简单任务的虚拟 subId：和后端 runTaskSimple / JobLogDetails 那侧保持一致
+const SIMPLE_SUB_ID_SUFFIX = '__simple'
+function simpleJobFor(task: Task | null): Job | null {
+  if (!task) return null
+  return jobOf(`${task.id}${SIMPLE_SUB_ID_SUFFIX}`)
+}
+// 简单任务完成态语义：把 Job.status 收敛成 5 态，方便模板/CSS 直接套用
+// - idle      没有 job 记录（未执行过）
+// - running   pending/running 视为进行中
+// - done      成功
+// - error     执行失败
+// - cancelled 用户主动停止
+type SimpleState = 'idle' | 'running' | 'done' | 'error' | 'cancelled'
+function simpleJobState(job: Job | null): SimpleState {
+  if (!job) return 'idle'
+  if (job.status === 'pending' || job.status === 'running') return 'running'
+  if (job.status === 'done') return 'done'
+  if (job.status === 'cancelled') return 'cancelled'
+  return 'error'
+}
+function formatShortTime(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  // 锁定本地时区，格式：MM-DD HH:mm（任务列表侧栏是密集展示，不放年份）
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function attachmentCount(t: Task): number {
   return Array.isArray(t.attachments) ? t.attachments.length : 0
 }
@@ -1597,15 +1626,51 @@ function humanSize(n: number): string {
             <h4>{{ $t('@WORKBENCH:简单任务') }}</h4>
             <span class="wb-simple__hint">{{ $t('@WORKBENCH:无需拆分子任务;点执行后直接用上方描述驱动 Claude') }}</span>
           </div>
-          <div class="wb-form-item">
-            <label class="wb-form-item__label">{{ $t('@WORKBENCH:覆盖预置提示词（可选）') }}</label>
+          <div
+            class="wb-simple__status"
+            :class="`is-${simpleJobState(simpleJobFor(selectedTask))}`"
+            role="status"
+            :aria-label="$t('@WORKBENCH:任务完成状态')"
+          >
+            <span class="wb-simple__status-dot" aria-hidden="true"></span>
+            <span class="wb-simple__status-text">
+              <template v-if="simpleJobState(simpleJobFor(selectedTask)) === 'idle'">{{ $t('@WORKBENCH:尚未执行') }}</template>
+              <template v-else-if="simpleJobState(simpleJobFor(selectedTask)) === 'running'">{{ $t('@WORKBENCH:正在执行…') }}</template>
+              <template v-else-if="simpleJobState(simpleJobFor(selectedTask)) === 'cancelled'">{{ $t('@WORKBENCH:已停止') }}</template>
+              <template v-else-if="simpleJobState(simpleJobFor(selectedTask)) === 'error'">
+                {{ $t('@WORKBENCH:执行失败') }}
+                <span v-if="simpleJobFor(selectedTask)?.error" class="wb-simple__status-detail" :title="simpleJobFor(selectedTask)?.error || ''">
+                  — {{ simpleJobFor(selectedTask)?.error }}
+                </span>
+              </template>
+              <template v-else-if="simpleJobState(simpleJobFor(selectedTask)) === 'done'">
+                {{ $t('@WORKBENCH:已执行完成') }}
+                <span v-if="simpleJobFor(selectedTask)?.endedAt" class="wb-simple__status-detail">
+                  · {{ $t('@WORKBENCH:完成时间') }}: {{ formatShortTime(simpleJobFor(selectedTask)?.endedAt) }}
+                </span>
+              </template>
+            </span>
+          </div>
+          <details
+            class="wb-simple__override"
+            :class="{ 'has-content': !!(selectedTask.simpleOverride && selectedTask.simpleOverride.trim()) }"
+          >
+            <summary class="wb-form-item__label wb-simple__override-summary">
+              <el-icon class="wb-simple__override-caret"><ArrowRight /></el-icon>
+              <span>{{ $t('@WORKBENCH:覆盖预置提示词（可选）') }}</span>
+              <span
+                v-if="selectedTask.simpleOverride && selectedTask.simpleOverride.trim()"
+                class="wb-simple__override-tag"
+                :title="$t('@WORKBENCH:已填写覆盖内容')"
+              >{{ $t('@WORKBENCH:已填写') }}</span>
+            </summary>
             <textarea
               class="wb-textarea"
               v-model="selectedTask.simpleOverride"
               :placeholder="$t('@WORKBENCH:留空则使用上方选定的「预置提示词」模板;可用变量同子任务:｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝')"
               rows="6"
             />
-          </div>
+          </details>
           <!-- 简单任务的执行日志：用 task 的虚拟 sub id 查 job -->
           <JobLogDetails
             v-if="jobOf(`${selectedTask.id}__simple`)"
@@ -2560,6 +2625,130 @@ function humanSize(n: number): string {
   font-size: var(--font-size-115);
   color: var(--text-tertiary);
 }
+
+/* ── 简单任务完成态 banner ── */
+/* idle/running/done/error/cancelled 五态共用一个容器，状态由 .is-xxx 切换 */
+.wb-simple__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-125);
+  color: var(--text-secondary);
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  transition: background var(--transition-fast) var(--ease-custom),
+              color var(--transition-fast) var(--ease-custom),
+              border-color var(--transition-fast) var(--ease-custom);
+}
+.wb-simple__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: background var(--transition-fast) var(--ease-custom);
+}
+.wb-simple__status-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  letter-spacing: -0.05px;
+}
+.wb-simple__status-detail {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-115);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.wb-simple__status.is-idle {
+  /* 默认低调，仅灰点 + 灰字 */
+  background: color-mix(in srgb, var(--text-tertiary) 6%, var(--bg-container));
+}
+.wb-simple__status.is-running {
+  color: var(--color-primary);
+  background: var(--tint-primary-10, color-mix(in srgb, var(--color-primary) 10%, transparent));
+  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--border-color));
+}
+.wb-simple__status.is-running .wb-simple__status-dot {
+  background: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  animation: wb-simple-status-pulse 1.4s ease-in-out infinite;
+}
+.wb-simple__status.is-done {
+  color: var(--color-success, #16a34a);
+  background: color-mix(in srgb, var(--color-success, #16a34a) 10%, var(--bg-container));
+  border-color: color-mix(in srgb, var(--color-success, #16a34a) 30%, var(--border-color));
+}
+.wb-simple__status.is-done .wb-simple__status-dot {
+  background: var(--color-success, #16a34a);
+}
+.wb-simple__status.is-cancelled {
+  color: var(--text-secondary);
+  background: var(--bg-container);
+  border-color: var(--border-color);
+}
+.wb-simple__status.is-cancelled .wb-simple__status-dot {
+  background: var(--text-tertiary);
+}
+.wb-simple__status.is-error {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--bg-container));
+  border-color: color-mix(in srgb, var(--color-danger) 35%, var(--border-color));
+}
+.wb-simple__status.is-error .wb-simple__status-dot {
+  background: var(--color-danger);
+}
+@keyframes wb-simple-status-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-primary) 8%, transparent); }
+}
+
+/* ── 简单任务「覆盖预置提示词」可折叠 ── */
+.wb-simple__override {
+  border-radius: var(--radius-md);
+}
+.wb-simple__override > .wb-textarea {
+  margin-top: 8px;
+}
+.wb-simple__override-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  padding: 4px 0;
+}
+.wb-simple__override-summary::-webkit-details-marker { display: none; }
+.wb-simple__override-caret {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-fast) var(--ease-custom);
+}
+.wb-simple__override[open] > .wb-simple__override-summary .wb-simple__override-caret {
+  transform: rotate(90deg);
+  color: var(--color-primary);
+}
+.wb-simple__override.has-content > .wb-simple__override-summary {
+  color: var(--text-primary);
+}
+.wb-simple__override-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--tint-primary-12, color-mix(in srgb, var(--color-primary) 12%, transparent));
+  color: var(--color-primary);
+  letter-spacing: 0.2px;
+}
+
 .wb-form-item {
   display: flex;
   flex-direction: column;
