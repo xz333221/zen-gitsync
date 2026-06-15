@@ -361,6 +361,27 @@ function simpleJobState(job: Job | null): SimpleState {
   if (job.status === 'cancelled') return 'cancelled'
   return 'error'
 }
+// 5 态 → pill 颜色。和子任务 wb-sub-item__status 用的色卡完全一致：
+// done 绿 / running 蓝 / error 红 / cancelled 灰 / idle 默认灰
+function simpleStatusColor(s: SimpleState): string {
+  switch (s) {
+    case 'running':   return 'var(--color-primary)'
+    case 'done':      return '#22c55e'
+    case 'error':     return '#ef4444'
+    case 'cancelled': return '#9ca3af'
+    default:          return 'var(--text-tertiary)'
+  }
+}
+// 5 态 → pill 文字。复用现有 WORKBENCH 字典 key；i18n 已就绪
+function simpleStatusLabel(s: SimpleState): string {
+  switch (s) {
+    case 'idle':      return $t('@WORKBENCH:尚未执行')
+    case 'running':   return $t('@WORKBENCH:正在执行…')
+    case 'done':      return $t('@WORKBENCH:已完成')
+    case 'error':     return $t('@WORKBENCH:执行失败')
+    case 'cancelled': return $t('@WORKBENCH:已停止')
+  }
+}
 function formatShortTime(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)
@@ -1626,29 +1647,32 @@ function humanSize(n: number): string {
             <h4>{{ $t('@WORKBENCH:简单任务') }}</h4>
             <span class="wb-simple__hint">{{ $t('@WORKBENCH:无需拆分子任务;点执行后直接用上方描述驱动 Claude') }}</span>
           </div>
-          <div
-            class="wb-simple__status"
-            :class="`is-${simpleJobState(simpleJobFor(selectedTask))}`"
-            role="status"
-            :aria-label="$t('@WORKBENCH:任务完成状态')"
-          >
-            <span class="wb-simple__status-dot" aria-hidden="true"></span>
-            <span class="wb-simple__status-text">
-              <template v-if="simpleJobState(simpleJobFor(selectedTask)) === 'idle'">{{ $t('@WORKBENCH:尚未执行') }}</template>
-              <template v-else-if="simpleJobState(simpleJobFor(selectedTask)) === 'running'">{{ $t('@WORKBENCH:正在执行…') }}</template>
-              <template v-else-if="simpleJobState(simpleJobFor(selectedTask)) === 'cancelled'">{{ $t('@WORKBENCH:已停止') }}</template>
-              <template v-else-if="simpleJobState(simpleJobFor(selectedTask)) === 'error'">
-                {{ $t('@WORKBENCH:执行失败') }}
-                <span v-if="simpleJobFor(selectedTask)?.error" class="wb-simple__status-detail" :title="simpleJobFor(selectedTask)?.error || ''">
-                  — {{ simpleJobFor(selectedTask)?.error }}
-                </span>
-              </template>
-              <template v-else-if="simpleJobState(simpleJobFor(selectedTask)) === 'done'">
-                {{ $t('@WORKBENCH:已执行完成') }}
-                <span v-if="simpleJobFor(selectedTask)?.endedAt" class="wb-simple__status-detail">
-                  · {{ $t('@WORKBENCH:完成时间') }}: {{ formatShortTime(simpleJobFor(selectedTask)?.endedAt) }}
-                </span>
-              </template>
+          <!--
+            状态徽章：和子任务的 wb-sub-item__status 同型（绿/红/灰/橙 pill + 圆点 + 文字）。
+            简洁五态切换：idle / running / done / error / cancelled
+            时间戳和错误摘要拆到外层元数据，避免挤压徽章。
+          -->
+          <div class="wb-simple__status-row">
+            <span
+              class="wb-simple__status"
+              :style="{ background: simpleStatusColor(simpleJobState(simpleJobFor(selectedTask))) }"
+              :title="$t('@WORKBENCH:任务完成状态')"
+            >
+              <span class="wb-simple__status-dot" aria-hidden="true"></span>
+              <span class="wb-simple__status-text">{{ simpleStatusLabel(simpleJobState(simpleJobFor(selectedTask))) }}</span>
+            </span>
+            <span
+              v-if="simpleJobFor(selectedTask)?.endedAt && simpleJobState(simpleJobFor(selectedTask)) === 'done'"
+              class="wb-simple__meta"
+            >
+              · {{ $t('@WORKBENCH:完成时间') }} {{ formatShortTime(simpleJobFor(selectedTask)?.endedAt) }}
+            </span>
+            <span
+              v-else-if="simpleJobFor(selectedTask)?.error && simpleJobState(simpleJobFor(selectedTask)) === 'error'"
+              class="wb-simple__meta wb-simple__meta--error"
+              :title="simpleJobFor(selectedTask)?.error || ''"
+            >
+              — {{ simpleJobFor(selectedTask)?.error }}
             </span>
           </div>
           <details
@@ -2613,101 +2637,77 @@ function humanSize(n: number): string {
   align-items: baseline;
   gap: 10px;
   margin-top: 8px;
+  padding-left: 8px;
+  border-left: 2px solid var(--color-primary);
   flex-shrink: 0;
 }
 .wb-simple__header h4 {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  letter-spacing: -0.05px;
 }
 .wb-simple__hint {
   font-size: var(--font-size-115);
   color: var(--text-tertiary);
 }
 
-/* ── 简单任务完成态 banner ── */
-/* idle/running/done/error/cancelled 五态共用一个容器，状态由 .is-xxx 切换 */
-.wb-simple__status {
+/* ── 简单任务完成态 pill ── */
+/* 与子任务 wb-sub-item__status 同型：彩色背景 + 白字 + 圆点 + 文字。
+   五态由 :style="{ background: simpleStatusColor(...) }" 注入背景色。 */
+.wb-simple__status-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-125);
-  color: var(--text-secondary);
-  background: var(--bg-container);
-  border: 1px solid var(--border-color);
-  transition: background var(--transition-fast) var(--ease-custom),
-              color var(--transition-fast) var(--ease-custom),
-              border-color var(--transition-fast) var(--ease-custom);
-}
-.wb-simple__status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
+  flex-wrap: wrap;
+  margin-top: 2px;
   flex-shrink: 0;
+}
+.wb-simple__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  /* 颜色由行内 style 注入；这里只做过渡 */
   transition: background var(--transition-fast) var(--ease-custom);
 }
-.wb-simple__status-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  letter-spacing: -0.05px;
+.wb-simple__status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fff;
+  flex-shrink: 0;
+  opacity: 0.9;
 }
-.wb-simple__status-detail {
-  color: var(--text-tertiary);
+.wb-simple__status-text {
+  line-height: 1.4;
+}
+.wb-simple__meta {
   font-size: var(--font-size-115);
+  color: var(--text-tertiary);
+  letter-spacing: -0.05px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
 }
-.wb-simple__status.is-idle {
-  /* 默认低调，仅灰点 + 灰字 */
-  background: color-mix(in srgb, var(--text-tertiary) 6%, var(--bg-container));
-}
-.wb-simple__status.is-running {
-  color: var(--color-primary);
-  background: var(--tint-primary-10, color-mix(in srgb, var(--color-primary) 10%, transparent));
-  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--border-color));
-}
-.wb-simple__status.is-running .wb-simple__status-dot {
-  background: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 20%, transparent);
-  animation: wb-simple-status-pulse 1.4s ease-in-out infinite;
-}
-.wb-simple__status.is-done {
-  color: var(--color-success, #16a34a);
-  background: color-mix(in srgb, var(--color-success, #16a34a) 10%, var(--bg-container));
-  border-color: color-mix(in srgb, var(--color-success, #16a34a) 30%, var(--border-color));
-}
-.wb-simple__status.is-done .wb-simple__status-dot {
-  background: var(--color-success, #16a34a);
-}
-.wb-simple__status.is-cancelled {
-  color: var(--text-secondary);
-  background: var(--bg-container);
-  border-color: var(--border-color);
-}
-.wb-simple__status.is-cancelled .wb-simple__status-dot {
-  background: var(--text-tertiary);
-}
-.wb-simple__status.is-error {
+.wb-simple__meta--error {
   color: var(--color-danger);
-  background: color-mix(in srgb, var(--color-danger) 10%, var(--bg-container));
-  border-color: color-mix(in srgb, var(--color-danger) 35%, var(--border-color));
 }
-.wb-simple__status.is-error .wb-simple__status-dot {
-  background: var(--color-danger);
+/* idle 灰底：背景由 inline style 注入，pill 文字需要深色（白底不可读） */
+.wb-simple__status[style*="--text-tertiary"] {
+  color: var(--text-secondary);
 }
-@keyframes wb-simple-status-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent); }
-  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-primary) 8%, transparent); }
+.wb-simple__status[style*="--text-tertiary"] .wb-simple__status-dot {
+  background: var(--text-tertiary);
 }
 
 /* ── 简单任务「覆盖预置提示词」可折叠 ── */
