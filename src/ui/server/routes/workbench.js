@@ -1742,7 +1742,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   app.post('/api/workbench/tasks', async (req, res) => {
     try {
       const { id, title, desc, promptId, subtasks, type: rawType, simpleOverride } = req.body || {};
-      if (!title) return res.status(400).json({ success: false, error: 'title 必填' });
+      // title 非必填：允许空字符串，UI 层会用"未命名任务"占位
+      const safeTitle = typeof title === 'string' ? title.trim() : '';
       // type 归一化:仅接受 'simple' | 'complex'，缺省/未知一律按 complex
       const taskType = rawType === 'simple' ? 'simple' : 'complex';
       const safeOverride = typeof simpleOverride === 'string' ? simpleOverride.slice(0, 8000) : '';
@@ -1756,7 +1757,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         if (i < 0) return res.status(404).json({ success: false, error: '任务不存在' });
         tasks[i] = {
           ...tasks[i],
-          title,
+          title: safeTitle,
           desc: desc || '',
           promptId: promptId || null,
           type: taskType,
@@ -1786,7 +1787,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       }
       const task = {
         id: genId(),
-        title,
+        title: safeTitle,
         desc: desc || '',
         promptId: promptId || null,
         type: taskType,

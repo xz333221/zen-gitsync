@@ -1848,7 +1848,6 @@ export default {
   '@WORKBENCH:名称和内容不能为空': 'Name and content cannot be empty',
   '@WORKBENCH:已保存': 'Saved',
   '@WORKBENCH:保存失败': 'Save failed',
-  '@WORKBENCH:标题必填': 'Title is required',
   '@WORKBENCH:已保存拆分': 'Breakdown saved',
   '@WORKBENCH:请先拆分任务': 'Please break down the task first',
   '@WORKBENCH:已加入执行队列': 'Added to execution queue',

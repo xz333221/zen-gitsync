@@ -661,10 +661,7 @@ function openCreateTask() {
   taskDialog.visible = true
 }
 async function saveTask() {
-  if (!taskDialog.title.trim()) {
-    ElMessage.warning($t('@WORKBENCH:标题必填'))
-    return
-  }
+  // title is optional: empty title is allowed; UI falls back to "Untitled task"
   const body: any = {
     id: taskDialog.editing?.id,
     title: taskDialog.title.trim(),
