@@ -1872,5 +1872,7 @@ export default {
   '@WORKBENCH:展开': '展开',
   '@WORKBENCH:收起': '收起',
   '@WORKBENCH:未命名子任务': '未命名子任务',
+  '@WORKBENCH:点击展开详情': '点击展开详情',
+  '@WORKBENCH:点击收起详情': '点击收起详情',
   // @WORKBENCH: file end
 }

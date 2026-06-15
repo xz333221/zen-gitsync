@@ -1865,5 +1865,7 @@ export default {
   '@WORKBENCH:展开': 'Expand',
   '@WORKBENCH:收起': 'Collapse',
   '@WORKBENCH:未命名子任务': 'Untitled subtask',
+  '@WORKBENCH:点击展开详情': 'Click to expand details',
+  '@WORKBENCH:点击收起详情': 'Click to collapse details',
   // @WORKBENCH: file end
 }

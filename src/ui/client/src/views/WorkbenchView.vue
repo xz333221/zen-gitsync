@@ -1486,9 +1486,18 @@ function humanSize(n: number): string {
               'is-persisting': isSubtaskPersisting(sub.id)
             }"
           >
-            <!-- 折叠态：只显示徽标 + 标题 + 展开 + 取消完成 + 删除 -->
+            <!-- 折叠态：整行可点击展开；操作按钮 @click.stop 阻止冒泡 -->
             <template v-if="isSubCollapsed(sub)">
-              <div class="wb-sub-item__row wb-sub-item__row--compact">
+              <div
+                class="wb-sub-item__row wb-sub-item__row--compact"
+                role="button"
+                tabindex="0"
+                :aria-label="$t('@WORKBENCH:展开')"
+                :title="$t('@WORKBENCH:点击展开详情')"
+                @click="toggleSubExpand(sub)"
+                @keydown.enter.prevent="toggleSubExpand(sub)"
+                @keydown.space.prevent="toggleSubExpand(sub)"
+              >
                 <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
                   {{ statusLabel(sub.status) }}
                 </span>
@@ -1537,13 +1546,28 @@ function humanSize(n: number): string {
                 >×</button>
               </div>
             </template>
-            <!-- 展开态：完整表单 -->
+            <!-- 展开态：整行可点击收起；行内输入框/按钮 @click.stop 阻止冒泡 -->
             <template v-else>
-            <div class="wb-sub-item__row">
+            <div
+              class="wb-sub-item__row"
+              role="button"
+              tabindex="0"
+              :aria-label="$t('@WORKBENCH:收起')"
+              :title="$t('@WORKBENCH:点击收起详情')"
+              @click="toggleSubExpand(sub)"
+              @keydown.enter.prevent="toggleSubExpand(sub)"
+              @keydown.space.prevent="toggleSubExpand(sub)"
+            >
               <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
                 {{ statusLabel(sub.status) }}
               </span>
-              <input class="wb-input" v-model="sub.title" :placeholder="$t('@WORKBENCH:子任务标题')" @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub })" />
+              <input
+                class="wb-input"
+                v-model="sub.title"
+                :placeholder="$t('@WORKBENCH:子任务标题')"
+                @click.stop
+                @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub })"
+              />
               <span v-if="dirtySubIds.has(sub.id)" class="wb-sub-item__dirty" :title="$t('@WORKBENCH:有未保存的更改')">
                 {{ $t('@WORKBENCH:未保存') }}
               </span>
@@ -1555,20 +1579,20 @@ function humanSize(n: number): string {
                 class="wb-sub-item__run"
                 :title="$t('@WORKBENCH:单独执行此子任务')"
                 :aria-label="$t('@WORKBENCH:单独执行此子任务')"
-                @click="runSubtask(sub)"
+                @click.stop="runSubtask(sub)"
               >{{ $t('@WORKBENCH:执行') }}</button>
               <button
                 v-if="jobOf(sub.id) && (jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending')"
                 class="wb-sub-item__stop"
                 :title="$t('@WORKBENCH:停止执行')"
-                @click="cancelJob(jobOf(sub.id)!)"
+                @click.stop="cancelJob(jobOf(sub.id)!)"
               >{{ $t('@WORKBENCH:停止') }}</button>
               <button
                 v-if="sub.status === 'done'"
                 class="wb-sub-item__toggle"
                 :title="$t('@WORKBENCH:收起')"
                 :aria-label="$t('@WORKBENCH:收起')"
-                @click="toggleSubExpand(sub)"
+                @click.stop="toggleSubExpand(sub)"
               >
                 <el-icon><ArrowUp /></el-icon>
               </button>
@@ -1578,14 +1602,14 @@ function humanSize(n: number): string {
                 :title="$t('@WORKBENCH:取消完成')"
                 :aria-label="$t('@WORKBENCH:取消完成')"
                 :disabled="isSubtaskPersisting(sub.id)"
-                @click="cancelDone(sub)"
+                @click.stop="cancelDone(sub)"
               >{{ $t('@WORKBENCH:取消完成') }}</button>
               <button
                 class="wb-sub-item__del"
                 :title="$t('@WORKBENCH:删除')"
                 :aria-label="$t('@WORKBENCH:删除')"
                 :disabled="isSubtaskPersisting(sub.id)"
-                @click="removeSubtask(sub)"
+                @click.stop="removeSubtask(sub)"
               >×</button>
             </div>
             <textarea
@@ -2908,12 +2932,20 @@ function humanSize(n: number): string {
   gap: 8px;
   align-items: center;
   margin-bottom: 6px;
+  /* 整行可点击展开/收起：除操作按钮外任意位置都触发切换 */
+  cursor: pointer;
+  user-select: none;
+}
+.wb-sub-item__row:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+  border-radius: var(--radius-sm, 4px);
 }
 
 /* ── 折叠态：紧凑单行 ─────────────────────────────────────── */
 .wb-sub-item__row--compact {
   margin-bottom: 0;
-  cursor: default;
+  cursor: pointer;
   gap: 6px;
 }
 .wb-sub-item__title-compact {
