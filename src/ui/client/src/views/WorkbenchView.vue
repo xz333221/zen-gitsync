@@ -697,6 +697,51 @@ async function saveTask() {
     ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
   }
 }
+// 在任务列表条目上直接切换 simple/complex，不进入编辑 dialog。
+// - 简单 → 复杂：无副作用，simpleOverride 会被后端清空（仅 simple 时有意义）
+// - 复杂 → 简单：会清空现有子任务，弹 ElMessageBox 让用户确认
+async function toggleTaskType(t: Task) {
+  const next: 'simple' | 'complex' = t.type === 'simple' ? 'complex' : 'simple'
+  const isComplexToSimple = t.type === 'complex' && next === 'simple'
+  const willClearSubtasks = isComplexToSimple && (t.subtasks?.length ?? 0) > 0
+  if (willClearSubtasks) {
+    try {
+      await ElMessageBox.confirm(
+        $t('@WORKBENCH:任务「{title}」当前有 {n} 个子任务，切换为简单任务后会清空这些子任务，确认继续？', {
+          title: t.title,
+          n: t.subtasks.length
+        }),
+        $t('@WORKBENCH:切换任务类型'),
+        { type: 'warning', confirmButtonText: $t('@WORKBENCH:切换并清空'), cancelButtonText: $t('@WORKBENCH:取消') }
+      )
+    } catch {
+      return // 用户取消
+    }
+  }
+  const body: any = {
+    id: t.id,
+    title: t.title,
+    desc: t.desc,
+    promptId: t.promptId,
+    type: next,
+    // 切换为 simple 时后端会用 '' 覆盖 simpleOverride；为 complex 时同理
+    simpleOverride: t.simpleOverride || '',
+    // 复杂 → 简单时显式传空数组清空子任务；其他情况保留现有
+    subtasks: willClearSubtasks ? [] : (t.subtasks || [])
+  }
+  const res = await fetch('/api/workbench/tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(r => r.json())
+  if (!res.success) {
+    ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
+    return
+  }
+  await loadTasks()
+  ElMessage.success(next === 'simple' ? $t('@WORKBENCH:已切换为简单任务') : $t('@WORKBENCH:已切换为复杂任务'))
+}
+
 async function deleteTask(t: Task) {
   await ElMessageBox.confirm(
     $t('@WORKBENCH:删除任务「{title}」及其所有子任务？', { title: t.title }),
@@ -1306,13 +1351,21 @@ function humanSize(n: number): string {
                     >
                       <el-icon class="wb-task-item__meta-icon"><Memo /></el-icon>
                     </span>
-                    <span
-                      v-if="t.type === 'simple'"
-                      class="wb-task-item__meta-item wb-task-item__meta-item--simple"
-                      :title="$t('@WORKBENCH:简单任务 - 无需拆分直接执行')"
+                    <!--
+                      任务类型切换按钮:点击在 simple/complex 间互转。
+                      - 简单 → 复杂:直接切换,无副作用(简单任务没有子任务)
+                      - 复杂 → 简单:弹 ElMessageBox 确认,因为会清空现有子任务
+                    -->
+                    <button
+                      type="button"
+                      class="wb-task-item__meta-item wb-task-item__type-toggle"
+                      :class="t.type === 'simple' ? 'wb-task-item__meta-item--simple' : 'wb-task-item__meta-item--complex'"
+                      :title="t.type === 'simple' ? $t('@WORKBENCH:简单任务 - 点击切换为复杂任务') : $t('@WORKBENCH:复杂任务 - 点击切换为简单任务')"
+                      :aria-label="t.type === 'simple' ? $t('@WORKBENCH:切换为复杂任务') : $t('@WORKBENCH:切换为简单任务')"
+                      @click.stop="toggleTaskType(t)"
                     >
-                      {{ $t('@WORKBENCH:简单') }}
-                    </span>
+                      {{ t.type === 'simple' ? $t('@WORKBENCH:简单') : $t('@WORKBENCH:复杂') }}
+                    </button>
                     <span
                       v-if="t.projectPath && t.projectPath !== currentProject.path"
                       class="wb-task-item__meta-item wb-task-item__meta-item--project"
@@ -2124,6 +2177,26 @@ function humanSize(n: number): string {
   font-weight: 500;
 }
 .wb-task-item__meta-item--accent { color: var(--color-primary); }
+/* 任务类型切换按钮：点击在 simple/complex 间互转。
+   复用 meta-item 的尺寸节奏（h=15, r=7, fz=10, fw=600），用色区分两种状态。*/
+.wb-task-item__type-toggle {
+  height: 15px;
+  padding: 0 6px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  font-family: inherit;
+}
+.wb-task-item__type-toggle:active { transform: scale(0.96); }
+.wb-task-item__type-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
 /* 简单任务徽标：紧凑圆角胶囊,弱色调以不抢戏 */
 .wb-task-item__meta-item--simple {
   display: inline-flex;
@@ -2137,6 +2210,14 @@ function humanSize(n: number): string {
   font-weight: 600;
   letter-spacing: 0.2px;
   white-space: nowrap;
+}
+/* 复杂任务徽标：紫蓝调，区别于简单任务的绿色调 */
+.wb-task-item__meta-item--complex {
+  background: color-mix(in srgb, #6366f1 14%, transparent);
+  color: #4338ca;
+}
+.wb-task-item__type-toggle:hover {
+  filter: brightness(0.95);
 }
 /* 跨项目的任务：在 meta 行内加一个简短的项目名徽标，提示"这条是别的项目的" */
 .wb-task-item__meta-item--project {

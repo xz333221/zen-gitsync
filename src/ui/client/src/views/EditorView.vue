@@ -409,8 +409,25 @@ watch(activeTabPath, (path) => {
   //   - 焦点在 button 上时，空格键会被浏览器当作按钮点击（无法输入）；
   //   - 焦点在 body 上时，空格键会触发页面滚动（无法输入）。
   // 这是用户反馈"编辑器不能输入空格"的根因。
-  nextTick(() => editorInstance.value?.focus())
+  nextTick(() => focusEditor())
 })
+
+// 把键盘焦点交还给 Monaco。
+// 同时处理两种渲染模式：
+//   1. 经典 textarea 模式（.monaco-editor textarea.inputarea）
+//   2. EditContext API 模式（Chrome 121+/Edge，焦点元素是 .native-edit-context DIV）
+// 这两种情况下，editor.focus() 都能正确把输入事件路由到 Monaco。
+function focusEditor() {
+  if (!editorInstance.value) return
+  editorInstance.value.focus()
+  // EditContext 模式下 editor.focus() 不一定能把 DOM 焦点转移到 .native-edit-context 上，
+  // 显式补一次 DOM focus 兜底（EditContext 节点本身就是可聚焦的）。
+  const ec = document.querySelector('.monaco-editor .native-edit-context') as HTMLElement | null
+  if (ec && document.activeElement !== ec) {
+    // 不能在每个 tick 都抢焦点，只在 Monaco 已 focus 但 activeElement 漂移时纠正一次。
+    requestAnimationFrame(() => ec.focus?.())
+  }
+}
 
 // 同步"未保存文件数"到 editorTabs store（供活动栏显示徽标）。
 // 只统计真实文件 tab：图片 tab 的 content 始终为空字符串、isDirty 恒为 false，
@@ -455,13 +472,23 @@ function setupViewVisibilityObserver() {
         // 仅当当前焦点不在输入框（搜索框/重命名/内联新建）时才抢焦点，
         // 避免打断用户在这些输入框里的操作
         const ae = document.activeElement as HTMLElement | null
-        const inEditableInput = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
-        if (!inEditableInput) editorInstance.value?.focus()
+        const isInputLike = ae && (
+          ae.tagName === 'INPUT'
+          || ae.tagName === 'TEXTAREA'
+          || ae.isContentEditable
+          // Chrome 121+/Edge 在 Monaco 上启用 EditContext API 后，
+          // 焦点元素是 <div class="native-edit-context">（不是 contenteditable）。
+          // 此时焦点已经在 Monaco 内，不要再抢。
+          || ae.classList?.contains('native-edit-context')
+          || ae.classList?.contains('monaco-editor')
+        )
+        if (!isInputLike) focusEditor()
       })
     }
   })
+  const observer = viewVisibilityObserver
   targets.forEach(t =>
-    viewVisibilityObserver.observe(t, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] }),
+    observer.observe(t, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] }),
   )
 }
 
@@ -470,6 +497,10 @@ onMounted(async () => {
   await initTree()
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
   setupViewVisibilityObserver()
+  // 首次 mount 时若已有打开的文件，主动把焦点交给 Monaco，避免初次进入编辑器视图时空格键失效。
+  if (activeTabPath.value) {
+    nextTick(() => focusEditor())
+  }
 })
 
 onBeforeUnmount(() => {
