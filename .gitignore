@@ -83,4 +83,7 @@ Thumbs.db
 .temp/
 tmp/
 
+# E2E 验证产生的截图产物（按 task id 分子目录，一次性产物不入库）
+workbench-images/
+
 .npmrc
