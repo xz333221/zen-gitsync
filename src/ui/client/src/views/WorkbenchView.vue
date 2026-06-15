@@ -1511,17 +1511,26 @@ function humanSize(n: number): string {
                   }"
                   @click="selectedSubId = sub.id"
                 >
-                  <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
-                    {{ statusLabel(sub.status) }}
-                  </span>
-                  <span class="wb-exec-sub-item__title" :title="sub.title">
-                    {{ sub.title || $t('@WORKBENCH:未命名子任务') }}
-                  </span>
-                  <span v-if="jobOf(sub.id)" class="wb-sub-item__pid" :title="$t('@WORKBENCH:进程ID')">PID: {{ jobOf(sub.id)?.pid }}</span>
-                  <button v-if="canRunSubtask(sub)" class="wb-sub-item__run" :title="$t('@WORKBENCH:单独执行此子任务')" :aria-label="$t('@WORKBENCH:单独执行此子任务')" @click.stop="runSubtask(sub)">{{ $t('@WORKBENCH:执行') }}</button>
-                  <button v-if="jobOf(sub.id) && (jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending')" class="wb-sub-item__stop" :title="$t('@WORKBENCH:停止执行')" @click.stop="cancelJob(jobOf(sub.id)!)">{{ $t('@WORKBENCH:停止') }}</button>
-                  <button v-if="sub.status === 'done'" class="wb-sub-item__undo" :title="$t('@WORKBENCH:取消完成')" :aria-label="$t('@WORKBENCH:取消完成')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="cancelDone(sub)">{{ $t('@WORKBENCH:取消完成') }}</button>
-                  <button class="wb-sub-item__del" :title="$t('@WORKBENCH:删除')" :aria-label="$t('@WORKBENCH:删除')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="removeSubtask(sub)">×</button>
+                  <!-- 第一行：状态徽章 + 标题 -->
+                  <div class="wb-exec-sub-item__row1">
+                    <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
+                      {{ statusLabel(sub.status) }}
+                    </span>
+                    <span class="wb-exec-sub-item__title" :title="sub.title">
+                      {{ sub.title || $t('@WORKBENCH:未命名子任务') }}
+                    </span>
+                    <span v-if="dirtySubIds.has(sub.id)" class="wb-exec-sub-item__dirty-dot" title="未保存" />
+                  </div>
+                  <!-- 第二行：PID + 操作按钮（hover/选中时浮现） -->
+                  <div class="wb-exec-sub-item__row2">
+                    <span v-if="jobOf(sub.id)" class="wb-sub-item__pid">PID: {{ jobOf(sub.id)?.pid }}</span>
+                    <span class="wb-exec-sub-item__actions">
+                      <button v-if="canRunSubtask(sub)" class="wb-exec-sub-btn wb-exec-sub-btn--run" :title="$t('@WORKBENCH:单独执行此子任务')" @click.stop="runSubtask(sub)">{{ $t('@WORKBENCH:执行') }}</button>
+                      <button v-if="jobOf(sub.id) && (jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending')" class="wb-exec-sub-btn wb-exec-sub-btn--stop" :title="$t('@WORKBENCH:停止执行')" @click.stop="cancelJob(jobOf(sub.id)!)">{{ $t('@WORKBENCH:停止') }}</button>
+                      <button v-if="sub.status === 'done'" class="wb-exec-sub-btn wb-exec-sub-btn--undo" :title="$t('@WORKBENCH:取消完成')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="cancelDone(sub)">{{ $t('@WORKBENCH:取消完成') }}</button>
+                      <button class="wb-exec-sub-btn wb-exec-sub-btn--del" :title="$t('@WORKBENCH:删除')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="removeSubtask(sub)">×</button>
+                    </span>
+                  </div>
                 </li>
                 <li v-if="selectedTask.subtasks.length === 0" class="wb-empty wb-empty--rich">
                   <div class="wb-empty__art" aria-hidden="true"><el-icon><List /></el-icon></div>
@@ -2488,13 +2497,13 @@ function humanSize(n: number): string {
   overflow-y: auto;
 }
 
-/* 左列子任务条目：紧凑单行 + 选中高亮 */
+/* 左列子任务条目：两行布局，标题独占第一行，操作按钮 hover 浮现 */
 .wb-exec-sub-item {
   position: relative;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 8px;
+  flex-direction: column;
+  gap: 0;
+  padding: 7px 8px 5px;
   border-radius: var(--radius-md);
   cursor: pointer;
   user-select: none;
@@ -2516,8 +2525,95 @@ function humanSize(n: number): string {
   background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
 }
 .wb-exec-sub-item.is-done:not(.is-selected) {
-  opacity: 0.72;
+  opacity: 0.75;
 }
+
+/* 第一行：状态徽章 + 标题 */
+.wb-exec-sub-item__row1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* 第二行：PID + 操作按钮（默认高度0隐藏，hover/selected 时展开） */
+.wb-exec-sub-item__row2 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  transition:
+    max-height 0.18s var(--ease-custom),
+    opacity 0.15s var(--ease-custom),
+    padding-top 0.18s var(--ease-custom);
+}
+.wb-exec-sub-item:hover .wb-exec-sub-item__row2,
+.wb-exec-sub-item.is-selected .wb-exec-sub-item__row2,
+.wb-exec-sub-item.is-running .wb-exec-sub-item__row2 {
+  max-height: 28px;
+  opacity: 1;
+  padding-top: 5px;
+}
+.wb-exec-sub-item__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+/* 第二行 dirty 小圆点 */
+.wb-exec-sub-item__dirty-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f59e0b;
+  flex-shrink: 0;
+}
+
+/* 操作按钮（统一小尺寸胶囊） */
+.wb-exec-sub-btn {
+  appearance: none;
+  border: 1px solid var(--border-color-medium);
+  background: var(--bg-container);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 7px;
+  height: 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.wb-exec-sub-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.wb-exec-sub-btn--run {
+  color: var(--color-primary);
+  border-color: var(--tint-primary-35);
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
+}
+.wb-exec-sub-btn--run:hover { background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container)); }
+.wb-exec-sub-btn--stop {
+  color: #ef4444;
+  border-color: rgba(239,68,68,0.4);
+  background: rgba(239,68,68,0.06);
+}
+.wb-exec-sub-btn--stop:hover { background: rgba(239,68,68,0.12); }
+.wb-exec-sub-btn--undo {
+  color: var(--color-primary);
+  border-color: var(--tint-primary-35);
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
+}
+.wb-exec-sub-btn--undo:hover { background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container)); }
+.wb-exec-sub-btn--del {
+  width: 20px;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+.wb-exec-sub-btn--del:hover { color: #ef4444; border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06); }
+
 .wb-exec-sub-item__title {
   flex: 1;
   min-width: 0;
@@ -2527,7 +2623,7 @@ function humanSize(n: number): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 .wb-exec-sub-item.is-selected .wb-exec-sub-item__title {
   color: var(--color-primary);
