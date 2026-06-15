@@ -347,6 +347,14 @@ function attachmentCount(t: Task): number {
 function subtaskCount(t: Task): number {
   return Array.isArray(t.subtasks) ? t.subtasks.length : 0
 }
+function subtaskDoneCount(t: Task): number {
+  if (!Array.isArray(t.subtasks)) return 0
+  return t.subtasks.filter(s => s && s.status === 'done').length
+}
+function taskIsRunning(t: Task): boolean {
+  if (!Array.isArray(t.subtasks)) return false
+  return t.subtasks.some(s => s && s.status === 'running')
+}
 
 // ── 数据加载 ────────────────────────────────────────────────────────────────
 async function loadPrompts() {
@@ -1188,7 +1196,8 @@ function humanSize(n: number): string {
                 :class="{
                   active: t.id === selectedTaskId,
                   'has-attachment': attachmentCount(t) > 0,
-                  'is-other-project': t.projectPath && t.projectPath !== currentProject.path
+                  'is-other-project': t.projectPath && t.projectPath !== currentProject.path,
+                  'is-running': taskIsRunning(t)
                 }"
                 :data-icon="pickTaskIcon(t.title)"
                 @click="selectTask(t)"
@@ -1199,9 +1208,16 @@ function humanSize(n: number): string {
                 <div class="wb-task-item__body">
                   <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
                   <div class="wb-task-item__meta">
-                    <span class="wb-task-item__meta-item" :title="$t('@WORKBENCH:个子任务')">
+                    <span
+                      v-if="subtaskCount(t) > 0"
+                      class="wb-task-item__meta-item"
+                      :class="{ 'wb-task-item__meta-item--running': taskIsRunning(t) }"
+                      :title="$t('@WORKBENCH:个子任务')"
+                    >
                       <el-icon class="wb-task-item__meta-icon"><List /></el-icon>
-                      <span class="wb-pill wb-task-item__num">{{ subtaskCount(t) }}</span>
+                      <span class="wb-pill wb-task-item__num">
+                        {{ subtaskDoneCount(t) }}/{{ subtaskCount(t) }}
+                      </span>
                     </span>
                     <span
                       v-if="attachmentCount(t) > 0"
@@ -1952,6 +1968,21 @@ function humanSize(n: number): string {
               box-shadow var(--transition-fast) var(--ease-custom),
               transform var(--transition-fast) var(--ease-custom);
 }
+.wb-task-item.is-running {
+  border-color: color-mix(in srgb, var(--color-warning) 55%, var(--border-color));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-warning) 22%, transparent) inset;
+}
+.wb-task-item.is-running::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--color-warning);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-warning) 60%, transparent);
+}
 .wb-task-item:hover {
   background: var(--bg-container-hover);
   border-color: var(--border-color-medium);
@@ -2091,6 +2122,19 @@ function humanSize(n: number): string {
 .wb-task-item.active .wb-task-item__num {
   color: var(--color-primary);
   background: var(--tint-primary-14);
+}
+.wb-task-item__meta-item--running .wb-task-item__num {
+  color: color-mix(in srgb, var(--color-warning, #f59e0b) 85%, var(--text-primary));
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 18%, transparent);
+  font-weight: 600;
+}
+.wb-task-item.is-running .wb-task-item__meta-icon {
+  color: color-mix(in srgb, var(--color-warning, #f59e0b) 80%, var(--text-primary));
+  animation: wb-task-running-icon 1.4s ease-in-out infinite;
+}
+@keyframes wb-task-running-icon {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
 }
 
 /* 删除按钮：默认隐藏，hover 卡片时淡入 */
