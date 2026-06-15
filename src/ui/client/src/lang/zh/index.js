@@ -1659,6 +1659,9 @@ export default {
   '@EDITOR:创建成功': '创建成功',
   '@EDITOR:输入文件名': '输入文件名（回车确认，Esc 取消）',
   '@EDITOR:输入文件夹名': '输入文件夹名（回车确认，Esc 取消）',
+  '@EDITOR:搜索文件...': '搜索文件...',
+  '@EDITOR:清除搜索': '清除搜索',
+  '@EDITOR:未找到匹配文件': '未找到匹配文件',
   // @EDITOR: file end
   // @INSSW: file path: components/InstanceSwitcher.vue
   '@INSSW:个实例': '个实例',

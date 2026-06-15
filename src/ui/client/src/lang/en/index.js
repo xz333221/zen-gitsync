@@ -1652,6 +1652,9 @@ export default {
   '@EDITOR:创建成功': 'Created successfully',
   '@EDITOR:输入文件名': 'Enter file name (Enter to confirm, Esc to cancel)',
   '@EDITOR:输入文件夹名': 'Enter folder name (Enter to confirm, Esc to cancel)',
+  '@EDITOR:搜索文件...': 'Search files...',
+  '@EDITOR:清除搜索': 'Clear search',
+  '@EDITOR:未找到匹配文件': 'No matching files',
   // @EDITOR: file end
   // @INSSW: file path: components/InstanceSwitcher.vue
   '@INSSW:个实例': ' instances',

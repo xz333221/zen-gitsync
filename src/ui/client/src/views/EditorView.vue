@@ -60,6 +60,32 @@ interface TreeNode extends FsItem {
 const configStore = useConfigStore()
 const treeNodes = ref<TreeNode[]>([])
 const treeLoading = ref(false)
+const searchQuery = ref('')
+// 实际参与过滤的关键词(防抖后)—— 避免大文件树下逐键重算 visibleTree 导致卡顿
+const debouncedSearchQuery = ref('')
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearSearch() {
+  searchQuery.value = ''
+  // 立即同步防抖值,避免清空后还要等一帧才恢复原树
+  debouncedSearchQuery.value = ''
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+}
+
+watch(searchQuery, (val) => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    debouncedSearchQuery.value = val
+    searchDebounceTimer = null
+  }, 180)
+})
+
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+})
 
 async function loadDir(dirPath: string, depth = 0): Promise<TreeNode[]> {
   const resp = await fetch(`/api/browse_directory?path=${encodeURIComponent(dirPath)}`)
@@ -150,6 +176,85 @@ function flattenTree(nodes: TreeNode[]): TreeNode[] {
     }
   }
   return result
+}
+
+// 搜索关键词(小写),用于过滤树
+const searchQueryLower = computed(() => debouncedSearchQuery.value.trim().toLowerCase())
+
+// 递归过滤:不区分大小写匹配 name,命中节点保留所有祖先目录并强制 expanded=true。
+// 输入为空 → 返回原树(保持用户已展开/折叠状态)。
+// 直接修改原始 reactive 节点的属性,以保留 Vue 响应式链路(toggleDir / openFile 才能触发 UI 更新)。
+// 仅在节点本身边界才覆盖 children:未加载的目录(原 children 为 undefined)保持 undefined,
+// 这样 toggleDir 仍能通过 `!node.children` 判断触发懒加载。
+function filterTree(nodes: TreeNode[], keyword: string): TreeNode[] {
+  if (!keyword) return nodes
+  const result: TreeNode[] = []
+  for (const n of nodes) {
+    const children = n.children ? filterTree(n.children, keyword) : []
+    const nameMatch = n.name.toLowerCase().includes(keyword)
+    if (n.type === 'directory') {
+      // 目录:自己命中 或 子树有命中 → 保留并强制展开
+      if (nameMatch || children.length > 0) {
+        n.expanded = true
+        // 已加载的目录才覆盖 children;未加载时保留 undefined,以便后续 toggleDir 懒加载
+        if (n.children !== undefined) {
+          n.children = children
+        }
+        result.push(n)
+      }
+    } else {
+      // 文件:仅自身命中
+      if (nameMatch) result.push(n)
+    }
+  }
+  return result
+}
+
+// 当前用于渲染的树(搜索时为过滤后,否则为原树)
+const visibleTree = computed(() => filterTree(treeNodes.value, searchQueryLower.value))
+
+// 是否处于无匹配状态(搜索框非空且过滤结果为空)
+const noSearchResults = computed(() =>
+  searchQueryLower.value.length > 0 && visibleTree.value.length === 0
+)
+
+// 将节点名按当前防抖关键词拆成段,用于在渲染时高亮命中部分。
+// 空关键词 → 单段无高亮;大小写不敏感匹配。
+function highlightName(name: string): Array<{ text: string; hit: boolean }> {
+  const kw = debouncedSearchQuery.value.trim()
+  if (!kw) return [{ text: name, hit: false }]
+  const lowerName = name.toLowerCase()
+  const lowerKw = kw.toLowerCase()
+  const parts: Array<{ text: string; hit: boolean }> = []
+  let cursor = 0
+  let idx = lowerName.indexOf(lowerKw, cursor)
+  while (idx !== -1) {
+    if (idx > cursor) parts.push({ text: name.slice(cursor, idx), hit: false })
+    parts.push({ text: name.slice(idx, idx + lowerKw.length), hit: true })
+    cursor = idx + lowerKw.length
+    idx = lowerName.indexOf(lowerKw, cursor)
+  }
+  if (cursor < name.length) parts.push({ text: name.slice(cursor), hit: false })
+  return parts
+}
+
+// 搜索输入框 ref + 快捷键聚焦 / Esc 清空
+const searchInputRef = ref<HTMLInputElement | null>(null)
+function focusSearchInput() {
+  const el = searchInputRef.value
+  if (!el) return
+  el.focus()
+  el.select()
+}
+function onSearchEscape() {
+  if (searchQuery.value) {
+    // 有内容:清空并保留焦点
+    clearSearch()
+    searchInputRef.value?.focus()
+  } else {
+    // 已经是空:失焦,把键盘焦点让给编辑器
+    searchInputRef.value?.blur()
+  }
 }
 
 // ── 已打开的标签页 ─────────────────────────────────────
@@ -341,7 +446,14 @@ async function saveCurrentFile(silent = false) {
 
 // Ctrl+S 保存
 function handleKeydown(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+  const mod = e.ctrlKey || e.metaKey
+  if (mod && e.key.toLowerCase() === 'f') {
+    // Ctrl/Cmd+F:聚焦到资源管理器的搜索框(类似 VS Code)
+    e.preventDefault()
+    focusSearchInput()
+    return
+  }
+  if (mod && e.key === 's') {
     e.preventDefault()
     saveCurrentFile()
   }
@@ -736,8 +848,38 @@ function stopPreviewResize() {
         </div>
       </div>
 
+      <div class="sidebar-search">
+        <svg class="sidebar-search-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input
+          ref="searchInputRef"
+          v-model="searchQuery"
+          type="text"
+          class="sidebar-search-input"
+          :placeholder="$t('@EDITOR:搜索文件...')"
+          :title="$t('@EDITOR:搜索文件...')"
+          spellcheck="false"
+          autocomplete="off"
+          @keydown.escape="onSearchEscape"
+        />
+        <button
+          v-if="searchQuery"
+          class="sidebar-search-clear"
+          :title="$t('@EDITOR:清除搜索')"
+          :aria-label="$t('@EDITOR:清除搜索')"
+          @click="clearSearch"
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
       <div class="sidebar-tree" v-if="!treeLoading">
-        <template v-for="node in flattenTree(treeNodes)" :key="node.path">
+        <template v-for="node in flattenTree(visibleTree)" :key="node.path">
           <!-- 重命名时用输入框替换节点 -->
           <div
             v-if="renameInput && renameInput.node.path === node.path"
@@ -793,8 +935,13 @@ function stopPreviewResize() {
             <svg v-else class="tree-icon mit-icon" aria-hidden="true">
               <use :xlink:href="`#${getNodeSpriteId(node)}`" />
             </svg>
-            <!-- 名称 -->
-            <span class="tree-name" :title="node.path">{{ node.name }}</span>
+            <!-- 名称(命中关键字高亮) -->
+            <span class="tree-name" :title="node.path">
+              <template v-for="(part, i) in highlightName(node.name)" :key="i">
+                <span v-if="part.hit" class="tree-name-hit">{{ part.text }}</span>
+                <template v-else>{{ part.text }}</template>
+              </template>
+            </span>
             <span v-if="node.loading" class="tree-loading" />
           </div>
 
@@ -847,8 +994,8 @@ function stopPreviewResize() {
           />
         </div>
 
-        <div v-if="treeNodes.length === 0 && !inlineInput" class="tree-empty">
-          {{ $t('@EDITOR:暂无文件') }}
+        <div v-if="!inlineInput && (noSearchResults || treeNodes.length === 0)" class="tree-empty">
+          {{ noSearchResults ? $t('@EDITOR:未找到匹配文件') : $t('@EDITOR:暂无文件') }}
         </div>
       </div>
       <div v-else class="sidebar-loading">
@@ -1111,6 +1258,79 @@ function stopPreviewResize() {
 .sidebar-action-btn:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+.sidebar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-search-icon {
+  position: absolute;
+  left: 18px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.sidebar-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 24px 0 26px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-input, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  outline: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.sidebar-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.sidebar-search-input:hover {
+  border-color: var(--text-tertiary);
+}
+
+.sidebar-search-input:focus {
+  border-color: var(--accent-color, #3b82f6);
+  background: var(--bg-panel);
+}
+
+.sidebar-search-clear {
+  position: absolute;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: background 0.12s, color 0.12s;
+}
+
+.sidebar-search-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+// 节点名搜索命中高亮(沿用主题色 + 柔和背景)
+.tree-name-hit {
+  color: var(--accent-color, #f59e0b);
+  background: rgba(245, 158, 11, 0.15);
+  border-radius: 2px;
+  padding: 0 1px;
 }
 
 .sidebar-tree {
