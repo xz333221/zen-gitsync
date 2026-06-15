@@ -13,6 +13,8 @@ export default {
   '@F13B4:当前分支': 'Current branch',
   '@F13B4:复制仓库地址': 'Copy repository URL',
   '@F13B4:查看更新': 'Check for updates',
+  '@F13B4:在 GitHub 上查看源码': 'View source on GitHub',
+  '@F13B4:在 npm 上查看包': 'View package on npm',
   '@F13B4:升级': 'Upgrade',
   '@F13B4:升级中': 'Upgrading',
   '@F13B4:升级完成': 'Upgrade complete',

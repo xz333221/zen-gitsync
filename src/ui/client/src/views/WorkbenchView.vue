@@ -2561,7 +2561,8 @@ function humanSize(n: number): string {
   flex: 1;
 }
 
-
+/* ── 任务拆分头部：标题 + 提示词下拉 + 按钮组 ────────────────── */
+.wb-split__header {
   display: flex;
   gap: 10px;
   align-items: center;

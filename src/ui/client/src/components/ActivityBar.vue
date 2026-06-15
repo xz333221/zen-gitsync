@@ -44,14 +44,13 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         :aria-label="$t('@ACTBAR:Git')"
         :aria-pressed="props.activeView === 'git'"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <!-- 分支图：左下 main，右下 feature，右上 head 合并 -->
-          <circle cx="6" cy="19" r="2.2" fill="var(--bg-container)"/>
-          <circle cx="18" cy="19" r="2.2" fill="var(--bg-container)"/>
-          <circle cx="18" cy="5" r="2.2" fill="var(--bg-container)"/>
-          <line x1="6" y1="16.8" x2="6" y2="11"/>
-          <line x1="6" y1="11" x2="18" y2="11"/>
-          <line x1="18" y1="11" x2="18" y2="7.2"/>
+        <!-- Git 分支图：竖干 + 向右开出分支 + 圆形节点 -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="7" cy="4.5" r="2" />
+          <circle cx="7" cy="19.5" r="2" />
+          <circle cx="17" cy="8.5" r="2" />
+          <line x1="7" y1="6.5" x2="7" y2="17.5" />
+          <path d="M7 6.5 C7 10 17 8.5 17 8.5" />
         </svg>
       </button>
     </el-tooltip>
@@ -65,14 +64,13 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         :aria-label="$t('@ACTBAR:编辑器')"
         :aria-pressed="props.activeView === 'editor'"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <!-- 文件折角：轮廓 + 折页 -->
-          <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/>
-          <polyline points="14 3 14 8 19 8"/>
-          <!-- 代码标记 </> -->
-          <polyline points="9.5 12 7 14.5 9.5 17"/>
-          <polyline points="14.5 12 17 14.5 14.5 17"/>
-          <line x1="13.5" y1="11" x2="10.5" y2="18"/>
+        <!-- 文件资源管理器：文件夹 + 文件树 -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <!-- 文件夹 -->
+          <path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z" />
+          <!-- 内部文件行 -->
+          <line x1="8" y1="13" x2="16" y2="13" stroke-width="1.5" />
+          <line x1="8" y1="16" x2="13" y2="16" stroke-width="1.5" />
         </svg>
       </button>
     </el-tooltip>
@@ -86,17 +84,18 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         :aria-label="$t('@ACTBAR:源码地图')"
         :aria-pressed="props.activeView === 'source-map'"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <!-- 中心节点 + 四个外围节点 + 连线（关系图谱） -->
-          <circle cx="12" cy="12" r="2.2"/>
-          <circle cx="4.5" cy="4.5" r="1.7" fill="var(--bg-container)"/>
-          <circle cx="19.5" cy="4.5" r="1.7" fill="var(--bg-container)"/>
-          <circle cx="4.5" cy="19.5" r="1.7" fill="var(--bg-container)"/>
-          <circle cx="19.5" cy="19.5" r="1.7" fill="var(--bg-container)"/>
-          <line x1="6.3" y1="6.3" x2="10.1" y2="10.1"/>
-          <line x1="17.7" y1="6.3" x2="13.9" y2="10.1"/>
-          <line x1="6.3" y1="17.7" x2="10.1" y2="13.9"/>
-          <line x1="17.7" y1="17.7" x2="13.9" y2="13.9"/>
+        <!-- 思维导图：中心节点 + 三条分支辐射 -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="2.4" />
+          <!-- 上分支 -->
+          <line x1="12" y1="9.6" x2="12" y2="4" />
+          <circle cx="12" cy="3" r="1.5" />
+          <!-- 左下分支 -->
+          <line x1="9.9" y1="13.4" x2="6" y2="18" />
+          <circle cx="5.2" cy="19" r="1.5" />
+          <!-- 右下分支 -->
+          <line x1="14.1" y1="13.4" x2="18" y2="18" />
+          <circle cx="18.8" cy="19" r="1.5" />
         </svg>
       </button>
     </el-tooltip>
@@ -110,20 +109,18 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         :aria-label="$t('@ACTBAR:工作台')"
         :aria-pressed="props.activeView === 'workbench'"
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <!-- 仪表板：外框 + 左侧导航 + 右侧 2x2 卡片网格 -->
-          <rect x="3" y="4" width="18" height="16" rx="2.2"/>
-          <line x1="9" y1="4" x2="9" y2="20"/>
-          <!-- 导航条：活动指示点 + 菜单行 -->
-          <circle cx="6" cy="7.5" r="0.7" fill="currentColor" stroke="none"/>
-          <line x1="4.6" y1="11.5" x2="7.4" y2="11.5"/>
-          <line x1="4.6" y1="14.5" x2="7.4" y2="14.5"/>
-          <line x1="4.6" y1="17.5" x2="7.4" y2="17.5"/>
-          <!-- 右上卡片 -->
-          <rect x="11" y="6" width="8" height="5" rx="1"/>
-          <!-- 右下两个小卡片 -->
-          <rect x="11" y="13" width="3.7" height="5" rx="1"/>
-          <rect x="15.3" y="13" width="3.7" height="5" rx="1"/>
+        <!-- 任务清单：勾选列表（代表 AI 任务工作台） -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="18" height="18" rx="2.5" />
+          <!-- 第一行：勾 + 文字线 -->
+          <polyline points="7 8.5 9 10.5 12.5 7" stroke-width="1.7" />
+          <line x1="14" y1="8.5" x2="18" y2="8.5" stroke-width="1.5" />
+          <!-- 第二行：勾 + 文字线 -->
+          <polyline points="7 13 9 15 12.5 11.5" stroke-width="1.7" />
+          <line x1="14" y1="13" x2="18" y2="13" stroke-width="1.5" />
+          <!-- 第三行：空圆 + 短文字线（未完成） -->
+          <circle cx="8" cy="17.5" r="1.3" stroke-width="1.4" />
+          <line x1="11" y1="17.5" x2="17" y2="17.5" stroke-width="1.5" />
         </svg>
         <span
           v-if="wbStatus.hasRunning"

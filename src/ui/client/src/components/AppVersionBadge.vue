@@ -121,6 +121,37 @@ onMounted(() => {
 
 <template>
   <div class="app-version-badge">
+    <!-- GitHub 链接 -->
+    <el-tooltip :content="$t('@F13B4:在 GitHub 上查看源码')" placement="top" effect="dark" :show-after="300">
+      <a
+        href="https://github.com/xz333221/zen-gitsync"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="badge-icon-link"
+        :aria-label="$t('@F13B4:在 GitHub 上查看源码')"
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/>
+        </svg>
+      </a>
+    </el-tooltip>
+
+    <!-- NPM 链接 -->
+    <el-tooltip :content="$t('@F13B4:在 npm 上查看包')" placement="top" effect="dark" :show-after="300">
+      <a
+        href="https://www.npmjs.com/package/zen-gitsync"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="badge-icon-link badge-icon-link--npm"
+        :aria-label="$t('@F13B4:在 npm 上查看包')"
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2 2v20h20V2H2zm17.167 17.167H12.5v-10h-3.333v10H4.833V4.833h14.334v14.334z"/>
+        </svg>
+      </a>
+    </el-tooltip>
+
+    <!-- 版本号 -->
     <el-tooltip :content="$t('@F13B4:查看更新')" placement="top" effect="dark" :show-after="300">
       <a
         :href="releasesUrl"
@@ -160,6 +191,32 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-base);
   margin-left: auto;
+}
+
+/* ── 图标链接（GitHub / NPM） ── */
+.badge-icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  text-decoration: none;
+  transition: color 0.18s ease, opacity 0.18s ease, background 0.18s ease;
+
+  &:hover {
+    opacity: 1;
+    color: var(--text-secondary);
+    background: var(--bg-hover, rgba(0, 0, 0, 0.06));
+  }
+}
+.badge-icon-link--npm:hover {
+  color: #cb3837;
+}
+.badge-icon-link:first-child:hover {
+  color: var(--text-primary);
 }
 
 .version-link {
