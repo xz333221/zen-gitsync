@@ -72,6 +72,10 @@ const isRunning = computed(() => phase.value === 'running')
 // 那种"假关闭"会把刚启动的 LLM 流打断。
 function close() {
   abortTyping()
+  // 用户主动关闭：把 phase 与四个 tab 的数据清回 idle，
+  // 配合父组件 v-if 复用 + taskId watch，下一次打开会强制重新初始化。
+  // 已确认入库的子任务在父组件的 selectedTask.subtasks 里，不受此影响。
+  reset()
   emit('update:modelValue', false)
 }
 
@@ -247,6 +251,14 @@ async function reparse() {
 // 打开弹窗时自动启动；关闭意图由 close() 处理（见上注释）
 watch(() => props.modelValue, (v) => {
   if (v && phase.value === 'idle') start()
+})
+
+// 父组件用 v-if="selectedTask" 复用同一份实例，selectedTask 切换时组件不会被卸载。
+// 这里 watch taskId 把 phase/数据清回 idle，避免上一个任务的 LLM 输出
+// 残留在新任务上。父组件的 selectedTaskId watch 会同步关闭弹窗，
+// 这里的 reset 是双保险：哪怕未来重构去掉父组件的关闭逻辑，状态也不会泄漏。
+watch(() => props.taskId, () => {
+  reset()
 })
 
 // ── 提示词编辑 ──────────────────────────────────────────────────────

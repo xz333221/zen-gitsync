@@ -236,6 +236,14 @@ watch(selectedTaskId, async (_n, _o) => {
   // 新 task 选中时 captureSnapshot() 会在 selectTask() / loadTasks() 内同步调用
 })
 
+// 切换/新建任务时关闭 AI 拆分弹窗。
+// AISplitDialog 由 v-if="selectedTask" 包裹，selectedTask 切换时不会卸载；
+// 不显式关闭就会看到上一个任务的 4 个 tab 残留在新任务上。
+// 由 AISplitDialog 内部的 taskId watch 负责把 phase/数据清回 idle，下次打开会重跑。
+watch(selectedTaskId, () => {
+  aiSplitDialogVisible.value = false
+})
+
 // 离开页面 / 切到别的 task 前尝试 flush（best-effort）
 // 用 sendBeacon 保证 fetch 在 unload 后也能完成
 function beaconPersist(task: Task) {
