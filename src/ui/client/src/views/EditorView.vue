@@ -19,6 +19,7 @@ import { ref, shallowRef, computed, nextTick, onMounted, onBeforeUnmount, watch 
 import { ElMessage, ElTooltip } from 'element-plus'
 import * as monaco from 'monaco-editor'
 import { useConfigStore } from '@/stores/configStore'
+import { useEditorTabsStore } from '@/stores/editorTabs'
 import { getLanguageByExt } from '@/utils/editorLang'
 import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
 import ImagePreview from '@/components/ImagePreview.vue'
@@ -58,6 +59,7 @@ interface TreeNode extends FsItem {
 }
 
 const configStore = useConfigStore()
+const editorTabsStore = useEditorTabsStore()
 const treeNodes = ref<TreeNode[]>([])
 const treeLoading = ref(false)
 const searchQuery = ref('')
@@ -402,7 +404,24 @@ watch(activeTabPath, (path) => {
   if (!tab) return
   const model = getOrCreateModel(tab)
   editorInstance.value.setModel(model)
+  // 切换 tab 后把键盘焦点交给 Monaco。
+  // 否则焦点会停留在被点击的 tab 按钮或文件树节点上：
+  //   - 焦点在 button 上时，空格键会被浏览器当作按钮点击（无法输入）；
+  //   - 焦点在 body 上时，空格键会触发页面滚动（无法输入）。
+  // 这是用户反馈"编辑器不能输入空格"的根因。
+  nextTick(() => editorInstance.value?.focus())
 })
+
+// 同步"未保存文件数"到 editorTabs store（供活动栏显示徽标）。
+// 只统计真实文件 tab：图片 tab 的 content 始终为空字符串、isDirty 恒为 false，
+// 这里统一用 isDirty 过滤即可，无需区分类型。
+watch(
+  () => tabs.value.filter(t => t.isDirty).length,
+  (n) => { editorTabsStore.setDirtyCount(n) },
+  { immediate: true },
+)
+// 组件卸载时清零，避免空 tab 列表后徽标仍显示历史数字
+onBeforeUnmount(() => editorTabsStore.setDirtyCount(0))
 
 // 跟随系统主题
 const themeObserver = new MutationObserver(() => {
@@ -410,14 +429,53 @@ const themeObserver = new MutationObserver(() => {
   monaco.editor.setTheme(isDark ? 'vs-dark' : 'vs')
 })
 
+// 监听编辑器视图的可见性变化：
+// 用户点击活动栏切换视图时，父容器 (.editor-pane) 的 v-show 会切换 display。
+// 切回编辑器视图后，焦点往往停留在被点击的活动栏按钮上（button 默认可聚焦），
+// 此时 Monaco 收不到键盘输入，空格键反而会触发按钮点击 —— 表现为"不能输入空格"。
+// 用 MutationObserver 监听 display，视图变可见且有打开的文件时把焦点交还给 Monaco。
+let viewVisibilityObserver: MutationObserver | null = null
+function setupViewVisibilityObserver() {
+  if (viewVisibilityObserver || !containerRef.value) return
+  // 观察自身及祖先链上最近的 display 控制节点（.editor-pane / .view-pane）
+  const targets: Element[] = [containerRef.value]
+  let p: Element | null = containerRef.value.parentElement
+  while (p) {
+    if (p.classList.contains('view-pane') || p.classList.contains('editor-pane')) {
+      targets.push(p)
+      break
+    }
+    p = p.parentElement
+  }
+  viewVisibilityObserver = new MutationObserver(() => {
+    const visible = containerRef.value && containerRef.value.offsetParent !== null
+    if (visible && activeTabPath.value && editorInstance.value) {
+      // 延迟一帧，确保 display 切换已应用
+      requestAnimationFrame(() => {
+        // 仅当当前焦点不在输入框（搜索框/重命名/内联新建）时才抢焦点，
+        // 避免打断用户在这些输入框里的操作
+        const ae = document.activeElement as HTMLElement | null
+        const inEditableInput = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
+        if (!inEditableInput) editorInstance.value?.focus()
+      })
+    }
+  })
+  targets.forEach(t =>
+    viewVisibilityObserver.observe(t, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] }),
+  )
+}
+
 onMounted(async () => {
   mountEditor()
   await initTree()
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  setupViewVisibilityObserver()
 })
 
 onBeforeUnmount(() => {
   themeObserver.disconnect()
+  viewVisibilityObserver?.disconnect()
+  viewVisibilityObserver = null
   editorInstance.value?.dispose()
   modelCache.forEach(m => m.dispose())
   modelCache.clear()

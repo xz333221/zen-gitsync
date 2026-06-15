@@ -19,6 +19,7 @@ import { ElTooltip } from 'element-plus'
 import { computed } from 'vue'
 import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
 import { useGitStore } from '@stores/gitStore'
+import { useEditorTabsStore } from '@stores/editorTabs'
 
 const props = defineProps<{
   activeView: 'git' | 'editor' | 'source-map' | 'workbench'
@@ -30,10 +31,11 @@ const emit = defineEmits<{
 
 const wbStatus = useWorkbenchStatusStore()
 const gitStore = useGitStore()
+const editorTabsStore = useEditorTabsStore()
 
 // 未提交文件数：只统计已纳入 git 跟踪的变更（staged + unstaged）
 // 排除 untracked —— 刚新建/尚未保存的空文件出现在文件树里属于正常状态，
-// 不该让徽标过早提示“未提交”，避免和编辑器里“未保存”的 dirty dot 混淆。
+// 不该让徽标过早提示”未提交”，避免和编辑器里”未保存”的 dirty dot 混淆。
 const uncommittedCount = computed(() => {
   const list = gitStore.fileList
   if (!list || list.length === 0) return 0
@@ -41,6 +43,15 @@ const uncommittedCount = computed(() => {
 })
 const uncommittedBadge = computed(() => {
   const n = uncommittedCount.value
+  return n > 99 ? '99+' : String(n)
+})
+
+// 编辑器未保存文件数：与 Git 的 uncommitted 徽标刻意区分开。
+//   - editor dirty（这里）= 文件已改动但尚未落盘（编辑器内部状态）
+//   - git uncommitted   = 改动已落盘但尚未提交（仓库状态）
+// 数值由 EditorView 通过 editorTabs store 同步。
+const editorDirtyBadge = computed(() => {
+  const n = editorTabsStore.dirtyCount
   return n > 99 ? '99+' : String(n)
 })
 
@@ -78,7 +89,11 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
     </el-tooltip>
 
     <!-- 编辑器页面 -->
-    <el-tooltip :content="$t('@ACTBAR:编辑器')" placement="right" :show-after="300">
+    <el-tooltip
+      :content="editorTabsStore.hasDirty ? `${$t('@ACTBAR:编辑器')} · ${editorTabsStore.dirtyCount} ${$t('@ACTBAR:个未保存文件')}` : $t('@ACTBAR:编辑器')"
+      placement="right"
+      :show-after="300"
+    >
       <button
         class="activity-btn"
         :class="{ active: props.activeView === 'editor' }"
@@ -90,6 +105,12 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         <svg viewBox="0 0 1024 1024" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
           <path d="M928 687.9c-17.8 0-32.2 14.4-32.2 32.1v80.7c0 35.3-28.7 64-64 64H192.5c-35.3 0-64-28.7-64-64V225c0-35.3 28.7-64 64-64H415l82.7 143.3c6.6 11.4 19.2 17.2 31.5 15.8h302.5c35.3 0 64 28.7 64 64v80c0 17.7 14.4 32.1 32.2 32.1s32.2-14.4 32.2-32.1c0-0.8 0-1.6-0.1-2.4v-77.5C960 329 925.1 282 876.1 264v-1c0-68.2-55.8-124-124-124H476.2l-14.8-25.7c-7.4-12.9-18-16.2-27.3-16l-0.1-0.1H192.1c-70.7 0-128 57.3-128 128v574.1c0 70.7 57.3 128 128 128h640c70.7 0 128-57.3 128-128v-76.9c0.1-0.8 0.1-1.6 0.1-2.4 0-17.7-14.4-32.1-32.2-32.1zM747.1 202.8c31.6 0 58 23.2 63.1 53.4H543.9l-30.8-53.4h234z"/>
         </svg>
+        <span
+          v-if="editorTabsStore.hasDirty"
+          class="editor-dirty-badge"
+          :title="`${editorTabsStore.dirtyCount} ${$t('@ACTBAR:个未保存文件')}`"
+          aria-hidden="true"
+        >{{ editorDirtyBadge }}</span>
       </button>
     </el-tooltip>
 
@@ -279,6 +300,31 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   100% { transform: scale(1);    opacity: 1; }
 }
 
+/* ── 编辑器未保存文件数量徽标 ─────────────────────────────────────── */
+/* 几何与 Git 徽标一致，颜色用 warning 橙色以呼应编辑器 tab 上的 dirty dot，
+   与 Git 的品牌色"未提交"徽标形成视觉区分。 */
+.editor-dirty-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  background: var(--color-warning);
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--bg-container);
+  pointer-events: none;
+  animation: git-badge-pop-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1;
+}
+
 /* 左侧指示条进入动画 */
 @keyframes actbar-indicator-in {
   from {
@@ -294,6 +340,7 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
 @media (prefers-reduced-motion: reduce) {
   .wb-running-dot,
   .git-uncommitted-badge,
+  .editor-dirty-badge,
   .activity-btn.active::before {
     animation: none;
   }
