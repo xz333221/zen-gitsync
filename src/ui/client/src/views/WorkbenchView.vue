@@ -1462,7 +1462,7 @@ function humanSize(n: number): string {
           class="wb-textarea"
           v-model="selectedTask.desc"
           :placeholder="$t('@WORKBENCH:任务描述（可选）')"
-          rows="3"
+          rows="2"
           @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
         />
         <AttachmentZone
@@ -2430,11 +2430,11 @@ function humanSize(n: number): string {
 .wb-split {
   flex: 1;
   min-height: 0;
-  padding: 18px 22px 14px;
+  padding: 10px 16px 10px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 .wb-placeholder {
   flex: 1;
@@ -2714,12 +2714,12 @@ function humanSize(n: number): string {
 
 /* ── 标题：hero 级单行输入 ─────────────────────────── */
 .wb-input--title {
-  height: 42px;
+  height: 36px;
   flex: 1;
-  font-size: var(--font-size-17);
+  font-size: var(--font-size-15);
   font-weight: 600;
-  letter-spacing: -0.4px;
-  padding: 0 14px;
+  letter-spacing: -0.3px;
+  padding: 0 12px;
   border-color: var(--border-color-medium);
   background: var(--bg-container);
 }
@@ -2767,15 +2767,15 @@ function humanSize(n: number): string {
 /* ── 多行输入 ─────────────────────────────────────── */
 .wb-textarea {
   display: block;
-  padding: 12px 14px;
+  padding: 8px 12px;
   font-size: var(--font-size-135);
-  line-height: 1.65;
+  line-height: 1.6;
   letter-spacing: -0.05px;
   resize: vertical;
   width: 100%;
   box-sizing: border-box;
   flex-shrink: 0;
-  min-height: 72px;
+  min-height: 52px;
   /* 块级 textarea 在容器内与其它控件等宽 */
 }
 .wb-textarea::placeholder {
