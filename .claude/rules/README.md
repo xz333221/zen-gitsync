@@ -46,6 +46,16 @@ dev server status:
 
 **全部通过后才能进入下一步。**
 
+### 第一点二步：auto-preview-verify（前端改动自动起 preview 验证）
+
+**仅当本轮会改动前端代码时**执行，加载 `.claude/skills/auto-preview-verify/SKILL.md`：
+
+- **改完不要等用户说"帮我验证"** —— 前端代码改完必须自己起 preview 走一遍浏览器验证
+- 起 preview 后按 dev-server-diagnostics 步骤 0a 判定走的链路（HMR 还是 backend 生产 bundle）
+- HMR 链路 → preview_eval 验证 + preview_screenshot 截图
+- 生产 bundle 链路 → `vite build` + reload 再验证
+- preview 怎么都起不来 → 退化为只跑 vite build,不阻塞 commit,但要在最终汇报里说明
+
 ### 第一点三步：hmr-debug-check（浏览器验证时的 5 步检查）
 
 如果本轮改动了前端代码并且通过浏览器验证视觉效果，加载并执行 `.claude/rules/hmr-debug-check.md`：
