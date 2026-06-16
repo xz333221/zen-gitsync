@@ -252,10 +252,10 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 4px;
   list-style: none;
-  background: var(--bg-elevated, #ffffff);
+  background: var(--bg-container, var(--color-white, #ffffff));
   border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
   border-radius: 6px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
   user-select: none;
   font-size: 13px;
 
@@ -266,10 +266,10 @@ onBeforeUnmount(() => {
     padding: 6px 10px;
     border-radius: 4px;
     cursor: pointer;
-    color: var(--text-primary, #1f2328);
+    color: var(--text-primary, #303133);
 
     &:hover {
-      background: var(--bg-hover, rgba(64, 158, 255, 0.12));
+      background: var(--bg-container-hover, rgba(64, 158, 255, 0.12));
       color: var(--el-color-primary, #409eff);
     }
 

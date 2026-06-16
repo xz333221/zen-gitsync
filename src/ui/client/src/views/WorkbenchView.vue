@@ -656,7 +656,7 @@ function openCreateTask() {
   taskDialog.title = ''
   taskDialog.desc = ''
   taskDialog.promptId = null
-  taskDialog.type = 'complex'
+  taskDialog.type = 'simple'
   taskDialog.simpleOverride = ''
   taskDialog.visible = true
 }

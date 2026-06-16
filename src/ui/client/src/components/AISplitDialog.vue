@@ -16,7 +16,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Loading, CircleClose } from '@element-plus/icons-vue'
+import { Loading, CircleClose, Promotion } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 
 export interface SplitSubtask {
@@ -248,9 +248,14 @@ async function reparse() {
   }
 }
 
-// 打开弹窗时自动启动；关闭意图由 close() 处理（见上注释）
+// 打开弹窗时不再自动跑，由用户点「开始拆分」按钮触发；
+// 关闭意图由 close() 处理（见上注释）。这样用户可以从容查看提示词 / 编辑指令，
+// 而不会一进弹窗就看到 LLM 在烧 token。
 watch(() => props.modelValue, (v) => {
-  if (v && phase.value === 'idle') start()
+  if (v && phase.value === 'idle') {
+    // 只重置一次；用户多次开关弹窗时保留已生成的数据，避免重复消耗 LLM 配额
+    activeTab.value = 'prompt'
+  }
 })
 
 // 父组件用 v-if="selectedTask" 复用同一份实例，selectedTask 切换时组件不会被卸载。
@@ -321,8 +326,28 @@ function cancelEditPrompt() {
       <el-icon color="#f56c6c"><CircleClose /></el-icon>
       <span>{{ errorMessage }}</span>
     </div>
+    <div v-else-if="phase === 'idle'" class="ai-split-idle">
+      <div class="ai-split-idle__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v3"></path>
+          <path d="M12 18v3"></path>
+          <path d="M3 12h3"></path>
+          <path d="M18 12h3"></path>
+          <path d="M5.6 5.6l2.1 2.1"></path>
+          <path d="M16.3 16.3l2.1 2.1"></path>
+          <path d="M5.6 18.4l2.1-2.1"></path>
+          <path d="M16.3 7.7l2.1-2.1"></path>
+          <circle cx="12" cy="12" r="4"></circle>
+        </svg>
+      </div>
+      <div class="ai-split-idle__title">{{ $t('@WORKBENCH:准备用 AI 拆分任务') }}</div>
+      <div class="ai-split-idle__desc">{{ $t('@WORKBENCH:点击下方按钮开始生成。生成期间可切换到「思考 / 原始结果」实时查看模型输出。') }}</div>
+      <el-button type="primary" :icon="Promotion" @click="start">
+        {{ $t('@WORKBENCH:开始拆分') }}
+      </el-button>
+    </div>
 
-    <el-tabs v-model="activeTab" class="ai-split-tabs">
+    <el-tabs v-if="phase !== 'idle'" v-model="activeTab" class="ai-split-tabs">
       <!-- 1. 提示词 -->
       <el-tab-pane :label="$t('@WORKBENCH:提示词')" name="prompt">
         <div class="ai-split-prompt-actions">
@@ -462,6 +487,35 @@ function cancelEditPrompt() {
   &.is-error { color: var(--el-color-danger); }
 
   .is-loading { animation: rotating 2s linear infinite; }
+}
+
+/* 空闲态：等待用户主动开始拆分 */
+.ai-split-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px 16px 24px;
+  gap: 10px;
+
+  &__icon {
+    color: var(--el-color-primary);
+    opacity: 0.6;
+    margin-bottom: 4px;
+  }
+  &__title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  &__desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 460px;
+    margin-bottom: 4px;
+  }
 }
 @keyframes rotating {
   from { transform: rotate(0deg); }
