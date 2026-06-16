@@ -36,7 +36,7 @@ import AttachmentZone from '@components/AttachmentZone.vue'
 import JobLogDetails from '@components/JobLogDetails.vue'
 import ExecutionLogManager from '@components/ExecutionLogManager.vue'
 import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
-import { statusLabel, statusColor } from '@/utils/jobStatus'
+import { statusColor } from '@/utils/jobStatus'
 import type { Job } from '@/types/workbench'
 
 // ── 类型 ────────────────────────────────────────────────────────────────────
@@ -388,16 +388,6 @@ function simpleStatusColor(s: SimpleState): string {
     case 'error':     return 'var(--color-danger-bright)'
     case 'cancelled': return 'var(--color-cancelled)'
     default:          return 'var(--bg-subtle)'  // idle: 灰底 + 暗文字，禁色卡，保持「未开始」的弱化语义
-  }
-}
-// 5 态 → pill 文字。复用现有 WORKBENCH 字典 key；i18n 已就绪
-function simpleStatusLabel(s: SimpleState): string {
-  switch (s) {
-    case 'idle':      return $t('@WORKBENCH:尚未执行')
-    case 'running':   return $t('@WORKBENCH:正在执行…')
-    case 'done':      return $t('@WORKBENCH:已完成')
-    case 'error':     return $t('@WORKBENCH:执行失败')
-    case 'cancelled': return $t('@WORKBENCH:已停止')
   }
 }
 function formatShortTime(iso: string | null | undefined): string {
@@ -1617,8 +1607,8 @@ function humanSize(n: number): string {
                 >
                   <!-- 第一行：状态徽章 + 标题 -->
                   <div class="wb-exec-sub-item__row1">
-                    <span class="wb-sub-item__status" :style="{ background: statusColor(sub.status) }">
-                      {{ statusLabel(sub.status) }}
+                    <span class="wb-sub-item__status wb-sub-item__status--dot" :style="{ background: statusColor(sub.status) }" :title="$t('@WORKBENCH:任务完成状态')">
+                      <span class="wb-simple__status-dot" aria-hidden="true"></span>
                     </span>
                     <span class="wb-exec-sub-item__title" :title="sub.title">
                       {{ sub.title || $t('@WORKBENCH:未命名子任务') }}
@@ -1663,9 +1653,8 @@ function humanSize(n: number): string {
                   }"
                 >
                   <div class="wb-exec-sub-item__row1">
-                    <span class="wb-sub-item__status" :style="{ background: simpleStatusColor(simpleJobState(simpleJobFor(selectedTask))) }">
+                    <span class="wb-sub-item__status wb-sub-item__status--dot" :style="{ background: simpleStatusColor(simpleJobState(simpleJobFor(selectedTask))) }" :title="$t('@WORKBENCH:任务完成状态')">
                       <span class="wb-simple__status-dot" aria-hidden="true"></span>
-                      {{ simpleStatusLabel(simpleJobState(simpleJobFor(selectedTask))) }}
                     </span>
                     <span class="wb-exec-sub-item__title" :title="selectedTask.title">
                       {{ selectedTask.title || $t('@WORKBENCH:未命名任务') }}
@@ -1728,12 +1717,11 @@ function humanSize(n: number): string {
             <template v-else>
               <div class="wb-simple__status-row">
                 <span
-                  class="wb-simple__status"
+                  class="wb-simple__status wb-simple__status--dot"
                   :style="{ background: simpleStatusColor(simpleJobState(simpleJobFor(selectedTask))) }"
                   :title="$t('@WORKBENCH:任务完成状态')"
                 >
                   <span class="wb-simple__status-dot" aria-hidden="true"></span>
-                  <span class="wb-simple__status-text">{{ simpleStatusLabel(simpleJobState(simpleJobFor(selectedTask))) }}</span>
                 </span>
                 <span
                   v-if="simpleJobFor(selectedTask)?.endedAt && simpleJobState(simpleJobFor(selectedTask)) === 'done'"
@@ -1748,6 +1736,14 @@ function humanSize(n: number): string {
                 >
                   — {{ simpleJobFor(selectedTask)?.error }}
                 </span>
+                <button
+                  v-if="simpleJobState(simpleJobFor(selectedTask)) === 'running' && simpleJobFor(selectedTask)"
+                  class="wb-simple__stop"
+                  :disabled="isSubtaskPersisting(simpleJobFor(selectedTask)!.id)"
+                  @click="cancelJob(simpleJobFor(selectedTask)!)"
+                >
+                  {{ $t('@WORKBENCH:停止') }}
+                </button>
               </div>
               <details
                 class="wb-simple__override"
@@ -1863,8 +1859,11 @@ function humanSize(n: number): string {
       width="600px"
     >
       <el-form label-position="top">
-        <el-form-item :label="$t('@WORKBENCH:标题')">
-          <el-input v-model="taskDialog.title" />
+        <el-form-item :label="$t('@WORKBENCH:标题（可选）')">
+          <el-input
+            v-model="taskDialog.title"
+            :placeholder="$t('@WORKBENCH:不填则自动命名为「无标题」，稍后可在任务列表里改名')"
+          />
         </el-form-item>
         <el-form-item :label="$t('@WORKBENCH:类型')">
           <el-radio-group v-model="taskDialog.type">
@@ -3223,8 +3222,8 @@ function humanSize(n: number): string {
 }
 
 /* ── 简单任务完成态 pill ── */
-/* 与子任务 wb-sub-item__status 同型：彩色背景 + 白字 + 圆点 + 文字。
-   五态由 :style="{ background: simpleStatusColor(...) }" 注入背景色。 */
+/* 圆点版：只用状态点+颜色表达状态,无文字。running 时由外层 wb-exec-sub-item
+   的边框跑马灯承担动效,pill 本身只做圆点呼吸。 */
 .wb-simple__status-row {
   display: flex;
   align-items: center;
@@ -3236,33 +3235,29 @@ function humanSize(n: number): string {
 .wb-simple__status {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
+  padding: 0;
+  border-radius: 50%;
+  width: 8px;
+  height: 8px;
   flex-shrink: 0;
   /* 颜色由行内 style 注入；这里只做过渡 */
   transition: background var(--transition-fast) var(--ease-custom);
 }
-.wb-simple__status-dot {
-  width: 5px;
-  height: 5px;
+.wb-simple__status--dot {
   border-radius: 50%;
-  background: #fff;
-  flex-shrink: 0;
-  opacity: 0.9;
 }
-/* 简单任务执行中：徽章呼吸 + 圆点脉动 + 高光扫过 */
-.wb-exec-sub-item.is-running .wb-simple__status-dot {
-  animation: wb-status-dot 1.2s ease-in-out infinite;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+.wb-simple__status-dot {
+  display: none; /* 圆点 pill 内不再嵌套小圆点 */
+}
+/* running: pill 圆点呼吸(白光环) */
+.wb-exec-sub-item.is-running .wb-simple__status {
+  animation: wb-status-dot-pulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
 }
 .wb-simple__status-text {
-  line-height: 1.4;
+  display: none;
 }
 .wb-simple__meta {
   font-size: var(--font-size-115);
@@ -3276,12 +3271,33 @@ function humanSize(n: number): string {
 .wb-simple__meta--error {
   color: var(--color-danger);
 }
-/* idle 灰底：背景由 inline style 注入，pill 文字需要深色（白底不可读） */
-.wb-simple__status[style*="--text-tertiary"] {
-  color: var(--text-secondary);
-}
+/* idle 灰底：背景由 inline style 注入，无文字无需特殊处理 */
 .wb-simple__status[style*="--text-tertiary"] .wb-simple__status-dot {
   background: var(--text-tertiary);
+}
+
+/* ── 简单任务「停止」按钮(running 时详情区状态条末尾) ── */
+.wb-simple__stop {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-danger-bright);
+  background: transparent;
+  color: var(--color-danger-bright);
+  font-size: var(--font-size-115);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast) var(--ease-custom),
+    color var(--transition-fast) var(--ease-custom);
+}
+.wb-simple__stop:hover:not(:disabled) {
+  background: var(--color-danger-bright);
+  color: #fff;
+}
+.wb-simple__stop:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── 简单任务「覆盖预置提示词」可折叠 ── */
@@ -3613,19 +3629,27 @@ function humanSize(n: number): string {
 .wb-sub-item.is-done.is-collapsed {
   padding: 8px 10px;
 }
+/* ── 状态点 pill（无文字,只用圆点+边框传递状态）
+   running 时不动 pill 本身,而是把动效挪到 wb-exec-sub-item 的边框上 —— 见下方 ── */
 .wb-sub-item__status {
   position: relative;
   font-size: 11px;
   color: #fff;
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 0;
+  border-radius: 50%;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   font-weight: 600;
   letter-spacing: 0.2px;
   overflow: hidden;
+  width: 8px;
+  height: 8px;
+}
+.wb-sub-item__status--dot {
+  border-radius: 50%;
 }
 
 /* idle 状态：inline 注入的背景是 --bg-subtle（灰底），不能用白字
@@ -3637,75 +3661,81 @@ function humanSize(n: number): string {
   background: var(--text-tertiary);
 }
 
-/* ── 执行中：徽章呼吸 + 闪烁圆点 + shimmer 高光 ─────────── */
-.wb-sub-item.is-running .wb-sub-item__status {
-  background: linear-gradient(
-    90deg,
-    var(--color-primary) 0%,
-    color-mix(in srgb, var(--color-primary) 70%, #fff) 50%,
-    var(--color-primary) 100%
-  ) !important;
-  background-size: 200% 100% !important;
-  animation: wb-status-shimmer 2.4s linear infinite;
-  box-shadow:
-    0 0 0 0 var(--tint-primary-45),
-    0 0 12px var(--tint-primary-35);
-  animation: wb-status-pulse 2.4s ease-in-out infinite,
-             wb-status-shimmer 2.4s linear infinite;
+/* ── 执行中：边框跑马灯 + 状态点呼吸
+   pill 内部 ::before/::after 已禁用(让 pill 退化为纯圆点),
+   动效全部交给外层 .wb-exec-sub-item 的边框 + 外发光。 ─────────── */
+.wb-sub-item.is-running .wb-sub-item__status,
+.wb-exec-sub-item.is-running .wb-sub-item__status {
+  animation: wb-status-dot-pulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
 }
-.wb-sub-item.is-running .wb-sub-item__status::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
-  animation: wb-status-dot 1.2s ease-in-out infinite;
-}
-.wb-sub-item.is-running .wb-sub-item__status::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.4) 50%,
-    transparent 100%
-  );
-  animation: wb-status-sweep 2.4s ease-in-out infinite;
-  pointer-events: none;
+.wb-sub-item.is-running .wb-sub-item__status::before,
+.wb-sub-item.is-running .wb-sub-item__status::after,
+.wb-exec-sub-item.is-running .wb-sub-item__status::before,
+.wb-exec-sub-item.is-running .wb-sub-item__status::after {
+  content: none;
 }
 
-@keyframes wb-status-shimmer {
+/* 复杂任务子任务 running：边框跑马灯 + 整行外发光 */
+.wb-sub-item.is-running {
+  position: relative;
+  border-color: var(--color-primary);
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--tint-primary-18) 50%,
+      transparent 100%
+    ) var(--tint-primary-04);
+  background-size: 200% 100%;
+  animation: wb-border-shimmer 2.4s linear infinite;
+  box-shadow: 0 0 0 1px var(--tint-primary-45),
+              0 0 12px var(--tint-primary-25);
+}
+
+/* 简单任务 running（外层用 wb-exec-sub-item 包） */
+.wb-exec-sub-item.is-running {
+  position: relative;
+  border-color: var(--color-primary);
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--tint-primary-18) 50%,
+      transparent 100%
+    ) var(--tint-primary-04);
+  background-size: 200% 100%;
+  animation: wb-border-shimmer 2.4s linear infinite;
+  box-shadow: 0 0 0 1px var(--tint-primary-45),
+              0 0 12px var(--tint-primary-25);
+}
+
+@keyframes wb-border-shimmer {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
-@keyframes wb-status-pulse {
+@keyframes wb-status-dot-pulse {
   0%, 100% {
-    box-shadow:
-      0 0 0 0 var(--tint-primary-45),
-      0 0 12px var(--tint-primary-35);
+    transform: scale(1);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.45);
   }
   50% {
-    box-shadow:
-      0 0 0 4px color-mix(in srgb, var(--color-primary) 0%, transparent),
-      0 0 18px var(--tint-primary-55);
+    transform: scale(1.35);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.85);
   }
 }
+
 @keyframes wb-status-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.55; transform: scale(0.7); }
 }
-@keyframes wb-status-sweep {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
 @media (prefers-reduced-motion: reduce) {
+  .wb-sub-item.is-running,
+  .wb-exec-sub-item.is-running,
   .wb-sub-item.is-running .wb-sub-item__status,
+  .wb-exec-sub-item.is-running .wb-sub-item__status,
   .wb-sub-item.is-running .wb-sub-item__status::before,
   .wb-sub-item.is-running .wb-sub-item__status::after,
-  .wb-exec-sub-item.is-running .wb-sub-item__status,
   .wb-exec-sub-item.is-running .wb-sub-item__status::before,
   .wb-exec-sub-item.is-running .wb-sub-item__status::after,
   .wb-exec-sub-item.is-running .wb-simple__status-dot {
