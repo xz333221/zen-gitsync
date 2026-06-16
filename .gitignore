@@ -50,6 +50,8 @@ git-autocommit.log
 .claude/*
 # 例外：ui-ux-pro-max 是项目级设计规范 skill（`uipro init --ai claude` 装入）
 !.claude/skills/
+# 例外：项目级 Claude 规则文件(.claude/rules/ 是项目规范文档,跨会话加载)
+!.claude/rules/
 .claude/settings.json
 .claude/settings.local.json
 .claude/launch.json
