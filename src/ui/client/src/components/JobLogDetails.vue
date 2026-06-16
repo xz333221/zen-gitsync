@@ -8,12 +8,19 @@
 <template>
   <details
     class="wb-log-details"
+    :class="{ 'is-running': isActive, 'is-pending': job.status === 'pending' }"
     :open="autoOpen"
   >
     <summary class="wb-log-summary">
       <span class="wb-log-summary__left">
-        <span v-if="job.status === 'running'">● {{ $t('@WORKBENCH:正在执行…') }}</span>
-        <span v-else-if="job.status === 'pending'">{{ $t('@WORKBENCH:排队中…') }}</span>
+        <span v-if="job.status === 'running'" class="wb-log-summary__status">
+          <span class="wb-log-pulse" aria-hidden="true"></span>
+          <span class="wb-log-summary__status-text">{{ $t('@WORKBENCH:正在执行…') }}</span>
+        </span>
+        <span v-else-if="job.status === 'pending'" class="wb-log-summary__status">
+          <span class="wb-log-pulse wb-log-pulse--pending" aria-hidden="true"></span>
+          <span class="wb-log-summary__status-text">{{ $t('@WORKBENCH:排队中…') }}</span>
+        </span>
         <span v-else>{{ $t('@WORKBENCH:查看执行日志') }}</span>
       </span>
       <span class="wb-log-summary__right">
@@ -97,7 +104,16 @@
         ⛶ {{ $t('@WORKBENCH:全屏') }}
       </button>
     </div>
-    <pre ref="preRef" class="wb-log-pre">{{ displayOutput() || $t('@WORKBENCH:（暂无输出）') }}</pre>
+    <div ref="preRef" class="wb-log-pre">
+      <MarkdownRender
+        v-if="hasOutput"
+        :content="outputText"
+        :final="isFinished"
+        :typewriter="streamAnimating"
+        class="wb-log-pre__render"
+      />
+      <div v-else class="wb-log-pre__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
+    </div>
 
     <!-- 全屏查看 -->
     <el-dialog
@@ -108,8 +124,15 @@
       class="wb-log-fullscreen-dialog"
       @closed="onFullscreenClosed"
     >
-      <div class="wb-log-fullscreen">
-        <pre ref="fullscreenPreRef" class="wb-log-fullscreen__pre">{{ fullscreenText }}</pre>
+      <div ref="fullscreenContainerRef" class="wb-log-fullscreen">
+        <MarkdownRender
+          v-if="hasOutput"
+          :content="fullscreenText"
+          :final="isFinished"
+          :typewriter="streamAnimating"
+          class="wb-log-fullscreen__render"
+        />
+        <div v-else class="wb-log-fullscreen__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
       </div>
     </el-dialog>
   </details>
@@ -118,6 +141,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { MarkdownRender } from 'markstream-vue'
 import { $t } from '@/lang/static'
 import type { Job } from '@/types/workbench'
 
@@ -183,6 +207,21 @@ async function copyAll() {
   else ElMessage.error($t('@WORKBENCH:复制失败'))
 }
 
+// MarkdownRender 的输入:
+// - outputText:主视图(走 displayOutput 截断策略,内容过长保留尾部 64KB)
+// - isFinished:流是否结束(done/error/stopped),结束信号告诉 markstream 完成增量
+// - streamAnimating:运行中启用 typewriter 逐字符动画;已结束的 job 进来直接全量展示,不从头动画
+const outputText = computed(() => displayOutput())
+const isActive = computed(() => props.job.status === 'running' || props.job.status === 'pending')
+const isFinished = computed(() => {
+  const s = props.job.status
+  return s === 'done' || s === 'error' || s === 'cancelled'
+})
+const streamAnimating = computed(() => {
+  const s = props.job.status
+  return s === 'running' || s === 'pending'
+})
+
 // 流式追加时自动滚到底：仅当面板展开时滚动
 const preRef = ref<HTMLElement | null>(null)
 watch(
@@ -198,20 +237,20 @@ watch(
 const fullscreenOpen = ref(false)
 const fullscreenText = computed(() => props.job.output || $t('@WORKBENCH:（暂无输出）'))
 const hasOutput = computed(() => !!(props.job.output && props.job.output.length))
-const fullscreenPreRef = ref<HTMLElement | null>(null)
+const fullscreenContainerRef = ref<HTMLElement | null>(null)
 
 // 进入全屏后,若日志还在流式追加,保持滚到底
 watch(fullscreenOpen, async (open) => {
   if (!open) return
   await nextTick()
-  if (fullscreenPreRef.value) fullscreenPreRef.value.scrollTop = fullscreenPreRef.value.scrollHeight
+  if (fullscreenContainerRef.value) fullscreenContainerRef.value.scrollTop = fullscreenContainerRef.value.scrollHeight
 })
 watch(
   () => (props.job.output || '').length,
   async () => {
     if (!fullscreenOpen.value) return
     await nextTick()
-    if (fullscreenPreRef.value) fullscreenPreRef.value.scrollTop = fullscreenPreRef.value.scrollHeight
+    if (fullscreenContainerRef.value) fullscreenContainerRef.value.scrollTop = fullscreenContainerRef.value.scrollHeight
   }
 )
 
@@ -326,13 +365,25 @@ function onFullscreenClosed() {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  background: var(--bg-code);
+}
+.wb-log-pre__render {
+  /* MarkdownRender 自带根容器样式,这里只补全边距让它贴合容器 */
   font-size: 12px;
   line-height: 1.55;
   color: var(--text-primary);
-  background: var(--bg-code);
-  white-space: pre-wrap;
-  word-break: break-word;
+}
+.wb-log-pre__render :deep(pre) {
+  margin: 6px 0;
+}
+.wb-log-pre__render :deep(code) {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.wb-log-pre__empty {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-style: italic;
+  padding: 4px 0;
 }
 .wb-log-section {
   border-top: 1px solid var(--border-color);
@@ -413,19 +464,93 @@ function onFullscreenClosed() {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-code);
-  overflow: hidden;
+  overflow: auto;
 }
-.wb-log-fullscreen__pre {
+.wb-log-fullscreen__render {
   flex: 1;
   min-height: 0;
-  margin: 0;
   padding: 14px 18px;
-  overflow: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 13px;
   line-height: 1.65;
   color: var(--text-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
+}
+.wb-log-fullscreen__render :deep(pre) {
+  margin: 8px 0;
+}
+.wb-log-fullscreen__empty {
+  padding: 14px 18px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* ── 运行中 / 排队中 视觉指示 ──────────────────────────────────────── */
+.wb-log-summary__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--color-warning-dark, #b45309);
+}
+.wb-log-details.is-running .wb-log-summary {
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, transparent);
+  animation: wb-log-pulse-bg 2s ease-in-out infinite;
+}
+.wb-log-details.is-pending .wb-log-summary {
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+.wb-log-pulse {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-warning, #f59e0b);
+  flex-shrink: 0;
+}
+.wb-log-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: var(--color-warning, #f59e0b);
+  opacity: 0.6;
+  animation: wb-log-pulse-ring 1.6s ease-out infinite;
+}
+.wb-log-pulse--pending {
+  background: var(--color-primary);
+}
+.wb-log-pulse--pending::after {
+  background: var(--color-primary);
+  animation-duration: 2.4s;
+}
+/* 模型返回区:运行中加微弱的脉冲左边框,提示“正在这里输出” */
+.wb-log-details.is-running .wb-log-pre {
+  border-left: 2px solid var(--color-warning, #f59e0b);
+  animation: wb-log-pulse-border 2s ease-in-out infinite;
+}
+.wb-log-details.is-pending .wb-log-pre {
+  border-left: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
+}
+
+@keyframes wb-log-pulse-bg {
+  0%, 100% { background: color-mix(in srgb, var(--color-warning, #f59e0b) 6%, transparent); }
+  50% { background: color-mix(in srgb, var(--color-warning, #f59e0b) 16%, transparent); }
+}
+@keyframes wb-log-pulse-ring {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes wb-log-pulse-border {
+  0%, 100% { border-left-color: color-mix(in srgb, var(--color-warning, #f59e0b) 50%, transparent); }
+  50% { border-left-color: var(--color-warning, #f59e0b); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-log-details.is-running .wb-log-summary,
+  .wb-log-pulse::after,
+  .wb-log-details.is-running .wb-log-pre {
+    animation: none;
+  }
+  .wb-log-details.is-running .wb-log-summary {
+    background: color-mix(in srgb, var(--color-warning, #f59e0b) 10%, transparent);
+  }
 }
 </style>

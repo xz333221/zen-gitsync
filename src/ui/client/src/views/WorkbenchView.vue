@@ -489,6 +489,30 @@ async function loadJobs() {
   syncRunningCount()
 }
 
+/**
+ * 清空指定 task 下的所有旧 job,用于"重新执行"场景:
+ * 用户已执行过的任务点执行按钮时,先清掉旧输出再启动新任务,
+ * 避免旧 job 输出和新输出堆叠显示。
+ *
+ * 返回:后端 removed 数量(仅用于打日志 / 调试)。
+ */
+async function clearJobsByTask(taskId: string): Promise<number> {
+  try {
+    const res = await fetch(`/api/workbench/jobs/by-task/${encodeURIComponent(taskId)}`, { method: 'DELETE' }).then(r => r.json())
+    if (!res?.success) {
+      console.warn('[clearJobsByTask] failed:', res?.error)
+      return 0
+    }
+    // 后端已清空,本地 jobs 列表也同步清一遍(不等 socket 推送)
+    jobs.value = jobs.value.filter(j => j.taskId !== taskId)
+    syncRunningCount()
+    return res.removed || 0
+  } catch (err) {
+    console.warn('[clearJobsByTask] error:', err)
+    return 0
+  }
+}
+
 function connectSSE() {
   if (es) { es.close(); es = null }
   es = new EventSource('/api/workbench/events')
@@ -904,6 +928,8 @@ async function runTask(t: Task) {
       if (!ok) return
     }
   }
+  // 重新执行:清掉该 task 下的旧 job(内存 + 磁盘),再启动新批
+  await clearJobsByTask(t.id)
   const res = await fetch(`/api/workbench/tasks/${t.id}/run`, { method: 'POST' }).then(r => r.json())
   if (res.success) {
     ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
@@ -915,6 +941,7 @@ async function runTask(t: Task) {
 /**
  * 简单任务执行:不需要任何子任务,后端用 task.desc 合成虚拟 sub 跑。
  * 静默落盘行为跟 runTask 一致:title/desc/simpleOverride/promptId 有改动先 flush。
+ * 重新执行时清空旧 job,避免新旧输出堆叠。
  */
 async function runSimpleTask(t: Task) {
   if (selectedTask.value && selectedTask.value.id === t.id) {
@@ -929,6 +956,8 @@ async function runSimpleTask(t: Task) {
       if (!ok) return
     }
   }
+  // 重新执行简单任务:清掉旧 job 再启动新 job
+  await clearJobsByTask(t.id)
   const res = await fetch(`/api/workbench/tasks/${t.id}/run-simple`, { method: 'POST' }).then(r => r.json())
   if (res.success) {
     ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))

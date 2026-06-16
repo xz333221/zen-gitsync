@@ -2114,6 +2114,35 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
   })
 
+  // DELETE /api/workbench/jobs/by-task/:taskId
+  // 重新执行任务前清空该 task 下的所有旧 job(内存 + 文件双写)。
+  // 不清活跃的 running/pending,避免误杀正在跑的实例;前端启动新 run 时
+  // 应确认旧任务已结束,或在活跃态时拒绝调用本接口。
+  app.delete('/api/workbench/jobs/by-task/:taskId', async (req, res) => {
+    try {
+      const taskId = req.params.taskId
+      if (!taskId) return res.status(400).json({ success: false, error: '缺少 taskId' })
+      const ids = []
+      for (const j of jobs.values()) {
+        if (j.taskId !== taskId) continue
+        if (j.status === 'running' || j.status === 'pending') continue
+        jobs.delete(j.id)
+        ids.push(j.id)
+      }
+      const data = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+      if (data && Array.isArray(data.jobs)) {
+        const before = data.jobs.length
+        data.jobs = data.jobs.filter(j => !(j.taskId === taskId && !ids.includes(j.id)))
+        const removed = before - data.jobs.length
+        if (removed > 0) await writeJson(JOBS_FILE, data)
+        return res.json({ success: true, removed: ids.length + removed, ids })
+      }
+      res.json({ success: true, removed: ids.length, ids })
+    } catch (err) {
+      res.status(500).json({ success: false, error: '按 task 清空失败: ' + (err.message || String(err)) })
+    }
+  })
+
   // GET /api/workbench/jobs/:id
   app.get('/api/workbench/jobs/:id', async (req, res) => {
     try {
