@@ -87,8 +87,31 @@
       >
         ⧉ {{ $t('@WORKBENCH:复制') }}
       </button>
+      <button
+        type="button"
+        class="wb-log-copy wb-log-copy--sm"
+        :title="$t('@WORKBENCH:全屏查看模型返回')"
+        :disabled="!hasOutput"
+        @click.stop="fullscreenOpen = true"
+      >
+        ⛶ {{ $t('@WORKBENCH:全屏') }}
+      </button>
     </div>
     <pre ref="preRef" class="wb-log-pre">{{ displayOutput() || $t('@WORKBENCH:（暂无输出）') }}</pre>
+
+    <!-- 全屏查看 -->
+    <el-dialog
+      v-model="fullscreenOpen"
+      :title="$t('@WORKBENCH:模型返回 - 全屏查看')"
+      fullscreen
+      :close-on-click-modal="true"
+      class="wb-log-fullscreen-dialog"
+      @closed="onFullscreenClosed"
+    >
+      <div class="wb-log-fullscreen">
+        <pre ref="fullscreenPreRef" class="wb-log-fullscreen__pre">{{ fullscreenText }}</pre>
+      </div>
+    </el-dialog>
   </details>
 </template>
 
@@ -170,6 +193,31 @@ watch(
     if (preRef.value) preRef.value.scrollTop = preRef.value.scrollHeight
   }
 )
+
+// 全屏查看：dialog 打开时显示完整 output(无截断),关闭后回到 inline 视图
+const fullscreenOpen = ref(false)
+const fullscreenText = computed(() => props.job.output || $t('@WORKBENCH:（暂无输出）'))
+const hasOutput = computed(() => !!(props.job.output && props.job.output.length))
+const fullscreenPreRef = ref<HTMLElement | null>(null)
+
+// 进入全屏后,若日志还在流式追加,保持滚到底
+watch(fullscreenOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  if (fullscreenPreRef.value) fullscreenPreRef.value.scrollTop = fullscreenPreRef.value.scrollHeight
+})
+watch(
+  () => (props.job.output || '').length,
+  async () => {
+    if (!fullscreenOpen.value) return
+    await nextTick()
+    if (fullscreenPreRef.value) fullscreenPreRef.value.scrollTop = fullscreenPreRef.value.scrollHeight
+  }
+)
+
+function onFullscreenClosed() {
+  // el-dialog 关闭后清理:确保下次打开重新挂载 ref
+}
 </script>
 
 <style scoped>
@@ -180,6 +228,11 @@ watch(
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-code);
   overflow: hidden;
+  /* 撑满父容器剩余高度,让模型返回区填满 */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .wb-log-summary {
   list-style: none;
@@ -269,7 +322,9 @@ watch(
 .wb-log-pre {
   margin: 0;
   padding: 8px 10px;
-  max-height: 600px;
+  /* 撑满 details 内部剩余高度,而不是硬编码 600px */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
@@ -340,5 +395,37 @@ watch(
   color: var(--text-secondary);
   border-left: 2px solid var(--tint-think-45, rgba(139, 92, 246, 0.45));
   font-style: italic;
+}
+
+/* ── 全屏查看 dialog ──────────────────────────────────────── */
+.wb-log-fullscreen-dialog .el-dialog__body {
+  /* 顶到屏幕底,不浪费屏幕高度 */
+  padding: 0 16px 16px;
+  height: calc(100vh - 54px); /* 减去 el-dialog__header */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.wb-log-fullscreen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-code);
+  overflow: hidden;
+}
+.wb-log-fullscreen__pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 18px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

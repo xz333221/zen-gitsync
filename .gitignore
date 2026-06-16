@@ -48,13 +48,15 @@ git-autocommit.log
 
 # Claude / AI worktrees
 .claude/*
-# Claude Code post_tool_hook 写到 cwd/.claude/codediff.txt（子目录里的 .claude/ 是 hook 产物，非项目规范）。
-# 根 .claude/* 规则不递归到子目录，这里显式声明。
-**/.claude/
 # 例外：ui-ux-pro-max 是项目级设计规范 skill（`uipro init --ai claude` 装入）
 !.claude/skills/
+!.claude/skills/**
 # 例外：项目级 Claude 规则文件(.claude/rules/ 是项目规范文档,跨会话加载)
 !.claude/rules/
+!.claude/rules/**
+# Claude Code post_tool_hook 写到 cwd/.claude/codediff.txt（子目录里的 .claude/ 是 hook 产物，非项目规范）。
+# 根 .claude/* 规则不递归到子目录，这里用精确路径替代 `**/.claude/`，避免父目录被屏蔽后子目录例外失效。
+**/.claude/codediff.txt
 .claude/settings.json
 .claude/settings.local.json
 .claude/launch.json
