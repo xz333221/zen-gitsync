@@ -379,25 +379,6 @@ function simpleJobState(job: Job | null): SimpleState {
   if (job.status === 'cancelled') return 'cancelled'
   return 'error'
 }
-// 5 态 → pill 颜色。和子任务 wb-sub-item__status 用的色卡完全一致：
-// done 绿 / running 蓝 / error 红 / cancelled 灰 / idle 默认灰
-function simpleStatusColor(s: SimpleState): string {
-  switch (s) {
-    case 'running':   return 'var(--color-primary)'
-    case 'done':      return 'var(--color-success-dark)'
-    case 'error':     return 'var(--color-danger-bright)'
-    case 'cancelled': return 'var(--color-cancelled)'
-    default:          return 'var(--bg-subtle)'  // idle: 灰底 + 暗文字，禁色卡，保持「未开始」的弱化语义
-  }
-}
-function formatShortTime(iso: string | null | undefined): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  // 锁定本地时区，格式：MM-DD HH:mm（任务列表侧栏是密集展示，不放年份）
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
 
 function attachmentCount(t: Task): number {
   return Array.isArray(t.attachments) ? t.attachments.length : 0
@@ -1574,96 +1555,67 @@ function humanSize(n: number): string {
             @dragleave="pasteHoverId = (pasteHoverId === 'task-' + selectedTask.id ? null : pasteHoverId)"
           />
         </details>
-        <!-- ── 执行主体：左（子任务列表）+ 右（详情面板）左右布局 ── -->
-        <div class="wb-execution-body">
-          <!-- 左：子任务/简单任务列表 -->
-          <div class="wb-exec-list">
-            <template v-if="!isSimpleTask">
-              <div class="wb-exec-list__header">
-                <h4 class="wb-exec-list__title">{{ $t('@WORKBENCH:子任务拆分') }}</h4>
-                <div class="wb-split__sub-actions">
-                  <el-button size="small" plain :icon="Plus" :disabled="selectedTask.subtasks.length === 0" @click="addSubtask">
-                    {{ $t('@WORKBENCH:添加子任务') }}
-                  </el-button>
-                  <el-button size="small" :type="hasDirtySubtasks ? 'primary' : 'default'" :disabled="selectedTask.subtasks.length === 0" @click="saveSubtasks">
-                    {{ $t('@WORKBENCH:保存拆分') }}
-                    <span v-if="hasDirtySubtasks" class="wb-dirty-badge">{{ dirtySubIds.size }}</span>
-                  </el-button>
+        <!-- ── 执行主体：复杂任务用左（子任务列表）+ 右（详情）左右布局；简单任务只保留详情面板 ── -->
+        <div class="wb-execution-body" :class="{ 'wb-execution-body--simple': isSimpleTask }">
+          <!-- 左：子任务列表 —— 简单任务时不渲染 -->
+          <div v-if="!isSimpleTask" class="wb-exec-list">
+            <div class="wb-exec-list__header">
+              <h4 class="wb-exec-list__title">{{ $t('@WORKBENCH:子任务拆分') }}</h4>
+              <div class="wb-split__sub-actions">
+                <el-button size="small" plain :icon="Plus" :disabled="selectedTask.subtasks.length === 0" @click="addSubtask">
+                  {{ $t('@WORKBENCH:添加子任务') }}
+                </el-button>
+                <el-button size="small" :type="hasDirtySubtasks ? 'primary' : 'default'" :disabled="selectedTask.subtasks.length === 0" @click="saveSubtasks">
+                  {{ $t('@WORKBENCH:保存拆分') }}
+                  <span v-if="hasDirtySubtasks" class="wb-dirty-badge">{{ dirtySubIds.size }}</span>
+                </el-button>
+              </div>
+            </div>
+            <ul class="wb-exec-sub-list">
+              <li
+                v-for="sub in selectedTask.subtasks"
+                :key="sub.id"
+                class="wb-exec-sub-item"
+                :class="{
+                  'is-selected': selectedSubId === sub.id,
+                  'is-running': sub.status === 'running',
+                  'is-done': sub.status === 'done',
+                  'is-dirty': dirtySubIds.has(sub.id),
+                  'is-persisting': isSubtaskPersisting(sub.id)
+                }"
+                @click="selectedSubId = sub.id"
+              >
+                <!-- 第一行：状态徽章 + 标题 -->
+                <div class="wb-exec-sub-item__row1">
+                  <span class="wb-sub-item__status wb-sub-item__status--dot" :style="{ background: statusColor(sub.status) }" :title="$t('@WORKBENCH:任务完成状态')">
+                    <span class="wb-simple__status-dot" aria-hidden="true"></span>
+                  </span>
+                  <span class="wb-exec-sub-item__title" :title="sub.title">
+                    {{ sub.title || $t('@WORKBENCH:未命名子任务') }}
+                  </span>
+                  <span v-if="dirtySubIds.has(sub.id)" class="wb-exec-sub-item__dirty-dot" title="未保存" />
                 </div>
-              </div>
-              <ul class="wb-exec-sub-list">
-                <li
-                  v-for="sub in selectedTask.subtasks"
-                  :key="sub.id"
-                  class="wb-exec-sub-item"
-                  :class="{
-                    'is-selected': selectedSubId === sub.id,
-                    'is-running': sub.status === 'running',
-                    'is-done': sub.status === 'done',
-                    'is-dirty': dirtySubIds.has(sub.id),
-                    'is-persisting': isSubtaskPersisting(sub.id)
-                  }"
-                  @click="selectedSubId = sub.id"
-                >
-                  <!-- 第一行：状态徽章 + 标题 -->
-                  <div class="wb-exec-sub-item__row1">
-                    <span class="wb-sub-item__status wb-sub-item__status--dot" :style="{ background: statusColor(sub.status) }" :title="$t('@WORKBENCH:任务完成状态')">
-                      <span class="wb-simple__status-dot" aria-hidden="true"></span>
-                    </span>
-                    <span class="wb-exec-sub-item__title" :title="sub.title">
-                      {{ sub.title || $t('@WORKBENCH:未命名子任务') }}
-                    </span>
-                    <span v-if="dirtySubIds.has(sub.id)" class="wb-exec-sub-item__dirty-dot" title="未保存" />
-                  </div>
-                  <!-- 第二行：PID + 操作按钮（hover/选中时浮现） -->
-                  <div class="wb-exec-sub-item__row2">
-                    <span v-if="jobOf(sub.id)" class="wb-sub-item__pid">PID: {{ jobOf(sub.id)?.pid }}</span>
-                    <span class="wb-exec-sub-item__actions">
-                      <button v-if="canRunSubtask(sub)" class="wb-exec-sub-btn wb-exec-sub-btn--run" :title="$t('@WORKBENCH:单独执行此子任务')" @click.stop="runSubtask(sub)">{{ $t('@WORKBENCH:执行') }}</button>
-                      <button v-if="jobOf(sub.id) && (jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending')" class="wb-exec-sub-btn wb-exec-sub-btn--stop" :title="$t('@WORKBENCH:停止执行')" @click.stop="cancelJob(jobOf(sub.id)!)">{{ $t('@WORKBENCH:停止') }}</button>
-                      <button v-if="sub.status === 'done'" class="wb-exec-sub-btn wb-exec-sub-btn--undo" :title="$t('@WORKBENCH:取消完成')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="cancelDone(sub)">{{ $t('@WORKBENCH:取消完成') }}</button>
-                      <button class="wb-exec-sub-btn wb-exec-sub-btn--del" :title="$t('@WORKBENCH:删除')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="removeSubtask(sub)">×</button>
-                    </span>
-                  </div>
-                </li>
-                <li v-if="selectedTask.subtasks.length === 0" class="wb-empty wb-empty--rich">
-                  <div class="wb-empty__art" aria-hidden="true"><el-icon><List /></el-icon></div>
-                  <div class="wb-empty__title">{{ $t('@WORKBENCH:拆分任务，逐项执行') }}</div>
-                  <div class="wb-empty__hint">{{ $t('@WORKBENCH:手动添加子任务，或让 AI 帮你自动拆分') }}</div>
-                  <div class="wb-empty__cta">
-                    <el-button type="primary" size="small" :icon="Plus" @click="addSubtask">{{ $t('@WORKBENCH:添加子任务') }}</el-button>
-                    <button type="button" class="wb-empty__link" :disabled="!selectedTask.title || !selectedTask.title.trim()" @click="openAiSplitDialog">{{ $t('@WORKBENCH:用 AI 自动拆分') }}</button>
-                  </div>
-                </li>
-              </ul>
-            </template>
-
-            <!-- 简单任务：左侧显示单一执行条目，与复杂任务保持一致的视觉结构 -->
-            <template v-else>
-              <div class="wb-exec-list__header">
-                <h4 class="wb-exec-list__title">{{ $t('@WORKBENCH:简单任务') }}</h4>
-                <span class="wb-simple__hint">{{ $t('@WORKBENCH:无需拆分子任务;点执行后直接用上方描述驱动 Claude') }}</span>
-              </div>
-              <ul class="wb-exec-sub-list">
-                <li
-                  class="wb-exec-sub-item is-selected"
-                  :class="{
-                    'is-running': simpleJobState(simpleJobFor(selectedTask)) === 'running',
-                    'is-done': simpleJobState(simpleJobFor(selectedTask)) === 'done',
-                  }"
-                >
-                  <div class="wb-exec-sub-item__row1">
-                    <span class="wb-sub-item__status wb-sub-item__status--dot" :style="{ background: simpleStatusColor(simpleJobState(simpleJobFor(selectedTask))) }" :title="$t('@WORKBENCH:任务完成状态')">
-                      <span class="wb-simple__status-dot" aria-hidden="true"></span>
-                    </span>
-                    <span class="wb-exec-sub-item__title" :title="selectedTask.title">
-                      {{ selectedTask.title || $t('@WORKBENCH:未命名任务') }}
-                    </span>
-                    <span v-if="simpleJobFor(selectedTask)?.endedAt && simpleJobState(simpleJobFor(selectedTask)) === 'done'" class="wb-simple__meta">{{ formatShortTime(simpleJobFor(selectedTask)?.endedAt) }}</span>
-                  </div>
-                </li>
-              </ul>
-            </template>
+                <!-- 第二行：PID + 操作按钮（hover/选中时浮现） -->
+                <div class="wb-exec-sub-item__row2">
+                  <span v-if="jobOf(sub.id)" class="wb-sub-item__pid">PID: {{ jobOf(sub.id)?.pid }}</span>
+                  <span class="wb-exec-sub-item__actions">
+                    <button v-if="canRunSubtask(sub)" class="wb-exec-sub-btn wb-exec-sub-btn--run" :title="$t('@WORKBENCH:单独执行此子任务')" @click.stop="runSubtask(sub)">{{ $t('@WORKBENCH:执行') }}</button>
+                    <button v-if="jobOf(sub.id) && (jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending')" class="wb-exec-sub-btn wb-exec-sub-btn--stop" :title="$t('@WORKBENCH:停止执行')" @click.stop="cancelJob(jobOf(sub.id)!)">{{ $t('@WORKBENCH:停止') }}</button>
+                    <button v-if="sub.status === 'done'" class="wb-exec-sub-btn wb-exec-sub-btn--undo" :title="$t('@WORKBENCH:取消完成')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="cancelDone(sub)">{{ $t('@WORKBENCH:取消完成') }}</button>
+                    <button class="wb-exec-sub-btn wb-exec-sub-btn--del" :title="$t('@WORKBENCH:删除')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="removeSubtask(sub)">×</button>
+                  </span>
+                </div>
+              </li>
+              <li v-if="selectedTask.subtasks.length === 0" class="wb-empty wb-empty--rich">
+                <div class="wb-empty__art" aria-hidden="true"><el-icon><List /></el-icon></div>
+                <div class="wb-empty__title">{{ $t('@WORKBENCH:拆分任务，逐项执行') }}</div>
+                <div class="wb-empty__hint">{{ $t('@WORKBENCH:手动添加子任务，或让 AI 帮你自动拆分') }}</div>
+                <div class="wb-empty__cta">
+                  <el-button type="primary" size="small" :icon="Plus" @click="addSubtask">{{ $t('@WORKBENCH:添加子任务') }}</el-button>
+                  <button type="button" class="wb-empty__link" :disabled="!selectedTask.title || !selectedTask.title.trim()" @click="openAiSplitDialog">{{ $t('@WORKBENCH:用 AI 自动拆分') }}</button>
+                </div>
+              </li>
+            </ul>
           </div>
 
           <!-- 右：详情面板（执行内容区，宽度充足） -->
@@ -1713,38 +1665,8 @@ function humanSize(n: number): string {
               </template>
             </template>
 
-            <!-- 简单任务详情（与复杂任务右侧风格保持一致） -->
+            <!-- 简单任务详情：状态完全交给 JobLogDetails 的「正在执行…」展示 -->
             <template v-else>
-              <div class="wb-simple__status-row">
-                <span
-                  class="wb-simple__status wb-simple__status--dot"
-                  :style="{ background: simpleStatusColor(simpleJobState(simpleJobFor(selectedTask))) }"
-                  :title="$t('@WORKBENCH:任务完成状态')"
-                >
-                  <span class="wb-simple__status-dot" aria-hidden="true"></span>
-                </span>
-                <span
-                  v-if="simpleJobFor(selectedTask)?.endedAt && simpleJobState(simpleJobFor(selectedTask)) === 'done'"
-                  class="wb-simple__meta"
-                >
-                  · {{ $t('@WORKBENCH:完成时间') }} {{ formatShortTime(simpleJobFor(selectedTask)?.endedAt) }}
-                </span>
-                <span
-                  v-else-if="simpleJobFor(selectedTask)?.error && simpleJobState(simpleJobFor(selectedTask)) === 'error'"
-                  class="wb-simple__meta wb-simple__meta--error"
-                  :title="simpleJobFor(selectedTask)?.error || ''"
-                >
-                  — {{ simpleJobFor(selectedTask)?.error }}
-                </span>
-                <button
-                  v-if="simpleJobState(simpleJobFor(selectedTask)) === 'running' && simpleJobFor(selectedTask)"
-                  class="wb-simple__stop"
-                  :disabled="isSubtaskPersisting(simpleJobFor(selectedTask)!.id)"
-                  @click="cancelJob(simpleJobFor(selectedTask)!)"
-                >
-                  {{ $t('@WORKBENCH:停止') }}
-                </button>
-              </div>
               <details
                 class="wb-simple__override"
                 :class="{ 'has-content': !!(selectedTask.simpleOverride && selectedTask.simpleOverride.trim()) }"
@@ -1757,6 +1679,14 @@ function humanSize(n: number): string {
                     class="wb-simple__override-tag"
                     :title="$t('@WORKBENCH:已填写覆盖内容')"
                   >{{ $t('@WORKBENCH:已填写') }}</span>
+                  <button
+                    v-if="simpleJobState(simpleJobFor(selectedTask)) === 'running' && simpleJobFor(selectedTask)"
+                    class="wb-simple__stop"
+                    :disabled="isSubtaskPersisting(simpleJobFor(selectedTask)!.id)"
+                    @click.stop="cancelJob(simpleJobFor(selectedTask)!)"
+                  >
+                    {{ $t('@WORKBENCH:停止') }}
+                  </button>
                 </summary>
                 <textarea
                   class="wb-textarea"
@@ -1765,7 +1695,7 @@ function humanSize(n: number): string {
                   rows="6"
                 />
               </details>
-              <!-- 简单任务的执行日志 -->
+              <!-- 简单任务的执行日志：running 时顶部显示「● 正在执行…」 -->
               <JobLogDetails
                 v-if="jobOf(`${selectedTask.id}__simple`)"
                 :job="jobOf(`${selectedTask.id}__simple`)!"
@@ -2634,6 +2564,10 @@ function humanSize(n: number): string {
   overflow: hidden;
   gap: 16px;
 }
+/* 简单任务：没有左列，让详情面板撑满，不留多余 gap */
+.wb-execution-body--simple {
+  gap: 0;
+}
 
 /* 左列：子任务列表（固定宽度，内部滚动） */
 .wb-exec-list {
@@ -3308,7 +3242,7 @@ function humanSize(n: number): string {
   margin-top: 8px;
 }
 .wb-simple__override-summary {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
