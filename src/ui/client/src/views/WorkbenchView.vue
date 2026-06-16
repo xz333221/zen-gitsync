@@ -700,9 +700,11 @@ async function saveTask() {
 // 在任务列表条目上直接切换 simple/complex，不进入编辑 dialog。
 // - 简单 → 复杂：无副作用，simpleOverride 会被后端清空（仅 simple 时有意义）
 // - 复杂 → 简单：会清空现有子任务，弹 ElMessageBox 让用户确认
-async function toggleTaskType(t: Task) {
-  const next: 'simple' | 'complex' = t.type === 'simple' ? 'complex' : 'simple'
-  const isComplexToSimple = t.type === 'complex' && next === 'simple'
+// setTaskType(t, type) 是底层 setter，UI 上的所有切换入口（左侧 chip / 顶部 segmented）
+// 都通过它来保证"复杂 → 简单"的二次确认逻辑不被绕过。
+async function setTaskType(t: Task, type: 'simple' | 'complex') {
+  if (t.type === type) return
+  const isComplexToSimple = t.type === 'complex' && type === 'simple'
   const willClearSubtasks = isComplexToSimple && (t.subtasks?.length ?? 0) > 0
   if (willClearSubtasks) {
     try {
@@ -723,7 +725,7 @@ async function toggleTaskType(t: Task) {
     title: t.title,
     desc: t.desc,
     promptId: t.promptId,
-    type: next,
+    type,
     // 切换为 simple 时后端会用 '' 覆盖 simpleOverride；为 complex 时同理
     simpleOverride: t.simpleOverride || '',
     // 复杂 → 简单时显式传空数组清空子任务；其他情况保留现有
@@ -739,7 +741,18 @@ async function toggleTaskType(t: Task) {
     return
   }
   await loadTasks()
-  ElMessage.success(next === 'simple' ? $t('@WORKBENCH:已切换为简单任务') : $t('@WORKBENCH:已切换为复杂任务'))
+  ElMessage.success(type === 'simple' ? $t('@WORKBENCH:已切换为简单任务') : $t('@WORKBENCH:已切换为复杂任务'))
+}
+
+async function toggleTaskType(t: Task) {
+  await setTaskType(t, t.type === 'simple' ? 'complex' : 'simple')
+}
+
+// 顶部 segmented control 入口：把目标类型交给 setTaskType，
+// 当 selectedTask 已是目标类型时直接 no-op，避免误触再次落盘。
+async function onTypePillClick(target: 'simple' | 'complex') {
+  if (!selectedTask.value) return
+  await setTaskType(selectedTask.value, target)
 }
 
 async function deleteTask(t: Task) {
@@ -1488,15 +1501,48 @@ function humanSize(n: number): string {
             <option :value="null">{{ $t('@WORKBENCH:不绑定预置提示词') }}</option>
             <option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
-          <el-button
+          <!-- 任务类型 segmented control：简单/复杂二选一。
+               复杂任务下右侧再额外出现 AI 拆分按钮，组成「模式选择 + AI 动作 + 执行」的紧凑操作组。 -->
+          <div
+            class="wb-mode-switch"
+            role="tablist"
+            :aria-label="$t('@WORKBENCH:任务类型')"
+          >
+            <button
+              type="button"
+              role="tab"
+              class="wb-mode-switch__btn"
+              :class="{ 'is-active': !isSimpleTask }"
+              :aria-selected="!isSimpleTask"
+              @click="onTypePillClick('complex')"
+            >{{ $t('@WORKBENCH:复杂') }}</button>
+            <button
+              type="button"
+              role="tab"
+              class="wb-mode-switch__btn"
+              :class="{ 'is-active': isSimpleTask }"
+              :aria-selected="isSimpleTask"
+              @click="onTypePillClick('simple')"
+            >{{ $t('@WORKBENCH:简单') }}</button>
+            <span
+              class="wb-mode-switch__indicator"
+              :class="{ 'is-right': isSimpleTask }"
+              aria-hidden="true"
+            />
+          </div>
+          <button
             v-if="!isSimpleTask"
-            type="info"
-            plain
+            type="button"
+            class="wb-ai-split-btn"
             :disabled="!selectedTask.title || !selectedTask.title.trim()"
+            :title="$t('@WORKBENCH:AI 拆分')"
             @click="openAiSplitDialog"
           >
-            {{ $t('@WORKBENCH:AI 拆分') }}
-          </el-button>
+            <svg class="wb-ai-split-btn__icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M8 1.5l1.6 3.4 3.4 1.6-3.4 1.6L8 11.5 6.4 8.1 3 6.5l3.4-1.6L8 1.5zM2.5 9.5l.8 1.6 1.6.8-1.6.8-.8 1.6-.8-1.6L.1 11.9l1.6-.8.8-1.6zm11 0l.8 1.6 1.6.8-1.6.8-.8 1.6-.8-1.6-1.6-.8 1.6-.8.8-1.6z" fill="currentColor"/>
+            </svg>
+            <span>{{ $t('@WORKBENCH:AI 拆分') }}</span>
+          </button>
           <el-button type="primary" :loading="false" @click="runTask(selectedTask)">
             {{ isSimpleTask ? $t('@WORKBENCH:执行') : $t('@WORKBENCH:执行任务') }}
           </el-button>
@@ -2088,7 +2134,6 @@ function humanSize(n: number): string {
 .wb-task-item:hover {
   background: var(--bg-container-hover);
   border-color: var(--border-color-medium);
-  box-shadow: var(--wb-card-shadow-hover);
 }
 .wb-task-item:hover .wb-task-item__del {
   opacity: 1;
@@ -2097,7 +2142,19 @@ function humanSize(n: number): string {
 .wb-task-item.active {
   background: color-mix(in srgb, var(--color-primary) 9%, var(--bg-container));
   border-color: var(--tint-primary-45);
-  box-shadow: var(--wb-card-shadow-hover);
+  /* 极简化：去掉 box-shadow，改用左侧 2px accent 竖条作主激活指示 */
+  box-shadow: none;
+}
+.wb-task-item.active::after {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--color-primary);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 60%, transparent);
 }
 .wb-task-item.active .wb-task-item__title { color: var(--color-primary); }
 .wb-task-item.active .wb-task-item__del { opacity: 1; color: var(--color-primary); }
@@ -2521,16 +2578,19 @@ function humanSize(n: number): string {
   flex: 1;
   min-height: 0;
   display: flex;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  /* 极简化：去掉外层 border + border-radius，子区用 bg-subtle 区隔 */
+  border: none;
+  border-radius: 0;
   overflow: hidden;
+  gap: 16px;
 }
 
 /* 左列：子任务列表（固定宽度，内部滚动） */
 .wb-exec-list {
   width: 260px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border-color);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2749,11 +2809,12 @@ function humanSize(n: number): string {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 20px 20px;
+  /* 极简化：去掉固定 padding，让头部/输入框/日志三段自然垂直堆叠 */
+  padding: 4px 4px 8px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background: var(--bg-container);
+  gap: 14px;
+  background: transparent;
 }
 /* 详情面板头部：标题输入 + dirty 标记 */
 .wb-exec-detail__head {
@@ -2772,6 +2833,134 @@ function humanSize(n: number): string {
   gap: 10px;
   align-items: center;
   flex-shrink: 0;
+}
+
+/* ── 任务类型 segmented control（顶部头部右侧） ────────────────
+   设计参照 Claude Code Overview/Models tab：圆角 8px 灰底容器，
+   内部两个等宽按钮，激活态用滑块 + 阴影强调，非激活态保持透明。 */
+.wb-mode-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+  user-select: none;
+  isolation: isolate;
+}
+.wb-mode-switch__btn {
+  position: relative;
+  z-index: 1;
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0 14px;
+  min-width: 64px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  color: var(--text-tertiary);
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.18s var(--ease-custom);
+}
+.wb-mode-switch__btn:hover:not(.is-active) {
+  color: var(--text-secondary);
+}
+.wb-mode-switch__btn.is-active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.wb-mode-switch__btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+/* 滑块：用 transform 在两按钮之间滑动，激活态显示白底+阴影+细描边 */
+.wb-mode-switch__indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 7px;
+  background: var(--bg-container);
+  border: 1px solid var(--border-color-medium);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 6%, transparent);
+  transition: transform 0.22s var(--ease-custom, cubic-bezier(0.4, 0, 0.2, 1));
+  z-index: 0;
+  pointer-events: none;
+}
+.wb-mode-switch__indicator.is-right {
+  transform: translateX(100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-mode-switch__indicator { transition: none; }
+}
+
+/* ── AI 拆分按钮（次要动作，accent 描边 + sparkle icon） ────────
+   视觉权重略低于主「执行任务」按钮，但比 el-button info/plain 灰底明显。 */
+.wb-ai-split-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--tint-primary-35, color-mix(in srgb, var(--color-primary) 35%, transparent));
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--bg-container));
+  color: var(--color-primary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  border-radius: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s var(--ease-custom, ease),
+    border-color 0.15s var(--ease-custom, ease),
+    color 0.15s var(--ease-custom, ease),
+    transform 0.1s var(--ease-custom, ease);
+}
+.wb-ai-split-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-container));
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.wb-ai-split-btn:active:not(:disabled) { transform: scale(0.98); }
+.wb-ai-split-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-tertiary);
+}
+.wb-ai-split-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.wb-ai-split-btn__icon {
+  flex-shrink: 0;
+  /* 给图标加一点 pulse 微动效，强化"这是一个 AI 动作"的视觉提示 */
+  animation: wb-ai-sparkle-pulse 2.6s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes wb-ai-sparkle-pulse {
+  0%, 100% { transform: scale(1);   opacity: 0.9; }
+  50%      { transform: scale(1.12); opacity: 1; }
+}
+.wb-ai-split-btn:disabled .wb-ai-split-btn__icon { animation: none; opacity: 0.5; }
+@media (prefers-reduced-motion: reduce) {
+  .wb-ai-split-btn__icon { animation: none; }
 }
 
 /* ── 表单控件统一系统（input / select / textarea 共用基底） ── */
@@ -2823,23 +3012,25 @@ function humanSize(n: number): string {
 
 /* ── 标题：hero 级单行输入 ─────────────────────────── */
 .wb-input--title {
+  /* 极简化：去掉 box-shadow inset，更低视觉重量 */
   height: 36px;
   flex: 1;
-  font-size: var(--font-size-15);
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.4px;
   padding: 0 12px;
+  border-color: var(--border-color);
+  background: transparent;
+  box-shadow: none;
+}
+.wb-input--title:hover:not(:focus) {
   border-color: var(--border-color-medium);
   background: var(--bg-container);
 }
-.wb-input--title:hover:not(:focus) {
-  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--border-color-medium));
-}
 .wb-input--title:focus {
   border-color: var(--color-primary);
-  box-shadow:
-    0 0 0 4px var(--tint-primary-14),
-    var(--wb-card-inset-shadow);
+  background: var(--bg-container);
+  box-shadow: 0 0 0 3px var(--tint-primary-14);
 }
 .wb-input--title::placeholder {
   font-weight: 500;
@@ -2876,30 +3067,32 @@ function humanSize(n: number): string {
 /* ── 多行输入 ─────────────────────────────────────── */
 .wb-textarea {
   display: block;
-  padding: 8px 12px;
-  font-size: var(--font-size-135);
-  line-height: 1.6;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.55;
   letter-spacing: -0.05px;
   resize: vertical;
   width: 100%;
   box-sizing: border-box;
   flex-shrink: 0;
   min-height: 52px;
-  /* 块级 textarea 在容器内与其它控件等宽 */
+  /* 极简化：去掉 box-shadow inset，默认透明背景（focus 时再铺底） */
+  background: transparent;
+  box-shadow: none;
+  border-color: var(--border-color);
 }
 .wb-textarea::placeholder {
-  line-height: 1.65;
+  line-height: 1.55;
+  color: var(--text-placeholder);
 }
 .wb-textarea:hover:not(:focus) {
-  border-color: var(--border-input-hover, #cbd5e1);
-  background: var(--bg-container-hover);
+  border-color: var(--border-color-medium);
+  background: var(--bg-container);
 }
 .wb-textarea:focus {
   border-color: var(--color-primary);
   background: var(--bg-container);
-  box-shadow:
-    0 0 0 3px var(--tint-primary-18),
-    var(--wb-card-inset-shadow);
+  box-shadow: 0 0 0 3px var(--tint-primary-14);
 }
 .wb-textarea--sm { min-height: 44px; padding: 8px 12px; font-size: 13px; }
 

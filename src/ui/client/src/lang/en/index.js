@@ -1736,6 +1736,7 @@ export default {
   '@WORKBENCH:标题': 'Title',
   '@WORKBENCH:描述': 'Description',
   '@WORKBENCH:不绑定': 'Unset',
+  '@WORKBENCH:任务类型': 'Task type',
   '@WORKBENCH:AI 生成项目架构说明': 'Generate Architecture Overview',
   '@WORKBENCH:编辑指令': 'Edit instruction',
   '@WORKBENCH:编辑生成指令': 'Edit generation instruction',

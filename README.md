@@ -245,6 +245,9 @@ A dedicated view (fourth icon in the activity bar) for batch-running Claude agai
 | Feature | Description |
 |---|---|
 | Task list | Create, edit, delete tasks; each shows its subtask count; click the **Simple / Complex** badge on any task to flip its type in place (Complex → Simple with subtasks asks for confirmation and clears them; Simple → Complex is instant) |
+| Top-bar type switch | A segmented control (Complex / Simple) lives in the task header, right next to **Run task**, so you can flip the current task's type without going back to the sidebar; the same confirmation rule (Complex → Simple with subtasks) applies |
+| AI split (promoted) | The "AI split" action is now a dedicated accent button with a sparkle icon and a subtle pulse, sitting between the type switcher and the primary **Run task** button — it is always enabled for complex tasks with a non-empty title |
+| Minimal task & chat layout | The task execution view is now stripped of redundant borders / shadows: a flatter sidebar, transparent title input and textarea, and a clean left/right execution body. Visual reference follows the Claude Code desktop app |
 | Subtask breakdown | Add / edit / remove subtasks per task, with per-subtask status; the empty state ships a centered illustration card with a primary "Add subtask" CTA and a secondary "Split with AI" shortcut |
 | Subtask attachments | Attach up to 9 files per subtask (image / PDF / text / Markdown / CSV / JSON / log, ≤ 5 MB each); their absolute paths are appended to the prompt so Claude reads them directly. Right-click an image attachment to copy it to the system clipboard (`image/png` / `jpeg` / `webp` / `gif`) |
 | Prompt presets | Reusable prompt templates with `{{task.title}}` / `{{task.desc}}` / `{{sub.title}}` / `{{sub.desc}}` / `{{repo.path}}` / `{{branch}}` variable interpolation |
@@ -633,6 +636,9 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 功能 | 说明 |
 |---|---|
 | 任务列表 | 新建、编辑、删除任务；每条任务显示子任务数量；点击徽标可在「简单（绿色）/ 复杂（紫色）」间即时切换，复杂→简单且带子任务时弹窗确认并清空子任务 |
+| 顶部类型切换器 | 任务头部增加 segmented control（复杂 / 简单），无需回到左侧即可切换当前任务类型；切换逻辑与左侧徽标共享，复杂→简单且带子任务时同样弹窗确认 |
+| AI 拆分（升级） | AI 拆分升级为带 sparkle 图标 + 轻微 pulse 动效的 accent 按钮，位置紧贴主「执行任务」按钮；只要标题非空，复杂任务下始终可点 |
+| 极简任务 / 对话样式 | 任务执行视图整体极简化：减少冗余边框与阴影、标题 / 描述输入框透明化、执行主体左右两段式分列；视觉参考 Claude Code 桌面版 |
 | 任务字段自动保存 | 标题 / 描述 / 预置提示词 / 简单任务覆盖 改动后 1.5s 防抖落盘，标题右侧显示「保存中 / 已保存 / 有未保存的更改」状态徽标；切换任务或关页面前自动 flush（含 `navigator.sendBeacon` 兜底） |
 | 简单任务 | 新建任务时选「简单（直接执行）」即跳过子任务拆分；执行时把 task.desc 拼成单 sub 走 `/tasks/:id/run-simple`；可填「覆盖预置提示词」独立覆写预置模板；主任务附件 + 描述 + 覆盖三者合并驱动 Claude |
 | 子任务拆分 | 增删改子任务，实时显示每个子任务的执行状态；空态提供居中插画卡片、主 CTA「添加子任务」与「用 AI 自动拆分」次级入口（仅复杂任务显示） |

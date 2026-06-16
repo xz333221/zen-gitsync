@@ -1743,6 +1743,7 @@ export default {
   '@WORKBENCH:标题': '标题',
   '@WORKBENCH:描述': '描述',
   '@WORKBENCH:不绑定': '不绑定',
+  '@WORKBENCH:任务类型': '任务类型',
   '@WORKBENCH:AI 生成项目架构说明': 'AI 生成项目架构说明',
   '@WORKBENCH:编辑指令': '编辑指令',
   '@WORKBENCH:编辑生成指令': '编辑生成指令',
