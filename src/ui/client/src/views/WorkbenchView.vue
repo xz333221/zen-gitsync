@@ -2046,25 +2046,23 @@ function humanSize(n: number): string {
 .wb-new-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--tint-primary-30);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-container));
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
   color: var(--color-primary);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.1px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.05px;
   cursor: pointer;
   transition: background var(--transition-fast) var(--ease-custom),
-              border-color var(--transition-fast) var(--ease-custom),
-              box-shadow var(--transition-fast) var(--ease-custom),
-              transform var(--transition-fast) var(--ease-custom);
+              color var(--transition-fast) var(--ease-custom);
 }
 .wb-new-btn__icon {
-  font-size: 14px;
+  font-size: 13px;
   flex-shrink: 0;
   transition: transform var(--transition-fast) var(--ease-custom);
 }
@@ -2074,10 +2072,8 @@ function humanSize(n: number): string {
   display: none;
 }
 .wb-new-btn:hover {
-  background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container));
-  border-color: var(--tint-primary-50);
-  box-shadow: var(--wb-card-shadow-hover),
-              0 0 0 3px var(--tint-primary-10);
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
 }
 .wb-new-btn:hover .wb-new-btn__icon {
   transform: rotate(90deg);
@@ -2086,8 +2082,8 @@ function humanSize(n: number): string {
   transform: scale(0.99);
 }
 .wb-new-btn:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset-lg);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
 }
 
 /* ── 任务列表 ───────────────────────────────────────── */
@@ -2105,35 +2101,34 @@ function humanSize(n: number): string {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px 9px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-container);
+  gap: 8px;
+  /* 紧凑单行：上下 padding 从 9px → 6px，左右 10 → 10 不变 */
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
   cursor: pointer;
   transition: background var(--transition-fast) var(--ease-custom),
-              border-color var(--transition-fast) var(--ease-custom),
-              box-shadow var(--transition-fast) var(--ease-custom),
-              transform var(--transition-fast) var(--ease-custom);
+              color var(--transition-fast) var(--ease-custom);
 }
 .wb-task-item.is-running {
-  border-color: color-mix(in srgb, var(--color-warning) 55%, var(--border-color));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-warning) 22%, transparent) inset;
+  /* 极简化：去掉 inset box-shadow；用左侧 2px 暖色竖条 + 浅底色 */
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 .wb-task-item.is-running::before {
   content: '';
   position: absolute;
   left: -1px;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
   border-radius: 2px;
   background: var(--color-warning);
   box-shadow: 0 0 6px color-mix(in srgb, var(--color-warning) 60%, transparent);
 }
 .wb-task-item:hover {
   background: var(--bg-container-hover);
-  border-color: var(--border-color-medium);
+  border-color: transparent;
 }
 .wb-task-item:hover .wb-task-item__del {
   opacity: 1;
@@ -2141,16 +2136,15 @@ function humanSize(n: number): string {
 }
 .wb-task-item.active {
   background: color-mix(in srgb, var(--color-primary) 9%, var(--bg-container));
-  border-color: var(--tint-primary-45);
-  /* 极简化：去掉 box-shadow，改用左侧 2px accent 竖条作主激活指示 */
+  border-color: transparent;
   box-shadow: none;
 }
 .wb-task-item.active::after {
   content: '';
   position: absolute;
   left: -1px;
-  top: 6px;
-  bottom: 6px;
+  top: 4px;
+  bottom: 4px;
   width: 2px;
   border-radius: 2px;
   background: var(--color-primary);
@@ -2159,19 +2153,19 @@ function humanSize(n: number): string {
 .wb-task-item.active .wb-task-item__title { color: var(--color-primary); }
 .wb-task-item.active .wb-task-item__del { opacity: 1; color: var(--color-primary); }
 
-/* 左侧头像：根据任务类型变色 */
+/* 左侧头像：紧凑圆形 22×22，去掉边框 */
 .wb-task-item__avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-md);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-size-15);
+  font-size: 12px;
   flex-shrink: 0;
   background: var(--bg-subtle);
   color: var(--text-tertiary);
-  border: 1px solid var(--border-color);
+  border: none;
   transition: background var(--transition-fast) var(--ease-custom),
               color var(--transition-fast) var(--ease-custom),
               border-color var(--transition-fast) var(--ease-custom);
@@ -2179,22 +2173,22 @@ function humanSize(n: number): string {
 .wb-task-item__avatar[data-icon="image"] {
   background: color-mix(in srgb, #8b5cf6 12%, transparent);
   color: #6d28d9;
-  border-color: color-mix(in srgb, #8b5cf6 28%, transparent);
+  border: none;
 }
 .wb-task-item__avatar[data-icon="icon"] {
   background: color-mix(in srgb, #0ea5e9 12%, transparent);
   color: #0369a1;
-  border-color: color-mix(in srgb, #0ea5e9 28%, transparent);
+  border: none;
 }
 .wb-task-item__avatar[data-icon="test"] {
   background: color-mix(in srgb, #10b981 12%, transparent);
   color: #047857;
-  border-color: color-mix(in srgb, #10b981 28%, transparent);
+  border: none;
 }
 .wb-task-item__avatar[data-icon="ui"] {
   background: color-mix(in srgb, #f59e0b 12%, transparent);
   color: #b45309;
-  border-color: color-mix(in srgb, #f59e0b 28%, transparent);
+  border: none;
 }
 .wb-task-item.active .wb-task-item__avatar {
   background: var(--color-primary);
@@ -2206,23 +2200,23 @@ function humanSize(n: number): string {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 .wb-task-item__title {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: -0.1px;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 .wb-task-item__meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
+  gap: 5px;
+  font-size: 10px;
   color: var(--text-tertiary);
   line-height: 1;
 }
@@ -2329,14 +2323,14 @@ function humanSize(n: number): string {
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   flex-shrink: 0;
   opacity: 0;
   transform: translateX(-2px);

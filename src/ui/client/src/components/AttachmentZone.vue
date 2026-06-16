@@ -201,8 +201,7 @@ onBeforeUnmount(() => {
             <span v-else>{{ att.ext.toUpperCase() }}</span>
           </div>
           <div class="wb-attachment__meta">
-            <div class="wb-attachment__name" :title="att.originalName">{{ att.originalName }}</div>
-            <div class="wb-attachment__sub">{{ humanSize(att.size) }} · {{ att.mimeType }}</div>
+            <div class="wb-attachment__name" :title="`${att.originalName} (${humanSize(att.size)})`">{{ att.originalName }}</div>
           </div>
         </button>
         <button class="wb-attachment__del" @click.stop="onRemove(att)" :title="$t('@WORKBENCH:删除')">×</button>
