@@ -1,4 +1,4 @@
-# 浏览器验证 HMR 生效的 5 步检查清单
+# 浏览器验证 HMR 生效的检查清单
 
 改完前端代码进浏览器验证时,DOM 看起来"没变"是最常见的伪故障。
 **核心反模式:没看清目标元素就跳到工具链找原因**(本仓库曾因误判 HMR 失败反复 touch 文件 / 切端口 / 重启 preview server,实际是看错了另一条未改的分支)。
@@ -6,6 +6,18 @@
 ## 规则
 
 按顺序执行。任何一步失败,先定位到这一步,不要跳到下一步找原因:
+
+0. **改前端代码前先确认 vite dev server 活着** ——
+   ```
+   npm run dev:ping
+   ```
+   返回两个 `[ OK ]` 才说明 vite + backend 都在跑(返回 `[ DOWN ]` = 进程没启,改完代码 reload 也拿不到新 chunk,白等)。
+   脚本不可用时退化为:
+   ```
+   curl -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5544/@vite/client
+   ```
+   返回 200 才说明 vite 在跑。
+   **本仓库曾因 vite 没起来改了 5 轮代码、reload 4 次,最后才发现 dev server 整个就没在跑**。preview 工具的 "started successfully" 只代表 wrapper 进程跑了,不等于 vite 在跑,不要相信它。
 
 1. **看 dev server stdout** — 必须看到 `hmr update /path/to/file`(或 vite `[vite] hot updated`、webpack `[WDS] Hot Module Replacement`)。**没看到 = dev server 没收到改动**,先检查文件保存、watcher 路径、.gitignore 是否把文件屏蔽。
 2. **看 Network** — 该文件的 JS/CSS chunk 必须是 **200**(不是 304),且 hash 必须和上次不同。304 = 浏览器用缓存,没拿到新模块。
@@ -23,6 +35,8 @@ HMR 失败的 3 个真实原因按概率排序:
 | **50%** | **看错 DOM 路径** | `eval` 拉目标元素的 outerHTML,确认 class/属性就是改的那条 |
 | 30%   | dev server 真的死了 / watcher 没监听 | 重启 dev server,或 `touch` 文件看 stdout 有没有 hmr update |
 | 20%   | HMR 边界出错 → 整页 fallback 但旧模块缓存 | hard reload + 禁 cache,或 `localStorage.clear()` 后重启 |
+
+**先按上面的步骤 0 排除"dev server 没启"再考虑这三类**。步骤 0 不过,后三类概率全失效。
 
 **默认假设是 50%**。先做 "是不是看错" 的判断,再去看 dev server。
 

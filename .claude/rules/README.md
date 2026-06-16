@@ -6,6 +6,36 @@
 
 每当本轮对话中使用了 `Edit`、`Write`（或多文件批量编辑）工具之后，**必须严格按以下顺序执行**，不允许跳过任何步骤：
 
+### 第零步：改前端代码前先验 dev server 活着（强约束）
+
+**仅当本轮会改动前端代码（`.vue` / `.ts` / `.tsx` / 前端目录下的 `.js` / CSS）时才执行。**
+
+优先用项目脚本探测：
+
+```
+npm run dev:ping
+```
+
+输出形如：
+
+```
+dev server status:
+  [  OK  ]  backend  127.0.0.1:4065/api/app-version
+  [  OK  ]  vite     127.0.0.1:5544/@vite/client
+```
+
+- 两个都 OK → 一切正常,可以开始改前端代码,后续浏览器验证走 HMR 链路
+- 任何一个 DOWN → **先告诉用户启动缺失的 dev server(`npm run dev` 启整体,或单独 `npm run start:vue` 启 vite)再继续改代码**,否则改完 reload 也拿不到新 chunk,会被迫绕去 `vite build` 验证,白花 1 分多钟
+- 脚本不存在或异常时,退化为手动探测:
+
+  ```
+  curl -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5544/@vite/client
+  ```
+
+  返回 200 才说明 vite 在跑(返回 404/000 = vite 没启)。
+
+**为什么是强约束**:`preview_start` 的 "started successfully" 只代表 wrapper 进程跑了,不代表 vite 在跑(本仓库 `npm run dev` 用 concurrently 同时启后端+vite,常因端口冲突而 vite 子进程没起)。本仓库曾因 vite 没起改了 5 轮前端代码、reload 4 次,最后才发现 dev server 整个就没在跑。
+
 ### 第一步：auto-validate（代码验证）
 
 加载并执行 `.claude/skills/auto-validate/SKILL.md` 中定义的全量验证流程：

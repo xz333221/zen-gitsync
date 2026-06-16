@@ -12,6 +12,7 @@
     "pull": "git pull",
     "dev:server": "nodemon server.js --no-open",
     "dev": "concurrently \"npm run dev:server\" \"npm run start:vue\"",
+    "dev:ping": "node scripts/dev-ping.cjs",
     "start:server:no-open": "node server.js --no-open",
     "start:vue": "cd ./src/ui/client && npm run dev",
     "release": "node ./scripts/release.js",
