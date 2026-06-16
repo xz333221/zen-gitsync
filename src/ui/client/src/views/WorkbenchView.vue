@@ -3042,6 +3042,10 @@ function humanSize(n: number): string {
 }
 .wb-logs-inline-btn__icon { font-size: 14px; }
 
+/* 「执行日志」弹窗的 max-height / body 滚动限制已放在文件末尾的非 scoped <style> 块里，
+   这里不再重复。原因：el-dialog 用 teleport 渲染到 body 下，scoped 选择器（包括 :deep()）
+   都拿不到它的根 div，强行写只会变成 dead rule。 */
+
 /* ── 表单控件统一系统（input / select / textarea 共用基底） ── */
 /*    设计目标：与按钮视觉重量齐平、可识别焦点、hover 反馈明确。
       颜色走 --border-color-medium 提升基础边框可见度，hover 阶段加深，
@@ -3923,5 +3927,24 @@ function humanSize(n: number): string {
 }
 @media (prefers-reduced-motion: reduce) {
   .wb-meta-save.is-saving .wb-meta-save__dot { animation: none; }
+}
+</style>
+
+<!-- 「执行日志」弹窗：必须放在非 scoped 块里。
+     el-dialog 用 teleport 渲染到 body 下，根 div 不带 data-v，
+     scoped 选择器（即便 :deep()）都拿不到它。
+     这里的规则只匹配 wb-logs-dialog 这一个 class，影响面可控。 -->
+<style>
+.wb-logs-dialog {
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+.wb-logs-dialog .el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(88vh - 60px);
+  overflow: auto;
+  padding: 12px 20px 16px;
 }
 </style>
