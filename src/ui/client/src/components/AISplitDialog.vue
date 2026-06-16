@@ -575,8 +575,8 @@ function cancelEditPrompt() {
 .ai-split-pre--think {
   font-style: italic;
   color: var(--text-secondary);
-  background: rgba(139, 92, 246, 0.06);
-  border-left: 2px solid rgba(139, 92, 246, 0.45);
+  background: var(--tint-think-06);
+  border-left: 2px solid var(--tint-think-45);
 }
 
 .ai-split-empty {
@@ -659,7 +659,7 @@ function cancelEditPrompt() {
   margin-top: 8px;
   padding: 8px 10px;
   border-radius: 4px;
-  background: rgba(230, 162, 60, 0.1);
+  background: var(--tint-warning-14, rgba(230, 162, 60, 0.1));
   color: var(--el-color-warning);
   font-size: 12px;
 }
@@ -672,7 +672,7 @@ function cancelEditPrompt() {
   margin-bottom: 8px;
   padding: 6px 10px;
   border-radius: 4px;
-  background: rgba(64, 158, 255, 0.06);
+  background: var(--tint-primary-06);
   font-size: 12px;
 }
 .ai-split-raw-tip {

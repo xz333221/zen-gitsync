@@ -251,10 +251,10 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 4px;
   list-style: none;
-  background: var(--bg-container, var(--color-white, #ffffff));
-  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--shadow-md);
   user-select: none;
   font-size: 13px;
 
@@ -265,11 +265,11 @@ onBeforeUnmount(() => {
     padding: 6px 10px;
     border-radius: 4px;
     cursor: pointer;
-    color: var(--text-primary, #303133);
+    color: var(--text-primary);
 
     &:hover {
-      background: var(--bg-container-hover, rgba(64, 158, 255, 0.12));
-      color: var(--el-color-primary, #409eff);
+      background: var(--tint-primary-12);
+      color: var(--color-primary);
     }
 
     &.is-disabled {

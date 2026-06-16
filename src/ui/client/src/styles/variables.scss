@@ -16,13 +16,17 @@
   /* 语义颜色 */
   --color-success: #67c23a;
   --color-success-light: #10b981;
+  --color-success-dark: #047857;
   --color-warning: #e6a23c;
   --color-warning-light: #f59e0b;
+  --color-warning-dark: #b45309;
   --color-danger: #f56c6c;
   --color-danger-light: #ef4444;
-  --color-danger-dark: #dc2626;
+  --color-danger-bright: #ef4444;
+  --color-danger-dark: #b91c1c;
   --color-info: #909399;
   --color-info-light: #8b5cf6;
+  --color-cancelled: #9ca3af;
   
   /* 中性颜色 */
   --color-white: #ffffff;
@@ -556,6 +560,19 @@
 
   --tint-info-12: color-mix(in srgb, var(--color-info) 12%, transparent);
   --tint-info-28: color-mix(in srgb, var(--color-info) 28%, transparent);
+
+  /* ===== think（AI 思考区，紫色）tint 复合 token ===== */
+  --color-think: #8b5cf6;
+  --color-think-dark: #6d28d9;
+  --color-think-darker: #4338ca;
+  --tint-think-04: color-mix(in srgb, var(--color-think) 4%, transparent);
+  --tint-think-06: color-mix(in srgb, var(--color-think) 6%, transparent);
+  --tint-think-14: color-mix(in srgb, var(--color-think) 14%, transparent);
+  --tint-think-18: color-mix(in srgb, var(--color-think) 18%, transparent);
+  --tint-think-45: color-mix(in srgb, var(--color-think) 45%, transparent);
+
+  /* ===== warning dark（深色主题下更亮的橙）tint 复合 token ===== */
+  --tint-warning-04: color-mix(in srgb, var(--color-warning) 4%, transparent);
 
   /* ===== Workbench 专用语义 token ===== */
   --wb-card-bg: var(--bg-container);

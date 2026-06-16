@@ -194,7 +194,7 @@ watch(
   gap: 8px;
 }
 .wb-log-summary::-webkit-details-marker { display: none; }
-.wb-log-summary:hover { background: rgba(59, 130, 246, 0.06); }
+.wb-log-summary:hover { background: var(--tint-primary-06); }
 .wb-log-summary__left {
   flex: 1;
   min-width: 0;
@@ -296,7 +296,7 @@ watch(
   background: var(--bg-subtle, var(--bg-container));
 }
 .wb-log-section__summary::-webkit-details-marker { display: none; }
-.wb-log-section__summary:hover { background: rgba(59, 130, 246, 0.06); }
+.wb-log-section__summary:hover { background: var(--tint-primary-06); }
 .wb-log-section__tag {
   display: inline-block;
   padding: 1px 6px;
@@ -307,12 +307,12 @@ watch(
   text-transform: uppercase;
 }
 .wb-log-section__tag--user {
-  background: rgba(245, 158, 11, 0.18);
-  color: #b45309;
+  background: var(--tint-warning-14);
+  color: var(--color-warning-dark, #b45309);
 }
 .wb-log-section__tag--think {
-  background: rgba(139, 92, 246, 0.18);
-  color: #6d28d9;
+  background: var(--tint-think-14);
+  color: var(--color-think-dark, #6d28d9);
 }
 .wb-log-section__count {
   font-size: 10px;
@@ -331,14 +331,14 @@ watch(
   word-break: break-word;
 }
 .wb-log-section__pre--user {
-  background: rgba(245, 158, 11, 0.06);
+  background: var(--tint-warning-04, rgba(245, 158, 11, 0.06));
   color: var(--text-primary);
-  border-left: 2px solid rgba(245, 158, 11, 0.45);
+  border-left: 2px solid var(--tint-warning-45, rgba(245, 158, 11, 0.45));
 }
 .wb-log-section__pre--think {
-  background: rgba(139, 92, 246, 0.06);
+  background: var(--tint-think-04, rgba(139, 92, 246, 0.06));
   color: var(--text-secondary);
-  border-left: 2px solid rgba(139, 92, 246, 0.45);
+  border-left: 2px solid var(--tint-think-45, rgba(139, 92, 246, 0.45));
   font-style: italic;
 }
 </style>

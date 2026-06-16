@@ -164,7 +164,13 @@
   --text-secondary: var(--text-secondary-dark);
   --text-tertiary: var(--text-tertiary-dark);
   --text-placeholder: var(--text-placeholder-dark);
-  
+
+  /* 状态色 dark 主题覆盖：dark 主题下使用更亮、更饱和的版本 */
+  --color-success-dark: #34d399;
+  --color-warning-dark: #fbbf24;
+  --color-danger-dark: #fca5a5;
+  --color-danger-bright: #f87171;
+
   /* 全局文字颜色覆盖 */
   --color-text: var(--text-primary-dark);
   --color-text-title: var(--text-title-dark);

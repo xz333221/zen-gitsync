@@ -384,10 +384,10 @@ function simpleJobState(job: Job | null): SimpleState {
 function simpleStatusColor(s: SimpleState): string {
   switch (s) {
     case 'running':   return 'var(--color-primary)'
-    case 'done':      return '#22c55e'
-    case 'error':     return '#ef4444'
-    case 'cancelled': return '#9ca3af'
-    default:          return 'var(--text-tertiary)'
+    case 'done':      return 'var(--color-success-dark)'
+    case 'error':     return 'var(--color-danger-bright)'
+    case 'cancelled': return 'var(--color-cancelled)'
+    default:          return 'var(--bg-subtle)'  // idle: 灰底 + 暗文字，禁色卡，保持「未开始」的弱化语义
   }
 }
 // 5 态 → pill 文字。复用现有 WORKBENCH 字典 key；i18n 已就绪
@@ -1662,14 +1662,16 @@ function humanSize(n: number): string {
                     'is-done': simpleJobState(simpleJobFor(selectedTask)) === 'done',
                   }"
                 >
-                  <span class="wb-sub-item__status" :style="{ background: simpleStatusColor(simpleJobState(simpleJobFor(selectedTask))) }">
-                    <span class="wb-simple__status-dot" aria-hidden="true"></span>
-                    {{ simpleStatusLabel(simpleJobState(simpleJobFor(selectedTask))) }}
-                  </span>
-                  <span class="wb-exec-sub-item__title" :title="selectedTask.title">
-                    {{ selectedTask.title || $t('@WORKBENCH:未命名任务') }}
-                  </span>
-                  <span v-if="simpleJobFor(selectedTask)?.endedAt && simpleJobState(simpleJobFor(selectedTask)) === 'done'" class="wb-simple__meta">{{ formatShortTime(simpleJobFor(selectedTask)?.endedAt) }}</span>
+                  <div class="wb-exec-sub-item__row1">
+                    <span class="wb-sub-item__status" :style="{ background: simpleStatusColor(simpleJobState(simpleJobFor(selectedTask))) }">
+                      <span class="wb-simple__status-dot" aria-hidden="true"></span>
+                      {{ simpleStatusLabel(simpleJobState(simpleJobFor(selectedTask))) }}
+                    </span>
+                    <span class="wb-exec-sub-item__title" :title="selectedTask.title">
+                      {{ selectedTask.title || $t('@WORKBENCH:未命名任务') }}
+                    </span>
+                    <span v-if="simpleJobFor(selectedTask)?.endedAt && simpleJobState(simpleJobFor(selectedTask)) === 'done'" class="wb-simple__meta">{{ formatShortTime(simpleJobFor(selectedTask)?.endedAt) }}</span>
+                  </div>
                 </li>
               </ul>
             </template>
@@ -2226,23 +2228,23 @@ function humanSize(n: number): string {
               border-color var(--transition-fast) var(--ease-custom);
 }
 .wb-task-item__avatar[data-icon="image"] {
-  background: color-mix(in srgb, #8b5cf6 12%, transparent);
-  color: #6d28d9;
+  background: color-mix(in srgb, var(--color-think) 12%, transparent);
+  color: var(--color-think-dark, #6d28d9);
   border: none;
 }
 .wb-task-item__avatar[data-icon="icon"] {
-  background: color-mix(in srgb, #0ea5e9 12%, transparent);
-  color: #0369a1;
+  background: color-mix(in srgb, var(--color-info-light) 12%, transparent);
+  color: var(--color-info, #0369a1);
   border: none;
 }
 .wb-task-item__avatar[data-icon="test"] {
-  background: color-mix(in srgb, #10b981 12%, transparent);
-  color: #047857;
+  background: var(--tint-success-14);
+  color: var(--color-success-dark, #047857);
   border: none;
 }
 .wb-task-item__avatar[data-icon="ui"] {
-  background: color-mix(in srgb, #f59e0b 12%, transparent);
-  color: #b45309;
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  color: var(--color-warning-dark, #b45309);
   border: none;
 }
 .wb-task-item.active .wb-task-item__avatar {
@@ -2310,8 +2312,8 @@ function humanSize(n: number): string {
   height: 15px;
   padding: 0 6px;
   border-radius: 7px;
-  background: color-mix(in srgb, #10b981 14%, transparent);
-  color: #047857;
+  background: var(--tint-success-14);
+  color: var(--color-success-dark, #047857);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.2px;
@@ -2319,8 +2321,8 @@ function humanSize(n: number): string {
 }
 /* 复杂任务徽标：紫蓝调，区别于简单任务的绿色调 */
 .wb-task-item__meta-item--complex {
-  background: color-mix(in srgb, #6366f1 14%, transparent);
-  color: #4338ca;
+  background: var(--tint-think-14);
+  color: var(--color-think-darker, #4338ca);
 }
 .wb-task-item__type-toggle:hover {
   filter: brightness(0.95);
@@ -2785,7 +2787,7 @@ function humanSize(n: number): string {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: var(--color-warning);
   flex-shrink: 0;
 }
 
@@ -2813,11 +2815,11 @@ function humanSize(n: number): string {
 }
 .wb-exec-sub-btn--run:hover { background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container)); }
 .wb-exec-sub-btn--stop {
-  color: #ef4444;
-  border-color: rgba(239,68,68,0.4);
-  background: rgba(239,68,68,0.06);
+  color: var(--color-danger-bright, #ef4444);
+  border-color: var(--tint-danger-50);
+  background: var(--tint-danger-06);
 }
-.wb-exec-sub-btn--stop:hover { background: rgba(239,68,68,0.12); }
+.wb-exec-sub-btn--stop:hover { background: var(--tint-danger-14); }
 .wb-exec-sub-btn--undo {
   color: var(--color-primary);
   border-color: var(--tint-primary-35);
@@ -2830,7 +2832,7 @@ function humanSize(n: number): string {
   font-size: 13px;
   color: var(--text-tertiary);
 }
-.wb-exec-sub-btn--del:hover { color: #ef4444; border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06); }
+.wb-exec-sub-btn--del:hover { color: var(--color-danger); border-color: var(--tint-danger-50); background: var(--tint-danger-06); }
 
 .wb-exec-sub-item__title {
   flex: 1;
@@ -2942,8 +2944,8 @@ function humanSize(n: number): string {
   background: var(--bg-container);
   border: 1px solid var(--border-color-medium);
   box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    0 0 0 1px color-mix(in srgb, var(--color-primary) 6%, transparent);
+    var(--shadow-sm),
+    0 0 0 1px var(--tint-primary-06);
   transition: transform 0.22s var(--ease-custom, cubic-bezier(0.4, 0, 0.2, 1));
   z-index: 0;
   pointer-events: none;
@@ -3359,8 +3361,8 @@ function humanSize(n: number): string {
   overflow: auto;
 }
 .wb-sub-item.is-dirty {
-  border-color: rgba(245, 158, 11, 0.55);
-  background: rgba(245, 158, 11, 0.04);
+  border-color: var(--tint-warning-45);
+  background: var(--tint-warning-04);
 }
 
 /* ── 执行中：卡片整体光环 + 顶部流动光带 ────────────────── */
@@ -3444,8 +3446,8 @@ function humanSize(n: number): string {
   gap: 3px;
   font-size: 10px;
   font-weight: 600;
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.15);
+  color: var(--color-warning-dark, #b45309);
+  background: var(--tint-warning-14);
   padding: 2px 7px;
   border-radius: 8px;
   flex-shrink: 0;
@@ -3457,7 +3459,7 @@ function humanSize(n: number): string {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: var(--color-warning);
 }
 .wb-dirty-badge {
   display: inline-flex;
@@ -3471,7 +3473,7 @@ function humanSize(n: number): string {
   font-weight: 700;
   line-height: 1;
   color: #fff;
-  background: #ef4444;
+  background: var(--color-danger);
   border-radius: 8px;
   vertical-align: middle;
 }
@@ -3605,8 +3607,8 @@ function humanSize(n: number): string {
 
 /* ── 已完成态：绿色微底 + 圆角柔化（与执行中红色脉冲对比） ─────────── */
 .wb-sub-item.is-done:not(.is-running) {
-  border-color: color-mix(in srgb, #22c55e 30%, transparent);
-  background: color-mix(in srgb, #22c55e 4%, var(--bg-container));
+  border-color: var(--tint-success-30);
+  background: var(--tint-success-04);
 }
 .wb-sub-item.is-done.is-collapsed {
   padding: 8px 10px;
@@ -3624,6 +3626,15 @@ function humanSize(n: number): string {
   font-weight: 600;
   letter-spacing: 0.2px;
   overflow: hidden;
+}
+
+/* idle 状态：inline 注入的背景是 --bg-subtle（灰底），不能用白字
+   —— 通过 style 属性匹配把文字色降为中性色，保持可读。 */
+.wb-sub-item__status[style*="--bg-subtle"] {
+  color: var(--text-secondary);
+}
+.wb-sub-item__status[style*="--bg-subtle"] .wb-simple__status-dot {
+  background: var(--text-tertiary);
 }
 
 /* ── 执行中：徽章呼吸 + 闪烁圆点 + shimmer 高光 ─────────── */
@@ -3744,9 +3755,9 @@ function humanSize(n: number): string {
   flex-shrink: 0;
 }
 .wb-sub-item__stop {
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
+  border: 1px solid var(--tint-danger-50);
+  background: var(--tint-danger-08);
+  color: var(--color-danger-bright, #ef4444);
   font-size: 11px;
   font-weight: 600;
   padding: 2px 10px;
@@ -3757,13 +3768,13 @@ function humanSize(n: number): string {
   transition: background 0.15s, color 0.15s;
 }
 .wb-sub-item__stop:hover {
-  background: #ef4444;
+  background: var(--color-danger);
   color: #fff;
-  border-color: #ef4444;
+  border-color: var(--color-danger);
 }
 .wb-sub-item__run {
-  border: 1px solid var(--el-color-primary, #409eff);
-  background: var(--el-color-primary, #409eff);
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
   color: #fff;
   font-size: 11px;
   font-weight: 600;
@@ -3907,19 +3918,19 @@ function humanSize(n: number): string {
   animation: wb-meta-pulse 1.2s ease-in-out infinite;
 }
 .wb-meta-save.is-saved {
-  color: #047857;
-  border-color: color-mix(in srgb, #10b981 35%, transparent);
-  background: color-mix(in srgb, #10b981 8%, var(--bg-container));
+  color: var(--color-success-dark, #047857);
+  border-color: var(--tint-success-35);
+  background: var(--tint-success-08);
 }
 .wb-meta-save.is-dirty {
-  color: #b45309;
-  border-color: rgba(245, 158, 11, 0.45);
-  background: rgba(245, 158, 11, 0.06);
+  color: var(--color-warning-dark, #b45309);
+  border-color: var(--tint-warning-45);
+  background: var(--tint-warning-06);
 }
 .wb-meta-save.is-error {
-  color: #b91c1c;
-  border-color: rgba(239, 68, 68, 0.45);
-  background: rgba(239, 68, 68, 0.06);
+  color: var(--color-danger-dark, #b91c1c);
+  border-color: var(--tint-danger-45);
+  background: var(--tint-danger-06);
 }
 @keyframes wb-meta-pulse {
   0%, 100% { opacity: 0.4; transform: scale(0.85); }

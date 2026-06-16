@@ -581,16 +581,16 @@ onMounted(() => {
   transition: background 0.15s, color 0.15s;
 }
 .exec-card__del:hover {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
+  background: var(--tint-danger-14);
+  color: var(--color-danger-bright, #ef4444);
 }
 .exec-card__error {
   margin: 0;
   padding: 6px 10px;
   font-size: 12px;
-  color: #b91c1c;
-  background: rgba(239, 68, 68, 0.06);
-  border-left: 2px solid #ef4444;
+  color: var(--color-danger-dark, #b91c1c);
+  background: var(--tint-danger-06);
+  border-left: 2px solid var(--color-danger-bright, #ef4444);
   border-radius: 3px;
   font-family: var(--font-mono, ui-monospace, monospace);
   white-space: pre-wrap;
