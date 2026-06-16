@@ -5,10 +5,10 @@
 -->
 <template>
   <div class="exec-logs">
-    <!-- 头部：标题 + 统计 + 刷新 -->
+    <!-- 头部：统计 + 刷新 + 清空。
+         标题已由外层 el-dialog 提供，这里不再重复 h2。 -->
     <header class="exec-logs__head">
       <div class="exec-logs__title-block">
-        <h2 class="exec-logs__title">{{ $t('@WORKBENCH:执行日志') }}</h2>
         <span class="exec-logs__stats">
           {{ $t('@WORKBENCH:共 {count} 条，占 {size} MB', { count: stats.count, size: stats.sizeMB }) }}
         </span>
@@ -413,12 +413,6 @@ onMounted(() => {
   gap: 10px;
   flex: 1;
   min-width: 0;
-}
-.exec-logs__title {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--text-primary);
 }
 .exec-logs__stats {
   font-size: 12px;

@@ -1256,23 +1256,6 @@ function humanSize(n: number): string {
 
 <template>
   <div class="workbench">
-    <!-- 顶部按钮条：执行日志入口（弹窗）+ 当前视图标题 -->
-    <header class="wb-topbar">
-      <h2 class="wb-topbar__title">{{ $t('@WORKBENCH:任务执行') }}</h2>
-      <div class="wb-topbar__actions">
-        <button
-          type="button"
-          class="wb-topbar__logs-btn"
-          :title="$t('@WORKBENCH:执行日志')"
-          :aria-label="$t('@WORKBENCH:执行日志')"
-          @click="logsDialogVisible = true"
-        >
-          <el-icon class="wb-topbar__logs-icon"><Document /></el-icon>
-          <span>{{ $t('@WORKBENCH:执行日志') }}</span>
-        </button>
-      </div>
-    </header>
-
     <div class="workbench__editor-row">
     <!-- 左：任务列表 -->
     <aside class="wb-sidebar">
@@ -1545,6 +1528,16 @@ function humanSize(n: number): string {
           <el-button type="primary" :loading="false" @click="runTask(selectedTask)">
             {{ isSimpleTask ? $t('@WORKBENCH:执行') : $t('@WORKBENCH:执行任务') }}
           </el-button>
+          <button
+            type="button"
+            class="wb-logs-inline-btn"
+            :title="$t('@WORKBENCH:执行日志')"
+            :aria-label="$t('@WORKBENCH:执行日志')"
+            @click="logsDialogVisible = true"
+          >
+            <el-icon class="wb-logs-inline-btn__icon"><Document /></el-icon>
+            <span>{{ $t('@WORKBENCH:执行日志') }}</span>
+          </button>
         </div>
         <!-- 任务描述区域：默认折叠，节省首屏空间；展开后可编辑/上传附件 -->
         <details
@@ -1941,59 +1934,7 @@ function humanSize(n: number): string {
   color: var(--text-primary);
 }
 
-/* 顶部条：左侧标题 + 右侧执行日志按钮。
-   原 tab 切换条改为单按钮入口（弹窗承载执行日志），腾出首屏纵向空间。 */
-.wb-topbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-subtle, var(--bg-container));
-  flex-shrink: 0;
-  min-height: 40px;
-}
-.wb-topbar__title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: 0.2px;
-}
-.wb-topbar__actions {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.wb-topbar__logs-btn {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-container);
-  color: var(--text-secondary);
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.wb-topbar__logs-btn:hover {
-  background: var(--tint-primary-12);
-  color: var(--color-primary);
-  border-color: var(--tint-primary-35);
-}
-.wb-topbar__logs-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
-}
-.wb-topbar__logs-icon {
-  font-size: 14px;
-}
+/* 顶部条已移除：执行日志入口直接合到任务头（与「执行任务」按钮同处），节省首屏纵向空间。 */
 
 /* 任务描述折叠：默认收起，点击 summary 展开。 */
 .wb-task-desc {
@@ -3070,6 +3011,36 @@ function humanSize(n: number): string {
 @media (prefers-reduced-motion: reduce) {
   .wb-ai-split-btn__icon { animation: none; }
 }
+
+/* 「执行日志」内联按钮：紧贴「执行任务」右侧，视觉重量接近 secondary */
+.wb-logs-inline-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-container);
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.wb-logs-inline-btn:hover {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
+  border-color: var(--tint-primary-35);
+}
+.wb-logs-inline-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.wb-logs-inline-btn__icon { font-size: 14px; }
 
 /* ── 表单控件统一系统（input / select / textarea 共用基底） ── */
 /*    设计目标：与按钮视觉重量齐平、可识别焦点、hover 反馈明确。
