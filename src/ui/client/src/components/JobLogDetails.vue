@@ -100,8 +100,9 @@ import type { Job } from '@/types/workbench'
 
 const props = defineProps<{ job: Job }>()
 
-// 展开策略：运行中/排队中默认展开（沿用 WorkbenchView 原行为）
-const autoOpen = computed(() => props.job.status === 'running' || props.job.status === 'pending')
+// 展开策略：默认展开。用户希望「任务执行时日志需要能直接看到」，
+// 不再仅在 running/pending 状态自动展开。运行结束/异常后日志仍可直接查阅。
+const autoOpen = computed(() => true)
 
 const MAX_LOG_DISPLAY = 64 * 1024
 function displayOutput(): string {

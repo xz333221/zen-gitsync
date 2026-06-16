@@ -28,7 +28,8 @@ import {
   EditPen,
   Folder,
   ArrowDown,
-  ArrowRight
+  ArrowRight,
+  Document
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
@@ -85,8 +86,8 @@ interface Task {
 const prompts = ref<Prompt[]>([])
 const tasks = ref<Task[]>([])
 const jobs = ref<Job[]>([])
-// 顶部 tab 切换：'editor' = 现有任务执行视图，'logs' = 执行日志管理
-const activeView = ref<'editor' | 'logs'>('editor')
+// 执行日志管理弹窗：默认收起，editor 视图保持常驻
+const logsDialogVisible = ref(false)
 
 const selectedTaskId = ref<string | null>(null)
 const selectedTask = computed<Task | null>(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
@@ -260,6 +261,8 @@ function onBeforeUnloadPersist() {
 
 const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false })
 const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
+// 任务描述（主任务 desc + 附件）默认折叠，避免占满首屏
+const taskDescExpanded = ref(false)
 // 任务编辑对话框:同时支持「简单任务」和「复杂任务」两种模式
 // - type='simple' 时 simpleOverride 启用,执行走 /run-simple,不进入子任务拆分
 // - type='complex' 时 simpleOverride 无意义,UI 隐藏
@@ -1253,27 +1256,23 @@ function humanSize(n: number): string {
 
 <template>
   <div class="workbench">
-    <!-- 顶部 tab 切换：editor = 任务执行（默认），logs = 执行日志管理 -->
-    <header class="wb-tabs">
-      <button
-        type="button"
-        class="wb-tab"
-        :class="{ 'is-active': activeView === 'editor' }"
-        @click="activeView = 'editor'"
-      >
-        {{ $t('@WORKBENCH:任务执行') }}
-      </button>
-      <button
-        type="button"
-        class="wb-tab"
-        :class="{ 'is-active': activeView === 'logs' }"
-        @click="activeView = 'logs'"
-      >
-        {{ $t('@WORKBENCH:执行日志') }}
-      </button>
+    <!-- 顶部按钮条：执行日志入口（弹窗）+ 当前视图标题 -->
+    <header class="wb-topbar">
+      <h2 class="wb-topbar__title">{{ $t('@WORKBENCH:任务执行') }}</h2>
+      <div class="wb-topbar__actions">
+        <button
+          type="button"
+          class="wb-topbar__logs-btn"
+          :title="$t('@WORKBENCH:执行日志')"
+          :aria-label="$t('@WORKBENCH:执行日志')"
+          @click="logsDialogVisible = true"
+        >
+          <el-icon class="wb-topbar__logs-icon"><Document /></el-icon>
+          <span>{{ $t('@WORKBENCH:执行日志') }}</span>
+        </button>
+      </div>
     </header>
 
-    <template v-if="activeView === 'editor'">
     <div class="workbench__editor-row">
     <!-- 左：任务列表 -->
     <aside class="wb-sidebar">
@@ -1547,28 +1546,51 @@ function humanSize(n: number): string {
             {{ isSimpleTask ? $t('@WORKBENCH:执行') : $t('@WORKBENCH:执行任务') }}
           </el-button>
         </div>
-        <textarea
-          class="wb-textarea"
-          v-model="selectedTask.desc"
-          :placeholder="$t('@WORKBENCH:任务描述（可选）')"
-          rows="2"
-          @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
-        />
-        <AttachmentZone
-          :attachments="selectedTask.attachments || []"
-          :is-image="isImageAttachment"
-          :human-size="humanSize"
-          :is-uploading="isUploading('task-' + selectedTask.id)"
-          :is-paste-hover="pasteHoverId === 'task-' + selectedTask.id"
-          :max-count="9"
-          :on-pick="() => pickAttachmentFile({ kind: 'task', task: selectedTask })"
-          :on-remove="(att) => removeAttachment({ kind: 'task', task: selectedTask }, att)"
-          @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
-          @drop.prevent="onAttachmentDrop($event, { kind: 'task', task: selectedTask })"
-          @dragover.prevent="pasteHoverId = 'task-' + selectedTask.id"
-          @dragenter.prevent="pasteHoverId = 'task-' + selectedTask.id"
-          @dragleave="pasteHoverId = (pasteHoverId === 'task-' + selectedTask.id ? null : pasteHoverId)"
-        />
+        <!-- 任务描述区域：默认折叠，节省首屏空间；展开后可编辑/上传附件 -->
+        <details
+          class="wb-task-desc"
+          :open="taskDescExpanded"
+          @toggle="taskDescExpanded = ($event.target as HTMLDetailsElement).open"
+        >
+          <summary class="wb-task-desc__summary">
+            <el-icon class="wb-task-desc__caret">
+              <component :is="taskDescExpanded ? ArrowDown : ArrowRight" />
+            </el-icon>
+            <span class="wb-task-desc__label">{{ $t('@WORKBENCH:任务描述（可选）') }}</span>
+            <span
+              v-if="(selectedTask.desc && selectedTask.desc.length > 0) || (selectedTask.attachments && selectedTask.attachments.length > 0)"
+              class="wb-task-desc__tag"
+            >
+              <span v-if="selectedTask.desc && selectedTask.desc.length > 0">{{ $t('@WORKBENCH:已填写') }}</span>
+              <span
+                v-if="selectedTask.attachments && selectedTask.attachments.length > 0"
+                class="wb-task-desc__tag-attachment"
+              >{{ selectedTask.attachments.length }}</span>
+            </span>
+          </summary>
+          <textarea
+            class="wb-textarea"
+            v-model="selectedTask.desc"
+            :placeholder="$t('@WORKBENCH:任务描述（可选）')"
+            rows="2"
+            @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
+          />
+          <AttachmentZone
+            :attachments="selectedTask.attachments || []"
+            :is-image="isImageAttachment"
+            :human-size="humanSize"
+            :is-uploading="isUploading('task-' + selectedTask.id)"
+            :is-paste-hover="pasteHoverId === 'task-' + selectedTask.id"
+            :max-count="9"
+            :on-pick="() => pickAttachmentFile({ kind: 'task', task: selectedTask })"
+            :on-remove="(att) => removeAttachment({ kind: 'task', task: selectedTask }, att)"
+            @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
+            @drop.prevent="onAttachmentDrop($event, { kind: 'task', task: selectedTask })"
+            @dragover.prevent="pasteHoverId = 'task-' + selectedTask.id"
+            @dragenter.prevent="pasteHoverId = 'task-' + selectedTask.id"
+            @dragleave="pasteHoverId = (pasteHoverId === 'task-' + selectedTask.id ? null : pasteHoverId)"
+          />
+        </details>
         <!-- ── 执行主体：左（子任务列表）+ 右（详情面板）左右布局 ── -->
         <div class="wb-execution-body">
           <!-- 左：子任务/简单任务列表 -->
@@ -1763,9 +1785,18 @@ function humanSize(n: number): string {
       </template>
     </section>
     </div>
-    </template>
-    <!-- v-else 视图：执行日志管理。tab 切换到 logs 时挂载，editor 视图 v-show 保活避免 SSE 重连 -->
-    <ExecutionLogManager v-else />
+
+    <!-- 执行日志管理：弹窗形式承载，原本独立 tab 切换会占用首屏。 -->
+    <el-dialog
+      v-model="logsDialogVisible"
+      :title="$t('@WORKBENCH:执行日志')"
+      width="1080px"
+      :close-on-click-modal="false"
+      top="6vh"
+      class="wb-logs-dialog"
+    >
+      <ExecutionLogManager />
+    </el-dialog>
 
     <!-- 提示词编辑对话框 -->
     <el-dialog
@@ -1910,46 +1941,129 @@ function humanSize(n: number): string {
   color: var(--text-primary);
 }
 
-/* 顶部 tab 切换条：editor / logs 两栏；用下划线标记激活 */
-.wb-tabs {
+/* 顶部条：左侧标题 + 右侧执行日志按钮。
+   原 tab 切换条改为单按钮入口（弹窗承载执行日志），腾出首屏纵向空间。 */
+.wb-topbar {
   display: flex;
-  align-items: stretch;
-  gap: 4px;
-  padding: 0 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-subtle, var(--bg-container));
   flex-shrink: 0;
   min-height: 40px;
 }
-.wb-tab {
-  appearance: none;
-  background: transparent;
-  border: none;
-  padding: 0 16px;
+.wb-topbar__title {
+  margin: 0;
   font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.2px;
+}
+.wb-topbar__actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.wb-topbar__logs-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-container);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text-tertiary);
   cursor: pointer;
-  position: relative;
-  transition: color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.wb-topbar__logs-btn:hover {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
+  border-color: var(--tint-primary-35);
+}
+.wb-topbar__logs-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.wb-topbar__logs-icon {
+  font-size: 14px;
+}
+
+/* 任务描述折叠：默认收起，点击 summary 展开。 */
+.wb-task-desc {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.wb-task-desc[open] {
+  background: var(--bg-container);
+}
+.wb-task-desc__summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
   user-select: none;
 }
-.wb-tab:hover {
-  color: var(--text-primary);
+.wb-task-desc__summary::-webkit-details-marker { display: none; }
+.wb-task-desc__summary:hover { background: var(--bg-container-hover); }
+.wb-task-desc__caret {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  transition: transform 0.15s;
 }
-.wb-tab.is-active {
+.wb-task-desc__label {
+  font-weight: 500;
+  letter-spacing: 0.1px;
+}
+.wb-task-desc__tag {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
   color: var(--color-primary);
   font-weight: 600;
 }
-.wb-tab.is-active::after {
-  content: '';
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: -1px;
-  height: 2px;
-  background: var(--color-primary);
-  border-radius: var(--radius-2xs);
+.wb-task-desc__tag-attachment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--tint-primary-14);
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+.wb-task-desc[open] .wb-task-desc__summary {
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 0;
+}
+.wb-task-desc > .wb-textarea,
+.wb-task-desc > :deep(.attachment-zone) {
+  margin: 8px 12px 10px;
+}
+.wb-task-desc > .wb-textarea {
+  margin-bottom: 0;
+}
+.wb-task-desc > :deep(.attachment-zone) {
+  margin-top: 0;
 }
 
 /* editor 视图的子行容器：把 sidebar + split 重新横向排列（workbench 改成 column 后需要这一层） */

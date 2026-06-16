@@ -247,6 +247,7 @@ A dedicated view (fourth icon in the activity bar) for batch-running Claude agai
 | Task list | Create, edit, delete tasks; each shows its subtask count; click the **Simple / Complex** badge on any task to flip its type in place (Complex → Simple with subtasks asks for confirmation and clears them; Simple → Complex is instant) |
 | Top-bar type switch | A segmented control (Complex / Simple) lives in the task header, right next to **Run task**, so you can flip the current task's type without going back to the sidebar; the same confirmation rule (Complex → Simple with subtasks) applies |
 | AI split (promoted) | The "AI split" action is now a dedicated accent button with a sparkle icon and a subtle pulse, sitting between the type switcher and the primary **Run task** button — it is always enabled for complex tasks with a non-empty title |
+| Description collapsible by default | Selecting a task collapses the description + attachment area into a one-line summary "Task description (optional)" to free up vertical space; click the summary to expand. When the description is filled or attachments are present, an "Filled" badge and the attachment count appear on the right of the summary |
 | Minimal task & chat layout | The task execution view is now stripped of redundant borders / shadows: a flatter sidebar, transparent title input and textarea, and a clean left/right execution body. Visual reference follows the Claude Code desktop app |
 | Subtask breakdown | Add / edit / remove subtasks per task, with per-subtask status; the empty state ships a centered illustration card with a primary "Add subtask" CTA and a secondary "Split with AI" shortcut |
 | Subtask attachments | Attach up to 9 files per subtask (image / PDF / text / Markdown / CSV / JSON / log, ≤ 5 MB each); their absolute paths are appended to the prompt so Claude reads them directly. Right-click an image attachment to copy it to the system clipboard (`image/png` / `jpeg` / `webp` / `gif`) |
@@ -256,10 +257,11 @@ A dedicated view (fourth icon in the activity bar) for batch-running Claude agai
 | Sequential execution | Runs subtasks in declared order; the next one starts only after the previous process exits |
 | Pipe-mode launcher | Spawns `claude -p "<prompt>" --output-format text --permission-mode bypassPermissions --dangerously-skip-permissions` with stdout/stderr piped to the server — no external terminal window is opened, so output streams directly into the UI |
 | Isolated windows | Every subtask runs as its own detached process with fresh context, so memory and conversation state never accumulate across subtasks |
-| Live log | Each running subtask has an expandable "执行日志 / Execution log" panel that auto-scrolls and shows accumulated `stdout` + `stderr` (capped at 256 KB server-side, last 64 KB rendered client-side) |
+| Live log | Each subtask has a "执行日志 / Execution log" panel that **opens by default** and auto-scrolls, showing accumulated `stdout` + `stderr` (capped at 256 KB server-side, last 64 KB rendered client-side) |
 | Live status | Subtask status (todo / pending / running / done / error) and PID stream in real time over SSE |
 | Running animation | Subtasks in `running` state get a breathing primary-color glow + a sliding progress bar on top of the card; the status badge uses a shimmer gradient with a pulsing white dot and outer halo, easing back to neutral on completion |
 | Cross-view indicator | While any Workbench subtask is running, a pulsing dot appears on the Workbench icon in the Activity Bar so you can see job state from the Git or Editor view |
+| Execution log manager (dialog) | The "Execution logs" button in the workbench top bar (replaces the previous standalone tab) opens a dialog with the list / filter / batch delete / clear / retention-policy UI; the task execution view stays mounted so no work-in-progress state is dropped |
 
 Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.zen-gitsync/tasks.json` (cross-project, shared across repos).
 
@@ -638,6 +640,7 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 任务列表 | 新建、编辑、删除任务；每条任务显示子任务数量；点击徽标可在「简单（绿色）/ 复杂（紫色）」间即时切换，复杂→简单且带子任务时弹窗确认并清空子任务 |
 | 顶部类型切换器 | 任务头部增加 segmented control（复杂 / 简单），无需回到左侧即可切换当前任务类型；切换逻辑与左侧徽标共享，复杂→简单且带子任务时同样弹窗确认 |
 | AI 拆分（升级） | AI 拆分升级为带 sparkle 图标 + 轻微 pulse 动效的 accent 按钮，位置紧贴主「执行任务」按钮；只要标题非空，复杂任务下始终可点 |
+| 任务描述默认折叠 | 选中任务后默认仅显示一行「任务描述（可选）」摘要，节省首屏纵向空间；点击 summary 展开后即可看到描述输入框和附件区；已填写描述或挂有附件时摘要右侧会出现「已填写」徽标和附件数量 |
 | 极简任务 / 对话样式 | 任务执行视图整体极简化：减少冗余边框与阴影、标题 / 描述输入框透明化、执行主体左右两段式分列；视觉参考 Claude Code 桌面版 |
 | 任务字段自动保存 | 标题 / 描述 / 预置提示词 / 简单任务覆盖 改动后 1.5s 防抖落盘，标题右侧显示「保存中 / 已保存 / 有未保存的更改」状态徽标；切换任务或关页面前自动 flush（含 `navigator.sendBeacon` 兜底） |
 | 简单任务 | 新建任务时选「简单（直接执行）」即跳过子任务拆分；执行时把 task.desc 拼成单 sub 走 `/tasks/:id/run-simple`；可填「覆盖预置提示词」独立覆写预置模板；主任务附件 + 描述 + 覆盖三者合并驱动 Claude |
@@ -649,10 +652,11 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 顺序执行 | 按声明顺序依次执行子任务；上一个进程退出后才启动下一个 |
 | 管道模式启动 | 直接以 `claude -p "<prompt>" --output-format text --permission-mode bypassPermissions --dangerously-skip-permissions` 拉起进程，stdout / stderr 通过管道回传服务端，不再弹外部终端窗口 |
 | 独立上下文 | 每个子任务都是独立的 detached 进程，上下文与状态不会跨子任务累积 |
-| 实时日志 | 正在执行的子任务可展开「执行日志」面板，自动滚到底，展示累积的 stdout / stderr（服务端缓存 256 KB，客户端渲染最近 64 KB） |
+| 实时日志 | 子任务的「执行日志」面板**默认展开**（不再仅在运行中展开），方便随时回看上次执行结果；面板内自动滚到底，展示累积的 stdout / stderr（服务端缓存 256 KB，客户端渲染最近 64 KB） |
 | 实时状态 | 子任务状态（todo / pending / running / done / error）和 PID 通过 SSE 实时推送 |
 | 执行中动效 | 状态为 `running` 的子任务卡片整体呈现蓝色呼吸光晕 + 顶部流动进度光带；状态徽章为渐变 shimmer + 脉冲白点 + 外发光，停下后平滑恢复 |
 | 跨视图指示 | 任意子任务运行中时，Activity Bar 上的工作台图标会显示脉动小圆点；切换到 Git 或编辑器视图也能看到运行状态 |
+| 执行日志管理（弹窗） | 顶部「执行日志」按钮（替代原独立 tab）唤起弹窗：列表 / 过滤 / 批量删除 / 清空 / 保留策略全部可在此一次性管理；弹窗关闭后任务执行视图常驻，避免切换时不必要的卸载 |
 
 提示词预置与任务数据持久化到 `~/.zen-gitsync/prompts.json` 和 `~/.zen-gitsync/tasks.json`（跨项目共享）。子任务附件落盘在 `~/.zen-gitsync/workbench-images/<subId>/`。
 
