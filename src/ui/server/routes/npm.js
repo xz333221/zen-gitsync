@@ -191,6 +191,17 @@ export function registerNpmRoutes({
   })
 
 
+  // POST /api/app-restart  - 优雅退出当前 Node 进程，由外层 launcher/desktop 自动拉起
+  app.post('/api/app-restart', (_req, res) => {
+    res.json({ success: true, message: '正在重启服务…' })
+    // 给响应一点时间落到客户端再退出
+    setTimeout(() => {
+      console.log('[app-restart] 收到重启指令，退出当前进程')
+      process.exit(0)
+    }, 300)
+  })
+
+
   // 读取 package.json 文件内容
   app.post('/api/read-package-json', express.json(), async (req, res) => {
     try {

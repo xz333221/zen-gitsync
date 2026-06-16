@@ -2595,6 +2595,44 @@ function humanSize(n: number): string {
   border-color: var(--tint-primary-45);
   background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
 }
+/* 执行面板内的徽章：和左侧子任务列表复用同一套执行中特效 */
+.wb-exec-sub-item.is-running .wb-sub-item__status {
+  background: linear-gradient(
+    90deg,
+    var(--color-primary) 0%,
+    color-mix(in srgb, var(--color-primary) 70%, #fff) 50%,
+    var(--color-primary) 100%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: wb-status-pulse 2.4s ease-in-out infinite,
+             wb-status-shimmer 2.4s linear infinite;
+  box-shadow:
+    0 0 0 0 var(--tint-primary-45),
+    0 0 12px var(--tint-primary-35);
+}
+.wb-exec-sub-item.is-running .wb-sub-item__status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+  animation: wb-status-dot 1.2s ease-in-out infinite;
+}
+.wb-exec-sub-item.is-running .wb-sub-item__status::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  animation: wb-status-sweep 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
 .wb-exec-sub-item.is-done:not(.is-selected) {
   opacity: 0.75;
 }
@@ -2939,6 +2977,11 @@ function humanSize(n: number): string {
   background: #fff;
   flex-shrink: 0;
   opacity: 0.9;
+}
+/* 简单任务执行中：徽章呼吸 + 圆点脉动 + 高光扫过 */
+.wb-exec-sub-item.is-running .wb-simple__status-dot {
+  animation: wb-status-dot 1.2s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
 }
 .wb-simple__status-text {
   line-height: 1.4;
@@ -3374,7 +3417,11 @@ function humanSize(n: number): string {
 @media (prefers-reduced-motion: reduce) {
   .wb-sub-item.is-running .wb-sub-item__status,
   .wb-sub-item.is-running .wb-sub-item__status::before,
-  .wb-sub-item.is-running .wb-sub-item__status::after {
+  .wb-sub-item.is-running .wb-sub-item__status::after,
+  .wb-exec-sub-item.is-running .wb-sub-item__status,
+  .wb-exec-sub-item.is-running .wb-sub-item__status::before,
+  .wb-exec-sub-item.is-running .wb-sub-item__status::after,
+  .wb-exec-sub-item.is-running .wb-simple__status-dot {
     animation: none;
   }
   .wb-sub-item__toggle .el-icon,

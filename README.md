@@ -246,7 +246,7 @@ A dedicated view (fourth icon in the activity bar) for batch-running Claude agai
 |---|---|
 | Task list | Create, edit, delete tasks; each shows its subtask count; click the **Simple / Complex** badge on any task to flip its type in place (Complex → Simple with subtasks asks for confirmation and clears them; Simple → Complex is instant) |
 | Subtask breakdown | Add / edit / remove subtasks per task, with per-subtask status; the empty state ships a centered illustration card with a primary "Add subtask" CTA and a secondary "Split with AI" shortcut |
-| Subtask attachments | Attach up to 9 files per subtask (image / PDF / text / Markdown / CSV / JSON / log, ≤ 5 MB each); their absolute paths are appended to the prompt so Claude reads them directly |
+| Subtask attachments | Attach up to 9 files per subtask (image / PDF / text / Markdown / CSV / JSON / log, ≤ 5 MB each); their absolute paths are appended to the prompt so Claude reads them directly. Right-click an image attachment to copy it to the system clipboard (`image/png` / `jpeg` / `webp` / `gif`) |
 | Prompt presets | Reusable prompt templates with `{{task.title}}` / `{{task.desc}}` / `{{sub.title}}` / `{{sub.desc}}` / `{{repo.path}}` / `{{branch}}` variable interpolation |
 | AI prompt generation | "New / Edit preset" dialog has an **AI Generate** button — the server reads the current project tree (depth 2) + README + manifests (package.json / pyproject.toml / go.mod / Cargo.toml / …) and asks the configured LLM to draft a project-aware preset (name + body) |
 | Per-subtask override | Override the preset's content for a specific subtask in its description field |
@@ -272,6 +272,14 @@ Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.
 | Language | Chinese / English |
 | File locking | Lock files so they are never staged or stashed |
 | NPM paths | Configure where to look for `package.json` files |
+
+---
+
+### Self-Upgrade
+
+The footer version chip in the GUI checks npm for newer releases once per session. When an update is available, a **Upgrade** button appears next to the version; clicking it streams `npm install -g zen-gitsync` output into a modal dialog. On success, the dialog switches to a "Restart and reload now" CTA that calls `POST /api/app-restart` (which gracefully exits the Node process — your launcher / desktop shell brings it back up) and then reloads the browser tab so the new SPA bundle takes effect. The footer version also updates instantly to the new number so you can see the bump even before restarting.
+
+On macOS / Linux, the global install is run under `sudo -n` (non-interactive); if sudo can't authenticate non-interactively, re-launch the GUI with admin rights and try again.
 
 ---
 
@@ -628,7 +636,7 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 任务字段自动保存 | 标题 / 描述 / 预置提示词 / 简单任务覆盖 改动后 1.5s 防抖落盘，标题右侧显示「保存中 / 已保存 / 有未保存的更改」状态徽标；切换任务或关页面前自动 flush（含 `navigator.sendBeacon` 兜底） |
 | 简单任务 | 新建任务时选「简单（直接执行）」即跳过子任务拆分；执行时把 task.desc 拼成单 sub 走 `/tasks/:id/run-simple`；可填「覆盖预置提示词」独立覆写预置模板；主任务附件 + 描述 + 覆盖三者合并驱动 Claude |
 | 子任务拆分 | 增删改子任务，实时显示每个子任务的执行状态；空态提供居中插画卡片、主 CTA「添加子任务」与「用 AI 自动拆分」次级入口（仅复杂任务显示） |
-| 子任务附件 | 每个子任务最多挂 9 个附件（图片 / PDF / 文本 / Markdown / CSV / JSON / log，单个 ≤ 5 MB）；同 `originalName + size` 已存在则直接复用，跳过重复上传；执行时绝对路径会自动追加到 prompt 末尾，Claude 直接按路径读取 |
+| 子任务附件 | 每个子任务最多挂 9 个附件（图片 / PDF / 文本 / Markdown / CSV / JSON / log，单个 ≤ 5 MB）；同 `originalName + size` 已存在则直接复用，跳过重复上传；执行时绝对路径会自动追加到 prompt 末尾，Claude 直接按路径读取。**右键图片附件可一键复制到系统剪贴板**（支持 png / jpeg / webp / gif） |
 | 提示词预置 | 可复用提示词模板，支持 `{{task.title}}` / `{{task.desc}}` / `{{sub.title}}` / `{{sub.desc}}` / `{{repo.path}}` / `{{branch}}` 变量插值 |
 | AI 生成预置 | 「新建 / 编辑预置」对话框内置 **AI 生成项目架构说明** 按钮 + **编辑指令** 按钮：服务端递归识别当前项目里的所有子项目（含 `.git` 或 9 种 manifest 之一的目录），为每个子项目独立读取关键文件（manifest 20 KB / README 8 KB / 2 层目录树），并发调 LLM 产出各子项目架构说明，多子项目场景再合并成一份整体说明；用户可点「编辑指令」自定义生成策略（持久化到 `~/.zen-gitsync/ai-instruction.json`）；`max_tokens=4000`，单次请求最多 20 分钟 |
 | 子任务覆盖 | 在子任务描述框可独立覆盖预置提示词的内容 |
@@ -654,6 +662,14 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 语言 | 中文 / English |
 | 文件锁定 | 锁定文件，使其永远不被暂存或储藏 |
 | NPM 路径 | 配置 `package.json` 的扫描位置 |
+
+---
+
+### 自升级
+
+GUI 底栏版本号每个会话会向 npm 查询一次最新版本。检测到更新时版本旁会出现 **升级** 按钮，点击后在弹窗里实时回传 `npm install -g zen-gitsync` 的输出；升级成功后弹窗会切换为「**立即重启并刷新**」主 CTA，调用 `POST /api/app-restart` 让 Node 进程优雅退出（外层 launcher / desktop 壳会自动拉起新版本），再 reload 当前 tab 让新 SPA 资源生效。同时底栏版本号会立刻刷新到新版本号，重启前就能看到。
+
+> macOS / Linux 上全局安装需要 sudo，前端会用 `sudo -n` 非交互式尝试；如非免密 sudo，请以管理员权限重启 GUI 后再试。
 
 ---
 

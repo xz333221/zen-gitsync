@@ -29,6 +29,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'retry'): void
+  (e: 'restart'): void
 }>()
 
 const logEl = ref<HTMLElement | null>(null)
@@ -55,6 +56,10 @@ function close() {
 function onRetry() {
   emit('retry')
 }
+
+function onRestart() {
+  emit('restart')
+}
 </script>
 
 <template>
@@ -77,14 +82,21 @@ function onRetry() {
       <span v-else>{{ $t('@F13B4:升级失败') }}</span>
     </div>
 
+    <p v-if="status === 'success'" class="upgrade-hint">
+      {{ $t('@F13B4:新版本已全局安装，需要重启服务才能生效') }}
+    </p>
+
     <pre ref="logEl" class="upgrade-log">{{ logs || $t('@F13B4:等待日志输出') }}</pre>
 
     <template #footer>
       <el-button v-if="status === 'failed'" type="primary" @click="onRetry">
         {{ $t('@F13B4:重试') }}
       </el-button>
+      <el-button v-if="status === 'success'" type="primary" @click="onRestart">
+        {{ $t('@F13B4:立即重启并刷新') }}
+      </el-button>
       <el-button v-if="status === 'success'" @click="close">
-        {{ $t('@F13B4:完成') }}
+        {{ $t('@F13B4:稍后手动重启') }}
       </el-button>
       <el-button v-if="status === 'running'" disabled>
         {{ $t('@F13B4:升级中') }}...
@@ -130,6 +142,16 @@ function onRetry() {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.upgrade-hint {
+  margin: 0 0 var(--spacing-md) 0;
+  padding: 8px 12px;
+  background: rgba(103, 194, 58, 0.08);
+  border-left: 3px solid var(--el-color-success);
+  border-radius: 4px;
+  color: var(--el-color-success);
+  font-size: 13px;
 }
 
 @keyframes rotating {

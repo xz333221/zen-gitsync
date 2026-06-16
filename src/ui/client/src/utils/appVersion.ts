@@ -88,3 +88,19 @@ export async function startAppUpgrade(onLog: (evt: UpgradeLogEvent) => void): Pr
     } catch {}
   }
 }
+
+/**
+ * 通知服务端优雅退出，外层 launcher 会自动拉起新版本。
+ * 失败抛错，由调用方决定是否回退到手动刷新。
+ */
+export async function restartApp(): Promise<void> {
+  const res = await fetch('/api/app-restart', { method: 'POST' })
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try {
+      const body = await res.json()
+      if (body?.error) msg = body.error
+    } catch {}
+    throw new Error(msg)
+  }
+}

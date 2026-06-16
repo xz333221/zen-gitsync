@@ -14,15 +14,19 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { $t } from '@/lang/static'
-import { fetchAppVersion, startAppUpgrade, type AppVersionInfo } from '@/utils/appVersion'
+import { fetchAppVersion, startAppUpgrade, restartApp, type AppVersionInfo } from '@/utils/appVersion'
 import UpgradeDialog from './UpgradeDialog.vue'
 
 // 由 vite.config.ts 在构建时从外层 package.json 注入
-const version = import.meta.env.PKG_VERSION
+const buildVersion = import.meta.env.PKG_VERSION
 const releasesUrl = 'https://github.com/xz333221/zen-gitsync/releases'
+
+// 升级成功后会被后端返回的 current 覆盖，确保 footer 立刻反映新版本
+const runtimeVersion = ref<string>(buildVersion)
+const displayVersion = computed(() => runtimeVersion.value || buildVersion)
 
 const latestInfo = ref<AppVersionInfo | null>(null)
 const upgradeDialogVisible = ref(false)
@@ -59,6 +63,10 @@ async function checkUpdate(silent = false) {
     const info = await fetchAppVersion()
     latestInfo.value = info
     writeCache(info)
+    // 把后端读到的真实版本覆盖到 footer，让用户立即看到当前版本
+    if (info.current) {
+      runtimeVersion.value = info.current
+    }
     if (!silent && info.success && info.hasUpdate) {
       ElMessage({
         type: 'success',
@@ -106,11 +114,32 @@ async function handleUpgrade() {
       if (evt.code === 0) {
         // 升级成功后清掉缓存，等下次进页面自动重查
         try { sessionStorage.removeItem(CACHE_KEY) } catch {}
+        // 立即把 footer 上的版本号更新到后端报告的 latest，
+        // 这样用户不重启也能看到"已经升级到 vX.Y.Z"的提示
+        if (latestInfo.value?.latest) {
+          runtimeVersion.value = latestInfo.value.latest
+        }
       }
     } else if (evt.message) {
       upgradeLogs.value += evt.message
     }
   })
+}
+
+async function handleRestart() {
+  try {
+    await restartApp()
+    // 给服务端 300ms 时间退出，再尝试 reload
+    setTimeout(() => {
+      // 加 cache buster 防止浏览器从 disk cache 命中旧 SPA
+      window.location.reload()
+    }, 600)
+  } catch (err: any) {
+    ElMessage({
+      type: 'warning',
+      message: $t('@F13B4:重启失败 {error}', { error: err?.message || '' })
+    })
+  }
 }
 
 onMounted(() => {
@@ -158,7 +187,7 @@ onMounted(() => {
         target="_blank"
         rel="noopener noreferrer"
         class="version-link"
-      >v{{ version }}</a>
+      >v{{ displayVersion }}</a>
     </el-tooltip>
 
     <el-tooltip
@@ -181,6 +210,7 @@ onMounted(() => {
       :logs="upgradeLogs"
       :status="upgradeStatus"
       @retry="handleUpgrade"
+      @restart="handleRestart"
     />
   </div>
 </template>
