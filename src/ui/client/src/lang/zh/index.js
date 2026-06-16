@@ -1741,6 +1741,8 @@ export default {
   '@WORKBENCH:保存': '保存',
   '@WORKBENCH:编辑任务': '编辑任务',
   '@WORKBENCH:标题': '标题',
+  '@WORKBENCH:标题（可选）': '标题（可选）',
+  '@WORKBENCH:不填则自动命名为「无标题」，稍后可在任务列表里改名': '不填则自动命名为「无标题」，稍后可在任务列表里改名',
   '@WORKBENCH:描述': '描述',
   '@WORKBENCH:不绑定': '不绑定',
   '@WORKBENCH:任务类型': '任务类型',
