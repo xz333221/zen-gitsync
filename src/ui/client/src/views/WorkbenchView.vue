@@ -2583,25 +2583,33 @@ function humanSize(n: number): string {
 }
 
 /* ── 执行主体：左右两列布局 ── */
+/*
+  关键:用 CSS Grid 替代 flex row。
+  - flex item 的 height: 100% 在父级也是 flex item 时会 fallback 到 auto(父级没有显式 height)
+  - grid 子项默认 align-self: stretch + justify-self: stretch,自动撑满 cell 高度
+  - 不需要 height: 100% 链,flex chain 也能正常传递 max-height 给子级
+  - 简单任务时切到 1fr 单列,详情面板占满
+*/
 .wb-execution-body {
   flex: 1;
   min-height: 0;
-  display: flex;
-  /* 极简化：去掉外层 border + border-radius，子区用 bg-subtle 区隔 */
+  display: grid;
+  grid-template-columns: 260px 1fr;
   border: none;
   border-radius: 0;
   overflow: hidden;
   gap: 16px;
 }
-/* 简单任务：没有左列，让详情面板撑满，不留多余 gap */
 .wb-execution-body--simple {
+  grid-template-columns: 1fr;
   gap: 0;
 }
 
 /* 左列：子任务列表（固定宽度，内部滚动） */
 .wb-exec-list {
-  width: 260px;
-  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   display: flex;
@@ -2816,17 +2824,16 @@ function humanSize(n: number): string {
   text-decoration-thickness: 1px;
 }
 
-/* 右列：详情面板（充满剩余宽度，内部滚动） */
+/* 右列：详情面板（充满剩余宽度，内部滚动交给 JobLogDetails 的 wb-log-pre） */
 .wb-exec-detail {
-  flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  /* 极简化：去掉固定 padding，让头部/输入框/日志三段自然垂直堆叠 */
-  padding: 4px 4px 8px;
+  /* 改 overflow-y: auto → hidden:让子级 wb-log-pre 拿到 max-height 约束,自身不抢滚动 */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  padding: 4px 4px 8px;
   background: transparent;
 }
 /* 详情面板头部：标题输入 + dirty 标记 */

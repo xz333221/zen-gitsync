@@ -5,17 +5,23 @@
   - 自带 copy / displayOutput 截断（不依赖父组件），彻底解耦
   - 替换原 WorkbenchView L1252-1335 的 <details> 块
 -->
+<!--
+  注:本组件历史上用 <details> 元素,但 <details> 子级的 div 不能正确继承
+  height: 100% / min-height: 100% / position: absolute top:0 bottom:0,
+  导致模型返回区无法用 flex 收敛到父级剩余高度(踩过的真实坑)。
+  改用普通 <div> + 自定义 summary 按钮(@click toggle body 显隐),
+  让外层 div 真正拿到父级高度,内部 flex column 正常收敛。
+-->
 <template>
-  <details
+  <div
     class="wb-log-details"
     :class="{
       'is-running': isActive,
       'is-pending': job.status === 'pending',
       'is-finished': isFinished
     }"
-    :open="autoOpen"
   >
-    <summary class="wb-log-summary">
+    <div class="wb-log-summary" @click="toggleOpen" role="button" :aria-expanded="!isCollapsed">
       <span class="wb-log-summary__left">
         <span v-if="job.status === 'running'" class="wb-log-summary__status wb-log-summary__status--running">
           <span class="wb-log-summary__label">{{ $t('@WORKBENCH:正在执行…') }}</span>
@@ -57,8 +63,12 @@
           ⧉ {{ $t('@WORKBENCH:复制全部') }}
         </button>
       </span>
-    </summary>
+    </div>
 
+    <!--
+      body 容器:真正的 flex column 布局。让 wb-log-pre flex: 1 收敛到剩余空间。
+    -->
+    <div v-show="!isCollapsed" class="wb-log-details__body">
     <!-- 用户提示词 -->
     <!--
       展开策略:默认一直展开(用户提示词是输入,展开方便回看),
@@ -111,7 +121,7 @@
         </span>
         <button
           type="button"
-          class="wb-log-copy wb-log-copy--sm"
+          class="wb-log-copy wb-copy--sm"
           :title="$t('@WORKBENCH:复制思考内容')"
           @click.stop="copyField('thinking')"
         >
@@ -161,7 +171,7 @@
       v-model="fullscreenOpen"
       :title="$t('@WORKBENCH:模型返回 - 全屏查看')"
       fullscreen
-      :close-on-click-modal="true"
+      :close-on-click-modal="false"
       class="wb-log-fullscreen-dialog"
       @closed="onFullscreenClosed"
     >
@@ -176,7 +186,8 @@
         <div v-else class="wb-log-fullscreen__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
       </div>
     </el-dialog>
-  </details>
+    </div><!-- /.wb-log-details__body -->
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -188,9 +199,17 @@ import type { Job } from '@/types/workbench'
 
 const props = defineProps<{ job: Job }>()
 
+/* 折叠状态:与历史上 <details> open 的语义对齐。
+   本组件历史上用 <details> 元素,但 <details> 子级 div 不接受 height: 100% /
+   min-height: 100% / position: absolute 撑满,导致 flex 子级无法收敛。
+   改用普通 div + v-show 模拟 <details> 行为,外层 div 拿到显式 height。 */
+const isCollapsed = ref(false)
+function toggleOpen() { isCollapsed.value = !isCollapsed.value }
+
 // 展开策略：默认展开。用户希望「任务执行时日志需要能直接看到」，
 // 不再仅在 running/pending 状态自动展开。运行结束/异常后日志仍可直接查阅。
-const autoOpen = computed(() => true)
+/* 历史保留:autoOpen 表达式改由 isCollapsed 控制显隐(见模板 v-show="!isCollapsed")。
+   函数体删除,只留注释占位避免外部 import 误用。 */
 
 const MAX_LOG_DISPLAY = 64 * 1024
 function displayOutput(): string {
@@ -415,7 +434,7 @@ watch(() => props.job.status, (s, prev) => {
 watch(
   () => (props.job.output || '').length,
   async () => {
-    if (!autoOpen.value) return
+    if (isCollapsed.value) return
     await nextTick()
     if (preRef.value) preRef.value.scrollTop = preRef.value.scrollHeight
   }
@@ -454,14 +473,26 @@ function onFullscreenClosed() {
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-code);
   overflow: hidden;
-  /* 撑满父容器剩余高度,让模型返回区填满 */
+  /* 撑满父容器剩余高度,让模型返回区填满。
+     历史上用 <details> 元素 + display: flex,Chromium 不能正确收缩 flex 子级;
+     改用普通 div + flex column 后正常工作。 */
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
+  height: 100%;
+}
+
+/* body 容器:summary 之外的所有内容在这里 flex column 布局,
+   wb-log-pre flex: 1 收敛到剩余空间。 */
+.wb-log-details__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
 }
 .wb-log-summary {
-  list-style: none;
   cursor: pointer;
   padding: 6px 10px;
   font-size: 12px;
@@ -471,8 +502,8 @@ function onFullscreenClosed() {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-shrink: 0;
 }
-.wb-log-summary::-webkit-details-marker { display: none; }
 .wb-log-summary:hover { background: var(--tint-primary-06); }
 .wb-log-summary__left {
   flex: 1;
@@ -548,8 +579,8 @@ function onFullscreenClosed() {
 .wb-log-pre {
   margin: 0;
   padding: 8px 10px;
-  /* 撑满 details 内部剩余高度,而不是硬编码 600px */
-  flex: 1 1 auto;
+  /* flex: 1 1 0% 在 flex column 父里收敛到剩余空间,让模型返回区填满。 */
+  flex: 1 1 0%;
   min-height: 0;
   overflow: auto;
   background: var(--bg-code);
@@ -559,6 +590,18 @@ function onFullscreenClosed() {
   font-size: 12px;
   line-height: 1.55;
   color: var(--text-primary);
+}
+/* 强制覆盖 markstream-vue 默认的 content-visibility: auto
+   content-visibility: auto 会让浏览器对未滚到视口的部分用 contain-intrinsic-size
+   假高度(800x600)渲染,导致 flex 父容器拿不到真实内容高度,
+   子级 wb-log-pre 的 overflow: auto 永远不触发滚动。
+   改为 visible 后浏览器立即按真实尺寸布局,父级 max-height 约束生效。
+   注:.markdown-renderer 节点本身就是 .wb-log-pre__render(class 同时存在),
+   所以直接在 wb-log-pre__render 上覆盖即可,不用 :deep 找后代。 */
+.wb-log-pre__render,
+.wb-log-pre__render.markdown-renderer {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
 }
 .wb-log-pre__render :deep(pre) {
   margin: 6px 0;
