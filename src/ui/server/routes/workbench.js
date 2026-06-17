@@ -551,16 +551,22 @@ async function callLlmStream(model, input, onDelta, opts = {}) {
 // 任一步成功就返回 parsed，全部失败时返回最后一次 JSON.parse 的错误，
 // 用 parseStage 告知前端"模型输出哪一步崩了"，并把原始 raw 一并回传。
 function parseSubtaskJson(content) {
-  const src = String(content || '');
+  let src = String(content || '');
   if (!src.trim()) {
     return { parsed: null, parseError: '模型未返回任何内容', parseStage: 'empty' };
   }
 
+  // 预处理：剥离 deepseek-r1 / QwQ 等模型在 content 前输出的 <think>...</think> 思考块。
+  // 思考块通常跨行、可能多段，也可能自闭合 <think/>。剥离后下面的 JSON 扫描
+  // 才能命中真正的 subtasks JSON 块，避免贪婪正则把整段 think 包进 candidates。
+  src = src.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<think\s*\/>/gi, '').trim();
+
   const candidates = [];
   const fenced = src.match(/```json\s*([\s\S]*?)```/i) || src.match(/```\s*([\s\S]*?)```/);
   if (fenced) candidates.push(fenced[1]);
-  const bracePair = src.match(/\{[\s\S]*\}/);
-  if (bracePair) candidates.push(bracePair[0]);
+  // 平衡花括号扫描：避免贪婪正则把多段 JSON / 散落的 { } 全包进去
+  const balancedFirst = extractBalancedJson(src);
+  if (balancedFirst) candidates.push(balancedFirst);
   // 兜底：整段当 JSON 试
   candidates.push(src);
 

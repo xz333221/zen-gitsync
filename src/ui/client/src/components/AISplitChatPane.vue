@@ -16,7 +16,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleClose, Promotion, ChatLineRound, Refresh, Clock } from '@element-plus/icons-vue'
+import { CircleClose, Promotion, ChatLineRound, Refresh, Clock, Loading } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import type { SplitSubtask } from './AISplitDialog.vue'
 
@@ -67,6 +67,16 @@ let runNonce = 0
 const streamEl = ref<HTMLElement | null>(null)
 
 const isStreaming = computed(() => phase.value === 'streaming')
+
+// 顶部 streaming banner 文案:根据当前 assistant turn 累积状态动态切换
+const streamingHint = computed(() => {
+  if (!isStreaming.value) return ''
+  const last = [...turns.value].reverse().find(t => t.role === 'assistant')
+  if (!last) return $t('@WORKBENCH:AI 正在思考…')
+  if (last.content) return $t('@WORKBENCH:AI 正在输出…')
+  if (last.thinking) return $t('@WORKBENCH:AI 正在思考… (已思考 {n} 字)', { n: last.thinking.length })
+  return $t('@WORKBENCH:AI 正在思考…')
+})
 
 // ── 历史抽屉 ──────────────────────────────────────────────────────────
 const historyDrawerVisible = ref(false)
@@ -338,7 +348,13 @@ if (props.initialSessionId) {
   <div class="ai-chat-pane">
     <!-- 中间:消息流 -->
     <div ref="streamEl" class="ai-chat-stream">
-      <div v-if="turns.length === 0" class="ai-chat-empty">
+      <!-- 顶部 streaming 全局提示:菊花 + 已累积字符数,即使 thinking 折叠也始终可见 -->
+      <div v-if="isStreaming" class="ai-chat-streaming-banner">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>{{ streamingHint }}</span>
+      </div>
+
+      <div v-if="turns.length === 0 && !isStreaming" class="ai-chat-empty">
         <el-icon :size="32" color="#909399"><ChatLineRound /></el-icon>
         <div class="ai-chat-empty__title">{{ $t('@WORKBENCH:开始与 AI 对话拆分') }}</div>
         <div class="ai-chat-empty__desc">
@@ -365,7 +381,10 @@ if (props.initialSessionId) {
             </el-collapse-item>
           </el-collapse>
 
-          <!-- 解析结果 -->
+          <!-- AI 正文:始终展示(自然语言回复或 JSON 都在这显示) -->
+          <div v-if="t.content" class="ai-chat-content-text">{{ t.content }}</div>
+
+          <!-- 解析结果(仅在含 sub 时) -->
           <div v-if="t.subtasks && t.subtasks.length > 0" class="ai-chat-subtasks">
             <div class="ai-chat-subtasks__head">
               <span class="ai-chat-subtasks__count">
@@ -383,21 +402,14 @@ if (props.initialSessionId) {
             </ul>
           </div>
 
-          <!-- 解析失败提示 -->
-          <el-alert
-            v-else-if="t.parseError"
-            type="warning"
-            show-icon
-            :closable="false"
-            class="ai-chat-parse-error"
-          >
-            <template #title>
-              {{ $t('@WORKBENCH:本轮未识别到子任务') }}
-            </template>
-            <div class="ai-chat-parse-error__detail">{{ t.parseError }}</div>
-          </el-alert>
+          <!-- 解析失败时,把错误详情折叠在「诊断」里(不再用顶部 alert 吓用户) -->
+          <el-collapse v-if="t.parseError && (!t.subtasks || t.subtasks.length === 0)" class="ai-chat-collapse">
+            <el-collapse-item :title="$t('@WORKBENCH:查看解析详情')" name="diag">
+              <div class="ai-chat-parse-error__detail">{{ t.parseError }}</div>
+            </el-collapse-item>
+          </el-collapse>
 
-          <!-- 原始 LLM 输出 -->
+          <!-- 原始 LLM 输出(仅当与 content 不同时) -->
           <el-collapse v-if="t.raw && t.raw !== t.content" class="ai-chat-collapse">
             <el-collapse-item :title="$t('@WORKBENCH:查看原始 LLM 输出')" name="raw">
               <pre class="ai-chat-pre">{{ t.raw }}</pre>
@@ -414,12 +426,6 @@ if (props.initialSessionId) {
             >
               {{ $t('@WORKBENCH:应用本轮') }} ({{ t.subtasks.length }})
             </el-button>
-          </div>
-
-          <!-- 流式中的占位提示 -->
-          <div v-if="!t.content && !t.thinking && isStreaming" class="ai-chat-streaming-hint">
-            <el-icon class="is-loading"><Loading /></el-icon>
-            <span>{{ $t('@WORKBENCH:AI 正在思考…') }}</span>
           </div>
         </div>
       </div>
@@ -590,6 +596,21 @@ if (props.initialSessionId) {
   }
 }
 
+.ai-chat-content-text {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #303133;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 4px 0 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 .ai-chat-pre {
   margin: 0;
   padding: 8px 10px;
@@ -691,6 +712,21 @@ if (props.initialSessionId) {
   justify-content: flex-end;
 }
 
+.ai-chat-streaming-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--tint-primary-06, rgba(64, 158, 255, 0.08));
+  border-left: 2px solid var(--el-color-primary);
+  border-radius: 4px;
+  color: var(--el-color-primary);
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-bottom: 4px;
+}
 .ai-chat-streaming-hint {
   display: flex;
   align-items: center;
