@@ -8,18 +8,39 @@
 <template>
   <details
     class="wb-log-details"
-    :class="{ 'is-running': isActive, 'is-pending': job.status === 'pending' }"
+    :class="{
+      'is-running': isActive,
+      'is-pending': job.status === 'pending',
+      'is-finished': isFinished
+    }"
     :open="autoOpen"
   >
     <summary class="wb-log-summary">
       <span class="wb-log-summary__left">
-        <span v-if="job.status === 'running'" class="wb-log-summary__status">
-          <span class="wb-log-pulse" aria-hidden="true"></span>
-          <span class="wb-log-summary__status-text">{{ $t('@WORKBENCH:正在执行…') }}</span>
+        <span v-if="job.status === 'running'" class="wb-log-summary__status wb-log-summary__status--running">
+          <span class="wb-log-summary__label">{{ $t('@WORKBENCH:正在执行…') }}</span>
+          <span class="wb-log-dots" aria-hidden="true">
+            <span class="wb-log-dots__dot"></span>
+            <span class="wb-log-dots__dot"></span>
+            <span class="wb-log-dots__dot"></span>
+          </span>
+          <span v-if="elapsedLabel" class="wb-log-summary__elapsed">{{ elapsedLabel }}</span>
         </span>
-        <span v-else-if="job.status === 'pending'" class="wb-log-summary__status">
-          <span class="wb-log-pulse wb-log-pulse--pending" aria-hidden="true"></span>
-          <span class="wb-log-summary__status-text">{{ $t('@WORKBENCH:排队中…') }}</span>
+        <span v-else-if="job.status === 'pending'" class="wb-log-summary__status wb-log-summary__status--pending">
+          <span class="wb-log-summary__label">{{ $t('@WORKBENCH:排队中…') }}</span>
+          <span class="wb-log-dots" aria-hidden="true">
+            <span class="wb-log-dots__dot"></span>
+            <span class="wb-log-dots__dot"></span>
+            <span class="wb-log-dots__dot"></span>
+          </span>
+        </span>
+        <span v-else-if="isFinished" class="wb-log-summary__status wb-log-summary__status--done">
+          <span v-if="job.status === 'error'" class="wb-log-summary__icon">✗</span>
+          <span v-else class="wb-log-summary__icon">✓</span>
+          <span class="wb-log-summary__label">
+            {{ job.status === 'error' ? $t('@WORKBENCH:执行出错') : $t('@WORKBENCH:执行完成') }}
+          </span>
+          <span v-if="elapsedLabel" class="wb-log-summary__elapsed">{{ elapsedLabel }}</span>
         </span>
         <span v-else>{{ $t('@WORKBENCH:查看执行日志') }}</span>
       </span>
@@ -39,7 +60,16 @@
     </summary>
 
     <!-- 用户提示词 -->
-    <details v-if="job.prompt" class="wb-log-section">
+    <!--
+      展开策略:默认一直展开(用户提示词是输入,展开方便回看),
+      用户可手动合上,尊重用户选择。
+    -->
+    <details
+      v-if="job.prompt"
+      class="wb-log-section"
+      :open="promptOpen"
+      @toggle="onPromptToggle"
+    >
       <summary class="wb-log-section__summary">
         <span class="wb-log-section__tag wb-log-section__tag--user">
           {{ $t('@WORKBENCH:用户提示词') }}
@@ -60,7 +90,18 @@
     </details>
 
     <!-- Claude 思考过程 -->
-    <details v-if="job.thinking" class="wb-log-section">
+    <!--
+      展开策略:
+      - 任务运行中(thinking 已有内容) → 展开,方便用户实时看到 AI 思考过程
+      - 任务结束(done/error/cancelled) → 合上,让出屏幕给"模型返回"区
+      - 用户手动展开/合上后,本次会话内尊重用户的选择(不强行覆盖)
+    -->
+    <details
+      v-if="job.thinking"
+      class="wb-log-section"
+      :open="thinkingOpen"
+      @toggle="onThinkingToggle"
+    >
       <summary class="wb-log-section__summary">
         <span class="wb-log-section__tag wb-log-section__tag--think">
           {{ $t('@WORKBENCH:Claude 思考') }}
@@ -107,9 +148,9 @@
     <div ref="preRef" class="wb-log-pre">
       <MarkdownRender
         v-if="hasOutput"
-        :content="outputText"
-        :final="isFinished"
-        :typewriter="streamAnimating"
+        :content="displayText"
+        :final="isFinalReached"
+        :typewriter="false"
         class="wb-log-pre__render"
       />
       <div v-else class="wb-log-pre__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
@@ -127,9 +168,9 @@
       <div ref="fullscreenContainerRef" class="wb-log-fullscreen">
         <MarkdownRender
           v-if="hasOutput"
-          :content="fullscreenText"
-          :final="isFinished"
-          :typewriter="streamAnimating"
+          :content="fullscreenDisplayText"
+          :final="isFinalReached"
+          :typewriter="false"
           class="wb-log-fullscreen__render"
         />
         <div v-else class="wb-log-fullscreen__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
@@ -139,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { MarkdownRender } from 'markstream-vue'
 import { $t } from '@/lang/static'
@@ -208,22 +249,169 @@ async function copyAll() {
 }
 
 // MarkdownRender 的输入:
-// - outputText:主视图(走 displayOutput 截断策略,内容过长保留尾部 64KB)
-// - isFinished:流是否结束(done/error/stopped),结束信号告诉 markstream 完成增量
-// - streamAnimating:运行中启用 typewriter 逐字符动画;已结束的 job 进来直接全量展示,不从头动画
+// - outputText:模型返回完整文本(走 displayOutput 截断策略)
+// - isActive:status 是 running/pending,标识任务在流式生成
+// - isFinished:流是否结束(done/error/cancelled),决定是否启用 typewriter
+// - visibleLength:自己控制的 typewriter 进度。markstream-vue 自带的 typewriter
+//   在 catch-up 模式下会瞬间刷出,看不到逐字效果,所以这里改成:
+//   1) visibleLength 跟踪 outputText 长度,以 ~50 CPS 速度追上
+//   2) 用 displayText = outputText.slice(0, visibleLength) 喂给 markstream
+//   3) 已完成 job 直接 visibleLength = full(全量展示,不动画)
 const outputText = computed(() => displayOutput())
 const isActive = computed(() => props.job.status === 'running' || props.job.status === 'pending')
 const isFinished = computed(() => {
   const s = props.job.status
   return s === 'done' || s === 'error' || s === 'cancelled'
 })
-const streamAnimating = computed(() => {
-  const s = props.job.status
-  return s === 'running' || s === 'pending'
+
+// 自定义 typewriter:visibleLength 从 0 累加到 outputText.length
+const visibleLength = ref(0)
+let typewriterTimer: ReturnType<typeof setInterval> | null = null
+const TYPEWRITER_CPS = 60 // 字符/秒,可调
+
+function startTypewriter() {
+  stopTypewriter()
+  typewriterTimer = setInterval(() => {
+    const target = outputText.value.length
+    if (target === 0) {
+      visibleLength.value = 0
+      stopTypewriter()
+      return
+    }
+    // 按 TYPEWRITER_CPS 字符/秒的速度累加
+    const step = Math.max(1, Math.ceil(TYPEWRITER_CPS / 30))
+    if (visibleLength.value < target) {
+      visibleLength.value = Math.min(target, visibleLength.value + step)
+    }
+    if (visibleLength.value >= target) {
+      // 追上了,停定时器(但 watch 会在下次 output 增长时重新启动)
+      stopTypewriter()
+    }
+  }, 33) // 约 30fps
+}
+
+function stopTypewriter() {
+  if (typewriterTimer) {
+    clearInterval(typewriterTimer)
+    typewriterTimer = null
+  }
+}
+
+// watch output 长度变化:
+// - 已完成 job:visibleLength 直接 = full(全量,无动画)
+// - running/pending:启动累加器
+watch(
+  () => [props.job.output?.length || 0, props.job.status] as const,
+  ([len, status]) => {
+    if (status === 'done' || status === 'error' || status === 'cancelled') {
+      // 任务完成 → 直接全量展示
+      stopTypewriter()
+      visibleLength.value = len
+    } else {
+      // 任务在跑:启动累加器(如果还没追上)
+      if (visibleLength.value < len && !typewriterTimer) {
+        startTypewriter()
+      }
+    }
+  },
+  { immediate: true }
+)
+
+// 组件卸载时清理定时器
+onUnmounted(() => stopTypewriter())
+
+// displayText:截断到 visibleLength,喂给 markstream-vue
+const displayText = computed(() => outputText.value.slice(0, visibleLength.value))
+const fullscreenDisplayText = computed(() => (props.job.output || '').slice(0, visibleLength.value))
+// :final 仅在显示追上时传 true,避免 markstream 提前 end-streaming
+const isFinalReached = computed(() => visibleLength.value >= (props.job.output || '').length)
+
+// 耗时统计:从 running 起累计,完成时定格
+const startedAt = ref<number | null>(null)
+watch(() => props.job.status, (s, prev) => {
+  if (s === 'running' && prev !== 'running') {
+    startedAt.value = startedAt.value ?? Date.now()
+  }
+})
+const elapsedLabel = computed(() => {
+  if (!startedAt.value) return ''
+  const startMs = startedAt.value
+  const endMs = props.job.endedAt
+    ? new Date(props.job.endedAt).getTime()
+    : Date.now()
+  const sec = Math.max(0, Math.floor((endMs - startMs) / 1000))
+  if (sec < 60) return `${sec}s`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m}分${s.toString().padStart(2, '0')}秒`
 })
 
 // 流式追加时自动滚到底：仅当面板展开时滚动
 const preRef = ref<HTMLElement | null>(null)
+
+/**
+ * 思考区自动展开/合上:
+ * - 默认按 status 自动控制(运行中有内容时展开,完成后合上)
+ * - 用户手动点 summary 改 open 后,本组件生命周期内不再覆盖(尊重用户)
+ * - job 状态从未活跃 → 活跃(新一轮开始)时,清掉用户覆盖标记
+ *
+ * 实现要点:`<details :open="thinkingOpen">` 的 open 是个 prop,
+ * Vue 不会"双向同步"用户点击造成的状态变化(@toggle 事件能拿到事件后状态),
+ * 所以需要在 @toggle 里手动同步 + 设标记
+ */
+let thinkingUserOverride = false
+const thinkingOpen = ref(false)
+
+function recomputeThinkingOpen() {
+  if (thinkingUserOverride) return
+  const s = props.job.status
+  if (s === 'running' || s === 'pending') {
+    thinkingOpen.value = (props.job.thinking || '').length > 0
+  } else {
+    thinkingOpen.value = false
+  }
+}
+
+function onThinkingToggle(e: Event) {
+  const el = e.target as HTMLDetailsElement
+  thinkingUserOverride = true
+  thinkingOpen.value = el.open
+}
+
+// 任务重新进入活跃态 → 清掉用户覆盖
+watch(() => props.job.status, (s, prev) => {
+  const wasActive = prev === 'running' || prev === 'pending'
+  const isActive = s === 'running' || s === 'pending'
+  if (!wasActive && isActive) {
+    thinkingUserOverride = false
+  }
+  recomputeThinkingOpen()
+})
+
+// thinking 长度变化 → 重新计算(运行中长度 > 0 就展开)
+watch(() => (props.job.thinking || '').length, () => recomputeThinkingOpen(), { immediate: true })
+
+// 用户提示词区:默认展开;用户可手动合上,尊重用户选择(新一轮开始时重置)
+let promptUserOverride = false
+const promptOpen = ref(true)
+function onPromptToggle(e: Event) {
+  const el = e.target as HTMLDetailsElement
+  promptUserOverride = true
+  promptOpen.value = el.open
+}
+watch(() => props.job.status, (s, prev) => {
+  const wasActive = prev === 'running' || prev === 'pending'
+  const isActive = s === 'running' || s === 'pending'
+  if (!wasActive && isActive) {
+    // 新一轮开始 → 重置用户覆盖 + 重新展开
+    promptUserOverride = false
+    promptOpen.value = true
+  } else if (!promptUserOverride) {
+    promptOpen.value = true
+  }
+  // 用户覆盖后保持用户的选择
+})
+
 watch(
   () => (props.job.output || '').length,
   async () => {
@@ -235,7 +423,6 @@ watch(
 
 // 全屏查看：dialog 打开时显示完整 output(无截断),关闭后回到 inline 视图
 const fullscreenOpen = ref(false)
-const fullscreenText = computed(() => props.job.output || $t('@WORKBENCH:（暂无输出）'))
 const hasOutput = computed(() => !!(props.job.output && props.job.output.length))
 const fullscreenContainerRef = ref<HTMLElement | null>(null)
 
@@ -483,74 +670,94 @@ function onFullscreenClosed() {
   font-style: italic;
 }
 
-/* ── 运行中 / 排队中 视觉指示 ──────────────────────────────────────── */
+/* ── 运行中 / 排队中 / 完成 视觉指示 ──────────────────────────────────────── */
 .wb-log-summary__status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-weight: 600;
+  font-size: 12px;
+}
+.wb-log-summary__status--running {
   color: var(--color-warning-dark, #b45309);
 }
+.wb-log-summary__status--pending {
+  color: var(--color-primary);
+}
+.wb-log-summary__status--done {
+  color: var(--color-success-dark, #15803d);
+}
+.wb-log-summary__icon {
+  font-size: 13px;
+  line-height: 1;
+}
+.wb-log-summary__elapsed {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+/* 三点跳动动画:左→右 错相位 1.4s 循环 */
+.wb-log-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: -2px;
+}
+.wb-log-dots__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: wb-log-dot-bounce 1.4s ease-in-out infinite;
+}
+.wb-log-dots__dot:nth-child(2) { animation-delay: 0.2s; }
+.wb-log-dots__dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* 状态行背景:running 暖色,pending 主色,done 绿色 */
 .wb-log-details.is-running .wb-log-summary {
   background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, transparent);
-  animation: wb-log-pulse-bg 2s ease-in-out infinite;
 }
 .wb-log-details.is-pending .wb-log-summary {
   background: color-mix(in srgb, var(--color-primary) 6%, transparent);
 }
-.wb-log-pulse {
-  position: relative;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--color-warning, #f59e0b);
-  flex-shrink: 0;
+.wb-log-details.is-finished .wb-log-summary {
+  background: color-mix(in srgb, var(--color-success, #22c55e) 6%, transparent);
 }
-.wb-log-pulse::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  background: var(--color-warning, #f59e0b);
-  opacity: 0.6;
-  animation: wb-log-pulse-ring 1.6s ease-out infinite;
-}
-.wb-log-pulse--pending {
-  background: var(--color-primary);
-}
-.wb-log-pulse--pending::after {
-  background: var(--color-primary);
-  animation-duration: 2.4s;
-}
-/* 模型返回区:运行中加微弱的脉冲左边框,提示“正在这里输出” */
+
+/* 模型返回区左侧条带颜色,跟状态行对应 */
 .wb-log-details.is-running .wb-log-pre {
   border-left: 2px solid var(--color-warning, #f59e0b);
-  animation: wb-log-pulse-border 2s ease-in-out infinite;
 }
 .wb-log-details.is-pending .wb-log-pre {
   border-left: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
 }
+.wb-log-details.is-finished .wb-log-pre {
+  border-left: 2px solid color-mix(in srgb, var(--color-success, #22c55e) 60%, transparent);
+}
 
-@keyframes wb-log-pulse-bg {
-  0%, 100% { background: color-mix(in srgb, var(--color-warning, #f59e0b) 6%, transparent); }
-  50% { background: color-mix(in srgb, var(--color-warning, #f59e0b) 16%, transparent); }
+/* 完成时整条详情面板闪一下绿光,持续 1.5s 后渐隐,吸引注意力 */
+.wb-log-details.is-finished {
+  animation: wb-log-finished-flash 1.5s ease-out;
 }
-@keyframes wb-log-pulse-ring {
-  0% { transform: scale(0.6); opacity: 0.7; }
-  100% { transform: scale(2.2); opacity: 0; }
+
+@keyframes wb-log-dot-bounce {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
 }
-@keyframes wb-log-pulse-border {
-  0%, 100% { border-left-color: color-mix(in srgb, var(--color-warning, #f59e0b) 50%, transparent); }
-  50% { border-left-color: var(--color-warning, #f59e0b); }
+@keyframes wb-log-finished-flash {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success, #22c55e) 50%, transparent); }
+  60% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success, #22c55e) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
+
 @media (prefers-reduced-motion: reduce) {
-  .wb-log-details.is-running .wb-log-summary,
-  .wb-log-pulse::after,
-  .wb-log-details.is-running .wb-log-pre {
+  .wb-log-dots__dot,
+  .wb-log-details.is-finished {
     animation: none;
-  }
-  .wb-log-details.is-running .wb-log-summary {
-    background: color-mix(in srgb, var(--color-warning, #f59e0b) 10%, transparent);
   }
 }
 </style>

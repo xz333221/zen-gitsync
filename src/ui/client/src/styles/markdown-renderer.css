@@ -1,0 +1,138 @@
+/*
+ * markstream-vue 主题样式。
+ * 引入 markstream-vue 默认 css(包含代码块/表格/列表/标题/链接 等基础排版),
+ * 然后用深色模式 class(.dark)做主题适配,并针对工作台背景做覆盖变量。
+ *
+ * 注意:不要把样式 scoped 到某个组件 — markstream-vue 内部用大量 :deep 选择器,
+ * 我们这里负责"主题层",真正的样式微调写在 JobLogDetails.vue 的 scoped 段里。
+ */
+
+/* 基础主题(代码块高亮、表格、列表/标题/链接 等基础排版) */
+@import 'markstream-vue/index.css';
+
+/* 工作台内的 markdown 容器,贴合背景 */
+.wb-log-pre .markdown-renderer,
+.wb-log-fullscreen__render .markdown-renderer {
+  color: var(--text-primary);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* 标题分级留白,跟现有工作台排版一致 */
+.wb-log-pre .markdown-renderer h1,
+.wb-log-pre .markdown-renderer h2,
+.wb-log-pre .markdown-renderer h3,
+.wb-log-pre .markdown-renderer h4 {
+  margin: 14px 0 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+.wb-log-pre .markdown-renderer h1 { font-size: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--border-color); }
+.wb-log-pre .markdown-renderer h2 { font-size: 16px; }
+.wb-log-pre .markdown-renderer h3 { font-size: 14px; }
+.wb-log-pre .markdown-renderer h4 { font-size: 13px; color: var(--text-secondary); }
+.wb-log-pre .markdown-renderer h1:first-child,
+.wb-log-pre .markdown-renderer h2:first-child { margin-top: 0; }
+
+/* 段落 */
+.wb-log-pre .markdown-renderer p {
+  margin: 6px 0;
+  color: var(--text-primary);
+}
+
+/* 列表:更紧凑 */
+.wb-log-pre .markdown-renderer ul,
+.wb-log-pre .markdown-renderer ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+.wb-log-pre .markdown-renderer li {
+  margin: 2px 0;
+}
+.wb-log-pre .markdown-renderer li::marker {
+  color: var(--text-tertiary);
+}
+
+/* 行内 code */
+.wb-log-pre .markdown-renderer code:not(pre code) {
+  padding: 1px 5px;
+  font-size: 0.92em;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary-dark, #c026d3);
+  border-radius: 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* 链接 */
+.wb-log-pre .markdown-renderer a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  text-underline-offset: 2px;
+}
+.wb-log-pre .markdown-renderer a:hover {
+  text-decoration-color: var(--color-primary);
+}
+
+/* 引用 block */
+.wb-log-pre .markdown-renderer blockquote {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
+  color: var(--text-secondary);
+  border-radius: 0 4px 4px 0;
+}
+
+/* 表格 */
+.wb-log-pre .markdown-renderer table {
+  width: auto;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.wb-log-pre .markdown-renderer th,
+.wb-log-pre .markdown-renderer td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  text-align: left;
+}
+.wb-log-pre .markdown-renderer th:last-child,
+.wb-log-pre .markdown-renderer td:last-child { border-right: none; }
+.wb-log-pre .markdown-renderer tr:last-child td { border-bottom: none; }
+.wb-log-pre .markdown-renderer th {
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-container));
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* 水平分割线 */
+.wb-log-pre .markdown-renderer hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 12px 0;
+}
+
+/* code-block 容器:markstream-vue 自带 .code-block-container 样式,
+ * 这里只覆写背景/边框让它跟工作台协调 */
+.wb-log-pre .code-block-container,
+.wb-log-fullscreen__render .code-block-container {
+  border-radius: 6px;
+  margin: 8px 0;
+  border: 1px solid var(--border-color);
+}
+
+/* 全屏模式下字号略大 */
+.wb-log-fullscreen__render .markdown-renderer {
+  font-size: 14px;
+  line-height: 1.75;
+}
+.wb-log-fullscreen__render .markdown-renderer h1 { font-size: 22px; }
+.wb-log-fullscreen__render .markdown-renderer h2 { font-size: 19px; }
+.wb-log-fullscreen__render .markdown-renderer h3 { font-size: 16px; }

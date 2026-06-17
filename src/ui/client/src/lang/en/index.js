@@ -1871,6 +1871,7 @@ export default {
   '@WORKBENCH:（AI 内部思考过程，模型未直接返回。可切换到「原始结果」查看 LLM 完整输出。）': '(AI internal thinking not directly returned. Switch to "Raw result" to see the full LLM output.)',
   '@WORKBENCH:（暂无输出）': '(no output yet)',
   '@WORKBENCH:执行出错': 'Execution error',
+  '@WORKBENCH:执行完成': 'Execution complete',
   '@WORKBENCH:名称和内容不能为空': 'Name and content cannot be empty',
   '@WORKBENCH:已保存': 'Saved',
   '@WORKBENCH:保存失败': 'Save failed',
