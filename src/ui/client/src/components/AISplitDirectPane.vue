@@ -16,7 +16,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { InfoFilled, Loading, CircleClose, Promotion } from '@element-plus/icons-vue'
+import { Loading, CircleClose, Promotion } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import type { SplitSubtask } from './AISplitDialog.vue'
 
@@ -27,15 +27,11 @@ const props = defineProps<{
   desc: string
   taskId?: string
   promptId?: string | null
-  existingSubtaskCount?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'confirm', subtasks: SplitSubtask[]): void
 }>()
-
-const hasExisting = computed(() => (props.existingSubtaskCount ?? 0) > 0)
-const existingCount = computed(() => props.existingSubtaskCount ?? 0)
 
 // ── 状态 ─────────────────────────────────────────────────────────────────
 const phase = ref<Phase>('idle')
@@ -263,16 +259,6 @@ function cancelEditPrompt() {
 
 <template>
   <div class="ai-split-direct-pane">
-    <div v-if="hasExisting" class="ai-split-existing-banner">
-      <el-icon><InfoFilled /></el-icon>
-      <span>
-        {{
-          $t('@WORKBENCH:该任务已包含 {n} 个子任务。本次 AI 拆分结果可在「确认入库」时选择追加或替换。', {
-            n: existingCount
-          })
-        }}
-      </span>
-    </div>
     <div v-if="isRunning" class="ai-split-status">
       <el-icon class="is-loading"><Loading /></el-icon>
       <span>{{ $t('@WORKBENCH:AI 正在拆分…') }}</span>
@@ -426,24 +412,6 @@ function cancelEditPrompt() {
 .ai-split-direct-pane {
   display: flex;
   flex-direction: column;
-}
-
-.ai-split-existing-banner {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  margin-bottom: 12px;
-  border-radius: 4px;
-  background: var(--tint-warning-14, rgba(230, 162, 60, 0.1));
-  color: var(--el-color-warning);
-  font-size: 12px;
-  line-height: 1.5;
-
-  .el-icon {
-    flex-shrink: 0;
-    font-size: 14px;
-  }
 }
 
 .ai-split-status {

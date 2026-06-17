@@ -881,19 +881,11 @@ function openAiSplitDialog() {
 }
 
 /**
- * 用户在 AI 拆分对话框点"确认入库":把拆分结果写入当前 task 的 subtasks。
- * - mode = 'append' (默认): 追加到现有子任务列表
- * - mode = 'replace': 清空现有子任务后写入(用户明确选择)
- * 自动标 dirty(已有的未保存机制会捕捉)。
+ * 用户在 AI 拆分对话框点"确认入库"：把拆分结果追加到当前 task 的 subtasks 列表。
+ * 自动标 dirty（已有的未保存机制会捕捉）。
  */
-function applySplitResult(
-  newSubs: { title: string; desc: string }[],
-  mode: 'append' | 'replace' = 'append'
-) {
+function applySplitResult(newSubs: { title: string; desc: string }[]) {
   if (!selectedTask.value) return
-  if (mode === 'replace') {
-    selectedTask.value.subtasks.splice(0, selectedTask.value.subtasks.length)
-  }
   for (const s of newSubs) {
     selectedTask.value.subtasks.push({
       id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
@@ -904,10 +896,9 @@ function applySplitResult(
       attachments: []
     })
   }
-  const verb = mode === 'replace'
-    ? $t('@WORKBENCH:已替换为 {n} 个子任务，请审阅后保存', { n: newSubs.length })
-    : $t('@WORKBENCH:已生成 {n} 个子任务，请审阅后保存', { n: newSubs.length })
-  ElMessage.success(verb)
+  ElMessage.success(
+    $t('@WORKBENCH:已生成 {n} 个子任务，请审阅后保存', { n: newSubs.length })
+  )
 }
 
 async function runTask(t: Task) {
@@ -1884,7 +1875,6 @@ function humanSize(n: number): string {
       :desc="selectedTask.desc"
       :task-id="selectedTask.id"
       :prompt-id="selectedTask.promptId"
-      :existing-subtask-count="selectedTask.subtasks?.length ?? 0"
       @confirm="applySplitResult"
     />
   </div>

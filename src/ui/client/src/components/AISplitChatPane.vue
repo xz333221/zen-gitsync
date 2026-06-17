@@ -16,7 +16,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleClose, Promotion, ChatLineRound, Refresh, Clock, Loading, InfoFilled } from '@element-plus/icons-vue'
+import { CircleClose, Promotion, ChatLineRound, Refresh, Clock, Loading } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import type { SplitSubtask } from './AISplitDialog.vue'
 
@@ -49,7 +49,6 @@ const props = defineProps<{
   taskId?: string
   promptId?: string | null
   initialSessionId?: string | null
-  existingSubtaskCount?: number
 }>()
 
 const emit = defineEmits<{
@@ -347,16 +346,6 @@ if (props.initialSessionId) {
 
 <template>
   <div class="ai-chat-pane">
-    <div v-if="(props.existingSubtaskCount ?? 0) > 0" class="ai-split-existing-banner">
-      <el-icon><InfoFilled /></el-icon>
-      <span>
-        {{
-          $t('@WORKBENCH:该任务已包含 {n} 个子任务。本次 AI 拆分结果可在「确认入库」时选择追加或替换。', {
-            n: props.existingSubtaskCount
-          })
-        }}
-      </span>
-    </div>
     <!-- 中间:消息流 -->
     <div ref="streamEl" class="ai-chat-stream">
       <!-- 顶部 streaming 全局提示:菊花 + 已累积字符数,即使 thinking 折叠也始终可见 -->
@@ -528,24 +517,6 @@ if (props.initialSessionId) {
   height: 60vh;
   max-height: 60vh;
   min-height: 360px;
-}
-
-.ai-split-existing-banner {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  margin-bottom: 8px;
-  border-radius: 4px;
-  background: var(--tint-warning-14, rgba(230, 162, 60, 0.1));
-  color: var(--el-color-warning);
-  font-size: 12px;
-  line-height: 1.5;
-
-  .el-icon {
-    flex-shrink: 0;
-    font-size: 14px;
-  }
 }
 
 .ai-chat-stream {
