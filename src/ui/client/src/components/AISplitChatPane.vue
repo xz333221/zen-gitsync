@@ -511,12 +511,17 @@ if (props.initialSessionId) {
 .ai-chat-pane {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 480px;
+  // 不依赖父级 height:100%(el-dialog body 高度不固定),用 max-height 兜底。
+  // 留 220px 给输入区(3 行 textarea + 按钮 + padding)+ el-dialog title/footer/padding。
+  // 浏览器视口越小时,消息流区域越压缩,触发内部滚动而不是撑爆弹窗。
+  height: 60vh;
+  max-height: 60vh;
+  min-height: 360px;
 }
 
 .ai-chat-stream {
   flex: 1;
+  min-height: 0; // 关键:让 flex 子项可以被压缩从而触发 overflow-y
   overflow-y: auto;
   padding: 12px 4px;
   display: flex;

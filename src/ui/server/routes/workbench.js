@@ -1845,7 +1845,17 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       // 拼 system message(只在第一轮)
       if (session.messages.length === 0) {
         const userInstruction = await readSubtaskInstruction(req);
-        session.messages.push({ role: 'system', content: userInstruction });
+        // 第一轮时把任务上下文拼到 system message 末尾,让 LLM 一开始就知道要拆哪个任务。
+        // 直接拆分端点把 title/desc 拼在 user prompt 里同样达到此效果;对话模式因 user 消息
+        // 可能只是「拆一下」这种简短追问,必须把上下文放在 system 里 LLM 才不会反问。
+        // 后续轮次不再追加,避免任务变更(切换 taskId)时影响已建立的多轮上下文。
+        const ctxLines = [];
+        if (title) ctxLines.push(`【任务标题】${title}`);
+        if (desc) ctxLines.push(`【任务描述】${desc}`);
+        const sysContent = ctxLines.length
+          ? `${userInstruction}\n\n${ctxLines.join('\n')}`
+          : userInstruction;
+        session.messages.push({ role: 'system', content: sysContent });
       }
 
       // 追加 user message
