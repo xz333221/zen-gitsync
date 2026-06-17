@@ -694,7 +694,7 @@ function onFullscreenClosed() {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-code);
-  overflow: auto;
+  overflow: hidden;
 }
 .wb-log-fullscreen__render {
   flex: 1;
@@ -703,6 +703,7 @@ function onFullscreenClosed() {
   font-size: 13px;
   line-height: 1.65;
   color: var(--text-primary);
+  overflow: auto;
 }
 .wb-log-fullscreen__render :deep(pre) {
   margin: 8px 0;

@@ -86,8 +86,12 @@
   border-radius: 0 4px 4px 0;
 }
 
-/* 表格 */
-.wb-log-pre .markdown-renderer table {
+/* 表格 — 用 .markdown-renderer 自身做关键选择器,
+ * 因为 markstream-vue 的根节点 class 同时含 .markdown-renderer 和 .wb-log-pre__render。
+ * 双选择器叠加提高特异性,压过 markstream-vue 默认浅色主题。 */
+.markdown-renderer table,
+.wb-log-pre table,
+.wb-log-fullscreen__render table {
   width: auto;
   border-collapse: collapse;
   margin: 8px 0;
@@ -95,21 +99,39 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   overflow: hidden;
+  background: transparent;
+  color: var(--text-primary);
 }
-.wb-log-pre .markdown-renderer th,
-.wb-log-pre .markdown-renderer td {
+.markdown-renderer th,
+.markdown-renderer td,
+.wb-log-pre th,
+.wb-log-pre td,
+.wb-log-fullscreen__render th,
+.wb-log-fullscreen__render td {
   padding: 6px 12px;
   border-bottom: 1px solid var(--border-color);
   border-right: 1px solid var(--border-color);
   text-align: left;
+  color: var(--text-primary);
+  background: transparent;
 }
-.wb-log-pre .markdown-renderer th:last-child,
-.wb-log-pre .markdown-renderer td:last-child { border-right: none; }
-.wb-log-pre .markdown-renderer tr:last-child td { border-bottom: none; }
-.wb-log-pre .markdown-renderer th {
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-container));
-  font-weight: 600;
-  color: var(--text-secondary);
+.markdown-renderer th:last-child,
+.markdown-renderer td:last-child,
+.wb-log-pre th:last-child,
+.wb-log-pre td:last-child,
+.wb-log-fullscreen__render th:last-child,
+.wb-log-fullscreen__render td:last-child { border-right: none; }
+.markdown-renderer tr:last-child td,
+.wb-log-pre tr:last-child td,
+.wb-log-fullscreen__render tr:last-child td { border-bottom: none; }
+.markdown-renderer th,
+.wb-log-pre th,
+.wb-log-fullscreen__render th {
+  background: color-mix(in srgb, var(--color-primary) 22%, var(--bg-container)) !important;
+  font-weight: 700 !important;
+  color: var(--text-primary) !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
 }
 
 /* 水平分割线 */

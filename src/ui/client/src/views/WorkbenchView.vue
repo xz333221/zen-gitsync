@@ -742,10 +742,6 @@ async function setTaskType(t: Task, type: 'simple' | 'complex') {
   ElMessage.success(type === 'simple' ? $t('@WORKBENCH:已切换为简单任务') : $t('@WORKBENCH:已切换为复杂任务'))
 }
 
-async function toggleTaskType(t: Task) {
-  await setTaskType(t, t.type === 'simple' ? 'complex' : 'simple')
-}
-
 // 顶部 segmented control 入口：把目标类型交给 setTaskType，
 // 当 selectedTask 已是目标类型时直接 no-op，避免误触再次落盘。
 async function onTypePillClick(target: 'simple' | 'complex') {
@@ -1357,7 +1353,6 @@ function humanSize(n: number): string {
                       :class="t.type === 'simple' ? 'wb-task-item__meta-item--simple' : 'wb-task-item__meta-item--complex'"
                       :title="t.type === 'simple' ? $t('@WORKBENCH:简单任务 - 点击切换为复杂任务') : $t('@WORKBENCH:复杂任务 - 点击切换为简单任务')"
                       :aria-label="t.type === 'simple' ? $t('@WORKBENCH:切换为复杂任务') : $t('@WORKBENCH:切换为简单任务')"
-                      @click.stop="toggleTaskType(t)"
                     >
                       {{ t.type === 'simple' ? $t('@WORKBENCH:简单') : $t('@WORKBENCH:复杂') }}
                     </button>
