@@ -30,6 +30,10 @@ const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
 const INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-instruction.json');
 const SUBTASK_INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-subtask-instruction.json');
+// AI 对话拆分会话存档:每个 sessionId 一个文件,重启可恢复多轮上下文
+const SESSIONS_DIR = path.join(DATA_DIR, 'ai-split-sessions');
+const MAX_SESSIONS = 100;     // 软上限,触发清理
+const SESSIONS_KEEP = 50;      // 超过上限时保留最新 N 个
 // 执行日志持久化：jobs.json 是历史档案，jobs-config.json 是保留策略。
 // jobs Map 仍只承载当前进程产出的活跃 job；管理页直接读 jobs.json。
 const JOBS_FILE = path.join(DATA_DIR, 'jobs.json');
@@ -90,7 +94,7 @@ const DEFAULT_SUBTASK_INSTRUCTION_ZH = `你是一名任务拆分助手。
 2. 粒度适中：单个子任务应当能在一次会话里完成（既不要"实现整个登录功能"这么大，也不要"打印 hello"这么琐碎）。
 3. 顺序合理：子任务按依赖关系和执行顺序排列（先准备、后实现、最后验证）。
 4. 可验证：每个子任务都有明确的完成标志（"输出文件 xxx"、"通过测试 yyy"、"控制台打印 zzz"）。
-5. 数量：拆成 3-6 个子任务为宜。任务很简单时 2-3 个；复杂时 5-6 个，不要超过 8 个。
+5. 数量：不设上限。任务很简单时 1-2 个就够，复杂时按需拆成 10 个、20 个甚至更多子任务都行，直到覆盖所有可独立验证的步骤。
 6. 描述具体：desc 字段要写清楚"要做什么、参考什么、产出什么"，不要只是把 title 改写一遍。
 7. 如果任务里附带了图片，必须基于图片的实际内容拆分（例如指出图片中的哪个区域、哪个元素需要改），而不是泛泛而谈。
 
@@ -98,7 +102,7 @@ const DEFAULT_SUBTASK_INSTRUCTION_ZH = `你是一名任务拆分助手。
 最后必须输出 JSON，结构：
 {
   "subtasks": [
-    { "title": "子任务标题（10-20字）", "desc": "子任务的具体描述，包含要做什么、输入是什么、输出/验证标志是什么" }
+    { "title": "子任务标题", "desc": "子任务的具体描述，包含要做什么、输入是什么、输出/验证标志是什么" }
   ]
 }
 
@@ -118,7 +122,7 @@ Before producing JSON, think carefully (put your thoughts in reasoning if the mo
 2. Right granularity: a subtask should finish in one Claude session (not as big as "implement the whole login flow", not as trivial as "print hello").
 3. Sensible order: arrange subtasks by dependency / execution order (prepare first, implement, then verify).
 4. Verifiable: every subtask has a clear completion signal (e.g. "produce file xxx", "pass test yyy", "log zzz to console").
-5. Quantity: prefer 3-6 subtasks. Very simple tasks 2-3, complex ones 5-6, never exceed 8.
+5. Quantity: no hard limit. Very simple tasks need only 1-2; complex tasks can be split into 10, 20 or more subtasks until every independently verifiable step is covered.
 6. Concrete desc: write what to do, what to reference, what to produce — don't just paraphrase the title.
 7. If the task includes images, the breakdown must reference the actual image content (which region, which element to change), not just generic talk.
 
@@ -126,7 +130,7 @@ Before producing JSON, think carefully (put your thoughts in reasoning if the mo
 End with JSON, structure:
 {
   "subtasks": [
-    { "title": "subtask title (10-20 chars)", "desc": "concrete description: what to do, what the input is, what the output / verification signal is" }
+    { "title": "subtask title", "desc": "concrete description: what to do, what the input is, what the output / verification signal is" }
   ]
 }
 
@@ -140,6 +144,102 @@ function pickDefaultSubtaskInstruction(req) {
   const al = String(req?.headers?.['accept-language'] || '').toLowerCase()
   if (al.startsWith('en')) return DEFAULT_SUBTASK_INSTRUCTION_EN
   return DEFAULT_SUBTASK_INSTRUCTION_ZH
+}
+
+// ── AI 对话拆分: session 持久化层 ────────────────────────────
+// 文件命名: {sessionId}.json
+// 内容: { version, sessionId, title, desc, taskId, promptId, createdAt, updatedAt,
+//         messages: [{role, content}], latestSubtasks, latestRaw, latestParseStage }
+// 写入用临时文件 + rename 原子替换(与 workbench 现有 writeJson 模式一致),
+// 避免半写状态被读到。并发安全: 单进程内同一 session 串行调用,
+// 跨端点并发写同 session 概率极低,丢失只会是最后一次 user/assistant pair,可重发。
+function genSessionId() {
+  // 16 字符: 时间戳后 8 位 + 随机 8 位 base36,既可读也基本不冲突
+  return `${Date.now().toString(36).slice(-8)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+async function readSessionFile(sessionId) {
+  if (!/^[a-z0-9-]{4,32}$/i.test(sessionId)) {
+    const err = new Error('非法 sessionId'); err.statusCode = 400; throw err
+  }
+  const file = path.join(SESSIONS_DIR, `${sessionId}.json`)
+  try {
+    return JSON.parse(await fsp.readFile(file, 'utf-8'))
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      const e = new Error('会话不存在'); e.statusCode = 404; throw e
+    }
+    throw err
+  }
+}
+
+async function writeSessionFile(sessionId, data) {
+  await fsp.mkdir(SESSIONS_DIR, { recursive: true })
+  const file = path.join(SESSIONS_DIR, `${sessionId}.json`)
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`
+  await fsp.writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8')
+  await fsp.rename(tmp, file)
+}
+
+async function deleteSessionFile(sessionId) {
+  if (!/^[a-z0-9-]{4,32}$/i.test(sessionId)) {
+    const err = new Error('非法 sessionId'); err.statusCode = 400; throw err
+  }
+  const file = path.join(SESSIONS_DIR, `${sessionId}.json`)
+  try {
+    await fsp.unlink(file)
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      const e = new Error('会话不存在'); e.statusCode = 404; throw e
+    }
+    throw err
+  }
+}
+
+// 列表只读 metadata 不读 messages 内容,启动无需预加载
+async function listSessionsMeta() {
+  await fsp.mkdir(SESSIONS_DIR, { recursive: true })
+  const files = await fsp.readdir(SESSIONS_DIR)
+  const list = []
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue
+    const sid = f.slice(0, -5)
+    try {
+      const file = path.join(SESSIONS_DIR, f)
+      const stat = await fsp.stat(file)
+      const data = JSON.parse(await fsp.readFile(file, 'utf-8'))
+      list.push({
+        sessionId: data.sessionId || sid,
+        title: data.title || '(无标题)',
+        taskId: data.taskId || '',
+        createdAt: data.createdAt || '',
+        updatedAt: data.updatedAt || '',
+        messageCount: Array.isArray(data.messages) ? data.messages.length : 0,
+        latestSubtaskCount: Array.isArray(data.latestSubtasks) ? data.latestSubtasks.length : 0,
+        size: stat.size
+      })
+    } catch { /* 跳过坏文件 */ }
+  }
+  list.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+  return list
+}
+
+// 容量控制: 超过 MAX_SESSIONS 时按 mtime 删旧的,保留最新 SESSIONS_KEEP 个
+async function enforceSessionsRetention() {
+  const files = await fsp.readdir(SESSIONS_DIR).catch(() => [])
+  const jsonFiles = files.filter(f => f.endsWith('.json'))
+  if (jsonFiles.length < MAX_SESSIONS) return
+  const stats = await Promise.all(jsonFiles.map(async f => {
+    const full = path.join(SESSIONS_DIR, f)
+    const s = await fsp.stat(full)
+    return { file: full, mtime: s.mtimeMs }
+  }))
+  stats.sort((a, b) => b.mtime - a.mtime)
+  const toDelete = stats.slice(SESSIONS_KEEP)
+  await Promise.all(toDelete.map(s => fsp.unlink(s.file).catch(() => {})))
+  if (toDelete.length > 0) {
+    console.log(`[workbench] ai-split sessions: cleaned up ${toDelete.length} old files`)
+  }
 }
 // 白名单后缀：图片 + 常见文档（PDF / 纯文本 / Markdown）
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
@@ -325,27 +425,50 @@ async function callLlmJson(model, prompt, opts = {}) {
  *   - reasoning / reasoning_text：openai o1 风格
  *   - content：普通输出
  * 返回完整 content 字符串。
+ *
+ * input 支持两种形态(判别 union):
+ *   - string: 旧模式,拼成单条 user message,支持 opts.images 多模态
+ *   - ChatMsg[]: 新模式(对话拆分),直接作为 messages 发送;opts.images/systemPrompt 忽略
  */
-async function callLlmStream(model, prompt, onDelta, opts = {}) {
-  const { maxTokens = 2000, timeoutMs = 600000, signal, images = [] } = opts
+function cloneMsgContent(c) {
+  if (typeof c === 'string') return c
+  if (Array.isArray(c)) return c.map(p => ({ ...p }))
+  return c
+}
+
+async function callLlmStream(model, input, onDelta, opts = {}) {
+  const { maxTokens = 2000, timeoutMs = 600000, signal, images = [], systemPrompt } = opts
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
   const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`
   const headers = { 'Content-Type': 'application/json' }
   if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`
 
-  let userContent
-  if (Array.isArray(images) && images.length > 0) {
-    userContent = [
-      { type: 'text', text: prompt },
-      ...images.map(img => ({ type: 'image_url', image_url: { url: img } }))
-    ]
+  // 判别 input: string(旧,直接拆分)或 messages 数组(新,对话拆分)
+  let messages
+  if (Array.isArray(input)) {
+    // messages 模式: 深拷贝避免外部 mutation 污染 LLM 请求
+    // images / systemPrompt opts 在 messages 模式下不生效(由 caller 自管)
+    messages = input.map(m => ({ role: m.role, content: cloneMsgContent(m.content) }))
   } else {
-    userContent = prompt
+    // 旧模式: string prompt 拼成单条 user message,支持多模态
+    const text = String(input || '')
+    let userContent
+    if (Array.isArray(images) && images.length > 0) {
+      userContent = [
+        { type: 'text', text },
+        ...images.map(img => ({ type: 'image_url', image_url: { url: img } }))
+      ]
+    } else {
+      userContent = text
+    }
+    messages = []
+    if (systemPrompt) messages.push({ role: 'system', content: String(systemPrompt) })
+    messages.push({ role: 'user', content: userContent })
   }
 
   const body = JSON.stringify({
     model: model.model,
-    messages: [{ role: 'user', content: userContent }],
+    messages,
     max_tokens: maxTokens,
     temperature: 0.4,
     // 注意：stream: true 模式下不能同时使用 response_format:{type:'json_object'}，
@@ -1392,8 +1515,8 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       if (!text) {
         return res.status(400).json({ success: false, error: '指令不能为空' });
       }
-      if (text.length > 50000) {
-        return res.status(413).json({ success: false, error: '指令过长（最多 50000 字符）' });
+      if (text.length > 500000) {
+        return res.status(413).json({ success: false, error: '指令过长（最多 500000 字符）' });
       }
       await writeInstruction(text);
       res.json({ success: true });
@@ -1427,8 +1550,8 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       if (!text) {
         return res.status(400).json({ success: false, error: '指令不能为空' });
       }
-      if (text.length > 50000) {
-        return res.status(413).json({ success: false, error: '指令过长（最多 50000 字符）' });
+      if (text.length > 500000) {
+        return res.status(413).json({ success: false, error: '指令过长（最多 500000 字符）' });
       }
       // 如果保存的文本正好等于当前 locale 的默认——不写文件，保持 fallback 行为
       const def = pickDefaultSubtaskInstruction(req);
@@ -1574,7 +1697,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
 请先简要分析（可以放在 reasoning 中或直接写出来），然后给出 JSON。JSON 用 \`\`\`json ... \`\`\` 包裹：
 {
   "subtasks": [
-    { "title": "子任务标题（10-20字）", "desc": "具体描述" }
+    { "title": "子任务标题", "desc": "具体描述" }
   ]
 }
 
@@ -1595,7 +1718,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
           if (delta.thinking) send({ type: 'thinking', delta: delta.thinking });
           if (delta.content) send({ type: 'content', delta: delta.content });
         },
-        { maxTokens: 4000, timeoutMs: 600000, images: imageDataUrls, signal: abortController.signal }
+        { maxTokens: 16000, timeoutMs: 600000, images: imageDataUrls, signal: abortController.signal }
       );
 
       if (aborted) {
@@ -1609,11 +1732,10 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       const list = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
       const subtasks = list
         .map(s => ({
-          title: String(s?.title || '').trim().slice(0, 80),
-          desc: String(s?.desc || '').trim().slice(0, 500)
+          title: String(s?.title || '').trim(),
+          desc: String(s?.desc || '').trim()
         }))
-        .filter(s => s.title)
-        .slice(0, 8);
+        .filter(s => s.title);
 
       send({ type: 'done', subtasks, raw: content, parseError, parseStage });
       finished = true;
@@ -1638,14 +1760,200 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       const list = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
       const subtasks = list
         .map(s => ({
-          title: String(s?.title || '').trim().slice(0, 80),
-          desc: String(s?.desc || '').trim().slice(0, 500)
+          title: String(s?.title || '').trim(),
+          desc: String(s?.desc || '').trim()
         }))
-        .filter(s => s.title)
-        .slice(0, 8);
+        .filter(s => s.title);
       res.json({ success: true, subtasks, parseError, parseStage });
     } catch (err) {
       res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  // ── AI 对话拆分: 多轮 SSE 端点 ───────────────────────────────────────
+  // POST /api/workbench/tasks/ai-chat-split  (SSE)
+  //   body: { sessionId?, title, desc?, taskId?, promptId?, userMessage }
+  //   →   meta / user_echo / thinking / content / done / error
+  // 第一轮可省略 sessionId,后端会新建;后续轮带 sessionId 继续追加 messages。
+  // 历史对话持久化在 SESSIONS_DIR,前端可从 GET 列表/GET 详情恢复。
+  app.post('/api/workbench/tasks/ai-chat-split', async (req, res) => {
+    const userMessage = String(req.body?.userMessage || '').trim();
+    const sessionIdInput = String(req.body?.sessionId || '').trim();
+    const title = String(req.body?.title || '').trim();
+    const desc = String(req.body?.desc || '').trim();
+    const taskId = String(req.body?.taskId || '').trim();
+    const promptId = String(req.body?.promptId || '').trim();
+
+    // SSE 头
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    res.flushHeaders?.();
+    const send = (obj) => {
+      try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {}
+    };
+    const abortController = new AbortController();
+    let finished = false;
+    if (req.socket) req.socket.once('close', () => { if (!finished) abortController.abort(); });
+
+    try {
+      // 加载或新建 session
+      let session, isNew = false;
+      if (sessionIdInput) {
+        try {
+          session = await readSessionFile(sessionIdInput);
+        } catch (err) {
+          if (err.statusCode === 404) {
+            send({ type: 'error', error: '会话不存在' });
+            return res.end();
+          }
+          throw err;
+        }
+      } else {
+        if (!title) {
+          send({ type: 'error', error: '新建会话时必须提供 title' });
+          return res.end();
+        }
+        session = {
+          version: 1,
+          sessionId: genSessionId(),
+          title, desc, taskId, promptId,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          messages: [],
+          latestSubtasks: [],
+          latestRaw: '',
+          latestParseStage: ''
+        };
+        isNew = true;
+      }
+
+      if (!userMessage) {
+        send({ type: 'error', error: '消息内容不能为空' });
+        return res.end();
+      }
+
+      // 拼 system message(只在第一轮)
+      if (session.messages.length === 0) {
+        const userInstruction = await readSubtaskInstruction(req);
+        session.messages.push({ role: 'system', content: userInstruction });
+      }
+
+      // 追加 user message
+      session.messages.push({ role: 'user', content: userMessage });
+
+      // 推 meta + user_echo
+      send({
+        type: 'meta',
+        sessionId: session.sessionId,
+        isNew,
+        prompt: { system: session.messages[0].content, user: userMessage }
+      });
+      send({ type: 'user_echo', userMessage });
+
+      // 加载 model
+      let model;
+      try {
+        if (!configManager) throw new Error('configManager 不可用');
+        const rawConfig = await configManager.readRawConfigFile();
+        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+        model = models.find(m => m.isDefault) || models[0];
+      } catch (err) {
+        send({ type: 'error', error: '读取 AI 配置失败: ' + err.message });
+        finished = true;
+        return res.end();
+      }
+      if (!model) {
+        send({ type: 'error', error: '未配置 AI 模型' });
+        finished = true;
+        return res.end();
+      }
+
+      // 流式调用(messages 模式)
+      const { content, aborted } = await callLlmStream(
+        model,
+        session.messages,
+        (delta) => {
+          if (delta.thinking) send({ type: 'thinking', delta: delta.thinking });
+          if (delta.content) send({ type: 'content', delta: delta.content });
+        },
+        { maxTokens: 16000, timeoutMs: 600000, signal: abortController.signal }
+      );
+
+      if (aborted) {
+        session.updatedAt = nowIso();
+        await writeSessionFile(session.sessionId, session).catch(() => {});
+        enforceSessionsRetention().catch(() => {});
+        send({ type: 'error', error: '已取消' });
+        finished = true;
+        return res.end();
+      }
+
+      // 解析 + 写盘
+      const { parsed, parseError, parseStage } = parseSubtaskJson(content);
+      const subtasks = Array.isArray(parsed?.subtasks)
+        ? parsed.subtasks
+            .map(s => ({
+              title: String(s?.title || '').trim(),
+              desc: String(s?.desc || '').trim()
+            }))
+            .filter(s => s.title)
+        : [];
+
+      session.messages.push({ role: 'assistant', content });
+      session.latestSubtasks = subtasks;
+      session.latestRaw = content;
+      session.latestParseStage = parseStage;
+      session.updatedAt = nowIso();
+      await writeSessionFile(session.sessionId, session);
+      enforceSessionsRetention().catch(() => {});
+
+      send({ type: 'done', subtasks, raw: content, parseError, parseStage });
+      finished = true;
+      res.end();
+    } catch (err) {
+      send({ type: 'error', error: '对话拆分失败: ' + (err?.message || String(err)) });
+      finished = true;
+      res.end();
+    }
+  });
+
+  // GET /api/workbench/tasks/ai-chat-sessions
+  //   →   { success, sessions: [{ sessionId, title, taskId, createdAt, updatedAt, messageCount, latestSubtaskCount, size }] }
+  // 列表只读 metadata,启动时无需预加载
+  app.get('/api/workbench/tasks/ai-chat-sessions', async (_req, res) => {
+    try {
+      const sessions = await listSessionsMeta();
+      res.json({ success: true, sessions });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  // GET /api/workbench/tasks/ai-chat-sessions/:sessionId
+  //   →   { success, session: { ...完整,含 messages } }
+  app.get('/api/workbench/tasks/ai-chat-sessions/:sessionId', async (req, res) => {
+    try {
+      const session = await readSessionFile(req.params.sessionId);
+      res.json({ success: true, session });
+    } catch (err) {
+      const code = err.statusCode || 500;
+      res.status(code).json({ success: false, error: err.message });
+    }
+  });
+
+  // DELETE /api/workbench/tasks/ai-chat-sessions/:sessionId
+  //   →   { success: true }  (硬删文件)
+  app.delete('/api/workbench/tasks/ai-chat-sessions/:sessionId', async (req, res) => {
+    try {
+      await deleteSessionFile(req.params.sessionId);
+      res.json({ success: true });
+    } catch (err) {
+      const code = err.statusCode || 500;
+      res.status(code).json({ success: false, error: err.message });
     }
   });
 

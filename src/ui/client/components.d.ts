@@ -9,7 +9,9 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     ActivityBar: typeof import('./src/components/ActivityBar.vue')['default']
+    AISplitChatPane: typeof import('./src/components/AISplitChatPane.vue')['default']
     AISplitDialog: typeof import('./src/components/AISplitDialog.vue')['default']
+    AISplitDirectPane: typeof import('./src/components/AISplitDirectPane.vue')['default']
     AppVersionBadge: typeof import('./src/components/AppVersionBadge.vue')['default']
     AttachmentZone: typeof import('./src/components/AttachmentZone.vue')['default']
     BaseNode: typeof import('./src/components/flow/nodes/BaseNode.vue')['default']
@@ -34,6 +36,8 @@ declare module 'vue' {
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCard: typeof import('element-plus/es')['ElCard']
     ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
+    ElCollapse: typeof import('element-plus/es')['ElCollapse']
+    ElCollapseItem: typeof import('element-plus/es')['ElCollapseItem']
     ElDialog: typeof import('element-plus/es')['ElDialog']
     ElDrawer: typeof import('element-plus/es')['ElDrawer']
     ElDropdown: typeof import('element-plus/es')['ElDropdown']
@@ -52,6 +56,7 @@ declare module 'vue' {
     ElRadioButton: typeof import('element-plus/es')['ElRadioButton']
     ElRadioGroup: typeof import('element-plus/es')['ElRadioGroup']
     ElRow: typeof import('element-plus/es')['ElRow']
+    ElSegmented: typeof import('element-plus/es')['ElSegmented']
     ElSelect: typeof import('element-plus/es')['ElSelect']
     ElSlider: typeof import('element-plus/es')['ElSlider']
     ElSplitter: typeof import('element-plus/es')['ElSplitter']
