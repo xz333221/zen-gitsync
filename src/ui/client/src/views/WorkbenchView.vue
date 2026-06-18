@@ -1368,6 +1368,12 @@ function humanSize(n: number): string {
                     </span>
                   </div>
                 </div>
+                <span
+                  v-if="taskIsRunning(t)"
+                  class="wb-task-item__running-dot"
+                  :title="$t('@WORKBENCH:执行中')"
+                  aria-hidden="true"
+                />
                 <button
                   class="wb-task-item__del"
                   @click.stop="deleteTask(t)"
@@ -2125,19 +2131,12 @@ function humanSize(n: number): string {
               color var(--transition-fast) var(--ease-custom);
 }
 .wb-task-item.is-running {
-  /* 极简化：去掉 inset box-shadow；用左侧 2px 暖色竖条 + 浅底色 */
+  /* 执行中:浅暖色底,左侧竖条留给 active(选中)用 */
   background: color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
-.wb-task-item.is-running::before {
-  content: '';
-  position: absolute;
-  left: -1px;
-  top: 4px;
-  bottom: 4px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--color-warning);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-warning) 60%, transparent);
+.wb-task-item.is-running:hover {
+  /* hover 时稍微加深一点,提示"在跑但可点" */
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
 }
 .wb-task-item:hover {
   background: var(--bg-container-hover);
@@ -2165,6 +2164,30 @@ function humanSize(n: number): string {
 }
 .wb-task-item.active .wb-task-item__title { color: var(--color-primary); }
 .wb-task-item.active .wb-task-item__del { opacity: 1; color: var(--color-primary); }
+
+/* 执行中脉动圆点：放在右侧(标题和删除按钮之间),不抢左侧 active 竖条的位置 */
+.wb-task-item__running-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-warning) 60%, transparent);
+  animation: wb-running-pulse 1.4s ease-in-out infinite;
+  margin-left: auto;
+}
+@keyframes wb-running-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-warning) 60%, transparent);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.35);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-warning) 0%, transparent);
+    opacity: 0.75;
+  }
+}
 
 /* 左侧头像：紧凑圆形 22×22，去掉边框 */
 .wb-task-item__avatar {
