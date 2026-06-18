@@ -1642,10 +1642,8 @@ function humanSize(n: number): string {
               <li v-if="selectedTask.subtasks.length === 0" class="wb-empty wb-empty--rich">
                 <div class="wb-empty__art" aria-hidden="true"><el-icon><List /></el-icon></div>
                 <div class="wb-empty__title">{{ $t('@WORKBENCH:拆分任务，逐项执行') }}</div>
-                <div class="wb-empty__hint">{{ $t('@WORKBENCH:手动添加子任务，或让 AI 帮你自动拆分') }}</div>
                 <div class="wb-empty__cta">
                   <el-button type="primary" size="small" :icon="Plus" @click="addSubtask">{{ $t('@WORKBENCH:添加子任务') }}</el-button>
-                  <button type="button" class="wb-empty__link" :disabled="!selectedTask.title || !selectedTask.title.trim()" @click="openAiSplitDialog">{{ $t('@WORKBENCH:用 AI 自动拆分') }}</button>
                 </div>
               </li>
             </ul>

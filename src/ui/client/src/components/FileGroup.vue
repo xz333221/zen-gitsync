@@ -221,7 +221,6 @@ const getFileIcon = (filePath: string) => {
   overflow: hidden;
   background: var(--bg-container);
   box-shadow: var(--shadow-base);
-  border: 1px solid var(--border-color);
   transition: var(--transition-all);
 }
 
@@ -248,7 +247,6 @@ const getFileIcon = (filePath: string) => {
     background: var(--bg-panel);
     padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--radius-full);
-    border: 1px solid var(--border-card);
     margin-left: auto;
   }
 }
@@ -279,7 +277,6 @@ const getFileIcon = (filePath: string) => {
   border-radius: var(--radius-base);
   cursor: pointer;
   transition: var(--transition-bg), var(--transition-shadow);
-  border: 1px solid var(--border-color-light);
   height: 28px;
   box-sizing: border-box;
   position: relative;
@@ -456,11 +453,10 @@ const getFileIcon = (filePath: string) => {
   display: none;
   align-items: center;
   gap: var(--spacing-xs);
-  
+
   border-radius: var(--radius-base);
   background: var(--bg-container);
   box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-color-light);
 }
 
 .file-item:hover .file-actions {

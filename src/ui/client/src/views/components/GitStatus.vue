@@ -1664,7 +1664,6 @@ defineExpose({
     background: var(--bg-panel);
     padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--radius-full);
-    border: 1px solid var(--border-card);
   }
 }
 
@@ -1674,7 +1673,6 @@ defineExpose({
   padding: var(--spacing-xs);
   background: var(--bg-panel);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-card);
 }
 
 /* 文件列表容器 */
@@ -2183,7 +2181,6 @@ html.dark .upstream-tip:hover {
     background: var(--bg-container);
     padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--radius-full);
-    border: 1px solid var(--border-card);
     font-weight: var(--font-weight-medium);
   }
 }
