@@ -24,6 +24,7 @@ export default {
   '@F13B4:立即重启并刷新': 'Restart and reload now',
   '@F13B4:稍后手动重启': 'Restart later',
   '@F13B4:新版本已全局安装，需要重启服务才能生效': 'The new version is installed globally. Restart the service to apply it.',
+  '@F13B4:{seconds} 秒后自动刷新': 'Auto-reloading in {seconds}s',
   '@F13B4:重启失败 {error}': 'Restart failed: {error}',
   '@F13B4:确定升级': 'Upgrade',
   '@F13B4:取消': 'Cancel',

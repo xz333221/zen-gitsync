@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref, computed, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { $t } from '@/lang/static'
 import { fetchAppVersion, startAppUpgrade, restartApp, type AppVersionInfo } from '@/utils/appVersion'
@@ -32,6 +32,11 @@ const latestInfo = ref<AppVersionInfo | null>(null)
 const upgradeDialogVisible = ref(false)
 const upgradeLogs = ref('')
 const upgradeStatus = ref<'running' | 'success' | 'failed'>('running')
+
+// 升级成功 → 自动重启的倒计时（秒）。0 表示不启动自动重启
+const AUTO_REFRESH_SECONDS = 5
+const countdown = ref(0)
+let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 const CACHE_KEY = 'app-version-check'
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1 小时
@@ -119,6 +124,8 @@ async function handleUpgrade() {
         if (latestInfo.value?.latest) {
           runtimeVersion.value = latestInfo.value.latest
         }
+        // 启动自动刷新倒计时：N 秒后自动调用重启接口 + 刷新页面
+        startAutoRefreshCountdown()
       }
     } else if (evt.message) {
       upgradeLogs.value += evt.message
@@ -126,7 +133,39 @@ async function handleUpgrade() {
   })
 }
 
+function startAutoRefreshCountdown() {
+  // 防止重复启动
+  cancelAutoRefreshCountdown()
+  countdown.value = AUTO_REFRESH_SECONDS
+  countdownTimer = setInterval(() => {
+    countdown.value -= 1
+    if (countdown.value <= 0) {
+      // 倒计时归零：清理 timer 并自动触发重启
+      if (countdownTimer) {
+        clearInterval(countdownTimer)
+        countdownTimer = null
+      }
+      handleRestart()
+    }
+  }, 1000)
+}
+
+function cancelAutoRefreshCountdown() {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+  countdown.value = 0
+}
+
+function handleCancelAutoRefresh() {
+  // 子组件(UpgradeDialog)汇报"用户选择稍后或关闭弹窗"
+  cancelAutoRefreshCountdown()
+}
+
 async function handleRestart() {
+  // 用户主动点"立即重启"或在倒计时归零时触发：先取消倒计时避免重复触发
+  cancelAutoRefreshCountdown()
   try {
     await restartApp()
     // 给服务端 300ms 时间退出，再尝试 reload
@@ -141,6 +180,10 @@ async function handleRestart() {
     })
   }
 }
+
+onBeforeUnmount(() => {
+  cancelAutoRefreshCountdown()
+})
 
 onMounted(() => {
   // 静默检查（1 小时内的结果走缓存，命中时不打扰用户）
@@ -209,8 +252,10 @@ onMounted(() => {
       v-model="upgradeDialogVisible"
       :logs="upgradeLogs"
       :status="upgradeStatus"
+      :countdown="countdown"
       @retry="handleUpgrade"
       @restart="handleRestart"
+      @cancel="handleCancelAutoRefresh"
     />
   </div>
 </template>
