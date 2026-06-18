@@ -1265,11 +1265,22 @@ function toggleFullscreen() {
                 <el-tooltip
                   :content="scope.row.email"
                   placement="top"
-                  
+
                   :show-after="200"
                 >
                   <span class="author-name">{{ scope.row.author }}</span>
                 </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column :label="$t('@A1833:哈希')" width="56" align="center" class-name="hash-action-col">
+              <template #default="scope">
+                <IconButton
+                  :tooltip="$t('@A1833:复制提交哈希')"
+                  custom-class="copy-hash-btn"
+                  @click.stop="copyCommitHash(scope.row as LogItem)"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                </IconButton>
               </template>
             </el-table-column>
           </el-table>
@@ -1871,6 +1882,16 @@ function toggleFullscreen() {
 }
 
 .copy-message-btn:hover {
+  color: var(--color-primary);
+}
+
+.copy-hash-btn {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  transition: color 0.2s;
+}
+
+.copy-hash-btn:hover {
   color: var(--color-primary);
 }
 
