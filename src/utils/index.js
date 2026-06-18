@@ -899,7 +899,11 @@ async function execGitAddWithLockFilter() {
     // 注意：用单引号包文件名,单引号内不解释 $ ` " \ 等元字符,
     // 只需把单引号自身转义为 '\''
     // 避免文件名含特殊字符(如 " $ ` ;) 导致 shell 注入或命令错乱
-    const shellQuote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
+    // null/undefined 显式返回 '' 而非 'null'/'undefined' (与 src/ui/server/utils/shellQuote.js shQuote 契约一致)
+    const shellQuote = (s) => {
+      if (s === null || s === undefined) return "''"
+      return `'${String(s).replace(/'/g, `'\\''`)}'`
+    }
     let successCount = 0
     let failedFiles = []
     for (const file of filesToAdd) {
