@@ -19,6 +19,32 @@
    返回 200 才说明 vite 在跑。
    **本仓库曾因 vite 没起来改了 5 轮代码、reload 4 次,最后才发现 dev server 整个就没在跑**。preview 工具的 "started successfully" 只代表 wrapper 进程跑了,不等于 vite 在跑,不要相信它。
 
+   **⚠️ vite 8 IPv6-only 陷阱**:`dev:ping` 用 IPv4 (`127.0.0.1`) 探测,但 vite 8 默认 `server.host = 'localhost'` 时**只绑 IPv6 `[::1]`**,IPv4 `127.0.0.1` 永远 000 → ping 误报 DOWN。
+   排查链(规则 0 报 vite DOWN 时强制走一遍):
+   ```
+   # 1. netstat 看端口 LISTENING 是 IPv4 还是 IPv6
+   netstat -ano | grep LISTENING | grep 5544
+   #  → TCP [::1]:5544  → vite 只绑 IPv6,vite 是活的,别杀
+   #  → TCP 0.0.0.0:5544 → IPv4 监听,正常
+   #  → 没输出         → vite 真没起
+   # 2. 用 IPv6 curl 二次确认
+   curl -s -o /dev/null -w "%{http_code}\n" "http://[::1]:5544/@vite/client"
+   #  → 200 = vite 活的,跳过 ping,直接进预览验证
+   ```
+   如果非要 `dev:ping` 一次过,在 vite.config.ts 加 `server: { host: '127.0.0.1' }` 即可。
+
+0a. **preview 起来后 snapshot 只显示空 RootWebArea,先等预构建,别重启** —
+   element-plus 全量按需引入 + resolve.alias,首次启动要扫几十个子模块,后台日志会反复:
+   ```
+   [optimizer] bundling dependencies...
+   ✨ new dependencies optimized: element-plus/es/components/...
+   ✨ optimized dependencies changed. reloading
+   ```
+   每次 reload 重新打包,从 `Local: http://localhost:5544/` 出现到全部 pre-bundle 完成 **20–60 秒**(本仓库实测)。
+   - 后台日志 `vite ready in Xms` 已出 + 还在反复 bundling → **正常,等**
+   - `Local:` 都没出现过 → 真挂了,看 stdout 错误
+   - 等超过 90 秒还没出 → 退化为 `vite build` 走生产 bundle 验证,不阻塞 commit
+
 1. **看 dev server stdout** — 必须看到 `hmr update /path/to/file`(或 vite `[vite] hot updated`、webpack `[WDS] Hot Module Replacement`)。**没看到 = dev server 没收到改动**,先检查文件保存、watcher 路径、.gitignore 是否把文件屏蔽。
 2. **看 Network** — 该文件的 JS/CSS chunk 必须是 **200**(不是 304),且 hash 必须和上次不同。304 = 浏览器用缓存,没拿到新模块。
 3. **看目标元素的 runtime DOM** — 用 `preview_eval` 拉 `outerHTML` / `className` / `style`,而不是 `preview_snapshot`(snapshot 文本会截断且与实际 DOM 不完全等价)。
@@ -55,6 +81,8 @@ HMR 失败的 3 个真实原因按概率排序:
 - 不要 `touch` 文件指望它"触发 watcher" — Vite 的 chokidar 已经监听文件写入,这一步说明 dev server 已经死了。
 - 不要 `preview_stop` + `preview_start` 反复重启同一个 server — preview 工具的 serverId 是复用的,start 不会真的重启 dev 进程;要重启就用 shell。
 - 不要在 `preview_logs` 里找 HMR 输出 — `npm run dev` 用 concurrently 启多进程,preview 工具只抓其中一个进程的 stdout,大概率是抓的 backend 而不是 vite。直接 `curl` 命中端口看 HTML 头部有没有 `/@vite/client` 来判断 vite 是不是真的活。
+- **不要因为 `dev:ping` 报 vite DOWN 就重启** — 先 `netstat` 看是不是 `[::1]:5544 LISTENING`,是的话 vite 活的,跳过(详见规则 0 IPv6-only 陷阱)。
+- **不要 preview 起来 snapshot 空就重启** — 先看后台 vite 日志是不是还在 `[optimizer] bundling dependencies...`,是的话正常,等 30 秒(详见规则 0a)。
 
 ## 不需要执行的情况
 
