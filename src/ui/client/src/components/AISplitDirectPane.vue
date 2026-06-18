@@ -20,7 +20,7 @@ import { Loading, CircleClose, Promotion } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import type { SplitSubtask } from './AISplitDialog.vue'
 
-type Phase = 'idle' | 'running' | 'result' | 'error'
+type Phase = 'idle' | 'preview' | 'running' | 'result' | 'error'
 
 const props = defineProps<{
   title: string
@@ -54,6 +54,11 @@ const thinkingLen = computed(() => thinkingText.value.length)
 const contentLen = computed(() => contentText.value.length)
 const canConfirm = computed(() => phase.value === 'result' && subtasks.value.length > 0)
 const isRunning = computed(() => phase.value === 'running')
+const isPreview = computed(() => phase.value === 'preview')
+
+// 预览阶段:用户在 textarea 改过的 user prompt(改完点"发送给 AI"才真正发送)
+const editableUserPrompt = ref('')
+const previewLoading = ref(false)
 
 function abortTyping() {
   if (abortController) {
@@ -68,6 +73,7 @@ function reset() {
   activeTab.value = 'prompt'
   systemPrompt.value = ''
   userPrompt.value = ''
+  editableUserPrompt.value = ''
   thinkingText.value = ''
   contentText.value = ''
   rawResponse.value = ''
@@ -77,15 +83,69 @@ function reset() {
   parseStage.value = ''
 }
 
+/**
+ * 点"AI 拆分"按钮:不立即调 LLM,先用 /ai-split-preview 拿拼装好的 prompt,
+ * 切到 prompt tab 让用户预览/编辑,改完点"发送给 AI"才真正调 LLM。
+ */
 async function start() {
   if (!props.title.trim()) {
     ElMessage.warning($t('@WORKBENCH:请先填写任务标题'))
     return
   }
   reset()
+  phase.value = 'preview'
+  activeTab.value = 'prompt'
+  previewLoading.value = true
+  try {
+    const res = await fetch('/api/workbench/tasks/ai-split-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: props.title,
+        desc: props.desc,
+        taskId: props.taskId || '',
+        promptId: props.promptId || ''
+      })
+    }).then(r => r.json())
+    if (!res.success) {
+      phase.value = 'error'
+      errorMessage.value = res.error || $t('@WORKBENCH:生成预览失败')
+      return
+    }
+    systemPrompt.value = res.system || ''
+    userPrompt.value = res.user || ''
+    editableUserPrompt.value = res.user || ''
+  } catch (err: any) {
+    phase.value = 'error'
+    errorMessage.value = err?.message || String(err)
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+/**
+ * 点"发送给 AI":把 editableUserPrompt(可能已被编辑)作为 customUserBlock
+ * 传到 /ai-split-subtasks,后端会用它直接发给 LLM,跳过服务端拼装。
+ */
+async function sendToAI() {
+  if (!editableUserPrompt.value.trim()) {
+    ElMessage.warning($t('@WORKBENCH:提示词不能为空'))
+    return
+  }
   const myNonce = ++runNonce
+  abortTyping()
+  // 保留 systemPrompt/userPrompt(顶部预览块)不动,清掉上轮的 thinking/raw
+  thinkingText.value = ''
+  contentText.value = ''
+  rawResponse.value = ''
+  subtasks.value = []
+  parseError.value = ''
+  parseStage.value = ''
+  errorMessage.value = ''
   phase.value = 'running'
   activeTab.value = 'thinking'
+  // 同步 userPrompt 显示成用户最终发的版本,便于事后查证
+  userPrompt.value = editableUserPrompt.value
 
   abortController = new AbortController()
   const myController = abortController
@@ -97,7 +157,8 @@ async function start() {
         title: props.title,
         desc: props.desc,
         taskId: props.taskId || '',
-        promptId: props.promptId || ''
+        promptId: props.promptId || '',
+        customUserBlock: editableUserPrompt.value
       }),
       signal: myController.signal
     })
@@ -128,8 +189,8 @@ async function start() {
         try { evt = JSON.parse(payload) } catch { continue }
         switch (evt.type) {
           case 'meta':
-            systemPrompt.value = evt.prompt?.system || ''
-            userPrompt.value = evt.prompt?.user || ''
+            // 服务端会再回一次拼装,但我们更尊重用户改过的版本,只用 system 字段
+            systemPrompt.value = evt.prompt?.system || systemPrompt.value
             break
           case 'thinking':
             thinkingText.value += String(evt.delta || '')
@@ -161,8 +222,8 @@ async function start() {
   } catch (err: any) {
     if (myNonce !== runNonce) return
     if (err?.name === 'AbortError' || myController.signal.aborted) {
-      // 用户主动停止：回到 idle 状态,提示词 tab 留作查看,让用户能修改后再 start
-      phase.value = 'idle'
+      // 用户停止:退回 preview 状态(prompt 已存在),让他能再次"发送给 AI"
+      phase.value = 'preview'
       activeTab.value = 'prompt'
       return
     }
@@ -178,8 +239,16 @@ function confirmImport() {
   emit('confirm', subtasks.value.slice())
 }
 
+/**
+ * "重新拆分":如果手里有 editableUserPrompt 就直接重发,否则回到预览。
+ * 错误恢复 / "重新生成" 也走这里。
+ */
 function retry() {
-  start()
+  if (editableUserPrompt.value.trim()) {
+    sendToAI()
+  } else {
+    start()
+  }
 }
 
 function stop() {
@@ -252,7 +321,8 @@ async function saveEditedPrompt() {
     if (res.success) {
       ElMessage.success($t('@WORKBENCH:已保存指令'))
       editingPrompt.value = false
-      retry()
+      // 指令模板变了,prompt 拼装结果也要重算,回 preview 状态重新拉一次
+      start()
     } else {
       ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
     }
@@ -275,6 +345,11 @@ function cancelEditPrompt() {
       <el-button size="small" link type="danger" class="ai-split-status__stop" @click="stop">
         {{ $t('@WORKBENCH:停止拆分') }}
       </el-button>
+    </div>
+    <div v-else-if="isPreview" class="ai-split-status">
+      <el-icon v-if="previewLoading" class="is-loading"><Loading /></el-icon>
+      <span v-if="previewLoading">{{ $t('@WORKBENCH:正在生成提示词预览…') }}</span>
+      <span v-else>{{ $t('@WORKBENCH:提示词已就绪,可在下方编辑后点「发送给 AI」开始拆分') }}</span>
     </div>
     <div v-else-if="phase === 'error'" class="ai-split-status is-error">
       <el-icon color="#f56c6c"><CircleClose /></el-icon>
@@ -324,7 +399,32 @@ function cancelEditPrompt() {
         </div>
         <pre v-else class="ai-split-pre">{{ systemPrompt || '（等待 LLM 启动…）' }}</pre>
         <h4 class="ai-split-subhead">{{ $t('@WORKBENCH:用户提示词（拼装后）') }}</h4>
-        <pre class="ai-split-pre">{{ userPrompt || '（等待 LLM 启动…）' }}</pre>
+        <!-- 预览阶段:textarea 可编辑;running/result/error 阶段:只读 <pre> 展示 -->
+        <template v-if="isPreview">
+          <el-input
+            v-model="editableUserPrompt"
+            type="textarea"
+            :rows="16"
+            :placeholder="$t('@WORKBENCH:正在生成预览…')"
+            :readonly="previewLoading"
+            class="ai-split-user-editor"
+            resize="none"
+          />
+          <div class="ai-split-user-actions">
+            <el-button size="small" :disabled="previewLoading" @click="reset">
+              {{ $t('@WORKBENCH:取消') }}
+            </el-button>
+            <el-button
+              type="primary"
+              :icon="Promotion"
+              :disabled="previewLoading || !editableUserPrompt.trim()"
+              @click="sendToAI"
+            >
+              {{ $t('@WORKBENCH:发送给 AI') }}
+            </el-button>
+          </div>
+        </template>
+        <pre v-else class="ai-split-pre">{{ userPrompt || '（等待 LLM 启动…）' }}</pre>
       </el-tab-pane>
 
       <el-tab-pane :name="'thinking'">
@@ -530,6 +630,20 @@ function cancelEditPrompt() {
   color: var(--text-secondary);
   background: var(--tint-think-06);
   border-left: 2px solid var(--tint-think-45);
+}
+
+/* 预览阶段:用户可编辑 user prompt 的 textarea */
+.ai-split-user-editor :deep(.el-textarea__inner) {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 480px;
+}
+.ai-split-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .ai-split-empty {

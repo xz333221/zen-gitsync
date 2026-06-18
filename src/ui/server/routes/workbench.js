@@ -1625,6 +1625,11 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
     const desc = String(req.body?.desc || '').trim();
     const taskId = String(req.body?.taskId || '').trim();
     const promptId = String(req.body?.promptId || '').trim();
+    // customUserBlock:用户在前端 prompt 预览页编辑过的 user prompt。非空时
+    // 直接拿它发给 LLM,跳过服务端拼装;为空时按老逻辑现拼。
+    // 注意:即便传了 customUserBlock,attachments/imageDataUrls 仍按 taskId 重新读,
+    // 因为图片要随消息发,不能跟 prompt 文本一起塞。
+    const customUserBlock = typeof req.body?.customUserBlock === 'string' ? req.body.customUserBlock : '';
     if (!title) {
       return res.status(400).json({ success: false, error: '任务标题不能为空' });
     }
@@ -1722,7 +1727,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
         } catch { /* 没拿到附件不影响拆分 */ }
       }
 
-      const userBlock = `${userInstruction}
+      const userBlock = customUserBlock.trim() ? customUserBlock : `${userInstruction}
 
 ---
 
@@ -1785,6 +1790,103 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       send({ type: 'error', error: 'AI 拆分失败: ' + (err?.message || String(err)) });
       finished = true;
       res.end();
+    }
+  });
+
+  // POST /api/workbench/tasks/ai-split-preview
+  //   body: { title, desc?, taskId?, promptId? }
+  //   →   { success, system, user, hasImages, imageCount }
+  // "AI 拆分前预览/编辑 prompt" 用:跟 /ai-split-subtasks 做完全一样的拼装,
+  // 但**不调 LLM**,只把拼好的 system + user 返回。前端在 UI 上 textarea 展示,
+  // 用户改完按"发送给 AI"再正式调 /ai-split-subtasks 并把改过的文本作为
+  // customUserBlock 传回。这样省一次 LLM 调用,且让用户能修正提示词后再拆分。
+  app.post('/api/workbench/tasks/ai-split-preview', async (req, res) => {
+    try {
+      const title = String(req.body?.title || '').trim();
+      const desc = String(req.body?.desc || '').trim();
+      const taskId = String(req.body?.taskId || '').trim();
+      const promptId = String(req.body?.promptId || '').trim();
+      if (!title) {
+        return res.status(400).json({ success: false, error: '任务标题不能为空' });
+      }
+
+      const userInstruction = await readSubtaskInstruction(req);
+      const projectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+      const projectName = projectPath ? path.basename(projectPath) : '（未指定项目）';
+      const manifestHint = await detectProjectManifest(projectPath);
+
+      let templateBlock = '';
+      if (promptId) {
+        try {
+          const promptData = await readJson(PROMPTS_FILE, { prompts: [] });
+          const p = (promptData.prompts || []).find(x => x.id === promptId);
+          if (p && p.content) {
+            templateBlock = `\n\n## 子任务执行模板（每个拆出的子任务最终会被这套模板包裹后送给 claude 执行；拆分时请确保子任务能让模板里的 {{sub.title}} / {{sub.desc}} 等变量填得有意义）\n模板名：${p.name || '（未命名）'}\n---\n${p.content}\n---`;
+          }
+        } catch { /* 模板读取失败不影响预览 */ }
+      }
+
+      // 附件:只列条目,不读图片二进制(preview 阶段不需要 image_data_url)
+      let attachmentBlock = '';
+      let imageCount = 0;
+      if (taskId) {
+        try {
+          const data = await readJson(TASKS_FILE, { tasks: [] });
+          const task = (data.tasks || []).find(t => t.id === taskId);
+          const atts = Array.isArray(task?.attachments) ? task.attachments : [];
+          if (atts.length > 0) {
+            const lines = [];
+            for (let i = 0; i < atts.length; i++) {
+              const a = atts[i];
+              if (!a || !a.absolutePath) continue;
+              lines.push(`  ${i + 1}. [${a.mimeType || 'application/octet-stream'}] ${a.absolutePath}`);
+              if (isImageExt(a.ext)) imageCount++;
+            }
+            if (lines.length > 0) {
+              const imgNote = imageCount > 0
+                ? `（其中 ${imageCount} 张图片已随消息一并发送，请直接基于图片内容拆分）`
+                : '';
+              attachmentBlock = `\n\n## 任务附件${imgNote}\n${lines.join('\n')}`;
+            }
+          }
+        } catch { /* 没拿到附件不影响预览 */ }
+      }
+
+      const userBlock = `${userInstruction}
+
+---
+
+## 待拆分的任务
+标题：${title}
+${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateBlock}
+
+## 项目上下文（仅供参考，便于拆分时考虑项目特性）
+- 项目名称：${projectName}
+- 项目根目录：${projectPath || '（未指定）'}
+- 主要 manifest：${manifestHint || '（未识别到）'}
+
+请先仔细分析（可以放在 reasoning 中或直接写出来）。仔细分析指：列出 5 个维度——任务真实目标 / 关键技术栈与边界 / 自然执行顺序 / 风险点与可能失败步骤 / 是否需要前置调研——不要简短一两句话就过；分析过后再给出 JSON。JSON 用 \`\`\`json ... \`\`\` 包裹：
+{
+  "subtasks": [
+    { "title": "子任务标题", "desc": "具体描述" }
+  ]
+}
+
+**JSON 输出严格要求**（不遵守会导致解析失败、用户无法入库）：
+1. title 和 desc 内如需引用术语 / 页面名 / 状态名，**必须使用中文引号「」或『』**，禁止使用 ASCII 双引号、单引号或反引号，否则会破坏外层 JSON 结构。
+2. JSON 中不允许尾随逗号（最后一个元素后面不能跟逗号）。
+3. JSON 中不允许写注释。
+4. 所有字符串字段必须用 ASCII 双引号包裹，字符串内部如有换行用 \\n 转义。`;
+
+      res.json({
+        success: true,
+        system: userInstruction,
+        user: userBlock,
+        hasImages: imageCount > 0,
+        imageCount
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: '生成预览失败: ' + (err?.message || String(err)) });
     }
   });
 
