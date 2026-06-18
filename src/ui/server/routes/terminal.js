@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import { spawn, exec } from 'child_process';
+import { psEscape, appleEscape, shQuote } from '../utils/shellQuote.js';
 
 export function registerTerminalRoutes({
   app,
@@ -25,7 +26,6 @@ export function registerTerminalRoutes({
 
     if (process.platform === 'win32') {
       const cmdToRun = String(command || '').trim();
-      const safeWorkingDir = String(targetDir).replace(/"/g, '""');
 
       const splitArgs = (input) => {
         const s = String(input || '');
@@ -59,6 +59,7 @@ export function registerTerminalRoutes({
       const tokens = splitArgs(cmdToRun);
       const isStartCommand = tokens.length > 0 && String(tokens[0]).toLowerCase() === 'start';
 
+      // PowerShell 转义全部走 shellQuote.psEscape ($ ` " 都会被处理)
       let psScript;
       if (isStartCommand) {
         const args = tokens.slice(1);
@@ -69,19 +70,14 @@ export function registerTerminalRoutes({
         const exe = candidateExe && !isUrl(candidateExe) ? String(candidateExe) : null;
 
         if (!exe && candidateUrl) {
-          const safeUrl = String(candidateUrl).replace(/"/g, '""');
-          psScript = `$p = Start-Process -FilePath "${safeUrl}" -WorkingDirectory "${safeWorkingDir}" -PassThru; Write-Output $p.Id`;
+          psScript = `$p = Start-Process -FilePath "${psEscape(candidateUrl)}" -WorkingDirectory "${psEscape(targetDir)}" -PassThru; Write-Output $p.Id`;
         } else if (exe && candidateUrl) {
-          const safeExe = String(exe).replace(/"/g, '""');
-          const safeUrl = String(candidateUrl).replace(/"/g, '""');
-          psScript = `$p = Start-Process -FilePath "${safeExe}" -ArgumentList "${safeUrl}" -WorkingDirectory "${safeWorkingDir}" -PassThru; Write-Output $p.Id`;
+          psScript = `$p = Start-Process -FilePath "${psEscape(exe)}" -ArgumentList "${psEscape(candidateUrl)}" -WorkingDirectory "${psEscape(targetDir)}" -PassThru; Write-Output $p.Id`;
         } else {
-          const safeCmd = String(cmdToRun).replace(/"/g, '""');
-          psScript = `$p = Start-Process -FilePath "cmd.exe" -ArgumentList "/C", "${safeCmd}" -WorkingDirectory "${safeWorkingDir}" -WindowStyle Hidden -PassThru; Write-Output $p.Id`;
+          psScript = `$p = Start-Process -FilePath "cmd.exe" -ArgumentList "/C", "${psEscape(cmdToRun)}" -WorkingDirectory "${psEscape(targetDir)}" -WindowStyle Hidden -PassThru; Write-Output $p.Id`;
         }
       } else {
-        const safeCmd = String(cmdToRun).replace(/"/g, '""');
-        psScript = `$p = Start-Process -FilePath "cmd.exe" -ArgumentList "/K", "${safeCmd}" -WorkingDirectory "${safeWorkingDir}" -PassThru; Write-Output $p.Id`;
+        psScript = `$p = Start-Process -FilePath "cmd.exe" -ArgumentList "/K", "${psEscape(cmdToRun)}" -WorkingDirectory "${psEscape(targetDir)}" -PassThru; Write-Output $p.Id`;
       }
 
       return await new Promise((resolve, reject) => {
@@ -118,8 +114,10 @@ export function registerTerminalRoutes({
     }
 
     if (process.platform === 'darwin') {
-      const script = `tell application "Terminal" to do script "cd ${targetDir} && ${command.trim()}"`;
-      exec(`osascript -e '${script}'`, (error) => {
+      // AppleScript 转义统一走 shellQuote.appleEscape (\ " 都会被处理)
+      const script = `tell application "Terminal" to do script "cd ${appleEscape(targetDir)} && ${appleEscape(command.trim())}"`;
+      // 外层用单引号包,把脚本里可能出现的单引号转义为 '\''
+      exec(`osascript -e ${shQuote(script)}`, (error) => {
         if (error) {
           console.error('打开终端失败:', error);
         }
@@ -127,7 +125,8 @@ export function registerTerminalRoutes({
       return { pid: null };
     }
 
-    const terminalCommand = `gnome-terminal -- bash -c "cd ${targetDir} && ${command.trim()}; exec bash" || xterm -e "cd ${targetDir} && ${command.trim()}; bash"`;
+    // Linux: 用 sh 单引号包命令行,单引号内不解释 $ ` " \ ,只把单引号自身 '\''
+    const terminalCommand = `gnome-terminal -- bash -c ${shQuote(`cd ${targetDir} && ${command.trim()}; exec bash`)} || xterm -e ${shQuote(`cd ${targetDir} && ${command.trim()}; bash`)}`;
     exec(terminalCommand, (error) => {
       if (error) {
         console.error('打开终端失败:', error);

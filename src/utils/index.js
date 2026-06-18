@@ -101,20 +101,7 @@ const printTableWithHeaderUnderline = (head, content, style) => {
 
 // printTableWithHeaderUnderline();
 
-const colors = [
-  '\x1b[31m',  // 红色
-  '\x1b[32m',  // 绿色
-  '\x1b[33m',  // 黄色
-  '\x1b[34m',  // 蓝色
-  '\x1b[35m',  // 紫色
-  '\x1b[36m',  // 青色
-];
-
-function getRandomColor() {
-  return `\x1b[0m`;
-  // const randomIndex = Math.floor(Math.random() * colors.length);
-  // return colors[randomIndex];
-}
+// getRandomColor 已删除（原实现永远返回 \x1b[0m，是死代码）
 
 function resetColor() {
   return '\x1b[0m';
@@ -246,7 +233,8 @@ function execSyncGitCommand(command, options = {}) {
   } catch (e) {
     // console.log(`执行命令出错 ==> `, command, e)
     log && coloredLog(command, e, 'error')
-    throw new Error(e)
+    // 透传原始 error,保留 stack + 已挂载的 stdout/stderr
+    throw e
   }
 }
 
@@ -456,15 +444,34 @@ function addCommandToHistory(command, stdout = '', stderr = '', error = null, ex
   return historyItem;
 }
 
-const getCwd = () => {
-  const cwdArg = process.argv.find(arg => arg.startsWith('--path')) || process.argv.find(arg => arg.startsWith('--cwd'));
-  if (cwdArg) {
-    // console.log(`cwdArg ==> `, cwdArg)
-    const [, value] = cwdArg.split('=')
-    // console.log(`value ==> `, value)
-    return value || process.cwd()
+/**
+ * 从 argv 数组里解析出 --path / --cwd 的值
+ * 严格匹配 `--path` / `--path=<v>` / `--cwd` / `--cwd=<v>`,避免误匹配 `--pathTo=...`
+ *
+ * @param {readonly string[]} argv - 类似 process.argv 的参数数组
+ * @returns {string | null} 解析到的值,没匹配到返回 null
+ */
+function parseCwdArg(argv) {
+  if (!Array.isArray(argv)) return null
+  const cwdArg = argv.find((arg) => {
+    if (typeof arg !== 'string') return false
+    if (arg === '--path' || arg === '--cwd') return true
+    return arg.startsWith('--path=') || arg.startsWith('--cwd=')
+  })
+  if (!cwdArg) return null
+  const eqIdx = cwdArg.indexOf('=')
+  if (eqIdx >= 0) {
+    const value = cwdArg.slice(eqIdx + 1)
+    return value || null
   }
-  return process.cwd()
+  // 空格分隔形式: `--path <value>`,取下一个 argv
+  const next = argv[argv.indexOf(cwdArg) + 1]
+  return next || null
+}
+
+const getCwd = () => {
+  const parsed = parseCwdArg(process.argv)
+  return parsed || process.cwd()
 }
 const judgePlatform = () => {
   // 判断是否是 Windows 系统
@@ -889,15 +896,35 @@ async function execGitAddWithLockFilter() {
     }
 
     // 逐个添加未锁定的文件
+    // 注意：用单引号包文件名,单引号内不解释 $ ` " \ 等元字符,
+    // 只需把单引号自身转义为 '\''
+    // 避免文件名含特殊字符(如 " $ ` ;) 导致 shell 注入或命令错乱
+    const shellQuote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
+    let successCount = 0
+    let failedFiles = []
     for (const file of filesToAdd) {
-      await execGitCommand(`git add "${file}"`, {
-        head: `git add ${file}`,
-        log: false
-      });
+      try {
+        await execGitCommand(`git add -- ${shellQuote(file)}`, {
+          head: `git add ${file}`,
+          log: false
+        })
+        successCount++
+      } catch (err) {
+        // 单文件失败不阻断整批,记录失败清单让用户感知
+        failedFiles.push({ file, error: err?.message || String(err) })
+        console.warn(chalk.yellow(`⚠️ 添加失败: ${file} — ${err?.message || err}`))
+      }
     }
 
     const skippedCount = modifiedFiles.length - filesToAdd.length;
-    console.log(chalk.green(`✅ 已添加 ${filesToAdd.length} 个文件到暂存区${skippedCount > 0 ? ` (跳过 ${skippedCount} 个锁定文件)` : ''}`));
+    const failSuffix = failedFiles.length > 0 ? `, ${failedFiles.length} 个失败` : ''
+    console.log(chalk.green(`✅ 已添加 ${successCount} 个文件到暂存区${skippedCount > 0 ? ` (跳过 ${skippedCount} 个锁定文件)` : ''}${failSuffix}`));
+    if (failedFiles.length > 0) {
+      // 把失败列表挂到 thrown error 上,上层可选择性展示
+      const e = new Error(`git add 部分失败 (${failedFiles.length}/${filesToAdd.length})`)
+      e.failedFiles = failedFiles
+      throw e
+    }
 
   } catch (error) {
     console.error(chalk.red('执行 git add 时出错:'), error.message);
@@ -1050,7 +1077,7 @@ export {
   clearCommandHistory,
   checkAndClearGitLock,
   registerSocketIO, // 导出注册Socket.io的函数
-  getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
+  getCwd, parseCwdArg, judgePlatform, showHelp, judgeLog, printGitLog,
   judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,
   exec_push, execPull, judgeRemote, execDiff, execAddAndCommit,
   execGitAddWithLockFilter, // 导出新的 git add 函数

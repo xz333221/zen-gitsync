@@ -123,20 +123,21 @@ export function registerExecRoutes({
       // npm、node、git 等现代工具都输出 UTF-8
       const isWindows = process.platform === 'win32';
       const cmdBuiltins = ['dir', 'type', 'set', 'path', 'cd', 'md', 'rd', 'del', 'copy', 'move', 'ren'];
-      
+
       // echo 命令特殊处理：如果包含变量替换（如 {{xxx}}），说明内容可能已经是 UTF-8，不转换
-      const isEchoCommand = command.trim().toLowerCase().startsWith('echo ');
+      const trimmed = command.trim().toLowerCase();
+      const firstToken = trimmed.split(/\s+/, 1)[0] || '';
+      const isEchoCommand = firstToken === 'echo';
       const hasVariableSubstitution = isEchoCommand && (
-        command.includes('{{') || 
-        command.includes('${') || 
+        command.includes('{{') ||
+        command.includes('${') ||
         command.includes('%')  // Windows 环境变量
       );
-      
+
+      // 必须按 token 边界判断,避免 'dir' 误匹配 'directory'、'path' 误匹配 'path-to'
       const needsGbkConversion = isWindows && (
-        cmdBuiltins.some(builtin =>
-          command.trim().toLowerCase().startsWith(builtin + ' ') ||
-          command.trim().toLowerCase() === builtin
-        ) || (isEchoCommand && !hasVariableSubstitution)  // echo 只在没有变量替换时才转换
+        cmdBuiltins.includes(firstToken) ||
+        (isEchoCommand && !hasVariableSubstitution)  // echo 只在没有变量替换时才转换
       );
 
       console.log(`[流式输出] 命令: ${command.substring(0, 50)}, 需要GBK转换: ${needsGbkConversion}`);

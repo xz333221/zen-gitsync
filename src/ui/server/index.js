@@ -134,7 +134,8 @@ async function startUIServer(noOpen = false, savePort = false) {
     execGitCommand,
     addCommandToHistory,
     getCurrentProjectPath: () => currentProjectPath,
-    nextProcessId: () => processIdCounter++,
+    // 用 pre-increment 从 1 起,避免首进程拿到 id=0（0 在 `if (processId)` 这类真值检查里会被吞）
+    nextProcessId: () => ++processIdCounter,
     runningProcesses
   });
 
