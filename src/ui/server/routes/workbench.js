@@ -1124,10 +1124,18 @@ ${prompt}`
   // claude -p 字符串模式会扫描 prompt 中出现的本地文件路径并自动
   // 识别为附件（图片 / PDF / 文本均可）。
   // 主任务附件对所有 sub 都可见；子任务自己的附件只对该 sub 可见。
-  const allAttachments = [
-    ...(Array.isArray(task.attachments) ? task.attachments : []),
-    ...(Array.isArray(sub.attachments) ? sub.attachments : [])
-  ];
+  // 注意：run-simple 路径下 virtualSub.attachments 就是 task.attachments 的同一引用，
+  // 不去重会把同一张图在 prompt 里列两遍。按 absolutePath 去重。
+  const taskAtts = Array.isArray(task.attachments) ? task.attachments : [];
+  const subAtts = Array.isArray(sub.attachments) ? sub.attachments : [];
+  const seen = new Set();
+  const allAttachments = [];
+  for (const a of [...subAtts, ...taskAtts]) {
+    if (!a || !a.absolutePath) continue;
+    if (seen.has(a.absolutePath)) continue;
+    seen.add(a.absolutePath);
+    allAttachments.push(a);
+  }
   if (allAttachments.length > 0) {
     const lines = allAttachments
       .filter(a => a && a.absolutePath)
