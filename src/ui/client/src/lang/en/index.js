@@ -1495,6 +1495,7 @@ export default {
   '@A1833:重置': 'Reset',
   '@A1833:查看详情': 'View details',
   '@A1833:复制提交哈希': 'Copy commit hash',
+  '@A1833:点击复制完整哈希': 'Click to copy full hash',
   '@A1833:复制提交内容': 'Copy commit content',
   '@A1833:已复制提交内容: ': 'Copied commit content: ',
   '@A1833:复制提交内容失败: ': 'Copy commit content failed: ',

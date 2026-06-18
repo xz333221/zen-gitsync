@@ -1272,15 +1272,19 @@ function toggleFullscreen() {
                 </el-tooltip>
               </template>
             </el-table-column>
-            <el-table-column :label="$t('@A1833:哈希')" width="56" align="center" class-name="hash-action-col">
+            <el-table-column :label="$t('@A1833:哈希')" width="78" align="center" resizable>
               <template #default="scope">
-                <IconButton
-                  :tooltip="$t('@A1833:复制提交哈希')"
-                  custom-class="copy-hash-btn"
-                  @click.stop="copyCommitHash(scope.row as LogItem)"
+                <el-tooltip
+                  :content="scope.row.hash"
+                  placement="top"
+                  :show-after="300"
                 >
-                  <el-icon><CopyDocument /></el-icon>
-                </IconButton>
+                  <span
+                    class="commit-hash"
+                    :title="$t('@A1833:点击复制完整哈希')"
+                    @click.stop="copyCommitHash(scope.row as LogItem)"
+                  >{{ scope.row.hash.substring(0, 7) }}</span>
+                </el-tooltip>
               </template>
             </el-table-column>
           </el-table>
@@ -1572,16 +1576,25 @@ function toggleFullscreen() {
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-weight: 500;
   border-radius: var(--radius-sm);
-  padding: 1px 3px;
+  padding: 2px 5px;
   background-color: #ecf5ff;
   transition: all 0.2s ease;
   font-size: 11px;
+  letter-spacing: 0.2px;
+  user-select: none;
+  display: inline-block;
+  line-height: 1.4;
 }
 
 .commit-hash:hover {
   text-decoration: none;
   background-color: #d9ecff;
   box-shadow: var(--shadow-sm);
+}
+
+.commit-hash:active {
+  background-color: #b3d8ff;
+  transform: scale(0.96);
 }
 
 .commit-detail-container {
