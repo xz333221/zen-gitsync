@@ -454,17 +454,17 @@ function copyGitInit() {
           <span class="user-warning">{{ $t('@F13B4:未配置') }}</span>
         </template>
         <el-tooltip :content="$t('@F13B4:用户设置')" placement="bottom" effect="dark" :show-after="200">
-          <button class="modern-btn btn-icon-28" @click="openUserSettingsDialog">
-            <el-icon class="btn-icon"><Setting /></el-icon>
+          <button class="modern-btn btn-icon-28" :aria-label="$t('@F13B4:用户设置')" @click="openUserSettingsDialog">
+            <el-icon class="btn-icon" aria-hidden="true"><Setting /></el-icon>
           </button>
         </el-tooltip>
       </div>
     </div>
   </header>
 
-  <div v-if="configStore.hasConfigLoadError" class="config-broken-banner">
+  <div v-if="configStore.hasConfigLoadError" class="config-broken-banner" role="alert" aria-live="polite">
     <div class="banner-left">
-      <el-icon class="banner-icon"><WarningFilled /></el-icon>
+      <el-icon class="banner-icon" aria-hidden="true"><WarningFilled /></el-icon>
       <div class="banner-text">
         <span class="banner-title">{{ $t('@CFGERR:系统配置文件有问题') }}</span>
         <el-tooltip
@@ -595,8 +595,8 @@ function copyGitInit() {
         </template>
       </div>
       <div class="commit-form-panel" v-else>
-        <div class="not-git-repo-card">
-          <div class="not-git-repo-icon">
+        <div class="not-git-repo-card" role="region" :aria-label="$t('@F13B4:仓库初始化')">
+          <div class="not-git-repo-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/>
               <path d="M14 2v6h6"/>
@@ -609,10 +609,15 @@ function copyGitInit() {
           <p class="not-git-repo-desc">{{ $t('@F13B4:当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。') }}</p>
           <div class="not-git-repo-tip">
             <span class="tip-label">{{ $t('@F13B4:可以使用以下命令初始化仓库：') }}</span>
-            <div class="not-git-repo-code" @click="copyGitInit">
+            <button
+              type="button"
+              class="not-git-repo-code"
+              :aria-label="`${$t('@F13B4:点击复制')} git init`"
+              @click="copyGitInit"
+            >
               <code>git init</code>
               <span class="copy-hint">{{ $t('@F13B4:点击复制') }}</span>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -866,11 +871,11 @@ h1 {
   font-weight: 700;
   letter-spacing: -0.6px;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  color: #1e3a5f;
+  color: var(--color-primary-dark);
 }
 
 [data-theme="dark"] h1 {
-  color: #93c5fd;
+  color: var(--color-primary-light);
 }
 
 .header-info {
@@ -899,8 +904,8 @@ h1 {
 
 #user-info:hover {
   border-color: var(--color-primary);
-  background: rgba(59, 130, 246, 0.08);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+  background: var(--tint-primary-10);
+  box-shadow: var(--focus-ring-soft);
 }
 
 .command-history-section {
@@ -1302,13 +1307,23 @@ h1 {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--transition-fast) var(--ease-custom),
+    border-color var(--transition-fast) var(--ease-custom),
+    box-shadow var(--transition-fast) var(--ease-custom);
   user-select: all;
+  font-family: inherit;
 }
 
 .not-git-repo-code:hover {
   border-color: var(--color-primary);
   background: var(--bg-panel);
+}
+
+.not-git-repo-code:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
 
 .not-git-repo-code code {
@@ -1326,7 +1341,8 @@ h1 {
   transition: opacity 0.2s ease;
 }
 
-.not-git-repo-code:hover .copy-hint {
+.not-git-repo-code:hover .copy-hint,
+.not-git-repo-code:focus-visible .copy-hint {
   opacity: 1;
 }
 
@@ -1430,14 +1446,14 @@ h1 {
 
 .vertical-resizer:hover,
 .vertical-resizer.active {
-  background-color: rgba(59, 130, 246, 0.12);
+  background-color: var(--tint-primary-12);
 }
 
 .vertical-resizer:hover::after,
 .vertical-resizer.active::after {
   width: 2px;
   background-color: var(--color-primary);
-  box-shadow: 0 0 6px rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 6px var(--tint-primary-55);
 }
 
 /* 第二条垂直分隔条样式 */
@@ -1465,14 +1481,14 @@ h1 {
 
 .vertical-resizer-2:hover,
 .vertical-resizer-2.active {
-  background-color: rgba(59, 130, 246, 0.12);
+  background-color: var(--tint-primary-12);
 }
 
 .vertical-resizer-2:hover::after,
 .vertical-resizer-2.active::after {
   width: 2px;
   background-color: var(--color-primary);
-  box-shadow: 0 0 6px rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 6px var(--tint-primary-55);
 }
 
 /* 水平分隔条样式 */
@@ -1501,7 +1517,7 @@ h1 {
 
 .horizontal-resizer:hover,
 .horizontal-resizer.active {
-  background-color: rgba(59, 130, 246, 0.06);
+  background-color: var(--tint-primary-08);
 }
 
 .horizontal-resizer:hover::after,
@@ -1510,7 +1526,7 @@ h1 {
   height: 4px;
   width: 48px;
   border-radius: 2px;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.45);
+  box-shadow: 0 0 10px var(--tint-primary-45);
 }
 
 

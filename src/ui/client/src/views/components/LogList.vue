@@ -265,6 +265,17 @@ function getBranchTagType(ref: string) {
   if (ref.includes("origin/")) return "warning";
   return "info";
 }
+
+/**
+ * 判断 commit message 是否需要 tooltip 预览。
+ * 单行省略号判断：超过 60 个字符或包含换行就显示 tooltip。
+ * 配合模板里 el-tooltip 的 :disabled 实现"短消息不打扰"。
+ */
+function isMessageTruncated(message: string): boolean {
+  if (!message) return false;
+  if (message.length > 60) return true;
+  return message.includes("\n");
+}
 // 添加对表格实例的引用
 const tableRef = ref<TableInstance | null>(null);
 const tableBodyWrapper = ref<HTMLElement | null>(null);
@@ -1246,8 +1257,16 @@ function toggleFullscreen() {
                         {{ formatBranchName(ref) }}
                       </el-tag>
                     </div>
-                    <!-- 提交信息 -->
-                    <span class="message-text">{{ scope.row.message }}</span>
+                    <!-- 提交信息（hover 显示完整内容预览） -->
+                    <el-tooltip
+                      v-if="scope.row.message"
+                      :content="scope.row.message"
+                      placement="top"
+                      :show-after="350"
+                      :disabled="!isMessageTruncated(scope.row.message)"
+                    >
+                      <span class="message-text">{{ scope.row.message }}</span>
+                    </el-tooltip>
                     <el-button
                       :icon="CopyDocument"
                       size="small"
@@ -1259,20 +1278,19 @@ function toggleFullscreen() {
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="date" :label="$t('@A1833:日期')" width="150" resizable />
-            <el-table-column :label="$t('@A1833:作者')" width="100" resizable>
+            <el-table-column prop="date" :label="$t('@A1833:日期')" min-width="130" width="150" resizable />
+            <el-table-column :label="$t('@A1833:作者')" min-width="90" width="120" resizable>
               <template #default="scope">
                 <el-tooltip
                   :content="scope.row.email"
                   placement="top"
-
                   :show-after="200"
                 >
                   <span class="author-name">{{ scope.row.author }}</span>
                 </el-tooltip>
               </template>
             </el-table-column>
-            <el-table-column :label="$t('@A1833:哈希')" width="78" align="center" resizable>
+            <el-table-column :label="$t('@A1833:哈希')" min-width="78" width="78" align="center" resizable>
               <template #default="scope">
                 <el-tooltip
                   :content="scope.row.hash"
@@ -1873,8 +1891,16 @@ function toggleFullscreen() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  
+  flex: 1;
+  min-width: 0;
   line-height: var(--line-height-tight);
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.message-text:hover {
+  color: var(--text-primary);
 }
 
 :deep(.el-table__cell) {
