@@ -45,7 +45,7 @@ import {
 } from "@element-plus/icons-vue";
 import "element-plus/dist/index.css";
 import { useGitStore } from "@stores/gitStore";
-import { formatCommitMessage, extractPureMessage } from "@utils/index.ts";
+import { extractPureMessage } from "@utils/index.ts";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
 import IconButton from "@components/IconButton.vue";
@@ -90,6 +90,22 @@ const commitFileViewMode = ref<CommitFileViewMode>('full-new')
 
 const commitCompareOriginal = ref('')
 const commitCompareModified = ref('')
+
+// commit message 折叠：标题(第一行)始终显示,body(剩余行)默认收起,长 message 才显示展开按钮
+const commitMessageExpanded = ref(false)
+const commitMessageTitle = computed(() => {
+  if (!selectedCommit.value?.message) return ''
+  return selectedCommit.value.message.split('\n')[0].trim()
+})
+const commitMessageBody = computed(() => {
+  if (!selectedCommit.value?.message) return ''
+  const parts = selectedCommit.value.message.split('\n')
+  return parts.slice(1).join('\n').trim()
+})
+const hasCommitMessageBody = computed(() => commitMessageBody.value.length > 0)
+const commitMessageBodyHtml = computed(() =>
+  commitMessageBody.value.replace(/\n/g, '<br>')
+)
 
 // 添加筛选相关变量
 const filterVisible = ref(false);
@@ -463,6 +479,7 @@ async function viewCommitDetail(commit: LogItem | null) {
   commitFileViewMode.value = 'full-new'
   commitCompareOriginal.value = ''
   commitCompareModified.value = ''
+  commitMessageExpanded.value = false
 
   try {
     // 确保哈希值有效
@@ -1282,15 +1299,25 @@ function toggleFullscreen() {
             </div>
             <div class="info-item message-item">
               <span class="info-label">{{ $t('@A1833:提交信息') }}</span>
-              <div
-                class="info-message"
-                v-html="
-                  formatCommitMessage(selectedCommit.message).replace(
-                    /\n/g,
-                    '<br>'
-                  )
-                "
-              ></div>
+              <div class="info-message-wrapper">
+                <div class="info-message-title">{{ commitMessageTitle }}</div>
+                <div
+                  v-if="commitMessageExpanded && hasCommitMessageBody"
+                  class="info-message-body"
+                  v-html="commitMessageBodyHtml"
+                ></div>
+              </div>
+              <button
+                v-if="hasCommitMessageBody"
+                class="info-message-toggle"
+                @click="commitMessageExpanded = !commitMessageExpanded"
+              >
+                {{ commitMessageExpanded ? $t('@A1833:收起') : $t('@A1833:展开') }}
+                <span
+                  class="info-message-toggle-icon"
+                  :class="{ 'is-expanded': commitMessageExpanded }"
+                >▾</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1586,6 +1613,11 @@ function toggleFullscreen() {
 .message-item {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--spacing-base);
 }
 
 .info-label {
@@ -1605,10 +1637,64 @@ function toggleFullscreen() {
 
 .info-message {
   color: var(--text-primary);
-  
+
   line-height: 1.6;
   word-break: break-word;
   flex: 1;
+}
+
+.info-message-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  flex: 1;
+  min-width: 0;
+}
+
+.info-message-title {
+  color: var(--text-primary);
+  font-weight: 500;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.info-message-body {
+  color: var(--text-primary);
+  line-height: 1.6;
+  word-break: break-word;
+  white-space: pre-wrap;
+  padding-top: var(--spacing-sm);
+  border-top: 1px dashed var(--border-card);
+}
+
+.info-message-toggle {
+  align-self: center;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.info-message-toggle:hover {
+  background: var(--bg-panel);
+  border-color: var(--color-primary);
+}
+
+.info-message-toggle-icon {
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.info-message-toggle-icon.is-expanded {
+  transform: rotate(180deg);
 }
 
 /* 提交详情弹窗样式 */

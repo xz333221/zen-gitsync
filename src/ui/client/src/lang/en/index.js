@@ -1455,6 +1455,8 @@ export default {
   '@A1833:结束日期': 'End Date',
   '@A1833:哈希': 'Hash',
   '@A1833:提交信息': 'Commit message',
+  '@A1833:展开': 'Expand',
+  '@A1833:收起': 'Collapse',
   '@A1833:复制纯净提交信息（不含类型前缀）': 'Copy pure commit information (excluding type prefix)',
   '@A1833:日期': 'Date',
   '@A1833:作者': 'Author',
