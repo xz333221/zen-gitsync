@@ -1,6 +1,6 @@
 ---
 name: dev-server-diagnostics
-description: zen-gitsync 专属前端 dev server 诊断 skill。当用户反馈"改完代码浏览器没变 / HMR 不工作 / reload 后还是旧的 / DOM 没刷新"时调用,按概率从高到低排查:preview 走的不是 vite 而 backend 生产 bundle(最新踩坑) > dev server 没启 > 看错元素 > HMR 边界问题。优先用 `npm run dev:ping` 一键判断 vite 状态,不要等"DOM 没变"了再回头查 dev server。适用触发词:HMR 不工作、刷新没生效、DOM 没变、dev server 死了、vite 没起、reload 无效、改了没生效、preview 没生效、preview 加载的是旧版。
+description: zen-gitsync 专属前端 dev server 诊断 skill。当用户反馈"改完代码浏览器没变 / HMR 不工作 / reload 后还是旧的 / DOM 没刷新"时调用,按概率从高到低排查:preview 走的不是 vite 而 backend 生产 bundle(最新踩坑) > dev:ping 报 vite DOWN 但 vite 漂到 5545 等其他端口(端口被占) > preview 改写 .port 导致 vite proxy 找不到 backend > dev server 没启 > 看错元素 > HMR 边界问题。优先用 `npm run dev:ping` 一键判断 vite 状态(注意它只探 5544),不要等"DOM 没变"了再回头查 dev server。**承认 preview 工具能力有限**——陷在"preview_eval 看不到新加 DOM"超过 3 分钟应改走 build 验证或交用户肉眼确认。适用触发词:HMR 不工作、刷新没生效、DOM 没变、dev server 死了、vite 没起、reload 无效、改了没生效、preview 没生效、preview 加载的是旧版、preview_eval 看不到。
 ---
 
 # 前端 dev server 诊断流程
@@ -68,7 +68,13 @@ curl -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5544/@vite/client
 
 返回 200 = vite 在跑。
 
-**为什么这是步骤 0 而不是步骤 1**:本仓库曾因 vite 没起来改了 5 轮代码、reload 4 次,最后才发现 dev server 整个就没在跑。preview 工具的 "started successfully" 只代表 wrapper 进程跑了,不等于 vite 在跑。
+**dev:ping 报 vite DOWN 但 vite 实际在跑(端口被占导致漂移)的处理**:
+- dev:ping 默认只探 5544;本项目 `start:vue` 在 5544 被占时会自动漂到 5545、5546……
+- 若 dev:ping 报 vite DOWN,**先**用 `netstat -ano | grep ":554[0-9]"` 看实际监听端口,或循环 `curl` 5544/5545/5546 的 `/@vite/client`
+- 命中 200 的端口就是真实 vite 端口,**改 `cat .port` 看 backend port 是否对齐**(vibe 启动脚本会写 .port 给 vite proxy 用)
+- 不要因为 dev:ping DOWN 就以为 vite 死了,直接 reload+改代码可能拿不到新 chunk,但**根本原因不是 vite 没起,而是 vite 端口和 dev:ping 默认端口对不上**
+
+**为什么这是步骤 0 而不是步骤 1**:本仓库曾因 vite 没起来改了 5 轮代码、reload 4 次,最后才发现 dev server 整个就没在跑。preview 工具的 "started successfully" 只代表 wrapper 进程跑了,不等于 vite 在跑。**也**曾因 dev:ping 误报 vite DOWN、跳过 vite、回头改代码,实际 vite 在 5545 一直跑着、只是没被 ping 到。
 
 ---
 
@@ -159,9 +165,13 @@ grep -l "新加的类名" src/ui/public/assets/WorkbenchView-*.js
 | 误操作 | 为什么错 |
 |--------|----------|
 | preview 起来直接改代码等 HMR,不看 0a 判定 | 走的是 backend 生产 bundle 的话,HMR 永远不会推送;看完 0a 才知道该走 build 路径 |
+| dev:ping 报 vite DOWN 就以为 vite 死了、跳过 vite 操作 | vite 可能因端口被占漂到 5545/5546,dev:ping 默认只探 5544。先用 `netstat -ano` 或循环 curl 多端口确认 |
 | `touch` 文件指望"触发 watcher" | Vite chokidar 已经监听文件写入,这一步说明 dev server 已经死了,先解决 dev server |
 | `preview_stop` + `preview_start` 反复重启 | preview 工具的 serverId 是复用的,start 不会真的重启 dev 进程;要重启用 shell |
 | 在 `preview_logs` 里找 HMR 输出 | `npm run dev` 用 concurrently 启多进程,preview 工具只抓其中一个进程的 stdout,大概率是后端 |
 | 改完代码直接 reload 没看 Network hash | 304 = 浏览器用缓存,reload 也拿不到新模块;或更根本的:走的是生产 bundle,reload 拿到的还是旧构建产物 |
 | 反复改代码等下次"也许就生效了" | 步骤 0a 已经告诉你走的是生产 bundle,改再多也没用,直接 build |
 | dev:ping 显示 OK 就以为 HMR 通 | dev:ping 只检查端口监听,不看浏览器实际请求落到哪个 server。本仓库 preview + concurrently 链路下 vite OK 不代表浏览器走了 vite |
+| `preview_eval` 里 `fetch('/src/...')` 拿 vite 源文件做断言 | preview 工具的页面跑在它分配的 wrapper 端口(如 7606/4937),`fetch('/src/...')` 命中 wrapper,不是 vite 5545。**这条返回 404 不代表 vite 编译产物不对**。要看 vite 编译产物,直接在 shell `curl http://localhost:5545/src/...`,或用 `preview_network` 看实际请求 |
+| 陷在"preview_eval 看不到我加的 DOM"的死循环超过 3 分钟 | preview 工具内部渲染状态可能与 vite 不一致(改写 `.port`、wrapper 进程缓存、teleport 行为等)。**承认限制**后选择:(a) 走 `npx vite build` 验证(写到 `src/ui/public/assets/`,grep 类名/字符串确认进 bundle);(b) 告知用户自己 reload 看效果。不要在 preview 里反复改 toggle、加 hardcode、改 key 试图"逼出来" |
+| preview 改写 `.port` 导致 vite proxy 找不到 backend | preview 工具会把它分配的 wrapper 端口写入 `.port`,vite 启动脚本读 `.port` 配置 proxy 后端。如果看到工作台任务列表空、API 调用 500,先看 `.port` 内容、用 `cat .port > 真后端端口` 修复 |
