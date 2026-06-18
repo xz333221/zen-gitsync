@@ -10,8 +10,9 @@
     "npm:publish": "npm publish --registry https://registry.npmjs.org/",
     "npm:whoami": "npm whoami --registry https://registry.npmjs.org/",
     "pull": "git pull",
-    "dev:server": "nodemon server.js --no-open",
-    "dev": "concurrently \"npm run dev:server\" \"npm run start:vue\"",
+    "dev:server": "cross-env PORT=5545 nodemon server.js --no-open",
+    "dev:vue": "cd ./src/ui/client && npm run dev",
+    "dev": "concurrently -n backend,vite -c blue,green \"npm:dev:server\" \"npm:dev:vue\"",
     "dev:ping": "node scripts/dev-ping.cjs",
     "start:server:no-open": "node server.js --no-open",
     "start:vue": "cd ./src/ui/client && npm run dev",
@@ -103,6 +104,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "nodemon": "^3.1.14"
   }
 }

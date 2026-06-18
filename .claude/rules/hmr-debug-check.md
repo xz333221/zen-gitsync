@@ -84,6 +84,10 @@ HMR 失败的 3 个真实原因按概率排序:
 - **不要因为 `dev:ping` 报 vite DOWN 就重启** — 先 `netstat` 看是不是 `[::1]:5544 LISTENING`,是的话 vite 活的,跳过(详见规则 0 IPv6-only 陷阱)。
 - **不要 preview 起来 snapshot 空就重启** — 先看后台 vite 日志是不是还在 `[optimizer] bundling dependencies...`,是的话正常,等 30 秒(详见规则 0a)。
 
+## 启动 preview 的端口分工(本仓库强约束)
+
+任何 session 第一次起 preview 必须先读 `.claude/rules/preview-launch.md` —— 端口 5544 给 vite dev server (HMR)、5545 给 backend,`launch.json` 拆成 `zen-vite` + `zen-backend` 两个 server,启动顺序是 **backend 先 → 等 `.port` 写好 → 再启 vite**。本仓库曾因 vite 漂到 5545、preview 工具只问 5544,导致所有"改前端代码无 HMR"的伪故障。
+
 ## 不需要执行的情况
 
 - 没改前端代码(只改 .md / .json / .yaml / .txt)

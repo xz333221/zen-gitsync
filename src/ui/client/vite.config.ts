@@ -110,9 +110,10 @@ export default defineConfig(({ command }) => {
     },
   },
   server: {
-    // 默认 5544；如果被占用则自动顺延下一个可用端口，避免与已有的 zen-git 实例冲突
+    // 默认 5544；strictPort:true 时端口被占直接报错，避免 preview 工具抓到漂移后的端口
+    // （preview 工具只问 .port/launch.json 配的 5544，不知道 vite 漂到 5545）
     port: 5544,
-    strictPort: false,
+    strictPort: true,
     open: true,
     // 显式绑 IPv4,避免 vite 8 默认 'localhost' 只绑 IPv6 [::1] 导致浏览器走 127.0.0.1 拿不到 HMR
     host: '127.0.0.1',
