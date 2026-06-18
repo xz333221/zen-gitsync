@@ -75,9 +75,10 @@ export default defineConfig(({ command }) => {
         resolvers: [ElementPlusResolver()],
       }),
       Components({
-        // importStyle: 'css' 让 resolver 在主入口就 import 每个子组件的 style/css,
-        // Vite 启动时一次性把所有用到的 element-plus 子模块加入依赖图 → 不再触发懒补预构建
-        resolvers: [ElementPlusResolver({ importStyle: 'css' })],
+        // 走默认 importStyle (theme-chalk 完整包),保证 in-js 样式(segmented 指示器、
+        // collapse 折叠动画等)与 css 都被 resolver 注入,容器高度不会算错 → 滚动条消失。
+        // dev 期间触发 reload 的问题由下面的 optimizeDeps 兜底解决。
+        resolvers: [ElementPlusResolver()],
       }),
       tailwindcss(),
       vue(),
@@ -91,10 +92,9 @@ export default defineConfig(({ command }) => {
     ],
   optimizeDeps: {
     exclude: ['ai-model-form'],
-    // entry 显式声明 src/main.ts,Vite 启动时按主入口扫全依赖,
-    // resolver importStyle: 'css' 让 element-plus 子模块的 css 在启动时进入依赖图,
-    // dev 期间访问新页面不再触发 Vite 补预构建 → 避免 "optimized dependencies changed. reloading"
-    entries: ['src/main.ts'],
+    // entry 显式声明 src/main.ts + 全量 .vue 组件,resolver 在 transform 阶段把所有
+    // el-* 子模块加入依赖图,Vite 启动时一次预构建完 → dev 期访问新页面不再触发 reload
+    entries: ['src/main.ts', 'src/**/*.{vue,ts,tsx}'],
     // 兜底:把 element-plus 整个包放进去,运行期即使 resolver 漏掉,Vite 也不再需要新增依赖
     include: ['element-plus/es > element-plus'],
   },
