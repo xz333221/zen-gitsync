@@ -244,16 +244,16 @@ function loadLayoutRatios() {
 
   // 应用三列区域比例
   if (savedLeftRatio != null && savedMidRatio != null && savedRightRatio != null) {
-    gridLayout.style.gridTemplateColumns = `${savedLeftRatio}fr 8px ${savedMidRatio}fr 8px ${savedRightRatio}fr`;
+    gridLayout.style.gridTemplateColumns = `${savedLeftRatio}fr 4px ${savedMidRatio}fr 4px ${savedRightRatio}fr`;
   } else {
     // 默认比例 2:3:3
-    gridLayout.style.gridTemplateColumns = "2fr 8px 3fr 8px 3fr";
+    gridLayout.style.gridTemplateColumns = "2fr 4px 3fr 4px 3fr";
   }
 
   // 应用上下区域比例
   if (savedTopRatio != null) {
     const bottomRatio = 1 - savedTopRatio;
-    gridLayout.style.gridTemplateRows = `${savedTopRatio}fr 8px ${bottomRatio}fr`;
+    gridLayout.style.gridTemplateRows = `${savedTopRatio}fr 4px ${bottomRatio}fr`;
   }
 }
 
@@ -294,11 +294,11 @@ function handleVResize(event: MouseEvent) {
     const maxLeftRatio = 0.4;
 
     if (newLeftRatio < minLeftRatio) {
-      gridLayout.style.gridTemplateColumns = `${minLeftRatio}fr 8px ${(1 - minLeftRatio) * midShare}fr 8px ${(1 - minLeftRatio) * rightShare}fr`;
+      gridLayout.style.gridTemplateColumns = `${minLeftRatio}fr 4px ${(1 - minLeftRatio) * midShare}fr 4px ${(1 - minLeftRatio) * rightShare}fr`;
     } else if (newLeftRatio > maxLeftRatio) {
-      gridLayout.style.gridTemplateColumns = `${maxLeftRatio}fr 8px ${(1 - maxLeftRatio) * midShare}fr 8px ${(1 - maxLeftRatio) * rightShare}fr`;
+      gridLayout.style.gridTemplateColumns = `${maxLeftRatio}fr 4px ${(1 - maxLeftRatio) * midShare}fr 4px ${(1 - maxLeftRatio) * rightShare}fr`;
     } else {
-      gridLayout.style.gridTemplateColumns = `${newLeftRatio}fr 8px ${restRatio * midShare}fr 8px ${restRatio * rightShare}fr`;
+      gridLayout.style.gridTemplateColumns = `${newLeftRatio}fr 4px ${restRatio * midShare}fr 4px ${restRatio * rightShare}fr`;
     }
   }
 }
@@ -341,11 +341,11 @@ function handleV2Resize(event: MouseEvent) {
     const maxRightRatio = 0.5;
 
     if (newRightRatio < minRightRatio) {
-      gridLayout.style.gridTemplateColumns = `${(1 - minRightRatio) * leftShare}fr 8px ${(1 - minRightRatio) * midShare}fr 8px ${minRightRatio}fr`;
+      gridLayout.style.gridTemplateColumns = `${(1 - minRightRatio) * leftShare}fr 4px ${(1 - minRightRatio) * midShare}fr 4px ${minRightRatio}fr`;
     } else if (newRightRatio > maxRightRatio) {
-      gridLayout.style.gridTemplateColumns = `${(1 - maxRightRatio) * leftShare}fr 8px ${(1 - maxRightRatio) * midShare}fr 8px ${maxRightRatio}fr`;
+      gridLayout.style.gridTemplateColumns = `${(1 - maxRightRatio) * leftShare}fr 4px ${(1 - maxRightRatio) * midShare}fr 4px ${maxRightRatio}fr`;
     } else {
-      gridLayout.style.gridTemplateColumns = `${restRatio * leftShare}fr 8px ${restRatio * midShare}fr 8px ${newRightRatio}fr`;
+      gridLayout.style.gridTemplateColumns = `${restRatio * leftShare}fr 4px ${restRatio * midShare}fr 4px ${newRightRatio}fr`;
     }
   }
 }
@@ -395,11 +395,11 @@ function handleHResize(event: MouseEvent) {
     const maxTopRatio = 0.8;
 
     if (newTopRatio < minTopRatio) {
-      gridLayout.style.gridTemplateRows = `${minTopRatio}fr 8px ${1 - minTopRatio}fr`;
+      gridLayout.style.gridTemplateRows = `${minTopRatio}fr 4px ${1 - minTopRatio}fr`;
     } else if (newTopRatio > maxTopRatio) {
-      gridLayout.style.gridTemplateRows = `${maxTopRatio}fr 8px ${1 - maxTopRatio}fr`;
+      gridLayout.style.gridTemplateRows = `${maxTopRatio}fr 4px ${1 - maxTopRatio}fr`;
     } else {
-      gridLayout.style.gridTemplateRows = `${newTopRatio}fr 8px ${newBottomRatio}fr`;
+      gridLayout.style.gridTemplateRows = `${newTopRatio}fr 4px ${newBottomRatio}fr`;
     }
   }
 }
@@ -762,8 +762,8 @@ body {
 
 .grid-layout {
   display: grid;
-  grid-template-columns: 2fr 8px 3fr 8px 3fr;
-  grid-template-rows: 1fr 8px 1fr;
+  grid-template-columns: 2fr 4px 3fr 4px 3fr;
+  grid-template-rows: 1fr 4px 1fr;
   grid-template-areas:
     "git-status v-resizer commit-form v-resizer-2 log-list"
     "git-status v-resizer h-resizer   v-resizer-2 log-list"
@@ -1405,11 +1405,10 @@ h1 {
   filter: drop-shadow(0 0 2em #42b883aa);
 }
 
-/* 垂直分隔条样式 */
+/* 垂直分隔条样式 —— 默认 4px 透明细列(不挤压两侧),hover 时整列变浅蓝高亮 */
 .vertical-resizer {
   grid-area: v-resizer;
   cursor: col-resize;
-  width: 8px !important;
   position: relative;
   z-index: 10;
   background-color: transparent;
@@ -1425,21 +1424,26 @@ h1 {
   transform: translateX(-50%);
   width: 1px;
   background-color: transparent;
-  transition: background-color 0.15s, width 0.15s;
+  transition: background-color 0.15s, width 0.15s, box-shadow 0.15s;
   pointer-events: none;
+}
+
+.vertical-resizer:hover,
+.vertical-resizer.active {
+  background-color: rgba(59, 130, 246, 0.12);
 }
 
 .vertical-resizer:hover::after,
 .vertical-resizer.active::after {
   width: 2px;
   background-color: var(--color-primary);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.55);
 }
 
 /* 第二条垂直分隔条样式 */
 .vertical-resizer-2 {
   grid-area: v-resizer-2;
   cursor: col-resize;
-  width: 8px !important;
   position: relative;
   z-index: 10;
   background-color: transparent;
@@ -1455,14 +1459,20 @@ h1 {
   transform: translateX(-50%);
   width: 1px;
   background-color: transparent;
-  transition: background-color 0.15s, width 0.15s;
+  transition: background-color 0.15s, width 0.15s, box-shadow 0.15s;
   pointer-events: none;
+}
+
+.vertical-resizer-2:hover,
+.vertical-resizer-2.active {
+  background-color: rgba(59, 130, 246, 0.12);
 }
 
 .vertical-resizer-2:hover::after,
 .vertical-resizer-2.active::after {
   width: 2px;
   background-color: var(--color-primary);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.55);
 }
 
 /* 水平分隔条样式 */

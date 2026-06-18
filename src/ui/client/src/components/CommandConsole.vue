@@ -3554,7 +3554,6 @@ pre.stderr {
   gap: var(--spacing-md);
   padding: 8px 10px;
 }
-}
 
 .flow-panel-title {
   flex: 1;
