@@ -777,9 +777,8 @@ body {
   overflow: hidden;
   max-height: 100%;
   padding: 0;
-  background: var(--bg-container);
+  background: var(--bg-panel);
   border-radius: 0;
-  border-right: 1px solid var(--border-color);
 }
 
 .commit-form-panel {
@@ -796,9 +795,8 @@ body {
   overflow: hidden;
   max-height: 100%;
   padding: 0;
-  background: var(--bg-container);
+  background: var(--bg-console);
   border-radius: 0;
-  border-top: 1px solid var(--border-color);
 }
 
 .log-list-panel {
@@ -806,9 +804,8 @@ body {
   overflow: hidden;
   max-height: 100%;
   padding: 0;
-  background: var(--bg-container);
+  background: var(--bg-panel);
   border-radius: 0;
-  border-left: 1px solid var(--border-color);
 }
 
 .main-header {
@@ -1427,7 +1424,7 @@ h1 {
   left: 50%;
   transform: translateX(-50%);
   width: 1px;
-  background-color: var(--border-color);
+  background-color: transparent;
   transition: background-color 0.15s, width 0.15s;
   pointer-events: none;
 }
@@ -1457,7 +1454,7 @@ h1 {
   left: 50%;
   transform: translateX(-50%);
   width: 1px;
-  background-color: var(--border-color);
+  background-color: transparent;
   transition: background-color 0.15s, width 0.15s;
   pointer-events: none;
 }

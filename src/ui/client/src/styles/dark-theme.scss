@@ -344,7 +344,7 @@
 
   .vertical-resizer::after,
   .vertical-resizer-2::after {
-    background-color: rgba(255, 255, 255, 0.2) !important;
+    background-color: transparent !important;
   }
 
   .vertical-resizer:hover,
@@ -401,11 +401,18 @@
 
   /* 面板深色主题 */
   .git-status-panel,
-  .commit-form-panel,
-  .cmd-console-panel,
   .log-list-panel {
+    background: var(--bg-panel-dark) !important;
+    box-shadow: none !important;
+  }
+
+  .commit-form-panel {
     background: var(--bg-container-dark) !important;
-    border-color: rgba(255, 255, 255, 0.08) !important;
+    box-shadow: none !important;
+  }
+
+  .cmd-console-panel {
+    background: var(--bg-console-dark) !important;
     box-shadow: none !important;
   }
 
@@ -680,7 +687,6 @@
   .template-list h3,
   .message-templates-list h3 {
     color: var(--color-text-title) !important;
-    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
   }
 
   .template-item.el-card {
