@@ -1588,8 +1588,6 @@ defineExpose({
   width: 100%;
   padding: var(--spacing-xs) var(--spacing-sm);
   background: var(--bg-panel);
-  border-top: 1px solid var(--border-card);
-  border-bottom: 1px solid var(--border-card);
 }
 
 .status-header h2 {
@@ -1644,8 +1642,7 @@ defineExpose({
   justify-content: space-between;
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-container);
-  border-bottom: 1px solid var(--border-card);
-  
+
   h4 {
     margin: 0;
     font-size: var(--font-size-base);

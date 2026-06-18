@@ -373,7 +373,6 @@ async function refreshCurrentBranch() {
 }
 
 .branch-popover-footer {
-  border-top: 1px solid var(--border-color, rgba(128,128,128,0.2));
   margin-top: 4px;
   padding-top: 6px;
 }

@@ -560,7 +560,6 @@ function onFullscreenClosed() {
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  border-top: 1px solid var(--border-color);
   background: var(--bg-subtle, var(--bg-container));
   font-size: 11px;
   color: var(--text-secondary);
@@ -616,7 +615,6 @@ function onFullscreenClosed() {
   padding: 4px 0;
 }
 .wb-log-section {
-  border-top: 1px solid var(--border-color);
 }
 .wb-log-section__summary {
   list-style: none;

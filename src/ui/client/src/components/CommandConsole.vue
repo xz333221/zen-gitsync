@@ -2839,7 +2839,6 @@ onUnmounted(() => {
 /* 命令控制台容器 */
 .command-console {
   background: var(--bg-console);
-  border: 1px solid var(--border-console);
   border-radius: 10px;
   padding: 0;
   box-shadow: var(--console-shadow);
@@ -2864,7 +2863,6 @@ onUnmounted(() => {
     height: 100%;
     overflow: hidden;
     background: var(--bg-console-output);
-    border-right: 1px solid var(--border-console);
   }
 
   .console-content-main {
@@ -2924,7 +2922,6 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 6px 12px;
   background: var(--bg-console-header);
-  border-bottom: 1px solid var(--border-console);
 }
 
 .console-window-dots {
@@ -2973,7 +2970,6 @@ onUnmounted(() => {
    justify-content: space-between;
    padding: 8px 12px;
    background: var(--bg-console-cmd);
-   border-bottom: 1px solid var(--border-console);
  }
 
  .terminal-sessions-title {
@@ -3083,7 +3079,6 @@ onUnmounted(() => {
 
  .terminal-sessions-collapsed {
    padding: 8px 12px;
-   border-bottom: 1px solid var(--border-console);
    background: var(--bg-console-cmd);
  }
 
@@ -3351,8 +3346,7 @@ onUnmounted(() => {
   max-height: 280px;
   overflow: auto;
   background: var(--bg-console-output);
-  border-top: 1px solid var(--border-console);
-  
+
   /* 美化滚动条 */
   &::-webkit-scrollbar {
     width: 8px;
@@ -3559,7 +3553,7 @@ pre.stderr {
   justify-content: space-between;
   gap: var(--spacing-md);
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border-component);
+}
 }
 
 .flow-panel-title {
@@ -3650,7 +3644,6 @@ pre.stderr {
 .steps-header {
   padding: var(--spacing-sm) var(--spacing-md);
   background: linear-gradient(135deg, var(--bg-container), var(--bg-panel));
-  border-bottom: 1px solid var(--border-component);
 }
 
 .steps-title {

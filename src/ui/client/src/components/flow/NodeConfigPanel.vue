@@ -1655,7 +1655,6 @@ function saveConfig() {
 .code-examples {
   margin-top: var(--spacing-md);
   padding-top: var(--spacing-md);
-  border-top: 1px dashed var(--border-component);
 }
 
 .examples-title {

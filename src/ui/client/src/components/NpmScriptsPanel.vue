@@ -358,7 +358,6 @@ onMounted(() => {
 .npm-scripts-panel {
   position: relative;
   background: var(--bg-container);
-  border: 1px solid var(--border-card);
   border-radius: 0;
   margin-top: var(--spacing-md);
   overflow: hidden;
@@ -423,7 +422,6 @@ onMounted(() => {
   align-items: center;
   padding: 5px 8px 5px var(--spacing-md);
   background: var(--bg-input);
-  border-bottom: 1px solid var(--border-card);
 }
 
 .header-left {
@@ -605,7 +603,6 @@ onMounted(() => {
 
 .scripts-list {
   background: var(--bg-container);
-  border-top: 1px solid var(--border-card);
   max-height: 300px;
   overflow-y: auto;
   overflow-x: hidden;

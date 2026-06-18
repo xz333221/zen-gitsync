@@ -675,7 +675,6 @@ function onBrowserSelect(path: string) {
   align-items: center;
   gap: 4px;
   padding-left: 8px;
-  border-left: 1px solid rgba(59, 130, 246, 0.12);
 }
 
 [data-theme="dark"] .directory-selector--header {

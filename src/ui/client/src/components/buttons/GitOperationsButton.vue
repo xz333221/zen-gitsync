@@ -381,7 +381,6 @@ defineExpose({
   color: var(--text-primary);
   margin-bottom: 10px;  // 略增,标题和按钮间距更舒展
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-card);
 }
 
 .group-buttons {

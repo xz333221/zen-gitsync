@@ -200,7 +200,6 @@ watch(() => props.filePath, () => {
   gap: var(--spacing-sm);
   padding: 6px 10px;
   background: var(--bg-panel);
-  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   font-size: var(--font-size-sm);
 }
@@ -292,7 +291,6 @@ watch(() => props.filePath, () => {
   align-items: center;
   padding: 4px 12px;
   background: var(--bg-panel);
-  border-top: 1px solid var(--border-color);
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   flex-shrink: 0;

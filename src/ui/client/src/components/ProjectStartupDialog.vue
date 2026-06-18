@@ -635,7 +635,6 @@ function executeItem(item: any) {
 .startup-add {
   margin-top: 4px;
   padding-top: 10px;
-  border-top: 1px solid var(--border-component);
 }
 
 .startup-add__title {

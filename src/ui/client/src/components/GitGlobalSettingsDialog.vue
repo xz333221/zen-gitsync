@@ -997,7 +997,6 @@ async function openSystemConfigFile() {
 .settings-section {
   margin-top: var(--spacing-base);
   padding-top: 14px;
-  border-top: 1px solid var(--el-border-color);
 }
 
 .section-title {

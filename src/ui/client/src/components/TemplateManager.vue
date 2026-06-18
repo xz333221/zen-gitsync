@@ -556,7 +556,6 @@ defineExpose({
   top: 0;
   z-index: 2;
   padding: var(--spacing-base) 0 10px 0;
-  border-bottom: 1px solid var(--bg-icon);
 }
 
 /* 卡片列表的细节优化 */
@@ -615,7 +614,6 @@ defineExpose({
   top: 0;
   z-index: 2;
   padding: var(--spacing-base) 0 10px 0;
-  border-bottom: 1px solid var(--bg-icon);
 }
 
 .templates-scroll-area {

@@ -980,7 +980,6 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 8px 16px;
   background: var(--sm-canvas-bg);
-  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
@@ -1168,7 +1167,6 @@ onBeforeUnmount(() => {
   min-width: 0;
   flex-shrink: 0;
   background: var(--sm-canvas-bg);
-  border-right: 1px solid var(--border-color);
   overflow: hidden;
 }
 
@@ -1181,7 +1179,6 @@ onBeforeUnmount(() => {
 .sm-panel-source {
   flex-shrink: 0;
   background: var(--sm-canvas-bg);
-  border-left: 1px solid var(--border-color);
 }
 
 .sm-panel-header {
@@ -1194,7 +1191,6 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border-color);
   background: var(--sm-canvas-bg);
   flex-shrink: 0;
 }
@@ -1212,7 +1208,6 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 6px 12px;
   background: var(--sm-canvas-bg);
-  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -1296,7 +1291,6 @@ onBeforeUnmount(() => {
 .sm-log-panel {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--border-color);
   flex-shrink: 0;
   background: var(--sm-canvas-bg);
   min-height: 60px;
@@ -1312,7 +1306,6 @@ onBeforeUnmount(() => {
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 

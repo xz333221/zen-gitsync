@@ -1766,7 +1766,6 @@ function toggleFullscreen() {
   background-color: var(--bg-container);
   width: 100%;
   border-radius: 0;
-  border-bottom: 1px solid var(--border-card);
   box-shadow: var(--shadow-md);
 }
 

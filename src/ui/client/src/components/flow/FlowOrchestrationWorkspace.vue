@@ -1212,8 +1212,7 @@ onUnmounted(() => {
   align-items: center;
   margin-bottom: var(--spacing-md);
   padding-bottom: var(--spacing-sm);
-  border-bottom: 2px solid var(--border-component);
-  
+
   h3 {
     margin: 0;
     font-size: var(--font-size-md);
@@ -1281,7 +1280,6 @@ onUnmounted(() => {
 .canvas-header {
   padding: var(--spacing-lg);
   background: var(--bg-container);
-  border-bottom: 1px solid var(--border-component);
   display: flex;
   justify-content: space-between;
   align-items: center;

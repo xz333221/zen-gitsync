@@ -954,7 +954,6 @@ defineExpose({
 .list-header {
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--bg-component-area);
-  border-bottom: 1px solid var(--border-component);
   flex-shrink: 0;
   display: flex;
   align-items: center;

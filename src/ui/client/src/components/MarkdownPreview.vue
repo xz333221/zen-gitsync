@@ -194,7 +194,6 @@ const segments = computed<Segment[]>(() => {
   font-weight: 600;
   color: var(--text-secondary, #656d76);
   background: var(--code-bg, #f6f8fa);
-  border-bottom: 1px solid var(--border-color, #d0d7de);
   letter-spacing: 0.5px;
 }
 .md-mindmap-canvas {

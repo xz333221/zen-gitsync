@@ -101,7 +101,6 @@ async function copyCommand() {
   color: var(--text-console-muted);
   white-space: nowrap;
   flex-shrink: 0;
-  border-right: 1px solid var(--border-console);
   background: var(--bg-console-cmd);
 
   /* 绿色 $ 提示符 */

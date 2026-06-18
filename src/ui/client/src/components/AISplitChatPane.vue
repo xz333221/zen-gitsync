@@ -741,7 +741,6 @@ if (props.initialSessionId) {
 }
 
 .ai-chat-input {
-  border-top: 1px solid #ebeef5;
   padding-top: 10px;
   display: flex;
   flex-direction: column;

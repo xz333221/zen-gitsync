@@ -858,7 +858,6 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: var(--spacing-md);
   background: linear-gradient(135deg, #f8f9fa 0%, var(--border-component) 100%);
-  border-bottom: 1px solid var(--border-component);
   border-radius: 8px 8px 0 0;
   flex-wrap: wrap;
 }

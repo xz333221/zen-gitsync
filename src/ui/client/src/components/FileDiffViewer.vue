@@ -1635,10 +1635,8 @@ onMounted(() => {
 .files-panel {
   width: 100%; /* 让宽度由 el-splitter 控制 */
   background: var(--bg-icon);
-  border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  box-shadow: inset -1px 0 0 var(--border-color-light);
 }
 
 .diff-panel {
@@ -1663,18 +1661,17 @@ onMounted(() => {
 .panel-header {
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--bg-container);
-  
-  border-bottom: 1px solid var(--border-card);
+
   display: flex;
   justify-content: space-between;
   align-items: center;
   box-shadow: var(--shadow-sm);
-  
+
   h4 {
     margin: 0;
     font-size: var(--font-size-md);
     font-weight: var(--font-weight-semibold);
-    
+
   }
 }
 
@@ -1718,8 +1715,7 @@ onMounted(() => {
 .search-box {
   padding: var(--spacing-sm) 0;
   background: var(--bg-container);
-  border-bottom: 1px solid var(--border-color-light);
-  
+
   :deep(.el-input) {
     .el-input__wrapper {
       background: var(--bg-input);
@@ -2092,7 +2088,6 @@ onMounted(() => {
 .resolution-mode-switch {
   padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border-color);
   display: flex;
   gap: var(--spacing-base);
   justify-content: center;
@@ -2138,7 +2133,6 @@ onMounted(() => {
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-panel);
-  border-bottom: 1px solid var(--border-component);
   flex-shrink: 0;
 }
 
@@ -2181,7 +2175,6 @@ onMounted(() => {
 .save-resolution-bar {
   padding: var(--spacing-sm) var(--spacing-lg);
   background: var(--bg-elevated);
-  border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: center;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);

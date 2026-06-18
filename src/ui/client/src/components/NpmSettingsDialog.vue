@@ -511,7 +511,6 @@ function handleClose() {
   justify-content: space-between;
   margin-bottom: var(--spacing-md);
   padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-card);
 }
 
 .section-title {

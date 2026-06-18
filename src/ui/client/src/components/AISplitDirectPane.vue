@@ -644,6 +644,5 @@ function cancelEditPrompt() {
   gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--border-color);
 }
 </style>

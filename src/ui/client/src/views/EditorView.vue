@@ -1303,7 +1303,6 @@ function stopPreviewResize() {
   overflow: hidden;
   background: var(--bg-container);
   border-radius: 0;
-  border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1313,7 +1312,6 @@ function stopPreviewResize() {
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
-  border-right: 1px solid var(--border-color);
   background: var(--bg-panel);
 }
 
@@ -1322,7 +1320,6 @@ function stopPreviewResize() {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px 6px;
-  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
@@ -1357,7 +1354,6 @@ function stopPreviewResize() {
   align-items: center;
   padding: 6px 10px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-color);
 }
 
 .sidebar-search-icon {
@@ -1594,7 +1590,6 @@ function stopPreviewResize() {
   overflow-x: auto;
   overflow-y: hidden;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-color);
   background: var(--bg-panel);
   scrollbar-width: none;
 }
@@ -1609,7 +1604,6 @@ function stopPreviewResize() {
   gap: 6px;
   padding: 0 12px;
   height: 34px;
-  border-right: 1px solid var(--border-color);
   cursor: pointer;
   font-size: 12.5px;
   color: var(--text-secondary);
@@ -1780,7 +1774,6 @@ function stopPreviewResize() {
   flex-grow: 1;             /* 默认占满右侧剩余空间 */
   flex-shrink: 1;
   flex-basis: 0;            /* 让 flex-grow 均匀分配，避免首屏从 0 起跳 */
-  border-left: 1px solid var(--border-color);
   background: var(--bg-panel);
   overflow: hidden;
   min-width: 200px;
@@ -1792,7 +1785,6 @@ function stopPreviewResize() {
   gap: 6px;
   padding: 0 10px;
   height: 34px;
-  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   background: var(--bg-panel);
 }
@@ -1917,7 +1909,6 @@ function stopPreviewResize() {
   color: var(--text-secondary);
   font-size: 12px;
   white-space: nowrap;
-  border-left: 1px solid var(--border-color);
   transition: background 0.1s, color 0.1s;
   flex-shrink: 0;
 }

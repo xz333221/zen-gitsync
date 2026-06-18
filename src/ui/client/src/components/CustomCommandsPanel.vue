@@ -186,7 +186,6 @@ async function runCommand(cmd: any) {
 .custom-commands-panel {
   position: relative;
   background: var(--bg-container);
-  border: 1px solid var(--border-card);
   border-radius: 0;
   overflow: hidden;
   box-shadow: var(--shadow-md);
@@ -250,7 +249,6 @@ async function runCommand(cmd: any) {
   align-items: center;
   padding: 5px 4px 5px var(--spacing-md);
   background: var(--bg-input);
-  border-bottom: 1px solid var(--border-card);
 }
 
 .header-left {

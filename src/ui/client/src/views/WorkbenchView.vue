@@ -1957,7 +1957,6 @@ function humanSize(n: number): string {
   font-variant-numeric: tabular-nums;
 }
 .wb-task-desc[open] .wb-task-desc__summary {
-  border-bottom: 1px solid var(--border-color);
   margin-bottom: 0;
 }
 .wb-task-desc > .wb-textarea,
@@ -1981,10 +1980,9 @@ function humanSize(n: number): string {
 .wb-sidebar {
   width: 268px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border-color);
   padding: 14px 12px 18px;
   overflow-y: auto;
-  background: var(--bg-container);
+  background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -2002,7 +2000,6 @@ function humanSize(n: number): string {
 }
 .wb-section + .wb-section {
   padding-top: 16px;
-  border-top: 1px dashed var(--border-color);
 }
 .wb-section__head {
   display: flex;
@@ -2643,7 +2640,6 @@ function humanSize(n: number): string {
   align-items: center;
   gap: 8px;
   padding: 10px 12px 8px;
-  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   flex-wrap: wrap;
 }
@@ -3833,7 +3829,6 @@ function humanSize(n: number): string {
   color: var(--text-tertiary);
   letter-spacing: 0.3px;
   text-transform: uppercase;
-  border-top: 1px dashed var(--border-color);
   cursor: pointer;
   user-select: none;
   border-radius: var(--radius-sm);

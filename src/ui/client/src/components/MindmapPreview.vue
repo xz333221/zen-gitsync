@@ -63,7 +63,6 @@ const data = computed(() => markdownToRichMindMap(props.content || '', '未命�
   align-items: center;
   gap: 12px;
   padding: 8px 14px;
-  border-bottom: 1px solid var(--border-color, #d0d7de);
   background: var(--bg-panel, #f6f8fa);
   font-size: 12px;
 }

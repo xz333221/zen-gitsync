@@ -163,8 +163,7 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   align-items: center;
   padding: 10px 0;
   gap: 6px;
-  background: var(--bg-container);
-  border-right: 1px solid var(--border-color);
+  background: var(--bg-panel);
   border-radius: 0;
   box-shadow: var(--shadow-sm);
 }
