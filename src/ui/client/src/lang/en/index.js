@@ -50,6 +50,7 @@ export default {
   '@F13B4:未配置': 'Not configured',
   '@F13B4:关闭测试': 'Close testing',
   '@F13B4:加载中...': 'Loading...',
+  '@F13B4:加载中': 'Loading',
   '@F13B4:用户未配置': 'User not configured',
   '@F13B4:请先配置Git用户信息才能进行提交操作。': 'Please configure Git user information before performing the commit operation.',
   '@F13B4:您可以通过以下方式配置：': 'You can configure it in the following ways:',

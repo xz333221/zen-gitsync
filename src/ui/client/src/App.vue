@@ -488,16 +488,61 @@ function copyGitInit() {
 
   <main class="main-container" :style="{ top: configStore.hasConfigLoadError ? '104px' : '64px' }">
     <div v-if="!initCompleted" class="loading-container">
-      <el-card class="loading-card">
-        <div class="loading-spinner">
-          <el-icon class="is-loading"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-              <path fill="currentColor"
-                d="M512 64a32 32 0 0 1 32 32v192a32 32 0 0 1-64 0V96a32 32 0 0 1 32-32zm0 640a32 32 0 0 1 32 32v192a32 32 0 1 1-64 0V736a32 32 0 0 1 32-32zm448-192a32 32 0 0 1-32 32H736a32 32 0 1 1 0-64h192a32 32 0 0 1 32 32zm-640 0a32 32 0 0 1-32 32H96a32 32 0 0 1 0-64h192a32 32 0 0 1 32 32zM195.2 195.2a32 32 0 0 1 45.248 0L376.32 331.008a32 32 0 0 1-45.248 45.248L195.2 240.448a32 32 0 0 1 0-45.248zm452.544 452.544a32 32 0 0 1 45.248 0L828.8 783.552a32 32 0 0 1-45.248 45.248L647.744 692.992a32 32 0 0 1 0-45.248zM828.8 195.264a32 32 0 0 1 0 45.184L692.992 376.32a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0zm-452.544 452.48a32 32 0 0 1 0 45.248L240.448 828.8a32 32 0 0 1-45.248-45.248l135.808-135.808a32 32 0 0 1 45.248 0z">
-                </path>
-              </svg></el-icon>
+      <div class="loading-card" role="status" aria-live="polite">
+        <!-- 三层错位旋转环 spinner -->
+        <div class="loading-spinner" aria-hidden="true">
+          <svg class="loading-spinner__svg" viewBox="0 0 120 120">
+            <defs>
+              <linearGradient id="loading-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="var(--color-primary)" />
+                <stop offset="100%" stop-color="#0ea5e9" />
+              </linearGradient>
+            </defs>
+            <!-- 外环 -->
+            <circle
+              class="loading-spinner__ring loading-spinner__ring--outer"
+              cx="60" cy="60" r="52"
+              fill="none"
+              stroke="url(#loading-gradient)"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-dasharray="80 250"
+            />
+            <!-- 中环（反向旋转 + 不同颜色） -->
+            <circle
+              class="loading-spinner__ring loading-spinner__ring--middle"
+              cx="60" cy="60" r="38"
+              fill="none"
+              stroke="var(--color-primary-light)"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-dasharray="60 200"
+              opacity="0.7"
+            />
+            <!-- 内环（慢速旋转 + 低透明度） -->
+            <circle
+              class="loading-spinner__ring loading-spinner__ring--inner"
+              cx="60" cy="60" r="24"
+              fill="none"
+              stroke="var(--color-primary)"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-dasharray="40 150"
+              opacity="0.45"
+            />
+          </svg>
         </div>
-        <div class="loading-text">{{ $t('@F13B4:加载中...') }}</div>
-      </el-card>
+
+        <!-- 加载文字 + 跳动点 -->
+        <div class="loading-text">
+          <span class="loading-text__label">{{ $t('@F13B4:加载中') }}</span>
+          <span class="loading-dots" aria-hidden="true">
+            <span class="loading-dots__dot" />
+            <span class="loading-dots__dot" />
+            <span class="loading-dots__dot" />
+          </span>
+        </div>
+      </div>
     </div>
 
     <div v-else class="app-body">
@@ -1020,23 +1065,184 @@ h1 {
 }
 
 .loading-card {
-  width: 280px;
+  position: relative;
+  width: 260px;
   text-align: center;
-  padding: 40px;
+  padding: 36px 32px 32px;
   border-radius: var(--radius-xl);
+  background: var(--bg-container);
   border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--dialog-shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* 顶部高光：让卡片有一层环境光，增加层次 */
+.loading-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 80% at 50% 0%,
+    var(--tint-primary-12) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+  z-index: -1;
 }
 
 .loading-spinner {
-  font-size: 40px;
-  color: var(--color-primary);
-  animation: spin 1.5s linear infinite;
+  width: 84px;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
+/* 柔和光晕 */
+.loading-spinner::after {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    var(--tint-primary-18) 0%,
+    transparent 70%
+  );
+  filter: blur(6px);
+  z-index: -1;
+}
+
+.loading-spinner__svg {
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 50%;
+}
+
+.loading-spinner__ring {
+  transform-origin: 50% 50%;
+}
+
+.loading-spinner__ring--outer {
+  animation: loading-spin-outer 1.4s linear infinite;
+}
+
+.loading-spinner__ring--middle {
+  animation: loading-spin-middle 2.1s linear infinite reverse;
+}
+
+.loading-spinner__ring--inner {
+  animation: loading-spin-inner 2.8s linear infinite;
+}
+
+@keyframes loading-spin-outer {
   to { transform: rotate(360deg); }
+}
+
+@keyframes loading-spin-middle {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes loading-spin-inner {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  letter-spacing: var(--letter-spacing-wide);
+  user-select: none;
+}
+
+.loading-text__label {
+  /* 给文字一点点节奏感 */
+  color: var(--text-primary);
+}
+
+/* 三个跳动点：交错延迟 */
+.loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+  transform: translateY(-1px);
+}
+
+.loading-dots__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  display: inline-block;
+  animation: loading-dot-bounce 1.2s var(--ease-in-out) infinite;
+}
+
+.loading-dots__dot:nth-child(2) {
+  animation-delay: 0.15s;
+  background: var(--color-primary-light);
+}
+
+.loading-dots__dot:nth-child(3) {
+  animation-delay: 0.3s;
+  background: #0ea5e9;
+}
+
+@keyframes loading-dot-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.55;
+  }
+  30% {
+    transform: translateY(-3px) scale(1.15);
+    opacity: 1;
+  }
+}
+
+/* 减弱 motion */
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner__ring--outer,
+  .loading-spinner__ring--middle,
+  .loading-spinner__ring--inner,
+  .loading-dots__dot {
+    animation-duration: 3s;
+  }
+}
+
+/* 深色主题微调 */
+[data-theme="dark"] .loading-card {
+  background: var(--bg-container-dark);
+  border-color: var(--border-color-dark);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.55),
+    0 4px 14px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .loading-card::before {
+  background: radial-gradient(
+    120% 80% at 50% 0%,
+    var(--tint-primary-18) 0%,
+    transparent 60%
+  );
+}
+
+[data-theme="dark"] .loading-spinner__ring--outer {
+  stroke: url(#loading-gradient);
+  filter: drop-shadow(0 0 4px var(--tint-primary-45));
+}
+
+[data-theme="dark"] .loading-dots__dot {
+  filter: drop-shadow(0 0 4px var(--tint-primary-45));
 }
 
 .user-warning {
