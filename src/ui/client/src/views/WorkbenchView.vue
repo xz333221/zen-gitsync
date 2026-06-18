@@ -391,8 +391,11 @@ function subtaskDoneCount(t: Task): number {
   return t.subtasks.filter(s => s && s.status === 'done').length
 }
 function taskIsRunning(t: Task): boolean {
-  if (!Array.isArray(t.subtasks)) return false
-  return t.subtasks.some(s => s && s.status === 'running')
+  if (Array.isArray(t.subtasks) && t.subtasks.some(s => s && s.status === 'running')) return true
+  // 简单任务的执行状态存在 jobs 数组里(virtual subId = `${t.id}__simple`),要一并检查
+  const j = jobs.value.find(x => x.subId === `${t.id}__simple`)
+  if (j && (j.status === 'running' || j.status === 'pending')) return true
+  return false
 }
 
 // ── 数据加载 ────────────────────────────────────────────────────────────────
