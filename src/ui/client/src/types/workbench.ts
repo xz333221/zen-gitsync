@@ -33,6 +33,10 @@ export interface Job {
   endedAt: string | null
   exitCode: number | null
   error: string | null
+  /** claude --output-format stream-json 的 system.init 事件捕获的会话 id;
+   *  续接对话(`/jobs/:id/continue`)需要回传给后端做 --resume。
+   *  老 job 没这个字段;init 事件来之前也可能为空。 */
+  claudeSessionId?: string | null
 }
 
 /** 完整形态——管理页 /jobs/list 列表项、/jobs/:id 详情用 */

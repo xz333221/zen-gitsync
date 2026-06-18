@@ -262,6 +262,7 @@ A dedicated view (fourth icon in the activity bar) for batch-running Claude agai
 | Running animation | Subtasks in `running` state get a breathing primary-color glow + a sliding progress bar on top of the card; the status badge uses a shimmer gradient with a pulsing white dot and outer halo, easing back to neutral on completion |
 | Cross-view indicator | While any Workbench subtask is running, a pulsing dot appears on the Workbench icon in the Activity Bar so you can see job state from the Git or Editor view |
 | Execution log manager (dialog) | The "Execution logs" button in the workbench top bar (replaces the previous standalone tab) opens a dialog with the list / filter / batch delete / clear / retention-policy UI; the task execution view stays mounted so no work-in-progress state is dropped |
+| Continue chat (simple task) | After a simple task finishes (done / error / cancelled), the detail panel grows an **Exit** button and a follow-up composer; sending a follow-up message spawns `claude --resume <session_id> -p <newPrompt>` to continue the prior conversation, and each new turn appears as its own card stacked into a chat-style flow. The `session_id` is captured from claude's stream-json `system.init` event and persisted on the job |
 
 Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.zen-gitsync/tasks.json` (cross-project, shared across repos).
 
@@ -658,6 +659,7 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 执行中动效 | 状态为 `running` 的子任务卡片整体呈现蓝色呼吸光晕 + 顶部流动进度光带；状态徽章为渐变 shimmer + 脉冲白点 + 外发光，停下后平滑恢复 |
 | 跨视图指示 | 任意子任务运行中时，Activity Bar 上的工作台图标会显示脉动小圆点；切换到 Git 或编辑器视图也能看到运行状态 |
 | 执行日志管理（弹窗） | 顶部「执行日志」按钮（替代原独立 tab）唤起弹窗：列表 / 过滤 / 批量删除 / 清空 / 保留策略全部可在此一次性管理；弹窗关闭后任务执行视图常驻，避免切换时不必要的卸载 |
+| 简单任务继续对话 | 简单任务执行完（done / error / cancelled）后，详情区底部出现「退出」按钮和续聊输入框；点退出走 `clearJobsByTask` 一键清空整段对话回到 idle；输入续聊消息发送则后端用 `claude --resume <session_id> -p <newPrompt>` 续接历史会话，**新一轮 = 新 job**（subId 形如 `__simple__r${n}`），多轮纵向堆叠成对话流。session_id 在 stream-json 的首条 `system.init` 事件里捕获并持久化到 job |
 
 提示词预置与任务数据持久化到 `~/.zen-gitsync/prompts.json` 和 `~/.zen-gitsync/tasks.json`（跨项目共享）。子任务附件落盘在 `~/.zen-gitsync/workbench-images/<subId>/`。
 

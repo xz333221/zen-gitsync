@@ -361,9 +361,28 @@ function taskIconFor(t: Task) {
 
 // 简单任务的虚拟 subId：和后端 runTaskSimple / JobLogDetails 那侧保持一致
 const SIMPLE_SUB_ID_SUFFIX = '__simple'
+// 简单任务"对话流":首轮 subId = `${task.id}__simple`,续接轮 = `__simple__r${n}`
+// (后端 /jobs/:id/continue 用相同命名规则)。simpleAllJobsFor 把它们都聚出来,
+// 按 startedAt 升序作为对话流;simpleJobFor 返回最新一轮(状态/操作以末尾轮为准)。
+function simpleAllJobsFor(task: Task | null): Job[] {
+  if (!task) return []
+  const prefix = `${task.id}${SIMPLE_SUB_ID_SUFFIX}`
+  return jobs.value
+    .filter(j => j.subId === prefix || j.subId.startsWith(`${prefix}__r`))
+    .sort((a, b) => {
+      // 优先按 startedAt 升序;未启动时 startedAt 为空,放最后,保证排队中也能渲染
+      const sa = a.startedAt || ''
+      const sb = b.startedAt || ''
+      if (sa && sb) return sa.localeCompare(sb)
+      if (sa) return -1
+      if (sb) return 1
+      return 0
+    })
+}
 function simpleJobFor(task: Task | null): Job | null {
   if (!task) return null
-  return jobOf(`${task.id}${SIMPLE_SUB_ID_SUFFIX}`)
+  const list = simpleAllJobsFor(task)
+  return list.length > 0 ? list[list.length - 1] : null
 }
 // 简单任务完成态语义：把 Job.status 收敛成 5 态，方便模板/CSS 直接套用
 // - idle      没有 job 记录（未执行过）
@@ -392,8 +411,9 @@ function subtaskDoneCount(t: Task): number {
 }
 function taskIsRunning(t: Task): boolean {
   if (Array.isArray(t.subtasks) && t.subtasks.some(s => s && s.status === 'running')) return true
-  // 简单任务的执行状态存在 jobs 数组里(virtual subId = `${t.id}__simple`),要一并检查
-  const j = jobs.value.find(x => x.subId === `${t.id}__simple`)
+  // 简单任务的执行状态存在 jobs 数组里(virtual subId = `${t.id}__simple` 或续聊轮 `__simple__r${n}`),要一并检查
+  const prefix = `${t.id}__simple`
+  const j = jobs.value.find(x => x.subId === prefix || x.subId.startsWith(`${prefix}__r`))
   if (j && (j.status === 'running' || j.status === 'pending')) return true
   return false
 }
@@ -963,6 +983,59 @@ async function runSimpleTask(t: Task) {
   } else {
     ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
   }
+}
+
+/**
+ * 简单任务"继续对话":基于最后一轮已结束 job 的 claudeSessionId,用
+ * --resume 续接 claude 会话,新一轮 = 新 job(subId 形如 __simple__r${n})。
+ * 后端 /jobs/:id/continue 负责拒绝并发(上一轮还在跑时)和缺 sessionId 的场景,
+ * 前端只做基本本地校验 + 发请求 + 弹消息。SSE 推送会自动把新 job 加进面板。
+ */
+async function continueChat(t: Task, message: string) {
+  const latest = simpleAllJobsFor(t).slice(-1)[0]
+  if (!latest) {
+    ElMessage.error($t('@WORKBENCH:没有可续接的会话'))
+    return
+  }
+  const res = await fetch(`/api/workbench/jobs/${latest.id}/continue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userMessage: message })
+  }).then(r => r.json()).catch(err => ({ success: false, error: err?.message || String(err) }))
+  if (res.success) {
+    ElMessage.success(res.message || $t('@WORKBENCH:已加入续接队列'))
+  } else {
+    ElMessage.error(res.error || $t('@WORKBENCH:续接失败'))
+  }
+}
+
+/**
+ * 简单任务详情区"继续对话"输入框 v-model 草稿,按 task.id 分桶,
+ * 避免切换任务时把上一个任务正在编辑的续聊文字带过去。
+ */
+const continueDraft = reactive<Record<string, string>>({})
+
+async function onExitSimple(t: Task) {
+  try {
+    await ElMessageBox.confirm(
+      $t('@WORKBENCH:退出后将清空本次对话的全部轮次,确认?'),
+      $t('@WORKBENCH:退出执行'),
+      {
+        confirmButtonText: $t('@WORKBENCH:退出'),
+        cancelButtonText: $t('@WORKBENCH:取消'),
+        type: 'warning'
+      }
+    )
+  } catch { return }
+  await clearJobsByTask(t.id)
+  delete continueDraft[t.id]
+}
+
+async function onContinueSend(t: Task) {
+  const msg = (continueDraft[t.id] || '').trim()
+  if (!msg) return
+  await continueChat(t, msg)
+  continueDraft[t.id] = ''
 }
 
 /**
@@ -1726,11 +1799,38 @@ function humanSize(n: number): string {
                   rows="6"
                 />
               </details>
-              <!-- 简单任务的执行日志：running 时顶部显示「● 正在执行…」 -->
+              <!-- 简单任务的执行日志：running 时顶部显示「● 正在执行…」
+                   续聊后每轮独立卡片纵向堆叠成对话流 -->
               <JobLogDetails
-                v-if="jobOf(`${selectedTask.id}__simple`)"
-                :job="jobOf(`${selectedTask.id}__simple`)!"
+                v-for="j in simpleAllJobsFor(selectedTask)"
+                :key="j.id"
+                :job="j"
               />
+              <!-- 终态控件:最后一轮 done/error/cancelled 才显示退出 + 续聊输入 -->
+              <div
+                v-if="simpleJobFor(selectedTask) && ['done','error','cancelled'].includes(simpleJobState(simpleJobFor(selectedTask)))"
+                class="wb-simple__continue"
+              >
+                <textarea
+                  class="wb-textarea wb-simple__continue-input"
+                  v-model="continueDraft[selectedTask.id]"
+                  :placeholder="$t('@WORKBENCH:输入后续问题继续对话…(Ctrl+Enter 发送)')"
+                  rows="3"
+                  @keydown.ctrl.enter.prevent="onContinueSend(selectedTask)"
+                />
+                <div class="wb-simple__continue-actions">
+                  <el-button @click="onExitSimple(selectedTask)">
+                    {{ $t('@WORKBENCH:退出') }}
+                  </el-button>
+                  <el-button
+                    type="primary"
+                    :disabled="!(continueDraft[selectedTask.id] || '').trim()"
+                    @click="onContinueSend(selectedTask)"
+                  >
+                    {{ $t('@WORKBENCH:发送') }}
+                  </el-button>
+                </div>
+              </div>
             </template>
           </div>
         </div>
@@ -3317,6 +3417,29 @@ function humanSize(n: number): string {
   background: var(--tint-primary-12, color-mix(in srgb, var(--color-primary) 12%, transparent));
   color: var(--color-primary);
   letter-spacing: 0.2px;
+}
+
+/* ── 简单任务"继续对话"区:终态(done/error/cancelled)时显示 ── */
+.wb-simple__continue {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.wb-simple__continue-input {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 60px;
+}
+.wb-simple__continue-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .wb-form-item {

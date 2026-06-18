@@ -1006,16 +1006,21 @@ function snapshotJobs() {
 // 返回 { pid, child }：调用方可以监听 child.stdout/stderr 实时收集输出。
 // 不再走 cmd /k 弹窗——claude -p 是非交互模式，输出通过 stdout pipe 实时回传
 // 到前端面板展示。
-function launchClaudeInNewWindow(cwd, promptText) {
+function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
   return new Promise((resolve, reject) => {
-    const args = [
+    const args = [];
+    // 续接历史会话:--resume 必须放在 -p 之前,确保 claude CLI 先识别 resume 上下文
+    if (resumeSessionId) {
+      args.push('--resume', String(resumeSessionId));
+    }
+    args.push(
       '-p', promptText,
       '--input-format', 'text',
       '--output-format', 'stream-json',
       '--verbose',
       '--permission-mode', 'bypassPermissions',
       '--dangerously-skip-permissions'
-    ];
+    );
     let child;
     let spawnedExe = 'claude';
     if (process.platform === 'win32') {
@@ -1088,8 +1093,15 @@ async function runTaskQueue(task, repoPath, branch) {
  *        前序 done 子任务的输出摘要（in-place 追加）。用于把同一任务下
  *        前面已完成的 sub 产物拼到当前 sub 的 prompt 头部，让 Claude
  *        知道上下文。单独跑一个 sub 时，这个数组里只会有"前面 done 的 sub"。
+ * @param {object} [options]
+ * @param {string|null} [options.resumeSessionId]
+ *        续接历史 claude 会话:传入上一轮通过 stream-json 的 system.init
+ *        事件捕获到的 session_id,本轮以 --resume <id> 启动,claude 会带着
+ *        上下文继续对话。前端"简单任务执行完成后继续聊"走的就是这条路径。
  */
-async function runSingleSubtask(task, sub, repoPath, branch, priorOutputs) {
+async function runSingleSubtask(task, sub, repoPath, branch, priorOutputs, options) {
+  const opts = options || {}
+  const resumeSessionId = opts.resumeSessionId || null
   const MAX_PREV_OUTPUT_CHARS = 2000
   const promptTemplate = sub.promptOverride || (task.promptId
     ? (await readJson(PROMPTS_FILE, { prompts: [] })).prompts.find(p => p.id === task.promptId)?.content
@@ -1152,7 +1164,9 @@ ${prompt}`
     subId: sub.id,
     title: `${task.title} / ${sub.title}`,
     status: 'pending',
-    prompt
+    prompt,
+    // 续接历史会话时先填上,首条 system.init 事件回来后再用真值覆盖(通常等同)
+    claudeSessionId: resumeSessionId
   };
   jobs.set(jobId, job);
   sub.status = 'running';
@@ -1160,7 +1174,7 @@ ${prompt}`
   publish('job:update', job);
 
   try {
-    const { pid, child } = await launchClaudeInNewWindow(repoPath || process.cwd(), prompt);
+    const { pid, child } = await launchClaudeInNewWindow(repoPath || process.cwd(), prompt, resumeSessionId);
     job.pid = pid;
     // 保存 child 引用，供 cancel 接口调用 kill
     job.child = child;
@@ -1202,6 +1216,15 @@ ${prompt}`
         }
         let evt;
         try { evt = JSON.parse(trimmed) } catch { continue }
+        // 捕获 system.init 里的 session_id,供后续"续接对话"用(--resume <id>)。
+        // 一个 claude -p 调用只在首行发一次,所以仅在 job 还没记到时写入。
+        if (evt.type === 'system' && evt.subtype === 'init' && typeof evt.session_id === 'string') {
+          if (!job.claudeSessionId || job.claudeSessionId !== evt.session_id) {
+            job.claudeSessionId = evt.session_id;
+            publish('job:update', job);
+          }
+          continue;
+        }
         if (evt.type !== 'assistant') continue;
         const blocks = evt.message?.content;
         if (!Array.isArray(blocks)) continue;
@@ -2308,6 +2331,74 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     } catch (err) {
       cancelledJobs.delete(job.id)
       res.status(500).json({ success: false, error: '发送停止信号失败: ' + err.message })
+    }
+  });
+
+  // ── 续接简单任务对话 ────────────────────────────────────────────
+  // POST /api/workbench/jobs/:id/continue
+  // 入参 body: { userMessage: string }
+  // 行为:
+  //   - 仅用于 type==='simple' 的任务,基于上一轮 job 捕获到的 claudeSessionId,
+  //     用 claude --resume <id> 续接历史对话,**新一轮 = 新 job**
+  //   - 新 job 的 subId 形如 `${task.id}__simple__r${n}`,跟首轮 `${task.id}__simple`
+  //     区分;前端按 subId 前缀聚合渲染对话流
+  //   - 上一轮还在 pending/running 时拒绝(避免 session 并发跑乱)
+  //   - 上一轮未捕获到 session_id(claude 在 init 前就 crash)时拒绝
+  app.post('/api/workbench/jobs/:id/continue', async (req, res) => {
+    try {
+      const userMessage = String(req.body?.userMessage || '').trim();
+      if (!userMessage) {
+        return res.status(400).json({ success: false, error: 'userMessage 不能为空' });
+      }
+      const prevJob = jobs.get(req.params.id);
+      if (!prevJob) {
+        return res.status(404).json({ success: false, error: 'job 不存在' });
+      }
+      if (prevJob.status === 'running' || prevJob.status === 'pending') {
+        return res.status(400).json({ success: false, error: '上一轮还在执行,请等结束后再续接' });
+      }
+      if (!prevJob.claudeSessionId) {
+        return res.status(400).json({ success: false, error: '无法续接:会话标识未捕获' });
+      }
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const task = (data.tasks || []).find(t => t.id === prevJob.taskId);
+      if (!task) {
+        return res.status(404).json({ success: false, error: '所属任务不存在' });
+      }
+      if (task.type !== 'simple') {
+        return res.status(400).json({ success: false, error: '仅支持简单任务的续接' });
+      }
+      // 计算续接轮次号:扫所有同 task 下的 __simple / __simple__rN job,取最大 N + 1
+      const subIdPrefix = `${task.id}__simple`;
+      let maxRound = 0;
+      for (const j of jobs.values()) {
+        if (j.taskId !== task.id) continue;
+        if (j.subId === subIdPrefix) continue;
+        const m = j.subId && j.subId.match(/__simple__r(\d+)$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (!isNaN(n) && n > maxRound) maxRound = n;
+        }
+      }
+      const nextRound = maxRound + 1;
+      const virtualSub = {
+        id: `${task.id}__simple__r${nextRound}`,
+        title: `续接 #${nextRound}`,
+        desc: '',
+        status: 'todo',
+        // 用户输入的续接消息直接作为本轮 prompt(走 promptOverride,不再拼模板)
+        promptOverride: userMessage,
+        // 续接轮不带附件,避免重复推附件给 claude(已在首轮 prompt 里)
+        attachments: []
+      };
+      const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+      res.json({ success: true, message: '已加入续接队列' });
+      runSingleSubtask(task, virtualSub, repoPath, '', [], { resumeSessionId: prevJob.claudeSessionId })
+        .catch(err => {
+          publish('task:error', { taskId: task.id, error: err.message });
+        });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 
