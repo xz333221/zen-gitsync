@@ -114,6 +114,8 @@ export default defineConfig(({ command }) => {
     port: 5544,
     strictPort: false,
     open: true,
+    // 显式绑 IPv4,避免 vite 8 默认 'localhost' 只绑 IPv6 [::1] 导致浏览器走 127.0.0.1 拿不到 HMR
+    host: '127.0.0.1',
     // watch: {
     //   // 忽略构建输出目录，避免 build 时触发热更新
     //   ignored: [
