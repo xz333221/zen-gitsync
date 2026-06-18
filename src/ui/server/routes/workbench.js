@@ -998,7 +998,9 @@ function snapshotJobs() {
     startedAt: j.startedAt || null,
     endedAt: j.endedAt || null,
     exitCode: typeof j.exitCode === 'number' ? j.exitCode : null,
-    error: j.error || null
+    error: j.error || null,
+    // 续接对话用:claude --output-format stream-json 的 system.init 事件捕获到的 session_id
+    claudeSessionId: j.claudeSessionId || null
   }));
 }
 
