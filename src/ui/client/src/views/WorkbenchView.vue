@@ -1902,7 +1902,6 @@ function humanSize(n: number): string {
 
 /* 任务描述折叠：默认收起，点击 summary 展开。 */
 .wb-task-desc {
-  border: 1px solid var(--border-color);
   border-radius: 10px;
   background: var(--bg-subtle);
   padding: 0;
@@ -2479,7 +2478,6 @@ function humanSize(n: number): string {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  border: 1px dashed var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
@@ -2509,8 +2507,6 @@ function humanSize(n: number): string {
 .wb-empty--rich {
   padding: 32px 28px 28px;
   gap: 10px;
-  border-style: solid;
-  border-color: var(--border-color);
   background: var(--bg-container);
   margin: 4px 2px 2px;
 }
@@ -2628,7 +2624,6 @@ function humanSize(n: number): string {
   width: 100%;
   min-width: 0;
   min-height: 0;
-  border: 1px solid var(--border-color);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
