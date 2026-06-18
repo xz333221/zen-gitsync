@@ -161,6 +161,9 @@ async function start() {
   } catch (err: any) {
     if (myNonce !== runNonce) return
     if (err?.name === 'AbortError' || myController.signal.aborted) {
+      // 用户主动停止：回到 idle 状态,提示词 tab 留作查看,让用户能修改后再 start
+      phase.value = 'idle'
+      activeTab.value = 'prompt'
       return
     }
     phase.value = 'error'
@@ -177,6 +180,13 @@ function confirmImport() {
 
 function retry() {
   start()
+}
+
+function stop() {
+  if (!abortController) return
+  abortController.abort()
+  abortController = null
+  ElMessage.info($t('@WORKBENCH:已停止拆分'))
 }
 
 const reparsing = ref(false)
@@ -262,6 +272,9 @@ function cancelEditPrompt() {
     <div v-if="isRunning" class="ai-split-status">
       <el-icon class="is-loading"><Loading /></el-icon>
       <span>{{ $t('@WORKBENCH:AI 正在拆分…') }}</span>
+      <el-button size="small" link type="danger" class="ai-split-status__stop" @click="stop">
+        {{ $t('@WORKBENCH:停止拆分') }}
+      </el-button>
     </div>
     <div v-else-if="phase === 'error'" class="ai-split-status is-error">
       <el-icon color="#f56c6c"><CircleClose /></el-icon>
@@ -400,6 +413,9 @@ function cancelEditPrompt() {
     <div class="ai-split-direct-footer">
       <el-button v-if="phase === 'error' || (phase === 'result' && parseError && subtasks.length === 0)" @click="retry">
         {{ $t('@WORKBENCH:重新生成') }}
+      </el-button>
+      <el-button v-if="phase === 'result' && subtasks.length > 0" @click="retry">
+        {{ $t('@WORKBENCH:重新拆分') }}
       </el-button>
       <el-button type="primary" :disabled="!canConfirm" @click="confirmImport">
         {{ $t('@WORKBENCH:确认入库') }} ({{ subtasks.length }})
