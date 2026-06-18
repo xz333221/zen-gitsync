@@ -75,7 +75,9 @@ export default defineConfig(({ command }) => {
         resolvers: [ElementPlusResolver()],
       }),
       Components({
-        resolvers: [ElementPlusResolver()],
+        // importStyle: 'css' 让 resolver 在主入口就 import 每个子组件的 style/css,
+        // Vite 启动时一次性把所有用到的 element-plus 子模块加入依赖图 → 不再触发懒补预构建
+        resolvers: [ElementPlusResolver({ importStyle: 'css' })],
       }),
       tailwindcss(),
       vue(),
@@ -89,6 +91,12 @@ export default defineConfig(({ command }) => {
     ],
   optimizeDeps: {
     exclude: ['ai-model-form'],
+    // entry 显式声明 src/main.ts,Vite 启动时按主入口扫全依赖,
+    // resolver importStyle: 'css' 让 element-plus 子模块的 css 在启动时进入依赖图,
+    // dev 期间访问新页面不再触发 Vite 补预构建 → 避免 "optimized dependencies changed. reloading"
+    entries: ['src/main.ts'],
+    // 兜底:把 element-plus 整个包放进去,运行期即使 resolver 漏掉,Vite 也不再需要新增依赖
+    include: ['element-plus/es > element-plus'],
   },
   resolve: {
     alias: {
