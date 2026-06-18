@@ -345,7 +345,6 @@ body {
 /* Card 样式 */
 .app-card {
   background: var(--color-white);
-  border: 1px solid var(--border-color-medium);
   border-radius: 0;
   box-shadow: none;
   transition: var(--transition-all);
@@ -359,7 +358,6 @@ body {
 /* 统一的卡片基础样式（供各组件直接使用 class="card"） */
 .card {
   background-color: var(--bg-container);
-  border: 1px solid var(--border-card);
   border-radius: 0;
   box-shadow: none;
   transition: var(--transition-all, all 0.3s ease);
@@ -382,7 +380,6 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-base);
-  border-bottom: 1px solid var(--border-card);
   background-color: var(--bg-container);
 }
 
@@ -397,7 +394,6 @@ body {
 /* Card Header */
 .app-card-header {
   padding: var(--spacing-base) var(--spacing-lg);
-  border-bottom: 1px solid var(--border-color-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -419,7 +415,6 @@ body {
 /* Card Footer */
 .app-card-footer {
   padding: var(--spacing-base) var(--spacing-lg);
-  border-top: 1px solid var(--border-color-light);
   background: var(--color-gray-50);
 }
 
