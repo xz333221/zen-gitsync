@@ -57,6 +57,10 @@ npm install -g zen-gitsync
 - **Selection-scoped diff** — AI commit message and quick commit/push use only the diff of currently selected files when the Git view is the active tab
 - **Commit templates** — Save type/scope/description/message templates
 - **Theme & language** — Light/dark theme and Chinese/English UI
+- **Accessibility (WCAG 2.1 AA)** — Dialog focus trap & restore, role-based separators, keyboard-only panel resize (`← → ↑ ↓`), screen-reader friendly commit context menu, ARIA-pressed toggle buttons
+- **Faster cold start** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` are split into independent chunks and lazy-loaded so the Git panel boots without waiting on the code editor or visual workflow designer
+
+> Detailed per-release change log (a11y/perf fixes, i18n missing translations, dead-code removals, etc.) lives in [CHANGELOG.md](./CHANGELOG.md).
 
 ---
 
@@ -451,6 +455,10 @@ npm install -g zen-gitsync
 - **选择模式差异** — 当 Git 视图为当前激活标签时，AI 生成提交信息与一键提交/推送仅作用于当前勾选文件的 diff
 - **提交模板** — 保存类型/范围/描述/完整提交信息模板
 - **主题与语言** — 支持明/暗主题，中英文界面切换
+- **可访问性(WCAG 2.1 AA)** — 弹窗焦点陷阱与归还、`role="separator"` 键盘可达的分隔条、纯键盘(`← → ↑ ↓`)调整面板宽度、屏幕阅读器友好的提交右键菜单、ARIA-pressed 切换按钮
+- **更快的冷启动** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` 拆分为独立 chunk 并按需懒加载,Git 面板首屏不再等待代码编辑器或可视化流程编排模块
+
+> 每个版本的详细变更日志(可访问性/性能修复、i18n 漏译、死代码清理等)见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
