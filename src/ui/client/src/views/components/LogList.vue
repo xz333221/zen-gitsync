@@ -1275,6 +1275,7 @@ function toggleFullscreen() {
                       placement="top"
                       :show-after="350"
                       :disabled="!isMessageTruncated(scope.row.message)"
+                      popper-class="commit-message-tooltip"
                     >
                       <span class="message-text">{{ scope.row.message }}</span>
                     </el-tooltip>
@@ -2124,6 +2125,16 @@ function toggleFullscreen() {
 <style>
 .el-table .el-table__cell .cell {
   word-break: break-all;
+}
+
+/* 提交信息 tooltip 气泡:限制宽度,长 commit message 友好换行 */
+.el-popper.commit-message-tooltip {
+  max-width: 480px;
+  line-height: 1.5;
+}
+.el-popper.commit-message-tooltip .el-tooltip__content {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>
 
