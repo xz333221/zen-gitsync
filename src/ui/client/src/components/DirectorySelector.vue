@@ -413,33 +413,44 @@ function onBrowserSelect(path: string) {
 
 <template>
 <div id="directory-selector" class="directory-selector" :class="[`directory-selector--${props.variant}`]">
-    <div class="directory-display" :title="$t('@67CE7:切换工作目录') + '\n' + currentDirectory" @click="onOpenDialog" @contextmenu.prevent="onCopyDirectory">
+    <button
+      type="button"
+      class="directory-display"
+      :title="$t('@67CE7:切换工作目录') + '\n' + currentDirectory"
+      :aria-label="$t('@67CE7:切换工作目录: {path}', { path: currentDirectory })"
+      @click="onOpenDialog"
+      @contextmenu.prevent="onCopyDirectory"
+    >
       {{ currentFolderName }}
-    </div>
+    </button>
     <div class="directory-actions flex">
       <IconButton
         :tooltip="$t('@67CE7:切换工作目录')"
+        :aria-label="$t('@67CE7:切换工作目录')"
         size="large"
         @click="onOpenDialog"
       >
-        <el-icon><Folder /></el-icon>
+        <el-icon aria-hidden="true"><Folder /></el-icon>
       </IconButton>
       <IconButton
         :tooltip="$t('@67CE7:在资源管理器中打开')"
+        :aria-label="$t('@67CE7:在资源管理器中打开')"
         size="large"
         @click="onOpenExplorer"
       >
-        <el-icon><FolderOpened /></el-icon>
+        <el-icon aria-hidden="true"><FolderOpened /></el-icon>
       </IconButton>
       <IconButton
-        tooltip="在终端中打开"
+        :tooltip="$t('@67CE7:在终端中打开')"
+        :aria-label="$t('@67CE7:在终端中打开')"
         size="large"
         @click="onOpenTerminal"
       >
-        <el-icon><Monitor /></el-icon>
+        <el-icon aria-hidden="true"><Monitor /></el-icon>
       </IconButton>
       <IconButton
-        tooltip="用 VSCode 打开"
+        :tooltip="$t('@67CE7:用 VSCode 打开')"
+        :aria-label="$t('@67CE7:用 VSCode 打开')"
         size="large"
         @click="onOpenInVscode"
       >
@@ -465,33 +476,40 @@ function onBrowserSelect(path: string) {
             @contextmenu.prevent.stop="openClaudeMenu"
           >
             <IconButton
-              tooltip="用 Claude Code 打开（完全批准）"
+              :tooltip="$t('@67CE7:用 Claude Code 打开（完全批准）')"
+              :aria-label="$t('@67CE7:用 Claude Code 打开（完全批准）')"
               size="large"
               @click="onOpenInClaudeCode('bypassPermissions')"
             >
               <img
                 :src="claudeCodeIcon"
-                alt="Claude Code"
+                :alt="$t('@67CE7:Claude Code')"
                 class="claude-code-btn__icon"
               />
             </IconButton>
           </span>
         </template>
-        <ul class="claude-menu" role="menu">
+        <ul class="claude-menu" role="menu" :aria-label="$t('@67CE7:Claude Code 启动模式')">
           <li
             class="claude-menu__item"
             role="menuitem"
+            tabindex="-1"
             @click="pickClaudeMode('default')"
+            @keydown.enter.prevent="pickClaudeMode('default')"
+            @keydown.space.prevent="pickClaudeMode('default')"
           >
-            <span class="claude-menu__label">用 Claude Code 打开</span>
-            <span class="claude-menu__hint">默认权限</span>
+            <span class="claude-menu__label">{{ $t('@67CE7:用 Claude Code 打开') }}</span>
+            <span class="claude-menu__hint">{{ $t('@67CE7:默认权限') }}</span>
           </li>
           <li
             class="claude-menu__item claude-menu__item--accent"
             role="menuitem"
+            tabindex="-1"
             @click="pickClaudeMode('acceptEdits')"
+            @keydown.enter.prevent="pickClaudeMode('acceptEdits')"
+            @keydown.space.prevent="pickClaudeMode('acceptEdits')"
           >
-            <span class="claude-menu__label">用 Claude Code 打开</span>
+            <span class="claude-menu__label">{{ $t('@67CE7:用 Claude Code 打开') }}</span>
             <span class="claude-menu__hint">批准文件编辑</span>
           </li>
           <li
@@ -711,6 +729,16 @@ function onBrowserSelect(path: string) {
   border-radius: 6px;
   padding: 2px 8px;
   transition: background 0.15s, color 0.15s;
+  /* 按钮重置:继承 div 视觉,但移除浏览器默认样式 */
+  border: none;
+  background: transparent;
+  text-align: left;
+  appearance: none;
+}
+
+.directory-display:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .directory-display:hover {

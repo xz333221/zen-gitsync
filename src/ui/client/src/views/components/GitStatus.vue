@@ -1106,18 +1106,26 @@ defineExpose({
           <div v-else-if="recentDirectories.length === 0" class="recent-projects__empty">
             {{ $t('@13D1C:暂无最近项目') }}
           </div>
-          <ul v-else class="recent-projects__list">
+          <ul v-else class="recent-projects__list" :aria-label="$t('@13D1C:最近项目列表')">
             <li
               v-for="item in recentDirectories"
               :key="item.path"
               class="recent-projects__item"
               :class="{ 'is-missing': !item.exists }"
-              :title="item.exists ? item.path : $t('@13D1C:目录不存在')"
-              @click="onRecentDirClick(item)"
             >
-              <el-icon class="recent-projects__icon"><Folder /></el-icon>
+              <button
+                type="button"
+                class="recent-projects__btn"
+                :title="item.exists ? item.path : $t('@13D1C:目录不存在')"
+                :aria-label="item.exists
+                  ? $t('@13D1C:在新标签页打开 {path}', { path: item.path })
+                  : $t('@13D1C:{path} (目录不存在)', { path: item.path })"
+                @click="onRecentDirClick(item)"
+              >
+              <el-icon class="recent-projects__icon" aria-hidden="true"><Folder /></el-icon>
               <span class="recent-projects__name">{{ item.path }}</span>
               <span v-if="!item.exists" class="recent-projects__tag">{{ $t('@13D1C:不存在') }}</span>
+              </button>
             </li>
           </ul>
         </div>
@@ -1391,13 +1399,19 @@ defineExpose({
             <template v-else>
               <!-- 冲突文件（优先级最高，显示在最前面） -->
               <div v-if="gitStore.fileList.filter(f => f.type === 'conflicted').length" class="tree-group">
-                <div class="tree-group-header" @click="toggleGroupCollapse('conflicted')">
-                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.conflicted }">
+                <button
+                  type="button"
+                  class="tree-group-header"
+                  :aria-expanded="!collapsedGroups.conflicted"
+                  :aria-controls="'tree-group-conflicted'"
+                  @click="toggleGroupCollapse('conflicted')"
+                >
+                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.conflicted }" aria-hidden="true">
                     <ArrowDown />
                   </el-icon>
                   <h5>{{ $t('@13D1C:冲突文件') }}</h5>
                   <span class="file-count">{{ gitStore.fileList.filter(f => f.type === 'conflicted').length }}</span>
-                </div>
+                </button>
                 <FileTreeView
                   v-if="!collapsedGroups.conflicted"
                   :tree-data="conflictedTreeData"
@@ -1414,13 +1428,19 @@ defineExpose({
               
               <!-- 已暂存的更改 -->
               <div v-if="gitStore.fileList.filter(f => f.type === 'added').length" class="tree-group">
-                <div class="tree-group-header" @click="toggleGroupCollapse('staged')">
-                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.staged }">
+                <button
+                  type="button"
+                  class="tree-group-header"
+                  :aria-expanded="!collapsedGroups.staged"
+                  :aria-controls="'tree-group-staged'"
+                  @click="toggleGroupCollapse('staged')"
+                >
+                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.staged }" aria-hidden="true">
                     <ArrowDown />
                   </el-icon>
                   <h5>{{ $t('@13D1C:已暂存的更改') }}</h5>
                   <span class="file-count">{{ gitStore.fileList.filter(f => f.type === 'added').length }}</span>
-                </div>
+                </button>
                 <FileTreeView
                   v-if="!collapsedGroups.staged"
                   :tree-data="stagedTreeData"
@@ -1436,13 +1456,19 @@ defineExpose({
               
               <!-- 未暂存的更改 -->
               <div v-if="gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted').length" class="tree-group">
-                <div class="tree-group-header" @click="toggleGroupCollapse('unstaged')">
-                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.unstaged }">
+                <button
+                  type="button"
+                  class="tree-group-header"
+                  :aria-expanded="!collapsedGroups.unstaged"
+                  :aria-controls="'tree-group-unstaged'"
+                  @click="toggleGroupCollapse('unstaged')"
+                >
+                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.unstaged }" aria-hidden="true">
                     <ArrowDown />
                   </el-icon>
                   <h5>{{ $t('@13D1C:未暂存的更改') }}</h5>
                   <span class="file-count">{{ gitStore.fileList.filter(f => f.type === 'modified' || f.type === 'deleted').length }}</span>
-                </div>
+                </button>
                 <FileTreeView
                   v-if="!collapsedGroups.unstaged"
                   :tree-data="unstagedTreeData"
@@ -1459,13 +1485,19 @@ defineExpose({
               
               <!-- 未跟踪的文件 -->
               <div v-if="gitStore.fileList.filter(f => f.type === 'untracked').length" class="tree-group">
-                <div class="tree-group-header" @click="toggleGroupCollapse('untracked')">
-                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.untracked }">
+                <button
+                  type="button"
+                  class="tree-group-header"
+                  :aria-expanded="!collapsedGroups.untracked"
+                  :aria-controls="'tree-group-untracked'"
+                  @click="toggleGroupCollapse('untracked')"
+                >
+                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups.untracked }" aria-hidden="true">
                     <ArrowDown />
                   </el-icon>
                   <h5>{{ $t('@13D1C:未跟踪的文件') }}</h5>
                   <span class="file-count">{{ gitStore.fileList.filter(f => f.type === 'untracked').length }}</span>
-                </div>
+                </button>
                 <FileTreeView
                   v-if="!collapsedGroups.untracked"
                   :tree-data="untrackedTreeData"
@@ -1937,6 +1969,27 @@ defineExpose({
 .recent-projects__item:hover {
   background: rgba(45, 127, 249, 0.12);
 }
+.recent-projects__btn {
+  /* 让 button 占据 li 全部空间,继承 li 的视觉 */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.recent-projects__btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 .recent-projects__item.is-missing {
   color: var(--text-secondary);
   cursor: not-allowed;
@@ -2317,14 +2370,27 @@ html.dark .upstream-tip:hover {
   gap: var(--spacing-md);
   padding: var(--spacing-base) var(--spacing-lg);
   font-weight: var(--font-weight-semibold);
-  
+
   cursor: pointer;
   transition: var(--transition-all);
-  
+
+  // 按钮重置:继承 div 视觉
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+
   &:hover {
     background: var(--bg-hover);
   }
-  
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+
   .collapse-icon {
     transition: var(--transition-transform);
     font-size: var(--font-size-sm);

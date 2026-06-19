@@ -15,7 +15,7 @@
   -->
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { computed } from 'vue'
+import { computed, nextTick, useId } from 'vue'
 import { ElDialog } from 'element-plus'
 
 // 定义弹窗尺寸枚举
@@ -92,7 +92,7 @@ const emit = defineEmits<Emits>()
 // 计算弹窗尺寸
 const dialogWidth = computed(() => {
   if (props.width) return props.width
-  
+
   switch (props.size) {
     case 'small':
       return '30%'
@@ -108,6 +108,41 @@ const dialogWidth = computed(() => {
       return '50%'
   }
 })
+
+// a11y: 用 useId 给标题生成稳定 id,让 el-dialog 的 aria-labelledby 引用
+const titleId = useId()
+// 记录触发对话框打开的元素,关闭后归还焦点(WCAG 2.4.3 focus order)
+let previouslyFocused: HTMLElement | null = null
+
+function handleOpened() {
+  emit('opened')
+  // 焦点陷阱:打开后聚焦对话框内第一个可聚焦元素(关闭按钮或第一个表单控件)
+  nextTick(() => {
+    const dialogEl = document.querySelector('.el-dialog__wrapper:not([style*="display: none"]) .el-dialog')
+    if (!dialogEl) return
+    const focusable = dialogEl.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    ;(focusable || dialogEl as HTMLElement).focus?.()
+  })
+}
+
+function handleClosed() {
+  emit('closed')
+  // 关闭后归还焦点
+  if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+    nextTick(() => previouslyFocused?.focus())
+    previouslyFocused = null
+  }
+}
+
+// 拦截 modelValue 由 false→true 的瞬间,记录触发元素
+function handleUpdateModelValue(next: boolean) {
+  if (next && !props.modelValue) {
+    previouslyFocused = document.activeElement as HTMLElement | null
+  }
+  emit('update:modelValue', next)
+}
 
 const dialogTop = computed(() => {
   if (props.size === 'fullscreen') return '0'
@@ -167,14 +202,6 @@ function handleCancel() {
   emit('cancel')
   handleClose()
 }
-
-function handleOpened() {
-  emit('opened')
-}
-
-function handleClosed() {
-  emit('closed')
-}
 </script>
 
 <template>
@@ -193,22 +220,33 @@ function handleClosed() {
     :class="dialogClass"
     :append-to-body="appendToBody"
     :lock-scroll="lockScroll"
+    :aria-modal="true"
+    :aria-labelledby="titleId"
+    role="dialog"
     @close="handleClose"
+    @update:model-value="handleUpdateModelValue"
     @opened="handleOpened"
     @closed="handleClosed"
   >
+    <!-- 重写 header 把 title span 绑定到 titleId,供 aria-labelledby 引用 -->
+    <template #header="{ titleClass }">
+      <span :id="titleId" :class="['el-dialog__title', titleClass]" role="heading" aria-level="2">
+        {{ title }}
+      </span>
+    </template>
+
     <!-- 主要内容区域 -->
     <slot />
-    
+
     <!-- 底部按钮区域 -->
     <template #footer v-if="showFooter || $slots.footer">
       <slot name="footer">
         <div class="common-dialog__footer">
-          <el-button v-if="showCancel" @click="handleCancel">
+          <el-button v-if="showCancel" type="button" @click="handleCancel">
             {{ cancelText }}
           </el-button>
-          <el-button 
-            type="primary" 
+          <el-button
+            type="primary"
             :loading="confirmLoading"
             @click="handleConfirm"
           >

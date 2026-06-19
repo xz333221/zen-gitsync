@@ -160,6 +160,26 @@ function isBlockDiscarded(blockId: number, kind: 'current' | 'incoming'): boolea
   return block.choice === 'current'
 }
 
+/**
+ * 把动态创建的 div 配置成 a11y 可达的"按钮":
+ * - role=button + tabindex=0 → 键盘可聚焦
+ * - aria-label → 屏幕阅读器可读
+ * - Enter/Space → 触发点击
+ * - aria-pressed → 表达已应用/已丢弃的 toggle 状态
+ */
+function decorateAsButton(el: HTMLElement, label: string, pressed: boolean) {
+  el.setAttribute('role', 'button')
+  el.setAttribute('tabindex', '0')
+  el.setAttribute('aria-label', label)
+  if (pressed) el.setAttribute('aria-pressed', 'true')
+  el.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      el.click()
+    }
+  })
+}
+
 function applyRightActions() {
   if (!editor) return
   ensureRightActionsContainer()
@@ -191,6 +211,7 @@ function applyRightActions() {
       arrowBtn.className = `merge-right-action merge-right-action-current${isApplied ? ' is-applied' : ''}`
       arrowBtn.textContent = isApplied ? '✓' : '→'
       arrowBtn.title = isApplied ? '已采用当前更改' : '采用当前更改'
+      decorateAsButton(arrowBtn, arrowBtn.title, isApplied)
       arrowBtn.addEventListener('mousedown', (e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -200,11 +221,12 @@ function applyRightActions() {
         e.stopPropagation()
         emit('gutter-click', a.blockId, 'accept')
       })
-      
+
       const closeBtn = document.createElement('div')
       closeBtn.className = `merge-right-action merge-right-action-close${isDiscarded ? ' is-discarded' : ''}`
       closeBtn.textContent = '✕'
       closeBtn.title = isDiscarded ? '已丢弃当前更改' : '丢弃当前更改'
+      decorateAsButton(closeBtn, closeBtn.title, isDiscarded)
       closeBtn.addEventListener('mousedown', (e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -215,7 +237,7 @@ function applyRightActions() {
         // 丢弃当前 = 采用传入
         emit('gutter-click', a.blockId, 'discard')
       })
-      
+
       wrapper.appendChild(arrowBtn)
       wrapper.appendChild(closeBtn)
     } else {
@@ -224,6 +246,7 @@ function applyRightActions() {
       closeBtn.className = `merge-right-action merge-right-action-close${isDiscarded ? ' is-discarded' : ''}`
       closeBtn.textContent = '✕'
       closeBtn.title = isDiscarded ? '已丢弃传入更改' : '丢弃传入更改'
+      decorateAsButton(closeBtn, closeBtn.title, isDiscarded)
       closeBtn.addEventListener('mousedown', (e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -234,11 +257,12 @@ function applyRightActions() {
         // 丢弃传入 = 采用当前
         emit('gutter-click', a.blockId, 'discard')
       })
-      
+
       const arrowBtn = document.createElement('div')
       arrowBtn.className = `merge-right-action merge-right-action-incoming${isApplied ? ' is-applied' : ''}`
       arrowBtn.textContent = isApplied ? '✓' : '←'
       arrowBtn.title = isApplied ? '已采用传入更改' : '采用传入更改'
+      decorateAsButton(arrowBtn, arrowBtn.title, isApplied)
       arrowBtn.addEventListener('mousedown', (e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -248,7 +272,7 @@ function applyRightActions() {
         e.stopPropagation()
         emit('gutter-click', a.blockId, 'accept')
       })
-      
+
       wrapper.appendChild(closeBtn)
       wrapper.appendChild(arrowBtn)
     }

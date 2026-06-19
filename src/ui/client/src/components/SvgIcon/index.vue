@@ -14,58 +14,55 @@
   ~ limitations under the License.
   -->
 <template>
-  <svg :class="svgClass" aria-hidden="true">
+  <svg
+    :class="svgClass"
+    :aria-hidden="decorative ? 'true' : undefined"
+    :role="decorative ? undefined : 'img'"
+    :aria-label="decorative ? undefined : (ariaLabel || undefined)"
+    :focusable="decorative ? 'false' : undefined"
+  >
     <use :xlink:href="iconName" />
   </svg>
 </template>
 
 <script lang="ts" setup name="SvgIcon">
-  import { computed } from 'vue'
+import { computed } from 'vue'
+
 const props = defineProps({
-    iconClass: {
-        type: String,
-        required: true,
-    },
-    className: {
-        type: String,
-        default: '',
-    },
+  iconClass: {
+    type: String,
+    required: true,
+  },
+  className: {
+    type: String,
+    default: '',
+  },
+  /**
+   * 是否装饰性图标。
+   * - true (默认): aria-hidden=true，屏幕阅读器跳过
+   * - false: 作为 img + aria-label 语义化使用(如 Logo、状态徽章等)
+   */
+  decorative: {
+    type: Boolean,
+    default: true,
+  },
+  /**
+   * 语义化图标 (decorative=false) 时的无障碍标签
+   */
+  ariaLabel: {
+    type: String,
+    default: '',
+  },
 })
-  const iconName = computed(() => {
-      return `#icon-${props.iconClass}`
-  })
-  const svgClass = computed(() => {
-      if (props.className) {
-          return `svg-icon ${props.className}`
-      } else {
-          return 'svg-icon'
-      }
-  })
-// export default {
-//   name: 'SvgIcon',
-//   props: {
-//     iconClass: {
-//       type: String,
-//       required: true
-//     },
-//     className: {
-//       type: String,
-//       default: ''
-//     }
-//   },
-//   computed: {
-//     iconName() {
-//       return `#icon-${this.iconClass}`
-//     },
-//     svgClass() {
-//       if (this.className) {
-//         return 'svg-icon ' + this.className
-//       } else {
-//         return 'svg-icon'
-//       }
-//     }
-//   }
-// }
+
+const iconName = computed(() => `#icon-${props.iconClass}`)
+
+const svgClass = computed(() => {
+  if (props.className) {
+    return `svg-icon ${props.className}`
+  }
+  return 'svg-icon'
+})
 </script>
 
 <style scoped>

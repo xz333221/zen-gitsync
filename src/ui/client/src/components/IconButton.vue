@@ -28,8 +28,12 @@ interface IconButtonProps {
   disabled?: boolean
   // 是否激活状态
   active?: boolean
-  // 提示文本
+  // 提示文本（同时作为默认 aria-label，可被 ariaLabel 覆盖）
   tooltip?: string
+  // 显式无障碍标签（推荐：与 tooltip 同义但更结构化）。若不传则回退到 tooltip
+  ariaLabel?: string
+  // toggle 按钮的按下状态，会同步设置 aria-pressed
+  pressed?: boolean
   // 自定义类名
   customClass?: string
   // 图标颜色（仅对 SVG 图标有效）
@@ -43,6 +47,8 @@ const props = withDefaults(defineProps<IconButtonProps>(), {
   disabled: false,
   active: false,
   tooltip: '',
+  ariaLabel: '',
+  pressed: false,
   customClass: '',
   color: '',
   hoverColor: 'var(--color-primary)',
@@ -70,6 +76,7 @@ const handleClick = (event: MouseEvent) => {
     :show-after="300"
   >
     <button
+      type="button"
       class="icon-button"
       :class="[
         sizeClass,
@@ -80,23 +87,27 @@ const handleClick = (event: MouseEvent) => {
         }
       ]"
       :disabled="disabled"
+      :aria-label="ariaLabel || tooltip || undefined"
+      :aria-pressed="pressed ? 'true' : undefined"
       @click="handleClick"
     >
       <!-- SVG 图标 -->
       <svg-icon
         v-if="iconClass"
         :icon-class="iconClass"
+        :decorative="true"
         :style="{ color: color || undefined }"
       />
-      
+
       <!-- 图片图标 -->
       <img
         v-else-if="imageUrl"
         :src="imageUrl"
-        alt="icon"
+        alt=""
+        aria-hidden="true"
         class="icon-image"
       />
-      
+
       <!-- 插槽支持自定义内容 -->
       <slot v-else />
     </button>
@@ -115,11 +126,12 @@ const handleClick = (event: MouseEvent) => {
   border-radius: var(--btn-radius-sm);
   color: var(--text-secondary);
   padding: 0;
-  
-  &:focus {
+
+  // 鼠标点击的 :focus 不要 outline，只有 :focus-visible（键盘）才显示焦点环
+  &:focus:not(:focus-visible) {
     outline: none;
   }
-  
+
   &:focus-visible {
     box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.3);
     outline: 2px solid var(--color-primary);
@@ -211,13 +223,7 @@ const handleClick = (event: MouseEvent) => {
     background: rgba(64, 158, 255, 0.15);
     box-shadow: none;
   }
-  
-  // Focus 效果
-  &:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
-  }
-  
+
   // 激活状态
   &.is-active {
     color: v-bind(hoverColor);

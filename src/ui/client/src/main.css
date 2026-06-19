@@ -69,3 +69,42 @@ body {
   background: color-mix(in srgb, var(--color-primary) 22%, transparent);
   color: var(--text-primary);
 }
+
+/* ===== 全局焦点环兜底 =====
+   个别组件已自定义 :focus-visible,这里只覆盖"没设置"的元素,
+   保证键盘用户始终能看到清晰的焦点指示(WCAG 2.4.7) */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+/* 鼠标点击产生的 :focus 不显示 outline */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ===== 屏幕阅读器专用隐藏(给视觉上不可见但读屏可读的内容) ===== */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* ===== 全局 prefers-reduced-motion 兜底 =====
+   用户偏好减少动画时,把所有动画/过渡压缩到接近 0,但保留极短的过渡
+   让状态变化仍能被感知(WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

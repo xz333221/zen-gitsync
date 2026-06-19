@@ -43,7 +43,6 @@ import {
   CopyDocument,
   Document,
 } from "@element-plus/icons-vue";
-import "element-plus/dist/index.css";
 import { useGitStore } from "@stores/gitStore";
 import { extractPureMessage } from "@utils/index.ts";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
@@ -63,9 +62,8 @@ interface LogItem {
 // 使用Git状态和日志Store
 const gitStore = useGitStore();
 
-// 获取日志数据
-let logsData: LogItem[] = [];
-const logs = ref<LogItem[]>(logsData);
+// 获取日志数据(直接用 ref,删除中间数组 logsData,避免双倍拷贝)
+const logs = ref<LogItem[]>([]);
 const errorMessage = ref("");
 // 定义本地加载状态，而不是依赖于computed
 const localLoading = ref(false);
@@ -200,23 +198,18 @@ async function loadLog(all = false, page = 1) {
 
     const isLoadMore = page > 1;
 
-    // 处理结果
-    // 如果是加载更多，追加数据，否则替换数据
-    if (isLoadMore) {
-      result.data.forEach((item: LogItem) => logsData.push(item));
-    } else {
-      logsData.length = 0;
-      result.data.forEach((item: LogItem) => logsData.push(item));
+    // 处理结果:加载更多时追加,否则替换,直接走响应式 ref,避免中间数组
+    if (isLoadMore && Array.isArray(result.data)) {
+      logs.value = logs.value.concat(result.data as LogItem[])
+    } else if (Array.isArray(result.data)) {
+      logs.value = result.data as LogItem[]
     }
-
-    // 强制重新渲染列表
-    logs.value = [...logsData];
 
     // 更新当前页码
     gitStore.currentPage = page;
 
     // 更新总数和分页标记
-    gitStore.totalCommits = result.total || logsData.length;
+    gitStore.totalCommits = result.total ?? logs.value.length;
     gitStore.hasMoreData = result.hasMore === true;
 
     // 表格视图：设置滚动监听并检查是否需要加载更多
@@ -280,7 +273,16 @@ function isMessageTruncated(message: string): boolean {
 const tableRef = ref<TableInstance | null>(null);
 const tableBodyWrapper = ref<HTMLElement | null>(null);
 
-// 监听表格滚动事件的处理函数
+// 监听表格滚动事件的处理函数(RAF 节流:60fps 合并到显示器刷新率)
+let scrollRafId: number | null = null
+function scheduleScrollCheck(event: Event) {
+  if (scrollRafId !== null) return
+  scrollRafId = requestAnimationFrame(() => {
+    scrollRafId = null
+    handleTableScroll(event)
+  })
+}
+
 function handleTableScroll(event: Event) {
   if (
     !gitStore.hasMoreData ||
@@ -317,17 +319,18 @@ function setupTableScrollListener() {
 
   // 先移除旧的监听器，避免重复
   if (tableBodyWrapper.value) {
-    tableBodyWrapper.value.removeEventListener("scroll", handleTableScroll, true);
-    tableBodyWrapper.value.addEventListener("scroll", handleTableScroll, true);
+    tableBodyWrapper.value.removeEventListener("scroll", scheduleScrollCheck, true);
+    tableBodyWrapper.value.addEventListener("scroll", scheduleScrollCheck, true);
   }
 }
 
 // 移除表格滚动监听
 function removeTableScrollListener() {
   if (tableBodyWrapper.value) {
-    tableBodyWrapper.value.removeEventListener("scroll", handleTableScroll, true);
+    tableBodyWrapper.value.removeEventListener("scroll", scheduleScrollCheck, true);
     tableBodyWrapper.value = null;
   }
+  if (scrollRafId !== null) { cancelAnimationFrame(scrollRafId); scrollRafId = null }
 }
 
 // 添加键盘事件处理函数
@@ -343,15 +346,9 @@ onMounted(() => {
   // 检查gitStore中是否已有数据
   if (gitStore.isGitRepo) {
     if (gitStore.log.length > 0) {
-      // 如果已经有数据，直接使用现有数据
-      // 清空并填充logsData
-      logsData.length = 0;
-      gitStore.log.forEach((item) => logsData.push(item));
-
-      // 由于TypeScript类型错误，我们直接设置totalCommits而不是使用logs.value.length
-      gitStore.totalCommits = gitStore.log.length;
-
-      // 图表视图已移除
+      // 如果已经有数据,直接给 logs 赋值(响应式接管)
+      logs.value = gitStore.log as LogItem[]
+      gitStore.totalCommits = gitStore.log.length
     } else {
       // 否则加载数据
       loadLog();
@@ -442,29 +439,19 @@ watch(
   () => gitStore.log,
   (newLogs) => {
     try {
-      // 清空logsData
-      logsData.length = 0;
-
-      // 重新填充数据，使用类型断言
+      // 直接赋值给 logs(响应式接管),避免中间数组 + 浅拷贝双倍开销
       if (Array.isArray(newLogs)) {
-        // @ts-ignore - 忽略类型校验
-        newLogs.forEach((item) => item && logsData.push(item));
+        logs.value = newLogs as LogItem[]
       }
 
       // 更新计数器
-      gitStore.totalCommits = logsData.length;
+      gitStore.totalCommits = logs.value.length;
 
       // 重置当前页为第1页
       gitStore.currentPage = 1;
-      
+
       // 重置分页标记：如果是通过gitStore.refreshLog()加载的全量数据，没有更多数据
       gitStore.hasMoreData = false;
-
-      // 确保引用更新，触发UI重渲染
-      // @ts-ignore - 忽略类型校验
-      logs.value = [...logsData];
-
-      // 图表视图已移除
     } catch (error) {
       // 静默处理错误
     }
@@ -857,6 +844,30 @@ function handleContextMenu(row: LogItem, _column: any, event: MouseEvent) {
   setTimeout(() => {
     document.addEventListener("click", hideContextMenu);
   }, 0);
+
+  // 把焦点转移到菜单第一个 item,这样键盘导航立即可用
+  nextTick(() => {
+    const items = contextMenuRef.value?.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    if (items && items.length > 0) {
+      items[0].focus()
+    }
+  })
+}
+
+// 关闭右键菜单(键盘 Esc)
+function closeContextMenu() {
+  contextMenuVisible.value = false
+  document.removeEventListener('click', () => {}) // 无害,清理可能残留的监听器
+}
+
+// 键盘 ↑↓ 在菜单项间循环焦点(roving tabindex)
+function moveContextMenuFocus(direction: 1 | -1) {
+  const items = contextMenuRef.value?.querySelectorAll<HTMLElement>('[role="menuitem"]')
+  if (!items || items.length === 0) return
+  const active = document.activeElement as HTMLElement | null
+  const currentIndex = active ? Array.from(items).indexOf(active) : -1
+  const nextIndex = (currentIndex + direction + items.length) % items.length
+  items[nextIndex].focus()
 }
 
 // 撤销提交 (Revert)
@@ -1209,7 +1220,7 @@ function toggleFullscreen() {
       class="content-area"  
       :class="{ 'with-filter': filterVisible }"
     >
-      <div v-if="errorMessage && gitStore.isGitRepo">{{ errorMessage }}</div>
+      <div v-if="errorMessage && gitStore.isGitRepo" role="alert" class="log-error">{{ errorMessage }}</div>
       <div v-else-if="!gitStore.isGitRepo" class="log-empty-state">
         <el-icon class="log-empty-icon"><Document /></el-icon>
         <span class="log-empty-text">{{ $t('@A1833:暂无提交记录') }}</span>
@@ -1273,6 +1284,7 @@ function toggleFullscreen() {
                       @click.stop="copyPureMessage(scope.row.message)"
                       class="copy-message-btn"
                       :title="$t('@A1833:复制纯净提交信息（不含类型前缀）')"
+                      :aria-label="$t('@A1833:复制纯净提交信息（不含类型前缀）')"
                     />
                   </div>
                 </div>
@@ -1297,11 +1309,13 @@ function toggleFullscreen() {
                   placement="top"
                   :show-after="300"
                 >
-                  <span
+                  <button
+                    type="button"
                     class="commit-hash"
                     :title="$t('@A1833:点击复制完整哈希')"
+                    :aria-label="$t('@A1833:复制提交哈希 {hash}', { hash: scope.row.hash.substring(0, 7) })"
                     @click.stop="copyCommitHash(scope.row as LogItem)"
-                  >{{ scope.row.hash.substring(0, 7) }}</span>
+                  >{{ scope.row.hash.substring(0, 7) }}</button>
                 </el-tooltip>
               </template>
             </el-table-column>
@@ -1387,38 +1401,47 @@ function toggleFullscreen() {
     </CommonDialog>
   </div>
   <!-- 添加右键菜单 -->
-  <div
+  <ul
     v-show="contextMenuVisible"
     class="context-menu"
     :class="{ 'fullscreen-context-menu': isFullscreen }"
     :style="{ top: contextMenuTop + 'px', left: contextMenuLeft + 'px' }"
     ref="contextMenuRef"
+    role="menu"
+    :aria-label="$t('@A1833:提交操作菜单')"
+    @keydown.esc.prevent="closeContextMenu"
+    @keydown.down.prevent="moveContextMenuFocus(1)"
+    @keydown.up.prevent="moveContextMenuFocus(-1)"
   >
-    <div
+    <li
       class="context-menu-item"
+      role="menuitem"
+      tabindex="-1"
       @click="viewCommitDetail(selectedContextCommit)"
     >
-      <i class="el-icon-view"></i> {{ $t('@A1833:查看详情') }}
-    </div>
-    <div class="context-menu-item" @click="copyCommitHash(selectedContextCommit)">
-      <i class="el-icon-document-copy"></i> {{ $t('@A1833:复制提交哈希') }}
-    </div>
-    <div class="context-menu-item" @click="copyCommitContent(selectedContextCommit)">
-      <i class="el-icon-document"></i> {{ $t('@A1833:复制提交内容') }}
-    </div>
-    <div class="context-menu-item" @click="resetToCommit(selectedContextCommit)">
-      <i class="el-icon-refresh-right"></i> {{ $t('@A1833:重置到该提交(hard)') }}
-    </div>
-    <div class="context-menu-item" @click="revertCommit(selectedContextCommit)">
-      <i class="el-icon-delete"></i> {{ $t('@A1833:撤销提交 (Revert)') }}
-    </div>
-    <div
+      <i class="el-icon-view" aria-hidden="true"></i> {{ $t('@A1833:查看详情') }}
+    </li>
+    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="copyCommitHash(selectedContextCommit)">
+      <i class="el-icon-document-copy" aria-hidden="true"></i> {{ $t('@A1833:复制提交哈希') }}
+    </li>
+    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="copyCommitContent(selectedContextCommit)">
+      <i class="el-icon-document" aria-hidden="true"></i> {{ $t('@A1833:复制提交内容') }}
+    </li>
+    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="resetToCommit(selectedContextCommit)">
+      <i class="el-icon-refresh-right" aria-hidden="true"></i> {{ $t('@A1833:重置到该提交(hard)') }}
+    </li>
+    <li class="context-menu-item" role="menuitem" tabindex="-1" @click="revertCommit(selectedContextCommit)">
+      <i class="el-icon-delete" aria-hidden="true"></i> {{ $t('@A1833:撤销提交 (Revert)') }}
+    </li>
+    <li
       class="context-menu-item"
+      role="menuitem"
+      tabindex="-1"
       @click="cherryPickCommit(selectedContextCommit)"
     >
-      <i class="el-icon-edit"></i> Cherry{{ $t('@A1833:-Pick 到当前分支') }}
-    </div>
-  </div>
+      <i class="el-icon-edit" aria-hidden="true"></i> Cherry{{ $t('@A1833:-Pick 到当前分支') }}
+    </li>
+  </ul>
 </template>
 <style scoped lang="scss">
 .fullscreen-mode .log-header {
@@ -1597,6 +1620,10 @@ function toggleFullscreen() {
   padding: 2px 5px;
   background-color: #ecf5ff;
   transition: all 0.2s ease;
+  /* 按钮重置:保持 span 视觉 */
+  border: none;
+  font-size: inherit;
+  line-height: inherit;
   font-size: 11px;
   letter-spacing: 0.2px;
   user-select: none;
@@ -1980,6 +2007,15 @@ function toggleFullscreen() {
 .context-menu-item {
   padding: 10px var(--spacing-lg);
   cursor: pointer;
+  list-style: none; /* 改用 ul/li 后去掉列表 marker */
+  transition: background-color 0.12s;
+}
+
+.context-menu-item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  background-color: var(--bg-hover);
+}
   
   display: flex;
   align-items: center;
