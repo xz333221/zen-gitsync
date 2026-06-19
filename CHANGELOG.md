@@ -114,6 +114,15 @@ chunk 拆分策略。无破坏性 API 变更,向后兼容。
   `tooltip="用 VSCode 打开"` / `"在终端中打开"` 等
 - **GitStatus.vue** × 0(此前已合规)
 
+### Fixed — Workbench 子任务流与日志折叠(`32332db`)
+- **WorkbenchView.vue**: 新增 watch 监听所有 sub.status,队列推进且当前选中 sub 不在
+  running 时自动切到下一个正在跑的 sub;若用户主动点了某个非 running 的 sub 看历史日志,
+  不抢焦点,保持用户当前选中
+- **JobLogDetails.vue**: `recomputeThinkingOpen` 增加 `output.length > 0 → 合上思考区`
+  分支,模型开始返回时把屏幕让给输出;新增 watch 监听 output 长度变化触发折叠
+- **WorkbenchView.vue (CSS)**: 子任务 header 容器仅 260px,标题 + 3 个按钮一行放不下;
+  按钮组 `flex-wrap: wrap` + 压缩 padding `5px 8px`,避免溢出被相邻列遮住
+
 ### i18n 新增 key(26 条,中英双语同步)
 | 命名空间 | 数量 | 用途 |
 |---|---|---|
