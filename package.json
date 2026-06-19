@@ -100,10 +100,13 @@
     "ora": "^8.1.1",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
-    "string-width": "^7.2.0"
+    "string-width": "^7.2.0",
+    "engine.io": "^6.6.9",
+    "engine.io-client": "^6.6.6",
+    "socket.io-adapter": "^2.5.8"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "nodemon": "^3.1.14"
   }

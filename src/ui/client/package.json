@@ -37,6 +37,7 @@
     "monaco-editor": "^0.55.1",
     "pinia": "^3.0.2",
     "socket.io-client": "^4.8.1",
+    "engine.io-client": "^6.6.6",
     "vue": "^3.5.13",
     "vue-i18n": "^9.14.5"
   },
