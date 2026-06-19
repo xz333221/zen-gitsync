@@ -1070,20 +1070,35 @@ function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
   });
 }
 
-// 顺序执行一个任务下所有子任务；上一个结束再启动下一个
-async function runTaskQueue(task, repoPath, branch) {
-  // 前序上下文：跑完一个 sub 后把它"完成态"摘要存到这里，下一个 sub 启动时
-  // 拼到 prompt 头部，让 Claude 知道前面做了什么、产出了什么。
-  // 故意不用 raw output 全文——LLM 已经习惯"摘要 + 关键结论"的格式，且不会
+/**
+ * 顺序执行一个任务下所有子任务；上一个结束再启动下一个。
+ * 入参 fromIndex 指定从哪个 sub 开始(0-based,默认 0),用于"从此处开始"入口;
+ * fromIndex>0 时,把 [0, fromIndex) 区间内已 done 的 sub 输出预填到 priorOutputs,
+ * 这样后续 sub 仍能拿到前序上下文(跟单 sub 执行的语义保持一致)。
+ */
+async function runTaskQueue(task, repoPath, branch, opts) {
+  // 前序上下文:跑完一个 sub 后把它"完成态"摘要存到这里,下一个 sub 启动时
+  // 拼到 prompt 头部,让 Claude 知道前面做了什么、产出了什么。
+  // 故意不用 raw output 全文——LLM 已经习惯"摘要 + 关键结论"的格式,且不会
   // 一次塞几 MB 进 prompt 烧 token。truncate 到每条 MAX_PREV_OUTPUT_CHARS。
   const MAX_PREV_OUTPUT_CHARS = 2000
-  const priorOutputs = []
-  for (const sub of task.subtasks) {
+  const requested = Number(opts && opts.fromIndex)
+  const fromIndex = Number.isInteger(requested) && requested >= 0 && requested < task.subtasks.length
+    ? requested
+    : 0
+  // 从 fromIndex 开始时,把前面已 done 的 sub 输出预填进 priorOutputs,
+  // 否则"从中间开始"会丢失前序上下文。
+  const priorOutputs = fromIndex > 0
+    ? await collectPriorOutputsUpTo(task, fromIndex)
+    : []
+  for (let i = fromIndex; i < task.subtasks.length; i++) {
+    const sub = task.subtasks[i]
     if (sub.status === 'done') continue;
     await runSingleSubtask(task, sub, repoPath, branch, priorOutputs)
+    // 逐 sub 落盘:之前只在队列跑完才 persistTaskAfterRun,中途崩溃会丢已完成
+    // sub 的状态。runSingleSubtask 已经把 sub.status 改完,这里补一次落盘。
+    await persistTaskAfterRun(task)
   }
-  // 写回 tasks.json
-  await persistTaskAfterRun(task)
 }
 
 /**
@@ -1324,11 +1339,19 @@ async function persistTaskAfterRun(task) {
  * 子任务输出摘要收集起来。这样单独跑一个 sub 时,它也能拿到前序上下文。
  */
 async function collectPriorOutputs(task, targetSub) {
+  const targetIdx = task.subtasks.findIndex(s => s.id === targetSub.id)
+  if (targetIdx < 0) return []
+  return collectPriorOutputsUpTo(task, targetIdx)
+}
+
+/**
+ * 收集 [0, endIdx) 区间内已 done 的 sub 输出摘要,作为队列内 sub 的前序上下文。
+ * runTaskQueue 在 fromIndex>0 时调这个,让"从此处开始"也能拼上前序 done sub 的结论。
+ */
+async function collectPriorOutputsUpTo(task, endIdx) {
   const MAX_PREV_OUTPUT_CHARS = 2000
   const prior = []
-  const targetIdx = task.subtasks.findIndex(s => s.id === targetSub.id)
-  if (targetIdx < 0) return prior
-  for (let i = 0; i < targetIdx; i++) {
+  for (let i = 0; i < endIdx; i++) {
     const s = task.subtasks[i]
     if (s.status !== 'done') continue
     // 从 jobs 列表里找最近一个属于这个 sub 且 status=done 的 job,
@@ -2298,6 +2321,40 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       // 异步执行，立即返回
       res.json({ success: true, message: '已开始执行' });
       runTaskQueue(task, repoPath, '').catch(err => {
+        publish('task:error', { taskId: task.id, error: err.message });
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ── 从指定子任务开始执行 ───────────────────────────────────────────
+  // POST /api/workbench/tasks/:id/run-from
+  // 入参 body: { startSubIndex: number }
+  // 行为:
+  //   - 从 task.subtasks[startSubIndex] 开始按序执行,前面 [0, startSubIndex) 区间的
+  //     done sub 输出会自动作为前序上下文(同单 sub 执行的语义)
+  //   - 前面 error / running 的 sub 不会被自动重跑;从 startSubIndex 开始重新走队列
+  //   - 适合"中间某个 sub 失败/被取消后,从该 sub 继续"的场景
+  //   - startSubIndex 必须落在 [0, task.subtasks.length) 范围内
+  app.post('/api/workbench/tasks/:id/run-from', async (req, res) => {
+    try {
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const task = (data.tasks || []).find(t => t.id === req.params.id);
+      if (!task) return res.status(404).json({ success: false, error: '任务不存在' });
+      if (!task.subtasks || task.subtasks.length === 0) {
+        return res.status(400).json({ success: false, error: '任务没有子任务' });
+      }
+      const startSubIndex = Number(req.body?.startSubIndex);
+      if (!Number.isInteger(startSubIndex)
+        || startSubIndex < 0
+        || startSubIndex >= task.subtasks.length) {
+        return res.status(400).json({ success: false, error: 'startSubIndex 越界' });
+      }
+      const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+      // 异步执行,立即返回(同 /run 的 fire-and-forget 模式)
+      res.json({ success: true, message: `已从第 ${startSubIndex + 1} 个子任务开始执行` });
+      runTaskQueue(task, repoPath, '', { fromIndex: startSubIndex }).catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });
       });
     } catch (err) {

@@ -1088,6 +1088,58 @@ function canRunSubtask(sub: SubTask): boolean {
   return true
 }
 
+/**
+ * "从此处开始"按钮显示条件:
+ *   - 可以执行(同 canRunSubtask)
+ *   - 不是最后一个 sub(最后一个直接用"执行"按钮更直接)
+ *   - 当前没有正在跑的 sub 在它之后(避免和正在跑的队列冲突)
+ */
+function canRunFromHere(sub: SubTask): boolean {
+  if (!canRunSubtask(sub)) return false
+  if (!selectedTask.value) return false
+  const subs = selectedTask.value.subtasks || []
+  const idx = subs.findIndex(s => s.id === sub.id)
+  if (idx < 0) return false
+  if (idx === subs.length - 1) return false
+  return true
+}
+
+/**
+ * "从此处开始"按钮触发:从当前 sub 开始按序执行整批 sub。
+ * 前面 done 的 sub 输出会自动作为前序上下文(后端 collectPriorOutputsUpTo 处理)。
+ * 跟"执行"按钮的差异:不只是跑当前 sub,而是从当前 sub 开始走完整队列。
+ */
+async function runFromHere(sub: SubTask) {
+  if (!selectedTask.value) return
+  const t = selectedTask.value
+  const subs = t.subtasks || []
+  const startIndex = subs.findIndex(s => s.id === sub.id)
+  if (startIndex < 0) return
+  // 静默落盘:title/desc/subtasks 有变更就先写一次,保证后端拿到的状态是最新
+  const onDisk = tasks.value.find(x => x.id === t.id)
+  const dirty = !onDisk
+    || onDisk.title !== t.title
+    || onDisk.desc !== t.desc
+    || JSON.stringify(onDisk.subtasks) !== JSON.stringify(t.subtasks)
+    || onDisk.promptId !== t.promptId
+  if (dirty) {
+    const ok = await persistTask(false)
+    if (!ok) return
+  }
+  const res = await fetch(`/api/workbench/tasks/${t.id}/run-from`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ startSubIndex: startIndex })
+  })
+    .then(r => r.json())
+    .catch(err => ({ success: false, error: err?.message || String(err) }))
+  if (res.success) {
+    ElMessage.success(res.message || $t('@WORKBENCH:已从此处开始执行'))
+  } else {
+    ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
+  }
+}
+
 async function cancelDone(sub: SubTask) {
   if (!selectedTask.value) return
   // 防止连续点击触发并发落盘 + 状态抖动
@@ -1706,6 +1758,7 @@ function humanSize(n: number): string {
                   <span v-if="jobOf(sub.id)" class="wb-sub-item__pid">PID: {{ jobOf(sub.id)?.pid }}</span>
                   <span class="wb-exec-sub-item__actions">
                     <button v-if="canRunSubtask(sub)" class="wb-exec-sub-btn wb-exec-sub-btn--run" :title="$t('@WORKBENCH:单独执行此子任务')" @click.stop="runSubtask(sub)">{{ $t('@WORKBENCH:执行') }}</button>
+                    <button v-if="canRunFromHere(sub)" class="wb-exec-sub-btn wb-exec-sub-btn--run-from" :title="$t('@WORKBENCH:从此处执行后续子任务')" @click.stop="runFromHere(sub)">{{ $t('@WORKBENCH:从此处开始') }}</button>
                     <button v-if="jobOf(sub.id) && (jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending')" class="wb-exec-sub-btn wb-exec-sub-btn--stop" :title="$t('@WORKBENCH:停止执行')" @click.stop="cancelJob(jobOf(sub.id)!)">{{ $t('@WORKBENCH:停止') }}</button>
                     <button v-if="sub.status === 'done'" class="wb-exec-sub-btn wb-exec-sub-btn--undo" :title="$t('@WORKBENCH:取消完成')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="cancelDone(sub)">{{ $t('@WORKBENCH:取消完成') }}</button>
                     <button class="wb-exec-sub-btn wb-exec-sub-btn--del" :title="$t('@WORKBENCH:删除')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="removeSubtask(sub)">×</button>
@@ -2894,6 +2947,13 @@ function humanSize(n: number): string {
   background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
 }
 .wb-exec-sub-btn--run:hover { background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container)); }
+/* "从此处开始" — 次级操作,视觉权重比主"执行"低一档,避免和主按钮抢眼 */
+.wb-exec-sub-btn--run-from {
+  color: var(--text-secondary);
+  border-color: var(--border-secondary, var(--border-default));
+  background: transparent;
+}
+.wb-exec-sub-btn--run-from:hover { color: var(--color-primary); border-color: var(--tint-primary-35); background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container)); }
 .wb-exec-sub-btn--stop {
   color: var(--color-danger-bright, #ef4444);
   border-color: var(--tint-danger-50);
