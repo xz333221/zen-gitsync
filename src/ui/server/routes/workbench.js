@@ -2867,6 +2867,61 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
   })
 
+  // POST /api/workbench/tasks/:id/clear-subtasks
+  // 只清空 subtasks 数组(及关联的 jobs),保留 desc / attachments / promptId / projectPath。
+  // 与 reset-shell 的区别:reset-shell 把任务还原成只有标题的空壳,这个只删拆分结果。
+  // 活跃 job 拒绝,避免误杀正在跑的实例。
+  app.post('/api/workbench/tasks/:id/clear-subtasks', async (req, res) => {
+    try {
+      const taskId = req.params.id
+      if (!taskId) return res.status(400).json({ success: false, error: '缺少 taskId' })
+      // 1) 检查活跃 job
+      const live = []
+      for (const j of jobs.values()) {
+        if (j.taskId !== taskId) continue
+        if (j.status === 'running' || j.status === 'pending') live.push(j.id)
+      }
+      if (live.length > 0) {
+        return res.status(400).json({ success: false, error: `有 ${live.length} 个 job 正在执行,请先停止` })
+      }
+      // 2) 清空该 task 的所有 jobs(内存 + 磁盘)
+      const removedJobIds = []
+      for (const j of jobs.values()) {
+        if (j.taskId !== taskId) continue
+        jobs.delete(j.id)
+        removedJobIds.push(j.id)
+      }
+      const jobsData = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+      if (jobsData && Array.isArray(jobsData.jobs)) {
+        const before = jobsData.jobs.length
+        jobsData.jobs = jobsData.jobs.filter(j => j.taskId !== taskId)
+        if (jobsData.jobs.length !== before) await writeJson(JOBS_FILE, jobsData)
+      }
+      // 3) 更新 task:只清 subtasks,其他字段(尤其 desc / attachments / promptId)保留
+      const tasksData = await readJson(TASKS_FILE, { tasks: [] })
+      const task = (tasksData.tasks || []).find(t => t.id === taskId)
+      if (!task) {
+        return res.json({ success: true, removedJobs: removedJobIds.length, removedSubs: 0, message: '任务不存在,仅清空 job' })
+      }
+      const removedSubCount = Array.isArray(task.subtasks) ? task.subtasks.length : 0
+      if (removedSubCount === 0) {
+        return res.json({ success: true, removedJobs: removedJobIds.length, removedSubs: 0, message: '没有子任务需要清空' })
+      }
+      task.subtasks = []
+      task.updatedAt = nowIso()
+      await writeJson(TASKS_FILE, tasksData)
+      publish('task:update', task)
+      res.json({
+        success: true,
+        removedJobs: removedJobIds.length,
+        removedSubs: removedSubCount,
+        message: `已清空 ${removedSubCount} 个子任务,任务描述和附件保留`
+      })
+    } catch (err) {
+      res.status(500).json({ success: false, error: '清空子任务失败: ' + (err.message || String(err)) })
+    }
+  })
+
   // GET /api/workbench/jobs/:id
   app.get('/api/workbench/jobs/:id', async (req, res) => {
     try {
