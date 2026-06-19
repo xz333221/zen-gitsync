@@ -2729,6 +2729,70 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
   })
 
+  // POST /api/workbench/tasks/:id/clear-execution
+  // 一次性清空指定 task 的所有执行痕迹:
+  //   1. 删除内存 + 磁盘 jobs.json 中该 task 的全部 job(跳过 running/pending)
+  //   2. 把 tasks.json 中该 task 的所有 subtasks status 重置为 'todo'(让"重新执行"能从头跑)
+  //   3. 同步清掉 sub 的 error 字段,broadcast task:update + 一组 sub:update
+  // 任务描述、附件、提示词模板等"内容"字段保留不动——只清"执行痕迹"。
+  // 活跃态(有 running/pending job)时拒绝,避免误杀正在跑的实例。
+  app.post('/api/workbench/tasks/:id/clear-execution', async (req, res) => {
+    try {
+      const taskId = req.params.id
+      if (!taskId) return res.status(400).json({ success: false, error: '缺少 taskId' })
+      // 检查活跃 job
+      const live = []
+      for (const j of jobs.values()) {
+        if (j.taskId !== taskId) continue
+        if (j.status === 'running' || j.status === 'pending') live.push(j.id)
+      }
+      if (live.length > 0) {
+        return res.status(400).json({ success: false, error: `有 ${live.length} 个 job 正在执行,请先停止` })
+      }
+      // 1) 清空 jobs(内存 + 磁盘)
+      const removedJobIds = []
+      for (const j of jobs.values()) {
+        if (j.taskId !== taskId) continue
+        jobs.delete(j.id)
+        removedJobIds.push(j.id)
+      }
+      const jobsData = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+      if (jobsData && Array.isArray(jobsData.jobs)) {
+        const before = jobsData.jobs.length
+        jobsData.jobs = jobsData.jobs.filter(j => j.taskId !== taskId)
+        if (jobsData.jobs.length !== before) await writeJson(JOBS_FILE, jobsData)
+      }
+      // 2) 重置 subtasks.status → todo
+      const tasksData = await readJson(TASKS_FILE, { tasks: [] })
+      const task = (tasksData.tasks || []).find(t => t.id === taskId)
+      if (!task) {
+        return res.json({ success: true, removedJobs: removedJobIds.length, resetSubs: 0, message: '任务不存在,仅清空 job' })
+      }
+      let resetSubs = 0
+      if (Array.isArray(task.subtasks)) {
+        for (const s of task.subtasks) {
+          if (s.status !== 'todo') {
+            s.status = 'todo'
+            resetSubs++
+            if (s.error) delete s.error
+            publish('sub:update', { taskId, sub: s })
+          }
+        }
+        task.updatedAt = nowIso()
+        await writeJson(TASKS_FILE, tasksData)
+        publish('task:update', task)
+      }
+      res.json({
+        success: true,
+        removedJobs: removedJobIds.length,
+        resetSubs,
+        message: `已清空 ${removedJobIds.length} 条执行记录,${resetSubs} 个子任务重置为待执行`
+      })
+    } catch (err) {
+      res.status(500).json({ success: false, error: '清空执行痕迹失败: ' + (err.message || String(err)) })
+    }
+  })
+
   // GET /api/workbench/jobs/:id
   app.get('/api/workbench/jobs/:id', async (req, res) => {
     try {

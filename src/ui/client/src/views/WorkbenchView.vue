@@ -29,7 +29,8 @@ import {
   Folder,
   ArrowDown,
   ArrowRight,
-  Document
+  Document,
+  Delete
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
@@ -63,6 +64,7 @@ interface SubTask {
   status: 'todo' | 'running' | 'done' | 'error'
   promptOverride: string
   attachments?: Attachment[]
+  error?: string
 }
 interface Task {
   id: string
@@ -533,6 +535,68 @@ async function clearJobsByTask(taskId: string): Promise<number> {
   } catch (err) {
     console.warn('[clearJobsByTask] error:', err)
     return 0
+  }
+}
+
+/**
+ * 清空当前 task 的所有执行痕迹(用户主动触发,跟自动"重新执行"不同):
+ *   1. 弹 ElMessageBox 二次确认,告知"会重置 N 个子任务、删除 M 条执行记录"
+ *   2. 调 POST /api/workbench/tasks/:id/clear-execution
+ *      后端会同时清空 jobs.json + 重置 subtasks.status → todo + broadcast
+ *   3. 前端收到 task:update / sub:update 后会自动刷新,这里也强制 reload 一次兜底
+ * 任务描述/附件/拆分都保留,只清"执行痕迹"。
+ */
+async function clearExecutionForSelectedTask() {
+  if (!selectedTask.value) return
+  const t = selectedTask.value
+  const subs = Array.isArray(t.subtasks) ? t.subtasks : []
+  const doneCount = subs.filter(s => s.status === 'done').length
+  const errCount = subs.filter(s => s.status === 'error').length
+  const runCount = subs.filter(s => s.status === 'running').length
+  const localJobs = jobs.value.filter(j => j.taskId === t.id)
+  // 二次确认文案
+  const confirmMsg = doneCount + errCount === 0
+    ? $t('@WORKBENCH:当前任务还没有执行内容,确认仍要清空?')
+    : $t('@WORKBENCH:将清空 {n} 个已执行/失败的子任务和 {m} 条执行记录,任务拆分/描述/附件保留。', {
+        n: doneCount + errCount,
+        m: localJobs.length
+      })
+  try {
+    await ElMessageBox.confirm(
+      confirmMsg,
+      $t('@WORKBENCH:清空执行内容'),
+      {
+        confirmButtonText: $t('@WORKBENCH:清空'),
+        cancelButtonText: $t('@WORKBENCH:取消'),
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+  if (runCount > 0) {
+    ElMessage.warning($t('@WORKBENCH:有 {n} 个子任务正在执行,请先停止', { n: runCount }))
+    return
+  }
+  const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/clear-execution`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  })
+    .then(r => r.json())
+    .catch(err => ({ success: false, error: err?.message || String(err) }))
+  if (res?.success) {
+    // 后端已 broadcast task:update / sub:update,本地内存兜底刷一遍
+    if (Array.isArray(t.subtasks)) {
+      for (const s of t.subtasks) {
+        s.status = 'todo'
+        if (s.error) delete s.error
+      }
+    }
+    jobs.value = jobs.value.filter(j => j.taskId !== t.id)
+    syncRunningCount()
+    ElMessage.success(res.message || $t('@WORKBENCH:已清空执行内容'))
+  } else {
+    ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))
   }
 }
 
@@ -1657,6 +1721,16 @@ function humanSize(n: number): string {
           <el-button type="primary" :loading="false" @click="runTask(selectedTask)">
             {{ isSimpleTask ? $t('@WORKBENCH:执行') : $t('@WORKBENCH:执行任务') }}
           </el-button>
+          <button
+            type="button"
+            class="wb-logs-inline-btn wb-logs-inline-btn--danger"
+            :title="$t('@WORKBENCH:清空当前任务的所有执行内容')"
+            :aria-label="$t('@WORKBENCH:清空当前任务的所有执行内容')"
+            @click="clearExecutionForSelectedTask"
+          >
+            <el-icon class="wb-logs-inline-btn__icon"><Delete /></el-icon>
+            <span>{{ $t('@WORKBENCH:清空执行') }}</span>
+          </button>
           <button
             type="button"
             class="wb-logs-inline-btn"
@@ -3176,6 +3250,17 @@ function humanSize(n: number): string {
   background: var(--tint-primary-12);
   color: var(--color-primary);
   border-color: var(--tint-primary-35);
+}
+/* 「清空执行」danger 变体：常规态用次级色(不抢眼),hover 才显危险色,避免误点 */
+.wb-logs-inline-btn--danger {
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+  background: var(--bg-container);
+}
+.wb-logs-inline-btn--danger:hover {
+  color: var(--color-danger, #ef4444);
+  border-color: var(--tint-danger-50);
+  background: var(--tint-danger-06);
 }
 .wb-logs-inline-btn:focus-visible {
   outline: 2px solid var(--color-primary);
