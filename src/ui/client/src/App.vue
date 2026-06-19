@@ -562,16 +562,16 @@ function copyGitInit() {
       <!-- 中间上方提交表单 -->
       <div class="commit-form-panel" v-if="gitStore.isGitRepo">
         <!-- 当用户未配置时显示配置提示 -->
-        <div v-if="!gitStore.userName || !gitStore.userEmail" class="user-unconfigured-card">
-          <div class="user-unconfigured-icon">
+        <div v-if="!gitStore.userName || !gitStore.userEmail" class="state-block state-block--warning user-unconfigured-card">
+          <div class="state-block__icon user-unconfigured-icon">
             <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="8" r="4"/>
               <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
               <path d="M17 13.5l1.5 1.5 3-3" stroke="var(--color-warning)" stroke-width="2"/>
             </svg>
           </div>
-          <h2 class="user-unconfigured-title">Git {{ $t('@F13B4:用户未配置') }}</h2>
-          <p class="user-unconfigured-desc">{{ $t('@F13B4:请先配置Git用户信息才能进行提交操作。') }}</p>
+          <h2 class="state-block__title user-unconfigured-title">Git {{ $t('@F13B4:用户未配置') }}</h2>
+          <p class="state-block__hint user-unconfigured-desc">{{ $t('@F13B4:请先配置Git用户信息才能进行提交操作。') }}</p>
           <div class="user-unconfigured-actions">
             <button class="user-unconfigured-primary-btn" @click="openUserSettingsDialog">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -595,8 +595,8 @@ function copyGitInit() {
         </template>
       </div>
       <div class="commit-form-panel" v-else>
-        <div class="not-git-repo-card" role="region" :aria-label="$t('@F13B4:仓库初始化')">
-          <div class="not-git-repo-icon" aria-hidden="true">
+        <div class="state-block state-block--empty not-git-repo-card" role="region" :aria-label="$t('@F13B4:仓库初始化')">
+          <div class="state-block__icon not-git-repo-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/>
               <path d="M14 2v6h6"/>
@@ -605,8 +605,8 @@ function copyGitInit() {
               <path d="M9 12l3 3-3 3"/>
             </svg>
           </div>
-          <h2 class="not-git-repo-title">Git{{ $t('@F13B4:仓库初始化') }}</h2>
-          <p class="not-git-repo-desc">{{ $t('@F13B4:当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。') }}</p>
+          <h2 class="state-block__title not-git-repo-title">Git{{ $t('@F13B4:仓库初始化') }}</h2>
+          <p class="state-block__hint not-git-repo-desc">{{ $t('@F13B4:当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。') }}</p>
           <div class="not-git-repo-tip">
             <span class="tip-label">{{ $t('@F13B4:可以使用以下命令初始化仓库：') }}</span>
             <button
@@ -712,14 +712,26 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--spacing-lg);
-  background: rgba(245, 158, 11, 0.12);
-  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  background: var(--tint-warning-14);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
   color: var(--text-primary);
+  animation: banner-slide-down 0.32s var(--ease-custom);
 }
 
 [data-theme="dark"] .config-broken-banner {
-  background: rgba(245, 158, 11, 0.14);
-  border-bottom: 1px solid rgba(245, 158, 11, 0.28);
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--color-warning) 38%, transparent);
+}
+
+@keyframes banner-slide-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .config-broken-banner .banner-left {
@@ -730,7 +742,8 @@ body {
 }
 
 .config-broken-banner .banner-icon {
-  color: rgba(245, 158, 11, 0.95);
+  color: var(--color-warning);
+  flex-shrink: 0;
 }
 
 .config-broken-banner .banner-text {
@@ -750,6 +763,13 @@ body {
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  transition: color var(--transition-fast) var(--ease-custom);
+}
+
+.config-broken-banner .banner-detail:hover {
+  color: var(--text-primary);
 }
 
 .config-broken-banner .banner-path {
@@ -784,6 +804,8 @@ body {
   padding: 0;
   background: var(--bg-panel);
   border-radius: 0;
+  /* 内 1px 描边:与右侧分隔条对齐,亮色下可见,深色下自然隐入 */
+  box-shadow: inset -1px 0 0 var(--border-color-light);
 }
 
 .commit-form-panel {
@@ -793,6 +815,11 @@ body {
   padding: 0;
   background: var(--bg-container);
   border-radius: 0;
+  /* 居中面板:左右两侧 + 底边都有内描边,让 commit-form 与 cmd-console 区分开 */
+  box-shadow:
+    inset -1px 0 0 var(--border-color-light),
+    inset 1px 0 0 var(--border-color-light),
+    inset 0 -1px 0 var(--border-color-light);
 }
 
 .cmd-console-panel {
@@ -802,6 +829,8 @@ body {
   padding: 0;
   background: var(--bg-console);
   border-radius: 0;
+  /* 顶部描边:与 h-resizer 视觉对齐 */
+  box-shadow: inset 0 1px 0 var(--border-color-light);
 }
 
 .log-list-panel {
@@ -811,6 +840,8 @@ body {
   padding: 0;
   background: var(--bg-panel);
   border-radius: 0;
+  /* 内 1px 描边:与左侧分隔条对齐 */
+  box-shadow: inset 1px 0 0 var(--border-color-light);
 }
 
 .main-header {
@@ -821,11 +852,7 @@ body {
   z-index: 1000;
   height: 64px;
   box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   padding: 0 var(--spacing-lg);
-  position: fixed;
 }
 
 .header-left {
@@ -844,6 +871,25 @@ body {
   text-decoration: none;
   color: inherit;
   cursor: pointer;
+  padding: 4px var(--spacing-sm);
+  margin-left: calc(-1 * var(--spacing-sm));
+  border-radius: var(--radius-md);
+  transition:
+    background-color var(--transition-base) var(--ease-custom),
+    transform var(--transition-base) var(--ease-custom);
+}
+
+.header-brand-link:hover {
+  background: var(--tint-primary-08);
+}
+
+.header-brand-link:active {
+  transform: scale(0.98);
+}
+
+.header-brand-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-soft);
 }
 
 .header-center {
@@ -898,14 +944,25 @@ h1 {
   border: 1px solid var(--border-component);
   box-shadow: none;
   flex-shrink: 0;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  transition:
+    border-color var(--transition-base) var(--ease-custom),
+    box-shadow var(--transition-base) var(--ease-custom),
+    background-color var(--transition-base) var(--ease-custom),
+    transform var(--transition-base) var(--ease-custom);
   background: var(--bg-subtle);
+  cursor: default;
 }
 
 #user-info:hover {
   border-color: var(--color-primary);
   background: var(--tint-primary-10);
   box-shadow: var(--focus-ring-soft);
+  transform: translateY(-0.5px);
+}
+
+#user-info:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
 }
 
 .command-history-section {
@@ -948,46 +1005,30 @@ h1 {
   overflow-y: auto;
 }
 
-/* 用户未配置提示卡片 */
+/* 用户未配置提示卡片 —— 复用 .state-block(state-block--warning variant) */
 .user-unconfigured-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   height: 100%;
   padding: var(--spacing-xl);
-  text-align: center;
+  /* state-block 默认 gap 为 12px,这里通过子元素自管 margin 保留原节奏 */
+  gap: 0;
 }
 
 .user-unconfigured-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
-  color: var(--color-warning);
-  margin-bottom: var(--spacing-lg);
+  --state-icon-size: 72px;
+  /* 强化 warning 视觉:加细描边 */
   border: 1.5px solid color-mix(in srgb, var(--color-warning) 25%, transparent);
 }
 
 .user-unconfigured-title {
   font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 var(--spacing-sm) 0;
 }
 
 .user-unconfigured-desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin: 0 0 var(--spacing-xl) 0;
-  line-height: 1.6;
+  max-width: 40ch;
 }
 
 .user-unconfigured-actions {
-  margin-bottom: var(--spacing-xl);
+  margin: var(--spacing-base) 0 var(--spacing-lg);
 }
 
 .user-unconfigured-primary-btn {
@@ -1002,17 +1043,23 @@ h1 {
   font-size: var(--font-size-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.15s, transform 0.1s;
+  transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
 }
 
 .user-unconfigured-primary-btn:hover {
-  opacity: 0.88;
+  opacity: 0.92;
   transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.32);
 }
 
 .user-unconfigured-primary-btn:active {
   opacity: 1;
   transform: translateY(0);
+}
+
+.user-unconfigured-primary-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.32);
 }
 
 .user-unconfigured-divider {
@@ -1252,38 +1299,26 @@ h1 {
   font-weight: bold;
 }
 
-/* 非Git仓库初始化提示卡片 */
+/* 非Git仓库初始化提示卡片 —— 复用 .state-block(state-block--empty variant) */
 .not-git-repo-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   height: 100%;
   padding: var(--spacing-xl);
-  text-align: center;
-  background: var(--bg-container);
-  border-radius: var(--radius-xl);
+  gap: 0;
 }
 
 .not-git-repo-icon {
-  color: var(--color-gray-400);
-  margin-bottom: var(--spacing-lg);
-  opacity: 0.7;
+  --state-icon-size: 48px;
+  /* 减弱品牌色:这一态是"未初始化",不抢眼 */
+  color: var(--text-tertiary);
+  opacity: 0.85;
 }
 
 .not-git-repo-title {
   font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 var(--spacing-sm) 0;
 }
 
 .not-git-repo-desc {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  margin: 0 0 var(--spacing-lg) 0;
-  max-width: 360px;
-  line-height: 1.6;
+  max-width: 40ch;
 }
 
 .not-git-repo-tip {
@@ -1291,6 +1326,7 @@ h1 {
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-sm);
+  margin-top: var(--spacing-base);
 }
 
 .not-git-repo-tip .tip-label {
@@ -1355,6 +1391,12 @@ h1 {
   height: 32px;
   box-sizing: border-box;
   padding: 0 var(--spacing-lg);
+  gap: var(--spacing-lg);
+  transition: background-color var(--transition-base) var(--ease-custom);
+}
+
+.main-footer:hover {
+  background: var(--bg-component-hover);
 }
 
 .footer-model-hint {
