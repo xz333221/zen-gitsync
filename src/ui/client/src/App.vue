@@ -17,21 +17,22 @@
 import { $t } from '@/lang/static'
 import { ref, onMounted, onBeforeUnmount, computed, watch, defineAsyncComponent } from 'vue'
 import { getFolderNameFromPath } from '@/utils/path'
-import GitStatus from '@views/components/GitStatus.vue'
-import CommitForm from '@views/components/CommitForm.vue'
-import LogList from '@views/components/LogList.vue'
-import CommandConsole from '@components/CommandConsole.vue'
-import RemoteRepoCard from '@components/RemoteRepoCard.vue'
-import AppVersionBadge from '@components/AppVersionBadge.vue'
-import BranchSelector from '@components/BranchSelector.vue'
+// 6 个首屏主面板组件改异步,首屏只下载外壳 JS + 实际激活的视图
+const GitStatus = defineAsyncComponent(() => import('@views/components/GitStatus.vue'))
+const CommitForm = defineAsyncComponent(() => import('@views/components/CommitForm.vue'))
+const LogList = defineAsyncComponent(() => import('@views/components/LogList.vue'))
+const CommandConsole = defineAsyncComponent(() => import('@components/CommandConsole.vue'))
+const RemoteRepoCard = defineAsyncComponent(() => import('@components/RemoteRepoCard.vue'))
+const AppVersionBadge = defineAsyncComponent(() => import('@components/AppVersionBadge.vue'))
+const BranchSelector = defineAsyncComponent(() => import('@components/BranchSelector.vue'))
 import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import ActivityBar from '@/components/ActivityBar.vue'
 import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 // 编辑器 / 源码地图视图延迟加载（首屏不下载）
 const EditorView = defineAsyncComponent(() => import('@/views/EditorView.vue'))
-const SourceMapView = defineAsyncComponent(() => import('@/views/SourceMapView.vue'))
-const WorkbenchView = defineAsyncComponent(() => import('@/views/WorkbenchView.vue'))
+const SourceMapView = defineAsyncComponent(() => import('@views/SourceMapView.vue'))
+const WorkbenchView = defineAsyncComponent(() => import('@views/WorkbenchView.vue'))
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -198,6 +199,12 @@ let initialX = 0;
 let initialY = 0;
 let initialGridTemplateColumns = '';
 let initialGridTemplateRows = '';
+// RAF 节流:把最近一次 mousemove 的 event 缓存下来,RAF 回调里读取
+let lastMouseEvent: MouseEvent | null = null;
+// 3 个 resizer 的 RAF id,stopXxx 时取消未触发的回调
+let vResizeRafId: number | null = null
+let v2ResizeRafId: number | null = null
+let hResizeRafId: number | null = null
 
 // 保存布局比例到 configStore（持久化到 ~/.git-commit-tool.json 的 ui.layout 字段）
 function saveLayoutRatios() {
@@ -255,9 +262,109 @@ function loadLayoutRatios() {
     const bottomRatio = 1 - savedTopRatio;
     gridLayout.style.gridTemplateRows = `${savedTopRatio}fr 4px ${bottomRatio}fr`;
   }
+
+  // 刷新给 resizer aria-valuenow 用的百分比
+  refreshGridPercents();
+}
+
+/** 读取当前 grid 的三列宽度比(供 aria-valuenow 显示) */
+function readGridPercents(): { left: number; top: number; right: number } {
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement | null;
+  if (!gridLayout) return { left: 20, top: 50, right: 30 }
+  const cols = getComputedStyle(gridLayout).gridTemplateColumns.split(' ')
+  const rows = getComputedStyle(gridLayout).gridTemplateRows.split(' ')
+  const leftW = parseFloat(cols[0] ?? '0')
+  const midW = parseFloat(cols[2] ?? '0')
+  const rightW = parseFloat(cols[4] ?? '0')
+  const totalW = leftW + midW + rightW || 1
+  const topH = parseFloat(rows[0] ?? '0')
+  const bottomH = parseFloat(rows[2] ?? '0')
+  const totalH = topH + bottomH || 1
+  return {
+    left: Math.round((leftW / totalW) * 100),
+    top: Math.round((topH / totalH) * 100),
+    right: Math.round((rightW / totalW) * 100),
+  }
+}
+
+const gridLeftPercent = ref(20)
+const gridTopPercent = ref(50)
+const gridRightPercent = ref(30)
+
+function refreshGridPercents() {
+  const p = readGridPercents()
+  gridLeftPercent.value = p.left
+  gridTopPercent.value = p.top
+  gridRightPercent.value = p.right
+}
+
+/** 键盘方向键调整:复用拖拽逻辑,只是不进入 isVResizing 状态 */
+function nudgeV(deltaPercent: number) {
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement | null
+  if (!gridLayout) return
+  const cols = getComputedStyle(gridLayout).gridTemplateColumns.split(' ')
+  if (cols.length < 5) return
+  const leftW = parseFloat(cols[0])
+  const midW = parseFloat(cols[2])
+  const rightW = parseFloat(cols[4])
+  const total = leftW + midW + rightW || 1
+  let newLeft = (leftW / total) * 100 + deltaPercent
+  newLeft = Math.min(40, Math.max(8, newLeft))
+  const rest = 100 - newLeft
+  const midShare = midW / (midW + rightW)
+  const rightShare = rightW / (midW + rightW)
+  gridLayout.style.gridTemplateColumns =
+    `${newLeft}fr 4px ${rest * midShare}fr 4px ${rest * rightShare}fr`
+  refreshGridPercents()
+  saveLayoutRatios()
+}
+
+function nudgeV2(deltaPercent: number) {
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement | null
+  if (!gridLayout) return
+  const cols = getComputedStyle(gridLayout).gridTemplateColumns.split(' ')
+  if (cols.length < 5) return
+  const leftW = parseFloat(cols[0])
+  const midW = parseFloat(cols[2])
+  const rightW = parseFloat(cols[4])
+  const total = leftW + midW + rightW || 1
+  let newRight = (rightW / total) * 100 + deltaPercent
+  newRight = Math.min(50, Math.max(10, newRight))
+  const rest = 100 - newRight
+  const leftShare = leftW / (leftW + midW)
+  const midShare = midW / (leftW + midW)
+  gridLayout.style.gridTemplateColumns =
+    `${rest * leftShare}fr 4px ${rest * midShare}fr 4px ${newRight}fr`
+  refreshGridPercents()
+  saveLayoutRatios()
+}
+
+function nudgeH(deltaPercent: number) {
+  const gridLayout = document.querySelector('.grid-layout') as HTMLElement | null
+  if (!gridLayout) return
+  const rows = getComputedStyle(gridLayout).gridTemplateRows.split(' ')
+  if (rows.length < 3) return
+  const topH = parseFloat(rows[0])
+  const bottomH = parseFloat(rows[2])
+  const total = topH + bottomH || 1
+  let newTop = (topH / total) * 100 + deltaPercent
+  newTop = Math.min(80, Math.max(20, newTop))
+  gridLayout.style.gridTemplateRows = `${newTop}fr 4px ${100 - newTop}fr`
+  refreshGridPercents()
+  saveLayoutRatios()
 }
 
 // 第一条竖分隔条拖拽（调整 GitStatus 与 中间列+右侧列 的比例）
+// RAF 节流:把 mousemove 60 fps 合并到显示器刷新率(~16ms),避免 60×3=180 次/秒 style mutation
+function scheduleVResize(event: MouseEvent) {
+  lastMouseEvent = event
+  if (vResizeRafId !== null) return
+  vResizeRafId = requestAnimationFrame(() => {
+    vResizeRafId = null
+    handleVResize()
+  })
+}
+
 function startVResize(event: MouseEvent) {
   isVResizing = true;
   initialX = event.clientX;
@@ -266,13 +373,17 @@ function startVResize(event: MouseEvent) {
   initialGridTemplateColumns = getComputedStyle(gridLayout).gridTemplateColumns;
 
   document.getElementById('v-resizer')?.classList.add('active');
-  document.addEventListener('mousemove', handleVResize);
+  document.addEventListener('mousemove', scheduleVResize);
   document.addEventListener('mouseup', stopVResize);
   event.preventDefault();
 }
 
-function handleVResize(event: MouseEvent) {
+function handleVResize() {
   if (!isVResizing) return;
+  // 用最近一次 mousemove 的 clientX,避免 RAF 期间坐标漂移
+  // (lastMouseX 由 mousemove 监听器同步更新)
+  const event = lastMouseEvent
+  if (!event) return;
 
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   const delta = event.clientX - initialX;
@@ -304,6 +415,15 @@ function handleVResize(event: MouseEvent) {
 }
 
 // 第二条竖分隔条拖拽（调整 中间列 与 LogList 的比例）
+function scheduleV2Resize(event: MouseEvent) {
+  lastMouseEvent = event
+  if (v2ResizeRafId !== null) return
+  v2ResizeRafId = requestAnimationFrame(() => {
+    v2ResizeRafId = null
+    handleV2Resize()
+  })
+}
+
 function startV2Resize(event: MouseEvent) {
   isV2Resizing = true;
   initialX = event.clientX;
@@ -312,13 +432,15 @@ function startV2Resize(event: MouseEvent) {
   initialGridTemplateColumns = getComputedStyle(gridLayout).gridTemplateColumns;
 
   document.getElementById('v-resizer-2')?.classList.add('active');
-  document.addEventListener('mousemove', handleV2Resize);
+  document.addEventListener('mousemove', scheduleV2Resize);
   document.addEventListener('mouseup', stopVResize);
   event.preventDefault();
 }
 
-function handleV2Resize(event: MouseEvent) {
+function handleV2Resize() {
   if (!isV2Resizing) return;
+  const event = lastMouseEvent
+  if (!event) return;
 
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   const delta = event.clientX - initialX;
@@ -357,8 +479,10 @@ function stopVResize() {
   document.getElementById('v-resizer')?.classList.remove('active');
   document.getElementById('v-resizer-2')?.classList.remove('active');
 
-  document.removeEventListener('mousemove', handleVResize);
-  document.removeEventListener('mousemove', handleV2Resize);
+  if (vResizeRafId !== null) { cancelAnimationFrame(vResizeRafId); vResizeRafId = null }
+  if (v2ResizeRafId !== null) { cancelAnimationFrame(v2ResizeRafId); v2ResizeRafId = null }
+  document.removeEventListener('mousemove', scheduleVResize);
+  document.removeEventListener('mousemove', scheduleV2Resize);
   document.removeEventListener('mouseup', stopVResize);
 
   saveLayoutRatios();
@@ -372,13 +496,24 @@ function startHResize(event: MouseEvent) {
   initialGridTemplateRows = getComputedStyle(gridLayout).gridTemplateRows;
 
   document.getElementById('h-resizer')?.classList.add('active');
-  document.addEventListener('mousemove', handleHResize);
+  document.addEventListener('mousemove', scheduleHResize);
   document.addEventListener('mouseup', stopHResize);
   event.preventDefault();
 }
 
-function handleHResize(event: MouseEvent) {
+function scheduleHResize(event: MouseEvent) {
+  lastMouseEvent = event
+  if (hResizeRafId !== null) return
+  hResizeRafId = requestAnimationFrame(() => {
+    hResizeRafId = null
+    handleHResize()
+  })
+}
+
+function handleHResize() {
   if (!isHResizing) return;
+  const event = lastMouseEvent
+  if (!event) return;
 
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   const delta = event.clientY - initialY;
@@ -407,7 +542,8 @@ function handleHResize(event: MouseEvent) {
 function stopHResize() {
   isHResizing = false;
   document.getElementById('h-resizer')?.classList.remove('active');
-  document.removeEventListener('mousemove', handleHResize);
+  if (hResizeRafId !== null) { cancelAnimationFrame(hResizeRafId); hResizeRafId = null }
+  document.removeEventListener('mousemove', scheduleHResize);
   document.removeEventListener('mouseup', stopHResize);
   saveLayoutRatios();
 }
@@ -557,7 +693,20 @@ function copyGitInit() {
       </div>
 
       <!-- 第一条垂直分隔条（GitStatus | 中间列） -->
-      <div class="vertical-resizer" id="v-resizer" @mousedown="startVResize"></div>
+      <div
+        class="vertical-resizer"
+        id="v-resizer"
+        role="separator"
+        tabindex="0"
+        aria-orientation="vertical"
+        :aria-label="$t('@F13B4:调整左侧与中间面板宽度（左右方向键）')"
+        :aria-valuenow="gridLeftPercent"
+        aria-valuemin="8"
+        aria-valuemax="40"
+        @mousedown="startVResize"
+        @keydown.left.prevent="nudgeV(-2)"
+        @keydown.right.prevent="nudgeV(2)"
+      ></div>
 
       <!-- 中间上方提交表单 -->
       <div class="commit-form-panel" v-if="gitStore.isGitRepo">
@@ -623,7 +772,20 @@ function copyGitInit() {
       </div>
 
       <!-- 水平分隔条（提交表单 | 自定义指令） -->
-      <div class="horizontal-resizer" id="h-resizer" @mousedown="startHResize"></div>
+      <div
+        class="horizontal-resizer"
+        id="h-resizer"
+        role="separator"
+        tabindex="0"
+        aria-orientation="horizontal"
+        :aria-label="$t('@F13B4:调整上方与下方面板高度（上下方向键）')"
+        :aria-valuenow="gridTopPercent"
+        aria-valuemin="20"
+        aria-valuemax="80"
+        @mousedown="startHResize"
+        @keydown.up.prevent="nudgeH(-2)"
+        @keydown.down.prevent="nudgeH(2)"
+      ></div>
 
       <!-- 中间下方自定义指令 -->
       <div class="cmd-console-panel">
@@ -631,7 +793,20 @@ function copyGitInit() {
       </div>
 
       <!-- 第二条垂直分隔条（中间列 | 提交历史） -->
-      <div class="vertical-resizer-2" id="v-resizer-2" @mousedown="startV2Resize"></div>
+      <div
+        class="vertical-resizer-2"
+        id="v-resizer-2"
+        role="separator"
+        tabindex="0"
+        aria-orientation="vertical"
+        :aria-label="$t('@F13B4:调整中间与右侧面板宽度（左右方向键）')"
+        :aria-valuenow="gridRightPercent"
+        aria-valuemin="10"
+        aria-valuemax="50"
+        @mousedown="startV2Resize"
+        @keydown.left.prevent="nudgeV2(-2)"
+        @keydown.right.prevent="nudgeV2(2)"
+      ></div>
 
       <!-- 右侧提交历史 -->
       <div class="log-list-panel">

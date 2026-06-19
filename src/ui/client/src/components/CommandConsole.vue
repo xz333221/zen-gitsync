@@ -14,17 +14,19 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted, nextTick, computed } from 'vue';
+import { ref, onMounted, watch, onUnmounted, nextTick, computed, defineAsyncComponent } from 'vue';
 import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor, Document, Timer, Ticket, Delete, RefreshRight, Folder } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
 import IconButton from '@components/IconButton.vue';
 import CommonDialog from '@components/CommonDialog.vue'
-import CustomCommandManager from '@components/CustomCommandManager.vue';
-import ProjectStartupButton from '@components/ProjectStartupButton.vue';
-import FlowOrchestrationWorkspace from '@components/flow/FlowOrchestrationWorkspace.vue';
+// 弹窗型重型组件改异步:仅在用户主动打开时才下载 FlowOrchestrationWorkspace/FlowExecutionViewer 等
+// (它们各自带 @vue-flow + dagre,体积巨大,不应阻塞首屏)
+const CustomCommandManager = defineAsyncComponent(() => import('@components/CustomCommandManager.vue'))
+const ProjectStartupButton = defineAsyncComponent(() => import('@components/ProjectStartupButton.vue'))
+const FlowOrchestrationWorkspace = defineAsyncComponent(() => import('@components/flow/FlowOrchestrationWorkspace.vue'))
+const FlowExecutionViewer = defineAsyncComponent(() => import('@components/flow/FlowExecutionViewer.vue'))
 import type { FlowData, FlowEdge, FlowNode } from '@components/flow/FlowOrchestrationWorkspace.vue';
-import FlowExecutionViewer from '@components/flow/FlowExecutionViewer.vue';
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
 import { useGitStore } from '@stores/gitStore';

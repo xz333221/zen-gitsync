@@ -144,9 +144,21 @@ export default defineConfig(({ command }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes("node_modules")) {
-              return "vendor"
-            }
+            // 体积大且仅特定视图用到的库 → 各自独立 chunk,首屏不下载
+            // monaco-editor 仅 EditorView 用(~3 MB)
+            if (id.includes('monaco-editor')) return 'monaco'
+            // @vue-flow/* 仅 SourceMapView + FlowOrchestrationWorkspace 用(~700 KB)
+            if (id.includes('@vue-flow')) return 'vue-flow'
+            // flow-mindmap 仅 MindmapPreview 用(~500 KB)
+            if (id.includes('flow-mindmap')) return 'flow-mindmap'
+            // socket.io-client 仅 Stores 用,但长连接常驻,独立 chunk 利于缓存
+            if (id.includes('socket.io-client')) return 'socket-io'
+            // element-plus 整体(被 resolver 按需,但全量包仍在)
+            if (id.includes('element-plus')) return 'element-plus'
+            // dagre 仅 FlowOrchestrationWorkspace 用
+            if (id.includes('dagre')) return 'dagre'
+            // 其它 node_modules 统一 vendor,避免过度切分
+            if (id.includes('node_modules')) return 'vendor'
           },
         },
       },
