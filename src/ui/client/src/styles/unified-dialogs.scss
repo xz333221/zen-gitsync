@@ -350,6 +350,27 @@
     flex-shrink: 0;
   }
 
+  /* EP 2.x 期望由 .el-message-box-icon--warning/--info/--success/--error
+     修饰类负责给 status 容器着色,但本仓库 vite 按需没拉进这些 css chunk,
+     导致 svg fill: currentColor 拿到的是 body 文字色(深灰近黑)。
+     这里兜底:svg 跟随 currentColor,只要给容器 color 就能修。 */
+  .el-message-box__status.el-message-box-icon--warning,
+  .el-message-box__status.el-icon-warning {
+    color: var(--el-color-warning, #e6a23c);
+  }
+  .el-message-box__status.el-message-box-icon--info,
+  .el-message-box__status.el-icon-info {
+    color: var(--el-color-info, #909399);
+  }
+  .el-message-box__status.el-message-box-icon--success,
+  .el-message-box__status.el-icon-success {
+    color: var(--el-color-success, #67c23a);
+  }
+  .el-message-box__status.el-message-box-icon--error,
+  .el-message-box__status.el-icon-error {
+    color: var(--el-color-error, #f56c6c);
+  }
+
   .el-message-box__content {
     padding: var(--spacing-lg) 0 var(--spacing-base);
   }

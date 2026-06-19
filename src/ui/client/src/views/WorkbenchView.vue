@@ -445,9 +445,38 @@ async function loadCurrentProject() {
 }
 // 任务列表按 projectPath 分组；同组内保持原有顺序
 const NO_PROJECT_KEY = '__no_project__'
-// 折叠状态：记录哪些项目分组当前是收起的。用户可手动展开/收起。
-// 初次出现 / 切换当前项目时，非当前项目分组默认收起，避免侧栏一眼被别处任务占满。
-const collapsedGroupPaths = ref<Set<string>>(new Set())
+// 折叠状态:记录哪些项目分组当前是收起的。
+// 用 seenGroupPaths 严格区分"用户主动操作过的路径"和"自动默认折叠的路径":
+// - 折叠集合里某条路径,如果用户曾主动展开/收起过,记到 seenGroupPaths
+// - watcher 只对「首次见到」的非当前项目分组才自动折叠;已主动操作过的(在 seen 里)保持原状
+// - 两个集合都持久化到 localStorage,刷新后保留用户偏好
+const COLLAPSED_STORAGE_KEY = 'wb.collapsedGroupPaths.v1'
+const SEEN_STORAGE_KEY = 'wb.seenGroupPaths.v1'
+
+function readStringSet(key: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw)
+    return new Set(Array.isArray(arr) ? arr.filter((x: unknown) => typeof x === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+function writeStringSet(key: string, s: Set<string>) {
+  try {
+    localStorage.setItem(key, JSON.stringify(Array.from(s)))
+  } catch {
+    /* quota / privacy mode 都不阻塞 UI */
+  }
+}
+
+const collapsedGroupPaths = ref<Set<string>>(readStringSet(COLLAPSED_STORAGE_KEY))
+const seenGroupPaths = ref<Set<string>>(readStringSet(SEEN_STORAGE_KEY))
+
+watch(collapsedGroupPaths, (s) => writeStringSet(COLLAPSED_STORAGE_KEY, s), { deep: false })
+watch(seenGroupPaths, (s) => writeStringSet(SEEN_STORAGE_KEY, s), { deep: false })
+
 function isGroupCollapsed(path: string): boolean {
   return collapsedGroupPaths.value.has(path)
 }
@@ -455,6 +484,10 @@ function toggleGroupCollapsed(path: string) {
   if (collapsedGroupPaths.value.has(path)) collapsedGroupPaths.value.delete(path)
   else collapsedGroupPaths.value.add(path)
   collapsedGroupPaths.value = new Set(collapsedGroupPaths.value)
+  // 记录"用户主动操作过这条路径",后续 watcher 不再自动重置
+  const seen = new Set(seenGroupPaths.value)
+  seen.add(path)
+  seenGroupPaths.value = seen
 }
 const groupedTasksList = computed(() => {
   const list = tasks.value
@@ -490,21 +523,27 @@ function shortProjectLabel(fullPath: string): string {
   return parts.slice(-2).join('/')
 }
 
-// 首次出现 / 切换当前项目时，把所有「非当前项目」分组默认折叠收起。
-// 用户手动展开过的会保留展开；这里只在新增 / 变更路径时补齐折叠状态。
+// 首次出现某条 projectPath 时才默认折叠;已经被用户手动操作过的(在 seenGroupPaths 里)
+// 保持原状 —— 删除任务不再把用户手动展开的分组收回。
 watch(
   () => groupedTasksList.value.groups.map(g => g.path),
   (paths) => {
     const cur = currentProject.value.path
     const next = new Set(collapsedGroupPaths.value)
+    const seen = new Set(seenGroupPaths.value)
     let changed = false
     for (const p of paths) {
-      if (p !== cur && !next.has(p)) {
+      // 用户已经主动操作过:无论当前是折叠还是展开,都不重置
+      if (seen.has(p)) continue
+      // 首次见到的非当前项目分组:标记为已见 + 默认折叠
+      seen.add(p)
+      if (p !== cur) {
         next.add(p)
         changed = true
       }
     }
     if (changed) collapsedGroupPaths.value = next
+    seenGroupPaths.value = seen
   },
   { immediate: true }
 )
