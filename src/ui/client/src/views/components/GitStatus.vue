@@ -2374,7 +2374,7 @@ html.dark .upstream-tip:hover {
   cursor: pointer;
   transition: var(--transition-all);
 
-  // 按钮重置:继承 div 视觉
+  /* 按钮重置:继承 div 视觉 */
   width: 100%;
   background: transparent;
   border: none;

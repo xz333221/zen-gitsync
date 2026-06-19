@@ -2016,7 +2016,8 @@ function toggleFullscreen() {
   outline-offset: -2px;
   background-color: var(--bg-hover);
 }
-  
+
+.context-menu-item {
   display: flex;
   align-items: center;
   transition: all 0.2s ease;
