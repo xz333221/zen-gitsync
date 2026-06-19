@@ -494,7 +494,7 @@ async function refreshStatus() {
     await gitStore.getBranchStatus(true)
     ElMessage.success($t('@13D1C:Git 状态已刷新'))
   } catch (error) {
-    ElMessage.error('刷新失败: ' + (error as Error).message)
+    ElMessage.error(`${$t('@13D1C:刷新失败: ')}${(error as Error).message}`)
   }
 }
 

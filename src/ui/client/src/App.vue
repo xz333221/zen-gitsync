@@ -418,7 +418,7 @@ function copyGitInit() {
   navigator.clipboard.writeText('git init').then(() => {
     ElMessage.success($t('@F13B4:已复制'))
   }).catch(() => {
-    ElMessage.error('复制失败')
+    ElMessage.error($t('@F13B4:复制失败'))
   })
 }
 </script>

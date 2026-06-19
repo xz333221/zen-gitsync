@@ -89,7 +89,7 @@ function onOpenDialog() {
 async function onOpenExplorer() {
   try {
     if (!currentDirectory.value) {
-      ElMessage.warning("当前目录路径为空");
+      ElMessage.warning($t('@67CE7:当前目录路径为空'));
       return;
     }
     const response = await fetch("/api/open_directory", {
@@ -99,7 +99,7 @@ async function onOpenExplorer() {
     });
     const result = await response.json();
     if (result.success) {
-      ElMessage.success("已在文件管理器中打开目录");
+      ElMessage.success($t('@67CE7:已在文件管理器中打开目录'));
     } else if (result.error) {
       ElMessage.error(result.error);
     }
@@ -112,7 +112,7 @@ async function onOpenExplorer() {
 async function onOpenInVscode() {
   try {
     if (!currentDirectory.value) {
-      ElMessage.warning('当前目录路径为空');
+      ElMessage.warning($t('@67CE7:当前目录路径为空'));
       return;
     }
     const response = await fetch('/api/open-directory-with-vscode', {
@@ -122,12 +122,12 @@ async function onOpenInVscode() {
     });
     const result = await response.json();
     if (result.success) {
-      ElMessage.success('已用 VSCode 打开目录');
+      ElMessage.success($t('@67CE7:已用 VSCode 打开目录'));
     } else if (result.error) {
       ElMessage.error(result.error);
     }
   } catch (error) {
-    ElMessage.error(`打开失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -138,7 +138,7 @@ async function onOpenInClaudeCode(permissionMode?: string) {
   closeClaudeMenu()
   try {
     if (!currentDirectory.value) {
-      ElMessage.warning('当前目录路径为空');
+      ElMessage.warning($t('@67CE7:当前目录路径为空'));
       return;
     }
     const response = await fetch('/api/open-directory-with-claude-code', {
@@ -151,12 +151,12 @@ async function onOpenInClaudeCode(permissionMode?: string) {
     });
     const result = await response.json();
     if (result.success) {
-      ElMessage.success(result.message || '已用 Claude Code 打开目录');
+      ElMessage.success(result.message || $t('@67CE7:已用 Claude Code 打开目录'));
     } else if (result.error) {
       ElMessage.error(result.error);
     }
   } catch (error) {
-    ElMessage.error(`打开失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -206,7 +206,7 @@ onBeforeUnmount(() => {
 async function onOpenTerminal() {
   try {
     if (!currentDirectory.value) {
-      ElMessage.warning("当前目录路径为空");
+      ElMessage.warning($t('@67CE7:当前目录路径为空'));
       return;
     }
     const response = await fetch("/api/open_terminal", {
@@ -216,7 +216,7 @@ async function onOpenTerminal() {
     });
     const result = await response.json();
     if (result.success) {
-      ElMessage.success("已在终端中打开目录");
+      ElMessage.success($t('@67CE7:已在终端中打开目录'));
     } else if (result.error) {
       ElMessage.error(result.error);
     }
@@ -275,7 +275,7 @@ async function saveRecentDirectory(directory: string) {
 // 切换目录
 async function changeDirectory() {
   if (!newDirectoryPath.value) {
-    ElMessage.warning("目录路径不能为空");
+    ElMessage.warning($t('@67CE7:目录路径不能为空'));
     return;
   }
   try {
@@ -287,7 +287,7 @@ async function changeDirectory() {
     });
     const result = await response.json();
     if (result.success) {
-      ElMessage.success("已切换工作目录");
+      ElMessage.success($t('@67CE7:已切换工作目录'));
       isDirectoryDialogVisible.value = false;
       await saveRecentDirectory(result.directory);
       await getRecentDirectories();
@@ -330,7 +330,7 @@ async function changeDirectory() {
         gitStore.$reset();
       }
     } else {
-      ElMessage.error(result.error || "切换目录失败");
+      ElMessage.error(result.error || $t('@67CE7:切换目录失败'));
     }
   } catch (error) {
     ElMessage.error(`${$t('@67CE7:切换目录失败: ')}${(error as Error).message}`);
@@ -342,7 +342,7 @@ async function changeDirectory() {
 // 新开 cmd 标签并在目标路径执行 g ui
 async function openNewTabGui() {
   if (!newDirectoryPath.value) {
-    ElMessage.warning("目录路径不能为空");
+    ElMessage.warning($t('@67CE7:目录路径不能为空'));
     return;
   }
   try {
@@ -353,10 +353,10 @@ async function openNewTabGui() {
     });
     const result = await response.json();
     if (!result.success) {
-      ElMessage.error(result.error || '打开失败');
+      ElMessage.error(result.error || $t('@67CE7:打开失败'));
     }
   } catch (error) {
-    ElMessage.error(`打开失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -380,10 +380,10 @@ async function openRecentDirInNewTab(dirPath: string) {
     });
     const result = await response.json();
     if (!result.success) {
-      ElMessage.error(result.error || '打开失败');
+      ElMessage.error(result.error || $t('@67CE7:打开失败'));
     }
   } catch (error) {
-    ElMessage.error(`打开失败: ${(error as Error).message}`);
+    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
   }
 }
 
@@ -391,7 +391,7 @@ async function openRecentDirInNewTab(dirPath: string) {
 function onRecentDirClick(item: { path: string; exists: boolean }, event: MouseEvent) {
   if (event.ctrlKey || event.metaKey) {
     if (!item.exists) {
-      ElMessage.warning('目录不存在,无法打开');
+      ElMessage.warning($t('@67CE7:目录不存在,无法打开'));
       return;
     }
     openRecentDirInNewTab(item.path);
