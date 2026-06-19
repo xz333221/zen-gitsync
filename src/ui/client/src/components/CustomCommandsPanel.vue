@@ -47,6 +47,9 @@ const panelHeight = ref(240)
 const isResizing = ref(false)
 const startY = ref(0)
 const startHeight = ref(0)
+const MIN_PANEL_HEIGHT = 120
+const MAX_PANEL_HEIGHT = 600
+const KEY_NUDGE_PX = 16
 
 function startResize(e: MouseEvent) {
   isResizing.value = true
@@ -60,13 +63,30 @@ function startResize(e: MouseEvent) {
 function handleResize(e: MouseEvent) {
   if (!isResizing.value) return
   const deltaY = startY.value - e.clientY
-  panelHeight.value = Math.max(120, Math.min(600, startHeight.value + deltaY))
+  panelHeight.value = Math.max(MIN_PANEL_HEIGHT, Math.min(MAX_PANEL_HEIGHT, startHeight.value + deltaY))
 }
 
 function stopResize() {
   isResizing.value = false
   document.removeEventListener('mousemove', handleResize)
   document.removeEventListener('mouseup', stopResize)
+}
+
+// OPT-4: 键盘方向键调高度,纯键盘用户也能调整面板尺寸
+function onResizeKeydown(event: KeyboardEvent) {
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    panelHeight.value = Math.min(MAX_PANEL_HEIGHT, panelHeight.value + KEY_NUDGE_PX)
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    panelHeight.value = Math.max(MIN_PANEL_HEIGHT, panelHeight.value - KEY_NUDGE_PX)
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    panelHeight.value = MAX_PANEL_HEIGHT
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    panelHeight.value = MIN_PANEL_HEIGHT
+  }
 }
 
 // 执行命令
@@ -133,8 +153,20 @@ async function runCommand(cmd: any) {
       </div>
     </div>
 
-    <!-- 拖拽调高度（展开时显示） -->
-    <div v-show="!collapsed" class="resize-handle" @mousedown="startResize" />
+    <!-- 拖拽调高度（展开时显示） OPT-4: 补 role/tabindex/aria-orientation + 键盘 nudge -->
+    <div
+      v-show="!collapsed"
+      class="resize-handle"
+      role="separator"
+      tabindex="0"
+      aria-orientation="horizontal"
+      :aria-valuenow="panelHeight"
+      :aria-valuemin="MIN_PANEL_HEIGHT"
+      :aria-valuemax="MAX_PANEL_HEIGHT"
+      :aria-label="$t('@CMDPANEL:调整自定义命令面板高度（上下方向键）')"
+      @mousedown="startResize"
+      @keydown="onResizeKeydown"
+    />
 
     <div v-if="!collapsed && commands.length === 0" class="empty-container">
       <svg class="empty-icon" viewBox="0 0 1024 1024" width="40" height="40">
@@ -200,6 +232,20 @@ async function runCommand(cmd: any) {
   cursor: ns-resize;
   z-index: 10;
   transition: background 0.2s ease;
+  /* OPT-4: padding 提命中区,背景只画在 content-box 不影响视觉 */
+  padding: 2px 0;
+  background: transparent;
+  background-clip: content-box;
+  box-sizing: border-box;
+}
+
+.resize-handle:focus-visible {
+  outline: none;
+}
+
+.resize-handle:focus-visible::before {
+  background: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px var(--focus-ring-color);
 }
 
 .resize-handle::before {

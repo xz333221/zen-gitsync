@@ -465,6 +465,13 @@
   /* 等宽字体族（JetBrains Mono 优先） */
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Courier New", monospace;
 
+  /* 提交哈希（Git SHA 短码）专用色 token
+     亮色:蓝色文字 + 极淡蓝底;暗色由 dark-theme.scss 覆盖,保证对比度 ≥ 4.5:1 */
+  --commit-hash-fg: var(--color-primary);
+  --commit-hash-bg: #ecf5ff;
+  --commit-hash-fg-dark: var(--color-primary-light);
+  --commit-hash-bg-dark: var(--tint-primary-18);
+
   /* ===== 源码地图 (SourceMap) 主题变量 =====
      画布、VueFlow 节点、边、Controls、MiniMap、源码面板等都通过
      这组变量适配浅色 / 深色主题，避免在组件内硬编码颜色。 */

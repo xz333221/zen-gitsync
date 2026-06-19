@@ -260,6 +260,21 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 一键切换 light ↔ dark（不进入 auto 模式；auto 模式下视当前实际渲染决定目标）
+  // 用于 header 主题切换按钮,避免在设置里改完之后又被 auto 覆盖。
+  function toggleTheme() {
+    const html = document.documentElement
+    const currentlyDark = html.getAttribute('data-theme') === 'dark'
+    const next: 'light' | 'dark' = currentlyDark ? 'light' : 'dark'
+    theme.value = next
+    applyTheme(next)
+    // 同步落盘到文件配置,失败也不阻塞 UI
+    saveGeneralSettings({ theme: next }).catch((e) => {
+      console.error('保存主题切换结果失败:', e)
+    })
+    return next
+  }
+
   // 初始化时应用主题
   applyTheme(theme.value)
 
@@ -1244,6 +1259,7 @@ export const useConfigStore = defineStore('config', () => {
     saveUiSettings,
     resetUiLayout,
     applyTheme,
+    toggleTheme,
     saveDefaultMessage,
     deleteTemplate,
     updateTemplate,

@@ -1613,12 +1613,12 @@ function toggleFullscreen() {
 
 .commit-hash {
   cursor: pointer;
-  color: var(--color-primary);
+  color: var(--commit-hash-fg);
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-weight: 500;
   border-radius: var(--radius-sm);
   padding: 2px 5px;
-  background-color: #ecf5ff;
+  background-color: var(--commit-hash-bg);
   transition: all 0.2s ease;
   /* 按钮重置:保持 span 视觉 */
   border: none;
@@ -1633,12 +1633,12 @@ function toggleFullscreen() {
 
 .commit-hash:hover {
   text-decoration: none;
-  background-color: #d9ecff;
+  background-color: color-mix(in srgb, var(--commit-hash-bg) 70%, var(--color-primary) 30%);
   box-shadow: var(--shadow-sm);
 }
 
 .commit-hash:active {
-  background-color: #b3d8ff;
+  background-color: color-mix(in srgb, var(--commit-hash-bg) 50%, var(--color-primary) 50%);
   transform: scale(0.96);
 }
 

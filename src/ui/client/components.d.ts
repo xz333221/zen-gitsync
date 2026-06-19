@@ -12,6 +12,7 @@ declare module 'vue' {
     AISplitChatPane: typeof import('./src/components/AISplitChatPane.vue')['default']
     AISplitDialog: typeof import('./src/components/AISplitDialog.vue')['default']
     AISplitDirectPane: typeof import('./src/components/AISplitDirectPane.vue')['default']
+    AppErrorBanner: typeof import('./src/components/AppErrorBanner.vue')['default']
     AppVersionBadge: typeof import('./src/components/AppVersionBadge.vue')['default']
     AttachmentZone: typeof import('./src/components/AttachmentZone.vue')['default']
     BaseNode: typeof import('./src/components/flow/nodes/BaseNode.vue')['default']

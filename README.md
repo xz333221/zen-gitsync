@@ -56,8 +56,9 @@ npm install -g zen-gitsync
 - **AI commit message** — Generate commit message from staged diff automatically
 - **Selection-scoped diff** — AI commit message and quick commit/push use only the diff of currently selected files when the Git view is the active tab
 - **Commit templates** — Save type/scope/description/message templates
-- **Theme & language** — Light/dark theme and Chinese/English UI
-- **Accessibility (WCAG 2.1 AA)** — Dialog focus trap & restore, role-based separators, keyboard-only panel resize (`← → ↑ ↓`), screen-reader friendly commit context menu, ARIA-pressed toggle buttons
+- **Theme & language** — Light/dark theme and Chinese/English UI; one-click theme toggle in the header (no need to dig into settings)
+- **Network error banner** — Global banner appears when the backend is unreachable, with one-click retry and relative-time status
+- **Accessibility (WCAG 2.1 AA)** — Dialog focus trap & restore, role-based separators, keyboard-only panel resize (`← → ↑ ↓`), screen-reader friendly commit context menu, ARIA-pressed toggle buttons, commit button `aria-busy` during in-flight commits, Git SHA hashes meet ≥ 4.5:1 contrast in both light and dark themes
 - **Faster cold start** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` are split into independent chunks and lazy-loaded so the Git panel boots without waiting on the code editor or visual workflow designer
 
 > Detailed per-release change log (a11y/perf fixes, i18n missing translations, dead-code removals, etc.) lives in [CHANGELOG.md](./CHANGELOG.md).
@@ -454,8 +455,9 @@ npm install -g zen-gitsync
 - **AI 生成提交信息** — 基于 staged diff 自动生成提交消息
 - **选择模式差异** — 当 Git 视图为当前激活标签时，AI 生成提交信息与一键提交/推送仅作用于当前勾选文件的 diff
 - **提交模板** — 保存类型/范围/描述/完整提交信息模板
-- **主题与语言** — 支持明/暗主题，中英文界面切换
-- **可访问性(WCAG 2.1 AA)** — 弹窗焦点陷阱与归还、`role="separator"` 键盘可达的分隔条、纯键盘(`← → ↑ ↓`)调整面板宽度、屏幕阅读器友好的提交右键菜单、ARIA-pressed 切换按钮
+- **主题与语言** — 支持明/暗主题，中英文界面切换;header 一键切换主题(无需进入设置)
+- **网络错误横幅** — 后端不可达时全局弹出横幅,支持一键重试与相对时间状态
+- **可访问性(WCAG 2.1 AA)** — 弹窗焦点陷阱与归还、`role="separator"` 键盘可达的分隔条、纯键盘(`← → ↑ ↓`)调整面板宽度、屏幕阅读器友好的提交右键菜单、ARIA-pressed 切换按钮、提交按钮在提交过程中挂 `aria-busy`、Git 提交哈希在明/暗主题下对比度均 ≥ 4.5:1
 - **更快的冷启动** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` 拆分为独立 chunk 并按需懒加载,Git 面板首屏不再等待代码编辑器或可视化流程编排模块
 
 > 每个版本的详细变更日志(可访问性/性能修复、i18n 漏译、死代码清理等)见 [CHANGELOG.md](./CHANGELOG.md)。

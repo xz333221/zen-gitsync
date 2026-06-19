@@ -29,17 +29,19 @@ import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import ActivityBar from '@/components/ActivityBar.vue'
 import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
+import AppErrorBanner from '@/components/AppErrorBanner.vue'
 // 编辑器 / 源码地图视图延迟加载（首屏不下载）
 const EditorView = defineAsyncComponent(() => import('@/views/EditorView.vue'))
 const SourceMapView = defineAsyncComponent(() => import('@views/SourceMapView.vue'))
 const WorkbenchView = defineAsyncComponent(() => import('@views/WorkbenchView.vue'))
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
-import { Setting, WarningFilled } from '@element-plus/icons-vue'
+import { Setting, WarningFilled, Sunny, Moon } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
 import { useLocaleStore } from '@stores/localeStore'
 import { useInstancesStore } from '@stores/instancesStore'
+import { useNetworkStatus } from '@/composables/useNetworkStatus'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -99,6 +101,18 @@ async function loadCurrentDirectory() {
 onMounted(async () => {
   console.log($t('@F13B4:---------- 页面初始化开始 ----------'))
 
+  // 同步初始主题状态 + 监听 documentElement 的 data-theme 变化
+  // (auto 模式跟随系统 / 主题切换按钮都会改这个属性)
+  syncIsDarkFromDom()
+  themeObserver = new MutationObserver(syncIsDarkFromDom)
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  })
+
+  // OPT-5: 启动全局网络监听(patch fetch + 监听 online/offline)
+  useNetworkStatus().start()
+
   // 启动实例注册表轮询 + Socket.IO 监听
   instancesStore.start()
 
@@ -149,6 +163,13 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   // 停止实例注册表轮询 + 断开 Socket.IO
   instancesStore.stop()
+
+  // 停止主题 MutationObserver
+  themeObserver?.disconnect()
+  themeObserver = null
+
+  // OPT-5: 卸载时还原 fetch 补丁,避免 HMR 时累积多次 patch
+  useNetworkStatus().stop()
 })
 
 // 监听设置菜单的"重置布局"事件：把新比例立刻应用到 DOM
@@ -189,6 +210,14 @@ const userSettingsDialogVisible = ref(false)
 
 function openUserSettingsDialog() {
   userSettingsDialogVisible.value = true
+}
+
+// 主题切换快捷按钮:跟踪 documentElement 的 data-theme,
+// 这是当前实际渲染态,覆盖 configStore.theme='auto' 时跟随系统的场景
+const isDarkTheme = ref(false)
+let themeObserver: MutationObserver | null = null
+function syncIsDarkFromDom() {
+  isDarkTheme.value = document.documentElement.getAttribute('data-theme') === 'dark'
 }
 
 // 添加分隔条相关逻辑
@@ -561,6 +590,8 @@ function copyGitInit() {
 
 <template>
   <el-config-provider :locale="localeStore.elementPlusLocale">
+  <!-- OPT-5: 全局网络错误横幅(header 下方置顶,不影响主区布局) -->
+  <AppErrorBanner />
   <header class="main-header app-header">
     <div class="header-left">
       <a href="https://github.com/xz333221/zen-gitsync" target="_blank" class="header-brand-link">
@@ -578,6 +609,25 @@ function copyGitInit() {
       </div>
       <!-- 实例切换器：显示所有运行中的 GUI 项目 -->
       <InstanceSwitcher />
+      <!-- 主题切换快捷按钮（OPT-2：原本要进设置→通用→主题 4 次点击,现在 1 次） -->
+      <el-tooltip
+        :content="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')"
+        placement="bottom"
+        effect="dark"
+        :show-after="200"
+      >
+        <button
+          class="modern-btn btn-icon-32 theme-toggle-btn"
+          :aria-label="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')"
+          :aria-pressed="isDarkTheme ? 'true' : 'false'"
+          @click="configStore.toggleTheme()"
+        >
+          <el-icon class="btn-icon" aria-hidden="true">
+            <Moon v-if="isDarkTheme" />
+            <Sunny v-else />
+          </el-icon>
+        </button>
+      </el-tooltip>
       <!-- 用户信息 -->
       <div id="user-info" class="user-info-card">
         <template v-if="gitStore.userName">
@@ -1472,6 +1522,52 @@ h1 {
 .user-warning {
   color: var(--color-warning);
   font-weight: bold;
+}
+
+/* 主题切换快捷按钮(OPT-2)
+   32×32 触摸区,比标准 28px 大 14%,在 header 区域更易命中
+   复用 .modern-btn 基础样式,只补:卡片式背景(与 user-info 视觉同源)+ 图标切换动画 */
+.theme-toggle-btn {
+  flex-shrink: 0;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-component);
+  /* 与 .user-info-card 一致: 6px 内边距,圆角 8px */
+  padding: 0;
+  color: var(--text-tertiary);
+  box-shadow: none;
+  transition:
+    background-color var(--transition-base) var(--ease-custom),
+    border-color var(--transition-base) var(--ease-custom),
+    color var(--transition-base) var(--ease-custom),
+    transform var(--transition-base) var(--ease-custom),
+    box-shadow var(--transition-base) var(--ease-custom);
+}
+
+.theme-toggle-btn:hover {
+  background: var(--tint-warning-14);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+  transform: translateY(-0.5px);
+  box-shadow: var(--focus-ring-soft);
+}
+
+.theme-toggle-btn:active {
+  transform: scale(0.96);
+}
+
+.theme-toggle-btn:focus-visible {
+  outline: none;
+  border-color: var(--color-warning);
+  box-shadow: var(--focus-ring);
+}
+
+.theme-toggle-btn .btn-icon {
+  /* 太阳 ↔ 月亮切换时 360° 翻转,有视觉反馈 */
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.theme-toggle-btn:hover .btn-icon {
+  transform: rotate(-18deg) scale(1.08);
 }
 
 /* 非Git仓库初始化提示卡片 —— 复用 .state-block(state-block--empty variant) */

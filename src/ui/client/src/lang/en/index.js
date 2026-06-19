@@ -36,6 +36,13 @@ export default {
   '@F13B4:已复制克隆命令': 'Clone command copied',
   '@F13B4:切换到浅色主题': 'Switch to light theme',
   '@F13B4:切换到深色主题': 'Switch to dark theme',
+  // @OPT-5: Global network error banner
+  '@NET:无法连接到本地服务,请检查后端进程': 'Cannot reach local backend. Please check the server process.',
+  '@NET:重试': 'Retry',
+  '@NET:关闭': 'Dismiss',
+  '@NET:刚刚': 'just now',
+  '@NET:网络连接失败': 'Network connection failed',
+  '@NET:浏览器报告离线': 'Browser reports offline',
   '@F13B4:未知目录': 'Unknown directory',
   '@F13B4:---------- 页面初始化开始 ----------': '----------Page initialization begins----------',
   '@F13B4:当前目录不是Git仓库，部分功能将不可用': 'The current directory is not a Git repository, some features will be unavailable',
@@ -82,6 +89,9 @@ export default {
   '@76A11:个已暂存文件': 'A staged file',
   '@76A11:存在冲突文件，请先解决冲突': 'Conflicted files exist, please resolve conflicts first',
   '@76A11:提交并完成合并': 'Commit and complete merge',
+  // @OPT-3: Commit button loading state label + tooltip
+  '@76A11:提交中…': 'Committing…',
+  '@76A11:正在提交中…': 'Commit in progress…',
   // @76A11: file end
   // @F4137: file path: components\buttons\PushButton.vue
   '@F4137:当前分支没有上游分支': 'There is no upstream branch in the current branch',
@@ -260,6 +270,8 @@ export default {
   '@CMDPANEL:自定义命令': 'Custom Commands',
   '@CMDPANEL:管理命令': 'Manage Commands',
   '@CMDPANEL:暂无自定义命令': 'No custom commands yet',
+  // @OPT-4: custom commands panel separator a11y
+  '@CMDPANEL:调整自定义命令面板高度（上下方向键）': 'Adjust custom commands panel height (arrow up/down)',
   '@CMDPANEL:去添加': 'Add one',
   '@CMDPANEL:已在新终端中执行': 'Running in terminal: {name}',
   '@CMDPANEL:执行失败': 'Execution failed',
@@ -569,6 +581,8 @@ export default {
   '@NPM01:个包': 'packages',
   '@NPM01:正在扫描项目中的 npm 脚本...': 'Scanning npm scripts in project...',
   '@NPM01:当前项目中未找到包含 scripts 的 package.json': 'No package.json with scripts found in current project',
+  // @OPT-4: NPM panel separator a11y
+  '@NPM01:调整 NPM 脚本面板高度（上下方向键）': 'Adjust NPM scripts panel height (arrow up/down)',
   '@NPM01:个脚本': 'scripts',
   '@NPM01:已在新终端中执行': 'Executed in new terminal',
   '@NPM01:加载npm脚本失败': 'Failed to load npm scripts',
