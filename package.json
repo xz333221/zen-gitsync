@@ -5,6 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "g:ui": "node ./src/gitCommit.js ui",
     "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
     "npm:login": "npm login --registry https://registry.npmjs.org/",
     "npm:publish": "npm publish --registry https://registry.npmjs.org/",
@@ -34,7 +35,6 @@
     "g:set-default-message": "node ./src/gitCommit.js --set-default-message=\"提交\"",
     "g:y": "g -y",
     "g:reset": "git reset --hard origin/main",
-    "g:ui": "node ./src/gitCommit.js ui",
     "g:test-cmd": "node ./src/gitCommit.js --cmd=\"echo zen-gitsync test\" --cmd-interval=5",
     "g:test-cmd-at": "node ./src/gitCommit.js --cmd=\"echo at-time-test\" --at=21:09",
     "start:server": "node server.js",
