@@ -383,6 +383,11 @@ const thinkingOpen = ref(false)
 
 function recomputeThinkingOpen() {
   if (thinkingUserOverride) return
+  // 输出已经有内容 → 思考阶段已结束,合上思考区把屏幕让给模型返回
+  if ((props.job.output || '').length > 0) {
+    thinkingOpen.value = false
+    return
+  }
   const s = props.job.status
   if (s === 'running' || s === 'pending') {
     thinkingOpen.value = (props.job.thinking || '').length > 0
@@ -409,6 +414,9 @@ watch(() => props.job.status, (s, prev) => {
 
 // thinking 长度变化 → 重新计算(运行中长度 > 0 就展开)
 watch(() => (props.job.thinking || '').length, () => recomputeThinkingOpen(), { immediate: true })
+
+// output 长度变化 → 模型开始返回时折叠思考区,把屏幕让给输出
+watch(() => (props.job.output || '').length, () => recomputeThinkingOpen())
 
 // 用户提示词区:默认展开;用户可手动合上,尊重用户选择(新一轮开始时重置)
 let promptUserOverride = false

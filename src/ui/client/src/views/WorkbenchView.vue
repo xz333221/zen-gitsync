@@ -939,6 +939,24 @@ watch(
     }
   }
 )
+// 队列推进时自动跟随正在执行的子任务：
+// 当前选中的 sub 已经不在 running(说明队列往后走了)→ 切到下一个 running 的 sub。
+// 若用户主动点了某个非 running 的 sub 看历史日志,不抢焦点,保持用户当前选中。
+watch(
+  () => selectedTask.value?.subtasks?.map(s => ({ id: s.id, status: s.status })) || [],
+  () => {
+    if (!selectedTask.value || isSimpleTask.value) return
+    const subs = selectedTask.value.subtasks
+    const cur = subs.find(s => s.id === selectedSubId.value)
+    // 选中的不是 running → 让位给队列里正在跑的那条
+    if (!cur || cur.status !== 'running') {
+      const running = subs.find(s => s.status === 'running')
+      if (running && running.id !== selectedSubId.value) {
+        selectedSubId.value = running.id
+      }
+    }
+  }
+)
 
 // ── 子任务编辑（拆分） ─────────────────────────────────────────────────────
 // 子任务行内的"持久化中"集合：避免连续点击同一行触发并发落盘
@@ -2942,6 +2960,16 @@ function humanSize(n: number): string {
 }
 .wb-exec-list__header .wb-split__sub-actions {
   margin-left: auto;
+  /* 容器只有 260px,标题 + 3 个按钮一行放不下;允许按钮组内部折行,
+     标题独占一行/按钮换行,避免溢出容器被相邻列遮住。 */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 4px;
+}
+.wb-exec-list__header .wb-split__sub-actions .el-button {
+  /* small 默认 7px 12px → 260px 容器装不下 3 个,
+     压到 4px 8px 可以省 ~16px(单按钮),叠加 wrap 能稳定放进容器。 */
+  padding: 5px 8px;
 }
 .wb-exec-sub-list {
   list-style: none;
