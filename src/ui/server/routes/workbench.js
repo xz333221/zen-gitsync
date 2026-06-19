@@ -2793,6 +2793,80 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
   })
 
+  // POST /api/workbench/tasks/:id/reset-shell
+  // 把 task 还原成"只有标题的空壳",清掉 desc / attachments / promptId / subtasks。
+  // 与 clear-execution 的区别:
+  //   - clear-execution 只重置 sub.status + 清 jobs(保留拆分/描述/附件)
+  //   - reset-shell 直接删除 subtasks 数组和描述/附件,任务只剩标题
+  // 同时清空该 task 的所有 job(沿用 by-task 删除语义,跳过 running/pending)。
+  // 活跃态拒绝,避免误杀正在跑的实例。
+  app.post('/api/workbench/tasks/:id/reset-shell', async (req, res) => {
+    try {
+      const taskId = req.params.id
+      if (!taskId) return res.status(400).json({ success: false, error: '缺少 taskId' })
+      // 检查活跃 job
+      const live = []
+      for (const j of jobs.values()) {
+        if (j.taskId !== taskId) continue
+        if (j.status === 'running' || j.status === 'pending') live.push(j.id)
+      }
+      if (live.length > 0) {
+        return res.status(400).json({ success: false, error: `有 ${live.length} 个 job 正在执行,请先停止` })
+      }
+      // 1) 清空 jobs(内存 + 磁盘)
+      const removedJobIds = []
+      for (const j of jobs.values()) {
+        if (j.taskId !== taskId) continue
+        jobs.delete(j.id)
+        removedJobIds.push(j.id)
+      }
+      const jobsData = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+      if (jobsData && Array.isArray(jobsData.jobs)) {
+        const before = jobsData.jobs.length
+        jobsData.jobs = jobsData.jobs.filter(j => j.taskId !== taskId)
+        if (jobsData.jobs.length !== before) await writeJson(JOBS_FILE, jobsData)
+      }
+      // 2) 重置 task 字段:只留 id / title / createdAt / status / projectPath(如存在)
+      const tasksData = await readJson(TASKS_FILE, { tasks: [] })
+      const task = (tasksData.tasks || []).find(t => t.id === taskId)
+      if (!task) {
+        return res.json({ success: true, removedJobs: removedJobIds.length, message: '任务不存在,仅清空 job' })
+      }
+      const removedSubCount = Array.isArray(task.subtasks) ? task.subtasks.length : 0
+      const removedAttCount = Array.isArray(task.attachments) ? task.attachments.length : 0
+      const hadDesc = !!(task.desc && task.desc.length > 0)
+      const hadPrompt = !!task.promptId
+      // 保留字段:id / title / createdAt / status / projectPath
+      // 清理:desc / attachments / promptId / subtasks
+      const preservedProjectPath = task.projectPath
+      const preservedCreatedAt = task.createdAt
+      const preservedStatus = task.status || 'todo'
+      // 重建对象(顺序保留 title 在前,符合视觉习惯)
+      const newTask = { id: task.id, title: task.title, status: preservedStatus }
+      if (preservedProjectPath) newTask.projectPath = preservedProjectPath
+      if (preservedCreatedAt) newTask.createdAt = preservedCreatedAt
+      newTask.subtasks = []
+      newTask.attachments = []
+      newTask.updatedAt = nowIso()
+      // 用 Object.assign 替换 task 的所有自身属性,保留原型链
+      for (const k of Object.keys(task)) delete task[k]
+      Object.assign(task, newTask)
+      await writeJson(TASKS_FILE, tasksData)
+      publish('task:update', task)
+      res.json({
+        success: true,
+        removedJobs: removedJobIds.length,
+        removedSubs: removedSubCount,
+        removedAttachments: removedAttCount,
+        clearedDesc: hadDesc,
+        clearedPrompt: hadPrompt,
+        message: `已清空:删除 ${removedSubCount} 个子任务${removedAttCount ? '、' + removedAttCount + ' 个附件' : ''}${hadDesc ? '、任务描述' : ''},任务标题保留`
+      })
+    } catch (err) {
+      res.status(500).json({ success: false, error: '清空任务内容失败: ' + (err.message || String(err)) })
+    }
+  })
+
   // GET /api/workbench/jobs/:id
   app.get('/api/workbench/jobs/:id', async (req, res) => {
     try {

@@ -600,6 +600,69 @@ async function clearExecutionForSelectedTask() {
   }
 }
 
+/**
+ * 把当前 task 还原成"只有标题的空壳":
+ *   1. 弹 ElMessageBox 二次确认(列出要清掉的 N 个子任务)
+ *   2. 调 POST /api/workbench/tasks/:id/reset-shell
+ *      后端会清空 desc / attachments / promptId / subtasks,只留 id/title/createdAt/status/projectPath
+ *   3. 后端 broadcast task:update 后前端会重新拉取,这里也兜底本地刷一遍
+ * 与 clearExecutionForSelectedTask 的区别:那个只重置 sub.status + 清 jobs(保留拆分/描述/附件);
+ * 这个直接删 subtasks 数组和描述/附件,任务只剩标题,适合"我想要一个空任务,从头开始"的场景。
+ */
+async function resetSelectedTaskShell() {
+  if (!selectedTask.value) return
+  const t = selectedTask.value
+  const subCount = Array.isArray(t.subtasks) ? t.subtasks.length : 0
+  const attCount = Array.isArray(t.attachments) ? t.attachments.length : 0
+  const hasDesc = !!(t.desc && t.desc.length > 0)
+  if (subCount === 0 && attCount === 0 && !hasDesc) {
+    ElMessage.warning($t('@WORKBENCH:任务已经是空的了'))
+    return
+  }
+  // 检查有没有 running/pending job(双重保险,后端也会拦)
+  const runningJob = jobs.value.find(j => j.taskId === t.id && (j.status === 'running' || j.status === 'pending'))
+  if (runningJob) {
+    ElMessage.warning($t('@WORKBENCH:有子任务正在执行,请先停止'))
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      $t('@WORKBENCH:将删除 {n} 个子任务、附件和任务描述,任务标题保留,确认?', { n: subCount }),
+      $t('@WORKBENCH:清空任务内容'),
+      {
+        confirmButtonText: $t('@WORKBENCH:清空'),
+        cancelButtonText: $t('@WORKBENCH:取消'),
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+  const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/reset-shell`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  })
+    .then(r => r.json())
+    .catch(err => ({ success: false, error: err?.message || String(err) }))
+  if (res?.success) {
+    // 本地内存兜底:把 selectedTask 同步成空壳,免得 SSE 推送延迟
+    t.subtasks = []
+    t.attachments = []
+    t.desc = ''
+    t.promptId = null
+    // 取消选中的 sub(已被清)
+    selectedSubId.value = null
+    // 清空 dirty / 本地 sub snapshot
+    dirtySubIds.value.clear()
+    subSnapshot.value.clear()
+    jobs.value = jobs.value.filter(j => j.taskId !== t.id)
+    syncRunningCount()
+    ElMessage.success(res.message || $t('@WORKBENCH:已清空任务内容'))
+  } else {
+    ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))
+  }
+}
+
 function connectSSE() {
   if (es) { es.close(); es = null }
   es = new EventSource('/api/workbench/events')
@@ -1800,6 +1863,17 @@ function humanSize(n: number): string {
                 <el-button size="small" :type="hasDirtySubtasks ? 'primary' : 'default'" :disabled="selectedTask.subtasks.length === 0" @click="saveSubtasks">
                   {{ $t('@WORKBENCH:保存拆分') }}
                   <span v-if="hasDirtySubtasks" class="wb-dirty-badge">{{ dirtySubIds.size }}</span>
+                </el-button>
+                <el-button
+                  size="small"
+                  type="danger"
+                  plain
+                  :icon="Delete"
+                  :disabled="selectedTask.subtasks.length === 0 && (!selectedTask.attachments || selectedTask.attachments.length === 0) && !(selectedTask.desc && selectedTask.desc.length > 0)"
+                  :title="$t('@WORKBENCH:清空子任务、附件和任务描述,任务标题保留')"
+                  @click="resetSelectedTaskShell"
+                >
+                  {{ $t('@WORKBENCH:清空子任务') }}
                 </el-button>
               </div>
             </div>
