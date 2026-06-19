@@ -21,6 +21,18 @@
   -webkit-backdrop-filter: blur(10px);
 }
 
+/* ElMessageBox 走 .el-overlay(不带 -dialog 后缀),默认是 display: block,
+   导致弹窗贴左上角且没有 flex 居中。el-overlay-dialog 已经有自己的 flex 居中,
+   这里用 :has 限定到 message-box 的 overlay 单独加,避免嵌套两层 flex
+   把 .el-overlay-dialog 内部 flex 居中破坏。 */
+.el-overlay:has(.el-overlay-message-box) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md);
+  box-sizing: border-box;
+}
+
 .el-overlay-dialog {
   display: flex;
   align-items: center;
@@ -285,12 +297,68 @@
   }
 
   .el-message-box__headerbtn {
-    top: 16px;
-    right: 16px;
+    /* 跟 .el-dialog__headerbtn 对齐:绝对定位右上角 + 固定 28px 方块,
+       否则默认 static + 14px 会跑到弹窗左上角、流式布局 */
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--btn-radius-sm);
+    transition: var(--dialog-transition-fast);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: var(--text-secondary);
+    font-size: 16px;
+    line-height: 1;
+
+    &:hover {
+      background: var(--bg-container-hover);
+      color: var(--text-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 1px;
+    }
+  }
+
+  .el-message-box__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+  }
+
+  .el-message-box__status {
+    /* 图标和文字并排(默认是 inline-flex 但被压缩到 14px),
+       跟 .el-message-box__message 在 container 里 flex 排开 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-right: 12px;
+    font-size: 24px;
+    flex-shrink: 0;
   }
 
   .el-message-box__content {
     padding: var(--spacing-lg) 0 var(--spacing-base);
+  }
+
+  .el-message-box__container {
+    /* 默认 display: block 导致 status 图标和 message 文字块级堆叠,
+       改成 flex 让图标在左、文字在右并排(项目其他 dialog 的布局) */
+    display: flex;
+    align-items: flex-start;
   }
 
   .el-message-box__message {

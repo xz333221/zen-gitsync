@@ -77,20 +77,24 @@ withDefaults(defineProps<Props>(), {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-xl);
-  padding: 40px;
-  border-radius: 20px;
+  /* 固定宽度让 loading 框保持紧凑,不被 spinner/文字撑长 */
+  width: 240px;
+  /* 全局有 .loading-container { height: 100% } 会把它撑到 overlay 全高,
+     这里用 !important 压住,让高度由内容决定 */
+  height: auto !important;
+  gap: var(--spacing-md);
+  padding: 28px 32px;
+  border-radius: 16px;
   background: linear-gradient(135deg, rgba(64, 158, 255, 0.9) 0%, rgba(103, 194, 58, 0.9) 100%);
   backdrop-filter: blur(25px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  min-height: 200px;
   overflow: hidden;
 }
 
 .loading-spinner {
   position: relative;
-  width: 120px;
-  height: 120px;
+  width: 64px;
+  height: 64px;
 }
 
 .spinner-ring {
