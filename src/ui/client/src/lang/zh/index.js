@@ -2027,5 +2027,13 @@ export default {
   '@WORKBENCH:点击展开详情': '点击展开详情',
   '@WORKBENCH:点击收起详情': '点击收起详情',
   '@WORKBENCH:子任务详情': '子任务详情',
+  // 重新执行任务时,检测到 done sub 的三选一确认窗
+  '@WORKBENCH:检测到已完成子任务': '检测到已完成子任务',
+  '@WORKBENCH:该任务有 {n} 个子任务已 done,如何处理?': '该任务有 {n} 个子任务已 done,如何处理?',
+  '@WORKBENCH:点"确定"将重置全部 done 为 todo,从头跑一遍(会消耗 token)': '点"确定"将重置全部 done 为 todo,从头跑一遍(会消耗 token)',
+  '@WORKBENCH:点"取消"将保留 done 状态,只跑未完成的 sub': '点"取消"将保留 done 状态,只跑未完成的 sub',
+  '@WORKBENCH:重置全部并重跑': '重置全部并重跑',
+  '@WORKBENCH:只跑未完成': '只跑未完成',
+  '@WORKBENCH:已重置,准备从头执行': '已重置,准备从头执行',
   // @WORKBENCH: file end
 }

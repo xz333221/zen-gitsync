@@ -578,6 +578,30 @@ async function clearJobsByTask(taskId: string): Promise<number> {
 }
 
 /**
+ * 清空指定 task 下的 non-done job(保留 done 历史的日志)。
+ * 用于"只跑未完成"场景:不偷偷清掉 done sub 的 job,避免新页签上
+ * jobOf(subId) 找不到 → JobLogDetails 渲染空白。
+ * 后端 ?keepDone=true 只删 running/error/cancelled 的 job。
+ */
+async function clearNonDoneJobsByTask(taskId: string): Promise<number> {
+  try {
+    const res = await fetch(`/api/workbench/jobs/by-task/${encodeURIComponent(taskId)}?keepDone=true`, { method: 'DELETE' }).then(r => r.json())
+    if (!res?.success) {
+      console.warn('[clearNonDoneJobsByTask] failed:', res?.error)
+      return 0
+    }
+    // 本地同步:只过滤掉 non-done 的 job,done 的保留
+    const removedIds = new Set(res.ids || [])
+    jobs.value = jobs.value.filter(j => !(j.taskId === taskId && removedIds.has(j.id)))
+    syncRunningCount()
+    return res.removed || 0
+  } catch (err) {
+    console.warn('[clearNonDoneJobsByTask] error:', err)
+    return 0
+  }
+}
+
+/**
  * 清空当前 task 的所有执行痕迹(用户主动触发,跟自动"重新执行"不同):
  *   1. 弹 ElMessageBox 二次确认,告知"会重置 N 个子任务、删除 M 条执行记录"
  *   2. 调 POST /api/workbench/tasks/:id/clear-execution
@@ -1126,8 +1150,61 @@ async function runTask(t: Task) {
       if (!ok) return
     }
   }
-  // 重新执行:清掉该 task 下的旧 job(内存 + 磁盘),再启动新批
-  await clearJobsByTask(t.id)
+  // 启动前:有 done sub 时弹三选一,避免偷偷清掉 done sub 的日志
+  // 后端 runTaskQueue(workbench.js:1096)对 sub.status==='done' 直接 continue,
+  // 不会重跑 done sub;所以"重新执行"不能让前端把 done 的 job 也清掉。
+  const doneSubs = t.subtasks.filter(s => s.status === 'done')
+  if (doneSubs.length > 0) {
+    // 用 ElMessageBox 三选一(confirm = 重置, cancel = 只跑未完成, close = 取消)
+    // distinguishCancelAndClose 让 catch 区分这两种语义
+    let choice: 'confirm' | 'cancel' | 'close' = 'close'
+    try {
+      await ElMessageBox.confirm(
+        $t('@WORKBENCH:该任务有 {n} 个子任务已 done,如何处理?', { n: doneSubs.length }) + '\n\n' +
+          $t('@WORKBENCH:点"确定"将重置全部 done 为 todo,从头跑一遍(会消耗 token)') + '\n' +
+          $t('@WORKBENCH:点"取消"将保留 done 状态,只跑未完成的 sub'),
+        $t('@WORKBENCH:检测到已完成子任务'),
+        {
+          confirmButtonText: $t('@WORKBENCH:重置全部并重跑'),
+          cancelButtonText: $t('@WORKBENCH:只跑未完成'),
+          type: 'warning',
+          distinguishCancelAndClose: true,
+          showClose: true
+        }
+      )
+      choice = 'confirm'
+    } catch (action: any) {
+      // action: 'cancel'(点取消按钮 = "只跑未完成") 或 'close'(点 X / Esc = 取消操作)
+      choice = action === 'cancel' ? 'cancel' : 'close'
+    }
+    if (choice === 'close') return  // 用户点 X / Esc 取消
+    if (choice === 'confirm') {
+      // 重置全部:done → todo,清掉该 task 所有 job
+      // 复用后端 /clear-execution:同时清 jobs.json + 重置 subtasks.status + broadcast
+      const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/clear-execution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }).then(r => r.json()).catch(err => ({ success: false, error: err?.message || String(err) }))
+      if (!res?.success) {
+        ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))
+        return
+      }
+      // 后端会 broadcast sub:update + task:update,本地同步兜底
+      if (Array.isArray(t.subtasks)) {
+        for (const s of t.subtasks) {
+          s.status = 'todo'
+          if (s.error) delete s.error
+        }
+      }
+      jobs.value = jobs.value.filter(j => j.taskId !== t.id)
+      syncRunningCount()
+      ElMessage.success(res.message || $t('@WORKBENCH:已重置,准备从头执行'))
+    }
+    // choice === 'cancel'(= "只跑未完成") → fallthrough,保留 done 状态
+  }
+  // 清掉 non-done 的旧 job(它们反正要重跑,留着会污染视图);
+  // done 的 job 保留,前端 jobOf(subId) 仍能找到
+  await clearNonDoneJobsByTask(t.id)
   const res = await fetch(`/api/workbench/tasks/${t.id}/run`, { method: 'POST' }).then(r => r.json())
   if (res.success) {
     ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
@@ -3209,7 +3286,7 @@ function humanSize(n: number): string {
   min-width: 0;
   min-height: 0;
   /* 改 overflow-y: auto → hidden:让子级 wb-log-pre 拿到 max-height 约束,自身不抢滚动 */
-  overflow: hidden;
+  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;

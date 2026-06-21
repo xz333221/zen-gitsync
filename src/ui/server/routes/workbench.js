@@ -1314,8 +1314,19 @@ ${prompt}`
     delete job.child
     publish('job:update', job);
     publish('sub:update', { taskId: task.id, sub });
-    // 终态：fire-and-forget 同步落盘，确保 done/cancelled/error 都立即归档
-    flushJobsSaveNow().catch(err => console.warn('[workbench] jobs save failed:', err.message))
+    // 终态：await 同步落盘,确保 done/cancelled/error 全部立即归档。
+    // 历史上这里用 fire-and-forget(`.catch(err => ...)`) → runSingleSubtask 返回时
+    // flushJobsSaveNow 还在写盘 microtask 里 → runTaskQueue 进入下一个 sub →
+    // 如果用户此时调了 clearJobsByTask / 切页面 / 后端退出 → 写盘未完成就丢 job
+    // (但 sub.status=done 已经被 publish 出去 → 磁盘状态 = "sub done 但无 job",
+    //  跟用户截图里的"6 个 done 但 jobs.json 全空"现象吻合)。
+    // 改 await 后:runSingleSubtask 返回时,本 sub 的 job 已经落盘 → 安全。
+    // 出错也只是 log warn,不会抛出影响后续 sub 的执行。
+    try {
+      await flushJobsSaveNow()
+    } catch (err) {
+      console.warn('[workbench] flushJobsSaveNow failed (job id=' + job.id + ', status=' + job.status + '):', err && err.message || err)
+    }
   }
 }
 
@@ -2442,8 +2453,24 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   });
 
   // ── 进程状态查询（兜底，SSE 断了也能拉） ────────────────────────────
-  app.get('/api/workbench/jobs', (_req, res) => {
-    res.json({ success: true, jobs: snapshotJobs() });
+  // 合并内存 jobs Map（当前进程的活跃 job）+ jobs.json 落盘历史。
+  // 之前只走 snapshotJobs()：进程重启后内存清空，新开页签就看不到旧 job 的输出。
+  // WorkbenchView 在 onMounted 调一次，靠这个接口把历史 job 重新塞回 jobs.value，
+  // 才能用 jobOf(subId) 找到对应记录渲染 JobLogDetails。
+  // 文件里的字段已经是落盘时 serialize 过的精简形态，跟 snapshotJobs() 同 schema，
+  // 直接合并即可，不需要再走 serializeJob 补 taskTitle/subTitle（WorkbenchView 不用）。
+  app.get('/api/workbench/jobs', async (_req, res) => {
+    try {
+      const data = await readJson(JOBS_FILE, { version: 1, jobs: [] })
+      const fileJobs = (data && Array.isArray(data.jobs)) ? data.jobs : []
+      const fileIds = new Set(fileJobs.map(j => j.id))
+      // 内存里 running/pending 或刚起还没刷盘的，文件里没的，必须补
+      const liveOnly = snapshotJobs().filter(j => !fileIds.has(j.id))
+      res.json({ success: true, jobs: [...fileJobs, ...liveOnly] })
+    } catch (err) {
+      // 读取失败兜底：只返内存的，UI 至少能看到当前活跃 job
+      res.json({ success: true, jobs: snapshotJobs() })
+    }
   });
 
   // ── 取消正在执行的 job ───────────────────────────────────────────
@@ -2698,21 +2725,30 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   // 重新执行任务前清空该 task 下的所有旧 job(内存 + 文件双写)。
   // 不清活跃的 running/pending,避免误杀正在跑的实例;前端启动新 run 时
   // 应确认旧任务已结束,或在活跃态时拒绝调用本接口。
+  // ?keepDone=true 时只清 non-done 的 job(保留 done 历史的日志),用于
+  // "只跑未完成" 场景——避免偷偷清掉 done sub 的日志,让前端 jobOf(subId)
+  // 在新页签上还能找到。
   app.delete('/api/workbench/jobs/by-task/:taskId', async (req, res) => {
     try {
       const taskId = req.params.taskId
       if (!taskId) return res.status(400).json({ success: false, error: '缺少 taskId' })
+      const keepDone = String(req.query.keepDone || '').toLowerCase() === 'true'
       const ids = []
       for (const j of jobs.values()) {
         if (j.taskId !== taskId) continue
         if (j.status === 'running' || j.status === 'pending') continue
+        if (keepDone && j.status === 'done') continue
         jobs.delete(j.id)
         ids.push(j.id)
       }
       const data = await readJson(JOBS_FILE, { version: 1, jobs: [] })
       if (data && Array.isArray(data.jobs)) {
         const before = data.jobs.length
-        data.jobs = data.jobs.filter(j => !(j.taskId === taskId && !ids.includes(j.id)))
+        data.jobs = data.jobs.filter(j => {
+          if (j.taskId !== taskId) return true
+          if (keepDone && j.status === 'done') return true
+          return !ids.includes(j.id)
+        })
         const removed = before - data.jobs.length
         if (removed > 0) await writeJson(JOBS_FILE, data)
         return res.json({ success: true, removed: ids.length + removed, ids })

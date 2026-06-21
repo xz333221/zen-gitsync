@@ -480,7 +480,7 @@ function onFullscreenClosed() {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-code);
-  overflow: hidden;
+  overflow: auto;
   /* 撑满父容器剩余高度,让模型返回区填满。
      历史上用 <details> 元素 + display: flex,Chromium 不能正确收缩 flex 子级;
      改用普通 div + flex column 后正常工作。 */
@@ -498,7 +498,7 @@ function onFullscreenClosed() {
   flex-direction: column;
   flex: 1 1 0%;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 .wb-log-summary {
   cursor: pointer;

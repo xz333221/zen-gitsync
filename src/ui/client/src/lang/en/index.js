@@ -2018,5 +2018,13 @@ export default {
   '@WORKBENCH:点击展开详情': 'Click to expand details',
   '@WORKBENCH:点击收起详情': 'Click to collapse details',
   '@WORKBENCH:子任务详情': 'Subtask details',
+  // Re-run a task with completed subtasks: 3-way confirm dialog
+  '@WORKBENCH:检测到已完成子任务': 'Completed subtasks detected',
+  '@WORKBENCH:该任务有 {n} 个子任务已 done,如何处理?': 'This task has {n} completed subtask(s). How to proceed?',
+  '@WORKBENCH:点"确定"将重置全部 done 为 todo,从头跑一遍(会消耗 token)': 'Click "OK" to reset all done → todo and re-run from scratch (consumes tokens)',
+  '@WORKBENCH:点"取消"将保留 done 状态,只跑未完成的 sub': 'Click "Cancel" to keep done status and only run remaining subs',
+  '@WORKBENCH:重置全部并重跑': 'Reset all and re-run',
+  '@WORKBENCH:只跑未完成': 'Run only remaining',
+  '@WORKBENCH:已重置,准备从头执行': 'Reset done — ready to run from scratch',
   // @WORKBENCH: file end
 }
