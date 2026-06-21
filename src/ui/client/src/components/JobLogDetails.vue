@@ -132,7 +132,23 @@
     </details>
 
     <!-- 模型返回 -->
-    <div class="wb-log-pre__head">
+    <!--
+      折叠策略:默认展开(模型返回是本面板的主内容,用户展开面板就是为了看它);
+      用户可手动合上让出屏幕给其它区域,尊重用户选择;
+      新一轮 job 进入活跃态时重置为展开,避免上轮"合上"状态带到下轮。
+    -->
+    <div
+      class="wb-log-pre__head"
+      role="button"
+      :aria-expanded="outputExpanded"
+      :title="outputExpanded ? $t('@WORKBENCH:收起') : $t('@WORKBENCH:展开')"
+      @click="toggleOutputExpanded"
+    >
+      <span
+        class="wb-log-pre__toggle-icon"
+        :class="{ 'is-expanded': outputExpanded }"
+        aria-hidden="true"
+      >▸</span>
       <span class="wb-log-pre__label">{{ $t('@WORKBENCH:模型返回') }}</span>
       <span class="wb-log-pre__meta">
         {{ (job.output || '').length }} {{ $t('@WORKBENCH:字符') }}
@@ -155,7 +171,7 @@
         ⛶ {{ $t('@WORKBENCH:全屏') }}
       </button>
     </div>
-    <div ref="preRef" class="wb-log-pre">
+    <div v-show="outputExpanded" ref="preRef" class="wb-log-pre">
       <MarkdownRender
         v-if="hasOutput"
         :content="displayText"
@@ -446,10 +462,26 @@ watch(() => props.job.status, (s, prev) => {
   // 用户覆盖后保持用户的选择
 })
 
+// 模型返回区:默认展开(主内容);用户可手动合上让出屏幕,
+// 新一轮 job 进入活跃态时重置为展开,避免上轮"合上"状态带到下轮。
+const outputExpanded = ref(true)
+function toggleOutputExpanded() {
+  outputExpanded.value = !outputExpanded.value
+}
+watch(() => props.job.status, (s, prev) => {
+  const wasActive = prev === 'running' || prev === 'pending'
+  const isActive = s === 'running' || s === 'pending'
+  if (!wasActive && isActive) {
+    // 新一轮开始 → 默认展开(模型返回是主内容,不该被上轮的合上状态影响)
+    outputExpanded.value = true
+  }
+})
+
 watch(
   () => (props.job.output || '').length,
   async () => {
     if (isCollapsed.value) return
+    if (!outputExpanded.value) return
     await nextTick()
     if (preRef.value) preRef.value.scrollTop = preRef.value.scrollHeight
   }
@@ -578,6 +610,25 @@ function onFullscreenClosed() {
   background: var(--bg-subtle, var(--bg-container));
   font-size: 11px;
   color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.wb-log-pre__head:hover {
+  background: var(--tint-primary-06);
+}
+.wb-log-pre__toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.wb-log-pre__toggle-icon.is-expanded {
+  transform: rotate(90deg);
 }
 .wb-log-pre__label {
   flex: 1;
