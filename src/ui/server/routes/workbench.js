@@ -1306,9 +1306,12 @@ ${prompt}`
       if (priorOutputs) priorOutputs.push({ title: sub.title, output: job.output || '' })
     }
   } catch (err) {
-    job.error = err && err.message ? err.message : String(err);
+    const errMsg = err && err.message ? err.message : String(err);
+    job.error = errMsg;
     job.status = 'error';
     sub.status = 'error';
+    sub.error = errMsg;
+    sub.errorAt = nowIso();
   } finally {
     // 移除 child 引用——避免后续被 SSE 序列化到前端
     delete job.child
@@ -1335,7 +1338,19 @@ async function persistTaskAfterRun(task) {
   const data = await readJson(TASKS_FILE, { tasks: [] });
   const t = data.tasks.find(x => x.id === task.id);
   if (t) {
-    t.subtasks = task.subtasks;
+    // 仅同步 status 之外的 error/errorAt 字段，避免覆盖用户编辑过的 title/desc 等。
+    // 历史 subtasks 持久化只写 status → 失败信息丢，hover "执行出错" 标签看不到原因。
+    const newMap = new Map(task.subtasks.map(s => [s.id, s]));
+    t.subtasks = (t.subtasks || []).map(old => {
+      const fresh = newMap.get(old.id);
+      if (!fresh) return old;
+      return {
+        ...old,
+        status: fresh.status ?? old.status,
+        error: fresh.error ?? old.error,
+        errorAt: fresh.errorAt ?? old.errorAt,
+      };
+    });
     t.updatedAt = nowIso();
     await writeJson(TASKS_FILE, data);
     publish('task:update', t);
@@ -2257,6 +2272,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
             desc: s.desc || '',
             status: s.status || 'todo',
             promptOverride: s.promptOverride || '',
+            // 保留失败信息：编辑已 error 的 sub 时不能丢 context，否则 hover popover 看不到原因
+            error: typeof s.error === 'string' ? s.error : undefined,
+            errorAt: typeof s.errorAt === 'string' ? s.errorAt : undefined,
             // 保留附件元数据（仅保留基础字段，丢弃客户端临时字段）
             attachments: Array.isArray(s.attachments) ? s.attachments.map(a => ({
               id: a.id,
@@ -2288,6 +2306,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
           desc: s.desc || '',
           status: s.status || 'todo',
           promptOverride: s.promptOverride || '',
+          error: typeof s.error === 'string' ? s.error : undefined,
+          errorAt: typeof s.errorAt === 'string' ? s.errorAt : undefined,
           attachments: Array.isArray(s.attachments) ? s.attachments : []
         })) : [],
         status: 'todo',

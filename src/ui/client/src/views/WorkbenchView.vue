@@ -30,7 +30,9 @@ import {
   ArrowDown,
   ArrowRight,
   Document,
-  Delete
+  Delete,
+  CircleCloseFilled,
+  CopyDocument
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
@@ -65,6 +67,7 @@ interface SubTask {
   promptOverride: string
   attachments?: Attachment[]
   error?: string
+  errorAt?: string
 }
 interface Task {
   id: string
@@ -341,6 +344,52 @@ const TASK_ICON_RULES: { key: TaskIconKey; patterns: RegExp[] }[] = [
   { key: 'test',  patterns: [/测\s*试/, /test/i, /spec/i, /\bqa\b/i] },
   { key: 'ui',    patterns: [/ui\s*优\s*化/, /样\s*式/, /style/i, /css/i, /界面/, /视\s*觉/, /design/i] }
 ]
+
+/** 复制文本到剪贴板，失败时降级到 textarea + execCommand。 */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* 降级 */ }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+/** 把子任务的 error 时间戳格式化成 YYYY-MM-DD HH:mm:ss，本地时区。 */
+function formatSubErrorTime(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+/** popover 里"复制错误信息"按钮：复制 sub.title + 错误内容。 */
+async function copySubError(sub: any) {
+  const text = `[${sub.title || $t('@WORKBENCH:未命名子任务')}]\n${sub.error || ''}`
+  const ok = await copyToClipboard(text)
+  ElMessage[ok ? 'success' : 'error'](ok ? $t('@WORKBENCH:已复制错误信息') : $t('@WORKBENCH:复制失败'))
+}
+
+/** popover 里"查看执行日志"按钮：定位到该 sub 对应的任务后打开日志弹窗。 */
+function openExecutionLog(sub: any) {
+  selectedSubId.value = sub.id
+  logsDialogVisible.value = true
+}
+
 function pickTaskIcon(title: string): TaskIconKey {
   const t = (title || '').trim()
   if (!t) return 'doc'
@@ -2022,7 +2071,33 @@ function humanSize(n: number): string {
               >
                 <!-- 第一行：状态徽章 + 标题 -->
                 <div class="wb-exec-sub-item__row1">
-                  <span class="wb-sub-item__status wb-sub-item__status--dot" :style="{ background: statusColor(sub.status) }" :title="$t('@WORKBENCH:任务完成状态')">
+                  <el-popover
+                    v-if="sub.status === 'error' && sub.error"
+                    placement="right-start"
+                    :width="420"
+                    trigger="hover"
+                    :show-after="120"
+                    popper-class="wb-sub-error-popover"
+                  >
+                    <template #reference>
+                      <span class="wb-sub-item__status wb-sub-item__status--dot wb-sub-item__status--clickable" :style="{ background: statusColor(sub.status) }" :title="$t('@WORKBENCH:点击查看错误详情')">
+                        <span class="wb-simple__status-dot" aria-hidden="true"></span>
+                      </span>
+                    </template>
+                    <div class="wb-sub-error">
+                      <div class="wb-sub-error__head">
+                        <el-icon class="wb-sub-error__icon"><CircleCloseFilled /></el-icon>
+                        <span class="wb-sub-error__title">{{ $t('@WORKBENCH:执行出错') }}</span>
+                        <span v-if="sub.errorAt" class="wb-sub-error__time">{{ formatSubErrorTime(sub.errorAt) }}</span>
+                      </div>
+                      <pre class="wb-sub-error__msg">{{ sub.error }}</pre>
+                      <div class="wb-sub-error__actions">
+                        <el-button size="small" :icon="CopyDocument" @click="copySubError(sub)">{{ $t('@WORKBENCH:复制错误信息') }}</el-button>
+                        <el-button size="small" type="primary" @click="openExecutionLog(sub)">{{ $t('@WORKBENCH:查看执行日志') }}</el-button>
+                      </div>
+                    </div>
+                  </el-popover>
+                  <span v-else class="wb-sub-item__status wb-sub-item__status--dot" :style="{ background: statusColor(sub.status) }" :title="$t('@WORKBENCH:任务完成状态')">
                     <span class="wb-simple__status-dot" aria-hidden="true"></span>
                   </span>
                   <span class="wb-exec-sub-item__title" :title="sub.title">
@@ -4447,5 +4522,58 @@ function humanSize(n: number): string {
   max-height: calc(88vh - 60px);
   overflow: auto;
   padding: 12px 20px 16px;
+}
+
+/* 子任务"执行出错"小圆点：让用户看出是可点击的 */
+.wb-sub-item__status--clickable {
+  cursor: help;
+  outline: 1px solid color-mix(in oklab, currentColor 35%, transparent);
+  outline-offset: 1px;
+  transition: outline-color 0.15s ease;
+}
+.wb-sub-item__status--clickable:hover {
+  outline-color: currentColor;
+}
+
+/* popover 内容布局 */
+.wb-sub-error-popover { padding: 4px 2px; }
+.wb-sub-error {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wb-sub-error__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--el-color-danger);
+}
+.wb-sub-error__icon { font-size: 16px; }
+.wb-sub-error__title { flex: 0 0 auto; }
+.wb-sub-error__time {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.wb-sub-error__msg {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  font-family: var(--el-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+  color: var(--el-text-color-primary);
+}
+.wb-sub-error__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>
