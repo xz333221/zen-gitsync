@@ -66,11 +66,11 @@ const DEFAULT_INSTRUCTION = `你是一名资深软件架构师。
    - 2 层目录树（最多 200 行）
 
 【输出要求】
-1. 给出一段 400-800 字的中文「项目架构说明」，覆盖：项目整体定位、技术栈、模块划分、核心流程、关键设计决策。
+1. 给出一段中文「项目架构说明」，长度不限，模型自行决定篇幅与详尽程度，能写多详细就多详细。覆盖：项目整体定位、技术栈、模块划分、核心流程、关键设计决策。
 2. 必须引用子项目里实际存在的文件路径、目录名、依赖名，不要编造。
 3. 多个子项目时：先逐个说明，最后输出一段「整体架构」总结它们之间的关系。
 4. 语气专业、具体、面向接手这个项目的开发者。
-5. 只返回 JSON：{ "name": "项目名（10-20字）", "summary": "架构说明正文" }。`;
+5. 只返回 JSON：{ "name": "项目名（建议：项目名+架构说明）", "summary": "架构说明正文" }。`;
 
 // 单个附件最大 5MB；与 Anthropic Messages API 文档约束一致
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -1488,7 +1488,7 @@ export function registerWorkbenchRoutes({ app, getCurrentProjectPath, getProject
       }
 
       const projectName = path.basename(projectPath);
-      const LLM_OPTS = { maxTokens: 4000, timeoutMs: 1200000 };
+      const LLM_OPTS = { maxTokens: 16000, timeoutMs: 1200000 };
 
       // ── 第一阶段：基于可编辑指令 + 根目录概览，生成「可复用的提示词模板」 ──
       const overviewBlock = subProjects.map(sp =>
@@ -1518,12 +1518,12 @@ ${subProjects.map(sp => {
 
 只返回 JSON：
 {
-  "name": "项目名（10-20字）",
-  "template": "可复用的提示词模板（300-600字），应明确使用 {{task.title}} / {{task.desc}} / {{sub.title}} / {{sub.desc}} / {{repo.path}} / {{branch}} 这 6 个变量"
+  "name": "项目名（建议：项目名+架构说明，可根据实际项目特征调整）",
+  "template": "可复用的提示词模板，长度不限，请充分覆盖 {{task.title}} / {{task.desc}} / {{sub.title}} / {{sub.desc}} / {{repo.path}} / {{branch}} 这 6 个变量的用法与上下文"
 }`;
 
       const first = await callLlmJson(model, firstPrompt, LLM_OPTS);
-      const templateName = String(first.name || '').trim() || projectName || '项目架构说明';
+      const templateName = String(first.name || '').trim() || `${projectName}架构说明`;
       const template = String(first.template || '').trim();
 
       // ── 第二阶段：为每个子项目分别生成总结（单子项目 = 现在的行为） ──
@@ -1551,7 +1551,7 @@ ${sp.readme || '（无）'}
 
 只返回 JSON：
 {
-  "summary": "该子项目的架构说明（300-600字）"
+  "summary": "该子项目的架构说明，长度不限，模型自行决定篇幅与详尽程度，能写多详细就多详细"
 }`;
         const r = await callLlmJson(model, subPrompt, LLM_OPTS);
         return { name: sp.name, root: sp.root, summary: String(r.summary || '').trim() };
@@ -1566,12 +1566,12 @@ ${sp.readme || '（无）'}
       if (subSummaries.length === 1) {
         finalSummary = subSummaries[0].summary;
       } else {
-        const mergePrompt = `你是项目架构师。下列是同一仓库下 N 个子项目的架构说明，请合并输出**单一**的「项目架构说明」（800-1500字），覆盖：项目整体定位、技术栈、模块划分、子项目间关系、核心流程、关键设计决策。
+        const mergePrompt = `你是项目架构师。下列是同一仓库下 N 个子项目的架构说明，请合并输出**单一**的「项目架构说明」，长度不限，模型自行决定篇幅与详尽程度。覆盖：项目整体定位、技术栈、模块划分、子项目间关系、核心流程、关键设计决策。
 子项目之间用清晰的小标题或编号分隔。最后输出一段「整体架构」总结它们如何协同。
 只引用实际出现的子项目名 / 文件路径 / 依赖名，不要编造。只返回 JSON：
 
 {
-  "name": "项目名（10-20字）",
+  "name": "项目名（建议：项目名+架构说明）",
   "summary": "合并后的架构说明"
 }
 
@@ -1583,6 +1583,9 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
           || subSummaries.map(s => `### ${s.name}\n${s.summary}`).join('\n\n');
         finalName = String(merged.name || '').trim() || templateName;
       }
+
+      // 名称始终固定为「<项目名>架构说明」，不信任模型返回的 name 字段
+      finalName = `${projectName}架构说明`;
 
       if (!finalSummary) {
         // 兜底：仅返回模板
