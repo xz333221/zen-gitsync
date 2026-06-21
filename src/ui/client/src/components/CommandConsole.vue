@@ -34,21 +34,11 @@ import { io, Socket } from 'socket.io-client';
 import { replaceVariables } from '@/utils/commandParser';
 import { useAnsiToHtml } from '@/composables/useAnsiToHtml';
 import { useTerminalSessions } from '@/composables/useTerminalSessions';
+import { getBackendPort } from '@/utils/backendUrl';
 import { $t } from '@/lang/static'
 
 const configStore = useConfigStore();
 const gitStore = useGitStore();
-
-// 获取后端端口
-function getBackendPort() {
-  const currentPort = window.location.port || '80';
-  if (currentPort === '5173' || currentPort === '4173' || currentPort === '5544') {
-    const envPort = import.meta.env.VITE_BACKEND_PORT;
-    if (envPort) return parseInt(envPort, 10);
-    return 3000;
-  }
-  return parseInt(currentPort, 10);
-}
 
 function handleAfterQuickPushSuccessEvent() {
   runAfterQuickPushAction().catch((e: any) => {
@@ -939,11 +929,6 @@ async function stopCommand(rec: ConsoleRecord) {
 function openCommandManager() {
   commandManagerVisible.value = true;
 }
-
-// 打开编排工作台（已被可视化编排工作台替代，暂时保留代码）
-// function openOrchestrationWorkspace() {
-//   orchestrationWorkspaceVisible.value = true;
-// }
 
 // 打开可视化编排工作台
 function openFlowOrchestrationWorkspace() {

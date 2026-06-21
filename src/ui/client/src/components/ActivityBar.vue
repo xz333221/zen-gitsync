@@ -239,17 +239,6 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   transform: scale(0.94);
 }
 
-/* ── 预留样式：暂未启用的 Tab ─────────────────────────────────── */
-.activity-btn--soon {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.activity-btn--soon:hover {
-  background: transparent;
-  color: var(--text-tertiary);
-}
-
 /* ── Workbench 任务运行指示器 ─────────────────────────────────── */
 .wb-running-dot {
   position: absolute;

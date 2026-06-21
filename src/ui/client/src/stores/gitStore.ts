@@ -18,30 +18,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { io, Socket } from 'socket.io-client'
 import { useConfigStore } from './configStore'
+import { getBackendPort } from '@/utils/backendUrl'
 
 // 定义Git操作间隔时间（毫秒）
 const GIT_OPERATION_DELAY = 800
-
-// 获取后端服务器端口
-function getBackendPort() {
-  const currentPort = window.location.port || '80';
-  
-  // 开发环境判断：只在开发环境中从环境变量读取后端端口
-  if (currentPort === '5173' || currentPort === '4173' || currentPort === '5544') {
-    const envPort = import.meta.env.VITE_BACKEND_PORT;
-    if (envPort) {
-      console.log(`${$t('@C298B:开发环境：从环境变量读取后端端口 ')}${envPort}`);
-      return parseInt(envPort, 10);
-    }
-    console.log($t('@C298B:开发环境：使用默认后端端口 3000'));
-    return 3000;
-  }
-  
-  // 生产环境：直接使用当前页面端口，不读取环境变量
-  const port = parseInt(currentPort, 10);
-  console.log(`${$t('@C298B:生产环境：使用当前页面端口 ')}${port}`);
-  return port;
-}
 
 // 获取后端端口
 const backendPort = getBackendPort()

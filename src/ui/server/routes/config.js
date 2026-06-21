@@ -17,6 +17,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
 import open from 'open';
+import logger from '../utils/logger.js';
 
 // 跳过的产物/资源/lock 文件(用 stat 一行带过,不打 patch)
 const SKIP_FILE_PATTERNS = [
@@ -1136,10 +1137,9 @@ ${diffText || '(no staged content, please infer from the file list)'}`
 
       const prompt = userLocale.startsWith('en') ? promptEn : promptZh
 
-      console.log('[generate-commit] locale:', userLocale, '| prompt length:', prompt.length)
-      console.log('[generate-commit] ===== PROMPT START =====')
-      console.log(prompt)
-      console.log('[generate-commit] ===== PROMPT END =====')
+      // AI prompt 默认不打印,只有 DEBUG=1 / DEBUG=logger 时才落地(防 Token 泄露)
+      logger.debug('[generate-commit] locale:', userLocale, '| prompt length:', prompt.length)
+      logger.debug('[generate-commit] prompt:\n' + prompt)
       const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
       const url = `${defaultModel.baseURL.replace(/\/$/, '')}/chat/completions`
       const headers = { 'Content-Type': 'application/json' }
@@ -1165,7 +1165,8 @@ ${diffText || '(no staged content, please infer from the file list)'}`
         return res.json({ success: false, error: msg })
       }
       const content = data?.choices?.[0]?.message?.content || ''
-      console.log('[generate-commit] raw content length:', content.length, JSON.stringify(content).slice(0, 600))
+      // 响应内容只走 debug(默认关闭),前 600 字截断防 token 泄露
+      logger.debug('[generate-commit] raw content length:', content.length, JSON.stringify(content).slice(0, 600))
 
       const codeBlockMatch = content.match(/```(?:json)?\s*(\{[^`]*?\})\s*```/)
       const jsonMatch = codeBlockMatch

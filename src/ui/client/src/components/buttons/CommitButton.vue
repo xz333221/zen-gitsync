@@ -18,6 +18,7 @@ import { $t } from '@/lang/static'
 import { computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
+import { isFilePathLocked } from '@/utils/fileLock'
 import { Check, Loading } from '@element-plus/icons-vue'
 
 interface Props {
@@ -43,20 +44,11 @@ const emit = defineEmits<{
 const gitStore = useGitStore()
 const configStore = useConfigStore()
 
-// 检查文件是否被锁定
-function isFileLocked(filePath: string): boolean {
-  const normalizedPath = filePath.replace(/\\/g, '/')
-  return configStore.lockedFiles.some((lockedFile: string) => {
-    const normalizedLocked = lockedFile.replace(/\\/g, '/')
-    return normalizedPath === normalizedLocked
-  })
-}
-
 // 计算已暂存文件数量（排除锁定文件）
 const stagedFilesCount = computed(() => {
   return gitStore.fileList.filter(file =>
     file.type === 'added' &&
-    !isFileLocked(file.path)
+    !isFilePathLocked(file.path, configStore.lockedFiles)
   ).length
 })
 

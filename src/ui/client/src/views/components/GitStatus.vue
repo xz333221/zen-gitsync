@@ -24,6 +24,7 @@ import ListIcon from '@/components/icons/ListIcon.vue'
 import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
+import { isFilePathLocked } from '@/utils/fileLock'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
 import CommonDialog from '@components/CommonDialog.vue'
 import FileGroup from '@/components/FileGroup.vue'
@@ -48,14 +49,9 @@ const props = defineProps({
   }
 })
 
-// const gitLogStore = useGitLogStore()
 const gitStore = useGitStore()
 const configStore = useConfigStore()
-// 移除本地status定义，直接使用store中的statusText
-// const status = ref($t('@13D1C:加载中...'))
-// const socket = io()
 const isRefreshing = computed(() => gitStore.isLoadingStatus)
-// 移除本地fileList定义，改用store中的fileList
 const selectedFile = ref('')
 const diffContent = ref('')
 const diffStats = ref<{added: number, deleted: number} | null>(null)
@@ -195,21 +191,6 @@ const viewMode = computed<'list' | 'tree'>({
   get: () => configStore.ui.fileListViewMode,
   set: (v) => { configStore.ui.fileListViewMode = v }
 });
-// 添加切换目录相关的状态
-// const isDirectoryDialogVisible = ref(false)
-// const newDirectoryPath = ref('')
-// const isChangingDirectory = ref(false)
-// 添加目录浏览相关的状态
-// const isDirectoryBrowserVisible = ref(false)
-// const currentBrowsePath = ref('')
-// const directoryItems = ref<{name: string, path: string, type: string}[]>([])
-// const isBrowsing = ref(false)
-// const browseErrorMessage = ref('')
-
-// 添加git操作相关状态
-// 不再需要本地状态变量，使用gitStore中的isGitPulling和isGitFetching
-// const isGitPulling = ref(false)
-// const isGitFetching = ref(false)
 
 const currentDirectory = ref(props.initialDirectory || '');
 async function loadStatus() {
@@ -767,16 +748,9 @@ function getFileDirectory(path: string): string {
   return parts.slice(0, -1).join('/')
 }
 
-// 检查文件是否被锁定
+// 检查文件是否被锁定(底层逻辑见 utils/fileLock.ts)
 function isFileLocked(filePath: string): boolean {
-  // 标准化路径分隔符，统一使用正斜杠
-  const normalizedPath = filePath.replace(/\\/g, '/')
-  const isLocked = configStore.lockedFiles.some(lockedFile => {
-    const normalizedLocked = lockedFile.replace(/\\/g, '/')
-    return normalizedPath === normalizedLocked
-  })
-
-  return isLocked
+  return isFilePathLocked(filePath, configStore.lockedFiles)
 }
 
 // 切换文件锁定状态
@@ -784,7 +758,7 @@ async function toggleFileLock(filePath: string) {
   if (lockingFiles.value[filePath]) return
   lockingFiles.value[filePath] = true
   try {
-    const isLocked = isFileLocked(filePath)
+    const isLocked = isFilePathLocked(filePath, configStore.lockedFiles)
     if (isLocked) {
       await configStore.unlockFile(filePath)
     } else {

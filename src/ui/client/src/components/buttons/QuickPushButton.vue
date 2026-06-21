@@ -20,6 +20,7 @@ import { Position } from "@element-plus/icons-vue";
 import { $t } from '@/lang/static';
 import { useGitStore } from "@stores/gitStore";
 import { useConfigStore } from "@stores/configStore";
+import { isFilePathLocked } from "@/utils/fileLock";
 import PushProgressModal from "@components/PushProgressModal.vue";
 
 const gitStore = useGitStore();
@@ -52,18 +53,9 @@ const emit = defineEmits<{
   clearFields: [];
 }>();
 
-// 检查文件是否被锁定
-function isFileLocked(filePath: string): boolean {
-  const normalizedPath = filePath.replace(/\\/g, "/");
-  return configStore.lockedFiles.some((lockedFile: string) => {
-    const normalizedLocked = lockedFile.replace(/\\/g, "/");
-    return normalizedPath === normalizedLocked;
-  });
-}
-
 // 计算是否有任何变更
 const hasAnyChanges = computed(() => {
-  return gitStore.fileList.some((file) => !isFileLocked(file.path));
+  return gitStore.fileList.some((file) => !isFilePathLocked(file.path, configStore.lockedFiles));
 });
 
 // 选择模式下是否有可暂存/提交的勾选文件

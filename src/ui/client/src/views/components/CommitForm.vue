@@ -17,7 +17,7 @@
 import { $t } from "@/lang/static";
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage } from "element-plus";
-import { ArrowDown, Loading } from "@element-plus/icons-vue";
+import { Loading } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";
@@ -25,6 +25,7 @@ import { useSuccessModal } from "@/composables/useSuccessModal";
 import { useGitStore } from "@stores/gitStore";
 import { useConfigStore } from "@stores/configStore";
 import { useLocaleStore } from "@stores/localeStore";
+import { isFilePathLocked } from "@/utils/fileLock";
 import TemplateManager from "@components/TemplateManager.vue";
 import GitCommandPreview from "@components/GitCommandPreview.vue";
 import GitActionButtons from "@/components/GitActionButtons.vue";
@@ -90,8 +91,6 @@ const {
 } = useGlobalLoading();
 const { successState } = useSuccessModal();
 const isUpdatingStatus = ref(false); // 添加状态更新中的标识
-// 添加placeholder变量
-const placeholder = ref("输入提交信息...");
 // 添加默认提交信息变量
 const defaultCommitMessage = ref("");
 const isStandardCommit = computed({
@@ -194,7 +193,7 @@ const isCommitDisabled = computed(() => {
   if (gitStore.hasConflictedFiles) return true;
   // MERGING 状态：只需要有提交信息即可
   if (gitStore.isMergeInProgress) return !hasUserCommitMessage.value;
-  const hasAnyChanges = gitStore.fileList.some((f) => !isFileLocked(f.path));
+  const hasAnyChanges = gitStore.fileList.some((f) => !isFilePathLocked(f.path, configStore.lockedFiles));
   return !hasAnyChanges || !hasUserCommitMessage.value;
 });
 
@@ -233,9 +232,6 @@ const gitCommandPreview = computed(() => {
 function updateFromConfig() {
   const config = configStore.config;
   if (config) {
-    placeholder.value = `${$t("@76872:输入提交信息 (默认: ")}${
-      config.defaultCommitMessage
-    })`;
     defaultCommitMessage.value = config.defaultCommitMessage || "";
 
     // 加载描述模板
@@ -344,16 +340,6 @@ function handleQuickPushAfter(success: boolean) {
   }
 }
 
-// 检查文件是否被锁定的同步方法
-function isFileLocked(filePath: string): boolean {
-  // 标准化路径分隔符，统一使用正斜杠
-  const normalizedPath = filePath.replace(/\\/g, "/");
-  return configStore.lockedFiles.some((lockedFile) => {
-    const normalizedLocked = lockedFile.replace(/\\/g, "/");
-    return normalizedPath === normalizedLocked;
-  });
-}
-
 // 使用默认提交信息模板
 function useMessageTemplate(template: string) {
   // 设置为当前提交信息
@@ -377,7 +363,7 @@ async function handleEnterKey(event: KeyboardEvent) {
   // 添加与一键推送按钮相同的禁用逻辑判断
   // 检查是否有任何变更
   const hasAnyChangesValue = gitStore.fileList.some(
-    (file) => !isFileLocked(file.path)
+    (file) => !isFilePathLocked(file.path, configStore.lockedFiles)
   );
   const hasConflicts = gitStore.hasConflictedFiles;
 

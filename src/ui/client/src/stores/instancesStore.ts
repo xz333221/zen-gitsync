@@ -16,20 +16,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import type { InstanceInfo, InstancesResponse } from '@/types/instances'
-
-// 与 gitStore 同款后端端口探测：开发环境从 VITE_BACKEND_PORT 读，生产从 window.location
-function getBackendPort(): number {
-  const currentPort = window.location.port || '80'
-
-  // 开发环境：5173 / 4173 / 5544 视为 Vite dev server
-  if (currentPort === '5173' || currentPort === '4173' || currentPort === '5544') {
-    const envPort = import.meta.env.VITE_BACKEND_PORT
-    if (envPort) return parseInt(envPort, 10)
-    return 3000
-  }
-
-  return parseInt(currentPort, 10)
-}
+import { getBackendPort } from '@/utils/backendUrl'
 
 const backendPort = getBackendPort()
 const POLL_INTERVAL_MS = 15_000
