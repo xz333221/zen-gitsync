@@ -18,7 +18,6 @@ import path from 'path'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
-// import { visualizer } from 'rollup-plugin-visualizer'
 import tailwindcss from "@tailwindcss/vite"
 import fs from 'fs'
 import createSvgIcon from './vite-plugins/svg-icon'
@@ -83,12 +82,6 @@ export default defineConfig(({ command }) => {
       tailwindcss(),
       vue(),
       createSvgIcon(isBuild),
-      // visualizer({
-      //   open: true,
-      //   gzipSize: true,
-      //   brotliSize: true,
-      //   filename: 'stats.html'
-      // })
     ],
   optimizeDeps: {
     exclude: ['ai-model-form'],

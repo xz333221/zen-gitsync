@@ -18,6 +18,10 @@
     "start:server:no-open": "node server.js --no-open",
     "start:vue": "cd ./src/ui/client && npm run dev",
     "release": "node ./scripts/release.js",
+    "test": "node scripts/run-tests.cjs",
+    "test:watch": "node scripts/run-tests.cjs --watch",
+    "audit": "npm audit --omit=dev",
+    "audit:ci": "npm audit --audit-level=high --omit=dev",
     "g": "node ./src/gitCommit.js",
     "g:m": "node ./src/gitCommit.js -m='test'",
     "g:m2": "node ./src/gitCommit.js -m testmsg",
@@ -34,7 +38,7 @@
     "g:addResetScript": "node ./src/gitCommit.js addResetScript",
     "g:set-default-message": "node ./src/gitCommit.js --set-default-message=\"提交\"",
     "g:y": "g -y",
-    "g:reset": "git reset --hard origin/main",
+    "danger:reset": "git reset --hard origin/main",
     "g:test-cmd": "node ./src/gitCommit.js --cmd=\"echo zen-gitsync test\" --cmd-interval=5",
     "g:test-cmd-at": "node ./src/gitCommit.js --cmd=\"echo at-time-test\" --at=21:09",
     "start:server": "node server.js",
@@ -100,14 +104,15 @@
     "ora": "^8.1.1",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
-    "string-width": "^7.2.0",
-    "engine.io": "^6.6.9",
-    "engine.io-client": "^6.6.6",
-    "socket.io-adapter": "^2.5.8"
+    "string-width": "^7.2.0"
   },
   "devDependencies": {
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "nodemon": "^3.1.14"
+  },
+  "engines": {
+    "node": ">=20.19",
+    "npm": ">=10"
   }
 }

@@ -37,7 +37,6 @@
     "monaco-editor": "^0.55.1",
     "pinia": "^3.0.2",
     "socket.io-client": "^4.8.1",
-    "engine.io-client": "^6.6.6",
     "vue": "^3.5.13",
     "vue-i18n": "^9.14.5"
   },
@@ -47,8 +46,6 @@
     "@types/node": "^24.0.10",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.7.0",
-    "fast-glob": "^3.3.3",
-    "rollup-plugin-visualizer": "^7.0.1",
     "sass-embedded": "^1.92.0",
     "tailwindcss": "^4.2.4",
     "typescript": "~5.7.2",
@@ -57,5 +54,9 @@
     "vite": "^8.0.10",
     "vite-plugin-svg-icons": "^2.0.1",
     "vue-tsc": "^2.2.8"
+  },
+  "engines": {
+    "node": ">=20.19",
+    "npm": ">=10"
   }
 }
