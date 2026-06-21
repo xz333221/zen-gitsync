@@ -389,7 +389,7 @@ async function listDirTree(projectPath, maxDepth = 2, maxEntries = 400) {
 }
 
 async function callLlmJson(model, prompt, opts = {}) {
-  const { maxTokens = 1500, timeoutMs = 60000, images = [] } = opts;
+  const { timeoutMs = 60000, images = [] } = opts;
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
   const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`;
   const headers = { 'Content-Type': 'application/json' };
@@ -410,7 +410,6 @@ async function callLlmJson(model, prompt, opts = {}) {
   const body = JSON.stringify({
     model: model.model,
     messages: [{ role: 'user', content: userContent }],
-    max_tokens: maxTokens,
     temperature: 0.4,
     response_format: { type: 'json_object' },
     stream: false,
@@ -422,16 +421,35 @@ async function callLlmJson(model, prompt, opts = {}) {
     const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
-    const content = data?.choices?.[0]?.message?.content || '{}';
+    const content = data?.choices?.[0]?.message?.content || '';
+    if (!content.trim()) {
+      throw new Error('LLM 返回内容为空');
+    }
     try {
       const m = content.match(/```json\s*([\s\S]*?)```/) || content.match(/({[\s\S]*})/);
       return JSON.parse(m ? m[1] : content);
-    } catch {
-      return {};
+    } catch (err) {
+      const snippet = content.length > 500 ? content.slice(0, 500) + '…' : content;
+      throw new Error(`LLM 返回非 JSON 或被截断：${err.message}；原始内容片段：${snippet}`);
     }
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function callLlmJsonWithRetry(model, prompt, opts = {}, retries = 1) {
+  let lastErr;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await callLlmJson(model, prompt, opts);
+    } catch (err) {
+      lastErr = err;
+      if (i < retries) {
+        await new Promise(r => setTimeout(r, 800 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 /**
@@ -1488,7 +1506,7 @@ export function registerWorkbenchRoutes({ app, getCurrentProjectPath, getProject
       }
 
       const projectName = path.basename(projectPath);
-      const LLM_OPTS = { maxTokens: 16000, timeoutMs: 1200000 };
+      const LLM_OPTS = { timeoutMs: 1200000 };
 
       // ── 第一阶段：基于可编辑指令 + 根目录概览，生成「可复用的提示词模板」 ──
       const overviewBlock = subProjects.map(sp =>
@@ -1522,7 +1540,7 @@ ${subProjects.map(sp => {
   "template": "可复用的提示词模板，长度不限，请充分覆盖 {{task.title}} / {{task.desc}} / {{sub.title}} / {{sub.desc}} / {{repo.path}} / {{branch}} 这 6 个变量的用法与上下文"
 }`;
 
-      const first = await callLlmJson(model, firstPrompt, LLM_OPTS);
+      const first = await callLlmJsonWithRetry(model, firstPrompt, LLM_OPTS);
       const templateName = String(first.name || '').trim() || `${projectName}架构说明`;
       const template = String(first.template || '').trim();
 
@@ -1553,11 +1571,15 @@ ${sp.readme || '（无）'}
 {
   "summary": "该子项目的架构说明，长度不限，模型自行决定篇幅与详尽程度，能写多详细就多详细"
 }`;
-        const r = await callLlmJson(model, subPrompt, LLM_OPTS);
+        const r = await callLlmJsonWithRetry(model, subPrompt, LLM_OPTS);
         return { name: sp.name, root: sp.root, summary: String(r.summary || '').trim() };
       }
 
-      const subSummaries = await Promise.all(subProjects.map(summarizeOneSub));
+      // 串行执行,避免并发触发 provider 限流(429)导致整批失败
+      const subSummaries = [];
+      for (const sp of subProjects) {
+        subSummaries.push(await summarizeOneSub(sp));
+      }
 
       // ── 第三阶段：仅多子项目时合并（单子项目直接拿它的 summary） ──
       let finalSummary = '';
@@ -1578,7 +1600,7 @@ ${sp.readme || '（无）'}
 ## 子项目说明
 ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summary || '（空）'}`).join('\n')}`;
 
-        const merged = await callLlmJson(model, mergePrompt, LLM_OPTS);
+        const merged = await callLlmJsonWithRetry(model, mergePrompt, LLM_OPTS);
         finalSummary = String(merged.summary || '').trim()
           || subSummaries.map(s => `### ${s.name}\n${s.summary}`).join('\n\n');
         finalName = String(merged.name || '').trim() || templateName;
@@ -1588,13 +1610,9 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
       finalName = `${projectName}架构说明`;
 
       if (!finalSummary) {
-        // 兜底：仅返回模板
-        return res.json({
-          success: true,
-          name: finalName,
-          template,
-          result: '',
-          content: template
+        return res.status(502).json({
+          success: false,
+          error: '模型返回为空，请稍后重试'
         });
       }
 
