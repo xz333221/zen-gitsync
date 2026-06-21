@@ -128,7 +128,7 @@
           ⧉ {{ $t('@WORKBENCH:复制') }}
         </button>
       </summary>
-      <pre class="wb-log-section__pre wb-log-section__pre--think">{{ job.thinking }}</pre>
+      <pre class="wb-log-section__pre wb-log-section__pre--think">{{ displayThinking() }}</pre>
     </details>
 
     <!-- 模型返回 -->
@@ -203,17 +203,24 @@ const props = defineProps<{ job: Job }>()
    本组件历史上用 <details> 元素,但 <details> 子级 div 不接受 height: 100% /
    min-height: 100% / position: absolute 撑满,导致 flex 子级无法收敛。
    改用普通 div + v-show 模拟 <details> 行为,外层 div 拿到显式 height。 */
-const isCollapsed = ref(false)
+/* 列表态默认折叠:20+ 条 jobs × ~60KB output 一次性进 DOM + markstream-vue 全量解析
+   = 主线程卡死(/jobs/list 弹窗首次打开 1-2s)。用户要点 summary 才展开 body,
+   性能换 1 次点击,可接受。 */
+const isCollapsed = ref(true)
 function toggleOpen() { isCollapsed.value = !isCollapsed.value }
-
-// 展开策略：默认展开。用户希望「任务执行时日志需要能直接看到」，
-// 不再仅在 running/pending 状态自动展开。运行结束/异常后日志仍可直接查阅。
-/* 历史保留:autoOpen 表达式改由 isCollapsed 控制显隐(见模板 v-show="!isCollapsed")。
-   函数体删除,只留注释占位避免外部 import 误用。 */
 
 const MAX_LOG_DISPLAY = 64 * 1024
 function displayOutput(): string {
   const raw = props.job.output || ''
+  if (!raw) return ''
+  if (raw.length <= MAX_LOG_DISPLAY) return raw
+  return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
+}
+/* thinking 也走 64KB 截断,跟 displayOutput 同语义。
+   之前没截断的隐患:thinking 在模板里直接 <pre>{{ job.thinking }}</pre>,50 条全展开时
+   巨型 thinking 单条可达数百 KB,光 DOM 内插就足以让主线程卡顿。 */
+function displayThinking(): string {
+  const raw = props.job.thinking || ''
   if (!raw) return ''
   if (raw.length <= MAX_LOG_DISPLAY) return raw
   return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
