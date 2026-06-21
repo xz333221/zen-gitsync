@@ -1041,16 +1041,16 @@ async function openSystemConfigFile() {
 }
 
 
-::deep(.settings-grid .el-switch) {
+:deep(.settings-grid .el-switch) {
   --el-switch-on-color: var(--color-primary);
   --el-switch-off-color: var(--el-border-color);
 }
 
-::deep(.settings-grid .el-select) {
+:deep(.settings-grid .el-select) {
   width: 100%;
 }
 
-::deep(.settings-grid .el-input) {
+:deep(.settings-grid .el-input) {
   width: 100%;
 }
 
@@ -1091,7 +1091,7 @@ async function openSystemConfigFile() {
 .setting-slider {
   width: 100%;
 }
-::deep(.setting-slider .el-slider__runway) {
+:deep(.setting-slider .el-slider__runway) {
   margin: 0;
 }
 
@@ -1134,7 +1134,7 @@ html.dark .label-icon {
   color: var(--color-primary);
 }
 
-::deep(.modern-input .el-input__wrapper) {
+:deep(.modern-input .el-input__wrapper) {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-input);
   box-shadow: var(--shadow-sm);
@@ -1142,23 +1142,23 @@ html.dark .label-icon {
   background: var(--bg-container);
 }
 
-::deep(.modern-input .el-input__wrapper:hover) {
+:deep(.modern-input .el-input__wrapper:hover) {
   border-color: var(--color-gray-300);
   box-shadow: var(--shadow-md);
 }
 
-::deep(.modern-input.is-focus .el-input__wrapper) {
+:deep(.modern-input.is-focus .el-input__wrapper) {
   border-color: #3498db;
   box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1), 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
-::deep(.modern-input .el-input__inner) {
+:deep(.modern-input .el-input__inner) {
   
   color: var(--text-title);
   font-weight: 400;
 }
 
-::deep(.modern-input .el-input__inner::placeholder) {
+:deep(.modern-input .el-input__inner::placeholder) {
   color: var(--color-gray-400);
   font-weight: 400;
 }

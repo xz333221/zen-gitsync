@@ -132,7 +132,7 @@ async function copyCommand() {
   }
 }
 
-::deep(.copy-command-btn) {
+:deep(.copy-command-btn) {
   flex-shrink: 0;
   margin-right: 6px;
   color: var(--text-console-muted) !important;
