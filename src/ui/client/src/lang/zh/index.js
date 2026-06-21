@@ -1994,6 +1994,7 @@ export default {
   '@WORKBENCH:执行完成': '执行完成',
   '@WORKBENCH:名称和内容不能为空': '名称和内容不能为空',
   '@WORKBENCH:已保存': '已保存',
+  '@WORKBENCH:已新建任务': '已新建任务',
   '@WORKBENCH:保存失败': '保存失败',
   '@WORKBENCH:已保存拆分': '已保存拆分',
   '@WORKBENCH:请先拆分任务': '请先拆分任务',

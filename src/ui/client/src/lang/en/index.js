@@ -1985,6 +1985,7 @@ export default {
   '@WORKBENCH:执行完成': 'Execution complete',
   '@WORKBENCH:名称和内容不能为空': 'Name and content cannot be empty',
   '@WORKBENCH:已保存': 'Saved',
+  '@WORKBENCH:已新建任务': 'New task created',
   '@WORKBENCH:保存失败': 'Save failed',
   '@WORKBENCH:已保存拆分': 'Breakdown saved',
   '@WORKBENCH:请先拆分任务': 'Please break down the task first',

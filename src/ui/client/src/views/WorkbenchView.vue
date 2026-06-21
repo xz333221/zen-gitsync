@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, reactive, markRaw, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, reactive, markRaw, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -268,18 +268,6 @@ const promptDialog = reactive({ visible: false, editing: null as Prompt | null, 
 const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
 // 任务描述（主任务 desc + 附件）默认折叠，避免占满首屏
 const taskDescExpanded = ref(false)
-// 任务编辑对话框:同时支持「简单任务」和「复杂任务」两种模式
-// - type='simple' 时 simpleOverride 启用,执行走 /run-simple,不进入子任务拆分
-// - type='complex' 时 simpleOverride 无意义,UI 隐藏
-const taskDialog = reactive({
-  visible: false,
-  editing: null as Task | null,
-  title: '',
-  desc: '',
-  promptId: null as string | null,
-  type: 'complex' as 'simple' | 'complex',
-  simpleOverride: ''
-})
 
 let es: EventSource | null = null
 
@@ -906,50 +894,56 @@ async function deletePrompt(p: Prompt) {
 }
 
 // ── 任务 CRUD ───────────────────────────────────────────────────────────────
-function openCreateTask() {
-  taskDialog.editing = null
-  taskDialog.title = ''
-  taskDialog.desc = ''
-  taskDialog.promptId = null
-  taskDialog.type = 'simple'
-  taskDialog.simpleOverride = ''
-  taskDialog.visible = true
-}
-async function saveTask() {
-  // title is optional: empty title is allowed; UI falls back to "Untitled task"
+// 新建任务:点按钮直接创建空任务,自动选中,右侧立即出现编辑器。不再走弹窗。
+// - 任务级 title / desc / promptId / type / simpleOverride 全部在右侧 inline 编辑
+//   (标题输入、描述折叠面板、promptId select、type segmented、simpleOverride textarea),
+//   原弹窗只是「创建时的初始值收集器」,能力完全可由右侧 inline 化字段承担。
+// - 标题为空由后端存储 '' / 前端模板 fallback 显示「未命名任务」,跟弹窗里"不填则自动命名"语义一致。
+// - 连续点击防并发:creatingTask 标志位 + 按钮 disabled。
+// - 创建后标题输入框自动聚焦,直接打字即可起标题(免去鼠标移到输入框)。
+const creatingTask = ref(false)
+const titleInputRef = ref<HTMLInputElement | null>(null)
+async function createTaskDirect() {
+  if (creatingTask.value) return
+  creatingTask.value = true
   const body: any = {
-    id: taskDialog.editing?.id,
-    title: taskDialog.title.trim(),
-    desc: taskDialog.desc,
-    promptId: taskDialog.promptId,
-    type: taskDialog.type,
-    // 简单任务才需要覆盖;复杂任务后端会忽略
-    simpleOverride: taskDialog.type === 'simple' ? taskDialog.simpleOverride : '',
-    subtasks: taskDialog.editing?.subtasks || []
+    title: '',
+    desc: '',
+    promptId: null,
+    type: 'simple',
+    simpleOverride: '',
+    subtasks: []
   }
-  // 新建任务时附带当前项目路径；编辑已有任务不覆盖 projectPath
-  if (!taskDialog.editing?.id && currentProject.value.path) {
+  // 附带当前项目路径,后续按项目分组显示;没有当前项目时后端走默认
+  if (currentProject.value.path) {
     body.projectPath = currentProject.value.path
   }
-  const res = await fetch('/api/workbench/tasks', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  }).then(r => r.json())
-  if (res.success) {
-    ElMessage.success($t('@WORKBENCH:已保存'))
-    const isCreate = !taskDialog.editing?.id
-    taskDialog.visible = false
+  try {
+    const res = await fetch('/api/workbench/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(r => r.json())
+    if (!res.success) {
+      ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
+      return
+    }
+    // 先 flush 当前 task 的未保存改动,避免"点了新建 → 老 task 的标题改动丢"
+    clearMetaSaveTimers()
+    if (selectedTask.value && metaDirty.value) {
+      await flushMetaSave()
+    }
     await loadTasks()
-    // 新建后自动切到新任务；编辑场景保持原选中（loadTasks 兜底确保至少有一个选中）
-    if (isCreate && res.task?.id) {
+    if (res.task?.id) {
       selectedTaskId.value = res.task.id
       captureSnapshot()
-    } else if (!selectedTaskId.value) {
-      selectedTaskId.value = res.task.id
+      ElMessage.success($t('@WORKBENCH:已新建任务'))
+      // 等右侧 v-if 渲染出新任务的标题输入框后再聚焦
+      await nextTick()
+      titleInputRef.value?.focus()
     }
-  } else {
-    ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
+  } finally {
+    creatingTask.value = false
   }
 }
 // 在任务列表条目上直接切换 simple/complex，不进入编辑 dialog。
@@ -1696,8 +1690,8 @@ function humanSize(n: number): string {
           <span class="wb-pill wb-section__count">{{ tasks.length }}</span>
         </header>
 
-        <!-- 顶部主操作：新建任务 -->
-        <button class="wb-new-btn" @click="openCreateTask">
+        <!-- 顶部主操作：新建任务（点一下直接创建 + 右侧展示，无弹窗） -->
+        <button class="wb-new-btn" :disabled="creatingTask" @click="createTaskDirect">
           <el-icon class="wb-new-btn__icon"><Plus /></el-icon>
           <span>{{ $t('@WORKBENCH:新建任务') }}</span>
           <span class="wb-new-btn__shortcut">N</span>
@@ -1822,7 +1816,7 @@ function humanSize(n: number): string {
             <div class="wb-empty__title">{{ $t('@WORKBENCH:暂无任务') }}</div>
             <div class="wb-empty__hint">{{ $t('@WORKBENCH:点击上方按钮新建') }}</div>
             <div class="wb-empty__cta">
-              <el-button type="primary" size="small" :icon="Plus" @click="openCreateTask">
+              <el-button type="primary" size="small" :icon="Plus" :loading="creatingTask" @click="createTaskDirect">
                 {{ $t('@WORKBENCH:新建任务') }}
               </el-button>
             </div>
@@ -1884,6 +1878,7 @@ function humanSize(n: number): string {
       <template v-else>
         <div class="wb-split__header">
           <input
+            ref="titleInputRef"
             class="wb-input wb-input--title"
             v-model="selectedTask.title"
             :placeholder="$t('@WORKBENCH:任务标题')"
@@ -2315,67 +2310,6 @@ function humanSize(n: number): string {
       <template #footer>
         <el-button @click="instructionDialog.visible = false">{{ $t('@WORKBENCH:取消') }}</el-button>
         <el-button type="primary" :loading="instructionDialog.saving" @click="saveInstruction">{{ $t('@WORKBENCH:保存') }}</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 任务编辑对话框 -->
-    <el-dialog
-      v-model="taskDialog.visible"
-      :title="taskDialog.editing ? $t('@WORKBENCH:编辑任务') : $t('@WORKBENCH:新建任务')"
-      width="600px"
-    >
-      <el-form label-position="top">
-        <el-form-item :label="$t('@WORKBENCH:标题（可选）')">
-          <el-input
-            v-model="taskDialog.title"
-            :placeholder="$t('@WORKBENCH:不填则自动命名为「无标题」，稍后可在任务列表里改名')"
-          />
-        </el-form-item>
-        <el-form-item :label="$t('@WORKBENCH:类型')">
-          <el-radio-group v-model="taskDialog.type">
-            <el-radio-button value="complex">{{ $t('@WORKBENCH:复杂任务（需要拆分子任务）') }}</el-radio-button>
-            <el-radio-button value="simple">{{ $t('@WORKBENCH:简单任务（直接执行）') }}</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item
-          v-if="taskDialog.type === 'simple'"
-          :label="$t('@WORKBENCH:描述')"
-        >
-          <el-input
-            v-model="taskDialog.desc"
-            type="textarea"
-            :rows="4"
-            :placeholder="$t('@WORKBENCH:把要做的事直接写在这里,执行时会把这段描述作为 prompt 喂给 Claude')"
-          />
-        </el-form-item>
-        <el-form-item
-          v-else
-          :label="$t('@WORKBENCH:描述')"
-        >
-          <el-input v-model="taskDialog.desc" type="textarea" :rows="3" />
-        </el-form-item>
-        <el-form-item v-if="taskDialog.type === 'simple'" :label="$t('@WORKBENCH:覆盖预置提示词（可选）')">
-          <el-input
-            v-model="taskDialog.simpleOverride"
-            type="textarea"
-            :rows="5"
-            :placeholder="$t('@WORKBENCH:留空则使用「预置提示词」下拉里选定的模板;可用变量同子任务覆盖。')"
-          />
-        </el-form-item>
-        <el-form-item :label="$t('@WORKBENCH:预置提示词')">
-          <el-select v-model="taskDialog.promptId" clearable :placeholder="$t('@WORKBENCH:不绑定')" style="width: 100%;">
-            <el-option
-              v-for="p in prompts"
-              :key="p.id"
-              :label="p.name"
-              :value="p.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="taskDialog.visible = false">{{ $t('@WORKBENCH:取消') }}</el-button>
-        <el-button type="primary" @click="saveTask">{{ $t('@WORKBENCH:保存') }}</el-button>
       </template>
     </el-dialog>
 
