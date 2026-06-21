@@ -1018,8 +1018,9 @@ function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
       args.push('--resume', String(resumeSessionId));
     }
     args.push(
-      '-p', promptText,
-      '--input-format', 'text',
+      // -p '-' 让 claude CLI 从 stdin 读取 prompt —— 避免 Windows 命令行 32K 长度上限
+      // (spawn argv 会拼成 cmdline 给 CreateProcess,长 prompt 直接 ENAMETOOLONG)
+      '-p', '-',
       '--output-format', 'stream-json',
       '--verbose',
       '--permission-mode', 'bypassPermissions',
@@ -1047,7 +1048,7 @@ function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
       spawnedExe = claudeExe;
       child = spawn(claudeExe, args, {
         cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: false,
         env: { ...process.env, LANG: 'zh_CN.UTF-8' }
       });
@@ -1057,7 +1058,7 @@ function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
       child = spawn('claude', args, {
         cwd,
         detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, LANG: 'zh_CN.UTF-8' }
       });
     }
@@ -1065,6 +1066,19 @@ function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
     child.on('spawn', () => {
       // unref 让 claude 独立于父进程事件循环；返回 child 引用让调用方继续读 stdout。
       child.unref();
+      // 长 prompt 通过 stdin 喂入(避开 Windows CreateProcess 32K 命令行上限)。
+      // 必须在 spawn 事件回调里 write,而不是 resolve 前同步 write——因为 spawn
+      // 返回时 child.stdin 句柄可能尚未绑定到真正的 pipe fd。
+      // write 完成后必须 end(),否则 claude CLI 会一直阻塞在读 stdin 上 → hang。
+      try {
+        child.stdin.write(promptText, () => {
+          try { child.stdin.end() } catch { /* 子进程已关闭,忽略 */ }
+        });
+      } catch (err) {
+        // stdin 写入失败不要让 spawn 整体 reject —— 让 child 自然以错误状态收尾,
+        // 后面的 stdout/stderr 监听会捕获到 LLM 端反馈。
+        console.warn('[workbench] stdin write failed:', err && err.message || err);
+      }
       resolve({ pid: child.pid, child });
     });
   });
