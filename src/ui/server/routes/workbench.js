@@ -1077,11 +1077,10 @@ function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
  * 这样后续 sub 仍能拿到前序上下文(跟单 sub 执行的语义保持一致)。
  */
 async function runTaskQueue(task, repoPath, branch, opts) {
-  // 前序上下文:跑完一个 sub 后把它"完成态"摘要存到这里,下一个 sub 启动时
+  // 前序上下文:跑完一个 sub 后把它"完成态"输出存到这里,下一个 sub 启动时
   // 拼到 prompt 头部,让 Claude 知道前面做了什么、产出了什么。
-  // 故意不用 raw output 全文——LLM 已经习惯"摘要 + 关键结论"的格式,且不会
-  // 一次塞几 MB 进 prompt 烧 token。truncate 到每条 MAX_PREV_OUTPUT_CHARS。
-  const MAX_PREV_OUTPUT_CHARS = 2000
+  // 现在 LLM 都是百万 token 上下文窗口,完整透传 raw output,不做截断——
+  // 关键产物(生成的代码块、JSON、结论)在中间被砍掉反而会让后续 sub 失去依据。
   const requested = Number(opts && opts.fromIndex)
   const fromIndex = Number.isInteger(requested) && requested >= 0 && requested < task.subtasks.length
     ? requested
@@ -1121,7 +1120,6 @@ async function runTaskQueue(task, repoPath, branch, opts) {
 async function runSingleSubtask(task, sub, repoPath, branch, priorOutputs, options) {
   const opts = options || {}
   const resumeSessionId = opts.resumeSessionId || null
-  const MAX_PREV_OUTPUT_CHARS = 2000
   const promptTemplate = sub.promptOverride || (task.promptId
     ? (await readJson(PROMPTS_FILE, { prompts: [] })).prompts.find(p => p.id === task.promptId)?.content
     : null) || '';
@@ -1135,12 +1133,11 @@ async function runSingleSubtask(task, sub, repoPath, branch, priorOutputs, optio
   const parts = [interpolated, sub.title, sub.desc].filter(s => s && s.trim());
   let prompt = parts.join('\n\n');
 
-  // ── 前序上下文：把前几个 done 子任务的输出摘要拼到 prompt 头部 ──
+  // ── 前序上下文：把前几个 done 子任务的输出完整拼到 prompt 头部 ──
+  // 完整透传,不做字符截断;只在输出真为空时跳过该条。
   if (priorOutputs && priorOutputs.length > 0) {
     const prevBlock = priorOutputs.map((p, i) => {
-      const text = (p.output || '').slice(0, MAX_PREV_OUTPUT_CHARS)
-      const truncated = (p.output || '').length > MAX_PREV_OUTPUT_CHARS ? '\n…（前文已截断）' : ''
-      return `### [${i + 1}] ${p.title}\n${text}${truncated}`
+      return `### [${i + 1}] ${p.title}\n${p.output || ''}`
     }).join('\n\n')
     prompt = `以下是同一任务下已经完成的前序子任务输出（仅作上下文参考，请基于这些结论继续当前子任务，无需重复执行它们）：
 
@@ -1349,20 +1346,17 @@ async function collectPriorOutputs(task, targetSub) {
  * runTaskQueue 在 fromIndex>0 时调这个,让"从此处开始"也能拼上前序 done sub 的结论。
  */
 async function collectPriorOutputsUpTo(task, endIdx) {
-  const MAX_PREV_OUTPUT_CHARS = 2000
   const prior = []
   for (let i = 0; i < endIdx; i++) {
     const s = task.subtasks[i]
     if (s.status !== 'done') continue
     // 从 jobs 列表里找最近一个属于这个 sub 且 status=done 的 job,
-    // 取其 output 作为"前序上下文摘要"
+    // 取其 output 作为"前序上下文"。完整透传,不做字符截断。
     const job = snapshotJobs()
       .filter(j => j.subId === s.id && j.status === 'done')
       .sort((a, b) => (b.endedAt || '').localeCompare(a.endedAt || ''))[0]
     if (!job) continue
-    const text = (job.output || '').slice(0, MAX_PREV_OUTPUT_CHARS)
-    const truncated = (job.output || '').length > MAX_PREV_OUTPUT_CHARS ? '\n…（前文已截断）' : ''
-    prior.push({ title: s.title, output: text + truncated })
+    prior.push({ title: s.title, output: job.output || '' })
   }
   return prior
 }
