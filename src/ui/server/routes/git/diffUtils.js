@@ -31,8 +31,27 @@ export function createDiffHelpers({ execGitCommand }) {
 
     // 2. 使用 --numstat 快速检查变更量（不获取实际内容，速度快）
     try {
-      const numstatCommand = diffCommand.replace(/git (diff|show)/, 'git $1 --numstat');
-      const { stdout: numstat } = await execGitCommand(numstatCommand, { log: false });
+      // 把传入的 diffCommand 字符串改写成 git diff/show 加 --numstat 的 argv 数组。
+      // 不再走 shell 模式,避免 Windows cmd.exe 下引号兼容问题(参 utils execGitCommand execFile 化)。
+      const numstatCommand = diffCommand.replace(/git (diff|show)/, 'git $1 --numstat')
+      const argvMatch = numstatCommand.trim().match(/^git\s+(\S+)\s*(.*)$/)
+      let numstatArgs
+      if (argvMatch) {
+        const subCmd = argvMatch[1]
+        const rest = argvMatch[2]
+        // 简单按空白拆分,带引号段整体保留 -- "--" + 路径
+        // 这里最常见形态是 'git diff/show -- "--path"' 或 'git diff/show hash -- "--path"'
+        const tokens = []
+        const re = /"([^"]*)"|(\S+)/g
+        let m
+        while ((m = re.exec(rest)) !== null) tokens.push(m[1] !== undefined ? m[1] : m[2])
+        // 找到 '--numstat' 位置,把它加到 subCmd 后面作为第一个参数
+        numstatArgs = [subCmd, '--numstat', ...tokens]
+      } else {
+        // fallback: 走旧逻辑(字符串)
+        numstatArgs = numstatCommand
+      }
+      const { stdout: numstat } = await execGitCommand(numstatArgs, { log: false });
 
       if (numstat.trim()) {
         const lines = numstat.trim().split('\n');

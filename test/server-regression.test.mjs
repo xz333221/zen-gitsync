@@ -46,66 +46,51 @@ test('regression: utils/index.js execSyncGitCommand 保留原始 stack', async (
   )
 })
 
-// 2. 回归测试 #2: shellQuote 单引号包裹 + 失败清单上抛
-// Windows 文件名不允许 ' " ` ; 等字符,改成测试 utils 内部使用的 shellQuote 行为
-test('regression: utils execGitAddWithLockFilter 内部 shellQuote 转义规则', async () => {
-  const utilsUrl = pathToFileURL(path.join(projectRoot, 'src/utils/index.js')).href
-  const utils = await import(utilsUrl)
-
-  // 复制 utils 内部 shellQuote 实现 (utils/index.js:902)
-  // 注意: 这个内联实现必须与 src/ui/server/utils/shellQuote.js 的 shQuote 契约一致
-  // 即 null/undefined 返回 '' 而非 'null'/'undefined'
-  // 我们不在测试里 hard-code 复制,而是直接读取 utils/index.js 源码验证其逻辑
-  const utilsSrc = await (await import('node:fs/promises')).readFile(
+// 2. 回归测试 #2: execGitCommand 必须用 execFile('git', argv) 不走 shell
+// 之前的 shellQuote 单引号包裹在 Windows cmd.exe 下不识别,
+// 导致 `pathspec 'test/test111/2.txt' did not match any files` 回归。
+// 修复方案: 全部改用 execFile,argv 数组天然免疫 shell 引号兼容问题 + 注入。
+test('regression: execGitCommand 走 execFile(规避 cmd.exe 单引号兼容问题)', async () => {
+  const fs = await import('node:fs/promises')
+  const utilsSrc = await fs.readFile(
     path.join(projectRoot, 'src/utils/index.js'), 'utf-8'
   )
 
-  // 提取源码里的 shellQuote 函数定义
-  const match = utilsSrc.match(/const shellQuote\s*=\s*\(s\)\s*=>\s*\{([\s\S]*?)\n\s{4}\}/)
-  assert.ok(match, 'utils/index.js 应保留 shellQuote 函数定义')
-
-  // 模拟执行: 直接验证关键安全属性 + null/undefined 守卫
-  const fnBody = match[1]
+  // 1. 内部实现必须用 execFile('git', argv),不能继续用 exec(command_string)
   assert.ok(
-    /s\s*===\s*null\s*\|\|\s*s\s*===\s*undefined/.test(fnBody),
-    'shellQuote 必须显式守卫 null/undefined(避免返回 \'null\'/\'undefined\')'
+    /execFile\(\s*['"]git['"]\s*,/.test(utilsSrc),
+    'execGitCommand 必须用 execFile(\'git\', argv) 跨平台执行'
   )
   assert.ok(
-    /return\s+['"]''['"]/.test(fnBody),
-    'shellQuote 必须返回空字符串 \'\''
+    !/exec\(\s*command\s*\{/.test(utilsSrc),
+    'execGitCommand 不应继续用 exec(command_string) 走 shell 模式'
   )
 
-  // 行为验证: 用 eval 在隔离作用域里跑提取出来的函数
-  const extracted = new Function('s', match[1] + '\nreturn s === null || s === undefined ? "\'\'" : "\'" + String(s).replace(/\'/g, "\'\\\\\'\'") + "\'"')
+  // 2. shellQuote 已删除(不再需要);add-filtered 应直接传 ['add', '--', file]
+  assert.ok(
+    !/const\s+shellQuote\s*=/.test(utilsSrc),
+    'utils/index.js 不应再保留内联 shellQuote 函数 (改用 execFile argv)'
+  )
+  assert.ok(
+    /execGitCommand\(\[\s*['"]add['"]\s*,\s*['"]--['"]/.test(utilsSrc),
+    'add-filtered 必须改成 execGitCommand([\'add\', \'--\', file]) 数组形式'
+  )
 
-  // Windows 允许的特殊字符: 空格 $ ( ) [ ] ! @ # % ^ & + = , . - _ 数字字母
-  const cases = [
-    { input: 'normal.txt',           expect: `'normal.txt'` },
-    { input: 'with space.txt',       expect: `'with space.txt'` },
-    { input: 'price$100.txt',        expect: `'price$100.txt'` },
-    { input: '"quoted".txt',         expect: `'"quoted".txt'` },
-    { input: "it's.txt",             expect: `'it'\\''s.txt'` },
-    { input: '',                     expect: `''` },
-    { input: 42,                     expect: `'42'` },
-    { input: null,                   expect: `''` },
-    { input: undefined,              expect: `''` },
-  ]
-  for (const { input, expect: expected } of cases) {
-    const got = extracted(input)
-    assert.equal(got, expected, `shellQuote(${JSON.stringify(input)}) 应输出 ${expected},实际 ${got}`)
-  }
+  // 3. commit -m 也必须改成 argv 数组(避免 commitMessage 含 " 时 cmd.exe 拼断)
+  assert.ok(
+    /execGitCommand\(\[\s*['"]commit['"]\s*,\s*['"]-m['"]/.test(utilsSrc),
+    'commit 必须改成 execGitCommand([\'commit\', \'-m\', msg]) 数组形式'
+  )
 
-  // 关键安全属性: 输出必然以 ' 开头,以 ' 结尾
-  for (const input of ['x', 'with $dollar', '"', '$(rm -rf /)', '`whoami`']) {
-    const out = extracted(input)
-    assert.ok(out.startsWith("'") && out.endsWith("'"),
-      `shellQuote 转义后必须被单引号包裹,避免 ${input} 被 shell 解释`)
-  }
-
-  // 旧的 `${file}` 拼接形式应该已经不存在
+  // 4. 不应再出现 `git add "${file}"` 这种裸双引号拼接(已知 cmd.exe 下文件名含 " 会断)
   assert.ok(
     !/git add "\$\{file\}"/.test(utilsSrc),
     '不应再保留 `git add "${file}"` 的注入风险模式'
+  )
+  // 5. 不应再出现 `git commit -m "${...}"` 拼接
+  assert.ok(
+    !/git commit -m "\$\{/.test(utilsSrc),
+    '不应再保留 `git commit -m "${...}"` 的拼接形式'
   )
 })
 

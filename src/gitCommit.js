@@ -94,7 +94,7 @@ async function createGitCommit(options) {
     let exit = options ? !!options.exit : true
     const config = await loadConfig()
     let commitMessage = config.defaultCommitMessage
-    let {stdout} = await execGitCommand('git status')
+    let {stdout} = await execGitCommand(['status'])
     statusOutput = stdout
     judgeUnmerged(statusOutput)
     // 先检查本地是否有未提交的更改
@@ -113,7 +113,7 @@ async function createGitCommit(options) {
     } else {
       if (statusOutput.includes('use "git push')) {
         // 获取最近一次提交的实际信息
-        const lastCommitResult = await execGitCommand('git log -1 --pretty=%B', {log: false});
+        const lastCommitResult = await execGitCommand(['log', '-1', '--pretty=%B'], {log: false});
         const actualCommitMessage = lastCommitResult.stdout.trim();
         await exec_push({exit, commitMessage: actualCommitMessage || commitMessage})
       } else if (statusOutput.includes('use "git pull')) {

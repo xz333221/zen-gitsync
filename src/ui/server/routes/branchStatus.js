@@ -24,7 +24,7 @@ export function registerBranchStatusRoutes({
   // 获取当前分支 - 直接读取，不缓存（git symbolic-ref 极快，<5ms）
   app.get('/api/branch', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git symbolic-ref --short HEAD');
+      const { stdout } = await execGitCommand(['symbolic-ref', '--short', 'HEAD']);
       res.json({ branch: stdout.trim() });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -70,11 +70,11 @@ export function registerBranchStatusRoutes({
         console.log(`使用5秒缓存的分支名: ${currentBranch} -> ${upstreamBranch}`);
       } else {
         // 直接读取，不再走5分钟长缓存
-        const { stdout: branchOut } = await execGitCommand('git symbolic-ref --short HEAD');
+        const { stdout: branchOut } = await execGitCommand(['symbolic-ref', '--short', 'HEAD']);
         currentBranch = branchOut.trim();
 
         const { stdout: upstreamOut } = await execGitCommand(
-          'git rev-parse --abbrev-ref --symbolic-full-name @{u}',
+          ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
           { ignoreError: true }
         );
         upstreamBranch = upstreamOut.trim() || null;
@@ -88,7 +88,7 @@ export function registerBranchStatusRoutes({
       }
 
       const { stdout: aheadBehindOutput } = await execGitCommand(
-        `git rev-list --left-right --count ${currentBranch}...${upstreamBranch}`
+        ['rev-list', '--left-right', '--count', `${currentBranch}...${upstreamBranch}`]
       );
       const [ahead, behind] = aheadBehindOutput.trim().split('\t').map(Number);
 

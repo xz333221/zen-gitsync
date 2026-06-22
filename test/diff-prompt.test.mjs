@@ -150,11 +150,18 @@ test('prepareDiffForPrompt: 按优先级排序, 源码文件先出现', () => {
 // ============ collectDiffForAi 集成测试 ============
 
 // Mock 一个 execGitCommand,模拟真实 git 输出
+// 兼容两种 cmd 形态:
+//   - 字符串(旧路径,如 "git status --porcelain ...")
+//   - argv 数组(新路径,如 ['status', '--porcelain', ...])
+// 把任意形态统一转成 "git " + 空格分隔的字符串再 pattern.test
 function makeMockGit(handlers) {
   return async (cmd) => {
+    const cmdStr = Array.isArray(cmd)
+      ? `git ${cmd.join(' ')}`
+      : String(cmd || '')
     for (const [pattern, fn] of handlers) {
-      if (pattern.test(cmd)) {
-        return { stdout: fn(cmd) }
+      if (pattern.test(cmdStr)) {
+        return { stdout: fn(cmdStr) }
       }
     }
     return { stdout: '' }
@@ -211,14 +218,25 @@ test('collectDiffForAi: 空仓库状态返回空值', async () => {
 
 test('collectDiffForAi: untracked 批量添加且路径含空格', async () => {
   let addNCalled = 0
+  let receivedArgs = null
   const mockExec = async (cmd) => {
-    if (/status --porcelain/.test(cmd)) {
+    // 兼容字符串 + argv 数组(改 execFile 后调用形态)
+    const cmdStr = Array.isArray(cmd) ? `git ${cmd.join(' ')}` : String(cmd || '')
+    if (/status --porcelain/.test(cmdStr)) {
       return { stdout: '?? "my file with spaces.ts"\n?? test/normal.ts' }
     }
-    if (/git add -N/.test(cmd)) {
+    if (/git add -N/.test(cmdStr) || (Array.isArray(cmd) && cmd[0] === 'add' && cmd[1] === '-N')) {
       addNCalled++
-      // 验证引号转义存在
-      assert.ok(cmd.includes('\\"'), '空格路径应被转义')
+      // execFile 模式下空格路径走 argv 数组,不需 shell 转义。
+      // 验证裸路径进 argv(数组形态)或字符串形态都应保留空格
+      if (Array.isArray(cmd)) {
+        assert.ok(cmd.includes('my file with spaces.ts'),
+          `argv 数组应保留裸路径(含空格),实际: ${JSON.stringify(cmd)}`)
+        receivedArgs = cmd
+      } else {
+        assert.ok(cmd.includes('my file with spaces.ts'),
+          `空格路径应保留在命令里,实际: ${cmd}`)
+      }
       return { stdout: '' }
     }
     return { stdout: '' }
@@ -233,13 +251,16 @@ test('collectDiffForAi: untracked 批量添加且路径含空格', async () => {
 
 test('collectDiffForAi: 同时合并 staged 和 unstaged diff', async () => {
   const mockExec = async (cmd) => {
-    if (/status --porcelain/.test(cmd)) {
+    const cmdStr = Array.isArray(cmd) ? `git ${cmd.join(' ')}` : String(cmd || '')
+    if (/status --porcelain/.test(cmdStr)) {
       return { stdout: 'MM src/foo.ts\n M src/bar.ts' }
     }
-    if (/git diff --staged/.test(cmd)) {
+    if (/git diff --staged/.test(cmdStr) ||
+        (Array.isArray(cmd) && cmd[0] === 'diff' && cmd.includes('--staged'))) {
       return { stdout: 'diff --git a/src/foo.ts b/src/foo.ts\n-index\n+index staged change' }
     }
-    if (/git diff --no-color/.test(cmd)) {
+    if (/git diff --no-color/.test(cmdStr) ||
+        (Array.isArray(cmd) && cmd[0] === 'diff' && !cmd.includes('--staged'))) {
       return { stdout: 'diff --git a/src/bar.ts b/src/bar.ts\n-bar\n+baz unstaged' }
     }
     return { stdout: '' }

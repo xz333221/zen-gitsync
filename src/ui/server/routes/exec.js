@@ -16,6 +16,12 @@ import path from 'path';
 import iconv from 'iconv-lite';
 import { spawn } from 'child_process';
 
+// 把 "git config --global key value" 这种空格分隔命令拆成 argv 数组,
+// 注意:简单 split 不处理引号/转义;保持与之前 shell 模式一致的语义。
+function splitCommandArgs(command) {
+  return command.trim().split(/\s+/).filter(Boolean);
+}
+
 export function registerExecRoutes({
   app,
   execGitCommand,
@@ -33,7 +39,7 @@ export function registerExecRoutes({
       }
 
       try {
-        const { stdout = '', stderr = '' } = await execGitCommand(command, { log: false });
+        const { stdout = '', stderr = '' } = await execGitCommand(splitCommandArgs(command), { log: false });
         return res.json({ success: true, stdout, stderr });
       } catch (err) {
         return res.status(400).json({ success: false, error: err?.message || String(err) });

@@ -32,7 +32,7 @@ import stringWidth from 'string-width';
 import Table from 'cli-table3';
 import chalk from 'chalk';
 import boxen from "boxen";
-import {exec, execSync} from 'child_process'
+import {execFile, execSync} from 'child_process'
 import os from 'os'
 import ora from "ora";
 import readline from 'readline'
@@ -266,14 +266,18 @@ function clearCommandHistory() {
 
 function execGitCommand(command, options = {}) {
   return new Promise((resolve, reject) => {
-    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
+    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = Array.isArray(command) ? command.join(' ') : command, log = true} = options
     let cwd = getCwd()
-    
+
     // Record start time for command execution
     const startTime = Date.now();
 
     // setTimeout(() => {
-    exec(command, {
+    // 用 execFile('git', argv) 跨平台执行:
+    // - 不走 shell,Windows cmd.exe / POSIX sh 都一致
+    // - argv 数组天然免疫 shell 注入,文件名/参数无需 shellQuote
+    // - 所有调用点约定只跑 git 子命令,见 src/utils/index.js 内的 execGitCommand 调用清单
+    execFile('git', command, {
       env: {
         ...process.env,
         // LANG: 'en_US.UTF-8',    // Linux/macOS
@@ -282,7 +286,10 @@ function execGitCommand(command, options = {}) {
       },
       encoding,
       maxBuffer,
-      cwd
+      cwd,
+      // Windows 下 git 是 .exe;POSIX 下直接 PATH 找。
+      // 不传 shell,杜绝 cmd.exe 单/双引号兼容问题与注入风险。
+      windowsHide: true
     }, (error, stdout, stderr) => {
       if (options.spinner) {
         options.spinner.stop();
@@ -590,7 +597,7 @@ async function printGitLog() {
     n = parseInt(logArg.split('=')[1], 10);
   }
   // 使用 ASCII 记录分隔符 %x1E 作为字段分隔符
-  const logCommand = `git log -n ${n} --pretty=format:"%C(green)%h%C(reset) %x1E %C(cyan)%an%C(reset) %x1E %C(yellow)%ad%C(reset) %x1E %C(blue)%D%C(reset) %x1E %C(magenta)%s%C(reset)" --date=format:"%Y-%m-%d %H:%M" --graph --decorate --color`
+  const logCommand = ['log', '-n', n, '--pretty=format:%C(green)%h%C(reset) %x1E %C(cyan)%an%C(reset) %x1E %C(yellow)%ad%C(reset) %x1E %C(blue)%D%C(reset) %x1E %C(magenta)%s%C(reset)', '--date=format:%Y-%m-%d %H:%M', '--graph', '--decorate', '--color']
   try {
     const logOutput = await execGitCommand(logCommand, {
       head: `git log`
@@ -620,7 +627,7 @@ async function exec_push({exit, commitMessage}) {
   // 执行 git push
   const spinner = ora('正在推送代码...').start();
   try {
-    const {stdout, stderr} = await execGitCommand('git push', {
+    const {stdout, stderr} = await execGitCommand(['push'], {
       spinner
     });
     await printCommitLog({commitMessage});
@@ -633,15 +640,15 @@ async function exec_push({exit, commitMessage}) {
 async function printCommitLog({commitMessage}) {
   try {
     // 获取项目名称（取git仓库根目录名）
-    const projectRootResult = await execGitCommand('git rev-parse --show-toplevel', {log: false});
+    const projectRootResult = await execGitCommand(['rev-parse', '--show-toplevel'], {log: false});
     const projectName = chalk.blueBright(path.basename(projectRootResult.stdout.trim()));
 
     // 获取当前提交hash（取前7位）
-    const commitHashResult = await execGitCommand('git rev-parse --short HEAD', {log: false});
+    const commitHashResult = await execGitCommand(['rev-parse', '--short', 'HEAD'], {log: false});
     const hashDisplay = chalk.yellow(commitHashResult.stdout.trim());
 
     // 获取分支信息
-    const branchResult = await execGitCommand('git branch --show-current', {log: false});
+    const branchResult = await execGitCommand(['branch', '--show-current'], {log: false});
     const branchDisplay = chalk.magenta(branchResult.stdout.trim());
 
     // 构建信息内容
@@ -679,7 +686,7 @@ async function execPull() {
   try {
     // 检查是否需要拉取更新
     const spinner = ora('正在拉取代码...').start();
-    await execGitCommand('git pull', {
+    await execGitCommand(['pull'], {
       spinner
     })
   } catch (e) {
@@ -697,12 +704,12 @@ async function judgeRemote() {
   try {
     // 检查是否有远程更新
     // 先获取远程最新状态
-    await execGitCommand('git remote update', {
+    await execGitCommand(['remote', 'update'], {
       head: 'Fetching remote updates',
       log: false
     });
     // 检查是否需要 pull
-    const res = await execGitCommand('git rev-list HEAD..@{u} --count', {
+    const res = await execGitCommand(['rev-list', 'HEAD..@{u}', '--count'], {
       head: 'Checking if behind remote',
       log: false
     });
@@ -754,7 +761,7 @@ async function judgeRemote() {
 async function execDiff() {
   const no_diff = process.argv.find(arg => arg.startsWith('--no-diff'))
   if (!no_diff) {
-    await execGitCommand('git diff --color=always', {
+    await execGitCommand(['diff', '--color=always'], {
       head: `git diff`
     })
   }
@@ -768,14 +775,14 @@ async function execGitAddWithLockFilter() {
 
     if (lockedFiles.length === 0) {
       // 如果没有锁定文件，直接执行 git add .
-      await execGitCommand('git add .');
+      await execGitCommand(['add', '.']);
       return;
     }
 
     // 获取Git工作目录根路径，确保路径匹配的准确性
     let gitRoot;
     try {
-      const gitRootResult = await execGitCommand('git rev-parse --show-toplevel', {log: false});
+      const gitRootResult = await execGitCommand(['rev-parse', '--show-toplevel'], {log: false});
       gitRoot = path.normalize(gitRootResult.stdout.trim());
     } catch (error) {
       console.warn(chalk.yellow('⚠️ 无法获取Git根目录，使用当前工作目录'));
@@ -783,7 +790,7 @@ async function execGitAddWithLockFilter() {
     }
 
     // 获取所有修改的文件（包括未跟踪文件）
-    const statusResult = await execGitCommand('git status --porcelain --untracked-files=all', {log: false});
+    const statusResult = await execGitCommand(['status', '--porcelain', '--untracked-files=all'], {log: false});
     const modifiedFiles = statusResult.stdout
       .split('\n')
       .filter(line => line.trim())
@@ -896,19 +903,15 @@ async function execGitAddWithLockFilter() {
     }
 
     // 逐个添加未锁定的文件
-    // 注意：用单引号包文件名,单引号内不解释 $ ` " \ 等元字符,
-    // 只需把单引号自身转义为 '\''
-    // 避免文件名含特殊字符(如 " $ ` ;) 导致 shell 注入或命令错乱
-    // null/undefined 显式返回 '' 而非 'null'/'undefined' (与 src/ui/server/utils/shellQuote.js shQuote 契约一致)
-    const shellQuote = (s) => {
-      if (s === null || s === undefined) return "''"
-      return `'${String(s).replace(/'/g, `'\\''`)}'`
-    }
+    // 用 execFile('git', argv) 直接传 argv 数组,不经过 shell,
+    // 文件名含空格/特殊字符时不需要 shellQuote;同时跨 Windows cmd.exe /
+    // POSIX sh 都一致(此前单引号写法在 Windows cmd.exe 不被识别,导致
+    // "pathspec '...did not match any files" 报错,见 da01bcb 回归)。
     let successCount = 0
     let failedFiles = []
     for (const file of filesToAdd) {
       try {
-        await execGitCommand(`git add -- ${shellQuote(file)}`, {
+        await execGitCommand(['add', '--', file], {
           head: `git add ${file}`,
           log: false
         })
@@ -979,7 +982,7 @@ async function execAddAndCommit({statusOutput, commitMessage, exit}) {
   }
 
   // 提交前二次校验（包括未跟踪文件）
-  const checkStatus = await execGitCommand('git status --porcelain --untracked-files=all', {log: false});
+  const checkStatus = await execGitCommand(['status', '--porcelain', '--untracked-files=all'], {log: false});
   if (!checkStatus.stdout.trim()) {
     console.log(chalk.yellow('⚠️ 没有检测到可提交的变更'));
     // exec_exit(exit)
@@ -988,7 +991,7 @@ async function execAddAndCommit({statusOutput, commitMessage, exit}) {
 
   // 执行 git commit
   if (statusOutput.includes('Untracked files:') || statusOutput.includes('Changes not staged for commit') || statusOutput.includes('Changes to be committed')) {
-    await execGitCommand(`git commit -m "${commitMessage}"`)
+    await execGitCommand(['commit', '-m', commitMessage])
   }
   
   // 返回实际使用的提交信息
@@ -1053,7 +1056,7 @@ async function addResetScriptToPackageJson() {
     }
 
     // 获取当前分支名
-    const branchResult = await execGitCommand('git branch --show-current', {log: false});
+    const branchResult = await execGitCommand(['branch', '--show-current'], {log: false});
     const branch = branchResult.stdout.trim();
 
     // 添加 g:reset 命令

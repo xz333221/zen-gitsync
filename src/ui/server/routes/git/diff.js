@@ -34,10 +34,11 @@ export function registerGitDiffRoutes({
         return res.status(400).json({ error: '缺少文件路径参数' });
       }
 
-      const diffCommand = `git diff -- "${filePath}"`;
+      const diffArgs = ['diff', '--', filePath];
 
-      // 使用优化的检查函数
-      const skipCheck = await checkShouldSkipDiff(filePath, diffCommand);
+      // 使用优化的检查函数(diffCommand 用于内部 numstat 检测的字符串转换,
+      // 实际走 git 时用 argv 数组,避免 Windows cmd.exe 拼引号问题)
+      const skipCheck = await checkShouldSkipDiff(filePath, `git diff -- "${filePath}"`);
       if (skipCheck.shouldSkip) {
         return res.json({
           diff: skipCheck.reason,
@@ -47,7 +48,7 @@ export function registerGitDiffRoutes({
       }
 
       // 执行git diff命令获取文件差异
-      const { stdout } = await execGitCommand(diffCommand);
+      const { stdout } = await execGitCommand(diffArgs);
 
       // 检查实际diff大小
       const sizeCheck = checkDiffSize(stdout, 500);
@@ -72,10 +73,10 @@ export function registerGitDiffRoutes({
         return res.status(400).json({ error: '缺少文件路径参数' });
       }
 
-      const diffCommand = `git diff --cached -- "${filePath}"`;
+      const diffArgs = ['diff', '--cached', '--', filePath];
 
       // 使用优化的检查函数
-      const skipCheck = await checkShouldSkipDiff(filePath, diffCommand);
+      const skipCheck = await checkShouldSkipDiff(filePath, `git diff --cached -- "${filePath}"`);
       if (skipCheck.shouldSkip) {
         return res.json({
           diff: skipCheck.reason,
@@ -85,7 +86,7 @@ export function registerGitDiffRoutes({
       }
 
       // 执行git diff --cached命令获取已暂存文件差异
-      const { stdout } = await execGitCommand(diffCommand);
+      const { stdout } = await execGitCommand(diffArgs);
 
       // 检查实际diff大小
       const sizeCheck = checkDiffSize(stdout, 500);
@@ -105,7 +106,7 @@ export function registerGitDiffRoutes({
   // 获取全量 diff（git diff HEAD，含已暂存与未暂存的所有变更）
   app.get('/api/diff-head', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git diff HEAD');
+      const { stdout } = await execGitCommand(['diff', 'HEAD']);
       const MAX = 500 * 1024;
       const content = stdout.length > MAX
         ? stdout.slice(0, MAX) + '\n\n[内容过大，已截断]'
@@ -172,7 +173,7 @@ export function registerGitDiffRoutes({
 
       let sizeBytes = 0;
       try {
-        const { stdout: sizeOut } = await execGitCommand(`git cat-file -s "${spec}"`, { log: false });
+        const { stdout: sizeOut } = await execGitCommand(['cat-file', '-s', spec], { log: false });
         sizeBytes = parseInt(String(sizeOut).trim(), 10) || 0;
       } catch (e) {
         return res.json({ success: true, notFound: true, content: '' });
@@ -187,7 +188,7 @@ export function registerGitDiffRoutes({
         });
       }
 
-      const { stdout } = await execGitCommand(`git show "${spec}"`, { log: false });
+      const { stdout } = await execGitCommand(['show', spec], { log: false });
       return res.json({ success: true, content: stdout ?? '' });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -253,7 +254,7 @@ export function registerGitDiffRoutes({
       }
 
       // 检查文件状态：未跟踪文件需要删除，修改文件需要恢复
-      const { stdout: statusOutput } = await execGitCommand(`git status --porcelain -- "${filePath}"`);
+      const { stdout: statusOutput } = await execGitCommand(['status', '--porcelain', '--', filePath]);
 
       // 未跟踪的文件 (??), 需要删除它
       if (statusOutput.startsWith('??')) {
@@ -270,12 +271,12 @@ export function registerGitDiffRoutes({
       // 已暂存的文件，先取消暂存
       else if (statusOutput.startsWith('A ') || statusOutput.startsWith('M ') || statusOutput.startsWith('D ')) {
         // 先取消暂存
-        await execGitCommand(`git reset HEAD -- "${filePath}"`);
+        await execGitCommand(['reset', 'HEAD', '--', filePath]);
       }
 
       // 已修改文件，取消所有本地修改
       if (statusOutput) {
-        await execGitCommand(`git checkout -- "${filePath}"`);
+        await execGitCommand(['checkout', '--', filePath]);
         return res.json({ success: true, message: '文件修改已撤回' });
       } else {
         return res.status(400).json({
@@ -307,7 +308,7 @@ export function registerGitDiffRoutes({
     for (const filePath of filePaths) {
       try {
         // 检查文件状态：未跟踪 ??、已暂存 A/M/D、已修改（空状态会返回空字符串）
-        const { stdout: statusOutput } = await execGitCommand(`git status --porcelain -- "${filePath}"`)
+        const { stdout: statusOutput } = await execGitCommand(['status', '--porcelain', '--', filePath])
 
         // 未跟踪的文件 (??) → 直接删除
         if (statusOutput.startsWith('??')) {
@@ -324,12 +325,12 @@ export function registerGitDiffRoutes({
 
         // 已暂存的文件，先取消暂存（不影响工作区）
         if (statusOutput.startsWith('A ') || statusOutput.startsWith('M ') || statusOutput.startsWith('D ')) {
-          await execGitCommand(`git reset HEAD -- "${filePath}"`)
+          await execGitCommand(['reset', 'HEAD', '--', filePath])
         }
 
         // 已修改文件：丢弃工作区修改
         if (statusOutput) {
-          await execGitCommand(`git checkout -- "${filePath}"`)
+          await execGitCommand(['checkout', '--', filePath])
           results.push({ path: filePath, success: true, message: '文件修改已撤回' })
           successCount++
         } else {

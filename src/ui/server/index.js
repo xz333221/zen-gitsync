@@ -110,7 +110,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     let dirPath = process.cwd();
     try {
       if(showConsole) console.log(`记录最近打开目录`)
-      const { stdout } = await execGitCommand('git rev-parse --show-toplevel');
+      const { stdout } = await execGitCommand(['rev-parse', '--show-toplevel']);
       const root = stdout?.trim();
       if (root) dirPath = root;
     } catch (_) {
@@ -290,7 +290,7 @@ async function startUIServer(noOpen = false, savePort = false) {
       }
 
       // 只获取porcelain格式状态，不再获取完整的git status
-      const { stdout: porcelainOutput } = await execGitCommand('git status --porcelain --untracked-files=all');
+      const { stdout: porcelainOutput } = await execGitCommand(['status', '--porcelain', '--untracked-files=all']);
 
       // 广播到当前项目房间的所有客户端
       io.to(projectRoomId).emit('git_status_update', {
@@ -309,7 +309,7 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 检查当前目录是否是Git仓库
   let isGitRepo = false;
   try {
-    const { stdout } = await execGitCommand('git rev-parse --is-inside-work-tree', { log: false });
+    const { stdout } = await execGitCommand(['rev-parse', '--is-inside-work-tree'], { log: false });
     isGitRepo = stdout.trim() === 'true';
   } catch (error) {
     isGitRepo = false;

@@ -23,10 +23,10 @@ export function registerGitRoutes({
   app.get('/api/branches', async (req, res) => {
     try {
       // 获取本地分支 - 使用简单的git branch命令
-      const { stdout: localBranches } = await execGitCommand('git branch');
+      const { stdout: localBranches } = await execGitCommand(['branch']);
 
       // 获取远程分支
-      const { stdout: remoteBranches } = await execGitCommand('git branch -r');
+      const { stdout: remoteBranches } = await execGitCommand(['branch', '-r']);
 
       // 处理本地分支 - 正确解析git branch的标准输出格式
       const localBranchList = localBranches.split('\n')
@@ -63,18 +63,18 @@ export function registerGitRoutes({
       }
 
       // 构建创建分支的命令
-      let command = `git branch ${newBranchName}`;
+      let commandArgs = ['branch', newBranchName];
 
       // 如果指定了基础分支，则基于该分支创建
       if (baseBranch) {
-        command = `git branch ${newBranchName} ${baseBranch}`;
+        commandArgs = ['branch', newBranchName, baseBranch];
       }
 
       // 执行创建分支命令
-      await execGitCommand(command);
+      await execGitCommand(commandArgs);
 
       // 切换到新创建的分支
-      await execGitCommand(`git checkout ${newBranchName}`);
+      await execGitCommand(['checkout', newBranchName]);
 
       // 清除分支缓存，因为分支已切换
       clearBranchCache();
@@ -95,7 +95,7 @@ export function registerGitRoutes({
       }
 
       // 执行分支切换
-      await execGitCommand(`git checkout ${branch}`);
+      await execGitCommand(['checkout', branch]);
 
       // 清除分支缓存，因为分支已切换
       clearBranchCache();
@@ -117,28 +117,17 @@ export function registerGitRoutes({
       }
 
       // 构建Git合并命令 - 直接使用传入的分支名（可能包含origin/前缀）
-      let command = `git merge ${branch}`;
+      const commandArgs = ['merge', branch];
 
       // 添加可选参数
-      if (noCommit) {
-        command += ' --no-commit';
-      }
-
-      if (noFf) {
-        command += ' --no-ff';
-      }
-
-      if (squash) {
-        command += ' --squash';
-      }
-
-      if (message) {
-        command += ` -m "${message}"`;
-      }
+      if (noCommit) commandArgs.push('--no-commit');
+      if (noFf) commandArgs.push('--no-ff');
+      if (squash) commandArgs.push('--squash');
+      if (message) commandArgs.push('-m', message);
 
       try {
         // 执行合并命令
-        const { stdout } = await execGitCommand(command);
+        const { stdout } = await execGitCommand(commandArgs);
 
         res.json({
           success: true,
@@ -175,9 +164,9 @@ export function registerGitRoutes({
   app.get('/api/user-info', async (req, res) => {
     try {
       // 获取全局用户名
-      const { stdout: userName } = await execGitCommand('git config --global user.name');
+      const { stdout: userName } = await execGitCommand(['config', '--global', 'user.name']);
       // 获取全局用户邮箱
-      const { stdout: userEmail } = await execGitCommand('git config --global user.email');
+      const { stdout: userEmail } = await execGitCommand(['config', '--global', 'user.email']);
 
       res.json({
         name: userName.trim(),

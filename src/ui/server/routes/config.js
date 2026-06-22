@@ -101,7 +101,7 @@ async function collectDiffForAi({ execGitCommand, getCurrentProjectPath, selecte
   let fileList = []
   try {
     // 1. 拿到工作区状态,识别 untracked 文件
-    const { stdout: statusOut } = await execGitCommand('git status --porcelain=1 --untracked-files=all', cwdOpts)
+    const { stdout: statusOut } = await execGitCommand(['status', '--porcelain=1', '--untracked-files=all'], cwdOpts)
     const untracked = []
     const trackedChanges = []
     for (const line of (statusOut || '').split('\n')) {
@@ -129,9 +129,8 @@ async function collectDiffForAi({ execGitCommand, getCurrentProjectPath, selecte
       const batchSize = 20
       for (let i = 0; i < untracked.length; i += batchSize) {
         const batch = untracked.slice(i, i + batchSize)
-        const quoted = batch.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ')
         try {
-          await execGitCommand(`git add -N --force ${quoted}`, cwdOpts)
+          await execGitCommand(['add', '-N', '--force', ...batch], cwdOpts)
         } catch (e) {
           // 单批失败不影响整体
           console.warn('[generate-commit] git add -N failed for batch:', e?.message)
@@ -142,12 +141,13 @@ async function collectDiffForAi({ execGitCommand, getCurrentProjectPath, selecte
     // 3. 合并 staged + unstaged diff
     //    用 --no-color 避免 ANSI 干扰, --no-ext-diff 避免外接 diff 工具
     //    选择模式下用 `-- <paths>` 限定,避免拉取无关 staged 改动
-    const pathArgs = selectedSet
-      ? ' -- ' + [...selectedSet].map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ')
-      : ''
+    const pathArgs = selectedSet ? [...selectedSet] : []
+    const diffBase = ['diff', '--no-color', '--no-ext-diff']
+    const stagedArgs = ['diff', '--staged', '--no-color', '--no-ext-diff', ...(pathArgs.length ? ['--', ...pathArgs] : [])]
+    const unstagedArgs = [...diffBase, ...(pathArgs.length ? ['--', ...pathArgs] : [])]
     const [stagedRes, unstagedRes] = await Promise.all([
-      execGitCommand(`git diff --staged --no-color --no-ext-diff${pathArgs}`, cwdOpts).catch(() => ({ stdout: '' })),
-      execGitCommand(`git diff --no-color --no-ext-diff${pathArgs}`, cwdOpts).catch(() => ({ stdout: '' }))
+      execGitCommand(stagedArgs, cwdOpts).catch(() => ({ stdout: '' })),
+      execGitCommand(unstagedArgs, cwdOpts).catch(() => ({ stdout: '' }))
     ])
     let combined = ''
     if (stagedRes?.stdout) combined += stagedRes.stdout.trim() + '\n'

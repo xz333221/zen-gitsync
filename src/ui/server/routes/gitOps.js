@@ -40,31 +40,31 @@ export function registerGitOpsRoutes({
       const { message, hasNewlines, noVerify } = req.body;
 
       // 构建 git commit 命令
-      let commitCommand = 'git commit';
+      const commitArgs = ['commit'];
 
       // 如果消息包含换行符，使用文件方式提交
+      let tempFile
       if (hasNewlines) {
         // 创建临时文件存储提交信息
-        const tempFile = path.join(os.tmpdir(), `commit-msg-${Date.now()}.txt`);
+        tempFile = path.join(os.tmpdir(), `commit-msg-${Date.now()}.txt`);
         await fs.writeFile(tempFile, message);
-        commitCommand += ` -F "${tempFile}"`;
+        commitArgs.push('-F', tempFile);
       } else {
         // 否则直接在命令行中提供消息
-        commitCommand += ` -m "${message}"`;
+        commitArgs.push('-m', message);
       }
 
       // 添加 --no-verify 参数
       if (noVerify) {
-        commitCommand += ' --no-verify';
+        commitArgs.push('--no-verify');
       }
 
-      console.log(`commitCommand ==>`, commitCommand);
+      console.log(`commitArgs ==>`, commitArgs);
       // 执行提交命令
-      await execGitCommand(commitCommand);
+      await execGitCommand(commitArgs);
 
       // 如果使用了临时文件，删除它
-      if (hasNewlines) {
-        const tempFile = path.join(os.tmpdir(), `commit-msg-${Date.now()}.txt`);
+      if (hasNewlines && tempFile) {
         await fs.unlink(tempFile).catch(() => {});
       }
 
@@ -78,7 +78,7 @@ export function registerGitOpsRoutes({
   app.post('/api/add', async (req, res) => {
     try {
       // 直接执行 git add . - 前端已经做了锁定文件过滤判断
-      await execGitCommand('git add .');
+      await execGitCommand(['add', '.']);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -100,7 +100,7 @@ export function registerGitOpsRoutes({
   app.post('/api/add-all', async (req, res) => {
     try {
       // 直接执行 git add . 不考虑锁定文件
-      await execGitCommand('git add .');
+      await execGitCommand(['add', '.']);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -120,7 +120,7 @@ export function registerGitOpsRoutes({
       }
 
       // 执行 git add 命令添加特定文件
-      await execGitCommand(`git add "${filePath}"`);
+      await execGitCommand(['add', '--', filePath]);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -152,9 +152,8 @@ export function registerGitOpsRoutes({
         });
       }
 
-      // 用一个 git add 命令暂存所有文件（按路径转义双引号防注入）
-      const escaped = uniquePaths.map(p => `"${String(p).replace(/"/g, '\\"')}"`).join(' ');
-      await execGitCommand(`git add ${escaped}`);
+      // 一次 git add 命令暂存所有文件(不再需要 shell 转义,execFile argv 数组天然支持任意路径)
+      await execGitCommand(['add', ...uniquePaths]);
 
       res.json({
         success: true,
@@ -180,7 +179,7 @@ export function registerGitOpsRoutes({
       }
 
       // 执行 git reset HEAD 命令移除特定文件的暂存
-      await execGitCommand(`git reset HEAD -- "${filePath}"`);
+      await execGitCommand(['reset', 'HEAD', '--', filePath]);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -190,7 +189,7 @@ export function registerGitOpsRoutes({
   // 推送更改
   app.post('/api/push', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git push');
+      const { stdout } = await execGitCommand(['push']);
 
       // 推送成功后，设置推送状态标记
       setRecentPushStatus({
@@ -395,7 +394,7 @@ export function registerGitOpsRoutes({
   // 添加git pull API端点
   app.post('/api/pull', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git pull');
+      const { stdout } = await execGitCommand(['pull']);
       res.json({ success: true, message: stdout });
     } catch (error) {
       // 改进错误处理，检查是否需要合并
@@ -426,7 +425,7 @@ export function registerGitOpsRoutes({
   // 添加git fetch --all API端点
   app.post('/api/fetch-all', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git fetch --all');
+      const { stdout } = await execGitCommand(['fetch', '--all']);
       res.json({ success: true, message: stdout });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -449,78 +448,54 @@ export function registerGitOpsRoutes({
       const branch = req.query.branch ? req.query.branch.split(',') : [];
       const withParents = req.query.with_parents === 'true';
 
-      // 构建Git命令选项
-      let commandOptions = [];
-
-      // 修改分支筛选处理 - 使用正确的引用格式
+      // 如果指定了分支,直接走 executeGitLogCommand 处理 refs/ 前缀
       if (branch.length > 0) {
-        // 不再简单拼接分支名，而是将它们作为引用路径处理
-        // 如果指定了分支，不再使用--all参数，而是直接用分支名
-        commandOptions = commandOptions.filter(opt => opt !== '--all');
-
-        // 将分支名格式化为Git可理解的引用格式
         const branchRefs = branch.map(b => b.trim()).join(' ');
-
-        // 直接将分支名作为命令参数，并确保后面添加 -- 分隔符防止歧义
         return executeGitLogCommand(res, branchRefs, author, message, dateFrom, dateTo, limit, skip, req.query.all === 'true', withParents);
       }
 
-      // 如果没有指定分支，则使用--all参数
-      // 作者筛选（支持多作者，使用正则表达式OR操作）
+      // 构建 git log 的 argv 数组
+      const logArgs = ['log', '--all'];
+
+      // 作者筛选(支持多作者用正则 OR)
       if (author.length > 0) {
-        // 过滤掉空作者
         const validAuthors = author.filter(a => a.trim() !== '');
-
         if (validAuthors.length === 1) {
-          // 单个作者，直接使用--author
-          commandOptions.push(`--author="${validAuthors[0].trim()}"`);
+          logArgs.push(`--author=${validAuthors[0].trim()}`);
         } else if (validAuthors.length > 1) {
-          // 多个作者，使用正则表达式OR条件
-          // 只转义OR运算符，保持其他内容不变
-          const authorPattern = validAuthors
-            .map(a => a.trim())
-            .join('\\|');  // 在JavaScript字符串中\\|会变成\|，在shell中会成为|
-
-          commandOptions.push(`--author="${authorPattern}"`);
+          const authorPattern = validAuthors.map(a => a.trim()).join('\\|');
+          logArgs.push(`--author=${authorPattern}`);
         }
       }
 
       // 日期范围筛选
       if (dateFrom && dateTo) {
-        commandOptions.push(`--after="${dateFrom}" --before="${dateTo} 23:59:59"`);
+        logArgs.push(`--after=${dateFrom}`, `--before=${dateTo} 23:59:59`);
       } else if (dateFrom) {
-        commandOptions.push(`--after="${dateFrom}"`);
+        logArgs.push(`--after=${dateFrom}`);
       } else if (dateTo) {
-        commandOptions.push(`--before="${dateTo} 23:59:59"`);
+        logArgs.push(`--before=${dateTo} 23:59:59`);
       }
 
       // 提交信息筛选
       if (message) {
-        commandOptions.push(`--grep="${message}"`);
+        logArgs.push(`--grep=${message}`);
       }
 
-      // 如果all=true，则不使用限制，否则按页码和limit精确获取
-      // 修复：只获取当前页的数据，而不是累计所有之前页的数据
-      const limitOption = req.query.all === 'true' ? '' : `-n ${limit} --skip=${skip}`;
+      // 分页
+      if (req.query.all !== 'true') {
+        logArgs.push('-n', String(limit), `--skip=${skip}`);
+      }
 
-      // 合并所有命令选项
-      const options = [...commandOptions, limitOption].filter(Boolean).join(' ');
-
-      // 添加父提交信息的格式
+      // format 字符串直接作为 argv 单元素(不再需要外层 shell 双引号)
       let formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D';
       if (withParents) {
         formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D%x1E%P';
       }
+      logArgs.push(`--pretty=format:${formatString}`);
+      logArgs.push('--date=format-local:%Y-%m-%d %H:%M');
 
-      // console.log(`执行Git命令: git log --all --pretty=format:"${formatString}" --date=format-local:"%Y-%m-%d %H:%M" ${options}`);
-
-      // 使用 git log 命令获取提交历史
-      let { stdout: logOutput } = await execGitCommand(
-        `git log --all --pretty=format:"${formatString}" --date=format-local:"%Y-%m-%d %H:%M" ${options}`
-      );
-
-      // 分页加载优化：不需要获取总数，通过实际返回的数据量判断是否还有更多
-      // 这里直接处理已获取的数据，通过返回数据量判断是否还有更多
+      let { stdout: logOutput } = await execGitCommand(logArgs);
       processAndSendLogOutput(res, logOutput, page, limit, withParents);
     } catch (error) {
       console.error('获取Git日志失败:', error);
@@ -531,69 +506,60 @@ export function registerGitOpsRoutes({
   // 抽取执行Git日志命令的函数
   async function executeGitLogCommand(res, branchRefs, author, message, dateFrom, dateTo, limit, skip, isAll, withParents = false) {
     try {
-      // 构建命令选项
-      const commandOptions = [];
+      // 构建 git log argv 数组
+      const logArgs = ['log'];
+
+      // 准备分支引用,确保它们被正确识别为分支而不是文件名
+      // 使用 refs/heads/ 前缀明确指示这是分支
+      const formattedBranchRefs = branchRefs.split(' ')
+        .map(branch => {
+          if (branch.startsWith('refs/') || branch.includes('/')) {
+            return branch;
+          }
+          return `refs/heads/${branch}`;
+        });
+      logArgs.push(...formattedBranchRefs);
 
       // 作者筛选
       if (author.length > 0) {
         const validAuthors = author.filter(a => a.trim() !== '');
-
         if (validAuthors.length === 1) {
-          commandOptions.push(`--author="${validAuthors[0].trim()}"`);
+          logArgs.push(`--author=${validAuthors[0].trim()}`);
         } else if (validAuthors.length > 1) {
           const authorPattern = validAuthors.map(a => a.trim()).join('\\|');
-          commandOptions.push(`--author="${authorPattern}"`);
+          logArgs.push(`--author=${authorPattern}`);
         }
       }
 
       // 日期范围筛选
       if (dateFrom && dateTo) {
-        commandOptions.push(`--after="${dateFrom}" --before="${dateTo} 23:59:59"`);
+        logArgs.push(`--after=${dateFrom}`, `--before=${dateTo} 23:59:59`);
       } else if (dateFrom) {
-        commandOptions.push(`--after="${dateFrom}"`);
+        logArgs.push(`--after=${dateFrom}`);
       } else if (dateTo) {
-        commandOptions.push(`--before="${dateTo} 23:59:59"`);
+        logArgs.push(`--before=${dateTo} 23:59:59`);
       }
 
       // 提交信息筛选
       if (message) {
-        commandOptions.push(`--grep="${message}"`);
+        logArgs.push(`--grep=${message}`);
       }
 
       // 限制选项
-      const limitOption = isAll ? '' : `-n ${limit} --skip=${skip}`;
+      if (!isAll) {
+        logArgs.push('-n', String(limit), `--skip=${skip}`);
+      }
 
-      // 合并所有选项
-      const options = [...commandOptions, limitOption].filter(Boolean).join(' ');
-
-      // 准备分支引用，确保它们被正确识别为分支而不是文件名
-      // 使用 refs/heads/ 前缀明确指示这是分支
-      const formattedBranchRefs = branchRefs.split(' ')
-        .map(branch => {
-          // 检查是否已经是完整引用
-          if (branch.startsWith('refs/') || branch.includes('/')) {
-            return branch;
-          }
-          // 添加refs/heads/前缀
-          return `refs/heads/${branch}`;
-        })
-        .join(' ');
-
-      // 添加父提交信息的格式
-      // 确认格式字符串使用 %x1E 作为分隔符
       let formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D';
       if (withParents) {
         formatString = '%H%x1E%an%x1E%ae%x1E%ad%x1E%B%x1E%D%x1E%P';
       }
+      logArgs.push(`--pretty=format:${formatString}`);
+      logArgs.push('--date=format-local:%Y-%m-%d %H:%M');
 
-      // 构建执行的命令
-      const command = `git log ${formattedBranchRefs} --pretty=format:"${formatString}" --date=format-local:"%Y-%m-%d %H:%M" ${options}`;
-      console.log(`执行Git命令(带分支引用): ${command}`);
+      console.log(`执行Git log 命令 argv:`, logArgs);
 
-      // 执行命令
-      const { stdout: logOutput } = await execGitCommand(command);
-
-      // 分页加载优化：不需要获取总数，通过实际返回的数据量判断是否还有更多
+      const { stdout: logOutput } = await execGitCommand(logArgs);
       processAndSendLogOutput(res, logOutput, skip / limit + 1, limit, withParents);
     } catch (error) {
       console.error('执行Git日志命令失败:', error);
@@ -675,7 +641,7 @@ export function registerGitOpsRoutes({
   app.post('/api/reset-head', async (req, res) => {
     try {
       // 执行 git reset HEAD 命令
-      await execGitCommand('git reset HEAD');
+      await execGitCommand(['reset', 'HEAD']);
       res.json({ success: true });
     } catch (error) {
       console.error('重置暂存区失败:', error);
@@ -702,7 +668,7 @@ export function registerGitOpsRoutes({
       await checkAndClearGitLock();
 
       // 执行 git reset --hard origin/branch 命令
-      await execGitCommand(`git reset --hard origin/${branch}`);
+      await execGitCommand(['reset', '--hard', `origin/${branch}`]);
       res.json({ success: true });
     } catch (error) {
       console.error('重置到远程分支失败:', error);
@@ -720,10 +686,10 @@ export function registerGitOpsRoutes({
       await checkAndClearGitLock();
 
       // 1. 执行 git reset --hard 丢弃已跟踪文件的更改
-      await execGitCommand('git reset --hard');
-      
+      await execGitCommand(['reset', '--hard']);
+
       // 2. 执行 git clean -fd 移除未跟踪的文件和目录
-      await execGitCommand('git clean -fd');
+      await execGitCommand(['clean', '-fd']);
       
       res.json({ success: true });
     } catch (error) {
@@ -750,7 +716,7 @@ export function registerGitOpsRoutes({
       console.log(`获取提交文件列表: hash=${hash}`);
 
       // 执行命令获取提交中修改的文件列表
-      const { stdout } = await execGitCommand(`git show --name-only --format="" ${hash}`);
+      const { stdout } = await execGitCommand(['show', '--name-only', '--format=', hash]);
 
       // 将输出按行分割，并过滤掉空行
       const files = stdout.split('\n').filter(line => line.trim());
@@ -784,10 +750,12 @@ export function registerGitOpsRoutes({
 
       console.log(`获取提交文件差异: hash=${hash}, file=${filePath}`);
 
-      const diffCommand = `git show ${hash} -- "${filePath}"`;
+      const diffCommandArgs = ['show', hash, '--', filePath];
 
       // 使用优化的检查函数
-      const skipCheck = await checkShouldSkipDiff(filePath, diffCommand);
+      // checkShouldSkipDiff 接受字符串命令,这里只用于大小判断,先按字面占位;
+      // 走 execGitCommand 时仍用 argv 数组保证转义正确。
+      const skipCheck = await checkShouldSkipDiff(filePath, `git show ${hash} -- "${filePath}"`);
       if (skipCheck.shouldSkip) {
         return res.json({
           success: true,
@@ -798,7 +766,7 @@ export function registerGitOpsRoutes({
       }
 
       // 执行命令获取文件差异
-      const { stdout } = await execGitCommand(diffCommand);
+      const { stdout } = await execGitCommand(diffCommandArgs);
 
       console.log(`获取到差异内容，长度: ${stdout.length}`);
 
@@ -854,11 +822,10 @@ export function registerGitOpsRoutes({
       }
 
       const spec = `${targetHash}:${filePath}`;
-      const sizeCmd = `git cat-file -s "${spec}"`;
 
       let sizeBytes = 0;
       try {
-        const { stdout: sizeOut } = await execGitCommand(sizeCmd, { log: false });
+        const { stdout: sizeOut } = await execGitCommand(['cat-file', '-s', spec], { log: false });
         sizeBytes = parseInt(String(sizeOut).trim(), 10) || 0;
       } catch (e) {
         return res.json({
@@ -880,9 +847,8 @@ export function registerGitOpsRoutes({
         });
       }
 
-      const showCmd = `git show "${spec}"`;
       try {
-        const { stdout } = await execGitCommand(showCmd, { log: false });
+        const { stdout } = await execGitCommand(['show', spec], { log: false });
         res.json({
           success: true,
           content: stdout ?? ''
@@ -916,7 +882,7 @@ export function registerGitOpsRoutes({
       console.log(`执行撤销提交操作: hash=${hash}`);
 
       // 执行git revert命令
-      await execGitCommand(`git revert --no-edit ${hash}`);
+      await execGitCommand(['revert', '--no-edit', hash]);
 
       res.json({
         success: true,
@@ -946,7 +912,7 @@ export function registerGitOpsRoutes({
       console.log(`执行Cherry-pick操作: hash=${hash}`);
 
       // 执行git cherry-pick命令
-      await execGitCommand(`git cherry-pick ${hash}`);
+      await execGitCommand(['cherry-pick', hash]);
 
       res.json({
         success: true,
@@ -976,7 +942,7 @@ export function registerGitOpsRoutes({
       console.log(`执行重置到指定提交操作: hash=${hash}`);
 
       // 执行git reset --hard命令
-      await execGitCommand(`git reset --hard ${hash}`);
+      await execGitCommand(['reset', '--hard', hash]);
 
       res.json({
         success: true,
@@ -998,7 +964,7 @@ export function registerGitOpsRoutes({
       if (!hash) {
         return res.status(400).json({ success: false, error: '缺少提交哈希参数' });
       }
-      const { stdout } = await execGitCommand(`git show ${hash}`);
+      const { stdout } = await execGitCommand(['show', hash]);
       // 限制最大 200KB 防止内容过大
       const MAX = 200 * 1024;
       const content = stdout.length > MAX ? stdout.slice(0, MAX) + '\n\n[内容过大，已截断]' : stdout;
@@ -1042,9 +1008,9 @@ export function registerGitOpsRoutes({
     try {
       // 检查全局配置是否存在，如果存在才删除
       try {
-        const { stdout: userName } = await execGitCommand('git config --global user.name');
+        const { stdout: userName } = await execGitCommand(['config', '--global', 'user.name']);
         if (userName.trim()) {
-          await execGitCommand('git config --global --unset user.name');
+          await execGitCommand(['config', '--global', '--unset', 'user.name']);
         }
       } catch (error) {
         console.log('全局用户名配置检查失败，可能不存在:', error.message);
@@ -1052,9 +1018,9 @@ export function registerGitOpsRoutes({
       }
 
       try {
-        const { stdout: userEmail } = await execGitCommand('git config --global user.email');
+        const { stdout: userEmail } = await execGitCommand(['config', '--global', 'user.email']);
         if (userEmail.trim()) {
-          await execGitCommand('git config --global --unset user.email');
+          await execGitCommand(['config', '--global', '--unset', 'user.email']);
         }
       } catch (error) {
         console.log('全局邮箱配置检查失败，可能不存在:', error.message);
@@ -1081,8 +1047,8 @@ export function registerGitOpsRoutes({
         });
       }
 
-      await execGitCommand(`git config --global user.name "${name}"`);
-      await execGitCommand(`git config --global user.email "${email}"`);
+      await execGitCommand(['config', '--global', 'user.name', name]);
+      await execGitCommand(['config', '--global', 'user.email', email]);
       res.json({ success: true, message: '已更新全局Git用户配置' });
     } catch (error) {
       res.status(500).json({
@@ -1095,7 +1061,7 @@ export function registerGitOpsRoutes({
   // 初始化Git仓库
   app.post('/api/git-init', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git init');
+      const { stdout } = await execGitCommand(['init']);
       res.json({ success: true, output: stdout.trim() });
     } catch (error) {
       console.error('git init 失败:', error);
@@ -1113,7 +1079,7 @@ export function registerGitOpsRoutes({
       if (!url || !url.trim()) {
         return res.json({ success: false, error: '远程仓库地址不能为空' });
       }
-      await execGitCommand(`git remote add ${name} ${url.trim()}`);
+      await execGitCommand(['remote', 'add', name, url.trim()]);
       res.json({ success: true });
     } catch (error) {
       console.error('添加远程仓库失败:', error);
@@ -1130,7 +1096,7 @@ export function registerGitOpsRoutes({
       }
 
       // 执行git命令获取远程仓库URL
-      const { stdout } = await execGitCommand('git config --get remote.origin.url');
+      const { stdout } = await execGitCommand(['config', '--get', 'remote.origin.url']);
 
       // 返回远程仓库URL
       res.json({
@@ -1150,7 +1116,7 @@ export function registerGitOpsRoutes({
   app.get('/api/authors', async (req, res) => {
     try {
       // 使用git命令获取所有提交者，不依赖Unix命令
-      const { stdout } = await execGitCommand('git log --format="%an"');
+      const { stdout } = await execGitCommand(['log', '--format=%an']);
 
       // 将结果按行分割并过滤空行
       const lines = stdout.split('\n').filter(author => author.trim() !== '');

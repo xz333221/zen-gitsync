@@ -32,12 +32,12 @@ export function registerStatusRoutes({
 
   app.get('/api/status_porcelain', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git status --porcelain --untracked-files=all');
+      const { stdout } = await execGitCommand(['status', '--porcelain', '--untracked-files=all']);
       // 检测是否处于 MERGING 状态（MERGE_HEAD 存在）
       let isMergeInProgress = false;
       let mergeMessage = '';
       try {
-        const { stdout: mergeHead } = await execGitCommand('git rev-parse -q --verify MERGE_HEAD');
+        const { stdout: mergeHead } = await execGitCommand(['rev-parse', '-q', '--verify', 'MERGE_HEAD']);
         isMergeInProgress = mergeHead.trim().length > 0;
       } catch (_) {
         // MERGE_HEAD 不存在时命令会报错，属正常情况
@@ -45,7 +45,7 @@ export function registerStatusRoutes({
       }
       if (isMergeInProgress) {
         try {
-          const { stdout: gitDir } = await execGitCommand('git rev-parse --git-dir');
+          const { stdout: gitDir } = await execGitCommand(['rev-parse', '--git-dir']);
           const mergeMsgPath = path.resolve(gitDir.trim(), 'MERGE_MSG');
           const raw = await fs.readFile(mergeMsgPath, 'utf-8');
           // 过滤掉以 # 开头的注释行，拼接所有非空非注释行（保留多段信息如合并分支列表）

@@ -20,7 +20,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
   // 获取stash列表
   app.get('/api/stash-list', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git stash list');
+      const { stdout } = await execGitCommand(['stash', 'list']);
 
       // 解析stash列表
       const stashList = stdout.split('\n')
@@ -53,7 +53,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       if (excludeLocked) {
         const lockedFiles = await configManager.getLockedFiles();
         // 包含未跟踪文件，确保状态与 UI 一致
-        const { stdout: statusStdout } = await execGitCommand('git status --porcelain --untracked-files=all', { log: false });
+        const { stdout: statusStdout } = await execGitCommand(['status', '--porcelain', '--untracked-files=all'], { log: false });
         const changedFiles = statusStdout
           .split('\n')
           .filter(line => line.trim())
@@ -100,7 +100,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
                 if (includeUntracked) {
                   try {
                     // 使用 git 列出该目录下的未跟踪和已修改文件
-                    const { stdout: listStdout } = await execGitCommand(`git ls-files -mo --exclude-standard "${filename}"`, { log: false });
+                    const { stdout: listStdout } = await execGitCommand(['ls-files', '-mo', '--exclude-standard', '--', filename], { log: false });
                     const listed = listStdout
                       .split('\n')
                       .map(l => l.trim())
@@ -145,14 +145,13 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         // 在执行 stash 前进行候选校验：
         // 1) 仍有跟踪差异的文件
         try {
-          const args = filesToStash.map(f => `"${f}"`).join(' ');
-          const { stdout: diffNames } = await execGitCommand(`git diff --name-only -- ${args}`, { log: false });
+          const { stdout: diffNames } = await execGitCommand(['diff', '--name-only', '--', ...filesToStash], { log: false });
           const trackedChanged = new Set(diffNames.split('\n').map(s => s.trim()).filter(Boolean));
 
           // 2) 仍为未跟踪的文件（当 includeUntracked 才检查）
           let untrackedExisting = new Set();
           if (includeUntracked) {
-            const { stdout: others } = await execGitCommand(`git ls-files --others --exclude-standard -- ${args}`, { log: false });
+            const { stdout: others } = await execGitCommand(['ls-files', '--others', '--exclude-standard', '--', ...filesToStash], { log: false });
             untrackedExisting = new Set(others.split('\n').map(s => s.trim()).filter(Boolean));
           }
 
@@ -174,27 +173,22 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
           return res.json({ success: false, message: '没有可储藏的更改（可能刚刚已储藏，或被锁定过滤）' });
         }
 
-        let command = 'git stash push';
-        if (message) command += ` -m "${message}"`;
-        if (includeUntracked) command += ' --include-untracked';
-        const args = filesToStash.map(f => `"${f}"`).join(' ');
-        command += ` -- ${args}`;
+        const stashArgs = ['stash', 'push'];
+        if (message) stashArgs.push('-m', message);
+        if (includeUntracked) stashArgs.push('--include-untracked');
+        if (filesToStash.length > 0) stashArgs.push('--', ...filesToStash);
 
-        const { stdout } = await execGitCommand(command);
+        const { stdout } = await execGitCommand(stashArgs);
         if (stdout.includes('No local changes to save')) {
           return res.json({ success: false, message: '没有本地更改需要保存' });
         }
         return res.json({ success: true, message: '成功保存未锁定的工作区更改', output: stdout });
       }
 
-      let command = 'git stash push';
-      if (message) {
-        command += ` -m "${message}"`;
-      }
-      if (includeUntracked) {
-        command += ' --include-untracked';
-      }
-      const { stdout } = await execGitCommand(command);
+      const stashArgs = ['stash', 'push'];
+      if (message) stashArgs.push('-m', message);
+      if (includeUntracked) stashArgs.push('--include-untracked');
+      const { stdout } = await execGitCommand(stashArgs);
       if (stdout.includes('No local changes to save')) {
         return res.json({ success: false, message: '没有本地更改需要保存' });
       }
@@ -220,19 +214,18 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       }
 
       // 构建 git stash push 命令
-      let command = 'git stash push';
+      const stashArgs = ['stash', 'push'];
       if (message) {
-        command += ` -m "${message}"`;
+        stashArgs.push('-m', message);
       }
       if (includeUntracked) {
-        command += ' --include-untracked';
+        stashArgs.push('--include-untracked');
       }
 
       // 添加文件列表
-      const args = files.map(f => `"${f}"`).join(' ');
-      command += ` -- ${args}`;
+      stashArgs.push('--', ...files);
 
-      const { stdout } = await execGitCommand(command);
+      const { stdout } = await execGitCommand(stashArgs);
 
       if (stdout.includes('No local changes to save')) {
         return res.json({ success: false, message: '没有本地更改需要保存' });
@@ -266,7 +259,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       }
 
       // 决定是使用apply(保留stash)还是pop(应用后删除stash)
-      const command = pop ? `git stash pop ${stashId}` : `git stash apply ${stashId}`;
+      const command = pop ? ['stash', 'pop', stashId] : ['stash', 'apply', stashId];
 
       try {
         const { stdout } = await execGitCommand(command);
@@ -306,7 +299,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         });
       }
 
-      const { stdout } = await execGitCommand(`git stash drop ${stashId}`);
+      const { stdout } = await execGitCommand(['stash', 'drop', stashId]);
 
       res.json({
         success: true,
@@ -322,7 +315,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
   // 清空所有stash
   app.post('/api/stash-clear', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git stash clear');
+      const { stdout } = await execGitCommand(['stash', 'clear']);
 
       res.json({
         success: true,
@@ -350,7 +343,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       console.log(`获取stash文件列表: stashId=${stashId}`);
 
       // 0) 解析出当前 stash 提交及其父提交哈希，避免在 Windows 上使用 ^ 语法
-      const { stdout: parentsLine } = await execGitCommand(`git rev-list --parents -n 1 ${stashId}`, { log: false });
+      const { stdout: parentsLine } = await execGitCommand(['rev-list', '--parents', '-n', '1', stashId], { log: false });
       const hashes = parentsLine.trim().split(/\s+/).filter(Boolean);
       const stashCommit = hashes[0] || '';
       const parent1 = hashes[1] || '';
@@ -359,14 +352,14 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       // 1) 跟踪文件的变更列表：父1 与 stash 提交的差异（若无父1则为空）
       let trackedFiles = [];
       if (parent1) {
-        const { stdout: trackedOut } = await execGitCommand(`git diff --name-only ${parent1} ${stashCommit}`, { log: false });
+        const { stdout: trackedOut } = await execGitCommand(['diff', '--name-only', parent1, stashCommit], { log: false });
         trackedFiles = trackedOut.split('\n').map(s => s.trim()).filter(Boolean);
       }
 
       // 2) 未跟踪文件：来自第三父（若存在）
       let untrackedFiles = [];
       if (parent3) {
-        const { stdout: untrackedOut } = await execGitCommand(`git ls-tree -r --name-only ${parent3}`, { log: false });
+        const { stdout: untrackedOut } = await execGitCommand(['ls-tree', '-r', '--name-only', parent3], { log: false });
         untrackedFiles = untrackedOut.split('\n').map(s => s.trim()).filter(Boolean);
       }
 
@@ -403,7 +396,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       console.log(`获取stash文件差异: stashId=${stashId}, file=${file}`);
 
       // 先解析父提交哈希，避免使用 ^ 语法
-      const { stdout: parentsLine } = await execGitCommand(`git rev-list --parents -n 1 ${stashId}`, { log: false });
+      const { stdout: parentsLine } = await execGitCommand(['rev-list', '--parents', '-n', '1', stashId], { log: false });
       const hashes = parentsLine.trim().split(/\s+/).filter(Boolean);
       const stashCommit = hashes[0] || '';
       const parent1 = hashes[1] || '';
@@ -413,7 +406,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       let isFromThirdParent = false;
       if (parent3) {
         try {
-          await execGitCommand(`git cat-file -e ${parent3}:"${file}"`, { log: false });
+          await execGitCommand(['cat-file', '-e', `${parent3}:${file}`], { log: false });
           isFromThirdParent = true;
         } catch (_) {
           isFromThirdParent = false;
@@ -422,7 +415,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
 
       if (isFromThirdParent) {
         // 未跟踪文件：读取第三父中的内容，构造新增文件的统一diff
-        const { stdout: blob } = await execGitCommand(`git show ${parent3}:"${file}"`, { log: false });
+        const { stdout: blob } = await execGitCommand(['show', `${parent3}:${file}`], { log: false });
 
         // 检查文件大小
         const sizeCheck = checkDiffSize(blob, 500);
@@ -457,10 +450,13 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       }
 
       // 否则，使用原有方式获取与父1的变更
-      const diffCommand = `git show ${stashCommit} -- "${file}"`;
+      // checkShouldSkipDiff 接受字符串命令用于日志展示,这里只用于大小判断;
+      // 走 execGitCommand 时用 argv 数组,避免 Windows 下 cmd.exe 拼引号被破坏。
+      const diffCommandForCheck = `git show ${stashCommit} -- "${file}"`;
+      const diffCommandArgs = ['show', stashCommit, '--', file];
 
       // 使用优化的检查函数
-      const skipCheck = await checkShouldSkipDiff(file, diffCommand);
+      const skipCheck = await checkShouldSkipDiff(file, diffCommandForCheck);
       if (skipCheck.shouldSkip) {
         return res.json({
           success: true,
@@ -470,7 +466,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         });
       }
 
-      const { stdout } = await execGitCommand(diffCommand);
+      const { stdout } = await execGitCommand(diffCommandArgs);
 
       console.log(`获取到差异内容，长度: ${stdout.length}`);
 
@@ -503,7 +499,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       }
 
       // 解析父提交哈希
-      const { stdout: parentsLine } = await execGitCommand(`git rev-list --parents -n 1 ${stashId}`, { log: false });
+      const { stdout: parentsLine } = await execGitCommand(['rev-list', '--parents', '-n', '1', stashId], { log: false });
       const hashes = parentsLine.trim().split(/\s+/).filter(Boolean);
       const stashCommit = hashes[0] || '';
       const parent1 = hashes[1] || '';
@@ -513,7 +509,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       let isFromThirdParent = false;
       if (parent3) {
         try {
-          await execGitCommand(`git cat-file -e ${parent3}:"${file}"`, { log: false });
+          await execGitCommand(['cat-file', '-e', `${parent3}:${file}`], { log: false });
           isFromThirdParent = true;
         } catch (_) {
           isFromThirdParent = false;
@@ -524,7 +520,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       let original = '';
       if (!isFromThirdParent && parent1) {
         try {
-          const { stdout: origOut } = await execGitCommand(`git show ${parent1}:"${file}"`, { log: false });
+          const { stdout: origOut } = await execGitCommand(['show', `${parent1}:${file}`], { log: false });
           original = origOut ?? '';
         } catch (_) {
           original = ''; // 文件在储藏前不存在
@@ -536,7 +532,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       const modRef = isFromThirdParent ? parent3 : stashCommit;
       if (modRef) {
         try {
-          const { stdout: modOut } = await execGitCommand(`git show ${modRef}:"${file}"`, { log: false });
+          const { stdout: modOut } = await execGitCommand(['show', `${modRef}:${file}`], { log: false });
           modified = modOut ?? '';
         } catch (_) {
           modified = ''; // 文件已被删除

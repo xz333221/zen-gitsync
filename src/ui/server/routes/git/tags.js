@@ -24,25 +24,25 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
         return res.status(400).json({ success: false, error: '缺少标签名称' });
       }
 
-      let command = 'git tag';
+      const tagArgs = ['tag'];
 
       if (type === 'annotated') {
         // 附注标签
         if (!message) {
           return res.status(400).json({ success: false, error: '附注标签需要提供说明信息' });
         }
-        command += ` -a "${tagName}" -m "${message}"`;
+        tagArgs.push('-a', tagName, '-m', message);
       } else {
         // 轻量标签
-        command += ` "${tagName}"`;
+        tagArgs.push(tagName);
       }
 
       // 如果指定了commit，添加到命令中
       if (commit && commit.trim()) {
-        command += ` ${commit.trim()}`;
+        tagArgs.push(commit.trim());
       }
 
-      const { stdout } = await execGitCommand(command);
+      const { stdout } = await execGitCommand(tagArgs);
 
       res.json({
         success: true,
@@ -60,7 +60,7 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
     try {
       // 使用 git tag -n --format 获取详细信息
       const { stdout } = await execGitCommand(
-        'git tag -n --format="%(refname:short)|%(objectname:short)|%(creatordate:iso8601)|%(subject)"'
+        ['tag', '-n', '--format=%(refname:short)|%(objectname:short)|%(creatordate:iso8601)|%(subject)']
       );
 
       if (!stdout.trim()) {
@@ -82,7 +82,7 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
       for (const tag of tags) {
         try {
           const { stdout: typeCheck } = await execGitCommand(
-            `git cat-file -t ${tag.name}`,
+            ['cat-file', '-t', tag.name],
             { log: false }
           );
           if (typeCheck.trim() === 'tag') {
@@ -109,7 +109,7 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
         return res.status(400).json({ success: false, error: '缺少标签名称' });
       }
 
-      const { stdout } = await execGitCommand(`git push origin ${tagName}`);
+      const { stdout } = await execGitCommand(['push', 'origin', tagName]);
 
       res.json({
         success: true,
@@ -125,7 +125,7 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
   // 推送所有标签到远程
   app.post('/api/push-all-tags', async (req, res) => {
     try {
-      const { stdout } = await execGitCommand('git push origin --tags');
+      const { stdout } = await execGitCommand(['push', 'origin', '--tags']);
 
       res.json({
         success: true,
@@ -147,7 +147,7 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
         return res.status(400).json({ success: false, error: '缺少标签名称' });
       }
 
-      const { stdout } = await execGitCommand(`git tag -d ${tagName}`);
+      const { stdout } = await execGitCommand(['tag', '-d', tagName]);
 
       res.json({
         success: true,

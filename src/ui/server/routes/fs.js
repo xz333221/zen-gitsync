@@ -45,7 +45,7 @@ export function registerFsRoutes({
 
       // 检查当前目录是否是Git仓库
       try {
-        await execGitCommand('git rev-parse --is-inside-work-tree');
+        await execGitCommand(['rev-parse', '--is-inside-work-tree']);
       } catch (error) {
         return res.status(400).json({
           error: '当前目录不是一个Git仓库',
@@ -86,7 +86,7 @@ export function registerFsRoutes({
 
         // 检查新目录是否是Git仓库
         try {
-          await execGitCommand('git rev-parse --is-inside-work-tree');
+          await execGitCommand(['rev-parse', '--is-inside-work-tree']);
 
           // 更新全局变量
           setCurrentProjectPath(newProjectPath);
