@@ -388,6 +388,68 @@ async function listDirTree(projectPath, maxDepth = 2, maxEntries = 400) {
   return lines.join('\n');
 }
 
+// 剥离 LLM 输出的 思考块、```json``` 代码块围栏，以及首尾说明文字。
+// 原贪婪正则 /({[\s\S]*})/ 会把 思考块（内含未配对花括号或字符串）一起吞进 JSON.parse，
+// 在 DeepSeek 等会输出 推理链的模型上偶发 "Unterminated string in JSON"。
+function stripThinkingBlocks(content) {
+  let s = String(content || '');
+  // 1) 显式 思考块（成对标签）
+  s = s.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');
+  // 2) 某些 provider 流式结尾会留下裸 <think>...</think> 之外的残段（无结束标签时被截断）
+  s = s.replace(/<think(?:ing)?>[\s\S]*$/gi, '');
+  // 3) ```json ... ``` 代码块围栏（保留内部 JSON）
+  s = s.replace(/```json\s*/gi, '').replace(/```/g, '');
+  return s;
+}
+
+// 在剥离 思考块 的文本里定位第一个「平衡花括号对象」的起点/终点。
+// 跳过字符串内的 {/}（含转义）以及 Jinja {{ }} 模板占位符；
+// 同时只在「JSON 特征显著」的 { 处起算 —— 即该 { 之后不远处出现 " 字符串。
+// 这能避免把 LLM 思考文本里的裸 { ... }（如 "see { views, stores }"）误当 JSON 起点。
+function extractFirstJsonObject(content) {
+  const s = String(content || '');
+  let depth = 0;
+  let inStr = false;
+  let escape = false;
+  let start = -1;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (escape) { escape = false; continue; }
+      if (ch === '\\') { escape = true; continue; }
+      if (ch === '"') { inStr = false; }
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    // 跳过 Jinja {{ }} 占位符（提示词模板常用，勿当 JSON）
+    if (ch === '{' && s[i + 1] === '{') { i++; continue; }
+    if (ch === '}' && s[i - 1] === '}') { continue; }
+    if (ch === '{') {
+      if (depth === 0) {
+        // 启发式判断「这看起来像 JSON 起点」：
+        // 1. { 之前紧邻「真正的语义字符」(字母/数字/中文/下划线) → 不是 JSON 起点（散文里的花括号）
+        //    但接受 . , ; : 等句末标点（LLM 经常以「总结：{...}」直接开头 JSON）
+        // 2. { 之后跳过空白第一个字符必须是 " 或 }（空对象）
+        const before = i > 0 ? s[i - 1] : '';
+        if (/[A-Za-z0-9_一-龥]/.test(before)) continue;
+        let j = i + 1;
+        while (j < s.length && /\s/.test(s[j])) j++;
+        const firstNonWs = s[j];
+        if (firstNonWs !== '"' && firstNonWs !== '}') continue;
+        start = i;
+      }
+      depth++;
+    } else if (ch === '}') {
+      if (depth > 0) depth--;
+      if (depth === 0 && start !== -1) {
+        return s.slice(start, i + 1);
+      }
+    }
+  }
+  // 兜底：找不到平衡对象时返回原文（让上层 JSON.parse 报清晰错误）
+  return s;
+}
+
 async function callLlmJson(model, prompt, opts = {}) {
   const { timeoutMs = 60000, images = [] } = opts;
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
@@ -426,8 +488,8 @@ async function callLlmJson(model, prompt, opts = {}) {
       throw new Error('LLM 返回内容为空');
     }
     try {
-      const m = content.match(/```json\s*([\s\S]*?)```/) || content.match(/({[\s\S]*})/);
-      return JSON.parse(m ? m[1] : content);
+      const cleaned = stripThinkingBlocks(content);
+      return JSON.parse(extractFirstJsonObject(cleaned));
     } catch (err) {
       const snippet = content.length > 500 ? content.slice(0, 500) + '…' : content;
       throw new Error(`LLM 返回非 JSON 或被截断：${err.message}；原始内容片段：${snippet}`);
