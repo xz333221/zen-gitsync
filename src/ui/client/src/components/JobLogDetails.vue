@@ -40,12 +40,9 @@
             <span class="wb-log-dots__dot"></span>
           </span>
         </span>
-        <span v-else-if="isFinished" class="wb-log-summary__status wb-log-summary__status--done">
-          <span v-if="job.status === 'error'" class="wb-log-summary__icon">✗</span>
-          <span v-else class="wb-log-summary__icon">✓</span>
-          <span class="wb-log-summary__label">
-            {{ job.status === 'error' ? $t('@WORKBENCH:执行出错') : $t('@WORKBENCH:执行完成') }}
-          </span>
+        <span v-else-if="isFinished" :class="['wb-log-summary__status', finishedStatusClass]">
+          <span class="wb-log-summary__icon">{{ finishedStatusIcon }}</span>
+          <span class="wb-log-summary__label">{{ finishedStatusLabel }}</span>
           <span v-if="elapsedLabel" class="wb-log-summary__elapsed">{{ elapsedLabel }}</span>
         </span>
         <span v-else>{{ $t('@WORKBENCH:查看执行日志') }}</span>
@@ -304,6 +301,22 @@ const isActive = computed(() => props.job.status === 'running' || props.job.stat
 const isFinished = computed(() => {
   const s = props.job.status
   return s === 'done' || s === 'error' || s === 'cancelled'
+})
+// 终态分三态：done → 绿色执行完成，cancelled → 灰色已停止，error → 红色执行出错
+const finishedStatusClass = computed(() => {
+  if (props.job.status === 'cancelled') return 'wb-log-summary__status--cancelled'
+  if (props.job.status === 'error') return 'wb-log-summary__status--error'
+  return 'wb-log-summary__status--done'
+})
+const finishedStatusIcon = computed(() => {
+  if (props.job.status === 'cancelled') return '⏹'
+  if (props.job.status === 'error') return '✗'
+  return '✓'
+})
+const finishedStatusLabel = computed(() => {
+  if (props.job.status === 'cancelled') return $t('@WORKBENCH:已停止')
+  if (props.job.status === 'error') return $t('@WORKBENCH:执行出错')
+  return $t('@WORKBENCH:执行完成')
 })
 
 // 自定义 typewriter:visibleLength 从 0 累加到 outputText.length
@@ -794,6 +807,13 @@ function onFullscreenClosed() {
 }
 .wb-log-summary__status--done {
   color: var(--color-success-dark, #15803d);
+}
+/* cancelled 用中性灰（与 statusColor.ts 里 cancelled=#9ca3af 对齐），区别于 error 红和 done 绿 */
+.wb-log-summary__status--cancelled {
+  color: #9ca3af;
+}
+.wb-log-summary__status--error {
+  color: var(--color-danger, #ef4444);
 }
 .wb-log-summary__icon {
   font-size: 13px;

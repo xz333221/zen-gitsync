@@ -80,6 +80,9 @@ interface Task {
   simpleOverride?: string
   // 任务所属项目根路径（创建时记录），用于侧边栏按项目分组显示
   projectPath?: string
+  // 仅 complex 任务有效：true（默认）= 子任务连续执行，任意一个出错/取消就停后续；
+  // false = 单个子任务独立，失败不影响后续（旧行为）
+  sequential?: boolean
   subtasks: SubTask[]
   status: string
   attachments?: Attachment[]
@@ -218,7 +221,8 @@ watch(
         title: selectedTask.value.title,
         desc: selectedTask.value.desc,
         promptId: selectedTask.value.promptId,
-        simpleOverride: selectedTask.value.simpleOverride || ''
+        simpleOverride: selectedTask.value.simpleOverride || '',
+        sequential: selectedTask.value.sequential !== false  // 连续模式开关变更也要保存
       }
     : null,
   (cur, prev) => {
@@ -977,6 +981,8 @@ async function setTaskType(t: Task, type: 'simple' | 'complex') {
     type,
     // 切换为 simple 时后端会用 '' 覆盖 simpleOverride；为 complex 时同理
     simpleOverride: t.simpleOverride || '',
+    // 切换为复杂任务时保留用户已设置的 sequential（避免被后端默认覆盖）
+    sequential: t.sequential !== false,
     // 复杂 → 简单时显式传空数组清空子任务；其他情况保留现有
     subtasks: willClearSubtasks ? [] : (t.subtasks || [])
   }
@@ -1847,13 +1853,6 @@ function humanSize(n: number): string {
             <span class="wb-prompt-item__name" @click="openEditPrompt(p)" :title="p.content">
               {{ p.name }}
             </span>
-            <span
-              v-if="currentProject.name"
-              class="wb-prompt-item__project"
-              :title="$t('@WORKBENCH:适用于当前项目') + '：' + currentProject.path"
-            >
-              {{ currentProject.name }}
-            </span>
             <button
               class="wb-prompt-item__del"
               @click="deletePrompt(p)"
@@ -2023,6 +2022,17 @@ function humanSize(n: number): string {
             @dragleave="pasteHoverId = (pasteHoverId === 'task-' + selectedTask.id ? null : pasteHoverId)"
           />
         </details>
+        <!-- 连续执行开关：仅复杂任务可见（简单任务无 sub 列表，无意义） -->
+        <!-- AI 拆出的子任务一般前后强依赖（产物-输入），默认开启；关闭后单个 sub 失败不影响后续 -->
+        <div v-if="!isSimpleTask" class="wb-task-options">
+          <el-switch
+            v-model="selectedTask.sequential"
+            :active-text="$t('@WORKBENCH:子任务连续执行')"
+            :inactive-text="$t('@WORKBENCH:子任务连续执行')"
+            inline-prompt
+            :title="$t('@WORKBENCH:连续模式下，任意子任务出错或被手动停止都会终止后续子任务')"
+          />
+        </div>
         <!-- ── 执行主体：复杂任务用左（子任务列表）+ 右（详情）左右布局；简单任务只保留详情面板 ── -->
         <div class="wb-execution-body" :class="{ 'wb-execution-body--simple': isSimpleTask }">
           <!-- 左：子任务列表 —— 简单任务时不渲染 -->
@@ -2345,6 +2355,15 @@ function humanSize(n: number): string {
   margin: 0;
   flex-shrink: 0;
   overflow: hidden;
+}
+/* 任务头操作区（连续执行开关等）：与任务描述块同一列、对齐缩进 */
+.wb-task-options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 .wb-task-desc[open] {
   background: var(--bg-container);
@@ -2860,24 +2879,7 @@ function humanSize(n: number): string {
   font-weight: 500;
   letter-spacing: -0.05px;
 }
-/* 提示词项右侧的项目徽标——提示词本体跨项目共享，仅做"适用于当前项目"的视觉提示 */
-.wb-prompt-item__project {
-  display: inline-flex;
-  align-items: center;
-  height: 16px;
-  padding: 0 6px;
-  border-radius: 8px;
-  background: var(--tint-primary-12);
-  color: var(--color-primary);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* .wb-prompt-item__del */
 .wb-prompt-item__del {
   border: none;
   background: transparent;

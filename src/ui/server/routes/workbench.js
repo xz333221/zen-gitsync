@@ -1198,13 +1198,21 @@ async function runTaskQueue(task, repoPath, branch, opts) {
   const priorOutputs = fromIndex > 0
     ? await collectPriorOutputsUpTo(task, fromIndex)
     : []
+  // 连续模式（默认）：任意 sub 终态非 done（cancelled / error）→ 整批停，后续 sub 保持 todo。
+  // AI 拆出来的 sub 一般前后强依赖（前一步产出是后一步输入），出错就停下来让用户决策。
+  // 关闭后回退旧行为：单个 sub 失败不影响后续 sub 继续跑。
+  const sequential = task.sequential !== false
   for (let i = fromIndex; i < task.subtasks.length; i++) {
     const sub = task.subtasks[i]
     if (sub.status === 'done') continue;
-    await runSingleSubtask(task, sub, repoPath, branch, priorOutputs)
+    const outcome = await runSingleSubtask(task, sub, repoPath, branch, priorOutputs)
     // 逐 sub 落盘:之前只在队列跑完才 persistTaskAfterRun,中途崩溃会丢已完成
     // sub 的状态。runSingleSubtask 已经把 sub.status 改完,这里补一次落盘。
     await persistTaskAfterRun(task)
+    if (sequential && outcome !== 'done') {
+      // cancelled / error → 后续 sub 全部保持 todo，不再继续
+      break
+    }
   }
 }
 
@@ -1405,7 +1413,12 @@ ${prompt}`
       job.exitCode = 130; // 128 + SIGINT(2)，约定俗成的"用户取消"退出码
       job.status = 'cancelled';
       job.error = '用户已停止执行';
-      // sub 不改状态——cancelled 是 job 维度，同 task 后续 sub 仍可继续执行
+      // 同步把闭包里的 sub 也置 cancelled（cancel 接口的 syncSubToCancelled 改了磁盘 task
+      // 引用，但 runSingleSubtask 形参里的 sub 是另一份内存引用）。否则 finally publish sub:update
+      // 会用 status='running' 覆盖掉前端已渲染的 cancelled 状态，导致 UI 反复跳回 running。
+      // 同时 sequential=true 时 runTaskQueue 会看到 outcome='cancelled'，break 不再跑后续 sub。
+      sub.status = 'cancelled';
+      if (!sub.error) sub.error = '用户已停止执行';
     } else {
       job.exitCode = 0;
       job.status = 'done';
@@ -1439,6 +1452,36 @@ ${prompt}`
       console.warn('[workbench] flushJobsSaveNow failed (job id=' + job.id + ', status=' + job.status + '):', err && err.message || err)
     }
   }
+  // 把 sub 的终态返回给 runTaskQueue，用于「连续模式」判断要不要 break 整批队列
+  return job.status  // 'done' | 'cancelled' | 'error'
+}
+
+/**
+ * 把被取消的 sub 同步置 'cancelled' 并落盘。
+ * cancelJob 路径专用：前端 taskIsRunning/sub.is-running 都看 sub.status，不改就会出现
+ * "主任务黄点 + sub running 动效 + 右侧执行完成"三处不一致。
+ *
+ * 简单任务的虚拟 subId 不在 tasks.json 里（task.subtasks 是 complex 才有），所以这里
+ * 找不到 sub 时静默返回；简单任务的 running 状态由 job 数组单独维护（见 taskIsRunning）。
+ *
+ * @returns {{ taskId: string, sub: object } | null}  找到并更新时返回新 sub，否则 null
+ */
+async function syncSubToCancelled(job) {
+  if (!job || !job.taskId || !job.subId) return null
+  const data = await readJson(TASKS_FILE, { tasks: [] })
+  const task = (data.tasks || []).find(x => x.id === job.taskId)
+  if (!task || !Array.isArray(task.subtasks)) return null
+  const sub = task.subtasks.find(s => s && s.id === job.subId)
+  if (!sub) return null
+  if (sub.status === 'cancelled') return { taskId: task.id, sub }  // 已置过，幂等返回
+  sub.status = 'cancelled'
+  sub.error = '用户已停止执行'
+  sub.errorAt = nowIso()
+  task.updatedAt = nowIso()
+  await writeJson(TASKS_FILE, data)
+  publish('sub:update', { taskId: task.id, sub })
+  publish('task:update', task)
+  return { taskId: task.id, sub }
 }
 
 /** 把 task.subtasks 写回 tasks.json,并广播 task:update。runTaskQueue 和"单 sub 执行"共用。 */
@@ -2356,11 +2399,14 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
 
   app.post('/api/workbench/tasks', async (req, res) => {
     try {
-      const { id, title, desc, promptId, subtasks, type: rawType, simpleOverride } = req.body || {};
+      const { id, title, desc, promptId, subtasks, type: rawType, simpleOverride, sequential: rawSequential } = req.body || {};
       // title 非必填：允许空字符串，UI 层会用"未命名任务"占位
       const safeTitle = typeof title === 'string' ? title.trim() : '';
       // type 归一化:仅接受 'simple' | 'complex'，缺省/未知一律按 complex
       const taskType = rawType === 'simple' ? 'simple' : 'complex';
+      // sequential 归一化：仅接受 boolean，缺省/非布尔一律 true（连续模式），
+      // 旧任务没字段时也是 true，保留连续默认行为
+      const sequential = rawSequential === false ? false : true;
       const safeOverride = typeof simpleOverride === 'string' ? simpleOverride.slice(0, 8000) : '';
       const data = await readJson(TASKS_FILE, { tasks: [] });
       const tasks = data.tasks || [];
@@ -2376,6 +2422,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
           desc: desc || '',
           promptId: promptId || null,
           type: taskType,
+          // 复杂任务可显式关闭连续模式；简单任务无意义，固定 true
+          sequential: taskType === 'complex' ? sequential : true,
           simpleOverride: taskType === 'simple' ? safeOverride : '',
           subtasks: Array.isArray(subtasks) ? subtasks.map(s => ({
             id: s.id || genId(),
@@ -2409,6 +2457,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         desc: desc || '',
         promptId: promptId || null,
         type: taskType,
+        // 新建任务：简单任务固定 true，复杂任务用传入值（默认 true）
+        sequential: taskType === 'complex' ? sequential : true,
         simpleOverride: taskType === 'simple' ? safeOverride : '',
         projectPath: currentProjectPath || '',
         subtasks: Array.isArray(subtasks) ? subtasks.map(s => ({
@@ -2610,7 +2660,11 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   //   - 找到正在运行的 job，调 child.kill() 终止 claude 进程
   //   - Windows 下用 taskkill /T /F 杀进程树（claude 进程可能 fork 出子进程）
   //   - 加入 cancelledJobs 集合，runTaskQueue 退出循环后会把 job 标为 'cancelled'
-  //   - 只影响这一个 sub；同 task 后续 sub 仍按队列顺序继续执行
+  //   - 同步把 sub.status 改为 'cancelled' 并 publish sub:update，
+  //     否则前端 sub 列表/任务头黄点会一直显示 running（sub.status 没动）。
+  //     历史这里只改 job.status 导致 UI 误显示「执行中」。
+  //   - 只影响这一个 sub；同 task 后续 sub 在 sequential=false 时继续执行，
+  //     sequential=true 时由 runTaskQueue 自然 break（见 runSingleSubtask 的 cancelled 分支）
   app.post('/api/workbench/jobs/:id/cancel', (req, res) => {
     const job = jobs.get(req.params.id)
     if (!job) {
@@ -2625,6 +2679,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     job.error = '用户已停止执行'
     job.endedAt = nowIso()
     publish('job:update', { ...job }) // 用浅拷贝避免序列化 child 引用
+    // 同步把 sub 也置 cancelled，否则 taskIsRunning(sub.status==='running') 一直 true
+    // → 左侧任务头黄点 + 右侧 sub 列表 running 动效都不消失
+    const subInfo = syncSubToCancelled(job)
     // 终态：fire-and-forget 同步落盘，cancel 是显式操作，要保证不丢
     flushJobsSaveNow().catch(err => console.warn('[workbench] jobs save failed:', err.message))
     const child = job.child
