@@ -40,6 +40,14 @@ interface CommandHistoryItem {
 
 const commandHistory = ref<CommandHistoryItem[]>([]);
 const isLoading = ref(false);
+
+// 防御:后端旧版本/遗留数据可能把 command 字段塞成数组(例如 execGitCommand(['status']) 未经 join),
+// 这里统一归一化为字符串,所有下游访问 item.command.xxx 都先经过它
+function normalizeCommand(raw: unknown): string {
+  if (Array.isArray(raw)) return raw.join(' ')
+  if (raw == null) return ''
+  return String(raw)
+}
 const isClearingHistory = ref(false);
 const isCopyingHistory = ref(false);
 const hasSocketConnection = ref(false);
@@ -68,16 +76,16 @@ const filteredCommandHistory = computed(() => {
   // 按命令类型筛选
   if (filterCommandType.value !== 'all') {
     result = result.filter(item => {
-      const isGitCommand = item.command.trim().startsWith('git ');
+      const isGitCommand = normalizeCommand(item.command).startsWith('git ');
       return filterCommandType.value === 'git' ? isGitCommand : !isGitCommand;
     });
   }
-  
+
   // 按关键词搜索
   if (searchKeyword.value.trim()) {
     const keyword = searchKeyword.value.toLowerCase();
-    result = result.filter(item => 
-      item.command.toLowerCase().includes(keyword) ||
+    result = result.filter(item =>
+      normalizeCommand(item.command).toLowerCase().includes(keyword) ||
       (item.stdout && item.stdout.toLowerCase().includes(keyword)) ||
       (item.stderr && item.stderr.toLowerCase().includes(keyword)) ||
       (item.error && item.error.toLowerCase().includes(keyword))
@@ -90,8 +98,8 @@ const filteredCommandHistory = computed(() => {
 // 统计数量
 const successCount = computed(() => commandHistory.value.filter(item => item.success).length);
 const errorCount = computed(() => commandHistory.value.filter(item => !item.success).length);
-const gitCommandCount = computed(() => commandHistory.value.filter(item => item.command.trim().startsWith('git ')).length);
-const otherCommandCount = computed(() => commandHistory.value.filter(item => !item.command.trim().startsWith('git ')).length);
+const gitCommandCount = computed(() => commandHistory.value.filter(item => normalizeCommand(item.command).startsWith('git ')).length);
+const otherCommandCount = computed(() => commandHistory.value.filter(item => !normalizeCommand(item.command).startsWith('git ')).length);
 
 // 打开命令历史弹窗
 function openCommandHistory() {
@@ -142,13 +150,13 @@ async function copyAllHistory() {
     const historyText = filteredCommandHistory.value.map(item => {
       // 基本格式：命令 + 时间 + 耗时 + 状态
       let text = `# ${formatTimestamp(item.timestamp)}${$t('@81F0F: (耗时: ')}${formatExecutionTime(item.executionTime)}) - ${item.success ? $t('@81F0F:成功') : $t('@81F0F:失败')}\n`;
-      text += `${item.command}\n`;
-      
+      text += `${normalizeCommand(item.command)}\n`;
+
       // 添加输出（如果需要）
       if (item.stdout) {
         text += `\n# 输出:\n${item.stdout}\n`;
       }
-      
+
       // 添加stderr输出（根据命令类型决定标签）
       if (item.stderr) {
         const stderrLabel = isStderrNormalOutput(item.command) ? $t('@81F0F:输出信息') : $t('@81F0F:错误输出');
@@ -187,7 +195,7 @@ async function copyCommandsOnly() {
     
     // 只提取筛选后的命令部分
     const commandsText = filteredCommandHistory.value
-      .map(item => item.command)
+      .map(item => normalizeCommand(item.command))
       .join('\n');
     
     await navigator.clipboard.writeText(commandsText);
@@ -299,9 +307,11 @@ function isGitPushCommand(command: string): boolean {
 }
 
 // 判断stderr是否应该被视为正常输出
-function isStderrNormalOutput(command: string): boolean {
+function isStderrNormalOutput(command: string | unknown): boolean {
+  // 防御:后端旧数据/遗留条目可能传入非字符串(数组等)
+  const cmd = normalizeCommand(command)
   // Git push命令的stderr通常包含正常的推送信息
-  if (isGitPushCommand(command)) {
+  if (isGitPushCommand(cmd)) {
     return true;
   }
 
@@ -547,7 +557,7 @@ onUnmounted(() => {
                 <el-tag size="small" :type="item.success ? 'success' : 'danger'" effect="dark" class="status-tag">
                   {{ item.success ? $t('@81F0F:成功') : $t('@81F0F:失败') }}
                 </el-tag>
-                <code>{{ item.command }}</code>
+                <code>{{ normalizeCommand(item.command) }}</code>
               </div>
               <div class="command-meta">
                 <span class="timestamp">{{ formatTimestamp(item.timestamp) }}</span>
@@ -558,7 +568,7 @@ onUnmounted(() => {
               <IconButton
                 :tooltip="$t('@81F0F:复制命令')"
                 custom-class="item-copy-button"
-                @click.stop="copyCommand(item.command)"
+                @click.stop="copyCommand(normalizeCommand(item.command))"
               >
                 <el-icon><CopyDocument /></el-icon>
               </IconButton>

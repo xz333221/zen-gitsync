@@ -315,8 +315,10 @@ function execGitCommand(command, options = {}) {
       }
 
       // Add command to history
+      // 用 head(已 join)而不是原始 command,确保历史里的 command 永远是字符串
+      // 防止 execGitCommand(['status']) 这类数组调用把数组塞进历史 → 前端 item.command.trim() 崩
       const historyItem = {
-        command,
+        command: head,
         stdout: truncatedStdout || '',
         stderr: truncatedStderr || '',
         error: error ? error.message : null,
@@ -415,7 +417,14 @@ function getCommandHistory() {
 // Function to manually add command to history (for commands not using execGitCommand)
 function addCommandToHistory(command, stdout = '', stderr = '', error = null, executionTime = 0) {
   const MAX_OUTPUT_LENGTH = 5000;
-  
+
+  // 防御:历史里的 command 必须始终是字符串,防止前端 item.command.trim() 抛错
+  if (Array.isArray(command)) {
+    command = command.join(' ')
+  } else if (typeof command !== 'string') {
+    command = String(command ?? '')
+  }
+
   // Truncate outputs if too long
   const isStdoutTruncated = stdout.length > MAX_OUTPUT_LENGTH;
   const isStderrTruncated = stderr.length > MAX_OUTPUT_LENGTH;
