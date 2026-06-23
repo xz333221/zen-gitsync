@@ -286,6 +286,8 @@ async function openFile(node: TreeNode) {
   const existing = tabs.value.find(t => t.path === node.path)
   if (existing) {
     activeTabPath.value = node.path
+    // 若 path 未变（已激活 tab 被再次点击），watch 不会触发，需显式还焦点
+    nextTick(() => focusEditor())
     return
   }
   // 图片：跳过 Monaco，直接建一个只读 tab，content 留空字符串（不渲染 Monaco）
@@ -388,12 +390,29 @@ function mountEditor() {
     tab.isDirty = newVal !== tab.originalContent
   })
 
-  // 失去焦点时，如果开启自动保存则保存
+  // 失去焦点时：
+  // ① 如果开启自动保存则保存
+  // ② 如果编辑器视图仍可见，且焦点去往的是非输入控件（按钮、div、body 等），
+  //    则在下一帧把焦点归还给 Monaco，彻底消除"点击侧边栏按钮后空格键失效"的问题。
+  //    焦点去往真实输入框（搜索框 / 内联新建 / 重命名输入框 / Monaco 自身 EC 节点）时不抢焦点。
   editorInstance.value.onDidBlurEditorText(() => {
     if (configStore.ui.editorAutoSave) {
       const tab = activeTab()
       if (tab?.isDirty) saveCurrentFile(false)
     }
+    requestAnimationFrame(() => {
+      // 编辑器视图已被 v-show 隐藏，不抢焦点
+      if (!containerRef.value || containerRef.value.offsetParent === null) return
+      const ae = document.activeElement as HTMLElement | null
+      const isInputLike = ae && (
+        ae.tagName === 'INPUT'
+        || ae.tagName === 'TEXTAREA'
+        || ae.isContentEditable
+        || ae.classList?.contains('native-edit-context')
+        || ae.classList?.contains('monaco-editor')
+      )
+      if (!isInputLike) focusEditor()
+    })
   })
 }
 
