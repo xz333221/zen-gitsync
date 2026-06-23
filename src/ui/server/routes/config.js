@@ -1027,6 +1027,7 @@ export function registerConfigRoutes({
       await configManager.writeRawConfigFile(rawConfig)
       res.json({ success: true })
     } catch (error) {
+      logger.error('[save-ui-settings] failed:', error)
       res.status(500).json({ success: false, error: error.message })
     }
   })

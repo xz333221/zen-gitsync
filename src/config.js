@@ -101,8 +101,21 @@ async function readRawConfigFile() {
 }
 
 // 将原始配置对象写回磁盘
+// 用 tmp + rename 原子写：避免拖拽高频触发 + 防抖期间 beforeunload 同时写入时
+// 两次 fs.writeFile 直接覆盖产生的"先 truncate 再写"的中间态空文件,
+// 触发 readRawConfigFile 在 race 时 JSON.parse 失败 → 500。
 async function writeRawConfigFile(obj) {
-  await fs.writeFile(configPath, JSON.stringify(obj, null, 2), 'utf-8');
+  const tmpPath = `${configPath}.${process.pid}.${Date.now()}.tmp`;
+  const data = JSON.stringify(obj, null, 2);
+  await fs.writeFile(tmpPath, data, 'utf-8');
+  try {
+    await fs.rename(tmpPath, configPath);
+  } catch (err) {
+    // Windows 上 rename 到已存在文件可能抛 EPERM/EEXIST,fallback 覆盖写
+    try { await fs.unlink(tmpPath); } catch (_) {}
+    await fs.writeFile(configPath, data, 'utf-8');
+    if (err) throw err;
+  }
 }
 
 async function backupConfigFileIfExists() {
