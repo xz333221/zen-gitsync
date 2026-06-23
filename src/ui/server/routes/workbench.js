@@ -1961,7 +1961,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
           if (delta.thinking) send({ type: 'thinking', delta: delta.thinking });
           if (delta.content) send({ type: 'content', delta: delta.content });
         },
-        { maxTokens: 16000, timeoutMs: 600000, images: imageDataUrls, signal: abortController.signal }
+        { maxTokens: 32000, timeoutMs: 600000, images: imageDataUrls, signal: abortController.signal }
       );
 
       if (aborted) {
@@ -2230,7 +2230,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
           if (delta.thinking) send({ type: 'thinking', delta: delta.thinking });
           if (delta.content) send({ type: 'content', delta: delta.content });
         },
-        { maxTokens: 16000, timeoutMs: 600000, signal: abortController.signal }
+        { maxTokens: 32000, timeoutMs: 600000, signal: abortController.signal }
       );
 
       if (aborted) {
