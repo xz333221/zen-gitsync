@@ -93,14 +93,37 @@ export const useInstancesStore = defineStore('instances', () => {
   function start() {
     refresh()
     attachSocket()
-    pollTimer = window.setInterval(() => { refresh() }, POLL_INTERVAL_MS)
+    schedulePoll()
+    document.addEventListener('visibilitychange', onVisibilityChange)
   }
 
   function stop() {
     detachSocket()
+    cancelPoll()
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+  }
+
+  // 轮询由 visibility 控制:页面可见时 15s 兜底轮询(兼容 Windows fs.watch 跨进程不可靠),
+  // 失焦时停掉以省请求;重新聚焦时立即拉一次保证数据是新的
+  function schedulePoll() {
+    cancelPoll()
+    if (typeof document !== 'undefined' && document.hidden) return
+    pollTimer = window.setInterval(() => { refresh() }, POLL_INTERVAL_MS)
+  }
+
+  function cancelPoll() {
     if (pollTimer != null) {
       window.clearInterval(pollTimer)
       pollTimer = null
+    }
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) {
+      cancelPoll()
+    } else {
+      refresh()        // 切回前台立即拉一次,补齐失焦期间可能错过的变化
+      schedulePoll()   // 恢复 15s 兜底轮询
     }
   }
 
