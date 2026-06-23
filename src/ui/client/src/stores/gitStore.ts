@@ -481,6 +481,49 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 启动时静默 fetch --all,如有新内容触发 fetchLog 刷新右侧 commit 历史
+  // 只在以下情况执行:已经加载为 Git 仓库、有上游分支(否则 ahead/behind 没意义)
+  // 不挂在 visibilitychange/focus:启动期一次性,避免高频触发网络请求
+  async function bootFetch() {
+    if (!isGitRepo.value) return false
+    if (!hasUpstream.value) {
+      console.log('[bootFetch] no upstream, skip')
+      return false
+    }
+
+    try {
+      isGitFetching.value = true
+      const beforeBehind = branchBehind.value
+      console.log(`[bootFetch] start silent fetch --all, beforeBehind=${beforeBehind}`)
+
+      const response = await fetch('/api/fetch-all', { method: 'POST' })
+      const result = await response.json()
+      if (!result.success) {
+        console.warn('[bootFetch] fetch --all failed:', result.error)
+        return false
+      }
+
+      // 重新计算 ahead/behind(fetch 改变了 FETCH_HEAD,必须 force 重算)
+      await getBranchStatus(true)
+
+      const afterBehind = branchBehind.value
+      // fetch 后 behind 变小 = 远端推了新 commit 但被我们 fetch 到了
+      const hasNewRemoteCommits = afterBehind < beforeBehind
+      console.log(`[bootFetch] afterBehind=${afterBehind}, hasNewRemoteCommits=${hasNewRemoteCommits}`)
+
+      if (hasNewRemoteCommits) {
+        await fetchLog(true)
+        return true
+      }
+      return false
+    } catch (error) {
+      console.warn('[bootFetch] silent fetch error (ignored):', (error as Error).message)
+      return false
+    } finally {
+      isGitFetching.value = false
+    }
+  }
+
   // 执行git fetch --all操作
   async function gitFetchAll() {
     if (!isGitRepo.value) {
@@ -2252,6 +2295,7 @@ export const useGitStore = defineStore('git', () => {
     getBranchStatus,
     gitPull,
     gitFetchAll,
+    bootFetch,
     initSocketConnection,
     parseStatusPorcelain,
     fetchLog,

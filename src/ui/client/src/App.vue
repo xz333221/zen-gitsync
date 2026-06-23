@@ -142,6 +142,12 @@ onMounted(async () => {
         gitStore.getRemoteUrl(),         // 获取远程仓库地址
         gitStore.getBranchStatus(true)   // 强制获取分支状态（页面首次加载）
       ])
+
+      // 启动时静默 git fetch --all,如有新提交则刷新右侧 log
+      // 不阻塞初始化,失败也只是 warn,不影响主流程
+      gitStore.bootFetch().catch(err => {
+        console.warn('[App] 启动静默 fetch 异常(已忽略):', err)
+      })
     } else {
       ElMessage.warning($t('@F13B4:当前目录不是Git仓库，部分功能将不可用'))
     }
