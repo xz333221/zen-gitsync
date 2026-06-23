@@ -585,57 +585,8 @@ async function addRemoteAndSetUpstream() {
 // 初始化Git仓库
 const isInitializingRepo = ref(false)
 
-// ── 非 git 仓库时,在空态展示"最近项目"列表(沿用 DirectorySelector 的常用目录数据源)──
-// 设计:点击 → 新标签打开(POST /api/open-new-tab-gui),与切换弹窗里 Ctrl+点击行为一致
-// 不存在的目录(原弹窗里标"不存在"的)点击不响应并提示,避免打开失败
-const recentDirectories = ref<Array<{ path: string; exists: boolean }>>([])
-const isLoadingRecent = ref(false)
-async function loadRecentDirectories() {
-  isLoadingRecent.value = true
-  try {
-    const res = await fetch('/api/recent_directories', { cache: 'no-store' })
-    const data = await res.json()
-    if (data && Array.isArray(data.directories)) {
-      recentDirectories.value = data.directories
-    } else {
-      recentDirectories.value = []
-    }
-  } catch {
-    recentDirectories.value = []
-  } finally {
-    isLoadingRecent.value = false
-  }
-}
-async function openRecentDirInNewTab(dirPath: string) {
-  if (!dirPath) return
-  try {
-    const res = await fetch('/api/open-new-tab-gui', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: dirPath })
-    })
-    const data = await res.json()
-    if (!data?.success) {
-      ElMessage.error(data?.error || $t('@13D1C:打开失败'))
-    }
-  } catch (err) {
-    ElMessage.error(`${$t('@13D1C:打开失败')}: ${(err as Error).message}`)
-  }
-}
-function onRecentDirClick(item: { path: string; exists: boolean }) {
-  if (!item.exists) {
-    ElMessage.warning($t('@13D1C:目录不存在,无法打开'))
-    return
-  }
-  openRecentDirInNewTab(item.path)
-}
-
-// 进入"非 git 仓库"空态时才拉最近目录;git 仓库下没必要展示
-watch(() => gitStore.isGitRepo, (isRepo) => {
-  if (!isRepo && recentDirectories.value.length === 0) {
-    loadRecentDirectories()
-  }
-}, { immediate: true })
+// "最近项目"列表已抽出为独立组件 @/components/RecentProjectsList.vue
+// 在 App.vue 中间空态(非 git 仓库时)和原本的 Git 仓库初始化卡片一起展示
 async function initGitRepo() {
   isInitializingRepo.value = true
   try {
@@ -964,7 +915,9 @@ defineExpose({
 
 <template>
   <div class="card git-status-card flex flex-col">
-    <div class="status-header">
+    <!-- status-header 只在 git 仓库下显示:非 git 仓库时所有按钮都已隐藏,
+         header 整块就是 58px 空占位,直接不渲染 -->
+    <div v-if="gitStore.isGitRepo" class="status-header">
       <div class="title-row">
         <div class="header-actions">
           <!-- 添加Git Pull按钮 -->
@@ -1043,9 +996,12 @@ defineExpose({
         </div>
       </div>
     </div>
-    
-    <div class="card-content" 
-      v-loading="gitStore.isGitPulling || gitStore.isGitFetching" 
+
+    <!-- 非 git 仓库时,只渲染"非 git 仓库"空态,避免上游分支/未暂存/未跟踪等
+         旧状态在切换目录后残留显示(它们原本用 v-if="!hasUpstream" 等独立条件,
+         不感知 isGitRepo 变化,导致切到非 git 目录还会渲染陈旧的"未设置上游分支"等提示) -->
+    <div class="card-content" v-if="gitStore.isGitRepo"
+      v-loading="gitStore.isGitPulling || gitStore.isGitFetching"
       :element-loading-text="gitStore.isGitPulling ? $t('@13D1C:正在拉取代码...') : $t('@13D1C:正在获取远程分支信息...')"
     >
       <div v-if="!gitStore.isGitRepo" class="status-box not-git-repo">
@@ -1065,44 +1021,8 @@ defineExpose({
             {{ $t('@13D1C:初始化Git仓库') }}
           </el-button>
         </div>
-        <!-- 非 git 仓库时,展示"最近项目"列表(沿用 DirectorySelector 的常用目录数据源)
-             点击 = 在新标签页打开(POST /api/open-new-tab-gui),与切换弹窗里 Ctrl+点击行为一致
-             不存在的目录点击会提示,避免打开失败 -->
-        <div class="recent-projects">
-          <div class="recent-projects__head">
-            <span class="recent-projects__title">{{ $t('@13D1C:最近项目') }}</span>
-            <span class="recent-projects__hint">{{ $t('@13D1C:点击在新标签页打开') }}</span>
-          </div>
-          <div v-if="isLoadingRecent && recentDirectories.length === 0" class="recent-projects__empty">
-            <el-icon><Loading /></el-icon>
-            <span>{{ $t('@13D1C:加载中…') }}</span>
-          </div>
-          <div v-else-if="recentDirectories.length === 0" class="recent-projects__empty">
-            {{ $t('@13D1C:暂无最近项目') }}
-          </div>
-          <ul v-else class="recent-projects__list" :aria-label="$t('@13D1C:最近项目列表')">
-            <li
-              v-for="item in recentDirectories"
-              :key="item.path"
-              class="recent-projects__item"
-              :class="{ 'is-missing': !item.exists }"
-            >
-              <button
-                type="button"
-                class="recent-projects__btn"
-                :title="item.exists ? item.path : $t('@13D1C:目录不存在')"
-                :aria-label="item.exists
-                  ? $t('@13D1C:在新标签页打开 {path}', { path: item.path })
-                  : $t('@13D1C:{path} (目录不存在)', { path: item.path })"
-                @click="onRecentDirClick(item)"
-              >
-              <el-icon class="recent-projects__icon" aria-hidden="true"><Folder /></el-icon>
-              <span class="recent-projects__name">{{ item.path }}</span>
-              <span v-if="!item.exists" class="recent-projects__tag">{{ $t('@13D1C:不存在') }}</span>
-              </button>
-            </li>
-          </ul>
-        </div>
+        <!-- "最近项目"列表已抽出为 @/components/RecentProjectsList.vue,
+             在 App.vue 中间空态(非 git 仓库时)随 Git 仓库初始化卡片一起展示 -->
         <!-- 非Git仓库时也提供配置远程仓库入口 -->
         <div class="no-remote-tip">
           <div class="tip-header">
@@ -1497,6 +1417,26 @@ defineExpose({
         </div>
       </div>
     </div>
+    <div v-else class="card-content not-git-repo-content">
+      <div class="status-box not-git-repo">
+        <div class="empty-status">
+          <el-icon class="empty-icon"><Folder /></el-icon>
+          <p class="empty-title">{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
+          <p class="empty-desc">{{ $t('@13D1C:请初始化Git仓库或切换到Git仓库目录') }}</p>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            :loading="isInitializingRepo"
+            :disabled="isInitializingRepo"
+            style="margin-top: 12px;"
+            @click="initGitRepo"
+          >
+            {{ $t('@13D1C:初始化Git仓库') }}
+          </el-button>
+        </div>
+      </div>
+    </div>
     
     <!-- NPM脚本面板 -->
     <NpmScriptsPanel />
@@ -1888,112 +1828,6 @@ defineExpose({
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   margin: 0;
-}
-
-/* "最近项目"列表：非 git 仓库时替代空态大图标,展示常用目录,点击在新标签页打开 */
-.recent-projects {
-  margin-top: var(--spacing-lg);
-  padding: var(--spacing-md);
-  background: var(--bg-container, #fff);
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 6px;
-  text-align: left;
-}
-.recent-projects__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.recent-projects__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.recent-projects__hint {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-.recent-projects__empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 12px;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-.recent-projects__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 280px;
-  overflow-y: auto;
-}
-.recent-projects__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-primary);
-  transition: background 0.12s;
-}
-.recent-projects__item:hover {
-  background: rgba(45, 127, 249, 0.12);
-}
-.recent-projects__btn {
-  /* 让 button 占据 li 全部空间,继承 li 的视觉 */
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-.recent-projects__btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-.recent-projects__item.is-missing {
-  color: var(--text-secondary);
-  cursor: not-allowed;
-}
-.recent-projects__item.is-missing:hover {
-  background: rgba(239, 68, 68, 0.06);
-}
-.recent-projects__icon {
-  flex-shrink: 0;
-  color: #2D7FF9;
-}
-.recent-projects__item.is-missing .recent-projects__icon {
-  color: var(--text-secondary);
-}
-.recent-projects__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: ui-monospace, monospace;
-}
-.recent-projects__tag {
-  flex-shrink: 0;
-  padding: 1px 6px;
-  font-size: 11px;
-  border-radius: 3px;
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
 }
 
 /* 分支信息样式 */

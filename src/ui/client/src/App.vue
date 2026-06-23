@@ -30,6 +30,7 @@ import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
 import ActivityBar from '@/components/ActivityBar.vue'
 import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 import AppErrorBanner from '@/components/AppErrorBanner.vue'
+import RecentProjectsList from '@/components/RecentProjectsList.vue'
 // 编辑器 / 源码地图视图延迟加载（首屏不下载）
 const EditorView = defineAsyncComponent(() => import('@/views/EditorView.vue'))
 const SourceMapView = defineAsyncComponent(() => import('@views/SourceMapView.vue'))
@@ -584,14 +585,6 @@ function stopHResize() {
 }
 
 // 目录切换逻辑已移到 DirectorySelector 组件内部
-
-function copyGitInit() {
-  navigator.clipboard.writeText('git init').then(() => {
-    ElMessage.success($t('@F13B4:已复制'))
-  }).catch(() => {
-    ElMessage.error($t('@F13B4:复制失败'))
-  })
-}
 </script>
 
 <template>
@@ -799,32 +792,10 @@ function copyGitInit() {
           <CommitForm />
         </template>
       </div>
-      <div class="commit-form-panel" v-else>
-        <div class="state-block state-block--empty not-git-repo-card" role="region" :aria-label="$t('@F13B4:仓库初始化')">
-          <div class="state-block__icon not-git-repo-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/>
-              <path d="M14 2v6h6"/>
-              <path d="M2 15h10"/>
-              <path d="M5 12l-3 3 3 3"/>
-              <path d="M9 12l3 3-3 3"/>
-            </svg>
-          </div>
-          <h2 class="state-block__title not-git-repo-title">Git{{ $t('@F13B4:仓库初始化') }}</h2>
-          <p class="state-block__hint not-git-repo-desc">{{ $t('@F13B4:当前目录不是Git仓库，请先初始化Git仓库或切换到Git仓库目录。') }}</p>
-          <div class="not-git-repo-tip">
-            <span class="tip-label">{{ $t('@F13B4:可以使用以下命令初始化仓库：') }}</span>
-            <button
-              type="button"
-              class="not-git-repo-code"
-              :aria-label="`${$t('@F13B4:点击复制')} git init`"
-              @click="copyGitInit"
-            >
-              <code>git init</code>
-              <span class="copy-hint">{{ $t('@F13B4:点击复制') }}</span>
-            </button>
-          </div>
-        </div>
+      <div class="commit-form-panel commit-form-panel--empty" v-else>
+        <!-- 非 Git 仓库时,中间空态直接用"最近项目"列表代替原"Git 仓库初始化"卡片
+             (左侧 GitStatus 已经有"初始化 Git 仓库"按钮 + "尚未配置远程仓库"提示,这里不重复) -->
+        <RecentProjectsList />
       </div>
 
       <!-- 水平分隔条（提交表单 | 自定义指令） -->
@@ -930,6 +901,22 @@ body {
   overflow: hidden;
   z-index: 1001;
   background: var(--bg-page);
+}
+/* footer 走 fixed,不再依赖文档流 #app 高度撑开;
+   之前 main-container 已是 position: fixed 脱离文档流,导致 #app 高度坍缩,
+   position: static 的 footer 跑到 #app 顶部(top: 0) */
+.main-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  z-index: 1002;
+  background: var(--bg-component);
+  border-top: 1px solid var(--border-color-light);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-md);
 }
 
 .config-broken-banner {
@@ -1051,6 +1038,10 @@ body {
     inset -1px 0 0 var(--border-color-light),
     inset 1px 0 0 var(--border-color-light),
     inset 0 -1px 0 var(--border-color-light);
+}
+/* 非 git 仓库空态:卡片不再贴左右分隔条 */
+.commit-form-panel--empty {
+  padding: 0 var(--spacing-md);
 }
 
 .cmd-console-panel {
@@ -1576,101 +1567,7 @@ h1 {
   transform: rotate(-18deg) scale(1.08);
 }
 
-/* 非Git仓库初始化提示卡片 —— 复用 .state-block(state-block--empty variant) */
-.not-git-repo-card {
-  height: 100%;
-  padding: var(--spacing-xl);
-  gap: 0;
-}
-
-.not-git-repo-icon {
-  --state-icon-size: 48px;
-  /* 减弱品牌色:这一态是"未初始化",不抢眼 */
-  color: var(--text-tertiary);
-  opacity: 0.85;
-}
-
-.not-git-repo-title {
-  font-size: var(--font-size-lg);
-}
-
-.not-git-repo-desc {
-  max-width: 40ch;
-}
-
-.not-git-repo-tip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin-top: var(--spacing-base);
-}
-
-.not-git-repo-tip .tip-label {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.not-git-repo-code {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  background: var(--bg-code);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition:
-    background-color var(--transition-fast) var(--ease-custom),
-    border-color var(--transition-fast) var(--ease-custom),
-    box-shadow var(--transition-fast) var(--ease-custom);
-  user-select: all;
-  font-family: inherit;
-}
-
-.not-git-repo-code:hover {
-  border-color: var(--color-primary);
-  background: var(--bg-panel);
-}
-
-.not-git-repo-code:focus-visible {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: var(--focus-ring);
-}
-
-.not-git-repo-code code {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  background: transparent;
-  padding: 0;
-}
-
-.not-git-repo-code .copy-hint {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.not-git-repo-code:hover .copy-hint,
-.not-git-repo-code:focus-visible .copy-hint {
-  opacity: 1;
-}
-
-.main-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  height: 32px;
-  box-sizing: border-box;
-  padding: 0 var(--spacing-lg);
-  gap: var(--spacing-lg);
-  transition: background-color var(--transition-base) var(--ease-custom);
-}
+/* 非Git仓库初始化卡片相关样式已随原卡片整体移除 —— 中间空态改为 RecentProjectsList */
 
 .main-footer:hover {
   background: var(--bg-component-hover);
