@@ -1793,6 +1793,60 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 把 remoteUrl 转成可访问的 web URL
+  // - https/http 形式:剥掉末尾的 .git 后缀,直接打开
+  // - ssh 形式 (git@host:user/repo.git):仅当 host 在已知 web 平台白名单内时转 https,
+  //   未知 host 不冒猜(自建域的 ssh 端口往往不等于 https 端口,直接拼容易跳错地址)
+  // 返回 null 表示无法生成可访问的 web URL
+  const KNOWN_WEB_HOSTS = ['github.com', 'gitlab.com', 'bitbucket.org', 'gitee.com', 'coding.net', 'codeup.aliyun.com']
+  const remoteWebUrl = computed<string | null>(() => {
+    const url = remoteUrl.value.trim()
+    if (!url) return null
+
+    // 已经是 http(s) 形式:直接可用,去掉 .git 后缀避免 404
+    if (/^https?:\/\//i.test(url)) {
+      return url.replace(/\.git$/i, '')
+    }
+
+    // SSH 形式:git@host:user/repo.git 或 ssh://git@host:port/user/repo.git
+    const sshShorthand = url.match(/^[\w.-]+@([^:]+):(.+?)(?:\.git)?$/i)
+    if (sshShorthand) {
+      const host = sshShorthand[1]
+      const path = sshShorthand[2]
+      if (KNOWN_WEB_HOSTS.includes(host.toLowerCase())) {
+        return `https://${host}/${path}`
+      }
+      return null
+    }
+
+    const sshUri = url.match(/^ssh:\/\/(?:[\w.-]+@)?([^/:]+)(?::\d+)?\/(.+?)(?:\.git)?$/i)
+    if (sshUri) {
+      const host = sshUri[1]
+      const path = sshUri[2]
+      if (KNOWN_WEB_HOSTS.includes(host.toLowerCase())) {
+        return `https://${host}/${path}`
+      }
+      return null
+    }
+
+    return null
+  })
+
+  const isRemoteBrowsable = computed(() => remoteWebUrl.value !== null)
+
+  function openRemoteWebUrl() {
+    const webUrl = remoteWebUrl.value
+    if (!webUrl) {
+      ElMessage({
+        message: $t('@C298B:该远程仓库地址无法识别为可访问的网页地址'),
+        type: 'warning'
+      })
+      return false
+    }
+    window.open(webUrl, '_blank', 'noopener,noreferrer')
+    return true
+  }
+
   // 复制远程仓库地址到剪贴板
   async function copyRemoteUrl() {
     if (!remoteUrl.value) {
@@ -2236,6 +2290,9 @@ export const useGitStore = defineStore('git', () => {
     lastBranchesTime,
     remoteUrl,
     isLoadingRemoteUrl,
+    remoteWebUrl,
+    isRemoteBrowsable,
+    openRemoteWebUrl,
     hasConflictedFiles,
     
     // stash相关状态
