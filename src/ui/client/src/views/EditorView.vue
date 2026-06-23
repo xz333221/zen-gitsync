@@ -379,6 +379,10 @@ function mountEditor() {
     smoothScrolling: true,
     cursorBlinking: 'smooth',
     padding: { top: 8, bottom: 8 },
+    // Monaco 0.52+ 在 Chrome/Edge 121+ 上默认启用 EditContext API，
+    // 该模式下 Space 键输入存在已知 bug（键事件被静默丢弃）。
+    // 显式禁用，回退到经典 textarea 模式，彻底解决空格键无法输入的问题。
+    editContext: false,
   })
 
   // 监听内容变化，标记 dirty
