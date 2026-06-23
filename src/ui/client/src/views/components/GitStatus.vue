@@ -1698,7 +1698,9 @@ defineExpose({
   flex-direction: column;
 }
 
-.status-box {
+/* Git 命令原始输出框（monospace + 200px 高度 + pre-wrap） */
+/* 仅作用于未带 .not-git-repo 修饰的 .status-box,后者是友好提示区,要填充满整块面板 */
+.status-box:not(.not-git-repo) {
   white-space: pre-wrap;
   font-family: monospace;
   padding: var(--spacing-base);
@@ -1708,7 +1710,6 @@ defineExpose({
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid var(--border-card);
-  
   line-height: 1.5;
   width: 100%;
   box-sizing: border-box;
