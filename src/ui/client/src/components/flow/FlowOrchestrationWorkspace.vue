@@ -39,10 +39,7 @@ import NodeContextMenu from './nodes/NodeContextMenu.vue'
 import NodeConfigPanel from './NodeConfigPanel.vue'
 import { $t } from '@/lang/static'
 
-// 导入样式
-import '@vue-flow/core/dist/style.css'
-import '@vue-flow/core/dist/theme-default.css'
-import '@vue-flow/controls/dist/style.css'
+// vue-flow 样式已统一在 main.ts 入口注入,组件内不再重复 import
 
 // 定义节点数据类型
 export interface FlowNodeData {

@@ -1094,7 +1094,7 @@ export function registerConfigRoutes({
       const models = Array.isArray(rawConfig.models) ? rawConfig.models : []
       const defaultModel = models.find(m => m.isDefault) || models[0]
       if (!defaultModel) {
-        return res.json({ success: false, error: '未配置 AI 模型，请先在通用设置中添加模型' })
+        return res.json({ success: false, error: '未配置 AI 模型，请先在通用设置中添加模型', code: 'NO_MODEL' })
       }
 
       // 后端自己收集 diff,确保 untracked 文件也能进 prompt
@@ -1152,7 +1152,7 @@ ${diffText || '(no staged content, please infer from the file list)'}`
         stream: false
       })
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 30000)
+      const timer = setTimeout(() => controller.abort(), 60000)
       let response
       try {
         response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
@@ -1162,7 +1162,7 @@ ${diffText || '(no staged content, please infer from the file list)'}`
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
         const msg = data?.error?.message || data?.message || `HTTP ${response.status}`
-        return res.json({ success: false, error: msg })
+        return res.json({ success: false, error: msg, code: 'HTTP_ERR' })
       }
       const content = data?.choices?.[0]?.message?.content || ''
       // 响应内容只走 debug(默认关闭),前 600 字截断防 token 泄露
@@ -1175,7 +1175,7 @@ ${diffText || '(no staged content, please infer from the file list)'}`
 
       if (!jsonMatch) {
         console.error('[generate-commit] no JSON found, full content:', content)
-        return res.json({ success: false, error: 'model returned no valid JSON' })
+        return res.json({ success: false, error: 'model returned no valid JSON', code: 'NO_JSON' })
       }
       let parsed
       try {
@@ -1192,7 +1192,7 @@ ${diffText || '(no staged content, please infer from the file list)'}`
             description: (descM?.[1] || '').trim()
           })
         }
-        return res.json({ success: false, error: 'JSON parse failed' })
+        return res.json({ success: false, error: 'JSON parse failed', code: 'PARSE_FAILED' })
       }
       res.json({
         success: true,
@@ -1201,8 +1201,9 @@ ${diffText || '(no staged content, please infer from the file list)'}`
         description: String(parsed.description || '').trim()
       })
     } catch (error) {
-      const msg = error.name === 'AbortError' ? 'timeout 30s' : error.message
-      res.json({ success: false, error: msg })
+      const isTimeout = error.name === 'AbortError'
+      const msg = isTimeout ? 'AI 请求超时（60s），请重试或检查模型响应速度' : error.message
+      res.json({ success: false, error: msg, code: isTimeout ? 'TIMEOUT' : 'GENERATE_FAILED' })
     }
   })
 }

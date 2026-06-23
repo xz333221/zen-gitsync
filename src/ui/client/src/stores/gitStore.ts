@@ -443,10 +443,20 @@ export const useGitStore = defineStore('git', () => {
           message: $t('@C298B:拉取成功'),
           type: 'success'
         });
-        
+
         // 刷新分支状态（强制刷新，避免外部切换分支后缓存仍为旧分支名）
         await getBranchStatus(true);
-        return { success: true };
+
+        // 拉取有内容变化时,刷新提交历史（"Already up to date" 时跳过,
+        // 避免无意义的全量重查).git pull 的 stdout 含 "Already up to date" /
+        // "已经是最新的" 时视为无变化.
+        const msg = (result.message || '').toString();
+        const hasChanges =
+          !/already up to date|已经是最新的|already up-to-date/i.test(msg);
+        if (hasChanges) {
+          await refreshLog();
+        }
+        return { success: true, hadChanges: hasChanges };
       } else {
         // 返回结构化错误信息，由调用方决定如何展示
         return {

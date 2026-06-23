@@ -17,7 +17,7 @@
 import { $t } from "@/lang/static";
 import { ref, computed, watch, onMounted } from "vue";
 import { ElMessage } from "element-plus";
-import { Loading } from "@element-plus/icons-vue";
+import { Loading, ArrowDown } from "@element-plus/icons-vue";
 import GlobalLoading from "@/components/GlobalLoading.vue";
 import SuccessModal from "@/components/SuccessModal.vue";
 import { useGlobalLoading } from "@/composables/useGlobalLoading";
@@ -51,7 +51,20 @@ async function handleAiGenerateCommit() {
     });
     const data = await res.json();
     if (!data.success) {
-      ElMessage.error(data.error || $t('@76872:AI生成失败'));
+      // 后端按 code 返回结构化错误: TIMEOUT / GENERATE_FAILED / NO_MODEL / NO_JSON / PARSE_FAILED / HTTP_ERR
+      // 前端按 code 走 i18n,error 字段仅在无法识别时兜底展示(比如 HTTP 502 等)
+      const code = (data as { code?: string }).code;
+      const fallback = data.error || $t('@76872:AI生成失败');
+      const i18nByCode: Record<string, string> = {
+        TIMEOUT: '@76872:AI生成超时，请重试或检查模型响应速度',
+        NO_MODEL: '@76872:未配置AI模型，请先在通用设置中添加模型',
+        NO_JSON: '@76872:AI未返回有效结果，请重试',
+        PARSE_FAILED: '@76872:AI返回格式无法解析，请重试',
+        GENERATE_FAILED: '@76872:AI生成失败',
+        HTTP_ERR: '@76872:AI生成失败'
+      };
+      const key = code ? i18nByCode[code] : null;
+      ElMessage.error(key ? $t(key) : fallback);
       return;
     }
 
@@ -752,7 +765,7 @@ git config --global user.email "your.email@example.com"</pre
                   class="toggle-icon"
                   :class="{ 'is-active': showAdvancedFields }"
                 >
-                  <arrow-down />
+                  <ArrowDown />
                 </el-icon>
               </div>
 

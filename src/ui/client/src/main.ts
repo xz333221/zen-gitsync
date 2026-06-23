@@ -25,6 +25,13 @@ import './styles/workbench.scss'
 import './styles/markdown-renderer.css'
 import 'virtual:svg-icons-register'
 import 'local-file-picker/dist/file-picker.css'
+// Vue Flow 样式必须在 VueFlow 组件 mount 之前注入,否则会 console warn
+// 之前写在 FlowExecutionViewer/FlowOrchestrationWorkspace 组件级 import,
+// 由于这俩组件是 defineAsyncComponent 懒加载,首次 mount 时 css 还没注入。
+// 提到入口保证应用启动即加载。
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import '@vue-flow/controls/dist/style.css'
 import { initSvg } from './components/SvgIcon'
 
 const app = createApp(App)
