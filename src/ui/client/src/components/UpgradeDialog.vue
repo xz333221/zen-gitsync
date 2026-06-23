@@ -91,6 +91,7 @@ function onLater() {
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     :show-close="status !== 'running'"
+    append-to-body
     @close="close"
   >
     <div class="upgrade-status" :class="`is-${status}`">

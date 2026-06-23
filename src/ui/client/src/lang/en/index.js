@@ -30,6 +30,7 @@ export default {
   '@F13B4:取消': 'Cancel',
   '@F13B4:确定要从 {current} 升级到 {latest} 吗？': 'Upgrade from {current} to {latest}?',
   '@F13B4:发现新版本 {version}': 'New version available: {version}',
+  '@F13B4:发现新版本 {version}，点击升级': 'New version available: {version}, click to upgrade',
   '@F13B4:检查更新失败 {error}': 'Update check failed: {error}',
   '@F13B4:等待日志输出': 'Waiting for output...',
   '@F13B4:复制克隆命令': 'Copy clone command',

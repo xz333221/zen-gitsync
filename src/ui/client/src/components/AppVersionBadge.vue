@@ -233,20 +233,18 @@ onMounted(() => {
       >v{{ displayVersion }}</a>
     </el-tooltip>
 
-    <el-tooltip
+    <button
       v-if="latestInfo?.hasUpdate"
-      :content="$t('@F13B4:发现新版本 {version}', { version: latestInfo.latest ?? '' })"
-      placement="top"
-      effect="dark"
-      :show-after="300"
+      type="button"
+      class="upgrade-btn"
+      :title="$t('@F13B4:发现新版本 {version}，点击升级', { version: latestInfo.latest ?? '' })"
+      :aria-label="$t('@F13B4:发现新版本 {version}，点击升级', { version: latestInfo.latest ?? '' })"
+      @click="handleUpgrade"
     >
-      <el-button
-        class="upgrade-btn"
-        size="small"
-        type="primary"
-        @click="handleUpgrade"
-      >{{ $t('@F13B4:升级') }}</el-button>
-    </el-tooltip>
+      <span class="upgrade-btn__dot" aria-hidden="true"></span>
+      <span class="upgrade-btn__label">{{ $t('@F13B4:升级') }}</span>
+      <span class="upgrade-btn__version">v{{ latestInfo.latest }}</span>
+    </button>
 
     <UpgradeDialog
       v-model="upgradeDialogVisible"
@@ -310,10 +308,77 @@ onMounted(() => {
 }
 
 .upgrade-btn {
-  // 让按钮和 v2.12.9 在视觉上更平衡
-  font-size: 11px !important;
-  padding: 0 8px !important;
-  height: 20px !important;
-  border-radius: 3px !important;
+  // 独立的胶囊按钮：不再被 el-tooltip 包裹，避免 tooltip padding 区域扩大误点击区
+  // 直接给 button 元素加样式，hover/active 都在自身范围内
+  appearance: none;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 10px 0 8px;
+  margin: 0;
+  border: 0;
+  border-radius: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #3a8ee6 100%);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--transition-fast) var(--ease-custom),
+    box-shadow var(--transition-fast) var(--ease-custom),
+    filter var(--transition-fast) var(--ease-custom);
+  white-space: nowrap;
+  user-select: none;
+
+  &:hover {
+    filter: brightness(1.08);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+    filter: brightness(0.96);
+    box-shadow: var(--shadow-sm);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+.upgrade-btn__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+  animation: upgrade-pulse 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.upgrade-btn__label {
+  letter-spacing: 0.5px;
+}
+
+.upgrade-btn__version {
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.22);
+  line-height: 1.2;
+}
+
+@keyframes upgrade-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.8); }
 }
 </style>
