@@ -1658,8 +1658,15 @@ function pickAttachmentFile(t: AttachmentTarget) {
 
 
 const IMAGE_EXTS_UI = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'])
+// 兜底：除了 ext，还看 mime/originalName，防止 ext 缺失或非标准扩展（如 jpe / heic 改写后）导致
+// imageList 为空、previewUrls.length === 0，最终 viewer 模板 v-if 不满足而完全不渲染
 function isImageAttachment(att: Attachment): boolean {
-  return IMAGE_EXTS_UI.has(String(att.ext || '').toLowerCase())
+  const ext = String(att?.ext || '').toLowerCase()
+  if (ext && IMAGE_EXTS_UI.has(ext)) return true
+  const mime = String(att?.mimeType || '').toLowerCase()
+  if (mime.startsWith('image/')) return true
+  const name = String(att?.originalName || '').toLowerCase()
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(name)
 }
 
 function humanSize(n: number): string {

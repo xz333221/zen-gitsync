@@ -214,6 +214,7 @@ onBeforeUnmount(() => {
       :url-list="previewUrls"
       :initial-index="previewIndex"
       :hide-on-click-modal="true"
+      :teleported="true"
       @close="closePreview"
     />
   </teleport>
