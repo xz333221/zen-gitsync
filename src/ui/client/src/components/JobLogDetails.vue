@@ -210,6 +210,11 @@ const emit = defineEmits<{
 const isCollapsed = ref(true)
 function toggleOpen() { isCollapsed.value = !isCollapsed.value }
 
+// job 是否处于活跃态(running/pending)。必须定义在使用前,否则 recomputeIsCollapsed
+// 在 watch immediate 触发时进 TDZ 报 "Cannot access 'isActive' before initialization"。
+// 文件下方 312 行附近还有一份重复定义,这里保留这一份并删掉下面那份。
+const isActive = computed(() => props.job.status === 'running' || props.job.status === 'pending')
+
 // 仅在 running/pending 时记录"自动展开过";用户点 summary 改 open 后,
 // 本组件生命周期内不再覆盖(尊重用户);新一轮开始时清掉。
 let activeUserOverride = false
@@ -308,7 +313,7 @@ async function copyAll() {
 //   2) 用 displayText = outputText.slice(0, visibleLength) 喂给 markstream
 //   3) 已完成 job 直接 visibleLength = full(全量展示,不动画)
 const outputText = computed(() => displayOutput())
-const isActive = computed(() => props.job.status === 'running' || props.job.status === 'pending')
+// isActive 已提前到上面与 isCollapsed 一起定义(避免 TDZ 报错)
 const isFinished = computed(() => {
   const s = props.job.status
   return s === 'done' || s === 'error' || s === 'cancelled'
