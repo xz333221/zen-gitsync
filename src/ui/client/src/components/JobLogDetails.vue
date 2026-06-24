@@ -25,7 +25,7 @@
       'is-finished': isFinished
     }"
   >
-    <div class="wb-log-summary" @click="toggleOpen" role="button" :aria-expanded="!isCollapsed">
+    <div class="wb-log-summary" @click="onSummaryToggle" role="button" :aria-expanded="!isCollapsed">
       <span class="wb-log-summary__left">
         <span v-if="job.status === 'running'" class="wb-log-summary__status wb-log-summary__status--running">
           <span class="wb-log-summary__label">{{ $t('@WORKBENCH:正在执行…') }}</span>
@@ -199,11 +199,39 @@ const emit = defineEmits<{
   (e: 're-execute', job: Job): void
 }>()
 
-/* 列表态默认折叠:20+ 条 jobs × ~60KB output 一次性进 DOM + markstream-vue 全量解析
-   = 主线程卡死(/jobs/list 弹窗首次打开 1-2s)。用户要点 summary 才展开 body,
-   性能换 1 次点击,可接受。 */
+/* 默认展开策略:
+   - running/pending → 展开(用户点了"执行"后想看到实时进度)
+   - done/error/cancelled → 折叠(看历史不需要 50 条全展开,会卡 DOM)
+   - 用户手动展开/折叠后,本组件生命周期内不再覆盖
+   - 新一轮 job 进入活跃态(从未活跃 → 活跃)时,清掉用户覆盖,重置为"展开"
+   注:ExecutionLogManager 一屏 50+ 条 done jobs,默认折叠是必要的;
+      主面板上 1-3 条 job,默认展开让用户立刻看到对话流。
+   isCollapsed 含义保持原状(true=折叠, false=展开)。 */
 const isCollapsed = ref(true)
 function toggleOpen() { isCollapsed.value = !isCollapsed.value }
+
+// 仅在 running/pending 时记录"自动展开过";用户点 summary 改 open 后,
+// 本组件生命周期内不再覆盖(尊重用户);新一轮开始时清掉。
+let activeUserOverride = false
+function recomputeIsCollapsed() {
+  if (activeUserOverride) return
+  isCollapsed.value = !isActive.value
+}
+watch(() => props.job.status, (s, prev) => {
+  const wasActive = prev === 'running' || prev === 'pending'
+  const nowActive = s === 'running' || s === 'pending'
+  if (!wasActive && nowActive) {
+    // 新一轮开始 → 重置用户覆盖,自动展开
+    activeUserOverride = false
+  }
+  recomputeIsCollapsed()
+}, { immediate: true })
+
+// 在 summary @click 之外,用户对折叠状态做的手动改 open → 走这里
+function onSummaryToggle() {
+  activeUserOverride = true
+  toggleOpen()
+}
 
 const MAX_LOG_DISPLAY = 64 * 1024
 function displayOutput(): string {
