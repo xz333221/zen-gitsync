@@ -1790,6 +1790,8 @@ export default {
   '@WORKBENCH:编辑提示词': '编辑提示词',
   '@WORKBENCH:新建提示词': '新建提示词',
   '@WORKBENCH:名称': '名称',
+  '@WORKBENCH:所属项目': '所属项目',
+  '@WORKBENCH:全局（所有项目可用）': '全局（所有项目可用）',
   '@WORKBENCH:如：代码审查 / 写测试': '如：代码审查 / 写测试',
   '@WORKBENCH:内容': '内容',
   '@WORKBENCH:可用变量：{{task.title}} {{task.desc}} {{sub.title}} {{sub.desc}} {{repo.path}} {{branch}}': '可用变量：｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛sub.title｝｝ ｛｛sub.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝',

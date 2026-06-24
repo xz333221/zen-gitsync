@@ -1783,6 +1783,8 @@ export default {
   '@WORKBENCH:编辑提示词': 'Edit prompt preset',
   '@WORKBENCH:新建提示词': 'New prompt preset',
   '@WORKBENCH:名称': 'Name',
+  '@WORKBENCH:所属项目': 'Belongs to project',
+  '@WORKBENCH:全局（所有项目可用）': 'Global (available to all projects)',
   '@WORKBENCH:如：代码审查 / 写测试': 'e.g. Code review / Write tests',
   '@WORKBENCH:内容': 'Content',
   '@WORKBENCH:可用变量：{{task.title}} {{task.desc}} {{sub.title}} {{sub.desc}} {{repo.path}} {{branch}}': 'Variables: ｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛sub.title｝｝ ｛｛sub.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝',

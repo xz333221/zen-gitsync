@@ -45,6 +45,9 @@ interface Prompt {
   id: string
   name: string
   content: string
+  // 提示词所属项目根路径。空字符串 = 全局提示词(所有项目都看得到);
+  // 非空 = 只在指定项目的右侧下拉里出现。旧数据(没有该字段)视同全局。
+  projectPath?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -266,10 +269,18 @@ function onBeforeUnloadPersist() {
   }
 }
 
-const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false })
+const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false, projectPath: '' })
 const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
 // 任务描述（主任务 desc + 附件）默认折叠，避免占满首屏
 const taskDescExpanded = ref(false)
+
+// ── 提示词按项目过滤 ────────────────────────────────────────────────────
+// 全局提示词的 projectPath = '' (空串);右侧下拉只展示「当前项目专属 + 全局」两部分。
+// 历史数据(没有 projectPath 字段)也会被 !p.projectPath 命中 → 仍作为全局展示,不影响存量。
+const availablePrompts = computed<Prompt[]>(() => {
+  const cur = (currentProject.value.path || '').trim()
+  return prompts.value.filter(p => !p.projectPath || p.projectPath === cur)
+})
 
 let es: EventSource | null = null
 
@@ -747,11 +758,14 @@ function connectSSE() {
 }
 
 // ── 提示词 CRUD ─────────────────────────────────────────────────────────────
+// 新建提示词：默认归属当前项目（若已选中项目）；用户可在弹窗里手动改成"全局"。
+// 让"在哪个项目添加就属于哪个项目"的默认行为一步到位,不需要额外操作。
 function openCreatePrompt() {
   promptDialog.editing = null
   promptDialog.name = ''
   promptDialog.content = ''
   promptDialog.aiLoading = false
+  promptDialog.projectPath = (currentProject.value.path || '').trim()
   promptDialog.visible = true
 }
 function openEditPrompt(p: Prompt) {
@@ -759,6 +773,8 @@ function openEditPrompt(p: Prompt) {
   promptDialog.name = p.name
   promptDialog.content = p.content
   promptDialog.aiLoading = false
+  // 旧数据没有 projectPath → 视同全局(空串)
+  promptDialog.projectPath = (p.projectPath || '').trim()
   promptDialog.visible = true
 }
 async function aiGeneratePrompt() {
@@ -825,10 +841,12 @@ async function savePrompt() {
     ElMessage.warning($t('@WORKBENCH:名称和内容不能为空'))
     return
   }
+  // 落盘:projectPath 为空 = 全局提示词,非空 = 归属到那个项目
   const body = {
     id: promptDialog.editing?.id,
     name: promptDialog.name.trim(),
-    content: promptDialog.content
+    content: promptDialog.content,
+    projectPath: (promptDialog.projectPath || '').trim()
   }
   const res = await fetch('/api/workbench/prompts', {
     method: 'POST',
@@ -1799,7 +1817,7 @@ function humanSize(n: number): string {
         <header class="wb-section__head">
           <span class="wb-section__tag wb-section__tag--accent">{{ $t('@WORKBENCH:提示') }}</span>
           <h3 class="wb-section__title">{{ $t('@WORKBENCH:预置提示词') }}</h3>
-          <span class="wb-pill wb-section__count">{{ prompts.length }}</span>
+          <span class="wb-pill wb-section__count">{{ availablePrompts.length }}</span>
           <button
             class="wb-section__action"
             @click="openCreatePrompt"
@@ -1810,13 +1828,23 @@ function humanSize(n: number): string {
           </button>
         </header>
         <ul class="wb-prompt-list">
-          <li v-for="p in prompts" :key="p.id" class="wb-prompt-item">
+          <li v-for="p in availablePrompts" :key="p.id" class="wb-prompt-item">
             <div class="wb-prompt-item__icon">
               <el-icon><Memo /></el-icon>
             </div>
             <span class="wb-prompt-item__name" @click="openEditPrompt(p)" :title="p.content">
               {{ p.name }}
             </span>
+            <span
+              v-if="!p.projectPath"
+              class="wb-prompt-item__tag"
+              :title="$t('@WORKBENCH:全局（所有项目可用）')"
+            >{{ $t('@WORKBENCH:全局（所有项目可用）') }}</span>
+            <span
+              v-else
+              class="wb-prompt-item__tag wb-prompt-item__tag--project"
+              :title="p.projectPath"
+            >{{ shortProjectLabel(p.projectPath) }}</span>
             <button
               class="wb-prompt-item__del"
               @click="deletePrompt(p)"
@@ -1826,7 +1854,7 @@ function humanSize(n: number): string {
               <el-icon><Close /></el-icon>
             </button>
           </li>
-          <li v-if="prompts.length === 0" class="wb-empty wb-empty--compact">
+          <li v-if="availablePrompts.length === 0" class="wb-empty wb-empty--compact">
             {{ $t('@WORKBENCH:暂无提示词') }}
           </li>
         </ul>
@@ -1873,7 +1901,7 @@ function humanSize(n: number): string {
           </span>
           <select class="wb-select" v-model="selectedTask.promptId">
             <option :value="null">{{ $t('@WORKBENCH:不绑定预置提示词') }}</option>
-            <option v-for="p in prompts" :key="p.id" :value="p.id">{{ p.name }}</option>
+            <option v-for="p in availablePrompts" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
           <!-- 任务类型 segmented control：简单/复杂二选一。
                复杂任务下右侧再额外出现 AI 拆分按钮，组成「模式选择 + AI 动作 + 执行」的紧凑操作组。 -->
@@ -2233,6 +2261,27 @@ function humanSize(n: number): string {
       <el-form label-position="top">
         <el-form-item :label="$t('@WORKBENCH:名称')">
           <el-input v-model="promptDialog.name" :placeholder="$t('@WORKBENCH:如：代码审查 / 写测试')" />
+        </el-form-item>
+        <el-form-item :label="$t('@WORKBENCH:所属项目')">
+          <el-select
+            v-model="promptDialog.projectPath"
+            :placeholder="$t('@WORKBENCH:所属项目')"
+            style="width: 100%"
+            :disabled="!currentProject.path"
+          >
+            <!-- 「全局」选项 = projectPath 为空串,所有项目都能看到 -->
+            <el-option
+              :label="$t('@WORKBENCH:全局（所有项目可用）')"
+              value=""
+            />
+            <!-- 仅当有当前项目时才允许绑定到当前项目,避免“绑到空项目”的兑犷数据 -->
+            <el-option
+              v-if="currentProject.path"
+              :key="currentProject.path"
+              :label="currentProject.name || currentProject.path"
+              :value="currentProject.path"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item>
           <div style="display: flex; gap: 8px; align-items: center;">
@@ -2800,6 +2849,26 @@ function humanSize(n: number): string {
   color: var(--text-primary);
   font-weight: 500;
   letter-spacing: -0.05px;
+}
+/* 提示词“全局/项目归属”小标签：在名称后面吃一点空间 */
+.wb-prompt-item__tag {
+  flex-shrink: 0;
+  max-width: 96px;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.1px;
+  background: var(--tint-primary-08);
+  color: var(--color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-prompt-item__tag--project {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color-light);
 }
 /* .wb-prompt-item__del */
 .wb-prompt-item__del {

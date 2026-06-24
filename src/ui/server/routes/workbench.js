@@ -2342,21 +2342,37 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
 
   app.post('/api/workbench/prompts', async (req, res) => {
     try {
-      const { id, name, content } = req.body || {};
+      const { id, name, content, projectPath } = req.body || {};
       if (!name || typeof content !== 'string') {
         return res.status(400).json({ success: false, error: 'name 和 content 必填' });
       }
       const data = await readJson(PROMPTS_FILE, { prompts: [] });
       const prompts = data.prompts || [];
       const now = nowIso();
+      // projectPath 规范化:undefined / '' / 非法类型 → '' (全局)
+      // 留空字符串 = 全局提示词(所有项目都能看到);非空 = 归属具体项目
+      const normalizedProjectPath = typeof projectPath === 'string' ? projectPath.trim() : '';
       if (id) {
         const i = prompts.findIndex(p => p.id === id);
         if (i < 0) return res.status(404).json({ success: false, error: '提示词不存在' });
-        prompts[i] = { ...prompts[i], name, content, updatedAt: now };
+        prompts[i] = {
+          ...prompts[i],
+          name,
+          content,
+          projectPath: normalizedProjectPath,
+          updatedAt: now
+        };
         await writeJson(PROMPTS_FILE, { prompts });
         return res.json({ success: true, prompt: prompts[i] });
       }
-      const prompt = { id: genId(), name, content, createdAt: now, updatedAt: now };
+      const prompt = {
+        id: genId(),
+        name,
+        content,
+        projectPath: normalizedProjectPath,
+        createdAt: now,
+        updatedAt: now
+      };
       prompts.push(prompt);
       await writeJson(PROMPTS_FILE, { prompts });
       res.json({ success: true, prompt });
