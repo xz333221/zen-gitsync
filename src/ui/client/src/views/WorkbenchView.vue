@@ -2027,6 +2027,15 @@ function humanSize(n: number): string {
           <div v-if="!isSimpleTask" class="wb-exec-list">
             <div class="wb-exec-list__header">
               <h4 class="wb-exec-list__title">{{ $t('@WORKBENCH:子任务拆分') }}</h4>
+              <!-- 执行模式：连续 / 并行；放标题右侧，与标题同处一行避免外层单占一行 -->
+              <el-switch
+                class="wb-exec-list__mode-switch"
+                v-model="selectedTask.sequential"
+                :active-text="$t('@WORKBENCH:连续')"
+                :inactive-text="$t('@WORKBENCH:并行')"
+                inline-prompt
+                :title="$t('@WORKBENCH:连续模式下，任意子任务出错或被手动停止都会终止后续子任务')"
+              />
               <div class="wb-split__sub-actions">
                 <el-button size="small" plain :icon="Plus" :disabled="selectedTask.subtasks.length === 0" @click="addSubtask">
                   {{ $t('@WORKBENCH:添加子任务') }}
@@ -2047,16 +2056,6 @@ function humanSize(n: number): string {
                   {{ $t('@WORKBENCH:清空子任务') }}
                 </el-button>
               </div>
-            </div>
-            <!-- 执行模式：连续 / 并行；与子任务拆分同属 260px 左列，紧贴标题下方避免外层单占一行 -->
-            <div v-if="!isSimpleTask" class="wb-exec-list__mode">
-              <el-switch
-                v-model="selectedTask.sequential"
-                :active-text="$t('@WORKBENCH:连续')"
-                :inactive-text="$t('@WORKBENCH:并行')"
-                inline-prompt
-                :title="$t('@WORKBENCH:连续模式下，任意子任务出错或被手动停止都会终止后续子任务')"
-              />
             </div>
             <ul class="wb-exec-sub-list">
               <li
@@ -3107,15 +3106,11 @@ function humanSize(n: number): string {
   overflow-y: auto;
 }
 
-/* 执行模式行：紧贴子任务拆分 header 下方，与子任务列表同处 260px 左列 */
-.wb-exec-list__mode {
-  display: flex;
-  align-items: center;
-  padding: 0 12px 8px;
+/* 标题右侧的连续/并行开关：与标题同行，压缩字号避免挤压按钮组 */
+.wb-exec-list__mode-switch {
   flex-shrink: 0;
 }
-.wb-exec-list__mode .el-switch {
-  /* 260px 容器 + 短标签「连续/并行」，压缩字号避免换行 */
+.wb-exec-list__mode-switch .el-switch {
   --el-switch-font-size: 11px;
 }
 
