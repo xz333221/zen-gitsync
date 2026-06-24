@@ -1933,6 +1933,8 @@ export default {
   '@WORKBENCH:恢复': 'Restore',
   '@WORKBENCH:删除': 'Delete',
   '@WORKBENCH:子任务连续执行': 'Run subtasks sequentially',
+  '@WORKBENCH:连续': 'Sequential',
+  '@WORKBENCH:并行': 'Parallel',
   '@WORKBENCH:连续模式下，任意子任务出错或被手动停止都会终止后续子任务': 'In sequential mode, any subtask error or manual stop will halt subsequent subtasks',
   '@WORKBENCH:暂无历史会话': 'No history sessions',
   '@WORKBENCH:删除失败': 'Delete failed',

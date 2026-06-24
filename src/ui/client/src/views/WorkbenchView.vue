@@ -2014,17 +2014,6 @@ function humanSize(n: number): string {
             @dragleave="pasteHoverId = (pasteHoverId === 'task-' + selectedTask.id ? null : pasteHoverId)"
           />
         </details>
-        <!-- 连续执行开关：仅复杂任务可见（简单任务无 sub 列表，无意义） -->
-        <!-- AI 拆出的子任务一般前后强依赖（产物-输入），默认开启；关闭后单个 sub 失败不影响后续 -->
-        <div v-if="!isSimpleTask" class="wb-task-options">
-          <el-switch
-            v-model="selectedTask.sequential"
-            :active-text="$t('@WORKBENCH:子任务连续执行')"
-            :inactive-text="$t('@WORKBENCH:子任务连续执行')"
-            inline-prompt
-            :title="$t('@WORKBENCH:连续模式下，任意子任务出错或被手动停止都会终止后续子任务')"
-          />
-        </div>
         <!-- ── 执行主体：复杂任务用左（子任务列表）+ 右（详情）左右布局；简单任务只保留详情面板 ── -->
         <div class="wb-execution-body" :class="{ 'wb-execution-body--simple': isSimpleTask }">
           <!-- 左：子任务列表 —— 简单任务时不渲染 -->
@@ -2051,6 +2040,16 @@ function humanSize(n: number): string {
                   {{ $t('@WORKBENCH:清空子任务') }}
                 </el-button>
               </div>
+            </div>
+            <!-- 执行模式：连续 / 并行；与子任务拆分同属 260px 左列，紧贴标题下方避免外层单占一行 -->
+            <div v-if="!isSimpleTask" class="wb-exec-list__mode">
+              <el-switch
+                v-model="selectedTask.sequential"
+                :active-text="$t('@WORKBENCH:连续')"
+                :inactive-text="$t('@WORKBENCH:并行')"
+                inline-prompt
+                :title="$t('@WORKBENCH:连续模式下，任意子任务出错或被手动停止都会终止后续子任务')"
+              />
             </div>
             <ul class="wb-exec-sub-list">
               <li
@@ -3099,6 +3098,18 @@ function humanSize(n: number): string {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* 执行模式行：紧贴子任务拆分 header 下方，与子任务列表同处 260px 左列 */
+.wb-exec-list__mode {
+  display: flex;
+  align-items: center;
+  padding: 0 12px 8px;
+  flex-shrink: 0;
+}
+.wb-exec-list__mode .el-switch {
+  /* 260px 容器 + 短标签「连续/并行」，压缩字号避免换行 */
+  --el-switch-font-size: 11px;
 }
 
 /* 左列子任务条目：两行布局，标题独占第一行，操作按钮 hover 浮现 */

@@ -1942,6 +1942,8 @@ export default {
   '@WORKBENCH:恢复': '恢复',
   '@WORKBENCH:删除': '删除',
   '@WORKBENCH:子任务连续执行': '子任务连续执行',
+  '@WORKBENCH:连续': '连续',
+  '@WORKBENCH:并行': '并行',
   '@WORKBENCH:连续模式下，任意子任务出错或被手动停止都会终止后续子任务': '连续模式下，任意子任务出错或被手动停止都会终止后续子任务',
   '@WORKBENCH:暂无历史会话': '暂无历史会话',
   '@WORKBENCH:删除失败': '删除失败',
