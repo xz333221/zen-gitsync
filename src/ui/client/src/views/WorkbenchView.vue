@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, reactive, markRaw, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, reactive, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -22,10 +22,8 @@ import {
   Close,
   List,
   Picture as PictureIcon,
-  Document as DocumentIcon,
   DocumentAdd,
   Memo,
-  EditPen,
   Folder,
   ArrowDown,
   ArrowRight,
@@ -327,16 +325,6 @@ function applyJobEvent(evt: string, payload: any) {
   }
 }
 
-// ── 任务图标：根据标题关键词做一个轻量分类，决定左侧小头像的图标与颜色 ──
-//    不引入新的 Task.type 字段，保持后端 schema 不变；仅做 UI 维度的视觉提示
-type TaskIconKey = 'icon' | 'image' | 'test' | 'ui' | 'doc' | 'idea'
-const TASK_ICON_RULES: { key: TaskIconKey; patterns: RegExp[] }[] = [
-  { key: 'image', patterns: [/图\s*片/, /上\s*传/, /upload/i, /image/i, /screenshot/i, /截图/, /附件/, /attachment/i] },
-  { key: 'icon',  patterns: [/图\s*标/, /icon/i, /svg/i] },
-  { key: 'test',  patterns: [/测\s*试/, /test/i, /spec/i, /\bqa\b/i] },
-  { key: 'ui',    patterns: [/ui\s*优\s*化/, /样\s*式/, /style/i, /css/i, /界面/, /视\s*觉/, /design/i] }
-]
-
 /** 复制文本到剪贴板，失败时降级到 textarea + execCommand。 */
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
@@ -380,26 +368,6 @@ async function copySubError(sub: any) {
 function openExecutionLog(sub: any) {
   selectedSubId.value = sub.id
   logsDialogVisible.value = true
-}
-
-function pickTaskIcon(title: string): TaskIconKey {
-  const t = (title || '').trim()
-  if (!t) return 'doc'
-  for (const r of TASK_ICON_RULES) {
-    if (r.patterns.some(p => p.test(t))) return r.key
-  }
-  return 'doc'
-}
-const ICON_COMPONENT: Record<TaskIconKey, unknown> = {
-  icon:  markRaw(DocumentIcon),
-  image: markRaw(PictureIcon),
-  test:  markRaw(EditPen),
-  ui:    markRaw(Memo),
-  doc:   markRaw(DocumentIcon),
-  idea:  markRaw(Memo)
-}
-function taskIconFor(t: Task) {
-  return ICON_COMPONENT[pickTaskIcon(t.title)]
 }
 
 // 简单任务的虚拟 subId：和后端 runTaskSimple / JobLogDetails 那侧保持一致
@@ -1740,12 +1708,8 @@ function humanSize(n: number): string {
                   'is-other-project': t.projectPath && t.projectPath !== currentProject.path,
                   'is-running': taskIsRunning(t)
                 }"
-                :data-icon="pickTaskIcon(t.title)"
                 @click="selectTask(t)"
               >
-                <div class="wb-task-item__avatar" :data-icon="pickTaskIcon(t.title)">
-                  <el-icon><component :is="taskIconFor(t)" /></el-icon>
-                </div>
                 <div class="wb-task-item__body">
                   <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
                   <div class="wb-task-item__meta">
@@ -2641,48 +2605,6 @@ function humanSize(n: number): string {
   }
 }
 
-/* 左侧头像：紧凑圆形 22×22，去掉边框 */
-.wb-task-item__avatar {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  flex-shrink: 0;
-  background: var(--bg-subtle);
-  color: var(--text-tertiary);
-  border: none;
-  transition: background var(--transition-fast) var(--ease-custom),
-              color var(--transition-fast) var(--ease-custom),
-              border-color var(--transition-fast) var(--ease-custom);
-}
-.wb-task-item__avatar[data-icon="image"] {
-  background: color-mix(in srgb, var(--color-think) 12%, transparent);
-  color: var(--color-think-dark, #6d28d9);
-  border: none;
-}
-.wb-task-item__avatar[data-icon="icon"] {
-  background: color-mix(in srgb, var(--color-info-light) 12%, transparent);
-  color: var(--color-info, #0369a1);
-  border: none;
-}
-.wb-task-item__avatar[data-icon="test"] {
-  background: var(--tint-success-14);
-  color: var(--color-success-dark, #047857);
-  border: none;
-}
-.wb-task-item__avatar[data-icon="ui"] {
-  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
-  color: var(--color-warning-dark, #b45309);
-  border: none;
-}
-.wb-task-item.active .wb-task-item__avatar {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
-}
 .wb-task-item__body {
   flex: 1;
   min-width: 0;
