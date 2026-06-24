@@ -1330,6 +1330,53 @@ async function onContinueSend(t: Task) {
 }
 
 /**
+ * JobLogDetails 内部点"重新执行"按钮后冒泡到这里。
+ * 根据 job.subId 判断是简单任务续跑还是子任务重跑,走各自已有 API。
+ * - 简单任务 subId 形如 `${task.id}__simple` 或 `${task.id}__simple__r${n}`
+ *   → 走 /api/workbench/tasks/${taskId}/run-simple,会用 claudeSessionId 续接
+ * - 子任务 subId 即 SubTask.id → 走 /api/workbench/subtasks/${subId}/run
+ */
+async function onReExecuteJob(j: Job) {
+  const subId = j.subId || ''
+  // 1) 简单任务路径
+  const simpleMatch = subId.match(/^(.+)__simple(?:__r\d+)?$/)
+  if (simpleMatch) {
+    const taskId = simpleMatch[1]
+    const t = tasks.value.find(x => x.id === taskId)
+    if (!t) {
+      ElMessage.error($t('@WORKBENCH:任务不存在,无法重新执行'))
+      return
+    }
+    // 复用 runSimpleTask(它会做静默落盘+清非 done job+调 API,完整流程)
+    await runSimpleTask(t)
+    return
+  }
+  // 2) 子任务路径:subId 即 subtask.id
+  for (const t of tasks.value) {
+    const sub = (t.subtasks || []).find(s => s.id === subId)
+    if (sub) {
+      // runSubtask 依赖 selectedTask.value = 当前选中任务,这里直接调 API 走重跑流程
+      // (等价于父面板里点"执行"按钮的行为)
+      const live = jobOf(sub.id)
+      if (live && (live.status === 'running' || live.status === 'pending')) {
+        ElMessage.warning($t('@WORKBENCH:该子任务正在执行中'))
+        return
+      }
+      const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, { method: 'POST' })
+        .then(r => r.json())
+        .catch(err => ({ success: false, error: err?.message || String(err) }))
+      if (res.success) {
+        ElMessage.success(res.message || $t('@WORKBENCH:已开始执行子任务'))
+      } else {
+        ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
+      }
+      return
+    }
+  }
+  ElMessage.error($t('@WORKBENCH:找不到对应任务,无法重新执行'))
+}
+
+/**
  * 单 sub 执行：仅跑指定 subId 那一个，不会触发其他 todo sub。
  * 跟整批"执行任务"走同一套后端逻辑(prompt 拼装 / job 跟踪 / 取消 / 落盘),
  * 唯一区别是不遍历 task.subtasks。
@@ -1337,6 +1384,7 @@ async function onContinueSend(t: Task) {
  * 静默落盘行为跟 runTask 一致:用户编辑过但没点"保存拆分"时,先把当前
  * selectedTask 写盘,保证后端拿到的 sub 描述/title 是最新的。
  */
+
 async function runSubtask(sub: SubTask) {
   if (!selectedTask.value) return
   const t = selectedTask.value
@@ -2157,6 +2205,7 @@ function humanSize(n: number): string {
                 <JobLogDetails
                   v-if="jobOf(activeSubtask.id)"
                   :job="jobOf(activeSubtask.id)!"
+                  @re-execute="onReExecuteJob"
                 />
                 <AttachmentZone
                   :attachments="activeSubtask.attachments || []"
@@ -2212,6 +2261,7 @@ function humanSize(n: number): string {
                 v-for="j in simpleAllJobsFor(selectedTask)"
                 :key="j.id"
                 :job="j"
+                @re-execute="onReExecuteJob"
               />
               <!-- 终态控件:最后一轮 done/error/cancelled 才显示退出 + 续聊输入 -->
               <div

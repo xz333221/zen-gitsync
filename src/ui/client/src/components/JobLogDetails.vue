@@ -3,7 +3,11 @@
   共享的"执行日志"折叠面板，WorkbenchView 子任务行 + ExecutionLogManager 卡片复用。
   - 单 prop: job（Job 或 JobFull，结构兼容）
   - 自带 copy / displayOutput 截断（不依赖父组件），彻底解耦
-  - 替换原 WorkbenchView L1252-1335 的 <details> 块
+  - 视觉：单轮 job 内部按"对话气泡"组织
+    · 用户提示词 → 右侧气泡（蓝）
+    · Claude 思考 → 左侧气泡（紫，可折叠）
+    · 模型返回  → 左侧气泡（紫，带"重新执行"按钮）
+  - 简单任务的"续聊"由父组件 v-for 多轮叠加，天然形成纵向对话流。
 -->
 <!--
   注:本组件历史上用 <details> 元素,但 <details> 子级的 div 不能正确继承
@@ -63,142 +67,122 @@
     </div>
 
     <!--
-      body 容器:真正的 flex column 布局。让 wb-log-pre flex: 1 收敛到剩余空间。
+      body 容器:对话气泡列表,纵向堆叠,气泡间用 gap 分隔。
+      用户气泡靠右,AI 气泡靠左,用 is-user / is-ai 区分。
     -->
-    <div v-show="!isCollapsed" class="wb-log-details__body">
-    <!-- 用户提示词 -->
-    <!--
-      展开策略:默认一直展开(用户提示词是输入,展开方便回看),
-      用户可手动合上,尊重用户选择。
-    -->
-    <details
-      v-if="job.prompt"
-      class="wb-log-section"
-      :open="promptOpen"
-      @toggle="onPromptToggle"
-    >
-      <summary class="wb-log-section__summary">
-        <span class="wb-log-section__tag wb-log-section__tag--user">
-          {{ $t('@WORKBENCH:用户提示词') }}
-        </span>
-        <span class="wb-log-section__count">
-          {{ (job.prompt || '').length }} {{ $t('@WORKBENCH:字符') }}
-        </span>
-        <button
-          type="button"
-          class="wb-log-copy wb-log-copy--sm"
-          :title="$t('@WORKBENCH:复制用户提示词')"
-          @click.stop="copyField('prompt')"
-        >
-          ⧉ {{ $t('@WORKBENCH:复制') }}
-        </button>
-      </summary>
-      <pre class="wb-log-section__pre wb-log-section__pre--user">{{ job.prompt }}</pre>
-    </details>
-
-    <!-- Claude 思考过程 -->
-    <!--
-      展开策略:
-      - 任务运行中(thinking 已有内容) → 展开,方便用户实时看到 AI 思考过程
-      - 任务结束(done/error/cancelled) → 合上,让出屏幕给"模型返回"区
-      - 用户手动展开/合上后,本次会话内尊重用户的选择(不强行覆盖)
-    -->
-    <details
-      v-if="job.thinking"
-      class="wb-log-section"
-      :open="thinkingOpen"
-      @toggle="onThinkingToggle"
-    >
-      <summary class="wb-log-section__summary">
-        <span class="wb-log-section__tag wb-log-section__tag--think">
-          {{ $t('@WORKBENCH:Claude 思考') }}
-        </span>
-        <span class="wb-log-section__count">
-          {{ (job.thinking || '').length }} {{ $t('@WORKBENCH:字符') }}
-        </span>
-        <button
-          type="button"
-          class="wb-log-copy wb-copy--sm"
-          :title="$t('@WORKBENCH:复制思考内容')"
-          @click.stop="copyField('thinking')"
-        >
-          ⧉ {{ $t('@WORKBENCH:复制') }}
-        </button>
-      </summary>
-      <pre class="wb-log-section__pre wb-log-section__pre--think">{{ displayThinking() }}</pre>
-    </details>
-
-    <!-- 模型返回 -->
-    <!--
-      折叠策略:默认展开(模型返回是本面板的主内容,用户展开面板就是为了看它);
-      用户可手动合上让出屏幕给其它区域,尊重用户选择;
-      新一轮 job 进入活跃态时重置为展开,避免上轮"合上"状态带到下轮。
-    -->
-    <div
-      class="wb-log-pre__head"
-      role="button"
-      :aria-expanded="outputExpanded"
-      :title="outputExpanded ? $t('@WORKBENCH:收起') : $t('@WORKBENCH:展开')"
-      @click="toggleOutputExpanded"
-    >
-      <span
-        class="wb-log-pre__toggle-icon"
-        :class="{ 'is-expanded': outputExpanded }"
-        aria-hidden="true"
-      >▸</span>
-      <span class="wb-log-pre__label">{{ $t('@WORKBENCH:模型返回') }}</span>
-      <span class="wb-log-pre__meta">
-        {{ (job.output || '').length }} {{ $t('@WORKBENCH:字符') }}
-      </span>
-      <button
-        type="button"
-        class="wb-log-copy wb-log-copy--sm"
-        :title="$t('@WORKBENCH:复制模型返回')"
-        @click.stop="copyField('output')"
-      >
-        ⧉ {{ $t('@WORKBENCH:复制') }}
-      </button>
-      <button
-        type="button"
-        class="wb-log-copy wb-log-copy--sm"
-        :title="$t('@WORKBENCH:全屏查看模型返回')"
-        :disabled="!hasOutput"
-        @click.stop="fullscreenOpen = true"
-      >
-        ⛶ {{ $t('@WORKBENCH:全屏') }}
-      </button>
-    </div>
-    <div v-show="outputExpanded" ref="preRef" class="wb-log-pre">
-      <MarkdownRender
-        v-if="hasOutput"
-        :content="displayText"
-        :final="isFinalReached"
-        :typewriter="false"
-        class="wb-log-pre__render"
-      />
-      <div v-else class="wb-log-pre__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
-    </div>
-
-    <!-- 全屏查看 -->
-    <el-dialog
-      v-model="fullscreenOpen"
-      :title="$t('@WORKBENCH:模型返回 - 全屏查看')"
-      fullscreen
-      :close-on-click-modal="false"
-      class="wb-log-fullscreen-dialog"
-      @closed="onFullscreenClosed"
-    >
-      <div ref="fullscreenContainerRef" class="wb-log-fullscreen">
-        <MarkdownRender
-          v-if="hasOutput"
-          :content="fullscreenDisplayText"
-          :final="isFinalReached"
-          :typewriter="false"
-          class="wb-log-fullscreen__render"
-        />
-        <div v-else class="wb-log-fullscreen__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
+    <div v-show="!isCollapsed" class="wb-log-details__body wb-chat">
+      <!-- 用户提示词气泡：靠右 -->
+      <div v-if="job.prompt" class="wb-chat__row is-user">
+        <div class="wb-chat__bubble wb-chat__bubble--user">
+          <header class="wb-chat__head">
+            <span class="wb-chat__tag wb-chat__tag--user">{{ $t('@WORKBENCH:用户提示词') }}</span>
+            <span class="wb-chat__count">{{ (job.prompt || '').length }} {{ $t('@WORKBENCH:字符') }}</span>
+            <button
+              type="button"
+              class="wb-log-copy wb-log-copy--sm"
+              :title="$t('@WORKBENCH:复制用户提示词')"
+              @click.stop="copyField('prompt')"
+            >
+              ⧉ {{ $t('@WORKBENCH:复制') }}
+            </button>
+          </header>
+          <pre class="wb-chat__pre wb-chat__pre--user">{{ job.prompt }}</pre>
+        </div>
       </div>
-    </el-dialog>
+
+      <!-- Claude 思考过程气泡：靠左(紫),默认折叠 -->
+      <div v-if="job.thinking" class="wb-chat__row is-ai">
+        <div class="wb-chat__bubble wb-chat__bubble--think">
+          <header
+            class="wb-chat__head"
+            role="button"
+            :aria-expanded="thinkingOpen"
+            @click="toggleThinking"
+          >
+            <span class="wb-chat__toggle-icon" :class="{ 'is-expanded': thinkingOpen }" aria-hidden="true">▸</span>
+            <span class="wb-chat__tag wb-chat__tag--think">{{ $t('@WORKBENCH:Claude 思考') }}</span>
+            <span class="wb-chat__count">{{ (job.thinking || '').length }} {{ $t('@WORKBENCH:字符') }}</span>
+            <button
+              type="button"
+              class="wb-log-copy wb-log-copy--sm"
+              :title="$t('@WORKBENCH:复制思考内容')"
+              @click.stop="copyField('thinking')"
+            >
+              ⧉ {{ $t('@WORKBENCH:复制') }}
+            </button>
+          </header>
+          <pre v-show="thinkingOpen" class="wb-chat__pre wb-chat__pre--think">{{ displayThinking() }}</pre>
+        </div>
+      </div>
+
+      <!-- 模型返回气泡：靠左(紫),主内容 -->
+      <div class="wb-chat__row is-ai">
+        <div class="wb-chat__bubble wb-chat__bubble--ai">
+          <header class="wb-chat__head">
+            <span class="wb-chat__tag wb-chat__tag--ai">{{ $t('@WORKBENCH:模型返回') }}</span>
+            <span class="wb-chat__count">{{ (job.output || '').length }} {{ $t('@WORKBENCH:字符') }}</span>
+            <button
+              type="button"
+              class="wb-log-copy wb-log-copy--sm"
+              :title="$t('@WORKBENCH:复制模型返回')"
+              @click.stop="copyField('output')"
+            >
+              ⧉ {{ $t('@WORKBENCH:复制') }}
+            </button>
+            <button
+              type="button"
+              class="wb-log-copy wb-log-copy--sm"
+              :title="$t('@WORKBENCH:全屏查看模型返回')"
+              :disabled="!hasOutput"
+              @click.stop="fullscreenOpen = true"
+            >
+              ⛶ {{ $t('@WORKBENCH:全屏') }}
+            </button>
+          </header>
+          <div class="wb-chat__body">
+            <MarkdownRender
+              v-if="hasOutput"
+              :content="displayText"
+              :final="isFinalReached"
+              :typewriter="false"
+              class="wb-chat__render"
+            />
+            <div v-else class="wb-chat__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
+          </div>
+          <!-- footer:任务结束后显示"重新执行",运行中不显示 -->
+          <footer v-if="canReExecute" class="wb-chat__foot">
+            <button
+              type="button"
+              class="wb-chat__action"
+              :title="$t('@WORKBENCH:用相同的提示词重新执行此任务')"
+              @click="onReExecute"
+            >
+              ↻ {{ $t('@WORKBENCH:重新执行') }}
+            </button>
+          </footer>
+        </div>
+      </div>
+
+      <!-- 全屏查看 dialog -->
+      <el-dialog
+        v-model="fullscreenOpen"
+        :title="$t('@WORKBENCH:模型返回 - 全屏查看')"
+        fullscreen
+        :close-on-click-modal="false"
+        class="wb-log-fullscreen-dialog"
+        @closed="onFullscreenClosed"
+      >
+        <div ref="fullscreenContainerRef" class="wb-log-fullscreen">
+          <MarkdownRender
+            v-if="hasOutput"
+            :content="fullscreenDisplayText"
+            :final="isFinalReached"
+            :typewriter="false"
+            class="wb-log-fullscreen__render"
+          />
+          <div v-else class="wb-log-fullscreen__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
+        </div>
+      </el-dialog>
     </div><!-- /.wb-log-details__body -->
   </div>
 </template>
@@ -211,11 +195,10 @@ import { $t } from '@/lang/static'
 import type { Job } from '@/types/workbench'
 
 const props = defineProps<{ job: Job }>()
+const emit = defineEmits<{
+  (e: 're-execute', job: Job): void
+}>()
 
-/* 折叠状态:与历史上 <details> open 的语义对齐。
-   本组件历史上用 <details> 元素,但 <details> 子级 div 不接受 height: 100% /
-   min-height: 100% / position: absolute 撑满,导致 flex 子级无法收敛。
-   改用普通 div + v-show 模拟 <details> 行为,外层 div 拿到显式 height。 */
 /* 列表态默认折叠:20+ 条 jobs × ~60KB output 一次性进 DOM + markstream-vue 全量解析
    = 主线程卡死(/jobs/list 弹窗首次打开 1-2s)。用户要点 summary 才展开 body,
    性能换 1 次点击,可接受。 */
@@ -401,21 +384,18 @@ const elapsedLabel = computed(() => {
   return `${m}分${s.toString().padStart(2, '0')}秒`
 })
 
-// 流式追加时自动滚到底：仅当面板展开时滚动
-const preRef = ref<HTMLElement | null>(null)
-
 /**
  * 思考区自动展开/合上:
  * - 默认按 status 自动控制(运行中有内容时展开,完成后合上)
- * - 用户手动点 summary 改 open 后,本组件生命周期内不再覆盖(尊重用户)
+ * - 用户手动点 header 改 open 后,本组件生命周期内不再覆盖(尊重用户)
  * - job 状态从未活跃 → 活跃(新一轮开始)时,清掉用户覆盖标记
- *
- * 实现要点:`<details :open="thinkingOpen">` 的 open 是个 prop,
- * Vue 不会"双向同步"用户点击造成的状态变化(@toggle 事件能拿到事件后状态),
- * 所以需要在 @toggle 里手动同步 + 设标记
  */
 let thinkingUserOverride = false
 const thinkingOpen = ref(false)
+function toggleThinking() {
+  thinkingUserOverride = true
+  thinkingOpen.value = !thinkingOpen.value
+}
 
 function recomputeThinkingOpen() {
   if (thinkingUserOverride) return
@@ -430,12 +410,6 @@ function recomputeThinkingOpen() {
   } else {
     thinkingOpen.value = false
   }
-}
-
-function onThinkingToggle(e: Event) {
-  const el = e.target as HTMLDetailsElement
-  thinkingUserOverride = true
-  thinkingOpen.value = el.open
 }
 
 // 任务重新进入活跃态 → 清掉用户覆盖
@@ -453,52 +427,6 @@ watch(() => (props.job.thinking || '').length, () => recomputeThinkingOpen(), { 
 
 // output 长度变化 → 模型开始返回时折叠思考区,把屏幕让给输出
 watch(() => (props.job.output || '').length, () => recomputeThinkingOpen())
-
-// 用户提示词区:默认展开;用户可手动合上,尊重用户选择(新一轮开始时重置)
-let promptUserOverride = false
-const promptOpen = ref(true)
-function onPromptToggle(e: Event) {
-  const el = e.target as HTMLDetailsElement
-  promptUserOverride = true
-  promptOpen.value = el.open
-}
-watch(() => props.job.status, (s, prev) => {
-  const wasActive = prev === 'running' || prev === 'pending'
-  const isActive = s === 'running' || s === 'pending'
-  if (!wasActive && isActive) {
-    // 新一轮开始 → 重置用户覆盖 + 重新展开
-    promptUserOverride = false
-    promptOpen.value = true
-  } else if (!promptUserOverride) {
-    promptOpen.value = true
-  }
-  // 用户覆盖后保持用户的选择
-})
-
-// 模型返回区:默认展开(主内容);用户可手动合上让出屏幕,
-// 新一轮 job 进入活跃态时重置为展开,避免上轮"合上"状态带到下轮。
-const outputExpanded = ref(true)
-function toggleOutputExpanded() {
-  outputExpanded.value = !outputExpanded.value
-}
-watch(() => props.job.status, (s, prev) => {
-  const wasActive = prev === 'running' || prev === 'pending'
-  const isActive = s === 'running' || s === 'pending'
-  if (!wasActive && isActive) {
-    // 新一轮开始 → 默认展开(模型返回是主内容,不该被上轮的合上状态影响)
-    outputExpanded.value = true
-  }
-})
-
-watch(
-  () => (props.job.output || '').length,
-  async () => {
-    if (isCollapsed.value) return
-    if (!outputExpanded.value) return
-    await nextTick()
-    if (preRef.value) preRef.value.scrollTop = preRef.value.scrollHeight
-  }
-)
 
 // 全屏查看：dialog 打开时显示完整 output(无截断),关闭后回到 inline 视图
 const fullscreenOpen = ref(false)
@@ -523,6 +451,16 @@ watch(
 function onFullscreenClosed() {
   // el-dialog 关闭后清理:确保下次打开重新挂载 ref
 }
+
+// ── 重新执行 ────────────────────────────────────────────────────────
+// 仅在任务处于终态 + 有 prompt 时才显示"重新执行"按钮
+// 父组件在 v-for 模式下需要根据 job 上下文(所属 task/subtask)决定如何重跑
+const canReExecute = computed(() => {
+  return isFinished.value && !!(props.job.prompt)
+})
+function onReExecute() {
+  emit('re-execute', props.job)
+}
 </script>
 
 <style scoped>
@@ -533,9 +471,6 @@ function onFullscreenClosed() {
   border-radius: var(--radius-sm, 4px);
   background: var(--bg-code);
   overflow: auto;
-  /* 撑满父容器剩余高度,让模型返回区填满。
-     历史上用 <details> 元素 + display: flex,Chromium 不能正确收缩 flex 子级;
-     改用普通 div + flex column 后正常工作。 */
   display: flex;
   flex-direction: column;
   flex: 1 1 0%;
@@ -543,8 +478,7 @@ function onFullscreenClosed() {
   height: 100%;
 }
 
-/* body 容器:summary 之外的所有内容在这里 flex column 布局,
-   wb-log-pre flex: 1 收敛到剩余空间。 */
+/* body 容器:对话气泡列表,纵向堆叠 */
 .wb-log-details__body {
   display: flex;
   flex-direction: column;
@@ -552,6 +486,7 @@ function onFullscreenClosed() {
   min-height: 0;
   overflow: auto;
 }
+
 .wb-log-summary {
   cursor: pointer;
   padding: 6px 10px;
@@ -615,21 +550,84 @@ function onFullscreenClosed() {
   padding: 1px 6px;
   font-size: 10px;
 }
-.wb-log-pre__head {
+
+/* ── 对话气泡布局 ────────────────────────────────────────────────── */
+.wb-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-code);
+}
+.wb-chat__row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+.wb-chat__row.is-user { justify-content: flex-end; }
+.wb-chat__row.is-ai   { justify-content: flex-start; }
+
+/* 气泡本体:最大宽度 85%,留出对齐侧的小尾巴空间 */
+.wb-chat__bubble {
+  max-width: 85%;
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-container);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.wb-chat__bubble--user {
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--bg-container));
+}
+.wb-chat__bubble--ai {
+  border-color: color-mix(in srgb, #8b5cf6 35%, transparent);
+  background: color-mix(in srgb, #8b5cf6 4%, var(--bg-container));
+}
+.wb-chat__bubble--think {
+  border-color: color-mix(in srgb, #8b5cf6 25%, transparent);
+  background: color-mix(in srgb, #8b5cf6 2%, var(--bg-container));
+}
+
+.wb-chat__head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
-  background: var(--bg-subtle, var(--bg-container));
+  gap: 6px;
+  padding: 4px 10px;
   font-size: 11px;
   color: var(--text-secondary);
-  cursor: pointer;
+  background: color-mix(in srgb, var(--text-tertiary) 6%, transparent);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
   user-select: none;
 }
-.wb-log-pre__head:hover {
-  background: var(--tint-primary-06);
+.wb-chat__bubble--think .wb-chat__head { cursor: pointer; }
+
+.wb-chat__tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
 }
-.wb-log-pre__toggle-icon {
+.wb-chat__tag--user {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+}
+.wb-chat__tag--ai {
+  background: color-mix(in srgb, #8b5cf6 18%, transparent);
+  color: #6d28d9;
+}
+.wb-chat__tag--think {
+  background: color-mix(in srgb, #8b5cf6 18%, transparent);
+  color: #6d28d9;
+}
+
+.wb-chat__toggle-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -640,126 +638,103 @@ function onFullscreenClosed() {
   transition: transform 0.15s ease;
   flex-shrink: 0;
 }
-.wb-log-pre__toggle-icon.is-expanded {
-  transform: rotate(90deg);
-}
-.wb-log-pre__label {
-  flex: 1;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-.wb-log-pre__meta {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-.wb-log-pre {
-  margin: 0;
-  padding: 8px 10px;
-  /* flex: 1 1 0% 在 flex column 父里收敛到剩余空间,让模型返回区填满。 */
-  flex: 1 1 0%;
-  min-height: 0;
-  overflow: auto;
-  background: var(--bg-code);
-}
-.wb-log-pre__render {
-  /* MarkdownRender 自带根容器样式,这里只补全边距让它贴合容器 */
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-primary);
-}
-/* 强制覆盖 markstream-vue 默认的 content-visibility: auto
-   content-visibility: auto 会让浏览器对未滚到视口的部分用 contain-intrinsic-size
-   假高度(800x600)渲染,导致 flex 父容器拿不到真实内容高度,
-   子级 wb-log-pre 的 overflow: auto 永远不触发滚动。
-   改为 visible 后浏览器立即按真实尺寸布局,父级 max-height 约束生效。
-   注:.markdown-renderer 节点本身就是 .wb-log-pre__render(class 同时存在),
-   所以直接在 wb-log-pre__render 上覆盖即可,不用 :deep 找后代。 */
-.wb-log-pre__render,
-.wb-log-pre__render.markdown-renderer {
-  content-visibility: visible;
-  contain-intrinsic-size: auto;
-}
-.wb-log-pre__render :deep(pre) {
-  margin: 6px 0;
-}
-.wb-log-pre__render :deep(code) {
-  font-family: var(--font-mono, ui-monospace, monospace);
-}
-.wb-log-pre__empty {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-style: italic;
-  padding: 4px 0;
-}
-.wb-log-section {
-}
-.wb-log-section__summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 5px 10px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  user-select: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  background: var(--bg-subtle, var(--bg-container));
-}
-.wb-log-section__summary::-webkit-details-marker { display: none; }
-.wb-log-section__summary:hover { background: var(--tint-primary-06); }
-.wb-log-section__tag {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-.wb-log-section__tag--user {
-  background: var(--tint-warning-14);
-  color: var(--color-warning-dark, #b45309);
-}
-.wb-log-section__tag--think {
-  background: var(--tint-think-14);
-  color: var(--color-think-dark, #6d28d9);
-}
-.wb-log-section__count {
+.wb-chat__toggle-icon.is-expanded { transform: rotate(90deg); }
+
+.wb-chat__count {
+  margin-left: auto;
   font-size: 10px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
-.wb-log-section__pre {
+
+.wb-chat__pre {
   margin: 0;
-  padding: 8px 10px;
-  max-height: 800px;
-  overflow: auto;
+  padding: 8px 12px;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-}
-.wb-log-section__pre--user {
-  background: var(--tint-warning-04, rgba(245, 158, 11, 0.06));
   color: var(--text-primary);
-  border-left: 2px solid var(--tint-warning-45, rgba(245, 158, 11, 0.45));
+  background: transparent;
+  max-height: 800px;
+  overflow: auto;
 }
-.wb-log-section__pre--think {
-  background: var(--tint-think-04, rgba(139, 92, 246, 0.06));
-  color: var(--text-secondary);
-  border-left: 2px solid var(--tint-think-45, rgba(139, 92, 246, 0.45));
+.wb-chat__pre--user {
+  background: transparent;
+}
+.wb-chat__pre--think {
   font-style: italic;
+  color: var(--text-secondary);
+  max-height: 600px;
+}
+
+.wb-chat__body {
+  padding: 6px 12px 4px;
+  min-height: 24px;
+}
+.wb-chat__render {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+/* 强制 markstream-vue 不开 content-visibility:auto,否则 flex 父容器拿不到真实高度 */
+.wb-chat__render,
+.wb-chat__render.markdown-renderer {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
+}
+.wb-chat__render :deep(pre) { margin: 6px 0; }
+.wb-chat__render :deep(code) {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.wb-chat__empty {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+.wb-chat__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 4px 10px 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  background: color-mix(in srgb, var(--text-tertiary) 3%, transparent);
+}
+.wb-chat__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6d28d9;
+  background: color-mix(in srgb, #8b5cf6 10%, var(--bg-container));
+  border: 1px solid color-mix(in srgb, #8b5cf6 30%, transparent);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.wb-chat__action:hover {
+  background: color-mix(in srgb, #8b5cf6 18%, var(--bg-container));
+  border-color: color-mix(in srgb, #8b5cf6 50%, transparent);
+  color: #5b21b6;
+}
+.wb-chat__action:active {
+  background: color-mix(in srgb, #8b5cf6 26%, var(--bg-container));
+}
+.wb-chat__action:focus-visible {
+  outline: 2px solid color-mix(in srgb, #8b5cf6 50%, transparent);
+  outline-offset: 1px;
 }
 
 /* ── 全屏查看 dialog ──────────────────────────────────────── */
 .wb-log-fullscreen-dialog .el-dialog__body {
-  /* 顶到屏幕底,不浪费屏幕高度 */
   padding: 0 16px 16px;
-  height: calc(100vh - 54px); /* 减去 el-dialog__header */
+  height: calc(100vh - 54px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -782,9 +757,7 @@ function onFullscreenClosed() {
   color: var(--text-primary);
   overflow: auto;
 }
-.wb-log-fullscreen__render :deep(pre) {
-  margin: 8px 0;
-}
+.wb-log-fullscreen__render :deep(pre) { margin: 8px 0; }
 .wb-log-fullscreen__empty {
   padding: 14px 18px;
   color: var(--text-tertiary);
@@ -854,17 +827,6 @@ function onFullscreenClosed() {
 }
 .wb-log-details.is-finished .wb-log-summary {
   background: color-mix(in srgb, var(--color-success, #22c55e) 6%, transparent);
-}
-
-/* 模型返回区左侧条带颜色,跟状态行对应 */
-.wb-log-details.is-running .wb-log-pre {
-  border-left: 2px solid var(--color-warning, #f59e0b);
-}
-.wb-log-details.is-pending .wb-log-pre {
-  border-left: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
-}
-.wb-log-details.is-finished .wb-log-pre {
-  border-left: 2px solid color-mix(in srgb, var(--color-success, #22c55e) 60%, transparent);
 }
 
 /* 完成时整条详情面板闪一下绿光,持续 1.5s 后渐隐,吸引注意力 */

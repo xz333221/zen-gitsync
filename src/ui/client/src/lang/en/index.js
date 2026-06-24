@@ -2039,5 +2039,11 @@ export default {
   '@WORKBENCH:重置全部并重跑': 'Reset all and re-run',
   '@WORKBENCH:只跑未完成': 'Run only remaining',
   '@WORKBENCH:已重置,准备从头执行': 'Reset done — ready to run from scratch',
+  // ── 对话式执行日志:重新执行 ──
+  '@WORKBENCH:重新执行': 'Re-run',
+  '@WORKBENCH:用相同的提示词重新执行此任务': 'Re-run this task with the same prompt',
+  '@WORKBENCH:请到工作台主面板的对应任务上点击「重新执行」': 'Please click "Re-run" on the corresponding task in the main workbench panel',
+  '@WORKBENCH:任务不存在,无法重新执行': 'Task not found, cannot re-run',
+  '@WORKBENCH:找不到对应任务,无法重新执行': 'Corresponding task not found, cannot re-run',
   // @WORKBENCH: file end
 }

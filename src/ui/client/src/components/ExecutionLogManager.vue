@@ -148,7 +148,7 @@
           >×</button>
         </header>
         <p v-if="job.error" class="exec-card__error">⚠ {{ job.error }}</p>
-        <JobLogDetails :job="job" />
+        <JobLogDetails :job="job" @re-execute="onReExecuteInLog" />
       </article>
     </div>
 
@@ -303,6 +303,15 @@ function toggleSelectAllOnPage(checked: any) {
     for (const j of list.value) selectedIds.value.delete(j.id)
   }
   selectedIds.value = new Set(selectedIds.value)
+}
+
+/**
+ * 日志卡片内点"重新执行"按钮。
+ * ExecutionLogManager 只展示历史,没有重跑上下文(task/subtask 反查需要主视图),
+ * 给个引导提示让用户去工作台主面板操作。
+ */
+function onReExecuteInLog(_j: any) {
+  ElMessage.info($t('@WORKBENCH:请到工作台主面板的对应任务上点击「重新执行」'))
 }
 
 async function deleteOne(id: string) {
