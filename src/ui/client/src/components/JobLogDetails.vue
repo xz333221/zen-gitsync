@@ -25,7 +25,7 @@
       'is-finished': isFinished
     }"
   >
-    <div class="wb-log-summary" @click="onSummaryToggle" role="button" :aria-expanded="!isCollapsed">
+    <div class="wb-log-summary" @click="toggleOpen" role="button" :aria-expanded="!isCollapsed">
       <span class="wb-log-summary__left">
         <span v-if="job.status === 'running'" class="wb-log-summary__status wb-log-summary__status--running">
           <span class="wb-log-summary__label">{{ $t('@WORKBENCH:正在执行…') }}</span>
@@ -59,9 +59,10 @@
           type="button"
           class="wb-log-copy"
           :title="$t('@WORKBENCH:复制全部（含提示词与输出）')"
+          :aria-label="$t('@WORKBENCH:复制全部')"
           @click.stop="copyAll"
         >
-          ⧉ {{ $t('@WORKBENCH:复制全部') }}
+          ⧉
         </button>
       </span>
     </div>
@@ -81,9 +82,10 @@
               type="button"
               class="wb-log-copy wb-log-copy--sm"
               :title="$t('@WORKBENCH:复制用户提示词')"
+              :aria-label="$t('@WORKBENCH:复制用户提示词')"
               @click.stop="copyField('prompt')"
             >
-              ⧉ {{ $t('@WORKBENCH:复制') }}
+              ⧉
             </button>
           </header>
           <pre class="wb-chat__pre wb-chat__pre--user">{{ job.prompt }}</pre>
@@ -106,9 +108,10 @@
               type="button"
               class="wb-log-copy wb-log-copy--sm"
               :title="$t('@WORKBENCH:复制思考内容')"
+              :aria-label="$t('@WORKBENCH:复制思考内容')"
               @click.stop="copyField('thinking')"
             >
-              ⧉ {{ $t('@WORKBENCH:复制') }}
+              ⧉
             </button>
           </header>
           <pre v-show="thinkingOpen" class="wb-chat__pre wb-chat__pre--think">{{ displayThinking() }}</pre>
@@ -125,18 +128,20 @@
               type="button"
               class="wb-log-copy wb-log-copy--sm"
               :title="$t('@WORKBENCH:复制模型返回')"
+              :aria-label="$t('@WORKBENCH:复制模型返回')"
               @click.stop="copyField('output')"
             >
-              ⧉ {{ $t('@WORKBENCH:复制') }}
+              ⧉
             </button>
             <button
               type="button"
               class="wb-log-copy wb-log-copy--sm"
               :title="$t('@WORKBENCH:全屏查看模型返回')"
+              :aria-label="$t('@WORKBENCH:全屏查看模型返回')"
               :disabled="!hasOutput"
               @click.stop="fullscreenOpen = true"
             >
-              ⛶ {{ $t('@WORKBENCH:全屏') }}
+              ⛶
             </button>
           </header>
           <div class="wb-chat__body">
@@ -155,9 +160,10 @@
               type="button"
               class="wb-chat__action"
               :title="$t('@WORKBENCH:用相同的提示词重新执行此任务')"
+              :aria-label="$t('@WORKBENCH:重新执行')"
               @click="onReExecute"
             >
-              ↻ {{ $t('@WORKBENCH:重新执行') }}
+              ↻
             </button>
           </footer>
         </div>
@@ -199,44 +205,24 @@ const emit = defineEmits<{
   (e: 're-execute', job: Job): void
 }>()
 
-/* 默认展开策略:
-   - running/pending → 展开(用户点了"执行"后想看到实时进度)
-   - done/error/cancelled → 折叠(看历史不需要 50 条全展开,会卡 DOM)
-   - 用户手动展开/折叠后,本组件生命周期内不再覆盖
-   - 新一轮 job 进入活跃态(从未活跃 → 活跃)时,清掉用户覆盖,重置为"展开"
-   注:ExecutionLogManager 一屏 50+ 条 done jobs,默认折叠是必要的;
-      主面板上 1-3 条 job,默认展开让用户立刻看到对话流。
-   isCollapsed 含义保持原状(true=折叠, false=展开)。 */
-const isCollapsed = ref(true)
+/* 默认展开:任务执行后用户期望看到完整对话流,不要收起。
+   ExecutionLogManager 50+ 条历史卡顿的担心:已经在 ExecutionLogManager 父级
+   限定 .exec-card 容器高度 + 内部 scroll,JobLogDetails 这里只需保持"展开"即可,
+   性能由父级虚拟/分页承担。 */
+const isCollapsed = ref(false)
 function toggleOpen() { isCollapsed.value = !isCollapsed.value }
-
-// job 是否处于活跃态(running/pending)。必须定义在使用前,否则 recomputeIsCollapsed
-// 在 watch immediate 触发时进 TDZ 报 "Cannot access 'isActive' before initialization"。
-// 文件下方 312 行附近还有一份重复定义,这里保留这一份并删掉下面那份。
+// 模板里用作 is-running class 条件,必须先于任何 watch 定义。
 const isActive = computed(() => props.job.status === 'running' || props.job.status === 'pending')
 
-// 仅在 running/pending 时记录"自动展开过";用户点 summary 改 open 后,
-// 本组件生命周期内不再覆盖(尊重用户);新一轮开始时清掉。
-let activeUserOverride = false
-function recomputeIsCollapsed() {
-  if (activeUserOverride) return
-  isCollapsed.value = !isActive.value
-}
+// 新一轮 job 重新激活(running/pending)时,自动展开,避免用户上轮手动
+// 折叠的偏好带到下轮。完成态保持用户当前选择不变。
 watch(() => props.job.status, (s, prev) => {
   const wasActive = prev === 'running' || prev === 'pending'
   const nowActive = s === 'running' || s === 'pending'
   if (!wasActive && nowActive) {
-    // 新一轮开始 → 重置用户覆盖,自动展开
-    activeUserOverride = false
+    isCollapsed.value = false
   }
-  recomputeIsCollapsed()
-}, { immediate: true })
-
-// 在 summary @click 之外,用户对折叠状态做的手动改 open → 走这里
-function onSummaryToggle() {
-  activeUserOverride = true
-  toggleOpen()
-}
+})
 
 const MAX_LOG_DISPLAY = 64 * 1024
 function displayOutput(): string {
