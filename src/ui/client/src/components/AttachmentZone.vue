@@ -16,6 +16,13 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount } from 'vue'
 import { ElImageViewer, ElMessage } from 'element-plus'
+// 手动 import ElImageViewer 时 unplugin-vue-components 不会自动加载它的 CSS,
+// 没这行 viewer 的 wrapper position 会是 static、mask 透明、遮罩不显示。
+// 其他 EP 组件都是模板用法(resolver 自动 import CSS),只需 image-viewer 单独引。
+// 注意:引 css.mjs 而不是 index.mjs——index.mjs 会触发 ../../base/style 的全量 reset,
+// 在深色主题下会让 body / 部分容器背景变成 base.css 的兜底浅色(实测右侧 log-list 区域
+// 会被冲淡)。css.mjs 只带 image-viewer 自身 + theme-chalk/el-image-viewer.css,够用且无副作用。
+import 'element-plus/es/components/image-viewer/style/css.mjs'
 import { $t } from '@/lang/static'
 
 interface AttachmentItem {
@@ -208,16 +215,20 @@ onBeforeUnmount(() => {
       </li>
     </ul>
   </div>
-  <teleport to="body">
-    <el-image-viewer
-      v-if="previewVisible && previewUrls.length > 0"
-      :url-list="previewUrls"
-      :initial-index="previewIndex"
-      :hide-on-click-modal="true"
-      :teleported="true"
-      @close="closePreview"
-    />
-  </teleport>
+  <!--
+    el-image-viewer 自己通过内部 <Teleport to="body" :disabled="!teleported"> 把遮罩渲染到 body。
+    不要在外面再包一层 <teleport to="body"> —— 嵌套 Teleport 在 element-plus 2.11.x 下会让组件
+    的 v-if 容器内残留占位、且内部 Teleport 因找不到正确锚点而不挂载，导致点击图片无反应。
+    显式传 :teleported="true" 是为了保证内部 Teleport 启用（默认是 undefined 关闭）。
+  -->
+  <el-image-viewer
+    v-if="previewVisible && previewUrls.length > 0"
+    :url-list="previewUrls"
+    :initial-index="previewIndex"
+    :hide-on-click-modal="true"
+    :teleported="true"
+    @close="closePreview"
+  />
 
   <!-- 右键菜单：仅图片附件可用 -->
   <teleport to="body">
