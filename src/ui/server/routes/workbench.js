@@ -2724,7 +2724,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
 
   // ── 续接简单任务对话 ────────────────────────────────────────────
   // POST /api/workbench/jobs/:id/continue
-  // 入参 body: { userMessage: string }
+  // 入参 body: { userMessage: string, attachments?: Attachment[] }
   // 行为:
   //   - 仅用于 type==='simple' 的任务,基于上一轮 job 捕获到的 claudeSessionId,
   //     用 claude --resume <id> 续接历史对话,**新一轮 = 新 job**
@@ -2732,6 +2732,11 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   //     区分;前端按 subId 前缀聚合渲染对话流
   //   - 上一轮还在 pending/running 时拒绝(避免 session 并发跑乱)
   //   - 上一轮未捕获到 session_id(claude 在 init 前就 crash)时拒绝
+  //   - 附件处理(2026-06 改):
+  //     · 默认复用 task.attachments(claude --resume 上下文里已经看过这些图,
+  //       不重复推,节省 token)
+  //     · 前端可显式传 attachments 数组做"追加"(用户续聊时新增的图片)
+  //     · 透传到 virtualSub.attachments,继续走 runSingleSubtask 的拼装逻辑
   app.post('/api/workbench/jobs/:id/continue', async (req, res) => {
     try {
       const userMessage = String(req.body?.userMessage || '').trim();
@@ -2769,6 +2774,15 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         }
       }
       const nextRound = maxRound + 1;
+      // 续接轮的 attachments:
+      //   - 前端显式传 attachments:用前端值(复用 task.attachments + 续聊时新增的)
+      //   - 前端没传:回退到 task.attachments(向后兼容)
+      // 注意:本轮 attachments 不写盘,只用于拼 prompt,claude --resume 上下文已看过
+      // 大部分图(默认复用的那些),真正"新加"的图是这次对话的关键信息。
+      const bodyAtts = req.body?.attachments;
+      const carryAtts = Array.isArray(bodyAtts) && bodyAtts.length > 0
+        ? bodyAtts
+        : (Array.isArray(task.attachments) ? task.attachments : []);
       const virtualSub = {
         id: `${task.id}__simple__r${nextRound}`,
         title: `续接 #${nextRound}`,
@@ -2776,8 +2790,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         status: 'todo',
         // 用户输入的续接消息直接作为本轮 prompt(走 promptOverride,不再拼模板)
         promptOverride: userMessage,
-        // 续接轮不带附件,避免重复推附件给 claude(已在首轮 prompt 里)
-        attachments: []
+        // 透传:复用 task 上已有附件 + 本轮新增(如果有)
+        attachments: carryAtts
       };
       const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
       res.json({ success: true, message: '已加入续接队列' });

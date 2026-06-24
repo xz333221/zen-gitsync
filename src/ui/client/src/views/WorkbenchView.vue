@@ -1288,10 +1288,20 @@ async function continueChat(t: Task, message: string) {
     ElMessage.error($t('@WORKBENCH:没有可续接的会话'))
     return
   }
+  // 续接时把 task.attachments 透传给后端,作为本轮 claude --resume 上下文里的图片。
+  // 注意:这里不区分"上一轮的图"和"用户续聊时新加的图"——因为都挂在 task.attachments
+  // 上(简单任务本来就用 task 级附件),新加的会自然 push 进去,后端拿到整张快照。
+  // 后端 defaultTask = t(front-end selectedTask),虚拟 sub 拿到的 attachments 是
+  // 当前 task 的完整列表;后端不再"丢弃 attachments 让 claude 不重复看图"——
+  // claude 自己会基于 session 上下文去判断哪些图已经说过,前端简单透传最稳。
+  const carryAtts = Array.isArray(t.attachments) ? t.attachments : []
   const res = await fetch(`/api/workbench/jobs/${latest.id}/continue`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userMessage: message })
+    body: JSON.stringify({
+      userMessage: message,
+      attachments: carryAtts
+    })
   }).then(r => r.json()).catch(err => ({ success: false, error: err?.message || String(err) }))
   if (res.success) {
     ElMessage.success(res.message || $t('@WORKBENCH:已加入续接队列'))
@@ -2268,6 +2278,24 @@ function humanSize(n: number): string {
                 v-if="simpleJobFor(selectedTask) && ['done','error','cancelled'].includes(simpleJobState(simpleJobFor(selectedTask)))"
                 class="wb-simple__continue"
               >
+                <!-- 续聊附件:复用 task.attachments(续接时传给 claude),
+                     用户增删也是直接改 task.attachments;Claude --resume 上下文
+                     里已经看过这些图(节省 token),但用户新增的会真的到模型面前。 -->
+                <AttachmentZone
+                  :attachments="selectedTask.attachments || []"
+                  :is-image="isImageAttachment"
+                  :human-size="humanSize"
+                  :is-uploading="isUploading('continue-' + selectedTask.id)"
+                  :is-paste-hover="pasteHoverId === 'continue-' + selectedTask.id"
+                  :max-count="9"
+                  :on-pick="() => pickAttachmentFile({ kind: 'task', task: selectedTask })"
+                  :on-remove="(att) => removeAttachment({ kind: 'task', task: selectedTask }, att)"
+                  @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
+                  @drop.prevent="onAttachmentDrop($event, { kind: 'task', task: selectedTask })"
+                  @dragover.prevent="pasteHoverId = 'continue-' + selectedTask.id"
+                  @dragenter.prevent="pasteHoverId = 'continue-' + selectedTask.id"
+                  @dragleave="pasteHoverId = (pasteHoverId === 'continue-' + selectedTask.id ? null : pasteHoverId)"
+                />
                 <textarea
                   class="wb-textarea wb-simple__continue-input"
                   v-model="continueDraft[selectedTask.id]"
