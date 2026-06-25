@@ -38,6 +38,9 @@ const AUTO_REFRESH_SECONDS = 5
 const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
+// 防止用户倒计时归零 + 手动点"立即重启"双触发
+const restartInFlight = ref(false)
+
 const CACHE_KEY = 'app-version-check'
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1 小时
 
@@ -166,18 +169,32 @@ function handleCancelAutoRefresh() {
 async function handleRestart() {
   // 用户主动点"立即重启"或在倒计时归零时触发：先取消倒计时避免重复触发
   cancelAutoRefreshCountdown()
+  if (restartInFlight.value) return
+  restartInFlight.value = true
   try {
-    await restartApp()
-    // 给服务端 300ms 时间退出，再尝试 reload
-    setTimeout(() => {
-      // 加 cache buster 防止浏览器从 disk cache 命中旧 SPA
-      window.location.reload()
-    }, 600)
+    const port = await restartApp()
+    // 重定向到新端口的同一个 path（保留 query + hash），保证 SPA 路由不丢
+    // 而不是 window.location.reload() —— 后端进程已退，reload 拿不到新 chunk
+    const { pathname, search, hash } = window.location
+    window.location.href = `http://localhost:${port}${pathname}${search}${hash}`
+    // 成功分支不重置 restartInFlight —— 浏览器即将跳转，组件即将卸载
   } catch (err: any) {
+    // 后端通过 NDJSON 'error' / 'timeout' 推过来的 message 是中文,优先展示;
+    // 前端自己抛的英文 code 用 i18n 兜底
+    const raw = err?.message || ''
+    const fallbackKey: Record<string, string> = {
+      'restart.timeout': '@F13B4:重启超时',
+      'restart.stream-closed': '@F13B4:重启失败，请刷新页面重试',
+      'restart.failed': '@F13B4:重启失败'
+    }
+    const localized = fallbackKey[raw]
     ElMessage({
       type: 'warning',
-      message: $t('@F13B4:重启失败 {error}', { error: err?.message || '' })
+      message: localized
+        ? $t(localized)
+        : $t('@F13B4:重启失败 {error}', { error: raw })
     })
+    restartInFlight.value = false
   }
 }
 

@@ -355,6 +355,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     noOpen,
     isGitRepo,
     savePortToFile,
+    fsSync,
     maxTries: 100,
     callbackExecutedRef
   }).catch((e) => {

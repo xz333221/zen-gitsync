@@ -30,6 +30,38 @@ export interface UpgradeLogEvent {
   code?: number
 }
 
+export interface RestartEvent {
+  type: 'ready' | 'error' | 'timeout' | 'stdout'
+  port?: number
+  message?: string
+}
+
+/**
+ * 通用 NDJSON 流解析器：把 fetch ReadableStream 切成行，逐行调用 onEvent。
+ * 解析失败/空行被静默丢弃，不中断流。
+ * 复用：startAppUpgrade / restartApp
+ */
+async function _parseNdjsonStream(
+  res: Response,
+  onEvent: (line: string) => void
+): Promise<void> {
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.trim()) onEvent(line)
+    }
+  }
+  if (buffer.trim()) onEvent(buffer)
+}
+
 /** 查询当前版本与 npm 上的最新版本 */
 export async function fetchAppVersion(): Promise<AppVersionInfo> {
   const res = await fetch('/api/app-version')
@@ -61,39 +93,21 @@ export async function startAppUpgrade(onLog: (evt: UpgradeLogEvent) => void): Pr
     return
   }
 
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder('utf-8')
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    // 按换行切分
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-    for (const line of lines) {
-      if (!line.trim()) continue
-      try {
-        onLog(JSON.parse(line) as UpgradeLogEvent)
-      } catch {
-        // 忽略无法解析的行
-      }
-    }
-  }
-  // 流结束时若有残余 buffer 也尝试解析一次
-  if (buffer.trim()) {
+  await _parseNdjsonStream(res, (line) => {
     try {
-      onLog(JSON.parse(buffer) as UpgradeLogEvent)
-    } catch {}
-  }
+      onLog(JSON.parse(line) as UpgradeLogEvent)
+    } catch {
+      // 忽略无法解析的行
+    }
+  })
 }
 
 /**
- * 通知服务端优雅退出，外层 launcher 会自动拉起新版本。
- * 失败抛错，由调用方决定是否回退到手动刷新。
+ * 触发后端自拉起重启；通过 NDJSON 流接收新进程端口。
+ * resolve 时返回新端口；reject 时抛带原因的错误。
+ * 流提前关闭（未收到 ready）也会 reject。
  */
-export async function restartApp(): Promise<void> {
+export async function restartApp(): Promise<number> {
   const res = await fetch('/api/app-restart', { method: 'POST' })
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
@@ -103,4 +117,31 @@ export async function restartApp(): Promise<void> {
     } catch {}
     throw new Error(msg)
   }
+  if (!res.body) throw new Error('响应无 body')
+
+  return new Promise<number>((resolve, reject) => {
+    let settled = false
+    const settle = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      fn()
+    }
+    _parseNdjsonStream(res, (line) => {
+      try {
+        const evt = JSON.parse(line) as RestartEvent
+        if (evt.type === 'ready' && typeof evt.port === 'number' && evt.port > 0) {
+          settle(() => resolve(evt.port as number))
+        } else if (evt.type === 'timeout') {
+          settle(() => reject(new Error('restart.timeout')))
+        } else if (evt.type === 'error') {
+          settle(() => reject(new Error(evt.message || 'restart.failed')))
+        }
+        // 'stdout' 仅用于后端日志展示，前端忽略
+      } catch {
+        // 忽略无法解析的行
+      }
+    }).then(() => {
+      settle(() => reject(new Error('restart.stream-closed')))
+    }).catch(() => {})
+  })
 }

@@ -288,7 +288,7 @@ Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.
 
 ### Self-Upgrade
 
-The footer version chip in the GUI checks npm for newer releases once per session. When an update is available, a **Upgrade** button appears next to the version; clicking it streams `npm install -g zen-gitsync` output into a modal dialog. On success, the dialog switches to a "Restart and reload now" CTA that calls `POST /api/app-restart` (which gracefully exits the Node process — your launcher / desktop shell brings it back up) and then reloads the browser tab so the new SPA bundle takes effect. The footer version also updates instantly to the new number so you can see the bump even before restarting.
+The footer version chip in the GUI checks npm for newer releases once per session. When an update is available, a **Upgrade** button appears next to the version; clicking it streams `npm install -g zen-gitsync` output into a modal dialog. On success, the dialog switches to a "Restart and reload now" CTA. Clicking it calls `POST /api/app-restart`, which **self-respawns a new Node process** (no external launcher / desktop shell is required), waits for the new process to bind its port, streams that port back to the browser over NDJSON, and gracefully exits the old process. The browser then **redirects** to the new port (preserving the current path, query, and hash) so the upgraded backend serves the next request. The footer version also updates instantly to the new number so you can see the bump even before restarting. If the child process fails to come up within 8s, the old process is preserved and an error toast is shown — your session stays connected.
 
 On macOS / Linux, the global install is run under `sudo -n` (non-interactive); if sudo can't authenticate non-interactively, re-launch the GUI with admin rights and try again.
 
@@ -690,7 +690,7 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 
 ### 自升级
 
-GUI 底栏版本号每个会话会向 npm 查询一次最新版本。检测到更新时版本旁会出现 **升级** 按钮，点击后在弹窗里实时回传 `npm install -g zen-gitsync` 的输出；升级成功后弹窗会切换为「**立即重启并刷新**」主 CTA，调用 `POST /api/app-restart` 让 Node 进程优雅退出（外层 launcher / desktop 壳会自动拉起新版本），再 reload 当前 tab 让新 SPA 资源生效。同时底栏版本号会立刻刷新到新版本号，重启前就能看到。
+GUI 底栏版本号每个会话会向 npm 查询一次最新版本。检测到更新时版本旁会出现 **升级** 按钮，点击后在弹窗里实时回传 `npm install -g zen-gitsync` 的输出；升级成功后弹窗会切换为「**立即重启并刷新**」主 CTA。点击后调用 `POST /api/app-restart`，后端**自行 spawn 新 Node 进程**（不依赖任何外层 launcher / 桌面壳），通过 NDJSON 流把新进程端口推回前端，旧进程再优雅退出；浏览器**重定向**到新端口（保留当前 path、query、hash）由新后端服务后续请求。同时底栏版本号会立刻刷新到新版本号，重启前就能看到。若子进程 8 秒内未就绪，旧进程不退出并弹错误提示，您的会话保持连接。
 
 > macOS / Linux 上全局安装需要 sudo，前端会用 `sudo -n` 非交互式尝试；如非免密 sudo，请以管理员权限重启 GUI 后再试。
 

@@ -16,9 +16,11 @@ import express from 'express';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
+import os from 'os';
 import { exec, spawn } from 'child_process';
 import https from 'https';
 import { fileURLToPath } from 'url';
+import { getRegistryPath } from '../utils/instanceRegistry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,8 +31,35 @@ export function registerNpmRoutes({
 }) {
   // 标记是否有升级任务在跑（防并发）
   let activeUpgrade = false;
+  // 标记是否有重启任务在跑（防并发）
+  let activeRestart = false;
+  // 自拉起重启相关常量
+  const RESTART_TIMEOUT_MS = 8000;   // 子进程必须在此时间内注册到 instanceRegistry
+  const REGISTRY_POLL_MS = 250;      // 轮询注册表文件间隔
+  const EXIT_DELAY_MS = 100;         // 子进程就绪后给前端的最后缓冲时间
 
   // ========== 应用自升级相关 API ==========
+
+  // 解析"自拉起"要 spawn 的入口绝对路径。
+  // 优先 process.argv[1](开发态 server.js / 生产态 src/gitCommit.js 都是绝对路径),
+  // 但 launch.json 的 backend 是 `node -e "...process.argv = [...]; require('./server.js')"`,
+  // 这种篡改出来的 argv[1] 是相对路径 "server.js",不能直接 spawn。
+  // 回退: 用 __dirname 推导 src/ui/server/index.js 的同级 server.js(仓库根)
+  function resolveRestartEntry() {
+    const arg = process.argv[1]
+    if (arg && path.isAbsolute(arg) && fsSync.existsSync(arg)) {
+      return { entry: arg, args: process.argv.slice(2) }
+    }
+    // 回退到仓库根的 server.js(开发态入口),保留原 PORT 等环境变量
+    const fallback = path.resolve(__dirname, '../../../..', 'server.js')
+    if (fsSync.existsSync(fallback)) {
+      // 透传用户原始 argv[2..](--no-open 等);如果原 argv[1] 是 "server.js" 这类相对路径,
+      // 用户大概率没传任何 args,所以空数组也合理
+      const originalArgs = (arg && !path.isAbsolute(arg)) ? process.argv.slice(2) : []
+      return { entry: fallback, args: originalArgs }
+    }
+    return null
+  }
 
   // 当前安装的版本（从外层 package.json 读取）
   function getCurrentVersion() {
@@ -191,15 +220,139 @@ export function registerNpmRoutes({
   })
 
 
-  // POST /api/app-restart  - 优雅退出当前 Node 进程，由外层 launcher/desktop 自动拉起
+  // 同步读取 instanceRegistry 文件并返回 Map<pid, entry>
+  // npm.js 在自拉起重启场景下需要轮询此文件判断子进程是否已绑定端口
+  function readRegistrySync(p) {
+    const m = new Map();
+    try {
+      const raw = fsSync.readFileSync(p, 'utf-8');
+      const obj = JSON.parse(raw);
+      const instances = (obj && obj.instances) || {};
+      for (const [pidStr, entry] of Object.entries(instances)) {
+        const pid = Number(pidStr);
+        if (Number.isFinite(pid) && entry && typeof entry === 'object') {
+          m.set(pid, entry);
+        }
+      }
+    } catch (_) {
+      // 文件不存在或 JSON 损坏 → 返回空 Map，调用方按"还没注册"处理
+    }
+    return m;
+  }
+
+  // POST /api/app-restart  - 自拉起重启：spawn 当前进程入口 + 轮询 instanceRegistry
+  //                           拿到子进程端口后通过 NDJSON 流告知前端；旧进程再退出
   app.post('/api/app-restart', (_req, res) => {
-    res.json({ success: true, message: '正在重启服务…' })
-    // 给响应一点时间落到客户端再退出
-    setTimeout(() => {
-      console.log('[app-restart] 收到重启指令，退出当前进程')
-      process.exit(0)
-    }, 300)
-  })
+    if (activeRestart) {
+      res.status(409).json({ success: false, error: '已有重启任务在进行中' });
+      return;
+    }
+    activeRestart = true;
+
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const send = (obj) => { try { res.write(JSON.stringify(obj) + '\n') } catch (_) {} };
+    const finish = () => { try { res.end() } catch (_) {} };
+    const release = () => { activeRestart = false };
+
+    // 1. 记录当前所有 instance,后续用"出现的新 pid"判定子进程
+    const registryPath = getRegistryPath();
+    const before = readRegistrySync(registryPath);
+    const start = Date.now();
+    const spawnAt = Date.now();
+
+    // 2. 准备子进程 ready 信号文件 —— startServerOnAvailablePort 在 listen 成功后会写入
+    //    （instanceRegistry 在 EPERM 环境下不可用,这是回退通道）
+    const notifyPath = path.join(
+      os.tmpdir(),
+      `zen-gitsync-restart-${process.pid}-${Date.now()}.port`
+    );
+    try { fsSync.unlinkSync(notifyPath) } catch (_) {}  // 清掉旧同名文件
+
+    const entryInfo = resolveRestartEntry();
+    if (!entryInfo) {
+      send({ type: 'error', message: '无法解析重启入口（process.argv[1] 既不是绝对路径,仓库根也没有 server.js）' });
+      finish();
+      release();
+      return;
+    }
+
+    let child;
+    try {
+      // spawn 当前进程当时是怎么被 node 启的同一个入口（开发态 server.js / 生产态 gitCommit.js）
+      // detached: true + stdio: 'ignore' + child.unref() → Windows 上父进程 exit 不会带走子进程
+      child = spawn(process.execPath, [entryInfo.entry, ...entryInfo.args], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+        env: { ...process.env, ZEN_RESTART_NOTIFY_PATH: notifyPath }
+      });
+      child.unref();
+    } catch (err) {
+      send({ type: 'error', message: `拉起子进程失败: ${err?.message || err}` });
+      try { fsSync.unlinkSync(notifyPath) } catch (_) {}
+      finish();
+      release();
+      return;
+    }
+
+    send({ type: 'stdout', message: `[restart] 已在 PID ${child.pid} 拉起子进程 (${entryInfo.entry})，等待端口就绪…\n` });
+
+    const poll = setInterval(() => {
+      if (Date.now() - start > RESTART_TIMEOUT_MS) {
+        clearInterval(poll);
+        try { child.kill('SIGTERM') } catch (_) {}
+        send({ type: 'error', message: `子进程 ${RESTART_TIMEOUT_MS / 1000}s 内未就绪（未读到 ${notifyPath}），已 kill` });
+        send({ type: 'timeout' });
+        finish();
+        try { fsSync.unlinkSync(notifyPath) } catch (_) {}
+        // 关键：超时分支旧进程不退出，用户仍可继续手动刷新页面
+        release();
+        return;
+      }
+
+      // 优先判定：子进程是否写了 notify 文件（最可靠,不走 instanceRegistry）
+      let notifiedPort = null;
+      try {
+        const raw = fsSync.readFileSync(notifyPath, 'utf8').trim();
+        const p = Number(raw);
+        if (Number.isInteger(p) && p > 0 && p < 65536) notifiedPort = p;
+      } catch (_) {}
+
+      // 兜底：instanceRegistry 里出现的新 pid + port（用于没有 savePort 的环境）
+      let registryPort = null;
+      if (!notifiedPort) {
+        const after = readRegistrySync(registryPath);
+        for (const [pid, entry] of after) {
+          if (
+            !before.has(pid) &&
+            Number.isInteger(entry.port) && entry.port > 0 &&
+            (entry.lastHeartbeat ?? entry.startedAt ?? 0) >= spawnAt
+          ) {
+            registryPort = entry.port;
+            break;
+          }
+        }
+      }
+
+      const newPort = notifiedPort ?? registryPort;
+      if (newPort) {
+        clearInterval(poll);
+        // 给 EXIT_DELAY_MS 让新进程稳定，再通知前端 + 旧进程退出
+        setTimeout(() => {
+          send({ type: 'ready', port: newPort });
+          finish();
+          try { fsSync.unlinkSync(notifyPath) } catch (_) {}
+          console.log('[app-restart] 子进程已就绪，退出当前进程');
+          process.exit(0);
+        }, EXIT_DELAY_MS);
+        return;
+      }
+    }, REGISTRY_POLL_MS);
+  });
 
 
   // 读取 package.json 文件内容

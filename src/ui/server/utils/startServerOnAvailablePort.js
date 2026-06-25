@@ -20,6 +20,7 @@ export async function startServerOnAvailablePort({
   noOpen,
   isGitRepo,
   savePortToFile,
+  fsSync,
   maxTries = 100,
   callbackExecutedRef
 }) {
@@ -73,6 +74,18 @@ export async function startServerOnAvailablePort({
           console.log(chalk.green('======================================'));
 
           savePortToFile(currentPort);
+
+          // 自拉起重启通知：父进程 spawn 时设置了 ZEN_RESTART_NOTIFY_PATH
+          // 子进程成功 bind 端口后,把端口写到该文件作为"已就绪"信号
+          // （instanceRegistry 在 EPERM 环境下不可用,这是回退通道）
+          const notifyPath = process.env.ZEN_RESTART_NOTIFY_PATH;
+          if (notifyPath && fsSync) {
+            try {
+              fsSync.writeFileSync(notifyPath, String(currentPort), 'utf8');
+            } catch (_) {
+              // 通知写失败不影响主流程
+            }
+          }
 
           if (!noOpen) {
             setTimeout(() => {

@@ -17,9 +17,20 @@
 // 多进程并发写采用 atomic temp+rename + 进程内串行化 Promise 链
 // stale 判定：PID 不存在 或 lastHeartbeat 超过阈值
 
+import nodePath from 'node:path';
+import nodeOs from 'node:os';
+
 const STALE_MS = 30_000;          // 心跳超时阈值（毫秒）
 const WATCH_DEBOUNCE_MS = 100;    // fs.watch 防抖时间
 const REGISTRY_VERSION = 1;
+
+/**
+ * 默认注册表文件路径（与 createInstanceRegistry({ registryPath }) 的约定一致）
+ * 用于：npm.js 的 /api/app-restart 自拉起时，父进程轮询此路径判断子进程是否就绪。
+ */
+export function getRegistryPath() {
+  return nodePath.join(nodeOs.homedir(), '.zen-gitsync-instances.json');
+}
 
 function isProcessAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
