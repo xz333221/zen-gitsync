@@ -3,11 +3,12 @@
   共享的"执行日志"折叠面板，WorkbenchView 子任务行 + ExecutionLogManager 卡片复用。
   - 单 prop: job（Job 或 JobFull，结构兼容）
   - 自带 copy / displayOutput 截断（不依赖父组件），彻底解耦
-  - 视觉：单轮 job 内部按"对话气泡"组织
-    · 用户提示词 → 右侧气泡（蓝）
-    · Claude 思考 → 左侧气泡（紫，可折叠）
-    · 模型返回  → 左侧气泡（紫，带"重新执行"按钮）
-  - 简单任务的"续聊"由父组件 v-for 多轮叠加，天然形成纵向对话流。
+  - 视觉：单轮 job 内部用 zen-ai-chat-ui 的 ChatContainer 渲染对话
+    · 用户提示词 → 右侧气泡（user 消息）
+    · Claude 思考 → 左侧气泡内可折叠思考块（assistant.reasoning）
+    · 模型返回  → 左侧气泡正文（assistant.content，Markdown 渲染 + 流式光标）
+  - 简单任务的"续聊"由父组件 v-for 多轮叠加，天然形成纵向对话流；
+    续聊输入框在父组件，本组件隐藏 ChatContainer 自带输入框（避免多输入框冲突）。
 -->
 <!--
   注:本组件历史上用 <details> 元素,但 <details> 子级的 div 不能正确继承
@@ -68,106 +69,31 @@
     </div>
 
     <!--
-      body 容器:对话气泡列表,纵向堆叠,气泡间用 gap 分隔。
-      用户气泡靠右,AI 气泡靠左,用 is-user / is-ai 区分。
+      body 容器:用 zen-ai-chat-ui 的 ChatContainer 渲染单轮对话。
+      隐藏 ChatContainer 自带的输入框(acu-chat-footer),续聊输入由父组件统一承载。
+      下方保留"重新执行"footer。
     -->
-    <div v-show="!isCollapsed" class="wb-log-details__body wb-chat">
-      <!-- 用户提示词气泡：靠右 -->
-      <div v-if="job.prompt" class="wb-chat__row is-user">
-        <div class="wb-chat__bubble wb-chat__bubble--user">
-          <header class="wb-chat__head">
-            <span class="wb-chat__tag wb-chat__tag--user">{{ $t('@WORKBENCH:用户提示词') }}</span>
-            <span class="wb-chat__count">{{ (job.prompt || '').length }} {{ $t('@WORKBENCH:字符') }}</span>
-            <button
-              type="button"
-              class="wb-log-copy wb-log-copy--sm"
-              :title="$t('@WORKBENCH:复制用户提示词')"
-              :aria-label="$t('@WORKBENCH:复制用户提示词')"
-              @click.stop="copyField('prompt')"
-            >
-              ⧉
-            </button>
-          </header>
-          <pre class="wb-chat__pre wb-chat__pre--user">{{ job.prompt }}</pre>
-        </div>
-      </div>
+    <div v-show="!isCollapsed" class="wb-log-details__body">
+      <ChatContainer
+        :messages="chatMessages"
+        :assistant-name="assistantLabel"
+        :show-avatar="false"
+        theme="auto"
+        class="wb-job-chat"
+      />
 
-      <!-- Claude 思考过程气泡：靠左(紫),默认折叠 -->
-      <div v-if="job.thinking" class="wb-chat__row is-ai">
-        <div class="wb-chat__bubble wb-chat__bubble--think">
-          <header
-            class="wb-chat__head"
-            role="button"
-            :aria-expanded="thinkingOpen"
-            @click="toggleThinking"
-          >
-            <span class="wb-chat__toggle-icon" :class="{ 'is-expanded': thinkingOpen }" aria-hidden="true">▸</span>
-            <span class="wb-chat__tag wb-chat__tag--think">{{ $t('@WORKBENCH:Claude 思考') }}</span>
-            <span class="wb-chat__count">{{ (job.thinking || '').length }} {{ $t('@WORKBENCH:字符') }}</span>
-            <button
-              type="button"
-              class="wb-log-copy wb-log-copy--sm"
-              :title="$t('@WORKBENCH:复制思考内容')"
-              :aria-label="$t('@WORKBENCH:复制思考内容')"
-              @click.stop="copyField('thinking')"
-            >
-              ⧉
-            </button>
-          </header>
-          <pre v-show="thinkingOpen" class="wb-chat__pre wb-chat__pre--think">{{ displayThinking() }}</pre>
-        </div>
-      </div>
-
-      <!-- 模型返回气泡：靠左(紫),主内容 -->
-      <div class="wb-chat__row is-ai">
-        <div class="wb-chat__bubble wb-chat__bubble--ai">
-          <header class="wb-chat__head">
-            <span class="wb-chat__tag wb-chat__tag--ai">{{ $t('@WORKBENCH:模型返回') }}</span>
-            <span class="wb-chat__count">{{ (job.output || '').length }} {{ $t('@WORKBENCH:字符') }}</span>
-            <button
-              type="button"
-              class="wb-log-copy wb-log-copy--sm"
-              :title="$t('@WORKBENCH:复制模型返回')"
-              :aria-label="$t('@WORKBENCH:复制模型返回')"
-              @click.stop="copyField('output')"
-            >
-              ⧉
-            </button>
-            <button
-              type="button"
-              class="wb-log-copy wb-log-copy--sm"
-              :title="$t('@WORKBENCH:全屏查看模型返回')"
-              :aria-label="$t('@WORKBENCH:全屏查看模型返回')"
-              :disabled="!hasOutput"
-              @click.stop="fullscreenOpen = true"
-            >
-              ⛶
-            </button>
-          </header>
-          <div class="wb-chat__body">
-            <MarkdownRender
-              v-if="hasOutput"
-              :content="displayText"
-              :final="isFinalReached"
-              :typewriter="false"
-              class="wb-chat__render"
-            />
-            <div v-else class="wb-chat__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
-          </div>
-          <!-- footer:任务结束后显示"重新执行",运行中不显示 -->
-          <footer v-if="canReExecute" class="wb-chat__foot">
-            <button
-              type="button"
-              class="wb-chat__action"
-              :title="$t('@WORKBENCH:用相同的提示词重新执行此任务')"
-              :aria-label="$t('@WORKBENCH:重新执行')"
-              @click="onReExecute"
-            >
-              ↻
-            </button>
-          </footer>
-        </div>
-      </div>
+      <!-- footer:任务结束后显示"重新执行",运行中不显示 -->
+      <footer v-if="canReExecute" class="wb-chat__foot">
+        <button
+          type="button"
+          class="wb-chat__action"
+          :title="$t('@WORKBENCH:用相同的提示词重新执行此任务')"
+          :aria-label="$t('@WORKBENCH:重新执行')"
+          @click="onReExecute"
+        >
+          ↻
+        </button>
+      </footer>
 
       <!-- 全屏查看 dialog -->
       <el-dialog
@@ -179,11 +105,9 @@
         @closed="onFullscreenClosed"
       >
         <div ref="fullscreenContainerRef" class="wb-log-fullscreen">
-          <MarkdownRender
+          <MarkdownRenderer
             v-if="hasOutput"
-            :content="fullscreenDisplayText"
-            :final="isFinalReached"
-            :typewriter="false"
+            :source="fullscreenSource"
             class="wb-log-fullscreen__render"
           />
           <div v-else class="wb-log-fullscreen__empty">{{ $t('@WORKBENCH:（暂无输出）') }}</div>
@@ -194,11 +118,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { MarkdownRender } from 'markstream-vue'
+// 模型对话 UI 改为引用 zen-ai-chat-ui(本地 chat-ui 项目发布的组件库)
+import { ChatContainer, MarkdownRenderer, type ChatMessage, type MessageStatus } from 'zen-ai-chat-ui'
+import 'zen-ai-chat-ui/style.css'
 import { $t } from '@/lang/static'
-import type { Job } from '@/types/workbench'
+import type { Job, JobStatus } from '@/types/workbench'
 
 const props = defineProps<{ job: Job }>()
 const emit = defineEmits<{
@@ -232,7 +158,7 @@ function displayOutput(): string {
   return `${$t('@WORKBENCH:…（前文已截断）')}\n${raw.slice(-MAX_LOG_DISPLAY)}`
 }
 /* thinking 也走 64KB 截断,跟 displayOutput 同语义。
-   之前没截断的隐患:thinking 在模板里直接 <pre>{{ job.thinking }}</pre>,50 条全展开时
+   之前没截断的隐患:thinking 在模板里直接展示,50 条全展开时
    巨型 thinking 单条可达数百 KB,光 DOM 内插就足以让主线程卡顿。 */
 function displayThinking(): string {
   const raw = props.job.thinking || ''
@@ -264,17 +190,6 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-async function copyField(field: 'prompt' | 'thinking' | 'output') {
-  const text = (props.job as any)[field] || ''
-  if (!text) {
-    ElMessage.warning($t('@WORKBENCH:暂无内容可复制'))
-    return
-  }
-  const ok = await copyToClipboard(text)
-  if (ok) ElMessage.success($t('@WORKBENCH:已复制到剪贴板'))
-  else ElMessage.error($t('@WORKBENCH:复制失败'))
-}
-
 async function copyAll() {
   const sections: string[] = []
   if (props.job.prompt) sections.push(`## ${$t('@WORKBENCH:用户提示词')}\n\n${props.job.prompt}`)
@@ -289,17 +204,6 @@ async function copyAll() {
   else ElMessage.error($t('@WORKBENCH:复制失败'))
 }
 
-// MarkdownRender 的输入:
-// - outputText:模型返回完整文本(走 displayOutput 截断策略)
-// - isActive:status 是 running/pending,标识任务在流式生成
-// - isFinished:流是否结束(done/error/cancelled),决定是否启用 typewriter
-// - visibleLength:自己控制的 typewriter 进度。markstream-vue 自带的 typewriter
-//   在 catch-up 模式下会瞬间刷出,看不到逐字效果,所以这里改成:
-//   1) visibleLength 跟踪 outputText 长度,以 ~50 CPS 速度追上
-//   2) 用 displayText = outputText.slice(0, visibleLength) 喂给 markstream
-//   3) 已完成 job 直接 visibleLength = full(全量展示,不动画)
-const outputText = computed(() => displayOutput())
-// isActive 已提前到上面与 isCollapsed 一起定义(避免 TDZ 报错)
 const isFinished = computed(() => {
   const s = props.job.status
   return s === 'done' || s === 'error' || s === 'cancelled'
@@ -321,67 +225,64 @@ const finishedStatusLabel = computed(() => {
   return $t('@WORKBENCH:执行完成')
 })
 
-// 自定义 typewriter:visibleLength 从 0 累加到 outputText.length
-const visibleLength = ref(0)
-let typewriterTimer: ReturnType<typeof setInterval> | null = null
-const TYPEWRITER_CPS = 60 // 字符/秒,可调
+// ── zen-ai-chat-ui 消息映射 ────────────────────────────────────────────
+// 把单轮 Job 映射成 ChatContainer 的 messages 数组:
+//   job.prompt        → user 消息(右气泡)
+//   job.thinking      → assistant.reasoning(可折叠思考块)
+//   job.output        → assistant.content(Markdown 正文 + 流式光标)
+//   job.status        → message.status(streaming 光标 / pending 打字点 / done / error)
+// 流式状态由 message.status 驱动,不再需要自定义 typewriter。
+// Claude 为产品名,中英文一致,无需走 i18n
+const assistantLabel = 'Claude'
 
-function startTypewriter() {
-  stopTypewriter()
-  typewriterTimer = setInterval(() => {
-    const target = outputText.value.length
-    if (target === 0) {
-      visibleLength.value = 0
-      stopTypewriter()
-      return
-    }
-    // 按 TYPEWRITER_CPS 字符/秒的速度累加
-    const step = Math.max(1, Math.ceil(TYPEWRITER_CPS / 30))
-    if (visibleLength.value < target) {
-      visibleLength.value = Math.min(target, visibleLength.value + step)
-    }
-    if (visibleLength.value >= target) {
-      // 追上了,停定时器(但 watch 会在下次 output 增长时重新启动)
-      stopTypewriter()
-    }
-  }, 33) // 约 30fps
-}
-
-function stopTypewriter() {
-  if (typewriterTimer) {
-    clearInterval(typewriterTimer)
-    typewriterTimer = null
+function mapStatus(s: JobStatus, hasContent: boolean): MessageStatus {
+  if (s === 'running' || s === 'pending') {
+    // 有任何输出(思考或正文)→ streaming(显示光标/思考流式);否则 pending(打字点)
+    return hasContent ? 'streaming' : 'pending'
   }
+  if (s === 'error') return 'error'
+  // done / cancelled → done(cancelled 保留已有输出,不显示错误)
+  return 'done'
 }
 
-// watch output 长度变化:
-// - 已完成 job:visibleLength 直接 = full(全量,无动画)
-// - running/pending:启动累加器
-watch(
-  () => [props.job.output?.length || 0, props.job.status] as const,
-  ([len, status]) => {
-    if (status === 'done' || status === 'error' || status === 'cancelled') {
-      // 任务完成 → 直接全量展示
-      stopTypewriter()
-      visibleLength.value = len
-    } else {
-      // 任务在跑:启动累加器(如果还没追上)
-      if (visibleLength.value < len && !typewriterTimer) {
-        startTypewriter()
-      }
-    }
-  },
-  { immediate: true }
-)
+const chatMessages = computed<ChatMessage[]>(() => {
+  const j = props.job
+  const msgs: ChatMessage[] = []
+  const createdAt = j.startedAt ? new Date(j.startedAt).getTime() : Date.now()
 
-// 组件卸载时清理定时器
-onUnmounted(() => stopTypewriter())
+  if (j.prompt) {
+    msgs.push({
+      id: `${j.id}-u`,
+      role: 'user',
+      content: j.prompt,
+      status: 'done',
+      createdAt
+    })
+  }
 
-// displayText:截断到 visibleLength,喂给 markstream-vue
-const displayText = computed(() => outputText.value.slice(0, visibleLength.value))
-const fullscreenDisplayText = computed(() => (props.job.output || '').slice(0, visibleLength.value))
-// :final 仅在显示追上时传 true,避免 markstream 提前 end-streaming
-const isFinalReached = computed(() => visibleLength.value >= (props.job.output || '').length)
+  const outputText = displayOutput()
+  const thinkingText = displayThinking()
+  const hasOutput = !!outputText
+  const hasThinking = !!thinkingText
+  const hasContent = hasOutput || hasThinking
+  const status = mapStatus(j.status, hasContent)
+
+  msgs.push({
+    id: `${j.id}-a`,
+    role: 'assistant',
+    content: outputText,
+    reasoning: hasThinking ? thinkingText : undefined,
+    // 有思考:思考阶段(output 为空)→ streaming 思考块;output 出现后 → done 折叠
+    reasoningStatus: hasThinking
+      ? (hasOutput ? 'done' : (status === 'streaming' ? 'streaming' : 'done'))
+      : undefined,
+    status,
+    error: status === 'error' ? (j.error || undefined) : undefined,
+    createdAt
+  })
+
+  return msgs
+})
 
 // 耗时统计:从 running 起累计,完成时定格
 const startedAt = ref<number | null>(null)
@@ -403,53 +304,10 @@ const elapsedLabel = computed(() => {
   return `${m}分${s.toString().padStart(2, '0')}秒`
 })
 
-/**
- * 思考区自动展开/合上:
- * - 默认按 status 自动控制(运行中有内容时展开,完成后合上)
- * - 用户手动点 header 改 open 后,本组件生命周期内不再覆盖(尊重用户)
- * - job 状态从未活跃 → 活跃(新一轮开始)时,清掉用户覆盖标记
- */
-let thinkingUserOverride = false
-const thinkingOpen = ref(false)
-function toggleThinking() {
-  thinkingUserOverride = true
-  thinkingOpen.value = !thinkingOpen.value
-}
-
-function recomputeThinkingOpen() {
-  if (thinkingUserOverride) return
-  // 输出已经有内容 → 思考阶段已结束,合上思考区把屏幕让给模型返回
-  if ((props.job.output || '').length > 0) {
-    thinkingOpen.value = false
-    return
-  }
-  const s = props.job.status
-  if (s === 'running' || s === 'pending') {
-    thinkingOpen.value = (props.job.thinking || '').length > 0
-  } else {
-    thinkingOpen.value = false
-  }
-}
-
-// 任务重新进入活跃态 → 清掉用户覆盖
-watch(() => props.job.status, (s, prev) => {
-  const wasActive = prev === 'running' || prev === 'pending'
-  const isActive = s === 'running' || s === 'pending'
-  if (!wasActive && isActive) {
-    thinkingUserOverride = false
-  }
-  recomputeThinkingOpen()
-})
-
-// thinking 长度变化 → 重新计算(运行中长度 > 0 就展开)
-watch(() => (props.job.thinking || '').length, () => recomputeThinkingOpen(), { immediate: true })
-
-// output 长度变化 → 模型开始返回时折叠思考区,把屏幕让给输出
-watch(() => (props.job.output || '').length, () => recomputeThinkingOpen())
-
 // 全屏查看：dialog 打开时显示完整 output(无截断),关闭后回到 inline 视图
 const fullscreenOpen = ref(false)
 const hasOutput = computed(() => !!(props.job.output && props.job.output.length))
+const fullscreenSource = computed(() => props.job.output || '')
 const fullscreenContainerRef = ref<HTMLElement | null>(null)
 
 // 进入全屏后,若日志还在流式追加,保持滚到底
@@ -497,13 +355,37 @@ function onReExecute() {
   height: 100%;
 }
 
-/* body 容器:对话气泡列表,纵向堆叠 */
+/* body 容器:flex column,ChatContainer 占满剩余高度,footer 固定底部 */
 .wb-log-details__body {
   display: flex;
   flex-direction: column;
   flex: 1 1 0%;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+}
+
+/* ChatContainer 容器:占满 body 剩余高度,隐藏自带输入框(续聊由父组件承载) */
+.wb-job-chat {
+  flex: 1;
+  min-height: 0;
+}
+.wb-job-chat :deep(.acu-chat-footer) {
+  display: none;
+}
+/* 让 zen-ai-chat-ui 的背景融入 zen-git 代码区背景 */
+.wb-job-chat :deep(.acu-chat) {
+  background: transparent;
+}
+/* 贴合原有气泡密度:略微收紧内边距 */
+.wb-job-chat :deep(.acu-message-list-inner) {
+  padding: 10px 12px 14px;
+  gap: 10px;
+}
+.wb-job-chat :deep(.acu-bubble) {
+  font-size: 12px;
+}
+.wb-job-chat :deep(.acu-bubble-name) {
+  font-size: 10px;
 }
 
 .wb-log-summary {
@@ -565,155 +447,8 @@ function onReExecute() {
   outline: 2px solid color-mix(in srgb, var(--color-primary) 50%, transparent);
   outline-offset: 1px;
 }
-.wb-log-copy--sm {
-  padding: 1px 6px;
-  font-size: 10px;
-}
 
-/* ── 对话气泡布局 ────────────────────────────────────────────────── */
-.wb-chat {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  background: var(--bg-code);
-}
-.wb-chat__row {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-}
-.wb-chat__row.is-user { justify-content: flex-end; }
-.wb-chat__row.is-ai   { justify-content: flex-start; }
-
-/* 气泡本体:最大宽度 85%,留出对齐侧的小尾巴空间 */
-.wb-chat__bubble {
-  max-width: 85%;
-  min-width: 0;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-container);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.wb-chat__bubble--user {
-  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 5%, var(--bg-container));
-}
-.wb-chat__bubble--ai {
-  border-color: color-mix(in srgb, #8b5cf6 35%, transparent);
-  background: color-mix(in srgb, #8b5cf6 4%, var(--bg-container));
-}
-.wb-chat__bubble--think {
-  border-color: color-mix(in srgb, #8b5cf6 25%, transparent);
-  background: color-mix(in srgb, #8b5cf6 2%, var(--bg-container));
-}
-
-.wb-chat__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-tertiary) 6%, transparent);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-  user-select: none;
-}
-.wb-chat__bubble--think .wb-chat__head { cursor: pointer; }
-
-.wb-chat__tag {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-.wb-chat__tag--user {
-  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
-  color: var(--color-primary);
-}
-.wb-chat__tag--ai {
-  background: color-mix(in srgb, #8b5cf6 18%, transparent);
-  color: #6d28d9;
-}
-.wb-chat__tag--think {
-  background: color-mix(in srgb, #8b5cf6 18%, transparent);
-  color: #6d28d9;
-}
-
-.wb-chat__toggle-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  font-size: 10px;
-  color: var(--text-tertiary);
-  transition: transform 0.15s ease;
-  flex-shrink: 0;
-}
-.wb-chat__toggle-icon.is-expanded { transform: rotate(90deg); }
-
-.wb-chat__count {
-  margin-left: auto;
-  font-size: 10px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.wb-chat__pre {
-  margin: 0;
-  padding: 8px 12px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text-primary);
-  background: transparent;
-  max-height: 800px;
-  overflow: auto;
-}
-.wb-chat__pre--user {
-  background: transparent;
-}
-.wb-chat__pre--think {
-  font-style: italic;
-  color: var(--text-secondary);
-  max-height: 600px;
-}
-
-.wb-chat__body {
-  padding: 6px 12px 4px;
-  min-height: 24px;
-}
-.wb-chat__render {
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-primary);
-}
-/* 强制 markstream-vue 不开 content-visibility:auto,否则 flex 父容器拿不到真实高度 */
-.wb-chat__render,
-.wb-chat__render.markdown-renderer {
-  content-visibility: visible;
-  contain-intrinsic-size: auto;
-}
-.wb-chat__render :deep(pre) { margin: 6px 0; }
-.wb-chat__render :deep(code) {
-  font-family: var(--font-mono, ui-monospace, monospace);
-}
-.wb-chat__empty {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-style: italic;
-  padding: 4px 0;
-}
-
+/* ── 重新执行 footer ────────────────────────────────────────────────── */
 .wb-chat__foot {
   display: flex;
   justify-content: flex-end;
@@ -721,6 +456,7 @@ function onReExecute() {
   padding: 4px 10px 6px;
   border-top: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
   background: color-mix(in srgb, var(--text-tertiary) 3%, transparent);
+  flex-shrink: 0;
 }
 .wb-chat__action {
   display: inline-flex;
