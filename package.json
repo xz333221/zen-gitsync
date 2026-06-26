@@ -55,6 +55,7 @@
     "src/utils/**",
     "src/gitCommit.js",
     "src/config.js",
+    "src/cli/**",
     "scripts/**",
     "!scripts/archive/**",
     "package.json",

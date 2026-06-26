@@ -68,6 +68,9 @@ __pycache__/
 # CodeBuddy project data
 .codebuddy/
 
+# WorkBuddy workspace data（工作日志/缓存，本地数据，不入库）
+.workbuddy/
+
 # TypeScript build info
 *.tsbuildinfo
 
