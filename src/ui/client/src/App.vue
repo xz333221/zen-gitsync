@@ -43,6 +43,7 @@ import { useConfigStore } from '@stores/configStore'
 import { useLocaleStore } from '@stores/localeStore'
 import { useInstancesStore } from '@stores/instancesStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
+import { useThemeObserver } from '@/composables/useThemeObserver'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -102,14 +103,7 @@ async function loadCurrentDirectory() {
 onMounted(async () => {
   console.log($t('@F13B4:---------- 页面初始化开始 ----------'))
 
-  // 同步初始主题状态 + 监听 documentElement 的 data-theme 变化
-  // (auto 模式跟随系统 / 主题切换按钮都会改这个属性)
-  syncIsDarkFromDom()
-  themeObserver = new MutationObserver(syncIsDarkFromDom)
-  themeObserver.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['data-theme'],
-  })
+  // useThemeObserver 已在 setup() 同步建好观察者(初值从 DOM 读),无需在此再初始化
 
   // OPT-5: 启动全局网络监听(patch fetch + 监听 online/offline)
   useNetworkStatus().start()
@@ -171,9 +165,7 @@ onBeforeUnmount(() => {
   // 停止实例注册表轮询 + 断开 Socket.IO
   instancesStore.stop()
 
-  // 停止主题 MutationObserver
-  themeObserver?.disconnect()
-  themeObserver = null
+  // 主题 observer 由 useThemeObserver 自动清理
 
   // OPT-5: 卸载时还原 fetch 补丁,避免 HMR 时累积多次 patch
   useNetworkStatus().stop()
@@ -221,11 +213,9 @@ function openUserSettingsDialog() {
 
 // 主题切换快捷按钮:跟踪 documentElement 的 data-theme,
 // 这是当前实际渲染态,覆盖 configStore.theme='auto' 时跟随系统的场景
-const isDarkTheme = ref(false)
-let themeObserver: MutationObserver | null = null
-function syncIsDarkFromDom() {
-  isDarkTheme.value = document.documentElement.getAttribute('data-theme') === 'dark'
-}
+// useThemeObserver 集中处理 MutationObserver + onBeforeUnmount cleanup,
+// 与 SourceMapView / MonacoEditor 共用同一份实现
+const { theme: isDarkTheme } = useThemeObserver()
 
 // 添加分隔条相关逻辑
 let isVResizing = false;       // 第一条竖分隔条（GitStatus | 中间列）

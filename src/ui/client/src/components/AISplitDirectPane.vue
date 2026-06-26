@@ -352,7 +352,7 @@ function cancelEditPrompt() {
       <span v-else>{{ $t('@WORKBENCH:提示词已就绪,可在下方编辑后点「发送给 AI」开始拆分') }}</span>
     </div>
     <div v-else-if="phase === 'error'" class="ai-split-status is-error">
-      <el-icon color="#f56c6c"><CircleClose /></el-icon>
+      <el-icon color="var(--color-danger)"><CircleClose /></el-icon>
       <span>{{ errorMessage }}</span>
     </div>
     <div v-else-if="phase === 'idle'" class="ai-split-idle">
@@ -506,7 +506,7 @@ function cancelEditPrompt() {
     </el-tabs>
 
     <div v-if="parseError && phase === 'result' && subtasks.length === 0" class="ai-split-footer-hint">
-      <el-icon color="#e6a23c"><CircleClose /></el-icon>
+      <el-icon color="var(--color-warning)"><CircleClose /></el-icon>
       <span>{{ $t('@WORKBENCH:解析失败，未能从模型输出中提取出子任务 — 请查看「原始结果」') }}</span>
     </div>
 

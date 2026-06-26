@@ -16,6 +16,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'monaco-editor/min/vs/editor/editor.main.css'
+import { useThemeObserver } from '@/composables/useThemeObserver'
 
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
@@ -46,8 +47,6 @@ let monaco: any = null
 let diffEditor: any = null
 let originalModel: any = null
 let modifiedModel: any = null
-
-let themeObserver: MutationObserver | null = null
 
 let monacoLoaderPromise: Promise<any> | null = null
 
@@ -123,6 +122,10 @@ function applyTheme() {
   monaco.editor.setTheme(theme)
 }
 
+// 主题切换由 useThemeObserver 集中处理 — setup() 即注册,onBeforeUnmount 自动 disconnect
+// applyTheme 自带 `if (!monaco) return` 守卫,monaco 加载完成前触发也安全
+useThemeObserver(() => applyTheme())
+
 function createModels() {
   if (!monaco) return
 
@@ -173,10 +176,7 @@ onMounted(async () => {
 
   setModelsToEditor()
 
-  themeObserver = new MutationObserver(() => {
-    applyTheme()
-  })
-  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  // 主题 observer 由 useThemeObserver 在 setup() 顶层统一管理
 })
 
 watch(
@@ -215,8 +215,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  themeObserver?.disconnect()
-  themeObserver = null
+  // useThemeObserver 自动 disconnect,无需手动清理
 
   diffEditor?.dispose()
   diffEditor = null

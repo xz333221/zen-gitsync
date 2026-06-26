@@ -25,6 +25,7 @@ import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
 import ImagePreview from '@/components/ImagePreview.vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import MindmapPreview from '@/components/MindmapPreview.vue'
+import { useThemeObserver } from '@/composables/useThemeObserver'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
 // 使用 Vite 的 ?worker 语法为 Monaco 创建 web worker
@@ -463,8 +464,8 @@ watch(
 // 组件卸载时清零，避免空 tab 列表后徽标仍显示历史数字
 onBeforeUnmount(() => editorTabsStore.setDirtyCount(0))
 
-// 跟随系统主题
-const themeObserver = new MutationObserver(() => {
+// 跟随系统主题 — useThemeObserver 集中管理,与 App.vue / SourceMapView / MonacoEditor 共用
+useThemeObserver(() => {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   monaco.editor.setTheme(isDark ? 'vs-dark' : 'vs')
 })
@@ -518,7 +519,7 @@ function setupViewVisibilityObserver() {
 onMounted(async () => {
   mountEditor()
   await initTree()
-  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  // useThemeObserver 已自动注册观察者,无需在此再 observe
   setupViewVisibilityObserver()
   // 首次 mount 时若已有打开的文件，主动把焦点交给 Monaco，避免初次进入编辑器视图时空格键失效。
   if (activeTabPath.value) {
@@ -527,7 +528,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  themeObserver.disconnect()
+  // useThemeObserver 自动 disconnect,无需手动清理
   viewVisibilityObserver?.disconnect()
   viewVisibilityObserver = null
   editorInstance.value?.dispose()

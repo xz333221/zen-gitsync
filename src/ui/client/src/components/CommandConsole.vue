@@ -42,7 +42,7 @@ const gitStore = useGitStore();
 
 function handleAfterQuickPushSuccessEvent() {
   runAfterQuickPushAction().catch((e: any) => {
-    ElMessage.error(e?.message || '提交后启动项执行失败')
+    ElMessage.error(e?.message || $t('@CF05E:提交后启动项执行失败'))
   })
 }
 
@@ -53,7 +53,7 @@ async function runWorkflow(wf: any) {
     await executeFlow({ flowData, orchestrationMeta: meta })
     return
   }
-  ElMessage.warning('该编排缺少流程数据，无法执行')
+  ElMessage.warning($t('@CF05E:该编排缺少流程数据，无法执行'))
 }
 
 async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; isSingleExecution?: boolean; orchestrationMeta?: { id?: string; name?: string } }) {
@@ -89,7 +89,7 @@ async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; 
 
   const startNodeId = (payload?.startNodeId || '').trim() || nodes.find((n) => n.type === 'start')?.id
   if (!startNodeId) {
-    ElMessage.error('未找到 start 节点')
+    ElMessage.error($t('@CF05E:未找到 start 节点'))
     return
   }
 
@@ -198,7 +198,7 @@ async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; 
 
   try {
     while (currentNodeId) {
-      if (!consoleRunning.value) throw new Error('用户停止执行')
+      if (!consoleRunning.value) throw new Error($t('@CF05E:用户停止执行'))
       if (stepCounter++ > maxSteps) throw new Error(`执行步数超过上限(${maxSteps})，可能存在循环`)
 
       const prevCount = visitCount.get(currentNodeId) || 0
@@ -284,7 +284,7 @@ async function executeFlow(payload: { flowData: FlowData; startNodeId?: string; 
       if (isSingleExecution) break
     }
   } catch (err: any) {
-    if (String(err?.message || err) !== '用户停止执行') {
+    if (String(err?.message || err) !== $t('@CF05E:用户停止执行')) {
       if (currentExecutingNodeId.value && !failedNodeIds.value.includes(currentExecutingNodeId.value)) {
         failedNodeIds.value = [...failedNodeIds.value, currentExecutingNodeId.value]
       }
@@ -316,16 +316,16 @@ let consoleIdCounter = 0; // ID计数器，确保唯一性
 // 清空执行历史
 function clearConsoleHistory() {
   ElMessageBox.confirm(
-    '确定要清空所有执行历史吗？此操作不可撤销。',
-    '清空历史',
+    $t('@CF05E:确定要清空所有执行历史吗？此操作不可撤销。'),
+    $t('@CF05E:清空历史'),
     {
-      confirmButtonText: '清空',
-      cancelButtonText: '取消',
+      confirmButtonText: $t('@CF05E:清空'),
+      cancelButtonText: $t('@CF05E:取消'),
       type: 'warning',
     }
   ).then(() => {
     consoleHistory.value = [];
-    ElMessage.success('执行历史已清空');
+    ElMessage.success($t('@CF05E:执行历史已清空'));
   }).catch(() => {
     // 用户取消
   });
@@ -510,17 +510,17 @@ async function runStartupCommandById(commandId: string) {
           await loadTerminalSessions();
         }
       } else {
-        ElMessage.error(result?.error || '启动项命令执行失败');
+        ElMessage.error(result?.error || $t('@CF05E:启动项命令执行失败'));
       }
     } catch (e: any) {
-      ElMessage.error(e?.message || '启动项命令执行失败');
+      ElMessage.error(e?.message || $t('@CF05E:启动项命令执行失败'));
     }
     return;
   }
 
   const ok = await waitForSocketConnected();
   if (!ok) {
-    ElMessage.error('Socket 连接未就绪，无法自动执行交互式启动项');
+    ElMessage.error($t('@CF05E:Socket 连接未就绪，无法自动执行交互式启动项'));
     return;
   }
   await runInteractiveCommandWithCmd(commandText, targetDir);
@@ -690,17 +690,17 @@ async function runConsoleCommandWithCmd(cmd: string, directory: string = current
       });
       const result = await resp.json();
       if (result?.success) {
-        ElMessage.success('已在新终端中执行命令');
+        ElMessage.success($t('@CF05E:已在新终端中执行命令'));
         if (result?.session) {
           upsertTerminalSession(result.session);
         } else {
           await loadTerminalSessions();
         }
       } else {
-        ElMessage.error(result?.error || '执行失败');
+        ElMessage.error(result?.error || $t('@CF05E:执行失败'));
       }
     } catch (e: any) {
-      ElMessage.error(e?.message || '执行失败');
+      ElMessage.error(e?.message || $t('@CF05E:执行失败'));
     } finally {
       consoleRunning.value = false;
     }
@@ -740,7 +740,7 @@ async function runConsoleCommandWithCmd(cmd: string, directory: string = current
     const decoder = new TextDecoder();
     
     if (!reader) {
-      throw new Error('无法读取响应流');
+      throw new Error($t('@CF05E:无法读取响应流'));
     }
     
     console.log('[前端-控制台] 开始读取流数据');
@@ -891,12 +891,12 @@ function toggleCommandOutput(rec: ConsoleRecord) {
 // 停止正在运行的命令
 async function stopCommand(rec: ConsoleRecord) {
   if (!rec.processId) {
-    ElMessage.warning('无法停止：进程ID不存在');
+    ElMessage.warning($t('@CF05E:无法停止：进程ID不存在'));
     return;
   }
 
   if (!rec.running) {
-    ElMessage.info('命令已经结束');
+    ElMessage.info($t('@CF05E:命令已经结束'));
     return;
   }
 
@@ -921,7 +921,7 @@ async function stopCommand(rec: ConsoleRecord) {
     }
   } catch (error: any) {
     console.error('[停止命令] 失败:', error);
-    ElMessage.error(`停止失败: ${error.message || '未知错误'}`);
+    ElMessage.error(`停止失败: ${error.message || $t('@CF05E:未知错误')}`);
   }
 }
 
@@ -1049,7 +1049,7 @@ async function executeOrchestration(
   for (let i = startIndex; i < steps.length; i++) {
     // 检查是否被停止执行
     if (!consoleRunning.value) {
-      throw new Error('用户停止执行');
+      throw new Error($t('@CF05E:用户停止执行'));
     }
     
     const step = steps[i];
@@ -1145,7 +1145,7 @@ async function executeOrchestration(
                 }
                 await loadTerminalSessions();
               } else {
-                throw new Error(restartResult?.error || '重启失败');
+                throw new Error(restartResult?.error || $t('@CF05E:重启失败'));
               }
             }
           }
@@ -1168,7 +1168,7 @@ async function executeOrchestration(
                 await loadTerminalSessions();
               }
             } else {
-              throw new Error(result?.error || '执行失败');
+              throw new Error(result?.error || $t('@CF05E:执行失败'));
             }
           }
             
@@ -1189,11 +1189,11 @@ async function executeOrchestration(
               if (!userConfirmed) {
                 shouldContinue = false;
                 consoleRunning.value = false;
-                throw new Error('用户取消执行');
+                throw new Error($t('@CF05E:用户取消执行'));
               }
             }
         } catch (e: any) {
-          if (e?.message !== '用户取消执行') {
+          if (e?.message !== $t('@CF05E:用户取消执行')) {
             ElMessage.error(`${stepLabel} 执行失败: ${e?.message}`);
           }
           shouldContinue = false;
@@ -1235,7 +1235,7 @@ async function executeOrchestration(
         const decoder = new TextDecoder();
         
         if (!reader) {
-          throw new Error('无法读取响应流');
+          throw new Error($t('@CF05E:无法读取响应流'));
         }
         
         let buffer = '';
@@ -1344,15 +1344,15 @@ async function executeOrchestration(
         // 检查是否被停止
         if (!consoleRunning.value) {
           rec.stdout = `等待已中断（剩余 ${countdown} 秒）`;
-          ElMessage.warning('等待已中断');
-          throw new Error('用户停止执行');
+          ElMessage.warning($t('@CF05E:等待已中断'));
+          throw new Error($t('@CF05E:用户停止执行'));
         }
         rec.stdout = `等待中... 还剩 ${countdown} 秒`;
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      rec.stdout = '等待完成';
+      rec.stdout = $t('@CF05E:等待完成');
     } else if (step.type === 'code') {
-      stepLabel = '代码节点';
+      stepLabel = $t('@CF05E:代码节点');
       ElMessage.info(`[${i + 1}/${steps.length}] ${stepLabel}`);
 
       const rec: ConsoleRecord = {
@@ -1368,7 +1368,7 @@ async function executeOrchestration(
 
       try {
         if (!step.codeScript || !String(step.codeScript).trim()) {
-          throw new Error('未配置脚本')
+          throw new Error($t('@CF05E:未配置脚本'))
         }
 
         const param: Record<string, string> = {}
@@ -1409,13 +1409,13 @@ async function executeOrchestration(
 
         const result = await resp.json();
         if (!result?.success) {
-          throw new Error(result?.error || '代码节点执行失败')
+          throw new Error(result?.error || $t('@CF05E:代码节点执行失败'))
         }
 
         const outputs: Record<string, string> = result?.outputs && typeof result.outputs === 'object' ? result.outputs : {};
         const outputKeys = Object.keys(outputs);
         if (outputKeys.length === 0) {
-          throw new Error('代码节点未返回任何输出')
+          throw new Error($t('@CF05E:代码节点未返回任何输出'))
         }
 
         nodeOutputs[step.id] = { ...outputs };
@@ -1514,7 +1514,7 @@ async function executeOrchestration(
       // 需要显式版本号的模式：校验必填
       if (step.versionTarget === 'dependency') {
         if (versionSource === 'manual' && !String(step.dependencyVersion || '').trim() && !String(resolvedByInputs.dependencyVersion || '').trim()) {
-          ElMessage.error('依赖版本号为空，请检查输入/手动输入配置')
+          ElMessage.error($t('@CF05E:依赖版本号为空，请检查输入/手动输入配置'))
           hasFailure = true
           break
         }
@@ -1751,7 +1751,7 @@ async function executeOrchestration(
           }, 100);
         }).catch(() => {
           // 用户停止执行
-          throw new Error('用户停止执行');
+          throw new Error($t('@CF05E:用户停止执行'));
         });
       }
     }
@@ -1827,7 +1827,7 @@ async function executeCustomCommand(command: CustomCommand) {
       });
       const result = await resp.json();
       if (result?.success) {
-        ElMessage.success('已在新终端中执行命令');
+        ElMessage.success($t('@CF05E:已在新终端中执行命令'));
         if (result?.session) {
           upsertTerminalSession(result.session);
         } else {
@@ -1836,10 +1836,10 @@ async function executeCustomCommand(command: CustomCommand) {
         // 关闭弹窗
         commandManagerVisible.value = false;
       } else {
-        ElMessage.error(result?.error || '执行失败');
+        ElMessage.error(result?.error || $t('@CF05E:执行失败'));
       }
     } catch (e: any) {
-      ElMessage.error(e?.message || '执行失败');
+      ElMessage.error(e?.message || $t('@CF05E:执行失败'));
     } finally {
       consoleRunning.value = false;
     }
@@ -2001,7 +2001,7 @@ async function executeCustomCommand(command: CustomCommand) {
     const decoder = new TextDecoder();
     
     if (!reader) {
-      throw new Error('无法读取响应流');
+      throw new Error($t('@CF05E:无法读取响应流'));
     }
     
     console.log('[前端-自定义] 开始读取流数据');

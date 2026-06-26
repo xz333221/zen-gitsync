@@ -303,7 +303,7 @@ onMounted(() => {
   }
 }
 .badge-icon-link--npm:hover {
-  color: #cb3837;
+  color: var(--color-npm);
 }
 .badge-icon-link:first-child:hover {
   color: var(--text-primary);
@@ -312,14 +312,14 @@ onMounted(() => {
 .version-link {
   font-family: monospace;
   font-size: 11px;
-  color: #6c757d;
+  color: var(--text-secondary);
   text-decoration: none;
   padding: 2px 6px;
   border-radius: 3px;
   transition: color 0.2s, background-color 0.2s;
 
   &:hover {
-    color: var(--el-color-primary);
+    color: var(--color-primary);
     background-color: rgba(0, 0, 0, 0.04);
   }
 }

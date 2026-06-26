@@ -25,15 +25,11 @@ import { MiniMap } from '@vue-flow/minimap'
 import { ElMessage } from 'element-plus'
 import { useConfigStore } from '@/stores/configStore'
 import { getFileIconClass } from '@/utils/fileIcon'
+import { useThemeObserver } from '@/composables/useThemeObserver'
 
 // 当前主题（'light' | 'dark'），会随 data-theme 变化实时更新
-const currentTheme = ref<'light' | 'dark'>(
-  document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
-)
-function syncCurrentTheme() {
-  currentTheme.value = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
-}
-let themeObserver: MutationObserver | null = null
+// useThemeObserver 统一处理 MutationObserver + cleanup,与 App.vue / MonacoEditor 共用
+const { theme: currentTheme } = useThemeObserver()
 
 // ── 类型定义 ─────────────────────────────────────────────────────────────────
 
@@ -625,20 +621,13 @@ onMounted(() => {
   if (!projectPath.value && configStore.currentDirectory) {
     projectPath.value = configStore.currentDirectory
   }
-  // 监听 data-theme 属性变化以同步 Monaco / 画布主题
-  themeObserver = new MutationObserver(() => syncCurrentTheme())
-  themeObserver.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['data-theme'],
-  })
+  // useThemeObserver 已在 setup() 建好观察者,onBeforeUnmount 自动 cleanup
 })
 
 onBeforeUnmount(() => {
   monacoInstance.value?.getModel()?.dispose()
   monacoInstance.value?.dispose()
   stopPanelResize()
-  themeObserver?.disconnect()
-  themeObserver = null
 })
 </script>
 

@@ -72,7 +72,7 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         class="activity-btn"
         :class="{ active: props.activeView === 'git' }"
         @click="select('git')"
-        :aria-label="$t('@ACTBAR:Git')"
+        :aria-label="uncommittedCount > 0 ? `${$t('@ACTBAR:Git')} · ${uncommittedCount} ${$t('@ACTBAR:个未提交文件')}` : $t('@ACTBAR:Git')"
         :aria-pressed="props.activeView === 'git'"
       >
         <!-- git.svg -->
@@ -98,7 +98,7 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         class="activity-btn"
         :class="{ active: props.activeView === 'editor' }"
         @click="select('editor')"
-        :aria-label="$t('@ACTBAR:编辑器')"
+        :aria-label="editorTabsStore.hasDirty ? `${$t('@ACTBAR:编辑器')} · ${editorTabsStore.dirtyCount} ${$t('@ACTBAR:个未保存文件')}` : $t('@ACTBAR:编辑器')"
         :aria-pressed="props.activeView === 'editor'"
       >
         <!-- code-folder.svg -->
@@ -136,7 +136,7 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
         class="activity-btn"
         :class="{ active: props.activeView === 'workbench' }"
         @click="select('workbench')"
-        :aria-label="$t('@ACTBAR:工作台')"
+        :aria-label="wbStatus.runningCount > 0 ? `${$t('@ACTBAR:工作台')} · ${wbStatus.runningCount} ${$t('@ACTBAR:个任务正在执行')}` : $t('@ACTBAR:工作台')"
         :aria-pressed="props.activeView === 'workbench'"
       >
         <!-- code-task.svg -->

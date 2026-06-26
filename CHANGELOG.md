@@ -317,6 +317,76 @@ chunk 拆分策略。无破坏性 API 变更,向后兼容。
 | 低 | 屏幕阅读器对 Monaco 编辑器内部的支持 | Monaco 自身有 `accessibilitySupport: 'on'` 选项,但项目未显式开启,可后续评估 |
 | 低 | 命令面板 / 全局快捷键系统 | 目前无 Cmd+K 之类的快速命令面板,大项目里效率提升明显 |
 
+### GUI 客户端硬化与可访问性补齐(2026-06-26)
+
+本轮集中:`useThemeObserver` composable 统一 5 处重复 MutationObserver · `CommandConsole.vue`
+`ElMessage`/`ElMessageBox`/`throw new Error` 用户可见硬编码中文收敛为 `$t('@CF05E:...')` ·
+设计令牌补 el-plus 兼容别名 + npm 品牌色,扫 AISplitChatPane/AISplitDirectPane/AppVersionBadge
+26+ 处硬编码色值替换为 token · ActivityBar 3 个视图按钮 `aria-label` 动态包含徽标数,屏幕阅读器可听到。
+
+#### Changed — composable 抽取(CQ-7)
+
+- 新建 `src/ui/client/src/composables/useThemeObserver.ts`,提供响应式 + 命令式两种用法:
+  - 响应式:`const { theme } = useThemeObserver()`,返回 `Readonly<Ref<'light'|'dark'>>`
+  - 命令式:`useThemeObserver((t) => applyTheme())`,主题切换时触发副作用
+- `setup()` 调用即注册 `MutationObserver(<html data-theme>)`,`getCurrentInstance()` 检测到组件上下文时自动 `onBeforeUnmount disconnect`;模块上下文返回的 `stop()` 供显式清理
+- 5 处重复 `themeObserver + syncXxx + observer.observe(...) + observer.disconnect()` 模板全部收敛:
+  - `App.vue` — `isDarkTheme: Ref<boolean>`(主题切换按钮的状态源)
+  - `views/EditorView.vue` — Monaco 主题跟随
+  - `views/SourceMapView.vue` — `currentTheme: Ref<'light'|'dark'>`,Vue Flow dotColor + Monaco theme
+  - `components/MonacoEditor.vue` — diff editor applyTheme 副作用
+  - `components/MonacoDiffViewer.vue` — diff editor applyTheme 副作用
+- 行为保留:`applyTheme` 自带 `if (!monaco) return` 守卫,setup 阶段注册的回调在 monaco 加载完成前触发也安全
+
+#### Changed — 设计令牌(MAINT-14)
+
+- `styles/variables.scss` 新增 4 个 token:
+  - `--el-color-primary: #409eff` — Element Plus 默认主色,旧组件锁此 token 不改视觉
+  - `--bg-page-light: #f4f4f5` — el-plus 默认轻背景
+  - `--border-color-extra-light: #ebeef5` — el-plus 默认细边框
+  - `--color-npm: #cb3837` — npmjs 品牌红(AppVersionBadge hover)
+- 现有 `--text-primary` / `--text-secondary` / `--text-tertiary` / `--color-success` / `--color-warning` / `--color-danger` 已覆盖大部分 el-plus 默认色,旧组件无需新增 token 即可替换
+- 硬编码色值 → token 替换:
+  - `components/AISplitChatPane.vue` × 24(扫描集中)
+  - `components/AISplitDirectPane.vue` × 2(模板 el-icon color)
+  - `components/AppVersionBadge.vue` × 2(`#cb3837` → `--color-npm`,`#6c757d` → `--text-secondary`)
+
+#### Changed — i18n(MAINT-13)
+
+- `lang/zh/index.js` + `lang/en/index.js` `@CF05E` 命名空间下新增 19 条 key:
+  - `提交后启动项执行失败` / `该编排缺少流程数据,无法执行` / `未找到 start 节点` / `用户停止执行`
+  - `确定要清空所有执行历史吗?此操作不可撤销。` / `清空历史` / `清空` / `取消` / `执行历史已清空`
+  - `启动项命令执行失败` / `Socket 连接未就绪,无法自动执行交互式启动项` / `已在新终端中执行命令`
+  - `执行失败` / `无法停止:进程ID不存在` / `命令已经结束` / `无法读取响应流` / `未知错误`
+  - `重启失败` / `用户取消执行` / `等待已中断` / `等待完成` / `代码节点` / `未配置脚本`
+  - `代码节点执行失败` / `代码节点未返回任何输出` / `依赖版本号为空,请检查输入/手动输入配置`
+- `lang/zh/index.js` + `lang/en/index.js` `@ACTBAR` 命名空间下新增 1 条:`个任务正在执行`
+- `components/CommandConsole.vue` × 26:全部 ElMessage / ElMessageBox / throw new Error 用户可见中文化为 `$t()` 包裹
+
+#### Changed — 无障碍(a11y)
+
+- `components/ActivityBar.vue` × 3:Git / Editor / Workbench 视图按钮的 `aria-label` 改为动态:
+  - Git: `Git · 12 个未提交文件`(若有未提交)
+  - Editor: `编辑器 · 3 个未保存文件`(若有 dirty)
+  - Workbench: `工作台 · 2 个任务正在执行`(若有 running)
+  - 之前固定 `aria-label="Git"` 仅 tooltip 含数量,屏幕阅读器读不到数字;现动态 aria-label 让 SR 也能听到徽标数
+
+#### 验证
+
+- ✅ **vue-tsc**: 0 错误(`src/ui/client` 全量类型检查)
+- ✅ **vite build**: 0 错误,bundle chunk 与改造前无回退
+  - `AppVersionBadge.css` 3.6 KB · `EditorView.js` 31 KB · monaco 系列仍独立 chunk
+- ✅ **i18n 合规**: CommandConsole 用户可见硬编码中文从 26+ 处全部收敛
+- ✅ **token 合规**: AISplitChatPane/AISplitDirectPane/AppVersionBadge 26+ 处硬编码色值全部替换
+
+#### 未触动(本轮范围外,留给后续 PR)
+
+- `@vue-flow + dagre` 大图性能(节点合并 / 视口虚拟化):当前 dagre layout 在 `buildFlowGraph` 内
+  一次性跑,节点 < 200 时无感知;>500 节点建议加 shallow-equal memo 与节点合并。本轮范围外,需要 perf profile 数据驱动
+- `gitStore.ts` (2406 行) / `configStore.ts` (1282 行) 按域拆分:本轮 useThemeObserver 提取是
+  composable 收敛(对应审计 CQ-7),不是 store 拆分;store 拆分跨多组件依赖,需独立 PR
+- MonacoEditor/MonacoDiffViewer 重复 worker 注册:dev 期 Vite 已 dedup,生产 manualChunks 合并,目前为幂等;非阻塞优化
+
 ---
 
 ## [2.13.16] — 2026-06-18

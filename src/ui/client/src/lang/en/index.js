@@ -160,6 +160,33 @@ export default {
   '@CF05E:全屏': 'Fullscreen',
   '@CF05E:收起控制台': 'Collapse Console',
   '@CF05E:展开控制台': 'Expand Console',
+  // CommandConsole visible message strings — translated from hardcoded Chinese
+  '@CF05E:提交后启动项执行失败': 'Post-commit startup command failed',
+  '@CF05E:该编排缺少流程数据，无法执行': 'This orchestration has no flow data and cannot be executed',
+  '@CF05E:未找到 start 节点': 'No start node found',
+  '@CF05E:用户停止执行': 'User stopped execution',
+  '@CF05E:确定要清空所有执行历史吗？此操作不可撤销。': 'Clear all execution history? This cannot be undone.',
+  '@CF05E:清空历史': 'Clear History',
+  '@CF05E:清空': 'Clear',
+  '@CF05E:取消': 'Cancel',
+  '@CF05E:执行历史已清空': 'Execution history cleared',
+  '@CF05E:启动项命令执行失败': 'Startup command failed',
+  '@CF05E:Socket 连接未就绪，无法自动执行交互式启动项': 'Socket not ready, cannot auto-run interactive startup command',
+  '@CF05E:已在新终端中执行命令': 'Command launched in new terminal',
+  '@CF05E:执行失败': 'Execution failed',
+  '@CF05E:无法停止：进程ID不存在': 'Cannot stop: process ID missing',
+  '@CF05E:命令已经结束': 'Command has already ended',
+  '@CF05E:无法读取响应流': 'Cannot read response stream',
+  '@CF05E:未知错误': 'Unknown error',
+  '@CF05E:重启失败': 'Restart failed',
+  '@CF05E:用户取消执行': 'User cancelled execution',
+  '@CF05E:等待已中断': 'Wait interrupted',
+  '@CF05E:等待完成': 'Wait completed',
+  '@CF05E:代码节点': 'Code node',
+  '@CF05E:未配置脚本': 'Script not configured',
+  '@CF05E:代码节点执行失败': 'Code node execution failed',
+  '@CF05E:代码节点未返回任何输出': 'Code node returned no output',
+  '@CF05E:依赖版本号为空，请检查输入/手动输入配置': 'Dependency version is empty, check input/manual configuration',
   // @CF05E: file end
 
   // @FLOWNODE: condition
@@ -1664,6 +1691,7 @@ export default {
   '@ACTBAR:源码地图': 'Source Map',
   '@ACTBAR:个未提交文件': 'uncommitted files',
   '@ACTBAR:个未保存文件': 'unsaved files',
+  '@ACTBAR:个任务正在执行': 'running tasks',
   // @ACTBAR: file end
   // @SRCMAP: file path: views\SourceMapView.vue
   '@SRCMAP:源码地图': 'Source Map',

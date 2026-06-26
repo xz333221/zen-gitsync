@@ -16,6 +16,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'monaco-editor/min/vs/editor/editor.main.css'
+import { useThemeObserver } from '@/composables/useThemeObserver'
 
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
@@ -72,7 +73,6 @@ const containerRef = ref<HTMLDivElement | null>(null)
 let monaco: any = null
 let editor: any = null
 let model: any = null
-let themeObserver: MutationObserver | null = null
 let monacoLoaderPromise: Promise<any> | null = null
 let suppressEmit = false
 let decorationIds: string[] = []
@@ -355,6 +355,10 @@ function applyTheme() {
   monaco.editor.setTheme(getResolvedTheme())
 }
 
+// 主题变化时通过 useThemeObserver 的回调形式触发 applyTheme
+// setup() 即注册 — applyTheme 自带 `if (!monaco) return` 守卫,monaco 加载完成前触发也安全
+useThemeObserver(() => applyTheme())
+
 function ensureModel() {
   if (!monaco) return
   const lang = getResolvedLanguage()
@@ -506,11 +510,6 @@ onMounted(async () => {
     emit('update:modelValue', v)
   })
 
-  themeObserver = new MutationObserver(() => {
-    applyTheme()
-  })
-  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-
   applyRevealLine()
   applyHighlight()
   applyGutterItems()
@@ -648,8 +647,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  themeObserver?.disconnect()
-  themeObserver = null
+  // useThemeObserver 自动 disconnect,无需手动清理
 
   try {
     mouseDownDisposable?.dispose?.()

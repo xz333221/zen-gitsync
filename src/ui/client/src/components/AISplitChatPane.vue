@@ -355,7 +355,7 @@ if (props.initialSessionId) {
       </div>
 
       <div v-if="turns.length === 0 && !isStreaming" class="ai-chat-empty">
-        <el-icon :size="32" color="#909399"><ChatLineRound /></el-icon>
+        <el-icon :size="32" color="var(--text-tertiary)"><ChatLineRound /></el-icon>
         <div class="ai-chat-empty__title">{{ $t('@WORKBENCH:开始与 AI 对话拆分') }}</div>
         <div class="ai-chat-empty__desc">
           {{ $t('@WORKBENCH:输入你想让 AI 怎么拆分或调整(Enter 发送,Shift+Enter 换行)') }}
@@ -532,12 +532,12 @@ if (props.initialSessionId) {
 .ai-chat-empty {
   margin: auto;
   text-align: center;
-  color: #909399;
+  color: var(--text-tertiary);
 
   &__title {
     font-size: 16px;
     margin-top: 12px;
-    color: #606266;
+    color: var(--text-secondary);
   }
   &__desc {
     font-size: 13px;
@@ -565,7 +565,7 @@ if (props.initialSessionId) {
   word-wrap: break-word;
 
   &.user {
-    background: #409eff;
+    background: var(--el-color-primary);
     color: #fff;
 
     .ai-chat-content {
@@ -578,8 +578,8 @@ if (props.initialSessionId) {
   }
 
   &.assistant {
-    background: #f4f4f5;
-    color: #303133;
+    background: var(--bg-page-light);
+    color: var(--text-primary);
     width: 100%;
     max-width: 100%;
   }
@@ -591,7 +591,7 @@ if (props.initialSessionId) {
 
   :deep(.el-collapse-item__header) {
     font-size: 12px;
-    color: #909399;
+    color: var(--text-tertiary);
     background: transparent;
     border: none;
   }
@@ -603,12 +603,12 @@ if (props.initialSessionId) {
 
 .ai-chat-content-text {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-color-extra-light);
   border-radius: 4px;
   padding: 10px 12px;
   font-size: 13px;
   line-height: 1.7;
-  color: #303133;
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-wrap: break-word;
   margin: 4px 0 8px;
@@ -630,7 +630,7 @@ if (props.initialSessionId) {
 
   &--think {
     background: rgba(64, 158, 255, 0.08);
-    color: #606266;
+    color: var(--text-secondary);
   }
 }
 
@@ -645,7 +645,7 @@ if (props.initialSessionId) {
   }
   &__count {
     font-size: 13px;
-    color: #67c23a;
+    color: var(--color-success);
     font-weight: 500;
   }
 }
@@ -663,7 +663,7 @@ if (props.initialSessionId) {
     gap: 10px;
     padding: 8px 10px;
     background: #fff;
-    border: 1px solid #ebeef5;
+    border: 1px solid var(--border-color-extra-light);
     border-radius: 4px;
   }
 
@@ -672,7 +672,7 @@ if (props.initialSessionId) {
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: #409eff;
+    background: var(--el-color-primary);
     color: #fff;
     text-align: center;
     line-height: 22px;
@@ -688,13 +688,13 @@ if (props.initialSessionId) {
   &__title {
     font-size: 14px;
     font-weight: 500;
-    color: #303133;
+    color: var(--text-primary);
     margin-bottom: 2px;
   }
 
   &__desc {
     font-size: 12px;
-    color: #606266;
+    color: var(--text-secondary);
     line-height: 1.5;
     white-space: pre-wrap;
   }
@@ -705,7 +705,7 @@ if (props.initialSessionId) {
 
   &__detail {
     font-size: 12px;
-    color: #606266;
+    color: var(--text-secondary);
     margin-top: 4px;
     white-space: pre-wrap;
   }
@@ -736,7 +736,7 @@ if (props.initialSessionId) {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #909399;
+  color: var(--text-tertiary);
   font-size: 13px;
 }
 
@@ -757,12 +757,12 @@ if (props.initialSessionId) {
   &__loading {
     text-align: center;
     padding: 40px 0;
-    color: #909399;
+    color: var(--text-tertiary);
   }
   &__empty {
     text-align: center;
     padding: 40px 0;
-    color: #909399;
+    color: var(--text-tertiary);
   }
   &__list {
     list-style: none;
@@ -773,19 +773,19 @@ if (props.initialSessionId) {
     gap: 8px;
   }
   &__item {
-    border: 1px solid #ebeef5;
+    border: 1px solid var(--border-color-extra-light);
     border-radius: 6px;
     padding: 10px 12px;
   }
   &__title {
     font-size: 14px;
     font-weight: 500;
-    color: #303133;
+    color: var(--text-primary);
     margin-bottom: 4px;
   }
   &__meta {
     font-size: 12px;
-    color: #909399;
+    color: var(--text-tertiary);
     display: flex;
     gap: 4px;
     flex-wrap: wrap;

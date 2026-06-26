@@ -17,6 +17,9 @@
   --color-success: #67c23a;
   --color-success-light: #10b981;
   --color-success-dark: #047857;
+
+  /* 品牌色(外部服务链接) */
+  --color-npm: #cb3837;             /* npmjs 品牌红,用于 AppVersionBadge 等链接 hover */
   --color-warning: #e6a23c;
   --color-warning-light: #f59e0b;
   --color-warning-dark: #b45309;
@@ -344,13 +347,20 @@
   /* 辅助文字 */
   --text-tertiary: #909399;
   --text-tertiary-dark: #cbd0d6; /* 再次提升：原 #aeb3b9 */
-  
+
   /* 占位符文字 */
   --text-placeholder: #c0c4cc;
   --text-placeholder-dark: #bac0c6; /* 再次提升：原 #9aa0a6 */
-  
+
   /* 全局文字颜色 - 根据主题自动调整 */
   --color-text: var(--text-primary);
+
+  /* ===== Element Plus 默认色兼容别名 =====
+     早期 / 散落代码直接写死 el-plus 默认值,统一用 token 收敛;
+     这些 token 值刻意保持与 el-plus 主题变量 1:1,不改视觉,只确保单一来源。 */
+  --el-color-primary: #409eff;       /* el-plus 默认主色,与 --color-primary(#3b82f6) 略有色差,旧代码锁定用此 token */
+  --bg-page-light: #f4f4f5;          /* el-plus 默认轻背景 */
+  --border-color-extra-light: #ebeef5; /* el-plus 默认细边框 */
   --color-text-title: var(--text-title);
   --color-text-secondary: var(--text-secondary);
   --color-text-tertiary: var(--text-tertiary);
