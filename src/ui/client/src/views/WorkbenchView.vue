@@ -34,6 +34,10 @@ import {
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
+import { ChatInput, ChatContainer, type SelectedFile, type ChatMessage, type MessageStatus } from 'zen-ai-chat-ui'
+import 'zen-ai-chat-ui/style.css'
+import { useConfigStore } from '@/stores/configStore'
+const configStore = useConfigStore()
 import JobLogDetails from '@components/JobLogDetails.vue'
 import ExecutionLogManager from '@components/ExecutionLogManager.vue'
 import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
@@ -386,6 +390,65 @@ const SIMPLE_SUB_ID_SUFFIX = '__simple'
 // 简单任务"对话流":首轮 subId = `${task.id}__simple`,续接轮 = `__simple__r${n}`
 // (后端 /jobs/:id/continue 用相同命名规则)。simpleAllJobsFor 把它们都聚出来,
 // 按 startedAt 升序作为对话流;simpleJobFor 返回最新一轮(状态/操作以末尾轮为准)。
+// 将当前简单任务所有 jobs 合并成一个连续对话消息流（ChatContainer 用）
+const MAX_LOG_DISPLAY_SIMPLE = 64 * 1024
+const simpleConversationMessages = computed<ChatMessage[]>(() => {
+  if (!selectedTask.value) return []
+  const allJobs = simpleAllJobsFor(selectedTask.value)
+  if (allJobs.length === 0) return []
+  const msgs: ChatMessage[] = []
+  allJobs.forEach((j, idx) => {
+    const isLast = idx === allJobs.length - 1
+    const createdAt = j.startedAt ? new Date(j.startedAt).getTime() : Date.now()
+    if (j.prompt) {
+      msgs.push({
+        id: `${j.id}-u`,
+        role: 'user',
+        content: j.prompt,
+        status: 'done',
+        createdAt
+      })
+    }
+    const rawOutput = j.output || ''
+    const rawThinking = j.thinking || ''
+    const outputText = rawOutput.length > MAX_LOG_DISPLAY_SIMPLE
+      ? `\u2026（前文已截断）\n${rawOutput.slice(-MAX_LOG_DISPLAY_SIMPLE)}`
+      : rawOutput
+    const thinkingText = rawThinking.length > MAX_LOG_DISPLAY_SIMPLE
+      ? `\u2026（前文已截断）\n${rawThinking.slice(-MAX_LOG_DISPLAY_SIMPLE)}`
+      : rawThinking
+    const hasOutput = !!outputText
+    const hasThinking = !!thinkingText
+    const hasContent = hasOutput || hasThinking
+    let status: MessageStatus
+    if (!isLast) {
+      // 历史轮一律 done
+      status = 'done'
+    } else {
+      const s = j.status
+      if (s === 'running' || s === 'pending') {
+        status = hasContent ? 'streaming' : 'pending'
+      } else if (s === 'error') {
+        status = 'error'
+      } else {
+        status = 'done'
+      }
+    }
+    msgs.push({
+      id: `${j.id}-a`,
+      role: 'assistant',
+      content: outputText,
+      reasoning: hasThinking ? thinkingText : undefined,
+      reasoningStatus: hasThinking
+        ? (!isLast && hasOutput ? 'done' : (hasOutput ? 'done' : (status === 'streaming' ? 'streaming' : 'done')))
+        : undefined,
+      status,
+      error: status === 'error' ? (j.error || undefined) : undefined,
+      createdAt
+    })
+  })
+  return msgs
+})
 function simpleAllJobsFor(task: Task | null): Job[] {
   if (!task) return []
   const prefix = `${task.id}${SIMPLE_SUB_ID_SUFFIX}`
@@ -1316,27 +1379,14 @@ async function continueChat(t: Task, message: string) {
  */
 const continueDraft = reactive<Record<string, string>>({})
 
-async function onExitSimple(t: Task) {
-  try {
-    await ElMessageBox.confirm(
-      $t('@WORKBENCH:退出后将清空本次对话的全部轮次,确认?'),
-      $t('@WORKBENCH:退出执行'),
-      {
-        confirmButtonText: $t('@WORKBENCH:退出'),
-        cancelButtonText: $t('@WORKBENCH:取消'),
-        type: 'warning'
-      }
-    )
-  } catch { return }
-  await clearJobsByTask(t.id)
-  delete continueDraft[t.id]
-}
-
-async function onContinueSend(t: Task) {
-  const msg = (continueDraft[t.id] || '').trim()
+async function onContinueSendFromChat(t: Task, payload: { text: string; files: SelectedFile[] }) {
+  const msg = payload.text.trim()
   if (!msg) return
+  // 先把 ChatInput 选中的文件逐个上传，再续聊
+  for (const sf of payload.files) {
+    await uploadAttachment({ kind: 'task', task: t }, sf.file)
+  }
   await continueChat(t, msg)
-  continueDraft[t.id] = ''
 }
 
 /**
@@ -2265,57 +2315,38 @@ function humanSize(n: number): string {
                   rows="6"
                 />
               </details>
-              <!-- 简单任务的执行日志：running 时顶部显示「● 正在执行…」
-                   续聊后每轮独立卡片纵向堆叠成对话流 -->
-              <JobLogDetails
-                v-for="j in simpleAllJobsFor(selectedTask)"
-                :key="j.id"
-                :job="j"
-                @re-execute="onReExecuteJob"
-              />
-              <!-- 终态控件:最后一轮 done/error/cancelled 才显示退出 + 续聊输入 -->
-              <div
-                v-if="simpleJobFor(selectedTask) && ['done','error','cancelled'].includes(simpleJobState(simpleJobFor(selectedTask)))"
-                class="wb-simple__continue"
-              >
-                <!-- 续聊附件:复用 task.attachments(续接时传给 claude),
-                     用户增删也是直接改 task.attachments;Claude --resume 上下文
-                     里已经看过这些图(节省 token),但用户新增的会真的到模型面前。 -->
-                <AttachmentZone
-                  :attachments="selectedTask.attachments || []"
-                  :is-image="isImageAttachment"
-                  :human-size="humanSize"
-                  :is-uploading="isUploading('continue-' + selectedTask.id)"
-                  :is-paste-hover="pasteHoverId === 'continue-' + selectedTask.id"
-                  :max-count="9"
-                  :on-pick="() => pickAttachmentFile({ kind: 'task', task: selectedTask })"
-                  :on-remove="(att) => removeAttachment({ kind: 'task', task: selectedTask }, att)"
-                  @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
-                  @drop.prevent="onAttachmentDrop($event, { kind: 'task', task: selectedTask })"
-                  @dragover.prevent="pasteHoverId = 'continue-' + selectedTask.id"
-                  @dragenter.prevent="pasteHoverId = 'continue-' + selectedTask.id"
-                  @dragleave="pasteHoverId = (pasteHoverId === 'continue-' + selectedTask.id ? null : pasteHoverId)"
-                />
-                <textarea
-                  class="wb-textarea wb-simple__continue-input"
-                  v-model="continueDraft[selectedTask.id]"
-                  :placeholder="$t('@WORKBENCH:输入后续问题继续对话…(Ctrl+Enter 发送)')"
-                  rows="3"
-                  @keydown.ctrl.enter.prevent="onContinueSend(selectedTask)"
-                />
-                <div class="wb-simple__continue-actions">
-                  <el-button @click="onExitSimple(selectedTask)">
-                    {{ $t('@WORKBENCH:退出') }}
-                  </el-button>
-                  <el-button
-                    type="primary"
-                    :disabled="!(continueDraft[selectedTask.id] || '').trim()"
-                    @click="onContinueSend(selectedTask)"
+              <!-- 简单任务连续对话流：所有轮次合并到单个 ChatContainer -->
+              <template v-if="simpleAllJobsFor(selectedTask).length > 0">
+                <div class="wb-simple-chat-wrap">
+                  <ChatContainer
+                    :key="selectedTask.id"
+                    :messages="simpleConversationMessages"
+                    assistant-name="Claude"
+                    :show-avatar="false"
+                    :theme="configStore.theme"
+                    class="wb-simple-chat"
+                  />
+                  <!-- 终态控件 -->
+                  <div
+                    v-if="simpleJobFor(selectedTask) && ['done','error','cancelled'].includes(simpleJobState(simpleJobFor(selectedTask)))"
+                    class="wb-simple-chat__footer"
                   >
-                    {{ $t('@WORKBENCH:发送') }}
-                  </el-button>
+                    <ChatInput
+                      :key="'input-' + selectedTask.id"
+                      :placeholder="$t('@WORKBENCH:输入后续问题继续对话…(Ctrl+Enter 发送)')"
+                      :upload-config="{
+                        enabled: true,
+                        accept: ALLOWED_EXT_HINT,
+                        multiple: true,
+                        maxCount: Math.max(0, 9 - (selectedTask.attachments?.length ?? 0)),
+                        maxSize: MAX_ATTACHMENT_BYTES
+                      }"
+                      class="wb-simple-chat__input"
+                      @send="onContinueSendFromChat(selectedTask, $event)"
+                    />
+                  </div>
                 </div>
-              </div>
+              </template>
             </template>
           </div>
         </div>
@@ -3870,28 +3901,42 @@ function humanSize(n: number): string {
   letter-spacing: 0.2px;
 }
 
-/* ── 简单任务"继续对话"区:终态(done/error/cancelled)时显示 ── */
-.wb-simple__continue {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border-color);
+/* ── 简单任务单一对话流：合并所有轮次到一个 ChatContainer ── */
+.wb-simple-chat-wrap {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  flex: 1 1 0%;
+  min-height: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-code);
+  overflow: hidden;
+  margin-top: 6px;
+  /* 强制 zen-ai-chat-ui 内部背景与容器一致 */
+  --acu-bg: var(--bg-code);
+}
+.wb-simple-chat {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+.wb-simple-chat :deep(.acu-chat-footer) { display: none; }
+.wb-simple-chat :deep(.acu-chat),
+.wb-simple-chat :deep(.acu-message-list),
+.wb-simple-chat :deep(.acu-message-list-inner) > * { background: transparent; }
+.wb-simple-chat :deep(.acu-chat) { background: var(--bg-code); }
+.wb-simple-chat :deep(.acu-message-list) { background: var(--bg-code); }
+.wb-simple-chat :deep(.acu-message-list-inner) {
+  padding: 10px 12px 14px;
+  gap: 10px;
+}
+.wb-simple-chat :deep(.acu-bubble) { font-size: 12px; }
+.wb-simple-chat :deep(.acu-bubble-name) { font-size: 10px; }
+.wb-simple-chat__footer {
   flex-shrink: 0;
+  padding: 0 4px 4px;
+  background: var(--bg-code);
 }
-.wb-simple__continue-input {
-  width: 100%;
-  font-size: 13px;
-  line-height: 1.5;
-  resize: vertical;
-  min-height: 60px;
-}
-.wb-simple__continue-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
+.wb-simple-chat__input { width: 100%; }
 
 .wb-form-item {
   display: flex;

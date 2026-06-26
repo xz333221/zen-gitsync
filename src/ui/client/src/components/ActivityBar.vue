@@ -144,11 +144,11 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
           <path d="M840.454 62.442H201.849c-76.445 0-139.409 63.68-139.409 141.007v614.048c0 77.326 62.963 141.007 139.408 141.007h638.605c76.454 0 139.408-63.68 139.408-141.007V203.449c0-77.326-58.454-141.007-139.408-141.007z m71.955 759.608c0 40.931-31.473 72.772-71.954 72.772H201.85c-40.473 0-71.954-31.84-71.954-72.772V203.447c0-40.931 31.481-72.772 71.954-72.772h638.605c40.481 0 71.954 31.84 71.954 72.772V822.05zM399.73 285.32l-98.936 100.065-44.973-45.477c-13.5-13.647-35.981-13.647-44.973 0-13.5 13.638-13.5 36.386 0 45.477l71.954 72.781c4.5 4.546 13.492 9.092 26.981 9.092 13.5 0 13.5-4.546 26.981-9.092L458.19 335.353c13.5-13.647 13.5-36.386 0-45.487-26.981-13.638-44.973-13.638-58.463-4.546z m413.743 54.588H503.165c-22.481 0-31.481 13.638-31.481 31.84 0 22.739 13.5 31.84 31.481 31.84h310.316c22.481 0 31.473-13.647 31.473-31.84 0-18.202-13.5-31.84-31.481-31.84zM318.775 544.584c-58.463 0-103.436 45.487-103.436 104.62 0 59.125 44.973 104.611 103.436 104.611 58.473 0 103.436-45.487 103.436-104.611 0-63.68-49.463-104.62-103.436-104.62z m0 136.459c-22.481 0-35.973-13.647-35.973-36.386 0-22.747 13.492-36.395 35.973-36.395 22.492 0 35.981 13.647 35.981 36.395 0 22.739-17.992 36.386-35.981 36.386z m494.698-68.235H503.165c-22.481 0-31.481 13.647-31.481 31.849 0 18.184 13.5 31.84 31.481 31.84h310.316c22.481 0 31.473-13.647 31.473-31.84 0-18.202-13.5-31.84-31.481-31.84z"/>
         </svg>
         <span
-          v-if="wbStatus.hasRunning"
-          class="wb-running-dot"
+          v-if="wbStatus.runningCount > 0"
+          class="wb-running-badge"
           :title="$t('@ACTBAR:有任务正在执行')"
           aria-hidden="true"
-        />
+        >{{ wbStatus.runningCount > 99 ? '99+' : wbStatus.runningCount }}</span>
       </button>
     </el-tooltip>
   </div>
@@ -239,23 +239,37 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
   transform: scale(0.94);
 }
 
-/* ── Workbench 任务运行指示器 ─────────────────────────────────── */
-.wb-running-dot {
+/* ―― Workbench 任务执行数量徽标 ――――――――――――――――――――――――――― */
+.wb-running-badge {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-primary);
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  background: var(--color-success, #34d399);
+  border-radius: 8px;
   box-shadow: 0 0 0 2px var(--bg-container);
-  animation: wb-dot-pulse 1.5s ease-in-out infinite;
   pointer-events: none;
+  animation: wb-badge-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), wb-badge-pulse 2s ease-in-out 0.3s infinite;
+  z-index: 1;
 }
 
-@keyframes wb-dot-pulse {
-  0%, 100% { transform: scale(1);   opacity: 1; }
-  50%      { transform: scale(1.3); opacity: 0.55; }
+@keyframes wb-badge-in {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+@keyframes wb-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--bg-container); }
+  50%      { box-shadow: 0 0 0 2px var(--bg-container), 0 0 6px 1px color-mix(in srgb, var(--color-success, #34d399) 60%, transparent); }
 }
 
 /* ── Git 未提交文件数量徽标 ─────────────────────────────────────── */
@@ -326,7 +340,7 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wb-running-dot,
+  .wb-running-badge,
   .git-uncommitted-badge,
   .editor-dirty-badge,
   .activity-btn.active::before {
