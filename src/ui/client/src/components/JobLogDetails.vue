@@ -78,7 +78,7 @@
         :messages="chatMessages"
         :assistant-name="assistantLabel"
         :show-avatar="false"
-        theme="auto"
+        :theme="configStore.theme"
         class="wb-job-chat"
       />
 
@@ -125,6 +125,9 @@ import { ChatContainer, MarkdownRenderer, type ChatMessage, type MessageStatus }
 import 'zen-ai-chat-ui/style.css'
 import { $t } from '@/lang/static'
 import type { Job, JobStatus } from '@/types/workbench'
+import { useConfigStore } from '@/stores/configStore'
+
+const configStore = useConfigStore()
 
 const props = defineProps<{ job: Job }>()
 const emit = defineEmits<{
