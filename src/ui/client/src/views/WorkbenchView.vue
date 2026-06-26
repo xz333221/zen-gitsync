@@ -1,4 +1,4 @@
-<!--
+﻿<!--
   ~ Copyright 2026 xz333221
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +19,7 @@ import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus,
-  Close,
   List,
-  Picture as PictureIcon,
-  DocumentAdd,
-  Memo,
-  Folder,
   ArrowDown,
   ArrowRight,
   Document,
@@ -34,21 +29,37 @@ import {
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
-import { ChatInput, ChatContainer, type SelectedFile, type ChatMessage, type MessageStatus } from 'zen-ai-chat-ui'
+import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 const configStore = useConfigStore()
 import JobLogDetails from '@components/JobLogDetails.vue'
 import ExecutionLogManager from '@components/ExecutionLogManager.vue'
-import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
 import { statusColor } from '@/utils/jobStatus'
-import type { Job, Task, SubTask, Prompt } from '@/types/workbench'
+import type { Task, SubTask, Prompt } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
+import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
+import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
+import { useWorkbenchData } from '@/composables/useWorkbenchData'
+import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
 
-// ── 状态 ────────────────────────────────────────────────────────────────────
-const prompts = ref<Prompt[]>([])
-const tasks = ref<Task[]>([])
-const jobs = ref<Job[]>([])
+// ── 数据层（状态 + 加载 + CRUD） ─────────────────────────────────────────────
+const {
+  prompts, tasks, jobs, currentProject,
+  syncRunningCount, jobOf,
+  connectSSE, disconnectSSE,
+  loadPrompts, loadCurrentProject, loadJobs,
+  clearJobsByTask, clearNonDoneJobsByTask,
+  loadTasks: _loadDataTasks
+} = useWorkbenchData()
+
+async function loadTasks() {
+  await _loadDataTasks()
+  if (!selectedTaskId.value && tasks.value.length > 0) {
+    selectedTaskId.value = tasks.value[0].id
+  }
+  captureSnapshot()
+}
 // 执行日志管理弹窗：默认收起，editor 视图保持常驻
 const logsDialogVisible = ref(false)
 
@@ -236,59 +247,6 @@ const availablePrompts = computed<Prompt[]>(() => {
   return prompts.value.filter(p => !p.projectPath || p.projectPath === cur)
 })
 
-let es: EventSource | null = null
-
-const wbStatus = useWorkbenchStatusStore()
-
-function syncRunningCount() {
-  wbStatus.setRunning(jobs.value.filter(j => j.status === 'running').length)
-}
-
-function jobOf(subId: string): Job | null {
-  return jobs.value.find(j => j.subId === subId) || null
-}
-
-function applyJobEvent(evt: string, payload: any) {
-  if (evt === 'hello') {
-    jobs.value = payload.jobs || []
-    syncRunningCount()
-    return
-  }
-  if (evt === 'job:update') {
-    const j: Job = payload
-    const i = jobs.value.findIndex(x => x.id === j.id)
-    if (i >= 0) jobs.value[i] = j
-    else jobs.value.push(j)
-    syncRunningCount()
-    return
-  }
-  if (evt === 'job:thinking-delta' || evt === 'job:output-delta') {
-    // 流式增量：服务端只发新增片段，避免每帧重复广播整段累积文本。
-    // 客户端按 id 找到对应 job，append 到对应字段即可。
-    const field = evt === 'job:thinking-delta' ? 'thinking' : 'output'
-    const delta: string = payload?.delta || ''
-    if (!delta) return
-    const i = jobs.value.findIndex(x => x.id === payload.id)
-    if (i < 0) return
-    const cur = (jobs.value[i] as any)[field] || ''
-    ;(jobs.value[i] as any)[field] = cur + delta
-    return
-  }
-  if (evt === 'sub:update') {
-    const t = tasks.value.find(x => x.id === payload.taskId)
-    if (t) {
-      const i = t.subtasks.findIndex(s => s.id === payload.sub.id)
-      if (i >= 0) t.subtasks[i] = payload.sub
-    }
-  }
-  if (evt === 'task:update') {
-    const i = tasks.value.findIndex(t => t.id === payload.id)
-    if (i >= 0) tasks.value[i] = payload
-  }
-  if (evt === 'task:error') {
-    ElMessage.error(payload.error || $t('@WORKBENCH:执行出错'))
-  }
-}
 
 /** 复制文本到剪贴板，失败时降级到 textarea + execCommand。 */
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -335,366 +293,11 @@ function openExecutionLog(sub: any) {
   logsDialogVisible.value = true
 }
 
-// 简单任务的虚拟 subId：和后端 runTaskSimple / JobLogDetails 那侧保持一致
-const SIMPLE_SUB_ID_SUFFIX = '__simple'
-// 简单任务"对话流":首轮 subId = `${task.id}__simple`,续接轮 = `__simple__r${n}`
-// (后端 /jobs/:id/continue 用相同命名规则)。simpleAllJobsFor 把它们都聚出来,
-// 按 startedAt 升序作为对话流;simpleJobFor 返回最新一轮(状态/操作以末尾轮为准)。
-// 将当前简单任务所有 jobs 合并成一个连续对话消息流（ChatContainer 用）
-const MAX_LOG_DISPLAY_SIMPLE = 64 * 1024
-const simpleConversationMessages = computed<ChatMessage[]>(() => {
-  if (!selectedTask.value) return []
-  const allJobs = simpleAllJobsFor(selectedTask.value)
-  if (allJobs.length === 0) return []
-  const msgs: ChatMessage[] = []
-  allJobs.forEach((j, idx) => {
-    const isLast = idx === allJobs.length - 1
-    const createdAt = j.startedAt ? new Date(j.startedAt).getTime() : Date.now()
-    if (j.prompt) {
-      msgs.push({
-        id: `${j.id}-u`,
-        role: 'user',
-        content: j.prompt,
-        status: 'done',
-        createdAt
-      })
-    }
-    const rawOutput = j.output || ''
-    const rawThinking = j.thinking || ''
-    const outputText = rawOutput.length > MAX_LOG_DISPLAY_SIMPLE
-      ? `\u2026（前文已截断）\n${rawOutput.slice(-MAX_LOG_DISPLAY_SIMPLE)}`
-      : rawOutput
-    const thinkingText = rawThinking.length > MAX_LOG_DISPLAY_SIMPLE
-      ? `\u2026（前文已截断）\n${rawThinking.slice(-MAX_LOG_DISPLAY_SIMPLE)}`
-      : rawThinking
-    const hasOutput = !!outputText
-    const hasThinking = !!thinkingText
-    const hasContent = hasOutput || hasThinking
-    let status: MessageStatus
-    if (!isLast) {
-      // 历史轮一律 done
-      status = 'done'
-    } else {
-      const s = j.status
-      if (s === 'running' || s === 'pending') {
-        status = hasContent ? 'streaming' : 'pending'
-      } else if (s === 'error') {
-        status = 'error'
-      } else {
-        status = 'done'
-      }
-    }
-    msgs.push({
-      id: `${j.id}-a`,
-      role: 'assistant',
-      content: outputText,
-      reasoning: hasThinking ? thinkingText : undefined,
-      reasoningStatus: hasThinking
-        ? (!isLast && hasOutput ? 'done' : (hasOutput ? 'done' : (status === 'streaming' ? 'streaming' : 'done')))
-        : undefined,
-      status,
-      error: status === 'error' ? (j.error || undefined) : undefined,
-      createdAt
-    })
-  })
-  return msgs
-})
-function simpleAllJobsFor(task: Task | null): Job[] {
-  if (!task) return []
-  const prefix = `${task.id}${SIMPLE_SUB_ID_SUFFIX}`
-  return jobs.value
-    .filter(j => j.subId === prefix || j.subId.startsWith(`${prefix}__r`))
-    .sort((a, b) => {
-      // 优先按 startedAt 升序;未启动时 startedAt 为空,放最后,保证排队中也能渲染
-      const sa = a.startedAt || ''
-      const sb = b.startedAt || ''
-      if (sa && sb) return sa.localeCompare(sb)
-      if (sa) return -1
-      if (sb) return 1
-      return 0
-    })
-}
-function simpleJobFor(task: Task | null): Job | null {
-  if (!task) return null
-  const list = simpleAllJobsFor(task)
-  return list.length > 0 ? list[list.length - 1] : null
-}
-// 简单任务完成态语义：把 Job.status 收敛成 5 态，方便模板/CSS 直接套用
-// - idle      没有 job 记录（未执行过）
-// - running   pending/running 视为进行中
-// - done      成功
-// - error     执行失败
-// - cancelled 用户主动停止
-type SimpleState = 'idle' | 'running' | 'done' | 'error' | 'cancelled'
-function simpleJobState(job: Job | null): SimpleState {
-  if (!job) return 'idle'
-  if (job.status === 'pending' || job.status === 'running') return 'running'
-  if (job.status === 'done') return 'done'
-  if (job.status === 'cancelled') return 'cancelled'
-  return 'error'
-}
+// 简单任务对话流（通 useWorkbenchSimpleConversation 合并 jobs → ChatMessage[]）
+const { simpleConversationMessages, simpleAllJobsFor, simpleJobFor, simpleJobState } = useWorkbenchSimpleConversation(jobs, selectedTask)
 
-function attachmentCount(t: Task): number {
-  return Array.isArray(t.attachments) ? t.attachments.length : 0
-}
-function subtaskCount(t: Task): number {
-  return Array.isArray(t.subtasks) ? t.subtasks.length : 0
-}
-function subtaskDoneCount(t: Task): number {
-  if (!Array.isArray(t.subtasks)) return 0
-  return t.subtasks.filter(s => s && s.status === 'done').length
-}
-function taskIsRunning(t: Task): boolean {
-  if (Array.isArray(t.subtasks) && t.subtasks.some(s => s && s.status === 'running')) return true
-  // 简单任务的执行状态存在 jobs 数组里(virtual subId = `${t.id}__simple` 或续聊轮 `__simple__r${n}`),要一并检查
-  const prefix = `${t.id}__simple`
-  const j = jobs.value.find(x => x.subId === prefix || x.subId.startsWith(`${prefix}__r`))
-  if (j && (j.status === 'running' || j.status === 'pending')) return true
-  return false
-}
-
-// ── 数据加载 ────────────────────────────────────────────────────────────────
-async function loadPrompts() {
-  const res = await fetch('/api/workbench/prompts').then(r => r.json()).catch(() => ({ prompts: [] }))
-  prompts.value = res.prompts || []
-}
-async function loadTasks() {
-  const res = await fetch('/api/workbench/tasks').then(r => r.json()).catch(() => ({ tasks: [] }))
-  tasks.value = res.tasks || []
-  if (!selectedTaskId.value && tasks.value.length > 0) {
-    selectedTaskId.value = tasks.value[0].id
-  }
-  // 重新加载后立即拍快照——此时 UI 与磁盘一致
-  captureSnapshot()
-}
-
-// 当前选中的项目路径 + 项目短名（用于侧边栏按项目分组显示）
-const currentProject = ref<{ path: string; name: string }>({ path: '', name: '' })
-async function loadCurrentProject() {
-  const res = await fetch('/api/workbench/current-project').then(r => r.json()).catch(() => ({}))
-  if (res && typeof res.projectPath === 'string') {
-    currentProject.value = { path: res.projectPath, name: res.projectName || '' }
-  }
-}
-// 任务列表按 projectPath 分组；同组内保持原有顺序
-const NO_PROJECT_KEY = '__no_project__'
-// 折叠状态:记录哪些项目分组当前是收起的。
-// 用 seenGroupPaths 严格区分"用户主动操作过的路径"和"自动默认折叠的路径":
-// - 折叠集合里某条路径,如果用户曾主动展开/收起过,记到 seenGroupPaths
-// - watcher 只对「首次见到」的非当前项目分组才自动折叠;已主动操作过的(在 seen 里)保持原状
-// - 两个集合都持久化到 localStorage,刷新后保留用户偏好
-const COLLAPSED_STORAGE_KEY = 'wb.collapsedGroupPaths.v1'
-const SEEN_STORAGE_KEY = 'wb.seenGroupPaths.v1'
-
-function readStringSet(key: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return new Set()
-    const arr = JSON.parse(raw)
-    return new Set(Array.isArray(arr) ? arr.filter((x: unknown) => typeof x === 'string') : [])
-  } catch {
-    return new Set()
-  }
-}
-function writeStringSet(key: string, s: Set<string>) {
-  try {
-    localStorage.setItem(key, JSON.stringify(Array.from(s)))
-  } catch {
-    /* quota / privacy mode 都不阻塞 UI */
-  }
-}
-
-const collapsedGroupPaths = ref<Set<string>>(readStringSet(COLLAPSED_STORAGE_KEY))
-const seenGroupPaths = ref<Set<string>>(readStringSet(SEEN_STORAGE_KEY))
-
-watch(collapsedGroupPaths, (s) => writeStringSet(COLLAPSED_STORAGE_KEY, s), { deep: false })
-watch(seenGroupPaths, (s) => writeStringSet(SEEN_STORAGE_KEY, s), { deep: false })
-
-function isGroupCollapsed(path: string): boolean {
-  return collapsedGroupPaths.value.has(path)
-}
-function toggleGroupCollapsed(path: string) {
-  if (collapsedGroupPaths.value.has(path)) collapsedGroupPaths.value.delete(path)
-  else collapsedGroupPaths.value.add(path)
-  collapsedGroupPaths.value = new Set(collapsedGroupPaths.value)
-  // 记录"用户主动操作过这条路径",后续 watcher 不再自动重置
-  const seen = new Set(seenGroupPaths.value)
-  seen.add(path)
-  seenGroupPaths.value = seen
-}
-const groupedTasksList = computed(() => {
-  const list = tasks.value
-  const groups = new Map<string, Task[]>()
-  for (const t of list) {
-    const raw = (t.projectPath || '').trim()
-    const key = raw || NO_PROJECT_KEY
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(t)
-  }
-  const cur = currentProject.value.path
-  const keys = Array.from(groups.keys()).sort((a, b) => {
-    if (a === cur) return -1
-    if (b === cur) return 1
-    if (a === NO_PROJECT_KEY) return 1
-    if (b === NO_PROJECT_KEY) return -1
-    return a.localeCompare(b)
-  })
-  return {
-    groups: keys.map(path => ({
-      path,
-      label: path === NO_PROJECT_KEY ? $t('@WORKBENCH:未关联项目') : path,
-      tasks: groups.get(path)!
-    })),
-    hasMultiple: keys.length > 1
-  }
-})
-// 把完整路径压缩成"~/.../末级目录"形式，便于侧边栏显示
-function shortProjectLabel(fullPath: string): string {
-  if (!fullPath || fullPath === NO_PROJECT_KEY) return fullPath
-  const parts = fullPath.split(/[\\/]/).filter(Boolean)
-  if (parts.length <= 1) return fullPath
-  return parts.slice(-2).join('/')
-}
-
-// 首次出现某条 projectPath 时才默认折叠;已经被用户手动操作过的(在 seenGroupPaths 里)
-// 保持原状 —— 删除任务不再把用户手动展开的分组收回。
-watch(
-  () => groupedTasksList.value.groups.map(g => g.path),
-  (paths) => {
-    const cur = currentProject.value.path
-    const next = new Set(collapsedGroupPaths.value)
-    const seen = new Set(seenGroupPaths.value)
-    let changed = false
-    for (const p of paths) {
-      // 用户已经主动操作过:无论当前是折叠还是展开,都不重置
-      if (seen.has(p)) continue
-      // 首次见到的非当前项目分组:标记为已见 + 默认折叠
-      seen.add(p)
-      if (p !== cur) {
-        next.add(p)
-        changed = true
-      }
-    }
-    if (changed) collapsedGroupPaths.value = next
-    seenGroupPaths.value = seen
-  },
-  { immediate: true }
-)
-async function loadJobs() {
-  const res = await fetch('/api/workbench/jobs').then(r => r.json()).catch(() => ({ jobs: [] }))
-  jobs.value = res.jobs || []
-  syncRunningCount()
-}
-
-/**
- * 清空指定 task 下的所有旧 job,用于"重新执行"场景:
- * 用户已执行过的任务点执行按钮时,先清掉旧输出再启动新任务,
- * 避免旧 job 输出和新输出堆叠显示。
- *
- * 返回:后端 removed 数量(仅用于打日志 / 调试)。
- */
-async function clearJobsByTask(taskId: string): Promise<number> {
-  try {
-    const res = await fetch(`/api/workbench/jobs/by-task/${encodeURIComponent(taskId)}`, { method: 'DELETE' }).then(r => r.json())
-    if (!res?.success) {
-      console.warn('[clearJobsByTask] failed:', res?.error)
-      return 0
-    }
-    // 后端已清空,本地 jobs 列表也同步清一遍(不等 socket 推送)
-    jobs.value = jobs.value.filter(j => j.taskId !== taskId)
-    syncRunningCount()
-    return res.removed || 0
-  } catch (err) {
-    console.warn('[clearJobsByTask] error:', err)
-    return 0
-  }
-}
-
-/**
- * 清空指定 task 下的 non-done job(保留 done 历史的日志)。
- * 用于"只跑未完成"场景:不偷偷清掉 done sub 的 job,避免新页签上
- * jobOf(subId) 找不到 → JobLogDetails 渲染空白。
- * 后端 ?keepDone=true 只删 running/error/cancelled 的 job。
- */
-async function clearNonDoneJobsByTask(taskId: string): Promise<number> {
-  try {
-    const res = await fetch(`/api/workbench/jobs/by-task/${encodeURIComponent(taskId)}?keepDone=true`, { method: 'DELETE' }).then(r => r.json())
-    if (!res?.success) {
-      console.warn('[clearNonDoneJobsByTask] failed:', res?.error)
-      return 0
-    }
-    // 本地同步:只过滤掉 non-done 的 job,done 的保留
-    const removedIds = new Set(res.ids || [])
-    jobs.value = jobs.value.filter(j => !(j.taskId === taskId && removedIds.has(j.id)))
-    syncRunningCount()
-    return res.removed || 0
-  } catch (err) {
-    console.warn('[clearNonDoneJobsByTask] error:', err)
-    return 0
-  }
-}
-
-/**
- * 清空当前 task 的所有执行痕迹(用户主动触发,跟自动"重新执行"不同):
- *   1. 弹 ElMessageBox 二次确认,告知"会重置 N 个子任务、删除 M 条执行记录"
- *   2. 调 POST /api/workbench/tasks/:id/clear-execution
- *      后端会同时清空 jobs.json + 重置 subtasks.status → todo + broadcast
- *   3. 前端收到 task:update / sub:update 后会自动刷新,这里也强制 reload 一次兜底
- * 任务描述/附件/拆分都保留,只清"执行痕迹"。
- */
-async function clearExecutionForSelectedTask() {
-  if (!selectedTask.value) return
-  const t = selectedTask.value
-  const subs = Array.isArray(t.subtasks) ? t.subtasks : []
-  const doneCount = subs.filter(s => s.status === 'done').length
-  const errCount = subs.filter(s => s.status === 'error').length
-  const runCount = subs.filter(s => s.status === 'running').length
-  const localJobs = jobs.value.filter(j => j.taskId === t.id)
-  // 二次确认文案
-  const confirmMsg = doneCount + errCount === 0
-    ? $t('@WORKBENCH:当前任务还没有执行内容,确认仍要清空?')
-    : $t('@WORKBENCH:将清空 {n} 个已执行/失败的子任务和 {m} 条执行记录,任务拆分/描述/附件保留。', {
-        n: doneCount + errCount,
-        m: localJobs.length
-      })
-  try {
-    await ElMessageBox.confirm(
-      confirmMsg,
-      $t('@WORKBENCH:清空执行内容'),
-      {
-        confirmButtonText: $t('@WORKBENCH:清空'),
-        cancelButtonText: $t('@WORKBENCH:取消'),
-        type: 'warning'
-      }
-    )
-  } catch {
-    return
-  }
-  if (runCount > 0) {
-    ElMessage.warning($t('@WORKBENCH:有 {n} 个子任务正在执行,请先停止', { n: runCount }))
-    return
-  }
-  const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/clear-execution`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  })
-    .then(r => r.json())
-    .catch(err => ({ success: false, error: err?.message || String(err) }))
-  if (res?.success) {
-    // 后端已 broadcast task:update / sub:update,本地内存兜底刷一遍
-    if (Array.isArray(t.subtasks)) {
-      for (const s of t.subtasks) {
-        s.status = 'todo'
-        if (s.error) delete s.error
-      }
-    }
-    jobs.value = jobs.value.filter(j => j.taskId !== t.id)
-    syncRunningCount()
-    ElMessage.success(res.message || $t('@WORKBENCH:已清空执行内容'))
-  } else {
-    ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))
-  }
-}
+// attachmentCount / subtaskCount / subtaskDoneCount / taskIsRunning → moved to WorkbenchSidebar
+// clearExecutionForSelectedTask → 来自 useWorkbenchExecution
 
 /**
  * 只清空当前 task 的 subtasks 数组(及关联的 jobs),保留 desc / attachments / promptId。
@@ -751,22 +354,6 @@ async function clearSubtasksForSelectedTask() {
     ElMessage.success(res.message || $t('@WORKBENCH:已清空子任务'))
   } else {
     ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))
-  }
-}
-
-function connectSSE() {
-  if (es) { es.close(); es = null }
-  es = new EventSource('/api/workbench/events')
-  es.onmessage = (e) => {
-    try {
-      const data = JSON.parse(e.data)
-      applyJobEvent(data.event, data.payload)
-    } catch { /* ignore */ }
-  }
-  es.onerror = () => {
-    // 自动重连
-    if (es) { es.close(); es = null }
-    setTimeout(connectSSE, 3000)
   }
 }
 
@@ -1175,360 +762,24 @@ function applySplitResult(newSubs: { title: string; desc: string }[]) {
   )
 }
 
-async function runTask(t: Task) {
-  // 简单任务:不需要子任务,直接走 /run-simple
-  if (t.type === 'simple') {
-    return runSimpleTask(t)
-  }
-  if (!t.subtasks || t.subtasks.length === 0) {
-    ElMessage.warning($t('@WORKBENCH:请先拆分任务'))
-    return
-  }
-  // 若用户编辑过 task 但没点保存，先静默持久化一次。
-  if (selectedTask.value && selectedTask.value.id === t.id) {
-    // 通过 ref 代理对比：title/desc/subtasks 任意一项与磁盘快照不同就写一次
-    const onDisk = tasks.value.find(x => x.id === t.id)
-    const dirty = !onDisk
-      || onDisk.title !== selectedTask.value.title
-      || onDisk.desc !== selectedTask.value.desc
-      || JSON.stringify(onDisk.subtasks) !== JSON.stringify(selectedTask.value.subtasks)
-      || onDisk.promptId !== selectedTask.value.promptId
-    if (dirty) {
-      const ok = await persistTask(false)
-      if (!ok) return
-    }
-  }
-  // 启动前:有 done sub 时弹三选一,避免偷偷清掉 done sub 的日志
-  // 后端 runTaskQueue(workbench.js:1096)对 sub.status==='done' 直接 continue,
-  // 不会重跑 done sub;所以"重新执行"不能让前端把 done 的 job 也清掉。
-  const doneSubs = t.subtasks.filter(s => s.status === 'done')
-  if (doneSubs.length > 0) {
-    // 用 ElMessageBox 三选一(confirm = 重置, cancel = 只跑未完成, close = 取消)
-    // distinguishCancelAndClose 让 catch 区分这两种语义
-    let choice: 'confirm' | 'cancel' | 'close' = 'close'
-    try {
-      await ElMessageBox.confirm(
-        $t('@WORKBENCH:该任务有 {n} 个子任务已 done,如何处理?', { n: doneSubs.length }) + '\n\n' +
-          $t('@WORKBENCH:点"确定"将重置全部 done 为 todo,从头跑一遍(会消耗 token)') + '\n' +
-          $t('@WORKBENCH:点"取消"将保留 done 状态,只跑未完成的 sub'),
-        $t('@WORKBENCH:检测到已完成子任务'),
-        {
-          confirmButtonText: $t('@WORKBENCH:重置全部并重跑'),
-          cancelButtonText: $t('@WORKBENCH:只跑未完成'),
-          type: 'warning',
-          distinguishCancelAndClose: true,
-          showClose: true
-        }
-      )
-      choice = 'confirm'
-    } catch (action: any) {
-      // action: 'cancel'(点取消按钮 = "只跑未完成") 或 'close'(点 X / Esc = 取消操作)
-      choice = action === 'cancel' ? 'cancel' : 'close'
-    }
-    if (choice === 'close') return  // 用户点 X / Esc 取消
-    if (choice === 'confirm') {
-      // 重置全部:done → todo,清掉该 task 所有 job
-      // 复用后端 /clear-execution:同时清 jobs.json + 重置 subtasks.status + broadcast
-      const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/clear-execution`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      }).then(r => r.json()).catch(err => ({ success: false, error: err?.message || String(err) }))
-      if (!res?.success) {
-        ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))
-        return
-      }
-      // 后端会 broadcast sub:update + task:update,本地同步兜底
-      if (Array.isArray(t.subtasks)) {
-        for (const s of t.subtasks) {
-          s.status = 'todo'
-          if (s.error) delete s.error
-        }
-      }
-      jobs.value = jobs.value.filter(j => j.taskId !== t.id)
-      syncRunningCount()
-      ElMessage.success(res.message || $t('@WORKBENCH:已重置,准备从头执行'))
-    }
-    // choice === 'cancel'(= "只跑未完成") → fallthrough,保留 done 状态
-  }
-  // 清掉 non-done 的旧 job(它们反正要重跑,留着会污染视图);
-  // done 的 job 保留,前端 jobOf(subId) 仍能找到
-  await clearNonDoneJobsByTask(t.id)
-  const res = await fetch(`/api/workbench/tasks/${t.id}/run`, { method: 'POST' }).then(r => r.json())
-  if (res.success) {
-    ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
-  } else {
-    ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
-  }
-}
-
-/**
- * 简单任务执行:不需要任何子任务,后端用 task.desc 合成虚拟 sub 跑。
- * 静默落盘行为跟 runTask 一致:title/desc/simpleOverride/promptId 有改动先 flush。
- * 重新执行时清空旧 job,避免新旧输出堆叠。
- */
-async function runSimpleTask(t: Task) {
-  if (selectedTask.value && selectedTask.value.id === t.id) {
-    const onDisk = tasks.value.find(x => x.id === t.id)
-    const dirty = !onDisk
-      || onDisk.title !== selectedTask.value.title
-      || onDisk.desc !== selectedTask.value.desc
-      || onDisk.promptId !== selectedTask.value.promptId
-      || (onDisk.simpleOverride || '') !== (selectedTask.value.simpleOverride || '')
-    if (dirty) {
-      const ok = await persistTask(false)
-      if (!ok) return
-    }
-  }
-  // 重新执行简单任务:清掉旧 job 再启动新 job
-  await clearJobsByTask(t.id)
-  const res = await fetch(`/api/workbench/tasks/${t.id}/run-simple`, { method: 'POST' }).then(r => r.json())
-  if (res.success) {
-    ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
-  } else {
-    ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
-  }
-}
-
-/**
- * 简单任务"继续对话":基于最后一轮已结束 job 的 claudeSessionId,用
- * --resume 续接 claude 会话,新一轮 = 新 job(subId 形如 __simple__r${n})。
- * 后端 /jobs/:id/continue 负责拒绝并发(上一轮还在跑时)和缺 sessionId 的场景,
- * 前端只做基本本地校验 + 发请求 + 弹消息。SSE 推送会自动把新 job 加进面板。
- */
-async function continueChat(t: Task, message: string) {
-  const latest = simpleAllJobsFor(t).slice(-1)[0]
-  if (!latest) {
-    ElMessage.error($t('@WORKBENCH:没有可续接的会话'))
-    return
-  }
-  // 续接时把 task.attachments 透传给后端,作为本轮 claude --resume 上下文里的图片。
-  // 注意:这里不区分"上一轮的图"和"用户续聊时新加的图"——因为都挂在 task.attachments
-  // 上(简单任务本来就用 task 级附件),新加的会自然 push 进去,后端拿到整张快照。
-  // 后端 defaultTask = t(front-end selectedTask),虚拟 sub 拿到的 attachments 是
-  // 当前 task 的完整列表;后端不再"丢弃 attachments 让 claude 不重复看图"——
-  // claude 自己会基于 session 上下文去判断哪些图已经说过,前端简单透传最稳。
-  const carryAtts = Array.isArray(t.attachments) ? t.attachments : []
-  const res = await fetch(`/api/workbench/jobs/${latest.id}/continue`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      userMessage: message,
-      attachments: carryAtts
-    })
-  }).then(r => r.json()).catch(err => ({ success: false, error: err?.message || String(err) }))
-  if (res.success) {
-    ElMessage.success(res.message || $t('@WORKBENCH:已加入续接队列'))
-  } else {
-    ElMessage.error(res.error || $t('@WORKBENCH:续接失败'))
-  }
-}
-
-async function onContinueSendFromChat(t: Task, payload: { text: string; files: SelectedFile[] }) {
-  const msg = payload.text.trim()
-  if (!msg) return
-  // 先把 ChatInput 选中的文件逐个上传，再续聊
-  for (const sf of payload.files) {
-    await uploadAttachment({ kind: 'task', task: t }, sf.file)
-  }
-  await continueChat(t, msg)
-}
-
-/**
- * JobLogDetails 内部点"重新执行"按钮后冒泡到这里。
- * 根据 job.subId 判断是简单任务续跑还是子任务重跑,走各自已有 API。
- * - 简单任务 subId 形如 `${task.id}__simple` 或 `${task.id}__simple__r${n}`
- *   → 走 /api/workbench/tasks/${taskId}/run-simple,会用 claudeSessionId 续接
- * - 子任务 subId 即 SubTask.id → 走 /api/workbench/subtasks/${subId}/run
- */
-async function onReExecuteJob(j: Job) {
-  const subId = j.subId || ''
-  // 1) 简单任务路径
-  const simpleMatch = subId.match(/^(.+)__simple(?:__r\d+)?$/)
-  if (simpleMatch) {
-    const taskId = simpleMatch[1]
-    const t = tasks.value.find(x => x.id === taskId)
-    if (!t) {
-      ElMessage.error($t('@WORKBENCH:任务不存在,无法重新执行'))
-      return
-    }
-    // 复用 runSimpleTask(它会做静默落盘+清非 done job+调 API,完整流程)
-    await runSimpleTask(t)
-    return
-  }
-  // 2) 子任务路径:subId 即 subtask.id
-  for (const t of tasks.value) {
-    const sub = (t.subtasks || []).find(s => s.id === subId)
-    if (sub) {
-      // runSubtask 依赖 selectedTask.value = 当前选中任务,这里直接调 API 走重跑流程
-      // (等价于父面板里点"执行"按钮的行为)
-      const live = jobOf(sub.id)
-      if (live && (live.status === 'running' || live.status === 'pending')) {
-        ElMessage.warning($t('@WORKBENCH:该子任务正在执行中'))
-        return
-      }
-      const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, { method: 'POST' })
-        .then(r => r.json())
-        .catch(err => ({ success: false, error: err?.message || String(err) }))
-      if (res.success) {
-        ElMessage.success(res.message || $t('@WORKBENCH:已开始执行子任务'))
-      } else {
-        ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
-      }
-      return
-    }
-  }
-  ElMessage.error($t('@WORKBENCH:找不到对应任务,无法重新执行'))
-}
-
-/**
- * 单 sub 执行：仅跑指定 subId 那一个，不会触发其他 todo sub。
- * 跟整批"执行任务"走同一套后端逻辑(prompt 拼装 / job 跟踪 / 取消 / 落盘),
- * 唯一区别是不遍历 task.subtasks。
- *
- * 静默落盘行为跟 runTask 一致:用户编辑过但没点"保存拆分"时,先把当前
- * selectedTask 写盘,保证后端拿到的 sub 描述/title 是最新的。
- */
-
-async function runSubtask(sub: SubTask) {
-  if (!selectedTask.value) return
-  const t = selectedTask.value
-  // 已经在跑 → 拒绝,UI 上按钮也应该隐藏,这里再兜底一次
-  const live = jobOf(sub.id)
-  if (live && (live.status === 'running' || live.status === 'pending')) {
-    ElMessage.warning($t('@WORKBENCH:该子任务正在执行中'))
-    return
-  }
-  // 静默落盘:title/desc/subtasks 有变更就先写一次
-  const onDisk = tasks.value.find(x => x.id === t.id)
-  const dirty = !onDisk
-    || onDisk.title !== t.title
-    || onDisk.desc !== t.desc
-    || JSON.stringify(onDisk.subtasks) !== JSON.stringify(t.subtasks)
-    || onDisk.promptId !== t.promptId
-  if (dirty) {
-    const ok = await persistTask(false)
-    if (!ok) return
-  }
-  const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, { method: 'POST' })
-    .then(r => r.json())
-    .catch(err => ({ success: false, error: err?.message || String(err) }))
-  if (res.success) {
-    ElMessage.success(res.message || $t('@WORKBENCH:已开始执行子任务'))
-  } else {
-    ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
-  }
-}
-
-/**
- * 决定某个 sub 行是否需要显示"执行"按钮。
- * 规则:sub 不在 done 状态 && 当前没有 running/pending 的 job。
- * (UI 上和后端 endpoint 的拒绝条件保持一致)
- */
-function canRunSubtask(sub: SubTask): boolean {
-  if (sub.status === 'done') return false
-  const j = jobOf(sub.id)
-  if (j && (j.status === 'running' || j.status === 'pending')) return false
-  return true
-}
-
-/**
- * "从此处开始"按钮显示条件:
- *   - 可以执行(同 canRunSubtask)
- *   - 不是最后一个 sub(最后一个直接用"执行"按钮更直接)
- *   - 当前没有正在跑的 sub 在它之后(避免和正在跑的队列冲突)
- */
-function canRunFromHere(sub: SubTask): boolean {
-  if (!canRunSubtask(sub)) return false
-  if (!selectedTask.value) return false
-  const subs = selectedTask.value.subtasks || []
-  const idx = subs.findIndex(s => s.id === sub.id)
-  if (idx < 0) return false
-  if (idx === subs.length - 1) return false
-  return true
-}
-
-/**
- * "从此处开始"按钮触发:从当前 sub 开始按序执行整批 sub。
- * 前面 done 的 sub 输出会自动作为前序上下文(后端 collectPriorOutputsUpTo 处理)。
- * 跟"执行"按钮的差异:不只是跑当前 sub,而是从当前 sub 开始走完整队列。
- */
-async function runFromHere(sub: SubTask) {
-  if (!selectedTask.value) return
-  const t = selectedTask.value
-  const subs = t.subtasks || []
-  const startIndex = subs.findIndex(s => s.id === sub.id)
-  if (startIndex < 0) return
-  // 静默落盘:title/desc/subtasks 有变更就先写一次,保证后端拿到的状态是最新
-  const onDisk = tasks.value.find(x => x.id === t.id)
-  const dirty = !onDisk
-    || onDisk.title !== t.title
-    || onDisk.desc !== t.desc
-    || JSON.stringify(onDisk.subtasks) !== JSON.stringify(t.subtasks)
-    || onDisk.promptId !== t.promptId
-  if (dirty) {
-    const ok = await persistTask(false)
-    if (!ok) return
-  }
-  const res = await fetch(`/api/workbench/tasks/${t.id}/run-from`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ startSubIndex: startIndex })
-  })
-    .then(r => r.json())
-    .catch(err => ({ success: false, error: err?.message || String(err) }))
-  if (res.success) {
-    ElMessage.success(res.message || $t('@WORKBENCH:已从此处开始执行'))
-  } else {
-    ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
-  }
-}
-
+// cancelDone kept local (uses subSnapshot / isSubtaskPersisting)
 async function cancelDone(sub: SubTask) {
   if (!selectedTask.value) return
-  // 防止连续点击触发并发落盘 + 状态抖动
   if (isSubtaskPersisting(sub.id)) return
   setSubtaskPersisting(sub.id, true)
   try {
-    // 把磁盘快照里这条 sub 的 status 一起改回 todo，避免 dirty 误标
     const snap = subSnapshot.value.get(sub.id)
     if (snap) {
       subSnapshot.value.set(sub.id, { ...snap, status: 'todo' } as any)
     }
     sub.status = 'todo'
-    // 静默落盘：让后端 runTaskQueue 在下次执行时把这 sub 重新纳入队列
     await persistTask(false)
   } finally {
     setSubtaskPersisting(sub.id, false)
   }
 }
 
-/**
- * 取消正在执行的 job。点击后会弹确认，确认后调后端 cancel 接口。
- * 取消的语义只影响这一个 sub：已输出的内容保留，同 task 后续 sub 仍按队列继续执行。
- */
-async function cancelJob(j: Job) {
-  try {
-    await ElMessageBox.confirm(
-      $t('@WORKBENCH:确认停止执行？已输出的内容会保留。'),
-      $t('@WORKBENCH:停止执行'),
-      {
-        confirmButtonText: $t('@WORKBENCH:停止'),
-        cancelButtonText: $t('@WORKBENCH:取消'),
-        type: 'warning'
-      }
-    )
-  } catch {
-    return
-  }
-  const res = await fetch(`/api/workbench/jobs/${j.id}/cancel`, { method: 'POST' })
-    .then(r => r.json())
-    .catch(err => ({ success: false, error: err?.message || String(err) }))
-  if (res.success) {
-    ElMessage.success($t('@WORKBENCH:已发送停止信号'))
-  } else {
-    ElMessage.error(res.error || $t('@WORKBENCH:停止失败'))
-  }
-}
+// ── 执行（其余执行函数来自 useWorkbenchExecution） ──
 
 onMounted(async () => {
   await Promise.all([loadPrompts(), loadTasks(), loadCurrentProject(), loadJobs()])
@@ -1536,7 +787,7 @@ onMounted(async () => {
   window.addEventListener('beforeunload', onBeforeUnloadPersist)
 })
 onBeforeUnmount(() => {
-  if (es) { es.close(); es = null }
+  disconnectSSE()
   window.removeEventListener('beforeunload', onBeforeUnloadPersist)
   // 卸载时同步 flush 一次（sendBeacon 不支持时也能尽量保住）
   if (selectedTask.value && metaDirty.value) {
@@ -1552,199 +803,44 @@ const {
   onAttachmentPaste, onAttachmentDrop,
   uploadAttachment, removeAttachment, pickAttachmentFile
 } = useWorkbenchAttachments()
+
+// ── 执行层（run/cancel/continue/clear 等核心交互逻辑） ──
+const {
+  runTask, onContinueSendFromChat,
+  onReExecuteJob, runSubtask, canRunSubtask, canRunFromHere, runFromHere,
+  cancelJob, clearExecutionForSelectedTask
+} = useWorkbenchExecution(
+  jobs, tasks, selectedTask,
+  {
+    syncRunningCount,
+    jobOf,
+    simpleAllJobsFor,
+    clearJobsByTask,
+    clearNonDoneJobsByTask,
+    persistTask,
+    loadTasks: _loadDataTasks,
+    uploadAttachment
+  }
+)
 </script>
 
 <template>
   <div class="workbench">
     <div class="workbench__editor-row">
-    <!-- 左：任务列表 -->
-    <aside class="wb-sidebar">
-      <!-- ── 分组 1：任务列表 ── -->
-      <section class="wb-section">
-        <header class="wb-section__head">
-          <span class="wb-section__tag">{{ $t('@WORKBENCH:任务') }}</span>
-          <h3 class="wb-section__title">{{ $t('@WORKBENCH:任务列表') }}</h3>
-          <span class="wb-pill wb-section__count">{{ tasks.length }}</span>
-        </header>
-
-        <!-- 顶部主操作：新建任务（点一下直接创建 + 右侧展示，无弹窗） -->
-        <button class="wb-new-btn" :disabled="creatingTask" @click="createTaskDirect">
-          <el-icon class="wb-new-btn__icon"><Plus /></el-icon>
-          <span>{{ $t('@WORKBENCH:新建任务') }}</span>
-          <span class="wb-new-btn__shortcut">N</span>
-        </button>
-
-        <ul class="wb-task-list">
-          <template v-for="group in groupedTasksList.groups" :key="group.path">
-            <li
-              v-if="groupedTasksList.hasMultiple"
-              class="wb-task-group__head"
-              :class="{
-                'is-current': group.path === currentProject.path,
-                'is-collapsed': isGroupCollapsed(group.path)
-              }"
-              role="button"
-              tabindex="0"
-              :aria-expanded="!isGroupCollapsed(group.path)"
-              :title="isGroupCollapsed(group.path) ? $t('@WORKBENCH:展开') : $t('@WORKBENCH:收起')"
-              @click="toggleGroupCollapsed(group.path)"
-              @keydown.enter.prevent="toggleGroupCollapsed(group.path)"
-              @keydown.space.prevent="toggleGroupCollapsed(group.path)"
-            >
-              <el-icon class="wb-task-group__caret">
-                <component :is="isGroupCollapsed(group.path) ? ArrowRight : ArrowDown" />
-              </el-icon>
-              <el-icon class="wb-task-group__icon"><Folder /></el-icon>
-              <span class="wb-task-group__name" :title="group.path === currentProject.path ? currentProject.path : group.label">
-                {{ group.path === currentProject.path ? currentProject.name : shortProjectLabel(group.label) }}
-              </span>
-              <span class="wb-pill wb-task-group__count">{{ group.tasks.length }}</span>
-            </li>
-            <template v-if="!isGroupCollapsed(group.path)">
-              <li
-                v-for="t in group.tasks"
-                :key="t.id"
-                class="wb-task-item"
-                :class="{
-                  active: t.id === selectedTaskId,
-                  'has-attachment': attachmentCount(t) > 0,
-                  'is-other-project': t.projectPath && t.projectPath !== currentProject.path,
-                  'is-running': taskIsRunning(t)
-                }"
-                @click="selectTask(t)"
-              >
-                <div class="wb-task-item__body">
-                  <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
-                  <div class="wb-task-item__meta">
-                    <span
-                      v-if="subtaskCount(t) > 0"
-                      class="wb-task-item__meta-item"
-                      :class="{ 'wb-task-item__meta-item--running': taskIsRunning(t) }"
-                      :title="$t('@WORKBENCH:个子任务')"
-                    >
-                      <el-icon class="wb-task-item__meta-icon"><List /></el-icon>
-                      <span class="wb-pill wb-task-item__num">
-                        {{ subtaskDoneCount(t) }}/{{ subtaskCount(t) }}
-                      </span>
-                    </span>
-                    <span
-                      v-if="attachmentCount(t) > 0"
-                      class="wb-task-item__meta-item"
-                      :title="$t('@WORKBENCH:附件')"
-                    >
-                      <el-icon class="wb-task-item__meta-icon"><PictureIcon /></el-icon>
-                      <span class="wb-pill wb-task-item__num">{{ attachmentCount(t) }}</span>
-                    </span>
-                    <span
-                      v-if="t.promptId"
-                      class="wb-task-item__meta-item wb-task-item__meta-item--accent"
-                      :title="$t('@WORKBENCH:已绑定预置提示词')"
-                    >
-                      <el-icon class="wb-task-item__meta-icon"><Memo /></el-icon>
-                    </span>
-                    <!--
-                      任务类型切换按钮:点击在 simple/complex 间互转。
-                      - 简单 → 复杂:直接切换,无副作用(简单任务没有子任务)
-                      - 复杂 → 简单:弹 ElMessageBox 确认,因为会清空现有子任务
-                    -->
-                    <button
-                      type="button"
-                      class="wb-task-item__meta-item wb-task-item__type-toggle"
-                      :class="t.type === 'simple' ? 'wb-task-item__meta-item--simple' : 'wb-task-item__meta-item--complex'"
-                      :title="t.type === 'simple' ? $t('@WORKBENCH:简单任务 - 点击切换为复杂任务') : $t('@WORKBENCH:复杂任务 - 点击切换为简单任务')"
-                      :aria-label="t.type === 'simple' ? $t('@WORKBENCH:切换为复杂任务') : $t('@WORKBENCH:切换为简单任务')"
-                    >
-                      {{ t.type === 'simple' ? $t('@WORKBENCH:简单') : $t('@WORKBENCH:复杂') }}
-                    </button>
-                    <span
-                      v-if="t.projectPath && t.projectPath !== currentProject.path"
-                      class="wb-task-item__meta-item wb-task-item__meta-item--project"
-                      :title="t.projectPath"
-                    >
-                      {{ shortProjectLabel(t.projectPath) }}
-                    </span>
-                  </div>
-                </div>
-                <span
-                  v-if="taskIsRunning(t)"
-                  class="wb-task-item__running-dot"
-                  :title="$t('@WORKBENCH:执行中')"
-                  aria-hidden="true"
-                />
-                <button
-                  class="wb-task-item__del"
-                  @click.stop="deleteTask(t)"
-                  :title="$t('@WORKBENCH:删除')"
-                  :aria-label="$t('@WORKBENCH:删除')"
-                >
-                  <el-icon><Close /></el-icon>
-                </button>
-              </li>
-            </template>
-          </template>
-          <li v-if="tasks.length === 0" class="wb-empty wb-empty--rich">
-            <div class="wb-empty__art" aria-hidden="true">
-              <el-icon><DocumentAdd /></el-icon>
-            </div>
-            <div class="wb-empty__title">{{ $t('@WORKBENCH:暂无任务') }}</div>
-            <div class="wb-empty__hint">{{ $t('@WORKBENCH:点击上方按钮新建') }}</div>
-            <div class="wb-empty__cta">
-              <el-button type="primary" size="small" :icon="Plus" :loading="creatingTask" @click="createTaskDirect">
-                {{ $t('@WORKBENCH:新建任务') }}
-              </el-button>
-            </div>
-          </li>
-        </ul>
-      </section>
-
-      <!-- ── 分组 2：预置提示词 ── -->
-      <section class="wb-section">
-        <header class="wb-section__head">
-          <span class="wb-section__tag wb-section__tag--accent">{{ $t('@WORKBENCH:提示') }}</span>
-          <h3 class="wb-section__title">{{ $t('@WORKBENCH:预置提示词') }}</h3>
-          <span class="wb-pill wb-section__count">{{ availablePrompts.length }}</span>
-          <button
-            class="wb-section__action"
-            @click="openCreatePrompt"
-            :title="$t('@WORKBENCH:新建提示词')"
-            :aria-label="$t('@WORKBENCH:新建提示词')"
-          >
-            <el-icon><Plus /></el-icon>
-          </button>
-        </header>
-        <ul class="wb-prompt-list">
-          <li v-for="p in availablePrompts" :key="p.id" class="wb-prompt-item">
-            <div class="wb-prompt-item__icon">
-              <el-icon><Memo /></el-icon>
-            </div>
-            <span class="wb-prompt-item__name" @click="openEditPrompt(p)" :title="p.content">
-              {{ p.name }}
-            </span>
-            <span
-              v-if="!p.projectPath"
-              class="wb-prompt-item__tag"
-              :title="$t('@WORKBENCH:全局（所有项目可用）')"
-            >{{ $t('@WORKBENCH:全局（所有项目可用）') }}</span>
-            <span
-              v-else
-              class="wb-prompt-item__tag wb-prompt-item__tag--project"
-              :title="p.projectPath"
-            >{{ shortProjectLabel(p.projectPath) }}</span>
-            <button
-              class="wb-prompt-item__del"
-              @click="deletePrompt(p)"
-              :title="$t('@WORKBENCH:删除')"
-              :aria-label="$t('@WORKBENCH:删除')"
-            >
-              <el-icon><Close /></el-icon>
-            </button>
-          </li>
-          <li v-if="availablePrompts.length === 0" class="wb-empty wb-empty--compact">
-            {{ $t('@WORKBENCH:暂无提示词') }}
-          </li>
-        </ul>
-      </section>
-    </aside>
+    <WorkbenchSidebar
+      :tasks="tasks"
+      :prompts="prompts"
+      :selected-task-id="selectedTaskId"
+      :current-project="currentProject"
+      :creating-task="creatingTask"
+      @select-task="selectTask"
+      @delete-task="deleteTask"
+      @set-task-type="setTaskType"
+      @create-task="createTaskDirect"
+      @open-create-prompt="openCreatePrompt"
+      @open-edit-prompt="openEditPrompt"
+      @delete-prompt="deletePrompt"
+    />
 
     <!-- 中：单任务拆分 -->
     <section class="wb-split">
