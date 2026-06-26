@@ -16,584 +16,442 @@
 
 /**
  * 发布前准备工作
- * 1. 更新版本号（最后一位加1）
+ * 1. 更新版本号(最后一位加 1)
  * 2. 构建前端项目
- * 3. 提交更改到git
- * 4. 发布到npm
+ * 3. 提交更改到 git
+ * 4. 发布到 npm
+ *
+ * 用法:
+ *   npm run release                      # 全流程,自伤护栏全部开启
+ *   npm run release -- --skip-self-update # 发布后不自动 npm install -g zen-gitsync
+ *   npm run release -- --skip-push        # 只发布到 npm,不 push git
+ *   npm run release -- --dry-run          # 只打印计划,不真正改 package.json / commit / publish
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
-import chalk from 'chalk';
-import readline from 'readline/promises';
+import fs from 'node:fs'
+import fsp from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { execSync, spawn } from 'node:child_process'
+import chalk from 'chalk'
+import readline from 'node:readline/promises'
 
-// 获取项目根目录
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..');
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const rootDir = path.resolve(__dirname, '..')
 
-// 创建readline接口函数
+const argv = process.argv.slice(2)
+const DRY_RUN = argv.includes('--dry-run')
+const SKIP_SELF_UPDATE = argv.includes('--skip-self-update')
+const SKIP_PUSH = argv.includes('--skip-push')
+
+// 跨平台 sleep:Node 原生,避免 `sleep N || ping` 的 Windows 兜底 hack
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// 显式白名单:只有这些文件路径会被 git add。
+// 禁止 `git add .` 防止把工作区脏文件 / 临时调试文件一起带上 release commit。
+const RELEASE_FILES = ['package.json', 'CHANGELOG.md', 'package-lock.json', 'pnpm-lock.yaml']
+
 function createReadlineInterface() {
-  return readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+  return readline.createInterface({ input: process.stdin, output: process.stdout })
 }
 
-// 读取package.json
-const packageJsonPath = path.join(rootDir, 'package.json');
-const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-
-// 尝试终止可能正在运行的Git进程
-function terminateGitProcesses() {
-  console.log(chalk.yellow('尝试终止可能正在运行的Git进程...'));
-  
-  try {
-    // 在Windows上
-    if (process.platform === 'win32') {
-      try {
-        execSync('taskkill /f /im git.exe /t', { stdio: 'ignore' });
-        console.log(chalk.green('已终止Git进程'));
-      } catch (e) {
-        // 可能没有正在运行的进程，忽略错误
-        console.log(chalk.gray('没有找到正在运行的Git进程'));
-      }
-    } 
-    // 在Linux/MacOS上
-    else {
-      try {
-        execSync("pkill -f 'git' || true", { stdio: 'ignore' });
-        console.log(chalk.green('已终止Git进程'));
-      } catch (e) {
-        // 忽略错误
-        console.log(chalk.gray('没有找到正在运行的Git进程'));
-      }
-    }
-    
-    // 等待进程终止
-    console.log(chalk.gray('等待进程终止...'));
-    execSync('sleep 2 || ping -n 3 127.0.0.1 > nul', { stdio: 'ignore' });
-  } catch (error) {
-    console.log(chalk.yellow('终止Git进程失败，但将继续尝试清理锁文件'));
-  }
-}
-
-// 询问是否继续执行
 async function askContinue(message) {
-  const rl = createReadlineInterface();
-  
+  const rl = createReadlineInterface()
   try {
-    const answer = await rl.question(message);
-    // 如果是空字符串(直接回车)或者是"y"，都返回true
-    return answer.toLowerCase() === 'y' || answer.trim() === '';
+    const answer = await rl.question(message)
+    return answer.toLowerCase() === 'y' || answer.trim() === ''
   } finally {
-    rl.close();
+    rl.close()
   }
 }
 
-// 检查并清理Git锁文件
+// 拿到本脚本派生出的 git 进程 PID 集合(用于精准 kill,避免误杀用户其他 git 进程)
+const spawnedGitPids = new Set()
+function runGit(args, opts = {}) {
+  const proc = spawn('git', args, { stdio: opts.stdio ?? 'inherit', cwd: opts.cwd ?? rootDir })
+  spawnedGitPids.add(proc.pid)
+  return proc
+}
+
+// 精准终止本脚本派生出的 git 进程(不再 `pkill -f git` 一锅端用户机器上其他 git 进程)
+function terminateSpawnedGitProcesses() {
+  if (spawnedGitPids.size === 0) return
+  for (const pid of spawnedGitPids) {
+    try {
+      process.kill(pid, 'SIGTERM')
+    } catch {
+      /* 已退出,忽略 */
+    }
+  }
+}
+
+// 检查并清理 Git 锁文件
 async function checkAndCleanGitLocks() {
-  console.log(chalk.gray('检查Git锁文件...'));
-  
-  const gitDir = path.join(rootDir, '.git');
-  
-  // 可能的锁文件列表
+  console.log(chalk.gray('检查 Git 锁文件...'))
+
+  const gitDir = path.join(rootDir, '.git')
+
+  // 具体的锁文件路径(不要通配符,避免误删)
   const lockFiles = [
     path.join(gitDir, 'index.lock'),
     path.join(gitDir, 'HEAD.lock'),
     path.join(gitDir, 'config.lock'),
-    path.join(gitDir, 'refs', 'heads', '*.lock'),
-    path.join(gitDir, 'packed-refs.lock')
-  ];
-  
-  // 检查并清理每个锁文件
-  let foundLocks = false;
-  let hasBusyLocks = false;
-  
-  lockFiles.forEach(lockPattern => {
-    // 处理通配符模式
-    if (lockPattern.includes('*')) {
-      const baseDir = path.dirname(lockPattern);
-      const pattern = path.basename(lockPattern);
-      
-      try {
-        // 确保目录存在
-        if (fs.existsSync(baseDir)) {
-          const files = fs.readdirSync(baseDir);
-          files.forEach(file => {
-            if (file.endsWith('.lock')) {
-              const lockPath = path.join(baseDir, file);
-              foundLocks = true;
-              console.log(chalk.yellow(`发现Git锁文件: ${lockPath}`));
-              
-              try {
-                fs.unlinkSync(lockPath);
-                console.log(chalk.green(`成功删除Git锁文件: ${lockPath}`));
-              } catch (error) {
-                hasBusyLocks = true;
-                console.error(chalk.red(`无法删除Git锁文件 ${lockPath}:`), error);
-                console.log(chalk.yellow('文件可能正被进程使用，尝试终止Git进程后重试'));
-              }
-            }
-          });
-        }
-      } catch (error) {
-        console.log(chalk.gray(`无法检查目录 ${baseDir}: ${error.message}`));
-      }
-    } else {
-      // 直接检查具体路径
-      if (fs.existsSync(lockPattern)) {
-        foundLocks = true;
-        console.log(chalk.yellow(`发现Git锁文件: ${lockPattern}`));
-        
-        try {
-          fs.unlinkSync(lockPattern);
-          console.log(chalk.green(`成功删除Git锁文件: ${lockPattern}`));
-        } catch (error) {
-          hasBusyLocks = true;
-          console.error(chalk.red(`无法删除Git锁文件 ${lockPattern}:`), error);
-          console.log(chalk.yellow('文件可能正被进程使用，尝试终止Git进程后重试'));
-        }
-      }
+    path.join(gitDir, 'packed-refs.lock'),
+  ]
+  // 扫描 refs/heads/*.lock 与 refs/remotes/*.lock
+  const lockDirs = [path.join(gitDir, 'refs', 'heads'), path.join(gitDir, 'refs', 'remotes')]
+
+  let hasBusyLocks = false
+  const busyLocks = []
+
+  for (const lockPath of lockFiles) {
+    if (!fs.existsSync(lockPath)) continue
+    try {
+      await fsp.unlink(lockPath)
+      console.log(chalk.green(`已删除锁文件: ${lockPath}`))
+    } catch (err) {
+      hasBusyLocks = true
+      busyLocks.push({ path: lockPath, err })
+      console.error(chalk.red(`无法删除锁文件 ${lockPath}:`), err.message)
     }
-  });
-  
-  if (hasBusyLocks) {
-    // 尝试终止Git进程
-    terminateGitProcesses();
-    
-    // 再次尝试删除锁文件
-    let stillHasBusyLocks = false;
-    
-    lockFiles.forEach(lockPattern => {
-      if (!lockPattern.includes('*') && fs.existsSync(lockPattern)) {
-        try {
-          fs.unlinkSync(lockPattern);
-          console.log(chalk.green(`成功删除Git锁文件: ${lockPattern}`));
-        } catch (error) {
-          stillHasBusyLocks = true;
-          console.error(chalk.red(`仍然无法删除Git锁文件 ${lockPattern}`));
-        }
-      }
-    });
-    
-    if (stillHasBusyLocks) {
-      console.log(chalk.yellow('警告：一些Git锁文件无法删除。建议：'));
-      console.log(chalk.yellow('1. 关闭所有可能使用Git的应用程序'));
-      console.log(chalk.yellow('2. 手动删除上述锁文件'));
-      console.log(chalk.yellow('3. 重新运行发布脚本'));
-      
-      // 询问是否要继续
-      const shouldContinue = await askContinue(chalk.yellow('是否尝试继续执行？(Y/n): '));
-      
-      if (!shouldContinue) {
-        console.log(chalk.yellow('用户选择终止发布过程'));
-        process.exit(1);
-      }
-      
-      console.log(chalk.yellow('尝试继续执行，但可能会失败...'));
-    }
-  } else if (!foundLocks) {
-    console.log(chalk.gray('未发现Git锁文件，继续执行...'));
   }
-  
-  // 等待一下，确保文件系统操作完成
-  execSync('sleep 1 || ping -n 2 127.0.0.1 > nul', { stdio: 'ignore' });
+  for (const dir of lockDirs) {
+    if (!fs.existsSync(dir)) continue
+    let entries
+    try {
+      entries = await fsp.readdir(dir)
+    } catch {
+      continue
+    }
+    for (const name of entries) {
+      if (!name.endsWith('.lock')) continue
+      const p = path.join(dir, name)
+      try {
+        await fsp.unlink(p)
+        console.log(chalk.green(`已删除锁文件: ${p}`))
+      } catch (err) {
+        hasBusyLocks = true
+        busyLocks.push({ path: p, err })
+        console.error(chalk.red(`无法删除锁文件 ${p}:`), err.message)
+      }
+    }
+  }
+
+  if (hasBusyLocks) {
+    // 仅终止本脚本派生出的 git 进程(不再 `pkill -f git`)
+    console.log(chalk.yellow('锁文件被占用,尝试终止本脚本启动的 git 进程...'))
+    terminateSpawnedGitProcesses()
+    await sleep(2000)
+
+    // 重试一次
+    for (const item of busyLocks) {
+      try {
+        await fsp.unlink(item.path)
+        console.log(chalk.green(`重试后已删除: ${item.path}`))
+      } catch (err) {
+        console.error(chalk.red(`重试仍无法删除 ${item.path}:`), err.message)
+        const shouldContinue = await askContinue(
+          chalk.yellow(`是否继续发布(可能导致失败)? (Y/n): `)
+        )
+        if (!shouldContinue) {
+          throw new Error('用户选择终止发布')
+        }
+      }
+    }
+  } else {
+    console.log(chalk.gray('未发现 Git 锁文件'))
+  }
 }
 
 // 检查发布环境
 async function checkEnvironment() {
-  console.log(chalk.blue('=== 检查发布环境 ==='));
-  
+  console.log(chalk.blue('=== 检查发布环境 ==='))
+
   try {
-    // 检查Git是否可用
-    execSync('git --version', { stdio: 'ignore' });
-    
-    // 检查是否在Git仓库中
-    execSync('git rev-parse --is-inside-work-tree', { stdio: 'ignore' });
-    
-    // 清理可能的Git锁文件
-    await checkAndCleanGitLocks();
-    
-    // 检查当前分支
-    const currentBranch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
-    console.log(chalk.gray(`当前Git分支: ${currentBranch}`));
-    
-    // 如果不在主分支上，询问是否继续
+    execSync('git --version', { stdio: 'ignore' })
+    execSync('git rev-parse --is-inside-work-tree', { stdio: 'ignore' })
+    await checkAndCleanGitLocks()
+
+    const currentBranch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim()
+    console.log(chalk.gray(`当前 Git 分支: ${currentBranch}`))
+
     if (currentBranch !== 'main' && currentBranch !== 'master') {
-      const rl = createReadlineInterface();
-      
+      const rl = createReadlineInterface()
       try {
-        const answer = await rl.question(chalk.yellow(`当前不在主分支上，是否继续在 ${currentBranch} 分支上发布? (Y/n): `));
-        if (answer.toLowerCase() === 'n') {
-          throw '用户选择取消发布';
-        }
+        const answer = await rl.question(
+          chalk.yellow(`当前不在主分支上,是否继续在 ${currentBranch} 分支上发布? (Y/n): `)
+        )
+        if (answer.toLowerCase() === 'n') throw new Error('用户选择取消发布')
       } finally {
-        rl.close();
+        rl.close()
       }
     }
-    
-    // 检查工作区是否干净
+
+    // 工作区是否干净
     try {
-      execSync('git diff --quiet && git diff --staged --quiet', { stdio: 'ignore' });
-      console.log(chalk.green('Git工作区干净'));
-    } catch (e) {
-      console.log(chalk.yellow('Git工作区有未提交的更改'));
-      
-      // 显示未提交的更改
-      console.log(chalk.gray('\n未提交的更改:'));
-      execSync('git status -s', { stdio: 'inherit' });
-      console.log(''); // 空行
-      
-      const rl = createReadlineInterface();
-      
-      try {
-        const answer = await rl.question(chalk.yellow('有未提交的更改，是否继续发布? (Y/n): '));
-        if (answer.toLowerCase() === 'n') {
-          throw '用户选择取消发布';
-        }
-      } finally {
-        rl.close();
-      }
+      execSync('git diff --quiet && git diff --staged --quiet', { stdio: 'ignore' })
+      console.log(chalk.green('Git 工作区干净'))
+    } catch {
+      console.log(chalk.yellow('Git 工作区有未提交的更改:'))
+      execSync('git status -s', { stdio: 'inherit' })
+      console.log('')
+      const shouldContinue = await askContinue(
+        chalk.yellow('有未提交的更改,是否继续发布? (Y/n): ')
+      )
+      if (!shouldContinue) throw new Error('用户选择取消发布')
     }
-    
-    console.log(chalk.green('环境检查通过'));
-  } catch (error) {
-    if (error === '用户选择取消发布') {
-      console.log(chalk.yellow('发布已取消'));
-      process.exit(0);
+
+    console.log(chalk.green('环境检查通过'))
+  } catch (err) {
+    if (err.message === '用户选择取消发布') {
+      console.log(chalk.yellow('发布已取消'))
+      process.exit(0)
     }
-    
-    console.error(chalk.red('环境检查失败:'), error);
-    process.exit(1);
+    console.error(chalk.red('环境检查失败:'), err.message || err)
+    process.exit(1)
   }
 }
 
-// TSC 类型检查
+// TSC / vue-tsc 类型检查 — 走 vue-tsc(覆盖 .vue),与 dev 链路一致
 async function runTypeCheck() {
-  console.log(chalk.blue('\n=== TypeScript 类型检查 ==='));
+  console.log(chalk.blue('\n=== TypeScript 类型检查 ==='))
 
-  const frontendDir = path.join(rootDir, 'src', 'ui', 'client');
+  const frontendDir = path.join(rootDir, 'src', 'ui', 'client')
   if (!fs.existsSync(frontendDir)) {
-    console.log(chalk.yellow('前端项目目录不存在，跳过 TSC 检查'));
-    return;
+    console.log(chalk.yellow('前端项目目录不存在,跳过 TSC 检查'))
+    return
   }
 
+  // tsconfig.app.json 已永久包含 "types": ["node"](无需本脚本再 mutate)
   try {
-    console.log(chalk.gray('执行 tsc --noEmit...'));
-    execSync('npx tsc --noEmit', { cwd: frontendDir, stdio: 'inherit' });
-    console.log(chalk.green('TSC 类型检查通过'));
-  } catch (error) {
-    console.error(chalk.red('TSC 类型检查失败，请修复以上错误后重新发布'));
-    process.exit(1);
+    console.log(chalk.gray('执行 vue-tsc -b --noEmit...'))
+    execSync('npx vue-tsc -b --noEmit', { cwd: frontendDir, stdio: 'inherit' })
+    console.log(chalk.green('vue-tsc 类型检查通过'))
+  } catch (err) {
+    console.error(chalk.red('vue-tsc 类型检查失败,请修复以上错误后重新发布'))
+    process.exit(1)
   }
 }
 
-// 更新版本号
+// 更新版本号(只动 package.json,不动 lockfile——lockfile 由发版后第一次 install 同步)
 function updateVersion() {
-  console.log(chalk.blue('=== 更新版本号 ==='));
-  
-  const currentVersion = packageJson.version;
-  console.log(chalk.gray(`当前版本: ${currentVersion}`));
-  
-  // 拆分版本号
-  const versionParts = currentVersion.split('.');
-  
-  // 递增最后一位版本号
-  const lastPart = parseInt(versionParts[versionParts.length - 1], 10);
-  versionParts[versionParts.length - 1] = (lastPart + 1).toString();
-  
-  // 重组版本号
-  const newVersion = versionParts.join('.');
-  packageJson.version = newVersion;
-  
-  // 写回package.json
-  fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
-  
-  console.log(chalk.green(`版本号已更新: ${currentVersion} -> ${newVersion}`));
-  return newVersion;
+  console.log(chalk.blue('\n=== 更新版本号 ==='))
+
+  const packageJsonPath = path.join(rootDir, 'package.json')
+  const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+  const currentVersion = pkg.version
+  const parts = currentVersion.split('.')
+  const last = parseInt(parts[parts.length - 1], 10)
+  parts[parts.length - 1] = String(last + 1)
+  const newVersion = parts.join('.')
+  pkg.version = newVersion
+
+  if (DRY_RUN) {
+    console.log(chalk.yellow(`[dry-run] 跳过写入: ${currentVersion} -> ${newVersion}`))
+  } else {
+    fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
+    console.log(chalk.green(`版本号已更新: ${currentVersion} -> ${newVersion}`))
+  }
+  return newVersion
 }
 
 // 构建前端项目
 async function buildFrontend() {
-  console.log(chalk.blue('\n=== 构建前端项目 ==='));
-  
+  console.log(chalk.blue('\n=== 构建前端项目 ==='))
+
+  const frontendDir = path.join(rootDir, 'src', 'ui', 'client')
+  if (!fs.existsSync(frontendDir)) {
+    console.log(chalk.yellow('前端项目目录不存在,跳过构建'))
+    return
+  }
+
   try {
-    // 检查前端项目目录是否存在
-    const frontendDir = path.join(rootDir, 'src', 'ui', 'client');
-    if (!fs.existsSync(frontendDir)) {
-      console.log(chalk.yellow('前端项目目录不存在，跳过构建'));
-      return;
-    }
-    
-    // 检查前端依赖是否安装
-    console.log(chalk.gray('检查前端依赖...'));
-    const nodeModulesPath = path.join(frontendDir, 'node_modules');
+    const nodeModulesPath = path.join(frontendDir, 'node_modules')
     if (!fs.existsSync(nodeModulesPath)) {
-      console.log(chalk.yellow('未找到前端依赖，开始安装...'));
-      execSync('cd ./src/ui/client && npm install', { stdio: 'inherit' });
-      console.log(chalk.green('前端依赖安装完成'));
-    }
-    
-    // 安装Node.js类型定义（如果需要）
-    try {
-      const typesNodePath = path.join(nodeModulesPath, '@types', 'node');
-      if (!fs.existsSync(typesNodePath)) {
-        console.log(chalk.yellow('安装Node.js类型定义...'));
-        execSync('cd ./src/ui/client && npm install --save-dev @types/node', { stdio: 'inherit' });
+      console.log(chalk.yellow('未找到前端依赖,开始安装...'))
+      if (!DRY_RUN) {
+        execSync('npm install', { cwd: frontendDir, stdio: 'inherit' })
+        console.log(chalk.green('前端依赖安装完成'))
       }
-    } catch (error) {
-      console.log(chalk.yellow('安装Node.js类型定义失败，继续构建...'));
     }
-    
-    // 更新tsconfig.app.json以包含node类型（如果需要）
-    try {
-      const tsconfigAppPath = path.join(frontendDir, 'tsconfig.app.json');
-      if (fs.existsSync(tsconfigAppPath)) {
-        const tsconfig = JSON.parse(fs.readFileSync(tsconfigAppPath, 'utf8'));
-        let needsUpdate = false;
-        
-        if (!tsconfig.compilerOptions) {
-          tsconfig.compilerOptions = {};
-          needsUpdate = true;
-        }
-        
-        if (!tsconfig.compilerOptions.types) {
-          tsconfig.compilerOptions.types = ['node'];
-          needsUpdate = true;
-        } else if (!tsconfig.compilerOptions.types.includes('node')) {
-          tsconfig.compilerOptions.types.push('node');
-          needsUpdate = true;
-        }
-        
-        if (needsUpdate) {
-          console.log(chalk.yellow('更新tsconfig.app.json以包含Node.js类型...'));
-          fs.writeFileSync(tsconfigAppPath, JSON.stringify(tsconfig, null, 2), 'utf8');
-        }
-      }
-    } catch (error) {
-      console.log(`error ==>`, error)
-      console.log(chalk.yellow('更新tsconfig失败，继续构建...'));
+
+    console.log(chalk.gray('执行构建...'))
+    if (!DRY_RUN) {
+      execSync('npm run build', { cwd: frontendDir, stdio: 'inherit' })
     }
-    
-    // 执行构建命令
-    console.log(chalk.gray('执行构建命令...'));
-    execSync('cd ./src/ui/client && npm run build', { stdio: 'inherit' });
-    console.log(chalk.green('前端项目构建完成'));
-  } catch (error) {
-    console.error(chalk.red('前端项目构建失败:'), error);
-    
-    // 询问用户是否继续发布过程
-    console.log(chalk.yellow('\n前端构建失败，但您可以选择继续发布过程。'));
-    const rl = createReadlineInterface();
-    
-    try {
-      const answer = await rl.question(chalk.yellow('是否继续发布流程？(Y/n): '));
-      if (answer.toLowerCase() === 'n') {
-        console.log(chalk.red('发布流程已取消'));
-        process.exit(1);
-      }
-      console.log(chalk.yellow('继续发布流程...'));
-    } finally {
-      rl.close();
+    console.log(chalk.green('前端项目构建完成'))
+  } catch (err) {
+    console.error(chalk.red('前端项目构建失败:'), err.message || err)
+    const shouldContinue = await askContinue(chalk.yellow('前端构建失败,是否继续发布? (Y/n): '))
+    if (!shouldContinue) {
+      console.log(chalk.red('发布流程已取消'))
+      process.exit(1)
     }
   }
 }
 
-// 提交更改到git
+// 仅把显式白名单文件 stage,并 sanity check
+function stageReleaseFiles() {
+  console.log(chalk.gray('stage 白名单文件(避免 `git add .` 误带脏文件)...'))
+  for (const f of RELEASE_FILES) {
+    const abs = path.join(rootDir, f)
+    if (!fs.existsSync(abs)) continue
+    if (DRY_RUN) {
+      console.log(chalk.yellow(`[dry-run] git add ${f}`))
+    } else {
+      execSync(`git add ${JSON.stringify(f)}`, { stdio: 'inherit' })
+    }
+  }
+
+  if (DRY_RUN) return
+
+  // sanity check:staged 范围不能超出白名单
+  const stagedOut = execSync('git diff --cached --name-only', { stdio: ['ignore', 'pipe', 'inherit'] })
+    .toString()
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+  const unexpected = stagedOut.filter((f) => !RELEASE_FILES.includes(f))
+  if (unexpected.length) {
+    console.error(chalk.red('staged 范围超出白名单,中止提交:'))
+    for (const f of unexpected) console.error('  - ' + f)
+    process.exit(1)
+  }
+}
+
+// 提交更改到 git
 async function commitChanges(version) {
-  console.log(chalk.blue('\n=== 提交更改到Git ==='));
-  
+  console.log(chalk.blue('\n=== 提交更改到 Git ==='))
+
   try {
-    // 检查并清理可能的Git锁文件
-    await checkAndCleanGitLocks();
-    
-    // 创建提交信息，包含版本号
-    const commitMessage = `chore: 发布版本 v${version}`;
-    
-    // 禁用Git钩子以确保没有其他脚本干扰
-    console.log(chalk.gray('临时禁用Git钩子...'));
-    const gitHooksDir = path.join(rootDir, '.git', 'hooks');
-    let renamedHooks = [];
-    
-    console.log(chalk.gray('添加更改文件...'));
-    // 使用--force参数，避免可能的锁文件问题，但排除node_modules目录
-    execSync('git add .', { stdio: 'inherit' });
-    
-    // 等待一下，确保文件系统同步
-    console.log(chalk.gray('等待文件系统同步...'));
-    execSync('sleep 1 || ping -n 2 127.0.0.1 > nul', { stdio: 'ignore' });
-    
-    console.log(chalk.gray('提交更改...'));
-    
-    // 尝试提交，如果失败则重试
-    let committed = false;
-    let attempts = 0;
-    const maxAttempts = 3;
-    
+    await checkAndCleanGitLocks()
+    stageReleaseFiles()
+
+    const commitMessage = `chore: 发布版本 v${version}`
+
+    let committed = false
+    let attempts = 0
+    const maxAttempts = 3
+
     while (!committed && attempts < maxAttempts) {
-      attempts++;
-      
+      attempts++
+      if (attempts > 1) {
+        await checkAndCleanGitLocks()
+        console.log(chalk.yellow(`重试提交 (${attempts}/${maxAttempts})...`))
+        await sleep(2000)
+      }
+
       try {
-        // 检查并清理Git锁文件
-        if (attempts > 1) {
-          await checkAndCleanGitLocks();
-          console.log(chalk.yellow(`重试提交 (${attempts}/${maxAttempts})...`));
-          // 稍等更长时间
-          execSync('sleep 2 || ping -n 3 127.0.0.1 > nul', { stdio: 'ignore' });
+        if (DRY_RUN) {
+          console.log(chalk.yellow(`[dry-run] git commit --no-verify -m "${commitMessage}"`))
+          committed = true
+        } else {
+          execSync(`git commit --no-verify -m "${commitMessage}"`, { stdio: 'inherit' })
+          committed = true
         }
-        
-        // 使用--no-verify参数跳过钩子，避免可能的挂起
-        execSync(`git commit --no-verify -m "${commitMessage}"`, { stdio: 'inherit' });
-        committed = true;
-      } catch (error) {
-        if (attempts >= maxAttempts) {
-          throw error; // 重试次数用完，抛出错误
-        }
-        console.log(chalk.yellow(`提交失败，将在2秒后重试...`));
-        // 等待2秒后重试
-        execSync('sleep 2 || ping -n 3 127.0.0.1 > nul', { stdio: 'ignore' });
+      } catch (err) {
+        if (attempts >= maxAttempts) throw err
+        console.log(chalk.yellow(`提交失败,2 秒后重试...`))
+        await sleep(2000)
       }
     }
-    
-    console.log(chalk.green(`更改已提交到Git，提交信息: "${commitMessage}"`));
-    
-    // 创建版本标签
-    console.log(chalk.gray('创建版本标签...'));
-    execSync(`git tag v${version}`, { stdio: 'inherit' });
-    console.log(chalk.green(`已创建标签: v${version}`));
-    
-    // 默认推送到远程（注释掉确认提示）
-    // const rl = createReadlineInterface();
-    
-    try {
-      // const answer = await rl.question(chalk.yellow('是否推送代码和标签到远程仓库? (Y/n): '));
-      
-      // if (answer.toLowerCase() !== 'n') {
-        try {
-          // 获取当前分支
-          const branch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
-          
-          console.log(chalk.gray(`推送代码到远程仓库，分支: ${branch}...`));
-          execSync(`git push origin ${branch}`, { stdio: 'inherit' });
-          
-          console.log(chalk.gray('推送标签到远程仓库...'));
-          execSync('git push origin --tags', { stdio: 'inherit' });
-          
-          console.log(chalk.green('代码和标签已成功推送到远程仓库'));
-        } catch (pushError) {
-          console.error(chalk.red('推送到远程仓库失败:'), pushError);
-          // 继续发布过程，不终止
-        }
-      // } else {
-      //   console.log(chalk.yellow('跳过推送到远程仓库'));
-      // }
-    } finally {
-      // rl.close();
-      
-      // 恢复Git钩子
-      if (renamedHooks.length > 0) {
-        console.log(chalk.gray('恢复Git钩子...'));
-        for (const hook of renamedHooks) {
-          try {
-            fs.renameSync(hook.disabled, hook.original);
-          } catch (e) {
-            console.log(chalk.yellow(`无法恢复Git钩子: ${path.basename(hook.original)}`));
-          }
-        }
-        console.log(chalk.gray(`已恢复 ${renamedHooks.length} 个Git钩子`));
+
+    console.log(chalk.green(`已提交: "${commitMessage}"`))
+
+    // tag
+    if (DRY_RUN) {
+      console.log(chalk.yellow(`[dry-run] git tag v${version}`))
+    } else {
+      execSync(`git tag v${version}`, { stdio: 'inherit' })
+      console.log(chalk.green(`已创建标签: v${version}`))
+    }
+
+    if (SKIP_PUSH) {
+      console.log(chalk.yellow('--skip-push: 跳过 git push'))
+      return
+    }
+
+    const branch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim()
+    if (DRY_RUN) {
+      console.log(chalk.yellow(`[dry-run] git push origin ${branch}`))
+      console.log(chalk.yellow(`[dry-run] git push origin --tags`))
+    } else {
+      try {
+        console.log(chalk.gray(`推送代码到远程仓库,分支: ${branch}...`))
+        execSync(`git push origin ${branch}`, { stdio: 'inherit' })
+        console.log(chalk.gray('推送标签到远程仓库...'))
+        execSync('git push origin --tags', { stdio: 'inherit' })
+        console.log(chalk.green('代码和标签已成功推送到远程仓库'))
+      } catch (err) {
+        console.error(chalk.red('推送到远程仓库失败:'), err.message)
+        // 推送失败不阻塞 npm 发布
       }
     }
-  } catch (error) {
-    console.error(chalk.red('Git提交失败:'), error);
-    process.exit(1);
+  } catch (err) {
+    console.error(chalk.red('Git 提交失败:'), err.message || err)
+    process.exit(1)
   }
 }
 
-// 发布到NPM
+// 发布到 NPM
 async function publishToNpm() {
-  console.log(chalk.blue('\n=== 发布到NPM ==='));
-  
-  // 默认发布到NPM（注释掉确认提示）
-  // const rl = createReadlineInterface();
-  
+  console.log(chalk.blue('\n=== 发布到 NPM ==='))
+
   try {
-    // 等待用户确认
-    // const answer = await rl.question(chalk.yellow('是否发布到NPM? (Y/n): '));
-    
-    // if (answer.toLowerCase() === 'n') {
-    //   console.log(chalk.yellow('跳过发布到NPM'));
-    //   return;
-    // }
-    
-    // 执行npm发布
-    console.log(chalk.gray('执行npm发布...'));
-    try {
-      execSync('npm publish --registry=https://registry.npmjs.org/', { stdio: 'inherit' });
-      console.log(chalk.green('已成功发布到NPM'));
-      
-      // 发布成功后执行更新和查看命令
-      console.log(chalk.blue('\n=== 发布后操作 ==='));
-      
-      try {
-        console.log(chalk.gray('执行 npm run update:g...'));
-        execSync('npm run update:g', { stdio: 'inherit' });
-        console.log(chalk.green('✅ update:g 执行完成'));
-      } catch (error) {
-        console.error(chalk.red('❌ update:g 执行失败:'), error.message);
-      }
-      
-      try {
-        console.log(chalk.gray('执行 npm run npm:ls:g...'));
-        execSync('npm run npm:ls:g', { stdio: 'inherit' });
-        console.log(chalk.green('✅ npm:ls:g 执行完成'));
-      } catch (error) {
-        console.error(chalk.red('❌ npm:ls:g 执行失败:'), error.message);
-      }
-      
-    } catch (error) {
-      console.error(chalk.red('发布到NPM失败:'), error);
-      throw error;
+    if (DRY_RUN) {
+      console.log(chalk.yellow('[dry-run] npm publish --registry=https://registry.npmjs.org/'))
+      return
     }
-  } finally {
-    // rl.close();
+    execSync('npm publish --registry=https://registry.npmjs.org/', { stdio: 'inherit' })
+    console.log(chalk.green('已成功发布到 NPM'))
+
+    if (SKIP_SELF_UPDATE) {
+      console.log(chalk.yellow('--skip-self-update: 不自动 `npm install -g zen-gitsync`'))
+      return
+    }
+
+    // 发版后可选:把刚发布的版本装到全局(默认开启,可用 --skip-self-update 关掉)
+    try {
+      console.log(chalk.gray('执行 npm run update:g...'))
+      execSync('npm run update:g', { stdio: 'inherit' })
+      console.log(chalk.green('update:g 执行完成'))
+    } catch (err) {
+      console.error(chalk.red('update:g 执行失败:'), err.message)
+    }
+  } catch (err) {
+    console.error(chalk.red('发布到 NPM 失败:'), err.message || err)
+    process.exit(1)
   }
 }
 
 // 主流程
 async function main() {
-  console.log(chalk.cyan('\n🚀 开始发布流程...\n'));
-  
+  console.log(chalk.cyan(`\n🚀 开始发布流程${DRY_RUN ? '(DRY RUN)' : ''}...\n`))
+
+  if (DRY_RUN) {
+    console.log(chalk.yellow('--dry-run: 所有写操作会跳过,只打印计划'))
+    console.log(chalk.yellow('--dry-run: type-check / vue-tsc / npm run build 仍会真跑(可在失败前中止)'))
+  }
+  if (SKIP_SELF_UPDATE) console.log(chalk.yellow('--skip-self-update: 发版后不自动 npm install -g'))
+  if (SKIP_PUSH) console.log(chalk.yellow('--skip-push: 不 push git'))
+
   try {
-    // 1. 检查环境
-    await checkEnvironment();
+    await checkEnvironment()
+    await runTypeCheck()
+    const newVersion = updateVersion()
+    await buildFrontend()
+    await commitChanges(newVersion)
+    await publishToNpm()
 
-    // 2. TSC 类型检查
-    await runTypeCheck();
-
-    // 3. 更新版本号
-    const newVersion = updateVersion();
-
-    // 4. 构建前端项目
-    await buildFrontend();
-
-    // 5. 提交更改到Git
-    await commitChanges(newVersion);
-
-    // 6. 发布到NPM
-    await publishToNpm();
-    
-    console.log(chalk.green('\n🎉 发布完成！'));
-  } catch (error) {
-    console.error(chalk.red('\n❌ 发布失败:'), error);
-    process.exit(1);
+    console.log(chalk.green('\n🎉 发布完成!'))
+  } catch (err) {
+    console.error(chalk.red('\n❌ 发布失败:'), err.message || err)
+    process.exit(1)
   }
 }
 
-// 启动流程
-main().catch(error => {
-  console.error(chalk.red('\n❌ 未捕获的错误:'), error);
-  process.exit(1);
-}); 
+main().catch((err) => {
+  console.error(chalk.red('\n❌ 未捕获的错误:'), err)
+  process.exit(1)
+})

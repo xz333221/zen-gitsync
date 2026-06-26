@@ -13,15 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// GUI 后端独立启动入口(供 `npm run start:server` / `dev:server` 使用)。
+// 仅启 Express + Socket.IO,不接管 CLI argv。`--no-open` 抑制自动打开浏览器。
+//
+import startUIServer from './src/ui/server/index.js'
 
-// 专门的服务器启动文件
-import startUIServer from './src/ui/server/index.js';
+const noOpen = process.argv.slice(2).includes('--no-open')
 
-// 解析命令行参数
-const args = process.argv.slice(2);
-const noOpen = args.includes('--no-open');
-
-console.log(`启动Zen GitSync服务器${noOpen ? '（不打开浏览器）' : '（自动打开浏览器）'}...`);
-
-// 启动服务器
-startUIServer(noOpen, true);
+startUIServer(noOpen, true)

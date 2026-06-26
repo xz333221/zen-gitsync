@@ -12,14 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// package.json `main` 入口。供「以库方式 import zen-gitsync」的消费者使用:
+//   import config from 'zen-gitsync'        // 配置对象
+//   import { startServer } from 'zen-gitsync'  // 启动 GUI 后端
+// CLI/GUI 的常规入口仍是 `bin.g = ./src/gitCommit.js`,不要从这里跑。
+//
 import config from './src/config.js'
 import startUIServer from './src/ui/server/index.js'
 
-// 导出配置
 export { config as default }
 
-// 导出启动服务器函数
-export async function startServer(noOpen = false) {
-  // 当通过 npm script 启动服务器时，应该保存端口信息
-  return startUIServer(noOpen, true) // 传递 savePort=true
+/**
+ * 启动 GUI 后端(Express + Socket.IO)。
+ * @param {boolean} [noOpen=false] true = 不自动打开浏览器
+ * @returns {Promise<void>}
+ */
+export function startServer(noOpen = false) {
+  // savePort=true: 当通过 npm script 启动时,把真实端口写到 .port 文件,
+  // 以便 dev-ping / vite.config / 同进程 IPC 读取。
+  return startUIServer(noOpen, true)
 }

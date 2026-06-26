@@ -306,6 +306,19 @@ If you change `.gitattributes` rules, renormalize the index in one shot:
 git add --renormalize .
 ```
 
+### Package manager
+
+All `package.json` scripts use **npm** (`npm install`, `npm run dev`, `npm run release`, etc.). The repo also has a `pnpm-lock.yaml` checked in for reproducibility on machines that prefer pnpm — both managers work because `package.json` is the single source of truth. The CLI's own `bin` entry and most devDeps are pinned to caret ranges; either manager will resolve to compatible versions.
+
+If you switch managers, delete the other manager's lockfile so only one is in the tree:
+
+```bash
+rm -f pnpm-lock.yaml   # when running on npm
+rm -f package-lock.json # when running on pnpm
+```
+
+`.gitignore` already lists both `pnpm-lock.yaml` and `package-lock.json`, so neither is forced into version control.
+
 ---
 
 ## CLI Commands
