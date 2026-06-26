@@ -39,6 +39,54 @@ export interface Job {
   claudeSessionId?: string | null
 }
 
+// ── Workbench 任务相关类型 ──────────────────────────────────────────
+
+export interface Attachment {
+  id: string
+  originalName: string
+  mimeType: string
+  size: number
+  ext: string
+  absolutePath?: string
+  createdAt?: string
+}
+
+export interface SubTask {
+  id: string
+  title: string
+  desc: string
+  status: 'todo' | 'running' | 'done' | 'error'
+  promptOverride: string
+  attachments?: Attachment[]
+  error?: string
+  errorAt?: string
+}
+
+export interface Task {
+  id: string
+  title: string
+  desc: string
+  promptId: string | null
+  type?: 'simple' | 'complex'
+  simpleOverride?: string
+  projectPath?: string
+  sequential?: boolean
+  subtasks: SubTask[]
+  status: string
+  attachments?: Attachment[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface Prompt {
+  id: string
+  name: string
+  content: string
+  projectPath?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 /** 完整形态——管理页 /jobs/list 列表项、/jobs/:id 详情用 */
 export interface JobFull extends Job {
   taskTitle: string

@@ -42,58 +42,8 @@ import JobLogDetails from '@components/JobLogDetails.vue'
 import ExecutionLogManager from '@components/ExecutionLogManager.vue'
 import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
 import { statusColor } from '@/utils/jobStatus'
-import type { Job } from '@/types/workbench'
-
-// ── 类型 ────────────────────────────────────────────────────────────────────
-interface Prompt {
-  id: string
-  name: string
-  content: string
-  // 提示词所属项目根路径。空字符串 = 全局提示词(所有项目都看得到);
-  // 非空 = 只在指定项目的右侧下拉里出现。旧数据(没有该字段)视同全局。
-  projectPath?: string
-  createdAt?: string
-  updatedAt?: string
-}
-interface Attachment {
-  id: string
-  originalName: string
-  mimeType: string
-  size: number
-  ext: string
-  absolutePath?: string
-  createdAt?: string
-}
-interface SubTask {
-  id: string
-  title: string
-  desc: string
-  status: 'todo' | 'running' | 'done' | 'error'
-  promptOverride: string
-  attachments?: Attachment[]
-  error?: string
-  errorAt?: string
-}
-interface Task {
-  id: string
-  title: string
-  desc: string
-  promptId: string | null
-  // 'simple'=不需要拆分,执行时直接跑 desc; 'complex'=需要拆子任务
-  type?: 'simple' | 'complex'
-  // 仅 simple 任务有效:覆盖预置提示词的内容,留空走 task.promptId
-  simpleOverride?: string
-  // 任务所属项目根路径（创建时记录），用于侧边栏按项目分组显示
-  projectPath?: string
-  // 仅 complex 任务有效：true（默认）= 子任务连续执行，任意一个出错/取消就停后续；
-  // false = 单个子任务独立，失败不影响后续（旧行为）
-  sequential?: boolean
-  subtasks: SubTask[]
-  status: string
-  attachments?: Attachment[]
-  createdAt?: string
-  updatedAt?: string
-}
+import type { Job, Task, SubTask, Prompt } from '@/types/workbench'
+import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 
 // ── 状态 ────────────────────────────────────────────────────────────────────
 const prompts = ref<Prompt[]>([])
@@ -1373,12 +1323,6 @@ async function continueChat(t: Task, message: string) {
   }
 }
 
-/**
- * 简单任务详情区"继续对话"输入框 v-model 草稿,按 task.id 分桶,
- * 避免切换任务时把上一个任务正在编辑的续聊文字带过去。
- */
-const continueDraft = reactive<Record<string, string>>({})
-
 async function onContinueSendFromChat(t: Task, payload: { text: string; files: SelectedFile[] }) {
   const msg = payload.text.trim()
   if (!msg) return
@@ -1601,187 +1545,13 @@ onBeforeUnmount(() => {
 })
 
 // ── 日志详情面板已抽到 components/JobLogDetails.vue（自动滚动 / 复制 / 截断都在那里）
-
-// ── 附件上传（主任务 + 子任务共用） ────────────────────────────────────
-const ALLOWED_MIME = new Set([
-  'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
-  'image/bmp', 'image/svg+xml',
-  'application/pdf',
-  'text/plain', 'text/markdown', 'text/x-markdown', 'text/csv',
-  'application/json', 'text/json', 'text/x-log'
-])
-const ALLOWED_EXT_HINT = '.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.pdf,.txt,.md,.csv,.json,.log'
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
-const uploadingTargets = ref<Record<string, boolean>>({})
-const pasteHoverId = ref<string | null>(null)
-
-function isUploading(id: string): boolean { return !!uploadingTargets.value[id] }
-
-function ensureFile(blob: Blob, fallbackName: string): File {
-  if (blob instanceof File) return blob
-  const mime = blob.type || 'application/octet-stream'
-  return new File([blob], fallbackName, { type: mime })
-}
-
-/** 附件归属：主任务 或 子任务，决定 URL/存储位置 */
-type AttachmentTarget =
-  | { kind: 'task'; task: Task | null }
-  | { kind: 'sub'; task: Task | null; sub: SubTask }
-
-function targetKey(t: AttachmentTarget): string {
-  return t.kind === 'task' ? `task-${t.task?.id ?? ''}` : `sub-${t.sub.id}`
-}
-function targetAttachments(t: AttachmentTarget): Attachment[] {
-  const arr = t.kind === 'task' ? t.task?.attachments : t.sub.attachments
-  return Array.isArray(arr) ? (arr as Attachment[]) : []
-}
-function setTargetAttachments(t: AttachmentTarget, att: Attachment[]) {
-  if (t.kind === 'task') { if (t.task) t.task.attachments = att }
-  else t.sub.attachments = att
-}
-function targetUploadUrl(t: AttachmentTarget): string {
-  return t.kind === 'task'
-    ? `/api/workbench/tasks/${t.task?.id ?? ''}/attachments`
-    : `/api/workbench/subtasks/${t.sub.id}/attachments`
-}
-function targetDeleteUrl(t: AttachmentTarget, attId: string): string {
-  return t.kind === 'task'
-    ? `/api/workbench/tasks/${t.task?.id ?? ''}/attachments/${attId}`
-    : `/api/workbench/subtasks/${t.sub.id}/attachments/${attId}`
-}
-
-function onAttachmentPaste(e: ClipboardEvent, t: AttachmentTarget) {
-  if (!e.clipboardData) return
-  const imageItems = Array.from(e.clipboardData.items).filter(
-    it => it.kind === 'file' && it.type.startsWith('image/')
-  )
-  if (imageItems.length > 0) {
-    e.preventDefault()
-    for (const it of imageItems) {
-      const blob = it.getAsFile()
-      if (!blob) continue
-      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-      uploadAttachment(t, ensureFile(blob, `paste-${stamp}.${ext}`))
-    }
-    return
-  }
-  const fileItems = Array.from(e.clipboardData.items).filter(
-    it => it.kind === 'file' && !it.type.startsWith('image/')
-  )
-  if (fileItems.length > 0) {
-    e.preventDefault()
-    for (const it of fileItems) {
-      const blob = it.getAsFile()
-      if (!blob) continue
-      uploadAttachment(t, ensureFile(blob, blob.name || 'pasted-file'))
-    }
-  }
-}
-
-function onAttachmentDrop(e: DragEvent, t: AttachmentTarget) {
-  pasteHoverId.value = null
-  const files = Array.from(e.dataTransfer?.files || [])
-  files.forEach(f => uploadAttachment(t, f))
-}
-
-async function uploadAttachment(t: AttachmentTarget, file: File) {
-  if (file.size > MAX_ATTACHMENT_BYTES) {
-    ElMessage.error(`「${file.name}」${$t('@WORKBENCH:超过 5MB 限制')}`)
-    return
-  }
-  if (!ALLOWED_MIME.has(file.type) && !file.name.match(/\.(png|jpg|jpeg|gif|webp|bmp|svg|pdf|txt|md|markdown|csv|json|log)$/i)) {
-    ElMessage.error(`${$t('@WORKBENCH:不支持的文件类型')}（${file.name}）`)
-    return
-  }
-  const existing = targetAttachments(t)
-  if (existing.length >= 9) {
-    ElMessage.error($t('@WORKBENCH:单个任务最多 9 个附件'))
-    return
-  }
-  // 客户端去重：相同 originalName + size 已存在则直接复用，重复上传/粘贴不会
-  // 再产生第二条记录。key 不用 mimeType——同名同 size 的不同文件几乎不可能，
-  // 但万一真撞了，后端会原样落盘，本地去重后用户看到的就是同一条（acceptable）。
-  const dup = existing.find(a => a.originalName === file.name && a.size === file.size)
-  if (dup) {
-    ElMessage.info(`${file.name} ${$t('@WORKBENCH:已存在，已复用')}`)
-    return
-  }
-  const key = targetKey(t)
-  uploadingTargets.value[key] = true
-  try {
-    const res = await fetch(targetUploadUrl(t), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'X-Original-Name': file.name,
-        'X-Mime-Type': file.type || 'application/octet-stream'
-      },
-      body: file
-    }).then(r => r.json())
-    if (res.success) {
-      const list = targetAttachments(t)
-      list.push(res.attachment)
-      setTargetAttachments(t, list)
-      ElMessage.success(`${$t('@WORKBENCH:已添加：')}${file.name}`)
-    } else {
-      ElMessage.error(res.error || $t('@WORKBENCH:上传失败'))
-    }
-  } catch (err: any) {
-    ElMessage.error($t('@WORKBENCH:上传失败') + '：' + (err && err.message || err))
-  } finally {
-    uploadingTargets.value[key] = false
-  }
-}
-
-async function removeAttachment(t: AttachmentTarget, att: Attachment) {
-  try {
-    await ElMessageBox.confirm(
-      $t('@WORKBENCH:删除附件「{name}」？', { name: att.originalName }),
-      $t('@WORKBENCH:确认'),
-      { type: 'warning' }
-    )
-  } catch { return }
-  const res = await fetch(targetDeleteUrl(t, att.id), { method: 'DELETE' }).then(r => r.json())
-  if (res.success) {
-    const list = targetAttachments(t).filter(a => a.id !== att.id)
-    setTargetAttachments(t, list)
-    ElMessage.success($t('@WORKBENCH:已删除'))
-  } else {
-    ElMessage.error(res.error || $t('@WORKBENCH:删除失败'))
-  }
-}
-
-function pickAttachmentFile(t: AttachmentTarget) {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = ALLOWED_EXT_HINT
-  input.multiple = true
-  input.onchange = () => {
-    const files = Array.from(input.files || [])
-    files.forEach(f => uploadAttachment(t, f))
-  }
-  input.click()
-}
-
-
-const IMAGE_EXTS_UI = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'])
-// 兜底：除了 ext，还看 mime/originalName，防止 ext 缺失或非标准扩展（如 jpe / heic 改写后）导致
-// imageList 为空、previewUrls.length === 0，最终 viewer 模板 v-if 不满足而完全不渲染
-function isImageAttachment(att: Attachment): boolean {
-  const ext = String(att?.ext || '').toLowerCase()
-  if (ext && IMAGE_EXTS_UI.has(ext)) return true
-  const mime = String(att?.mimeType || '').toLowerCase()
-  if (mime.startsWith('image/')) return true
-  const name = String(att?.originalName || '').toLowerCase()
-  return /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(name)
-}
-
-function humanSize(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 / 1024).toFixed(2)} MB`
-}
+// ── 附件上传已抽到 composables/useWorkbenchAttachments.ts ────────────
+const {
+  pasteHoverId,
+  isUploading, isImageAttachment, humanSize,
+  onAttachmentPaste, onAttachmentDrop,
+  uploadAttachment, removeAttachment, pickAttachmentFile
+} = useWorkbenchAttachments()
 </script>
 
 <template>
