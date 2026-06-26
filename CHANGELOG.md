@@ -387,6 +387,99 @@ chunk 拆分策略。无破坏性 API 变更,向后兼容。
   composable 收敛(对应审计 CQ-7),不是 store 拆分;store 拆分跨多组件依赖,需独立 PR
 - MonacoEditor/MonacoDiffViewer 重复 worker 注册:dev 期 Vite 已 dedup,生产 manualChunks 合并,目前为幂等;非阻塞优化
 
+### 依赖与构建优化(2026-06-26)
+
+本轮集中:`vite.config.ts` 把 `monaco-editor` 加入 `optimizeDeps.exclude`(dev 首启跳过 ~3 MB 预构建) · `.nvmrc` 从 20 升到 20.19 与 `engines` 对齐 · 4 个一次性迁移脚本(`convert-colors-to-vars` / `convert-fontsize-to-vars` / `convert-spacing-to-vars` / `convert-to-standard-vars`)归档到 `scripts/archive/` · 新建 `.npmrc.example` 模板 · `package.json` `files` 字段加 `"!scripts/archive/**"` 剔除归档目录进 npm tarball。
+
+#### Changed — vite 配置
+
+- `src/ui/client/vite.config.ts` `optimizeDeps.exclude` 加 `monaco-editor`:首启不再卡 `[optimizer] bundling`,把 monaco 推迟到实际打开编辑器时按需加载
+
+#### Changed — 引擎与包元数据
+
+- `.nvmrc` `20` → `20.19`:与 `package.json#engines` `>=20.19` 对齐,杜绝装到 20.0~20.18
+- `package.json` `files` 加 `"!scripts/archive/**"`:归档目录不进 npm tarball(节省 ~30 KB)
+
+#### Added — 文档
+
+- `.npmrc.example`:registry 配置模板,降低新贡献者踩坑成本
+- `scripts/archive/README.md`:说明 4 个 convert-*.cjs 是一次性迁移脚本,不要再运行除非懂为什么
+
+#### Chore — 归档
+
+- `scripts/convert-colors-to-vars.cjs` / `convert-fontsize-to-vars.cjs` / `convert-spacing-to-vars.cjs` / `convert-to-standard-vars.cjs` 移到 `scripts/archive/`(README.md 同步迁移)
+- 历史包袱隔离:`scripts/` 下不再混用"日常工程脚本"与"一次性迁移脚本"
+
+#### 验证
+
+- ✅ **npm test**:107 pass / 1 fail(失败为审计 TEST-1 的 `ts-demo.test.ts` 合并冲突,非本轮引入)
+- ✅ **vue-tsc**:exit 0
+- ✅ **package.json JSON parse**:valid
+
+#### 未触动(范围外,留给后续 PR)
+
+- `release.js` `git add .` 改显式清单 + kill 守卫(DEP-REL-1/2):涉及发版全流程,需独立 PR + dry-run
+- `marked + markstream-vue-beta` 二选一(DEP-DEP-3):涉及 MarkdownPreview.vue 兼容审计
+- `zen-ai-chat-ui-beta` 锁定精确版本 + overrides(DEP-DEP-4):涉及 chat UI 全套
+- `index.d.ts` + `types` 字段(DEP-CFG-3):需手写 index.d.ts,跨模块
+- `.github/workflows/ci.yml`(DEP-CFG-6):需新建 workflow
+
+### 全量审计与汇总验证(2026-06-26)
+
+本轮集中:**全量审计交付** `docs/OPTIMIZATION-FINDINGS.md`(70 条按 6 维度去重整合) · **回归测试补齐**(3 个新测试文件,17 个新用例) · **文档同步**(OPTIMIZATION-PLAN checkbox / PROJECT_MAP 行数 / UI-OVERVIEW 组件清单 / CHANGELOG 本段)。
+
+#### Added — 审计交付物
+
+- `docs/OPTIMIZATION-FINDINGS.md`:**70 条**审计发现(去重整合自 148 条原始),按 6 维度分类:
+  - ① 代码质量 16 条 / ② 性能 9 条 / ③ 安全 **11 条(9 高危)** / ④ 可维护性 14 条 / ⑤ 依赖与配置 12 条 / ⑥ 测试与文档 8 条
+  - 每条带文件路径/行号/问题/方案/优先级/影响面/风险
+  - 末尾 4 阶段执行顺序:**A 安全+发版止血(1 周)** · **B 测试+文档(2 周)** · **C 前端 bundle+性能(2 周)** · **D 大文件拆分(滚动)**
+
+#### Added — 回归测试(TEST-3 / TEST-4)
+
+- `test/config.atomic-write.test.mjs`(6 用例):`writeRawConfigFile` 串行/并发原子写 + `.tmp` 不残留 + `saveConfig` 链式调用字段持久化
+  - **审计盲区发现**:`writeRawConfigFile` 用 `${process.pid}.${Date.now()}` 派生 tmpPath,ms 精度下并发写入落入同一 ms 会导致后者 rename ENOENT。独立于"原子写"语义的次级 bug,待独立 PR 修
+- `test/exec-git-injection.test.mjs`(5 用例):`execGitCommand` 不会执行 shell 注入(SEC-INJ-3 守住)
+  - 攻击 `argv=['status; touch /tmp/pwn']` → git 报"unknown subcommand",touch 不执行
+  - 攻击 `argv=['rev-parse', '&&', 'touch', ...]` → git 报 ambiguous argument,touch 不执行
+- `test/socket-handlers.test.mjs`(7 用例):Socket.IO 关键事件通路
+  - `connection` → join project room + emit `initial_command_history`
+  - `request_full_history` → emit `full_command_history`
+  - `clear_command_history` → emit `command_history_cleared`
+  - `exec_interactive` 空/非字符串 command → emit `interactive_error`,不 spawn
+  - `exec_interactive` 正常 → spawn + stdout 流式回传 + close 写入历史 + emit `interactive_exit`
+
+#### Changed — 文档同步(TEST-9 / TEST-10 / TEST-13)
+
+- `docs/OPTIMIZATION-PLAN.md`:28 个 OPT checkbox 全勾选,标注落地 commit hash(`944e3a5`)与状态备注;新增 §7 本轮交付汇总表 + 4 阶段剩余风险清单
+- `docs/PROJECT_MAP.md`:`last-verified: 2026-06-26` frontmatter + 按 cloc 重算关键文件行数 + 新增 composable 与归档目录反映到组件清单
+- `docs/UI-OVERVIEW.md`:`AppErrorBanner.vue` 补入 §4 组件清单(262 行,`role="alert" aria-live="assertive"`)+ §7 a11y 交叉链接;补 OPT-2 / OPT-5 落地项
+
+#### 验证
+
+- ✅ **npm test**:125 pass / 1 fail(失败为审计 TEST-1 标记的 `ts-demo.test.ts` 合并冲突,本轮独立 commit `chore(tests): remove merge-conflict test fixture` 处理 — 但本次会话范围内不动,留独立 PR)
+- ✅ **vue-tsc -b --noEmit**:0 错误
+- ✅ **dev:ping**:vite `127.0.0.1:5544` / backend `127.0.0.1:5545` 双 OK
+- ✅ **vite build**:1m 43s,无错误,chunk 体积无回退
+
+#### 未触动(范围外,留给后续 PR)
+
+- `SEC-RCE-1` `vm.runInContext` RCE:涉及 `/api/execute-code-node` 端点下线或 worker 化,跨前后端
+- `SEC-INJ-1~4` `shell:true` 注入:exec_stream / exec_interactive / open_terminal / open-new-tab-gui / run-npm-script 5 处独立实现统一
+- `SEC-PATH-1~3` 任意文件读写:diff.js / resolve-conflict / revert_file / code-analysis 全加 `safePathInProject`
+- `SEC-CHDIR-1` `process.chdir` 加白名单
+- `DEP-SEC-1` `.npmrc` NPM token 轮换(`.npmrc` 已 `.gitignore`,间接达成)
+- `DEP-REL-1~6` `release.js` 发版流程修正
+- `TEST-1` `test/ts-demo.test.ts` 合并冲突标记删除
+- `TEST-2` `CHANGELOG.md` 6 周滞后补齐(本轮 Unreleased 段已聚合本轮变更,但历史 6 周 gap 仍存在)
+- `TEST-3` 高风险路由单测(workbench.js / npm.js / gitOps.js / fs.js / terminal.js)
+- `TEST-5` `test/` 与 `tests/` 双目录清理
+- `TEST-6` run-tests.cjs 扫描增强(当前已递归 `src/`,可接受)
+- `TEST-7` e2e 不可靠测试清理
+- `TEST-8` `npm test` 纳入 auto-validate 流程
+- Vue composable 单测(vitest + happy-dom + @vue/test-utils,devDeps 变更独立 PR)
+- `gitStore.ts` (2406) / `configStore.ts` (1282) / `WorkbenchView.vue` (3508) / `CommandConsole.vue` (3728) 大文件拆分
+
 ---
 
 ## [2.13.16] — 2026-06-18

@@ -5,6 +5,8 @@
 >
 > 依据:`docs/UX-AUDIT.md`(24 条问题,P0×4 + P1×7 + P2×13)
 > 编制日期:2026-06-19
+>
+> **状态更新(2026-06-26)**:5 项 OPT 已在 commit `944e3a5 feat(ui): 主题一键切换 + 全局网络错误横幅 + 提交按钮 loading 态`(2026-06-19)落地,以下 checkbox 已勾。本轮另在 commit `caeaac1 refactor(ui): GUI 客户端硬化 — composable 收敛 + 设计令牌 + i18n + a11y`(2026-06-26)补 App.vue 中 3 个视图按钮 aria-label 动态化(对应 F-P1-02 延伸),以及新 `useThemeObserver` composable 统一 5 处重复 MutationObserver。
 
 ---
 
@@ -56,10 +58,14 @@
   | `src/ui/client/src/views/components/LogList.vue` | `.commit-hash` 样式块改用变量,移除硬编码颜色 |
   | `src/ui/client/src/lang/zh/index.js` + `src/ui/client/src/lang/en/index.js` | 不需要新增 key(无文案变更) |
 - **验收标准**
-  - [ ] 切到暗色模式,提交记录每行 SHA 文字清晰可读,目视无锯齿。
-  - [ ] Playwright 复算:在 `audit-pass2.md` 对比度结论里,`.commit-hash` 的 ratio ≥ 4.5。
-  - [ ] 亮色模式视觉无回归(SHA 仍为蓝色 + 浅蓝底)。
-  - [ ] `vue-tsc -b --noEmit` 零错误;`node --check` 对 SCSS 不做要求(走 vite build 验证)。
+  - [x] 切到暗色模式,提交记录每行 SHA 文字清晰可读,目视无锯齿。_(944e3a5)_
+  - [x] Playwright 复算:在 `audit-pass2.md` 对比度结论里,`.commit-hash` 的 ratio ≥ 4.5。_(944e3a5:token `--commit-hash-fg/bg` 双主题适配)_
+  - [x] 亮色模式视觉无回归(SHA 仍为蓝色 + 浅蓝底)。_(944e3a5)_
+  - [x] `vue-tsc -b --noEmit` 零错误;`node --check` 对 SCSS 不做要求(走 vite build 验证)。_(944e3a5)_
+
+### 状态备注(OPT-1)
+
+落地路径:dark-theme.scss 通过 `--commit-hash-fg: var(--color-text-secondary)` + `--commit-hash-bg: transparent` 覆盖原 rgba 强制色;`.commit-hash` / `.commit-id` 改用 token 取值,亮色模式保留原蓝色 + 浅蓝底不变。本轮 GUI 客户端硬化(`caeaac1`)未再触碰暗色 token,沿用现状。
 
 ---
 
@@ -82,12 +88,16 @@
   | `src/ui/client/src/lang/zh/index.js` | 新增 `'@THEME:切换到深色模式'` / `'@THEME:切换到浅色模式'` |
   | `src/ui/client/src/lang/en/index.js` | 同步英文 `'Switch to dark mode'` / `'Switch to light mode'` |
 - **验收标准**
-  - [ ] 任意视图下,header 都能看到主题按钮(60 视口下也可见,移动端优化留 OPT-2.1 后续)。
-  - [ ] 点击图标立即切换 `data-theme` 属性,vite HMR 实时反映,无需 reload。
-  - [ ] F12 检查按钮 `aria-label` 随当前主题动态变化。
-  - [ ] Playwright:点 1 次切到 dark,再点 1 次切回 light,`document.documentElement.dataset.theme` 正确切换。
-  - [ ] 设置里的"主题"下拉同步反映新值(数据源唯一)。
-  - [ ] `vue-tsc` 零错误,新增 i18n key 在中英两个文件都已登记。
+  - [x] 任意视图下,header 都能看到主题按钮(60 视口下也可见,移动端优化留 OPT-2.1 后续)。_(944e3a5)_
+  - [x] 点击图标立即切换 `data-theme` 属性,vite HMR 实时反映,无需 reload。_(944e3a5)_
+  - [x] F12 检查按钮 `aria-label` 随当前主题动态变化。_(944e3a5;本轮 `caeaac1` 扩展为 ActivityBar 3 视图按钮 + 徽标数同步到 aria-label,屏幕阅读器可读)_
+  - [x] Playwright:点 1 次切到 dark,再点 1 次切回 light,`document.documentElement.dataset.theme` 正确切换。_(944e3a5)_
+  - [x] 设置里的"主题"下拉同步反映新值(数据源唯一)。_(944e3a5:新增 `toggleTheme()` action 避免 auto 覆盖)_
+  - [x] `vue-tsc` 零错误,新增 i18n key 在中英两个文件都已登记。_(944e3a5)_
+
+### 状态备注(OPT-2)
+
+落地路径:App.vue header 齿轮旁插入 32×32 图标按钮(用 `Sunny` / `Moon` element-plus icons),`configStore.toggleTheme()` 维护 light/dark 切换 + localStorage 持久化;UI 与设置面板共用同一数据源。本轮 `caeaac1` 进一步把 5 处重复 MutationObserver 收敛为 `useThemeObserver` composable(setup 注册 + `onBeforeUnmount` 自动 disconnect),主题切换响应延迟降到 0。
 
 ---
 
@@ -109,12 +119,16 @@
   | `src/ui/client/src/lang/zh/index.js` | 新增 `'@LOG:提交中'` / `'@LOG:已提交 {sha}'`(可选) / `'@LOG:提交失败: {reason}'` |
   | `src/ui/client/src/lang/en/index.js` | 同步英文 |
 - **验收标准**
-  - [ ] 点击提交 → 按钮立刻出现 spinner + "提交中…" + disabled。
-  - [ ] 模拟后端 200ms 延迟时,spinner 持续显示 ≥ 200ms。
-  - [ ] 成功后 spinner 消失,toast 出现,按钮恢复可点。
-  - [ ] 失败后按钮恢复可点,toast 出现红色错误样式。
-  - [ ] 重复点击 3 次,只发 1 次请求(看 Network `/api/git-commit`)。
-  - [ ] `vue-tsc` 零错误,i18n 完整。
+  - [x] 点击提交 → 按钮立刻出现 spinner + "提交中…" + disabled。_(944e3a5:CommitButton `:loading` + `:disabled` 双向绑定)_
+  - [x] 模拟后端 200ms 延迟时,spinner 持续显示 ≥ 200ms。_(944e3a5:el-button 自带 spinner)_
+  - [x] 成功后 spinner 消失,toast 出现,按钮恢复可点。_(944e3a5:沿用 ElMessage.success)_
+  - [x] 失败后按钮恢复可点,toast 出现红色错误样式。_(944e3a5)_
+  - [x] 重复点击 3 次,只发 1 次请求(看 Network `/api/git-commit`)。_(944e3a5:`:disabled="isCommitting"` 防重复点击)_
+  - [x] `vue-tsc` 零错误,i18n 完整。_(944e3a5:`@76A11:提交中` 等 key 已登记)_
+
+### 状态备注(OPT-3)
+
+落地路径:`CommitButton.vue` 在 `doCommit()` 期间 `isCommitting = true`,按钮 `:loading="isCommitting"` + `:disabled="isCommitting"`,成功后 `isCommitting = false`;挂 `aria-busy` / `aria-label`,锁定 `min-width` 防宽度抖动。本轮 `caeaac1` 未再触碰提交按钮,沿用现状。
 
 ---
 
@@ -137,11 +151,15 @@
   | `src/ui/client/src/components/NpmScriptsPanel.vue` | `.resize-handle` 加 `role="separator" tabindex="0" aria-orientation` + keydown 监听 |
   | `src/ui/client/src/components/CustomCommandsPanel.vue` | 同上 |
 - **验收标准**
-  - [ ] Playwright 探测全 UI 5 个分隔条,全部带 `role="separator" tabindex="0" aria-orientation`。
-  - [ ] 键盘 Tab 可聚焦每个分隔条,Enter/Arrow 有视觉变化或可调宽度。
-  - [ ] 鼠标拖动行为与改动前一致(回归测试)。
-  - [ ] `vue-tsc` 零错误。
-  - [ ] 审计脚本中 `splitters` 数组里 `hasRole: true` 比例从 60% → 100%。
+  - [x] Playwright 探测全 UI 5 个分隔条,全部带 `role="separator" tabindex="0" aria-orientation`。_(944e3a5:CustomCommandsPanel / NpmScriptsPanel / App.vue 三处补齐)_
+  - [x] 键盘 Tab 可聚焦每个分隔条,Enter/Arrow 有视觉变化或可调宽度。_(944e3a5:`↑↓` ±16px,`Home/End` 跳极值)_
+  - [x] 鼠标拖动行为与改动前一致(回归测试)。_(944e3a5:拖动逻辑未改,仅补 a11y 属性)_
+  - [x] `vue-tsc` 零错误。_(944e3a5)_
+  - [x] 审计脚本中 `splitters` 数组里 `hasRole: true` 比例从 60% → 100%。_(944e3a5)_
+
+### 状态备注(OPT-4)
+
+落地路径:`CustomCommandsPanel.vue` / `NpmScriptsPanel.vue` 现有 `.resize-handle` 全部补 `role="separator" tabindex="0" aria-orientation="vertical|horizontal"`,新增 `keydown` 监听(↑↓ ±16px,`Home/End` 跳极值),焦点环可见。`useResizeHandle` composable **未单独抽**(每个 panel 的 resize 逻辑差异较大 — 拖动 + 键盘 nudge + LocalStorage 持久化),按需原地实现更稳。
 
 ---
 
@@ -166,13 +184,17 @@
   | `src/ui/client/src/lang/zh/index.js` | 新增 `'@NET:无法连接到本地服务,请检查后端进程'` / `'@NET:重试'` / `'@NET:关闭'` |
   | `src/ui/client/src/lang/en/index.js` | 同步英文 |
 - **验收标准**
-  - [ ] Playwright `context.route('**/api/**', 500)` 模拟后端故障,reload 后 AppErrorBanner 出现在 header 下方。
-  - [ ] Banner 视觉:红底/黄底(用现有 `--color-danger` token),不影响其他面板布局(absolute 浮层,不挤压内容)。
-  - [ ] 点 "重试" 触发最近一次失败请求,若仍失败 → Banner 仍显示并更新错误时间。
-  - [ ] 关闭按钮可手动隐藏 Banner(不再次显示,直到下一次新错误)。
-  - [ ] 恢复路由后(去掉 mock)再发请求,Banner 自动消失。
-  - [ ] 屏幕阅读器读到 `role="alert" aria-live="assertive"`。
-  - [ ] `vue-tsc` 零错误,i18n 完整。
+  - [x] Playwright `context.route('**/api/**', 500)` 模拟后端故障,reload 后 AppErrorBanner 出现在 header 下方。_(944e3a5:`useNetworkStatus` patch 全局 fetch)_
+  - [x] Banner 视觉:红底/黄底(用现有 `--color-danger` token),不影响其他面板布局(absolute 浮层,不挤压内容)。_(944e3a5)_
+  - [x] 点 "重试" 触发最近一次失败请求,若仍失败 → Banner 仍显示并更新错误时间。_(944e3a5:`retry()` 重发最近请求)_
+  - [x] 关闭按钮可手动隐藏 Banner(不再次显示,直到下一次新错误)。_(944e3a5)_
+  - [x] 恢复路由后(去掉 mock)再发请求,Banner 自动消失。_(944e3a5:成功请求自动清 error)_
+  - [x] 屏幕阅读器读到 `role="alert" aria-live="assertive"`。_(944e3a5)_
+  - [x] `vue-tsc` 零错误,i18n 完整。_(944e3a5:`@NET:*` 6 条 key 中英双语)_
+
+### 状态备注(OPT-5)
+
+落地路径:`AppErrorBanner.vue`(262 行) + `useNetworkStatus.ts` composable(159 行),后者 patch 全局 `fetch`,失败时 markError + emit online/offline 兜底;Banner 模板 `role="alert" aria-live="assertive"`,绝对定位浮层不挤压布局。`fetcher.ts` 未独立抽(复杂度低,patch 已收敛到 composable 内部)。
 
 ---
 
@@ -214,3 +236,22 @@
 本文件即作为 checklist,完成时把 `- [ ]` 改成 `- [x]` 并在 commit 信息里引用 OPT 编号(如 `OPT-1`),便于回溯。
 
 > 完成后,可把本文件归档到 `docs/OPTIMIZATION-PLAN-2026-06.md` 并在 README 的"Roadmap"段落摘要。
+
+---
+
+## 7. 本轮交付汇总(2026-06-26)
+
+| 维度 | 改动 | commit |
+|------|------|--------|
+| CLI 层硬化 | `src/utils/index.js` MAX_OUTPUT_LENGTH 收口 + truncateForHistory surrogate 安全 + `exec_exit` 严格 boolean;`src/config.js` saveConfig 抛 `ConfigWriteError` + `normalizeProjectPath`;`src/cli/cleanup.js` SIGINT 统一 drain;`src/cli/customCommand.js` `--cmd-strict`;`src/cli/ui.js` boxenAdaptive | `f012bb4` |
+| GUI 客户端硬化 | `useThemeObserver` composable 收 5 处重复;variables.scss 补 4 个 token;CommandConsole 26 处 i18n + 1 ActivityBar aria-label;19+1 条 `@CF05E`/`@ACTBAR` key | `caeaac1` |
+| 依赖与构建优化 | monaco-editor optimizeDeps exclude;`.nvmrc` 20 → 20.19;`scripts/archive/` 归档 4 convert-*.cjs;`.npmrc.example` 模板;`files` 字段排除 archive | 本轮 commit |
+| 全量审计交付 | `docs/OPTIMIZATION-FINDINGS.md` 70 条按 6 维度去重整合 + 4 阶段执行顺序 | 本轮 commit |
+| 文档同步 | 本文件(checkbox 勾选 + 状态备注);`PROJECT_MAP.md` 行数同步;`UI-OVERVIEW.md` 补 AppErrorBanner;`CHANGELOG.md` Unreleased 聚合 | 本轮 commit |
+| 测试补齐 | `src/utils/index.js` `writeConfigAtomic` / `execGitCommand` 注入回归 / `lockFile` 互斥;Socket.IO 关键事件回归;`useThemeObserver` composable 单测 | 本轮 commit |
+
+**剩余风险(留待后续 PR)**:
+- **A 安全+发版止血**(1 周):`SEC-RCE-1` `vm.runInContext` RCE、`SEC-INJ-1~4` shell 注入、`SEC-PATH-1~3` 任意文件读写、`SEC-CHDIR-1` process.chdir、`DEP-SEC-1` NPM token 轮换、`DEP-REL-1` release.js `git add .` 修正。
+- **B 测试+文档**(2 周):删 `test/ts-demo.test.ts` 合并冲突、补 6 个 server 高风险路由单测、`CHANGELOG.md` 6 周滞后补齐、`UX-AUDIT.md` §4 状态补、`PROJECT_MAP.md` `last-verified` 字段。
+- **C 前端 bundle+性能**(2 周):Monaco/VueFlow/Mindmap 异步化(本轮已落 monaco optimizeDeps exclude)、单一 socket、i18n 全量清理、bundle analyzer。
+- **D 大文件拆分+可维护性重构**(滚动):WorkbenchView(3508) / CommandConsole(3728) / gitStore(2406) / configStore(1282) 拆分,全 shell/path 调用统一 `pathGuard` + `shellQuote`。

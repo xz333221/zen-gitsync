@@ -411,12 +411,18 @@ pill 999px 胶囊徽标
 ## 七、可访问性 / 焦点 / 交互
 
 `recent commit 13c6727 refactor(ui): 可访问性(WCAG 2.1 AA)全面提升,补全局焦点环 + 弹窗焦点陷阱 + 键盘可达`
+`recent commit 944e3a5 feat(ui): 主题一键切换 + 全局网络错误横幅 + 提交按钮 loading 态`
+`recent commit caeaac1 refactor(ui): GUI 客户端硬化 — composable 收敛 + 设计令牌 + i18n + a11y`
 
 - **焦点环**:所有可交互元素 `:focus-visible` 用 `--focus-ring` 或 `--focus-ring-soft`
 - **拖拽分隔条键盘可达**:`role="separator"` + `tabindex="0"` + `aria-orientation` + `aria-valuenow/min/max`,左右/上下方向键 ±2% 调整
 - **对话框焦点陷阱**:`CommonDialog` 统一处理 Esc 关闭 / 焦点循环
 - **配置损坏 banner**:`role="alert" aria-live="polite"`,包含可点击"查看原因"tooltip
-- **活动栏按钮**:`aria-pressed` 反映 activeView 状态,`aria-label` 提供语义名称
+- **网络错误横幅**(`AppErrorBanner.vue`,944e3a5 落地):`role="alert" aria-live="assertive"`,patch 全局 fetch,失败时顶部红条,带"重试"+"关闭",绝对定位不挤压布局;`useNetworkStatus` composable(159 行)负责 fetch patch + online/offline 事件兜底
+- **主题切换按钮**(Header,944e3a5):齿轮旁 32×32 图标,`aria-label` 动态反映当前可切换到的主题
+- **提交按钮 loading 态**(CommitButton,944e3a5):`:loading="isCommitting"` + `:disabled="isCommitting"`,挂 `aria-busy` + `aria-label`,锁定 `min-width` 防宽度抖动
+- **提交哈希对比度**(OPT-1,944e3a5):暗色 `.commit-hash` / `.commit-id` 通过 `--commit-hash-fg/bg` token 提升对比度 ≥ 4.5:1(WCAG AA)
+- **活动栏按钮**:`aria-pressed` 反映 activeView 状态,`aria-label` **动态包含徽标数**(caeaac1 增强)— Git/Editor/Workbench 各自带"X 个未提交/未保存/任务正在执行"后缀,屏幕阅读器可读
 - **loading 容器**:`role="status" aria-live="polite"`,spinner SVG `aria-hidden="true"`
 - **减弱 motion**:`@media (prefers-reduced-motion: reduce)` 全局降速,spinner 降到 3s
 - **i18n**:所有用户可见文案必须经 `$t('@<namespace>:<key>')` 包裹,语言文件在 `src/ui/client/src/lang/{zh,en}/index.js`(由 `.claude/rules/i18n-check.md` 强制)
@@ -433,13 +439,14 @@ pill 999px 胶囊徽标
 | `GitStatus` | `views/components/GitStatus.vue` |
 | `CommitForm` | `views/components/CommitForm.vue` |
 | `LogList` | `views/components/LogList.vue` |
-| `CommandConsole` | `components/CommandConsole.vue` |
+| `CommandConsole` | `components/CommandConsole.vue`(本轮 26 处 i18n 收敛) |
 | `RemoteRepoCard` | `components/RemoteRepoCard.vue` |
-| `AppVersionBadge` | `components/AppVersionBadge.vue` |
+| `AppVersionBadge` | `components/AppVersionBadge.vue`(本轮 2 处 token 替换) |
 | `BranchSelector` | `components/BranchSelector.vue` |
 | `DirectorySelector` | `components/DirectorySelector.vue`(顶置变体 `variant="header"`) |
-| `ActivityBar` | `components/ActivityBar.vue` |
+| `ActivityBar` | `components/ActivityBar.vue`(本轮 3 按钮 aria-label 动态化) |
 | `InstanceSwitcher` | `components/InstanceSwitcher.vue` |
+| `AppErrorBanner` | `components/AppErrorBanner.vue`(**944e3a5 新增,262 行,role="alert" aria-live="assertive"**) |
 
 ### 视图(KeepAlive 缓存)
 | 组件 | 路径 | 说明 |
@@ -476,9 +483,12 @@ pill 999px 胶囊徽标
 
 ### 工具
 - `stores/`:6 个 Pinia store(configStore / gitStore / editorTabs / instancesStore / localeStore / workbenchStatus)
-- `composables/`:Vue 3 组合式工具(useGlobalLoading / useSuccessModal / 等)
+- `composables/`:Vue 3 组合式工具
+  - `useThemeObserver.ts`(caeaac1 新增,87 行)— 统一 5 处重复 MutationObserver,响应式 + 命令式双用法,setup 注册 + onBeforeUnmount 自动 disconnect
+  - `useNetworkStatus.ts`(944e3a5 新增,159 行)— 全局 fetch patch + online/offline 事件兜底
+  - `useGlobalLoading` / `useSuccessModal` / 等
 - `utils/`:路径处理、文件图标类、editor 语言、job 状态色、文件树构建、合并去重等
-- `lang/`:静态 `$t` 函数 + `static.d.ts` 类型 + `zh/` `en/` 翻译
+- `lang/`:静态 `$t` 函数 + `static.d.ts` 类型 + `zh/` `en/` 翻译(本轮 +28 条 key)
 - `locales/`:Vue-i18n 配置(动态 locale,zh-CN / en-US)
 - `types/`:TS 类型定义(workbench, 等)
 - `plugins/`:Vue 插件
