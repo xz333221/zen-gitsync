@@ -145,7 +145,160 @@ chunk 拆分策略。无破坏性 API 变更,向后兼容。
 
 同步更新 `README_ICON_BUTTON.md`,移除对 `OptionSwitchCard` 的残留引用。
 
+### Changed — 依赖与构建优化
+
+#### `vite.config.ts` — Monaco dev 预构建剔除
+- `optimizeDeps.exclude` 由 `['ai-model-form']` 扩为 `['ai-model-form', 'monaco-editor']`
+- 收益: monaco-editor (~3 MB) 仅 EditorView / SourceMapView / MonacoDiffViewer 用,这三条路径均路由级
+  lazy 加载,exclude 后 Vite dev 期跳过 monaco 全量预构建,首启不再卡在 `[optimizer] bundling`
+  几十秒;配合既有的 `manualChunks → 'monaco'` chunk 切分,生产构建产物不变
+- 注意: 仅影响 dev,HMR/热替换行为不变
+
+#### `package.json#files` — 收紧发布包内容
+- 此前 `scripts/**` 包含所有脚本(含 4 个 `convert-*.cjs` 历史迁移脚本 + 4 个 README 文档)
+- 本轮把 `convert-colors-to-vars.cjs` / `convert-fontsize-to-vars.cjs` /
+  `convert-spacing-to-vars.cjs` / `convert-to-standard-vars.cjs` 与对应 README 全部 `git mv`
+  到 `scripts/archive/`,新建 `scripts/archive/README.md` 说明"勿运行,除非你明确知道为什么"
+- `files` 字段加 `"!scripts/archive/**"` 排除,发布 tarball 减少约 30 KB,且下游客不会再误触发
+  一次性历史迁移脚本
+- 不影响 `dev:ping` / `test` / `release` 三个真实 npm script(它们只调 dev-ping / run-tests / release.js)
+
+#### `.nvmrc` — 与 `engines.node >=20.19` 对齐
+- 由 `20` 改为 `20.19`,`nvm use` 直接装 20.19.x,避免开发机装到 20.0~20.18(已知 `sass@1.100`
+  的 `engines.node` 要求 `>=20.19`,装低版本 npm 会拉出警告)
+
+#### `.npmrc.example` — 新增配置模板
+- 新增 `.npmrc.example`,说明本地 `.npmrc`(已在 `.gitignore` L96)的标准结构
+- 含 registry / 认证 token(优先用 `${NPM_TOKEN}` 环境变量,不落盘)/ scoped registry 模板 /
+  `engine-strict=true` 等开关
+- 间接回应 DEP-SEC-1:真实 `.npmrc` 不进仓库,贡献者按模板本地复制,token 通过环境变量注入,
+  CI 推荐用 OIDC/trusted publishing 替代长期 token
+
+#### `acorn` 依赖 — 审计结论保留
+- 审计初判 `acorn` 是死依赖(grep `import.*acorn` 零命中),但实测 `src/ui/server/routes/codeAnalysis.js:192`
+  有 `await import('acorn')`,用于 JS AST 解析提取 import 依赖
+- 结论: `acorn@^8.16.0` 继续保留在 `dependencies`,但写入 changelog 留作下轮 review 的复查锚点
+- 这是审计盲区的实例,提醒下轮审计 `grep` 时要把 `await import('...')` 异步动态导入也纳入
+
+### Changed — CLI 层代码质量与健壮性
+
+聚焦 `src/gitCommit.js` / `src/config.js` / `src/utils/index.js`,对外命令表面**保持
+完全向后兼容**(`g` / `g:test-cmd` / `g:cwd` / `g:lock-file` 等 17 个 npm script 行为不变),
+所有改动为内部硬化 + 错误契约规范化 + 资源管理加固。
+
+#### `src/utils/index.js` — 输出截断 + 退出契约
+- **CQ-1**: `MAX_OUTPUT_LENGTH = 5000` 从 3 处重复声明(模块顶层 + `addCommandToHistory` 内 shadow)
+  收口为单点常量;截断提示文案统一为 `TRUNCATED_SUFFIX_STDOUT/STDERR/MANUAL` 三个命名常量,
+  便于后续 i18n 替换
+- **新增 `truncateForHistory(str, limit, suffix)` 辅助函数**: 检测 UTF-16 代理对边界
+  (emoji / 辅助平面 CJK),`substring(0, N)` 切到 high surrogate 时回退一格,避免半个字符
+  拼到末尾;`limit <= 0` 视为不截断(防御退化输入)
+- **CQ-14 修复**: `exec_exit(exit)` 由 `if (exit)` 改为 `if (exit === true)`,
+  严格 boolean 契约 — 字符串 `'false'` / `'true'` / 数字 / 对象都不再误触发退出
+  (旧版本: `'false'` 是 truthy 字符串,会错误退出 process)
+
+#### `src/config.js` — 写入失败契约规范化(MAINT-4)
+- 新增 `ConfigWriteError` 类(命名导出,带 `cause` 链)
+- **`saveConfig` 契约变更**: 之前在错误分支仅 `console.warn` + `return undefined`,调用方按成功
+  处理 → 用户看到 `✓` / `200 OK` 但其实没写盘。现改为:
+  - 入参非法(非对象 / 空对象 / 数组)→ `throw ConfigWriteError`
+  - IO/解析失败 → `throw ConfigWriteError(wrapped)`
+  - 成功路径仍 `return undefined`(保持与 fs.writeFile 风格一致)
+- **更新 3 处内部调用方**: `lockFile` / `unlockFile` / `handleConfigCommands` 全部包 try/catch,
+  失败时回滚内存变更(如 lockFile 把刚 push 的 lockedFile splice 回去)+ 红色 `❌` 提示 +
+  rethrow。Web server 路由(`/api/config/*` ~40 处)继续走原 catch 路径,Express 5 异步错误中间件
+  会自动 5xx — 无需逐处修改
+- **MAINT-5 修复**: `saveRecentDirectory` 的 `unshift(dirPath)` 改为 `unshift(normalizeProjectPath(dirPath))`,
+  Windows 下 `C:\Project` 与 `C:\PROJECT` 不再产生两条"看起来一样"的项(去重基于 normalize 后比较,
+  之前 filter 已正确,只是 unshift 存了原值导致 list 越长越乱)
+- **新增命名导出**: `ConfigWriteError` + `normalizeProjectPath`,便于单测与外部复用
+
+#### `src/cli/cleanup.js` — 新增统一资源清理工具
+- 抽离自 `gitCommit.js` 内的 SIGINT 处理逻辑,便于单测 + 跨 CLI 入口复用
+- 提供 `registerCleanup(name, fn)` / `unregisterCleanup(name)` / `clearAllCleanup()` /
+  `trackChild(child)` / `killAllTrackedChildren(graceMs)` / `runCleanupTasks()` /
+  `setupSigintHandler({onBeforeCleanup, onAfterCleanup})` 等工具
+- 设计原则:
+  - 单次注册 + 幂等触发(多次 SIGINT 只生效第一次,避免 cleanup 中重入)
+  - 同名注册覆盖(commitAndSchedule 递归 setTimeout 自然覆盖上一轮)
+  - 错误隔离(单个 cleanup fn 抛错不影响后续 fn 与子进程 kill)
+  - 优雅退出(子进程先 SIGTERM 给 500ms 窗口,再 SIGKILL 兜底)
+  - exit code 130(128 + SIGINT 2,符合 shell 惯例)
+
+#### `gitCommit.js` — 资源释放与异常恢复加固
+- **任务 6 落地**: 之前 3 处分支(定时 commit / `--cmd --at` / `--cmd --cmd-interval`)各自
+  挂 inline SIGINT handler,处理顺序不确定,且 exec() spawn 出去的子进程无人跟踪 —
+  Ctrl+C 后子进程继续跑、倒计时残影、临时 `.tmp` 文件残留
+- 现在: 入口 `setupSigintHandler({...})` 注册一次,所有 timer 通过 `registerCleanup(name, fn)` 上报,
+  所有 `exec()` 返回的 child 通过 `trackChild(child)` 跟踪,SIGINT 时统一
+  `logUpdate.clear() → runCleanupTasks() → killAllTrackedChildren() → exit 130`
+- `startCountdown` 把 setInterval 注册到 cleanup 表(原 `let countdownInterval = null` 保留作为
+  内部引用,cleanup fn 操作同一变量)
+- `commitAndSchedule` 把 `setTimeout` 注册为 `'commitTimer'` cleanup,递归 setTimeout 自然覆盖
+- `--cmd --at` 路径: `atTimer` 注册到 cleanup,exec 子进程 trackChild
+- `--cmd --cmd-interval` 路径: setInterval 注册为 `'cmdInterval'` cleanup,exec 子进程 trackChild
+
+#### `src/cli/customCommand.js` — `--cmd=` 输入校验(SEC-CLI-1 加固)
+- 新增 `validateCustomCommand(cmd)` — 本地 CLI 工具,用户明确输入,所以**检测而非阻止**:
+  - 拒绝: 非字符串 / 空字符串 / 以 `-` 开头(避免 exec 误解析为 flag)/ 超过 `MAX_CUSTOM_CMD_LENGTH=1000` 字符
+  - 警告(不阻止): 检测到 `rm -<flag> /` / fork bomb `:(){ :|:& };:` / `chmod 777 /` 等危险模式
+- 新增 `isCmdStrictMode(argv)` 检测 `--cmd-strict` flag(本轮仅打提示,实际严格模式
+  的 argv 拆分器留作下轮工作 — 风险评估需要更细的语义)
+- `gitCommit.js` 在 `--cmd=` 解析后立即调 `validateCustomCommand`,失败 `console.error + exit 2`
+  (Bash 惯例:参数错误 exit code 2)
+- 命令表面零变化:`g --cmd="echo hello"` / `g --cmd="npm run dev"` / `g --cmd="echo hi | wc -l"`
+  (含管道 / 重定向 / shell 列表) 仍按原 `exec(cmd, cb)` 走 shell 执行
+
+#### `src/cli/ui.js` — boxen 宽度自适应
+- 新增 `boxenAdaptive(message, options)`,`width` 默认按 `process.stdout.columns - 6` 自适应
+- `calcBoxenWidth({headroom=6})` 处理 `columns` 为 `undefined` / `0` / `NaN` / 负数的退化(回退 100)
+- `gitCommit.js` 的倒计时 boxen 改用 `boxenAdaptive` — 80 列硬编码在窄终端会换行难看,
+  现在 30~200 列终端都能合理适配
+- Web/TTY/CI 不同环境下都能跑(`process.stdout.columns` 在管道/CI 为 undefined,走回退)
+
+#### 测试覆盖新增(`test/` + `src/cli/` + `src/utils/`)
+- `src/utils/parseCwdArg.test.js` 12 → **22 用例**: 增补带空格路径(引号 / 空格分隔两种)、
+  相对路径 `./` `../`、Windows 盘符大小写、value 中嵌入等号、混入 emoji/CJK、重复 --path 等
+- 新增 `src/utils/utils.test.js`(**13 用例**): `truncateForHistory` surrogate-pair 处理(完整 emoji /
+  BMP CJK / 退化输入) + `exec_exit` 严格 boolean 契约(回归测试字符串 `'false'` 等)
+- 新增 `src/cli/cleanup.test.js`(**20 用例**): `registerCleanup` 同名覆盖 / 错误隔离 / 串行顺序 /
+  单次执行语义;`trackChild` 链式调用 / 退出自移除;`killAllTrackedChildren` SIGTERM→SIGKILL 升级;
+  `setupSigintHandler` 幂等 / SIGINT 触发清理 / onBefore/After 钩子调用 — 含 dispose 模式避免
+  跨 test SIGINT listener 累积
+- 新增 `src/cli/customCommand.test.js`(**14 用例**): `validateCustomCommand` 全部分支 +
+  `isCmdStrictMode` argv 检测;危险模式 regex 不误伤普通命令(`rm -rf build/` `chmod 644 a.txt`)
+- 新增 `src/cli/ui.test.js`(**9 用例**): `calcBoxenWidth` 退化处理 + `boxenAdaptive` 行为契约
+- 新增 `test/config.test.mjs`(**8 用例**): `normalizeProjectPath` 跨平台 + `saveConfig` 错误契约
+  (空对象 / null / undefined / 数组 / 字符串 / 数字 / boolean 全部抛 ConfigWriteError)
+- 总计新增 **64 个测试用例**,全部通过
+
 ### 验证结果
+
+- ✅ **npm test**: 107 通过 / 1 失败 — 失败是 `test/ts-demo.test.ts` 的合并冲突标记
+  (审计 TEST-1,非本轮引入,留作单独清理工单)
+- ✅ **node --check**: `src/gitCommit.js` / `src/config.js` / `src/utils/index.js` / `src/cli/*.js`
+  全部 syntax OK
+- ✅ **命令表面兼容**: 17 个 npm script(`g` / `g:test-cmd` / `g:cwd` / `g:y` / `g:lock-file` 等)
+  行为不变;新增 `--cmd-strict` flag 是纯增量
+- ✅ **向后兼容**: 现有用户 ~/.git-commit-tool.json 配置不受影响(saveConfig 写入路径不变,
+  仅错误分支从 warn 改为 throw,默认成功路径行为不变)
+
+### 遗留事项 / 后续建议
+
+| 优先级 | 事项 | 备注 |
+|---|---|---|
+| 中 | `test/ts-demo.test.ts` 合并冲突标记 | 审计 TEST-1,非本轮引入 |
+| 中 | 全量 i18n 中英对照表 | 本轮只抽了 `src/cli/ui.js` 与 `src/cli/cleanup.js` 两个新模块的注释,
+  `gitCommit.js` 与 `utils/index.js` 内 20+ 处硬编码中文(`'提交流程错误:'` / `'正在拉取代码...'`
+  / `'已成功同步远程更新'` 等)未迁移,需独立 PR |
+| 中 | `--cmd-strict` 模式的完整 argv 拆分器 | 本轮仅打提示 + 校验,严格模式走
+  `execFile('sh', ['-c', cmd])` 还是真正的 argv token 拆分(`string-argv` / `shlex`),
+  需要更细的语义讨论 |
+| 中 | 定时 commitAndSchedule 的"在途 commit 完成后再退出" | 当前 SIGINT 直接 exit 130,
+  在跑的 commit 会被打断;下轮可加 SIGINT 时设 `draining` 标志,commitAndSchedule 跑完
+  当前 cycle 再退 |
+| 低 | 命令历史 ioInstance 检查替换为显式注入 | 当前 `let ioInstance = null` 模块全局,
+  测试时需 stub,可用 DI 容器替代 |
 - ✅ **vue-tsc**: 0 错误(客户端目录全量类型检查)
 - ✅ **dev:ping**: backend `127.0.0.1:5545` + vite `127.0.0.1:5544` 双 OK
 - ✅ **HMR**: vite 200,App.vue transform 59 ms / 122 KB

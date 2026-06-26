@@ -84,3 +84,92 @@ test('--cwd 优先 --path 之前出现', () => {
     '/c'
   )
 })
+
+// ========== 边界用例扩展(2026-06-26 增补) ==========
+
+test('带空格的路径(带引号包裹)', () => {
+  // POSIX/macOS 常见: --path="/Users/me/My Project"
+  // 解析行为:eqIdx 取第一个 `=`,整段 `--path=` 之后保留引号本身,
+  // 由下游 getCwd → process.chdir 或 exec cwd 自行去引号(shell 词法在 child_process 那层)
+  assert.equal(
+    parseCwdArg(['node', 'g.js', '--path="/Users/me/My Project"']),
+    '"/Users/me/My Project"'
+  )
+})
+
+test('带空格的路径(无引号 + 空格分隔形式)', () => {
+  // --path <value> 形式,value 含空格
+  assert.equal(
+    parseCwdArg(['node', 'g.js', '--path', '/Users/me/My Project']),
+    '/Users/me/My Project'
+  )
+})
+
+test('相对路径 ./ 与 ../', () => {
+  // 用户在子目录下用 --path=./repo 触发相对路径解析,
+  // parseCwdArg 只做字符串切片,不解析;是否 resolve 由 getCwd 决定
+  assert.equal(parseCwdArg(['--path=./repo']), './repo')
+  assert.equal(parseCwdArg(['--path=../sibling']), '../sibling')
+  assert.equal(parseCwdArg(['--path', './inner']), './inner')
+})
+
+test('Windows 盘符 C:\\Project 不被特殊处理', () => {
+  // 解析器对盘符大小写不敏感,字符串原样返回;
+  // 真正的 case-insensitive 去重在 normalizeProjectPath(config.js)层做
+  assert.equal(
+    parseCwdArg(['node', 'g.js', '--path=C:\\Project']),
+    'C:\\Project'
+  )
+  assert.equal(
+    parseCwdArg(['node', 'g.js', '--path=c:\\project']),
+    'c:\\project'
+  )
+  assert.equal(
+    parseCwdArg(['node', 'g.js', '--path=D:/work']),
+    'D:/work'
+  )
+})
+
+test('value 中嵌入等号不被截断', () => {
+  // --path=/a=b → indexOf 取第一个 `=`,value 保留嵌入等号
+  // 例: --path=/opt/some=weird-name
+  assert.equal(
+    parseCwdArg(['--path=/opt/some=weird-name']),
+    '/opt/some=weird-name'
+  )
+  // 多重等号同理
+  assert.equal(
+    parseCwdArg(['--path=x=y=z']),
+    'x=y=z'
+  )
+})
+
+test('--path= 仅在 argv 末尾也安全返回 null', () => {
+  // 防御:argv 解析不抛
+  assert.equal(parseCwdArg(['--path=']), null)
+})
+
+test('argv 中混入无关 unicode 不影响解析', () => {
+  // 中间混 emoji / CJK,只关心 --path 的值
+  assert.equal(
+    parseCwdArg(['node', 'g.js', '🚀', '--path=/repo', '中文']),
+    '/repo'
+  )
+})
+
+test('--path 等号紧贴无空格', () => {
+  // --path=/repo(无空格) vs --path /repo(空格)
+  // 行为应一致
+  assert.equal(
+    parseCwdArg(['--path=/repo']),
+    parseCwdArg(['--path', '/repo'])
+  )
+})
+
+test('重复 --path 取首个出现', () => {
+  // 已经测过,这里再确认带空格的重复
+  assert.equal(
+    parseCwdArg(['--path=/first with space', '--path=/second']),
+    '/first with space'
+  )
+})

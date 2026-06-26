@@ -241,7 +241,13 @@ function execSyncGitCommand(command, options = {}) {
 // Add a command history array to store commands and their results
 const commandHistory = [];
 const MAX_HISTORY_SIZE = 100;
-const MAX_OUTPUT_LENGTH = 5000; // Limit the output length to avoid memory issues
+// 输出截断上限 — 单点常量,避免在 execGitCommand / addCommandToHistory /
+// 其他未来 history 写入点之间漂移导致截断行为不一致。
+// 截断提示也集中在这里,所有调用方用同一个文案,便于后续 i18n 替换。
+const MAX_OUTPUT_LENGTH = 5000;
+const TRUNCATED_SUFFIX_STDOUT = '\n... (output truncated)';
+const TRUNCATED_SUFFIX_STDERR = '\n... (error output truncated)';
+const TRUNCATED_SUFFIX_MANUAL = '...[truncated]';
 
 // 添加一个变量来保存Socket.io实例
 let ioInstance = null;
@@ -303,14 +309,14 @@ function execGitCommand(command, options = {}) {
       let truncatedStderr = stderr;
       let isStdoutTruncated = false;
       let isStderrTruncated = false;
-      
+
       if (stdout && stdout.length > MAX_OUTPUT_LENGTH) {
-        truncatedStdout = stdout.substring(0, MAX_OUTPUT_LENGTH) + '\n... (output truncated)';
+        truncatedStdout = truncateForHistory(stdout, MAX_OUTPUT_LENGTH, TRUNCATED_SUFFIX_STDOUT);
         isStdoutTruncated = true;
       }
-      
+
       if (stderr && stderr.length > MAX_OUTPUT_LENGTH) {
-        truncatedStderr = stderr.substring(0, MAX_OUTPUT_LENGTH) + '\n... (error output truncated)';
+        truncatedStderr = truncateForHistory(stderr, MAX_OUTPUT_LENGTH, TRUNCATED_SUFFIX_STDERR);
         isStderrTruncated = true;
       }
 
@@ -416,8 +422,6 @@ function getCommandHistory() {
 
 // Function to manually add command to history (for commands not using execGitCommand)
 function addCommandToHistory(command, stdout = '', stderr = '', error = null, executionTime = 0) {
-  const MAX_OUTPUT_LENGTH = 5000;
-
   // 防御:历史里的 command 必须始终是字符串,防止前端 item.command.trim() 抛错
   if (Array.isArray(command)) {
     command = command.join(' ')
@@ -428,8 +432,8 @@ function addCommandToHistory(command, stdout = '', stderr = '', error = null, ex
   // Truncate outputs if too long
   const isStdoutTruncated = stdout.length > MAX_OUTPUT_LENGTH;
   const isStderrTruncated = stderr.length > MAX_OUTPUT_LENGTH;
-  const truncatedStdout = isStdoutTruncated ? stdout.substring(0, MAX_OUTPUT_LENGTH) + '...[truncated]' : stdout;
-  const truncatedStderr = isStderrTruncated ? stderr.substring(0, MAX_OUTPUT_LENGTH) + '...[truncated]' : stderr;
+  const truncatedStdout = isStdoutTruncated ? truncateForHistory(stdout, MAX_OUTPUT_LENGTH, TRUNCATED_SUFFIX_MANUAL) : stdout;
+  const truncatedStderr = isStderrTruncated ? truncateForHistory(stderr, MAX_OUTPUT_LENGTH, TRUNCATED_SUFFIX_MANUAL) : stderr;
   
   const historyItem = {
     command,
@@ -619,9 +623,36 @@ async function printGitLog() {
 }
 
 function exec_exit(exit) {
-  if (exit) {
+  // 仅当显式传 true 时退出;空值/0/'false'/'no'/其他非真值都按"不退出"处理。
+  // 之前的 truthy 判断会把字符串 'false' 误判为 true(非空字符串都是 truthy),
+  // 调用方传 '--exit=false' 等解析出来的字符串时会错误退出。
+  if (exit === true) {
     process.exit()
   }
+}
+
+/**
+ * 按 char 边界安全截断,避免切断 UTF-16 代理对(emoji / 辅助平面 CJK)。
+ * 原 substring(0, N) 在 N-1 是 high surrogate 时会把半个字符拼到末尾,
+ * 前端 history 渲染可能显示 '�'。本函数检测这种情况并向前回退 1 个码元。
+ *
+ * @param {string} str
+ * @param {number} limit - 最大字符数(<=0 视为"不截断",原样返回)
+ * @param {string} suffix - 截断提示后缀
+ * @returns {string}
+ */
+function truncateForHistory(str, limit, suffix) {
+  if (typeof str !== 'string') return str;
+  if (!Number.isFinite(limit) || limit <= 0 || str.length <= limit) return str;
+  // 码元 = UTF-16 code unit;length 已经是码元数,但 surrogate pair 占 2 个码元。
+  const cutAt = limit;
+  const code = str.charCodeAt(cutAt - 1);
+  // 0xD800–0xDBFF = high surrogate,后面必须跟 low surrogate 才完整;
+  // 如果在 limit 处正好停在 high surrogate,回退一格避免半个 emoji/罕见汉字。
+  if (code >= 0xD800 && code <= 0xDBFF) {
+    return str.substring(0, cutAt - 1) + suffix;
+  }
+  return str.substring(0, cutAt) + suffix;
 }
 
 function judgeUnmerged(statusOutput) {
@@ -1091,6 +1122,7 @@ export {
   coloredLog, errorLog, execSyncGitCommand,
   execGitCommand, getCommandHistory, addCommandToHistory, // Add command history exports
   clearCommandHistory,
+  truncateForHistory, // 暴露便于测试与外部复用(单测会 import 这个验证 surrogate-pair 回退)
   checkAndClearGitLock,
   registerSocketIO, // 导出注册Socket.io的函数
   getCwd, parseCwdArg, judgePlatform, showHelp, judgeLog, printGitLog,

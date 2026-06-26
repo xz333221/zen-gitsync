@@ -176,24 +176,36 @@ async function loadConfig() {
   };
 }
 
+// 配置写入失败的错误类型,让上层 catch 后能区分是参数错误还是 IO 错误
+class ConfigWriteError extends Error {
+  constructor(message, cause) {
+    super(message);
+    this.name = 'ConfigWriteError';
+    if (cause) this.cause = cause;
+  }
+}
+
 // 异步保存配置
+// 契约变更(2026-06-26):之前在错误分支仅 console.warn + return undefined,
+// 调用方按成功处理 → 用户看到 ✓ / 200 OK 但其实没写盘(MAINT-4)。
+// 现在改为:参数非法 → 抛 ConfigWriteError;IO/解析失败 → 抛 ConfigWriteError(wrapped)。
+// 成功路径仍然返回 undefined,保持与大多数 fs.writeFile 风格一致。
 async function saveConfig(config) {
   if(!config || typeof config !== 'object' || Array.isArray(config)){
-    console.warn(chalk.yellow('⚠️ 配置文件为空，已取消写入以避免覆盖。')); 
-    console.warn(chalk.gray(`文件: ${configPath}`));
-    return;
+    throw new ConfigWriteError(`saveConfig: 入参必须是普通对象,实际收到 ${Array.isArray(config) ? 'array' : typeof config}`);
   }
   if (Object.keys(config).length === 0) {
-    console.warn(chalk.yellow('⚠️ 配置文件为空，已取消写入以避免覆盖。')); 
-    console.warn(chalk.gray(`文件: ${configPath}`));
-    return;
+    throw new ConfigWriteError('saveConfig: 配置对象为空,已取消写入以避免覆盖');
   }
   const key = getCurrentProjectKey();
   const state = await safeLoadRaw();
   if (!state.ok) {
-    console.warn(chalk.yellow('⚠️ 解析配置文件失败，已取消写入以避免覆盖。')); 
-    console.warn(chalk.gray(`文件: ${configPath}`));
-    return;
+    const cause = state.error;
+    const detail = cause?.message ? String(cause.message) : String(cause);
+    throw new ConfigWriteError(
+      `解析配置文件失败,已取消写入以避免覆盖。\n文件: ${configPath}\n原因: ${detail}`,
+      cause
+    );
   }
 
   const raw = state.obj; // 保留现有顶层键
@@ -234,7 +246,16 @@ async function lockFile(filePath) {
 
   if (!config.lockedFiles.includes(normalizedPath)) {
     config.lockedFiles.push(normalizedPath);
-    await saveConfig(config);
+    try {
+      await saveConfig(config);
+    } catch (err) {
+      // 写入失败时回滚内存变更,避免"以为锁了实际没锁"
+      const idx = config.lockedFiles.lastIndexOf(normalizedPath);
+      if (idx > -1) config.lockedFiles.splice(idx, 1);
+      console.error(chalk.red(`❌ 锁定失败: "${normalizedPath}"`));
+      console.error(chalk.gray(err.message));
+      throw err;
+    }
     console.log(chalk.green(`✓ 文件已锁定: "${normalizedPath}"`));
     return true;
   } else {
@@ -250,7 +271,15 @@ async function unlockFile(filePath) {
 
   if (index > -1) {
     config.lockedFiles.splice(index, 1);
-    await saveConfig(config);
+    try {
+      await saveConfig(config);
+    } catch (err) {
+      // 写入失败时回滚(把刚 splice 掉的项加回去)
+      config.lockedFiles.splice(index, 0, normalizedPath);
+      console.error(chalk.red(`❌ 解锁失败: "${normalizedPath}"`));
+      console.error(chalk.gray(err.message));
+      throw err;
+    }
     console.log(chalk.green(`✓ 文件已解锁: "${normalizedPath}"`));
     return true;
   } else {
@@ -296,17 +325,24 @@ async function saveRecentDirectory(dirPath) {
   if (!dirPath || typeof dirPath !== 'string') return;
   const state = await safeLoadRaw();
   if (!state.ok) {
-    console.warn(chalk.yellow('⚠️ 解析配置文件失败，已取消写入最近目录以避免覆盖。'));
-    console.warn(chalk.gray(`文件: ${configPath}`));
-    return [];
+    const cause = state.error;
+    const detail = cause?.message ? String(cause.message) : String(cause);
+    throw new ConfigWriteError(
+      `解析配置文件失败,已取消写入最近目录以避免覆盖。\n文件: ${configPath}\n原因: ${detail}`,
+      cause
+    );
   }
   const raw = state.obj; // 保留现有顶层键
   let list = Array.isArray(raw.recentDirectories) ? raw.recentDirectories.slice() : [];
 
-  // 规范化：Windows 下统一为小写，去掉重复，保持最新在前
+  // 规范化:Windows 下统一为小写,去掉重复,保持最新在前
+  // 修复(MAINT-5):unshift 用原始大小写,Windows 下 C:\Project 与 C:\PROJECT
+  // 会产生两条"看起来一样"的项;现在 unshift 前先 normalize,dup 检测自然合并。
+  // 注意:存的字符串是 normalized 形式,在 Windows 下显示为小写路径,
+  // 这是有意为之 — 用 OS 标准大小写形式消除歧义,GUI 层可选择单独保留原始形式。
   const normalized = normalizeProjectPath(dirPath);
   list = list.filter(p => normalizeProjectPath(p) !== normalized);
-  list.unshift(dirPath);
+  list.unshift(normalized);
   if (list.length > MAX_RECENT_DIRS) list = list.slice(0, MAX_RECENT_DIRS);
 
   raw.recentDirectories = list;
@@ -341,7 +377,13 @@ async function handleConfigCommands() {
     const newMessage = setMsgArg.split('=')[1];
     const currentConfig = await loadConfig();
     currentConfig.defaultCommitMessage = newMessage;
-    await saveConfig(currentConfig);
+    try {
+      await saveConfig(currentConfig);
+    } catch (err) {
+      console.error(chalk.red('❌ 默认提交信息写入失败'));
+      console.error(chalk.gray(err.message));
+      process.exit(1);
+    }
     console.log(chalk.green(`✓ 默认提交信息已设置为: "${newMessage}"`));
     process.exit();
   }
@@ -361,3 +403,6 @@ export default {
   readRawConfigFile,
   writeRawConfigFile
 };
+
+// 命名导出 — 用于测试与外部复用
+export { ConfigWriteError, normalizeProjectPath };

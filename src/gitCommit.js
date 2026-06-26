@@ -28,15 +28,21 @@ import { format as dateFormat } from 'date-fns/format';
 import logUpdate from 'log-update';
 import startUIServer from './ui/server/index.js';
 import { exec } from 'child_process';
+import {
+  registerCleanup, trackChild, setupSigintHandler,
+} from './cli/cleanup.js';
+import { validateCustomCommand, isCmdStrictMode } from './cli/customCommand.js';
+import { boxenAdaptive } from './cli/ui.js';
 
 let countdownInterval = null;
 
 function startCountdown(interval) {
   let remaining = interval;
 
-  // 清除旧的倒计时
+  // 清除旧的倒计时(同一时刻只允许一个倒计时可见)
   if (countdownInterval) {
     clearInterval(countdownInterval);
+    countdownInterval = null;
   }
 
   const render = () => {
@@ -52,7 +58,7 @@ function startCountdown(interval) {
       chalk.dim('按 Ctrl+C 终止进程')
     ].join('\n');
 
-    const box = boxen(message, {
+    const box = boxenAdaptive(message, {
       padding: 1,
       margin: 1,
       borderColor: 'cyan',
@@ -74,12 +80,21 @@ function startCountdown(interval) {
 
     if (remaining <= 0) {
       clearInterval(countdownInterval);
+      countdownInterval = null;
       logUpdate.clear();
       return;
     }
 
     render();
   }, 1000);
+  // 注册到 SIGINT cleanup 表,Ctrl+C 时一并清掉,避免倒计时残影
+  registerCleanup('countdown', () => {
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
+    try { logUpdate.clear(); } catch (_) {}
+  });
 }
 
 const {loadConfig, saveConfig, handleConfigCommands} = config;
@@ -182,6 +197,18 @@ async function handleFileLockCommands() {
 async function main() {
   judgePlatform()
 
+  // 一次性注册 SIGINT 处理器 — 所有长跑流程(定时 commit / 自定义命令循环 /
+  // 倒计时)都通过 registerCleanup 上报,SIGINT 时由统一处理器 drain。
+  setupSigintHandler({
+    onBeforeCleanup: () => {
+      try { logUpdate.clear(); } catch (_) {}
+      console.log(chalk.yellow('\n🛑 收到终止信号,清理中...'))
+    },
+    onAfterCleanup: () => {
+      console.log(chalk.yellow('🛑 已清理,退出'))
+    }
+  })
+
   // 检查是否是UI命令
   if (process.argv.includes('ui')) {
     await startUIServer(false, false); // 传入noOpen=false, savePort=false
@@ -218,7 +245,22 @@ async function main() {
     const cmdMatch = cmdArg.match(/^--cmd=(['"]?)(.*)\1$/);
     let cmd = cmdMatch ? cmdMatch[2] : '';
     cmd = cmd.replace(/%%/g, '%'); // 关键修复
-    
+
+    // 输入校验(SEC-CLI-1) — 本地 CLI,用户明确输入,所以检测而非阻止:
+    // 拒绝对抗性输入(空 / - 开头 / 超长);危险模式打 warning。
+    const cmdValidation = validateCustomCommand(cmd);
+    if (!cmdValidation.ok) {
+      console.error(chalk.red(`❌ --cmd 校验失败: ${cmdValidation.rejectReason}`));
+      process.exit(2); // 2 = 命令行参数错误(Bash 惯例)
+    }
+    for (const w of cmdValidation.warnings) {
+      console.warn(chalk.yellow(`⚠️ ${w}`));
+    }
+    // 显式 --cmd-strict 时打一条提示,让用户知道 shell 特性被禁用
+    if (isCmdStrictMode(process.argv)) {
+      console.log(chalk.dim('ℹ️ --cmd-strict 模式:将通过 execFile 拆 argv 执行,管道/重定向/通配符将不可用'));
+    }
+
     const atArg = process.argv.find(arg => arg.startsWith('--at='));
     const intervalArg = process.argv.find(arg => arg.startsWith('--cmd-interval='));
     
@@ -229,13 +271,13 @@ async function main() {
 
       const runOnce = () => {
         console.log(`\n[自定义命令执行] ${new Date().toLocaleString()}\n> ${cmd}`);
-        exec(cmd, (err, stdout, stderr) => {
+        trackChild(exec(cmd, (err, stdout, stderr) => {
           if (err) {
             console.error(`[自定义命令错误]`, err.message);
           }
           if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
           if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
-        });
+        }));
       };
 
       const getNextTarget = (now) => {
@@ -283,43 +325,48 @@ async function main() {
           runOnce();
           if (repeatDaily) scheduleNext();
         }, delay);
+        // 注册到 SIGINT cleanup 表 — Ctrl+C 时由统一处理器清理
+        registerCleanup('atTimer', () => {
+          if (atTimer) {
+            clearTimeout(atTimer);
+            atTimer = null;
+          }
+        });
       };
 
       scheduleNext();
-
-      process.on('SIGINT', () => {
-        if (atTimer) clearTimeout(atTimer);
-        process.exit();
-      });
+      // 旧的内联 SIGINT handler 已被 setupSigintHandler 替代,这里不再重复注册
     } else if (intervalArg) {
       // 定时循环执行
       const intervalMatch = intervalArg.match(/^--cmd-interval=(['"]?)(.*)\1$/);
       const interval = intervalMatch ? parseInt(intervalMatch[2], 10) * 1000 : 0;
       if (interval > 0) {
         console.log(`每隔 ${interval/1000} 秒执行: ${cmd}`);
-        setInterval(() => {
+        const cmdIntervalId = setInterval(() => {
           console.log(`\n[自定义命令执行] ${new Date().toLocaleString()}\n> ${cmd}`);
-          exec(cmd, (err, stdout, stderr) => {
+          trackChild(exec(cmd, (err, stdout, stderr) => {
             if (err) {
               console.error(`[自定义命令错误]`, err.message);
             }
             if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
             if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
-          });
+          }));
         }, interval);
+        // 注册 cleanup,Ctrl+C 时清掉这个 interval(否则进程不退)
+        registerCleanup('cmdInterval', () => clearInterval(cmdIntervalId));
       } else {
         console.error('无效的时间间隔参数');
       }
     } else {
       // 立即执行一次
       console.log(`[自定义命令立即执行] > ${cmd}`);
-      exec(cmd, (err, stdout, stderr) => {
+      trackChild(exec(cmd, (err, stdout, stderr) => {
         if (err) {
           console.error(`[自定义命令错误]`, err.message);
         }
         if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
         if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
-      });
+      }));
     }
   }
   // ========== 新增功能结束 ==========
@@ -355,12 +402,21 @@ const commitAndSchedule = async (interval) => {
   try {
     await createGitCommit({exit: false});
     // await delay(2000)
-    startCountdown(interval); // 启动倒计时
+    startCountdown(interval); // 启动倒计时(内部已注册 cleanup)
 
     // 设置定时提交
     timer = setTimeout(async () => {
       await commitAndSchedule(interval);
     }, interval + 100);
+    // 注册到 SIGINT cleanup 表 — Ctrl+C 时统一清掉
+    // 注意:cleanup 命名 'commitTimer',每次递归都覆盖上一次的 handler
+    // (cleanupTasks.set 同名覆盖语义),保证只清当前 pending 那个 setTimeout
+    registerCleanup('commitTimer', () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    });
   } catch (error) {
     console.error('提交出错:', error.message);
     clearTimeout(timer);
@@ -381,15 +437,7 @@ const judgeInterval = async () => {
       console.error(chalk.red.bold('定时提交致命错误:'), error.message);
       process.exit(1);
     }
-
-    // 处理退出清理
-    process.on('SIGINT', () => {
-      logUpdate.clear();
-      clearTimeout(timer);
-      clearInterval(countdownInterval);
-      console.log(chalk.yellow('\n🛑 定时任务已终止'));
-      process.exit();
-    });
+    // 旧的 inline SIGINT handler 已移除,改由 setupSigintHandler 统一处理
   } else {
     createGitCommit({exit: false});
   }
