@@ -1,0 +1,29 @@
+# .npmrc.example — 本地复制为 .npmrc 后填入实际值
+#
+# .npmrc 已在 .gitignore 中,不会被提交到仓库。
+# 此文件作为模板,帮助新贡献者快速配置。
+#
+# 注意:
+#   - 真实 token 通过 `npm login` 或环境变量 NPM_TOKEN 注入,不要硬编码在文件里
+#   - 任何含真实凭据的 .npmrc 文件都不能 commit(参见 .gitignore L96)
+
+# 1. 默认 registry
+registry=https://registry.npmjs.org/
+
+# 2. NPM 认证 token
+#    方式 A(推荐):用环境变量,token 不落盘
+#      export NPM_TOKEN=npm_xxxxxxxxxxxxxxxxxxxx
+#      //registry.npmjs.org/:_authToken=${NPM_TOKEN}
+#
+#    方式 B:直接填(本仓库 .gitignore 已屏蔽,但本地仍要小心)
+#      //registry.npmjs.org/:_authToken=npm_xxxxxxxxxxxxxxxxxxxx
+//
+# 3. 内部 scoped registry(若有私有包,如 ai-model-form / local-file-picker)
+#    把模板里的 @your-scope 替换为实际作用域
+#    @your-scope:registry=https://npm.pkg.github.com/
+#    //npm.pkg.github.com/:_authToken=${NPM_TOKEN}
+
+# 4. 工程开关(可选)
+#    save-exact=true       # 锁定精确版本,避免 ^ 带来的意外升级
+#    engine-strict=true    # engines.node 不满足时 npm 直接拒绝安装
+#    fund=false            # 关闭 npm install 末尾的 funding 提示

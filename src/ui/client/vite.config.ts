@@ -84,7 +84,10 @@ export default defineConfig(({ command }) => {
       createSvgIcon(isBuild),
     ],
   optimizeDeps: {
-    exclude: ['ai-model-form'],
+    // monaco-editor (~3 MB) 仅 EditorView / SourceMapView / MonacoDiffViewer 用,这两个 view
+    // 是路由级 lazy 加载;exclude 让 Vite dev 期跳过预构建,首启不再 ~30s 卡在 [optimizer]
+    // build,改由浏览器运行时直接 esbuild 解析(配合 manualChunks 已独立切到 'monaco' chunk)
+    exclude: ['ai-model-form', 'monaco-editor'],
     // entry 显式声明 src/main.ts + 全量 .vue 组件,resolver 在 transform 阶段把所有
     // el-* 子模块加入依赖图,Vite 启动时一次预构建完 → dev 期访问新页面不再触发 reload
     entries: ['src/main.ts', 'src/**/*.{vue,ts,tsx}'],
