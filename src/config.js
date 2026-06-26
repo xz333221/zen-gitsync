@@ -80,24 +80,78 @@ function normalizeProjectPath(p) {
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
-// 获取当前项目的唯一键（优先使用 Git 根目录）
+// 缓存当前项目的唯一键。git 根目录在一个进程生命周期内通常不变
+// (用户极少在 CLI 运行中 cd 出去),缓存命中后省掉一次同步 git 子进程
+// (Windows 上 ~30-100ms,是 CLI 冷启动最大的单点延迟来源)。
+// invalidateCurrentProjectKey() 在 process.chdir / fs.js 的 /api/change_directory
+// 之类"cwd 改变"的场景下被调用,保证缓存不变成 stale。
+let _currentProjectKeyCache = null;
+let _currentProjectKeyCwd = null;
+
 function getCurrentProjectKey() {
+  const cwd = process.cwd();
+  // cwd 没变 + 已有缓存:直接返回
+  if (_currentProjectKeyCache && _currentProjectKeyCwd === cwd) {
+    return _currentProjectKeyCache;
+  }
+  let key = null;
   try {
     const gitRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-    if (gitRoot) return normalizeProjectPath(gitRoot);
+    if (gitRoot) key = normalizeProjectPath(gitRoot);
   } catch (_) {
     // 非 Git 项目或 git 不可用，降级到 CWD
   }
-  return normalizeProjectPath(process.cwd());
+  if (!key) key = normalizeProjectPath(cwd);
+  _currentProjectKeyCache = key;
+  _currentProjectKeyCwd = cwd;
+  return key;
 }
 
+/**
+ * 主动让项目键缓存失效。fs.js /api/change_directory 等修改 process.cwd
+ * 的代码必须在 chdir 之后调一次,否则下一次 loadConfig/saveConfig 还会
+ * 命中旧 key,写到错误项目的配置容器里。
+ */
+function invalidateCurrentProjectKey() {
+  _currentProjectKeyCache = null;
+  _currentProjectKeyCwd = null;
+}
+
+// 监听 process.chdir:任何位置调 process.chdir(path) 都会触发,这里统一
+// 让缓存失效,避免上游每个 chdir 调用方都记得手动 invalidate。
+// 注意:这是 Node 原生事件,无需 import;事件名拼写固定为 'chdir'。
+process.on('chdir', () => invalidateCurrentProjectKey());
+
 // 从磁盘读取原始配置对象
+//
+// 缓存策略:单进程内 safeLoadRaw 的结果缓存,所有 loadConfig / saveConfig /
+// saveRecentDirectory 等路径共享,避免每次都重新打开文件 + JSON.parse。
+// 写盘( writeRawConfigFile )时主动失效缓存,保证下一次读看到最新值;
+// 缓存不存在 / 已失效时走原 IO 路径。
+//
+// 注意:这是一个进程内 LRU-free 简单缓存,不感知外部进程对本文件的修改。
+// GUI(独立进程)改完文件后,本进程的 cache 仍是旧值 — 这符合 CLI 工具的
+// 现实使用模式(同一用户很少同时跑多个 CLI 写配置),保留旧行为(open +
+// readFile)开销即可控。如果未来需要多进程一致性,再加 fs.watch 即可。
+let _rawConfigCache = null; // { value, existed } | null(null = 失效/未缓存)
+
 async function readRawConfigFile() {
+  if (_rawConfigCache) {
+    return _rawConfigCache.value;
+  }
   const state = await safeLoadRaw();
   if (!state.ok) {
     throw state.error;
   }
-  return state.obj;
+  _rawConfigCache = { value: state.obj, existed: state.existed };
+  return _rawConfigCache.value;
+}
+
+/**
+ * 主动让 raw config 缓存失效。测试 / 跨进程场景可手动调。
+ */
+function invalidateRawConfigCache() {
+  _rawConfigCache = null;
 }
 
 // 将原始配置对象写回磁盘
@@ -116,6 +170,8 @@ async function writeRawConfigFile(obj) {
     await fs.writeFile(configPath, data, 'utf-8');
     if (err) throw err;
   }
+  // 写盘成功后让缓存失效 — 下次 readRawConfigFile 走实盘,保证拿到最新值
+  invalidateRawConfigCache();
 }
 
 async function backupConfigFileIfExists() {
@@ -134,15 +190,26 @@ async function backupConfigFileIfExists() {
 
 // 更安全的读取，区分“文件不存在”和“解析失败”
 async function safeLoadRaw() {
+  // 命中缓存直接返回,跳过 readFile + JSON.parse
+  if (_rawConfigCache) {
+    return { ok: true, obj: _rawConfigCache.value, existed: _rawConfigCache.existed };
+  }
   try {
     const data = await fs.readFile(configPath, 'utf-8');
-    return { ok: true, obj: JSON.parse(data), existed: true };
+    const obj = JSON.parse(data);
+    _rawConfigCache = { value: obj, existed: true };
+    return { ok: true, obj, existed: true };
   } catch (err) {
     if (err && err.code === 'ENOENT') {
       // 文件不存在：当作空对象，但可继续写入
-      return { ok: true, obj: {}, existed: false };
+      // 注意:这里也缓存 existed:false 的空对象,避免每次 lockFile/unlockFile
+      // 等"未初始化"路径都重新走 fs.readFile(总抛 ENOENT)
+      const empty = {};
+      _rawConfigCache = { value: empty, existed: false };
+      return { ok: true, obj: empty, existed: false };
     }
     // 其他错误（例如解析失败）：不写入，提示用户
+    // 不缓存错误状态 — 修复后下次读还能成功
     return { ok: false, error: err };
   }
 }
@@ -238,6 +305,7 @@ async function saveConfig(config) {
   raw.projects[key] = { ...defaultConfig, ...existingProjectConfig, ...projectConfig };
   await backupConfigFileIfExists();
   await writeRawConfigFile(raw);
+  // writeRawConfigFile 内部已 invalidateRawConfigCache,这里不再重复
 }
 // 文件锁定管理函数
 async function lockFile(filePath) {
@@ -405,4 +473,4 @@ export default {
 };
 
 // 命名导出 — 用于测试与外部复用
-export { ConfigWriteError, normalizeProjectPath };
+export { ConfigWriteError, normalizeProjectPath, invalidateCurrentProjectKey, invalidateRawConfigCache };

@@ -22,21 +22,51 @@ import {
 import readline from 'readline'
 import ora from 'ora';
 import chalk from 'chalk';
-import boxen from 'boxen';
 import config from './config.js';
-import { format as dateFormat } from 'date-fns/format';
-import logUpdate from 'log-update';
-import startUIServer from './ui/server/index.js';
 import { exec } from 'child_process';
 import {
   registerCleanup, trackChild, setupSigintHandler,
 } from './cli/cleanup.js';
 import { validateCustomCommand, isCmdStrictMode } from './cli/customCommand.js';
-import { boxenAdaptive } from './cli/ui.js';
+
+// 延迟加载的重模块 — 这些只在特定子命令路径才需要,启动时加载会无谓拖慢
+// CLI 冷启动(其中 startUIServer 还会拉起 Express + Socket.IO + 全部 routes,
+// 一次约几十到上百 KB 依赖链)。
+//   - startUIServer:仅 `g ui` 子命令使用
+//   - boxen / boxenAdaptive / logUpdate / date-fns:仅定时/倒计时 UI 使用
+let startUIServerPromise = null;
+let boxenImportsPromise = null;
+
+async function loadStartUIServer() {
+  if (!startUIServerPromise) {
+    startUIServerPromise = import('./ui/server/index.js').then(m => m.default);
+  }
+  return startUIServerPromise;
+}
+
+async function loadBoxenImports() {
+  if (!boxenImportsPromise) {
+    boxenImportsPromise = (async () => {
+      const [boxenMod, uiMod, logUpdateMod, dateFnsMod] = await Promise.all([
+        import('boxen'),
+        import('./cli/ui.js'),
+        import('log-update'),
+        import('date-fns/format')
+      ]);
+      return {
+        boxen: boxenMod.default,
+        boxenAdaptive: uiMod.boxenAdaptive,
+        logUpdate: logUpdateMod.default,
+        dateFormat: dateFnsMod.format
+      };
+    })();
+  }
+  return boxenImportsPromise;
+}
 
 let countdownInterval = null;
 
-function startCountdown(interval) {
+async function startCountdown(interval) {
   let remaining = interval;
 
   // 清除旧的倒计时(同一时刻只允许一个倒计时可见)
@@ -44,6 +74,10 @@ function startCountdown(interval) {
     clearInterval(countdownInterval);
     countdownInterval = null;
   }
+
+  // 懒加载 boxen/logUpdate/date-fns/boxenAdaptive — 这些只在倒计时 UI 用,
+  // 单次 `g` 提交不触发,避免冷启动时无谓加载 ~150KB 依赖链。
+  const { dateFormat, logUpdate, boxenAdaptive } = await loadBoxenImports();
 
   const render = () => {
     const nextTime = Date.now() + remaining;
@@ -211,6 +245,7 @@ async function main() {
 
   // 检查是否是UI命令
   if (process.argv.includes('ui')) {
+    const startUIServer = await loadStartUIServer();
     await startUIServer(false, false); // 传入noOpen=false, savePort=false
     return;
   }
@@ -398,16 +433,26 @@ const showStartInfo = (interval) => {
   coloredLog(head, message)
   // console.log('\n'.repeat(6));
 }
+// 漂移自由调度的基线时间(由 judgeInterval 在启动时初始化一次)。
+// commitAndSchedule 每次循环 nextRunAt += interval,实际 setTimeout 延迟
+// = nextRunAt - Date.now()。
+let nextRunAt = 0;
+
 const commitAndSchedule = async (interval) => {
   try {
     await createGitCommit({exit: false});
     // await delay(2000)
-    startCountdown(interval); // 启动倒计时(内部已注册 cleanup)
+    await startCountdown(interval); // 启动倒计时(内部已注册 cleanup)
 
-    // 设置定时提交
-    timer = setTimeout(async () => {
-      await commitAndSchedule(interval);
-    }, interval + 100);
+    // 漂移自由的调度 — 每次循环把 nextRunAt 加上 interval,
+    // 实际 setTimeout 延迟 = nextRunAt - now:
+    //   - 执行时间 < interval:延后到 nextRunAt,自然追平,不累积漂移
+    //   - 执行时间 > interval:延迟 = 0(可能 = -X,被 Math.max 钳到 0),立即跑下一轮
+    // 之前 setTimeout(..., interval + 100) 在执行时间波动时会持续累积漂移,
+    // 长时间运行后周期显著偏离用户配置的 interval。
+    nextRunAt += interval;
+    const delay = Math.max(0, nextRunAt - Date.now());
+    timer = setTimeout(() => commitAndSchedule(interval), delay);
     // 注册到 SIGINT cleanup 表 — Ctrl+C 时统一清掉
     // 注意:cleanup 命名 'commitTimer',每次递归都覆盖上一次的 handler
     // (cleanupTasks.set 同名覆盖语义),保证只清当前 pending 那个 setTimeout
@@ -430,6 +475,10 @@ const judgeInterval = async () => {
     let interval = parseInt(intervalArg.split('=')[1] || '3600', 10) * 1000;
 
     showStartInfo(interval);
+
+    // 漂移自由调度的基线 — 首次 commit 立即跑(与之前行为一致),
+    // 之后 nextRunAt = startAt + N*interval, 每次循环 nextRunAt += interval
+    nextRunAt = Date.now();
 
     try {
       await commitAndSchedule(interval);

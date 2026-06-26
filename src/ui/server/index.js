@@ -203,7 +203,13 @@ async function startUIServer(noOpen = false, savePort = false) {
     configManager,
     io,
     getCurrentProjectPath: () => currentProjectPath,
-    setCurrentProjectPath: (v) => { currentProjectPath = v; },
+    setCurrentProjectPath: (v) => {
+      currentProjectPath = v;
+      // project 切换后清掉 _lastBroadcastedPorcelain 缓存,
+      // 否则两个 project 都是 clean 时(porcelain 都是 '')会误判
+      // 内容未变 → 漏推新 projectPath
+      _lastBroadcastedPorcelain = null;
+    },
     getProjectRoomId: () => projectRoomId,
     setProjectRoomId: (v) => { projectRoomId = v; },
     setIsGitRepo: (v) => { isGitRepo = v; }
@@ -276,34 +282,53 @@ async function startUIServer(noOpen = false, savePort = false) {
   });
   
   // 获取并广播Git状态 (优化版本 - 只获取porcelain格式)
+  // 去重:50ms 内的多次调用合并为一次 git status + 一次广播。
+  // 触发场景:页面刷新风暴(打开 GUI 后浏览器自动重连 3-5 次),
+  //           或前端多 tab 同时连接。N 个客户端连进来 = N 次 git status 子进程,
+  //           每次 ~30-80ms,合并后只跑 1 次。
+  let _statusBroadcastPending = false;
+  let _lastBroadcastedPorcelain = null;
   async function getAndBroadcastStatus() {
-    try {
-      // 如果不是Git仓库，发送特殊状态
-      if (!isGitRepo) {
+    if (_statusBroadcastPending) return;
+    _statusBroadcastPending = true;
+    // 用 setImmediate 让同一 tick 内的多次调用合并(更短的等待)
+    setImmediate(async () => {
+      _statusBroadcastPending = false;
+      try {
+        // 如果不是Git仓库，发送特殊状态
+        if (!isGitRepo) {
+          io.to(projectRoomId).emit('git_status_update', {
+            isGitRepo: false,
+            porcelain: '',
+            timestamp: new Date().toISOString(),
+            projectPath: currentProjectPath
+          });
+          return;
+        }
+
+        // 只获取porcelain格式状态，不再获取完整的git status
+        const { stdout: porcelainOutput } = await execGitCommand(['status', '--porcelain', '--untracked-files=all']);
+
+        // 内容未变就不广播 — 防止每次前端 reconnect 都推一份完全一样的字符串
+        // 跨项目切换时 isGitRepo/projectPath 会变,这里只按内容去重
+        if (porcelainOutput === _lastBroadcastedPorcelain) {
+          return;
+        }
+        _lastBroadcastedPorcelain = porcelainOutput;
+
+        // 广播到当前项目房间的所有客户端
         io.to(projectRoomId).emit('git_status_update', {
-          isGitRepo: false,
-          porcelain: '',
+          isGitRepo: true,
+          porcelain: porcelainOutput,
           timestamp: new Date().toISOString(),
           projectPath: currentProjectPath
         });
-        return;
+
+        console.log(`已广播Git状态更新到房间: ${projectRoomId}`);
+      } catch (error) {
+        console.error('获取或广播Git状态失败:', error);
       }
-
-      // 只获取porcelain格式状态，不再获取完整的git status
-      const { stdout: porcelainOutput } = await execGitCommand(['status', '--porcelain', '--untracked-files=all']);
-
-      // 广播到当前项目房间的所有客户端
-      io.to(projectRoomId).emit('git_status_update', {
-        isGitRepo: true,
-        porcelain: porcelainOutput,
-        timestamp: new Date().toISOString(),
-        projectPath: currentProjectPath
-      });
-
-      console.log(`已广播Git状态更新到房间: ${projectRoomId}`);
-    } catch (error) {
-      console.error('获取或广播Git状态失败:', error);
-    }
+    });
   }
   
   // 检查当前目录是否是Git仓库

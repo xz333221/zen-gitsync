@@ -416,6 +416,9 @@ async function checkAndClearGitLock() {
 }
 
 // Function to get command history
+// Cached cwd — 进程内 getCwd() 只算一次,见下方 getCwd() 实现
+let _cachedCwd = null
+
 function getCommandHistory() {
   return [...commandHistory];
 }
@@ -490,23 +493,51 @@ function parseCwdArg(argv) {
 }
 
 const getCwd = () => {
-  const parsed = parseCwdArg(process.argv)
-  return parsed || process.cwd()
+  // process.argv 在进程内不变(CLI 启动后用户不会去改 process.argv),缓存一次
+  // 即可。execGitCommand 在一次 g 流程里会被调 5-15 次(每个 git 子命令一次),
+  // 缓存省掉重复的 Array.find + startsWith 扫描,在 GUI 后端常驻进程里累计收益更大。
+  if (_cachedCwd === null) {
+    const parsed = parseCwdArg(process.argv)
+    _cachedCwd = parsed || process.cwd()
+  }
+  return _cachedCwd
+}
+
+/**
+ * 主动让 getCwd 缓存失效。CLI 内部不会调;供 fs.js /api/change_directory
+ * 之类的"cwd 改变"路径使用,避免后续 execGitCommand 仍然用旧 cwd 跑子命令。
+ * 注意:CLI 子进程通常不需要这个,只有 GUI 后端在 chdir 后需要手动 clear。
+ */
+export function invalidateCwdCache() {
+  _cachedCwd = null
 }
 const judgePlatform = () => {
   // 判断是否是 Windows 系统
   if (os.platform() === 'win32') {
     try {
-      // 设置终端字符编码为 UTF-8
+      // 设置终端字符编码为 UTF-8 — 这条必须 sync,后续 console 输出依赖
+      // 新的 code page,异步的话早期 console.log 会乱码。
       execSync('chcp 65001');
-      execSync('git config --global core.autocrlf true');
-      // 设置Git不转义路径（避免中文显示为八进制）
-      execSync('git config --global core.quotepath false');
     } catch (e) {
       console.error('设置字符编码失败:', e.message);
     }
-  }else{
-    execSync('git config --global core.autocrlf input');
+    // git config --global 不影响启动期 console 输出,丢到后台跑,避免
+    // 两次额外的同步子进程阻塞 Node 启动(Windows 上各 ~30-80ms)
+    setImmediate(() => {
+      try {
+        execSync('git config --global core.autocrlf true');
+        execSync('git config --global core.quotepath false');
+      } catch (e) {
+        // 后台配置失败不致命,首次 commit 时用户会发现并自己跑命令
+      }
+    });
+  } else {
+    // 非 Windows:同样丢到后台
+    setImmediate(() => {
+      try {
+        execSync('git config --global core.autocrlf input');
+      } catch (_) {}
+    });
   }
 };
 const showHelp = () => {

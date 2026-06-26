@@ -18,6 +18,10 @@
 //
 // 当前会话先落地 boxen 宽度自适应 — messages 表作为下轮 i18n 的过渡形态,
 // 避免一次性大改风险。
+//
+// 性能注意:本模块会被 gitCommit.js 动态 import(loadBoxenImports),
+// 所以这里的静态 import 仅在真正用到 boxen 的路径(如 g --interval
+// 倒计时 / 自定义命令输出)才付出加载成本,普通 `g -m "msg"` 提交不触发。
 
 import boxen from 'boxen'
 
