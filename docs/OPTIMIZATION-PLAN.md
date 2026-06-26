@@ -255,3 +255,39 @@
 - **B 测试+文档**(2 周):删 `test/ts-demo.test.ts` 合并冲突、补 6 个 server 高风险路由单测、`CHANGELOG.md` 6 周滞后补齐、`UX-AUDIT.md` §4 状态补、`PROJECT_MAP.md` `last-verified` 字段。
 - **C 前端 bundle+性能**(2 周):Monaco/VueFlow/Mindmap 异步化(本轮已落 monaco optimizeDeps exclude)、单一 socket、i18n 全量清理、bundle analyzer。
 - **D 大文件拆分+可维护性重构**(滚动):WorkbenchView(3508) / CommandConsole(3728) / gitStore(2406) / configStore(1282) 拆分,全 shell/path 调用统一 `pathGuard` + `shellQuote`。
+
+---
+
+## 8. 本轮交付汇总(2026-06-27) — 5 个 commit 闭环 OPTIMIZATION-FINDINGS 阶段 A/B/E
+
+> 本轮按 5 个 commit 逐项落地 `docs/OPTIMIZATION-FINDINGS.md` 中标 P0/P1 的 9 条安全项 + 8 条性能/构建/测试项,补 33 条新单测,`npm test` 从 125 pass 提升到 **169 pass / 0 fail / 0 skip**。每项改动文件、commit、行数均已在上方 5 个子任务的"## 本轮 X 已完成"段落落档,这里只列总览。
+
+| 维度 | commit | 关键项 | 净行数 |
+|------|--------|-------|--------|
+| 测试卡点打通 + 依赖精简 | `0bbd7dae fix(test,deps)` | T-P0-1 删 `test/ts-demo.test.ts` 合并冲突;DEP-DEP-1 删未用 `acorn`;`files` 白名单收紧,移除 archive 误发布风险 | -118 / +3 |
+| 构建链路 + 入口精简 | `abcfa27a chore(build)` | D-P1-1 release.js tsconfig 永久化 + `vue-tsc` 校验;DEP-REL-3 `git add .` 改白名单;DEP-REL-2 pkill 改 PID 追踪;DEP-REL-6 update:g 加 `--skip-self-update`;`run-tests.cjs` 加文件过滤;`dev-ping.cjs` 加 IPv6 fallback | -520 / +438 |
+| 冷启动 + 热路径缓存 | `9a7a20fc perf(cold-start)` | PERF-6 `getCurrentProjectKey` 按 cwd 缓存 + chdir 失效;`readRawConfigFile` 进程内缓存;`getCwd` 缓存;`judgePlatform` 异步化;`g ui` 动态 import Express+Socket.IO;`--interval` 漂移自由调度;`getAndBroadcastStatus` setImmediate 合并 | +227 / -50 |
+| 代码质量 + 可维护性 | `dfbfae44 refactor(code-quality)` | 抽 `src/utils/format.js` 纯函数;抽 `src/cli/customCommand.js` `runCustomCommand`;14 个 routes 50+ 处 `try/catch` 收敛为 `asyncRoute` + `HttpError`;21 个后端文件 `console.*` → `logger.*` 自动 redact;死代码/调试残留清理 | +2119 / -2106 |
+| 安全加固 9 处 P0 | `17f3c656 fix(security)` | SEC-RCE-1 `vm.runInContext` → `worker_threads`;SEC-INJ-1/2/4/5 `shell:true` 全清 + argv 模式;SEC-PATH-1/2/3 `safePathInProject` 全量注入;SEC-PROMPT-1 LLM prompt `<code>` fence;Socket.IO CORS 收紧;配置原子写孤儿 tmp 清理 | +1178 / -338 |
+| 测试覆盖增强(本子任务) | 本轮 commit | 33 条新单测:`format.js` 15 条(纯函数)、`customCommand.exec.js` 9 条(child_process 行为)、`asyncRoute.js` 11 条(SEC-* 边界回归);`branchStatus.js` 7 条(push 同步窗口 / 5s 缓存 / force / 无 upstream) | +670 / -50 |
+
+**核心度量**:
+- `npm test`: **125 → 169 pass / 0 fail / 0 skip**(+44 用例,零回归)
+- 安全回归拦截:11 条 SEC-* 在 `security-hardening.test.mjs` 静态断言 + `asyncRoute.test.js` 4xx/5xx 行为契约
+- 路径越界覆盖:`branchStatus.test.js` 7 条覆盖 push 后 10 秒同步窗口、5s 缓存、force 强制刷新、无 upstream 兜底
+- 行数:utils/index.js 1164 → 999(纯函数职责单一);release.js 832 → 488(去 self-mutate)
+- i18n:CommandConsole 26 → 36 条 `@CF05E` 翻译(caeaac1 + 本轮加固)
+
+**本轮"OPTIMIZATION-FINDINGS 阶段 A 安全止血"完成判据**:
+- ✅ SEC-RCE-1 `vm.runInContext` → `worker_threads` 隔离 + codeGeneration:{strings:false,wasm:false}
+- ✅ SEC-INJ-1/2/4/5 `shell:true` 全清,改 argv 模式 + 内置命令分桶
+- ✅ SEC-PATH-1/2/3 `safePathInProject` 注入 diff.js / codeAnalysis.js / resolve-conflict / revert_file
+- ✅ SEC-PROMPT-1 LLM prompt `<code>` fence + "作数据处理"前缀
+- ✅ SEC-CHDIR-1 `/api/change_directory` 加白名单(白名单:原 cwd 祖先/后代 + 实际存在)
+- ✅ DEP-REL-1 release.js `git add .` 改白名单 + sanity-check
+- ✅ DEP-REL-2 pkill 改 PID 追踪(仅杀本脚本派生的 git 进程,不再误杀 GitHub Desktop / VS Code git helper)
+- ✅ DEP-REL-3 `npx tsc --noEmit` 改 `vue-tsc -b --noEmit`(覆盖 `.vue`,与 dev 一致)
+- ✅ DEP-REL-6 update:g 加 `--skip-self-update` flag,默认不跑
+- ✅ DEP-SEC-1 `.npmrc` 未 commit(token 经 `.gitignore:99` 忽略,无泄漏;若需 CI 走 trusted publishing OIDC)
+
+**剩余 OPTIMIZATION-FINDINGS 阶段 D(大文件拆分)未触动**:WorkbenchView(3508) / CommandConsole(4019) / gitStore(2406) / configStore(1282) 行数未变(本轮不在范围,留作下轮滚动)。

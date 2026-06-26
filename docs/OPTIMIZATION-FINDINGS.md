@@ -281,3 +281,44 @@
 每完成一项,在本文件对应行加 `- [x] YYYY-MM-DD #PR-NNN` 并在 `CHANGELOG.md` 引用本文件 section;`auto-update-readme` skill 在 release 时同步勾选状态。每月底跑一遍四路审计脚本(可考虑固化到 `npm run audit:internal`),对比本文件新增/关闭数量。
 
 > **本文件与现有 `OPTIMIZATION-PLAN.md` 的关系**:本文件不替代 `OPTIMIZATION-PLAN.md`,后者是 UI 5 项落地清单;本文件是全量审计与中长期执行计划,优先级维度更广。建议把已完成的 OPT-1/2/4/5 在本文件 §1 的相关项也勾选,并在 CHANGELOG 注明"OPT-PLAN 闭环"。
+
+---
+
+## 10. 阶段 A/B/E 闭环记录(2026-06-27)
+
+> 5 个 commit 落地 OPTIMIZATION-FINDINGS 阶段 A(安全)+ B(性能/构建)+ E(测试)全部 P0/P1 项,本节作为审计关闭清单。
+
+| 审计编号 | 落地 commit | 简述 |
+|---------|------------|------|
+| **SEC-RCE-1** | `17f3c656` | `vm.runInContext` → `worker_threads` + `codeGeneration:{strings:false,wasm:false}` + `resourceLimits` |
+| **SEC-INJ-1** | `17f3c656` | socket `exec_interactive` `spawn(cmd, [], {shell:true})` → argv 模式 + cmd.exe 内置分支 |
+| **SEC-INJ-2** | `17f3c656` | `/api/exec-stream` 同上 + req close → SIGTERM |
+| **SEC-INJ-4** | `17f3c656` | `/api/open-new-tab-gui` + `/api/open_terminal` + `/api/editor/reveal` 全改 spawn(bin, argv) |
+| **SEC-INJ-5** | `17f3c656` | `/api/run-npm-script` `scriptName` 白名单 `/^[a-zA-Z0-9_:-]+$/` |
+| **SEC-PATH-1** | `17f3c656` | diff.js 5 个端点 + `safePathInProject` + `/api/revert_files` MAX_BATCH=200 |
+| **SEC-PATH-2** | `17f3c656` | `/api/change_directory` 白名单(原 cwd 祖先/后代 + 存在目录) |
+| **SEC-PATH-3** | `17f3c656` | codeAnalysis.js 4 个端点路径绑 `getCurrentProjectPath()` + 深度上限 |
+| **SEC-PROMPT-1** | `17f3c656` | LLM prompt 4 处 `<code>` fence + "作数据处理"前缀 + drill snippet 截断 1500 字符 |
+| **SEC-SYM-1** | `17f3c656` | `pathGuard` realpath 校验注入 diff.js 5 个端点 |
+| **DEP-SEC-1** | (无需 commit) | `.npmrc` 经 `.gitignore:99` 忽略,无明文 token 落地;CI 走 trusted publishing 文档化在 README |
+| **DEP-REL-1** | `abcfa27a` | release.js `git add .` → 显式白名单 + `git status --porcelain` sanity check |
+| **DEP-REL-2** | `abcfa27a` | `terminateGitProcesses` 改 PID 追踪,仅杀本脚本派生的 git |
+| **DEP-REL-3** | `abcfa27a` | `npx tsc --noEmit` → `npx vue-tsc -b --noEmit`(覆盖 .vue) |
+| **DEP-REL-4** | `abcfa27a` | release.js 不再 mutate `tsconfig.app.json`(永久含 `types:['node']`) |
+| **DEP-REL-6** | `abcfa27a` | `update:g` 加 `--skip-self-update` flag,默认不自动跑 |
+| **DEP-DEP-1** | `0bbd7dae` | 删未用 dep `acorn` |
+| **DEP-CFG-1** | `abcfa27a` | `package.json` `files` 字段显式列脚本,排除 archive / convert-*.cjs |
+| **PERF-1(部分)** | `9a7a20fc` | monaco-editor `optimizeDeps.exclude`(全量 async 化留 D 阶段) |
+| **PERF-4(部分)** | `9a7a20fc` | `g ui` 动态 import(loadStartUIServer),Express+Socket.IO+全部 routes 推迟到真正需要时 |
+| **PERF-6** | `9a7a20fc` | `getCurrentProjectKey` 按 cwd 缓存 + chdir 失效;`readRawConfigFile` 进程内缓存;`getCwd` 缓存 |
+| **TEST-1** | `0bbd7dae` | 删 `test/ts-demo.test.ts` 合并冲突 fixture |
+| **TEST-4(部分)** | 本轮 commit | `branchStatus.js` 7 条(push 同步窗口 / 5s 缓存 / force / 无 upstream);`asyncRoute.js` 11 条(SEC-PATH/INJ 4xx 回归);`customCommand.exec.js` 9 条(SEC-CLI 行为契约);`format.js` 15 条(纯函数) |
+
+**仍开放(留作 OPTIMIZATION-FINDINGS 阶段 D / C 后续)**:
+- **CQ-7** `useThemeObserver` 已在 `caeaac1` 落地,但 `App.vue:884-1628` 大块 SCSS 仍 <style> 未 scoped
+- **CQ-9** CommandConsole `socket.off` 在 `onUnmounted` 全量清理(本轮未触)
+- **MAINT-8/9/10** WorkbenchView(3508) / CommandConsole(4019) / gitStore(2406) 大文件拆分(滚动,本轮不在范围)
+- **MAINT-13** CommandConsole 仍有 10+ 处 `ElMessage` 裸中文(本轮后端范围,前端待 MAINT-13 续)
+- **PERF-2/3/5** Monaco / VueFlow / Mindmap 异步化(全量留 D 阶段,本轮仅 PERF-1 optimizeDeps exclude + PERF-4 单一 socket 部分)
+- **DEP-CFG-3/4** 库入口 `index.d.ts` 缺失;release.js 改 .mjs;c8/rollup-plugin-visualizer 缺失
+- **TEST-2/7/11** CHANGELOG 6 周 gap;e2e 不可靠的 2 个 spec;README 措辞与代码不一致
