@@ -571,8 +571,9 @@ export const useGitStore = defineStore('git', () => {
   // 从 gitLogStore 合并过来的方法
   // Socket.io连接处理
   async function initSocketConnection() {
-    // 如果已经有socket连接，先断开
+    // 如果已经有socket连接，先清理监听器再断开
     if (socketRef.value) {
+      cleanupSocketListeners()
       socketRef.value.disconnect()
     }
     
@@ -1911,8 +1912,18 @@ export const useGitStore = defineStore('git', () => {
   // 在组件卸载时断开socket连接
   function disconnectSocket() {
     if (socketRef.value) {
+      cleanupSocketListeners()
       socketRef.value.disconnect();
       socketRef.value = null;
+    }
+  }
+
+  function cleanupSocketListeners() {
+    if (socketRef.value) {
+      const events = ['connect', 'project_info', 'project_changed', 'disconnect', 'git_status_update', 'connect_error', 'connect_timeout', 'reconnect', 'reconnect_attempt', 'reconnect_error', 'reconnect_failed']
+      for (const event of events) {
+        try { socketRef.value.off(event) } catch (_) {}
+      }
     }
   }
 
