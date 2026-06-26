@@ -358,7 +358,10 @@ test('registerUiSocketHandlers: exec_interactive 正常 → spawn → stdout 流
 
   // 写入历史
   assert.ok(addedToHistory, '应调 addCommandToHistory')
-  assert.equal(addedToHistory.cmd, 'echo hello')
+  // SEC-INJ-1 修复后:Windows 上 echo 是 cmd 内置命令,
+  // 走 'cmd.exe /c echo hello' argv 模式,history.command 记录 join 后的字符串
+  const expectedCmd = process.platform === 'win32' ? 'cmd.exe /c echo hello' : 'echo hello'
+  assert.equal(addedToHistory.cmd, expectedCmd)
   assert.match(addedToHistory.stdout, /hello/)
 })
 

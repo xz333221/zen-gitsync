@@ -974,31 +974,69 @@ export function registerNpmRoutes({
         });
       }
       
-      logger.info(`执行npm脚本: ${scriptName} in ${packagePath}`);
-      
-      // 根据操作系统选择合适的终端命令
-      let terminalCommand;
-      const npmCommand = `npm run ${scriptName}`;
-      
-      if (process.platform === 'win32') {
-        // Windows: 使用 start 命令打开新的 cmd 窗口
-        // /K 参数表示执行命令后保持窗口打开
-        terminalCommand = `start cmd /K "cd /d ${packagePath} && ${npmCommand}"`;
-      } else if (process.platform === 'darwin') {
-        // macOS: 使用 osascript 打开 Terminal.app
-        const script = `tell application "Terminal" to do script "cd ${packagePath} && ${npmCommand}"`;
-        terminalCommand = `osascript -e '${script}'`;
-      } else {
-        // Linux: 尝试常见的终端模拟器
-        // 优先使用 gnome-terminal, 然后是 xterm
-        terminalCommand = `gnome-terminal -- bash -c "cd ${packagePath} && ${npmCommand}; exec bash" || xterm -e "cd ${packagePath} && ${npmCommand}; bash"`;
+            logger.info(`执行npm脚本: ${scriptName} in ${packagePath}`);
+
+      // SEC-INJ-5 防御:scriptName 严格白名单(只允许 package.json scripts key),
+      // packagePath 规范化后必须存在,所有 spawn 走 argv 数组
+      if (!/^[a-zA-Z0-9_:-]+$/.test(String(scriptName))) {
+        return res.status(400).json({
+          success: false,
+          error: 'scriptName 只能包含字母数字下划线短横线冒号'
+        });
       }
-      
-      // 执行命令打开新终端（使用已导入的 exec）
-      exec(terminalCommand, (error, stdout, stderr) => {
-        if (error) {
-          logger.error('打开终端失败:', error);
+      const resolvedPkgPath = path.resolve(String(packagePath));
+      let pkgStat;
+      try {
+        pkgStat = fsSync.statSync(resolvedPkgPath);
+      } catch (e) {
+        return res.status(404).json({
+          success: false,
+          error: `packagePath 目录不存在: ${resolvedPkgPath}`
+        });
+      }
+      if (!pkgStat.isDirectory()) {
+        return res.status(400).json({
+          success: false,
+          error: 'packagePath 必须是目录路径'
+        });
+      }
+
+      const npmCommand = `npm run ${scriptName}`;
+      const platform = process.platform;
+
+      try {
+        if (platform === 'win32') {
+          // Windows: argv 数组启动 start "" /D path cmd /k npm run script
+          spawn('cmd', ['/c', 'start', '', '/D', resolvedPkgPath, 'cmd', '/k', 'npm', 'run', String(scriptName)], {
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: false,
+          }).unref();
+        } else if (platform === 'darwin') {
+          // macOS: 直接打开 Terminal.app 到目标目录(避免 osascript 字符串拼接)
+          spawn('open', ['-a', 'Terminal', resolvedPkgPath], {
+            detached: true,
+            stdio: 'ignore'
+          }).unref();
+        } else {
+          // Linux: gnome-terminal 数组模式,内部命令作为 bash 的 argv 元素
+          spawn('gnome-terminal', [
+            '--working-directory', resolvedPkgPath,
+            '--', 'bash', '-c', `npm run ${String(scriptName)}; exec bash`,
+          ], {
+            detached: true,
+            stdio: 'ignore'
+          }).unref();
         }
+      } catch (err) {
+        logger.error('打开终端失败:', err);
+      }
+
+      res.json({
+        success: true,
+        message: `已在新终端中执行: ${scriptName}`,
+        command: npmCommand,
+        path: resolvedPkgPath
       });
       
       res.json({ 

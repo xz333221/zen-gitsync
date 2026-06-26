@@ -161,14 +161,20 @@ function invalidateRawConfigCache() {
 async function writeRawConfigFile(obj) {
   const tmpPath = `${configPath}.${process.pid}.${Date.now()}.tmp`;
   const data = JSON.stringify(obj, null, 2);
-  await fs.writeFile(tmpPath, data, 'utf-8');
   try {
-    await fs.rename(tmpPath, configPath);
+    await fs.writeFile(tmpPath, data, 'utf-8');
+    try {
+      await fs.rename(tmpPath, configPath);
+    } catch (err) {
+      // Windows 上 rename 到已存在文件可能抛 EPERM/EEXIST,fallback 覆盖写
+      try { await fs.unlink(tmpPath); } catch (_) {}
+      await fs.writeFile(configPath, data, 'utf-8');
+      if (err) throw err;
+    }
   } catch (err) {
-    // Windows 上 rename 到已存在文件可能抛 EPERM/EEXIST,fallback 覆盖写
-    try { await fs.unlink(tmpPath); } catch (_) {}
-    await fs.writeFile(configPath, data, 'utf-8');
-    if (err) throw err;
+    // 写入失败时清理孤儿 tmp 文件,避免 ~/.git-commit-tool.json.*.tmp 堆积
+    try { await fs.unlink(tmpPath); } catch (_) { /* ignore */ }
+    throw err;
   }
   // 写盘成功后让缓存失效 — 下次 readRawConfigFile 走实盘,保证拿到最新值
   invalidateRawConfigCache();

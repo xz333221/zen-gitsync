@@ -13,6 +13,82 @@
 // limitations under the License.
 //
 import logger from '../utils/logger.js'
+import { ensureWithinCwd } from '../utils/pathGuard.js'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// exec_interactive 修复(SEC-INJ-1)
+//
+// 之前:`spawn(command.trim(), [], { shell: true })` — command 来自 socket,
+// 直接交给 /bin/sh -c 或 cmd.exe /c 解释,任意 shell 都能跑(RCE)。
+//
+// 现在:用与 routes/exec.js 同样的 argv 拆分 + cmd.exe /c 内置分支策略,
+// 完全不走 shell。
+// ─────────────────────────────────────────────────────────────────────────────
+
+const WIN_CMD_BUILTINS = new Set([
+  'dir', 'type', 'echo', 'set', 'path', 'cd', 'md', 'rd', 'del',
+  'copy', 'move', 'ren', 'cls', 'exit', 'title', 'ver', 'prompt',
+]);
+
+function splitCommandArgs(command) {
+  const s = String(command || '');
+  const out = [];
+  let cur = '';
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\' && s[i + 1]) {
+      cur += s[i + 1];
+      i++;
+      continue;
+    }
+    if (!inDouble && ch === "'") {
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && ch === '"') {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble && /\s/.test(ch)) {
+      if (cur) { out.push(cur); cur = ''; }
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out.filter((t) => t.length > 0);
+}
+
+function resolveBinAndArgs(command) {
+  const tokens = splitCommandArgs(command);
+  if (tokens.length === 0) {
+    throw new Error('command 不能为空');
+  }
+  const head = tokens[0];
+  if (process.platform === 'win32' && WIN_CMD_BUILTINS.has(head.toLowerCase())) {
+    return { bin: 'cmd.exe', args: ['/c', ...tokens] };
+  }
+  return { bin: head, args: tokens.slice(1) };
+}
+
+const INTERACTIVE_ENV = {
+  ...process.env,
+  GIT_CONFIG_PARAMETERS: "'color.ui=always' 'color.status=always' 'core.quotepath=false'",
+  FORCE_COLOR: '3',
+  NPM_CONFIG_COLOR: 'always',
+  TERM: 'xterm-256color',
+  COLORTERM: 'truecolor',
+  CLICOLOR_FORCE: '1',
+  PYTHONUNBUFFERED: '1',
+};
+
+function isWindowsBuiltin(command) {
+  if (process.platform !== 'win32') return false;
+  const first = splitCommandArgs(command)[0]?.toLowerCase();
+  return first ? WIN_CMD_BUILTINS.has(first) : false;
+}
 
 export function registerUiSocketHandlers({
   io,
@@ -52,7 +128,7 @@ export function registerUiSocketHandlers({
     });
 
     socket.on('exec_interactive', async (data) => {
-      const { command, directory, sessionId } = data;
+      const { command, directory, sessionId } = data || {};
 
       if (!command || typeof command !== 'string' || !command.trim()) {
         socket.emit('interactive_error', {
@@ -63,65 +139,79 @@ export function registerUiSocketHandlers({
       }
 
       const currentProjectPath = getCurrentProjectPath();
-      const execDirectory = directory && directory.trim()
-        ? (path.isAbsolute(directory) ? directory : path.join(currentProjectPath, directory))
-        : currentProjectPath;
 
-      logger.info(`[交互式命令] ${sessionId}: ${command} (目录: ${execDirectory})`);
+      // 安全解析 directory:防止 chdir 到项目外
+      let execDirectory = currentProjectPath;
+      try {
+        if (directory && String(directory).trim()) {
+          const safe = await ensureWithinCwd(String(directory), currentProjectPath);
+          if (!safe) {
+            socket.emit('interactive_error', {
+              sessionId,
+              error: 'directory 必须在当前项目目录内'
+            });
+            return;
+          }
+          execDirectory = safe.safePath;
+        }
+      } catch (err) {
+        socket.emit('interactive_error', { sessionId, error: err.message });
+        return;
+      }
+
+      let bin, args;
+      try {
+        const resolved = resolveBinAndArgs(command);
+        bin = resolved.bin;
+        args = resolved.args;
+      } catch (err) {
+        socket.emit('interactive_error', { sessionId, error: err.message });
+        return;
+      }
+
+      logger.info(`[交互式命令] ${sessionId}: ${bin} ${args.join(' ').substring(0, 80)} (目录: ${execDirectory})`);
 
       const processId = nextProcessId();
       const startTime = Date.now();
 
       let collectedStdout = '';
       let collectedStderr = '';
+      let socketClosed = false;
 
-      const childProcess = spawn(command.trim(), [], {
+      const childProcess = spawn(bin, args, {
         cwd: execDirectory,
-        shell: true,
-        env: {
-          ...process.env,
-          GIT_CONFIG_PARAMETERS: "'color.ui=always' 'color.status=always' 'core.quotepath=false'",
-          FORCE_COLOR: '3',
-          NPM_CONFIG_COLOR: 'always',
-          TERM: 'xterm-256color',
-          COLORTERM: 'truecolor',
-          CLICOLOR_FORCE: '1',
-          PYTHONUNBUFFERED: '1'
-        }
+        env: INTERACTIVE_ENV,
       });
 
       runningProcesses.set(processId, {
         childProcess,
-        command: command.trim(),
+        command: `${bin} ${args.join(' ')}`.trim(),
         startTime,
         directory: execDirectory,
         sessionId
       });
 
-      logger.info(`[交互式命令] 创建进程 #${processId}: ${command.substring(0, 50)}`);
+      logger.info(`[交互式命令] 创建进程 #${processId}: ${bin} ${args.join(' ').substring(0, 50)}`);
 
       socket.emit('interactive_process_id', { sessionId, processId });
 
-      const isWindows = process.platform === 'win32';
       const cmdBuiltins = ['dir', 'type', 'echo', 'set', 'path', 'cd', 'md', 'rd', 'del', 'copy', 'move', 'ren'];
-      const needsGbkConversion = isWindows && cmdBuiltins.some(builtin =>
-        command.trim().toLowerCase().startsWith(builtin + ' ') ||
-        command.trim().toLowerCase() === builtin
-      );
+      const needsGbkConversion = isWindowsBuiltin(command) && cmdBuiltins.some(builtin => {
+        const first = splitCommandArgs(command)[0]?.toLowerCase();
+        return first === builtin;
+      });
 
       childProcess.stdout?.on('data', (stdoutData) => {
         const output = needsGbkConversion ? iconv.decode(stdoutData, 'gbk') : stdoutData.toString('utf8');
         collectedStdout += output;
-        socket.emit('interactive_stdout', { sessionId, data: output });
+        if (!socketClosed) socket.emit('interactive_stdout', { sessionId, data: output });
       });
 
       childProcess.stderr?.on('data', (stderrData) => {
         let output;
-
-        if (isWindows) {
+        if (process.platform === 'win32') {
           const utf8Output = stderrData.toString('utf8');
-
-          if (!utf8Output.includes('�') || utf8Output.match(/[\u4e00-\u9fa5]/)) {
+          if (!utf8Output.includes('�') || utf8Output.match(/[一-龥]/)) {
             output = utf8Output;
           } else {
             try {
@@ -135,7 +225,7 @@ export function registerUiSocketHandlers({
         }
 
         collectedStderr += output;
-        socket.emit('interactive_stderr', { sessionId, data: output });
+        if (!socketClosed) socket.emit('interactive_stderr', { sessionId, data: output });
       });
 
       childProcess.on('close', (code, signal) => {
@@ -145,18 +235,20 @@ export function registerUiSocketHandlers({
         const executionTime = Date.now() - startTime;
         const error = code !== 0 ? `Command exited with code ${code}` : null;
         addCommandToHistory(
-          command.trim(),
+          `${bin} ${args.join(' ')}`.trim(),
           collectedStdout,
           collectedStderr,
           error,
           executionTime
         );
 
-        socket.emit('interactive_exit', {
-          sessionId,
-          code,
-          success: code === 0
-        });
+        if (!socketClosed) {
+          socket.emit('interactive_exit', {
+            sessionId,
+            code,
+            success: code === 0
+          });
+        }
       });
 
       childProcess.on('error', (error) => {
@@ -165,22 +257,25 @@ export function registerUiSocketHandlers({
 
         const executionTime = Date.now() - startTime;
         addCommandToHistory(
-          command.trim(),
+          `${bin} ${args.join(' ')}`.trim(),
           collectedStdout,
           collectedStderr,
           error.message,
           executionTime
         );
 
-        socket.emit('interactive_error', {
-          sessionId,
-          error: error.message
-        });
+        if (!socketClosed) {
+          socket.emit('interactive_error', {
+            sessionId,
+            error: error.message
+          });
+        }
       });
 
       socket.on(`interactive_stdin_${sessionId}`, (inputData) => {
-        const { input } = inputData;
-        logger.info(`[交互式命令] 收到 stdin 输入 (${sessionId}):`, input);
+        if (socketClosed) return;
+        const { input } = inputData || {};
+        logger.info(`[交互式命令] 收到 stdin 输入 (${sessionId})`);
 
         if (childProcess.stdin && !childProcess.stdin.destroyed) {
           try {
@@ -216,6 +311,27 @@ export function registerUiSocketHandlers({
             }
           } catch (err) {
             logger.error(`[交互式命令] 停止进程失败:`, err);
+          }
+        }
+      });
+
+      // socket disconnect → 子进程也要清理,否则孤儿进程会一直跑
+      socket.on('disconnect', () => {
+        socketClosed = true;
+        if (childProcess && !childProcess.killed) {
+          try {
+            if (process.platform === 'win32') {
+              exec(`taskkill /pid ${childProcess.pid} /T /F`, () => {});
+            } else {
+              childProcess.kill('SIGTERM');
+              setTimeout(() => {
+                if (!childProcess.killed) {
+                  try { childProcess.kill('SIGKILL'); } catch { /* ignore */ }
+                }
+              }, 2000);
+            }
+          } catch (e) {
+            logger.warn('[exec-interactive] 断连后清理子进程失败:', e?.message || e);
           }
         }
       });

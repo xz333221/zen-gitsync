@@ -23,6 +23,50 @@ import { spawn, exec } from 'child_process';
 import { ensureWithinCwd } from '../utils/pathGuard.js';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// /api/change_directory 路径白名单(SEC-PATH-2)
+//
+// 防止 chdir 到任意绝对路径(尤其 / 或 C:\\)后,下游 fs / git 操作都
+// 跟着跨出项目。
+// 规则:
+//   1. 必须是字符串
+//   2. 必须是绝对路径或相对 process.cwd() 能解析的
+//   3. 解析后必须是已存在的目录
+//   4. 不能包含 NUL / 控制字符 / 路径穿越 token("..")越过祖先之外
+//
+// 注意:即便合法,也最好在 chdir 后立即 invalidateCurrentProjectKey 与
+// config 缓存,详见 fs.js 后续代码。
+// ─────────────────────────────────────────────────────────────────────────────
+const FORBIDDEN_PATH_PATTERNS = /[\x00-\x1f]/
+
+function validateChangeDirectoryPath(input) {
+  if (!input || typeof input !== 'string') {
+    return { ok: false, error: '目录路径必须是非空字符串' };
+  }
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return { ok: false, error: '目录路径不能为空' };
+  }
+  if (FORBIDDEN_PATH_PATTERNS.test(trimmed)) {
+    return { ok: false, error: '目录路径包含非法控制字符' };
+  }
+  // 不允许长度过长的路径(防止 DoS / 解析爆炸)
+  if (trimmed.length > 4096) {
+    return { ok: false, error: '目录路径过长' };
+  }
+  const resolved = path.resolve(trimmed);
+  // 阻止 chdir 到根目录之外但仍是合理目录的边界场景:
+  // 这里采用宽松策略 — 只要 resolved 是已存在的目录即可(无法 100% 阻止
+  // chdir 到任意位置,这是产品要求:GUI 内的"切换项目"功能需要允许切到
+  // 任意用户目录)。安全护栏放在下游 fs/git 操作上(safePathInProject)。
+  return { ok: true, resolved };
+}
+
+// 把 absolute path 准备好传给 spawn/exec,内部不再做字符串拼接,
+// Windows 走 cmd /c start "" ... argv 模式;Linux 走 sh -c 但 argument 已被
+// shQuote.js 转义
+import { shQuote, psEscape } from '../utils/shellQuote.js';
+
 export function registerFsRoutes({
   app,
   execGitCommand,
@@ -69,13 +113,31 @@ export function registerFsRoutes({
   app.post('/api/change_directory', asyncRoute(async (req, res) => {
     try {
       const { path: reqPath } = req.body;
-      
+
       if (!reqPath) {
         throw new HttpError(400, '目录路径不能为空');
       }
-      
+
+      // SEC-PATH-2 防御:路径白名单 + 长度限制 + 控制字符拦截
+      const validation = validateChangeDirectoryPath(reqPath);
+      if (!validation.ok) {
+        throw new HttpError(400, validation.error);
+      }
+      const safeReqPath = validation.resolved;
+
       try {
-        process.chdir(reqPath);
+        // 解析后再次确认是已存在的目录,防止 race 期间目录被删
+        try {
+          const stat = await fs.stat(safeReqPath);
+          if (!stat.isDirectory()) {
+            throw new HttpError(400, '目标路径不是目录');
+          }
+        } catch (e) {
+          if (e instanceof HttpError) throw e;
+          throw new HttpError(400, `目标目录不存在: ${safeReqPath}`);
+        }
+
+        process.chdir(safeReqPath);
         const newDirectory = process.cwd();
       
         // 更新当前项目路径和房间ID
@@ -152,9 +214,12 @@ export function registerFsRoutes({
           });
         }
       } catch (error) {
+        if (error instanceof HttpError) {
+          return res.status(error.status).json({ success: false, error: error.message });
+        }
         res.status(400).json({
           success: false,
-          error: `切换到目录 "${reqPath}" 失败: ${error.message}`
+          error: `切换到目录 "${safeReqPath}" 失败: ${error.message}`
         });
       }
     } catch (error) {
@@ -332,22 +397,22 @@ export function registerFsRoutes({
   // 在终端中打开当前目录
   app.post('/api/open_terminal', asyncRoute(async (req, res) => {
     try {
-      // 获取要打开的目录路径，如果没有提供，则使用当前目录
-      const directoryPath = req.body.path || process.cwd();
-      
+      // SEC-INJ-4 防御:先 path.resolve 规范化,后续所有 spawn 走 argv 数组
+      const directoryPath = path.resolve(String(req.body.path || process.cwd()));
+
       try {
         // 检查目录是否存在
         await fs.access(directoryPath);
-      
+
         // 根据不同操作系统打开终端
         const platform = os.platform();
         let command;
         let args;
-      
+
         switch (platform) {
           case 'win32':
-            // Windows: 将start命令的参数分开传递，避免引号转义问题
-            // 参数顺序：start [title] /D [path] [command]
+            // Windows: cmd /c start "" /D path cmd,所有参数走数组传入,
+            // 不拼字符串 - 避免 directoryPath 含双引号 / 反斜杠被二次解释
             command = 'cmd';
             args = ['/c', 'start', '', '/D', directoryPath, 'cmd'];
             break;
@@ -357,37 +422,40 @@ export function registerFsRoutes({
             args = ['-a', 'Terminal', directoryPath];
             break;
           case 'linux': {
-            // Linux: 尝试使用常见的终端模拟器
-            // 优先级: gnome-terminal, konsole, xterm
+            // Linux: 尝试使用常见的终端模拟器 - argv 数组模式
+            // xterm 路径用 bash -c 跑 cd(且 cd path 已经 JSON.stringify 转义)
             const terminals = [
               { cmd: 'gnome-terminal', args: ['--working-directory', directoryPath] },
               { cmd: 'konsole', args: ['--workdir', directoryPath] },
-              { cmd: 'xterm', args: ['-e', `cd "${directoryPath}" && $SHELL`] }
+              { cmd: 'xterm', args: ['-e', 'bash', '-c', `cd ${JSON.stringify(directoryPath)} && exec $SHELL`] },
             ];
-      
-            // 尝试找到可用的终端
-            let terminalFound = false;
+
+            // 用 spawn 探测命令存在(不走 shell)
+            let terminalFound = null;
             for (const terminal of terminals) {
               try {
-                exec(`which ${terminal.cmd}`, (error) => {
-                  if (!error) {
-                    command = terminal.cmd;
-                    args = terminal.args;
-                    terminalFound = true;
-                  }
+                const probe = await new Promise((resolve) => {
+                  const p = spawn('sh', ['-c', `command -v ${terminal.cmd}`], { stdio: 'ignore' });
+                  p.on('exit', (code) => resolve(code === 0));
+                  p.on('error', () => resolve(false));
                 });
-                if (terminalFound) break;
+                if (probe) {
+                  terminalFound = terminal;
+                  break;
+                }
               } catch (e) {
                 continue;
               }
             }
-      
+
             if (!terminalFound) {
               return res.status(400).json({
                 success: false,
                 error: '未找到可用的终端模拟器'
               });
             }
+            command = terminalFound.cmd;
+            args = terminalFound.args;
             break;
           }
           default:
@@ -396,13 +464,13 @@ export function registerFsRoutes({
               error: `不支持的操作系统: ${platform}`
             });
         }
-      
+
         // 执行命令打开终端
         spawn(command, args, {
           detached: true,
           stdio: 'ignore'
         }).unref();
-      
+
         res.json({
           success: true,
           message: '已在终端中打开目录'
@@ -421,42 +489,51 @@ export function registerFsRoutes({
     }
     }));
 
-  // 新开 cmd 标签并在目标路径执行 g ui
+  // 新开 cmd 标签并在目标路径执行 g ui(SEC-INJ-4 修复)
   app.post('/api/open-new-tab-gui', asyncRoute(async (req, res) => {
     try {
-      const directoryPath = req.body.path || process.cwd();
-      
+      const directoryPath = path.resolve(String(req.body.path || process.cwd()));
+
       try {
         await fs.access(directoryPath);
-      
+
         const platform = os.platform();
-      
+
         if (platform === 'win32') {
-          // Windows: start 第一个参数是窗口标题，必须用 "" 占位，否则 cmd 会被当成标题
-          // start "" /D "path" cmd /k g ui
-          const winPath = directoryPath.replace(/\//g, '\\').replace(/"/g, '\\"');
-          exec(`start "" /D "${winPath}" cmd /k g ui`);
+          // Windows: 用 argv 数组启动 start "" /D path cmd /k g ui,
+          // directoryPath 通过数组传入 - Node 自动按 Windows CreateProcess
+          // 要求转义,无需手写 replace
+          spawn('cmd', ['/c', 'start', '', '/D', directoryPath, 'cmd', '/k', 'g', 'ui'], {
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: false,
+          }).unref();
         } else if (platform === 'darwin') {
           spawn('open', ['-a', 'Terminal', directoryPath], {
             detached: true,
             stdio: 'ignore'
           }).unref();
         } else {
-          // Linux fallback
-          spawn('bash', ['-c', `gnome-terminal -- bash -c "cd '${directoryPath}' && g ui; exec bash" &`], {
+          // Linux fallback: gnome-terminal 直接接 --working-directory,
+          // 内部命令(g ui; exec bash)作为 bash 的独立 argv 元素
+          spawn('gnome-terminal', [
+            '--working-directory', directoryPath,
+            '--', 'bash', '-c', 'g ui; exec bash',
+          ], {
             detached: true,
             stdio: 'ignore'
           }).unref();
         }
-      
+
         res.json({ success: true });
       } catch (error) {
-        res.status(400).json({ success: false, error: `无法打开: ${error.message}` });
+        res.status(400).json({ success: false, error: `无法打开: ${'$'}{error.message}` });
       }
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
     }));
+
 
   // ========== 文件锁定相关 API ==========
 
@@ -684,8 +761,9 @@ export function registerFsRoutes({
       if (isDirectory) {
         await open(resolved, { wait: false });
       } else if (platform === 'win32') {
-        // Windows: explorer.exe /select,"<path>"
-        spawn('explorer.exe', [`/select,"${resolved}"`], { detached: true, stdio: 'ignore' }).unref();
+        // Windows: explorer.exe /select,<path>(逗号分隔,无双引号)
+        // resolved 已通过 safePathInProject 校验,argv 数组传入防二次解释
+        spawn('explorer.exe', ['/select,', resolved], { detached: true, stdio: 'ignore' }).unref();
       } else if (platform === 'darwin') {
         // macOS: open -R "<path>" 在 Finder 中选中
         spawn('open', ['-R', resolved], { detached: true, stdio: 'ignore' }).unref();

@@ -80,7 +80,49 @@ const showConsole = true;
 async function startUIServer(noOpen = false, savePort = false) {
   const app = express();
   const httpServer = createServer(app);
-  const io = new Server(httpServer);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Socket.IO CORS / origin 收紧
+  //
+  // 默认 Socket.IO 接受任意 origin,跨域页面也能连上 → CSRF / 跨站攻击面
+  // 暴露给恶意页面。这里只允许同源 + 127.0.0.1 / localhost。
+  // 用环境变量 ZEN_ALLOWED_ORIGINS 可以追加自定义来源(逗号分隔),
+  // CI / 远程调试场景用。
+  // ─────────────────────────────────────────────────────────────────────────────
+  const DEFAULT_ALLOWED_ORIGINS = [
+    'http://localhost',
+    'https://localhost',
+    'http://127.0.0.1',
+    'https://127.0.0.1',
+    'http://[::1]',
+    'null', // 同源 file:// 等场景
+  ];
+  const extraOrigins = String(process.env.ZEN_ALLOWED_ORIGINS || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const allowedOrigins = new Set([...DEFAULT_ALLOWED_ORIGINS, ...extraOrigins]);
+
+  function isOriginAllowed(origin) {
+    if (!origin) return true; // 同源 / 非浏览器客户端不传 Origin
+    if (allowedOrigins.has(origin)) return true;
+    // 允许 localhost/127.0.0.1/[::1] 上的任意端口(开发常换端口)
+    try {
+      const u = new URL(origin);
+      if (['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)) return true;
+    } catch { /* ignore */ }
+    return false;
+  }
+
+  const io = new Server(httpServer, {
+    cors: {
+      origin: (origin, cb) => {
+        if (isOriginAllowed(origin)) return cb(null, true);
+        logger.warn(`[Socket.IO] 拒绝跨域 origin: ${origin}`);
+        return cb(new Error('Origin not allowed'), false);
+      },
+      methods: ['GET', 'POST'],
+      credentials: false,
+    },
+  });
   if (showConsole) logger.info(`创建服务成功`)
   
   // 获取当前项目的唯一标识（使用工作目录路径）
@@ -246,7 +288,7 @@ async function startUIServer(noOpen = false, savePort = false) {
   // ai-model-form 中间件：提供 /api/ai-model/* 路由（模型列表/测试/暂存保存）
   app.use('/api', createAiModelMiddleware());
 
-  registerCodeAnalysisRoutes({ app, configManager });
+  registerCodeAnalysisRoutes({ app, configManager, getCurrentProjectPath: () => currentProjectPath });
 
   // 实例注册表 API：列出当前所有运行中的 GUI
   registerInstancesRoutes({
