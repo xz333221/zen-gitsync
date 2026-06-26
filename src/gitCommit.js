@@ -23,11 +23,10 @@ import readline from 'readline'
 import ora from 'ora';
 import chalk from 'chalk';
 import config from './config.js';
-import { exec } from 'child_process';
 import {
-  registerCleanup, trackChild, setupSigintHandler,
+  registerCleanup, setupSigintHandler,
 } from './cli/cleanup.js';
-import { validateCustomCommand, isCmdStrictMode } from './cli/customCommand.js';
+import { validateCustomCommand, isCmdStrictMode, runCustomCommand } from './cli/customCommand.js';
 
 // 延迟加载的重模块 — 这些只在特定子命令路径才需要,启动时加载会无谓拖慢
 // CLI 冷启动(其中 startUIServer 还会拉起 Express + Socket.IO + 全部 routes,
@@ -137,7 +136,6 @@ const {defaultCommitMessage} = config
 let timer = null
 
 async function createGitCommit(options) {
-  // console.log(`自动提交流程开始=====================>`)
   try {
     let statusOutput = null
     let exit = options ? !!options.exit : true
@@ -304,16 +302,7 @@ async function main() {
       const atTime = atMatch ? atMatch[2] : '';
       const repeatDaily = process.argv.includes('--daily') || process.argv.includes('--repeat=daily') || process.argv.includes('--at-repeat=daily');
 
-      const runOnce = () => {
-        console.log(`\n[自定义命令执行] ${new Date().toLocaleString()}\n> ${cmd}`);
-        trackChild(exec(cmd, (err, stdout, stderr) => {
-          if (err) {
-            console.error(`[自定义命令错误]`, err.message);
-          }
-          if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
-          if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
-        }));
-      };
+      const runOnce = () => runCustomCommand(cmd);
 
       const getNextTarget = (now) => {
         if (/^\d{2}:\d{2}$/.test(atTime)) {
@@ -377,16 +366,7 @@ async function main() {
       const interval = intervalMatch ? parseInt(intervalMatch[2], 10) * 1000 : 0;
       if (interval > 0) {
         console.log(`每隔 ${interval/1000} 秒执行: ${cmd}`);
-        const cmdIntervalId = setInterval(() => {
-          console.log(`\n[自定义命令执行] ${new Date().toLocaleString()}\n> ${cmd}`);
-          trackChild(exec(cmd, (err, stdout, stderr) => {
-            if (err) {
-              console.error(`[自定义命令错误]`, err.message);
-            }
-            if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
-            if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
-          }));
-        }, interval);
+        const cmdIntervalId = setInterval(() => runCustomCommand(cmd, { silent: true }), interval);
         // 注册 cleanup,Ctrl+C 时清掉这个 interval(否则进程不退)
         registerCleanup('cmdInterval', () => clearInterval(cmdIntervalId));
       } else {
@@ -394,14 +374,7 @@ async function main() {
       }
     } else {
       // 立即执行一次
-      console.log(`[自定义命令立即执行] > ${cmd}`);
-      trackChild(exec(cmd, (err, stdout, stderr) => {
-        if (err) {
-          console.error(`[自定义命令错误]`, err.message);
-        }
-        if (stdout) console.log(`[自定义命令输出]\n${stdout}`);
-        if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`);
-      }));
+      runCustomCommand(cmd);
     }
   }
   // ========== 新增功能结束 ==========
@@ -431,7 +404,6 @@ const showStartInfo = (interval) => {
   ].join("\n"));
 
   coloredLog(head, message)
-  // console.log('\n'.repeat(6));
 }
 // 漂移自由调度的基线时间(由 judgeInterval 在启动时初始化一次)。
 // commitAndSchedule 每次循环 nextRunAt += interval,实际 setTimeout 延迟

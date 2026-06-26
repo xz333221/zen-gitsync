@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+import logger from '../utils/logger.js'
+
 export function createDiffHelpers({ execGitCommand }) {
   /**
    * 检查文件是否应该跳过diff显示（参考GitLab策略）
@@ -83,7 +85,7 @@ export function createDiffHelpers({ execGitCommand }) {
       }
     } catch (error) {
       // numstat失败不影响后续流程
-      console.log('numstat检查失败，继续执行:', error.message);
+      logger.info('numstat检查失败，继续执行:', error.message);
     }
 
     // 3. 通过了初步检查

@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import express from 'express';
+import logger from '../utils/logger.js'
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
@@ -71,7 +72,7 @@ export function registerNpmRoutes({
         return pkg.version || '0.0.0'
       }
     } catch (err) {
-      console.error('读取本地 package.json 版本失败:', err)
+      logger.error('读取本地 package.json 版本失败:', err)
     }
     return '0.0.0'
   }
@@ -346,7 +347,7 @@ export function registerNpmRoutes({
           send({ type: 'ready', port: newPort });
           finish();
           try { fsSync.unlinkSync(notifyPath) } catch (_) {}
-          console.log('[app-restart] 子进程已就绪，退出当前进程');
+          logger.info('[app-restart] 子进程已就绪，退出当前进程');
           process.exit(0);
         }, EXIT_DELAY_MS);
         return;
@@ -603,7 +604,6 @@ export function registerNpmRoutes({
       const packageJsons = [];
       const startTime = Date.now();
       
-      // console.log(`[NPM扫描-后端] 开始扫描项目: ${projectRoot}`);
       
       // 需要忽略的目录列表（更全面）
       const IGNORED_DIRS = new Set([
@@ -655,7 +655,7 @@ export function registerNpmRoutes({
           const fileSizeMB = stats.size / (1024 * 1024);
           if (fileSizeMB > 1) {
             // package.json超过1MB是异常情况，跳过
-            console.log(`[NPM扫描] 跳过超大文件 (${fileSizeMB.toFixed(2)}MB): ${packagePath}`);
+            logger.info(`[NPM扫描] 跳过超大文件 (${fileSizeMB.toFixed(2)}MB): ${packagePath}`);
             return false;
           }
           
@@ -759,10 +759,8 @@ export function registerNpmRoutes({
       }
       
       // 执行递归扫描
-      // console.log(`[NPM扫描-后端] 开始递归扫描（最大深度${MAX_DEPTH}层）`);
       const scanStart = Date.now();
       await scanDirectory(projectRoot, 0);
-      // console.log(`[NPM扫描-后端] 递归扫描完成，耗时${Date.now() - scanStart}ms`);
       
       // 扫描完成，清除abort controller
       if (currentScanAbortController === scanController) {
@@ -772,7 +770,7 @@ export function registerNpmRoutes({
       const scanTime = Date.now() - startTime;
       
       if (scanController.aborted) {
-        console.log(`npm脚本扫描被取消，耗时${scanTime}ms`);
+        logger.info(`npm脚本扫描被取消，耗时${scanTime}ms`);
         return res.json({ 
           success: true, 
           packages: [],
@@ -787,8 +785,6 @@ export function registerNpmRoutes({
         .filter(Boolean)
         .join(', ');
       
-      // console.log(`npm脚本扫描完成，耗时${scanTime}ms，扫描了${scannedCount}个目录，读取了${fileReadCount}个package.json文件，跳过${skippedCount}个目录，找到${packageJsons.length}个有效的package.json`);
-      // console.log(`[NPM扫描-后端] 深度分布: ${depthInfo}`);
       
       res.json({ 
         success: true, 
@@ -796,7 +792,7 @@ export function registerNpmRoutes({
         totalScripts: packageJsons.reduce((sum, pkg) => sum + Object.keys(pkg.scripts).length, 0)
       });
     } catch (error) {
-      console.error('扫描npm脚本失败:', error);
+      logger.error('扫描npm脚本失败:', error);
       res.status(500).json({ 
         success: false, 
         error: `扫描npm脚本失败: ${error.message}` 
@@ -958,7 +954,7 @@ export function registerNpmRoutes({
         fileReadCount
       });
     } catch (error) {
-      console.error('扫描package.json文件失败:', error);
+      logger.error('扫描package.json文件失败:', error);
       res.status(500).json({ 
         success: false, 
         error: `扫描package.json文件失败: ${error.message}` 
@@ -978,7 +974,7 @@ export function registerNpmRoutes({
         });
       }
       
-      console.log(`执行npm脚本: ${scriptName} in ${packagePath}`);
+      logger.info(`执行npm脚本: ${scriptName} in ${packagePath}`);
       
       // 根据操作系统选择合适的终端命令
       let terminalCommand;
@@ -1001,7 +997,7 @@ export function registerNpmRoutes({
       // 执行命令打开新终端（使用已导入的 exec）
       exec(terminalCommand, (error, stdout, stderr) => {
         if (error) {
-          console.error('打开终端失败:', error);
+          logger.error('打开终端失败:', error);
         }
       });
       
@@ -1012,7 +1008,7 @@ export function registerNpmRoutes({
         path: packagePath
       });
     } catch (error) {
-      console.error('执行npm脚本失败:', error);
+      logger.error('执行npm脚本失败:', error);
       res.status(500).json({ 
         success: false, 
         error: `执行npm脚本失败: ${error.message}` 
@@ -1086,7 +1082,7 @@ export function registerNpmRoutes({
       // 写回文件
       fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
       
-      console.log(`已更新npm版本号: ${oldVersion} → ${newVersion} (${packagePath})`);
+      logger.info(`已更新npm版本号: ${oldVersion} → ${newVersion} (${packagePath})`);
       
       res.json({
         success: true,
@@ -1094,7 +1090,7 @@ export function registerNpmRoutes({
         newVersion
       });
     } catch (error) {
-      console.error('更新版本号失败:', error);
+      logger.error('更新版本号失败:', error);
       res.status(500).json({
         success: false,
         error: `更新版本号失败: ${error.message}`
@@ -1150,7 +1146,7 @@ export function registerNpmRoutes({
       // 写回文件（保持格式化）
       fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
       
-      console.log(`已添加npm脚本: ${scriptName} = ${scriptCommand} (${packagePath})`);
+      logger.info(`已添加npm脚本: ${scriptName} = ${scriptCommand} (${packagePath})`);
       
       res.json({
         success: true,
@@ -1158,7 +1154,7 @@ export function registerNpmRoutes({
         scriptCommand
       });
     } catch (error) {
-      console.error('添加npm脚本失败:', error);
+      logger.error('添加npm脚本失败:', error);
       res.status(500).json({
         success: false,
         error: `添加npm脚本失败: ${error.message}`
@@ -1211,7 +1207,7 @@ export function registerNpmRoutes({
       // 写回文件
       fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
       
-      console.log(`已更新npm脚本: ${scriptName} = ${scriptCommand} (${packagePath})`);
+      logger.info(`已更新npm脚本: ${scriptName} = ${scriptCommand} (${packagePath})`);
       
       res.json({
         success: true,
@@ -1219,7 +1215,7 @@ export function registerNpmRoutes({
         scriptCommand
       });
     } catch (error) {
-      console.error('更新npm脚本失败:', error);
+      logger.error('更新npm脚本失败:', error);
       res.status(500).json({
         success: false,
         error: `更新npm脚本失败: ${error.message}`
@@ -1270,14 +1266,14 @@ export function registerNpmRoutes({
       // 写回文件
       fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
       
-      console.log(`已删除npm脚本: ${scriptName} (${packagePath})`);
+      logger.info(`已删除npm脚本: ${scriptName} (${packagePath})`);
       
       res.json({
         success: true,
         scriptName
       });
     } catch (error) {
-      console.error('删除npm脚本失败:', error);
+      logger.error('删除npm脚本失败:', error);
       res.status(500).json({
         success: false,
         error: `删除npm脚本失败: ${error.message}`
@@ -1339,14 +1335,14 @@ export function registerNpmRoutes({
       // 写回文件
       fsSync.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
       
-      console.log(`已置顶npm脚本: ${scriptName} (${packagePath})`);
+      logger.info(`已置顶npm脚本: ${scriptName} (${packagePath})`);
       
       res.json({
         success: true,
         scriptName
       });
     } catch (error) {
-      console.error('置顶npm脚本失败:', error);
+      logger.error('置顶npm脚本失败:', error);
       res.status(500).json({
         success: false,
         error: `置顶npm脚本失败: ${error.message}`

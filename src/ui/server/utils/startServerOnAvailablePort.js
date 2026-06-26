@@ -43,7 +43,7 @@ export async function startServerOnAvailablePort({
     try {
       if (currentPort > startPort) {
         await new Promise(resolve => setTimeout(resolve, 800));
-        console.log(`尝试端口 ${currentPort}...`);
+        logger.info(`尝试端口 ${currentPort}...`);
       }
 
       await new Promise((resolve, reject) => {
@@ -100,15 +100,15 @@ export async function startServerOnAvailablePort({
       return currentPort;
     } catch (err) {
       if (err.code === 'EADDRINUSE') {
-        console.log(`端口 ${currentPort} 被占用，尝试下一个端口...`);
+        logger.info(`端口 ${currentPort} 被占用，尝试下一个端口...`);
         currentPort++;
       } else {
-        console.error('启动服务器失败:', err);
+        logger.error('启动服务器失败:', err);
         process.exit(1);
       }
     }
   }
 
-  console.error(`无法找到可用端口 (尝试范围: ${startPort}-${maxPort - 1})`);
+  logger.error(`无法找到可用端口 (尝试范围: ${startPort}-${maxPort - 1})`);
   process.exit(1);
 }

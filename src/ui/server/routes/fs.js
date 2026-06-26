@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import express from 'express';
+import logger from '../utils/logger.js'
 import chalk from 'chalk';
 import fs from 'fs/promises';
 import path from 'path';
@@ -20,6 +21,7 @@ import open from 'open';
 import os from 'os';
 import { spawn, exec } from 'child_process';
 import { ensureWithinCwd } from '../utils/pathGuard.js';
+import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 
 export function registerFsRoutes({
   app,
@@ -39,10 +41,10 @@ export function registerFsRoutes({
   }
 
   // 新增获取当前工作目录接口
-  app.get('/api/current_directory', async (req, res) => {
+  app.get('/api/current_directory', asyncRoute(async (req, res) => {
     try {
       const directory = process.cwd();
-
+      
       // 检查当前目录是否是Git仓库
       try {
         await execGitCommand(['rev-parse', '--is-inside-work-tree']);
@@ -53,7 +55,7 @@ export function registerFsRoutes({
           isGitRepo: false
         });
       }
-
+      
       res.json({
         directory,
         isGitRepo: true
@@ -61,38 +63,38 @@ export function registerFsRoutes({
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  });
+    }));
 
   // 新增切换工作目录接口
-  app.post('/api/change_directory', async (req, res) => {
+  app.post('/api/change_directory', asyncRoute(async (req, res) => {
     try {
       const { path: reqPath } = req.body;
-
+      
       if (!reqPath) {
-        return res.status(400).json({ success: false, error: '目录路径不能为空' });
+        throw new HttpError(400, '目录路径不能为空');
       }
-
+      
       try {
         process.chdir(reqPath);
         const newDirectory = process.cwd();
-
+      
         // 更新当前项目路径和房间ID
         const oldProjectPath = getCurrentProjectPath();
         const newProjectPath = newDirectory;
         const newProjectRoomId = `project:${newProjectPath.replace(/[\\/:*?"<>|\s]/g, '_')}`;
-
+      
         console.log(chalk.yellow(`项目路径切换: ${oldProjectPath} -> ${newProjectPath}`));
         console.log(chalk.yellow(`房间ID更新: ${getProjectRoomId()} -> ${newProjectRoomId}`));
-
+      
         // 检查新目录是否是Git仓库
         try {
           await execGitCommand(['rev-parse', '--is-inside-work-tree']);
-
+      
           // 更新全局变量
           setCurrentProjectPath(newProjectPath);
           setProjectRoomId(newProjectRoomId);
           setIsGitRepo(true);
-
+      
           // 确保切换后立即初始化该项目的配置条目
           try {
             const currentCfg = await configManager.loadConfig();
@@ -100,16 +102,16 @@ export function registerFsRoutes({
             // 将新目录加入最近目录
             await configManager.saveRecentDirectory(newDirectory);
           } catch (e) {
-            console.warn('初始化项目配置失败:', e?.message || e);
+            logger.warn('初始化项目配置失败:', e?.message || e);
           }
-
+      
           // 通知所有旧房间的客户端项目已切换
           io.to(getProjectRoomId()).emit('project_changed', {
             oldProjectPath: getCurrentProjectPath(),
             newProjectPath: newProjectPath,
             newProjectRoomId: newProjectRoomId
           });
-
+      
           res.json({
             success: true,
             directory: newDirectory,
@@ -118,19 +120,19 @@ export function registerFsRoutes({
           });
         } catch (error) {
           // 不是Git仓库，停止监控
-
+      
           // 更新全局变量
           setCurrentProjectPath(newProjectPath);
           setProjectRoomId(newProjectRoomId);
           setIsGitRepo(false);
-
+      
           // 通知所有旧房间的客户端项目已切换
           io.to(getProjectRoomId()).emit('project_changed', {
             oldProjectPath: getCurrentProjectPath(),
             newProjectPath: newProjectPath,
             newProjectRoomId: newProjectRoomId
           });
-
+      
           // 即使不是Git仓库也初始化当前目录配置（使用CWD作为项目键）
           try {
             const currentCfg = await configManager.loadConfig();
@@ -138,9 +140,9 @@ export function registerFsRoutes({
             // 将新目录加入最近目录
             await configManager.saveRecentDirectory(newDirectory);
           } catch (e) {
-            console.warn('非Git目录初始化项目配置失败:', e?.message || e);
+            logger.warn('非Git目录初始化项目配置失败:', e?.message || e);
           }
-
+      
           res.json({
             success: true,
             directory: newDirectory,
@@ -158,22 +160,22 @@ export function registerFsRoutes({
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  });
+    }));
 
   // 获取目录内容（用于浏览目录）
-  app.get('/api/browse_directory', async (req, res) => {
+  app.get('/api/browse_directory', asyncRoute(async (req, res) => {
     try {
       // 获取要浏览的目录路径，如果没有提供，则使用当前目录
       const directoryPath = req.query.path || process.cwd();
-
+      
       try {
         // 读取目录内容
         const items = await fs.readdir(directoryPath, { withFileTypes: true });
-
+      
         // 分离文件夹和文件
         const directories = [];
         const files = [];
-
+      
         for (const item of items) {
           const fullPath = path.join(directoryPath, item.name);
           if (item.isDirectory()) {
@@ -190,14 +192,14 @@ export function registerFsRoutes({
             });
           }
         }
-
+      
         // 优先显示目录，然后是文件，都按字母排序
         directories.sort((a, b) => a.name.localeCompare(b.name));
         files.sort((a, b) => a.name.localeCompare(b.name));
-
+      
         // 获取父目录路径
         const parentPath = path.dirname(directoryPath);
-
+      
         res.json({
           success: true,
           currentPath: directoryPath,
@@ -213,21 +215,21 @@ export function registerFsRoutes({
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  });
+    }));
 
   // POST接口版本的浏览目录功能
-  app.post('/api/browse_directory', async (req, res) => {
+  app.post('/api/browse_directory', asyncRoute(async (req, res) => {
     try {
       // 获取要浏览的目录路径，如果没有提供，则使用当前目录
       const directoryPath = req.body.currentPath || process.cwd();
-
+      
       try {
         // 读取目录内容
         const items = await fs.readdir(directoryPath, { withFileTypes: true });
-
+      
         // 分离文件夹和文件
         const directories = [];
-
+      
         for (const item of items) {
           const fullPath = path.join(directoryPath, item.name);
           if (item.isDirectory()) {
@@ -238,13 +240,13 @@ export function registerFsRoutes({
             });
           }
         }
-
+      
         // 只返回目录，不返回文件
         directories.sort((a, b) => a.name.localeCompare(b.name));
-
+      
         // 获取父目录路径
         const parentPath = path.dirname(directoryPath);
-
+      
         // 返回选择的目录路径
         res.json({
           success: true,
@@ -264,10 +266,10 @@ export function registerFsRoutes({
         error: error.message
       });
     }
-  });
+    }));
 
   // 获取最近访问的目录列表
-  app.get('/api/recent_directories', async (req, res) => {
+  app.get('/api/recent_directories', asyncRoute(async (req, res) => {
     try {
       // 尝试从配置中获取最近的目录
       const recentDirs = await configManager.getRecentDirectories();
@@ -294,21 +296,21 @@ export function registerFsRoutes({
         error: error.message
       });
     }
-  });
+    }));
 
   // 在资源管理器/访达中打开当前目录
-  app.post('/api/open_directory', async (req, res) => {
+  app.post('/api/open_directory', asyncRoute(async (req, res) => {
     try {
       // 获取要打开的目录路径，如果没有提供，则使用当前目录
       const directoryPath = req.body.path || process.cwd();
-
+      
       try {
         // 检查目录是否存在
         await fs.access(directoryPath);
-
+      
         // 使用open模块打开目录，自动处理不同操作系统
         await open(directoryPath, { wait: false });
-
+      
         res.json({
           success: true,
           message: '已在文件管理器中打开目录'
@@ -325,23 +327,23 @@ export function registerFsRoutes({
         error: error.message
       });
     }
-  });
+    }));
 
   // 在终端中打开当前目录
-  app.post('/api/open_terminal', async (req, res) => {
+  app.post('/api/open_terminal', asyncRoute(async (req, res) => {
     try {
       // 获取要打开的目录路径，如果没有提供，则使用当前目录
       const directoryPath = req.body.path || process.cwd();
-
+      
       try {
         // 检查目录是否存在
         await fs.access(directoryPath);
-
+      
         // 根据不同操作系统打开终端
         const platform = os.platform();
         let command;
         let args;
-
+      
         switch (platform) {
           case 'win32':
             // Windows: 将start命令的参数分开传递，避免引号转义问题
@@ -362,7 +364,7 @@ export function registerFsRoutes({
               { cmd: 'konsole', args: ['--workdir', directoryPath] },
               { cmd: 'xterm', args: ['-e', `cd "${directoryPath}" && $SHELL`] }
             ];
-
+      
             // 尝试找到可用的终端
             let terminalFound = false;
             for (const terminal of terminals) {
@@ -379,7 +381,7 @@ export function registerFsRoutes({
                 continue;
               }
             }
-
+      
             if (!terminalFound) {
               return res.status(400).json({
                 success: false,
@@ -394,13 +396,13 @@ export function registerFsRoutes({
               error: `不支持的操作系统: ${platform}`
             });
         }
-
+      
         // 执行命令打开终端
         spawn(command, args, {
           detached: true,
           stdio: 'ignore'
         }).unref();
-
+      
         res.json({
           success: true,
           message: '已在终端中打开目录'
@@ -417,18 +419,18 @@ export function registerFsRoutes({
         error: error.message
       });
     }
-  });
+    }));
 
   // 新开 cmd 标签并在目标路径执行 g ui
-  app.post('/api/open-new-tab-gui', async (req, res) => {
+  app.post('/api/open-new-tab-gui', asyncRoute(async (req, res) => {
     try {
       const directoryPath = req.body.path || process.cwd();
-
+      
       try {
         await fs.access(directoryPath);
-
+      
         const platform = os.platform();
-
+      
         if (platform === 'win32') {
           // Windows: start 第一个参数是窗口标题，必须用 "" 占位，否则 cmd 会被当成标题
           // start "" /D "path" cmd /k g ui
@@ -446,7 +448,7 @@ export function registerFsRoutes({
             stdio: 'ignore'
           }).unref();
         }
-
+      
         res.json({ success: true });
       } catch (error) {
         res.status(400).json({ success: false, error: `无法打开: ${error.message}` });
@@ -454,75 +456,75 @@ export function registerFsRoutes({
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
-  });
+    }));
 
   // ========== 文件锁定相关 API ==========
 
   // 获取锁定文件列表
-  app.get('/api/locked-files', async (req, res) => {
+  app.get('/api/locked-files', asyncRoute(async (req, res) => {
     try {
       const lockedFiles = await configManager.getLockedFiles();
       res.json({ success: true, lockedFiles });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
-  });
+    }));
 
   // 锁定文件
-  app.post('/api/lock-file', async (req, res) => {
+  app.post('/api/lock-file', asyncRoute(async (req, res) => {
     try {
       const { filePath } = req.body;
       if (!filePath) {
-        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+        throw new HttpError(400, '缺少文件路径参数');
       }
-
+      
       const result = await configManager.lockFile(filePath);
       res.json({ success: true, locked: result });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
-  });
+    }));
 
   // 解锁文件
-  app.post('/api/unlock-file', async (req, res) => {
+  app.post('/api/unlock-file', asyncRoute(async (req, res) => {
     try {
       const { filePath } = req.body;
       if (!filePath) {
-        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+        throw new HttpError(400, '缺少文件路径参数');
       }
-
+      
       const result = await configManager.unlockFile(filePath);
       res.json({ success: true, unlocked: result });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
-  });
+    }));
 
   // 检查文件是否锁定
-  app.post('/api/check-file-lock', async (req, res) => {
+  app.post('/api/check-file-lock', asyncRoute(async (req, res) => {
     try {
       const { filePath } = req.body;
       if (!filePath) {
-        return res.status(400).json({ success: false, error: '缺少文件路径参数' });
+        throw new HttpError(400, '缺少文件路径参数');
       }
-
+      
       const isLocked = await configManager.isFileLocked(filePath);
       res.json({ success: true, isLocked });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
-  });
+    }));
 
   // ── 编辑器：读取文件内容 ────────────────────────────────────────
-  app.get('/api/editor/file', async (req, res) => {
+  app.get('/api/editor/file', asyncRoute(async (req, res) => {
     try {
       const filePath = req.query.path;
-      if (!filePath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+      if (!filePath) throw new HttpError(400, '缺少 path 参数');
       const safe = await safePathInProject(filePath);
-      if (!safe) return res.status(403).json({ success: false, error: '禁止访问工作目录以外的文件' });
+      if (!safe) throw new HttpError(403, '禁止访问工作目录以外的文件');
       const resolved = safe.safePath;
       const stat = await fs.stat(resolved);
-      if (!stat.isFile()) return res.status(400).json({ success: false, error: '目标不是文件' });
+      if (!stat.isFile()) throw new HttpError(400, '目标不是文件');
       // 超过 2MB 不读取
       if (stat.size > 2 * 1024 * 1024) {
         return res.json({ success: false, error: '文件过大（> 2 MB），暂不支持在线编辑' });
@@ -532,10 +534,10 @@ export function registerFsRoutes({
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
-  });
+    }));
 
   // ── 编辑器：读取原始文件（用于图片等二进制文件预览）────────────────────
-  app.get('/api/editor/raw', async (req, res) => {
+  app.get('/api/editor/raw', asyncRoute(async (req, res) => {
     try {
       const filePath = req.query.path;
       if (!filePath) return res.status(400).end();
@@ -559,17 +561,17 @@ export function registerFsRoutes({
     } catch (error) {
       res.status(500).end();
     }
-  });
+    }));
 
   // ── 编辑器：写入文件内容 ────────────────────────────────────────
   app.put('/api/editor/file', express.json(), async (req, res) => {
     try {
       const { path: filePath, content } = req.body;
       if (!filePath || content === undefined) {
-        return res.status(400).json({ success: false, error: '缺少 path 或 content 参数' });
+        throw new HttpError(400, '缺少 path 或 content 参数');
       }
       const safe = await safePathInProject(filePath);
-      if (!safe) return res.status(403).json({ success: false, error: '禁止写入工作目录以外的文件' });
+      if (!safe) throw new HttpError(403, '禁止写入工作目录以外的文件');
       await fs.writeFile(safe.safePath, content, 'utf-8');
       res.json({ success: true });
     } catch (error) {
@@ -581,14 +583,14 @@ export function registerFsRoutes({
   app.post('/api/editor/file', express.json(), async (req, res) => {
     try {
       const { path: filePath } = req.body;
-      if (!filePath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+      if (!filePath) throw new HttpError(400, '缺少 path 参数');
       const safe = await safePathInProject(filePath);
-      if (!safe) return res.status(403).json({ success: false, error: '禁止在工作目录以外创建文件' });
+      if (!safe) throw new HttpError(403, '禁止在工作目录以外创建文件');
       const resolved = safe.safePath;
       // 如果已存在则拒绝
       try {
         await fs.access(resolved);
-        return res.status(409).json({ success: false, error: '文件已存在' });
+        throw new HttpError(409, '文件已存在');
       } catch { /* 不存在，继续 */ }
       await fs.mkdir(path.dirname(resolved), { recursive: true });
       await fs.writeFile(resolved, '', 'utf-8');
@@ -602,13 +604,13 @@ export function registerFsRoutes({
   app.post('/api/editor/directory', express.json(), async (req, res) => {
     try {
       const { path: dirPath } = req.body;
-      if (!dirPath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+      if (!dirPath) throw new HttpError(400, '缺少 path 参数');
       const safe = await safePathInProject(dirPath);
-      if (!safe) return res.status(403).json({ success: false, error: '禁止在工作目录以外创建目录' });
+      if (!safe) throw new HttpError(403, '禁止在工作目录以外创建目录');
       const resolved = safe.safePath;
       try {
         await fs.access(resolved);
-        return res.status(409).json({ success: false, error: '目录已存在' });
+        throw new HttpError(409, '目录已存在');
       } catch { /* 不存在，继续 */ }
       await fs.mkdir(resolved, { recursive: true });
       res.json({ success: true });
@@ -621,9 +623,9 @@ export function registerFsRoutes({
   app.delete('/api/editor/entry', express.json(), async (req, res) => {
     try {
       const filePath = req.query.path;
-      if (!filePath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+      if (!filePath) throw new HttpError(400, '缺少 path 参数');
       const safe = await safePathInProject(filePath);
-      if (!safe) return res.status(403).json({ success: false, error: '禁止删除工作目录以外的内容' });
+      if (!safe) throw new HttpError(403, '禁止删除工作目录以外的内容');
       const resolved = safe.safePath;
       const stat = await fs.stat(resolved);
       if (stat.isDirectory()) {
@@ -641,13 +643,13 @@ export function registerFsRoutes({
   app.put('/api/editor/rename', express.json(), async (req, res) => {
     try {
       const { oldPath, newPath } = req.body;
-      if (!oldPath || !newPath) return res.status(400).json({ success: false, error: '缺少参数' });
+      if (!oldPath || !newPath) throw new HttpError(400, '缺少参数');
       const safeOld = await safePathInProject(oldPath)
       const safeNew = await safePathInProject(newPath)
-      if (!safeOld || !safeNew) return res.status(403).json({ success: false, error: '禁止操作工作目录以外的内容' });
+      if (!safeOld || !safeNew) throw new HttpError(403, '禁止操作工作目录以外的内容');
       try {
         await fs.access(safeNew.safePath);
-        return res.status(409).json({ success: false, error: '目标名称已存在' });
+        throw new HttpError(409, '目标名称已存在');
       } catch { /* 不存在，继续 */ }
       await fs.rename(safeOld.safePath, safeNew.safePath);
       res.json({ success: true });
@@ -663,16 +665,16 @@ export function registerFsRoutes({
   app.post('/api/editor/reveal', express.json(), async (req, res) => {
     try {
       const targetPath = req.body?.path;
-      if (!targetPath) return res.status(400).json({ success: false, error: '缺少 path 参数' });
+      if (!targetPath) throw new HttpError(400, '缺少 path 参数');
 
       const safe = await safePathInProject(targetPath);
-      if (!safe) return res.status(403).json({ success: false, error: '禁止访问工作目录以外的内容' });
+      if (!safe) throw new HttpError(403, '禁止访问工作目录以外的内容');
       const resolved = safe.safePath;
 
       try {
         await fs.access(resolved);
       } catch {
-        return res.status(404).json({ success: false, error: '目标不存在' });
+        throw new HttpError(404, '目标不存在');
       }
 
       const stat = await fs.stat(resolved);

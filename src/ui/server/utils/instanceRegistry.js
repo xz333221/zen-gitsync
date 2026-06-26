@@ -18,6 +18,7 @@
 // stale 判定：PID 不存在 或 lastHeartbeat 超过阈值
 
 import nodePath from 'node:path';
+import logger from '../utils/logger.js'
 import nodeOs from 'node:os';
 
 const STALE_MS = 30_000;          // 心跳超时阈值（毫秒）
@@ -90,7 +91,7 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
       if (err && err.code === 'ENOENT') {
         return { version: REGISTRY_VERSION, instances: {} };
       }
-      console.warn(`[instanceRegistry] 读取注册表失败，按空表处理: ${err?.message || err}`);
+      logger.warn(`[instanceRegistry] 读取注册表失败，按空表处理: ${err?.message || err}`);
       return { version: REGISTRY_VERSION, instances: {} };
     }
   }
@@ -207,7 +208,7 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
       throw new Error('watch: callback 必填');
     }
     if (typeof fsWatch !== 'function') {
-      console.warn('[instanceRegistry] 未提供 fs.watch，跨进程推送将不可用');
+      logger.warn('[instanceRegistry] 未提供 fs.watch，跨进程推送将不可用');
       return function noop() {};
     }
     let debounceTimer = null;
@@ -221,7 +222,7 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
         const fresh = await list({ pruneStale: true });
         callback(fresh);
       } catch (e) {
-        console.warn(`[instanceRegistry] watch 回调失败: ${e?.message || e}`);
+        logger.warn(`[instanceRegistry] watch 回调失败: ${e?.message || e}`);
       }
     };
 
@@ -240,11 +241,11 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
       });
       if (watcher && typeof watcher.on === 'function') {
         watcher.on('error', (err) => {
-          console.warn(`[instanceRegistry] fs.watch 出错: ${err?.message || err}`);
+          logger.warn(`[instanceRegistry] fs.watch 出错: ${err?.message || err}`);
         });
       }
     } catch (err) {
-      console.warn(`[instanceRegistry] 无法启动 fs.watch (${err?.message || err})，跨进程推送将不可用，请依赖轮询`);
+      logger.warn(`[instanceRegistry] 无法启动 fs.watch (${err?.message || err})，跨进程推送将不可用，请依赖轮询`);
     }
 
     return function closeWatcher() {

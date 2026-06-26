@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import express from 'express';
+import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -133,7 +134,7 @@ async function collectDiffForAi({ execGitCommand, getCurrentProjectPath, selecte
           await execGitCommand(['add', '-N', '--force', ...batch], cwdOpts)
         } catch (e) {
           // 单批失败不影响整体
-          console.warn('[generate-commit] git add -N failed for batch:', e?.message)
+          logger.warn('[generate-commit] git add -N failed for batch:', e?.message)
         }
       }
     }
@@ -155,7 +156,7 @@ async function collectDiffForAi({ execGitCommand, getCurrentProjectPath, selecte
 
     return { diff: combined.trim(), fileList }
   } catch (error) {
-    console.error('[generate-commit] collectDiffForAi error:', error?.message)
+    logger.error('[generate-commit] collectDiffForAi error:', error?.message)
     return { diff: '', fileList }
   }
 }
@@ -262,100 +263,97 @@ export function registerConfigRoutes({
   getCurrentProjectPath
 }) {
   // 保存最近访问的目录
-  app.post('/api/save_recent_directory', async (req, res) => {
-      try {
-          const { path } = req.body;
-          
-          if (!path) {
-              return res.status(400).json({ 
-                  success: false, 
-                  error: '目录路径不能为空' 
-              });
-          }
-          
-          // 保存到配置
-          await configManager.saveRecentDirectory(path);
-          
-          res.json({
-              success: true
-          });
-      } catch (error) {
-          res.status(500).json({ 
-              success: false,
-              error: error.message 
-          });
-      }
-  });
+  app.post('/api/save_recent_directory', asyncRoute(async (req, res) => {
+        try {
+            const { path } = req.body;
+      
+            if (!path) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: '目录路径不能为空' 
+                });
+            }
+      
+            // 保存到配置
+            await configManager.saveRecentDirectory(path);
+      
+            res.json({
+                success: true
+            });
+        } catch (error) {
+            res.status(500).json({ 
+                success: false,
+                error: error.message 
+            });
+        }
+    }));
 
   // 删除最近访问的目录
-  app.post('/api/remove_recent_directory', async (req, res) => {
-    try {
-      const { path: dirPath } = req.body;
-      if (!dirPath) {
-        return res.status(400).json({ success: false, error: '目录路径不能为空' });
+  app.post('/api/remove_recent_directory', asyncRoute(async (req, res) => {
+      try {
+        const { path: dirPath } = req.body;
+        if (!dirPath) {
+          throw new HttpError(400, '目录路径不能为空');
+        }
+        const list = await configManager.removeRecentDirectory(dirPath);
+        res.json({ success: true, directories: list });
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
       }
-      const list = await configManager.removeRecentDirectory(dirPath);
-      res.json({ success: true, directories: list });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
+    }));
   
   // 获取配置
-  app.get('/api/config/getConfig', async (req, res) => {
-    try {
-      // console.log('获取配置中。。。')
-      const config = await configManager.loadConfig()
-
-      // 兼容旧数据：补齐自定义命令 id，避免前端编辑/删除/编排引用异常
-      if (Array.isArray(config.customCommands)) {
-        let changed = false
-        config.customCommands = config.customCommands.map((cmd) => {
-          if (cmd && typeof cmd === 'object' && !cmd.id) {
-            changed = true
-            return {
-              ...cmd,
-              id: `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  app.get('/api/config/getConfig', asyncRoute(async (req, res) => {
+      try {
+        const config = await configManager.loadConfig()
+      
+        // 兼容旧数据：补齐自定义命令 id，避免前端编辑/删除/编排引用异常
+        if (Array.isArray(config.customCommands)) {
+          let changed = false
+          config.customCommands = config.customCommands.map((cmd) => {
+            if (cmd && typeof cmd === 'object' && !cmd.id) {
+              changed = true
+              return {
+                ...cmd,
+                id: `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+              }
             }
+            return cmd
+          })
+          if (changed) {
+            await configManager.saveConfig(config)
           }
-          return cmd
-        })
-        if (changed) {
+        }
+      
+        // 初始化命令模板（首次安装/旧配置兼容）
+        if (!Array.isArray(config.commandTemplates)) {
+          config.commandTemplates = []
+        }
+      
+        if (config.commandTemplates.length === 0) {
+          config.commandTemplates = [
+            'echo "{{cmd}}"',
+            'npm run dev',
+            'npm run build',
+            'git status',
+            'git add .',
+            'git commit -m "{{message}}" --no-verify',
+            'git push',
+          ]
           await configManager.saveConfig(config)
         }
+      
+        res.json(config)
+      } catch (error) {
+        const configPath = path.join(os.homedir(), '.git-commit-tool.json')
+        res.status(500).json({
+          success: false,
+          code: 'CONFIG_LOAD_FAILED',
+          error: error?.message || String(error),
+          configPath
+        })
       }
-
-      // 初始化命令模板（首次安装/旧配置兼容）
-      if (!Array.isArray(config.commandTemplates)) {
-        config.commandTemplates = []
-      }
-
-      if (config.commandTemplates.length === 0) {
-        config.commandTemplates = [
-          'echo "{{cmd}}"',
-          'npm run dev',
-          'npm run build',
-          'git status',
-          'git add .',
-          'git commit -m "{{message}}" --no-verify',
-          'git push',
-        ]
-        await configManager.saveConfig(config)
-      }
-
-      // console.log('获取配置成功')
-      res.json(config)
-    } catch (error) {
-      // console.log('获取配置失败')
-      const configPath = path.join(os.homedir(), '.git-commit-tool.json')
-      res.status(500).json({
-        success: false,
-        code: 'CONFIG_LOAD_FAILED',
-        error: error?.message || String(error),
-        configPath
-      })
-    }
-  })
+    }));
   
   // 保存默认提交信息
   app.post('/api/config/saveDefaultMessage', express.json(), async (req, res) => {
@@ -396,63 +394,63 @@ export function registerConfigRoutes({
   })
 
   // 检查系统配置文件格式
-  app.get('/api/config/check-file-format', async (req, res) => {
-    try {
-      const configPath = path.join(os.homedir(), '.git-commit-tool.json');
-      
+  app.get('/api/config/check-file-format', asyncRoute(async (req, res) => {
       try {
-        const data = await fs.readFile(configPath, 'utf-8');
+        const configPath = path.join(os.homedir(), '.git-commit-tool.json');
+      
         try {
-          JSON.parse(data);
-          res.json({ success: true, isValidJson: true, exists: true });
-        } catch (parseError) {
-          res.json({ 
-            success: true, 
-            isValidJson: false, 
-            exists: true, 
-            error: `JSON解析失败: ${parseError.message}` 
-          });
+          const data = await fs.readFile(configPath, 'utf-8');
+          try {
+            JSON.parse(data);
+            res.json({ success: true, isValidJson: true, exists: true });
+          } catch (parseError) {
+            res.json({ 
+              success: true, 
+              isValidJson: false, 
+              exists: true, 
+              error: `JSON解析失败: ${parseError.message}` 
+            });
+          }
+        } catch (fileError) {
+          if (fileError.code === 'ENOENT') {
+            res.json({ success: true, isValidJson: true, exists: false });
+          } else {
+            res.json({ 
+              success: true, 
+              isValidJson: false, 
+              exists: true, 
+              error: `文件读取失败: ${fileError.message}` 
+            });
+          }
         }
-      } catch (fileError) {
-        if (fileError.code === 'ENOENT') {
-          res.json({ success: true, isValidJson: true, exists: false });
-        } else {
-          res.json({ 
-            success: true, 
-            isValidJson: false, 
-            exists: true, 
-            error: `文件读取失败: ${fileError.message}` 
-          });
-        }
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
       }
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  })
+    }));
 
   // 使用系统默认程序打开配置文件 ~/.git-commit-tool.json
-  app.post('/api/config/open-file', async (req, res) => {
-    try {
-      const filePath = path.join(os.homedir(), '.git-commit-tool.json');
+  app.post('/api/config/open-file', asyncRoute(async (req, res) => {
       try {
-        // 检查文件是否存在，不存在也尝试让系统创建（可能会打开空文件）
-        await fs.access(filePath);
-      } catch (_) {
-        // 如果文件不存在，先创建一个最小结构，避免某些系统无法打开不存在的路径
+        const filePath = path.join(os.homedir(), '.git-commit-tool.json');
         try {
-          await fs.writeFile(filePath, '{}', 'utf-8');
-        } catch (e) {
-          // 创建失败不阻断打开尝试
-          console.warn('创建配置文件失败(可忽略):', e?.message || e);
+          // 检查文件是否存在，不存在也尝试让系统创建（可能会打开空文件）
+          await fs.access(filePath);
+        } catch (_) {
+          // 如果文件不存在，先创建一个最小结构，避免某些系统无法打开不存在的路径
+          try {
+            await fs.writeFile(filePath, '{}', 'utf-8');
+          } catch (e) {
+            // 创建失败不阻断打开尝试
+            logger.warn('创建配置文件失败(可忽略):', e?.message || e);
+          }
         }
+      
+        await open(filePath, { wait: false });
+        res.json({ success: true })
+      } catch (error) {
+        res.status(400).json({ success: false, error: `无法打开配置文件: ${error.message}` })
       }
-
-      await open(filePath, { wait: false });
-      res.json({ success: true })
-    } catch (error) {
-      res.status(400).json({ success: false, error: `无法打开配置文件: ${error.message}` })
-    }
-  })
+    }));
   
   // 保存模板
   app.post('/api/config/save-template', express.json(), async (req, res) => {
@@ -1175,7 +1173,7 @@ ${diffText || '(no staged content, please infer from the file list)'}`
         : [...content.matchAll(/\{[^{}]*\}/g)].at(-1)
 
       if (!jsonMatch) {
-        console.error('[generate-commit] no JSON found, full content:', content)
+        logger.error('[generate-commit] no JSON found, full content:', content)
         return res.json({ success: false, error: 'model returned no valid JSON', code: 'NO_JSON' })
       }
       let parsed

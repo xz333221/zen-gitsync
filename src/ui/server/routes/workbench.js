@@ -17,6 +17,7 @@
 // 数据存到用户主目录 ~/.zen-gitsync/，跨项目共享。
 
 import fs from 'fs';
+import logger from '../utils/logger.js'
 import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -254,7 +255,7 @@ async function enforceSessionsRetention() {
   const toDelete = stats.slice(SESSIONS_KEEP)
   await Promise.all(toDelete.map(s => fsp.unlink(s.file).catch(() => {})))
   if (toDelete.length > 0) {
-    console.log(`[workbench] ai-split sessions: cleaned up ${toDelete.length} old files`)
+    logger.info(`[workbench] ai-split sessions: cleaned up ${toDelete.length} old files`)
   }
 }
 // 白名单后缀：图片 + 常见文档（PDF / 纯文本 / Markdown）
@@ -830,7 +831,7 @@ function scheduleJobsSave() {
   if (jobsSaveTimer) clearTimeout(jobsSaveTimer)
   jobsSaveTimer = setTimeout(() => {
     jobsSaveTimer = null
-    flushJobsSaveNow().catch(err => console.warn('[workbench] jobs save failed:', err.message))
+    flushJobsSaveNow().catch(err => logger.warn('[workbench] jobs save failed:', err.message))
   }, JOBS_SAVE_DEBOUNCE_MS)
 }
 
@@ -882,7 +883,7 @@ async function hydrateJobs() {
     data = await readJson(JOBS_FILE, null)
   } catch (err) {
     // 损坏文件：改名备份避免下次 flush 静默覆盖用户数据
-    console.warn('[workbench] jobs.json 解析失败，备份原文件后重置:', err.message)
+    logger.warn('[workbench] jobs.json 解析失败，备份原文件后重置:', err.message)
     try { await fsp.rename(JOBS_FILE, `${JOBS_FILE}.bak-${Date.now()}`) } catch { /* 文件可能已不在 */ }
     return
   }
@@ -901,7 +902,7 @@ async function hydrateJobs() {
     jobs.set(j.id, j)
   }
   // 启动后也跑一遍保留策略，让历史文件立刻缩到当前配置
-  try { await enforceRetention() } catch (err) { console.warn('[workbench] 启动时 enforceRetention 失败:', err.message) }
+  try { await enforceRetention() } catch (err) { logger.warn('[workbench] 启动时 enforceRetention 失败:', err.message) }
 }
 
 // 保留策略：按 endedAt desc（fallback startedAt / id）排序，先按 maxCount 截，
@@ -951,7 +952,7 @@ const jobs = new Map(); // jobId -> { id, taskId, subId, status, pid, startedAt,
 // 有一个简洁的"待回收"窗口。
 const cancelledJobs = new Set();
 // 启动时从磁盘拉回历史 job（陈旧 running/pending 自动降级 error）
-hydrateJobs().catch(err => console.warn('[workbench] hydrate jobs failed:', err.message))
+hydrateJobs().catch(err => logger.warn('[workbench] hydrate jobs failed:', err.message))
 
 // ── 生成指令持久化（~/.zen-gitsync/ai-instruction.json） ────────────────────
 async function readInstruction() {
@@ -1171,7 +1172,7 @@ function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
       } catch (err) {
         // stdin 写入失败不要让 spawn 整体 reject —— 让 child 自然以错误状态收尾,
         // 后面的 stdout/stderr 监听会捕获到 LLM 端反馈。
-        console.warn('[workbench] stdin write failed:', err && err.message || err);
+        logger.warn('[workbench] stdin write failed:', err && err.message || err);
       }
       resolve({ pid: child.pid, child });
     });
@@ -1449,7 +1450,7 @@ ${prompt}`
     try {
       await flushJobsSaveNow()
     } catch (err) {
-      console.warn('[workbench] flushJobsSaveNow failed (job id=' + job.id + ', status=' + job.status + '):', err && err.message || err)
+      logger.warn('[workbench] flushJobsSaveNow failed (job id=' + job.id + ', status=' + job.status + '):', err && err.message || err)
     }
   }
   // 把 sub 的终态返回给 runTaskQueue，用于「连续模式」判断要不要 break 整批队列
@@ -2699,7 +2700,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     // → 左侧任务头黄点 + 右侧 sub 列表 running 动效都不消失
     const subInfo = syncSubToCancelled(job)
     // 终态：fire-and-forget 同步落盘，cancel 是显式操作，要保证不丢
-    flushJobsSaveNow().catch(err => console.warn('[workbench] jobs save failed:', err.message))
+    flushJobsSaveNow().catch(err => logger.warn('[workbench] jobs save failed:', err.message))
     const child = job.child
     if (!child) {
       return res.json({ success: true, message: '已标记取消，进程将尽快结束' })
@@ -2709,7 +2710,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         // Windows: child.kill(SIGTERM) 经常无效，用 taskkill 杀进程树
         execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], (err) => {
           if (err) {
-            console.warn(`[workbench] taskkill ${child.pid} 失败:`, err.message)
+            logger.warn(`[workbench] taskkill ${child.pid} 失败:`, err.message)
           }
         })
       } else {

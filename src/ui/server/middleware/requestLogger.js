@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+import logger from '../utils/logger.js'
+
 export function createRequestLogger({ chalk }) {
   return (req, res, next) => {
     const startTime = Date.now();
@@ -37,7 +39,7 @@ export function createRequestLogger({ chalk }) {
         durationColor = chalk.cyan;
       }
 
-      console.log(
+      logger.info(
         chalk.dim(`[${requestTime}]`),
         chalk.bold(req.method),
         req.url,

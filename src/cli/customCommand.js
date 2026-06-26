@@ -25,6 +25,9 @@
  */
 export const MAX_CUSTOM_CMD_LENGTH = 1000
 
+import { exec } from 'node:child_process'
+import { trackChild } from './cleanup.js'
+
 /**
  * 检测输入校验结果
  * @typedef {Object} CmdValidation
@@ -91,4 +94,31 @@ export function validateCustomCommand(cmd) {
 export function isCmdStrictMode(argv) {
   if (!Array.isArray(argv)) return false
   return argv.includes('--cmd-strict')
+}
+
+/**
+ * 用 child_process.exec 跑一条自定义命令,把输出/错误写到 console,
+ * 同时把 child 注册到 SIGINT cleanup,Ctrl+C 时统一 drain。
+ *
+ * 抽到 customCommand.js 是因为 gitCommit.js 原本有三处完全相同的
+ *   trackChild(exec(cmd, (err, stdout, stderr) => { ... }))
+ * 复制粘贴;统一收敛到这一个函数。
+ *
+ * @param {string} cmd - 已通过 validateCustomCommand 校验的命令字符串
+ * @param {{silent?: boolean}} [options]
+ * @param {boolean} [options.silent] - true 时不打印 [自定义命令...] 头标
+ *   (用于后台 interval 模式避免每次都刷一条开始行)
+ * @returns {import('node:child_process').ChildProcess | undefined}
+ *   同步 exec 返回的 child 句柄,调用方一般无需关心;传 undefined 兜底
+ *   是因为 Node 类型签名在某些平台上是 ChildProcess 而另一些是 undefined。
+ */
+export function runCustomCommand(cmd, options = {}) {
+  if (!options.silent) {
+    console.log(`\n[自定义命令执行] ${new Date().toLocaleString()}\n> ${cmd}`)
+  }
+  return trackChild(exec(cmd, (err, stdout, stderr) => {
+    if (err) console.error('[自定义命令错误]', err.message)
+    if (stdout) console.log(`[自定义命令输出]\n${stdout}`)
+    if (stderr) console.error(`[自定义命令错误输出]\n${stderr}`)
+  }))
 }

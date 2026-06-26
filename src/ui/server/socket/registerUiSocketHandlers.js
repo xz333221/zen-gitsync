@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+import logger from '../utils/logger.js'
+
 export function registerUiSocketHandlers({
   io,
   getProjectRoomId,
@@ -28,11 +30,11 @@ export function registerUiSocketHandlers({
   iconv
 }) {
   io.on('connection', (socket) => {
-    console.log('客户端已连接:', socket.id);
+    logger.info('客户端已连接:', socket.id);
 
     const projectRoomId = getProjectRoomId();
     socket.join(projectRoomId);
-    console.log(`客户端 ${socket.id} 已加入房间: ${projectRoomId}`);
+    logger.info(`客户端 ${socket.id} 已加入房间: ${projectRoomId}`);
 
     getAndBroadcastStatus();
 
@@ -65,7 +67,7 @@ export function registerUiSocketHandlers({
         ? (path.isAbsolute(directory) ? directory : path.join(currentProjectPath, directory))
         : currentProjectPath;
 
-      console.log(`[交互式命令] ${sessionId}: ${command} (目录: ${execDirectory})`);
+      logger.info(`[交互式命令] ${sessionId}: ${command} (目录: ${execDirectory})`);
 
       const processId = nextProcessId();
       const startTime = Date.now();
@@ -96,7 +98,7 @@ export function registerUiSocketHandlers({
         sessionId
       });
 
-      console.log(`[交互式命令] 创建进程 #${processId}: ${command.substring(0, 50)}`);
+      logger.info(`[交互式命令] 创建进程 #${processId}: ${command.substring(0, 50)}`);
 
       socket.emit('interactive_process_id', { sessionId, processId });
 
@@ -138,7 +140,7 @@ export function registerUiSocketHandlers({
 
       childProcess.on('close', (code, signal) => {
         runningProcesses.delete(processId);
-        console.log(`[交互式命令] 进程 #${processId} 已结束`);
+        logger.info(`[交互式命令] 进程 #${processId} 已结束`);
 
         const executionTime = Date.now() - startTime;
         const error = code !== 0 ? `Command exited with code ${code}` : null;
@@ -159,7 +161,7 @@ export function registerUiSocketHandlers({
 
       childProcess.on('error', (error) => {
         runningProcesses.delete(processId);
-        console.error(`[交互式命令] 进程 #${processId} 出错:`, error);
+        logger.error(`[交互式命令] 进程 #${processId} 出错:`, error);
 
         const executionTime = Date.now() - startTime;
         addCommandToHistory(
@@ -178,13 +180,13 @@ export function registerUiSocketHandlers({
 
       socket.on(`interactive_stdin_${sessionId}`, (inputData) => {
         const { input } = inputData;
-        console.log(`[交互式命令] 收到 stdin 输入 (${sessionId}):`, input);
+        logger.info(`[交互式命令] 收到 stdin 输入 (${sessionId}):`, input);
 
         if (childProcess.stdin && !childProcess.stdin.destroyed) {
           try {
             childProcess.stdin.write(input + '\n');
           } catch (err) {
-            console.error(`[交互式命令] 写入 stdin 失败:`, err);
+            logger.error(`[交互式命令] 写入 stdin 失败:`, err);
             socket.emit('interactive_error', {
               sessionId,
               error: `写入输入失败: ${err.message}`
@@ -194,14 +196,14 @@ export function registerUiSocketHandlers({
       });
 
       socket.on(`interactive_stop_${sessionId}`, () => {
-        console.log(`[交互式命令] 收到停止请求 (${sessionId})`);
+        logger.info(`[交互式命令] 收到停止请求 (${sessionId})`);
 
         if (childProcess && !childProcess.killed) {
           try {
             if (process.platform === 'win32') {
               exec(`taskkill /pid ${childProcess.pid} /T /F`, (error) => {
                 if (error) {
-                  console.error(`[交互式命令] taskkill 失败:`, error);
+                  logger.error(`[交互式命令] taskkill 失败:`, error);
                 }
               });
             } else {
@@ -213,14 +215,14 @@ export function registerUiSocketHandlers({
               }, 2000);
             }
           } catch (err) {
-            console.error(`[交互式命令] 停止进程失败:`, err);
+            logger.error(`[交互式命令] 停止进程失败:`, err);
           }
         }
       });
     });
 
     socket.on('disconnect', () => {
-      console.log(`客户端已断开连接: ${socket.id} (房间: ${getProjectRoomId()})`);
+      logger.info(`客户端已断开连接: ${socket.id} (房间: ${getProjectRoomId()})`);
     });
   });
 }

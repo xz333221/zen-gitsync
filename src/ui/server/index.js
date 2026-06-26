@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import express from 'express';
+import logger from '../utils/logger.js'
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -80,7 +81,7 @@ async function startUIServer(noOpen = false, savePort = false) {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer);
-  if (showConsole) console.log(`创建服务成功`)
+  if (showConsole) logger.info(`创建服务成功`)
   
   // 获取当前项目的唯一标识（使用工作目录路径）
   // 需要在切换目录时更新，故使用 let
@@ -109,14 +110,14 @@ async function startUIServer(noOpen = false, savePort = false) {
   try {
     let dirPath = process.cwd();
     try {
-      if(showConsole) console.log(`记录最近打开目录`)
+      if(showConsole) logger.info(`记录最近打开目录`)
       const { stdout } = await execGitCommand(['rev-parse', '--show-toplevel']);
       const root = stdout?.trim();
       if (root) dirPath = root;
     } catch (_) {
       // 非Git仓库或命令失败，使用 CWD 即可
     }
-    if (showConsole) console.log(`记录最近打开目录: ${dirPath}`)
+    if (showConsole) logger.info(`记录最近打开目录: ${dirPath}`)
     await configManager.saveRecentDirectory(dirPath);
     if (showConsole) console.log(chalk.gray(`已记录最近打开目录: ${dirPath}`));
   } catch (e) {
@@ -175,7 +176,7 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   // 清除分支缓存的函数（在分支切换时调用）
   function clearBranchCache() {
-    console.log('清除分支缓存');
+    logger.info('清除分支缓存');
     // 清除5秒分支状态缓存
     branchStatusCache = {
       currentBranch: null,
@@ -324,9 +325,9 @@ async function startUIServer(noOpen = false, savePort = false) {
           projectPath: currentProjectPath
         });
 
-        console.log(`已广播Git状态更新到房间: ${projectRoomId}`);
+        logger.info(`已广播Git状态更新到房间: ${projectRoomId}`);
       } catch (error) {
-        console.error('获取或广播Git状态失败:', error);
+        logger.error('获取或广播Git状态失败:', error);
       }
     });
   }
@@ -384,7 +385,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     maxTries: 100,
     callbackExecutedRef
   }).catch((e) => {
-    console.error('启动服务器失败:', e);
+    logger.error('启动服务器失败:', e);
   });
 
   // 把所有注册/心跳/watch 逻辑封装到独立函数，由 listening 事件触发

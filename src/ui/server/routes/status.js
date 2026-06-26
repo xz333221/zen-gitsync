@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import { promises as fs } from 'fs';
+import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import path from 'path';
 
 export function registerStatusRoutes({
@@ -21,46 +22,46 @@ export function registerStatusRoutes({
   execGitCommand
 }) {
   // Add new endpoint for command history
-  app.get('/api/command-history', async (req, res) => {
-    try {
-      const history = getCommandHistory();
-      res.json({ success: true, history });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  app.get('/api/status_porcelain', async (req, res) => {
-    try {
-      const { stdout } = await execGitCommand(['status', '--porcelain', '--untracked-files=all']);
-      // 检测是否处于 MERGING 状态（MERGE_HEAD 存在）
-      let isMergeInProgress = false;
-      let mergeMessage = '';
+  app.get('/api/command-history', asyncRoute(async (req, res) => {
       try {
-        const { stdout: mergeHead } = await execGitCommand(['rev-parse', '-q', '--verify', 'MERGE_HEAD']);
-        isMergeInProgress = mergeHead.trim().length > 0;
-      } catch (_) {
-        // MERGE_HEAD 不存在时命令会报错，属正常情况
-        isMergeInProgress = false;
+        const history = getCommandHistory();
+        res.json({ success: true, history });
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
       }
-      if (isMergeInProgress) {
+    }));
+
+  app.get('/api/status_porcelain', asyncRoute(async (req, res) => {
+      try {
+        const { stdout } = await execGitCommand(['status', '--porcelain', '--untracked-files=all']);
+        // 检测是否处于 MERGING 状态（MERGE_HEAD 存在）
+        let isMergeInProgress = false;
+        let mergeMessage = '';
         try {
-          const { stdout: gitDir } = await execGitCommand(['rev-parse', '--git-dir']);
-          const mergeMsgPath = path.resolve(gitDir.trim(), 'MERGE_MSG');
-          const raw = await fs.readFile(mergeMsgPath, 'utf-8');
-          // 过滤掉以 # 开头的注释行，拼接所有非空非注释行（保留多段信息如合并分支列表）
-          mergeMessage = raw
-            .split('\n')
-            .filter(line => line.trim() && !line.startsWith('#'))
-            .join('\n')
-            .trim();
+          const { stdout: mergeHead } = await execGitCommand(['rev-parse', '-q', '--verify', 'MERGE_HEAD']);
+          isMergeInProgress = mergeHead.trim().length > 0;
         } catch (_) {
-          // MERGE_MSG 不存在/无权限时忽略
+          // MERGE_HEAD 不存在时命令会报错，属正常情况
+          isMergeInProgress = false;
         }
+        if (isMergeInProgress) {
+          try {
+            const { stdout: gitDir } = await execGitCommand(['rev-parse', '--git-dir']);
+            const mergeMsgPath = path.resolve(gitDir.trim(), 'MERGE_MSG');
+            const raw = await fs.readFile(mergeMsgPath, 'utf-8');
+            // 过滤掉以 # 开头的注释行，拼接所有非空非注释行（保留多段信息如合并分支列表）
+            mergeMessage = raw
+              .split('\n')
+              .filter(line => line.trim() && !line.startsWith('#'))
+              .join('\n')
+              .trim();
+          } catch (_) {
+            // MERGE_MSG 不存在/无权限时忽略
+          }
+        }
+        res.json({ status: stdout, isMergeInProgress, mergeMessage });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
       }
-      res.json({ status: stdout, isMergeInProgress, mergeMessage });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+    }));
 }

@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import express from 'express';
+import logger from '../utils/logger.js'
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -59,7 +60,7 @@ export function registerGitOpsRoutes({
         commitArgs.push('--no-verify');
       }
 
-      console.log(`commitArgs ==>`, commitArgs);
+      logger.info(`commitArgs ==>`, commitArgs);
       // 执行提交命令
       await execGitCommand(commitArgs);
 
@@ -198,7 +199,7 @@ export function registerGitOpsRoutes({
         validDuration: 10000 // 10秒内认为分支状态是同步的
       });
 
-      console.log('推送成功，已设置推送状态标记');
+      logger.info('推送成功，已设置推送状态标记');
       res.json({ success: true, message: stdout });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -226,7 +227,7 @@ export function registerGitOpsRoutes({
         workDir = value || process.cwd();
       }
 
-      console.log('开始推送，工作目录:', workDir);
+      logger.info('开始推送，工作目录:', workDir);
 
       // 记录开始时间
       const startTime = Date.now();
@@ -298,9 +299,9 @@ export function registerGitOpsRoutes({
       });
 
       gitPush.on('close', (code) => {
-        console.log(`Git push 进程结束，退出码: ${code}`);
-        console.log('标准输出:', standardOutput);
-        console.log('错误输出:', errorOutput);
+        logger.info(`Git push 进程结束，退出码: ${code}`);
+        logger.info('标准输出:', standardOutput);
+        logger.info('错误输出:', errorOutput);
 
         // 计算执行时间
         const executionTime = Date.now() - startTime;
@@ -329,7 +330,7 @@ export function registerGitOpsRoutes({
           });
         } else {
           // 推送失败
-          console.error('推送失败:', errorOutput || standardOutput);
+          logger.error('推送失败:', errorOutput || standardOutput);
 
           // 添加到命令历史（失败情况）
           addCommandToHistory(
@@ -350,7 +351,7 @@ export function registerGitOpsRoutes({
       });
 
       gitPush.on('error', (error) => {
-        console.error('Git push 进程错误:', error);
+        logger.error('Git push 进程错误:', error);
 
         // 计算执行时间
         const executionTime = Date.now() - startTime;
@@ -498,7 +499,7 @@ export function registerGitOpsRoutes({
       let { stdout: logOutput } = await execGitCommand(logArgs);
       processAndSendLogOutput(res, logOutput, page, limit, withParents);
     } catch (error) {
-      console.error('获取Git日志失败:', error);
+      logger.error('获取Git日志失败:', error);
       res.status(500).json({ error: '获取日志失败: ' + error.message });
     }
   });
@@ -557,12 +558,12 @@ export function registerGitOpsRoutes({
       logArgs.push(`--pretty=format:${formatString}`);
       logArgs.push('--date=format-local:%Y-%m-%d %H:%M');
 
-      console.log(`执行Git log 命令 argv:`, logArgs);
+      logger.info(`执行Git log 命令 argv:`, logArgs);
 
       const { stdout: logOutput } = await execGitCommand(logArgs);
       processAndSendLogOutput(res, logOutput, skip / limit + 1, limit, withParents);
     } catch (error) {
-      console.error('执行Git日志命令失败:', error);
+      logger.error('执行Git日志命令失败:', error);
       res.status(500).json({ error: '获取日志失败: ' + error.message });
     }
   }
@@ -604,7 +605,6 @@ export function registerGitOpsRoutes({
     // 如果返回的数据量小于limit，说明已经到底了
     const hasMore = data.length === limit;
 
-    // console.log(`分页查询 - 页码: ${page}, 每页数量: ${limit}, 返回数量: ${data.length}, 是否有更多: ${hasMore} (优化版本，不计算总数)`);
 
     // 返回提交历史数据，包括是否有更多数据的标志
     res.json({
@@ -644,7 +644,7 @@ export function registerGitOpsRoutes({
       await execGitCommand(['reset', 'HEAD']);
       res.json({ success: true });
     } catch (error) {
-      console.error('重置暂存区失败:', error);
+      logger.error('重置暂存区失败:', error);
       res.status(500).json({
         success: false,
         error: `重置暂存区失败: ${error.message}`
@@ -671,7 +671,7 @@ export function registerGitOpsRoutes({
       await execGitCommand(['reset', '--hard', `origin/${branch}`]);
       res.json({ success: true });
     } catch (error) {
-      console.error('重置到远程分支失败:', error);
+      logger.error('重置到远程分支失败:', error);
       res.status(500).json({
         success: false,
         error: `重置到远程分支失败: ${error.message}`
@@ -693,7 +693,7 @@ export function registerGitOpsRoutes({
       
       res.json({ success: true });
     } catch (error) {
-      console.error('清除所有更改失败:', error);
+      logger.error('清除所有更改失败:', error);
       res.status(500).json({
         success: false,
         error: `清除所有更改失败: ${error.message}`
@@ -713,21 +713,21 @@ export function registerGitOpsRoutes({
         });
       }
 
-      console.log(`获取提交文件列表: hash=${hash}`);
+      logger.info(`获取提交文件列表: hash=${hash}`);
 
       // 执行命令获取提交中修改的文件列表
       const { stdout } = await execGitCommand(['show', '--name-only', '--format=', hash]);
 
       // 将输出按行分割，并过滤掉空行
       const files = stdout.split('\n').filter(line => line.trim());
-      console.log(`找到${files.length}个文件:`, files);
+      logger.info(`找到${files.length}个文件:`, files);
 
       res.json({
         success: true,
         files
       });
     } catch (error) {
-      console.error('获取提交文件列表失败:', error);
+      logger.error('获取提交文件列表失败:', error);
       res.status(500).json({
         success: false,
         error: `获取提交文件列表失败: ${error.message}`
@@ -748,7 +748,7 @@ export function registerGitOpsRoutes({
         });
       }
 
-      console.log(`获取提交文件差异: hash=${hash}, file=${filePath}`);
+      logger.info(`获取提交文件差异: hash=${hash}, file=${filePath}`);
 
       const diffCommandArgs = ['show', hash, '--', filePath];
 
@@ -768,7 +768,7 @@ export function registerGitOpsRoutes({
       // 执行命令获取文件差异
       const { stdout } = await execGitCommand(diffCommandArgs);
 
-      console.log(`获取到差异内容，长度: ${stdout.length}`);
+      logger.info(`获取到差异内容，长度: ${stdout.length}`);
 
       // 检查实际diff大小
       const sizeCheck = checkDiffSize(stdout, 500);
@@ -788,7 +788,7 @@ export function registerGitOpsRoutes({
         stats
       });
     } catch (error) {
-      console.error('获取提交文件差异失败:', error);
+      logger.error('获取提交文件差异失败:', error);
       res.status(500).json({
         success: false,
         error: `获取提交文件差异失败: ${error.message}`
@@ -879,7 +879,7 @@ export function registerGitOpsRoutes({
         });
       }
 
-      console.log(`执行撤销提交操作: hash=${hash}`);
+      logger.info(`执行撤销提交操作: hash=${hash}`);
 
       // 执行git revert命令
       await execGitCommand(['revert', '--no-edit', hash]);
@@ -889,7 +889,7 @@ export function registerGitOpsRoutes({
         message: `已成功撤销提交 ${hash}`
       });
     } catch (error) {
-      console.error('撤销提交失败:', error);
+      logger.error('撤销提交失败:', error);
       res.status(500).json({
         success: false,
         error: `撤销提交失败: ${error.message}`
@@ -909,7 +909,7 @@ export function registerGitOpsRoutes({
         });
       }
 
-      console.log(`执行Cherry-pick操作: hash=${hash}`);
+      logger.info(`执行Cherry-pick操作: hash=${hash}`);
 
       // 执行git cherry-pick命令
       await execGitCommand(['cherry-pick', hash]);
@@ -919,7 +919,7 @@ export function registerGitOpsRoutes({
         message: `已成功Cherry-pick提交 ${hash}`
       });
     } catch (error) {
-      console.error('Cherry-pick提交失败:', error);
+      logger.error('Cherry-pick提交失败:', error);
       res.status(500).json({
         success: false,
         error: `Cherry-pick提交失败: ${error.message}`
@@ -939,7 +939,7 @@ export function registerGitOpsRoutes({
         });
       }
 
-      console.log(`执行重置到指定提交操作: hash=${hash}`);
+      logger.info(`执行重置到指定提交操作: hash=${hash}`);
 
       // 执行git reset --hard命令
       await execGitCommand(['reset', '--hard', hash]);
@@ -949,7 +949,7 @@ export function registerGitOpsRoutes({
         message: `已成功重置到提交 ${hash}`
       });
     } catch (error) {
-      console.error('重置到指定提交失败:', error);
+      logger.error('重置到指定提交失败:', error);
       res.status(500).json({
         success: false,
         error: `重置到指定提交失败: ${error.message}`
@@ -995,7 +995,7 @@ export function registerGitOpsRoutes({
         }
       }
     } catch (error) {
-      console.error('清理锁定文件失败:', error)
+      logger.error('清理锁定文件失败:', error)
       res.status(500).json({
         success: false,
         error: `清理锁定文件失败: ${error.message}`
@@ -1013,7 +1013,7 @@ export function registerGitOpsRoutes({
           await execGitCommand(['config', '--global', '--unset', 'user.name']);
         }
       } catch (error) {
-        console.log('全局用户名配置检查失败，可能不存在:', error.message);
+        logger.info('全局用户名配置检查失败，可能不存在:', error.message);
         // 忽略错误继续执行
       }
 
@@ -1023,7 +1023,7 @@ export function registerGitOpsRoutes({
           await execGitCommand(['config', '--global', '--unset', 'user.email']);
         }
       } catch (error) {
-        console.log('全局邮箱配置检查失败，可能不存在:', error.message);
+        logger.info('全局邮箱配置检查失败，可能不存在:', error.message);
         // 忽略错误继续执行
       }
 
@@ -1064,7 +1064,7 @@ export function registerGitOpsRoutes({
       const { stdout } = await execGitCommand(['init']);
       res.json({ success: true, output: stdout.trim() });
     } catch (error) {
-      console.error('git init 失败:', error);
+      logger.error('git init 失败:', error);
       res.json({ success: false, error: error.message || 'git init 失败' });
     }
   });
@@ -1082,7 +1082,7 @@ export function registerGitOpsRoutes({
       await execGitCommand(['remote', 'add', name, url.trim()]);
       res.json({ success: true });
     } catch (error) {
-      console.error('添加远程仓库失败:', error);
+      logger.error('添加远程仓库失败:', error);
       res.json({ success: false, error: error.message || '添加远程仓库失败' });
     }
   });
@@ -1104,7 +1104,7 @@ export function registerGitOpsRoutes({
         url: stdout.trim()
       });
     } catch (error) {
-      console.error('获取远程仓库URL失败:', error);
+      logger.error('获取远程仓库URL失败:', error);
       res.json({
         success: false,
         error: error.message || '获取远程仓库URL失败'
@@ -1127,7 +1127,7 @@ export function registerGitOpsRoutes({
       // 控制台输出一下搜索示例，方便调试
       if (uniqueAuthors.length > 1) {
         const searchExample = uniqueAuthors.slice(0, 2).join('|');
-        console.log(`多作者搜索示例: git log --author="${searchExample}"`);
+        logger.info(`多作者搜索示例: git log --author="${searchExample}"`);
       }
 
       res.json({
@@ -1135,7 +1135,7 @@ export function registerGitOpsRoutes({
         authors: uniqueAuthors
       });
     } catch (error) {
-      console.error('获取作者列表失败:', error);
+      logger.error('获取作者列表失败:', error);
       res.status(500).json({
         success: false,
         error: '获取作者列表失败: ' + error.message

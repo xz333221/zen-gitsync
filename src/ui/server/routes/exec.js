@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import path from 'path';
+import logger from '../utils/logger.js'
 import iconv from 'iconv-lite';
 import { spawn } from 'child_process';
 
@@ -64,8 +65,8 @@ export function registerExecRoutes({
         ? (path.isAbsolute(directory) ? directory : path.join(currentProjectPath, directory))
         : currentProjectPath;
 
-      console.log(`流式执行命令: ${command}`);
-      console.log(`执行目录: ${execDirectory}`);
+      logger.info(`流式执行命令: ${command}`);
+      logger.info(`执行目录: ${execDirectory}`);
 
       // 分配进程 ID
       const processId = nextProcessId();
@@ -110,12 +111,11 @@ export function registerExecRoutes({
         startTime,
         directory: execDirectory
       });
-      console.log(`[进程管理] 创建进程 #${processId}: ${command.substring(0, 50)}`);
+      logger.info(`[进程管理] 创建进程 #${processId}: ${command.substring(0, 50)}`);
 
       // 发送数据到客户端的辅助函数
       const sendData = (type, data) => {
         const message = `data: ${JSON.stringify({ type, data })}\n\n`;
-        // console.log(`[流式输出] 发送数据 - 类型: ${type}, 长度: ${data?.length || 0}`);
         res.write(message);
       };
 
@@ -146,7 +146,7 @@ export function registerExecRoutes({
         (isEchoCommand && !hasVariableSubstitution)  // echo 只在没有变量替换时才转换
       );
 
-      console.log(`[流式输出] 命令: ${command.substring(0, 50)}, 需要GBK转换: ${needsGbkConversion}`);
+      logger.info(`[流式输出] 命令: ${command.substring(0, 50)}, 需要GBK转换: ${needsGbkConversion}`);
 
       // 监听标准输出
       childProcess.stdout?.on('data', (data) => {
@@ -155,11 +155,11 @@ export function registerExecRoutes({
         if (needsGbkConversion) {
           // Windows CMD 内置命令，从 GBK 转换为 UTF-8
           output = iconv.decode(data, 'gbk');
-          console.log(`[流式输出] 收到stdout(GBK转UTF8):`, output.substring(0, 200));
+          logger.info(`[流式输出] 收到stdout(GBK转UTF8):`, output.substring(0, 200));
         } else {
           // 现代工具或 Unix 系统，直接使用 UTF-8
           output = data.toString('utf8');
-          console.log(`[流式输出] 收到stdout(UTF8):`, output.substring(0, 200));
+          logger.info(`[流式输出] 收到stdout(UTF8):`, output.substring(0, 200));
         }
         outputReceived = true;
         collectedStdout += output; // 收集输出用于历史记录
@@ -181,22 +181,22 @@ export function registerExecRoutes({
           if (!utf8Output.includes('�') || utf8Output.match(/[\u4e00-\u9fa5]/)) {
             // UTF-8 解码成功（包含有效中文或没有替换字符）
             output = utf8Output;
-            console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 200));
+            logger.info(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 200));
           } else {
             // UTF-8 解码失败，尝试 GBK（可能是 CMD shell 的系统消息）
             try {
               output = iconv.decode(data, 'gbk');
-              console.log(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 200));
+              logger.info(`[流式输出] 收到stderr(GBK转UTF8):`, output.substring(0, 200));
             } catch (e) {
               // GBK 也失败，使用原始 UTF-8 结果
               output = utf8Output;
-              console.log(`[流式输出] GBK解码失败，使用UTF8:`, output.substring(0, 200));
+              logger.info(`[流式输出] GBK解码失败，使用UTF8:`, output.substring(0, 200));
             }
           }
         } else {
           // Unix系统，直接使用 UTF-8
           output = data.toString('utf8');
-          console.log(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 200));
+          logger.info(`[流式输出] 收到stderr(UTF8):`, output.substring(0, 200));
         }
 
         outputReceived = true;
@@ -208,16 +208,14 @@ export function registerExecRoutes({
 
       // 监听进程退出（exit 在流关闭前触发）
       childProcess.on('exit', (code, signal) => {
-        // console.log(`[流式输出] 进程 exit 事件 - 代码: ${code}, 信号: ${signal}`);
       });
 
       // 监听进程关闭（close 在流关闭后触发）
       childProcess.on('close', (code, signal) => {
-        // console.log(`[流式输出] 进程 close 事件 - 代码: ${code}, 信号: ${signal}, 有输出: ${outputReceived}`);
 
         // 从运行进程列表中移除
         runningProcesses.delete(processId);
-        console.log(`[进程管理] 进程 #${processId} 已结束，剩余进程数: ${runningProcesses.size}`);
+        logger.info(`[进程管理] 进程 #${processId} 已结束，剩余进程数: ${runningProcesses.size}`);
 
         // 计算执行时间
         const executionTime = Date.now() - startTime;
@@ -243,7 +241,7 @@ export function registerExecRoutes({
 
         // 从运行进程列表中移除
         runningProcesses.delete(processId);
-        console.log(`[进程管理] 进程 #${processId} 出错并结束，剩余进程数: ${runningProcesses.size}`);
+        logger.info(`[进程管理] 进程 #${processId} 出错并结束，剩余进程数: ${runningProcesses.size}`);
 
         // 添加到命令历史（错误情况）
         const executionTime = Date.now() - startTime;
@@ -261,7 +259,6 @@ export function registerExecRoutes({
 
       // 添加spawn事件监听
       childProcess.on('spawn', () => {
-        // console.log(`[流式输出] 进程已启动 - PID: ${childProcess.pid}`);
       });
 
       // 注意：不监听req.on('close')，参考git push的实现
@@ -269,7 +266,7 @@ export function registerExecRoutes({
       // 如果监听req.on('close')可能会导致进程被提前kill
 
     } catch (error) {
-      console.error('流式执行命令失败:', error);
+      logger.error('流式执行命令失败:', error);
       res.status(500).json({
         success: false,
         error: `流式执行命令失败: ${error.message}`

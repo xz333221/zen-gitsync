@@ -12,24 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// const chalk = require('chalk');
-// const boxen = require('boxen');
-// const message = chalk.blue('git diff') + '\n' +
-//   chalk.red('- line1') + '\n' +
-//   chalk.green('+ line2') + '\n' +
-//   chalk.cyan('@@ line diff @@');
-//
-// const options = {
-//   padding: 1,
-//   margin: 1,
-//   borderStyle: 'round',  // 可以选择 'single', 'double', 'round' 等边框样式
-//   borderColor: 'yellow'
-// };
-//
-// const boxedMessage = boxen(message, options);
-// console.log(boxedMessage);
-import stringWidth from 'string-width';
-import Table from 'cli-table3';
+// git 子进程包装 + 命令历史 + 锁定文件过滤 git add
+// 纯函数(parseCwdArg / truncateForHistory / formatDuration / delay)已抽到
+// ./format.js,这里 re-export 以保持向后兼容(老调用方无需改 import)。
 import chalk from 'chalk';
 import boxen from "boxen";
 import {execFile, execSync} from 'child_process'
@@ -41,172 +26,76 @@ import fs from 'fs/promises'
 import config from '../config.js'
 
 
-const printTableWithHeaderUnderline = (head, content, style) => {
-  // 获取终端的列数（宽度）
-  const terminalWidth = process.stdout.columns || 100;
+import {
+  parseCwdArg as _parseCwdArg,
+  truncateForHistory as _truncateForHistory,
+  formatDuration as _formatDuration,
+  delay as _delay,
+} from './format.js'
 
-  // 计算表格的宽度，保证至少有 2 个字符留给边框
-  const tableWidth = terminalWidth - 2; // 左右边框和分隔符的宽度
-
-  // 计算每列的宽度
-  const colWidths = [tableWidth]; // 只有一列，因此宽度设置为终端宽度
-
-  if (!style) {
-    style = {
-      // head: ['cyan'], // 表头文字颜色为cyan
-      border: [chalk.reset()],         // 边框颜色
-      compact: true,              // 启用紧凑模式，去掉不必要的空白
-    }
-  }
-  // 创建表格实例
-  const table = new Table({
-    head: [head],  // 只有一个表头
-    colWidths,       // 使用动态计算的列宽
-    style: style,
-    wordWrap: true,  // 启用自动换行
-    // chars: {
-    //   'top': '─',
-    //   'top-mid': '┬',
-    //   'bottom': '─',
-    //   'mid': '─',
-    //   'left': '│',
-    //   'right': '│'
-    // },
-    // chars: {
-    //   'top': '═',       // 顶部边框使用长横线
-    //   'top-mid': '╤',   // 顶部连接符
-    //   'top-left': '╔',   // 左上角
-    //   'top-right': '╗',  // 右上角
-    //   'bottom': '═',    // 底部边框
-    //   'bottom-mid': '╧', // 底部连接符
-    //   'bottom-left': '╚',// 左下角
-    //   'bottom-right': '╝',// 右下角
-    //   'left': '║',      // 左边框
-    //   'left-mid': '╟',  // 左连接符
-    //   'mid': '═',       // 中间分隔符
-    //   'mid-mid': '╪',   // 中间连接符
-    //   'right': '║',     // 右边框
-    //   'right-mid': '╢', // 右连接符
-    //   'middle': '│'     // 中间内容的边界
-    // }
-  });
-
-  
-  content.forEach(item => {
-    table.push([item]);
-  })
-
-  console.log(table.toString()); // 输出表格
-};
-
-// printTableWithHeaderUnderline();
-
-// getRandomColor 已删除（原实现永远返回 \x1b[0m，是死代码）
-
-function resetColor() {
-  return '\x1b[0m';
-}
+// 向后兼容 re-export — 老调用方 import { parseCwdArg } from '../utils' 仍然可用
+export const parseCwdArg = _parseCwdArg
+export const truncateForHistory = _truncateForHistory
+export const formatDuration = _formatDuration
+export const delay = _delay
 
 const calcColor = (commandLine, str) => {
   let color = 'reset'
-  switch (commandLine) {
-    case 'git status':
-      if (str.startsWith('\t')) {
-        color = 'red'
-        if (str.startsWith('new file:')) {
-          color = 'red'
-        }
-        if (str.startsWith('modified:')) {
-          color = 'green'
-        }
-        if (str.startsWith('deleted:')) {
-          color = 'red'
-        }
-      }
-      break;
-    case 'git diff':
-      // if (str.startsWith('---')) {
-      //   color = 'red'
-      // }
-      // if (str.startsWith('+++')) {
-      //   color = 'green'
-      // }
-      // if (str.startsWith('@@ ')) {
-      //   color = 'cyan'
-      // }
-      break;
+  if (commandLine === 'git status' && str.startsWith('\t')) {
+    color = 'red'
+    if (str.startsWith('modified:')) color = 'green'
+    if (str.startsWith('deleted:')) color = 'red'
   }
   return color
 }
+
 const tableLog = (commandLine, content, type) => {
-  let handle_commandLine = `> ${commandLine}`
-  let head = chalk.bold.blue(handle_commandLine)
-  let style = {
-    // head: ['cyan'], // 表头文字颜色为cyan
-    border: [chalk.reset()],         // 边框颜色
-    compact: true,              // 启用紧凑模式，去掉不必要的空白
+  const headLabel = `> ${commandLine}`
+  let head = chalk.bold.blue(headLabel)
+  if (type === 'error') {
+    content = content.toString().split('\n')
+    head = chalk.bold.red(headLabel)
+  } else if (type === 'common') {
+    content = content.split('\n')
   }
-  switch (type) {
-    case 'error':
-      style.head = ['red'];
-      content = content.toString().split('\n')
-      head = chalk.bold.red(handle_commandLine)
-      break;
-    case 'common':
-      style.head = ['blue'];
-      content = content.split('\n')
-      break;
-    default:
-      break;
-  }
-  
-  // 限制输出内容
-  const MAX_LINES = 10; // 最大行数
-  const MAX_LINE_LENGTH = 200; // 每行最大字符数
-  let isTruncated = false;
-  
+
+  // 单次输出限幅,避免 git log --all 之类命令刷屏
+  const MAX_LINES = 10
+  const MAX_LINE_LENGTH = 200
+  let isTruncated = false
   if (content.length > MAX_LINES) {
-    content = content.slice(0, MAX_LINES);
-    isTruncated = true;
+    content = content.slice(0, MAX_LINES)
+    isTruncated = true
   }
-  
-  content = content.map(item => {
-    let fontColor = calcColor(commandLine, item)
+
+  content = content.map((item) => {
+    const fontColor = calcColor(commandLine, item)
     let row = item.replaceAll('\t', '      ')
-    // 截断过长的行
     if (row.length > MAX_LINE_LENGTH) {
-      row = row.substring(0, MAX_LINE_LENGTH) + '...';
+      row = row.substring(0, MAX_LINE_LENGTH) + '...'
     }
-    const result = chalk[fontColor](row)
-    return result
+    return chalk[fontColor](row)
   })
-  
-  // 如果内容被截断，添加提示
+
   if (isTruncated) {
-    content.push(chalk.dim('... (输出内容过多，已省略)'));
+    content.push(chalk.dim('... (输出内容过多，已省略)'))
   }
 
-  printTableWithHeaderUnderline(head, content, style)
-}
-const coloredLog = (...args) => {
-  // 获取参数内容
-  const commandLine = args[0];
-  const content = args[1];
-  const type = args[2] || 'common';
-  // console.log(`commandLine ==> `, commandLine)
-  // console.log(`content ==> `, content)
-  // console.log(`type ==> `, type)
-  tableLog(commandLine, content, type);
-}
-const errorLog = (commandLine, content) => {
-  // 使用 boxen 绘制带边框的消息
-  let msg = ` FAIL ${commandLine}
- content: ${content} `
-  const message = chalk.red.bold(msg);
-  const box = boxen(message);
-  console.log(box); // 打印带有边框的消息
+  // 极简打印 — 头一行 + 内容逐行,取代旧的 cli-table3 边框表格
+  console.log(head)
+  for (const line of content) console.log(line)
 }
 
+const coloredLog = (...args) => {
+  const [commandLine, content, type = 'common'] = args
+  tableLog(commandLine, content, type)
+}
+
+const errorLog = (commandLine, content) => {
+  const msg = ` FAIL ${commandLine}\n content: ${content} `
+  const box = boxen(chalk.red.bold(msg))
+  console.log(box)
+}
 function execSyncGitCommand(command, options = {}) {
   let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = command, log = true} = options
   try {
@@ -231,7 +120,6 @@ function execSyncGitCommand(command, options = {}) {
     }
     return result
   } catch (e) {
-    // console.log(`执行命令出错 ==> `, command, e)
     log && coloredLog(command, e, 'error')
     // 透传原始 error,保留 stack + 已挂载的 stdout/stderr
     throw e
@@ -467,31 +355,6 @@ function addCommandToHistory(command, stdout = '', stderr = '', error = null, ex
   return historyItem;
 }
 
-/**
- * 从 argv 数组里解析出 --path / --cwd 的值
- * 严格匹配 `--path` / `--path=<v>` / `--cwd` / `--cwd=<v>`,避免误匹配 `--pathTo=...`
- *
- * @param {readonly string[]} argv - 类似 process.argv 的参数数组
- * @returns {string | null} 解析到的值,没匹配到返回 null
- */
-function parseCwdArg(argv) {
-  if (!Array.isArray(argv)) return null
-  const cwdArg = argv.find((arg) => {
-    if (typeof arg !== 'string') return false
-    if (arg === '--path' || arg === '--cwd') return true
-    return arg.startsWith('--path=') || arg.startsWith('--cwd=')
-  })
-  if (!cwdArg) return null
-  const eqIdx = cwdArg.indexOf('=')
-  if (eqIdx >= 0) {
-    const value = cwdArg.slice(eqIdx + 1)
-    return value || null
-  }
-  // 空格分隔形式: `--path <value>`,取下一个 argv
-  const next = argv[argv.indexOf(cwdArg) + 1]
-  return next || null
-}
-
 const getCwd = () => {
   // process.argv 在进程内不变(CLI 启动后用户不会去改 process.argv),缓存一次
   // 即可。execGitCommand 在一次 g 流程里会被调 5-15 次(每个 git 子命令一次),
@@ -662,30 +525,6 @@ function exec_exit(exit) {
   }
 }
 
-/**
- * 按 char 边界安全截断,避免切断 UTF-16 代理对(emoji / 辅助平面 CJK)。
- * 原 substring(0, N) 在 N-1 是 high surrogate 时会把半个字符拼到末尾,
- * 前端 history 渲染可能显示 '�'。本函数检测这种情况并向前回退 1 个码元。
- *
- * @param {string} str
- * @param {number} limit - 最大字符数(<=0 视为"不截断",原样返回)
- * @param {string} suffix - 截断提示后缀
- * @returns {string}
- */
-function truncateForHistory(str, limit, suffix) {
-  if (typeof str !== 'string') return str;
-  if (!Number.isFinite(limit) || limit <= 0 || str.length <= limit) return str;
-  // 码元 = UTF-16 code unit;length 已经是码元数,但 surrogate pair 占 2 个码元。
-  const cutAt = limit;
-  const code = str.charCodeAt(cutAt - 1);
-  // 0xD800–0xDBFF = high surrogate,后面必须跟 low surrogate 才完整;
-  // 如果在 limit 处正好停在 high surrogate,回退一格避免半个 emoji/罕见汉字。
-  if (code >= 0xD800 && code <= 0xDBFF) {
-    return str.substring(0, cutAt - 1) + suffix;
-  }
-  return str.substring(0, cutAt) + suffix;
-}
-
 function judgeUnmerged(statusOutput) {
   const hasUnmerged = statusOutput.includes('You have unmerged paths');
   if (hasUnmerged) {
@@ -766,10 +605,6 @@ async function execPull() {
   }
 }
 
-function delay(timeout) {
-  return new Promise(resolve => setTimeout(resolve, timeout));
-}
-
 async function judgeRemote() {
   const spinner = ora('正在检查远程更新...').start();
   try {
@@ -798,7 +633,6 @@ async function judgeRemote() {
         //   spinner: spinner_pull,
         //   head: 'Pulling updates'
         // });
-        // console.log(
         //   bgGreen.white.bold(' SYNC ') +
         //   green` ➔ ` +
         //   chalk.blue.bold('远程仓库已同步') +
@@ -811,7 +645,6 @@ async function judgeRemote() {
         console.log(chalk.bold(`✅ ${message}`));
       } catch (pullError) {
         // // 如果 --ff-only 拉取失败，尝试普通的 git pull
-        // console.log(chalk.yellow('⚠️ 无法快进合并，尝试普通合并...'));
         // await this.execPull()
         throw new Error(pullError)
       }
@@ -823,7 +656,6 @@ async function judgeRemote() {
       console.log(chalk.bold(`✅ ${message}`));
     }
   } catch (e) {
-    // console.log(`e ==> `, e)
     spinner.stop();
     throw new Error(e)
   }
@@ -1070,21 +902,6 @@ async function execAddAndCommit({statusOutput, commitMessage, exit}) {
 }
 
 // 添加时间格式化函数
-function formatDuration(ms) {
-  const totalSeconds = Math.floor(ms / 1000);
-  const days = Math.floor(totalSeconds / (3600 * 24));
-  const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  return [
-    days && `${days}天`,
-    hours && `${hours}小时`,
-    minutes && `${minutes}分`,
-    `${seconds}秒`
-  ].filter(Boolean).join('');
-}
-
 async function addScriptToPackageJson() {
   try {
     // 读取当前目录的 package.json
@@ -1153,11 +970,12 @@ export {
   coloredLog, errorLog, execSyncGitCommand,
   execGitCommand, getCommandHistory, addCommandToHistory, // Add command history exports
   clearCommandHistory,
-  truncateForHistory, // 暴露便于测试与外部复用(单测会 import 这个验证 surrogate-pair 回退)
+  // parseCwdArg / truncateForHistory / formatDuration / delay 已在文件顶部从
+  // ./format.js re-export,这里不再重复导出,避免 Duplicate export 错误。
   checkAndClearGitLock,
   registerSocketIO, // 导出注册Socket.io的函数
-  getCwd, parseCwdArg, judgePlatform, showHelp, judgeLog, printGitLog,
-  judgeHelp, exec_exit, judgeUnmerged, delay, formatDuration,
+  getCwd, judgePlatform, showHelp, judgeLog, printGitLog,
+  judgeHelp, exec_exit, judgeUnmerged,
   exec_push, execPull, judgeRemote, execDiff, execAddAndCommit,
   execGitAddWithLockFilter, // 导出新的 git add 函数
   addScriptToPackageJson, addResetScriptToPackageJson
