@@ -1088,8 +1088,16 @@ const {
             @dragleave="pasteHoverId = (pasteHoverId === 'task-' + selectedTask.id ? null : pasteHoverId)"
           />
         </details>
-        <!-- ── 执行主体：复杂任务用左（子任务列表）+ 右（详情）左右布局；简单任务只保留详情面板 ── -->
-        <div class="wb-execution-body" :class="{ 'wb-execution-body--simple': isSimpleTask }">
+        <!-- ── 执行主体：复杂任务用左（子任务列表）+ 右（详情）左右布局；简单任务只保留详情面板 ──
+             wb-execution-body--no-subs: 复杂任务且无子任务时合并成 1fr 单列,把空状态卡搬到右列,释放左侧 260px
+        -->
+        <div
+          class="wb-execution-body"
+          :class="{
+            'wb-execution-body--simple': isSimpleTask,
+            'wb-execution-body--no-subs': !isSimpleTask && selectedTask.subtasks.length === 0
+          }"
+        >
           <!-- 左：子任务列表 —— 简单任务时不渲染 -->
           <div v-if="!isSimpleTask" class="wb-exec-list">
             <div class="wb-exec-list__header">
@@ -1194,13 +1202,6 @@ const {
                   </span>
                 </div>
               </li>
-              <li v-if="selectedTask.subtasks.length === 0" class="wb-empty wb-empty--rich">
-                <div class="wb-empty__art" aria-hidden="true"><el-icon><List /></el-icon></div>
-                <div class="wb-empty__title">{{ $t('@WORKBENCH:拆分任务，逐项执行') }}</div>
-                <div class="wb-empty__cta">
-                  <el-button type="primary" size="small" :icon="Plus" @click="addSubtask">{{ $t('@WORKBENCH:添加子任务') }}</el-button>
-                </div>
-              </li>
             </ul>
           </div>
 
@@ -1208,8 +1209,20 @@ const {
           <div class="wb-exec-detail">
             <!-- 复杂任务详情：显示选中子任务的完整内容 -->
             <template v-if="!isSimpleTask">
-              <div v-if="!activeSubtask" class="wb-placeholder">
-                <p>{{ selectedTask.subtasks.length === 0 ? $t('@WORKBENCH:手动添加子任务，或让 AI 帮你自动拆分') : $t('@WORKBENCH:左侧选择子任务查看详情') }}</p>
+              <!-- 复杂任务 + 无子任务:把空状态卡撑满右列(此时左列已被 grid 合并,不再占 260px) -->
+              <div v-if="selectedTask.subtasks.length === 0" class="wb-empty wb-empty--rich wb-empty--full">
+                <div class="wb-empty__art" aria-hidden="true"><el-icon><List /></el-icon></div>
+                <div class="wb-empty__title">{{ $t('@WORKBENCH:拆分任务，逐项执行') }}</div>
+                <div class="wb-empty__hint">
+                  {{ $t('@WORKBENCH:手动添加子任务，或让 AI 帮你自动拆分') }}
+                </div>
+                <div class="wb-empty__cta">
+                  <el-button type="primary" :icon="Plus" @click="addSubtask">{{ $t('@WORKBENCH:添加子任务') }}</el-button>
+                  <el-button :icon="Upload" @click="importDialogVisible = true">{{ $t('@WORKBENCH:导入拆分') }}</el-button>
+                </div>
+              </div>
+              <div v-else-if="!activeSubtask" class="wb-placeholder">
+                <p>{{ $t('@WORKBENCH:左侧选择子任务查看详情') }}</p>
               </div>
               <template v-else>
                 <div class="wb-exec-detail__head">
@@ -2143,6 +2156,34 @@ const {
   position: relative;
   z-index: 1;
 }
+/* 撑满右列的完整空状态(复杂任务 + 无子任务 时使用,占据 wb-exec-detail 全高)
+   与 wb-empty--rich 共享底色/光晕,只调整 padding 和垂直居中,适配 1fr 容器 */
+.wb-empty--full {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  padding: 56px 40px 48px;
+  margin: 0;
+  border-radius: 14px;
+}
+.wb-empty--full .wb-empty__art {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  font-size: 28px;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+.wb-empty--full .wb-empty__title {
+  font-size: 17px;
+  letter-spacing: var(--letter-spacing-heading, -0.3px);
+}
+.wb-empty--full .wb-empty__hint {
+  font-size: 13px;
+  max-width: 360px;
+}
 .wb-empty__link {
   appearance: none;
   background: none;
@@ -2217,6 +2258,15 @@ const {
 .wb-execution-body--simple {
   grid-template-columns: 1fr;
   gap: 0;
+}
+/* 复杂任务且无子任务:整列合并到右列,左列 grid item 隐藏(grid 不会因为单一子项变 1fr,
+   显式 display: none 才能彻底让出 260px 空间) */
+.wb-execution-body--no-subs {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+.wb-execution-body--no-subs > .wb-exec-list {
+  display: none;
 }
 
 /* 左列：子任务列表（固定宽度，内部滚动） */
