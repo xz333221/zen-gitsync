@@ -2099,5 +2099,10 @@ export default {
   '@WORKBENCH:复制任务': '复制任务',
   '@WORKBENCH:{title} (副本)': '{title} (副本)',
   '@WORKBENCH:已复制任务': '已复制任务',
+  '@WORKBENCH:拖动排序提示': '拖动以重新排序',
+  '@WORKBENCH:不允许跨组拖动': '只能在同一项目内拖动排序',
+  '@WORKBENCH:排序保存失败': '排序保存失败',
+  '@WORKBENCH:拖动中': '拖动中…',
+  '@WORKBENCH:放置位置': '释放到此处',
   // @WORKBENCH: file end
 }

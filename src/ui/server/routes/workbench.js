@@ -2414,6 +2414,55 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
   });
 
+  // 任务排序：拖动落盘。body: { orderedIds: string[] }
+  // - orderedIds 是磁盘 tasks 数组中已存在 id 的子集(本场景只传同组 id)
+  // - 仅重排这些 id 的相对位置，其他 task 保持原位
+  // - 不接收 projectPath(跨组拖动本版本不实现,前端 emit 阶段就拦了)
+  // 成功后 publish('tasks:reordered', { tasks: 新顺序数组 }) 给所有 SSE 客户端。
+  // 新事件用整组顺序 payload，避免单条 task:update 覆盖导致多客户端顺序错乱。
+  app.put('/api/workbench/tasks/reorder', async (req, res) => {
+    try {
+      const orderedIds = Array.isArray(req.body && req.body.orderedIds) ? req.body.orderedIds : null;
+      if (!orderedIds || orderedIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'orderedIds 不能为空' });
+      }
+      if (!orderedIds.every((x) => typeof x === 'string' && x.length > 0)) {
+        return res.status(400).json({ success: false, error: 'orderedIds 必须是字符串数组' });
+      }
+      if (new Set(orderedIds).size !== orderedIds.length) {
+        return res.status(400).json({ success: false, error: 'orderedIds 包含重复 id' });
+      }
+      const data = await readJson(TASKS_FILE, { tasks: [] });
+      const tasks = data.tasks || [];
+      const idIndex = new Map();
+      for (let i = 0; i < tasks.length; i++) idIndex.set(tasks[i].id, i);
+      const missing = orderedIds.filter((id) => !idIndex.has(id));
+      if (missing.length > 0) {
+        return res.status(400).json({ success: false, error: `id 不存在: ${missing.slice(0, 3).join(',')}` });
+      }
+      // 骨架算法：遍历原 tasks，在 orderedIds 中的 id 按 orderedIds 顺序取，其余原样
+      const orderedSet = new Set(orderedIds);
+      const reordered = [];
+      let ptr = 0;
+      for (const t of tasks) {
+        if (orderedSet.has(t.id)) {
+          if (ptr < orderedIds.length) {
+            const target = tasks.find((x) => x.id === orderedIds[ptr++]);
+            if (target) reordered.push(target);
+          }
+        } else {
+          reordered.push(t);
+        }
+      }
+      data.tasks = reordered;
+      await writeJson(TASKS_FILE, data);
+      publish('tasks:reordered', { tasks: reordered });
+      res.json({ success: true, tasks: reordered });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.post('/api/workbench/tasks', async (req, res) => {
     try {
       const { id, title, desc, promptId, subtasks, type: rawType, simpleOverride, sequential: rawSequential } = req.body || {};

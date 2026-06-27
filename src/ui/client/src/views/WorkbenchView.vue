@@ -682,6 +682,67 @@ async function selectTask(t: Task) {
   captureSnapshot()
 }
 
+// ── 拖动排序：父组件负责落盘 + 乐观更新 + 失败回滚 ──────────────────
+// sidebar 已经 emit 出目标 group 内的新 id 顺序。这里:
+//   1) 备份原数组
+//   2) 在原数组中按 orderedIds 重排目标 group 的 task(其他 group 保持原相对位置)
+//   3) 乐观更新 tasks.value → sidebar 立刻按新顺序渲染
+//   4) 调 PUT /api/workbench/tasks/reorder 落盘
+//   5) 失败回滚到 snapshot + ElMessage.error
+//   6) 成功无操作(后端会 publish 'tasks:reordered' 事件,客户端 SSE 整组覆盖,等价)
+async function reorderTasks(payload: { groupPath: string; orderedIds: string[] }) {
+  const { groupPath, orderedIds } = payload
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) return
+  const snapshot = tasks.value.slice()
+  const reordered = applyLocalReorder(tasks.value, groupPath, orderedIds)
+  if (reordered === tasks.value) return // 校验失败,sidebar 误调,忽略
+  tasks.value = reordered
+  try {
+    const res = await fetch('/api/workbench/tasks/reorder', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderedIds })
+    }).then(r => r.json()).catch(() => ({ success: false, error: $t('@WORKBENCH:排序保存失败') }))
+    if (!res?.success) {
+      tasks.value = snapshot
+      ElMessage.error(res?.error || $t('@WORKBENCH:排序保存失败'))
+    }
+  } catch (err: any) {
+    tasks.value = snapshot
+    ElMessage.error($t('@WORKBENCH:排序保存失败') + ': ' + (err?.message || err))
+  }
+}
+
+/**
+ * 把 list 中 projectPath === groupPath 的 task 按 orderedIds 顺序排,其余保持相对位置。
+ * 校验:orderedIds 长度必须等于同组 task 数,且都是同组 id(避免 sidebar 误调)。
+ * 校验失败返回原 list(让 reorderTasks 走 no-op 兜底)。
+ */
+function applyLocalReorder(
+  list: Task[],
+  groupPath: string,
+  orderedIds: string[]
+): Task[] {
+  const groupKey = (p?: string) => ((p || '').trim() || '__no_project__')
+  const inGroupIds = list.filter(t => groupKey(t.projectPath) === groupPath).map(t => t.id)
+  const inGroupSet = new Set(inGroupIds)
+  if (orderedIds.length !== inGroupSet.size || orderedIds.some(id => !inGroupSet.has(id))) {
+    return list
+  }
+  const byId = new Map(list.map(t => [t.id, t]))
+  const orderedInGroup = orderedIds.map(id => byId.get(id)!).filter(Boolean)
+  const result: Task[] = []
+  let ptr = 0
+  for (const t of list) {
+    if (groupKey(t.projectPath) === groupPath) {
+      result.push(orderedInGroup[ptr++])
+    } else {
+      result.push(t)
+    }
+  }
+  return result
+}
+
 // 切换任务时自动选中第一个子任务（优先选正在执行的）
 watch(
   () => selectedTask.value,
@@ -951,6 +1012,7 @@ const {
       @open-create-prompt="openCreatePrompt"
       @open-edit-prompt="openEditPrompt"
       @delete-prompt="deletePrompt"
+      @reorder-tasks="reorderTasks"
     />
 
     <!-- 中：单任务拆分 -->

@@ -54,6 +54,14 @@ export function useWorkbenchData() {
       const i = tasks.value.findIndex(t => t.id === payload.id)
       if (i >= 0) tasks.value[i] = payload
     }
+    if (evt === 'tasks:reordered') {
+      // 后端整体广播新顺序；整组替换避免单条 task:update 覆盖歧义。
+      // useWorkbenchProjectGroups 是 computed，基于 tasks.value 顺序，渲染同步刷新。
+      if (Array.isArray(payload?.tasks)) {
+        tasks.value = payload.tasks
+      }
+      return
+    }
     if (evt === 'task:error') {
       ElMessage.error(payload.error || $t('@WORKBENCH:执行出错'))
     }

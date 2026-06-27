@@ -2090,5 +2090,10 @@ export default {
   '@WORKBENCH:复制任务': 'Copy Task',
   '@WORKBENCH:{title} (副本)': '{title} (Copy)',
   '@WORKBENCH:已复制任务': 'Task Copied',
+  '@WORKBENCH:拖动排序提示': 'Drag to reorder',
+  '@WORKBENCH:不允许跨组拖动': 'Tasks can only be reordered within the same project',
+  '@WORKBENCH:排序保存失败': 'Failed to save new order',
+  '@WORKBENCH:拖动中': 'Dragging…',
+  '@WORKBENCH:放置位置': 'Drop here',
   // @WORKBENCH: file end
 }

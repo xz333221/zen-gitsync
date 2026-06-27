@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
 import { Plus, Close, List, Picture as PictureIcon, DocumentAdd, Memo, Folder, ArrowDown, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
 import type { Task, Prompt } from '@/types/workbench'
 import { useWorkbenchProjectGroups } from '@/composables/useWorkbenchProjectGroups'
+
+type DragPosition = 'before' | 'after' | null
 
 const props = defineProps<{
   tasks: Task[]
@@ -28,6 +30,7 @@ const emit = defineEmits<{
   'open-create-prompt': []
   'open-edit-prompt': [prompt: Prompt]
   'delete-prompt': [prompt: Prompt]
+  'reorder-tasks': [payload: { groupPath: string; orderedIds: string[] }]
 }>()
 
 const currentProjectRef = computed(() => props.currentProject)
@@ -53,6 +56,91 @@ function subtaskDoneCount(t: Task): number {
 // 也就不重复实现 SIMPLE_SUB_ID_SUFFIX 拼接规则。
 function taskIsRunning(t: Task): boolean {
   return props.isTaskRunning(t)
+}
+
+// ── 拖动排序（仅同组内，跨组由父组件校验 + drop 时丢弃） ──────────────
+// 状态：draggingTaskId/dragOverTaskId/dragPosition 由 5 个 drag handler 维护，
+// 模板上绑 :class 即可出半透明 / 蓝色 2px 指示线。draggingTaskId 在 dragend
+// 兜底 reset，避免 drop 取消时残留视觉。
+const draggingTaskId = ref<string | null>(null)
+const dragStartGroupPath = ref<string | null>(null)
+const dragOverTaskId = ref<string | null>(null)
+const dragOverGroupPath = ref<string | null>(null)
+const dragPosition = ref<DragPosition>(null)
+
+function resetDragState() {
+  draggingTaskId.value = null
+  dragStartGroupPath.value = null
+  dragOverTaskId.value = null
+  dragOverGroupPath.value = null
+  dragPosition.value = null
+}
+
+function onDragStart(e: DragEvent, t: Task, groupPath: string) {
+  if (!e.dataTransfer) return
+  draggingTaskId.value = t.id
+  dragStartGroupPath.value = groupPath
+  // 必须 setData,Firefox 否则拒绝 drop
+  e.dataTransfer.setData('application/x-workbench-task-id', t.id)
+  e.dataTransfer.setData('application/x-workbench-group-path', groupPath)
+  e.dataTransfer.effectAllowed = 'move'
+}
+
+function onDragOver(e: DragEvent, t: Task, groupPath: string) {
+  if (!draggingTaskId.value || !e.dataTransfer) return
+  // 仅同组允许 drop；跨组直接 effectAllowed=none,鼠标变 not-allowed
+  if (dragStartGroupPath.value !== groupPath) {
+    e.dataTransfer.dropEffect = 'none'
+    return
+  }
+  e.dataTransfer.dropEffect = 'move'
+  // 用中线判断 before/after
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const mid = rect.top + rect.height / 2
+  dragOverTaskId.value = t.id
+  dragOverGroupPath.value = groupPath
+  dragPosition.value = e.clientY < mid ? 'before' : 'after'
+}
+
+function onDragLeave(e: DragEvent, t: Task) {
+  const li = e.currentTarget as HTMLElement
+  // 进入子元素不算 leave,避免子节点间反复触发闪烁
+  if (!li.contains(e.relatedTarget as Node | null)) {
+    if (dragOverTaskId.value === t.id) {
+      dragOverTaskId.value = null
+      dragPosition.value = null
+    }
+  }
+}
+
+function onDrop(_e: DragEvent, t: Task, groupPath: string) {
+  if (!draggingTaskId.value) return
+  if (dragStartGroupPath.value !== groupPath) {
+    // 跨组 drop:丢掉,视觉状态已经在 dragover 时由 effectAllowed=none 表达
+    resetDragState()
+    return
+  }
+  const draggedId = draggingTaskId.value
+  const targetId = t.id
+  const position = dragPosition.value
+  resetDragState()
+
+  // 计算目标 group 内的新顺序 id 数组
+  const group = groupedTasksList.value.groups.find(g => g.path === groupPath)
+  if (!group) return
+  const ids = group.tasks.map(x => x.id)
+  const fromIdx = ids.indexOf(draggedId)
+  if (fromIdx < 0) return
+  ids.splice(fromIdx, 1)
+  const toIdx = ids.indexOf(targetId) + (position === 'after' ? 1 : 0)
+  ids.splice(toIdx, 0, draggedId)
+
+  emit('reorder-tasks', { groupPath, orderedIds: ids })
+}
+
+function onDragEnd() {
+  // 兜底:drop 失败/用户拖到 group 外取消时清状态
+  resetDragState()
 }
 </script>
 
@@ -102,9 +190,22 @@ function taskIsRunning(t: Task): boolean {
                 active: t.id === selectedTaskId,
                 'has-attachment': attachmentCount(t) > 0,
                 'is-other-project': t.projectPath && t.projectPath !== currentProject.path,
-                'is-running': taskIsRunning(t)
+                'is-running': taskIsRunning(t),
+                'is-dragging': draggingTaskId === t.id,
+                'is-drop-before': dragOverTaskId === t.id && dragPosition === 'before',
+                'is-drop-after': dragOverTaskId === t.id && dragPosition === 'after'
               }"
+              draggable="true"
+              :data-task-id="t.id"
+              :data-group-path="group.path"
+              :title="`${t.title || $t('@WORKBENCH:未命名任务')} · ${$t('@WORKBENCH:拖动排序提示')}`"
               @click="emit('select-task', t)"
+              @dragstart="onDragStart($event, t, group.path)"
+              @dragover.prevent="onDragOver($event, t, group.path)"
+              @dragenter.prevent
+              @dragleave="onDragLeave($event, t)"
+              @drop.prevent.stop="onDrop($event, t, group.path)"
+              @dragend="onDragEnd()"
             >
               <div class="wb-task-item__body">
                 <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
@@ -169,7 +270,11 @@ function taskIsRunning(t: Task): boolean {
                 >
                   <el-icon><CopyDocument /></el-icon>
                 </button>
+                <!-- 执行中不允许删除:避免误杀正在跑的实例(jobs 还在内存里,
+                     任务从 tasks.json 消失后,runTaskQueue / runSingleSubtask 读不到 task
+                     会留一堆孤儿 job)。后端 DELETE 路由也加了同样的 live-job 守卫兜底 -->
                 <button
+                  v-if="!taskIsRunning(t)"
                   class="wb-task-item__del"
                   @click.stop="emit('delete-task', t)"
                   :title="$t('@WORKBENCH:删除')"
@@ -428,6 +533,31 @@ function taskIsRunning(t: Task): boolean {
 }
 .wb-task-item.is-other-project { opacity: 0.78; }
 .wb-task-item.is-other-project:hover { opacity: 1; }
+/* 拖动排序：整行可拖，drag 时半透明 + cursor:grabbing；drop 位置在目标行
+   上沿 / 下沿画 2px 蓝色指示线，group 内顺序调整、后端落盘。 */
+.wb-task-item { cursor: grab; }
+.wb-task-item.is-dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+  /* 源不响应 dragover，避免自我指示线 */
+  pointer-events: none;
+}
+.wb-task-item.is-drop-before::before,
+.wb-task-item.is-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--color-primary);
+  border-radius: 2px;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary) 50%, transparent);
+  pointer-events: none;
+}
+.wb-task-item.is-drop-before::before { top: -2px; }
+.wb-task-item.is-drop-after::after  { bottom: -2px; }
+/* 跨组拖动时：group head 灰显 + cursor:not-allowed */
+.wb-task-group__head.is-no-drop { cursor: not-allowed; opacity: 0.55; }
 .wb-task-item__meta-icon { font-size: 11px; opacity: 0.85; }
 .wb-task-item__num { min-width: 14px; padding: 0 4px; color: var(--text-secondary); transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom); }
 .wb-task-item.active .wb-task-item__num { color: var(--color-primary); background: var(--tint-primary-14); }
