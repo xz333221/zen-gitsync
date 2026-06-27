@@ -58,15 +58,29 @@ function taskIsRunning(t: Task): boolean {
   return props.isTaskRunning(t)
 }
 
-// ── 拖动排序（仅同组内，跨组由父组件校验 + drop 时丢弃） ──────────────
-// 状态：draggingTaskId/dragOverTaskId/dragPosition 由 5 个 drag handler 维护，
-// 模板上绑 :class 即可出半透明 / 蓝色 2px 指示线。draggingTaskId 在 dragend
-// 兜底 reset，避免 drop 取消时残留视觉。
+// ── 拖动排序（自实现 mousedown+mousemove+mouseup，不走 HTML5 DnD） ──────
+// 为什么不用原生 drag & drop：HTML5 dragstart 在 <button>（复制/删除/类型切换）
+// 或文本子元素上会被浏览器吞掉 → 用户感觉"拖不动"。改成手动监听后，整行任何
+// 位置按下都能进入拖动态，不依赖 HTML5 DnD 的距离阈值和 button 的 draggable=false。
+// - mousedown: 记录起点 + 起点 task id，绑全局 mousemove/mouseup
+// - mousemove: 移动距离 > 5px 才进入"拖动态"(避免点击误触发);
+//   进入后用 elementFromPoint 命中目标 li，按中线切 before/after
+// - mouseup: emit('reorder-tasks')，父组件乐观更新 + 落盘
+// 仅同组内允许 drop，跨组鼠标显示 not-allowed + 无视觉指示（不 emit）
 const draggingTaskId = ref<string | null>(null)
 const dragStartGroupPath = ref<string | null>(null)
 const dragOverTaskId = ref<string | null>(null)
 const dragOverGroupPath = ref<string | null>(null)
 const dragPosition = ref<DragPosition>(null)
+
+type DragStartInfo = {
+  pointerY: number
+  li: HTMLElement
+  taskId: string
+  groupPath: string
+}
+let dragStart: DragStartInfo | null = null
+const DRAG_THRESHOLD_PX = 5
 
 function resetDragState() {
   draggingTaskId.value = null
@@ -74,59 +88,76 @@ function resetDragState() {
   dragOverTaskId.value = null
   dragOverGroupPath.value = null
   dragPosition.value = null
+  dragStart = null
 }
 
-function onDragStart(e: DragEvent, t: Task, groupPath: string) {
-  if (!e.dataTransfer) return
-  draggingTaskId.value = t.id
-  dragStartGroupPath.value = groupPath
-  // 必须 setData,Firefox 否则拒绝 drop
-  e.dataTransfer.setData('application/x-workbench-task-id', t.id)
-  e.dataTransfer.setData('application/x-workbench-group-path', groupPath)
-  e.dataTransfer.effectAllowed = 'move'
+function onTaskMouseDown(e: MouseEvent, t: Task, groupPath: string, li: HTMLElement) {
+  // 左键才进入拖动；中键右键保留原生菜单
+  if (e.button !== 0) return
+  // 不在 mousedown 上 preventDefault,否则 click(选中任务)会被吞。
+  // 文本选择问题在 mousemove 进入拖动态后用 removeAllRanges 兜底。
+  dragStart = { pointerY: e.clientY, li, taskId: t.id, groupPath }
+  window.addEventListener('mousemove', onWindowMouseMove)
+  window.addEventListener('mouseup', onWindowMouseUp, { once: true })
 }
 
-function onDragOver(e: DragEvent, t: Task, groupPath: string) {
-  if (!draggingTaskId.value || !e.dataTransfer) return
-  // 仅同组允许 drop；跨组直接 effectAllowed=none,鼠标变 not-allowed
-  if (dragStartGroupPath.value !== groupPath) {
-    e.dataTransfer.dropEffect = 'none'
+function onWindowMouseMove(e: MouseEvent) {
+  if (!dragStart) return
+  // 未达阈值:啥也不做,但拖动起点已经记录,等移动够了进入拖动态
+  if (draggingTaskId.value === null) {
+    if (Math.abs(e.clientY - dragStart.pointerY) < DRAG_THRESHOLD_PX) return
+    draggingTaskId.value = dragStart.taskId
+    dragStartGroupPath.value = dragStart.groupPath
+    // 进入拖动态时清除已有的文本选择,避免拖动时残留选区闪烁
+    window.getSelection()?.removeAllRanges()
+    document.body.style.userSelect = 'none'
+  }
+  // 用 elementFromPoint 命中目标 li,避免依赖 dragover 系列事件
+  const target = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
+  if (!target) return
+  // 找最近的 .wb-task-item 祖先
+  const hitLi = target.closest('.wb-task-item') as HTMLElement | null
+  if (!hitLi) {
+    dragOverTaskId.value = null
+    dragOverGroupPath.value = null
+    dragPosition.value = null
     return
   }
-  e.dataTransfer.dropEffect = 'move'
-  // 用中线判断 before/after
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const hitId = hitLi.getAttribute('data-task-id')
+  const hitGroup = hitLi.getAttribute('data-group-path')
+  if (!hitId || !hitGroup) return
+  // 跨组:不要视觉指示(后续 mouseup 也不会 emit)
+  if (hitGroup !== dragStartGroupPath.value) {
+    dragOverTaskId.value = null
+    dragOverGroupPath.value = null
+    dragPosition.value = null
+    return
+  }
+  const rect = hitLi.getBoundingClientRect()
   const mid = rect.top + rect.height / 2
-  dragOverTaskId.value = t.id
-  dragOverGroupPath.value = groupPath
+  dragOverTaskId.value = hitId
+  dragOverGroupPath.value = hitGroup
   dragPosition.value = e.clientY < mid ? 'before' : 'after'
 }
 
-function onDragLeave(e: DragEvent, t: Task) {
-  const li = e.currentTarget as HTMLElement
-  // 进入子元素不算 leave,避免子节点间反复触发闪烁
-  if (!li.contains(e.relatedTarget as Node | null)) {
-    if (dragOverTaskId.value === t.id) {
-      dragOverTaskId.value = null
-      dragPosition.value = null
-    }
-  }
-}
-
-function onDrop(_e: DragEvent, t: Task, groupPath: string) {
-  if (!draggingTaskId.value) return
-  if (dragStartGroupPath.value !== groupPath) {
-    // 跨组 drop:丢掉,视觉状态已经在 dragover 时由 effectAllowed=none 表达
+function onWindowMouseUp(_e: MouseEvent) {
+  window.removeEventListener('mousemove', onWindowMouseMove)
+  document.body.style.userSelect = ''
+  if (!dragStart) {
     resetDragState()
     return
   }
-  const draggedId = draggingTaskId.value
-  const targetId = t.id
+  const startGroup = dragStart.groupPath
+  const draggedId = dragStart.taskId
+  const targetId = dragOverTaskId.value
   const position = dragPosition.value
+  const targetGroup = dragOverGroupPath.value
   resetDragState()
 
-  // 计算目标 group 内的新顺序 id 数组
-  const group = groupedTasksList.value.groups.find(g => g.path === groupPath)
+  // 没移动到阈值(就是一次点击)/ 跨组:不触发 reorder
+  if (!targetId || !position || targetGroup !== startGroup) return
+
+  const group = groupedTasksList.value.groups.find(g => g.path === startGroup)
   if (!group) return
   const ids = group.tasks.map(x => x.id)
   const fromIdx = ids.indexOf(draggedId)
@@ -135,12 +166,7 @@ function onDrop(_e: DragEvent, t: Task, groupPath: string) {
   const toIdx = ids.indexOf(targetId) + (position === 'after' ? 1 : 0)
   ids.splice(toIdx, 0, draggedId)
 
-  emit('reorder-tasks', { groupPath, orderedIds: ids })
-}
-
-function onDragEnd() {
-  // 兜底:drop 失败/用户拖到 group 外取消时清状态
-  resetDragState()
+  emit('reorder-tasks', { groupPath: startGroup, orderedIds: ids })
 }
 </script>
 
@@ -195,17 +221,11 @@ function onDragEnd() {
                 'is-drop-before': dragOverTaskId === t.id && dragPosition === 'before',
                 'is-drop-after': dragOverTaskId === t.id && dragPosition === 'after'
               }"
-              draggable="true"
               :data-task-id="t.id"
               :data-group-path="group.path"
               :title="`${t.title || $t('@WORKBENCH:未命名任务')} · ${$t('@WORKBENCH:拖动排序提示')}`"
               @click="emit('select-task', t)"
-              @dragstart="onDragStart($event, t, group.path)"
-              @dragover.prevent="onDragOver($event, t, group.path)"
-              @dragenter.prevent
-              @dragleave="onDragLeave($event, t)"
-              @drop.prevent.stop="onDrop($event, t, group.path)"
-              @dragend="onDragEnd()"
+              @mousedown="onTaskMouseDown($event, t, group.path, $event.currentTarget as HTMLElement)"
             >
               <div class="wb-task-item__body">
                 <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
