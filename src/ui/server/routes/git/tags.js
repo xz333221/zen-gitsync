@@ -14,7 +14,7 @@
 //
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js'
 
-import logger from '../utils/logger.js'
+import logger from '../../utils/logger.js'
 
 export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory }) {
   // ============ Git Tag 相关接口 ============

@@ -13,8 +13,8 @@
 // limitations under the License.
 //
 import fs from 'fs/promises';
-import logger from '../utils/logger.js'
-import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
+import logger from '../../utils/logger.js'
+import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 
 import { createDiffHelpers } from './diffUtils.js';
 

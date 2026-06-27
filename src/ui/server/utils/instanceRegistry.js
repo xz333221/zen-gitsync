@@ -18,7 +18,7 @@
 // stale 判定：PID 不存在 或 lastHeartbeat 超过阈值
 
 import nodePath from 'node:path';
-import logger from '../utils/logger.js'
+import logger from './logger.js'
 import nodeOs from 'node:os';
 
 const STALE_MS = 30_000;          // 心跳超时阈值（毫秒）

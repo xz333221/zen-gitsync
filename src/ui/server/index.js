@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 import express from 'express';
-import logger from '../utils/logger.js'
+import logger from './utils/logger.js'
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import path from 'path';

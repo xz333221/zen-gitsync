@@ -13,8 +13,8 @@
 // limitations under the License.
 //
 import { createDiffHelpers } from './diffUtils.js';
-import logger from '../utils/logger.js'
-import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
+import logger from '../../utils/logger.js'
+import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 
 export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
   const { checkShouldSkipDiff, checkDiffSize, getDiffStats } = createDiffHelpers({ execGitCommand });

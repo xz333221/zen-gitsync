@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-import logger from '../utils/logger.js'
+import logger from './logger.js'
 
 export function createSavePortToFile({ savePort, fs, path, cwdFn = process.cwd }) {
   let savedPort = null;
