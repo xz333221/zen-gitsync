@@ -310,7 +310,9 @@ export function registerGitDiffRoutes({
         }
 
         // 检查文件状态：未跟踪文件需要删除，修改文件需要恢复
-        const { stdout: statusOutput } = await execGitCommand(['status', '--porcelain', '--', safeFilePath]);
+        // pathspec 用相对路径(避免 Windows 绝对路径在某些 git 版本下的边界问题)
+        const relFilePath = toGitRepoRelativePath(safeFilePath);
+        const { stdout: statusOutput } = await execGitCommand(['status', '--porcelain', '--', relFilePath]);
 
         // 未跟踪的文件 (??), 需要删除它
         if (statusOutput.startsWith('??')) {
@@ -327,12 +329,12 @@ export function registerGitDiffRoutes({
         // 已暂存的文件，先取消暂存
         else if (statusOutput.startsWith('A ') || statusOutput.startsWith('M ') || statusOutput.startsWith('D ')) {
           // 先取消暂存
-          await execGitCommand(['reset', 'HEAD', '--', safeFilePath]);
+          await execGitCommand(['reset', 'HEAD', '--', relFilePath]);
         }
 
         // 已修改文件，取消所有本地修改
         if (statusOutput) {
-          await execGitCommand(['checkout', '--', safeFilePath]);
+          await execGitCommand(['checkout', '--', relFilePath]);
           return res.json({ success: true, message: '文件修改已撤回' });
         } else {
           return res.status(400).json({
@@ -377,7 +379,9 @@ export function registerGitDiffRoutes({
           }
 
           // 检查文件状态：未跟踪 ??、已暂存 A/M/D、已修改（空状态会返回空字符串）
-          const { stdout: statusOutput } = await execGitCommand(['status', '--porcelain', '--', safeFilePath])
+          // pathspec 用相对路径，避免 Windows 绝对路径的潜在问题
+          const relFilePath = toGitRepoRelativePath(safeFilePath);
+          const { stdout: statusOutput } = await execGitCommand(['status', '--porcelain', '--', relFilePath])
 
           // 未跟踪的文件 (??) → 直接删除
           if (statusOutput.startsWith('??')) {
@@ -394,12 +398,12 @@ export function registerGitDiffRoutes({
 
           // 已暂存的文件，先取消暂存（不影响工作区）
           if (statusOutput.startsWith('A ') || statusOutput.startsWith('M ') || statusOutput.startsWith('D ')) {
-            await execGitCommand(['reset', 'HEAD', '--', safeFilePath])
+            await execGitCommand(['reset', 'HEAD', '--', relFilePath])
           }
 
           // 已修改文件：丢弃工作区修改
           if (statusOutput) {
-            await execGitCommand(['checkout', '--', safeFilePath])
+            await execGitCommand(['checkout', '--', relFilePath])
             results.push({ path: filePath, success: true, message: '文件修改已撤回' })
             successCount++
           } else {
