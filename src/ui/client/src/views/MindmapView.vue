@@ -110,8 +110,9 @@ async function handleSave() {
       return
     }
     await store.saveCurrent(content)
-    // 保存成功后强制重新挂载 MindMap，避免 data prop 引用替换导致分支渲染丢失
-    mmKey.value++
+    // 不强制重挂载 MindMap：组件内部已持有用户最新编辑状态，
+    // 重新挂载会用 store.current.content（未更新为最新保存值）初始化导致回退。
+    // saveCurrent 内部原地更新 mtime（不创建新对象引用），避免触发 :data 重算。
     ElMessage.success($t('@MINDMAP:已保存'))
   } catch (e: any) {
     ElMessage.error(e?.message || $t('@MINDMAP:保存失败'))
