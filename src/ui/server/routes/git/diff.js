@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import fs from 'fs/promises';
+import path from 'path';
 import logger from '../../utils/logger.js'
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 
@@ -23,7 +24,7 @@ import { ensureWithinCwd } from '../../utils/pathGuard.js';
 /**
  * SEC-PATH-1: resolve user path to be inside process.cwd(), returns null on escape
  * @param {string} userPath
- * @returns {Promise<string|null>}
+ * @returns {Promise<string|null>} 绝对路径（已校验在 cwd 内），或 null（越界）
  */
 async function safePathInProject(userPath) {
   if (typeof userPath !== 'string' || !userPath) return null;
@@ -31,6 +32,18 @@ async function safePathInProject(userPath) {
   const cwd = process.cwd();
   const result = await ensureWithinCwd(userPath, cwd);
   return result ? result.safePath : null;
+}
+
+/**
+ * 把 safePathInProject 返回的绝对路径转成相对于仓库根的路径（正斜杠），
+ * 用于拼接 git rev:path 语法（git show/cat-file 不接受绝对路径）。
+ * @param {string} safeFilePath - 已校验在 cwd 内的绝对路径
+ * @returns {string} 仓库根的相对路径（正斜杠分隔）
+ */
+function toGitRepoRelativePath(safeFilePath) {
+  const rel = path.relative(process.cwd(), safeFilePath);
+  // git 内部统一用正斜杠，Windows 反斜杠会被 git show 当成转义字符导致 notFound
+  return rel.replace(/\\/g, '/');
 }
 
 export function registerGitDiffRoutes({
@@ -198,8 +211,13 @@ export function registerGitDiffRoutes({
         }
 
         const r = String(rev);
-        // 用 safeFilePath 而不是 user input,防注入
-        const spec = r === ':' ? `:${safeFilePath}` : `${r}:${safeFilePath}`;
+        // git show/cat-file 的 rev:path 语法要求 path 必须是相对于仓库根的路径,
+        // 不接受绝对路径（safeFilePath 是绝对路径,直接拼 spec 会导致 git show 报
+        // "path exists on disk, but not in 'HEAD'" → 前端拿到 notFound:true）。
+        // 这里用 toGitRepoRelativePath 转成仓库根相对路径,并把 Windows 反斜杠
+        // 替换为正斜杠（git 内部统一用 /）。
+        const relPath = toGitRepoRelativePath(safeFilePath);
+        const spec = r === ':' ? `:${relPath}` : `${r}:${relPath}`;
 
         let sizeBytes = 0;
         try {
