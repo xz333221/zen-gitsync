@@ -622,7 +622,7 @@ async function copyTask(t: Task) {
         attachments: []
       }))
     : []
-  const body = {
+  const body: any = {
     title: copyTitle,
     desc: t.desc || '',
     promptId: t.promptId || null,
@@ -2978,8 +2978,13 @@ const {
 .wb-simple-chat :deep(.acu-chat) { background: var(--bg-code); }
 .wb-simple-chat :deep(.acu-message-list) { background: var(--bg-code); }
 .wb-simple-chat :deep(.acu-message-list-inner) {
-  padding: 10px 12px 14px;
+  padding: 10px 8px 14px;
   gap: 10px;
+  max-width: 100%;
+  margin: 0;
+}
+.wb-simple-chat :deep(.acu-bubble-main) {
+  max-width: 100%;
 }
 .wb-simple-chat :deep(.acu-bubble) { font-size: 12px; }
 .wb-simple-chat :deep(.acu-bubble-name) { font-size: 10px; }
