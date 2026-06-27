@@ -50,7 +50,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // 显式白名单:只有这些文件路径会被 git add。
 // 禁止 `git add .` 防止把工作区脏文件 / 临时调试文件一起带上 release commit。
-const RELEASE_FILES = ['package.json', 'CHANGELOG.md', 'package-lock.json', 'pnpm-lock.yaml']
+// lockfile (package-lock.json / pnpm-lock.yaml) 都在 .gitignore 里,
+// 即便列在白名单也会被 git 拒绝 add,所以这里不列。
+// 实际入 release commit 的只有 package.json(版本号)+ CHANGELOG.md。
+const RELEASE_FILES = ['package.json', 'CHANGELOG.md']
 
 function createReadlineInterface() {
   return readline.createInterface({ input: process.stdin, output: process.stdout })
