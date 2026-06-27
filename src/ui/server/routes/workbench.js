@@ -2549,10 +2549,53 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
   });
 
+  // DELETE /api/workbench/tasks/:id
+  // 行为：
+  //   - 该 task 下有 running/pending 的 job 时拒绝（避免误杀正在跑的实例）
+  //   - 同步清理磁盘上的图片/附件目录，避免孤儿文件:
+  //     1) 主任务附件 IMAGES_DIR/_task-<id>/
+  //     2) 每个子任务附件 IMAGES_DIR/<subId>/
+  //   - 从 tasks.json 中删除 task 条目
+  // 前端 sidebar 已用 v-if="!taskIsRunning(t)" 隐藏执行中的删除按钮,这里兜底
+  // 防 DevTools / curl / 第三方脚本绕过。
   app.delete('/api/workbench/tasks/:id', async (req, res) => {
     try {
+      const taskId = req.params.id;
       const data = await readJson(TASKS_FILE, { tasks: [] });
-      const tasks = (data.tasks || []).filter(t => t.id !== req.params.id);
+      const allTasks = data.tasks || [];
+      const task = allTasks.find(t => t.id === taskId);
+      if (!task) return res.status(404).json({ success: false, error: '任务不存在' });
+
+      // 1) 检查活跃 job —— 有 running/pending 直接拒绝
+      const live = [];
+      for (const j of jobs.values()) {
+        if (j.taskId !== taskId) continue;
+        if (j.status === 'running' || j.status === 'pending') live.push(j.id);
+      }
+      if (live.length > 0) {
+        return res.status(400).json({ success: false, error: `有 ${live.length} 个 job 正在执行,请先停止` });
+      }
+
+      // 2) 清理磁盘上的图片目录(force: true 让目录不存在也不抛错)
+      //    失败只 warn 不阻断 —— 元数据删除优先,孤儿文件是次要问题
+      try {
+        await fsp.rm(path.join(IMAGES_DIR, '_task-' + taskId), { recursive: true, force: true });
+      } catch (e) {
+        console.warn(`[workbench] failed to remove task image dir for ${taskId}:`, e.message);
+      }
+      if (Array.isArray(task.subtasks)) {
+        for (const sub of task.subtasks) {
+          if (!sub || !sub.id) continue;
+          try {
+            await fsp.rm(path.join(IMAGES_DIR, sub.id), { recursive: true, force: true });
+          } catch (e) {
+            console.warn(`[workbench] failed to remove sub image dir for ${sub.id}:`, e.message);
+          }
+        }
+      }
+
+      // 3) 从 tasks.json 中删除
+      const tasks = allTasks.filter(t => t.id !== taskId);
       await writeJson(TASKS_FILE, { tasks });
       res.json({ success: true });
     } catch (err) {
