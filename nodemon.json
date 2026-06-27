@@ -1,0 +1,22 @@
+{
+  "watch": ["src/ui/server", "src/utils", "src/config.js", "src/gitCommit.js", "server.js"],
+  "ext": "js,mjs,cjs,json",
+  "ignore": [
+    "src/ui/client/**",
+    "src/ui/public/**",
+    "public/**",
+    "test/**",
+    "tests/**",
+    "skills/**",
+    "docs/**",
+    "scripts/**",
+    "node_modules/**",
+    ".workbuddy/**",
+    ".codebuddy/**",
+    ".claude/**",
+    "*.log",
+    "*.png",
+    "*.md"
+  ],
+  "delay": 0
+}

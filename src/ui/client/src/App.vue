@@ -17,8 +17,12 @@
 import { $t } from '@/lang/static'
 import { ref, onMounted, onBeforeUnmount, computed, watch, defineAsyncComponent } from 'vue'
 import { getFolderNameFromPath } from '@/utils/path'
-// 6 个首屏主面板组件改异步,首屏只下载外壳 JS + 实际激活的视图
-const GitStatus = defineAsyncComponent(() => import('@views/components/GitStatus.vue'))
+// GitStatus 是首屏左侧主面板(默认 git 视图立即渲染),改静态 import:
+// - 动态 import(defineAsyncComponent)会等到 App.vue 渲染到 <GitStatus> 时才发起 chunk 请求
+// - GitStatus 依赖深(FileDiffViewer/FileTreeView/NpmScriptsPanel/多个 buttons),首次 transform 瀑布式,实测 23s+
+// - 静态 import 让 vite 在 transform App.vue 时一次性解析整条依赖链,避免瀑布
+import GitStatus from '@views/components/GitStatus.vue'
+// 其余首屏组件保持异步:它们在非默认视图或次要位置,首次访问时才加载可接受
 const CommitForm = defineAsyncComponent(() => import('@views/components/CommitForm.vue'))
 const LogList = defineAsyncComponent(() => import('@views/components/LogList.vue'))
 const CommandConsole = defineAsyncComponent(() => import('@components/CommandConsole.vue'))
@@ -140,9 +144,15 @@ onMounted(async () => {
 
       // 启动时静默 git fetch --all,如有新提交则刷新右侧 log
       // 不阻塞初始化,失败也只是 warn,不影响主流程
-      gitStore.bootFetch().catch(err => {
-        console.warn('[App] 启动静默 fetch 异常(已忽略):', err)
-      })
+      //
+      // 延后 3s 触发:GitStatus 首屏会立刻调 git status --porcelain,
+      // 如果 bootFetch 同步发起,git fetch --all 会占用仓库锁,导致 git status 阻塞 4s+。
+      // 延后让首屏状态先加载完,fetch-all 再跑就不影响感知。
+      setTimeout(() => {
+        gitStore.bootFetch().catch(err => {
+          console.warn('[App] 启动静默 fetch 异常(已忽略):', err)
+        })
+      }, 3000)
     } else {
       ElMessage.warning($t('@F13B4:当前目录不是Git仓库，部分功能将不可用'))
     }

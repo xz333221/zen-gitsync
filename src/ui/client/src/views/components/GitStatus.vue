@@ -209,8 +209,9 @@ async function loadStatus() {
     // 使用gitStore获取Git状态（只获取文件状态）
     await gitStore.fetchStatus()
 
-    // 总是刷新分支状态以获取上游分支信息
-    await gitStore.getBranchStatus()
+    // 分支状态(ahead/behind/upstream)由 App.vue onMounted 的 getBranchStatus(true) 强制刷新过,
+    // 这里不再重复调用 —— 之前重复 fetch 会被启动期的 bootFetch (git fetch --all) 阻塞,
+    // 实测多耗 3s+,且数据无变化(性能修复)。
 
     ElMessage({
       message: $t('@13D1C:Git 状态已刷新'),

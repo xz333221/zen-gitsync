@@ -88,9 +88,9 @@ export default defineConfig(({ command }) => {
     // 是路由级 lazy 加载;exclude 让 Vite dev 期跳过预构建,首启不再 ~30s 卡在 [optimizer]
     // build,改由浏览器运行时直接 esbuild 解析(配合 manualChunks 已独立切到 'monaco' chunk)
     exclude: ['ai-model-form', 'monaco-editor'],
-    // entry 显式声明 src/main.ts + 全量 .vue 组件,resolver 在 transform 阶段把所有
-    // el-* 子模块加入依赖图,Vite 启动时一次预构建完 → dev 期访问新页面不再触发 reload
-    entries: ['src/main.ts', 'src/**/*.{vue,ts,tsx}'],
+    // entries:主入口即可。GitStatus 已改为静态 import,vite 从 main.ts → App.vue → GitStatus
+    // 自然遍历整条依赖链,不需要单独列。其它 lazy 路由按需发现。
+    entries: ['src/main.ts'],
     // 兜底:把 element-plus 整个包放进去,运行期即使 resolver 漏掉,Vite 也不再需要新增依赖
     include: ['element-plus/es > element-plus'],
   },
