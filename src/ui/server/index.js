@@ -63,6 +63,105 @@ let processIdCounter = 0;
 const terminalSessions = new Map(); // key: terminalSessionId, value: { id, command, workingDirectory, pid, createdAt, lastStartedAt }
 let terminalSessionIdCounter = 0;
 
+/**
+ * 终止并等待单个子进程退出
+ * @param {import('child_process').ChildProcess} child
+ * @param {number} timeoutMs 等待 SIGTERM 生效的最大时间,超时后发 SIGKILL
+ * @returns {Promise<void>}
+ */
+function killChildProcess(child, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    if (!child || (child.exitCode !== null && child.exitCode !== undefined)) {
+      return resolve();
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      child.removeListener('exit', finish);
+      resolve();
+    };
+    child.once('exit', finish);
+    try {
+      // SIGTERM 优雅退出,被 Node 在 Windows 上转 TerminateProcess
+      child.kill('SIGTERM');
+    } catch (_) {
+      finish();
+      return;
+    }
+    // 超时未退就 SIGKILL 强杀
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch (_) {}
+      // 给 SIGKILL 200ms 兜底,再不退也不等了
+      setTimeout(finish, 200);
+    }, timeoutMs);
+  });
+}
+
+/**
+ * 并行终止 runningProcesses 内所有子进程,总等待时间不超过 timeoutMs。
+ * 防止 SIGINT/SIGTERM 关闭 server 时,正在跑的 claude/npm/git 子进程变孤儿。
+ * @param {number} timeoutMs
+ * @returns {Promise<number>} 被尝试终止的进程数
+ */
+async function drainRunningProcesses(timeoutMs = 5000) {
+  const entries = Array.from(runningProcesses.entries());
+  if (entries.length === 0) return 0;
+  // 先并行发 SIGTERM,再并行等;整批用 Promise.race 卡最大时长
+  const killPromises = entries.map(([, info]) => killChildProcess(info.childProcess, timeoutMs).catch(() => {}));
+  await Promise.race([
+    Promise.all(killPromises),
+    new Promise((r) => setTimeout(r, timeoutMs))
+  ]);
+  return entries.length;
+}
+
+// 全局错误处理 — 幂等,只允许进入 fatalExit 一次
+let _fatalExitInProgress = false;
+
+/**
+ * 注册 process.on('uncaughtException') / unhandledRejection 处理器
+ *
+ * 触发时的清理链路(防止留下孤儿子进程 / 假死 registry / 端口文件残留):
+ *   1) drainRunningProcesses(3s) — 并行 SIGTERM 杀掉所有 claude/npm/git 子进程
+ *   2) instanceRegistry.unregister — 把自己从实例表里摘掉
+ *   3) setTimeout 250ms 退 — 给 logger/console 一点时间把日志刷盘
+ *
+ * @param {Object} opts
+ * @param {ReturnType<typeof createInstanceRegistry>} opts.instanceRegistry
+ */
+function setupGlobalErrorHandlers({ instanceRegistry }) {
+  // 幂等:多个错误同时触发时只走一次清理,避免清理动作自身再次触发 fatalExit
+  const fatalExit = async (reason, err) => {
+    if (_fatalExitInProgress) return;
+    _fatalExitInProgress = true;
+    try {
+      logger.error(`[FATAL] ${reason}: ${err?.message || err}`);
+      if (err?.stack) logger.error(err.stack);
+    } catch (_) { /* logger 自身炸了,放弃 */ }
+    // 1) 杀光所有子进程
+    try {
+      const killed = await drainRunningProcesses(3000);
+      if (killed > 0) logger.warn(`[FATAL] 已尝试终止 ${killed} 个运行中的子进程`);
+    } catch (_) {}
+    // 2) 反注册实例
+    if (instanceRegistry) {
+      try { await instanceRegistry.unregister(process.pid); } catch (_) {}
+    }
+    // 3) 给 OS 250ms 刷盘日志,然后非 0 退出
+    setTimeout(() => process.exit(1), 250);
+  };
+
+  process.on('uncaughtException', (err, origin) => {
+    // 同步处理路径:直接调 fatalExit,内部 await 会进入 microtask
+    fatalExit(`uncaughtException (${origin || 'uncaught'})`, err);
+  });
+  process.on('unhandledRejection', (reason) => {
+    fatalExit('unhandledRejection', reason instanceof Error ? reason : new Error(String(reason)));
+  });
+}
+
 // 分支状态缓存
 let branchStatusCache = {
   currentBranch: null,
@@ -146,6 +245,12 @@ async function startUIServer(noOpen = false, savePort = false) {
     os,
     registryPath: path.join(os.homedir(), '.zen-gitsync-instances.json')
   });
+
+  // 注册全局错误处理器:任意未捕获异常/拒绝都会触发 fatalExit,
+  // 走 drainRunningProcesses + unregister + 延迟 250ms 退出的链路。
+  // 在 instanceRegistry 创建之后立即注册,这样后续 route 注册阶段抛出
+  // 也能被同一个处理器捕获(否则会无声崩,留下子进程孤儿与 .port 残留)。
+  setupGlobalErrorHandlers({ instanceRegistry });
 
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
@@ -478,11 +583,20 @@ async function startUIServer(noOpen = false, savePort = false) {
       }
     }, fsSync.watch);
 
-    // 优雅退出：SIGINT/SIGTERM 触发异步 unregister + 清心跳
+    // 优雅退出：SIGINT/SIGTERM 触发 drain 子进程 + unregister + 清心跳
     const shutdown = async (signal) => {
+      console.log(chalk.gray(`[shutdown] 收到 ${signal}，开始清理…`));
+      // 1) 先杀光所有正在跑的子进程(限时 3s),防止 claude/npm/git 变孤儿
+      try {
+        const killed = await drainRunningProcesses(3000);
+        if (killed > 0) console.log(chalk.gray(`[shutdown] 已终止 ${killed} 个子进程`));
+      } catch (_) {}
+      // 2) 清心跳 + 反注册实例
       try { clearInterval(heartbeatTimer); } catch (_) {}
       try { await instanceRegistry.unregister(process.pid); } catch (_) {}
-      console.log(chalk.gray(`[instanceRegistry] 收到 ${signal}，已清理本实例`));
+      console.log(chalk.gray(`[shutdown] 收到 ${signal}，已清理本实例`));
+      // 3) 给 OS 100ms 刷盘日志
+      setTimeout(() => process.exit(0), 100);
     };
     process.on('SIGINT', () => { shutdown('SIGINT'); });
     process.on('SIGTERM', () => { shutdown('SIGTERM'); });

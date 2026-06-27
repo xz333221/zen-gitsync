@@ -180,9 +180,45 @@ function clearCommandHistory() {
   return true;
 }
 
+// 按 git 子命令类型设定默认超时(毫秒),避免 git push/fetch 撞死网导致
+// 整个 Node 事件循环永久挂起。读类操作给短超时(快);网络类给长超时;
+// 默认 60s 兜底。调用方可通过 options.timeout 显式覆盖,timeout=0 表示不超时。
+const DEFAULT_GIT_TIMEOUT_MS = {
+  // 只读 metadata,通常几 ms 完成
+  status: 30_000,
+  'rev-parse': 10_000,
+  branch: 10_000,
+  'rev-list': 30_000,
+  // 输出可能很大
+  log: 30_000,
+  diff: 60_000,
+  show: 30_000,
+  // 写操作,锁文件 + 索引更新
+  add: 60_000,
+  commit: 60_000,
+  // 网络操作,留足时间应对慢网 + 钩子 + 大仓库
+  fetch: 300_000,
+  pull: 300_000,
+  push: 300_000,
+  clone: 600_000,
+  remote: 60_000,
+  // 兜底
+  default: 60_000,
+};
+
+function getDefaultGitTimeout(command) {
+  if (!Array.isArray(command) || command.length === 0) return DEFAULT_GIT_TIMEOUT_MS.default;
+  const sub = String(command[0] || '').trim();
+  return DEFAULT_GIT_TIMEOUT_MS[sub] ?? DEFAULT_GIT_TIMEOUT_MS.default;
+}
+
 function execGitCommand(command, options = {}) {
   return new Promise((resolve, reject) => {
-    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = Array.isArray(command) ? command.join(' ') : command, log = true} = options
+    let {encoding = 'utf-8', maxBuffer = 30 * 1024 * 1024, head = Array.isArray(command) ? command.join(' ') : command, log = true, timeout} = options
+    // options.timeout === undefined → 按子命令类型取默认;0 = 不超时(显式禁用)
+    if (timeout === undefined) {
+      timeout = getDefaultGitTimeout(command);
+    }
     let cwd = getCwd()
 
     // Record start time for command execution
@@ -193,6 +229,7 @@ function execGitCommand(command, options = {}) {
     // - 不走 shell,Windows cmd.exe / POSIX sh 都一致
     // - argv 数组天然免疫 shell 注入,文件名/参数无需 shellQuote
     // - 所有调用点约定只跑 git 子命令,见 src/utils/index.js 内的 execGitCommand 调用清单
+    // - timeout 显式传 0 表示禁用;否则按 getDefaultGitTimeout() 自动选值
     execFile('git', command, {
       env: {
         ...process.env,
@@ -205,7 +242,9 @@ function execGitCommand(command, options = {}) {
       cwd,
       // Windows 下 git 是 .exe;POSIX 下直接 PATH 找。
       // 不传 shell,杜绝 cmd.exe 单/双引号兼容问题与注入风险。
-      windowsHide: true
+      windowsHide: true,
+      // 超时后 execFile 自动给子进程发 SIGTERM,callback 收到 error.killed=true
+      timeout
     }, (error, stdout, stderr) => {
       if (options.spinner) {
         options.spinner.stop();
@@ -271,6 +310,15 @@ function execGitCommand(command, options = {}) {
         console.log(chalk.dim(`📁 目录: ${cwd} | ⏰ 时间: ${currentTime}`));
       }
       if (error) {
+        // 检测是否超时:execFile 超时后 error.killed=true,signal='SIGTERM',
+        // error.code=null(被信号杀,无 exit code)。在 error 上加 isTimeout 标记
+        // 方便上层(路由 / GUI 前端)区分"超时"和"git 自己报错"做不同提示。
+        if (error.killed && (error.signal === 'SIGTERM' || /TIMEOUT|timeout/i.test(error.message || ''))) {
+          error.isTimeout = true
+          if (log) {
+            console.log(chalk.yellow(`⏰ git 命令超时 (${timeout}ms): ${head}`))
+          }
+        }
         log && coloredLog(head, error, 'error')
         // 错误情况也打印目录和时间
         if (log) {
@@ -294,31 +342,101 @@ function execGitCommand(command, options = {}) {
 
 /**
  * 检查并尝试清理 Git 锁文件
+ *
+ * 安全策略:必须先验证锁是否真的过期(孤儿锁),才能 unlink。盲目删锁
+ * 会删掉别人正在写的锁 → `.git/index` 半写状态 → 仓库损坏。
+ *
+ * 判定顺序:
+ * 1. 读 .git/index.lock 内容,若能解析为 PID,调 process.kill(pid, 0) 探测
+ *    - 探测成功(无错)→ 进程存活,锁仍被持有 → 跳过清理
+ *    - ESRCH(无此进程)→ 锁是孤儿 → 进入清理
+ *    - EPERM(进程存在但无权限)→ 锁被别人持有且我们是其他用户 → 跳过
+ * 2. 锁文件内容不是 PID(老 git 仅 touch 空文件,内容为空)→ 用 mtime 兜底:
+ *    超过 60 秒未更新视为陈旧,否则保守跳过
+ *
  * @returns {Promise<boolean>} 是否清理成功
  */
 async function checkAndClearGitLock() {
+  // 锁文件"陈旧"阈值(毫秒):60s 是经验值,正常 git add/commit 在锁定期
+  // 内必完成;只有崩溃/被 kill -9 才会留下更老的锁。
+  const STALE_LOCK_THRESHOLD_MS = 60_000;
   try {
     const cwd = getCwd();
     let gitRoot;
     try {
-      // 使用 execSync 快速获取 Git 根目录
-      const rootOutput = execSync('git rev-parse --show-toplevel', { cwd, encoding: 'utf-8' });
+      // 使用 execSync 快速获取 Git 根目录,加 5s 超时避免 rev-parse 卡死
+      const rootOutput = execSync('git rev-parse --show-toplevel', {
+        cwd,
+        encoding: 'utf-8',
+        timeout: 5000
+      });
       gitRoot = rootOutput.trim();
     } catch (e) {
       gitRoot = cwd;
     }
 
     const lockFilePath = path.join(gitRoot, '.git', 'index.lock');
+
+    // 一次 IO 替代原来的 fs.access + fs.unlink 两步
+    let content;
     try {
-      await fs.access(lockFilePath);
-      // 如果文件存在，尝试删除它
-      await fs.unlink(lockFilePath);
-      console.log(chalk.green(`✅ 已清理 Git 锁文件: ${lockFilePath}`));
-      return true;
+      content = await fs.readFile(lockFilePath, 'utf-8');
     } catch (e) {
-      // 文件不存在，不需要清理
-      return false;
+      if (e.code === 'ENOENT') return false;  // 锁文件不存在,无需清理
+      throw e;
     }
+
+    // 判定锁是否过期
+    const trimmed = (content || '').trim();
+    const isPidFormat = /^\d+$/.test(trimmed);
+    let isStale = false;
+
+    if (isPidFormat) {
+      const pid = parseInt(trimmed, 10);
+      if (Number.isInteger(pid) && pid > 0) {
+        try {
+          // signal 0 不真发信号,只探测进程是否存在
+          process.kill(pid, 0);
+          // 无错 → 进程存活,锁还活着
+          console.log(chalk.yellow(`⚠️ 检测到 Git 锁由活跃进程持有 (PID=${pid}),跳过清理`));
+          return false;
+        } catch (e) {
+          if (e.code === 'ESRCH') {
+            // 进程已死,锁是孤儿
+            isStale = true;
+          } else if (e.code === 'EPERM') {
+            // 进程存在但无权限(其他用户的进程),不能删
+            console.log(chalk.yellow(`⚠️ 检测到 Git 锁由无权限访问的进程持有,跳过清理`));
+            return false;
+          } else {
+            // 其他探测错误,保守不删
+            console.warn(chalk.yellow(`⚠️ 探测 PID liveness 失败: ${e.message},跳过清理`));
+            return false;
+          }
+        }
+      }
+    } else {
+      // 锁文件内容不是 PID — 老 git 仅 touch 空文件,用 mtime 兜底
+      try {
+        const stat = await fs.stat(lockFilePath);
+        const ageMs = Date.now() - stat.mtimeMs;
+        if (ageMs > STALE_LOCK_THRESHOLD_MS) {
+          isStale = true;
+        } else {
+          console.log(chalk.yellow(`⚠️ Git 锁文件较新(${Math.round(ageMs / 1000)}s),保守跳过清理`));
+          return false;
+        }
+      } catch (_) {
+        return false;
+      }
+    }
+
+    if (!isStale) return false;
+
+    // 锁是孤儿,清理
+    await fs.unlink(lockFilePath);
+    console.log(chalk.green(`✅ 已清理过期 Git 锁文件: ${lockFilePath}`));
+    return true;
   } catch (error) {
     console.error(chalk.red('清理 Git 锁文件失败:'), error.message);
     return false;
