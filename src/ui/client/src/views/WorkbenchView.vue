@@ -1456,6 +1456,9 @@ const {
   padding: 0;
   margin: 0;
   flex-shrink: 0;
+  /* 兜底：作为 flex column 子项时被自身内容(尤其 summary 的标签 + textarea 的 placeholder)
+     撑出右边界,导致 textarea 看起来"右侧超出"。min-width: 0 让它老老实实按容器宽度收。 */
+  min-width: 0;
   overflow: hidden;
 }
 /* 任务头操作区（连续执行开关等）：与任务描述块同一列、对齐缩进 */
@@ -1476,7 +1479,9 @@ const {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  /* 右内边距 14px:之前 12px 在 focus 边框场景下视觉上被 1px 焦点边框"吃掉",
+     看起来跟"已填写 1"标签贴边,造成"右侧超出"错觉。给 2px 缓冲。 */
+  padding: 8px 14px;
   font-size: 12px;
   color: var(--text-secondary);
   user-select: none;
@@ -1518,10 +1523,15 @@ const {
 }
 .wb-task-desc > .wb-textarea,
 .wb-task-desc > :deep(.attachment-zone) {
-  margin: 8px 12px 10px;
+  /* 右外边距 14px(与 summary 同步):之前 12px 在 focus 状态下被焦点边框吃掉 1px,
+     视觉上 textarea 右边缘几乎贴住父容器右内边缘,显得"右侧超出/没显示全"。
+     加 2px 缓冲,并配合 .wb-task-desc 的 min-width: 0 一起保证不撑出父容器。 */
+  margin: 8px 14px 10px;
 }
 .wb-task-desc > .wb-textarea {
   margin-bottom: 0;
+  /* 双保险:即便父容器出现内容撑出,textarea 也止步于父容器 content-box 之内 */
+  max-width: 100%;
 }
 .wb-task-desc > :deep(.attachment-zone) {
   margin-top: 0;
