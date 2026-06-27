@@ -117,10 +117,12 @@ function invalidateCurrentProjectKey() {
   _currentProjectKeyCwd = null;
 }
 
-// 监听 process.chdir:任何位置调 process.chdir(path) 都会触发,这里统一
-// 让缓存失效,避免上游每个 chdir 调用方都记得手动 invalidate。
-// 注意:这是 Node 原生事件,无需 import;事件名拼写固定为 'chdir'。
-process.on('chdir', () => invalidateCurrentProjectKey());
+// 注意:Node.js 的 process 对象**不会**因为 process.chdir(path) 自动派发
+// 'chdir' 事件(只有 cwd 包装器才会,API 文档明确标注不可靠)。所以这里
+// 不挂 process.on('chdir', ...) —— 任何修改 cwd 的代码路径
+// (fs.js 的 /api/change_directory 等)必须显式 import 并调用
+// invalidateCurrentProjectKey(),否则下一次 loadConfig/saveConfig 还会
+// 命中旧 key,写到错误项目的配置容器里。
 
 // 从磁盘读取原始配置对象
 //

@@ -22,6 +22,7 @@ import os from 'os';
 import { spawn, exec } from 'child_process';
 import { ensureWithinCwd } from '../utils/pathGuard.js';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
+import { invalidateCurrentProjectKey, invalidateRawConfigCache } from '../../../config.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // /api/change_directory 路径白名单(SEC-PATH-2)
@@ -138,6 +139,10 @@ export function registerFsRoutes({
         }
 
         process.chdir(safeReqPath);
+        // chdir 后立即失效项目键 + 原始 config 缓存,防止下一次 loadConfig /
+        // saveConfig 还命中旧 cwd 容器写到错误项目下。
+        invalidateCurrentProjectKey();
+        invalidateRawConfigCache();
         const newDirectory = process.cwd();
       
         // 更新当前项目路径和房间ID

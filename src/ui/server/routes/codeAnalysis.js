@@ -173,8 +173,10 @@ function parseImportsRegex(src) {
 
 /**
  * 从源码中静态提取 import 路径
- * - JS/MJS/CJS/JSX：优先用 acorn AST 解析，失败则正则兜底
- * - TS/TSX/Vue：正则（import 语法与 JS 相同，acorn 不支持 TypeScript 类型语法）
+ * - 所有可解析扩展名(.js / .mjs / .cjs / .jsx / .ts / .tsx / .vue)统一走
+ *   正则解析。历史上 JS 路径曾尝试过 acorn AST,但 acorn 已从 dependencies
+ *   移除;AST 解析与正则解析在实际精度上差异很小(都拿不到动态 import
+ *   的真实 target),正则维护成本更低,这里统一收敛。
  */
 async function parseStaticImports(filePath, content) {
   const ext = path.extname(filePath).toLowerCase();
@@ -186,35 +188,6 @@ async function parseStaticImports(filePath, content) {
     src = m ? m[1] : '';
   }
 
-  // JS / MJS / CJS / JSX → 尝试 acorn AST（最准确）
-  if (['.js', '.mjs', '.cjs', '.jsx'].includes(ext)) {
-    try {
-      const acorn = await import('acorn');
-      const ast = acorn.parse(src, {
-        ecmaVersion: 2022,
-        sourceType: 'module',
-        allowImportExportEverywhere: true,
-        allowHashBang: true,
-      });
-      const imports = [];
-      for (const node of ast.body) {
-        if (node.type === 'ImportDeclaration') imports.push(node.source.value);
-        if (node.type === 'ExportNamedDeclaration' && node.source) imports.push(node.source.value);
-        if (node.type === 'ExportAllDeclaration' && node.source) imports.push(node.source.value);
-        // CommonJS require('...')
-        if (node.type === 'ExpressionStatement') {
-          const expr = node.expression;
-          if (expr?.type === 'CallExpression' && expr.callee?.name === 'require' &&
-              expr.arguments?.[0]?.type === 'Literal') {
-            imports.push(expr.arguments[0].value);
-          }
-        }
-      }
-      return imports;
-    } catch { /* fallthrough to regex */ }
-  }
-
-  // TS / TSX / Vue / 其他 → 正则解析
   return parseImportsRegex(src);
 }
 
