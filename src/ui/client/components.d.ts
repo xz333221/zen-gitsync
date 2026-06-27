@@ -84,6 +84,7 @@ declare module 'vue' {
     GlobalLoading: typeof import('./src/components/GlobalLoading.vue')['default']
     IconButton: typeof import('./src/components/IconButton.vue')['default']
     ImagePreview: typeof import('./src/components/ImagePreview.vue')['default']
+    ImportSplitDialog: typeof import('./src/components/ImportSplitDialog.vue')['default']
     InstanceSwitcher: typeof import('./src/components/InstanceSwitcher.vue')['default']
     JobLogDetails: typeof import('./src/components/JobLogDetails.vue')['default']
     ListIcon: typeof import('./src/components/icons/ListIcon.vue')['default']

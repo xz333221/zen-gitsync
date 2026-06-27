@@ -25,9 +25,11 @@ import {
   Document,
   Delete,
   CircleCloseFilled,
-  CopyDocument
+  CopyDocument,
+  Upload
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
+import ImportSplitDialog from '@components/ImportSplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
 import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
@@ -726,6 +728,47 @@ async function saveSubtasks() {
   await persistTask(true)
 }
 
+// ── 导入拆分 ───────────────────────────────────────────────────────────────
+// 粘贴一段文本（每行一个子任务）→ 解析 → 批量生成子任务
+const importDialogVisible = ref(false)
+
+async function handleImportSplitConfirm(payload: {
+  strategy: 'append' | 'replace' | 'merge'
+  titles: string[]
+}) {
+  if (!selectedTask.value || !payload.titles.length) return
+
+  const { strategy, titles } = payload
+
+  if (strategy === 'replace') {
+    selectedTask.value.subtasks = []
+  }
+
+  const newSubs: SubTask[] = titles.map(title => ({
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    title,
+    desc: '',
+    status: 'todo' as const,
+    promptOverride: ''
+  }))
+
+  if (strategy === 'append' || strategy === 'replace') {
+    selectedTask.value.subtasks.push(...newSubs)
+  } else if (strategy === 'merge') {
+    // merge: 按 title 去重,已有跳过(避免破坏已有子任务的 dirty 状态)
+    const existing = new Set(selectedTask.value.subtasks.map(s => s.title.trim()))
+    const fresh = newSubs.filter(s => !existing.has(s.title.trim()))
+    selectedTask.value.subtasks.push(...fresh)
+    const skipped = newSubs.length - fresh.length
+    if (skipped > 0) {
+      ElMessage.info($t('@WORKBENCH:跳过 N 个已存在的子任务', { n: skipped }))
+    }
+  }
+
+  await persistTask(true)
+  ElMessage.success($t('@WORKBENCH:已导入 N 个子任务', { n: newSubs.length }))
+}
+
 // ── 执行 ───────────────────────────────────────────────────────────────────
 // AI 拆分子任务：打开对话框，所有过程在 AISplitDialog 内部完成
 const aiSplitDialogVisible = ref(false)
@@ -1017,6 +1060,14 @@ const {
                 <el-button size="small" :type="hasDirtySubtasks ? 'primary' : 'default'" :disabled="selectedTask.subtasks.length === 0" @click="saveSubtasks">
                   {{ $t('@WORKBENCH:保存拆分') }}
                   <span v-if="hasDirtySubtasks" class="wb-dirty-badge">{{ dirtySubIds.size }}</span>
+                </el-button>
+                <el-button
+                  size="small"
+                  plain
+                  :icon="Upload"
+                  @click="importDialogVisible = true"
+                >
+                  {{ $t('@WORKBENCH:导入拆分') }}
                 </el-button>
                 <el-button
                   size="small"
@@ -1325,6 +1376,14 @@ const {
       :task-id="selectedTask.id"
       :prompt-id="selectedTask.promptId"
       @confirm="applySplitResult"
+    />
+
+    <!-- 导入拆分对话框：粘贴文本 → 每行一个子任务 -->
+    <ImportSplitDialog
+      v-if="selectedTask"
+      v-model="importDialogVisible"
+      :existing-count="selectedTask.subtasks.length"
+      @confirm="handleImportSplitConfirm"
     />
   </div>
 </template>
