@@ -17,6 +17,7 @@
 // ./format.js,这里 re-export 以保持向后兼容(老调用方无需改 import)。
 import chalk from 'chalk';
 import boxen from "boxen";
+import stringWidth from 'string-width';
 import {execFile, execSync} from 'child_process'
 import os from 'os'
 import ora from "ora";
@@ -81,9 +82,30 @@ const tableLog = (commandLine, content, type) => {
     content.push(chalk.dim('... (输出内容过多，已省略)'))
   }
 
-  // 极简打印 — 头一行 + 内容逐行,取代旧的 cli-table3 边框表格
-  console.log(head)
-  for (const line of content) console.log(line)
+  // 用 box-drawing 字符画完整边框(上下左右 + header 分隔线),视觉上把每条 git 命令的输出框起来
+  // 复刻旧版 coloredLog 的样式:┌─┐│├─┤└─┘,每行右侧补空格对齐到框宽 + 右边框 │
+  const terminalWidth = Math.min(process.stdout.columns || 80, 120)
+  const startLine = '┌' + '─'.repeat(terminalWidth - 2) + '┐'
+  const midLine = '├' + '─'.repeat(terminalWidth - 2) + '┤'
+  const endLine = '└' + '─'.repeat(terminalWidth - 2) + '┘'
+
+  // 计算每行右侧需要补多少空格(用 stringWidth 处理中文/emoji 宽度,避免对不齐)
+  const padRight = (text, extraFix = 0) => {
+    const len = stringWidth(text)
+    const repeatLen = terminalWidth - len - 3 - extraFix
+    return ' '.repeat(Math.max(repeatLen, 0)) + '│'
+  }
+
+  console.log(startLine)
+  // header 行:│ > command │,下面跟一条分隔线
+  console.log(`│ ${head}${padRight(headLabel, 2)}`)
+  console.log(midLine)
+  // 内容行:│ content │
+  for (const line of content) {
+    if (line.trim().length === 0) continue
+    console.log(`│ ${line}${padRight(line)}`)
+  }
+  console.log(endLine)
 }
 
 const coloredLog = (...args) => {

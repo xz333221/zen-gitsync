@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+import logger from './logger.js'
+
 export async function startServerOnAvailablePort({
   httpServer,
   startPort,

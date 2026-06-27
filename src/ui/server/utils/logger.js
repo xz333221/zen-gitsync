@@ -43,6 +43,15 @@ function redact(value) {
     return value.length > MAX_STRING ? value.slice(0, MAX_STRING) + '...[truncated]' : value
   }
   if (Array.isArray(value)) return value.map(redact)
+  if (value instanceof Error) {
+    // Error 对象的 message/stack/code 不可枚举,Object.entries 拿不到,
+    // 必须显式提取,否则 logger.error('xxx:', err) 会打印成 {}
+    const out = { message: value.message, stack: value.stack, code: value.code }
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = SENSITIVE_KEYS.has(k.toLowerCase()) ? REDACTED : redact(v)
+    }
+    return out
+  }
   if (typeof value === 'object') {
     const out = {}
     for (const [k, v] of Object.entries(value)) {
