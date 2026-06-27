@@ -39,6 +39,8 @@ import RecentProjectsList from '@/components/RecentProjectsList.vue'
 const EditorView = defineAsyncComponent(() => import('@/views/EditorView.vue'))
 const SourceMapView = defineAsyncComponent(() => import('@views/SourceMapView.vue'))
 const WorkbenchView = defineAsyncComponent(() => import('@views/WorkbenchView.vue'))
+const MonitorView = defineAsyncComponent(() => import('@views/MonitorView.vue'))
+const MindmapView = defineAsyncComponent(() => import('@views/MindmapView.vue'))
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled, Sunny, Moon } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -202,7 +204,7 @@ function handleBranchChanged() {
 }
 
 // 活动视图切换
-const activeView = ref<'git' | 'editor' | 'source-map' | 'workbench'>('git')
+const activeView = ref<'git' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap'>('git')
 
 // 切换到 Git 视图时静默刷新状态（与窗口焦点/标签页可见时一致）
 watch(activeView, (view) => {
@@ -860,6 +862,20 @@ function stopHResize() {
       <KeepAlive>
         <div v-show="activeView === 'workbench'" class="view-pane workbench-pane">
           <WorkbenchView />
+        </div>
+      </KeepAlive>
+
+      <!-- 系统监控视图（延迟加载，KeepAlive 缓存实例） -->
+      <KeepAlive>
+        <div v-show="activeView === 'monitor'" class="view-pane monitor-pane">
+          <MonitorView />
+        </div>
+      </KeepAlive>
+
+      <!-- 思维导图视图（延迟加载，KeepAlive 缓存实例） -->
+      <KeepAlive>
+        <div v-show="activeView === 'mindmap'" class="view-pane mindmap-pane">
+          <MindmapView />
         </div>
       </KeepAlive>
 

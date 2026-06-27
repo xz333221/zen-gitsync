@@ -44,6 +44,8 @@ import { registerGitOpsRoutes } from './routes/gitOps.js';
 import { registerCodeRoutes } from './routes/code.js';
 import { registerCodeAnalysisRoutes } from './routes/codeAnalysis.js';
 import { registerInstancesRoutes } from './routes/instances.js';
+import { registerMonitorRoutes } from './routes/monitor.js';
+import { registerMindmapRoutes } from './routes/mindmap.js';
 import { createInstanceRegistry } from './utils/instanceRegistry.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
@@ -308,6 +310,12 @@ async function startUIServer(noOpen = false, savePort = false) {
     getIsGitRepo: () => isGitRepo,
     setRecentPushStatus: (v) => { recentPushStatus = v; }
   });
+
+  // 系统监控：CPU / 内存 / 端口占用 + kill 进程
+  registerMonitorRoutes({ app });
+
+  // 思维导图：.mindmap.json 文件的列/读/写/建/删/重命名
+  registerMindmapRoutes({ app });
   registerUiSocketHandlers({
     io,
     getProjectRoomId: () => projectRoomId,

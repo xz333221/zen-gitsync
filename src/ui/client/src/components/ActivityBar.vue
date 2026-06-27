@@ -22,11 +22,11 @@ import { useGitStore } from '@stores/gitStore'
 import { useEditorTabsStore } from '@stores/editorTabs'
 
 const props = defineProps<{
-  activeView: 'git' | 'editor' | 'source-map' | 'workbench'
+  activeView: 'git' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap'
 }>()
 
 const emit = defineEmits<{
-  'update:activeView': [view: 'git' | 'editor' | 'source-map' | 'workbench']
+  'update:activeView': [view: 'git' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap']
 }>()
 
 const wbStatus = useWorkbenchStatusStore()
@@ -55,7 +55,7 @@ const editorDirtyBadge = computed(() => {
   return n > 99 ? '99+' : String(n)
 })
 
-function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
+function select(view: 'git' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap') {
   emit('update:activeView', view)
 }
 </script>
@@ -149,6 +149,46 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench') {
           :title="$t('@ACTBAR:有任务正在执行')"
           aria-hidden="true"
         >{{ wbStatus.runningCount > 99 ? '99+' : wbStatus.runningCount }}</span>
+      </button>
+    </el-tooltip>
+
+    <!-- 系统监控 -->
+    <el-tooltip :content="$t('@ACTBAR:系统监控')" placement="right" :show-after="300">
+      <button
+        class="activity-btn"
+        :class="{ active: props.activeView === 'monitor' }"
+        @click="select('monitor')"
+        :aria-label="$t('@ACTBAR:系统监控')"
+        :aria-pressed="props.activeView === 'monitor'"
+      >
+        <!-- activity.svg: 心跳/波形监控图标 -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
+      </button>
+    </el-tooltip>
+
+    <!-- 思维导图 -->
+    <el-tooltip :content="$t('@ACTBAR:思维导图')" placement="right" :show-after="300">
+      <button
+        class="activity-btn"
+        :class="{ active: props.activeView === 'mindmap' }"
+        @click="select('mindmap')"
+        :aria-label="$t('@ACTBAR:思维导图')"
+        :aria-pressed="props.activeView === 'mindmap'"
+      >
+        <!-- mindmap.svg: 中心节点 + 四向辐射的节点拓扑 -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="2.2" />
+          <circle cx="4.5" cy="5" r="1.8" />
+          <circle cx="19.5" cy="5" r="1.8" />
+          <circle cx="4.5" cy="19" r="1.8" />
+          <circle cx="19.5" cy="19" r="1.8" />
+          <line x1="10.3" y1="10.6" x2="6" y2="6.2" />
+          <line x1="13.7" y1="10.6" x2="18" y2="6.2" />
+          <line x1="10.3" y1="13.4" x2="6" y2="17.8" />
+          <line x1="13.7" y1="13.4" x2="18" y2="17.8" />
+        </svg>
       </button>
     </el-tooltip>
   </div>
