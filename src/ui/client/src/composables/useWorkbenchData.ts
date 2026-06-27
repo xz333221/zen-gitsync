@@ -57,7 +57,12 @@ export function useWorkbenchData() {
     if (evt === 'tasks:reordered') {
       // 后端整体广播新顺序；整组替换避免单条 task:update 覆盖歧义。
       // useWorkbenchProjectGroups 是 computed，基于 tasks.value 顺序，渲染同步刷新。
+      // 防御性检查：如果服务端返回的任务数比当前少，说明可能丢数据，拒绝覆盖
       if (Array.isArray(payload?.tasks)) {
+        if (payload.tasks.length < tasks.value.length) {
+          console.warn(`[SSE tasks:reordered] 数据丢失风险：当前 ${tasks.value.length} 个任务，服务端只返回 ${payload.tasks.length} 个，拒绝覆盖`)
+          return
+        }
         tasks.value = payload.tasks
       }
       return

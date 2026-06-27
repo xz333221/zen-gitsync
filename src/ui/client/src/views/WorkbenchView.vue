@@ -701,7 +701,7 @@ async function reorderTasks(payload: { groupPath: string; orderedIds: string[] }
     const res = await fetch('/api/workbench/tasks/reorder', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderedIds })
+      body: JSON.stringify({ orderedIds, groupPath })
     }).then(r => r.json()).catch(() => ({ success: false, error: $t('@WORKBENCH:排序保存失败') }))
     if (!res?.success) {
       tasks.value = snapshot

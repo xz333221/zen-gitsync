@@ -2414,15 +2414,15 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
   });
 
-  // 任务排序：拖动落盘。body: { orderedIds: string[] }
-  // - orderedIds 是磁盘 tasks 数组中已存在 id 的子集(本场景只传同组 id)
-  // - 仅重排这些 id 的相对位置，其他 task 保持原位
-  // - 不接收 projectPath(跨组拖动本版本不实现,前端 emit 阶段就拦了)
-  // 成功后 publish('tasks:reordered', { tasks: 新顺序数组 }) 给所有 SSE 客户端。
-  // 新事件用整组顺序 payload，避免单条 task:update 覆盖导致多客户端顺序错乱。
+  // 任务排序：拖动落盘。body: { orderedIds: string[], groupPath?: string }
+  // - orderedIds 是同组内所有任务的 id，按新顺序排列（必须完整，不能遗漏）
+  // - groupPath 标识目标分组（projectPath），后端据此做完整性校验
+  // - 仅重排该组任务的相对位置，其他组/其他任务保持原位
+  // - 成功后 publish('tasks:reordered', { tasks: 新顺序数组 }) 给所有 SSE 客户端。
   app.put('/api/workbench/tasks/reorder', async (req, res) => {
     try {
       const orderedIds = Array.isArray(req.body && req.body.orderedIds) ? req.body.orderedIds : null;
+      const groupPath = typeof (req.body && req.body.groupPath) === 'string' ? req.body.groupPath.trim() || null : null;
       if (!orderedIds || orderedIds.length === 0) {
         return res.status(400).json({ success: false, error: 'orderedIds 不能为空' });
       }
@@ -2440,19 +2440,55 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       if (missing.length > 0) {
         return res.status(400).json({ success: false, error: `id 不存在: ${missing.slice(0, 3).join(',')}` });
       }
-      // 骨架算法：遍历原 tasks，在 orderedIds 中的 id 按 orderedIds 顺序取，其余原样
+
+      // 如果传了 groupPath，校验 orderedIds 是否完整包含了该组的所有任务
+      if (groupPath) {
+        const groupKey = groupPath || '__no_project__';
+        const groupTasks = tasks.filter(t => ((t.projectPath || '').trim() || '__no_project__') === groupKey);
+        if (groupTasks.length > 0 && orderedIds.length !== groupTasks.length) {
+          return res.status(400).json({
+            success: false,
+            error: `orderedIds 不完整：该组有 ${groupTasks.length} 个任务，但只传了 ${orderedIds.length} 个 id`
+          });
+        }
+        // 额外校验：所有 orderedIds 确实都属于该组
+        const nonGroupIds = orderedIds.filter(id => {
+          const t = tasks.find(x => x.id === id);
+          return !t || ((t.projectPath || '').trim() || '__no_project__') !== groupKey;
+        });
+        if (nonGroupIds.length > 0) {
+          return res.status(400).json({
+            success: false,
+            error: `以下 id 不属于指定分组: ${nonGroupIds.slice(0, 3).join(',')}`
+          });
+        }
+      }
+
+      // 安全的重排算法：用 Map 按序取，确保每个 orderedId 对应的 task 都被保留
       const orderedSet = new Set(orderedIds);
+      const byId = new Map(tasks.map(t => [t.id, t]));
       const reordered = [];
       let ptr = 0;
       for (const t of tasks) {
         if (orderedSet.has(t.id)) {
+          // 用 ptr 从 orderedIds 取下一个 id，从 byId 查找对应 task
           if (ptr < orderedIds.length) {
-            const target = tasks.find((x) => x.id === orderedIds[ptr++]);
-            if (target) reordered.push(target);
+            const target = byId.get(orderedIds[ptr++]);
+            if (target) {
+              reordered.push(target);
+              continue; // 成功匹配，跳过下面的 fallback
+            }
           }
+          // fallback：如果有序列错乱导致没匹配上，仍保留原 task（防御性）
+          reordered.push(t);
         } else {
           reordered.push(t);
         }
+      }
+      // 最终校验：输出数量必须等于输入数量（绝对不能丢任务）
+      if (reordered.length !== tasks.length) {
+        console.error('[reorder] 数据丢失风险！原始 %d 个，重排后 %d 个', tasks.length, reordered.length);
+        return res.status(500).json({ success: false, error: '内部错误：重排结果数量不一致' });
       }
       data.tasks = reordered;
       await writeJson(TASKS_FILE, data);
