@@ -11,6 +11,12 @@ const props = defineProps<{
   selectedTaskId: string | null
   currentProject: { path: string; name: string }
   creatingTask: boolean
+  /**
+   * 判断 task 是否正在执行（用于在左侧任务条目上打 is-running 标记 + 脉动圆点）。
+   * 父组件传入是因为 sidebar 不持有 jobs，简单任务的"在跑"必须看 jobs.subId，
+   * 而 jobs 与 SIMPLE_SUB_ID_SUFFIX 的拼接规则只在父组件知道。
+   */
+  isTaskRunning: (task: Task) => boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,9 +49,10 @@ function subtaskDoneCount(t: Task): number {
   if (!Array.isArray(t.subtasks)) return 0
   return t.subtasks.filter(s => s && s.status === 'done').length
 }
+// 直接复用父组件传入的判断函数，sidebar 自己不持有 jobs，
+// 也就不重复实现 SIMPLE_SUB_ID_SUFFIX 拼接规则。
 function taskIsRunning(t: Task): boolean {
-  if (Array.isArray(t.subtasks) && t.subtasks.some(s => s && s.status === 'running')) return true
-  return false // jobs not available here; handled via parent
+  return props.isTaskRunning(t)
 }
 </script>
 

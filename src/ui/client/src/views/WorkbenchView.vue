@@ -298,7 +298,24 @@ function openExecutionLog(sub: any) {
 // 简单任务对话流（通 useWorkbenchSimpleConversation 合并 jobs → ChatMessage[]）
 const { simpleConversationMessages, simpleAllJobsFor, simpleJobFor, simpleJobState } = useWorkbenchSimpleConversation(jobs, selectedTask)
 
-// attachmentCount / subtaskCount / subtaskDoneCount / taskIsRunning → moved to WorkbenchSidebar
+/**
+ * 左侧任务条目"是否执行中"的统一判断。父组件传给 WorkbenchSidebar。
+ * - 复杂任务：任一 subtask 处于 running → 在跑
+ * - 简单任务：没有 subtasks，只能查 jobs（subId = ${task.id}__simple 或 __rN 后缀）。
+ *   取最新一条 job，pending/running 都算在跑。
+ * 关键修复：之前 sidebar 自己实现的 taskIsRunning 只看 subtasks，
+ * 简单任务永远没有 subtasks → 简单任务在执行时左侧"执行中"状态完全缺失。
+ */
+function isTaskRunning(t: Task): boolean {
+  if (!t) return false
+  if (t.type !== 'simple') {
+    return Array.isArray(t.subtasks) && t.subtasks.some(s => s && s.status === 'running')
+  }
+  const job = simpleJobFor(t)
+  return !!job && (job.status === 'running' || job.status === 'pending')
+}
+
+// attachmentCount / subtaskCount / subtaskDoneCount → moved to WorkbenchSidebar
 // clearExecutionForSelectedTask → 来自 useWorkbenchExecution
 
 /**
@@ -925,6 +942,7 @@ const {
       :selected-task-id="selectedTaskId"
       :current-project="currentProject"
       :creating-task="creatingTask"
+      :is-task-running="isTaskRunning"
       @select-task="selectTask"
       @delete-task="deleteTask"
       @copy-task="copyTask"
