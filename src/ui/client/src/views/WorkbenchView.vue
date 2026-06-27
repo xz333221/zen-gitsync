@@ -1764,14 +1764,16 @@ const {
   flex-direction: column;
   gap: 2px;
 }
+/* 任务标题：与 WorkbenchSidebar.vue 保持一致 —
+   略小于 section header，作为分组下的内容项。 */
 .wb-task-item__title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: -0.08px;
+  letter-spacing: -0.05px;
   line-height: 1.3;
 }
 .wb-task-item__meta {
@@ -3480,6 +3482,9 @@ const {
    侧栏顶部不再重复渲染"当前项目"条以避免信息冗余。 */
 
 /* ── 任务分组头（多项目时按项目分组显示） ───────────────────────── */
+/* 分组头：与 WorkbenchSidebar.vue 保持一致 —
+   字号 11px + 字重 600 + secondary 颜色，承担"这是什么项目"的语义。
+   移除了 uppercase + tracked-out,避免和 sidebar 双视图风格不一致。 */
 .wb-task-group__head {
   display: flex;
   align-items: center;
@@ -3488,9 +3493,7 @@ const {
   margin-top: 4px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-tertiary);
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
+  color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
   border-radius: var(--radius-sm);

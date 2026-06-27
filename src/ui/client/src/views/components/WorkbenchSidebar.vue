@@ -388,10 +388,13 @@ function taskIsRunning(t: Task): boolean {
   50% { transform: scale(1.35); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-warning) 0%, transparent); opacity: 0.75; }
 }
 .wb-task-item__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* 任务标题：略小于 section header，作为分组下的内容项，
+   用 secondary 颜色 + medium 字重让位给项目名(11px/600/secondary)。
+   选中态由 .wb-task-item.active 切到 primary 蓝。 */
 .wb-task-item__title {
-  font-size: 12.5px; font-weight: 600; color: var(--text-primary);
+  font-size: 12px; font-weight: 500; color: var(--text-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  letter-spacing: -0.08px; line-height: 1.3;
+  letter-spacing: -0.05px; line-height: 1.3;
 }
 .wb-task-item__meta { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-tertiary); line-height: 1; }
 .wb-task-item__meta-item { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; font-weight: 500; }
@@ -494,12 +497,16 @@ function taskIsRunning(t: Task): boolean {
 .wb-empty__cta { display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
 .wb-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 8px; font-size: 10px; font-weight: 600; color: var(--text-tertiary); background: var(--bg-subtle); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .wb-section__count { background: var(--tint-primary-12); color: var(--color-primary); }
+/* 分组头：作为 section header，比组内任务标题(.wb-task-item__title 12px/500/secondary)
+   字号略小但字重更重、颜色更深,承担"这是什么项目"的语义。
+   当前项目用 .is-current 切到 primary 蓝。 */
 .wb-task-group__head {
   display: flex; align-items: center; gap: 6px; padding: 5px 6px; margin-bottom: 2px;
-  border-radius: 6px; cursor: pointer; user-select: none; font-size: 11px; font-weight: 500;
-  color: var(--text-tertiary); transition: background var(--transition-fast) var(--ease-custom);
+  border-radius: 6px; cursor: pointer; user-select: none; font-size: 11px; font-weight: 600;
+  color: var(--text-secondary); transition: background var(--transition-fast) var(--ease-custom),
+    color var(--transition-fast) var(--ease-custom);
 }
-.wb-task-group__head:hover { background: var(--bg-container-hover); color: var(--text-secondary); }
+.wb-task-group__head:hover { background: var(--bg-container-hover); color: var(--text-primary); }
 .wb-task-group__head.is-current { color: var(--color-primary); font-weight: 600; }
 .wb-task-group__caret { font-size: 11px; flex-shrink: 0; transition: transform 0.15s; }
 .wb-task-group__icon { font-size: 13px; flex-shrink: 0; opacity: 0.7; }
