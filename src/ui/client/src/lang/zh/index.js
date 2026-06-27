@@ -2096,5 +2096,8 @@ export default {
   '@WORKBENCH:请到工作台主面板的对应任务上点击「重新执行」': '请到工作台主面板的对应任务上点击「重新执行」',
   '@WORKBENCH:任务不存在,无法重新执行': '任务不存在,无法重新执行',
   '@WORKBENCH:找不到对应任务,无法重新执行': '找不到对应任务,无法重新执行',
+  '@WORKBENCH:复制任务': '复制任务',
+  '@WORKBENCH:{title} (副本)': '{title} (副本)',
+  '@WORKBENCH:已复制任务': '已复制任务',
   // @WORKBENCH: file end
 }

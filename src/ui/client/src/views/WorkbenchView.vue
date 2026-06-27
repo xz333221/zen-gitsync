@@ -604,6 +604,55 @@ async function deleteTask(t: Task) {
   if (selectedTaskId.value === t.id) selectedTaskId.value = null
   loadTasks()
 }
+
+/**
+ * 复制任务：基于源任务创建一个新任务，标题加"副本"后缀，
+ * 保留 desc / promptId / type / simpleOverride / subtasks 等全部内容。
+ */
+async function copyTask(t: Task) {
+  const baseTitle = (t.title || $t('@WORKBENCH:未命名任务')).trim()
+  const copyTitle = $t('@WORKBENCH:{title} (副本)', { title: baseTitle })
+  const newSubtasks = Array.isArray(t.subtasks)
+    ? t.subtasks.map(s => ({
+        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        title: s.title,
+        desc: s.desc || '',
+        status: 'todo' as const,
+        promptOverride: s.promptOverride || '',
+        attachments: []
+      }))
+    : []
+  const body = {
+    title: copyTitle,
+    desc: t.desc || '',
+    promptId: t.promptId || null,
+    type: t.type || 'complex',
+    simpleOverride: t.simpleOverride || '',
+    subtasks: newSubtasks
+  }
+  if (currentProject.value.path) {
+    body.projectPath = currentProject.value.path
+  }
+  try {
+    const res = await fetch('/api/workbench/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(r => r.json())
+    if (!res.success) {
+      ElMessage.error(res.error || $t('@WORKBENCH:复制失败'))
+      return
+    }
+    await loadTasks()
+    if (res.task?.id) {
+      selectedTaskId.value = res.task.id
+      captureSnapshot()
+    }
+    ElMessage.success($t('@WORKBENCH:已复制任务'))
+  } catch (err: any) {
+    ElMessage.error($t('@WORKBENCH:网络错误: ') + (err && err.message || err))
+  }
+}
 async function selectTask(t: Task) {
   if (selectedTaskId.value === t.id) return
   // 切换前先把当前 task 的未保存 title/desc/promptId 落盘
@@ -878,6 +927,7 @@ const {
       :creating-task="creatingTask"
       @select-task="selectTask"
       @delete-task="deleteTask"
+      @copy-task="copyTask"
       @set-task-type="setTaskType"
       @create-task="createTaskDirect"
       @open-create-prompt="openCreatePrompt"
@@ -1571,18 +1621,21 @@ const {
   align-items: center;
   gap: 6px;
   width: 100%;
-  height: 30px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px dashed var(--tint-primary-35, color-mix(in srgb, var(--color-primary) 35%, transparent));
+  border-radius: 10px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 4%, transparent) 0%, color-mix(in srgb, var(--color-primary) 2%, transparent) 100%);
   color: var(--color-primary);
   font-size: 12.5px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.05px;
   cursor: pointer;
-  transition: background var(--transition-fast) var(--ease-custom),
-              color var(--transition-fast) var(--ease-custom);
+  transition:
+    background var(--transition-fast) var(--ease-custom),
+    color var(--transition-fast) var(--ease-custom),
+    border-color var(--transition-fast) var(--ease-custom),
+    transform var(--transition-fast) var(--ease-custom);
 }
 .wb-new-btn__icon {
   font-size: 13px;
@@ -1595,8 +1648,10 @@ const {
   display: none;
 }
 .wb-new-btn:hover {
-  background: var(--tint-primary-12);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, transparent) 0%, color-mix(in srgb, var(--color-primary) 6%, transparent) 100%);
   color: var(--color-primary);
+  border-style: solid;
+  border-color: var(--tint-primary-50);
 }
 .wb-new-btn:hover .wb-new-btn__icon {
   transform: rotate(90deg);
@@ -1625,14 +1680,26 @@ const {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* 紧凑单行：上下 padding 从 9px → 6px，左右 10 → 10 不变 */
-  padding: 6px 10px;
+  /* 紧凑单行：上下 padding 从 9px → 7px，左右 10 → 10 不变 */
+  padding: 7px 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   cursor: pointer;
-  transition: background var(--transition-fast) var(--ease-custom),
-              color var(--transition-fast) var(--ease-custom);
+  transition:
+    background var(--transition-fast) var(--ease-custom),
+    color var(--transition-fast) var(--ease-custom),
+    transform var(--transition-fast) var(--ease-custom),
+    box-shadow var(--transition-fast) var(--ease-custom);
+}
+.wb-task-item:hover {
+  background: var(--bg-container-hover);
+  border-color: transparent;
+  transform: translateY(-0.5px);
+}
+.wb-task-item:hover .wb-task-item__del {
+  opacity: 1;
+  transform: translateX(0);
 }
 .wb-task-item.is-running {
   /* 执行中:浅暖色底,左侧竖条留给 active(选中)用 */
@@ -1641,30 +1708,27 @@ const {
 .wb-task-item.is-running:hover {
   /* hover 时稍微加深一点,提示"在跑但可点" */
   background: color-mix(in srgb, var(--color-warning) 14%, transparent);
-}
-.wb-task-item:hover {
-  background: var(--bg-container-hover);
-  border-color: transparent;
-}
-.wb-task-item:hover .wb-task-item__del {
-  opacity: 1;
-  transform: translateX(0);
+  transform: none;
 }
 .wb-task-item.active {
-  background: color-mix(in srgb, var(--color-primary) 9%, var(--bg-container));
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-container));
   border-color: transparent;
-  box-shadow: none;
+  box-shadow:
+    0 1px 3px color-mix(in srgb, var(--color-primary) 12%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
 .wb-task-item.active::after {
   content: '';
   position: absolute;
   left: -1px;
-  top: 4px;
-  bottom: 4px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--color-primary);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 60%, transparent);
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--color-primary) 0%, color-mix(in srgb, var(--color-primary) 70%, #fff) 100%);
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--color-primary) 50%, transparent),
+    0 1px 3px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 .wb-task-item.active .wb-task-item__title { color: var(--color-primary); }
 .wb-task-item.active .wb-task-item__del { opacity: 1; color: var(--color-primary); }
@@ -1702,13 +1766,13 @@ const {
 }
 .wb-task-item__title {
   font-size: 12.5px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: -0.1px;
-  line-height: 1.25;
+  letter-spacing: -0.08px;
+  line-height: 1.3;
 }
 .wb-task-item__meta {
   display: flex;
@@ -1940,27 +2004,46 @@ const {
 
 /* ── 空状态 ─────────────────────────────────────────── */
 .wb-empty {
-  padding: 22px 12px 18px;
+  padding: 24px 14px 20px;
   text-align: center;
   color: var(--text-tertiary);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   border-radius: var(--radius-md);
-  background: var(--bg-subtle);
+  background: linear-gradient(135deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--tint-primary-05) 50%, transparent) 100%);
+  border: 1px dashed var(--border-color-light, color-mix(in srgb, var(--border-color) 60%, transparent));
+  position: relative;
+  overflow: hidden;
+}
+/* 装饰性背景光晕 */
+.wb-empty::before {
+  content: '';
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-primary) 5%, transparent) 0%, transparent 70%);
+  pointer-events: none;
 }
 .wb-empty--compact {
   padding: 10px 12px;
   flex-direction: row;
   justify-content: center;
   gap: 0;
+  background: var(--bg-subtle);
+  border-style: solid;
 }
+.wb-empty--compact::before { display: none; }
 .wb-empty__icon {
-  font-size: 22px;
-  color: var(--text-tertiary);
-  opacity: 0.65;
+  font-size: 24px;
+  color: var(--color-primary);
+  opacity: 0.7;
   margin-bottom: 2px;
+  filter: drop-shadow(0 2px 4px color-mix(in srgb, var(--color-primary) 20%, transparent));
 }
 .wb-empty__text {
   font-size: var(--font-size-125);
@@ -1974,43 +2057,79 @@ const {
 
 /* ── 空状态：富卡片版（子任务拆分） ────────────────── */
 .wb-empty--rich {
-  padding: 32px 28px 28px;
-  gap: 10px;
-  background: var(--bg-container);
+  padding: 40px 28px 32px;
+  gap: 12px;
+  background: linear-gradient(180deg, var(--bg-container) 0%, color-mix(in srgb, var(--tint-primary-04) 80%, transparent) 100%);
   margin: 4px 2px 2px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color-light, color-mix(in srgb, var(--border-color) 50%, transparent));
+  position: relative;
+  overflow: hidden;
+}
+/* 装饰性背景 */
+.wb-empty--rich::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-primary) 6%, transparent) 0%, transparent 70%);
+  pointer-events: none;
+}
+.wb-empty--rich::after {
+  content: '';
+  position: absolute;
+  bottom: -30px;
+  left: -30px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-primary) 4%, transparent) 0%, transparent 70%);
+  pointer-events: none;
 }
 .wb-empty__art {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--tint-primary-12);
+  background: linear-gradient(135deg, var(--tint-primary-12) 0%, var(--tint-primary-08) 100%);
   color: var(--color-primary);
-  font-size: 22px;
-  margin-bottom: 2px;
+  font-size: 24px;
+  margin-bottom: 4px;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 10%, transparent);
+  position: relative;
+  z-index: 1;
 }
 .wb-empty__title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: var(--letter-spacing-heading, -0.25px);
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: 1.45;
+  position: relative;
+  z-index: 1;
 }
 .wb-empty--rich .wb-empty__hint {
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--text-tertiary);
   max-width: 280px;
+  position: relative;
+  z-index: 1;
 }
 .wb-empty__cta {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-top: 6px;
+  margin-top: 8px;
   flex-wrap: wrap;
   justify-content: center;
+  position: relative;
+  z-index: 1;
 }
 .wb-empty__link {
   appearance: none;
@@ -2050,11 +2169,11 @@ const {
 .wb-split {
   flex: 1;
   min-height: 0;
-  padding: 10px 16px 10px;
+  padding: 12px 18px 10px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .wb-placeholder {
   flex: 1;
@@ -2093,11 +2212,12 @@ const {
   width: 100%;
   min-width: 0;
   min-height: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-subtle);
+  background: linear-gradient(180deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--bg-subtle) 95%, var(--tint-primary-03)) 100%);
+  border: 1px solid var(--border-color-light, color-mix(in srgb, var(--border-color) 50%, transparent));
 }
 .wb-exec-list__header {
   display: flex;
@@ -2154,22 +2274,26 @@ const {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 7px 8px 5px;
+  padding: 8px 10px 6px;
   border-radius: var(--radius-md);
   cursor: pointer;
   user-select: none;
   border: 1px solid transparent;
   transition:
     background var(--transition-fast) var(--ease-custom),
-    border-color var(--transition-fast) var(--ease-custom);
+    border-color var(--transition-fast) var(--ease-custom),
+    transform var(--transition-fast) var(--ease-custom),
+    box-shadow var(--transition-fast) var(--ease-custom);
 }
 .wb-exec-sub-item:hover {
   background: var(--bg-container-hover);
   border-color: var(--border-color);
+  transform: translateX(2px);
 }
 .wb-exec-sub-item.is-selected {
-  background: color-mix(in srgb, var(--color-primary) 9%, var(--bg-container));
-  border-color: var(--tint-primary-35);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-container));
+  border-color: var(--tint-primary-35, color-mix(in srgb, var(--color-primary) 35%, transparent));
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 .wb-exec-sub-item.is-running {
   border-color: var(--tint-primary-45);
@@ -2359,6 +2483,7 @@ const {
   gap: 10px;
   align-items: center;
   flex-shrink: 0;
+  padding-bottom: 4px;
 }
 
 /* ── 任务类型 segmented control（顶部头部右侧） ────────────────

@@ -2087,5 +2087,8 @@ export default {
   '@WORKBENCH:请到工作台主面板的对应任务上点击「重新执行」': 'Please click "Re-run" on the corresponding task in the main workbench panel',
   '@WORKBENCH:任务不存在,无法重新执行': 'Task not found, cannot re-run',
   '@WORKBENCH:找不到对应任务,无法重新执行': 'Corresponding task not found, cannot re-run',
+  '@WORKBENCH:复制任务': 'Copy Task',
+  '@WORKBENCH:{title} (副本)': '{title} (Copy)',
+  '@WORKBENCH:已复制任务': 'Task Copied',
   // @WORKBENCH: file end
 }
