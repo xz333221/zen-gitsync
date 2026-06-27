@@ -52,12 +52,8 @@ function taskIsRunning(t: Task): boolean {
 <template>
   <aside class="wb-sidebar">
     <section class="wb-section">
-      <header class="wb-section__head">
-        <span class="wb-section__tag">{{ $t('@WORKBENCH:任务') }}</span>
-        <h3 class="wb-section__title">{{ $t('@WORKBENCH:任务列表') }}</h3>
-        <span class="wb-pill wb-section__count">{{ tasks.length }}</span>
-      </header>
-
+      <!-- 任务分组 header 已去掉："任务"/"任务列表"/计数 三件套冗余，下方任务项本身已能自我说明。
+           提示词分组保留 header(含 + 新建按钮 + 计数),信息密度不一对齐,后续按需统一。 -->
       <button class="wb-new-btn" :disabled="creatingTask" @click="emit('create-task')">
         <el-icon class="wb-new-btn__icon"><Plus /></el-icon>
         <span>{{ $t('@WORKBENCH:新建任务') }}</span>
@@ -389,7 +385,7 @@ function taskIsRunning(t: Task): boolean {
 }
 .wb-task-item__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 /* 任务标题：略小于 section header，作为分组下的内容项，
-   用 secondary 颜色 + medium 字重让位给项目名(11px/600/secondary)。
+   用 secondary 颜色 + medium 字重让位给项目名(13px/600/secondary)。
    选中态由 .wb-task-item.active 切到 primary 蓝。 */
 .wb-task-item__title {
   font-size: 12px; font-weight: 500; color: var(--text-secondary);
@@ -498,18 +494,18 @@ function taskIsRunning(t: Task): boolean {
 .wb-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 8px; font-size: 10px; font-weight: 600; color: var(--text-tertiary); background: var(--bg-subtle); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .wb-section__count { background: var(--tint-primary-12); color: var(--color-primary); }
 /* 分组头：作为 section header，比组内任务标题(.wb-task-item__title 12px/500/secondary)
-   字号略小但字重更重、颜色更深,承担"这是什么项目"的语义。
+   字号更大、字重更重,承担"这是什么项目"的语义。
    当前项目用 .is-current 切到 primary 蓝。 */
 .wb-task-group__head {
   display: flex; align-items: center; gap: 6px; padding: 5px 6px; margin-bottom: 2px;
-  border-radius: 6px; cursor: pointer; user-select: none; font-size: 11px; font-weight: 600;
+  border-radius: 6px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600;
   color: var(--text-secondary); transition: background var(--transition-fast) var(--ease-custom),
     color var(--transition-fast) var(--ease-custom);
 }
 .wb-task-group__head:hover { background: var(--bg-container-hover); color: var(--text-primary); }
 .wb-task-group__head.is-current { color: var(--color-primary); font-weight: 600; }
-.wb-task-group__caret { font-size: 11px; flex-shrink: 0; transition: transform 0.15s; }
-.wb-task-group__icon { font-size: 13px; flex-shrink: 0; opacity: 0.7; }
+.wb-task-group__caret { font-size: 12px; flex-shrink: 0; transition: transform 0.15s; }
+.wb-task-group__icon { font-size: 14px; flex-shrink: 0; opacity: 0.7; }
 .wb-task-group__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wb-task-group__count { min-width: 14px; height: 14px; padding: 0 4px; font-size: 9px; background: var(--bg-subtle); }
 </style>

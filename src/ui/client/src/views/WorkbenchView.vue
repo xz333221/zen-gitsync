@@ -3488,7 +3488,7 @@ const {
 
 /* ── 任务分组头（多项目时按项目分组显示） ───────────────────────── */
 /* 分组头：与 WorkbenchSidebar.vue 保持一致 —
-   字号 11px + 字重 600 + secondary 颜色，承担"这是什么项目"的语义。
+   字号 13px + 字重 600 + secondary 颜色，承担"这是什么项目"的语义。
    移除了 uppercase + tracked-out,避免和 sidebar 双视图风格不一致。 */
 .wb-task-group__head {
   display: flex;
@@ -3496,7 +3496,7 @@ const {
   gap: 6px;
   padding: 8px 6px 4px;
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
@@ -3530,12 +3530,12 @@ const {
   background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-subtle));
 }
 .wb-task-group__caret {
-  font-size: 11px;
+  font-size: 12px;
   flex-shrink: 0;
   opacity: 0.75;
   transition: transform var(--transition-fast) var(--ease-custom);
 }
-.wb-task-group__icon { font-size: 12px; flex-shrink: 0; opacity: 0.8; }
+.wb-task-group__icon { font-size: 14px; flex-shrink: 0; opacity: 0.8; }
 .wb-task-group__name {
   flex: 1;
   min-width: 0;
