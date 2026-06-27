@@ -339,8 +339,17 @@ async function getFileDiff(filePath: string) {
 async function fetchGitFileContent(filePath: string, rev: 'HEAD' | ':') {
   const response = await fetch(`/api/git-file-content?rev=${encodeURIComponent(rev)}&file=${encodeURIComponent(filePath)}`)
   const data = await response.json()
-  if (data && data.success) return data.content || ''
+  if (data && data.success) {
+    // 如果文件在指定 rev 中不存在，返回特殊标记（含 notFound 信息）
+    if (data.notFound) return '\x00NOT_FOUND\x00'
+    return data.content || ''
+  }
   return data?.error ? `⚠️ ${data.error}` : ''
+}
+
+/** 检查 fetchGitFileContent 的返回值是否表示 "文件在 git 历史中不存在" */
+function isContentNotFound(content: string): boolean {
+  return content === '\x00NOT_FOUND\x00'
 }
 
 async function fetchWorkspaceFileContent(filePath: string) {
@@ -359,9 +368,12 @@ async function getFileCompare(filePath: string) {
     currentFileIndex.value = gitStore.fileList.findIndex(file => file.path === filePath)
     const currentFile = gitStore.fileList[currentFileIndex.value]
 
-    // untracked: old为空，new=工作区
+    // untracked: 尝试获取 index(:) 作为 old，没有则用空；new=工作区
     if (currentFile && currentFile.type === 'untracked') {
-      compareOriginal.value = ''
+      // 对于 untracked 文件，尝试从暂存区获取（如果已被 git add 过）
+      const stagedContent = await fetchGitFileContent(filePath, ':')
+      // 如果暂存区有内容（不是 notFound），用它作为 original；否则留空
+      compareOriginal.value = isContentNotFound(stagedContent) ? '' : stagedContent
       compareModified.value = await fetchWorkspaceFileContent(filePath)
       return
     }
@@ -376,7 +388,7 @@ async function getFileCompare(filePath: string) {
     // added(已暂存的更改): old=HEAD(不存在则视为新增为空), new=index(:)
     if (currentFile && currentFile.type === 'added') {
       const oldText = await fetchGitFileContent(filePath, 'HEAD')
-      compareOriginal.value = oldText
+      compareOriginal.value = isContentNotFound(oldText) ? '' : oldText
       compareModified.value = await fetchGitFileContent(filePath, ':')
       return
     }
@@ -385,7 +397,17 @@ async function getFileCompare(filePath: string) {
     // - 未暂存修改：old=HEAD, new=工作区
     // - 已暂存修改：old=HEAD, new=index(:)
     const isStaged = currentFile && (currentFile.type === 'staged' || currentFile.type === 'modified-staged' || currentFile.type === 'added')
-    compareOriginal.value = await fetchGitFileContent(filePath, 'HEAD')
+    const headContent = await fetchGitFileContent(filePath, 'HEAD')
+
+    // 如果 HEAD 返回 notFound，说明该文件在 git 历史中从未存在过
+    // 尝试用暂存区内容作为 original（如果有的话），否则留空（这是正确行为：新文件确实没有旧版本）
+    if (isContentNotFound(headContent)) {
+      const possibleStaged = isStaged ? await fetchGitFileContent(filePath, ':') : ''
+      compareOriginal.value = isContentNotFound(possibleStaged) ? '' : possibleStaged
+    } else {
+      compareOriginal.value = headContent
+    }
+
     compareModified.value = isStaged
       ? await fetchGitFileContent(filePath, ':')
       : await fetchWorkspaceFileContent(filePath)
@@ -827,9 +849,13 @@ onMounted(() => {
   // 监听 Git 状态刷新事件（例如解决冲突后）
   const handleGitStatusRefresh = () => {
     loadStatus();
-    // 如果当前有选中的文件，重新获取差异
+    // 如果当前有选中的文件，根据当前视图模式重新获取差异
     if (selectedFile.value) {
-      getFileDiff(selectedFile.value);
+      if (diffViewMode.value === 'compare') {
+        void getFileCompare(selectedFile.value);
+      } else {
+        void getFileDiff(selectedFile.value);
+      }
     }
   };
   
