@@ -353,20 +353,30 @@ function execGitCommand(command, options = {}) {
  *    - EPERM(进程存在但无权限)→ 锁被别人持有且我们是其他用户 → 跳过
  * 2. 锁文件内容不是 PID(原生 git 通过 O_CREAT|O_EXCL 创建空文件作锁,
  *    内容几乎总为空;此分支为兼容场景与未知第三方工具的 mtime 兜底):
- *    超过 5 分钟未更新视为陈旧,否则保守跳过
+ *    - force=false(默认):超过 5 分钟未更新视为陈旧,否则保守跳过
+ *    - force=true:绕过 mtime 判断直接视为陈旧(用于破坏性入口,
+ *      如 reset --hard / discard-all-changes — 用户主动触发,
+ *      不该被一个刚崩出来的新孤儿锁挡住)
+ *
+ * 注:force=true 仅绕过 mtime,**仍走 PID liveness 校验**——
+ *    若锁由活跃进程持有(无论新旧)一律跳过,确保不会误删活跃锁。
  *
  * 注:阈值取 5min 而非 60s,是为大仓库的 git add -A / stash / gc 等长操作
  *    留出空间 — 60s 阈值下用户在手抖触发清理时可能误删活跃锁,
  *    导致 .git/index 半写损坏。5min 是 GitHub Desktop / Sourcetree 等
  *    GUI 客户端常用的陈旧判定阈值。
  *
+ * @param {Object} [options]
+ * @param {boolean} [options.force=false] 是否绕过 mtime 兜底判断(破坏性入口用)。
+ *        注意:force 不影响 PID liveness 校验——活跃进程持有的锁永远不会被删。
  * @returns {Promise<boolean>} 是否清理成功
  */
-async function checkAndClearGitLock() {
+async function checkAndClearGitLock({ force = false } = {}) {
   // 锁文件"陈旧"阈值(毫秒):5min 是经验值。
   // - 大仓库 git add -A / stash / gc 单次可能 > 60s,60s 阈值会误删活跃锁;
   // - 5min 与 GitHub Desktop / Sourcetree 等 GUI 客户端的陈旧判定一致;
   // - 只有真正崩溃/被 kill -9 留下的孤儿锁才会存在这么久。
+  // - force=true 时此阈值被绕过,但仍受 PID liveness 校验保护。
   const STALE_LOCK_THRESHOLD_MS = 5 * 60_000;
   try {
     const cwd = getCwd();
@@ -429,17 +439,30 @@ async function checkAndClearGitLock() {
     } else {
       // 锁文件内容不是 PID — 原生 git 用 O_CREAT|O_EXCL 创建空文件,
       // 内容为空,用 mtime 兜底
-      try {
-        const stat = await fs.stat(lockFilePath);
-        const ageMs = Date.now() - stat.mtimeMs;
-        if (ageMs > STALE_LOCK_THRESHOLD_MS) {
-          isStale = true;
-        } else {
-          console.log(chalk.yellow(`⚠️ Git 锁文件较新(${Math.round(ageMs / 1000)}s),保守跳过清理`));
+      if (force) {
+        // 破坏性入口(reset --hard / discard-all-changes 等):用户主动
+        // 触发,不应被刚崩出来的新孤儿锁挡住。PID liveness 已在上面通过
+        // (走到这里说明锁不是 PID 格式或 PID 已死),直接视为陈旧清理。
+        // 仍打印 mtime 便于排查。
+        try {
+          const stat = await fs.stat(lockFilePath);
+          const ageMs = Date.now() - stat.mtimeMs;
+          console.log(chalk.gray(`ℹ️ force=true,绕过 mtime 判断清理 Git 锁(年龄 ${Math.round(ageMs / 1000)}s)`));
+        } catch (_) {}
+        isStale = true;
+      } else {
+        try {
+          const stat = await fs.stat(lockFilePath);
+          const ageMs = Date.now() - stat.mtimeMs;
+          if (ageMs > STALE_LOCK_THRESHOLD_MS) {
+            isStale = true;
+          } else {
+            console.log(chalk.yellow(`⚠️ Git 锁文件较新(${Math.round(ageMs / 1000)}s),保守跳过清理`));
+            return false;
+          }
+        } catch (_) {
           return false;
         }
-      } catch (_) {
-        return false;
       }
     }
 

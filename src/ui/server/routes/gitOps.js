@@ -664,8 +664,10 @@ export function registerGitOpsRoutes({
         });
       }
 
-      // 尝试清理 Git 锁文件
-      await checkAndClearGitLock();
+      // 尝试清理 Git 锁文件(破坏性入口:force=true 绕过 mtime 判断,
+      // 仍走 PID liveness 校验——用户主动触发的 reset --hard 不该被
+      // 一个刚崩出来的新孤儿锁挡住)
+      await checkAndClearGitLock({ force: true });
 
       // 执行 git reset --hard origin/branch 命令
       await execGitCommand(['reset', '--hard', `origin/${branch}`]);
@@ -682,8 +684,10 @@ export function registerGitOpsRoutes({
   // 清除本地所有更改，包括未跟踪文件 (git reset --hard && git clean -fd)
   app.post('/api/discard-all-changes', async (req, res) => {
     try {
-      // 尝试清理 Git 锁文件
-      await checkAndClearGitLock();
+      // 尝试清理 Git 锁文件(破坏性入口:force=true 绕过 mtime 判断,
+      // 仍走 PID liveness 校验——用户主动触发的 discard-all 不该被
+      // 一个刚崩出来的新孤儿锁挡住)
+      await checkAndClearGitLock({ force: true });
 
       // 1. 执行 git reset --hard 丢弃已跟踪文件的更改
       await execGitCommand(['reset', '--hard']);

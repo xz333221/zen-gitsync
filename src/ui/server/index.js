@@ -590,7 +590,13 @@ async function startUIServer(noOpen = false, savePort = false) {
     }, fsSync.watch);
 
     // 优雅退出：SIGINT/SIGTERM 触发 drain 子进程 + unregister + 清心跳
+    // 幂等保护：连按 Ctrl+C 或 SIGINT+SIGTERM 同来时只走一次清理，
+    // 避免重复 drain(3s)、重复 unregister、排多个 setTimeout(exit)。
+    // 与上方 _fatalExitInProgress 同思路，但作用域在本次 startUIServer 调用内。
+    let _shuttingDown = false;
     const shutdown = async (signal) => {
+      if (_shuttingDown) return;
+      _shuttingDown = true;
       console.log(chalk.gray(`[shutdown] 收到 ${signal}，开始清理…`));
       // 1) 先并行 SIGTERM 所有正在跑的子进程(限时 3s),防止 claude/npm/git 变孤儿。
       //    注意:返回值是"尝试终止数"而非"实际终止数" — drain 内部用
