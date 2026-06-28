@@ -217,6 +217,7 @@ export const useConfigStore = defineStore('config', () => {
     fileDiffSplitPercent: number
     commandConsole: UiCommandConsole
     editorAutoSave: boolean
+    mindmapDir: string
   }
 
   const defaultUiSettings: UiSettings = {
@@ -230,6 +231,7 @@ export const useConfigStore = defineStore('config', () => {
       splitPercent: 25,
     },
     editorAutoSave: false,
+    mindmapDir: '',
   }
 
   // 浅拷贝默认值（避免外部 mutate 到 defaultUiSettings）
@@ -512,6 +514,7 @@ export const useConfigStore = defineStore('config', () => {
               : defaultUiSettings.commandConsole.splitPercent,
           },
           editorAutoSave: typeof configData.ui.editorAutoSave === 'boolean' ? configData.ui.editorAutoSave : defaultUiSettings.editorAutoSave,
+          mindmapDir: typeof configData.ui.mindmapDir === 'string' ? configData.ui.mindmapDir : defaultUiSettings.mindmapDir,
         }
       }
 

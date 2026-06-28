@@ -14,7 +14,7 @@
 //
 // 思维导图 store：管理当前目录、文件列表、当前编辑文件、dirty 状态。
 // 持久化策略：
-//   - currentDir 持久化到 localStorage（刷新后仍记住上次目录）
+//   - currentDir 持久化到 ~/.git-commit-tool.json ui.mindmapDir（避免因随机端口导致 localStorage 失效）
 //   - 文件保存是手动的（Ctrl+S / 工具栏按钮 / 切换文件前提示）
 //   - @change 事件只标记 dirty=true，不自动写盘，避免频繁 IO
 //
@@ -24,6 +24,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { useConfigStore } from './configStore'
 
 export interface MindmapFileMeta {
   name: string
@@ -40,12 +41,10 @@ export interface CurrentMindmap {
   mtime: number
 }
 
-const DIR_STORAGE_KEY = 'zen-mindmap-dir'
-const HOME_FALLBACK = '' // 空 → 首次进入时让用户主动选目录
-
 export const useMindmapStore = defineStore('mindmap', () => {
-  // 当前目录（持久化到 localStorage）
-  const currentDir = ref<string>(loadStoredDir())
+  const configStore = useConfigStore()
+  // 当前目录（持久化到 ~/.git-commit-tool.json ui.mindmapDir，避免因随机端口导致 localStorage 失效）
+  const currentDir = ref<string>((configStore.ui as any).mindmapDir || '')
   const files = ref<MindmapFileMeta[]>([])
   const current = ref<CurrentMindmap | null>(null)
   const dirty = ref(false)
@@ -58,21 +57,8 @@ export const useMindmapStore = defineStore('mindmap', () => {
   const hasCurrent = computed(() => current.value !== null)
   const filesCount = computed(() => files.value.length)
 
-  function loadStoredDir(): string {
-    try {
-      return localStorage.getItem(DIR_STORAGE_KEY) || HOME_FALLBACK
-    } catch {
-      return HOME_FALLBACK
-    }
-  }
-
   function persistDir(dir: string) {
-    try {
-      if (dir) localStorage.setItem(DIR_STORAGE_KEY, dir)
-      else localStorage.removeItem(DIR_STORAGE_KEY)
-    } catch {
-      // localStorage 不可用（隐私模式）时静默失败
-    }
+    configStore.saveUiSettings({ mindmapDir: dir })
   }
 
   // ── 列目录 ──────────────────────────────────────────────────────
