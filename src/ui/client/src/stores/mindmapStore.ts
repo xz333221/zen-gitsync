@@ -186,9 +186,14 @@ export const useMindmapStore = defineStore('mindmap', () => {
       })
       const json = await res.json()
       if (json.success) {
-        // 原地更新 mtime，避免创建新对象引用导致 Vue 重新计算 :data prop
-        // （flow-mindmap 组件对 data 深层引用替换处理不佳，会导致分支渲染丢失）
-        if (current.value) current.value.mtime = json.mtime
+        // 同步更新 content 与 mtime：content 必须更新，否则模板里
+        // JSON.parse(store.current.content) 在父组件重渲染时会拿到旧值，
+        // 触发 flow-mindmap 的浅 data watcher 用旧内容覆盖内部状态，
+        // 表现为「保存后导图回退到保存前的样式」。
+        if (current.value) {
+          current.value.content = content
+          current.value.mtime = json.mtime
+        }
         lastSavedContent.value = content
         dirty.value = false
         // 刷新列表（mtime 变了，排序可能变）

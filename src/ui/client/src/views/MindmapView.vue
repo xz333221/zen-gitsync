@@ -303,6 +303,19 @@ watch(
   }
 )
 
+// 把 store.current.content 解析成 MindMap 的 data prop。
+// 用 computed 缓存：同字符串 → 同引用，避免每次父组件重渲染都产生新对象，
+// 触发 flow-mindmap 内部浅 data watcher 覆盖组件内部状态（保存后视觉回退的根因）。
+const mmData = computed(() => {
+  const c = store.current?.content
+  if (!c) return null
+  try {
+    return JSON.parse(c)
+  } catch {
+    return null
+  }
+})
+
 // ── 生命周期 ──────────────────────────────────────────────────────
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
@@ -479,7 +492,7 @@ function formatSize(bytes: number): string {
           v-else
           :key="mmKey"
           ref="mmRef"
-          :data="JSON.parse(store.current.content)"
+          :data="mmData"
           @change="onMindMapChange"
         />
       </div>
