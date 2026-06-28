@@ -102,8 +102,14 @@ function killChildProcess(child, timeoutMs = 3000) {
 /**
  * 并行终止 runningProcesses 内所有子进程,总等待时间不超过 timeoutMs。
  * 防止 SIGINT/SIGTERM 关闭 server 时,正在跑的 claude/npm/git 子进程变孤儿。
+ *
+ * 注意:返回值是"尝试终止的进程数",不等于"已实际退出数"。内部用
+ * Promise.race 卡总时长,timeoutMs 到了就返回,此时可能仍有子进程
+ * 处于 SIGTERM → exit 的过渡中(尤其 Windows 上 TerminateProcess 是
+ * 异步的)。调用方日志应使用"已尝试终止"措辞,避免排查孤儿进程时被误导。
+ *
  * @param {number} timeoutMs
- * @returns {Promise<number>} 被尝试终止的进程数
+ * @returns {Promise<number>} 被尝试终止的进程数(entries.length)
  */
 async function drainRunningProcesses(timeoutMs = 5000) {
   const entries = Array.from(runningProcesses.entries());
@@ -586,10 +592,12 @@ async function startUIServer(noOpen = false, savePort = false) {
     // 优雅退出：SIGINT/SIGTERM 触发 drain 子进程 + unregister + 清心跳
     const shutdown = async (signal) => {
       console.log(chalk.gray(`[shutdown] 收到 ${signal}，开始清理…`));
-      // 1) 先杀光所有正在跑的子进程(限时 3s),防止 claude/npm/git 变孤儿
+      // 1) 先并行 SIGTERM 所有正在跑的子进程(限时 3s),防止 claude/npm/git 变孤儿。
+      //    注意:返回值是"尝试终止数"而非"实际终止数" — drain 内部用
+      //    Promise.race 卡总时长,3s 到了就返回,可能仍有进程在 SIGTERM 退出中。
       try {
         const killed = await drainRunningProcesses(3000);
-        if (killed > 0) console.log(chalk.gray(`[shutdown] 已终止 ${killed} 个子进程`));
+        if (killed > 0) console.log(chalk.gray(`[shutdown] 已尝试终止 ${killed} 个子进程(实际终止情况以 exit 事件为准)`));
       } catch (_) {}
       // 2) 清心跳 + 反注册实例
       try { clearInterval(heartbeatTimer); } catch (_) {}

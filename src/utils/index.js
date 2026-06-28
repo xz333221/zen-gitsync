@@ -351,15 +351,23 @@ function execGitCommand(command, options = {}) {
  *    - 探测成功(无错)→ 进程存活,锁仍被持有 → 跳过清理
  *    - ESRCH(无此进程)→ 锁是孤儿 → 进入清理
  *    - EPERM(进程存在但无权限)→ 锁被别人持有且我们是其他用户 → 跳过
- * 2. 锁文件内容不是 PID(老 git 仅 touch 空文件,内容为空)→ 用 mtime 兜底:
- *    超过 60 秒未更新视为陈旧,否则保守跳过
+ * 2. 锁文件内容不是 PID(原生 git 通过 O_CREAT|O_EXCL 创建空文件作锁,
+ *    内容几乎总为空;此分支为兼容场景与未知第三方工具的 mtime 兜底):
+ *    超过 5 分钟未更新视为陈旧,否则保守跳过
+ *
+ * 注:阈值取 5min 而非 60s,是为大仓库的 git add -A / stash / gc 等长操作
+ *    留出空间 — 60s 阈值下用户在手抖触发清理时可能误删活跃锁,
+ *    导致 .git/index 半写损坏。5min 是 GitHub Desktop / Sourcetree 等
+ *    GUI 客户端常用的陈旧判定阈值。
  *
  * @returns {Promise<boolean>} 是否清理成功
  */
 async function checkAndClearGitLock() {
-  // 锁文件"陈旧"阈值(毫秒):60s 是经验值,正常 git add/commit 在锁定期
-  // 内必完成;只有崩溃/被 kill -9 才会留下更老的锁。
-  const STALE_LOCK_THRESHOLD_MS = 60_000;
+  // 锁文件"陈旧"阈值(毫秒):5min 是经验值。
+  // - 大仓库 git add -A / stash / gc 单次可能 > 60s,60s 阈值会误删活跃锁;
+  // - 5min 与 GitHub Desktop / Sourcetree 等 GUI 客户端的陈旧判定一致;
+  // - 只有真正崩溃/被 kill -9 留下的孤儿锁才会存在这么久。
+  const STALE_LOCK_THRESHOLD_MS = 5 * 60_000;
   try {
     const cwd = getCwd();
     let gitRoot;
@@ -388,6 +396,9 @@ async function checkAndClearGitLock() {
 
     // 判定锁是否过期
     const trimmed = (content || '').trim();
+    // 原生 git 通过 O_CREAT|O_EXCL 创建空文件作锁,内容几乎总为空,
+    // 不会往 .git/index.lock 写 PID。此 PID 分支为兼容某些会写 PID 的
+    // 第三方工具(如部分 GUI 客户端 / 自定义钩子),并非常规路径。
     const isPidFormat = /^\d+$/.test(trimmed);
     let isStale = false;
 
@@ -416,7 +427,8 @@ async function checkAndClearGitLock() {
         }
       }
     } else {
-      // 锁文件内容不是 PID — 老 git 仅 touch 空文件,用 mtime 兜底
+      // 锁文件内容不是 PID — 原生 git 用 O_CREAT|O_EXCL 创建空文件,
+      // 内容为空,用 mtime 兜底
       try {
         const stat = await fs.stat(lockFilePath);
         const ageMs = Date.now() - stat.mtimeMs;
