@@ -68,6 +68,12 @@ __pycache__/
 # CodeBuddy project data
 .codebuddy/
 
+
+# 其它 AI 工具本地副本(已删除,内容已迁移到 .claude/skills/)
+# 保留 .gitignore 规则防止后续误创建再被追踪
+.trae/
+.windsurf/
+.iflow/
 # WorkBuddy workspace data（工作日志/缓存，本地数据，不入库）
 .workbuddy/
 
