@@ -740,6 +740,10 @@ export const useGitStore = defineStore('git', () => {
         } else if (indexStatus === ' ' && workTreeStatus === 'D') {
           // 已删除未暂存的文件
           type = 'deleted'
+        } else if (indexStatus === ' ' && workTreeStatus === 'A') {
+          // 意向添加（git add -N）：index 已注册成空 blob,实际内容在工作区
+          // 用户视角下等价于已暂存的新文件：可直接 commit,故归入 added
+          type = 'added'
         } else if (code === '??') {
           // 未跟踪的文件
           type = 'untracked'
