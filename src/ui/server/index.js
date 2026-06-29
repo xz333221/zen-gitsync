@@ -28,6 +28,7 @@ import { Server } from 'socket.io';
 import { spawn, exec } from 'child_process';
 import iconv from 'iconv-lite';
 import { createRequestLogger } from './middleware/requestLogger.js';
+import { createErrorHandler } from './middleware/errorHandler.js';
 import { registerUiSocketHandlers } from './socket/registerUiSocketHandlers.js';
 import { registerExecRoutes } from './routes/exec.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
@@ -427,6 +428,12 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   // 思维导图：.mindmap.json 文件的列/读/写/建/删/重命名
   registerMindmapRoutes({ app });
+
+  // 全局错误处理中间件：必须放在所有 register*Routes 之后注册，
+  // 作为最后一道兜底捕获 asyncRoute 之外抛出的异常（headersSent 走 express 默认关闭）。
+  // 与 asyncRoute 共享同一套错误响应格式 {success:false, error}。
+  app.use(createErrorHandler());
+
   registerUiSocketHandlers({
     io,
     getProjectRoomId: () => projectRoomId,
