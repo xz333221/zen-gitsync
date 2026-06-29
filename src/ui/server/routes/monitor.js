@@ -71,21 +71,26 @@ async function listPorts({ all = false } = {}) {
 }
 
 async function listPortsWindows({ all = false } = {}) {
-  const tcpLines = []
-  const udpLines = []
-  // netstat 一次只能指定一个 proto，分两次调用
-  try {
-    const { stdout } = await execFileP('netstat', ['-ano', '-p', 'TCP'])
-    tcpLines.push(...stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))
-  } catch (e) {
-    logger.warn(`[monitor] netstat TCP 失败: ${e?.message || e}`)
-  }
-  try {
-    const { stdout } = await execFileP('netstat', ['-ano', '-p', 'UDP'])
-    udpLines.push(...stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))
-  } catch (e) {
-    logger.warn(`[monitor] netstat UDP 失败: ${e?.message || e}`)
-  }
+  // 三个子进程并行执行（原实现串行 await，netstat TCP + netstat UDP + tasklist
+  // 串行耗时 = 三者之和；并行后 = max(三者)），Windows 上 netstat 对大量
+  // ESTABLISHED 连接很慢，并行能把 8-19s 压到 3-8s。
+  const [tcpRes, udpRes, tasklistRes] = await Promise.all([
+    execFileP('netstat', ['-ano', '-p', 'TCP']).catch((e) => {
+      logger.warn(`[monitor] netstat TCP 失败: ${e?.message || e}`)
+      return { stdout: '' }
+    }),
+    execFileP('netstat', ['-ano', '-p', 'UDP']).catch((e) => {
+      logger.warn(`[monitor] netstat UDP 失败: ${e?.message || e}`)
+      return { stdout: '' }
+    }),
+    execFileP('tasklist', ['/FO', 'CSV', '/NH']).catch((e) => {
+      logger.warn(`[monitor] tasklist 失败: ${e?.message || e}`)
+      return { stdout: '' }
+    })
+  ])
+
+  const tcpLines = tcpRes.stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+  const udpLines = udpRes.stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
 
   const pids = new Set()
   const ports = []
@@ -133,19 +138,14 @@ async function listPortsWindows({ all = false } = {}) {
   for (const l of tcpLines) parseLine(l, 'TCP')
   for (const l of udpLines) parseLine(l, 'UDP')
 
-  // 批量拿 PID -> 进程名映射，避免对每个 PID 单独 tasklist
+  // tasklist 已在上面并行拿到，这里直接解析 PID -> 进程名映射
   const pidToName = new Map()
   if (pids.size > 0) {
-    try {
-      const { stdout } = await execFileP('tasklist', ['/FO', 'CSV', '/NH'])
-      // 输出形如: "node.exe","1234","Console","1","123,456 K"
-      for (const line of stdout.split(/\r?\n/)) {
-        if (!line.trim()) continue
-        const m = line.match(/^"([^"]+)","(\d+)"/)
-        if (m) pidToName.set(m[2], m[1])
-      }
-    } catch (e) {
-      logger.warn(`[monitor] tasklist 失败: ${e?.message || e}`)
+    // 输出形如: "node.exe","1234","Console","1","123,456 K"
+    for (const line of tasklistRes.stdout.split(/\r?\n/)) {
+      if (!line.trim()) continue
+      const m = line.match(/^"([^"]+)","(\d+)"/)
+      if (m) pidToName.set(m[2], m[1])
     }
   }
 
@@ -278,6 +278,13 @@ async function killProcess(pid, { force = false } = {}) {
 }
 
 // ── 路由注册 ────────────────────────────────────────────────────────────
+// ports 列表缓存：netstat + tasklist 在 Windows 上对大量连接很慢（3-8s），
+// 前端每 10-15s 轮询一次，5s 缓存能把第二次以后的响应压到 <10ms。
+// 仅缓存默认场景（all=false，只看监听端口）；all=true 实时查不缓存。
+let _portsCache = null
+let _portsCacheTime = 0
+const PORTS_CACHE_TTL_MS = 5000
+
 export function registerMonitorRoutes({ app }) {
   // 系统概览：CPU + 内存 + 系统信息
   app.get(
@@ -315,7 +322,16 @@ export function registerMonitorRoutes({ app }) {
     '/api/monitor/ports',
     asyncRoute(async (req, res) => {
       const all = req.query.all === '1' || req.query.all === 'true'
+      // 默认场景命中缓存直接返回（all=true 实时查，不缓存）
+      const now = Date.now()
+      if (!all && _portsCache && (now - _portsCacheTime) < PORTS_CACHE_TTL_MS) {
+        return res.json({ success: true, data: _portsCache, cached: true })
+      }
       const ports = await listPorts({ all })
+      if (!all) {
+        _portsCache = ports
+        _portsCacheTime = now
+      }
       res.json({ success: true, data: ports })
     })
   )

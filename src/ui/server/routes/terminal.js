@@ -210,22 +210,20 @@ export function registerTerminalRoutes({
     }
   }
 
+  // process.kill(pid, 0) 跨平台探测进程存活（信号 0 = 只探测不发信号）。
+  // 原实现 Windows 分支 spawn powershell.exe 冷启动 1-2s/次，N 个 session 累积
+  // 让 /api/terminal-sessions/status 耗时 15-29s；改用 process.kill 后 <1ms/次。
+  // Node 在 Windows 上用 OpenProcess 模拟信号 0，语义与 POSIX 一致：
+  //   - 进程存在 → 无错返回 true
+  //   - 进程不存在 → 抛 ESRCH → false
+  //   - 无权限 → 抛 EPERM → true（进程存在但属于其他用户）
   async function isPidAlive(pid) {
     if (!pid) return false;
-
-    if (process.platform === 'win32') {
-      const script = `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Out-Null; if ($?) { exit 0 } else { exit 1 }`;
-      return await new Promise((resolve) => {
-        const child = spawn('powershell.exe', ['-NoProfile', '-Command', script], { windowsHide: true });
-        child.on('error', () => resolve(false));
-        child.on('close', (code) => resolve(code === 0));
-      });
-    }
-
     try {
       process.kill(pid, 0);
       return true;
-    } catch {
+    } catch (e) {
+      if (e.code === 'EPERM') return true;
       return false;
     }
   }
