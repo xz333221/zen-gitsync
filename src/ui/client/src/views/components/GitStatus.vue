@@ -632,6 +632,10 @@ async function setUpstreamAndPush() {
     ElMessage.warning($t('@13D1C:未知当前分支'))
     return
   }
+  if (gitStore.currentBranch === 'HEAD') {
+    ElMessage.warning($t('@13D1C:当前为 detached HEAD,无法设置上游分支'))
+    return
+  }
   try {
     isSettingUpstream.value = true
     const res = await fetch('/api/git/push-with-upstream', {

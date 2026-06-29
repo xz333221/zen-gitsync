@@ -1468,6 +1468,7 @@ export default {
   '@13D1C:当前目录不是一个Git仓库': 'The current directory is not a Git repository',
   '@13D1C:切换目录失败': 'Failed to switch directory',
   '@13D1C:未知当前分支': 'Unknown current branch',
+  '@13D1C:当前为 detached HEAD,无法设置上游分支': 'Currently on detached HEAD, cannot set upstream branch',
   '@13D1C:已推送并设置上游分支': 'Promoted and set up upstream branch',
   '@13D1C:设置上游失败': 'Setting upstream failed',
   '@13D1C:撤回修改': 'Discard changes',
