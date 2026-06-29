@@ -655,14 +655,10 @@ function handleVisibleChange(val: boolean) {
 // 读取单个全局配置
 async function getGlobalConfig(key: string): Promise<string> {
   try {
-    const res = await fetch('/api/exec', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command: `git config --global --get ${key}` })
-    })
+    const res = await fetch(`/api/git/global-config?key=${encodeURIComponent(key)}`)
     const data = await res.json()
     if (data.success) {
-      return String(data.stdout || '').trim()
+      return String(data.value || '')
     }
   } catch (e) {
     // ignore
@@ -672,10 +668,10 @@ async function getGlobalConfig(key: string): Promise<string> {
 
 // 设置单个全局配置
 async function setGlobalConfig(key: string, value: string) {
-  const res = await fetch('/api/exec', {
+  const res = await fetch('/api/git/global-config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command: `git config --global ${key} ${value}` })
+    body: JSON.stringify({ key, value })
   })
   const data = await res.json()
   if (!data.success) throw new Error(data.error || `${$t('@42BB9:设置 ')}${key}${$t('@42BB9: 失败')}`)

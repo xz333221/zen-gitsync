@@ -117,27 +117,6 @@ export function registerExecRoutes({
   nextProcessId,
   runningProcesses
 }) {
-  // 通用命令执行接口（非流式）— 走 argv 模式,无 shell
-  app.post('/api/exec', asyncRoute(async (req, res) => {
-    try {
-      const { command } = req.body || {};
-      if (!command || typeof command !== 'string' || !command.trim()) {
-        return res.status(400).json({ success: false, error: 'command 不能为空' });
-      }
-
-      try {
-        // execGitCommand 本身已经走 execFile argv 模式(见 utils/index.js)
-        // 这里保持调用形态兼容
-        const { stdout = '', stderr = '' } = await execGitCommand(splitCommandArgs(command), { log: false });
-        return res.json({ success: true, stdout, stderr });
-      } catch (err) {
-        return res.status(400).json({ success: false, error: err?.message || String(err) });
-      }
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  }));
-
   // 流式执行命令接口(支持实时输出)— argv 模式 + cwd 校验
   app.post('/api/exec-stream', asyncRoute(async (req, res) => {
     try {

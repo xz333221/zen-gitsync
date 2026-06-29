@@ -634,11 +634,10 @@ async function setUpstreamAndPush() {
   }
   try {
     isSettingUpstream.value = true
-    const command = `git push -u origin ${gitStore.currentBranch}`
-    const res = await fetch('/api/exec', {
+    const res = await fetch('/api/git/push-with-upstream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command })
+      body: JSON.stringify({ branch: gitStore.currentBranch })
     })
     const data = await res.json()
     if (data.success) {

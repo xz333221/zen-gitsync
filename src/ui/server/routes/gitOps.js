@@ -206,6 +206,68 @@ export function registerGitOpsRoutes({
     }
   });
 
+  // 推送并设置上游分支（git push -u origin <branch>）
+  app.post('/api/git/push-with-upstream', async (req, res) => {
+    try {
+      const { branch } = req.body || {};
+      if (!branch || typeof branch !== 'string') {
+        return res.status(400).json({ success: false, error: '缺少 branch 参数' });
+      }
+      const { stdout } = await execGitCommand(['push', '-u', 'origin', branch]);
+      setRecentPushStatus({
+        justPushed: true,
+        pushTime: Date.now(),
+        validDuration: 10000
+      });
+      logger.info(`推送并设置上游成功: origin/${branch}`);
+      res.json({ success: true, message: stdout });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 读取单个 git 全局配置
+  // GET /api/git/global-config?key=<name>
+  // key 不存在时返回空串（与 git --get 行为一致；前端 getGlobalConfig 容错为空）
+  app.get('/api/git/global-config', async (req, res) => {
+    try {
+      const key = typeof req.query.key === 'string' ? req.query.key.trim() : '';
+      if (!key) {
+        return res.status(400).json({ success: false, error: '缺少 key 参数' });
+      }
+      try {
+        const { stdout } = await execGitCommand(['config', '--global', '--get', key], { log: false });
+        return res.json({ success: true, value: String(stdout || '').trim() });
+      } catch (err) {
+        // git --get 在 key 不存在时返回非零退出码 → 视为"未设置",返回空串
+        return res.json({ success: true, value: '' });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 写入单个 git 全局配置
+  // POST /api/git/global-config  body: { key, value }
+  // value 为空字符串时执行 --unset，与 git 语义一致（允许前端"清空某项"）
+  app.post('/api/git/global-config', async (req, res) => {
+    try {
+      const { key, value } = req.body || {};
+      if (!key || typeof key !== 'string') {
+        return res.status(400).json({ success: false, error: '缺少 key 参数' });
+      }
+      const trimmed = typeof value === 'string' ? value.trim() : '';
+      if (!trimmed) {
+        await execGitCommand(['config', '--global', '--unset', key]);
+      } else {
+        await execGitCommand(['config', '--global', key, trimmed]);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // 带进度的推送更改 (SSE)
   app.post('/api/push-with-progress', async (req, res) => {
     // 设置SSE响应头
