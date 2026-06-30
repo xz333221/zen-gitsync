@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# unplugin-auto-import / unplugin-vue-components 生成的类型声明文件
+# 构建时每次重新写入,dev server 监听会触发整页 reload;且与 dev 并行 build 时
+# 易被文件锁占用导致构建报错。从版本库移除,本地生成即可。
+auto-imports.d.ts
+components.d.ts
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
