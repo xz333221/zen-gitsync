@@ -319,15 +319,22 @@ function execGitCommand(command, options = {}) {
             console.log(chalk.yellow(`⏰ git 命令超时 (${timeout}ms): ${head}`))
           }
         }
+        // 将 stdout 和 stderr 附加到 error 对象，以便上层可以获取完整输出
+        error.stdout = stdout
+        error.stderr = stderr
+        // ignoreError=true:命令预期可能失败(如 git rev-parse @{u} 查无 upstream 时 git 报
+        // "fatal: no upstream configured")。此时不当错误抛,resolve {stdout, stderr, error}
+        // 让上层用 stdout 为空自行降级,而不是把整个接口 500 掉。
+        if (options.ignoreError) {
+          resolve({ stdout: stdout || '', stderr: stderr || '', error })
+          return
+        }
         log && coloredLog(head, error, 'error')
         // 错误情况也打印目录和时间
         if (log) {
           const currentTime = new Date().toLocaleString('zh-CN', { hour12: false });
           console.log(chalk.dim(`📁 目录: ${cwd} | ⏰ 时间: ${currentTime}`));
         }
-        // 将 stdout 和 stderr 附加到 error 对象，以便上层可以获取完整输出
-        error.stdout = stdout
-        error.stderr = stderr
         reject(error)
         return
       }

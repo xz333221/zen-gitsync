@@ -216,6 +216,43 @@ test('branchStatus: 无 upstream 时 → hasUpstream:false', async () => {
   assert.equal(cacheSet.currentBranch, null)
 })
 
+// 回归:真实 git 在新建分支(无 upstream)上跑 rev-parse @{u} 会抛
+// "fatal: no upstream configured"。execGitCommand 的 ignoreError 选项应把
+// 这个错误吞成 resolve({stdout:''}) 而非 reject,否则 /api/branch-status
+// 直接 500(曾发生在线上:切到无 upstream 的 test 分支后接口红)。
+// 旧测试用 mock 返回空 stdout 屏蔽了这条抛错路径,这里用真抛 mock 复现。
+test('branchStatus: rev-parse @{u} 抛错(no upstream) → ignoreError 吞下,返回 hasUpstream:false(非 500)', async () => {
+  const app = makeApp()
+  let cacheSet = null
+  registerBranchStatusRoutes({
+    app,
+    execGitCommand: async (args, opts) => {
+      if (args[0] === 'symbolic-ref') return { stdout: 'test\n' }
+      if (args[0] === 'rev-parse' && args.includes('@{u}')) {
+        // 复刻真实 git 行为:无 upstream 时非零退出 + stderr
+        const err = new Error("Command failed: git rev-parse --abbrev-ref --symbolic-full-name @{u}\nfatal: no upstream configured for branch 'test'\n")
+        err.code = 128
+        err.stderr = "fatal: no upstream configured for branch 'test'\n"
+        err.stdout = ''
+        // execGitCommand 真实实现:ignoreError=true → resolve({stdout:''})
+        if (opts && opts.ignoreError) return { stdout: '' }
+        throw err
+      }
+      return { stdout: '' }
+    },
+    getIsGitRepo: () => true,
+    getBranchStatusCache: () => ({ currentBranch: null, upstreamBranch: null, lastUpdate: 0, cacheTimeout: 5000 }),
+    setBranchStatusCache: (v) => { cacheSet = v },
+    getRecentPushStatus: () => ({ justPushed: false, pushTime: 0, validDuration: 10000 }),
+    setRecentPushStatus: () => {}
+  })
+  const res = makeRes()
+  await app.invoke('GET', '/api/branch-status', { query: {} }, res)
+  assert.equal(res.statusCode, 200, '应 200,不应 500')
+  assert.deepEqual(res.payload, { hasUpstream: false, ahead: 0, behind: 0 })
+  assert.ok(cacheSet, '无 upstream 时应清空缓存')
+})
+
 // ========== /api/branch ==========
 
 test('branchStatus: /api/branch 返回 trim 后的分支名', async () => {

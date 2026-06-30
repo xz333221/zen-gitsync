@@ -32,6 +32,13 @@ import 'local-file-picker/dist/file-picker.css'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
+// 命令式 API 的样式手动补:ElMessage / ElMessageBox 通过 JS 调用而非模板用法,
+// unplugin-vue-components 只对模板里检测到的组件自动注入 CSS,这俩的样式不会自动加载,
+// 不手动 import 会渲染成无样式的裸 div(ElMessage toast 尤其明显,ElMessageBox 靠
+// unified-dialogs.scss 的覆盖还能凑合看,但 base 的遮罩/定位/动画仍缺)。
+// 同类坑见 AttachmentZone.vue 对 ElImageViewer 的单独 import。
+import 'element-plus/es/components/message/style/css.mjs'
+import 'element-plus/es/components/message-box/style/css.mjs'
 import { initSvg } from './components/SvgIcon'
 
 const app = createApp(App)
