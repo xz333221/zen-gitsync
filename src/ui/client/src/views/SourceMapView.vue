@@ -22,7 +22,7 @@ import dagre from 'dagre'
 import { Background, BackgroundVariant } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElDialog } from 'element-plus'
 import { useConfigStore } from '@/stores/configStore'
 import { getFileIconClass } from '@/utils/fileIcon'
 import { useThemeObserver } from '@/composables/useThemeObserver'
@@ -104,6 +104,35 @@ const expandedFolders = ref<Set<string>>(new Set())
 // 面板可见性
 const panelVisible = ref({ files: true, graph: true, source: true })
 const isOptimizing = ref(false)
+
+// GitNexus 推荐安装引导对话框
+const gitnexusDialogVisible = ref(false)
+const GITNEXUS_REPO_URL = 'https://github.com/abhigyanpatwari/GitNexus'
+
+function openGitnexusRepo() {
+  window.open(GITNEXUS_REPO_URL, '_blank', 'noopener,noreferrer')
+}
+
+async function copyText(text: string) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      // 兼容无 Clipboard API 的环境（极少数老浏览器）
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    ElMessage.success($t('@SRCMAP:已复制到剪贴板'))
+  } catch {
+    ElMessage.warning($t('@SRCMAP:复制失败,请手动选择'))
+  }
+}
 
 // 面板尺寸（可拖拽调整）
 const filesWidth = ref(220)
@@ -668,6 +697,30 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="sm-toolbar-right">
+        <!-- 推荐安装 GitNexus：完整版 MCP 知识图谱 -->
+        <el-tooltip
+          :content="$t('@SRCMAP:推荐安装 GitNexus - 更强的代码知识图谱 MCP')"
+          placement="bottom"
+        >
+          <button
+            class="sm-panel-btn sm-gitnexus-btn"
+            :aria-label="$t('@SRCMAP:推荐安装 GitNexus')"
+            @click="gitnexusDialogVisible = true"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="6" cy="6" r="2.5"/>
+              <circle cx="18" cy="6" r="2.5"/>
+              <circle cx="6" cy="18" r="2.5"/>
+              <circle cx="18" cy="18" r="2.5"/>
+              <circle cx="12" cy="12" r="2.5"/>
+              <line x1="8" y1="7.5" x2="10.5" y2="10.5"/>
+              <line x1="16" y1="7.5" x2="13.5" y2="10.5"/>
+              <line x1="8" y1="16.5" x2="10.5" y2="13.5"/>
+              <line x1="16" y1="16.5" x2="13.5" y2="13.5"/>
+            </svg>
+          </button>
+        </el-tooltip>
+
         <!-- 面板显示切换 -->
         <el-tooltip :content="$t('@SRCMAP:文件列表')" placement="bottom">
           <button
@@ -946,6 +999,102 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <!-- GitNexus 推荐安装对话框 -->
+    <ElDialog
+      v-model="gitnexusDialogVisible"
+      :title="$t('@SRCMAP:推荐安装 GitNexus')"
+      width="640px"
+      :close-on-click-modal="true"
+      :show-close="true"
+      align-center
+      destroy-on-close
+    >
+      <div class="sm-gitnexus-dialog">
+        <p class="sm-gitnexus-intro">
+          {{ $t('@SRCMAP:GitNexus 是把代码库索引为知识图谱的开源工具,通过 MCP 协议喂给 Claude Code / Cursor 等 AI 助手,让它们在动手改代码前就能完整感知项目结构与调用链。') }}
+        </p>
+
+        <h4 class="sm-gitnexus-h">{{ $t('@SRCMAP:安装 GitNexus') }}</h4>
+        <div class="sm-gitnexus-cmd">
+          <code>npm install -g gitnexus</code>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            @click="copyText('npm install -g gitnexus')"
+          >{{ $t('@SRCMAP:复制') }}</el-button>
+        </div>
+
+        <h4 class="sm-gitnexus-h">{{ $t('@SRCMAP:一键配置编辑器 MCP') }}</h4>
+        <p class="sm-gitnexus-tip">{{ $t('@SRCMAP:自动检测本机已装的 Cursor / Claude Code / OpenCode / Codex / Windsurf 等编辑器,写入 MCP 配置并安装 Skill。') }}</p>
+        <div class="sm-gitnexus-cmd">
+          <code>gitnexus setup</code>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            @click="copyText('gitnexus setup')"
+          >{{ $t('@SRCMAP:复制') }}</el-button>
+        </div>
+
+        <h4 class="sm-gitnexus-h">{{ $t('@SRCMAP:仅配置 Claude Code') }}</h4>
+        <div class="sm-gitnexus-cmd">
+          <code>claude mcp add gitnexus -- gitnexus mcp</code>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            @click="copyText('claude mcp add gitnexus -- gitnexus mcp')"
+          >{{ $t('@SRCMAP:复制') }}</el-button>
+        </div>
+        <div class="sm-gitnexus-cmd">
+          <code>claude mcp add gitnexus -- cmd /c gitnexus mcp</code>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            @click="copyText('claude mcp add gitnexus -- cmd /c gitnexus mcp')"
+          >{{ $t('@SRCMAP:复制') }}</el-button>
+        </div>
+        <p class="sm-gitnexus-tip sm-gitnexus-tip--windows">{{ $t('@SRCMAP:第二行为 Windows 专用。配置后需完全退出再重启 Claude Code,MCP server 才生效。') }}</p>
+
+        <h4 class="sm-gitnexus-h">{{ $t('@SRCMAP:索引当前项目') }}</h4>
+        <p class="sm-gitnexus-tip">{{ $t('@SRCMAP:推荐用完整索引 —— 含语义搜索与每个功能社区的 SKILL.md。') }}</p>
+        <div class="sm-gitnexus-cmd">
+          <code>gitnexus analyze --embeddings --skills --verbose</code>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            @click="copyText('gitnexus analyze --embeddings --skills --verbose')"
+          >{{ $t('@SRCMAP:复制') }}</el-button>
+        </div>
+
+        <h4 class="sm-gitnexus-h">{{ $t('@SRCMAP:验证安装') }}</h4>
+        <div class="sm-gitnexus-cmd">
+          <code>gitnexus --version</code>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            @click="copyText('gitnexus --version')"
+          >{{ $t('@SRCMAP:复制') }}</el-button>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="gitnexusDialogVisible = false">
+          {{ $t('@SRCMAP:关闭') }}
+        </el-button>
+        <el-button type="primary" @click="openGitnexusRepo">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px">
+            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+          </svg>
+          {{ $t('@SRCMAP:查看 GitHub 仓库') }}
+        </el-button>
+      </template>
+    </ElDialog>
   </div>
 </template>
 
@@ -1502,6 +1651,72 @@ onBeforeUnmount(() => {
   background: #f59e0b15;
   border-color: #f59e0b40;
   color: #f59e0b;
+}
+
+/* ── GitNexus 推荐按钮 + 对话框 ───────────────────── */
+.sm-gitnexus-btn {
+  color: #10b981;
+}
+
+.sm-gitnexus-btn:hover {
+  color: #059669;
+  border-color: #10b98150;
+  background: #10b98110;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
+}
+
+.sm-gitnexus-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sm-gitnexus-intro {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+
+.sm-gitnexus-h {
+  font-size: 12px;
+  font-weight: 600;
+  color: #10b981;
+  margin: 12px 0 6px;
+  letter-spacing: 0.02em;
+}
+
+.sm-gitnexus-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--sm-source-bg);
+  border: 1px solid var(--border-color-light);
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.sm-gitnexus-cmd code {
+  flex: 1;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  user-select: all;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.sm-gitnexus-tip {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.6;
+  margin: 4px 0 6px;
+}
+
+.sm-gitnexus-tip--windows {
+  color: #f59e0b;
+  opacity: 0.85;
 }
 
 /* ── 加载动画 ────────────────────────── */

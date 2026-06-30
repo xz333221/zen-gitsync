@@ -1029,10 +1029,19 @@ defineExpose({
     <!-- 非 git 仓库时,只渲染"非 git 仓库"空态,避免上游分支/未暂存/未跟踪等
          旧状态在切换目录后残留显示(它们原本用 v-if="!hasUpstream" 等独立条件,
          不感知 isGitRepo 变化,导致切到非 git 目录还会渲染陈旧的"未设置上游分支"等提示) -->
-    <div class="card-content" v-if="gitStore.isGitRepo"
-      v-loading="gitStore.isGitPulling || gitStore.isGitFetching"
-      :element-loading-text="gitStore.isGitPulling ? $t('@13D1C:正在拉取代码...') : $t('@13D1C:正在获取远程分支信息...')"
-    >
+    <div class="card-content" v-if="gitStore.isGitRepo">
+      <!-- 顶部 inline 进度条:不遮挡文件列表,只在头部下方显示一条细线 + 文案 -->
+      <div
+        v-if="gitStore.isGitPulling || gitStore.isGitFetching"
+        class="git-status-sync-bar"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="git-status-sync-bar__dot" aria-hidden="true"></span>
+        <span class="git-status-sync-bar__text">
+          {{ gitStore.isGitPulling ? $t('@13D1C:正在拉取代码...') : $t('@13D1C:正在获取远程分支信息...') }}
+        </span>
+      </div>
       <div v-if="!gitStore.isGitRepo" class="status-box not-git-repo">
         <div class="empty-status">
           <el-icon class="empty-icon"><Folder /></el-icon>
@@ -1663,6 +1672,50 @@ defineExpose({
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+/* 顶部 inline 同步进度条 — 替代 v-loading 全屏遮罩
+   不遮挡文件列表,只在头部下方显示一行小字 + 旋转点 + 淡背景 */
+.git-status-sync-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 var(--spacing-sm) var(--spacing-sm);
+  padding: 6px 10px;
+  background: var(--tint-primary-08);
+  border: 1px solid var(--tint-primary-22);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--color-primary);
+  font-weight: 500;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .git-status-sync-bar {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+
+.git-status-sync-bar__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 8px var(--tint-primary-45);
+  animation: git-status-sync-bar-pulse 1.1s var(--ease-in-out, ease-in-out) infinite;
+  flex-shrink: 0;
+}
+
+@keyframes git-status-sync-bar-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.7); }
+}
+
+.git-status-sync-bar__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Git 命令原始输出框（monospace + 200px 高度 + pre-wrap） */

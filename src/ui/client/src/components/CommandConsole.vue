@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted, nextTick, computed, defineAsyncComponent } from 'vue';
+import { ref, onMounted, onActivated, onDeactivated, watch, onUnmounted, nextTick, computed, defineAsyncComponent } from 'vue';
 import { ArrowDown, FullScreen, VideoPlay, Loading, Close, Position, Monitor, Document, Timer, Ticket, Delete, RefreshRight, Folder } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '@components/SvgIcon/index.vue';
@@ -30,6 +30,7 @@ import type { FlowData, FlowEdge, FlowNode } from '@components/flow/FlowOrchestr
 import type { CustomCommand } from '@components/CustomCommandManager.vue';
 import { useConfigStore, type OrchestrationStep } from '@stores/configStore';
 import { useGitStore } from '@stores/gitStore';
+import { useTerminalSessionsStore } from '@stores/terminalSessions';
 import { io, Socket } from 'socket.io-client';
 import { replaceVariables } from '@/utils/commandParser';
 import { useAnsiToHtml } from '@/composables/useAnsiToHtml';
@@ -39,6 +40,7 @@ import { $t } from '@/lang/static'
 
 const configStore = useConfigStore();
 const gitStore = useGitStore();
+const terminalSessionsStore = useTerminalSessionsStore();
 
 function handleAfterQuickPushSuccessEvent() {
   runAfterQuickPushAction().catch((e: any) => {
@@ -470,6 +472,12 @@ const showTerminalSessions = computed<boolean>({
 });
 const terminalSessionsCount = computed(() => terminalSessions.value.length);
 
+// 同步终端会话数到 pinia store,供 ActivityBar 控制台图标徽标读取。
+// watch 在 terminalSessions 变化时立即同步(含首屏拉取 / 增删会话后)。
+watch(terminalSessionsCount, (n) => {
+  terminalSessionsStore.setCount(n)
+}, { immediate: true })
+
 const startupAutoRunTriggered = ref(false);
 
 function sleep(ms: number) {
@@ -650,6 +658,35 @@ async function loadTerminalSessionsStatus(cleanup: boolean = true) {
   } catch {
   }
 }
+
+// ── 死会话定时清理 ──────────────────────────────────────────────
+// 问题:用户直接关终端窗口(非点列表"删除"按钮),前端无法实时感知 → 死会话残留。
+// 后端 startTerminalProcess 是 fire-and-forget 启外部终端(WindowsTerminal/gnome-terminal),
+// Node 拿到的是终端窗口 pid 但无法挂 exit 监听,只能靠 /status?cleanup=true 轮询 isPidAlive 清理。
+// 修复:有会话时每 8s 调一次 cleanup,无会话时停止;KeepAlive deactivated 时暂停省请求。
+// 8s < 后端 10s 保护期(刚启动的进程即使探测不到 pid alive 也不删),不会误删。
+const TERMINAL_POLL_INTERVAL_MS = 8000;
+let terminalPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopTerminalPolling() {
+  if (terminalPollTimer !== null) {
+    clearInterval(terminalPollTimer);
+    terminalPollTimer = null;
+  }
+}
+
+function startTerminalPolling() {
+  if (terminalPollTimer !== null) return; // 已在轮询,不重复启
+  terminalPollTimer = setInterval(() => {
+    loadTerminalSessionsStatus(true);
+  }, TERMINAL_POLL_INTERVAL_MS);
+}
+
+// 有会话才轮询,空列表时停掉省请求。watch 会在 count 变化时自动启停。
+watch(terminalSessionsCount, (n) => {
+  if (n > 0) startTerminalPolling();
+  else stopTerminalPolling();
+}, { immediate: true });
 
 // 终端会话的 3 个 API 调用（load / restart / delete）已抽离到 useTerminalSessions composable。
 // 状态 refs (terminalSessions / terminalSessionsLoading) 和 upsert 工具也从 composable 解构出来。
@@ -2359,6 +2396,23 @@ onUnmounted(() => {
     socket.value.disconnect();
     socket.value = null;
   }
+  // 停止死会话轮询
+  stopTerminalPolling();
+});
+
+// KeepAlive 缓存场景:切到别的视图时 CommandConsole deactivated,暂停轮询省请求;
+// 切回控制台视图时 activated,若有会话则恢复轮询。
+// (onMounted 已由 watch immediate 启动,onUnmounted 已停止,这里只补 deactivated/activated 对)
+onDeactivated(() => {
+  stopTerminalPolling();
+});
+
+onActivated(() => {
+  // 恢复前先刷新一次(切走期间可能有会话死了),再由 watch 决定是否继续轮询
+  if (terminalSessionsCount.value > 0) {
+    loadTerminalSessionsStatus(true);
+    startTerminalPolling();
+  }
 });
 </script>
 
@@ -3043,21 +3097,25 @@ onUnmounted(() => {
    font-size: 12px;
  }
 
- .terminal-session-pid {
-   display: inline-flex;
-   align-items: center;
-   white-space: nowrap;
-   font-size: 11px;
-   font-weight: 600;
-   color: rgba(191, 219, 254, 0.9);
-   background: rgba(59, 130, 246, 0.18);
-   border: 1px solid rgba(59, 130, 246, 0.3);
-   padding: 1px 6px;
-   border-radius: 999px;
-   margin-left: 6px;
-   line-height: 1;
-   vertical-align: middle;
- }
+  .terminal-session-pid {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    /* 用控制台主题 muted 文字 + 半透明描边药丸,对比度高于原蓝底蓝字。
+       独立成标签而非贴在 command 文字右侧,视觉更清晰。 */
+    color: var(--text-console);
+    background: var(--bg-console-cmd, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-console, rgba(255, 255, 255, 0.12));
+    padding: 2px 7px;
+    border-radius: 999px;
+    margin-left: 8px;
+    line-height: 1.4;
+    vertical-align: middle;
+    letter-spacing: 0.2px;
+  }
 
  .terminal-session-actions {
    display: flex;

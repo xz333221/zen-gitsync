@@ -20,6 +20,7 @@ import { computed } from 'vue'
 import { useWorkbenchStatusStore } from '@stores/workbenchStatus'
 import { useGitStore } from '@stores/gitStore'
 import { useEditorTabsStore } from '@stores/editorTabs'
+import { useTerminalSessionsStore } from '@stores/terminalSessions'
 
 const props = defineProps<{
   activeView: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap'
@@ -32,14 +33,14 @@ const emit = defineEmits<{
 const wbStatus = useWorkbenchStatusStore()
 const gitStore = useGitStore()
 const editorTabsStore = useEditorTabsStore()
+const terminalSessionsStore = useTerminalSessionsStore()
 
-// 未提交文件数：只统计已纳入 git 跟踪的变更（staged + unstaged）
-// 排除 untracked —— 刚新建/尚未保存的空文件出现在文件树里属于正常状态，
-// 不该让徽标过早提示”未提交”，避免和编辑器里”未保存”的 dirty dot 混淆。
+// 未提交文件数:与文件列表 badge 对齐,包含所有 git status --porcelain 的变更
+// (modified / staged / added / deleted / conflicted / untracked)。
+// 之前 .filter(f => f.type !== 'untracked') 会漏掉未跟踪文件,
+// 导致左侧红点和文件列表 badge 数字不一致。
 const uncommittedCount = computed(() => {
-  const list = gitStore.fileList
-  if (!list || list.length === 0) return 0
-  return list.filter(f => f.type !== 'untracked').length
+  return gitStore.fileList?.length ?? 0
 })
 const uncommittedBadge = computed(() => {
   const n = uncommittedCount.value
@@ -89,12 +90,16 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
     </el-tooltip>
 
     <!-- 控制台页面:自定义命令 + 命令控制台(从 Git 视图拆出) -->
-    <el-tooltip :content="$t('@ACTBAR:控制台')" placement="right" :show-after="300">
+    <el-tooltip
+      :content="terminalSessionsStore.hasActive ? `${$t('@ACTBAR:控制台')} · ${terminalSessionsStore.count} ${$t('@ACTBAR:个终端会话')}` : $t('@ACTBAR:控制台')"
+      placement="right"
+      :show-after="300"
+    >
       <button
         class="activity-btn"
         :class="{ active: props.activeView === 'console' }"
         @click="select('console')"
-        :aria-label="$t('@ACTBAR:控制台')"
+        :aria-label="terminalSessionsStore.hasActive ? `${$t('@ACTBAR:控制台')} · ${terminalSessionsStore.count} ${$t('@ACTBAR:个终端会话')}` : $t('@ACTBAR:控制台')"
         :aria-pressed="props.activeView === 'console'"
       >
         <!-- terminal.svg: 终端窗口 + 光标 -->
@@ -103,6 +108,12 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
           <path d="M6 9l3 3-3 3" />
           <line x1="12" y1="15" x2="17" y2="15" />
         </svg>
+        <span
+          v-if="terminalSessionsStore.hasActive"
+          class="console-sessions-badge"
+          :title="$t('@ACTBAR:个终端会话')"
+          aria-hidden="true"
+        >{{ terminalSessionsStore.count > 99 ? '99+' : terminalSessionsStore.count }}</span>
       </button>
     </el-tooltip>
 
@@ -330,6 +341,36 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   50%      { box-shadow: 0 0 0 2px var(--bg-container), 0 0 6px 1px color-mix(in srgb, var(--color-success, #34d399) 60%, transparent); }
 }
 
+/* ── 控制台终端会话数量徽标 ─────────────────────────────────────── */
+/* 几何与 wb/git/editor 徽标一致,颜色用青色(cyan)呼应终端主题,
+   与工作台绿色(running)、Git 品牌色(uncommitted)、编辑器橙色(dirty)区分。 */
+.console-sessions-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  background: var(--color-info, #06b6d4);
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--bg-container);
+  pointer-events: none;
+  animation: wb-badge-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), console-badge-pulse 2s ease-in-out 0.3s infinite;
+  z-index: 1;
+}
+
+@keyframes console-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--bg-container); }
+  50%      { box-shadow: 0 0 0 2px var(--bg-container), 0 0 6px 1px color-mix(in srgb, var(--color-info, #06b6d4) 60%, transparent); }
+}
+
 /* ── Git 未提交文件数量徽标 ─────────────────────────────────────── */
 .git-uncommitted-badge {
   position: absolute;
@@ -401,6 +442,7 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
   .wb-running-badge,
   .git-uncommitted-badge,
   .editor-dirty-badge,
+  .console-sessions-badge,
   .activity-btn.active::before {
     animation: none;
   }

@@ -1728,6 +1728,22 @@ export default {
   '@SRCMAP:默认': '默认',
   '@SRCMAP:优化布局': '优化布局',
   '@SRCMAP:布局中...': '布局中...',
+  '@SRCMAP:推荐安装 GitNexus': '推荐安装 GitNexus',
+  '@SRCMAP:推荐安装 GitNexus - 更强的代码知识图谱 MCP': '推荐安装 GitNexus - 更强的代码知识图谱 MCP',
+  '@SRCMAP:GitNexus 是把代码库索引为知识图谱的开源工具,通过 MCP 协议喂给 Claude Code / Cursor 等 AI 助手,让它们在动手改代码前就能完整感知项目结构与调用链。': 'GitNexus 是把代码库索引为知识图谱的开源工具,通过 MCP 协议喂给 Claude Code / Cursor 等 AI 助手,让它们在动手改代码前就能完整感知项目结构与调用链。',
+  '@SRCMAP:安装 GitNexus': '安装 GitNexus',
+  '@SRCMAP:一键配置编辑器 MCP': '一键配置编辑器 MCP',
+  '@SRCMAP:自动检测本机已装的 Cursor / Claude Code / OpenCode / Codex / Windsurf 等编辑器,写入 MCP 配置并安装 Skill。': '自动检测本机已装的 Cursor / Claude Code / OpenCode / Codex / Windsurf 等编辑器,写入 MCP 配置并安装 Skill。',
+  '@SRCMAP:仅配置 Claude Code': '仅配置 Claude Code',
+  '@SRCMAP:第二行为 Windows 专用。配置后需完全退出再重启 Claude Code,MCP server 才生效。': '第二行为 Windows 专用。配置后需完全退出再重启 Claude Code,MCP server 才生效。',
+  '@SRCMAP:索引当前项目': '索引当前项目',
+  '@SRCMAP:推荐用完整索引 —— 含语义搜索与每个功能社区的 SKILL.md。': '推荐用完整索引 —— 含语义搜索与每个功能社区的 SKILL.md。',
+  '@SRCMAP:验证安装': '验证安装',
+  '@SRCMAP:复制': '复制',
+  '@SRCMAP:已复制到剪贴板': '已复制到剪贴板',
+  '@SRCMAP:复制失败,请手动选择': '复制失败,请手动选择',
+  '@SRCMAP:关闭': '关闭',
+  '@SRCMAP:查看 GitHub 仓库': '查看 GitHub 仓库',
   // @SRCMAP: file end
   // @EDITOR: file path: views\EditorView.vue
   '@EDITOR:资源管理器': '资源管理器',
@@ -2115,6 +2131,7 @@ export default {
 
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 控制台)
   '@ACTBAR:控制台': '控制台',
+  '@ACTBAR:个终端会话': '个终端会话',
   // @ACTBAR: file end (追加3)
 
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 思维导图)
