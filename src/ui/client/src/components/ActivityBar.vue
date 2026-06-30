@@ -22,11 +22,11 @@ import { useGitStore } from '@stores/gitStore'
 import { useEditorTabsStore } from '@stores/editorTabs'
 
 const props = defineProps<{
-  activeView: 'git' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap'
+  activeView: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap'
 }>()
 
 const emit = defineEmits<{
-  'update:activeView': [view: 'git' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap']
+  'update:activeView': [view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap']
 }>()
 
 const wbStatus = useWorkbenchStatusStore()
@@ -55,7 +55,7 @@ const editorDirtyBadge = computed(() => {
   return n > 99 ? '99+' : String(n)
 })
 
-function select(view: 'git' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap') {
+function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap') {
   emit('update:activeView', view)
 }
 </script>
@@ -85,6 +85,24 @@ function select(view: 'git' | 'editor' | 'source-map' | 'workbench' | 'monitor' 
           :title="`${uncommittedCount} ${$t('@ACTBAR:个未提交文件')}`"
           aria-hidden="true"
         >{{ uncommittedBadge }}</span>
+      </button>
+    </el-tooltip>
+
+    <!-- 控制台页面:自定义命令 + 命令控制台(从 Git 视图拆出) -->
+    <el-tooltip :content="$t('@ACTBAR:控制台')" placement="right" :show-after="300">
+      <button
+        class="activity-btn"
+        :class="{ active: props.activeView === 'console' }"
+        @click="select('console')"
+        :aria-label="$t('@ACTBAR:控制台')"
+        :aria-pressed="props.activeView === 'console'"
+      >
+        <!-- terminal.svg: 终端窗口 + 光标 -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <path d="M6 9l3 3-3 3" />
+          <line x1="12" y1="15" x2="17" y2="15" />
+        </svg>
       </button>
     </el-tooltip>
 

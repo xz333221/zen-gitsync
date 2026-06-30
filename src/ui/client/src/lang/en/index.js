@@ -57,6 +57,7 @@ export default {
   '@F13B4:默认模型': 'Default Model',
   '@F13B4:布局比例已保存 - 左侧: ': 'Layout ratio saved - Left: ',
   '@F13B4:调整左侧与中间面板宽度（左右方向键）': 'Resize left and middle panel (← → keys)',
+  '@F13B4:调整左侧与右侧面板宽度（左右方向键）': 'Resize left and right panel (← → keys)',
   '@F13B4:调整中间与右侧面板宽度（左右方向键）': 'Resize middle and right panel (← → keys)',
   '@F13B4:调整上方与下方面板高度（上下方向键）': 'Resize top and bottom panel (↑ ↓ keys)',
   '@F13B4:%, 上方: ': '%, Top: ',
@@ -2101,6 +2102,10 @@ export default {
   // @ACTBAR: file path: components/ActivityBar.vue (append: monitor)
   '@ACTBAR:系统监控': 'System Monitor',
   // @ACTBAR: file end (append)
+
+  // @ACTBAR: file path: components/ActivityBar.vue (append3: console)
+  '@ACTBAR:控制台': 'Console',
+  // @ACTBAR: file end (append3)
 
   // @ACTBAR: file path: components/ActivityBar.vue (append2: mindmap)
   '@ACTBAR:思维导图': 'Mind Map',

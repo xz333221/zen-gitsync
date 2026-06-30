@@ -32,13 +32,16 @@ import 'local-file-picker/dist/file-picker.css'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
-// 命令式 API 的样式手动补:ElMessage / ElMessageBox 通过 JS 调用而非模板用法,
-// unplugin-vue-components 只对模板里检测到的组件自动注入 CSS,这俩的样式不会自动加载,
-// 不手动 import 会渲染成无样式的裸 div(ElMessage toast 尤其明显,ElMessageBox 靠
-// unified-dialogs.scss 的覆盖还能凑合看,但 base 的遮罩/定位/动画仍缺)。
-// 同类坑见 AttachmentZone.vue 对 ElImageViewer 的单独 import。
-import 'element-plus/es/components/message/style/css.mjs'
-import 'element-plus/es/components/message-box/style/css.mjs'
+// element-plus 全量样式入口注入。
+// 原因:unplugin-vue-components 的 ElementPlusResolver 只对模板里检测到的组件
+// 按需注入 CSS,但有两类场景漏掉:
+//  1) 命令式 API(ElMessage / ElMessageBox)——不走模板,resolver 检测不到;
+//  2) 异步组件(defineAsyncComponent)用的 EP 组件(如 LogList 的 el-table)——
+//     首屏 chunk 还在下载时样式未注入,导致表格行/边框裸奔。
+// 入口直接引全量 dist/index.css,一次性解决所有 EP 组件样式时序问题,
+// 不再逐个手动 import message/message-box/table 等 style/css.mjs。
+// 代价:首屏多 ~80KB gzip CSS,但换掉所有样式延迟/裸奔 bug,值得。
+import 'element-plus/dist/index.css'
 import { initSvg } from './components/SvgIcon'
 
 const app = createApp(App)

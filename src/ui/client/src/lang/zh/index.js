@@ -59,6 +59,7 @@ export default {
   '@F13B4:%, 中间: ': '%, 中间: ',
   '@F13B4:%, 右侧: ': '%, 右侧: ',
   '@F13B4:调整左侧与中间面板宽度（左右方向键）': '调整左侧与中间面板宽度（左右方向键）',
+  '@F13B4:调整左侧与右侧面板宽度（左右方向键）': '调整左侧与右侧面板宽度（左右方向键）',
   '@F13B4:调整中间与右侧面板宽度（左右方向键）': '调整中间与右侧面板宽度（左右方向键）',
   '@F13B4:调整上方与下方面板高度（上下方向键）': '调整上方与下方面板高度（上下方向键）',
   '@F13B4:%, 上方: ': '%, 上方: ',
@@ -2111,6 +2112,10 @@ export default {
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 系统监控)
   '@ACTBAR:系统监控': '系统监控',
   // @ACTBAR: file end (追加)
+
+  // @ACTBAR: file path: components/ActivityBar.vue (追加: 控制台)
+  '@ACTBAR:控制台': '控制台',
+  // @ACTBAR: file end (追加3)
 
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 思维导图)
   '@ACTBAR:思维导图': '思维导图',

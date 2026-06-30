@@ -31,7 +31,6 @@ import FileGroup from '@/components/FileGroup.vue'
 import FileTreeView from '@/components/FileTreeView.vue'
 import { isImageFile } from '@/utils/fileKind'
 import NpmScriptsPanel from '@components/NpmScriptsPanel.vue'
-import CustomCommandsPanel from '@components/CustomCommandsPanel.vue'
 import StashChangesButton from '@/components/buttons/StashChangesButton.vue'
 import StashListButton from '@/components/buttons/StashListButton.vue'
 import StashSelectedFilesButton from '@/components/buttons/StashSelectedFilesButton.vue'
@@ -1470,9 +1469,7 @@ defineExpose({
     
     <!-- NPM脚本面板 -->
     <NpmScriptsPanel />
-
-    <!-- 自定义命令快捷面板 -->
-    <CustomCommandsPanel />
+    <!-- 自定义命令快捷面板已拆到"控制台"视图(activeView === 'console') -->
   </div>
   
   <!-- 文件差异对话框 -->
