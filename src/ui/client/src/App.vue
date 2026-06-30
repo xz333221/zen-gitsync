@@ -35,12 +35,23 @@ import ActivityBar from '@/components/ActivityBar.vue'
 import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 import AppErrorBanner from '@/components/AppErrorBanner.vue'
 import RecentProjectsList from '@/components/RecentProjectsList.vue'
+import ViewLoading from '@/components/ViewLoading.vue'
+// 视图懒加载:首屏只下载 git 视图,其它视图切过去才请求 chunk。
+// loadingComponent:chunk 下载期间显示的内联占位(轻量 spinner,非全屏遮罩)。
+// delay:200ms 后才显示 loading,避免本地秒加载时 loading 一闪而过造成抖动。
+// KeepAlive 缓存命中(已加载过的视图再切回)时 defineAsyncComponent 同步 resolve,
+// loadingComponent 不会显示 → 首次切有 loading,之后秒切。
+const asyncOpts = {
+  loadingComponent: ViewLoading,
+  delay: 200,
+  // timeout: 60_000  // 超时走 errorComponent,暂不配
+}
 // 编辑器 / 源码地图视图延迟加载（首屏不下载）
-const EditorView = defineAsyncComponent(() => import('@/views/EditorView.vue'))
-const SourceMapView = defineAsyncComponent(() => import('@views/SourceMapView.vue'))
-const WorkbenchView = defineAsyncComponent(() => import('@views/WorkbenchView.vue'))
-const MonitorView = defineAsyncComponent(() => import('@views/MonitorView.vue'))
-const MindmapView = defineAsyncComponent(() => import('@views/MindmapView.vue'))
+const EditorView = defineAsyncComponent({ loader: () => import('@/views/EditorView.vue'), ...asyncOpts })
+const SourceMapView = defineAsyncComponent({ loader: () => import('@views/SourceMapView.vue'), ...asyncOpts })
+const WorkbenchView = defineAsyncComponent({ loader: () => import('@views/WorkbenchView.vue'), ...asyncOpts })
+const MonitorView = defineAsyncComponent({ loader: () => import('@views/MonitorView.vue'), ...asyncOpts })
+const MindmapView = defineAsyncComponent({ loader: () => import('@views/MindmapView.vue'), ...asyncOpts })
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled, Sunny, Moon } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -844,40 +855,41 @@ function stopHResize() {
 
       </div><!-- /view-pane git -->
 
-      <!-- 编辑器视图（延迟加载，KeepAlive 缓存实例） -->
-      <KeepAlive>
-        <div v-show="activeView === 'editor'" class="view-pane editor-pane">
-          <EditorView />
-        </div>
-      </KeepAlive>
+      <!-- 编辑器视图（懒加载：v-if 控制组件加载，KeepAlive 缓存实例保状态；
+           wrapper div 仍用 v-show 管 flex 布局占位，display:none 不抢 flex 空间） -->
+      <div v-show="activeView === 'editor'" class="view-pane editor-pane">
+        <KeepAlive>
+          <EditorView v-if="activeView === 'editor'" />
+        </KeepAlive>
+      </div>
 
-      <!-- 源码地图视图（延迟加载，KeepAlive 缓存实例） -->
-      <KeepAlive>
-        <div v-show="activeView === 'source-map'" class="view-pane source-map-pane">
-          <SourceMapView />
-        </div>
-      </KeepAlive>
+      <!-- 源码地图视图（懒加载 + KeepAlive 缓存） -->
+      <div v-show="activeView === 'source-map'" class="view-pane source-map-pane">
+        <KeepAlive>
+          <SourceMapView v-if="activeView === 'source-map'" />
+        </KeepAlive>
+      </div>
 
-      <!-- 工作台视图（延迟加载，KeepAlive 缓存实例） -->
-      <KeepAlive>
-        <div v-show="activeView === 'workbench'" class="view-pane workbench-pane">
-          <WorkbenchView />
-        </div>
-      </KeepAlive>
+      <!-- 工作台视图（懒加载 + KeepAlive 缓存：任务进度/执行状态切走不丢） -->
+      <div v-show="activeView === 'workbench'" class="view-pane workbench-pane">
+        <KeepAlive>
+          <WorkbenchView v-if="activeView === 'workbench'" />
+        </KeepAlive>
+      </div>
 
-      <!-- 系统监控视图（延迟加载，KeepAlive 缓存实例） -->
-      <KeepAlive>
-        <div v-show="activeView === 'monitor'" class="view-pane monitor-pane">
-          <MonitorView />
-        </div>
-      </KeepAlive>
+      <!-- 系统监控视图（懒加载 + KeepAlive 缓存） -->
+      <div v-show="activeView === 'monitor'" class="view-pane monitor-pane">
+        <KeepAlive>
+          <MonitorView v-if="activeView === 'monitor'" />
+        </KeepAlive>
+      </div>
 
-      <!-- 思维导图视图（延迟加载，KeepAlive 缓存实例） -->
-      <KeepAlive>
-        <div v-show="activeView === 'mindmap'" class="view-pane mindmap-pane">
-          <MindmapView />
-        </div>
-      </KeepAlive>
+      <!-- 思维导图视图（懒加载 + KeepAlive 缓存） -->
+      <div v-show="activeView === 'mindmap'" class="view-pane mindmap-pane">
+        <KeepAlive>
+          <MindmapView v-if="activeView === 'mindmap'" />
+        </KeepAlive>
+      </div>
 
     </div><!-- /app-body -->
   </main>

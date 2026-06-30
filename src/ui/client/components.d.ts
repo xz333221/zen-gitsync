@@ -126,6 +126,7 @@ declare module 'vue' {
     UserInputNode: typeof import('./src/components/flow/nodes/UserInputNode.vue')['default']
     UserInputParamConfig: typeof import('./src/components/flow/UserInputParamConfig.vue')['default']
     VersionNode: typeof import('./src/components/flow/nodes/VersionNode.vue')['default']
+    ViewLoading: typeof import('./src/components/ViewLoading.vue')['default']
     WaitNode: typeof import('./src/components/flow/nodes/WaitNode.vue')['default']
   }
   export interface GlobalDirectives {
