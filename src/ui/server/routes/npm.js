@@ -35,7 +35,7 @@ export function registerNpmRoutes({
   // 标记是否有重启任务在跑（防并发）
   let activeRestart = false;
   // 自拉起重启相关常量
-  const RESTART_TIMEOUT_MS = 8000;   // 子进程必须在此时间内注册到 instanceRegistry
+  const RESTART_TIMEOUT_MS = 15000;  // 子进程必须在此时间内注册到 instanceRegistry（Windows 冷启动偏慢）
   const REGISTRY_POLL_MS = 250;      // 轮询注册表文件间隔
   const EXIT_DELAY_MS = 100;         // 子进程就绪后给前端的最后缓冲时间
 
@@ -281,35 +281,92 @@ export function registerNpmRoutes({
       return;
     }
 
+    // 子进程 stdout/stderr 写到临时日志文件，便于诊断"cmd 闪退"
+    const childLogFile = path.join(
+      os.tmpdir(),
+      `zen-gitsync-restart-${process.pid}-${Date.now()}.log`
+    );
+    let childLogFd;
+    try {
+      childLogFd = fsSync.openSync(childLogFile, 'a');
+    } catch (err) {
+      send({ type: 'error', message: `打开子进程日志文件失败: ${err?.message || err}` });
+      finish();
+      release();
+      return;
+    }
+
     let child;
     try {
       // spawn 当前进程当时是怎么被 node 启的同一个入口（开发态 server.js / 生产态 gitCommit.js）
-      // detached: true + stdio: 'ignore' + child.unref() → Windows 上父进程 exit 不会带走子进程
+      // detached: true + stdio 指向日志文件 + child.unref() → Windows 上父进程 exit 不会带走子进程
       child = spawn(process.execPath, [entryInfo.entry, ...entryInfo.args], {
         detached: true,
-        stdio: 'ignore',
+        stdio: ['ignore', childLogFd, childLogFd],
         windowsHide: true,
         env: { ...process.env, ZEN_RESTART_NOTIFY_PATH: notifyPath }
       });
       child.unref();
     } catch (err) {
       send({ type: 'error', message: `拉起子进程失败: ${err?.message || err}` });
+      try { fsSync.closeSync(childLogFd) } catch (_) {}
       try { fsSync.unlinkSync(notifyPath) } catch (_) {}
+      try { fsSync.unlinkSync(childLogFile) } catch (_) {}
       finish();
       release();
       return;
     }
 
     send({ type: 'stdout', message: `[restart] 已在 PID ${child.pid} 拉起子进程 (${entryInfo.entry})，等待端口就绪…\n` });
+    send({ type: 'stdout', message: `[restart] 子进程日志: ${childLogFile}\n` });
+
+    // 监听子进程异常退出，避免"cmd 闪一下没了却没人知道为什么"
+    let childDead = false;
+    child.on('error', (err) => {
+      if (childDead) return;
+      childDead = true;
+      send({ type: 'error', message: `子进程 spawn 失败: ${err?.message || err}` });
+      try { fsSync.closeSync(childLogFd) } catch (_) {}
+      try { fsSync.unlinkSync(notifyPath) } catch (_) {}
+      finish();
+      release();
+    });
+    child.on('exit', (code, signal) => {
+      if (childDead) return;
+      childDead = true;
+      // 读子进程日志尾部，把崩溃原因推给前端
+      let tail = '';
+      try {
+        const buf = fsSync.readFileSync(childLogFile, 'utf8');
+        tail = buf.slice(-2000);
+      } catch (_) {}
+      send({
+        type: 'error',
+        message: `子进程提前退出 (code=${code} signal=${signal})${tail ? `\n--- 子进程日志尾部 ---\n${tail}` : ''}`
+      });
+      try { fsSync.closeSync(childLogFd) } catch (_) {}
+      try { fsSync.unlinkSync(notifyPath) } catch (_) {}
+      finish();
+      release();
+    });
 
     const poll = setInterval(() => {
       if (Date.now() - start > RESTART_TIMEOUT_MS) {
         clearInterval(poll);
+        childDead = true;  // 阻止 exit 监听器再发一次 error，避免和 timeout 重复
         try { child.kill('SIGTERM') } catch (_) {}
-        send({ type: 'error', message: `子进程 ${RESTART_TIMEOUT_MS / 1000}s 内未就绪（未读到 ${notifyPath}），已 kill` });
+        // 读子进程日志尾部，帮助诊断为啥超时
+        let tail = '';
+        try { tail = fsSync.readFileSync(childLogFile, 'utf8').slice(-2000) } catch (_) {}
+        send({
+          type: 'error',
+          message: `子进程 ${RESTART_TIMEOUT_MS / 1000}s 内未就绪（未读到 ${notifyPath}），已 kill${tail ? `\n--- 子进程日志尾部 ---\n${tail}` : ''}`
+        });
         send({ type: 'timeout' });
         finish();
+        try { fsSync.closeSync(childLogFd) } catch (_) {}
         try { fsSync.unlinkSync(notifyPath) } catch (_) {}
+        try { fsSync.unlinkSync(childLogFile) } catch (_) {}
         // 关键：超时分支旧进程不退出，用户仍可继续手动刷新页面
         release();
         return;
@@ -342,11 +399,14 @@ export function registerNpmRoutes({
       const newPort = notifiedPort ?? registryPort;
       if (newPort) {
         clearInterval(poll);
+        childDead = true;  // 子进程已就绪，阻止 exit 监听器误报 error
         // 给 EXIT_DELAY_MS 让新进程稳定，再通知前端 + 旧进程退出
         setTimeout(() => {
           send({ type: 'ready', port: newPort });
           finish();
           try { fsSync.unlinkSync(notifyPath) } catch (_) {}
+          try { fsSync.closeSync(childLogFd) } catch (_) {}
+          // 成功分支不删 childLogFile：子进程仍可能往里写新日志，便于下次诊断；交给 OS 临时文件清理
           logger.info('[app-restart] 子进程已就绪，退出当前进程');
           process.exit(0);
         }, EXIT_DELAY_MS);
