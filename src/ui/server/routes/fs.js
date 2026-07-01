@@ -23,6 +23,7 @@ import { spawn, exec } from 'child_process';
 import { ensureWithinCwd } from '../utils/pathGuard.js';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import { invalidateCurrentProjectKey, invalidateRawConfigCache } from '../../../config.js';
+import { invalidateCwdCache } from '../../../utils/index.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // /api/change_directory 路径白名单(SEC-PATH-2)
@@ -141,8 +142,12 @@ export function registerFsRoutes({
         process.chdir(safeReqPath);
         // chdir 后立即失效项目键 + 原始 config 缓存,防止下一次 loadConfig /
         // saveConfig 还命中旧 cwd 容器写到错误项目下。
+        // 同时清掉 utils/index.js 里 getCwd() 的 cwd 缓存,避免后续 execGitCommand
+        // 仍按 process.argv / 启动期 cwd 跑子命令,导致切到非 git 目录后
+        // /api/current_directory 等接口的 rev-parse 误判为 git 仓库。
         invalidateCurrentProjectKey();
         invalidateRawConfigCache();
+        invalidateCwdCache();
         const newDirectory = process.cwd();
       
         // 更新当前项目路径和房间ID
