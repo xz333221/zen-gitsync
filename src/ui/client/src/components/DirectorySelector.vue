@@ -318,11 +318,15 @@ async function changeDirectory() {
       
       if (result.isGitRepo) {
         // 并行加载基本信息
+        // 切目录时强制刷分支状态(force=true),hasUpstream / upstreamBranch
+        // / branchAhead / branchBehind 否则会保留上一个项目的脏值
+        // (上次 getBranchStatus 调用缓存在 5s 内不会重拉,见 branchStatus.js)
         await Promise.all([
           gitStore.getCurrentBranch(),
           gitStore.getAllBranches(),
           gitStore.getUserInfo(),
-          gitStore.getRemoteUrl()
+          gitStore.getRemoteUrl(),
+          gitStore.getBranchStatus(true)
         ]);
         
         // 并行加载提交历史和文件状态，避免串行导致的延迟
