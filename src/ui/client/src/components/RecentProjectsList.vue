@@ -168,7 +168,9 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-base);
-  overflow: hidden;
+  /* 不在这里设 overflow:hidden,留给 .recent-projects__list 自身做滚动。
+     之前在这里 overflow:hidden 会让列表项 hover 时 transform: translateY(-1px)
+     上移被切掉边框/阴影 */
 }
 .recent-projects__head {
   display: flex;
@@ -282,6 +284,10 @@ onMounted(() => {
   min-height: 0;
   overflow-y: auto;
   align-content: start;
+  /* 给第一行 item hover 留出 translateY(-1px) + box-shadow 空间,
+     否则上边框/阴影会被 list 自身的 overflow:auto 切掉 */
+  padding: 2px;
+  margin: -2px;
 }
 .recent-projects__item {
   display: flex;
