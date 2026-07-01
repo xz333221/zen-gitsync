@@ -272,7 +272,9 @@ onMounted(() => {
 }
 .recent-projects--fullpage .recent-projects__list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* 窗口窄时强制 1 列(避免 200px 太挤),窗口宽时 2-3 列自适应;
+     路径在卡片内可换行,长路径不被截断 */
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
   margin-top: 4px;
   /* 列表占满父 flex 容器剩余空间,多出时内部滚动而不是撑爆外层 */
@@ -355,13 +357,14 @@ onMounted(() => {
 .recent-projects__name {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 路径默认换行展示完整内容,避免窗口大、列多时单行省略号把路径切掉 */
+  white-space: normal;
+  word-break: break-all;
   font-family: ui-monospace, monospace;
+  line-height: 1.4;
 }
 .recent-projects--fullpage .recent-projects__name {
-  font-size: 15px;
+  font-size: 14px;
 }
 .recent-projects__tag {
   flex-shrink: 0;
