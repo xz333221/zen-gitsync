@@ -22,6 +22,10 @@ import { ElMessage } from "element-plus";
 import { Folder, Loading } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 
+withDefaults(defineProps<{ variant?: 'inline' | 'fullpage' }>(), {
+  variant: 'inline',
+});
+
 const recentDirectories = ref<Array<{ path: string; exists: boolean }>>([]);
 const isLoadingRecent = ref(false);
 
@@ -73,7 +77,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="recent-projects">
+  <div class="recent-projects" :class="{ 'recent-projects--fullpage': variant === 'fullpage' }">
     <div class="recent-projects__head">
       <span class="recent-projects__title">{{ $t('@13D1C:最近项目') }}</span>
       <span class="recent-projects__hint">{{ $t('@13D1C:点击在新标签页打开') }}</span>
@@ -120,6 +124,24 @@ onMounted(() => {
   border-radius: 6px;
   text-align: left;
 }
+/* 占满模式:由 App.vue 在非 Git 仓库时设置 variant="fullpage",
+   字号 16px + 大圆角 + 卡片化布局 */
+.recent-projects--fullpage {
+  margin-top: 0;
+  /* 关键:min-height: 0 让 flex 子项可被父级 grid-template-rows 高度约束,
+     否则 height:100% + flex 链会被子项自然高度撑爆 */
+  min-height: 0;
+  height: 100%;
+  padding: var(--spacing-xl) var(--spacing-xl);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-xl);
+  background: var(--bg-container);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-base);
+  overflow: hidden;
+}
 .recent-projects__head {
   display: flex;
   align-items: baseline;
@@ -133,6 +155,15 @@ onMounted(() => {
 }
 .recent-projects__hint {
   font-size: 11px;
+  color: var(--text-secondary);
+}
+.recent-projects--fullpage .recent-projects__title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.recent-projects--fullpage .recent-projects__hint {
+  font-size: 13px;
   color: var(--text-secondary);
 }
 .recent-projects__empty {
@@ -150,6 +181,17 @@ onMounted(() => {
   padding: 0;
   /* 不限高度:列表项少时自然铺开,空出下方区域而非出现内部滚动条 */
 }
+.recent-projects--fullpage .recent-projects__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+  /* 列表占满父 flex 容器剩余空间,多出时内部滚动而不是撑爆外层 */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+}
 .recent-projects__item {
   display: flex;
   align-items: center;
@@ -163,6 +205,25 @@ onMounted(() => {
 }
 .recent-projects__item:hover {
   background: rgba(45, 127, 249, 0.12);
+}
+.recent-projects--fullpage .recent-projects__item {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color-light);
+  background: var(--bg-panel);
+  font-size: 16px;
+  transition: border-color 0.18s, box-shadow 0.18s, transform 0.12s, background 0.18s;
+}
+.recent-projects--fullpage .recent-projects__item:hover {
+  background: var(--bg-component-hover);
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring-soft);
+  transform: translateY(-1px);
+}
+.recent-projects--fullpage .recent-projects__icon {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
 }
 .recent-projects__btn {
   display: flex;
@@ -191,6 +252,10 @@ onMounted(() => {
 .recent-projects__item.is-missing:hover {
   background: rgba(239, 68, 68, 0.06);
 }
+.recent-projects--fullpage .recent-projects__item.is-missing:hover {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.04);
+}
 .recent-projects__icon {
   flex-shrink: 0;
   color: #2D7FF9;
@@ -205,6 +270,9 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: ui-monospace, monospace;
+}
+.recent-projects--fullpage .recent-projects__name {
+  font-size: 15px;
 }
 .recent-projects__tag {
   flex-shrink: 0;

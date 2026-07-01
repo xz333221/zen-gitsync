@@ -15,7 +15,7 @@
   -->
 <script setup lang="ts">
 import { $t } from '@/lang/static'
-import { ref, onMounted, onBeforeUnmount, computed, watch, defineAsyncComponent } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { getFolderNameFromPath } from '@/utils/path'
 // GitStatus 是首屏左侧主面板(默认 git 视图立即渲染),改静态 import:
 // - 动态 import(defineAsyncComponent)会等到 App.vue 渲染到 <GitStatus> 时才发起 chunk 请求
@@ -206,6 +206,13 @@ onBeforeUnmount(() => {
   window.removeEventListener('ui-layout-reset', handleUiLayoutReset)
 })
 
+// 监听 isGitRepo 变化:切换目录时 grid-template-rows 需要重算
+// (非 Git 仓库时清空 inline style 让 CSS class 接管,回到 Git 仓库时按持久化比例重设)
+watch(() => gitStore.isGitRepo, () => {
+  // 等下一个 tick 让 v-show 切换完成,DOM 区域稳定后再读 inline style
+  nextTick(() => loadLayoutRatios())
+})
+
 // 处理分支变更事件
 function handleBranchChanged() {
   // 刷新Git状态
@@ -262,6 +269,9 @@ let hResizeRafId: number | null = null
 function saveLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
+  // 非 Git 仓库:无 h-resizer 可拖,不要保存 grid-template-rows 比例
+  // (否则后续回到 Git 仓库会被旧比例覆盖默认值)
+  if (!gitStore.isGitRepo) return;
 
   const columns = getComputedStyle(gridLayout).gridTemplateColumns.split(' ');
   const rows = getComputedStyle(gridLayout).gridTemplateRows.split(' ');
@@ -294,6 +304,15 @@ function loadLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
 
+  // 非 Git 仓库:右侧只保留 RecentProjectsList 一块,无 h-resizer / log-list,
+  // 不需要上下分块比例,直接占满整列。清除 inline style 让 CSS class 接管。
+  if (!gitStore.isGitRepo) {
+    gridLayout.style.gridTemplateRows = '';
+    // 刷新给 resizer aria-valuenow 用的百分比
+    refreshGridPercents();
+    return;
+  }
+
   const layout = configStore.ui.layout;
   const savedLeftRatio = Number.isFinite(layout?.leftRatio) ? layout.leftRatio : null;
   const savedTopRatio = Number.isFinite(layout?.topRatio) ? layout.topRatio : null;
@@ -310,6 +329,8 @@ function loadLayoutRatios() {
   if (savedTopRatio != null) {
     const bottomRatio = 1 - savedTopRatio;
     gridLayout.style.gridTemplateRows = `${savedTopRatio}fr 4px ${bottomRatio}fr`;
+  } else {
+    gridLayout.style.gridTemplateRows = '';
   }
 
   // 刷新给 resizer aria-valuenow 用的百分比
@@ -653,8 +674,9 @@ function stopHResize() {
       <ActivityBar v-model:activeView="activeView" />
 
       <!-- Git 视图:2 列布局 — 左 GitStatus | 右(上 commit-form / h-resizer / 下 log-list)
-           原中间列的命令控制台 + 自定义命令已拆到"控制台"视图(activeView === 'console') -->
-      <div v-show="activeView === 'git'" class="view-pane grid-layout">
+           非 Git 仓库时:右上 RecentProjectsList 占满右侧整列,隐藏 h-resizer + log-list-panel,
+           由 .grid-layout--no-bottom 控制 grid-template-rows 去掉下方行 -->
+      <div v-show="activeView === 'git'" class="view-pane grid-layout" :class="{ 'grid-layout--no-bottom': !gitStore.isGitRepo }">
       <!-- 左侧Git状态 -->
       <div class="git-status-panel">
         <GitStatus ref="gitStatusRef" :initial-directory="currentDirectory" />
@@ -714,11 +736,12 @@ function stopHResize() {
       <div class="commit-form-panel commit-form-panel--empty" v-else>
         <!-- 非 Git 仓库时,右侧空态直接用"最近项目"列表代替原"Git 仓库初始化"卡片
              (左侧 GitStatus 已经有"初始化 Git 仓库"按钮 + "尚未配置远程仓库"提示,这里不重复) -->
-        <RecentProjectsList />
+        <RecentProjectsList variant="fullpage" />
       </div>
 
       <!-- 水平分隔条（提交表单 | 提交历史） -->
       <div
+        v-show="gitStore.isGitRepo"
         class="horizontal-resizer"
         id="h-resizer"
         role="separator"
@@ -733,8 +756,8 @@ function stopHResize() {
         @keydown.down.prevent="nudgeH(2)"
       ></div>
 
-      <!-- 右侧下方提交历史 -->
-      <div class="log-list-panel">
+      <!-- 右侧下方提交历史(仅 Git 仓库显示,非 Git 仓库时 RecentProjectsList 占满右侧整列) -->
+      <div v-show="gitStore.isGitRepo" class="log-list-panel">
         <LogList />
       </div>
 
@@ -936,6 +959,13 @@ body {
   height: 100%;
 }
 
+/* 非 Git 仓库:右侧只保留 RecentProjectsList 一块,
+   隐藏 h-resizer + log-list 行,让 commit-form 行占满右侧整列。
+   用 minmax(0, 1fr) 替代 1fr,让 grid row 高度不被子项 min-content 撑大 */
+.grid-layout--no-bottom {
+  grid-template-rows: minmax(0, 1fr) 0fr 0fr;
+}
+
 .git-status-panel {
   grid-area: git-status;
   overflow: hidden;
@@ -963,6 +993,10 @@ body {
 /* 非 git 仓库空态:卡片不再贴左右分隔条 */
 .commit-form-panel--empty {
   padding: 0 var(--spacing-md);
+  /* 让子组件 RecentProjectsList 用 height:100% 撑满 panel 自身高度 */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .log-list-panel {
