@@ -385,11 +385,15 @@ async function getFileCompare(filePath: string) {
       return
     }
 
-    // added(已暂存的更改): old=HEAD(不存在则视为新增为空), new=index(:)
+    // added(已暂存的更改):
+    //   对新增文件 index 中可能是空 blob(例如 git add 之后又修改了文件),
+    //   此时拿 index 作 modified 会让 diff 看起来"空",无法反映实际将提交的变更。
+    //   改为: modified 拿工作区内容(用户即将提交的最终内容),
+    //   original 拿 HEAD(新增文件不存在则为空)。
     if (currentFile && currentFile.type === 'added') {
       const oldText = await fetchGitFileContent(filePath, 'HEAD')
       compareOriginal.value = isContentNotFound(oldText) ? '' : oldText
-      compareModified.value = await fetchGitFileContent(filePath, ':')
+      compareModified.value = await fetchWorkspaceFileContent(filePath)
       return
     }
 
