@@ -307,9 +307,14 @@ async function changeDirectory() {
       // 直接更新 store 状态
       configStore.setCurrentDirectory(result.directory);
       gitStore.isGitRepo = result.isGitRepo;
-      
+
       // 切换目录后强制重新加载配置
       await configStore.loadConfig(true);
+
+      // 重新加载配置后 layout 已按当前项目挑选(layoutsByProject[cwd]),
+      // 需要派发 ui-layout-reset 让 App.vue 把新的 ui.layout 写回 DOM(grid-template)。
+      // App.vue 只在初始 mount 时调过一次 loadLayoutRatios,切项目不会自动重应用。
+      window.dispatchEvent(new Event('ui-layout-reset'));
       
       if (result.isGitRepo) {
         // 并行加载基本信息

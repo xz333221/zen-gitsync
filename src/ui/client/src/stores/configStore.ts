@@ -213,6 +213,11 @@ export const useConfigStore = defineStore('config', () => {
 
   type UiSettings = {
     layout: UiLayout
+    // 按项目隔离的布局比例镜像,key = 项目绝对路径(cwd),value = 该项目的 layout。
+    // 未命中当前项目的项目用 layout 字段(全局默认)兜底,首次拖拽后写入对应条目。
+    // layout 字段保留作为"未隔离前的全局默认" + "新项目首次进入的兜底值",
+    // 不再被 layout watch 复写(避免一个项目拖完覆盖另一项目)。
+    layoutsByProject: Record<string, UiLayout>
     fileListViewMode: 'list' | 'tree'
     fileDiffSplitPercent: number
     commandConsole: UiCommandConsole
@@ -222,6 +227,7 @@ export const useConfigStore = defineStore('config', () => {
 
   const defaultUiSettings: UiSettings = {
     layout: { leftRatio: 0.25, midRatio: 0.375, rightRatio: 0.375, topRatio: 0.5 },
+    layoutsByProject: {},
     fileListViewMode: 'list',
     fileDiffSplitPercent: 35,
     commandConsole: {
@@ -242,6 +248,23 @@ export const useConfigStore = defineStore('config', () => {
   // 设置当前目录
   function setCurrentDirectory(dir: string) {
     currentDirectory.value = dir || ''
+  }
+
+  // 为当前项目挑选应使用的布局比例,写回 ui.layout(工作副本)。
+  // 优先级:
+  //   1. layoutsByProject[cwd] —— 已存项目布局
+  //   2. ui.layout legacy 兜底 —— 老 config 文件遗留的全局 layout(未隔离前的共享值)
+  //   3. defaultUiSettings.layout
+  // 命中后更新 ui.value.layout; 调用方(App.vue loadLayoutRatios)对外只读 ui.value.layout 即可,
+  // 不必感知 per-project 抽象。watch(ui.value.layout) 负责把这个工作副本写回 layoutsByProject[cwd]。
+  function applyProjectLayoutToRef() {
+    const cwd = currentDirectory.value
+    if (cwd && ui.value.layoutsByProject?.[cwd]) {
+      ui.value.layout = { ...ui.value.layoutsByProject[cwd] }
+      return
+    }
+    // fallback: 保持 ui.value.layout 当前值(loadConfig 已合并 legacy ui.layout 或 default)。
+    // 不主动再写,避免触发不必要的 layout watch。
   }
 
   // 应用主题
@@ -499,8 +522,30 @@ export const useConfigStore = defineStore('config', () => {
         }
       } else {
         // 已有 ui 字段：从响应合并到 ref（缺字段走默认值补齐）
+        // layoutsByProject: 按项目隔离的布局镜像。sanitize 成合法 map<string, UiLayout>。
+        const rawLayoutsByProject = (configData.ui.layoutsByProject && typeof configData.ui.layoutsByProject === 'object' && !Array.isArray(configData.ui.layoutsByProject))
+          ? configData.ui.layoutsByProject
+          : {}
+        const sanitizedLayoutsByProject: Record<string, UiLayout> = {}
+        for (const [projPath, projLayout] of Object.entries(rawLayoutsByProject)) {
+          if (projLayout && typeof projLayout === 'object' && !Array.isArray(projLayout)) {
+            const p = projLayout as Partial<UiLayout>
+            sanitizedLayoutsByProject[projPath] = {
+              leftRatio: Number.isFinite(Number(p.leftRatio)) ? Number(p.leftRatio) : defaultUiSettings.layout.leftRatio,
+              midRatio: Number.isFinite(Number(p.midRatio)) ? Number(p.midRatio) : defaultUiSettings.layout.midRatio,
+              rightRatio: Number.isFinite(Number(p.rightRatio)) ? Number(p.rightRatio) : defaultUiSettings.layout.rightRatio,
+              topRatio: Number.isFinite(Number(p.topRatio)) ? Number(p.topRatio) : defaultUiSettings.layout.topRatio,
+            }
+          }
+        }
+
+        // layout 字段: 全局默认兜底值(legacy 也指它)。保留 configData.ui.layout 原值,
+        // 不再被按项目覆盖写,所以 ref 里的 layout 仅作为"新项目进入时的初值"。
+        const globalLayout: UiLayout = { ...defaultUiSettings.layout, ...(configData.ui.layout || {}) }
+
         ui.value = {
-          layout: { ...defaultUiSettings.layout, ...(configData.ui.layout || {}) },
+          layout: globalLayout,
+          layoutsByProject: sanitizedLayoutsByProject,
           fileListViewMode: configData.ui.fileListViewMode === 'tree' ? 'tree' : 'list',
           fileDiffSplitPercent: Number.isFinite(Number(configData.ui.fileDiffSplitPercent))
             ? Math.min(85, Math.max(15, Number(configData.ui.fileDiffSplitPercent)))
@@ -517,6 +562,15 @@ export const useConfigStore = defineStore('config', () => {
           mindmapDir: typeof configData.ui.mindmapDir === 'string' ? configData.ui.mindmapDir : defaultUiSettings.mindmapDir,
         }
       }
+
+      // ============================================================
+      // 按项目隔离布局比例
+      // ============================================================
+      // 优先级:layoutsByProject[currentDirectory] > legacy layoutsByProject 兜底 >
+      // global ui.layout(legacy 全局值,迁移为当前项目条目) > 默认值。
+      // 命中后直接把项目布局写进 ui.layout(ref),App.vue loadLayoutRatios 会读这同一个 ref。
+      // 老用户首次升级:原 ui.layout 全局值会被迁移为当前项目的条目,不破坏既有体验。
+      applyProjectLayoutToRef()
 
       // 标记 UI 配置已加载（启动防抖写入的 watch）
       isUiLoaded.value = true
@@ -608,11 +662,20 @@ export const useConfigStore = defineStore('config', () => {
     _uiSaveTimer = setTimeout(() => { flushUiSaveNow() }, UI_SAVE_DEBOUNCE_MS)
   }
 
-  /** 重置布局比例到默认（应用到 DOM + 立即落盘） */
+  /**
+   * 重置布局比例到默认（应用到 DOM + 立即落盘）。
+   * 含义:把当前项目的布局条目显式写成默认值,使得:
+   *  - 立刻在 DOM 上看到默认比例
+   *  - 重新加载此项目时仍读到默认比例(reset 在跨会话生效)
+   *  - 其它已存项目条目不受影响
+   */
   async function resetUiLayout() {
     ui.value.layout = { ...defaultUiSettings.layout }
-    // 落盘
-    await saveUiSettings({ layout: ui.value.layout }, { immediate: true })
+    const cwd = currentDirectory.value
+    if (cwd) {
+      ui.value.layoutsByProject = { ...ui.value.layoutsByProject, [cwd]: { ...ui.value.layout } }
+    }
+    await saveUiSettings({ layoutsByProject: ui.value.layoutsByProject }, { immediate: true })
     return ui.value.layout
   }
 
@@ -620,7 +683,18 @@ export const useConfigStore = defineStore('config', () => {
   watch(() => ui.value.fileListViewMode, (v) => { if (isUiLoaded.value) saveUiSettings({ fileListViewMode: v }) })
   watch(() => ui.value.fileDiffSplitPercent, (v) => { if (isUiLoaded.value) saveUiSettings({ fileDiffSplitPercent: v }) })
   watch(() => ui.value.editorAutoSave, (v) => { if (isUiLoaded.value) saveUiSettings({ editorAutoSave: v }) })
-  watch(() => ui.value.layout, (v) => { if (isUiLoaded.value) saveUiSettings({ layout: v }) }, { deep: true })
+  // layout 是当前项目的工作副本。变化时把当前项目的 layoutsByProject 条目更新为该值,
+  // 同时持久化整张 layoutsByProject map(服务端对这个 key 做深合并,保留其它项目)。
+  // 不再写全局 ui.layout(否则一个项目拖完会被另一个项目读到),保持 layout 字段为静态默认。
+  // 切项目时由 DirectorySelector 在 loadConfig(true) 后派发 ui-layout-reset 事件给 App.vue 重应用 DOM,
+  // 这里不做 currentDirectory 的 watch(applyProjectLayoutToRef 已在 loadConfig 内把工作副本拼好)。
+  watch(() => ui.value.layout, (v) => {
+    if (!isUiLoaded.value) return
+    const cwd = currentDirectory.value
+    if (!cwd) return
+    ui.value.layoutsByProject = { ...ui.value.layoutsByProject, [cwd]: v }
+    saveUiSettings({ layoutsByProject: ui.value.layoutsByProject })
+  }, { deep: true })
   watch(() => ui.value.commandConsole, (v) => { if (isUiLoaded.value) saveUiSettings({ commandConsole: v }) }, { deep: true })
 
   // 页面卸载时强制 flush 待发送的请求，避免拖拽松手后立刻关闭导致丢数据

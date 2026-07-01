@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **zen-gitsync** (6460 symbols, 13528 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **zen-gitsync** (6472 symbols, 13538 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -40,25 +40,5 @@ This project is indexed by GitNexus as **zen-gitsync** (6460 symbols, 13528 rela
 | Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
 | Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
-| Work in the Components area (470 symbols) | `.claude/skills/generated/components/SKILL.md` |
-| Work in the Scripts area (431 symbols) | `.claude/skills/generated/scripts/SKILL.md` |
-| Work in the Routes area (88 symbols) | `.claude/skills/generated/routes/SKILL.md` |
-| Work in the Stores area (85 symbols) | `.claude/skills/generated/stores/SKILL.md` |
-| Work in the Views area (66 symbols) | `.claude/skills/generated/views/SKILL.md` |
-| Work in the Workbench area (62 symbols) | `.claude/skills/generated/workbench/SKILL.md` |
-| Work in the Flow area (61 symbols) | `.claude/skills/generated/flow/SKILL.md` |
-| Work in the Cli area (40 symbols) | `.claude/skills/generated/cli/SKILL.md` |
-| Work in the Server area (32 symbols) | `.claude/skills/generated/server/SKILL.md` |
-| Work in the Composables area (32 symbols) | `.claude/skills/generated/composables/SKILL.md` |
-| Work in the Buttons area (22 symbols) | `.claude/skills/generated/buttons/SKILL.md` |
-| Work in the Cluster_280 area (14 symbols) | `.claude/skills/generated/cluster-280/SKILL.md` |
-| Work in the Middleware area (12 symbols) | `.claude/skills/generated/middleware/SKILL.md` |
-| Work in the Git area (12 symbols) | `.claude/skills/generated/git/SKILL.md` |
-| Work in the Cluster_74 area (9 symbols) | `.claude/skills/generated/cluster-74/SKILL.md` |
-| Work in the Cluster_76 area (9 symbols) | `.claude/skills/generated/cluster-76/SKILL.md` |
-| Work in the Cluster_82 area (9 symbols) | `.claude/skills/generated/cluster-82/SKILL.md` |
-| Work in the Cluster_281 area (7 symbols) | `.claude/skills/generated/cluster-281/SKILL.md` |
-| Work in the Socket area (4 symbols) | `.claude/skills/generated/socket/SKILL.md` |
-| Work in the Plugins area (3 symbols) | `.claude/skills/generated/plugins/SKILL.md` |
 
 <!-- gitnexus:end -->

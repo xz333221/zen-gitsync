@@ -1006,6 +1006,8 @@ export function registerConfigRoutes({
 
   // 保存 UI 状态（视图模式/分割比例/控制台状态/布局比例/编辑器自动保存等）
   // 接受 partial body，浅合并到顶层 ui 对象。例：{ layout: {...} } / { commandConsole: {...} } / { fileListViewMode: 'tree' }
+  // 例外：layoutsByProject 是"按项目 cwd → layout"的 map；多个实例并行修改不同项目时
+  //   浅替换会丢失其它项目条目，因此对这个 key 做 per-project 合并。
   app.post('/api/config/save-ui-settings', express.json(), async (req, res) => {
     try {
       const partial = req.body && typeof req.body === 'object' ? req.body : {}
@@ -1016,9 +1018,23 @@ export function registerConfigRoutes({
       if (!rawConfig.ui || typeof rawConfig.ui !== 'object' || Array.isArray(rawConfig.ui)) {
         rawConfig.ui = {}
       }
+      if (!rawConfig.ui.layoutsByProject || typeof rawConfig.ui.layoutsByProject !== 'object' || Array.isArray(rawConfig.ui.layoutsByProject)) {
+        rawConfig.ui.layoutsByProject = {}
+      }
 
       // 浅合并顶层 ui 字段（支持嵌套对象整体替换，如 commandConsole）
       for (const key of Object.keys(partial)) {
+        if (key === 'layoutsByProject') {
+          // 深合并 map<string, layout>：保留其它项目条目
+          const incoming = partial[key]
+          if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+            rawConfig.ui.layoutsByProject = {
+              ...rawConfig.ui.layoutsByProject,
+              ...incoming,
+            }
+          }
+          continue
+        }
         rawConfig.ui[key] = partial[key]
       }
 
