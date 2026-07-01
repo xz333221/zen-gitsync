@@ -17,17 +17,24 @@
 // 非 Git 仓库空态下展示"最近项目"列表
 // 数据源:复用 DirectorySelector 调用的 /api/recent_directories
 // 交互:点击 → 在新标签页打开(POST /api/open-new-tab-gui)
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { ElMessage } from "element-plus";
-import { Folder, Loading } from "@element-plus/icons-vue";
+import { Folder, Loading, Search } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 
-withDefaults(defineProps<{ variant?: 'inline' | 'fullpage' }>(), {
-  variant: 'inline',
-});
+const { variant = 'inline' } = defineProps<{ variant?: 'inline' | 'fullpage' }>();
 
 const recentDirectories = ref<Array<{ path: string; exists: boolean }>>([]);
 const isLoadingRecent = ref(false);
+// 搜索关键词:仅 fullpage 模式展示输入框,inline 模式走默认行为不渲染
+const searchQuery = ref('');
+
+// 大小写不敏感子串匹配,匹配 path 任意位置
+const filteredDirectories = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return recentDirectories.value;
+  return recentDirectories.value.filter(item => item.path.toLowerCase().includes(q));
+});
 
 async function loadRecentDirectories() {
   isLoadingRecent.value = true;
@@ -82,6 +89,24 @@ onMounted(() => {
       <span class="recent-projects__title">{{ $t('@13D1C:最近项目') }}</span>
       <span class="recent-projects__hint">{{ $t('@13D1C:点击在新标签页打开') }}</span>
     </div>
+    <!-- 搜索框:仅 fullpage 模式(非 Git 仓库右侧整列)展示,inline 紧凑版不渲染避免占用空间 -->
+    <div v-if="variant === 'fullpage'" class="recent-projects__search">
+      <el-icon class="recent-projects__search-icon" aria-hidden="true"><Search /></el-icon>
+      <input
+        v-model="searchQuery"
+        type="text"
+        class="recent-projects__search-input"
+        :placeholder="$t('@13D1C:搜索最近项目...')"
+        :aria-label="$t('@13D1C:搜索最近项目')"
+      />
+      <button
+        v-if="searchQuery"
+        type="button"
+        class="recent-projects__search-clear"
+        :aria-label="$t('@13D1C:清空搜索')"
+        @click="searchQuery = ''"
+      >×</button>
+    </div>
     <div v-if="isLoadingRecent && recentDirectories.length === 0" class="recent-projects__empty">
       <el-icon><Loading /></el-icon>
       <span>{{ $t('@13D1C:加载中...') }}</span>
@@ -89,9 +114,12 @@ onMounted(() => {
     <div v-else-if="recentDirectories.length === 0" class="recent-projects__empty">
       {{ $t('@13D1C:暂无最近项目') }}
     </div>
+    <div v-else-if="filteredDirectories.length === 0" class="recent-projects__empty">
+      {{ $t('@13D1C:没有匹配 "{q}" 的项目', { q: searchQuery }) }}
+    </div>
     <ul v-else class="recent-projects__list" :aria-label="$t('@13D1C:最近项目列表')">
       <li
-        v-for="item in recentDirectories"
+        v-for="item in filteredDirectories"
         :key="item.path"
         class="recent-projects__item"
         :class="{ 'is-missing': !item.exists }"
@@ -165,6 +193,67 @@ onMounted(() => {
 .recent-projects--fullpage .recent-projects__hint {
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+/* 搜索框:fullpage 模式独占,inline 模式不渲染 */
+.recent-projects__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  padding: 0 12px;
+  height: 40px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.recent-projects__search:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--tint-primary-08);
+}
+.recent-projects__search-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+  margin-right: 8px;
+}
+.recent-projects__search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  padding: 0;
+  height: 100%;
+}
+.recent-projects__search-input::placeholder {
+  color: var(--text-tertiary);
+}
+.recent-projects__search-clear {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 6px;
+  border: none;
+  background: var(--bg-component-hover);
+  color: var(--text-secondary);
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.recent-projects__search-clear:hover {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
 }
 .recent-projects__empty {
   display: flex;
