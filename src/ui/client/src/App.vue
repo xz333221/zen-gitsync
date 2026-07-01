@@ -961,9 +961,14 @@ body {
 
 /* 非 Git 仓库:右侧只保留 RecentProjectsList 一块,
    隐藏 h-resizer + log-list 行,让 commit-form 行占满右侧整列。
-   用 minmax(0, 1fr) 替代 1fr,让 grid row 高度不被子项 min-content 撑大 */
-.grid-layout--no-bottom {
+   用 minmax(0, 1fr) 替代 1fr,让 grid row 高度不被子项 min-content 撑大。
+   注意:这里也要重置 grid-template-columns,否则 @media (max-width:1024px)
+   媒体查询的 5 列布局会覆盖默认 3 列,让右列 (commit-form) 被挤窄。
+   selector 重复 .grid-layout 提升 specificity(media query 用了 !important,
+   这里 selector 升级到 (0,2,0) 匹配 media query 的 !important 优先级) */
+.grid-layout.grid-layout--no-bottom {
   grid-template-rows: minmax(0, 1fr) 0fr 0fr;
+  grid-template-columns: 0.25fr 4px 0.75fr !important;
 }
 
 .git-status-panel {
