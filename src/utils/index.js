@@ -594,6 +594,7 @@ Options:
   --set-default-message=<msg>  Set default commit message
   get-config                   Show current configuration
   -y                          Auto commit with default message
+  --ai                        AI generate commit message, commit and push
   -m <message>                Commit message (use quotes if message contains spaces)
   -m=<message>                Commit message (use this form without spaces around '=')
   --path=<path>               Set custom working directory
@@ -626,6 +627,9 @@ Example:
   g -m "Initial commit"      Commit with a custom message
   g -m=Fix-bug              Commit with a custom message (no spaces around '=')
   g -y                      Auto commit with the default message
+  g --ai                    AI generate commit message, commit and push
+  g --ai --no-diff          AI commit without displaying diff
+  g --ai --interval=600     AI commit every 10 minutes (600 seconds)
   g -y --interval=600       Commit every 10 minutes (600 seconds)
   g --path=/path/to/repo    Specify a custom working directory
   g log                     Show recent commit logs
@@ -1040,8 +1044,8 @@ async function execAddAndCommit({statusOutput, commitMessage, exit}) {
     }
   }
 
-  // 检查命令行参数，判断是否有 -y 参数
-  const autoCommit = process.argv.includes('-y');
+  // 检查命令行参数，判断是否有 -y 或 --ai 参数（都跳过用户输入提示）
+  const autoCommit = process.argv.includes('-y') || process.argv.includes('--ai');
 
   if (!autoCommit && !commitMessageArg) {
     // 如果没有 -y 参数，则等待用户输入提交信息

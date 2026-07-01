@@ -147,6 +147,13 @@ async function createGitCommit(options) {
     // 先检查本地是否有未提交的更改
     const hasLocalChanges = !statusOutput.includes('nothing to commit, working tree clean');
     if (hasLocalChanges) {
+      // --ai 模式: 动态加载 AI 模块生成 Conventional Commits 提交信息
+      // (懒加载,普通 g -y / g -m 不会触发,避免冷启动拖慢)
+      const useAi = process.argv.includes('--ai');
+      if (useAi) {
+        const { generateAiCommitMessage } = await import('./aiCommit.js');
+        commitMessage = await generateAiCommitMessage({ locale: config.locale });
+      }
       // 检查是否有 --no-diff 参数
       await execDiff()
       // 获取实际使用的提交信息（可能是用户交互输入的）
@@ -383,6 +390,7 @@ async function main() {
   const hasGitTask = process.argv.some(arg =>
     arg.startsWith('--interval') ||
     arg === '-y' ||
+    arg === '--ai' ||
     arg.startsWith('-m')
   );
   if (hasGitTask || !cmdArg) {
