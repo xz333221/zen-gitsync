@@ -18,30 +18,25 @@ import App from './App.vue'
 import i18n from './locales'
 import './main.css'
 import './styles/tailwindcss.css'
+// element-plus 全量样式必须在项目自定义样式之前注入。
+// 原因:EP 2.14+ 的 dist/index.css 在 :root 下用 var() 链式定义主题变量
+// (--el-table-bg-color: var(--el-fill-color-blank) 等),:root 与
+// [data-theme="dark"] 特异性相同 (0,1,0),相同特异性下后加载的赢。
+// 若 EP CSS 在 dark-theme.scss 之后加载,会把深色覆盖盖回 :root 的 #fff,
+// 导致深色主题下 el-table 背景仍是白色。
+// 入口顺序:EP 全量 CSS → 项目 scss 覆盖,保证项目深色变量赢。
+// 代价:首屏多 ~80KB gzip CSS,但换掉所有 EP 组件样式延迟/裸奔 bug,值得。
+import 'element-plus/dist/index.css'
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import '@vue-flow/controls/dist/style.css'
+import 'local-file-picker/dist/file-picker.css'
 import './styles/common.scss'
 import './styles/dark-theme.scss'
 import './styles/unified-dialogs.scss'
 import './styles/workbench.scss'
 import './styles/markdown-renderer.css'
 import 'virtual:svg-icons-register'
-import 'local-file-picker/dist/file-picker.css'
-// Vue Flow 样式必须在 VueFlow 组件 mount 之前注入,否则会 console warn
-// 之前写在 FlowExecutionViewer/FlowOrchestrationWorkspace 组件级 import,
-// 由于这俩组件是 defineAsyncComponent 懒加载,首次 mount 时 css 还没注入。
-// 提到入口保证应用启动即加载。
-import '@vue-flow/core/dist/style.css'
-import '@vue-flow/core/dist/theme-default.css'
-import '@vue-flow/controls/dist/style.css'
-// element-plus 全量样式入口注入。
-// 原因:unplugin-vue-components 的 ElementPlusResolver 只对模板里检测到的组件
-// 按需注入 CSS,但有两类场景漏掉:
-//  1) 命令式 API(ElMessage / ElMessageBox)——不走模板,resolver 检测不到;
-//  2) 异步组件(defineAsyncComponent)用的 EP 组件(如 LogList 的 el-table)——
-//     首屏 chunk 还在下载时样式未注入,导致表格行/边框裸奔。
-// 入口直接引全量 dist/index.css,一次性解决所有 EP 组件样式时序问题,
-// 不再逐个手动 import message/message-box/table 等 style/css.mjs。
-// 代价:首屏多 ~80KB gzip CSS,但换掉所有样式延迟/裸奔 bug,值得。
-import 'element-plus/dist/index.css'
 import { initSvg } from './components/SvgIcon'
 
 const app = createApp(App)
