@@ -41,6 +41,8 @@ pnpm-debug.log*
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+# pnpm 11 自动写入的 minimumReleaseAgeExclude 等本地抑制配置,跟 pnpm-lock.yaml 同性质
+pnpm-workspace.yaml
 .port
 
 # Auto-generated log
