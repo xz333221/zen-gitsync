@@ -45,10 +45,12 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: process.env.CI ? 'github' : 'list',
-  timeout: 30_000,
-  expect: { timeout: 5_000 },
+  timeout: 90_000,
+  expect: { timeout: 15_000 },
   use: {
-    baseURL: `http://localhost:${VITE_PORT}`,
+    // 必须 IPv4:本机 localhost 优先解析 [::1],但 vite strictPort 绑 127.0.0.1,
+    // localhost 直连会超时。详见 .claude/rules/hmr-debug-check.md 规则 0。
+    baseURL: `http://127.0.0.1:${VITE_PORT}`,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -61,10 +63,31 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] }
     }
   ],
-  // 不自动启 webServer —— 因为需要 .port 已存在(后端先起)
-  // 用户手动跑: node server.js && npx playwright test
-  // 设为空数组让 Playwright 跳过 webServer 检查
-  webServer: undefined
+  // 自动启 dev server(本地复用、CI 强制启):
+  // 顺序敏感——backend 先必须写 .port=5545,vite 后读它配 proxy(vite.config.ts:26-42)。
+  // backend 用裸 node(不走 nodemon,避免文件改动触发重启杀掉测试进程)。
+  webServer: [
+    {
+      // 必须传 PORT=5545:src/ui/server/index.js:517-523 端口策略默认随机,只有
+      // 环境变量 PORT 才锁死端口。Windows cmd 不支持 PORT=5545 语法,用 cross-env。
+      command: 'npx cross-env PORT=5545 node server.js --no-open',
+      cwd: '../../..',
+      port: 5545,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      command: 'npm run dev:vue',
+      cwd: '../..',
+      port: 5544,
+      reuseExistingServer: !process.env.CI,
+      timeout: 90_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  ],
 })
 
 // 导出后端端口供测试用
