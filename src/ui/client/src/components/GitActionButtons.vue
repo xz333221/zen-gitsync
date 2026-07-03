@@ -193,7 +193,11 @@ defineExpose({
   display: flex;
   gap: 6px;
   align-items: center;
-  justify-content: space-between;
+  /* 不要 space-between —— 那会让"基础三件套"和"组合快捷方式"两组之间
+     出现比组内 gap 大很多的空隙,视觉上像是按钮之间多了一段空白。
+     改用 flex-start + right-actions 用 margin-left: auto 把自己推右边,
+     中间间距等于容器剩余空间,看起来更自然。 */
+  justify-content: flex-start;
 }
 
 .left-actions {
@@ -211,6 +215,7 @@ defineExpose({
   align-items: stretch;
   gap: 6px;
   height: 36px;
+  margin-left: auto;
 }
 
 </style>
