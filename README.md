@@ -74,11 +74,59 @@ $ g ui
 
 ![ui](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/zen-gitsync-ui-git.png)
 
-The GUI runs as a local web server and opens in your default browser. It attaches to the current Git repository automatically. The activity bar on the left switches between four views: **Git**, **Editor**, **Source Map**, and **Workbench**.
+The GUI runs as a local web server and opens in your default browser. It attaches to the current Git repository automatically. The activity bar on the left switches between four primary views: **Git**, **Editor**, **Source Map**, and **Workbench** — plus three utility views (**Console**, **System Monitor**, **Mindmap**).
+
+### Architecture at a glance
+
+```
+                  ┌─────────────────────────────────────────────┐
+                  │  Header:  current dir · theme · user        │
+                  ├─────────────────────────────────────────────┤
+                  │  Activity Bar (left rail)                   │
+                  │  ┌───┐                                      │
+                  │  │Git│────► Git panel  (file list + commit) │
+                  │  └───┘                                      │
+                  │  ┌─────┐                                    │
+                  │  │Edit│────► Monaco editor + file tree     │
+                  │  └─────┘                                    │
+                  │  ┌──────┐                                   │
+                  │  │SrcMap│─► AI dependency graph             │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                    │
+                  │  │Bench │─► Tasks + Claude runs             │
+                  │  └──────┘                                    │
+                  │  ┌──────┐                                    │
+                  │  │Consol│─► Commands + terminal             │
+                  │  └──────┘                                    │
+                  └─────────────────────────────────────────────┘
+                       ▲              ▲              ▲
+                       │              │              │
+                  Pinia stores ──── EventBus ──── Socket.IO
+                       ▲
+                       │
+                  Backend Express server (port 5545) → git / npm / shell
+```
+
+### A typical day in the GUI
+
+```
+  1.  g ui            → browser opens at http://127.0.0.1:5544
+  2.  Glance header   → current dir, branch, instance count, theme toggle
+  3.  Edit files      → Activity Bar → Editor, save with Ctrl+S
+  4.  Stage & commit  → Activity Bar → Git, pick files, fill commit form, push
+  5.  AI commit msg   → click ✨ AI 生成 in commit form, diff → Conventional Commits
+  6.  Background job  → Activity Bar → Workbench, run task, watch live logs
+  7.  Visualize code  → Activity Bar → Source Map → 开始分析 → click nodes
+  8.  Quick command   → Activity Bar → Console → pick saved command → run
+```
 
 ---
 
 ### Core Git Panel
+
+![Git panel — file list, structured commit form, history](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/git-panel-changes.png)
+
+> Single-screen view of "what changed → what to commit → what was committed". The left column lists changed files grouped by staged / unstaged / untracked / conflicted; the right side stacks the structured commit form on top of a chronological commit history. No tab switching required for the 80% case.
 
 | Feature | Description |
 |---|---|
@@ -107,6 +155,14 @@ The commit form supports two modes toggled by a switch:
 - **Free-text mode** — single text area for any commit message
 
 In either mode, click **AI Generate** to fill in the fields automatically based on the staged diff.
+
+---
+
+### Quick directory switch
+
+![Directory switcher dialog](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/directory-switcher.png)
+
+> Click the directory name in the header (or the folder icon) to open this dialog. Type a path, hit **浏览** to use the OS file picker, or pick from **常用目录** for one-click switching. **使用新标签打开** spawns a new GUI tab on that path so you can keep the current project open.
 
 ---
 
@@ -150,12 +206,13 @@ Save reusable templates for:
 
 ![Command Orchestration](https://home.flowdash.cn/upload/VditorFiles/2026-1/zen-gitsync_SBAJdlvm.png)
 
-Create, manage, and run shell commands from the sidebar:
+Create, manage, and run shell commands from the sidebar (Console view):
 
 - Define commands with a name, shell command, and working directory
 - Add **parameters** with names, descriptions, and default values (referenced via `{{paramName}}`)
 - Run a command instantly in a new terminal session
 - Save command **templates** for quick reuse
+- Each command has its own **enable / disable** toggle so you can stage a suite of commands without running them
 
 ---
 
@@ -177,6 +234,10 @@ Build automated pipelines with a drag-and-drop canvas:
 ---
 
 ### NPM Scripts Panel
+
+![NPM scripts panel — scanned packages and runnable scripts](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/npm-scripts.png)
+
+> The panel lives inside the Git view (left column). It scans every `package.json` in the repo on demand, groups scripts by package, and lets you click any script name to run it directly. The **NPM 路径** setting under **Settings** configures the scan root and exclusion patterns.
 
 - Automatically discovers all `package.json` files in the project tree
 - Lists their `scripts` entries
@@ -204,6 +265,17 @@ Configure commands or workflows to run automatically when a project is opened:
 
 ---
 
+### Four primary views at a glance
+
+| View | Purpose | Persistent state | Highlights |
+|---|---|---|---|
+| **Git** | Day-to-day staging, committing, pushing, history review | Per-project UI prefs (view mode, layout ratios) | Structured commit form, AI commit message, selection-scoped quick push |
+| **Editor** | Browse & edit project files without leaving the GUI | Open tabs, unsaved markers, recent files | Monaco editor with syntax highlighting, Markdown preview, file search |
+| **Source Map** | AI-built visual dependency graph | Last analyzed project, layout ratios | Three-pane (tree / graph / source), subsystems, entry-point detection |
+| **Workbench** | Batch Claude execution on the repo | Tasks, prompts, log retention | Subtask attachments, isolated contexts, live SSE logs, simple-task continuation |
+
+---
+
 ### Built-in Code Editor
 
 A full IDE-like editor (second icon in the activity bar) for browsing and editing project files without leaving the tool:
@@ -225,6 +297,10 @@ A full IDE-like editor (second icon in the activity bar) for browsing and editin
 
 ### Source Map (AI Codebase Visualization)
 
+![Source Map view](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/source-map.png)
+
+> Three-pane layout: file tree on the left, interactive dependency graph in the middle (drag / zoom / fit-view / minimap), source preview on the right. Click **开始分析** to send the project to the configured LLM and the graph populates with color-coded subsystems, an entry-point node, and tech-stack detection. Live progress streams into the **AGENT 日志** panel at the bottom.
+
 A dedicated view (third icon in the activity bar) that uses an AI model to build a visual dependency graph of your project:
 
 | Feature | Description |
@@ -244,6 +320,10 @@ Configure the model endpoint, API key, and model name in **Settings → AI**.
 ---
 
 ### Workbench (Task-Driven Claude Execution)
+
+![Workbench — task detail with Claude execution log](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/workbench-task-detail.png)
+
+> Sidebar lists tasks (with project grouping) and prompt presets. The main pane is split between the task definition (commit-code field, preset selector, run/stop buttons) and the live **Claude** execution stream — a chronological card stack of stdout/stderr output, scrolled to the latest. The bottom composer captures follow-up prompts for `claude --resume`.
 
 A dedicated view (fourth icon in the activity bar) for batch-running Claude against your repo. Define a task, split it into ordered subtasks, attach a reusable prompt preset, then click **Run task** — each subtask launches in its own terminal window with `claude --permission-mode bypassPermissions`, so context never piles up.
 
@@ -274,6 +354,10 @@ Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.
 ---
 
 ### Settings
+
+![User settings dialog — general tab](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/settings-general.png)
+
+> Click the gear icon in the top-right header. Tabs cover **General / Git / Commit / AI / Theme / Language / File Locking / NPM Paths**. Most toggles take effect immediately without restarting the GUI.
 
 | Setting | Description |
 |---|---|
@@ -486,11 +570,59 @@ $ g ui
 
 ![ui](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/zen-gitsync-ui-git.png)
 
-GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。左侧 Activity Bar 可在四个视图之间切换：**Git**、**编辑器**、**源码地图**、**工作台**。
+GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。左侧 Activity Bar 可在四个主视图（**Git** / **编辑器** / **源码地图** / **工作台**）与三个辅助视图（**控制台** / **系统监控** / **思维导图**）之间切换。
+
+### 一眼看懂架构
+
+```
+                  ┌─────────────────────────────────────────────┐
+                  │  顶部条: 当前目录 · 主题 · 用户              │
+                  ├─────────────────────────────────────────────┤
+                  │  Activity Bar(左侧导航)                     │
+                  │  ┌───┐                                      │
+                  │  │Git│────► Git 面板 (文件列表 + 提交)       │
+                  │  └───┘                                      │
+                  │  ┌─────┐                                    │
+                  │  │编辑│────► Monaco 编辑器 + 文件树         │
+                  │  └─────┘                                    │
+                  │  ┌──────┐                                   │
+                  │  │源图 │──► AI 依赖关系图                    │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                    │
+                  │  │工作 │──► 任务 + Claude 实时执行           │
+                  │  └──────┘                                    │
+                  │  ┌──────┐                                    │
+                  │  │控制 │──► 命令 + 终端                       │
+                  │  └──────┘                                    │
+                  └─────────────────────────────────────────────┘
+                       ▲              ▲              ▲
+                       │              │              │
+                  Pinia stores ──── EventBus ──── Socket.IO
+                       ▲
+                       │
+                  后端 Express (端口 5545) → git / npm / shell
+```
+
+### GUI 典型一天
+
+```
+  1.  g ui              → 浏览器自动打开 http://127.0.0.1:5544
+  2.  看顶部条          → 当前目录 / 当前分支 / 实例数 / 主题切换
+  3.  编辑文件          → Activity Bar → 编辑器,Ctrl+S 保存
+  4.  暂存并提交        → Activity Bar → Git,勾选文件,填提交表单,推送
+  5.  AI 生成提交信息   → 点击提交表单里的 ✨ AI 生成,基于 diff 生成
+  6.  后台任务          → Activity Bar → 工作台,执行任务,实时日志
+  7.  可视化代码        → Activity Bar → 源码地图 → 开始分析 → 点击节点
+  8.  快速命令          → Activity Bar → 控制台 → 选保存的命令 → 执行
+```
 
 ---
 
 ### 核心 Git 面板
+
+![Git 面板 — 文件列表、结构化提交表单、提交历史](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/git-panel-changes.png)
+
+> 单屏覆盖"改了什么 → 要提交什么 → 已经提交了什么"。左侧按 已暂存 / 未暂存 / 未追踪 / 冲突 分组列出变更文件；右侧上半部分是结构化提交表单，下半部分是时间倒序的提交历史。80% 的日常操作不需要切换 tab。
 
 | 功能 | 说明 |
 |---|---|
@@ -519,6 +651,14 @@ GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附�
 - **自由模式** — 单一文本框，输入任意提交信息
 
 两种模式下均可点击 **AI 生成** 按钮，根据当前 staged diff 自动填充提交信息。
+
+---
+
+### 快速切换目录
+
+![切换目录弹窗](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/directory-switcher.png)
+
+> 点击顶部条里的目录名（或文件夹图标）即可弹出该对话框。直接输入路径、点击 **浏览** 唤起系统文件选择器，或从 **常用目录** 一键切换。**使用新标签打开** 会在新 GUI 标签里加载目标路径，原项目保持不动。
 
 ---
 
@@ -562,12 +702,13 @@ GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附�
 
 ![命令编排](https://home.flowdash.cn/upload/VditorFiles/2026-1/zen-gitsync_SBAJdlvm.png)
 
-在侧边栏创建、管理并运行 Shell 命令：
+在侧边栏（控制台视图）创建、管理并运行 Shell 命令：
 
 - 定义命令（名称、Shell 命令、工作目录）
 - 添加**参数**（名称、描述、默认值，通过 `{{paramName}}` 引用）
 - 一键在新终端会话中执行命令
 - 保存**命令模板**快速复用
+- 每条命令都有 **启用 / 禁用** 开关，可以在不立即运行的情况下预排一组命令
 
 ---
 
@@ -589,6 +730,10 @@ GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附�
 ---
 
 ### NPM 脚本面板
+
+![NPM 脚本面板 — 扫描到的包与可运行脚本](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/npm-scripts.png)
+
+> 面板嵌在 Git 视图左下角。按需扫描仓库里的所有 `package.json`，按包分组列出 scripts，点击脚本名即可直接运行。扫描根路径与排除规则在 **设置** 的 **NPM 路径** 中配置。
 
 - 自动扫描项目中所有 `package.json` 文件
 - 列出其中的 `scripts` 条目
@@ -616,6 +761,17 @@ GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附�
 
 ---
 
+### 四个主视图对照
+
+| 视图 | 用途 | 持久化状态 | 高亮特性 |
+|---|---|---|---|
+| **Git** | 日常暂存、提交、推送、历史回看 | 每个项目的 UI 偏好（视图模式、布局比例） | 结构化提交表单、AI 生成提交信息、选择范围一键推送 |
+| **编辑器** | 不离开 GUI 浏览并编辑项目文件 | 打开的 tab、未保存标记、最近访问 | Monaco 编辑器带语法高亮、Markdown 预览、文件搜索 |
+| **源码地图** | AI 生成的可视化依赖图 | 最近分析的项目、布局比例 | 三栏布局（树 / 图 / 源码）、子系统聚类、入口点识别 |
+| **工作台** | 在仓库上批量执行 Claude | 任务、提示词、日志保留策略 | 子任务附件、独立上下文、实时 SSE 日志、简单任务续聊 |
+
+---
+
 ### 内置代码编辑器
 
 Activity Bar 第二个视图，在 GUI 内直接浏览并编辑项目文件：
@@ -637,6 +793,10 @@ Activity Bar 第二个视图，在 GUI 内直接浏览并编辑项目文件：
 
 ### 源码地图（AI 代码库可视化）
 
+![源码地图视图](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/source-map.png)
+
+> 三栏布局：左侧文件树 / 中间可交互依赖图（拖拽、缩放、适配视图、缩略图） / 右侧源码预览。点击 **开始分析** 把项目发给配置好的 LLM，图上就会填入颜色分明的子系统、入口节点、技术栈识别结果。底部 **AGENT 日志** 实时输出扫描进度。
+
 Activity Bar 第三个视图，调用 AI 模型将项目代码库生成可交互的依赖关系图：
 
 | 功能 | 说明 |
@@ -656,6 +816,10 @@ Activity Bar 第三个视图，调用 AI 模型将项目代码库生成可交互
 ---
 
 ### 工作台（任务驱动的 Claude 执行）
+
+![工作台 — 任务详情 + Claude 实时执行日志](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/workbench-task-detail.png)
+
+> 侧边栏按项目分组列出任务和提示词预置；主面板上半部分是任务定义（提交代码字段、预置提示词下拉、运行 / 停止按钮），下半部分是 **Claude** 实时执行流 —— 按时间顺序堆叠的 stdout / stderr 卡片，自动滚到最新。底部续聊输入框可以接着 `claude --resume` 继续对话。
 
 Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定义任务、拆成有序子任务、绑定可复用的提示词预置，点 **执行任务** 后按顺序依次执行。
 
@@ -689,6 +853,10 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 ---
 
 ### 设置
+
+![用户设置弹窗 — 通用 tab](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/settings-general.png)
+
+> 点击顶部条右上角齿轮图标。tab 包含 **通用 / Git / 提交 / AI / 主题 / 语言 / 文件锁定 / NPM 路径**。大部分开关即时生效，无需重启 GUI。
 
 | 设置项 | 说明 |
 |---|---|
