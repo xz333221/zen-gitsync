@@ -34,7 +34,7 @@
     "dagre": "^0.8.5",
     "element-plus": "^2.11.4",
     "flow-mindmap": "^0.3.1",
-    "local-file-picker": "^0.1.7",
+    "local-file-picker": "^0.1.9",
     "marked": "^18.0.3",
     "markstream-vue": "1.0.3-beta.2",
     "monaco-editor": "^0.55.1",
