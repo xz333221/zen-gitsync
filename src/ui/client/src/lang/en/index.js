@@ -1517,6 +1517,7 @@ export default {
   '@13D1C:请输入远程仓库地址': 'Please enter the remote repository URL',
   '@13D1C:已添加远程仓库': 'Remote repository added',
   '@13D1C:初始化Git仓库': 'Initialize Git repository',
+  '@13D1C:打开其他目录': 'Open another directory',
   '@13D1C:初始化并添加远程': 'Init & add remote',
   '@13D1C:Git仓库初始化成功': 'Git repository initialized successfully',
   '@13D1C:个提交': 'A commit',

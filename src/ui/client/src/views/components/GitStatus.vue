@@ -608,6 +608,12 @@ async function addRemoteAndSetUpstream() {
   }
 }
 
+// 非 Git 仓库空态下的"打开其他目录"按钮:复用 DirectorySelector 顶部唯一的目录切换弹窗
+// 通过全局事件通知它打开,避免在 GitStatus 再造一份。
+function openDirectoryDialog() {
+  window.dispatchEvent(new CustomEvent('zen-gitsync:open-directory-dialog'))
+}
+
 // 初始化Git仓库
 const isInitializingRepo = ref(false)
 
@@ -1051,17 +1057,24 @@ defineExpose({
           <el-icon class="empty-icon"><Folder /></el-icon>
           <p class="empty-title">{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
           <p class="empty-desc">{{ $t('@13D1C:请初始化Git仓库或切换到Git仓库目录') }}</p>
-          <el-button
-            size="small"
-            type="primary"
-            plain
-            :loading="isInitializingRepo"
-            :disabled="isInitializingRepo"
-            style="margin-top: 12px;"
-            @click="initGitRepo"
-          >
-            {{ $t('@13D1C:初始化Git仓库') }}
-          </el-button>
+          <div class="empty-status-actions">
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              :loading="isInitializingRepo"
+              :disabled="isInitializingRepo"
+              @click="initGitRepo"
+            >
+              {{ $t('@13D1C:初始化Git仓库') }}
+            </el-button>
+            <el-button
+              size="small"
+              @click="openDirectoryDialog"
+            >
+              {{ $t('@13D1C:打开其他目录') }}
+            </el-button>
+          </div>
         </div>
         <!-- "最近项目"列表已抽出为 @/components/RecentProjectsList.vue,
              在 App.vue 中间空态(非 git 仓库时)随 Git 仓库初始化卡片一起展示 -->
@@ -1465,17 +1478,24 @@ defineExpose({
           <el-icon class="empty-icon"><Folder /></el-icon>
           <p class="empty-title">{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
           <p class="empty-desc">{{ $t('@13D1C:请初始化Git仓库或切换到Git仓库目录') }}</p>
-          <el-button
-            size="small"
-            type="primary"
-            plain
-            :loading="isInitializingRepo"
-            :disabled="isInitializingRepo"
-            style="margin-top: 12px;"
-            @click="initGitRepo"
-          >
-            {{ $t('@13D1C:初始化Git仓库') }}
-          </el-button>
+          <div class="empty-status-actions">
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              :loading="isInitializingRepo"
+              :disabled="isInitializingRepo"
+              @click="initGitRepo"
+            >
+              {{ $t('@13D1C:初始化Git仓库') }}
+            </el-button>
+            <el-button
+              size="small"
+              @click="openDirectoryDialog"
+            >
+              {{ $t('@13D1C:打开其他目录') }}
+            </el-button>
+          </div>
         </div>
       </div>
     </div>
@@ -1912,6 +1932,13 @@ defineExpose({
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   margin: 0;
+}
+
+.status-box.not-git-repo .empty-status-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
 }
 
 /* 分支信息样式 */

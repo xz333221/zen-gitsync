@@ -197,9 +197,13 @@ function onDocumentMouseDown(e: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('mousedown', onDocumentMouseDown, true)
+  // 监听全局事件:非 Git 仓库空态里的"打开其他目录"按钮通过这个事件弹出对话框,
+  // 复用此处唯一的对话框实例,避免在 GitStatus.vue 再造一份。
+  window.addEventListener('zen-gitsync:open-directory-dialog', onOpenDialog as EventListener)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onDocumentMouseDown, true)
+  window.removeEventListener('zen-gitsync:open-directory-dialog', onOpenDialog as EventListener)
 })
 
 // 在终端中打开当前目录

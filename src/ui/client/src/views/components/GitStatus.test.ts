@@ -29,7 +29,7 @@ import GitStatus from './GitStatus.vue'
 import { mockGitStore, mockConfigStore, mockLocaleStore } from '@/test-utils/mockStores'
 import { mountWithSetup } from '@/test-utils/mount'
 import { mockFetchResponse, resetFetch } from '@/test-utils/mockFetch'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { isFilePathLocked } from '@/utils/fileLock'
 
 function mountGitStatus(props = {}) {
@@ -152,7 +152,7 @@ describe('GitStatus.vue', () => {
     const { isImageFile } = await import('@/utils/fileKind')
     vi.mocked(isImageFile).mockReturnValue(true)
     mockFetchResponse('/api/file-content', { content: 'binary' })
-    const w = mountGitStatus()
+    mountGitStatus()
     expect(isImageFile('a.png')).toBe(true)
   })
 
@@ -231,7 +231,7 @@ describe('GitStatus.vue', () => {
 
   test('GS-22: hasConflictedFiles=true → gitStore 状态正确', () => {
     mockGitStore.hasConflictedFiles = true
-    const w = mountGitStatus()
+    mountGitStatus()
     expect(mockGitStore.hasConflictedFiles).toBe(true)
   })
 
