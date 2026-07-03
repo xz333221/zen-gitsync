@@ -282,7 +282,7 @@ A full IDE-like editor (second icon in the activity bar) for browsing and editin
 
 | Feature | Description |
 |---|---|
-| File tree | Collapsible directory tree with file-type icons |
+| File tree | Collapsible directory tree with file-type icons; **auto-refreshes every 15s** to pick up changes made outside the GUI (skipped when the tab is hidden or the search box is non-empty) |
 | File search | Type in the sidebar search box to filter the tree (180 ms debounce); matched substrings are highlighted in node names; `Ctrl+F` / `Cmd+F` focuses the box; `Esc` clears the query or blurs the input |
 | Multi-tab editing | Open multiple files simultaneously; tabs show unsaved (●) indicator |
 | Monaco editor | Syntax highlighting for JS, TS, Vue, Python, Go, JSON, CSS, and more |
@@ -778,7 +778,7 @@ Activity Bar 第二个视图，在 GUI 内直接浏览并编辑项目文件：
 
 | 功能 | 说明 |
 |---|---|
-| 文件树 | 可折叠的目录树，附带文件类型图标 |
+| 文件树 | 可折叠的目录树，附带文件类型图标；**每 15 秒自动刷新一次**，捕获 GUI 外部对文件的改动（标签页隐藏或搜索框非空时跳过） |
 | 文件搜索 | 在侧边栏搜索框中输入关键字过滤文件树（180ms 防抖），命中片段会在节点名中高亮；`Ctrl+F` / `Cmd+F` 聚焦搜索框，`Esc` 清空内容或失焦 |
 | 多标签页 | 同时打开多个文件，未保存文件显示 ● 标记 |
 | Monaco 编辑器 | 支持 JS、TS、Vue、Python、Go、JSON、CSS 等语法高亮 |

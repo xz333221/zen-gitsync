@@ -88,6 +88,41 @@ watch(searchQuery, (val) => {
 
 onBeforeUnmount(() => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  stopTreePolling()
+})
+
+// ── 文件树轮询:每 15s 自动刷新一次,捕获外部修改 ───────
+// 为什么轮询而不是 fs.watch:
+//   - 后端 instanceRegistry 的 fs.watch 是给跨进程通信用的,不面向文件树
+//   - 前端 fs.watch 在沙箱/网络盘下不可靠,Socket.IO 推送需要后端再搭一套 watcher
+//   - 15s GET /api/browse_directory 在普通仓库 < 100ms,完全够用
+// 后端参考 src/ui/server/index.js:590 注释的"前端轮询(15s)兜底"约定
+const TREE_POLL_MS = 15000
+let treePollTimer: ReturnType<typeof setInterval> | null = null
+
+function startTreePolling() {
+  stopTreePolling()
+  treePollTimer = setInterval(() => {
+    // 标签页隐藏时跳过(fetch 会被浏览器节流,且用户看不到)
+    if (document.hidden) return
+    // 没有打开的目录就不发请求
+    if (!configStore.currentDirectory) return
+    // 正在搜索时不刷,避免覆盖用户输入的关键词
+    if (searchQuery.value.trim()) return
+    refreshTree()
+  }, TREE_POLL_MS)
+}
+
+function stopTreePolling() {
+  if (treePollTimer) {
+    clearInterval(treePollTimer)
+    treePollTimer = null
+  }
+}
+
+// currentDirectory 变更时重启 interval(避免旧 timer 引用旧路径)
+watch(() => configStore.currentDirectory, () => {
+  startTreePolling()
 })
 
 async function loadDir(dirPath: string, depth = 0): Promise<TreeNode[]> {
@@ -521,6 +556,8 @@ onMounted(async () => {
   await initTree()
   // useThemeObserver 已自动注册观察者,无需在此再 observe
   setupViewVisibilityObserver()
+  // 启动文件树 15s 轮询,捕获外部修改(详见 startTreePolling 注释)
+  startTreePolling()
   // 首次 mount 时若已有打开的文件，主动把焦点交给 Monaco，避免初次进入编辑器视图时空格键失效。
   if (activeTabPath.value) {
     nextTick(() => focusEditor())
