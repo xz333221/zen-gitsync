@@ -17,6 +17,7 @@
 import { $t } from '@/lang/static'
 import { ref, computed } from 'vue'
 import { useGitStore } from '@stores/gitStore'
+import { useToolsStore } from '@stores/toolsStore'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Box, Delete, Edit, Download, Check } from '@element-plus/icons-vue'
 import CommonDialog from '@components/CommonDialog.vue'
@@ -33,6 +34,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const gitStore = useGitStore()
+const toolsStore = useToolsStore()
 
 // 储藏列表对话框状态
 const isStashListDialogVisible = ref(false)
@@ -471,6 +473,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
             :compareModified="stashCompareModified"
             context="stash-detail"
             :emptyText="$t('@76872:该stash没有变更文件')"
+            :showVscodeButton="toolsStore.vscodeAvailable"
             @file-select="handleStashFileSelect"
             @open-file="handleOpenFile"
             @open-with-vscode="handleOpenWithVSCode"

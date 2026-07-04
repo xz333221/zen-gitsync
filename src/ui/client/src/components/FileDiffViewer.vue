@@ -66,6 +66,7 @@ interface Props {
   context?: ContextType; // 使用上下文，用于确定打开文件的行为
   showOpenButton?: boolean; // 是否显示打开文件按钮，默认true
   showActionButtons?: boolean; // 是否显示操作按钮（锁定/暂存/撤回），默认false
+  showVscodeButton?: boolean; // 是否显示"用 VSCode 打开"按钮,默认 true(向后兼容)
   isFileLocked?: (filePath: string) => boolean; // 判断文件是否锁定
   isLocking?: (filePath: string) => boolean; // 判断文件是否正在锁定中
 }
@@ -85,6 +86,7 @@ const props = withDefaults(defineProps<Props>(), {
   context: 'git-status',
   showOpenButton: true,
   showActionButtons: false,
+  showVscodeButton: true,
   isFileLocked: () => false,
   isLocking: () => false
 });
@@ -1174,7 +1176,7 @@ onMounted(() => {
                     <el-icon class="btn-icon"><FolderOpened /></el-icon>
                   </button>
                 </el-tooltip>
-                <el-tooltip :content="$t('@E80AC:用VSCode打开文件')" placement="top" effect="light">
+                <el-tooltip v-if="showVscodeButton" :content="$t('@E80AC:用VSCode打开文件')" placement="top" effect="light">
                   <button class="modern-btn btn-icon-24" @click="handleOpenWithVSCode">
                     <svg-icon icon-class="vscode" class="btn-icon" />
                   </button>
@@ -1414,6 +1416,7 @@ onMounted(() => {
               </button>
             </el-tooltip>
             <el-tooltip
+              v-if="showVscodeButton"
               :content="$t('@E80AC:用VSCode打开文件')"
               placement="top"
               effect="light"

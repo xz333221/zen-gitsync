@@ -254,13 +254,13 @@ export function registerFileOpenRoutes({
         if (!dirPath) {
           throw new HttpError(400, '目录路径不能为空');
         }
-      
+
         try {
           await fs.access(dirPath);
         } catch (error) {
           throw new HttpError(400, `目录不存在或不可访问: ${dirPath}`);
         }
-      
+
         try {
           await launchClaudeCode(dirPath, { permissionMode });
           const message = permissionMode
@@ -276,5 +276,34 @@ export function registerFileOpenRoutes({
       } catch (error) {
         res.status(500).json({ success: false, error: error.message });
       }
+    }));
+
+  // 检测本地工具是否已安装(供前端根据结果决定是否显示对应按钮)
+  // 检测方式: spawn 'tool --version',exit 0 即视为已安装
+  // 超时 3s 避免某个工具卡在 PATH 解析上时整个接口挂起
+  app.get('/api/check-tools', asyncRoute(async (req, res) => {
+      const checkCmd = (cmd) => new Promise((resolve) => {
+        const child = spawn(cmd, ['--version'], {
+          stdio: 'ignore',
+          shell: process.platform === 'win32',
+        });
+        let done = false;
+        const finish = (ok) => {
+          if (done) return;
+          done = true;
+          try { child.kill('SIGKILL'); } catch {}
+          resolve(ok);
+        };
+        child.on('error', () => finish(false));
+        child.on('exit', (code) => finish(code === 0));
+        setTimeout(() => finish(false), 3000);
+      });
+
+      const [vscode, claude] = await Promise.all([
+        checkCmd('code'),
+        checkCmd('claude'),
+      ]);
+
+      res.json({ success: true, vscode, claude });
     }));
 }

@@ -59,6 +59,7 @@ import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
 import { useLocaleStore } from '@stores/localeStore'
 import { useInstancesStore } from '@stores/instancesStore'
+import { useToolsStore } from '@stores/toolsStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 
@@ -74,6 +75,7 @@ const configStore = useConfigStore()
 const localeStore = useLocaleStore()
 // 使用实例注册 Store
 const instancesStore = useInstancesStore()
+const toolsStore = useToolsStore()
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
@@ -127,6 +129,9 @@ onMounted(async () => {
 
   // 启动实例注册表轮询 + Socket.IO 监听
   instancesStore.start()
+
+  // 启动本地工具检测(vscode / claude 是否已安装),决定要不要显示对应按钮
+  toolsStore.startPolling()
 
   try {
     // 并行加载配置和目录信息
@@ -187,6 +192,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   // 停止实例注册表轮询 + 断开 Socket.IO
   instancesStore.stop()
+
+  // 停止本地工具检测轮询
+  toolsStore.stopPolling()
 
   // 主题 observer 由 useThemeObserver 自动清理
 

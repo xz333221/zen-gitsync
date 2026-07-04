@@ -44,6 +44,7 @@ import {
   Document,
 } from "@element-plus/icons-vue";
 import { useGitStore } from "@stores/gitStore";
+import { useToolsStore } from "@stores/toolsStore";
 import { extractPureMessage } from "@utils/index.ts";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
@@ -61,6 +62,7 @@ interface LogItem {
 
 // 使用Git状态和日志Store
 const gitStore = useGitStore();
+const toolsStore = useToolsStore();
 
 // 获取日志数据(直接用 ref,删除中间数组 logsData,避免双倍拷贝)
 const logs = ref<LogItem[]>([]);
@@ -1382,6 +1384,7 @@ function toggleFullscreen() {
           :compareModified="commitCompareModified"
           context="commit-detail"
           :emptyText="$t('@A1833:没有找到变更文件')"
+          :show-vscode-button="toolsStore.vscodeAvailable"
           @file-select="handleCommitFileSelect"
           @open-file="handleOpenFile"
           @open-with-vscode="handleOpenWithVSCode"

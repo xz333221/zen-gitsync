@@ -24,6 +24,7 @@ import ListIcon from '@/components/icons/ListIcon.vue'
 import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useGitStore } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
+import { useToolsStore } from '@stores/toolsStore'
 import { isFilePathLocked } from '@/utils/fileLock'
 import FileDiffViewer from '@components/FileDiffViewer.vue'
 import CommonDialog from '@components/CommonDialog.vue'
@@ -50,6 +51,7 @@ const props = defineProps({
 
 const gitStore = useGitStore()
 const configStore = useConfigStore()
+const toolsStore = useToolsStore()
 const isRefreshing = computed(() => gitStore.isLoadingStatus)
 const selectedFile = ref('')
 const diffContent = ref('')
@@ -1527,6 +1529,7 @@ defineExpose({
       context="git-status"
       :showOpenButton="true"
       :showActionButtons="true"
+      :showVscodeButton="toolsStore.vscodeAvailable"
       :isFileLocked="isFileLocked"
       :isLocking="isLocking"
       @file-select="handleGitFileSelect"

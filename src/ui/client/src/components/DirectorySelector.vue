@@ -23,6 +23,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
 import { useLocaleStore } from "@/stores/localeStore";
+import { useToolsStore } from "@/stores/toolsStore";
 import { storeToRefs } from "pinia";
 import IconButton from "@components/IconButton.vue";
 import SvgIcon from "@components/SvgIcon/index.vue";
@@ -38,6 +39,7 @@ const props = withDefaults(defineProps<{
 // 使用 store
 const configStore = useConfigStore();
 const gitStore = useGitStore();
+const toolsStore = useToolsStore();
 const { currentLocale } = storeToRefs(useLocaleStore());
 
 // 从 store 中获取当前目录
@@ -462,6 +464,7 @@ function onBrowserSelect(path: string) {
         <el-icon aria-hidden="true"><Monitor /></el-icon>
       </IconButton>
       <IconButton
+        v-if="toolsStore.vscodeAvailable"
         :tooltip="$t('@67CE7:用 VSCode 打开')"
         :aria-label="$t('@67CE7:用 VSCode 打开')"
         size="large"
@@ -475,6 +478,7 @@ function onBrowserSelect(path: string) {
         在 IconButton(el-tooltip) 嵌套下的失效问题。
       -->
       <el-popover
+        v-if="toolsStore.claudeAvailable"
         :visible="claudeMenuVisible"
         :trigger="('manual' as any)"
         placement="bottom-end"
