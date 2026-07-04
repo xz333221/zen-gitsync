@@ -27,7 +27,8 @@ import {
   Document
 } from '@element-plus/icons-vue'
 import { FilePickerModal as FilePicker } from 'local-file-picker/client'
-import { MindMap, Outline, DataPanel, SettingsPanel, markdownToMindMap, type MindMapNode, type MindMapSettings } from 'flow-mindmap'
+import { MindMap, Outline, DataPanel, SettingsPanel, Drawer, markdownToMindMap, type MindMapNode, type MindMapSettings } from 'flow-mindmap'
+import CanvasModal from '@/components/CanvasModal.vue'
 import 'flow-mindmap/style.css'
 import { useMindmapStore } from '@/stores/mindmapStore'
 import { useConfigStore } from '@/stores/configStore'
@@ -687,6 +688,58 @@ function formatSize(bytes: number): string {
           @canvas-import="onCanvasImport"
           @canvas-toggle-preview="onCanvasTogglePreview"
         />
+
+        <!-- 画布内抽屉：Drawer 的 scope='canvas' 以 absolute 浮在
+             .mm-editor 内,backdrop 只罩画布,不遮顶 toolbar / 侧栏。 -->
+        <Drawer
+          v-model:open="showOutline"
+          :title="$t('@MINDMAP:大纲')"
+          side="right"
+          :width="320"
+          scope="canvas"
+        >
+          <Outline
+            v-if="mmData"
+            :data="mmData"
+            :selected-id="outlineSelectedId"
+            @select="onOutlineSelect"
+            @add-child="onOutlineAddChild"
+            @add-sibling="onOutlineAddSibling"
+            @toggle-collapse="onOutlineToggleCollapse"
+            @edit="onOutlineEdit"
+            @move="onOutlineMove"
+          />
+        </Drawer>
+
+        <Drawer
+          v-model:open="showDataDrawer"
+          :title="$t('@MINDMAP:思维导图数据')"
+          side="right"
+          :width="480"
+          scope="canvas"
+        >
+          <DataPanel
+            v-if="mmData"
+            :data="mmData"
+            @import="onDataPanelImport"
+          />
+        </Drawer>
+
+        <!-- 画布内对话框:本地 canvas-modal 包一层,不走 Element Plus
+             的 Teleport,backdrop + 中央容器只罩画布。 -->
+        <canvas-modal
+          v-model:open="showSettingsDialog"
+          :title="$t('@MINDMAP:思维导图设置')"
+          :width="520"
+        >
+          <SettingsPanel
+            v-if="showSettingsDialog"
+            :settings="currentSettings"
+            :has-selection="!!outlineSelectedId"
+            :selected-node-text="selectedNodeText"
+            @update:settings="onSettingsUpdate"
+          />
+        </canvas-modal>
       </div>
     </div>
 
@@ -699,63 +752,6 @@ function formatSize(bytes: number): string {
       @close="filePickerVisible = false"
       @confirm="onPickerConfirm"
     />
-
-    <!-- 大纲抽屉 -->
-    <el-drawer
-      v-model="showOutline"
-      :title="$t('@MINDMAP:大纲')"
-      direction="rtl"
-      size="320px"
-      :close-on-click-modal="false"
-    >
-      <Outline
-        v-if="mmData"
-        :data="mmData"
-        :selected-id="outlineSelectedId"
-        @select="onOutlineSelect"
-        @add-child="onOutlineAddChild"
-        @add-sibling="onOutlineAddSibling"
-        @toggle-collapse="onOutlineToggleCollapse"
-        @edit="onOutlineEdit"
-        @move="onOutlineMove"
-      />
-    </el-drawer>
-
-    <!-- 数据抽屉:DataPanel 自带导入 emit,这里接管后由 importData 灌进 MindMap -->
-    <el-drawer
-      v-model="showDataDrawer"
-      :title="$t('@MINDMAP:思维导图数据')"
-      direction="rtl"
-      size="480px"
-      :close-on-click-modal="false"
-    >
-      <DataPanel
-        v-if="mmData"
-        :data="mmData"
-        @import="onDataPanelImport"
-      />
-    </el-drawer>
-
-    <!-- 设置对话框 -->
-    <el-dialog
-      v-model="showSettingsDialog"
-      :title="$t('@MINDMAP:思维导图设置')"
-      width="520px"
-      :close-on-click-modal="false"
-    >
-      <SettingsPanel
-        v-if="showSettingsDialog"
-        :settings="currentSettings"
-        :has-selection="!!outlineSelectedId"
-        :selected-node-text="selectedNodeText"
-        @update:settings="onSettingsUpdate"
-      />
-      <template #footer>
-        <el-button size="small" @click="showSettingsDialog = false">
-          {{ $t('@MINDMAP:关闭') }}
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
