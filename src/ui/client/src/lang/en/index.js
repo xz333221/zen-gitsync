@@ -2118,6 +2118,8 @@ export default {
   '@WORKBENCH:排序保存失败': 'Failed to save new order',
   '@WORKBENCH:拖动中': 'Dragging…',
   '@WORKBENCH:放置位置': 'Drop here',
+  '@WORKBENCH:未检测到本地 claude,无法执行任务': 'Local claude not detected — tasks cannot run',
+  '@WORKBENCH:查看安装指引': 'View install guide',
   // @WORKBENCH: file end
 
   // @ACTBAR: file path: components/ActivityBar.vue (append: monitor)

@@ -2128,6 +2128,8 @@ export default {
   '@WORKBENCH:排序保存失败': '排序保存失败',
   '@WORKBENCH:拖动中': '拖动中…',
   '@WORKBENCH:放置位置': '释放到此处',
+  '@WORKBENCH:未检测到本地 claude,无法执行任务': '未检测到本地 claude,无法执行任务',
+  '@WORKBENCH:查看安装指引': '查看安装指引',
   // @WORKBENCH: file end
 
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 系统监控)

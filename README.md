@@ -348,6 +348,7 @@ A dedicated view (fourth icon in the activity bar) for batch-running Claude agai
 | Cross-view indicator | While any Workbench subtask is running, a pulsing dot appears on the Workbench icon in the Activity Bar so you can see job state from the Git or Editor view |
 | Execution log manager (dialog) | The "Execution logs" button in the workbench top bar (replaces the previous standalone tab) opens a dialog with the list / filter / batch delete / clear / retention-policy UI; the task execution view stays mounted so no work-in-progress state is dropped |
 | Continue chat (simple task) | After a simple task finishes (done / error / cancelled), the detail panel grows an **Exit** button and a follow-up composer; sending a follow-up message spawns `claude --resume <session_id> -p <newPrompt>` to continue the prior conversation, and each new turn appears as its own card stacked into a chat-style flow. The `session_id` is captured from claude's stream-json `system.init` event and persisted on the job |
+| Local tool detection (vscode / claude) | On startup + every 10 min the server probes `code --version` and `claude --version` (3 s timeout). The Workbench "Execute task" button — and the header's "Open in Claude Code" popover — hide when the corresponding CLI is missing, replaced by a status hint linking to the install guide |
 
 Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.zen-gitsync/tasks.json` (cross-project, shared across repos).
 

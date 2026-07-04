@@ -26,7 +26,8 @@ import {
   Delete,
   CircleCloseFilled,
   CopyDocument,
-  Upload
+  Upload,
+  Warning
 } from '@element-plus/icons-vue'
 import AISplitDialog from '@components/AISplitDialog.vue'
 import ImportSplitDialog from '@components/ImportSplitDialog.vue'
@@ -34,7 +35,9 @@ import AttachmentZone from '@components/AttachmentZone.vue'
 import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
+import { useToolsStore } from '@/stores/toolsStore'
 const configStore = useConfigStore()
+const toolsStore = useToolsStore()
 import JobLogDetails from '@components/JobLogDetails.vue'
 import ExecutionLogManager from '@components/ExecutionLogManager.vue'
 import { statusColor } from '@/utils/jobStatus'
@@ -1099,9 +1102,19 @@ const {
             </svg>
             <span>{{ $t('@WORKBENCH:AI 拆分') }}</span>
           </button>
-          <el-button type="primary" :loading="false" @click="runTask(selectedTask)">
+          <el-button v-if="toolsStore.claudeAvailable" type="primary" :loading="false" @click="runTask(selectedTask)">
             {{ isSimpleTask ? $t('@WORKBENCH:执行') : $t('@WORKBENCH:执行任务') }}
           </el-button>
+          <div v-else class="wb-no-claude-hint" role="status">
+            <el-icon class="wb-no-claude-hint__icon"><Warning /></el-icon>
+            <span class="wb-no-claude-hint__text">{{ $t('@WORKBENCH:未检测到本地 claude,无法执行任务') }}</span>
+            <a
+              class="wb-no-claude-hint__link"
+              href="https://docs.claude.com/en/docs/claude-code/setup"
+              target="_blank"
+              rel="noopener noreferrer"
+            >{{ $t('@WORKBENCH:查看安装指引') }}</a>
+          </div>
           <button
             type="button"
             class="wb-logs-inline-btn wb-logs-inline-btn--danger"
@@ -2757,6 +2770,32 @@ const {
 }
 
 /* 「执行日志」内联按钮：紧贴「执行任务」右侧，视觉重量接近 secondary */
+.wb-no-claude-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 32%, transparent);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, transparent);
+  color: color-mix(in srgb, var(--color-warning, #f59e0b) 75%, var(--text-primary));
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.wb-no-claude-hint__icon { font-size: 14px; opacity: 0.9; }
+.wb-no-claude-hint__text { letter-spacing: -0.05px; }
+.wb-no-claude-hint__link {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 2px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-primary) 45%, transparent);
+}
+.wb-no-claude-hint__link:hover { border-bottom-style: solid; }
+
 .wb-logs-inline-btn {
   appearance: none;
   display: inline-flex;
