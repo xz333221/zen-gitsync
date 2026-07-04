@@ -578,7 +578,6 @@ function formatSize(bytes: number): string {
           :key="mmKey"
           ref="mmRef"
           :data="mmData"
-          :hide-canvas-actions="true"
           :preview-mode="previewMode"
           @change="onMindMapChange"
           @canvas-outline="onCanvasOutline"
