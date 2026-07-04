@@ -135,6 +135,13 @@ defineExpose({
 
 <style scoped lang="scss">
 
+// 覆盖 element-plus 默认 .el-button + .el-button { margin-left: 12px }
+// 那个兄弟选择器在每个按钮之间强加 12px,会覆盖我们的 flex gap,导致
+// "暂存 → 提交"之间实际是 18px(12 + 6),而不是预期的 6px
+:deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 :deep(.el-button) {
   border-radius: var(--radius-md);
   font-weight: 500;
