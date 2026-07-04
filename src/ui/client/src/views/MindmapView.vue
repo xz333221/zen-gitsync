@@ -303,6 +303,91 @@ watch(
   }
 )
 
+// ── flow-mindmap 内部 emit 的 canvas-* 事件 ────────────────────────
+// 0.4.0 起 MindMap 内置 FAB 与画布右键菜单会发 canvas-outline /
+// canvas-data / canvas-settings / canvas-import / canvas-toggle-preview
+// 五种事件,由宿主决定如何呈现。ZenGit 这边把每个事件接到一个
+// el-drawer / el-dialog / MessageBox 上,避免事件冒泡到祖先节点上的
+// click handler 时把 click 吞掉(此前表现为"侧栏/抽屉打不开")。
+const showOutline = ref(false)
+const showDataDrawer = ref(false)
+const showSettingsDialog = ref(false)
+const dataDrawerJson = ref('')
+const dataDrawerCopied = ref(false)
+const previewMode = ref(false)
+
+function onCanvasOutline() {
+  showOutline.value = true
+}
+function onCanvasData() {
+  if (!mmRef.value) return
+  try {
+    dataDrawerJson.value = mmRef.value.exportData()
+  } catch (e: any) {
+    dataDrawerJson.value = ''
+    ElMessage.error(e?.message || $t('@MINDMAP:获取数据失败'))
+    return
+  }
+  dataDrawerCopied.value = false
+  showDataDrawer.value = true
+}
+async function onCanvasSettings() {
+  showSettingsDialog.value = true
+}
+async function onCanvasImport(mode: 'markdown' | 'json' | 'txt') {
+  if (mode === 'markdown') {
+    await handleImportMarkdown()
+  } else {
+    // json / txt: 文件选完后,把内容灌进当前文件
+    try {
+      const res = await ElMessageBox.prompt(
+        $t('@MINDMAP:粘贴导入内容'),
+        $t('@MINDMAP:导入提示'),
+        {
+          confirmButtonText: $t('@MINDMAP:导入'),
+          cancelButtonText: $t('@MINDMAP:取消'),
+          inputType: 'textarea',
+          inputPlaceholder: $t('@MINDMAP:粘贴JSON或TXT'),
+          inputValidator: (v: string) => {
+            if (!v || !v.trim()) return $t('@MINDMAP:内容不能为空')
+            return true
+          }
+        }
+      )
+      const raw = res.value.trim()
+      if (mode === 'json') {
+        const parsed = JSON.parse(raw) // 让错误向上冒泡,被 ElMessage 接住
+        if (!mmRef.value?.importData(JSON.stringify(parsed))) {
+          throw new Error('invalid mindmap json')
+        }
+      } else {
+        // txt: 视为纯文本顶层节点
+        if (!mmRef.value?.importData(JSON.stringify({ id: 'root', text: raw, children: [] }))) {
+          throw new Error('invalid mindmap json')
+        }
+      }
+      store.markDirty()
+      ElMessage.success($t('@MINDMAP:已导入'))
+    } catch (e: any) {
+      if (e === 'cancel' || e?.message === 'cancel') return
+      ElMessage.error(e?.message || $t('@MINDMAP:导入失败'))
+    }
+  }
+}
+function onCanvasTogglePreview() {
+  previewMode.value = !previewMode.value
+}
+async function copyDataDrawerJson() {
+  if (!dataDrawerJson.value) return
+  try {
+    await navigator.clipboard.writeText(dataDrawerJson.value)
+    dataDrawerCopied.value = true
+    ElMessage.success($t('@MINDMAP:已复制数据'))
+  } catch (e: any) {
+    ElMessage.error(e?.message || $t('@MINDMAP:复制失败'))
+  }
+}
+
 // 把 store.current.content 解析成 MindMap 的 data prop。
 // 用 computed 缓存：同字符串 → 同引用，避免每次父组件重渲染都产生新对象，
 // 触发 flow-mindmap 内部浅 data watcher 覆盖组件内部状态（保存后视觉回退的根因）。
@@ -493,7 +578,14 @@ function formatSize(bytes: number): string {
           :key="mmKey"
           ref="mmRef"
           :data="mmData"
+          :hide-canvas-actions="true"
+          :preview-mode="previewMode"
           @change="onMindMapChange"
+          @canvas-outline="onCanvasOutline"
+          @canvas-data="onCanvasData"
+          @canvas-settings="onCanvasSettings"
+          @canvas-import="onCanvasImport"
+          @canvas-toggle-preview="onCanvasTogglePreview"
         />
       </div>
     </div>
@@ -507,6 +599,57 @@ function formatSize(bytes: number): string {
       @close="filePickerVisible = false"
       @confirm="onPickerConfirm"
     />
+
+    <!-- 大纲抽屉 -->
+    <el-drawer
+      v-model="showOutline"
+      :title="$t('@MINDMAP:大纲')"
+      direction="rtl"
+      size="320px"
+      :close-on-click-modal="false"
+    >
+      <div class="mm-outline-empty">{{ $t('@MINDMAP:大纲占位') }}</div>
+    </el-drawer>
+
+    <!-- 数据抽屉 (JSON) -->
+    <el-drawer
+      v-model="showDataDrawer"
+      :title="$t('@MINDMAP:思维导图数据')"
+      direction="rtl"
+      size="480px"
+      :close-on-click-modal="false"
+    >
+      <pre v-if="dataDrawerJson" class="mm-data-json">{{ dataDrawerJson }}</pre>
+      <div v-else class="mm-outline-empty">{{ $t('@MINDMAP:暂无数据') }}</div>
+      <template #footer>
+        <el-button size="small" @click="showDataDrawer = false">
+          {{ $t('@MINDMAP:关闭') }}
+        </el-button>
+        <el-button
+          size="small"
+          type="primary"
+          :disabled="!dataDrawerJson"
+          @click="copyDataDrawerJson"
+        >
+          {{ dataDrawerCopied ? $t('@MINDMAP:已复制') : $t('@MINDMAP:复制') }}
+        </el-button>
+      </template>
+    </el-drawer>
+
+    <!-- 设置对话框 (占位,功能未实装) -->
+    <el-dialog
+      v-model="showSettingsDialog"
+      :title="$t('@MINDMAP:思维导图设置')"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <p class="mm-outline-empty">{{ $t('@MINDMAP:设置占位') }}</p>
+      <template #footer>
+        <el-button size="small" @click="showSettingsDialog = false">
+          {{ $t('@MINDMAP:关闭') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -762,5 +905,25 @@ function formatSize(bytes: number): string {
   .mm-dir-path {
     max-width: 160px;
   }
+}
+
+/* ── 数据/大纲抽屉 ─────────────────────────────────────────────── */
+.mm-outline-empty {
+  padding: 16px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+.mm-data-json {
+  margin: 0;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  max-height: calc(100vh - 200px);
+  overflow: auto;
 }
 </style>
