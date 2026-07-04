@@ -27,7 +27,7 @@ import {
   Document
 } from '@element-plus/icons-vue'
 import { FilePickerModal as FilePicker } from 'local-file-picker/client'
-import { MindMap, markdownToMindMap, type MindMapNode } from 'flow-mindmap'
+import { MindMap, Outline, DataPanel, SettingsPanel, markdownToMindMap, type MindMapNode, type MindMapSettings } from 'flow-mindmap'
 import 'flow-mindmap/style.css'
 import { useMindmapStore } from '@/stores/mindmapStore'
 import { useConfigStore } from '@/stores/configStore'
@@ -213,6 +213,9 @@ async function handleRename(file: { path: string; title: string }) {
 function onMindMapChange(_node: MindMapNode) {
   store.markDirty()
 }
+function onMindMapSelect(node: MindMapNode | null) {
+  outlineSelectedId.value = node?.id ?? null
+}
 
 // ── 从 markdown 导入（创建一个新思维导图，内容来自 md） ──────────
 async function handleImportMarkdown() {
@@ -312,9 +315,40 @@ watch(
 const showOutline = ref(false)
 const showDataDrawer = ref(false)
 const showSettingsDialog = ref(false)
-const dataDrawerJson = ref('')
-const dataDrawerCopied = ref(false)
 const previewMode = ref(false)
+// 大纲/数据/设置三个 drawer 都需要与 MindMap 实例双向联动:
+//   outlineSelectedId 跟着 MindMap 的 select emit 走;点击 Outline
+//   项触发 onOutlineSelect,本组件调用 mmRef.setNodeText / addChild
+//   / addSibling / moveNode 等 expose 方法改树,改完后触发 store
+//   markDirty 走保存路径。
+const outlineSelectedId = ref<string | null>(null)
+// Settings 默认值兜底:打开设置对话框时若 MindMap 实例尚未就绪
+// 或 getSettings() 抛错,这里提供一组 MindMap 默认 Settings,避免
+// 模板里 :settings 卡到 undefined。SettingsPanel 需要 settings 是
+// 完整结构(Partial 不够)。
+const defaultSettings: MindMapSettings = {
+  autoBalanceOnChange: false,
+  lineWidthStart: 4,
+  lineWidthEnd: 2,
+  rainbowBranch: false,
+  branchPaletteId: 'default',
+  customPalettes: [],
+  lineStyle: 'curve',
+  layoutMode: 'mindmap',
+  taperedEdge: true,
+  showOrderBadge: false,
+}
+const currentSettings = ref<MindMapSettings>({ ...defaultSettings })
+// 打开设置对话框时,从 MindMap 取实时设置;这样用户在面板上改的
+// 值能精确反映当前状态,而不是兜底。
+async function refreshSettingsFromMindmap() {
+  if (!mmRef.value) return
+  try {
+    currentSettings.value = mmRef.value.getSettings()
+  } catch {
+    // 忽略,沿用兜底
+  }
+}
 
 function onCanvasOutline() {
   showOutline.value = true
@@ -322,16 +356,15 @@ function onCanvasOutline() {
 function onCanvasData() {
   if (!mmRef.value) return
   try {
-    dataDrawerJson.value = mmRef.value.exportData()
+    mmRef.value.exportData()
   } catch (e: any) {
-    dataDrawerJson.value = ''
     ElMessage.error(e?.message || $t('@MINDMAP:获取数据失败'))
     return
   }
-  dataDrawerCopied.value = false
   showDataDrawer.value = true
 }
 async function onCanvasSettings() {
+  await refreshSettingsFromMindmap()
   showSettingsDialog.value = true
 }
 async function onCanvasImport(mode: 'markdown' | 'json' | 'txt') {
@@ -377,15 +410,65 @@ async function onCanvasImport(mode: 'markdown' | 'json' | 'txt') {
 function onCanvasTogglePreview() {
   previewMode.value = !previewMode.value
 }
-async function copyDataDrawerJson() {
-  if (!dataDrawerJson.value) return
-  try {
-    await navigator.clipboard.writeText(dataDrawerJson.value)
-    dataDrawerCopied.value = true
-    ElMessage.success($t('@MINDMAP:已复制数据'))
-  } catch (e: any) {
-    ElMessage.error(e?.message || $t('@MINDMAP:复制失败'))
+
+// ── Outline 事件转发 ───────────────────────────────────────────────
+// MindMapExpose 提供 addChild/addSibling/removeNode/duplicateNode/
+// setNodeText/moveNode 等同步方法,它们直接操作画布 + 内部状态;
+// 改完后让本地 store 标记 dirty,触发保存路径。
+function onOutlineSelect(node: MindMapNode) {
+  outlineSelectedId.value = node.id
+}
+function onOutlineAddChild(id: string) {
+  if (!mmRef.value) return
+  mmRef.value.addChild(id)
+  store.markDirty()
+}
+function onOutlineAddSibling(id: string) {
+  if (!mmRef.value) return
+  mmRef.value.addSibling(id)
+  store.markDirty()
+}
+function onOutlineToggleCollapse(id: string) {
+  if (!mmRef.value) return
+  // MindMapExpose 没有 collapse / expand 方法,这里走 toggleSelected
+  // 旁路:发送 click 没法,所以仅刷新 selectedId + 让画布 focus,
+  // TODO: flow-mindmap 后续 expose collapseNode / expandNode 后实装。
+  outlineSelectedId.value = id
+}
+function onOutlineEdit(payload: { id: string; text: string }) {
+  if (!mmRef.value) return
+  mmRef.value.setNodeText(payload.id, payload.text)
+  store.markDirty()
+}
+function onOutlineMove(payload: {
+  srcId: string
+  targetId: string
+  position: 'before' | 'after' | 'child'
+}) {
+  if (!mmRef.value) return
+  mmRef.value.moveNode(payload.srcId, payload.targetId, payload.position)
+  store.markDirty()
+}
+
+// ── DataPanel 导入 ────────────────────────────────────────────────
+// DataPanel 内部已经把 JSON 字符串处理成 MindMapNode,emit import
+// 把节点直接灌进当前文件;importData 返回 boolean,失败时给提示。
+function onDataPanelImport(data: MindMapNode) {
+  if (!mmRef.value) return
+  const ok = mmRef.value.importData(JSON.stringify(data))
+  if (!ok) {
+    ElMessage.error($t('@MINDMAP:导入失败'))
+    return
   }
+  store.markDirty()
+  ElMessage.success($t('@MINDMAP:已导入'))
+}
+
+// ── SettingsPanel 提交 ────────────────────────────────────────────
+function onSettingsUpdate(patch: Partial<MindMapSettings>) {
+  if (!mmRef.value) return
+  mmRef.value.applySettings(patch)
+  currentSettings.value = mmRef.value.getSettings()
 }
 
 // 把 store.current.content 解析成 MindMap 的 data prop。
@@ -399,6 +482,23 @@ const mmData = computed(() => {
   } catch {
     return null
   }
+})
+// SettingsPanel 的 per-node 文本提示:从 mmData 里按 outlineSelectedId
+// 找节点文字;没选中就传 undefined。
+const selectedNodeText = computed<string | undefined>(() => {
+  if (!outlineSelectedId.value || !mmData.value) return undefined
+  const walk = (n: any): string | undefined => {
+    if (!n || typeof n !== 'object') return undefined
+    if (n.id === outlineSelectedId.value) return typeof n.text === 'string' ? n.text : undefined
+    if (Array.isArray(n.children)) {
+      for (const c of n.children) {
+        const r = walk(c)
+        if (r !== undefined) return r
+      }
+    }
+    return undefined
+  }
+  return walk(mmData.value)
 })
 
 // ── 生命周期 ──────────────────────────────────────────────────────
@@ -580,6 +680,7 @@ function formatSize(bytes: number): string {
           :data="mmData"
           :preview-mode="previewMode"
           @change="onMindMapChange"
+          @select="onMindMapSelect"
           @canvas-outline="onCanvasOutline"
           @canvas-data="onCanvasData"
           @canvas-settings="onCanvasSettings"
@@ -607,10 +708,20 @@ function formatSize(bytes: number): string {
       size="320px"
       :close-on-click-modal="false"
     >
-      <div class="mm-outline-empty">{{ $t('@MINDMAP:大纲占位') }}</div>
+      <Outline
+        v-if="mmData"
+        :data="mmData"
+        :selected-id="outlineSelectedId"
+        @select="onOutlineSelect"
+        @add-child="onOutlineAddChild"
+        @add-sibling="onOutlineAddSibling"
+        @toggle-collapse="onOutlineToggleCollapse"
+        @edit="onOutlineEdit"
+        @move="onOutlineMove"
+      />
     </el-drawer>
 
-    <!-- 数据抽屉 (JSON) -->
+    <!-- 数据抽屉:DataPanel 自带导入 emit,这里接管后由 importData 灌进 MindMap -->
     <el-drawer
       v-model="showDataDrawer"
       :title="$t('@MINDMAP:思维导图数据')"
@@ -618,31 +729,27 @@ function formatSize(bytes: number): string {
       size="480px"
       :close-on-click-modal="false"
     >
-      <pre v-if="dataDrawerJson" class="mm-data-json">{{ dataDrawerJson }}</pre>
-      <div v-else class="mm-outline-empty">{{ $t('@MINDMAP:暂无数据') }}</div>
-      <template #footer>
-        <el-button size="small" @click="showDataDrawer = false">
-          {{ $t('@MINDMAP:关闭') }}
-        </el-button>
-        <el-button
-          size="small"
-          type="primary"
-          :disabled="!dataDrawerJson"
-          @click="copyDataDrawerJson"
-        >
-          {{ dataDrawerCopied ? $t('@MINDMAP:已复制') : $t('@MINDMAP:复制') }}
-        </el-button>
-      </template>
+      <DataPanel
+        v-if="mmData"
+        :data="mmData"
+        @import="onDataPanelImport"
+      />
     </el-drawer>
 
-    <!-- 设置对话框 (占位,功能未实装) -->
+    <!-- 设置对话框 -->
     <el-dialog
       v-model="showSettingsDialog"
       :title="$t('@MINDMAP:思维导图设置')"
       width="520px"
       :close-on-click-modal="false"
     >
-      <p class="mm-outline-empty">{{ $t('@MINDMAP:设置占位') }}</p>
+      <SettingsPanel
+        v-if="showSettingsDialog"
+        :settings="currentSettings"
+        :has-selection="!!outlineSelectedId"
+        :selected-node-text="selectedNodeText"
+        @update:settings="onSettingsUpdate"
+      />
       <template #footer>
         <el-button size="small" @click="showSettingsDialog = false">
           {{ $t('@MINDMAP:关闭') }}
