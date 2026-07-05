@@ -247,8 +247,10 @@ function onMindMapChange(_node: MindMapNode) {
   store.markDirty()
   scheduleAutosave()
 }
-function onMindMapSelect(node: MindMapNode | null) {
-  outlineSelectedId.value = node?.id ?? null
+function onMindMapSelect(nodes: MindMapNode[] | null) {
+  // flow-mindmap 0.4.7 起 select 事件传节点数组(multi-select 语义)。
+  // zen-gitsync 的 Outline / SettingsPanel 只支持单选高亮,这里取数组中第一个节点。
+  outlineSelectedId.value = nodes?.[0]?.id ?? null
 }
 
 // ── 从 markdown 导入（创建一个新思维导图，内容来自 md） ──────────
