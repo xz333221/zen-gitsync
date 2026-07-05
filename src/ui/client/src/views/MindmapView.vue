@@ -102,21 +102,49 @@ async function handleNewFile() {
 }
 
 // ── 保存 ──────────────────────────────────────────────────────────
-async function handleSave() {
+// handleSave 供手动触发（按钮、Ctrl+S、切换文件前确认）共用。
+// 自动保存走 scheduleAutosave：编辑停止 1500ms 后静默调用，失败才弹错。
+async function handleSave(silent = false) {
   if (!store.current) return
   try {
     const content = mmRef.value?.exportData()
     if (!content) {
-      ElMessage.warning($t('@MINDMAP:无法获取数据'))
+      if (!silent) ElMessage.warning($t('@MINDMAP:无法获取数据'))
       return
     }
     await store.saveCurrent(content)
     // 不强制重挂载 MindMap：组件内部已持有用户最新编辑状态，
     // 重新挂载会用 store.current.content（未更新为最新保存值）初始化导致回退。
     // saveCurrent 内部原地更新 mtime（不创建新对象引用），避免触发 :data 重算。
-    ElMessage.success($t('@MINDMAP:已保存'))
+    if (!silent) ElMessage.success($t('@MINDMAP:已保存'))
   } catch (e: any) {
     ElMessage.error(e?.message || $t('@MINDMAP:保存失败'))
+  }
+}
+
+// ── Debounce 自动保存 ─────────────────────────────────────────────
+// dirty 变更后 1500ms 没有新改动 → 静默写盘。任何手动保存（Cron/按钮/切文件）
+// 都会清掉 pending timer，避免与 handleSave 并发触发两次 /api/mindmap/save。
+const AUTOSAVE_DELAY = 1500
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleAutosave() {
+  if (!store.current || !store.dirty) return
+  if (autosaveTimer) clearTimeout(autosaveTimer)
+  autosaveTimer = setTimeout(() => {
+    autosaveTimer = null
+    // timer 触发时再校一次：用户可能在这 1500ms 里又改了一次且 dirty 仍为 true，
+    // 也可能刚刚手动保存把 dirty 清掉了。清掉了就跳过。
+    if (store.current && store.dirty) {
+      handleSave(true)
+    }
+  }, AUTOSAVE_DELAY)
+}
+
+function cancelAutosave() {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer)
+    autosaveTimer = null
   }
 }
 
@@ -135,6 +163,7 @@ async function confirmDiscardIfDirty(): Promise<boolean> {
       }
     )
     // 用户点「保存」
+    cancelAutosave()
     const content = mmRef.value?.exportData()
     if (content) {
       await store.saveCurrent(content)
@@ -143,7 +172,10 @@ async function confirmDiscardIfDirty(): Promise<boolean> {
     return true
   } catch (action) {
     // action === 'cancel' → 丢弃；action === 'close' → 取消整个操作
-    if (action === 'cancel') return true
+    if (action === 'cancel') {
+      cancelAutosave()
+      return true
+    }
     return false
   }
 }
@@ -213,6 +245,7 @@ async function handleRename(file: { path: string; title: string }) {
 // ── MindMap 事件 ──────────────────────────────────────────────────
 function onMindMapChange(_node: MindMapNode) {
   store.markDirty()
+  scheduleAutosave()
 }
 function onMindMapSelect(node: MindMapNode | null) {
   outlineSelectedId.value = node?.id ?? null
@@ -293,7 +326,10 @@ async function handleExportMarkdown() {
 function onKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault()
-    if (store.current && store.dirty) handleSave()
+    if (store.current && store.dirty) {
+      cancelAutosave()
+      handleSave()
+    }
   }
 }
 
@@ -401,6 +437,7 @@ async function onCanvasImport(mode: 'markdown' | 'json' | 'txt') {
         }
       }
       store.markDirty()
+      scheduleAutosave()
       ElMessage.success($t('@MINDMAP:已导入'))
     } catch (e: any) {
       if (e === 'cancel' || e?.message === 'cancel') return
@@ -423,11 +460,13 @@ function onOutlineAddChild(id: string) {
   if (!mmRef.value) return
   mmRef.value.addChild(id)
   store.markDirty()
+  scheduleAutosave()
 }
 function onOutlineAddSibling(id: string) {
   if (!mmRef.value) return
   mmRef.value.addSibling(id)
   store.markDirty()
+  scheduleAutosave()
 }
 function onOutlineToggleCollapse(id: string) {
   if (!mmRef.value) return
@@ -440,6 +479,7 @@ function onOutlineEdit(payload: { id: string; text: string }) {
   if (!mmRef.value) return
   mmRef.value.setNodeText(payload.id, payload.text)
   store.markDirty()
+  scheduleAutosave()
 }
 function onOutlineMove(payload: {
   srcId: string
@@ -449,6 +489,7 @@ function onOutlineMove(payload: {
   if (!mmRef.value) return
   mmRef.value.moveNode(payload.srcId, payload.targetId, payload.position)
   store.markDirty()
+  scheduleAutosave()
 }
 
 // ── DataPanel 导入 ────────────────────────────────────────────────
@@ -462,6 +503,7 @@ function onDataPanelImport(data: MindMapNode) {
     return
   }
   store.markDirty()
+  scheduleAutosave()
   ElMessage.success($t('@MINDMAP:已导入'))
 }
 
@@ -513,6 +555,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  cancelAutosave()
 })
 
 // ── 格式化 ────────────────────────────────────────────────────────
@@ -573,7 +616,7 @@ function formatSize(bytes: number): string {
           :icon="FolderChecked"
           :disabled="!store.current || !store.dirty"
           :loading="store.loading"
-          @click="handleSave"
+          @click="() => { cancelAutosave(); handleSave() }"
         >{{ $t('@MINDMAP:保存') }}</el-button>
         <span v-if="store.current" class="mm-status">
           <span class="mm-status-title" :title="store.current.title">{{ store.current.title }}</span>
