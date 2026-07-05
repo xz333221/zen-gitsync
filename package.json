@@ -13,6 +13,8 @@
     "pull": "git pull",
     "dev:server": "cross-env PORT=5545 nodemon server.js --no-open",
     "dev:vue": "cd ./src/ui/client && npm run dev",
+    "install:vue": "cd ./src/ui/client && pnpm install --trust-lockfile",
+    "dev:vue": "npm run install:vue && cd ./src/ui/client && npm run dev",
     "dev": "concurrently -n backend,vite -c blue,green \"npm:dev:server\" \"npm:dev:vue\"",
     "dev:ping": "node scripts/dev-ping.cjs",
     "start:server:no-open": "node server.js --no-open",
