@@ -29,11 +29,34 @@ const isLoadingRecent = ref(false);
 // 搜索关键词:仅 fullpage 模式展示输入框,inline 模式走默认行为不渲染
 const searchQuery = ref('');
 
+// Path split: basename shows as project name; parent path shown smaller + muted.
+// Handles both \ and / so Windows paths render correctly even when the OS
+// normalizes to forward slashes (e.g. E:/workspace/...).
+function splitPath(fullPath: string): { base: string; parent: string } {
+  const parts = fullPath.split(/[\\/]/).filter(Boolean);
+  if (parts.length <= 1) return { base: fullPath, parent: '' };
+  return { base: parts[parts.length - 1], parent: parts.slice(0, -1).join('/') };
+}
+
+
 // 大小写不敏感子串匹配,匹配 path 任意位置
 const filteredDirectories = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return recentDirectories.value;
   return recentDirectories.value.filter(item => item.path.toLowerCase().includes(q));
+});
+
+// Decorate items with displayBase so template renders the basename bold on line 1.
+// Line 2 shows the full path verbatim (item.path) so each card is uniquely identifiable
+// at a glance - parent-only was too ambiguous (e.g. multiple cards sharing c:/users).
+const displayItems = computed(() => {
+  return filteredDirectories.value.map(item => {
+    const { base } = splitPath(item.path);
+    return {
+      ...item,
+      displayBase: base,
+    };
+  });
 });
 
 async function loadRecentDirectories() {
@@ -119,7 +142,7 @@ onMounted(() => {
     </div>
     <ul v-else class="recent-projects__list" :aria-label="$t('@13D1C:最近项目列表')">
       <li
-        v-for="item in filteredDirectories"
+        v-for="item in displayItems"
         :key="item.path"
         class="recent-projects__item"
         :class="{ 'is-missing': !item.exists }"
@@ -134,7 +157,10 @@ onMounted(() => {
           @click="onRecentDirClick(item)"
         >
           <el-icon class="recent-projects__icon" aria-hidden="true"><Folder /></el-icon>
-          <span class="recent-projects__name">{{ item.path }}</span>
+          <span class="recent-projects__name" :title="item.path">
+            <span class="recent-projects__name-base">{{ item.displayBase }}</span>
+            <span class="recent-projects__name-parent">{{ item.path }}</span>
+          </span>
           <span v-if="!item.exists" class="recent-projects__tag">{{ $t('@13D1C:不存在') }}</span>
         </button>
       </li>
@@ -149,7 +175,7 @@ onMounted(() => {
   padding: var(--spacing-md) calc(var(--spacing-md) * 1.5);
   background: var(--bg-container, #fff);
   border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   text-align: left;
 }
 /* 占满模式:由 App.vue 在非 Git 仓库时设置 variant="fullpage",
@@ -176,20 +202,20 @@ onMounted(() => {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: var(--spacing-base);
 }
 .recent-projects__title {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
 }
 .recent-projects__hint {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
 }
 .recent-projects--fullpage .recent-projects__title {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
   letter-spacing: -0.2px;
 }
 .recent-projects--fullpage .recent-projects__hint {
@@ -202,23 +228,23 @@ onMounted(() => {
   position: relative;
   display: flex;
   align-items: center;
-  margin-top: 4px;
+  margin-top: var(--spacing-sm);
   border: 1px solid var(--border-color-light);
   border-radius: 10px;
   background: var(--bg-panel);
-  padding: 0 12px;
+  padding: 0 var(--spacing-md);
   height: 40px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .recent-projects__search:focus-within {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--tint-primary-08);
+  box-shadow: var(--focus-ring);
 }
 .recent-projects__search-icon {
   flex-shrink: 0;
   color: var(--text-secondary);
-  font-size: 16px;
-  margin-right: 8px;
+  font-size: var(--font-size-md);
+  margin-right: var(--spacing-base);
 }
 .recent-projects__search-input {
   flex: 1;
@@ -227,7 +253,7 @@ onMounted(() => {
   background: transparent;
   outline: none;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   color: var(--text-primary);
   padding: 0;
   height: 100%;
@@ -242,16 +268,16 @@ onMounted(() => {
   justify-content: center;
   width: 22px;
   height: 22px;
-  margin-left: 6px;
+  margin-left: var(--spacing-sm);
   border: none;
   background: var(--bg-component-hover);
   color: var(--text-secondary);
-  border-radius: 50%;
-  font-size: 16px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-md);
   line-height: 1;
   cursor: pointer;
   padding: 0;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 .recent-projects__search-clear:hover {
   background: var(--tint-primary-12);
@@ -261,8 +287,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 12px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
   color: var(--text-secondary);
   font-size: 13px;
 }
@@ -277,8 +303,8 @@ onMounted(() => {
   /* 卡片保持够宽(380px)避免路径频繁换行;窗口极窄时降为 1 列,
      路径单行省略号(末尾用 ... 截断,完整路径通过 :title 提示) */
   grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 12px;
-  margin-top: 4px;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-sm);
   /* 列表占满父 flex 容器剩余空间,多出时内部滚动而不是撑爆外层 */
   flex: 1;
   min-height: 0;
@@ -286,46 +312,56 @@ onMounted(() => {
   align-content: start;
   /* 给第一行 item hover 留出 translateY(-1px) + box-shadow 空间,
      否则上边框/阴影会被 list 自身的 overflow:auto 切掉 */
-  padding: 2px;
-  margin: -2px;
+  padding: var(--spacing-xs);
+  margin: calc(-1 * var(--spacing-xs));
 }
 .recent-projects__item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
+  gap: var(--spacing-base);
+  padding: var(--spacing-sm) var(--spacing-base);
+  border-radius: var(--radius-base);
   cursor: pointer;
   font-size: 13px;
   color: var(--text-primary);
-  transition: background 0.12s;
+  transition: background var(--transition-fast);
 }
 .recent-projects__item:hover {
-  background: rgba(45, 127, 249, 0.12);
+  background: var(--tint-primary-12);
 }
 .recent-projects--fullpage .recent-projects__item {
-  padding: 14px 16px;
-  border-radius: 12px;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color-light);
   background: var(--bg-panel);
-  font-size: 16px;
-  transition: border-color 0.18s, box-shadow 0.18s, transform 0.12s, background 0.18s;
+  font-size: var(--font-size-md);
+  /* Drop transform + box-shadow: motion conveys state, not decoration. */
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .recent-projects--fullpage .recent-projects__item:hover {
   background: var(--bg-component-hover);
-  border-color: var(--color-primary);
-  box-shadow: var(--focus-ring-soft);
-  transform: translateY(-1px);
+  border-color: var(--border-color);
 }
+.recent-projects--fullpage .recent-projects__item:active {
+  background: var(--tint-primary-08);
+}
+/* fullpage 图标做成 tinted 色块容器,提升卡片视觉层级;
+   inline 模式仍是裸图标保持紧凑 */
 .recent-projects--fullpage .recent-projects__icon {
-  width: 20px;
-  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
   font-size: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--tint-primary-08);
+  color: var(--color-primary);
 }
 .recent-projects__btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-base);
   flex: 1;
   min-width: 0;
   background: transparent;
@@ -340,45 +376,71 @@ onMounted(() => {
 .recent-projects__btn:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
 }
 .recent-projects__item.is-missing {
   color: var(--text-secondary);
   cursor: not-allowed;
 }
 .recent-projects__item.is-missing:hover {
-  background: rgba(239, 68, 68, 0.06);
+  background: var(--tint-danger-06);
 }
 .recent-projects--fullpage .recent-projects__item.is-missing:hover {
-  border-color: rgba(239, 68, 68, 0.5);
-  background: rgba(239, 68, 68, 0.04);
+  border-color: var(--tint-danger-50);
+  background: var(--tint-danger-06);
 }
 .recent-projects__icon {
   flex-shrink: 0;
-  color: #2D7FF9;
+  color: var(--color-primary);
 }
 .recent-projects__item.is-missing .recent-projects__icon {
   color: var(--text-secondary);
 }
+/* 缺失态:fullpage 图标色块从中性蓝改为灰底,与 is-missing 语义一致 */
+.recent-projects--fullpage .recent-projects__item.is-missing .recent-projects__icon {
+  background: var(--bg-component-hover);
+}
 .recent-projects__name {
   flex: 1;
   min-width: 0;
-  /* 单行省略号:卡片够宽(380px)时大部分路径能完整展示,超长路径在末尾
-     用 ... 截断,完整路径通过 :title 属性提示 */
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.recent-projects__name-base {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: ui-monospace, monospace;
+  line-height: 1.3;
+  letter-spacing: -0.1px;
 }
-.recent-projects--fullpage .recent-projects__name {
-  font-size: 15px;
+.recent-projects__name-parent {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+  /* faded to recede behind the project name */
+  opacity: 0.85;
+}
+.recent-projects--fullpage .recent-projects__name-base {
+  font-size: var(--font-size-15);
+}
+.recent-projects--fullpage .recent-projects__name-parent {
+  font-size: 12px;
 }
 .recent-projects__tag {
   flex-shrink: 0;
-  padding: 1px 6px;
-  font-size: 11px;
-  border-radius: 3px;
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
+  padding: 1px var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
+  background: var(--tint-danger-14);
+  color: var(--color-danger-light);
 }
 </style>
