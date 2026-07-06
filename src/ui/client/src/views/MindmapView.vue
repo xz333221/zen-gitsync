@@ -27,8 +27,7 @@ import {
   Document
 } from '@element-plus/icons-vue'
 import { FilePickerModal as FilePicker } from 'local-file-picker/client'
-import { MindMap, Outline, DataPanel, SettingsPanel, Drawer, markdownToMindMap, type MindMapNode, type MindMapSettings } from 'flow-mindmap'
-import CanvasModal from '@/components/CanvasModal.vue'
+import { MindMap, markdownToMindMap, type MindMapNode } from 'flow-mindmap'
 import 'flow-mindmap/style.css'
 import { useMindmapStore } from '@/stores/mindmapStore'
 import { useConfigStore } from '@/stores/configStore'
@@ -47,11 +46,10 @@ const isDark = computed(() => {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
 })
 
-// ── MindMap 组件 ref ──────────────────────────────────────────────
-// 用 ref 拿到组件 expose 的方法：exportData / importData / getMarkdown 等
+// MindMap 组件 ref — 用 expose 方法做 exportData / getMarkdown 等
 const mmRef = ref<InstanceType<typeof MindMap> | null>(null)
 
-// ── 目录选择（local-file-picker） ─────────────────────────────────
+// 目录选择（local-file-picker）
 const filePickerVisible = ref(false)
 
 function openDirPicker() {
@@ -65,13 +63,12 @@ function onPickerConfirm(paths: string[]) {
   }
 }
 
-// ── 新建文件 ──────────────────────────────────────────────────────
+// 新建文件
 async function handleNewFile() {
   if (!store.currentDir) {
     ElMessage.warning($t('@MINDMAP:请先选择目录'))
     return
   }
-  // dirty 确认
   if (!(await confirmDiscardIfDirty())) return
   let name = ''
   try {
@@ -101,9 +98,7 @@ async function handleNewFile() {
   }
 }
 
-// ── 保存 ──────────────────────────────────────────────────────────
-// handleSave 供手动触发（按钮、Ctrl+S、切换文件前确认）共用。
-// 自动保存走 scheduleAutosave：编辑停止 1500ms 后静默调用，失败才弹错。
+// 保存
 async function handleSave(silent = false) {
   if (!store.current) return
   try {
@@ -113,18 +108,13 @@ async function handleSave(silent = false) {
       return
     }
     await store.saveCurrent(content)
-    // 不强制重挂载 MindMap：组件内部已持有用户最新编辑状态，
-    // 重新挂载会用 store.current.content（未更新为最新保存值）初始化导致回退。
-    // saveCurrent 内部原地更新 mtime（不创建新对象引用），避免触发 :data 重算。
     if (!silent) ElMessage.success($t('@MINDMAP:已保存'))
   } catch (e: any) {
     ElMessage.error(e?.message || $t('@MINDMAP:保存失败'))
   }
 }
 
-// ── Debounce 自动保存 ─────────────────────────────────────────────
-// dirty 变更后 1500ms 没有新改动 → 静默写盘。任何手动保存（Cron/按钮/切文件）
-// 都会清掉 pending timer，避免与 handleSave 并发触发两次 /api/mindmap/save。
+// Debounce 自动保存 — 编辑停止 1500ms 后静默写盘
 const AUTOSAVE_DELAY = 1500
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -133,8 +123,6 @@ function scheduleAutosave() {
   if (autosaveTimer) clearTimeout(autosaveTimer)
   autosaveTimer = setTimeout(() => {
     autosaveTimer = null
-    // timer 触发时再校一次：用户可能在这 1500ms 里又改了一次且 dirty 仍为 true，
-    // 也可能刚刚手动保存把 dirty 清掉了。清掉了就跳过。
     if (store.current && store.dirty) {
       handleSave(true)
     }
@@ -148,7 +136,7 @@ function cancelAutosave() {
   }
 }
 
-// ── 切换文件（带 dirty 确认） ─────────────────────────────────────
+// 切换文件（带 dirty 确认）
 async function confirmDiscardIfDirty(): Promise<boolean> {
   if (!store.dirty || !store.current) return true
   try {
@@ -162,7 +150,6 @@ async function confirmDiscardIfDirty(): Promise<boolean> {
         type: 'warning'
       }
     )
-    // 用户点「保存」
     cancelAutosave()
     const content = mmRef.value?.exportData()
     if (content) {
@@ -171,7 +158,6 @@ async function confirmDiscardIfDirty(): Promise<boolean> {
     }
     return true
   } catch (action) {
-    // action === 'cancel' → 丢弃；action === 'close' → 取消整个操作
     if (action === 'cancel') {
       cancelAutosave()
       return true
@@ -190,7 +176,7 @@ async function handleOpenFile(filePath: string) {
   }
 }
 
-// ── 删除 / 重命名 ─────────────────────────────────────────────────
+// 删除 / 重命名
 async function handleDelete(file: { path: string; title: string }) {
   try {
     await ElMessageBox.confirm(
@@ -242,18 +228,16 @@ async function handleRename(file: { path: string; title: string }) {
   }
 }
 
-// ── MindMap 事件 ──────────────────────────────────────────────────
+// MindMap 事件
 function onMindMapChange(_node: MindMapNode) {
   store.markDirty()
   scheduleAutosave()
 }
-function onMindMapSelect(nodes: MindMapNode[] | null) {
-  // flow-mindmap 0.4.7 起 select 事件传节点数组(multi-select 语义)。
-  // zen-gitsync 的 Outline / SettingsPanel 只支持单选高亮,这里取数组中第一个节点。
-  outlineSelectedId.value = nodes?.[0]?.id ?? null
+function onMindMapSelect(_nodes: MindMapNode[] | null) {
+  // flow-mindmap 0.5.0 builtInDrawers 模式下,选择高亮由组件内部处理。
 }
 
-// ── 从 markdown 导入（创建一个新思维导图，内容来自 md） ──────────
+// 从 markdown 导入
 async function handleImportMarkdown() {
   if (!store.currentDir) {
     ElMessage.warning($t('@MINDMAP:请先选择目录'))
@@ -280,7 +264,6 @@ async function handleImportMarkdown() {
   } catch {
     return
   }
-  // 第二步：问名字
   try {
     const res = await ElMessageBox.prompt(
       $t('@MINDMAP:输入文件名提示'),
@@ -299,10 +282,8 @@ async function handleImportMarkdown() {
   } catch {
     return
   }
-  // 先创建空文件，再用 md 内容覆盖保存
   try {
     await store.createFile(name, true)
-    // 用 markdownToMindMap 转成数据，再让组件 importData
     const data = markdownToMindMap(md, name)
     const json = JSON.stringify(data, null, 2)
     await store.saveCurrent(json)
@@ -312,7 +293,7 @@ async function handleImportMarkdown() {
   }
 }
 
-// ── 导出 markdown（复制到剪贴板） ────────────────────────────────
+// 导出 markdown（复制到剪贴板）
 async function handleExportMarkdown() {
   if (!mmRef.value) return
   try {
@@ -324,7 +305,7 @@ async function handleExportMarkdown() {
   }
 }
 
-// ── 快捷键 Ctrl+S 保存 ────────────────────────────────────────────
+// 快捷键 Ctrl+S 保存
 function onKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault()
@@ -335,8 +316,7 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-// ── 当前 content 变化时，用 importData 把数据灌进组件 ─────────────
-// 用 watch + key 强制 MindMap 重新挂载，避免 importData 时序问题
+// 当前 content 变化时，用 key 强制 MindMap 重新挂载
 const mmKey = ref(0)
 watch(
   () => store.current?.path,
@@ -345,180 +325,17 @@ watch(
   }
 )
 
-// ── flow-mindmap 内部 emit 的 canvas-* 事件 ────────────────────────
-// 0.4.0 起 MindMap 内置 FAB 与画布右键菜单会发 canvas-outline /
-// canvas-data / canvas-settings / canvas-import / canvas-toggle-preview
-// 五种事件,由宿主决定如何呈现。ZenGit 这边把每个事件接到一个
-// el-drawer / el-dialog / MessageBox 上,避免事件冒泡到祖先节点上的
-// click handler 时把 click 吞掉(此前表现为"侧栏/抽屉打不开")。
-const showOutline = ref(false)
-const showDataDrawer = ref(false)
-const showSettingsDialog = ref(false)
+// flow-mindmap 0.5.0 builtInDrawers 模式:
+// MindMap 默认 builtInDrawers=true,组件内部自渲染 Drawer + Panel
+// (settings/data/markdown/note/outline)。canvas-toggle-preview 仍 emit
+// 给宿主控制 previewMode。
 const previewMode = ref(false)
-// 大纲/数据/设置三个 drawer 都需要与 MindMap 实例双向联动:
-//   outlineSelectedId 跟着 MindMap 的 select emit 走;点击 Outline
-//   项触发 onOutlineSelect,本组件调用 mmRef.setNodeText / addChild
-//   / addSibling / moveNode 等 expose 方法改树,改完后触发 store
-//   markDirty 走保存路径。
-const outlineSelectedId = ref<string | null>(null)
-// Settings 默认值兜底:打开设置对话框时若 MindMap 实例尚未就绪
-// 或 getSettings() 抛错,这里提供一组 MindMap 默认 Settings,避免
-// 模板里 :settings 卡到 undefined。SettingsPanel 需要 settings 是
-// 完整结构(Partial 不够)。
-const defaultSettings: MindMapSettings = {
-  autoBalanceOnChange: false,
-  lineWidthStart: 4,
-  lineWidthEnd: 2,
-  rainbowBranch: false,
-  branchPaletteId: 'default',
-  customPalettes: [],
-  lineStyle: 'curve',
-  layoutMode: 'mindmap',
-  taperedEdge: true,
-  showOrderBadge: false,
-}
-const currentSettings = ref<MindMapSettings>({ ...defaultSettings })
-// 打开设置对话框时,从 MindMap 取实时设置;这样用户在面板上改的
-// 值能精确反映当前状态,而不是兜底。
-async function refreshSettingsFromMindmap() {
-  if (!mmRef.value) return
-  try {
-    currentSettings.value = mmRef.value.getSettings()
-  } catch {
-    // 忽略,沿用兜底
-  }
-}
 
-function onCanvasOutline() {
-  showOutline.value = true
-}
-function onCanvasData() {
-  if (!mmRef.value) return
-  try {
-    mmRef.value.exportData()
-  } catch (e: any) {
-    ElMessage.error(e?.message || $t('@MINDMAP:获取数据失败'))
-    return
-  }
-  showDataDrawer.value = true
-}
-async function onCanvasSettings() {
-  await refreshSettingsFromMindmap()
-  showSettingsDialog.value = true
-}
-async function onCanvasImport(mode: 'markdown' | 'json' | 'txt') {
-  if (mode === 'markdown') {
-    await handleImportMarkdown()
-  } else {
-    // json / txt: 文件选完后,把内容灌进当前文件
-    try {
-      const res = await ElMessageBox.prompt(
-        $t('@MINDMAP:粘贴导入内容'),
-        $t('@MINDMAP:导入提示'),
-        {
-          confirmButtonText: $t('@MINDMAP:导入'),
-          cancelButtonText: $t('@MINDMAP:取消'),
-          inputType: 'textarea',
-          inputPlaceholder: $t('@MINDMAP:粘贴JSON或TXT'),
-          inputValidator: (v: string) => {
-            if (!v || !v.trim()) return $t('@MINDMAP:内容不能为空')
-            return true
-          }
-        }
-      )
-      const raw = res.value.trim()
-      if (mode === 'json') {
-        const parsed = JSON.parse(raw) // 让错误向上冒泡,被 ElMessage 接住
-        if (!mmRef.value?.importData(JSON.stringify(parsed))) {
-          throw new Error('invalid mindmap json')
-        }
-      } else {
-        // txt: 视为纯文本顶层节点
-        if (!mmRef.value?.importData(JSON.stringify({ id: 'root', text: raw, children: [] }))) {
-          throw new Error('invalid mindmap json')
-        }
-      }
-      store.markDirty()
-      scheduleAutosave()
-      ElMessage.success($t('@MINDMAP:已导入'))
-    } catch (e: any) {
-      if (e === 'cancel' || e?.message === 'cancel') return
-      ElMessage.error(e?.message || $t('@MINDMAP:导入失败'))
-    }
-  }
-}
 function onCanvasTogglePreview() {
   previewMode.value = !previewMode.value
 }
 
-// ── Outline 事件转发 ───────────────────────────────────────────────
-// MindMapExpose 提供 addChild/addSibling/removeNode/duplicateNode/
-// setNodeText/moveNode 等同步方法,它们直接操作画布 + 内部状态;
-// 改完后让本地 store 标记 dirty,触发保存路径。
-function onOutlineSelect(node: MindMapNode) {
-  outlineSelectedId.value = node.id
-}
-function onOutlineAddChild(id: string) {
-  if (!mmRef.value) return
-  mmRef.value.addChild(id)
-  store.markDirty()
-  scheduleAutosave()
-}
-function onOutlineAddSibling(id: string) {
-  if (!mmRef.value) return
-  mmRef.value.addSibling(id)
-  store.markDirty()
-  scheduleAutosave()
-}
-function onOutlineToggleCollapse(id: string) {
-  if (!mmRef.value) return
-  // MindMapExpose 没有 collapse / expand 方法,这里走 toggleSelected
-  // 旁路:发送 click 没法,所以仅刷新 selectedId + 让画布 focus,
-  // TODO: flow-mindmap 后续 expose collapseNode / expandNode 后实装。
-  outlineSelectedId.value = id
-}
-function onOutlineEdit(payload: { id: string; text: string }) {
-  if (!mmRef.value) return
-  mmRef.value.setNodeText(payload.id, payload.text)
-  store.markDirty()
-  scheduleAutosave()
-}
-function onOutlineMove(payload: {
-  srcId: string
-  targetId: string
-  position: 'before' | 'after' | 'child'
-}) {
-  if (!mmRef.value) return
-  mmRef.value.moveNode(payload.srcId, payload.targetId, payload.position)
-  store.markDirty()
-  scheduleAutosave()
-}
-
-// ── DataPanel 导入 ────────────────────────────────────────────────
-// DataPanel 内部已经把 JSON 字符串处理成 MindMapNode,emit import
-// 把节点直接灌进当前文件;importData 返回 boolean,失败时给提示。
-function onDataPanelImport(data: MindMapNode) {
-  if (!mmRef.value) return
-  const ok = mmRef.value.importData(JSON.stringify(data))
-  if (!ok) {
-    ElMessage.error($t('@MINDMAP:导入失败'))
-    return
-  }
-  store.markDirty()
-  scheduleAutosave()
-  ElMessage.success($t('@MINDMAP:已导入'))
-}
-
-// ── SettingsPanel 提交 ────────────────────────────────────────────
-function onSettingsUpdate(patch: Partial<MindMapSettings>) {
-  if (!mmRef.value) return
-  mmRef.value.applySettings(patch)
-  currentSettings.value = mmRef.value.getSettings()
-}
-
-// 把 store.current.content 解析成 MindMap 的 data prop。
-// 用 computed 缓存：同字符串 → 同引用，避免每次父组件重渲染都产生新对象，
-// 触发 flow-mindmap 内部浅 data watcher 覆盖组件内部状态（保存后视觉回退的根因）。
+// 把 store.current.content 解析成 MindMap 的 data prop
 const mmData = computed(() => {
   const c = store.current?.content
   if (!c) return null
@@ -528,28 +345,10 @@ const mmData = computed(() => {
     return null
   }
 })
-// SettingsPanel 的 per-node 文本提示:从 mmData 里按 outlineSelectedId
-// 找节点文字;没选中就传 undefined。
-const selectedNodeText = computed<string | undefined>(() => {
-  if (!outlineSelectedId.value || !mmData.value) return undefined
-  const walk = (n: any): string | undefined => {
-    if (!n || typeof n !== 'object') return undefined
-    if (n.id === outlineSelectedId.value) return typeof n.text === 'string' ? n.text : undefined
-    if (Array.isArray(n.children)) {
-      for (const c of n.children) {
-        const r = walk(c)
-        if (r !== undefined) return r
-      }
-    }
-    return undefined
-  }
-  return walk(mmData.value)
-})
 
-// ── 生命周期 ──────────────────────────────────────────────────────
+// 生命周期
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
-  // 有已保存的目录则自动加载文件列表；不弹窗，等用户主动点「选择目录」
   if (store.currentDir) {
     await store.listFiles()
   }
@@ -560,7 +359,7 @@ onBeforeUnmount(() => {
   cancelAutosave()
 })
 
-// ── 格式化 ────────────────────────────────────────────────────────
+// 格式化
 function formatTime(ms: number): string {
   if (!ms) return '-'
   const d = new Date(ms)
@@ -727,64 +526,8 @@ function formatSize(bytes: number): string {
           :preview-mode="previewMode"
           @change="onMindMapChange"
           @select="onMindMapSelect"
-          @canvas-outline="onCanvasOutline"
-          @canvas-data="onCanvasData"
-          @canvas-settings="onCanvasSettings"
-          @canvas-import="onCanvasImport"
           @canvas-toggle-preview="onCanvasTogglePreview"
         />
-
-        <!-- 画布内抽屉：Drawer 的 scope='canvas' 以 absolute 浮在
-             .mm-editor 内,backdrop 只罩画布,不遮顶 toolbar / 侧栏。 -->
-        <Drawer
-          v-model:open="showOutline"
-          :title="$t('@MINDMAP:大纲')"
-          side="right"
-          :width="320"
-          scope="canvas"
-        >
-          <Outline
-            v-if="mmData"
-            :data="mmData"
-            :selected-id="outlineSelectedId"
-            @select="onOutlineSelect"
-            @add-child="onOutlineAddChild"
-            @add-sibling="onOutlineAddSibling"
-            @toggle-collapse="onOutlineToggleCollapse"
-            @edit="onOutlineEdit"
-            @move="onOutlineMove"
-          />
-        </Drawer>
-
-        <Drawer
-          v-model:open="showDataDrawer"
-          :title="$t('@MINDMAP:思维导图数据')"
-          side="right"
-          :width="480"
-          scope="canvas"
-        >
-          <DataPanel
-            v-if="mmData"
-            :data="mmData"
-            @import="onDataPanelImport"
-          />
-        </Drawer>
-
-        <!-- 画布内对话框:本地 canvas-modal 包一层,不走 Element Plus
-             的 Teleport,backdrop + 中央容器只罩画布。 -->
-        <canvas-modal
-          v-model:open="showSettingsDialog"
-          :title="$t('@MINDMAP:思维导图设置')"
-          :width="520"
-        >
-          <SettingsPanel
-            v-if="showSettingsDialog"
-            :settings="currentSettings"
-            :has-selection="!!outlineSelectedId"
-            :selected-node-text="selectedNodeText"
-            @update:settings="onSettingsUpdate"
-          />
-        </canvas-modal>
       </div>
     </div>
 
@@ -1052,25 +795,5 @@ function formatSize(bytes: number): string {
   .mm-dir-path {
     max-width: 160px;
   }
-}
-
-/* ── 数据/大纲抽屉 ─────────────────────────────────────────────── */
-.mm-outline-empty {
-  padding: 16px;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-}
-.mm-data-json {
-  margin: 0;
-  padding: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: var(--el-fill-color-light);
-  border-radius: 4px;
-  max-height: calc(100vh - 200px);
-  overflow: auto;
 }
 </style>
