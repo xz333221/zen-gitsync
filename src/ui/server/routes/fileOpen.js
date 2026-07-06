@@ -286,6 +286,7 @@ export function registerFileOpenRoutes({
         const child = spawn(cmd, ['--version'], {
           stdio: 'ignore',
           shell: process.platform === 'win32',
+          windowsHide: true,
         });
         let done = false;
         const finish = (ok) => {

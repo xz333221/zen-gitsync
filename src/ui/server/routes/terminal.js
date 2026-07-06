@@ -195,7 +195,7 @@ export function registerTerminalRoutes({
     if (!pid) return;
 
     if (process.platform === 'win32') {
-      exec(`taskkill /pid ${pid} /T /F`, (error) => {
+      exec(`taskkill /pid ${pid} /T /F`, { windowsHide: true }, (error) => {
         if (error) {
           logger.warn(`[终端会话] taskkill 失败(可忽略): ${error?.message || error}`);
         }

@@ -1141,7 +1141,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     try {
       if (process.platform === 'win32') {
         // Windows: child.kill(SIGTERM) 经常无效，用 taskkill 杀进程树
-        execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], (err) => {
+        execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, (err) => {
           if (err) {
             logger.warn(`[workbench] taskkill ${child.pid} 失败: ${err.message}`);
           }

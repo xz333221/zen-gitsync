@@ -44,7 +44,7 @@ export function registerProcessRoutes({
           if (process.platform === 'win32') {
             // 使用已导入的 exec
             // /F 强制终止, /T 终止进程树
-            exec(`taskkill /pid ${processInfo.childProcess.pid} /T /F`, (error) => {
+            exec(`taskkill /pid ${processInfo.childProcess.pid} /T /F`, { windowsHide: true }, (error) => {
               if (error) {
                 logger.error(`[进程管理] taskkill 失败:`, error);
               }

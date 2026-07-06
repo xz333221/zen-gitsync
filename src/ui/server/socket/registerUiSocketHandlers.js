@@ -181,6 +181,7 @@ export function registerUiSocketHandlers({
       const childProcess = spawn(bin, args, {
         cwd: execDirectory,
         env: INTERACTIVE_ENV,
+        windowsHide: true,
       });
 
       runningProcesses.set(processId, {
@@ -296,7 +297,7 @@ export function registerUiSocketHandlers({
         if (childProcess && !childProcess.killed) {
           try {
             if (process.platform === 'win32') {
-              exec(`taskkill /pid ${childProcess.pid} /T /F`, (error) => {
+              exec(`taskkill /pid ${childProcess.pid} /T /F`, { windowsHide: true }, (error) => {
                 if (error) {
                   logger.error(`[交互式命令] taskkill 失败:`, error);
                 }
@@ -321,7 +322,7 @@ export function registerUiSocketHandlers({
         if (childProcess && !childProcess.killed) {
           try {
             if (process.platform === 'win32') {
-              exec(`taskkill /pid ${childProcess.pid} /T /F`, () => {});
+              exec(`taskkill /pid ${childProcess.pid} /T /F`, { windowsHide: true }, () => {});
             } else {
               childProcess.kill('SIGTERM');
               setTimeout(() => {

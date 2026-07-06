@@ -75,7 +75,7 @@ export function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
       // 用 `where claude` 找到 claude.cmd，再从 cmd 内容推断对应 .exe 路径。
       let claudeExe = 'claude.exe';
       try {
-        const cmdShim = execFileSync('where', ['claude'], { encoding: 'utf8' })
+        const cmdShim = execFileSync('where', ['claude'], { encoding: 'utf8', windowsHide: true })
           .split(/\r?\n/).map(s => s.trim()).find(s => /\.cmd$/i.test(s));
         if (cmdShim) {
           const txt = fs.readFileSync(cmdShim, 'utf8');

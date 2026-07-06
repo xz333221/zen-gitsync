@@ -75,15 +75,15 @@ async function listPortsWindows({ all = false } = {}) {
   // 串行耗时 = 三者之和；并行后 = max(三者)），Windows 上 netstat 对大量
   // ESTABLISHED 连接很慢，并行能把 8-19s 压到 3-8s。
   const [tcpRes, udpRes, tasklistRes] = await Promise.all([
-    execFileP('netstat', ['-ano', '-p', 'TCP']).catch((e) => {
+    execFileP('netstat', ['-ano', '-p', 'TCP'], { windowsHide: true }).catch((e) => {
       logger.warn(`[monitor] netstat TCP 失败: ${e?.message || e}`)
       return { stdout: '' }
     }),
-    execFileP('netstat', ['-ano', '-p', 'UDP']).catch((e) => {
+    execFileP('netstat', ['-ano', '-p', 'UDP'], { windowsHide: true }).catch((e) => {
       logger.warn(`[monitor] netstat UDP 失败: ${e?.message || e}`)
       return { stdout: '' }
     }),
-    execFileP('tasklist', ['/FO', 'CSV', '/NH']).catch((e) => {
+    execFileP('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true }).catch((e) => {
       logger.warn(`[monitor] tasklist 失败: ${e?.message || e}`)
       return { stdout: '' }
     })
@@ -245,7 +245,7 @@ async function killProcess(pid, { force = false } = {}) {
     const args = ['/PID', String(pidNum), '/F']
     if (force) args.push('/T')
     try {
-      await execFileP('taskkill', args)
+      await execFileP('taskkill', args, { windowsHide: true })
     } catch (e) {
       // taskkill 在中文 Windows 上 stderr 是 GBK 编码，promisify 默认 utf8 解码会乱码，
       // 无法可靠匹配 "找不到" 文案。改用 exit code 兜底：
