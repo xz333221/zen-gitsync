@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 前端加载/运行时性能优化。涉及 21 个文件,新增 26 条 i18n key,删除 4 个孤儿组件,新增 1 条手动
 chunk 拆分策略。无破坏性 API 变更,向后兼容。
 
+本轮会话集中提交:更新客户端 flow-mindmap 依赖到 `^0.5.6`(0.5.3 -> 0.5.6,patch 更新);
+修复上游 flow-mindmap package.json description 中的损坏 UTF-8 字符(导致 vite 8/rolldown 构建失败);
+src/ui/client 中的引用点(`MarkdownPreview.vue` / `MindmapPreview.vue` / `MindmapView.vue` / `mindmapStore.ts`)
+未变动,vue-tsc 检查通过。
+
+### Changed - Dependencies
+
+- **flow-mindmap**: 升级到 `^0.5.6`(0.5.3 -> 0.5.6,patch 更新,修复 description 损坏 UTF-8)
 ### Added — 可访问性(Accessibility,WCAG 2.1 AA)
 
 #### 焦点管理 / 全局兜底(`main.css`)
