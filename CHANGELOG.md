@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — 2026-06-19
 
+本轮会话集中提交:更新客户端 flow-mindmap 依赖到 `^0.5.6` → `0.5.7`(patch 更新);
+上游 flow-mindmap 0.5.7 变更:层级衰减默认 0.3、线条粗端默认 16、圆角折线两端不再显示圆角、
+新增圆角大小设置、配色方案改为可视化色板列表、移除表格排序功能。
+
 本轮会话集中提交:死代码清理 + i18n 漏译修复 + UI 设计语言统一 + 可访问性(a11y)全面提升 +
 前端加载/运行时性能优化。涉及 21 个文件,新增 26 条 i18n key,删除 4 个孤儿组件,新增 1 条手动
 chunk 拆分策略。无破坏性 API 变更,向后兼容。
