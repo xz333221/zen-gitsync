@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — 2026-06-19
 
+本轮会话集中提交:更新客户端 flow-mindmap 依赖到 `^0.5.9` → `^0.5.10`(patch 更新);
+上游 flow-mindmap 0.5.10 变更:三级节点背景色(根/一级/二级分层递减)、折叠按钮改为圆角方形、
+折叠计数改为递归统计所有后代节点、圆角折线默认 20px 且仅子节点端有圆角、水平直线跳过圆角、
+lineWidthTaper 范围放宽至 0.1–1.0、lineWidthEnd 最小值降至 0.1、点击缩放百分比重置 100%。
+
 本轮会话集中提交:更新客户端 flow-mindmap 依赖到 `^0.5.6` → `0.5.7`(patch 更新);
 上游 flow-mindmap 0.5.7 变更:层级衰减默认 0.3、线条粗端默认 16、圆角折线两端不再显示圆角、
 新增圆角大小设置、配色方案改为可视化色板列表、移除表格排序功能。
