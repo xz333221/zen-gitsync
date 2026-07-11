@@ -1,6 +1,6 @@
 {
   "name": "zen-gitsync",
-  "version": "2.15.22",
+  "version": "2.15.23",
   "description": "Auto commit, scheduled sync, and visual GUI for Git. Run `g` in any repo for one-key commit & push, AI commit messages, scheduled background sync, and a drag-and-drop workflow builder.",
   "main": "index.js",
   "type": "module",
