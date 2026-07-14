@@ -241,8 +241,8 @@ function onBeforeUnloadPersist() {
 
 const promptDialog = reactive({ visible: false, editing: null as Prompt | null, name: '', content: '', aiLoading: false, projectPath: '' })
 const instructionDialog = reactive({ visible: false, text: '', loading: false, saving: false })
-// 任务描述（主任务 desc + 附件）默认折叠，避免占满首屏
-const taskDescExpanded = ref(false)
+// 任务描述（主任务 desc + 附件）默认展开，用户编辑时一眼可见,不必每次点开
+const taskDescExpanded = ref(true)
 
 // ── 提示词按项目过滤 ────────────────────────────────────────────────────
 // 全局提示词的 projectPath = '' (空串);右侧下拉只展示「当前项目专属 + 全局」两部分。
@@ -290,6 +290,49 @@ async function copySubError(sub: any) {
   const text = `[${sub.title || $t('@WORKBENCH:未命名子任务')}]\n${sub.error || ''}`
   const ok = await copyToClipboard(text)
   ElMessage[ok ? 'success' : 'error'](ok ? $t('@WORKBENCH:已复制错误信息') : $t('@WORKBENCH:复制失败'))
+}
+
+/**
+ * 复制任务标题/描述的小工具：
+ * - 复制成功 → 短暂切换 icon 为 ✓（1.5s 后还原），并在 1.5s 内显示已复制提示
+ * - 复制失败 → 弹 ElMessage.error 并保持原 icon
+ * - title/desc 都为空时弹 warning，不进入复制流程
+ */
+const copyTitleFlashId = ref<string | null>(null)
+const copyDescFlashId = ref<string | null>(null)
+
+async function copyTaskTitle(t: Task | null) {
+  if (!t) return
+  const text = (t.title || '').trim() || $t('@WORKBENCH:未命名任务')
+  const ok = await copyToClipboard(text)
+  if (!ok) {
+    ElMessage.error($t('@WORKBENCH:复制失败'))
+    return
+  }
+  copyTitleFlashId.value = t.id
+  ElMessage.success($t('@WORKBENCH:已复制任务标题'))
+  window.setTimeout(() => {
+    if (copyTitleFlashId.value === t.id) copyTitleFlashId.value = null
+  }, 1500)
+}
+
+async function copyTaskDesc(t: Task | null) {
+  if (!t) return
+  const text = (t.desc || '').trim()
+  if (!text) {
+    ElMessage.warning($t('@WORKBENCH:任务描述为空,无需复制'))
+    return
+  }
+  const ok = await copyToClipboard(text)
+  if (!ok) {
+    ElMessage.error($t('@WORKBENCH:复制失败'))
+    return
+  }
+  copyDescFlashId.value = t.id
+  ElMessage.success($t('@WORKBENCH:已复制任务描述'))
+  window.setTimeout(() => {
+    if (copyDescFlashId.value === t.id) copyDescFlashId.value = null
+  }, 1500)
 }
 
 /** popover 里"查看执行日志"按钮：定位到该 sub 对应的任务后打开日志弹窗。 */
@@ -515,6 +558,47 @@ async function deletePrompt(p: Prompt) {
 // - 创建后标题输入框自动聚焦,直接打字即可起标题(免去鼠标移到输入框)。
 const creatingTask = ref(false)
 const titleInputRef = ref<HTMLInputElement | null>(null)
+const taskDescTextareaRef = ref<HTMLTextAreaElement | null>(null)
+
+/**
+ * 自适应 textarea 高度:
+ * - 每次输入后重置 height=auto 让 scrollHeight 重新计算,然后 clamp 到 [minPx, maxPx]
+ * - 同时清掉 resize 拖拽手柄(resize:none),避免手动拖拽高度破坏自适应逻辑
+ * - 切走任务再切回来时 selectedTask.desc 可能已变,触发 watch 走同一逻辑
+ */
+const DESC_TEXTAREA_MIN_PX = 52
+const DESC_TEXTAREA_MAX_PX = 320
+
+function autoGrowTextarea(ev?: Event) {
+  const el = (ev?.currentTarget as HTMLTextAreaElement | null) || taskDescTextareaRef.value
+  if (!el) return
+  // 重置回 auto 让浏览器能正确算出真实高度(只设 height 不会触发重新计算)
+  el.style.height = 'auto'
+  const next = Math.min(Math.max(el.scrollHeight, DESC_TEXTAREA_MIN_PX), DESC_TEXTAREA_MAX_PX)
+  el.style.height = `${next}px`
+  // 内容超过 max 时启用内部滚动条
+  el.style.overflowY = el.scrollHeight > DESC_TEXTAREA_MAX_PX ? 'auto' : 'hidden'
+}
+
+// 切换/新建任务时,如果描述折叠展开着,需要重新计算一次高度
+// (上一任务写入的 height 可能不是新任务的最佳值)
+watch(taskDescExpanded, async (open) => {
+  if (open) {
+    await nextTick()
+    autoGrowTextarea()
+  }
+})
+// 默认展开后,首屏直接渲染 textarea 但 watch 不会触发(initial value 不算 change)。
+// 这里兜底:selectedTask 切换 / 首次加载时,如果已展开就 recalc 一次高度。
+watch(
+  () => selectedTask.value?.id,
+  async () => {
+    if (taskDescExpanded.value) {
+      await nextTick()
+      autoGrowTextarea()
+    }
+  }
+)
 async function createTaskDirect() {
   if (creatingTask.value) return
   creatingTask.value = true
@@ -1025,12 +1109,25 @@ const {
       </div>
       <template v-else>
         <div class="wb-split__header">
-          <input
-            ref="titleInputRef"
-            class="wb-input wb-input--title"
-            v-model="selectedTask.title"
-            :placeholder="$t('@WORKBENCH:任务标题')"
-          />
+          <div class="wb-split__title-wrap">
+            <input
+              ref="titleInputRef"
+              class="wb-input wb-input--title"
+              v-model="selectedTask.title"
+              :placeholder="$t('@WORKBENCH:任务标题')"
+            />
+            <button
+              type="button"
+              class="wb-copy-btn"
+              :class="{ 'is-flash': copyTitleFlashId === selectedTask.id }"
+              :title="$t('@WORKBENCH:复制任务标题')"
+              :aria-label="$t('@WORKBENCH:复制任务标题')"
+              @click="copyTaskTitle(selectedTask)"
+            >
+              <el-icon class="wb-copy-btn__icon" v-if="copyTitleFlashId !== selectedTask.id"><CopyDocument /></el-icon>
+              <el-icon class="wb-copy-btn__icon wb-copy-btn__icon--check" v-else>✓</el-icon>
+            </button>
+          </div>
           <span
             v-if="metaSaveState !== 'idle' || metaDirty"
             class="wb-meta-save"
@@ -1147,6 +1244,17 @@ const {
               <component :is="taskDescExpanded ? ArrowDown : ArrowRight" />
             </el-icon>
             <span class="wb-task-desc__label">{{ $t('@WORKBENCH:任务描述（可选）') }}</span>
+            <button
+              type="button"
+              class="wb-copy-btn wb-copy-btn--inline"
+              :class="{ 'is-flash': copyDescFlashId === selectedTask.id }"
+              :title="(selectedTask.desc && selectedTask.desc.trim()) ? $t('@WORKBENCH:复制任务描述') : $t('@WORKBENCH:任务描述为空,无需复制')"
+              :aria-label="$t('@WORKBENCH:复制任务描述')"
+              @click.stop.prevent="copyTaskDesc(selectedTask)"
+            >
+              <el-icon class="wb-copy-btn__icon" v-if="copyDescFlashId !== selectedTask.id"><CopyDocument /></el-icon>
+              <el-icon class="wb-copy-btn__icon wb-copy-btn__icon--check" v-else>✓</el-icon>
+            </button>
             <span
               v-if="(selectedTask.desc && selectedTask.desc.length > 0) || (selectedTask.attachments && selectedTask.attachments.length > 0)"
               class="wb-task-desc__tag"
@@ -1159,10 +1267,11 @@ const {
             </span>
           </summary>
           <textarea
-            class="wb-textarea"
+            ref="taskDescTextareaRef"
+            class="wb-textarea wb-textarea--autogrow"
             v-model="selectedTask.desc"
             :placeholder="$t('@WORKBENCH:任务描述（可选）')"
-            rows="2"
+            @input="autoGrowTextarea($event)"
             @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
           />
           <AttachmentZone
@@ -1585,9 +1694,10 @@ const {
   display: flex;
   align-items: center;
   gap: 6px;
-  /* 右内边距 14px:之前 12px 在 focus 边框场景下视觉上被 1px 焦点边框"吃掉",
-     看起来跟"已填写 1"标签贴边,造成"右侧超出"错觉。给 2px 缓冲。 */
-  padding: 8px 14px;
+  /* 去掉左右 padding:让 summary 的图标/文字/复制按钮/已填写标签
+     全部紧贴父容器左右内边线,跟下面 textarea 的 0 margin 对齐,
+     整体视觉更紧凑、不再有"两边挤压"的不对齐感。 */
+  padding: 8px 0;
   font-size: 12px;
   color: var(--text-secondary);
   user-select: none;
@@ -1631,8 +1741,12 @@ const {
 .wb-task-desc > :deep(.attachment-zone) {
   /* 右外边距 14px(与 summary 同步):之前 12px 在 focus 状态下被焦点边框吃掉 1px,
      视觉上 textarea 右边缘几乎贴住父容器右内边缘,显得"右侧超出/没显示全"。
-     加 2px 缓冲,并配合 .wb-task-desc 的 min-width: 0 一起保证不撑出父容器。 */
-  margin: 8px 14px 10px;
+     加 2px 缓冲,并配合 .wb-task-desc 的 min-width: 0 一起保证不撑出父容器。
+     上 margin 0:让 textarea 紧贴 summary(默认展开后 summary 和 textarea 紧贴更紧凑)。
+     左外边距 0:让 textarea 文本基线与 summary 文本对齐(summary 的图标+文字也是
+     紧贴父容器左内边线),不要让 textarea 再往里缩 14px 出现"视觉上偏移"。
+     下 margin 0:由 attachment-zone 的上 margin(8px)和 border 视觉自然分隔。 */
+  margin: 0 14px 0 0;
 }
 .wb-task-desc > .wb-textarea {
   margin-bottom: 0;
@@ -1640,7 +1754,9 @@ const {
   max-width: 100%;
 }
 .wb-task-desc > :deep(.attachment-zone) {
-  margin-top: 0;
+  /* 给 attachment-zone 一个 8px 上 margin,与 textarea 的 0 上 margin
+     形成 8px 视觉间距(避免去掉 textarea 上 margin 后两者贴在一起)。 */
+  margin-top: 8px;
 }
 
 /* editor 视图的子行容器：把 sidebar + split 重新横向排列（workbench 改成 column 后需要这一层） */
@@ -2315,7 +2431,12 @@ const {
 .wb-split {
   flex: 1;
   min-height: 0;
-  padding: 12px 18px 10px;
+  /* 之前 padding-right: 18px 在 1080p 窄窗口下被 header 横向滚动吃光,
+     加上滚动条 8-12px 后正文右侧紧贴容器右边缘,
+     焦点边框 1px + 卡片背景渐变导致"看不到又边框"。
+     18 → 24 给 6px 额外缓冲,并配合 .wb-split__header 的 padding-right: 8px
+     保证标题输入框和工具按钮不被父容器右内边线吃掉。 */
+  padding: 12px 24px 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -2639,7 +2760,71 @@ const {
   align-items: center;
   flex-shrink: 0;
   padding-bottom: 4px;
+  /* 右侧 8px padding 让"复制/保存状态"等小工具不被外边线贴住,
+     解决"看不到又边框"的问题（之前是 0,边缘 1px focus ring 吃掉 padding
+     会让按钮紧贴父容器右内边线,看起来"超出/缺 padding"）。 */
+  padding-right: 8px;
 }
+
+/* 标题输入 + 复制按钮的横向组合,让按钮紧贴输入框右侧并保持 8px 间距 */
+.wb-split__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.wb-split__title-wrap .wb-input--title { flex: 1; min-width: 0; }
+
+/* ── 复制按钮(标题/描述都用,inline 变体用在 summary 行) ───────────── */
+.wb-copy-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-container);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition:
+    background var(--transition-fast) var(--ease-custom),
+    border-color var(--transition-fast) var(--ease-custom),
+    color var(--transition-fast) var(--ease-custom),
+    transform 0.1s var(--ease-custom);
+}
+.wb-copy-btn:hover:not(:disabled) {
+  background: var(--tint-primary-12);
+  border-color: var(--tint-primary-35);
+  color: var(--color-primary);
+}
+.wb-copy-btn:active:not(:disabled) { transform: scale(0.94); }
+.wb-copy-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.wb-copy-btn.is-flash {
+  background: var(--tint-success-14, color-mix(in srgb, var(--color-success) 14%, transparent));
+  border-color: var(--tint-success-35, color-mix(in srgb, var(--color-success) 35%, transparent));
+  color: var(--color-success-dark, #047857);
+}
+.wb-copy-btn__icon { font-size: 13px; line-height: 1; }
+.wb-copy-btn__icon--check {
+  font-size: 14px;
+  font-weight: 800;
+}
+/* 描述折叠行内的紧凑变体:小一号,跟文字行视觉重量齐平 */
+.wb-copy-btn--inline {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  margin-left: 2px;
+}
+.wb-copy-btn--inline .wb-copy-btn__icon { font-size: 11px; }
 
 /* ── 任务类型 segmented control（顶部头部右侧） ────────────────
    设计参照 Claude Code Overview/Models tab：圆角 8px 灰底容器，
@@ -2972,6 +3157,18 @@ const {
   box-shadow: 0 0 0 3px var(--tint-primary-14);
 }
 .wb-textarea--sm { min-height: 44px; padding: 8px 12px; font-size: 13px; }
+
+/* 自适应高度 textarea:禁掉手动 resize,高度由 autoGrowTextarea() 写入。
+   设 overflow-y: hidden 默认,JS 在内容超 max 时改 overflow-y: auto。 */
+.wb-textarea--autogrow {
+  resize: none;
+  min-height: 52px;
+  max-height: 320px;
+  overflow-y: hidden;
+  /* line-height 1.55 配合 13px 字号 → 行高 ~20px,
+     52px 起手约 2 行可写空间,足够 placeholder 完整显示。 */
+  transition: height 0.12s var(--ease-custom);
+}
 
 .wb-split__sub-header {
   display: flex;
