@@ -37,6 +37,7 @@ import {
   genId,
   interpolate,
 } from './shared.js';
+import { buildAttachmentBlock } from './pdfText.js';
 import {
   jobs,
   cancelledJobs,
@@ -211,8 +212,8 @@ ${prompt}`;
   }
 
   // ── 附件：合并 sub.attachments + task.attachments 后拼到 prompt 末尾 ──
-  // claude -p 字符串模式会扫描 prompt 中出现的本地文件路径并自动
-  // 识别为附件（图片 / PDF / 文本均可）。
+  // PDF 附件在服务端预提取全文(Claude CLI v2.1.x 的 pdfParse 有 bug),
+  // 图片和其他文件仍列路径让 Claude CLI 直接读取。
   // 主任务附件对所有 sub 都可见；子任务自己的附件只对该 sub 可见。
   // 注意：run-simple 路径下 virtualSub.attachments 就是 task.attachments 的同一引用，
   // 不去重会把同一张图在 prompt 里列两遍。按 absolutePath 去重。
@@ -227,11 +228,9 @@ ${prompt}`;
     allAttachments.push(a);
   }
   if (allAttachments.length > 0) {
-    const lines = allAttachments
-      .filter(a => a && a.absolutePath)
-      .map((a, i) => `  ${i + 1}. [${a.mimeType || 'application/octet-stream'}] ${a.absolutePath}`);
-    if (lines.length > 0) {
-      prompt += `\n\n---\n本任务包含 ${lines.length} 个附件（请按文件路径读取，不要让用户重新提供）：\n${lines.join('\n')}\n---`;
+    const { block: attachmentBlock } = await buildAttachmentBlock(allAttachments);
+    if (attachmentBlock) {
+      prompt += `\n\n---\n本任务包含 ${allAttachments.length} 个附件（请按文件路径读取，不要让用户重新提供）：${attachmentBlock}\n---`;
     }
   }
 
