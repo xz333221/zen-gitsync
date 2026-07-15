@@ -389,7 +389,7 @@ async function getLockedFiles() {
 }
 
 // 全局“最近访问的目录”管理（保存在原始配置的顶层）
-const MAX_RECENT_DIRS = 12;
+const MAX_RECENT_DIRS = 50;
 
 async function getRecentDirectories() {
   const raw = await readRawConfigFile();

@@ -35,6 +35,8 @@ import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 import AppErrorBanner from '@/components/AppErrorBanner.vue'
 import RecentProjectsList from '@/components/RecentProjectsList.vue'
 import ViewLoading from '@/components/ViewLoading.vue'
+// 控制台视图:默认加载(静态导入),首屏即打包进 chunk,切过去无需等待。
+import ConsoleView from '@views/ConsoleView.vue'
 // 视图懒加载:首屏只下载 git 视图,其它视图切过去才请求 chunk。
 // loadingComponent:chunk 下载期间显示的内联占位(轻量 spinner,非全屏遮罩)。
 // delay:200ms 后才显示 loading,避免本地秒加载时 loading 一闪而过造成抖动。
@@ -45,8 +47,7 @@ const asyncOpts = {
   delay: 200,
   // timeout: 60_000  // 超时走 errorComponent,暂不配
 }
-// 控制台 / 编辑器 / 源码地图等视图延迟加载（首屏不下载）
-const ConsoleView = defineAsyncComponent({ loader: () => import('@views/ConsoleView.vue'), ...asyncOpts })
+// 编辑器 / 源码地图等视图延迟加载（首屏不下载）
 const EditorView = defineAsyncComponent({ loader: () => import('@/views/EditorView.vue'), ...asyncOpts })
 const SourceMapView = defineAsyncComponent({ loader: () => import('@views/SourceMapView.vue'), ...asyncOpts })
 const WorkbenchView = defineAsyncComponent({ loader: () => import('@views/WorkbenchView.vue'), ...asyncOpts })
@@ -771,10 +772,10 @@ function stopHResize() {
 
       </div><!-- /view-pane git -->
 
-      <!-- 控制台视图（懒加载 + KeepAlive 缓存：自定义命令 + 命令控制台，从 Git 视图拆出） -->
+      <!-- 控制台视图（默认加载：随首屏静态挂载，切过去零等待；KeepAlive 缓存实例保状态） -->
       <div v-show="activeView === 'console'" class="view-pane console-pane">
         <KeepAlive>
-          <ConsoleView v-if="activeView === 'console'" />
+          <ConsoleView />
         </KeepAlive>
       </div>
 
