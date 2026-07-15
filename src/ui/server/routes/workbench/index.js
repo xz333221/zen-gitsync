@@ -498,7 +498,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       } catch { /* 模板读取失败不影响预览 */ }
     }
 
-    // 附件:只列条目,不读图片二进制(preview 阶段不需要 image_data_url)
+    // 附件:PDF 预提取全文,图片只计数(preview 阶段不需要 image_data_url)
     let attachmentBlock = '';
     let imageCount = 0;
     if (taskId) {
@@ -507,19 +507,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         const task = (data.tasks || []).find(t => t.id === taskId);
         const atts = Array.isArray(task?.attachments) ? task.attachments : [];
         if (atts.length > 0) {
-          const lines = [];
-          for (let i = 0; i < atts.length; i++) {
-            const a = atts[i];
-            if (!a || !a.absolutePath) continue;
-            lines.push(`  ${i + 1}. [${a.mimeType || 'application/octet-stream'}] ${a.absolutePath}`);
-            if (isImageExt(a.ext)) imageCount++;
-          }
-          if (lines.length > 0) {
-            const imgNote = imageCount > 0
-              ? `（其中 ${imageCount} 张图片已随消息一并发送，请直接基于图片内容拆分）`
-              : '';
-            attachmentBlock = `\n\n## 任务附件${imgNote}\n${lines.join('\n')}`;
-          }
+          imageCount = atts.filter(a => a && isImageExt(a.ext)).length;
+          const result = await buildAttachmentBlock(atts, { withImageData: false });
+          attachmentBlock = result.block;
         }
       } catch { /* 没拿到附件不影响预览 */ }
     }

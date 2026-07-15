@@ -109,6 +109,7 @@
     "log-update": "^6.1.0",
     "open": "^10.1.2",
     "ora": "^8.1.1",
+    "pdf-parse": "^2.4.5",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
     "string-width": "^7.2.0"
