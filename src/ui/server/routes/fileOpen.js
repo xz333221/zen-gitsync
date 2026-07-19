@@ -54,6 +54,26 @@ async function launchClaudeCode(dirPath, { permissionMode } = {}) {
   });
 }
 
+async function launchCodex(dirPath) {
+  // OpenAI Codex CLI - 无 permissionMode 参数(与 claude 不同)
+  if (process.platform === 'win32') {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'codex'], {
+      cwd: dirPath
+    });
+  }
+  return spawnDetached('codex', [], { cwd: dirPath });
+}
+
+async function launchOpenCode(dirPath) {
+  // opencode (sst/opencode) CLI - https://opencode.ai
+  if (process.platform === 'win32') {
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', 'opencode'], {
+      cwd: dirPath
+    });
+  }
+  return spawnDetached('opencode', [], { cwd: dirPath });
+}
+
 export function registerFileOpenRoutes({
   app
 }) {
@@ -278,6 +298,62 @@ export function registerFileOpenRoutes({
       }
     }));
 
+  // 用 Codex 打开目录
+  app.post('/api/open-directory-with-codex', asyncRoute(async (req, res) => {
+      try {
+        const { path: dirPath } = req.body || {};
+        if (!dirPath) {
+          throw new HttpError(400, '目录路径不能为空');
+        }
+
+        try {
+          await fs.access(dirPath);
+        } catch (error) {
+          throw new HttpError(400, `目录不存在或不可访问: ${dirPath}`);
+        }
+
+        try {
+          await launchCodex(dirPath);
+          res.json({ success: true, message: '已用 Codex 打开目录' });
+        } catch (error) {
+          res.status(400).json({
+            success: false,
+            error: '未检测到 Codex，请先安装并确保可以在终端中直接运行 codex'
+          });
+        }
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    }));
+
+  // 用 OpenCode 打开目录
+  app.post('/api/open-directory-with-opencode', asyncRoute(async (req, res) => {
+      try {
+        const { path: dirPath } = req.body || {};
+        if (!dirPath) {
+          throw new HttpError(400, '目录路径不能为空');
+        }
+
+        try {
+          await fs.access(dirPath);
+        } catch (error) {
+          throw new HttpError(400, `目录不存在或不可访问: ${dirPath}`);
+        }
+
+        try {
+          await launchOpenCode(dirPath);
+          res.json({ success: true, message: '已用 OpenCode 打开目录' });
+        } catch (error) {
+          res.status(400).json({
+            success: false,
+            error: '未检测到 OpenCode，请先安装并确保可以在终端中直接运行 opencode'
+          });
+        }
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    }));
+
   // 检测本地工具是否已安装(供前端根据结果决定是否显示对应按钮)
   // 检测方式: spawn 'tool --version',exit 0 即视为已安装
   // 超时 3s 避免某个工具卡在 PATH 解析上时整个接口挂起
@@ -300,11 +376,13 @@ export function registerFileOpenRoutes({
         setTimeout(() => finish(false), 3000);
       });
 
-      const [vscode, claude] = await Promise.all([
+      const [vscode, claude, codex, opencode] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
+        checkCmd('codex'),
+        checkCmd('opencode'),
       ]);
 
-      res.json({ success: true, vscode, claude });
+      res.json({ success: true, vscode, claude, codex, opencode });
     }));
 }

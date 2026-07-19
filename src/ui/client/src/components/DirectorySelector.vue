@@ -162,6 +162,52 @@ async function onOpenInClaudeCode(permissionMode?: string) {
   }
 }
 
+// 用 Codex 打开当前目录
+async function onOpenInCodex() {
+  try {
+    if (!currentDirectory.value) {
+      ElMessage.warning($t('@67CE7:当前目录路径为空'));
+      return;
+    }
+    const response = await fetch('/api/open-directory-with-codex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: currentDirectory.value }),
+    });
+    const result = await response.json();
+    if (result.success) {
+      ElMessage.success(result.message || $t('@67CE7:已用 Codex 打开目录'));
+    } else if (result.error) {
+      ElMessage.error(result.error);
+    }
+  } catch (error) {
+    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
+  }
+}
+
+// 用 OpenCode 打开当前目录
+async function onOpenInOpencode() {
+  try {
+    if (!currentDirectory.value) {
+      ElMessage.warning($t('@67CE7:当前目录路径为空'));
+      return;
+    }
+    const response = await fetch('/api/open-directory-with-opencode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: currentDirectory.value }),
+    });
+    const result = await response.json();
+    if (result.success) {
+      ElMessage.success(result.message || $t('@67CE7:已用 OpenCode 打开目录'));
+    } else if (result.error) {
+      ElMessage.error(result.error);
+    }
+  } catch (error) {
+    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
+  }
+}
+
 // 右键菜单（el-popover manual 模式）—— 避开 el-dropdown 在 el-tooltip 嵌套下的 contextmenu 失效问题
 const claudeMenuVisible = ref(false)
 const claudeTriggerRef = ref<HTMLElement | null>(null)
@@ -471,6 +517,24 @@ function onBrowserSelect(path: string) {
         @click="onOpenInVscode"
       >
         <svg-icon icon-class="vscode" />
+      </IconButton>
+      <IconButton
+        v-if="toolsStore.codexAvailable"
+        :tooltip="$t('@67CE7:用 Codex 打开')"
+        :aria-label="$t('@67CE7:用 Codex 打开')"
+        size="large"
+        @click="onOpenInCodex"
+      >
+        <svg-icon icon-class="codex" />
+      </IconButton>
+      <IconButton
+        v-if="toolsStore.opencodeAvailable"
+        :tooltip="$t('@67CE7:用 OpenCode 打开')"
+        :aria-label="$t('@67CE7:用 OpenCode 打开')"
+        size="large"
+        @click="onOpenInOpencode"
+      >
+        <svg-icon icon-class="opencode" />
       </IconButton>
       <!--
         用 Claude Code 打开：左键 = 默认；右键 = 弹出菜单（默认 / 完全批准）。

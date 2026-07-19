@@ -1,4 +1,4 @@
-// 本地工具检测 store — vscode / claude 是否安装
+// 本地工具检测 store — vscode / claude / codex / opencode 是否安装
 // 调用 /api/check-tools,启动时一次 + 每 10 分钟刷新
 // 组件用 v-if="toolsStore.vscodeAvailable" 决定是否显示对应按钮
 import { defineStore } from 'pinia'
@@ -11,6 +11,8 @@ const POLL_INTERVAL_MS = 10 * 60 * 1000 // 10 分钟
 export const useToolsStore = defineStore('tools', () => {
   const vscodeAvailable = ref(false)
   const claudeAvailable = ref(false)
+  const codexAvailable = ref(false)
+  const opencodeAvailable = ref(false)
   const lastCheckedAt = ref<number | null>(null)
   const isChecking = ref(false)
 
@@ -23,6 +25,8 @@ export const useToolsStore = defineStore('tools', () => {
       if (data.success) {
         vscodeAvailable.value = !!data.vscode
         claudeAvailable.value = !!data.claude
+        codexAvailable.value = !!data.codex
+        opencodeAvailable.value = !!data.opencode
         lastCheckedAt.value = Date.now()
       }
     } catch {
@@ -49,6 +53,8 @@ export const useToolsStore = defineStore('tools', () => {
   return {
     vscodeAvailable,
     claudeAvailable,
+    codexAvailable,
+    opencodeAvailable,
     lastCheckedAt,
     isChecking,
     checkTools,
