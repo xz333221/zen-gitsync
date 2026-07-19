@@ -190,6 +190,19 @@ export function registerGitOpsRoutes({
   // 推送更改
   app.post('/api/push', async (req, res) => {
     try {
+      // 防御性检查：空仓库直接返回明确错误,避免 git push 报
+      // "src refspec master does not match any" 让用户摸不着头脑。
+      const headCheck = await execGitCommand(
+        ['rev-parse', '--verify', 'HEAD'],
+        { ignoreError: true, log: false }
+      );
+      if (!headCheck.stdout || !headCheck.stdout.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: '当前仓库没有任何提交，请先在左侧暂存并提交至少一个文件后再推送。',
+          errorCode: 'EMPTY_REPO'
+        });
+      }
       const { stdout } = await execGitCommand(['push']);
 
       // 推送成功后，设置推送状态标记
@@ -212,6 +225,21 @@ export function registerGitOpsRoutes({
       const { branch } = req.body || {};
       if (!branch || typeof branch !== 'string') {
         return res.status(400).json({ success: false, error: '缺少 branch 参数' });
+      }
+      // 防御性检查：空仓库（没有任何 commit）直接返回明确错误，
+      // 避免 git push -u 报 "src refspec master does not match any" 让用户摸不着头脑。
+      // git rev-parse --verify HEAD 在空仓库下返回非零退出 → execGitCommand 用 ignoreError
+      // 吞掉异常并 resolve({stdout:''}),用空 stdout 判定空仓库。
+      const headCheck = await execGitCommand(
+        ['rev-parse', '--verify', 'HEAD'],
+        { ignoreError: true, log: false }
+      );
+      if (!headCheck.stdout || !headCheck.stdout.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: '当前仓库没有任何提交，请先在左侧暂存并提交至少一个文件后再推送。',
+          errorCode: 'EMPTY_REPO'
+        });
       }
       const { stdout } = await execGitCommand(['push', '-u', 'origin', branch]);
       setRecentPushStatus({
@@ -287,6 +315,22 @@ export function registerGitOpsRoutes({
       if (cwdArg) {
         const [, value] = cwdArg.split('=');
         workDir = value || process.cwd();
+      }
+
+      // 防御性检查:空仓库直接返回 EMPTY_REPO,避免 git push 报
+      // "src refspec master does not match any" 走完整个 spawn 流程。
+      // 注意:SSE 通道一旦 flushHeaders 就无法再发普通 JSON,只能继续用 SSE 协议。
+      const headCheck = await execGitCommand(
+        ['rev-parse', '--verify', 'HEAD'],
+        { ignoreError: true, log: false }
+      );
+      if (!headCheck.stdout || !headCheck.stdout.trim()) {
+        sendProgress({
+          type: 'error',
+          error: '当前仓库没有任何提交，请先在左侧暂存并提交至少一个文件后再推送。',
+          errorCode: 'EMPTY_REPO'
+        });
+        return res.end();
       }
 
       logger.info('开始推送，工作目录:', workDir);

@@ -662,7 +662,13 @@ async function setUpstreamAndPush() {
       await gitStore.getCurrentBranch(true)
       await gitStore.getBranchStatus(true)
     } else {
-      ElMessage.error(data.error || $t('@13D1C:设置上游失败'))
+      // EMPTY_REPO: 仓库里还没有任何 commit,后端会返回明确的中文提示,
+      // 直接用后端文案弹窗更准确,不再二次包装
+      if (data.errorCode === 'EMPTY_REPO') {
+        ElMessage.warning(data.error || $t('@13D1C:当前仓库没有任何提交，请先暂存并提交至少一个文件后再推送。'))
+      } else {
+        ElMessage.error(data.error || $t('@13D1C:设置上游失败'))
+      }
     }
   } catch (e) {
     ElMessage.error(`${$t('@13D1C:设置上游失败: ')}${(e as Error).message}`)
@@ -1040,7 +1046,8 @@ defineExpose({
 
     <!-- 非 git 仓库时,只渲染"非 git 仓库"空态,避免上游分支/未暂存/未跟踪等
          旧状态在切换目录后残留显示(它们原本用 v-if="!hasUpstream" 等独立条件,
-         不感知 isGitRepo 变化,导致切到非 git 目录还会渲染陈旧的"未设置上游分支"等提示) -->
+         不感知 isGitRepo 变化,导致切到非 git 目录还会渲染陈旧的"未设置上游分支"等提示)。
+         真正的"非 git 仓库"空态在下方 <div v-else class="card-content not-git-repo-content"> 分支。 -->
     <div class="card-content" v-if="gitStore.isGitRepo">
       <!-- 顶部 inline 进度条:不遮挡文件列表,只在头部下方显示一条细线 + 文案 -->
       <div
@@ -1054,64 +1061,7 @@ defineExpose({
           {{ gitStore.isGitPulling ? $t('@13D1C:正在拉取代码...') : $t('@13D1C:正在获取远程分支信息...') }}
         </span>
       </div>
-      <div v-if="!gitStore.isGitRepo" class="status-box not-git-repo">
-        <div class="empty-status">
-          <el-icon class="empty-icon"><Folder /></el-icon>
-          <p class="empty-title">{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
-          <p class="empty-desc">{{ $t('@13D1C:请初始化Git仓库或切换到Git仓库目录') }}</p>
-          <div class="empty-status-actions">
-            <el-button
-              size="small"
-              type="primary"
-              plain
-              :loading="isInitializingRepo"
-              :disabled="isInitializingRepo"
-              @click="initGitRepo"
-            >
-              {{ $t('@13D1C:初始化Git仓库') }}
-            </el-button>
-            <el-button
-              size="small"
-              @click="openDirectoryDialog"
-            >
-              {{ $t('@13D1C:打开其他目录') }}
-            </el-button>
-          </div>
-        </div>
-        <!-- "最近项目"列表已抽出为 @/components/RecentProjectsList.vue,
-             在 App.vue 中间空态(非 git 仓库时)随 Git 仓库初始化卡片一起展示 -->
-        <!-- 非Git仓库时也提供配置远程仓库入口 -->
-        <div class="no-remote-tip">
-          <div class="tip-header">
-            <el-icon class="tip-icon"><WarningFilled /></el-icon>
-            <span class="tip-title">{{ $t('@13D1C:尚未配置远程仓库') }}</span>
-          </div>
-          <div class="tip-body">
-            <div class="tip-text">{{ $t('@13D1C:添加远程仓库后，即可推送分支并与团队协作。') }}</div>
-            <div class="tip-input-row">
-              <el-input
-                v-model="newRemoteUrl"
-                size="small"
-                :placeholder="$t('@13D1C:输入远程仓库地址，例如 https://github.com/user/repo.git')"
-                :disabled="isInitializingRepo"
-                @keyup.enter="initGitRepo"
-              />
-              <el-button
-                size="small"
-                type="primary"
-                plain
-                :loading="isInitializingRepo"
-                :disabled="isInitializingRepo"
-                @click="initGitRepo"
-              >
-                {{ $t('@13D1C:初始化并添加远程') }}
-              </el-button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="status-box-wrap" v-else>
+      <div class="status-box-wrap">
         <!-- 未配置远程仓库提示 -->
         <div v-if="!gitStore.remoteUrl && !gitStore.hasUpstream" class="no-remote-tip">
           <div class="tip-header">
@@ -1480,6 +1430,18 @@ defineExpose({
           <el-icon class="empty-icon"><Folder /></el-icon>
           <p class="empty-title">{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
           <p class="empty-desc">{{ $t('@13D1C:请初始化Git仓库或切换到Git仓库目录') }}</p>
+          <!-- 一次性输入"远程仓库地址" + 初始化,减少来回点击。
+               没有远程仓库时,留空即可,等价于只点"初始化Git仓库"按钮。
+               初始化成功后会自动 addRemote 并把输入框清空。 -->
+          <div class="empty-status-remote-input">
+            <el-input
+              v-model="newRemoteUrl"
+              size="small"
+              :placeholder="$t('@13D1C:输入远程仓库地址，例如 https://github.com/user/repo.git')"
+              :disabled="isInitializingRepo"
+              @keyup.enter="initGitRepo"
+            />
+          </div>
           <div class="empty-status-actions">
             <el-button
               size="small"
@@ -1489,15 +1451,18 @@ defineExpose({
               :disabled="isInitializingRepo"
               @click="initGitRepo"
             >
-              {{ $t('@13D1C:初始化Git仓库') }}
+              <el-icon v-if="!isInitializingRepo"><Folder /></el-icon>
+              {{ newRemoteUrl.trim() ? $t('@13D1C:初始化并添加远程') : $t('@13D1C:初始化Git仓库') }}
             </el-button>
             <el-button
               size="small"
+              :disabled="isInitializingRepo"
               @click="openDirectoryDialog"
             >
               {{ $t('@13D1C:打开其他目录') }}
             </el-button>
           </div>
+          <p class="empty-status-hint">{{ $t('@13D1C:初始化后可暂存文件并提交首次提交，再推送到远程。') }}</p>
         </div>
       </div>
     </div>

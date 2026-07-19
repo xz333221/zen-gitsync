@@ -1172,13 +1172,13 @@ export const useGitStore = defineStore('git', () => {
       ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
-    
+
     try {
       isPushing.value = true
       const response = await fetch('/api/push', {
         method: 'POST'
       })
-      
+
       const result = await response.json()
       if (result.success) {
         // 推送成功后，逻辑上本地和远程必定同步，直接设置状态
@@ -1195,10 +1195,19 @@ export const useGitStore = defineStore('git', () => {
 
         return true
       } else {
-        ElMessage({
-          message: `${$t('@C298B:推送失败: ')}${result.error}`,
-          type: 'error'
-        })
+        // EMPTY_REPO: 后端返回的中文提示已经够清楚,
+        // 用 warning 而非 error 提示用户"先提交再推送",不再是红色的 git 错误信息
+        if (result.errorCode === 'EMPTY_REPO') {
+          ElMessage({
+            message: result.error || $t('@C298B:当前仓库没有任何提交，请先暂存并提交至少一个文件后再推送。'),
+            type: 'warning'
+          })
+        } else {
+          ElMessage({
+            message: `${$t('@C298B:推送失败: ')}${result.error}`,
+            type: 'error'
+          })
+        }
         return false
       }
     } catch (error) {
@@ -1257,22 +1266,40 @@ export const useGitStore = defineStore('git', () => {
                       if (onProgress) {
                         onProgress(data)
                       }
-                      
+
+                      // 处理 EMPTY_REPO 错误事件（后端 SSE 流在 spawn 之前就短路返回）
+                      if (data.type === 'error') {
+                        isPushing.value = false
+                        if (data.errorCode === 'EMPTY_REPO') {
+                          ElMessage({
+                            message: data.error || $t('@C298B:当前仓库没有任何提交，请先暂存并提交至少一个文件后再推送。'),
+                            type: 'warning'
+                          })
+                        } else {
+                          ElMessage({
+                            message: `${$t('@C298B:推送失败: ')}${data.error || $t('@C298B:未知错误')}`,
+                            type: 'error'
+                          })
+                        }
+                        resolve(false)
+                        return
+                      }
+
                       // 处理完成事件
                       if (data.type === 'complete') {
                         isPushing.value = false
-                        
+
                         if (data.success) {
                           // 推送成功
                           branchAhead.value = 0
                           branchBehind.value = 0
-                          
+
                           // 刷新状态
                           Promise.all([
                             fetchStatus(),
                             fetchLog(),
                           ])
-                          
+
                           resolve(true)
                         } else {
                           // 推送失败
