@@ -105,7 +105,7 @@
     "date-fns": "^4.1.0",
     "express": "^5.1.0",
     "iconv-lite": "^0.7.0",
-    "local-file-picker": "^0.2.1",
+    "local-file-picker": "^0.2.2",
     "log-update": "^6.1.0",
     "open": "^10.1.2",
     "ora": "^8.1.1",
