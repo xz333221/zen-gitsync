@@ -16,7 +16,7 @@ import fs from 'fs/promises';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import path from 'path';
 import open from 'open';
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 
 function spawnDetached(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -34,6 +34,59 @@ function spawnDetached(command, args, options = {}) {
   });
 }
 
+function shQuote(s) {
+  return `'${String(s).replace(/'/g, `'\\''`)}'`;
+}
+
+// Linux 终端模拟器探测顺序：x-terminal-emulator 是 Debian/Ubuntu alternatives
+// 指向用户默认终端的通用入口，优先使用；其余为常见桌面终端的兜底
+const LINUX_TERMINALS = [
+  { cmd: 'x-terminal-emulator', args: (shell) => ['-e', 'bash', '-c', shell] },
+  { cmd: 'gnome-terminal', args: (shell) => ['--', 'bash', '-c', shell] },
+  { cmd: 'konsole', args: (shell) => ['-e', 'bash', '-c', shell] },
+  { cmd: 'xfce4-terminal', args: (shell) => ['-x', 'bash', '-c', shell] },
+  { cmd: 'mate-terminal', args: (shell) => ['-e', `bash -c ${shQuote(shell)}`] },
+  { cmd: 'alacritty', args: (shell) => ['-e', 'bash', '-c', shell] },
+  { cmd: 'kitty', args: (shell) => ['bash', '-c', shell] },
+  { cmd: 'xterm', args: (shell) => ['-e', 'bash', '-c', shell] },
+];
+
+function findLinuxTerminal() {
+  for (const term of LINUX_TERMINALS) {
+    const r = spawnSync('which', [term.cmd], { stdio: 'pipe' });
+    if (r.status === 0) return term;
+  }
+  return null;
+}
+
+// 拼一段在终端里执行的 shell：先 cd 到目标目录再启动 CLI；
+// 进程非零退出时停住窗口，否则 CLI 启动失败会秒关窗口，用户看不到任何报错
+function buildTerminalShell(dirPath, command, cliArgs) {
+  const cmdStr = [command, ...cliArgs].map(shQuote).join(' ');
+  return `cd ${shQuote(dirPath)} && ${cmdStr}; rc=$?; if [ $rc -ne 0 ]; then echo; echo "${command} 退出码 $rc，按回车关闭窗口"; read -r _; fi`;
+}
+
+// Linux/macOS 没有统一的"新开终端窗口"API：直接 spawn TUI 程序只会在后台
+// 跑一个无 TTY 的进程（stdio 被 ignore），用户屏幕上看不到任何东西，
+// 必须显式起终端模拟器把命令跑在窗口里
+async function launchInTerminal(dirPath, command, cliArgs = []) {
+  const shell = buildTerminalShell(dirPath, command, cliArgs);
+
+  if (process.platform === 'darwin') {
+    const script = `tell application "Terminal"\nactivate\ndo script ${JSON.stringify(shell)}\nend tell`;
+    return spawnDetached('osascript', ['-e', script]);
+  }
+
+  if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+    throw new Error('当前会话没有图形环境（DISPLAY / WAYLAND_DISPLAY 均为空），无法打开终端窗口');
+  }
+  const term = findLinuxTerminal();
+  if (!term) {
+    throw new Error('未检测到可用的终端模拟器（gnome-terminal / konsole / xterm 等）');
+  }
+  return spawnDetached(term.cmd, term.args(shell));
+}
+
 async function launchClaudeCode(dirPath, { permissionMode } = {}) {
   // 透传可选的权限模式参数到 claude CLI（如 acceptEdits）
   // 注意：permissionMode 必须是一个 token 字符串，避免 shell 注入
@@ -49,9 +102,7 @@ async function launchClaudeCode(dirPath, { permissionMode } = {}) {
     });
   }
 
-  return spawnDetached('claude', cliArgs, {
-    cwd: dirPath
-  });
+  return launchInTerminal(dirPath, 'claude', cliArgs);
 }
 
 async function launchCodex(dirPath) {
@@ -61,7 +112,7 @@ async function launchCodex(dirPath) {
       cwd: dirPath
     });
   }
-  return spawnDetached('codex', [], { cwd: dirPath });
+  return launchInTerminal(dirPath, 'codex');
 }
 
 async function launchOpenCode(dirPath) {
@@ -71,7 +122,7 @@ async function launchOpenCode(dirPath) {
       cwd: dirPath
     });
   }
-  return spawnDetached('opencode', [], { cwd: dirPath });
+  return launchInTerminal(dirPath, 'opencode');
 }
 
 export function registerFileOpenRoutes({
@@ -290,7 +341,7 @@ export function registerFileOpenRoutes({
         } catch (error) {
           res.status(400).json({
             success: false,
-            error: '未检测到 Claude Code，请先安装并确保可以在终端中直接运行 claude'
+            error: error.message || '未检测到 Claude Code，请先安装并确保可以在终端中直接运行 claude'
           });
         }
       } catch (error) {
@@ -318,7 +369,7 @@ export function registerFileOpenRoutes({
         } catch (error) {
           res.status(400).json({
             success: false,
-            error: '未检测到 Codex，请先安装并确保可以在终端中直接运行 codex'
+            error: error.message || '未检测到 Codex，请先安装并确保可以在终端中直接运行 codex'
           });
         }
       } catch (error) {
@@ -346,7 +397,7 @@ export function registerFileOpenRoutes({
         } catch (error) {
           res.status(400).json({
             success: false,
-            error: '未检测到 OpenCode，请先安装并确保可以在终端中直接运行 opencode'
+            error: error.message || '未检测到 OpenCode，请先安装并确保可以在终端中直接运行 opencode'
           });
         }
       } catch (error) {
