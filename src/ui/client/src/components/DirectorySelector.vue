@@ -18,7 +18,7 @@ import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { FilePickerModal as FilePicker } from 'local-file-picker/client';
 import { ElMessage, ElPopover } from "element-plus";
-import { Folder, FolderOpened, Clock, Monitor, Warning } from "@element-plus/icons-vue";
+import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
@@ -279,14 +279,6 @@ async function onOpenTerminal() {
 
 // npm脚本检查已移至NpmScriptsPanel中，点击按钮时按需加载
 
-// "当前目录不是Git仓库"徽章点击:复用 DirectorySelector 唯一的目录切换弹窗,
-// 避免在 GitStatus.vue 里再造一份。弹窗里再引导用户走"初始化 + 加远程"流程。
-function openInitDialog() {
-  // 切换目录弹窗本身就是空的输入框 + 最近目录列表,
-  // 用户在弹窗里也能感知"我已经在这里了",然后切到左侧 GitStatus 初始化。
-  onOpenDialog()
-}
-
 // 获取最近访问的目录
 async function getRecentDirectories() {
   try {
@@ -492,26 +484,9 @@ function onBrowserSelect(path: string) {
     >
       {{ currentFolderName }}
     </button>
-    <!-- 非 Git 仓库时,在目录名旁显示一个红色提示徽章,
-         让用户从顶栏就能立刻发现"当前目录不是 Git 仓库"。
-         点击徽章会直接弹出初始化对话框,无需再去找左侧面板的入口。 -->
-    <el-tooltip
-      v-if="gitStore.isGitRepo === false"
-      :content="$t('@67CE7:当前目录不是 Git 仓库，点击初始化')"
-      placement="bottom"
-      effect="dark"
-      :show-after="200"
-    >
-      <button
-        type="button"
-        class="directory-status-pill directory-status-pill--danger"
-        :aria-label="$t('@67CE7:当前目录不是 Git 仓库，点击初始化')"
-        @click="openInitDialog"
-      >
-        <el-icon aria-hidden="true" class="directory-status-pill__icon"><Warning /></el-icon>
-        <span class="directory-status-pill__text">{{ $t('@67CE7:当前目录不是Git仓库') }}</span>
-      </button>
-    </el-tooltip>
+    <!-- 旧版"非 Git 仓库"红色徽章已移除:左侧 GitStatus 面板已经完整展示
+         "当前目录不是 Git 仓库 + 初始化按钮 + 打开其他目录",顶栏重复出现
+         反而挤占目录名空间、显得啰嗦。打开目录后让左侧面板统一兜底即可。 -->
     <div class="directory-actions flex">
       <IconButton
         :tooltip="$t('@67CE7:切换工作目录')"
@@ -860,61 +835,7 @@ function onBrowserSelect(path: string) {
   color: #60a5fa;
 }
 
-/* "当前目录不是Git仓库" 状态徽章 — 在 header 变体的目录名旁边,
-   用红底白字 + 警告图标让用户从顶栏就发现状态。
-   按钮重置 + 视觉继承:和 directory-display 同一族但带语义色 */
-.directory-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: filter 0.15s, transform 0.15s;
-  flex-shrink: 0;
-  user-select: none;
-  /* 按钮重置 */
-  background: transparent;
-  text-align: left;
-  appearance: none;
-}
-
-.directory-status-pill:hover {
-  filter: brightness(0.95);
-  transform: translateY(-1px);
-}
-
-.directory-status-pill:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-.directory-status-pill--danger {
-  background: rgba(220, 38, 38, 0.1);
-  border-color: rgba(220, 38, 38, 0.35);
-  color: #b91c1c;
-}
-
-[data-theme="dark"] .directory-status-pill--danger {
-  background: rgba(248, 113, 113, 0.14);
-  border-color: rgba(248, 113, 113, 0.4);
-  color: #fca5a5;
-}
-
-.directory-status-pill__icon {
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.directory-status-pill__text {
-  font-size: 12px;
-  line-height: 1;
-}
+/* 旧版 "当前目录不是Git仓库" 状态徽章样式已随 UI 调整移除(左侧 GitStatus 面板兜底) */
 
 .claude-code-btn__icon {
   width: 22px;

@@ -1928,8 +1928,8 @@ defineExpose({
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  padding: var(--spacing-xl);
-  gap: var(--spacing-lg);
+  padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-xl);
+  gap: var(--spacing-md);
   background: transparent;
   border: none;
 }
@@ -1939,8 +1939,9 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--spacing-xl) 0 var(--spacing-md);
+  justify-content: flex-start;
+  padding: var(--spacing-xl) var(--spacing-md) var(--spacing-md);
+  gap: 0;
 }
 
 .status-box.not-git-repo .empty-icon {
@@ -1957,19 +1958,43 @@ defineExpose({
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 var(--spacing-xs) 0;
+  line-height: 1.4;
 }
 
 .status-box.not-git-repo .empty-desc {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  margin: 0;
+  margin: 0 0 var(--spacing-lg) 0;
+  line-height: 1.5;
+}
+
+/* 远程仓库输入框:撑满可用宽度,但限制最大宽度避免拉得过宽。 */
+.status-box.not-git-repo .empty-status-remote-input {
+  width: 100%;
+  max-width: 420px;
+  margin-bottom: var(--spacing-base);
 }
 
 .status-box.not-git-repo .empty-status-actions {
   display: flex;
   gap: 8px;
   justify-content: center;
-  margin-top: 12px;
+  margin-top: var(--spacing-xs);
+  margin-bottom: var(--spacing-base);
+}
+
+.status-box.not-git-repo .empty-status-actions .el-button {
+  min-width: 120px;
+}
+
+/* 底部提示:用更柔的颜色 + 适当行高,和主操作区分开。 */
+.status-box.not-git-repo .empty-status-hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--text-tertiary);
+  text-align: center;
+  max-width: 360px;
 }
 
 /* 分支信息样式 */
