@@ -741,9 +741,10 @@ export const useGitStore = defineStore('git', () => {
           // 已删除未暂存的文件
           type = 'deleted'
         } else if (indexStatus === ' ' && workTreeStatus === 'A') {
-          // 意向添加（git add -N）：index 已注册成空 blob,实际内容在工作区
-          // 用户视角下等价于已暂存的新文件：可直接 commit,故归入 added
-          type = 'added'
+          // 意向添加（git add -N）：index 仅注册了空 blob,实际内容在工作区
+          // 此时 git commit 不会把这个文件的内容带上去,会和真 staged 区分开,
+          // 需要在 UI 上明确为"待暂存"状态,而不是混入"已暂存"组。
+          type = 'intent-to-add'
         } else if (code === '??') {
           // 未跟踪的文件
           type = 'untracked'
@@ -2261,7 +2262,7 @@ export const useGitStore = defineStore('git', () => {
       if (lockedSet.has(normalized)) continue
       const file = fileList.value.find(f => f.path === path)
       if (!file) continue
-      if (!['modified', 'deleted', 'untracked'].includes(file.type)) continue
+      if (!['modified', 'deleted', 'untracked', 'intent-to-add'].includes(file.type)) continue
       out.push(path)
     }
     return out

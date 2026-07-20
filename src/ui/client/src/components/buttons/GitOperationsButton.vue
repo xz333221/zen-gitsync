@@ -80,8 +80,8 @@ const needsPull = computed(() => {
 
 // 计算是否有未暂存的更改
 const hasUnstagedChanges = computed(() => {
-  return gitStore.fileList.some(file => 
-    ['modified', 'deleted', 'untracked'].includes(file.type)
+  return gitStore.fileList.some(file =>
+    ['modified', 'deleted', 'untracked', 'intent-to-add'].includes(file.type)
   )
 })
 

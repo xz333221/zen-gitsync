@@ -1444,6 +1444,7 @@ export default {
   '@13D1C:已暂存的更改': 'Temporarily stored changes',
   '@13D1C:未暂存的更改': 'Untreated changes',
   '@13D1C:未跟踪的文件': 'Untracked files',
+  '@13D1C:已声明添加（待暂存）': 'Staged with intent (awaiting add)',
   '@13D1C:文件差异': 'File differences',
   '@13D1C:仅显示差异': 'Show differences only',
   '@13D1C:显示完整对比': 'Show full comparison',

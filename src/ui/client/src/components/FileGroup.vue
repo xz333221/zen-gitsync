@@ -28,7 +28,7 @@ interface FileItem {
 interface Props {
   files: FileItem[]
   title: string
-  groupKey: 'staged' | 'unstaged' | 'untracked' | 'conflicted'
+  groupKey: 'staged' | 'unstaged' | 'untracked' | 'conflicted' | 'intent-to-add'
   collapsedGroups: Record<string, boolean>
   isFileLocked: (filePath: string) => boolean
   isLocking: (filePath: string) => boolean
@@ -41,7 +41,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  toggleCollapse: [groupKey: 'staged' | 'unstaged' | 'untracked' | 'conflicted']
+  toggleCollapse: [groupKey: 'staged' | 'unstaged' | 'untracked' | 'conflicted' | 'intent-to-add']
   fileClick: [file: FileItem]
   toggleFileLock: [filePath: string]
   stageFile: [filePath: string]
@@ -116,6 +116,8 @@ function getStatusLetter(fileType: string): string {
       return '!'
     case 'untracked':
       return 'U'
+    case 'intent-to-add':
+      return 'I'
     default:
       return ''
   }

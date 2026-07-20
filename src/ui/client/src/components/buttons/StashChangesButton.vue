@@ -43,23 +43,25 @@ const excludeLocked = ref(false)
 
 // 计算是否有变更文件（包括锁定的）
 const anyChangesIncludingLocked = computed(() => {
-  return gitStore.fileList.some(file => 
-    file.type === 'modified' || 
-    file.type === 'added' || 
-    file.type === 'deleted' || 
-    file.type === 'untracked'
+  return gitStore.fileList.some(file =>
+    file.type === 'modified' ||
+    file.type === 'added' ||
+    file.type === 'deleted' ||
+    file.type === 'untracked' ||
+    file.type === 'intent-to-add'
   )
 })
 
 // 计算是否所有变更都是锁定文件
 const allChangesAreLocked = computed(() => {
   if (!anyChangesIncludingLocked.value) return false
-  
-  const changedFiles = gitStore.fileList.filter(file => 
-    file.type === 'modified' || 
-    file.type === 'added' || 
-    file.type === 'deleted' || 
-    file.type === 'untracked'
+
+  const changedFiles = gitStore.fileList.filter(file =>
+    file.type === 'modified' ||
+    file.type === 'added' ||
+    file.type === 'deleted' ||
+    file.type === 'untracked' ||
+    file.type === 'intent-to-add'
   )
   
   if (changedFiles.length === 0) return false

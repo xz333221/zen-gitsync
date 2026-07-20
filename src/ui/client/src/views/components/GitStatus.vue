@@ -180,11 +180,12 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
 // 锁定文件对话框状态
 const showLockedFilesDialog = ref(false)
 // 添加文件组折叠状态
-const collapsedGroups = ref({
+const collapsedGroups = ref<Record<'staged' | 'unstaged' | 'untracked' | 'conflicted' | 'intent-to-add', boolean>>({
   staged: false,    // 已暂存的更改
   unstaged: false,  // 未暂存的更改
   untracked: false, // 未跟踪的文件
-  conflicted: false // 冲突文件
+  conflicted: false, // 冲突文件
+  'intent-to-add': false, // 已声明添加（待暂存）: git add -N 的产物
 })
 // 视图模式：列表或树状（从 configStore.ui.fileListViewMode 读取）
 // 该值持久化到 ~/.git-commit-tool.json（之前在 localStorage，因随机端口启动失效）
@@ -765,7 +766,7 @@ async function toggleFileLock(filePath: string) {
 }
 
 // 切换文件组的折叠状态
-function toggleGroupCollapse(groupType: 'staged' | 'unstaged' | 'untracked' | 'conflicted') {
+function toggleGroupCollapse(groupType: 'staged' | 'unstaged' | 'untracked' | 'conflicted' | 'intent-to-add') {
   collapsedGroups.value[groupType] = !collapsedGroups.value[groupType]
 }
 
@@ -773,6 +774,7 @@ function toggleGroupCollapse(groupType: 'staged' | 'unstaged' | 'untracked' | 'c
 const conflictedTreeData = ref<TreeNode[]>([]);
 const stagedTreeData = ref<TreeNode[]>([]);
 const unstagedTreeData = ref<TreeNode[]>([]);
+const intentToAddTreeData = ref<TreeNode[]>([]);
 const untrackedTreeData = ref<TreeNode[]>([]);
 
 // 更新树状视图数据
@@ -824,6 +826,18 @@ function updateTreeData() {
     mergeTreeExpandState(newUntrackedTree, untrackedTreeData.value);
   }
   untrackedTreeData.value = newUntrackedTree;
+
+  // 已声明添加（git add -N）：独立分组,不会被算进已暂存
+  const intentToAddFiles = gitStore.fileList.filter(f => f.type === 'intent-to-add').map(file => ({
+    path: file.path,
+    type: file.type,
+    locked: isFileLocked(file.path)
+  }));
+  const newIntentToAddTree = buildFileTree(intentToAddFiles);
+  if (intentToAddTreeData.value.length > 0) {
+    mergeTreeExpandState(newIntentToAddTree, intentToAddTreeData.value);
+  }
+  intentToAddTreeData.value = newIntentToAddTree;
 }
 
 // 监听文件列表变化，更新树数据
@@ -1273,6 +1287,27 @@ defineExpose({
                 @revert-file-changes="revertFileChanges"
                 @manage-locked-files="showLockedFilesDialog = true"
               />
+
+              <!-- 已声明添加（待暂存）：git add -N 的产物,index 只注册了空 blob,
+                   实际内容还在工作区,点击"暂存"才会真正进暂存区 -->
+              <FileGroup
+                v-if="gitStore.fileList.some(f => f.type === 'intent-to-add')"
+                :files="gitStore.fileList.filter(f => f.type === 'intent-to-add')"
+                :title="$t('@13D1C:已声明添加（待暂存）')"
+                group-key="intent-to-add"
+                :collapsed-groups="collapsedGroups"
+                :is-file-locked="isFileLocked"
+                :is-locking="isLocking"
+                :get-file-name="getFileName"
+                :get-file-directory="getFileDirectory"
+                :is-selection-mode="isSelectionMode"
+                :is-file-selected="isFileSelected"
+                @toggle-collapse="toggleGroupCollapse"
+                @file-click="handleFileClick"
+                @toggle-file-lock="toggleFileLock"
+                @toggle-file-selection="toggleFileSelection"
+                @stage-file="stageFile"
+              />
               
               <!-- 未跟踪的文件 -->
               <FileGroup
@@ -1381,6 +1416,34 @@ defineExpose({
                   @toggle-lock="toggleFileLock"
                   @stage="stageFile"
                   @revert="revertFileChanges"
+                />
+              </div>
+
+              <!-- 已声明添加（待暂存）：git add -N 的产物 -->
+              <div v-if="gitStore.fileList.some(f => f.type === 'intent-to-add')" class="tree-group">
+                <button
+                  type="button"
+                  class="tree-group-header"
+                  :aria-expanded="!collapsedGroups['intent-to-add']"
+                  :aria-controls="'tree-group-intent-to-add'"
+                  @click="toggleGroupCollapse('intent-to-add')"
+                >
+                  <el-icon class="collapse-icon" :class="{ 'collapsed': collapsedGroups['intent-to-add'] }" aria-hidden="true">
+                    <ArrowDown />
+                  </el-icon>
+                  <h5>{{ $t('@13D1C:已声明添加（待暂存）') }}</h5>
+                  <span class="file-count">{{ gitStore.fileList.filter(f => f.type === 'intent-to-add').length }}</span>
+                </button>
+                <FileTreeView
+                  v-if="!collapsedGroups['intent-to-add']"
+                  :tree-data="intentToAddTreeData"
+                  :selected-file="''"
+                  :show-action-buttons="true"
+                  :is-file-locked="isFileLocked"
+                  :is-locking="isLocking"
+                  @file-select="(path: string) => handleFileClick({ path, type: 'intent-to-add' })"
+                  @toggle-lock="toggleFileLock"
+                  @stage="stageFile"
                 />
               </div>
               
