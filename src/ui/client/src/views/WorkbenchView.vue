@@ -1,4 +1,4 @@
-﻿<!--
+﻿﻿<!--
   ~ Copyright 2026 xz333221
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
@@ -565,19 +565,24 @@ const taskDescTextareaRef = ref<HTMLTextAreaElement | null>(null)
  * - 每次输入后重置 height=auto 让 scrollHeight 重新计算,然后 clamp 到 [minPx, maxPx]
  * - 同时清掉 resize 拖拽手柄(resize:none),避免手动拖拽高度破坏自适应逻辑
  * - 切走任务再切回来时 selectedTask.desc 可能已变,触发 watch 走同一逻辑
+ * - 焦点状态下使用更大的最大高度，方便查看输入内容
  */
 const DESC_TEXTAREA_MIN_PX = 52
 const DESC_TEXTAREA_MAX_PX = 320
+const DESC_TEXTAREA_MAX_PX_FOCUS = 500
 
 function autoGrowTextarea(ev?: Event) {
   const el = (ev?.currentTarget as HTMLTextAreaElement | null) || taskDescTextareaRef.value
   if (!el) return
   // 重置回 auto 让浏览器能正确算出真实高度(只设 height 不会触发重新计算)
   el.style.height = 'auto'
-  const next = Math.min(Math.max(el.scrollHeight, DESC_TEXTAREA_MIN_PX), DESC_TEXTAREA_MAX_PX)
+  // 焦点状态下使用更大的最大高度
+  const isFocused = document.activeElement === el
+  const maxPx = isFocused ? DESC_TEXTAREA_MAX_PX_FOCUS : DESC_TEXTAREA_MAX_PX
+  const next = Math.min(Math.max(el.scrollHeight, DESC_TEXTAREA_MIN_PX), maxPx)
   el.style.height = `${next}px`
   // 内容超过 max 时启用内部滚动条
-  el.style.overflowY = el.scrollHeight > DESC_TEXTAREA_MAX_PX ? 'auto' : 'hidden'
+  el.style.overflowY = el.scrollHeight > maxPx ? 'auto' : 'hidden'
 }
 
 // 切换/新建任务时,如果描述折叠展开着,需要重新计算一次高度
@@ -895,6 +900,8 @@ async function addSubtask() {
     promptOverride: ''
   }
   selectedTask.value.subtasks.push(sub)
+  // 自动切换到新创建的子任务
+  selectedSubId.value = sub.id
   // 新子任务立刻落盘，避免后续「执行任务」时后端找不到 id。
   // await 是为了保证「点完添加立刻点执行」时，后端已经能看到这条 sub。
   setSubtaskPersisting(sub.id, true)
@@ -1272,6 +1279,8 @@ const {
             v-model="selectedTask.desc"
             :placeholder="$t('@WORKBENCH:任务描述（可选）')"
             @input="autoGrowTextarea($event)"
+            @focus="autoGrowTextarea($event)"
+            @blur="autoGrowTextarea($event)"
             @paste="onAttachmentPaste($event, { kind: 'task', task: selectedTask })"
           />
           <AttachmentZone
@@ -1438,10 +1447,12 @@ const {
                   <span v-if="dirtySubIds.has(activeSubtask.id)" class="wb-sub-item__dirty" :title="$t('@WORKBENCH:有未保存的更改')">{{ $t('@WORKBENCH:未保存') }}</span>
                 </div>
                 <textarea
-                  class="wb-textarea wb-textarea--sm"
+                  class="wb-textarea wb-textarea--sm wb-textarea--autogrow"
                   v-model="activeSubtask.desc"
                   :placeholder="$t('@WORKBENCH:子任务描述 / 独立提示词覆盖')"
-                  rows="3"
+                  @input="autoGrowTextarea($event)"
+                  @focus="autoGrowTextarea($event)"
+                  @blur="autoGrowTextarea($event)"
                   @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub: activeSubtask })"
                 />
                 <JobLogDetails
@@ -3151,12 +3162,17 @@ const {
   border-color: var(--border-color-medium);
   background: var(--bg-container);
 }
-.wb-textarea:focus {
+        .wb-textarea:focus {
   border-color: var(--color-primary);
   background: var(--bg-container);
   box-shadow: 0 0 0 3px var(--tint-primary-14);
 }
+.wb-textarea--focus-expand:focus {
+  max-height: 500px;
+  transition: max-height 0.2s var(--ease-custom);
+}
 .wb-textarea--sm { min-height: 44px; padding: 8px 12px; font-size: 13px; }
+.wb-textarea--sm.wb-textarea--autogrow { min-height: 44px; }
 
 /* 自适应高度 textarea:禁掉手动 resize,高度由 autoGrowTextarea() 写入。
    设 overflow-y: hidden 默认,JS 在内容超 max 时改 overflow-y: auto。 */
