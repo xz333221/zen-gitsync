@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "g:ui": "node ./src/gitCommit.js ui",
+    "g:ai": "node ./src/gitCommit.js ai",
     "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
     "npm:login": "npm login --registry https://registry.npmjs.org/",
     "npm:publish": "npm publish --registry https://registry.npmjs.org/",

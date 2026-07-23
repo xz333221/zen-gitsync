@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — 2026-06-19
 
+### Added — `g ai` 终端 AI 编码智能体
+
+- 新增 `g ai` 子命令:在终端启动交互式编码智能体(REPL),默认使用 `g ui`
+  通用设置里配置的模型(`isDefault` 优先,否则取第一个),`--model=<序号|名称>`
+  可指定,会话内 `/model` 切换
+- 能力:OpenAI 兼容流式 function calling,内置 6 个工具 ——
+  `run_command` / `read_file` / `write_file` / `edit_file` / `list_files` / `search_text`,
+  可写代码、跑命令、git 提交(`g -y` / `g --ai` 也可被它调用)
+- 权限模型:启动目录内操作直接执行,其他目录可读写;唯一红线由
+  `src/cli/ai/safety.js` 硬拦截(格式化磁盘、递归删除根/系统目录、关机重启、
+  写块设备、fork bomb、删注册表主键、改根目录权限等)
+- 用法:`g ai` 进入 REPL;`g ai "任务"` 单发执行后退出;
+  会话内命令 `/help` `/model` `/cd` `/clear` `/exit`
+- 新文件:`src/cli/ai/{agent,tools,safety}.js` + 105 个单元测试;
+  `scripts/run-tests.cjs` 扫描范围补上 `src/cli`(此前该目录测试不被 npm test 执行)
+
 本轮会话集中提交:更新客户端 flow-mindmap 依赖到 `^0.5.9` → `^0.5.10`(patch 更新);
 上游 flow-mindmap 0.5.10 变更:三级节点背景色(根/一级/二级分层递减)、折叠按钮改为圆角方形、
 折叠计数改为递归统计所有后代节点、圆角折线默认 20px 且仅子节点端有圆角、水平直线跳过圆角、

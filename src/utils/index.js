@@ -606,6 +606,8 @@ Options:
   addScript                   Add "g:y": "g -y" to package.json scripts
   addResetScript             Add "g:reset": "git reset --hard origin/<current-branch>" to package.json scripts
   ui                         Launch graphical user interface (v2.0.0)
+  ai                         Launch AI coding agent in terminal (uses default model configured in g ui)
+    --model=<n|name>          Pick a configured model by index or name
 
 File Locking:
   --lock-file=<path>          Lock a file to exclude it from commits
@@ -639,6 +641,9 @@ Example:
   g --lock-file=config.json    Lock config.json file
   g --unlock-file=config.json  Unlock config.json file
   g --list-locked              List all locked files
+  g ai                        Start interactive AI agent (write code, run commands, commit)
+  g ai "fix the failing test" One-shot agent task, then exit
+  g ai --model=2              Use the 2nd model from g ui settings
 
 Add auto submit in package.json:
   "scripts": {

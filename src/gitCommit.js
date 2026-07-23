@@ -255,6 +255,15 @@ async function main() {
     return;
   }
 
+  // 检查是否是 AI 智能体命令(g ai)
+  // 只认 argv[2] === 'ai':精确匹配子命令位置,避免 `g -m ai` 这种
+  // 把 "ai" 当提交信息的场景被误判。动态 import,普通提交路径零加载成本。
+  if (process.argv[2] === 'ai') {
+    const { runAiAgent } = await import('./cli/ai/agent.js');
+    await runAiAgent(process.argv.slice(3));
+    return;
+  }
+
   // 检查是否是添加脚本命令
   if (process.argv.includes('addScript')) {
     await addScriptToPackageJson();

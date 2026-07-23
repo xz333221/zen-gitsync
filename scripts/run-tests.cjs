@@ -23,6 +23,7 @@ const ROOT = join(__dirname, '..')
 const SCAN_DIRS = [
   join(ROOT, 'test'),
   join(ROOT, 'src', 'utils'),
+  join(ROOT, 'src', 'cli'),
   join(ROOT, 'src', 'ui', 'server'),
 ]
 const PATTERNS = /\.(test|spec)\.(mjs|js|ts)$/

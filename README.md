@@ -408,6 +408,22 @@ rm -f package-lock.json # when running on pnpm
 
 ## CLI Commands
 
+### AI coding agent (terminal):
+Launch an interactive AI agent that writes code, runs commands, and commits for you.
+It uses the default model configured in `g ui` (Settings → AI models).
+
+```bash
+$ g ai                          # interactive REPL
+$ g ai "fix the failing test"   # one-shot task, then exit
+$ g ai --model=2                # pick the 2nd configured model (index or name)
+```
+
+In-session commands: `/help`, `/model`, `/cd <path>`, `/clear`, `/exit`.
+
+Permission model: everything inside the launch directory runs directly; other
+directories are readable/writable too; only system-destroying commands
+(disk format, `rm -rf /`, shutdown, ...) are hard-blocked by a built-in safety guard.
+
 ### Interactive commit:
 ```bash
 $ g
