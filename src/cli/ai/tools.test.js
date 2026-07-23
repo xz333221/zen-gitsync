@@ -160,3 +160,31 @@ test('未知工具返回错误字符串并列出可用工具', async () => {
   assert.match(r, /未知工具/)
   assert.match(r, /run_command/)
 })
+
+// ========== search_text: 文件路径直接搜索 ==========
+
+test('search_text 支持 path 直接指向单个文件', async () => {
+  const r = await executeTool('search_text', { pattern: 'LINE-2', path: 'src/deep/hello.txt' }, ctx)
+  assert.match(r, /hello\.txt:2:/)
+  const miss = await executeTool('search_text', { pattern: 'not-in-file-xyz', path: 'src/deep/hello.txt' }, ctx)
+  assert.match(miss, /未找到/)
+})
+
+// ========== run_command: 输出编码(GBK 乱码回归) ==========
+
+test('run_command UTF-8 中文输出不乱码', async () => {
+  // node 自身 stdout 是 UTF-8,跨平台一致
+  const r = await executeTool('run_command', { command: 'node -e "console.log(\'中文输出测试\')"' }, ctx)
+  assert.match(r, /中文输出测试/)
+})
+
+test('run_command 本地化错误消息解码正确(Windows GBK 回归)', async () => {
+  const r = await executeTool('run_command', { command: 'nonexistent-cmd-xyz-123' }, ctx)
+  if (process.platform === 'win32') {
+    // cmd.exe 的"不是内部或外部命令"是 GBK 字节流,修复前会显示为 '����' 乱码
+    assert.match(r, /不是内部或外部命令/)
+    assert.doesNotMatch(r, /�/)
+  } else {
+    assert.match(r, /not found|未找到/)
+  }
+})

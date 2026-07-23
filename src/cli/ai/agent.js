@@ -41,6 +41,7 @@ import { getCwd } from '../../utils/index.js'
 import { boxenAdaptive } from '../ui.js'
 import { registerCleanup } from '../cleanup.js'
 import { TOOL_DEFINITIONS, executeTool } from './tools.js'
+import { createThinkFilter } from './streamFilter.js'
 
 // ──────────────────────────────────────────────
 // 常量
@@ -116,6 +117,7 @@ function modelLabel(m) {
 function buildSystemPrompt({ cwd, locale, shellDesc }) {
   const zh = !String(locale || '').startsWith('en')
   const now = new Date().toLocaleString()
+  const isWin = process.platform === 'win32'
   if (zh) {
     return `你是 "g ai" —— zen-gitsync CLI 内置的终端编码智能体,通过工具在用户真实电脑上完成编码任务。
 
@@ -138,7 +140,10 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 - 大文件用 offset/limit 分段读取,不要一次读爆上下文
 - git 操作用 run_command 执行;提交代码可以用 git 命令,也可以用本 CLI 的 g -y(默认信息提交并推送)或 g --ai(AI 生成提交信息)
 - run_command 默认超时 120 秒,长任务加大 timeout_seconds(最大 600)
-- 命令在 ${shellDesc} 下执行,注意语法兼容
+- 命令在 ${shellDesc} 下执行,注意语法兼容${isWin ? `
+- Windows cmd 没有 head/grep/ls/sed/cat/tail 等 Unix 命令,直接跑会报"不是内部或外部命令";
+  列目录用 list_files、搜内容用 search_text、看文件用 read_file,优先工具而不是 shell;
+  必须跑 shell 时优先跨平台写法(如 node -e "..."),别用 Unix 专属命令` : ''}
 
 # 输出
 - 你的文本输出直接显示在用户终端,用简体中文交流
@@ -164,7 +169,8 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 - Read large files in segments (offset/limit)
 - Git operations go through run_command; to commit, use git commands or this CLI's g -y / g --ai
 - run_command defaults to a 120s timeout; raise timeout_seconds (max 600) for long tasks
-- Commands run under ${shellDesc}; keep syntax compatible
+- Commands run under ${shellDesc}; keep syntax compatible${isWin ? `
+- Windows cmd has NO Unix commands (head/grep/ls/sed/cat/tail); running them fails with "not recognized". Use the tools instead: list_files for directories, search_text for content, read_file for files. For shell one-offs, prefer cross-platform forms like node -e "..."` : ''}
 
 # Output
 - Your text output goes straight to the user's terminal; reply in English
@@ -281,9 +287,20 @@ function printToolCall(name, rawArgs) {
 
 function printToolResult(result) {
   let text = String(result || '')
-  if (text.length > DISPLAY_RESULT_LIMIT) text = text.slice(0, DISPLAY_RESULT_LIMIT) + `\n… [回显截断,完整结果已提供给模型]`
-  const indented = text.split('\n').map(l => '  ' + l).join('\n')
-  process.stdout.write(chalk.dim(indented) + '\n')
+  // 回显截断保留 头 + 尾:命令输出最关键的信息(报错、最终结果)通常在末尾,
+  // 只留头部会把 `g --ai` 这类命令的结果部分整个截没
+  if (text.length > DISPLAY_RESULT_LIMIT) {
+    const half = Math.floor(DISPLAY_RESULT_LIMIT / 2)
+    text = text.slice(0, half) + `\n  ⋮ [回显省略 ${text.length - half * 2} 字符,完整结果已提供给模型]\n` + text.slice(text.length - half)
+  }
+  // run_command 结果形如 "$ cmd\n(exit N)\n...",按退出码着色:
+  // 0 / 非命令结果 → 暗色;非 0 → 黄色提醒
+  const exitMatch = text.match(/^\$[^\n]*\n\(exit (\d+)\)/)
+  const exitCode = exitMatch ? Number(exitMatch[1]) : null
+  const colorize = exitCode === null || exitCode === 0 ? chalk.dim : chalk.yellow
+  const bar = chalk.dim('  │ ')
+  const rendered = text.split('\n').map(l => bar + colorize(l)).join('\n')
+  process.stdout.write(rendered + '\n')
 }
 
 // ──────────────────────────────────────────────
@@ -297,13 +314,26 @@ async function runAgentTurn(state, userText, t) {
 
     // 首个 token 到达前显示等待提示,到达后清掉
     let firstToken = true
-    let wroteThinking = false
+    // content/thinking 两种段切换时换行分隔,避免思考和正文粘在一行
+    let lastKind = null
+    // MiniMax 系把 <think> 标签内联在 content 流里,用过滤器剥离并置灰显示
+    // (历史里仍保存模型原始输出,见 streamChatOnce 返回的 content)
+    const thinkFilter = createThinkFilter()
     const showWaiting = () => process.stdout.write(chalk.dim(t.waiting))
     const clearWaiting = () => {
       if (firstToken) {
         process.stdout.write('\r\x1b[K')
         firstToken = false
       }
+    }
+    const renderSeg = (seg) => {
+      const kind = seg.content !== undefined ? 'content' : 'thinking'
+      const text = seg.content ?? seg.thinking
+      if (!text) return
+      clearWaiting()
+      if (lastKind && lastKind !== kind) process.stdout.write('\n')
+      lastKind = kind
+      process.stdout.write(kind === 'thinking' ? chalk.dim(text) : text)
     }
     showWaiting()
 
@@ -314,18 +344,12 @@ async function runAgentTurn(state, userText, t) {
         messages: state.messages,
         signal: state.abortController?.signal,
         onToken: ({ thinking, content }) => {
-          if (thinking) {
-            clearWaiting()
-            wroteThinking = true
-            process.stdout.write(chalk.dim(thinking))
-          }
-          if (content) {
-            clearWaiting()
-            if (wroteThinking) { process.stdout.write('\n'); wroteThinking = false }
-            process.stdout.write(content)
-          }
+          if (thinking) renderSeg({ thinking })
+          if (content) for (const seg of thinkFilter.feed(content)) renderSeg(seg)
         },
       })
+      // 流结束,冲刷过滤器里残留的半拉标签/未闭合 think 块
+      for (const seg of thinkFilter.flush()) renderSeg(seg)
     } catch (err) {
       clearWaiting()
       process.stdout.write('\n' + chalk.red(t.llmError(err.message)) + '\n')

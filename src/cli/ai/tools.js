@@ -27,6 +27,7 @@
 import { exec } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import iconv from 'iconv-lite'
 import { trackChild } from '../cleanup.js'
 import { checkDangerousCommand } from './safety.js'
 
@@ -145,12 +146,12 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'search_text',
-      description: '在目录内所有文本文件中搜索正则匹配的行,返回 文件:行号: 内容。用于定位符号、关键字、调用点。',
+      description: '搜索正则匹配的行,返回 文件:行号: 内容。path 可以是目录(递归搜全部文本文件)或单个文件。用于定位符号、关键字、调用点。',
       parameters: {
         type: 'object',
         properties: {
           pattern: { type: 'string', description: '正则表达式(JavaScript 语法)' },
-          path: { type: 'string', description: '搜索目录,默认智能体启动目录' },
+          path: { type: 'string', description: '搜索目录或单个文件路径,默认智能体启动目录' },
           ext: { type: 'string', description: '限定扩展名过滤,如 "js" 或 "js,ts,vue";不传则搜全部文本文件' },
           ignore_case: { type: 'boolean', description: '忽略大小写,默认 false' },
         },
@@ -179,15 +180,29 @@ function truncateMiddle(text, budget) {
   return `${text.slice(0, head)}\n\n... [中间省略 ${omitted} 字符] ...\n\n${text.slice(text.length - tail)}`
 }
 
+// 子进程输出解码:Windows cmd/PowerShell 的本地化消息(错误提示等)是
+// GBK(CP936) 字节流,直接按 UTF-8 解会变成 '����' 乱码(实测踩坑)。
+// 策略:先严格 UTF-8 解码(node/git 等现代工具的输出都能过),
+// 失败(含非法字节序列,GBK 中文几乎必挂)再按 GBK 兜底。
+function decodeOutput(buf) {
+  if (!buf || buf.length === 0) return ''
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf)
+  } catch {
+    return iconv.decode(buf, 'gbk')
+  }
+}
+
 // 包装 exec 为 Promise,stdout/stderr 合并返回;出错(非零退出)也正常返回输出
+// encoding:'buffer' 拿原始字节,由 decodeOutput 决定真实编码
 function execCommand(command, options) {
   return new Promise((resolve) => {
-    const child = exec(command, options, (err, stdout, stderr) => {
+    const child = exec(command, { ...options, encoding: 'buffer' }, (err, stdout, stderr) => {
       resolve({
         code: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
         killed: !!err?.killed,
-        stdout: stdout || '',
-        stderr: stderr || '',
+        stdout: decodeOutput(stdout),
+        stderr: decodeOutput(stderr),
         errorMessage: err && !('code' in err) ? err.message : null,
       })
     })
@@ -377,6 +392,21 @@ async function toolSearchText(args, ctx) {
   let scanned = 0
   let overflow = false
 
+  // 在单个文件内匹配各行(path 直接指向文件时走这个分支 ——
+  // 模型经常拿文件路径来搜,兼容掉,别让它吃"不是目录"的错)
+  async function searchOneFile(full) {
+    let text
+    try { text = await fs.readFile(full, 'utf-8') } catch { return }
+    scanned++
+    const lines = text.split('\n')
+    for (let i = 0; i < lines.length && hits.length < MAX_SEARCH_HITS; i++) {
+      regex.lastIndex = 0
+      if (regex.test(lines[i])) {
+        hits.push(`${path.relative(ctx.cwd, full) || full}:${i + 1}: ${lines[i].trim().slice(0, 300)}`)
+      }
+    }
+  }
+
   async function walk(current, depth) {
     if (hits.length >= MAX_SEARCH_HITS || depth > 12) { if (depth > 12) return; overflow = true; return }
     let items
@@ -394,25 +424,23 @@ async function toolSearchText(args, ctx) {
         let st
         try { st = await fs.stat(full) } catch { continue }
         if (st.size > MAX_SEARCH_FILE_SIZE) continue
-        let text
-        try { text = await fs.readFile(full, 'utf-8') } catch { continue }
-        scanned++
-        const lines = text.split('\n')
-        for (let i = 0; i < lines.length && hits.length < MAX_SEARCH_HITS; i++) {
-          regex.lastIndex = 0
-          if (regex.test(lines[i])) {
-            hits.push(`${path.relative(ctx.cwd, full) || full}:${i + 1}: ${lines[i].trim().slice(0, 300)}`)
-          }
-        }
+        await searchOneFile(full)
       }
     }
   }
 
+  let st
   try {
-    const st = await fs.stat(dir)
-    if (!st.isDirectory()) return `错误: 不是目录: ${dir}`
+    st = await fs.stat(dir)
   } catch {
-    return `错误: 目录不存在: ${dir}`
+    return `错误: 路径不存在: ${dir}`
+  }
+  // 文件:直接搜它自己(忽略 ext 过滤 — 用户/模型明确指名了这个文件)
+  if (!st.isDirectory()) {
+    if (st.size > MAX_SEARCH_FILE_SIZE) return `错误: 文件过大(${(st.size / 1024 / 1024).toFixed(1)}MB),请用 read_file 分段查看`
+    await searchOneFile(dir)
+    if (hits.length === 0) return `未找到匹配 "${args.pattern}" 的内容(已扫描 1 个文件)`
+    return hits.join('\n')
   }
 
   await walk(dir, 1)

@@ -22,6 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   会话内命令 `/help` `/model` `/cd` `/clear` `/exit`
 - 新文件:`src/cli/ai/{agent,tools,safety}.js` + 105 个单元测试;
   `scripts/run-tests.cjs` 扫描范围补上 `src/cli`(此前该目录测试不被 npm test 执行)
+- 实测打磨(第二轮):
+  - 修复 Windows 下 cmd 本地化输出(GBK 字节流)显示为乱码的问题 —— 子进程输出
+    先严格 UTF-8 解码,失败按 GBK 兜底(iconv-lite)
+  - MiniMax 系模型内联 `<think>` 标签经流式过滤器(streamFilter.js)剥离,
+    思考内容置灰显示,不再裸标签刷屏;历史仍保存原始输出
+  - 工具结果回显截断改为 头+尾 保留(命令结果通常在末尾),并加 `│` 竖线前缀,
+    非零退出码黄色高亮
+  - `search_text` 兼容 path 直接指向单个文件(此前报"不是目录")
+  - system prompt 增加 Windows cmd 指引:无 head/grep/ls 等 Unix 命令,
+    优先用工具而非 shell,避免模型连番试错
 
 本轮会话集中提交:更新客户端 flow-mindmap 依赖到 `^0.5.9` → `^0.5.10`(patch 更新);
 上游 flow-mindmap 0.5.10 变更:三级节点背景色(根/一级/二级分层递减)、折叠按钮改为圆角方形、
