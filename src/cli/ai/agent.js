@@ -65,6 +65,8 @@ const STRINGS = {
     busy: '智能体正在执行中,请稍候(Ctrl+C 结束会话)…',
     bye: '已退出 g ai',
     cleared: '对话历史已清空',
+    thinkOn: '思考过程显示: 开',
+    thinkOff: '思考过程显示: 关(模型仍会思考,只是不回显)',
     modelSwitched: (label) => `已切换模型: ${label}`,
     invalidModelIndex: '无效的模型序号',
     cdOk: (p) => `工作目录已切换: ${p}`,
@@ -87,6 +89,8 @@ const STRINGS = {
     busy: 'Agent is working, please wait (Ctrl+C to end session)…',
     bye: 'Bye',
     cleared: 'Conversation cleared',
+    thinkOn: 'Thinking display: on',
+    thinkOff: 'Thinking display: off (model still thinks, just hidden)',
     modelSwitched: (label) => `Switched model: ${label}`,
     invalidModelIndex: 'Invalid model index',
     cdOk: (p) => `Working directory changed: ${p}`,
@@ -123,7 +127,10 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 
 # 运行环境
 - 操作系统: ${process.platform}
-- Shell: ${shellDesc}
+- Shell: ${shellDesc}${isWin ? `
+- 注意:Windows cmd 没有 head/grep/ls/sed/cat/tail 等 Unix 命令,直接跑会报"不是内部或外部命令"。
+  列目录用 list_files、搜内容用 search_text、看文件用 read_file,优先用工具而不是 shell;
+  必须跑 shell 时优先跨平台写法(如 node -e "..."),别用 Unix 专属命令` : ''}
 - 当前工作目录: ${cwd}(用户在此启动 g ai,也是所有相对路径的基准)
 - 当前时间: ${now}
 
@@ -139,11 +146,15 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 - 编辑文件优先 edit_file 精确替换;先 read_file 看原文,old_string 必须与文件内容完全一致(含缩进换行)
 - 大文件用 offset/limit 分段读取,不要一次读爆上下文
 - git 操作用 run_command 执行;提交代码可以用 git 命令,也可以用本 CLI 的 g -y(默认信息提交并推送)或 g --ai(AI 生成提交信息)
-- run_command 默认超时 120 秒,长任务加大 timeout_seconds(最大 600)
-- 命令在 ${shellDesc} 下执行,注意语法兼容${isWin ? `
-- Windows cmd 没有 head/grep/ls/sed/cat/tail 等 Unix 命令,直接跑会报"不是内部或外部命令";
-  列目录用 list_files、搜内容用 search_text、看文件用 read_file,优先工具而不是 shell;
-  必须跑 shell 时优先跨平台写法(如 node -e "..."),别用 Unix 专属命令` : ''}
+- run_command 默认就在工作目录执行,不要再加 cd / cd /d 前缀;默认超时 120 秒,长任务加大 timeout_seconds(最大 600)
+- 命令在 ${shellDesc} 下执行,注意语法兼容
+- 本项目跑测试用 npm test(node --test 不支持直接传目录路径)
+
+# 与用户交互
+- 需要向用户确认、提问或汇报重要决策时,直接用普通文本输出 —— 用户能实时看到你的文本;
+  不要调用不存在的工具,可用工具只有上面列出的 6 个
+- 发现高风险或状态不一致的情况(例如版本号 / git tag / CHANGELOG 对不上、发布前环境异常、
+  仓库状态与预期不符)时:先用文本说明发现和影响,停下来等用户指示,不要擅自继续破坏性操作
 
 # 输出
 - 你的文本输出直接显示在用户终端,用简体中文交流
@@ -153,7 +164,10 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 
 # Environment
 - OS: ${process.platform}
-- Shell: ${shellDesc}
+- Shell: ${shellDesc}${isWin ? `
+- Note: Windows cmd has NO Unix commands (head/grep/ls/sed/cat/tail); running them fails with "not recognized".
+  Use the tools instead: list_files for directories, search_text for content, read_file for files.
+  For shell one-offs, prefer cross-platform forms like node -e "..."` : ''}
 - Working directory: ${cwd} (where the user launched g ai; base for all relative paths)
 - Current time: ${now}
 
@@ -168,9 +182,13 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 - Prefer edit_file for precise replacements; read_file first, old_string must match the file exactly
 - Read large files in segments (offset/limit)
 - Git operations go through run_command; to commit, use git commands or this CLI's g -y / g --ai
-- run_command defaults to a 120s timeout; raise timeout_seconds (max 600) for long tasks
-- Commands run under ${shellDesc}; keep syntax compatible${isWin ? `
-- Windows cmd has NO Unix commands (head/grep/ls/sed/cat/tail); running them fails with "not recognized". Use the tools instead: list_files for directories, search_text for content, read_file for files. For shell one-offs, prefer cross-platform forms like node -e "..."` : ''}
+- run_command already executes in the working directory — do NOT prefix with cd; default timeout 120s, raise timeout_seconds (max 600) for long tasks
+- Commands run under ${shellDesc}; keep syntax compatible
+- Run this project's tests with npm test (node --test does not accept a bare directory)
+
+# Talking to the user
+- When you need to confirm something, ask a question, or report an important decision, just write plain text — the user sees your output in real time. Never call tools that do not exist; only the 6 tools listed above are available
+- When you spot high-risk or inconsistent state (version number / git tag / CHANGELOG mismatch, abnormal release environment, unexpected repo state), explain the finding and its impact in text, then STOP and wait for the user's decision instead of proceeding with destructive operations
 
 # Output
 - Your text output goes straight to the user's terminal; reply in English
@@ -279,6 +297,32 @@ function trimHistory(messages) {
 // ──────────────────────────────────────────────
 // 终端回显辅助
 // ──────────────────────────────────────────────
+
+// 回显截断的"最小省略量":只超出一两个字符时截断反而碍事(实测:git status
+// 输出 614 字符被截,省略 14 字符还把路径从中间切断),不值得就不截
+const TRUNCATE_MIN_OMITTED = 200
+
+/**
+ * 回显截断(纯函数,便于单测):
+ *   - 只超出一点点(< TRUNCATE_MIN_OMITTED)时原样返回
+ *   - 截断保留 头+尾,且切口对齐到整行边界 —— 避免把路径/单词从中间切断
+ *   - 命令输出最关键的信息(报错、最终结果)通常在末尾,所以头尾都要
+ */
+export function truncateDisplay(text, limit = DISPLAY_RESULT_LIMIT) {
+  text = String(text || '')
+  if (text.length <= limit + TRUNCATE_MIN_OMITTED) return text
+  const half = Math.floor(limit / 2)
+  const headRaw = text.slice(0, half)
+  const tailRaw = text.slice(text.length - half)
+  // 头部对齐到最后一个完整行;尾部对齐到第一个完整行
+  const lastNl = headRaw.lastIndexOf('\n')
+  const head = lastNl > 0 ? headRaw.slice(0, lastNl) : headRaw
+  const firstNl = tailRaw.indexOf('\n')
+  const tail = firstNl >= 0 ? tailRaw.slice(firstNl + 1) : tailRaw
+  const omitted = text.length - head.length - tail.length
+  return `${head}\n  ⋮ [回显省略 ${omitted} 字符,完整结果已提供给模型]\n${tail}`
+}
+
 function printToolCall(name, rawArgs) {
   let preview = String(rawArgs || '').replace(/\s+/g, ' ').trim()
   if (preview.length > DISPLAY_ARGS_LIMIT) preview = preview.slice(0, DISPLAY_ARGS_LIMIT) + '…'
@@ -286,13 +330,7 @@ function printToolCall(name, rawArgs) {
 }
 
 function printToolResult(result) {
-  let text = String(result || '')
-  // 回显截断保留 头 + 尾:命令输出最关键的信息(报错、最终结果)通常在末尾,
-  // 只留头部会把 `g --ai` 这类命令的结果部分整个截没
-  if (text.length > DISPLAY_RESULT_LIMIT) {
-    const half = Math.floor(DISPLAY_RESULT_LIMIT / 2)
-    text = text.slice(0, half) + `\n  ⋮ [回显省略 ${text.length - half * 2} 字符,完整结果已提供给模型]\n` + text.slice(text.length - half)
-  }
+  const text = truncateDisplay(result)
   // run_command 结果形如 "$ cmd\n(exit N)\n...",按退出码着色:
   // 0 / 非命令结果 → 暗色;非 0 → 黄色提醒
   const exitMatch = text.match(/^\$[^\n]*\n\(exit (\d+)\)/)
@@ -330,6 +368,8 @@ async function runAgentTurn(state, userText, t) {
       const kind = seg.content !== undefined ? 'content' : 'thinking'
       const text = seg.content ?? seg.thinking
       if (!text) return
+      // /think 关闭时跳过思考内容显示(历史不受影响)
+      if (kind === 'thinking' && !state.showThinking) return
       clearWaiting()
       if (lastKind && lastKind !== kind) process.stdout.write('\n')
       lastKind = kind
@@ -415,6 +455,7 @@ function printSlashHelp(t, locale) {
     '  /help             显示本帮助',
     '  /model            列出可用模型;/model <序号> 切换模型',
     '  /cd <路径>        切换智能体工作目录',
+    '  /think            开关思考过程显示',
     '  /clear            清空对话历史',
     '  /exit, /quit      退出',
     '',
@@ -425,6 +466,7 @@ function printSlashHelp(t, locale) {
     '  /help             Show this help',
     '  /model            List models; /model <n> to switch',
     '  /cd <path>        Change agent working directory',
+    '  /think            Toggle thinking display',
     '  /clear            Clear conversation history',
     '  /exit, /quit      Quit',
     '',
@@ -443,6 +485,11 @@ async function handleSlashCommand(state, input, t) {
   if (cmd === '/clear') {
     state.messages = [state.messages[0]]
     console.log(chalk.green(t.cleared))
+    return 'ok'
+  }
+  if (cmd === '/think') {
+    state.showThinking = !state.showThinking
+    console.log(chalk.green(state.showThinking ? t.thinkOn : t.thinkOff))
     return 'ok'
   }
   if (cmd === '/model') {
@@ -544,6 +591,7 @@ export async function runAiAgent(argv = []) {
     currentChild: null,
     abortController: null,
     busy: false,
+    showThinking: true,   // /think 切换:是否回显模型的思考过程
   }
 
   // SIGINT 时中止进行中的 LLM 请求 + 正在跑的子命令
