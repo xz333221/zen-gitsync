@@ -23,6 +23,7 @@ import {
   validateEndpoint,
   buildModelConfig,
   testModelConnection,
+  collectModelInput,
   PROVIDERS,
   BUILTIN_MODELS,
 } from './modelSetup.js'
@@ -355,5 +356,141 @@ test('BUILTIN_MODELS: 每个 key 都能在 PROVIDERS 中找到', () => {
   const providerUrls = new Set(PROVIDERS.map(p => p.url))
   for (const url of Object.keys(BUILTIN_MODELS)) {
     assert.ok(providerUrls.has(url), `BUILTIN_MODELS 的 key "${url}" 不在 PROVIDERS 中`)
+  }
+})
+
+// ── collectModelInput:交互式收集(注入 mock rl + mock fetch) ──
+//
+// collectModelInput 是 runModelSetup 和 agent.js /addmodel 共用的核心交互逻辑。
+// 通过 mock readline 逐条返回预设答案,mock fetch 控制 /chat/completions 测试结果,
+// 覆盖:预设服务商、自定义服务商、测试成功/失败/取消 四条主路径。
+
+/**
+ * 创建 mock readline,按队列依次返回预设答案给 rl.question()。
+ * @param {string[]} answers - 预设答案队列(每次 question 消费一条)
+ * @param {object} [opts]
+ * @param {number} [opts.closeOnQuestion=-1] - 在第 N 次 question 时触发 close 事件(模拟取消),-1=不触发
+ */
+function createMockRl(answers, { closeOnQuestion = -1 } = {}) {
+  const queue = [...answers]
+  const closeHandlers = []
+  let qNum = 0
+  return {
+    question(_prompt, cb) {
+      qNum++
+      if (qNum === closeOnQuestion) {
+        // 先让 once('close') 注册,再在 nextTick 触发(模拟用户 Ctrl+D)
+        process.nextTick(() => { for (const h of closeHandlers) h() })
+        return
+      }
+      const answer = queue.shift() ?? ''
+      process.nextTick(() => cb(answer))
+    },
+    once(event, cb) {
+      if (event === 'close') closeHandlers.push(cb)
+    },
+    close() {},
+  }
+}
+
+/** 静默 console.log/error/warn,避免交互式测试刷屏;返回 restore 函数 */
+function silenceConsole() {
+  const orig = { log: console.log, error: console.error, warn: console.warn }
+  console.log = () => {}
+  console.error = () => {}
+  console.warn = () => {}
+  return () => {
+    console.log = orig.log
+    console.error = orig.error
+    console.warn = orig.warn
+  }
+}
+
+test('collectModelInput: 预设服务商 + 内置模型 + 测试成功 → 返回收集的字段', async () => {
+  const restore = silenceConsole()
+  try {
+    // 答案:选 OpenAI(1) → 确认 baseURL(空=默认) → 选第一个模型(1) → apiKey → displayName(空=默认)
+    const rl = createMockRl(['1', '', '1', 'sk-test', ''])
+    const result = await collectModelInput({
+      locale: 'zh-CN',
+      rl,
+      fetchFn: mockFetch({ status: 200, ok: true }),
+    })
+    assert.ok(result, '应返回收集结果')
+    assert.equal(result.baseURL, 'https://api.openai.com/v1')
+    assert.equal(result.model, 'gpt-5.5')
+    assert.equal(result.apiKey, 'sk-test')
+    assert.equal(result.displayName, 'gpt-5.5')
+  } finally {
+    restore()
+  }
+})
+
+test('collectModelInput: 自定义服务商 + 手动输入模型名 → 返回收集的字段', async () => {
+  const restore = silenceConsole()
+  try {
+    // 选自定义(0) → 输入 baseURL → 确认(空=默认) → 手动输入模型名 → apiKey(空) → displayName(空=默认)
+    const rl = createMockRl(['0', 'https://my.custom.api/v1', '', 'my-model', '', ''])
+    const result = await collectModelInput({
+      locale: 'zh-CN',
+      rl,
+      fetchFn: mockFetch({ status: 200, ok: true }),
+    })
+    assert.ok(result)
+    assert.equal(result.baseURL, 'https://my.custom.api/v1')
+    assert.equal(result.model, 'my-model')
+    assert.equal(result.apiKey, '')
+    assert.equal(result.displayName, 'my-model')
+  } finally {
+    restore()
+  }
+})
+
+test('collectModelInput: 测试失败 + 用户选择不保存 → 返回 null', async () => {
+  const restore = silenceConsole()
+  try {
+    // 选 DeepSeek(3) → 确认 → 选第一个模型(1) → apiKey → displayName → 测试401失败 → 不保存(n)
+    const rl = createMockRl(['3', '', '1', 'sk-bad', '', 'n'])
+    const result = await collectModelInput({
+      locale: 'zh-CN',
+      rl,
+      fetchFn: mockFetch({ status: 401, ok: false }),
+    })
+    assert.equal(result, null)
+  } finally {
+    restore()
+  }
+})
+
+test('collectModelInput: 测试失败 + 用户选择继续 → 返回收集的字段', async () => {
+  const restore = silenceConsole()
+  try {
+    const rl = createMockRl(['3', '', '1', 'sk-bad', '', 'y'])
+    const result = await collectModelInput({
+      locale: 'zh-CN',
+      rl,
+      fetchFn: mockFetch({ status: 500, ok: false }),
+    })
+    assert.ok(result)
+    assert.equal(result.model, 'deepseek-v4-pro')
+  } finally {
+    restore()
+  }
+})
+
+test('collectModelInput: 用户取消(触发 close)→ 返回 null', async () => {
+  const restore = silenceConsole()
+  try {
+    // 在第 1 次 question(选服务商)时触发 close,模拟用户取消
+    const rl = createMockRl([], { closeOnQuestion: 1 })
+    const result = await collectModelInput({
+      locale: 'zh-CN',
+      rl,
+      fetchFn: mockFetch({ status: 200, ok: true }),
+      cancelMessage: '自定义取消文案',
+    })
+    assert.equal(result, null)
+  } finally {
+    restore()
   }
 })

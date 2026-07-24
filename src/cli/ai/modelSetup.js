@@ -150,6 +150,7 @@ const STRINGS = {
     testSkip: '跳过测试',
     askSave: '是否保存此模型配置？(Y/n)',
     saveCancelled: '已取消保存。',
+    cancelled: '已取消。',
     saved: (name) => `✓ 模型 "${name}" 已保存,正在启动 g ai…`,
     saveError: (msg) => `保存配置失败: ${msg}`,
     selectModelForUse: '请选择要使用的模型:',
@@ -182,6 +183,7 @@ const STRINGS = {
     testSkip: 'Skipped test',
     askSave: 'Save this model? (Y/n)',
     saveCancelled: 'Save cancelled.',
+    cancelled: 'Cancelled.',
     saved: (name) => `✓ Model "${name}" saved, starting g ai…`,
     saveError: (msg) => `Failed to save: ${msg}`,
     selectModelForUse: 'Select a model to use:',
@@ -402,6 +404,127 @@ async function selectFromList(asker, title, items, t, extraOptionLabel) {
 // ──────────────────────────────────────────────
 
 /**
+ * 交互式收集单个模型的配置(服务商 → 接口地址 → 模型名 → API Key → 显示名 → 测试连接)。
+ *
+ * 这是 runModelSetup(首次配置向导)与 agent.js 的 /addmodel 斜杠命令共用的核心交互逻辑。
+ * 本函数只负责"收集 + 测试",不负责保存 —— 调用方拿到返回值后自行 buildModelConfig +
+ * 持久化,以便在不同场景下灵活控制 isDefault / 状态更新等后续行为。
+ *
+ * @param {object} opts
+ * @param {string} [opts.locale='zh-CN']
+ * @param {import('node:readline').Interface} [opts.rl] - 可注入 readline(测试用 / REPL 复用)
+ * @param {typeof fetch} [opts.fetchFn] - 可注入 fetch(测试用)
+ * @param {string} [opts.cancelMessage] - 用户取消(Ctrl+C/Ctrl+D)时打印的提示文案,
+ *   默认用通用的 t.cancelled;首次配置向导可传入 t.setupCancelled 以保留原有提示
+ * @returns {Promise<{baseURL: string, model: string, apiKey: string, displayName: string}|null>}
+ *   成功返回收集到的字段;用户取消或测试失败后选择不保存时返回 null(已打印相应提示)
+ */
+export async function collectModelInput({ locale = 'zh-CN', rl: injectedRl, fetchFn, cancelMessage } = {}) {
+  const t = makeStrings(locale)
+  const ownRl = !injectedRl
+  const rl = injectedRl || readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  })
+  const asker = createAsker(rl)
+  const cancelMsg = cancelMessage || t.cancelled
+
+  try {
+    // 1. 选择服务商
+    const providerItems = PROVIDERS.map(p => ({
+      label: `${p.label} ${chalk.dim(p.url)}`,
+      value: p,
+    }))
+    const providerChoice = await selectFromList(asker, t.selectProvider, providerItems, t, t.customOption)
+
+    let baseURL
+    if (providerChoice) {
+      baseURL = providerChoice.value.url
+    } else {
+      // 自定义:手动输入 baseURL
+      while (true) {
+        baseURL = await asker.ask(t.endpointPrompt('https://...'))
+        if (validateEndpoint(baseURL)) break
+        console.log(chalk.red(t.endpointInvalid))
+      }
+    }
+
+    // 2. 确认/输入接口地址(选了预设的也允许用户修改)
+    const confirmedBaseURL = await asker.ask(t.endpointPrompt(baseURL), baseURL)
+    if (!validateEndpoint(confirmedBaseURL)) {
+      console.log(chalk.red(t.endpointInvalid))
+      // 再给一次机会
+      while (true) {
+        const retry = await asker.ask(t.endpointPrompt('https://...'))
+        if (validateEndpoint(retry)) { baseURL = retry; break }
+        console.log(chalk.red(t.endpointInvalid))
+      }
+    } else {
+      baseURL = confirmedBaseURL
+    }
+
+    // 3. 选择/输入模型名称
+    const builtin = getBuiltinModels(baseURL)
+    let model
+    if (builtin.length > 0) {
+      const modelItems = builtin.map(m => ({ label: m, value: m }))
+      const modelChoice = await selectFromList(asker, t.builtinModels, modelItems, t, t.manualInput)
+      if (modelChoice) {
+        model = modelChoice.value
+      } else {
+        // 手动输入
+        while (true) {
+          model = await asker.ask(t.modelPrompt)
+          if (model) break
+          console.log(chalk.yellow(t.modelRequired))
+        }
+      }
+    } else {
+      // 没有预设模型,直接手动输入
+      while (true) {
+        model = await asker.ask(t.modelPrompt)
+        if (model) break
+        console.log(chalk.yellow(t.modelRequired))
+      }
+    }
+
+    // 4. 输入 API Key
+    const apiKey = await asker.ask(t.apiKeyPrompt)
+
+    // 5. 输入显示名称(默认用 model 名)
+    const displayName = await asker.ask(t.displayNamePrompt(model), model)
+
+    // 6. 测试连接
+    console.log()
+    const spinner = startSpinner(t.testing)
+    const testResult = await testModelConnection({ baseURL, model, apiKey, fetchFn })
+    spinner.stop()
+
+    if (testResult.ok) {
+      console.log(chalk.green(`✓ ${t.testOk}`))
+    } else {
+      console.log(chalk.yellow(`⚠ ${t.testFail(testResult.message)}`))
+      const proceed = await askYesNo(asker, t.askSave)
+      if (!proceed) {
+        console.log(chalk.dim(t.saveCancelled))
+        return null
+      }
+    }
+
+    return { baseURL, model, apiKey, displayName }
+  } catch (err) {
+    // 用户 Ctrl+C / Ctrl+D 取消
+    if (err && err.cancelled) {
+      console.log(chalk.dim('\n' + cancelMsg))
+      return null
+    }
+    throw err
+  } finally {
+    if (ownRl) rl.close()
+  }
+}
+
+/**
  * 运行交互式模型配置向导。
  *
  * 当 models 为空时由 agent.js 调用。完成后将新模型保存到配置文件并返回,
@@ -433,92 +556,13 @@ export async function runModelSetup({ locale = 'zh-CN', rl: injectedRl, fetchFn 
       return null
     }
 
-    // 2. 选择服务商
-    const providerItems = PROVIDERS.map(p => ({
-      label: `${p.label} ${chalk.dim(p.url)}`,
-      value: p,
-    }))
-    const providerChoice = await selectFromList(asker, t.selectProvider, providerItems, t, t.customOption)
+    // 2-6. 交互式收集模型配置(复用 collectModelInput)
+    const collected = await collectModelInput({ locale, rl, fetchFn, cancelMessage: t.setupCancelled })
+    if (!collected) return null
 
-    let baseURL
-    let provider = null
-    if (providerChoice) {
-      provider = providerChoice.value
-      baseURL = provider.url
-    } else {
-      // 自定义:手动输入 baseURL
-      while (true) {
-        baseURL = await asker.ask(t.endpointPrompt('https://...'))
-        if (validateEndpoint(baseURL)) break
-        console.log(chalk.red(t.endpointInvalid))
-      }
-    }
-
-    // 3. 确认/输入接口地址
-    // 选了预设的也允许用户修改
-    const confirmedBaseURL = await asker.ask(t.endpointPrompt(baseURL), baseURL)
-    if (!validateEndpoint(confirmedBaseURL)) {
-      console.log(chalk.red(t.endpointInvalid))
-      // 再给一次机会
-      while (true) {
-        const retry = await asker.ask(t.endpointPrompt('https://...'))
-        if (validateEndpoint(retry)) { baseURL = retry; break }
-        console.log(chalk.red(t.endpointInvalid))
-      }
-    } else {
-      baseURL = confirmedBaseURL
-    }
-
-    // 4. 选择/输入模型名称
-    const builtin = getBuiltinModels(baseURL)
-    let model
-    if (builtin.length > 0) {
-      const modelItems = builtin.map(m => ({ label: m, value: m }))
-      const modelChoice = await selectFromList(asker, t.builtinModels, modelItems, t, t.manualInput)
-      if (modelChoice) {
-        model = modelChoice.value
-      } else {
-        // 手动输入
-        while (true) {
-          model = await asker.ask(t.modelPrompt)
-          if (model) break
-          console.log(chalk.yellow(t.modelRequired))
-        }
-      }
-    } else {
-      // 没有预设模型,直接手动输入
-      while (true) {
-        model = await asker.ask(t.modelPrompt)
-        if (model) break
-        console.log(chalk.yellow(t.modelRequired))
-      }
-    }
-
-    // 5. 输入 API Key
-    const apiKey = await asker.ask(t.apiKeyPrompt)
-
-    // 6. 输入显示名称(默认用 model 名)
-    const displayName = await asker.ask(t.displayNamePrompt(model), model)
-
-    // 7. 测试连接
-    console.log()
-    const spinner = startSpinner(t.testing)
-    const testResult = await testModelConnection({ baseURL, model, apiKey, fetchFn })
-    spinner.stop()
-
-    if (testResult.ok) {
-      console.log(chalk.green(`✓ ${t.testOk}`))
-    } else {
-      console.log(chalk.yellow(`⚠ ${t.testFail(testResult.message)}`))
-      const proceed = await askYesNo(asker, t.askSave)
-      if (!proceed) {
-        console.log(chalk.dim(t.saveCancelled))
-        return null
-      }
-    }
-
-    // 8. 保存配置(测试成功直接保存;失败时上面已确认过)
+    // 7. 保存配置(测试成功直接保存;失败时 collectModelInput 内已确认过)
     // 加载现有配置,添加新模型
+    const { baseURL, model, apiKey, displayName } = collected
     const cfg = await config.loadConfig()
     const models = Array.isArray(cfg.models) ? cfg.models : []
     const isFirst = models.length === 0
@@ -536,7 +580,7 @@ export async function runModelSetup({ locale = 'zh-CN', rl: injectedRl, fetchFn 
     console.log(chalk.green(t.saved(displayName || model)))
     return { models, model: newModel }
   } catch (err) {
-    // 用户 Ctrl+C 取消
+    // 用户 Ctrl+C 取消(askSetup 阶段;collectModelInput 内部的取消已自行处理)
     if (err && err.cancelled) {
       console.log(chalk.dim('\n' + t.setupCancelled))
       return null
@@ -547,4 +591,4 @@ export async function runModelSetup({ locale = 'zh-CN', rl: injectedRl, fetchFn 
   }
 }
 
-export default { runModelSetup, testModelConnection, getBuiltinModels, findProviderByUrl, validateEndpoint, buildModelConfig, PROVIDERS, BUILTIN_MODELS }
+export default { runModelSetup, collectModelInput, testModelConnection, getBuiltinModels, findProviderByUrl, validateEndpoint, buildModelConfig, PROVIDERS, BUILTIN_MODELS }

@@ -420,7 +420,7 @@ $ g ai "fix the failing test"   # one-shot task, then exit
 $ g ai --model=2                # pick the 2nd configured model (index or name)
 ```
 
-In-session commands: `/help`, `/model`, `/cd <path>`, `/image [path]`, `/think`, `/clear`, `/exit`.
+In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/clear`, `/exit`.
 
 Images: press `Alt+V` in the REPL to paste a clipboard image (screenshot), or attach a
 local file with `/image <path>`; images are sent as multimodal `image_url` parts with your
@@ -932,7 +932,7 @@ $ g ai "修复失败的测试"           # 单发模式：执行一轮后退出
 $ g ai --model=2                # 使用第 2 个已配置的模型（序号或名称）
 ```
 
-会话内命令：`/help`、`/model`、`/cd <路径>`、`/image [路径]`、`/think`、`/clear`、`/exit`。
+会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/clear`、`/exit`。
 
 图片：在 REPL 中按 `Alt+V` 粘贴剪贴板图片（截图），或用 `/image <路径>` 附加本地图片；
 图片以多模态 `image_url` 部件随下一条消息发送（需视觉模型）。单独 `/image` 查看待发送图片，

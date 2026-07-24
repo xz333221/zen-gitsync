@@ -17,7 +17,7 @@
 // 且切口把 "src/cli/ai/agent.js" 从中间切断显示成 "rc/cli/ai/agent.js"。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { truncateDisplay, stripStaleImages } from './agent.js'
+import { truncateDisplay, stripStaleImages, sanitizeMessages } from './agent.js'
 
 const LIMIT = 600
 
@@ -111,4 +111,80 @@ test('stripStaleImages: en locale 用英文占位符', () => {
   stripStaleImages(messages, 'en-US')
   assert.equal(messages[0].content[0].text, '[image omitted from history]')
   assert.equal(messages[1].content[0].type, 'image_url')
+})
+
+// ── sanitizeMessages:空 content 消毒(防止 provider 报 2013) ──
+test('sanitizeMessages: assistant 空 content 转 null(带 tool_calls 场景)', () => {
+  const messages = [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'tc1', type: 'function', function: { name: 'read_file', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'tc1', name: 'read_file', content: 'file contents...' },
+  ]
+  sanitizeMessages(messages)
+  assert.equal(messages[2].content, null, 'assistant 空 content 应转为 null')
+  assert.ok(messages[2].tool_calls, 'tool_calls 应保留不动')
+})
+
+test('sanitizeMessages: assistant 空 content 转 null(无 tool_calls)', () => {
+  const messages = [
+    { role: 'assistant', content: '' },
+  ]
+  sanitizeMessages(messages)
+  assert.equal(messages[0].content, null)
+})
+
+test('sanitizeMessages: tool 空 content 兜底为 (no output)', () => {
+  const messages = [
+    { role: 'tool', tool_call_id: 'tc1', name: 'run_command', content: '' },
+  ]
+  sanitizeMessages(messages)
+  assert.equal(messages[0].content, '(no output)')
+})
+
+test('sanitizeMessages: user 空 content 兜底为空格', () => {
+  const messages = [
+    { role: 'user', content: '' },
+  ]
+  sanitizeMessages(messages)
+  assert.equal(messages[0].content, ' ')
+})
+
+test('sanitizeMessages: 非空 content 不受影响', () => {
+  const messages = [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'hello' },
+    { role: 'assistant', content: 'world' },
+    { role: 'tool', tool_call_id: 'tc1', name: 'read_file', content: 'output' },
+  ]
+  const snapshot = JSON.parse(JSON.stringify(messages))
+  sanitizeMessages(messages)
+  assert.deepEqual(messages, snapshot)
+})
+
+test('sanitizeMessages: 数组 content(多模态)不受影响', () => {
+  const messages = [
+    { role: 'user', content: [{ type: 'text', text: 'hi' }, { type: 'image_url', image_url: { url: 'data:...' } }] },
+  ]
+  const snapshot = JSON.parse(JSON.stringify(messages))
+  sanitizeMessages(messages)
+  assert.deepEqual(messages, snapshot)
+})
+
+test('sanitizeMessages: 模拟真实工具调用流程后消息数组无空 content', () => {
+  // 模拟:模型只返回 tool_calls 没有文本 → 工具执行 → 下次请求
+  const messages = [
+    { role: 'system', content: 'sys prompt' },
+    { role: 'user', content: '帮我读一下文件' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'tc1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.js"}' } }] },
+    { role: 'tool', tool_call_id: 'tc1', name: 'read_file', content: '1→hello' },
+  ]
+  sanitizeMessages(messages)
+  // 消毒后所有消息的 content 都不应是空字符串
+  for (const m of messages) {
+    if (typeof m.content === 'string') {
+      assert.ok(m.content.length > 0, `role=${m.role} 的 content 不应为空字符串`)
+    }
+  }
+  assert.equal(messages[2].content, null, 'assistant 空 content 应为 null')
 })

@@ -54,7 +54,7 @@ import {
   printOk, printWarn, printError, printDim,
 } from './termui.js'
 import { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes } from './images.js'
-import { runModelSetup } from './modelSetup.js'
+import { runModelSetup, collectModelInput, buildModelConfig } from './modelSetup.js'
 
 // truncateDisplay 已迁移到 termui.js;这里 re-export 保持既有测试/外部引用不断
 export { truncateDisplay } from './termui.js'
@@ -105,6 +105,10 @@ const STRINGS = {
     imageListEmpty: '当前没有待发送的图片(Alt+V 粘贴或 /image <路径> 附加)',
     imageCleared: '已清除待发送的图片',
     imageSending: (n) => `📎 附带 ${n} 张图片`,
+    addModelTitle: '添加模型配置',
+    addModelSaved: (name) => `✓ 模型 "${name}" 已添加并切换为当前模型`,
+    addModelCancelled: '已取消添加模型',
+    addModelSaveError: (msg) => `保存配置失败: ${msg}`,
   },
   en: {
     noModel: 'No AI model configured. Add one in GUI settings first (run `g ui`).',
@@ -141,6 +145,10 @@ const STRINGS = {
     imageListEmpty: 'No pending images (Alt+V to paste, or /image <path>)',
     imageCleared: 'Pending images cleared',
     imageSending: (n) => `📎 ${n} image(s) attached`,
+    addModelTitle: 'Add Model Configuration',
+    addModelSaved: (name) => `✓ Model "${name}" added and switched to`,
+    addModelCancelled: 'Add model cancelled',
+    addModelSaveError: (msg) => `Failed to save: ${msg}`,
   },
 }
 
@@ -336,6 +344,33 @@ function trimHistory(messages) {
 }
 
 // ──────────────────────────────────────────────
+// 消息消毒:确保发给 LLM 的消息数组里没有空内容。
+//
+// 背景:部分 LLM provider(如 Moonshot/Kimi、智谱、火山引擎等)对 assistant
+// 消息的 content 字段校验严格 —— 当模型只返回 tool_calls 而没有文本时,
+// content 为空字符串 "" 会被拒绝并报 "chat content is empty (2013)"。
+// OpenAI 官方规范允许 assistant 消息在带 tool_calls 时 content 为 null,
+// 本函数将空字符串统一转为 null,并对 tool/user 消息做兜底防止空内容。
+// ──────────────────────────────────────────────
+export function sanitizeMessages(messages) {
+  for (const m of messages) {
+    if (typeof m.content !== 'string') continue
+    if (m.content === '') {
+      if (m.role === 'assistant') {
+        // assistant 带 tool_calls 时 content 用 null(OpenAI 规范);
+        // 不带 tool_calls 的空内容也用 null,provider 通常可接受
+        m.content = null
+      } else if (m.role === 'tool') {
+        m.content = '(no output)'
+      } else if (m.role === 'user') {
+        m.content = ' '
+      }
+    }
+  }
+  return messages
+}
+
+// ──────────────────────────────────────────────
 // 多模态历史:base64 图片很占上下文,只保留"最近一条带图消息"里的图片,
 // 更早消息里的 image_url 部件降级为文字占位(模型仍知道这里曾有图)
 // ──────────────────────────────────────────────
@@ -405,6 +440,9 @@ async function runAgentTurn(state, userText, t, images = []) {
       else writer.writeContent(text)
     }
 
+    // 发送前消毒:确保历史里没有空 content 的消息(部分 provider 报 2013)
+    sanitizeMessages(state.messages)
+
     let result
     try {
       result = await streamChatOnce({
@@ -441,12 +479,13 @@ async function runAgentTurn(state, userText, t, images = []) {
 
     // 无工具调用:本轮结束,assistant 文本入历史
     if (toolCalls.length === 0) {
-      state.messages.push({ role: 'assistant', content: content || '' })
+      state.messages.push({ role: 'assistant', content: content || null })
       return
     }
 
     // 有工具调用:assistant(带 tool_calls)入历史,然后逐个执行
-    state.messages.push({ role: 'assistant', content: content || '', tool_calls: toolCalls })
+    // content 为 null 而非空字符串:部分 provider 拒绝空字符串内容(2013 错误)
+    state.messages.push({ role: 'assistant', content: content || null, tool_calls: toolCalls })
 
     for (const tc of toolCalls) {
       const name = tc.function?.name || ''
@@ -492,6 +531,7 @@ function printSlashHelp(t, locale) {
   const lines = zh ? [
     '  /help             显示本帮助',
     '  /model            列出可用模型;/model <序号> 切换模型',
+    '  /addmodel         添加新的模型配置(交互式向导)',
     '  /cd <路径>        切换智能体工作目录',
     '  /image [路径]     查看待发送图片;/image <路径> 附加本地图片;/image clear 清除',
     '  /think            开关思考过程显示',
@@ -505,6 +545,7 @@ function printSlashHelp(t, locale) {
   ] : [
     '  /help             Show this help',
     '  /model            List models; /model <n> to switch',
+    '  /addmodel         Add a new model (interactive wizard)',
     '  /cd <path>        Change agent working directory',
     '  /image [path]     List pending images; attach a file; /image clear to reset',
     '  /think            Toggle thinking display',
@@ -581,6 +622,47 @@ async function handleSlashCommand(state, input, t) {
     }
     state.model = state.models[idx - 1]
     printOk(t.modelSwitched(modelLabel(state.model)))
+    return 'ok'
+  }
+  if (cmd === '/addmodel') {
+    // 智能体执行中不允许启动向导:向导的 rl.question 会与流式输出交错,体验混乱
+    if (state.busy) {
+      printDim(t.busy)
+      return 'ok'
+    }
+    state.inWizard = true
+    try {
+      console.log(chalk.cyan.bold('\n' + t.addModelTitle))
+      // 复用 modelSetup 的交互式收集逻辑(服务商 → 接口 → 模型名 → Key → 显示名 → 测试)
+      const collected = await collectModelInput({
+        locale: state.locale,
+        rl: state.rl,
+        cancelMessage: t.addModelCancelled,
+      })
+      if (!collected) return 'ok'
+      const { baseURL, model, apiKey, displayName } = collected
+      // 构建模型配置(isDefault=false:/addmodel 只是追加,不改默认模型)
+      const newModel = buildModelConfig({ baseURL, model, apiKey, name: displayName, isDefault: false })
+      // 持久化到 ~/.git-commit-tool.json 顶层 models 数组
+      const cfg = await config.loadConfig()
+      const models = Array.isArray(cfg.models) ? cfg.models : []
+      models.push(newModel)
+      cfg.models = models
+      try {
+        await config.saveConfig(cfg)
+      } catch (err) {
+        printError(t.addModelSaveError(err.message))
+        return 'ok'
+      }
+      // 同步 REPL 状态:更新模型列表 + 自动切换到新模型(用户刚添加,大概率想立刻用)
+      state.models = models
+      state.model = newModel
+      printOk(t.addModelSaved(displayName || model))
+    } catch (err) {
+      printError(err.message)
+    } finally {
+      state.inWizard = false
+    }
     return 'ok'
   }
   if (cmd === '/cd') {
@@ -669,6 +751,8 @@ export async function runAiAgent(argv = []) {
     showThinking: true,     // /think 切换:是否回显模型的思考过程
     pendingImages: [],      // Alt+V / /image 附加的待发送图片 [{path, bytes}]
     pasting: false,         // 剪贴板读取进行中(防 Alt+V 连打并发)
+    inWizard: false,        // /addmodel 交互式向导进行中:忽略 REPL 的 line 事件
+    rl: null,               // REPL readline 引用(供 /addmodel 复用做 rl.question)
   }
 
   // SIGINT 时中止进行中的 LLM 请求 + 正在跑的子命令
@@ -704,6 +788,7 @@ export async function runAiAgent(argv = []) {
     prompt: chalk.cyan.bold(t.prompt),
     historySize: 200,
   })
+  state.rl = rl  // 供 /addmodel 等需要 rl.question 的斜杠命令复用
 
   // 输入提示符管理。
   //
@@ -794,6 +879,9 @@ export async function runAiAgent(argv = []) {
   rl.prompt()
 
   rl.on('line', async (line) => {
+    // /addmodel 等交互式向导进行中时,用户的回答由向导自身的 rl.question 处理,
+    // 不应进入 REPL 的正常输入流程(否则会把向导的答案当成命令/消息发给模型)
+    if (state.inWizard) return
     const input = line.trim()
 
     if (input.startsWith('/')) {
