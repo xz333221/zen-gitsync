@@ -158,6 +158,13 @@ export function startSpinner(text) {
     text: chalk.dim(text),
     spinner: 'dots',
     color: 'cyan',
+    // ora 默认 discardStdin: true,内部用 stdin-discarder 在 spinner 运行时
+    // 丢弃 stdin 输入。但 stdin-discarder 的 stop() 在 Windows 上有 bug:
+    // start() 跳过 Windows,但 stop() 没有 Windows 检查,无条件执行
+    // process.stdin.pause() + setRawMode(false),导致 readline 的 stdin
+    // 停止 flowing → 事件循环失去引用 → 进程退出。
+    // 关闭这个选项即可避免问题。
+    discardStdin: false,
   })
   spinner.start()
   return {

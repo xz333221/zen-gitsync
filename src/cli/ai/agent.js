@@ -712,6 +712,12 @@ export async function runAiAgent(argv = []) {
 
   const showPrompt = () => {
     if (rl.closed) return
+    // 双保险:确保 stdin 处于 flowing 模式(ora 的 stdin-discarder 可能在
+    // stop() 时 pause 了 stdin,即使 discardStdin:false 已设,仍防止其他
+    // 库意外 pause)
+    if (process.stdin.isTTY && !process.stdin.readableFlowing) {
+      process.stdin.resume()
+    }
     if (process.stdout.isTTY) {
       // 确保光标在新行第 0 列(\r 回行首,\n 换行)
       process.stdout.write('\r\n')
