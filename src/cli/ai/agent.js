@@ -700,21 +700,30 @@ export async function runAiAgent(argv = []) {
     historySize: 200,
   })
 
-  // 输入提示符:只用 rl.prompt(),不画任何边框。
+  // 输入提示符管理。
   //
-  // 根因分析(历次踩坑):
-  //   1. 下边框 ╰╯ 被 readline _refreshLine() 的 clearScreenDown() 反复清除
-  //   2. 上边框 ╭╮ 由 drawInputTop() 直接写 stdout,readline 不知道这行
-  //      的存在。虽然 prevRows=0 时不会上移光标,但 _refreshLine() 内部
-  //      的 cursorTo(0)+clearScreenDown()+write(prompt) 与 drawInputTop()
-  //      的输出在时序上交织,导致终端光标位置与 readline 内部追踪脱节,
-  //      出现输入丢失、文字重复、Enter 不发送等问题。
-  //   3. 任何在 _refreshLine() 调用之间直接写 stdout 的行为都会使 prevRows
-  //      失效(模型输出、工具结果、drawInputTop 等都算)。
+  // readline 的 _line() (Enter 键触发) 内部调用 clearLine(),
+  // clearLine() 会:
+  //   1. kMoveCursor(+Infinity) — 光标移到行末
+  //   2. kWriteToOutput('\r\n') — 写 \r\n (readline 自己写!不需要我们补)
+  //   3. this.line = ''; this.cursor = 0; this.prevRows = 0;
+  // 然后 _line() 调用 kOnLine(line) 发出 'line' 事件。
   //
-  // 结论:不向 stdout 写任何 readline 不知道的内容。只用 rl.prompt()。
+  // 所以 Enter 后,readline 已经把光标移到了新行(第 0 列)。
+  // 我们在 'line' handler 里不需要再写 \n — 那会创建一个 readline
+  // 不知道的额外空行,导致后续 _refreshLine() 的光标计算错误。
+  //
+  // 模型输出通过 process.stdout.write / console.log 直接写 stdout,
+  // readline 不知道这些输出。这会使 prevRows 失效(它假设光标还在
+  // 上次 _refreshLine() 的位置)。所以每次调 rl.prompt() 前必须
+  // 手动重置 rl.prevRows = 0,告诉 readline “光标在提示符行”。
+
   const showPrompt = () => {
     if (rl.closed) return
+    // 重置 prevRows:模型输出/工具结果等直接写 stdout 后,
+    // readline 的 prevRows 已过期。设为 0 可防止 _refreshLine()
+    // 尝试上移光标到错误的行。
+    rl.prevRows = 0
     rl.prompt()
   }
 
@@ -725,16 +734,11 @@ export async function runAiAgent(argv = []) {
     } catch (_) {
       try { rl.prompt() } catch { /* 给予宽容 */ }
     }
-    try { process.stdin.resume() } catch { /* noop */ }
   }
 
-  // readline 的 _line() 在 Enter 后调用 clearLine()→_refreshLine(),
-  // 在当前行重写 ❯ (空提示符),但不写 \n。我们的输出内容需要从新行开始,
-  // 所以在这里补一个 \n 把光标移到下一行。
-  // 注意:空输入时不调 closeInputFrame,直接 safeShowPrompt() 重画提示符。
-  const closeInputFrame = () => {
-    if (process.stdout.isTTY) process.stdout.write('\n')
-  }
+  // readline 的 clearLine() 已经写了 \r\n,不需要我们再补换行。
+  // 这个函数保留为空函数,保持调用点不变(避免大范围重构)。
+  const closeInputFrame = () => {}
 
   // 在提示符上方插一行通知(粘贴进度等)。
   // console.log 输出后光标在新行,rl.prompt() 在该行重画提示符。
@@ -777,7 +781,6 @@ export async function runAiAgent(argv = []) {
     const input = line.trim()
 
     if (input.startsWith('/')) {
-      closeInputFrame()
       const r = await handleSlashCommand(state, input, t)
       if (r === 'exit') { rl.close(); return }
       safeShowPrompt()
@@ -786,12 +789,11 @@ export async function runAiAgent(argv = []) {
 
     if (!input) { safeShowPrompt(); return }
     if (state.busy) {
-      closeInputFrame()
       printDim(t.busy)
+      safeShowPrompt()
       return
     }
 
-    closeInputFrame()
     // 取出待发送图片(取出即清空队列,用户每条消息独立决定带不带图)
     const images = state.pendingImages.splice(0)
     if (images.length > 0) printDim(t.imageSending(images.length))
@@ -818,8 +820,6 @@ export async function runAiAgent(argv = []) {
   const rejectionHandler = (reason) => {
     const msg = reason instanceof Error ? reason.message : String(reason)
     printError(`内部错误(已捕获,会话继续): ${msg}`)
-    // 确保 stdin 仍然活跃,防止事件循环空闲退出
-    try { process.stdin.resume() } catch { /* noop */ }
     safeShowPrompt()
   }
   process.on('unhandledRejection', rejectionHandler)
