@@ -118,10 +118,12 @@ export function printHelpPanel(title, lines) {
 // ──────────────────────────────────────────────
 //
 //   ╭────────────────────────────────────────╮   ← drawInputTop()
-//   ❯ 用户输入…                              ← readline prompt
-//   ╰────────────────────────────────────────╯   ← drawInputBottom()
+//   ❯ 用户输入…                              ← readline prompt(光标停在这行)
+//   ╰────────────────────────────────────────╯   ← 与上行同时画好,输入时就看到完整框
 //
-// readline 只能管一行提示符,上下边框由我们在 prompt 前 / line 事件后补画。
+// readline 只能管一行提示符,边框由我们补画:
+// 画完下边框后由调用方把光标移回输入行(readline 的刷新只动当前行,互不影响);
+// 用户回车后光标正好落在下边框行,write('\n') 越过它即可,框完整留在回显里。
 // 非 TTY 或终端过窄时静默降级为裸提示符。
 
 function borderLine(left, right) {
@@ -132,6 +134,11 @@ function borderLine(left, right) {
 export function drawInputTop(write = (s) => process.stdout.write(s)) {
   if (!process.stdout.isTTY) return
   write(borderLine('╭', '╮') + '\n')
+}
+
+/** 下边框字符串(不带换行)—— 由调用方在 prompt 之后补画并自行恢复光标 */
+export function inputBottomBorder() {
+  return borderLine('╰', '╯')
 }
 
 export function drawInputBottom(write = (s) => process.stdout.write(s)) {
@@ -195,12 +202,15 @@ export function createAssistantWriter({
   let inFence = false      // ``` 代码块状态
   let contentLines = 0     // 已输出正文行数(首行带 ⏺ 子弹头)
   let lastBlank = false    // 上一行是空白行(连续空行合并,避免模型输出头部/分隔空行刷屏)
+  // ⏺ 后留 2 个空格,后续行 3 空格对齐 — 图标与文字之间别太挤
+  const BULLET_FIRST = chalk.green('⏺') + '  '
+  const BULLET_REST = '   '
 
   const emitContentLine = (raw, withNewline = true) => {
     // 围栏标记行:切换状态,用一个淡淡的槽线代替裸 ```
     if (/^\s*```/.test(raw)) {
       inFence = !inFence
-      const bullet = contentLines === 0 ? chalk.green('⏺ ') : '  '
+      const bullet = contentLines === 0 ? BULLET_FIRST : BULLET_REST
       contentLines++
       lastBlank = false
       write(bullet + chalk.dim(inFence ? '┄ code ' + '┄'.repeat(8) : '┄'.repeat(14)) + (withNewline ? '\n' : ''))
@@ -208,7 +218,7 @@ export function createAssistantWriter({
     }
     // 围栏内:代码行原样带槽线(空行也保留,代码格式不能动)
     if (inFence) {
-      const bullet = contentLines === 0 ? chalk.green('⏺ ') : '  '
+      const bullet = contentLines === 0 ? BULLET_FIRST : BULLET_REST
       contentLines++
       lastBlank = false
       write(bullet + chalk.dim('│ ') + raw + (withNewline ? '\n' : ''))
@@ -222,7 +232,7 @@ export function createAssistantWriter({
       return
     }
     lastBlank = false
-    const bullet = contentLines === 0 ? chalk.green('⏺ ') : '  '
+    const bullet = contentLines === 0 ? BULLET_FIRST : BULLET_REST
     contentLines++
     const h = raw.match(/^(#{1,6})\s+(.*)$/)
     const body = h ? chalk.bold(renderInline(h[2])) : renderInline(raw)
@@ -303,16 +313,18 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
   }
 }
 
-/** 工具头:⏺ name  参数摘要 */
+/** 工具头:⏺  name  参数摘要(图标与文字之间 2 空格,别太挤;青色与正文绿色子弹头区分) */
 export function printToolHeader(name, summary, write = (s) => process.stdout.write(s)) {
-  write('\n' + chalk.green('⏺ ') + chalk.bold(name) + (summary ? '  ' + chalk.dim(summary) : '') + '\n')
+  write('\n' + chalk.cyan('⏺') + '  ' + chalk.bold(name) + (summary ? '  ' + chalk.dim(summary) : '') + '\n')
 }
 
 /**
  * 工具结果块:
- *   ⎿ 首行
- *   │ 后续行…
+ *   └─ 首行
+ *   │  后续行…
  * 退出码非 0 → 黄色;"错误/已拒绝"开头 → 红色;其余暗色。
+ * (首行用 └─ 而不是 Claude 的 ⎿:box-drawing 字符在 Windows 终端字体里渲染更稳,
+ *  且与输入框 ╭╰ 边框同一字符族,视觉更统一)
  */
 export function printToolResult(result, write = (s) => process.stdout.write(s)) {
   const text = truncateDisplay(result)
@@ -323,7 +335,7 @@ export function printToolResult(result, write = (s) => process.stdout.write(s)) 
   const colorize = isError ? chalk.yellow : chalk.dim
   const lines = text.split('\n')
   const rendered = lines.map((l, i) => {
-    const gutter = i === 0 ? chalk.dim('  ⎿  ') : chalk.dim('  │  ')
+    const gutter = i === 0 ? chalk.dim('  └─ ') : chalk.dim('  │  ')
     return gutter + colorize(l)
   }).join('\n')
   write(rendered + '\n')
@@ -346,6 +358,7 @@ export default {
   printHelpPanel,
   drawInputTop,
   drawInputBottom,
+  inputBottomBorder,
   startSpinner,
   createAssistantWriter,
   summarizeToolArgs,

@@ -42,16 +42,17 @@
 
 import readline from 'node:readline'
 import chalk from 'chalk'
+import stringWidth from 'string-width'
 import config from '../../config.js'
 import { getCwd } from '../../utils/index.js'
 import { registerCleanup } from '../cleanup.js'
 import { TOOL_DEFINITIONS, executeTool } from './tools.js'
 import { createThinkFilter } from './streamFilter.js'
 import {
-  printBanner, printHelpPanel, drawInputTop, drawInputBottom,
+  printBanner, printHelpPanel, drawInputTop, inputBottomBorder,
   startSpinner, createAssistantWriter,
   summarizeToolArgs, printToolHeader, printToolResult,
-  printOk, printWarn, printError, printDim,
+  printOk, printWarn, printError, printDim, stripAnsi,
 } from './termui.js'
 import { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes } from './images.js'
 
@@ -88,12 +89,13 @@ const STRINGS = {
     currentModel: '当前模型',
     availableModels: '可用模型',
     oneShotNoModel: '未配置模型,无法启动',
+    oneShotDone: '单发模式完成 · 需要多轮连续对话请直接运行 g ai(不带参数)',
     helpTitle: 'g ai 命令',
     bannerTip: 'Alt+V 粘贴图片 · /help 查看命令 · /exit 退出 · Ctrl+C 结束会话',
     prompt: '❯ ',
     bannerModel: '模型',
     bannerCwd: '目录',
-    thinkingLabel: '✻ 思考',
+    thinkingLabel: '✻  思考',
     chars: '字符',
     imagePasting: '正在读取剪贴板图片…',
     imageAttached: (n, size) => `📎 图片 #${n} 已附加(${size}),将随下一条消息发送`,
@@ -123,12 +125,13 @@ const STRINGS = {
     currentModel: 'Current model',
     availableModels: 'Available models',
     oneShotNoModel: 'No model configured, aborting',
+    oneShotDone: 'One-shot done · for multi-turn chat run `g ai` with no arguments',
     helpTitle: 'g ai commands',
     bannerTip: 'Alt+V paste image · /help for commands · /exit to quit · Ctrl+C to end session',
     prompt: '❯ ',
     bannerModel: 'Model',
     bannerCwd: 'CWD',
-    thinkingLabel: '✻ Thinking',
+    thinkingLabel: '✻  Thinking',
     chars: 'chars',
     imagePasting: 'Reading clipboard image…',
     imageAttached: (n, size) => `📎 Image #${n} attached (${size}); sent with your next message`,
@@ -676,6 +679,7 @@ export async function runAiAgent(argv = []) {
   if (oneShot) {
     console.log(chalk.dim(`[${t.bannerModel}] ${modelLabel(model)} · [${t.bannerCwd}] ${cwd}`))
     await runAgentTurn(state, oneShot, t)
+    printDim(t.oneShotDone)
     return
   }
 
@@ -697,23 +701,40 @@ export async function runAiAgent(argv = []) {
     historySize: 200,
   })
 
-  // 盒式输入框(Codex composer 风格):prompt 前画 ╭──╮,提交后画 ╰──╯
+  // 盒式输入框(Codex composer 风格):输入时完整框就可见 —
+  // 上边框 → 提示符行 → 下边框一次画好,再把光标移回输入行;
+  // readline 的编辑刷新只重写当前行,不会碰上下边框。
+  const promptCol = stringWidth(stripAnsi(chalk.cyan.bold(t.prompt)))   // '❯ ' 的显示列宽
   const showPrompt = () => {
+    if (!process.stdout.isTTY) { rl.prompt(); return }
     drawInputTop()
     rl.prompt()
+    process.stdout.write('\n' + inputBottomBorder() + '\n')
+    readline.moveCursor(process.stdout, 0, -2)
+    readline.cursorTo(process.stdout, promptCol)
+  }
+
+  // 用户回车后光标正好落在下边框行:写个换行越过它(完整框留在回显里),再开始输出
+  const closeInputFrame = () => {
+    if (process.stdout.isTTY) process.stdout.write('\n')
   }
 
   // 在输入框上方插一行通知(粘贴进度等),不打断用户正在输入的内容:
-  // 清掉当前输入行与旧边框 → 打通知 → 重画边框 + 提示符 → 恢复已输入文本
+  // 清掉旧上边框 → 通知占其位 → 重画上边框 → 清掉旧下边框行 → 提示符 + 新下边框 → 恢复已输入文本
   const notifyAbovePrompt = (text) => {
     if (state.busy || !process.stdout.isTTY) { console.log(text); return }
     const current = rl.line
-    readline.moveCursor(process.stdout, 0, -1)   // 回到输入框上边框行
+    readline.moveCursor(process.stdout, 0, -1)   // 输入行 → 上边框行
     readline.clearLine(process.stdout, 0)
     readline.cursorTo(process.stdout, 0)
     console.log(text)
-    drawInputTop()
+    drawInputTop()                               // 光标落到旧下边框行
+    readline.clearLine(process.stdout, 0)        // 清掉旧下边框,该行给提示符用
+    readline.cursorTo(process.stdout, 0)
     rl.prompt()
+    process.stdout.write('\n' + inputBottomBorder() + '\n')
+    readline.moveCursor(process.stdout, 0, -2)
+    readline.cursorTo(process.stdout, promptCol)
     if (current) rl.write(current)
   }
 
@@ -748,20 +769,21 @@ export async function runAiAgent(argv = []) {
     const input = line.trim()
 
     if (input.startsWith('/')) {
-      drawInputBottom()
+      closeInputFrame()
       const r = await handleSlashCommand(state, input, t)
       if (r === 'exit') { rl.close(); return }
       showPrompt()
       return
     }
 
-    if (!input) { drawInputBottom(); showPrompt(); return }
+    if (!input) { closeInputFrame(); showPrompt(); return }
     if (state.busy) {
+      closeInputFrame()
       printDim(t.busy)
       return
     }
 
-    drawInputBottom()
+    closeInputFrame()
     // 取出待发送图片(取出即清空队列,用户每条消息独立决定带不带图)
     const images = state.pendingImages.splice(0)
     if (images.length > 0) printDim(t.imageSending(images.length))
