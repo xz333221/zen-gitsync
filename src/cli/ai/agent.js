@@ -49,6 +49,7 @@ import { TOOL_DEFINITIONS, executeTool } from './tools.js'
 import { createThinkFilter } from './streamFilter.js'
 import {
   printBanner, printHelpPanel,
+  filterSlashCommands, renderSlashHintBody,
   startSpinner, createAssistantWriter,
   summarizeToolArgs, printToolHeader, printToolResult,
   printOk, printWarn, printError, printDim,
@@ -773,7 +774,7 @@ export async function runAiAgent(argv = []) {
 
   // ── 交互模式(REPL)──
   printBanner({
-    title: 'g ai — AI Agent',
+    title: 'Zen GitSync — AI Agent',
     modelLabel: modelLabel(model),
     baseURL: model.baseURL || '',
     cwd,
@@ -846,6 +847,35 @@ export async function runAiAgent(argv = []) {
     if (!state.busy) safeShowPrompt()
   }
 
+  // ── 斜杠命令即时提示 ──
+  // 在提示符下方浮现匹配到的命令,随输入过滤;不移动光标(用 DECSC/DECRC 保存-恢复)。
+  // slashHintRows 记录当前提示占了几行,下次刷新/提交时据此擦除,避免残影。
+  let slashHintRows = 0
+  const eraseSlashHint = () => {
+    if (!process.stdout.isTTY || slashHintRows === 0) return
+    // 保存光标 → 下移到提示区逐行清空 → 恢复光标
+    let seq = '\x1b7'
+    for (let i = 0; i < slashHintRows; i++) seq += '\x1b[1B\x1b[2K'
+    seq += '\x1b8'
+    process.stdout.write(seq)
+    slashHintRows = 0
+  }
+  const renderSlashHint = () => {
+    if (!process.stdout.isTTY || state.busy || state.inWizard) { return }
+    const matches = filterSlashCommands(rl.line, state.locale)
+    const body = renderSlashHintBody(matches)
+    // 先擦掉旧提示(行数可能变化),再画新的
+    eraseSlashHint()
+    if (!body) return
+    const rows = body.split('\n')
+    // 保存光标,逐行下移打印(每行先清行防止与旧内容叠字),最后恢复光标回输入行
+    let seq = '\x1b7'
+    for (const r of rows) seq += '\x1b[1B\x1b[2K\r' + r
+    seq += '\x1b8'
+    process.stdout.write(seq)
+    slashHintRows = rows.length
+  }
+
   // Alt+V 粘贴剪贴板图片(node 把 ESC+v 解析为 meta+v;部分终端不发 Alt,可用 /image 兜底)
   const pasteFromClipboard = async () => {
     if (state.pasting) return
@@ -867,6 +897,13 @@ export async function runAiAgent(argv = []) {
     }
   }
   rl.input.on('keypress', (ch, key) => {
+    // Enter 提交由 line 处理器负责擦除提示,这里不重画(此刻 readline 已换行,
+    // 光标不在输入行,重画会错位)
+    if (!(key && (key.name === 'return' || key.name === 'enter'))) {
+      // 每次按键后即时刷新斜杠命令提示(readline 已先处理完本次按键,rl.line 为最新值)。
+      // 非 slash / 无匹配时 renderSlashHint 会把上一次的提示擦掉。
+      renderSlashHint()
+    }
     if (!key) return
     const isAltV = (key.meta && key.name === 'v')
       || (typeof key.sequence === 'string' && key.sequence.length === 2
@@ -879,6 +916,12 @@ export async function runAiAgent(argv = []) {
   rl.prompt()
 
   rl.on('line', async (line) => {
+    // 提交时光标已落到提示符下一行(即提示区起点),直接清到屏幕末尾擦掉整块提示,
+    // 比 DECSC/DECRC 相对定位更稳(此时光标不在输入行)
+    if (process.stdout.isTTY && slashHintRows > 0) {
+      process.stdout.write('\x1b[0J')
+      slashHintRows = 0
+    }
     // /addmodel 等交互式向导进行中时,用户的回答由向导自身的 rl.question 处理,
     // 不应进入 REPL 的正常输入流程(否则会把向导的答案当成命令/消息发给模型)
     if (state.inWizard) return

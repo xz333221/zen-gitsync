@@ -20,6 +20,7 @@ import assert from 'node:assert/strict'
 import {
   stripAnsi, truncateDisplay, summarizeToolArgs,
   createAssistantWriter, printToolHeader, printToolResult,
+  filterSlashCommands, renderSlashHintBody, SLASH_COMMANDS,
 } from './termui.js'
 
 // 收集 write 输出的辅助:返回 {text(), lines()}
@@ -212,4 +213,41 @@ test('printToolResult: 超长结果被截断并含省略标记', () => {
   const long = Array.from({ length: 60 }, (_, i) => `line${i} ` + 'y'.repeat(40)).join('\n')
   printToolResult(long, c.write)
   assert.match(c.text(), /回显省略/)
+})
+
+// ── 斜杠命令即时提示 ──
+
+test('filterSlashCommands: 单个 / 返回全部命令', () => {
+  const got = filterSlashCommands('/', 'zh').map(m => m.cmd)
+  assert.deepEqual(got, SLASH_COMMANDS.map(c => c.cmd))
+})
+
+test('filterSlashCommands: 前缀过滤,大小写不敏感', () => {
+  assert.deepEqual(filterSlashCommands('/m', 'zh').map(m => m.cmd), ['/model'])
+  assert.deepEqual(filterSlashCommands('/AD', 'zh').map(m => m.cmd), ['/addmodel'])
+  assert.deepEqual(filterSlashCommands('/exit', 'zh').map(m => m.cmd), ['/exit'])
+})
+
+test('filterSlashCommands: 已输入空格(进入参数)时不再提示', () => {
+  assert.deepEqual(filterSlashCommands('/model 2', 'zh'), [])
+  assert.deepEqual(filterSlashCommands('/cd ..', 'zh'), [])
+})
+
+test('filterSlashCommands: 非 slash 输入 / 无匹配返回空', () => {
+  assert.deepEqual(filterSlashCommands('hello', 'zh'), [])
+  assert.deepEqual(filterSlashCommands('', 'zh'), [])
+  assert.deepEqual(filterSlashCommands('/xyz', 'zh'), [])
+})
+
+test('filterSlashCommands: locale 决定说明语言', () => {
+  const zh = filterSlashCommands('/help', 'zh')[0]
+  const en = filterSlashCommands('/help', 'en')[0]
+  assert.equal(zh.desc, '显示帮助')
+  assert.equal(en.desc, 'Show help')
+})
+
+test('renderSlashHintBody: 每行含命令名与说明,空输入返回空串', () => {
+  assert.equal(renderSlashHintBody([]), '')
+  const body = stripAnsi(renderSlashHintBody(filterSlashCommands('/m', 'en')))
+  assert.match(body, /\/model\s+List \/ switch models/)
 })

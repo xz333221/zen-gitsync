@@ -100,6 +100,54 @@ export function printBanner({ title, modelLabel, baseURL, cwd, modelText, cwdTex
   )
 }
 
+// ──────────────────────────────────────────────
+// 斜杠命令即时提示(输入 / 时在提示符下方浮现,随输入过滤)
+// ──────────────────────────────────────────────
+//
+// 命令元数据集中放这里,printSlashHelp(agent.js)与即时提示共用同一份来源,
+// 新增命令时只改这一处。desc 分中英,由调用方按 locale 取用。
+
+export const SLASH_COMMANDS = [
+  { cmd: '/help',     descZh: '显示帮助',            descEn: 'Show help' },
+  { cmd: '/model',    descZh: '列出 / 切换模型',      descEn: 'List / switch models' },
+  { cmd: '/addmodel', descZh: '添加模型配置(向导)',  descEn: 'Add a model (wizard)' },
+  { cmd: '/cd',       descZh: '切换工作目录',         descEn: 'Change working directory' },
+  { cmd: '/image',    descZh: '附加 / 查看图片',      descEn: 'Attach / list images' },
+  { cmd: '/think',    descZh: '开关思考过程显示',      descEn: 'Toggle thinking display' },
+  { cmd: '/clear',    descZh: '清空对话历史',         descEn: 'Clear conversation' },
+  { cmd: '/exit',     descZh: '退出',                descEn: 'Quit' },
+  { cmd: '/quit',     descZh: '退出',                descEn: 'Quit' },
+]
+
+/**
+ * 按当前输入过滤斜杠命令(纯函数,便于单测)。
+ *   - 仅当输入以 / 开头、且尚未输入空格(还在敲命令名)时才提示
+ *   - 前缀匹配,大小写不敏感
+ *   - 精确等于某命令且无后续参数时仍然展示该命令(便于确认拼写)
+ * @returns {{cmd:string, desc:string}[]}
+ */
+export function filterSlashCommands(input, locale) {
+  const zh = !String(locale || '').startsWith('en')
+  const line = String(input || '')
+  if (!line.startsWith('/') || /\s/.test(line)) return []
+  const q = line.toLowerCase()
+  return SLASH_COMMANDS
+    .filter((c) => c.cmd.startsWith(q))
+    .map((c) => ({ cmd: c.cmd, desc: zh ? c.descZh : c.descEn }))
+}
+
+/**
+ * 生成即时提示面板的 ANSI 字符串(不含定位,由调用方负责保存/恢复光标)。
+ * 每行:两空格缩进 + 青色命令名(左对齐补齐)+ 灰色说明。
+ * 空数组返回空串。
+ */
+export function renderSlashHintBody(matches) {
+  if (!Array.isArray(matches) || matches.length === 0) return ''
+  return matches
+    .map((m) => '  ' + chalk.cyan(String(m.cmd).padEnd(12)) + chalk.dim(m.desc))
+    .join('\n')
+}
+
 /** 盒式帮助面板 */
 export function printHelpPanel(title, lines) {
   const body = [chalk.bold(title), ...lines].join('\n')
@@ -363,6 +411,9 @@ export default {
   truncateDisplay,
   printBanner,
   printHelpPanel,
+  SLASH_COMMANDS,
+  filterSlashCommands,
+  renderSlashHintBody,
   drawInputTop,
   drawInputBottom,
   inputBottomBorder,
