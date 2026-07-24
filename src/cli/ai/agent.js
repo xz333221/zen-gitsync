@@ -707,11 +707,26 @@ export async function runAiAgent(argv = []) {
   const promptCol = stringWidth(stripAnsi(chalk.cyan.bold(t.prompt)))   // '❯ ' 的显示列宽
   const showPrompt = () => {
     if (!process.stdout.isTTY) { rl.prompt(); return }
+    if (rl.closed) return
     drawInputTop()
     rl.prompt()
     process.stdout.write('\n' + inputBottomBorder() + '\n')
     readline.moveCursor(process.stdout, 0, -2)
     readline.cursorTo(process.stdout, promptCol)
+  }
+
+  // 安全版 showPrompt:捕获所有异常,防止 finally 块里的错误变成
+  // unhandledRejection 导致进程直接退出(Node 15+ 默认 throw 策略)。
+  // 降级行为:只画一个裸提示符,不画边框。
+  const safeShowPrompt = () => {
+    try {
+      showPrompt()
+    } catch (_) {
+      try { rl.prompt() } catch { /* 给予宽容,不能让提示符绘制挂掉整个会话 */ }
+    }
+    // 安全网:确保 stdin 处于 flowing 模式,事件循环不会因为
+    // I/O watcher 被意外移除而空闲退出
+    try { process.stdin.resume() } catch { /* noop */ }
   }
 
   // 用户回车后光标正好落在下边框行:写个换行越过它(完整框留在回显里),再开始输出
@@ -742,8 +757,8 @@ export async function runAiAgent(argv = []) {
   const pasteFromClipboard = async () => {
     if (state.pasting) return
     state.pasting = true
-    notifyAbovePrompt(chalk.dim(t.imagePasting))
     try {
+      notifyAbovePrompt(chalk.dim(t.imagePasting))
       const img = await readClipboardImage()
       if (!img) {
         notifyAbovePrompt(chalk.yellow(t.imageEmpty))
@@ -751,6 +766,9 @@ export async function runAiAgent(argv = []) {
         state.pendingImages.push(img)
         notifyAbovePrompt(chalk.green(t.imageAttached(state.pendingImages.length, formatBytes(img.bytes))))
       }
+    } catch (err) {
+      // 不能让粘贴异常变成 unhandledRejection 杀掉会话
+      printError(`粘贴图片失败: ${err.message}`)
     } finally {
       state.pasting = false
     }
@@ -763,7 +781,7 @@ export async function runAiAgent(argv = []) {
     if (isAltV) pasteFromClipboard()
   })
 
-  showPrompt()
+  safeShowPrompt()
 
   rl.on('line', async (line) => {
     const input = line.trim()
@@ -772,11 +790,11 @@ export async function runAiAgent(argv = []) {
       closeInputFrame()
       const r = await handleSlashCommand(state, input, t)
       if (r === 'exit') { rl.close(); return }
-      showPrompt()
+      safeShowPrompt()
       return
     }
 
-    if (!input) { closeInputFrame(); showPrompt(); return }
+    if (!input) { closeInputFrame(); safeShowPrompt(); return }
     if (state.busy) {
       closeInputFrame()
       printDim(t.busy)
@@ -797,7 +815,7 @@ export async function runAiAgent(argv = []) {
     } finally {
       state.busy = false
       state.abortController = null
-      showPrompt()
+      safeShowPrompt()
     }
   })
 
@@ -805,8 +823,22 @@ export async function runAiAgent(argv = []) {
     printWarn('\n' + t.bye)
   })
 
+  // 全局安全网:任何未捕获的 Promise rejection / 异常都不应该静默杀掉
+  // 整个 REPL 会话。这里记录到 stderr 但不退出,让 readline 继续运行。
+  const rejectionHandler = (reason) => {
+    const msg = reason instanceof Error ? reason.message : String(reason)
+    printError(`内部错误(已捕获,会话继续): ${msg}`)
+    // 确保 stdin 仍然活跃,防止事件循环空闲退出
+    try { process.stdin.resume() } catch { /* noop */ }
+    safeShowPrompt()
+  }
+  process.on('unhandledRejection', rejectionHandler)
+
   // 等 readline 关闭后返回(进程随后自然退出)
   await new Promise((resolve) => rl.on('close', resolve))
+
+  // 清理:移除本次会话注册的全局处理器
+  process.removeListener('unhandledRejection', rejectionHandler)
 }
 
 export default { runAiAgent }
