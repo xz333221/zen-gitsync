@@ -263,8 +263,8 @@ export function createAssistantWriter({
   const BULLET_REST = '   '
   // 思考内容整体右移,与正文文字左缘对齐,视觉上成为独立子块
   const THINK_INDENT = '   '
-  // 思考用可读的灰色斜体(不用 dim:dim 在多数终端渲染成半透明,看不清)
-  const thinkStyle = (s) => chalk.gray.italic(s)
+  // 思考用橙黄色斜体(gray/dim 太浅看不清;橙黄既醒目又与正文白、工具青区分开)
+  const thinkStyle = (s) => chalk.hex('#e8a33d').italic(s)
 
   const emitContentLine = (raw, withNewline = true) => {
     // 围栏标记行:切换状态,用一个淡淡的槽线代替裸 ```
@@ -306,7 +306,7 @@ export function createAssistantWriter({
   }
 
   return {
-    /** 思考段:灰斜体 + 整体右缩进(不做 markdown),段头只打印一次 */
+    /** 思考段:橙黄斜体 + 整体右缩进(不做 markdown),段头只打印一次 */
     writeThinking(text) {
       if (!showThinking || !text) return
       if (mode !== 'thinking') {
@@ -400,7 +400,7 @@ export function printToolHeader(name, summary, write = (s) => process.stdout.wri
  * 工具结果块:
  *   └─ 首行
  *   │  后续行…
- * 退出码非 0 → 黄色;"错误/已拒绝"开头 → 红色;其余用可读灰色(不用 dim,dim 太浅看不清)。
+ * 退出码非 0 → 黄色;"错误/已拒绝"开头 → 红色;其余用青色(cyan,dim/gray 太浅看不清)。
  * (首行用 └─ 而不是 Claude 的 ⎿:box-drawing 字符在 Windows 终端字体里渲染更稳,
  *  且与输入框 ╭╰ 边框同一字符族,视觉更统一)
  */
@@ -410,8 +410,8 @@ export function printToolResult(result, write = (s) => process.stdout.write(s)) 
   const exitCode = exitMatch ? Number(exitMatch[1]) : null
   const isError = exitCode !== null && exitCode !== 0
     || /^(错误|已拒绝|Error)/.test(text.trim())
-  // 正文用 gray(比 dim 亮,能看清);错误保持黄色告警。槽线仍用 dim 当装饰导轨
-  const colorize = isError ? chalk.yellow : chalk.gray
+  // 正文用 cyan(比 dim/gray 亮,能看清);错误保持黄色告警。槽线仍用 dim 当装饰导轨
+  const colorize = isError ? chalk.yellow : chalk.cyan
   const lines = text.split('\n')
   const rendered = lines.map((l, i) => {
     const gutter = i === 0 ? chalk.dim('  └─ ') : chalk.dim('  │  ')
