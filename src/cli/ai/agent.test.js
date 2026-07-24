@@ -17,7 +17,7 @@
 // 且切口把 "src/cli/ai/agent.js" 从中间切断显示成 "rc/cli/ai/agent.js"。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { truncateDisplay } from './agent.js'
+import { truncateDisplay, stripStaleImages } from './agent.js'
 
 const LIMIT = 600
 
@@ -65,4 +65,50 @@ test('单行超长文本也能截断(无换行可对齐时按字符截)', () => 
   assert.match(r, /回显省略/)
   assert.ok(r.startsWith('yyy'))
   assert.ok(r.endsWith('yyy'))
+})
+
+// ── stripStaleImages:多模态历史的图片瘦身 ──
+test('stripStaleImages: 只保留最近一条带图消息的图片,更早的降级为占位文字', () => {
+  const img = (n) => ({ type: 'image_url', image_url: { url: `data:image/png;base64,${n}` } })
+  const messages = [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: [{ type: 'text', text: '第一问' }, img('AAA')] },
+    { role: 'assistant', content: '第一答' },
+    { role: 'user', content: [{ type: 'text', text: '第二问' }, img('BBB')] },
+    { role: 'assistant', content: '第二答' },
+    { role: 'user', content: [{ type: 'text', text: '第三问' }, img('CCC')] },
+  ]
+  stripStaleImages(messages, 'zh-CN')
+  // 最近一条(第三问)图片原样保留
+  assert.equal(messages[5].content[1].type, 'image_url')
+  // 更早的图片变成文字占位
+  for (const i of [1, 3]) {
+    assert.equal(messages[i].content[1].type, 'text')
+    assert.match(messages[i].content[1].text, /图片/)
+  }
+  // 文本部件不动
+  assert.equal(messages[1].content[0].text, '第一问')
+  // 纯字符串 content 的消息不受影响
+  assert.equal(messages[0].content, 'sys')
+})
+
+test('stripStaleImages: 没有图片时完全不动', () => {
+  const messages = [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: '纯文本问题' },
+    { role: 'user', content: [{ type: 'text', text: '多部件但没图' }] },
+  ]
+  const snapshot = JSON.parse(JSON.stringify(messages))
+  stripStaleImages(messages, 'zh-CN')
+  assert.deepEqual(messages, snapshot)
+})
+
+test('stripStaleImages: en locale 用英文占位符', () => {
+  const messages = [
+    { role: 'user', content: [{ type: 'image_url', image_url: { url: 'data:...' } }] },
+    { role: 'user', content: [{ type: 'image_url', image_url: { url: 'data:...' } }] },
+  ]
+  stripStaleImages(messages, 'en-US')
+  assert.equal(messages[0].content[0].text, '[image omitted from history]')
+  assert.equal(messages[1].content[0].type, 'image_url')
 })

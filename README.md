@@ -418,7 +418,16 @@ $ g ai "fix the failing test"   # one-shot task, then exit
 $ g ai --model=2                # pick the 2nd configured model (index or name)
 ```
 
-In-session commands: `/help`, `/model`, `/cd <path>`, `/clear`, `/exit`.
+In-session commands: `/help`, `/model`, `/cd <path>`, `/image [path]`, `/think`, `/clear`, `/exit`.
+
+Images: press `Alt+V` in the REPL to paste a clipboard image (screenshot), or attach a
+local file with `/image <path>`; images are sent as multimodal `image_url` parts with your
+next message (requires a vision-capable model). `/image` alone lists pending images,
+`/image clear` drops them.
+
+The terminal UI follows the Codex / Claude Code style: boxed input composer, animated
+waiting spinner, dim-italic streaming thinking, `⏺` tool blocks with smart argument
+summaries, and lightweight Markdown rendering (bold, inline code, headers, code fences).
 
 Permission model: everything inside the launch directory runs directly; other
 directories are readable/writable too; only system-destroying commands

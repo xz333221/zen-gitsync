@@ -21,8 +21,14 @@
 //     isDefault 优先,否则取第一个);--model=<序号|名称> 或会话内 /model 切换
 //   - OpenAI 兼容流式 function calling:模型可以调用 run_command /
 //     read_file / write_file / edit_file / list_files / search_text
+//   - 图片:Alt+V 粘贴剪贴板图片、/image <路径> 附加本地图片,
+//     以多模态(image_url)消息发给模型(需模型支持视觉)
 //   - 权限:启动目录内全开放,其他目录可读写;唯一红线由 safety.js 拦截
 //     (格式化磁盘、删根目录、关机等系统级破坏操作)
+//
+// 视觉风格(termui.js):对标 Codex CLI / Claude Code / OpenCode —
+//   盒式输入框、ora 等待 spinner、✻ 思考灰斜体、⏺ 工具块 + ⎿ 结果槽、
+//   正文逐行轻量 markdown(**bold** / `code` / # 标题 / ``` 围栏 / - 列表)
 //
 // 使用方式:
 //   g ai                  交互模式(REPL)
@@ -38,10 +44,19 @@ import readline from 'node:readline'
 import chalk from 'chalk'
 import config from '../../config.js'
 import { getCwd } from '../../utils/index.js'
-import { boxenAdaptive } from '../ui.js'
 import { registerCleanup } from '../cleanup.js'
 import { TOOL_DEFINITIONS, executeTool } from './tools.js'
 import { createThinkFilter } from './streamFilter.js'
+import {
+  printBanner, printHelpPanel, drawInputTop, drawInputBottom,
+  startSpinner, createAssistantWriter,
+  summarizeToolArgs, printToolHeader, printToolResult,
+  printOk, printWarn, printError, printDim,
+} from './termui.js'
+import { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes } from './images.js'
+
+// truncateDisplay 已迁移到 termui.js;这里 re-export 保持既有测试/外部引用不断
+export { truncateDisplay } from './termui.js'
 
 // ──────────────────────────────────────────────
 // 常量
@@ -49,8 +64,6 @@ import { createThinkFilter } from './streamFilter.js'
 const MAX_TOOL_ITERATIONS = 40      // 单轮用户输入允许的最大工具调用循环数(防失控)
 const MAX_HISTORY_MESSAGES = 40     // 历史消息上限(超出后从最旧的整段对话裁剪)
 const LLM_TIMEOUT_MS = 300000       // 单次 LLM 请求超时(5 分钟,长推理模型够用)
-const DISPLAY_ARGS_LIMIT = 160      // 终端回显工具参数的截断长度
-const DISPLAY_RESULT_LIMIT = 600    // 终端回显工具结果的截断长度(完整结果仍进上下文)
 
 // ──────────────────────────────────────────────
 // i18n 字符串表(CLI 其他部分以中文为主,这里按 locale 给双语)
@@ -59,9 +72,10 @@ const STRINGS = {
   zh: {
     noModel: '未配置 AI 模型,请先在 GUI 通用设置中添加模型(运行 g ui 打开设置)',
     unknownModel: (q) => `未找到匹配的模型: ${q},使用默认模型`,
-    waiting: '等待模型响应…',
+    waiting: '思考中…',
     llmError: (msg) => `LLM 请求失败: ${msg}`,
     toolIterLimit: (n) => `已达单轮最大工具调用次数(${n}),本轮结束。如需继续请再发一条消息。`,
+    toolRunning: (name) => `执行 ${name}…`,
     busy: '智能体正在执行中,请稍候(Ctrl+C 结束会话)…',
     bye: '已退出 g ai',
     cleared: '对话历史已清空',
@@ -75,17 +89,28 @@ const STRINGS = {
     availableModels: '可用模型',
     oneShotNoModel: '未配置模型,无法启动',
     helpTitle: 'g ai 命令',
-    bannerTip: '/help 查看命令 · /exit 退出 · Ctrl+C 结束会话',
+    bannerTip: 'Alt+V 粘贴图片 · /help 查看命令 · /exit 退出 · Ctrl+C 结束会话',
     prompt: '❯ ',
     bannerModel: '模型',
     bannerCwd: '目录',
+    thinkingLabel: '✻ 思考',
+    chars: '字符',
+    imagePasting: '正在读取剪贴板图片…',
+    imageAttached: (n, size) => `📎 图片 #${n} 已附加(${size}),将随下一条消息发送`,
+    imageEmpty: '剪贴板中没有图片;可先截图再按 Alt+V,或用 /image <路径> 附加本地图片',
+    imageBadPath: (p) => `图片不存在或格式不支持: ${p}(支持 png/jpg/jpeg/gif/webp/bmp)`,
+    imageListTitle: '待发送图片',
+    imageListEmpty: '当前没有待发送的图片(Alt+V 粘贴或 /image <路径> 附加)',
+    imageCleared: '已清除待发送的图片',
+    imageSending: (n) => `📎 附带 ${n} 张图片`,
   },
   en: {
     noModel: 'No AI model configured. Add one in GUI settings first (run `g ui`).',
     unknownModel: (q) => `No model matching "${q}", falling back to default`,
-    waiting: 'Waiting for model…',
+    waiting: 'Thinking…',
     llmError: (msg) => `LLM request failed: ${msg}`,
     toolIterLimit: (n) => `Hit max tool iterations (${n}) for this turn. Send another message to continue.`,
+    toolRunning: (name) => `Running ${name}…`,
     busy: 'Agent is working, please wait (Ctrl+C to end session)…',
     bye: 'Bye',
     cleared: 'Conversation cleared',
@@ -99,10 +124,20 @@ const STRINGS = {
     availableModels: 'Available models',
     oneShotNoModel: 'No model configured, aborting',
     helpTitle: 'g ai commands',
-    bannerTip: '/help for commands · /exit to quit · Ctrl+C to end session',
+    bannerTip: 'Alt+V paste image · /help for commands · /exit to quit · Ctrl+C to end session',
     prompt: '❯ ',
     bannerModel: 'Model',
     bannerCwd: 'CWD',
+    thinkingLabel: '✻ Thinking',
+    chars: 'chars',
+    imagePasting: 'Reading clipboard image…',
+    imageAttached: (n, size) => `📎 Image #${n} attached (${size}); sent with your next message`,
+    imageEmpty: 'No image in clipboard; take a screenshot first, or use /image <path>',
+    imageBadPath: (p) => `Not a supported image: ${p} (png/jpg/jpeg/gif/webp/bmp)`,
+    imageListTitle: 'Pending images',
+    imageListEmpty: 'No pending images (Alt+V to paste, or /image <path>)',
+    imageCleared: 'Pending images cleared',
+    imageSending: (n) => `📎 ${n} image(s) attached`,
   },
 }
 
@@ -153,6 +188,8 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 # 与用户交互
 - 需要向用户确认、提问或汇报重要决策时,直接用普通文本输出 —— 用户能实时看到你的文本;
   不要调用不存在的工具,可用工具只有上面列出的 6 个
+- 用户可能通过 Alt+V 或 /image 附加图片:图片以 image_url 部件出现在 user 消息里;
+  如果当前模型不支持视觉(带图请求报错),提醒用户换用支持视觉的模型
 - 发现高风险或状态不一致的情况(例如版本号 / git tag / CHANGELOG 对不上、发布前环境异常、
   仓库状态与预期不符)时:先用文本说明发现和影响,停下来等用户指示,不要擅自继续破坏性操作
 
@@ -188,6 +225,7 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 
 # Talking to the user
 - When you need to confirm something, ask a question, or report an important decision, just write plain text — the user sees your output in real time. Never call tools that do not exist; only the 6 tools listed above are available
+- The user can attach images (Alt+V or /image); they arrive as image_url parts in your user messages. If the current model rejects images (no vision support), tell the user to switch to a vision-capable model
 - When you spot high-risk or inconsistent state (version number / git tag / CHANGELOG mismatch, abnormal release environment, unexpected repo state), explain the finding and its impact in text, then STOP and wait for the user's decision instead of proceeding with destructive operations
 
 # Output
@@ -295,87 +333,74 @@ function trimHistory(messages) {
 }
 
 // ──────────────────────────────────────────────
-// 终端回显辅助
+// 多模态历史:base64 图片很占上下文,只保留"最近一条带图消息"里的图片,
+// 更早消息里的 image_url 部件降级为文字占位(模型仍知道这里曾有图)
 // ──────────────────────────────────────────────
-
-// 回显截断的"最小省略量":只超出一两个字符时截断反而碍事(实测:git status
-// 输出 614 字符被截,省略 14 字符还把路径从中间切断),不值得就不截
-const TRUNCATE_MIN_OMITTED = 200
-
-/**
- * 回显截断(纯函数,便于单测):
- *   - 只超出一点点(< TRUNCATE_MIN_OMITTED)时原样返回
- *   - 截断保留 头+尾,且切口对齐到整行边界 —— 避免把路径/单词从中间切断
- *   - 命令输出最关键的信息(报错、最终结果)通常在末尾,所以头尾都要
- */
-export function truncateDisplay(text, limit = DISPLAY_RESULT_LIMIT) {
-  text = String(text || '')
-  if (text.length <= limit + TRUNCATE_MIN_OMITTED) return text
-  const half = Math.floor(limit / 2)
-  const headRaw = text.slice(0, half)
-  const tailRaw = text.slice(text.length - half)
-  // 头部对齐到最后一个完整行;尾部对齐到第一个完整行
-  const lastNl = headRaw.lastIndexOf('\n')
-  const head = lastNl > 0 ? headRaw.slice(0, lastNl) : headRaw
-  const firstNl = tailRaw.indexOf('\n')
-  const tail = firstNl >= 0 ? tailRaw.slice(firstNl + 1) : tailRaw
-  const omitted = text.length - head.length - tail.length
-  return `${head}\n  ⋮ [回显省略 ${omitted} 字符,完整结果已提供给模型]\n${tail}`
-}
-
-function printToolCall(name, rawArgs) {
-  let preview = String(rawArgs || '').replace(/\s+/g, ' ').trim()
-  if (preview.length > DISPLAY_ARGS_LIMIT) preview = preview.slice(0, DISPLAY_ARGS_LIMIT) + '…'
-  process.stdout.write(`\n${chalk.cyan('▸ ' + name)} ${chalk.dim(preview)}\n`)
-}
-
-function printToolResult(result) {
-  const text = truncateDisplay(result)
-  // run_command 结果形如 "$ cmd\n(exit N)\n...",按退出码着色:
-  // 0 / 非命令结果 → 暗色;非 0 → 黄色提醒
-  const exitMatch = text.match(/^\$[^\n]*\n\(exit (\d+)\)/)
-  const exitCode = exitMatch ? Number(exitMatch[1]) : null
-  const colorize = exitCode === null || exitCode === 0 ? chalk.dim : chalk.yellow
-  const bar = chalk.dim('  │ ')
-  const rendered = text.split('\n').map(l => bar + colorize(l)).join('\n')
-  process.stdout.write(rendered + '\n')
+export function stripStaleImages(messages, locale) {
+  const placeholder = String(locale || '').startsWith('en')
+    ? '[image omitted from history]'
+    : '[图片已从历史中省略]'
+  let seenLatest = false
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m?.role !== 'user' || !Array.isArray(m.content)) continue
+    const hasImage = m.content.some(p => p?.type === 'image_url')
+    if (!hasImage) continue
+    if (!seenLatest) { seenLatest = true; continue }
+    m.content = m.content.map(p => p?.type === 'image_url'
+      ? { type: 'text', text: placeholder }
+      : p)
+  }
 }
 
 // ──────────────────────────────────────────────
 // 单轮 agent 循环:用户一句话 → 流式输出 → 工具调用 → 再调用模型 … 直到模型给出最终文本
+// images: [{path, bytes}] 待发送图片(可为空数组)
 // ──────────────────────────────────────────────
-async function runAgentTurn(state, userText, t) {
-  state.messages.push({ role: 'user', content: userText })
+async function runAgentTurn(state, userText, t, images = []) {
+  // 有图片:编码为 OpenAI 多模态 content parts;没图片保持纯字符串
+  if (images.length > 0) {
+    const parts = [{ type: 'text', text: userText }]
+    for (const img of images) {
+      try {
+        const url = await imageToDataUrl(img.path)
+        parts.push({ type: 'image_url', image_url: { url } })
+      } catch (err) {
+        printWarn(t.imageBadPath(img.path))
+      }
+    }
+    state.messages.push({ role: 'user', content: parts })
+  } else {
+    state.messages.push({ role: 'user', content: userText })
+  }
+  // 旧消息里的图片降级为占位文字,防止 base64 随对话轮次累积撑爆上下文
+  stripStaleImages(state.messages, state.locale)
 
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     trimHistory(state.messages)
 
-    // 首个 token 到达前显示等待提示,到达后清掉
-    let firstToken = true
-    // content/thinking 两种段切换时换行分隔,避免思考和正文粘在一行
-    let lastKind = null
+    // 首个 token 到达前转 spinner,到达后停掉并让位给流式渲染
+    const spinner = startSpinner(t.waiting)
+    let spinnerStopped = false
+    const stopSpinner = () => {
+      if (!spinnerStopped) { spinner.stop(); spinnerStopped = true }
+    }
+    // 每次 LLM 调用一个 writer:思考灰斜体、正文 ⏺ + 逐行 markdown
+    const writer = createAssistantWriter({
+      showThinking: state.showThinking,
+      thinkingHeader: t.thinkingLabel,
+    })
     // MiniMax 系把 <think> 标签内联在 content 流里,用过滤器剥离并置灰显示
     // (历史里仍保存模型原始输出,见 streamChatOnce 返回的 content)
     const thinkFilter = createThinkFilter()
-    const showWaiting = () => process.stdout.write(chalk.dim(t.waiting))
-    const clearWaiting = () => {
-      if (firstToken) {
-        process.stdout.write('\r\x1b[K')
-        firstToken = false
-      }
-    }
     const renderSeg = (seg) => {
       const kind = seg.content !== undefined ? 'content' : 'thinking'
       const text = seg.content ?? seg.thinking
       if (!text) return
-      // /think 关闭时跳过思考内容显示(历史不受影响)
-      if (kind === 'thinking' && !state.showThinking) return
-      clearWaiting()
-      if (lastKind && lastKind !== kind) process.stdout.write('\n')
-      lastKind = kind
-      process.stdout.write(kind === 'thinking' ? chalk.dim(text) : text)
+      stopSpinner()
+      if (kind === 'thinking') writer.writeThinking(text)
+      else writer.writeContent(text)
     }
-    showWaiting()
 
     let result
     try {
@@ -391,8 +416,9 @@ async function runAgentTurn(state, userText, t) {
       // 流结束,冲刷过滤器里残留的半拉标签/未闭合 think 块
       for (const seg of thinkFilter.flush()) renderSeg(seg)
     } catch (err) {
-      clearWaiting()
-      process.stdout.write('\n' + chalk.red(t.llmError(err.message)) + '\n')
+      stopSpinner()
+      writer.finish()
+      printError(t.llmError(err.message))
       // 请求失败时,如果最后一条仍是本轮塞进去的 user 消息则撤掉,
       // 避免历史里留一条没有回应的消息;若已进入工具循环(末尾是 tool
       // 结果),消息链本身是完整的,保持不动
@@ -400,10 +426,11 @@ async function runAgentTurn(state, userText, t) {
       if (last?.role === 'user') state.messages.pop()
       return
     }
-    clearWaiting()
+    stopSpinner()
+    writer.finish()
 
     if (result.aborted) {
-      process.stdout.write('\n' + chalk.yellow('⛔ 已中止') + '\n')
+      printWarn('⛔ 已中止')
       return
     }
 
@@ -411,38 +438,47 @@ async function runAgentTurn(state, userText, t) {
 
     // 无工具调用:本轮结束,assistant 文本入历史
     if (toolCalls.length === 0) {
-      if (content) process.stdout.write('\n')
       state.messages.push({ role: 'assistant', content: content || '' })
       return
     }
 
     // 有工具调用:assistant(带 tool_calls)入历史,然后逐个执行
-    if (content) process.stdout.write('\n')
     state.messages.push({ role: 'assistant', content: content || '', tool_calls: toolCalls })
 
     for (const tc of toolCalls) {
       const name = tc.function?.name || ''
       const rawArgs = tc.function?.arguments || ''
-      printToolCall(name, rawArgs)
 
       let args
       try {
         args = rawArgs ? JSON.parse(rawArgs) : {}
       } catch {
+        printToolHeader(name, printDimInline(rawArgs))
         const errResult = `错误: 工具参数不是合法 JSON: ${rawArgs.slice(0, 200)}`
         printToolResult(errResult)
         state.messages.push({ role: 'tool', tool_call_id: tc.id || name, name, content: errResult })
         continue
       }
 
+      printToolHeader(name, summarizeToolArgs(name, args, { chars: t.chars }))
+      // 长命令执行期间给个 spinner,让用户知道没有卡死
+      const toolSpinner = startSpinner(t.toolRunning(name))
       const output = await executeTool(name, args, state.ctx)
+      toolSpinner.stop()
       printToolResult(output)
       state.messages.push({ role: 'tool', tool_call_id: tc.id || name, name, content: output })
     }
     // 工具结果全部入历史后继续循环,让模型基于结果决定下一步
   }
 
-  process.stdout.write('\n' + chalk.yellow(t.toolIterLimit(MAX_TOOL_ITERATIONS)) + '\n')
+  printWarn(t.toolIterLimit(MAX_TOOL_ITERATIONS))
+}
+
+// JSON 解析失败时的参数回显:单行截断,不进 summarizeToolArgs(它没有结构化参数可用)
+function printDimInline(rawArgs) {
+  let preview = String(rawArgs || '').replace(/\s+/g, ' ').trim()
+  if (preview.length > 160) preview = preview.slice(0, 160) + '…'
+  return preview
 }
 
 // ──────────────────────────────────────────────
@@ -451,29 +487,33 @@ async function runAgentTurn(state, userText, t) {
 function printSlashHelp(t, locale) {
   const zh = !String(locale || '').startsWith('en')
   const lines = zh ? [
-    `${t.helpTitle}:`,
     '  /help             显示本帮助',
     '  /model            列出可用模型;/model <序号> 切换模型',
     '  /cd <路径>        切换智能体工作目录',
+    '  /image [路径]     查看待发送图片;/image <路径> 附加本地图片;/image clear 清除',
     '  /think            开关思考过程显示',
     '  /clear            清空对话历史',
     '  /exit, /quit      退出',
     '',
+    '  Alt+V             粘贴剪贴板图片,随下一条消息发送(需视觉模型)',
+    '',
     '权限说明: 工作目录内全部操作直接执行;其他目录可读写;',
     '仅系统级破坏命令(格式化、删根目录、关机等)会被安全守卫拦截。',
   ] : [
-    `${t.helpTitle}:`,
     '  /help             Show this help',
     '  /model            List models; /model <n> to switch',
     '  /cd <path>        Change agent working directory',
+    '  /image [path]     List pending images; attach a file; /image clear to reset',
     '  /think            Toggle thinking display',
     '  /clear            Clear conversation history',
     '  /exit, /quit      Quit',
     '',
+    '  Alt+V             Paste clipboard image (needs a vision-capable model)',
+    '',
     'Permissions: full access in the working directory; other dirs readable/writable;',
     'only system-destroying commands (format, rm -rf /, shutdown, ...) are blocked.',
   ]
-  console.log(lines.join('\n'))
+  printHelpPanel(t.helpTitle, lines)
 }
 
 async function handleSlashCommand(state, input, t) {
@@ -484,12 +524,40 @@ async function handleSlashCommand(state, input, t) {
   if (cmd === '/help') { printSlashHelp(t, state.locale); return 'ok' }
   if (cmd === '/clear') {
     state.messages = [state.messages[0]]
-    console.log(chalk.green(t.cleared))
+    printOk(t.cleared)
     return 'ok'
   }
   if (cmd === '/think') {
     state.showThinking = !state.showThinking
-    console.log(chalk.green(state.showThinking ? t.thinkOn : t.thinkOff))
+    printOk(state.showThinking ? t.thinkOn : t.thinkOff)
+    return 'ok'
+  }
+  if (cmd === '/image') {
+    if (arg === 'clear') {
+      state.pendingImages = []
+      printOk(t.imageCleared)
+      return 'ok'
+    }
+    if (!arg) {
+      if (state.pendingImages.length === 0) {
+        printDim(t.imageListEmpty)
+      } else {
+        console.log(chalk.bold(t.imageListTitle) + ':')
+        state.pendingImages.forEach((img, i) => {
+          console.log(`  ${i + 1}. ${img.path} ${chalk.dim('(' + formatBytes(img.bytes) + ')')}`)
+        })
+      }
+      return 'ok'
+    }
+    const { resolve } = await import('node:path')
+    const target = resolve(state.ctx.cwd, arg)
+    const img = await checkImageFile(target)
+    if (!img) {
+      printError(t.imageBadPath(target))
+      return 'ok'
+    }
+    state.pendingImages.push(img)
+    printOk(t.imageAttached(state.pendingImages.length, formatBytes(img.bytes)))
     return 'ok'
   }
   if (cmd === '/model') {
@@ -505,11 +573,11 @@ async function handleSlashCommand(state, input, t) {
     }
     const idx = Number.parseInt(arg, 10)
     if (!Number.isFinite(idx) || idx < 1 || idx > state.models.length) {
-      console.log(chalk.red(t.invalidModelIndex))
+      printError(t.invalidModelIndex)
       return 'ok'
     }
     state.model = state.models[idx - 1]
-    console.log(chalk.green(t.modelSwitched(modelLabel(state.model))))
+    printOk(t.modelSwitched(modelLabel(state.model)))
     return 'ok'
   }
   if (cmd === '/cd') {
@@ -523,13 +591,13 @@ async function handleSlashCommand(state, input, t) {
       state.ctx.cwd = target
       // 同步更新 system prompt 里的 cwd 说明(重建首条消息)
       state.messages[0] = { role: 'system', content: buildSystemPrompt({ cwd: target, locale: state.locale, shellDesc: state.shellDesc }) }
-      console.log(chalk.green(t.cdOk(target)))
+      printOk(t.cdOk(target))
     } catch {
-      console.log(chalk.red(t.cdFail(target)))
+      printError(t.cdFail(target))
     }
     return 'ok'
   }
-  console.log(chalk.yellow(`未知命令: ${cmd},输入 /help 查看可用命令`))
+  printWarn(`未知命令: ${cmd},输入 /help 查看可用命令`)
   return 'ok'
 }
 
@@ -565,7 +633,7 @@ export async function runAiAgent(argv = []) {
     } else {
       const found = models.find(m => modelLabel(m).toLowerCase().includes(String(q).toLowerCase()))
       if (found) model = found
-      else console.log(chalk.yellow(t.unknownModel(q)))
+      else printWarn(t.unknownModel(q))
     }
   }
 
@@ -591,7 +659,9 @@ export async function runAiAgent(argv = []) {
     currentChild: null,
     abortController: null,
     busy: false,
-    showThinking: true,   // /think 切换:是否回显模型的思考过程
+    showThinking: true,     // /think 切换:是否回显模型的思考过程
+    pendingImages: [],      // Alt+V / /image 附加的待发送图片 [{path, bytes}]
+    pasting: false,         // 剪贴板读取进行中(防 Alt+V 连打并发)
   }
 
   // SIGINT 时中止进行中的 LLM 请求 + 正在跑的子命令
@@ -610,52 +680,107 @@ export async function runAiAgent(argv = []) {
   }
 
   // ── 交互模式(REPL)──
-  const banner = [
-    chalk.green.bold('g ai — AI Agent'),
-    `${t.bannerModel}: ${chalk.cyan(modelLabel(model))} ${chalk.dim(model.baseURL || '')}`,
-    `${t.bannerCwd}: ${chalk.cyan(cwd)}`,
-    chalk.dim(t.bannerTip),
-  ].join('\n')
-  console.log(boxenAdaptive(banner, { padding: 1, margin: { top: 1, bottom: 0, left: 0, right: 0 }, borderColor: 'cyan', borderStyle: 'round' }))
+  printBanner({
+    title: 'g ai — AI Agent',
+    modelLabel: modelLabel(model),
+    baseURL: model.baseURL || '',
+    cwd,
+    modelText: t.bannerModel,
+    cwdText: t.bannerCwd,
+    tip: t.bannerTip,
+  })
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: chalk.green(t.prompt),
+    prompt: chalk.cyan.bold(t.prompt),
     historySize: 200,
   })
-  rl.prompt()
+
+  // 盒式输入框(Codex composer 风格):prompt 前画 ╭──╮,提交后画 ╰──╯
+  const showPrompt = () => {
+    drawInputTop()
+    rl.prompt()
+  }
+
+  // 在输入框上方插一行通知(粘贴进度等),不打断用户正在输入的内容:
+  // 清掉当前输入行与旧边框 → 打通知 → 重画边框 + 提示符 → 恢复已输入文本
+  const notifyAbovePrompt = (text) => {
+    if (state.busy || !process.stdout.isTTY) { console.log(text); return }
+    const current = rl.line
+    readline.moveCursor(process.stdout, 0, -1)   // 回到输入框上边框行
+    readline.clearLine(process.stdout, 0)
+    readline.cursorTo(process.stdout, 0)
+    console.log(text)
+    drawInputTop()
+    rl.prompt()
+    if (current) rl.write(current)
+  }
+
+  // Alt+V 粘贴剪贴板图片(node 把 ESC+v 解析为 meta+v;部分终端不发 Alt,可用 /image 兜底)
+  const pasteFromClipboard = async () => {
+    if (state.pasting) return
+    state.pasting = true
+    notifyAbovePrompt(chalk.dim(t.imagePasting))
+    try {
+      const img = await readClipboardImage()
+      if (!img) {
+        notifyAbovePrompt(chalk.yellow(t.imageEmpty))
+      } else {
+        state.pendingImages.push(img)
+        notifyAbovePrompt(chalk.green(t.imageAttached(state.pendingImages.length, formatBytes(img.bytes))))
+      }
+    } finally {
+      state.pasting = false
+    }
+  }
+  rl.input.on('keypress', (ch, key) => {
+    if (!key) return
+    const isAltV = (key.meta && key.name === 'v')
+      || (typeof key.sequence === 'string' && key.sequence.length === 2
+          && key.sequence.charCodeAt(0) === 27 && key.sequence[1] === 'v')
+    if (isAltV) pasteFromClipboard()
+  })
+
+  showPrompt()
 
   rl.on('line', async (line) => {
     const input = line.trim()
-    if (!input) { rl.prompt(); return }
-    if (state.busy) {
-      console.log(chalk.dim(t.busy))
+
+    if (input.startsWith('/')) {
+      drawInputBottom()
+      const r = await handleSlashCommand(state, input, t)
+      if (r === 'exit') { rl.close(); return }
+      showPrompt()
       return
     }
 
-    if (input.startsWith('/')) {
-      const r = await handleSlashCommand(state, input, t)
-      if (r === 'exit') { rl.close(); return }
-      rl.prompt()
+    if (!input) { drawInputBottom(); showPrompt(); return }
+    if (state.busy) {
+      printDim(t.busy)
       return
     }
+
+    drawInputBottom()
+    // 取出待发送图片(取出即清空队列,用户每条消息独立决定带不带图)
+    const images = state.pendingImages.splice(0)
+    if (images.length > 0) printDim(t.imageSending(images.length))
 
     state.busy = true
     state.abortController = new AbortController()
     try {
-      await runAgentTurn(state, input, t)
+      await runAgentTurn(state, input, t, images)
     } catch (err) {
-      console.error(chalk.red(err.message))
+      printError(err.message)
     } finally {
       state.busy = false
       state.abortController = null
-      rl.prompt()
+      showPrompt()
     }
   })
 
   rl.on('close', () => {
-    console.log(chalk.yellow('\n' + t.bye))
+    printWarn('\n' + t.bye)
   })
 
   // 等 readline 关闭后返回(进程随后自然退出)
