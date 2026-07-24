@@ -48,7 +48,7 @@ import { registerCleanup } from '../cleanup.js'
 import { TOOL_DEFINITIONS, executeTool } from './tools.js'
 import { createThinkFilter } from './streamFilter.js'
 import {
-  printBanner, printHelpPanel, drawInputTop,
+  printBanner, printHelpPanel,
   startSpinner, createAssistantWriter,
   summarizeToolArgs, printToolHeader, printToolResult,
   printOk, printWarn, printError, printDim,
@@ -700,47 +700,47 @@ export async function runAiAgent(argv = []) {
     historySize: 200,
   })
 
-  // 盒式输入框(Codex composer 风格):只画上边框 + 提示符。
+  // 输入提示符:只用 rl.prompt(),不画任何边框。
   //
-  // 重要:不能画下边框!readline 的 _refreshLine() 会在每次按键时调用
-  // clearScreenDown(),清掉光标以下的所有内容 —— 下边框会被反复清除。
-  // 更严重的是,如果我们用 moveCursor/cursorTo 把光标移回提示符行,
-  // readline 的内部 prevRows 追踪会与实际终端光标位置脱节,导致后续
-  // _refreshLine() 的光标移动计算错误,出现输入丢失、重复、错行等问题。
+  // 根因分析(历次踩坑):
+  //   1. 下边框 ╰╯ 被 readline _refreshLine() 的 clearScreenDown() 反复清除
+  //   2. 上边框 ╭╮ 由 drawInputTop() 直接写 stdout,readline 不知道这行
+  //      的存在。虽然 prevRows=0 时不会上移光标,但 _refreshLine() 内部
+  //      的 cursorTo(0)+clearScreenDown()+write(prompt) 与 drawInputTop()
+  //      的输出在时序上交织,导致终端光标位置与 readline 内部追踪脱节,
+  //      出现输入丢失、文字重复、Enter 不发送等问题。
+  //   3. 任何在 _refreshLine() 调用之间直接写 stdout 的行为都会使 prevRows
+  //      失效(模型输出、工具结果、drawInputTop 等都算)。
   //
-  // 正确做法:只用 drawInputTop() 画上边框(在光标上方,不受 clearScreenDown 影响),
-  // 然后调用 rl.prompt() 让 readline 自己管理光标状态。不做任何手动光标移动。
+  // 结论:不向 stdout 写任何 readline 不知道的内容。只用 rl.prompt()。
   const showPrompt = () => {
-    if (!process.stdout.isTTY) { rl.prompt(); return }
     if (rl.closed) return
-    drawInputTop()
     rl.prompt()
   }
 
-  // 安全版 showPrompt:捕获所有异常,防止 finally 块里的错误变成
-  // unhandledRejection 导致进程直接退出(Node 15+ 默认 throw 策略)。
+  // 安全版:防止 finally 块里的异常变成 unhandledRejection 杀掉会话
   const safeShowPrompt = () => {
     try {
       showPrompt()
     } catch (_) {
-      try { rl.prompt() } catch { /* 给予宽容,不能让提示符绘制挂掉整个会话 */ }
+      try { rl.prompt() } catch { /* 给予宽容 */ }
     }
-    // 安全网:确保 stdin 处于 flowing 模式,事件循环不会因为
-    // I/O watcher 被意外移除而空闲退出
     try { process.stdin.resume() } catch { /* noop */ }
   }
 
-  // 无需关闭输入框(没有下边框需要越过);readline 的 Enter 已把光标移到下一行
-  const closeInputFrame = () => {}
+  // readline 的 _line() 在 Enter 后调用 clearLine()→_refreshLine(),
+  // 在当前行重写 ❯ (空提示符),但不写 \n。我们的输出内容需要从新行开始,
+  // 所以在这里补一个 \n 把光标移到下一行。
+  // 注意:空输入时不调 closeInputFrame,直接 safeShowPrompt() 重画提示符。
+  const closeInputFrame = () => {
+    if (process.stdout.isTTY) process.stdout.write('\n')
+  }
 
-  // 在输入框上方插一行通知(粘贴进度等),不打断用户正在输入的内容。
-  // 简化实现:在新行写通知,然后重画上边框 + 提示符。rl.prompt() 会自动
-  // 显示当前行内容(rl.line),无需手动恢复。
+  // 在提示符上方插一行通知(粘贴进度等)。
+  // console.log 输出后光标在新行,rl.prompt() 在该行重画提示符。
   const notifyAbovePrompt = (text) => {
-    if (state.busy || !process.stdout.isTTY) { console.log(text); return }
-    process.stdout.write('\n' + text + '\n')
-    drawInputTop()
-    rl.prompt()
+    console.log(text)
+    if (!state.busy) safeShowPrompt()
   }
 
   // Alt+V 粘贴剪贴板图片(node 把 ESC+v 解析为 meta+v;部分终端不发 Alt,可用 /image 兜底)
@@ -784,7 +784,7 @@ export async function runAiAgent(argv = []) {
       return
     }
 
-    if (!input) { closeInputFrame(); safeShowPrompt(); return }
+    if (!input) { safeShowPrompt(); return }
     if (state.busy) {
       closeInputFrame()
       printDim(t.busy)
