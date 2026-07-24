@@ -1,4 +1,4 @@
-﻿# zen-gitsync
+﻿﻿# zen-gitsync
 
 [English](#zen-gitsync) | [中文](#zh)
 
@@ -410,7 +410,9 @@ rm -f package-lock.json # when running on pnpm
 
 ### AI coding agent (terminal):
 Launch an interactive AI agent that writes code, runs commands, and commits for you.
-It uses the default model configured in `g ui` (Settings → AI models).
+It uses the default model configured in `g ui` (Settings → AI models). If no model is
+configured yet, `g ai` launches an interactive setup wizard — pick a provider, choose a
+model, enter your API key, test the connection, and you're ready to go.
 
 ```bash
 $ g ai                          # interactive REPL
@@ -918,6 +920,29 @@ git add --renormalize .
 ---
 
 ## 命令行
+
+### AI 编码智能体（终端）：
+启动交互式 AI 智能体，自动写代码、跑命令、提交代码。
+默认使用 `g ui` 中配置的模型（设置 → AI 模型）。如果尚未配置任何模型，`g ai` 会启动
+交互式配置向导 —— 选择服务商、选择模型、输入 API Key、测试连接，完成后即可直接使用。
+
+```bash
+$ g ai                          # 交互式 REPL
+$ g ai "修复失败的测试"           # 单发模式：执行一轮后退出
+$ g ai --model=2                # 使用第 2 个已配置的模型（序号或名称）
+```
+
+会话内命令：`/help`、`/model`、`/cd <路径>`、`/image [路径]`、`/think`、`/clear`、`/exit`。
+
+图片：在 REPL 中按 `Alt+V` 粘贴剪贴板图片（截图），或用 `/image <路径>` 附加本地图片；
+图片以多模态 `image_url` 部件随下一条消息发送（需视觉模型）。单独 `/image` 查看待发送图片，
+`/image clear` 清除。
+
+终端 UI 对标 Codex / Claude Code 风格：盒式输入框、等待 spinner、灰斜体流式思考、
+`⏺` 工具块 + 智能参数摘要、轻量 Markdown 渲染（加粗、行内代码、标题、代码块）。
+
+权限模型：启动目录内所有操作直接执行；其他目录同样可读写；仅系统级破坏命令
+（格式化磁盘、`rm -rf /`、关机等）由内置安全守卫硬拦截。
 
 #### 交互式提交：
 ```bash

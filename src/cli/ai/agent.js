@@ -54,6 +54,7 @@ import {
   printOk, printWarn, printError, printDim,
 } from './termui.js'
 import { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes } from './images.js'
+import { runModelSetup } from './modelSetup.js'
 
 // truncateDisplay 已迁移到 termui.js;这里 re-export 保持既有测试/外部引用不断
 export { truncateDisplay } from './termui.js'
@@ -617,11 +618,15 @@ export async function runAiAgent(argv = []) {
     return
   }
 
-  const models = Array.isArray(cfg.models) ? cfg.models : []
+  let models = Array.isArray(cfg.models) ? cfg.models : []
   if (models.length === 0) {
-    console.error(chalk.red(t.noModel))
-    process.exitCode = 1
-    return
+    // 未配置模型:启动交互式配置向导,参照 g ui 设置里的"添加模型"
+    const setupResult = await runModelSetup({ locale })
+    if (!setupResult) {
+      process.exitCode = 1
+      return
+    }
+    models = setupResult.models
   }
 
   // --model=<序号|名称> 选择模型;默认 isDefault,否则第一个
