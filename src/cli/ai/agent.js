@@ -174,12 +174,23 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 
 # 运行环境
 - 操作系统: ${process.platform}
-- Shell: ${shellDesc}${isWin ? `
-- 注意:Windows cmd 没有 head/grep/ls/sed/cat/tail 等 Unix 命令,直接跑会报"不是内部或外部命令"。
-  列目录用 list_files、搜内容用 search_text、看文件用 read_file,优先用工具而不是 shell;
-  必须跑 shell 时优先跨平台写法(如 node -e "..."),别用 Unix 专属命令` : ''}
+- Shell: ${shellDesc}
 - 当前工作目录: ${cwd}(用户在此启动 g ai,也是所有相对路径的基准)
 - 当前时间: ${now}
+
+# 平台兼容性(重要!)
+- 必须使用与当前 Shell 兼容的命令,禁止盲套 Unix 写法
+${isWin ? `- 当前是 Windows cmd.exe,以下 Unix 命令**不存在**,用了必定报"不是内部或外部命令":
+  tail / head / cat / grep / ls / sed / awk / wc / cut / uniq / xargs / which / touch
+  平台守卫会在执行前拦截这些命令,但请主动避免,不要浪费一轮调用
+- 跨平台替代方案:
+  · 列目录 → list_files 工具 或 cmd 的 dir
+  · 搜内容 → search_text 工具 或 cmd 的 findstr
+  · 看文件 → read_file 工具 或 cmd 的 type
+  · 看输出末尾 → PowerShell "命令 | Select-Object -Last N"
+  · 文本处理 → node -e "..." 或 PowerShell
+  · 查命令路径 → cmd 的 where(不是 which)
+- 必须跑 shell 时优先跨平台写法(如 node -e "..."),别用 Unix 专属命令` : `- 当前是 POSIX 环境,Unix 命令可用`}
 
 # 权限(用户已明确授权,无需反复征求同意)
 - 工作目录内:读写文件、执行命令等所有操作直接执行
@@ -213,12 +224,23 @@ function buildSystemPrompt({ cwd, locale, shellDesc }) {
 
 # Environment
 - OS: ${process.platform}
-- Shell: ${shellDesc}${isWin ? `
-- Note: Windows cmd has NO Unix commands (head/grep/ls/sed/cat/tail); running them fails with "not recognized".
-  Use the tools instead: list_files for directories, search_text for content, read_file for files.
-  For shell one-offs, prefer cross-platform forms like node -e "..."` : ''}
+- Shell: ${shellDesc}
 - Working directory: ${cwd} (where the user launched g ai; base for all relative paths)
 - Current time: ${now}
+
+# Platform compatibility (important!)
+- You MUST use commands compatible with the current shell. Do NOT blindly copy Unix patterns.
+${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist here and will fail with "not recognized":
+  tail / head / cat / grep / ls / sed / awk / wc / cut / uniq / xargs / which / touch
+  A platform guard will block these before execution, but avoid them proactively — don't waste a turn.
+- Cross-platform alternatives:
+  · List dirs → list_files tool, or cmd's dir
+  · Search content → search_text tool, or cmd's findstr
+  · Read files → read_file tool, or cmd's type
+  · Tail output → PowerShell "command | Select-Object -Last N"
+  · Text processing → node -e "..." or PowerShell
+  · Find executable → cmd's where (not which)
+- For shell one-offs, prefer cross-platform forms like node -e "..."` : `- POSIX environment: Unix commands are available`}
 
 # Permissions (explicitly granted by the user — do not keep asking)
 - Inside the working directory: read/write files and run commands directly

@@ -30,6 +30,7 @@ import path from 'node:path'
 import iconv from 'iconv-lite'
 import { trackChild } from '../cleanup.js'
 import { checkDangerousCommand } from './safety.js'
+import { guardCommand } from './platformGuard.js'
 
 // ──────────────────────────────────────────────
 // 常量
@@ -224,6 +225,13 @@ async function toolRunCommand(args, ctx) {
   const danger = checkDangerousCommand(command)
   if (danger.blocked) {
     return `已拒绝执行(安全守卫): ${danger.reason}\n命令: ${command}\n如果你确认需要类似效果,请换一种不破坏系统的方式,或明确告知用户需要他手动执行。`
+  }
+
+  // 平台兼容性守卫 — 拦截"在当前 shell 里注定失败"的命令
+  // (如 Windows cmd 上跑 tail/grep/ls 等 Unix-only 命令)
+  const platform = await guardCommand(command)
+  if (platform.blocked) {
+    return `已拒绝执行(平台守卫): ${platform.reason}`
   }
 
   const cwd = resolvePath(ctx, args.cwd)
