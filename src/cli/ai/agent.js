@@ -362,33 +362,54 @@ async function streamChatOnce({ model, messages, signal, onToken }) {
 function trimHistory(messages) {
   if (messages.length <= MAX_HISTORY_MESSAGES + 1) return
   let cut = messages.length - MAX_HISTORY_MESSAGES
-  while (cut < messages.length && messages[cut].role !== 'user') cut++
-  if (cut <= 1) return
+  // 至少向后扫 5 条,跳过孤立的 tool / assistant(tool_calls),
+  // 找到真正的 user 节点再切,防止撕裂 tool 调用链
+  let safety = 0
+  while (cut < messages.length && messages[cut].role !== 'user' && safety < 8) {
+    cut++
+    safety++
+  }
+  if (cut <= 1 || messages[cut]?.role !== 'user') return
   messages.splice(1, cut - 1)
 }
 
 // ──────────────────────────────────────────────
 // 消息消毒:确保发给 LLM 的消息数组里没有空内容。
 //
-// 背景:部分 LLM provider(如 Moonshot/Kimi、智谱、火山引擎等)对 assistant
-// 消息的 content 字段校验严格 —— 当模型只返回 tool_calls 而没有文本时,
-// content 为空字符串 "" 会被拒绝并报 "chat content is empty (2013)"。
-// OpenAI 官方规范允许 assistant 消息在带 tool_calls 时 content 为 null,
-// 本函数将空字符串统一转为 null,并对 tool/user 消息做兜底防止空内容。
+// 背景:部分 LLM provider(如 Moonshot/Kimi、智谱、火山引擎、MiniMax 等)
+// 对 assistant 历史消息 content 校验严格 —— 当某轮 assistant 只返回
+// tool_calls 而没有文本、或正文被 trim 后只剩空白时,provider 会拒绝
+// 并报 "chat content is empty (2013)"。OpenAI 官方规范允许 assistant
+// 消息在带 tool_calls 时 content 为 null,但 provider 实现不一致:
+//
+//   - assistant 带 tool_calls → content 强制 null(即使有字符串)
+//   - assistant 不带 tool_calls 且 content 全空白 → null(避免触发 2013)
+//   - user content 全空白 → 用单个空格 ' ' 占位(provider 通常可接受)
+//   - tool content 全空白 → '(no output)' 占位(防止序列化时被丢)
+//
+// CLI 与 Web 端共用本逻辑(两份实现必须保持一致)。
 // ──────────────────────────────────────────────
 export function sanitizeMessages(messages) {
   for (const m of messages) {
+    if (m == null || typeof m !== 'object') continue
+    if (m.content === null || m.content === undefined) {
+      if (m.role === 'assistant') m.content = null
+      continue
+    }
     if (typeof m.content !== 'string') continue
-    if (m.content === '') {
+    const trimmed = m.content.trim()
+    if (trimmed === '') {
       if (m.role === 'assistant') {
-        // assistant 带 tool_calls 时 content 用 null(OpenAI 规范);
-        // 不带 tool_calls 的空内容也用 null,provider 通常可接受
         m.content = null
       } else if (m.role === 'tool') {
         m.content = '(no output)'
       } else if (m.role === 'user') {
         m.content = ' '
       }
+      continue
+    }
+    if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+      m.content = null
     }
   }
   return messages

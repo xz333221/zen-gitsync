@@ -10,6 +10,7 @@ import { reactive, ref } from 'vue'
 import type { ChatMessage, ToolCall } from 'zen-ai-chat-ui'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { uid } from 'zen-ai-chat-ui'
+import { extractThinkSegments } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
 
 // ── 类型 ──────────────────────────────────────────────────
@@ -365,7 +366,24 @@ export function useAgentChat() {
               if (assistantMsg.status === 'pending') {
                 assistantMsg.status = 'streaming'
               }
-              assistantMsg.content += String(evt.delta || '')
+              {
+                const delta = String(evt.delta || '')
+                assistantMsg.content += delta
+                // 模型常把 <think>…</think> 直接写在 content 流里
+                // (典型如 MiniMax-M3、DeepSeek)。已闭合段立即抽到
+                // reasoning，剩余未闭合段继续留在 content，下一次
+                // chunk 增长时由 extractThinkSegments 重试。
+                const split = extractThinkSegments(assistantMsg.content)
+                if (split.reasoning) {
+                  if (!assistantMsg.reasoning) {
+                    assistantMsg.reasoning = ''
+                    assistantMsg.reasoningStatus = 'streaming'
+                  }
+                  // 整段替换 reasoning，避免重复累加
+                  assistantMsg.reasoning = split.reasoning
+                  assistantMsg.content = split.content
+                }
+              }
               break
 
             case 'tool_call_start': {
@@ -400,13 +418,20 @@ export function useAgentChat() {
               break
             }
 
-            case 'done':
-              assistantMsg.content = evt.content || assistantMsg.content
+            case 'done': {
+              const finalContent = evt.content || assistantMsg.content
+              // 最终落地时再剥一次 <think> 标签，确保历史落盘不含思考标签
+              const split = extractThinkSegments(finalContent)
+              if (split.reasoning && !assistantMsg.reasoning) {
+                assistantMsg.reasoning = split.reasoning
+              }
+              assistantMsg.content = split.content
               assistantMsg.status = 'done'
               if (assistantMsg.reasoningStatus === 'streaming') {
                 assistantMsg.reasoningStatus = 'done'
               }
               break
+            }
 
             case 'error':
               assistantMsg.status = 'error'

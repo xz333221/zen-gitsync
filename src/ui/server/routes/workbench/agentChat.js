@@ -218,29 +218,66 @@ async function streamChatOnce({ model, messages, signal, onToken }) {
 }
 
 // ── 消息消毒 ──────────────────────────────────────────────
+// 目的:确保发往 LLM provider 的 messages 数组里没有"空内容"或
+// "看似有内容但全是空白"的字段。
+//
+// 背景:部分 LLM provider(Moonshot/Kimi、智谱、火山引擎、MiniMax 等)
+// 对 assistant 历史消息 content 校验严格 —— 当某轮 assistant 只返回
+// tool_calls 而没有文本、或正文被 trim 后只剩空白时,provider 会拒绝
+// 并报 "chat content is empty (2013)"。OpenAI 官方规范允许 assistant
+// 消息在带 tool_calls 时 content 为 null,但 provider 实现不一致:
+//
+//   - assistant 带 tool_calls → content 强制 null(即使有字符串)
+//   - assistant 不带 tool_calls 且 content 全空白 → null(避免触发 2013)
+//   - user content 全空白 → 用单个空格 ' ' 占位(provider 通常可接受)
+//   - tool content 全空白 → '(no output)' 占位(防止序列化时被丢)
 function sanitizeMessages(messages) {
   for (const m of messages) {
+    if (m == null || typeof m !== 'object') continue;
+    // 非字符串 content(数组形态的多模态 user 消息、已是 null 等) 不动
+    if (m.content === null || m.content === undefined) {
+      // assistant 必须显式 null,不要让 provider 看到 undefined
+      if (m.role === 'assistant') m.content = null;
+      continue;
+    }
     if (typeof m.content !== 'string') continue;
-    if (m.content === '') {
+    const trimmed = m.content.trim();
+    if (trimmed === '') {
       if (m.role === 'assistant') {
+        // 带 tool_calls 时强制 null;否则也置 null(provider 更安全)
         m.content = null;
       } else if (m.role === 'tool') {
         m.content = '(no output)';
       } else if (m.role === 'user') {
+        // user 不能 null(部分 provider 拒),用单个空格占位
         m.content = ' ';
       }
+      continue;
+    }
+    // assistant 带 tool_calls:即使是有效正文也强制 null
+    // (OpenAI 规范要求 tool_calls 出现时 content=null,避免 provider 误判)
+    if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+      m.content = null;
     }
   }
   return messages;
 }
 
 // ── 历史裁剪 ──────────────────────────────────────────────
+// 保留 system + 最近 MAX_HISTORY_MESSAGES 条
+// 切口必须落在 user 消息上,避免把 assistant(tool_calls) 与其 tool 结果从中间撕开
 const MAX_HISTORY_MESSAGES = 40;
 function trimHistory(messages) {
   if (messages.length <= MAX_HISTORY_MESSAGES + 1) return;
   let cut = messages.length - MAX_HISTORY_MESSAGES;
-  while (cut < messages.length && messages[cut].role !== 'user') cut++;
-  if (cut <= 1) return;
+  // 至少向后扫 5 条,跳过孤立的 tool / assistant(tool_calls),
+  // 找到真正的 user 节点再切,防止撕裂 tool 调用链
+  let safety = 0;
+  while (cut < messages.length && messages[cut].role !== 'user' && safety < 8) {
+    cut++;
+    safety++;
+  }
+  if (cut <= 1 || messages[cut]?.role !== 'user') return;
   messages.splice(1, cut - 1);
 }
 

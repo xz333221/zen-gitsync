@@ -188,3 +188,32 @@ test('sanitizeMessages: 模拟真实工具调用流程后消息数组无空 cont
   }
   assert.equal(messages[2].content, null, 'assistant 空 content 应为 null')
 })
+
+test('sanitizeMessages: 全空白字符(空格/换行/制表符)按空处理', () => {
+  const messages = [
+    { role: 'assistant', content: '   \n  \t  ' },
+    { role: 'user', content: '\n\n\n' },
+    { role: 'tool', tool_call_id: 't1', name: 'run_command', content: ' \t' },
+  ]
+  sanitizeMessages(messages)
+  assert.equal(messages[0].content, null, 'assistant 全空白 content 应转 null')
+  assert.equal(messages[1].content, ' ', 'user 全空白 content 兜底为空格')
+  assert.equal(messages[2].content, '(no output)', 'tool 全空白 content 兜底为占位')
+})
+
+test('sanitizeMessages: assistant 带 tool_calls 时强制 content=null(即使有正文)', () => {
+  const messages = [
+    { role: 'assistant', content: '正在调用工具', tool_calls: [{ id: 'tc1', type: 'function', function: { name: 'run_command', arguments: '{}' } }] },
+  ]
+  sanitizeMessages(messages)
+  assert.equal(messages[0].content, null, 'assistant 带 tool_calls 时 content 必须为 null')
+  assert.ok(messages[0].tool_calls, 'tool_calls 应保留')
+})
+
+test('sanitizeMessages: assistant content 已是 null 时不被覆盖', () => {
+  const messages = [
+    { role: 'assistant', content: null, tool_calls: [{ id: 'tc1', type: 'function', function: { name: 'x', arguments: '{}' } }] },
+  ]
+  sanitizeMessages(messages)
+  assert.equal(messages[0].content, null)
+})
