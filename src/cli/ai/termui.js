@@ -393,30 +393,31 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
 
 /** 工具头:⏺  name  参数摘要(图标与文字之间 2 空格,别太挤;青色与正文绿色子弹头区分) */
 export function printToolHeader(name, summary, write = (s) => process.stdout.write(s)) {
-  write('\n' + chalk.cyan('⏺') + '  ' + chalk.bold(name) + (summary ? '  ' + chalk.dim(summary) : '') + '\n')
+  // 摘要用 cyan(同图标色)— dim 在多数终端太浅看不清;同色让头部视觉一体化
+  write('\n' + chalk.cyan('⏺') + '  ' + chalk.bold(name) + (summary ? '  ' + chalk.cyan(summary) : '') + '\n')
 }
 
 /**
  * 工具结果块:
- *   └─ 首行
- *   │  后续行…
+ *   │  每行统一用 │ 槽线对齐(不做首行 └─ 拐角,看着更干净)
  * 退出码非 0 → 黄色;"错误/已拒绝"开头 → 红色;其余用青色(cyan,dim/gray 太浅看不清)。
- * (首行用 └─ 而不是 Claude 的 ⎿:box-drawing 字符在 Windows 终端字体里渲染更稳,
- *  且与输入框 ╭╰ 边框同一字符族,视觉更统一)
+ *
+ * run_command 的结果里首行是 `$ <command>` 回显——这条信息已经出现在上方的
+ * `⏺ run_command $ <summary>` 工具头里,这里再印一次就是重复。所以这里把首
+ * 行 `$ ...` 剥掉,同时复用它来识别退出码(退出码仍驱动错误着色)。
  */
 export function printToolResult(result, write = (s) => process.stdout.write(s)) {
   const text = truncateDisplay(result)
+  // 先把 "$ <command>\n" 这一行回显从展示里剥掉(退出码仍在第二行里识别)
+  const visible = text.replace(/^\$[^\n]*\n/, '')
   const exitMatch = text.match(/^\$[^\n]*\n\(exit (\d+)\)/)
   const exitCode = exitMatch ? Number(exitMatch[1]) : null
   const isError = exitCode !== null && exitCode !== 0
     || /^(错误|已拒绝|Error)/.test(text.trim())
   // 正文用 cyan(比 dim/gray 亮,能看清);错误保持黄色告警。槽线仍用 dim 当装饰导轨
   const colorize = isError ? chalk.yellow : chalk.cyan
-  const lines = text.split('\n')
-  const rendered = lines.map((l, i) => {
-    const gutter = i === 0 ? chalk.dim('  └─ ') : chalk.dim('  │  ')
-    return gutter + colorize(l)
-  }).join('\n')
+  const lines = visible.split('\n')
+  const rendered = lines.map((l) => chalk.dim('  │  ') + colorize(l)).join('\n')
   write(rendered + '\n')
 }
 

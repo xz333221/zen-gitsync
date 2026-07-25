@@ -200,12 +200,12 @@ test('printToolHeader: ⏺ + 名称 + 摘要', () => {
   assert.ok(text.includes('$ npm test'))
 })
 
-test('printToolResult: 首行 └─,后续行 │ 槽线', () => {
+test('printToolResult: 全部行统一 │ 槽线(无 └─ 拐角)', () => {
   const c = collect()
   printToolResult('$ ls\n(exit 0)\nfile1\nfile2', c.write)
   const lines = c.lines()
-  assert.ok(lines[0].startsWith('  └─ '), `首行应为 └─ 槽线,实际: ${lines[0]}`)
-  assert.ok(lines.slice(1).every(l => l.startsWith('  │  ') || l === ''), '后续行应为 │ 槽线')
+  assert.ok(lines.every(l => l.startsWith('  │  ') || l === ''), `每行都应为 │ 槽线,实际: ${JSON.stringify(lines)}`)
+  assert.ok(!lines.some(l => l.includes('└─')), '不应出现 └─ 拐角字符')
 })
 
 test('printToolResult: 超长结果被截断并含省略标记', () => {
