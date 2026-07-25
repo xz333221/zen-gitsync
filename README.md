@@ -1,4 +1,4 @@
-﻿﻿# zen-gitsync
+﻿﻿﻿﻿# zen-gitsync
 
 [English](#zen-gitsync) | [中文](#zh)
 
@@ -22,6 +22,7 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
   - [Built-in Code Editor](#built-in-code-editor)
   - [Source Map](#source-map-ai-codebase-visualization)
   - [Workbench](#workbench-task-driven-claude-execution)
+  - [AI Agent](#ai-agent-web)
   - [Settings](#settings)
 - [CLI Commands](#cli-commands)
 
@@ -354,6 +355,22 @@ Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.
 
 ---
 
+### AI Agent (Web)
+
+A dedicated view (robot icon in the activity bar) for chatting with the built-in AI agent directly from the browser. The left sidebar lists all saved sessions (both Web and CLI origins); the right pane is a full chat interface with streaming responses, thinking process display, and tool-call visualization.
+
+| Feature | Description |
+|---|---|
+| Session list | Browse, search, rename, and delete past conversations; sessions created via `g ai` in the terminal also appear here with a **CLI** badge |
+| Streaming chat | SSE-based real-time streaming with thinking process, content, tool calls, and tool results rendered inline |
+| Tool call display | Each tool invocation (run_command, read_file, edit_file, list_files, search_text, write_file) is shown as a collapsible card with arguments preview and execution result |
+| Session persistence | All conversations are saved to `~/.zen-gitsync/agent-sessions/` as JSON files; the CLI agent (`g ai`) writes to the same directory so Web and CLI sessions are unified |
+| Preset questions | Quick-start buttons on the welcome screen for common tasks (view project structure, analyze code quality, write tests, check git status) |
+| Stop generation | A floating stop button appears during streaming; aborts the LLM request and any running child processes |
+| Theme sync | The chat area follows the GUI's current theme (light / dark / auto) |
+
+---
+
 ### Settings
 
 ![User settings dialog — general tab](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/settings-general.png)
@@ -546,6 +563,7 @@ $ g --check-lock=config.json
   - [内置代码编辑器](#内置代码编辑器)
   - [源码地图](#源码地图ai-代码库可视化)
   - [工作台](#工作台任务驱动的-claude-执行)
+  - [智能体](#智能体web-端)
   - [设置](#设置)
 - [命令行](#命令行)
 
@@ -877,6 +895,22 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 | 简单任务继续对话 | 简单任务执行完（done / error / cancelled）后，详情区底部出现「退出」按钮和续聊输入框；点退出走 `clearJobsByTask` 一键清空整段对话回到 idle；输入续聊消息发送则后端用 `claude --resume <session_id> -p <newPrompt>` 续接历史会话，**新一轮 = 新 job**（subId 形如 `__simple__r${n}`），多轮纵向堆叠成对话流。session_id 在 stream-json 的首条 `system.init` 事件里捕获并持久化到 job |
 
 提示词预置与任务数据持久化到 `~/.zen-gitsync/prompts.json` 和 `~/.zen-gitsync/tasks.json`（跨项目共享）。子任务附件落盘在 `~/.zen-gitsync/workbench-images/<subId>/`。
+
+---
+
+### 智能体（Web 端）
+
+Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 智能体对话。左侧边栏列出所有已保存的会话（含 Web 端和 CLI 端来源）；右侧为完整的对话界面，支持流式输出、思考过程展示和工具调用可视化。
+
+| 功能 | 说明 |
+|---|---|
+| 会话列表 | 浏览、搜索、重命名、删除历史对话；通过 `g ai` 在终端创建的会话也会出现在这里，带 **CLI** 标记 |
+| 流式对话 | 基于 SSE 的实时流式输出，包含思考过程、正文内容、工具调用和工具结果的内联渲染 |
+| 工具调用展示 | 每次工具调用（run_command、read_file、edit_file、list_files、search_text、write_file）以可折叠卡片形式展示，含参数预览和执行结果 |
+| 会话持久化 | 所有对话保存为 JSON 文件到 `~/.zen-gitsync/agent-sessions/`；CLI 智能体（`g ai`）写入同一目录，Web 端与 CLI 端会话统一管理 |
+| 预设问题 | 开场界面提供快捷按钮（查看项目结构、分析代码质量、写测试、Git 状态检查）|
+| 停止生成 | 流式输出期间出现浮动停止按钮；中止 LLM 请求及正在运行的子进程 |
+| 主题同步 | 对话区域跟随 GUI 当前主题（浅色 / 深色 / 自动）|
 
 ---
 

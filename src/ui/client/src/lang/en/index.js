@@ -1,4 +1,4 @@
-﻿// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
+﻿﻿// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
 export default {
   // @F13B4: file path: App.vue
   '@F13B4:编辑项目配置': 'Edit project configuration',
@@ -2265,4 +2265,51 @@ export default {
   '@MINDMAP:粘贴JSON或TXT': 'JSON or plain text',
   '@MINDMAP:粘贴Markdown提示': 'Paste Markdown content (a ```mindmap fence will be recognized)',
   // @MINDMAP: file end
+
+  // @ACTBAR: file path: components/ActivityBar.vue (追加: 智能体)
+  '@ACTBAR:智能体': 'Agent',
+  // @ACTBAR: file end (追加4)
+
+  // @AGENT: file path: views/AgentView.vue
+  '@AGENT:新建会话': 'New Session',
+  '@AGENT:搜索会话...': 'Search sessions...',
+  '@AGENT:未找到匹配的会话': 'No matching sessions found',
+  '@AGENT:暂无会话': 'No sessions yet',
+  '@AGENT:点击上方按钮开始对话': 'Click the button above to start chatting',
+  '@AGENT:条': 'msgs',
+  '@AGENT:重命名': 'Rename',
+  '@AGENT:删除': 'Delete',
+  '@AGENT:加载会话中...': 'Loading session...',
+  '@AGENT:智能体助手': 'AI Agent',
+  '@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。': 'I can help you read code, run commands, and modify files. Choose a topic below or type your question.',
+  '@AGENT:正在生成中...': 'Generating...',
+  '@AGENT:输入消息，Enter 发送': 'Type a message, press Enter to send',
+  '@AGENT:停止生成': 'Stop generating',
+  '@AGENT:请先停止当前生成': 'Please stop the current generation first',
+  '@AGENT:确认删除该会话': 'Delete this session?',
+  '@AGENT:删除后无法恢复': 'This action cannot be undone',
+  '@AGENT:加载会话列表失败': 'Failed to load sessions',
+  '@AGENT:加载会话失败': 'Failed to load session',
+  '@AGENT:删除失败': 'Failed to delete',
+  '@AGENT:已删除': 'Deleted',
+  '@AGENT:重命名失败': 'Failed to rename',
+  '@AGENT:已重命名': 'Renamed',
+  '@AGENT:未知错误': 'Unknown error',
+  '@AGENT:已停止': 'Stopped',
+  '@AGENT:对话失败': 'Chat failed',
+  '@AGENT:请输入新的会话标题': 'Enter new session title',
+  '@AGENT:重命名会话': 'Rename Session',
+  '@AGENT:标题不能为空': 'Title cannot be empty',
+  '@AGENT:今天': 'Today',
+  '@AGENT:天前': 'days ago',
+  '@AGENT:无标题': '(Untitled)',
+  '@AGENT:查看项目结构': 'View project structure',
+  '@AGENT:分析代码质量': 'Analyze code quality',
+  '@AGENT:帮我写测试': 'Write tests',
+  '@AGENT:Git 状态检查': 'Git status check',
+  '@AGENT:prompt_p1': 'Please list the current project directory structure to help me understand the layout',
+  '@AGENT:prompt_p2': 'Please analyze the code quality of the current project and identify potential issues',
+  '@AGENT:prompt_p3': 'Please help me write unit tests for recently modified files',
+  '@AGENT:prompt_p4': 'Please check the current git repository status for uncommitted changes',
+  // @AGENT: file end
 }

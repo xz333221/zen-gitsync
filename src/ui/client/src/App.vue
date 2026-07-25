@@ -53,6 +53,7 @@ const SourceMapView = defineAsyncComponent({ loader: () => import('@views/Source
 const WorkbenchView = defineAsyncComponent({ loader: () => import('@views/WorkbenchView.vue'), ...asyncOpts })
 const MonitorView = defineAsyncComponent({ loader: () => import('@views/MonitorView.vue'), ...asyncOpts })
 const MindmapView = defineAsyncComponent({ loader: () => import('@views/MindmapView.vue'), ...asyncOpts })
+const AgentView = defineAsyncComponent({ loader: () => import('@views/AgentView.vue'), ...asyncOpts })
 import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled, Sunny, Moon } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
@@ -231,7 +232,7 @@ function handleBranchChanged() {
 }
 
 // 活动视图切换
-const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap'>('git')
+const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap' | 'agent'>('git')
 
 // 切换到 Git 视图时静默刷新状态（与窗口焦点/标签页可见时一致）
 watch(activeView, (view) => {
@@ -812,6 +813,13 @@ function stopHResize() {
       <div v-show="activeView === 'mindmap'" class="view-pane mindmap-pane">
         <KeepAlive>
           <MindmapView v-if="activeView === 'mindmap'" />
+        </KeepAlive>
+      </div>
+
+      <!-- 智能体视图（懒加载 + KeepAlive 缓存：会话列表/对话状态切走不丢） -->
+      <div v-show="activeView === 'agent'" class="view-pane agent-pane">
+        <KeepAlive>
+          <AgentView v-if="activeView === 'agent'" />
         </KeepAlive>
       </div>
 

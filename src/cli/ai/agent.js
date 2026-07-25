@@ -56,6 +56,7 @@ import {
 } from './termui.js'
 import { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes } from './images.js'
 import { runModelSetup, collectModelInput, buildModelConfig } from './modelSetup.js'
+import { genSessionId, autoTitle, writeSession, enforceRetention } from './sessionStore.js'
 
 // truncateDisplay 已迁移到 termui.js;这里 re-export 保持既有测试/外部引用不断
 export { truncateDisplay } from './termui.js'
@@ -591,6 +592,9 @@ async function handleSlashCommand(state, input, t) {
   if (cmd === '/help') { printSlashHelp(t, state.locale); return 'ok' }
   if (cmd === '/clear') {
     state.messages = [state.messages[0]]
+    // 开新会话 ID,旧会话保留在磁盘上
+    state.sessionId = genSessionId()
+    state.sessionCreatedAt = new Date().toISOString()
     printOk(t.cleared)
     return 'ok'
   }
@@ -755,6 +759,10 @@ export async function runAiAgent(argv = []) {
     : (process.env.SHELL || '/bin/sh')
 
   const state = {
+    // 会话持久化:CLI 对话也保存到 ~/.zen-gitsync/agent-sessions/,
+    // 在 Web UI 智能体 tab 中可见(带 CLI 标记)
+    sessionId: genSessionId(),
+    sessionCreatedAt: new Date().toISOString(),
     messages: [{ role: 'system', content: buildSystemPrompt({ cwd, locale, shellDesc }) }],
     ctx: {
       cwd,
@@ -778,6 +786,28 @@ export async function runAiAgent(argv = []) {
     rl: null,               // REPL readline 引用(供 /addmodel 复用做 rl.question)
   }
 
+  // 持久化当前会话到磁盘(供 Web UI 读取)
+  async function persistSession() {
+    try {
+      const title = autoTitle(state.messages)
+      await writeSession(state.sessionId, {
+        version: 1,
+        sessionId: state.sessionId,
+        title,
+        source: 'cli',
+        cwd,
+        model: modelLabel(state.model),
+        createdAt: state.sessionCreatedAt,
+        updatedAt: new Date().toISOString(),
+        messages: state.messages,
+      })
+      enforceRetention().catch(() => {})
+    } catch (err) {
+      // 持久化失败不影响 CLI 正常使用
+      printDim(`(会话保存失败: ${err.message})`)
+    }
+  }
+
   // SIGINT 时中止进行中的 LLM 请求 + 正在跑的子命令
   // (进程退出与全局子进程 drain 由 gitCommit.js 的统一 handler 负责,这里只做快速止血)
   registerCleanup('aiAgent', () => {
@@ -790,6 +820,7 @@ export async function runAiAgent(argv = []) {
   if (oneShot) {
     console.log(chalk.dim(`[${t.bannerModel}] ${modelLabel(model)} · [${t.bannerCwd}] ${cwd}`))
     await runAgentTurn(state, oneShot, t)
+    await persistSession()
     printDim(t.oneShotDone)
     return
   }
@@ -973,6 +1004,8 @@ export async function runAiAgent(argv = []) {
     state.abortController = new AbortController()
     try {
       await runAgentTurn(state, input, t, images)
+      // 每轮对话结束后持久化到磁盘,供 Web UI 读取
+      await persistSession()
     } catch (err) {
       printError(err.message)
     } finally {
