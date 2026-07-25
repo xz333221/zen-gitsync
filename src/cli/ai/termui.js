@@ -85,16 +85,18 @@ export function truncateDisplay(text, limit = DISPLAY_RESULT_LIMIT) {
 /** 启动横幅:模型 + 目录 + 快捷键提示,盒式自适应宽度 */
 export function printBanner({ title, modelLabel, baseURL, cwd, modelText, cwdText, tip }) {
   const lines = [
-    chalk.green.bold(title),
-    `${modelText}: ${chalk.cyan(modelLabel)}${baseURL ? ' ' + chalk.dim(baseURL) : ''}`,
-    `${cwdText}: ${chalk.cyan(cwd)}`,
-    chalk.dim(tip),
+    // greenBright 在黑底上比 green 更鲜亮,与 🤖 回答图标同色系
+    chalk.greenBright.bold(title),
+    `${modelText}: ${chalk.cyanBright(modelLabel)}${baseURL ? ' ' + chalk.hex('#a0aec0')(baseURL) : ''}`,
+    `${cwdText}: ${chalk.cyanBright(cwd)}`,
+    // dim 在黑底太暗,改用浅灰可读
+    chalk.hex('#a0aec0')(tip),
   ].join('\n')
   process.stdout.write(
     boxenAdaptive(lines, {
       padding: { top: 0, bottom: 0, left: 1, right: 1 },
       margin: { top: 1, bottom: 0, left: 0, right: 0 },
-      borderColor: 'cyan',
+      borderColor: 'greenBright',
       borderStyle: 'round',
     }) + '\n'
   )
@@ -203,9 +205,10 @@ export function drawInputBottom(write = (s) => process.stdout.write(s)) {
 
 export function startSpinner(text) {
   const spinner = ora({
-    text: chalk.dim(text),
+    // 琥珀色加粗,与思考内容同色系,dim 太浅看不清
+    text: chalk.hex('#e8a33d').bold(text),
     spinner: 'dots',
-    color: 'cyan',
+    color: 'yellow',
     // ora 默认 discardStdin: true,内部用 stdin-discarder 在 spinner 运行时
     // 丢弃 stdin 输入。但 stdin-discarder 的 stop() 在 Windows 上有 bug:
     // start() 跳过 Windows,但 stop() 没有 Windows 检查,无条件执行
@@ -226,8 +229,11 @@ export function startSpinner(text) {
 // 流式回复 writer:思考(橙黄斜体) + 正文(➤ 子弹头 + 轻量 markdown)
 // ──────────────────────────────────────────────
 
-/** 行内 markdown:`code` 优先提取防干扰,再处理 **bold** */
-function renderInline(line) {
+/** 行内 markdown:`code` 优先提取防干扰,再处理 **bold**
+ * @param {string} resetFg - 行内 code 后需重置的前景色 ANSI 码(如 whiteBright 用 '\x1b[97m'),
+ *   避免 chalk.cyan 的 \x1b[39m 把外层 base 色清掉导致后续文字掉色
+ */
+function renderInline(line, resetFg = '') {
   const spans = []
   // 先抠出 inline code,避免其中的 * 被 bold 规则误吃
   line = line.replace(/`([^`\n]+)`/g, (m, c) => {
@@ -235,7 +241,7 @@ function renderInline(line) {
     return `\u0000${spans.length - 1}\u0000`
   })
   line = line.replace(/\*\*([^*\n]+)\*\*/g, (m, c) => chalk.bold(c))
-  line = line.replace(/\u0000(\d+)\u0000/g, (m, i) => chalk.cyan(spans[Number(i)]))
+  line = line.replace(/\u0000(\d+)\u0000/g, (m, i) => chalk.cyan(spans[Number(i)]) + resetFg)
   return line
 }
 
@@ -262,6 +268,8 @@ export function createAssistantWriter({
   // 正文 🤖(亮绿):模型最终回复的视觉锚点;用亮绿 + 加粗图标,普通绿在深背景上偏暗
   const BULLET_FIRST = chalk.bold(chalk.hex('#5eff8b')('🤖')) + '  '
   const BULLET_REST = '   '
+  // whiteBright ANSI 码:行内 code 的 \x1b[39m 会清掉外层色,用此恢复正文亮白色
+  const WB = '\x1b[97m'
   // 思考内容整体右移,与正文文字左缘对齐,视觉上成为独立子块
   const THINK_INDENT = '   '
   // 思考用橙黄色斜体(gray/dim 太浅看不清;橙黄既醒目又与正文白、工具青区分开)
@@ -298,7 +306,10 @@ export function createAssistantWriter({
     const bullet = contentLines === 0 ? BULLET_FIRST : BULLET_REST
     contentLines++
     const h = raw.match(/^(#{1,6})\s+(.*)$/)
-    const body = h ? chalk.bold(renderInline(h[2])) : renderInline(raw)
+    // 正文用 whiteBright(亮白)比默认白更醒目;resetFg=WB 让行内 code 后恢复亮白
+    const body = h
+      ? chalk.bold.whiteBright(renderInline(h[2], WB))
+      : chalk.whiteBright(renderInline(raw, WB))
     write(bullet + body + (withNewline ? '\n' : ''))
   }
 
@@ -315,7 +326,8 @@ export function createAssistantWriter({
       if (mode !== 'thinking') {
         flushLineBuf()
         mode = 'thinking'
-        // 段头前空一行与上文分隔;图标 🧠 靠最左(0 缩进),与 ⚙ 工具头、➤ 正文对齐同一左缘
+        // 图标 🧠 靠最左(0 缩进),与 ⚙ 工具头、➤ 正文对齐同一左缘
+        // 段头前空一行与上文(spinner / 上一轮输出)分隔,视觉更清晰
         write('\n' + THINK_ICON + '  ' + thinkStyle(chalk.bold(thinkingHeader)) + '\n')
         thinkAtLineStart = true
       }
@@ -343,6 +355,8 @@ export function createAssistantWriter({
       if (mode !== 'content') {
         // 思考→正文:补足换行 + 空一行,让思考块与正文之间有呼吸间隔(不再紧挨)
         if (mode === 'thinking') write((thinkAtLineStart ? '' : '\n') + '\n')
+        // 无思考段直接出正文:null→content 时在 🤖 上方加一空行,与 spinner 分隔
+        else if (mode === null) write('\n')
         mode = 'content'
       }
       lineBuf += text
@@ -394,23 +408,23 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
   }
 }
 
-/** 工具头:▶  name  参数摘要(青色三角表示"工具执行";name 与命令都加粗,和下方结果区分) */
+/** 工具头:▶  name  参数摘要(青色三角表示"工具执行";name 加粗白色,摘要灰色,避免整块青色) */
 export function printToolHeader(name, summary, write = (s) => process.stdout.write(s)) {
-  // 图标 + name + 命令摘要 全部 cyan 加粗 — 整块作为工具头强调,
-  // 下方的执行结果(工具调用块本身)保持非粗体,通过粗/细自然分层
+  // ▶ 保留青色作为工具执行的标识色;name 用白色加粗与下方结果区分;
+  // summary 用浅灰(#a0aec0)— dim 在黑底下太暗看不清,浅灰可读且仍比 name 低调
   write('\n' + chalk.cyan('▶') + '  '
-    + chalk.bold.cyan(name)
-    + (summary ? '  ' + chalk.bold.cyan(summary) : '')
+    + chalk.bold.white(name)
+    + (summary ? '  ' + chalk.hex('#a0aec0')(summary) : '')
     + '\n')
 }
 
 /**
  * 工具结果块:
  *   │  每行统一用 │ 槽线对齐(不做首行 └─ 拐角,看着更干净)
- * 退出码非 0 → 黄色;"错误/已拒绝"开头 → 红色;其余用青色(cyan,dim/gray 太浅看不清)。
+ * 退出码非 0 → 琥珀色;"错误/已拒绝"开头 → 琥珀色;其余用柔和灰蓝(避免与工具头同色)。
  *
  * run_command 的结果里首行是 `$ <command>` 回显——这条信息已经出现在上方的
- * `⚙ run_command $ <summary>` 工具头里,这里再印一次就是重复。所以这里把首
+ * `▶ run_command $ <summary>` 工具头里,这里再印一次就是重复。所以这里把首
  * 行 `$ ...` 剥掉,同时复用它来识别退出码(退出码仍驱动错误着色)。
  */
 export function printToolResult(result, write = (s) => process.stdout.write(s)) {
@@ -421,8 +435,9 @@ export function printToolResult(result, write = (s) => process.stdout.write(s)) 
   const exitCode = exitMatch ? Number(exitMatch[1]) : null
   const isError = exitCode !== null && exitCode !== 0
     || /^(错误|已拒绝|Error)/.test(text.trim())
-  // 正文用 cyan(比 dim/gray 亮,能看清);错误保持黄色告警。槽线仍用 dim 当装饰导轨
-  const colorize = isError ? chalk.yellow : chalk.cyan
+  // 正文用柔和灰蓝(#94a3b8)— 不再用青色,避免与工具头同色连成一片;
+  // 错误用琥珀色(#f0a020)比黄色更醒目
+  const colorize = isError ? chalk.hex('#f0a020') : chalk.hex('#94a3b8')
   const lines = visible.split('\n')
   const rendered = lines.map((l) => chalk.dim('  │  ') + colorize(l)).join('\n')
   write(rendered + '\n')

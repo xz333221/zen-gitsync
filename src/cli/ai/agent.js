@@ -808,7 +808,9 @@ export async function runAiAgent(argv = []) {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: chalk.cyan.bold(t.prompt),
+    // prompt: ❯ 用青色加粗;末尾追加 ANSI 亮白+加粗码,
+    // 让用户输入的文本继承亮白色高亮(黑底上最清晰)
+    prompt: chalk.cyan.bold(t.prompt) + '\x1b[1;97m',
     historySize: 200,
   })
   state.rl = rl  // 供 /addmodel 等需要 rl.question 的斜杠命令复用

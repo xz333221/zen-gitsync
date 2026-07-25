@@ -184,7 +184,9 @@ test('writer: 头部空白行被吞掉,连续空白行合并(真实 MiniMax 输�
   w.writeContent('答案\n\n\n\n下一段\n')
   w.finish()
   const lines = c.lines()
-  assert.equal(lines[0], '🤖  答案', `首行应为 🤖  答案,实际: ${lines[0]}`)
+  // null→content 自动在 🤖 上方加一空行,跳过空行找正文首行
+  const firstContent = lines.find(l => l !== '')
+  assert.equal(firstContent, '🤖  答案', `首行应为 🤖  答案,实际: ${JSON.stringify(lines)}`)
   // "答案"与"下一段"之间最多一个空行,且空行不带缩进
   const midBlank = lines.slice(1, lines.indexOf('   下一段')).filter(l => l === '').length
   assert.ok(midBlank <= 1, `空行应被合并,实际行: ${JSON.stringify(lines)}`)
