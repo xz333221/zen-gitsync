@@ -6,7 +6,7 @@
 //   3. 后端 OpenAI 格式消息 → zen-ai-chat-ui ChatMessage 格式转换
 //   4. 取消正在进行的请求
 
-import { ref } from 'vue'
+import { reactive, ref } from 'vue'
 import type { ChatMessage, ToolCall } from 'zen-ai-chat-ui'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { uid } from 'zen-ai-chat-ui'
@@ -286,13 +286,18 @@ export function useAgentChat() {
     messages.value.push(userMsg)
 
     // 占位 assistant 消息
-    const assistantMsg: ChatMessage = {
+    // 注意:必须用 reactive() 包装,否则 push 进 messages.value 后,
+    // assistantMsg 变量指向原始 plain object,SSE 循环里的
+    // `assistantMsg.content += delta` 修改的是 plain object,
+    // 而 Vue 渲染看到的是 reactive Proxy(初始 content=''),
+    // 内容永远不变,loading dots 一直不消失。
+    const assistantMsg = reactive<ChatMessage>({
       id: uid(),
       role: 'assistant',
       content: '',
       status: 'pending',
       createdAt: Date.now()
-    }
+    })
     messages.value.push(assistantMsg)
 
     isStreaming.value = true
@@ -364,14 +369,17 @@ export function useAgentChat() {
               break
 
             case 'tool_call_start': {
-              const tc: ToolCall = {
+              // 注意:必须用 reactive() 包装,否则 tool_result 事件里
+              // 修改 tc.status/tc.result 时 Vue 看不到(plain object vs Proxy),
+              // 工具块一直停在 'running' 转圈。跟 assistantMsg 是同一个根因。
+              const tc = reactive<ToolCall>({
                 id: evt.toolCallId || uid(),
                 name: evt.name || '',
                 argsPreview: evt.argsPreview || '',
                 arguments: evt.argsPreview || '',
                 status: 'running',
                 result: ''
-              }
+              })
               currentToolCalls.push(tc)
               if (!assistantMsg.toolCalls) {
                 assistantMsg.toolCalls = []
