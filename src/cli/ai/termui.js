@@ -16,10 +16,10 @@
 //
 //   - 盒式输入框(Codex composer 风格):╭───╮ + ❯ 提示符 + ╰───╯
 //   - 等待 spinner(ora):首个 token 到达前持续转动
-//   - 思考过程:✻ 思考 头 + 灰色斜体流式输出
-//   - 工具调用块(Claude Code 风格):⏺ 工具头 + 智能参数摘要,
-//     结果用 ⎿/│ 缩进槽,按退出码/错误前缀着色
-//   - 正文:⏺ 项目符号 + 逐行缓冲的轻量 markdown 渲染
+//   - 思考过程:✻ 思考 头 + 橙黄斜体流式输出
+//   - 工具调用块(Claude Code 风格):⚙ 工具头 + 智能参数摘要,
+//     结果用 │ 缩进槽,按退出码/错误前缀着色
+//   - 正文:➤ 子弹头 + 逐行缓冲的轻量 markdown 渲染
 //     (**bold**、`code`、# 标题、``` 代码块、- 列表)
 //
 // 设计约束:
@@ -223,7 +223,7 @@ export function startSpinner(text) {
 }
 
 // ──────────────────────────────────────────────
-// 流式回复 writer:思考(灰斜体) + 正文(⏺ + 轻量 markdown)
+// 流式回复 writer:思考(橙黄斜体) + 正文(➤ 子弹头 + 轻量 markdown)
 // ──────────────────────────────────────────────
 
 /** 行内 markdown:`code` 优先提取防干扰,再处理 **bold** */
@@ -255,16 +255,19 @@ export function createAssistantWriter({
   let mode = null          // null | 'thinking' | 'content'
   let lineBuf = ''         // 正文行缓冲(逐行渲染,保证 ** 等标记完整)
   let inFence = false      // ``` 代码块状态
-  let contentLines = 0     // 已输出正文行数(首行带 ⏺ 子弹头)
+  let contentLines = 0     // 已输出正文行数(首行带 ➤ 子弹头)
   let lastBlank = false    // 上一行是空白行(连续空行合并,避免模型输出头部/分隔空行刷屏)
   let thinkAtLineStart = true  // 思考流当前是否在行首(用于逐行缩进 + 计算与正文的分隔)
-  // ⏺ 后留 2 个空格,后续行 3 空格对齐 — 图标与文字之间别太挤
-  const BULLET_FIRST = chalk.green('⏺') + '  '
+  // ➤ 后留 2 个空格,后续行 3 空格对齐 — 图标与文字之间别太挤
+  // 正文 🤖(亮绿):模型最终回复的视觉锚点;用亮绿 + 加粗图标,普通绿在深背景上偏暗
+  const BULLET_FIRST = chalk.bold(chalk.hex('#5eff8b')('🤖')) + '  '
   const BULLET_REST = '   '
   // 思考内容整体右移,与正文文字左缘对齐,视觉上成为独立子块
   const THINK_INDENT = '   '
   // 思考用橙黄色斜体(gray/dim 太浅看不清;橙黄既醒目又与正文白、工具青区分开)
   const thinkStyle = (s) => chalk.hex('#e8a33d').italic(s)
+  // 思考图标:🧠 大脑 — 紧贴最左(0 缩进),与工具头、正文对齐到同一左缘
+  const THINK_ICON = '🧠'
 
   const emitContentLine = (raw, withNewline = true) => {
     // 围栏标记行:切换状态,用一个淡淡的槽线代替裸 ```
@@ -312,8 +315,8 @@ export function createAssistantWriter({
       if (mode !== 'thinking') {
         flushLineBuf()
         mode = 'thinking'
-        // 段头前空一行与上文分隔;头部本身也缩进,和内容左缘对齐
-        write('\n' + THINK_INDENT + thinkStyle(thinkingHeader) + '\n')
+        // 段头前空一行与上文分隔;图标 🧠 靠最左(0 缩进),与 ⚙ 工具头、➤ 正文对齐同一左缘
+        write('\n' + THINK_ICON + '  ' + thinkStyle(chalk.bold(thinkingHeader)) + '\n')
         thinkAtLineStart = true
       }
       // 按换行切段,整段着色(避免逐字符 escape 刷屏);每逢行首补一层缩进,
@@ -334,7 +337,7 @@ export function createAssistantWriter({
       }
     },
 
-    /** 正文段:⏺ 子弹头 + 逐行 markdown 渲染 */
+    /** 正文段:➤ 子弹头 + 逐行 markdown 渲染 */
     writeContent(text) {
       if (!text) return
       if (mode !== 'content') {
@@ -391,10 +394,14 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
   }
 }
 
-/** 工具头:⏺  name  参数摘要(图标与文字之间 2 空格,别太挤;青色与正文绿色子弹头区分) */
+/** 工具头:▶  name  参数摘要(青色三角表示"工具执行";name 与命令都加粗,和下方结果区分) */
 export function printToolHeader(name, summary, write = (s) => process.stdout.write(s)) {
-  // 摘要用 cyan(同图标色)— dim 在多数终端太浅看不清;同色让头部视觉一体化
-  write('\n' + chalk.cyan('⏺') + '  ' + chalk.bold(name) + (summary ? '  ' + chalk.cyan(summary) : '') + '\n')
+  // 图标 + name + 命令摘要 全部 cyan 加粗 — 整块作为工具头强调,
+  // 下方的执行结果(工具调用块本身)保持非粗体,通过粗/细自然分层
+  write('\n' + chalk.cyan('▶') + '  '
+    + chalk.bold.cyan(name)
+    + (summary ? '  ' + chalk.bold.cyan(summary) : '')
+    + '\n')
 }
 
 /**
@@ -403,7 +410,7 @@ export function printToolHeader(name, summary, write = (s) => process.stdout.wri
  * 退出码非 0 → 黄色;"错误/已拒绝"开头 → 红色;其余用青色(cyan,dim/gray 太浅看不清)。
  *
  * run_command 的结果里首行是 `$ <command>` 回显——这条信息已经出现在上方的
- * `⏺ run_command $ <summary>` 工具头里,这里再印一次就是重复。所以这里把首
+ * `⚙ run_command $ <summary>` 工具头里,这里再印一次就是重复。所以这里把首
  * 行 `$ ...` 剥掉,同时复用它来识别退出码(退出码仍驱动错误着色)。
  */
 export function printToolResult(result, write = (s) => process.stdout.write(s)) {

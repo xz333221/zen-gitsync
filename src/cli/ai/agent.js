@@ -27,8 +27,8 @@
 //     (格式化磁盘、删根目录、关机等系统级破坏操作)
 //
 // 视觉风格(termui.js):对标 Codex CLI / Claude Code / OpenCode —
-//   盒式输入框、ora 等待 spinner、✻ 思考灰斜体、⏺ 工具块 + ⎿ 结果槽、
-//   正文逐行轻量 markdown(**bold** / `code` / # 标题 / ``` 围栏 / - 列表)
+//   盒式输入框、ora 等待 spinner、✻ 思考(橙黄斜体)、⚙ 工具头(青) + │ 结果槽、
+//   正文 ➤ 子弹头(绿)+ 逐行轻量 markdown(**bold** / `code` / # 标题 / ``` 围栏 / - 列表)
 //
 // 使用方式:
 //   g ai                  交互模式(REPL)
@@ -96,7 +96,7 @@ const STRINGS = {
     prompt: '❯ ',
     bannerModel: '模型',
     bannerCwd: '目录',
-    thinkingLabel: '✻  思考',
+    thinkingLabel: '思考',
     chars: '字符',
     imagePasting: '正在读取剪贴板图片…',
     imageAttached: (n, size) => `📎 图片 #${n} 已附加(${size}),将随下一条消息发送`,
@@ -136,7 +136,7 @@ const STRINGS = {
     prompt: '❯ ',
     bannerModel: 'Model',
     bannerCwd: 'CWD',
-    thinkingLabel: '✻  Thinking',
+    thinkingLabel: 'Thinking',
     chars: 'chars',
     imagePasting: 'Reading clipboard image…',
     imageAttached: (n, size) => `📎 Image #${n} attached (${size}); sent with your next message`,
@@ -446,7 +446,7 @@ async function runAgentTurn(state, userText, t, images = []) {
     const stopSpinner = () => {
       if (!spinnerStopped) { spinner.stop(); spinnerStopped = true }
     }
-    // 每次 LLM 调用一个 writer:思考灰斜体、正文 ⏺ + 逐行 markdown
+    // 每次 LLM 调用一个 writer:思考(橙黄斜体)+ 正文 ➤ 子弹头 + 逐行 markdown
     const writer = createAssistantWriter({
       showThinking: state.showThinking,
       thinkingHeader: t.thinkingLabel,

@@ -102,13 +102,13 @@ test('writer: showThinking=false 时丢弃思考段', () => {
   assert.ok(text.includes('正文'))
 })
 
-test('writer: 正文首行 ⏺ 子弹头,后续行缩进对齐', () => {
+test('writer: 正文首行 🤖 子弹头,后续行缩进对齐', () => {
   const c = collect()
   const w = createAssistantWriter({ write: c.write })
   w.writeContent('第一行\n第二行\n第三行')
   w.finish()
   const lines = c.lines()
-  assert.ok(lines.some(l => l.startsWith('⏺  第一行')))
+  assert.ok(lines.some(l => l.startsWith('🤖  第一行')))
   assert.ok(lines.some(l => l.startsWith('   第二行')))
   assert.ok(lines.some(l => l.startsWith('   第三行')))
 })
@@ -184,7 +184,7 @@ test('writer: 头部空白行被吞掉,连续空白行合并(真实 MiniMax 输�
   w.writeContent('答案\n\n\n\n下一段\n')
   w.finish()
   const lines = c.lines()
-  assert.equal(lines[0], '⏺  答案', `首行应为 ⏺  答案,实际: ${lines[0]}`)
+  assert.equal(lines[0], '🤖  答案', `首行应为 🤖  答案,实际: ${lines[0]}`)
   // "答案"与"下一段"之间最多一个空行,且空行不带缩进
   const midBlank = lines.slice(1, lines.indexOf('   下一段')).filter(l => l === '').length
   assert.ok(midBlank <= 1, `空行应被合并,实际行: ${JSON.stringify(lines)}`)
@@ -192,11 +192,11 @@ test('writer: 头部空白行被吞掉,连续空白行合并(真实 MiniMax 输�
 })
 
 // ── 工具块 ──
-test('printToolHeader: ⏺ + 名称 + 摘要', () => {
+test('printToolHeader: ▶ + 名称(粗)+ 摘要(粗)', () => {
   const c = collect()
   printToolHeader('run_command', '$ npm test', c.write)
   const text = c.text()
-  assert.ok(text.includes('⏺  run_command'))
+  assert.ok(text.includes('▶  run_command'))
   assert.ok(text.includes('$ npm test'))
 })
 
