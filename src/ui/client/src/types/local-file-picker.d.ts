@@ -22,6 +22,11 @@ declare module 'local-file-picker/client' {
       theme?: 'dark' | 'light';
       apiBase?: string;
       locale?: 'zh-CN' | 'en-US';
+      /**
+       * 初始目录路径。打开 picker 时定位到这个目录(若无效则回落用户目录)。
+       * 实际 JS 支持但本地 .d.ts 未声明,这里补齐类型。
+       */
+      defaultPath?: string;
       messages?: Record<string, Record<string, string>> | null;
     },
     object,

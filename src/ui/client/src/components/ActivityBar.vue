@@ -117,6 +117,26 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
       </button>
     </el-tooltip>
 
+    <!-- 智能体 -->
+    <el-tooltip :content="$t('@ACTBAR:智能体')" placement="right" :show-after="300">
+      <button
+        class="activity-btn"
+        :class="{ active: props.activeView === 'agent' }"
+        @click="select('agent')"
+        :aria-label="$t('@ACTBAR:智能体')"
+        :aria-pressed="props.activeView === 'agent'"
+      >
+        <!-- robot/bot.svg: 智能体图标 -->
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="11" width="18" height="10" rx="2" />
+          <circle cx="12" cy="5" r="2" />
+          <path d="M12 7v4" />
+          <line x1="8" y1="16" x2="8" y2="16" />
+          <line x1="16" y1="16" x2="16" y2="16" />
+        </svg>
+      </button>
+    </el-tooltip>
+
     <!-- 编辑器页面 -->
     <el-tooltip
       :content="editorTabsStore.hasDirty ? `${$t('@ACTBAR:编辑器')} · ${editorTabsStore.dirtyCount} ${$t('@ACTBAR:个未保存文件')}` : $t('@ACTBAR:编辑器')"
@@ -193,26 +213,6 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
         <!-- activity.svg: 心跳/波形监控图标 -->
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
           <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-        </svg>
-      </button>
-    </el-tooltip>
-
-    <!-- 智能体 -->
-    <el-tooltip :content="$t('@ACTBAR:智能体')" placement="right" :show-after="300">
-      <button
-        class="activity-btn"
-        :class="{ active: props.activeView === 'agent' }"
-        @click="select('agent')"
-        :aria-label="$t('@ACTBAR:智能体')"
-        :aria-pressed="props.activeView === 'agent'"
-      >
-        <!-- robot/bot.svg: 智能体图标 -->
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="11" width="18" height="10" rx="2" />
-          <circle cx="12" cy="5" r="2" />
-          <path d="M12 7v4" />
-          <line x1="8" y1="16" x2="8" y2="16" />
-          <line x1="16" y1="16" x2="16" y2="16" />
         </svg>
       </button>
     </el-tooltip>

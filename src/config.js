@@ -51,7 +51,9 @@ const defaultConfig = {
   skipHooks: false,
   autoQuickPushOnEnter: false,
   autoSetDefaultMessage: false,
-  autoClosePushModal: false,
+  // 默认开启：推送成功后进度弹窗自动关闭，2 秒后消失。
+  // 用户可在 设置 → 提交设置 → "Push 完成自动关闭" 单独关闭。
+  autoClosePushModal: true,
   pullBeforePush: true,
   // 通用设置
   theme: 'light',  // 主题: light | dark | auto

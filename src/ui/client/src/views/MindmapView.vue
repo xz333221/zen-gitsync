@@ -459,19 +459,6 @@ function formatSize(bytes: number): string {
             :class="{ active: store.current?.path === f.path }"
             @click="handleOpenFile(f.path)"
           >
-            <div class="mm-file-icon">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="2" />
-                <circle cx="5" cy="5" r="2" />
-                <circle cx="19" cy="5" r="2" />
-                <circle cx="5" cy="19" r="2" />
-                <circle cx="19" cy="19" r="2" />
-                <line x1="10.5" y1="10.5" x2="6.5" y2="6.5" />
-                <line x1="13.5" y1="10.5" x2="17.5" y2="6.5" />
-                <line x1="10.5" y1="13.5" x2="6.5" y2="17.5" />
-                <line x1="13.5" y1="13.5" x2="17.5" y2="17.5" />
-              </svg>
-            </div>
             <div class="mm-file-info">
               <div class="mm-file-title" :title="f.title">{{ f.title }}</div>
               <div class="mm-file-meta">
@@ -532,11 +519,14 @@ function formatSize(bytes: number): string {
     </div>
 
     <!-- 目录选择（local-file-picker） -->
+    <!-- 传入当前目录作为 defaultPath：用户改目录时不用每次都从根目录找,
+         已选过的话直接定位到上次的位置;无效时 picker 自动回落到用户目录 -->
     <FilePicker
       :visible="filePickerVisible"
       mode="directory"
       :theme="isDark ? 'dark' : 'light'"
       :locale="currentLocale"
+      :default-path="store.currentDir || ''"
       @close="filePickerVisible = false"
       @confirm="onPickerConfirm"
     />
@@ -573,6 +563,12 @@ function formatSize(bytes: number): string {
   min-width: 0;
 }
 
+/* 左侧占满剩余空间,让目录路径有地方展开; */
+/* 右侧保持原大小不被压缩,确保所有按钮始终可见。 */
+.mm-toolbar-left {
+  flex: 1;
+}
+
 .mm-toolbar-right {
   flex-shrink: 0;
 }
@@ -584,7 +580,10 @@ function formatSize(bytes: number): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 320px;
+  /* 自适应占满左侧工具栏的剩余空间,长路径会被省略号截断 */
+  /* (hover 通过 :title="store.currentDir" 看完整路径) */
+  flex: 1;
+  min-width: 0;
   padding: 2px 8px;
   background: var(--bg-subtle);
   border-radius: var(--radius-sm);
@@ -695,17 +694,6 @@ function formatSize(bytes: number): string {
 .mm-file-item.active .mm-file-title {
   color: var(--color-primary);
   font-weight: 600;
-}
-
-.mm-file-icon {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-}
-
-.mm-file-item.active .mm-file-icon {
-  color: var(--color-primary);
 }
 
 .mm-file-info {
