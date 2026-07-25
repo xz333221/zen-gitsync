@@ -2,6 +2,23 @@
 // Polyfill 必须在 import element-plus 之前执行,否则 ElTable/ElScrollbar 实例化 ResizeObserver 时崩溃。
 import { vi } from 'vitest'
 
+// i18n 链路在测试里 mock 掉
+// 背景:@/lang/static → @/locales → import '@/lang/zh/index.js' 等大文件,
+// 这些 .js 文件含 BOM + 大量翻译键(~80KB),在 vitest 的 esbuild 解析链路
+// 里偶尔会撞到 BOM 头解析的边界(Unexpected token ':')。组件测试本身只
+// 关心 $t 调用结果,不关心真实翻译表,所以把整个 i18n 链路 mock 成
+// identity 函数,既避免真实加载,又保留 $t(key) 的语义。
+vi.mock('@/lang/static', () => ({
+  $t: (key: string, _params?: any) => key,
+}))
+vi.mock('@/locales', () => ({
+  default: { global: { t: (key: string) => key, locale: { value: 'zh-CN' } } },
+  setLocale: () => {},
+  getLocale: () => 'zh-CN',
+  SUPPORT_LOCALES: ['zh-CN', 'en-US'],
+  LOCALE_NAMES: { 'zh-CN': '简体中文', 'en-US': 'English' },
+}))
+
 // vi.mock 必须出现在所有其他代码之前(hoist)
 vi.mock('@vueuse/core', async () => {
   const actual = await vi.importActual<any>('@vueuse/core')
