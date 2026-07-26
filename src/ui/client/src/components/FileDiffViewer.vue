@@ -17,7 +17,7 @@
 import { $t } from '@/lang/static.ts'
 import { ref, computed, watch, onMounted } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput, ElButton } from 'element-plus';
-import { FolderOpened, DocumentCopy, Search, Warning, CircleCheck } from '@element-plus/icons-vue';
+import { FolderOpened, DocumentCopy, Document, Search, Warning, CircleCheck } from '@element-plus/icons-vue';
 import TreeIcon from '@/components/icons/TreeIcon.vue';
 import ListIcon from '@/components/icons/ListIcon.vue';
 import IconButton from '@/components/IconButton.vue';
@@ -67,6 +67,7 @@ interface Props {
   showOpenButton?: boolean; // 是否显示打开文件按钮，默认true
   showActionButtons?: boolean; // 是否显示操作按钮（锁定/暂存/撤回），默认false
   showVscodeButton?: boolean; // 是否显示"用 VSCode 打开"按钮,默认 true(向后兼容)
+  showEditorButton?: boolean; // 是否显示"在编辑器中打开"按钮(切到 Monaco 编辑器视图),默认 true
   isFileLocked?: (filePath: string) => boolean; // 判断文件是否锁定
   isLocking?: (filePath: string) => boolean; // 判断文件是否正在锁定中
 }
@@ -87,6 +88,7 @@ const props = withDefaults(defineProps<Props>(), {
   showOpenButton: true,
   showActionButtons: false,
   showVscodeButton: true,
+  showEditorButton: true,
   isFileLocked: () => false,
   isLocking: () => false
 });
@@ -96,6 +98,7 @@ interface Emits {
   (e: 'file-select', filePath: string): void; // 选择文件时触发
   (e: 'open-file', filePath: string, context: ContextType): void; // 打开文件时触发
   (e: 'open-with-vscode', filePath: string, context: ContextType): void; // 用VSCode打开文件时触发
+  (e: 'open-in-editor', filePath: string, context: ContextType): void; // 在内置编辑器中打开文件时触发
   (e: 'toggle-lock', filePath: string): void; // 切换文件锁定状态
   (e: 'stage', filePath: string): void; // 暂存文件
   (e: 'unstage', filePath: string): void; // 取消暂存
@@ -270,8 +273,20 @@ function handleOpenWithVSCode() {
     ElMessage.warning($t('@E80AC:请先选择一个文件'));
     return;
   }
-  
+
   emit('open-with-vscode', currentSelectedFile.value, props.context);
+}
+
+// 在内置编辑器(Monaco)打开文件方法
+function handleOpenInEditor() {
+  console.log('[debug-open-in-editor] FileDiffViewer handleOpenInEditor start')
+  if (!currentSelectedFile.value) {
+    ElMessage.warning($t('@E80AC:请先选择一个文件'));
+    return;
+  }
+  console.log('[debug-open-in-editor] FileDiffViewer emit, filePath=', currentSelectedFile.value, 'context=', props.context)
+
+  emit('open-in-editor', currentSelectedFile.value, props.context);
 }
 
 // 冲突块相关状态
@@ -1179,6 +1194,11 @@ onMounted(() => {
                 <el-tooltip v-if="showVscodeButton" :content="$t('@E80AC:用VSCode打开文件')" placement="top" effect="light">
                   <button class="modern-btn btn-icon-24" @click="handleOpenWithVSCode">
                     <svg-icon icon-class="vscode" class="btn-icon" />
+                  </button>
+                </el-tooltip>
+                <el-tooltip v-if="showEditorButton" :content="$t('@E80AC:在编辑器中打开')" placement="top" effect="light">
+                  <button class="modern-btn btn-icon-24" @click="handleOpenInEditor">
+                    <el-icon class="btn-icon"><Document /></el-icon>
                   </button>
                 </el-tooltip>
               </div>

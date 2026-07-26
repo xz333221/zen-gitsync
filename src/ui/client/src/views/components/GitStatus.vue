@@ -177,6 +177,17 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
     ElMessage.error(`${$t('@13D1C:用VSCode打开文件失败: ')}${(error as Error).message}`);
   }
 }
+
+// 在内置编辑器(Monaco)中打开文件
+// FileDiffViewer emit 'open-in-editor' → App.vue 切到 editor 视图 → EditorView 调 openFile
+function handleOpenInEditor(filePath: string, _context: string) {
+  console.log('[debug-open-in-editor] GitStatus handleOpenInEditor dispatching, filePath=', filePath)
+  // 关闭文件差异弹窗,免得切到编辑器后还被弹窗盖着看不到
+  diffDialogVisible.value = false
+  window.dispatchEvent(new CustomEvent('zen-gitsync:open-file-in-editor', {
+    detail: { filePath }
+  }))
+}
 // 锁定文件对话框状态
 const showLockedFilesDialog = ref(false)
 // 添加文件组折叠状态
@@ -1563,6 +1574,7 @@ defineExpose({
       @file-select="handleGitFileSelect"
       @open-file="handleOpenFile"
       @open-with-vscode="handleOpenWithVSCode"
+      @open-in-editor="handleOpenInEditor"
       @toggle-lock="toggleFileLock"
       @stage="stageFile"
       @unstage="unstageFile"

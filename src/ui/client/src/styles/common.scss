@@ -1155,17 +1155,12 @@ body {
    微交互增强 (Focus / Hover / Tabular nums)
    ======================================================= */
 
-/* 全局 focus-visible 默认样式 —— 统一 3px 浅蓝光圈 */
-:where(button, [role="button"], a, input, textarea, select):focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--radius-sm);
-}
-
-/* 文字密集区禁用 focus ring 圆角突变 */
-:where(input, textarea, select):focus-visible {
-  border-radius: var(--input-radius);
-}
+/* 全局 focus-visible 默认样式 —— 已删除
+   之前用 :where(button, [role="button"], a, input, textarea, select):focus-visible 加 box-shadow
+   + 用 :where(input, textarea, select):focus-visible 重设 border-radius。
+   缺点:跟 zen-ai-chat-ui 的 .acu-input-wrap:focus-within 叠在一起会出现双层 3px 同心蓝圈
+        ("大框套小框"),且全局 border-radius 会让 input/textarea 在 focus 时突变圆角。
+   删除后:focus 视觉由各组件自管(chat-ui 用 :focus-within,Element Plus 用 :focus-visible)。 */
 
 /* 数字 / 计数位启用 tabular-nums，避免抖动 */
 :where(.num, .count, .badge, .stat-value, [data-tabular]) {

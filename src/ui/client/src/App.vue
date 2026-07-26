@@ -234,6 +234,11 @@ function handleBranchChanged() {
 // 活动视图切换
 const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap' | 'agent'>('git')
 
+// 待编辑器打开的文件路径(由文件差异页"在编辑器中打开"按钮触发)。
+// 设到这而不是直接 emit:EditorView 是 async 组件,activeView 切到 editor 后才挂载,
+// 事件可能比挂载先到。把路径存到这里,EditorView 通过 prop 接收并在变化时 openFile。
+const pendingEditorFilePath = ref<string | null>(null)
+
 // 切换到 Git 视图时静默刷新状态（与窗口焦点/标签页可见时一致）
 watch(activeView, (view) => {
   if (view === 'git' && gitStatusRef.value && gitStore.isGitRepo) {
@@ -242,6 +247,30 @@ watch(activeView, (view) => {
       gitStore.getBranchStatus()
     ]).catch(err => console.error('切换到Git视图刷新失败:', err))
   }
+})
+
+// 监听文件差异页"在编辑器中打开"事件 → 切到编辑器视图 + 把路径给 EditorView
+// 用 setTimeout 清空 prop,让 EditorView 的 watcher 触发一次后状态可重置
+// (用户再次点击同一个文件也能重新打开,而不是被 prop 同值短路)。
+const pendingEditorTimer: { value: number | null } = { value: null }
+function handleOpenFileInEditor(e: Event) {
+  const detail = (e as CustomEvent<{ filePath: string }>).detail
+  console.log('[debug-open-in-editor] App.vue handleOpenFileInEditor fired, detail=', detail)
+  if (!detail?.filePath) return
+  pendingEditorFilePath.value = detail.filePath
+  activeView.value = 'editor'
+  console.log('[debug-open-in-editor] App.vue set pendingEditorFilePath=', detail.filePath, 'activeView=editor')
+  if (pendingEditorTimer.value !== null) {
+    clearTimeout(pendingEditorTimer.value)
+  }
+  pendingEditorTimer.value = window.setTimeout(() => {
+    pendingEditorFilePath.value = null
+    pendingEditorTimer.value = null
+  }, 500)
+}
+window.addEventListener('zen-gitsync:open-file-in-editor', handleOpenFileInEditor)
+onBeforeUnmount(() => {
+  window.removeEventListener('zen-gitsync:open-file-in-editor', handleOpenFileInEditor)
 })
 
 // 用户设置对话框
@@ -784,7 +813,7 @@ function stopHResize() {
            wrapper div 仍用 v-show 管 flex 布局占位，display:none 不抢 flex 空间） -->
       <div v-show="activeView === 'editor'" class="view-pane editor-pane">
         <KeepAlive>
-          <EditorView v-if="activeView === 'editor'" />
+          <EditorView v-if="activeView === 'editor'" :pending-file-path="pendingEditorFilePath" />
         </KeepAlive>
       </div>
 

@@ -716,6 +716,16 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
   }
 }
 
+// 在内置编辑器(Monaco)中打开文件
+// FileDiffViewer emit 'open-in-editor' → App.vue 切到 editor 视图 → EditorView 调 openFile
+function handleOpenInEditor(filePath: string, _context: string) {
+  // 关闭提交详情弹窗,免得切到编辑器后还被弹窗盖着看不到
+  commitDetailVisible.value = false
+  window.dispatchEvent(new CustomEvent('zen-gitsync:open-file-in-editor', {
+    detail: { filePath }
+  }))
+}
+
 // 复制纯净的提交信息
 async function copyPureMessage(message: string) {
   try {
@@ -1388,6 +1398,7 @@ function toggleFullscreen() {
           @file-select="handleCommitFileSelect"
           @open-file="handleOpenFile"
           @open-with-vscode="handleOpenWithVSCode"
+          @open-in-editor="handleOpenInEditor"
         >
           <template #header-extra>
             <el-button size="small" :type="commitFileViewMode === 'diff' ? 'primary' : 'default'" @click="handleCommitDiffOnly">

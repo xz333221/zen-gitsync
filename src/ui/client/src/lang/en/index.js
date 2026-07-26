@@ -688,6 +688,7 @@ export default {
   '@E80AC:该文件已被锁定，提交时会被跳过': 'This file has been locked and will be skipped during commit',
   '@E80AC:复制文件路径': 'Copy file path',
   '@E80AC:用VSCode打开文件': 'Open the file with VSCode',
+  '@E80AC:在编辑器中打开': 'Open in editor',
   '@E80AC:该文件没有差异内容': 'This file has no differential content',
   '@E80AC:请选择文件查看差异': 'Please select a file to view differences',
   '@E80AC:没有找到变更文件': 'No change file found',

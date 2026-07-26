@@ -45,6 +45,15 @@ import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
   }
 }
 
+// 由父组件(App.vue)传入的"待打开文件路径"。
+// 当文件差异页点击"在编辑器中打开"时,App.vue 会把路径放到这里,
+// EditorView 在挂载 + prop 变化时调 openFile。
+// 不能用 window CustomEvent:EditorView 是 async 组件,activeView 切到 editor
+// 之前事件就发了,挂载时事件已经过去,必须用 prop 把"路径"显式传进来。
+const props = defineProps<{
+  pendingFilePath?: string | null
+}>()
+
 // ── 文件树 ─────────────────────────────────────────────
 interface FsItem {
   name: string
@@ -320,6 +329,7 @@ async function openFile(node: TreeNode) {
   }
   // 已打开则激活
   const existing = tabs.value.find(t => t.path === node.path)
+  console.log('[debug-open-in-editor] EditorView openFile existing tab check:', { path: node.path, found: !!existing, tabsCount: tabs.value.length })
   if (existing) {
     activeTabPath.value = node.path
     // 若 path 未变（已激活 tab 被再次点击），watch 不会触发，需显式还焦点
@@ -347,6 +357,7 @@ async function openFile(node: TreeNode) {
   try {
     const resp = await fetch(`/api/editor/file?path=${encodeURIComponent(node.path)}`)
     const data = await resp.json()
+    console.log('[debug-open-in-editor] EditorView fetch /api/editor/file response:', { path: node.path, status: resp.status, data })
     if (!data.success) {
       ElMessage.error(`${$t('@EDITOR:打开文件失败: ')}${data.error}`)
       return
@@ -360,12 +371,31 @@ async function openFile(node: TreeNode) {
       isDirty: false,
       language: lang,
     }
+    console.log('[debug-open-in-editor] EditorView pushing tab:', { path: tab.path, name: tab.name, contentLen: tab.content.length, lang: tab.language })
     tabs.value.push(tab)
     activeTabPath.value = node.path
+    console.log('[debug-open-in-editor] EditorView tabs after push:', tabs.value.length, 'activeTabPath=', activeTabPath.value)
   } catch (e: any) {
+    console.log('[debug-open-in-editor] EditorView fetch threw:', e)
     ElMessage.error(`${$t('@EDITOR:打开文件失败: ')}${e.message}`)
   }
 }
+
+// 监听父组件传入的"待打开文件路径"(由文件差异页"在编辑器中打开"按钮触发)。
+// 收到后构造一个最小 TreeNode(node.name 来自路径 basename)并调 openFile。
+// 父组件会用 setTimeout 自动把 prop 清空,所以这里不 emit 回调(避免 EditorView 依赖 defineEmits)。
+// 加 immediate:true:EditorView 是 v-if 懒加载,首次挂载时父组件已经把 prop 设上了,
+// 不加 immediate 就只在 prop 变化时触发,首次不会开。
+watch(() => props.pendingFilePath, async (filePath) => {
+  console.log('[debug-open-in-editor] EditorView watcher fired, filePath=', filePath)
+  if (!filePath) return
+  // 等一帧,确保 EditorView 自身初始化完(tabs.value / monaco 容器都就绪)
+  await nextTick()
+  const name = filePath.split(/[\\/]/).pop() || filePath
+  console.log('[debug-open-in-editor] EditorView calling openFile, name=', name, 'path=', filePath)
+  await openFile({ name, path: filePath, type: 'file', depth: 0 } as TreeNode)
+  console.log('[debug-open-in-editor] EditorView openFile returned')
+}, { immediate: true })
 
 function closeTab(path: string, e: MouseEvent) {
   e.stopPropagation()

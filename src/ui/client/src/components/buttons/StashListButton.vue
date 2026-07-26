@@ -296,6 +296,16 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
     ElMessage.error(`${$t('@76872:用VSCode打开文件失败: ')}${(error as Error).message}`)
   }
 }
+
+// 在内置编辑器(Monaco)中打开文件
+// FileDiffViewer emit 'open-in-editor' → App.vue 切到 editor 视图 → EditorView 调 openFile
+function handleOpenInEditor(filePath: string, _context: string) {
+  // stash 列表本身就是弹窗,关闭整个 stash 弹窗
+  isStashListDialogVisible.value = false
+  window.dispatchEvent(new CustomEvent('zen-gitsync:open-file-in-editor', {
+    detail: { filePath }
+  }))
+}
 </script>
 
 <template>
@@ -477,6 +487,7 @@ async function handleOpenWithVSCode(filePath: string, context: string) {
             @file-select="handleStashFileSelect"
             @open-file="handleOpenFile"
             @open-with-vscode="handleOpenWithVSCode"
+            @open-in-editor="handleOpenInEditor"
           >
             <template #header-extra>
               <el-button size="small" :type="stashDiffViewMode === 'diff' ? 'primary' : 'default'" @click="showStashDiffOnly">
