@@ -407,7 +407,8 @@ export function registerFileOpenRoutes({
 
   // 检测本地工具是否已安装(供前端根据结果决定是否显示对应按钮)
   // 检测方式: spawn 'tool --version',exit 0 即视为已安装
-  // 超时 3s 避免某个工具卡在 PATH 解析上时整个接口挂起
+  // 超时 15s:Claude CLI / opencode 等 Node 包装的工具首次冷启动
+  // 在 Windows 上经常 5-7s(磁盘 cache + Defender 扫描),3s 永远命中超时。
   app.get('/api/check-tools', asyncRoute(async (req, res) => {
       const checkCmd = (cmd) => new Promise((resolve) => {
         const child = spawn(cmd, ['--version'], {
@@ -424,7 +425,7 @@ export function registerFileOpenRoutes({
         };
         child.on('error', () => finish(false));
         child.on('exit', (code) => finish(code === 0));
-        setTimeout(() => finish(false), 3000);
+        setTimeout(() => finish(false), 15000);
       });
 
       const [vscode, claude, codex, opencode] = await Promise.all([
