@@ -509,6 +509,12 @@ export function registerFsRoutes({
 
         const platform = os.platform();
 
+        // 新开的标签页是独立实例，不应继承父进程的 PORT 环境变量。
+        // 否则子进程会从父进程的固定端口开始顺序扫描，逐个碰撞已占用端口。
+        // 剥离 PORT 后，子进程走 resolveStartPort() 的随机端口策略。
+        const childEnv = { ...process.env };
+        delete childEnv.PORT;
+
         if (platform === 'win32') {
           // Windows: 用 argv 数组启动 start "" /D path cmd /k g ui,
           // directoryPath 通过数组传入 - Node 自动按 Windows CreateProcess
@@ -517,11 +523,13 @@ export function registerFsRoutes({
             detached: true,
             stdio: 'ignore',
             windowsHide: false,
+            env: childEnv,
           }).unref();
         } else if (platform === 'darwin') {
           spawn('open', ['-a', 'Terminal', directoryPath], {
             detached: true,
-            stdio: 'ignore'
+            stdio: 'ignore',
+            env: childEnv,
           }).unref();
         } else {
           // Linux fallback: gnome-terminal 直接接 --working-directory,
@@ -531,7 +539,8 @@ export function registerFsRoutes({
             '--', 'bash', '-c', 'g ui; exec bash',
           ], {
             detached: true,
-            stdio: 'ignore'
+            stdio: 'ignore',
+            env: childEnv,
           }).unref();
         }
 
