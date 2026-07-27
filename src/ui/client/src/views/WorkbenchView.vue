@@ -48,6 +48,33 @@ import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
 import { useWorkbenchData } from '@/composables/useWorkbenchData'
 import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
 
+// ── 按 projectPath 记忆「该项目最后一次打开的 task」───────────────────────
+// 落地 localStorage,key 格式 wb.lastTaskByProject.v1 = { [projectPath]: taskId }。
+// 刷新 / 重进工作台时,在当前项目下优先恢复上次打开的任务,而不是默认选第一条。
+const LAST_TASK_BY_PROJECT_KEY = 'wb.lastTaskByProject.v1'
+const NO_PROJECT_KEY = '__no_project__'
+function readLastTaskMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(LAST_TASK_BY_PROJECT_KEY)
+    const obj = raw ? JSON.parse(raw) : {}
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? (obj as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+function writeLastTaskMap(m: Record<string, string>) {
+  try {
+    localStorage.setItem(LAST_TASK_BY_PROJECT_KEY, JSON.stringify(m))
+  } catch {
+    // 隐私模式 / 配额超限:静默降级,不影响主流程
+  }
+}
+function rememberLastTask(projectPath: string, taskId: string) {
+  const map = readLastTaskMap()
+  map[projectPath || NO_PROJECT_KEY] = taskId
+  writeLastTaskMap(map)
+}
+
 // ── 数据层（状态 + 加载 + CRUD） ─────────────────────────────────────────────
 const {
   prompts, tasks, jobs, currentProject,
@@ -61,7 +88,12 @@ const {
 async function loadTasks() {
   await _loadDataTasks()
   if (!selectedTaskId.value && tasks.value.length > 0) {
-    selectedTaskId.value = tasks.value[0].id
+    // 优先恢复当前项目最后一次打开的 task(被删则降级到首条)
+    const map = readLastTaskMap()
+    const cur = (currentProject.value.path || '').trim()
+    const rememberedId = map[cur] || (cur ? '' : map[NO_PROJECT_KEY])
+    const hit = rememberedId ? tasks.value.find(t => t.id === rememberedId) : null
+    selectedTaskId.value = hit ? hit.id : tasks.value[0].id
   }
   captureSnapshot()
 }
@@ -772,6 +804,8 @@ async function selectTask(t: Task) {
   selectedTaskId.value = t.id
   // 切换后立刻拍快照，避免新 task 误标为 dirty
   captureSnapshot()
+  // 记忆「该项目最后一次打开的 task」,便于下次刷新 / 重进工作台时优先恢复
+  rememberLastTask((currentProject.value.path || '').trim(), t.id)
 }
 
 // ── 拖动排序：父组件负责落盘 + 乐观更新 + 失败回滚 ──────────────────
