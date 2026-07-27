@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import AutoImport from 'unplugin-auto-import/vite'
@@ -21,6 +21,51 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import tailwindcss from "@tailwindcss/vite"
 import fs from 'fs'
 import createSvgIcon from './vite-plugins/svg-icon'
+
+// ── 启动耗时打点(dev 专用) ─────────────────────────────────────────────
+// 门控在 ZEN_PERF=1(root package.json dev:vue 已设),build / CI 不输出。
+// 与 backend src/ui/server/utils/perfMark.js 同一输出格式,方便两条线对齐时间轴。
+const PERF = !!process.env.ZEN_PERF
+function perfMark(label: string) {
+  if (!PERF) return
+  console.log(`[PERF] +${performance.now().toFixed(0).padStart(5)}ms ${label}`)
+}
+
+// 计时插件:标记 vite 进程关键里程碑。configureServer 里的中间件负责:
+//   1) 首个 HTTP 请求(浏览器首屏开始加载的时刻)
+//   2) svg-icons sprite 生成耗时(vite-plugin-svg-icons dev 模式是首次请求时
+//      才 lazy 扫描 1174 个 SVG,不会拖慢 listening,会拖慢首屏)
+function startupTiming(): Plugin {
+  let firstReqMarked = false
+  return {
+    name: 'zen-startup-timing',
+    apply: 'serve', // 仅 dev server,build 不加载
+    buildStart() {
+      perfMark('vite buildStart (rollup 启动,开始模块图扫描)')
+    },
+    configureServer(server) {
+      server.httpServer?.once('listening', () => {
+        perfMark('vite 真正就绪 (listening)')
+      })
+      server.middlewares.use((req, res, next) => {
+        const url = req.url || ''
+        if (!firstReqMarked) {
+          firstReqMarked = true
+          perfMark(`首个 HTTP 请求到达 (${url})`)
+        }
+        if (url.includes('svg-icons-register')) {
+          const t = performance.now()
+          const origEnd = res.end.bind(res)
+          ;(res as any).end = (...args: any[]) => {
+            perfMark(`svg-icons sprite 生成完成 (glob+编译 1174 图标, ${(performance.now() - t).toFixed(0)}ms)`)
+            return origEnd(...args)
+          }
+        }
+        next()
+      })
+    },
+  }
+}
 
 // 读取后端服务器端口
 function getBackendPort() {
@@ -64,12 +109,17 @@ const pkgVersion = getPackageVersion()
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
   const isBuild = command === 'build'
+  perfMark('vite.config 求值完成 (config 文件加载+插件实例化)')
 
   return {
     define: {
       'import.meta.env.PKG_VERSION': JSON.stringify(pkgVersion),
     },
     plugins: [
+      // 计时插件必须放最前:vite-plugin-svg-icons dev 模式用自己的 middleware
+      // 拦截 sprite 请求并直接 res.end,中间件按插件顺序入链,
+      // startupTiming 排前面才能包到 svg middleware 的 res.end 计时。
+      startupTiming(),
       AutoImport({
         resolvers: [ElementPlusResolver()],
       }),
@@ -91,8 +141,16 @@ export default defineConfig(({ command }) => {
     // entries:主入口即可。GitStatus 已改为静态 import,vite 从 main.ts → App.vue → GitStatus
     // 自然遍历整条依赖链,不需要单独列。其它 lazy 路由按需发现。
     entries: ['src/main.ts'],
-    // 兜底:把 element-plus 整个包放进去,运行期即使 resolver 漏掉,Vite 也不再需要新增依赖
-    include: ['element-plus/es > element-plus'],
+    // 兜底:把 element-plus 整个包放进去,运行期即使 resolver 漏掉,Vite 也不再需要新增依赖。
+    // 实测冷启动瓶颈(2026-07 基线):resolver 按需注入的 element-plus/es/components/*/style/css
+    // 深路径在首屏爬取时被"逐个发现",触发 6 轮 re-bundle + 2 次整页 reload(~36s)。
+    // 用 glob 把所有组件样式入口 upfront 纳进首轮预构建(micromatch,仅影响 dev 预构建,
+    // 不改变运行时装载的模块集合),风暴消除;首轮 bundling 略增但仍远小于级联总时长。
+    include: [
+      'element-plus/es > element-plus',
+      'element-plus/es',
+      'element-plus/es/components/*/style/css',
+    ],
   },
   resolve: {
     alias: {

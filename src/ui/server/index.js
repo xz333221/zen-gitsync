@@ -52,6 +52,7 @@ import { createInstanceRegistry } from './utils/instanceRegistry.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
 import { resolveStartPort } from './utils/randomStartPort.js';
+import { perfMark } from './utils/perfMark.js';
 import { createFilePickerMiddleware } from 'local-file-picker';
 import { createAiModelMiddleware } from 'ai-model-form';
 
@@ -233,7 +234,8 @@ async function startUIServer(noOpen = false, savePort = false) {
     },
   });
   if (showConsole) logger.info(`创建服务成功`)
-  
+  perfMark('express app + socket.io 创建完成')
+
   // 获取当前项目的唯一标识（使用工作目录路径）
   // 需要在切换目录时更新，故使用 let
   let currentProjectPath = process.cwd();
@@ -263,13 +265,22 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
 
+  // 两个 git 检测并行发起(Windows 上每个 git spawn ~180-200ms,串行要 ~380ms):
+  // show-toplevel 供下面"记录最近目录"立即 await;is-inside-work-tree 供路由注册后
+  // 的 isGitRepo 判定使用,让它在路由注册期间后台完成,此处不 await。
+  const gitToplevelP = execGitCommand(['rev-parse', '--show-toplevel'])
+    .catch(() => null);
+  const gitRepoCheckP = execGitCommand(['rev-parse', '--is-inside-work-tree'], { log: false })
+    .then(({ stdout }) => ({ isRepo: stdout.trim() === 'true', failed: false }))
+    .catch(() => ({ isRepo: false, failed: true }));
+
   // 记录最近打开的目录（优先 Git 根目录，其次当前工作目录）
   try {
     let dirPath = process.cwd();
     try {
       if(showConsole) logger.info(`记录最近打开目录`)
-      const { stdout } = await execGitCommand(['rev-parse', '--show-toplevel']);
-      const root = stdout?.trim();
+      const result = await gitToplevelP;
+      const root = result?.stdout?.trim();
       if (root) dirPath = root;
     } catch (_) {
       // 非Git仓库或命令失败，使用 CWD 即可
@@ -286,6 +297,7 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   // 静态文件服务
   app.use(express.static(path.join(__dirname, '../public')));
+  perfMark('中间件 + 静态目录挂载完成,开始注册路由')
 
   registerExecRoutes({
     app,
@@ -437,6 +449,8 @@ async function startUIServer(noOpen = false, savePort = false) {
     configManager
   });
 
+  perfMark('全部 API 路由注册完成')
+
   // 全局错误处理中间件：必须放在所有 register*Routes 之后注册，
   // 作为最后一道兜底捕获 asyncRoute 之外抛出的异常（headersSent 走 express 默认关闭）。
   // 与 asyncRoute 共享同一套错误响应格式 {success:false, error}。
@@ -508,19 +522,19 @@ async function startUIServer(noOpen = false, savePort = false) {
     });
   }
   
-  // 检查当前目录是否是Git仓库
+  // 检查当前目录是否是Git仓库(检测进程已在上面与 show-toplevel 并行发起,
+  // 路由注册期间已在后台跑完,这里 await 只是取结果,接近 0ms)
   let isGitRepo = false;
-  try {
-    const { stdout } = await execGitCommand(['rev-parse', '--is-inside-work-tree'], { log: false });
-    isGitRepo = stdout.trim() === 'true';
-  } catch (error) {
-    isGitRepo = false;
+  const gitRepoCheck = await gitRepoCheckP;
+  isGitRepo = gitRepoCheck.isRepo;
+  if (gitRepoCheck.failed) {
     console.log(chalk.yellow('======================================'));
     console.log(chalk.yellow(`  提示: 当前目录不是Git仓库`));
     console.log(chalk.yellow(`  目录: ${process.cwd()}`));
     console.log(chalk.yellow('======================================'));
   }
-  
+  perfMark(`Git 仓库检测完成 (isGitRepo=${isGitRepo})`)
+
   // 启动服务器
   // 端口策略：默认从 [4000, 6000) 随机挑起点，再顺序扫描 EADDRINUSE；
   // 可通过 PORT 环境变量强制使用固定端口（向后兼容 + 便于书签/调试）
@@ -543,6 +557,8 @@ async function startUIServer(noOpen = false, savePort = false) {
   httpServer.once('listening', () => {
     if (registerDone) return;
     registerDone = true;
+    const addr = httpServer.address();
+    perfMark(`backend 真正就绪 (listening, port=${addr && addr.port})`)
     registerCurrentInstance().catch((e) => {
       console.warn(chalk.yellow(`[instanceRegistry] 启动注册流程失败: ${e?.message || e}`));
     });
