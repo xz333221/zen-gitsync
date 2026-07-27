@@ -87,14 +87,19 @@ const {
 
 async function loadTasks() {
   await _loadDataTasks()
-  if (!selectedTaskId.value && tasks.value.length > 0) {
-    // 优先恢复当前项目最后一次打开的 task(被删则降级到首条)
-    const map = readLastTaskMap()
-    const cur = (currentProject.value.path || '').trim()
-    const rememberedId = map[cur] || (cur ? '' : map[NO_PROJECT_KEY])
-    const hit = rememberedId ? tasks.value.find(t => t.id === rememberedId) : null
-    selectedTaskId.value = hit ? hit.id : tasks.value[0].id
-  }
+  const cp = (currentProject.value.path || '').trim()
+  // 决定"应该选中的 task id":优先恢复当前项目最后一次打开的 task,否则降级到当前项目下的首条,
+  // 否则(完全没有当前项目的 task)降级到任意首条。
+  const curProjectTasks = tasks.value.filter(t => !t.projectPath || t.projectPath.trim() === cp)
+  const map = readLastTaskMap()
+  const rememberedId = (cp && map[cp]) || (!cp && map[NO_PROJECT_KEY]) || ''
+  const remembered = rememberedId ? tasks.value.find(t => t.id === rememberedId) : null
+  const fallback = curProjectTasks[0] || tasks.value[0] || null
+  const desiredId = (remembered && remembered.projectPath && remembered.projectPath.trim() !== cp) ? null
+    : remembered ? remembered.id
+    : fallback ? fallback.id
+    : null
+  selectedTaskId.value = desiredId
   captureSnapshot()
 }
 // 执行日志管理弹窗：默认收起，editor 视图保持常驻
@@ -255,6 +260,17 @@ watch(selectedTaskId, async (_n, _o) => {
 // 由 AISplitDialog 内部的 taskId watch 负责把 phase/数据清回 idle，下次打开会重跑。
 watch(selectedTaskId, () => {
   aiSplitDialogVisible.value = false
+})
+
+// currentProject 加载完后(loadTasks 与 loadCurrentProject 并发,loadTasks 可能先跑完 cp 还为空),
+// 如果当前选中的 task 不属于当前项目,清掉并走 loadTasks 里的恢复逻辑重选。
+watch(currentProject, async (n) => {
+  if (!n.path) return
+  const cp = (n.path || '').trim()
+  const cur = selectedTask.value
+  if (cur && cur.projectPath && cur.projectPath.trim() !== cp) {
+    await loadTasks()
+  }
 })
 
 // 离开页面 / 切到别的 task 前尝试 flush（best-effort）
