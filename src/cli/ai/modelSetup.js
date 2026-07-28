@@ -137,6 +137,8 @@ const STRINGS = {
     endpointInvalid: '接口地址格式不正确(需为 http/https URL)',
     modelLabel: '模型名称',
     builtinModels: '常用模型:',
+    fetchingModels: '正在获取模型列表…',
+    fetchModelsFailed: '获取模型列表失败,使用内置列表',
     manualInput: '手动输入',
     modelPrompt: '请输入模型名称: ',
     modelRequired: '模型名称不能为空',
@@ -170,6 +172,8 @@ const STRINGS = {
     endpointInvalid: 'Invalid endpoint URL (must be http/https)',
     modelLabel: 'Model name',
     builtinModels: 'Popular models:',
+    fetchingModels: 'Fetching model list…',
+    fetchModelsFailed: 'Failed to fetch model list, using built-in list',
     manualInput: 'Manual input',
     modelPrompt: 'Enter model name: ',
     modelRequired: 'Model name cannot be empty',
@@ -256,6 +260,48 @@ export function buildModelConfig({ baseURL, model, apiKey, name, isDefault }) {
     model,
     apiKey: apiKey || '',
     isDefault: Boolean(isDefault),
+  }
+}
+
+/**
+ * 从 API 获取可用模型列表(OpenAI 兼容 /models 接口)。
+ *
+ * @param {object} opts
+ * @param {string} opts.baseURL - API 基础地址
+ * @param {string} [opts.apiKey] - API Key(可选)
+ * @param {number} [opts.timeoutMs=5000] - 超时时间
+ * @param {typeof fetch} [opts.fetchFn] - 可注入 fetch(测试用)
+ * @returns {Promise<string[]>} 模型名数组,失败返回空数组
+ */
+export async function fetchModelsFromApi({ baseURL, apiKey, timeoutMs = 5000, fetchFn } = {}) {
+  const fetch = fetchFn || globalThis.fetch
+  if (!fetch) return []
+
+  const url = `${String(baseURL || '').replace(/\/$/, '')}/models`
+  const headers = {}
+  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+    })
+
+    if (!res.ok) return []
+
+    const data = await res.json()
+    // OpenAI 兼容接口返回 { data: [{ id: 'model-name', ... }] }
+    const models = data?.data || []
+    return models.map(m => m.id).filter(Boolean)
+  } catch (err) {
+    // 任何错误都静默返回空数组,由调用方决定是否回退
+    return []
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -464,10 +510,21 @@ export async function collectModelInput({ locale = 'zh-CN', rl: injectedRl, fetc
     }
 
     // 3. 选择/输入模型名称
-    const builtin = getBuiltinModels(baseURL)
+    // 先尝试从 API 获取模型列表
+    const spinner = startSpinner(t.fetchingModels)
+    const fetchedModels = await fetchModelsFromApi({ baseURL, apiKey: '', fetchFn })
+    spinner.stop()
+
+    // 使用 API 返回的模型列表,如果失败则使用内置列表
+    const modelList = fetchedModels.length > 0 ? fetchedModels : getBuiltinModels(baseURL)
+
+    if (fetchedModels.length === 0 && getBuiltinModels(baseURL).length > 0) {
+      console.log(chalk.dim(`  ${t.fetchModelsFailed}`))
+    }
+
     let model
-    if (builtin.length > 0) {
-      const modelItems = builtin.map(m => ({ label: m, value: m }))
+    if (modelList.length > 0) {
+      const modelItems = modelList.map(m => ({ label: m, value: m }))
       const modelChoice = await selectFromList(asker, t.builtinModels, modelItems, t, t.manualInput)
       if (modelChoice) {
         model = modelChoice.value
@@ -480,7 +537,7 @@ export async function collectModelInput({ locale = 'zh-CN', rl: injectedRl, fetc
         }
       }
     } else {
-      // 没有预设模型,直接手动输入
+      // 没有模型列表,直接手动输入
       while (true) {
         model = await asker.ask(t.modelPrompt)
         if (model) break
@@ -591,4 +648,4 @@ export async function runModelSetup({ locale = 'zh-CN', rl: injectedRl, fetchFn 
   }
 }
 
-export default { runModelSetup, collectModelInput, testModelConnection, getBuiltinModels, findProviderByUrl, validateEndpoint, buildModelConfig, PROVIDERS, BUILTIN_MODELS }
+export default { runModelSetup, collectModelInput, fetchModelsFromApi, testModelConnection, getBuiltinModels, findProviderByUrl, validateEndpoint, buildModelConfig, PROVIDERS, BUILTIN_MODELS }
