@@ -409,8 +409,8 @@ function silenceConsole() {
 test('collectModelInput: 预设服务商 + 内置模型 + 测试成功 → 返回收集的字段', async () => {
   const restore = silenceConsole()
   try {
-    // 答案:选 OpenAI(1) → 确认 baseURL(空=默认) → 选第一个模型(1) → apiKey → displayName(空=默认)
-    const rl = createMockRl(['1', '', '1', 'sk-test', ''])
+    // 答案:选 OpenAI(1) → 确认 baseURL(空=默认) → apiKey → 选第一个模型(1) → displayName(空=默认)
+    const rl = createMockRl(['1', '', 'sk-test', '1', ''])
     const result = await collectModelInput({
       locale: 'zh-CN',
       rl,
@@ -429,8 +429,8 @@ test('collectModelInput: 预设服务商 + 内置模型 + 测试成功 → 返�
 test('collectModelInput: 自定义服务商 + 手动输入模型名 → 返回收集的字段', async () => {
   const restore = silenceConsole()
   try {
-    // 选自定义(0) → 输入 baseURL → 确认(空=默认) → 手动输入模型名 → apiKey(空) → displayName(空=默认)
-    const rl = createMockRl(['0', 'https://my.custom.api/v1', '', 'my-model', '', ''])
+    // 选自定义(0) → 输入 baseURL → 确认(空=默认) → apiKey(空) → 手动输入模型名 → displayName(空=默认)
+    const rl = createMockRl(['0', 'https://my.custom.api/v1', '', '', 'my-model', ''])
     const result = await collectModelInput({
       locale: 'zh-CN',
       rl,
@@ -449,8 +449,8 @@ test('collectModelInput: 自定义服务商 + 手动输入模型名 → 返回�
 test('collectModelInput: 测试失败 + 用户选择不保存 → 返回 null', async () => {
   const restore = silenceConsole()
   try {
-    // 选 DeepSeek(3) → 确认 → 选第一个模型(1) → apiKey → displayName → 测试401失败 → 不保存(n)
-    const rl = createMockRl(['3', '', '1', 'sk-bad', '', 'n'])
+    // 选 DeepSeek(3) → 确认 → apiKey → 选第一个模型(1) → displayName → 测试401失败 → 不保存(n)
+    const rl = createMockRl(['3', '', 'sk-bad', '1', '', 'n'])
     const result = await collectModelInput({
       locale: 'zh-CN',
       rl,
@@ -465,7 +465,7 @@ test('collectModelInput: 测试失败 + 用户选择不保存 → 返回 null', 
 test('collectModelInput: 测试失败 + 用户选择继续 → 返回收集的字段', async () => {
   const restore = silenceConsole()
   try {
-    const rl = createMockRl(['3', '', '1', 'sk-bad', '', 'y'])
+    const rl = createMockRl(['3', '', 'sk-bad', '1', '', 'y'])
     const result = await collectModelInput({
       locale: 'zh-CN',
       rl,
@@ -490,6 +490,35 @@ test('collectModelInput: 用户取消(触发 close)→ 返回 null', async () =>
       cancelMessage: '自定义取消文案',
     })
     assert.equal(result, null)
+  } finally {
+    restore()
+  }
+})
+
+test('collectModelInput: API 返回模型列表时优先使用 → 返回收集的字段', async () => {
+  const restore = silenceConsole()
+  try {
+    // mock fetch: /models 返回模型列表, /chat/completions 返回 200
+    const smartFetch = async (url, opts) => {
+      if (url.endsWith('/models')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ id: 'api-model-1' }, { id: 'api-model-2' }] }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({}) }
+    }
+    // 选 OpenAI(1) → 确认 baseURL → apiKey → 选第一个 API 返回的模型(1) → displayName
+    const rl = createMockRl(['1', '', 'sk-test', '1', ''])
+    const result = await collectModelInput({
+      locale: 'zh-CN',
+      rl,
+      fetchFn: smartFetch,
+    })
+    assert.ok(result)
+    assert.equal(result.model, 'api-model-1', '应使用 API 返回的模型而非内置列表')
+    assert.equal(result.apiKey, 'sk-test')
   } finally {
     restore()
   }

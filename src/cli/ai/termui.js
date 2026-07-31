@@ -140,14 +140,57 @@ export function filterSlashCommands(input, locale) {
 
 /**
  * 生成即时提示面板的 ANSI 字符串(不含定位,由调用方负责保存/恢复光标)。
- * 每行:两空格缩进 + 青色命令名(左对齐补齐)+ 灰色说明。
- * 空数组返回空串。
+ * 每行:两空格缩进 + 蓝色命令名(左对齐补齐 12 字符宽)+ 灰色说明。
+ * 所有行的"视觉起点"一致(均为 2 空格缩进);选中行用整行反白区分(从缩进处
+ * 开始),不另加 ❯ 之类的偏移标记 —— 避免反白块起点与其他行不齐。
+ *   - 越界 selectedIndex(<0 / >=matches.length) 自动回退为 -1(即不高亮)
+ *   - 空数组返回空串
  */
-export function renderSlashHintBody(matches) {
+export function renderSlashHintBody(matches, selectedIndex = -1) {
   if (!Array.isArray(matches) || matches.length === 0) return ''
+  const sel = (Number.isInteger(selectedIndex) && selectedIndex >= 0 && selectedIndex < matches.length)
+    ? selectedIndex
+    : -1
+  // 行宽固定 = 2 空格缩进 + 12 字符命令 + 说明;选中行反白整行(含缩进),
+  // 反白起点与未选中行严格对齐,视觉上选中行不会"偏左"。
+  const rowWidth = (m) => 2 + Math.max(12, String(m.cmd).length) + 1 + String(m.desc).length
   return matches
-    .map((m) => '  ' + chalk.cyan(String(m.cmd).padEnd(12)) + chalk.dim(m.desc))
+    .map((m, i) => {
+      // 用 padEnd 凑满 rowWidth,这样反白背景能延伸到行尾,左右不留缝
+      const raw = '  ' + String(m.cmd).padEnd(12) + ' ' + m.desc
+      // 所有行命令名统一用青色(不带额外前缀),选中行靠反白区分
+      const line = chalk.cyan(String(m.cmd).padEnd(12)) + ' ' + chalk.dim(m.desc)
+      if (i !== sel) return '  ' + line
+      // 选中行:把命令名+说明之外的两空格缩进也纳入反白,这样视觉起点严格对齐
+      return chalk.inverse(raw.padEnd(rowWidth(m)))
+    })
     .join('\n')
+}
+
+/**
+ * 解析 readline keypress 事件,识别"斜杠命令提示"专用快捷键。
+ * 返回动作字符串(消费方据此改 selectedIndex 或补全输入);
+ * 不识别的键返回 null(由 readline 正常处理)。
+ *
+ *   - ↑ / Shift+Tab → 'prev'
+ *   - ↓             → 'next'
+ *   - Tab           → 'complete'(补全选中命令到输入行)
+ *   - Enter         → 'submit'(由 readline 默认提交,本函数仅标记是补全时机)
+ *   - Esc           → 'cancel'
+ *
+ * 注意:readline 默认会把方向键当历史浏览。消费方需要在我们这个 handler
+ * 里"事后回滚":把 rl.line 恢复成 hint 显示时的基线,再 _refreshLine()。
+ * (详见 agent.js 的 keypress 监听与说明)
+ */
+export function parseKeyForSlashHint(key) {
+  if (!key) return null
+  const name = key.name
+  if (name === 'tab') return key.shift ? 'prev' : 'complete'
+  if (name === 'up') return 'prev'
+  if (name === 'down') return 'next'
+  if (name === 'return' || name === 'enter') return 'submit'
+  if (name === 'escape') return 'cancel'
+  return null
 }
 
 /** 盒式帮助面板 */
@@ -376,6 +419,28 @@ export function createAssistantWriter({
   }
 }
 
+// ──────────────────────────────────────────────────────
+// 耗时格式化
+// ──────────────────────────────────────────────────────
+
+/**
+ * 格式化耗时(毫秒 → 人类可读)。
+ *   < 1s  → "123ms"
+ *   < 60s → "1.2s"
+ *   ≥ 60s → "2m30s"
+ * @param {number} ms
+ * @returns {string}
+ */
+export function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return ''
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  const s = ms / 1000
+  if (s < 60) return `${s.toFixed(1)}s`
+  const m = Math.floor(s / 60)
+  const rem = Math.round(s % 60)
+  return `${m}m${rem}s`
+}
+
 // ──────────────────────────────────────────────
 // 工具调用块(Claude Code 风格)
 // ──────────────────────────────────────────────
@@ -426,8 +491,12 @@ export function printToolHeader(name, summary, write = (s) => process.stdout.wri
  * run_command 的结果里首行是 `$ <command>` 回显——这条信息已经出现在上方的
  * `▶ run_command $ <summary>` 工具头里,这里再印一次就是重复。所以这里把首
  * 行 `$ ...` 剥掉,同时复用它来识别退出码(退出码仍驱动错误着色)。
+ *
+ * @param {string} result - 工具输出文本
+ * @param {(s: string) => void} [write] - 输出函数,默认写 stdout
+ * @param {number} [durationMs] - 执行耗时(毫秒),有值时在结果末尾追加 ⏱ 计时行
  */
-export function printToolResult(result, write = (s) => process.stdout.write(s)) {
+export function printToolResult(result, write = (s) => process.stdout.write(s), durationMs) {
   const text = truncateDisplay(result)
   // 先把 "$ <command>\n" 这一行回显从展示里剥掉(退出码仍在第二行里识别)
   const visible = text.replace(/^\$[^\n]*\n/, '')
@@ -440,7 +509,11 @@ export function printToolResult(result, write = (s) => process.stdout.write(s)) 
   const colorize = isError ? chalk.hex('#f0a020') : chalk.hex('#94a3b8')
   const lines = visible.split('\n')
   const rendered = lines.map((l) => chalk.dim('  │  ') + colorize(l)).join('\n')
-  write(rendered + '\n')
+  // 有耗时时在结果末尾追加 ⏱ 计时行(与结果块同缩进)
+  const timingLine = (durationMs != null && Number.isFinite(durationMs))
+    ? '\n' + chalk.dim('  │  ⏱ ') + chalk.hex('#7a87a0')(formatDuration(durationMs))
+    : ''
+  write(rendered + timingLine + '\n')
 }
 
 // ──────────────────────────────────────────────
@@ -456,11 +529,13 @@ export default {
   termWidth,
   stripAnsi,
   truncateDisplay,
+  formatDuration,
   printBanner,
   printHelpPanel,
   SLASH_COMMANDS,
   filterSlashCommands,
   renderSlashHintBody,
+  parseKeyForSlashHint,
   drawInputTop,
   drawInputBottom,
   inputBottomBorder,

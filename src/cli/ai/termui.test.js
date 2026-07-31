@@ -17,11 +17,18 @@
 //   - ANSI 着色本身不在断言范围(非 TTY 下 chalk 自动降级,测了也没意义)
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import chalk from 'chalk'
 import {
   stripAnsi, truncateDisplay, summarizeToolArgs,
   createAssistantWriter, printToolHeader, printToolResult,
-  filterSlashCommands, renderSlashHintBody, SLASH_COMMANDS,
+  formatDuration,
+  filterSlashCommands, renderSlashHintBody, parseKeyForSlashHint, SLASH_COMMANDS,
 } from './termui.js'
+
+// 测试在非 TTY 环境下跑,chalk 默认 level=0(全部降级为纯文本),会让
+// inverse 反白 / chalk 着色等被吃掉。强制把 level 提到 2(256 色 + 完整 ANSI),
+// 断言就能直接看 raw 字节里的 \x1b 序列;不依赖 terminal capability 检测。
+chalk.level = 2
 
 // 收集 write 输出的辅助:返回 {text(), lines()}
 function collect() {
@@ -217,6 +224,51 @@ test('printToolResult: 超长结果被截断并含省略标记', () => {
   assert.match(c.text(), /回显省略/)
 })
 
+// ── formatDuration ──
+test('formatDuration: 毫秒级显示 ms', () => {
+  assert.equal(formatDuration(0), '0ms')
+  assert.equal(formatDuration(123), '123ms')
+  assert.equal(formatDuration(999), '999ms')
+})
+
+test('formatDuration: 秒级显示一位小数', () => {
+  assert.equal(formatDuration(1000), '1.0s')
+  assert.equal(formatDuration(1500), '1.5s')
+  assert.equal(formatDuration(59999), '60.0s')
+})
+
+test('formatDuration: 分钟级显示 m+s', () => {
+  assert.equal(formatDuration(60000), '1m0s')
+  assert.equal(formatDuration(125000), '2m5s')
+  assert.equal(formatDuration(3600000), '60m0s')
+})
+
+test('formatDuration: 无效输入返回空串', () => {
+  assert.equal(formatDuration(-1), '')
+  assert.equal(formatDuration(NaN), '')
+  assert.equal(formatDuration(Infinity), '')
+  assert.equal(formatDuration(undefined), '')
+})
+
+// ── printToolResult 带耗时 ──
+test('printToolResult: 传入 durationMs 时末尾追加 ⏱ 计时行', () => {
+  const c = collect()
+  printToolResult('hello world', c.write, 1500)
+  // 去掉末尾空行(split('\n') 在末尾 \n 后产生空串)
+  const lines = c.lines().filter(l => l !== '')
+  const lastLine = lines[lines.length - 1]
+  assert.ok(lastLine.includes('⏱'), `应包含 ⏱,实际: ${lastLine}`)
+  assert.ok(lastLine.includes('1.5s'), `应包含 1.5s,实际: ${lastLine}`)
+  assert.ok(lastLine.startsWith('  │  '), `计时行应与结果块同缩进,实际: ${lastLine}`)
+})
+
+test('printToolResult: 不传 durationMs 时无计时行(向后兼容)', () => {
+  const c = collect()
+  printToolResult('hello world', c.write)
+  const text = c.text()
+  assert.ok(!text.includes('⏱'), '不应包含 ⏱ 计时行')
+})
+
 // ── 斜杠命令即时提示 ──
 
 test('filterSlashCommands: 单个 / 返回全部命令', () => {
@@ -252,4 +304,81 @@ test('renderSlashHintBody: 每行含命令名与说明,空输入返回空串', (
   assert.equal(renderSlashHintBody([]), '')
   const body = stripAnsi(renderSlashHintBody(filterSlashCommands('/m', 'en')))
   assert.match(body, /\/model\s+List \/ switch models/)
+})
+
+test('renderSlashHintBody: 选中行整行反白,不另加 ❯ 前缀(避免反白块偏左)', () => {
+  const matches = filterSlashCommands('/h', 'zh')   // 1 个: /help
+  // 选中:不应有 ❯ 前缀;行首应是 2 空格 + 命令名 + padEnd + 空格 + 说明
+  const rawSel = renderSlashHintBody(matches, 0)
+  const bodySel = stripAnsi(rawSel)
+  assert.equal(bodySel.includes('❯'), false, '选中行不应出现 ❯ 前缀')
+  assert.ok(bodySel.startsWith('  /help'), '选中行应以 2 空格 + /help 开头,与未选中行起点对齐')
+  // 未选中(默认):同样以 2 空格 + /help 开头
+  const bodyNoSel = stripAnsi(renderSlashHintBody(matches))
+  assert.ok(bodyNoSel.startsWith('  /help'), '未选中行应以 2 空格 + /help 开头')
+  // raw 长度差异(反白序列加 \x1b[7m / \x1b[27m 共 10 字节)即可识别选中态
+  // —— 即使非 TTY 下 chalk.inverse 自动降级,断言 raw 字节差异更稳
+  const rawNoSel = renderSlashHintBody(matches)
+  assert.notEqual(rawSel.length, rawNoSel.length,
+    `选中行 raw 与未选中行 raw 长度应不同(inverse 加了 ANSI 序列),实际: ${rawSel.length} vs ${rawNoSel.length}`)
+})
+
+test('renderSlashHintBody: 选中行与其他行起点严格一致(无 ❯ 偏移)', () => {
+  const matches = filterSlashCommands('/', 'zh')   // 全部命令
+  const bodySel = stripAnsi(renderSlashHintBody(matches, 0))
+  const lines = bodySel.split('\n')
+  // 所有行(含选中与未选中)的视觉起点都应是 2 空格 + 命令名(无 ❯ 偏移)
+  for (let i = 0; i < lines.length; i++) {
+    assert.ok(
+      lines[i].startsWith('  /'),
+      `第 ${i} 行应以 2 空格 + 命令名开头,实际: ${JSON.stringify(lines[i])}`,
+    )
+    assert.equal(lines[i].includes('❯'), false, `第 ${i} 行不应含 ❯`)
+  }
+})
+
+test('renderSlashHintBody: 未选中行不带 ❯ 也不带反白', () => {
+  const matches = filterSlashCommands('/', 'zh')   // 全部命令
+  const rawSel = renderSlashHintBody(matches, 0)
+  const body = stripAnsi(rawSel)
+  const lines = body.split('\n')
+  // 所有行都不应出现 ❯ 前缀
+  for (let i = 0; i < lines.length; i++) {
+    assert.equal(lines[i].includes('❯'), false, `第 ${i} 行不应有 ❯`)
+  }
+})
+
+test('renderSlashHintBody: 越界 selectedIndex 安全回退(不高亮)', () => {
+  const matches = filterSlashCommands('/h', 'zh')   // 1 个: /help
+  // 越界 → 应当作无选中,不应抛错也不应高亮
+  const body = stripAnsi(renderSlashHintBody(matches, 99))
+  assert.equal(body.includes('❯'), false, '越界 index 不应渲染 ❯ 标记')
+  // selectedIndex < 0 同样安全
+  const body2 = stripAnsi(renderSlashHintBody(matches, -1))
+  assert.equal(body2.includes('❯'), false)
+})
+
+test('renderSlashHintBody: 默认 selectedIndex=-1 与旧行为一致(向后兼容)', () => {
+  const matches = filterSlashCommands('/m', 'zh')
+  // 不传 selectedIndex:不应出现 ❯
+  const body = stripAnsi(renderSlashHintBody(matches))
+  assert.equal(body.includes('❯'), false)
+})
+
+test('parseKeyForSlashHint: ↑↓/Tab/Enter/Esc 返回动作', () => {
+  assert.equal(parseKeyForSlashHint({ name: 'up' }), 'prev')
+  assert.equal(parseKeyForSlashHint({ name: 'down' }), 'next')
+  assert.equal(parseKeyForSlashHint({ name: 'tab' }), 'complete')
+  assert.equal(parseKeyForSlashHint({ name: 'tab', shift: true }), 'prev')
+  assert.equal(parseKeyForSlashHint({ name: 'return' }), 'submit')
+  assert.equal(parseKeyForSlashHint({ name: 'enter' }), 'submit')
+  assert.equal(parseKeyForSlashHint({ name: 'escape' }), 'cancel')
+})
+
+test('parseKeyForSlashHint: 普通字符 / null key 返回 null(消费方透传给 readline)', () => {
+  assert.equal(parseKeyForSlashHint(null), null)
+  assert.equal(parseKeyForSlashHint({ name: 'a' }), null)
+  assert.equal(parseKeyForSlashHint({ name: 'space' }), null)
+  assert.equal(parseKeyForSlashHint({ name: 'backspace' }), null)
+  assert.equal(parseKeyForSlashHint(undefined), null)
 })

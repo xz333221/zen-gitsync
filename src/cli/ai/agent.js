@@ -49,9 +49,10 @@ import { TOOL_DEFINITIONS, executeTool } from './tools.js'
 import { createThinkFilter } from './streamFilter.js'
 import {
   printBanner, printHelpPanel,
-  filterSlashCommands, renderSlashHintBody,
+  filterSlashCommands, renderSlashHintBody, parseKeyForSlashHint,
   startSpinner, createAssistantWriter,
   summarizeToolArgs, printToolHeader, printToolResult,
+  formatDuration,
   printOk, printWarn, printError, printDim,
 } from './termui.js'
 import { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes } from './images.js'
@@ -488,6 +489,7 @@ async function runAgentTurn(state, userText, t, images = []) {
     // 发送前消毒:确保历史里没有空 content 的消息(部分 provider 报 2013)
     sanitizeMessages(state.messages)
 
+    const llmStart = performance.now()
     let result
     try {
       result = await streamChatOnce({
@@ -512,6 +514,7 @@ async function runAgentTurn(state, userText, t, images = []) {
       if (last?.role === 'user') state.messages.pop()
       return
     }
+    const llmDuration = performance.now() - llmStart
     stopSpinner()
     writer.finish()
 
@@ -532,6 +535,11 @@ async function runAgentTurn(state, userText, t, images = []) {
     // content 为 null 而非空字符串:部分 provider 拒绝空字符串内容(2013 错误)
     state.messages.push({ role: 'assistant', content: content || null, tool_calls: toolCalls })
 
+    // LLM 耗时在进入工具执行前打印(仅本轮有工具调用时显示)
+    if (llmDuration > 0) {
+      printDim(`  ⏱ LLM ${formatDuration(llmDuration)}`)
+    }
+
     for (const tc of toolCalls) {
       const name = tc.function?.name || ''
       const rawArgs = tc.function?.arguments || ''
@@ -550,9 +558,11 @@ async function runAgentTurn(state, userText, t, images = []) {
       printToolHeader(name, summarizeToolArgs(name, args, { chars: t.chars }))
       // 长命令执行期间给个 spinner,让用户知道没有卡死
       const toolSpinner = startSpinner(t.toolRunning(name))
+      const toolStart = performance.now()
       const output = await executeTool(name, args, state.ctx)
+      const toolDuration = performance.now() - toolStart
       toolSpinner.stop()
-      printToolResult(output)
+      printToolResult(output, undefined, toolDuration)
       state.messages.push({ role: 'tool', tool_call_id: tc.id || name, name, content: output })
     }
     // 工具结果全部入历史后继续循环,让模型基于结果决定下一步
@@ -923,10 +933,16 @@ export async function runAiAgent(argv = []) {
     if (!state.busy) safeShowPrompt()
   }
 
-  // ── 斜杠命令即时提示 ──
+  // ── 斜杠命令即时提示(支持 ↑↓ 切换 / Tab 补全 / Enter 提交) ──
   // 在提示符下方浮现匹配到的命令,随输入过滤;不移动光标(用 DECSC/DECRC 保存-恢复)。
   // slashHintRows 记录当前提示占了几行,下次刷新/提交时据此擦除,避免残影。
+  // slashHintBaseLine:本次 hint 显示时"输入行的基线值" — ↑↓ 时 readline 已经把
+  //   rl.line 改成历史上一行,我们用基线回滚 + _refreshLine() 重绘,让用户视觉上看
+  //   不到"按 ↑ 输入行变了",只看到 hint 高亮跳了一格。
   let slashHintRows = 0
+  let slashHintBaseLine = ''
+  let slashHintMatches = []
+  let slashHintIndex = 0
   const eraseSlashHint = () => {
     if (!process.stdout.isTTY || slashHintRows === 0) return
     // 保存光标 → 下移到提示区逐行清空 → 恢复光标
@@ -936,11 +952,8 @@ export async function runAiAgent(argv = []) {
     process.stdout.write(seq)
     slashHintRows = 0
   }
-  const renderSlashHint = () => {
-    if (!process.stdout.isTTY || state.busy || state.inWizard) { return }
-    const matches = filterSlashCommands(rl.line, state.locale)
-    const body = renderSlashHintBody(matches)
-    // 先擦掉旧提示(行数可能变化),再画新的
+  const drawSlashHint = () => {
+    const body = renderSlashHintBody(slashHintMatches, slashHintIndex)
     eraseSlashHint()
     if (!body) return
     const rows = body.split('\n')
@@ -950,6 +963,42 @@ export async function runAiAgent(argv = []) {
     seq += '\x1b8'
     process.stdout.write(seq)
     slashHintRows = rows.length
+  }
+  // 重置 hint 上下文:重新计算匹配 + 重画。输入字符变化时调用。
+  const refreshSlashHint = () => {
+    if (!process.stdout.isTTY || state.busy || state.inWizard) {
+      eraseSlashHint()
+      slashHintMatches = []
+      slashHintIndex = 0
+      slashHintBaseLine = ''
+      return
+    }
+    slashHintBaseLine = rl.line
+    slashHintMatches = filterSlashCommands(rl.line, state.locale)
+    // 匹配列表缩短时夹紧 index(增删交替时不会越界)
+    slashHintIndex = slashHintIndex < slashHintMatches.length ? slashHintIndex : 0
+    drawSlashHint()
+  }
+  // ↑↓ / Shift+Tab:readline 已经把 rl.line 改成历史行或没动 → 强制恢复基线并重绘输入行
+  const restoreInputLineToBaseline = () => {
+    if (rl.line === slashHintBaseLine) return
+    rl.line = slashHintBaseLine
+    rl.cursor = slashHintBaseLine.length
+    if (typeof rl._refreshLine === 'function') rl._refreshLine()
+  }
+  // Tab / Enter:把 rl.line 替换为补全文本 + 清掉 hint 状态
+  //   Tab:补全文本末尾加空格,便于用户继续打参数(不回车)
+  //   Enter:不用此函数 — 用 state.slashHintSubmitLine 标志 + line handler 替换
+  //     (readline 自己处理 Enter,我们不能事后改 rl.line 触发提交)
+  const applyHintCompletion = (newLine) => {
+    rl.line = newLine
+    rl.cursor = newLine.length
+    eraseSlashHint()
+    slashHintMatches = []
+    slashHintIndex = 0
+    slashHintRows = 0
+    slashHintBaseLine = newLine
+    if (typeof rl._refreshLine === 'function') rl._refreshLine()
   }
 
   // Alt+V 粘贴剪贴板图片(node 把 ESC+v 解析为 meta+v;部分终端不发 Alt,可用 /image 兜底)
@@ -973,14 +1022,73 @@ export async function runAiAgent(argv = []) {
     }
   }
   rl.input.on('keypress', (ch, key) => {
-    // Enter 提交由 line 处理器负责擦除提示,这里不重画(此刻 readline 已换行,
-    // 光标不在输入行,重画会错位)
-    if (!(key && (key.name === 'return' || key.name === 'enter'))) {
-      // 每次按键后即时刷新斜杠命令提示(readline 已先处理完本次按键,rl.line 为最新值)。
-      // 非 slash / 无匹配时 renderSlashHint 会把上一次的提示擦掉。
-      renderSlashHint()
-    }
     if (!key) return
+
+    // ── 斜杠命令提示专用键盘:↑↓/Tab/Enter/Shift+Tab/Esc ──
+    // 仅在 hint 已显示且有匹配项时拦截,readline 的 default 行为(历史浏览等)
+    // 我们在 handler 里事后回滚 rl.line 来抵消
+    const action = parseKeyForSlashHint(key)
+    const hintActive = action === 'prev' || action === 'next' || action === 'complete' || action === 'submit' || action === 'cancel'
+      ? (slashHintRows > 0 && slashHintMatches.length > 0 && !state.busy && !state.inWizard)
+      : false
+
+    if (hintActive) {
+      if (action === 'prev' || action === 'next') {
+        const n = slashHintMatches.length
+        slashHintIndex = action === 'prev'
+          ? (slashHintIndex - 1 + n) % n
+          : (slashHintIndex + 1) % n
+        restoreInputLineToBaseline()
+        drawSlashHint()
+        return   // 不再走 default update + Alt+V 分支
+      }
+      if (action === 'complete') {
+        // Tab:把输入行替换为选中命令 + 末尾空格(便于继续打参数),
+        // 光标跳到末尾;之后不再触发 hint(已经精确选了某个命令)
+        const sel = slashHintMatches[slashHintIndex]
+        const newLine = sel.cmd + ' '
+        applyHintCompletion(newLine)
+        return
+      }
+      if (action === 'submit') {
+        // Enter:把 rl.line 替换为补全命令,然后手动调用 rl._line() 触发 line 事件。
+        // 这样提交的就是补全后的命令,而不是用户敲到一半的前缀。
+        // 必须 return — 否则 readline 自己也会按 Enter 把当前 rl.line(用户原始输入) 提交一遍。
+        const sel = slashHintMatches[slashHintIndex]
+        const newLine = sel.cmd
+        console.error('[DEBUG-ENTER] sel.cmd=' + JSON.stringify(sel.cmd) + ' rl.line before=' + JSON.stringify(rl.line))
+        rl.line = newLine
+        rl.cursor = newLine.length
+        eraseSlashHint()
+        slashHintMatches = []
+        slashHintIndex = 0
+        slashHintRows = 0
+        slashHintBaseLine = newLine
+        if (typeof rl._refreshLine === 'function') rl._refreshLine()
+        // readline 的 _line() 内部会 this.emit('line', this.line) — 用补全后的 line
+        if (typeof rl._line === 'function') {
+          try { rl._line(); console.error('[DEBUG-ENTER] _line ok, rl.line after=' + JSON.stringify(rl.line)) } catch (e) { console.error('[DEBUG-ENTER] _line err: ' + e.message); rl.emit('line', newLine) }
+        } else {
+          rl.emit('line', newLine)
+        }
+        return
+      }
+      if (action === 'cancel') {
+        // Esc:只清 hint,不动输入行
+        eraseSlashHint()
+        slashHintMatches = []
+        slashHintIndex = 0
+        return
+      }
+    }
+
+    // submit(Enter)走默认 readline 提交,line 事件里统一擦除 hint;
+    // 其他普通按键:重算匹配 + 重画 hint
+    if (!(key.name === 'return' || key.name === 'enter')) {
+      refreshSlashHint()
+    }
+
+    // Alt+V 粘贴剪贴板图片(node 把 ESC+v 解析为 meta+v;部分终端不发 Alt,可用 /image 兜底)
     const isAltV = (key.meta && key.name === 'v')
       || (typeof key.sequence === 'string' && key.sequence.length === 2
           && key.sequence.charCodeAt(0) === 27 && key.sequence[1] === 'v')

@@ -22,8 +22,8 @@
 //   1. 询问是否现在配置
 //   2. 选择服务商(预设列表 / 自定义)
 //   3. 确认接口地址(baseURL)
-//   4. 选择模型名称(常用模型列表 / 手动输入)
-//   5. 输入 API Key(本地模型可留空)
+//   4. 输入 API Key(本地模型可留空)
+//   5. 选择模型名称(先从 API 获取模型列表,失败则用内置列表 / 手动输入)
 //   6. 输入显示名称(可选)
 //   7. 测试连接
 //   8. 保存到配置文件并返回模型对象
@@ -509,11 +509,14 @@ export async function collectModelInput({ locale = 'zh-CN', rl: injectedRl, fetc
       baseURL = confirmedBaseURL
     }
 
-    // 3. 选择/输入模型名称
-    // 先尝试从 API 获取模型列表
-    const spinner = startSpinner(t.fetchingModels)
-    const fetchedModels = await fetchModelsFromApi({ baseURL, apiKey: '', fetchFn })
-    spinner.stop()
+    // 3. 输入 API Key(在获取模型列表之前,因为大部分服务商需要 Key 才能调 /models)
+    const apiKey = await asker.ask(t.apiKeyPrompt)
+
+    // 4. 选择/输入模型名称
+    // 先尝试从 API 获取模型列表(有了 apiKey 才能调通)
+    const fetchSpinner = startSpinner(t.fetchingModels)
+    const fetchedModels = await fetchModelsFromApi({ baseURL, apiKey, fetchFn })
+    fetchSpinner.stop()
 
     // 使用 API 返回的模型列表,如果失败则使用内置列表
     const modelList = fetchedModels.length > 0 ? fetchedModels : getBuiltinModels(baseURL)
@@ -544,9 +547,6 @@ export async function collectModelInput({ locale = 'zh-CN', rl: injectedRl, fetc
         console.log(chalk.yellow(t.modelRequired))
       }
     }
-
-    // 4. 输入 API Key
-    const apiKey = await asker.ask(t.apiKeyPrompt)
 
     // 5. 输入显示名称(默认用 model 名)
     const displayName = await asker.ask(t.displayNamePrompt(model), model)
