@@ -193,6 +193,96 @@ export function parseKeyForSlashHint(key) {
   return null
 }
 
+// ──────────────────────────────────────────────────
+// 交互式可选列表(供 modelSetup 等一次性向导使用:上下键切换 + Enter 提交)
+// ──────────────────────────────────────────────────
+//
+// 与 renderSlashHintBody 的差异:
+//   - 必须支持 Enter 提交(parseKeyForSlashHint 把它当 'submit',但那个由 readline 默认接管;
+//     可选列表场景下 wizard 自己消费 Enter,不能丢给 readline)
+//   - 多支持直接按数字 1..9/0 跳到指定项(给经常用键盘的用户省一趟 ↑↓)
+//   - Ctrl+C 在可选列表场景下与 Esc 等价(都视作取消)
+//
+// 渲染/解析都做成纯函数,wizard 内部(modelSetup.selectFromList)负责:
+//   - 调用 renderSelectableListBody 把列表写到屏幕
+//   - 在 rl.input 上挂 keypress 监听,把 readline 默认行为(历史浏览)回滚掉
+//   - 每次 selectedIndex 变化时,重绘列表(用 ANSI 把光标上移、清行、再写)
+
+/**
+ * 渲染可选项列表 body(纯函数,便于单测)。
+ *
+ *   - 标准项:`  [k]. label`(未选中)
+ *   - 选中项:`▶ [k]. label`(整行反白,含前缀空格,跟下方其它行起点对齐)
+ *   - 额外项:编号 0,dim 灰;选中时整行反白(与普通选中项视觉一致)
+ *
+ * @param {Array<{label: string, value: any}>} items
+ * @param {number} [selectedIndex=0] - 选中项下标;范围 [0, items.length+extra)
+ *   越界回退为 0(默认选第一项,避免空数组报错)
+ * @param {string|null} [extraOptionLabel=null] - 额外项(如"自定义" / "手动输入")
+ * @returns {string} body 字符串(不含末尾换行 — 由调用方控制)
+ */
+export function renderSelectableListBody(items, selectedIndex = 0, extraOptionLabel = null) {
+  const safeItems = Array.isArray(items) ? items : []
+  const extraActive = !!extraOptionLabel
+  const totalLen = safeItems.length + (extraActive ? 1 : 0)
+  // selectedIndex 越界时静默回退为 0(首次调用时通常如此)
+  if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= totalLen) {
+    selectedIndex = 0
+  }
+  const rows = []
+  for (let i = 0; i < safeItems.length; i++) {
+    const num = String(i + 1).padStart(2)
+    const label = safeItems[i].label
+    if (i === selectedIndex) {
+      // 整行反白(含 '  ' 缩进) — 起点与未选中行严格对齐,不留左侧白边
+      rows.push(chalk.inverse(`  ${num}. ${label}`))
+    } else {
+      rows.push(`  ${chalk.cyan(num)}. ${label}`)
+    }
+  }
+  if (extraActive) {
+    const extraIdx = safeItems.length
+    if (extraIdx === selectedIndex) {
+      // extra 选中时也整行反白,这样高亮跨度统一(虽然 label 是 dim,但反白让它可读)
+      rows.push(chalk.inverse(`  ${chalk.dim('0')}. ${extraOptionLabel}`))
+    } else {
+      rows.push(`  ${chalk.dim('0')}. ${chalk.dim(extraOptionLabel)}`)
+    }
+  }
+  return rows.join('\n')
+}
+
+/**
+ * 解析 readline keypress 事件,识别"可选列表"专用键。
+ * 返回动作字符串(消费方据此改 selectedIndex 或提交);
+ * 不识别的键返回 null(让 readline 正常处理 — 但消费方应恢复 line buffer
+ * 防止方向键的历史浏览把当前输入覆盖)。
+ *
+ *   - ↑ / Shift+Tab  → 'prev'
+ *   - ↓              → 'next'
+ *   - Enter          → 'confirm'
+ *   - Esc / Ctrl+C   → 'cancel'
+ *   - 数字 0..9      → 'jump:N'(1-based;0 = extra option,需消费方映射)
+ *
+ * 与 parseKeyForSlashHint 的差别:
+ *   - 这里 Enter 直接是 'confirm'——wizard 不会让 readline 默认提交(否则进 line 事件
+ *     走 REPL 的命令分发,体验错乱);Esc / Ctrl+C 都是 'cancel';不支持 Tab 补全
+ *     (列表项不是命令片段,不需要补全语义)
+ */
+export function parseKeyForSelectableList(key) {
+  if (!key) return null
+  const name = key.name
+  if (name === 'up') return 'prev'
+  if (name === 'tab') return key.shift ? 'prev' : 'next'
+  if (name === 'down') return 'next'
+  if (name === 'return' || name === 'enter') return 'confirm'
+  if (name === 'escape') return 'cancel'
+  if (key.ctrl && name === 'c') return 'cancel'
+  // 数字键 0..9:readline keypress 事件的 key.name 会是该字符
+  if (typeof name === 'string' && /^[0-9]$/.test(name)) return `jump:${name}`
+  return null
+}
+
 /** 盒式帮助面板 */
 export function printHelpPanel(title, lines) {
   const body = [chalk.bold(title), ...lines].join('\n')
@@ -536,6 +626,8 @@ export default {
   filterSlashCommands,
   renderSlashHintBody,
   parseKeyForSlashHint,
+  renderSelectableListBody,
+  parseKeyForSelectableList,
   drawInputTop,
   drawInputBottom,
   inputBottomBorder,

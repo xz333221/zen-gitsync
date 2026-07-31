@@ -23,6 +23,7 @@ import {
   createAssistantWriter, printToolHeader, printToolResult,
   formatDuration,
   filterSlashCommands, renderSlashHintBody, parseKeyForSlashHint, SLASH_COMMANDS,
+  renderSelectableListBody, parseKeyForSelectableList,
 } from './termui.js'
 
 // 测试在非 TTY 环境下跑,chalk 默认 level=0(全部降级为纯文本),会让
@@ -381,4 +382,134 @@ test('parseKeyForSlashHint: 普通字符 / null key 返回 null(消费方透传�
   assert.equal(parseKeyForSlashHint({ name: 'space' }), null)
   assert.equal(parseKeyForSlashHint({ name: 'backspace' }), null)
   assert.equal(parseKeyForSlashHint(undefined), null)
+})
+
+// ── 可选项列表(供 /addmodel 等交互式列表选择)──
+
+test('renderSelectableListBody: 默认选中第一项(整行反白,起点与未选中行对齐)', () => {
+  const items = [
+    { label: 'OpenAI', value: 'openai' },
+    { label: 'Anthropic (Claude)', value: 'anthropic' },
+    { label: 'DeepSeek', value: 'deepseek' },
+  ]
+  const body = renderSelectableListBody(items, 0)
+  const lines = stripAnsi(body).split('\n')
+  assert.equal(lines.length, 3)
+  // 每行视觉对齐到"缩进 + 数字 + . "结构(padStart(2) 让 1-9 编号前面再补 1 空格)
+  // → "   1." / "   2." / "   3." 都是"3 个字符前导:空格+空格+空格+数字+点+空格"+ label
+  // 选中行(反白)也用同样的"  "前缀,不能因为反白就丢掉缩进(否则反白块起点会偏左)
+  for (const l of lines) {
+    assert.match(l, /^ +\d+\. /, `每行应以"缩进 + 标号 + . "开头: ${JSON.stringify(l)}`)
+  }
+  // 进一步:每行的"前导列宽"(即 'padStart(2) 后的数字 + . ' 之前的所有字符)长度一致,
+  // 才能保证反白块的左缘跟未选中行的左缘对齐(这是 renderSlashHintBody 同款设计)
+  const indentCols = lines.map(l => l.indexOf('.') + 1)   // 标号结束列
+  assert.ok(indentCols.every(c => c === indentCols[0]),
+    `每行标号结束列应一致(选中行不能比未选中行更长/更短): ${JSON.stringify(indentCols)}`)
+  assert.ok(lines[0].includes('OpenAI'))
+  assert.ok(lines[1].includes('Anthropic (Claude)'))
+  assert.ok(lines[2].includes('DeepSeek'))
+  // raw 中:选中行含 inverse(\x1b[7m),未选中行不含
+  const rawLines = body.split('\n')
+  assert.match(rawLines[0], /\x1b\[7m/, '选中行首行应含 inverse')
+  assert.ok(!rawLines[1].includes('\x1b[7m'), '未选中行不应含 inverse')
+  assert.ok(!rawLines[2].includes('\x1b\[7m'), '未选中行不应含 inverse')
+})
+
+test('renderSelectableListBody: selectedIndex 切换,反白行随之改变', () => {
+  const items = [
+    { label: 'A', value: 'a' },
+    { label: 'B', value: 'b' },
+    { label: 'C', value: 'c' },
+  ]
+  // 选中中间
+  const sel = renderSelectableListBody(items, 1)
+  const rawLines = sel.split('\n')
+  assert.ok(!rawLines[0].includes('\x1b[7m'), '首行 A 不应被反白')
+  assert.match(rawLines[1], /\x1b\[7m/, '中间行 B 应被反白')
+  assert.ok(!rawLines[2].includes('\x1b[7m'), '末行 C 不应被反白')
+})
+
+test('renderSelectableListBody: selectedIndex 越界(<0 或 >=total)静默回退为 0', () => {
+  const items = [{ label: 'X', value: 'x' }, { label: 'Y', value: 'y' }]
+  // 负数
+  assert.match(
+    renderSelectableListBody(items, -1).split('\n')[0],
+    /\x1b\[7m/,
+    '负索引应回退为 0,首行反白',
+  )
+  // 超出范围
+  assert.match(
+    renderSelectableListBody(items, 99).split('\n')[0],
+    /\x1b\[7m/,
+    '超出范围应回退为 0,首行反白',
+  )
+  // 非整数
+  assert.match(
+    renderSelectableListBody(items, 1.5).split('\n')[0],
+    /\x1b\[7m/,
+    '非整数应回退为 0,首行反白',
+  )
+})
+
+test('renderSelectableListBody: extraOptionLabel 出现且选中时也是整行反白', () => {
+  const items = [{ label: 'A', value: 'a' }]
+  // 选中 extra(items.length = 1)
+  const sel = renderSelectableListBody(items, 1, 'Custom')
+  const lines = stripAnsi(sel).split('\n')
+  assert.equal(lines.length, 2)
+  assert.ok(lines[0].includes('A'))
+  assert.ok(lines[1].includes('0'), 'extra 应显示 0 号')
+  assert.ok(lines[1].includes('Custom'))
+  // raw 中 extra 是反白行
+  assert.match(sel.split('\n')[1], /\x1b\[7m/, 'extra 项选中时也应反白')
+})
+
+test('renderSelectableListBody: extraOptionLabel 未选中时是 dim 灰,无反白', () => {
+  const items = [{ label: 'A', value: 'a' }]
+  const sel = renderSelectableListBody(items, 0, 'Custom')
+  // standard 行反白,extra 行不反白
+  const rawLines = sel.split('\n')
+  assert.match(rawLines[0], /\x1b\[7m/, '标准行应反白')
+  assert.ok(!rawLines[1].includes('\x1b[7m'), 'extra 行未选中时不应反白')
+  // dim 灰用 \x1b[2m 或 grayscale 序列,宽松断言含 \x1b
+  assert.match(rawLines[1], /\x1b\[/, 'extra 行应用 dim 着色')
+})
+
+test('renderSelectableListBody: 空 items + 无 extra → 返回空串(无渲染)', () => {
+  assert.equal(renderSelectableListBody([], 0), '')
+  assert.equal(renderSelectableListBody([], 0, undefined), '')
+  assert.equal(renderSelectableListBody(undefined, 0), '')
+})
+
+test('parseKeyForSelectableList: ↑↓/Enter/Esc/Ctrl+C 返回动作', () => {
+  assert.equal(parseKeyForSelectableList({ name: 'up' }), 'prev')
+  assert.equal(parseKeyForSelectableList({ name: 'down' }), 'next')
+  assert.equal(parseKeyForSelectableList({ name: 'return' }), 'confirm')
+  assert.equal(parseKeyForSelectableList({ name: 'enter' }), 'confirm')
+  assert.equal(parseKeyForSelectableList({ name: 'escape' }), 'cancel')
+  // Ctrl+C 也视作取消
+  assert.equal(parseKeyForSelectableList({ name: 'c', ctrl: true }), 'cancel')
+})
+
+test('parseKeyForSelectableList: Tab 视作 next,Shift+Tab 视作 prev(同 slash hint)', () => {
+  assert.equal(parseKeyForSelectableList({ name: 'tab' }), 'next')
+  assert.equal(parseKeyForSelectableList({ name: 'tab', shift: true }), 'prev')
+})
+
+test('parseKeyForSelectableList: 数字键 0..9 返回 jump:N(数字直跳)', () => {
+  assert.equal(parseKeyForSelectableList({ name: '1' }), 'jump:1')
+  assert.equal(parseKeyForSelectableList({ name: '5' }), 'jump:5')
+  assert.equal(parseKeyForSelectableList({ name: '9' }), 'jump:9')
+  assert.equal(parseKeyForSelectableList({ name: '0' }), 'jump:0')
+})
+
+test('parseKeyForSelectableList: 其他字符 / null / undefined 返回 null(透传给 readline)', () => {
+  assert.equal(parseKeyForSelectableList(null), null)
+  assert.equal(parseKeyForSelectableList(undefined), null)
+  assert.equal(parseKeyForSelectableList({ name: 'a' }), null)
+  assert.equal(parseKeyForSelectableList({ name: 'space' }), null)
+  assert.equal(parseKeyForSelectableList({ name: 'backspace' }), null)
+  // Ctrl+(非 c) 不视作取消
+  assert.equal(parseKeyForSelectableList({ name: 'd', ctrl: true }), null)
 })

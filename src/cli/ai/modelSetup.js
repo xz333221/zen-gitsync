@@ -34,7 +34,7 @@
 import readline from 'node:readline'
 import chalk from 'chalk'
 import config from '../../config.js'
-import { startSpinner } from './termui.js'
+import { startSpinner, renderSelectableListBody, parseKeyForSelectableList } from './termui.js'
 
 // ──────────────────────────────────────────────
 // 预设服务商列表
@@ -131,6 +131,7 @@ const STRINGS = {
     selectProvider: '选择 AI 服务商:',
     customOption: '自定义',
     selectPrompt: (min, max) => `请选择 (${min}-${max}): `,
+    navHint: '↑↓ 切换,Enter 确认,数字直跳(0 = 上一行)',
     invalidChoice: (min, max) => `无效选择,请输入 ${min}-${max} 之间的数字`,
     endpointLabel: '接口地址',
     endpointPrompt: (def) => `接口地址 [${def}]: `,
@@ -166,6 +167,7 @@ const STRINGS = {
     selectProvider: 'Select an AI provider:',
     customOption: 'Custom',
     selectPrompt: (min, max) => `Choose (${min}-${max}): `,
+    navHint: '↑↓ to switch, Enter to confirm, number to jump (0 = extra)',
     invalidChoice: (min, max) => `Invalid choice, enter a number between ${min} and ${max}`,
     endpointLabel: 'Endpoint URL',
     endpointPrompt: (def) => `Endpoint [${def}]: `,
@@ -413,32 +415,201 @@ async function askYesNo(asker, prompt) {
 }
 
 /**
- * 让用户从数字列表中选择一项。
- * @param {object} asker
- * @param {string} title - 列表标题
- * @param {Array<{label: string, value: any}>} items
- * @param {object} t - i18n strings
- * @param {number} [extraOption] - 额外选项的序号(如"手动输入"用 0)
- * @param {string} [extraLabel]
- * @returns {Promise<{index: number, value: any}|null>} 选中的项,null = 用户选了额外选项
+ * 让用户从列表中选择一项。
+ *
+ * 两条路径:
+ *   - TTY(终端)且传入了 rl → 上下键切换 + Enter 提交(类似 Codex CLI 的列表选择)
+ *     - 数字键 1..9 / 0 也可直跳(0 = 额外项)
+ *     - Esc / Ctrl+C 视作取消整个 wizard(调用方按 { cancelled: true } 走 catch 分支)
+ *   - 其他情况 → 回退到原数字输入(由 asker.ask 提示,数字 + 回车确认;非法输入不退出,
+ *     提示 t.invalidChoice 让用户重新输)
+ *
+ * 设计要点:
+ *   - 列表用 renderSelectableListBody 渲染,选中行整行反白(可视化锚点固定,跟斜杠命令
+ *     提示一样的"反白起点严格对齐"思路)
+ *   - 方向键会触发 readline 默认历史浏览,我们用"清空 rl.line + 调 _refreshLine"撤销
+ *     (参考 agent.js 对斜杠命令提示的处理)
+ *   - 按 Enter 时 rl.question 回调自然拿到 line 字符串;空字符串 → 用当前 selectedIndex,
+ *     数字 → 直接选中,非数字 → 视为无效,保持当前列表继续等待输入(不重画列表)
+ *
+ * @param {object} opts
+ * @param {import('node:readline').Interface} [opts.rl] - 用于挂 keypress + rl.question;
+ *   不传或非 TTY 时退回数字输入
+ * @param {{ask:(p:string,d?:string)=>Promise<string>}} opts.asker - 数字输入回退路径的 asker;
+ *   TTY 路径不需要,但参数签名上必须传(避免 collectModelInput 内部拆开两个调用)
+ * @param {string} opts.title
+ * @param {Array<{label: string, value: any}>} opts.items
+ * @param {object} opts.t - i18n strings
+ * @param {string} [opts.extraOptionLabel] - 额外项(编号 0)
+ * @returns {Promise<{index: number, value: any}|null>}
+ *   - { index, value }:选中标准项
+ *   - null:选中额外项
+ *   - 抛出 { cancelled: true }:用户取消整个 wizard(Ctrl+C / Esc / readline close)
  */
-async function selectFromList(asker, title, items, t, extraOptionLabel) {
+async function selectFromList({ rl, asker, title, items, t, extraOptionLabel } = {}) {
+  const safeItems = Array.isArray(items) ? items : []
+  const extraActive = !!extraOptionLabel
+  const totalItems = safeItems.length + (extraActive ? 1 : 0)
+  if (totalItems === 0) return null
+
   console.log()
   console.log(chalk.bold(title))
+
+  // 判断走哪条路
+  const interactive = !!(rl && rl.input && process.stdout.isTTY && process.stdin.isTTY)
+
+  if (!interactive) {
+    // 非 TTY / 没 rl:走数字输入回退(原行为,保留 CI / 管道环境的可脚本化能力)
+    return selectByDigits({ asker, items: safeItems, t, extraOptionLabel })
+  }
+
+  // ── TTY 路径:方向键列表选择 ──
+  let selectedIndex = 0
+  let finished = false
+
+  // 渲染初始列表
+  const initialBody = renderSelectableListBody(safeItems, 0, extraOptionLabel)
+  process.stdout.write(initialBody + '\n')
+  const listRows = initialBody.split('\n').length
+
+  /**
+   * 重画列表:用 ANSI 把光标逐行上移 + 清行,然后重新打印,光标回到列表首行行首,
+   * 不影响 readline 在 listRows+1 行的 prompt 行。
+   * 用 \x1b[2K(清整行)+ \x1b[1A(上移一行)循环 N 次,等价于
+   * "清掉光标以上 N 行"但不污染更下面的内容;最后 \r 回到行首方便后续输出起点对齐。
+   */
+  const redraw = () => {
+    for (let i = 0; i < listRows; i++) {
+      process.stdout.write('\x1b[1A\x1b[2K')
+    }
+    process.stdout.write('\r')
+    process.stdout.write(renderSelectableListBody(safeItems, selectedIndex, extraOptionLabel) + '\n')
+  }
+
+  /**
+   * 撤销 readline 内置行为对 rl.line 的副作用:
+   *   - 方向键:readline 读 history 一条回填到 rl.line + _refreshLine 重画 prompt
+   *     用户本来在 prompt 行没敲任何字符,历史回填会让用户突然看到历史的脏字符。
+   *     所以清空 line buffer 让 prompt 行保持空(类似 agent.js 对斜杠命令提示的做法)。
+   *   - 数字键(jump:N):用户在 prompt 行确实敲了数字,该数字已经在 rl.line 里,
+   *     不能撤销(否则用户按 "8" 看不到 "8")— 但目前的 jump 路径用 rl.line.length === 0 守门,
+   *     等于已经避免和 readline 的字符输入重叠,所以 prev/next 路径才需要清,数字路径不用清。
+   */
+  const clearLineBuffer = () => {
+    if (!rl) return
+    rl.line = ''
+    rl.cursor = 0
+    if (typeof rl._refreshLine === 'function') {
+      try { rl._refreshLine() } catch { /* 兜底 — 某些 readline 版本没有 _refreshLine */ }
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      if (finished) return
+      finished = true
+      if (rl && rl.input) rl.input.removeListener('keypress', keyHandler)
+      if (rl) rl.removeListener('close', onClose)
+    }
+    const onClose = () => {
+      cleanup()
+      reject({ cancelled: true })
+    }
+
+    const keyHandler = (_str, key) => {
+      if (finished || !key) return
+      const action = parseKeyForSelectableList(key)
+      const max = totalItems - 1
+
+      if (action === 'prev' || action === 'next') {
+        if (action === 'prev') {
+          selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : max
+        } else {
+          selectedIndex = selectedIndex < max ? selectedIndex + 1 : 0
+        }
+        clearLineBuffer()   // 撤销 readline 历史回填
+        redraw()
+        return
+      }
+
+      if (typeof action === 'string' && action.startsWith('jump:')) {
+        // 只在用户当前没敲字符时接受 jump,避免和 readline 正常字符输入冲突
+        if (rl.line && rl.line.length > 0) return
+        const n = Number(action.slice(5))
+        let target = -1
+        if (n === 0 && extraActive) target = safeItems.length
+        else if (n >= 1 && n <= safeItems.length) target = n - 1
+        if (target >= 0) {
+          selectedIndex = target
+          redraw()   // 数字已进 rl.line,不清;用户会看到 prompt 行同步显示这个数字
+        }
+        return
+      }
+
+      if (action === 'cancel') {
+        // Esc / Ctrl+C — 让用户取消整个 wizard
+        cleanup()
+        reject({ cancelled: true })
+        return
+      }
+
+      // 'confirm' (Enter) 不处理,让 readline 自然触发 line 事件 → rl.question 回调拿 answer
+      // 其他字符(字母/数字但 line buffer 非空)让 readline 自然处理
+    }
+
+    rl.input.on('keypress', keyHandler)
+    rl.once('close', onClose)
+
+    // 提示词:列出可选范围 + 导航提示
+    const minIdx = extraActive ? 0 : 1
+    const maxIdx = safeItems.length
+    const navHint = t.navHint  // "↑↓ 切换,Enter 确认,数字直跳"
+    const promptStr = `${chalk.cyan(t.selectPrompt(minIdx, maxIdx))}${chalk.dim(navHint ? '  ' + navHint : '')} `
+
+    rl.question(promptStr, (answer) => {
+      cleanup()
+      const trimmed = (answer || '').trim()
+      let idx = Number.parseInt(trimmed, 10)
+      if (Number.isFinite(idx) && idx >= minIdx && idx <= maxIdx) {
+        if (idx === 0) return resolve(null)
+        return resolve({ index: idx - 1, value: safeItems[idx - 1].value })
+      }
+      if (trimmed === '') {
+        // 空回答:用当前 selectedIndex
+        if (selectedIndex >= safeItems.length) return resolve(null)
+        return resolve({ index: selectedIndex, value: safeItems[selectedIndex].value })
+      }
+      // 非法输入:在当前列表下方打印提示,不重画列表(列表还在可见)
+      console.log(chalk.yellow(t.invalidChoice(minIdx, maxIdx)))
+      resolve('__retry__')
+    })
+  }).then(async (r) => {
+    if (r === '__retry__') {
+      // 递归重试(重新调一次)— 列表会再画一遍,实测可接受;保持 wizard 流程的简洁
+      return selectFromList({ rl, asker, title, items, t, extraOptionLabel })
+    }
+    return r
+  })
+}
+
+/**
+ * 数字输入回退路径(原 selectFromList 的实现)。
+ * 保留给非 TTY / 无 readline 的场景(管道、CI、测试)。
+ */
+async function selectByDigits({ asker, items, t, extraOptionLabel }) {
   items.forEach((item, i) => {
     console.log(`  ${chalk.cyan(String(i + 1).padStart(2))}. ${item.label}`)
   })
   if (extraOptionLabel) {
     console.log(`  ${chalk.dim('0')}. ${chalk.dim(extraOptionLabel)}`)
   }
-
   const min = extraOptionLabel ? 0 : 1
   const max = items.length
   while (true) {
     const answer = await asker.ask(t.selectPrompt(min, max))
     const idx = Number.parseInt(answer, 10)
     if (Number.isFinite(idx) && idx >= min && idx <= max) {
-      if (idx === 0) return null // 额外选项
+      if (idx === 0) return null
       return { index: idx - 1, value: items[idx - 1].value }
     }
     console.log(chalk.yellow(t.invalidChoice(min, max)))
@@ -481,7 +652,13 @@ export async function collectModelInput({ locale = 'zh-CN', rl: injectedRl, fetc
       label: `${p.label} ${chalk.dim(p.url)}`,
       value: p,
     }))
-    const providerChoice = await selectFromList(asker, t.selectProvider, providerItems, t, t.customOption)
+    const providerChoice = await selectFromList({
+      rl, asker,
+      title: t.selectProvider,
+      items: providerItems,
+      t,
+      extraOptionLabel: t.customOption,
+    })
 
     let baseURL
     if (providerChoice) {
@@ -528,7 +705,13 @@ export async function collectModelInput({ locale = 'zh-CN', rl: injectedRl, fetc
     let model
     if (modelList.length > 0) {
       const modelItems = modelList.map(m => ({ label: m, value: m }))
-      const modelChoice = await selectFromList(asker, t.builtinModels, modelItems, t, t.manualInput)
+      const modelChoice = await selectFromList({
+        rl, asker,
+        title: t.builtinModels,
+        items: modelItems,
+        t,
+        extraOptionLabel: t.manualInput,
+      })
       if (modelChoice) {
         model = modelChoice.value
       } else {

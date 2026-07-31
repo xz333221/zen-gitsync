@@ -437,6 +437,11 @@ $ g ai "fix the failing test"   # one-shot task, then exit
 $ g ai --model=2                # pick the 2nd configured model (index or name)
 ```
 
+The first-run setup wizard and `/addmodel` provider/model lists support **↑↓ keys to switch
+selection + Enter to confirm** (typing a number also jumps directly; `0` selects the trailing
+"custom / manual input" entry). Non-TTY environments (CI, piped input) automatically fall back
+to numeric input. `Esc` or `Ctrl+C` cancels the wizard cleanly.
+
 In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/clear`, `/exit`.
 
 Images: press `Alt+V` in the REPL to paste a clipboard image (screenshot), or attach a
@@ -965,6 +970,10 @@ $ g ai                          # 交互式 REPL
 $ g ai "修复失败的测试"           # 单发模式：执行一轮后退出
 $ g ai --model=2                # 使用第 2 个已配置的模型（序号或名称）
 ```
+
+启动配置向导与 `/addmodel` 的"服务商 / 模型"列表支持 **↑↓ 键切换 + Enter 确认**（也可
+直接输入数字跳转，`0` = 列表底部的"自定义 / 手动输入"）；非 TTY 环境下自动回退为数字输入。
+`Esc` 或 `Ctrl+C` 一键取消整个向导。
 
 会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/clear`、`/exit`。
 
