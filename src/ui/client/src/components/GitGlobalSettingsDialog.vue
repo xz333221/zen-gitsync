@@ -39,6 +39,13 @@
         </div>
         <div
           class="tab-item"
+          :class="{ active: activeTab === 'ai-models' }"
+          @click="activeTab = 'ai-models'"
+        >
+          <span>{{ $t('@42BB9:AI 模型配置') }}</span>
+        </div>
+        <div
+          class="tab-item"
           :class="{ active: activeTab === 'git' }"
           @click="activeTab = 'git'"
         >
@@ -184,11 +191,22 @@
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- AI 模型配置 -->
+        <!-- AI 模型配置面板 -->
+        <div v-show="activeTab === 'ai-models'" class="settings-panel">
+          <div class="info-section">
+            <div class="info-card">
+              <div class="info-content">
+                <p class="info-title">{{ $t('@42BB9:AI 模型配置') }}</p>
+                <p class="info-desc">{{ $t('@42BB9:管理 AI 模型的 API 端点、凭据与默认模型') }}</p>
+              </div>
+            </div>
+          </div>
+
           <div class="settings-section">
             <div class="section-title model-section-title">
-              <span>{{ $t('@42BB9:AI 模型配置') }}</span>
+              <span>{{ $t('@42BB9:已配置模型') }}</span>
               <button class="add-model-btn" @click="startAddModel">+ {{ $t('@42BB9:添加模型') }}</button>
             </div>
 
@@ -466,8 +484,12 @@ const gitStore = useGitStore()
 const localeStore = useLocaleStore()
 const configStore = useConfigStore()
 
+export type SettingsTab = 'general' | 'ai-models' | 'git' | 'commit' | 'config' | 'editor'
+
 const props = defineProps<{
   modelValue: boolean
+  /** 打开 dialog 时自动跳转到指定 tab（用于 footer / 头部的快捷入口） */
+  initialTab?: SettingsTab
 }>()
 
 const emit = defineEmits<{
@@ -476,7 +498,7 @@ const emit = defineEmits<{
 
 const visible = ref(false)
 const isLoading = ref(false)
-const activeTab = ref<'general' | 'git' | 'commit' | 'config' | 'editor'>('general')
+const activeTab = ref<SettingsTab>('general')
 
 // 通用设置
 const tempTheme = ref<'light' | 'dark' | 'auto'>('light')
@@ -619,7 +641,7 @@ watch(() => props.modelValue, async (val) => {
     tempUserName.value = gitStore.userName
     tempUserEmail.value = gitStore.userEmail
     configEditorText.value = '' // 延迟加载，点击 tab 时才加载
-    
+
     // 加载通用设置
     tempTheme.value = configStore.theme
     tempLocale.value = configStore.locale
@@ -627,14 +649,21 @@ watch(() => props.modelValue, async (val) => {
     editingModelId.value = undefined
     // 加载编辑器设置
     tempEditorAutoSave.value = configStore.ui.editorAutoSave
-    
+
+    // 外部指定了跳转 tab（footer / 头部按钮）→ 切过去
+    if (props.initialTab) {
+      activeTab.value = props.initialTab
+    } else {
+      activeTab.value = 'general'
+    }
+
     try {
       isLoading.value = true
       await loadGlobalGitConfigs()
     } finally {
       isLoading.value = false
     }
-    
+
     // 记录初始值
     initUserName = tempUserName.value
     initUserEmail = tempUserEmail.value
@@ -647,6 +676,14 @@ watch(() => props.modelValue, async (val) => {
     initLocale = tempLocale.value
   }
 }, { immediate: true })
+
+// 监听 initialTab 变化:支持 dialog 已打开期间外部再触发跳转
+// (例:连续点击 footer 不同入口、或者外部编程式调度)
+watch(() => props.initialTab, (newTab) => {
+  if (newTab && visible.value) {
+    activeTab.value = newTab
+  }
+})
 
 function handleVisibleChange(val: boolean) {
   emit('update:modelValue', val)

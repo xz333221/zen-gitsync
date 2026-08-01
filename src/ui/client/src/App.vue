@@ -30,6 +30,7 @@ const AppVersionBadge = defineAsyncComponent(() => import('@components/AppVersio
 const BranchSelector = defineAsyncComponent(() => import('@components/BranchSelector.vue'))
 import DirectorySelector from '@components/DirectorySelector.vue'
 import UserSettingsDialog from '@/components/GitGlobalSettingsDialog.vue'
+import type { SettingsTab } from '@/components/GitGlobalSettingsDialog.vue'
 import ActivityBar from '@/components/ActivityBar.vue'
 import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 import AppErrorBanner from '@/components/AppErrorBanner.vue'
@@ -275,8 +276,11 @@ onBeforeUnmount(() => {
 
 // 用户设置对话框
 const userSettingsDialogVisible = ref(false)
+/** 打开 dialog 时要跳转的目标 tab（外部入口控制） */
+const userSettingsInitialTab = ref<SettingsTab | undefined>(undefined)
 
-function openUserSettingsDialog() {
+function openUserSettingsDialog(tab?: SettingsTab) {
+  userSettingsInitialTab.value = tab ?? 'general'
   userSettingsDialogVisible.value = true
 }
 
@@ -617,7 +621,7 @@ function stopHResize() {
           <span class="user-warning">{{ $t('@F13B4:未配置') }}</span>
         </template>
         <el-tooltip :content="$t('@F13B4:用户设置')" placement="bottom" effect="dark" :show-after="200">
-          <button class="modern-btn btn-icon-28" :aria-label="$t('@F13B4:用户设置')" @click="openUserSettingsDialog">
+          <button class="modern-btn btn-icon-28" :aria-label="$t('@F13B4:用户设置')" @click="openUserSettingsDialog()">
             <el-icon class="btn-icon" aria-hidden="true"><Setting /></el-icon>
           </button>
         </el-tooltip>
@@ -751,7 +755,7 @@ function stopHResize() {
           <h2 class="state-block__title user-unconfigured-title">Git {{ $t('@F13B4:用户未配置') }}</h2>
           <p class="state-block__hint user-unconfigured-desc">{{ $t('@F13B4:请先配置Git用户信息才能进行提交操作。') }}</p>
           <div class="user-unconfigured-actions">
-            <button class="user-unconfigured-primary-btn" @click="openUserSettingsDialog">
+            <button class="user-unconfigured-primary-btn" @click="() => openUserSettingsDialog()">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -857,16 +861,22 @@ function stopHResize() {
 
   <footer class="main-footer app-footer">
     <BranchSelector @branch-changed="handleBranchChanged" />
-    <div class="footer-model-hint" v-if="defaultModelName">
+    <button
+      v-if="defaultModelName"
+      type="button"
+      class="footer-model-hint"
+      :aria-label="`${$t('@F13B4:默认模型')}: ${defaultModelName}`"
+      @click="() => openUserSettingsDialog('ai-models')"
+    >
       <span class="footer-model-hint__label">{{ $t('@F13B4:默认模型') }}</span>
       <span class="footer-model-hint__name">{{ defaultModelName }}</span>
-    </div>
+    </button>
     <RemoteRepoCard />
     <AppVersionBadge />
   </footer>
 
   <!-- 用户设置对话框 -->
-  <UserSettingsDialog v-model="userSettingsDialogVisible" />
+  <UserSettingsDialog v-model="userSettingsDialogVisible" :initial-tab="userSettingsInitialTab" />
   </el-config-provider>
 </template>
 
@@ -1577,6 +1587,39 @@ h1 {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 3px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  user-select: none;
+  transition:
+    background-color var(--transition-base) var(--ease-custom),
+    border-color var(--transition-base) var(--ease-custom),
+    color var(--transition-base) var(--ease-custom),
+    transform var(--transition-base) var(--ease-custom);
+}
+
+.footer-model-hint:hover {
+  background: var(--tint-primary-12);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+.footer-model-hint:hover .footer-model-hint__name {
+  color: var(--color-primary);
+  opacity: 1;
+}
+
+.footer-model-hint:active {
+  transform: translateX(-50%) scale(0.97);
+}
+
+.footer-model-hint:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring-soft);
 }
 
 .footer-model-hint__label {
@@ -1592,6 +1635,7 @@ h1 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color var(--transition-base) var(--ease-custom), opacity var(--transition-base) var(--ease-custom);
 }
 
 /* app body 包含活动栏 + 内容区 */

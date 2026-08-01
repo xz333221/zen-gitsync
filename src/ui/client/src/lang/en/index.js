@@ -812,6 +812,8 @@ export default {
   '@42BB9:打开文件失败: ': 'Failed to open file: ',
   '@42BB9:提交设置': 'Commit Settings',
   '@42BB9:AI 模型配置': 'AI Model Configuration',
+  '@42BB9:管理 AI 模型的 API 端点、凭据与默认模型': 'Manage AI model API endpoints, credentials, and the default model',
+  '@42BB9:已配置模型': 'Configured Models',
   '@42BB9:暂未配置模型': 'No models configured',
   '@42BB9:添加模型': 'Add Model',
   '@42BB9:编辑模型': 'Edit Model',

@@ -923,7 +923,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 
 ![用户设置弹窗 — 通用 tab](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/settings-general.png)
 
-> 点击顶部条右上角齿轮图标。tab 包含 **通用 / Git / 提交 / AI / 主题 / 语言 / 文件锁定 / NPM 路径**。大部分开关即时生效，无需重启 GUI。
+> 点击顶部条右上角齿轮图标。tab 包含 **通用 / Git / 提交 / AI / 主题 / 语言 / 文件锁定 / NPM 路径**。大部分开关即时生效，无需重启 GUI。点击底栏的 **默认模型** 名称可一键定位到「AI 模型」tab。
 
 | 设置项 | 说明 |
 |---|---|
@@ -933,6 +933,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 语言 | 中文 / English |
 | 文件锁定 | 锁定文件，使其永远不被暂存或储藏 |
 | NPM 路径 | 配置 `package.json` 的扫描位置 |
+| AI 模型 | 配置 OpenAI / Claude 等兼容 OpenAI 协议的 LLM 端点（API Key、baseURL、模型名），可设置默认模型，多套配置并存 |
 
 ---
 
