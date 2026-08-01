@@ -88,6 +88,7 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
 # 与用户交互
 - 需要向用户确认、提问或汇报重要决策时,直接用普通文本输出
 - 不要调用不存在的工具,可用工具只有上面列出的 6 个
+- 用户可能随消息附带图片:图片以 image_url 部件出现在 user 消息里;如果当前模型不支持视觉(带图请求报错),提醒用户换用支持视觉的模型
 - 发现高风险或状态不一致的情况时:先用文本说明发现和影响,停下来等用户指示,不要擅自继续破坏性操作
 
 # 输出
@@ -128,6 +129,7 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 - Use offset/limit for large files
 - git operations via run_command
 - run_command defaults to the working directory; default timeout 120s, max 600s
+- The user may attach images to a message; they arrive as image_url parts in the user message. If the current model rejects images (no vision support), tell the user to switch to a vision-capable model
 
 # Output
 - Your text output is displayed in the user's Web UI
@@ -304,6 +306,7 @@ function stripStaleImages(messages) {
 //   - session: 从 agentSessionStore 读取的会话对象
 //   - model: { baseURL, model, apiKey }
 //   - userMessage: 用户输入文本
+//   - images: base64 dataURL 数组(可选,多模态图片,随最新一条 user 消息发给模型)
 //   - cwd: 工作目录
 //   - locale: 'zh' | 'en'
 //   - signal: AbortSignal (客户端断开时触发)
@@ -311,7 +314,7 @@ function stripStaleImages(messages) {
 //   - onChild: (child) => void  子进程回调(用于取消)
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, cwd, locale, signal, send, onChild }) {
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, signal, send, onChild }) {
   const ctx = { cwd, locale, onChild };
 
   // 确保 session.messages 存在
@@ -325,8 +328,16 @@ export async function runAgentTurn({ session, model, userMessage, cwd, locale, s
     });
   }
 
-  // 追加 user 消息
-  session.messages.push({ role: 'user', content: userMessage });
+  // 追加 user 消息：有图片时组装 OpenAI 多模态 content 数组（与 CLI agent.js 一致），否则保持纯字符串
+  const imageParts = (Array.isArray(images) ? images : [])
+    .filter(u => typeof u === 'string' && u.startsWith('data:image/'))
+    .map(u => ({ type: 'image_url', image_url: { url: u } }));
+  session.messages.push({
+    role: 'user',
+    content: imageParts.length > 0
+      ? [{ type: 'text', text: userMessage || ' ' }, ...imageParts]
+      : userMessage
+  });
 
   // 旧图片降级
   stripStaleImages(session.messages);

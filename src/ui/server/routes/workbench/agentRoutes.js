@@ -79,7 +79,12 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
     const sessionIdInput = String(req.body?.sessionId || '').trim();
     const locale = String(req.body?.locale || req.headers['accept-language'] || 'zh').startsWith('en') ? 'en' : 'zh';
 
-    if (!userMessage) {
+    // 图片附件（base64 dataURL 数组）：前端已限制只能选图片，这里再做一层白名单校验
+    const images = (Array.isArray(req.body?.images) ? req.body.images : [])
+      .filter(u => typeof u === 'string' && /^data:image\/[\w.+-]+;base64,/.test(u))
+      .slice(0, 10);
+
+    if (!userMessage && images.length === 0) {
       return res.status(400).json({ success: false, error: '消息内容不能为空' });
     }
 
@@ -179,6 +184,7 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
         session,
         model,
         userMessage,
+        images,
         cwd,
         locale,
         signal: abortController.signal,

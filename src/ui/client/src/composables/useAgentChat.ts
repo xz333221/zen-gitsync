@@ -7,7 +7,7 @@
 //   4. 取消正在进行的请求
 
 import { reactive, ref } from 'vue'
-import type { ChatMessage, ToolCall } from 'zen-ai-chat-ui'
+import type { ChatMessage, ToolCall, ChatAttachment, SelectedFile } from 'zen-ai-chat-ui'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { uid } from 'zen-ai-chat-ui'
 import { extractThinkSegments } from 'zen-ai-chat-ui'
@@ -72,16 +72,29 @@ export function convertSessionToMessages(session: AgentSession | null): ChatMess
 
     if (m.role === 'user') {
       let text = ''
+      let attachments: ChatAttachment[] | undefined
       if (typeof m.content === 'string') {
         text = m.content
       } else if (Array.isArray(m.content)) {
         text = m.content.filter(p => p?.type === 'text').map(p => p.text || '').join(' ')
+        // 多模态消息里的 image_url 部件还原为附件，历史里也能看到当时发的图
+        const imageAtts = m.content
+          .filter(p => p?.type === 'image_url' && typeof p.image_url?.url === 'string')
+          .map((p, idx) => ({
+            id: `att-${i}-${idx}`,
+            name: 'image',
+            size: 0,
+            type: mimeFromDataUrl(p.image_url?.url || '') || 'image/*',
+            preview: p.image_url?.url
+          }))
+        if (imageAtts.length > 0) attachments = imageAtts
       }
-      if (text) {
+      if (text || attachments) {
         result.push({
           id: `msg-${i}`,
           role: 'user',
           content: text,
+          attachments,
           status: 'done',
           createdAt: Date.now()
         })
@@ -163,6 +176,22 @@ function summarizeToolArgs(name: string, argsStr: string): string {
   } catch {
     return argsStr.slice(0, 200)
   }
+}
+
+// File → base64 dataURL（图片随聊天请求发给后端）
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('FileReader failed'))
+    reader.readAsDataURL(file)
+  })
+}
+
+// 从 dataURL 解析 MIME（data:image/png;base64,... → image/png）
+function mimeFromDataUrl(u: string): string {
+  const m = /^data:([^;,]+)/.exec(u)
+  return m ? m[1] : ''
 }
 
 // ── composable ───────────────────────────────────────────
@@ -269,20 +298,40 @@ export function useAgentChat() {
   }
 
   // ── 发送消息（SSE 流式） ────────────────────────────────
-  async function sendMessage(text: string) {
-    if (!text.trim() || isStreaming.value) return
+  async function sendMessage(text: string, files: SelectedFile[] = []) {
+    // 组件库允许选任意文件，但多模态消息只支持图片；非图片提示后忽略
+    const imageFiles = files.filter(f => f?.file?.type?.startsWith('image/'))
+    if (imageFiles.length < files.length) {
+      ElMessage.warning($t('@AGENT:仅支持发送图片，非图片文件已忽略'))
+    }
+    if ((!text.trim() && imageFiles.length === 0) || isStreaming.value) return
+
+    // 图片 File → base64 dataURL，随请求发给后端组装多模态 content
+    const settled = await Promise.allSettled(imageFiles.map(f => fileToDataUrl(f.file)))
+    const images = settled
+      .map(r => (r.status === 'fulfilled' ? r.value : ''))
+      .filter(u => u.startsWith('data:image/'))
 
     const myNonce = ++runNonce
     abortController = new AbortController()
     const myController = abortController
 
-    // 乐观推入 user 消息
+    // 乐观推入 user 消息（图片以附件缩略图展示）
     const userMsg: ChatMessage = {
       id: uid(),
       role: 'user',
       content: text,
       status: 'done',
       createdAt: Date.now()
+    }
+    if (imageFiles.length > 0) {
+      userMsg.attachments = imageFiles.map(f => ({
+        id: f.id,
+        name: f.file.name || 'image',
+        size: f.file.size || 0,
+        type: f.file.type || '',
+        preview: f.preview
+      }))
     }
     messages.value.push(userMsg)
 
@@ -312,7 +361,8 @@ export function useAgentChat() {
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({
           sessionId: currentSessionId.value || '',
-          userMessage: text
+          userMessage: text,
+          ...(images.length > 0 ? { images } : {})
         }),
         signal: myController.signal
       })

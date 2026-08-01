@@ -262,6 +262,10 @@ async function startUIServer(noOpen = false, savePort = false) {
   // 也能被同一个处理器捕获(否则会无声崩,留下子进程孤儿与 .port 残留)。
   setupGlobalErrorHandlers({ instanceRegistry });
 
+  // 智能体聊天允许携带 base64 图片,该路由单独放宽 JSON body 上限;
+  // 必须在全局 express.json() 之前注册(body-parser 解析后会置 req._body,全局中间件自动跳过)
+  app.use('/api/agent/chat', express.json({ limit: '50mb' }));
+
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
 

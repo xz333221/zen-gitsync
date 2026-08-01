@@ -2298,6 +2298,7 @@ export default {
   '@AGENT:未知错误': 'Unknown error',
   '@AGENT:已停止': 'Stopped',
   '@AGENT:对话失败': 'Chat failed',
+  '@AGENT:仅支持发送图片，非图片文件已忽略': 'Only images can be sent; non-image files were ignored',
   '@AGENT:请输入新的会话标题': 'Enter new session title',
   '@AGENT:重命名会话': 'Rename Session',
   '@AGENT:标题不能为空': 'Title cannot be empty',

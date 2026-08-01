@@ -80,7 +80,7 @@ const presetQuestions = computed(() => [
 
 // ── 发送消息 ──────────────────────────────────────────────
 async function onSend(payload: { text: string; files: any[] }) {
-  await sendMessage(payload.text)
+  await sendMessage(payload.text, payload.files)
   await nextTick()
   scrollToBottom()
 }
@@ -293,6 +293,7 @@ onMounted(() => {
         :assistant-name="'g ai'"
         :theme="chatTheme"
         :disabled="isStreaming"
+        :upload-config="{ accept: 'image/*' }"
         :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
         @send="onSend"
         @select="onSelectPreset"
