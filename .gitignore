@@ -79,6 +79,13 @@ __pycache__/
 # WorkBuddy workspace data（工作日志/缓存，本地数据，不入库）
 .workbuddy/
 
+# .agents/ 是 .claude/skills/ 的历史副本,权威只在 .claude/
+.agents/
+
+# 根 skills/ 是历史 skill 备份,权威只在 .claude/skills/
+skills/
+skills-lock.json
+
 # TypeScript build info
 *.tsbuildinfo
 
@@ -103,5 +110,15 @@ tmp/
 
 # E2E 验证产生的截图产物（按 task id 分子目录，一次性产物不入库）
 workbench-images/
+
+# 构建分析产物
+src/ui/client/stats.html
+# 一次性截图脚本
+src/ui/client/_shot.mjs
+src/ui/client/_readme-shots.mjs
+
+# 一次性 PTY 复现脚本和日志(含硬编码本地路径)
+test/pty-repro*.py
+test/pty-repro*.log
 
 .npmrc

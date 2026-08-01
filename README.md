@@ -1,4 +1,4 @@
-﻿﻿﻿﻿# zen-gitsync
+# zen-gitsync
 
 [English](#zen-gitsync) | [中文](#zh)
 
@@ -7,7 +7,7 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
 ## Table of Contents
 
 - [Installation](#installation)
-- [What''s New](#v2xx--whats-new)
+- [What's New](#v2xx--whats-new)
 - [GUI](#gui)
   - [Core Git Panel](#core-git-panel)
   - [Branch Management](#branch-management)
@@ -38,7 +38,7 @@ npm install -g zen-gitsync
 
 ---
 
-## v2.x.x — What''s New
+## v2.x.x — What's New
 
 - **Visual GUI** — Full graphical interface for Git operations
 - **Branch management** — Create, switch, and track local/remote branches

@@ -199,11 +199,9 @@ src/ui/client 中的引用点(`MarkdownPreview.vue` / `MindmapPreview.vue` / `Mi
 
 #### `package.json#files` — 收紧发布包内容
 - 此前 `scripts/**` 包含所有脚本(含 4 个 `convert-*.cjs` 历史迁移脚本 + 4 个 README 文档)
-- 本轮把 `convert-colors-to-vars.cjs` / `convert-fontsize-to-vars.cjs` /
-  `convert-spacing-to-vars.cjs` / `convert-to-standard-vars.cjs` 与对应 README 全部 `git mv`
-  到 `scripts/archive/`,新建 `scripts/archive/README.md` 说明"勿运行,除非你明确知道为什么"
-- `files` 字段加 `"!scripts/archive/**"` 排除,发布 tarball 减少约 30 KB,且下游客不会再误触发
-  一次性历史迁移脚本
+- 计划把 `convert-colors-to-vars.cjs` / `convert-fontsize-to-vars.cjs` /
+  `convert-spacing-to-vars.cjs` / `convert-to-standard-vars.cjs` 与对应 README 移到
+  `scripts/archive/`(实际尚未执行,脚本仍在 `scripts/` 根目录)
 - 不影响 `dev:ping` / `test` / `release` 三个真实 npm script(它们只调 dev-ping / run-tests / release.js)
 
 #### `.nvmrc` — 与 `engines.node >=20.19` 对齐
@@ -217,11 +215,10 @@ src/ui/client 中的引用点(`MarkdownPreview.vue` / `MindmapPreview.vue` / `Mi
 - 间接回应 DEP-SEC-1:真实 `.npmrc` 不进仓库,贡献者按模板本地复制,token 通过环境变量注入,
   CI 推荐用 OIDC/trusted publishing 替代长期 token
 
-#### `acorn` 依赖 — 审计结论保留
-- 审计初判 `acorn` 是死依赖(grep `import.*acorn` 零命中),但实测 `src/ui/server/routes/codeAnalysis.js:192`
-  有 `await import('acorn')`,用于 JS AST 解析提取 import 依赖
-- 结论: `acorn@^8.16.0` 继续保留在 `dependencies`,但写入 changelog 留作下轮 review 的复查锚点
-- 这是审计盲区的实例,提醒下轮审计 `grep` 时要把 `await import('...')` 异步动态导入也纳入
+#### `acorn` 依赖 — 已移除
+- 审计初判 `acorn` 是死依赖,实测确认 `src/ui/server/routes/codeAnalysis.js` 已改用正则解析
+  提取 import 路径,acorn 已从 `dependencies` 移除
+- 这是审计盲区的实例,提醒审计 `grep` 时要把 `await import('...')` 异步动态导入也纳入
 
 ### Changed — CLI 层代码质量与健壮性
 

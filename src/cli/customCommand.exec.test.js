@@ -19,7 +19,9 @@
 // (`node -e "..."` 跨平台) 触发 runCustomCommand 内部 callback,
 // 验证 stdout/stderr/error 三条打印分支都生效。
 //
-// 测试间用 `setTimeout(200)` 等真实子进程跑完(避免 microtask 顺序问题)。
+// 测试间用 `waitForContent()` 轮询等待真实子进程的 exec 回调跑完。
+// 早期版本用固定 setTimeout(200),但在 Windows + node --test 并行执行下
+// 子进程回调经常晚于 200ms 到达,导致 flaky 失败。
 import { test, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { runCustomCommand } from './customCommand.js'
@@ -46,9 +48,37 @@ afterEach(() => {
   _resetForTests()
 })
 
-/** 等异步 exec 回调跑完的辅助函数 — 200ms 足够本地 node -e 完成 */
-function settle() {
-  return new Promise((r) => setTimeout(r, 200))
+/**
+ * 等异步 exec 回调跑完的辅助函数。
+ * 轮询检测目标数组中出现匹配内容,最多等 3 秒。
+ * 比固定 setTimeout 更可靠,避免 Windows 上 exec 回调时序不稳定导致的 flaky。
+ *
+ * @param {() => boolean} predicate - 检测是否完成的断言函数
+ * @param {number} timeout - 最大等待毫秒数
+ * @param {number} interval - 轮询间隔毫秒数
+ * @returns {Promise<void>}
+ */
+function waitFor(predicate, timeout = 3000, interval = 50) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now()
+    function check() {
+      try {
+        if (predicate()) return resolve()
+      } catch (e) {
+        // predicate 可能抛 AssertionError,先记录但不立即失败
+      }
+      if (Date.now() - start >= timeout) {
+        return reject(new Error(`waitFor() 超时(${timeout}ms): 条件未满足`))
+      }
+      setTimeout(check, interval)
+    }
+    check()
+  })
+}
+
+/** 超时兜底:无论结果如何,在指定时间后 resolve(用于断言"不应出现"的场景) */
+function settle(timeout = 500) {
+  return new Promise((r) => setTimeout(r, timeout))
 }
 
 // ========== 行为契约 ==========
@@ -56,7 +86,8 @@ function settle() {
 test('runCustomCommand: silent=true 不打印 [自定义命令执行] 头标', async () => {
   captureConsole()
   runCustomCommand('node -e "console.log(1)"', { silent: true })
-  await settle()
+  // 等足够久确保 exec 回调已执行(断言"不应出现"的场景)
+  await settle(500)
   assert.equal(
     logs.some((m) => /\[自定义命令执行\]/.test(m)),
     false,
@@ -66,8 +97,9 @@ test('runCustomCommand: silent=true 不打印 [自定义命令执行] 头标', a
 
 test('runCustomCommand: 非 silent 打印 [自定义命令执行] 头标 + 命令', async () => {
   captureConsole()
+  // 非 silent 模式头标是同步打印的,但 stdout 是异步的
   runCustomCommand('node -e "console.log(1)"')
-  await settle()
+  await waitFor(() => logs.some((m) => /\[自定义命令执行\]/.test(m)))
   assert.ok(
     logs.some((m) => /\[自定义命令执行\]/.test(m)),
     '非 silent 应打印 [自定义命令执行] 头标'
@@ -81,7 +113,7 @@ test('runCustomCommand: 非 silent 打印 [自定义命令执行] 头标 + 命�
 test('runCustomCommand: stdout 有内容时打印 [自定义命令输出] + 内容', async () => {
   captureConsole()
   runCustomCommand('node -e "console.log(\'hello-from-stdout\')"', { silent: true })
-  await settle()
+  await waitFor(() => logs.some((m) => /hello-from-stdout/.test(m)))
   assert.ok(
     logs.some((m) => /\[自定义命令输出\]/.test(m)),
     '应打印 [自定义命令输出] 头标'
@@ -98,7 +130,7 @@ test('runCustomCommand: stderr 有内容时打印 [自定义命令错误输出] 
     'node -e "console.error(\'warning-msg\')"',
     { silent: true }
   )
-  await settle()
+  await waitFor(() => errs.some((m) => /warning-msg/.test(m)))
   assert.ok(
     errs.some((m) => /\[自定义命令错误输出\]/.test(m)),
     '应打印 [自定义命令错误输出] 头标'
@@ -112,7 +144,7 @@ test('runCustomCommand: stderr 有内容时打印 [自定义命令错误输出] 
 test('runCustomCommand: 进程非 0 退出时打印 [自定义命令错误]', async () => {
   captureConsole()
   runCustomCommand('node -e "process.exit(1)"', { silent: true })
-  await settle()
+  await waitFor(() => errs.some((m) => /\[自定义命令错误\]/.test(m)))
   assert.ok(
     errs.some((m) => /\[自定义命令错误\]/.test(m)),
     '非 0 退出应打印 [自定义命令错误] 头标'
@@ -123,7 +155,8 @@ test('runCustomCommand: 进程非 0 退出时打印 [自定义命令错误]', as
 test('runCustomCommand: 成功 + 无输出时不打印 [自定义命令输出/错误]', async () => {
   captureConsole()
   runCustomCommand('node -e ""', { silent: true })
-  await settle()
+  // 等足够久确保 exec 回调已执行(无输出的情况无法用 waitFor 检测内容)
+  await settle(1000)
   assert.equal(logs.some((m) => /\[自定义命令输出\]/.test(m)), false)
   assert.equal(errs.some((m) => /\[自定义命令错误\]/.test(m)), false)
   assert.equal(errs.some((m) => /\[自定义命令错误输出\]/.test(m)), false)
@@ -135,7 +168,10 @@ test('runCustomCommand: 同时有 stdout 和 stderr 时两条都打印', async (
     'node -e "console.log(\'OUT-MARKER-XYZ\'); console.error(\'ERR-MARKER-XYZ\')"',
     { silent: true }
   )
-  await settle()
+  await waitFor(() =>
+    logs.some((m) => /OUT-MARKER-XYZ/.test(m)) &&
+    errs.some((m) => /ERR-MARKER-XYZ/.test(m))
+  )
   assert.ok(logs.some((m) => /OUT-MARKER-XYZ/.test(m)), 'stdout 应被打印到 console.log')
   assert.ok(errs.some((m) => /ERR-MARKER-XYZ/.test(m)), 'stderr 应被打印到 console.error')
 })
@@ -153,13 +189,16 @@ test('runCustomCommand: 跟踪 child 到 activeChildren(SIGINT 兜底)', async (
   // 且 SIGINT 路径下用户主动 kill 才走 killAllTrackedChildren,
   // 主动 exit 的 child 由 trackChild 的 once('exit') 自动从集合移除,
   // 已在 cleanup.test.js#trackChild 单独覆盖)
-  await settle()
+  await settle(1000)
 })
 
 test('runCustomCommand: 非 silent + stdout 都打印,顺序头标在前', async () => {
   captureConsole()
   runCustomCommand('node -e "console.log(\'payload\')"')
-  await settle()
+  await waitFor(() =>
+    logs.some((m) => /\[自定义命令执行\]/.test(m)) &&
+    logs.some((m) => /\[自定义命令输出\]/.test(m))
+  )
   const execIdx = logs.findIndex((m) => /\[自定义命令执行\]/.test(m))
   const outIdx = logs.findIndex((m) => /\[自定义命令输出\]/.test(m))
   assert.ok(execIdx >= 0, '应有 [自定义命令执行] 头标')

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-import { prepareDiffForPrompt } from '/sessions/clever-upbeat-wright/mnt/zen-gitsync/src/ui/server/routes/config.js'
+import { prepareDiffForPrompt } from '../src/ui/server/routes/config.js'
 
 function makeFileDiff(p, added, removed) {
   const removedLines = removed.map(l => '-' + l).join('\n')
