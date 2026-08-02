@@ -69,24 +69,41 @@ export function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
     let child;
     let spawnedExe = 'claude';
     if (process.platform === 'win32') {
-      // 直接 spawn claude.exe（npm 全局 @anthropic-ai/claude-code 里的真实二进制），
-      // 避开两件事：
-      //  1. Node 23 在 Windows 上拒绝 spawn .cmd/.bat（EINVAL）
-      //  2. shell:true 会把 argv 拼成命令行交给 cmd 解释，prompt 里的 \n 被切成多段
-      // 用 `where claude` 找到 claude.cmd，再从 cmd 内容推断对应 .exe 路径。
+      // 避开两件事:
+      //  1. Node 23 在 Windows 上拒绝 spawn .cmd/.bat(EINVAL)
+      //  2. shell:true 会把 argv 拼成命令行交给 cmd 解释,prompt 里的 \n 被切成多段
+      // 用 `where claude` 找到 claude.cmd,优先按 npm 全局 shim 实际行为走:
+      // 直接 spawn(process.execPath, [cliJs, ...])。原代码读 shim 内容推断
+      // bin\claude.exe 路径,但当前 claude-code 已经改成走 `node cli.js`,
+      // shim 内容正则匹配不上 → 落回 'claude.exe' → spawn ENOENT。
       let claudeExe = 'claude.exe';
+      let spawnExe = null;
+      let spawnArgs = args;
       try {
         const cmdShim = execFileSync('where', ['claude'], { encoding: 'utf8', windowsHide: true })
           .split(/\r?\n/).map(s => s.trim()).find(s => /\.cmd$/i.test(s));
         if (cmdShim) {
-          const txt = fs.readFileSync(cmdShim, 'utf8');
-          if (/%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude\.exe/i.test(txt)) {
-            claudeExe = path.join(path.dirname(cmdShim), 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
+          const prefix = path.dirname(cmdShim);
+          const cliJs = path.join(prefix, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
+          if (fs.existsSync(cliJs)) {
+            // npm 全局安装:shim 实质是 `node <prefix>/node_modules/.../cli.js`
+            spawnExe = process.execPath;
+            spawnArgs = [cliJs, ...args];
+          } else {
+            // 老式安装:shim 内容真的指向 bin\claude.exe
+            try {
+              const txt = fs.readFileSync(cmdShim, 'utf8');
+              if (/%~?dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude\.exe/i.test(txt)) {
+                claudeExe = path.join(prefix, 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
+              }
+            } catch { /* fallback */ }
+            spawnExe = claudeExe;
           }
         }
       } catch { /* fallback */ }
-      spawnedExe = claudeExe;
-      child = spawn(claudeExe, args, {
+      if (!spawnExe) spawnExe = claudeExe;
+      spawnedExe = spawnExe;
+      child = spawn(spawnExe, spawnArgs, {
         cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: false,

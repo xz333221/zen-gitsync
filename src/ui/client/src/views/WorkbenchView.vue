@@ -3199,8 +3199,9 @@ const {
   box-sizing: border-box;
   flex-shrink: 0;
   min-height: 52px;
-  /* 极简化：去掉 box-shadow inset，默认透明背景（focus 时再铺底） */
-  background: transparent;
+  /* 默认铺实色背景,避免和外层渐变/紫色面板叠加导致"看不清字"。
+     focus 用 box-shadow 区分层级,不再靠颜色变化。 */
+  background: var(--bg-container);
   box-shadow: none;
   border-color: var(--border-color);
 }
@@ -3210,11 +3211,11 @@ const {
 }
 .wb-textarea:hover:not(:focus) {
   border-color: var(--border-color-medium);
-  background: var(--bg-container);
+  background: var(--bg-container-hover);
 }
         .wb-textarea:focus {
   border-color: var(--color-primary);
-  background: var(--bg-container);
+  background: var(--bg-container-hover);
   box-shadow: 0 0 0 3px var(--tint-primary-14);
 }
 .wb-textarea--focus-expand:focus {
