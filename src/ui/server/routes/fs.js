@@ -19,7 +19,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import open from 'open';
 import os from 'os';
-import { spawn, exec } from 'child_process';
+import { spawn, exec, execSync } from 'child_process';
 import { ensureWithinCwd } from '../utils/pathGuard.js';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import { invalidateCurrentProjectKey, invalidateRawConfigCache } from '../../../config.js';
@@ -794,6 +794,58 @@ export function registerFsRoutes({
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── 编辑器：用 VSCode 打开文件/目录 ─────────────────────────
+  // 行为：spawn `code` / `code.cmd` (argv 数组,无 shell 解释)
+  // - Windows: VSCode 安装时会把 bin 目录加到 PATH,bin/code.cmd 直接 spawn 即可
+  // - macOS / Linux: 直接 spawn `code`(CLI command)
+  // 找不到 code 时返回 503 + 明确提示,而不是静默成功
+  app.post('/api/editor/open-in-vscode', express.json(), async (req, res) => {
+    try {
+      const targetPath = req.body?.path;
+      if (!targetPath) throw new HttpError(400, '缺少 path 参数');
+
+      const safe = await safePathInProject(targetPath);
+      if (!safe) throw new HttpError(403, '禁止访问工作目录以外的内容');
+      const resolved = safe.safePath;
+
+      try {
+        await fs.access(resolved);
+      } catch {
+        throw new HttpError(404, '目标不存在');
+      }
+
+      const isWin = process.platform === 'win32';
+      const candidates = isWin ? ['code.cmd', 'code'] : ['code'];
+      let cli = null;
+      for (const cmd of candidates) {
+        try {
+          const probe = isWin ? `where ${cmd}` : `which ${cmd}`;
+          execSync(probe, { stdio: ['ignore', 'pipe', 'ignore'] });
+          cli = cmd;
+          break;
+        } catch {
+          // 找不到,试下一个候选
+        }
+      }
+      if (!cli) {
+        throw new HttpError(503, '未检测到 VSCode CLI (PATH 中找不到 code),请确认已安装 VSCode 并启用 "将 code 添加到 PATH"');
+      }
+
+      // Windows 上 spawn .cmd / .bat 必须 shell: true(Node 18+ 限制),否则 EINVAL
+      // 路径已通过 safePathInProject 校验,argv 数组不会被再次 shell 展开
+      const spawnOpts = { detached: true, stdio: 'ignore' };
+      if (isWin) spawnOpts.shell = true;
+      const child = spawn(cli, [resolved], spawnOpts);
+      child.on('error', () => { /* 静默:已通过 PATH 探测,理论不会出错 */ });
+      child.unref();
+
+      res.json({ success: true });
+    } catch (error) {
+      const status = error?.status || 500;
+      res.status(status).json({ success: false, error: error.message });
     }
   });
 }

@@ -893,6 +893,80 @@ async function ctxRevealInExplorer() {
   }
 }
 
+// 把绝对路径转成相对工作区根的相对路径(正斜杠)
+function toWorkspaceRelative(absPath: string): string {
+  const root = configStore.currentDirectory
+  if (!root) return absPath
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '')
+  const r = norm(root)
+  const p = norm(absPath)
+  if (p === r) return '.'
+  if (p.startsWith(r + '/')) return p.slice(r.length + 1)
+  // 跨盘符 / 路径不在 root 下,fallback 返回绝对
+  return p
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* fall through to legacy */ }
+  // Fallback:临时 textarea + execCommand
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+async function ctxCopyAbsolutePath() {
+  const node = ctxMenu.value?.node
+  closeContextMenu()
+  if (!node) return
+  const ok = await copyToClipboard(node.path)
+  if (ok) ElMessage.success($t('@EDITOR:已复制到剪贴板'))
+  else ElMessage.error($t('@EDITOR:复制失败'))
+}
+
+async function ctxCopyRelativePath() {
+  const node = ctxMenu.value?.node
+  closeContextMenu()
+  if (!node) return
+  const rel = toWorkspaceRelative(node.path)
+  const ok = await copyToClipboard(rel)
+  if (ok) ElMessage.success($t('@EDITOR:已复制到剪贴板'))
+  else ElMessage.error($t('@EDITOR:复制失败'))
+}
+
+async function ctxOpenInVscode() {
+  const node = ctxMenu.value?.node
+  closeContextMenu()
+  if (!node) return
+  try {
+    const resp = await fetch('/api/editor/open-in-vscode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: node.path }),
+    })
+    const data = await resp.json()
+    if (!data.success) {
+      ElMessage.error(data.error || $t('@EDITOR:VSCode 未安装'))
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.message || String(error))
+  }
+}
+
 // 点击全局关闭右键菜单
 onMounted(() => document.addEventListener('click', closeContextMenu))
 onBeforeUnmount(() => document.removeEventListener('click', closeContextMenu))
@@ -1360,12 +1434,33 @@ function stopPreviewResize() {
         {{ $t('@EDITOR:新建文件夹') }}
       </button>
       <div class="ctx-menu-sep" />
+      <button class="ctx-menu-item" @click="ctxCopyAbsolutePath">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+        {{ $t('@EDITOR:复制绝对路径') }}
+      </button>
+      <button class="ctx-menu-item" @click="ctxCopyRelativePath">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+        {{ $t('@EDITOR:复制相对路径') }}
+      </button>
+      <div class="ctx-menu-sep" />
       <button class="ctx-menu-item" @click="ctxRevealInExplorer">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
           <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2"/>
         </svg>
         {{ $t('@EDITOR:在资源管理器中打开') }}
+      </button>
+      <button class="ctx-menu-item" @click="ctxOpenInVscode">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <path d="M17.5 0l-5.81 4.69L7.32 0H0l9.34 11.7L0 23.36h7.32l4.39-4.69 4.34 4.69H24L14.66 11.7 24 0h-6.5zm-2.36 21.36h-2.04L5.62 2.64h2.18l9.34 18.72z"/>
+        </svg>
+        {{ $t('@EDITOR:在 VSCode 中打开') }}
       </button>
       <button class="ctx-menu-item" @click="ctxRename">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
