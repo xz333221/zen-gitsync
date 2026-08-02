@@ -131,17 +131,21 @@ const segments = computed<Segment[]>(() => {
 .md-preview :deep(h2) { font-size: 1.4em; }
 .md-preview :deep(h3) { font-size: 1.2em; }
 .md-preview :deep(p) { margin: 0 0 14px; }
-.md-preview :deep(a) { color: var(--link-color, #0969da); text-decoration: none; }
+.md-preview :deep(a) { color: var(--text-link, #0969da); text-decoration: none; }
 .md-preview :deep(a:hover) { text-decoration: underline; }
 .md-preview :deep(code) {
-  background: var(--code-bg, #f6f8fa);
+  background: var(--bg-code, #f6f8fa);
+  color: var(--text-primary, inherit);
+  border: 1px solid var(--border-color-light, transparent);
   padding: 2px 5px;
   border-radius: 4px;
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   font-size: 87%;
 }
 .md-preview :deep(pre) {
-  background: var(--code-bg, #f6f8fa);
+  background: var(--bg-code, #f6f8fa);
+  color: var(--text-primary, inherit);
+  border: 1px solid var(--border-color-light, transparent);
   padding: 14px 16px;
   border-radius: 6px;
   overflow: auto;
@@ -149,6 +153,7 @@ const segments = computed<Segment[]>(() => {
 }
 .md-preview :deep(pre code) {
   background: none;
+  border: none;
   padding: 0;
   font-size: 100%;
 }
@@ -174,7 +179,7 @@ const segments = computed<Segment[]>(() => {
   border: 1px solid var(--border-color, #d0d7de);
   padding: 6px 13px;
 }
-.md-preview :deep(thead tr) { background: var(--code-bg, #f6f8fa); }
+.md-preview :deep(thead tr) { background: var(--bg-code, #f6f8fa); }
 .md-preview :deep(ul),
 .md-preview :deep(ol) { padding-left: 2em; margin-bottom: 16px; }
 .md-preview :deep(li) { margin: 4px 0; }
@@ -193,7 +198,7 @@ const segments = computed<Segment[]>(() => {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary, #656d76);
-  background: var(--code-bg, #f6f8fa);
+  background: var(--bg-code, #f6f8fa);
   letter-spacing: 0.5px;
 }
 .md-mindmap-canvas {
