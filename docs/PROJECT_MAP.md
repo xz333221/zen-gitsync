@@ -208,27 +208,35 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 │       │   ├── favicon.svg / logo.svg / vite.svg
 │       │   └── assets/
 │       └── server/                # [核心: GUI 后端 Express]
-│           ├── index.js           # 入口(420 行,startUIServer)
+│           ├── index.js           # 入口(601 行,startUIServer)
 │           ├── middleware/requestLogger.js
-│           ├── routes/            # 12 个 REST 路由注册器(行数 = 2026-06-26 cloc)
-│           │   ├── workbench.js        (3410 行, **最大**,已 +198 行)
-│           │   ├── config.js           (1210 行)
-│           │   ├── npm.js              (1356 行,已 +153 行)
-│           │   ├── gitOps.js           (1145 行,已 -34 行)
-│           │   ├── codeAnalysis.js     (995 行)
-│           │   ├── fs.js               (701 行)
-│           │   ├── git.js              (179 行) + git/
-│           │   │   ├── stash.js        (552 行)
-│           │   │   ├── diff.js         (352 行) + diffUtils.js (128 行)
-│           │   │   └── tags.js         (172 行)
-│           │   ├── terminal.js         (318 行)
-│           │   ├── fileOpen.js         (279 行)
-│           │   ├── exec.js             (279 行,已 +6 行)
-│           │   ├── code.js             (110 行, **code 节点 RCE 入口,审计 SEC-RCE-1 标记**)
-│           │   ├── branchStatus.js     (101 行)
-│           │   ├── process.js          (82 行)
-│           │   ├── status.js           (66 行)
-│           │   └── instances.js        (38 行)
+│           ├── routes/            # 36 个路由文件(含 git/ 和 workbench/ 子目录)
+│           │   ├── workbench.js        (31 行, 主入口 → workbench/ 子目录)
+│           │   ├── workbench/          # 工作台子系统(14 个子模块)
+│           │   │   ├── index.js / taskRunner.js / jobStore.js
+│           │   │   ├── agentRoutes.js / agentChat.js / agentSessionStore.js
+│           │   │   ├── sessionStore.js / instructionStore.js
+│           │   │   ├── llmClient.js / jsonParse.js / pdfText.js
+│           │   │   ├── projectScan.js / attachmentUtils.js / shared.js
+│           │   ├── config.js           (1164 行)
+│           │   ├── npm.js              (1384 行)
+│           │   ├── gitOps.js           (1099 行)
+│           │   ├── codeAnalysis.js     (895 行)
+│           │   ├── fs.js               (752 行)
+│           │   ├── git.js              (169 行) + git/
+│           │   │   ├── stash.js        (540 行)
+│           │   │   ├── diff.js         (384 行) + diffUtils.js (136 行)
+│           │   │   └── tags.js         (168 行)
+│           │   ├── terminal.js         (292 行)
+│           │   ├── fileOpen.js         (281 行)
+│           │   ├── exec.js             (412 行)
+│           │   ├── code.js             (207 行, **code 节点 RCE 入口,审计 SEC-RCE-1 标记**)
+│           │   ├── branchStatus.js     (102 行)
+│           │   ├── process.js          (84 行)
+│           │   ├── status.js           (65 行)
+│           │   ├── mindmap.js          (293 行)
+│           │   ├── monitor.js          (329 行)
+│           │   └── instances.js        (31 行)
 │           ├── socket/
 │           │   └── registerUiSocketHandlers.js (226 行)
 │           └── utils/

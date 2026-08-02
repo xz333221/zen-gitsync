@@ -62,7 +62,7 @@ npm install -g zen-gitsync
 - **Accessibility (WCAG 2.1 AA)** — Dialog focus trap & restore, role-based separators, keyboard-only panel resize (`← → ↑ ↓`), screen-reader friendly commit context menu, ARIA-pressed toggle buttons, commit button `aria-busy` during in-flight commits, Git SHA hashes meet ≥ 4.5:1 contrast in both light and dark themes
 - **Faster cold start** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` are split into independent chunks and lazy-loaded so the Git panel boots without waiting on the code editor or visual workflow designer
 
-> Detailed per-release change log (a11y/perf fixes, i18n missing translations, dead-code removals, etc.) lives in [CHANGELOG.md](./CHANGELOG.md).
+> Detailed per-release changes can be found via `git log` or the [GitHub Releases](https://github.com/xz333221/zen-gitsync/releases) page.
 
 ---
 
@@ -410,16 +410,7 @@ git add --renormalize .
 
 ### Package manager
 
-All `package.json` scripts use **npm** (`npm install`, `npm run dev`, `npm run release`, etc.). The repo also has a `pnpm-lock.yaml` checked in for reproducibility on machines that prefer pnpm — both managers work because `package.json` is the single source of truth. The CLI's own `bin` entry and most devDeps are pinned to caret ranges; either manager will resolve to compatible versions.
-
-If you switch managers, delete the other manager's lockfile so only one is in the tree:
-
-```bash
-rm -f pnpm-lock.yaml   # when running on npm
-rm -f package-lock.json # when running on pnpm
-```
-
-`.gitignore` already lists both `pnpm-lock.yaml` and `package-lock.json`, so neither is forced into version control.
+All `package.json` scripts use **npm** (`npm install`, `npm run dev`, `npm run release`, etc.). The `package-lock.json` is git-ignored, so each developer generates it locally. The CLI's own `bin` entry and most devDeps are pinned to caret ranges.
 
 ---
 
@@ -608,7 +599,7 @@ npm install -g zen-gitsync
 - **可访问性(WCAG 2.1 AA)** — 弹窗焦点陷阱与归还、`role="separator"` 键盘可达的分隔条、纯键盘(`← → ↑ ↓`)调整面板宽度、屏幕阅读器友好的提交右键菜单、ARIA-pressed 切换按钮、提交按钮在提交过程中挂 `aria-busy`、Git 提交哈希在明/暗主题下对比度均 ≥ 4.5:1
 - **更快的冷启动** — `monaco-editor` / `@vue-flow` / `flow-mindmap` / `dagre` 拆分为独立 chunk 并按需懒加载,Git 面板首屏不再等待代码编辑器或可视化流程编排模块
 
-> 每个版本的详细变更日志(可访问性/性能修复、i18n 漏译、死代码清理等)见 [CHANGELOG.md](./CHANGELOG.md)。
+> 每个版本的详细变更可通过 `git log` 或 [GitHub Releases](https://github.com/xz333221/zen-gitsync/releases) 页面查看。
 
 ---
 
