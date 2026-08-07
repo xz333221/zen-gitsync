@@ -130,25 +130,49 @@ function invalidateCurrentProjectKey() {
 //
 // 缓存策略:单进程内 safeLoadRaw 的结果缓存,所有 loadConfig / saveConfig /
 // saveRecentDirectory 等路径共享,避免每次都重新打开文件 + JSON.parse。
-// 写盘( writeRawConfigFile )时主动失效缓存,保证下一次读看到最新值;
-// 缓存不存在 / 已失效时走原 IO 路径。
+// 写盘( writeRawConfigFile )时主动失效缓存,保证下一次读看到最新值。
 //
-// 注意:这是一个进程内 LRU-free 简单缓存,不感知外部进程对本文件的修改。
-// GUI(独立进程)改完文件后,本进程的 cache 仍是旧值 — 这符合 CLI 工具的
-// 现实使用模式(同一用户很少同时跑多个 CLI 写配置),保留旧行为(open +
-// readFile)开销即可控。如果未来需要多进程一致性,再加 fs.watch 即可。
-let _rawConfigCache = null; // { value, existed } | null(null = 失效/未缓存)
+// 多进程一致性(2026-08-07):之前缓存不感知外部进程修改 —— 一个 g ui 实例
+// 改了模型配置,另一个实例要重启才能看到。现在缓存命中时先 fs.stat 比对
+// mtimeMs + size(一次 stat 系统调用,远低于 open+read+parse 的开销),
+// 签名不一致则自动重读,等价于"懒加载版 fs.watch",且无 watcher 生命周期 /
+// CLI 进程退出阻塞的问题。
+let _rawConfigCache = null; // { value, existed, mtimeMs, size } | null(null = 失效/未缓存)
+
+// 取配置文件签名(mtimeMs + size);文件不存在返回 null,stat 异常返回 undefined(表示"未知")
+async function statConfigSignature() {
+  try {
+    const st = await fs.stat(configPath);
+    return { mtimeMs: st.mtimeMs, size: st.size };
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    return undefined;
+  }
+}
+
+// 判断缓存是否仍新鲜。仅在 _rawConfigCache 非空时调用。
+async function isRawConfigCacheFresh() {
+  const sig = await statConfigSignature();
+  if (sig === undefined) {
+    // stat 异常(权限等):保守沿用缓存,避免把本来可读的状态打成错误
+    return true;
+  }
+  if (sig === null) {
+    // 文件当前不存在:缓存也说"不存在"才算新鲜;缓存有值但文件被外部删了 → 需重走读取路径
+    return !_rawConfigCache.existed;
+  }
+  if (!_rawConfigCache.existed) return false; // 外部进程新建了配置文件 → 需重读
+  return sig.mtimeMs === _rawConfigCache.mtimeMs && sig.size === _rawConfigCache.size;
+}
 
 async function readRawConfigFile() {
-  if (_rawConfigCache) {
-    return _rawConfigCache.value;
-  }
+  // 缓存的新鲜性校验统一收敛在 safeLoadRaw,这里不另开快速通道,
+  // 否则外部进程写盘会被这条捷径挡住。
   const state = await safeLoadRaw();
   if (!state.ok) {
     throw state.error;
   }
-  _rawConfigCache = { value: state.obj, existed: state.existed };
-  return _rawConfigCache.value;
+  return state.obj;
 }
 
 /**
@@ -200,22 +224,31 @@ async function backupConfigFileIfExists() {
 
 // 更安全的读取，区分“文件不存在”和“解析失败”
 async function safeLoadRaw() {
-  // 命中缓存直接返回,跳过 readFile + JSON.parse
-  if (_rawConfigCache) {
+  // 命中缓存且签名未变(无外部进程写入)才直接返回,跳过 readFile + JSON.parse
+  if (_rawConfigCache && await isRawConfigCacheFresh()) {
     return { ok: true, obj: _rawConfigCache.value, existed: _rawConfigCache.existed };
   }
   try {
     const data = await fs.readFile(configPath, 'utf-8');
     const obj = JSON.parse(data);
-    _rawConfigCache = { value: obj, existed: true };
+    // 读完后立刻取签名。取不到(stat 异常)则签名字段置 undefined ——
+    // 之后若 stat 恢复可用,签名比对必然不命中 → 自动重读兜底;
+    // 若 stat 持续异常,isRawConfigCacheFresh 会保守沿用缓存。
+    const sig = await statConfigSignature();
+    _rawConfigCache = {
+      value: obj,
+      existed: true,
+      mtimeMs: sig ? sig.mtimeMs : undefined,
+      size: sig ? sig.size : undefined
+    };
     return { ok: true, obj, existed: true };
   } catch (err) {
     if (err && err.code === 'ENOENT') {
-      // 文件不存在：当作空对象，但可继续写入
-      // 注意:这里也缓存 existed:false 的空对象,避免每次 lockFile/unlockFile
-      // 等"未初始化"路径都重新走 fs.readFile(总抛 ENOENT)
+      // 文件不存在：当作空对象，但可继续写入。
+      // 缓存签名 mtimeMs:null —— 命中缓存时仍会 stat 一次以感知外部新建,
+      // 比旧的"每次都 readFile 抛 ENOENT"便宜,比"永久信任缓存"及时。
       const empty = {};
-      _rawConfigCache = { value: empty, existed: false };
+      _rawConfigCache = { value: empty, existed: false, mtimeMs: null, size: null };
       return { ok: true, obj: empty, existed: false };
     }
     // 其他错误（例如解析失败）：不写入，提示用户

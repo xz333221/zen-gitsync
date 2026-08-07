@@ -252,8 +252,9 @@ export const useGitStore = defineStore('git', () => {
       
       const result = await response.json()
       if (result.success) {
+        // 选中远程分支时服务端会切到/创建同名本地分支，提示以实际分支名为准
         ElMessage({
-          message: `${$t('@C298B:已切换到分支: ')}${branch}`,
+          message: `${$t('@C298B:已切换到分支: ')}${result.branch || branch}`,
           type: 'success'
         })
         
@@ -1133,8 +1134,14 @@ export const useGitStore = defineStore('git', () => {
       
       const result = await response.json()
       if (result.success) {
+        // 如果服务端跳过了锁定文件，在成功提示中附加说明
+        const skipped = Array.isArray(result.skippedLockedFiles) ? result.skippedLockedFiles : []
+        let successMsg = $t('@C298B:提交成功')
+        if (skipped.length > 0) {
+          successMsg += $t('@C298B:，已跳过 ') + skipped.length + $t('@C298B: 个锁定文件')
+        }
         ElMessage({
-          message: $t('@C298B:提交成功'),
+          message: successMsg,
           type: 'success'
         })
 
@@ -1149,8 +1156,14 @@ export const useGitStore = defineStore('git', () => {
 
         return true
       } else {
+        // 服务端可能返回 "所有暂存文件都被锁定" 等业务级失败
+        const skipped = Array.isArray(result.skippedLockedFiles) ? result.skippedLockedFiles : []
+        let errorMsg = result.error || ''
+        if (skipped.length > 0) {
+          errorMsg += `（${$t('@C298B:跳过 ')}${skipped.length}${$t('@C298B: 个锁定文件')}）`
+        }
         ElMessage({
-          message: `${$t('@C298B:commitChanges 提交失败: ')}${result.error}`,
+          message: `${$t('@C298B:commitChanges 提交失败: ')}${errorMsg}`,
           type: "error",
         });
         return false

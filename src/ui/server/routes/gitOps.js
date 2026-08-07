@@ -36,7 +36,15 @@ export function registerGitOpsRoutes({
   setRecentPushStatus
 }) {
   // 提交更改
+  // 锁定文件排除逻辑：提交前检测暂存区中是否有锁定文件，
+  // 如果有则临时 git reset HEAD 取消暂存 → 提交 → 恢复暂存状态。
+  // 这样用户可以从左侧文件列表区域自由操作锁定文件（暂存/撤回），
+  // 但右侧提交时锁定文件不会被提交。
   app.post('/api/commit', express.json(), async (req, res) => {
+    let tempFile = null;
+    // 临时取消暂存的锁定文件列表（提交后需恢复）
+    let unstagedLockedFiles = [];
+
     try {
       const { message, hasNewlines, noVerify } = req.body;
 
@@ -44,7 +52,6 @@ export function registerGitOpsRoutes({
       const commitArgs = ['commit'];
 
       // 如果消息包含换行符，使用文件方式提交
-      let tempFile
       if (hasNewlines) {
         // 创建临时文件存储提交信息
         tempFile = path.join(os.tmpdir(), `commit-msg-${Date.now()}.txt`);
@@ -60,17 +67,114 @@ export function registerGitOpsRoutes({
         commitArgs.push('--no-verify');
       }
 
+      // ====== 锁定文件排除逻辑 ======
+      const lockedFiles = await configManager.getLockedFiles();
+      let skippedLockedFiles = [];
+
+      if (lockedFiles.length > 0) {
+        // 获取当前暂存区文件列表
+        const { stdout: stagedOutput } = await execGitCommand(
+          ['diff', '--cached', '--name-only'], { log: false }
+        );
+        const stagedFiles = stagedOutput.split('\n').filter(Boolean);
+
+        if (stagedFiles.length > 0) {
+          // 获取 Git 根目录，用于将锁定文件的绝对路径转为 git 相对路径
+          let gitRoot;
+          try {
+            const { stdout: rootOut } = await execGitCommand(
+              ['rev-parse', '--show-toplevel'], { log: false }
+            );
+            gitRoot = path.normalize(rootOut.trim());
+          } catch (_) {
+            gitRoot = path.normalize(process.cwd());
+          }
+
+          // 将锁定文件路径统一为 git 相对路径（正斜杠）以便与
+          // git diff --cached --name-only 的输出进行比较
+          function toGitRelative(p) {
+            const normalized = path.normalize(p);
+            const relative = (path.isAbsolute(normalized) && normalized.startsWith(gitRoot))
+              ? path.relative(gitRoot, normalized)
+              : normalized;
+            return relative.replace(/\\/g, '/');
+          }
+
+          const lockedRelativeSet = new Set(lockedFiles.map(toGitRelative));
+
+          // 找出暂存区中的锁定文件
+          unstagedLockedFiles = stagedFiles.filter(
+            f => lockedRelativeSet.has(f.replace(/\\/g, '/'))
+          );
+
+          if (unstagedLockedFiles.length > 0) {
+            // 临时取消暂存锁定文件
+            await execGitCommand(
+              ['reset', 'HEAD', '--', ...unstagedLockedFiles], { log: false }
+            );
+            skippedLockedFiles = unstagedLockedFiles;
+
+            // 检查取消暂存后是否还有可提交的内容
+            const { stdout: remainingStaged } = await execGitCommand(
+              ['diff', '--cached', '--name-only'], { log: false }
+            );
+            if (!remainingStaged.trim()) {
+              // 所有暂存文件都是锁定的 — 恢复暂存状态并返回提示
+              await execGitCommand(
+                ['add', '--', ...unstagedLockedFiles], { log: false }
+              );
+              if (tempFile) {
+                await fs.unlink(tempFile).catch(() => {});
+              }
+              res.json({
+                success: false,
+                error: '所有暂存文件都被锁定，没有可提交的内容',
+                skippedLockedFiles,
+              });
+              return;
+            }
+          }
+        }
+      }
+
       logger.info(`commitArgs ==>`, commitArgs);
       // 执行提交命令
       await execGitCommand(commitArgs);
 
       // 如果使用了临时文件，删除它
-      if (hasNewlines && tempFile) {
+      if (tempFile) {
         await fs.unlink(tempFile).catch(() => {});
       }
 
-      res.json({ success: true });
+      // 恢复锁定文件的暂存状态（保留用户在左侧文件列表中的暂存操作）
+      if (unstagedLockedFiles.length > 0) {
+        try {
+          await execGitCommand(
+            ['add', '--', ...unstagedLockedFiles], { log: false }
+          );
+        } catch (e) {
+          logger.warn('恢复锁定文件暂存状态失败:', e.message);
+        }
+      }
+
+      res.json({
+        success: true,
+        skippedLockedFiles: skippedLockedFiles.length > 0
+          ? skippedLockedFiles
+          : undefined,
+      });
     } catch (error) {
+      // 出错时也要尝试恢复锁定文件的暂存状态
+      if (unstagedLockedFiles.length > 0) {
+        try {
+          await execGitCommand(
+            ['add', '--', ...unstagedLockedFiles], { log: false }
+          );
+        } catch (_) { /* 忽略恢复失败，不掩盖原始错误 */ }
+      }
+      if (tempFile) {
+        await fs.unlink(tempFile).catch(() => {});
+      }
       res.status(500).json({ success: false, error: error.message });
     }
   });

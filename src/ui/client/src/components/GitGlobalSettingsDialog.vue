@@ -637,6 +637,11 @@ let initLocale: SupportLocale = 'zh-CN'
 watch(() => props.modelValue, async (val) => {
   visible.value = val
   if (val) {
+    // 打开时先强制刷新一次配置:
+    // 另一个 g ui 实例(独立进程)改过的全局配置(AI 模型/主题等),
+    // 本页面 configStore 里还是启动时的旧快照,不刷新就看不到对方的修改。
+    await configStore.loadConfig(true)
+
     // 打开时加载数据
     tempUserName.value = gitStore.userName
     tempUserEmail.value = gitStore.userEmail

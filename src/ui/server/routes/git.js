@@ -95,14 +95,45 @@ export function registerGitRoutes({
         if (!branch) {
           throw new HttpError(400, '分支名称不能为空');
         }
-      
+
+        let finalBranch = branch;
+
+        // 远程分支（如 origin/xxx）：直接 checkout 远程引用会进入 detached HEAD，
+        // 需要先解析出同名本地分支——已存在则直接切换，不存在则基于远程分支创建并跟踪。
+        if (branch.includes('/')) {
+          const { stdout: remoteRef } = await execGitCommand(
+            ['rev-parse', '--verify', '--quiet', `refs/remotes/${branch}`],
+            { ignoreError: true, log: false }
+          );
+
+          if (remoteRef.trim()) {
+            // 去掉第一个路径段（远程名），得到本地分支名，支持 origin/feature/x 这类多级名称
+            const localName = branch.substring(branch.indexOf('/') + 1);
+            const { stdout: localRef } = await execGitCommand(
+              ['rev-parse', '--verify', '--quiet', `refs/heads/${localName}`],
+              { ignoreError: true, log: false }
+            );
+
+            if (localRef.trim()) {
+              // 本地已有同名分支，直接切换
+              finalBranch = localName;
+            } else {
+              // 本地没有：创建同名本地分支并跟踪该远程分支
+              await execGitCommand(['checkout', '--track', branch]);
+              clearBranchCache();
+              res.json({ success: true, branch: localName, created: true });
+              return;
+            }
+          }
+        }
+
         // 执行分支切换
-        await execGitCommand(['checkout', branch]);
-      
+        await execGitCommand(['checkout', finalBranch]);
+
         // 清除分支缓存，因为分支已切换
         clearBranchCache();
-      
-        res.json({ success: true });
+
+        res.json({ success: true, branch: finalBranch });
       } catch (error) {
         logger.error('切换分支失败:', error);
         res.status(500).json({ success: false, error: error.message });

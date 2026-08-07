@@ -159,8 +159,8 @@ function handleManageLockedFiles(event: Event) {
       </el-button>
     </el-tooltip>
     
-    <!-- 动态操作按钮（文件被锁定时隐藏） -->
-    <template v-if="!isLocked" v-for="action in actionButtons" :key="action.type">
+    <!-- 动态操作按钮（锁定文件也显示:锁定语义=不随提交走,不影响暂存/撤回等文件操作） -->
+    <template v-for="action in actionButtons" :key="action.type">
       <el-tooltip :content="action.tooltip" placement="top"  :show-after="200">
         <el-button
           :type="action.buttonType"
