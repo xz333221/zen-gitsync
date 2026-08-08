@@ -23,10 +23,11 @@ import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
 import { useLocaleStore } from "@/stores/localeStore";
-import { useToolsStore } from "@/stores/toolsStore";
+import { useToolsStore, type ToolId } from "@/stores/toolsStore";
 import { storeToRefs } from "pinia";
 import IconButton from "@components/IconButton.vue";
 import SvgIcon from "@components/SvgIcon/index.vue";
+import ToolInstallDialog from "@components/ToolInstallDialog.vue";
 import claudeCodeIcon from "@/assets/icons/svg/claudecode-color.svg";
 import { getFolderNameFromPath } from "@/utils/path";
 
@@ -73,6 +74,63 @@ const newDirectoryPath = ref("");
 const isChangingDirectory = ref(false);
 const recentDirectories = ref<{ path: string; exists: boolean }[]>([]);
 const isBrowserDialogVisible = ref(false);
+const installDialogVisible = ref(false);
+const selectedInstallTool = ref<ToolId | null>(null);
+
+const toolNames: Record<ToolId, string> = {
+  vscode: 'VSCode',
+  claude: 'Claude Code',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+}
+
+function openToolInstall(tool: ToolId) {
+  selectedInstallTool.value = tool
+  installDialogVisible.value = true
+}
+
+function toolTooltip(tool: ToolId, availableText: string) {
+  if (toolsStore.lastCheckedAt === null) {
+    return $t('@67CE7:正在检测 {tool}', { tool: toolNames[tool] })
+  }
+  return toolsStore.isToolAvailable(tool)
+    ? availableText
+    : $t('@67CE7:{tool} 未安装，点击查看安装方式', { tool: toolNames[tool] })
+}
+
+async function runOrInstall(tool: ToolId, action: () => void | Promise<void>) {
+  if (toolsStore.lastCheckedAt === null) {
+    await toolsStore.checkTools()
+    if (toolsStore.lastCheckedAt === null) {
+      ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
+      return
+    }
+  }
+  if (!toolsStore.isToolAvailable(tool)) {
+    openToolInstall(tool)
+    return
+  }
+  await action()
+}
+
+function onClaudePrimaryClick() {
+  runOrInstall('claude', () => onOpenInClaudeCode('bypassPermissions'))
+}
+
+async function onClaudeContextMenu() {
+  if (toolsStore.lastCheckedAt === null) {
+    await toolsStore.checkTools()
+    if (toolsStore.lastCheckedAt === null) {
+      ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
+      return
+    }
+  }
+  if (toolsStore.claudeAvailable) {
+    openClaudeMenu()
+  } else {
+    openToolInstall('claude')
+  }
+}
 
 // 定义emits
 defineEmits<{
@@ -513,29 +571,29 @@ function onBrowserSelect(path: string) {
         <el-icon aria-hidden="true"><Monitor /></el-icon>
       </IconButton>
       <IconButton
-        v-if="toolsStore.vscodeAvailable"
-        :tooltip="$t('@67CE7:用 VSCode 打开')"
-        :aria-label="$t('@67CE7:用 VSCode 打开')"
+        :tooltip="toolTooltip('vscode', $t('@67CE7:用 VSCode 打开'))"
+        :aria-label="toolTooltip('vscode', $t('@67CE7:用 VSCode 打开'))"
+        :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.vscodeAvailable ? '' : 'tool-button--missing')"
         size="large"
-        @click="onOpenInVscode"
+        @click="runOrInstall('vscode', onOpenInVscode)"
       >
         <svg-icon icon-class="vscode" />
       </IconButton>
       <IconButton
-        v-if="toolsStore.codexAvailable"
-        :tooltip="$t('@67CE7:用 Codex 打开')"
-        :aria-label="$t('@67CE7:用 Codex 打开')"
+        :tooltip="toolTooltip('codex', $t('@67CE7:用 Codex 打开'))"
+        :aria-label="toolTooltip('codex', $t('@67CE7:用 Codex 打开'))"
+        :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.codexAvailable ? '' : 'tool-button--missing')"
         size="large"
-        @click="onOpenInCodex"
+        @click="runOrInstall('codex', onOpenInCodex)"
       >
         <svg-icon icon-class="codex" />
       </IconButton>
       <IconButton
-        v-if="toolsStore.opencodeAvailable"
-        :tooltip="$t('@67CE7:用 OpenCode 打开')"
-        :aria-label="$t('@67CE7:用 OpenCode 打开')"
+        :tooltip="toolTooltip('opencode', $t('@67CE7:用 OpenCode 打开'))"
+        :aria-label="toolTooltip('opencode', $t('@67CE7:用 OpenCode 打开'))"
+        :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.opencodeAvailable ? '' : 'tool-button--missing')"
         size="large"
-        @click="onOpenInOpencode"
+        @click="runOrInstall('opencode', onOpenInOpencode)"
       >
         <svg-icon icon-class="opencode" />
       </IconButton>
@@ -545,7 +603,6 @@ function onBrowserSelect(path: string) {
         在 IconButton(el-tooltip) 嵌套下的失效问题。
       -->
       <el-popover
-        v-if="toolsStore.claudeAvailable"
         :visible="claudeMenuVisible"
         :trigger="('manual' as any)"
         placement="bottom-end"
@@ -557,13 +614,14 @@ function onBrowserSelect(path: string) {
           <span
             ref="claudeTriggerRef"
             class="claude-code-trigger"
-            @contextmenu.prevent.stop="openClaudeMenu"
+            @contextmenu.prevent.stop="onClaudeContextMenu"
           >
             <IconButton
-              :tooltip="$t('@67CE7:用 Claude Code 打开（完全批准）')"
-              :aria-label="$t('@67CE7:用 Claude Code 打开（完全批准）')"
+              :tooltip="toolTooltip('claude', $t('@67CE7:用 Claude Code 打开（完全批准）'))"
+              :aria-label="toolTooltip('claude', $t('@67CE7:用 Claude Code 打开（完全批准）'))"
+              :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.claudeAvailable ? '' : 'tool-button--missing')"
               size="large"
-              @click="onOpenInClaudeCode('bypassPermissions')"
+              @click="onClaudePrimaryClick"
             >
               <img
                 :src="claudeCodeIcon"
@@ -611,6 +669,11 @@ function onBrowserSelect(path: string) {
       </el-popover>
     </div>
   </div>
+
+  <ToolInstallDialog
+    v-model="installDialogVisible"
+    :tool="selectedInstallTool"
+  />
 
   <!-- 切换目录对话框 -->
   <CommonDialog
@@ -1067,6 +1130,40 @@ function onBrowserSelect(path: string) {
 
 /* dialog-footer、footer-actions、dialog-cancel-btn、dialog-confirm-btn 基础样式已移至 @/styles/common.scss */
 
+/* 未安装的工具仍保持可点击，仅降低饱和度并用小圆点提示“需要安装”。 */
+:deep(.tool-button--missing) {
+  position: relative;
+  opacity: 0.52;
+  filter: grayscale(0.65);
+}
+
+:deep(.tool-button--missing::after) {
+  content: '';
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid var(--bg-container);
+  border-radius: 50%;
+  background: var(--el-color-warning);
+}
+
+:deep(.tool-button--missing:hover) {
+  opacity: 0.85;
+  filter: grayscale(0.2);
+}
+
+:deep(.tool-button--checking) {
+  opacity: 0.68;
+  animation: tool-checking-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes tool-checking-pulse {
+  from { opacity: 0.45; }
+  to { opacity: 0.82; }
+}
+
 /* 加载动画 */
 .is-loading {
   animation: rotating 2s linear infinite;
@@ -1081,4 +1178,3 @@ function onBrowserSelect(path: string) {
   }
 }
 </style>
-

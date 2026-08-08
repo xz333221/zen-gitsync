@@ -1,12 +1,23 @@
 // 本地工具检测 store — vscode / claude / codex / opencode 是否安装
 // 调用 /api/check-tools,启动时一次 + 每 10 分钟刷新
-// 组件用 v-if="toolsStore.vscodeAvailable" 决定是否显示对应按钮
+// 组件始终显示工具按钮；available 决定点击后是直接打开还是展示安装引导
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 const POLL_INTERVAL_MS = 10 * 60 * 1000 // 10 分钟
-// 检测完成前默认 false(不显示按钮),等首次检测完才决定
-// 不预设 true 是为了不向用户承诺一个未经验证的状态
+
+export type ToolId = 'vscode' | 'claude' | 'codex' | 'opencode'
+
+export interface ToolInstallerInfo {
+  supported: boolean
+  command: string
+  packageManager: string
+  docsUrl: string
+  note: string
+}
+
+type ToolInstallers = Partial<Record<ToolId, ToolInstallerInfo>>
+// 检测完成前默认 false，按钮仍显示，但会走安装引导而不是直接启动工具
 
 export const useToolsStore = defineStore('tools', () => {
   const vscodeAvailable = ref(false)
@@ -15,24 +26,44 @@ export const useToolsStore = defineStore('tools', () => {
   const opencodeAvailable = ref(false)
   const lastCheckedAt = ref<number | null>(null)
   const isChecking = ref(false)
+  const platform = ref('')
+  const installers = ref<ToolInstallers>({})
 
-  async function checkTools(): Promise<void> {
-    if (isChecking.value) return
+  let checkPromise: Promise<void> | null = null
+  function checkTools(): Promise<void> {
+    if (checkPromise) return checkPromise
     isChecking.value = true
-    try {
-      const resp = await fetch('/api/check-tools')
-      const data = await resp.json()
-      if (data.success) {
-        vscodeAvailable.value = !!data.vscode
-        claudeAvailable.value = !!data.claude
-        codexAvailable.value = !!data.codex
-        opencodeAvailable.value = !!data.opencode
-        lastCheckedAt.value = Date.now()
+    checkPromise = (async () => {
+      try {
+        const resp = await fetch('/api/check-tools')
+        const data = await resp.json()
+        if (data.success) {
+          vscodeAvailable.value = !!data.vscode
+          claudeAvailable.value = !!data.claude
+          codexAvailable.value = !!data.codex
+          opencodeAvailable.value = !!data.opencode
+          platform.value = typeof data.platform === 'string' ? data.platform : ''
+          installers.value = data.installers && typeof data.installers === 'object'
+            ? data.installers as ToolInstallers
+            : {}
+          lastCheckedAt.value = Date.now()
+        }
+      } catch {
+        // 检测失败保持原状态,不抛
+      } finally {
+        isChecking.value = false
+        checkPromise = null
       }
-    } catch {
-      // 检测失败保持原状态,不抛
-    } finally {
-      isChecking.value = false
+    })()
+    return checkPromise
+  }
+
+  function isToolAvailable(tool: ToolId): boolean {
+    switch (tool) {
+      case 'vscode': return vscodeAvailable.value
+      case 'claude': return claudeAvailable.value
+      case 'codex': return codexAvailable.value
+      case 'opencode': return opencodeAvailable.value
     }
   }
 
@@ -57,6 +88,9 @@ export const useToolsStore = defineStore('tools', () => {
     opencodeAvailable,
     lastCheckedAt,
     isChecking,
+    platform,
+    installers,
+    isToolAvailable,
     checkTools,
     startPolling,
     stopPolling,

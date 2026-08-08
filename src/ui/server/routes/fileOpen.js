@@ -18,6 +18,105 @@ import path from 'path';
 import open from 'open';
 import { spawn, spawnSync } from 'child_process';
 
+const TOOL_INSTALL_PACKAGES = Object.freeze({
+  claude: '@anthropic-ai/claude-code',
+  codex: '@openai/codex',
+  opencode: 'opencode-ai',
+});
+
+const TOOL_DOCS_URLS = Object.freeze({
+  vscode: 'https://code.visualstudio.com/download',
+  claude: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
+  codex: 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started',
+  opencode: 'https://opencode.ai/docs',
+});
+
+function commandExists(command, platform = process.platform) {
+  const checker = platform === 'win32' ? 'where.exe' : 'which';
+  const result = spawnSync(checker, [command], {
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  return result.status === 0;
+}
+
+/**
+ * 返回当前平台可展示、可执行的安装方案。
+ * executable/args 只在服务端使用；前端只能提交固定 tool id，不能提交命令。
+ */
+export function getToolInstallers(platform = process.platform, hasCommand = commandExists) {
+  const npmExecutable = platform === 'win32' ? 'npm.cmd' : 'npm';
+  const npmAvailable = hasCommand('npm', platform);
+  const installers = {};
+
+  for (const [tool, packageName] of Object.entries(TOOL_INSTALL_PACKAGES)) {
+    installers[tool] = {
+      supported: npmAvailable,
+      command: `npm install -g ${packageName}`,
+      packageManager: 'npm',
+      docsUrl: TOOL_DOCS_URLS[tool],
+      note: npmAvailable
+        ? '将在新终端中执行全局安装。安装过程中可能需要登录或确认权限。'
+        : '未检测到 npm，请先安装 Node.js/npm，或按照官方文档手动安装。',
+      executable: npmExecutable,
+      args: ['install', '-g', packageName],
+    };
+  }
+
+  if (platform === 'win32') {
+    const wingetAvailable = hasCommand('winget', platform);
+    installers.vscode = {
+      supported: wingetAvailable,
+      command: 'winget install --id Microsoft.VisualStudioCode -e --accept-package-agreements --accept-source-agreements',
+      packageManager: 'winget',
+      docsUrl: TOOL_DOCS_URLS.vscode,
+      note: wingetAvailable
+        ? '将在新终端中通过 winget 安装 Visual Studio Code。'
+        : '未检测到 winget，请使用 VS Code 官方安装程序。',
+      executable: 'winget',
+      args: ['install', '--id', 'Microsoft.VisualStudioCode', '-e', '--accept-package-agreements', '--accept-source-agreements'],
+    };
+  } else if (platform === 'darwin') {
+    const brewAvailable = hasCommand('brew', platform);
+    installers.vscode = {
+      supported: brewAvailable,
+      command: 'brew install --cask visual-studio-code',
+      packageManager: 'Homebrew',
+      docsUrl: TOOL_DOCS_URLS.vscode,
+      note: brewAvailable
+        ? '将在新终端中通过 Homebrew 安装 Visual Studio Code。'
+        : '未检测到 Homebrew，请使用 VS Code 官方安装程序。',
+      executable: 'brew',
+      args: ['install', '--cask', 'visual-studio-code'],
+    };
+  } else {
+    const snapAvailable = hasCommand('snap', platform);
+    installers.vscode = {
+      supported: snapAvailable,
+      command: 'sudo snap install code --classic',
+      packageManager: 'snap',
+      docsUrl: TOOL_DOCS_URLS.vscode,
+      note: snapAvailable
+        ? '将在新终端中通过 snap 安装 Visual Studio Code，可能需要输入系统密码。'
+        : '当前 Linux 环境未检测到 snap，请按照发行版对应的官方说明安装。',
+      executable: 'sudo',
+      args: ['snap', 'install', 'code', '--classic'],
+    };
+  }
+
+  return installers;
+}
+
+function publicInstallerInfo(installers) {
+  return Object.fromEntries(Object.entries(installers).map(([tool, installer]) => [tool, {
+    supported: installer.supported,
+    command: installer.command,
+    packageManager: installer.packageManager,
+    docsUrl: installer.docsUrl,
+    note: installer.note,
+  }]));
+}
+
 function spawnDetached(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -123,6 +222,18 @@ async function launchOpenCode(dirPath) {
     });
   }
   return launchInTerminal(dirPath, 'opencode');
+}
+
+async function launchToolInstaller(installer, dirPath = process.cwd()) {
+  if (process.platform === 'win32') {
+    // 安装命令完全来自服务端白名单。使用可见 cmd 窗口，让用户看到进度和错误。
+    const commandLine = [installer.executable, ...installer.args].join(' ');
+    return spawnDetached('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/k', commandLine], {
+      cwd: dirPath,
+    });
+  }
+
+  return launchInTerminal(dirPath, installer.executable, installer.args);
 }
 
 export function registerFileOpenRoutes({
@@ -405,6 +516,26 @@ export function registerFileOpenRoutes({
       }
     }));
 
+  // 安装本地工具：前端只能传固定 tool id，实际命令由服务端按平台从白名单选择。
+  app.post('/api/install-tool', asyncRoute(async (req, res) => {
+      const { tool } = req.body || {};
+      const installers = getToolInstallers();
+      const installer = installers[tool];
+
+      if (!installer) {
+        throw new HttpError(400, '不支持的工具');
+      }
+      if (!installer.supported) {
+        throw new HttpError(400, installer.note || '当前系统不支持一键安装，请按照官方文档手动安装');
+      }
+
+      await launchToolInstaller(installer);
+      res.json({
+        success: true,
+        message: '安装命令已在新终端中启动',
+      });
+    }));
+
   // 检测本地工具是否已安装(供前端根据结果决定是否显示对应按钮)
   // 检测方式: spawn 'tool --version',exit 0 即视为已安装
   // 超时 15s:Claude CLI / opencode 等 Node 包装的工具首次冷启动
@@ -435,6 +566,15 @@ export function registerFileOpenRoutes({
         checkCmd('opencode'),
       ]);
 
-      res.json({ success: true, vscode, claude, codex, opencode });
+      const installers = getToolInstallers();
+      res.json({
+        success: true,
+        platform: process.platform,
+        installers: publicInstallerInfo(installers),
+        vscode,
+        claude,
+        codex,
+        opencode,
+      });
     }));
 }
