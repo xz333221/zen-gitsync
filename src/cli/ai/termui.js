@@ -85,18 +85,19 @@ export function truncateDisplay(text, limit = DISPLAY_RESULT_LIMIT) {
 /** 启动横幅:模型 + 目录 + 快捷键提示,盒式自适应宽度 */
 export function printBanner({ title, modelLabel, baseURL, cwd, modelText, cwdText, tip }) {
   const lines = [
-    // greenBright 在黑底上比 green 更鲜亮,与 🤖 回答图标同色系
-    chalk.greenBright.bold(title),
-    `${modelText}: ${chalk.cyanBright(modelLabel)}${baseURL ? ' ' + chalk.hex('#a0aec0')(baseURL) : ''}`,
-    `${cwdText}: ${chalk.cyanBright(cwd)}`,
-    // dim 在黑底太暗,改用浅灰可读
-    chalk.hex('#a0aec0')(tip),
+    chalk.greenBright.bold(`✦ ${title}`),
+    `${chalk.gray(modelText.padEnd(4))}  ${chalk.cyan(modelLabel)}${baseURL ? '  ' + chalk.gray(baseURL) : ''}`,
+    `${chalk.gray(cwdText.padEnd(4))}  ${chalk.cyan(cwd)}`,
+    chalk.gray(tip),
   ].join('\n')
+  // 大屏终端也保持紧凑,避免横幅铺满整行形成厚重的绿色大框。
+  const width = Math.min(76, Math.max(MIN_BOX_WIDTH, termWidth() - 4))
   process.stdout.write(
     boxenAdaptive(lines, {
+      width,
       padding: { top: 0, bottom: 0, left: 1, right: 1 },
       margin: { top: 1, bottom: 0, left: 0, right: 0 },
-      borderColor: 'greenBright',
+      borderColor: 'gray',
       borderStyle: 'round',
     }) + '\n'
   )
@@ -142,29 +143,32 @@ export function filterSlashCommands(input, locale) {
 
 /**
  * 生成即时提示面板的 ANSI 字符串(不含定位,由调用方负责保存/恢复光标)。
- * 每行:两空格缩进 + 蓝色命令名(左对齐补齐 12 字符宽)+ 灰色说明。
- * 所有行的"视觉起点"一致(均为 2 空格缩进);选中行用整行反白区分(从缩进处
- * 开始),不另加 ❯ 之类的偏移标记 —— 避免反白块起点与其他行不齐。
+ * 无边框列表 + 选中箭头,避免整行反白或竖向框线产生突兀色块。
+ * 首尾显式 reset,防止输入提示符的粗体/亮白状态泄漏到第一条命令。
  *   - 越界 selectedIndex(<0 / >=matches.length) 自动回退为 -1(即不高亮)
  *   - 空数组返回空串
  */
-export function renderSlashHintBody(matches, selectedIndex = -1) {
+export function renderSlashHintBody(matches, selectedIndex = -1, locale = 'zh-CN') {
   if (!Array.isArray(matches) || matches.length === 0) return ''
   const sel = (Number.isInteger(selectedIndex) && selectedIndex >= 0 && selectedIndex < matches.length)
     ? selectedIndex
     : -1
-  return matches
-    .map((m, i) => {
-      const command = String(m.cmd).padEnd(12)
-      if (i !== sel) return '  ' + chalk.cyan(command) + ' ' + chalk.dim(m.desc)
-      // Windows Terminal 的 inverse 会把命令原有的青色吃掉。选中项改用灰色背景,
-      // 命令文字仍保持与其他项一致的青色,只用背景表达当前选择。
-      return chalk.bgGray('  ')
-        + chalk.bgGray.cyan(command)
-        + chalk.bgGray(' ')
-        + chalk.bgGray.white(m.desc)
-    })
-    .join('\n')
+  const zh = !String(locale || '').startsWith('en')
+  const lines = []
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i]
+    const command = String(m.cmd).padEnd(12)
+    if (i === sel) {
+      lines.push(`${chalk.cyanBright('›')} ${chalk.cyan(command)} ${chalk.white(m.desc)}`)
+    } else {
+      lines.push(`  ${chalk.cyan(command)} ${chalk.gray(m.desc)}`)
+    }
+  }
+  const hint = zh
+    ? '↑↓ 选择 · Enter 补全 · Esc 关闭'
+    : '↑↓ select · Enter complete · Esc close'
+  lines.push(chalk.gray(hint))
+  return '\x1b[0m' + lines.join('\n') + '\x1b[0m'
 }
 
 /**

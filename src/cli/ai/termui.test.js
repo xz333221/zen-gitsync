@@ -309,45 +309,38 @@ test('renderSlashHintBody: 每行含命令名与说明,空输入返回空串', (
   assert.match(body, /\/model\s+List \/ switch models/)
 })
 
-test('renderSlashHintBody: 选中行使用背景高亮,不另加 ❯ 前缀(避免高亮块偏左)', () => {
+test('renderSlashHintBody: 选中行使用箭头标记,命令行起点对齐', () => {
   const matches = filterSlashCommands('/h', 'zh')   // 1 个: /help
-  // 选中:不应有 ❯ 前缀;行首应是 2 空格 + 命令名 + padEnd + 空格 + 说明
   const rawSel = renderSlashHintBody(matches, 0)
   const bodySel = stripAnsi(rawSel)
-  assert.equal(bodySel.includes('❯'), false, '选中行不应出现 ❯ 前缀')
-  assert.ok(bodySel.startsWith('  /help'), '选中行应以 2 空格 + /help 开头,与未选中行起点对齐')
-  // 未选中(默认):同样以 2 空格 + /help 开头
+  const selectedLine = bodySel.split('\n').find(line => line.includes('/help'))
+  assert.ok(selectedLine.startsWith('› /help'))
   const bodyNoSel = stripAnsi(renderSlashHintBody(matches))
-  assert.ok(bodyNoSel.startsWith('  /help'), '未选中行应以 2 空格 + /help 开头')
-  // raw 长度差异可识别背景高亮状态
+  const unselectedLine = bodyNoSel.split('\n').find(line => line.includes('/help'))
+  assert.ok(unselectedLine.startsWith('  /help'))
   const rawNoSel = renderSlashHintBody(matches)
   assert.notEqual(rawSel.length, rawNoSel.length,
-    `选中行 raw 与未选中行 raw 长度应不同(背景高亮增加 ANSI 序列),实际: ${rawSel.length} vs ${rawNoSel.length}`)
+    `选中行 raw 与未选中行 raw 长度应不同,实际: ${rawSel.length} vs ${rawNoSel.length}`)
 })
 
-test('renderSlashHintBody: 选中行与其他行起点严格一致(无 ❯ 偏移)', () => {
+test('renderSlashHintBody: 所有命令行无左侧边框且对齐', () => {
   const matches = filterSlashCommands('/', 'zh')   // 全部命令
   const bodySel = stripAnsi(renderSlashHintBody(matches, 0))
-  const lines = bodySel.split('\n')
-  // 所有行(含选中与未选中)的视觉起点都应是 2 空格 + 命令名(无 ❯ 偏移)
-  for (let i = 0; i < lines.length; i++) {
-    assert.ok(
-      lines[i].startsWith('  /'),
-      `第 ${i} 行应以 2 空格 + 命令名开头,实际: ${JSON.stringify(lines[i])}`,
-    )
-    assert.equal(lines[i].includes('❯'), false, `第 ${i} 行不应含 ❯`)
+  const commandLines = bodySel.split('\n').filter(line => line.includes('/'))
+  assert.equal(commandLines.length, matches.length)
+  for (const line of commandLines) {
+    assert.equal(/[╭│╰]/.test(line), false, `命令行不应含左侧框线,实际: ${JSON.stringify(line)}`)
   }
 })
 
-test('renderSlashHintBody: 未选中行不带 ❯ 也不带反白', () => {
+test('renderSlashHintBody: 面板无标题和外层缩进,保留导航提示与显式 ANSI reset', () => {
   const matches = filterSlashCommands('/', 'zh')   // 全部命令
-  const rawSel = renderSlashHintBody(matches, 0)
-  const body = stripAnsi(rawSel)
-  const lines = body.split('\n')
-  // 所有行都不应出现 ❯ 前缀
-  for (let i = 0; i < lines.length; i++) {
-    assert.equal(lines[i].includes('❯'), false, `第 ${i} 行不应有 ❯`)
-  }
+  const raw = renderSlashHintBody(matches, 0)
+  const body = stripAnsi(raw)
+  assert.ok(raw.startsWith('\x1b[0m'), '面板开头必须重置输入提示符遗留样式')
+  assert.equal(body.includes('命令'), false)
+  assert.ok(body.startsWith('› /help'))
+  assert.match(body, /↑↓ 选择 · Enter 补全 · Esc 关闭/)
 })
 
 test('renderSlashHintBody: 越界 selectedIndex 安全回退(不高亮)', () => {

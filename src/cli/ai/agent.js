@@ -1044,7 +1044,7 @@ export async function runAiAgent(argv = []) {
     slashHintRows = 0
   }
   const drawSlashHint = () => {
-    const body = renderSlashHintBody(slashHintMatches, slashHintIndex)
+    const body = renderSlashHintBody(slashHintMatches, slashHintIndex, state.locale)
     const hadVisibleHint = slashHintRows > 0
     eraseSlashHint()
     if (!body) return
