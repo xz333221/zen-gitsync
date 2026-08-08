@@ -1816,8 +1816,18 @@ export default {
   // @EDITOR: file end
   // @INSSW: file path: components/InstanceSwitcher.vue
   '@INSSW:个实例': ' instances',
+  '@INSSW:运行中': 'running',
+  '@INSSW:运行中的实例': 'Running instances',
+  '@INSSW:点击实例可在新标签页打开': 'Open an instance in a new tab',
   '@INSSW:当前': 'Current',
   '@INSSW:无其他运行中的实例': 'No other running instances',
+  '@INSSW:关闭实例': 'Close instance',
+  '@INSSW:关闭实例 {name}': 'Close instance {name}',
+  '@INSSW:关闭实例确认内容': 'Close {name} on port :{port}? Unsaved runtime state may be lost.',
+  '@INSSW:确认关闭': 'Close instance',
+  '@INSSW:取消': 'Cancel',
+  '@INSSW:实例已关闭': 'Instance {name} closed',
+  '@INSSW:关闭实例失败': 'Failed to close instance',
   // @INSSW: file end
   // @ACTBAR: file path: components/ActivityBar.vue
   '@ACTBAR:工作台': 'Workbench',

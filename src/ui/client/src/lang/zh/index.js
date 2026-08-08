@@ -1824,8 +1824,18 @@ export default {
   // @EDITOR: file end
   // @INSSW: file path: components/InstanceSwitcher.vue
   '@INSSW:个实例': '个实例',
+  '@INSSW:运行中': '运行中',
+  '@INSSW:运行中的实例': '运行中的实例',
+  '@INSSW:点击实例可在新标签页打开': '点击实例可在新标签页打开',
   '@INSSW:当前': '当前',
   '@INSSW:无其他运行中的实例': '无其他运行中的实例',
+  '@INSSW:关闭实例': '关闭实例',
+  '@INSSW:关闭实例 {name}': '关闭实例 {name}',
+  '@INSSW:关闭实例确认内容': '确定关闭 {name}（端口 :{port}）吗？未保存的运行状态可能会丢失。',
+  '@INSSW:确认关闭': '确认关闭',
+  '@INSSW:取消': '取消',
+  '@INSSW:实例已关闭': '实例 {name} 已关闭',
+  '@INSSW:关闭实例失败': '关闭实例失败',
   // @INSSW: file end
   // @ACTBAR: file path: components/ActivityBar.vue
   '@ACTBAR:工作台': '工作台',

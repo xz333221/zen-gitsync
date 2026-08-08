@@ -60,6 +60,25 @@ export const useInstancesStore = defineStore('instances', () => {
     }
   }
 
+  async function closeInstance(pid: number): Promise<void> {
+    if (!Number.isInteger(pid) || pid <= 0) {
+      throw new Error('实例 PID 无效')
+    }
+    if (pid === currentInstanceId.value) {
+      throw new Error('不能关闭当前实例')
+    }
+
+    const res = await fetch(`/api/instances/${pid}/close`, { method: 'POST' })
+    const data = await res.json().catch(() => null) as { success?: boolean; error?: string } | null
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `HTTP ${res.status}`)
+    }
+
+    // 立即更新本地视图；注册表 watch / 轮询会继续校准最终状态。
+    list.value = list.value.filter((instance) => instance.pid !== pid)
+    lastError.value = null
+  }
+
   // 监听后端 Socket.IO 推送
   function attachSocket() {
     if (socketRef.value) return
@@ -136,6 +155,7 @@ export const useInstancesStore = defineStore('instances', () => {
     otherInstances,
     lastError,
     refresh,
+    closeInstance,
     start,
     stop
   }

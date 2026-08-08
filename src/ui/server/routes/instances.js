@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 实例注册表 API 路由
-// 当前只暴露只读列表；停止/启停他人实例属于 out-of-scope（v1 只做跳转导航）
+// 实例注册表 API 路由：列表、跳转所需元数据，以及关闭其他已注册实例。
 
-import { asyncRoute } from '../utils/asyncRoute.js'
+import { asyncRoute, HttpError } from '../utils/asyncRoute.js'
 
-export function registerInstancesRoutes({ app, registry, getCurrentInstanceId }) {
+export function registerInstancesRoutes({
+  app,
+  registry,
+  getCurrentInstanceId,
+  killProcess = process.kill.bind(process),
+}) {
   // 获取所有活跃实例（自动 prune 失效条目）
   app.get('/api/instances', asyncRoute(async (req, res) => {
     const instances = await registry.list({ pruneStale: true });
@@ -28,6 +32,47 @@ export function registerInstancesRoutes({ app, registry, getCurrentInstanceId })
       success: true,
       instances,
       currentInstanceId
+    });
+  }));
+
+  // 只允许关闭注册表中仍存活的“其他实例”。前端不能传 signal 或任意命令。
+  app.post('/api/instances/:pid/close', asyncRoute(async (req, res) => {
+    const pidText = String(req.params?.pid || '');
+    if (!/^\d+$/.test(pidText)) {
+      throw new HttpError(400, '实例 PID 无效');
+    }
+
+    const pid = Number(pidText);
+    const currentInstanceId = typeof getCurrentInstanceId === 'function'
+      ? getCurrentInstanceId()
+      : null;
+    if (pid === currentInstanceId) {
+      throw new HttpError(400, '不能从当前页面关闭当前实例');
+    }
+
+    const instances = await registry.list({ pruneStale: true });
+    const target = instances.find((instance) => instance.pid === pid);
+    if (!target) {
+      throw new HttpError(404, '实例不存在或已经关闭');
+    }
+
+    try {
+      killProcess(pid, 'SIGTERM');
+    } catch (error) {
+      if (error?.code === 'ESRCH' || error?.code === 'ENOENT') {
+        await registry.unregister(pid);
+        throw new HttpError(404, '实例已经关闭');
+      }
+      throw new HttpError(500, `关闭实例失败: ${error?.message || error}`);
+    }
+
+    // Windows 的 process.kill 会直接终止目标，来不及执行目标自身的 unregister；
+    // 由发起关闭的一侧立即从注册表摘除，watch 会广播最新列表。
+    await registry.unregister(pid);
+    res.json({
+      success: true,
+      closedPid: pid,
+      message: `已关闭实例 ${target.projectName || pid}`,
     });
   }));
 }
