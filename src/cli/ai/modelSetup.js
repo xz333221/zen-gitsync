@@ -384,20 +384,50 @@ function createAsker(rl) {
    */
   function ask(prompt, defaultValue) {
     return new Promise((resolve, reject) => {
+      let settled = false
+      const controller = new AbortController()
       const display = defaultValue != null && defaultValue !== ''
         ? chalk.cyan(prompt) + chalk.dim(` (${defaultValue})`)
         : chalk.cyan(prompt)
-      rl.question(display + ' ', (answer) => {
+
+      const cleanup = () => {
+        rl.removeListener?.('close', onClose)
+        rl.removeListener?.('operationCancel', onCancel)
+        rl.input?.removeListener?.('keypress', onKeypressCancel)
+      }
+      const cancel = () => {
+        if (settled) return
+        settled = true
+        controller.abort()
+        cleanup()
+        reject({ cancelled: true })
+      }
+      const onClose = () => cancel()
+      const onCancel = () => cancel()
+      const onKeypressCancel = (_str, key) => {
+        if (!key?.ctrl || key.name !== 'c') return
+        // 必须在 readline 内置 listener 前消费,否则它会直接关闭整个 REPL。
+        key.name = 'escape'
+        key.sequence = ''
+        key.ctrl = false
+        key.meta = false
+        key.shift = false
+        cancel()
+      }
+      rl.once('close', onClose)
+      rl.once('operationCancel', onCancel)
+      rl.input?.prependListener?.('keypress', onKeypressCancel)
+
+      rl.question(display + ' ', { signal: controller.signal }, (answer) => {
+        if (settled) return
+        settled = true
+        cleanup()
         const trimmed = (answer || '').trim()
         if (trimmed === '' && defaultValue != null && defaultValue !== '') {
           resolve(defaultValue)
         } else {
           resolve(trimmed)
         }
-      })
-      // Ctrl+C / Ctrl+D: 用户取消
-      rl.once('close', () => {
-        reject({ cancelled: true })
       })
     })
   }
@@ -446,7 +476,7 @@ async function askYesNo(asker, prompt) {
  *   - null:选中额外项
  *   - 抛出 { cancelled: true }:用户取消整个 wizard(Ctrl+C / Esc / readline close)
  */
-async function selectFromList({ rl, asker, title, items, t, extraOptionLabel } = {}) {
+export async function selectFromList({ rl, asker, title, items, t, extraOptionLabel } = {}) {
   const safeItems = Array.isArray(items) ? items : []
   const extraActive = !!extraOptionLabel
   const totalItems = safeItems.length + (extraActive ? 1 : 0)
@@ -504,10 +534,12 @@ async function selectFromList({ rl, asker, title, items, t, extraOptionLabel } =
     }
   }
 
+  const questionController = new AbortController()
   return new Promise((resolve, reject) => {
     const cleanup = () => {
       if (finished) return
       finished = true
+      questionController.abort()
       if (rl && rl.input) rl.input.removeListener('keypress', keyHandler)
       if (rl) rl.removeListener('close', onClose)
     }
@@ -548,6 +580,13 @@ async function selectFromList({ rl, asker, title, items, t, extraOptionLabel } =
 
       if (action === 'cancel') {
         // Esc / Ctrl+C — 让用户取消整个 wizard
+        if (key.ctrl && key.name === 'c') {
+          key.name = 'escape'
+          key.sequence = ''
+          key.ctrl = false
+          key.meta = false
+          key.shift = false
+        }
         cleanup()
         reject({ cancelled: true })
         return
@@ -557,7 +596,8 @@ async function selectFromList({ rl, asker, title, items, t, extraOptionLabel } =
       // 其他字符(字母/数字但 line buffer 非空)让 readline 自然处理
     }
 
-    rl.input.on('keypress', keyHandler)
+    // 必须先于 readline 内置 listener,这样 Ctrl+C 才是取消向导而不是关闭 REPL。
+    rl.input.prependListener('keypress', keyHandler)
     rl.once('close', onClose)
 
     // 提示词:列出可选范围 + 导航提示
@@ -566,7 +606,7 @@ async function selectFromList({ rl, asker, title, items, t, extraOptionLabel } =
     const navHint = t.navHint  // "↑↓ 切换,Enter 确认,数字直跳"
     const promptStr = `${chalk.cyan(t.selectPrompt(minIdx, maxIdx))}${chalk.dim(navHint ? '  ' + navHint : '')} `
 
-    rl.question(promptStr, (answer) => {
+    rl.question(promptStr, { signal: questionController.signal }, (answer) => {
       cleanup()
       const trimmed = (answer || '').trim()
       let idx = Number.parseInt(trimmed, 10)

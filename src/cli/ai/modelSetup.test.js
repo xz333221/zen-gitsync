@@ -17,6 +17,7 @@
 // buildModelConfig / testModelConnection(注入 mock fetch)。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import {
   getBuiltinModels,
   findProviderByUrl,
@@ -371,26 +372,36 @@ test('BUILTIN_MODELS: 每个 key 都能在 PROVIDERS 中找到', () => {
  * @param {object} [opts]
  * @param {number} [opts.closeOnQuestion=-1] - 在第 N 次 question 时触发 close 事件(模拟取消),-1=不触发
  */
-function createMockRl(answers, { closeOnQuestion = -1 } = {}) {
+function createMockRl(answers, { closeOnQuestion = -1, cancelOnQuestion = -1, ctrlCOnQuestion = -1 } = {}) {
   const queue = [...answers]
-  const closeHandlers = []
   let qNum = 0
-  return {
-    question(_prompt, cb) {
-      qNum++
-      if (qNum === closeOnQuestion) {
-        // 先让 once('close') 注册,再在 nextTick 触发(模拟用户 Ctrl+D)
-        process.nextTick(() => { for (const h of closeHandlers) h() })
-        return
-      }
-      const answer = queue.shift() ?? ''
-      process.nextTick(() => cb(answer))
-    },
-    once(event, cb) {
-      if (event === 'close') closeHandlers.push(cb)
-    },
-    close() {},
+  const rl = new EventEmitter()
+  rl.input = new EventEmitter()
+  rl.closed = false
+  rl.question = (_prompt, options, callback) => {
+    const cb = typeof options === 'function' ? options : callback
+    qNum++
+    if (qNum === closeOnQuestion) {
+      process.nextTick(() => { rl.closed = true; rl.emit('close') })
+      return
+    }
+    if (qNum === cancelOnQuestion) {
+      process.nextTick(() => rl.emit('operationCancel'))
+      return
+    }
+    if (qNum === ctrlCOnQuestion) {
+      process.nextTick(() => {
+        const key = { name: 'c', sequence: '\x03', ctrl: true, meta: false, shift: false }
+        rl.input.emit('keypress', '\x03', key)
+        rl.lastCtrlCKey = key
+      })
+      return
+    }
+    const answer = queue.shift() ?? ''
+    process.nextTick(() => cb(answer))
   }
+  rl.close = () => { rl.closed = true; rl.emit('close') }
+  return rl
 }
 
 /** 静默 console.log/error/warn,避免交互式测试刷屏;返回 restore 函数 */
@@ -490,6 +501,39 @@ test('collectModelInput: 用户取消(触发 close)→ 返回 null', async () =>
       cancelMessage: '自定义取消文案',
     })
     assert.equal(result, null)
+  } finally {
+    restore()
+  }
+})
+
+test('collectModelInput: operationCancel 取消当前问题但不关闭 readline', async () => {
+  const restore = silenceConsole()
+  try {
+    const rl = createMockRl([], { cancelOnQuestion: 1 })
+    const result = await collectModelInput({
+      locale: 'zh-CN',
+      rl,
+      fetchFn: mockFetch({ status: 200, ok: true }),
+    })
+    assert.equal(result, null)
+    assert.equal(rl.closed, false, '取消向导后 REPL readline 应继续可用')
+  } finally {
+    restore()
+  }
+})
+
+test('collectModelInput: Ctrl+C 只取消当前问题并阻止 readline 关闭', async () => {
+  const restore = silenceConsole()
+  try {
+    const rl = createMockRl([], { ctrlCOnQuestion: 1 })
+    const result = await collectModelInput({
+      locale: 'zh-CN',
+      rl,
+      fetchFn: mockFetch({ status: 200, ok: true }),
+    })
+    assert.equal(result, null)
+    assert.equal(rl.closed, false)
+    assert.equal(rl.lastCtrlCKey.name, 'escape', 'Ctrl+C 应在 readline 处理前被中和')
   } finally {
     restore()
   }

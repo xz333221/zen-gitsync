@@ -116,6 +116,8 @@ export const SLASH_COMMANDS = [
   { cmd: '/cd',       descZh: '切换工作目录',         descEn: 'Change working directory' },
   { cmd: '/image',    descZh: '附加 / 查看图片',      descEn: 'Attach / list images' },
   { cmd: '/think',    descZh: '开关思考过程显示',      descEn: 'Toggle thinking display' },
+  { cmd: '/new',      descZh: '开启新对话',            descEn: 'Start a new chat' },
+  { cmd: '/resume',   descZh: '恢复之前的对话',         descEn: 'Resume a previous chat' },
   { cmd: '/clear',    descZh: '清空对话历史',         descEn: 'Clear conversation' },
   { cmd: '/exit',     descZh: '退出',                descEn: 'Quit' },
   { cmd: '/quit',     descZh: '退出',                descEn: 'Quit' },
@@ -151,18 +153,16 @@ export function renderSlashHintBody(matches, selectedIndex = -1) {
   const sel = (Number.isInteger(selectedIndex) && selectedIndex >= 0 && selectedIndex < matches.length)
     ? selectedIndex
     : -1
-  // 行宽固定 = 2 空格缩进 + 12 字符命令 + 说明;选中行反白整行(含缩进),
-  // 反白起点与未选中行严格对齐,视觉上选中行不会"偏左"。
-  const rowWidth = (m) => 2 + Math.max(12, String(m.cmd).length) + 1 + String(m.desc).length
   return matches
     .map((m, i) => {
-      // 用 padEnd 凑满 rowWidth,这样反白背景能延伸到行尾,左右不留缝
-      const raw = '  ' + String(m.cmd).padEnd(12) + ' ' + m.desc
-      // 所有行命令名统一用青色(不带额外前缀),选中行靠反白区分
-      const line = chalk.cyan(String(m.cmd).padEnd(12)) + ' ' + chalk.dim(m.desc)
-      if (i !== sel) return '  ' + line
-      // 选中行:把命令名+说明之外的两空格缩进也纳入反白,这样视觉起点严格对齐
-      return chalk.inverse(raw.padEnd(rowWidth(m)))
+      const command = String(m.cmd).padEnd(12)
+      if (i !== sel) return '  ' + chalk.cyan(command) + ' ' + chalk.dim(m.desc)
+      // Windows Terminal 的 inverse 会把命令原有的青色吃掉。选中项改用灰色背景,
+      // 命令文字仍保持与其他项一致的青色,只用背景表达当前选择。
+      return chalk.bgGray('  ')
+        + chalk.bgGray.cyan(command)
+        + chalk.bgGray(' ')
+        + chalk.bgGray.white(m.desc)
     })
     .join('\n')
 }
@@ -175,7 +175,7 @@ export function renderSlashHintBody(matches, selectedIndex = -1) {
  *   - ↑ / Shift+Tab → 'prev'
  *   - ↓             → 'next'
  *   - Tab           → 'complete'(补全选中命令到输入行)
- *   - Enter         → 'submit'(由 readline 默认提交,本函数仅标记是补全时机)
+ *   - Enter         → 'complete'(补全选中命令到输入行,与 Tab 一致)
  *   - Esc           → 'cancel'
  *
  * 注意:readline 默认会把方向键当历史浏览。消费方需要在我们这个 handler
@@ -188,7 +188,7 @@ export function parseKeyForSlashHint(key) {
   if (name === 'tab') return key.shift ? 'prev' : 'complete'
   if (name === 'up') return 'prev'
   if (name === 'down') return 'next'
-  if (name === 'return' || name === 'enter') return 'submit'
+  if (name === 'return' || name === 'enter') return 'complete'
   if (name === 'escape') return 'cancel'
   return null
 }
@@ -198,7 +198,7 @@ export function parseKeyForSlashHint(key) {
 // ──────────────────────────────────────────────────
 //
 // 与 renderSlashHintBody 的差异:
-//   - 必须支持 Enter 提交(parseKeyForSlashHint 把它当 'submit',但那个由 readline 默认接管;
+//   - 必须支持 Enter 提交(parseKeyForSlashHint 把它当 'complete',但斜杠提示由 REPL 接管;
 //     可选列表场景下 wizard 自己消费 Enter,不能丢给 readline)
 //   - 多支持直接按数字 1..9/0 跳到指定项(给经常用键盘的用户省一趟 ↑↓)
 //   - Ctrl+C 在可选列表场景下与 Esc 等价(都视作取消)

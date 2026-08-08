@@ -78,6 +78,30 @@ export async function readSession(sessionId) {
 }
 
 /**
+ * 列出可恢复的会话,按最近更新时间倒序排列。
+ * 单个损坏的 JSON 不应阻断整个列表,因此会静默跳过。
+ */
+export async function listSessions(directory = SESSIONS_DIR) {
+  const files = await fsp.readdir(directory).catch(() => []);
+  const sessions = await Promise.all(
+    files.filter(file => file.endsWith('.json')).map(async (file) => {
+      try {
+        const raw = await fsp.readFile(path.join(directory, file), 'utf-8');
+        const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object' || !Array.isArray(data.messages)) return null;
+        const sessionId = file.slice(0, -'.json'.length);
+        return { ...data, sessionId };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return sessions
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
+}
+
+/**
  * 保留策略:超过 MAX_SESSIONS 时删最旧的,保留 KEEP_SESSIONS 个
  */
 export async function enforceRetention() {

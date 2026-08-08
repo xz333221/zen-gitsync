@@ -280,6 +280,8 @@ test('filterSlashCommands: 单个 / 返回全部命令', () => {
 test('filterSlashCommands: 前缀过滤,大小写不敏感', () => {
   assert.deepEqual(filterSlashCommands('/m', 'zh').map(m => m.cmd), ['/model'])
   assert.deepEqual(filterSlashCommands('/AD', 'zh').map(m => m.cmd), ['/addmodel'])
+  assert.deepEqual(filterSlashCommands('/n', 'zh').map(m => m.cmd), ['/new'])
+  assert.deepEqual(filterSlashCommands('/res', 'zh').map(m => m.cmd), ['/resume'])
   assert.deepEqual(filterSlashCommands('/exit', 'zh').map(m => m.cmd), ['/exit'])
 })
 
@@ -307,7 +309,7 @@ test('renderSlashHintBody: 每行含命令名与说明,空输入返回空串', (
   assert.match(body, /\/model\s+List \/ switch models/)
 })
 
-test('renderSlashHintBody: 选中行整行反白,不另加 ❯ 前缀(避免反白块偏左)', () => {
+test('renderSlashHintBody: 选中行使用背景高亮,不另加 ❯ 前缀(避免高亮块偏左)', () => {
   const matches = filterSlashCommands('/h', 'zh')   // 1 个: /help
   // 选中:不应有 ❯ 前缀;行首应是 2 空格 + 命令名 + padEnd + 空格 + 说明
   const rawSel = renderSlashHintBody(matches, 0)
@@ -317,11 +319,10 @@ test('renderSlashHintBody: 选中行整行反白,不另加 ❯ 前缀(避免反�
   // 未选中(默认):同样以 2 空格 + /help 开头
   const bodyNoSel = stripAnsi(renderSlashHintBody(matches))
   assert.ok(bodyNoSel.startsWith('  /help'), '未选中行应以 2 空格 + /help 开头')
-  // raw 长度差异(反白序列加 \x1b[7m / \x1b[27m 共 10 字节)即可识别选中态
-  // —— 即使非 TTY 下 chalk.inverse 自动降级,断言 raw 字节差异更稳
+  // raw 长度差异可识别背景高亮状态
   const rawNoSel = renderSlashHintBody(matches)
   assert.notEqual(rawSel.length, rawNoSel.length,
-    `选中行 raw 与未选中行 raw 长度应不同(inverse 加了 ANSI 序列),实际: ${rawSel.length} vs ${rawNoSel.length}`)
+    `选中行 raw 与未选中行 raw 长度应不同(背景高亮增加 ANSI 序列),实际: ${rawSel.length} vs ${rawNoSel.length}`)
 })
 
 test('renderSlashHintBody: 选中行与其他行起点严格一致(无 ❯ 偏移)', () => {
@@ -371,8 +372,8 @@ test('parseKeyForSlashHint: ↑↓/Tab/Enter/Esc 返回动作', () => {
   assert.equal(parseKeyForSlashHint({ name: 'down' }), 'next')
   assert.equal(parseKeyForSlashHint({ name: 'tab' }), 'complete')
   assert.equal(parseKeyForSlashHint({ name: 'tab', shift: true }), 'prev')
-  assert.equal(parseKeyForSlashHint({ name: 'return' }), 'submit')
-  assert.equal(parseKeyForSlashHint({ name: 'enter' }), 'submit')
+  assert.equal(parseKeyForSlashHint({ name: 'return' }), 'complete')
+  assert.equal(parseKeyForSlashHint({ name: 'enter' }), 'complete')
   assert.equal(parseKeyForSlashHint({ name: 'escape' }), 'cancel')
 })
 

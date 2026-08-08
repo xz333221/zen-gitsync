@@ -56,8 +56,8 @@ import {
   printOk, printWarn, printError, printDim,
 } from './termui.js'
 import { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes } from './images.js'
-import { runModelSetup, collectModelInput, buildModelConfig } from './modelSetup.js'
-import { genSessionId, autoTitle, writeSession, enforceRetention } from './sessionStore.js'
+import { runModelSetup, collectModelInput, buildModelConfig, selectFromList } from './modelSetup.js'
+import { genSessionId, autoTitle, writeSession, enforceRetention, listSessions } from './sessionStore.js'
 
 // truncateDisplay 已迁移到 termui.js;这里 re-export 保持既有测试/外部引用不断
 export { truncateDisplay } from './termui.js'
@@ -83,6 +83,8 @@ const STRINGS = {
     busy: '智能体正在执行中,请稍候(Ctrl+C 结束会话)…',
     bye: '已退出 g ai',
     cleared: '对话历史已清空',
+    newConversation: '已开启新对话',
+    operationCancelled: '已取消当前操作',
     thinkOn: '思考过程显示: 开',
     thinkOff: '思考过程显示: 关(模型仍会思考,只是不回显)',
     modelSwitched: (label) => `已切换模型: ${label}`,
@@ -112,6 +114,10 @@ const STRINGS = {
     addModelSaved: (name) => `✓ 模型 "${name}" 已添加并切换为当前模型`,
     addModelCancelled: '已取消添加模型',
     addModelSaveError: (msg) => `保存配置失败: ${msg}`,
+    resumeTitle: '选择要恢复的对话',
+    resumeEmpty: '没有可恢复的历史对话',
+    resumeCancelled: '已取消恢复对话',
+    resumeDone: (title, count) => `已恢复对话: ${title} (${count} 条消息)`,
   },
   en: {
     noModel: 'No AI model configured. Add one in GUI settings first (run `g ui`).',
@@ -123,6 +129,8 @@ const STRINGS = {
     busy: 'Agent is working, please wait (Ctrl+C to end session)…',
     bye: 'Bye',
     cleared: 'Conversation cleared',
+    newConversation: 'Started a new conversation',
+    operationCancelled: 'Current operation cancelled',
     thinkOn: 'Thinking display: on',
     thinkOff: 'Thinking display: off (model still thinks, just hidden)',
     modelSwitched: (label) => `Switched model: ${label}`,
@@ -152,6 +160,10 @@ const STRINGS = {
     addModelSaved: (name) => `✓ Model "${name}" added and switched to`,
     addModelCancelled: 'Add model cancelled',
     addModelSaveError: (msg) => `Failed to save: ${msg}`,
+    resumeTitle: 'Choose a conversation to resume',
+    resumeEmpty: 'No previous conversations to resume',
+    resumeCancelled: 'Resume cancelled',
+    resumeDone: (title, count) => `Resumed: ${title} (${count} messages)`,
   },
 }
 
@@ -590,6 +602,8 @@ function printSlashHelp(t, locale) {
     '  /cd <路径>        切换智能体工作目录',
     '  /image [路径]     查看待发送图片;/image <路径> 附加本地图片;/image clear 清除',
     '  /think            开关思考过程显示',
+    '  /new              开启新对话',
+    '  /resume           选择并恢复之前的对话',
     '  /clear            清空对话历史',
     '  /exit, /quit      退出',
     '',
@@ -604,6 +618,8 @@ function printSlashHelp(t, locale) {
     '  /cd <path>        Change agent working directory',
     '  /image [path]     List pending images; attach a file; /image clear to reset',
     '  /think            Toggle thinking display',
+    '  /new              Start a new conversation',
+    '  /resume           Choose and resume a previous conversation',
     '  /clear            Clear conversation history',
     '  /exit, /quit      Quit',
     '',
@@ -621,12 +637,86 @@ async function handleSlashCommand(state, input, t) {
 
   if (cmd === '/exit' || cmd === '/quit') return 'exit'
   if (cmd === '/help') { printSlashHelp(t, state.locale); return 'ok' }
-  if (cmd === '/clear') {
+  if (cmd === '/clear' || cmd === '/new') {
     state.messages = [state.messages[0]]
     // 开新会话 ID,旧会话保留在磁盘上
     state.sessionId = genSessionId()
     state.sessionCreatedAt = new Date().toISOString()
-    printOk(t.cleared)
+    printOk(cmd === '/new' ? t.newConversation : t.cleared)
+    return 'ok'
+  }
+  if (cmd === '/resume') {
+    if (state.busy) {
+      printDim(t.busy)
+      return 'ok'
+    }
+    const sessions = (await listSessions())
+      .filter(session => session.sessionId !== state.sessionId && session.messages.length > 1)
+    if (sessions.length === 0) {
+      printDim(t.resumeEmpty)
+      return 'ok'
+    }
+
+    const zh = !String(state.locale || '').startsWith('en')
+    const cleanLabel = (value, fallback) => String(value || fallback).replace(/[\r\n\x00-\x1f\x7f]/g, ' ').trim()
+    const items = sessions.map((session) => {
+      const title = cleanLabel(session.title, zh ? '(未命名对话)' : '(untitled)')
+      const updated = new Date(session.updatedAt || session.createdAt || 0)
+      const date = Number.isNaN(updated.getTime()) ? '' : updated.toLocaleString(state.locale)
+      const count = session.messages.filter(message => message?.role !== 'system').length
+      return {
+        label: `${title}  ${chalk.dim(`${date} · ${count} ${zh ? '条消息' : 'messages'}`)}`,
+        value: session,
+      }
+    })
+    const selectStrings = {
+      navHint: zh ? '↑↓ 切换,Enter 确认' : '↑↓ navigate, Enter confirm',
+      selectPrompt: (min, max) => zh ? `请选择(${min}-${max}):` : `Choose (${min}-${max}):`,
+      invalidChoice: (min, max) => zh ? `请输入 ${min}-${max} 之间的序号` : `Enter a number from ${min} to ${max}`,
+    }
+    const asker = {
+      ask(prompt) {
+        return new Promise(resolve => state.rl.question(`${prompt} `, answer => resolve(String(answer || '').trim())))
+      },
+    }
+
+    state.inWizard = true
+    try {
+      const selected = await selectFromList({
+        rl: state.rl,
+        asker,
+        title: t.resumeTitle,
+        items,
+        t: selectStrings,
+      })
+      if (!selected?.value) return 'ok'
+
+      const session = selected.value
+      const { promises: fsp } = await import('node:fs')
+      if (session.cwd) {
+        try {
+          const stat = await fsp.stat(session.cwd)
+          if (stat.isDirectory()) state.ctx.cwd = session.cwd
+        } catch { /* 已删除的旧目录不阻断恢复,沿用当前目录 */ }
+      }
+      state.sessionId = session.sessionId
+      state.sessionCreatedAt = session.createdAt || new Date().toISOString()
+      state.messages = session.messages.map(message => ({ ...message }))
+      const systemMessage = {
+        role: 'system',
+        content: buildSystemPrompt({ cwd: state.ctx.cwd, locale: state.locale, shellDesc: state.shellDesc }),
+      }
+      if (state.messages[0]?.role === 'system') state.messages[0] = systemMessage
+      else state.messages.unshift(systemMessage)
+      state.pendingImages = []
+      const count = state.messages.filter(message => message?.role !== 'system').length
+      printOk(t.resumeDone(cleanLabel(session.title, session.sessionId), count))
+    } catch (err) {
+      if (err?.cancelled) printDim(t.resumeCancelled)
+      else printError(err.message)
+    } finally {
+      state.inWizard = false
+    }
     return 'ok'
   }
   if (cmd === '/think') {
@@ -809,6 +899,7 @@ export async function runAiAgent(argv = []) {
     shellDesc,
     currentChild: null,
     abortController: null,
+    cancelRequested: false,
     busy: false,
     showThinking: true,     // /think 切换:是否回显模型的思考过程
     pendingImages: [],      // Alt+V / /image 附加的待发送图片 [{path, bytes}]
@@ -933,7 +1024,7 @@ export async function runAiAgent(argv = []) {
     if (!state.busy) safeShowPrompt()
   }
 
-  // ── 斜杠命令即时提示(支持 ↑↓ 切换 / Tab 补全 / Enter 提交) ──
+  // ── 斜杠命令即时提示(支持 ↑↓ 切换 / Tab、Enter 补全) ──
   // 在提示符下方浮现匹配到的命令,随输入过滤;不移动光标(用 DECSC/DECRC 保存-恢复)。
   // slashHintRows 记录当前提示占了几行,下次刷新/提交时据此擦除,避免残影。
   // slashHintBaseLine:本次 hint 显示时"输入行的基线值" — ↑↓ 时 readline 已经把
@@ -954,9 +1045,19 @@ export async function runAiAgent(argv = []) {
   }
   const drawSlashHint = () => {
     const body = renderSlashHintBody(slashHintMatches, slashHintIndex)
+    const hadVisibleHint = slashHintRows > 0
     eraseSlashHint()
     if (!body) return
     const rows = body.split('\n')
+    if (!hadVisibleHint) {
+      // CSI B(光标下移)到达终端底部后只会停在最后一行,不会自动滚屏,
+      // 所以候选项会被裁掉。第一次显示提示时先用换行真实预留空间,
+      // 再上移相同行数回到输入行；无论中途是否发生滚屏,都能回到原内容所在行。
+      let reserve = ''
+      for (let i = 0; i < rows.length; i++) reserve += '\n\x1b[2K'
+      reserve += `\x1b[${rows.length}A`
+      process.stdout.write(reserve)
+    }
     // 保存光标,逐行下移打印(每行先清行防止与旧内容叠字),最后恢复光标回输入行
     let seq = '\x1b7'
     for (const r of rows) seq += '\x1b[1B\x1b[2K\r' + r
@@ -986,10 +1087,8 @@ export async function runAiAgent(argv = []) {
     rl.cursor = slashHintBaseLine.length
     if (typeof rl._refreshLine === 'function') rl._refreshLine()
   }
-  // Tab / Enter:把 rl.line 替换为补全文本 + 清掉 hint 状态
-  //   Tab:补全文本末尾加空格,便于用户继续打参数(不回车)
-  //   Enter:不用此函数 — 用 state.slashHintSubmitLine 标志 + line handler 替换
-  //     (readline 自己处理 Enter,我们不能事后改 rl.line 触发提交)
+  // Tab / Enter:把 rl.line 替换为补全文本 + 清掉 hint 状态。
+  // Enter 会先被 readline 提交,因此由下方 line handler 在处理命令前调用本函数。
   const applyHintCompletion = (newLine) => {
     rl.line = newLine
     rl.cursor = newLine.length
@@ -1000,6 +1099,47 @@ export async function runAiAgent(argv = []) {
     slashHintBaseLine = newLine
     if (typeof rl._refreshLine === 'function') rl._refreshLine()
   }
+
+  const neutralizeKeyForReadline = (key) => {
+    key.name = 'escape'
+    key.sequence = ''
+    key.ctrl = false
+    key.meta = false
+    key.shift = false
+  }
+
+  // readline 自己会优先处理 Enter/Ctrl+C。用 prependListener 在它之前完成补全
+  // 或取消当前操作,再把本次按键变成 readline 会忽略的 Esc。
+  const interceptInteractiveControlKeys = (_ch, key) => {
+    if (!key) return
+    if (key.ctrl && key.name === 'c') {
+      if (state.inWizard) {
+        neutralizeKeyForReadline(key)
+        rl.emit('operationCancel')
+        return
+      }
+      if (state.busy) {
+        neutralizeKeyForReadline(key)
+        state.cancelRequested = true
+        try { state.abortController?.abort() } catch (_) {}
+        try { state.currentChild?.kill('SIGTERM') } catch (_) {}
+        return
+      }
+      if (slashHintRows > 0) {
+        neutralizeKeyForReadline(key)
+        applyHintCompletion('')
+        return
+      }
+      return
+    }
+    if (key.name !== 'return' && key.name !== 'enter') return
+    if (slashHintRows === 0 || slashHintMatches.length === 0 || state.busy || state.inWizard) return
+    const selected = slashHintMatches[slashHintIndex]
+    if (!selected) return
+    applyHintCompletion(selected.cmd + ' ')
+    neutralizeKeyForReadline(key)
+  }
+  rl.input.prependListener('keypress', interceptInteractiveControlKeys)
 
   // Alt+V 粘贴剪贴板图片(node 把 ESC+v 解析为 meta+v;部分终端不发 Alt,可用 /image 兜底)
   const pasteFromClipboard = async () => {
@@ -1028,7 +1168,7 @@ export async function runAiAgent(argv = []) {
     // 仅在 hint 已显示且有匹配项时拦截,readline 的 default 行为(历史浏览等)
     // 我们在 handler 里事后回滚 rl.line 来抵消
     const action = parseKeyForSlashHint(key)
-    const hintActive = action === 'prev' || action === 'next' || action === 'complete' || action === 'submit' || action === 'cancel'
+    const hintActive = action === 'prev' || action === 'next' || action === 'complete' || action === 'cancel'
       ? (slashHintRows > 0 && slashHintMatches.length > 0 && !state.busy && !state.inWizard)
       : false
 
@@ -1050,29 +1190,6 @@ export async function runAiAgent(argv = []) {
         applyHintCompletion(newLine)
         return
       }
-      if (action === 'submit') {
-        // Enter:把 rl.line 替换为补全命令,然后手动调用 rl._line() 触发 line 事件。
-        // 这样提交的就是补全后的命令,而不是用户敲到一半的前缀。
-        // 必须 return — 否则 readline 自己也会按 Enter 把当前 rl.line(用户原始输入) 提交一遍。
-        const sel = slashHintMatches[slashHintIndex]
-        const newLine = sel.cmd
-        console.error('[DEBUG-ENTER] sel.cmd=' + JSON.stringify(sel.cmd) + ' rl.line before=' + JSON.stringify(rl.line))
-        rl.line = newLine
-        rl.cursor = newLine.length
-        eraseSlashHint()
-        slashHintMatches = []
-        slashHintIndex = 0
-        slashHintRows = 0
-        slashHintBaseLine = newLine
-        if (typeof rl._refreshLine === 'function') rl._refreshLine()
-        // readline 的 _line() 内部会 this.emit('line', this.line) — 用补全后的 line
-        if (typeof rl._line === 'function') {
-          try { rl._line(); console.error('[DEBUG-ENTER] _line ok, rl.line after=' + JSON.stringify(rl.line)) } catch (e) { console.error('[DEBUG-ENTER] _line err: ' + e.message); rl.emit('line', newLine) }
-        } else {
-          rl.emit('line', newLine)
-        }
-        return
-      }
       if (action === 'cancel') {
         // Esc:只清 hint,不动输入行
         eraseSlashHint()
@@ -1082,7 +1199,7 @@ export async function runAiAgent(argv = []) {
       }
     }
 
-    // submit(Enter)走默认 readline 提交,line 事件里统一擦除 hint;
+    // Enter 走默认 readline 提交,line 事件里把选中项恢复到输入框;
     // 其他普通按键:重算匹配 + 重画 hint
     if (!(key.name === 'return' || key.name === 'enter')) {
       refreshSlashHint()
@@ -1130,21 +1247,25 @@ export async function runAiAgent(argv = []) {
     if (images.length > 0) printDim(t.imageSending(images.length))
 
     state.busy = true
+    state.cancelRequested = false
     state.abortController = new AbortController()
     try {
       await runAgentTurn(state, input, t, images)
       // 每轮对话结束后持久化到磁盘,供 Web UI 读取
       await persistSession()
     } catch (err) {
-      printError(err.message)
+      if (state.cancelRequested) printDim(t.operationCancelled)
+      else printError(err.message)
     } finally {
       state.busy = false
+      state.cancelRequested = false
       state.abortController = null
       safeShowPrompt()
     }
   })
 
   rl.on('close', () => {
+    rl.input.removeListener('keypress', interceptInteractiveControlKeys)
     printWarn('\n' + t.bye)
   })
 
