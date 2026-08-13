@@ -33,6 +33,7 @@ import { useConfigStore } from '@stores/configStore';
 import MonacoDiffViewer from '@/components/MonacoDiffViewer.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import ImagePreview from '@/components/ImagePreview.vue'
+import AiDiffSummary from '@/components/AiDiffSummary.vue'
 
 // 定义props
 interface FileItem {
@@ -70,6 +71,7 @@ interface Props {
   showEditorButton?: boolean; // 是否显示"在编辑器中打开"按钮(切到 Monaco 编辑器视图),默认 true
   isFileLocked?: (filePath: string) => boolean; // 判断文件是否锁定
   isLocking?: (filePath: string) => boolean; // 判断文件是否正在锁定中
+  commitHash?: string; // 提交详情页的提交哈希（AI 整体/文件说明用）
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -90,7 +92,8 @@ const props = withDefaults(defineProps<Props>(), {
   showVscodeButton: true,
   showEditorButton: true,
   isFileLocked: () => false,
-  isLocking: () => false
+  isLocking: () => false,
+  commitHash: ''
 });
 
 // 定义事件
@@ -132,6 +135,13 @@ const splitPercent = computed<number>({
 // 计算属性
 const currentSelectedFile = computed(() => {
   return props.selectedFile || internalSelectedFile.value;
+});
+
+// AI 差异说明来源：仅 git-status / commit-detail 两种上下文启用（stash 暂无后端支持）
+const aiSource = computed<'worktree' | 'commit' | ''>(() => {
+  if (props.context === 'commit-detail') return 'commit';
+  if (props.context === 'git-status') return 'worktree';
+  return '';
 });
 
 // 当前选中文件是否是图片
@@ -1204,6 +1214,15 @@ onMounted(() => {
               </div>
             </div>
           </div>
+          <!-- AI 差异说明（文件差异页 / 提交详情页，仅配置了模型时渲染） -->
+          <AiDiffSummary
+            v-if="aiSource"
+            :source="aiSource"
+            :commit-hash="commitHash"
+            :file="currentSelectedFile"
+            :file-name="selectedFileName"
+          />
+
           <!-- 冲突解决区域 -->
           <div v-if="isConflictedFile && hasActualConflictMarkers" class="conflict-resolution-container">
             <!-- 模式切换按钮 -->
@@ -1452,6 +1471,15 @@ onMounted(() => {
         </div>
       </div>
       
+      <!-- AI 差异说明（文件差异页 / 提交详情页，仅配置了模型时渲染） -->
+      <AiDiffSummary
+        v-if="aiSource"
+        :source="aiSource"
+        :commit-hash="commitHash"
+        :file="currentSelectedFile"
+        :file-name="selectedFileName"
+      />
+
       <!-- 冲突解决区域 -->
       <div v-if="isConflictedFile" class="conflict-resolution-container">
         <!-- 模式切换按钮 -->

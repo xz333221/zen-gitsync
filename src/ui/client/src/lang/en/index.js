@@ -2352,4 +2352,16 @@ export default {
   '@AGENT:prompt_p3': 'Please help me write unit tests for recently modified files',
   '@AGENT:prompt_p4': 'Please check the current git repository status for uncommitted changes',
   // @AGENT: file end
+  // @DIFFAI: file path: components\AiDiffSummary.vue
+  '@DIFFAI:AI 文件说明': 'AI File Summary',
+  '@DIFFAI:AI 整体说明': 'AI Overall Summary',
+  '@DIFFAI:本次提交': 'This Commit',
+  '@DIFFAI:未提交变更': 'Uncommitted Changes',
+  '@DIFFAI:正在生成差异说明...': 'Generating diff summary...',
+  '@DIFFAI:该文件没有可总结的变更': 'No summarizable changes in this file',
+  '@DIFFAI:没有可总结的变更': 'No summarizable changes',
+  '@DIFFAI:重新生成': 'Regenerate',
+  '@DIFFAI:重试': 'Retry',
+  '@DIFFAI:生成失败': 'Generation failed',
+  // @DIFFAI: file end
 }

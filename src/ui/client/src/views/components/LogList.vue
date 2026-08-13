@@ -1393,6 +1393,7 @@ function toggleFullscreen() {
           :compareOriginal="commitCompareOriginal"
           :compareModified="commitCompareModified"
           context="commit-detail"
+          :commit-hash="selectedCommit?.hash"
           :emptyText="$t('@A1833:没有找到变更文件')"
           :show-vscode-button="toolsStore.vscodeAvailable"
           @file-select="handleCommitFileSelect"

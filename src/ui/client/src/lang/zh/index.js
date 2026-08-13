@@ -2362,4 +2362,16 @@ export default {
   '@AGENT:prompt_p3': '请帮我为最近修改的文件编写单元测试',
   '@AGENT:prompt_p4': '请检查当前 git 仓库的状态，看看有哪些未提交的改动',
   // @AGENT: file end
+  // @DIFFAI: file path: components\AiDiffSummary.vue
+  '@DIFFAI:AI 文件说明': 'AI 文件说明',
+  '@DIFFAI:AI 整体说明': 'AI 整体说明',
+  '@DIFFAI:本次提交': '本次提交',
+  '@DIFFAI:未提交变更': '未提交变更',
+  '@DIFFAI:正在生成差异说明...': '正在生成差异说明...',
+  '@DIFFAI:该文件没有可总结的变更': '该文件没有可总结的变更',
+  '@DIFFAI:没有可总结的变更': '没有可总结的变更',
+  '@DIFFAI:重新生成': '重新生成',
+  '@DIFFAI:重试': '重试',
+  '@DIFFAI:生成失败': '生成失败',
+  // @DIFFAI: file end
 }

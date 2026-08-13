@@ -34,6 +34,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import express from 'express';
 import { callLlmStream } from '../workbench/llmClient.js';
 import { ensureWithinCwd } from '../../utils/pathGuard.js';
 
@@ -124,7 +125,7 @@ async function collectDiff({ execGitCommand, scope, source, file, hash }) {
 }
 
 export function registerAiDiffSummaryRoutes({ app, execGitCommand, configManager }) {
-  app.post('/api/ai/diff-summary', async (req, res) => {
+  app.post('/api/ai/diff-summary', express.json(), async (req, res) => {
     const scope = req.body?.scope === 'overall' ? 'overall' : 'file';
     const source = req.body?.source === 'commit' ? 'commit' : 'worktree';
     const file = String(req.body?.file || '').trim();
