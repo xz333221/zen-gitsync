@@ -12,6 +12,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { uid } from 'zen-ai-chat-ui'
 import { extractThinkSegments } from 'zen-ai-chat-ui'
 import { $t } from '@/lang/static'
+import { useConfigStore } from '@/stores/configStore'
 
 // ── 类型 ──────────────────────────────────────────────────
 interface SessionMeta {
@@ -196,6 +197,8 @@ function mimeFromDataUrl(u: string): string {
 
 // ── composable ───────────────────────────────────────────
 export function useAgentChat() {
+  const configStore = useConfigStore()
+
   // 会话列表
   const sessions = ref<SessionMeta[]>([])
   const sessionsLoading = ref(false)
@@ -210,11 +213,17 @@ export function useAgentChat() {
   let abortController: AbortController | null = null
   let runNonce = 0
 
-  // ── 加载会话列表 ────────────────────────────────────────
+  // ── 加载会话列表(按当前项目隔离) ─────────────────────
   async function loadSessions() {
     sessionsLoading.value = true
     try {
-      const res = await fetch('/api/agent/sessions').then(r => r.json())
+      // 带上当前项目路径,服务端只返回该项目的会话;
+      // 项目路径尚未就绪(socket 未推送)时退化为全量列表
+      const cwd = configStore.currentDirectory || ''
+      const url = cwd
+        ? `/api/agent/sessions?cwd=${encodeURIComponent(cwd)}`
+        : '/api/agent/sessions'
+      const res = await fetch(url).then(r => r.json())
       if (!res.success) {
         ElMessage.error(res.error || $t('@AGENT:加载会话列表失败'))
         return
@@ -362,6 +371,8 @@ export function useAgentChat() {
         body: JSON.stringify({
           sessionId: currentSessionId.value || '',
           userMessage: text,
+          // 新建会话时服务端用它确定项目归属(已有会话沿用其落盘 cwd)
+          cwd: configStore.currentDirectory || '',
           ...(images.length > 0 ? { images } : {})
         }),
         signal: myController.signal

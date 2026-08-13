@@ -15,18 +15,33 @@
 // 智能体路由入口。
 //
 // 路由清单:
-//   GET    /api/agent/sessions           — 列出所有会话(仅 metadata)
+//   GET    /api/agent/sessions           — 列出会话(仅 metadata;?cwd= 按项目过滤,空 cwd 视为当前项目)
 //   GET    /api/agent/sessions/:id       — 获取会话详情(含完整消息)
 //   DELETE /api/agent/sessions/:id       — 删除会话
 //   PUT    /api/agent/sessions/:id       — 重命名会话
-//   POST   /api/agent/chat               — SSE 流式聊天(含工具调用)
+//   POST   /api/agent/chat               — SSE 流式聊天(含工具调用;新建会话时 body.cwd 优先于服务端当前项目)
 
+import fs from 'node:fs';
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 import { agentSessionStore } from './agentSessionStore.js';
 import { runAgentTurn } from './agentChat.js';
 import { nowIso } from './shared.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
+
+// 项目路径规范化:统一斜杠 + 去尾斜杠 + 小写(Windows 路径大小写不敏感),
+// 避免 "E:\proj" 与 "E:/proj/" 被视为不同项目。
+function normalizeCwd(p) {
+  return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+// 判断会话是否属于指定项目。空 cwd(历史存量会话)视为属于当前项目,
+// 与工作台 TODO 的归属约定保持一致,避免升级后旧会话集体"消失"。
+function sessionBelongsTo(sessionCwd, projectCwd) {
+  const s = normalizeCwd(sessionCwd);
+  if (!s) return true;
+  return s === normalizeCwd(projectCwd);
+}
 
 /**
  * 注册智能体路由。
@@ -40,8 +55,13 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
   // ════════════════════════════════════════════════════════════════════════
   // §1. 会话列表
   // ════════════════════════════════════════════════════════════════════════
-  app.get('/api/agent/sessions', asyncRoute(async (_req, res) => {
-    const sessions = await listSessionsMeta();
+  app.get('/api/agent/sessions', asyncRoute(async (req, res) => {
+    let sessions = await listSessionsMeta();
+    // 按项目隔离:前端传当前项目路径时只返回该项目的会话
+    const cwdFilter = String(req.query?.cwd || '').trim();
+    if (cwdFilter) {
+      sessions = sessions.filter(s => sessionBelongsTo(s.cwd, cwdFilter));
+    }
     res.json({ success: true, sessions });
   }));
 
@@ -133,12 +153,22 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
           throw err;
         }
       } else {
+        // 新建会话的项目归属:优先取前端显式携带的 cwd(需真实存在的目录),
+        // 避免依赖服务端全局 currentProjectPath 在多标签页切换项目时记错;
+        // 前端没传或路径无效时回退服务端当前项目路径。
+        let sessionCwd = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : process.cwd();
+        const bodyCwd = String(req.body?.cwd || '').trim();
+        if (bodyCwd) {
+          try {
+            if (fs.statSync(bodyCwd).isDirectory()) sessionCwd = bodyCwd;
+          } catch { /* 路径无效,保持回退值 */ }
+        }
         session = {
           version: 1,
           sessionId: genSessionId(),
           title: '(新会话)',
           source: 'web',
-          cwd: typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : process.cwd(),
+          cwd: sessionCwd,
           model: '',
           createdAt: nowIso(),
           updatedAt: nowIso(),

@@ -202,6 +202,17 @@ function startResize(e: MouseEvent) {
 onMounted(() => {
   loadSessions()
 })
+
+// ── 项目切换:会话列表按项目隔离 ──────────────────────────
+// currentDirectory 变化(socket 推送 / 启动后异步就绪)时重新拉取;
+// 若当前打开的会话不属于新项目,重置为新建会话状态(流式生成中不打断)
+watch(() => configStore.currentDirectory, async () => {
+  await loadSessions()
+  if (currentSessionId.value && !isStreaming.value &&
+      !sessions.value.some(s => s.sessionId === currentSessionId.value)) {
+    newSession()
+  }
+})
 </script>
 
 <template>

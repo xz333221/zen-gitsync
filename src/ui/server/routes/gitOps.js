@@ -20,6 +20,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 
 import { registerGitDiffRoutes } from './git/diff.js';
+import { registerAiDiffSummaryRoutes } from './git/aiDiffSummary.js';
 import { createDiffHelpers } from './git/diffUtils.js';
 import { registerGitStashRoutes } from './git/stash.js';
 import { registerGitTagRoutes } from './git/tags.js';
@@ -833,6 +834,13 @@ export function registerGitOpsRoutes({
   registerGitDiffRoutes({
     app,
     execGitCommand
+  });
+
+  // AI 差异说明(SSE 流式):文件差异页 + 提交详情页共用
+  registerAiDiffSummaryRoutes({
+    app,
+    execGitCommand,
+    configManager
   });
 
   registerGitStashRoutes({
