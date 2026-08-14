@@ -212,27 +212,32 @@ export function useAgentChat() {
   // SSE 控制
   let abortController: AbortController | null = null
   let runNonce = 0
+  let sessionsRequestNonce = 0
 
   // ── 加载会话列表(按当前项目隔离) ─────────────────────
   async function loadSessions() {
+    const requestNonce = ++sessionsRequestNonce
+    const cwd = configStore.currentDirectory || ''
+    if (!cwd) {
+      sessions.value = []
+      sessionsLoading.value = false
+      return
+    }
     sessionsLoading.value = true
     try {
-      // 带上当前项目路径,服务端只返回该项目的会话;
-      // 项目路径尚未就绪(socket 未推送)时退化为全量列表
-      const cwd = configStore.currentDirectory || ''
-      const url = cwd
-        ? `/api/agent/sessions?cwd=${encodeURIComponent(cwd)}`
-        : '/api/agent/sessions'
+      const url = `/api/agent/sessions?cwd=${encodeURIComponent(cwd)}`
       const res = await fetch(url).then(r => r.json())
+      if (requestNonce !== sessionsRequestNonce) return
       if (!res.success) {
         ElMessage.error(res.error || $t('@AGENT:加载会话列表失败'))
         return
       }
       sessions.value = Array.isArray(res.sessions) ? res.sessions : []
     } catch (err: any) {
+      if (requestNonce !== sessionsRequestNonce) return
       ElMessage.error($t('@AGENT:加载会话列表失败') + ': ' + (err?.message || err))
     } finally {
-      sessionsLoading.value = false
+      if (requestNonce === sessionsRequestNonce) sessionsLoading.value = false
     }
   }
 

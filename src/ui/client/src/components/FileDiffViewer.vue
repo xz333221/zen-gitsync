@@ -143,6 +143,11 @@ const aiSource = computed<'worktree' | 'commit' | ''>(() => {
   if (props.context === 'git-status') return 'worktree';
   return '';
 });
+const showAiDiffSummary = computed(() => Boolean(aiSource.value && configStore.aiDiffSummaryEnabled));
+const overallDiffRevision = computed(() => props.files
+  .map(file => `${file.path}\0${file.type || ''}`)
+  .sort()
+  .join('\0'));
 
 // 当前选中文件是否是图片
 const isCurrentImage = computed(() => isImageFile(currentSelectedFile.value || ''))
@@ -1037,15 +1042,25 @@ onMounted(() => {
 
 <template>
   <div class="file-diff-viewer" :style="{ height }">
-    <!-- 使用 Splitter 控制左右面板比例 -->
-    <el-splitter
-      v-if="showFileList"
-      ref="splitterRef"
-      layout="horizontal"
-      style="height: 100%"
-      @resize="updateSplitFromDom"
-      @resize-end="updateSplitFromDom"
-    >
+    <!-- 整体说明独立于文件选择，横跨文件列表与差异面板。 -->
+    <AiDiffSummary
+      v-if="showAiDiffSummary"
+      class="overall-diff-summary"
+      :source="aiSource || 'worktree'"
+      scope="overall"
+      :commit-hash="commitHash"
+      :revision="overallDiffRevision"
+    />
+
+    <div class="diff-viewer-main">
+      <!-- 使用 Splitter 控制左右面板比例 -->
+      <el-splitter
+        v-if="showFileList"
+        ref="splitterRef"
+        layout="horizontal"
+        @resize="updateSplitFromDom"
+        @resize-end="updateSplitFromDom"
+      >
       <el-splitter-panel v-model:size="panelSize" :min="'15%'" :max="'85%'">
         <!-- 左侧：文件列表面板 -->
         <div class="files-panel">
@@ -1216,11 +1231,13 @@ onMounted(() => {
           </div>
           <!-- AI 差异说明（文件差异页 / 提交详情页，仅配置了模型时渲染） -->
           <AiDiffSummary
-            v-if="aiSource"
-            :source="aiSource"
+            v-if="showAiDiffSummary && currentSelectedFile"
+            :source="aiSource || 'worktree'"
+            scope="file"
             :commit-hash="commitHash"
             :file="currentSelectedFile"
             :file-name="selectedFileName"
+            :file-revision="diffContent"
           />
 
           <!-- 冲突解决区域 -->
@@ -1408,10 +1425,10 @@ onMounted(() => {
           </div>
         </div>
       </el-splitter-panel>
-    </el-splitter>
+      </el-splitter>
 
-    <!-- 当隐藏文件列表时，仅显示右侧面板 -->
-    <div v-else class="diff-panel full-width">
+      <!-- 当隐藏文件列表时，仅显示右侧面板 -->
+      <div v-else class="diff-panel full-width">
       <div class="panel-header">
         <h4>{{ $t('@E80AC:文件差异') }}</h4>
         <div class="header-right">
@@ -1473,11 +1490,13 @@ onMounted(() => {
       
       <!-- AI 差异说明（文件差异页 / 提交详情页，仅配置了模型时渲染） -->
       <AiDiffSummary
-        v-if="aiSource"
-        :source="aiSource"
+        v-if="showAiDiffSummary && currentSelectedFile"
+        :source="aiSource || 'worktree'"
+        scope="file"
         :commit-hash="commitHash"
         :file="currentSelectedFile"
         :file-name="selectedFileName"
+        :file-revision="diffContent"
       />
 
       <!-- 冲突解决区域 -->
@@ -1633,6 +1652,7 @@ onMounted(() => {
         <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
         <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
       </div>
+      </div>
     </div>
   </div>
 </template>
@@ -1640,6 +1660,7 @@ onMounted(() => {
 <style scoped lang="scss">
 .file-diff-viewer {
   display: flex;
+  flex-direction: column;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -1649,6 +1670,18 @@ onMounted(() => {
   min-height: 0; /* 关键：允许flex子元素收缩 */
   box-shadow: var(--shadow-base);
   transition: var(--transition-all);
+}
+
+.overall-diff-summary {
+  width: 100%;
+}
+
+.diff-viewer-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
 }
 
 .plain-text {
@@ -2335,5 +2368,44 @@ onMounted(() => {
   border: 1px solid var(--border-color-light);
   
   /* 全局diff样式已在common.scss中定义 */
+}
+
+@media (max-width: 720px) {
+  .panel-header {
+    padding: var(--spacing-sm);
+    gap: 4px;
+
+    h4 {
+      flex: 0 0 auto;
+      font-size: var(--font-size-xs);
+      white-space: nowrap;
+    }
+  }
+
+  .header-left,
+  .header-right {
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .file-count,
+  .diff-panel .action-buttons {
+    display: none;
+  }
+
+  .view-mode-toggle {
+    gap: 0;
+    padding: 2px;
+  }
+
+  .selected-file {
+    max-width: 92px;
+    padding-inline: 4px;
+    font-size: 10px;
+  }
+
+  .diff-content {
+    padding: var(--spacing-sm);
+  }
 }
 </style>

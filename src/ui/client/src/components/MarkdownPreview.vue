@@ -28,13 +28,42 @@ import 'flow-mindmap/style.css'
 interface Props {
   /** 原始 markdown 文本 */
   content: string
+  /** 是否允许 markdown 中的原始 HTML。AI 等不可信内容应关闭。 */
+  allowHtml?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { allowHtml: true })
 
 type Segment =
   | { type: 'html'; html: string }
   | { type: 'mindmap'; id: number; md: string; data: ReturnType<typeof markdownToMindMap> }
+
+function sanitizeRenderedHtml(value: string): string {
+  if (typeof document === 'undefined') return value
+  const template = document.createElement('template')
+  template.innerHTML = value
+  template.content.querySelectorAll('script, style, iframe, object, embed, form, input, button, textarea, select').forEach(node => node.remove())
+
+  template.content.querySelectorAll('*').forEach((element) => {
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase()
+      if (name.startsWith('on') || name === 'style' || name === 'srcdoc') {
+        element.removeAttribute(attribute.name)
+        continue
+      }
+      if (name === 'href' || name === 'src' || name === 'xlink:href') {
+        const url = attribute.value.trim().replace(/[\u0000-\u0020]+/g, '')
+        const safe = /^(https?:|mailto:|tel:|#|\/|\.\/|\.\.\/)/i.test(url)
+          || (name === 'src' && /^data:image\/(?:png|gif|jpe?g|webp);base64,/i.test(url))
+        if (!safe) element.removeAttribute(attribute.name)
+      }
+    }
+    if (element.getAttribute('target') === '_blank') {
+      element.setAttribute('rel', 'noopener noreferrer')
+    }
+  })
+  return template.innerHTML
+}
 
 /**
  * 拆分 markdown:
@@ -57,7 +86,15 @@ const segments = computed<Segment[]>(() => {
     return `${placeholderPrefix}${id}${placeholderSuffix}`
   })
 
-  const html = marked.parse(replaced, { async: false }) as string
+  const renderer = new marked.Renderer()
+  if (!props.allowHtml) {
+    renderer.html = ({ text }: { text: string }) => text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+  }
+  const parsedHtml = marked.parse(replaced, { async: false, renderer }) as string
+  const html = props.allowHtml ? parsedHtml : sanitizeRenderedHtml(parsedHtml)
 
   // 把占位符还原成不可见标记,便于在 HTML 字符串里切分
   const placeholderRe = new RegExp(

@@ -148,6 +148,21 @@
                 />
               </div>
 
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@42BB9:AI 差异说明') }}</label>
+                <div class="project-toggle">
+                  <el-switch
+                    :model-value="configStore.aiDiffSummaryEnabled"
+                    :disabled="!configStore.currentDirectory"
+                    @change="handleAiDiffSummaryEnabledChange"
+                  />
+                  <span class="setting-hint-block" :title="configStore.currentDirectory">
+                    {{ $t('@42BB9:在当前项目的文件差异和提交详情中显示 AI 生成的说明') }}
+                    <template v-if="currentProjectName"> · {{ currentProjectName }}</template>
+                  </span>
+                </div>
+              </div>
+
               <!-- 命令控制台（跨整行的复合控件） -->
               <div class="setting-row setting-row--full">
                 <label class="setting-label">{{ $t('@42BB9:命令控制台') }}</label>
@@ -514,6 +529,14 @@ const editingModelId = ref<string | null | undefined>(undefined) // undefined=�
 const currentThemeForForm = computed(() =>
   configStore.theme === 'light' ? 'light' : 'dark'
 )
+const currentProjectName = computed(() => {
+  const path = configStore.currentDirectory.replace(/[\\/]+$/, '')
+  return path.split(/[\\/]/).pop() || path
+})
+
+function handleAiDiffSummaryEnabledChange(value: string | number | boolean) {
+  void configStore.setAiDiffSummaryEnabled(value === true)
+}
 
 const editingModelInitial = computed(() => {
   if (editingModelId.value === null) return null
@@ -1115,6 +1138,19 @@ async function openSystemConfigFile() {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
+}
+.project-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+.project-toggle .setting-hint-block {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .setting-hint-inline {
   margin-left: 8px;

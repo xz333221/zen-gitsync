@@ -19,9 +19,9 @@
 //   GET    /api/agent/sessions/:id       — 获取会话详情(含完整消息)
 //   DELETE /api/agent/sessions/:id       — 删除会话
 //   PUT    /api/agent/sessions/:id       — 重命名会话
-//   POST   /api/agent/chat               — SSE 流式聊天(含工具调用;新建会话时 body.cwd 优先于服务端当前项目)
+//   POST   /api/agent/chat               — SSE 流式聊天(含工具调用;body.cwd 必须与服务端当前项目一致)
 
-import fs from 'node:fs';
+import path from 'node:path';
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 import { agentSessionStore } from './agentSessionStore.js';
 import { runAgentTurn } from './agentChat.js';
@@ -29,18 +29,20 @@ import { nowIso } from './shared.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
 
-// 项目路径规范化:统一斜杠 + 去尾斜杠 + 小写(Windows 路径大小写不敏感),
-// 避免 "E:\proj" 与 "E:/proj/" 被视为不同项目。
+// 项目路径规范化：Windows 路径大小写不敏感，POSIX 路径保留大小写语义。
 function normalizeCwd(p) {
-  return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const value = String(p || '').trim();
+  if (!value) return '';
+  const normalized = path.resolve(value).replace(/\\/g, '/').replace(/\/+$/, '');
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
-// 判断会话是否属于指定项目。空 cwd(历史存量会话)视为属于当前项目,
-// 与工作台 TODO 的归属约定保持一致,避免升级后旧会话集体"消失"。
+// 历史存量会话没有 cwd，暂时沿用升级前的可见性，避免升级后无法在 UI 中找回。
 function sessionBelongsTo(sessionCwd, projectCwd) {
   const s = normalizeCwd(sessionCwd);
+  const project = normalizeCwd(projectCwd);
   if (!s) return true;
-  return s === normalizeCwd(projectCwd);
+  return Boolean(project && s === project);
 }
 
 /**
@@ -140,6 +142,15 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
       // 加载或新建 session
       let session;
       let isNew = false;
+      const currentProjectCwd = typeof getCurrentProjectPath === 'function'
+        ? getCurrentProjectPath()
+        : process.cwd();
+      const bodyCwd = String(req.body?.cwd || '').trim();
+      if (bodyCwd && normalizeCwd(bodyCwd) !== normalizeCwd(currentProjectCwd)) {
+        send({ type: 'error', error: '当前页面项目与服务端项目不一致，请刷新后重试', code: 'PROJECT_MISMATCH' });
+        finished = true;
+        return res.end();
+      }
 
       if (sessionIdInput) {
         try {
@@ -152,23 +163,18 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
           }
           throw err;
         }
-      } else {
-        // 新建会话的项目归属:优先取前端显式携带的 cwd(需真实存在的目录),
-        // 避免依赖服务端全局 currentProjectPath 在多标签页切换项目时记错;
-        // 前端没传或路径无效时回退服务端当前项目路径。
-        let sessionCwd = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : process.cwd();
-        const bodyCwd = String(req.body?.cwd || '').trim();
-        if (bodyCwd) {
-          try {
-            if (fs.statSync(bodyCwd).isDirectory()) sessionCwd = bodyCwd;
-          } catch { /* 路径无效,保持回退值 */ }
+        if (session.cwd && normalizeCwd(session.cwd) !== normalizeCwd(currentProjectCwd)) {
+          send({ type: 'error', error: '该会话属于其他项目，无法在当前项目中继续', code: 'PROJECT_MISMATCH' });
+          finished = true;
+          return res.end();
         }
+      } else {
         session = {
           version: 1,
           sessionId: genSessionId(),
           title: '(新会话)',
           source: 'web',
-          cwd: sessionCwd,
+          cwd: currentProjectCwd,
           model: '',
           createdAt: nowIso(),
           updatedAt: nowIso(),

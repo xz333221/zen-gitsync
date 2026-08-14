@@ -876,6 +876,8 @@ export default {
   '@42BB9:列表': 'List',
   '@42BB9:树状': 'Tree',
   '@42BB9:文件差异分割': 'Diff split',
+  '@42BB9:AI 差异说明': 'AI Diff Summaries',
+  '@42BB9:在当前项目的文件差异和提交详情中显示 AI 生成的说明': 'Show AI-generated summaries in file diffs and commit details for the current project',
   '@42BB9:命令控制台': 'Command console',
   '@42BB9:默认展开': 'Expand by default',
   '@42BB9:使用终端执行': 'Run in terminal',
@@ -2361,6 +2363,8 @@ export default {
   '@DIFFAI:该文件没有可总结的变更': 'No summarizable changes in this file',
   '@DIFFAI:没有可总结的变更': 'No summarizable changes',
   '@DIFFAI:重新生成': 'Regenerate',
+  '@DIFFAI:展开说明': 'Expand summary',
+  '@DIFFAI:收起说明': 'Collapse summary',
   '@DIFFAI:重试': 'Retry',
   '@DIFFAI:生成失败': 'Generation failed',
   // @DIFFAI: file end

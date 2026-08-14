@@ -218,6 +218,8 @@ export const useConfigStore = defineStore('config', () => {
     // layout 字段保留作为"未隔离前的全局默认" + "新项目首次进入的兜底值",
     // 不再被 layout watch 复写(避免一个项目拖完覆盖另一项目)。
     layoutsByProject: Record<string, UiLayout>
+    // AI 差异说明按项目开关,key = 项目绝对路径；未配置的项目默认开启。
+    aiDiffSummaryByProject: Record<string, boolean>
     fileListViewMode: 'list' | 'tree'
     fileDiffSplitPercent: number
     commandConsole: UiCommandConsole
@@ -228,6 +230,7 @@ export const useConfigStore = defineStore('config', () => {
   const defaultUiSettings: UiSettings = {
     layout: { leftRatio: 0.25, midRatio: 0.375, rightRatio: 0.375, topRatio: 0.5 },
     layoutsByProject: {},
+    aiDiffSummaryByProject: {},
     fileListViewMode: 'list',
     fileDiffSplitPercent: 35,
     commandConsole: {
@@ -249,6 +252,12 @@ export const useConfigStore = defineStore('config', () => {
   function setCurrentDirectory(dir: string) {
     currentDirectory.value = dir || ''
   }
+
+  const aiDiffSummaryEnabled = computed(() => {
+    const cwd = currentDirectory.value
+    if (!cwd) return false
+    return ui.value.aiDiffSummaryByProject[cwd] !== false
+  })
 
   // 为当前项目挑选应使用的布局比例,写回 ui.layout(工作副本)。
   // 优先级:
@@ -539,6 +548,14 @@ export const useConfigStore = defineStore('config', () => {
           }
         }
 
+        const rawAiDiffSummaryByProject = (configData.ui.aiDiffSummaryByProject && typeof configData.ui.aiDiffSummaryByProject === 'object' && !Array.isArray(configData.ui.aiDiffSummaryByProject))
+          ? configData.ui.aiDiffSummaryByProject
+          : {}
+        const aiDiffSummaryByProject: Record<string, boolean> = {}
+        for (const [projPath, enabled] of Object.entries(rawAiDiffSummaryByProject)) {
+          if (typeof enabled === 'boolean') aiDiffSummaryByProject[projPath] = enabled
+        }
+
         // layout 字段: 全局默认兜底值(legacy 也指它)。保留 configData.ui.layout 原值,
         // 不再被按项目覆盖写,所以 ref 里的 layout 仅作为"新项目进入时的初值"。
         const globalLayout: UiLayout = { ...defaultUiSettings.layout, ...(configData.ui.layout || {}) }
@@ -546,6 +563,7 @@ export const useConfigStore = defineStore('config', () => {
         ui.value = {
           layout: globalLayout,
           layoutsByProject: sanitizedLayoutsByProject,
+          aiDiffSummaryByProject,
           fileListViewMode: configData.ui.fileListViewMode === 'tree' ? 'tree' : 'list',
           fileDiffSplitPercent: Number.isFinite(Number(configData.ui.fileDiffSplitPercent))
             ? Math.min(85, Math.max(15, Number(configData.ui.fileDiffSplitPercent)))
@@ -677,6 +695,19 @@ export const useConfigStore = defineStore('config', () => {
     }
     await saveUiSettings({ layoutsByProject: ui.value.layoutsByProject }, { immediate: true })
     return ui.value.layout
+  }
+
+  async function setAiDiffSummaryEnabled(enabled: boolean) {
+    const cwd = currentDirectory.value
+    if (!cwd) return
+    ui.value.aiDiffSummaryByProject = {
+      ...ui.value.aiDiffSummaryByProject,
+      [cwd]: enabled,
+    }
+    await saveUiSettings(
+      { aiDiffSummaryByProject: { [cwd]: enabled } },
+      { immediate: true },
+    )
   }
 
   // 监听 ui 子字段变化，自动落盘
@@ -1325,6 +1356,7 @@ export const useConfigStore = defineStore('config', () => {
     locale,
     ui,
     isUiLoaded,
+    aiDiffSummaryEnabled,
 
     // 方法
     loadConfig,
@@ -1334,6 +1366,7 @@ export const useConfigStore = defineStore('config', () => {
     saveModels,
     saveGeneralSettings,
     saveUiSettings,
+    setAiDiffSummaryEnabled,
     resetUiLayout,
     applyTheme,
     toggleTheme,

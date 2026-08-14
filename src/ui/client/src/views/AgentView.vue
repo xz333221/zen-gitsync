@@ -22,7 +22,7 @@
   - 会话持久化：后端自动保存到 ~/.zen-gitsync/agent-sessions/
 -->
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox, ElTooltip, ElIcon } from 'element-plus'
 import { Plus, Search, Delete, Edit, ChatLineRound, Loading } from '@element-plus/icons-vue'
@@ -198,21 +198,16 @@ function startResize(e: MouseEvent) {
   document.addEventListener('mouseup', onUp)
 }
 
-// ── 生命周期 ──────────────────────────────────────────────
-onMounted(() => {
-  loadSessions()
-})
-
 // ── 项目切换:会话列表按项目隔离 ──────────────────────────
 // currentDirectory 变化(socket 推送 / 启动后异步就绪)时重新拉取;
-// 若当前打开的会话不属于新项目,重置为新建会话状态(流式生成中不打断)
-watch(() => configStore.currentDirectory, async () => {
-  await loadSessions()
+// 流式生成期间不打断，结束后再次检查并清掉不属于新项目的旧会话。
+watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([cwd], previous) => {
+  if (!previous || cwd !== previous[0]) await loadSessions()
   if (currentSessionId.value && !isStreaming.value &&
       !sessions.value.some(s => s.sessionId === currentSessionId.value)) {
     newSession()
   }
-})
+}, { immediate: true })
 </script>
 
 <template>
