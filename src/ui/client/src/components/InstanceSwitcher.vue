@@ -25,11 +25,16 @@ import type { InstanceInfo } from '@/types/instances'
 const store = useInstancesStore()
 const dropdownVisible = ref(false)
 const closingPid = ref<number | null>(null)
+const closingAll = ref(false)
 
 // 列表为空时不渲染（单实例用户无意义）
 const hasAny = computed(() => store.list.length > 0)
 
 const count = computed(() => store.list.length)
+const otherCount = computed(() => store.otherInstances.length)
+
+// 是否有可以批量关闭的非当前实例
+const canCloseAll = computed(() => otherCount.value > 0)
 
 // 触发器文本：总数 + 当前项目名
 const triggerText = computed(() => `${count.value} ${$t('@INSSW:个实例')}`)
@@ -48,7 +53,7 @@ function instanceInitial(instance: InstanceInfo): string {
 }
 
 async function requestClose(instance: InstanceInfo) {
-  if (closingPid.value != null) return
+  if (closingPid.value != null || closingAll.value) return
   try {
     await ElMessageBox.confirm(
       $t('@INSSW:关闭实例确认内容', { name: instance.projectName, port: instance.port }),
@@ -73,6 +78,42 @@ async function requestClose(instance: InstanceInfo) {
     await store.refresh()
   } finally {
     closingPid.value = null
+  }
+}
+
+async function requestCloseAll() {
+  if (!canCloseAll.value || closingAll.value) return
+  const target = otherCount.value
+  try {
+    await ElMessageBox.confirm(
+      $t('@INSSW:关闭全部实例确认内容', { count: target }),
+      $t('@INSSW:关闭全部实例'),
+      {
+        confirmButtonText: $t('@INSSW:确认关闭'),
+        cancelButtonText: $t('@INSSW:取消'),
+        type: 'warning',
+        autofocus: false,
+      },
+    )
+  } catch {
+    return
+  }
+
+  closingAll.value = true
+  try {
+    const result = await store.closeAllInstances()
+    if (result.failed === 0) {
+      ElMessage.success($t('@INSSW:关闭全部实例成功', { closed: result.closed }))
+    } else {
+      ElMessage.warning(
+        $t('@INSSW:关闭全部实例部分失败', { closed: result.closed, failed: result.failed }),
+      )
+    }
+  } catch (error) {
+    ElMessage.error(`${$t('@INSSW:关闭实例失败')}: ${(error as Error).message}`)
+    await store.refresh()
+  } finally {
+    closingAll.value = false
   }
 }
 </script>
@@ -113,7 +154,23 @@ async function requestClose(instance: InstanceInfo) {
             <strong>{{ $t('@INSSW:运行中的实例') }}</strong>
             <span>{{ $t('@INSSW:点击实例可在新标签页打开') }}</span>
           </div>
-          <span class="instance-total">{{ count }}</span>
+          <div class="instance-header-actions">
+            <button
+              v-if="canCloseAll"
+              type="button"
+              class="instance-close-all"
+              :class="{ 'is-loading': closingAll }"
+              :disabled="closingAll || closingPid != null"
+              :aria-label="$t('@INSSW:关闭全部实例')"
+              :title="$t('@INSSW:关闭全部实例 {count}', { count: otherCount })"
+              @click.stop.prevent="requestCloseAll"
+            >
+              <el-icon v-if="closingAll"><Loading /></el-icon>
+              <el-icon v-else><Close /></el-icon>
+              <span>{{ $t('@INSSW:关闭全部实例 {count}', { count: otherCount }) }}</span>
+            </button>
+            <span class="instance-total">{{ count }}</span>
+          </div>
         </li>
 
         <!-- 当前实例（不可点击） -->
@@ -154,7 +211,7 @@ async function requestClose(instance: InstanceInfo) {
                 type="button"
                 class="instance-close"
                 :class="{ 'is-loading': closingPid === inst.pid }"
-                :disabled="closingPid != null"
+                :disabled="closingPid != null || closingAll"
                 :aria-label="$t('@INSSW:关闭实例 {name}', { name: inst.projectName })"
                 :title="$t('@INSSW:关闭实例')"
                 @click.stop.prevent="requestClose(inst)"
@@ -414,6 +471,52 @@ async function requestClose(instance: InstanceInfo) {
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
   font-weight: 700;
+}
+
+:global(.instance-switcher-popper .instance-header-actions) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:global(.instance-switcher-popper .instance-close-all) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--el-color-danger) 28%, var(--border-color));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--el-color-danger) 4%, transparent);
+  color: var(--el-color-danger);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
+
+:global(.instance-switcher-popper .instance-close-all:hover) {
+  background: color-mix(in srgb, var(--el-color-danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--el-color-danger) 50%, var(--border-color));
+}
+
+:global(.instance-switcher-popper .instance-close-all:focus-visible) {
+  outline: 2px solid var(--el-color-danger);
+  outline-offset: 1px;
+}
+
+:global(.instance-switcher-popper .instance-close-all:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+:global(.instance-switcher-popper .instance-close-all.is-loading :deep(svg)) {
+  animation: rotating 1s linear infinite;
+}
+
+:global(.instance-switcher-popper .instance-close-all .el-icon) {
+  font-size: 12px;
 }
 
 :global(.instance-switcher-popper .instance-menu-item) {

@@ -1833,6 +1833,11 @@ export default {
   '@INSSW:取消': 'Cancel',
   '@INSSW:实例已关闭': 'Instance {name} closed',
   '@INSSW:关闭实例失败': 'Failed to close instance',
+  '@INSSW:关闭全部实例': 'Close all',
+  '@INSSW:关闭全部实例 {count}': 'Close all ({count})',
+  '@INSSW:关闭全部实例确认内容': 'Close {count} other running instances? The current instance is not affected.',
+  '@INSSW:关闭全部实例成功': 'Closed {closed} instance(s)',
+  '@INSSW:关闭全部实例部分失败': 'Closed {closed}, failed {failed}',
   // @INSSW: file end
   // @ACTBAR: file path: components/ActivityBar.vue
   '@ACTBAR:工作台': 'Workbench',

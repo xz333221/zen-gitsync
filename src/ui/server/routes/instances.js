@@ -75,4 +75,53 @@ export function registerInstancesRoutes({
       message: `已关闭实例 ${target.projectName || pid}`,
     });
   }));
+
+  // 批量关闭注册表中所有非当前实例。逐个走 kill + unregister，失败不影响其他项。
+  app.post('/api/instances/close-all', asyncRoute(async (req, res) => {
+    const currentInstanceId = typeof getCurrentInstanceId === 'function'
+      ? getCurrentInstanceId()
+      : null;
+
+    const instances = await registry.list({ pruneStale: true });
+    const targets = instances.filter((instance) => instance.pid !== currentInstanceId);
+
+    const results = await Promise.all(targets.map(async (target) => {
+      try {
+        killProcess(target.pid, 'SIGTERM');
+      } catch (error) {
+        if (error?.code === 'ESRCH' || error?.code === 'ENOENT') {
+          await registry.unregister(target.pid);
+          return {
+            pid: target.pid,
+            projectName: target.projectName,
+            success: false,
+            error: '实例已经关闭',
+          };
+        }
+        return {
+          pid: target.pid,
+          projectName: target.projectName,
+          success: false,
+          error: `关闭失败: ${error?.message || error}`,
+        };
+      }
+      // Windows 的 process.kill 直接终止目标，由发起侧立即摘除。
+      await registry.unregister(target.pid);
+      return {
+        pid: target.pid,
+        projectName: target.projectName,
+        success: true,
+      };
+    }));
+
+    const closed = results.filter((r) => r.success).length;
+    const failed = results.length - closed;
+    res.json({
+      success: failed === 0,
+      closed,
+      failed,
+      total: results.length,
+      results,
+    });
+  }));
 }

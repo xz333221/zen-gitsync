@@ -79,6 +79,42 @@ export const useInstancesStore = defineStore('instances', () => {
     lastError.value = null
   }
 
+  interface CloseAllResult {
+    closed: number
+    failed: number
+    total: number
+  }
+
+  async function closeAllInstances(): Promise<CloseAllResult> {
+    const res = await fetch('/api/instances/close-all', { method: 'POST' })
+    const data = await res.json().catch(() => null) as {
+      success?: boolean
+      closed?: number
+      failed?: number
+      total?: number
+      error?: string
+    } | null
+    if (!res.ok || !data) {
+      throw new Error(data?.error || `HTTP ${res.status}`)
+    }
+
+    const closed = data.closed ?? 0
+    const failed = data.failed ?? 0
+    const total = data.total ?? 0
+
+    // 后端已把所有非当前实例 unregister，立刻同步本地视图（保留当前实例）。
+    if (closed > 0) {
+      await refresh()
+    }
+    lastError.value = null
+
+    if (!data.success) {
+      // 部分失败仍返回结果，调用方决定如何提示。
+      return { closed, failed, total }
+    }
+    return { closed, failed, total }
+  }
+
   // 监听后端 Socket.IO 推送
   function attachSocket() {
     if (socketRef.value) return
@@ -156,6 +192,7 @@ export const useInstancesStore = defineStore('instances', () => {
     lastError,
     refresh,
     closeInstance,
+    closeAllInstances,
     start,
     stop
   }
