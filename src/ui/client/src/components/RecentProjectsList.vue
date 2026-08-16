@@ -19,7 +19,7 @@
 // 交互:点击 → 在新标签页打开(POST /api/open-new-tab-gui)
 import { ref, computed, onMounted } from "vue";
 import { ElMessage } from "element-plus";
-import { Folder, Loading, Search } from "@element-plus/icons-vue";
+import { DocumentCopy, Folder, Loading, Search } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 
 const { variant = 'inline' } = defineProps<{ variant?: 'inline' | 'fullpage' }>();
@@ -101,6 +101,17 @@ function onRecentDirClick(item: { path: string; exists: boolean }) {
   openRecentDirInNewTab(item.path);
 }
 
+// 复制路径到剪贴板。失败降级提示,避免静默成功假象。
+async function copyPath(dirPath: string) {
+  if (!dirPath) return;
+  try {
+    await navigator.clipboard.writeText(dirPath);
+    ElMessage.success($t("@13D1C:路径已复制到剪贴板"));
+  } catch (err) {
+    ElMessage.error(`${$t("@13D1C:复制失败")}: ${(err as Error).message}`);
+  }
+}
+
 onMounted(() => {
   loadRecentDirectories();
 });
@@ -162,6 +173,17 @@ onMounted(() => {
             <span class="recent-projects__name-parent">{{ item.path }}</span>
           </span>
           <span v-if="!item.exists" class="recent-projects__tag">{{ $t('@13D1C:不存在') }}</span>
+        </button>
+        <!-- 复制路径按钮:与"打开"按钮平级,避免点击复制误触发打开。
+             .stop 阻止冒泡到 li 上层点击;默认透明,hover li 才显形。 -->
+        <button
+          type="button"
+          class="recent-projects__copy"
+          :title="$t('@13D1C:复制路径')"
+          :aria-label="$t('@13D1C:复制路径 {path}', { path: item.path })"
+          @click.stop="copyPath(item.path)"
+        >
+          <el-icon aria-hidden="true"><DocumentCopy /></el-icon>
         </button>
       </li>
     </ul>
@@ -442,5 +464,41 @@ onMounted(() => {
   border-radius: var(--radius-sm);
   background: var(--tint-danger-14);
   color: var(--color-danger-light);
+}
+/* 复制路径按钮:与"打开"按钮平级,默认透明,hover 卡片时才显形。
+   避免列表静止时被一堆小图标抢视觉重心。 */
+.recent-projects__copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+.recent-projects__item:hover .recent-projects__copy,
+.recent-projects__copy:focus-visible {
+  opacity: 1;
+}
+.recent-projects__copy:hover {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
+}
+.recent-projects__copy:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+/* 缺失目录的项目也允许复制(路径字符串仍可用);不与 is-missing hover 冲突 */
+.recent-projects__item.is-missing .recent-projects__copy:hover {
+  background: var(--bg-component-hover);
+  color: var(--text-secondary);
 }
 </style>
