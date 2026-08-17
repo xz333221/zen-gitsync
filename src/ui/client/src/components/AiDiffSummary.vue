@@ -338,6 +338,7 @@ const context = computed(() => {
   font-size: var(--font-size-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 120px;
 }
 
 .summary-body {

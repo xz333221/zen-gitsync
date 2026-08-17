@@ -1042,16 +1042,6 @@ onMounted(() => {
 
 <template>
   <div class="file-diff-viewer" :style="{ height }">
-    <!-- 整体说明独立于文件选择，横跨文件列表与差异面板。 -->
-    <AiDiffSummary
-      v-if="showAiDiffSummary"
-      class="overall-diff-summary"
-      :source="aiSource || 'worktree'"
-      scope="overall"
-      :commit-hash="commitHash"
-      :revision="overallDiffRevision"
-    />
-
     <div class="diff-viewer-main">
       <!-- 使用 Splitter 控制左右面板比例 -->
       <el-splitter
@@ -1179,6 +1169,26 @@ onMounted(() => {
               />
             </el-scrollbar>
           </div>
+          <!-- AI 说明悬浮窗：固定在文件列表底部 -->
+          <div v-if="showAiDiffSummary" class="ai-summary-float">
+            <AiDiffSummary
+              class="ai-summary-item"
+              :source="aiSource || 'worktree'"
+              scope="overall"
+              :commit-hash="commitHash"
+              :revision="overallDiffRevision"
+            />
+            <AiDiffSummary
+              v-if="currentSelectedFile"
+              class="ai-summary-item"
+              :source="aiSource || 'worktree'"
+              scope="file"
+              :commit-hash="commitHash"
+              :file="currentSelectedFile"
+              :file-name="selectedFileName"
+              :file-revision="diffContent"
+            />
+          </div>
         </div>
       </el-splitter-panel>
       <el-splitter-panel :min="'15%'" :max="'85%'">
@@ -1229,17 +1239,6 @@ onMounted(() => {
               </div>
             </div>
           </div>
-          <!-- AI 差异说明（文件差异页 / 提交详情页，仅配置了模型时渲染） -->
-          <AiDiffSummary
-            v-if="showAiDiffSummary && currentSelectedFile"
-            :source="aiSource || 'worktree'"
-            scope="file"
-            :commit-hash="commitHash"
-            :file="currentSelectedFile"
-            :file-name="selectedFileName"
-            :file-revision="diffContent"
-          />
-
           <!-- 冲突解决区域 -->
           <div v-if="isConflictedFile && hasActualConflictMarkers" class="conflict-resolution-container">
             <!-- 模式切换按钮 -->
@@ -1488,17 +1487,6 @@ onMounted(() => {
         </div>
       </div>
       
-      <!-- AI 差异说明（文件差异页 / 提交详情页，仅配置了模型时渲染） -->
-      <AiDiffSummary
-        v-if="showAiDiffSummary && currentSelectedFile"
-        :source="aiSource || 'worktree'"
-        scope="file"
-        :commit-hash="commitHash"
-        :file="currentSelectedFile"
-        :file-name="selectedFileName"
-        :file-revision="diffContent"
-      />
-
       <!-- 冲突解决区域 -->
       <div v-if="isConflictedFile" class="conflict-resolution-container">
         <!-- 模式切换按钮 -->
@@ -1672,10 +1660,6 @@ onMounted(() => {
   transition: var(--transition-all);
 }
 
-.overall-diff-summary {
-  width: 100%;
-}
-
 .diff-viewer-main {
   display: flex;
   flex: 1;
@@ -1721,6 +1705,28 @@ onMounted(() => {
   background: var(--bg-icon);
   display: flex;
   flex-direction: column;
+  height: 100%;
+}
+
+/* AI 说明悬浮窗：固定在文件列表底部 */
+.ai-summary-float {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-container);
+  max-height: 45%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ai-summary-item {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.ai-summary-item + .ai-summary-item {
+  border-top: 1px solid var(--border-color-light);
 }
 
 .diff-panel {
