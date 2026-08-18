@@ -15,10 +15,11 @@
   -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ArrowDown, ArrowUp, Loading, Memo, Refresh, Warning } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, FullScreen, Loading, Memo, Refresh, Warning } from '@element-plus/icons-vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import { $t } from '@/lang/static'
 import { useConfigStore } from '@stores/configStore'
+import { ElDialog } from 'element-plus'
 
 type SummaryScope = 'file' | 'overall'
 type SummaryStatus = 'idle' | 'loading' | 'done' | 'error' | 'empty' | 'no-model'
@@ -61,6 +62,7 @@ const modelKey = computed(() => {
 })
 const state = ref<SummaryState>({ status: 'idle', text: '', error: '' })
 const collapsed = ref(false)
+const dialogVisible = ref(false)
 const cache = new Map<string, string>()
 let controller: AbortController | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -248,6 +250,14 @@ const context = computed(() => {
         <el-button
           text
           size="small"
+          :icon="FullScreen"
+          :disabled="!state.text"
+          :title="$t('@DIFFAI:弹窗查看')"
+          @click="dialogVisible = true"
+        />
+        <el-button
+          text
+          size="small"
           :icon="Refresh"
           :disabled="state.status === 'loading'"
           :title="$t('@DIFFAI:重新生成')"
@@ -282,6 +292,27 @@ const context = computed(() => {
         </el-button>
       </div>
     </div>
+
+    <!-- 弹窗：完整显示 AI 说明 -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="title"
+      width="680px"
+      :close-on-click-modal="true"
+      destroy-on-close
+      class="ai-summary-dialog"
+    >
+      <div class="dialog-context" v-if="context">{{ context }}</div>
+      <div class="dialog-body">
+        <MarkdownPreview v-if="state.text" :content="state.text" :allow-html="false" />
+        <div v-else-if="state.status === 'loading'" class="summary-placeholder is-loading">
+          {{ $t('@DIFFAI:正在生成差异说明...') }}
+        </div>
+        <div v-else class="summary-placeholder">
+          {{ $t('@DIFFAI:暂无说明内容') }}
+        </div>
+      </div>
+    </el-dialog>
   </section>
 </template>
 
@@ -370,6 +401,29 @@ const context = computed(() => {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* 弹窗样式 */
+.ai-summary-dialog :deep(.el-dialog__body) {
+  padding: 0;
+}
+
+.dialog-context {
+  padding: 8px var(--spacing-lg) 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  word-break: break-all;
+}
+
+.dialog-body {
+  max-height: 60vh;
+  overflow: auto;
+  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+}
+
+.dialog-body :deep(.md-preview) { padding: 0; }
 
 @media (max-width: 720px) {
   .summary-context { display: none; }
