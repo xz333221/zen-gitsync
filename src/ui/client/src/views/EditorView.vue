@@ -25,6 +25,7 @@ import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
 import ImagePreview from '@/components/ImagePreview.vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import MindmapPreview from '@/components/MindmapPreview.vue'
+import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
@@ -1457,9 +1458,7 @@ function stopPreviewResize() {
         {{ $t('@EDITOR:在资源管理器中打开') }}
       </button>
       <button class="ctx-menu-item" @click="ctxOpenInVscode">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-          <path d="M17.5 0l-5.81 4.69L7.32 0H0l9.34 11.7L0 23.36h7.32l4.39-4.69 4.34 4.69H24L14.66 11.7 24 0h-6.5zm-2.36 21.36h-2.04L5.62 2.64h2.18l9.34 18.72z"/>
-        </svg>
+        <svg-icon icon-class="vscode" class-name="ctx-menu-icon" />
         {{ $t('@EDITOR:在 VSCode 中打开') }}
       </button>
       <button class="ctx-menu-item" @click="ctxRename">
@@ -2140,13 +2139,21 @@ function stopPreviewResize() {
 .ctx-menu {
   position: fixed;
   z-index: 9999;
-  background: var(--bg-panel);
+  /* 使用容器背景而非面板背景:深色主题下 --bg-panel 是半透明 rgba,
+     会导致右键菜单"通透",文字与底层内容重叠看不清。 */
+  background: var(--bg-container);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   padding: 4px;
   min-width: 160px;
   user-select: none;
+}
+
+.ctx-menu-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 
 .ctx-menu-item {
