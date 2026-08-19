@@ -1,4 +1,4 @@
-﻿﻿// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
+﻿// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
 export default {
   // @F13B4: file path: App.vue
   '@F13B4:编辑项目配置': 'Edit project configuration',
@@ -765,6 +765,11 @@ export default {
   '@E80AC:选择要保留的内容': 'to choose which content to keep',
   '@E80AC:冲突已解决，可以添加到暂存区': 'Conflict resolved, ready to stage',
   '@E80AC:添加到暂存区': 'Stage File',
+  '@E80AC:预览HTML/MD文件': 'Preview HTML/MD',
+  '@E80AC:文件预览': 'Preview',
+  '@E80AC:刷新预览': 'Refresh Preview',
+  '@E80AC:正在加载预览...': 'Loading preview...',
+  '@E80AC:当前文件类型不支持预览': 'Current file type is not previewable',
   // @E80AC: file end
   // @34292: file path: components\GitCommandPreview.vue
   '@34292:Git命令预览：': 'Git command preview:',

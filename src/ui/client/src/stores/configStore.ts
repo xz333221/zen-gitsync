@@ -222,6 +222,8 @@ export const useConfigStore = defineStore('config', () => {
     aiDiffSummaryByProject: Record<string, boolean>
     fileListViewMode: 'list' | 'tree'
     fileDiffSplitPercent: number
+    /** 差异 + 文件预览面板上下分割比例(顶部差异,百分比) */
+    diffPreviewSplitPercent?: number
     commandConsole: UiCommandConsole
     editorAutoSave: boolean
     mindmapDir: string
@@ -233,6 +235,7 @@ export const useConfigStore = defineStore('config', () => {
     aiDiffSummaryByProject: {},
     fileListViewMode: 'list',
     fileDiffSplitPercent: 35,
+    diffPreviewSplitPercent: 55,
     commandConsole: {
       expanded: true,
       useTerminal: true,
@@ -568,6 +571,9 @@ export const useConfigStore = defineStore('config', () => {
           fileDiffSplitPercent: Number.isFinite(Number(configData.ui.fileDiffSplitPercent))
             ? Math.min(85, Math.max(15, Number(configData.ui.fileDiffSplitPercent)))
             : defaultUiSettings.fileDiffSplitPercent,
+          diffPreviewSplitPercent: Number.isFinite(Number(configData.ui.diffPreviewSplitPercent))
+            ? Math.min(85, Math.max(25, Number(configData.ui.diffPreviewSplitPercent)))
+            : defaultUiSettings.diffPreviewSplitPercent,
           commandConsole: {
             expanded: typeof configData.ui.commandConsole?.expanded === 'boolean' ? configData.ui.commandConsole.expanded : defaultUiSettings.commandConsole.expanded,
             useTerminal: typeof configData.ui.commandConsole?.useTerminal === 'boolean' ? configData.ui.commandConsole.useTerminal : defaultUiSettings.commandConsole.useTerminal,
@@ -713,6 +719,7 @@ export const useConfigStore = defineStore('config', () => {
   // 监听 ui 子字段变化，自动落盘
   watch(() => ui.value.fileListViewMode, (v) => { if (isUiLoaded.value) saveUiSettings({ fileListViewMode: v }) })
   watch(() => ui.value.fileDiffSplitPercent, (v) => { if (isUiLoaded.value) saveUiSettings({ fileDiffSplitPercent: v }) })
+  watch(() => ui.value.diffPreviewSplitPercent, (v) => { if (isUiLoaded.value && v != null) saveUiSettings({ diffPreviewSplitPercent: v }) })
   watch(() => ui.value.editorAutoSave, (v) => { if (isUiLoaded.value) saveUiSettings({ editorAutoSave: v }) })
   // layout 是当前项目的工作副本。变化时把当前项目的 layoutsByProject 条目更新为该值,
   // 同时持久化整张 layoutsByProject map(服务端对这个 key 做深合并,保留其它项目)。

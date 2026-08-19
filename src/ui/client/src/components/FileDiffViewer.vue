@@ -15,9 +15,9 @@
   -->
 <script setup lang="ts">
 import { $t } from '@/lang/static.ts'
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput, ElButton } from 'element-plus';
-import { FolderOpened, DocumentCopy, Document, Search, Warning, CircleCheck } from '@element-plus/icons-vue';
+import { FolderOpened, DocumentCopy, Document, Search, Warning, CircleCheck, View } from '@element-plus/icons-vue';
 import TreeIcon from '@/components/icons/TreeIcon.vue';
 import ListIcon from '@/components/icons/ListIcon.vue';
 import IconButton from '@/components/IconButton.vue';
@@ -34,6 +34,10 @@ import MonacoDiffViewer from '@/components/MonacoDiffViewer.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import ImagePreview from '@/components/ImagePreview.vue'
 import AiDiffSummary from '@/components/AiDiffSummary.vue'
+import DiffPreviewPanel from '@/components/DiffPreviewPanel.vue'
+
+// 支持在差异面板下方预览的扩展名（markdown / html / svg）
+const PREVIEWABLE_EXTS = new Set(['md', 'markdown', 'html', 'htm', 'svg'])
 
 // 定义props
 interface FileItem {
@@ -131,6 +135,27 @@ const splitPercent = computed<number>({
   get: () => clampPercent(configStore.ui.fileDiffSplitPercent),
   set: (v) => { configStore.ui.fileDiffSplitPercent = clampPercent(v) }
 });
+
+// 预览面板状态
+const showPreview = ref<boolean>(false)
+const previewContent = ref<string>('')
+const previewLoading = ref<boolean>(false)
+const previewError = ref<string>('')
+let previewRequestToken = 0
+
+// 上下分栏：上 = 差异 / 下 = 预览。clampPercent 限制 25~80
+const previewTopPercent = computed<number>({
+  get: () => clampPercent(configStore.ui.diffPreviewSplitPercent ?? 55),
+  set: (v) => { configStore.ui.diffPreviewSplitPercent = clampPercent(v) }
+})
+
+// 预览扩展名判定（md / html / svg）
+const currentExt = computed(() => {
+  const path = currentSelectedFile.value || ''
+  const name = path.split('/').pop() || path
+  return name.split('.').pop()?.toLowerCase() ?? ''
+})
+const isCurrentPreviewable = computed(() => PREVIEWABLE_EXTS.has(currentExt.value))
 
 // 计算属性
 const currentSelectedFile = computed(() => {
@@ -334,6 +359,98 @@ async function loadConflictFileContent(filePath: string): Promise<string> {
   if (!data.success) throw new Error(data.error || $t('@E80AC:无法读取文件内容'))
   return String(data.content ?? '')
 }
+
+// 预览：按上下文加载文件内容
+// - git-status:  工作区文件内容（即将提交的最终状态）
+// - commit-detail: 该 commit 时的版本（commitHash 已知）
+// - stash-detail: 工作区内容（暂存引用未透传，使用当前工作区近似）
+async function loadPreviewContent() {
+  const path = currentSelectedFile.value
+  if (!path || !isCurrentPreviewable.value) return
+  const token = ++previewRequestToken
+  previewLoading.value = true
+  previewError.value = ''
+  try {
+    let data: { success?: boolean; content?: string; error?: string; notFound?: boolean } | null = null
+    if (props.context === 'commit-detail' && props.commitHash) {
+      const response = await fetch(`/api/git-file-content?rev=${encodeURIComponent(props.commitHash)}&file=${encodeURIComponent(path)}`)
+      data = await response.json()
+    } else {
+      const response = await fetch(`/api/file-content?file=${encodeURIComponent(path)}`)
+      data = await response.json()
+    }
+    if (token !== previewRequestToken) return // 后到的请求被丢弃
+    if (!data || !data.success) {
+      previewError.value = data?.error || $t('@E80AC:无法读取文件内容')
+      previewContent.value = ''
+      return
+    }
+    previewContent.value = String(data.content ?? '')
+  } catch (err) {
+    if (token !== previewRequestToken) return
+    previewError.value = (err as Error).message || $t('@E80AC:无法读取文件内容')
+    previewContent.value = ''
+  } finally {
+    if (token === previewRequestToken) previewLoading.value = false
+  }
+}
+
+function togglePreview() {
+  if (!isCurrentPreviewable.value) return
+  showPreview.value = !showPreview.value
+  if (showPreview.value && !previewContent.value && !previewLoading.value) {
+    loadPreviewContent()
+  }
+}
+
+// 当文件切换 / 上下文变化时,重置预览内容(若面板开启则自动重新加载)
+watch([currentSelectedFile, () => props.context, () => props.commitHash], () => {
+  previewContent.value = ''
+  previewError.value = ''
+  // 文件不可预览时自动关闭预览面板
+  if (!isCurrentPreviewable.value && showPreview.value) {
+    showPreview.value = false
+    return
+  }
+  if (showPreview.value) loadPreviewContent()
+})
+
+// 预览面板竖向拖拽调整
+let isPreviewSplitResizing = false
+let previewSplitStartY = 0
+let previewSplitStartPercent = 0
+
+function startPreviewSplitResize(e: MouseEvent) {
+  isPreviewSplitResizing = true
+  previewSplitStartY = e.clientY
+  previewSplitStartPercent = previewTopPercent.value
+  document.addEventListener('mousemove', onPreviewSplitResize)
+  document.addEventListener('mouseup', stopPreviewSplitResize)
+  e.preventDefault()
+}
+
+function onPreviewSplitResize(e: MouseEvent) {
+  if (!isPreviewSplitResizing) return
+  const panel = (e.target as HTMLElement)?.closest('.diff-panel') as HTMLElement | null
+  if (!panel) return
+  const rect = panel.getBoundingClientRect()
+  const usable = rect.height - 34 // 减去 header 高度
+  if (usable <= 0) return
+  const deltaY = e.clientY - previewSplitStartY
+  const percent = previewSplitStartPercent + (deltaY / usable) * 100
+  previewTopPercent.value = clampPercent(percent)
+}
+
+function stopPreviewSplitResize() {
+  isPreviewSplitResizing = false
+  document.removeEventListener('mousemove', onPreviewSplitResize)
+  document.removeEventListener('mouseup', stopPreviewSplitResize)
+}
+
+onBeforeUnmount(() => {
+  // 组件卸载时强制清理预览分割条的事件监听
+  if (isPreviewSplitResizing) stopPreviewSplitResize()
+})
 
 function buildTextAndAnchors(
   content: string,
@@ -1236,6 +1353,16 @@ onMounted(() => {
                     <el-icon class="btn-icon"><Document /></el-icon>
                   </button>
                 </el-tooltip>
+                <el-tooltip v-if="isCurrentPreviewable" :content="$t('@E80AC:预览HTML/MD文件')" placement="top" effect="light">
+                  <button
+                    class="modern-btn btn-icon-24"
+                    :class="{ 'active': showPreview }"
+                    :aria-pressed="showPreview"
+                    @click="togglePreview"
+                  >
+                    <el-icon class="btn-icon"><View /></el-icon>
+                  </button>
+                </el-tooltip>
               </div>
             </div>
           </div>
@@ -1399,28 +1526,53 @@ onMounted(() => {
               <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
             </div>
           </div>
-          <div v-else-if="!isConflictedFile" class="diff-content" v-loading="isLoading">
-            <ImagePreview
-              v-if="isCurrentImage"
-              :file-path="currentSelectedFile || ''"
-            />
-            <el-empty
-              v-else-if="!hasDiffContent && !isLoading"
-              :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
-              :image-size="80"
-            />
-            <div v-else-if="compareMode && !isCurrentImage" class="compare-view">
-              <MonacoDiffViewer
-                :original="compareOriginal"
-                :modified="compareModified"
-                language="auto"
-                :file-path="currentSelectedFile"
-                theme="auto"
-                :read-only="true"
+          <div v-else-if="!isConflictedFile" class="diff-and-preview-wrapper">
+            <div
+              class="diff-content diff-content-top"
+              :style="{ flexBasis: showPreview ? previewTopPercent + '%' : '100%' }"
+              v-loading="isLoading"
+            >
+              <ImagePreview
+                v-if="isCurrentImage"
+                :file-path="currentSelectedFile || ''"
               />
+              <el-empty
+                v-else-if="!hasDiffContent && !isLoading"
+                :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
+                :image-size="80"
+              />
+              <div v-else-if="compareMode && !isCurrentImage" class="compare-view">
+                <MonacoDiffViewer
+                  :original="compareOriginal"
+                  :modified="compareModified"
+                  language="auto"
+                  :file-path="currentSelectedFile"
+                  theme="auto"
+                  :read-only="true"
+                />
+              </div>
+              <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
+              <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
             </div>
-            <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
-            <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
+            <!-- 预览分割条:上下拖拽调整比例 -->
+            <div
+              v-if="showPreview && isCurrentPreviewable"
+              class="preview-vertical-resizer"
+              @mousedown="startPreviewSplitResize"
+            />
+            <!-- 文件预览面板:HTML/MD/SVG 直接预览 -->
+            <DiffPreviewPanel
+              v-if="showPreview && isCurrentPreviewable"
+              class="diff-content-bottom"
+              :style="{ flexBasis: (100 - previewTopPercent) + '%' }"
+              :file-path="currentSelectedFile || ''"
+              :content="previewContent"
+              :loading="previewLoading"
+              :error="previewError"
+              :context="props.context"
+              :commit-hash="commitHash"
+              @refresh="loadPreviewContent"
+            />
           </div>
         </div>
       </el-splitter-panel>
@@ -1617,28 +1769,51 @@ onMounted(() => {
         </div>
       </div>
       
-      <div v-else-if="!isConflictedFile" class="diff-content" v-loading="isLoading">
-        <ImagePreview
-          v-if="isCurrentImage"
-          :file-path="currentSelectedFile || ''"
-        />
-        <el-empty
-          v-else-if="!hasDiffContent && !isLoading"
-          :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
-          :image-size="80"
-        />
-        <div v-else-if="compareMode && !isCurrentImage" class="compare-view">
-          <MonacoDiffViewer
-            :original="compareOriginal"
-            :modified="compareModified"
-            language="auto"
-            :file-path="currentSelectedFile"
-            theme="auto"
-            :read-only="true"
+      <div v-else-if="!isConflictedFile" class="diff-and-preview-wrapper">
+        <div
+          class="diff-content diff-content-top"
+          :style="{ flexBasis: showPreview ? previewTopPercent + '%' : '100%' }"
+          v-loading="isLoading"
+        >
+          <ImagePreview
+            v-if="isCurrentImage"
+            :file-path="currentSelectedFile || ''"
           />
+          <el-empty
+            v-else-if="!hasDiffContent && !isLoading"
+            :description="currentSelectedFile ? $t('@E80AC:该文件没有差异内容') : $t('@E80AC:请选择文件查看差异')"
+            :image-size="80"
+          />
+          <div v-else-if="compareMode && !isCurrentImage" class="compare-view">
+            <MonacoDiffViewer
+              :original="compareOriginal"
+              :modified="compareModified"
+              language="auto"
+              :file-path="currentSelectedFile"
+              theme="auto"
+              :read-only="true"
+            />
+          </div>
+          <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
+          <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
         </div>
-        <pre v-else-if="hasDiffContent && plainText" class="diff-text plain-text" v-text="diffContent" />
-        <div v-else-if="hasDiffContent" class="diff-text" v-html="formatDiff(diffContent)" />
+        <div
+          v-if="showPreview && isCurrentPreviewable"
+          class="preview-vertical-resizer"
+          @mousedown="startPreviewSplitResize"
+        />
+        <DiffPreviewPanel
+          v-if="showPreview && isCurrentPreviewable"
+          class="diff-content-bottom"
+          :style="{ flexBasis: (100 - previewTopPercent) + '%' }"
+          :file-path="currentSelectedFile || ''"
+          :content="previewContent"
+          :loading="previewLoading"
+          :error="previewError"
+          :context="props.context"
+          :commit-hash="commitHash"
+          @refresh="loadPreviewContent"
+        />
       </div>
       </div>
     </div>
@@ -2327,7 +2502,7 @@ onMounted(() => {
   position: relative; /* 使loading遮罩能够覆盖整个区域 */
   // display: flex;
   // flex-direction: column;
-  
+
   .diff-text {
     font-family: var(--font-mono);
     font-size: var(--font-size-sm);
@@ -2339,6 +2514,67 @@ onMounted(() => {
     border-radius: var(--radius-base);
     border: 1px solid var(--border-color-light);
   }
+}
+
+/* 上下分栏:差异在上,预览在下;比例由 previewTopPercent 控制 */
+.diff-and-preview-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.diff-content-top {
+  /* 通过 flex-basis 显式控制高度,flex-grow/shrink 由父容器约束 */
+  flex-grow: 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid transparent;
+}
+
+.diff-content-bottom {
+  flex-grow: 0;
+  flex-shrink: 0;
+  padding: 0 var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-vertical-resizer {
+  flex: 0 0 6px;
+  cursor: row-resize;
+  background: var(--border-color-light, transparent);
+  position: relative;
+  user-select: none;
+  transition: background 0.1s;
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 32px;
+    height: 2px;
+    background: var(--text-tertiary, #888);
+    border-radius: 1px;
+    opacity: 0.5;
+  }
+
+  &:hover,
+  &:active {
+    background: var(--color-primary, #409eff);
+    opacity: 0.3;
+  }
+}
+
+/* 预览按钮激活态(预览面板打开时) */
+.modern-btn.btn-icon-24.active {
+  color: var(--color-primary);
+  background: rgba(64, 158, 255, 0.1);
+  border-color: var(--color-primary);
 }
 
 /* 滚动条样式 - 使用全局变量 */

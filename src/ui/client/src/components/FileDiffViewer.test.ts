@@ -43,6 +43,7 @@ describe('FileDiffViewer AI summaries', () => {
           ImagePreview: true,
           MonacoDiffViewer: true,
           MonacoEditor: true,
+          DiffPreviewPanel: true,
         },
       },
     })
