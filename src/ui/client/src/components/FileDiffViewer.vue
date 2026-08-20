@@ -17,7 +17,7 @@
 import { $t } from '@/lang/static.ts'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { ElEmpty, ElScrollbar, ElTooltip, ElIcon, ElMessage, ElSplitter, ElInput, ElButton } from 'element-plus';
-import { FolderOpened, DocumentCopy, Document, Search, Warning, CircleCheck, View } from '@element-plus/icons-vue';
+import { FolderOpened, DocumentCopy, CopyDocument, Document, Search, Warning, CircleCheck, View } from '@element-plus/icons-vue';
 import TreeIcon from '@/components/icons/TreeIcon.vue';
 import ListIcon from '@/components/icons/ListIcon.vue';
 import IconButton from '@/components/IconButton.vue';
@@ -30,6 +30,7 @@ import { isImageFile } from '../utils/fileKind';
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree';
 import type { ConflictBlock } from '@/types/conflict';
 import { useConfigStore } from '@stores/configStore';
+import { useGitStore } from '@stores/gitStore';
 import MonacoDiffViewer from '@/components/MonacoDiffViewer.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import ImagePreview from '@/components/ImagePreview.vue'
@@ -116,6 +117,7 @@ const emit = defineEmits<Emits>();
 
 // 内部状态
 const configStore = useConfigStore();
+const gitStore = useGitStore();
 const internalSelectedFile = ref<string>('');
 const searchQuery = ref<string>(''); // 搜索关键词
 
@@ -296,7 +298,7 @@ function handleCopyPath() {
     ElMessage.warning($t('@E80AC:请先选择一个文件'));
     return;
   }
-  
+
   // 复制到剪贴板
   navigator.clipboard.writeText(currentSelectedFile.value)
     .then(() => {
@@ -305,6 +307,11 @@ function handleCopyPath() {
     .catch(() => {
       ElMessage.error($t('@E80AC:复制失败'));
     });
+}
+
+// 复制全量 Diff(从 /api/diff-head 拉取工作区全量 diff 到剪贴板)
+function handleCopyFullDiff() {
+  void gitStore.copyCurrentDiff();
 }
 
 // 用VSCode打开文件方法
@@ -1338,6 +1345,11 @@ onMounted(() => {
                     <el-icon class="btn-icon"><DocumentCopy /></el-icon>
                   </button>
                 </el-tooltip>
+                <el-tooltip :content="$t('@E80AC:复制全量 Diff')" placement="top" effect="light">
+                  <button class="modern-btn btn-icon-24" @click="handleCopyFullDiff">
+                    <el-icon class="btn-icon"><CopyDocument /></el-icon>
+                  </button>
+                </el-tooltip>
                 <el-tooltip :content="openButtonTooltip" placement="top" effect="light">
                   <button class="modern-btn btn-icon-24" @click="handleOpenFile">
                     <el-icon class="btn-icon"><FolderOpened /></el-icon>
@@ -1602,14 +1614,27 @@ onMounted(() => {
               placement="top"
               effect="light"
             >
-              <button 
+              <button
                 class="modern-btn btn-icon-24"
                 @click="handleCopyPath"
               >
                 <el-icon class="btn-icon"><DocumentCopy /></el-icon>
               </button>
             </el-tooltip>
-            
+
+            <el-tooltip
+              :content="$t('@E80AC:复制全量 Diff')"
+              placement="top"
+              effect="light"
+            >
+              <button
+                class="modern-btn btn-icon-24"
+                @click="handleCopyFullDiff"
+              >
+                <el-icon class="btn-icon"><CopyDocument /></el-icon>
+              </button>
+            </el-tooltip>
+
             <el-tooltip
               :content="openButtonTooltip"
               placement="top"

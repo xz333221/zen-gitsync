@@ -17,7 +17,7 @@
 import { $t } from '@/lang/static'
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Document, ArrowUp, ArrowDown, Lock, Unlock, InfoFilled, WarningFilled, Loading, Folder, CopyDocument } from '@element-plus/icons-vue'
+import { Refresh, Document, ArrowUp, ArrowDown, Lock, Unlock, InfoFilled, WarningFilled, Loading, Folder } from '@element-plus/icons-vue'
 import TreeIcon from '@/components/icons/TreeIcon.vue'
 import IconButton from '@/components/IconButton.vue'
 import ListIcon from '@/components/icons/ListIcon.vue'
@@ -517,6 +517,13 @@ async function refreshStatus() {
   } catch (error) {
     ElMessage.error(`${$t('@13D1C:刷新失败: ')}${(error as Error).message}`)
   }
+}
+
+// git fetch --all:拉取所有远程信息,只更新远端引用不合并/变基到本地
+// 用于在不动工作区的前提下,查看 ahead/behind 与右侧提交历史是否需要拉取
+async function handleFetchAll() {
+  if (gitStore.isGitFetching) return
+  await gitStore.gitFetchAll()
 }
 
 // Pull 错误弹窗
@@ -1047,14 +1054,18 @@ defineExpose({
         </div>
         <div class="flex items-center">
           <!-- <GitOperationsButton variant="icon" /> -->
+          <!-- 拉取所有远程信息 (git fetch --all):复制全量 Diff 按钮已迁移到文件差异弹窗 -->
           <IconButton
-            v-if="gitStore.fileList.length > 0"
-            :tooltip="$t('@13D1C:复制全量 Diff')"
+            :tooltip="$t('@13D1C:拉取所有远程信息')"
             size="medium"
+            :disabled="gitStore.isGitFetching"
             hover-color="var(--color-primary)"
-            @click="gitStore.copyCurrentDiff()"
+            @click="handleFetchAll"
           >
-            <el-icon><CopyDocument /></el-icon>
+            <svg-icon
+              icon-class="fetch-all"
+              :class-name="gitStore.isGitFetching ? 'is-loading' : ''"
+            />
           </IconButton>
           <IconButton
             :tooltip="$t('@13D1C:刷新状态')"
