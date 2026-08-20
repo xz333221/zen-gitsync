@@ -448,16 +448,14 @@ export const useGitStore = defineStore('git', () => {
         // 刷新分支状态（强制刷新，避免外部切换分支后缓存仍为旧分支名）
         await getBranchStatus(true);
 
-        // 拉取有内容变化时,刷新提交历史（"Already up to date" 时跳过,
-        // 避免无意义的全量重查).git pull 的 stdout 含 "Already up to date" /
-        // "已经是最新的" 时视为无变化.
-        const msg = (result.message || '').toString();
-        const hasChanges =
-          !/already up to date|已经是最新的|already up-to-date/i.test(msg);
-        if (hasChanges) {
-          await refreshLog();
-        }
-        return { success: true, hadChanges: hasChanges };
+        // 刷新提交历史。
+        // 之前的实现用 `Already up to date` 正则判断是否有变更,但 pull
+        // 输出在不同 git 版本 / locale / 配置(ff-only、autostash 等)
+        // 下差异较大,容易出现"实际拉到新提交但被误判为无变更"导致
+        // 右侧 log 不刷新。改为始终刷新(用户主动拉取后看到最新日志
+        // 是预期行为;一次 HTTP 请求成本可忽略)。
+        await refreshLog();
+        return { success: true, hadChanges: true };
       } else {
         // 返回结构化错误信息，由调用方决定如何展示
         return {
