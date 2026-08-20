@@ -765,6 +765,7 @@ export default {
   '@E80AC:选择要保留的内容': 'to choose which content to keep',
   '@E80AC:冲突已解决，可以添加到暂存区': 'Conflict resolved, ready to stage',
   '@E80AC:添加到暂存区': 'Stage File',
+  '@E80AC:复制全量 Diff': 'Copy full diff',
   '@E80AC:预览HTML/MD文件': 'Preview HTML/MD',
   '@E80AC:文件预览': 'Preview',
   '@E80AC:刷新预览': 'Refresh Preview',

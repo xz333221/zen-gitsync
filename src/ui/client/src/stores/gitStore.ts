@@ -445,16 +445,15 @@ export const useGitStore = defineStore('git', () => {
           type: 'success'
         });
 
-        // 刷新分支状态（强制刷新，避免外部切换分支后缓存仍为旧分支名）
-        await getBranchStatus(true);
-
-        // 刷新提交历史。
-        // 之前的实现用 `Already up to date` 正则判断是否有变更,但 pull
-        // 输出在不同 git 版本 / locale / 配置(ff-only、autostash 等)
-        // 下差异较大,容易出现"实际拉到新提交但被误判为无变更"导致
-        // 右侧 log 不刷新。改为始终刷新(用户主动拉取后看到最新日志
-        // 是预期行为;一次 HTTP 请求成本可忽略)。
-        await refreshLog();
+        // 并行刷新分支状态 + 分支列表 + 提交历史。
+        // getBranchStatus(true):ahead/behind 与当前分支名立即更新(强制绕过缓存)
+        // getAllBranches():新建的远程分支立即出现在左下角列表
+        // refreshLog():右侧提交历史立即显示新提交(不再依赖 stdout 正则误判)
+        await Promise.all([
+          getBranchStatus(true),
+          getAllBranches(),
+          refreshLog(),
+        ]);
         return { success: true, hadChanges: true };
       } else {
         // 返回结构化错误信息，由调用方决定如何展示
@@ -545,9 +544,9 @@ export const useGitStore = defineStore('git', () => {
           message: $t('@C298B:获取所有远程分支信息成功'),
           type: 'success'
         });
-        
-        // 刷新分支状态
-        await getBranchStatus();
+
+        // 并行刷新分支状态 + 分支列表:新拉到的远程分支能立刻在左下角出现
+        await Promise.all([getBranchStatus(), getAllBranches()]);
         return true;
       } else {
         ElMessage({

@@ -1182,6 +1182,13 @@ onMounted(() => {
             <div class="header-left">
               <h4>{{ $t('@E80AC:变更文件') }}</h4>
               <span v-if="files.length > 0" class="file-count">({{ files.length }})</span>
+              <!-- 复制全量 Diff:从右侧头部迁移到这里,与"变更文件"标题并列,
+                   语义上与"对全部变更文件的整体操作"对齐 -->
+              <el-tooltip v-if="files.length > 0" :content="$t('@E80AC:复制全量 Diff')" placement="top" effect="light">
+                <button class="modern-btn btn-icon-24" @click="handleCopyFullDiff">
+                  <el-icon class="btn-icon"><CopyDocument /></el-icon>
+                </button>
+              </el-tooltip>
             </div>
             <div class="view-mode-toggle">
               <IconButton
@@ -1343,11 +1350,6 @@ onMounted(() => {
                 <el-tooltip :content="$t('@E80AC:复制文件路径')" placement="top" effect="light">
                   <button class="modern-btn btn-icon-24" @click="handleCopyPath">
                     <el-icon class="btn-icon"><DocumentCopy /></el-icon>
-                  </button>
-                </el-tooltip>
-                <el-tooltip :content="$t('@E80AC:复制全量 Diff')" placement="top" effect="light">
-                  <button class="modern-btn btn-icon-24" @click="handleCopyFullDiff">
-                    <el-icon class="btn-icon"><CopyDocument /></el-icon>
                   </button>
                 </el-tooltip>
                 <el-tooltip :content="openButtonTooltip" placement="top" effect="light">
@@ -1619,19 +1621,6 @@ onMounted(() => {
                 @click="handleCopyPath"
               >
                 <el-icon class="btn-icon"><DocumentCopy /></el-icon>
-              </button>
-            </el-tooltip>
-
-            <el-tooltip
-              :content="$t('@E80AC:复制全量 Diff')"
-              placement="top"
-              effect="light"
-            >
-              <button
-                class="modern-btn btn-icon-24"
-                @click="handleCopyFullDiff"
-              >
-                <el-icon class="btn-icon"><CopyDocument /></el-icon>
               </button>
             </el-tooltip>
 
