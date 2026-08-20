@@ -13,10 +13,17 @@
 // limitations under the License.
 //
 // utils/index.js 中暴露的工具函数测试(node:test 内置)。
-// 覆盖 truncateForHistory(surrogate-pair 安全截断)+ exec_exit(字符串 'false' 回归)。
+// 覆盖 truncateForHistory(surrogate-pair 安全截断)+ exec_exit(字符串 'false' 回归)
+// + coloredLog 表格化输出的边框对齐。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { truncateForHistory, exec_exit } from './index.js'
+import chalk from 'chalk'
+import stringWidth from 'string-width'
+import { truncateForHistory, exec_exit, coloredLog } from './index.js'
+
+// chalk 在非 TTY 下 level=0 会把所有着色降级为空串,影响 stripAnsi 后长度计算;
+// 显式提升到 level=2 让 \x1b 序列可见但断言统一走 stripAnsi 拿纯文本。
+chalk.level = 2
 
 // ========== truncateForHistory ==========
 
@@ -197,4 +204,84 @@ test('exec_exit: undefined / null 不退出', () => {
   } finally {
     process.exit = original
   }
+})
+
+// ========== coloredLog 表格边框对齐 ==========
+//
+// tableLog 复刻旧版 coloredLog 的盒式边框 ┌─┐│├─┤└─┘,每行显示宽 = terminalWidth。
+// 历史 bug:header 行 `padRight(headLabel, 2)` 多扣了 2 字符 + 公式里 -3 多扣 1 字符,
+// 导致右边框 │ 比顶边框 ┐ 早 3 格。回归测试:5 行显示宽必须相等。
+//
+// 关键:测试断言用显示宽(stringWidth),不是字符数(length)。
+// "─" 在 string-width 库里按 1 字符计(等同 box-drawing 不是 CJK),
+// 但中日韩是 2 字符。混排字符串的 length 和 stringWidth 不一致,
+// 用 length 断言会把 "字符数 74 / 显示宽 80" 这种"终端上正确对齐"的行判失败。
+
+const stripAnsi = (s) => String(s).replace(/\x1b\[[0-9;]*m/g, '')
+// 显示宽(等同 string-width 库):中日韩 / emoji 计 2,其它 1。用于断言终端视觉对齐。
+const displayWidth = (s) => stringWidth(stripAnsi(s))
+
+function captureColoredLog(columns, headLabel, content) {
+  // tableLog 用 process.stdout.columns 定框宽,mock 一个确定值便于断言
+  const originalCols = Object.getOwnPropertyDescriptor(process.stdout, 'columns')
+  Object.defineProperty(process.stdout, 'columns', { value: columns, configurable: true })
+  const captured = []
+  const originalLog = console.log
+  console.log = (s) => { captured.push(String(s)) }
+  try {
+    coloredLog(headLabel, content)
+  } finally {
+    console.log = originalLog
+    if (originalCols) {
+      Object.defineProperty(process.stdout, 'columns', originalCols)
+    } else {
+      delete process.stdout.columns
+    }
+  }
+  return captured
+}
+
+test('coloredLog: 五行显示宽相等,header 右边框与 ┐ 对齐(回归)', () => {
+  const lines = captureColoredLog(80, '> rev-parse --show-toplevel', 'D:/xz_workspace/ai-model-form')
+  // 4 行边框(顶/header/中/底)+ 1 行内容 = 5
+  assert.equal(lines.length, 5, `4 边框 + 1 内容 = 5,实际 ${lines.length}`)
+  const widths = lines.map(displayWidth)
+  // 5 行必须同显示宽,这样 │ 能竖直对齐 ┐ / ┘(等宽字体下显示宽相等 ⇒ 视觉对齐)
+  assert.ok(widths.every((w) => w === widths[0]),
+    `5 行显示宽应一致,实际: ${JSON.stringify(widths)}`)
+  assert.equal(widths[0], 80, `终端列 80 时框宽应为 80,实际: ${widths[0]}`)
+  // 顶/中/底:边框行(纯 ASCII)
+  assert.ok(stripAnsi(lines[0]).startsWith('┌'), `第 1 行应以 ┌ 开头: ${stripAnsi(lines[0])}`)
+  assert.ok(stripAnsi(lines[0]).endsWith('┐'), `第 1 行应以 ┐ 结尾: ${stripAnsi(lines[0])}`)
+  assert.ok(stripAnsi(lines[2]).startsWith('├'), `第 3 行应以 ├ 开头: ${stripAnsi(lines[2])}`)
+  assert.ok(stripAnsi(lines[2]).endsWith('┤'), `第 3 行应以 ┤ 结尾: ${stripAnsi(lines[2])}`)
+  assert.ok(stripAnsi(lines[4]).startsWith('└'), `第 5 行应以 └ 开头: ${stripAnsi(lines[4])}`)
+  assert.ok(stripAnsi(lines[4]).endsWith('┘'), `第 5 行应以 ┘ 结尾: ${stripAnsi(lines[4])}`)
+  // header / 内容:都是 │ ... │ 结构(关键回归点 — 旧版 header 行 │ 提前 3 格)
+  assert.ok(stripAnsi(lines[1]).startsWith('│'), `header 行应以 │ 开头: ${stripAnsi(lines[1])}`)
+  assert.ok(stripAnsi(lines[1]).endsWith('│'), `header 行应以 │ 结尾(必须对齐到 ┐): ${stripAnsi(lines[1])}`)
+  assert.ok(stripAnsi(lines[3]).startsWith('│'), `内容行应以 │ 开头: ${stripAnsi(lines[3])}`)
+  assert.ok(stripAnsi(lines[3]).endsWith('│'), `内容行应以 │ 结尾: ${stripAnsi(lines[3])}`)
+})
+
+test('coloredLog: terminalWidth 顶到上限 120 时仍等宽', () => {
+  // min(cols, 120) 触发:模拟大屏终端
+  const lines = captureColoredLog(200, '$ git status', 'On branch main\nnothing to commit')
+  // 边框 4 行(顶/header/中/底)+ 内容 2 行 = 6
+  assert.equal(lines.length, 6, `4 边框 + 2 内容 = 6,实际 ${lines.length}`)
+  const widths = lines.map(displayWidth)
+  assert.ok(widths.every((w) => w === widths[0]),
+    `所有行显示宽应一致,实际: ${JSON.stringify(widths)}`)
+  assert.equal(widths[0], 120, `上限 120 时框宽应为 120,实际: ${widths[0]}`)
+})
+
+test('coloredLog: 中文 header 宽度仍对齐(stringWidth 处理宽字符)', () => {
+  // 验证 stringWidth(text) 正确计算中日韩 / emoji 宽度。
+  // 关键:用显示宽断言,不用字符数 — "─" 当 1 字符,但中日韩是 2 字符,
+  // 字符数 != 显示宽。只有显示宽相等,终端才视觉对齐。
+  const lines = captureColoredLog(80, '> 中文命令 测试', '目录: D:/中文路径')
+  const widths = lines.map(displayWidth)
+  assert.ok(widths.every((w) => w === widths[0]),
+    `含中文的 5 行显示宽应一致,实际: ${JSON.stringify(widths)}`)
+  assert.equal(widths[0], 80, `中文场景下框宽应仍为 80,实际: ${widths[0]}`)
 })

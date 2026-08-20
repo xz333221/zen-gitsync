@@ -90,15 +90,18 @@ const tableLog = (commandLine, content, type) => {
   const endLine = '└' + '─'.repeat(terminalWidth - 2) + '┘'
 
   // 计算每行右侧需要补多少空格(用 stringWidth 处理中文/emoji 宽度,避免对不齐)
-  const padRight = (text, extraFix = 0) => {
+  // 每行结构:│ <space> <text> <spaces> │,两侧各 1 字符 + 中间 1 字符左 padding,
+  // 所以 spaces = terminalWidth - 3 - len(text)。不传 extraFix。
+  const padRight = (text) => {
     const len = stringWidth(text)
-    const repeatLen = terminalWidth - len - 3 - extraFix
+    const repeatLen = terminalWidth - len - 3
     return ' '.repeat(Math.max(repeatLen, 0)) + '│'
   }
 
   console.log(startLine)
   // header 行:│ > command │,下面跟一条分隔线
-  console.log(`│ ${head}${padRight(headLabel, 2)}`)
+  // 不传 extraFix:旧版传 2 是想多扣 2 格,实际让 header 右边框比 ┐ 早 3 格(扣 2 + 多扣 1)
+  console.log(`│ ${head}${padRight(headLabel)}`)
   console.log(midLine)
   // 内容行:│ content │
   for (const line of content) {
