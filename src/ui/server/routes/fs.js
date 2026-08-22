@@ -20,7 +20,7 @@ import path from 'path';
 import open from 'open';
 import os from 'os';
 import { spawn, exec, execSync } from 'child_process';
-import { ensureWithinCwd } from '../utils/pathGuard.js';
+import { ensureWithinCwd, normalizeProjectPath } from '../utils/pathGuard.js';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import { invalidateCurrentProjectKey, invalidateRawConfigCache } from '../../../config.js';
 import { invalidateCwdCache } from '../../../utils/index.js';
@@ -148,7 +148,7 @@ export function registerFsRoutes({
         invalidateCurrentProjectKey();
         invalidateRawConfigCache();
         invalidateCwdCache();
-        const newDirectory = process.cwd();
+        const newDirectory = normalizeProjectPath(process.cwd());
       
         // 更新当前项目路径和房间ID
         const oldProjectPath = getCurrentProjectPath();

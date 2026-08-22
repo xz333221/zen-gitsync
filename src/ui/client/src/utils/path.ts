@@ -23,12 +23,25 @@
  */
 export function getFolderNameFromPath(path: string): string {
   if (!path) return 'Zen GitSync'
-  
+
   // 处理Windows和Unix路径
   const parts = path.replace(/\\/g, '/').split('/')
-  
+
   // 过滤空字符串并返回最后一个部分
   const filtered = parts.filter(p => p)
-  
+
   return filtered.length > 0 ? filtered[filtered.length - 1] : 'Zen GitSync'
+}
+
+/**
+ * 规范化项目路径,用于分组 key / 相等性比较。
+ *
+ * 背景:Windows 上后端 process.cwd() 会保留启动时输入的盘符大小写,
+ * 同一目录在历史数据里可能同时存在 `e:\workspace\x` 与 `E:\workspace\x`
+ * 两种写法;文件系统不区分大小写,但字符串比较会把它们当成两个项目,
+ * 导致工作台侧边栏出现重复分组。这里统一把盘符转大写。
+ */
+export function canonicalProjectPath(p?: string | null): string {
+  const s = (p || '').trim()
+  return s.replace(/^([a-z])(?=:)/, (m) => m.toUpperCase())
 }

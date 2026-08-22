@@ -40,6 +40,27 @@ import path from 'path'
 const isWindows = process.platform === 'win32'
 
 /**
+ * 规范化项目路径,作为跨会话稳定的"项目身份"字符串(分组 key / 房间 id / 配置键)。
+ *
+ * 背景:Windows 上 process.cwd() 会保留启动进程 / cd 时输入的盘符大小写,
+ * 同一目录可能得到 `e:\workspace\x` 与 `E:\workspace\x` 两个字符串;
+ * 文件系统不区分大小写,但字符串比较会把它们当成两个项目(工作台侧边栏
+ * 出现重复分组)。这里统一把盘符转大写,并去掉尾部斜杠。
+ *
+ * @param {string} p
+ * @returns {string}
+ */
+export function normalizeProjectPath(p) {
+  if (typeof p !== 'string' || !p) return ''
+  let s = p.trim()
+  if (!isWindows) return s
+  s = s.replace(/^([a-z])(?=:)/, (m) => m.toUpperCase())
+  // 去尾部斜杠,但保留盘符根路径("E:\" 长度为 3)
+  if (s.length > 3) s = s.replace(/[\\/]+$/, '')
+  return s
+}
+
+/**
  * 把 user 输入路径解析成"在 cwd 内的绝对路径"，越界时返回 null
  *
  * @param {string} input - 用户提供的路径（相对 / 绝对 / 含 .. / 符号链接）

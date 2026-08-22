@@ -1,6 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import type { Ref } from 'vue'
 import { $t } from '@/lang/static'
+import { canonicalProjectPath } from '@/utils/path'
 import type { Task } from '@/types/workbench'
 
 const NO_PROJECT_KEY = '__no_project__'
@@ -48,12 +49,13 @@ export function useWorkbenchProjectGroups(tasks: Ref<Task[]>, currentProject: Re
     const list = tasks.value
     const groups = new Map<string, Task[]>()
     for (const t of list) {
-      const raw = (t.projectPath || '').trim()
-      const key = raw || NO_PROJECT_KEY
+      // 盘符大小写归一:历史数据里同一目录可能同时存在 e:\ 与 E:\ 两种写法,
+      // 不归一会被拆成两个分组(详见 canonicalProjectPath 注释)
+      const key = canonicalProjectPath(t.projectPath) || NO_PROJECT_KEY
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(t)
     }
-    const cur = currentProject.value.path
+    const cur = canonicalProjectPath(currentProject.value.path)
     const keys = Array.from(groups.keys()).sort((a, b) => {
       if (a === cur) return -1
       if (b === cur) return 1
@@ -81,7 +83,7 @@ export function useWorkbenchProjectGroups(tasks: Ref<Task[]>, currentProject: Re
   watch(
     () => groupedTasksList.value.groups.map(g => g.path),
     (paths) => {
-      const cur = currentProject.value.path
+      const cur = canonicalProjectPath(currentProject.value.path)
       const next = new Set(collapsedGroupPaths.value)
       const seen = new Set(seenGroupPaths.value)
       let changed = false

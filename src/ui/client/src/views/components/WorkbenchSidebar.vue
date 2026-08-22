@@ -4,6 +4,7 @@ import { $t } from '@/lang/static'
 import { Plus, Close, List, Picture as PictureIcon, DocumentAdd, Memo, Folder, ArrowDown, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
 import type { Task, Prompt } from '@/types/workbench'
 import { useWorkbenchProjectGroups } from '@/composables/useWorkbenchProjectGroups'
+import { canonicalProjectPath } from '@/utils/path'
 
 type DragPosition = 'before' | 'after' | null
 
@@ -37,9 +38,15 @@ const currentProjectRef = computed(() => props.currentProject)
 const tasksRef = computed(() => props.tasks)
 const { groupedTasksList, isGroupCollapsed, toggleGroupCollapsed, shortProjectLabel } = useWorkbenchProjectGroups(tasksRef as any, currentProjectRef as any)
 
+// 当前项目路径的归一形式(盘符大小写),供模板里"是否其他项目"判断复用
+const currentProjectKey = computed(() => canonicalProjectPath(props.currentProject.path))
+function isOtherProject(t: Task): boolean {
+  return !!t.projectPath && canonicalProjectPath(t.projectPath) !== currentProjectKey.value
+}
+
 const availablePrompts = computed<Prompt[]>(() => {
-  const cur = (props.currentProject.path || '').trim()
-  return props.prompts.filter(p => !p.projectPath || p.projectPath === cur)
+  const cur = currentProjectKey.value
+  return props.prompts.filter(p => !p.projectPath || canonicalProjectPath(p.projectPath) === cur)
 })
 
 function attachmentCount(t: Task): number {
@@ -187,7 +194,7 @@ function onWindowMouseUp(_e: MouseEvent) {
             v-if="groupedTasksList.hasMultiple"
             class="wb-task-group__head"
             :class="{
-              'is-current': group.path === currentProject.path,
+              'is-current': group.path === currentProjectKey,
               'is-collapsed': isGroupCollapsed(group.path)
             }"
             role="button"
@@ -202,8 +209,8 @@ function onWindowMouseUp(_e: MouseEvent) {
               <component :is="isGroupCollapsed(group.path) ? ArrowRight : ArrowDown" />
             </el-icon>
             <el-icon class="wb-task-group__icon"><Folder /></el-icon>
-            <span class="wb-task-group__name" :title="group.path === currentProject.path ? currentProject.path : group.label">
-              {{ group.path === currentProject.path ? currentProject.name : shortProjectLabel(group.label) }}
+            <span class="wb-task-group__name" :title="group.path === currentProjectKey ? currentProject.path : group.label">
+              {{ group.path === currentProjectKey ? currentProject.name : shortProjectLabel(group.label) }}
             </span>
             <span class="wb-pill wb-task-group__count">{{ group.tasks.length }}</span>
           </li>
@@ -215,7 +222,7 @@ function onWindowMouseUp(_e: MouseEvent) {
               :class="{
                 active: t.id === selectedTaskId,
                 'has-attachment': attachmentCount(t) > 0,
-                'is-other-project': t.projectPath && t.projectPath !== currentProject.path,
+                'is-other-project': isOtherProject(t),
                 'is-running': taskIsRunning(t),
                 'is-dragging': draggingTaskId === t.id,
                 'is-drop-before': dragOverTaskId === t.id && dragPosition === 'before',
@@ -267,11 +274,11 @@ function onWindowMouseUp(_e: MouseEvent) {
                     {{ t.type === 'simple' ? $t('@WORKBENCH:简单') : $t('@WORKBENCH:复杂') }}
                   </button>
                   <span
-                    v-if="t.projectPath && t.projectPath !== currentProject.path"
+                    v-if="isOtherProject(t)"
                     class="wb-task-item__meta-item wb-task-item__meta-item--project"
                     :title="t.projectPath"
                   >
-                    {{ shortProjectLabel(t.projectPath) }}
+                    {{ shortProjectLabel(t.projectPath || '') }}
                   </span>
                 </div>
               </div>

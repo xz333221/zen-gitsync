@@ -41,6 +41,7 @@ const toolsStore = useToolsStore()
 import JobLogDetails from '@components/JobLogDetails.vue'
 import ExecutionLogManager from '@components/ExecutionLogManager.vue'
 import { statusColor } from '@/utils/jobStatus'
+import { canonicalProjectPath } from '@/utils/path'
 import type { Task, SubTask, Prompt } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
@@ -87,15 +88,15 @@ const {
 
 async function loadTasks() {
   await _loadDataTasks()
-  const cp = (currentProject.value.path || '').trim()
+  const cp = canonicalProjectPath(currentProject.value.path)
   // 决定"应该选中的 task id":优先恢复当前项目最后一次打开的 task,否则降级到当前项目下的首条,
   // 否则(完全没有当前项目的 task)降级到任意首条。
-  const curProjectTasks = tasks.value.filter(t => !t.projectPath || t.projectPath.trim() === cp)
+  const curProjectTasks = tasks.value.filter(t => !t.projectPath || canonicalProjectPath(t.projectPath) === cp)
   const map = readLastTaskMap()
   const rememberedId = (cp && map[cp]) || (!cp && map[NO_PROJECT_KEY]) || ''
   const remembered = rememberedId ? tasks.value.find(t => t.id === rememberedId) : null
   const fallback = curProjectTasks[0] || tasks.value[0] || null
-  const desiredId = (remembered && remembered.projectPath && remembered.projectPath.trim() !== cp) ? null
+  const desiredId = (remembered && remembered.projectPath && canonicalProjectPath(remembered.projectPath) !== cp) ? null
     : remembered ? remembered.id
     : fallback ? fallback.id
     : null
@@ -266,9 +267,9 @@ watch(selectedTaskId, () => {
 // 如果当前选中的 task 不属于当前项目,清掉并走 loadTasks 里的恢复逻辑重选。
 watch(currentProject, async (n) => {
   if (!n.path) return
-  const cp = (n.path || '').trim()
+  const cp = canonicalProjectPath(n.path)
   const cur = selectedTask.value
-  if (cur && cur.projectPath && cur.projectPath.trim() !== cp) {
+  if (cur && cur.projectPath && canonicalProjectPath(cur.projectPath) !== cp) {
     await loadTasks()
   }
 })
@@ -296,8 +297,8 @@ const taskDescExpanded = ref(true)
 // 全局提示词的 projectPath = '' (空串);右侧下拉只展示「当前项目专属 + 全局」两部分。
 // 历史数据(没有 projectPath 字段)也会被 !p.projectPath 命中 → 仍作为全局展示,不影响存量。
 const availablePrompts = computed<Prompt[]>(() => {
-  const cur = (currentProject.value.path || '').trim()
-  return prompts.value.filter(p => !p.projectPath || p.projectPath === cur)
+  const cur = canonicalProjectPath(currentProject.value.path)
+  return prompts.value.filter(p => !p.projectPath || canonicalProjectPath(p.projectPath) === cur)
 })
 
 
@@ -821,7 +822,7 @@ async function selectTask(t: Task) {
   // 切换后立刻拍快照，避免新 task 误标为 dirty
   captureSnapshot()
   // 记忆「该项目最后一次打开的 task」,便于下次刷新 / 重进工作台时优先恢复
-  rememberLastTask((currentProject.value.path || '').trim(), t.id)
+  rememberLastTask(canonicalProjectPath(currentProject.value.path), t.id)
 }
 
 // ── 拖动排序：父组件负责落盘 + 乐观更新 + 失败回滚 ──────────────────
@@ -865,7 +866,7 @@ function applyLocalReorder(
   groupPath: string,
   orderedIds: string[]
 ): Task[] {
-  const groupKey = (p?: string) => ((p || '').trim() || '__no_project__')
+  const groupKey = (p?: string) => (canonicalProjectPath(p) || NO_PROJECT_KEY)
   const inGroupIds = list.filter(t => groupKey(t.projectPath) === groupPath).map(t => t.id)
   const inGroupSet = new Set(inGroupIds)
   if (orderedIds.length !== inGroupSet.size || orderedIds.some(id => !inGroupSet.has(id))) {
