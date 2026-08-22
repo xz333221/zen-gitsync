@@ -46,9 +46,11 @@ import {
 import { useGitStore } from "@stores/gitStore";
 import { useToolsStore } from "@stores/toolsStore";
 import { extractPureMessage } from "@utils/index.ts";
+import { computeCommitGraph, type GraphRowLayout } from "@utils/commitGraph";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
 import IconButton from "@components/IconButton.vue";
+import CommitGraphCell from "./CommitGraphCell.vue";
 
 interface LogItem {
   hash: string;
@@ -71,7 +73,32 @@ const errorMessage = ref("");
 const localLoading = ref(false);
 const isLoading = computed(() => gitStore.isLoadingLog || localLoading.value);
 const showAllCommits = ref(false);
-// 图表视图相关逻辑已移除
+
+// 分支图(Git Graph)开关, 记住用户偏好
+const GRAPH_STORAGE_KEY = "zen-gitsync:log-show-graph";
+const showGraph = ref(localStorage.getItem(GRAPH_STORAGE_KEY) !== "false");
+watch(showGraph, (v) => {
+  localStorage.setItem(GRAPH_STORAGE_KEY, String(v));
+});
+
+// 分支图布局: 由 logs(hash + parents) 计算轨道分配
+const graphResult = computed(() =>
+  showGraph.value && logs.value.length > 0
+    ? computeCommitGraph(logs.value)
+    : null
+);
+const graphRowMap = computed(() => {
+  const map = new Map<string, GraphRowLayout>();
+  if (graphResult.value) {
+    for (const row of graphResult.value.rows) {
+      map.set(row.hash, row);
+    }
+  }
+  return map;
+});
+const graphColumnWidth = computed(() =>
+  Math.max(graphResult.value?.width ?? 0, 28)
+);
 
 // 分页相关变量（部分已移到store中）
 const isLoadingMore = ref(false);
@@ -1094,6 +1121,22 @@ function toggleFullscreen() {
       </div>
 
       <div class="log-actions">
+        <!-- 分支图开关 -->
+        <IconButton
+          :tooltip="showGraph ? $t('@A1833:隐藏分支图') : $t('@A1833:显示分支图')"
+          :active="showGraph"
+          custom-class="graph-toggle-button"
+          @click="showGraph = !showGraph"
+        >
+          <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:block">
+            <circle cx="6" cy="5" r="2.2" />
+            <circle cx="6" cy="19" r="2.2" />
+            <circle cx="18" cy="9" r="2.2" />
+            <path d="M6 7.2v9.6" />
+            <path d="M18 11.2c0 4-4 4.8-9.2 5.6" />
+          </svg>
+        </IconButton>
+
         <!-- 筛选按钮 -->
         <IconButton
           :tooltip="filterVisible ? $t('@A1833:隐藏筛选') : $t('@A1833:显示筛选')"
@@ -1254,15 +1297,21 @@ function toggleFullscreen() {
             @row-click="(row) => viewCommitDetail(row)"
           >
 
-            <!-- <el-table-column :label="$t('@A1833:哈希')" width="80" resizable>
+            <!-- Git 分支图列(最左侧) -->
+            <el-table-column
+              v-if="showGraph"
+              :width="graphColumnWidth"
+              class-name="graph-column"
+              align="center"
+            >
               <template #default="scope">
-                <span
-                  class="commit-hash"
-                  @click="viewCommitDetail(scope.row)"
-                  >{{ scope.row.hash.substring(0, 6) }}</span
-                >
+                <CommitGraphCell
+                  v-if="graphRowMap.get(scope.row.hash)"
+                  :layout="graphRowMap.get(scope.row.hash)!"
+                  :width="graphColumnWidth"
+                />
               </template>
-            </el-table-column> -->
+            </el-table-column>
             <el-table-column :label="$t('@A1833:提交信息')" min-width="300">
               <template #default="scope">
                 <div class="commit-message-cell">
@@ -1914,6 +1963,17 @@ function toggleFullscreen() {
 .log-table {
   flex: 1;
   width: 100%;
+}
+
+/* 图列: td 相对定位, 让里面的 SVG 包装层 absolute 铺满整个单元格(=实际行高) */
+:deep(.graph-column) {
+  padding: 0 !important;
+  position: relative;
+}
+
+:deep(.graph-column .cell) {
+  padding: 0 !important;
+  line-height: 0;
 }
 
 /* 提交信息单元格样式 */

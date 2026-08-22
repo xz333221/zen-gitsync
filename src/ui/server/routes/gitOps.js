@@ -669,6 +669,11 @@ export function registerGitOpsRoutes({
       // 构建 git log 的 argv 数组
       const logArgs = ['log', '--all'];
 
+      // 分支图需要拓扑序, 保证子提交一定先于父提交出现(避免时钟偏移导致图错乱)
+      if (withParents) {
+        logArgs.push('--topo-order');
+      }
+
       // 作者筛选(支持多作者用正则 OR)
       if (author.length > 0) {
         const validAuthors = author.filter(a => a.trim() !== '');
@@ -720,6 +725,11 @@ export function registerGitOpsRoutes({
     try {
       // 构建 git log argv 数组
       const logArgs = ['log'];
+
+      // 分支图需要拓扑序, 保证子提交一定先于父提交出现
+      if (withParents) {
+        logArgs.push('--topo-order');
+      }
 
       // 准备分支引用,确保它们被正确识别为分支而不是文件名
       // 使用 refs/heads/ 前缀明确指示这是分支
