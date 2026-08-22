@@ -201,8 +201,14 @@ function startResize(e: MouseEvent) {
 // ── 项目切换:会话列表按项目隔离 ──────────────────────────
 // currentDirectory 变化(socket 推送 / 启动后异步就绪)时重新拉取;
 // 流式生成期间不打断，结束后再次检查并清掉不属于新项目的旧会话。
-watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([cwd], previous) => {
-  if (!previous || cwd !== previous[0]) await loadSessions()
+// 注意: 流式刚结束时也要先 await loadSessions() 再做清理判断——
+// 新会话的 meta 事件在流式期间就把 currentSessionId 置上了, 若不先
+// 刷新列表, sessions 还是旧的(不含新会话), 会误判"当前会话不属于本项目"
+// 把刚回答完的对话直接清掉(新建会话发第一条消息后被自动关闭的根因)。
+watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([cwd, streaming], previous) => {
+  const dirChanged = !previous || cwd !== previous[0]
+  const streamJustFinished = !!previous && previous[1] === true && !streaming
+  if (dirChanged || streamJustFinished) await loadSessions()
   if (currentSessionId.value && !isStreaming.value &&
       !sessions.value.some(s => s.sessionId === currentSessionId.value)) {
     newSession()
