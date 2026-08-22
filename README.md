@@ -325,7 +325,7 @@ Configure the model endpoint, API key, and model name in **Settings → AI**.
 
 ![Workbench — task detail with Claude execution log](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/workbench-task-detail.png)
 
-> Sidebar lists tasks (with project grouping) and prompt presets. The main pane is split between the task definition (commit-code field, preset selector, run/stop buttons) and the live **Claude** execution stream — a chronological card stack of stdout/stderr output, scrolled to the latest. The bottom composer captures follow-up prompts for `claude --resume`.
+> Sidebar lists tasks and prompt presets: the current project gets its own group, while tasks and prompts from other projects are tucked into an "Other projects" group that is collapsed by default. The main pane is split between the task definition (commit-code field, preset selector, run/stop buttons) and the live **Claude** execution stream — a chronological card stack of stdout/stderr output, scrolled to the latest. The bottom composer captures follow-up prompts for `claude --resume`.
 
 A dedicated view (fourth icon in the activity bar) for batch-running Claude against your repo. Define a task, split it into ordered subtasks, attach a reusable prompt preset, then click **Run task** — each subtask launches in its own terminal window with `claude --permission-mode bypassPermissions`, so context never piles up.
 
@@ -863,7 +863,7 @@ Activity Bar 第三个视图，调用 AI 模型将项目代码库生成可交互
 
 ![工作台 — 任务详情 + Claude 实时执行日志](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/workbench-task-detail.png)
 
-> 侧边栏按项目分组列出任务和提示词预置；主面板上半部分是任务定义（提交代码字段、预置提示词下拉、运行 / 停止按钮），下半部分是 **Claude** 实时执行流 —— 按时间顺序堆叠的 stdout / stderr 卡片，自动滚到最新。底部续聊输入框可以接着 `claude --resume` 继续对话。
+> 侧边栏列出任务和提示词预置：当前项目独立成组，其它项目的任务和提示词统一收纳进默认收起的「其他项目」分组；主面板上半部分是任务定义（提交代码字段、预置提示词下拉、运行 / 停止按钮），下半部分是 **Claude** 实时执行流 —— 按时间顺序堆叠的 stdout / stderr 卡片，自动滚到最新。底部续聊输入框可以接着 `claude --resume` 继续对话。
 
 Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定义任务、拆成有序子任务、绑定可复用的提示词预置，点 **执行任务** 后按顺序依次执行。
 

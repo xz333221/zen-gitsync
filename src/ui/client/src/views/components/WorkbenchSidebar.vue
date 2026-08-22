@@ -44,9 +44,36 @@ function isOtherProject(t: Task): boolean {
   return !!t.projectPath && canonicalProjectPath(t.projectPath) !== currentProjectKey.value
 }
 
-const availablePrompts = computed<Prompt[]>(() => {
+// 提示词分两段展示:全局 + 当前项目的直接列出;其它项目的收进「其他项目」折叠组(默认收起)
+const visiblePrompts = computed<Prompt[]>(() => {
   const cur = currentProjectKey.value
   return props.prompts.filter(p => !p.projectPath || canonicalProjectPath(p.projectPath) === cur)
+})
+const otherPrompts = computed<Prompt[]>(() => {
+  const cur = currentProjectKey.value
+  return props.prompts.filter(p => !!p.projectPath && canonicalProjectPath(p.projectPath) !== cur)
+})
+
+const OTHER_PROMPTS_COLLAPSED_KEY = 'wb.otherPromptsCollapsed.v1'
+const otherPromptsCollapsed = ref((() => {
+  try { return localStorage.getItem(OTHER_PROMPTS_COLLAPSED_KEY) !== '0' } catch { return true }
+})())
+function toggleOtherPromptsCollapsed() {
+  otherPromptsCollapsed.value = !otherPromptsCollapsed.value
+  try { localStorage.setItem(OTHER_PROMPTS_COLLAPSED_KEY, otherPromptsCollapsed.value ? '1' : '0') } catch { /* quota 不阻塞 UI */ }
+}
+
+// 混合行:可见提示词 + 「其他项目」组头 + (展开时)其它项目提示词,模板只需一份条目 markup
+type PromptRow = { kind: 'item'; prompt: Prompt } | { kind: 'other-head' }
+const promptRows = computed<PromptRow[]>(() => {
+  const rows: PromptRow[] = visiblePrompts.value.map(p => ({ kind: 'item', prompt: p }))
+  if (otherPrompts.value.length) {
+    rows.push({ kind: 'other-head' })
+    if (!otherPromptsCollapsed.value) {
+      rows.push(...otherPrompts.value.map(p => ({ kind: 'item' as const, prompt: p })))
+    }
+  }
+  return rows
 })
 
 function attachmentCount(t: Task): number {
@@ -210,7 +237,7 @@ function onWindowMouseUp(_e: MouseEvent) {
             </el-icon>
             <el-icon class="wb-task-group__icon"><Folder /></el-icon>
             <span class="wb-task-group__name" :title="group.path === currentProjectKey ? currentProject.path : group.label">
-              {{ group.path === currentProjectKey ? currentProject.name : shortProjectLabel(group.label) }}
+              {{ group.path === currentProjectKey ? currentProject.name : group.label }}
             </span>
             <span class="wb-pill wb-task-group__count">{{ group.tasks.length }}</span>
           </li>
@@ -332,7 +359,7 @@ function onWindowMouseUp(_e: MouseEvent) {
       <header class="wb-section__head">
         <span class="wb-section__tag wb-section__tag--accent">{{ $t('@WORKBENCH:提示') }}</span>
         <h3 class="wb-section__title">{{ $t('@WORKBENCH:预置提示词') }}</h3>
-        <span class="wb-pill wb-section__count">{{ availablePrompts.length }}</span>
+        <span class="wb-pill wb-section__count">{{ visiblePrompts.length + otherPrompts.length }}</span>
         <button
           class="wb-section__action"
           @click="emit('open-create-prompt')"
@@ -343,33 +370,54 @@ function onWindowMouseUp(_e: MouseEvent) {
         </button>
       </header>
       <ul class="wb-prompt-list">
-        <li v-for="p in availablePrompts" :key="p.id" class="wb-prompt-item">
-          <div class="wb-prompt-item__icon">
-            <el-icon><Memo /></el-icon>
-          </div>
-          <span class="wb-prompt-item__name" @click="emit('open-edit-prompt', p)" :title="p.content">
-            {{ p.name }}
-          </span>
-          <span
-            v-if="!p.projectPath"
-            class="wb-prompt-item__tag"
-            :title="$t('@WORKBENCH:全局（所有项目可用）')"
-          >{{ $t('@WORKBENCH:全局（所有项目可用）') }}</span>
-          <span
-            v-else
-            class="wb-prompt-item__tag wb-prompt-item__tag--project"
-            :title="p.projectPath"
-          >{{ shortProjectLabel(p.projectPath) }}</span>
-          <button
-            class="wb-prompt-item__del"
-            @click="emit('delete-prompt', p)"
-            :title="$t('@WORKBENCH:删除')"
-            :aria-label="$t('@WORKBENCH:删除')"
+        <template v-for="row in promptRows" :key="row.kind === 'item' ? row.prompt.id : 'other-head'">
+          <li
+            v-if="row.kind === 'other-head'"
+            class="wb-task-group__head wb-prompt-group__head"
+            :class="{ 'is-collapsed': otherPromptsCollapsed }"
+            role="button"
+            tabindex="0"
+            :aria-expanded="!otherPromptsCollapsed"
+            :title="otherPromptsCollapsed ? $t('@WORKBENCH:展开') : $t('@WORKBENCH:收起')"
+            @click="toggleOtherPromptsCollapsed"
+            @keydown.enter.prevent="toggleOtherPromptsCollapsed"
+            @keydown.space.prevent="toggleOtherPromptsCollapsed"
           >
-            <el-icon><Close /></el-icon>
-          </button>
-        </li>
-        <li v-if="availablePrompts.length === 0" class="wb-empty wb-empty--compact">
+            <el-icon class="wb-task-group__caret">
+              <component :is="otherPromptsCollapsed ? ArrowRight : ArrowDown" />
+            </el-icon>
+            <el-icon class="wb-task-group__icon"><Folder /></el-icon>
+            <span class="wb-task-group__name">{{ $t('@WORKBENCH:其他项目') }}</span>
+            <span class="wb-pill wb-task-group__count">{{ otherPrompts.length }}</span>
+          </li>
+          <li v-else class="wb-prompt-item">
+            <div class="wb-prompt-item__icon">
+              <el-icon><Memo /></el-icon>
+            </div>
+            <span class="wb-prompt-item__name" @click="emit('open-edit-prompt', row.prompt)" :title="row.prompt.content">
+              {{ row.prompt.name }}
+            </span>
+            <span
+              v-if="!row.prompt.projectPath"
+              class="wb-prompt-item__tag"
+              :title="$t('@WORKBENCH:全局（所有项目可用）')"
+            >{{ $t('@WORKBENCH:全局（所有项目可用）') }}</span>
+            <span
+              v-else
+              class="wb-prompt-item__tag wb-prompt-item__tag--project"
+              :title="row.prompt.projectPath"
+            >{{ shortProjectLabel(row.prompt.projectPath) }}</span>
+            <button
+              class="wb-prompt-item__del"
+              @click="emit('delete-prompt', row.prompt)"
+              :title="$t('@WORKBENCH:删除')"
+              :aria-label="$t('@WORKBENCH:删除')"
+            >
+              <el-icon><Close /></el-icon>
+            </button>
+          </li>
+        </template>
+        <li v-if="visiblePrompts.length === 0 && otherPrompts.length === 0" class="wb-empty wb-empty--compact">
           {{ $t('@WORKBENCH:暂无提示词') }}
         </li>
       </ul>
@@ -672,4 +720,6 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-task-group__icon { font-size: 14px; flex-shrink: 0; opacity: 0.7; }
 .wb-task-group__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wb-task-group__count { min-width: 14px; height: 14px; padding: 0 4px; font-size: 9px; background: var(--bg-subtle); }
+/* 提示词列表里的「其他项目」组头:复用任务组头样式,仅与上方条目拉开一点间距 */
+.wb-prompt-group__head { margin-top: 6px; }
 </style>

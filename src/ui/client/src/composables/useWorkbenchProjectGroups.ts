@@ -5,6 +5,8 @@ import { canonicalProjectPath } from '@/utils/path'
 import type { Task } from '@/types/workbench'
 
 const NO_PROJECT_KEY = '__no_project__'
+// 非当前项目的所有任务统一收纳进这个虚拟分组(默认收起,用户展开后记住选择)
+export const OTHER_PROJECTS_KEY = '__other_projects__'
 const COLLAPSED_STORAGE_KEY = 'wb.collapsedGroupPaths.v1'
 const SEEN_STORAGE_KEY = 'wb.seenGroupPaths.v1'
 
@@ -46,30 +48,24 @@ export function useWorkbenchProjectGroups(tasks: Ref<Task[]>, currentProject: Re
   }
 
   const groupedTasksList = computed(() => {
-    const list = tasks.value
-    const groups = new Map<string, Task[]>()
-    for (const t of list) {
+    const cur = canonicalProjectPath(currentProject.value.path)
+    const currentTasks: Task[] = []
+    const otherTasks: Task[] = []
+    for (const t of tasks.value) {
       // 盘符大小写归一:历史数据里同一目录可能同时存在 e:\ 与 E:\ 两种写法,
       // 不归一会被拆成两个分组(详见 canonicalProjectPath 注释)
-      const key = canonicalProjectPath(t.projectPath) || NO_PROJECT_KEY
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key)!.push(t)
+      const key = canonicalProjectPath(t.projectPath)
+      // 当前项目独立成组;其余(别的项目 + 未关联项目)全部收纳进「其他项目」
+      if (cur && key === cur) currentTasks.push(t)
+      else otherTasks.push(t)
     }
-    const cur = canonicalProjectPath(currentProject.value.path)
-    const keys = Array.from(groups.keys()).sort((a, b) => {
-      if (a === cur) return -1
-      if (b === cur) return 1
-      if (a === NO_PROJECT_KEY) return 1
-      if (b === NO_PROJECT_KEY) return -1
-      return a.localeCompare(b)
-    })
+    const groups: { path: string; label: string; tasks: Task[] }[] = []
+    if (cur && currentTasks.length) groups.push({ path: cur, label: cur, tasks: currentTasks })
+    if (otherTasks.length) groups.push({ path: OTHER_PROJECTS_KEY, label: $t('@WORKBENCH:其他项目'), tasks: otherTasks })
     return {
-      groups: keys.map(path => ({
-        path,
-        label: path === NO_PROJECT_KEY ? $t('@WORKBENCH:未关联项目') : path,
-        tasks: groups.get(path)!
-      })),
-      hasMultiple: keys.length > 1
+      groups,
+      // 只剩「其他项目」一组时也要渲染组头,否则任务会平铺出来、默认收起失效
+      hasMultiple: groups.length > 1 || (groups.length === 1 && groups[0].path === OTHER_PROJECTS_KEY)
     }
   })
 

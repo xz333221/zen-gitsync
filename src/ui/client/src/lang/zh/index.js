@@ -2027,6 +2027,7 @@ export default {
   '@WORKBENCH:删除': '删除',
   '@WORKBENCH:当前项目': '当前项目',
   '@WORKBENCH:未关联项目': '未关联项目',
+  '@WORKBENCH:其他项目': '其他项目',
   '@WORKBENCH:未保存': '未保存',
   '@WORKBENCH:有未保存的更改': '有未保存的更改',
   '@WORKBENCH:已取消': '已取消',

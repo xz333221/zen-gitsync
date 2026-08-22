@@ -2017,6 +2017,7 @@ export default {
   '@WORKBENCH:删除': 'Delete',
   '@WORKBENCH:当前项目': 'Current project',
   '@WORKBENCH:未关联项目': 'No project',
+  '@WORKBENCH:其他项目': 'Other projects',
   '@WORKBENCH:未保存': 'Unsaved',
   '@WORKBENCH:有未保存的更改': 'Unsaved changes',
   '@WORKBENCH:已取消': 'Cancelled',
