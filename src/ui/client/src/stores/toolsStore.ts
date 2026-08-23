@@ -6,7 +6,7 @@ import { ref } from 'vue'
 
 const POLL_INTERVAL_MS = 10 * 60 * 1000 // 10 分钟
 
-export type ToolId = 'vscode' | 'claude' | 'codex' | 'opencode'
+export type ToolId = 'vscode' | 'claude' | 'codex' | 'opencode' | 'kimi' | 'zcode'
 
 export interface ToolInstallerInfo {
   supported: boolean
@@ -24,6 +24,8 @@ export const useToolsStore = defineStore('tools', () => {
   const claudeAvailable = ref(false)
   const codexAvailable = ref(false)
   const opencodeAvailable = ref(false)
+  const kimiAvailable = ref(false)
+  const zcodeAvailable = ref(false)
   const lastCheckedAt = ref<number | null>(null)
   const isChecking = ref(false)
   const platform = ref('')
@@ -42,6 +44,8 @@ export const useToolsStore = defineStore('tools', () => {
           claudeAvailable.value = !!data.claude
           codexAvailable.value = !!data.codex
           opencodeAvailable.value = !!data.opencode
+          kimiAvailable.value = !!data.kimi
+          zcodeAvailable.value = !!data.zcode
           platform.value = typeof data.platform === 'string' ? data.platform : ''
           installers.value = data.installers && typeof data.installers === 'object'
             ? data.installers as ToolInstallers
@@ -64,6 +68,8 @@ export const useToolsStore = defineStore('tools', () => {
       case 'claude': return claudeAvailable.value
       case 'codex': return codexAvailable.value
       case 'opencode': return opencodeAvailable.value
+      case 'kimi': return kimiAvailable.value
+      case 'zcode': return zcodeAvailable.value
     }
   }
 
@@ -86,6 +92,8 @@ export const useToolsStore = defineStore('tools', () => {
     claudeAvailable,
     codexAvailable,
     opencodeAvailable,
+    kimiAvailable,
+    zcodeAvailable,
     lastCheckedAt,
     isChecking,
     platform,

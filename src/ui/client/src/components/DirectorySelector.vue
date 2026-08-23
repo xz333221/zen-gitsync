@@ -82,6 +82,8 @@ const toolNames: Record<ToolId, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   opencode: 'OpenCode',
+  kimi: 'Kimi Code',
+  zcode: 'ZCode',
 }
 
 function openToolInstall(tool: ToolId) {
@@ -115,6 +117,20 @@ async function runOrInstall(tool: ToolId, action: () => void | Promise<void>) {
 
 function onClaudePrimaryClick() {
   runOrInstall('claude', () => onOpenInClaudeCode('bypassPermissions'))
+}
+
+async function onOpenInKimi() {
+  const response = await fetch('/api/open-directory-with-kimi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentDirectory.value }) })
+  const result = await response.json()
+  if (!response.ok || !result.success) throw new Error(result.error || '无法打开 Kimi Code')
+  ElMessage.success(result.message || '已用 Kimi Code 打开目录')
+}
+
+async function onOpenInZcode() {
+  const response = await fetch('/api/open-directory-with-zcode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentDirectory.value }) })
+  const result = await response.json()
+  if (!response.ok || !result.success) throw new Error(result.error || '无法打开 ZCode')
+  ElMessage.success(result.message || '已用 ZCode 打开目录')
 }
 
 async function onClaudeContextMenu() {
@@ -596,6 +612,12 @@ function onBrowserSelect(path: string) {
         @click="runOrInstall('opencode', onOpenInOpencode)"
       >
         <svg-icon icon-class="opencode" />
+      </IconButton>
+      <IconButton :tooltip="toolTooltip('kimi', '用 Kimi Code 打开')" :aria-label="toolTooltip('kimi', '用 Kimi Code 打开')" :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.kimiAvailable ? '' : 'tool-button--missing')" size="large" @click="runOrInstall('kimi', onOpenInKimi)">
+        <svg-icon icon-class="kimi" />
+      </IconButton>
+      <IconButton :tooltip="toolTooltip('zcode', '用 ZCode 打开')" :aria-label="toolTooltip('zcode', '用 ZCode 打开')" :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.zcodeAvailable ? '' : 'tool-button--missing')" size="large" @click="runOrInstall('zcode', onOpenInZcode)">
+        <svg-icon icon-class="zcode" />
       </IconButton>
       <!--
         用 Claude Code 打开：左键 = 默认；右键 = 弹出菜单（默认 / 完全批准）。

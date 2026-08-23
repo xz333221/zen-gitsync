@@ -11,6 +11,10 @@ test('tool installers: Windows 使用 winget + 固定 npm 包名', () => {
   assert.deepEqual(installers.claude.args, ['install', '-g', '@anthropic-ai/claude-code'])
   assert.deepEqual(installers.codex.args, ['install', '-g', '@openai/codex'])
   assert.deepEqual(installers.opencode.args, ['install', '-g', 'opencode-ai'])
+  assert.equal(installers.kimi.command, 'irm https://code.kimi.com/kimi-code/install.ps1 | iex')
+  assert.equal(installers.kimi.supported, true)
+  assert.match(installers.kimi.executionCommand, /Get-FileHash/)
+  assert.match(installers.kimi.executionCommand, /SHA256/)
 })
 
 test('tool installers: macOS 和 Linux 选择平台对应的 VS Code 安装器', () => {

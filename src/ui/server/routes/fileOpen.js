@@ -29,6 +29,8 @@ const TOOL_DOCS_URLS = Object.freeze({
   claude: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
   codex: 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started',
   opencode: 'https://opencode.ai/docs',
+  kimi: 'https://moonshotai.github.io/kimi-code/en/guides/getting-started',
+  zcode: 'https://zcode.z.ai/',
 });
 
 function commandExists(command, platform = process.platform) {
@@ -104,6 +106,36 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
     };
   }
 
+  installers.kimi = {
+    supported: platform === 'win32' || platform === 'darwin' || platform === 'linux',
+    command: platform === 'win32'
+      ? 'irm https://code.kimi.com/kimi-code/install.ps1 | iex'
+      : 'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash',
+    packageManager: 'Kimi Code 官方安装脚本',
+    docsUrl: TOOL_DOCS_URLS.kimi,
+    note: '将打开终端执行官方安装脚本；Windows 首次使用还需要 Git for Windows。',
+    kind: 'script',
+    executionCommand: platform === 'win32'
+      ? [
+          "if (-not (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {",
+          "function global:Get-FileHash { param([string]$Path, [string]$Algorithm = 'SHA256')",
+          "$stream = [System.IO.File]::OpenRead($Path)",
+          "try { $sha = [System.Security.Cryptography.SHA256]::Create(); try { $bytes = $sha.ComputeHash($stream) } finally { $sha.Dispose() } } finally { $stream.Dispose() }",
+          "$hash = ([System.BitConverter]::ToString($bytes)).Replace('-', '')",
+          "New-Object PSObject -Property @{ Algorithm = 'SHA256'; Hash = $hash; Path = $Path }",
+          "}",
+          "}",
+          'Invoke-RestMethod https://code.kimi.com/kimi-code/install.ps1 | Invoke-Expression',
+        ].join('; ')
+      : undefined,
+  };
+  installers.zcode = {
+    supported: false,
+    command: '打开 ZCode 官方下载页，选择当前系统安装包',
+    packageManager: 'ZCode 官方安装包',
+    docsUrl: TOOL_DOCS_URLS.zcode,
+    note: 'ZCode 是桌面应用，官方提供 Windows、macOS 和 Linux 安装包，没有官方 npm CLI。',
+  };
   return installers;
 }
 
@@ -224,7 +256,115 @@ async function launchOpenCode(dirPath) {
   return launchInTerminal(dirPath, 'opencode');
 }
 
+async function launchKimiCode(dirPath) {
+  if (process.platform === 'win32') {
+    const executable = await findKimiExecutable();
+    if (!executable) throw new Error('未检测到 Kimi Code，请先安装 kimi CLI');
+    return spawnDetached('cmd.exe', ['/c', 'start', '""', executable], { cwd: dirPath });
+  }
+  return launchInTerminal(dirPath, 'kimi');
+}
+
+async function findKimiExecutable() {
+  if (process.platform !== 'win32') return commandExists('kimi') ? 'kimi' : null;
+
+  const candidates = [
+    path.join(process.env.USERPROFILE || '', '.kimi-code', 'bin', 'kimi.exe'),
+  ];
+  const registryPath = spawnSync('reg.exe', ['query', 'HKCU\\Environment', '/v', 'Path'], {
+    encoding: 'utf8',
+    windowsHide: true,
+  }).stdout || '';
+  const pathLine = registryPath.split(/\r?\n/).find(line => /\sPath\s+REG_(?:EXPAND_)?SZ\s+/i.test(line));
+  if (pathLine) {
+    const userPath = pathLine.replace(/^.*?REG_(?:EXPAND_)?SZ\s+/i, '').trim();
+    for (const directory of userPath.split(';').map(value => value.trim()).filter(Boolean)) {
+      candidates.push(path.join(directory, 'kimi.exe'));
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const stat = await fs.stat(candidate);
+      if (stat.isFile()) return candidate;
+    } catch {}
+  }
+  return null;
+}
+
+async function launchZCode(dirPath) {
+  const executable = await findZCodeExecutable();
+  if (!executable) throw new Error('未检测到 ZCode，请从官网下载桌面安装包');
+  return spawnDetached(executable, [dirPath]);
+}
+
+async function findZCodeExecutable() {
+  const candidates = process.platform === 'win32'
+    ? [
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'ZCode', 'ZCode.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'ZCode', 'ZCode.exe'),
+        path.join(process.env.PROGRAMFILES || '', 'ZCode', 'ZCode.exe'),
+      ]
+    : process.platform === 'darwin'
+      ? ['/Applications/ZCode.app/Contents/MacOS/ZCode']
+      : ['/usr/bin/zcode', '/usr/local/bin/zcode'];
+
+  if (process.platform === 'win32') {
+    const registryRoots = [
+      'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+      'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+      'HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+    ];
+    for (const root of registryRoots) {
+      const output = spawnSync('reg.exe', ['query', root, '/s'], {
+        encoding: 'utf8',
+        windowsHide: true,
+      }).stdout || '';
+      for (const line of output.split(/\r?\n/)) {
+        if (!/DisplayIcon|InstallLocation/i.test(line) || !/zcode/i.test(line)) continue;
+        const value = line.replace(/^.*?REG_SZ\s+/i, '').trim().replace(/^"|"$/g, '').replace(/,\d+$/, '');
+        if (value && !/\.(ico|png|jpg|jpeg)$/i.test(value)) candidates.push(value);
+      }
+    }
+    const running = spawnSync('powershell.exe', [
+      '-NoLogo', '-NoProfile', '-Command',
+      "Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match 'ZCode' } | Select-Object -ExpandProperty Path",
+    ], { encoding: 'utf8', windowsHide: true }).stdout || '';
+    candidates.push(...running.split(/\r?\n/).map(value => value.trim()).filter(Boolean));
+  }
+
+  for (const candidate of candidates.filter(Boolean)) {
+    const normalized = String(candidate).trim().replace(/^"|"$/g, '').replace(/,\d+$/, '');
+    if (/\.(ico|png|jpg|jpeg)$/i.test(normalized)) continue;
+    try {
+      const stat = await fs.stat(normalized);
+      if (stat.isFile()) return normalized;
+      if (stat.isDirectory()) {
+        for (const name of ['ZCode.exe', 'zcode.exe']) {
+          const executable = path.join(normalized, name);
+          try {
+            const executableStat = await fs.stat(executable);
+            if (executableStat.isFile()) return executable;
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+  return null;
+}
+
 async function launchToolInstaller(installer, dirPath = process.cwd()) {
+  if (installer.kind === 'script') {
+    if (process.platform === 'win32') {
+      // 显式创建新控制台；编码脚本可避免 cmd.exe 截获 PowerShell 管道符。
+      const encoded = Buffer.from(installer.executionCommand || installer.command, 'utf16le').toString('base64');
+      return spawnDetached('cmd.exe', [
+        '/c', 'start', '""', 'powershell.exe', '-NoLogo', '-NoExit',
+        '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded,
+      ], { cwd: dirPath });
+    }
+    return launchInTerminal(dirPath, 'bash', ['-lc', installer.command]);
+  }
   if (process.platform === 'win32') {
     // 安装命令完全来自服务端白名单。使用可见 cmd 窗口，让用户看到进度和错误。
     const commandLine = [installer.executable, ...installer.args].join(' ');
@@ -516,6 +656,32 @@ export function registerFileOpenRoutes({
       }
     }));
 
+  // 用 Kimi Code 打开目录
+  app.post('/api/open-directory-with-kimi', asyncRoute(async (req, res) => {
+    const { path: dirPath } = req.body || {};
+    if (!dirPath) throw new HttpError(400, '目录路径不能为空');
+    try {
+      await fs.access(dirPath);
+      await launchKimiCode(dirPath);
+      res.json({ success: true, message: '已用 Kimi Code 打开目录' });
+    } catch (error) {
+      res.status(400).json({ success: false, error: error.message || '未检测到 Kimi Code，请先安装 kimi CLI' });
+    }
+  }));
+
+  // 用 ZCode 打开目录
+  app.post('/api/open-directory-with-zcode', asyncRoute(async (req, res) => {
+    const { path: dirPath } = req.body || {};
+    if (!dirPath) throw new HttpError(400, '目录路径不能为空');
+    try {
+      await fs.access(dirPath);
+      await launchZCode(dirPath);
+      res.json({ success: true, message: '已用 ZCode 打开目录' });
+    } catch (error) {
+      res.status(400).json({ success: false, error: error.message || '未检测到 ZCode，请从官网下载桌面安装包' });
+    }
+  }));
+
   // 安装本地工具：前端只能传固定 tool id，实际命令由服务端按平台从白名单选择。
   app.post('/api/install-tool', asyncRoute(async (req, res) => {
       const { tool } = req.body || {};
@@ -559,11 +725,13 @@ export function registerFileOpenRoutes({
         setTimeout(() => finish(false), 15000);
       });
 
-      const [vscode, claude, codex, opencode] = await Promise.all([
+      const [vscode, claude, codex, opencode, kimiExecutable, zcodeExecutable] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
         checkCmd('codex'),
         checkCmd('opencode'),
+        findKimiExecutable(),
+        findZCodeExecutable(),
       ]);
 
       const installers = getToolInstallers();
@@ -575,6 +743,8 @@ export function registerFileOpenRoutes({
         claude,
         codex,
         opencode,
+        kimi: !!kimiExecutable,
+        zcode: !!zcodeExecutable,
       });
     }));
 }

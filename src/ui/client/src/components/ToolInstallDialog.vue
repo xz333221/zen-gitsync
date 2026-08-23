@@ -31,6 +31,8 @@ const toolNames: Record<ToolId, string> = {
   claude: 'Claude Code',
   codex: 'Codex CLI',
   opencode: 'OpenCode',
+  kimi: 'Kimi Code',
+  zcode: 'ZCode',
 }
 
 const toolName = computed(() => props.tool ? toolNames[props.tool] : '')
