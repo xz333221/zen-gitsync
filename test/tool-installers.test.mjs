@@ -15,6 +15,9 @@ test('tool installers: Windows 使用 winget + 固定 npm 包名', () => {
   assert.equal(installers.kimi.supported, true)
   assert.match(installers.kimi.executionCommand, /Get-FileHash/)
   assert.match(installers.kimi.executionCommand, /SHA256/)
+  assert.equal(installers.dsh.supported, true)
+  assert.equal(installers.dsh.command, 'npm install -g @deepseek-ai/dsh')
+  assert.deepEqual(installers.dsh.args, ['install', '-g', '@deepseek-ai/dsh'])
 })
 
 test('tool installers: macOS 和 Linux 选择平台对应的 VS Code 安装器', () => {

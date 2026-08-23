@@ -22,6 +22,7 @@ const TOOL_INSTALL_PACKAGES = Object.freeze({
   claude: '@anthropic-ai/claude-code',
   codex: '@openai/codex',
   opencode: 'opencode-ai',
+  dsh: '@deepseek-ai/dsh',
 });
 
 const TOOL_DOCS_URLS = Object.freeze({
@@ -31,6 +32,7 @@ const TOOL_DOCS_URLS = Object.freeze({
   opencode: 'https://opencode.ai/docs',
   kimi: 'https://moonshotai.github.io/kimi-code/en/guides/getting-started',
   zcode: 'https://zcode.z.ai/',
+  dsh: 'https://github.com/deepseek-ai/deepseek-harness',
 });
 
 function commandExists(command, platform = process.platform) {
@@ -263,6 +265,41 @@ async function launchKimiCode(dirPath) {
     return spawnDetached('cmd.exe', ['/c', 'start', '""', executable], { cwd: dirPath });
   }
   return launchInTerminal(dirPath, 'kimi');
+}
+
+async function launchDsh(dirPath) {
+  const executable = await findDshExecutable();
+  if (!executable) throw new Error('未检测到 DeepSeek Harness，请先全局安装 dsh CLI');
+  if (process.platform === 'win32') {
+    // 编码 PowerShell 命令，避免 cmd start 对 dsh.cmd 完整路径中的引号进行二次解析。
+    const escapedExecutable = executable.replace(/'/g, "''");
+    const script = `& '${escapedExecutable}' web`;
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    return spawnDetached('cmd.exe', [
+      '/c', 'start', '""', 'powershell.exe', '-NoLogo', '-NoExit',
+      '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded,
+    ], { cwd: dirPath });
+  }
+  return launchInTerminal(dirPath, executable, ['web']);
+}
+
+async function findDshExecutable() {
+  if (process.platform !== 'win32') return commandExists('dsh') ? 'dsh' : null;
+
+  const candidates = [path.join(process.env.APPDATA || '', 'npm', 'dsh.cmd')];
+  const npmPrefix = spawnSync('npm.cmd', ['prefix', '-g'], {
+    encoding: 'utf8',
+    windowsHide: true,
+  }).stdout?.trim();
+  if (npmPrefix) candidates.push(path.join(npmPrefix, 'dsh.cmd'));
+
+  for (const candidate of candidates.filter(Boolean)) {
+    try {
+      const stat = await fs.stat(candidate);
+      if (stat.isFile()) return candidate;
+    } catch {}
+  }
+  return null;
 }
 
 async function findKimiExecutable() {
@@ -669,6 +706,19 @@ export function registerFileOpenRoutes({
     }
   }));
 
+  // 用 DeepSeek Harness 打开目录
+  app.post('/api/open-directory-with-dsh', asyncRoute(async (req, res) => {
+    const { path: dirPath } = req.body || {};
+    if (!dirPath) throw new HttpError(400, '目录路径不能为空');
+    try {
+      await fs.access(dirPath);
+      await launchDsh(dirPath);
+      res.json({ success: true, message: '已启动 DeepSeek Harness' });
+    } catch (error) {
+      res.status(400).json({ success: false, error: error.message || '无法启动 DeepSeek Harness，请确认已安装 Node.js' });
+    }
+  }));
+
   // 用 ZCode 打开目录
   app.post('/api/open-directory-with-zcode', asyncRoute(async (req, res) => {
     const { path: dirPath } = req.body || {};
@@ -725,13 +775,14 @@ export function registerFileOpenRoutes({
         setTimeout(() => finish(false), 15000);
       });
 
-      const [vscode, claude, codex, opencode, kimiExecutable, zcodeExecutable] = await Promise.all([
+      const [vscode, claude, codex, opencode, kimiExecutable, zcodeExecutable, dshExecutable] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
         checkCmd('codex'),
         checkCmd('opencode'),
         findKimiExecutable(),
         findZCodeExecutable(),
+        findDshExecutable(),
       ]);
 
       const installers = getToolInstallers();
@@ -745,6 +796,7 @@ export function registerFileOpenRoutes({
         opencode,
         kimi: !!kimiExecutable,
         zcode: !!zcodeExecutable,
+        dsh: !!dshExecutable,
       });
     }));
 }

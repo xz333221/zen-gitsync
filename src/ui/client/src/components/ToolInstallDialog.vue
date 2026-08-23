@@ -33,6 +33,7 @@ const toolNames: Record<ToolId, string> = {
   opencode: 'OpenCode',
   kimi: 'Kimi Code',
   zcode: 'ZCode',
+  dsh: 'DeepSeek Harness',
 }
 
 const toolName = computed(() => props.tool ? toolNames[props.tool] : '')

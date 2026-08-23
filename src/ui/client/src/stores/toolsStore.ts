@@ -6,7 +6,7 @@ import { ref } from 'vue'
 
 const POLL_INTERVAL_MS = 10 * 60 * 1000 // 10 分钟
 
-export type ToolId = 'vscode' | 'claude' | 'codex' | 'opencode' | 'kimi' | 'zcode'
+export type ToolId = 'vscode' | 'claude' | 'codex' | 'opencode' | 'kimi' | 'zcode' | 'dsh'
 
 export interface ToolInstallerInfo {
   supported: boolean
@@ -26,6 +26,7 @@ export const useToolsStore = defineStore('tools', () => {
   const opencodeAvailable = ref(false)
   const kimiAvailable = ref(false)
   const zcodeAvailable = ref(false)
+  const dshAvailable = ref(false)
   const lastCheckedAt = ref<number | null>(null)
   const isChecking = ref(false)
   const platform = ref('')
@@ -46,6 +47,7 @@ export const useToolsStore = defineStore('tools', () => {
           opencodeAvailable.value = !!data.opencode
           kimiAvailable.value = !!data.kimi
           zcodeAvailable.value = !!data.zcode
+          dshAvailable.value = !!data.dsh
           platform.value = typeof data.platform === 'string' ? data.platform : ''
           installers.value = data.installers && typeof data.installers === 'object'
             ? data.installers as ToolInstallers
@@ -70,6 +72,7 @@ export const useToolsStore = defineStore('tools', () => {
       case 'opencode': return opencodeAvailable.value
       case 'kimi': return kimiAvailable.value
       case 'zcode': return zcodeAvailable.value
+      case 'dsh': return dshAvailable.value
     }
   }
 
@@ -94,6 +97,7 @@ export const useToolsStore = defineStore('tools', () => {
     opencodeAvailable,
     kimiAvailable,
     zcodeAvailable,
+    dshAvailable,
     lastCheckedAt,
     isChecking,
     platform,

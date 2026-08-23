@@ -84,6 +84,7 @@ const toolNames: Record<ToolId, string> = {
   opencode: 'OpenCode',
   kimi: 'Kimi Code',
   zcode: 'ZCode',
+  dsh: 'DeepSeek Harness',
 }
 
 function openToolInstall(tool: ToolId) {
@@ -131,6 +132,13 @@ async function onOpenInZcode() {
   const result = await response.json()
   if (!response.ok || !result.success) throw new Error(result.error || '无法打开 ZCode')
   ElMessage.success(result.message || '已用 ZCode 打开目录')
+}
+
+async function onOpenInDsh() {
+  const response = await fetch('/api/open-directory-with-dsh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentDirectory.value }) })
+  const result = await response.json()
+  if (!response.ok || !result.success) throw new Error(result.error || '无法启动 DeepSeek Harness')
+  ElMessage.success(result.message || '已启动 DeepSeek Harness')
 }
 
 async function onClaudeContextMenu() {
@@ -618,6 +626,9 @@ function onBrowserSelect(path: string) {
       </IconButton>
       <IconButton :tooltip="toolTooltip('zcode', '用 ZCode 打开')" :aria-label="toolTooltip('zcode', '用 ZCode 打开')" :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.zcodeAvailable ? '' : 'tool-button--missing')" size="large" @click="runOrInstall('zcode', onOpenInZcode)">
         <svg-icon icon-class="zcode" />
+      </IconButton>
+      <IconButton :tooltip="toolTooltip('dsh', '用 DeepSeek Harness 打开')" :aria-label="toolTooltip('dsh', '用 DeepSeek Harness 打开')" :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.dshAvailable ? '' : 'tool-button--missing')" size="large" @click="runOrInstall('dsh', onOpenInDsh)">
+        <svg-icon icon-class="dsh" />
       </IconButton>
       <!--
         用 Claude Code 打开：左键 = 默认；右键 = 弹出菜单（默认 / 完全批准）。
