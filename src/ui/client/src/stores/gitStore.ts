@@ -770,8 +770,10 @@ export const useGitStore = defineStore('git', () => {
       console.log($t('@C298B:开始加载提交历史...'))
       
       // 增加时间戳参数避免缓存，确保获取最新数据
+      // with_parents=true 必须带上: 否则后端不返回 %P(父提交), 分支图会把每条提交
+      // 都当成没有父节点的"分支头", 渲染成互不相连的彩色圆点(拉取后刷新一次才恢复正常)
       const timestamp = new Date().getTime()
-      const response = await fetch(`/api/log?page=1&_t=${timestamp}`)
+      const response = await fetch(`/api/log?page=1&with_parents=true&_t=${timestamp}`)
       const data = await response.json()
       
       if (data && data.data && Array.isArray(data.data)) {
