@@ -1599,6 +1599,8 @@ export default {
   '@A1833:复制纯净提交信息（不含类型前缀）': 'Copy pure commit information (excluding type prefix)',
   '@A1833:日期': 'Date',
   '@A1833:作者': 'Author',
+  '@A1833:所在分支': 'Branches',
+  '@A1833:暂不属于任何分支': 'Not part of any branch',
   '@A1833:没有找到变更文件': 'No change file found',
   '@A1833:加载中...': 'Loading...',
   '@A1833:没有匹配的提交记录': 'There are no matching commit records',

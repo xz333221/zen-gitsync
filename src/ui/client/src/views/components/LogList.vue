@@ -46,7 +46,7 @@ import {
 import { useGitStore } from "@stores/gitStore";
 import { useToolsStore } from "@stores/toolsStore";
 import { extractPureMessage } from "@utils/index.ts";
-import { computeCommitGraph, type GraphRowLayout } from "@utils/commitGraph";
+import { computeCommitGraph, computeBranchSets, type GraphRowLayout } from "@utils/commitGraph";
 import FileDiffViewer from "@components/FileDiffViewer.vue";
 import CommonDialog from "@components/CommonDialog.vue";
 import IconButton from "@components/IconButton.vue";
@@ -100,6 +100,10 @@ const graphColumnWidth = computed(() =>
   Math.max(graphResult.value?.width ?? 0, 28)
 );
 
+// 提交 → 所属分支列表(不依赖分支图开关, 详情弹窗需要独立展示)
+// 与图一样, 只能算出当前已加载/筛选列表范围内的分支归属, 分页/筛选截断时可能不完整
+const commitBranchesMap = computed(() => computeBranchSets(logs.value));
+
 // 分页相关变量（部分已移到store中）
 const isLoadingMore = ref(false);
 const loadTimerInterval = ref<number | null>(null);
@@ -117,6 +121,11 @@ const commitFileViewMode = ref<CommitFileViewMode>('full-new')
 
 const commitCompareOriginal = ref('')
 const commitCompareModified = ref('')
+
+// 当前查看的提交所属的分支列表(IDEA git 面板风格)
+const selectedCommitBranches = computed(() =>
+  selectedCommit.value ? commitBranchesMap.value.get(selectedCommit.value.hash) ?? [] : []
+)
 
 // commit message 折叠：标题(第一行)始终显示,body(剩余行)默认收起,长 message 才显示展开按钮
 const commitMessageExpanded = ref(false)
@@ -1406,6 +1415,21 @@ function toggleFullscreen() {
               <span class="info-label">{{ $t('@A1833:日期') }}</span>
               <span class="info-value">{{ selectedCommit.date }}</span>
             </div>
+            <div class="info-item branch-item">
+              <span class="info-label">{{ $t('@A1833:所在分支') }}</span>
+              <div v-if="selectedCommitBranches.length > 0" class="branch-container">
+                <el-tag
+                  v-for="name in selectedCommitBranches"
+                  :key="name"
+                  size="small"
+                  :type="getBranchTagType(name)"
+                  class="branch-tag"
+                >
+                  {{ formatBranchName(name) }}
+                </el-tag>
+              </div>
+              <span v-else class="info-value info-value-muted">{{ $t('@A1833:暂不属于任何分支') }}</span>
+            </div>
             <div class="info-item message-item">
               <span class="info-label">{{ $t('@A1833:提交信息') }}</span>
               <div class="info-message-wrapper">
@@ -1742,6 +1766,17 @@ function toggleFullscreen() {
 
 .date-item {
   flex-shrink: 0;
+}
+
+.branch-item {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.info-value-muted {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-style: italic;
 }
 
 .message-item {
