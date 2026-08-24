@@ -18,8 +18,8 @@
 // 数据源:复用 DirectorySelector 调用的 /api/recent_directories
 // 交互:点击 → 在新标签页打开(POST /api/open-new-tab-gui)
 import { ref, computed, onMounted } from "vue";
-import { ElMessage } from "element-plus";
-import { DocumentCopy, Folder, Loading, Search } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { Delete, DocumentCopy, Folder, Loading, Search } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 
 const { variant = 'inline' } = defineProps<{ variant?: 'inline' | 'fullpage' }>();
@@ -112,6 +112,41 @@ async function copyPath(dirPath: string) {
   }
 }
 
+// 从最近项目列表中移除。仅对缺失目录展示入口,避免误删还能打开的有效项目;
+// 用户确认后才调 /api/remove_recent_directory,成功后从本地状态移除并提示。
+async function removeRecentDirectory(dirPath: string) {
+  if (!dirPath) return;
+  try {
+    await ElMessageBox.confirm(
+      $t("@13D1C:确定要从最近项目中移除此目录吗？", { path: dirPath }),
+      $t("@13D1C:移除最近项目"),
+      {
+        confirmButtonText: $t("@13D1C:移除"),
+        cancelButtonText: $t("@13D1C:取消"),
+        type: "warning",
+      }
+    );
+  } catch {
+    return; // 用户取消
+  }
+  try {
+    const res = await fetch("/api/remove_recent_directory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: dirPath }),
+    });
+    const data = await res.json();
+    if (data?.success) {
+      recentDirectories.value = recentDirectories.value.filter(d => d.path !== dirPath);
+      ElMessage.success($t("@13D1C:已从最近项目中移除"));
+    } else {
+      ElMessage.error(data?.error || $t("@13D1C:移除失败"));
+    }
+  } catch (err) {
+    ElMessage.error(`${$t("@13D1C:移除失败")}: ${(err as Error).message}`);
+  }
+}
+
 onMounted(() => {
   loadRecentDirectories();
 });
@@ -184,6 +219,18 @@ onMounted(() => {
           @click.stop="copyPath(item.path)"
         >
           <el-icon aria-hidden="true"><DocumentCopy /></el-icon>
+        </button>
+        <!-- 移除按钮:仅对缺失目录展示,常驻显形(非 hover 才显形)便于清理。
+             .stop 阻止冒泡触发"打开"逻辑。 -->
+        <button
+          v-if="!item.exists"
+          type="button"
+          class="recent-projects__remove"
+          :title="$t('@13D1C:从最近项目中移除')"
+          :aria-label="$t('@13D1C:从最近项目中移除 {path}', { path: item.path })"
+          @click.stop="removeRecentDirectory(item.path)"
+        >
+          <el-icon aria-hidden="true"><Delete /></el-icon>
         </button>
       </li>
     </ul>
@@ -500,5 +547,32 @@ onMounted(() => {
 .recent-projects__item.is-missing .recent-projects__copy:hover {
   background: var(--bg-component-hover);
   color: var(--text-secondary);
+}
+/* 移除按钮:仅缺失目录展示,常驻显形(非 hover 才显形),方便一键清理。
+   配色用 danger 色系,与"不存在"标签语义一致;hover 加深红强调"破坏性"。 */
+.recent-projects__remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--tint-danger-50);
+  background: var(--bg-panel);
+  color: var(--color-danger-light);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+.recent-projects__remove:hover {
+  background: var(--tint-danger-14);
+  border-color: var(--color-danger-light);
+  color: var(--color-danger);
+}
+.recent-projects__remove:focus-visible {
+  outline: 2px solid var(--color-danger-light);
+  outline-offset: 1px;
 }
 </style>
