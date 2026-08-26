@@ -27,6 +27,7 @@ import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import MindmapPreview from '@/components/MindmapPreview.vue'
 import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useThemeObserver } from '@/composables/useThemeObserver'
+import { PREVIEW_IFRAME_SANDBOX, injectHtmlPreviewShims } from '@/utils/previewSandbox'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
 // 使用 Vite 的 ?worker 语法为 Monaco 创建 web worker
@@ -1031,8 +1032,9 @@ const previewSrcdoc = computed(() => {
   const bg = isDark ? '#0d1117' : '#ffffff'
 
   if (ext === 'html' || ext === 'htm') {
-    // 直接将用户 HTML 作为 srcdoc，沙箱内运行（无 JS）
-    return tab.content
+    // 直接将用户 HTML 作为 srcdoc，沙箱内运行：JS 可执行(交互可用)但不透明 origin，
+    // 无法访问宿主应用；storage/cookie 访问注入内存 shim 兜底
+    return injectHtmlPreviewShims(tab.content)
   }
   if (ext === 'svg') {
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:${bg};display:flex;align-items:center;justify-content:center;min-height:100vh;}svg{max-width:100%;max-height:90vh;}</style></head><body>${tab.content}</body></html>`
@@ -1391,11 +1393,11 @@ function stopPreviewResize() {
               :content="activeTabRef.content"
               class="preview-markdown"
             />
-            <!-- HTML / SVG → sandboxed iframe -->
+            <!-- HTML / SVG → sandboxed iframe (JS 可执行,不透明 origin 隔离宿主) -->
             <iframe
               v-else-if="showPreview && ['html', 'htm', 'svg'].includes(activeExt)"
               class="preview-iframe"
-              sandbox="allow-same-origin"
+              :sandbox="PREVIEW_IFRAME_SANDBOX"
               :srcdoc="previewSrcdoc"
             />
             <!-- 图片预览（使用增强版 ImagePreview，支持缩放/拖拽） -->

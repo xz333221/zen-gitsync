@@ -25,6 +25,7 @@ import { computed, ref, watch } from 'vue'
 import { ElIcon, ElTooltip } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
+import { PREVIEW_IFRAME_SANDBOX, injectHtmlPreviewShims } from '@/utils/previewSandbox'
 
 interface Props {
   /** 当前预览的文件路径 */
@@ -67,7 +68,8 @@ function syncTheme() {
   isDark.value = document.documentElement.getAttribute('data-theme') !== 'light'
 }
 
-// iframe srcdoc：HTML / SVG 直接灌入，背景随主题调整；沙箱关闭 JS 执行以保证安全
+// iframe srcdoc：HTML / SVG 直接灌入，背景随主题调整；沙箱允许 JS 执行(交互可用)，
+// 但不带 allow-same-origin → 不透明 origin，无法触碰宿主应用；storage 访问注入 shim 兜底
 const previewSrcdoc = computed(() => {
   if (!isHtmlLike.value) return ''
   const bg = isDark.value ? '#0d1117' : '#ffffff'
@@ -75,7 +77,7 @@ const previewSrcdoc = computed(() => {
   if (ext.value === 'svg') {
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:${bg};color:${textColor};display:flex;align-items:center;justify-content:center;min-height:100vh;}svg{max-width:100%;max-height:90vh;}</style></head><body>${props.content || ''}</body></html>`
   }
-  return props.content || ''
+  return injectHtmlPreviewShims(props.content || '')
 })
 
 watch(() => props.filePath, () => {
@@ -110,7 +112,7 @@ syncTheme()
       <iframe
         v-else-if="isHtmlLike"
         class="diff-preview-iframe"
-        sandbox="allow-same-origin"
+        :sandbox="PREVIEW_IFRAME_SANDBOX"
         :srcdoc="previewSrcdoc"
       />
       <MarkdownPreview

@@ -142,7 +142,7 @@ The GUI runs as a local web server and opens in your default browser. It attache
 | Reset to remote | One-click `git reset --hard origin/<branch>`; auto-refreshes branch info first to avoid stale-branch targets; hidden when working tree is clean and no unpushed commits |
 | Merge | Merge another branch; detects and surfaces in-progress merge state |
 | Diff viewer | Monaco-based side-by-side diff for any changed file |
-| In-diff preview | Toggle a preview pane below the diff for `.html` / `.htm` / `.svg` (sandboxed iframe) and `.md` / `.markdown` (rendered Markdown) — same preview experience as the built-in editor, with a draggable vertical resizer; split ratio is persisted per project |
+| In-diff preview | Toggle a preview pane below the diff for `.html` / `.htm` / `.svg` (sandboxed iframe with JavaScript enabled — interactive reports work, isolated from the app via an opaque origin) and `.md` / `.markdown` (rendered Markdown) — same preview experience as the built-in editor, with a draggable vertical resizer; split ratio is persisted per project |
 | Commit log | Browse commit history with author, date, branch tags, and changed files |
 | Remote URL | Display and one-click copy the remote repository URL |
 | Auto-refresh | Silently refreshes status and branch info when the window gains focus, the tab becomes visible, or you switch back to the **Git** view in the Activity Bar |
@@ -680,7 +680,7 @@ GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附�
 | 重置到远程 | 一键执行 `git reset --hard origin/<branch>`；点击前会先刷新分支信息，避免重置到陈旧分支；当工作区干净且无未推送提交时按钮自动隐藏 |
 | 合并 | 合并其他分支，自动检测并引导处理合并中间状态 |
 | Diff 查看器 | 基于 Monaco 编辑器的并排文件差异视图 |
-| 差异内预览 | 在差异下方一键展开预览面板：`.html` / `.htm` / `.svg` 走沙箱化 iframe，`.md` / `.markdown` 走 Markdown 渲染，与内置编辑器一致的预览体验；上下比例可拖拽，按项目持久化 |
+| 差异内预览 | 在差异下方一键展开预览面板：`.html` / `.htm` / `.svg` 走沙箱化 iframe（允许 JS 执行，报告类页面的按钮/交互可用，同时以不透明 origin 与宿主应用隔离），`.md` / `.markdown` 走 Markdown 渲染，与内置编辑器一致的预览体验；上下比例可拖拽，按项目持久化 |
 | 提交日志 | 浏览历史提交（作者、时间、分支标签、变更文件） |
 | 远程地址 | 显示并一键复制远程仓库 URL |
 | 自动刷新 | 窗口获得焦点、标签页重新可见，或从 Activity Bar 切回 **Git** 视图时，自动静默刷新文件状态与分支信息 |
