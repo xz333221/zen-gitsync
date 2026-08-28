@@ -68,6 +68,7 @@ function validateChangeDirectoryPath(input) {
 // Windows 走 cmd /c start "" ... argv 模式;Linux 走 sh -c 但 argument 已被
 // shQuote.js 转义
 import { shQuote, psEscape } from '../utils/shellQuote.js';
+import { convertOfficeToPdf, isOfficeFile } from '../utils/officePreview.js';
 
 export function registerFsRoutes({
   app,
@@ -659,6 +660,82 @@ export function registerFsRoutes({
     }
     }));
 
+  // ── Office 文件预览：工作区文件或 Git 版本统一转换为 PDF ───────────────
+  // 预览接口直接返回 PDF，前端可用 iframe/PDF.js 展示；不把 Office ZIP/XML
+  // 当作 UTF-8 文本读取，避免二进制损坏。Git revision 仅接受常见安全格式。
+  app.get('/api/office/preview', asyncRoute(async (req, res) => {
+    const filePath = String(req.query.file || '');
+    const source = String(req.query.source || 'worktree');
+    const rev = String(req.query.rev || '');
+    const side = String(req.query.side || 'new');
+    if (!filePath) throw new HttpError(400, '缺少 file 参数');
+    if (!['worktree', 'git'].includes(source)) throw new HttpError(400, '非法的 Office 预览来源');
+    if (!isOfficeFile(filePath)) throw new HttpError(415, '当前文件不是支持的 Office 类型');
+
+    const safe = await safePathInProject(filePath);
+    if (!safe) throw new HttpError(403, '禁止访问工作目录以外的文件');
+    const relPath = path.relative(getCurrentProjectPath() || process.cwd(), safe.safePath).replace(/\\/g, '/');
+    let buffer;
+    let cacheKey;
+    if (source === 'git') {
+      if (!/^[0-9a-f]{7,64}$/i.test(rev) || !['old', 'new'].includes(side)) {
+        throw new HttpError(400, '非法的 Git 版本参数');
+      }
+      const target = side === 'old' ? `${rev}^` : rev;
+      const spec = `${target}:${relPath}`;
+      const result = await execGitCommand(['show', spec], { encoding: 'buffer', log: false, maxBuffer: 60 * 1024 * 1024 });
+      buffer = Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout || '');
+      cacheKey = `git:${target}:${relPath}`;
+    } else {
+      const stat = await fs.stat(safe.safePath);
+      if (!stat.isFile()) throw new HttpError(400, '目标不是文件');
+      if (stat.size > 50 * 1024 * 1024) throw new HttpError(413, 'Office 文件过大（最大 50 MB）');
+      buffer = await fs.readFile(safe.safePath);
+      cacheKey = `worktree:${safe.safePath}:${stat.size}:${stat.mtimeMs}`;
+    }
+
+    const result = await convertOfficeToPdf({ buffer, filePath, cacheKey });
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}.pdf"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(result.buffer);
+  }));
+
+  // ── Office 原始二进制：供 vue-office 在浏览器内解析 ─────────────────────
+  app.get('/api/office/raw', asyncRoute(async (req, res) => {
+    const filePath = String(req.query.file || '');
+    const source = String(req.query.source || 'worktree');
+    const rev = String(req.query.rev || '');
+    const side = String(req.query.side || 'new');
+    if (!filePath) throw new HttpError(400, '缺少 file 参数');
+    if (!['worktree', 'git'].includes(source)) throw new HttpError(400, '非法的 Office 文件来源');
+    if (!isOfficeFile(filePath)) throw new HttpError(415, '当前文件不是支持的 Office 类型');
+
+    const safe = await safePathInProject(filePath);
+    if (!safe) throw new HttpError(403, '禁止访问工作目录以外的文件');
+    let content;
+    if (source === 'git') {
+      if (!/^[0-9a-f]{7,64}$/i.test(rev) || !['old', 'new'].includes(side)) {
+        throw new HttpError(400, '非法的 Git 版本参数');
+      }
+      const target = side === 'old' ? `${rev}^` : rev;
+      const relPath = path.relative(getCurrentProjectPath() || process.cwd(), safe.safePath).replace(/\\/g, '/');
+      const result = await execGitCommand(['show', `${target}:${relPath}`], {
+        encoding: 'buffer', log: false, maxBuffer: 60 * 1024 * 1024,
+      });
+      content = Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout || '');
+    } else {
+      const stat = await fs.stat(safe.safePath);
+      if (!stat.isFile()) throw new HttpError(400, '目标不是文件');
+      if (stat.size > 50 * 1024 * 1024) throw new HttpError(413, 'Office 文件过大（最大 50 MB）');
+      content = await fs.readFile(safe.safePath);
+    }
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', content.length);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(content);
+  }));
+
   // ── 编辑器：写入文件内容 ────────────────────────────────────────
   app.put('/api/editor/file', express.json(), async (req, res) => {
     try {
@@ -849,4 +926,3 @@ export function registerFsRoutes({
     }
   });
 }
-

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { mount } from '@vue/test-utils'
 import DiffPreviewPanel from './DiffPreviewPanel.vue'
+import { PREVIEW_IFRAME_SANDBOX } from '@/utils/previewSandbox'
 
 const $tMock = (key: string) => key
 
@@ -18,7 +19,7 @@ describe('DiffPreviewPanel', () => {
     })
     const iframe = wrapper.find('iframe.diff-preview-iframe')
     expect(iframe.exists()).toBe(true)
-    expect(iframe.attributes('sandbox')).toBe('allow-same-origin')
+    expect(iframe.attributes('sandbox')).toBe(PREVIEW_IFRAME_SANDBOX)
     expect((iframe.attributes('srcdoc') || '')).toContain('<h1>Hello</h1>')
   })
 
@@ -60,6 +61,25 @@ describe('DiffPreviewPanel', () => {
     expect(wrapper.find('.diff-preview-unsupported').exists()).toBe(true)
   })
 
+  test('renders OfficePreview when an Office preview URL is available', () => {
+    const wrapper = mount(DiffPreviewPanel, {
+      props: {
+        filePath: 'docs/report.docx',
+        content: '',
+        officePreviewUrl: '/api/office/raw?file=docs%2Freport.docx',
+      },
+      global: {
+        mocks: { $t: $tMock },
+        stubs: {
+          MarkdownPreview: true,
+          OfficePreview: { template: '<div class="office-stub" />' },
+          ElTooltip: true,
+        },
+      },
+    })
+    expect(wrapper.find('.office-stub').exists()).toBe(true)
+  })
+
   test('emits refresh event when refresh button is clicked', async () => {
     const wrapper = mount(DiffPreviewPanel, {
       props: {
@@ -78,4 +98,3 @@ describe('DiffPreviewPanel', () => {
     expect(wrapper.emitted('refresh')).toBeTruthy()
   })
 })
-

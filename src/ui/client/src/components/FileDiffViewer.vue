@@ -27,6 +27,7 @@ import FileActionButtons from './FileActionButtons.vue';
 import FileTreeView from './FileTreeView.vue';
 import { getFileIconClass } from '../utils/fileIcon';
 import { isImageFile } from '../utils/fileKind';
+import { getOfficePreviewUrl, isOfficeFile } from '@/utils/officeFile'
 import { buildFileTree, mergeTreeExpandState, type TreeNode } from '@/utils/fileTree';
 import type { ConflictBlock } from '@/types/conflict';
 import { useConfigStore } from '@stores/configStore';
@@ -38,7 +39,7 @@ import AiDiffSummary from '@/components/AiDiffSummary.vue'
 import DiffPreviewPanel from '@/components/DiffPreviewPanel.vue'
 
 // 支持在差异面板下方预览的扩展名（markdown / html / svg）
-const PREVIEWABLE_EXTS = new Set(['md', 'markdown', 'html', 'htm', 'svg'])
+const PREVIEWABLE_EXTS = new Set(['md', 'markdown', 'html', 'htm', 'svg', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'])
 
 // 定义props
 interface FileItem {
@@ -143,6 +144,7 @@ const showPreview = ref<boolean>(false)
 const previewContent = ref<string>('')
 const previewLoading = ref<boolean>(false)
 const previewError = ref<string>('')
+const officePreviewUrl = ref<string>('')
 let previewRequestToken = 0
 
 // 上下分栏：上 = 差异 / 下 = 预览。clampPercent 限制 25~80
@@ -377,7 +379,16 @@ async function loadPreviewContent() {
   const token = ++previewRequestToken
   previewLoading.value = true
   previewError.value = ''
+  officePreviewUrl.value = ''
   try {
+    if (isOfficeFile(path)) {
+      officePreviewUrl.value = getOfficePreviewUrl(path, {
+        source: props.context === 'commit-detail' ? 'git' : 'worktree',
+        rev: props.context === 'commit-detail' ? props.commitHash : undefined,
+      })
+      previewLoading.value = false
+      return
+    }
     let data: { success?: boolean; content?: string; error?: string; notFound?: boolean } | null = null
     if (props.context === 'commit-detail' && props.commitHash) {
       const response = await fetch(`/api/git-file-content?rev=${encodeURIComponent(props.commitHash)}&file=${encodeURIComponent(path)}`)
@@ -413,6 +424,7 @@ function togglePreview() {
 // 当文件切换 / 上下文变化时,重置预览内容(若面板开启则自动重新加载)
 watch([currentSelectedFile, () => props.context, () => props.commitHash], () => {
   previewContent.value = ''
+  officePreviewUrl.value = ''
   previewError.value = ''
   // 文件不可预览时自动关闭预览面板
   if (!isCurrentPreviewable.value && showPreview.value) {
@@ -1583,6 +1595,7 @@ onMounted(() => {
               :content="previewContent"
               :loading="previewLoading"
               :error="previewError"
+              :office-preview-url="officePreviewUrl"
               :context="props.context"
               :commit-hash="commitHash"
               @refresh="loadPreviewContent"
@@ -1824,6 +1837,7 @@ onMounted(() => {
           :content="previewContent"
           :loading="previewLoading"
           :error="previewError"
+          :office-preview-url="officePreviewUrl"
           :context="props.context"
           :commit-hash="commitHash"
           @refresh="loadPreviewContent"

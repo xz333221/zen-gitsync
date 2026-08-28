@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>子元素填充剩余高度并滚动演示</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <style>
+        .parent-container {
+            width: 100%;
+            max-width: 400px;
+            height: 600px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .dynamic-height {
+            background-color: #eff6ff;
+            padding: 16px;
+            border-bottom: 1px solid #dbeafe;
+        }
+        
+        .fill-remaining {
+            flex: 1;
+            background-color: #f0fdf4;
+            padding: 16px;
+            overflow: hidden;
+        }
+        
+        .scrollable-inner {
+            height: 100%;
+            overflow-y: auto;
+            padding-right: 8px; /* 为滚动条预留空间 */
+        }
+        
+        /* 美化滚动条 */
+        .scrollable-inner::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .scrollable-inner::-webkit-scrollbar-track {
+            background: #f0fdf4;
+        }
+        
+        .scrollable-inner::-webkit-scrollbar-thumb {
+            background-color: #a7f3d0;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col items-center justify-center p-4 font-sans">
+    <div class="text-center mb-6">
+        <h1 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-gray-800 mb-2">子元素填充剩余高度演示</h1>
+        <p class="text-gray-600">第一个子元素高度不固定，第二个子元素填充剩余高度并在内容过长时滚动</p>
+    </div>
+    
+    <div class="parent-container">
+        <!-- 第一个子元素：高度不固定 -->
+        <div class="dynamic-height">
+            <h2 class="text-lg font-semibold text-blue-600 mb-2 flex items-center">
+                <i class="fa fa-info-circle mr-2"></i>动态高度区域
+            </h2>
+            <p class="text-gray-700 mb-3">这个区域的高度会根据内容自动调整</p>
+            <div class="flex gap-2 mt-3">
+                <button id="addContent" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition">
+                    <i class="fa fa-plus mr-1"></i>增加内容
+                </button>
+                <button id="removeContent" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600 transition">
+                    <i class="fa fa-minus mr-1"></i>减少内容
+                </button>
+            </div>
+            <div id="dynamicContent" class="mt-3 text-gray-600">
+                <p>基础内容行 1</p>
+                <p>基础内容行 2</p>
+            </div>
+        </div>
+        
+        <!-- 第二个子元素：填充剩余高度并滚动 -->
+        <div class="fill-remaining">
+            <div class="scrollable-inner">
+                <h2 class="text-lg font-semibold text-green-600 mb-2 flex items-center">
+                    <i class="fa fa-list mr-2"></i>滚动内容区域
+                </h2>
+                <p class="text-gray-700 mb-3">这个区域会填充剩余高度，内容过多时会出现滚动条</p>
+                <p class="text-gray-500 text-sm mb-3">(点击"添加更多内容"按钮可以测试滚动)</p>
+                <button id="addScrollContent" class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition mb-4">
+                    <i class="fa fa-plus-circle mr-1"></i>添加更多内容
+                </button>
+                <div id="scrollableContent" class="space-y-2 text-gray-600">
+                    <div class="p-2 bg-white rounded shadow-sm">列表项 1</div>
+                    <div class="p-2 bg-white rounded shadow-sm">列表项 2</div>
+                    <div class="p-2 bg-white rounded shadow-sm">列表项 3</div>
+                    <div class="p-2 bg-white rounded shadow-sm">列表项 4</div>
+                    <div class="p-2 bg-white rounded shadow-sm">列表项 5</div>
+                    <div class="p-2 bg-white rounded shadow-sm">列表项 6</div>
+                    <div class="p-2 bg-white rounded shadow-sm">列表项 7</div>
+                    <div class="p-2 bg-white rounded shadow-sm">列表项 8</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 为第一个子元素添加/删除内容
+        const addBtn = document.getElementById('addContent');
+        const removeBtn = document.getElementById('removeContent');
+        const dynamicContent = document.getElementById('dynamicContent');
+        let contentCount = 2;
+        
+        addBtn.addEventListener('click', () => {
+            contentCount++;
+            const newPara = document.createElement('p');
+            newPara.textContent = `动态添加的内容行 ${contentCount}`;
+            dynamicContent.appendChild(newPara);
+        });
+        
+        removeBtn.addEventListener('click', () => {
+            if (contentCount > 2) {
+                contentCount--;
+                dynamicContent.removeChild(dynamicContent.lastChild);
+            }
+        });
+        
+        // 为滚动区域添加更多内容
+        const addScrollBtn = document.getElementById('addScrollContent');
+        const scrollableContent = document.getElementById('scrollableContent');
+        let scrollItemCount = 8;
+        
+        addScrollBtn.addEventListener('click', () => {
+            for (let i = 0; i < 5; i++) {
+                scrollItemCount++;
+                const newItem = document.createElement('div');
+                newItem.className = 'p-2 bg-white rounded shadow-sm';
+                newItem.textContent = `列表项 ${scrollItemCount}`;
+                scrollableContent.appendChild(newItem);
+            }
+        });
+        
+        // 页面加载完成后验证布局
+        window.addEventListener('load', () => {
+            const parent = document.querySelector('.parent-container');
+            const fillArea = document.querySelector('.fill-remaining');
+            const dynamicArea = document.querySelector('.dynamic-height');
+            
+            // 输出高度信息用于调试
+            console.log('父容器高度:', parent.offsetHeight);
+            console.log('动态区域高度:', dynamicArea.offsetHeight);
+            console.log('填充区域高度:', fillArea.offsetHeight);
+        });
+    </script>
+</body>
+</html>

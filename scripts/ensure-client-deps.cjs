@@ -43,7 +43,7 @@ if (fresh) {
 console.log('[ensure-client-deps] 依赖有变化或 node_modules 缺失,执行 npm install…')
 const r = spawnSync(
   'npm',
-  ['install', '--no-audit', '--no-fund', '--prefer-offline'],
+  ['install', '--legacy-peer-deps', '--no-audit', '--no-fund', '--prefer-offline'],
   { cwd: clientDir, stdio: 'inherit', shell: true } // shell:true 兼容 Windows 的 npm.cmd
 )
 process.exit(r.status == null ? 1 : r.status)

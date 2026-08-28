@@ -211,6 +211,10 @@ export default defineConfig(({ command }) => {
             if (id.includes('element-plus')) return 'element-plus'
             // dagre 仅 FlowOrchestrationWorkspace 用
             if (id.includes('dagre')) return 'dagre'
+            // Office 预览只在打开对应文件时加载，避免首屏打包解析器
+            if (id.includes('@vue-office/docx')) return 'office-docx'
+            if (id.includes('@vue-office/excel')) return 'office-excel'
+            if (id.includes('@vue-office/pptx')) return 'office-pptx'
             // 其它 node_modules 统一 vendor,避免过度切分
             if (id.includes('node_modules')) return 'vendor'
           },

@@ -25,6 +25,7 @@ import { computed, ref, watch } from 'vue'
 import { ElIcon, ElTooltip } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
+import OfficePreview from '@/components/OfficePreview.vue'
 import { PREVIEW_IFRAME_SANDBOX, injectHtmlPreviewShims } from '@/utils/previewSandbox'
 
 interface Props {
@@ -40,6 +41,8 @@ interface Props {
   context?: 'git-status' | 'commit-detail' | 'stash-detail'
   /** commit-detail 时使用的提交哈希 */
   commitHash?: string
+  /** Office 文件由服务端转换后的预览 URL */
+  officePreviewUrl?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -47,6 +50,7 @@ const props = withDefaults(defineProps<Props>(), {
   error: '',
   context: 'git-status',
   commitHash: '',
+  officePreviewUrl: '',
 })
 
 const emit = defineEmits<{
@@ -60,7 +64,8 @@ const ext = computed(() => {
 
 const isMarkdown = computed(() => ext.value === 'md' || ext.value === 'markdown')
 const isHtmlLike = computed(() => ext.value === 'html' || ext.value === 'htm' || ext.value === 'svg')
-const isPreviewable = computed(() => isMarkdown.value || isHtmlLike.value)
+const isOffice = computed(() => ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(ext.value))
+const isPreviewable = computed(() => isMarkdown.value || isHtmlLike.value || (isOffice.value && !!props.officePreviewUrl))
 
 const isDark = ref(true)
 function syncTheme() {
@@ -114,6 +119,12 @@ syncTheme()
         class="diff-preview-iframe"
         :sandbox="PREVIEW_IFRAME_SANDBOX"
         :srcdoc="previewSrcdoc"
+      />
+      <OfficePreview
+        v-else-if="isOffice && officePreviewUrl"
+        :file-path="filePath"
+        :source="context === 'commit-detail' ? 'git' : 'worktree'"
+        :rev="commitHash"
       />
       <MarkdownPreview
         v-else-if="isMarkdown"

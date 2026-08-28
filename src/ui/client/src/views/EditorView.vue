@@ -23,11 +23,13 @@ import { useEditorTabsStore } from '@/stores/editorTabs'
 import { getLanguageByExt } from '@/utils/editorLang'
 import { getFileIconClass, getFolderIconClass } from '@/utils/fileIcon'
 import ImagePreview from '@/components/ImagePreview.vue'
+import OfficePreview from '@/components/OfficePreview.vue'
 import MarkdownPreview from '@/components/MarkdownPreview.vue'
 import MindmapPreview from '@/components/MindmapPreview.vue'
 import SvgIcon from '@/components/SvgIcon/index.vue'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 import { PREVIEW_IFRAME_SANDBOX, injectHtmlPreviewShims } from '@/utils/previewSandbox'
+import { isOfficeFile } from '@/utils/officeFile'
 
 // 配置 Monaco web worker(避免回退到主线程导致 UI 卡顿)
 // 使用 Vite 的 ?worker 语法为 Monaco 创建 web worker
@@ -338,7 +340,7 @@ async function openFile(node: TreeNode) {
     nextTick(() => focusEditor())
     return
   }
-  // 图片：跳过 Monaco，直接建一个只读 tab，content 留空字符串（不渲染 Monaco）
+  // 图片/Office：跳过 Monaco，直接建一个只读 tab，content 留空字符串（不渲染 Monaco）
   // 由 preview 自动打开，ImagePreview 通过 /api/editor/raw 读取二进制
   const ext = node.name.split('.').pop() || ''
   if (IMAGE_EXTS.has(ext.toLowerCase())) {
@@ -353,6 +355,21 @@ async function openFile(node: TreeNode) {
     tabs.value.push(tab)
     activeTabPath.value = node.path
     // 图片自动打开预览
+    showPreview.value = true
+    return
+  }
+  if (isOfficeFile(node.name)) {
+    const tab: Tab = {
+      path: node.path,
+      name: node.name,
+      content: '',
+      originalContent: '',
+      isDirty: false,
+      language: 'office',
+    }
+    tabs.value.push(tab)
+    activeTabPath.value = node.path
+    showMindmap.value = false
     showPreview.value = true
     return
   }
@@ -987,6 +1004,7 @@ const activeTabRef = computed(() => tabs.value.find(t => t.path === activeTabPat
 
 /** 当前 tab 是否为图片（content 为空、language 为 'plaintext'，由 openFile 设置） */
 const activeTabIsImage = computed(() => activeTabRef.value?.language === 'plaintext' && activeTabRef.value?.content === '')
+const activeTabIsOffice = computed(() => activeTabRef.value?.language === 'office')
 
 const activeExt = computed(() => {
   const name = activeTabRef.value?.name ?? ''
@@ -994,7 +1012,7 @@ const activeExt = computed(() => {
 })
 
 const isPreviewable = computed(() =>
-  PREVIEW_TEXT_EXTS.has(activeExt.value) || IMAGE_EXTS.has(activeExt.value)
+  PREVIEW_TEXT_EXTS.has(activeExt.value) || IMAGE_EXTS.has(activeExt.value) || isOfficeFile(activeExt.value)
 )
 // 思维导图只对 markdown 开放,且需要至少有一个 # 标题才值得预览
 const mindmapTitleCount = computed(() => {
@@ -1338,7 +1356,7 @@ function stopPreviewResize() {
       <div class="editor-body">
         <div
           class="monaco-container"
-          :class="{ hidden: tabs.length === 0 || activeTabIsImage }"
+          :class="{ hidden: tabs.length === 0 || activeTabIsImage || activeTabIsOffice }"
           ref="editorContainerRef"
         />
         <!-- 图片 tab 时的占位提示（主预览区在右侧 preview-panel） -->
@@ -1405,6 +1423,10 @@ function stopPreviewResize() {
               v-else-if="showPreview && IMAGE_EXTS.has(activeExt) && activeTabRef"
               :file-path="activeTabRef.path"
               :file-name="activeTabRef.name"
+            />
+            <OfficePreview
+              v-else-if="showPreview && activeTabIsOffice && activeTabRef"
+              :file-path="activeTabRef.path"
             />
           </div>
         </div>
