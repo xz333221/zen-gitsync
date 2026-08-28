@@ -870,12 +870,12 @@ export default {
   '@42BB9:测试失败': 'Test failed',
   '@42BB9:请先填写接口地址和模型名称': 'Please fill in base URL and model name first',
   '@42BB9:模型尚未保存，请先保存或取消模型编辑': 'Model not saved yet, please save or cancel the model form first',
-  '@42BB9:编辑器设置': 'Editor Settings',
-  '@42BB9:自定义编辑器行为': 'Customize editor behavior',
+  '@42BB9:编辑器设置': 'File Space Settings',
+  '@42BB9:自定义编辑器行为': 'Customize file space behavior',
   '@42BB9:文件编辑': 'File Editing',
   '@42BB9:自动保存': 'Auto Save',
   '@42BB9:失去焦点时自动保存当前文件': 'Automatically save the current file when it loses focus',
-  '@42BB9:编辑器设置已保存': 'Editor settings saved',
+  '@42BB9:编辑器设置已保存': 'File Space settings saved',
   // "Interface" subsection (persisted to ~/.git-commit-tool.json ui field)
   '@42BB9:界面': 'Interface',
   '@42BB9:文件列表视图': 'File list view',
@@ -1752,7 +1752,7 @@ export default {
   // @13D1C: file end
   // @ACTBAR: file path: components\ActivityBar.vue
   '@ACTBAR:Git': 'Git',
-  '@ACTBAR:编辑器': 'Editor',
+  '@ACTBAR:编辑器': 'File Space',
   '@ACTBAR:源码地图（即将推出）': 'Source Map (Coming Soon)',
   '@ACTBAR:源码地图': 'Source Map',
   '@ACTBAR:个未提交文件': 'uncommitted files',

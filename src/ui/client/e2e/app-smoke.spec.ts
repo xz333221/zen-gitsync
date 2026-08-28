@@ -22,7 +22,7 @@ const VIEW_BUTTONS = [
   // —— 其他 6 个 pane 都带 -pane 后缀
   { label: 'Git',        pane: '.view-pane.grid-layout' },
   { label: '控制台',     pane: '.console-pane' },
-  { label: '编辑器',     pane: '.editor-pane' },
+  { label: '文件空间',   pane: '.editor-pane' },
   { label: '源码地图',   pane: '.source-map-pane' },
   { label: '工作台',     pane: '.workbench-pane' },
   { label: '系统监控',   pane: '.monitor-pane' },
