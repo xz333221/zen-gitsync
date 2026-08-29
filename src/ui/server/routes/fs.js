@@ -67,6 +67,8 @@ function validateChangeDirectoryPath(input) {
 // 把 absolute path 准备好传给 spawn/exec,内部不再做字符串拼接,
 // Windows 走 cmd /c start "" ... argv 模式;Linux 走 sh -c 但 argument 已被
 // shQuote.js 转义
+// 注意:历史上 /api/open_terminal 的 xterm 分支漏了转义,用的是 JSON.stringify
+// (双引号内 $() 仍会展开),已在下方改用 shQuote —— 这里的注释当时是不成立的。
 import { shQuote, psEscape } from '../utils/shellQuote.js';
 import { convertOfficeToPdf, isOfficeFile } from '../utils/officePreview.js';
 
@@ -434,11 +436,13 @@ export function registerFsRoutes({
             break;
           case 'linux': {
             // Linux: 尝试使用常见的终端模拟器 - argv 数组模式
-            // xterm 路径用 bash -c 跑 cd(且 cd path 已经 JSON.stringify 转义)
+            // xterm 分支会把路径拼进 bash -c 的字符串,必须用 shQuote(单引号包裹,
+            // 单引号内 shell 不做任何展开)。原先这里用 JSON.stringify(双引号),
+            // 而 bash 在双引号内仍会展开 $(...) / `...` / ${...},等于没防住。
             const terminals = [
               { cmd: 'gnome-terminal', args: ['--working-directory', directoryPath] },
               { cmd: 'konsole', args: ['--workdir', directoryPath] },
-              { cmd: 'xterm', args: ['-e', 'bash', '-c', `cd ${JSON.stringify(directoryPath)} && exec $SHELL`] },
+              { cmd: 'xterm', args: ['-e', 'bash', '-c', `cd ${shQuote(directoryPath)} && exec $SHELL`] },
             ];
 
             // 用 spawn 探测命令存在(不走 shell)

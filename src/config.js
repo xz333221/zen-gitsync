@@ -194,10 +194,20 @@ async function writeRawConfigFile(obj) {
     try {
       await fs.rename(tmpPath, configPath);
     } catch (err) {
-      // Windows 上 rename 到已存在文件可能抛 EPERM/EEXIST,fallback 覆盖写
+      // Windows 上 rename 到已存在文件会抛 EPERM / EEXIST —— 杀毒软件扫描、
+      // 文件索引器占用、多个实例并发写同一个配置都会命中。此时降级为直接覆盖写:
+      // 数据完整性由 writeFile 保证,只是丢了 rename 的原子性(极端情况下
+      // 可能留下 truncate 到一半的中间态,概率远低于整体写入失败)。
+      //
+      // 关键:降级写成功就算成功,**不能把 rename 的 err 再抛出去**。
+      // 原实现在这里 throw err,导致数据其实已经落盘、调用方却收到异常,
+      // 前端表现为"保存失败 500"。只有降级写本身失败时,下面的 await 才会抛,
+      // 交给外层 catch 清理 tmp 并向上传递。
+      console.warn(chalk.yellow(
+        `[config] 原子写降级为覆盖写(rename 失败: ${err?.code || err?.message || err})`
+      ));
       try { await fs.unlink(tmpPath); } catch (_) {}
       await fs.writeFile(configPath, data, 'utf-8');
-      if (err) throw err;
     }
   } catch (err) {
     // 写入失败时清理孤儿 tmp 文件,避免 ~/.git-commit-tool.json.*.tmp 堆积

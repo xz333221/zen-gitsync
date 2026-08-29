@@ -14,6 +14,18 @@
 //
 import logger from './logger.js'
 
+// 监听地址：默认只绑回环地址。
+// GUI 服务没有任何认证层，绑 0.0.0.0 等于把 /api/exec-stream（命令执行）、
+// /api/add-npm-script（写 package.json scripts）、/api/open-file（用系统
+// 关联程序打开任意文件）等接口裸奔在局域网上，同网段任何主机都可调用。
+// 确有远程访问 / WSL 跨环境需求时，用 ZEN_HOST=0.0.0.0 显式放开。
+const DEFAULT_HOST = '127.0.0.1'
+
+function normalizeHost(raw) {
+  const value = typeof raw === 'string' ? raw.trim() : ''
+  return value || DEFAULT_HOST
+}
+
 export async function startServerOnAvailablePort({
   httpServer,
   startPort,
@@ -24,8 +36,10 @@ export async function startServerOnAvailablePort({
   savePortToFile,
   fsSync,
   maxTries = 100,
-  callbackExecutedRef
+  callbackExecutedRef,
+  host
 }) {
+  const bindHost = normalizeHost(host ?? process.env.ZEN_HOST)
   let currentPort = startPort;
   const maxPort = startPort + maxTries;
   const getCallbackExecuted = () => {
@@ -56,7 +70,7 @@ export async function startServerOnAvailablePort({
 
         httpServer.once('error', errorHandler);
 
-        httpServer.listen(currentPort, () => {
+        httpServer.listen(currentPort, bindHost, () => {
           if (getCallbackExecuted()) return;
           setCallbackExecuted(true);
 
@@ -66,6 +80,10 @@ export async function startServerOnAvailablePort({
           console.log(chalk.green(`  Zen GitSync 服务器已启动`));
           console.log(chalk.green(`  访问地址: http://localhost:${currentPort}`));
           console.log(chalk.green(`  启动时间: ${new Date().toLocaleString()}`));
+          // 非回环地址才提示，默认情况保持安静（避免每次启动都刷警告）
+          if (bindHost !== DEFAULT_HOST) {
+            console.log(chalk.yellow(`  监听地址: ${bindHost}（已放开非本地访问，请确认网络环境可信）`));
+          }
 
           if (isGitRepo) {
             console.log(chalk.green(`  当前目录是Git仓库`));

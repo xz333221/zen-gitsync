@@ -24,6 +24,14 @@ import { registerAiDiffSummaryRoutes } from './git/aiDiffSummary.js';
 import { createDiffHelpers } from './git/diffUtils.js';
 import { registerGitStashRoutes } from './git/stash.js';
 import { registerGitTagRoutes } from './git/tags.js';
+import {
+  assertGitRef,
+  assertGitHash,
+  assertGitPath,
+  assertGitRemoteUrl,
+  assertGitConfigKey,
+  assertGitConfigValue
+} from '../utils/gitArgs.js';
 
 export function registerGitOpsRoutes({
   app,
@@ -229,7 +237,10 @@ export function registerGitOpsRoutes({
       await execGitCommand(['add', '--', filePath]);
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error?.statusCode || 500).json({
+        success: false,
+        error: error.message
+      });
     }
   });
 
@@ -259,7 +270,8 @@ export function registerGitOpsRoutes({
       }
 
       // 一次 git add 命令暂存所有文件(不再需要 shell 转义,execFile argv 数组天然支持任意路径)
-      await execGitCommand(['add', ...uniquePaths]);
+      // 前插 '--':文件名若以 - 开头会被 git 当成选项,-- 之后一律按路径处理
+      await execGitCommand(['add', '--', ...uniquePaths]);
 
       res.json({
         success: true,
@@ -331,6 +343,9 @@ export function registerGitOpsRoutes({
       if (!branch || typeof branch !== 'string') {
         return res.status(400).json({ success: false, error: '缺少 branch 参数' });
       }
+      // branch 落在 git 的参数位置上，不做形状校验的话传 '--upload-pack=curl x|sh'
+      // 就能让 git 执行命令(execFile 无 shell 也拦不住)。
+      const safeBranch = assertGitRef(branch, '分支名');
       // 防御性检查：空仓库（没有任何 commit）直接返回明确错误，
       // 避免 git push -u 报 "src refspec master does not match any" 让用户摸不着头脑。
       // git rev-parse --verify HEAD 在空仓库下返回非零退出 → execGitCommand 用 ignoreError
@@ -346,7 +361,7 @@ export function registerGitOpsRoutes({
           errorCode: 'EMPTY_REPO'
         });
       }
-      const { stdout } = await execGitCommand(['push', '-u', 'origin', branch]);
+      const { stdout } = await execGitCommand(['push', '-u', 'origin', safeBranch]);
       setRecentPushStatus({
         justPushed: true,
         pushTime: Date.now(),
@@ -355,7 +370,8 @@ export function registerGitOpsRoutes({
       logger.info(`推送并设置上游成功: origin/${branch}`);
       res.json({ success: true, message: stdout });
     } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+      // assertGitRef 抛的是 HttpError(400),别吞成 500
+      res.status(error?.statusCode || 500).json({ success: false, error: error.message });
     }
   });
 
@@ -368,15 +384,16 @@ export function registerGitOpsRoutes({
       if (!key) {
         return res.status(400).json({ success: false, error: '缺少 key 参数' });
       }
+      const safeKey = assertGitConfigKey(key);
       try {
-        const { stdout } = await execGitCommand(['config', '--global', '--get', key], { log: false });
+        const { stdout } = await execGitCommand(['config', '--global', '--get', safeKey], { log: false });
         return res.json({ success: true, value: String(stdout || '').trim() });
       } catch (err) {
         // git --get 在 key 不存在时返回非零退出码 → 视为"未设置",返回空串
         return res.json({ success: true, value: '' });
       }
     } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error?.statusCode || 500).json({ success: false, error: error.message });
     }
   });
 
@@ -389,15 +406,18 @@ export function registerGitOpsRoutes({
       if (!key || typeof key !== 'string') {
         return res.status(400).json({ success: false, error: '缺少 key 参数' });
       }
-      const trimmed = typeof value === 'string' ? value.trim() : '';
+      // key 走白名单(挡住 core.editor / core.pager / http.*.extraheader / alias.*),
+      // value 挡换行 —— 否则值里的 \n 会在 .gitconfig 里凭空造出一行新 key
+      const safeKey = assertGitConfigKey(key);
+      const trimmed = assertGitConfigValue(value);
       if (!trimmed) {
-        await execGitCommand(['config', '--global', '--unset', key]);
+        await execGitCommand(['config', '--global', '--unset', safeKey]);
       } else {
-        await execGitCommand(['config', '--global', key, trimmed]);
+        await execGitCommand(['config', '--global', safeKey, trimmed]);
       }
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error?.statusCode || 500).json({ success: false, error: error.message });
     }
   });
 
@@ -409,9 +429,18 @@ export function registerGitOpsRoutes({
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    // 客户端断开后 res.write 抛 EPIPE,若不吞掉,异常会从 gitPush.stderr 的
+    // 'data' 监听器冒泡成 uncaughtException → index.js 的 fatalExit → 整个服务退出。
+    let clientClosed = false;
     const sendProgress = (data) => {
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (clientClosed) return;
+      try {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      } catch {
+        // res 已关闭,忽略
+      }
     };
+    const finish = () => { try { res.end(); } catch { /* ignore */ } };
 
     try {
       // 获取当前工作目录 - 与execGitCommand保持一致
@@ -435,7 +464,7 @@ export function registerGitOpsRoutes({
           error: '当前仓库没有任何提交，请先在左侧暂存并提交至少一个文件后再推送。',
           errorCode: 'EMPTY_REPO'
         });
-        return res.end();
+        return finish();
       }
 
       logger.info('开始推送，工作目录:', workDir);
@@ -558,7 +587,7 @@ export function registerGitOpsRoutes({
             error: errorOutput || standardOutput || `Push failed with code ${code}`
           });
         }
-        res.end();
+        finish();
       });
 
       gitPush.on('error', (error) => {
@@ -581,7 +610,27 @@ export function registerGitOpsRoutes({
           success: false,
           error: error.message
         });
-        res.end();
+        finish();
+      });
+
+      // 客户端断连 → kill 掉 git push。推送在远端是原子的(要么整体接受要么整体拒绝),
+      // 中断不会留下半截引用;不 kill 则会残留孤儿进程直到推送结束。
+      req.on('close', () => {
+        if (clientClosed) return;
+        clientClosed = true;
+        if (gitPush && !gitPush.killed) {
+          try {
+            gitPush.kill('SIGTERM');
+            setTimeout(() => {
+              if (!gitPush.killed) {
+                try { gitPush.kill('SIGKILL'); } catch { /* ignore */ }
+              }
+            }, 2000);
+          } catch (e) {
+            logger.warn('[push-with-progress] 客户端断连后 kill 子进程失败:', e?.message || e);
+          }
+        }
+        finish();
       });
 
     } catch (error) {
@@ -599,7 +648,7 @@ export function registerGitOpsRoutes({
         success: false,
         error: error.message
       });
-      res.end();
+      finish();
     }
   });
 
@@ -657,7 +706,11 @@ export function registerGitOpsRoutes({
       const message = req.query.message || '';
       const dateFrom = req.query.dateFrom || '';
       const dateTo = req.query.dateTo || '';
-      const branch = req.query.branch ? req.query.branch.split(',') : [];
+      // branch 最终会原样进 git 的参数位(见 executeGitLogCommand:含 '/' 的不加
+      // refs/heads/ 前缀),所以 '--output=/path' 这类字符串能被 git 解析成选项。
+      const branch = req.query.branch
+        ? req.query.branch.split(',').map(b => b.trim()).filter(Boolean).map(b => assertGitRef(b, '分支名'))
+        : [];
       const withParents = req.query.with_parents === 'true';
 
       // 如果指定了分支,直接走 executeGitLogCommand 处理 refs/ 前缀
@@ -716,7 +769,8 @@ export function registerGitOpsRoutes({
       processAndSendLogOutput(res, logOutput, page, limit, withParents);
     } catch (error) {
       logger.error('获取Git日志失败:', error);
-      res.status(500).json({ error: '获取日志失败: ' + error.message });
+      // 参数校验失败是 HttpError(400),不该被一律吞成 500
+      res.status(error?.statusCode || 500).json({ error: '获取日志失败: ' + error.message });
     }
   });
 
@@ -785,7 +839,7 @@ export function registerGitOpsRoutes({
       processAndSendLogOutput(res, logOutput, skip / limit + 1, limit, withParents);
     } catch (error) {
       logger.error('执行Git日志命令失败:', error);
-      res.status(500).json({ error: '获取日志失败: ' + error.message });
+      res.status(error?.statusCode || 500).json({ error: '获取日志失败: ' + error.message });
     }
   }
 
@@ -891,6 +945,8 @@ export function registerGitOpsRoutes({
           error: '缺少分支名称参数'
         });
       }
+      // 拼成 origin/<branch> 后进 git 参数位,同样要过 ref 校验
+      const safeBranch = assertGitRef(branch, '分支名');
 
       // 尝试清理 Git 锁文件(破坏性入口:force=true 绕过 mtime 判断,
       // 仍走 PID liveness 校验——用户主动触发的 reset --hard 不该被
@@ -898,11 +954,11 @@ export function registerGitOpsRoutes({
       await checkAndClearGitLock({ force: true });
 
       // 执行 git reset --hard origin/branch 命令
-      await execGitCommand(['reset', '--hard', `origin/${branch}`]);
+      await execGitCommand(['reset', '--hard', `origin/${safeBranch}`]);
       res.json({ success: true });
     } catch (error) {
       logger.error('重置到远程分支失败:', error);
-      res.status(500).json({
+      res.status(error?.statusCode || 500).json({
         success: false,
         error: `重置到远程分支失败: ${error.message}`
       });
@@ -944,11 +1000,12 @@ export function registerGitOpsRoutes({
           error: '缺少提交哈希参数'
         });
       }
+      const safeHash = assertGitHash(hash);
 
-      logger.info(`获取提交文件列表: hash=${hash}`);
+      logger.info(`获取提交文件列表: hash=${safeHash}`);
 
       // 执行命令获取提交中修改的文件列表
-      const { stdout } = await execGitCommand(['show', '--name-only', '--format=', hash]);
+      const { stdout } = await execGitCommand(['show', '--name-only', '--format=', safeHash]);
 
       // 将输出按行分割，并过滤掉空行
       const files = stdout.split('\n').filter(line => line.trim());
@@ -960,7 +1017,7 @@ export function registerGitOpsRoutes({
       });
     } catch (error) {
       logger.error('获取提交文件列表失败:', error);
-      res.status(500).json({
+      res.status(error?.statusCode || 500).json({
         success: false,
         error: `获取提交文件列表失败: ${error.message}`
       });
@@ -980,14 +1037,20 @@ export function registerGitOpsRoutes({
         });
       }
 
-      logger.info(`获取提交文件差异: hash=${hash}, file=${filePath}`);
+      // hash 落在 `--` 之前,会被 git 当 rev 解析;以 - 开头就变成选项了
+      // (git show 有 --output=,能写任意文件)。filePath 虽有 -- 保护,
+      // 但仍要挡住绝对路径与 .. 上跳。
+      const safeHash = assertGitHash(hash);
+      const safePath = assertGitPath(String(filePath).replace(/^\/+/, ''));
 
-      const diffCommandArgs = ['show', hash, '--', filePath];
+      logger.info(`获取提交文件差异: hash=${safeHash}, file=${safePath}`);
+
+      const diffCommandArgs = ['show', safeHash, '--', safePath];
 
       // 使用优化的检查函数
       // checkShouldSkipDiff 接受字符串命令,这里只用于大小判断,先按字面占位;
       // 走 execGitCommand 时仍用 argv 数组保证转义正确。
-      const skipCheck = await checkShouldSkipDiff(filePath, `git show ${hash} -- "${filePath}"`);
+      const skipCheck = await checkShouldSkipDiff(safePath, `git show ${safeHash} -- "${safePath}"`);
       if (skipCheck.shouldSkip) {
         return res.json({
           success: true,
@@ -1021,7 +1084,7 @@ export function registerGitOpsRoutes({
       });
     } catch (error) {
       logger.error('获取提交文件差异失败:', error);
-      res.status(500).json({
+      res.status(error?.statusCode || 500).json({
         success: false,
         error: `获取提交文件差异失败: ${error.message}`
       });
@@ -1041,8 +1104,16 @@ export function registerGitOpsRoutes({
         });
       }
 
+      // hash 与 filePath 都要先过校验:spec 是 `<rev>:<path>` 复合形式,
+      // 任一环节带 - 开头都会被 git 当选项。hash 只接受十六进制(^ 由下面自己拼,
+      // 不交给外部传入),filePath 只接受仓库内的相对路径。
+      const safeHash = assertGitHash(hash);
+      // git 的 <rev>:<path> 里 /src/foo.ts 与 src/foo.ts 等价(都相对仓库根),
+      // 去掉前导 / 再校验,避免正常路径被误拒
+      const safePath = assertGitPath(String(filePath).replace(/^\/+/, ''));
+
       const isOld = String(version || 'new') === 'old';
-      const targetHash = isOld ? `${hash}^` : `${hash}`;
+      const targetHash = isOld ? `${safeHash}^` : `${safeHash}`;
 
       const skipExtensions = /\.(min\.js|umd\.cjs|bundle\.js|dist\.js|prod\.js|map|wasm|exe|dll|so|dylib|bin|zip|tar|gz|rar|7z|jar|war|ear|pdf|doc|docx|xls|xlsx|ppt|pptx|jpg|jpeg|png|gif|bmp|ico|mp3|mp4|avi|mov|wmv|flv|webm|mkv|ttf|woff|woff2|eot|otf)$/i;
       if (skipExtensions.test(String(filePath))) {
@@ -1053,7 +1124,7 @@ export function registerGitOpsRoutes({
         });
       }
 
-      const spec = `${targetHash}:${filePath}`;
+      const spec = `${targetHash}:${safePath}`;
 
       let sizeBytes = 0;
       try {
@@ -1086,13 +1157,14 @@ export function registerGitOpsRoutes({
           content: stdout ?? ''
         });
       } catch (error) {
-        res.status(500).json({
+        res.status(error?.statusCode || 500).json({
           success: false,
           error: `获取文件内容失败: ${error.message}`
         });
       }
     } catch (error) {
-      res.status(500).json({
+      // assertGitHash / assertGitPath 抛的是 HttpError(400),别吞成 500
+      res.status(error?.statusCode || 500).json({
         success: false,
         error: error.message
       });
@@ -1111,18 +1183,20 @@ export function registerGitOpsRoutes({
         });
       }
 
-      logger.info(`执行撤销提交操作: hash=${hash}`);
+      const safeHash = assertGitHash(hash);
+      logger.info(`执行撤销提交操作: hash=${safeHash}`);
 
       // 执行git revert命令
-      await execGitCommand(['revert', '--no-edit', hash]);
+      await execGitCommand(['revert', '--no-edit', safeHash]);
 
       res.json({
         success: true,
-        message: `已成功撤销提交 ${hash}`
+        message: `已成功撤销提交 ${safeHash}`
       });
     } catch (error) {
       logger.error('撤销提交失败:', error);
-      res.status(500).json({
+      // 校验失败是 HttpError(400),不该被一律吞成 500
+      res.status(error?.statusCode || 500).json({
         success: false,
         error: `撤销提交失败: ${error.message}`
       });
@@ -1141,18 +1215,19 @@ export function registerGitOpsRoutes({
         });
       }
 
-      logger.info(`执行Cherry-pick操作: hash=${hash}`);
+      const safeHash = assertGitHash(hash);
+      logger.info(`执行Cherry-pick操作: hash=${safeHash}`);
 
       // 执行git cherry-pick命令
-      await execGitCommand(['cherry-pick', hash]);
+      await execGitCommand(['cherry-pick', safeHash]);
 
       res.json({
         success: true,
-        message: `已成功Cherry-pick提交 ${hash}`
+        message: `已成功Cherry-pick提交 ${safeHash}`
       });
     } catch (error) {
       logger.error('Cherry-pick提交失败:', error);
-      res.status(500).json({
+      res.status(error?.statusCode || 500).json({
         success: false,
         error: `Cherry-pick提交失败: ${error.message}`
       });
@@ -1171,18 +1246,19 @@ export function registerGitOpsRoutes({
         });
       }
 
-      logger.info(`执行重置到指定提交操作: hash=${hash}`);
+      const safeHash = assertGitHash(hash);
+      logger.info(`执行重置到指定提交操作: hash=${safeHash}`);
 
       // 执行git reset --hard命令
-      await execGitCommand(['reset', '--hard', hash]);
+      await execGitCommand(['reset', '--hard', safeHash]);
 
       res.json({
         success: true,
-        message: `已成功重置到提交 ${hash}`
+        message: `已成功重置到提交 ${safeHash}`
       });
     } catch (error) {
       logger.error('重置到指定提交失败:', error);
-      res.status(500).json({
+      res.status(error?.statusCode || 500).json({
         success: false,
         error: `重置到指定提交失败: ${error.message}`
       });
@@ -1196,13 +1272,14 @@ export function registerGitOpsRoutes({
       if (!hash) {
         return res.status(400).json({ success: false, error: '缺少提交哈希参数' });
       }
-      const { stdout } = await execGitCommand(['show', hash]);
+      const safeHash = assertGitHash(hash);
+      const { stdout } = await execGitCommand(['show', safeHash]);
       // 限制最大 200KB 防止内容过大
       const MAX = 200 * 1024;
       const content = stdout.length > MAX ? stdout.slice(0, MAX) + '\n\n[内容过大，已截断]' : stdout;
       res.json({ success: true, content });
     } catch (error) {
-      res.status(500).json({ success: false, error: `获取提交内容失败: ${error.message}` });
+      res.status(error?.statusCode || 500).json({ success: false, error: `获取提交内容失败: ${error.message}` });
     }
   });
 
@@ -1311,11 +1388,13 @@ export function registerGitOpsRoutes({
       if (!url || !url.trim()) {
         return res.json({ success: false, error: '远程仓库地址不能为空' });
       }
-      await execGitCommand(['remote', 'add', name, url.trim()]);
+      const safeName = assertGitRef(name, '远程仓库名');
+      const safeUrl = assertGitRemoteUrl(url);
+      await execGitCommand(['remote', 'add', safeName, safeUrl]);
       res.json({ success: true });
     } catch (error) {
       logger.error('添加远程仓库失败:', error);
-      res.json({ success: false, error: error.message || '添加远程仓库失败' });
+      res.status(error?.statusCode || 200).json({ success: false, error: error.message || '添加远程仓库失败' });
     }
   });
 

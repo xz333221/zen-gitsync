@@ -162,9 +162,19 @@ export function registerNpmRoutes({
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders?.()
 
+    // 客户端断开后 res.write 会抛 EPIPE。这里必须吞掉:
+    // 异常若从 child.stdout 的 'data' 监听器冒泡出去,会变成 uncaughtException,
+    // 命中 index.js 的 fatalExit → 整个 GUI 服务退出,而不仅仅是这一个请求失败。
+    let clientClosed = false
     const send = (obj) => {
-      res.write(JSON.stringify(obj) + '\n')
+      if (clientClosed) return
+      try {
+        res.write(JSON.stringify(obj) + '\n')
+      } catch {
+        // res 已关闭,忽略
+      }
     }
+    const finish = () => { try { res.end() } catch { /* ignore */ } }
 
     // Windows 上 npm install -g 通常不需要管理员；*nix 需要 sudo。
     // 用 sudo -n（非交互式）检测是否可免密，失败时让用户用 sudo 重启 GUI
@@ -188,7 +198,7 @@ export function registerNpmRoutes({
     } catch (err) {
       send({ type: 'error', message: `启动升级进程失败: ${err.message}` })
       send({ type: 'done', code: -1 })
-      res.end()
+      finish()
       cleanup()
       return
     }
@@ -215,7 +225,28 @@ export function registerNpmRoutes({
         send({ type: 'error', message: `\n升级失败，退出码 ${code}${hint ? ' ' + hint : ''}\n` })
       }
       send({ type: 'done', code })
-      res.end()
+      finish()
+      cleanup()
+    })
+
+    // 客户端断连 → 主动 kill,防止孤儿 npm 进程;同时必须 cleanup(),
+    // 否则 activeUpgrade 一直非 null,后续升级请求会永久返回 409。
+    req.on('close', () => {
+      if (clientClosed) return
+      clientClosed = true
+      if (child && !child.killed) {
+        try {
+          child.kill('SIGTERM')
+          setTimeout(() => {
+            if (!child.killed) {
+              try { child.kill('SIGKILL') } catch { /* ignore */ }
+            }
+          }, 2000)
+        } catch (e) {
+          logger.warn('[app-upgrade] 客户端断连后 kill 子进程失败:', e?.message || e)
+        }
+      }
+      finish()
       cleanup()
     })
   })
@@ -1092,18 +1123,13 @@ export function registerNpmRoutes({
         logger.error('打开终端失败:', err);
       }
 
+      // 只响应一次。原先这里连续调用了两次 res.json() → ERR_HTTP_HEADERS_SENT,
+      // 且第二次还把未经校验的原始 packagePath 直接回给了前端。
       res.json({
         success: true,
         message: `已在新终端中执行: ${scriptName}`,
         command: npmCommand,
         path: resolvedPkgPath
-      });
-      
-      res.json({ 
-        success: true, 
-        message: `已在新终端中执行: ${scriptName}`,
-        command: npmCommand,
-        path: packagePath
       });
     } catch (error) {
       logger.error('执行npm脚本失败:', error);

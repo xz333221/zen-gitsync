@@ -15,6 +15,7 @@
 import { createDiffHelpers } from './diffUtils.js';
 import logger from '../../utils/logger.js'
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
+import { assertGitRef } from '../../utils/gitArgs.js';
 
 export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
   const { checkShouldSkipDiff, checkDiffSize, getDiffStats } = createDiffHelpers({ execGitCommand });
@@ -260,8 +261,11 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
           });
         }
       
+        // stashId 形如 stash@{0}(不含黑名单字符,能通过 ref 校验);
+        // 以 - 开头的输入会被 git 当选项,必须挡掉
+        const safeStashId = assertGitRef(stashId, 'stash ID');
         // 决定是使用apply(保留stash)还是pop(应用后删除stash)
-        const command = pop ? ['stash', 'pop', stashId] : ['stash', 'apply', stashId];
+        const command = pop ? ['stash', 'pop', safeStashId] : ['stash', 'apply', safeStashId];
       
         try {
           const { stdout } = await execGitCommand(command);
@@ -285,7 +289,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         }
       } catch (error) {
         logger.error('应用stash失败:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 
@@ -301,7 +305,8 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
           });
         }
       
-        const { stdout } = await execGitCommand(['stash', 'drop', stashId]);
+        const safeStashId = assertGitRef(stashId, 'stash ID');
+        const { stdout } = await execGitCommand(['stash', 'drop', safeStashId]);
       
         res.json({
           success: true,
@@ -310,7 +315,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         });
       } catch (error) {
         logger.error('删除stash失败:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 
@@ -341,11 +346,12 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
             error: '缺少stash ID参数'
           });
         }
-      
-        logger.info(`获取stash文件列表: stashId=${stashId}`);
-      
+        const safeStashId = assertGitRef(stashId, 'stash ID');
+
+        logger.info(`获取stash文件列表: stashId=${safeStashId}`);
+
         // 0) 解析出当前 stash 提交及其父提交哈希，避免在 Windows 上使用 ^ 语法
-        const { stdout: parentsLine } = await execGitCommand(['rev-list', '--parents', '-n', '1', stashId], { log: false });
+        const { stdout: parentsLine } = await execGitCommand(['rev-list', '--parents', '-n', '1', safeStashId], { log: false });
         const hashes = parentsLine.trim().split(/\s+/).filter(Boolean);
         const stashCommit = hashes[0] || '';
         const parent1 = hashes[1] || '';
@@ -376,7 +382,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         });
       } catch (error) {
         logger.error('获取stash文件列表失败:', error);
-        res.status(500).json({
+        res.status(error?.statusCode || 500).json({
           success: false,
           error: `获取stash文件列表失败: ${error.message}`
         });
@@ -394,11 +400,13 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
             error: '缺少必要参数'
           });
         }
-      
-        logger.info(`获取stash文件差异: stashId=${stashId}, file=${file}`);
-      
+        const safeStashId = assertGitRef(stashId, 'stash ID');
+        const safeFile = assertGitPath(file, '文件路径');
+
+        logger.info(`获取stash文件差异: stashId=${safeStashId}, file=${safeFile}`);
+
         // 先解析父提交哈希，避免使用 ^ 语法
-        const { stdout: parentsLine } = await execGitCommand(['rev-list', '--parents', '-n', '1', stashId], { log: false });
+        const { stdout: parentsLine } = await execGitCommand(['rev-list', '--parents', '-n', '1', safeStashId], { log: false });
         const hashes = parentsLine.trim().split(/\s+/).filter(Boolean);
         const stashCommit = hashes[0] || '';
         const parent1 = hashes[1] || '';
@@ -408,7 +416,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         let isFromThirdParent = false;
         if (parent3) {
           try {
-            await execGitCommand(['cat-file', '-e', `${parent3}:${file}`], { log: false });
+            await execGitCommand(['cat-file', '-e', `${parent3}:${safeFile}`], { log: false });
             isFromThirdParent = true;
           } catch (_) {
             isFromThirdParent = false;
@@ -417,7 +425,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       
         if (isFromThirdParent) {
           // 未跟踪文件：读取第三父中的内容，构造新增文件的统一diff
-          const { stdout: blob } = await execGitCommand(['show', `${parent3}:${file}`], { log: false });
+          const { stdout: blob } = await execGitCommand(['show', `${parent3}:${safeFile}`], { log: false });
       
           // 检查文件大小
           const sizeCheck = checkDiffSize(blob, 500);
@@ -440,10 +448,10 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
       
           const plusLines = lines.map(l => `+${l}`).join('\n');
           const diffText = [
-            `diff --git a/${file} b/${file}`,
+            `diff --git a/${safeFile} b/${safeFile}`,
             `new file mode 100644`,
             `--- /dev/null`,
-            `+++ b/${file}`,
+            `+++ b/${safeFile}`,
             `@@ -0,0 +${lineCount} @@`,
             `${plusLines}`
           ].join('\n');
@@ -454,11 +462,11 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         // 否则，使用原有方式获取与父1的变更
         // checkShouldSkipDiff 接受字符串命令用于日志展示,这里只用于大小判断;
         // 走 execGitCommand 时用 argv 数组,避免 Windows 下 cmd.exe 拼引号被破坏。
-        const diffCommandForCheck = `git show ${stashCommit} -- "${file}"`;
-        const diffCommandArgs = ['show', stashCommit, '--', file];
-      
+        const diffCommandForCheck = `git show ${stashCommit} -- "${safeFile}"`;
+        const diffCommandArgs = ['show', stashCommit, '--', safeFile];
+
         // 使用优化的检查函数
-        const skipCheck = await checkShouldSkipDiff(file, diffCommandForCheck);
+        const skipCheck = await checkShouldSkipDiff(safeFile, diffCommandForCheck);
         if (skipCheck.shouldSkip) {
           return res.json({
             success: true,
@@ -484,7 +492,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         res.json({ success: true, diff: stdout, stats });
       } catch (error) {
         logger.error('获取stash文件差异失败:', error);
-        res.status(500).json({
+        res.status(error?.statusCode || 500).json({
           success: false,
           error: `获取stash文件差异失败: ${error.message}`
         });
@@ -495,13 +503,15 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
   app.get('/api/stash-file-compare', asyncRoute(async (req, res) => {
       try {
         const { stashId, file } = req.query;
-      
+
         if (!stashId || !file) {
           throw new HttpError(400, '缺少必要参数');
         }
-      
+        const safeStashId = assertGitRef(stashId, 'stash ID');
+        const safeFile = assertGitPath(file, '文件路径');
+
         // 解析父提交哈希
-        const { stdout: parentsLine } = await execGitCommand(['rev-list', '--parents', '-n', '1', stashId], { log: false });
+        const { stdout: parentsLine } = await execGitCommand(['rev-list', '--parents', '-n', '1', safeStashId], { log: false });
         const hashes = parentsLine.trim().split(/\s+/).filter(Boolean);
         const stashCommit = hashes[0] || '';
         const parent1 = hashes[1] || '';
@@ -511,7 +521,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         let isFromThirdParent = false;
         if (parent3) {
           try {
-            await execGitCommand(['cat-file', '-e', `${parent3}:${file}`], { log: false });
+            await execGitCommand(['cat-file', '-e', `${parent3}:${safeFile}`], { log: false });
             isFromThirdParent = true;
           } catch (_) {
             isFromThirdParent = false;
@@ -522,7 +532,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         let original = '';
         if (!isFromThirdParent && parent1) {
           try {
-            const { stdout: origOut } = await execGitCommand(['show', `${parent1}:${file}`], { log: false });
+            const { stdout: origOut } = await execGitCommand(['show', `${parent1}:${safeFile}`], { log: false });
             original = origOut ?? '';
           } catch (_) {
             original = ''; // 文件在储藏前不存在
@@ -534,7 +544,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         const modRef = isFromThirdParent ? parent3 : stashCommit;
         if (modRef) {
           try {
-            const { stdout: modOut } = await execGitCommand(['show', `${modRef}:${file}`], { log: false });
+            const { stdout: modOut } = await execGitCommand(['show', `${modRef}:${safeFile}`], { log: false });
             modified = modOut ?? '';
           } catch (_) {
             modified = ''; // 文件已被删除
@@ -544,7 +554,7 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         res.json({ success: true, original, modified });
       } catch (error) {
         logger.error('获取stash文件对比失败:', error);
-        res.status(500).json({ success: false, error: `获取stash文件对比失败: ${error.message}` });
+        res.status(error?.statusCode || 500).json({ success: false, error: `获取stash文件对比失败: ${error.message}` });
       }
     }));
 }

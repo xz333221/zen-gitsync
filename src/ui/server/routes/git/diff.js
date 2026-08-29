@@ -16,6 +16,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import logger from '../../utils/logger.js'
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
+import { assertGitHash, assertGitPath } from '../../utils/gitArgs.js';
 
 import { createDiffHelpers } from './diffUtils.js';
 
@@ -210,14 +211,21 @@ export function registerGitDiffRoutes({
           });
         }
 
-        const r = String(rev);
+        // rev 的合法取值:':'(工作区) / 'HEAD' / commit hash —— 前端就这么传的
+        // (GitStatus.vue 的类型标注是 'HEAD' | ':')。它拼进 spec 后落在 git 的参数位,
+        // 以 - 开头会被当选项(git show 有 --output=,能写任意文件),所以白名单之外
+        // 只放行十六进制 hash。
+        const r = String(rev ?? '').trim();
+        const ALLOWED_SPECIAL_REVS = new Set([':', 'HEAD']);
+        const safeRev = ALLOWED_SPECIAL_REVS.has(r) ? r : assertGitHash(r, 'rev');
         // git show/cat-file 的 rev:path 语法要求 path 必须是相对于仓库根的路径,
         // 不接受绝对路径（safeFilePath 是绝对路径,直接拼 spec 会导致 git show 报
         // "path exists on disk, but not in 'HEAD'" → 前端拿到 notFound:true）。
         // 这里用 toGitRepoRelativePath 转成仓库根相对路径,并把 Windows 反斜杠
         // 替换为正斜杠（git 内部统一用 /）。
-        const relPath = toGitRepoRelativePath(safeFilePath);
-        const spec = r === ':' ? `:${relPath}` : `${r}:${relPath}`;
+        // 转换结果仍要过一次路径校验:挡 .. 上跳与选项形态的输入。
+        const safeRelPath = assertGitPath(toGitRepoRelativePath(safeFilePath), '文件路径');
+        const spec = safeRev === ':' ? `:${safeRelPath}` : `${safeRev}:${safeRelPath}`;
 
         let sizeBytes = 0;
         try {
@@ -239,7 +247,7 @@ export function registerGitDiffRoutes({
         const { stdout } = await execGitCommand(['show', spec], { log: false });
         return res.json({ success: true, content: stdout ?? '' });
       } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 

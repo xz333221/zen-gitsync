@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js'
+import { assertGitRef, assertGitHash } from '../../utils/gitArgs.js'
 
 import logger from '../../utils/logger.js'
 
@@ -27,27 +28,29 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
         if (!tagName) {
           throw new HttpError(400, '缺少标签名称');
         }
-      
+        // tagName 与 commit 都落在 git 的参数位上,以 - 开头就会被当选项
+        const safeTagName = assertGitRef(tagName, '标签名');
+
         const tagArgs = ['tag'];
-      
+
         if (type === 'annotated') {
           // 附注标签
           if (!message) {
             throw new HttpError(400, '附注标签需要提供说明信息');
           }
-          tagArgs.push('-a', tagName, '-m', message);
+          tagArgs.push('-a', safeTagName, '-m', message);
         } else {
           // 轻量标签
-          tagArgs.push(tagName);
+          tagArgs.push(safeTagName);
         }
-      
+
         // 如果指定了commit，添加到命令中
-        if (commit && commit.trim()) {
-          tagArgs.push(commit.trim());
+        if (commit && String(commit).trim()) {
+          tagArgs.push(assertGitHash(commit));
         }
-      
+
         const { stdout } = await execGitCommand(tagArgs);
-      
+
         res.json({
           success: true,
           message: '标签创建成功',
@@ -55,7 +58,7 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
         });
       } catch (error) {
         logger.error('创建标签失败:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 
@@ -113,8 +116,11 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
           throw new HttpError(400, '缺少标签名称');
         }
       
-        const { stdout } = await execGitCommand(['push', 'origin', tagName]);
-      
+        // tagName 落在 git 的参数位上,不校验的话传 '--upload-pack=curl x|sh'
+        // 就能让 git 执行命令(execFile 无 shell 也拦不住)。
+        const safeTagName = assertGitRef(tagName, '标签名');
+        const { stdout } = await execGitCommand(['push', 'origin', safeTagName]);
+
         res.json({
           success: true,
           message: '标签推送成功',
@@ -122,7 +128,7 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
         });
       } catch (error) {
         logger.error('推送标签失败:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 
@@ -151,8 +157,9 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
           throw new HttpError(400, '缺少标签名称');
         }
       
-        const { stdout } = await execGitCommand(['tag', '-d', tagName]);
-      
+        const safeTagName = assertGitRef(tagName, '标签名');
+        const { stdout } = await execGitCommand(['tag', '-d', safeTagName]);
+
         res.json({
           success: true,
           message: '标签删除成功',
@@ -160,7 +167,7 @@ export function registerGitTagRoutes({ app, execGitCommand, clearCommandHistory 
         });
       } catch (error) {
         logger.error('删除标签失败:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(error?.statusCode || 500).json({ success: false, error: error.message });
       }
     }));
 

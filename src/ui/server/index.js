@@ -50,6 +50,7 @@ import { registerMindmapRoutes } from './routes/mindmap.js';
 import { registerAgentRoutes } from './routes/workbench/agentRoutes.js';
 import { createInstanceRegistry } from './utils/instanceRegistry.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
+import { createOriginGuard, createOriginCheckerFromEnv } from './middleware/originGuard.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
 import { resolveStartPort } from './utils/randomStartPort.js';
 import { perfMark } from './utils/perfMark.js';
@@ -193,35 +194,14 @@ async function startUIServer(noOpen = false, savePort = false) {
   const httpServer = createServer(app);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Socket.IO CORS / origin 收紧
+  // Origin 收紧(Socket.IO + HTTP 共用同一套判定,见 middleware/originGuard.js)
   //
   // 默认 Socket.IO 接受任意 origin,跨域页面也能连上 → CSRF / 跨站攻击面
   // 暴露给恶意页面。这里只允许同源 + 127.0.0.1 / localhost。
   // 用环境变量 ZEN_ALLOWED_ORIGINS 可以追加自定义来源(逗号分隔),
   // CI / 远程调试场景用。
   // ─────────────────────────────────────────────────────────────────────────────
-  const DEFAULT_ALLOWED_ORIGINS = [
-    'http://localhost',
-    'https://localhost',
-    'http://127.0.0.1',
-    'https://127.0.0.1',
-    'http://[::1]',
-    'null', // 同源 file:// 等场景
-  ];
-  const extraOrigins = String(process.env.ZEN_ALLOWED_ORIGINS || '')
-    .split(',').map(s => s.trim()).filter(Boolean);
-  const allowedOrigins = new Set([...DEFAULT_ALLOWED_ORIGINS, ...extraOrigins]);
-
-  function isOriginAllowed(origin) {
-    if (!origin) return true; // 同源 / 非浏览器客户端不传 Origin
-    if (allowedOrigins.has(origin)) return true;
-    // 允许 localhost/127.0.0.1/[::1] 上的任意端口(开发常换端口)
-    try {
-      const u = new URL(origin);
-      if (['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)) return true;
-    } catch { /* ignore */ }
-    return false;
-  }
+  const isOriginAllowed = createOriginCheckerFromEnv()
 
   const io = new Server(httpServer, {
     cors: {
@@ -269,6 +249,12 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   // 添加全局中间件来解析JSON请求体
   app.use(express.json());
+
+  // 跨站请求守卫:放在 body 解析之后、业务路由之前。
+  // 服务没有认证层,恶意页面只要能把请求打进来就是全权限(命令执行 / 写文件 /
+  // 打开任意文件)。监听已收敛到 127.0.0.1,剩下的主要入口就是本机浏览器里的
+  // 跨站 fetch 与 DNS rebinding,按 Origin 挡这一道成本最低。
+  app.use(createOriginGuard());
 
   // 两个 git 检测并行发起(Windows 上每个 git spawn ~180-200ms,串行要 ~380ms):
   // show-toplevel 供下面"记录最近目录"立即 await;is-inside-work-tree 供路由注册后
