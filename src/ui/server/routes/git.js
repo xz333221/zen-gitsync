@@ -200,18 +200,21 @@ export function registerGitRoutes({
     }));
 
   // 获取Git用户配置信息
+  // 注意：不要加 --global，要按 Git 默认层级（local > global > system）读取生效配置；
+  // 用 ignoreError 吞掉 key 不存在时的 exit code 1，返回空字符串而不是 500。
   app.get('/api/user-info', asyncRoute(async (req, res) => {
       try {
-        // 获取全局用户名
-        const { stdout: userName } = await execGitCommand(['config', '--global', 'user.name']);
-        // 获取全局用户邮箱
-        const { stdout: userEmail } = await execGitCommand(['config', '--global', 'user.email']);
-      
+        const [nameResult, emailResult] = await Promise.all([
+          execGitCommand(['config', 'user.name'], { log: false, ignoreError: true }),
+          execGitCommand(['config', 'user.email'], { log: false, ignoreError: true })
+        ]);
+
         res.json({
-          name: userName.trim(),
-          email: userEmail.trim()
+          name: (nameResult.stdout || '').trim(),
+          email: (emailResult.stdout || '').trim()
         });
       } catch (error) {
+        logger.error('获取Git用户信息失败:', error);
         res.status(500).json({ error: error.message });
       }
     }));

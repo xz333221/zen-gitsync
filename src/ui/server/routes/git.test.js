@@ -145,3 +145,43 @@ test('checkout: rev-parse 探测抛错 → ignoreError 吞下,按原名 checkout
   assert.equal(res.statusCode, 200, '探测失败应降级为普通 checkout,不应 500')
   assert.deepEqual(calls[calls.length - 1], ['checkout', 'origin/gone'])
 })
+
+// ========== /api/user-info Git 用户信息读取层级 ==========
+
+test('user-info: 按 Git 默认层级读取生效配置,不强制 --global', async () => {
+  const app = makeApp()
+  const calls = makeDeps(app, async (args) => {
+    if (args[0] === 'config' && args[1] === 'user.name') return { stdout: 'Local User\n' }
+    if (args[0] === 'config' && args[1] === 'user.email') return { stdout: 'local@example.com\n' }
+    return { stdout: '' }
+  })
+  const res = makeRes()
+  await app.invoke('GET', '/api/user-info', {}, res)
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.payload, { name: 'Local User', email: 'local@example.com' })
+  assert.ok(
+    calls.some(c => c[0] === 'config' && c[1] === 'user.name' && !c.includes('--global')),
+    'user.name 应读取生效配置而非仅 global'
+  )
+  assert.ok(
+    calls.some(c => c[0] === 'config' && c[1] === 'user.email' && !c.includes('--global')),
+    'user.email 应读取生效配置而非仅 global'
+  )
+})
+
+test('user-info: 配置未设置时返回空字符串,不应 500', async () => {
+  const app = makeApp()
+  makeDeps(app, async (args, opts) => {
+    if (args[0] === 'config') {
+      const err = new Error(`Command failed: git config ${args[1]}`)
+      err.code = 1
+      if (opts && opts.ignoreError) return { stdout: '', stderr: `error: ${args[1]} 未配置`, error: err }
+      throw err
+    }
+    return { stdout: '' }
+  })
+  const res = makeRes()
+  await app.invoke('GET', '/api/user-info', {}, res)
+  assert.equal(res.statusCode, 200, '未配置时应返回 200 并降级为空字符串')
+  assert.deepEqual(res.payload, { name: '', email: '' })
+})
