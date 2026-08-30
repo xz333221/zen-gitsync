@@ -63,6 +63,7 @@ import { useConfigStore } from '@stores/configStore'
 import { useLocaleStore } from '@stores/localeStore'
 import { useInstancesStore } from '@stores/instancesStore'
 import { useToolsStore } from '@stores/toolsStore'
+import { useMonitorStore } from '@stores/monitorStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { useThemeObserver } from '@/composables/useThemeObserver'
 
@@ -79,6 +80,26 @@ const localeStore = useLocaleStore()
 // 使用实例注册 Store
 const instancesStore = useInstancesStore()
 const toolsStore = useToolsStore()
+// 系统监控 Store：header 右侧常驻展示 CPU/内存
+const monitorStore = useMonitorStore()
+// header 系统监控轮询定时器（独立于 MonitorView，避免互相覆盖 timer）
+const MONITOR_INTERVAL = 5000
+let monitorTimer: number | null = null
+
+function startHeaderMonitor() {
+  stopHeaderMonitor()
+  monitorStore.fetchSystem().catch(() => {})
+  monitorTimer = window.setInterval(() => {
+    monitorStore.fetchSystem().catch(() => {})
+  }, MONITOR_INTERVAL)
+}
+
+function stopHeaderMonitor() {
+  if (monitorTimer !== null) {
+    window.clearInterval(monitorTimer)
+    monitorTimer = null
+  }
+}
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
@@ -135,6 +156,9 @@ onMounted(async () => {
 
   // 启动本地工具检测(vscode / claude 是否已安装),决定要不要显示对应按钮
   toolsStore.startPolling()
+
+  // 启动 header 右侧 CPU/内存监控轮询（全局常驻，不依赖是否打开系统监控面板）
+  startHeaderMonitor()
 
   try {
     // 并行加载配置和目录信息
@@ -198,6 +222,9 @@ onBeforeUnmount(() => {
 
   // 停止本地工具检测轮询
   toolsStore.stopPolling()
+
+  // 停止 header CPU/内存监控轮询
+  stopHeaderMonitor()
 
   // 主题 observer 由 useThemeObserver 自动清理
 
@@ -289,6 +316,25 @@ function openUserSettingsDialog(tab?: SettingsTab) {
 // useThemeObserver 集中处理 MutationObserver + onBeforeUnmount cleanup,
 // 与 SourceMapView / MonacoEditor 共用同一份实现
 const { theme: isDarkTheme } = useThemeObserver()
+
+// ── header 系统监控指示器辅助函数 ───────────────────────────────────────
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let v = bytes
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+function usageColor(percent: number): string {
+  if (percent >= 90) return 'var(--color-danger)'
+  if (percent >= 70) return 'var(--color-warning)'
+  return 'var(--color-success)'
+}
 
 // 添加分隔条相关逻辑
 // Git 视图现为 2 列布局:左 GitStatus | v-resizer | 右(上 commit-form / h-resizer / 下 log-list)
@@ -587,6 +633,40 @@ function stopHResize() {
       <!-- 顶部右侧动作 -->
       <div class="header-actions" v-if="gitStore.isGitRepo">
         <!-- <CommandHistory /> -->
+      </div>
+      <!-- 系统监控指示器：header 右侧常驻展示 CPU/内存 -->
+      <div v-if="monitorStore.overview" class="header-monitor">
+        <el-tooltip placement="bottom" effect="dark" :show-after="200">
+          <template #content>
+            <div class="header-monitor__tooltip">
+              <div>CPU: {{ monitorStore.overview.cpu.model }}</div>
+              <div>{{ monitorStore.overview.cpu.cores }} {{ $t('@MONITOR:核心') }} · {{ monitorStore.overview.cpu.usage.toFixed(1) }}%</div>
+              <div>内存: {{ formatBytes(monitorStore.overview.memory.used) }} / {{ formatBytes(monitorStore.overview.memory.total) }}</div>
+              <div>空闲: {{ formatBytes(monitorStore.overview.memory.free) }}</div>
+            </div>
+          </template>
+          <div class="header-monitor__content">
+            <div class="header-monitor__item">
+              <span class="header-monitor__label">CPU</span>
+              <span class="header-monitor__value" :style="{ color: usageColor(monitorStore.overview.cpu.usage) }">
+                {{ monitorStore.overview.cpu.usage.toFixed(0) }}%
+              </span>
+              <div class="header-monitor__bar">
+                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.cpu.usage, 100)}%`, background: usageColor(monitorStore.overview.cpu.usage) }"></div>
+              </div>
+            </div>
+            <div class="header-monitor__divider"></div>
+            <div class="header-monitor__item">
+              <span class="header-monitor__label">MEM</span>
+              <span class="header-monitor__value" :style="{ color: usageColor(monitorStore.overview.memory.usagePercent) }">
+                {{ monitorStore.overview.memory.usagePercent.toFixed(0) }}%
+              </span>
+              <div class="header-monitor__bar">
+                <div class="header-monitor__fill" :style="{ width: `${Math.min(monitorStore.overview.memory.usagePercent, 100)}%`, background: usageColor(monitorStore.overview.memory.usagePercent) }"></div>
+              </div>
+            </div>
+          </div>
+        </el-tooltip>
       </div>
       <!-- 实例切换器：显示所有运行中的 GUI 项目 -->
       <InstanceSwitcher />
@@ -1204,6 +1284,78 @@ h1 {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
+}
+
+/* header 右侧系统监控指示器（CPU/内存） */
+.header-monitor {
+  display: flex;
+  align-items: center;
+  padding: 2px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: var(--bg-subtle);
+  transition: border-color var(--transition-base) var(--ease-custom),
+              background var(--transition-base) var(--ease-custom);
+  cursor: default;
+}
+
+.header-monitor:hover {
+  border-color: var(--color-primary);
+  background: var(--tint-primary-10);
+}
+
+.header-monitor__content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-monitor__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 70px;
+}
+
+.header-monitor__label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.3px;
+}
+
+.header-monitor__value {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 30px;
+  text-align: right;
+}
+
+.header-monitor__bar {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-color);
+  overflow: hidden;
+}
+
+.header-monitor__fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease, background 0.4s ease;
+}
+
+.header-monitor__divider {
+  width: 1px;
+  height: 14px;
+  background: var(--border-color);
+}
+
+.header-monitor__tooltip {
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: nowrap;
 }
 
 .user-label {

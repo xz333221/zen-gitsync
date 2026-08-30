@@ -630,6 +630,10 @@ export default {
   '@67CE7:切换': 'Switch',
   '@67CE7:已复制目录路径': 'Directory path copied',
   '@67CE7:复制失败': 'Copy failed',
+  '@67CE7:展开未安装的工具': 'Show uninstalled tools',
+  '@67CE7:收起未安装的工具': 'Hide uninstalled tools',
+  '@67CE7:未安装的工具': 'Not installed',
+  '@67CE7:未安装': 'Not installed',
   // @67CE7: file end
   // @NPM01: file path: components\NpmScriptsPanel.vue
   '@NPM01:NPM 脚本': 'NPM Scripts',

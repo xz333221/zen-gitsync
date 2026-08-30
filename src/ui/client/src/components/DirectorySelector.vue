@@ -18,7 +18,7 @@ import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { FilePickerModal as FilePicker } from 'local-file-picker/client';
 import { ElMessage, ElPopover } from "element-plus";
-import { Folder, FolderOpened, Clock, Monitor } from "@element-plus/icons-vue";
+import { Folder, FolderOpened, Clock, Monitor, ArrowDown, ArrowUp } from "@element-plus/icons-vue";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
@@ -155,6 +155,82 @@ async function onClaudeContextMenu() {
     openToolInstall('claude')
   }
 }
+
+// ── 工具按钮分组：已安装常驻显示，未安装收进"更多"菜单 ────────────────
+// header 空间有限，7 个工具全铺开太长。未安装的工具点了也只会弹安装引导，
+// 没必要占常驻位，收进菜单里按需取用。
+
+/** 除 claude 外的工具（claude 有右键菜单，单独渲染） */
+type SimpleToolId = Exclude<ToolId, 'claude'>
+
+interface SimpleTool {
+  id: SimpleToolId
+  name: string
+  icon: string
+  label: string
+  action: () => void | Promise<void>
+}
+
+// label 走 $t：保持和改动前一致的 i18n 行为（kimi/zcode/dsh 原本就是硬编码中文，
+// 没有对应 key，这里不动，避免引入未登记的翻译项）。
+const simpleTools: SimpleTool[] = [
+  { id: 'vscode', name: 'VSCode', icon: 'vscode', label: $t('@67CE7:用 VSCode 打开'), action: onOpenInVscode },
+  { id: 'codex', name: 'Codex', icon: 'codex', label: $t('@67CE7:用 Codex 打开'), action: onOpenInCodex },
+  { id: 'opencode', name: 'OpenCode', icon: 'opencode', label: $t('@67CE7:用 OpenCode 打开'), action: onOpenInOpencode },
+  { id: 'kimi', name: 'Kimi Code', icon: 'kimi', label: '用 Kimi Code 打开', action: onOpenInKimi },
+  { id: 'zcode', name: 'ZCode', icon: 'zcode', label: '用 ZCode 打开', action: onOpenInZcode },
+  { id: 'dsh', name: 'DeepSeek Harness', icon: 'dsh', label: '用 DeepSeek Harness 打开', action: onOpenInDsh },
+]
+
+/**
+ * "更多"菜单是否展开。
+ * 必须和 claude 菜单一样走 manual trigger：IconButton 的根元素是 el-tooltip（组件，
+ * 不是原生 DOM），el-popover 的 trigger="click" 拿不到可靠的 reference 节点，
+ * 点了不会弹。所以用 span 包一层自己接管 click，关闭交给 document 监听。
+ */
+const moreToolsVisible = ref(false)
+const moreToolsTriggerRef = ref<HTMLElement | null>(null)
+
+function toggleMoreTools() {
+  moreToolsVisible.value = !moreToolsVisible.value
+}
+
+/** 检测未完成前全部按 checking 态显示，不做分组，避免首屏按钮跳来跳去 */
+const toolsDetected = computed(() => toolsStore.lastCheckedAt !== null)
+
+/** 常驻显示的工具：检测中显示全部，检测后只显示已安装的 */
+const visibleTools = computed(() =>
+  !toolsDetected.value ? simpleTools : simpleTools.filter((t) => toolsStore.isToolAvailable(t.id))
+)
+
+/** 未安装的 claude 也要进菜单（已安装的 claude 单独常驻渲染） */
+const missingTools = computed(() => {
+  const list: { id: ToolId; name: string; icon?: string; label: string }[] = []
+  if (!toolsDetected.value) return list
+  for (const t of simpleTools) {
+    if (!toolsStore.isToolAvailable(t.id)) {
+      list.push({ id: t.id, name: t.name, icon: t.icon, label: t.label })
+    }
+  }
+  if (!toolsStore.claudeAvailable) {
+    list.push({ id: 'claude', name: toolNames.claude, label: '用 Claude Code 打开' })
+  }
+  return list
+})
+const hasMissingTools = computed(() => missingTools.value.length > 0)
+
+function runMissingTool(tool: { id: ToolId }) {
+  moreToolsVisible.value = false
+  if (tool.id === 'claude') {
+    openToolInstall('claude')
+    return
+  }
+  const found = simpleTools.find((t) => t.id === tool.id)
+  if (found) runOrInstall(found.id, found.action)
+}
+
+/** 已安装 claude 时才常驻渲染（未安装的走"更多"菜单） */
+const claudePinned = computed(() => !toolsDetected.value || toolsStore.claudeAvailable)
 
 // 定义emits
 defineEmits<{
@@ -315,14 +391,24 @@ function closeClaudeMenu() {
 // - target 在 trigger 内 → 不关（避免和右键 toggle / 左键 click 冲突）
 // - target 在 popover 内容内（teleport 到 body）→ 不关
 // - 否则 → 关闭
+// claude 菜单和"更多工具"菜单共用这一个监听，各自判断。
 function onDocumentMouseDown(e: MouseEvent) {
-  if (!claudeMenuVisible.value) return
   const target = e.target as Node | null
   if (!target) return
-  if (claudeTriggerRef.value && claudeTriggerRef.value.contains(target)) return
-  const popoverEl = document.querySelector('.claude-menu-popover')
-  if (popoverEl && popoverEl.contains(target)) return
-  claudeMenuVisible.value = false
+
+  if (claudeMenuVisible.value) {
+    if (claudeTriggerRef.value && claudeTriggerRef.value.contains(target)) return
+    const popoverEl = document.querySelector('.claude-menu-popover')
+    if (popoverEl && popoverEl.contains(target)) return
+    claudeMenuVisible.value = false
+  }
+
+  if (moreToolsVisible.value) {
+    if (moreToolsTriggerRef.value && moreToolsTriggerRef.value.contains(target)) return
+    const popoverEl = document.querySelector('.tools-more-popover')
+    if (popoverEl && popoverEl.contains(target)) return
+    moreToolsVisible.value = false
+  }
 }
 
 onMounted(() => {
@@ -594,48 +680,28 @@ function onBrowserSelect(path: string) {
       >
         <el-icon aria-hidden="true"><Monitor /></el-icon>
       </IconButton>
-      <IconButton
-        :tooltip="toolTooltip('vscode', $t('@67CE7:用 VSCode 打开'))"
-        :aria-label="toolTooltip('vscode', $t('@67CE7:用 VSCode 打开'))"
-        :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.vscodeAvailable ? '' : 'tool-button--missing')"
-        size="large"
-        @click="runOrInstall('vscode', onOpenInVscode)"
-      >
-        <svg-icon icon-class="vscode" />
-      </IconButton>
-      <IconButton
-        :tooltip="toolTooltip('codex', $t('@67CE7:用 Codex 打开'))"
-        :aria-label="toolTooltip('codex', $t('@67CE7:用 Codex 打开'))"
-        :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.codexAvailable ? '' : 'tool-button--missing')"
-        size="large"
-        @click="runOrInstall('codex', onOpenInCodex)"
-      >
-        <svg-icon icon-class="codex" />
-      </IconButton>
-      <IconButton
-        :tooltip="toolTooltip('opencode', $t('@67CE7:用 OpenCode 打开'))"
-        :aria-label="toolTooltip('opencode', $t('@67CE7:用 OpenCode 打开'))"
-        :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.opencodeAvailable ? '' : 'tool-button--missing')"
-        size="large"
-        @click="runOrInstall('opencode', onOpenInOpencode)"
-      >
-        <svg-icon icon-class="opencode" />
-      </IconButton>
-      <IconButton :tooltip="toolTooltip('kimi', '用 Kimi Code 打开')" :aria-label="toolTooltip('kimi', '用 Kimi Code 打开')" :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.kimiAvailable ? '' : 'tool-button--missing')" size="large" @click="runOrInstall('kimi', onOpenInKimi)">
-        <svg-icon icon-class="kimi" />
-      </IconButton>
-      <IconButton :tooltip="toolTooltip('zcode', '用 ZCode 打开')" :aria-label="toolTooltip('zcode', '用 ZCode 打开')" :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.zcodeAvailable ? '' : 'tool-button--missing')" size="large" @click="runOrInstall('zcode', onOpenInZcode)">
-        <svg-icon icon-class="zcode" />
-      </IconButton>
-      <IconButton :tooltip="toolTooltip('dsh', '用 DeepSeek Harness 打开')" :aria-label="toolTooltip('dsh', '用 DeepSeek Harness 打开')" :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.dshAvailable ? '' : 'tool-button--missing')" size="large" @click="runOrInstall('dsh', onOpenInDsh)">
-        <svg-icon icon-class="dsh" />
-      </IconButton>
+      <!--
+        编辑器 / AI 工具：已安装的常驻显示，未安装的收进右侧"更多"菜单。
+        检测未完成时全部按 checking 态显示，避免首屏按钮位置跳来跳去。
+      -->
+      <template v-for="tool in visibleTools" :key="tool.id">
+        <IconButton
+          :tooltip="toolTooltip(tool.id, tool.label)"
+          :aria-label="toolTooltip(tool.id, tool.label)"
+          :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.isToolAvailable(tool.id) ? '' : 'tool-button--missing')"
+          size="large"
+          @click="runOrInstall(tool.id, tool.action)"
+        >
+          <svg-icon :icon-class="tool.icon" />
+        </IconButton>
+      </template>
       <!--
         用 Claude Code 打开：左键 = 默认；右键 = 弹出菜单（默认 / 完全批准）。
         用 el-popover + manual trigger 自己接管右键事件，绕开 el-dropdown contextmenu
         在 IconButton(el-tooltip) 嵌套下的失效问题。
       -->
       <el-popover
+        v-if="claudePinned"
         :visible="claudeMenuVisible"
         :trigger="('manual' as any)"
         placement="bottom-end"
@@ -699,6 +765,71 @@ function onBrowserSelect(path: string) {
             <span class="claude-menu__hint">真·完全批准（含 Shell）</span>
           </li>
         </ul>
+      </el-popover>
+      <!--
+        未安装的工具收起在这里：点击展开菜单列出，点某一项走 runOrInstall
+        （已装就直接打开，没装就弹安装引导）。
+      -->
+      <el-popover
+        v-if="hasMissingTools"
+        :visible="moreToolsVisible"
+        :trigger="('manual' as any)"
+        placement="bottom-end"
+        :width="240"
+        :show-arrow="false"
+        popper-class="tools-more-popover"
+      >
+        <template #reference>
+          <!-- span 包一层接管 click：IconButton 根是 el-tooltip，不能直接当 popover reference -->
+          <span
+            ref="moreToolsTriggerRef"
+            class="tools-more-trigger"
+            @click.prevent.stop="toggleMoreTools"
+          >
+            <IconButton
+              :tooltip="moreToolsVisible ? $t('@67CE7:收起未安装的工具') : $t('@67CE7:展开未安装的工具')"
+              :aria-label="moreToolsVisible ? $t('@67CE7:收起未安装的工具') : $t('@67CE7:展开未安装的工具')"
+              :active="moreToolsVisible"
+              :pressed="moreToolsVisible"
+              custom-class="tool-button--more"
+              size="large"
+            >
+              <span class="tools-more__btn">
+                <el-icon aria-hidden="true" class="tools-more__arrow">
+                  <ArrowUp v-if="moreToolsVisible" />
+                  <ArrowDown v-else />
+                </el-icon>
+              </span>
+            </IconButton>
+          </span>
+        </template>
+        <div class="tools-more">
+          <div class="tools-more__title">{{ $t('@67CE7:未安装的工具') }}</div>
+          <ul class="tools-more__list" role="menu" :aria-label="$t('@67CE7:未安装的工具')">
+            <li
+              v-for="tool in missingTools"
+              :key="tool.id"
+              class="tools-more__item"
+              role="menuitem"
+              tabindex="-1"
+              @click="runMissingTool(tool)"
+              @keydown.enter.prevent="runMissingTool(tool)"
+              @keydown.space.prevent="runMissingTool(tool)"
+            >
+              <span class="tools-more__icon">
+                <img
+                  v-if="tool.id === 'claude'"
+                  :src="claudeCodeIcon"
+                  :alt="tool.name"
+                  class="tools-more__claude-icon"
+                />
+                <svg-icon v-else :icon-class="tool.icon ?? ''" />
+              </span>
+              <span class="tools-more__label">{{ tool.name }}</span>
+              <span class="tools-more__hint">{{ $t('@67CE7:未安装') }}</span>
+            </li>
+          </ul>
+        </div>
       </el-popover>
     </div>
   </div>
@@ -1007,6 +1138,126 @@ function onBrowserSelect(path: string) {
 .claude-menu__item--danger .claude-menu__hint {
   color: #e6a23c;
   font-weight: 600;
+}
+
+/* ── "更多"菜单：收起未安装的工具 ──────────────────────────────────── */
+
+/* 触发器容器：包住 IconButton，自己接管 click（见上面 template 的注释） */
+.tools-more-trigger {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 箭头图标比其它工具图标小一档：Element Plus 的 ArrowDown 是实心粗箭头，
+   按 large 的 22px 渲染会明显压过旁边的 svg-icon，缩到 18px 视觉才齐平 */
+:deep(.tool-button--more) .tools-more__arrow {
+  font-size: 18px;
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+/* 菜单展开时箭头轻微上挑，给出"已展开"的额外反馈 */
+:deep(.tool-button--more.is-active) .tools-more__arrow {
+  transform: translateY(-1px);
+}
+
+.tools-more {
+  padding: 2px 0;
+}
+
+.tools-more__title {
+  padding: 4px 12px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.tools-more__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-primary);
+}
+
+.tools-more__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 4px;
+  padding: 7px 10px;
+  border-radius: var(--btn-radius-sm, 6px);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tools-more__item:hover,
+.tools-more__item:focus-visible {
+  background-color: rgba(64, 158, 255, 0.12);
+  outline: none;
+}
+
+.tools-more__item:focus-visible {
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.3);
+}
+
+.tools-more__item:active {
+  background-color: rgba(64, 158, 255, 0.2);
+}
+
+.tools-more__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  /* 未安装的工具统一降饱和度，和常驻按钮的 missing 态视觉一致；
+     hover 时恢复，暗示"可以点它去安装" */
+  opacity: 0.55;
+  filter: grayscale(0.65);
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+.tools-more__item:hover .tools-more__icon,
+.tools-more__item:focus-visible .tools-more__icon {
+  opacity: 1;
+  filter: grayscale(0);
+}
+
+.tools-more__icon :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+
+.tools-more__claude-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+
+.tools-more__label {
+  flex: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tools-more__hint {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  transition: color 0.15s ease;
+}
+
+/* hover 时右侧提示变主色，从"状态描述"变成"可执行的动作" */
+.tools-more__item:hover .tools-more__hint,
+.tools-more__item:focus-visible .tools-more__hint {
+  color: var(--color-primary, #409eff);
 }
 
 /* 对话框样式（复用 App.vue 中样式） */
