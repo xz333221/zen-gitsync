@@ -15,15 +15,30 @@
 
 // TEST-3 回归测试:writeRawConfigFile 原子写 + 并发竞态
 //
-// 策略:
-//   1. 备份 ~/.git-commit-tool.json(若存在)到临时路径,测试结束后无论
-//      成功失败都恢复(避免污染用户 home)
-//   2. 走 default export.writeRawConfigFile(已导出),验证:
-//      - 串行写:写入内容 = 最新一次的对象(JSON.stringify(obj, null, 2))
-//      - 并发写 2 个不同对象:最终文件 = A 或 B,不是半写 JSON,不是混合
-//      - 不留 .pid.timestamp.tmp 临时文件
-//   3. 走 default export.saveConfig 验证 saveConfig → writeRawConfigFile
-//      的串行集成,确认项目级配置不丢字段
+// 隔离策略(2026-08-30 修订):
+//   1. **沙箱隔离**:在 import src/config.js **之前**把 USERPROFILE/HOME 指到
+//      mkdtemp 临时目录,使所有读写落在沙箱里,完全不触碰真实
+//      ~/.git-commit-tool.json。(os.homedir() 在 Windows 每次调用都重读
+//      USERPROFILE,POSIX 读 HOME,因此在 import 前设置环境变量即可生效。)
+//   2. **哨兵校验**:before 记录真实配置的 mtimeMs+size,after 断言二者未变。
+//      将来若有人改回"直接写真实 home",哨兵会立刻让测试失败,而不是
+//      等用户发现配置被冲掉。
+//
+// 修订原因(2026-08-30 事故复盘):
+//   旧实现是"备份真实配置 → 用测试产物覆盖真实文件 → after 里 copyFile 恢复
+//   + unlink 备份"。三条缺陷叠加,把用户 92KB 的真实配置冲成 1.4KB 的测试
+//   残留(24 个项目只剩 1 个、5 个 AI 模型全丢):
+//     ① 测试直接写真实 home,与同时运行的 g ui 实例的 _rawConfigCache 互踩 ——
+//        测试恢复完,UI 实例又用自己缓存的测试产物写回去
+//     ② after 的恢复是非原子 copyFile,中断即半写
+//     ③ 恢复失败只 console.error,备份随后被 unlink,唯一完整副本进了回收站
+//   沙箱化后三条同时消失:压根不碰真实文件,也就没有"恢复"这个环节。
+//
+// 验证点(保持不变):
+//   - 串行写:写入内容 = 最新一次的对象(JSON.stringify(obj, null, 2))
+//   - 并发写 2 个不同对象:最终文件 = A 或 B,不是半写 JSON,不是混合体
+//   - 不留 .pid.timestamp.tmp 临时文件
+//   - saveConfig → writeRawConfigFile 串行集成,项目级配置不丢字段
 //
 // 不测试 lockFile/unlockFile 端到端(会触发 loadConfig,需要磁盘已有合法
 // JSON;并发场景已通过 saveConfig 间接覆盖)。
@@ -35,47 +50,67 @@ import path from 'node:path'
 import os from 'node:os'
 import { pathToFileURL } from 'node:url'
 
+// ---- 真实 home 快照:必须在改写环境变量之前取,供哨兵校验使用 ----
+const realHome = os.homedir()
+const realConfigPath = path.join(realHome, '.git-commit-tool.json')
+
+// ---- 环境隔离:必须在 import src/config.js 之前完成 ----
+const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), 'zgs-config-atomic-test-'))
+const savedEnv = {
+  USERPROFILE: process.env.USERPROFILE,
+  HOME: process.env.HOME,
+  HOMEDRIVE: process.env.HOMEDRIVE,
+  HOMEPATH: process.env.HOMEPATH
+}
+process.env.USERPROFILE = fakeHome
+process.env.HOME = fakeHome
+// Windows 下 os.homedir() 的兜底是 HOMEDRIVE+HOMEPATH,清掉以防 USERPROFILE 被忽略
+delete process.env.HOMEDRIVE
+delete process.env.HOMEPATH
+
 const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..')
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
 const { writeRawConfigFile, saveConfig } = configMod.default
 
-const realConfigPath = path.join(os.homedir(), '.git-commit-tool.json')
-const backupPath = `${realConfigPath}.atomic-test.bak.${process.pid}.${Date.now()}`
-let hadOriginal = false
+// 沙箱内的配置路径 —— 本文件所有读写都落在这里
+const configPath = path.join(fakeHome, '.git-commit-tool.json')
+
+/** 读取真实配置的签名;文件不存在时返回 null */
+async function statRealConfig() {
+  try {
+    const st = await fs.stat(realConfigPath)
+    return { mtimeMs: st.mtimeMs, size: st.size }
+  } catch (_) {
+    return null
+  }
+}
+
+let realSignatureBefore = null
 
 before(async () => {
-  try {
-    await fs.access(realConfigPath)
-    hadOriginal = true
-    await fs.copyFile(realConfigPath, backupPath)
-  } catch {
-    hadOriginal = false
-  }
+  // 断言一:隔离确实生效 —— 此刻沙箱里不该有配置文件
+  const entries = await fs.readdir(fakeHome)
+  assert.ok(!entries.includes('.git-commit-tool.json'), '测试前沙箱 home 应为空')
+  // 断言二:沙箱路径与真实路径不能重合(防止 mkdtemp 异常落到 home)
+  assert.notEqual(path.resolve(fakeHome), path.resolve(realHome), '沙箱目录不应等于真实 home')
+  realSignatureBefore = await statRealConfig()
 })
 
 after(async () => {
-  // 清理测试可能产生的 .tmp 文件(pid 范围在当前进程内)
-  try {
-    const entries = await fs.readdir(path.dirname(realConfigPath))
-    const myTmpRegex = new RegExp(`^\\.git-commit-tool\\.json\\.${process.pid}\\.\\d+\\.tmp$`)
-    for (const name of entries) {
-      if (myTmpRegex.test(name)) {
-        await fs.unlink(path.join(path.dirname(realConfigPath), name)).catch(() => {})
-      }
-    }
-  } catch {}
-  // 恢复原配置
-  if (hadOriginal) {
-    try {
-      await fs.copyFile(backupPath, realConfigPath)
-      await fs.unlink(backupPath)
-    } catch (e) {
-      console.error('[atomic-write test] 恢复备份失败:', e.message)
-    }
-  } else {
-    // 测试前没有原文件,删掉测试产物
-    try { await fs.unlink(realConfigPath) } catch {}
+  // 恢复环境变量并清理临时目录
+  for (const [k, v] of Object.entries(savedEnv)) {
+    if (v === undefined) delete process.env[k]
+    else process.env[k] = v
   }
+  try { await fs.rm(fakeHome, { recursive: true, force: true }) } catch {}
+
+  // 哨兵:整个测试期间真实配置必须毫发无损
+  const sigAfter = await statRealConfig()
+  assert.deepEqual(
+    sigAfter,
+    realSignatureBefore,
+    `测试不得改动真实配置 ${realConfigPath} —— 若此处失败,说明有代码绕过了沙箱直接写 home`
+  )
 })
 
 // ========== 串行写 ==========
@@ -88,7 +123,7 @@ test('writeRawConfigFile: 串行写入可读回且字段一致', async () => {
     ui: { layout: { leftRatio: 0.5 } },
   }
   await writeRawConfigFile(obj)
-  const raw = await fs.readFile(realConfigPath, 'utf-8')
+  const raw = await fs.readFile(configPath, 'utf-8')
   const parsed = JSON.parse(raw) // 不能 parse = 写入了半写 JSON,原子写契约破裂
   assert.equal(parsed.__test_marker, 'atomic-write-serial')
   assert.equal(parsed.defaultCommitMessage, 'submit-test')
@@ -99,7 +134,7 @@ test('writeRawConfigFile: 串行写入可读回且字段一致', async () => {
 test('writeRawConfigFile: 覆盖写 — 后写覆盖前写', async () => {
   await writeRawConfigFile({ __test_marker: 'first' })
   await writeRawConfigFile({ __test_marker: 'second' })
-  const parsed = JSON.parse(await fs.readFile(realConfigPath, 'utf-8'))
+  const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'))
   assert.equal(parsed.__test_marker, 'second')
 })
 
@@ -123,7 +158,7 @@ test('writeRawConfigFile: 并发 2 个不同对象(20ms 间隔)— 最终文件�
       await writeRawConfigFile(objB)
     })(),
   ])
-  const raw = await fs.readFile(realConfigPath, 'utf-8')
+  const raw = await fs.readFile(configPath, 'utf-8')
   const parsed = JSON.parse(raw)
   // 最终文件必须是 A 或 B 的完整对象,不能 parse 失败(半写 JSON)
   // 也不能是混合字段(例如 .__test_marker='concurrent-A' 但 .payload='BBBB...')
@@ -146,7 +181,7 @@ test('writeRawConfigFile: 完成后不留 .pid.timestamp.tmp 临时文件', asyn
   await writeRawConfigFile({ __test_marker: 'no-tmp-leak' })
   // 给文件系统一点时间同步(虽然 rename 是同步的,防御性等待)
   await new Promise(r => setTimeout(r, 50))
-  const entries = await fs.readdir(path.dirname(realConfigPath))
+  const entries = await fs.readdir(path.dirname(configPath))
   const leaked = entries.filter(name =>
     name.startsWith('.git-commit-tool.json.') && name.endsWith('.tmp')
   )
@@ -172,7 +207,7 @@ test('saveConfig: 合法对象串行多次写不丢字段', async () => {
     defaultCommitMessage: 'chain-test-2',
     lockedFiles: ['a.txt', 'b.txt'],
   })
-  const parsed = JSON.parse(await fs.readFile(realConfigPath, 'utf-8'))
+  const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'))
   // 找到当前项目的 key(getCurrentProjectKey 内部用 git rev-parse 或 CWD)
   const projectKeys = Object.keys(parsed.projects || {})
   assert.ok(projectKeys.length >= 1, 'projects 容器应有当前项目')
@@ -187,6 +222,6 @@ test('saveConfig: 合法对象串行多次写不丢字段', async () => {
 test('saveConfig: 写入后磁盘文件是合法 JSON(不破坏现有可解析性)', async () => {
   await saveConfig({ defaultCommitMessage: 'parseable-test' })
   // 任意一次 saveConfig 后,文件必须可 parse — 否则其他读路径会 500
-  const raw = await fs.readFile(realConfigPath, 'utf-8')
+  const raw = await fs.readFile(configPath, 'utf-8')
   assert.doesNotThrow(() => JSON.parse(raw), 'saveConfig 后磁盘 JSON 必须可 parse')
 })

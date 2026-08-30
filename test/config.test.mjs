@@ -16,10 +16,20 @@
 // 重点覆盖:
 //   1. normalizeProjectPath: 跨平台大小写 + 路径解析
 //   2. saveConfig 错误契约(MAINT-4 修复):入参非法抛 ConfigWriteError
-// 不直接读写 ~/.git-commit-tool.json(避免污染用户 home),仅测纯函数与入参校验。
+//
+// 隔离策略(2026-08-30 修订):
+//   在 import src/config.js **之前**把 USERPROFILE/HOME 指到 mkdtemp 沙箱,
+//   所有读写落在临时目录,不触碰真实 ~/.git-commit-tool.json。
+//
+//   修订原因:本文件原先只做纯函数测试,但"saveConfig: 合法非空对象不抛
+//   ConfigWriteError"这个用例会真的调 saveConfig({ defaultCommitMessage:
+//   'test' }) —— 注释说"不验证是否真的写入磁盘",实际却写进了用户 home。
+//   它是 2026-08-30 配置被冲掉事故的第二个污染源(config.atomic-write.test.mjs
+//   是第一个)。node --test 按文件并发跑,任何一处漏沙箱都会踩到真实配置。
 
-import { test } from 'node:test'
+import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
@@ -27,6 +37,28 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
+
+// ---- 环境隔离:必须在 import src/config.js 之前完成 ----
+const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), 'zgs-config-contract-test-'))
+const savedEnv = {
+  USERPROFILE: process.env.USERPROFILE,
+  HOME: process.env.HOME,
+  HOMEDRIVE: process.env.HOMEDRIVE,
+  HOMEPATH: process.env.HOMEPATH
+}
+process.env.USERPROFILE = fakeHome
+process.env.HOME = fakeHome
+// Windows 下 os.homedir() 的兜底是 HOMEDRIVE+HOMEPATH,清掉以防 USERPROFILE 被忽略
+delete process.env.HOMEDRIVE
+delete process.env.HOMEPATH
+
+after(async () => {
+  for (const [k, v] of Object.entries(savedEnv)) {
+    if (v === undefined) delete process.env[k]
+    else process.env[k] = v
+  }
+  try { await fs.rm(fakeHome, { recursive: true, force: true }) } catch {}
+})
 
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
 // 注意:saveConfig / loadConfig 等业务函数挂在 default export 上;
@@ -99,9 +131,11 @@ test('saveConfig: 空对象入参抛 ConfigWriteError(防止覆盖)', async () =
 })
 
 test('saveConfig: 合法非空对象不抛 ConfigWriteError(可能抛别的 IO 错)', async () => {
-  // 这里不验证是否真的写入磁盘(会污染 ~/.git-commit-tool.json),
+  // 【重要】这个用例会真的走完 IO 落到磁盘 —— 但写的是文件顶部的 mkdtemp
+  // 沙箱,不是用户 home。沙箱靠 USERPROFILE/HOME 注入生效,一旦被绕过,
+  // config.atomic-write.test.mjs 的真实配置哨兵会失败告警。
   // 只验证入参校验已通过,走到 IO 阶段。
-  // 在用户 home 不可写或无 git repo 时可能抛别的错 — 捕获即可,断言"不是 ConfigWriteError(参数错)"
+  // 在沙箱不可写或无 git repo 时可能抛别的错 — 捕获即可,断言"不是 ConfigWriteError(参数错)"
   let thrown = null
   try {
     await saveConfig({ defaultCommitMessage: 'test' })
