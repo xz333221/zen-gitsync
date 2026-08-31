@@ -580,8 +580,9 @@ async function startUIServer(noOpen = false, savePort = false) {
       return;
     }
 
+    let projectName = '';
     try {
-      const projectName = await instanceRegistry._resolveProjectName(currentProjectPath);
+      projectName = await instanceRegistry._resolveProjectName(currentProjectPath);
       await instanceRegistry.register({
         pid: process.pid,
         port: currentPort,
@@ -595,9 +596,16 @@ async function startUIServer(noOpen = false, savePort = false) {
       return;
     }
 
-    // 5 秒心跳
+    // 5 秒心跳。必须带上完整注册信息：多实例同时启动时 register 的
+    // read-modify-write 存在跨进程竞态，本实例的条目可能被后来者整表覆盖掉。
+    // 带全信息后，心跳发现条目缺失会把自己补回注册表（自愈，见 instanceRegistry.heartbeat）。
     const heartbeatTimer = setInterval(() => {
-      instanceRegistry.heartbeat(process.pid, { projectPath: currentProjectPath })
+      instanceRegistry.heartbeat(process.pid, {
+        port: currentPort,
+        projectPath: currentProjectPath,
+        projectName,
+        hostname: os.hostname()
+      })
         .catch((e) => console.warn(chalk.yellow(`[instanceRegistry] 心跳失败: ${e?.message || e}`)));
     }, 5000);
 

@@ -634,6 +634,27 @@ function stopHResize() {
       <div class="header-actions" v-if="gitStore.isGitRepo">
         <!-- <CommandHistory /> -->
       </div>
+      <!-- 实例切换器：显示所有运行中的 GUI 项目 -->
+      <InstanceSwitcher />
+      <!-- 主题切换快捷按钮（OPT-2：原本要进设置→通用→主题 4 次点击,现在 1 次） -->
+      <el-tooltip
+        :content="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')"
+        placement="bottom"
+        effect="dark"
+        :show-after="200"
+      >
+        <button
+          class="modern-btn btn-icon-32 theme-toggle-btn"
+          :aria-label="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')"
+          :aria-pressed="isDarkTheme ? 'true' : 'false'"
+          @click="configStore.toggleTheme()"
+        >
+          <el-icon class="btn-icon" aria-hidden="true">
+            <Moon v-if="isDarkTheme" />
+            <Sunny v-else />
+          </el-icon>
+        </button>
+      </el-tooltip>
       <!-- 系统监控指示器：header 右侧常驻展示 CPU/内存 -->
       <div v-if="monitorStore.overview" class="header-monitor">
         <el-tooltip placement="bottom" effect="dark" :show-after="200">
@@ -668,27 +689,6 @@ function stopHResize() {
           </div>
         </el-tooltip>
       </div>
-      <!-- 实例切换器：显示所有运行中的 GUI 项目 -->
-      <InstanceSwitcher />
-      <!-- 主题切换快捷按钮（OPT-2：原本要进设置→通用→主题 4 次点击,现在 1 次） -->
-      <el-tooltip
-        :content="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')"
-        placement="bottom"
-        effect="dark"
-        :show-after="200"
-      >
-        <button
-          class="modern-btn btn-icon-32 theme-toggle-btn"
-          :aria-label="isDarkTheme ? $t('@F13B4:切换到浅色主题') : $t('@F13B4:切换到深色主题')"
-          :aria-pressed="isDarkTheme ? 'true' : 'false'"
-          @click="configStore.toggleTheme()"
-        >
-          <el-icon class="btn-icon" aria-hidden="true">
-            <Moon v-if="isDarkTheme" />
-            <Sunny v-else />
-          </el-icon>
-        </button>
-      </el-tooltip>
       <!-- 用户信息 -->
       <div id="user-info" class="user-info-card">
         <template v-if="gitStore.userName">
@@ -1162,15 +1162,20 @@ body {
   height: 64px;
   box-sizing: border-box;
   padding: 0 var(--spacing-lg);
+  display: grid;
+  grid-template-columns: 1fr minmax(0, auto) 1fr;
+  align-items: center;
+  gap: var(--spacing-base);
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  flex-shrink: 0;
+  justify-self: start;
   position: relative;
   z-index: 2;
+  min-width: 0;
 }
 
 .header-brand-link {
@@ -1202,15 +1207,12 @@ body {
 }
 
 .header-center {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(720px, calc(100% - 520px));
-  max-width: calc(100% - 520px);
+  min-width: 0;
+  max-width: min(720px, 100%);
   display: flex;
   align-items: center;
   justify-content: center;
+  justify-self: center;
   z-index: 1;
   overflow: visible;
 }
@@ -1236,10 +1238,9 @@ h1 {
 .header-info {
   display: flex;
   align-items: center;
-  gap: var(--spacing-base);
-  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  justify-self: end;
   min-width: 0;
-  flex-shrink: 0;
   position: relative;
   z-index: 2;
 }
@@ -1290,13 +1291,17 @@ h1 {
 .header-monitor {
   display: flex;
   align-items: center;
-  padding: 2px 10px;
+  justify-content: center;
+  height: 42px;
+  padding: 0 8px;
+  box-sizing: border-box;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-base);
   background: var(--bg-subtle);
   transition: border-color var(--transition-base) var(--ease-custom),
               background var(--transition-base) var(--ease-custom);
   cursor: default;
+  flex-shrink: 0;
 }
 
 .header-monitor:hover {
@@ -1306,15 +1311,16 @@ h1 {
 
 .header-monitor__content {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
 
 .header-monitor__item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 70px;
+  gap: 5px;
+  min-width: 0;
 }
 
 .header-monitor__label {
@@ -1333,8 +1339,8 @@ h1 {
 }
 
 .header-monitor__bar {
-  width: 36px;
-  height: 4px;
+  width: 24px;
+  height: 3px;
   border-radius: 2px;
   background: var(--border-color);
   overflow: hidden;
@@ -1347,9 +1353,7 @@ h1 {
 }
 
 .header-monitor__divider {
-  width: 1px;
-  height: 14px;
-  background: var(--border-color);
+  display: none;
 }
 
 .header-monitor__tooltip {
@@ -1366,6 +1370,10 @@ h1 {
   font-weight: bold;
   cursor: help;
   transition: color 0.2s ease;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-name:hover {
@@ -1680,52 +1688,6 @@ h1 {
   font-weight: bold;
 }
 
-/* 主题切换快捷按钮(OPT-2)
-   32×32 触摸区,比标准 28px 大 14%,在 header 区域更易命中
-   复用 .modern-btn 基础样式,只补:卡片式背景(与 user-info 视觉同源)+ 图标切换动画 */
-.theme-toggle-btn {
-  flex-shrink: 0;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-component);
-  /* 与 .user-info-card 一致: 6px 内边距,圆角 8px */
-  padding: 0;
-  color: var(--text-tertiary);
-  box-shadow: none;
-  transition:
-    background-color var(--transition-base) var(--ease-custom),
-    border-color var(--transition-base) var(--ease-custom),
-    color var(--transition-base) var(--ease-custom),
-    transform var(--transition-base) var(--ease-custom),
-    box-shadow var(--transition-base) var(--ease-custom);
-}
-
-.theme-toggle-btn:hover {
-  background: var(--tint-warning-14);
-  border-color: var(--color-warning);
-  color: var(--color-warning);
-  transform: translateY(-0.5px);
-  box-shadow: var(--focus-ring-soft);
-}
-
-.theme-toggle-btn:active {
-  transform: scale(0.96);
-}
-
-.theme-toggle-btn:focus-visible {
-  outline: none;
-  border-color: var(--color-warning);
-  box-shadow: var(--focus-ring);
-}
-
-.theme-toggle-btn .btn-icon {
-  /* 太阳 ↔ 月亮切换时 360° 翻转,有视觉反馈 */
-  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.theme-toggle-btn:hover .btn-icon {
-  transform: rotate(-18deg) scale(1.08);
-}
-
 /* 非Git仓库初始化卡片相关样式已随原卡片整体移除 —— 中间空态改为 RecentProjectsList */
 
 .main-footer:hover {
@@ -1959,6 +1921,49 @@ h1 {
   background: var(--bg-page);
   z-index: 999;
   overflow-y: auto;
+}
+
+/* 主题切换快捷按钮：与实例切换器保持一致的图标卡片风格 */
+.theme-toggle-btn {
+  flex-shrink: 0;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-component);
+  border-radius: 9px;
+  padding: 0;
+  color: var(--text-secondary);
+  box-shadow: none;
+  transition:
+    background-color var(--transition-base) var(--ease-custom),
+    border-color var(--transition-base) var(--ease-custom),
+    color var(--transition-base) var(--ease-custom),
+    transform var(--transition-base) var(--ease-custom),
+    box-shadow var(--transition-base) var(--ease-custom);
+}
+
+.theme-toggle-btn:hover {
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--bg-container));
+  border-color: var(--color-primary);
+  color: var(--text-primary);
+  transform: translateY(-0.5px);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 11%, transparent);
+}
+
+.theme-toggle-btn:active {
+  transform: scale(0.96);
+}
+
+.theme-toggle-btn:focus-visible {
+  outline: none;
+  border-color: var(--color-warning);
+  box-shadow: var(--focus-ring);
+}
+
+.theme-toggle-btn .btn-icon {
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.theme-toggle-btn:hover .btn-icon {
+  transform: rotate(-18deg) scale(1.08);
 }
 
 </style>

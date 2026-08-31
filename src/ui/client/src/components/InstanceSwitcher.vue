@@ -236,9 +236,10 @@ async function requestCloseAll() {
 .instance-switcher {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 32px;
-  padding: 0 9px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   cursor: pointer;
   border-radius: 9px;
   border: 1px solid var(--border-component);
@@ -248,6 +249,7 @@ async function requestCloseAll() {
   font-weight: var(--font-weight-medium, 500);
   transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease, color 180ms ease, transform 120ms ease;
   user-select: none;
+  flex-shrink: 0;
 }
 
 .instance-switcher:hover,
@@ -276,24 +278,10 @@ async function requestCloseAll() {
   height: 16px;
 }
 
-.switcher-count {
-  color: var(--text-primary);
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 12px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.switcher-label { white-space: nowrap; }
-
+.switcher-count,
+.switcher-label,
 .switcher-chevron {
-  margin-left: 1px;
-  font-size: 11px;
-  transition: transform 180ms ease;
-}
-
-.instance-switcher.is-open .switcher-chevron {
-  transform: rotate(180deg);
+  display: none;
 }
 
 .instance-row {

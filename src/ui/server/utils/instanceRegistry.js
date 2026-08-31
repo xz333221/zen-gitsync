@@ -160,21 +160,47 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
     });
   }
 
+  // 心跳。updates 可携带完整注册信息（port/projectPath/projectName/hostname）：
+  //   条目存在 → 刷新 lastHeartbeat
+  //   条目不存在 → 用完整信息自愈重建
+  // 为什么要自愈：register() 是 read-modify-write，而 enqueueWrite 只串行化
+  // 单进程内的写。多实例几乎同时启动时，两个进程都读到旧表再各自整表写回，
+  // 后写覆盖先写，先注册的实例被静默抹掉（temp+rename 只保证单次写原子，
+  // 读-改-写整体不原子）。被覆盖的实例不会自己恢复，这里借 5s 心跳兜底补回。
   async function heartbeat(pid, updates = {}) {
     if (!Number.isInteger(pid) || pid <= 0) return;
     await enqueueWrite(async () => {
       const obj = await readAll();
       const key = String(pid);
       const existing = obj.instances[key];
+
       if (!existing) {
-        // 如果心跳时条目不存在（被裁剪或被外部清理），跳过；
-        // 由调用方负责周期性 re-register
+        // 信息不全就无法自愈，保持原行为（跳过）
+        const canRebuild =
+          Number.isInteger(updates.port) && updates.port > 0 && !!updates.projectPath;
+        if (!canRebuild) return;
+
+        obj.instances[key] = {
+          pid,
+          port: updates.port,
+          projectName: updates.projectName || '',
+          projectPath: updates.projectPath,
+          startedAt: Date.now(),
+          lastHeartbeat: Date.now(),
+          hostname: updates.hostname || osMod.hostname()
+        };
+        await writeAll(obj);
+        logger.info(
+          `[instanceRegistry] 心跳检测到本实例条目丢失，已自愈重建 pid=${pid} port=${updates.port}`
+        );
         return;
       }
+
       obj.instances[key] = {
         ...existing,
         ...(updates.projectPath ? { projectPath: updates.projectPath } : {}),
         ...(updates.projectName ? { projectName: updates.projectName } : {}),
+        ...(Number.isInteger(updates.port) && updates.port > 0 ? { port: updates.port } : {}),
         lastHeartbeat: Date.now()
       };
       await writeAll(obj);
