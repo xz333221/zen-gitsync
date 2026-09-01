@@ -48,7 +48,7 @@ import { registerInstancesRoutes } from './routes/instances.js';
 import { registerMonitorRoutes } from './routes/monitor.js';
 import { registerMindmapRoutes } from './routes/mindmap.js';
 import { registerAgentRoutes } from './routes/workbench/agentRoutes.js';
-import { createInstanceRegistry } from './utils/instanceRegistry.js';
+import { createInstanceRegistry, getRegistryPath } from './utils/instanceRegistry.js';
 import { createSavePortToFile } from './utils/createSavePortToFile.js';
 import { createOriginGuard, createOriginCheckerFromEnv } from './middleware/originGuard.js';
 import { startServerOnAvailablePort } from './utils/startServerOnAvailablePort.js';
@@ -229,12 +229,15 @@ async function startUIServer(noOpen = false, savePort = false) {
   registerSocketIO(io);
 
   // 构建实例注册表（用于跨进程共享"当前运行中的 GUI"信息）
-  // 注册表文件位于用户主目录，所有 g ui 进程共享写入
+  // 8b725c5c 起改为"每实例一个文件"目录方案:register/heartbeat/unregister
+  // 只读写 *自己* 的 <pid>.json,跨进程并发永不互相覆盖。路径用 instanceRegistry
+  // 暴露的 getRegistryPath() 统一,避免再次出现"硬编码 .json 路径传给目录方案"
+  // 这种错配(8b725c5c 漏改 server/index.js 导致的 ENOTDIR scandir 报错)。
   const instanceRegistry = createInstanceRegistry({
     fs,
     path,
     os,
-    registryPath: path.join(os.homedir(), '.zen-gitsync-instances.json')
+    registryPath: getRegistryPath()
   });
 
   // 注册全局错误处理器:任意未捕获异常/拒绝都会触发 fatalExit,
