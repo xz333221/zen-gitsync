@@ -66,7 +66,7 @@ describe('instancesStore.closeInstance', () => {
   })
 
   test('关闭当前实例的 fetch 调用是正确的 POST /api/instances/<pid>/close', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
       jsonResponse({ success: true, closedPid: 100, selfClose: true }),
     )
     vi.stubGlobal('fetch', fetchMock)
