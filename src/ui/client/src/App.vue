@@ -657,8 +657,11 @@ function stopHResize() {
           @click="configStore.toggleTheme()"
         >
           <el-icon class="btn-icon" aria-hidden="true">
-            <Moon v-if="isDarkTheme" />
-            <Sunny v-else />
+            <!-- 显示「下一步动作」对应的图标,贴合主流操作系统托盘的直觉:
+                 当前 dark → 太阳(点了变亮);当前 light → 月亮(点了变暗)。
+                 之前 v-if/v-else 是「显示当前主题」,容易让人误点不下去。 -->
+            <Sunny v-if="isDarkTheme" />
+            <Moon v-else />
           </el-icon>
         </button>
       </el-tooltip>
