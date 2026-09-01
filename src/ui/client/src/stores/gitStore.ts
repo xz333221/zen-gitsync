@@ -23,6 +23,10 @@ import { getBackendPort } from '@/utils/backendUrl'
 // 定义Git操作间隔时间（毫秒）
 const GIT_OPERATION_DELAY = 800
 
+// getBranchStatus 检测到 ahead/behind/upstream 变化时,自动刷新右侧提交历史(log)
+// 的最小间隔(毫秒)。防止 refresh 按钮连点 / 用户连续 commit 时反复触发 fetchLog。
+const AUTO_LOG_REFRESH_INTERVAL_MS = 2000
+
 // 获取后端端口
 const backendPort = getBackendPort()
 
@@ -90,6 +94,10 @@ export const useGitStore = defineStore('git', () => {
   const currentPage = ref(1)
   const hasMoreData = ref(true)
   const totalCommits = ref(0)
+
+  // 自动刷新提交历史的节流时间戳(模块级,store 单例共享)
+  // 用于 getBranchStatus 内 ahead/behind 变化时,2s 内只刷一次 log
+  let lastAutoLogRefresh = 0
   
   // 在状态部分添加stash相关的状态变量
   const stashes = ref<{ id: string; description: string }[]>([])
@@ -157,6 +165,14 @@ export const useGitStore = defineStore('git', () => {
       const data = await response.json();
 
       if (data) {
+        // 记录变更前的状态,用于检测是否需要自动刷新右侧提交历史
+        // (LogList 只 watch gitStore.log,感知不到 branchAhead/branchBehind 变化,
+        //  所以这里需要主动触发 fetchLog,否则红框的"领先 N 个提交"亮起时 log 不会跟着刷)
+        const prevAhead = branchAhead.value
+        const prevBehind = branchBehind.value
+        const prevHasUpstream = hasUpstream.value
+        const prevUpstreamBranch = upstreamBranch.value
+
         branchAhead.value = data.ahead || 0;
         branchBehind.value = data.behind || 0;
         hasUpstream.value = data.hasUpstream || false;
@@ -164,6 +180,39 @@ export const useGitStore = defineStore('git', () => {
 
         // 添加调试日志
         console.log(`${$t('@C298B:分支状态更新：领先 ')}${branchAhead.value}${$t('@C298B: 个提交，落后 ')}${branchBehind.value}${$t('@C298B: 个提交，上游分支：')}${hasUpstream.value ? upstreamBranch.value : $t('@C298B:无')}`);
+
+        // 检测 ahead / behind / upstream 任意一项变化 → 自动刷新提交历史
+        // 覆盖场景:
+        //   1. 用户在另一工具(CLI/VSCode) commit 后,本地 ahead 变化
+        //   2. git fetch --all 后 behind 变化(新远程 commit 到达)
+        //   3. 切换分支 / 设置上游后 upstream 变化(首次 push -u 后)
+        // 节流 2s:避免用户连续 commit 时刷多次 log / focus 反复触发时刷多次
+        const stateChanged =
+          branchAhead.value !== prevAhead ||
+          branchBehind.value !== prevBehind ||
+          hasUpstream.value !== prevHasUpstream ||
+          upstreamBranch.value !== prevUpstreamBranch
+
+        if (stateChanged) {
+          const now = Date.now()
+          if (now - lastAutoLogRefresh >= AUTO_LOG_REFRESH_INTERVAL_MS) {
+            lastAutoLogRefresh = now
+            console.log(
+              `[getBranchStatus] 检测到分支状态变化 ` +
+              `(ahead: ${prevAhead}→${branchAhead.value}, ` +
+              `behind: ${prevBehind}→${branchBehind.value}, ` +
+              `upstream: ${prevUpstreamBranch || '无'}→${upstreamBranch.value || '无'}), ` +
+              `自动刷新右侧提交历史`
+            )
+            // fire-and-forget:不阻塞 getBranchStatus 的返回,
+            // 让 refresh 按钮 / focus 响应保持快速
+            void fetchLog(false)
+          } else {
+            console.log(
+              `[getBranchStatus] 分支状态变化但在 ${AUTO_LOG_REFRESH_INTERVAL_MS}ms 节流窗口内,跳过自动刷新`
+            )
+          }
+        }
       }
     } catch (error) {
       console.error('获取分支状态失败:', error);
