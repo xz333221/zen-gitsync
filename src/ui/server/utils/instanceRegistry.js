@@ -13,27 +13,44 @@
 // limitations under the License.
 //
 // 实例注册表工具
-// 维护 ~/.zen-gitsync-instances.json，记录所有正在运行的 GUI 实例
-// 多进程并发写采用 atomic temp+rename + 进程内串行化 Promise 链
-// stale 判定：PID 不存在 或 lastHeartbeat 超过阈值
+// 每个 GUI 实例在自己的 <registryPath>/<pid>.json 文件中维护自身条目，
+// 跨进程并发启动时不再因为 read-modify-write 互相覆盖而丢条目。
+//
+// 旧版本是单文件 `~/.zen-gitsync-instances.json`，多进程 register/heartbeat
+// 并发时 read-modify-write 整体不原子，后写会覆盖先写，启动时一同拉起的 N
+// 个实例最终只会有少数几个幸运的 PID 留在表里。改成目录后，写操作天然独
+// 立：register 只动自己的 entry 文件，unregister 只删自己的，readAll 是
+// 遍历目录做合并。
+//
+// stale 判定：PID 不存在 或 lastHeartbeat 超过 STALE_MS。
+// 启动时会自动从旧主文件（~/.zen-gitsync-instances.json）迁移到目录。
 
 import nodePath from 'node:path';
-import logger from './logger.js'
+import logger from './logger.js';
 import nodeOs from 'node:os';
 
-const STALE_MS = 30_000;          // 心跳超时阈值（毫秒）
-const WATCH_DEBOUNCE_MS = 100;    // fs.watch 防抖时间
+const STALE_MS = 30_000;              // 心跳超时阈值（毫秒）
+const WATCH_DEBOUNCE_MS = 100;        // fs.watch 防抖时间
 const REGISTRY_VERSION = 1;
+const REGISTRY_DIR_NAME = '.zen-gitsync-instances';
+const REGISTRY_LEGACY_FILE_NAME = '.zen-gitsync-instances.json';
+const MIGRATION_MARKER = '.migrated';
 
 /**
- * 默认注册表文件路径（与 createInstanceRegistry({ registryPath }) 的约定一致）
- * 用于：npm.js 的 /api/app-restart 自拉起时，父进程轮询此路径判断子进程是否就绪。
+ * 新注册表目录路径（每进程一个文件）
  */
 export function getRegistryPath() {
-  return nodePath.join(nodeOs.homedir(), '.zen-gitsync-instances.json');
+  return nodePath.join(nodeOs.homedir(), REGISTRY_DIR_NAME);
 }
 
-function isProcessAlive(pid) {
+/**
+ * 旧版单文件注册表路径（仅用于一次性迁移）
+ */
+export function getLegacyRegistryPath() {
+  return nodePath.join(nodeOs.homedir(), REGISTRY_LEGACY_FILE_NAME);
+}
+
+function defaultIsProcessAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     // 信号 0 仅做存活检查，不真正发送信号
@@ -64,10 +81,37 @@ async function resolveProjectName(projectPath, fsMod, pathMod) {
   return pathMod.basename(projectPath);
 }
 
-export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, registryPath }) {
+// entry 文件名匹配：<pid>.json（pid 是正整数）
+function isEntryFileName(name) {
+  if (!name || typeof name !== 'string') return false;
+  if (name.startsWith('.')) return false;     // 跳过 .migrated 等
+  if (name.endsWith('.tmp')) return false;    // 跳过写入中的临时文件
+  if (!name.endsWith('.json')) return false;
+  const base = name.slice(0, -'.json'.length);
+  return /^\d+$/.test(base);
+}
+
+function pidFromFileName(name) {
+  return Number(name.slice(0, -'.json'.length));
+}
+
+export function createInstanceRegistry({
+  fs: fsMod,
+  path: pathMod,
+  os: osMod,
+  registryPath,
+  isProcessAlive: isProcessAliveOverride,
+}) {
   if (!fsMod || !pathMod || !osMod || !registryPath) {
     throw new Error('createInstanceRegistry: 必须提供 fs/path/os/registryPath');
   }
+
+  // entry / legacy / marker 路径用注入的 pathMod 而非模块级的 nodePath,
+  // 这样测试里可以传跨平台的 mock path,避免 Windows 上 nodePath.join 生成
+  // 反斜杠路径而 mock fs 用的 '/' 路径读不到
+  const entryFilePath = (pid) => pathMod.join(registryPath, `${pid}.json`);
+  const legacyPath = () => pathMod.join(osMod.homedir(), REGISTRY_LEGACY_FILE_NAME);
+  const migrationMarkerPath = () => pathMod.join(registryPath, MIGRATION_MARKER);
 
   // 进程内写串行化：所有 mutate 操作都 await 这条链
   let writeChain = Promise.resolve();
@@ -79,32 +123,136 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
     return next;
   }
 
-  async function readAll() {
+  // 是否启用测试桩:若传入了 isProcessAlive,就用它(避免测试里 process.kill
+  // 误杀/找不到 PID 把所有 entry 都 prune 掉);否则用真实 process.kill。
+  const isProcessAlive = typeof isProcessAliveOverride === 'function'
+    ? isProcessAliveOverride
+    : defaultIsProcessAlive;
+
+  // 确保注册表目录存在
+  async function ensureDir() {
     try {
-      const raw = await fsMod.readFile(registryPath, 'utf-8');
+      await fsMod.mkdir(registryPath, { recursive: true });
+    } catch (err) {
+      if (err && err.code === 'EEXIST') return;
+      throw err;
+    }
+  }
+
+  // 读单个 entry 文件。失败/不存在时返回 null。
+  async function readEntry(pid) {
+    const fp = entryFilePath(pid);
+    try {
+      const raw = await fsMod.readFile(fp, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && parsed.instances && typeof parsed.instances === 'object') {
-        return parsed;
-      }
-      return { version: REGISTRY_VERSION, instances: {} };
+      if (parsed && typeof parsed === 'object') return parsed;
+      return null;
+    } catch (err) {
+      if (err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) return null;
+      logger.warn(`[instanceRegistry] 读 entry pid=${pid} 失败: ${err?.message || err}`);
+      return null;
+    }
+  }
+
+  // 原子写单个 entry 文件：tmp + rename
+  async function writeEntry(entry) {
+    const fp = entryFilePath(entry.pid);
+    const tmpFp = `${fp}.tmp`;
+    await fsMod.writeFile(tmpFp, JSON.stringify(entry, null, 2), 'utf-8');
+    await fsMod.rename(tmpFp, fp);
+  }
+
+  // 删除单个 entry 文件
+  async function deleteEntry(pid) {
+    const fp = entryFilePath(pid);
+    try {
+      await fsMod.unlink(fp);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return;
+      throw err;
+    }
+  }
+
+  // 遍历目录读取所有 entry，合并成单张表
+  async function readAll() {
+    await ensureDir();
+    let names;
+    try {
+      names = await fsMod.readdir(registryPath);
     } catch (err) {
       if (err && err.code === 'ENOENT') {
         return { version: REGISTRY_VERSION, instances: {} };
       }
-      logger.warn(`[instanceRegistry] 读取注册表失败，按空表处理: ${err?.message || err}`);
-      return { version: REGISTRY_VERSION, instances: {} };
+      throw err;
     }
+    const instances = {};
+    for (const name of names) {
+      if (!isEntryFileName(name)) continue;
+      const pid = pidFromFileName(name);
+      const entry = await readEntry(pid);
+      if (entry && Number.isInteger(entry.pid)) {
+        instances[String(entry.pid)] = entry;
+      }
+    }
+    return { version: REGISTRY_VERSION, instances };
   }
 
-  async function writeAll(obj) {
-    const payload = {
-      version: REGISTRY_VERSION,
-      ...obj,
-      instances: obj.instances || {}
-    };
-    const tmpPath = `${registryPath}.tmp`;
-    await fsMod.writeFile(tmpPath, JSON.stringify(payload, null, 2), 'utf-8');
-    await fsMod.rename(tmpPath, registryPath);
+  // 一次性迁移：从旧主文件 ~/.zen-gitsync-instances.json 把每个 entry
+  // 写到新目录里。已迁移过（存在 .migrated 标记）则跳过。
+  async function migrateLegacy() {
+    await ensureDir();
+    const markerPath = migrationMarkerPath();
+    try {
+      await fsMod.access(markerPath);
+      return false; // 已迁移
+    } catch (_) {
+      // 标记不存在，需要迁移
+    }
+
+    // legacy path 走注入的 osMod,这样测试里可以把 homedir 指向 mock 路径
+    const legacyPath_ = legacyPath();
+    let legacy = null;
+    try {
+      const raw = await fsMod.readFile(legacyPath_, 'utf-8');
+      legacy = JSON.parse(raw);
+    } catch (err) {
+      if (err && err.code !== 'ENOENT') {
+        logger.warn(`[instanceRegistry] 读旧主文件失败: ${err?.message || err}`);
+      }
+    }
+
+    if (!legacy || typeof legacy !== 'object' || !legacy.instances) {
+      // 没有旧数据,只写标记
+      try {
+        await fsMod.writeFile(markerPath, new Date().toISOString(), 'utf-8');
+      } catch (_) {}
+      return false;
+    }
+
+    let count = 0;
+    for (const [pidStr, entry] of Object.entries(legacy.instances)) {
+      if (!entry || !Number.isInteger(entry.pid)) continue;
+      try {
+        await writeEntry(entry);
+        count++;
+      } catch (e) {
+        logger.warn(`[instanceRegistry] 迁移 entry pid=${pidStr} 失败: ${e?.message || e}`);
+      }
+    }
+
+    try {
+      await fsMod.writeFile(markerPath, new Date().toISOString(), 'utf-8');
+    } catch (e) {
+      logger.warn(`[instanceRegistry] 写迁移标记失败: ${e?.message || e}`);
+    }
+    try {
+      await fsMod.unlink(legacyPath_);
+    } catch (e) {
+      // 旧文件删不掉不阻塞,只是留个垃圾,下回再删
+      logger.warn(`[instanceRegistry] 删旧主文件失败: ${e?.message || e}`);
+    }
+    logger.info(`[instanceRegistry] 已从旧主文件迁移 ${count} 个 entry 到目录格式`);
+    return true;
   }
 
   // 同步裁剪：传入当前内存中的 instances 字典，返回裁剪后的新字典
@@ -122,6 +270,9 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
   }
 
   // 公开 API
+  //
+  // 关键点:register / heartbeat / unregister 都只读写 *自己* 的 entry 文件,
+  // 跨进程并发时不同 PID 的写入互不干扰,从根本上消除 read-modify-write 覆盖。
   async function register({ pid, port, projectPath, projectName, hostname } = {}) {
     if (!Number.isInteger(pid) || pid <= 0) throw new Error('register: pid 必填');
     if (!Number.isInteger(port) || port <= 0) throw new Error('register: port 必填');
@@ -142,9 +293,9 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
     };
 
     await enqueueWrite(async () => {
-      const obj = await readAll();
-      obj.instances[String(pid)] = entry;
-      await writeAll(obj);
+      await ensureDir();
+      await migrateLegacy();
+      await writeEntry(entry);
     });
     return entry;
   }
@@ -152,35 +303,31 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
   async function unregister(pid) {
     if (!Number.isInteger(pid) || pid <= 0) return;
     await enqueueWrite(async () => {
-      const obj = await readAll();
-      if (obj.instances && obj.instances[String(pid)]) {
-        delete obj.instances[String(pid)];
-        await writeAll(obj);
-      }
+      await ensureDir();
+      await deleteEntry(pid);
     });
   }
 
   // 心跳。updates 可携带完整注册信息（port/projectPath/projectName/hostname）：
   //   条目存在 → 刷新 lastHeartbeat
   //   条目不存在 → 用完整信息自愈重建
-  // 为什么要自愈：register() 是 read-modify-write，而 enqueueWrite 只串行化
-  // 单进程内的写。多实例几乎同时启动时，两个进程都读到旧表再各自整表写回，
-  // 后写覆盖先写，先注册的实例被静默抹掉（temp+rename 只保证单次写原子，
-  // 读-改-写整体不原子）。被覆盖的实例不会自己恢复，这里借 5s 心跳兜底补回。
+  //
+  // 这里只读 *自己* 的 entry 文件，不遍历全表。即使全表被同时写，
+  // 也只影响这一个文件，自己的 lastHeartbeat 一定能更新到。
   async function heartbeat(pid, updates = {}) {
     if (!Number.isInteger(pid) || pid <= 0) return;
     await enqueueWrite(async () => {
-      const obj = await readAll();
-      const key = String(pid);
-      const existing = obj.instances[key];
+      await ensureDir();
+      await migrateLegacy();
 
+      const existing = await readEntry(pid);
+      let entry;
       if (!existing) {
-        // 信息不全就无法自愈，保持原行为（跳过）
         const canRebuild =
           Number.isInteger(updates.port) && updates.port > 0 && !!updates.projectPath;
         if (!canRebuild) return;
 
-        obj.instances[key] = {
+        entry = {
           pid,
           port: updates.port,
           projectName: updates.projectName || '',
@@ -189,21 +336,19 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
           lastHeartbeat: Date.now(),
           hostname: updates.hostname || osMod.hostname()
         };
-        await writeAll(obj);
         logger.info(
           `[instanceRegistry] 心跳检测到本实例条目丢失，已自愈重建 pid=${pid} port=${updates.port}`
         );
-        return;
+      } else {
+        entry = {
+          ...existing,
+          ...(updates.projectPath ? { projectPath: updates.projectPath } : {}),
+          ...(updates.projectName ? { projectName: updates.projectName } : {}),
+          ...(Number.isInteger(updates.port) && updates.port > 0 ? { port: updates.port } : {}),
+          lastHeartbeat: Date.now()
+        };
       }
-
-      obj.instances[key] = {
-        ...existing,
-        ...(updates.projectPath ? { projectPath: updates.projectPath } : {}),
-        ...(updates.projectName ? { projectName: updates.projectName } : {}),
-        ...(Number.isInteger(updates.port) && updates.port > 0 ? { port: updates.port } : {}),
-        lastHeartbeat: Date.now()
-      };
-      await writeAll(obj);
+      await writeEntry(entry);
     });
   }
 
@@ -211,15 +356,15 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
     const obj = await readAll();
     let instances = obj.instances || {};
     if (pruneStale) {
+      const originalKeys = Object.keys(instances);
       instances = pruneInPlace(instances);
-      // 如果发生了裁剪，持久化回去
-      const hasChange = Object.keys(instances).length !== Object.keys(obj.instances || {}).length;
-      if (hasChange) {
-        await enqueueWrite(async () => {
-          const fresh = await readAll();
-          fresh.instances = pruneInPlace(fresh.instances || {});
-          await writeAll(fresh);
-        });
+      const newKeys = Object.keys(instances);
+      if (originalKeys.length !== newKeys.length) {
+        // 失效条目的文件也要删,避免堆积
+        const removed = originalKeys.filter((k) => !newKeys.includes(k));
+        for (const pidStr of removed) {
+          await deleteEntry(Number(pidStr));
+        }
       }
     }
     const arr = Object.values(instances);
@@ -227,7 +372,7 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
     return arr;
   }
 
-  // 监听注册表文件变化；callback 会在 debounce 后被调用，参数是最新 list
+  // 监听注册表目录变化；callback 会在 debounce 后被调用，参数是最新 list
   // fsWatch 参数：node 'fs' 模块的 watch 函数（同步 + EventEmitter 形式）
   function watch(callback, fsWatch) {
     if (typeof callback !== 'function') {
@@ -253,13 +398,14 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
     };
 
     // 周期性 prune：即便没有其他进程写入注册表，也定期清理本地失效条目
-    // （例如所有 server 都强 kill 后，文件里残留的僵尸条目会被自动清理）
+    // （例如所有 server 都强 kill 后，目录里残留的僵尸 entry 会被自动清理）
     pruneTimer = setInterval(() => {
       if (closed) return;
       list({ pruneStale: true }).catch(() => {});
     }, STALE_MS / 3);
 
     try {
+      // 监听整个目录：任何一个 entry 文件增/删/改都会触发回调
       watcher = fsWatch(registryPath, { persistent: false }, () => {
         if (closed) return;
         if (debounceTimer) clearTimeout(debounceTimer);
@@ -303,6 +449,8 @@ export function createInstanceRegistry({ fs: fsMod, path: pathMod, os: osMod, re
     watch,
     close,
     _resolveProjectName: (p) => resolveProjectName(p, fsMod, pathMod),
-    _STALE_MS: STALE_MS
+    _STALE_MS: STALE_MS,
+    _migrateLegacy: migrateLegacy,
+    _isEntryFileName: isEntryFileName
   };
 }
