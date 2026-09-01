@@ -557,6 +557,10 @@ async function changeDirectory() {
       } else {
         ElMessage.warning($t('@67CE7:当前目录不是Git仓库，部分功能将不可用'));
         gitStore.$reset();
+        // $reset() 会连 userName / userEmail 一起清空(见 gitStore.ts:113-114),
+        // 但 Git 用户信息是用户级/全局属性,不随目录变化。
+        // 这里立刻重拉,否则切到非 Git 仓库目录后右上角会误报"未配置"。
+        gitStore.getUserInfo();
       }
     } else {
       ElMessage.error(result.error || $t('@67CE7:切换目录失败'));

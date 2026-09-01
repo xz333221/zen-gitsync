@@ -64,12 +64,12 @@ export const useInstancesStore = defineStore('instances', () => {
     if (!Number.isInteger(pid) || pid <= 0) {
       throw new Error('实例 PID 无效')
     }
-    if (pid === currentInstanceId.value) {
-      throw new Error('不能关闭当前实例')
-    }
+    // 当前实例也可关闭:后端会先 res.json 再 emit SIGTERM 走自身 graceful
+    // shutdown(见 server/index.js:648),调用方需自行决定要不要 window.close()
+    // 关当前 tab。响应里通过 selfClose 字段告知是否就是当前实例。
 
     const res = await fetch(`/api/instances/${pid}/close`, { method: 'POST' })
-    const data = await res.json().catch(() => null) as { success?: boolean; error?: string } | null
+    const data = await res.json().catch(() => null) as { success?: boolean; error?: string; selfClose?: boolean } | null
     if (!res.ok || !data?.success) {
       throw new Error(data?.error || `HTTP ${res.status}`)
     }

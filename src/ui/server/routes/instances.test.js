@@ -47,13 +47,58 @@ test('instances close: 关闭已注册的其他实例并反注册', async () => 
   assert.deepEqual(unregistered, [200])
 })
 
-test('instances close: 禁止关闭当前实例', async () => {
-  const { routes, killed } = setup({ currentPid: 100, instances: [{ pid: 100, port: 5800 }] })
-  const result = await callClose(routes.get('POST /api/instances/:pid/close'), 100)
+test('instances close: 允许关闭当前实例(selfClose=true),并 emit SIGTERM 触发自身 graceful shutdown', async () => {
+  // 当前实例的关闭走自身 SIGTERM handler(server/index.js:648),由
+  // instances.js 在 res.json 之后 setImmediate(() => process.emit('SIGTERM'))
+  // 触发。本测试用一个临时 listener 验证 emit 真的发生了一次。
+  const target = { pid: 100, port: 5800, projectName: 'self' }
+  let sigtermCount = 0
+  const onSigterm = () => { sigtermCount++ }
+  process.on('SIGTERM', onSigterm)
+  try {
+    const { routes, killed, unregistered } = setup({
+      currentPid: 100,
+      instances: [target],
+    })
+    const result = await callClose(routes.get('POST /api/instances/:pid/close'), 100)
 
-  assert.equal(result.statusCode, 400)
-  assert.match(result.payload.error, /不能.*当前实例/)
-  assert.deepEqual(killed, [])
+    // 等 setImmediate 队列跑完,让 emit SIGTERM 触发 listener
+    await new Promise((resolve) => setImmediate(resolve))
+
+    assert.equal(result.statusCode, 200)
+    assert.equal(result.payload.success, true)
+    assert.equal(result.payload.selfClose, true, 'should mark current instance as self-close')
+    assert.deepEqual(killed, [[100, 'SIGTERM']], 'killProcess 仍要正常调用(SIGTERM handler 真正入口)')
+    assert.deepEqual(unregistered, [100])
+    assert.equal(sigtermCount, 1, 'self-close 后应 emit 一次 SIGTERM 触发自身 shutdown handler')
+  } finally {
+    process.off('SIGTERM', onSigterm)
+  }
+})
+
+test('instances close: 关闭其他实例时 selfClose=false,不 emit SIGTERM', async () => {
+  const target = { pid: 200, port: 5801, projectName: 'other' }
+  let sigtermCount = 0
+  const onSigterm = () => { sigtermCount++ }
+  process.on('SIGTERM', onSigterm)
+  try {
+    const { routes, killed, unregistered } = setup({
+      currentPid: 100,
+      instances: [target],
+    })
+    const result = await callClose(routes.get('POST /api/instances/:pid/close'), 200)
+
+    await new Promise((resolve) => setImmediate(resolve))
+
+    assert.equal(result.statusCode, 200)
+    assert.equal(result.payload.success, true)
+    assert.equal(result.payload.selfClose, false, 'other instance must not be marked self-close')
+    assert.deepEqual(killed, [[200, 'SIGTERM']])
+    assert.deepEqual(unregistered, [200])
+    assert.equal(sigtermCount, 0, '关闭其他实例不应触发自身 SIGTERM')
+  } finally {
+    process.off('SIGTERM', onSigterm)
+  }
 })
 
 test('instances close: 不允许关闭注册表外的 PID', async () => {

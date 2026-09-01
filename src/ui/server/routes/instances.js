@@ -35,7 +35,10 @@ export function registerInstancesRoutes({
     });
   }));
 
-  // 只允许关闭注册表中仍存活的“其他实例”。前端不能传 signal 或任意命令。
+  // 关闭注册表中仍存活的实例(含当前实例,见下方 selfClose 分支)。前端不能传
+  // signal 或任意命令。当前实例关闭走和 SIGINT 一样的 graceful shutdown 链路
+  // (server/index.js:648 的 SIGTERM handler):drain 子进程 + unregister + exit,
+  // 响应先于 SIGTERM 触发发出,所以客户端能拿到 success。
   app.post('/api/instances/:pid/close', asyncRoute(async (req, res) => {
     const pidText = String(req.params?.pid || '');
     if (!/^\d+$/.test(pidText)) {
@@ -46,9 +49,7 @@ export function registerInstancesRoutes({
     const currentInstanceId = typeof getCurrentInstanceId === 'function'
       ? getCurrentInstanceId()
       : null;
-    if (pid === currentInstanceId) {
-      throw new HttpError(400, '不能从当前页面关闭当前实例');
-    }
+    const isSelfClose = pid === currentInstanceId;
 
     const instances = await registry.list({ pruneStale: true });
     const target = instances.find((instance) => instance.pid === pid);
@@ -73,7 +74,15 @@ export function registerInstancesRoutes({
       success: true,
       closedPid: pid,
       message: `已关闭实例 ${target.projectName || pid}`,
+      // 标记是否为当前实例。前端靠它决定要不要调 window.close() 关 tab。
+      selfClose: isSelfClose,
     });
+    if (isSelfClose) {
+      // 同步把 SIGTERM 事件 emit 给本进程的 listener(handler 内部 async,且
+      // 最后 setTimeout 100ms 才 exit);setImmediate 把 emit 推到下个 tick,
+      // 确保上面的 res.json 已同步写到 socket buffer,客户端能收到响应。
+      setImmediate(() => process.emit('SIGTERM'));
+    }
   }));
 
   // 批量关闭注册表中所有非当前实例。逐个走 kill + unregister，失败不影响其他项。

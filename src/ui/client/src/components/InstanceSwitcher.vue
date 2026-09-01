@@ -54,17 +54,21 @@ function instanceInitial(instance: InstanceInfo): string {
 
 async function requestClose(instance: InstanceInfo) {
   if (closingPid.value != null || closingAll.value) return
+  // 当前实例的关闭同时影响后台和当前 tab,文案单独区分,避免用户以为只是关别人。
+  const isSelf = instance.pid === store.currentInstanceId
+  const title = isSelf
+    ? $t('@INSSW:关闭当前实例')
+    : $t('@INSSW:关闭实例')
+  const content = isSelf
+    ? $t('@INSSW:关闭当前实例确认内容', { name: instance.projectName })
+    : $t('@INSSW:关闭实例确认内容', { name: instance.projectName, port: instance.port })
   try {
-    await ElMessageBox.confirm(
-      $t('@INSSW:关闭实例确认内容', { name: instance.projectName, port: instance.port }),
-      $t('@INSSW:关闭实例'),
-      {
-        confirmButtonText: $t('@INSSW:确认关闭'),
-        cancelButtonText: $t('@INSSW:取消'),
-        type: 'warning',
-        autofocus: false,
-      },
-    )
+    await ElMessageBox.confirm(content, title, {
+      confirmButtonText: $t('@INSSW:确认关闭'),
+      cancelButtonText: $t('@INSSW:取消'),
+      type: 'warning',
+      autofocus: false,
+    })
   } catch {
     return
   }
@@ -72,7 +76,17 @@ async function requestClose(instance: InstanceInfo) {
   closingPid.value = instance.pid
   try {
     await store.closeInstance(instance.pid)
-    ElMessage.success($t('@INSSW:实例已关闭', { name: instance.projectName }))
+    ElMessage.success(
+      isSelf
+        ? $t('@INSSW:当前实例已关闭', { name: instance.projectName })
+        : $t('@INSSW:实例已关闭', { name: instance.projectName })
+    )
+    // 关掉当前实例的后台服务后,再尝试关当前 tab。
+    // Chrome 90+ 禁止脚本关闭用户手动打开的 tab,这里大概率被浏览器静默
+    // 忽略 —— 后台已关,tab 失去 server 推送,用户手动关即可;能关则更好。
+    if (isSelf) {
+      try { window.close() } catch (_) { /* 浏览器拦截,忽略 */ }
+    }
   } catch (error) {
     ElMessage.error(`${$t('@INSSW:关闭实例失败')}: ${(error as Error).message}`)
     await store.refresh()
@@ -173,7 +187,8 @@ async function requestCloseAll() {
           </div>
         </li>
 
-        <!-- 当前实例（不可点击） -->
+        <!-- 当前实例(整行 disabled 防止误触发 dropdown 的 command → 新标签页打开;
+             内置独立关闭按钮走自己的 click,实现"先关后台再关 tab"流程) -->
         <el-dropdown-item v-if="store.currentInstance" disabled class="instance-menu-item instance-menu-item--current">
           <div class="instance-row instance-row--current">
             <span class="instance-avatar" aria-hidden="true">{{ instanceInitial(store.currentInstance) }}</span>
@@ -186,7 +201,21 @@ async function requestCloseAll() {
                 {{ store.currentInstance.projectPath }}
               </span>
             </div>
-            <span class="port-badge">:{{ store.currentInstance.port }}</span>
+            <div class="instance-action">
+              <span class="port-badge">:{{ store.currentInstance.port }}</span>
+              <button
+                type="button"
+                class="instance-close"
+                :class="{ 'is-loading': closingPid === store.currentInstance.pid }"
+                :disabled="closingPid != null || closingAll"
+                :aria-label="$t('@INSSW:关闭当前实例')"
+                :title="$t('@INSSW:关闭当前实例')"
+                @click.stop.prevent="requestClose(store.currentInstance)"
+              >
+                <el-icon v-if="closingPid === store.currentInstance.pid"><Loading /></el-icon>
+                <el-icon v-else><Close /></el-icon>
+              </button>
+            </div>
           </div>
         </el-dropdown-item>
 
@@ -546,6 +575,20 @@ async function requestCloseAll() {
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
+}
+
+/* 当前实例行的关闭按钮始终可见(不像其他实例要 hover 才显示),
+   让用户一眼能看到"我也能被关";hover/focus 时 port-badge 同样淡出,保持视觉一致。 */
+:global(.instance-switcher-popper .instance-menu-item--current .instance-close) {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+:global(.instance-switcher-popper .instance-menu-item--current:hover .port-badge),
+:global(.instance-switcher-popper .instance-menu-item--current:focus-within .port-badge) {
+  opacity: 0;
+  transform: scale(0.88);
 }
 
 :global(.instance-switcher-popper .port-badge) {

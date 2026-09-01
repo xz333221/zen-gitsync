@@ -176,13 +176,20 @@ onMounted(async () => {
     gitStore.isGitRepo = dirData.isGitRepo === true
     gitStore.lastCheckedTime = Date.now()
 
+    // Git 用户信息(user.name / user.email)是用户级/全局属性,与当前目录
+    // 是否为 Git 仓库无关 —— 后端走 `git config user.name`(不带 --global),
+    // 在非仓库目录也会按 local > global > system 层级 fallback 到全局值。
+    // 之前它被锁在下面的 if (isGitRepo) 里,导致打开非 Git 仓库目录时
+    // userName 永远停留在初始空串,右上角误报"未配置"。
+    // 不 await:getUserInfo 自带 try/catch,让它与下面的仓库信息并行跑。
+    gitStore.getUserInfo()
+
     // 只有是Git仓库的情况下才加载Git相关信息
     if (gitStore.isGitRepo) {
       // 并行获取所有Git信息，确保每个API只调用一次
       await Promise.all([
         gitStore.getCurrentBranch(true), // 强制获取当前分支（页面首次加载）
         gitStore.getAllBranches(),       // 获取所有分支
-        gitStore.getUserInfo(),          // 获取用户信息
         gitStore.getRemoteUrl(),         // 获取远程仓库地址
         gitStore.getBranchStatus(true)   // 强制获取分支状态（页面首次加载）
       ])

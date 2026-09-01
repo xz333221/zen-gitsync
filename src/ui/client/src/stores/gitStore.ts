@@ -331,14 +331,19 @@ export const useGitStore = defineStore('git', () => {
   }
 
   // 获取Git用户信息
+  // 注意:user.name / user.email 是用户级/全局属性,与当前目录是否为 Git
+  // 仓库无关。调用方(App.vue 初始化 / DirectorySelector 切目录)不应把它
+  // 锁在 isGitRepo 分支里,否则非仓库目录会一直误报"未配置"。
   async function getUserInfo() {
     try {
       const response = await fetch('/api/user-info')
       const data = await response.json()
-      if (data.name && data.email) {
-        userName.value = data.name
-        userEmail.value = data.email
-      }
+      // 分别赋值,而非旧的 `if (data.name && data.email)`:只配了 name 没配
+      // email 是很常见的状态,旧写法会让已配好的 name 也一起不显示,反而
+      // 掩盖了真正缺的那一项。是否"未配置"交给 UI 侧
+      // (!userName || !userEmail) 判断,这里只负责如实回填。
+      userName.value = data.name || ''
+      userEmail.value = data.email || ''
     } catch (error) {
       console.error('获取用户信息失败:', error)
     }
