@@ -14,13 +14,14 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
 import IconButton from '@components/IconButton.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import CustomCommandManager from '@components/CustomCommandManager.vue'
 import { useConfigStore } from '@stores/configStore'
+import { useGitStore } from '@stores/gitStore'
 import { replaceVariables } from '@/utils/commandParser'
 
 // @CMDPANEL: file path: components\CustomCommandsPanel.vue
@@ -39,8 +40,208 @@ function openManager() {
 }
 
 const configStore = useConfigStore()
+const gitStore = useGitStore()
 const commands = computed(() => configStore.customCommands || [])
 const isRunning = ref<Record<string, boolean>>({})
+
+// ──────────────────────────────────────────────
+// 定时提交:按设定间隔自动 git add-all + commit
+// - 间隔任意(分钟/小时/天),启动时可立即提交一次
+// - 提交信息:默认提交信息(configStore.defaultCommitMessage)或 AI 生成
+// - setTimeout 链式调度(而非 setInterval),避免上一次还没跑完就叠下一次
+// - 设置持久化到 localStorage,刷新后不用重新填
+// ──────────────────────────────────────────────
+const SCHEDULE_SETTINGS_KEY = 'zen-gitsync:schedule-commit-settings'
+
+type ScheduleUnit = 'min' | 'hour' | 'day'
+type MessageMode = 'default' | 'ai'
+interface ScheduleLog {
+  time: number
+  message: string
+  ok: boolean
+  skipped?: boolean
+  error?: string
+}
+
+const scheduleEnabled = ref(false)
+const scheduleInterval = ref(30)
+const scheduleUnit = ref<ScheduleUnit>('min')
+const scheduleCommitNow = ref(true)
+const scheduleMessageMode = ref<MessageMode>('default')
+const scheduleBusy = ref(false)
+const nextCommitAt = ref(0)
+const nowTick = ref(Date.now())
+const scheduleLogs = ref<ScheduleLog[]>([])
+// 启动时的工作目录快照:运行中若用户切换了项目目录,
+// 继续自动提交会把变更提交到错误的仓库,必须拦下
+const scheduleStartDir = ref('')
+
+const UNIT_MS: Record<ScheduleUnit, number> = { min: 60_000, hour: 3_600_000, day: 86_400_000 }
+
+const intervalMs = computed(() => {
+  const v = Math.max(1, Number(scheduleInterval.value) || 1)
+  return v * UNIT_MS[scheduleUnit.value]
+})
+
+// 设置持久化:启动状态不持久化(刷新后默认停止,避免用户不知情时后台一直在提交)
+watch([scheduleInterval, scheduleUnit, scheduleCommitNow, scheduleMessageMode], () => {
+  try {
+    localStorage.setItem(SCHEDULE_SETTINGS_KEY, JSON.stringify({
+      interval: scheduleInterval.value,
+      unit: scheduleUnit.value,
+      commitNow: scheduleCommitNow.value,
+      messageMode: scheduleMessageMode.value
+    }))
+  } catch { /* 隐私模式等场景 localStorage 不可用,忽略 */ }
+}, { deep: true })
+
+try {
+  const saved = JSON.parse(localStorage.getItem(SCHEDULE_SETTINGS_KEY) || '{}')
+  if (saved.interval) scheduleInterval.value = Math.max(1, Number(saved.interval) || 30)
+  if (saved.unit && UNIT_MS[saved.unit as ScheduleUnit]) scheduleUnit.value = saved.unit as ScheduleUnit
+  if (typeof saved.commitNow === 'boolean') scheduleCommitNow.value = saved.commitNow
+  if (saved.messageMode === 'ai' || saved.messageMode === 'default') scheduleMessageMode.value = saved.messageMode
+} catch { /* 解析失败用默认值 */ }
+
+let scheduleTimer: ReturnType<typeof setTimeout> | null = null
+let tickTimer: ReturnType<typeof setInterval> | null = null
+
+function armNextTimer() {
+  if (!scheduleEnabled.value) return
+  // 关键:先清掉可能存在的旧定时器再排新的。
+  // 否则定时运行中点「立即提交一次」会再排一条链,提交频率就不再是设定间隔了。
+  if (scheduleTimer) clearTimeout(scheduleTimer)
+  nextCommitAt.value = Date.now() + intervalMs.value
+  scheduleTimer = setTimeout(runScheduledCommit, intervalMs.value)
+}
+
+function toggleSchedule(running: boolean | string | number) {
+  if (running) {
+    scheduleEnabled.value = true
+    scheduleStartDir.value = configStore.currentDirectory || ''
+    nowTick.value = Date.now()
+    tickTimer = setInterval(() => { nowTick.value = Date.now() }, 1000)
+    if (scheduleCommitNow.value) {
+      runScheduledCommit()
+    } else {
+      armNextTimer()
+    }
+    ElMessage.success($t('@CMDPANEL:定时提交已启动'))
+  } else {
+    scheduleEnabled.value = false
+    if (scheduleTimer) { clearTimeout(scheduleTimer); scheduleTimer = null }
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null }
+    nextCommitAt.value = 0
+    ElMessage.info($t('@CMDPANEL:定时提交已停止'))
+  }
+}
+
+onBeforeUnmount(() => {
+  if (scheduleTimer) clearTimeout(scheduleTimer)
+  if (tickTimer) clearInterval(tickTimer)
+})
+
+function pushLog(entry: ScheduleLog) {
+  scheduleLogs.value.unshift(entry)
+  // 只保留最近 20 条,防长时间运行内存膨胀
+  if (scheduleLogs.value.length > 20) scheduleLogs.value.length = 20
+}
+
+function fmtClock(ts: number) {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+const countdownText = computed(() => {
+  if (!scheduleEnabled.value || !nextCommitAt.value) return ''
+  const remain = Math.max(0, nextCommitAt.value - nowTick.value)
+  const s = Math.floor(remain / 1000)
+  const p = (n: number) => String(n).padStart(2, '0')
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  return h > 0 ? `${p(h)}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`
+})
+
+// 手动「立即提交一次」:不改调度状态,只跑一轮
+async function commitOnceNow() {
+  if (scheduleBusy.value) return
+  await runScheduledCommit()
+}
+
+async function runScheduledCommit() {
+  if (scheduleBusy.value) return
+  scheduleBusy.value = true
+  try {
+    if (!gitStore.isGitRepo) {
+      pushLog({ time: Date.now(), message: '', ok: false, error: $t('@CMDPANEL:当前目录不是Git仓库') })
+      return
+    }
+
+    // 目录守卫:项目目录变了就立刻停掉定时,绝不往错误的仓库里自动提交。
+    // 仅对「定时运行中」生效 —— 手动点「立即提交一次」时 scheduleEnabled 为 false,
+    // scheduleStartDir 还没被赋值(空串),若不限定会永远判定为「目录已切换」而误拦。
+    if (scheduleEnabled.value && (configStore.currentDirectory || '') !== scheduleStartDir.value) {
+      pushLog({
+        time: Date.now(), message: '', ok: false,
+        error: $t('@CMDPANEL:项目目录已切换，定时提交已自动停止')
+      })
+      scheduleEnabled.value = false
+      if (scheduleTimer) { clearTimeout(scheduleTimer); scheduleTimer = null }
+      if (tickTimer) { clearInterval(tickTimer); tickTimer = null }
+      nextCommitAt.value = 0
+      ElMessage.warning($t('@CMDPANEL:项目目录已切换，定时提交已自动停止'))
+      return
+    }
+
+    // 1. 刷新工作区状态,没有变更就跳过这一轮(不报错,定时任务静默空转很正常)
+    await gitStore.fetchStatusPorcelain()
+    if (gitStore.fileList.length === 0) {
+      pushLog({ time: Date.now(), message: $t('@CMDPANEL:无变更，跳过本次提交'), ok: true, skipped: true })
+      return
+    }
+
+    // 2. 生成提交信息
+    let message = ''
+    if (scheduleMessageMode.value === 'ai') {
+      const res = await fetch('/api/config/generate-commit-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      })
+      const data = await res.json()
+      if (!data.success) {
+        pushLog({ time: Date.now(), message: '', ok: false, error: data.error || $t('@CMDPANEL:AI 生成失败') })
+        return
+      }
+      message = data.scope
+        ? `${data.type}(${data.scope}): ${data.description}`
+        : `${data.type}: ${data.description}`
+    } else {
+      const ts = fmtClock(Date.now())
+      message = configStore.defaultCommitMessage || `chore: auto commit at ${ts}`
+    }
+
+    // 3. 暂存全部变更(静默 fetch,不走 addAllToStage 免得每轮弹 toast)
+    const addResp = await fetch('/api/add-all', { method: 'POST' })
+    const addResult = await addResp.json()
+    if (!addResult.success) {
+      pushLog({ time: Date.now(), message, ok: false, error: addResult.error || 'git add 失败' })
+      return
+    }
+
+    // 4. 提交(commitChanges 会顺带刷新状态和历史;锁定文件由后端 /api/commit 自动排除)
+    const ok = await gitStore.commitChanges(message, false)
+    pushLog({ time: Date.now(), message, ok })
+  } catch (e: any) {
+    pushLog({ time: Date.now(), message: '', ok: false, error: e?.message || String(e) })
+  } finally {
+    scheduleBusy.value = false
+    // 链式调度:本轮跑完再排下一轮,间隔从「本轮完成时刻」起算
+    if (scheduleEnabled.value) armNextTimer()
+  }
+}
 
 // 高度调节
 const panelHeight = ref(240)
@@ -200,6 +401,110 @@ async function runCommand(cmd: any) {
             <span class="command-name">{{ cmd.name }}</span>
             <span v-if="cmd.description" class="command-desc">{{ cmd.description }}</span>
             <span v-else class="command-desc command-text">{{ cmd.command }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 定时提交:按间隔自动 add-all + commit,支持默认信息 / AI 生成 -->
+    <div class="schedule-section" :class="{ 'is-running': scheduleEnabled }">
+      <div class="schedule-header">
+        <div class="schedule-header-left">
+          <el-icon class="schedule-icon">
+            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor" d="M512 896a384 384 0 1 0 0-768 384 384 0 0 0 0 768zm0 64a448 448 0 1 1 0-896 448 448 0 0 1 0 896z"/>
+              <path fill="currentColor" d="M480 256a32 32 0 0 1 32 32v224a32 32 0 0 1-14.08 26.56l-128 85.312a32 32 0 1 1-35.456-53.248L448 495.168V288a32 32 0 0 1 32-32z"/>
+            </svg>
+          </el-icon>
+          <span class="schedule-title">{{ $t('@CMDPANEL:定时提交') }}</span>
+          <span v-if="scheduleEnabled && countdownText" class="schedule-countdown">
+            {{ $t('@CMDPANEL:下次提交') }} {{ countdownText }}
+          </span>
+        </div>
+        <div class="schedule-header-right" @click.stop>
+          <el-switch
+            v-model="scheduleEnabled"
+            :disabled="!gitStore.isGitRepo || (!scheduleEnabled && scheduleBusy)"
+            :aria-label="$t('@CMDPANEL:定时提交')"
+            @change="toggleSchedule"
+          />
+        </div>
+      </div>
+
+      <div class="schedule-body">
+        <div class="schedule-row">
+          <span class="schedule-label">{{ $t('@CMDPANEL:提交间隔') }}</span>
+          <el-input-number
+            v-model="scheduleInterval"
+            :min="1"
+            :max="999"
+            :step="scheduleUnit === 'min' ? 5 : 1"
+            size="small"
+            controls-position="right"
+            class="schedule-interval-input"
+            :disabled="scheduleEnabled"
+          />
+          <el-select
+            v-model="scheduleUnit"
+            size="small"
+            class="schedule-unit-select"
+            :disabled="scheduleEnabled"
+          >
+            <el-option :label="$t('@CMDPANEL:分钟')" value="min" />
+            <el-option :label="$t('@CMDPANEL:小时')" value="hour" />
+            <el-option :label="$t('@CMDPANEL:天')" value="day" />
+          </el-select>
+          <el-checkbox
+            v-model="scheduleCommitNow"
+            size="small"
+            :disabled="scheduleEnabled"
+            class="schedule-commit-now"
+          >
+            {{ $t('@CMDPANEL:启动时立即提交一次') }}
+          </el-checkbox>
+        </div>
+
+        <div class="schedule-row">
+          <span class="schedule-label">{{ $t('@CMDPANEL:提交信息') }}</span>
+          <el-radio-group
+            v-model="scheduleMessageMode"
+            size="small"
+            :disabled="scheduleEnabled"
+          >
+            <el-radio value="default">{{ $t('@CMDPANEL:默认提交信息') }}</el-radio>
+            <el-radio value="ai">
+              {{ $t('@CMDPANEL:AI 生成') }}
+              <el-tooltip placement="top" effect="dark" :show-after="200">
+                <template #content>
+                  <span>{{ $t('@CMDPANEL:使用通用设置中已配置的默认模型，按当前变更生成 Conventional Commits 信息') }}</span>
+                </template>
+                <el-icon class="schedule-help-icon"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896zm0 64a384 384 0 1 0 0 768 384 384 0 0 0 0-768zm0 128a96 96 0 0 1 96 96c0 36.032-20.864 64.192-51.392 82.752-8.832 5.376-16.832 9.6-27.264 14.272l-5.312 2.368v16.832a32 32 0 0 1-63.488 5.632L448 576v-64a32 32 0 0 1 32-32c22.528 0 32.896-3.776 44.48-10.816C537.344 461.632 544 452.032 544 416a32 32 0 0 0-64 0 32 32 0 0 1-64 0 96 96 0 0 1 96-96zm0 416a40 40 0 1 1 0-80 40 40 0 0 1 0 80z"/></svg></el-icon>
+              </el-tooltip>
+            </el-radio>
+          </el-radio-group>
+          <el-button
+            size="small"
+            class="schedule-once-btn"
+            :disabled="!gitStore.isGitRepo || scheduleBusy"
+            :loading="scheduleBusy"
+            @click="commitOnceNow"
+          >
+            {{ $t('@CMDPANEL:立即提交一次') }}
+          </el-button>
+        </div>
+
+        <!-- 运行日志:只展示最近几条 -->
+        <div v-if="scheduleLogs.length > 0" class="schedule-logs">
+          <div
+            v-for="(log, idx) in scheduleLogs.slice(0, 3)"
+            :key="log.time + '-' + idx"
+            class="schedule-log-item"
+            :class="{ 'is-error': !log.ok, 'is-skipped': log.skipped }"
+          >
+            <span class="schedule-log-time">{{ fmtClock(log.time) }}</span>
+            <span class="schedule-log-text">
+              {{ log.ok ? log.message : `${$t('@CMDPANEL:提交失败')}: ${log.error}` }}
+            </span>
           </div>
         </div>
       </div>
@@ -415,5 +720,142 @@ async function runCommand(cmd: any) {
 .command-text {
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+/* ── 定时提交区块 ── */
+.schedule-section {
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  background: var(--bg-input);
+}
+
+.schedule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px var(--spacing-md);
+}
+
+.schedule-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.schedule-icon {
+  font-size: 15px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.schedule-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.schedule-countdown {
+  font-size: 11px;
+  color: var(--color-success);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.schedule-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.schedule-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px var(--spacing-md) 8px;
+}
+
+.schedule-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.schedule-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  min-width: 52px;
+}
+
+.schedule-interval-input {
+  width: 90px;
+}
+
+.schedule-unit-select {
+  width: 78px;
+}
+
+.schedule-commit-now {
+  margin-left: 4px;
+}
+
+.schedule-commit-now :deep(.el-checkbox__label) {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.schedule-once-btn {
+  margin-left: auto;
+}
+
+.schedule-help-icon {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-left: 2px;
+  vertical-align: middle;
+  cursor: help;
+}
+
+.schedule-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 66px;
+  overflow-y: auto;
+  background: var(--bg-container);
+  border-radius: var(--radius-xs);
+  padding: 4px 6px;
+}
+
+.schedule-log-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  min-width: 0;
+}
+
+.schedule-log-time {
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.schedule-log-text {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.schedule-log-item.is-error .schedule-log-text {
+  color: var(--color-danger);
+}
+
+.schedule-log-item.is-skipped .schedule-log-text {
+  color: var(--text-tertiary);
+  font-style: italic;
 }
 </style>

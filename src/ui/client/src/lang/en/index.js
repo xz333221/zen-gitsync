@@ -303,6 +303,26 @@ export default {
   '@CMDPANEL:去添加': 'Add one',
   '@CMDPANEL:已在新终端中执行': 'Running in terminal: {name}',
   '@CMDPANEL:执行失败': 'Execution failed',
+  // @CMDPANEL: 定时提交
+  '@CMDPANEL:定时提交': 'Scheduled Commit',
+  '@CMDPANEL:下次提交': 'Next:',
+  '@CMDPANEL:提交间隔': 'Interval',
+  '@CMDPANEL:分钟': 'min',
+  '@CMDPANEL:小时': 'hour',
+  '@CMDPANEL:天': 'day',
+  '@CMDPANEL:启动时立即提交一次': 'Commit once on start',
+  '@CMDPANEL:提交信息': 'Message',
+  '@CMDPANEL:默认提交信息': 'Default message',
+  '@CMDPANEL:AI 生成': 'AI generated',
+  '@CMDPANEL:使用通用设置中已配置的默认模型，按当前变更生成 Conventional Commits 信息': 'Use the default model configured in general settings to generate a Conventional Commits message from current changes',
+  '@CMDPANEL:立即提交一次': 'Commit now',
+  '@CMDPANEL:定时提交已启动': 'Scheduled commit started',
+  '@CMDPANEL:定时提交已停止': 'Scheduled commit stopped',
+  '@CMDPANEL:无变更，跳过本次提交': 'No changes, skipped',
+  '@CMDPANEL:提交失败': 'Commit failed',
+  '@CMDPANEL:当前目录不是Git仓库': 'Current directory is not a Git repository',
+  '@CMDPANEL:AI 生成失败': 'AI generation failed',
+  '@CMDPANEL:项目目录已切换，定时提交已自动停止': 'Project directory changed, scheduled commit stopped automatically',
   // @CMDPANEL: file end
   // @CMD01: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
