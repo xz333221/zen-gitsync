@@ -56,6 +56,7 @@ describe('CustomCommandsPanel.vue 定时提交', () => {
     mockGitStore.fileList = [{ path: 'a.ts', type: 'M' }]
     mockGitStore.fetchStatusPorcelain = vi.fn().mockResolvedValue(undefined)
     mockGitStore.commitChanges = vi.fn().mockResolvedValue(true)
+    mockGitStore.pushToRemote = vi.fn().mockResolvedValue(true)
     mockConfigStore.customCommands = []
     mockConfigStore.currentDirectory = '/proj'
     mockConfigStore.defaultCommitMessage = ''
@@ -270,7 +271,57 @@ describe('CustomCommandsPanel.vue 定时提交', () => {
     expect(mockGitStore.commitChanges).toHaveBeenCalledWith('chore: daily sync', false)
   })
 
-  test('CCP-17: 自定义信息持久化到 localStorage', async () => {
+  test('CCP-17: 自动推送默认开启 → 提交成功后推送远程', async () => {
+    mockScheduleFetch({})
+    const w = mountPanel()
+    const vm: any = w.vm
+    expect(vm.scheduleAutoPush).toBe(true) // 默认开启
+    await vm.runScheduledCommit()
+    expect(mockGitStore.commitChanges).toHaveBeenCalledTimes(1)
+    expect(mockGitStore.pushToRemote).toHaveBeenCalledTimes(1)
+  })
+
+  test('CCP-18: 关闭自动推送 → 只提交不推送', async () => {
+    mockScheduleFetch({})
+    const w = mountPanel()
+    const vm: any = w.vm
+    vm.scheduleAutoPush = false
+    await vm.runScheduledCommit()
+    expect(mockGitStore.commitChanges).toHaveBeenCalledTimes(1)
+    expect(mockGitStore.pushToRemote).not.toHaveBeenCalled()
+  })
+
+  test('CCP-19: 提交失败 → 不推送(不会推上一次的提交)', async () => {
+    mockScheduleFetch({})
+    mockGitStore.commitChanges = vi.fn().mockResolvedValue(false)
+    const w = mountPanel()
+    await (w.vm as any).runScheduledCommit()
+    expect(mockGitStore.pushToRemote).not.toHaveBeenCalled()
+  })
+
+  test('CCP-20: 推送失败 → 记一条推送失败日志,提交的日志仍为成功', async () => {
+    mockScheduleFetch({})
+    mockGitStore.pushToRemote = vi.fn().mockResolvedValue(false)
+    const w = mountPanel()
+    await (w.vm as any).runScheduledCommit()
+    const logs = (w.vm as any).scheduleLogs
+    // 最新的在最前面:0 = 推送失败,1 = 提交成功
+    expect(logs[0].ok).toBe(false)
+    expect(logs[0].stage).toBe('push')
+    expect(logs[1].ok).toBe(true)
+    expect(logs[1].message).toMatch(/^chore: auto commit at/)
+  })
+
+  test('CCP-21: 自动推送开关持久化(默认 true 落盘)', async () => {
+    const w = mountPanel()
+    const vm: any = w.vm
+    vm.scheduleAutoPush = false
+    await w.vm.$nextTick()
+    await new Promise(r => setTimeout(r, 0))
+    expect(JSON.parse(localStorage.getItem(SCHEDULE_SETTINGS_KEY)!).autoPush).toBe(false)
+  })
+
+  test('CCP-22: 自定义信息持久化到 localStorage', async () => {
     const w = mountPanel()
     const vm: any = w.vm
     vm.scheduleCustomMessage = 'docs: 定时归档笔记'

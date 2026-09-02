@@ -61,12 +61,16 @@ interface ScheduleLog {
   ok: boolean
   skipped?: boolean
   error?: string
+  /** 失败发生在哪个阶段,决定日志用「提交失败」还是「推送失败」措辞 */
+  stage?: 'commit' | 'push'
 }
 
 const scheduleEnabled = ref(false)
 const scheduleInterval = ref(30)
 const scheduleUnit = ref<ScheduleUnit>('min')
 const scheduleCommitNow = ref(true)
+// 提交成功后自动 push 到远程(默认开启);没有远程/无上游时后端报错,只记日志不中断定时
+const scheduleAutoPush = ref(true)
 const scheduleMessageMode = ref<MessageMode>('default')
 // 默认模式下的自定义提交信息:空串 = 不覆盖,按「全局默认信息 → chore 兜底」链取值
 const scheduleCustomMessage = ref('')
@@ -86,14 +90,15 @@ const intervalMs = computed(() => {
 })
 
 // 设置持久化:启动状态不持久化(刷新后默认停止,避免用户不知情时后台一直在提交)
-watch([scheduleInterval, scheduleUnit, scheduleCommitNow, scheduleMessageMode, scheduleCustomMessage], () => {
+watch([scheduleInterval, scheduleUnit, scheduleCommitNow, scheduleMessageMode, scheduleCustomMessage, scheduleAutoPush], () => {
   try {
     localStorage.setItem(SCHEDULE_SETTINGS_KEY, JSON.stringify({
       interval: scheduleInterval.value,
       unit: scheduleUnit.value,
       commitNow: scheduleCommitNow.value,
       messageMode: scheduleMessageMode.value,
-      customMessage: scheduleCustomMessage.value
+      customMessage: scheduleCustomMessage.value,
+      autoPush: scheduleAutoPush.value
     }))
   } catch { /* 隐私模式等场景 localStorage 不可用,忽略 */ }
 }, { deep: true })
@@ -105,6 +110,8 @@ try {
   if (typeof saved.commitNow === 'boolean') scheduleCommitNow.value = saved.commitNow
   if (saved.messageMode === 'ai' || saved.messageMode === 'default') scheduleMessageMode.value = saved.messageMode
   if (typeof saved.customMessage === 'string') scheduleCustomMessage.value = saved.customMessage
+  // 没存过就保持默认 true;存过就尊重用户选择
+  if (typeof saved.autoPush === 'boolean') scheduleAutoPush.value = saved.autoPush
 } catch { /* 解析失败用默认值 */ }
 
 // 「默认提交信息」实际会用的内容,用于输入框 placeholder 预览
@@ -154,6 +161,13 @@ function pushLog(entry: ScheduleLog) {
   scheduleLogs.value.unshift(entry)
   // 只保留最近 20 条,防长时间运行内存膨胀
   if (scheduleLogs.value.length > 20) scheduleLogs.value.length = 20
+}
+
+// 日志文案:失败时要区分是提交阶段还是推送阶段挂的,否则会显示成「提交失败: 推送失败」
+function logText(log: ScheduleLog) {
+  if (log.ok) return log.message
+  if (log.stage === 'push') return $t('@CMDPANEL:推送失败')
+  return `${$t('@CMDPANEL:提交失败')}: ${log.error || ''}`
 }
 
 function fmtClock(ts: number) {
@@ -246,6 +260,15 @@ async function runScheduledCommit() {
     // 4. 提交(commitChanges 会顺带刷新状态和历史;锁定文件由后端 /api/commit 自动排除)
     const ok = await gitStore.commitChanges(message, false)
     pushLog({ time: Date.now(), message, ok })
+
+    // 5. 自动推送:仅在提交成功后才推;推送失败不影响定时继续(记一条日志即可,
+    //    没有配置远程/无上游是很常见的状态,不该中断整个调度链)
+    if (ok && scheduleAutoPush.value) {
+      const pushed = await gitStore.pushToRemote()
+      if (!pushed) {
+        pushLog({ time: Date.now(), message, ok: false, stage: 'push' })
+      }
+    }
   } catch (e: any) {
     pushLog({ time: Date.now(), message: '', ok: false, error: e?.message || String(e) })
   } finally {
@@ -519,6 +542,17 @@ async function runCommand(cmd: any) {
           />
         </div>
 
+        <div class="schedule-row">
+          <span class="schedule-label">{{ $t('@CMDPANEL:推送') }}</span>
+          <el-checkbox
+            v-model="scheduleAutoPush"
+            size="small"
+            :disabled="scheduleEnabled"
+          >
+            {{ $t('@CMDPANEL:提交后自动推送到远程') }}
+          </el-checkbox>
+        </div>
+
         <!-- 运行日志:只展示最近几条 -->
         <div v-if="scheduleLogs.length > 0" class="schedule-logs">
           <div
@@ -529,7 +563,7 @@ async function runCommand(cmd: any) {
           >
             <span class="schedule-log-time">{{ fmtClock(log.time) }}</span>
             <span class="schedule-log-text">
-              {{ log.ok ? log.message : `${$t('@CMDPANEL:提交失败')}: ${log.error}` }}
+              {{ logText(log) }}
             </span>
           </div>
         </div>
