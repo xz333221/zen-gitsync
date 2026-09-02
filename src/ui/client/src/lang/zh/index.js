@@ -318,6 +318,7 @@ export default {
   '@CMDPANEL:天': '天',
   '@CMDPANEL:启动时立即提交一次': '启动时立即提交一次',
   '@CMDPANEL:提交信息': '提交信息',
+  '@CMDPANEL:信息内容': '信息内容',
   '@CMDPANEL:默认提交信息': '默认提交信息',
   '@CMDPANEL:AI 生成': 'AI 生成',
   '@CMDPANEL:使用通用设置中已配置的默认模型，按当前变更生成 Conventional Commits 信息': '使用通用设置中已配置的默认模型，按当前变更生成 Conventional Commits 信息',

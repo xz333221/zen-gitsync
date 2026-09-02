@@ -312,6 +312,7 @@ export default {
   '@CMDPANEL:天': 'day',
   '@CMDPANEL:启动时立即提交一次': 'Commit once on start',
   '@CMDPANEL:提交信息': 'Message',
+  '@CMDPANEL:信息内容': 'Content',
   '@CMDPANEL:默认提交信息': 'Default message',
   '@CMDPANEL:AI 生成': 'AI generated',
   '@CMDPANEL:使用通用设置中已配置的默认模型，按当前变更生成 Conventional Commits 信息': 'Use the default model configured in general settings to generate a Conventional Commits message from current changes',

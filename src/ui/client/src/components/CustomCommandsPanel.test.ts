@@ -249,4 +249,34 @@ describe('CustomCommandsPanel.vue 定时提交', () => {
     vm.scheduleInterval = 0
     expect(vm.intervalMs).toBe(86_400_000)
   })
+
+  test('CCP-15: 自定义信息非空 → 优先于全局默认信息', async () => {
+    mockConfigStore.defaultCommitMessage = 'chore: daily sync'
+    mockScheduleFetch({})
+    const w = mountPanel()
+    const vm: any = w.vm
+    vm.scheduleCustomMessage = 'docs: 定时归档笔记'
+    await vm.runScheduledCommit()
+    expect(mockGitStore.commitChanges).toHaveBeenCalledWith('docs: 定时归档笔记', false)
+  })
+
+  test('CCP-16: 自定义信息为空白 → trim 后回落到全局默认信息', async () => {
+    mockConfigStore.defaultCommitMessage = 'chore: daily sync'
+    mockScheduleFetch({})
+    const w = mountPanel()
+    const vm: any = w.vm
+    vm.scheduleCustomMessage = '   '
+    await vm.runScheduledCommit()
+    expect(mockGitStore.commitChanges).toHaveBeenCalledWith('chore: daily sync', false)
+  })
+
+  test('CCP-17: 自定义信息持久化到 localStorage', async () => {
+    const w = mountPanel()
+    const vm: any = w.vm
+    vm.scheduleCustomMessage = 'docs: 定时归档笔记'
+    await w.vm.$nextTick()
+    await new Promise(r => setTimeout(r, 0))
+    const saved = JSON.parse(localStorage.getItem(SCHEDULE_SETTINGS_KEY)!)
+    expect(saved.customMessage).toBe('docs: 定时归档笔记')
+  })
 })

@@ -68,6 +68,8 @@ const scheduleInterval = ref(30)
 const scheduleUnit = ref<ScheduleUnit>('min')
 const scheduleCommitNow = ref(true)
 const scheduleMessageMode = ref<MessageMode>('default')
+// 默认模式下的自定义提交信息:空串 = 不覆盖,按「全局默认信息 → chore 兜底」链取值
+const scheduleCustomMessage = ref('')
 const scheduleBusy = ref(false)
 const nextCommitAt = ref(0)
 const nowTick = ref(Date.now())
@@ -84,13 +86,14 @@ const intervalMs = computed(() => {
 })
 
 // 设置持久化:启动状态不持久化(刷新后默认停止,避免用户不知情时后台一直在提交)
-watch([scheduleInterval, scheduleUnit, scheduleCommitNow, scheduleMessageMode], () => {
+watch([scheduleInterval, scheduleUnit, scheduleCommitNow, scheduleMessageMode, scheduleCustomMessage], () => {
   try {
     localStorage.setItem(SCHEDULE_SETTINGS_KEY, JSON.stringify({
       interval: scheduleInterval.value,
       unit: scheduleUnit.value,
       commitNow: scheduleCommitNow.value,
-      messageMode: scheduleMessageMode.value
+      messageMode: scheduleMessageMode.value,
+      customMessage: scheduleCustomMessage.value
     }))
   } catch { /* 隐私模式等场景 localStorage 不可用,忽略 */ }
 }, { deep: true })
@@ -101,7 +104,13 @@ try {
   if (saved.unit && UNIT_MS[saved.unit as ScheduleUnit]) scheduleUnit.value = saved.unit as ScheduleUnit
   if (typeof saved.commitNow === 'boolean') scheduleCommitNow.value = saved.commitNow
   if (saved.messageMode === 'ai' || saved.messageMode === 'default') scheduleMessageMode.value = saved.messageMode
+  if (typeof saved.customMessage === 'string') scheduleCustomMessage.value = saved.customMessage
 } catch { /* 解析失败用默认值 */ }
+
+// 「默认提交信息」实际会用的内容,用于输入框 placeholder 预览
+const defaultMessagePreview = computed(() =>
+  configStore.defaultCommitMessage || `chore: auto commit at ${fmtClock(Date.now())}`
+)
 
 let scheduleTimer: ReturnType<typeof setTimeout> | null = null
 let tickTimer: ReturnType<typeof setInterval> | null = null
@@ -220,7 +229,10 @@ async function runScheduledCommit() {
         : `${data.type}: ${data.description}`
     } else {
       const ts = fmtClock(Date.now())
-      message = configStore.defaultCommitMessage || `chore: auto commit at ${ts}`
+      // 优先级:自定义信息 > 全局默认提交信息 > chore 时间戳兜底
+      message = scheduleCustomMessage.value.trim()
+        || configStore.defaultCommitMessage
+        || `chore: auto commit at ${ts}`
     }
 
     // 3. 暂存全部变更(静默 fetch,不走 addAllToStage 免得每轮弹 toast)
@@ -491,6 +503,20 @@ async function runCommand(cmd: any) {
           >
             {{ $t('@CMDPANEL:立即提交一次') }}
           </el-button>
+        </div>
+
+        <!-- 默认模式:展示实际会用的信息并可编辑;留空则回落到全局默认/时间戳兜底 -->
+        <div v-if="scheduleMessageMode === 'default'" class="schedule-row">
+          <span class="schedule-label">{{ $t('@CMDPANEL:信息内容') }}</span>
+          <el-input
+            v-model="scheduleCustomMessage"
+            size="small"
+            class="schedule-message-input"
+            :placeholder="defaultMessagePreview"
+            :maxlength="200"
+            clearable
+            :disabled="scheduleEnabled"
+          />
         </div>
 
         <!-- 运行日志:只展示最近几条 -->
@@ -806,6 +832,16 @@ async function runCommand(cmd: any) {
 
 .schedule-once-btn {
   margin-left: auto;
+}
+
+.schedule-message-input {
+  flex: 1;
+  min-width: 160px;
+}
+
+.schedule-message-input :deep(.el-input__inner) {
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 
 .schedule-help-icon {
