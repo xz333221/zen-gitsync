@@ -49,7 +49,11 @@ describe('AiDiffSummary', () => {
         stubs: {
           MarkdownPreview: { props: ['content'], template: '<div>{{ content }}</div>' },
           ElIcon: { template: '<i><slot /></i>' },
-          ElButton: { template: '<button><slot /></button>' }
+          // 透传 title,让测试能按语义选中按钮(头部按钮顺序会变,按索引选会悄悄点错)
+          ElButton: {
+            props: ['title', 'disabled'],
+            template: '<button :title="title" :disabled="disabled"><slot /></button>'
+          }
         }
       }
     })
@@ -103,7 +107,10 @@ describe('AiDiffSummary', () => {
     const wrapper = mountSummary({ source: 'commit', scope: 'overall', commitHash: 'abcdef1' })
     await vi.advanceTimersByTimeAsync(400)
 
-    await wrapper.findAll('button')[0].trigger('click')
+    // $t 被 mock 成返回 key 本身,title 即 '@DIFFAI:重新生成'
+    const refreshBtn = wrapper.find('button[title="@DIFFAI:重新生成"]')
+    expect(refreshBtn.exists()).toBe(true)
+    await refreshBtn.trigger('click')
     await Promise.resolve()
 
     expect(calls).toHaveLength(2)
