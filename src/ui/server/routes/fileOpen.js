@@ -15,6 +15,7 @@
 import fs from 'fs/promises';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import path from 'path';
+import os from 'os';
 import open from 'open';
 import { spawn, spawnSync } from 'child_process';
 
@@ -45,6 +46,61 @@ function commandExists(command, platform = process.platform) {
 }
 
 /**
+ * 从 `--version` 的输出里提取 semver 版本号。
+ * 各工具输出格式五花八门:
+ *   dsh     → "0.1.1-rc.2"
+ *   claude  → "1.0.60 (Claude Code)"
+ *   code    → "1.92.0 abc123def (commit ...)"
+ *   opencode → "opencode 0.1.30"
+ * 策略:取第一个 semver 模式(含 prerelease 0.1.1-rc.2 / build 1.0.0+build.1)。
+ * 提不出来返回 null(调用方按"未知版本"处理,不影响安装判定)。
+ */
+export function parseVersionOutput(text) {
+  if (!text) return null;
+  const match = String(text).match(/\d+\.\d+\.\d+(?:[-+][\w.-]+)?/);
+  return match ? match[0] : null;
+}
+
+// ── npm registry 最新版本查询(右键更新菜单的「当前 → 最新」提示用)──────────
+// 为什么走 HTTP 而不是 `npm view <pkg> version`:spawnSync('npm.cmd', ...) 在
+// server 子进程里不稳(prefix -g 曾返回 "…npm:3" 废地址,见 findDshExecutable
+// 的修复记录),HTTP 直查又快又可控。
+// registry 优先级:~/.npmrc 的 registry 字段(用户可能配了镜像)→ npmmirror 默认。
+
+let cachedRegistryBase = null;
+
+export function getRegistryBase(readFile = fs.readFile) {
+  if (cachedRegistryBase) return cachedRegistryBase;
+  return readFile(path.join(os.homedir(), '.npmrc'), 'utf8').then((npmrc) => {
+    const match = String(npmrc).match(/^\s*registry\s*=\s*(\S+)/m);
+    cachedRegistryBase = match
+      ? match[1].replace(/\/+$/, '')
+      : 'https://registry.npmmirror.com';
+    return cachedRegistryBase;
+  }).catch(() => (cachedRegistryBase = 'https://registry.npmmirror.com'));
+}
+
+export async function fetchLatestVersion(packageName, { timeoutMs = 8000, fetchImpl = fetch } = {}) {
+  if (!packageName || !/^[\w@/.-]+$/.test(packageName)) return null;
+  const base = await getRegistryBase();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetchImpl(`${base}/${packageName}/latest`, {
+      signal: controller.signal,
+      headers: { accept: 'application/json' },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return typeof data?.version === 'string' ? data.version : null;
+  } catch {
+    return null; // 网络失败/超时:菜单显示原文案,不影响任何功能
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * 返回当前平台可展示、可执行的安装方案。
  * executable/args 只在服务端使用；前端只能提交固定 tool id，不能提交命令。
  */
@@ -64,6 +120,12 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
         : '未检测到 npm，请先安装 Node.js/npm，或按照官方文档手动安装。',
       executable: npmExecutable,
       args: ['install', '-g', packageName],
+      // 升级变体:@latest 强制同步到最新版。已是最新时 npm 自然跳过。
+      updateCommand: `npm install -g ${packageName}@latest`,
+      updatePackageManager: 'npm',
+      updateNote: '将在新终端中执行 `npm install -g <pkg>@latest`。已是最新时 npm 会跳过。',
+      updateExecutable: npmExecutable,
+      updateArgs: ['install', '-g', `${packageName}@latest`],
     };
   }
 
@@ -79,6 +141,18 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
         : '未检测到 winget，请使用 VS Code 官方安装程序。',
       executable: 'winget',
       args: ['install', '--id', 'Microsoft.VisualStudioCode', '-e', '--accept-package-agreements', '--accept-source-agreements'],
+      // winget 的升级动词是 upgrade(不是 install)
+      updateCommand: wingetAvailable
+        ? 'winget upgrade --id Microsoft.VisualStudioCode -e --accept-package-agreements --accept-source-agreements'
+        : undefined,
+      updatePackageManager: 'winget',
+      updateNote: wingetAvailable
+        ? '将在新终端中通过 winget upgrade 升级 VS Code。'
+        : '未检测到 winget，请使用 VS Code 官方安装包。',
+      updateExecutable: wingetAvailable ? 'winget' : undefined,
+      updateArgs: wingetAvailable
+        ? ['upgrade', '--id', 'Microsoft.VisualStudioCode', '-e', '--accept-package-agreements', '--accept-source-agreements']
+        : undefined,
     };
   } else if (platform === 'darwin') {
     const brewAvailable = hasCommand('brew', platform);
@@ -92,6 +166,11 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
         : '未检测到 Homebrew，请使用 VS Code 官方安装程序。',
       executable: 'brew',
       args: ['install', '--cask', 'visual-studio-code'],
+      updateCommand: brewAvailable ? 'brew upgrade --cask visual-studio-code' : undefined,
+      updatePackageManager: 'Homebrew',
+      updateNote: brewAvailable ? '将在新终端中通过 brew upgrade 升级 VS Code。' : '未检测到 brew。',
+      updateExecutable: brewAvailable ? 'brew' : undefined,
+      updateArgs: brewAvailable ? ['upgrade', '--cask', 'visual-studio-code'] : undefined,
     };
   } else {
     const snapAvailable = hasCommand('snap', platform);
@@ -105,6 +184,12 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
         : '当前 Linux 环境未检测到 snap，请按照发行版对应的官方说明安装。',
       executable: 'sudo',
       args: ['snap', 'install', 'code', '--classic'],
+      // snap 的升级动词是 refresh
+      updateCommand: snapAvailable ? 'sudo snap refresh code' : undefined,
+      updatePackageManager: 'snap',
+      updateNote: snapAvailable ? '将在新终端中通过 snap refresh 升级 VS Code。' : '未检测到 snap。',
+      updateExecutable: snapAvailable ? 'sudo' : undefined,
+      updateArgs: snapAvailable ? ['snap', 'refresh', 'code'] : undefined,
     };
   }
 
@@ -130,6 +215,26 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
           'Invoke-RestMethod https://code.kimi.com/kimi-code/install.ps1 | Invoke-Expression',
         ].join('; ')
       : undefined,
+    // 升级:kimi 官方脚本幂等,已安装时执行会自动升级到最新版,直接复用同一脚本
+    updateCommand: platform === 'win32'
+      ? 'irm https://code.kimi.com/kimi-code/install.ps1 | iex'
+      : 'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash',
+    updatePackageManager: 'Kimi Code 官方安装脚本',
+    updateNote: '官方安装脚本幂等，已安装时执行会自动升级到最新版本。',
+    updateKind: 'script',
+    updateExecutionCommand: platform === 'win32'
+      ? [
+          "if (-not (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {",
+          "function global:Get-FileHash { param([string]$Path, [string]$Algorithm = 'SHA256')",
+          "$stream = [System.IO.File]::OpenRead($Path)",
+          "try { $sha = [System.Security.Cryptography.SHA256]::Create(); try { $bytes = $sha.ComputeHash($stream) } finally { $sha.Dispose() } } finally { $stream.Dispose() }",
+          "$hash = ([System.BitConverter]::ToString($bytes)).Replace('-', '')",
+          "New-Object PSObject -Property @{ Algorithm = 'SHA256'; Hash = $hash; Path = $Path }",
+          "}",
+          "}",
+          'Invoke-RestMethod https://code.kimi.com/kimi-code/install.ps1 | Invoke-Expression',
+        ].join('; ')
+      : undefined,
   };
   installers.zcode = {
     supported: false,
@@ -137,6 +242,10 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
     packageManager: 'ZCode 官方安装包',
     docsUrl: TOOL_DOCS_URLS.zcode,
     note: 'ZCode 是桌面应用，官方提供 Windows、macOS 和 Linux 安装包，没有官方 npm CLI。',
+    // ZCode 是桌面应用、没有 CLI 更新通道;/api/update-tool 会对它返回 400
+    updateCommand: undefined,
+    updatePackageManager: 'ZCode 官方安装包',
+    updateNote: 'ZCode 是桌面应用，升级请到官网下载新版安装包覆盖安装。',
   };
   return installers;
 }
@@ -283,17 +392,34 @@ async function launchDsh(dirPath) {
   return launchInTerminal(dirPath, executable, ['web']);
 }
 
-async function findDshExecutable() {
+// 在 Windows 上找 dsh 可执行文件。
+// 优先用 where.exe dsh(覆盖 nvm4w 的 C:\nvm4w\nodejs\、默认的 %APPDATA%\npm、
+// pnpm/yarn 自定义 prefix、以及用户手摆到 PATH 里的任意位置),
+//再兜底 APPDATA\npm + npm prefix -g 两个写死路径(为 where.exe 漏检的边缘情况,
+//比如 PATH 里只有 junction/symlink 时)。
+export async function findDshExecutable() {
   if (process.platform !== 'win32') return commandExists('dsh') ? 'dsh' : null;
 
-  const candidates = [path.join(process.env.APPDATA || '', 'npm', 'dsh.cmd')];
+  const where = spawnSync('where.exe', ['dsh'], { encoding: 'utf8', windowsHide: true });
+  if (where.status === 0 && where.stdout) {
+    for (const line of where.stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)) {
+      // 偶尔会输出 "PATH=..." 这种变量行,跳过
+      if (/^[A-Z_]+=/i.test(line)) continue;
+      try {
+        const stat = await fs.stat(line);
+        if (stat.isFile()) return line;
+      } catch {}
+    }
+  }
+
+  const fallback = [path.join(process.env.APPDATA || '', 'npm', 'dsh.cmd')];
   const npmPrefix = spawnSync('npm.cmd', ['prefix', '-g'], {
     encoding: 'utf8',
     windowsHide: true,
   }).stdout?.trim();
-  if (npmPrefix) candidates.push(path.join(npmPrefix, 'dsh.cmd'));
+  if (npmPrefix) fallback.push(path.join(npmPrefix, 'dsh.cmd'));
 
-  for (const candidate of candidates.filter(Boolean)) {
+  for (const candidate of fallback.filter(Boolean)) {
     try {
       const stat = await fs.stat(candidate);
       if (stat.isFile()) return candidate;
@@ -390,27 +516,35 @@ async function findZCodeExecutable() {
   return null;
 }
 
-async function launchToolInstaller(installer, dirPath = process.cwd()) {
-  if (installer.kind === 'script') {
+async function launchToolInstaller(installer, dirPath = process.cwd(), { update = false } = {}) {
+  // update=true 时改用 updateXxx 字段(升级命令与安装命令动词不同:
+  // npm @latest / winget upgrade / brew upgrade / snap refresh / kimi 脚本幂等重跑)
+  const kindField = update ? 'updateKind' : 'kind';
+  const execCmdField = update ? 'updateExecutionCommand' : 'executionCommand';
+  const cmdField = update ? 'updateCommand' : 'command';
+  const executableField = update ? 'updateExecutable' : 'executable';
+  const argsField = update ? 'updateArgs' : 'args';
+
+  if (installer[kindField] === 'script') {
     if (process.platform === 'win32') {
       // 显式创建新控制台；编码脚本可避免 cmd.exe 截获 PowerShell 管道符。
-      const encoded = Buffer.from(installer.executionCommand || installer.command, 'utf16le').toString('base64');
+      const encoded = Buffer.from(installer[execCmdField] || installer[cmdField], 'utf16le').toString('base64');
       return spawnDetached('cmd.exe', [
         '/c', 'start', '""', 'powershell.exe', '-NoLogo', '-NoExit',
         '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded,
       ], { cwd: dirPath });
     }
-    return launchInTerminal(dirPath, 'bash', ['-lc', installer.command]);
+    return launchInTerminal(dirPath, 'bash', ['-lc', installer[cmdField]]);
   }
   if (process.platform === 'win32') {
-    // 安装命令完全来自服务端白名单。使用可见 cmd 窗口，让用户看到进度和错误。
-    const commandLine = [installer.executable, ...installer.args].join(' ');
+    // 安装/更新命令完全来自服务端白名单。使用可见 cmd 窗口，让用户看到进度和错误。
+    const commandLine = [installer[executableField], ...installer[argsField]].join(' ');
     return spawnDetached('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/k', commandLine], {
       cwd: dirPath,
     });
   }
 
-  return launchInTerminal(dirPath, installer.executable, installer.args);
+  return launchInTerminal(dirPath, installer[executableField], installer[argsField]);
 }
 
 export function registerFileOpenRoutes({
@@ -752,30 +886,113 @@ export function registerFileOpenRoutes({
       });
     }));
 
-  // 检测本地工具是否已安装(供前端根据结果决定是否显示对应按钮)
-  // 检测方式: spawn 'tool --version',exit 0 即视为已安装
+  // 更新本地工具:与 install-tool 同一套白名单,只是换用 updateXxx 命令变体
+  // (npm @latest / winget upgrade / brew upgrade / snap refresh / kimi 脚本重跑)。
+  // 没有 updateCommand 的工具(如 zcode 桌面应用)返回 400。
+  app.post('/api/update-tool', asyncRoute(async (req, res) => {
+      const { tool } = req.body || {};
+      const installers = getToolInstallers();
+      const installer = installers[tool];
+
+      if (!installer) {
+        throw new HttpError(400, '不支持的工具');
+      }
+      if (!installer.updateCommand) {
+        throw new HttpError(400, installer.updateNote || '当前工具不支持一键更新，请按官方文档手动升级');
+      }
+
+      await launchToolInstaller(installer, process.cwd(), { update: true });
+      res.json({
+        success: true,
+        message: '更新命令已在新终端中启动',
+      });
+    }));
+
+  // 查询 npm registry 上的最新版本,供前端更新菜单显示「当前 v1 → 最新 v2」。
+  // 只支持 TOOL_INSTALL_PACKAGES 里的 npm 工具;网络失败的工具返回 null(前端降级为原文案)。
+  // body 可选 { tools: ['claude', ...] } —— 缺省查全部 npm 工具。
+  app.post('/api/latest-tool-versions', asyncRoute(async (req, res) => {
+      const { tools } = req.body || {};
+      let requested;
+      if (tools === undefined) {
+        requested = Object.keys(TOOL_INSTALL_PACKAGES);
+      } else {
+        if (!Array.isArray(tools) || tools.some((t) => typeof t !== 'string')) {
+          throw new HttpError(400, 'tools 必须是字符串数组');
+        }
+        const unknown = tools.filter((t) => !TOOL_INSTALL_PACKAGES[t]);
+        if (unknown.length) {
+          throw new HttpError(400, `不支持的工具: ${unknown.join(', ')}`);
+        }
+        requested = tools;
+      }
+
+      const entries = await Promise.all(
+        requested.map(async (tool) => [tool, await fetchLatestVersion(TOOL_INSTALL_PACKAGES[tool])]),
+      );
+      res.json({
+        success: true,
+        latest: Object.fromEntries(entries),
+      });
+    }));
+
+  // 检测本地工具是否已安装 + 采集版本号(供前端决定按钮行为、tooltip 显示版本)
+  // 检测方式: spawn 'tool --version',exit 0 即视为已安装;stdout/stderr 里提取 semver。
   // 超时 15s:Claude CLI / opencode 等 Node 包装的工具首次冷启动
   // 在 Windows 上经常 5-7s(磁盘 cache + Defender 扫描),3s 永远命中超时。
   app.get('/api/check-tools', asyncRoute(async (req, res) => {
       const checkCmd = (cmd) => new Promise((resolve) => {
         const child = spawn(cmd, ['--version'], {
-          stdio: 'ignore',
+          // 要捕获输出来解析版本号,不能再用 'ignore'
+          stdio: ['ignore', 'pipe', 'pipe'],
           shell: process.platform === 'win32',
           windowsHide: true,
         });
+        let output = '';
         let done = false;
         const finish = (ok) => {
           if (done) return;
           done = true;
           try { child.kill('SIGKILL'); } catch {}
-          resolve(ok);
+          resolve({ installed: ok, version: parseVersionOutput(output) });
         };
+        // 有些 CLI 把版本号打到 stderr(如部分 Node 包装工具),两边都收
+        child.stdout.on('data', (chunk) => { output += chunk; });
+        child.stderr.on('data', (chunk) => { output += chunk; });
         child.on('error', () => finish(false));
         child.on('exit', (code) => finish(code === 0));
         setTimeout(() => finish(false), 15000);
       });
 
-      const [vscode, claude, codex, opencode, kimiExecutable, zcodeExecutable, dshExecutable] = await Promise.all([
+      // dsh / kimi 走 find*Executable 拿到完整路径,再补一次 --version 采版本。
+      // zcode 是纯 GUI 桌面应用,ZCode.exe --version 行为未知(可能弹窗),不采集。
+      const versionOfExecutable = (executable) => {
+        if (!executable) return Promise.resolve(null);
+        return new Promise((resolve) => {
+          const child = spawn(executable, ['--version'], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            shell: process.platform === 'win32',
+            windowsHide: true,
+          });
+          let output = '';
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            try { child.kill('SIGKILL'); } catch {}
+            resolve(parseVersionOutput(output));
+          };
+          child.stdout.on('data', (chunk) => { output += chunk; });
+          child.stderr.on('data', (chunk) => { output += chunk; });
+          child.on('error', () => finish());
+          child.on('exit', () => finish());
+          setTimeout(() => finish(), 15000);
+        });
+      };
+
+      // dsh / kimi 的版本采集依赖 find 结果,用 then 链接保持全并行
+      // (find 会跑两次——一次拿路径一次链版本——都是纯 fs/注册表查询,开销可忽略)
+      const [vscodeRes, claudeRes, codexRes, opencodeRes, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
         checkCmd('codex'),
@@ -783,6 +1000,8 @@ export function registerFileOpenRoutes({
         findKimiExecutable(),
         findZCodeExecutable(),
         findDshExecutable(),
+        findKimiExecutable().then(versionOfExecutable),
+        findDshExecutable().then(versionOfExecutable),
       ]);
 
       const installers = getToolInstallers();
@@ -790,13 +1009,22 @@ export function registerFileOpenRoutes({
         success: true,
         platform: process.platform,
         installers: publicInstallerInfo(installers),
-        vscode,
-        claude,
-        codex,
-        opencode,
+        vscode: vscodeRes.installed,
+        claude: claudeRes.installed,
+        codex: codexRes.installed,
+        opencode: opencodeRes.installed,
         kimi: !!kimiExecutable,
         zcode: !!zcodeExecutable,
         dsh: !!dshExecutable,
+        versions: {
+          vscode: vscodeRes.version,
+          claude: claudeRes.version,
+          codex: codexRes.version,
+          opencode: opencodeRes.version,
+          kimi: kimiExecutable ? kimiVersion : null,
+          zcode: null, // 桌面应用,无 CLI 版本通道
+          dsh: dshExecutable ? dshVersion : null,
+        },
       });
     }));
 }

@@ -17,7 +17,7 @@
 import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { FilePickerModal as FilePicker } from 'local-file-picker/client';
-import { ElMessage, ElPopover } from "element-plus";
+import { ElMessage, ElMessageBox, ElPopover } from "element-plus";
 import { Folder, FolderOpened, Clock, Monitor, ArrowDown, ArrowUp } from "@element-plus/icons-vue";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
@@ -96,9 +96,13 @@ function toolTooltip(tool: ToolId, availableText: string) {
   if (toolsStore.lastCheckedAt === null) {
     return $t('@67CE7:正在检测 {tool}', { tool: toolNames[tool] })
   }
-  return toolsStore.isToolAvailable(tool)
-    ? availableText
-    : $t('@67CE7:{tool} 未安装，点击查看安装方式', { tool: toolNames[tool] })
+  if (!toolsStore.isToolAvailable(tool)) {
+    return $t('@67CE7:{tool} 未安装，点击查看安装方式', { tool: toolNames[tool] })
+  }
+  // 已安装:tooltip 附上本地版本号(来自 check-tools 的 --version 采集);
+  // 采集不到(桌面应用/输出格式不认识)就不加,保持原样。
+  const version = toolsStore.versions[tool]
+  return version ? `${availableText}\nv${version}` : availableText
 }
 
 async function runOrInstall(tool: ToolId, action: () => void | Promise<void>) {
@@ -150,6 +154,7 @@ async function onClaudeContextMenu() {
     }
   }
   if (toolsStore.claudeAvailable) {
+    void toolsStore.fetchLatestVersions() // 右键打开菜单时顺带查最新版(5 分钟缓存)
     openClaudeMenu()
   } else {
     openToolInstall('claude')
@@ -387,6 +392,91 @@ function closeClaudeMenu() {
   if (claudeMenuVisible.value) claudeMenuVisible.value = false
 }
 
+// ── 更新已安装的工具 ─────────────────────────────────────────────
+// 调 /api/update-tool,由服务端白名单决定实际命令(npm @latest / winget upgrade /
+// brew upgrade / snap refresh / kimi 官方脚本重跑),前端只传固定 tool id。
+// 更新会打开一个新终端窗口跑命令,所以先弹确认。
+const updateRunning = ref(false)
+
+// 更新菜单项的版本提示:本地版本 + registry 最新版本都有才显示。
+// 两边相等 → 「已是最新 vX」;不等 → 「当前 vX → 最新 vY」;
+// 任一边缺失(桌面应用/采集失败/网络失败)→ 返回空串,菜单显示原文案。
+// fire-and-forget:菜单打开时触发查询,数据到了提示自然出现(响应式)。
+function updateHint(tool: ToolId): string {
+  const cur = toolsStore.versions[tool]
+  const latest = toolsStore.latestVersions[tool]
+  if (!cur || !latest) return ''
+  return cur === latest
+    ? $t('@67CE7:已是最新 v{ver}', { ver: cur })
+    : $t('@67CE7:当前 v{cur} → 最新 v{latest}', { cur, latest })
+}
+
+async function onUpdateTool(tool: ToolId) {
+  closeClaudeMenu()
+  closeSimpleMenu()
+  if (updateRunning.value) return
+  try {
+    await ElMessageBox.confirm(
+      $t('@67CE7:将在新终端中执行 {tool} 的更新命令，命令来自服务端白名单，确认继续？', { tool: toolNames[tool] }),
+      $t('@67CE7:更新 {tool}', { tool: toolNames[tool] }),
+      {
+        confirmButtonText: $t('@67CE7:确认更新'),
+        cancelButtonText: $t('@67CE7:取消'),
+        type: 'info',
+        autofocus: false,
+      },
+    )
+  } catch {
+    return
+  }
+
+  updateRunning.value = true
+  try {
+    const response = await fetch('/api/update-tool', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool }),
+    })
+    const result = await response.json()
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || $t('@67CE7:启动更新失败'))
+    }
+    ElMessage.success(result.message || $t('@67CE7:更新命令已在新终端中启动'))
+  } catch (error) {
+    ElMessage.error(`${$t('@67CE7:更新失败: ')}${(error as Error).message}`)
+  } finally {
+    updateRunning.value = false
+  }
+}
+
+// ── simpleTools 的右键菜单 ───────────────────────────────────────
+// 目前只含"更新"一项。与 claude 菜单同款 manual 模式(el-dropdown 在 el-tooltip
+// 嵌套下 contextmenu 失效,见 claude 菜单处的注释)。已安装才有更新可言,
+// 未安装仍走安装引导(openToolInstall)。
+const simpleMenuTool = ref<SimpleTool | null>(null)
+const simpleMenuVisible = ref(false)
+
+async function onSimpleToolContextMenu(tool: SimpleTool) {
+  if (toolsStore.lastCheckedAt === null) {
+    await toolsStore.checkTools()
+    if (toolsStore.lastCheckedAt === null) {
+      ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
+      return
+    }
+  }
+  if (!toolsStore.isToolAvailable(tool.id)) {
+    openToolInstall(tool.id)
+    return
+  }
+  simpleMenuTool.value = tool
+  void toolsStore.fetchLatestVersions() // 右键打开菜单时顺带查最新版(5 分钟缓存)
+  simpleMenuVisible.value = !simpleMenuVisible.value
+}
+
+function closeSimpleMenu() {
+  if (simpleMenuVisible.value) simpleMenuVisible.value = false
+}
+
 // manual trigger 下"点外面关闭"要自己挂 document 监听：
 // - target 在 trigger 内 → 不关（避免和右键 toggle / 左键 click 冲突）
 // - target 在 popover 内容内（teleport 到 body）→ 不关
@@ -408,6 +498,14 @@ function onDocumentMouseDown(e: MouseEvent) {
     const popoverEl = document.querySelector('.tools-more-popover')
     if (popoverEl && popoverEl.contains(target)) return
     moreToolsVisible.value = false
+  }
+
+  if (simpleMenuVisible.value) {
+    // trigger 是被右键的那个工具按钮外层 span;popover 内容 teleport 到 body
+    const popoverEl = document.querySelector('.simple-tool-menu-popover')
+    if (popoverEl && popoverEl.contains(target)) return
+    // 右键另一个工具时由 onSimpleToolContextMenu 自己 toggle,这里不抢
+    simpleMenuVisible.value = false
   }
 }
 
@@ -687,17 +785,48 @@ function onBrowserSelect(path: string) {
       <!--
         编辑器 / AI 工具：已安装的常驻显示，未安装的收进右侧"更多"菜单。
         检测未完成时全部按 checking 态显示，避免首屏按钮位置跳来跳去。
+        右键 = 工具操作菜单（当前只有"更新"）；与 claude 菜单同款 manual 模式。
       -->
       <template v-for="tool in visibleTools" :key="tool.id">
-        <IconButton
-          :tooltip="toolTooltip(tool.id, tool.label)"
-          :aria-label="toolTooltip(tool.id, tool.label)"
-          :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.isToolAvailable(tool.id) ? '' : 'tool-button--missing')"
-          size="large"
-          @click="runOrInstall(tool.id, tool.action)"
+        <el-popover
+          :visible="simpleMenuVisible && simpleMenuTool?.id === tool.id"
+          :trigger="('manual' as any)"
+          placement="bottom-end"
+          :width="190"
+          :show-arrow="false"
+          popper-class="simple-tool-menu-popover"
         >
-          <svg-icon :icon-class="tool.icon" />
-        </IconButton>
+          <template #reference>
+            <!-- span 包一层接管 contextmenu：IconButton 根是 el-tooltip，事件挂不住 -->
+            <span
+              class="simple-tool-trigger"
+              @contextmenu.prevent.stop="onSimpleToolContextMenu(tool)"
+            >
+              <IconButton
+                :tooltip="toolTooltip(tool.id, tool.label)"
+                :aria-label="toolTooltip(tool.id, tool.label)"
+                :custom-class="toolsStore.lastCheckedAt === null ? 'tool-button--checking' : (toolsStore.isToolAvailable(tool.id) ? '' : 'tool-button--missing')"
+                size="large"
+                @click="runOrInstall(tool.id, tool.action)"
+              >
+                <svg-icon :icon-class="tool.icon" />
+              </IconButton>
+            </span>
+          </template>
+          <ul class="claude-menu" role="menu" :aria-label="tool.name">
+            <li
+              class="claude-menu__item"
+              role="menuitem"
+              tabindex="-1"
+              @click="onUpdateTool(tool.id)"
+              @keydown.enter.prevent="onUpdateTool(tool.id)"
+              @keydown.space.prevent="onUpdateTool(tool.id)"
+            >
+              <span class="claude-menu__label">{{ $t('@67CE7:更新 {tool}', { tool: tool.name }) }}</span>
+              <span class="claude-menu__hint">{{ updateHint(tool.id) || $t('@67CE7:升级到最新版本') }}</span>
+            </li>
+          </ul>
+        </el-popover>
       </template>
       <!--
         用 Claude Code 打开：左键 = 默认；右键 = 弹出菜单（默认 / 完全批准）。
@@ -767,6 +896,19 @@ function onBrowserSelect(path: string) {
               <el-icon class="claude-menu__warn"><Warning /></el-icon>
             </span>
             <span class="claude-menu__hint">真·完全批准（含 Shell）</span>
+          </li>
+          <li class="claude-menu__sep" role="separator" />
+          <li
+            class="claude-menu__item"
+            role="menuitem"
+            tabindex="-1"
+            :aria-disabled="updateRunning"
+            @click="onUpdateTool('claude')"
+            @keydown.enter.prevent="onUpdateTool('claude')"
+            @keydown.space.prevent="onUpdateTool('claude')"
+          >
+            <span class="claude-menu__label">{{ $t('@67CE7:更新 {tool}', { tool: toolNames.claude }) }}</span>
+            <span class="claude-menu__hint">{{ updateHint('claude') || $t('@67CE7:升级到最新版本') }}</span>
           </li>
         </ul>
       </el-popover>
@@ -1090,6 +1232,13 @@ function onBrowserSelect(path: string) {
   list-style: none;
   font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
+}
+
+/* 「打开模式」与「更新」之间的分隔线 */
+.claude-menu__sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border-color-light, var(--border-color));
 }
 
 .claude-menu__item {

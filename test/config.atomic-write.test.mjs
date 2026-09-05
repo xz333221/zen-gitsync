@@ -68,7 +68,7 @@ process.env.HOME = fakeHome
 delete process.env.HOMEDRIVE
 delete process.env.HOMEPATH
 
-const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..')
+const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..')
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
 const { writeRawConfigFile, saveConfig } = configMod.default
 

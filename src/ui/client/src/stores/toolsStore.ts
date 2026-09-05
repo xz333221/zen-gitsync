@@ -31,6 +31,40 @@ export const useToolsStore = defineStore('tools', () => {
   const isChecking = ref(false)
   const platform = ref('')
   const installers = ref<ToolInstallers>({})
+  // 各工具本地版本号(--version 采集,tooltip 显示用);zcode 为 null(桌面应用无 CLI 通道)
+  const versions = ref<Partial<Record<ToolId, string | null>>>({})
+  // npm registry 上的最新版本(更新菜单「当前 → 最新」提示用);null = 未知/查询失败
+  const latestVersions = ref<Partial<Record<ToolId, string | null>>>({})
+  const isFetchingLatest = ref(false)
+
+  const LATEST_CACHE_MS = 5 * 60 * 1000 // 5 分钟内复用,不重复打 registry
+  let latestFetchedAt = 0
+  let latestPromise: Promise<void> | null = null
+  function fetchLatestVersions(force = false): Promise<void> {
+    if (!force && Date.now() - latestFetchedAt < LATEST_CACHE_MS) return Promise.resolve()
+    if (latestPromise) return latestPromise
+    isFetchingLatest.value = true
+    latestPromise = (async () => {
+      try {
+        const resp = await fetch('/api/latest-tool-versions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+        const data = await resp.json()
+        if (data.success && data.latest && typeof data.latest === 'object') {
+          latestVersions.value = data.latest as Partial<Record<ToolId, string | null>>
+          latestFetchedAt = Date.now()
+        }
+      } catch {
+        // 查询失败保持原状态,更新菜单降级为原文案
+      } finally {
+        isFetchingLatest.value = false
+        latestPromise = null
+      }
+    })()
+    return latestPromise
+  }
 
   let checkPromise: Promise<void> | null = null
   function checkTools(): Promise<void> {
@@ -51,6 +85,9 @@ export const useToolsStore = defineStore('tools', () => {
           platform.value = typeof data.platform === 'string' ? data.platform : ''
           installers.value = data.installers && typeof data.installers === 'object'
             ? data.installers as ToolInstallers
+            : {}
+          versions.value = data.versions && typeof data.versions === 'object'
+            ? data.versions as Partial<Record<ToolId, string | null>>
             : {}
           lastCheckedAt.value = Date.now()
         }
@@ -102,8 +139,12 @@ export const useToolsStore = defineStore('tools', () => {
     isChecking,
     platform,
     installers,
+    versions,
+    latestVersions,
+    isFetchingLatest,
     isToolAvailable,
     checkTools,
+    fetchLatestVersions,
     startPolling,
     stopPolling,
   }

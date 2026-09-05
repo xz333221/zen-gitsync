@@ -33,7 +33,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { pathToFileURL } from 'node:url'
 
-const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..')
+const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..')
 const utilsMod = await import(pathToFileURL(path.join(projectRoot, 'src/utils/index.js')).href)
 const { execGitCommand, getCommandHistory, clearCommandHistory } = utilsMod
 

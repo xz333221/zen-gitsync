@@ -578,17 +578,31 @@ async function requestCloseAll() {
 }
 
 /* 当前实例行的关闭按钮始终可见(不像其他实例要 hover 才显示),
-   让用户一眼能看到"我也能被关";hover/focus 时 port-badge 同样淡出,保持视觉一致。 */
+   让用户一眼能看到"我也能被关"。
+   注意:关闭按钮默认 position:absolute 叠在端口徽章上,若只改 opacity
+   会导致默认状态下两个元素重叠 —— 所以当前行额外改成并排布局:
+   端口徽章与关闭按钮各占独立位置,都不隐藏,port-badge 也无需再淡出。 */
+:global(.instance-switcher-popper .instance-menu-item--current .instance-action) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
 :global(.instance-switcher-popper .instance-menu-item--current .instance-close) {
+  position: static;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
   opacity: 1;
-  transform: scale(1);
+  transform: none;
   pointer-events: auto;
 }
 
-:global(.instance-switcher-popper .instance-menu-item--current:hover .port-badge),
-:global(.instance-switcher-popper .instance-menu-item--current:focus-within .port-badge) {
-  opacity: 0;
-  transform: scale(0.88);
+:global(.instance-switcher-popper .instance-menu-item--current .port-badge) {
+  opacity: 1;
+  transform: none;
 }
 
 :global(.instance-switcher-popper .port-badge) {
