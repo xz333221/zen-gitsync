@@ -283,17 +283,34 @@ async function launchDsh(dirPath) {
   return launchInTerminal(dirPath, executable, ['web']);
 }
 
-async function findDshExecutable() {
+// 在 Windows 上找 dsh 可执行文件。
+// 优先用 where.exe dsh(覆盖 nvm4w 的 C:\nvm4w\nodejs\、默认的 %APPDATA%\npm、
+// pnpm/yarn 自定义 prefix、以及用户手摆到 PATH 里的任意位置),
+//再兜底 APPDATA\npm + npm prefix -g 两个写死路径(为 where.exe 漏检的边缘情况,
+//比如 PATH 里只有 junction/symlink 时)。
+export async function findDshExecutable() {
   if (process.platform !== 'win32') return commandExists('dsh') ? 'dsh' : null;
 
-  const candidates = [path.join(process.env.APPDATA || '', 'npm', 'dsh.cmd')];
+  const where = spawnSync('where.exe', ['dsh'], { encoding: 'utf8', windowsHide: true });
+  if (where.status === 0 && where.stdout) {
+    for (const line of where.stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)) {
+      // 偶尔会输出 "PATH=..." 这种变量行,跳过
+      if (/^[A-Z_]+=/i.test(line)) continue;
+      try {
+        const stat = await fs.stat(line);
+        if (stat.isFile()) return line;
+      } catch {}
+    }
+  }
+
+  const fallback = [path.join(process.env.APPDATA || '', 'npm', 'dsh.cmd')];
   const npmPrefix = spawnSync('npm.cmd', ['prefix', '-g'], {
     encoding: 'utf8',
     windowsHide: true,
   }).stdout?.trim();
-  if (npmPrefix) candidates.push(path.join(npmPrefix, 'dsh.cmd'));
+  if (npmPrefix) fallback.push(path.join(npmPrefix, 'dsh.cmd'));
 
-  for (const candidate of candidates.filter(Boolean)) {
+  for (const candidate of fallback.filter(Boolean)) {
     try {
       const stat = await fs.stat(candidate);
       if (stat.isFile()) return candidate;
