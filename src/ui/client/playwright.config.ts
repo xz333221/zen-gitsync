@@ -38,6 +38,10 @@ try {
 
 const VITE_PORT = 5544
 
+// 见下方 webServer 注释:默认丢弃服务端日志,避免管道缓冲区打满把后端进程憋死。
+// 需要看后端/vite 日志排查时,跑测试时加 E2E_SHOW_SERVER_LOG=1 即可恢复。
+const serverLogMode = process.env.E2E_SHOW_SERVER_LOG ? 'pipe' : 'ignore'
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -66,6 +70,11 @@ export default defineConfig({
   // 自动启 dev server(本地复用、CI 强制启):
   // 顺序敏感——backend 先必须写 .port=5545,vite 后读它配 proxy(vite.config.ts:26-42)。
   // backend 用裸 node(不走 nodemon,避免文件改动触发重启杀掉测试进程)。
+  //
+  // 日志默认丢弃(ignore)而不是管道(pipe):后端每次 git 操作都会打印带边框的
+  // 大表格,跑几个用例就能灌满管道缓冲区,后端进程随即阻塞在 write() 上不再响应
+  // 请求,页面请求全部挂起,表现为用例"卡住不超时"。需要看服务端日志排查时,
+  // 用 E2E_SHOW_SERVER_LOG=1 打开即可。
   webServer: [
     {
       // 必须传 PORT=5545:src/ui/server/index.js:517-523 端口策略默认随机,只有
@@ -75,8 +84,8 @@ export default defineConfig({
       port: 5545,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
+      stdout: serverLogMode,
+      stderr: serverLogMode,
     },
     {
       command: 'npm run dev:vue',
@@ -84,8 +93,8 @@ export default defineConfig({
       port: 5544,
       reuseExistingServer: !process.env.CI,
       timeout: 90_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
+      stdout: serverLogMode,
+      stderr: serverLogMode,
     },
   ],
 })
