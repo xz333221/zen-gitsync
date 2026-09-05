@@ -154,6 +154,7 @@ async function onClaudeContextMenu() {
     }
   }
   if (toolsStore.claudeAvailable) {
+    void toolsStore.fetchLatestVersions() // 右键打开菜单时顺带查最新版(5 分钟缓存)
     openClaudeMenu()
   } else {
     openToolInstall('claude')
@@ -397,6 +398,19 @@ function closeClaudeMenu() {
 // 更新会打开一个新终端窗口跑命令,所以先弹确认。
 const updateRunning = ref(false)
 
+// 更新菜单项的版本提示:本地版本 + registry 最新版本都有才显示。
+// 两边相等 → 「已是最新 vX」;不等 → 「当前 vX → 最新 vY」;
+// 任一边缺失(桌面应用/采集失败/网络失败)→ 返回空串,菜单显示原文案。
+// fire-and-forget:菜单打开时触发查询,数据到了提示自然出现(响应式)。
+function updateHint(tool: ToolId): string {
+  const cur = toolsStore.versions[tool]
+  const latest = toolsStore.latestVersions[tool]
+  if (!cur || !latest) return ''
+  return cur === latest
+    ? $t('@67CE7:已是最新 v{ver}', { ver: cur })
+    : $t('@67CE7:当前 v{cur} → 最新 v{latest}', { cur, latest })
+}
+
 async function onUpdateTool(tool: ToolId) {
   closeClaudeMenu()
   closeSimpleMenu()
@@ -455,6 +469,7 @@ async function onSimpleToolContextMenu(tool: SimpleTool) {
     return
   }
   simpleMenuTool.value = tool
+  void toolsStore.fetchLatestVersions() // 右键打开菜单时顺带查最新版(5 分钟缓存)
   simpleMenuVisible.value = !simpleMenuVisible.value
 }
 
@@ -808,7 +823,7 @@ function onBrowserSelect(path: string) {
               @keydown.space.prevent="onUpdateTool(tool.id)"
             >
               <span class="claude-menu__label">{{ $t('@67CE7:更新 {tool}', { tool: tool.name }) }}</span>
-              <span class="claude-menu__hint">{{ $t('@67CE7:升级到最新版本') }}</span>
+              <span class="claude-menu__hint">{{ updateHint(tool.id) || $t('@67CE7:升级到最新版本') }}</span>
             </li>
           </ul>
         </el-popover>
@@ -893,7 +908,7 @@ function onBrowserSelect(path: string) {
             @keydown.space.prevent="onUpdateTool('claude')"
           >
             <span class="claude-menu__label">{{ $t('@67CE7:更新 {tool}', { tool: toolNames.claude }) }}</span>
-            <span class="claude-menu__hint">{{ $t('@67CE7:升级到最新版本') }}</span>
+            <span class="claude-menu__hint">{{ updateHint('claude') || $t('@67CE7:升级到最新版本') }}</span>
           </li>
         </ul>
       </el-popover>

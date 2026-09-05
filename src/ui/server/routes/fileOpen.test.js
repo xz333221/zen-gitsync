@@ -19,7 +19,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
-import { findDshExecutable, getToolInstallers, parseVersionOutput, registerFileOpenRoutes } from './fileOpen.js'
+import { fetchLatestVersion, findDshExecutable, getToolInstallers, parseVersionOutput, registerFileOpenRoutes } from './fileOpen.js'
 
 // ── parseVersionOutput(版本号采集,2026-09-05 check-tools 增强)────────────
 
@@ -140,4 +140,100 @@ test('update-tool 路由: 未知工具 id 返回 400', async () => {
 
   assert.equal(statusCode, 400)
   assert.equal(payload.success, false)
+})
+
+// ── fetchLatestVersion / latest-tool-versions(2026-09-05 更新菜单「当前→最新」)──
+
+test('fetchLatestVersion: 非法包名直接返回 null,不发请求', async () => {
+  let fetchCalls = 0
+  const fakeFetch = async () => { fetchCalls++; return { ok: true, json: async () => ({ version: '1.0.0' }) } }
+  assert.equal(await fetchLatestVersion(''), null)
+  assert.equal(await fetchLatestVersion(null), null)
+  assert.equal(await fetchLatestVersion('bad pkg name with spaces'), null)
+  assert.equal(await fetchLatestVersion('../etc/passwd'), null)
+  assert.equal(fetchCalls, 0, '非法包名不应触发任何网络请求')
+})
+
+test('fetchLatestVersion: 命中 registry 返回 version;非 200 / 抛异常 / 字段缺失都降级为 null', async () => {
+  const okFetch = async () => ({ ok: true, json: async () => ({ version: '2.3.4' }) })
+  assert.equal(await fetchLatestVersion('opencode-ai', { fetchImpl: okFetch }), '2.3.4')
+
+  const notOkFetch = async () => ({ ok: false, json: async () => ({}) })
+  assert.equal(await fetchLatestVersion('opencode-ai', { fetchImpl: notOkFetch }), null)
+
+  const throwFetch = async () => { throw new Error('network down') }
+  assert.equal(await fetchLatestVersion('opencode-ai', { fetchImpl: throwFetch }), null)
+
+  const missingFieldFetch = async () => ({ ok: true, json: async () => ({ name: 'opencode-ai' }) })
+  assert.equal(await fetchLatestVersion('opencode-ai', { fetchImpl: missingFieldFetch }), null)
+})
+
+test('latest-tool-versions 路由: tools 非数组 / 含未知工具 → 400,且不发请求', async () => {
+  const routes = new Map()
+  const app = {
+    get(path, handler) { routes.set(`GET ${path}`, handler) },
+    post(path, handler) { routes.set(`POST ${path}`, handler) },
+  }
+  registerFileOpenRoutes({ app })
+  const handler = routes.get('POST /api/latest-tool-versions')
+  assert.ok(handler, 'POST /api/latest-tool-versions 路由未注册')
+
+  const makeRes = () => {
+    let statusCode = 200
+    let payload = null
+    return {
+      res: { status(code) { statusCode = code; return this }, json(value) { payload = value; return this } },
+      get status() { return statusCode },
+      get payload() { return payload },
+    }
+  }
+
+  let ctx = makeRes()
+  await handler({ method: 'POST', body: { tools: 'claude' } }, ctx.res, () => {})
+  assert.equal(ctx.status, 400)
+
+  ctx = makeRes()
+  await handler({ method: 'POST', body: { tools: [123] } }, ctx.res, () => {})
+  assert.equal(ctx.status, 400)
+
+  ctx = makeRes()
+  await handler({ method: 'POST', body: { tools: ['claude', 'zcode'] } }, ctx.res, () => {})
+  // zcode 不在 TOOL_INSTALL_PACKAGES(npm 工具白名单)里 → 400
+  assert.equal(ctx.status, 400)
+  assert.match(ctx.payload.error, /不支持的工具/)
+})
+
+test('latest-tool-versions 路由: 正常路径调 registry 并把结果按 tool id 归还', async () => {
+  // 用全局 fetch mock 验证「路由 → fetchLatestVersion → registry URL」整条接线,
+  // 测试完必须恢复,不然会污染其它测试。
+  const requestedUrls = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    requestedUrls.push(String(url))
+    return { ok: true, json: async () => ({ version: '9.9.9' }) }
+  }
+  try {
+    const routes = new Map()
+    const app = {
+      get(path, handler) { routes.set(`GET ${path}`, handler) },
+      post(path, handler) { routes.set(`POST ${path}`, handler) },
+    }
+    registerFileOpenRoutes({ app })
+    const handler = routes.get('POST /api/latest-tool-versions')
+
+    let payload = null
+    const res = {
+      status() { return this },
+      json(value) { payload = value; return this },
+    }
+    await handler({ method: 'POST', body: { tools: ['claude', 'dsh'] } }, res, () => {})
+
+    assert.equal(payload.success, true)
+    assert.deepEqual(payload.latest, { claude: '9.9.9', dsh: '9.9.9' })
+    assert.equal(requestedUrls.length, 2)
+    assert.ok(requestedUrls[0].includes('/@anthropic-ai/claude-code/latest'), `URL 不对: ${requestedUrls[0]}`)
+    assert.ok(requestedUrls[1].includes('/@deepseek-ai/dsh/latest'), `URL 不对: ${requestedUrls[1]}`)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })

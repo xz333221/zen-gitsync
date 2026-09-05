@@ -15,6 +15,7 @@
 import fs from 'fs/promises';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import path from 'path';
+import os from 'os';
 import open from 'open';
 import { spawn, spawnSync } from 'child_process';
 
@@ -58,6 +59,45 @@ export function parseVersionOutput(text) {
   if (!text) return null;
   const match = String(text).match(/\d+\.\d+\.\d+(?:[-+][\w.-]+)?/);
   return match ? match[0] : null;
+}
+
+// ── npm registry 最新版本查询(右键更新菜单的「当前 → 最新」提示用)──────────
+// 为什么走 HTTP 而不是 `npm view <pkg> version`:spawnSync('npm.cmd', ...) 在
+// server 子进程里不稳(prefix -g 曾返回 "…npm:3" 废地址,见 findDshExecutable
+// 的修复记录),HTTP 直查又快又可控。
+// registry 优先级:~/.npmrc 的 registry 字段(用户可能配了镜像)→ npmmirror 默认。
+
+let cachedRegistryBase = null;
+
+export function getRegistryBase(readFile = fs.readFile) {
+  if (cachedRegistryBase) return cachedRegistryBase;
+  return readFile(path.join(os.homedir(), '.npmrc'), 'utf8').then((npmrc) => {
+    const match = String(npmrc).match(/^\s*registry\s*=\s*(\S+)/m);
+    cachedRegistryBase = match
+      ? match[1].replace(/\/+$/, '')
+      : 'https://registry.npmmirror.com';
+    return cachedRegistryBase;
+  }).catch(() => (cachedRegistryBase = 'https://registry.npmmirror.com'));
+}
+
+export async function fetchLatestVersion(packageName, { timeoutMs = 8000, fetchImpl = fetch } = {}) {
+  if (!packageName || !/^[\w@/.-]+$/.test(packageName)) return null;
+  const base = await getRegistryBase();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetchImpl(`${base}/${packageName}/latest`, {
+      signal: controller.signal,
+      headers: { accept: 'application/json' },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return typeof data?.version === 'string' ? data.version : null;
+  } catch {
+    return null; // 网络失败/超时:菜单显示原文案,不影响任何功能
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -865,6 +905,34 @@ export function registerFileOpenRoutes({
       res.json({
         success: true,
         message: '更新命令已在新终端中启动',
+      });
+    }));
+
+  // 查询 npm registry 上的最新版本,供前端更新菜单显示「当前 v1 → 最新 v2」。
+  // 只支持 TOOL_INSTALL_PACKAGES 里的 npm 工具;网络失败的工具返回 null(前端降级为原文案)。
+  // body 可选 { tools: ['claude', ...] } —— 缺省查全部 npm 工具。
+  app.post('/api/latest-tool-versions', asyncRoute(async (req, res) => {
+      const { tools } = req.body || {};
+      let requested;
+      if (tools === undefined) {
+        requested = Object.keys(TOOL_INSTALL_PACKAGES);
+      } else {
+        if (!Array.isArray(tools) || tools.some((t) => typeof t !== 'string')) {
+          throw new HttpError(400, 'tools 必须是字符串数组');
+        }
+        const unknown = tools.filter((t) => !TOOL_INSTALL_PACKAGES[t]);
+        if (unknown.length) {
+          throw new HttpError(400, `不支持的工具: ${unknown.join(', ')}`);
+        }
+        requested = tools;
+      }
+
+      const entries = await Promise.all(
+        requested.map(async (tool) => [tool, await fetchLatestVersion(TOOL_INSTALL_PACKAGES[tool])]),
+      );
+      res.json({
+        success: true,
+        latest: Object.fromEntries(entries),
       });
     }));
 

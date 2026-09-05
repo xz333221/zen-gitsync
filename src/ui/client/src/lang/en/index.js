@@ -623,6 +623,8 @@ export default {
   '@67CE7:工具检测失败，请稍后重试': 'Tool detection failed. Please try again later',
   '@67CE7:更新 {tool}': 'Update {tool}',
   '@67CE7:升级到最新版本': 'Upgrade to the latest version',
+  '@67CE7:已是最新 v{ver}': 'Up to date (v{ver})',
+  '@67CE7:当前 v{cur} → 最新 v{latest}': 'v{cur} → latest v{latest}',
   '@67CE7:确认更新': 'Update',
   '@67CE7:将在新终端中执行 {tool} 的更新命令，命令来自服务端白名单，确认继续？': 'The update command for {tool} (from the server-side whitelist) will run in a new terminal. Continue?',
   '@67CE7:更新命令已在新终端中启动': 'Update command started in a new terminal',
