@@ -19,7 +19,26 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
-import { findDshExecutable, getToolInstallers, registerFileOpenRoutes } from './fileOpen.js'
+import { findDshExecutable, getToolInstallers, parseVersionOutput, registerFileOpenRoutes } from './fileOpen.js'
+
+// ── parseVersionOutput(版本号采集,2026-09-05 check-tools 增强)────────────
+
+test('parseVersionOutput: 各工具的 --version 输出都能提取 semver', () => {
+  assert.equal(parseVersionOutput('0.1.1-rc.2\n'), '0.1.1-rc.2')               // dsh(带 prerelease)
+  assert.equal(parseVersionOutput('1.0.60 (Claude Code)'), '1.0.60')           // claude
+  assert.equal(parseVersionOutput('1.92.0 abc123def (commit)\n'), '1.92.0')    // vscode
+  assert.equal(parseVersionOutput('opencode 0.1.30\n'), '0.1.30')              // opencode 前缀
+  assert.equal(parseVersionOutput('codex-cli 0.9.2+build.1'), '0.9.2+build.1') // build 元数据
+})
+
+test('parseVersionOutput: 边界输入返回 null', () => {
+  assert.equal(parseVersionOutput(''), null)
+  assert.equal(parseVersionOutput(null), null)
+  assert.equal(parseVersionOutput(undefined), null)
+  assert.equal(parseVersionOutput('no version here'), null)
+  // 多段数字但不是 semver(如日期 2026.09.05 会被提取——可接受,总比没有强)
+  assert.ok(parseVersionOutput('version: 2.16.42\nsomething 1.0.0').startsWith('2.16.42'))
+})
 
 test('findDshExecutable: Windows 上返回 string 或 null,且非 null 时路径必须存在', async () => {
   const result = await findDshExecutable()

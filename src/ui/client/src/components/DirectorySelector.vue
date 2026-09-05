@@ -96,9 +96,13 @@ function toolTooltip(tool: ToolId, availableText: string) {
   if (toolsStore.lastCheckedAt === null) {
     return $t('@67CE7:正在检测 {tool}', { tool: toolNames[tool] })
   }
-  return toolsStore.isToolAvailable(tool)
-    ? availableText
-    : $t('@67CE7:{tool} 未安装，点击查看安装方式', { tool: toolNames[tool] })
+  if (!toolsStore.isToolAvailable(tool)) {
+    return $t('@67CE7:{tool} 未安装，点击查看安装方式', { tool: toolNames[tool] })
+  }
+  // 已安装:tooltip 附上本地版本号(来自 check-tools 的 --version 采集);
+  // 采集不到(桌面应用/输出格式不认识)就不加,保持原样。
+  const version = toolsStore.versions[tool]
+  return version ? `${availableText}\nv${version}` : availableText
 }
 
 async function runOrInstall(tool: ToolId, action: () => void | Promise<void>) {

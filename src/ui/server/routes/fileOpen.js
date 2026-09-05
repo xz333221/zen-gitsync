@@ -45,6 +45,22 @@ function commandExists(command, platform = process.platform) {
 }
 
 /**
+ * 从 `--version` 的输出里提取 semver 版本号。
+ * 各工具输出格式五花八门:
+ *   dsh     → "0.1.1-rc.2"
+ *   claude  → "1.0.60 (Claude Code)"
+ *   code    → "1.92.0 abc123def (commit ...)"
+ *   opencode → "opencode 0.1.30"
+ * 策略:取第一个 semver 模式(含 prerelease 0.1.1-rc.2 / build 1.0.0+build.1)。
+ * 提不出来返回 null(调用方按"未知版本"处理,不影响安装判定)。
+ */
+export function parseVersionOutput(text) {
+  if (!text) return null;
+  const match = String(text).match(/\d+\.\d+\.\d+(?:[-+][\w.-]+)?/);
+  return match ? match[0] : null;
+}
+
+/**
  * 返回当前平台可展示、可执行的安装方案。
  * executable/args 只在服务端使用；前端只能提交固定 tool id，不能提交命令。
  */
@@ -852,30 +868,63 @@ export function registerFileOpenRoutes({
       });
     }));
 
-  // 检测本地工具是否已安装(供前端根据结果决定是否显示对应按钮)
-  // 检测方式: spawn 'tool --version',exit 0 即视为已安装
+  // 检测本地工具是否已安装 + 采集版本号(供前端决定按钮行为、tooltip 显示版本)
+  // 检测方式: spawn 'tool --version',exit 0 即视为已安装;stdout/stderr 里提取 semver。
   // 超时 15s:Claude CLI / opencode 等 Node 包装的工具首次冷启动
   // 在 Windows 上经常 5-7s(磁盘 cache + Defender 扫描),3s 永远命中超时。
   app.get('/api/check-tools', asyncRoute(async (req, res) => {
       const checkCmd = (cmd) => new Promise((resolve) => {
         const child = spawn(cmd, ['--version'], {
-          stdio: 'ignore',
+          // 要捕获输出来解析版本号,不能再用 'ignore'
+          stdio: ['ignore', 'pipe', 'pipe'],
           shell: process.platform === 'win32',
           windowsHide: true,
         });
+        let output = '';
         let done = false;
         const finish = (ok) => {
           if (done) return;
           done = true;
           try { child.kill('SIGKILL'); } catch {}
-          resolve(ok);
+          resolve({ installed: ok, version: parseVersionOutput(output) });
         };
+        // 有些 CLI 把版本号打到 stderr(如部分 Node 包装工具),两边都收
+        child.stdout.on('data', (chunk) => { output += chunk; });
+        child.stderr.on('data', (chunk) => { output += chunk; });
         child.on('error', () => finish(false));
         child.on('exit', (code) => finish(code === 0));
         setTimeout(() => finish(false), 15000);
       });
 
-      const [vscode, claude, codex, opencode, kimiExecutable, zcodeExecutable, dshExecutable] = await Promise.all([
+      // dsh / kimi 走 find*Executable 拿到完整路径,再补一次 --version 采版本。
+      // zcode 是纯 GUI 桌面应用,ZCode.exe --version 行为未知(可能弹窗),不采集。
+      const versionOfExecutable = (executable) => {
+        if (!executable) return Promise.resolve(null);
+        return new Promise((resolve) => {
+          const child = spawn(executable, ['--version'], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            shell: process.platform === 'win32',
+            windowsHide: true,
+          });
+          let output = '';
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            try { child.kill('SIGKILL'); } catch {}
+            resolve(parseVersionOutput(output));
+          };
+          child.stdout.on('data', (chunk) => { output += chunk; });
+          child.stderr.on('data', (chunk) => { output += chunk; });
+          child.on('error', () => finish());
+          child.on('exit', () => finish());
+          setTimeout(() => finish(), 15000);
+        });
+      };
+
+      // dsh / kimi 的版本采集依赖 find 结果,用 then 链接保持全并行
+      // (find 会跑两次——一次拿路径一次链版本——都是纯 fs/注册表查询,开销可忽略)
+      const [vscodeRes, claudeRes, codexRes, opencodeRes, kimiExecutable, zcodeExecutable, dshExecutable, kimiVersion, dshVersion] = await Promise.all([
         checkCmd('code'),
         checkCmd('claude'),
         checkCmd('codex'),
@@ -883,6 +932,8 @@ export function registerFileOpenRoutes({
         findKimiExecutable(),
         findZCodeExecutable(),
         findDshExecutable(),
+        findKimiExecutable().then(versionOfExecutable),
+        findDshExecutable().then(versionOfExecutable),
       ]);
 
       const installers = getToolInstallers();
@@ -890,13 +941,22 @@ export function registerFileOpenRoutes({
         success: true,
         platform: process.platform,
         installers: publicInstallerInfo(installers),
-        vscode,
-        claude,
-        codex,
-        opencode,
+        vscode: vscodeRes.installed,
+        claude: claudeRes.installed,
+        codex: codexRes.installed,
+        opencode: opencodeRes.installed,
         kimi: !!kimiExecutable,
         zcode: !!zcodeExecutable,
         dsh: !!dshExecutable,
+        versions: {
+          vscode: vscodeRes.version,
+          claude: claudeRes.version,
+          codex: codexRes.version,
+          opencode: opencodeRes.version,
+          kimi: kimiExecutable ? kimiVersion : null,
+          zcode: null, // 桌面应用,无 CLI 版本通道
+          dsh: dshExecutable ? dshVersion : null,
+        },
       });
     }));
 }

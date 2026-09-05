@@ -31,6 +31,8 @@ export const useToolsStore = defineStore('tools', () => {
   const isChecking = ref(false)
   const platform = ref('')
   const installers = ref<ToolInstallers>({})
+  // 各工具本地版本号(--version 采集,tooltip 显示用);zcode 为 null(桌面应用无 CLI 通道)
+  const versions = ref<Partial<Record<ToolId, string | null>>>({})
 
   let checkPromise: Promise<void> | null = null
   function checkTools(): Promise<void> {
@@ -51,6 +53,9 @@ export const useToolsStore = defineStore('tools', () => {
           platform.value = typeof data.platform === 'string' ? data.platform : ''
           installers.value = data.installers && typeof data.installers === 'object'
             ? data.installers as ToolInstallers
+            : {}
+          versions.value = data.versions && typeof data.versions === 'object'
+            ? data.versions as Partial<Record<ToolId, string | null>>
             : {}
           lastCheckedAt.value = Date.now()
         }
@@ -102,6 +107,7 @@ export const useToolsStore = defineStore('tools', () => {
     isChecking,
     platform,
     installers,
+    versions,
     isToolAvailable,
     checkTools,
     startPolling,
