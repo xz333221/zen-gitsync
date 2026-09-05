@@ -19,7 +19,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
-import { findDshExecutable } from './fileOpen.js'
+import { findDshExecutable, getToolInstallers, registerFileOpenRoutes } from './fileOpen.js'
 
 test('findDshExecutable: Windows 上返回 string 或 null,且非 null 时路径必须存在', async () => {
   const result = await findDshExecutable()
@@ -37,4 +37,88 @@ test('findDshExecutable: Windows 上返回 string 或 null,且非 null 时路径
     const stat = await fs.stat(result)
     assert.equal(stat.isFile(), true, `${result} 不是文件`)
   }
+})
+
+// ── 工具升级(updateCommand)──────────────────────────────────────────
+// 2026-09-05 新增:右键工具 → 更新。install 与 update 命令动词不同
+// (npm @latest / winget upgrade / brew upgrade / snap refresh / kimi 脚本重跑)。
+
+test('getToolInstallers: npm 包工具的升级变体带 @latest', () => {
+  const installers = getToolInstallers('win32', () => true)
+  for (const tool of ['claude', 'codex', 'opencode', 'dsh']) {
+    const inst = installers[tool]
+    assert.match(inst.updateCommand, /@latest$/, `${tool}.updateCommand 应带 @latest`)
+    assert.ok(inst.updateExecutable, `${tool}.updateExecutable 缺失`)
+    assert.ok(
+      inst.updateArgs.at(-1).endsWith('@latest'),
+      `${tool}.updateArgs 最后一项应带 @latest`,
+    )
+    // 安装命令不被升级字段污染
+    assert.doesNotMatch(inst.command, /@latest/, `${tool}.command 不应带 @latest`)
+  }
+})
+
+test('getToolInstallers: 各平台 vscode 升级用各自的 upgrade 动词', () => {
+  const win = getToolInstallers('win32', () => true)
+  assert.match(win.vscode.updateCommand, /^winget upgrade/)
+  assert.deepEqual(win.vscode.updateArgs.slice(0, 2), ['upgrade', '--id'])
+
+  const mac = getToolInstallers('darwin', () => true)
+  assert.match(mac.vscode.updateCommand, /^brew upgrade/)
+
+  const linux = getToolInstallers('linux', () => true)
+  assert.match(linux.vscode.updateCommand, /^sudo snap refresh/)
+})
+
+test('getToolInstallers: kimi 升级复用幂等脚本,zcode 不支持一键升级', () => {
+  const installers = getToolInstallers('win32', () => true)
+  assert.equal(installers.kimi.updateKind, 'script')
+  assert.match(installers.kimi.updateCommand, /install\.ps1/)
+  // zcode 是桌面应用,updateCommand 必须为空 → /api/update-tool 对它返回 400
+  assert.equal(installers.zcode.updateCommand, undefined)
+})
+
+test('update-tool 路由: zcode(无 updateCommand)返回 400 且不启动任何进程', async () => {
+  // zcode 的 400 在 launchToolInstaller 之前抛出,本测试不会真的打开终端窗口。
+  const routes = new Map()
+  const app = {
+    get(path, handler) { routes.set(`GET ${path}`, handler) },
+    post(path, handler) { routes.set(`POST ${path}`, handler) },
+  }
+  registerFileOpenRoutes({ app })
+  const handler = routes.get('POST /api/update-tool')
+  assert.ok(handler, 'POST /api/update-tool 路由未注册')
+
+  let statusCode = 200
+  let payload = null
+  const res = {
+    status(code) { statusCode = code; return this },
+    json(value) { payload = value; return this },
+  }
+  await handler({ method: 'POST', path: '/api/update-tool', body: { tool: 'zcode' } }, res, () => {})
+
+  assert.equal(statusCode, 400)
+  assert.equal(payload.success, false)
+  assert.match(payload.error, /不支持一键更新|桌面应用/)
+})
+
+test('update-tool 路由: 未知工具 id 返回 400', async () => {
+  const routes = new Map()
+  const app = {
+    get(path, handler) { routes.set(`GET ${path}`, handler) },
+    post(path, handler) { routes.set(`POST ${path}`, handler) },
+  }
+  registerFileOpenRoutes({ app })
+  const handler = routes.get('POST /api/update-tool')
+
+  let statusCode = 200
+  let payload = null
+  const res = {
+    status(code) { statusCode = code; return this },
+    json(value) { payload = value; return this },
+  }
+  await handler({ method: 'POST', path: '/api/update-tool', body: { tool: 'not-a-tool' } }, res, () => {})
+
+  assert.equal(statusCode, 400)
+  assert.equal(payload.success, false)
 })

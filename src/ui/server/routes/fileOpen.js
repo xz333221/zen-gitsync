@@ -64,6 +64,12 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
         : '未检测到 npm，请先安装 Node.js/npm，或按照官方文档手动安装。',
       executable: npmExecutable,
       args: ['install', '-g', packageName],
+      // 升级变体:@latest 强制同步到最新版。已是最新时 npm 自然跳过。
+      updateCommand: `npm install -g ${packageName}@latest`,
+      updatePackageManager: 'npm',
+      updateNote: '将在新终端中执行 `npm install -g <pkg>@latest`。已是最新时 npm 会跳过。',
+      updateExecutable: npmExecutable,
+      updateArgs: ['install', '-g', `${packageName}@latest`],
     };
   }
 
@@ -79,6 +85,18 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
         : '未检测到 winget，请使用 VS Code 官方安装程序。',
       executable: 'winget',
       args: ['install', '--id', 'Microsoft.VisualStudioCode', '-e', '--accept-package-agreements', '--accept-source-agreements'],
+      // winget 的升级动词是 upgrade(不是 install)
+      updateCommand: wingetAvailable
+        ? 'winget upgrade --id Microsoft.VisualStudioCode -e --accept-package-agreements --accept-source-agreements'
+        : undefined,
+      updatePackageManager: 'winget',
+      updateNote: wingetAvailable
+        ? '将在新终端中通过 winget upgrade 升级 VS Code。'
+        : '未检测到 winget，请使用 VS Code 官方安装包。',
+      updateExecutable: wingetAvailable ? 'winget' : undefined,
+      updateArgs: wingetAvailable
+        ? ['upgrade', '--id', 'Microsoft.VisualStudioCode', '-e', '--accept-package-agreements', '--accept-source-agreements']
+        : undefined,
     };
   } else if (platform === 'darwin') {
     const brewAvailable = hasCommand('brew', platform);
@@ -92,6 +110,11 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
         : '未检测到 Homebrew，请使用 VS Code 官方安装程序。',
       executable: 'brew',
       args: ['install', '--cask', 'visual-studio-code'],
+      updateCommand: brewAvailable ? 'brew upgrade --cask visual-studio-code' : undefined,
+      updatePackageManager: 'Homebrew',
+      updateNote: brewAvailable ? '将在新终端中通过 brew upgrade 升级 VS Code。' : '未检测到 brew。',
+      updateExecutable: brewAvailable ? 'brew' : undefined,
+      updateArgs: brewAvailable ? ['upgrade', '--cask', 'visual-studio-code'] : undefined,
     };
   } else {
     const snapAvailable = hasCommand('snap', platform);
@@ -105,6 +128,12 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
         : '当前 Linux 环境未检测到 snap，请按照发行版对应的官方说明安装。',
       executable: 'sudo',
       args: ['snap', 'install', 'code', '--classic'],
+      // snap 的升级动词是 refresh
+      updateCommand: snapAvailable ? 'sudo snap refresh code' : undefined,
+      updatePackageManager: 'snap',
+      updateNote: snapAvailable ? '将在新终端中通过 snap refresh 升级 VS Code。' : '未检测到 snap。',
+      updateExecutable: snapAvailable ? 'sudo' : undefined,
+      updateArgs: snapAvailable ? ['snap', 'refresh', 'code'] : undefined,
     };
   }
 
@@ -130,6 +159,26 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
           'Invoke-RestMethod https://code.kimi.com/kimi-code/install.ps1 | Invoke-Expression',
         ].join('; ')
       : undefined,
+    // 升级:kimi 官方脚本幂等,已安装时执行会自动升级到最新版,直接复用同一脚本
+    updateCommand: platform === 'win32'
+      ? 'irm https://code.kimi.com/kimi-code/install.ps1 | iex'
+      : 'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash',
+    updatePackageManager: 'Kimi Code 官方安装脚本',
+    updateNote: '官方安装脚本幂等，已安装时执行会自动升级到最新版本。',
+    updateKind: 'script',
+    updateExecutionCommand: platform === 'win32'
+      ? [
+          "if (-not (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {",
+          "function global:Get-FileHash { param([string]$Path, [string]$Algorithm = 'SHA256')",
+          "$stream = [System.IO.File]::OpenRead($Path)",
+          "try { $sha = [System.Security.Cryptography.SHA256]::Create(); try { $bytes = $sha.ComputeHash($stream) } finally { $sha.Dispose() } } finally { $stream.Dispose() }",
+          "$hash = ([System.BitConverter]::ToString($bytes)).Replace('-', '')",
+          "New-Object PSObject -Property @{ Algorithm = 'SHA256'; Hash = $hash; Path = $Path }",
+          "}",
+          "}",
+          'Invoke-RestMethod https://code.kimi.com/kimi-code/install.ps1 | Invoke-Expression',
+        ].join('; ')
+      : undefined,
   };
   installers.zcode = {
     supported: false,
@@ -137,6 +186,10 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
     packageManager: 'ZCode 官方安装包',
     docsUrl: TOOL_DOCS_URLS.zcode,
     note: 'ZCode 是桌面应用，官方提供 Windows、macOS 和 Linux 安装包，没有官方 npm CLI。',
+    // ZCode 是桌面应用、没有 CLI 更新通道;/api/update-tool 会对它返回 400
+    updateCommand: undefined,
+    updatePackageManager: 'ZCode 官方安装包',
+    updateNote: 'ZCode 是桌面应用，升级请到官网下载新版安装包覆盖安装。',
   };
   return installers;
 }
@@ -407,27 +460,35 @@ async function findZCodeExecutable() {
   return null;
 }
 
-async function launchToolInstaller(installer, dirPath = process.cwd()) {
-  if (installer.kind === 'script') {
+async function launchToolInstaller(installer, dirPath = process.cwd(), { update = false } = {}) {
+  // update=true 时改用 updateXxx 字段(升级命令与安装命令动词不同:
+  // npm @latest / winget upgrade / brew upgrade / snap refresh / kimi 脚本幂等重跑)
+  const kindField = update ? 'updateKind' : 'kind';
+  const execCmdField = update ? 'updateExecutionCommand' : 'executionCommand';
+  const cmdField = update ? 'updateCommand' : 'command';
+  const executableField = update ? 'updateExecutable' : 'executable';
+  const argsField = update ? 'updateArgs' : 'args';
+
+  if (installer[kindField] === 'script') {
     if (process.platform === 'win32') {
       // 显式创建新控制台；编码脚本可避免 cmd.exe 截获 PowerShell 管道符。
-      const encoded = Buffer.from(installer.executionCommand || installer.command, 'utf16le').toString('base64');
+      const encoded = Buffer.from(installer[execCmdField] || installer[cmdField], 'utf16le').toString('base64');
       return spawnDetached('cmd.exe', [
         '/c', 'start', '""', 'powershell.exe', '-NoLogo', '-NoExit',
         '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded,
       ], { cwd: dirPath });
     }
-    return launchInTerminal(dirPath, 'bash', ['-lc', installer.command]);
+    return launchInTerminal(dirPath, 'bash', ['-lc', installer[cmdField]]);
   }
   if (process.platform === 'win32') {
-    // 安装命令完全来自服务端白名单。使用可见 cmd 窗口，让用户看到进度和错误。
-    const commandLine = [installer.executable, ...installer.args].join(' ');
+    // 安装/更新命令完全来自服务端白名单。使用可见 cmd 窗口，让用户看到进度和错误。
+    const commandLine = [installer[executableField], ...installer[argsField]].join(' ');
     return spawnDetached('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/k', commandLine], {
       cwd: dirPath,
     });
   }
 
-  return launchInTerminal(dirPath, installer.executable, installer.args);
+  return launchInTerminal(dirPath, installer[executableField], installer[argsField]);
 }
 
 export function registerFileOpenRoutes({
@@ -766,6 +827,28 @@ export function registerFileOpenRoutes({
       res.json({
         success: true,
         message: '安装命令已在新终端中启动',
+      });
+    }));
+
+  // 更新本地工具:与 install-tool 同一套白名单,只是换用 updateXxx 命令变体
+  // (npm @latest / winget upgrade / brew upgrade / snap refresh / kimi 脚本重跑)。
+  // 没有 updateCommand 的工具(如 zcode 桌面应用)返回 400。
+  app.post('/api/update-tool', asyncRoute(async (req, res) => {
+      const { tool } = req.body || {};
+      const installers = getToolInstallers();
+      const installer = installers[tool];
+
+      if (!installer) {
+        throw new HttpError(400, '不支持的工具');
+      }
+      if (!installer.updateCommand) {
+        throw new HttpError(400, installer.updateNote || '当前工具不支持一键更新，请按官方文档手动升级');
+      }
+
+      await launchToolInstaller(installer, process.cwd(), { update: true });
+      res.json({
+        success: true,
+        message: '更新命令已在新终端中启动',
       });
     }));
 
