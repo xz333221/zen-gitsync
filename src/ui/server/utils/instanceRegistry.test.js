@@ -299,6 +299,64 @@ test('list: prune 后删除对应 entry 文件', async () => {
 })
 
 // ──────────────────────────────────────────────────────────────────────────────
+// 损坏 entry 自愈（Windows 强杀/断电留下全 \x00 文件的真实场景）
+// ──────────────────────────────────────────────────────────────────────────────
+
+test('list: 损坏的 entry 文件被自动清理,不再出现在结果里', async () => {
+  const { registry, fs, registryPath } = setup({ alivePids: new Set([100]) });
+
+  // 模拟强杀后留下的全 \x00 损坏文件
+  await fs.writeFile(`${registryPath}/14400.json`, '\x00'.repeat(224), 'utf-8');
+  // 合法 JSON 但不是对象(比如被写成数组/字符串)也算损坏
+  await fs.writeFile(`${registryPath}/38520.json`, JSON.stringify([1, 2, 3]), 'utf-8');
+  // 正常条目不受影响
+  await fs.writeFile(`${registryPath}/100.json`, JSON.stringify({
+    pid: 100, port: 9001, projectName: 'live', projectPath: '/live',
+    startedAt: Date.now(), lastHeartbeat: Date.now(), hostname: 'h'
+  }), 'utf-8');
+
+  const arr = await registry.list();
+  assert.equal(arr.length, 1, '损坏条目不应出现在 list 结果里');
+  assert.equal(arr[0].pid, 100);
+
+  // 损坏文件应被删除
+  const names = await fs.readdir(registryPath);
+  assert.ok(!names.includes('14400.json'), '全 \\x00 损坏文件应被清理');
+  assert.ok(!names.includes('38520.json'), '非对象 JSON 文件应被清理');
+  assert.ok(names.includes('100.json'), '正常文件不受影响');
+})
+
+test('list: 损坏文件清理后不再重复打警告(文件已消失)', async () => {
+  const { registry, fs, registryPath } = setup();
+  await fs.writeFile(`${registryPath}/14400.json`, '\x00'.repeat(224), 'utf-8');
+
+  await registry.list(); // 第一次:warn 一次 + 清理
+  const names1 = await fs.readdir(registryPath);
+  assert.ok(!names1.includes('14400.json'));
+
+  await registry.list(); // 第二次:文件已不在,零警告零报错
+  const arr = await registry.list();
+  assert.equal(arr.length, 0);
+})
+
+test('heartbeat: 条目文件损坏时清理并自愈重建', async () => {
+  const { registry, fs, registryPath } = setup();
+  await fs.writeFile(`${registryPath}/100.json`, '\x00'.repeat(224), 'utf-8');
+
+  await registry.heartbeat(100, {
+    port: 9876,
+    projectPath: '/path/1',
+    projectName: 'p1',
+    hostname: 'host1'
+  });
+
+  const entry = await readEntry(fs, registryPath, 100);
+  assert.ok(entry, '损坏条目应被重建');
+  assert.equal(entry.pid, 100);
+  assert.equal(entry.port, 9876);
+})
+
+// ──────────────────────────────────────────────────────────────────────────────
 // 关键:并发安全
 // ──────────────────────────────────────────────────────────────────────────────
 

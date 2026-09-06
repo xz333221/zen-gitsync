@@ -139,18 +139,45 @@ export function createInstanceRegistry({
     }
   }
 
-  // 读单个 entry 文件。失败/不存在时返回 null。
+  // 读单个 entry 文件。返回值三种：
+  //   { entry }        → 解析成功且为对象
+  //   { corrupt: true }→ 文件存在但内容损坏（非合法 JSON / 非对象）
+  //   null             → 文件不存在或读取失败（IO 错误，不动文件）
+  //
+  // 损坏来源（Windows 实测）：进程被强杀 / 断电时文件长度已扩展但数据未落盘，
+  // 留下全 \x00 的文件。这类文件永远解析失败，若不清理会永久堆积，
+  // 且每次 list()（监控轮询约 5 秒一次）都打一条 warn 刷屏。
   async function readEntry(pid) {
     const fp = entryFilePath(pid);
+    let raw;
     try {
-      const raw = await fsMod.readFile(fp, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed;
-      return null;
+      raw = await fsMod.readFile(fp, 'utf-8');
     } catch (err) {
       if (err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) return null;
       logger.warn(`[instanceRegistry] 读 entry pid=${pid} 失败: ${err?.message || err}`);
       return null;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return { entry: parsed };
+      }
+      return { corrupt: true };
+    } catch (err) {
+      logger.warn(`[instanceRegistry] entry pid=${pid} 内容损坏(非合法 JSON)，将被清理: ${err?.message || err}`);
+      return { corrupt: true };
+    }
+  }
+
+  // 尽力删除损坏的 entry 文件（失败不抛，只留 warn，下轮再试）
+  async function removeCorruptEntry(pid) {
+    try {
+      await fsMod.unlink(entryFilePath(pid));
+      logger.info(`[instanceRegistry] 已清理损坏的 entry 文件 pid=${pid}`);
+    } catch (err) {
+      if (err && err.code !== 'ENOENT') {
+        logger.warn(`[instanceRegistry] 清理损坏 entry pid=${pid} 失败: ${err?.message || err}`);
+      }
     }
   }
 
@@ -189,7 +216,13 @@ export function createInstanceRegistry({
     for (const name of names) {
       if (!isEntryFileName(name)) continue;
       const pid = pidFromFileName(name);
-      const entry = await readEntry(pid);
+      const res = await readEntry(pid);
+      if (res && res.corrupt) {
+        // 损坏文件直接删掉，自愈，避免永久堆积 + 每 5 秒刷 warn
+        await removeCorruptEntry(pid);
+        continue;
+      }
+      const entry = res?.entry;
       if (entry && Number.isInteger(entry.pid)) {
         instances[String(entry.pid)] = entry;
       }
@@ -320,7 +353,12 @@ export function createInstanceRegistry({
       await ensureDir();
       await migrateLegacy();
 
-      const existing = await readEntry(pid);
+      const res = await readEntry(pid);
+      if (res && res.corrupt) {
+        // 损坏文件先清掉，按"条目丢失"走自愈重建
+        await removeCorruptEntry(pid);
+      }
+      const existing = res?.entry || null;
       let entry;
       if (!existing) {
         const canRebuild =
