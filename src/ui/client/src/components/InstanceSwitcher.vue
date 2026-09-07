@@ -14,7 +14,7 @@
   ~ limitations under the License.
   -->
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onBeforeUnmount } from 'vue'
 import { ElDropdown, ElDropdownMenu, ElDropdownItem, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Close, Loading } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
@@ -26,6 +26,18 @@ const store = useInstancesStore()
 const dropdownVisible = ref(false)
 const closingPid = ref<number | null>(null)
 const closingAll = ref(false)
+// 「关闭当前实例」兜底遮罩:window.close() 被浏览器拦截时展示(见 requestClose)
+const selfClosed = ref(false)
+const selfClosedName = ref('')
+let selfCloseFallbackTimer: number | null = null
+
+// 组件卸载时清掉兜底定时器,避免向已卸载的组件写状态、或干扰后续测试/热更新
+onBeforeUnmount(() => {
+  if (selfCloseFallbackTimer != null) {
+    window.clearTimeout(selfCloseFallbackTimer)
+    selfCloseFallbackTimer = null
+  }
+})
 
 // 列表为空时不渲染（单实例用户无意义）
 const hasAny = computed(() => store.list.length > 0)
@@ -41,7 +53,11 @@ const triggerText = computed(() => `${count.value} ${$t('@INSSW:个实例')}`)
 
 function handleOpen(port: number) {
   if (!port) return
-  window.open(`http://localhost:${port}`, '_blank', 'noopener')
+  // 注意不要带 'noopener':带 noopener 打开的标签页没有 opener,
+  // 浏览器(Chrome/Firefox)会把它当作用户手动打开的页面,禁止它随后
+  // 用 window.close() 关掉自己 —— 「关闭当前实例」就会变成僵尸页面。
+  // 两边都是本机同源的实例 UI,opener 暴露可接受。
+  window.open(`http://localhost:${port}`, '_blank')
 }
 
 function pathSubtitle(instance: InstanceInfo): string {
@@ -83,9 +99,22 @@ async function requestClose(instance: InstanceInfo) {
     )
     // 关掉当前实例的后台服务后,再尝试关当前 tab。
     // Chrome 90+ 禁止脚本关闭用户手动打开的 tab,这里大概率被浏览器静默
-    // 忽略 —— 后台已关,tab 失去 server 推送,用户手动关即可;能关则更好。
+    // 忽略 —— 能关则最好;关不掉时页面还活着,靠下面的兜底遮罩收尾。
     if (isSelf) {
+      selfClosedName.value = instance.projectName
       try { window.close() } catch (_) { /* 浏览器拦截,忽略 */ }
+      // 兜底:稍等片刻后若页面仍未被关掉(window.close 被拦截),
+      // 显示「实例已关闭」全屏遮罩,并停掉 store 的轮询 / socket 重连,
+      // 避免僵尸页面对已关闭的端口无限重连。若 window.close 成功,
+      // 页面已卸载,这个定时器自然不会执行。
+      if (selfCloseFallbackTimer != null) {
+        window.clearTimeout(selfCloseFallbackTimer)
+      }
+      selfCloseFallbackTimer = window.setTimeout(() => {
+        selfCloseFallbackTimer = null
+        selfClosed.value = true
+        try { store.stop() } catch (_) { /* store 未启动,忽略 */ }
+      }, 250)
     }
   } catch (error) {
     ElMessage.error(`${$t('@INSSW:关闭实例失败')}: ${(error as Error).message}`)
@@ -259,9 +288,84 @@ async function requestCloseAll() {
       </el-dropdown-menu>
     </template>
   </el-dropdown>
+
+  <!-- 「关闭当前实例」兜底遮罩:后台已关、window.close() 又被浏览器拦截时,
+       页面还活着但已与服务端断开 —— 明确告知用户此标签页可以安全关闭,
+       避免停留在僵尸页面上误以为实例还在运行。 -->
+  <Teleport to="body">
+    <div v-if="selfClosed" class="self-closed-overlay" role="alert">
+      <div class="self-closed-card">
+        <el-icon class="self-closed-icon">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M15 9l-6 6M9 9l6 6" />
+          </svg>
+        </el-icon>
+        <h2 class="self-closed-title">{{ $t('@INSSW:当前实例已关闭标题') }}</h2>
+        <p class="self-closed-desc">{{ $t('@INSSW:当前实例已关闭描述', { name: selfClosedName }) }}</p>
+        <span class="self-closed-hint">{{ $t('@INSSW:当前实例已关闭提示') }}</span>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
+/* 「关闭当前实例」兜底遮罩(Teleport 到 body,scoped 属性随元素走,样式生效) */
+.self-closed-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg-container, #fff);
+}
+
+.self-closed-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  text-align: center;
+}
+
+.self-closed-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-component);
+  background: var(--bg-subtle);
+}
+
+.self-closed-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.self-closed-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.self-closed-desc {
+  margin: 0;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.self-closed-hint {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary, var(--text-secondary));
+  line-height: 1.6;
+}
+
 .instance-switcher {
   display: inline-flex;
   align-items: center;

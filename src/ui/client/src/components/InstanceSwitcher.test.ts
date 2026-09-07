@@ -15,6 +15,7 @@
 // InstanceSwitcher.vue 回归测试。
 // 覆盖:当前实例行「端口徽章 + 关闭按钮」并存(不重叠的结构前提)、
 //       关闭当前/其他实例的确认流程分支、取消确认不关闭、空列表不渲染、
+//       关闭当前实例时 window.close 被拦截的兜底遮罩(ISSW-13/14)、
 //       以及 CSS 并排布局守卫。
 //
 // 为什么要有 CSS 守卫(ISSW-07~10):
@@ -37,6 +38,8 @@ const fakeStore = {
   closeInstance: vi.fn<(pid: number) => Promise<void>>().mockResolvedValue(undefined),
   closeAllInstances: vi.fn().mockResolvedValue({ closed: 0, failed: 0, total: 0 }),
   refresh: vi.fn().mockResolvedValue(undefined),
+  // 「关闭当前实例」兜底流程会调用 stop() 停掉轮询/socket 重连
+  stop: vi.fn(),
 }
 
 vi.mock('@/stores/instancesStore', () => ({
@@ -238,6 +241,39 @@ describe('InstanceSwitcher.vue 关闭流程', () => {
 
     expect(fakeStore.refresh).toHaveBeenCalledTimes(1)
   })
+
+  test('ISSW-13: 关闭当前实例且 window.close 被拦截 → 兜底遮罩出现并调用 store.stop', async () => {
+    setInstances(100, [makeInstance(100, 'self', 433)])
+    fakeStore.stop.mockClear()
+    // 模拟 Chrome 拦截:window.close() 静默不生效,页面仍然存活
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+    const w = mountSwitcher()
+
+    await currentRow(w).find('button.instance-close').trigger('click')
+    // 关闭刚完成、250ms 兜底定时器未到:遮罩不应出现
+    // (遮罩 Teleport 到 body,不在 wrapper 树内,必须查 document)
+    expect(document.querySelector('.self-closed-overlay')).toBeNull()
+
+    // 越过 250ms 兜底阈值(留裕量)
+    await new Promise((resolve) => setTimeout(resolve, 350))
+
+    // 页面还活着(window.close 被拦截)→ 遮罩出现,僵尸页面停止轮询/重连
+    expect(document.querySelector('.self-closed-overlay')).not.toBeNull()
+    expect(fakeStore.stop).toHaveBeenCalledTimes(1)
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+  }, 5000)
+
+  test('ISSW-14: 关闭其他实例 → 不触发兜底遮罩', async () => {
+    setInstances(100, [makeInstance(100, 'self', 433), makeInstance(200, 'zen-gitsync', 5510)])
+    fakeStore.stop.mockClear()
+    const w = mountSwitcher()
+
+    await otherRows(w)[0].find('button.instance-close').trigger('click')
+    await new Promise((resolve) => setTimeout(resolve, 350))
+
+    expect(document.querySelector('.self-closed-overlay')).toBeNull()
+    expect(fakeStore.stop).not.toHaveBeenCalled()
+  }, 5000)
 })
 
 // jsdom 不做 CSS 布局计算,DOM 结构在重叠 bug 前后完全一致,
