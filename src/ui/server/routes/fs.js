@@ -97,7 +97,11 @@ export function registerFsRoutes({
       // 检查当前目录是否是Git仓库
       try {
         await execGitCommand(['rev-parse', '--is-inside-work-tree']);
+        // 用实时检测结果回写服务端 isGitRepo 标志,自愈启动后目录状态
+        // 发生变化(如外部终端里 git init)导致的 stale false。
+        setIsGitRepo(true);
       } catch (error) {
+        setIsGitRepo(false);
         return res.status(400).json({
           error: '当前目录不是一个Git仓库',
           directory,

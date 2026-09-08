@@ -42,6 +42,7 @@ export function registerGitOpsRoutes({
   clearCommandHistory,
   checkAndClearGitLock,
   getIsGitRepo,
+  setIsGitRepo,
   setRecentPushStatus
 }) {
   // 提交更改
@@ -1371,6 +1372,12 @@ export function registerGitOpsRoutes({
   app.post('/api/git-init', async (req, res) => {
     try {
       const { stdout } = await execGitCommand(['init']);
+      // git init 成功后立即同步服务端 isGitRepo 标志。
+      // 否则该标志仍是启动时检测的 false,后续 /api/add-remote 等以
+      // getIsGitRepo() 做门禁的接口会误报"当前目录不是Git仓库"。
+      if (typeof setIsGitRepo === 'function') {
+        setIsGitRepo(true);
+      }
       res.json({ success: true, output: stdout.trim() });
     } catch (error) {
       logger.error('git init 失败:', error);

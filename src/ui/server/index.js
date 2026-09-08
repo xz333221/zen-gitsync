@@ -427,6 +427,7 @@ async function startUIServer(noOpen = false, savePort = false) {
     clearCommandHistory,
     checkAndClearGitLock,
     getIsGitRepo: () => isGitRepo,
+    setIsGitRepo: (v) => { isGitRepo = v; },
     setRecentPushStatus: (v) => { recentPushStatus = v; }
   });
 
