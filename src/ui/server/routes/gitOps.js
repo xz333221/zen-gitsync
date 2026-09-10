@@ -949,9 +949,8 @@ export function registerGitOpsRoutes({
       // 拼成 origin/<branch> 后进 git 参数位,同样要过 ref 校验
       const safeBranch = assertGitRef(branch, '分支名');
 
-      // 尝试清理 Git 锁文件(破坏性入口:force=true 绕过 mtime 判断,
-      // 仍走 PID liveness 校验——用户主动触发的 reset --hard 不该被
-      // 一个刚崩出来的新孤儿锁挡住)
+      // 仅清理能确认持有进程已退出的孤儿锁。原生 Git 的空锁无法确认
+      // 持有者状态时必须保留,让 Git 自己返回并发锁错误。
       await checkAndClearGitLock({ force: true });
 
       // 执行 git reset --hard origin/branch 命令
@@ -969,9 +968,8 @@ export function registerGitOpsRoutes({
   // 清除本地所有更改，包括未跟踪文件 (git reset --hard && git clean -fd)
   app.post('/api/discard-all-changes', async (req, res) => {
     try {
-      // 尝试清理 Git 锁文件(破坏性入口:force=true 绕过 mtime 判断,
-      // 仍走 PID liveness 校验——用户主动触发的 discard-all 不该被
-      // 一个刚崩出来的新孤儿锁挡住)
+      // 仅清理能确认持有进程已退出的孤儿锁。原生 Git 的空锁无法确认
+      // 持有者状态时必须保留,让 Git 自己返回并发锁错误。
       await checkAndClearGitLock({ force: true });
 
       // 1. 执行 git reset --hard 丢弃已跟踪文件的更改
@@ -1287,23 +1285,15 @@ export function registerGitOpsRoutes({
   // 添加清理Git锁定文件的接口
   app.post('/api/remove-lock', async (req, res) => {
     try {
-      const gitDir = path.join(process.cwd(), '.git')
-      const indexLockFile = path.join(gitDir, 'index.lock')
-
-      // 检查文件是否存在
-      try {
-        await fs.access(indexLockFile)
-        // 如果文件存在，尝试删除它
-        await fs.unlink(indexLockFile)
-        res.json({ success: true, message: '已清理锁定文件' })
-      } catch (error) {
-        // 如果文件不存在，也返回成功
-        if (error.code === 'ENOENT') {
-          res.json({ success: true, message: '没有发现锁定文件' })
-        } else {
-          throw error
-        }
-      }
+      // 统一走带并发保护的锁检查。原生 Git 的 index.lock 通常为空,
+      // 无法确认是否仍被其他工具使用时绝不能直接 unlink。
+      const cleaned = await checkAndClearGitLock({ force: false });
+      res.json({
+        success: cleaned,
+        message: cleaned
+          ? '已清理确认失效的锁定文件'
+          : '未自动删除锁定文件：无法确认没有其他 Git 操作正在运行'
+      });
     } catch (error) {
       logger.error('清理锁定文件失败:', error)
       res.status(500).json({
