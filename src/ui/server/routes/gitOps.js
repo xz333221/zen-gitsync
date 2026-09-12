@@ -1395,6 +1395,50 @@ export function registerGitOpsRoutes({
     }
   });
 
+  // 初始化/添加远程后自动关联远程分支
+  // 场景:全新目录"初始化并添加远程"后,远程已有提交时自动 fetch 并把本地
+  // (unborn) 分支检出到远程默认分支并建立跟踪,省去手动 checkout。
+  // 只在本地没有任何提交(unborn HEAD)时执行检出;
+  // 本地已有提交时绝不移动分支指针(避免静默丢弃本地历史)。
+  app.post('/api/attach-remote-branch', async (req, res) => {
+    try {
+      if (!getIsGitRepo()) {
+        return res.json({ success: false, error: '当前目录不是Git仓库' });
+      }
+
+      // 1. 本地已有提交 → 不动分支,交给"设置上游并推送"流程
+      try {
+        await execGitCommand(['rev-parse', '--verify', 'HEAD']);
+        return res.json({ success: true, attached: false, hasLocalCommits: true });
+      } catch { /* unborn HEAD,继续 */ }
+
+      // 2. 探测远程默认分支(空仓库 ls-remote 无输出)
+      const { stdout: symrefOut } = await execGitCommand(
+        ['ls-remote', '--symref', 'origin', 'HEAD'],
+        { ignoreError: true }
+      );
+      const m = (symrefOut || '').match(/^ref:\s+refs\/heads\/(\S+)\s+HEAD/m);
+      if (!m) {
+        // 远程为空(或无法解析) → 前端走"提交后一键推送建上游"
+        return res.json({ success: true, attached: false, empty: true });
+      }
+      const remoteDefault = assertGitRef(m[1], '远程默认分支');
+
+      // 3. fetch 远程
+      await execGitCommand(['fetch', 'origin']);
+
+      // 4. 检出到远程默认分支。若未跟踪文件与远程文件冲突,git 会拒绝,
+      //    错误原样透传给前端提示(不覆盖用户文件)。
+      await execGitCommand(['checkout', '-B', remoteDefault, `origin/${remoteDefault}`]);
+      await execGitCommand(['branch', '--set-upstream-to', `origin/${remoteDefault}`, remoteDefault]);
+
+      res.json({ success: true, attached: true, branch: remoteDefault });
+    } catch (error) {
+      logger.error('关联远程分支失败:', error);
+      res.json({ success: false, error: error.message || '关联远程分支失败' });
+    }
+  });
+
   // 获取远程仓库URL的API
   app.get('/api/remote-url', async (req, res) => {
     try {

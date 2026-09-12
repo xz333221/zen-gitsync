@@ -623,6 +623,8 @@ async function addRemoteAndSetUpstream() {
     if (ok) {
       ElMessage.success($t('@13D1C:已添加远程仓库'))
       newRemoteUrl.value = ''
+      // 本地无提交且远程已有提交时,自动检出远程默认分支并建跟踪
+      await gitStore.attachRemoteBranch()
     }
   } finally {
     isAddingRemote.value = false
@@ -647,10 +649,21 @@ async function initGitRepo() {
     if (ok) {
       ElMessage.success($t('@13D1C:Git仓库初始化成功'))
       if (newRemoteUrl.value.trim()) {
-        await gitStore.addRemote(newRemoteUrl.value.trim())
+        const remoteOk = await gitStore.addRemote(newRemoteUrl.value.trim())
+        if (remoteOk) {
+          // 远程已有提交时自动检出默认分支并建跟踪;远程为空则提示后走
+          // "提交首个 commit → 自动 push -u" 流程(见 gitStore.commitChanges)
+          await gitStore.attachRemoteBranch()
+        }
         newRemoteUrl.value = ''
       }
       await loadStatus()
+      // 初始化前加载的分支/历史等状态是陈旧的(底部"当前目录不是Git仓库"、
+      // 头部"未知当前分支"),这里强制刷新一遍
+      await gitStore.getCurrentBranch(true)
+      await gitStore.getAllBranches()
+      await gitStore.getBranchStatus(true)
+      await gitStore.fetchLog(false)
     }
   } finally {
     isInitializingRepo.value = false

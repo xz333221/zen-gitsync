@@ -1207,6 +1207,33 @@ export const useGitStore = defineStore('git', () => {
           void getBranchStatus(true)
         }
 
+        // 首次提交后自动建立上游:已配置远程但当前分支无上游时,
+        // 自动执行 push -u,省去再点一次"设置上游并推送"。
+        // 失败仅提示,不影响已成功的提交本身。
+        if (remoteUrl.value && !hasUpstream.value && currentBranch.value) {
+          try {
+            const pushRes = await fetch('/api/git/push-with-upstream', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ branch: currentBranch.value })
+            })
+            const pushData = await pushRes.json()
+            if (pushData.success) {
+              hasUpstream.value = true
+              upstreamBranch.value = `origin/${currentBranch.value}`
+              branchAhead.value = 0
+              branchBehind.value = 0
+              ElMessage.success($t('@C298B:已自动推送并设置上游分支'))
+              await getAllBranches()
+              void getBranchStatus(true)
+            } else {
+              ElMessage.warning(`${$t('@C298B:自动推送建上游失败: ')}${pushData.error || ''}`)
+            }
+          } catch (pushErr) {
+            ElMessage.warning(`${$t('@C298B:自动推送建上游失败: ')}${(pushErr as Error).message}`)
+          }
+        }
+
         return true
       } else {
         // 服务端可能返回 "所有暂存文件都被锁定" 等业务级失败
@@ -1870,6 +1897,38 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 初始化/添加远程后自动关联远程分支
+  // 远程已有提交且本地无提交时,检出远程默认分支并建立跟踪;
+  // 返回后端结果,toast 与刷新都在这里处理,调用方只需 await。
+  async function attachRemoteBranch() {
+    try {
+      const response = await fetch('/api/attach-remote-branch', { method: 'POST' });
+      const data = await response.json();
+      if (!data.success) {
+        ElMessage.warning(`${$t('@C298B:关联远程分支失败: ')}${data.error || ''}`);
+        return data;
+      }
+      if (data.attached) {
+        ElMessage.success($t('@C298B:已检出远程分支 {branch} 并建立跟踪', { branch: data.branch }));
+        // 检出后全量刷新分支/历史/状态
+        await Promise.all([
+          getCurrentBranch(true),
+          getAllBranches(),
+          getBranchStatus(true),
+          fetchLog(false),
+          fetchStatusPorcelain()
+        ]);
+      } else if (data.empty) {
+        ElMessage.info($t('@C298B:远程仓库为空，提交首个 commit 后可一键推送建上游'));
+      }
+      // hasLocalCommits: 本地已有提交,静默保留现状(交给"设置上游并推送"卡片)
+      return data;
+    } catch (error) {
+      ElMessage.warning(`${$t('@C298B:关联远程分支失败: ')}${(error as Error).message}`);
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
   // 复制当前全量 Diff 到剪贴板
   async function copyCurrentDiff() {
     try {
@@ -2486,6 +2545,7 @@ export const useGitStore = defineStore('git', () => {
     discardSelectedFiles,
     getRemoteUrl,
     addRemote,
+    attachRemoteBranch,
     gitInit,
     copyRemoteUrl,
     copyCloneCommand,

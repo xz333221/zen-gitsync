@@ -472,6 +472,22 @@ async function refreshLog() {
   });
 }
 
+// 监听仓库状态变化:初始化 git / 切换目录后,自愈"当前目录不是Git仓库"
+// 的陈旧错误提示与空列表(此前只在 onMounted 判断一次,之后不更新)
+watch(
+  () => gitStore.isGitRepo,
+  (isRepo) => {
+    if (isRepo) {
+      errorMessage.value = "";
+      loadLog(showAllCommits.value, 1);
+      fetchAllAuthors();
+    } else {
+      errorMessage.value = "当前目录不是Git仓库";
+      logs.value = [];
+    }
+  }
+);
+
 // 监听store中的日志变化
 watch(
   () => gitStore.log,
