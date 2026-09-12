@@ -152,6 +152,39 @@ test('assertGitRemoteUrl: 拒绝 ext:: 传输协议(会执行 shell 命令)', ()
   }
 })
 
+test('assertGitRemoteUrl: 放行含空格的本地路径(豁免空白检查)', () => {
+  // 本地路径形式的 remote 允许含空格,不能被空白检查误伤
+  for (const ok of [
+    '/c/My Repos/foo.git',
+    './my repo.git',
+    '../my repo.git',
+    'C:\\My Repos\\foo.git',
+    'C:/My Repos/foo.git',
+    '\\\\server\\my share\\foo.git'
+  ]) {
+    assert.equal(assertGitRemoteUrl(ok), ok, `应放行本地路径 ${ok}`)
+  }
+})
+
+test('回归:拒绝把「远程名 + 地址」一起粘贴进来的 URL', () => {
+  // 真实事故:用户从 `git remote -v` 的输出里复制粘贴(它的格式是
+  // 「远程名 + 制表符 + 地址」),于是地址被存成 "origin git@gitee.com:x/y.git"。
+  // 写入时 git 不报错,直到 push 才抛 `Permission denied, user: 'origin git'` ——
+  // 因为 git 按 scp 形式把它拆成了 user="origin git"。报错完全指不到真正原因,
+  // 必须在写 remote 之前就拦掉。
+  for (const bad of [
+    'origin git@gitee.com:xze333221/personal-website.git',
+    'origin\tgit@gitee.com:xze333221/personal-website.git',
+    'origin https://gitee.com/xze333221/personal-website.git',
+    'https://gitee.com/xze333221/my repo.git',
+    'git@gitee.com:xze333221/personal-website .git',
+    // 全角空格同样要拦(中文输入法下很容易打出来)
+    'origin\u3000git@gitee.com:xze333221/personal-website.git'
+  ]) {
+    assertRejected(assertGitRemoteUrl, bad, 'assertGitRemoteUrl')
+  }
+})
+
 test('assertGitConfigKey: 放行前端实际用到的配置项', () => {
   for (const ok of [
     'user.name',

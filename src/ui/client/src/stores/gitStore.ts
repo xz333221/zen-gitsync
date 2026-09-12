@@ -30,6 +30,10 @@ const AUTO_LOG_REFRESH_INTERVAL_MS = 2000
 // 获取后端端口
 const backendPort = getBackendPort()
 
+// "初始化并提交"流程使用的首次提交信息。
+// 刻意不走 i18n:提交信息是写进 git 历史的实体数据,不应该随界面语言变化。
+export const DEFAULT_INITIAL_COMMIT_MESSAGE = 'chore: init'
+
 export const useGitStore = defineStore('git', () => {
   // 获取configStore实例
   const configStore = useConfigStore()
@@ -1016,7 +1020,11 @@ export const useGitStore = defineStore('git', () => {
   }
   
   // 直接添加所有文件到暂存区 (git add . 不考虑锁定文件)
-  async function addAllToStage() {
+  async function addAllToStage(options: { silent?: boolean } = {}) {
+    // silent=true 时不弹成功 toast,供"初始化并提交"这类串联流程使用:
+    // 否则会先弹"所有文件已添加到暂存区"再弹"提交成功",两条提示叠加;
+    // 而且空目录场景下那句"已添加"本身就是误导。
+    const { silent = false } = options
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
       ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
@@ -1031,10 +1039,12 @@ export const useGitStore = defineStore('git', () => {
       
       const result = await response.json()
       if (result.success) {
-        ElMessage({
-          message: $t('@C298B:所有文件已添加到暂存区'),
-          type: 'success'
-        })
+        if (!silent) {
+          ElMessage({
+            message: $t('@C298B:所有文件已添加到暂存区'),
+            type: 'success'
+          })
+        }
 
         // 刷新porcelain状态，确保fileList及时更新（避免一键提交流程中按钮状态不变）
         await fetchStatusPorcelain()
@@ -1929,6 +1939,46 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 初始化仓库后的"首次提交"一步到位。
+  //
+  // 只串联 addAllToStage + commitChanges,不新增后端接口。
+  // commitChanges 内部已含"首次提交后自动 push -u origin <branch> 建上游",
+  // 所以填了远程地址时会一路从 init 走到 push,不需要在这里重复实现。
+  //
+  // 返回值(调用方据此决定提示文案):
+  //   'committed'           已创建首次提交
+  //   'skipped-has-commits' 仓库已有提交(重复初始化 / 目录被外部并发 init),不补提交
+  //   'skipped-no-files'    没有可提交的文件(空目录 / 文件全被 .gitignore 忽略)
+  //   'failed'              暂存或提交失败(具体原因已由内层 toast 呈现)
+  async function createInitialCommit(message = DEFAULT_INITIAL_COMMIT_MESSAGE) {
+    // 1) 已有提交就不补"首次提交",避免在既有历史上多压一个无关提交。
+    //    刚 git init 的仓库处于 unborn HEAD,git log 返回空,所以 log 为空
+    //    正是"还没有任何提交"。isGitRepo=true 时该面板本就不渲染,这里是
+    //    防御性检查(例如页面加载后目录被外部 git init 并发处理)。
+    if (log.value.length > 0) {
+      return 'skipped-has-commits' as const
+    }
+
+    // 2) 暂存全部文件。静默执行,避免"已添加到暂存区"与"提交成功"两条 toast 叠加
+    const staged = await addAllToStage({ silent: true })
+    if (!staged) {
+      return 'failed' as const
+    }
+
+    // 3) 暂存区为空 → 目录里没有任何可提交的文件。
+    //    此时直接提交会抛 git 原始的 "nothing to commit",提前拦掉交给调用方
+    //    提示更友好。porcelain 中 index 侧有变更的文件统一为 'added'
+    //    (见 parseStatusPorcelain:暂存的 A/M/D/R 都归到 'added')。
+    const hasStagedFile = fileList.value.some(file => file.type === 'added')
+    if (!hasStagedFile) {
+      return 'skipped-no-files' as const
+    }
+
+    // 4) 提交。空消息会让 git commit 直接失败,这里兜底默认文案
+    const ok = await commitChanges(message.trim() || DEFAULT_INITIAL_COMMIT_MESSAGE)
+    return ok ? ('committed' as const) : ('failed' as const)
+  }
+
   // 复制当前全量 Diff 到剪贴板
   async function copyCurrentDiff() {
     try {
@@ -2547,6 +2597,7 @@ export const useGitStore = defineStore('git', () => {
     addRemote,
     attachRemoteBranch,
     gitInit,
+    createInitialCommit,
     copyRemoteUrl,
     copyCloneCommand,
     copyCurrentDiff,

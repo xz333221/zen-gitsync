@@ -131,10 +131,11 @@ export function assertGitConfigValue(value, label = '配置项取值') {
 /**
  * 校验 remote URL。
  *
- * 除了 remote 名要过 assertGitRef，URL 本身也有两个坑：
+ * 除了 remote 名要过 assertGitRef，URL 本身有三个坑：
  *   1. git 支持 `ext::` 传输协议，值是 shell 命令 —— `git remote add origin 'ext::sh -c id'`
  *      会在下次 fetch/pull 时执行它。
  *   2. 以 - 开头同样会被解析成选项。
+ *   3. 含空白的 URL 会被 git 按 scp 形式误拆，报出看不懂的错。
  */
 export function assertGitRemoteUrl(value, label = '远程仓库地址') {
   const s = String(value ?? '').trim()
@@ -143,6 +144,16 @@ export function assertGitRemoteUrl(value, label = '远程仓库地址') {
   // ext:: 后面跟的是要执行的命令，等于把 remote 配置变成 RCE
   if (/^ext::/i.test(s)) throw new HttpError(400, `不支持 ext:: 传输协议`)
   if (/[\x00-\x1f\x7f]/.test(s)) throw new HttpError(400, `${label}含有非法字符`)
+  // 空白(空格 / 制表符 / 全角空格)本身写进去不报错，但会在下次 push 时爆掉：
+  // git 把 `origin git@gitee.com:x/y.git` 按 scp 形式拆成 user="origin git"、
+  // host="gitee.com"，最终抛出 `Permission denied, user: 'origin git'` ——
+  // 报错里看不出真正的原因是地址多了个前缀。最常见来源是从 `git remote -v`
+  // 的输出里复制粘贴(它打印的是「远程名 + 制表符 + 地址」)。
+  // 本地路径形式的 remote(如 /c/My Repos/foo.git)允许含空格，故做豁免。
+  const looksLikeLocalPath = /^(\/|\.{1,2}\/|~\/|[A-Za-z]:[\\/]|\\\\)/.test(s)
+  if (!looksLikeLocalPath && /\s/.test(s)) {
+    throw new HttpError(400, `${label}不能包含空格或制表符(检查是否把"远程名 + 地址"一起粘贴了)`)
+  }
   return s
 }
 

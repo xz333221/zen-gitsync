@@ -53,6 +53,9 @@ describe('GitStatus.vue', () => {
     mockGitStore.toggleSelectionMode.mockClear()
     mockGitStore.selectAllFiles.mockClear()
     mockGitStore.clearSelection.mockClear()
+    // "初始化并提交"流程(默认 init 成功、首次提交返回 committed)
+    mockGitStore.gitInit.mockClear().mockResolvedValue(true)
+    mockGitStore.createInitialCommit.mockClear().mockResolvedValue('committed')
     vi.mocked(isFilePathLocked).mockReset().mockReturnValue(false)
     vi.mocked(ElMessageBox.confirm).mockReset().mockResolvedValue('confirm' as any)
   })
@@ -246,5 +249,36 @@ describe('GitStatus.vue', () => {
 
   test('GS-24: 组件不抛错地挂载(custom 组件 stub 齐全)', () => {
     expect(() => mountGitStatus()).not.toThrow()
+  })
+
+  // -------------------------------------------------------------------
+  // "初始化并提交"一键流程(GS-25 / GS-26)
+  //
+  // 背景:此前空态面板的按钮只做 git init,用户还得回提交框手敲一句提交信息
+  // 才能产生首个 commit。现在 initGitRepo 在 init 成功后串联 createInitialCommit
+  // (内部 addAllToStage + commitChanges,配置了远程还会自动 push -u)。
+  // -------------------------------------------------------------------
+
+  test('GS-25: initGitRepo 在 init 成功后串联首次提交', async () => {
+    mockGitStore.isGitRepo = false
+    mockFetchResponse('/api/current_directory', { directory: '/repo' })
+    const w = mountGitStatus()
+
+    await (w.vm as any).initGitRepo()
+
+    expect(mockGitStore.gitInit).toHaveBeenCalled()
+    expect(mockGitStore.createInitialCommit).toHaveBeenCalledTimes(1)
+  })
+
+  test('GS-26: init 失败时不触发首次提交', async () => {
+    mockGitStore.isGitRepo = false
+    mockGitStore.gitInit.mockResolvedValueOnce(false)
+    mockFetchResponse('/api/current_directory', { directory: '/repo' })
+    const w = mountGitStatus()
+
+    await (w.vm as any).initGitRepo()
+
+    expect(mockGitStore.gitInit).toHaveBeenCalled()
+    expect(mockGitStore.createInitialCommit).not.toHaveBeenCalled()
   })
 })

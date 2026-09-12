@@ -664,6 +664,17 @@ async function initGitRepo() {
       await gitStore.getAllBranches()
       await gitStore.getBranchStatus(true)
       await gitStore.fetchLog(false)
+
+      // 一步到位:暂存全部文件并创建首次提交。
+      // 暂存区为空(空目录 / 文件全被 .gitignore 忽略)时 store 内部会跳过并返回
+      // skipped-no-files,由这里提示;配置了远程时 commitChanges 内部会自动接着
+      // push -u 建上游,所以"初始化 → 提交 → 推送"一次点击就全部走完。
+      // 必须放在 fetchLog 之后:createInitialCommit 用 log 是否为空判断当前是否
+      // 已有提交,用来防御"目录已被外部 git init"的并发场景。
+      const initCommitResult = await gitStore.createInitialCommit()
+      if (initCommitResult === 'skipped-no-files') {
+        ElMessage.info($t('@13D1C:目录中没有可提交的文件，已跳过首次提交'))
+      }
     }
   } finally {
     isInitializingRepo.value = false
@@ -1528,9 +1539,10 @@ defineExpose({
           <el-icon class="empty-icon"><Folder /></el-icon>
           <p class="empty-title">{{ $t('@13D1C:当前目录不是Git仓库') }}</p>
           <p class="empty-desc">{{ $t('@13D1C:请初始化Git仓库或切换到Git仓库目录') }}</p>
-          <!-- 一次性输入"远程仓库地址" + 初始化,减少来回点击。
-               没有远程仓库时,留空即可,等价于只点"初始化Git仓库"按钮。
-               初始化成功后会自动 addRemote 并把输入框清空。 -->
+          <!-- 一次性输入"远程仓库地址" + 初始化并提交,减少来回点击。
+               没有远程仓库时留空即可,等价于"初始化并提交"。
+               点击后的链路:init →(可选)addRemote → attachRemoteBranch →
+               暂存全部文件 → 首次提交 →(有远程时)自动 push -u 建上游。 -->
           <div class="empty-status-remote-input">
             <el-input
               v-model="newRemoteUrl"
@@ -1550,7 +1562,7 @@ defineExpose({
               @click="initGitRepo"
             >
               <el-icon v-if="!isInitializingRepo"><Folder /></el-icon>
-              {{ newRemoteUrl.trim() ? $t('@13D1C:初始化并添加远程') : $t('@13D1C:初始化Git仓库') }}
+              {{ newRemoteUrl.trim() ? $t('@13D1C:初始化、添加远程并提交') : $t('@13D1C:初始化并提交') }}
             </el-button>
             <el-button
               size="small"
@@ -1560,7 +1572,7 @@ defineExpose({
               {{ $t('@13D1C:打开其他目录') }}
             </el-button>
           </div>
-          <p class="empty-status-hint">{{ $t('@13D1C:初始化后可暂存文件并提交首次提交，再推送到远程。') }}</p>
+          <p class="empty-status-hint">{{ $t('@13D1C:将自动暂存全部文件并创建首次提交；已填远程地址时会一并推送并建立上游。') }}</p>
         </div>
       </div>
     </div>

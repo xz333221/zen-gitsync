@@ -29,6 +29,15 @@ export const mockGitStore: any = {
   clearSelection: vi.fn(),
   selectAllFiles: vi.fn(),
   refreshLog: vi.fn().mockResolvedValue(undefined),
+  // "初始化并提交"一键流程相关(GitStatus 空态面板调用,详见 gitStore.createInitialCommit)
+  gitInit: vi.fn().mockResolvedValue(true),
+  createInitialCommit: vi.fn().mockResolvedValue('committed'),
+  addRemote: vi.fn().mockResolvedValue(true),
+  attachRemoteBranch: vi.fn().mockResolvedValue({ success: true }),
+  fetchLog: vi.fn().mockResolvedValue(undefined),
+  getCurrentBranch: vi.fn().mockResolvedValue(undefined),
+  getAllBranches: vi.fn().mockResolvedValue(undefined),
+  getBranchStatus: vi.fn().mockResolvedValue(undefined),
 }
 
 export const mockConfigStore: any = {
