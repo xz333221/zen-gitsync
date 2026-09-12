@@ -26,6 +26,54 @@ import { getRegistryPath } from '../utils/instanceRegistry.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ── 环境探测（模块级纯函数，便于单测）───────────────────────────────────
+//
+// 判定"要不要 sudo 才能全局装包"这件事，历史上曾经写成 `process.platform === 'win32'`，
+// 这个判断在 MSYS/Cygwin 环境下会翻车：那种 Node 是伪 Unix 构建，platform 报 'linux'，
+// 于是走进 Unix 分支、去调 sudo —— 而 MSYS 自带的 sudo 只是个只会输出
+// "sudo: a password is required" 的桩程序，跟真实密码无关，用户无论输什么都装不上。
+//
+// 正确做法（对齐 npm / nvm 的处理思路）：
+//   1. 只要不是真 Unix（win32 / MSYS / Cygwin）→ 永远不需要 sudo；
+//   2. 是真 Unix 但已经是 root（uid 0，如装了 setuid 的 node）→ 不需要 sudo；
+//   3. 其余（真 Unix 的普通用户）→ 需要 sudo。
+export function needsSudo({
+  platform = process.platform,
+  env = process.env,
+  getuid = process.getuid,
+} = {}) {
+  // MSYS / Cygwin 会把这两个变量注入进程环境，是识别伪 Unix 最可靠的信号
+  const isMsysLike = !!(env.MSYSTEM || env.CYGWIN)
+  if (isMsysLike) return false
+  if (platform === 'win32') return false
+  if (typeof getuid === 'function') {
+    try {
+      if (getuid() === 0) return false
+    } catch { /* getuid 在某些环境会抛，落回"需要 sudo" */ }
+  }
+  return true
+}
+
+// 根据环境决定 npm 可执行文件名 / 是否需要 sudo / 是否要走 shell。
+// npm 在 Windows 上是 .cmd 批处理，spawn 必须配合 shell:true 才能找到；
+// MSYS 环境有 node 前缀里的 `npm`(sh shim)，直接 spawn 即可。
+export function resolveUpgradeCommand(pkgArgs, opts) {
+  const { platform = process.platform, env = process.env } = opts || {}
+  const isMsysLike = !!(env.MSYSTEM || env.CYGWIN)
+  const isWin = platform === 'win32'
+  const sudo = needsSudo({ ...opts, platform, env })
+
+  if (sudo) {
+    // -n 非交互：免密则直接过，需要密码就立刻失败，不把 GUI 挂死在密码提示上
+    return { cmd: 'sudo', args: ['-n', 'npm', ...pkgArgs], useShell: false, sudo }
+  }
+  if (isWin) {
+    return { cmd: 'npm.cmd', args: pkgArgs, useShell: true, sudo }
+  }
+  // 包含 MSYS/Cygwin：用裸 npm，绝不碰 sudo
+  return { cmd: 'npm', args: pkgArgs, useShell: false, sudo, isMsysLike }
+}
+
 export function registerNpmRoutes({
   app,
   getCurrentProjectPath
@@ -61,6 +109,8 @@ export function registerNpmRoutes({
     }
     return null
   }
+
+  // 环境探测 / 升级命令拼装 已提到模块顶部（见 import 之后的 needsSudo、resolveUpgradeCommand）
 
   // 当前安装的版本（从外层 package.json 读取）
   function getCurrentVersion() {
@@ -176,13 +226,12 @@ export function registerNpmRoutes({
     }
     const finish = () => { try { res.end() } catch { /* ignore */ } }
 
-    // Windows 上 npm install -g 通常不需要管理员；*nix 需要 sudo。
-    // 用 sudo -n（非交互式）检测是否可免密，失败时让用户用 sudo 重启 GUI
-    const isWin = process.platform === 'win32'
-    const npmCmd = isWin ? 'npm.cmd' : 'npm'
-    const args = ['install', '-g', 'zen-gitsync', '--registry', 'https://registry.npmjs.org/']
-    const cmd = isWin ? npmCmd : 'sudo'
-    const finalArgs = isWin ? args : ['-n', npmCmd, ...args]
+    // 升级命令按"运行环境"而非"操作系统名"决定要不要 sudo。
+    // 之前用 process.platform === 'win32' 判断，MSYS/Cygwin 的伪 Unix Node
+    // （platform 报 'linux'）会误走 sudo 分支，撞上 MSYS 那个假 sudo 桩程序卡死。
+    // 详见 needsSudo / resolveUpgradeCommand 的注释。
+    const upgradeArgs = ['install', '-g', 'zen-gitsync', '--registry', 'https://registry.npmjs.org/']
+    const { cmd, args: finalArgs, useShell, sudo } = resolveUpgradeCommand(upgradeArgs)
 
     activeUpgrade = send
     const cleanup = () => { activeUpgrade = null }
@@ -193,7 +242,7 @@ export function registerNpmRoutes({
         env: { ...process.env, FORCE_COLOR: '0' },
         windowsHide: true,
         // Windows 下调用 .cmd 必须 shell:true
-        shell: isWin
+        shell: useShell
       })
     } catch (err) {
       send({ type: 'error', message: `启动升级进程失败: ${err.message}` })
@@ -219,8 +268,14 @@ export function registerNpmRoutes({
         latestVersionCache = { value: null, at: 0 }
       } else {
         let hint = ''
-        if (!isWin) {
-          hint = '（提示：在 macOS/Linux 上全局安装需要 sudo，请用管理员权限重启 GUI 后再试）'
+        if (sudo) {
+          // 只有真的走了 sudo 分支才提示提权；Windows / MSYS / root 都不该看到这句
+          hint = '（提示：全局安装需要管理员权限，请用管理员权限重启 GUI 后再试，'
+            + '或手动执行 npm install -g zen-gitsync）'
+        } else {
+          // 无 sudo 仍失败：大概率是 npm prefix 目录无写权限，给出可自救的手动命令
+          hint = '（提示：可手动执行 npm install -g zen-gitsync 后重启 GUI；'
+            + '若报 EACCES，请检查 npm prefix -g 目录的写权限）'
         }
         send({ type: 'error', message: `\n升级失败，退出码 ${code}${hint ? ' ' + hint : ''}\n` })
       }

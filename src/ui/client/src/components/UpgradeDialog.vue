@@ -16,9 +16,17 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import { Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
 
 type Status = 'running' | 'success' | 'failed'
+
+/**
+ * 升级失败时给用户的手动自救命令。
+ * 自动升级在少数环境（无写权限的 npm prefix、被劫持的 sudo 等）注定失败，
+ * 与其让用户卡在"重试"循环里，不如直接把命令递到他手上。
+ */
+const MANUAL_COMMAND = 'npm install -g zen-gitsync --registry https://registry.npmjs.org/'
 
 const props = withDefaults(
   defineProps<{
@@ -80,6 +88,17 @@ function onLater() {
   emit('cancel')
   emit('update:modelValue', false)
 }
+
+/** 复制手动安装命令，让用户在自动升级失败后仍能自助完成升级 */
+async function onCopyCommand() {
+  try {
+    await navigator.clipboard.writeText(MANUAL_COMMAND)
+    ElMessage.success($t('@F13B4:已复制升级命令'))
+  } catch {
+    // clipboard API 在非安全上下文/无权限时会失败，提示用户手动复制
+    ElMessage.warning($t('@F13B4:复制失败，请手动复制'))
+  }
+}
 </script>
 
 <template>
@@ -110,11 +129,19 @@ function onLater() {
       </span>
     </p>
 
+    <p v-if="status === 'failed'" class="upgrade-manual">
+      <span class="upgrade-manual__label">{{ $t('@F13B4:手动升级命令') }}</span>
+      <code class="upgrade-manual__cmd">{{ MANUAL_COMMAND }}</code>
+    </p>
+
     <pre ref="logEl" class="upgrade-log">{{ logs || $t('@F13B4:等待日志输出') }}</pre>
 
     <template #footer>
       <el-button v-if="status === 'failed'" type="primary" @click="onRetry">
         {{ $t('@F13B4:重试') }}
+      </el-button>
+      <el-button v-if="status === 'failed'" @click="onCopyCommand">
+        {{ $t('@F13B4:复制升级命令') }}
       </el-button>
       <el-button v-if="status === 'success'" type="primary" @click="onRestart">
         {{ $t('@F13B4:立即重启并刷新') }}
@@ -188,6 +215,35 @@ function onLater() {
   font-size: 12px;
   font-weight: 600;
   animation: pulse 1s ease-in-out infinite;
+}
+
+/* 失败态的手动升级命令:给被自动升级卡住的用户一条自助出口 */
+.upgrade-manual {
+  margin: 0 0 var(--spacing-md) 0;
+  padding: 8px 12px;
+  background: rgba(245, 108, 108, 0.08);
+  border-left: 3px solid var(--el-color-danger);
+  border-radius: 4px;
+  font-size: 13px;
+
+  &__label {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--el-color-danger);
+    font-weight: 500;
+  }
+
+  &__cmd {
+    display: block;
+    padding: 6px 8px;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-primary, #303133);
+    word-break: break-all;
+    user-select: all;
+  }
 }
 
 @keyframes pulse {
