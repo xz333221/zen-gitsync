@@ -461,11 +461,12 @@ watch(visible, (v) => {
     </template>
   </CommonDialog>
 
-  <!-- 重命名 -->
+  <!-- 重命名。宽度与「编辑地址」「管理推送地址」保持一致:
+       三者在列表里是同一组操作,尺寸跳动会显得突兀 -->
   <CommonDialog
     v-model="renameVisible"
     :title="$t('@RMT01:重命名远程仓库')"
-    size="small"
+    width="min(660px, 92vw)"
     :close-on-click-modal="false"
     show-footer
     :confirm-text="$t('@RMT01:保存')"
@@ -487,11 +488,13 @@ watch(visible, (v) => {
     <GitCommandPreview :command="renameCommand" :title="$t('@RMT01:命令预览：')" />
   </CommonDialog>
 
-  <!-- 编辑地址 -->
+  <!-- 编辑地址。URL 与命令预览都偏长:small(30%) 下输入框会把地址截断,
+       medium(50%) 仍会让命令预览内部滚动,故显式给一个够宽的定值,
+       并用 min() 兜住窄窗口,避免定值宽度溢出屏幕 -->
   <CommonDialog
     v-model="urlVisible"
     :title="$t('@RMT01:编辑远程地址')"
-    size="small"
+    width="min(660px, 92vw)"
     :close-on-click-modal="false"
     show-footer
     :confirm-text="$t('@RMT01:保存')"
@@ -515,11 +518,11 @@ watch(visible, (v) => {
     <GitCommandPreview :command="urlCommand" :title="$t('@RMT01:命令预览：')" />
   </CommonDialog>
 
-  <!-- 推送地址 -->
+  <!-- 管理推送地址。一行一条完整 URL,宽度与上面两个子弹窗保持一致 -->
   <CommonDialog
     v-model="pushUrlVisible"
     :title="$t('@RMT01:管理推送地址')"
-    size="medium"
+    width="min(660px, 92vw)"
     :close-on-click-modal="false"
     show-footer
     :confirm-text="$t('@RMT01:保存')"

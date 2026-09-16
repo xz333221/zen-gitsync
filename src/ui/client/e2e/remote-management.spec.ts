@@ -242,4 +242,44 @@ test.describe('Remote management', () => {
     await expect(results.nth(1)).toHaveAttribute('title', /Could not read from remote repository/)
     await expect(page.locator('.el-message--error', { hasText: '部分远程推送失败' })).toBeVisible()
   })
+
+  test('7. 子弹窗宽度足够:地址不截断、命令预览不出现横向滚动', async ({ page }) => {
+    // 回归:这三个子弹窗最初用了 size="small"(30%),地址被截断、命令预览被挤成横向滚动。
+    // 断言按钮宽度而不是写死 660px —— 窗口变窄时 min(660px, 92vw) 会缩,断言要跟着容错。
+    await page.route('**/api/remotes', route => route.fulfill({
+      json: remotesPayload([
+        { name: 'origin', fetchUrl: 'git@github.com:user/project.git', isUpstream: true },
+        {
+          name: 'backup',
+          fetchUrl: 'git@gitee.com:xz333221/zen-gitsync.git',
+          pushUrls: ['git@gitee.com:xz333221/zen-gitsync.git'],
+          hasExplicitPushUrls: true
+        }
+      ])
+    }))
+
+    await gotoApp(page)
+    await openManager(page)
+
+    // 最后一行是 backup(数组顺序即渲染顺序),它的 URL 最长,最能暴露截断
+    await page.locator('button[aria-label="编辑地址"]').last().click()
+    const sub = page.locator('.el-dialog:visible').last()
+    await expect(sub).toBeVisible()
+
+    const metrics = await sub.evaluate(el => {
+      const preview = el.querySelector('.preview-content') as HTMLElement
+      const input = el.querySelector('.el-input__inner') as HTMLElement
+      return {
+        width: Math.round(el.getBoundingClientRect().width),
+        previewOverflow: preview.scrollWidth - preview.clientWidth,
+        inputOverflow: input.scrollWidth - input.clientWidth
+      }
+    })
+
+    expect(metrics.inputOverflow).toBeLessThanOrEqual(1)
+    expect(metrics.previewOverflow).toBeLessThanOrEqual(1)
+
+    const viewportWidth = await page.evaluate(() => window.innerWidth)
+    expect(metrics.width).toBeGreaterThanOrEqual(Math.min(600, Math.round(viewportWidth * 0.9)))
+  })
 })
