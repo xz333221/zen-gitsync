@@ -16,7 +16,7 @@
 <script setup lang="ts">
 import { $t } from '@/lang/static'
 import { computed, ref } from 'vue'
-import { Upload } from '@element-plus/icons-vue'
+import { Upload, ArrowDown } from '@element-plus/icons-vue'
 import { useGitStore } from '@stores/gitStore'
 import PushProgressModal from '@components/PushProgressModal.vue'
 
@@ -127,25 +127,103 @@ async function handleClick() {
 function handleProgressComplete(_success: boolean) {
   // 可以在这里添加额外的完成处理逻辑
 }
+
+// ── 多远程：下拉切换推送目标 ────────────────────────────────────────────
+// 仅当仓库配置了多个远程时才出现下拉,单远程/无远程保持原有按钮外观不变。
+// 主按钮逻辑完全不动(裸 push 走当前分支上游),多远程只是多给一个显式选择入口。
+const sortedRemotes = computed(() => {
+  // 上游排第一,其余按名称排序,让最常用的目标在触手可及的位置
+  return [...gitStore.remotes].sort((a, b) => {
+    if (a.isUpstream !== b.isUpstream) return a.isUpstream ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+})
+
+async function handleDropdownCommand(command: string) {
+  if (command === 'manage') {
+    gitStore.isRemoteManagerVisible = true
+    return
+  }
+  if (command === 'push-all') {
+    await gitStore.pushAllRemotes()
+    return
+  }
+  if (!command.startsWith('push:')) return
+
+  // 指定远程推送:复用与主按钮完全相同的进度弹窗链路,只是多传一个 remote
+  const remote = command.slice('push:'.length)
+  emit('beforePush')
+  try {
+    progressModalVisible.value = true
+    progressModalRef.value?.reset()
+    const result = await gitStore.pushToRemoteWithProgress((data) => {
+      progressModalRef.value?.handleProgress(data)
+    }, remote)
+    emit('afterPush', result)
+  } catch (error) {
+    console.error('推送失败:', error)
+    emit('afterPush', false)
+  }
+}
 </script>
 
 <template>
   <div>
-    <el-tooltip :content="tooltipText" placement="top">
-      <el-button
-        type="primary"
-        :icon="Upload"
-        @click="handleClick"
-        :loading="gitStore.isPushing"
-        :disabled="isDisabled"
-        :style="buttonStyle"
-        :class="['push-button', `from-${from}`]"
+    <div class="push-button-group">
+      <el-tooltip :content="tooltipText" placement="top">
+        <el-button
+          type="primary"
+          :icon="Upload"
+          @click="handleClick"
+          :loading="gitStore.isPushing"
+          :disabled="isDisabled"
+          :style="buttonStyle"
+          :class="['push-button', `from-${from}`]"
+        >
+          {{ $t('@F4137:推送') }}
+          <span v-if="needsPush">({{ gitStore.branchAhead }})</span>
+        </el-button>
+      </el-tooltip>
+
+      <!-- 多远程下拉：仅在配置了多个远程时出现，单远程外观与历史完全一致 -->
+      <el-dropdown
+        v-if="gitStore.hasMultipleRemotes"
+        trigger="click"
+        placement="top-end"
+        @command="handleDropdownCommand"
       >
-        {{ $t('@F4137:推送') }}
-        <span v-if="needsPush">({{ gitStore.branchAhead }})</span>
-      </el-button>
-    </el-tooltip>
-    
+        <el-button
+          type="primary"
+          :icon="ArrowDown"
+          :style="buttonStyle"
+          :class="['push-button__caret', `from-${from}`]"
+          :aria-label="$t('@F4137:更多推送选项')"
+        />
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item
+              v-for="r in sortedRemotes"
+              :key="r.name"
+              :command="`push:${r.name}`"
+            >
+              <span class="push-remote-item">
+                <span>{{ $t('@F4137:推送到') }} {{ r.name }}</span>
+                <el-tag v-if="r.isUpstream" size="small" type="success" effect="plain">
+                  {{ $t('@F4137:上游') }}
+                </el-tag>
+              </span>
+            </el-dropdown-item>
+            <el-dropdown-item divided command="push-all">
+              {{ $t('@F4137:推送到全部远程') }}
+            </el-dropdown-item>
+            <el-dropdown-item divided command="manage">
+              {{ $t('@F4137:管理远程…') }}
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+    </div>
+
     <!-- 推送进度弹窗 -->
     <PushProgressModal
       ref="progressModalRef"
@@ -156,6 +234,18 @@ function handleProgressComplete(_success: boolean) {
 </template>
 
 <style scoped lang="scss">
+.push-button-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.push-remote-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .push-button {
   &.from-drawer {
     padding: 6px var(--spacing-md);
@@ -172,6 +262,24 @@ function handleProgressComplete(_success: boolean) {
   &.from-form {
     font-size: 13px;
     height: 32px;
+  }
+}
+
+/* 下拉触发器：与主按钮等高、紧贴其右侧 */
+.push-button__caret {
+  &.from-drawer,
+  &.from-form {
+    height: 32px;
+    padding: 0 6px;
+  }
+
+  &.from-status {
+    height: 36px;
+    padding: 0 6px;
+  }
+
+  :deep(.el-icon) {
+    font-size: 12px;
   }
 }
 </style>

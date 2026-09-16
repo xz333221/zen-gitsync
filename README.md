@@ -11,6 +11,7 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
 - [GUI](#gui)
   - [Core Git Panel](#core-git-panel)
   - [Branch Management](#branch-management)
+  - [Remote Management](#remote-management)
   - [Stash Management](#stash-management)
   - [Tag Management](#tag-management)
   - [Commit Message Templates](#commit-message-templates)
@@ -42,6 +43,7 @@ npm install -g zen-gitsync
 
 - **Visual GUI** — Full graphical interface for Git operations
 - **Branch management** — Create, switch, and track local/remote branches
+- **Remote management** — Manage multiple remotes (add / rename / retarget / delete) from one dialog, configure multi push URLs, and push to a chosen remote or to all remotes at once
 - **Stash management** — Save and restore stashes with locked-file filtering
 - **Tag management** — Create lightweight and annotated tags
 - **Merge support** — Detect and complete in-progress merges
@@ -144,7 +146,7 @@ The GUI runs as a local web server and opens in your default browser. It attache
 | Diff viewer | Monaco-based side-by-side diff for any changed file |
 | In-diff preview | Toggle a preview pane below the diff for `.html` / `.htm` / `.svg` (sandboxed iframe with JavaScript enabled — interactive reports work, isolated from the app via an opaque origin) and `.md` / `.markdown` (rendered Markdown) — same preview experience as the built-in editor, with a draggable vertical resizer; split ratio is persisted per project |
 | Commit log | Browse commit history with author, date, branch tags, and changed files |
-| Remote URL | Display and one-click copy the remote repository URL |
+| Remote URL | Display and one-click copy the remote repository URL; the gear icon beside it opens **Remote Management** (multi-remote setups, multi push URLs) |
 | Auto-refresh | Silently refreshes status and branch info when the window gains focus, the tab becomes visible, or you switch back to the **Git** view in the Activity Bar |
 
 #### Structured Commit Form
@@ -172,6 +174,18 @@ In either mode, click **AI Generate** to fill in the fields automatically based 
 - Create a new branch from any base branch
 - Switch branches
 - Track upstream status (commits ahead / behind)
+
+---
+
+### Remote Management
+
+- Keep any number of remotes (`origin`, `upstream`, `backup`, …) in one dialog: add, rename, retarget the URL, or delete
+- Each remote shows its fetch URL plus any explicit push URLs, with **Upstream** / **Push default** badges so you can tell at a glance which one the current branch tracks
+- Give one remote several **push URLs** (e.g. GitHub + Gitee) so a single push reaches several hosts, or clear them all to fall back to the fetch URL
+- The **Push** dropdown appears once more than one remote is configured: push to a specific remote, push to every remote at once (with per-remote success / failure results), or jump into remote management. With a single remote the button looks and behaves exactly as before
+- Deleting the remote that the current branch tracks automatically unsets the upstream, so later pulls don't trip over a dangling config
+
+> Open it from the gear icon next to the remote URL in the status bar, or via **Manage remotes…** in the Push dropdown.
 
 ---
 
@@ -549,6 +563,7 @@ $ g --check-lock=config.json
 - [GUI 界面](#gui-界面)
   - [核心 Git 面板](#核心-git-面板)
   - [分支管理](#分支管理)
+  - [远程仓库管理](#远程仓库管理)
   - [Stash 管理](#stash-管理)
   - [Tag 管理](#tag-管理)
   - [提交信息模板](#提交信息模板)
@@ -580,6 +595,7 @@ npm install -g zen-gitsync
 
 - **可视化 GUI** — 完整的 Git 图形操作界面
 - **分支管理** — 创建、切换、追踪本地/远程分支
+- **远程仓库管理** — 在一个弹窗里管理多个远程仓库（添加/重命名/改地址/删除）、配置多推送地址，并支持推送到指定远程或一键推送全部
 - **Stash 管理** — 储藏与恢复变更，支持排除锁定文件
 - **Tag 管理** — 创建轻量/附注标签
 - **合并支持** — 自动检测并引导完成进行中的合并
@@ -713,7 +729,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 | Diff 查看器 | 基于 Monaco 编辑器的并排文件差异视图 |
 | 差异内预览 | 在差异下方一键展开预览面板：`.html` / `.htm` / `.svg` 走沙箱化 iframe（允许 JS 执行，报告类页面的按钮/交互可用，同时以不透明 origin 与宿主应用隔离），`.md` / `.markdown` 走 Markdown 渲染，与内置编辑器一致的预览体验；上下比例可拖拽，按项目持久化 |
 | 提交日志 | 浏览历史提交（作者、时间、分支标签、变更文件） |
-| 远程地址 | 显示并一键复制远程仓库 URL |
+| 远程地址 | 显示并一键复制远程仓库 URL；旁边的齿轮图标打开 **远程仓库管理**（多远程、多推送地址） |
 | 自动刷新 | 窗口获得焦点、标签页重新可见，或从 Activity Bar 切回 **Git** 视图时，自动静默刷新文件状态与分支信息 |
 
 #### 结构化提交表单
@@ -741,6 +757,18 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 - 从任意基础分支创建新分支
 - 切换分支
 - 追踪上游状态（领先/落后提交数）
+
+---
+
+### 远程仓库管理
+
+- 在同一个弹窗里管理任意数量的远程仓库（`origin` / `upstream` / `backup` 等）：添加、重命名、修改地址、删除
+- 逐个展示拉取地址与显式配置的推送地址，并用 **上游** / **默认推送** 标签标出当前分支跟踪的目标
+- 单个远程可配置多个 **推送地址**（如 GitHub + Gitee 双备份），一次推送同时到达多个主机；全部清空则回落到拉取地址
+- 配置了多个远程后，**推送** 按钮右侧会出现下拉：推送到指定远程、一键推送全部远程（逐条展示成功/失败结果），或直接进入远程管理。单远程时按钮外观与行为完全不变
+- 删除当前分支上游所指向的远程时会自动解除上游跟踪，避免后续拉取因残留配置报错
+
+> 从底部状态栏远程地址旁的齿轮图标进入，或使用推送下拉里的 **管理远程…**。
 
 ---
 

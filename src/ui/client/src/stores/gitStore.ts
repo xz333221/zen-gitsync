@@ -34,6 +34,23 @@ const backendPort = getBackendPort()
 // 刻意不走 i18n:提交信息是写进 git 历史的实体数据,不应该随界面语言变化。
 export const DEFAULT_INITIAL_COMMIT_MESSAGE = 'chore: init'
 
+// 远程仓库信息(与后端 GET /api/remotes 的返回元素对应)
+export interface RemoteInfo {
+  name: string
+  fetchUrl: string
+  pushUrls: string[]
+  hasExplicitPushUrls: boolean
+  isPushDefault: boolean
+  isUpstream: boolean
+}
+
+// 一键推送全部的逐远程结果(与 POST /api/push-all-remotes 的 results 元素对应)
+export interface PushAllResult {
+  name: string
+  ok: boolean
+  error?: string
+}
+
 export const useGitStore = defineStore('git', () => {
   // 获取configStore实例
   const configStore = useConfigStore()
@@ -51,6 +68,15 @@ export const useGitStore = defineStore('git', () => {
   // 添加远程仓库地址状态
   const remoteUrl = ref('') // 远程仓库地址
   const isLoadingRemoteUrl = ref(false) // 加载远程仓库地址的状态
+
+  // 多远程仓库管理
+  const remotes = ref<RemoteInfo[]>([]) // 全部远程仓库列表
+  const isLoadingRemotes = ref(false)
+  const pushDefaultRemote = ref('') // git remote.pushDefault 配置(可为空)
+  const isRemoteManagerVisible = ref(false) // 远程管理弹窗可见性(RemoteRepoCard / PushButton 共用入口)
+  const hasMultipleRemotes = computed(() => remotes.value.length > 1)
+  // 最近一次「全部远程推送」的逐条结果,供远程管理弹窗展示明细
+  const lastPushAllResults = ref<PushAllResult[]>([])
 
   // 新增Git操作状态
   const isPushing = ref(false)         // 推送中状态
@@ -131,6 +157,11 @@ export const useGitStore = defineStore('git', () => {
     isGitMerging.value = false
     remoteUrl.value = '' // 重置远程仓库地址
     isLoadingRemoteUrl.value = false
+    remotes.value = []
+    isLoadingRemotes.value = false
+    pushDefaultRemote.value = ''
+    isRemoteManagerVisible.value = false
+    lastPushAllResults.value = []
     
     // 重置gitLogStore的状态
     log.value = []
@@ -1325,21 +1356,24 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
-  // 带进度的推送到远程
-  async function pushToRemoteWithProgress(onProgress?: (data: any) => void) {
+  // 带进度的推送到远程。remote 可选:指定推送到哪个远程(多远程场景),
+  // 不传 = 裸 push 走当前分支上游,行为与历史一致。
+  async function pushToRemoteWithProgress(onProgress?: (data: any) => void, remote?: string) {
     // 检查是否是Git仓库
     if (!isGitRepo.value) {
       ElMessage.warning($t('@C298B:当前目录不是Git仓库'))
       return false
     }
-    
+
     return new Promise<boolean>((resolve) => {
       try {
         isPushing.value = true
-        
+
         // 使用fetch的ReadableStream API接收SSE
         fetch('/api/push-with-progress', {
-          method: 'POST'
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(remote ? { remote } : {})
         }).then(response => {
           const reader = response.body?.getReader()
           const decoder = new TextDecoder()
@@ -1895,7 +1929,7 @@ export const useGitStore = defineStore('git', () => {
       });
       const data = await response.json();
       if (data.success) {
-        await getRemoteUrl();
+        await Promise.all([getRemoteUrl(), fetchRemotes()]);
         return true;
       } else {
         ElMessage.error(data.error || $t('@C298B:添加远程仓库失败'));
@@ -1904,6 +1938,172 @@ export const useGitStore = defineStore('git', () => {
     } catch (error) {
       ElMessage.error(`${$t('@C298B:添加远程仓库失败: ')}${(error as Error).message}`);
       return false;
+    }
+  }
+
+  // ── 多远程仓库管理 ─────────────────────────────────────────────────────
+
+  // 获取全部远程仓库列表。顺带修正 remoteUrl(底部状态栏展示用):
+  // 优先上游 remote 的 fetchUrl,其次 origin,其次列表第一个 ——
+  // 解决多 remote 下状态栏只认 remote.origin.url 的偏差;单 remote 行为不变。
+  async function fetchRemotes() {
+    if (!isGitRepo.value) return;
+    try {
+      isLoadingRemotes.value = true;
+      const response = await fetch('/api/remotes');
+      const data = await response.json();
+      if (data.success) {
+        remotes.value = data.remotes || [];
+        pushDefaultRemote.value = data.pushDefault || '';
+        const upstream = remotes.value.find(r => r.isUpstream);
+        const origin = remotes.value.find(r => r.name === 'origin');
+        const preferred = upstream || origin || remotes.value[0];
+        remoteUrl.value = preferred?.fetchUrl || '';
+      }
+    } catch (error) {
+      console.error('获取远程仓库列表失败:', error);
+    } finally {
+      isLoadingRemotes.value = false;
+    }
+  }
+
+  // 变更类操作后统一刷新:远程列表 + 分支状态(上游标记可能已变)
+  async function refreshAfterRemoteChange() {
+    await Promise.all([fetchRemotes(), getBranchStatus(true)]);
+  }
+
+  // 重命名远程仓库
+  async function renameRemote(oldName: string, newName: string) {
+    try {
+      const response = await fetch('/api/remote/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldName, newName })
+      });
+      const data = await response.json();
+      if (data.success) {
+        ElMessage.success($t('@C298B:远程仓库已重命名'));
+        await refreshAfterRemoteChange();
+        return true;
+      }
+      ElMessage.error(data.error || $t('@C298B:重命名远程仓库失败'));
+      return false;
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:重命名远程仓库失败: ')}${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  // 删除远程仓库。若删的是当前分支上游指向的 remote,后端会自动解除上游跟踪,
+  // 这里据 wasUpstream 补充提示。
+  async function removeRemote(name: string) {
+    try {
+      const response = await fetch('/api/remote/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const data = await response.json();
+      if (data.success) {
+        ElMessage.success($t('@C298B:远程仓库已删除'));
+        if (data.wasUpstream) {
+          ElMessage.info($t('@C298B:已解除当前分支的上游跟踪'));
+        }
+        await refreshAfterRemoteChange();
+        return true;
+      }
+      ElMessage.error(data.error || $t('@C298B:删除远程仓库失败'));
+      return false;
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:删除远程仓库失败: ')}${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  // 修改远程地址(fetch + 默认 push)。显式配置的 pushurl 不受影响,据返回值提示。
+  async function setRemoteUrl(name: string, url: string) {
+    try {
+      const response = await fetch('/api/remote/set-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, url })
+      });
+      const data = await response.json();
+      if (data.success) {
+        ElMessage.success($t('@C298B:远程地址已更新'));
+        if (data.hasExplicitPushUrls) {
+          ElMessage.info($t('@C298B:该远程配置了独立的推送地址,不受本次修改影响'));
+        }
+        await refreshAfterRemoteChange();
+        return true;
+      }
+      ElMessage.error(data.error || $t('@C298B:更新远程地址失败'));
+      return false;
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:更新远程地址失败: ')}${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  // 幂等设置某个 remote 的 push URL 列表(空数组 = 回落 fetch URL)
+  async function setRemotePushUrls(name: string, pushUrls: string[]) {
+    try {
+      const response = await fetch('/api/remote/push-urls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, pushUrls })
+      });
+      const data = await response.json();
+      if (data.success) {
+        ElMessage.success($t('@C298B:推送地址已更新'));
+        await fetchRemotes();
+        return true;
+      }
+      ElMessage.error(data.error || $t('@C298B:更新推送地址失败'));
+      return false;
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:更新推送地址失败: ')}${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  // 一键推送全部远程:逐个 push,单个失败不中断。
+  // 全部成功才清零 ahead/behind;部分失败列出明细提示重试。
+  async function pushAllRemotes() {
+    if (!isGitRepo.value) {
+      ElMessage.warning($t('@C298B:当前目录不是Git仓库'));
+      return false;
+    }
+    try {
+      isPushing.value = true;
+      lastPushAllResults.value = [];
+      const response = await fetch('/api/push-all-remotes', { method: 'POST' });
+      const data = await response.json();
+      // 无论成败都留下逐条结果,供远程管理弹窗展示明细
+      if (Array.isArray(data.results)) {
+        lastPushAllResults.value = data.results;
+      }
+      if (data.success) {
+        branchAhead.value = 0;
+        branchBehind.value = 0;
+        ElMessage.success($t('@C298B:全部远程推送完成'));
+        await Promise.all([fetchStatus(), fetchLog(), fetchRemotes()]);
+        return true;
+      }
+      if (Array.isArray(data.results) && data.results.length > 0) {
+        const failed = data.results.filter((r: { ok: boolean }) => !r.ok);
+        ElMessage.error(
+          `${$t('@C298B:部分远程推送失败: ')}${failed.map((r: { name: string }) => r.name).join(', ')}`
+        );
+      } else {
+        ElMessage.warning(data.error || $t('@C298B:推送失败'));
+      }
+      return false;
+    } catch (error) {
+      ElMessage.error(`${$t('@C298B:推送失败: ')}${(error as Error).message}`);
+      return false;
+    } finally {
+      isPushing.value = false;
     }
   }
 
@@ -2508,6 +2708,12 @@ export const useGitStore = defineStore('git', () => {
     lastBranchesTime,
     remoteUrl,
     isLoadingRemoteUrl,
+    remotes,
+    isLoadingRemotes,
+    pushDefaultRemote,
+    isRemoteManagerVisible,
+    hasMultipleRemotes,
+    lastPushAllResults,
     remoteWebUrl,
     isRemoteBrowsable,
     openRemoteWebUrl,
@@ -2595,6 +2801,12 @@ export const useGitStore = defineStore('git', () => {
     discardSelectedFiles,
     getRemoteUrl,
     addRemote,
+    fetchRemotes,
+    renameRemote,
+    removeRemote,
+    setRemoteUrl,
+    setRemotePushUrls,
+    pushAllRemotes,
     attachRemoteBranch,
     gitInit,
     createInitialCommit,

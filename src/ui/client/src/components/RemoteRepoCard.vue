@@ -15,48 +15,66 @@
   -->
 <script setup lang="ts">
 import { $t } from '@/lang/static'
+import { Setting } from '@element-plus/icons-vue'
 import { useGitStore } from '@stores/gitStore'
+import IconButton from '@components/IconButton.vue'
 
 const gitStore = useGitStore()
 </script>
 
 <template>
-  <div v-if="gitStore.remoteUrl" class="remote-wrapper">
-    <!-- 房子图标：点击后跳转到对应的仓库主页
-         (1) 已经是 http(s) 形式 → 直接打开
-         (2) SSH 形式 (git@github.com:user/repo.git) → 仅 host 在已知 web 平台白名单内时转 https
-         (3) 其它情况（自建域 SSH 等）→ 不响应，鼠标保持默认，tooltip 提示无法打开
-         因为只有房子图标可点击，repo-url 文本仍维持"点击复制"语义 -->
-    <el-tooltip
-      :content="gitStore.isRemoteBrowsable
-        ? $t('@F13B4:在浏览器中打开仓库主页')
-        : $t('@F13B4:无法识别该远程仓库的网页地址')"
-      placement="top"
-      effect="dark"
-      :show-after="300"
+  <div class="remote-wrapper">
+    <!-- 齿轮按钮：打开远程仓库管理弹窗。必须无条件渲染 ——
+         未配置远程 / 多个远程的仓库同样需要从这里进入去添加或切换，
+         所以不能跟着 remoteUrl 的 v-if 一起消失。 -->
+    <IconButton
+      size="small"
+      :tooltip="$t('@F13B4:管理远程仓库')"
+      @click="gitStore.isRemoteManagerVisible = true"
     >
-      <a
-        v-if="gitStore.isRemoteBrowsable"
-        :href="gitStore.remoteWebUrl!"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="remote-repo-link"
-        :aria-label="$t('@F13B4:在浏览器中打开仓库主页')"
-        @click.stop
+      <el-icon><Setting /></el-icon>
+    </IconButton>
+
+    <template v-if="gitStore.remoteUrl">
+      <!-- 房子图标：点击后跳转到对应的仓库主页
+           (1) 已经是 http(s) 形式 → 直接打开
+           (2) SSH 形式 (git@github.com:user/repo.git) → 仅 host 在已知 web 平台白名单内时转 https
+           (3) 其它情况（自建域 SSH 等）→ 不响应，鼠标保持默认，tooltip 提示无法打开
+           因为只有房子图标可点击，repo-url 文本仍维持"点击复制"语义 -->
+      <el-tooltip
+        :content="gitStore.isRemoteBrowsable
+          ? $t('@F13B4:在浏览器中打开仓库主页')
+          : $t('@F13B4:无法识别该远程仓库的网页地址')"
+        placement="top"
+        effect="dark"
+        :show-after="300"
       >
-        <svg-icon icon-class="remote-repo" class-name="remote-repo-icon" />
-      </a>
-      <span
-        v-else
-        class="remote-repo-link remote-repo-link--disabled"
-        :aria-label="$t('@F13B4:无法识别该远程仓库的网页地址')"
-      >
-        <svg-icon icon-class="remote-repo" class-name="remote-repo-icon" />
-      </span>
-    </el-tooltip>
-    <el-tooltip :content="$t('@F13B4:复制仓库地址')" placement="top" effect="dark" :show-after="300">
-      <span class="repo-url clickable" @click="gitStore.copyRemoteUrl()">{{ gitStore.remoteUrl }}</span>
-    </el-tooltip>
+        <a
+          v-if="gitStore.isRemoteBrowsable"
+          :href="gitStore.remoteWebUrl!"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="remote-repo-link"
+          :aria-label="$t('@F13B4:在浏览器中打开仓库主页')"
+          @click.stop
+        >
+          <svg-icon icon-class="remote-repo" class-name="remote-repo-icon" />
+        </a>
+        <span
+          v-else
+          class="remote-repo-link remote-repo-link--disabled"
+          :aria-label="$t('@F13B4:无法识别该远程仓库的网页地址')"
+        >
+          <svg-icon icon-class="remote-repo" class-name="remote-repo-icon" />
+        </span>
+      </el-tooltip>
+      <el-tooltip :content="$t('@F13B4:复制仓库地址')" placement="top" effect="dark" :show-after="300">
+        <span class="repo-url clickable" @click="gitStore.copyRemoteUrl()">{{ gitStore.remoteUrl }}</span>
+      </el-tooltip>
+    </template>
+
+    <!-- 未配置远程时给一句简短说明，避免状态栏只剩一个孤零零的齿轮 -->
+    <span v-else class="repo-url repo-url--empty">{{ $t('@F13B4:未配置远程仓库') }}</span>
   </div>
 </template>
 
@@ -118,6 +136,14 @@ const gitStore = useGitStore()
       color: var(--el-color-primary);
       text-decoration: underline;
     }
+  }
+
+  /* 未配置远程时的占位说明：弱化但仍可读 */
+  &--empty {
+    color: var(--text-secondary);
+    opacity: 0.7;
+    font-family: inherit;
+    cursor: default;
   }
 }
 </style>

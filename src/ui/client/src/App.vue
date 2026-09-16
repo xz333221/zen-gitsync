@@ -26,6 +26,7 @@ import GitStatus from '@views/components/GitStatus.vue'
 const CommitForm = defineAsyncComponent(() => import('@views/components/CommitForm.vue'))
 const LogList = defineAsyncComponent(() => import('@views/components/LogList.vue'))
 const RemoteRepoCard = defineAsyncComponent(() => import('@components/RemoteRepoCard.vue'))
+const RemoteManagerDialog = defineAsyncComponent(() => import('@components/RemoteManagerDialog.vue'))
 const AppVersionBadge = defineAsyncComponent(() => import('@components/AppVersionBadge.vue'))
 const BranchSelector = defineAsyncComponent(() => import('@components/BranchSelector.vue'))
 import DirectorySelector from '@components/DirectorySelector.vue'
@@ -191,6 +192,7 @@ onMounted(async () => {
         gitStore.getCurrentBranch(true), // 强制获取当前分支（页面首次加载）
         gitStore.getAllBranches(),       // 获取所有分支
         gitStore.getRemoteUrl(),         // 获取远程仓库地址
+        gitStore.fetchRemotes(),         // 获取全部远程仓库列表(多远程管理)
         gitStore.getBranchStatus(true)   // 强制获取分支状态（页面首次加载）
       ])
 
@@ -967,6 +969,9 @@ function stopHResize() {
 
   <!-- 用户设置对话框 -->
   <UserSettingsDialog v-model="userSettingsDialogVisible" :initial-tab="userSettingsInitialTab" />
+
+  <!-- 远程仓库管理对话框（可见性由 store 统一持有，多个入口共用） -->
+  <RemoteManagerDialog />
   </el-config-provider>
 </template>
 

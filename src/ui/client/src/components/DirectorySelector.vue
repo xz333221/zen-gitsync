@@ -644,6 +644,7 @@ async function changeDirectory() {
           gitStore.getAllBranches(),
           gitStore.getUserInfo(),
           gitStore.getRemoteUrl(),
+          gitStore.fetchRemotes(),
           gitStore.getBranchStatus(true)
         ]);
         
