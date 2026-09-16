@@ -59,7 +59,7 @@ const props = withDefaults(defineProps<{
   minCardWidth: "380px",
 });
 
-const emit = defineEmits<{ select: [path: string] }>();
+const emit = defineEmits<{ select: [path: string]; loaded: [count: number] }>();
 
 const directories = ref<Array<{ path: string; exists: boolean }>>([]);
 const isLoading = ref(false);
@@ -121,6 +121,8 @@ async function load() {
     directories.value = [];
   } finally {
     isLoading.value = false;
+    // 上抛总数:调用方(bare 形态的弹窗)在 label 上标"共 N 个",列表滚动时也能看出总量
+    emit("loaded", directories.value.length);
   }
 }
 
@@ -322,13 +324,21 @@ defineExpose({ reload: load });
   gap: var(--spacing-base);
   /* 不设 overflow:hidden,滚动交给 .dir-list__items */
 }
-/* bare:弹窗内嵌,无外框;列表限高自带滚动,避免弹窗被长列表撑高 */
+/* bare:弹窗内嵌,无外框;自身参与父级 flex 高度链,吃掉剩余高度后内部滚动,
+   避免弹窗被长列表撑高、把输入框/按钮挤出视口。
+   max-height 是"父级不是高度链"时的兜底,防止列表无限长。 */
 .dir-list--bare {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 68vh;
 }
 .dir-list--bare .dir-list__items {
-  flex: none;
-  max-height: 42vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
 }
 .dir-list__head {
   display: flex;
@@ -435,9 +445,6 @@ defineExpose({ reload: load });
 .dir-list--panel .dir-list__items {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-}
-.dir-list--bare .dir-list__items {
   overflow-y: auto;
 }
 

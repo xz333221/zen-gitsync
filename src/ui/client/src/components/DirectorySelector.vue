@@ -76,6 +76,8 @@ const isChangingDirectory = ref(false);
 // 弹窗里的"常用目录"由 RecentDirectoriesList 统一渲染(与最近项目同一套卡片 + 同一份数据),
 // 这里只持有实例引用:每次打开弹窗 reload() 一次,避免展示上一次打开时的缓存。
 const recentDirsListRef = ref<InstanceType<typeof RecentDirectoriesList> | null>(null);
+// 常用目录总数:列表内部滚动,label 上标出总数,避免"看到几个就以为只有几个"
+const recentDirsCount = ref(0);
 const isBrowserDialogVisible = ref(false);
 const installDialogVisible = ref(false);
 const selectedInstallTool = ref<ToolId | null>(null);
@@ -930,7 +932,10 @@ function onBrowserSelect(path: string) {
   <CommonDialog
     v-model="isDirectoryDialogVisible"
     :title="$t('@67CE7:切换工作目录')"
-    size="medium"
+    width="min(1040px, 90vw)"
+    type="flex"
+    top="20px"
+    height-offset="32px"
     :destroy-on-close="true"
     :append-to-body="true"
     custom-class="directory-dialog"
@@ -959,12 +964,14 @@ function onBrowserSelect(path: string) {
         </el-form-item>
         <!-- 常用目录:与"最近项目"同一个组件、同一份数据、同一套卡片样式。
              mode="pick"   → 普通点击把路径回填到上面的输入框,Ctrl/Cmd+点击在新标签页打开
-             variant="bare" → 不渲染面板外壳(标题由本表单项 label 提供) -->
-        <el-form-item>
+             variant="bare" → 不渲染面板外壳(标题由本表单项 label 提供)
+             .form-item--dirs 让这一项吃掉弹窗剩余高度,由列表内部滚动 -->
+        <el-form-item class="form-item--dirs">
           <template #label>
             <div class="form-label">
               <el-icon class="label-icon"><Clock /></el-icon>
               <span>{{ $t('@67CE7:常用目录') }}</span>
+              <span class="label-count">{{ $t('@67CE7:共 {count} 个', { count: recentDirsCount }) }}</span>
             </div>
           </template>
           <RecentDirectoriesList
@@ -977,6 +984,7 @@ function onBrowserSelect(path: string) {
             :empty-text="$t('@67CE7:暂无常用目录')"
             :aria-label="$t('@67CE7:常用目录')"
             @select="onRecentDirSelect"
+            @loaded="(n: number) => (recentDirsCount = n)"
           />
         </el-form-item>
       </el-form>
@@ -1013,7 +1021,7 @@ function onBrowserSelect(path: string) {
             class="dialog-newtab-btn"
             @click="openNewTabGui()"
           >
-            <span>使用新标签打开</span>
+            <span>{{ $t('@67CE7:使用新标签打开') }}</span>
           </button>
         </div>
       </div>
@@ -1400,9 +1408,54 @@ function onBrowserSelect(path: string) {
 }
 
 /* 常用目录列表(RecentDirectoriesList)在弹窗里贴着 form-item 左侧排布,
-   卡片样式由组件自己负责,这里只补一点外边距节奏 */
+   卡片样式由组件自己负责,这里只负责"高度链":
+   el-dialog__body(flex) → .directory-content → el-form → .form-item--dirs → 列表,
+   逐层 flex:1 + min-height:0,让列表吃掉弹窗剩余高度,只有列表内部滚动
+   (路径输入框和底部按钮始终可见,不会被长列表顶出视口) */
 .recent-dirs-list {
   width: 100%;
+}
+.directory-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.directory-content :deep(.el-form) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* 路径那一项的默认下边距(18px)在矮窗口下太浪费,收紧一点把高度让给列表 */
+.directory-content :deep(.el-form-item:first-child) {
+  margin-bottom: var(--spacing-sm);
+}
+/* label 在上、内容在下,内容再撑满剩余空间 */
+.directory-content :deep(.form-item--dirs) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 0;
+}
+.directory-content :deep(.form-item--dirs .el-form-item__content) {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  /* 关键:Element Plus 的 content 默认是横向 flex(row + wrap + align-items:center),
+     子项高度会按内容撑开而不是被约束。必须改成纵向才吃得住剩余高度,
+     否则列表会顶破弹窗 body 造成二级滚动条 */
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+/* label 右侧的总数提示(列表会滚动,标出总数避免"看到几个就以为只有几个") */
+.form-label .label-count {
+  margin-left: var(--spacing-base);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-tertiary);
 }
 
 /* dialog-footer、footer-actions、dialog-cancel-btn、dialog-confirm-btn 基础样式已移至 @/styles/common.scss */

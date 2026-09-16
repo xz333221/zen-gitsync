@@ -619,6 +619,8 @@ export default {
   '@67CE7:常用目录': 'Common Directories',
   '@67CE7:暂无常用目录': 'No common directories yet',
   '@67CE7:从常用目录中移除': 'Remove from common directories',
+  '@67CE7:共 {count} 个': '{count} total',
+  '@67CE7:使用新标签打开': 'Open in a new tab',
   '@67CE7:取消': 'Cancel',
   '@67CE7:当前目录路径为空': 'Current directory path is empty',
   '@67CE7:已在文件管理器中打开目录': 'Opened directory in file manager',

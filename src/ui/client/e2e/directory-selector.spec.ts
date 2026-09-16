@@ -131,4 +131,47 @@ test.describe('DirectorySelector - Ctrl+点击新标签', () => {
     const value = await input.inputValue()
     expect(value).toBe(expected.trim())
   })
+
+  // 回归:用户反馈"弹窗太小、看到的项目太少" —— 保证弹窗够宽(≥ 窗口的 90%,上限 1040),
+  // 卡片排成两列,且滚动只发生在列表内部(弹窗 body 不能出现二级滚动条,
+  // 否则路径输入框和底部按钮会被顶出视口)
+  test('弹窗尺寸与两列网格:滚动只发生在列表内部', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 790 })
+    await page.goto('/')
+    await expect(page.locator('.directory-display')).toBeVisible({ timeout: 10_000 })
+    await page.locator('.directory-display').click()
+    await page.locator('.directory-dialog').waitFor({ timeout: 8_000 })
+
+    const count = await countDirectoryCards(page)
+    test.skip(count === 0, '没有常用目录,跳过此测试')
+
+    const m = await page.evaluate(() => {
+      const dlg = document.querySelector('.directory-dialog') as HTMLElement
+      const body = dlg.querySelector('.el-dialog__body') as HTMLElement
+      const list = dlg.querySelector('.dir-list__items') as HTMLElement
+      const cols = getComputedStyle(list).gridTemplateColumns.trim().split(/\s+/)
+      const listBox = list.getBoundingClientRect()
+      const fully = [...dlg.querySelectorAll('.dir-card')].filter(c => {
+        const r = c.getBoundingClientRect()
+        return r.top >= listBox.top - 1 && r.bottom <= listBox.bottom + 1
+      }).length
+      return {
+        dialogW: Math.round(dlg.getBoundingClientRect().width),
+        dialogH: Math.round(dlg.getBoundingClientRect().height),
+        bodyScroll: body.scrollHeight - body.clientHeight,
+        cols: cols.length,
+        colWidth: Math.round(parseFloat(cols[0])),
+        fullyVisible: fully,
+        truncated: [...dlg.querySelectorAll('.dir-card__name-path')].filter(p => p.scrollWidth > p.clientWidth + 1).length,
+      }
+    })
+
+    expect(m.dialogW).toBeGreaterThanOrEqual(Math.min(1040, 1400 * 0.9) - 1)
+    expect(m.dialogH).toBeGreaterThanOrEqual(700)          // 790 视口下接近满高
+    expect(m.bodyScroll).toBeLessThanOrEqual(1)            // 无二级滚动条
+    expect(m.cols).toBeGreaterThanOrEqual(2)               // 两列
+    expect(m.colWidth).toBeGreaterThanOrEqual(380)         // 每列够宽,路径不被省略号截断
+    expect(m.truncated).toBe(0)
+    expect(m.fullyVisible).toBeGreaterThanOrEqual(12)      // 一屏至少看到 12 个
+  })
 })
