@@ -25,6 +25,7 @@
 //
 // 拉取 / 搜索 / 加载态 / 空态 / 复制路径 / 移除 都收在这里,调用方不再各写一份。
 // 数据源:GET /api/recent_directories(只读) + POST /api/remove_recent_directory(移除)
+//        + POST /api/recent_directories/git-state(批量探测每个目录的 Git 状态)
 //
 // i18n 复用 @13D1C 命名空间:该分组原本就是 GitStatus.vue 定义、被目录相关组件沿用的
 // 目录家族文案(原 RecentProjectsList.vue 同样复用),不为此新建命名空间。
@@ -33,6 +34,26 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Delete, DocumentCopy, Folder, Loading, Search } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 import { getFolderNameFromPath } from "@/utils/path";
+
+/** 后端 /api/recent_directories/git-state 的单条结果 */
+interface DirectoryGitState {
+  exists: boolean;
+  /** true=仓库 / false=不是仓库 / null=没探到(超时等)。null 时不显示任何 Git 标记,不谎报 */
+  isGitRepo: boolean | null;
+  changed: number;
+  staged: number;
+  unstaged: number;
+  untracked: number;
+  error?: string;
+}
+
+/** 列表项(带 basename 与 Git 状态) */
+interface DirectoryItem {
+  path: string;
+  exists: boolean;
+  base: string;
+  git: DirectoryGitState | null;
+}
 
 const props = withDefaults(defineProps<{
   /** open:点击即新标签页打开 | pick:点击上抛 select 事件,由父组件决定(弹窗里是回填输入框) */
@@ -63,6 +84,8 @@ const emit = defineEmits<{ select: [path: string]; loaded: [count: number] }>();
 
 const directories = ref<Array<{ path: string; exists: boolean }>>([]);
 const isLoading = ref(false);
+// 目录路径 → Git 状态。探测是异步补充的,所以单独存一份,不阻塞列表渲染
+const gitStates = ref<Record<string, DirectoryGitState>>({});
 // 搜索关键词:只在 panel 形态渲染输入框,bare 形态下始终为空
 const searchQuery = ref("");
 
@@ -85,18 +108,44 @@ const resolvedEmptyText = computed(() => props.emptyText ?? $t("@13D1C:暂无最
 const resolvedAriaLabel = computed(() => props.ariaLabel ?? $t("@13D1C:最近项目列表"));
 
 // 列表项:补一个 basename 做第一行,完整路径放第二行(同名目录靠完整路径区分)
-const items = computed(() => {
+// 顺手把该目录的 Git 状态挂上去,模板里直接读 item.git,避免在模板里反复查表
+const items = computed<DirectoryItem[]>(() => {
   const q = searchQuery.value.trim().toLowerCase();
   const list = q
     ? directories.value.filter(item => item.path.toLowerCase().includes(q))
     : directories.value;
-  return list.map(item => ({ ...item, base: getFolderNameFromPath(item.path) }));
+  return list.map(item => {
+    const state = gitStates.value[item.path];
+    return {
+      ...item,
+      base: getFolderNameFromPath(item.path),
+      // isGitRepo=null 表示没探到:当作"无状态"处理,界面上不显示 Git 标记
+      git: state && state.isGitRepo !== null ? state : null,
+    };
+  });
 });
 
+// 悬浮提示里的 Git 附加信息:脏仓库给明细,干净仓库明确说干净,非仓库/未知不补充(徽标已表达)
+function gitSummary(item: DirectoryItem) {
+  if (!item.git || item.git.isGitRepo !== true) return "";
+  if (item.git.changed > 0) {
+    return $t("@13D1C:已暂存 {staged} · 未暂存 {unstaged} · 未跟踪 {untracked}", {
+      staged: item.git.staged,
+      unstaged: item.git.unstaged,
+      untracked: item.git.untracked,
+    });
+  }
+  return $t("@13D1C:Git 仓库,工作区干净");
+}
+
 // 整张卡片的悬浮提示:pick 形态下把"Ctrl+点击"的用法讲在这里
-function itemTitle(item: { path: string; exists: boolean }) {
-  if (props.mode === "pick") return `${ctrlHint.value}\n${item.path}`;
-  return item.exists ? item.path : $t("@13D1C:目录不存在");
+function itemTitle(item: DirectoryItem) {
+  const lines: string[] = [];
+  if (props.mode === "pick") lines.push(ctrlHint.value);
+  lines.push(item.exists ? item.path : $t("@13D1C:目录不存在"));
+  const summary = gitSummary(item);
+  if (summary) lines.push(summary);
+  return lines.join("\n");
 }
 
 function itemAriaLabel(item: { path: string; exists: boolean }) {
@@ -111,12 +160,35 @@ function canRemove(item: { exists: boolean }) {
   return props.removable === "always" || !item.exists;
 }
 
+// 批量探测 Git 状态。故意不 await:十几个目录要起十几个 git 进程,
+// 让列表先渲染出来、徽标随后补上,别让"是不是仓库"拖慢首屏。
+async function loadGitStates(paths: string[]) {
+  const targets = paths.filter(p => typeof p === "string" && p.trim());
+  if (targets.length === 0) return;
+  try {
+    const res = await fetch("/api/recent_directories/git-state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: targets }),
+    });
+    const data = await res.json();
+    if (data?.success && data.results) {
+      // 合并而不是覆盖:某次探测超时的目录保留上一次已探到的结果
+      gitStates.value = { ...gitStates.value, ...data.results };
+    }
+  } catch {
+    // 探测失败只是没有徽标,不该打扰用户,也不影响列表本身
+  }
+}
+
 async function load() {
   isLoading.value = true;
   try {
     const res = await fetch("/api/recent_directories", { cache: "no-store" });
     const data = await res.json();
     directories.value = Array.isArray(data?.directories) ? data.directories : [];
+    // 不存在的目录没有探测意义(后端也会跳过),这里先过滤掉省一次请求
+    void loadGitStates(directories.value.filter(d => d.exists !== false).map(d => d.path));
   } catch {
     directories.value = [];
   } finally {
@@ -272,7 +344,25 @@ defineExpose({ reload: load });
             <span class="dir-card__name-base">{{ item.base }}</span>
             <span class="dir-card__name-path">{{ item.path }}</span>
           </span>
-          <span v-if="!item.exists" class="dir-card__tag">{{ $t('@13D1C:不存在') }}</span>
+          <!-- 状态徽标:目录不存在 / 是否 Git 仓库 / 有几个未提交项。
+               探测未返回前不占位,避免"检测中"闪烁 -->
+          <span class="dir-card__tags">
+            <span v-if="!item.exists" class="dir-card__tag dir-card__tag--missing">
+              {{ $t('@13D1C:不存在') }}
+            </span>
+            <template v-else-if="item.git">
+              <span v-if="item.git.isGitRepo" class="dir-card__tag dir-card__tag--git">
+                {{ $t('@13D1C:Git') }}
+              </span>
+              <span
+                v-if="item.git.isGitRepo && item.git.changed > 0"
+                class="dir-card__tag dir-card__tag--dirty"
+              >{{ $t('@13D1C:未提交 {count} 项', { count: item.git.changed }) }}</span>
+              <span v-else-if="!item.git.isGitRepo" class="dir-card__tag dir-card__tag--plain">
+                {{ $t('@13D1C:非 Git 仓库') }}
+              </span>
+            </template>
+          </span>
         </button>
         <!-- 操作按钮与卡片按钮平级(不能嵌套 button),.stop 阻止冒泡到卡片点击。
              默认透明,hover 卡片才显形,避免列表静止时被一堆小图标抢视觉重心。 -->
@@ -545,13 +635,40 @@ defineExpose({ reload: load });
   /* 弱化到项目名之后 */
   opacity: 0.85;
 }
+/* 状态徽标区:可能同时出现「Git」+「未提交 N 项」两个,右对齐排一行 */
+.dir-card__tags {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
 .dir-card__tag {
   flex-shrink: 0;
   padding: 1px var(--spacing-sm);
   font-size: var(--font-size-xs);
   border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+/* 目录不存在:危险色,与卡片 is-missing 状态一致 */
+.dir-card__tag--missing {
   background: var(--tint-danger-14);
   color: var(--color-danger-light);
+}
+/* 是 Git 仓库:弱化的品牌色标签,不抢"未提交"的注意力 */
+.dir-card__tag--git {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
+}
+/* 有未提交改动:警示色 + 描边提高辨识(用户扫列表时主要找这个) */
+.dir-card__tag--dirty {
+  background: var(--tint-warning-14);
+  color: var(--text-warning);
+  border: 1px solid var(--tint-warning-45);
+}
+/* 不是仓库:中性灰,说明"这里没有 Git 可看" */
+.dir-card__tag--plain {
+  background: var(--bg-component-hover);
+  color: var(--text-secondary);
 }
 
 /* ── 卡片上的操作按钮 ─────────────────────────────────────────────── */

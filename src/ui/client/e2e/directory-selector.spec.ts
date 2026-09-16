@@ -174,4 +174,66 @@ test.describe('DirectorySelector - Ctrl+点击新标签', () => {
     expect(m.truncated).toBe(0)
     expect(m.fullyVisible).toBeGreaterThanOrEqual(12)      // 一屏至少看到 12 个
   })
+
+  // Git 状态徽标:哪些是 Git 目录、有几个未提交项。
+  // 探测走 /api/recent_directories/git-state,这个端点在组件里只有 loadGitStates() 一个调用方、
+  // 也没有 socket 广播回写,所以可以安全 stub(对比:目录列表本身是 HTTP + socket 双通道,
+  // 只 stub 一路会被广播刷回真实值 —— 见 e2e/commit-flow.spec.ts 顶部说明)。
+  // stub 而不是依赖本机真实仓库:真实仓库的 staged/unstaged 数在跑测试时会变,断言必然不稳。
+  test('卡片展示 Git / 未提交 N 项 / 非 Git 仓库徽标,探不到则不显示', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 790 })
+
+    // 按请求体里的 paths 顺序造状态:第 1 个脏仓库、第 2 个干净仓库、第 3 个非仓库,
+    // 其余一律 isGitRepo=null(模拟探测超时)→ 不能显示任何 Git 徽标,也不能谎报"非 Git 仓库"
+    await page.route('**/api/recent_directories/git-state', async route => {
+      const body = JSON.parse(route.request().postData() || '{}')
+      const results: Record<string, unknown> = {}
+      const clean = { exists: true, isGitRepo: true, changed: 0, staged: 0, unstaged: 0, untracked: 0 }
+      ;(body.paths ?? []).forEach((p: string, i: number) => {
+        if (i === 0) results[p] = { exists: true, isGitRepo: true, changed: 3, staged: 1, unstaged: 1, untracked: 1 }
+        else if (i === 1) results[p] = clean
+        else if (i === 2) results[p] = { ...clean, isGitRepo: false }
+        else results[p] = { ...clean, isGitRepo: null }
+      })
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, results }),
+      })
+    })
+
+    await page.goto('/')
+    await expect(page.locator('.directory-display')).toBeVisible({ timeout: 10_000 })
+    await page.locator('.directory-display').click()
+    await page.locator('.directory-dialog').waitFor({ timeout: 8_000 })
+
+    const count = await countDirectoryCards(page)
+    test.skip(count === 0, '没有常用目录,跳过此测试')
+    test.skip(count < 3, '常用目录少于 3 个,无法构造三种状态')
+
+    const cards = page.locator('.directory-dialog .dir-card')
+
+    // ① 脏仓库:Git + 未提交 3 项,悬浮提示给明细
+    await expect(cards.nth(0).locator('.dir-card__tag--git')).toHaveText('Git')
+    await expect(cards.nth(0).locator('.dir-card__tag--dirty')).toHaveText('未提交 3 项')
+    expect(await cards.nth(0).getAttribute('title')).toContain('已暂存 1 · 未暂存 1 · 未跟踪 1')
+
+    // ② 干净仓库:只有 Git 徽标,不该出现"未提交 0 项"这种噪音
+    await expect(cards.nth(1).locator('.dir-card__tag--git')).toBeVisible()
+    await expect(cards.nth(1).locator('.dir-card__tag--dirty')).toHaveCount(0)
+    expect(await cards.nth(1).getAttribute('title')).toContain('工作区干净')
+
+    // ③ 非仓库:只显示"非 Git 仓库",不带 Git 徽标
+    await expect(cards.nth(2).locator('.dir-card__tag--plain')).toHaveText('非 Git 仓库')
+    await expect(cards.nth(2).locator('.dir-card__tag--git')).toHaveCount(0)
+
+    // ④ 探测没结果(isGitRepo=null):整组徽标都不渲染,不猜、不谎报
+    const tail = await page.evaluate(() => {
+      const all = [...document.querySelectorAll('.directory-dialog .dir-card')]
+      return all.slice(3).filter(c => c.querySelector('.dir-card__tag')).length
+    })
+    expect(tail).toBe(0)
+
+    // 全列表"未提交"徽标有且仅有 1 个(即只有第 1 张卡)
+    await expect(page.locator('.directory-dialog .dir-card__tag--dirty')).toHaveCount(1)
+  })
 })

@@ -22,6 +22,7 @@ import os from 'os';
 import { spawn, exec, execSync } from 'child_process';
 import { ensureWithinCwd, normalizeProjectPath } from '../utils/pathGuard.js';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
+import { probeDirectoryGitStates, normalizeDirKey } from '../utils/directoryGitState.js';
 import { invalidateCurrentProjectKey, invalidateRawConfigCache } from '../../../config.js';
 import { invalidateCwdCache } from '../../../utils/index.js';
 
@@ -83,6 +84,8 @@ export function registerFsRoutes({
   setProjectRoomId,
   setIsGitRepo
 }) {
+  // 单次 Git 状态探测的路径数上限(最近目录一般十几个,这里是防御性上限)
+  const MAX_GIT_PROBE_PATHS = 100;
   // ── 解析并校验 user 输入路径在当前项目 cwd 内（防 ../ 父目录逃逸、startsWith 假阳性、Windows 大小写）──
   const safePathInProject = async (userPath) => {
     const cwd = getCurrentProjectPath() || process.cwd()
@@ -379,6 +382,27 @@ export function registerFsRoutes({
       });
     }
     }));
+
+  // 批量探测"最近目录"的 Git 状态(是不是仓库 / 有没有未提交改动)
+  //
+  // 列表卡片用它标 Git 徽标。安全上只接受**配置里的最近目录**:否则等于给前端开了
+  // 一个"任意路径 git 探测"的口子,可以拿来判断磁盘上任意目录存在与否以及仓库状态。
+  // body.paths 可选:不传就探测全部最近目录(面板场景),传了就只探这些。
+  app.post('/api/recent_directories/git-state', asyncRoute(async (req, res) => {
+    const recentDirs = (await configManager.getRecentDirectories()) || [];
+    const allowed = new Set(recentDirs.map(normalizeDirKey));
+
+    const requested = Array.isArray(req.body?.paths) ? req.body.paths : recentDirs;
+    const targets = [];
+    for (const p of requested.slice(0, MAX_GIT_PROBE_PATHS)) {
+      if (typeof p !== 'string' || !p.trim()) continue;
+      if (!allowed.has(normalizeDirKey(p))) continue; // 不在最近目录白名单里 → 忽略
+      targets.push(p);
+    }
+
+    const results = await probeDirectoryGitStates(targets);
+    res.json({ success: true, results });
+  }));
 
   // 在资源管理器/访达中打开当前目录
   app.post('/api/open_directory', asyncRoute(async (req, res) => {
