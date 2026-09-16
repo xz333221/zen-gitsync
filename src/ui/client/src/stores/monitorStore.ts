@@ -33,6 +33,22 @@ export interface MemoryInfo {
   usagePercent: number
 }
 
+export interface DriveInfo {
+  mount: string
+  total: number
+  free: number
+  used: number
+  usagePercent: number
+}
+
+export interface DiskInfo {
+  total: number
+  free: number
+  used: number
+  usagePercent: number
+  drives: DriveInfo[]
+}
+
 export interface SystemInfo {
   platform: string
   arch: string
@@ -44,6 +60,7 @@ export interface SystemInfo {
 export interface SystemOverview {
   cpu: CpuInfo
   memory: MemoryInfo
+  disks: DiskInfo | null
   system: SystemInfo
   timestamp: number
 }

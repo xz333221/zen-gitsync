@@ -301,8 +301,42 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- 磁盘占用 -->
+    <div class="monitor-disks" v-if="store.overview && store.overview.disks">
+      <div class="disks-header">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="12" x2="2" y2="12" />
+          <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+          <line x1="6" y1="16" x2="6.01" y2="16" />
+          <line x1="10" y1="16" x2="10.01" y2="16" />
+        </svg>
+        <span class="disks-title">{{ $t('@MONITOR:磁盘占用') }}</span>
+        <span class="disks-summary">
+          {{ formatBytes(store.overview.disks.used) }} / {{ formatBytes(store.overview.disks.total) }}
+          · {{ store.overview.disks.usagePercent.toFixed(1) }}%
+        </span>
+      </div>
+      <div class="disks-rows" v-if="store.overview.disks.drives.length > 0">
+        <div class="disk-row" v-for="d in store.overview.disks.drives" :key="d.mount">
+          <span class="disk-mount">{{ d.mount }}</span>
+          <el-progress
+            class="disk-bar"
+            :percentage="d.usagePercent"
+            :stroke-width="6"
+            :show-text="false"
+            :color="usageColor(d.usagePercent)"
+          />
+          <span class="disk-usage">{{ formatBytes(d.used) }} / {{ formatBytes(d.total) }}</span>
+          <span class="disk-percent" :style="{ color: usageColor(d.usagePercent) }">
+            {{ d.usagePercent.toFixed(1) }}%
+          </span>
+        </div>
+      </div>
+      <div v-else class="disks-empty">{{ $t('@MONITOR:暂无磁盘数据') }}</div>
+    </div>
+
     <!-- 加载占位 -->
-    <div v-else-if="store.loading" class="monitor-placeholder">
+    <div v-if="!store.overview && store.loading" class="monitor-placeholder">
       <el-icon class="is-loading"><Refresh /></el-icon>
       <span>{{ $t('@MONITOR:加载中') }}</span>
     </div>
@@ -522,6 +556,93 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── 磁盘占用 ───────────────────────────────────────────────────────── */
+.monitor-disks {
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  margin: 0 16px 12px;
+  padding: 10px 14px;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.disks-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.disks-header svg {
+  color: var(--text-tertiary);
+}
+
+.disks-title {
+  font-weight: 600;
+}
+
+.disks-summary {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.disks-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.disk-row {
+  display: grid;
+  /* 进度条不撑满整行：最长 220px，整行限宽，避免视觉上一条横贯全屏 */
+  grid-template-columns: 40px minmax(120px, 220px) auto 56px;
+  align-items: center;
+  gap: 12px;
+  max-width: 560px;
+}
+
+.disk-bar {
+  width: 100%;
+}
+
+.disk-mount {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-align: center;
+  padding: 1px 0;
+  background: var(--tint-primary-12);
+  border-radius: var(--radius-sm);
+}
+
+.disk-usage {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.disk-percent {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.disks-empty {
+  padding: 8px 0 4px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 /* ── 占位 / 错误 ─────────────────────────────────────────────────────── */
@@ -751,6 +872,12 @@ onBeforeUnmount(() => {
   }
   .ports-search {
     width: 160px;
+  }
+  .disk-row {
+    grid-template-columns: 40px 1fr 60px;
+  }
+  .disk-usage {
+    display: none;
   }
 }
 </style>

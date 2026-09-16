@@ -24,6 +24,7 @@
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js'
 import logger from '../utils/logger.js'
 import os from 'os'
+import { statfs } from 'fs/promises'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 
@@ -60,6 +61,87 @@ async function getCpuUsage(sampleDelayMs = 100) {
     // Windows 上 loadavg 恒为 [0,0,0]，仅 Unix 有意义
     loadAvg: os.loadavg()
   }
+}
+
+// ── 磁盘占用 ────────────────────────────────────────────────────────────
+// 磁盘占用变化慢，且 Windows 上枚举磁盘需要拉起 PowerShell（几百 ms），
+// 所以缓存 30s：前端 3s 轮询期间复用同一份结果。
+let _diskCache = null
+let _diskCacheTime = 0
+const DISK_CACHE_TTL_MS = 30000
+
+async function getDiskUsageWindows() {
+  // DriveType=3 表示本地固定磁盘（排除光驱/网络盘/U 盘），避免网络盘
+  // 掉线时 statfs/查询被挂起拖慢整个接口。
+  const { stdout } = await execFileP(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      'Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object Caption,Size,FreeSpace | ConvertTo-Csv -NoTypeInformation'
+    ],
+    { windowsHide: true, timeout: 10000 }
+  )
+  const drives = []
+  // CSV 输出形如: "Caption","Size","FreeSpace" / "C:","999619952640","123456789"
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = line.match(/^"([^"]+)","(\d+)","(\d+)"/)
+    if (!m) continue
+    const total = Number(m[2])
+    const free = Number(m[3])
+    if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(free)) continue
+    const used = total - free
+    drives.push({
+      mount: m[1],
+      total,
+      free,
+      used,
+      usagePercent: (used / total) * 100
+    })
+  }
+  return drives
+}
+
+async function getDiskUsageUnix() {
+  // 只统计根分区：Unix 下挂载点差异大（容器 overlay / 网络挂载 / 临时盘），
+  // 全量枚举噪音太多，根分区足够反映系统盘占用。
+  const s = await statfs('/')
+  const total = Number(s.blocks) * Number(s.bsize)
+  const free = Number(s.bavail) * Number(s.bsize)
+  if (!Number.isFinite(total) || total <= 0) return []
+  const used = total - free
+  return [
+    {
+      mount: '/',
+      total,
+      free,
+      used,
+      usagePercent: (used / total) * 100
+    }
+  ]
+}
+
+async function getDiskUsage() {
+  const now = Date.now()
+  if (_diskCache && now - _diskCacheTime < DISK_CACHE_TTL_MS) {
+    return _diskCache
+  }
+  const drives =
+    process.platform === 'win32' ? await getDiskUsageWindows() : await getDiskUsageUnix()
+  const total = drives.reduce((sum, d) => sum + d.total, 0)
+  const free = drives.reduce((sum, d) => sum + d.free, 0)
+  const used = total - free
+  const result = {
+    total,
+    free,
+    used,
+    usagePercent: total > 0 ? (used / total) * 100 : 0,
+    drives
+  }
+  _diskCache = result
+  _diskCacheTime = now
+  return result
 }
 
 // ── 端口列表 ────────────────────────────────────────────────────────────
@@ -286,7 +368,7 @@ let _portsCacheTime = 0
 const PORTS_CACHE_TTL_MS = 5000
 
 export function registerMonitorRoutes({ app }) {
-  // 系统概览：CPU + 内存 + 系统信息
+  // 系统概览：CPU + 内存 + 磁盘 + 系统信息
   app.get(
     '/api/monitor/system',
     asyncRoute(async (req, res) => {
@@ -294,6 +376,13 @@ export function registerMonitorRoutes({ app }) {
       const totalMem = os.totalmem()
       const freeMem = os.freemem()
       const usedMem = totalMem - freeMem
+      // 磁盘查询失败不应拖垮整个概览接口，降级为 disks: null
+      let disks = null
+      try {
+        disks = await getDiskUsage()
+      } catch (e) {
+        logger.warn(`[monitor] 获取磁盘占用失败: ${e?.message || e}`)
+      }
       res.json({
         success: true,
         data: {
@@ -304,6 +393,7 @@ export function registerMonitorRoutes({ app }) {
             used: usedMem,
             usagePercent: totalMem > 0 ? (usedMem / totalMem) * 100 : 0
           },
+          disks,
           system: {
             platform: process.platform,
             arch: process.arch,

@@ -2328,6 +2328,8 @@ export default {
   '@MONITOR:刷新失败': '刷新失败',
   '@MONITOR:无匹配结果': '无匹配结果',
   '@MONITOR:暂无端口占用': '暂无端口占用',
+  '@MONITOR:磁盘占用': '磁盘占用',
+  '@MONITOR:暂无磁盘数据': '暂无磁盘数据',
   // @MONITOR: file end
 
   // @MINDMAP: file path: views/MindmapView.vue
