@@ -1222,7 +1222,8 @@
     color: rgba(255, 255, 255, 0.9) !important;
   }
 
-  .directory-dialog .dir-path {
+  /* 常用目录卡片的路径行(RecentDirectoriesList .dir-card__name-path) */
+  .directory-dialog .dir-card__name-path {
     color: rgba(255, 255, 255, 0.8) !important;
   }
 

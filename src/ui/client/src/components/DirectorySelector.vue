@@ -26,6 +26,7 @@ import { useLocaleStore } from "@/stores/localeStore";
 import { useToolsStore, type ToolId } from "@/stores/toolsStore";
 import { storeToRefs } from "pinia";
 import IconButton from "@components/IconButton.vue";
+import RecentDirectoriesList from "@components/RecentDirectoriesList.vue";
 import SvgIcon from "@components/SvgIcon/index.vue";
 import ToolInstallDialog from "@components/ToolInstallDialog.vue";
 import claudeCodeIcon from "@/assets/icons/svg/claudecode-color.svg";
@@ -72,7 +73,9 @@ async function onCopyDirectory() {
 const isDirectoryDialogVisible = ref(false);
 const newDirectoryPath = ref("");
 const isChangingDirectory = ref(false);
-const recentDirectories = ref<{ path: string; exists: boolean }[]>([]);
+// 弹窗里的"常用目录"由 RecentDirectoriesList 统一渲染(与最近项目同一套卡片 + 同一份数据),
+// 这里只持有实例引用:每次打开弹窗 reload() 一次,避免展示上一次打开时的缓存。
+const recentDirsListRef = ref<InstanceType<typeof RecentDirectoriesList> | null>(null);
 const isBrowserDialogVisible = ref(false);
 const installDialogVisible = ref(false);
 const selectedInstallTool = ref<ToolId | null>(null);
@@ -247,7 +250,8 @@ defineEmits<{
 function onOpenDialog() {
   newDirectoryPath.value = currentDirectory.value;
   isDirectoryDialogVisible.value = true;
-  getRecentDirectories();
+  // 常用目录每次打开都重新拉一次(用户可能刚在别的标签页切过目录)
+  recentDirsListRef.value?.reload();
 }
 
 // 在资源管理器中打开当前目录
@@ -545,37 +549,8 @@ async function onOpenTerminal() {
 
 // npm脚本检查已移至NpmScriptsPanel中，点击按钮时按需加载
 
-// 获取最近访问的目录
-async function getRecentDirectories() {
-  try {
-    const response = await fetch("/api/recent_directories");
-    const result = await response.json();
-    if (result.success && Array.isArray(result.directories)) {
-      recentDirectories.value = result.directories;
-    }
-  } catch (error) {
-    console.error("获取最近目录失败:", error);
-  }
-}
-
-// 删除最近目录
-async function removeRecentDirectory(dirPath: string, event: MouseEvent) {
-  event.stopPropagation();
-  try {
-    const response = await fetch('/api/remove_recent_directory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: dirPath }),
-    });
-    const result = await response.json();
-    if (result.success) {
-      await getRecentDirectories();
-    }
-  } catch (error) {
-    console.error('删除目录失败:', error);
-  }
-}
-
+// 常用目录的拉取 / 移除 / 复制 / 点击语义全部由 @components/RecentDirectoriesList.vue 承担
+// (与"最近项目"共用同一组件、同一份 /api/recent_directories 数据、同一套卡片样式)
 
 // 保存最近使用的目录
 async function saveRecentDirectory(directory: string) {
@@ -608,8 +583,7 @@ async function changeDirectory() {
       ElMessage.success($t('@67CE7:已切换工作目录'));
       isDirectoryDialogVisible.value = false;
       await saveRecentDirectory(result.directory);
-      await getRecentDirectories();
-      
+
       // 立即清空文件列表和提交历史，避免显示旧目录的数据
       gitStore.log = [];
       gitStore.fileList = [];
@@ -692,44 +666,10 @@ async function openNewTabGui() {
   }
 }
 
-// 检测是否 Mac(用于 title 提示)
-const isMac = computed(() => {
-  if (typeof navigator === 'undefined') return false
-  // 优先用 userAgentData(Chrome 新 API),fallback 到 platform
-  const uaData = (navigator as any).userAgentData
-  if (uaData?.platform) return /mac/i.test(uaData.platform)
-  return /mac/i.test(navigator.platform || '')
-})
-
-// 在常用目录卡片上 Ctrl/Cmd + 点击 → 直接用新标签打开
-async function openRecentDirInNewTab(dirPath: string) {
-  if (!dirPath) return;
-  try {
-    const response = await fetch('/api/open-new-tab-gui', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: dirPath }),
-    });
-    const result = await response.json();
-    if (!result.success) {
-      ElMessage.error(result.error || $t('@67CE7:打开失败'));
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
-  }
-}
-
-// 常用目录卡片点击: Ctrl/Cmd 点击 = 新标签打开,普通点击 = 填到输入框
-function onRecentDirClick(item: { path: string; exists: boolean }, event: MouseEvent) {
-  if (event.ctrlKey || event.metaKey) {
-    if (!item.exists) {
-      ElMessage.warning($t('@67CE7:目录不存在,无法打开'));
-      return;
-    }
-    openRecentDirInNewTab(item.path);
-  } else {
-    newDirectoryPath.value = item.path;
-  }
+// 常用目录卡片点击: 由 RecentDirectoriesList(mode="pick") 上抛 —— 把路径填进输入框。
+// "Ctrl/Cmd+点击 = 新标签页打开"的判定在组件内部处理,这里只负责回填。
+function onRecentDirSelect(dirPath: string) {
+  newDirectoryPath.value = dirPath;
 }
 
 // 浏览目录
@@ -1017,37 +957,27 @@ function onBrowserSelect(path: string) {
             </button>
           </div>
         </el-form-item>
-        <el-form-item v-if="recentDirectories.length > 0">
+        <!-- 常用目录:与"最近项目"同一个组件、同一份数据、同一套卡片样式。
+             mode="pick"   → 普通点击把路径回填到上面的输入框,Ctrl/Cmd+点击在新标签页打开
+             variant="bare" → 不渲染面板外壳(标题由本表单项 label 提供) -->
+        <el-form-item>
           <template #label>
             <div class="form-label">
               <el-icon class="label-icon"><Clock /></el-icon>
               <span>{{ $t('@67CE7:常用目录') }}</span>
             </div>
           </template>
-          <div class="recent-directories">
-            <div
-              v-for="(item, index) in recentDirectories"
-              :key="index"
-              class="recent-dir-item"
-              :class="{ 'recent-dir-item--missing': !item.exists }"
-              :title="(isMac ? '按住 ⌘ 点击用新标签打开' : '按住 Ctrl 点击用新标签打开') + '\n' + item.path"
-              @click="onRecentDirClick(item, $event)"
-            >
-              <el-icon class="dir-icon"><Folder /></el-icon>
-              <span class="dir-path" :title="item.path">{{ item.path }}</span>
-              <span v-if="!item.exists" class="dir-missing-badge">不存在</span>
-              <button
-                type="button"
-                class="dir-delete-btn"
-                title="从常用目录中移除"
-                @click="removeRecentDirectory(item.path, $event)"
-              >
-                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="12" height="12">
-                  <path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
+          <RecentDirectoriesList
+            ref="recentDirsListRef"
+            class="recent-dirs-list"
+            mode="pick"
+            variant="bare"
+            removable="always"
+            :remove-label="$t('@67CE7:从常用目录中移除')"
+            :empty-text="$t('@67CE7:暂无常用目录')"
+            :aria-label="$t('@67CE7:常用目录')"
+            @select="onRecentDirSelect"
+          />
         </el-form-item>
       </el-form>
     </div>
@@ -1469,101 +1399,10 @@ function onBrowserSelect(path: string) {
   background: rgba(59, 130, 246, 0.15);
 }
 
-.recent-directories {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-base);
-}
-
-.recent-dir-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-base);
-  padding: 10px var(--spacing-md);
-  background: var(--bg-input);
-  border: 1px solid var(--border-card);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.recent-dir-item:hover {
-  background: var(--bg-input-hover);
-  border-color: var(--border-card-hover);
-}
-
-.recent-dir-item:active {
-  background: var(--bg-input-active, var(--bg-input-hover));
-  transform: scale(0.98);
-}
-
-.recent-dir-item--missing {
-  opacity: 0.45;
-  border-style: dashed;
-}
-
-.recent-dir-item--missing .dir-icon {
-  color: var(--color-text-secondary, #888);
-}
-
-.dir-missing-badge {
-  font-size: 10px;
-  color: #f87171;
-  border: 1px solid #f87171;
-  border-radius: 3px;
-  padding: 1px 4px;
-  flex-shrink: 0;
-  line-height: 1.4;
-}
-
-.dir-delete-btn {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  background: var(--bg-input, #fff);
-  border: 1px solid var(--border-card);
-  border-radius: 50%;
-  color: var(--color-text-secondary, #888);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s, color 0.15s;
-  z-index: 1;
-}
-
-.recent-dir-item:hover .dir-delete-btn {
-  opacity: 1;
-}
-
-.dir-delete-btn:hover {
-  background: #fee2e2;
-  border-color: #f87171;
-  color: #f87171;
-}
-
-.dir-icon {
-  font-size: var(--font-size-md);
-  color: var(--color-primary);
-  flex-shrink: 0;
-  margin-right: 0;
-}
-
-.dir-path {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-title);
-  font-family: "Courier New", monospace;
-  word-break: break-all;
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  flex: 1;
-  min-width: 0;
+/* 常用目录列表(RecentDirectoriesList)在弹窗里贴着 form-item 左侧排布,
+   卡片样式由组件自己负责,这里只补一点外边距节奏 */
+.recent-dirs-list {
+  width: 100%;
 }
 
 /* dialog-footer、footer-actions、dialog-cancel-btn、dialog-confirm-btn 基础样式已移至 @/styles/common.scss */

@@ -15,7 +15,16 @@
 // e2e: Ctrl+点击常用目录用新标签打开
 // 准备: 先 node server.js 启后端,再 npm run dev 启 vite,最后 npx playwright test
 
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
+
+// 常用目录卡片是异步拉取 /api/recent_directories 后才渲染的,
+// 直接 count() 会拿到 0 导致后续断言被 test.skip 静默跳过(历史问题)。
+// 统一走这个 helper:等首张卡片出现,拿不到就返回 0 交给调用方 skip。
+async function countDirectoryCards(page: Page): Promise<number> {
+  const cards = page.locator('.dir-card')
+  await cards.first().waitFor({ state: 'visible', timeout: 8_000 }).catch(() => {})
+  return cards.count()
+}
 
 test.describe('DirectorySelector - Ctrl+点击新标签', () => {
   test('页面能正常加载', async ({ page }) => {
@@ -40,15 +49,18 @@ test.describe('DirectorySelector - Ctrl+点击新标签', () => {
 
     // 至少有一个常用目录项(假设有历史记录)
     // 这里不强制 assert,只检查 DOM 结构
-    const recentDirs = page.locator('.recent-dir-item')
-    const count = await recentDirs.count()
+    const count = await countDirectoryCards(page)
     console.log(`找到 ${count} 个常用目录`)
 
     if (count > 0) {
       // 第一个目录项的 title 应包含"按住 Ctrl 点击用新标签打开"或"按住 ⌘ 点击"
-      const firstItem = recentDirs.first()
+      const firstItem = page.locator('.dir-card').first()
       const title = await firstItem.getAttribute('title')
       expect(title).toMatch(/按住 (Ctrl|⌘) 点击用新标签打开/)
+
+      // 与"最近项目"共用的卡片结构:目录名 + 完整路径两行都要渲染出来
+      await expect(firstItem.locator('.dir-card__name-base')).toBeVisible()
+      await expect(firstItem.locator('.dir-card__name-path')).toBeVisible()
     }
   })
 
@@ -59,9 +71,9 @@ test.describe('DirectorySelector - Ctrl+点击新标签', () => {
     await expect(dirDisplay).toBeVisible({ timeout: 10_000 })
     await dirDisplay.click()
 
-    const recentDirs = page.locator('.recent-dir-item')
-    const count = await recentDirs.count()
+    const count = await countDirectoryCards(page)
     test.skip(count === 0, '没有常用目录,跳过此测试')
+    const recentDirs = page.locator('.dir-card')
 
     // 监听 API 请求
     const apiCalls: { url: string; postData: string | null }[] = []
@@ -93,8 +105,7 @@ test.describe('DirectorySelector - Ctrl+点击新标签', () => {
     await expect(dirDisplay).toBeVisible({ timeout: 10_000 })
     await dirDisplay.click()
 
-    const recentDirs = page.locator('.recent-dir-item')
-    const count = await recentDirs.count()
+    const count = await countDirectoryCards(page)
     test.skip(count === 0, '没有常用目录,跳过此测试')
 
     // 监听 API 请求
@@ -105,17 +116,19 @@ test.describe('DirectorySelector - Ctrl+点击新标签', () => {
       }
     })
 
-    // 普通点击
-    await recentDirs.first().click()
+    // 普通点击(点卡片主体按钮,而不是 li 中心,避免误命中右侧操作按钮)
+    const firstCard = page.locator('.dir-card').first()
+    const expected = await firstCard.locator('.dir-card__name-path').innerText()
+    await firstCard.locator('.dir-card__btn').click()
 
     await page.waitForTimeout(300)
 
     // 不应调用任何变更 API
     expect(apiCalled, '普通点击不应触发 API').toBe(false)
 
-    // 输入框应该有值
+    // 输入框应该被回填为该卡片的路径
     const input = page.locator('.modern-input input')
     const value = await input.inputValue()
-    expect(value.length).toBeGreaterThan(0)
+    expect(value).toBe(expected.trim())
   })
 })

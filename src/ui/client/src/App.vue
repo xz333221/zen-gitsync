@@ -35,7 +35,7 @@ import type { SettingsTab } from '@/components/GitGlobalSettingsDialog.vue'
 import ActivityBar from '@/components/ActivityBar.vue'
 import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 import AppErrorBanner from '@/components/AppErrorBanner.vue'
-import RecentProjectsList from '@/components/RecentProjectsList.vue'
+import RecentDirectoriesList from '@/components/RecentDirectoriesList.vue'
 import ViewLoading from '@/components/ViewLoading.vue'
 // 控制台视图:默认加载(静态导入),首屏即打包进 chunk,切过去无需等待。
 import ConsoleView from '@views/ConsoleView.vue'
@@ -402,7 +402,7 @@ function loadLayoutRatios() {
   const gridLayout = document.querySelector('.grid-layout') as HTMLElement;
   if (!gridLayout) return;
 
-  // 非 Git 仓库:右侧只保留 RecentProjectsList 一块,无 h-resizer / log-list,
+  // 非 Git 仓库:右侧只保留 RecentDirectoriesList 一块,无 h-resizer / log-list,
   // 不需要上下分块比例,直接占满整列。清除 inline style 让 CSS class 接管。
   if (!gitStore.isGitRepo) {
     gridLayout.style.gridTemplateRows = '';
@@ -809,7 +809,7 @@ function stopHResize() {
       <ActivityBar v-model:activeView="activeView" />
 
       <!-- Git 视图:2 列布局 — 左 GitStatus | 右(上 commit-form / h-resizer / 下 log-list)
-           非 Git 仓库时:右上 RecentProjectsList 占满右侧整列,隐藏 h-resizer + log-list-panel,
+           非 Git 仓库时:右上 RecentDirectoriesList 占满右侧整列,隐藏 h-resizer + log-list-panel,
            由 .grid-layout--no-bottom 控制 grid-template-rows 去掉下方行 -->
       <div v-show="activeView === 'git'" class="view-pane grid-layout" :class="{ 'grid-layout--no-bottom': !gitStore.isGitRepo }">
       <!-- 左侧Git状态 -->
@@ -870,8 +870,9 @@ function stopHResize() {
       </div>
       <div class="commit-form-panel commit-form-panel--empty" v-else>
         <!-- 非 Git 仓库时,右侧空态直接用"最近项目"列表代替原"Git 仓库初始化"卡片
-             (左侧 GitStatus 已经有"初始化 Git 仓库"按钮 + "尚未配置远程仓库"提示,这里不重复) -->
-        <RecentProjectsList variant="fullpage" />
+             (左侧 GitStatus 已经有"初始化 Git 仓库"按钮 + "尚未配置远程仓库"提示,这里不重复)
+             默认即 panel(自带标题/搜索) + open(点击在新标签页打开)形态 -->
+        <RecentDirectoriesList />
       </div>
 
       <!-- 水平分隔条（提交表单 | 提交历史） -->
@@ -891,7 +892,7 @@ function stopHResize() {
         @keydown.down.prevent="nudgeH(2)"
       ></div>
 
-      <!-- 右侧下方提交历史(仅 Git 仓库显示,非 Git 仓库时 RecentProjectsList 占满右侧整列) -->
+      <!-- 右侧下方提交历史(仅 Git 仓库显示,非 Git 仓库时 RecentDirectoriesList 占满右侧整列) -->
       <div v-show="gitStore.isGitRepo" class="log-list-panel">
         <LogList />
       </div>
@@ -1110,7 +1111,7 @@ body {
   height: 100%;
 }
 
-/* 非 Git 仓库:右侧只保留 RecentProjectsList 一块,
+/* 非 Git 仓库:右侧只保留 RecentDirectoriesList 一块,
    隐藏 h-resizer + log-list 行,让 commit-form 行占满右侧整列。
    用 minmax(0, 1fr) 替代 1fr,让 grid row 高度不被子项 min-content 撑大。
    注意:这里也要重置 grid-template-columns,否则 @media (max-width:1024px)
@@ -1149,7 +1150,7 @@ body {
 /* 非 git 仓库空态:卡片不再贴左右分隔条 */
 .commit-form-panel--empty {
   padding: 0 var(--spacing-md);
-  /* 让子组件 RecentProjectsList 用 height:100% 撑满 panel 自身高度 */
+  /* 让子组件 RecentDirectoriesList 用 height:100% 撑满 panel 自身高度 */
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1703,7 +1704,7 @@ h1 {
   font-weight: bold;
 }
 
-/* 非Git仓库初始化卡片相关样式已随原卡片整体移除 —— 中间空态改为 RecentProjectsList */
+/* 非Git仓库初始化卡片相关样式已随原卡片整体移除 —— 中间空态改为 RecentDirectoriesList */
 
 .main-footer:hover {
   background: var(--bg-component-hover);
