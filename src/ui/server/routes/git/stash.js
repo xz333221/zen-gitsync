@@ -17,6 +17,35 @@ import logger from '../../utils/logger.js'
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 import { assertGitRef } from '../../utils/gitArgs.js';
 
+// git 空 blob 哈希:git add -N(intent-to-add)会在 index 中注册该空 blob,
+// 真实内容只存在于工作区
+const EMPTY_BLOB_HASH = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391';
+
+// git stash push 无法处理 intent-to-add(git add -N)条目:
+// index 里是空 blob、工作区有内容、HEAD 中不存在该文件,stash 内部 merge 会直接报
+// "Entry '<path>' not uptodate. Cannot merge. Cannot save the current worktree state"。
+// 本项目的 AI 提交 / commit message 生成流程会对 untracked 文件自动执行 git add -N,
+// 因此 stash 前必须把这类文件真正暂存(内容写入 index),stash 才能正常工作。
+// 返回被自动暂存的文件列表;失败不阻断主流程。
+async function fullyStageIntentToAddFiles(execGitCommand) {
+  try {
+    const { stdout } = await execGitCommand(['ls-files', '-s'], { log: false });
+    const intentFiles = stdout
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.includes(EMPTY_BLOB_HASH))
+      .map(l => l.split('\t')[1])
+      .filter(Boolean);
+    if (intentFiles.length === 0) return [];
+    await execGitCommand(['add', '--', ...intentFiles], { log: false });
+    logger.warn(`检测到 ${intentFiles.length} 个 intent-to-add 文件(git add -N 产物),已自动完全暂存以兼容 git stash:`, intentFiles);
+    return intentFiles;
+  } catch (e) {
+    logger.warn('intent-to-add 检测/修复失败(将继续尝试储藏):', e?.message || e);
+    return [];
+  }
+}
+
 export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
   const { checkShouldSkipDiff, checkDiffSize, getDiffStats } = createDiffHelpers({ execGitCommand });
 
@@ -52,7 +81,10 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
   app.post('/api/stash-save', asyncRoute(async (req, res) => {
       try {
         const { message, includeUntracked, excludeLocked } = req.body;
-      
+
+        // 防御:intent-to-add 条目会导致 git stash push 报 "not uptodate. Cannot merge",先自动完全暂存
+        await fullyStageIntentToAddFiles(execGitCommand);
+
         if (excludeLocked) {
           const lockedFiles = await configManager.getLockedFiles();
           // 包含未跟踪文件，确保状态与 UI 一致
@@ -202,6 +234,10 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         if (msg.includes('No valid patches in input')) {
           return res.json({ success: false, message: '没有可储藏的更改（可能刚刚已储藏，或被锁定过滤）' });
         }
+        // 兜底翻译:intent-to-add 自动修复失败时,把 git 原始报错转成可操作的提示
+        if (msg.includes('not uptodate') && msg.includes('Cannot merge')) {
+          return res.json({ success: false, message: '存在 intent-to-add(git add -N)状态的文件导致储藏失败,请先暂存(git add)或取消标记(git reset)后重试' });
+        }
         logger.error('保存stash失败:', error);
         res.status(500).json({ success: false, error: error.message });
       }
@@ -215,7 +251,10 @@ export function registerGitStashRoutes({ app, execGitCommand, configManager }) {
         if (!files || !Array.isArray(files) || files.length === 0) {
           return res.json({ success: false, message: '请选择要储藏的文件' });
         }
-      
+
+        // 防御:intent-to-add 条目会导致 git stash push 报 "not uptodate. Cannot merge",先自动完全暂存
+        await fullyStageIntentToAddFiles(execGitCommand);
+
         // 构建 git stash push 命令
         const stashArgs = ['stash', 'push'];
         if (message) {
