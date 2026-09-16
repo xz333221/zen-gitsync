@@ -24,6 +24,7 @@ import { registerAiDiffSummaryRoutes } from './git/aiDiffSummary.js';
 import { createDiffHelpers } from './git/diffUtils.js';
 import { registerGitStashRoutes } from './git/stash.js';
 import { registerGitTagRoutes } from './git/tags.js';
+import { registerGitRemoteRoutes, __testables as remoteTestables } from './git/remotes.js';
 import {
   assertGitRef,
   assertGitHash,
@@ -32,6 +33,23 @@ import {
   assertGitConfigKey,
   assertGitConfigValue
 } from '../utils/gitArgs.js';
+
+// 解析 push 的 remote 参数:不传 = 空数组(裸 push 走上游,历史行为);
+// 传了则结合当前分支与上游计算 refspec(详见 remotes.js 的 buildPushRefs)。
+// 供 /api/push 与 /api/push-with-progress 共用。
+async function resolvePushArgs({ execGitCommand, remote }) {
+  if (!remote) return [];
+  const safeRemote = assertGitRef(remote, '远程仓库名');
+  const [upstreamRes, branchRes] = await Promise.all([
+    execGitCommand(['rev-parse', '--abbrev-ref', '@{u}'], { ignoreError: true, log: false }),
+    execGitCommand(['symbolic-ref', '--short', 'HEAD'], { ignoreError: true, log: false })
+  ]);
+  return remoteTestables.buildPushRefs({
+    remote: safeRemote,
+    currentBranch: (branchRes.stdout || '').trim(),
+    upstreamBranch: (upstreamRes.stdout || '').trim()
+  });
+}
 
 export function registerGitOpsRoutes({
   app,
@@ -321,7 +339,10 @@ export function registerGitOpsRoutes({
           errorCode: 'EMPTY_REPO'
         });
       }
-      const { stdout } = await execGitCommand(['push']);
+      // 可选 remote 参数:指定推送到哪个远程(多远程场景);不传 = 裸 push 走上游,行为不变
+      const { remote } = req.body || {};
+      const pushArgs = await resolvePushArgs({ execGitCommand, remote });
+      const { stdout } = await execGitCommand(['push', ...pushArgs]);
 
       // 推送成功后，设置推送状态标记
       setRecentPushStatus({
@@ -333,20 +354,21 @@ export function registerGitOpsRoutes({
       logger.info('推送成功，已设置推送状态标记');
       res.json({ success: true, message: stdout });
     } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error?.statusCode || 500).json({ success: false, error: error.message });
     }
   });
 
-  // 推送并设置上游分支（git push -u origin <branch>）
+  // 推送并设置上游分支（git push -u <remote> <branch>,remote 可选,默认 origin）
   app.post('/api/git/push-with-upstream', async (req, res) => {
     try {
-      const { branch } = req.body || {};
+      const { branch, remote = 'origin' } = req.body || {};
       if (!branch || typeof branch !== 'string') {
         return res.status(400).json({ success: false, error: '缺少 branch 参数' });
       }
       // branch 落在 git 的参数位置上，不做形状校验的话传 '--upload-pack=curl x|sh'
       // 就能让 git 执行命令(execFile 无 shell 也拦不住)。
       const safeBranch = assertGitRef(branch, '分支名');
+      const safeRemote = assertGitRef(remote, '远程仓库名');
       // 防御性检查：空仓库（没有任何 commit）直接返回明确错误，
       // 避免 git push -u 报 "src refspec master does not match any" 让用户摸不着头脑。
       // git rev-parse --verify HEAD 在空仓库下返回非零退出 → execGitCommand 用 ignoreError
@@ -362,7 +384,7 @@ export function registerGitOpsRoutes({
           errorCode: 'EMPTY_REPO'
         });
       }
-      const { stdout } = await execGitCommand(['push', '-u', 'origin', safeBranch]);
+      const { stdout } = await execGitCommand(['push', '-u', safeRemote, safeBranch]);
       setRecentPushStatus({
         justPushed: true,
         pushTime: Date.now(),
@@ -468,6 +490,17 @@ export function registerGitOpsRoutes({
         return finish();
       }
 
+      // 可选 remote 参数(多远程场景)。注意:SSE 通道已 flushHeaders,
+      // 校验失败只能走 SSE 协议返回,不能 res.status().json()。
+      let pushArgs = [];
+      try {
+        pushArgs = await resolvePushArgs({ execGitCommand, remote: req.body?.remote });
+      } catch (e) {
+        sendProgress({ type: 'error', error: e?.message || String(e) });
+        return finish();
+      }
+      const pushCommandLabel = ['git', 'push', '--progress', ...pushArgs].join(' ');
+
       logger.info('开始推送，工作目录:', workDir);
 
       // 记录开始时间
@@ -479,8 +512,8 @@ export function registerGitOpsRoutes({
         message: 'Starting to push to the remote repository...'
       });
 
-      // 使用spawn执行git push --progress
-      const gitPush = spawn('git', ['push', '--progress'], {
+      // 使用spawn执行git push --progress(可带 remote refspec)
+      const gitPush = spawn('git', ['push', '--progress', ...pushArgs], {
         cwd: workDir,
         env: {
           ...process.env,
@@ -557,7 +590,7 @@ export function registerGitOpsRoutes({
 
           // 添加到命令历史
           addCommandToHistory(
-            'git push --progress',
+            pushCommandLabel,
             standardOutput,
             errorOutput,
             null,
@@ -575,7 +608,7 @@ export function registerGitOpsRoutes({
 
           // 添加到命令历史（失败情况）
           addCommandToHistory(
-            'git push --progress',
+            pushCommandLabel,
             standardOutput,
             errorOutput,
             errorOutput || standardOutput || `Push failed with code ${code}`,
@@ -918,6 +951,13 @@ export function registerGitOpsRoutes({
     app,
     execGitCommand,
     clearCommandHistory
+  });
+
+  // 远程仓库管理:列表/重命名/删除/改地址/多 push URL/一键推送全部
+  registerGitRemoteRoutes({
+    app,
+    execGitCommand,
+    setRecentPushStatus
   });
 
   // 重置暂存区 (git reset HEAD)
