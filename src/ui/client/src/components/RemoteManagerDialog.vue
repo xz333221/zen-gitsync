@@ -349,7 +349,6 @@ watch(visible, (v) => {
             v-for="r in gitStore.remotes"
             :key="r.name"
             class="rm-row"
-            :class="{ 'is-upstream': r.isUpstream }"
           >
             <div class="rm-row__head">
               <span class="rm-row__name">{{ r.name }}</span>
@@ -565,29 +564,22 @@ watch(visible, (v) => {
   gap: var(--spacing-lg);
 }
 
-/* 说明卡片 */
+/* 说明行:扁平,无边框无底色,只做图文说明 */
 .rm-hero {
   display: flex;
   align-items: flex-start;
-  gap: var(--spacing-base);
-  padding: var(--spacing-base);
-  /* 全部用主题感知令牌:--color-gray-* 是固定浅灰,不随深色主题翻转,
-     拿它做底色会在深色下变成"浅底浅字" */
-  border: 1px solid var(--border-card);
-  border-radius: var(--radius-xl);
-  background: var(--bg-subtle);
+  gap: var(--spacing-sm);
 
   &__icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
+    width: 20px;
+    height: 20px;
+    margin-top: 2px;
     flex-shrink: 0;
-    border-radius: var(--radius-lg);
-    background: var(--color-primary);
-    color: #fff;
-    font-size: var(--font-size-lg);
+    color: var(--color-primary);
+    font-size: var(--font-size-md);
   }
 
   &__text {
@@ -595,10 +587,11 @@ watch(visible, (v) => {
     min-width: 0;
 
     h4 {
-      margin: 0 0 4px;
-      font-size: var(--font-size-md);
+      margin: 0 0 2px;
+      font-size: var(--font-size-base);
       font-weight: 600;
       color: var(--color-text-title);
+      line-height: 1.4;
     }
 
     p {
@@ -682,22 +675,22 @@ watch(visible, (v) => {
 .rm-rows {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-base);
 }
 
 .rm-row {
-  padding: var(--spacing-base);
-  border: 1px solid var(--border-card);
-  border-radius: var(--radius-xl);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  /* 扁平列表:无边框、无圆角、无左侧色条,靠行间细分隔线与 hover 底色区分,
+     与分支列表 / 储藏列表保持同一套视觉语言。上游 / 默认推送只由标签表达。
+     水平 padding 用负 margin 抵消,让文字与区块标题左对齐、hover 底色略外扩。 */
+  padding: var(--spacing-base) var(--spacing-sm);
+  margin: 0 calc(-1 * var(--spacing-sm));
+  transition: background 0.15s ease;
 
-  &:hover {
-    border-color: var(--border-card-hover);
-    box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.06));
+  & + & {
+    border-top: 1px solid var(--border-color);
   }
 
-  &.is-upstream {
-    border-left: 3px solid var(--color-success);
+  &:hover {
+    background: var(--bg-subtle-hover);
   }
 
   &__head {
@@ -721,7 +714,7 @@ watch(visible, (v) => {
   &__actions {
     display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
+    gap: var(--spacing-sm);
   }
 
   &__urls {
@@ -773,15 +766,13 @@ watch(visible, (v) => {
   text-overflow: ellipsis;
 }
 
-/* 空态 */
+/* 空态:同样扁平,不用虚线圆角框 */
 .rm-empty {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-2xl);
-  border: 1px dashed var(--border-color-medium);
-  border-radius: var(--radius-xl);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
 }
