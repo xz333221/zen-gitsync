@@ -189,7 +189,7 @@ function onWindowMouseUp(_e: MouseEvent) {
         <span class="wb-new-btn__shortcut">N</span>
       </button>
 
-      <ul class="wb-task-list">
+      <ul class="wb-task-list" :class="{ 'is-grouped': groupedTasksList.hasMultiple }">
         <template v-for="group in groupedTasksList.groups" :key="group.path">
           <li
             v-if="groupedTasksList.hasMultiple"
@@ -487,6 +487,8 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-new-btn:active { transform: scale(0.99); }
 .wb-new-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 .wb-task-list, .wb-prompt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* 分组模式下任务项相对组头缩进一层,视觉上归属到项目分组下 */
+.wb-task-list.is-grouped .wb-task-item { margin-left: 14px; }
 .wb-task-item {
   position: relative; display: flex; align-items: center; gap: 8px;
   padding: 7px 10px; border: none; border-radius: 10px; background: transparent;
@@ -555,7 +557,9 @@ function onWindowMouseUp(_e: MouseEvent) {
   background: color-mix(in srgb, var(--color-warning, #f59e0b) 14%, transparent);
   color: color-mix(in srgb, var(--color-warning, #f59e0b) 80%, var(--text-primary));
   font-size: 10px; font-weight: 600; letter-spacing: 0.2px; white-space: nowrap;
-  max-width: 110px; overflow: hidden; text-overflow: ellipsis;
+  /* 不设固定 max-width:作为 meta 行最后一个 flex 项,overflow:hidden 让它
+     自动占满行内剩余宽度,只有行真的放不下时才省略,不再留白截断 */
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
 }
 .wb-task-item.is-other-project { opacity: 0.78; }
 .wb-task-item.is-other-project:hover { opacity: 1; }
