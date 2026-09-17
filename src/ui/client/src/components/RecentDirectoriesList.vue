@@ -365,28 +365,32 @@ defineExpose({ reload: load });
           </span>
         </button>
         <!-- 操作按钮与卡片按钮平级(不能嵌套 button),.stop 阻止冒泡到卡片点击。
-             默认透明,hover 卡片才显形,避免列表静止时被一堆小图标抢视觉重心。 -->
-        <button
-          type="button"
-          class="dir-card__action dir-card__copy"
-          :title="$t('@13D1C:复制路径')"
-          :aria-label="$t('@13D1C:复制路径 {path}', { path: item.path })"
-          @click.stop="copyPath(item.path)"
-        >
-          <el-icon aria-hidden="true"><DocumentCopy /></el-icon>
-        </button>
-        <!-- 失效目录的移除按钮常驻显形(方便一键清理),有效目录则 hover 才出现 -->
-        <button
-          v-if="canRemove(item)"
-          type="button"
-          class="dir-card__action dir-card__remove"
-          :class="{ 'is-pinned': !item.exists }"
-          :title="removeLabelText"
-          :aria-label="`${removeLabelText} ${item.path}`"
-          @click.stop="removeDirectory(item.path)"
-        >
-          <el-icon aria-hidden="true"><Delete /></el-icon>
-        </button>
+             绝对定位在卡片右端:hover 卡片时与徽标在同一锚点交叉淡入淡出 ——
+             既不叠字,也不会在静止时用一条空条把徽标顶到左边。 -->
+        <div class="dir-card__actions">
+          <!-- 目录都不存在了,复制路径没有意义,不渲染 -->
+          <button
+            v-if="item.exists"
+            type="button"
+            class="dir-card__action dir-card__copy"
+            :title="$t('@13D1C:复制路径')"
+            :aria-label="$t('@13D1C:复制路径 {path}', { path: item.path })"
+            @click.stop="copyPath(item.path)"
+          >
+            <el-icon aria-hidden="true"><DocumentCopy /></el-icon>
+          </button>
+          <!-- 失效目录的移除按钮常驻显形(方便一键清理);有效目录 hover 才出现 -->
+          <button
+            v-if="canRemove(item)"
+            type="button"
+            class="dir-card__action dir-card__remove"
+            :title="removeLabelText"
+            :aria-label="`${removeLabelText} ${item.path}`"
+            @click.stop="removeDirectory(item.path)"
+          >
+            <el-icon aria-hidden="true"><Delete /></el-icon>
+          </button>
+        </div>
       </li>
     </ul>
   </div>
@@ -396,6 +400,11 @@ defineExpose({ reload: load });
 /* ── 外壳 ─────────────────────────────────────────────────────────── */
 .dir-list {
   text-align: left;
+  /* 组件被塞进 el-form-item__content 时(弹窗的 bare 形态),EP 那个
+     `line-height: 32px` 会一路继承到徽标、空态文案上,把 10px 的徽标撑成 34px。
+     这里在根上截断,不让表单控件的行高漏进列表内容。
+     (同一类坑还有 `.el-form-item__content` 默认横向 flex,见 DirectorySelector.vue) */
+  line-height: var(--line-height-normal);
 }
 /* panel:撑满父级(右侧整列空态),卡片化外壳 + 内部滚动 */
 .dir-list--panel {
@@ -539,6 +548,8 @@ defineExpose({ reload: load });
 }
 
 .dir-card {
+  /* 操作按钮绝对定位的参照物 */
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
@@ -641,10 +652,22 @@ defineExpose({ reload: load });
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
+  transition: opacity var(--transition-fast);
+}
+/* hover 时徽标主动让位给操作按钮:两者锚在同一个右端点,做交叉淡入淡出,
+   而不是让按钮盖在徽标上压字。失效目录的移除按钮本来就是常驻的,徽标不用让。
+   ⚠️ 这里用 `:has(操作按钮:focus-visible)` 而不是 `.dir-card:focus-within`:
+   点击卡片主体按钮后 Chrome 会把焦点留在它上面,用 :focus-within 会让徽标
+   在点击之后一直隐身;只有键盘 Tab 真正落到操作按钮上才需要让位。 */
+.dir-card:not(.is-missing):hover .dir-card__tags,
+.dir-card:not(.is-missing):has(.dir-card__action:focus-visible) .dir-card__tags {
+  opacity: 0;
 }
 .dir-card__tag {
   flex-shrink: 0;
-  padding: 1px var(--spacing-sm);
+  /* 显式行高:徽标高度只由字号 + padding 决定,不受外部继承的行高影响 */
+  line-height: 1.4;
+  padding: 2px var(--spacing-sm);
   font-size: var(--font-size-xs);
   border-radius: var(--radius-sm);
   white-space: nowrap;
@@ -659,11 +682,12 @@ defineExpose({ reload: load });
   background: var(--tint-primary-12);
   color: var(--color-primary);
 }
-/* 有未提交改动:警示色 + 描边提高辨识(用户扫列表时主要找这个) */
+/* 有未提交改动:警示色(用户扫列表时主要找这个)。
+   不加描边 —— 描边会让它比同排的 Git 徽标高 2px,一眼看出没对齐;
+   而且底色 + 字色已经足够区分,不需要边框重复强调。 */
 .dir-card__tag--dirty {
   background: var(--tint-warning-14);
   color: var(--text-warning);
-  border: 1px solid var(--tint-warning-45);
 }
 /* 不是仓库:中性灰,说明"这里没有 Git 可看" */
 .dir-card__tag--plain {
@@ -672,47 +696,55 @@ defineExpose({ reload: load });
 }
 
 /* ── 卡片上的操作按钮 ─────────────────────────────────────────────── */
+/* 绝对定位:空闲时不占宽度,徽标才能贴到卡片右边缘(否则右边永远空出一条)。
+   整组按钮一起淡入淡出,避免两个图标各自闪现。 */
+.dir-card__actions {
+  position: absolute;
+  right: var(--spacing-base);
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  /* 隐藏时不可点,否则会在徽标位置吞掉本该落到卡片的点击 */
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+.dir-card:hover .dir-card__actions,
+.dir-card:has(.dir-card__action:focus-visible) .dir-card__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* 扁平化:不给按钮加边框/底色,只靠图标颜色表达状态与 hover ——
+   在 "圆角方块 + 色块" 已经被否掉的前提下,图标本身才是最轻的载体。 */
 .dir-card__action {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   padding: 0;
   font-size: 14px;
-  opacity: 0;
-  transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
-}
-.dir-card:hover .dir-card__action,
-.dir-card__action:focus-visible {
-  opacity: 1;
+  transition: color var(--transition-fast);
 }
 .dir-card__copy:hover {
-  background: var(--tint-primary-12);
   color: var(--color-primary);
 }
-.dir-card.is-missing .dir-card__copy:hover {
-  background: var(--bg-component-hover);
-  color: var(--text-secondary);
-}
-/* 移除按钮:破坏性操作,常驻是 border + danger 配色,显式区分于复制 */
-.dir-card__remove {
-  border: 1px solid var(--tint-danger-50);
-  background: var(--bg-panel);
+/* 破坏性操作只靠图标字色区分(危险色),不再用红边框红底重复强调 */
+.dir-card__remove:hover {
   color: var(--color-danger-light);
 }
-.dir-card__remove.is-pinned {
-  opacity: 1;
+.dir-card__action:active {
+  color: var(--color-primary);
 }
-.dir-card__remove:hover {
-  background: var(--tint-danger-14);
-  border-color: var(--color-danger-light);
+.dir-card__remove:active {
   color: var(--color-danger);
 }
 .dir-card__action:focus-visible {
@@ -721,5 +753,12 @@ defineExpose({ reload: load });
 }
 .dir-card__remove:focus-visible {
   outline-color: var(--color-danger-light);
+}
+/* 失效目录:移除按钮常驻,此时它在流内正常占位(不是在"空占"),徽标排在它左边 */
+.dir-card.is-missing .dir-card__actions {
+  position: static;
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
 }
 </style>

@@ -20,9 +20,11 @@ import { test, expect, type Page } from '@playwright/test'
 // 常用目录卡片是异步拉取 /api/recent_directories 后才渲染的,
 // 直接 count() 会拿到 0 导致后续断言被 test.skip 静默跳过(历史问题)。
 // 统一走这个 helper:等首张卡片出现,拿不到就返回 0 交给调用方 skip。
+// 超时给到 15s:vite 刚改过前端代码要重新编译,首次导航慢的时候 8s 会不够,
+// 于是 count() 读到 0 → 整条用例变 skipped,看起来"通过"其实啥也没验。
 async function countDirectoryCards(page: Page): Promise<number> {
   const cards = page.locator('.dir-card')
-  await cards.first().waitFor({ state: 'visible', timeout: 8_000 }).catch(() => {})
+  await cards.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
   return cards.count()
 }
 
@@ -235,5 +237,85 @@ test.describe('DirectorySelector - Ctrl+点击新标签', () => {
 
     // 全列表"未提交"徽标有且仅有 1 个(即只有第 1 张卡)
     await expect(page.locator('.directory-dialog .dir-card__tag--dirty')).toHaveCount(1)
+
+    // 回归:用户反馈"这个按钮高度怎么是撑起来的"。
+    // 根因有两层 —— Element Plus 的 .el-form-item__content 带 line-height:32px,会一路继承到徽标
+    // (10px 的字号被 32px 行高撑成 34px);再加上"未提交"徽标额外一条 1px 描边,同排就差 2px。
+    // 现在徽标高度只由字号 + padding 决定,四种徽标必须一样高。
+    const tagHeights = await page.evaluate(() => {
+      const seen = new Map<string, number>()
+      for (const t of document.querySelectorAll('.directory-dialog .dir-card__tag')) {
+        const variant = [...t.classList].find(c => c.startsWith('dir-card__tag--')) ?? 'base'
+        seen.set(variant, +t.getBoundingClientRect().height.toFixed(1))
+      }
+      return [...seen]
+    })
+    expect(tagHeights.length).toBeGreaterThanOrEqual(3)   // Git / 未提交 / 非 Git 仓库 都在
+    const heights = tagHeights.map(([, h]) => h)
+    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(0.5)
+
+    // 同排两个徽标必须垂直居中对齐(顶边齐不够,还要中心点齐)
+    const centerOffset = await page.evaluate(() => {
+      const group = [...document.querySelectorAll('.directory-dialog .dir-card__tags')]
+        .find(g => g.children.length === 2)
+      if (!group) return null
+      const [a, b] = [...group.children].map(c => {
+        const r = c.getBoundingClientRect()
+        return (r.top + r.bottom) / 2
+      })
+      return Math.abs(a - b)
+    })
+    expect(centerOffset).not.toBeNull()
+    expect(centerOffset!).toBeLessThanOrEqual(0.5)
+  })
+
+  // 回归:用户反馈"没 hover 时候右边不用占位,这按钮也太丑了"。
+  // ① 空闲时徽标必须贴到卡片右内边缘(此前操作按钮在流内占 60px,右边永远空一条)
+  // ② hover 时操作按钮淡入、徽标在同一锚点淡出,且徽标位置不移动(交叉过渡,不是布局抖动)
+  test('空闲时右侧不占位:hover 时按钮与徽标交叉过渡且无位移', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 790 })
+    await page.goto('/')
+    await expect(page.locator('.directory-display')).toBeVisible({ timeout: 10_000 })
+    await page.locator('.directory-display').click()
+    await page.locator('.directory-dialog').waitFor({ timeout: 8_000 })
+
+    const count = await countDirectoryCards(page)
+    test.skip(count === 0, '没有常用目录,跳过此测试')
+
+    // 挑一张有 Git 徽标、且不是"不存在"的有效目录卡(失效卡的移除按钮是常驻的,规则不同)
+    const card = page
+      .locator('.directory-dialog .dir-card')
+      .filter({ has: page.locator('.dir-card__tag--git') })
+      .first()
+    await expect(card).toBeVisible()
+
+    const probe = () => card.evaluate(el => {
+      const tags = el.querySelector('.dir-card__tags') as HTMLElement
+      const actions = el.querySelector('.dir-card__actions') as HTMLElement
+      const style = getComputedStyle(el)
+      return {
+        padRight: Math.round(parseFloat(style.paddingRight)),
+        // 卡片右边缘到徽标右边缘的距离:等于 padding-right 才说明右侧没被占位
+        gapRight: Math.round(el.getBoundingClientRect().right - tags.getBoundingClientRect().right),
+        tagsOpacity: Number(getComputedStyle(tags).opacity),
+        actionsOpacity: Number(getComputedStyle(actions).opacity),
+        actionsPosition: getComputedStyle(actions).position,
+      }
+    })
+
+    const idle = await probe()
+    // 右侧不留空条:徽标右边缘就是卡片内容区右边缘(容 1px 取整误差)
+    expect(Math.abs(idle.gapRight - idle.padRight)).toBeLessThanOrEqual(1)
+    expect(idle.actionsPosition).toBe('absolute')   // 操作按钮脱离文档流
+    expect(idle.tagsOpacity).toBe(1)
+    expect(idle.actionsOpacity).toBe(0)
+
+    await card.hover()
+    await page.waitForTimeout(300)                  // 等 opacity 过渡结束
+
+    const hovered = await probe()
+    expect(hovered.actionsOpacity).toBe(1)          // 按钮淡入
+    expect(hovered.tagsOpacity).toBe(0)             // 徽标让位
+    expect(hovered.gapRight).toBe(idle.gapRight)    // 徽标只淡出不位移 → 无布局抖动
   })
 })
