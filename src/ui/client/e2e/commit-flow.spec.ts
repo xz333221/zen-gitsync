@@ -257,8 +257,10 @@ test.describe('提交主流程', () => {
     // 断言"等于配置值"而不是写死,两种配置下都成立
     expect(body.noVerify).toBe(Boolean(cfg.skipHooks))
 
-    await expect(page.locator('.el-message--success')).toBeVisible({ timeout: 15_000 })
-    await expect(page.locator('.el-message--success')).toContainText('提交成功')
+    // 按文案过滤:提交成功后应用可能同时弹「Git 状态已刷新」等其它 success 提示,
+    // 直接断言 .el-message--success 会被 strict mode 判成多元素命中
+    // (同 remote-management.spec.ts:181 的写法)
+    await expect(page.locator('.el-message--success', { hasText: '提交成功' })).toBeVisible({ timeout: 15_000 })
 
     // clearCommitFields 清空输入;但开了"自动填充默认提交信息"时,清空后会被
     // 立刻回填成 defaultCommitMessage,所以期望值取决于该开关
@@ -277,8 +279,7 @@ test.describe('提交主流程', () => {
     await fillCommitMessage(page, '失败路径保留输入')
     await page.locator('.commit-button').click()
 
-    await expect(page.locator('.el-message--error')).toBeVisible({ timeout: 15_000 })
-    await expect(page.locator('.el-message--error')).toContainText('模拟提交失败')
+    await expect(page.locator('.el-message--error', { hasText: '模拟提交失败' })).toBeVisible({ timeout: 15_000 })
 
     // 失败时不能清空输入,否则用户白敲一遍
     expect(await readCommitMessage(page)).toContain('失败路径保留输入')

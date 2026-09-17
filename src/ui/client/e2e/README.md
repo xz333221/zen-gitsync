@@ -45,6 +45,7 @@ npm run e2e:report
   - `app-smoke.spec.ts` — 应用冒烟(启动/导航/默认视图)
   - `selective-stage.spec.ts` — 选择性暂存
   - `directory-selector.spec.ts` — 目录选择器/Ctrl+点击新标签
+  - `workbench-sidebar.spec.ts` — 工作台侧边栏(任务行单行展示/描述兜底/空任务不落盘/分组收起)
   - `drawer-*.spec.ts` — Git 抽屉样式截图
 
 ## 写新测试前必读(踩坑记录)
@@ -66,6 +67,14 @@ npm run e2e:report
 5. **提交信息断言用 `toContain`(描述文本),不要精确相等**。标准提交模式下
    最终 message = `${type}: ${description}`,输入带 "feat: " 前缀会拼成
    "feat: feat: xxx"。
+6. **断言 Element Plus 的 toast 必须按文案过滤**
+   (`page.locator('.el-message--success', { hasText: 'xxx' })`)。应用自身会弹
+   「Git 状态已刷新」这类提示,直接断言类名会在两个 toast 同屏时被 strict mode
+   判成多元素命中(见 commit-flow.spec.ts / remote-management.spec.ts)。
+7. **`page.route` 的 glob `*` 不跨 `/`**。拦 `DELETE /api/workbench/tasks/<id>`
+   这类带路径段的请求要用正则 `/\/api\/workbench\/tasks(?:$|[/?])/`,
+   否则删除请求打穿到真实后端,而本地乐观更新的列表看起来"也对",
+   断言会变成永不失败的死断言。参考 `workbench-sidebar.spec.ts`。
 
 ## 写新测试
 
