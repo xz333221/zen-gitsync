@@ -315,3 +315,71 @@ export function decorateTaskForBoard(task, jobsForTask = []) {
     updatedAt: task.updatedAt || null,
   };
 }
+
+// ── 任务详情（点卡片弹窗用） ────────────────────────────────────────────
+
+/**
+ * 弹窗里最多回多少字符的执行输出。
+ *
+ * 看板列表刻意只发摘要，因为它是 5s 轮询的：把每个任务的子任务描述、报错、
+ * 执行输出全塞进去，十几条任务每 5 秒推一遍纯属浪费（单条输出动辄几十万字符）。
+ * 详情改成按需取一次，并且**在服务端截尾**——弹窗要回答的是"最近一次执行干了什么、
+ * 卡在哪了"，不是把整份日志搬进 DOM。想看全文有编辑器和 job 管理页。
+ */
+export const OUTPUT_TAIL_CHARS = 4000;
+
+/**
+ * 把一条 job 压成弹窗够用的形状：丢掉 prompt/thinking（可能极大），
+ * output 只留尾部 OUTPUT_TAIL_CHARS 字符，并用 outputTruncated 明确告知被截过
+ * —— 前端据此提示"仅显示末尾"，而不是让人以为整个输出就这么点。
+ */
+export function trimJobForDetail(job) {
+  if (!job) return null;
+  const out = typeof job.output === 'string' ? job.output : '';
+  const truncated = out.length > OUTPUT_TAIL_CHARS;
+  return {
+    id: job.id || '',
+    subId: job.subId || '',
+    title: job.title || '',
+    subTitle: job.subTitle || '',
+    status: job.status || '',
+    pid: typeof job.pid === 'number' ? job.pid : null,
+    startedAt: job.startedAt || null,
+    endedAt: job.endedAt || null,
+    exitCode: typeof job.exitCode === 'number' ? job.exitCode : null,
+    error: job.error || '',
+    outputTail: truncated ? out.slice(-OUTPUT_TAIL_CHARS) : out,
+    outputTruncated: truncated,
+    hasOutput: out.length > 0,
+  };
+}
+
+/**
+ * 组装单个任务的详情。纯函数，单测覆盖。
+ *
+ * @param {object} task           完整任务（含 subtasks / attachments）
+ * @param {Array}  jobsForTask    属于该任务的 job（顺序不限，内部会按时间排）
+ * @param {number} recentJobLimit 最多回带几条 job 明细（默认 10）
+ * @returns {object|null}         task 缺失时返回 null，由路由转成 404
+ */
+export function buildTaskDetail(task, jobsForTask = [], { recentJobLimit = 10 } = {}) {
+  if (!task || !task.id) return null;
+  const jobs = (Array.isArray(jobsForTask) ? jobsForTask : []).filter(Boolean);
+
+  // 按时间倒序：弹窗里第一条就是「最近一次执行」
+  const sorted = [...jobs].sort((a, b) => {
+    const ta = jobTimestamp(a);
+    const tb = jobTimestamp(b);
+    if (ta === tb) return 0;
+    return ta < tb ? 1 : -1;
+  });
+
+  const limit = Number.isFinite(recentJobLimit) && recentJobLimit > 0 ? Math.floor(recentJobLimit) : 10;
+  return {
+    task,
+    column: deriveTaskColumn(task, jobs),
+    lastJob: trimJobForDetail(sorted[0] || null),
+    recentJobs: sorted.slice(0, limit).map(trimJobForDetail),
+    jobCount: jobs.length,
+  };
+}

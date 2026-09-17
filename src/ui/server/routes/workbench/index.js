@@ -102,6 +102,7 @@ import {
   groupJobsByTask,
   decorateTaskForBoard,
   resolveTaskRepoPath,
+  buildTaskDetail,
 } from './projectRegistry.js';
 import {
   readOrchestrator,
@@ -1731,6 +1732,31 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   app.get('/api/workbench/projects', asyncRoute(async (_req, res) => {
     const payload = await loadBoardPayload();
     res.json({ success: true, ...payload });
+  }));
+
+  /**
+   * 单个任务的详情 —— 点看板卡片弹出的那个框用它。
+   *
+   * 为什么不把详情并进 /projects：那个接口是 5s 轮询的，只该发摘要
+   * （decorateTaskForBoard）。把子任务描述、报错、执行输出一起推，
+   * 十几条任务每 5 秒来一遍，纯属浪费带宽和解析时间。
+   * 这里按需取一次，且 output 由 trimJobForDetail 在服务端截尾。
+   *
+   * 注册位置：字面量路径 /tasks/ai-* 都在上面且只有一段，
+   * :id/detail 是两段，不会互相抢匹配。
+   */
+  app.get('/api/workbench/tasks/:id/detail', asyncRoute(async (req, res) => {
+    const id = req.params.id;
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const task = (data.tasks || []).find(t => t && t.id === id);
+    if (!task) throw new HttpError(404, '任务不存在');
+
+    // loadAllJobs 已经把「文件里归档的 + 内存里还活着的」合并过（含 taskTitle/subTitle）
+    const allJobs = await loadAllJobs();
+    const detail = buildTaskDetail(task, allJobs.filter(j => j && j.taskId === id));
+    if (!detail) throw new HttpError(404, '任务不存在');
+
+    res.json({ success: true, ...detail });
   }));
 
   app.get('/api/workbench/orchestrator', asyncRoute(async (_req, res) => {

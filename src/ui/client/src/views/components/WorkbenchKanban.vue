@@ -20,7 +20,11 @@
   待处理/进行中/评审中/已完成 全部由执行事实推出（后端 deriveTaskColumn）：
   有 job 在跑就是进行中、子任务全完成才是已完成……
   所以卡片不支持拖动换列——拖过去也没有对应的写操作可做，
-  与其做一个拖了就弹回去的假交互，不如让动作落在「执行 / 打开编辑器」这两个真按钮上。
+  与其做一个拖了就弹回去的假交互，不如让动作落在「执行 / 查看详情」这两个真按钮上。
+
+  点卡片 = 就地弹出详情（view-task），**不跳转**：看板是用来扫全局的，
+  点一下就被甩到编辑器、还要再点回来，手上的上下文全丢了。
+  想深入编辑走弹窗里的「打开编辑器」这个显式动作。
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
@@ -37,7 +41,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'open-task': [task: BoardTask]
+  /** 查看任务详情（上层开弹窗，不做页面跳转） */
+  'view-task': [task: BoardTask]
   'run-task': [task: BoardTask]
   'delete-task': [task: BoardTask]
   'create-task': []
@@ -158,7 +163,7 @@ function hasError(t: BoardTask): boolean {
             :key="t.id"
             class="kb-card"
             :class="{ 'is-running': t.runningJobs > 0, 'has-error': hasError(t) }"
-            @click="emit('open-task', t)"
+            @click="emit('view-task', t)"
           >
             <div class="kb-card__row1">
               <span v-if="t.runningJobs > 0" class="kb-card__running" aria-hidden="true" />
@@ -224,7 +229,7 @@ function hasError(t: BoardTask): boolean {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="t in filtered" :key="t.id" class="kb-table__row" @click="emit('open-task', t)">
+          <tr v-for="t in filtered" :key="t.id" class="kb-table__row" @click="emit('view-task', t)">
             <td class="kb-table__td">
               <span class="kb-table__name">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</span>
               <span v-if="showProjectLabel && projectLabel(t)" class="kb-table__project">{{ projectLabel(t) }}</span>

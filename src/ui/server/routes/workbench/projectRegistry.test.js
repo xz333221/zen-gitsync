@@ -27,6 +27,9 @@ import {
   summarizeProjectTasks,
   buildProjectEntries,
   decorateTaskForBoard,
+  OUTPUT_TAIL_CHARS,
+  trimJobForDetail,
+  buildTaskDetail,
 } from './projectRegistry.js';
 import { normalizeOrchestrator, buildActivityFeed, buildRunningAgents } from './orchestratorStore.js';
 
@@ -249,4 +252,88 @@ test('buildRunningAgents: 只列活跃 job，到 job 粒度而不是任务粒度
   assert.equal(running[0].subTitle, '子任务一');
   assert.equal(running[0].projectName, 'proj-a');
   assert.equal(running[1].status, 'pending');
+});
+
+// ── 任务详情（点卡片弹窗用） ────────────────────────────────────────
+
+test('trimJobForDetail: 丢 prompt/thinking，output 只留尾部并标记被截断', () => {
+  const big = 'x'.repeat(OUTPUT_TAIL_CHARS + 500) + 'END';
+  const j = {
+    id: 'j1', taskId: 't1', subId: 's1', title: '跑一下', status: 'done',
+    prompt: 'P'.repeat(10000), thinking: 'T'.repeat(10000),
+    output: big, pid: 42, startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:01:00Z',
+    exitCode: 0, error: '',
+  };
+  const t = trimJobForDetail(j);
+  assert.equal(t.outputTail.length, OUTPUT_TAIL_CHARS);
+  assert.equal(t.outputTruncated, true);
+  assert.equal(t.hasOutput, true);
+  // 保留的是尾部，不是头部
+  assert.equal(t.outputTail.endsWith('END'), true);
+  assert.equal(t.outputTruncated === true && t.outputTail.startsWith('x'), true);
+  // 大字段必须被丢掉，否则弹窗会把整份日志搬进 DOM
+  assert.equal('prompt' in t, false);
+  assert.equal('thinking' in t, false);
+  assert.equal(t.pid, 42);
+  assert.equal(t.exitCode, 0);
+});
+
+test('trimJobForDetail: 短输出原样保留且不谎报截断', () => {
+  const t = trimJobForDetail({ id: 'j1', status: 'error', output: 'boom', error: '炸了' });
+  assert.equal(t.outputTail, 'boom');
+  assert.equal(t.outputTruncated, false);
+  assert.equal(t.error, '炸了');
+  assert.equal(t.pid, null);
+  assert.equal(t.exitCode, null);
+});
+
+test('trimJobForDetail: null / 无 output 不炸', () => {
+  assert.equal(trimJobForDetail(null), null);
+  const t = trimJobForDetail({ id: 'j2', status: 'pending' });
+  assert.equal(t.outputTail, '');
+  assert.equal(t.outputTruncated, false);
+  assert.equal(t.hasOutput, false);
+});
+
+test('buildTaskDetail: 任务缺失返回 null（交路由转 404）', () => {
+  assert.equal(buildTaskDetail(null, []), null);
+  assert.equal(buildTaskDetail({}, []), null);
+});
+
+test('buildTaskDetail: lastJob 取最新一条，recentJobs 倒序且被限制条数', () => {
+  const task = {
+    id: 't1', title: '任务', desc: '', type: 'complex',
+    subtasks: [sub('s1', 'done'), sub('s2', 'running')],
+    attachments: [{ id: 'a1' }],
+  };
+  const jobs = [
+    job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z'),
+    job('j3', 't1', 'running', '2026-01-01T00:02:00Z'),
+    job('j2', 't1', 'done', '2026-01-01T00:01:00Z', '2026-01-01T00:02:00Z'),
+  ];
+  const d = buildTaskDetail(task, jobs);
+  assert.equal(d.task.id, 't1');
+  assert.equal(d.jobCount, 3);
+  // 最新的是 j3（有 startedAt 无 endedAt，时间戳取 startedAt）
+  assert.equal(d.lastJob.id, 'j3');
+  assert.equal(d.recentJobs[0].id, 'j3');
+  assert.equal(d.recentJobs[1].id, 'j2');
+  assert.equal(d.recentJobs[2].id, 'j1');
+  // 有 job 在跑 → 进行中
+  assert.equal(d.column, 'doing');
+});
+
+test('buildTaskDetail: recentJobLimit 生效；无 job 时 lastJob 为 null 而不是抛错', () => {
+  const task = { id: 't2', title: '', desc: '', type: 'simple', subtasks: [] };
+  const jobs = [1, 2, 3, 4, 5, 6].map(i => job('j' + i, 't2', 'done', `2026-01-0${i}T00:00:00Z`));
+  const d = buildTaskDetail(task, jobs, { recentJobLimit: 2 });
+  assert.equal(d.recentJobs.length, 2);
+  assert.equal(d.jobCount, 6);
+  assert.equal(d.lastJob.id, 'j6');
+
+  const empty = buildTaskDetail(task, []);
+  assert.equal(empty.lastJob, null);
+  assert.deepEqual(empty.recentJobs, []);
+  assert.equal(empty.jobCount, 0);
+  assert.equal(empty.column, 'todo');
 });

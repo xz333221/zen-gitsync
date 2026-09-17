@@ -50,6 +50,7 @@ import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
 import { useWorkbenchData } from '@/composables/useWorkbenchData'
 import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
 import WorkbenchBoard from '@/views/components/WorkbenchBoard.vue'
+import CommonDialog from '@/components/CommonDialog.vue'
 
 // ── 按 projectPath 记忆「该项目最后一次打开的 task」───────────────────────
 // 落地 localStorage,key 格式 wb.lastTaskByProject.v1 = { [projectPath]: taskId }。
@@ -113,28 +114,19 @@ function rememberLastTask(projectPath: string, taskId: string) {
   writeLastTaskMap(map)
 }
 
-// ── 视图层级：L1 多项目编排台 ↔ L2 任务拆分编辑器 ────────────────────────
-// 默认落在 L1（看板）：工作台首先是"我现在手上有哪些项目、它们各自进展如何"，
-// 而不是"某一个任务的子任务拆到第几条"。想深入单个任务时从卡片点进 L2。
-// 层级选择落地 localStorage，刷新后回到你上次待的那一层。
-const WB_MODE_KEY = 'wb.mode.v1'
-const boardMode = ref<'board' | 'editor'>((() => {
-  try {
-    return localStorage.getItem(WB_MODE_KEY) === 'editor' ? 'editor' : 'board'
-  } catch {
-    return 'board'
-  }
-})())
-watch(boardMode, (m) => {
-  try { localStorage.setItem(WB_MODE_KEY, m) } catch { /* 隐私模式：不落地也不影响使用 */ }
-})
+// ── 视图层级：L1 多项目编排台（常驻底图）+ L2 任务拆分编辑器（大弹窗） ──────
+// 刻意**没有**视图切换了。原来 boardMode 是二选一，进编辑器等于换页：
+// 想瞄一眼任务的子任务再回到原来的项目/筛选，就得多点一次返回，还可能滚回顶部。
+// 现在看板始终在，编辑器以弹窗浮在它上面，关掉就回到原位 —— 全程没有任何"跳转"。
+// 也正因为弹窗天生是临时的，不再持久化"上次在哪一层"：刷新后落在看板才是对的行为。
+const editorOpen = ref(false)
 
-function backToBoard() {
-  boardMode.value = 'board'
+function closeEditor() {
+  editorOpen.value = false
 }
 
 /**
- * 从看板打开某个任务（进入 L2）。
+ * 从看板打开某个任务（把 L2 编辑器弹窗顶起来）。
  *
  * 两处必须显式处理：
  *   1. 看板上刚建的任务可能还没进 tasks.value（那边是独立拉取的项目/任务快照），
@@ -143,13 +135,13 @@ function backToBoard() {
  *      重挑选中项，把我们要打开的那条覆盖掉（跨项目任务尤其明显）。
  */
 async function openTaskFromBoard(payload: { taskId: string; projectPath: string }) {
-  boardMode.value = 'editor'
   await _loadDataTasks()
   selectedTaskId.value = payload.taskId
   captureSnapshot()
   if (selectedTask.value) {
     rememberLastTask(canonicalProjectPath(currentProject.value.path), payload.taskId)
   }
+  editorOpen.value = true
 }
 
 // ── 数据层（状态 + 加载 + CRUD） ─────────────────────────────────────────────
@@ -1281,21 +1273,28 @@ const {
 
 <template>
   <div class="workbench">
-    <!-- L1：多项目编排台（默认视图，看板） -->
-    <WorkbenchBoard
-      v-if="boardMode === 'board'"
-      @open-task="openTaskFromBoard"
-    />
+    <!-- L1：多项目编排台 —— **常驻底图**，不再与编辑器互斥 -->
+    <WorkbenchBoard @open-task="openTaskFromBoard" />
 
-    <!-- L2：单任务拆分编辑器（从看板卡片进入） -->
-    <!-- 返回入口做成独立的一条顶部细栏，而不是塞进任务头：
-         没选中任务时（右侧是空态占位）也需要它，塞进任务头就会出现"进了编辑器却回不去"的死角。 -->
-    <div v-if="boardMode === 'editor'" class="wb-editor-bar">
+    <!-- L2：单任务拆分编辑器 —— 大弹窗浮在看板之上，关掉即回到原位，全程无跳转 -->
+    <CommonDialog
+      v-model="editorOpen"
+      :title="$t('@WORKBENCH:任务拆分与执行')"
+      type="flex"
+      height-mode="fixed"
+      height-offset="88px"
+      top="2vh"
+      width="min(1520px, 96vw)"
+    >
+    <div class="wb-editor">
+    <!-- 顶部细栏：关闭入口做成独立一条，而不是塞进任务头 ——
+         没选中任务时（右侧是空态占位）也需要它，塞进任务头就会出现"进了编辑器却关不掉"的死角。 -->
+    <div class="wb-editor-bar">
       <button
         type="button"
         class="wb-back-btn"
         :title="$t('@WORKBENCH:返回看板')"
-        @click="backToBoard"
+        @click="closeEditor"
       >
         <el-icon class="wb-back-btn__icon"><ArrowLeft /></el-icon>
         <span>{{ $t('@WORKBENCH:返回看板') }}</span>
@@ -1308,7 +1307,7 @@ const {
       >{{ $t('@WORKBENCH:执行于 {name}', { name: foreignRepo.name }) }}</span>
       <span class="wb-editor-bar__hint">{{ $t('@WORKBENCH:任务拆分与执行') }}</span>
     </div>
-    <div v-if="boardMode === 'editor'" class="workbench__editor-row">
+    <div class="workbench__editor-row">
     <WorkbenchSidebar
       :style="{ width: sidebarWidth + 'px' }"
       :tasks="tasks"
@@ -1771,6 +1770,8 @@ const {
       </template>
     </section>
     </div>
+    </div>
+    </CommonDialog>
 
     <!-- 执行日志管理：弹窗形式承载，原本独立 tab 切换会占用首屏。 -->
     <el-dialog
@@ -1896,6 +1897,20 @@ const {
   height: 100%;
   background: var(--bg-container);
   color: var(--text-primary);
+}
+
+/* ── L2 编辑器弹窗的内容壳 ───────────────────────────────────────
+   高度链：CommonDialog 传 type="flex" + height-mode="fixed"，el-dialog 拿到确定高度、
+   el-dialog__body 吃到剩余高度；这里再 flex:1 顶满，编辑器内部原有的
+   「细栏 + flex:1 的 editor-row」布局就能照旧工作，不用改一行。 */
+.wb-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Element Plus 的 el-dialog__body 会把 line-height 一路继承下去，
+     编辑器里那些 10~11px 的小徽标会被撑高一圈 —— 在根元素重置（踩过两次的坑） */
+  line-height: 1.5;
 }
 
 /* ── L2 顶部细栏：返回看板 + 当前项目 ───────────────────────────── */

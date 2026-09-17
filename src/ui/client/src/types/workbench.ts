@@ -184,6 +184,35 @@ export interface BoardTask {
   updatedAt: string | null
 }
 
+/** 弹窗用的 job 明细：服务端已丢弃 prompt/thinking，output 只留尾部 */
+export interface TaskDetailJob {
+  id: string
+  subId: string
+  title: string
+  subTitle: string
+  status: JobStatus | ''
+  pid: number | null
+  startedAt: string | null
+  endedAt: string | null
+  exitCode: number | null
+  error: string
+  /** 输出尾部（最多 OUTPUT_TAIL_CHARS 字符） */
+  outputTail: string
+  /** outputTail 是否只是原文的末尾一段，前端据此提示「仅显示末尾」 */
+  outputTruncated: boolean
+  hasOutput: boolean
+}
+
+/** GET /api/workbench/tasks/:id/detail —— 点卡片弹窗时按需取一次 */
+export interface TaskDetailResponse {
+  success: boolean
+  task: Task
+  column: TaskColumn
+  lastJob: TaskDetailJob | null
+  recentJobs: TaskDetailJob[]
+  jobCount: number
+}
+
 /** 派发过的人类干预指令 */
 export interface OrchestratorInstruction {
   id: string

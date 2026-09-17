@@ -246,7 +246,7 @@ async function openHistory() {
     }
     historyList.value = Array.isArray(res.sessions) ? res.sessions : []
   } catch (err: any) {
-    ElMessage.error($t('@WORKBENCH:加载历史会话失败: ') + (err?.message || err))
+    ElMessage.error($t('@WORKBENCH:加载历史会话失败') + ': ' + (err?.message || err))
   } finally {
     historyLoading.value = false
   }
@@ -290,7 +290,7 @@ async function restoreSession(sid: string) {
     await nextTick()
     scrollToBottom()
   } catch (err: any) {
-    ElMessage.error($t('@WORKBENCH:加载历史会话失败: ') + (err?.message || err))
+    ElMessage.error($t('@WORKBENCH:加载历史会话失败') + ': ' + (err?.message || err))
   }
 }
 
@@ -315,7 +315,7 @@ async function deleteSession(sid: string) {
     historyList.value = historyList.value.filter(s => s.sessionId !== sid)
     ElMessage.success($t('@WORKBENCH:已删除'))
   } catch (err: any) {
-    ElMessage.error($t('@WORKBENCH:删除失败: ') + (err?.message || err))
+    ElMessage.error($t('@WORKBENCH:删除失败') + ': ' + (err?.message || err))
   }
 }
 

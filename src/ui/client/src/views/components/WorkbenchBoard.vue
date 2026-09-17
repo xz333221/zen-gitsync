@@ -31,7 +31,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
-import type { BoardTask, ProjectSummary } from '@/types/workbench'
+import type { BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
 import { useWorkbenchProjects } from '@/composables/useWorkbenchProjects'
 import { useOrchestrator } from '@/composables/useOrchestrator'
@@ -39,9 +39,11 @@ import WorkbenchProjectPanel from './WorkbenchProjectPanel.vue'
 import WorkbenchAgentPanel from './WorkbenchAgentPanel.vue'
 import WorkbenchKanban from './WorkbenchKanban.vue'
 import OrchestratorConsole from './OrchestratorConsole.vue'
+import WorkbenchTaskDialog from './WorkbenchTaskDialog.vue'
+import WorkbenchTaskCreateDialog from './WorkbenchTaskCreateDialog.vue'
 
 const emit = defineEmits<{
-  /** 请求上层切到任务编辑器的某个任务 */
+  /** 请求上层切到任务编辑器的某个任务（只由弹窗里的「打开编辑器」显式触发） */
   'open-task': [payload: { taskId: string; projectPath: string }]
 }>()
 
@@ -126,6 +128,50 @@ function targetProjectPath(): string {
   return currentProjectPath.value
 }
 
+// ── 任务详情弹窗：点卡片就地看内容，不再跳进编辑器 ────────────────────
+// 点卡片只开弹窗、不改 boardMode —— 看板的用处是扫全局、就地处理，
+// 点一下就被甩到编辑器再点回来，手上的位置和筛选状态全丢了。
+// 想深入编辑走弹窗里的「打开编辑器」这个显式动作。
+const dialogOpen = ref(false)
+const dialogTask = ref<BoardTask | null>(null)
+
+function onViewTask(t: BoardTask) {
+  dialogTask.value = t
+  dialogOpen.value = true
+}
+
+/** 这一份是"最新的"，用来判断还能不能执行：弹窗拿到的那份快照不会自己更新 */
+const dialogFreshTask = computed<BoardTask | null>(() => {
+  const id = dialogTask.value?.id
+  if (!id) return null
+  return boardTasks.value.find(x => x.id === id) || dialogTask.value
+})
+
+const dialogProjectName = computed(() => {
+  const t = dialogTask.value
+  if (!t) return ''
+  return projectLabels.value[t.projectPath] || ''
+})
+
+const dialogRunning = computed(() => (dialogFreshTask.value?.runningJobs ?? 0) > 0)
+
+/** 弹窗里的「打开编辑器」：到这一步才切 L2，并把弹窗关掉免得回头看到它 */
+function onOpenEditor(t: BoardTask) {
+  dialogOpen.value = false
+  emit('open-task', { taskId: t.id, projectPath: t.projectPath })
+}
+
+async function onDialogRun() {
+  const fresh = dialogFreshTask.value
+  if (fresh) await runTask(fresh)
+}
+
+async function onDialogRemove(t: BoardTask) {
+  await deleteTask(t)
+  // 删掉之后这个任务已经不存在了，弹窗继续开着只会停在 404 空框上
+  dialogOpen.value = false
+}
+
 // ── 刷新：5s 轮询 + 标签页隐藏时跳过 ────────────────────────────────
 const POLL_MS = 5000
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -164,23 +210,23 @@ function onSelectProject(p: ProjectSummary | null) {
   selectedKey.value = p ? p.key : ''
 }
 
-async function createTask() {
-  const projectPath = targetProjectPath()
-  const body: Record<string, unknown> = {
-    title: '', desc: '', promptId: null, type: 'simple', simpleOverride: '', subtasks: [],
-  }
-  if (projectPath) body.projectPath = projectPath
-  const res = await fetch('/api/workbench/tasks', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).then(r => r.json()).catch(() => null)
-  if (!res?.success) {
-    ElMessage.error(res?.error || $t('@WORKBENCH:保存失败'))
+// ── 新建任务：弹窗里问清字段，建完就关，卡片直接落在看板上 ──────────────
+// 不再"先建一个空任务再把人甩进编辑器" —— 那既让人离开看板，
+// 又没说清任务属于哪个项目，还会在看板上留一个需要清理的空条目。
+const createOpen = ref(false)
+
+function onCreateClick() {
+  createOpen.value = true
+}
+
+/** @param openEditor 来自「创建并打开编辑器」——那是显式动作，不是在背后偷偷跳转 */
+async function onTaskCreated(payload: { task: Task; openEditor: boolean }) {
+  await refresh(true)
+  if (payload.openEditor) {
+    emit('open-task', { taskId: payload.task.id, projectPath: payload.task.projectPath || '' })
     return
   }
-  await refresh(true)
-  emit('open-task', { taskId: res.task.id, projectPath: res.task.projectPath || projectPath })
+  ElMessage.success($t('@WORKBENCH:已创建任务'))
 }
 
 async function runTask(t: BoardTask) {
@@ -273,7 +319,7 @@ async function onToggleSchedule(next: boolean) {
         <button type="button" class="board__icon-btn" :title="$t('@WORKBENCH:刷新')" :aria-label="$t('@WORKBENCH:刷新')" @click="refresh(false)">
           <el-icon><Refresh /></el-icon>
         </button>
-        <el-button type="primary" size="small" :icon="Plus" @click="createTask">
+        <el-button type="primary" size="small" :icon="Plus" @click="onCreateClick">
           {{ $t('@WORKBENCH:新建开发任务') }}
         </el-button>
       </div>
@@ -312,10 +358,10 @@ async function onToggleSchedule(next: boolean) {
           :tasks="visibleTasks"
           :project-labels="projectLabels"
           :show-project-label="!selectedProject"
-          @open-task="(t) => emit('open-task', { taskId: t.id, projectPath: t.projectPath })"
+          @view-task="onViewTask"
           @run-task="runTask"
           @delete-task="deleteTask"
-          @create-task="createTask"
+          @create-task="onCreateClick"
         />
       </main>
 
@@ -332,6 +378,25 @@ async function onToggleSchedule(next: boolean) {
         @dispatch="onDispatch"
       />
     </div>
+
+    <!-- 任务详情：就地弹窗，看完关掉还在原来的看板位置 -->
+    <WorkbenchTaskDialog
+      v-model="dialogOpen"
+      :task="dialogTask"
+      :project-name="dialogProjectName"
+      :running="dialogRunning"
+      @run="onDialogRun"
+      @open-editor="onOpenEditor"
+      @remove="onDialogRemove"
+    />
+
+    <!-- 新建任务：弹窗里问清字段，建完就关 -->
+    <WorkbenchTaskCreateDialog
+      v-model="createOpen"
+      :projects="projects"
+      :default-project-path="targetProjectPath()"
+      @created="onTaskCreated"
+    />
   </div>
 </template>
 
