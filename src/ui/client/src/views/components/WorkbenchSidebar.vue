@@ -274,13 +274,8 @@ function onWindowMouseUp(_e: MouseEvent) {
                   >
                     {{ t.type === 'simple' ? $t('@WORKBENCH:简单') : $t('@WORKBENCH:复杂') }}
                   </button>
-                  <span
-                    v-if="isOtherProject(t)"
-                    class="wb-task-item__meta-item wb-task-item__meta-item--project"
-                    :title="t.projectPath"
-                  >
-                    {{ shortProjectLabel(t.projectPath || '') }}
-                  </span>
+                  <!-- 项目路径徽标已移除:按项目平铺分组后,组头已显示项目名(悬停有完整路径),
+                       每行再挂一条橙色徽标纯属重复信息,是侧边栏主要的视觉噪音 -->
                 </div>
               </div>
               <span
@@ -552,15 +547,6 @@ function onWindowMouseUp(_e: MouseEvent) {
   background: var(--tint-think-14); color: var(--color-think-darker, #4338ca);
 }
 .wb-task-item__type-toggle:hover { filter: brightness(0.95); }
-.wb-task-item__meta-item--project {
-  display: inline-flex; align-items: center; height: 15px; padding: 0 5px; border-radius: 7px;
-  background: color-mix(in srgb, var(--color-warning, #f59e0b) 14%, transparent);
-  color: color-mix(in srgb, var(--color-warning, #f59e0b) 80%, var(--text-primary));
-  font-size: 10px; font-weight: 600; letter-spacing: 0.2px; white-space: nowrap;
-  /* 不设固定 max-width:作为 meta 行最后一个 flex 项,overflow:hidden 让它
-     自动占满行内剩余宽度,只有行真的放不下时才省略,不再留白截断 */
-  min-width: 0; overflow: hidden; text-overflow: ellipsis;
-}
 .wb-task-item.is-other-project { opacity: 0.78; }
 .wb-task-item.is-other-project:hover { opacity: 1; }
 /* 拖动排序：整行可拖，drag 时半透明 + cursor:grabbing；drop 位置在目标行

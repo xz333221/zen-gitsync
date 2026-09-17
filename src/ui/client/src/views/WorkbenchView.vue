@@ -54,6 +54,41 @@ import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
 // 刷新 / 重进工作台时,在当前项目下优先恢复上次打开的任务,而不是默认选第一条。
 const LAST_TASK_BY_PROJECT_KEY = 'wb.lastTaskByProject.v1'
 const NO_PROJECT_KEY = '__no_project__'
+
+// ── 侧边栏宽度:分隔条拖动调整,落地 localStorage ──────────────────────────
+// 与任务拖动排序同款模式(mousedown 绑全局 mousemove/mouseup),
+// 不用 HTML5 DnD。宽度实时改 sidebar 内联样式,松手时才写 localStorage。
+const SIDEBAR_WIDTH_KEY = 'wb.sidebarWidth.v1'
+const SIDEBAR_MIN_W = 200
+const SIDEBAR_MAX_W = 480
+const SIDEBAR_DEFAULT_W = 268
+const sidebarWidth = ref((() => {
+  try {
+    const v = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY) || '', 10)
+    return Number.isFinite(v) ? Math.min(SIDEBAR_MAX_W, Math.max(SIDEBAR_MIN_W, v)) : SIDEBAR_DEFAULT_W
+  } catch {
+    return SIDEBAR_DEFAULT_W
+  }
+})())
+
+function onSidebarSplitterMouseDown(e: MouseEvent) {
+  e.preventDefault()
+  const startX = e.clientX
+  const startW = sidebarWidth.value
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'col-resize'
+  const onMove = (ev: MouseEvent) => {
+    sidebarWidth.value = Math.min(SIDEBAR_MAX_W, Math.max(SIDEBAR_MIN_W, startW + ev.clientX - startX))
+  }
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove)
+    document.body.style.userSelect = ''
+    document.body.style.cursor = ''
+    try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth.value)) } catch { /* quota 不阻塞 UI */ }
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp, { once: true })
+}
 function readLastTaskMap(): Record<string, string> {
   try {
     const raw = localStorage.getItem(LAST_TASK_BY_PROJECT_KEY)
@@ -1144,6 +1179,7 @@ const {
   <div class="workbench">
     <div class="workbench__editor-row">
     <WorkbenchSidebar
+      :style="{ width: sidebarWidth + 'px' }"
       :tasks="tasks"
       :prompts="prompts"
       :selected-task-id="selectedTaskId"
@@ -1159,6 +1195,13 @@ const {
       @open-edit-prompt="openEditPrompt"
       @delete-prompt="deletePrompt"
       @reorder-tasks="reorderTasks"
+    />
+    <div
+      class="wb-splitter"
+      role="separator"
+      aria-orientation="vertical"
+      :title="$t('@WORKBENCH:拖动调整侧边栏宽度')"
+      @mousedown="onSidebarSplitterMouseDown"
     />
 
     <!-- 中：单任务拆分 -->
@@ -1827,6 +1870,31 @@ const {
   display: flex;
   flex: 1;
   min-height: 0;
+}
+
+/* 侧边栏 / 主区之间的可拖分隔条:5px 命中区,常态隐形,
+   hover / 拖动时亮出 1px 主线提示可拖。宽度本身不改布局,
+   拖动时实时改的是 sidebar 的内联 width。 */
+.wb-splitter {
+  flex: 0 0 5px;
+  margin-right: -5px;
+  cursor: col-resize;
+  position: relative;
+  z-index: 5;
+}
+.wb-splitter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: transparent;
+  transition: background var(--transition-fast) var(--ease-custom);
+}
+.wb-splitter:hover::after,
+.wb-splitter:active::after {
+  background: var(--color-primary);
 }
 
 .wb-sidebar {
