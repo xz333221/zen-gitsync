@@ -40,8 +40,19 @@ export function getFolderNameFromPath(path: string): string {
  * 同一目录在历史数据里可能同时存在 `e:\workspace\x` 与 `E:\workspace\x`
  * 两种写法;文件系统不区分大小写,但字符串比较会把它们当成两个项目,
  * 导致工作台侧边栏出现重复分组。这里统一把盘符转大写。
+ *
+ * 另外常用目录允许用户手输,同一目录还会有 `D:/ws/proj` 与 `D:\ws\proj`
+ * 两种斜杠写法,同样会被字符串比较拆成两个项目(实测项目列表里
+ * article-generator 出现了两次)。所以 Windows 形式统一归成反斜杠。
+ *
+ * 只处理 Windows 形式(带盘符);POSIX 路径原样返回,免得把 `/home/me`
+ * 改写成 `\home\me`。
+ *
+ * ⚠️ 这个函数与后端 src/ui/server/routes/workbench/projectRegistry.js 的
+ * 同名函数必须**逐字一致** —— 两侧分组 key 不同,同一目录就会分裂成两个项目。
  */
 export function canonicalProjectPath(p?: string | null): string {
   const s = (p || '').trim()
-  return s.replace(/^([a-z])(?=:)/, (m) => m.toUpperCase())
+  if (!/^[a-zA-Z]:/.test(s)) return s
+  return s.replace(/^([a-z])(?=:)/, (m) => m.toUpperCase()).replace(/\//g, '\\')
 }

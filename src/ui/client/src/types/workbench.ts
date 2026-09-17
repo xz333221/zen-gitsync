@@ -115,3 +115,138 @@ export interface JobsListResponse {
   stats: JobStats
   error?: string
 }
+
+// ── 多项目编排台（L1 看板）相关类型 ──────────────────────────────────
+// 全部对应后端 GET /api/workbench/projects 与 GET /api/workbench/orchestrator 的返回，
+// 字段是服务端算好的事实（口径见 routes/workbench/projectRegistry.js），前端不重复推导。
+
+/** 看板列。顺序即列顺序 */
+export type TaskColumn = 'todo' | 'doing' | 'review' | 'done'
+
+/** 项目条目的 Git 状态；isGitRepo 为 null 表示没探到，此时不要显示任何 Git 标记 */
+export interface ProjectGitState {
+  isGitRepo: boolean | null
+  branch: string | null
+  upstream: string | null
+  hasUpstream: boolean
+  detached: boolean
+  ahead: number
+  behind: number
+  changed: number
+  staged: number
+  unstaged: number
+  untracked: number
+}
+
+export interface ProjectStats {
+  total: number
+  todo: number
+  doing: number
+  review: number
+  done: number
+  /** 已完成任务 / 总任务 × 100，整数 */
+  progress: number
+  /** 活跃 job 数（不是任务数） */
+  runningJobs: number
+  errorSubtasks: number
+  lastActiveAt: string | null
+}
+
+export interface ProjectSummary {
+  path: string
+  /** 归一化后的路径，用作分组/比较的 key */
+  key: string
+  name: string
+  /** recent=只在最近目录里 / task=只在任务里出现过 / both=两边都有 */
+  source: 'recent' | 'task' | 'both'
+  isCurrent: boolean
+  /** null = 没探到（不要把未知显示成"目录不存在"） */
+  exists: boolean | null
+  git: ProjectGitState | null
+  stats: ProjectStats
+}
+
+/** 看板卡片：任务的精简形态 */
+export interface BoardTask {
+  id: string
+  title: string
+  desc: string
+  type: 'simple' | 'complex'
+  projectPath: string
+  column: TaskColumn
+  subtaskCount: number
+  subtaskDoneCount: number
+  subtaskErrorCount: number
+  attachmentCount: number
+  runningJobs: number
+  lastJobStatus: string | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+/** 派发过的人类干预指令 */
+export interface OrchestratorInstruction {
+  id: string
+  text: string
+  projectPath: string
+  at: string | null
+  taskId: string | null
+  status: 'accepted' | 'rejected' | 'created'
+  reason: string
+}
+
+export type OrchestratorEventKind = 'dispatch' | 'done' | 'error' | 'cancelled' | 'user'
+
+/** 控制台活动流的一行。服务端只给结构化事实，句子由前端 $t() 渲染 */
+export interface OrchestratorActivity {
+  id: string
+  kind: OrchestratorEventKind
+  at: string | null
+  jobId?: string
+  taskId: string | null
+  subId?: string | null
+  taskTitle: string
+  subTitle: string
+  jobStatus?: string
+  pid?: number | null
+  exitCode?: number | null
+  error?: string
+  projectPath: string
+  projectName: string
+  instructionId?: string
+  text?: string
+  instructionStatus?: string
+  reason?: string
+}
+
+/** 正在执行的执行体（一行 = 一个活跃 job） */
+export interface RunningAgent {
+  jobId: string
+  taskId: string | null
+  subId: string | null
+  taskTitle: string
+  subTitle: string
+  status: string
+  pid: number | null
+  startedAt: string | null
+  projectPath: string
+  projectName: string
+}
+
+export interface ProjectsResponse {
+  success: boolean
+  projects: ProjectSummary[]
+  tasks: BoardTask[]
+  currentProjectPath: string
+  error?: string
+}
+
+export interface OrchestratorResponse {
+  success: boolean
+  active: boolean
+  updatedAt: string | null
+  instructions: OrchestratorInstruction[]
+  activity: OrchestratorActivity[]
+  running: RunningAgent[]
+  error?: string
+}

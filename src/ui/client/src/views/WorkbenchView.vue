@@ -21,6 +21,7 @@ import {
   Plus,
   List,
   ArrowDown,
+  ArrowLeft,
   ArrowRight,
   Document,
   Delete,
@@ -48,6 +49,7 @@ import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimple
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
 import { useWorkbenchData } from '@/composables/useWorkbenchData'
 import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
+import WorkbenchBoard from '@/views/components/WorkbenchBoard.vue'
 
 // ── 按 projectPath 记忆「该项目最后一次打开的 task」───────────────────────
 // 落地 localStorage,key 格式 wb.lastTaskByProject.v1 = { [projectPath]: taskId }。
@@ -111,6 +113,45 @@ function rememberLastTask(projectPath: string, taskId: string) {
   writeLastTaskMap(map)
 }
 
+// ── 视图层级：L1 多项目编排台 ↔ L2 任务拆分编辑器 ────────────────────────
+// 默认落在 L1（看板）：工作台首先是"我现在手上有哪些项目、它们各自进展如何"，
+// 而不是"某一个任务的子任务拆到第几条"。想深入单个任务时从卡片点进 L2。
+// 层级选择落地 localStorage，刷新后回到你上次待的那一层。
+const WB_MODE_KEY = 'wb.mode.v1'
+const boardMode = ref<'board' | 'editor'>((() => {
+  try {
+    return localStorage.getItem(WB_MODE_KEY) === 'editor' ? 'editor' : 'board'
+  } catch {
+    return 'board'
+  }
+})())
+watch(boardMode, (m) => {
+  try { localStorage.setItem(WB_MODE_KEY, m) } catch { /* 隐私模式：不落地也不影响使用 */ }
+})
+
+function backToBoard() {
+  boardMode.value = 'board'
+}
+
+/**
+ * 从看板打开某个任务（进入 L2）。
+ *
+ * 两处必须显式处理：
+ *   1. 看板上刚建的任务可能还没进 tasks.value（那边是独立拉取的项目/任务快照），
+ *      所以先强制重拉一次任务列表，否则 selectedTask 查不到、右侧是空的。
+ *   2. 重拉用 _loadDataTasks 而不是 loadTasks() 包装版 —— 后者会按"当前项目上次打开的任务"
+ *      重挑选中项，把我们要打开的那条覆盖掉（跨项目任务尤其明显）。
+ */
+async function openTaskFromBoard(payload: { taskId: string; projectPath: string }) {
+  boardMode.value = 'editor'
+  await _loadDataTasks()
+  selectedTaskId.value = payload.taskId
+  captureSnapshot()
+  if (selectedTask.value) {
+    rememberLastTask(canonicalProjectPath(currentProject.value.path), payload.taskId)
+  }
+}
+
 // ── 数据层（状态 + 加载 + CRUD） ─────────────────────────────────────────────
 const {
   prompts, tasks, jobs, currentProject,
@@ -143,6 +184,21 @@ const logsDialogVisible = ref(false)
 
 const selectedTaskId = ref<string | null>(null)
 const selectedTask = computed<Task | null>(() => tasks.value.find(t => t.id === selectedTaskId.value) || null)
+
+/**
+ * 打开的任务可能属于别的项目 —— L1 看板是跨项目的，L2 编辑器却只有一个"当前目录"。
+ * 后端执行时按 task.projectPath 落目录（resolveTaskRepoPath），与编辑器当前目录无关，
+ * 所以这里必须把"这条任务实际在哪个目录执行"明说出来：否则顶部返回栏写着 zen-gitsync、
+ * 任务其实跑在 claw-sdd-project，用户会被自己的眼睛误导。
+ * 同目录时返回 null，不占用栏位。
+ */
+const foreignRepo = computed<{ name: string; path: string } | null>(() => {
+  const tp = selectedTask.value?.projectPath || ''
+  if (!tp) return null
+  if (canonicalProjectPath(tp) === canonicalProjectPath(currentProject.value.path)) return null
+  const name = tp.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || tp
+  return { name, path: tp }
+})
 // 兼容历史数据:缺 type 字段一律按 complex 处理
 const isSimpleTask = computed(() => selectedTask.value?.type === 'simple')
 
@@ -1225,7 +1281,34 @@ const {
 
 <template>
   <div class="workbench">
-    <div class="workbench__editor-row">
+    <!-- L1：多项目编排台（默认视图，看板） -->
+    <WorkbenchBoard
+      v-if="boardMode === 'board'"
+      @open-task="openTaskFromBoard"
+    />
+
+    <!-- L2：单任务拆分编辑器（从看板卡片进入） -->
+    <!-- 返回入口做成独立的一条顶部细栏，而不是塞进任务头：
+         没选中任务时（右侧是空态占位）也需要它，塞进任务头就会出现"进了编辑器却回不去"的死角。 -->
+    <div v-if="boardMode === 'editor'" class="wb-editor-bar">
+      <button
+        type="button"
+        class="wb-back-btn"
+        :title="$t('@WORKBENCH:返回看板')"
+        @click="backToBoard"
+      >
+        <el-icon class="wb-back-btn__icon"><ArrowLeft /></el-icon>
+        <span>{{ $t('@WORKBENCH:返回看板') }}</span>
+      </button>
+      <span class="wb-editor-bar__project" :title="currentProject.path">{{ currentProject.name }}</span>
+      <span
+        v-if="foreignRepo"
+        class="wb-editor-bar__repo"
+        :title="foreignRepo.path"
+      >{{ $t('@WORKBENCH:执行于 {name}', { name: foreignRepo.name }) }}</span>
+      <span class="wb-editor-bar__hint">{{ $t('@WORKBENCH:任务拆分与执行') }}</span>
+    </div>
+    <div v-if="boardMode === 'editor'" class="workbench__editor-row">
     <WorkbenchSidebar
       :style="{ width: sidebarWidth + 'px' }"
       :tasks="tasks"
@@ -1813,6 +1896,65 @@ const {
   height: 100%;
   background: var(--bg-container);
   color: var(--text-primary);
+}
+
+/* ── L2 顶部细栏：返回看板 + 当前项目 ───────────────────────────── */
+.wb-editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 34px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-panel);
+}
+.wb-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom);
+}
+.wb-back-btn:hover { color: var(--color-primary); }
+.wb-back-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+.wb-back-btn__icon { font-size: 13px; }
+.wb-editor-bar__project {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.wb-editor-bar__hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+/* 任务属于别的项目时补一句实话：执行目录不是上面这个当前目录（后端按 task.projectPath 落目录） */
+.wb-editor-bar__repo {
+  flex-shrink: 0;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  line-height: 16px;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 顶部条已移除：执行日志入口直接合到任务头（与「执行任务」按钮同处），节省首屏纵向空间。 */

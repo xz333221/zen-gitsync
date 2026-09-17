@@ -44,6 +44,11 @@ export const JOBS_CONFIG_FILE = path.join(DATA_DIR, 'jobs-config.json');
 export const JOBS_SAVE_DEBOUNCE_MS = 1500;
 export const DEFAULT_JOBS_CONFIG = { maxCount: 500, maxSizeMB: 256 };
 
+// 主 Agent 编排台：调度开关（active）+ 人类干预指令存档。
+// 指令存档是「我说过什么」的流水，不参与执行逻辑，只用于控制台日志流回放。
+export const ORCHESTRATOR_FILE = path.join(DATA_DIR, 'orchestrator.json');
+export const MAX_ORCHESTRATOR_INSTRUCTIONS = 200;
+
 // 子项目识别 / 文件扫描时需要跳过的目录
 export const SKIP_DIRS = new Set([
   'node_modules', 'dist', 'build', '.next', '.nuxt', '__pycache__',

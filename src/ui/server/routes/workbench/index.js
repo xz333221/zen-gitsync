@@ -97,6 +97,20 @@ import {
   collectPriorOutputsUpTo,
   waitProcessExit,
 } from './taskRunner.js';
+import {
+  listProjects,
+  groupJobsByTask,
+  decorateTaskForBoard,
+  resolveTaskRepoPath,
+} from './projectRegistry.js';
+import {
+  readOrchestrator,
+  setOrchestratorActive,
+  appendInstruction,
+  isSchedulingActive,
+  buildActivityFeed,
+  buildRunningAgents,
+} from './orchestratorStore.js';
 
 const { genSessionId, read: readSessionFile, write: writeSessionFile, delete: deleteSessionFile, listMeta: listSessionsMeta, enforceRetention: enforceSessionsRetention } = sessionStore;
 
@@ -897,6 +911,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     const taskType = rawType === 'simple' ? 'simple' : 'complex';
     const sequential = rawSequential === false ? false : true;
     const safeOverride = typeof simpleOverride === 'string' ? simpleOverride.slice(0, 8000) : '';
+    // 显式指定的归属项目（多项目编排台传选中项目）；不传则沿用当前项目。
+    // 只影响**新建**，更新分支一律保留任务原有的 projectPath（否则编辑一次就会把任务挪到当前项目去）。
+    const bodyProjectPath = typeof req.body?.projectPath === 'string' ? req.body.projectPath.trim() : '';
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const tasks = data.tasks || [];
     const now = nowIso();
@@ -944,7 +961,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       type: taskType,
       sequential: taskType === 'complex' ? sequential : true,
       simpleOverride: taskType === 'simple' ? safeOverride : '',
-      projectPath: currentProjectPath || '',
+      projectPath: bodyProjectPath || currentProjectPath || '',
       subtasks: Array.isArray(subtasks) ? subtasks.map(s => ({
         id: s.id || genId(),
         title: s.title || '',
@@ -1013,7 +1030,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     if (!task.subtasks || task.subtasks.length === 0) {
       throw new HttpError(400, '任务没有子任务');
     }
-    const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+    const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
     // 异步执行，立即返回
     res.json({ success: true, message: '已开始执行' });
     runTaskQueue(task, repoPath, '').catch(err => {
@@ -1032,7 +1049,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     if (!Number.isInteger(startSubIndex) || startSubIndex < 0 || startSubIndex >= task.subtasks.length) {
       throw new HttpError(400, 'startSubIndex 越界');
     }
-    const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+    const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
     res.json({ success: true, message: `已从第 ${startSubIndex + 1} 个子任务开始执行` });
     runTaskQueue(task, repoPath, '', { fromIndex: startSubIndex }).catch(err => {
       publish('task:error', { taskId: task.id, error: err.message });
@@ -1046,7 +1063,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     if (task.type !== 'simple') {
       throw new HttpError(400, '该任务不是简单任务,请使用普通执行接口');
     }
-    const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+    const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
     const virtualSub = {
       id: `${task.id}__simple`,
       title: task.title,
@@ -1076,7 +1093,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     // 兜底:即便磁盘状态是 todo,如果磁盘里还没归档的 job 还在跑(进程被孤儿),也拦一下
     const liveJob = snapshotJobs().find(j => j.subId === subId && (j.status === 'running' || j.status === 'pending'));
     if (liveJob) throw new HttpError(400, '该子任务已有正在执行的 job');
-    const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+    const repoPath = resolveTaskRepoPath(foundTask, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
     res.json({ success: true, message: `已开始执行子任务：${foundSub.title || subId}` });
     (async () => {
       try {
@@ -1666,5 +1683,163 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     } catch {
       throw new HttpError(404, '文件已丢失');
     }
+  }));
+
+  // ════════════════════════════════════════════════════════════════════════
+  // §16. 多项目编排台（L1 看板 + 主 Agent 控制台）
+  //   GET  /api/workbench/projects               项目清单 + 看板任务
+  //   GET  /api/workbench/orchestrator           调度开关 + 指令存档 + 活动流
+  //   POST /api/workbench/orchestrator/state     暂停 / 恢复调度
+  //   POST /api/workbench/orchestrator/dispatch  派发一条人类干预指令
+  //
+  // 「暂停调度」的实际语义：只拦**自动派发**（dispatch 里带 autoRun），
+  // 手动点执行 / 子任务执行一概不受影响 —— 暂停的是主 Agent 的自主行为，
+  // 不是把用户的手也一起绑住。
+  // ════════════════════════════════════════════════════════════════════════
+
+  /**
+   * 组装「项目清单 + 看板任务」。
+   *
+   * 要探测 Git 状态的路径全部来自**服务端可信来源** —— configManager 的最近目录
+   * 与 tasks.json 里已有的 projectPath。本路由不接受任何客户端传入的路径，
+   * 因此不会被当成「任意路径 git 探测」的口子（口径同 /api/recent_directories/git-state）。
+   */
+  async function loadBoardPayload() {
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const tasks = data.tasks || [];
+    const jobsSnap = snapshotJobs();
+
+    let recentDirs = [];
+    try {
+      if (configManager && typeof configManager.getRecentDirectories === 'function') {
+        recentDirs = (await configManager.getRecentDirectories()) || [];
+      }
+    } catch (err) {
+      // 最近目录读不到不该让整个看板挂掉：退化成"只按任务里出现过的项目"生成清单
+      logger.warn('[workbench] 读取最近目录失败，项目清单退化为仅按任务路径生成:', err.message);
+    }
+
+    const currentProjectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+    // Git 探测自带 15s TTL 缓存（directoryGitState.js），看板 5s 轮询里有 2/3 是命中缓存，
+    // 实际 spawn 频率被自然限制在 15s 一次，不需要再给这个接口加"跳过一次探测"的开关。
+    const projects = await listProjects({ recentDirs, tasks, jobs: jobsSnap, currentProjectPath });
+    const jobsByTask = groupJobsByTask(jobsSnap);
+    const boardTasks = tasks.map(t => decorateTaskForBoard(t, jobsByTask.get(t.id) || []));
+    return { projects, tasks: boardTasks, currentProjectPath };
+  }
+
+  app.get('/api/workbench/projects', asyncRoute(async (_req, res) => {
+    const payload = await loadBoardPayload();
+    res.json({ success: true, ...payload });
+  }));
+
+  app.get('/api/workbench/orchestrator', asyncRoute(async (_req, res) => {
+    const state = await readOrchestrator();
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const tasks = data.tasks || [];
+    const jobsSnap = snapshotJobs();
+    res.json({
+      success: true,
+      active: state.active,
+      updatedAt: state.updatedAt,
+      instructions: state.instructions,
+      activity: buildActivityFeed({ jobs: jobsSnap, tasks, instructions: state.instructions }),
+      running: buildRunningAgents({ jobs: jobsSnap, tasks }),
+    });
+  }));
+
+  app.post('/api/workbench/orchestrator/state', asyncRoute(async (req, res) => {
+    const active = req.body?.active;
+    if (typeof active !== 'boolean') throw new HttpError(400, 'active 必须是布尔值');
+    const state = await setOrchestratorActive(active);
+    publish('orchestrator:state', { active: state.active, updatedAt: state.updatedAt });
+    res.json({ success: true, active: state.active, updatedAt: state.updatedAt });
+  }));
+
+  /**
+   * 派发一条指令。
+   * body: { text, projectPath?, autoRun? }
+   *   - projectPath 缺省 = 当前项目
+   *   - autoRun 默认 true；调度暂停时只建任务不执行（指令记录里会写明原因）
+   *
+   * 指令一律落成目标项目下的**简单任务**（一句话交给 claude 跑一轮），
+   * 而不是造一个没有子任务的复杂任务 —— 后者连执行入口都没有，只会变成看板上的死卡。
+   */
+  app.post('/api/workbench/orchestrator/dispatch', asyncRoute(async (req, res) => {
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if (!text) throw new HttpError(400, '指令内容不能为空');
+    if (text.length > 4000) throw new HttpError(400, '指令过长（上限 4000 字）');
+
+    const fallbackPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
+    const bodyPath = typeof req.body?.projectPath === 'string' ? req.body.projectPath.trim() : '';
+    const targetPath = bodyPath || fallbackPath;
+    if (!targetPath) throw new HttpError(400, '未选中项目，无法派发');
+
+    // 目标目录必须真的存在：跑在不存在的工作区上只会拿到一堆无意义的报错
+    let stat = null;
+    try { stat = await fsp.stat(targetPath); } catch { /* 下面统一报错 */ }
+    if (!stat || !stat.isDirectory()) {
+      const rejected = await appendInstruction({
+        text,
+        projectPath: targetPath,
+        status: 'rejected',
+        reason: '项目目录不存在',
+      });
+      publish('orchestrator:instruction', rejected);
+      throw new HttpError(400, `项目目录不存在：${targetPath}`);
+    }
+
+    const autoRun = req.body?.autoRun !== false;
+    const schedulingActive = await isSchedulingActive();
+
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const tasks = data.tasks || [];
+    const now = nowIso();
+    const task = {
+      id: genId(),
+      // 标题取指令首行并截断：看板卡片只占一行，整段指令塞进标题会把卡片撑爆
+      title: text.split('\n')[0].slice(0, 120),
+      desc: text,
+      promptId: null,
+      type: 'simple',
+      sequential: true,
+      simpleOverride: '',
+      projectPath: targetPath,
+      subtasks: [],
+      status: 'todo',
+      createdAt: now,
+      updatedAt: now,
+    };
+    tasks.push(task);
+    await writeJson(TASKS_FILE, { tasks });
+
+    const willRun = autoRun && schedulingActive;
+    const record = await appendInstruction({
+      text,
+      projectPath: targetPath,
+      taskId: task.id,
+      status: willRun ? 'accepted' : 'created',
+      reason: autoRun && !schedulingActive ? '调度已暂停，只建了任务未执行' : '',
+    });
+
+    publish('task:created', { task });
+    publish('orchestrator:instruction', record);
+
+    // 与 POST /tasks/:id/run-simple 走同一条执行路径，避免出现第二套执行入口
+    if (willRun) {
+      const virtualSub = {
+        id: `${task.id}__simple`,
+        title: task.title,
+        desc: task.desc || '',
+        status: 'todo',
+        promptOverride: '',
+        attachments: [],
+      };
+      runSingleSubtask(task, virtualSub, targetPath, '', []).catch(err => {
+        publish('task:error', { taskId: task.id, error: err.message });
+      });
+    }
+
+    res.json({ success: true, task, instruction: record, ran: willRun, schedulingActive });
   }));
 }
