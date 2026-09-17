@@ -2063,6 +2063,7 @@ export default {
   '@WORKBENCH:网络错误: ': '网络错误: ',
   '@WORKBENCH:附件': '附件',
   '@WORKBENCH:添加附件': '添加附件',
+  '@WORKBENCH:添加附件（也可直接粘贴或拖入文件）': '添加附件（也可直接粘贴或拖入文件）',
   '@WORKBENCH:上传中…': '上传中…',
   '@WORKBENCH:已添加：': '已添加：',
   '@WORKBENCH:已存在，已复用': '已存在，已复用',

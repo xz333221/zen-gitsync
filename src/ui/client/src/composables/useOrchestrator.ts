@@ -26,6 +26,7 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { $t } from '@/lang/static'
 import type {
+  Attachment,
   OrchestratorActivity,
   OrchestratorInstruction,
   RunningAgent,
@@ -36,6 +37,8 @@ export interface DispatchPayload {
   text: string
   projectPath?: string
   autoRun?: boolean
+  /** 已上传到暂存区的附件。只回传 id / ext / originalName，服务端自己按 id 找文件 */
+  attachments?: Attachment[]
 }
 
 export function useOrchestrator() {
@@ -116,6 +119,13 @@ export function useOrchestrator() {
           text: payload.text,
           projectPath: payload.projectPath || '',
           autoRun: payload.autoRun !== false,
+          // 只给 id / ext / originalName：路径由服务端在暂存区里自己拼，
+          // 前端拿不到、也指定不了 absolutePath。
+          attachments: (payload.attachments || []).map(a => ({
+            id: a.id,
+            ext: a.ext,
+            originalName: a.originalName,
+          })),
         }),
       }).then(r => r.json())
       if (!res?.success) {

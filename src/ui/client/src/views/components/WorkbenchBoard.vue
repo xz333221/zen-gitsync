@@ -31,7 +31,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
-import type { BoardTask, ProjectSummary, Task } from '@/types/workbench'
+import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
 import { useWorkbenchProjects } from '@/composables/useWorkbenchProjects'
 import { useOrchestrator } from '@/composables/useOrchestrator'
@@ -267,9 +267,19 @@ async function deleteTask(t: BoardTask) {
   await refresh(true)
 }
 
-async function onDispatch(payload: { text: string; autoRun: boolean }) {
-  const result = await dispatch({ text: payload.text, projectPath: targetProjectPath(), autoRun: payload.autoRun })
+/** 控制台组件实例：派发成功后才由它清掉草稿附件（失败要留着，让用户能重试） */
+const consoleRef = ref<InstanceType<typeof OrchestratorConsole> | null>(null)
+
+async function onDispatch(payload: { text: string; autoRun: boolean; attachments: Attachment[] }) {
+  const result = await dispatch({
+    text: payload.text,
+    projectPath: targetProjectPath(),
+    autoRun: payload.autoRun,
+    attachments: payload.attachments,
+  })
   if (!result) return
+  // 成功即可清：服务端此刻已把暂存文件搬进 `_task-{id}/`，前端留着这份记录只会指向失效路径
+  consoleRef.value?.clearAttachments()
   ElMessage.success(
     result.ran
       ? $t('@WORKBENCH:已派发并开始执行')
@@ -366,6 +376,7 @@ async function onToggleSchedule(next: boolean) {
       </main>
 
       <OrchestratorConsole
+        ref="consoleRef"
         :active="active"
         :activity="activity"
         :running-count="running.length"

@@ -16,6 +16,14 @@ export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 export type AttachmentTarget =
   | { kind: 'task'; task: Task | null }
   | { kind: 'sub'; task: Task | null; sub: SubTask }
+  /**
+   * 派发前的草稿附件 —— 主 Agent 控制台用。
+   * 这一刻任务还不存在，没有 task/sub 可挂，所以附件先落在服务端的暂存区
+   * （`~/.zen-gitsync/workbench-images/_dispatch/`），派发成功才搬进任务目录。
+   * `replace` 必须换成新数组：`uploadAttachment` 是先 push 再回写，
+   * 若 replace 里赋值同一个引用，Vue 收不到变更、缩略图不会出现。
+   */
+  | { kind: 'draft'; list: Attachment[]; replace: (next: Attachment[]) => void }
 
 export function useWorkbenchAttachments() {
   const uploadingTargets = ref<Record<string, boolean>>({})
@@ -30,22 +38,27 @@ export function useWorkbenchAttachments() {
   }
 
   function targetKey(t: AttachmentTarget): string {
+    if (t.kind === 'draft') return 'draft'
     return t.kind === 'task' ? `task-${t.task?.id ?? ''}` : `sub-${t.sub.id}`
   }
   function targetAttachments(t: AttachmentTarget): Attachment[] {
+    if (t.kind === 'draft') return t.list
     const arr = t.kind === 'task' ? t.task?.attachments : t.sub.attachments
     return Array.isArray(arr) ? (arr as Attachment[]) : []
   }
   function setTargetAttachments(t: AttachmentTarget, att: Attachment[]) {
+    if (t.kind === 'draft') { t.replace(att); return }
     if (t.kind === 'task') { if (t.task) t.task.attachments = att }
     else t.sub.attachments = att
   }
   function targetUploadUrl(t: AttachmentTarget): string {
+    if (t.kind === 'draft') return '/api/workbench/orchestrator/attachments'
     return t.kind === 'task'
       ? `/api/workbench/tasks/${t.task?.id ?? ''}/attachments`
       : `/api/workbench/subtasks/${t.sub.id}/attachments`
   }
   function targetDeleteUrl(t: AttachmentTarget, attId: string): string {
+    if (t.kind === 'draft') return `/api/workbench/orchestrator/attachments/${attId}`
     return t.kind === 'task'
       ? `/api/workbench/tasks/${t.task?.id ?? ''}/attachments/${attId}`
       : `/api/workbench/subtasks/${t.sub.id}/attachments/${attId}`

@@ -43,7 +43,20 @@ const props = defineProps<{
   maxCount: number
   onPick: () => void
   onRemove: (att: AttachmentItem) => void
+  /**
+   * 原始文件的 URL 前缀，默认 §17 的任务/子任务端点。
+   *
+   * 主 Agent 控制台的**草稿附件**必须覆盖它：那一刻任务还不存在，文件躺在服务端
+   * 暂存区 `_dispatch/` 里，任务侧端点靠 tasks.json 反查根本找不到 → 缩略图与预览
+   * 全 404。派发成功后附件已搬进任务目录，同一张图又该走默认端点了。
+   */
+  rawBase?: string
 }>()
+
+/** 附件原始文件地址；只差一个前缀，集中在这里拼，避免三处各写一遍 */
+function rawOf(att: AttachmentItem): string {
+  return `${props.rawBase || '/api/workbench/attachments'}/${att.id}/raw`
+}
 
 const emit = defineEmits<{
   (e: 'paste', evt: ClipboardEvent): void
@@ -58,7 +71,7 @@ const imageList = computed(() =>
   props.attachments.filter(a => props.isImage(a))
 )
 const previewUrls = computed(() =>
-  imageList.value.map(a => `/api/workbench/attachments/${a.id}/raw`)
+  imageList.value.map(a => rawOf(a))
 )
 const previewIndex = ref(0)
 const previewVisible = ref(false)
@@ -70,7 +83,7 @@ function previewAttachment(att: AttachmentItem) {
     previewVisible.value = true
   } else {
     // 非图片：交给浏览器原生处理（PDF/纯文本/JSON 等会直接展示，其他会下载）
-    window.open(`/api/workbench/attachments/${att.id}/raw`, '_blank', 'noopener')
+    window.open(rawOf(att), '_blank', 'noopener')
   }
 }
 function closePreview() {
@@ -123,7 +136,7 @@ async function copyImageToClipboard() {
 
   copyBusy.value = true
   try {
-    const res = await fetch(`/api/workbench/attachments/${att.id}/raw`, {
+    const res = await fetch(rawOf(att), {
       credentials: 'same-origin'
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -201,7 +214,7 @@ onBeforeUnmount(() => {
           <div class="wb-attachment__icon" :class="{ 'wb-attachment__icon--img': isImage(att) }">
             <img
               v-if="isImage(att)"
-              :src="`/api/workbench/attachments/${att.id}/raw`"
+              :src="rawOf(att)"
               :alt="att.originalName"
               loading="lazy"
             />

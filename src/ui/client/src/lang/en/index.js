@@ -2055,6 +2055,7 @@ export default {
   '@WORKBENCH:网络错误: ': 'Network error: ',
   '@WORKBENCH:附件': 'Attachments',
   '@WORKBENCH:添加附件': 'Add attachment',
+  '@WORKBENCH:添加附件（也可直接粘贴或拖入文件）': 'Add attachment (you can also paste or drop files)',
   '@WORKBENCH:上传中…': 'Uploading…',
   '@WORKBENCH:已添加：': 'Added: ',
   '@WORKBENCH:已存在，已复用': 'already attached, reused',

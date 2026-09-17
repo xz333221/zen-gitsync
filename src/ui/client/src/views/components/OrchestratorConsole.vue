@@ -29,9 +29,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Promotion } from '@element-plus/icons-vue'
-import type { OrchestratorActivity, ProjectSummary } from '@/types/workbench'
+import { Paperclip, Promotion } from '@element-plus/icons-vue'
+import type { Attachment, OrchestratorActivity, ProjectSummary } from '@/types/workbench'
 import { clockFromIso, relativeTimeFromIso } from '@/utils/relativeTime'
+import AttachmentZone from '@/components/AttachmentZone.vue'
+import { useWorkbenchAttachments, type AttachmentTarget } from '@/composables/useWorkbenchAttachments'
 
 const props = defineProps<{
   active: boolean
@@ -48,17 +50,76 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'toggle-schedule': [next: boolean]
-  dispatch: [payload: { text: string; autoRun: boolean }]
+  dispatch: [payload: { text: string; autoRun: boolean; attachments: Attachment[] }]
 }>()
 
 const draft = ref('')
 const autoRun = ref(true)
 
-const canSend = computed(() => draft.value.trim().length > 0 && !props.dispatching)
+// ── 附件 ────────────────────────────────────────────────────────────────
+// 派发这一刻任务还不存在，没有 task/sub 可挂 → 先落服务端的暂存区
+// （`~/.zen-gitsync/workbench-images/_dispatch/`），派发成功才搬进 `_task-{id}/`。
+const draftAttachments = ref<Attachment[]>([])
+/** 草稿阶段附件还在服务端暂存区，缩略图/预览必须走暂存端点，不能走任务侧 */
+const DRAFT_RAW_BASE = '/api/workbench/orchestrator/attachments'
+const attachTarget = computed<AttachmentTarget>(() => ({
+  kind: 'draft',
+  list: draftAttachments.value,
+  // 必须换成新数组：uploadAttachment 是"先 push 再回写"，
+  // 若这里赋回同一个引用，Vue 收不到变更、缩略图不会出现。
+  replace: (next) => { draftAttachments.value = next },
+}))
+const {
+  isUploading,
+  isImageAttachment,
+  humanSize,
+  onAttachmentPaste,
+  onAttachmentDrop,
+  removeAttachment,
+  pickAttachmentFile,
+} = useWorkbenchAttachments()
+
+const attachBusy = computed(() => isUploading('draft'))
+const attachDragging = ref(false)
+
+/**
+ * 粘贴统一入口。
+ *
+ * `@paste` 在三个层级上都挂了（textarea / AttachmentZone / .oc__compose），
+ * 而 paste 事件**会冒泡** —— 不在第一次处理后就地截断，粘一张图会一路上浮、
+ * 被处理两到三次，变成好几份重复附件（去重逻辑挡不住：上传是异步的，
+ * 第二次进来看列表还是空的）。所以处理完立刻 stopPropagation，保证"恰好一次"。
+ * 不粘贴文件时也只是截断冒泡，不 interfere 文本粘贴的默认行为。
+ */
+function onPaste(e: ClipboardEvent) {
+  e.stopPropagation()
+  onAttachmentPaste(e, attachTarget.value)
+}
+function onDrop(e: DragEvent) {
+  attachDragging.value = false
+  onAttachmentDrop(e, attachTarget.value)
+}
+function onPickAttachment() { pickAttachmentFile(attachTarget.value) }
+function onRemoveAttachment(att: Attachment) { removeAttachment(attachTarget.value, att) }
+
+/**
+ * 清空草稿附件。**由父组件在派发成功后调用** —— 不在这里跟着 draft 一起清：
+ * 派发失败（项目目录不存在等）时暂存文件还在，清掉只会让用户重贴一遍。
+ */
+function clearAttachments() { draftAttachments.value = [] }
+defineExpose({ clearAttachments })
+
+const canSend = computed(
+  () => draft.value.trim().length > 0 && !props.dispatching && !attachBusy.value
+)
 
 function send() {
   if (!canSend.value) return
-  emit('dispatch', { text: draft.value.trim(), autoRun: autoRun.value })
+  emit('dispatch', {
+    text: draft.value.trim(),
+    autoRun: autoRun.value,
+    attachments: draftAttachments.value,
+  })
   draft.value = ''
 }
 
@@ -197,7 +258,15 @@ const gitSummary = computed(() => {
       </dl>
     </div>
 
-    <div class="oc__compose">
+    <div
+      class="oc__compose"
+      @paste="onPaste"
+      @drop.prevent="onDrop"
+      @dragover.prevent="attachDragging = true"
+      @dragleave="attachDragging = false"
+    >
+      <!-- 粘贴事件必须同时挂在 textarea 上：在输入框里按 Ctrl+V 时事件只到 textarea，
+           不会冒泡经过下面的附件区 -->
       <textarea
         class="oc__input"
         v-model="draft"
@@ -205,8 +274,36 @@ const gitSummary = computed(() => {
         :placeholder="$t('@WORKBENCH:给主 Agent 下一条指令，例如：把登录模块的错误处理重构一遍')"
         @keydown.ctrl.enter.prevent="send"
         @keydown.meta.enter.prevent="send"
+        @paste="onPaste"
+      />
+      <AttachmentZone
+        v-if="draftAttachments.length > 0 || attachBusy"
+        :attachments="draftAttachments"
+        :is-image="isImageAttachment"
+        :human-size="humanSize"
+        :is-uploading="attachBusy"
+        :is-paste-hover="attachDragging"
+        :max-count="9"
+        :on-pick="onPickAttachment"
+        :on-remove="onRemoveAttachment"
+        :raw-base="DRAFT_RAW_BASE"
+        @paste="onPaste"
+        @drop="onDrop"
+        @dragover.prevent="attachDragging = true"
+        @dragenter.prevent="attachDragging = true"
+        @dragleave="attachDragging = false"
       />
       <div class="oc__compose-foot">
+        <button
+          type="button"
+          class="oc__attach"
+          :disabled="attachBusy || draftAttachments.length >= 9"
+          :title="$t('@WORKBENCH:添加附件（也可直接粘贴或拖入文件）')"
+          :aria-label="$t('@WORKBENCH:添加附件')"
+          @click="onPickAttachment"
+        >
+          <el-icon><Paperclip /></el-icon>
+        </button>
         <label class="oc__autorn" :title="$t('@WORKBENCH:取消勾选则只建任务草稿，不自动执行')">
           <input type="checkbox" v-model="autoRun" />
           <span>{{ $t('@WORKBENCH:立即执行') }}</span>
@@ -431,6 +528,25 @@ const gitSummary = computed(() => {
   gap: 8px;
   margin-top: 6px;
 }
+/* 回形针：按项目惯例 —— 图标按钮不加底色/边框，只变图标色 */
+.oc__attach {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom);
+}
+.oc__attach:hover:not(:disabled) { color: var(--color-primary); }
+.oc__attach:disabled { opacity: 0.4; cursor: default; }
+.oc__attach:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .oc__autorn {
   display: inline-flex;
   align-items: center;

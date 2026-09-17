@@ -63,7 +63,18 @@ import {
   listDirTree,
   safeReadFile,
 } from './projectScan.js';
-import { isImageExt, resolveExt, ALLOWED_EXTS, ensureImagesDir } from './attachmentUtils.js';
+import {
+  isImageExt,
+  resolveExt,
+  ALLOWED_EXTS,
+  ensureImagesDir,
+  DISPATCH_STAGING_DIR,
+  isSafeAttId,
+  mimeForExt,
+  stagingPath,
+  findStagingFile,
+  cleanupDispatchStaging,
+} from './attachmentUtils.js';
 import { sessionStore } from './sessionStore.js';
 import {
   DEFAULT_INSTRUCTION,
@@ -1818,11 +1829,70 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     const autoRun = req.body?.autoRun !== false;
     const schedulingActive = await isSchedulingActive();
 
+    // ── 附件：前端只回传 { id, ext, originalName }，服务端按 id 回暂存区找文件 ──
+    // 路径完全由服务端拼（stagingPath 会同时校验 id 形状与 ext 白名单），
+    // 所以不存在"前端指定任意路径"这回事 —— 比"信任 absolutePath 再校验前缀"干净。
+    // 数量与文件存在性在这里统一校验：上传时服务端是无状态的，压根不知道前端一共攒了几个。
+    const rawAttachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
+    if (rawAttachments.length > MAX_ATTACHMENTS_PER_SUBTASK) {
+      throw new HttpError(400, `附件最多 ${MAX_ATTACHMENTS_PER_SUBTASK} 个`);
+    }
+    const staged = [];
+    for (const item of rawAttachments) {
+      const attId = typeof item?.id === 'string' ? item.id : '';
+      const ext = typeof item?.ext === 'string' ? item.ext : '';
+      const from = stagingPath(attId, ext);
+      if (!from) throw new HttpError(400, '附件参数不合法');
+      let attStat = null;
+      try { attStat = await fsp.stat(from); } catch { /* 下面统一报错 */ }
+      if (!attStat || !attStat.isFile()) throw new HttpError(400, '附件已失效，请重新添加');
+      staged.push({
+        id: attId,
+        ext,
+        from,
+        size: attStat.size,
+        originalName: String(item?.originalName || `attachment.${ext}`).slice(0, 200),
+      });
+    }
+
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const tasks = data.tasks || [];
     const now = nowIso();
+    const taskId = genId();
+
+    // 附件从暂存区搬进任务自己的目录（`_task-{id}/`），这样删除任务时会被一并清掉
+    const attachmentDir = path.join(IMAGES_DIR, '_task-' + taskId);
+    const attachments = [];
+    if (staged.length > 0) {
+      await fsp.mkdir(attachmentDir, { recursive: true });
+      for (const s of staged) {
+        const storedName = `${s.id}.${s.ext}`;
+        const dest = path.join(attachmentDir, storedName);
+        try {
+          await fsp.rename(s.from, dest);
+        } catch {
+          // 极端情况（跨卷等）退化成复制 + 删除；仍失败就跳过这个附件，
+          // 而不是让整条指令派发不出去 —— 指令本身是好的，不该被一个文件拖死。
+          try {
+            await fsp.copyFile(s.from, dest);
+            await fsp.unlink(s.from);
+          } catch { continue; }
+        }
+        attachments.push({
+          id: s.id,
+          originalName: s.originalName,
+          mimeType: mimeForExt(s.ext),
+          size: s.size,
+          ext: s.ext,
+          storedName,
+          absolutePath: dest,
+          createdAt: now,
+        });
+      }
+    }
+
     const task = {
-      id: genId(),
+      id: taskId,
       // 标题取指令首行并截断：看板卡片只占一行，整段指令塞进标题会把卡片撑爆
       title: text.split('\n')[0].slice(0, 120),
       desc: text,
@@ -1831,6 +1901,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       sequential: true,
       simpleOverride: '',
       projectPath: targetPath,
+      attachments,
       subtasks: [],
       status: 'todo',
       createdAt: now,
@@ -1868,4 +1939,51 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
 
     res.json({ success: true, task, instruction: record, ran: willRun, schedulingActive });
   }));
+
+  /**
+   * 派发前把附件落到暂存区。
+   *
+   * 为什么需要这一层：§17 的上传端点都要求 taskId / subId 当挂载点，而派发这一刻
+   * 任务还不存在。所以先写进 `_dispatch/`，**不写任何 JSON** —— 附件记录回给前端持有，
+   * 派发时再按 id 搬进任务目录。
+   * 代价是服务端在这里无状态：它不知道前端一共攒了几个，附件数上限只能在派发时统一卡。
+   */
+  app.post('/api/workbench/orchestrator/attachments', rawAttachment, asyncRoute(async (req, res) => {
+    await fsp.mkdir(DISPATCH_STAGING_DIR, { recursive: true });
+    const target = { attachments: [], storageDir: DISPATCH_STAGING_DIR };
+    const att = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_SUBTASK });
+    res.json({ success: true, attachment: att });
+  }));
+
+  /** 撤掉一个还没派发的附件（用户点了 ×）。id 形状不合法一律 404，不做路径拼接。 */
+  app.delete('/api/workbench/orchestrator/attachments/:attId', asyncRoute(async (req, res) => {
+    const full = await findStagingFile(req.params.attId);
+    if (!full) throw new HttpError(404, '附件不存在');
+    try { await fsp.unlink(full); } catch { /* 文件可能已不在 */ }
+    res.json({ success: true });
+  }));
+
+  /** 暂存附件的缩略图 / 预览。与 §17 的 raw 端点同形，只是从暂存区取 */
+  app.get('/api/workbench/orchestrator/attachments/:attId/raw', asyncRoute(async (req, res) => {
+    const full = await findStagingFile(req.params.attId);
+    if (!full) throw new HttpError(404, '附件不存在');
+    const ext = path.extname(full).slice(1).toLowerCase();
+    try {
+      const st = await fsp.stat(full);
+      res.set('Content-Type', mimeForExt(ext));
+      res.set('Content-Length', String(st.size));
+      res.set('Cache-Control', 'private, max-age=3600');
+      const stream = fs.createReadStream(full);
+      stream.on('error', () => res.end());
+      stream.pipe(res);
+    } catch {
+      throw new HttpError(404, '文件已丢失');
+    }
+  }));
+
+  // 暂存区兜底清理：粘了图却没派发就关页面的痕迹，不该永久占着磁盘。
+  // 不上定时器 —— 暂存区的生命周期本来就是"几分钟内被派发掉"，启动清一次足够。
+  cleanupDispatchStaging().catch(err => {
+    logger.warn('[workbench] 清理派发附件暂存区失败:', err.message);
+  });
 }
