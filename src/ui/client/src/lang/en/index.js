@@ -2428,6 +2428,9 @@ export default {
   '@WORKBENCH:N 小时 M 分': '{n} h {m} min',
   '@WORKBENCH:N 分 M 秒': '{n} min {m} s',
   '@WORKBENCH:N 秒': '{n} s',
+  '@WORKBENCH:打开文件夹': 'Open folder',
+  '@WORKBENCH:已在文件管理器中打开文件夹': 'Opened the folder in your file manager',
+  '@WORKBENCH:打开文件夹失败': 'Failed to open folder',
   // @WORKBENCH: file end
 
   // @ACTBAR: file path: components/ActivityBar.vue (append: monitor)

@@ -210,6 +210,30 @@ function onSelectProject(p: ProjectSummary | null) {
   selectedKey.value = p ? p.key : ''
 }
 
+/**
+ * 打开项目所在文件夹（系统文件管理器 / 资源管理器 / 访达）。
+ *
+ * 路径直接用服务端 projects 快照里的 p.path，前端不做任何拼接——项目列表本来就是
+ * 服务端扫出来的，前端再拼一次只会在 Windows 反斜杠上出岔子。
+ * 这是一个纯旁路动作：不切换看板选中态、不刷新数据，开完窗口就结束。
+ */
+async function onOpenFolder(p: ProjectSummary) {
+  try {
+    const res = await fetch('/api/open_directory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: p.path }),
+    }).then(r => r.json())
+    if (res?.success) {
+      ElMessage.success(res.message || $t('@WORKBENCH:已在文件管理器中打开文件夹'))
+    } else {
+      ElMessage.error(res?.error || $t('@WORKBENCH:打开文件夹失败'))
+    }
+  } catch (e) {
+    ElMessage.error(`${$t('@WORKBENCH:打开文件夹失败')}: ${(e as Error).message}`)
+  }
+}
+
 // ── 新建任务：弹窗里问清字段，建完就关，卡片直接落在看板上 ──────────────
 // 不再"先建一个空任务再把人甩进编辑器" —— 那既让人离开看板，
 // 又没说清任务属于哪个项目，还会在看板上留一个需要清理的空条目。
@@ -342,6 +366,7 @@ async function onToggleSchedule(next: boolean) {
           :selected-key="selectedKey"
           :loading="loading"
           @select="onSelectProject"
+          @open-folder="onOpenFolder"
         />
         <WorkbenchAgentPanel :running="running" />
       </aside>
