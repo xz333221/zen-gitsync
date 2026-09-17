@@ -38,6 +38,7 @@ import {
   interpolate,
 } from './shared.js';
 import { buildAttachmentBlock } from './pdfText.js';
+import { composePromptBody } from './promptParts.js';
 import {
   jobs,
   cancelledJobs,
@@ -211,8 +212,8 @@ export async function runSingleSubtask(task, sub, repoPath, branch, priorOutputs
     branch: branch || ''
   };
   const interpolated = interpolate(promptTemplate, ctx);
-  const parts = [interpolated, sub.title, sub.desc].filter(s => s && s.trim());
-  let prompt = parts.join('\n\n');
+  // 标题与描述可能逐字相同（派发建的简单任务就是），去重规则见 promptParts.js
+  let prompt = composePromptBody(interpolated, sub.title, sub.desc);
 
   // ── 前序上下文：把前几个 done 子任务的输出完整拼到 prompt 头部 ──
   if (priorOutputs && priorOutputs.length > 0) {

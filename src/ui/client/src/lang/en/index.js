@@ -2420,6 +2420,7 @@ export default {
   '@WORKBENCH:读取项目列表失败': 'Failed to load projects',
   '@WORKBENCH:读取编排状态失败': 'Failed to load orchestrator state',
   '@WORKBENCH:刚刚': 'Just now',
+  '@WORKBENCH:昨天 {time}': 'Yesterday {time}',
   '@WORKBENCH:N 分钟前': '{n} min ago',
   '@WORKBENCH:N 小时前': '{n} h ago',
   '@WORKBENCH:N 天前': '{n} d ago',

@@ -31,7 +31,7 @@ import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
 import { Promotion } from '@element-plus/icons-vue'
 import type { OrchestratorActivity, ProjectSummary } from '@/types/workbench'
-import { relativeTimeFromIso } from '@/utils/relativeTime'
+import { clockFromIso, relativeTimeFromIso } from '@/utils/relativeTime'
 
 const props = defineProps<{
   active: boolean
@@ -88,14 +88,6 @@ const KIND_LABEL: Record<string, string> = {
   done: '@WORKBENCH:完成',
   error: '@WORKBENCH:出错',
   cancelled: '@WORKBENCH:取消',
-}
-
-function timeOf(at: string | null): string {
-  if (!at) return ''
-  const d = new Date(at)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 /** 指令的落点说明：建了任务并执行 / 只建了任务 / 被拒绝，各给一句实话 */
@@ -172,7 +164,8 @@ const gitSummary = computed(() => {
         <li v-for="r in activity" :key="r.id" class="oc-row" :class="'oc-row--' + r.kind">
           <div class="oc-row__head">
             <span class="oc-row__kind">{{ $t(KIND_LABEL[r.kind] || '@WORKBENCH:派发') }}</span>
-            <span class="oc-row__time">{{ timeOf(r.at) }}</span>
+            <!-- 时间走 clockFromIso：非当天会带上日期前缀，避免跨天记录看起来像今天刚发生 -->
+            <span class="oc-row__time">{{ clockFromIso(r.at) }}</span>
           </div>
           <p class="oc-row__text">{{ describe(r) }}</p>
           <p v-if="instructionNote(r)" class="oc-row__note">{{ instructionNote(r) }}</p>

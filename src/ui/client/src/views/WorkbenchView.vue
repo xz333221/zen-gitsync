@@ -1773,7 +1773,12 @@ const {
     </div>
     </CommonDialog>
 
-    <!-- 执行日志管理：弹窗形式承载，原本独立 tab 切换会占用首屏。 -->
+    <!-- 执行日志管理：弹窗形式承载，原本独立 tab 切换会占用首屏。
+
+         ⚠️ 必须 append-to-body。app shell 的 main.main-container 是 position:fixed + z-index:1001，
+         它自成一个层叠上下文：留在这里面的弹窗 z-index 再高，也只是跟"同一个上下文里的兄弟"比，
+         永远压不过挂在 body 下的 L2 编辑器弹窗（它 escape 了 1001 那层）。
+         现象就是点了「执行日志」没反应 —— 其实弹窗开了，只是被编辑器整个盖住。 -->
     <el-dialog
       v-model="logsDialogVisible"
       :title="$t('@WORKBENCH:执行日志')"
@@ -1781,15 +1786,17 @@ const {
       :close-on-click-modal="false"
       top="6vh"
       class="wb-logs-dialog"
+      append-to-body
     >
       <ExecutionLogManager />
     </el-dialog>
 
-    <!-- 提示词编辑对话框 -->
+    <!-- 提示词编辑对话框：同「执行日志」，从编辑器里打开，必须 append-to-body 才压得住编辑器弹窗 -->
     <el-dialog
       v-model="promptDialog.visible"
       :title="promptDialog.editing ? $t('@WORKBENCH:编辑提示词') : $t('@WORKBENCH:新建提示词')"
       width="640px"
+      append-to-body
     >
       <el-form label-position="top">
         <el-form-item :label="$t('@WORKBENCH:名称')">

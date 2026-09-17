@@ -2428,6 +2428,7 @@ export default {
   '@WORKBENCH:读取项目列表失败': '读取项目列表失败',
   '@WORKBENCH:读取编排状态失败': '读取编排状态失败',
   '@WORKBENCH:刚刚': '刚刚',
+  '@WORKBENCH:昨天 {time}': '昨天 {time}',
   '@WORKBENCH:N 分钟前': '{n} 分钟前',
   '@WORKBENCH:N 小时前': '{n} 小时前',
   '@WORKBENCH:N 天前': '{n} 天前',

@@ -9,6 +9,9 @@
  *   E 创建成功 -> 成功提示 + 弹窗自动关 + 卡片直接落在看板上
  *   F 详情里点「打开编辑器」-> 编辑器以**大弹窗**浮在看板上，看板仍在
  *   G 点「返回看板」-> 编辑器弹窗关闭，看板仍在
+ *   H 编辑器里点「执行日志」-> 日志弹窗必须压在编辑器之上
+ *     （app shell 的 main-container 是 fixed + z-index:1001 的层叠上下文，
+ *      内部弹窗不加 append-to-body 就会被关在里面、永远盖不过 body 层的编辑器弹窗）
  *
  * 另含两条易回归的点：
  *   D3/D4 项目下拉必须自动选中**当前项目**（项目条目 key 是归一化路径、path 是原始路径，
@@ -172,6 +175,31 @@ async function main() {
           })
           check('F2 编辑器弹窗是"大弹窗"（宽度 ≥ 1200px）', w >= 1200, `实测 ${w}px`)
           check('F3 编辑器打开时看板仍在 DOM（无跳转）', (await page.locator('.board').count()) > 0)
+
+          // ── H 从编辑器里打开的子弹窗必须压得住编辑器 ──────────────────
+          // app shell 的 main.main-container 是 position:fixed + z-index:1001，自成层叠上下文；
+          // 没 append-to-body 的弹窗被关在里面，z-index 再高也只跟"同一上下文里的兄弟"比，
+          // 永远盖不过挂在 body 下的编辑器弹窗 —— 现象是「点了执行日志没反应」，其实开了、被盖住了。
+          await page.locator('button', { hasText: '执行日志' }).first().click()
+          await sleep(1200)
+          const logsTop = await page.evaluate(() => {
+            const d = document.querySelector('.wb-logs-dialog')
+            if (!d) return { exists: false }
+            const r = d.getBoundingClientRect()
+            const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + 120))
+            const ov = d.closest('.el-overlay')
+            return {
+              exists: true,
+              escaped: !!(ov && ov.parentElement === document.body),
+              topmost: !!(hit && hit.closest('.wb-logs-dialog'))
+            }
+          })
+          check('H 「执行日志」弹窗压在编辑器之上（已逃出 main-container）',
+            logsTop.exists && logsTop.escaped && logsTop.topmost, JSON.stringify(logsTop))
+          if (logsTop.exists) {
+            await page.locator('.wb-logs-dialog .el-dialog__headerbtn').first().click()
+            await sleep(900)
+          }
         }
         await page.locator('.wb-back-btn').first().click()
         check('G 「返回看板」关闭编辑器弹窗', await noVisibleDialog(page, 12000))
