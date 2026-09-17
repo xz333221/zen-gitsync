@@ -32,7 +32,7 @@
     "@vue-office/docx": "^1.6.3",
     "@vue-office/excel": "^1.7.14",
     "@vue-office/pptx": "^1.0.1",
-    "ai-model-form": "^0.3.0",
+    "ai-model-form": "^0.3.1",
     "ansi-to-html": "^0.7.2",
     "dagre": "^0.8.5",
     "element-plus": "^2.11.4",
