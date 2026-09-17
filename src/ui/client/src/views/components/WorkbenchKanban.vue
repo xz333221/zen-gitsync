@@ -520,7 +520,6 @@ function hasError(t: BoardTask): boolean {
   align-items: center;
   gap: 2px;
   padding-left: 12px;
-  background: linear-gradient(to right, transparent 0%, var(--bg-container-hover) 40%);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-fast) var(--ease-custom);
@@ -529,6 +528,27 @@ function hasError(t: BoardTask): boolean {
 .kb-card:focus-within .kb-card__actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+/*
+ * 操作组正压在进度条和 "0/8" 上。这里**不用"给它加背景"的办法去盖**：
+ *   · 面板/容器类底色 token 在深色主题下本身就是半透明的
+ *     （--bg-panel-dark = rgba(255,255,255,.06)），拿它当浮层背景等于没挡；
+ *   · 换成不透明的 --bg-container 又比卡片暗，左边缘会留一道色阶；
+ *   · 而且浮层底色还得跟着 hover / focus-within / is-running 逐一对齐，很容易漏。
+ * 改成把**底下的进度行在右侧渐隐掉**：不涉及任何颜色，深浅主题都成立，也没有接缝。
+ * （组内按钮本身是 transparent，所以必须让它所在区域完全透明，不能只减淡。）
+ *
+ * 渐隐位置按操作组的实际占位反推：组右边缘距卡片右内边 8px、组宽 ≈ 62px
+ * （padding-left 12 + 「执行」32 + gap 2 + ×16），即组左边缘在内容盒右侧 60px 处。
+ * 所以让 mask 在「距右侧 64px」处就完全透明 —— 留 4px 余量，按钮（含 padding）
+ * 整个落在全透明区里，不会露出半截字形；再往左 16px 是淡出段。
+ * 英文标签（Run）比中文窄，组更小、左边缘更靠右，同样被完全透明区覆盖，不会失效。
+ */
+.kb-card:hover .kb-card__progress,
+.kb-card:focus-within .kb-card__progress {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
+  mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
 }
 .kb-card__btn {
   border: none;

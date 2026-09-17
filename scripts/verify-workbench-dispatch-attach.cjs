@@ -61,6 +61,23 @@ async function attachmentCount(page) {
   return page.locator('.oc .wb-attachment').count()
 }
 
+/**
+ * 轮询直到条件成立。
+ *
+ * 别用固定 sleep 等上传：请求要经 page.route 的 fetch→fulfill 转发，偶发会慢到
+ * 2.5s 以上，固定等待就会假报"一次上传都没发生"。实测遇到过一次：
+ * 断言说 0 个附件、0 次上传，但同一轮的"附件区已渲染"却是通过的 ——
+ * 附件区只在 `附件数>0 || 上传中` 时渲染，说明那一刻上传正飞在半路。
+ */
+async function waitUntil(fn, timeout = 12000, interval = 150) {
+  const t0 = Date.now()
+  while (Date.now() - t0 < timeout) {
+    if (await fn()) return true
+    await sleep(interval)
+  }
+  return false
+}
+
 async function main() {
   // 探活
   const alive = await fetch(`${API}/api/app-version`).then(r => r.ok).catch(() => false)
@@ -117,9 +134,9 @@ async function main() {
     // ── B 粘贴：恰好一个附件 ────────────────────────────────────────
     await page.locator('.oc__input').first().focus()
     await pastePng(page, '.oc__input', 'pasted-shot.png')
-    await sleep(2500)
+    const uploaded = await waitUntil(async () => (await attachmentCount(page)) >= 1)
     const n1 = await attachmentCount(page)
-    check('B 粘一张图 -> 恰好 1 个草稿附件（防重复上传回归）', n1 === 1, `实际 ${n1} 个`)
+    check('B 粘一张图 -> 恰好 1 个草稿附件（防重复上传回归）', uploaded && n1 === 1, `实际 ${n1} 个`)
     check('B2 上传请求也只发了 1 次', uploadIds.length === 1, `实际 ${uploadIds.length} 次`)
     check('B3 附件区出现（AttachmentZone 渲染）', (await page.locator('.oc .wb-attachments').count()) > 0)
 
@@ -131,10 +148,10 @@ async function main() {
       `src=${thumbSrc}`)
 
     // ── D 缩略图真的加载出来了 ──────────────────────────────────────
-    const imgOk = await page.evaluate(() => {
+    const imgOk = await waitUntil(() => page.evaluate(() => {
       const img = document.querySelector('.oc .wb-attachment__icon img')
       return !!img && img.complete && img.naturalWidth > 0
-    })
+    }))
     check('D 缩略图实际加载成功（naturalWidth>0，不是裂图）', imgOk)
 
     // ── E 点回形针走系统文件选择框 ──────────────────────────────────
@@ -149,7 +166,7 @@ async function main() {
         mimeType: 'text/markdown',
         buffer: Buffer.from('# 选文件上传验证\n\n这是一份通过系统文件框选进来的 Markdown。\n'),
       })
-      await sleep(2500)
+      await waitUntil(async () => (await attachmentCount(page)) >= 2)
       const n2 = await attachmentCount(page)
       check('E 选文件也进草稿（粘 + 选共 2 个）', n2 === 2, `实际 ${n2} 个`)
       const picked = await page.evaluate(() =>
@@ -166,7 +183,9 @@ async function main() {
     check('派发前按钮已启用', await page.locator('.oc__send').first().isEnabled())
 
     await page.locator('.oc__send').first().click()
-    await sleep(3500)
+    await waitUntil(() => !!dispatchBody)
+    // 草稿清空发生在派发成功后（父组件拿到结果才调 clearAttachments），单独等一等
+    await waitUntil(async () => (await attachmentCount(page)) === 0)
 
     // ── F 请求体 ────────────────────────────────────────────────────
     const sentAtts = Array.isArray(dispatchBody?.attachments) ? dispatchBody.attachments : []
@@ -200,8 +219,8 @@ async function main() {
 
     // ── I 看板上出现该任务卡片 ──────────────────────────────────────
     await page.locator('.proj-item--all').first().click().catch(() => {})
-    await sleep(1200)
-    const cardSeen = await page.locator('.kb-card', { hasText: MARK }).count() > 0
+    const cardSeen = await waitUntil(async () =>
+      (await page.locator('.kb-card', { hasText: MARK }).count()) > 0)
     check('I 派发的任务出现在看板上', cardSeen)
   } catch (err) {
     check('脚本异常', false, String((err && err.message) || err))
