@@ -229,6 +229,43 @@ function clearMetaSaveTimers() {
   if (metaSaveTimer !== null) { clearTimeout(metaSaveTimer); metaSaveTimer = null }
 }
 
+// ── 空任务不落盘 ────────────────────────────────────────────────────
+// 「空任务」= 标题和描述都没填(点了新建就直接走人/刷新)。这种任务保留下来
+// 只会在侧边栏留一行空白条目,所以不保存:切走时直接丢弃,首次加载时清理历史遗留。
+// 判定刻意保守——带子任务 / 附件 / 绑定提示词 / 自定义拆解配置的任务一律不算空,
+// 那些字段本身就是"用户填过东西"的证据,绝不能误删。
+function isTaskBlank(t: Task | null | undefined): boolean {
+  if (!t) return false
+  if ((t.title || '').trim() || (t.desc || '').trim()) return false
+  if (t.promptId) return false
+  if ((t.simpleOverride || '').trim()) return false
+  if (Array.isArray(t.subtasks) && t.subtasks.length > 0) return false
+  if (Array.isArray(t.attachments) && t.attachments.length > 0) return false
+  return true
+}
+
+/**
+ * 静默丢弃一个空任务:不弹确认、不动选中态(选中项靠 selectedTask 查不到自然变 null),
+ * 删除失败也不阻塞后续流程——下次加载时的清理兜底会再收拾它。
+ */
+async function discardBlankTask(t: Task) {
+  try {
+    await fetch(`/api/workbench/tasks/${t.id}`, { method: 'DELETE' })
+  } catch { /* 丢弃失败不阻塞:下次加载兜底清理 */ }
+  const i = tasks.value.findIndex(x => x.id === t.id)
+  if (i !== -1) tasks.value.splice(i, 1)
+}
+
+/**
+ * 清理历史遗留的空任务(仅首次加载跑一次)。
+ * 刻意跳过「当前选中」的空任务:那可能是用户刚点新建、正准备输入的那一个,
+ * 由切走时的丢弃逻辑负责,这里删掉会让输入框瞬间消失。
+ */
+async function pruneBlankTasks() {
+  const doomed = tasks.value.filter(t => t.id !== selectedTaskId.value && isTaskBlank(t))
+  for (const t of doomed) await discardBlankTask(t)
+}
+
 async function flushMetaSave(): Promise<boolean> {
   if (!selectedTask.value) return false
   if (!metaDirty.value) return true
@@ -318,7 +355,8 @@ function beaconPersist(task: Task) {
   } catch { /* swallow */ }
 }
 function onBeforeUnloadPersist() {
-  if (selectedTask.value && metaDirty.value) {
+  // 空任务(标题/描述都没填)不落盘:写进去反而会留下空白条目,交给下次加载时清理
+  if (selectedTask.value && metaDirty.value && !isTaskBlank(selectedTask.value)) {
     beaconPersist(selectedTask.value)
   }
 }
@@ -715,7 +753,11 @@ async function createTaskDirect() {
     }
     // 先 flush 当前 task 的未保存改动,避免"点了新建 → 老 task 的标题改动丢"
     clearMetaSaveTimers()
-    if (selectedTask.value && metaDirty.value) {
+    if (selectedTask.value && isTaskBlank(selectedTask.value)) {
+      // 上一个 task 是点新建后什么都没填的空任务:直接丢弃,不落盘(否则点两次
+      // 新建就会攒出两行空白)
+      await discardBlankTask(selectedTask.value)
+    } else if (selectedTask.value && metaDirty.value) {
       await flushMetaSave()
     }
     await loadTasks()
@@ -850,7 +892,11 @@ async function selectTask(t: Task) {
   if (selectedTaskId.value === t.id) return
   // 切换前先把当前 task 的未保存 title/desc/promptId 落盘
   clearMetaSaveTimers()
-  if (selectedTask.value && metaDirty.value) {
+  const leaving = selectedTask.value
+  if (leaving && isTaskBlank(leaving)) {
+    // 空任务(标题/描述都没填)不落盘:切走即丢弃,不给侧边栏留空白行
+    await discardBlankTask(leaving)
+  } else if (leaving && metaDirty.value) {
     await flushMetaSave()
   }
   selectedTaskId.value = t.id
@@ -1134,6 +1180,8 @@ async function cancelDone(sub: SubTask) {
 
 onMounted(async () => {
   await Promise.all([loadPrompts(), loadTasks(), loadCurrentProject(), loadJobs()])
+  // 首次加载清一次历史遗留的空任务(以前点新建没填东西留下的空白行)
+  await pruneBlankTasks()
   connectSSE()
   window.addEventListener('beforeunload', onBeforeUnloadPersist)
 })
@@ -1141,7 +1189,7 @@ onBeforeUnmount(() => {
   disconnectSSE()
   window.removeEventListener('beforeunload', onBeforeUnloadPersist)
   // 卸载时同步 flush 一次（sendBeacon 不支持时也能尽量保住）
-  if (selectedTask.value && metaDirty.value) {
+  if (selectedTask.value && metaDirty.value && !isTaskBlank(selectedTask.value)) {
     beaconPersist(selectedTask.value)
   }
 })
@@ -1189,7 +1237,6 @@ const {
       @select-task="selectTask"
       @delete-task="deleteTask"
       @copy-task="copyTask"
-      @set-task-type="setTaskType"
       @create-task="createTaskDirect"
       @open-create-prompt="openCreatePrompt"
       @open-edit-prompt="openEditPrompt"

@@ -345,8 +345,9 @@ A dedicated view (fourth icon in the activity bar) for batch-running Claude agai
 
 | Feature | Description |
 |---|---|
-| Task list | Create, edit, delete tasks; each shows its subtask count; click the **Simple / Complex** badge on any task to flip its type in place (Complex → Simple with subtasks asks for confirmation and clears them; Simple → Complex is instant) |
-| Top-bar type switch | A segmented control (Complex / Simple) lives in the task header, right next to **Run task**, so you can flip the current task's type without going back to the sidebar; the same confirmation rule (Complex → Simple with subtasks) applies |
+| Task list | Create, edit, delete tasks. Each row is a single line — the title, or the first characters of the description (ellipsised) when the title is empty. Subtask / attachment / type badges are gone to cut noise, and tasks with neither a title nor a description count as drafts that are never saved (switching away drops them) |
+| Resizable sidebar | Drag the divider between the sidebar and the main pane to resize it (200–480 px); the width is remembered across sessions. In grouped mode task rows are indented under their project header |
+| Top-bar type switch | A segmented control (Complex / Simple) lives in the task header, right next to **Run task** — now the only entry point for flipping a task's type, since the per-row badge was dropped to keep rows single-line; the confirmation rule (Complex → Simple with subtasks asks first) applies |
 | AI split (promoted) | The "AI split" action is now a dedicated accent button with a sparkle icon and a subtle pulse, sitting between the type switcher and the primary **Run task** button — it is always enabled for complex tasks with a non-empty title |
 | Description collapsible by default | Selecting a task collapses the description + attachment area into a one-line summary "Task description (optional)" to free up vertical space; click the summary to expand. When the description is filled or attachments are present, an "Filled" badge and the attachment count appear on the right of the summary |
 | Minimal task & chat layout | The task execution view is now stripped of redundant borders / shadows: a flatter sidebar, transparent title input and textarea, and a clean left/right execution body. Visual reference follows the Claude Code desktop app |
@@ -928,8 +929,9 @@ Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定
 
 | 功能 | 说明 |
 |---|---|
-| 任务列表 | 新建、编辑、删除任务；每条任务显示子任务数量；点击徽标可在「简单（绿色）/ 复杂（紫色）」间即时切换，复杂→简单且带子任务时弹窗确认并清空子任务 |
-| 顶部类型切换器 | 任务头部增加 segmented control（复杂 / 简单），无需回到左侧即可切换当前任务类型；切换逻辑与左侧徽标共享，复杂→简单且带子任务时同样弹窗确认 |
+| 任务列表 | 新建、编辑、删除任务；每条任务只占一行 —— 有标题显示标题，没标题则显示描述前若干字符（超出省略）；子任务数 / 附件数 / 类型徽标已移除降噪；标题和描述都没填的任务视为草稿，切走时直接丢弃、不落盘 |
+| 侧边栏可拖动 | 侧边栏与主面板之间的分隔条可拖动调整宽度（200–480 px），松手后记住设置；分组模式下任务项相对组头缩进一层 |
+| 顶部类型切换器 | 任务头部增加 segmented control（复杂 / 简单），是切换任务类型的唯一入口（左侧行内徽标已移除，保证任务行单行展示）；复杂→简单且带子任务时弹窗确认 |
 | AI 拆分（升级） | AI 拆分升级为带 sparkle 图标 + 轻微 pulse 动效的 accent 按钮，位置紧贴主「执行任务」按钮；只要标题非空，复杂任务下始终可点 |
 | 任务描述默认折叠 | 选中任务后默认仅显示一行「任务描述（可选）」摘要，节省首屏纵向空间；点击 summary 展开后即可看到描述输入框和附件区；已填写描述或挂有附件时摘要右侧会出现「已填写」徽标和附件数量 |
 | 极简任务 / 对话样式 | 任务执行视图整体极简化：减少冗余边框与阴影、标题 / 描述输入框透明化、执行主体左右两段式分列；视觉参考 Claude Code 桌面版 |

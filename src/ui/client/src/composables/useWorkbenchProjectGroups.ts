@@ -70,7 +70,11 @@ export function useWorkbenchProjectGroups(tasks: Ref<Task[]>, currentProject: Re
         label: path === NO_PROJECT_KEY ? $t('@WORKBENCH:未关联项目') : path,
         tasks: groups.get(path)!
       })),
-      hasMultiple: keys.length > 1
+      // 只有一组时默认不渲染组头(任务平铺,当前项目下没有多余的组名噪音)。
+      // 例外:这唯一一组正处于收起状态时必须把组头露出来 —— 组头是唯一的展开入口,
+      // 不渲染就会出现"侧边栏一条任务都没有、也没东西可点开"的假空列表
+      // (例如切换工作目录到新项目后,列表里只剩上一个项目的任务,而它被自动收起)。
+      hasMultiple: keys.length > 1 || (keys.length === 1 && collapsedGroupPaths.value.has(keys[0]))
     }
   })
 
@@ -81,18 +85,27 @@ export function useWorkbenchProjectGroups(tasks: Ref<Task[]>, currentProject: Re
     return parts.slice(-2).join('/')
   }
 
+  // 新出现的项目分组:非当前项目默认收起(用户手动展开/收起过就记进 seen,不再自动改)。
+  // 依赖里必须带上当前项目路径——loadTasks 与 loadCurrentProject 是并发请求,任务可能先到,
+  // 这时 cur 还是空串;若此刻就给分组做判定,会把"当前项目"当成别人家的项目收起来,
+  // 而且 seen 已经落盘,之后永远不会重新判定 → 表现为首屏侧边栏整组收起 / 看着一条任务都没有。
+  const groupPathsKey = computed(() =>
+    `${canonicalProjectPath(currentProject.value.path)}|${groupedTasksList.value.groups.map(g => g.path).join('\n')}`
+  )
   watch(
-    () => groupedTasksList.value.groups.map(g => g.path),
-    (paths) => {
+    groupPathsKey,
+    () => {
       const cur = canonicalProjectPath(currentProject.value.path)
+      // 当前项目还没加载出来:先不判定,等它到了 key 变化会再跑一次
+      if (!cur) return
       const next = new Set(collapsedGroupPaths.value)
       const seen = new Set(seenGroupPaths.value)
       let changed = false
-      for (const p of paths) {
-        if (seen.has(p)) continue
-        seen.add(p)
-        if (p !== cur) {
-          next.add(p)
+      for (const g of groupedTasksList.value.groups) {
+        if (seen.has(g.path)) continue
+        seen.add(g.path)
+        if (g.path !== cur) {
+          next.add(g.path)
           changed = true
         }
       }

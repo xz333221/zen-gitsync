@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Plus, Close, List, Picture as PictureIcon, DocumentAdd, Memo, Folder, ArrowDown, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
+import { Plus, Close, DocumentAdd, Memo, Folder, ArrowDown, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
 import type { Task, Prompt } from '@/types/workbench'
 import { useWorkbenchProjectGroups } from '@/composables/useWorkbenchProjectGroups'
 import { canonicalProjectPath } from '@/utils/path'
@@ -26,7 +26,6 @@ const emit = defineEmits<{
   'select-task': [task: Task]
   'delete-task': [task: Task]
   'copy-task': [task: Task]
-  'set-task-type': [task: Task, type: 'simple' | 'complex']
   'create-task': []
   'open-create-prompt': []
   'open-edit-prompt': [prompt: Prompt]
@@ -50,15 +49,18 @@ const availablePrompts = computed<Prompt[]>(() => {
   return props.prompts.filter(p => !p.projectPath || canonicalProjectPath(p.projectPath) === cur)
 })
 
-function attachmentCount(t: Task): number {
-  return Array.isArray(t.attachments) ? t.attachments.length : 0
+// 单行展示的标题来源:优先任务标题;没写标题用任务描述(多行压平成一行),
+// 超出交给 CSS ellipsis。两者都没有的返回空串——这种空任务不保存,
+// 只会以"刚新建、还没填内容"的选中态短暂存在,行内留白即可
+function taskDisplayName(t: Task): string {
+  const title = (t.title || '').trim()
+  if (title) return title
+  return (t.desc || '').replace(/\s+/g, ' ').trim()
 }
-function subtaskCount(t: Task): number {
-  return Array.isArray(t.subtasks) ? t.subtasks.length : 0
-}
-function subtaskDoneCount(t: Task): number {
-  if (!Array.isArray(t.subtasks)) return 0
-  return t.subtasks.filter(s => s && s.status === 'done').length
+function taskTooltip(t: Task): string {
+  const name = taskDisplayName(t)
+  const hint = $t('@WORKBENCH:拖动排序提示')
+  return name ? `${name} · ${hint}` : hint
 }
 // 直接复用父组件传入的判断函数，sidebar 自己不持有 jobs，
 // 也就不重复实现 SIMPLE_SUB_ID_SUFFIX 拼接规则。
@@ -222,7 +224,6 @@ function onWindowMouseUp(_e: MouseEvent) {
               class="wb-task-item"
               :class="{
                 active: t.id === selectedTaskId,
-                'has-attachment': attachmentCount(t) > 0,
                 'is-other-project': isOtherProject(t),
                 'is-running': taskIsRunning(t),
                 'is-dragging': draggingTaskId === t.id,
@@ -231,52 +232,15 @@ function onWindowMouseUp(_e: MouseEvent) {
               }"
               :data-task-id="t.id"
               :data-group-path="group.path"
-              :title="`${t.title || $t('@WORKBENCH:未命名任务')} · ${$t('@WORKBENCH:拖动排序提示')}`"
+              :title="taskTooltip(t)"
               @click="emit('select-task', t)"
               @mousedown="onTaskMouseDown($event, t, group.path, $event.currentTarget as HTMLElement)"
             >
+              <!-- 单行展示:只显示标题;没写标题用任务描述压平后顶上(CSS ellipsis 截断)。
+                   子任务数 / 附件数 / 类型 chip 等 meta 行已移除,降噪;
+                   类型切换走右侧头部的 复杂/简单 segmented -->
               <div class="wb-task-item__body">
-                <div class="wb-task-item__title" :title="t.title">{{ t.title || $t('@WORKBENCH:未命名任务') }}</div>
-                <div class="wb-task-item__meta">
-                  <span
-                    v-if="subtaskCount(t) > 0"
-                    class="wb-task-item__meta-item"
-                    :class="{ 'wb-task-item__meta-item--running': taskIsRunning(t) }"
-                    :title="$t('@WORKBENCH:个子任务')"
-                  >
-                    <el-icon class="wb-task-item__meta-icon"><List /></el-icon>
-                    <span class="wb-pill wb-task-item__num">
-                      {{ subtaskDoneCount(t) }}/{{ subtaskCount(t) }}
-                    </span>
-                  </span>
-                  <span
-                    v-if="attachmentCount(t) > 0"
-                    class="wb-task-item__meta-item"
-                    :title="$t('@WORKBENCH:附件')"
-                  >
-                    <el-icon class="wb-task-item__meta-icon"><PictureIcon /></el-icon>
-                    <span class="wb-pill wb-task-item__num">{{ attachmentCount(t) }}</span>
-                  </span>
-                  <span
-                    v-if="t.promptId"
-                    class="wb-task-item__meta-item wb-task-item__meta-item--accent"
-                    :title="$t('@WORKBENCH:已绑定预置提示词')"
-                  >
-                    <el-icon class="wb-task-item__meta-icon"><Memo /></el-icon>
-                  </span>
-                  <button
-                    type="button"
-                    class="wb-task-item__meta-item wb-task-item__type-toggle"
-                    :class="t.type === 'simple' ? 'wb-task-item__meta-item--simple' : 'wb-task-item__meta-item--complex'"
-                    :title="t.type === 'simple' ? $t('@WORKBENCH:简单任务 - 点击切换为复杂任务') : $t('@WORKBENCH:复杂任务 - 点击切换为简单任务')"
-                    :aria-label="t.type === 'simple' ? $t('@WORKBENCH:切换为复杂任务') : $t('@WORKBENCH:切换为简单任务')"
-                    @click.stop="emit('set-task-type', t, t.type === 'simple' ? 'complex' : 'simple')"
-                  >
-                    {{ t.type === 'simple' ? $t('@WORKBENCH:简单') : $t('@WORKBENCH:复杂') }}
-                  </button>
-                  <!-- 项目路径徽标已移除:按项目平铺分组后,组头已显示项目名(悬停有完整路径),
-                       每行再挂一条橙色徽标纯属重复信息,是侧边栏主要的视觉噪音 -->
-                </div>
+                <div class="wb-task-item__title" :title="taskDisplayName(t)">{{ taskDisplayName(t) }}</div>
               </div>
               <span
                 v-if="taskIsRunning(t)"
@@ -527,26 +491,6 @@ function onWindowMouseUp(_e: MouseEvent) {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   letter-spacing: -0.05px; line-height: 1.3;
 }
-.wb-task-item__meta { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-tertiary); line-height: 1; }
-.wb-task-item__meta-item { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; font-weight: 500; }
-.wb-task-item__meta-item--accent { color: var(--color-primary); }
-.wb-task-item__type-toggle {
-  height: 15px; padding: 0 6px; border-radius: 7px; font-size: 10px; font-weight: 600;
-  letter-spacing: 0.2px; white-space: nowrap; border: none; cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
-  font-family: inherit;
-}
-.wb-task-item__type-toggle:active { transform: scale(0.96); }
-.wb-task-item__type-toggle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
-.wb-task-item__meta-item--simple {
-  display: inline-flex; align-items: center; height: 15px; padding: 0 6px;
-  border-radius: 7px; background: var(--tint-success-14); color: var(--color-success-dark, #047857);
-  font-size: 10px; font-weight: 600; letter-spacing: 0.2px; white-space: nowrap;
-}
-.wb-task-item__meta-item--complex {
-  background: var(--tint-think-14); color: var(--color-think-darker, #4338ca);
-}
-.wb-task-item__type-toggle:hover { filter: brightness(0.95); }
 .wb-task-item.is-other-project { opacity: 0.78; }
 .wb-task-item.is-other-project:hover { opacity: 1; }
 /* 拖动排序：整行可拖，drag 时半透明 + cursor:grabbing；drop 位置在目标行
@@ -574,13 +518,6 @@ function onWindowMouseUp(_e: MouseEvent) {
 .wb-task-item.is-drop-after::after  { bottom: -2px; }
 /* 跨组拖动时：group head 灰显 + cursor:not-allowed */
 .wb-task-group__head.is-no-drop { cursor: not-allowed; opacity: 0.55; }
-.wb-task-item__meta-icon { font-size: 11px; opacity: 0.85; }
-.wb-task-item__num { min-width: 14px; padding: 0 4px; color: var(--text-secondary); transition: background var(--transition-fast) var(--ease-custom), color var(--transition-fast) var(--ease-custom); }
-.wb-task-item.active .wb-task-item__num { color: var(--color-primary); background: var(--tint-primary-14); }
-.wb-task-item__meta-item--running .wb-task-item__num { color: color-mix(in srgb, var(--color-warning, #f59e0b) 85%, var(--text-primary)); background: color-mix(in srgb, var(--color-warning, #f59e0b) 18%, transparent); font-weight: 600; }
-.wb-task-item.is-running .wb-task-item__meta-icon { color: color-mix(in srgb, var(--color-warning, #f59e0b) 80%, var(--text-primary)); animation: wb-task-running-icon 1.4s ease-in-out infinite; }
-@keyframes wb-task-running-icon { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-
 /* 任务操作按钮组：复制 + 删除，hover/active 时浮现。
    绝对定位悬浮在行内右侧——不参与 flex 布局,未 hover 时不占位,
    标题可以一直顶到行尾;左侧用透明渐变过渡,盖住长标题文字不突兀。 */
