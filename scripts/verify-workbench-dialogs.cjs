@@ -209,7 +209,20 @@ async function main() {
   } catch (err) {
     check('脚本异常', false, String((err && err.message) || err))
   } finally {
-    await fetch(`${BASE}/api/workbench/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' }).catch(() => {})
+    // 清场：本脚本一共会造出**两个**叫 MARK 的任务 —— 开头自己 POST 的那个，
+    // 以及步骤 E 通过 UI 新建的那个。只删 taskId 会漏掉后者，于是每跑一次就在
+    // 用户看板上留一张卡（实测连跑 4 次留了 4 张）。按标题扫一遍最省事。
+    //
+    // ⚠️ 必须**串行**删。DELETE 处理器是"读 tasks.json → 过滤 → 写回"，两个并发
+    // 请求会互相覆盖（后写的把先写的回滚），结果必然漏掉一个 —— 用 Promise.all
+    // 发出去看着都返回 200，实际只生效一次（踩过）。
+    try {
+      const list = await fetch(`${BASE}/api/workbench/tasks`).then(r => r.json())
+      for (const t of (list.tasks || [])) {
+        if (!t || t.title !== MARK) continue
+        await fetch(`${BASE}/api/workbench/tasks/${encodeURIComponent(t.id)}`, { method: 'DELETE' })
+      }
+    } catch { /* 清理失败不该盖住断言结果 */ }
     await browser.close()
   }
 

@@ -206,10 +206,18 @@ async function main() {
   } catch (err) {
     check('脚本异常', false, String((err && err.message) || err))
   } finally {
-    // 清场：删任务 + 删掉还留在暂存区的草稿附件
-    if (createdTaskId) {
-      await fetch(`${API}/api/workbench/tasks/${encodeURIComponent(createdTaskId)}`, { method: 'DELETE' }).catch(() => {})
-    }
+    // 清场：按标题扫任务（派发出来的 task.title 就是 MARK 首行），再删掉还留在暂存区的草稿附件。
+    // 集中在 finally 里做：中途断言失败/脚本抛异常时同样得清干净，否则残留会挂在用户看板上。
+    //
+    // ⚠️ 删除必须**串行**。DELETE 处理器是"读 tasks.json → 过滤 → 写回"，并发发出去
+    // 会互相覆盖（都返回 200 但只生效一次）。同理别在这里用 Promise.all。
+    try {
+      const list = await fetch(`${API}/api/workbench/tasks`).then(r => r.json())
+      for (const t of (list.tasks || [])) {
+        if (!t || t.title !== MARK) continue
+        await fetch(`${API}/api/workbench/tasks/${encodeURIComponent(t.id)}`, { method: 'DELETE' })
+      }
+    } catch { /* 清理失败不该盖住断言结果 */ }
     for (const id of uploadedAttIds()) {
       await fetch(`${API}/api/workbench/orchestrator/attachments/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {})
     }
