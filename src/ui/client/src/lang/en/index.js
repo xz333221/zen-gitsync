@@ -1823,7 +1823,7 @@ export default {
   '@CMDCON:在新终端执行': 'Execute in new terminal',
   '@CMDCON:交互式模式': 'Interactive mode: supports commands requiring input',
   // @CMDCON: file end
-  // @PUSH: file path: components\PushProgressModal.vue
+  // @PUSH: file path: components\PushProgressModal.vue + utils\pushFailure.ts
   '@PUSH:正在推送': 'Pushing...',
   '@PUSH:正在拉取远程更新': 'Pulling remote updates',
   '@PUSH:拉取完成后自动继续推送': 'Push will resume automatically after pull',
@@ -1837,6 +1837,14 @@ export default {
   '@PUSH:错误详情': 'Error details',
   '@PUSH:先拉取更新': 'Pull first',
   '@PUSH:检测到远程有新提交，请先拉取更新后再推送。': 'Remote changes detected. Please pull updates before pushing.',
+  '@PUSH:未能启动 git 进程（Windows 错误 0xC0000142：系统加载 DLL 失败）。这通常是系统的一次性瞬时故障，不是仓库的问题——请直接重试推送。': 'Failed to start the git process (Windows error 0xC0000142: DLL initialization failed). This is usually a one-off system glitch, not a problem with your repository — just retry the push.',
+  '@PUSH:未能启动 git 进程（Windows 错误 0xC0000135：缺少依赖 DLL）。请检查 Git 安装是否完整，必要时重装 Git for Windows。': 'Failed to start the git process (Windows error 0xC0000135: a required DLL is missing). Please check that your Git installation is complete, and reinstall Git for Windows if necessary.',
+  '@PUSH:系统内存不足，git 进程未能启动（Windows 错误 0xC0000017）。请关闭一些程序后重试。': 'Not enough memory to start the git process (Windows error 0xC0000017). Please close some applications and try again.',
+  '@PUSH:git 进程崩溃（Windows 错误 0xC0000005：访问冲突），没有产生任何输出。请重试；若反复出现，检查安全软件是否拦截了 git。': 'The git process crashed (Windows error 0xC0000005: access violation) without producing any output. Please retry; if it keeps happening, check whether security software is blocking git.',
+  '@PUSH:推送已被中断（Windows 错误 0xC000013A）。': 'The push was interrupted (Windows error 0xC000013A).',
+  '@PUSH:git 进程异常退出（退出码 {code}），且没有产生任何输出——通常是进程未能成功启动，请重试。': 'The git process exited abnormally (exit code {code}) without producing any output — this usually means the process failed to start. Please retry.',
+  '@PUSH:找不到 git 命令，请先安装 Git 并确保它在 PATH 中。': 'The git command was not found. Please install Git and make sure it is on your PATH.',
+  '@PUSH:未知错误': 'Unknown error',
   // @PUSH: file end
   // @13D1C: file path: views\components\GitStatus.vue (branch status)
   '@13D1C:你的分支领先': "Your branch is ahead of '{branch}' by {count} commit(s)",

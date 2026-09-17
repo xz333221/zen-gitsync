@@ -19,6 +19,7 @@ import { ElMessage } from 'element-plus'
 import { io, Socket } from 'socket.io-client'
 import { useConfigStore } from './configStore'
 import { getBackendPort } from '@/utils/backendUrl'
+import { describePushFailure } from '@/utils/pushFailure'
 
 // 定义Git操作间隔时间（毫秒）
 const GIT_OPERATION_DELAY = 800
@@ -1339,7 +1340,7 @@ export const useGitStore = defineStore('git', () => {
           })
         } else {
           ElMessage({
-            message: `${$t('@C298B:推送失败: ')}${result.error}`,
+            message: `${$t('@C298B:推送失败: ')}${describePushFailure(result)}`,
             type: 'error'
           })
         }
@@ -1442,7 +1443,7 @@ export const useGitStore = defineStore('git', () => {
                         } else {
                           // 推送失败
                           ElMessage({
-                            message: `${$t('@C298B:推送失败: ')}${data.error}`,
+                            message: `${$t('@C298B:推送失败: ')}${describePushFailure(data)}`,
                             type: 'error'
                           })
                           resolve(false)

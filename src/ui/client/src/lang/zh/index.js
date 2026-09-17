@@ -1831,7 +1831,7 @@ export default {
   '@CMDCON:在新终端执行': '在新终端执行',
   '@CMDCON:交互式模式': '交互式模式: 支持需要输入的命令',
   // @CMDCON: file end
-  // @PUSH: file path: components\PushProgressModal.vue
+  // @PUSH: file path: components\PushProgressModal.vue + utils\pushFailure.ts
   '@PUSH:正在推送': '正在推送...',
   '@PUSH:正在拉取远程更新': '正在拉取远程更新',
   '@PUSH:拉取完成后自动继续推送': '拉取完成后自动继续推送',
@@ -1845,6 +1845,16 @@ export default {
   '@PUSH:错误详情': '错误详情',
   '@PUSH:先拉取更新': '先拉取更新',
   '@PUSH:检测到远程有新提交，请先拉取更新后再推送。': '检测到远程有新提交，请先拉取更新后再推送。',
+  // 推送失败：git 进程根本没跑起来时 stdout/stderr 全空，只有退出码（0xC0000142 等 NTSTATUS），
+  // 原样显示用户看不懂，这里按后端 gitExitCode.js 的 errorCode 换成可执行的说法
+  '@PUSH:未能启动 git 进程（Windows 错误 0xC0000142：系统加载 DLL 失败）。这通常是系统的一次性瞬时故障，不是仓库的问题——请直接重试推送。': '未能启动 git 进程（Windows 错误 0xC0000142：系统加载 DLL 失败）。这通常是系统的一次性瞬时故障，不是仓库的问题——请直接重试推送。',
+  '@PUSH:未能启动 git 进程（Windows 错误 0xC0000135：缺少依赖 DLL）。请检查 Git 安装是否完整，必要时重装 Git for Windows。': '未能启动 git 进程（Windows 错误 0xC0000135：缺少依赖 DLL）。请检查 Git 安装是否完整，必要时重装 Git for Windows。',
+  '@PUSH:系统内存不足，git 进程未能启动（Windows 错误 0xC0000017）。请关闭一些程序后重试。': '系统内存不足，git 进程未能启动（Windows 错误 0xC0000017）。请关闭一些程序后重试。',
+  '@PUSH:git 进程崩溃（Windows 错误 0xC0000005：访问冲突），没有产生任何输出。请重试；若反复出现，检查安全软件是否拦截了 git。': 'git 进程崩溃（Windows 错误 0xC0000005：访问冲突），没有产生任何输出。请重试；若反复出现，检查安全软件是否拦截了 git。',
+  '@PUSH:推送已被中断（Windows 错误 0xC000013A）。': '推送已被中断（Windows 错误 0xC000013A）。',
+  '@PUSH:git 进程异常退出（退出码 {code}），且没有产生任何输出——通常是进程未能成功启动，请重试。': 'git 进程异常退出（退出码 {code}），且没有产生任何输出——通常是进程未能成功启动，请重试。',
+  '@PUSH:找不到 git 命令，请先安装 Git 并确保它在 PATH 中。': '找不到 git 命令，请先安装 Git 并确保它在 PATH 中。',
+  '@PUSH:未知错误': '未知错误',
   // @PUSH: file end
   // @13D1C: file path: views\components\GitStatus.vue (branch status)
   '@13D1C:你的分支领先': "你的分支领先 '{branch}' {count} 个提交",

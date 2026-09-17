@@ -33,6 +33,10 @@ import {
   assertGitConfigKey,
   assertGitConfigValue
 } from '../utils/gitArgs.js';
+import {
+  describeGitProcessFailure,
+  GIT_NOT_FOUND
+} from '../utils/gitExitCode.js';
 
 // 解析 push 的 remote 参数:不传 = 空数组(裸 push 走上游,历史行为);
 // 传了则结合当前分支与上游计算 refspec(详见 remotes.js 的 buildPushRefs)。
@@ -354,7 +358,26 @@ export function registerGitOpsRoutes({
       logger.info('推送成功，已设置推送状态标记');
       res.json({ success: true, message: stdout });
     } catch (error) {
-      res.status(error?.statusCode || 500).json({ success: false, error: error.message });
+      // PATH 里没有 git.exe：走 spawn 失败而不是退出码，单独给指引
+      if (error?.code === 'ENOENT') {
+        return res.status(500).json({ success: false, ...GIT_NOT_FOUND });
+      }
+      // HttpError(参数校验失败)走原样返回；只有 git 进程真的失败(error.code 是退出码)时
+      // 才做退出码翻译 —— 零输出时 error.message 只有 "Command failed: git push"。
+      if (typeof error?.code !== 'number' || error?.statusCode) {
+        return res.status(error?.statusCode || 500).json({ success: false, error: error.message });
+      }
+      const failure = describeGitProcessFailure({
+        code: error.code,
+        stdout: error.stdout,
+        stderr: error.stderr
+      });
+      res.status(500).json({
+        success: false,
+        error: failure.error,
+        errorCode: failure.errorCode,
+        exitCode: failure.exitCode
+      });
     }
   });
 
@@ -394,7 +417,24 @@ export function registerGitOpsRoutes({
       res.json({ success: true, message: stdout });
     } catch (error) {
       // assertGitRef 抛的是 HttpError(400),别吞成 500
-      res.status(error?.statusCode || 500).json({ success: false, error: error.message });
+      if (error?.code === 'ENOENT') {
+        return res.status(500).json({ success: false, ...GIT_NOT_FOUND });
+      }
+      if (typeof error?.code !== 'number' || error?.statusCode) {
+        return res.status(error?.statusCode || 500).json({ success: false, error: error.message });
+      }
+      // 与 /api/push 同理：git 进程级失败(含零输出的 NTSTATUS)翻成人话
+      const failure = describeGitProcessFailure({
+        code: error.code,
+        stdout: error.stdout,
+        stderr: error.stderr
+      });
+      res.status(500).json({
+        success: false,
+        error: failure.error,
+        errorCode: failure.errorCode,
+        exitCode: failure.exitCode
+      });
     }
   });
 
@@ -603,22 +643,31 @@ export function registerGitOpsRoutes({
             message: standardOutput || errorOutput || 'Push successful'
           });
         } else {
-          // 推送失败
+          // 推送失败。git 自己报错时 stderr 里有 `fatal: ...`，直接透传；
+          // 但进程**没跑起来**时 stdout/stderr 全空，退出码是 3221225794(0xC0000142)
+          // 这类 NTSTATUS —— 原样抛给用户等于什么都没说，必须翻译成人话。
           logger.error('推送失败:', errorOutput || standardOutput);
+          const failure = describeGitProcessFailure({
+            code,
+            stdout: standardOutput,
+            stderr: errorOutput
+          });
 
           // 添加到命令历史（失败情况）
           addCommandToHistory(
             pushCommandLabel,
             standardOutput,
             errorOutput,
-            errorOutput || standardOutput || `Push failed with code ${code}`,
+            failure.error,
             executionTime
           );
 
           sendProgress({
             type: 'complete',
             success: false,
-            error: errorOutput || standardOutput || `Push failed with code ${code}`
+            error: failure.error,
+            errorCode: failure.errorCode,
+            exitCode: failure.exitCode
           });
         }
         finish();
@@ -630,19 +679,26 @@ export function registerGitOpsRoutes({
         // 计算执行时间
         const executionTime = Date.now() - startTime;
 
+        // ENOENT = PATH 里没有 git.exe。这不是"推送失败"而是"根本没得推"，
+        // 给明确指引比抛 "spawn git ENOENT" 有用。
+        const failure = error?.code === 'ENOENT'
+          ? GIT_NOT_FOUND
+          : { errorCode: null, error: error.message };
+
         // 添加到命令历史（错误情况）
         addCommandToHistory(
           'git push --progress',
           '',
           '',
-          error.message,
+          failure.error,
           executionTime
         );
 
         sendProgress({
           type: 'complete',
           success: false,
-          error: error.message
+          error: failure.error,
+          errorCode: failure.errorCode
         });
         finish();
       });

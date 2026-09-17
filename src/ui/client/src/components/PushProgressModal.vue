@@ -20,6 +20,7 @@ import { ElDialog, ElProgress, ElIcon } from 'element-plus';
 import { Close, Loading, CircleCheck, Download } from '@element-plus/icons-vue';
 import { useConfigStore } from '@stores/configStore';
 import { useGitStore } from '@stores/gitStore';
+import { describePushFailure } from '@/utils/pushFailure';
 
 const { t } = useI18n();
 
@@ -169,7 +170,9 @@ function handleProgress(data: any) {
         }
       } else {
         status.value = 'error';
-        errorMessage.value = data.error || '未知错误';
+        // 按 errorCode 本地化：git 进程没跑起来时后端只有退出码文案，
+        // 走 describePushFailure 才能拿到当前语言的可执行提示
+        errorMessage.value = describePushFailure(data);
         // 标记当前阶段为错误
         if (activeStep.value < stages.length) {
           stages[activeStep.value].status = 'error';
