@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 批量探测目录的 Git 状态(是不是仓库 / 有没有未提交改动)。
+// 批量探测目录的 Git 状态(是不是仓库 / 有没有未提交改动 / 与上游差多少)。
 //
 // 用途:「最近项目」「常用目录」列表要在卡片上标出 Git 状态,列表里可能有十几个目录,
-// 因此这里做三件事:
+// 因此这里做四件事:
 //   1. 每个目录只跑**一次** git(status 成功即说明是仓库,失败即非仓库),
-//      避免 rev-parse + status 两次 spawn;
+//      并用 --branch 顺带拿到分支与领先/落后,避免额外 3 次 spawn;
 //   2. 并发上限 + 单目录超时,别让某个大仓库(或网络盘)拖死整个请求;
-//   3. 结果短 TTL 缓存,弹窗反复打开不必重复扫盘。
+//   3. 结果短 TTL 缓存,弹窗反复打开不必重复扫盘;
+//   4. 领先/落后只读**本地 remote-tracking 引用,不联网 fetch** —— 探测十几个目录
+//      去联网是不可接受的;口径与应用里那条「你的分支落后」提示一致。
 //
 // 不用 src/utils/index.js 的 execGitCommand:那个函数固定跑在当前项目 cwd,
 // 且会把每次调用写进命令历史和 socket 广播 —— 探测十几个无关目录不该污染这些。
@@ -46,14 +48,23 @@ export function normalizeDirKey(dirPath) {
 
 /** 空状态(非仓库 / 探测失败时复用),避免各处手写零值 */
 function emptyState(extra = {}) {
-  return { exists: true, isGitRepo: false, changed: 0, staged: 0, unstaged: 0, untracked: 0, ...extra };
+  return {
+    exists: true,
+    isGitRepo: false,
+    // 工作区计数
+    changed: 0, staged: 0, unstaged: 0, untracked: 0,
+    // 分支与上游跟踪
+    branch: null, upstream: null, hasUpstream: false, detached: false, ahead: 0, behind: 0,
+    ...extra,
+  };
 }
 
 /**
- * 解析 `git status --porcelain=v1` 输出 → 计数。
+ * 解析 `git status --porcelain=v1` 输出 → 工作区计数。
  * 纯函数,单测覆盖。
  *
  * 格式:`XY path`,X=暂存区状态,Y=工作区状态。
+ *   - `## ...` → 分支头(见 parseBranchTracking),**不计入改动**
  *   - `??` → 未跟踪
  *   - `!!` → 被忽略(porcelain 默认不输出,防御性跳过)
  *   - 其余非空位 → 计入暂存/未暂存(冲突如 `UU` 会同时计入两边)
@@ -63,6 +74,9 @@ export function parsePorcelainStatus(stdout) {
   const result = { changed: 0, staged: 0, unstaged: 0, untracked: 0 };
   for (const rawLine of String(stdout || '').split('\n')) {
     const line = rawLine.replace(/\r$/, '');
+    // 必须显式跳过分支头:`## main...origin/main` 的前两个字符是 `#`,
+    // 既不是 `!!` 也不是 `??`,漏掉会把它算成 1 个"已暂存 + 未暂存"的文件。
+    if (line.startsWith('##')) continue;
     if (line.length < 3) continue;
     const x = line[0];
     const y = line[1];
@@ -75,6 +89,68 @@ export function parsePorcelainStatus(stdout) {
     }
     result.changed += 1;
   }
+  return result;
+}
+
+/**
+ * 解析 `git status --porcelain=v1 --branch` 的 `##` 头 → 分支与领先/落后。
+ * 纯函数,单测覆盖。
+ *
+ * 见过的几种形状:
+ *   `## main...origin/main [ahead 1, behind 2]`  有上游且有差异
+ *   `## main...origin/main`                     有上游且同步
+ *   `## main...origin/main [gone]`              上游被删了(ahead/behind 无意义)
+ *   `## main`                                   有分支但没设上游
+ *   `## HEAD (no branch)`                       分离 HEAD
+ *   `## No commits yet on main`                 空仓库(老 git 是 `## Initial commit on main`)
+ *
+ * 领先/落后取自**本地 remote-tracking 引用**,不联网 fetch —— 与应用里那条
+ * 「你的分支落后 'origin/develop' 17 个提交」同一口径(都基于上次 fetch 的结果)。
+ */
+export function parseBranchTracking(stdout) {
+  const result = { branch: null, upstream: null, hasUpstream: false, detached: false, ahead: 0, behind: 0 };
+  const headLine = String(stdout || '')
+    .split('\n')
+    .map(l => l.replace(/\r$/, ''))
+    .find(l => l.startsWith('## '));
+  if (!headLine) return result;
+
+  let head = headLine.slice(3).trim();
+  // 跟踪信息固定在末尾方括号里,先摘掉再拆分支名(分支名里不可能出现 `[`)
+  const bracket = head.match(/\s+\[(.+)\]$/);
+  let tracking = '';
+  if (bracket) {
+    tracking = bracket[1];
+    head = head.slice(0, head.length - bracket[0].length).trim();
+  }
+
+  if (/^HEAD \(no branch\)/.test(head)) {
+    result.detached = true;
+    return result;
+  }
+
+  const fresh = head.match(/^(?:No commits yet on|Initial commit on)\s+(.+)$/);
+  if (fresh) {
+    result.branch = fresh[1].trim();
+    return result;
+  }
+
+  // git 的 ref 命名规则禁止 `..`,所以 `...` 只会是分隔符
+  const sep = head.indexOf('...');
+  if (sep === -1) {
+    result.branch = head;
+  } else {
+    result.branch = head.slice(0, sep);
+    result.upstream = head.slice(sep + 3);
+    // [gone] 表示上游引用已不存在,这时不算"有上游可比较"
+    result.hasUpstream = !/gone/.test(tracking);
+  }
+
+  const ahead = tracking.match(/ahead (\d+)/);
+  const behind = tracking.match(/behind (\d+)/);
+  if (ahead) result.ahead = Number(ahead[1]);
+  if (behind) result.behind = Number(behind[1]);
+
   return result;
 }
 
@@ -114,6 +190,10 @@ export async function probeDirectoryGitState(dirPath, { timeoutMs = DEFAULT_PROB
         '--no-optional-locks',
         'status',
         '--porcelain=v1',
+        // --branch 让 status 顺带输出 `## main...origin/main [ahead 1, behind 2]`,
+        // 领先/落后就白拿 —— 否则要再起 3 个进程(symbolic-ref + rev-parse @{u} + rev-list)。
+        // 只读本地 remote-tracking 引用,**不联网**。
+        '--branch',
         // normal 会把未跟踪目录折叠成一条,大目录(node_modules 之类)下比 all 快很多,
         // 而这里只需要"有没有 / 有几项"
         '--untracked-files=normal',
@@ -129,7 +209,12 @@ export async function probeDirectoryGitState(dirPath, { timeoutMs = DEFAULT_PROB
         },
       }
     );
-    return { exists: true, isGitRepo: true, ...parsePorcelainStatus(stdout) };
+    return {
+      exists: true,
+      isGitRepo: true,
+      ...parsePorcelainStatus(stdout),
+      ...parseBranchTracking(stdout),
+    };
   } catch (error) {
     const text = `${error?.stderr || ''}\n${error?.message || ''}`;
     if (/not a git repository|not a git repo/i.test(text)) {

@@ -44,6 +44,14 @@ interface DirectoryGitState {
   staged: number;
   unstaged: number;
   untracked: number;
+  /** 当前分支(分离 HEAD 时 null) */
+  branch: string | null;
+  /** 上游引用,如 origin/develop;没设上游时为 null */
+  upstream: string | null;
+  /** 本地领先上游的提交数 = 有未推送的提交 */
+  ahead: number;
+  /** 本地落后上游的提交数 = 远端有新提交,该 pull 了 */
+  behind: number;
   error?: string;
 }
 
@@ -125,17 +133,36 @@ const items = computed<DirectoryItem[]>(() => {
   });
 });
 
-// 悬浮提示里的 Git 附加信息:脏仓库给明细,干净仓库明确说干净,非仓库/未知不补充(徽标已表达)
-function gitSummary(item: DirectoryItem) {
-  if (!item.git || item.git.isGitRepo !== true) return "";
-  if (item.git.changed > 0) {
-    return $t("@13D1C:已暂存 {staged} · 未暂存 {unstaged} · 未跟踪 {untracked}", {
-      staged: item.git.staged,
-      unstaged: item.git.unstaged,
-      untracked: item.git.untracked,
-    });
+// 悬浮提示里的 Git 附加信息:按"需要动作"的顺序排 —— 落后(要拉) → 领先(要推) → 工作区明细。
+// 非仓库/未知不补充(徽标已表达);一切正常时明确说一句干净,避免"没内容"看起来像没探测。
+function gitSummaryLines(item: DirectoryItem): string[] {
+  const g = item.git;
+  if (!g || g.isGitRepo !== true) return [];
+
+  const lines: string[] = [];
+  if (g.upstream && g.behind > 0) {
+    lines.push($t("@13D1C:落后 {upstream} {count} 个提交", { upstream: g.upstream, count: g.behind }));
   }
-  return $t("@13D1C:Git 仓库,工作区干净");
+  if (g.upstream && g.ahead > 0) {
+    lines.push($t("@13D1C:领先 {upstream} {count} 个提交", { upstream: g.upstream, count: g.ahead }));
+  }
+  if (g.changed > 0) {
+    lines.push($t("@13D1C:已暂存 {staged} · 未暂存 {unstaged} · 未跟踪 {untracked}", {
+      staged: g.staged,
+      unstaged: g.unstaged,
+      untracked: g.untracked,
+    }));
+  }
+  if (lines.length === 0) lines.push($t("@13D1C:Git 仓库,工作区干净"));
+  return lines;
+}
+
+// 仓库"有话说"吗?有的话就用具体信息(未提交/领先/落后)替代那个中性的 Git 标签 ——
+// 否则满屏 "Git" 徽标会白占宽度,把长路径挤成省略号。
+function hasGitSignal(item: DirectoryItem) {
+  const g = item.git;
+  if (!g || g.isGitRepo !== true) return false;
+  return g.changed > 0 || g.ahead > 0 || g.behind > 0;
 }
 
 // 整张卡片的悬浮提示:pick 形态下把"Ctrl+点击"的用法讲在这里
@@ -143,8 +170,7 @@ function itemTitle(item: DirectoryItem) {
   const lines: string[] = [];
   if (props.mode === "pick") lines.push(ctrlHint.value);
   lines.push(item.exists ? item.path : $t("@13D1C:目录不存在"));
-  const summary = gitSummary(item);
-  if (summary) lines.push(summary);
+  lines.push(...gitSummaryLines(item));
   return lines.join("\n");
 }
 
@@ -344,22 +370,32 @@ defineExpose({ reload: load });
             <span class="dir-card__name-base">{{ item.base }}</span>
             <span class="dir-card__name-path">{{ item.path }}</span>
           </span>
-          <!-- 状态徽标:目录不存在 / 是否 Git 仓库 / 有几个未提交项。
+          <!-- 状态徽标:只表达"需要你做事"的信号,外加没信号时的一个中性 Git 标签。
                探测未返回前不占位,避免"检测中"闪烁 -->
           <span class="dir-card__tags">
             <span v-if="!item.exists" class="dir-card__tag dir-card__tag--missing">
               {{ $t('@13D1C:不存在') }}
             </span>
+            <span v-else-if="item.git && !item.git.isGitRepo" class="dir-card__tag dir-card__tag--plain">
+              {{ $t('@13D1C:非 Git 仓库') }}
+            </span>
             <template v-else-if="item.git">
-              <span v-if="item.git.isGitRepo" class="dir-card__tag dir-card__tag--git">
-                {{ $t('@13D1C:Git') }}
-              </span>
               <span
-                v-if="item.git.isGitRepo && item.git.changed > 0"
+                v-if="item.git.changed > 0"
                 class="dir-card__tag dir-card__tag--dirty"
               >{{ $t('@13D1C:未提交 {count} 项', { count: item.git.changed }) }}</span>
-              <span v-else-if="!item.git.isGitRepo" class="dir-card__tag dir-card__tag--plain">
-                {{ $t('@13D1C:非 Git 仓库') }}
+              <span
+                v-if="item.git.ahead > 0"
+                class="dir-card__tag dir-card__tag--ahead"
+              >{{ $t('@13D1C:领先 {count}', { count: item.git.ahead }) }}</span>
+              <span
+                v-if="item.git.behind > 0"
+                class="dir-card__tag dir-card__tag--behind"
+              >{{ $t('@13D1C:落后 {count}', { count: item.git.behind }) }}</span>
+              <!-- "是仓库"这个中性事实在没有任何待办时才标出来:
+                   一旦有未提交/领先/落后,它们本身就说明了这是仓库 -->
+              <span v-if="!hasGitSignal(item)" class="dir-card__tag dir-card__tag--git">
+                {{ $t('@13D1C:Git') }}
               </span>
             </template>
           </span>
@@ -688,6 +724,18 @@ defineExpose({ reload: load });
 .dir-card__tag--dirty {
   background: var(--tint-warning-14);
   color: var(--text-warning);
+}
+/* 领先上游:有未推送的提交。与"未提交"同属"本地还有东西没同步出去",
+   沿用 App 里「你的分支领先」的 warning 配色 */
+.dir-card__tag--ahead {
+  background: var(--tint-warning-14);
+  color: var(--text-warning);
+}
+/* 落后上游:远端有新提交,该 pull 了。
+   用品牌蓝而不是警示色 —— 这是"别人动了"的信息,不是本地出错,醒目但不报警 */
+.dir-card__tag--behind {
+  background: var(--tint-primary-12);
+  color: var(--color-primary);
 }
 /* 不是仓库:中性灰,说明"这里没有 Git 可看" */
 .dir-card__tag--plain {
