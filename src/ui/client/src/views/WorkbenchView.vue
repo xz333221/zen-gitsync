@@ -47,7 +47,6 @@ import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from 
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
 import { useWorkbenchData } from '@/composables/useWorkbenchData'
-import { OTHER_PROJECTS_KEY } from '@/composables/useWorkbenchProjectGroups'
 import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
 
 // ── 按 projectPath 记忆「该项目最后一次打开的 task」───────────────────────
@@ -858,8 +857,8 @@ async function reorderTasks(payload: { groupPath: string; orderedIds: string[] }
 }
 
 /**
- * 把 list 中属于 groupPath 分组的 task 按 orderedIds 顺序排,其余保持相对位置。
- * 分组规则与 useWorkbenchProjectGroups 一致:当前项目一组,其余全部归入 OTHER_PROJECTS_KEY。
+ * 把 list 中 projectPath === groupPath 的 task 按 orderedIds 顺序排,其余保持相对位置。
+ * 分组规则与 useWorkbenchProjectGroups 一致:每个项目独立成组,未关联项目归入 NO_PROJECT_KEY。
  * 校验:orderedIds 长度必须等于同组 task 数,且都是同组 id(避免 sidebar 误调)。
  * 校验失败返回原 list(让 reorderTasks 走 no-op 兜底)。
  */
@@ -868,11 +867,7 @@ function applyLocalReorder(
   groupPath: string,
   orderedIds: string[]
 ): Task[] {
-  const curKey = canonicalProjectPath(currentProject.value.path)
-  const groupKey = (p?: string) => {
-    const c = canonicalProjectPath(p)
-    return (curKey && c === curKey) ? curKey : OTHER_PROJECTS_KEY
-  }
+  const groupKey = (p?: string) => (canonicalProjectPath(p) || NO_PROJECT_KEY)
   const inGroupIds = list.filter(t => groupKey(t.projectPath) === groupPath).map(t => t.id)
   const inGroupSet = new Set(inGroupIds)
   if (orderedIds.length !== inGroupSet.size || orderedIds.some(id => !inGroupSet.has(id))) {
