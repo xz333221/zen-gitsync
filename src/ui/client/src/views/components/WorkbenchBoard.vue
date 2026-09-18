@@ -112,31 +112,14 @@ const headerStats = computed(() => {
 
 /**
  * 应用当前打开的项目（L2 编辑器里那个）。
- * 只作为「全部项目」模式下派发指令的兜底目标 —— 派发必须落到一个确定的目录，
- * 不能是「全部」。
+ * 选中「全部项目」时，它只是派发目标下拉的**默认项** —— 派发必须落到一个确定的
+ * 目录，不能是「全部」；但"有默认值"不等于"隐式"，用户在下拉里看得见、也改得动。
  */
 const fallbackProject = computed<ProjectSummary | null>(() => {
   const key = canonicalProjectPath(currentProjectPath.value)
   if (!key) return null
   return projects.value.find(p => p.key === key) || null
 })
-
-/**
- * 指令会落到哪个项目：选中具体项目时是它，选中「全部项目」时回落到应用当前项目。
- *
- * ⚠️ 这个兜底**只能用于派发**，不能反过来喂给右侧「项目概览」：
- * 概览是一块跟随左侧选中项的信息面板，若「全部项目」也回落到某个具体项目，
- * 切过去之后概览纹丝不动，看起来就像没切成功（用户实际遇到的就是这个）。
- * 概览一律直接用 selectedProject —— 为 null 即「全部项目」，不展示单项目 Git 指标。
- */
-const targetProjectName = computed(
-  () => selectedProject.value?.name || fallbackProject.value?.name || ''
-)
-
-function targetProjectPath(): string {
-  if (selectedProject.value) return selectedProject.value.path
-  return currentProjectPath.value
-}
 
 // ── 任务详情弹窗：点卡片就地看内容，不再跳进编辑器 ────────────────────
 // 点卡片只开弹窗、不改 boardMode —— 看板的用处是扫全局、就地处理，
@@ -304,10 +287,25 @@ async function deleteTask(t: BoardTask) {
 /** 控制台组件实例：派发成功后才由它清掉草稿附件（失败要留着，让用户能重试） */
 const consoleRef = ref<InstanceType<typeof OrchestratorConsole> | null>(null)
 
-async function onDispatch(payload: { text: string; autoRun: boolean; attachments: Attachment[] }) {
+/**
+ * 新建任务弹窗的默认项目：选中具体项目就是它，「全部项目」则用应用当前项目。
+ * 这里可以有隐式默认值 —— 弹窗里有项目下拉，用户看得见、改得动，不在看板上直接生效。
+ */
+const defaultProjectPath = computed(
+  () => selectedProject.value?.path || currentProjectPath.value
+)
+
+/**
+ * 派发。目标项目由控制台自己定（选中具体项目就是它；「全部项目」则是用户在
+ * 目标下拉里显式选的那个），随事件一起带上来 —— 这里不再自己猜一个回落值，
+ * 免得后台换目标、提示和实际落点各说各话。
+ */
+async function onDispatch(payload: {
+  text: string; autoRun: boolean; attachments: Attachment[]; projectPath: string
+}) {
   const result = await dispatch({
     text: payload.text,
-    projectPath: targetProjectPath(),
+    projectPath: payload.projectPath,
     autoRun: payload.autoRun,
     attachments: payload.attachments,
   })
@@ -416,10 +414,11 @@ async function onToggleSchedule(next: boolean) {
         :activity="activity"
         :running-count="running.length"
         :selected-project="selectedProject"
+        :projects="projects"
+        :fallback-project="fallbackProject"
         :dispatching="dispatching"
         :toggling-schedule="togglingSchedule"
         :today-done="headerStats.todayDone"
-        :target-project-name="targetProjectName"
         @toggle-schedule="onToggleSchedule"
         @dispatch="onDispatch"
       />
@@ -440,7 +439,7 @@ async function onToggleSchedule(next: boolean) {
     <WorkbenchTaskCreateDialog
       v-model="createOpen"
       :projects="projects"
-      :default-project-path="targetProjectPath()"
+      :default-project-path="defaultProjectPath"
       @created="onTaskCreated"
     />
   </div>
