@@ -27,7 +27,7 @@
   Git 状态探测自带 15s TTL 缓存，轮询不会真的每 5s 起十几个 git 进程。
 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Fold, Expand } from '@element-plus/icons-vue'
@@ -174,6 +174,7 @@ function onVisibilityChange() {
 }
 
 onMounted(async () => {
+  window.addEventListener('resize', onWindowResize)
   await refresh(false)
   pollTimer = setInterval(() => {
     if (document.hidden) return
@@ -183,25 +184,168 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', onWindowResize)
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 
-// ── 动作 ────────────────────────────────────────────────────────────
+// ── 两侧栏布局：拖动分隔条调宽 + 手动折叠（落地 localStorage）──────────
+// 和 WorkbenchView 的侧边栏分隔条同款模式（mousedown 绑全局 mousemove/mouseup），
+// 宽度实时改内联 CSS 变量，松手才写 localStorage。
+const LAYOUT_KEY = 'wb.boardLayout.v1'
+const LEFT_W_MIN = 180
+const LEFT_W_MAX = 420
+const RIGHT_W_MIN = 260
+const RIGHT_W_MAX = 560
 /**
- * 左栏抽屉的开合状态。**只在窄屏（≤1024px）有意义**：
- * 宽屏时 .board__left 是常驻一栏，这个 class 没有任何样式（相关规则全在媒体查询里），
- * 所以下面不用写"窗口宽度"判断 —— 状态只有一个，样式决定它怎么表现。
- *
- * 默认 false（收起）：窄屏下看板要占满宽度，左栏按需展开。
+ * 单侧最多占视口的比例，两侧加起来 ≤ 62% —— 看板任何情况下都还剩 ≥ 38%。
+ * 右栏比左栏松一档：它是派发指令的地方，用户要的是"够宽"。
+ */
+const LEFT_W_SHARE = 0.26
+const RIGHT_W_SHARE = 0.36
+
+/**
+ * 和响应式媒体查询的关系：**没拖过 = 完全交给媒体查询**（layout 里是 null，
+ * 一个内联变量都不写）；拖过一次，这个宽度就是用户的显式选择 —— 内联变量优先级
+ * 高于媒体查询，此后各断点不再自动收窄它。但每次渲染都会按**当前视口**重新夹一遍，
+ * 免得窗口缩小后两侧加起来把看板吃光（1920 下拖到 900 的两栏，换到 1280 的窗口就是看板消失）。
+ */
+const layout = reactive({
+  /** null = 没手动调过，宽度走 CSS 里的媒体查询默认值 */
+  left: null as number | null,
+  right: null as number | null,
+  /** 宽屏下的手动折叠（窄屏的左栏开合走下面的 leftDrawerOpen，两套状态不混用） */
+  leftCollapsed: false,
+  rightCollapsed: false,
+})
+
+function readLayout() {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY)
+    if (!raw) return
+    const o = JSON.parse(raw) as Partial<typeof layout>
+    if (typeof o.left === 'number' && Number.isFinite(o.left)) layout.left = o.left
+    if (typeof o.right === 'number' && Number.isFinite(o.right)) layout.right = o.right
+    layout.leftCollapsed = o.leftCollapsed === true
+    layout.rightCollapsed = o.rightCollapsed === true
+  } catch {
+    // 隐私模式 / 脏数据：退回默认布局，不影响使用
+  }
+}
+readLayout()
+
+function saveLayout() {
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)) } catch { /* quota 不阻塞 UI */ }
+}
+
+// ── 视口档位：和下面的媒体查询断点一一对应，只用来决定"拖拽 / 折叠要不要生效" ──
+const viewportW = ref(typeof window === 'undefined' ? 1920 : window.innerWidth)
+function onWindowResize() { viewportW.value = window.innerWidth }
+/** ≤1024：左栏变成浮层抽屉，宽度不吃看板的空间，也不该用分隔条拖 */
+const isNarrow = computed(() => viewportW.value <= 1024)
+/** ≤860：上下排列，右栏铺满一整块，"收窄 / 折叠"这两个方向都不存在 */
+const isStacked = computed(() => viewportW.value <= 860)
+
+function clampWidth(side: 'left' | 'right', raw: number): number {
+  const min = side === 'left' ? LEFT_W_MIN : RIGHT_W_MIN
+  const cap = Math.min(
+    side === 'left' ? LEFT_W_MAX : RIGHT_W_MAX,
+    viewportW.value * (side === 'left' ? LEFT_W_SHARE : RIGHT_W_SHARE),
+  )
+  return Math.round(Math.min(Math.max(raw, min), Math.max(min, cap)))
+}
+
+/** 内联到 .board 的 CSS 变量：值为 null 就不写，让媒体查询的默认值生效 */
+const boardStyle = computed<Record<string, string>>(() => {
+  const s: Record<string, string> = {}
+  if (layout.left != null) s['--wb-left-w'] = clampWidth('left', layout.left) + 'px'
+  // 竖排时右栏必须是 100%：写成 px 会把铺满压掉，右栏就只剩一条
+  if (layout.right != null && !isStacked.value) s['--wb-right-w'] = clampWidth('right', layout.right) + 'px'
+  return s
+})
+
+const colsRef = ref<HTMLElement | null>(null)
+/** 拖动中的那一侧：只为给分隔条自己加高亮、给容器关掉宽度过渡 */
+const draggingSide = ref<'left' | 'right' | null>(null)
+
+function panelEl(side: 'left' | 'right'): HTMLElement | null {
+  return colsRef.value?.querySelector(side === 'left' ? '.board__left' : '.oc') as HTMLElement | null
+}
+
+/**
+ * 分隔条拖动。起点宽度**从 DOM 量**而不是读 layout ——
+ * 没拖过的时候 layout 里是 null，真正在生效的是媒体查询给的默认值。
+ */
+function onSplitterMouseDown(side: 'left' | 'right', e: MouseEvent) {
+  if (side === 'left' ? isNarrow.value : isStacked.value) return
+  const start = panelEl(side)
+  if (!start) return
+  e.preventDefault()
+  const startX = e.clientX
+  const startW = start.getBoundingClientRect().width
+  draggingSide.value = side
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'col-resize'
+  const onMove = (ev: MouseEvent) => {
+    // 右栏在分隔条右边：鼠标往左拖才是变宽，方向要反过来
+    const dx = (ev.clientX - startX) * (side === 'left' ? 1 : -1)
+    layout[side] = clampWidth(side, startW + dx)
+  }
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove)
+    document.body.style.userSelect = ''
+    document.body.style.cursor = ''
+    draggingSide.value = null
+    saveLayout()
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp, { once: true })
+}
+
+/** 双击分隔条：清掉手动宽度，回到媒体查询给的默认值 */
+function onSplitterDblClick(side: 'left' | 'right') {
+  layout[side] = null
+  saveLayout()
+}
+
+/**
+ * 左栏抽屉的开合状态。窄屏（≤1024）是"浮在看板上的抽屉"，宽屏是"常驻的一栏"，
+ * 两者的默认值天生相反（窄屏要收起把宽度让给看板、宽屏要展开），
+ * 所以是两个状态，只在渲染时合流成一个"看不见"的判断。
  */
 const leftDrawerOpen = ref(false)
+/** 左栏当前是否不可见：窄屏看抽屉状态，宽屏看折叠状态 */
+const leftHidden = computed(() => (isNarrow.value ? !leftDrawerOpen.value : layout.leftCollapsed))
+
+function toggleLeft() {
+  if (isNarrow.value) {
+    leftDrawerOpen.value = !leftDrawerOpen.value
+    return
+  }
+  layout.leftCollapsed = !layout.leftCollapsed
+  saveLayout()
+}
+
+/** Esc 只收窄屏的抽屉：宽屏那一栏是常驻的，误按 Esc 把它收掉只会让人莫名其妙 */
+function onLeftEsc() {
+  if (isNarrow.value) leftDrawerOpen.value = false
+}
+
+/** 右栏折叠。竖排（≤860）时强制展开 —— 那时候它是看板下面的一整块，没有"收边"可言 */
+const rightHidden = computed(() => layout.rightCollapsed && !isStacked.value)
+
+function toggleRight() {
+  layout.rightCollapsed = !layout.rightCollapsed
+  saveLayout()
+}
 
 function onSelectProject(p: ProjectSummary | null) {
   selectedKey.value = p ? p.key : ''
   // 窄屏下选完项目就把抽屉收掉，否则它一直盖着刚选中那个项目的看板
   leftDrawerOpen.value = false
 }
+
+// ── 动作 ────────────────────────────────────────────────────────────
 
 /**
  * 打开项目所在文件夹（系统文件管理器 / 资源管理器 / 访达）。
@@ -327,19 +471,19 @@ async function onToggleSchedule(next: boolean) {
 </script>
 
 <template>
-  <div class="board">
+  <div class="board" :style="boardStyle">
     <header class="board__top">
-      <!-- 窄屏下展开/收起左栏。宽屏时这个按钮不显示（左栏本来就常驻） -->
+      <!-- 左栏的开合。宽屏=收起/展开常驻那一栏；窄屏=抽屉 -->
       <button
         type="button"
-        class="board__icon-btn board__drawer-btn"
-        :class="{ 'is-on': leftDrawerOpen }"
-        :title="leftDrawerOpen ? $t('@WORKBENCH:收起项目列表') : $t('@WORKBENCH:展开项目列表')"
-        :aria-label="leftDrawerOpen ? $t('@WORKBENCH:收起项目列表') : $t('@WORKBENCH:展开项目列表')"
-        :aria-expanded="leftDrawerOpen"
-        @click="leftDrawerOpen = !leftDrawerOpen"
+        class="board__icon-btn board__fold-btn"
+        :class="{ 'is-on': !leftHidden }"
+        :title="leftHidden ? $t('@WORKBENCH:展开项目列表') : $t('@WORKBENCH:收起项目列表')"
+        :aria-label="leftHidden ? $t('@WORKBENCH:展开项目列表') : $t('@WORKBENCH:收起项目列表')"
+        :aria-expanded="!leftHidden"
+        @click="toggleLeft"
       >
-        <el-icon v-if="leftDrawerOpen"><Fold /></el-icon>
+        <el-icon v-if="!leftHidden"><Fold /></el-icon>
         <el-icon v-else><Expand /></el-icon>
       </button>
 
@@ -382,7 +526,7 @@ async function onToggleSchedule(next: boolean) {
       </div>
     </header>
 
-    <div class="board__cols">
+    <div ref="colsRef" class="board__cols" :class="{ 'is-resizing': draggingSide !== null }">
       <!-- 抽屉打开时的点击捕获层：点空白处收起。
            只在窄屏 + 打开时才 display:block（见媒体查询），宽屏下是个不占位的空 div。
            不加遮罩底色而是全透明 —— 只是为了接住点击，不是为了压暗看板；
@@ -396,8 +540,8 @@ async function onToggleSchedule(next: boolean) {
 
       <aside
         class="board__left"
-        :class="{ 'is-collapsed': !leftDrawerOpen }"
-        @keydown.esc="leftDrawerOpen = false"
+        :class="{ 'is-collapsed': leftHidden }"
+        @keydown.esc="onLeftEsc"
       >
         <WorkbenchProjectPanel
           :projects="projects"
@@ -408,6 +552,17 @@ async function onToggleSchedule(next: boolean) {
         />
         <WorkbenchAgentPanel :running="running" />
       </aside>
+
+      <!-- 左栏分隔条：左栏收起 / 窄屏抽屉模式下不占位（不渲染 / 媒体查询里 display:none） -->
+      <div
+        v-if="!leftHidden"
+        class="board__splitter board__splitter--left"
+        role="separator"
+        aria-orientation="vertical"
+        :title="$t('@WORKBENCH:拖动调整项目列表宽度，双击恢复默认')"
+        @mousedown="onSplitterMouseDown('left', $event)"
+        @dblclick="onSplitterDblClick('left')"
+      />
 
       <main class="board__main">
         <div class="board__main-head">
@@ -438,6 +593,17 @@ async function onToggleSchedule(next: boolean) {
         />
       </main>
 
+      <!-- 右栏分隔条：右栏收起 / 竖排（≤860）时不占位 -->
+      <div
+        v-if="!rightHidden && !isStacked"
+        class="board__splitter board__splitter--right"
+        role="separator"
+        aria-orientation="vertical"
+        :title="$t('@WORKBENCH:拖动调整主 Agent 控制台宽度，双击恢复默认')"
+        @mousedown="onSplitterMouseDown('right', $event)"
+        @dblclick="onSplitterDblClick('right')"
+      />
+
       <OrchestratorConsole
         ref="consoleRef"
         :active="active"
@@ -447,6 +613,8 @@ async function onToggleSchedule(next: boolean) {
         :dispatching="dispatching"
         :toggling-schedule="togglingSchedule"
         :today-done="headerStats.todayDone"
+        :collapsed="rightHidden"
+        @toggle-collapse="toggleRight"
         @toggle-schedule="onToggleSchedule"
         @dispatch="onDispatch"
       />
@@ -483,9 +651,10 @@ async function onToggleSchedule(next: boolean) {
   color: var(--text-primary);
   /* 两侧栏宽度的**唯一出处**。右栏（OrchestratorConsole 的 .oc）读同一个变量，
      所以调窄屏宽度只改这里，不用 :deep 进子组件压它的 width。
-     下面三档媒体查询就是"越窄越收紧"的全部内容。 */
+     下面三档媒体查询就是"越窄越收紧"的全部内容。
+     这两个值只在**用户没手动拖过分隔条**时生效（拖过就由 .board 上的内联变量接管）。 */
   --wb-left-w: 264px;
-  --wb-right-w: 300px;
+  --wb-right-w: 360px;
 }
 
 /* ── 顶栏 ───────────────────────────────────────────── */
@@ -581,11 +750,12 @@ async function onToggleSchedule(next: boolean) {
 .board__icon-btn:hover { color: var(--color-primary); }
 .board__icon-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
-/* 抽屉按钮 / 点击捕获层默认不占位，只在窄屏生效（规则在下面的媒体查询里）。
-   ⚠️ 这两条必须写在媒体查询**之前**：`.board__drawer-btn` 在媒体查询里是同一个选择器、
-   同为 (0,1,0) 权重，谁在后面谁赢 —— 写在后面会把窄屏那条 display:inline-flex 反压掉。 */
-.board__drawer-btn { display: none; }
+/* 点击捕获层默认不占位，只在窄屏 + 抽屉打开时 display:block（规则在下面的媒体查询里）。 */
 .board__scrim { display: none; }
+
+/* 左栏开合按钮（.board__fold-btn）没有自有样式，靠 .board__icon-btn 兜底 ——
+   宽屏窄屏它都在，差别只在点下去收的是常驻那一栏还是浮层抽屉（见 toggleLeft）。
+   这个类名同时是验证脚本定位它的锚点，不要删。 */
 
 /* ── 三栏 ───────────────────────────────────────────── */
 .board__cols {
@@ -602,6 +772,32 @@ async function onToggleSchedule(next: boolean) {
   flex-shrink: 0;
   min-height: 0;
   background: var(--bg-panel);
+}
+
+/* 两侧栏的分隔条：5px 命中区，常态隐形，hover / 拖动时亮出 1px 主线提示可拖。
+   和 WorkbenchView 的 .wb-splitter 同款 —— 宽度不改自己的布局之外的东西，
+   拖动时实时改的是 .board 上的 --wb-left-w / --wb-right-w。 */
+.board__splitter {
+  flex: 0 0 5px;
+  position: relative;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+.board__splitter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: transparent;
+  transition: background var(--transition-fast) var(--ease-custom);
+}
+.board__splitter:hover::after,
+.board__splitter:active::after,
+.board__cols.is-resizing .board__splitter::after {
+  background: var(--color-primary);
 }
 .board__main {
   display: flex;
@@ -649,31 +845,45 @@ async function onToggleSchedule(next: boolean) {
 }
 
 /* ══ 响应式 ══════════════════════════════════════════════════════════
-   三栏固定总宽 = 264 + 300 = 564px，剩给看板；再算上左侧活动栏（约 48px），
-   屏宽 1280 时看板只有 660px 左右，三条列每列 220px —— 卡片标题已经开始成省略号。
-   所以这里的顺序是：**先收两边，再动结构**，能不折叠就不折叠。
+   下面这些是**默认值**：用户没拖过分隔条时（layout 里是 null，一个内联变量都不写）
+   完全由它们决定；拖过一次就由 .board 上的内联 --wb-*-w 接管，这里不再插手。
 
-   断点按"看板还剩多少"倒推，而不是拍脑袋的整数：
-     1440  看板 ≈ 830  → 两侧各收一点，还够看
-     1180  看板 ≈ 570  → 再收，左栏到 200px 是项目名还能认出来的下限
-     1024  看板 ≈ 460  → 左栏改成抽屉（能收起来才是真的省下 200px）
+   默认值按"看板还剩多少"倒推，而不是拍脑袋的整数：
+     1440  两侧各收一点，还够看
+     1180  再收，左栏到 200px 是项目名还能认出来的下限
+     1024  左栏改成抽屉（能收起来才是真的省下 200px）
       860  竖排       → 看板与右栏上下叠，各自占满宽度
 
-   ⚠️ 右栏（.oc）**不参与折叠**：用户要经常派发指令，它得一直在。
-   所以窄屏下被牺牲顺序是"左栏 → 结构"，不是"右栏 → 收起"。
+   右栏默认比左栏宽一档（360 vs 264）：它是派发指令的地方，输入区越宽越好写。
    ══════════════════════════════════════════════════════════════════ */
 @media (max-width: 1440px) {
-  .board { --wb-left-w: 224px; --wb-right-w: 280px; }
+  .board { --wb-left-w: 224px; --wb-right-w: 320px; }
 }
 @media (max-width: 1180px) {
-  .board { --wb-left-w: 200px; --wb-right-w: 260px; }
+  .board { --wb-left-w: 200px; --wb-right-w: 280px; }
+}
+
+/* 宽屏（>1024）：左栏是常驻一栏，可以手动折叠成 0 宽。
+   折叠只改宽度、不销毁内容 —— 展开回来滚动位置和筛选状态都还在。
+   过渡跟着折叠走；拖动分隔条时挂 .is-resizing 关掉它（否则宽度追不上鼠标）。 */
+@media (min-width: 1025px) {
+  .board__left {
+    transition: width var(--transition-base) var(--ease-custom);
+  }
+  .board__left.is-collapsed {
+    width: 0;
+    /* 折叠态的子树还占着 200+px 的内容宽度，不裁掉会把看板顶出去 */
+    overflow: hidden;
+  }
+  .board__cols.is-resizing .board__left { transition: none; }
 }
 
 /* 左栏改成抽屉：绝对定位浮在看板上方，用 transform 收起（保留过渡）。
    ⚠️ 底色用 --bg-container 而不是 --bg-panel：深色主题的 --bg-panel-dark 是半透明的，
    浮层用它会在看板文字上透出底下的字（同 NOTES §2 那个坑）。 */
 @media (max-width: 1024px) {
-  .board__drawer-btn { display: inline-flex; }
+  /* 抽屉是浮层、不吃看板宽度，横着拖它没有意义 —— 分隔条整个撤掉 */
+  .board__splitter--left { display: none; }
 
   .board__left {
     position: absolute;
@@ -706,6 +916,8 @@ async function onToggleSchedule(next: boolean) {
    展开后不用先滚动定位就能点到输入框和派发按钮。 */
 @media (max-width: 860px) {
   .board { --wb-right-w: 100%; }
+  /* 右栏铺满一整块，没有"收窄"这个方向可拖 */
+  .board__splitter--right { display: none; }
   .board__cols {
     flex-direction: column;
     overflow-y: auto;

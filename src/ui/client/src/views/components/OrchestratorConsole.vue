@@ -29,7 +29,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Paperclip, Promotion } from '@element-plus/icons-vue'
+import { Paperclip, Promotion, Expand, Fold } from '@element-plus/icons-vue'
 import type { Attachment, OrchestratorActivity, ProjectSummary } from '@/types/workbench'
 import { clockFromIso, relativeTimeFromIso } from '@/utils/relativeTime'
 import AttachmentZone from '@/components/AttachmentZone.vue'
@@ -44,10 +44,18 @@ const props = defineProps<{
   togglingSchedule: boolean
   /** 今日已完成的执行轮次，由看板统一算好后传入（两处各算一遍必然对不上） */
   todayDone: number
+  /**
+   * 折叠态：只剩一条竖排收纳条，点它展开。
+   * 由看板传进来，**并且看板已经把"竖排（≤860）时不算折叠"算掉了** ——
+   * 这里只认这一个布尔值，不再叠一层媒体查询判断，免得两边规则打架。
+   */
+  collapsed?: boolean
 }>()
 
 const emit = defineEmits<{
   'toggle-schedule': [next: boolean]
+  /** 点折叠条 / 头部折叠按钮：翻转让看板去决定折叠还是展开 */
+  'toggle-collapse': []
   dispatch: [payload: {
     text: string
     autoRun: boolean
@@ -224,8 +232,26 @@ const gitSummary = computed(() => {
 </script>
 
 <template>
-  <aside class="oc">
-    <header class="oc__head">
+  <aside class="oc" :class="{ 'is-collapsed': collapsed }">
+    <!-- 折叠后的收纳条：只剩一枚展开按钮 + 竖排标题，宽度收到 32px。
+         折叠不是"把宽度压成 0"—— 那样就再没有能点回来的地方了。 -->
+    <button
+      v-if="collapsed"
+      type="button"
+      class="oc__rail"
+      :title="$t('@WORKBENCH:展开主 Agent 控制台')"
+      :aria-label="$t('@WORKBENCH:展开主 Agent 控制台')"
+      :aria-expanded="false"
+      @click="emit('toggle-collapse')"
+    >
+      <el-icon class="oc__rail-icon"><Fold /></el-icon>
+      <span class="oc__rail-live" :class="{ 'is-off': !active }" aria-hidden="true" />
+      <span class="oc__rail-text">{{ $t('@WORKBENCH:主 Agent 控制台') }}</span>
+    </button>
+
+    <!-- 折叠时这几块整体隐藏而不是销毁（v-show 而不是 v-if）：
+         草稿指令和已贴的附件都还留着，展开回来能接着发 -->
+    <header v-show="!collapsed" class="oc__head">
       <span class="oc__live" :class="{ 'is-off': !active }" aria-hidden="true" />
       <h3 class="oc__title">{{ $t('@WORKBENCH:主 Agent 控制台') }}</h3>
       <button
@@ -235,9 +261,19 @@ const gitSummary = computed(() => {
         :title="active ? $t('@WORKBENCH:暂停后派发只建任务，不会自动执行') : $t('@WORKBENCH:恢复后派发会自动执行')"
         @click="emit('toggle-schedule', !active)"
       >{{ active ? $t('@WORKBENCH:暂停调度') : $t('@WORKBENCH:恢复调度') }}</button>
+      <button
+        type="button"
+        class="oc__collapse"
+        :title="$t('@WORKBENCH:收起主 Agent 控制台')"
+        :aria-label="$t('@WORKBENCH:收起主 Agent 控制台')"
+        :aria-expanded="true"
+        @click="emit('toggle-collapse')"
+      >
+        <el-icon><Expand /></el-icon>
+      </button>
     </header>
 
-    <div class="oc__state" :class="{ 'is-paused': !active }">
+    <div v-show="!collapsed" class="oc__state" :class="{ 'is-paused': !active }">
       <span class="oc__state-label">{{ $t('@WORKBENCH:调度状态') }}</span>
       <span class="oc__state-value">
         {{ active ? $t('@WORKBENCH:调度中') : $t('@WORKBENCH:已暂停') }}
@@ -245,7 +281,7 @@ const gitSummary = computed(() => {
       <span class="oc__state-meta">{{ $t('@WORKBENCH:{n} 个执行中', { n: runningCount }) }}</span>
     </div>
 
-    <div class="oc__feed">
+    <div v-show="!collapsed" class="oc__feed">
       <p class="oc__feed-title">{{ $t('@WORKBENCH:活动日志') }}</p>
       <ul class="oc__feed-list">
         <li v-for="r in activity" :key="r.id" class="oc-row" :class="'oc-row--' + r.kind">
@@ -269,7 +305,7 @@ const gitSummary = computed(() => {
       </ul>
     </div>
 
-    <div class="oc__git">
+    <div v-show="!collapsed" class="oc__git">
       <p class="oc__feed-title">
         {{ $t('@WORKBENCH:项目概览') }}
         <!-- 无选中项目即「全部项目」：显式标出来，否则底下只剩「今日完成」一行，看着像数据没加载出来 -->
@@ -292,6 +328,7 @@ const gitSummary = computed(() => {
     </div>
 
     <div
+      v-show="!collapsed"
       class="oc__compose"
       @paste="onPaste"
       @drop.prevent="onDrop"
@@ -370,6 +407,56 @@ const gitSummary = computed(() => {
   min-height: 0;
   border-left: 1px solid var(--border-color);
   background: var(--bg-panel);
+  /* 折叠/展开的收放动画。拖动分隔条时由工作台在 .board__cols 上挂 is-resizing
+     把过渡关掉 —— 否则宽度会慢半拍地追鼠标，拖起来像拽橡皮筋。
+     （.board__cols 是祖先元素的选择器，scoped 只给末段的 .oc 加作用域属性，
+       所以这条能正常命中，不需要 :deep()） */
+  transition: width var(--transition-base) var(--ease-custom);
+}
+.board__cols.is-resizing .oc { transition: none; }
+
+/* 折叠态：只剩收纳条。宽度 = 收纳条宽度，别用 0 ——
+   压成 0 就再没有能点回来的地方了。 */
+.oc.is-collapsed { width: 32px; }
+
+/* 收纳条：展开按钮 + 呼吸灯 + 竖排标题，整条都能点 */
+.oc__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom), background var(--transition-fast) var(--ease-custom);
+}
+.oc__rail:hover {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+.oc__rail:focus-visible { outline: var(--focus-outline); outline-offset: -2px; }
+.oc__rail-icon { font-size: 14px; flex-shrink: 0; }
+.oc__rail-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--color-success);
+  animation: oc-pulse 1.6s ease-in-out infinite;
+}
+.oc__rail-live.is-off { background: var(--color-warning); animation: none; }
+/* writing-mode 竖排：标题横着放不进 32px */
+.oc__rail-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 1px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  user-select: none;
 }
 .oc__head {
   display: flex;
@@ -413,6 +500,26 @@ const gitSummary = computed(() => {
 .oc__toggle:hover:not(:disabled) { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
 .oc__toggle:disabled { opacity: 0.5; cursor: default; }
 .oc__toggle:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+
+/* 折叠按钮：和 .oc__toggle 同款无底色图标按钮，只是换成图标 */
+.oc__collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color var(--transition-fast) var(--ease-custom);
+}
+.oc__collapse:hover { color: var(--color-primary); }
+.oc__collapse:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
 .oc__state {
   display: flex;
@@ -632,5 +739,8 @@ const gitSummary = computed(() => {
     border-top: 1px solid var(--border-color);
     min-height: 72vh;
   }
+  /* 竖排时右栏是一整块铺满，没有"收边"这个方向可收 —— 折叠按钮收起来，
+     免得点了没反应（看板那边也把 collapsed 强制成 false，两边一致） */
+  .oc__collapse { display: none; }
 }
 </style>

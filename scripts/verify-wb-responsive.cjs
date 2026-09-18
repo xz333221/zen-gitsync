@@ -2,9 +2,9 @@
  * 工作台响应式布局 —— 几何不变式验证 + 前后对比出图。
  *
  * 守的契约（对应 WorkbenchBoard.vue / OrchestratorConsole.vue / WorkbenchKanban.vue 的媒体查询）：
- *   W1  宽屏（1600）：三栏并排，左 264 / 右 300，抽屉按钮不占位
- *   W2  1300：两侧各收一档（左 224 / 右 280），仍并排
- *   W3  1100：再收（左 200 / 右 260），右栏**不折叠**
+ *   W1  宽屏（1600）：三栏并排，左 264 / 右 360（默认右比左宽），折叠按钮常驻
+ *   W2  1300：两侧各收一档（左 224 / 右 320），仍并排
+ *   W3  1100：再收（左 200 / 右 280），右栏默认**不折叠**
  *   W4  900：左栏改成浮层抽屉且默认收起 —— 右缘退到看板容器左缘之外、pointer-events:none
  *           （不吞点击），看板因此拿到 ≥500px（这是"窄屏先收左栏"这一档真正要换来的东西）
  *   W5  900 + 点开抽屉：左栏**浮在看板上方**（有重叠）且**不把看板挤窄**（宽度与收起时一致）
@@ -73,7 +73,7 @@ function MEASURE() {
     left: info('.board__left'),
     main: info('.board__main'),
     oc: info('.oc'),
-    drawerBtn: info('.board__drawer-btn'),
+    foldBtn: info('.board__fold-btn'),
     scrim: info('.board__scrim'),
     kbCols: info('.kb__columns'),
     kbColBoxes: Array.from(document.querySelectorAll('.kb-col')).map((n) => {
@@ -153,10 +153,10 @@ async function main() {
 
     /* ══ W1 宽屏基准 1600 ══ */
     let m = await M()
-    check('W1a 宽屏下抽屉按钮不占位（display:none）', m.drawerBtn?.display === 'none', `display=${m.drawerBtn?.display}`)
+    check('W1a 宽屏下折叠按钮就在（不再只有窄屏才显示）', m.foldBtn?.display !== 'none', `display=${m.foldBtn?.display}`)
     check('W1b 左栏是常驻一栏（position:static）', m.left?.position === 'static', `position=${m.left?.position}`)
     check('W1c 左栏宽 = 264', m.left?.width === 264, `width=${m.left?.width}`)
-    check('W1d 右栏宽 = 300', m.oc?.width === 300, `width=${m.oc?.width}`)
+    check('W1d 右栏宽 = 360（默认比左栏宽）', m.oc?.width === 360, `width=${m.oc?.width}`)
     check('W1e 左栏与看板不重叠（真的并排）', m.left && m.main && m.left.right <= m.main.left + 1,
       `left.right=${m.left?.right} main.left=${m.main?.left}`)
     check('W1f 右栏在看板右侧并排', m.oc && m.main && m.oc.left >= m.main.right - 1,
@@ -167,7 +167,7 @@ async function main() {
     await setSize(page, 1300)
     m = await M()
     check('W2a 1300：左栏收到 224', m.left?.width === 224, `width=${m.left?.width}`)
-    check('W2b 1300：右栏收到 280', m.oc?.width === 280, `width=${m.oc?.width}`)
+    check('W2b 1300：右栏收到 320', m.oc?.width === 320, `width=${m.oc?.width}`)
     check('W2c 1300：仍然是三栏并排（左栏未折叠）', m.left?.position === 'static' && m.left.right <= m.main.left + 1,
       `position=${m.left?.position} left.right=${m.left?.right} main.left=${m.main?.left}`)
     await shot(page, '1300-tight')
@@ -176,7 +176,7 @@ async function main() {
     await setSize(page, 1100)
     m = await M()
     check('W3a 1100：左栏收到 200', m.left?.width === 200, `width=${m.left?.width}`)
-    check('W3b 1100：右栏收到 260', m.oc?.width === 260, `width=${m.oc?.width}`)
+    check('W3b 1100：右栏收到 280', m.oc?.width === 280, `width=${m.oc?.width}`)
     check('W3c 1100：右栏仍常驻（用户要经常派发，它不参与折叠）',
       m.oc?.display !== 'none' && m.oc.width > 0 && m.oc.left >= m.main.right - 1,
       `display=${m.oc?.display} left=${m.oc?.left} main.right=${m.main?.right}`)
@@ -189,7 +189,7 @@ async function main() {
     // ⚠️ 参照物是 .board__cols 的左缘，不是视口 0 —— 应用左侧还有约 48px 的活动栏，
     //    抽屉的 absolute 是相对 .board__cols 定位的，"收起"= 右缘退到它左缘之外。
     const colsLeft = m.cols.left
-    check('W4a 900：抽屉按钮显示出来', m.drawerBtn?.display !== 'none', `display=${m.drawerBtn?.display}`)
+    check('W4a 900：折叠按钮仍在（这时候它管的是抽屉）', m.foldBtn?.display !== 'none', `display=${m.foldBtn?.display}`)
     check('W4b 900：左栏改成绝对定位浮层', m.left?.position === 'absolute', `position=${m.left?.position}`)
     check('W4c 900：左栏默认收起（右缘退到看板容器左缘之外）',
       !!m.left && m.left.right <= colsLeft + 1,
@@ -205,7 +205,7 @@ async function main() {
     /* ══ W5 900 + 打开抽屉 ══ */
     // ⚠️ transform 上有过渡动画，点完要等它**落定**再量 ——
     //    否则量到的是动画中途的位置（第一次跑就是这么假绿的：right 停在收起态的值）。
-    await page.locator('.board__drawer-btn').click()
+    await page.locator('.board__fold-btn').click()
     await waitUntil(async () => { const x = await M(); return Math.abs(x.left.left - x.cols.left) <= 1 }, 4000)
     m = await M()
     const overlap = m.left && m.main ? +(Math.min(m.left.right, m.main.right) - Math.max(m.left.left, m.main.left)).toFixed(1) : 0
