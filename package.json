@@ -7,7 +7,7 @@
   "scripts": {
     "g:ui": "node ./src/gitCommit.js ui",
     "g:ai": "node ./src/gitCommit.js ai",
-    "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/",
+    "update:g": "npm install -g zen-gitsync --registry https://registry.npmjs.org/ --prefer-online",
     "npm:login": "npm login --registry https://registry.npmjs.org/",
     "npm:publish": "npm publish --registry https://registry.npmjs.org/",
     "npm:whoami": "npm whoami --registry https://registry.npmjs.org/",

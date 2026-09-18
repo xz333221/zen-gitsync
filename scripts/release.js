@@ -26,6 +26,10 @@
  *   npm run release -- --skip-self-update # 发布后不自动 npm install -g zen-gitsync
  *   npm run release -- --skip-push        # 只发布到 npm,不 push git
  *   npm run release -- --dry-run          # 只打印计划,不真正改 package.json / commit / publish
+ *   npm run release -- --poll-interval=20 --poll-timeout=600  # 调 registry 轮询节奏(秒)
+ *
+ * 发布后自更新:先轮询 registry 确认新版本可见,再 `npm install -g zen-gitsync@<版本>`。
+ * 原因见 POLL_INTERVAL_MS 处注释 —— publish 成功不等于 registry 立即可见。
  */
 
 import fs from 'node:fs'
@@ -44,6 +48,30 @@ const argv = process.argv.slice(2)
 const DRY_RUN = argv.includes('--dry-run')
 const SKIP_SELF_UPDATE = argv.includes('--skip-self-update')
 const SKIP_PUSH = argv.includes('--skip-push')
+
+const NPM_REGISTRY = 'https://registry.npmjs.org/'
+const PKG_NAME = 'zen-gitsync'
+
+// 读 `--xxx=<数字>` 形式的数值参数,非法/缺失时回落默认值
+function readNumberArg(name, fallback) {
+  const prefix = `${name}=`
+  const hit = argv.find((a) => a.startsWith(prefix))
+  if (!hit) return fallback
+  const parsed = Number(hit.slice(prefix.length))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+// `npm publish` 返回成功 ≠ registry 立即对外可见:新版本要经过 registry 后台处理
+// ("Your package is being processed" 不是客套话) + CDN 缓存刷新。
+// 实测(2026-09-18, v2.17.3):publish 成功后 5 分钟,registry 上 dist-tags.latest
+// 仍是 2.17.2,versions 里没有 2.17.3;packument 响应头
+// `Cache-Control: public, max-age=300` —— 光 CDN 层就可能滞后 5 分钟。
+// 所以"publish 完立刻 npm install -g"必然装回旧版(实测 `npm ls -g` 停在 2.17.2)。
+// 对策:publish 后先轮询,确认 dist-tags.latest 已翻到目标版本,再安装。
+// 默认 15s 一轮、上限 600s(必须 > CDN 的 max-age=300,否则稳定误判超时);
+// 可用 `--poll-interval=<秒>` / `--poll-timeout=<秒>` 调。
+const POLL_INTERVAL_MS = readNumberArg('--poll-interval', 15) * 1000
+const POLL_TIMEOUT_MS = readNumberArg('--poll-timeout', 600) * 1000
 
 // 跨平台 sleep:Node 原生,避免 `sleep N || ping` 的 Windows 兜底 hack
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -460,16 +488,142 @@ async function commitChanges(version) {
   }
 }
 
+// 查询 registry 上 dist-tags.latest。查询失败(网络抖动 / registry 波动)返回 null,
+// 不视为致命错误 —— 交给轮询循环重试。
+function readLatestDistTag() {
+  try {
+    const out = execSync(
+      `npm view ${PKG_NAME} dist-tags.latest --json --registry=${NPM_REGISTRY} --prefer-online`,
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000 }
+    )
+    const parsed = JSON.parse(out.trim())
+    return typeof parsed === 'string' ? parsed.replace(/^v/, '') : null
+  } catch {
+    return null
+  }
+}
+
+// 读本地全局已安装的版本,读不到返回 null。
+// 不走 `npm ls -g <pkg> --json`:该包不存在时它退出码为 1 且输出里没有 dependencies
+// 字段(实测只返回 {"name":"<node 版本目录名>"}),字段结构还随 npm 版本变;
+// 直接读"当前 npm 的全局根"下该包的 package.json 更确定,也和 `npm install -g` 落点一致。
+function readGlobalInstalledVersion() {
+  let globalRoot
+  try {
+    globalRoot = execSync('npm root -g', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30000,
+    }).trim()
+  } catch {
+    // npm 不可用 / 超时:按 Node 安装目录兜底(Windows 下 npm 默认全局根就在这里)
+    globalRoot = path.join(path.dirname(process.execPath), 'node_modules')
+  }
+  if (!globalRoot) return null
+
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(globalRoot, PKG_NAME, 'package.json'), 'utf8')
+    )
+    return pkg.version ?? null
+  } catch {
+    return null
+  }
+}
+
+// 轮询 registry 直到目标版本可见。
+// 返回 true = 确认可见,false = 超时(调用方据此决定是否继续装)。
+async function waitForVersionVisible(version) {
+  console.log(chalk.blue('\n=== 等待 NPM registry 同步 ==='))
+  console.log(chalk.gray('publish 返回成功 ≠ 立即可见:registry 后台处理 + CDN 缓存(packument 的 max-age=300)。'))
+  console.log(chalk.gray('实测 v2.17.3 发布后约 3 分钟才可见;这期间 install 会解析到旧版本。'))
+  console.log(chalk.gray(
+    `轮询 dist-tags.latest,间隔 ${POLL_INTERVAL_MS / 1000}s,上限 ${POLL_TIMEOUT_MS / 1000}s;`
+    + '确认可见后才安装,避免全局装回旧版本。'
+  ))
+
+  const startedAt = Date.now()
+  const deadline = startedAt + POLL_TIMEOUT_MS
+  let attempt = 0
+
+  for (;;) {
+    attempt += 1
+    const latest = readLatestDistTag()
+
+    if (latest === version) {
+      const cost = ((Date.now() - startedAt) / 1000).toFixed(1)
+      console.log(chalk.green(`registry 已可见 ${PKG_NAME}@${version}(第 ${attempt} 次检查,耗时 ${cost}s)`))
+      return true
+    }
+
+    const remain = deadline - Date.now()
+    if (remain <= 0) {
+      console.log(chalk.yellow(
+        `已等待 ${POLL_TIMEOUT_MS / 1000}s 仍未看到 ${version},`
+        + `最近一次读到 latest=${latest ?? '查询失败'}`
+      ))
+      return false
+    }
+
+    console.log(chalk.gray(
+      `第 ${attempt} 次:latest=${latest ?? '查询失败(网络或 registry 波动)'},`
+      + `期望 ${version},${Math.ceil(remain / 1000)}s 后重试`
+    ))
+    await sleep(Math.min(POLL_INTERVAL_MS, remain))
+  }
+}
+
+// 装"精确版本"而不是 latest:即便 dist-tags 的 CDN 缓存滞后,
+// 精确版本号也只会命中刚发布的那份 tarball。
+function installGlobal(version) {
+  console.log(chalk.gray(`执行 npm install -g ${PKG_NAME}@${version}...`))
+  execSync(
+    `npm install -g ${PKG_NAME}@${version} --registry=${NPM_REGISTRY} --prefer-online`,
+    { stdio: 'inherit' }
+  )
+}
+
+// 等待可见 → 全局安装 → 校验装到的版本(校验不看退出码,退出码 0 不代表版本对)
+async function selfUpdateGlobal(version) {
+  const visible = await waitForVersionVisible(version)
+
+  try {
+    installGlobal(version)
+  } catch (err) {
+    console.error(chalk.red('全局安装失败:'), err.message || err)
+    console.error(chalk.gray(`可稍后手动重试: npm install -g ${PKG_NAME}@${version}`))
+    return
+  }
+
+  const installed = readGlobalInstalledVersion()
+  if (installed === version) {
+    console.log(chalk.green(`全局已更新到 ${PKG_NAME}@${version}`))
+    if (!visible) {
+      console.log(chalk.gray('(轮询阶段 npm view 未查到该版本,但安装已拿到正确版本)'))
+    }
+    return
+  }
+
+  console.error(chalk.red(
+    `全局版本校验不一致:期望 ${version},实际 ${installed ?? '未知'}`
+    + (visible ? '' : '(且轮询阶段未在 registry 上看到该版本)')
+  ))
+  console.error(chalk.gray(`等 registry 同步完成后手动重试: npm install -g ${PKG_NAME}@${version}`))
+}
+
 // 发布到 NPM
-async function publishToNpm() {
+async function publishToNpm(version) {
   console.log(chalk.blue('\n=== 发布到 NPM ==='))
 
   try {
     if (DRY_RUN) {
-      console.log(chalk.yellow('[dry-run] npm publish --registry=https://registry.npmjs.org/'))
+      console.log(chalk.yellow(`[dry-run] npm publish --registry=${NPM_REGISTRY}`))
+      console.log(chalk.yellow(
+        `[dry-run] 轮询 registry 直到 ${version} 可见,再 npm install -g ${PKG_NAME}@${version}`
+      ))
       return
     }
-    execSync('npm publish --registry=https://registry.npmjs.org/', { stdio: 'inherit' })
+    execSync(`npm publish --registry=${NPM_REGISTRY}`, { stdio: 'inherit' })
     console.log(chalk.green('已成功发布到 NPM'))
 
     if (SKIP_SELF_UPDATE) {
@@ -478,13 +632,7 @@ async function publishToNpm() {
     }
 
     // 发版后可选:把刚发布的版本装到全局(默认开启,可用 --skip-self-update 关掉)
-    try {
-      console.log(chalk.gray('执行 npm run update:g...'))
-      execSync('npm run update:g', { stdio: 'inherit' })
-      console.log(chalk.green('update:g 执行完成'))
-    } catch (err) {
-      console.error(chalk.red('update:g 执行失败:'), err.message)
-    }
+    await selfUpdateGlobal(version)
   } catch (err) {
     console.error(chalk.red('发布到 NPM 失败:'), err.message || err)
     process.exit(1)
@@ -509,7 +657,7 @@ async function main() {
     await buildFrontend()
     await verifyPackageContents()
     await commitChanges(newVersion)
-    await publishToNpm()
+    await publishToNpm(newVersion)
 
     console.log(chalk.green('\n🎉 发布完成!'))
   } catch (err) {
