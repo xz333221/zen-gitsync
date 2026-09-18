@@ -143,6 +143,20 @@ function send() {
   draft.value = ''
 }
 
+/**
+ * Enter 直接派发，Shift+Enter 换行。
+ *
+ * 指令正文基本都是中文，全靠输入法敲 —— IME 组合期间的回车是"选词确认"，
+ * 不拦掉的话每选一次词就误发一条指令出去（和「储藏更改」弹窗同一套判断）。
+ * Ctrl/Cmd+Enter 是老习惯，一起认，不专门拦。
+ */
+function onInputKeydown(e: KeyboardEvent) {
+  if ((e as any).isComposing || (e as any).keyCode === 229) return
+  if (e.key !== 'Enter' || e.shiftKey) return
+  e.preventDefault()
+  send()
+}
+
 /** 活动流一行的正文。文案全部走 i18n，服务端只给结构化字段 */
 function describe(r: OrchestratorActivity): string {
   const task = r.taskTitle || r.subTitle || $t('@WORKBENCH:未命名任务')
@@ -342,8 +356,7 @@ const gitSummary = computed(() => {
         v-model="draft"
         rows="3"
         :placeholder="$t('@WORKBENCH:给主 Agent 下一条指令，例如：把登录模块的错误处理重构一遍')"
-        @keydown.ctrl.enter.prevent="send"
-        @keydown.meta.enter.prevent="send"
+        @keydown="onInputKeydown"
         @paste="onPaste"
       />
       <AttachmentZone
@@ -385,10 +398,10 @@ const gitSummary = computed(() => {
       </div>
       <p class="oc__hint">
         <template v-if="selectedProject">
-          {{ $t('@WORKBENCH:指令会在「{name}」下新建一个任务；Ctrl+Enter 派发', { name: selectedProject.name }) }}
+          {{ $t('@WORKBENCH:指令会在「{name}」下新建一个任务；Enter 派发，Shift+Enter 换行', { name: selectedProject.name }) }}
         </template>
         <template v-else>
-          {{ $t('@WORKBENCH:指令落到哪个项目由主 Agent 判断；Ctrl+Enter 派发') }}
+          {{ $t('@WORKBENCH:指令落到哪个项目由主 Agent 判断；Enter 派发，Shift+Enter 换行') }}
         </template>
       </p>
     </div>
