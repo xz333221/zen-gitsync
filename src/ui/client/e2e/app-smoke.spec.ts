@@ -23,7 +23,8 @@ const VIEW_BUTTONS = [
   { label: 'Git',        pane: '.view-pane.grid-layout' },
   { label: '控制台',     pane: '.console-pane' },
   { label: '文件空间',   pane: '.editor-pane' },
-  { label: '源码地图',   pane: '.source-map-pane' },
+  // 源码地图:入口已由 ActivityBar 的 SHOW_SOURCE_MAP 关闭,恢复时把下面这行加回来
+  // { label: '源码地图',   pane: '.source-map-pane' },
   { label: '工作台',     pane: '.workbench-pane' },
   { label: '系统监控',   pane: '.monitor-pane' },
   { label: '思维导图',   pane: '.mindmap-pane' },

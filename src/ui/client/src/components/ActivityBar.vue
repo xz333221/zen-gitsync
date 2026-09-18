@@ -35,6 +35,10 @@ const gitStore = useGitStore()
 const editorTabsStore = useEditorTabsStore()
 const terminalSessionsStore = useTerminalSessionsStore()
 
+// 源码地图 tab 开关：暂时隐藏入口（反馈当前实用价值不大）。
+// 改回 true 即可恢复，SourceMapView 组件与 App.vue 的懒加载分支保持原样未动。
+const SHOW_SOURCE_MAP = false
+
 // 未提交文件数:与文件列表 badge 对齐,包含所有 git status --porcelain 的变更
 // (modified / staged / added / deleted / conflicted / untracked)。
 // 之前 .filter(f => f.type !== 'untracked') 会漏掉未跟踪文件,
@@ -163,8 +167,8 @@ function select(view: 'git' | 'console' | 'editor' | 'source-map' | 'workbench' 
       </button>
     </el-tooltip>
 
-    <!-- 源码地图 -->
-    <el-tooltip :content="$t('@ACTBAR:源码地图')" placement="right" :show-after="300">
+    <!-- 源码地图（SHOW_SOURCE_MAP = false 时隐藏入口） -->
+    <el-tooltip v-if="SHOW_SOURCE_MAP" :content="$t('@ACTBAR:源码地图')" placement="right" :show-after="300">
       <button
         class="activity-btn"
         :class="{ active: props.activeView === 'source-map' }"
