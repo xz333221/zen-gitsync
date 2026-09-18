@@ -928,7 +928,7 @@ export default {
   '@42BB9:自动保存': 'Auto Save',
   '@42BB9:失去焦点时自动保存当前文件': 'Automatically save the current file when it loses focus',
   '@42BB9:编辑器设置已保存': 'File Space settings saved',
-  // "Interface" subsection (persisted to ~/.git-commit-tool.json ui field)
+  // "Interface" subsection (persisted to ~/.zen-gitsync/config.json ui field)
   '@42BB9:界面': 'Interface',
   '@42BB9:文件列表视图': 'File list view',
   '@42BB9:列表': 'List',

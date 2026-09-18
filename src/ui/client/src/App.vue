@@ -360,7 +360,7 @@ let lastMouseEvent: MouseEvent | null = null;
 let vResizeRafId: number | null = null
 let hResizeRafId: number | null = null
 
-// 保存布局比例到 configStore（持久化到 ~/.git-commit-tool.json 的 ui.layout 字段）
+// 保存布局比例到 configStore（持久化到 ~/.zen-gitsync/config.json 的 ui.layout 字段）
 // 2 列布局:只存 leftRatio(GitStatus 占比) + topRatio(右侧 commit-form 占比)。
 // midRatio/rightRatio 是旧 3 列布局的遗留字段,这里用 spread 保留旧值,
 // 不再更新——避免给已存配置的用户制造类型迁移负担(字段在 UiLayout 中保留,无害)。

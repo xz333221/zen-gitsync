@@ -236,6 +236,14 @@ async function handleFileLockCommands() {
 async function main() {
   judgePlatform()
 
+  // 数据目录布局迁移(幂等、永不抛错):把散在主目录的历史文件收进 ~/.zen-gitsync/。
+  // 放在最前面是为了让所有子命令(ui / ai / 定时提交)都跑在同一种目录布局上;
+  // config.js 首次读写时也会惰性兜底调一次,这里只是把时机提前到"最确定"的位置。
+  // 动态 import:迁移模块只依赖 paths + 零依赖 logger,但仍不该拖慢 CLI 冷启动路径。
+  try {
+    await (await import('./dataDirMigration.js')).migrateDataDir()
+  } catch (_) { /* 迁移失败不影响主流程 */ }
+
   // 一次性注册 SIGINT 处理器 — 所有长跑流程(定时 commit / 自定义命令循环 /
   // 倒计时)都通过 registerCleanup 上报,SIGINT 时由统一处理器 drain。
   setupSigintHandler({

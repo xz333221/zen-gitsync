@@ -832,7 +832,7 @@ async function saveGeneralSettings() {
 // 重置界面布局比例（左/中/右/上面板比例）
 // configStore.resetUiLayout() 会：
 //   1) 把 ui.layout 改回 defaultUiSettings.layout
-//   2) 立即落盘到 ~/.git-commit-tool.json（不走防抖）
+//   2) 立即落盘到 ~/.zen-gitsync/config.json（不走防抖）
 //   3) 返回新的 layout 让 App.vue 重新应用比例
 async function onResetUiLayout() {
   try {

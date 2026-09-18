@@ -29,7 +29,7 @@ export const LOCALE_NAMES: Record<SupportLocale, string> = {
 
 // 从 localStorage 读取已保存的语言作为 i18n bootstrap 兜底
 // 注意：localStorage 只是早期 bootstrap 阶段能拿到的最快来源；
-// 文件 ~/.git-commit-tool.json 是唯一真相源。configStore.loadConfig()
+// 文件 ~/.zen-gitsync/config.json 是唯一真相源。configStore.loadConfig()
 // 完成后会调 setLocale(configData.locale) 覆盖此值。
 // 一次性迁移：setLocale 不再写 localStorage；configStore 启动时会清掉旧 'locale' 键。
 const getDefaultLocale = (): SupportLocale => {
@@ -60,7 +60,7 @@ const i18n = createI18n({
 })
 
 // 切换语言（i18n 运行时）
-// 持久化由 configStore.saveGeneralSettings({ locale }) 统一负责，写到 ~/.git-commit-tool.json
+// 持久化由 configStore.saveGeneralSettings({ locale }) 统一负责，写到 ~/.zen-gitsync/config.json
 // 此函数不再写 localStorage；setLocale 只负责更新 i18n 运行时和 html[lang] 属性
 export function setLocale(locale: SupportLocale) {
   i18n.global.locale.value = locale

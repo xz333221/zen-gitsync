@@ -94,7 +94,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 │   └── README_*.md          # 转换器用法
 ├── src/                     # [核心: 三段式主体]
 │   ├── gitCommit.js         # CLI 主控(455 行)
-│   ├── config.js            # 用户配置 ~/.git-commit-tool.json(350 行)
+│   ├── config.js            # 用户配置 ~/.zen-gitsync/config.json(350 行)
 │   ├── utils/index.js       # 共享工具 1089 行 + parseCwdArg.test.js
 │   └── ui/
 │       ├── client/          # [核心: 前端工程]
@@ -278,7 +278,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 | 类别 | 文件 | 行数 | 作用 |
 |------|------|------|------|
 | **CLI 入口** | `src/gitCommit.js` | 455 | `g` 命令主控,支持 ui/log/addScript/get-config 等子命令 |
-| **CLI 配置** | `src/config.js` | 350 | 读写 `~/.git-commit-tool.json`,包含代理、最近目录、locale |
+| **CLI 配置** | `src/config.js` | 350 | 读写 `~/.zen-gitsync/config.json`,包含代理、最近目录、locale |
 | **共享工具** | `src/utils/index.js` | 1089 | execGitCommand / 端口选择 / git lock 处理等 |
 | **GUI 后端入口** | `src/ui/server/index.js` | 420 | 启 Express + Socket.IO + 注册所有路由/中间件 |
 | **GUI 前端入口** | `src/ui/client/src/main.ts` | 36 | Vue app 启动,挂 Pinia + i18n + SvgIcon |

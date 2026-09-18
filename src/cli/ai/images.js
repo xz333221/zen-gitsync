@@ -15,7 +15,7 @@
 // g ai 图片附件 — 剪贴板图片读取 + 本地图片转 data URL。
 //
 // 触发方式:REPL 里按 Alt+V(或 /image <路径> 附加本地文件)。
-// 图片保存到 ~/.git-commit-tool/ai-images/,发送时编码为 base64 data URL,
+// 图片保存到 ~/.zen-gitsync/ai-images/,发送时编码为 base64 data URL,
 // 以 OpenAI 多模态格式(image_url)拼进 user 消息。
 //
 // 平台实现:
@@ -29,10 +29,12 @@
 
 import { execFile } from 'node:child_process'
 import { promises as fsp } from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
+import { AI_IMAGES_DIR } from '../../paths.js'
 
-const IMAGE_DIR = path.join(os.homedir(), '.git-commit-tool', 'ai-images')
+// 数据目录统一在 ~/.zen-gitsync/ 下(见 src/paths.js);旧路径 ~/.git-commit-tool/ai-images
+// 由 dataDirMigration 在首次启动时搬过来。
+const IMAGE_DIR = AI_IMAGES_DIR
 const MAX_KEEP = 20          // 目录里最多保留的历史图片数(超出按时间最旧先删)
 const CLIP_TIMEOUT_MS = 15000 // 剪贴板读取超时(PowerShell 冷启动可能要几秒)
 

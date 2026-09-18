@@ -15,10 +15,10 @@
 import express from 'express';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import path from 'path';
-import os from 'os';
 import fs from 'fs/promises';
 import open from 'open';
 import logger from '../utils/logger.js';
+import { CONFIG_FILE } from '../../../paths.js';
 
 // 跳过的产物/资源/lock 文件(用 stat 一行带过,不打 patch)
 const SKIP_FILE_PATTERNS = [
@@ -345,7 +345,7 @@ export function registerConfigRoutes({
       
         res.json(config)
       } catch (error) {
-        const configPath = path.join(os.homedir(), '.git-commit-tool.json')
+        const configPath = CONFIG_FILE
         res.status(500).json({
           success: false,
           code: 'CONFIG_LOAD_FAILED',
@@ -396,7 +396,7 @@ export function registerConfigRoutes({
   // 检查系统配置文件格式
   app.get('/api/config/check-file-format', asyncRoute(async (req, res) => {
       try {
-        const configPath = path.join(os.homedir(), '.git-commit-tool.json');
+        const configPath = CONFIG_FILE;
       
         try {
           const data = await fs.readFile(configPath, 'utf-8');
@@ -428,16 +428,19 @@ export function registerConfigRoutes({
       }
     }));
 
-  // 使用系统默认程序打开配置文件 ~/.git-commit-tool.json
+  // 使用系统默认程序打开配置文件(~/.zen-gitsync/config.json)
   app.post('/api/config/open-file', asyncRoute(async (req, res) => {
       try {
-        const filePath = path.join(os.homedir(), '.git-commit-tool.json');
+        const filePath = CONFIG_FILE;
         try {
           // 检查文件是否存在，不存在也尝试让系统创建（可能会打开空文件）
           await fs.access(filePath);
         } catch (_) {
-          // 如果文件不存在，先创建一个最小结构，避免某些系统无法打开不存在的路径
+          // 如果文件不存在，先创建一个最小结构，避免某些系统无法打开不存在的路径。
+          // 注意:新路径是嵌套目录,首次打开时数据目录可能还没建(正常启动流程里由
+          // dataDirMigration 建好,这里是独立于迁移的兜底)。
           try {
+            await fs.mkdir(path.dirname(filePath), { recursive: true });
             await fs.writeFile(filePath, '{}', 'utf-8');
           } catch (e) {
             // 创建失败不阻断打开尝试

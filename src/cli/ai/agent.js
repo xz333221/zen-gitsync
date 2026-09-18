@@ -17,7 +17,7 @@
 // 入口: runAiAgent(argv)(由 gitCommit.js 在 argv[2]==='ai' 时动态 import)。
 //
 // 能力:
-//   - 默认使用 g ui 里配置的模型(~/.git-commit-tool.json 顶层 models,
+//   - 默认使用 g ui 里配置的模型(~/.zen-gitsync/config.json 顶层 models,
 //     isDefault 优先,否则取第一个);--model=<序号|名称> 或会话内 /model 切换
 //   - OpenAI 兼容流式 function calling:模型可以调用 run_command /
 //     read_file / write_file / edit_file / list_files / search_text
@@ -791,7 +791,7 @@ async function handleSlashCommand(state, input, t) {
       const { baseURL, model, apiKey, displayName } = collected
       // 构建模型配置(isDefault=false:/addmodel 只是追加,不改默认模型)
       const newModel = buildModelConfig({ baseURL, model, apiKey, name: displayName, isDefault: false })
-      // 持久化到 ~/.git-commit-tool.json 顶层 models 数组
+      // 持久化到 ~/.zen-gitsync/config.json 顶层 models 数组
       const cfg = await config.loadConfig()
       const models = Array.isArray(cfg.models) ? cfg.models : []
       models.push(newModel)

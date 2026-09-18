@@ -27,16 +27,13 @@
 import fsp from 'fs/promises';
 import path from 'path';
 import { logger } from './shared.js';
+import { AGENT_SESSIONS_DIR } from '../../../../paths.js';
 
-// 数据目录：与 ai-split-sessions 平级
-export const AGENT_SESSIONS_DIR = path.join(
-  path.dirname(path.dirname(path.dirname(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, ''))))),
-  '.zen-gitsync',
-  'agent-sessions'
-);
-// 上面路径在 Windows 下不可靠，改用 os.homedir
-import os from 'os';
-export const AGENT_SESSIONS_DIR_FIXED = path.join(os.homedir(), '.zen-gitsync', 'agent-sessions');
+// 数据目录：与 ai-split-sessions 平级，定义见 src/paths.js
+export { AGENT_SESSIONS_DIR };
+// 历史遗留别名:此前这里有个"从 import.meta.url 推路径"的错误实现(Windows 下不可靠),
+// 后来补了个 _FIXED 版本两套并存。现在统一到 paths.js 的单一常量。
+export const AGENT_SESSIONS_DIR_FIXED = AGENT_SESSIONS_DIR;
 
 export const MAX_AGENT_SESSIONS = 200;
 export const AGENT_SESSIONS_KEEP = 100;

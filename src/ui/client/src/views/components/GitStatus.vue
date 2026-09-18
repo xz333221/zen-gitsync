@@ -199,7 +199,7 @@ const collapsedGroups = ref<Record<'staged' | 'unstaged' | 'untracked' | 'confli
   'intent-to-add': false, // 已声明添加（待暂存）: git add -N 的产物
 })
 // 视图模式：列表或树状（从 configStore.ui.fileListViewMode 读取）
-// 该值持久化到 ~/.git-commit-tool.json（之前在 localStorage，因随机端口启动失效）
+// 该值持久化到 ~/.zen-gitsync/config.json（之前在 localStorage，因随机端口启动失效）
 const viewMode = computed<'list' | 'tree'>({
   get: () => configStore.ui.fileListViewMode,
   set: (v) => { configStore.ui.fileListViewMode = v }

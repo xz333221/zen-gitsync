@@ -14,11 +14,32 @@
 //
 import { promises as fs } from 'fs';
 import path from 'path';
-import os from 'os';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
+import { CONFIG_FILE } from './paths.js';
+import { migrateDataDir } from './dataDirMigration.js';
 
-const configPath = path.join(os.homedir(), '.git-commit-tool.json');
+// 当前生效的配置文件路径。默认是统一数据目录下的 ~/.zen-gitsync/config.json;
+// 只有历史文件搬迁失败(被占用/无权限)时才回退到旧的 ~/.git-commit-tool.json,
+// 让应用至少还能以只读方式跑起来,下次启动再试迁移。
+let configPath = CONFIG_FILE;
+let _configPathReady = null;
+
+/**
+ * 确保配置文件已就位(必要时执行一次性数据目录迁移),返回实际使用的路径。
+ * 惰性执行且只跑一次;迁移内部不抛错,这里的 catch 只是最后一道保险。
+ */
+function resolveConfigPath() {
+  if (!_configPathReady) {
+    _configPathReady = migrateDataDir()
+      .then((report) => {
+        if (report?.configPath) configPath = report.configPath;
+        return configPath;
+      })
+      .catch(() => configPath);
+  }
+  return _configPathReady;
+}
 
 // 默认配置
 const defaultConfig = {
@@ -239,6 +260,7 @@ async function retryOnBusy(fn, { attempts = 6, baseDelayMs = 15 } = {}) {
 // 两次 fs.writeFile 直接覆盖产生的"先 truncate 再写"的中间态空文件,
 // 触发 readRawConfigFile 在 race 时 JSON.parse 失败 → 500。
 async function writeRawConfigFileInner(obj) {
+  await resolveConfigPath();
   const tmpPath = `${configPath}.${process.pid}.${Date.now()}.${++_tmpSeq}.tmp`;
   const data = JSON.stringify(obj, null, 2);
   try {
@@ -262,7 +284,7 @@ async function writeRawConfigFileInner(obj) {
       await retryOnBusy(() => fs.writeFile(configPath, data, 'utf-8'));
     }
   } catch (err) {
-    // 写入失败时清理孤儿 tmp 文件,避免 ~/.git-commit-tool.json.*.tmp 堆积
+    // 写入失败时清理孤儿 tmp 文件,避免 ~/.zen-gitsync/config.json.*.tmp 堆积
     try { await fs.unlink(tmpPath); } catch (_) { /* ignore */ }
     throw err;
   }
@@ -286,6 +308,7 @@ async function backupConfigFileIfExists() {
 
 // 更安全的读取，区分“文件不存在”和“解析失败”
 async function safeLoadRaw() {
+  await resolveConfigPath();
   // 命中缓存且签名未变(无外部进程写入)才直接返回,跳过 readFile + JSON.parse
   //
   // 先取快照再判新鲜:判新鲜期间会让出事件循环,缓存可能被并发路径失效。

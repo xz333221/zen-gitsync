@@ -14,7 +14,7 @@
 //
 // g ai 交互式模型配置向导。
 //
-// 当 ~/.git-commit-tool.json 顶层 models 为空时,由 agent.js 调用本模块
+// 当 ~/.zen-gitsync/config.json 顶层 models 为空时,由 agent.js 调用本模块
 // 引导用户在终端中完成首个 AI 模型的配置,参照 g ui 设置里的"添加模型"
 // 功能(ai-model-form 包的 AddModelForm 组件)。
 //

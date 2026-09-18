@@ -6,7 +6,7 @@
 // 断言:无 5xx、无 null 解引用、无"JSON 格式错误"假报错、无原子写降级、无 tmp 残渣。
 //
 // 隔离:server 进程的 USERPROFILE/HOME 指向 mkdtemp 沙箱,绝不碰用户真实
-// ~/.git-commit-tool.json。
+// ~/.zen-gitsync/(见 src/paths.js)。
 
 import { spawn } from 'node:child_process'
 import { promises as fs } from 'node:fs'
@@ -81,12 +81,14 @@ try {
   }
 
   // 沙箱里的配置文件必须仍是合法 JSON,且没有被半写破坏
-  const cfgPath = path.join(sandbox, '.git-commit-tool.json')
+  // (2026-09-18 起主配置在 ~/.zen-gitsync/config.json,见 src/paths.js)
+  const cfgDir = path.join(sandbox, '.zen-gitsync')
+  const cfgPath = path.join(cfgDir, 'config.json')
   const raw = await fs.readFile(cfgPath, 'utf-8')
   JSON.parse(raw)
 
   // 不留 tmp 残渣
-  const leaked = (await fs.readdir(sandbox)).filter(n => n.startsWith('.git-commit-tool.json.') && n.endsWith('.tmp'))
+  const leaked = (await fs.readdir(cfgDir)).filter(n => n.startsWith('config.json.') && n.endsWith('.tmp'))
 
   console.log(`请求总数(含并发): ${batches * perBatch * 4}`)
   console.log(`沙箱配置文件可 parse: yes (${raw.length} bytes)`)

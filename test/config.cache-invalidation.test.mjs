@@ -22,7 +22,7 @@
 // 隔离策略:
 //   config.js 的 configPath 在模块加载时由 os.homedir() 决定。
 //   本文件在 import config.js **之前**把 USERPROFILE/HOME 指到临时目录,
-//   使所有读写落在 mkdtemp 沙箱里,完全不触碰真实 ~/.git-commit-tool.json。
+//   使所有读写落在 mkdtemp 沙箱里,完全不触碰真实 ~/.zen-gitsync/config.json。
 //   (os.homedir() 在 Windows 每次调用都重读 USERPROFILE,POSIX 读 HOME,
 //    因此在 import 前设置环境变量即可生效。)
 
@@ -53,12 +53,18 @@ const { invalidateRawConfigCache } = configMod
 const { readRawConfigFile, writeRawConfigFile } = configMod.default
 
 //  sanity check:模块确实把配置路径指到了 fakeHome,绝不在真实 home 上操作
-const configPathInSandbox = path.join(fakeHome, '.git-commit-tool.json')
+//  2026-09-18 起主配置落在统一数据目录 ~/.zen-gitsync/config.json(见 src/paths.js)
+const configDirInSandbox = path.join(fakeHome, '.zen-gitsync')
+const configPathInSandbox = path.join(configDirInSandbox, 'config.json')
 
 before(async () => {
   // 确认隔离生效:此时 fakeHome 里不应有配置文件
   const entries = await fs.readdir(fakeHome)
   assert.ok(!entries.includes('.git-commit-tool.json'), '测试前沙箱 home 应为空')
+  assert.ok(!entries.includes('.zen-gitsync'), '测试前沙箱 home 应为空(不该有数据目录)')
+  // 本文件的 externalWrite 是"模拟别的进程直接写盘",绕过本模块的建目录逻辑,
+  // 所以这里先把数据目录建出来
+  await fs.mkdir(configDirInSandbox, { recursive: true })
 })
 
 after(async () => {

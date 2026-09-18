@@ -19,13 +19,11 @@
 //   - CLI 对话在 Web UI 的智能体 tab 里可见(带 CLI 标记)
 //   - Web UI 可以读取/继续 CLI 创建的会话
 //
-// 本模块刻意不依赖服务器代码,仅用 node 内置 fs/path/os,保持 CLI 自包含。
+// 本模块刻意不依赖服务器代码,仅用 node 内置 fs/path + 共享的路径常量,保持 CLI 自包含。
 
-import fsp from 'fs/promises';
-import path from 'path';
-import os from 'os';
-
-const SESSIONS_DIR = path.join(os.homedir(), '.zen-gitsync', 'agent-sessions');
+import { promises as fsp } from 'node:fs';
+import path from 'node:path';
+import { AGENT_SESSIONS_DIR as SESSIONS_DIR } from '../../paths.js';
 const MAX_SESSIONS = 200;
 const KEEP_SESSIONS = 100;
 

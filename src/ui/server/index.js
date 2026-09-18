@@ -28,6 +28,7 @@ import { Server } from 'socket.io';
 import { spawn, exec } from 'child_process';
 import iconv from 'iconv-lite';
 import { createRequestLogger } from './middleware/requestLogger.js';
+import { migrateDataDir } from '../../dataDirMigration.js';
 import { createErrorHandler } from './middleware/errorHandler.js';
 import { registerUiSocketHandlers } from './socket/registerUiSocketHandlers.js';
 import { registerExecRoutes } from './routes/exec.js';
@@ -190,6 +191,14 @@ let recentPushStatus = {
 
 const showConsole = true;
 async function startUIServer(noOpen = false, savePort = false) {
+  // 数据目录布局迁移:把散在主目录的历史文件收进 ~/.zen-gitsync/(见 src/paths.js)。
+  // 必须早于任何数据读写 —— 尤其是下面的实例注册表(它要读 instances/ 目录)。
+  // 幂等 + 永不抛错,失败只是"这轮没搬成",下次启动重试。
+  const migrationReport = await migrateDataDir();
+  if (migrationReport.moved.length || migrationReport.cleaned.length) {
+    logger.info(`[dataDirMigration] 搬移 ${migrationReport.moved.length} 项、留档 ${migrationReport.cleaned.length} 项`);
+  }
+
   const app = express();
   const httpServer = createServer(app);
 

@@ -35,12 +35,12 @@
 
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import express from 'express';
 import { callLlmStream } from '../workbench/llmClient.js';
 import { ensureWithinCwd } from '../../utils/pathGuard.js';
 import { createThinkFilter } from '../../../../cli/ai/streamFilter.js';
+import { AI_DIFF_SUMMARIES_DIR } from '../../../../paths.js';
 
 // prompt 预算:diff 超过预算只保留头部并标注截断,防止 token 爆炸
 const MAX_FILE_DIFF_CHARS = 8000;
@@ -51,7 +51,7 @@ const MAX_UNTRACKED_FILES = 40;
 // 提示词或输出契约变化时递增，避免复用旧规则生成的说明。
 const SUMMARY_CACHE_VERSION = 1;
 const MAX_SUMMARY_CACHE_ENTRIES = 300;
-const SUMMARY_CACHE_DIR = path.join(os.homedir(), '.zen-gitsync', 'ai-diff-summaries');
+const SUMMARY_CACHE_DIR = AI_DIFF_SUMMARIES_DIR;
 
 function hashText(value) {
   return createHash('sha256').update(String(value || ''), 'utf8').digest('hex');

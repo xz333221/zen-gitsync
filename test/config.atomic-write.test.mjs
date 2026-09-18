@@ -18,7 +18,7 @@
 // 隔离策略(2026-08-30 修订):
 //   1. **沙箱隔离**:在 import src/config.js **之前**把 USERPROFILE/HOME 指到
 //      mkdtemp 临时目录,使所有读写落在沙箱里,完全不触碰真实
-//      ~/.git-commit-tool.json。(os.homedir() 在 Windows 每次调用都重读
+//      ~/.zen-gitsync/config.json。(os.homedir() 在 Windows 每次调用都重读
 //      USERPROFILE,POSIX 读 HOME,因此在 import 前设置环境变量即可生效。)
 //   2. **哨兵校验**:before 记录真实配置的 mtimeMs+size,after 断言二者未变。
 //      将来若有人改回"直接写真实 home",哨兵会立刻让测试失败,而不是
@@ -52,7 +52,10 @@ import { pathToFileURL } from 'node:url'
 
 // ---- 真实 home 快照:必须在改写环境变量之前取,供哨兵校验使用 ----
 const realHome = os.homedir()
-const realConfigPath = path.join(realHome, '.git-commit-tool.json')
+// 2026-09-18 起数据统一收进 ~/.zen-gitsync/(见 src/paths.js);
+// 旧的 ~/.zen-gitsync/config.json 一并纳入哨兵 —— 迁移上线后它不该再被读写。
+const realConfigPath = path.join(realHome, '.zen-gitsync', 'config.json')
+const legacyRealConfigPath = path.join(realHome, '.git-commit-tool.json')
 
 // ---- 环境隔离:必须在 import src/config.js 之前完成 ----
 const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), 'zgs-config-atomic-test-'))
@@ -73,16 +76,20 @@ const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.
 const { writeRawConfigFile, saveConfig } = configMod.default
 
 // 沙箱内的配置路径 —— 本文件所有读写都落在这里
-const configPath = path.join(fakeHome, '.git-commit-tool.json')
+const configPath = path.join(fakeHome, '.zen-gitsync', 'config.json')
 
 /** 读取真实配置的签名;文件不存在时返回 null */
 async function statRealConfig() {
-  try {
-    const st = await fs.stat(realConfigPath)
-    return { mtimeMs: st.mtimeMs, size: st.size }
-  } catch (_) {
-    return null
+  const out = {}
+  for (const p of [realConfigPath, legacyRealConfigPath]) {
+    try {
+      const st = await fs.stat(p)
+      out[p] = { mtimeMs: st.mtimeMs, size: st.size }
+    } catch (_) {
+      out[p] = null
+    }
   }
+  return out
 }
 
 let realSignatureBefore = null
@@ -91,8 +98,10 @@ before(async () => {
   // 断言一:隔离确实生效 —— 此刻沙箱里不该有配置文件
   const entries = await fs.readdir(fakeHome)
   assert.ok(!entries.includes('.git-commit-tool.json'), '测试前沙箱 home 应为空')
+  assert.ok(!entries.includes('.zen-gitsync'), '测试前沙箱里不该有数据目录')
   // 断言二:沙箱路径与真实路径不能重合(防止 mkdtemp 异常落到 home)
   assert.notEqual(path.resolve(fakeHome), path.resolve(realHome), '沙箱目录不应等于真实 home')
+  // 本文件直接调 writeRawConfigFile,它会自己 resolveConfigPath → 迁移会建目录
   realSignatureBefore = await statRealConfig()
 })
 
@@ -226,7 +235,7 @@ test('writeRawConfigFile: 同一毫秒内并发多写 — 不得降级为非原�
   assert.equal(parsed.payload, String(idx).repeat(600), 'marker 与 payload 必须来自同一次写入')
 
   const leaked = (await fs.readdir(path.dirname(configPath))).filter(name =>
-    name.startsWith('.git-commit-tool.json.') && name.endsWith('.tmp')
+    name.startsWith(`${path.basename(configPath)}.`) && name.endsWith('.tmp')
   )
   assert.equal(leaked.length, 0, `并发写后不应残留 tmp,实际: ${JSON.stringify(leaked)}`)
 })
@@ -236,8 +245,9 @@ test('writeRawConfigFile: 完成后不留 .pid.timestamp.tmp 临时文件', asyn
   // 给文件系统一点时间同步(虽然 rename 是同步的,防御性等待)
   await new Promise(r => setTimeout(r, 50))
   const entries = await fs.readdir(path.dirname(configPath))
+  // 前缀必须由 configPath 推导 —— 写死旧文件名会让断言在改路径后"永远通过"(实测踩过)
   const leaked = entries.filter(name =>
-    name.startsWith('.git-commit-tool.json.') && name.endsWith('.tmp')
+    name.startsWith(`${path.basename(configPath)}.`) && name.endsWith('.tmp')
   )
   assert.equal(
     leaked.length,

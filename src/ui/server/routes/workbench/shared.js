@@ -25,10 +25,12 @@ import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import logger from '../../utils/logger.js';
+import { DATA_DIR } from '../../../../paths.js';
 
 // ── 数据目录与持久化文件路径 ─────────────────────────────────
-// 全部存在用户主目录 ~/.zen-gitsync/ 下，跨项目共享
-export const DATA_DIR = path.join(os.homedir(), '.zen-gitsync');
+// 全部存在用户主目录 ~/.zen-gitsync/ 下，跨项目共享。
+// 目录本身定义在 src/paths.js(全部数据路径的唯一真相源)，这里只在其下拼文件名。
+export { DATA_DIR };
 export const PROMPTS_FILE = path.join(DATA_DIR, 'prompts.json');
 export const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 export const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');

@@ -14,7 +14,7 @@
 //
 // 思维导图 store：管理当前目录、文件列表、当前编辑文件、dirty 状态。
 // 持久化策略：
-//   - currentDir 持久化到 ~/.git-commit-tool.json ui.mindmapDir（避免因随机端口导致 localStorage 失效）
+//   - currentDir 持久化到 ~/.zen-gitsync/config.json ui.mindmapDir（避免因随机端口导致 localStorage 失效）
 //   - 文件保存是手动的（Ctrl+S / 工具栏按钮 / 切换文件前提示）
 //     加自动保存：编辑停止 1500ms 后在 MindmapView 内静默调用本 store 的 saveCurrent
 //   - @change 事件只标记 dirty=true 并调度自动保存 timer，避免频繁 IO
@@ -44,7 +44,7 @@ export interface CurrentMindmap {
 
 export const useMindmapStore = defineStore('mindmap', () => {
   const configStore = useConfigStore()
-  // 当前目录（持久化到 ~/.git-commit-tool.json ui.mindmapDir，避免因随机端口导致 localStorage 失效）
+  // 当前目录（持久化到 ~/.zen-gitsync/config.json ui.mindmapDir，避免因随机端口导致 localStorage 失效）
   const currentDir = ref<string>((configStore.ui as any).mindmapDir || '')
   const files = ref<MindmapFileMeta[]>([])
   const current = ref<CurrentMindmap | null>(null)

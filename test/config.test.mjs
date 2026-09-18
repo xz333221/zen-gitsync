@@ -19,7 +19,7 @@
 //
 // 隔离策略(2026-08-30 修订):
 //   在 import src/config.js **之前**把 USERPROFILE/HOME 指到 mkdtemp 沙箱,
-//   所有读写落在临时目录,不触碰真实 ~/.git-commit-tool.json。
+//   所有读写落在临时目录,不触碰真实 ~/.zen-gitsync/config.json。
 //
 //   修订原因:本文件原先只做纯函数测试,但"saveConfig: 合法非空对象不抛
 //   ConfigWriteError"这个用例会真的调 saveConfig({ defaultCommitMessage:

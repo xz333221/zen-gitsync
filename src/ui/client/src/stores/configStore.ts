@@ -193,7 +193,7 @@ export const useConfigStore = defineStore('config', () => {
   const models = ref<ModelInfo[]>([])
 
   // ============================================================
-  // UI 状态（持久化到 ~/.git-commit-tool.json 的顶层 ui 字段）
+  // UI 状态（持久化到 ~/.zen-gitsync/config.json 的顶层 ui 字段）
   // ============================================================
   // 之前散落在 localStorage 里的视图模式/分割比例/控制台状态/布局比例
   // 因随机端口启动而失效，迁到文件持久化。

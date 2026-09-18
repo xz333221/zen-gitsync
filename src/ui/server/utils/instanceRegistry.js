@@ -25,29 +25,33 @@
 // stale 判定：PID 不存在 或 lastHeartbeat 超过 STALE_MS。
 // 启动时会自动从旧主文件（~/.zen-gitsync-instances.json）迁移到目录。
 
-import nodePath from 'node:path';
 import logger from './logger.js';
-import nodeOs from 'node:os';
+import { INSTANCES_DIR, LEGACY_INSTANCES_FILE } from '../../../paths.js';
 
 const STALE_MS = 30_000;              // 心跳超时阈值（毫秒）
 const WATCH_DEBOUNCE_MS = 100;        // fs.watch 防抖时间
 const REGISTRY_VERSION = 1;
+// 这两个字符串常量保留:createInstanceRegistry() 支持注入 pathMod/osMod(测试要跨平台
+// mock),内部 legacyPath() 用注入的 os 拼路径。生产默认值走下面的 getter → src/paths.js。
 const REGISTRY_DIR_NAME = '.zen-gitsync-instances';
 const REGISTRY_LEGACY_FILE_NAME = '.zen-gitsync-instances.json';
 const MIGRATION_MARKER = '.migrated';
 
 /**
- * 新注册表目录路径（每进程一个文件）
+ * 新注册表目录路径（每进程一个文件）。
+ *
+ * 位置由 src/paths.js 统一裁定 = ~/.zen-gitsync/instances(2026-09-18 从
+ * ~/.zen-gitsync-instances 收敛进数据目录,历史目录由 dataDirMigration 搬迁)。
  */
 export function getRegistryPath() {
-  return nodePath.join(nodeOs.homedir(), REGISTRY_DIR_NAME);
+  return INSTANCES_DIR;
 }
 
 /**
  * 旧版单文件注册表路径（仅用于一次性迁移）
  */
 export function getLegacyRegistryPath() {
-  return nodePath.join(nodeOs.homedir(), REGISTRY_LEGACY_FILE_NAME);
+  return LEGACY_INSTANCES_FILE;
 }
 
 function defaultIsProcessAlive(pid) {
@@ -249,7 +253,14 @@ export function createInstanceRegistry({
       const raw = await fsMod.readFile(legacyPath_, 'utf-8');
       legacy = JSON.parse(raw);
     } catch (err) {
-      if (err && err.code !== 'ENOENT') {
+      // 历史脏状态:~/.zen-gitsync-instances.json 被误建成了一个**目录**,readFile 会
+      // 抛 EISDIR(Windows 上 ENOTDIR/EISDIR 视情况)。这不是"读旧文件失败",而是
+      // "旧文件根本不是文件",当不存在处理即可 —— 否则每次启动都打一条误导性警告,
+      // 且随后的 unlink 也必然 EPERM,垃圾永远清不掉(目录本身由 dataDirMigration 收走)。
+      const kind = err?.code;
+      if (kind === 'EISDIR' || kind === 'ENOTDIR') {
+        logger.info('[instanceRegistry] 旧主文件位置是个目录(历史脏状态),按无旧数据处理');
+      } else if (kind !== 'ENOENT') {
         logger.warn(`[instanceRegistry] 读旧主文件失败: ${err?.message || err}`);
       }
     }

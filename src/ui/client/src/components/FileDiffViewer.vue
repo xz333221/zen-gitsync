@@ -126,7 +126,7 @@ const searchQuery = ref<string>(''); // 搜索关键词
 const clampPercent = (v: number) => Math.min(85, Math.max(15, v));
 
 // 视图模式：列表或树状（从 configStore.ui.fileListViewMode 读取，与 GitStatus 通过同一个 ref 自动同步）
-// 之前用 localStorage 持久化，因随机端口启动失效，改为 configStore 写入 ~/.git-commit-tool.json
+// 之前用 localStorage 持久化，因随机端口启动失效，改为 configStore 写入 ~/.zen-gitsync/config.json
 const viewMode = computed<'list' | 'tree'>({
   get: () => configStore.ui.fileListViewMode,
   set: (v) => { configStore.ui.fileListViewMode = v }
@@ -1089,7 +1089,7 @@ watch(() => props.files, (newFiles) => {
 }, { immediate: true });
 
 // splitPercent 已用 computed 双向绑定到 configStore，无需额外 watch 或 onMounted 重读
-// configStore.watch 会自动防抖落盘到 ~/.git-commit-tool.json
+// configStore.watch 会自动防抖落盘到 ~/.zen-gitsync/config.json
 
 // 确保每次挂载时都应用已保存的比例（对话框 destroy-on-close 时尤为重要）
 onMounted(() => {

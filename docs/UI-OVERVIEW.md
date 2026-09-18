@@ -89,7 +89,7 @@ zen-git SPA 是 **VS Code 风格三段式布局**,固定视口,无路由切换(4
 
 **截图:** `01-git-view-light.png` / `08-git-view-dark.png`
 
-三列 × 两行 CSS Grid,默认列比 `2 : 3 : 3`,可拖拽调整并持久化到 `~/.git-commit-tool.json` 的 `ui.layout`:
+三列 × 两行 CSS Grid,默认列比 `2 : 3 : 3`,可拖拽调整并持久化到 `~/.zen-gitsync/config.json` 的 `ui.layout`:
 
 ```
 ┌──────────┬──────────┬──────────┐
