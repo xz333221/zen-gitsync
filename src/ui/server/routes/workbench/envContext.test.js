@@ -23,7 +23,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildEnvContextBlock, ENV_CONTEXT_MAX_PROJECTS } from './envContext.js';
-import { canonicalProjectPath } from './projectRegistry.js';
+import { canonicalProjectPath, TASK_COLUMNS } from './projectRegistry.js';
 
 const entry = (path) => ({
   path,
@@ -53,7 +53,7 @@ test('没有任何项目时返回 null（不注入空块浪费 token）', () => 
   assert.equal(buildEnvContextBlock({ projects: [{ name: 'x', path: '' }] }), null);
 });
 
-test('项目清单带名称、路径与四列计数，并标出当前项目', () => {
+test('项目清单带名称、路径与三列计数，并标出当前项目', () => {
   const projects = [entry('D:\\ws\\zen-gitsync'), entry('D:\\ws\\article-generator')];
   const tasks = [
     // 已完成：simple 任务跑过一次且 job 是 done
@@ -75,11 +75,11 @@ test('项目清单带名称、路径与四列计数，并标出当前项目', ()
   assert.match(block, /zen-gitsync/);
   assert.match(block, /article-generator/);
   assert.match(block, /D:\\ws\\article-generator/);
-  // 四列计数：zen-gitsync 1 条已完成 → 0/0/0/1；article-generator 1 进行中 1 待处理 → 1/1/0/0
-  assert.match(block, /- zen-gitsync \| D:\\ws\\zen-gitsync \| 0\/0\/0\/1\s+← 当前/);
-  assert.match(block, /- article-generator \| D:\\ws\\article-generator \| 1\/1\/0\/0/);
-  // 合计：3 条
-  assert.match(block, /全部项目合计 3 条 —— 待处理 1 \/ 进行中 1 \/ 评审中 0 \/ 已完成 1/);
+  // 三列计数：zen-gitsync 1 条已完成 → 0/0/1；article-generator 1 进行中 1 待处理 → 1/1/0
+  assert.match(block, /- zen-gitsync \| D:\\ws\\zen-gitsync \| 0\/0\/1\s+← 当前/);
+  assert.match(block, /- article-generator \| D:\\ws\\article-generator \| 1\/1\/0/);
+  // 合计：3 条，各列各一条
+  assert.match(block, /全部项目合计 3 条 —— 待处理 1 \/ 进行中 1 \/ 已完成 1/);
   // 真相源路径：这是"够得着"的关键，缺了 Agent 还是只能猜
   for (const p of Object.values(PATHS)) assert.ok(block.includes(p), `缺少路径 ${p}`);
   // 明确要求它去读文件，而不是回"我看不到"
@@ -95,8 +95,8 @@ test('当前项目标记必须归一化后比较（大小写不同也算同一�
     currentProjectPath: 'c:/users/XUZE3',
     projects, tasks: [], jobs: [], ...PATHS,
   });
-  assert.match(block, /- xuze3 \| C:\\Users\\xuze3 \| 0\/0\/0\/0\s+← 当前/);
-  assert.match(block, /- other \| D:\\ws\\other \| 0\/0\/0\/0\n/);
+  assert.match(block, /- xuze3 \| C:\\Users\\xuze3 \| 0\/0\/0\s+← 当前/);
+  assert.match(block, /- other \| D:\\ws\\other \| 0\/0\/0\n/);
 });
 
 test('项目数超过上限时只列前 N 个，但合计仍按全量算', () => {
@@ -138,9 +138,41 @@ test('没关联项目的任务不计入项目行，但计入合计', () => {
   ];
   const block = buildEnvContextBlock({ projects, tasks, jobs: [], ...PATHS });
   // 项目行只认 key 匹配得上的那条（t1）→ 待处理 1
-  assert.match(block, /- a \| D:\\ws\\a \| 1\/0\/0\/0/);
+  assert.match(block, /- a \| D:\\ws\\a \| 1\/0\/0/);
   // 而合计走 NO_PROJECT_KEY 那桶一起算 → 2 条；两者不相等正是这段断言要守的
   assert.match(block, /全部项目合计 2 条/);
   // 无项目归属的任务不该凭空造出一行项目
   assert.equal(block.split('\n').filter(l => l.startsWith('- ') && l.includes('|')).length, 1);
+});
+
+// ── 列数一致性：这一条是"改列别再漏一处"的守门员 ──────────────────────
+//
+// 去掉「评审中」那一轮，输出从四列变三列，但这个文件里是**逐条正则硬写的数字**，
+// 只顺手改了最显眼的一行 → 另外三处照红。下面这条不比对具体数字，只守"段数 == 看板列数"，
+// 下次增删列时它和上面几条会一起红，而不是让某一条孤零零地报一个对不上的字符串。
+test('项目行/合计的段数必须与 TASK_COLUMNS 一致，且每列都有中文标签', () => {
+  const projects = [entry('D:\\ws\\a')];
+  const tasks = [
+    { id: 't1', projectPath: 'D:\\ws\\a', type: 'simple', subtasks: [] },
+    { id: 't2', projectPath: 'D:\\ws\\a', type: 'simple', subtasks: [] },
+  ];
+  const block = buildEnvContextBlock({ projects, tasks, jobs: [], ...PATHS });
+
+  // 表头里的「待处理/进行中/已完成」：段数 = 列数，且不能有一列回落成 key 本身
+  const headerLabels = block.match(/格式: 名称 \| 路径 \| ([^）]+)/)[1].split('/');
+  assert.equal(headerLabels.length, TASK_COLUMNS.length, '表头标签数应与看板列数一致');
+  TASK_COLUMNS.forEach((key, i) => {
+    assert.notEqual(headerLabels[i], key, `列「${key}」缺中文标签（标签表里没这个名字）`);
+  });
+
+  // 项目行的计数组数
+  const rowCounts = block.match(/- a \| D:\\ws\\a \| ([^\n]+)/)[1].trim().split('/');
+  assert.equal(rowCounts.length, TASK_COLUMNS.length, '项目行的计数组数应与看板列数一致');
+
+  // 合计行的段数
+  const overview = block.match(/全部项目合计 \d+ 条 —— ([^\n]+)/)[1].split(' / ');
+  assert.equal(overview.length, TASK_COLUMNS.length, '合计行的段数应与看板列数一致');
+
+  // 两个任务都是待处理 → 第一段是 2，其余列是 0（顺序由 TASK_COLUMNS 决定，不是写死的下标）
+  assert.equal(rowCounts[TASK_COLUMNS.indexOf('todo')], '2');
 });

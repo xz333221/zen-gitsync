@@ -29,9 +29,9 @@
        全是噪声，占的行高还让有任务的项目不显眼；没有进度行本身就是"这儿还没开工"的信号。
 -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Folder, FolderOpened, Grid } from '@element-plus/icons-vue'
+import { Folder, FolderOpened, Grid, Search } from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
 import type { ProjectSummary } from '@/types/workbench'
 import { relativeTimeFromIso } from '@/utils/relativeTime'
@@ -61,6 +61,41 @@ const ordered = computed(() => {
     return a.name.localeCompare(b.name)
   })
 })
+
+// ── 筛选（纯前端） ──────────────────────────────────────────────────
+// 项目清单本来就整份在内存里（GET /api/workbench/projects 一次给全），
+// 筛选再走一趟后端只会多一次往返和一次"筛选态与服务端口径不一致"的可能，
+// 所以这里就地对 ordered 过滤。
+const query = ref('')
+const onlyWithTasks = ref(false)
+const hideNonGit = ref(false)
+
+const filtering = computed(
+  () => !!query.value.trim() || onlyWithTasks.value || hideNonGit.value
+)
+
+/**
+ * 筛选结果。三条规则刻意各自独立（可叠加）：
+ *   · 「只看有任务」用 stats.total === 0 —— 与左栏进度行"没有就不显示"同一个口径；
+ *   · 「隐藏非 Git」只隐藏**明确探到不是仓库**的（isGitRepo === false）。
+ *     isGitRepo === null 是"没探到"，把它当成非仓库藏掉就是谎报，与分支位那条克制同源；
+ *   · 搜索同时匹配名称与路径（按路径找更快，名字记不全时用得上）。
+ */
+const visible = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  return ordered.value.filter((p) => {
+    if (onlyWithTasks.value && p.stats.total === 0) return false
+    if (hideNonGit.value && p.git && p.git.isGitRepo === false) return false
+    if (!q) return true
+    return p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q)
+  })
+})
+
+function clearFilters() {
+  query.value = ''
+  onlyWithTasks.value = false
+  hideNonGit.value = false
+}
 
 const totals = computed(() => props.projects.reduce(
   (acc, p) => ({
@@ -99,8 +134,46 @@ function hasBranchIcon(p: ProjectSummary): boolean {
   <section class="proj">
     <header class="proj__head">
       <h3 class="proj__title">{{ $t('@WORKBENCH:项目列表') }}</h3>
-      <span class="proj__count">{{ projects.length }}</span>
+      <span class="proj__count">
+        <template v-if="filtering">
+          {{ $t('@WORKBENCH:匹配 {n}/{total} 个项目', { n: visible.length, total: projects.length }) }}
+        </template>
+        <template v-else>{{ projects.length }}</template>
+      </span>
     </header>
+
+    <!-- 一个项目都没有时不渲染筛选条：没有可筛的东西，这一行只是占位 -->
+    <div v-if="projects.length > 0" class="proj__tools">
+      <div class="proj__search">
+        <el-icon class="proj__search-icon" aria-hidden="true"><Search /></el-icon>
+        <input
+          v-model="query"
+          class="proj__search-input"
+          type="search"
+          :placeholder="$t('@WORKBENCH:搜索项目名称或路径')"
+          :aria-label="$t('@WORKBENCH:搜索项目名称或路径')"
+          @keydown.esc="query = ''"
+        />
+      </div>
+      <div class="proj__toggles">
+        <button
+          type="button"
+          class="proj__toggle"
+          :class="{ 'is-on': onlyWithTasks }"
+          :aria-pressed="onlyWithTasks"
+          :title="$t('@WORKBENCH:只显示有任务的项目')"
+          @click="onlyWithTasks = !onlyWithTasks"
+        ><span>{{ $t('@WORKBENCH:只看有任务') }}</span></button>
+        <button
+          type="button"
+          class="proj__toggle"
+          :class="{ 'is-on': hideNonGit }"
+          :aria-pressed="hideNonGit"
+          :title="$t('@WORKBENCH:只显示 Git 仓库')"
+          @click="hideNonGit = !hideNonGit"
+        ><span>{{ $t('@WORKBENCH:隐藏非 Git') }}</span></button>
+      </div>
+    </div>
 
     <ul class="proj__list">
       <li
@@ -139,7 +212,7 @@ function hasBranchIcon(p: ProjectSummary): boolean {
       </li>
 
       <li
-        v-for="p in ordered"
+        v-for="p in visible"
         :key="p.key"
         class="proj-item"
         :class="{
@@ -219,6 +292,20 @@ function hasBranchIcon(p: ProjectSummary): boolean {
         <p class="proj-empty__title">{{ $t('@WORKBENCH:尚无项目') }}</p>
         <p class="proj-empty__hint">{{ $t('@WORKBENCH:常用目录与建过任务的目录都会出现在这里') }}</p>
       </li>
+
+      <!-- 有项目、只是被筛没了：这必须说出来。
+           空着会让人以为项目列表坏了，而"没有匹配"和"一个项目都没有"是两件事。
+           刻意写成两个互斥的 v-if（而不是 v-else-if）：条件里带上了 projects.length，
+           读代码时不用回头找上一段才敢确定它们不重叠。 -->
+      <li
+        v-if="!loading && projects.length > 0 && visible.length === 0"
+        class="proj-empty"
+      >
+        <p class="proj-empty__title">{{ $t('@WORKBENCH:没有匹配的项目') }}</p>
+        <button type="button" class="proj-empty__clear" @click="clearFilters">
+          {{ $t('@WORKBENCH:清除筛选') }}
+        </button>
+      </li>
     </ul>
   </section>
 </template>
@@ -250,7 +337,86 @@ function hasBranchIcon(p: ProjectSummary): boolean {
   font-size: 10px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
+
+/* ── 筛选条 ─────────────────────────────────────────── */
+/* 两行：搜索独占一行（挤到半行就短得没法用），两个开关并排一行。
+   整体是扁平的——只有 1px 边框，不额外加底色块，和下面项目行同一套语言。 */
+.proj__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 8px;
+  flex-shrink: 0;
+}
+.proj__search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  transition: border-color var(--transition-fast) var(--ease-custom);
+}
+.proj__search:focus-within { border-color: var(--color-primary); }
+.proj__search-icon {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.proj__search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--text-primary);
+}
+.proj__search-input::placeholder { color: var(--text-tertiary); }
+.proj__toggles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* 开关：等宽平分，选中只变颜色 + 一层很淡的主色底（和 .proj-item__action:hover 同款） */
+.proj__toggle {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast) var(--ease-custom),
+    border-color var(--transition-fast) var(--ease-custom),
+    background var(--transition-fast) var(--ease-custom);
+}
+/* ⚠️ 省略号挂在 span 上，不挂在 button 上：button 要参与 flex 分配宽度，
+   文字长度不可控时外层撑不住的话会把兄弟按钮挤走 */
+.proj__toggle > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proj__toggle:hover { color: var(--text-secondary); border-color: var(--text-tertiary); }
+.proj__toggle.is-on {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--tint-primary-12);
+}
+.proj__toggle:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .proj__list {
   list-style: none;
   margin: 0;
@@ -504,4 +670,17 @@ function hasBranchIcon(p: ProjectSummary): boolean {
   line-height: 1.6;
   color: var(--text-tertiary);
 }
+/* 「清除筛选」：文字按钮，不加底色不加边框，只给主色 */
+.proj-empty__clear {
+  margin-top: 8px;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.proj-empty__clear:hover { text-decoration: underline; }
+.proj-empty__clear:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 </style>

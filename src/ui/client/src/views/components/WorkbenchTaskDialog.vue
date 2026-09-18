@@ -60,7 +60,6 @@ const loadError = ref('')
 const COLUMN_LABEL: Record<TaskColumn, string> = {
   todo: '@WORKBENCH:待处理',
   doing: '@WORKBENCH:进行中',
-  review: '@WORKBENCH:评审中',
   done: '@WORKBENCH:已完成',
 }
 
@@ -354,7 +353,6 @@ function attachmentSize(bytes?: number): string {
   color: var(--text-secondary);
 }
 .td__status.is-doing { color: var(--color-warning); }
-.td__status.is-review { color: var(--color-primary); }
 .td__status.is-done { color: var(--color-success); }
 
 .td__error-bar {

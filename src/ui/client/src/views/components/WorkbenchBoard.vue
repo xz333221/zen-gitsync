@@ -30,7 +30,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh, Fold, Expand } from '@element-plus/icons-vue'
 import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
 import { useWorkbenchProjects } from '@/composables/useWorkbenchProjects'
@@ -188,8 +188,19 @@ onBeforeUnmount(() => {
 })
 
 // ── 动作 ────────────────────────────────────────────────────────────
+/**
+ * 左栏抽屉的开合状态。**只在窄屏（≤1024px）有意义**：
+ * 宽屏时 .board__left 是常驻一栏，这个 class 没有任何样式（相关规则全在媒体查询里），
+ * 所以下面不用写"窗口宽度"判断 —— 状态只有一个，样式决定它怎么表现。
+ *
+ * 默认 false（收起）：窄屏下看板要占满宽度，左栏按需展开。
+ */
+const leftDrawerOpen = ref(false)
+
 function onSelectProject(p: ProjectSummary | null) {
   selectedKey.value = p ? p.key : ''
+  // 窄屏下选完项目就把抽屉收掉，否则它一直盖着刚选中那个项目的看板
+  leftDrawerOpen.value = false
 }
 
 /**
@@ -318,6 +329,20 @@ async function onToggleSchedule(next: boolean) {
 <template>
   <div class="board">
     <header class="board__top">
+      <!-- 窄屏下展开/收起左栏。宽屏时这个按钮不显示（左栏本来就常驻） -->
+      <button
+        type="button"
+        class="board__icon-btn board__drawer-btn"
+        :class="{ 'is-on': leftDrawerOpen }"
+        :title="leftDrawerOpen ? $t('@WORKBENCH:收起项目列表') : $t('@WORKBENCH:展开项目列表')"
+        :aria-label="leftDrawerOpen ? $t('@WORKBENCH:收起项目列表') : $t('@WORKBENCH:展开项目列表')"
+        :aria-expanded="leftDrawerOpen"
+        @click="leftDrawerOpen = !leftDrawerOpen"
+      >
+        <el-icon v-if="leftDrawerOpen"><Fold /></el-icon>
+        <el-icon v-else><Expand /></el-icon>
+      </button>
+
       <div class="board__brand">
         <span class="board__live" :class="{ 'is-off': !active }" aria-hidden="true" />
         <div class="board__brand-text">
@@ -358,7 +383,22 @@ async function onToggleSchedule(next: boolean) {
     </header>
 
     <div class="board__cols">
-      <aside class="board__left">
+      <!-- 抽屉打开时的点击捕获层：点空白处收起。
+           只在窄屏 + 打开时才 display:block（见媒体查询），宽屏下是个不占位的空 div。
+           不加遮罩底色而是全透明 —— 只是为了接住点击，不是为了压暗看板；
+           真要压暗就得处理深色主题下半透明背景叠不实的老问题（见 NOTES §2）。 -->
+      <div
+        class="board__scrim"
+        :class="{ 'is-on': leftDrawerOpen }"
+        aria-hidden="true"
+        @click="leftDrawerOpen = false"
+      />
+
+      <aside
+        class="board__left"
+        :class="{ 'is-collapsed': !leftDrawerOpen }"
+        @keydown.esc="leftDrawerOpen = false"
+      >
         <WorkbenchProjectPanel
           :projects="projects"
           :selected-key="selectedKey"
@@ -441,6 +481,11 @@ async function onToggleSchedule(next: boolean) {
   min-height: 0;
   background: var(--bg-container);
   color: var(--text-primary);
+  /* 两侧栏宽度的**唯一出处**。右栏（OrchestratorConsole 的 .oc）读同一个变量，
+     所以调窄屏宽度只改这里，不用 :deep 进子组件压它的 width。
+     下面三档媒体查询就是"越窄越收紧"的全部内容。 */
+  --wb-left-w: 264px;
+  --wb-right-w: 300px;
 }
 
 /* ── 顶栏 ───────────────────────────────────────────── */
@@ -536,16 +581,24 @@ async function onToggleSchedule(next: boolean) {
 .board__icon-btn:hover { color: var(--color-primary); }
 .board__icon-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 
+/* 抽屉按钮 / 点击捕获层默认不占位，只在窄屏生效（规则在下面的媒体查询里）。
+   ⚠️ 这两条必须写在媒体查询**之前**：`.board__drawer-btn` 在媒体查询里是同一个选择器、
+   同为 (0,1,0) 权重，谁在后面谁赢 —— 写在后面会把窄屏那条 display:inline-flex 反压掉。 */
+.board__drawer-btn { display: none; }
+.board__scrim { display: none; }
+
 /* ── 三栏 ───────────────────────────────────────────── */
 .board__cols {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  /* 窄屏左栏要改成浮在看板上方的抽屉，这里当它的定位锚点（见媒体查询） */
+  position: relative;
 }
 .board__left {
   display: flex;
   flex-direction: column;
-  width: 264px;
+  width: var(--wb-left-w);
   flex-shrink: 0;
   min-height: 0;
   background: var(--bg-panel);
@@ -593,5 +646,87 @@ async function onToggleSchedule(next: boolean) {
   font-size: 11px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
+}
+
+/* ══ 响应式 ══════════════════════════════════════════════════════════
+   三栏固定总宽 = 264 + 300 = 564px，剩给看板；再算上左侧活动栏（约 48px），
+   屏宽 1280 时看板只有 660px 左右，三条列每列 220px —— 卡片标题已经开始成省略号。
+   所以这里的顺序是：**先收两边，再动结构**，能不折叠就不折叠。
+
+   断点按"看板还剩多少"倒推，而不是拍脑袋的整数：
+     1440  看板 ≈ 830  → 两侧各收一点，还够看
+     1180  看板 ≈ 570  → 再收，左栏到 200px 是项目名还能认出来的下限
+     1024  看板 ≈ 460  → 左栏改成抽屉（能收起来才是真的省下 200px）
+      860  竖排       → 看板与右栏上下叠，各自占满宽度
+
+   ⚠️ 右栏（.oc）**不参与折叠**：用户要经常派发指令，它得一直在。
+   所以窄屏下被牺牲顺序是"左栏 → 结构"，不是"右栏 → 收起"。
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 1440px) {
+  .board { --wb-left-w: 224px; --wb-right-w: 280px; }
+}
+@media (max-width: 1180px) {
+  .board { --wb-left-w: 200px; --wb-right-w: 260px; }
+}
+
+/* 左栏改成抽屉：绝对定位浮在看板上方，用 transform 收起（保留过渡）。
+   ⚠️ 底色用 --bg-container 而不是 --bg-panel：深色主题的 --bg-panel-dark 是半透明的，
+   浮层用它会在看板文字上透出底下的字（同 NOTES §2 那个坑）。 */
+@media (max-width: 1024px) {
+  .board__drawer-btn { display: inline-flex; }
+
+  .board__left {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(var(--wb-left-w), 86vw);
+    background: var(--bg-container);
+    border-right: 1px solid var(--border-color);
+    box-shadow: var(--dialog-shadow);
+    transition: transform var(--transition-base) var(--ease-custom);
+  }
+  .board__left.is-collapsed {
+    transform: translateX(-100%);
+    /* 收起后必须断掉命中测试，否则它会隔着 86vw 宽的一条透明区域继续吞点击 */
+    pointer-events: none;
+  }
+
+  .board__scrim.is-on {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+  }
+}
+
+/* 手机宽度：看板在上、主 Agent 控制台在下，整块纵向滚动。
+   输入区仍可直接用 —— 控制台自带 min-height（见 OrchestratorConsole），
+   展开后不用先滚动定位就能点到输入框和派发按钮。 */
+@media (max-width: 860px) {
+  .board { --wb-right-w: 100%; }
+  .board__cols {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .board__main {
+    flex: 0 0 auto;
+    min-height: 72vh;
+  }
+  /* 顶栏放不下一行：统计项落到第二行，而不是把标题挤没 */
+  .board__top {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 6px 12px;
+  }
+  .board__stats {
+    order: 3;
+    flex-basis: 100%;
+    margin-left: 0;
+    gap: 12px;
+  }
+  .board__actions { margin-left: auto; }
 }
 </style>

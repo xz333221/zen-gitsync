@@ -36,7 +36,7 @@
 import { probeDirectoryGitStates } from '../../utils/directoryGitState.js';
 
 /** 看板列，数组顺序即列顺序 */
-export const TASK_COLUMNS = ['todo', 'doing', 'review', 'done'];
+export const TASK_COLUMNS = ['todo', 'doing', 'done'];
 
 /** 没有关联任何项目的任务归到这个 key（与前端 useWorkbenchProjectGroups 一致） */
 export const NO_PROJECT_KEY = '__no_project__';
@@ -130,14 +130,14 @@ export function latestJob(jobsForTask) {
  *   1. 有 job 处于 running/pending，或子任务状态是 running → `doing`
  *   2. 有子任务且全部 done → `done`
  *   3. 有子任务但没全 done：
- *        - 动过（有 done 的子任务 / 执行过 / 有 error 的子任务）→ `review`（跑过但没收尾，等你确认或继续）
+ *        - 动过（有 done 的子任务 / 执行过 / 有 error 的子任务）→ `todo`
  *        - 完全没动过 → `todo`
  *   4. 没子任务（简单任务，或还没拆分的复杂任务）：
  *        - 从没执行过 → `todo`
- *        - 最近一条 job 是 done → `done`；其余终态（error/cancelled）→ `review`
+ *        - 最近一条 job 是 done → `done`；其余终态（error/cancelled）→ `todo`
  *
- * 之所以不把 error 单列一列：列是"任务处于哪个阶段"，error 是"这一轮执行失败了"，
- * 失败的任务同样需要人看一眼，归到 `review`，具体错误在前端卡片上另有标记。
+ * error/cancelled 不再单列：列表示任务是否仍待处理，错误是这一轮执行的结果，
+ * 具体错误继续通过卡片标记和任务详情展示。
  */
 export function deriveTaskColumn(task, jobsForTask = []) {
   const subs = Array.isArray(task && task.subtasks) ? task.subtasks : [];
@@ -149,19 +149,18 @@ export function deriveTaskColumn(task, jobsForTask = []) {
   if (subs.length > 0) {
     const doneCount = subs.filter(s => s && s.status === 'done').length;
     if (doneCount === subs.length) return 'done';
-    const touched = doneCount > 0 || jobs.length > 0 || subs.some(s => s && s.status === 'error');
-    return touched ? 'review' : 'todo';
+    return 'todo';
   }
 
   if (jobs.length === 0) return 'todo';
   const last = latestJob(jobs);
-  return last && last.status === 'done' ? 'done' : 'review';
+  return last && last.status === 'done' ? 'done' : 'todo';
 }
 
 /** 空统计，避免各处手写零值 */
 function emptyStats() {
   return {
-    total: 0, todo: 0, doing: 0, review: 0, done: 0,
+    total: 0, todo: 0, doing: 0, done: 0,
     progress: 0, runningJobs: 0, errorSubtasks: 0, lastActiveAt: null,
   };
 }

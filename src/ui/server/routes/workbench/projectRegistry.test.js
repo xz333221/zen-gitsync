@@ -96,16 +96,16 @@ test('deriveTaskColumn: 有 job 在跑或子任务 running 就是进行中', () 
 
 test('deriveTaskColumn: 子任务全部完成才算已完成', () => {
   assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'done'), sub('s2', 'done')] }, []), 'done');
-  // 一半完成 → 跑过但没收尾，落在评审中
-  assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'done'), sub('s2', 'todo')] }, []), 'review');
+  // 一半完成 → 仍待处理，错误与进度由卡片标记展示
+  assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'done'), sub('s2', 'todo')] }, []), 'todo');
   // 有子任务报错也算"需要人看一眼"
-  assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'error'), sub('s2', 'todo')] }, []), 'review');
+  assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'error'), sub('s2', 'todo')] }, []), 'todo');
 });
 
 test('deriveTaskColumn: 无子任务的任务只能看执行记录', () => {
   assert.equal(deriveTaskColumn({ subtasks: [], type: 'simple' }, [job('j1', 't1', 'done', '2026-01-01T00:00:00Z')]), 'done');
-  assert.equal(deriveTaskColumn({ subtasks: [], type: 'simple' }, [job('j1', 't1', 'cancelled', '2026-01-01T00:00:00Z')]), 'review');
-  assert.equal(deriveTaskColumn({ subtasks: [], type: 'simple' }, [job('j1', 't1', 'error', '2026-01-01T00:00:00Z')]), 'review');
+  assert.equal(deriveTaskColumn({ subtasks: [], type: 'simple' }, [job('j1', 't1', 'cancelled', '2026-01-01T00:00:00Z')]), 'todo');
+  assert.equal(deriveTaskColumn({ subtasks: [], type: 'simple' }, [job('j1', 't1', 'error', '2026-01-01T00:00:00Z')]), 'todo');
 });
 
 test('latestJob 按 startedAt 取最新的一条', () => {
@@ -208,7 +208,7 @@ test('decorateTaskForBoard: 只回卡片需要的字段', () => {
     attachments: [{ id: 'at1' }],
     createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z',
   }, []);
-  assert.equal(card.column, 'review');
+  assert.equal(card.column, 'todo');
   assert.equal(card.type, 'complex');
   assert.equal(card.subtaskCount, 2);
   assert.equal(card.subtaskDoneCount, 1);

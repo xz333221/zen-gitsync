@@ -121,7 +121,7 @@ export interface JobsListResponse {
 // 字段是服务端算好的事实（口径见 routes/workbench/projectRegistry.js），前端不重复推导。
 
 /** 看板列。顺序即列顺序 */
-export type TaskColumn = 'todo' | 'doing' | 'review' | 'done'
+export type TaskColumn = 'todo' | 'doing' | 'done'
 
 /** 项目条目的 Git 状态；isGitRepo 为 null 表示没探到，此时不要显示任何 Git 标记 */
 export interface ProjectGitState {
@@ -142,7 +142,6 @@ export interface ProjectStats {
   total: number
   todo: number
   doing: number
-  review: number
   done: number
   /** 已完成任务 / 总任务 × 100，整数 */
   progress: number

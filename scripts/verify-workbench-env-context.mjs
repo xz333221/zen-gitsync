@@ -85,6 +85,24 @@ const env = {
 delete env.HOMEDRIVE
 delete env.HOMEPATH
 
+// ⚠️ server.js 会往**仓库根**写 .port 与 src/ui/client/.env.local —— 它的 cwd 就是这里
+// （沙箱只换了 USERPROFILE/HOME，换不掉 cwd）。而本脚本硬编码 PORT=5611，
+// 5611 一般不是用户正在跑的 dev 端口；不还原的话 vite 的代理会一直指向 5611 这个空端口，
+// 之后所有浏览器脚本（proj-branch / proj-filter / overview / dialogs / dispatch …）
+// 集体 502，表现为"用例 1，通过 0，失败 1"这种没有信息量的假红。真踩过，白查一轮。
+const PORT_FILES = [
+  path.join(projectRoot, '.port'),
+  path.join(projectRoot, 'src/ui/client/.env.local'),
+]
+const portFileBackup = []
+for (const f of PORT_FILES) {
+  try {
+    portFileBackup.push({ f, content: await fs.readFile(f, 'utf8') })
+  } catch {
+    portFileBackup.push({ f, content: null }) // 原本不存在 → 收尾时删掉，别留一个凭空出现的文件
+  }
+}
+
 const child = spawn(process.execPath, ['server.js', '--no-open'], {
   cwd: projectRoot,
   env,
@@ -193,6 +211,13 @@ try {
   try { child.kill() } catch { /* ignore */ }
   await sleep(300)
   try { await fs.rm(sandbox, { recursive: true, force: true }) } catch { /* ignore */ }
+  // 把被 server.js 覆盖掉的端口记录文件还原（否则会毒化后续的浏览器验证，见上面的注释）
+  for (const { f, content } of portFileBackup) {
+    try {
+      if (content === null) await fs.rm(f, { force: true })
+      else await fs.writeFile(f, content)
+    } catch { /* 还原失败不该盖住断言结果 */ }
+  }
 }
 
 if (failures.length) {

@@ -17,7 +17,7 @@
   多项目编排台 · 中栏：任务看板。
 
   关于「列」的一处重要克制：这四列是**推导出来的阶段**，不是可拖拽的状态字段。
-  待处理/进行中/评审中/已完成 全部由执行事实推出（后端 deriveTaskColumn）：
+  待处理/进行中/已完成 全部由执行事实推出（后端 deriveTaskColumn）：
   有 job 在跑就是进行中、子任务全完成才是已完成……
   所以卡片不支持拖动换列——拖过去也没有对应的写操作可做，
   与其做一个拖了就弹回去的假交互，不如让动作落在「执行 / 查看详情」这两个真按钮上。
@@ -69,7 +69,6 @@ const onlyErrors = ref(false)
 const COLUMNS: { key: TaskColumn; labelKey: string }[] = [
   { key: 'todo', labelKey: '@WORKBENCH:待处理' },
   { key: 'doing', labelKey: '@WORKBENCH:进行中' },
-  { key: 'review', labelKey: '@WORKBENCH:评审中' },
   { key: 'done', labelKey: '@WORKBENCH:已完成' },
 ]
 
@@ -86,6 +85,17 @@ const filtered = computed(() => {
 const columns = computed(() =>
   COLUMNS.map(c => ({ ...c, tasks: filtered.value.filter(t => t.column === c.key) }))
 )
+
+/**
+ * 列轨道数跟着列数走。
+ * 写死在 CSS 里的 `repeat(4, ...)` 在去掉「评审中」之后留了一条**空轨道**——
+ * 三条列各占 1/4，剩下 1/4 全白，正是"评审列占了很大面积"观感的来源。
+ * 这里用内联样式取值（而不是改 CSS 里的数字），增删列时不用再记得改 CSS。
+ * 窄屏堆叠走的是 @media 改 `display`（不是改轨道数），所以不会被内联样式压住。
+ */
+const columnsStyle = computed(() => ({
+  gridTemplateColumns: `repeat(${columns.value.length}, minmax(0, 1fr))`,
+}))
 
 /** 卡片标题：优先任务标题；没写标题时用描述压平成一行（与侧边栏任务行同一约定） */
 function cardTitle(t: BoardTask): string {
@@ -149,7 +159,7 @@ function hasError(t: BoardTask): boolean {
     </div>
 
     <!-- 看板视图 -->
-    <div v-if="view === 'kanban'" class="kb__columns">
+    <div v-if="view === 'kanban'" class="kb__columns" :style="columnsStyle">
       <section v-for="col in columns" :key="col.key" class="kb-col" :class="'kb-col--' + col.key">
         <header class="kb-col__head">
           <span class="kb-col__dot" aria-hidden="true" />
@@ -357,7 +367,7 @@ function hasError(t: BoardTask): boolean {
 /* ── 看板列 ─────────────────────────────────────────── */
 .kb__columns {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* 轨道数由 columnsStyle 内联给出（= 列数），别在这儿写死数字 */
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -385,7 +395,6 @@ function hasError(t: BoardTask): boolean {
   background: var(--text-tertiary);
 }
 .kb-col--doing .kb-col__dot { background: var(--color-warning); animation: kb-pulse 1.4s ease-in-out infinite; }
-.kb-col--review .kb-col__dot { background: var(--color-primary); }
 .kb-col--done .kb-col__dot { background: var(--color-success); }
 @keyframes kb-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -636,11 +645,28 @@ function hasError(t: BoardTask): boolean {
   color: var(--text-secondary);
 }
 .kb-table__status.is-doing { color: var(--color-warning); }
-.kb-table__status.is-review { color: var(--color-primary); }
 .kb-table__status.is-done { color: var(--color-success); }
 .kb-table__empty {
   text-align: center;
   padding: 28px 10px;
   color: var(--text-tertiary);
+}
+
+/* ── 窄屏：三列竖排 ─────────────────────────────────── */
+/* 手机宽度下横排三列每列只剩 1/3 屏，卡片标题一律成省略号，不如竖着排、整块滚动。
+   这里切的是 display 而**不是** grid-template-columns：轨道数由 columnsStyle 内联
+   给出（= 列数，见脚本里的注释），媒体查询压不过内联样式，而 display 不受它影响。 */
+@media (max-width: 860px) {
+  .kb__columns {
+    display: block;
+    overflow-y: auto;
+  }
+  .kb-col {
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+  }
+  .kb-col:first-child { border-top: none; }
+  /* 每列不再各自滚：一屏三个滚动区手感很碎，交给外层整块滚 */
+  .kb-col__list { overflow: visible; }
 }
 </style>

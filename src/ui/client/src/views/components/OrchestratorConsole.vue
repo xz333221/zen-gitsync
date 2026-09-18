@@ -156,7 +156,7 @@ function describe(r: OrchestratorActivity): string {
 }
 
 const KIND_LABEL: Record<string, string> = {
-  user: '@WORKBENCH:人类干预',
+  user: '@WORKBENCH:用户派发',
   dispatch: '@WORKBENCH:派发',
   done: '@WORKBENCH:完成',
   error: '@WORKBENCH:出错',
@@ -362,7 +362,10 @@ const gitSummary = computed(() => {
 .oc {
   display: flex;
   flex-direction: column;
-  width: 300px;
+  /* 宽度由工作台给（--wb-right-w）：窄屏要收窄、手机宽度要铺满，
+     写死 300px 的话父级只能靠 :deep 进来压，规则散在两处。
+     默认值 300px 是给它单独用（不在工作台里）时的兜底。 */
+  width: var(--wb-right-w, 300px);
   flex-shrink: 0;
   min-height: 0;
   border-left: 1px solid var(--border-color);
@@ -614,5 +617,20 @@ const gitSummary = computed(() => {
   font-size: 10px;
   line-height: 1.5;
   color: var(--text-tertiary);
+}
+
+/* ── 窄屏 ──────────────────────────────────────────── */
+/* 手机宽度下工作台改成上下排列（见 WorkbenchBoard 的 .board__cols），
+   这条栏从"右侧一条"变成"看板下面一整块"：
+   · 左边框换成上边框（分隔线要跟着方向走）
+   · --wb-right-w 此时是 100%，所以宽度铺满，不用在这儿改
+   · 给一个最小高度，否则内部那条 flex 高度链（feed 滚动 / 输入区钉底）没有参照，
+     输入区会被压扁到只剩一行 */
+@media (max-width: 860px) {
+  .oc {
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+    min-height: 72vh;
+  }
 }
 </style>

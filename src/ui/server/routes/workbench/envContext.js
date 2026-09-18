@@ -35,13 +35,22 @@
 // 统计口径复用 projectRegistry 的 summarizeProjectTasks：「任务算哪一列」
 // 全局只有这一个实现，看板怎么分列，这里就怎么统计。
 
-import { summarizeProjectTasks, canonicalProjectPath } from './projectRegistry.js';
+import { summarizeProjectTasks, canonicalProjectPath, TASK_COLUMNS } from './projectRegistry.js';
 
 /** 项目清单最多列几个：再多就该让 Agent 自己去读文件，而不是往 prompt 里堆 */
 export const ENV_CONTEXT_MAX_PROJECTS = 30;
 
-/** 列 key → 中文标签。顺序即看板列顺序（todo / doing / review / done） */
-const COLUMN_LABELS = ['待处理', '进行中', '评审中', '已完成'];
+/**
+ * 列 key → 中文标签。**按 key 取名，不靠数组下标**：
+ * 顺序一律由 TASK_COLUMNS 决定，这里只负责"这列叫什么"。
+ * （上一轮去掉「评审中」列时，这份清单和下面的 `${s.todo}/${s.doing}/${s.done}` 是两处
+ *  各写各的，改一处漏一处 —— 现在两份都从 TASK_COLUMNS 推。）
+ */
+const COLUMN_LABELS = { todo: '待处理', doing: '进行中', done: '已完成' };
+
+/** 按 TASK_COLUMNS 的顺序取标签；缺标签时回落成 key 本身，
+ *  宁可让 Agent 看到 `todo` 也不要看到空段（空段会让列与标签整体错位）。 */
+const columnLabels = TASK_COLUMNS.map(k => COLUMN_LABELS[k] || k);
 
 /**
  * 拼运行环境上下文块。
@@ -78,13 +87,11 @@ export function buildEnvContextBlock({
   );
 
   // 合计按全部任务算（含「未关联项目」那一桶），所以不能用 list 求和
-  const total = { total: 0, todo: 0, doing: 0, review: 0, done: 0 };
+  const total = { total: 0 };
+  for (const key of TASK_COLUMNS) total[key] = 0;
   for (const s of stats.values()) {
     total.total += s.total;
-    total.todo += s.todo;
-    total.doing += s.doing;
-    total.review += s.review;
-    total.done += s.done;
+    for (const key of TASK_COLUMNS) total[key] += s[key] || 0;
   }
 
   const limit = Number.isFinite(maxProjects) && maxProjects > 0 ? Math.floor(maxProjects) : ENV_CONTEXT_MAX_PROJECTS;
@@ -100,11 +107,11 @@ export function buildEnvContextBlock({
   lines.push('');
   lines.push(`当前任务所在项目（也是你的工作目录）: ${currentProjectPath || '(未指定)'}`);
   lines.push('');
-  lines.push(`项目清单（共 ${list.length} 个；格式: 名称 | 路径 | ${COLUMN_LABELS.join('/')}）:`);
+  lines.push(`项目清单（共 ${list.length} 个；格式: 名称 | 路径 | ${columnLabels.join('/')}）:`);
   for (const p of shown) {
-    const s = stats.get(p.key) || { todo: 0, doing: 0, review: 0, done: 0 };
+    const s = stats.get(p.key) || {};
     const mark = currentKey && p.key === currentKey ? '  ← 当前' : '';
-    lines.push(`- ${p.name || p.key} | ${p.path} | ${s.todo}/${s.doing}/${s.review}/${s.done}${mark}`);
+    lines.push(`- ${p.name || p.key} | ${p.path} | ${TASK_COLUMNS.map(k => s[k] || 0).join('/')}${mark}`);
   }
   if (list.length > shown.length) {
     lines.push(`- …还有 ${list.length - shown.length} 个未列出（读下面的文件可以看全）`);
@@ -112,8 +119,7 @@ export function buildEnvContextBlock({
   lines.push('');
   lines.push(
     `看板任务概览：全部项目合计 ${total.total} 条 —— ` +
-    `${COLUMN_LABELS[0]} ${total.todo} / ${COLUMN_LABELS[1]} ${total.doing} / ` +
-    `${COLUMN_LABELS[2]} ${total.review} / ${COLUMN_LABELS[3]} ${total.done}`,
+    TASK_COLUMNS.map(k => `${COLUMN_LABELS[k]} ${total[k] || 0}`).join(' / '),
   );
   lines.push('');
   lines.push('需要细节时直接读这些文件（本机绝对路径，你有读取权限，不必先问用户）:');
