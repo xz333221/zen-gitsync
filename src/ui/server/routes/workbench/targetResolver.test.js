@@ -33,14 +33,14 @@ import {
   TARGET_SOURCES,
 } from './targetResolver.js';
 
-/** 清单里的 key 就是 canonicalProjectPath 的结果：盘符大写 + 斜杠归一 */
+/** 清单里的 key 就是 canonicalProjectPath 的结果：Windows 形式小写 + 斜杠归一 */
 const PROJECTS = [
-  { name: 'zen-gitsync', path: 'D:\\ws\\zen-gitsync', key: 'D:\\ws\\zen-gitsync' },
-  { name: 'article-generator', path: 'D:\\ws\\article-generator', key: 'D:\\ws\\article-generator' },
-  { name: 'claw-management', path: 'D:\\ws\\claw-management', key: 'D:\\ws\\claw-management' },
-  { name: 'claw-management-api', path: 'D:\\ws\\claw-management-api', key: 'D:\\ws\\claw-management-api' },
-  { name: 'claw-sdd', path: 'D:\\ws\\claw-sdd', key: 'D:\\ws\\claw-sdd' },
-  { name: 'claw-sdd-project', path: 'D:\\ws\\claw-sdd-project', key: 'D:\\ws\\claw-sdd-project' },
+  { name: 'zen-gitsync', path: 'D:\\ws\\zen-gitsync', key: 'd:\\ws\\zen-gitsync' },
+  { name: 'article-generator', path: 'D:\\ws\\article-generator', key: 'd:\\ws\\article-generator' },
+  { name: 'claw-management', path: 'D:\\ws\\claw-management', key: 'd:\\ws\\claw-management' },
+  { name: 'claw-management-api', path: 'D:\\ws\\claw-management-api', key: 'd:\\ws\\claw-management-api' },
+  { name: 'claw-sdd', path: 'D:\\ws\\claw-sdd', key: 'd:\\ws\\claw-sdd' },
+  { name: 'claw-sdd-project', path: 'D:\\ws\\claw-sdd-project', key: 'd:\\ws\\claw-sdd-project' },
 ];
 
 const nameOf = (r) => r && r.project && r.project.name;
@@ -102,6 +102,9 @@ test('pickProjectByAgent 只认清单里真实存在的路径', async () => {
   assert.equal(nameOf(await ask({ projectPath: 'D:\\ws\\article-generator' })), 'article-generator');
   // 盘符小写也要认（走 canonicalProjectPath 归一）
   assert.equal(nameOf(await ask({ projectPath: 'd:\\ws\\article-generator' })), 'article-generator');
+  // 目录段大小写也一样：模型可能把路径"顺手改写"成另一种大小写。
+  // key 会在别处被精确比较，归一必须做进 key 本身，否则这里会当成"编造的路径"退默认项目
+  assert.equal(nameOf(await ask({ projectPath: 'D:\\WS\\Article-Generator' })), 'article-generator');
   // 模型编出来的路径 -> 当作没判断出来，宁可退默认项目也不凭空造工作目录
   assert.equal(await ask({ projectPath: 'D:\\ws\\压根不存在的项目' }), null);
   assert.equal(await ask({ projectPath: '' }), null);

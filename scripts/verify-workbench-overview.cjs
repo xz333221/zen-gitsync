@@ -181,8 +181,14 @@ async function main() {
     check('E3 没点名 -> 落点非空且来源合法（agent / default）',
       !!vague?.target?.path && ['agent', 'default'].includes(vague?.target?.source),
       `source="${vague?.target?.source}" path="${vague?.target?.path}"`)
+    // E4 的判据刻意**不**复用 canonicalProjectPath 的规则，只做"同不同一个目录"的
+    // 宽松比较。理由：脚本里再抄一份归一规则 = 又一处会随产品口径漂移的地方 ——
+    // 抄的那份是旧规则（只转盘符），产品改成"转小写 + 斜杠归一"之后这里就误报红了，
+    // 而落点其实是清单里真有的目录。断言要守的是"没凭空造目录"，不是"key 长什么样"。
+    const samey = (a, b) => String(a || '').replace(/\//g, '\\').toLowerCase()
+      === String(b || '').replace(/\//g, '\\').toLowerCase()
     check('E4 落到的是清单里真实存在的目录',
-      (res.projects || []).some(p => p.key === vague?.target?.path?.replace(/^([a-z])(?=:)/, m => m.toUpperCase()).replace(/\//g, '\\')),
+      (res.projects || []).some(p => samey(p.path, vague?.target?.path) || samey(p.key, vague?.target?.path)),
       `path="${vague?.target?.path}"`)
 
     // 落点要能在这条指令的流水里看到 —— 判断错了才有迹可循

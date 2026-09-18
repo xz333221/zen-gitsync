@@ -27,7 +27,7 @@
 //
 // 设计要点：
 //   - 路径归一与前端 utils/path.ts 的 canonicalProjectPath 必须**逐字一致**
-//     （盘符转大写 + Windows 斜杠归一）；两边口径一旦分叉，
+//     （Windows 形式转小写 + 斜杠归一）；两边口径一旦分叉，
 //     同一个目录会在两侧落到不同 key 上，表现为项目凭空分裂成两个。
 //   - 任务落在哪一列由 deriveTaskColumn 统一推导，是纯函数、单测覆盖；
 //     前端不重复实现这套规则，避免两边口径漂移。
@@ -43,20 +43,34 @@ export const NO_PROJECT_KEY = '__no_project__';
 
 /**
  * 项目路径归一。与前端 src/ui/client/src/utils/path.ts 的 canonicalProjectPath 同口径：
- * Windows 形式（带盘符）→ 盘符转大写 + 反斜杠归一；其余（POSIX）原样返回。
+ * Windows 形式（带盘符）→ 转小写 + 反斜杠归一；其余（POSIX）原样返回。
  *
  * 为什么必须归斜杠：常用目录允许用户手输，同一个目录会同时存在 `D:/ws/proj`
  * 与 `D:\ws\proj` 两种写法。文件系统不区分，字符串比较却会 ——
  * 于是项目列表里出现两个同名项目（实测 article-generator 就是如此）。
  * 归一是修一个看得见的重复项，不是顺手清理。
  *
- * 刻意**不**做去尾斜杠 / 全小写 / 展开 `..`：那会把比较规则变得依赖文件系统语义，
- * 而这里只承诺"同一目录的常见书写差异归一到同一个 key"。
+ * 为什么必须归**大小写**（2026-09-18 补，同一类问题的第二张脸）：
+ * 只归斜杠治不了目录段的大小写。`recentDirectories` 存的是用户输入时的**原始写法**
+ * （`saveRecentDirectory` 只用 normalizeProjectPath 做去重比较，落盘仍写原串），
+ * 而任务的 `projectPath` 来自别处 —— 于是同一个目录会以 `c:\users\xuze3`
+ * （常用目录里手输的小写盘符）和 `C:\Users\xuze3`（任务带出来的）两种形态并存，
+ * 拿到两个 key、渲染成两条项目行。
+ *
+ * 关键在于**小写化必须做进 key 本身**，而不是在每处比较之前各自归一：key 会被拿去
+ * `stats.get(key)` 精确查表、比 `← 当前` 标记、比派发目标、比前端选中的项目 ——
+ * 只要有一处忘了先归一，同一目录就又会裂成两条。统一收在这里，调用方拿到的 key
+ * 天然可跨写法相等比较。（Windows 文件系统不区分大小写，小写化不会把两个真目录并成一个；
+ * 与之对应的 config.js 项目键 `normalizeProjectPath` 也是全小写的，方向一致。）
+ *
+ * 刻意**不**做去尾斜杠 / 展开 `..` / 解析符号链接：那会把比较规则变得依赖文件系统语义。
+ * 小写化是这条底线上唯一的例外，但它是**纯字符串**操作（只看 `X:` 这个形状，不看
+ * process.platform），没有引入任何 fs 依赖 —— 底线还在。
  */
 export function canonicalProjectPath(p) {
   const s = String(p || '').trim();
   if (!/^[a-zA-Z]:/.test(s)) return s;
-  return s.replace(/^([a-z])(?=:)/, (m) => m.toUpperCase()).replace(/\//g, '\\');
+  return s.replace(/\//g, '\\').toLowerCase();
 }
 
 /** 目录名（项目显示名），路径为空时返回空串而不是兜底文案（文案归前端 i18n 管） */
@@ -203,7 +217,13 @@ export function summarizeProjectTasks(tasks, jobs) {
 
 /**
  * 合并最近目录与任务里的 projectPath，得到去重后的项目条目。
- * path 取"首次出现的写法"（先最近目录、后任务），前端可以直接拿它跟其它列表对齐。
+ * path 取"首次出现的写法"（先最近目录内部按原顺序、再任务），前端可以直接拿它跟其它列表对齐。
+ *
+ * ⚠️ "首次出现"要显式实现，不能靠 `map.set` 覆盖：常用目录里同一个目录
+ * 出现两种写法是常态（`c:\users\xuze3` 与 `C:\Users\xuze3`），
+ * 无脑 set 会让**最后一条**写法覆盖前面那条 —— 既违背上面这句约定
+ * （界面上的路径会随常用目录顺序来回跳），也会把先命中过的 fromTasks 抹掉，
+ * 让 `source` 从 'both' 退化成 'recent'。
  *
  * @param {{ recentDirs?: string[], tasks?: object[] }} input
  * @returns {Array<{ path: string, key: string, name: string, source: 'recent'|'task'|'both' }>}
@@ -213,7 +233,9 @@ export function buildProjectEntries({ recentDirs = [], tasks = [] } = {}) {
   for (const dir of recentDirs) {
     const key = canonicalProjectPath(dir);
     if (!key) continue;
-    map.set(key, { path: String(dir).trim(), key, inRecent: true, fromTasks: false });
+    const hit = map.get(key);
+    if (hit) hit.inRecent = true; // 同一目录的第二种写法：只并入来源，不覆盖 path
+    else map.set(key, { path: String(dir).trim(), key, inRecent: true, fromTasks: false });
   }
   for (const t of tasks) {
     const key = canonicalProjectPath(t && t.projectPath);

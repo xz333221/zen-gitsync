@@ -86,15 +86,16 @@ test('项目清单带名称、路径与四列计数，并标出当前项目', ()
   assert.match(block, /不要回答"我看不到\/无法访问"/);
 });
 
-test('当前项目标记必须归一化后比较（盘符大小写不同也算同一个）', () => {
-  // 条目 key 是归一化过的（盘符大写），而 cwd 常常是小写盘符 ——
+test('当前项目标记必须归一化后比较（大小写不同也算同一个）', () => {
+  // 条目 key 是归一化过的（小写 + 反斜杠），而 cwd 常常是另一种写法 ——
   // 直接拿 path 跟 key 比会永远不相等，表现为"当前项目"标记丢失。
-  const projects = [entry('D:\\ws\\zen-gitsync'), entry('D:\\ws\\other')];
+  const projects = [entry('C:\\Users\\xuze3'), entry('D:\\ws\\other')];
   const block = buildEnvContextBlock({
-    currentProjectPath: 'd:/ws/zen-gitsync',
+    // 不只盘符：目录段大小写也不一样（左栏重复项那个 bug 的同款写法差异）
+    currentProjectPath: 'c:/users/XUZE3',
     projects, tasks: [], jobs: [], ...PATHS,
   });
-  assert.match(block, /- zen-gitsync \| D:\\ws\\zen-gitsync \| 0\/0\/0\/0\s+← 当前/);
+  assert.match(block, /- xuze3 \| C:\\Users\\xuze3 \| 0\/0\/0\/0\s+← 当前/);
   assert.match(block, /- other \| D:\\ws\\other \| 0\/0\/0\/0\n/);
 });
 

@@ -3,7 +3,9 @@
 // 守的是「派发指令时有没有真的把运行环境上下文喂给 claude CLI」这条链路 ——
 // 它横跨 configManager → projectRegistry → envContext → taskRunner 四个模块,
 // 单元测试(envContext.test.js)只覆盖得到中间的纯函数,接线断了它是看不见的。
-// 实测:把 taskRunner 里的注入关掉,这份脚本有 10 条断言会变红。
+// 实测:把 taskRunner 里的注入关掉,这份脚本有 10 条断言会变红;
+// 把 canonicalProjectPath 的大小写归一撤掉,win32 下另有 2 条变红
+// (第 6 组:同一目录的两种写法裂成两条项目 —— 就是用户在左栏看到的那个 bug)。
 //
 // 隔离:server 进程的 USERPROFILE/HOME 指向 mkdtemp 沙箱,绝不碰用户真实
 // ~/.zen-gitsync/(见 src/paths.js 的说明)。
@@ -29,6 +31,11 @@ const stubDir = path.join(sandbox, 'stub-claude')
 const promptOut = path.join(sandbox, 'cli-stdin.txt')
 const projA = path.join(sandbox, 'projA')
 const projB = path.join(sandbox, 'projB')
+// 同一个目录的第二种写法（只改大小写）。Windows 文件系统不区分大小写，
+// 而常用目录里存的是用户手输的原始串 —— 真实数据里就同时躺着
+// `c:\users\xuze3` 与 `C:\Users\xuze3`，旧口径把同一目录炸成两条项目。
+// POSIX 上大小写是真区别，所以只在 win32 下启用这条断言。
+const projBAlias = process.platform === 'win32' ? projB.toUpperCase() : null
 
 const PORT = 5611
 const base = `http://127.0.0.1:${PORT}`
@@ -42,7 +49,7 @@ await fs.mkdir(projA, { recursive: true })
 await fs.mkdir(projB, { recursive: true })
 await fs.mkdir(dataDir, { recursive: true })
 await fs.writeFile(path.join(dataDir, 'config.json'), JSON.stringify({
-  recentDirectories: [projA, projB],
+  recentDirectories: projBAlias ? [projA, projB, projBAlias] : [projA, projB],
   projects: [],
   models: [],
 }, null, 2))
@@ -160,6 +167,26 @@ try {
   check(task?.desc === TEXT, `task.desc 应保持用户原话,实际 ${JSON.stringify(task?.desc)}`)
   check(task?.title === TEXT, `task.title 应保持用户原话,实际 ${JSON.stringify(task?.title)}`)
   check(!String(task?.desc || '').includes('[运行环境'), 'task.desc 不应含注入内容')
+
+  // ── 6. 同一目录的两种大小写写法必须只出一条项目 ──
+  // 这是用户在左栏看到的那个 bug：常用目录里 `c:\users\xuze3` 与任务带出的
+  // `C:\Users\xuze3` 各占一行。夹具里 projB / PROJB 是同一个目录。
+  if (projBAlias) {
+    const projectsRes = await fetch(`${base}/api/workbench/projects`)
+    const projectsBody = await projectsRes.json()
+    const list = projectsBody.projects || []
+    const wantName = path.basename(projB).toLowerCase()
+    const hits = list.filter(p => String(p.name || '').toLowerCase() === wantName)
+    check(
+      hits.length === 1,
+      `左栏同一目录应只出一条项目，实际 ${hits.length} 条（key 未归大小写 → 项目裂成两条）`,
+    )
+    // Agent 那份注入清单走的是另一条组装路径（buildProjectEntries 直连），一并守
+    const rows = prompt.split('\n').filter(l => new RegExp(`^- ${path.basename(projB)} \\| `, 'i').test(l))
+    check(rows.length === 1, `Agent 清单里同一目录应只列一行，实际 ${rows.length} 行`)
+  } else {
+    console.log('[env-context e2e] 非 win32：跳过"大小写去重"断言（POSIX 路径大小写是真区别）')
+  }
 } catch (err) {
   failures.push(`异常: ${err.message}`)
 } finally {

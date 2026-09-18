@@ -90,9 +90,9 @@ export function buildEnvContextBlock({
   const limit = Number.isFinite(maxProjects) && maxProjects > 0 ? Math.floor(maxProjects) : ENV_CONTEXT_MAX_PROJECTS;
   const shown = list.slice(0, limit);
   // 当前项目的比对**必须归一化后再比**：条目 key 是 canonicalProjectPath 的结果
-  // （盘符大写 + 斜杠归一如 D:\ws\x），而调用方给的 currentProjectPath 是原始写法
-  // （盘符常常是小写）。直接拿 path 跟 key 比会永远不等 —— 同款口径分叉在后端
-  // 项目列表里已经制造过一次「同名项目分裂成两个」，这里不重蹈。
+  // （Windows 形式小写 + 斜杠归一如 d:\ws\x），而调用方给的 currentProjectPath 是原始写法
+  // （盘符/目录段大小写都不一定一致）。直接拿 path 跟 key 比会永远不等 —— 同款口径分叉
+  // 在后端项目列表里已经制造过一次「同名项目分裂成两个」，这里不重蹈。
   const currentKey = canonicalProjectPath(currentProjectPath);
 
   const lines = [];

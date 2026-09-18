@@ -40,15 +40,27 @@ const job = (id, taskId, status, startedAt, endedAt = null) => ({
 
 // ── 路径归一 ────────────────────────────────────────────────────────
 
-test('canonicalProjectPath: 盘符转大写 + Windows 斜杠归一（与前端同口径）', () => {
-  assert.equal(canonicalProjectPath('e:\\workspace\\x'), 'E:\\workspace\\x');
-  assert.equal(canonicalProjectPath('  D:/ws/y  '), 'D:\\ws\\y');
+test('canonicalProjectPath: Windows 形式转小写 + 斜杠归一（与前端同口径）', () => {
+  assert.equal(canonicalProjectPath('e:\\workspace\\x'), 'e:\\workspace\\x');
+  assert.equal(canonicalProjectPath('E:\\Workspace\\X'), 'e:\\workspace\\x');
+  assert.equal(canonicalProjectPath('  D:/ws/y  '), 'd:\\ws\\y');
   // 同一目录的两种斜杠写法必须落到同一个 key，否则项目列表里出现重复项
   // （实测 article-generator 就同时存在于 D:/... 与 D:\... 两种常用目录里）
   assert.equal(canonicalProjectPath('D:/ws/y'), canonicalProjectPath('D:\\ws\\y'));
-  // POSIX 路径原样返回，不能被改写成反斜杠
+  // 目录段大小写也必须归一：常用目录里手输的 c:\users\xuze3 与任务带出的
+  // C:\Users\xuze3 是同一个目录，旧口径只转盘符 → 左栏两条同名项目。
+  assert.equal(
+    canonicalProjectPath('C:\\Users\\xuze3'),
+    canonicalProjectPath('c:\\users\\xuze3'),
+  );
+  // 小写化是**纯字符串**规则，只看 `X:` 这个形状，不看 process.platform ——
+  // 所以 Windows 形态的断言在任何平台上都成立（POSIX 上跑测试也守得住）。
+  assert.equal(canonicalProjectPath('C:\\Users\\xuze3'), 'c:\\users\\xuze3');
+  // POSIX 路径原样返回，**不能**被小写化，也不能被改写成反斜杠：
+  // /home/Me/A 与 /home/me/a 是两个真目录，归一就是数据错误
   assert.equal(canonicalProjectPath('/home/me/proj'), '/home/me/proj');
   assert.equal(canonicalProjectPath('/home/me/proj/nested'), '/home/me/proj/nested');
+  assert.equal(canonicalProjectPath('/home/Me/A'), '/home/Me/A');
   assert.equal(canonicalProjectPath(''), '');
   assert.equal(canonicalProjectPath(null), '');
 });
@@ -107,7 +119,7 @@ test('latestJob 按 startedAt 取最新的一条', () => {
 
 // ── 项目合并去重 ────────────────────────────────────────────────────
 
-test('buildProjectEntries: 最近目录与任务路径取并集去重，盘符大小写归一', () => {
+test('buildProjectEntries: 最近目录与任务路径取并集去重，大小写与斜杠都归一', () => {
   const entries = buildProjectEntries({
     recentDirs: ['e:\\ws\\proj-a', 'D:\\ws\\proj-b'],
     tasks: [
@@ -118,10 +130,43 @@ test('buildProjectEntries: 最近目录与任务路径取并集去重，盘符�
   });
   const byKey = new Map(entries.map(e => [e.key, e]));
   assert.equal(entries.length, 3);
-  assert.equal(byKey.get('E:\\ws\\proj-a').source, 'both');
-  assert.equal(byKey.get('D:\\ws\\proj-b').source, 'recent');
-  assert.equal(byKey.get('D:\\ws\\proj-c').source, 'task');
-  assert.equal(byKey.get('D:\\ws\\proj-c').name, 'proj-c');
+  assert.equal(byKey.get('e:\\ws\\proj-a').source, 'both');
+  assert.equal(byKey.get('d:\\ws\\proj-b').source, 'recent');
+  assert.equal(byKey.get('d:\\ws\\proj-c').source, 'task');
+  assert.equal(byKey.get('d:\\ws\\proj-c').name, 'proj-c');
+  // path 保留首次出现的原始写法（前端要拿它跟其它列表对齐、也要显示出来），
+  // 只有 key 被归一 —— 别顺手把 path 也小写了
+  assert.equal(byKey.get('d:\\ws\\proj-b').path, 'D:\\ws\\proj-b');
+});
+
+test('buildProjectEntries: 目录段大小写不同也是同一个项目（旧口径会裂成两条）', () => {
+  // 复现现场：常用目录里手输的小写盘符（saveRecentDirectory 落盘原始串）
+  // + 任务带出的 C:\Users\xuze3 —— 旧口径只转盘符，这里会得到两条 "xuze3"。
+  const entries = buildProjectEntries({
+    recentDirs: ['c:\\users\\xuze3'],
+    tasks: [{ id: 't1', projectPath: 'C:\\Users\\xuze3' }],
+  });
+  assert.equal(entries.length, 1, '同一目录的不同大小写写法不应分裂成两个项目');
+  assert.equal(entries[0].key, 'c:\\users\\xuze3');
+  assert.equal(entries[0].source, 'both', '应当被认成"既在常用目录、又有任务"，而不是两个项目');
+  assert.equal(entries[0].name, 'xuze3');
+  // 项目行只认这个 key 的任务，key 分叉会连带把任务计数拆到两行上去
+  const stats = summarizeProjectTasks(
+    [{ id: 't1', projectPath: 'C:\\Users\\xuze3', subtasks: [] }],
+    [],
+  );
+  assert.equal(stats.get('c:\\users\\xuze3').total, 1);
+  assert.equal(stats.size, 1);
+
+  // 常用目录里同一个目录也可能历史累积出两种写法。此时只留**首次**那条：
+  // 否则界面上的路径会随常用目录的顺序跳变，`source` 也会从 both 退化掉。
+  const dup = buildProjectEntries({
+    recentDirs: ['C:\\Users\\xuze3', 'c:/users/xuze3'],
+    tasks: [{ id: 't1', projectPath: 'c:\\users\\xuze3' }],
+  });
+  assert.equal(dup.length, 1);
+  assert.equal(dup[0].path, 'C:\\Users\\xuze3', 'path 应取首次出现的写法');
+  assert.equal(dup[0].source, 'both', '重复的第二种写法不该抹掉已命中的来源');
 });
 
 test('summarizeProjectTasks: 按项目汇总列数量、进度、活跃执行与最后活跃时间', () => {
@@ -139,7 +184,7 @@ test('summarizeProjectTasks: 按项目汇总列数量、进度、活跃执行与
   ];
   const stats = summarizeProjectTasks(tasks, jobs);
 
-  const a = stats.get('D:\\a');
+  const a = stats.get('d:\\a');
   assert.equal(a.total, 2);
   assert.equal(a.done, 1);
   assert.equal(a.doing, 1);
@@ -148,7 +193,7 @@ test('summarizeProjectTasks: 按项目汇总列数量、进度、活跃执行与
   // 最后活跃时间要把 job 的起止也算进来（任务体本身可能很久没改）
   assert.equal(a.lastActiveAt, '2026-01-04T00:00:00Z');
 
-  const b = stats.get('D:\\b');
+  const b = stats.get('d:\\b');
   assert.equal(b.total, 1);
   assert.equal(b.todo, 1);
   assert.equal(b.progress, 0);
