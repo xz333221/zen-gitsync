@@ -19,12 +19,14 @@
   数据全部来自 GET /api/workbench/projects（服务器已算好 Git 状态与任务统计），
   这个组件只负责排版，不做任何推导。
 
-  两处刻意的克制：
+  三处刻意的克制：
     1. Git 状态三态——exists=false 才显示「目录不存在」，exists=null（没探到）什么都不显示。
        宁可没有标记，也不谎报"你的目录没了"。
     2. 分支位只放**真的分支**：不是 Git 仓库时整段不显示（用户看这里没有分支图标就知道了，
        不必再用文字重复一遍"不是仓库"）。徽标位只留给需要动作的信号，
        否则一行里塞四五个标签，项目名会被挤成省略号。
+    3. 进度行只给**有任务**的项目：total=0 时整行不渲染。一排「0/0 任务完成」+ 一条空进度条
+       全是噪声，占的行高还让有任务的项目不显眼；没有进度行本身就是"这儿还没开工"的信号。
 -->
 <script setup lang="ts">
 import { computed } from 'vue'
@@ -125,7 +127,8 @@ function hasBranchIcon(p: ProjectSummary): boolean {
           </span>
         </div>
 
-        <div class="proj-item__row3">
+        <!-- 一个任务都没有时整行不渲染（「0/0 任务完成」+ 空进度条是纯噪声） -->
+        <div v-if="totals.total > 0" class="proj-item__row3">
           <span class="proj-item__bar" aria-hidden="true">
             <i class="proj-item__bar-fill" :style="{ width: overallProgress + '%' }" />
           </span>
@@ -183,7 +186,8 @@ function hasBranchIcon(p: ProjectSummary): boolean {
           <span class="proj-item__time">{{ relativeTimeFromIso(p.stats.lastActiveAt) }}</span>
         </div>
 
-        <div class="proj-item__row3">
+        <!-- 同上：这个项目一个任务都没有就不给进度行 -->
+        <div v-if="p.stats.total > 0" class="proj-item__row3">
           <span class="proj-item__bar" aria-hidden="true">
             <i class="proj-item__bar-fill" :style="{ width: p.stats.progress + '%' }" />
           </span>

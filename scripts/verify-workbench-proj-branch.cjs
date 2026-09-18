@@ -1,5 +1,5 @@
 /**
- * 工作台**左栏项目列表**「分支位」的渲染契约。
+ * 工作台**左栏项目列表**每一行的渲染契约（分支位 + 进度行）。
  *
  * 验收契约（改这块时别破坏）：
  *   F1 真的在某个分支上   -> 显示分支名 + 名字**左边**一个 git-branch 图标
@@ -17,6 +17,9 @@
  *        `.svg-icon{color:--text-secondary}`，覆盖它必须**锚在 .proj-item__branch 下**
  *        把权重抬到 (0,3,0)；裸 :deep() 与之同为 (0,2,0)，谁生效只看样式表注入顺序）
  *   F8 exists=false 优先  -> 目录都不存在时只显示「目录不存在」，不显示分支位
+ *   G1 total=0            -> **进度行整行不渲染**（不留「0/0 任务完成」和空进度条）
+ *     ⚠️ 回归点：一排 0/0 + 空进度条是纯噪声，占的行高还让有任务的项目不显眼。
+ *   G2 total>0            -> 进度行照常渲染（G1 不能变成"把进度行全关了"）
  *
  * 前置：dev server 已启动（npm run dev，后端 5545 / 前端 5544）。
  * 用法：node scripts/verify-workbench-proj-branch.cjs
@@ -56,9 +59,9 @@ async function waitUntil(fn, timeout = 12000, interval = 150) {
   return false
 }
 
-const stats = () => ({
+const stats = (over = {}) => ({
   total: 3, todo: 1, doing: 1, review: 0, done: 1,
-  progress: 33, runningJobs: 0, errorSubtasks: 0, lastActiveAt: '2026-09-18T02:00:00.000Z',
+  progress: 33, runningJobs: 0, errorSubtasks: 0, lastActiveAt: '2026-09-18T02:00:00.000Z', ...over,
 })
 
 const git = (over = {}) => ({
@@ -66,7 +69,7 @@ const git = (over = {}) => ({
   ahead: 0, behind: 0, changed: 0, staged: 0, unstaged: 0, untracked: 0, ...over,
 })
 
-/** 5 个原子用例各占一个项目，名字前缀带 zen-verify- 以免和真实项目撞车 */
+/** 各原子用例各占一个项目，名字前缀带 zen-verify- 以免和真实项目撞车 */
 const FIXTURE = [
   { key: '/zen-verify/RepoMain', path: '/zen-verify/RepoMain', name: 'zen-verify-RepoMain',
     source: 'recent', isCurrent: false, exists: true, git: git({ branch: LONG_BRANCH }), stats: stats() },
@@ -78,6 +81,10 @@ const FIXTURE = [
     source: 'recent', isCurrent: false, exists: true, git: { ...git(), isGitRepo: null }, stats: stats() },
   { key: '/zen-verify/MissingDir', path: '/zen-verify/MissingDir', name: 'zen-verify-MissingDir',
     source: 'recent', isCurrent: false, exists: false, git: git({ branch: 'main' }), stats: stats() },
+  // G1：一个任务都没有 -> 整条进度行不该出现
+  { key: '/zen-verify/NoTask', path: '/zen-verify/NoTask', name: 'zen-verify-NoTask',
+    source: 'recent', isCurrent: false, exists: true, git: git({ branch: 'main' }),
+    stats: stats({ total: 0, todo: 0, doing: 0, done: 0, progress: 0 }) },
 ]
 
 /** 一行的 row2 观测结果；只取语义，不把选择器范围搞混 */
@@ -96,6 +103,7 @@ const ROW = (name) => {
     const r = rect(n)
     return r ? { left: +r.left.toFixed(2), right: +r.right.toFixed(2), width: +r.width.toFixed(2), height: +r.height.toFixed(2) } : null
   }
+  const row3 = el.querySelector('.proj-item__row3')
   return {
     row2Text: row2 ? row2.textContent.trim() : null,
     hasBranch: !!branch,
@@ -109,6 +117,10 @@ const ROW = (name) => {
     // 省略号是否真的发生：内容比可视宽度长
     nameOverflowed: nameEl ? nameEl.scrollWidth > nameEl.clientWidth : null,
     branchBox: box(branch),
+    // 进度行（G1/G2）：有没有整行、里面写的是什么、有没有进度条本体
+    hasRow3: !!row3,
+    row3Text: row3 ? row3.textContent.replace(/\s+/g, ' ').trim() : null,
+    hasBar: !!el.querySelector('.proj-item__bar'),
   }
 }
 
@@ -140,9 +152,9 @@ async function main() {
     await page.locator('.activity-btn[aria-label^="工作台"]').first().click()
     await page.waitForSelector('.board', { timeout: 15000 })
 
-    // 等到 5 个夹具项目全部渲染出来（1 个「全部项目」+ 5）
-    const ready = await waitUntil(async () => (await page.locator('.proj-item').count()) >= 6)
-    check('夹具就绪：左栏渲染出 5 个合成项目', ready, `实际 ${await page.locator('.proj-item').count()} 行`)
+    // 等到夹具项目全部渲染出来（1 个「全部项目」+ N）
+    const ready = await waitUntil(async () => (await page.locator('.proj-item').count()) >= FIXTURE.length + 1)
+    check(`夹具就绪：左栏渲染出 ${FIXTURE.length} 个合成项目`, ready, `实际 ${await page.locator('.proj-item').count()} 行`)
 
     // 图标能不能画出来，取决于 sprite 里有没有注册这个 symbol
     const symbolOk = await page.evaluate(() => !!document.querySelector('symbol#icon-git-branch'))
@@ -204,6 +216,21 @@ async function main() {
     check('F8 目录不存在：只显示「目录不存在」，不显示分支位',
       miss.hasBranch === false && !!miss.row2Text && miss.row2Text.includes('目录不存在'),
       `hasBranch=${miss.hasBranch} row2="${miss.row2Text}"`)
+
+    /* ---------- G1：一个任务都没有 -> 进度行整行不渲染 ---------- */
+    const noTask = rows['zen-verify-NoTask'] || {}
+    check('G1a 无任务的项目：不渲染进度行', noTask.hasRow3 === false,
+      `hasRow3=${noTask.hasRow3} row3Text="${noTask.row3Text}"`)
+    check('G1b 无任务的项目：进度条本体也不在（不是只藏了文字）', noTask.hasBar === false,
+      `hasBar=${noTask.hasBar}`)
+    check('G1c 无任务的项目：整行文本里不该出现「任务完成」',
+      !!noTask.row3Text === false || !/任务完成/.test(noTask.row3Text),
+      `row3Text="${noTask.row3Text}"`)
+
+    /* ---------- G2：有任务的项目照旧渲染（防止 G1 变成"把进度行全关了"） ---------- */
+    check('G2 有任务的项目：进度行照常渲染且文案正确',
+      main.hasRow3 === true && main.hasBar === true && /1\/3\s*任务完成/.test(main.row3Text || ''),
+      `hasRow3=${main.hasRow3} hasBar=${main.hasBar} row3Text="${main.row3Text}"`)
   } catch (err) {
     check('脚本异常', false, String(err?.message || err))
   } finally {
