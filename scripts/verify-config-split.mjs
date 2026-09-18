@@ -7,7 +7,8 @@
 //
 // 覆盖:
 //   · 用**真实的 605KB config.json** 当夹具(比造的假数据更能暴露问题:中文、
-//     真实画布 flowData、30 个项目),server 起来后自动完成拆分
+//     真实画布 flowData、30 个项目)。真实 home 已拆分后,自动退到
+//     `_migration-backup-*` 里那份拆分前快照;若连快照都没有,再用合成数据。
 //   · config.json 显著瘦身,projects/ 与 orchestration/ 文件数与项目/画布数一致
 //   · GET /api/config/getConfig 正常(拆分后读回形状不变)
 //   · POST /api/config/save-general-settings(只改全局)→ 项目文件与画布文件
@@ -78,10 +79,44 @@ function diffTrees(before, after) {
 }
 
 // ── 布置沙箱:用真实的数据当夹具 ───────────────────────────────
+//
+// ⚠️ 夹具必须是「还带内联 projects」的那份 config.json。
+// 真实 home 一旦完成拆分(config.json 只剩全局设置),再拿它当夹具,
+// fixtureProjectCount 会是 0 → 下面所有"文件数应为 N"的断言都会**空过**,
+// 脚本看着 PASS 其实什么都没验(静默腐化)。所以:
+//   1) 优先用真实 config.json —— 但要确认它真的还有内联 projects;
+//   2) 否则退到 _migration-backup-* 里那份拆分前的完整快照;
+//   3) 再不行才用合成数据。
+async function pickInlineFixture() {
+  const candidates = [realConfig]
+  let entries = []
+  try {
+    entries = await fs.readdir(realHome ? path.join(realHome, '.zen-gitsync') : '.')
+  } catch { /* 数据目录不存在,直接走合成数据 */ }
+  for (const name of entries.sort().reverse()) {
+    if (!name.startsWith('_migration-backup')) continue
+    candidates.push(path.join(realHome, '.zen-gitsync', name, 'config.json'))
+  }
+  // 注意:真实 config.json 现在能正常解析、只是**没有**内联 projects。
+  // 不能一读到就返回(那样永远选中它、count=0 → 空过),要么跳过、要么留作兜底。
+  let fallback = null
+  for (const file of candidates) {
+    try {
+      const raw = JSON.parse(await fs.readFile(file, 'utf-8'))
+      const n = Object.keys(raw.projects || {}).length
+      if (n > 0) return { file, raw, count: n }
+      if (!fallback) fallback = { file, raw, count: n }
+    } catch { /* 试下一个 */ }
+  }
+  return fallback
+}
+
 let fixtureSource = 'real'
 await fs.mkdir(dataDir, { recursive: true })
-if (await exists(realConfig)) {
-  await fs.copyFile(realConfig, configFile)
+const picked = await pickInlineFixture()
+if (picked && picked.count > 0) {
+  await fs.copyFile(picked.file, configFile)
+  if (picked.file !== realConfig) fixtureSource = `备份快照 ${path.basename(path.dirname(picked.file))}`
 } else {
   fixtureSource = 'synthetic'
   const projects = {}
@@ -111,7 +146,13 @@ const fixtureProjectCount = Object.keys(fixtureRaw.projects || {}).length
 const fixtureOrchCount = Object.values(fixtureRaw.projects || {})
   .reduce((s, p) => s + (Array.isArray(p.orchestrations) ? p.orchestrations.length : 0), 0)
 
-console.log(`夹具来源: ${fixtureSource === 'real' ? `真实 ${realConfig}` : '内置合成数据'}`)
+// 夹具没有内联 projects 就等于什么都没验 —— 宁可红,也别空过。
+if (fixtureProjectCount === 0) {
+  console.error('✗ 夹具里没有内联 projects,本次验证没有意义;请提供一个拆分前的 config.json。')
+  process.exit(1)
+}
+
+console.log(`夹具来源: ${fixtureSource === 'real' ? `真实 ${realConfig}` : fixtureSource === 'synthetic' ? '内置合成数据' : fixtureSource}`)
 console.log(`夹具: ${fixtureBytes} 字节 / ${fixtureProjectCount} 个项目 / ${fixtureOrchCount} 条画布`)
 console.log(`沙箱: ${sandbox}`)
 console.log('')
