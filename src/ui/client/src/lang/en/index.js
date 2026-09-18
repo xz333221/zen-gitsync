@@ -650,8 +650,15 @@ export default {
   '@67CE7:用 Claude Code 打开（完全批准）': 'Open with Claude Code (full permissions)',
   '@67CE7:用 Codex 打开': 'Open with Codex',
   '@67CE7:用 OpenCode 打开': 'Open with OpenCode',
+  '@67CE7:用 Kimi Code 打开': 'Open with Kimi Code',
+  '@67CE7:用 ZCode 打开': 'Open with ZCode',
+  '@67CE7:用 DeepSeek Harness 打开': 'Open with DeepSeek Harness',
   '@67CE7:已用 Codex 打开目录': 'Opened directory in Codex',
   '@67CE7:已用 OpenCode 打开目录': 'Opened directory in OpenCode',
+  '@67CE7:已用 Kimi Code 打开目录': 'Opened directory in Kimi Code',
+  '@67CE7:已用 ZCode 打开目录': 'Opened directory in ZCode',
+  '@67CE7:已用 {tool} 打开目录': 'Opened directory in {tool}',
+  '@67CE7:已启动 DeepSeek Harness': 'Started DeepSeek Harness',
   '@67CE7:Claude Code': 'Claude Code',
   '@67CE7:Claude Code 启动模式': 'Claude Code launch mode',
   // @TINST: file path: components\ToolInstallDialog.vue
@@ -2467,6 +2474,14 @@ export default {
   '@WORKBENCH:打开文件夹': 'Open folder',
   '@WORKBENCH:已在文件管理器中打开文件夹': 'Opened the folder in your file manager',
   '@WORKBENCH:打开文件夹失败': 'Failed to open folder',
+  '@WORKBENCH:打开方式': 'Open with',
+  '@WORKBENCH:在文件管理器中打开': 'Open in file manager',
+  '@WORKBENCH:在终端中打开': 'Open in terminal',
+  '@WORKBENCH:打开终端失败': 'Failed to open terminal',
+  '@WORKBENCH:在新标签页启动 g ui': 'Launch g ui in a new tab',
+  '@WORKBENCH:已在新标签页启动 g ui': 'Launched g ui in a new tab',
+  '@WORKBENCH:启动 g ui 失败': 'Failed to launch g ui',
+  '@WORKBENCH:用工具打开': 'Open with a tool',
   // @WORKBENCH: file end
 
   // @ACTBAR: file path: components/ActivityBar.vue (append: monitor)

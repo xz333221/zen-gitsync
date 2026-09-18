@@ -421,29 +421,9 @@ function onSelectProject(p: ProjectSummary | null) {
 
 // ── 动作 ────────────────────────────────────────────────────────────
 
-/**
- * 打开项目所在文件夹（系统文件管理器 / 资源管理器 / 访达）。
- *
- * 路径直接用服务端 projects 快照里的 p.path，前端不做任何拼接——项目列表本来就是
- * 服务端扫出来的，前端再拼一次只会在 Windows 反斜杠上出岔子。
- * 这是一个纯旁路动作：不切换看板选中态、不刷新数据，开完窗口就结束。
- */
-async function onOpenFolder(p: ProjectSummary) {
-  try {
-    const res = await fetch('/api/open_directory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: p.path }),
-    }).then(r => r.json())
-    if (res?.success) {
-      ElMessage.success(res.message || $t('@WORKBENCH:已在文件管理器中打开文件夹'))
-    } else {
-      ElMessage.error(res?.error || $t('@WORKBENCH:打开文件夹失败'))
-    }
-  } catch (e) {
-    ElMessage.error(`${$t('@WORKBENCH:打开文件夹失败')}: ${(e as Error).message}`)
-  }
-}
+// 「打开文件夹 / 终端 / 编辑器 / 新标签页跑 g ui」这类旁路动作全部收进了
+// WorkbenchProjectPanel：它们都作用于"某一行的项目路径"而不是看板选中态，
+// 放在行组件里才不用为一个菜单往回抛六七个子事件（也不再改看板选中态）。
 
 // ── 新建任务：弹窗里问清字段，建完就关，卡片直接落在看板上 ──────────────
 // 不再"先建一个空任务再把人甩进编辑器" —— 那既让人离开看板，
@@ -669,7 +649,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           :selected-key="selectedKey"
           :loading="loading"
           @select="onSelectProject"
-          @open-folder="onOpenFolder"
         />
 
         <!-- 项目列表 / 执行监控之间的横向分隔条：上下拖动改监控高度，双击恢复默认。

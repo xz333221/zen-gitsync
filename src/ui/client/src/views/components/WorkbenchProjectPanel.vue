@@ -29,10 +29,33 @@
        全是噪声，占的行高还让有任务的项目不显眼；没有进度行本身就是"这儿还没开工"的信号。
 -->
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Folder, FolderOpened, Grid, Search } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import {
+  Folder,
+  FolderOpened,
+  Grid,
+  Monitor,
+  MoreFilled,
+  Promotion,
+  Search,
+} from '@element-plus/icons-vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
+import ToolInstallDialog from '@components/ToolInstallDialog.vue'
+import claudeCodeIcon from '@/assets/icons/svg/claudecode-color.svg'
+import { useToolsStore, type ToolId } from '@/stores/toolsStore'
+// 打开方式（文件管理器 / 终端 / 编辑器与 AI 工具 / 新标签页跑 g ui）统一走这个 composable：
+// 端点映射、工具展示名与顶栏目录选择器共用一份，两处的工具列表不会各自漂移。
+import {
+  OPEN_WITH_TOOLS,
+  TOOL_DISPLAY_NAMES,
+  ensureToolsChecked,
+  launchGuiInNewTab,
+  openPathInFileManager,
+  openPathInTerminal,
+  openPathWithTool,
+} from '@/composables/useDirectoryOpenActions'
 import type { ProjectSummary } from '@/types/workbench'
 import { relativeTimeFromIso } from '@/utils/relativeTime'
 
@@ -45,8 +68,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** project 为 null 表示选中「全部项目」 */
   select: [project: ProjectSummary | null]
-  /** 在系统文件管理器里打开该项目的目录（不改动看板选中态） */
-  'open-folder': [project: ProjectSummary]
 }>()
 
 /** 有活跃执行的排前面，再按最后活跃时间倒序，最后是路径名——保证"正在动的"永远在第一屏 */
@@ -127,6 +148,106 @@ function gitLine(p: ProjectSummary): string {
 /** 有没有分支可挂图标：只有真的落在某个分支上（含游离 HEAD）才算，"未知"没有 */
 function hasBranchIcon(p: ProjectSummary): boolean {
   return !!(p.git && p.git.isGitRepo && (p.git.detached || p.git.branch))
+}
+
+// ── 打开方式菜单（hover 才出现的第二个按钮） ──────────────────────────
+// 用 el-popover + manual trigger，和顶栏的工具菜单同一套做法：
+//   1. trigger 不能是 IconButton 那类"根节点是组件"的元素（拿不到可靠 reference），
+//      这里 reference 是原生 <button>，但菜单项点完还要手动关，所以仍然走 manual；
+//   2. 每行各有一个 popover，隐藏的那些内容也留在 DOM 里 —— "点外面关闭"不能只查
+//      第一个 .proj-open-menu（很可能命中隐藏的那个），必须把所有同名 popper 都过一遍，
+//      再单独记住当前展开行的触发按钮（点它只该切换，不该先关再开）。
+const openMenuKey = ref<string | null>(null)
+const menuTriggerEl = ref<HTMLElement | null>(null)
+
+function toggleOpenMenu(p: ProjectSummary, e: MouseEvent) {
+  if (openMenuKey.value === p.key) {
+    openMenuKey.value = null
+    return
+  }
+  menuTriggerEl.value = e.currentTarget as HTMLElement
+  openMenuKey.value = p.key
+}
+
+function closeOpenMenu() {
+  openMenuKey.value = null
+}
+
+function onDocumentMouseDown(e: MouseEvent) {
+  if (!openMenuKey.value) return
+  const target = e.target as Node | null
+  if (!target) return
+  if (menuTriggerEl.value?.contains(target)) return
+  for (const el of Array.from(document.querySelectorAll('.proj-open-menu'))) {
+    if (el.contains(target)) return
+  }
+  openMenuKey.value = null
+}
+
+onMounted(() => document.addEventListener('mousedown', onDocumentMouseDown, true))
+onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentMouseDown, true))
+
+const toolsStore = useToolsStore()
+const installVisible = ref(false)
+const installTool = ref<ToolId | null>(null)
+
+/**
+ * 工具是否"确认未安装"：检测没跑完（lastCheckedAt === null）一律按未知处理 ——
+ * 那时 isToolAvailable 全是 false，直接信它会在装了 VSCode 的机器上挂一排「未安装」。
+ */
+function toolMissing(tool: ToolId): boolean {
+  return toolsStore.lastCheckedAt !== null && !toolsStore.isToolAvailable(tool)
+}
+
+/** 在系统文件管理器里打开项目目录 */
+async function openInFileManager(p: ProjectSummary) {
+  closeOpenMenu()
+  const r = await openPathInFileManager(p.path)
+  if (r.success) ElMessage.success(r.message || $t('@WORKBENCH:已在文件管理器中打开文件夹'))
+  else ElMessage.error(r.error || $t('@WORKBENCH:打开文件夹失败'))
+}
+
+/** 在系统终端里打开项目目录 */
+async function openInTerminal(p: ProjectSummary) {
+  closeOpenMenu()
+  const r = await openPathInTerminal(p.path)
+  if (r.success) ElMessage.success(r.message || $t('@67CE7:已在终端中打开目录'))
+  else ElMessage.error(r.error || $t('@WORKBENCH:打开终端失败'))
+}
+
+/**
+ * 新开一个终端标签页，在这个项目目录里执行 `g ui`。
+ * 服务端会剥掉 PORT 再启动，子进程自己挑空闲端口，不会和当前实例抢。
+ */
+async function launchGui(p: ProjectSummary) {
+  closeOpenMenu()
+  const r = await launchGuiInNewTab(p.path)
+  if (r.success) ElMessage.success($t('@WORKBENCH:已在新标签页启动 g ui'))
+  else ElMessage.error(r.error || $t('@WORKBENCH:启动 g ui 失败'))
+}
+
+/**
+ * 用某个编辑器 / AI 工具打开项目目录。
+ * 没装的走安装引导（和顶栏一致）：这里不直接打开，因为命令必然失败，
+ * 而"为什么失败"用户只有看到安装方式才解决得了。
+ */
+async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: string) {
+  closeOpenMenu()
+  if (!(await ensureToolsChecked())) {
+    ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
+    return
+  }
+  if (!toolsStore.isToolAvailable(tool)) {
+    installTool.value = tool
+    installVisible.value = true
+    return
+  }
+  const r = await openPathWithTool(tool, p.path, permissionMode)
+  if (r.success) {
+    ElMessage.success(r.message || $t('@67CE7:已用 {tool} 打开目录', { tool: TOOL_DISPLAY_NAMES[tool] }))
+  } else {
+    ElMessage.error(`${$t('@67CE7:打开失败: ')}${r.error ?? ''}`)
+  }
 }
 </script>
 
@@ -269,9 +390,12 @@ function hasBranchIcon(p: ProjectSummary): boolean {
           </span>
         </div>
 
-        <!-- 打开文件夹：与行主体平级，绝对定位锚在 row1 右端（不占位，否则「当前」徽标
+        <!-- 打开动作：与行主体平级，绝对定位锚在 row1 右端（不占位，否则「当前」徽标
              永远离右边缘一条）；.stop 阻止冒泡到行的选中逻辑。目录都不存在了就不渲染——
              点了只会弹一个「无法打开目录」的报错。
+             两个按钮：最常用的「打开文件夹」留一键直达，其余打开方式（终端 / 编辑器 /
+             AI 工具 / 新标签页跑 g ui）收进「打开方式」菜单 —— 一行放不下七个图标，
+             而项目名被挤成省略号比多点一次更难受。
              ⚠️ 行上的 keydown 必须带 .self：事件从按钮冒泡上来，不带 .self 时
              焦点在按钮上按回车会「选中该行 + preventDefault 掉按钮自己的激活」，
              键盘用户反而打不开文件夹。 -->
@@ -281,10 +405,127 @@ function hasBranchIcon(p: ProjectSummary): boolean {
             class="proj-item__action"
             :title="$t('@WORKBENCH:打开文件夹')"
             :aria-label="`${$t('@WORKBENCH:打开文件夹')} ${p.name}`"
-            @click.stop="emit('open-folder', p)"
+            @click.stop="openInFileManager(p)"
           >
             <el-icon aria-hidden="true"><FolderOpened /></el-icon>
           </button>
+
+          <el-popover
+            :visible="openMenuKey === p.key"
+            :trigger="('manual' as any)"
+            placement="right-start"
+            :width="272"
+            :show-arrow="false"
+            :offset="6"
+            popper-class="proj-open-menu"
+          >
+            <template #reference>
+              <button
+                type="button"
+                class="proj-item__action"
+                :class="{ 'is-open': openMenuKey === p.key }"
+                :title="$t('@WORKBENCH:打开方式')"
+                :aria-label="`${$t('@WORKBENCH:打开方式')} ${p.name}`"
+                :aria-expanded="openMenuKey === p.key"
+                aria-haspopup="menu"
+                @click.stop="toggleOpenMenu(p, $event)"
+              >
+                <el-icon aria-hidden="true"><MoreFilled /></el-icon>
+              </button>
+            </template>
+
+            <!-- v-if 而不是"一直渲染":el-popover 默认 persistent，菜单内容会常驻 DOM，
+                 十来个项目就是十来份一模一样的菜单（含图标）跟着每次项目轮询一起 diff。
+                 只在展开的那一行渲染，popover 外壳仍在（reference 要一直在），
+                 右对齐 placement 的锚点是触发按钮的右上角，内容后到也不会跑位。 -->
+            <ul v-if="openMenuKey === p.key" class="proj-menu" role="menu" :aria-label="$t('@WORKBENCH:打开方式')">
+              <li
+                class="proj-menu__item"
+                role="menuitem"
+                tabindex="-1"
+                @click="openInFileManager(p)"
+                @keydown.enter.prevent="openInFileManager(p)"
+                @keydown.space.prevent="openInFileManager(p)"
+              >
+                <span class="proj-menu__icon"><el-icon aria-hidden="true"><FolderOpened /></el-icon></span>
+                <span class="proj-menu__label">{{ $t('@WORKBENCH:在文件管理器中打开') }}</span>
+              </li>
+              <li
+                class="proj-menu__item"
+                role="menuitem"
+                tabindex="-1"
+                @click="openInTerminal(p)"
+                @keydown.enter.prevent="openInTerminal(p)"
+                @keydown.space.prevent="openInTerminal(p)"
+              >
+                <span class="proj-menu__icon"><el-icon aria-hidden="true"><Monitor /></el-icon></span>
+                <span class="proj-menu__label">{{ $t('@WORKBENCH:在终端中打开') }}</span>
+              </li>
+              <li
+                class="proj-menu__item"
+                role="menuitem"
+                tabindex="-1"
+                @click="launchGui(p)"
+                @keydown.enter.prevent="launchGui(p)"
+                @keydown.space.prevent="launchGui(p)"
+              >
+                <span class="proj-menu__icon"><el-icon aria-hidden="true"><Promotion /></el-icon></span>
+                <span class="proj-menu__label">{{ $t('@WORKBENCH:在新标签页启动 g ui') }}</span>
+              </li>
+
+              <li class="proj-menu__sep" role="separator" />
+              <li class="proj-menu__title" role="presentation">{{ $t('@WORKBENCH:用工具打开') }}</li>
+
+              <li
+                v-for="tool in OPEN_WITH_TOOLS"
+                :key="tool.id"
+                class="proj-menu__item"
+                :class="{ 'is-missing': toolMissing(tool.id) }"
+                role="menuitem"
+                tabindex="-1"
+                @click="openWithTool(p, tool.id)"
+                @keydown.enter.prevent="openWithTool(p, tool.id)"
+                @keydown.space.prevent="openWithTool(p, tool.id)"
+              >
+                <span class="proj-menu__icon"><svg-icon :icon-class="tool.icon" /></span>
+                <span class="proj-menu__label">{{ $t(tool.labelKey) }}</span>
+                <span v-if="toolMissing(tool.id)" class="proj-menu__hint">{{ $t('@67CE7:未安装') }}</span>
+              </li>
+
+              <!-- claude 有两种权限模式，不混进上面的工具列表（顶栏也是单独排布的） -->
+              <li
+                class="proj-menu__item"
+                :class="{ 'is-missing': toolMissing('claude') }"
+                role="menuitem"
+                tabindex="-1"
+                @click="openWithTool(p, 'claude')"
+                @keydown.enter.prevent="openWithTool(p, 'claude')"
+                @keydown.space.prevent="openWithTool(p, 'claude')"
+              >
+                <span class="proj-menu__icon">
+                  <img :src="claudeCodeIcon" alt="" class="proj-menu__img" />
+                </span>
+                <span class="proj-menu__label">{{ $t('@67CE7:用 Claude Code 打开') }}</span>
+                <span class="proj-menu__hint">
+                  {{ toolMissing('claude') ? $t('@67CE7:未安装') : $t('@67CE7:默认权限') }}
+                </span>
+              </li>
+              <li
+                class="proj-menu__item proj-menu__item--danger"
+                :class="{ 'is-missing': toolMissing('claude') }"
+                role="menuitem"
+                tabindex="-1"
+                @click="openWithTool(p, 'claude', 'bypassPermissions')"
+                @keydown.enter.prevent="openWithTool(p, 'claude', 'bypassPermissions')"
+                @keydown.space.prevent="openWithTool(p, 'claude', 'bypassPermissions')"
+              >
+                <span class="proj-menu__icon">
+                  <img :src="claudeCodeIcon" alt="" class="proj-menu__img" />
+                </span>
+                <span class="proj-menu__label">{{ $t('@67CE7:用 Claude Code 打开（完全批准）') }}</span>
+              </li>
+            </ul>
+          </el-popover>
         </div>
       </li>
 
@@ -307,6 +548,10 @@ function hasBranchIcon(p: ProjectSummary): boolean {
         </button>
       </li>
     </ul>
+
+    <!-- 未安装的工具：复用顶栏那套安装引导（同一个组件），不在这里另写一份说明。
+         挂在面板根上只渲染一份，而不是每行一个 —— 同时最多只可能开一个。 -->
+    <ToolInstallDialog v-model="installVisible" :tool="installTool" />
   </section>
 </template>
 
@@ -486,10 +731,10 @@ function hasBranchIcon(p: ProjectSummary): boolean {
   flex: 1;
   min-width: 0;
   line-height: 1.4;
-  /* 给 hover 才出现的「打开文件夹」按钮留位：按钮绝对定位在 row1 右端，
+  /* 给 hover 才出现的两个操作按钮（打开文件夹 + 打开方式）留位：它们绝对定位在 row1 右端，
      没有信号（运行中/当前）时名字会一路顶到那里，不留位就会被图标压住尾巴。
      名字没被截断时这段 padding 完全不可见。 */
-  padding-right: 20px;
+  padding-right: 44px;
 }
 /* 运行中 / 当前：与操作按钮共用 row1 右端这个锚点，hover 时整组淡出让位 */
 .proj-item__signals {
@@ -528,7 +773,7 @@ function hasBranchIcon(p: ProjectSummary): boolean {
   background: var(--tint-primary-12);
 }
 
-/* ── hover 才出现的「打开文件夹」 ──────────────────────────────────── */
+/* ── hover 才出现的「打开文件夹」+「打开方式」 ─────────────────────── */
 /* 绝对定位：空闲时不占宽度，row1 右端的徽标才能贴住行边缘。
    隐藏时 pointer-events: none —— 否则它会在右边吞掉本该落到整行的点击。 */
 .proj-item__actions {
@@ -537,12 +782,16 @@ function hasBranchIcon(p: ProjectSummary): boolean {
   top: 6px;
   display: inline-flex;
   align-items: center;
+  gap: 2px;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-fast) var(--ease-custom);
 }
 .proj-item:hover .proj-item__actions,
-.proj-item:has(.proj-item__action:focus-visible) .proj-item__actions {
+.proj-item:has(.proj-item__action:focus-visible) .proj-item__actions,
+/* ⚠️ 菜单开着时必须继续显示：鼠标移进菜单（在行外面）后 hover 态就没了，
+   少了这一条触发按钮会连同菜单一起"消失"，看着像点崩了。 */
+.proj-item:has(.proj-item__action.is-open) .proj-item__actions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -570,6 +819,87 @@ function hasBranchIcon(p: ProjectSummary): boolean {
 }
 .proj-item__action:active { color: var(--color-primary); }
 .proj-item__action:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+/* 菜单展开中：按钮保持主色，鼠标移进菜单后仍能看出"这个菜单是从哪一行开的" */
+.proj-item__action.is-open {
+  color: var(--color-primary);
+  background: var(--tint-primary-12);
+}
+
+/* ── 「打开方式」菜单（el-popover 内容，随 popover 一起 teleport 到 body） ──
+   scoped 仍然生效：弹层节点由本组件渲染，data-v 属性照样带着。
+   popper 外壳（间距/阴影）走 Element Plus 默认，这里只管列表本身。 */
+.proj-menu {
+  margin: 0;
+  padding: 2px 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+.proj-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--transition-fast) var(--ease-custom),
+    color var(--transition-fast) var(--ease-custom);
+}
+.proj-menu__item:hover,
+.proj-menu__item:focus-visible {
+  background: var(--tint-primary-12);
+  outline: none;
+}
+.proj-menu__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+.proj-menu__icon :deep(svg) { width: 16px; height: 16px; }
+.proj-menu__img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+.proj-menu__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proj-menu__hint {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast) var(--ease-custom);
+}
+.proj-menu__item:hover .proj-menu__hint { color: var(--color-primary); }
+.proj-menu__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-color);
+}
+.proj-menu__title {
+  padding: 4px 10px 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--text-tertiary);
+}
+/* 完全批准（含 Shell）：给个琥珀色，和顶栏 claude 菜单里那条危险项同一套语言 */
+.proj-menu__item--danger .proj-menu__label { color: var(--color-warning); }
+/* 未安装：降饱和度（hover 恢复），点它走安装引导而不是硬启动 */
+.proj-menu__item.is-missing .proj-menu__icon { opacity: 0.5; filter: grayscale(0.65); }
+.proj-menu__item.is-missing:hover .proj-menu__icon { opacity: 0.85; filter: grayscale(0.2); }
 
 .proj-item__row2 {
   display: flex;

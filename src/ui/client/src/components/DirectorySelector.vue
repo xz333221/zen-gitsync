@@ -31,6 +31,20 @@ import SvgIcon from "@components/SvgIcon/index.vue";
 import ToolInstallDialog from "@components/ToolInstallDialog.vue";
 import claudeCodeIcon from "@/assets/icons/svg/claudecode-color.svg";
 import { getFolderNameFromPath } from "@/utils/path";
+// 打开方式(文件管理器 / 终端 / 各编辑器与 AI 工具 / 新标签页跑 g ui)统一走这个 composable：
+// 编排台的项目列表用的是同一份端点映射和工具展示名，避免同一个工具在顶栏叫一个名、
+// 在项目列表里叫另一个名。这里只负责把结果翻译成 toast，交互(安装引导、版本 tooltip)仍在本组件。
+import {
+  OPEN_WITH_TOOLS,
+  TOOL_DISPLAY_NAMES,
+  ensureToolsChecked,
+  launchGuiInNewTab,
+  openPathInFileManager,
+  openPathInTerminal,
+  openPathWithTool,
+  type OpenDirectoryResult,
+  type OpenWithToolId,
+} from "@/composables/useDirectoryOpenActions";
 
 const props = withDefaults(defineProps<{
   variant?: 'default' | 'header'
@@ -82,27 +96,39 @@ const isBrowserDialogVisible = ref(false);
 const installDialogVisible = ref(false);
 const selectedInstallTool = ref<ToolId | null>(null);
 
-const toolNames: Record<ToolId, string> = {
-  vscode: 'VSCode',
-  claude: 'Claude Code',
-  codex: 'Codex',
-  opencode: 'OpenCode',
-  kimi: 'Kimi Code',
-  zcode: 'ZCode',
-  dsh: 'DeepSeek Harness',
-}
-
 function openToolInstall(tool: ToolId) {
   selectedInstallTool.value = tool
   installDialogVisible.value = true
 }
 
+/**
+ * 「打开目录」类操作的统一反馈。
+ * 成功文案优先用服务端返回的（可能附 permission-mode 之类的细节），没有才用调用方给的兜底；
+ * 失败一律「<动作>失败: 原因」—— 原因可能来自服务端，也可能是网络层异常（此时是 fetch 的
+ * 报错信息），对用户来说是同一件事：没打开成。
+ */
+function toastOpenResult(result: OpenDirectoryResult, successFallbackKey: string, failPrefixKey: string) {
+  if (result.success) {
+    ElMessage.success(result.message || $t(successFallbackKey))
+  } else {
+    ElMessage.error(`${$t(failPrefixKey)}${result.error ?? ''}`)
+  }
+}
+
+/** 路径为空时给个提示并返回 true（调用方直接 return）—— 顶栏的当前目录理论上不会为空，
+ *  但兜底一下比把空路径丢给服务端强 */
+function warnIfEmptyDirectory(): boolean {
+  if (currentDirectory.value) return false
+  ElMessage.warning($t('@67CE7:当前目录路径为空'))
+  return true
+}
+
 function toolTooltip(tool: ToolId, availableText: string) {
   if (toolsStore.lastCheckedAt === null) {
-    return $t('@67CE7:正在检测 {tool}', { tool: toolNames[tool] })
+    return $t('@67CE7:正在检测 {tool}', { tool: TOOL_DISPLAY_NAMES[tool] })
   }
   if (!toolsStore.isToolAvailable(tool)) {
-    return $t('@67CE7:{tool} 未安装，点击查看安装方式', { tool: toolNames[tool] })
+    return $t('@67CE7:{tool} 未安装，点击查看安装方式', { tool: TOOL_DISPLAY_NAMES[tool] })
   }
   // 已安装:tooltip 附上本地版本号(来自 check-tools 的 --version 采集);
   // 采集不到(桌面应用/输出格式不认识)就不加,保持原样。
@@ -111,12 +137,9 @@ function toolTooltip(tool: ToolId, availableText: string) {
 }
 
 async function runOrInstall(tool: ToolId, action: () => void | Promise<void>) {
-  if (toolsStore.lastCheckedAt === null) {
-    await toolsStore.checkTools()
-    if (toolsStore.lastCheckedAt === null) {
-      ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
-      return
-    }
+  if (!(await ensureToolsChecked())) {
+    ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
+    return
   }
   if (!toolsStore.isToolAvailable(tool)) {
     openToolInstall(tool)
@@ -130,33 +153,36 @@ function onClaudePrimaryClick() {
 }
 
 async function onOpenInKimi() {
-  const response = await fetch('/api/open-directory-with-kimi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentDirectory.value }) })
-  const result = await response.json()
-  if (!response.ok || !result.success) throw new Error(result.error || '无法打开 Kimi Code')
-  ElMessage.success(result.message || '已用 Kimi Code 打开目录')
+  if (warnIfEmptyDirectory()) return
+  toastOpenResult(
+    await openPathWithTool('kimi', currentDirectory.value),
+    '@67CE7:已用 Kimi Code 打开目录',
+    '@67CE7:打开失败: ',
+  )
 }
 
 async function onOpenInZcode() {
-  const response = await fetch('/api/open-directory-with-zcode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentDirectory.value }) })
-  const result = await response.json()
-  if (!response.ok || !result.success) throw new Error(result.error || '无法打开 ZCode')
-  ElMessage.success(result.message || '已用 ZCode 打开目录')
+  if (warnIfEmptyDirectory()) return
+  toastOpenResult(
+    await openPathWithTool('zcode', currentDirectory.value),
+    '@67CE7:已用 ZCode 打开目录',
+    '@67CE7:打开失败: ',
+  )
 }
 
 async function onOpenInDsh() {
-  const response = await fetch('/api/open-directory-with-dsh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentDirectory.value }) })
-  const result = await response.json()
-  if (!response.ok || !result.success) throw new Error(result.error || '无法启动 DeepSeek Harness')
-  ElMessage.success(result.message || '已启动 DeepSeek Harness')
+  if (warnIfEmptyDirectory()) return
+  toastOpenResult(
+    await openPathWithTool('dsh', currentDirectory.value),
+    '@67CE7:已启动 DeepSeek Harness',
+    '@67CE7:打开失败: ',
+  )
 }
 
 async function onClaudeContextMenu() {
-  if (toolsStore.lastCheckedAt === null) {
-    await toolsStore.checkTools()
-    if (toolsStore.lastCheckedAt === null) {
-      ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
-      return
-    }
+  if (!(await ensureToolsChecked())) {
+    ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
+    return
   }
   if (toolsStore.claudeAvailable) {
     void toolsStore.fetchLatestVersions() // 右键打开菜单时顺带查最新版(5 分钟缓存)
@@ -171,7 +197,7 @@ async function onClaudeContextMenu() {
 // 没必要占常驻位，收进菜单里按需取用。
 
 /** 除 claude 外的工具（claude 有右键菜单，单独渲染） */
-type SimpleToolId = Exclude<ToolId, 'claude'>
+type SimpleToolId = OpenWithToolId
 
 interface SimpleTool {
   id: SimpleToolId
@@ -181,16 +207,25 @@ interface SimpleTool {
   action: () => void | Promise<void>
 }
 
-// label 走 $t：保持和改动前一致的 i18n 行为（kimi/zcode/dsh 原本就是硬编码中文，
-// 没有对应 key，这里不动，避免引入未登记的翻译项）。
-const simpleTools: SimpleTool[] = [
-  { id: 'vscode', name: 'VSCode', icon: 'vscode', label: $t('@67CE7:用 VSCode 打开'), action: onOpenInVscode },
-  { id: 'codex', name: 'Codex', icon: 'codex', label: $t('@67CE7:用 Codex 打开'), action: onOpenInCodex },
-  { id: 'opencode', name: 'OpenCode', icon: 'opencode', label: $t('@67CE7:用 OpenCode 打开'), action: onOpenInOpencode },
-  { id: 'kimi', name: 'Kimi Code', icon: 'kimi', label: '用 Kimi Code 打开', action: onOpenInKimi },
-  { id: 'zcode', name: 'ZCode', icon: 'zcode', label: '用 ZCode 打开', action: onOpenInZcode },
-  { id: 'dsh', name: 'DeepSeek Harness', icon: 'dsh', label: '用 DeepSeek Harness 打开', action: onOpenInDsh },
-]
+/** 每个工具的打开动作。成功兜底文案各不相同（服务端一般都给了 message，这里只是保底），
+ *  所以仍是一个工具一个函数；图标 / 名称 / 菜单文案统一取自 OPEN_WITH_TOOLS ——
+ *  和编排台项目列表的「打开方式」菜单共用一份，避免同一工具两处叫法/图标不一致。 */
+const TOOL_ACTIONS: Record<SimpleToolId, () => void | Promise<void>> = {
+  vscode: onOpenInVscode,
+  codex: onOpenInCodex,
+  opencode: onOpenInOpencode,
+  kimi: onOpenInKimi,
+  zcode: onOpenInZcode,
+  dsh: onOpenInDsh,
+}
+
+const simpleTools: SimpleTool[] = OPEN_WITH_TOOLS.map((tool) => ({
+  id: tool.id,
+  name: tool.name,
+  icon: tool.icon,
+  label: $t(tool.labelKey),
+  action: TOOL_ACTIONS[tool.id],
+}))
 
 /**
  * "更多"菜单是否展开。
@@ -223,7 +258,7 @@ const missingTools = computed(() => {
     }
   }
   if (!toolsStore.claudeAvailable) {
-    list.push({ id: 'claude', name: toolNames.claude, label: '用 Claude Code 打开' })
+    list.push({ id: 'claude', name: TOOL_DISPLAY_NAMES.claude, label: '用 Claude Code 打开' })
   }
   return list
 })
@@ -258,48 +293,22 @@ function onOpenDialog() {
 
 // 在资源管理器中打开当前目录
 async function onOpenExplorer() {
-  try {
-    if (!currentDirectory.value) {
-      ElMessage.warning($t('@67CE7:当前目录路径为空'));
-      return;
-    }
-    const response = await fetch("/api/open_directory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: currentDirectory.value }),
-    });
-    const result = await response.json();
-    if (result.success) {
-      ElMessage.success($t('@67CE7:已在文件管理器中打开目录'));
-    } else if (result.error) {
-      ElMessage.error(result.error);
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:打开目录失败: ')}${(error as Error).message}`);
-  }
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathInFileManager(currentDirectory.value),
+    '@67CE7:已在文件管理器中打开目录',
+    '@67CE7:打开目录失败: ',
+  );
 }
 
 // 用 VSCode 打开当前目录
 async function onOpenInVscode() {
-  try {
-    if (!currentDirectory.value) {
-      ElMessage.warning($t('@67CE7:当前目录路径为空'));
-      return;
-    }
-    const response = await fetch('/api/open-directory-with-vscode', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: currentDirectory.value }),
-    });
-    const result = await response.json();
-    if (result.success) {
-      ElMessage.success($t('@67CE7:已用 VSCode 打开目录'));
-    } else if (result.error) {
-      ElMessage.error(result.error);
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
-  }
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathWithTool('vscode', currentDirectory.value),
+    '@67CE7:已用 VSCode 打开目录',
+    '@67CE7:打开失败: ',
+  );
 }
 
 // 用 Claude Code 打开当前目录
@@ -307,74 +316,32 @@ async function onOpenInVscode() {
 async function onOpenInClaudeCode(permissionMode?: string) {
   // 触发时也顺手关掉右键菜单
   closeClaudeMenu()
-  try {
-    if (!currentDirectory.value) {
-      ElMessage.warning($t('@67CE7:当前目录路径为空'));
-      return;
-    }
-    const response = await fetch('/api/open-directory-with-claude-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        path: currentDirectory.value,
-        ...(permissionMode ? { permissionMode } : {})
-      }),
-    });
-    const result = await response.json();
-    if (result.success) {
-      ElMessage.success(result.message || $t('@67CE7:已用 Claude Code 打开目录'));
-    } else if (result.error) {
-      ElMessage.error(result.error);
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
-  }
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathWithTool('claude', currentDirectory.value, permissionMode),
+    '@67CE7:已用 Claude Code 打开目录',
+    '@67CE7:打开失败: ',
+  );
 }
 
 // 用 Codex 打开当前目录
 async function onOpenInCodex() {
-  try {
-    if (!currentDirectory.value) {
-      ElMessage.warning($t('@67CE7:当前目录路径为空'));
-      return;
-    }
-    const response = await fetch('/api/open-directory-with-codex', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: currentDirectory.value }),
-    });
-    const result = await response.json();
-    if (result.success) {
-      ElMessage.success(result.message || $t('@67CE7:已用 Codex 打开目录'));
-    } else if (result.error) {
-      ElMessage.error(result.error);
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
-  }
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathWithTool('codex', currentDirectory.value),
+    '@67CE7:已用 Codex 打开目录',
+    '@67CE7:打开失败: ',
+  );
 }
 
 // 用 OpenCode 打开当前目录
 async function onOpenInOpencode() {
-  try {
-    if (!currentDirectory.value) {
-      ElMessage.warning($t('@67CE7:当前目录路径为空'));
-      return;
-    }
-    const response = await fetch('/api/open-directory-with-opencode', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: currentDirectory.value }),
-    });
-    const result = await response.json();
-    if (result.success) {
-      ElMessage.success(result.message || $t('@67CE7:已用 OpenCode 打开目录'));
-    } else if (result.error) {
-      ElMessage.error(result.error);
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
-  }
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathWithTool('opencode', currentDirectory.value),
+    '@67CE7:已用 OpenCode 打开目录',
+    '@67CE7:打开失败: ',
+  );
 }
 
 // 右键菜单（el-popover manual 模式）—— 避开 el-dropdown 在 el-tooltip 嵌套下的 contextmenu 失效问题
@@ -423,8 +390,8 @@ async function onUpdateTool(tool: ToolId) {
   if (updateRunning.value) return
   try {
     await ElMessageBox.confirm(
-      $t('@67CE7:将在新终端中执行 {tool} 的更新命令，命令来自服务端白名单，确认继续？', { tool: toolNames[tool] }),
-      $t('@67CE7:更新 {tool}', { tool: toolNames[tool] }),
+      $t('@67CE7:将在新终端中执行 {tool} 的更新命令，命令来自服务端白名单，确认继续？', { tool: TOOL_DISPLAY_NAMES[tool] }),
+      $t('@67CE7:更新 {tool}', { tool: TOOL_DISPLAY_NAMES[tool] }),
       {
         confirmButtonText: $t('@67CE7:确认更新'),
         cancelButtonText: $t('@67CE7:取消'),
@@ -463,12 +430,9 @@ const simpleMenuTool = ref<SimpleTool | null>(null)
 const simpleMenuVisible = ref(false)
 
 async function onSimpleToolContextMenu(tool: SimpleTool) {
-  if (toolsStore.lastCheckedAt === null) {
-    await toolsStore.checkTools()
-    if (toolsStore.lastCheckedAt === null) {
-      ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
-      return
-    }
+  if (!(await ensureToolsChecked())) {
+    ElMessage.warning($t('@67CE7:工具检测失败，请稍后重试'))
+    return
   }
   if (!toolsStore.isToolAvailable(tool.id)) {
     openToolInstall(tool.id)
@@ -528,25 +492,12 @@ onBeforeUnmount(() => {
 
 // 在终端中打开当前目录
 async function onOpenTerminal() {
-  try {
-    if (!currentDirectory.value) {
-      ElMessage.warning($t('@67CE7:当前目录路径为空'));
-      return;
-    }
-    const response = await fetch("/api/open_terminal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: currentDirectory.value }),
-    });
-    const result = await response.json();
-    if (result.success) {
-      ElMessage.success($t('@67CE7:已在终端中打开目录'));
-    } else if (result.error) {
-      ElMessage.error(result.error);
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:打开终端失败: ')}${(error as Error).message}`);
-  }
+  if (warnIfEmptyDirectory()) return;
+  toastOpenResult(
+    await openPathInTerminal(currentDirectory.value),
+    '@67CE7:已在终端中打开目录',
+    '@67CE7:打开终端失败: ',
+  );
 }
 
 // npm脚本检查已移至NpmScriptsPanel中，点击按钮时按需加载
@@ -653,18 +604,9 @@ async function openNewTabGui() {
     ElMessage.warning($t('@67CE7:目录路径不能为空'));
     return;
   }
-  try {
-    const response = await fetch('/api/open-new-tab-gui', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: newDirectoryPath.value }),
-    });
-    const result = await response.json();
-    if (!result.success) {
-      ElMessage.error(result.error || $t('@67CE7:打开失败'));
-    }
-  } catch (error) {
-    ElMessage.error(`${$t('@67CE7:打开失败: ')}${(error as Error).message}`);
+  const result = await launchGuiInNewTab(newDirectoryPath.value);
+  if (!result.success) {
+    ElMessage.error(result.error || $t('@67CE7:打开失败'));
   }
 }
 
@@ -850,7 +792,7 @@ function onBrowserSelect(path: string) {
             @keydown.enter.prevent="onUpdateTool('claude')"
             @keydown.space.prevent="onUpdateTool('claude')"
           >
-            <span class="claude-menu__label">{{ $t('@67CE7:更新 {tool}', { tool: toolNames.claude }) }}</span>
+            <span class="claude-menu__label">{{ $t('@67CE7:更新 {tool}', { tool: TOOL_DISPLAY_NAMES.claude }) }}</span>
             <span class="claude-menu__hint">{{ updateHint('claude') || $t('@67CE7:升级到最新版本') }}</span>
           </li>
         </ul>

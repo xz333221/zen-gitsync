@@ -654,8 +654,15 @@ export default {
   '@67CE7:用 Claude Code 打开（完全批准）': '用 Claude Code 打开（完全批准）',
   '@67CE7:用 Codex 打开': '用 Codex 打开',
   '@67CE7:用 OpenCode 打开': '用 OpenCode 打开',
+  '@67CE7:用 Kimi Code 打开': '用 Kimi Code 打开',
+  '@67CE7:用 ZCode 打开': '用 ZCode 打开',
+  '@67CE7:用 DeepSeek Harness 打开': '用 DeepSeek Harness 打开',
   '@67CE7:已用 Codex 打开目录': '已用 Codex 打开目录',
   '@67CE7:已用 OpenCode 打开目录': '已用 OpenCode 打开目录',
+  '@67CE7:已用 Kimi Code 打开目录': '已用 Kimi Code 打开目录',
+  '@67CE7:已用 ZCode 打开目录': '已用 ZCode 打开目录',
+  '@67CE7:已用 {tool} 打开目录': '已用 {tool} 打开目录',
+  '@67CE7:已启动 DeepSeek Harness': '已启动 DeepSeek Harness',
   '@67CE7:Claude Code': 'Claude Code',
   '@67CE7:Claude Code 启动模式': 'Claude Code 启动模式',
   // @TINST: file path: components\ToolInstallDialog.vue
@@ -2477,6 +2484,14 @@ export default {
   '@WORKBENCH:打开文件夹': '打开文件夹',
   '@WORKBENCH:已在文件管理器中打开文件夹': '已在文件管理器中打开文件夹',
   '@WORKBENCH:打开文件夹失败': '打开文件夹失败',
+  '@WORKBENCH:打开方式': '打开方式',
+  '@WORKBENCH:在文件管理器中打开': '在文件管理器中打开',
+  '@WORKBENCH:在终端中打开': '在终端中打开',
+  '@WORKBENCH:打开终端失败': '打开终端失败',
+  '@WORKBENCH:在新标签页启动 g ui': '在新标签页启动 g ui',
+  '@WORKBENCH:已在新标签页启动 g ui': '已在新标签页启动 g ui',
+  '@WORKBENCH:启动 g ui 失败': '启动 g ui 失败',
+  '@WORKBENCH:用工具打开': '用工具打开',
   // @WORKBENCH: file end
 
   // @ACTBAR: file path: components/ActivityBar.vue (追加: 系统监控)
