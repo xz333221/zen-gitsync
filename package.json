@@ -30,6 +30,7 @@
     "verify:wb-dialogs": "node scripts/verify-workbench-dialogs.cjs",
     "verify:wb-dispatch": "node scripts/verify-workbench-dispatch-attach.cjs",
     "verify:wb-env-context": "node scripts/verify-workbench-env-context.mjs",
+    "verify:wb-overview": "node scripts/verify-workbench-overview.cjs",
     "e2e": "cd src/ui/client && npx playwright test",
     "e2e:headed": "cd src/ui/client && npx playwright test --headed",
     "e2e:install": "cd src/ui/client && npx playwright install chromium",

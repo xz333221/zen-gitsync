@@ -110,18 +110,28 @@ const headerStats = computed(() => {
   }
 })
 
-/** 控制台右栏要展示的项目：选了具体项目就用它，否则回落到应用当前项目 */
-const consoleProject = computed<ProjectSummary | null>(() => {
-  if (selectedProject.value) return selectedProject.value
+/**
+ * 应用当前打开的项目（L2 编辑器里那个）。
+ * 只作为「全部项目」模式下派发指令的兜底目标 —— 派发必须落到一个确定的目录，
+ * 不能是「全部」。
+ */
+const fallbackProject = computed<ProjectSummary | null>(() => {
   const key = canonicalProjectPath(currentProjectPath.value)
   if (!key) return null
   return projects.value.find(p => p.key === key) || null
 })
 
-const targetProjectName = computed(() => {
-  if (selectedProject.value) return selectedProject.value.name
-  return consoleProject.value ? consoleProject.value.name : ''
-})
+/**
+ * 指令会落到哪个项目：选中具体项目时是它，选中「全部项目」时回落到应用当前项目。
+ *
+ * ⚠️ 这个兜底**只能用于派发**，不能反过来喂给右侧「项目概览」：
+ * 概览是一块跟随左侧选中项的信息面板，若「全部项目」也回落到某个具体项目，
+ * 切过去之后概览纹丝不动，看起来就像没切成功（用户实际遇到的就是这个）。
+ * 概览一律直接用 selectedProject —— 为 null 即「全部项目」，不展示单项目 Git 指标。
+ */
+const targetProjectName = computed(
+  () => selectedProject.value?.name || fallbackProject.value?.name || ''
+)
 
 function targetProjectPath(): string {
   if (selectedProject.value) return selectedProject.value.path
@@ -405,7 +415,7 @@ async function onToggleSchedule(next: boolean) {
         :active="active"
         :activity="activity"
         :running-count="running.length"
-        :selected-project="consoleProject"
+        :selected-project="selectedProject"
         :dispatching="dispatching"
         :toggling-schedule="togglingSchedule"
         :today-done="headerStats.todayDone"

@@ -240,7 +240,8 @@ const gitSummary = computed(() => {
     <div class="oc__git">
       <p class="oc__feed-title">
         {{ $t('@WORKBENCH:项目概览') }}
-        <span v-if="selectedProject" class="oc__git-name">{{ selectedProject.name }}</span>
+        <!-- 无选中项目即「全部项目」：显式标出来，否则底下只剩「今日完成」一行，看着像数据没加载出来 -->
+        <span class="oc__git-name">{{ selectedProject ? selectedProject.name : $t('@WORKBENCH:全部项目') }}</span>
       </p>
       <dl class="oc__git-list">
         <template v-for="row in gitSummary" :key="row.label">
