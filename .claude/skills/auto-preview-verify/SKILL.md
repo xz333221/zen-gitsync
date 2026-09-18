@@ -107,6 +107,33 @@ reload 后再走一遍步骤 4a 的 1-5 步检查。注意:
 
 ---
 
+## 步骤 4c — 没有 preview_* 工具时的兜底:Playwright 直连本机 Chrome
+
+会话里没有 `preview_start` / `preview_eval` 这套工具时,不要只剩"build + 肉眼看"这一条路 ——
+本仓库装了 Playwright,可以开真浏览器把断言跑成脚本,比人眼截图硬得多:
+
+```js
+// src/ui/client/tmp-verify-xxx.cjs —— 必须放这个目录下,node 从脚本位置解析 playwright
+const { chromium } = require('playwright')
+const browser = await chromium.launch({ channel: 'chrome' })   // ← 关键,见下
+```
+
+四个踩过的点:
+
+1. **用 `channel: 'chrome'`(或 `'msedge'`)复用本机已装的浏览器**。默认的 headless shell 没装,
+   `chromium.launch()` 直接抛 `Executable doesn't exist ... chrome-headless-shell`。
+   Windows 上 `C:\Program Files\Google\Chrome\Application\chrome.exe` 本来就有,
+   **不要**为了这一条跑 `npx playwright install` 拉 150MB。
+2. **应用默认落在 Git 视图**,工作台要自己点进去:`button.activity-btn` 里 `aria-label` 含「工作台」的那个。
+3. **会真改状态的接口必须先 mock**。派发(`/api/workbench/orchestrator/dispatch`)、取消、删除这类,
+   点一下就在 `~/.zen-gitsync/tasks.json` 里建出真任务、真起 claude 进程。用
+   `page.route('**/api/workbench/orchestrator/dispatch', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, task: null, ran: false }) }))`
+   拦掉,验证完再 grep 一次 `tasks.json` 确认没留下垃圾数据。
+   只读交互(Shift+Enter 换行、空内容不派发)可以放心真按。
+4. **脚本和截图是临时产物,commit 前删掉**(`git status --short` 里不该出现 `tmp-verify-*`)。
+
+---
+
 ## 步骤 5 — 验证完整后清理
 
 如果改之前加了 `data-debug` 锚点,**必须删掉**(commit 前不要留 debug 标记):
