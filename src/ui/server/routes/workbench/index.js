@@ -44,7 +44,9 @@ import {
   fsp,
   PROMPTS_FILE,
   TASKS_FILE,
+  CONFIG_FILE,
   JOBS_FILE,
+  ORCHESTRATOR_FILE,
   IMAGES_DIR,
   SUBTASK_INSTRUCTION_FILE,
   MAX_IMAGE_BYTES,
@@ -107,6 +109,7 @@ import {
   collectPriorOutputs,
   collectPriorOutputsUpTo,
   waitProcessExit,
+  setEnvContextProvider,
 } from './taskRunner.js';
 import {
   listProjects,
@@ -114,7 +117,9 @@ import {
   decorateTaskForBoard,
   resolveTaskRepoPath,
   buildTaskDetail,
+  buildProjectEntries,
 } from './projectRegistry.js';
+import { buildEnvContextBlock } from './envContext.js';
 import {
   readOrchestrator,
   setOrchestratorActive,
@@ -1739,6 +1744,45 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     const boardTasks = tasks.map(t => decorateTaskForBoard(t, jobsByTask.get(t.id) || []));
     return { projects, tasks: boardTasks, currentProjectPath };
   }
+
+  /**
+   * 注册「运行环境上下文」的提供者 —— 执行引擎（taskRunner）拼 prompt 时会回调它。
+   *
+   * 为什么在这一层注册：只有这里同时拿得到 configManager（最近目录）与 jobStore
+   * 的 job 快照；taskRunner 两个都没有，放它那儿就得再造一条「读最近目录」的路径，
+   * 也就是又一次口径分叉。
+   *
+   * 复用 buildProjectEntries + summarizeProjectTasks（与看板同一套口径），
+   * 但**刻意不走** listProjects：那是给看板用的，会去 spawn git 探状态。
+   * 分支、改动数这类信息 Agent 在自己的 cwd 里一条 git 命令就有，
+   * 不值得为它在这里每次执行都多探一轮。
+   */
+  setEnvContextProvider(async ({ repoPath } = {}) => {
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const tasks = data.tasks || [];
+
+    let recentDirs = [];
+    try {
+      if (configManager && typeof configManager.getRecentDirectories === 'function') {
+        recentDirs = (await configManager.getRecentDirectories()) || [];
+      }
+    } catch (err) {
+      // 与 loadBoardPayload 同一处理：读不到最近目录就退化成"只按任务里出现过的项目"
+      logger.warn('[workbench] 注入运行环境上下文时读取最近目录失败，退化为仅按任务路径:', err.message);
+    }
+
+    const projects = buildProjectEntries({ recentDirs, tasks });
+    return buildEnvContextBlock({
+      currentProjectPath: repoPath || '',
+      projects,
+      tasks,
+      jobs: snapshotJobs(),
+      tasksFile: TASKS_FILE,
+      jobsFile: JOBS_FILE,
+      orchestratorFile: ORCHESTRATOR_FILE,
+      configFile: CONFIG_FILE,
+    });
+  });
 
   app.get('/api/workbench/projects', asyncRoute(async (_req, res) => {
     const payload = await loadBoardPayload();

@@ -33,6 +33,9 @@ import { DATA_DIR } from '../../../../paths.js';
 export { DATA_DIR };
 export const PROMPTS_FILE = path.join(DATA_DIR, 'prompts.json');
 export const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
+// 应用主配置（projects / recentDirectories / models …）。这里只用来把**路径**告诉 Agent，
+// 让它需要时自己读 —— 服务端不在这个流程里解析配置内容。
+export const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 export const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
 export const INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-instruction.json');
 export const SUBTASK_INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-subtask-instruction.json');

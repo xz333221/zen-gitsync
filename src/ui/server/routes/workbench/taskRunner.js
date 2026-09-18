@@ -47,6 +47,39 @@ import {
   flushJobsSaveNow,
 } from './jobStore.js';
 
+// ── 运行环境上下文的提供者 ────────────────────────────────────────────────
+// 为什么用注入而不是在这里直接读：拼这份上下文要「最近目录」（在 configManager 上），
+// 而 taskRunner 拿不到 configManager —— 它是路由层的东西。与其在这里再造一条
+// 读取最近目录的路径（口径分叉的老套路），不如让路由层注册时把函数递进来。
+//
+// 未注入时静默跳过：上下文是锦上添花，不能因为没接线就让整个执行引擎跑不起来。
+let envContextProvider = null;
+
+/**
+ * 注册运行环境上下文的提供者。由 routes/workbench/index.js 在注册路由时调用。
+ * @param {(ctx: {repoPath: string}) => Promise<string|null>|string|null} fn
+ */
+export function setEnvContextProvider(fn) {
+  envContextProvider = typeof fn === 'function' ? fn : null;
+}
+
+/**
+ * 取本次执行的运行环境上下文块。
+ *
+ * 提供者抛错一律降级成"没有上下文"：读 tasks.json 失败、配置竞态都是可能发生的，
+ * 但它们都不该让用户的指令执行不了 —— 与「读不到最近目录不该让整个看板挂掉」同一条原则。
+ */
+async function resolveEnvContext(repoPath) {
+  if (!envContextProvider) return '';
+  try {
+    const block = await envContextProvider({ repoPath: repoPath || '' });
+    return typeof block === 'string' ? block : '';
+  } catch (err) {
+    logger.warn(`[workbench] 运行环境上下文注入失败，本次跳过: ${err.message}`);
+    return '';
+  }
+}
+
 // 用 detached 进程跑 claude；进程退出时回填状态。
 // 返回 { pid, child }：调用方可以监听 child.stdout/stderr 实时收集输出。
 // 不再走 cmd /k 弹窗——claude -p 是非交互模式，输出通过 stdout pipe 实时回传
@@ -250,6 +283,15 @@ ${prompt}`;
     if (attachmentBlock) {
       prompt += `\n\n---\n本任务包含 ${allAttachments.length} 个附件（请按文件路径读取，不要让用户重新提供）：${attachmentBlock}\n---`;
     }
+  }
+
+  // ── 运行环境上下文：项目清单 + 看板概览 + 真相源文件路径 ──
+  // 拼在**最前面**、任务正文压尾，与上面 priorOutputs 的位置口径一致：
+  // 越靠后离模型的注意力中心越近，用户真正要办的那句话必须在最后一屏。
+  // task.envContext === false 可以单任务关掉（默认开 —— 老任务不迁移也一并受益）。
+  if (task.envContext !== false) {
+    const envBlock = await resolveEnvContext(repoPath);
+    if (envBlock) prompt = `${envBlock}\n\n---\n\n${prompt}`;
   }
 
   const jobId = genId();
