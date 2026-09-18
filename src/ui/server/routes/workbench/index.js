@@ -120,6 +120,7 @@ import {
   buildProjectEntries,
 } from './projectRegistry.js';
 import { buildEnvContextBlock } from './envContext.js';
+import { resolveInstructionTarget } from './targetResolver.js';
 import {
   readOrchestrator,
   setOrchestratorActive,
@@ -1840,7 +1841,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   /**
    * 派发一条指令。
    * body: { text, projectPath?, autoRun? }
-   *   - projectPath 缺省 = 当前项目
+   *   - projectPath 缺省 -> 交给 targetResolver 判断落到哪个项目（显式指定 > 指令里点名
+   *     > 主 Agent 判断 > 应用当前项目）。用户不必先选项目，落点会如实记进指令流水
    *   - autoRun 默认 true；调度暂停时只建任务不执行（指令记录里会写明原因）
    *
    * 指令一律落成目标项目下的**简单任务**（一句话交给 claude 跑一轮），
@@ -1853,8 +1855,43 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
 
     const fallbackPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
     const bodyPath = typeof req.body?.projectPath === 'string' ? req.body.projectPath.trim() : '';
-    const targetPath = bodyPath || fallbackPath;
-    if (!targetPath) throw new HttpError(400, '未选中项目，无法派发');
+
+    // 先把任务与项目清单读出来：解析落点要用它们。
+    // 清单复用 buildProjectEntries（与看板 / 运行环境上下文同一套口径），
+    // 刻意**不走** listProjects —— 那会 spawn git，派发不值得为它多等一轮。
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    const tasks = data.tasks || [];
+
+    let recentDirs = [];
+    try {
+      if (configManager && typeof configManager.getRecentDirectories === 'function') {
+        recentDirs = (await configManager.getRecentDirectories()) || [];
+      }
+    } catch (err) {
+      logger.warn('[workbench] 派发时读取最近目录失败，落点解析退化为仅按任务路径:', err.message);
+    }
+
+    const target = await resolveInstructionTarget({
+      text,
+      projects: buildProjectEntries({ recentDirs, tasks }),
+      explicitPath: bodyPath,
+      defaultPath: fallbackPath,
+      // 懒取模型：只有「指令里没点名、也没被显式指定」时才会真的读 config 去问模型
+      getModel: async () => {
+        if (!configManager) return null;
+        const rawConfig = await configManager.readRawConfigFile();
+        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
+        return models.find(m => m.isDefault) || models[0] || null;
+      },
+      onAgentError: (err) => {
+        logger.warn('[workbench] 主 Agent 判断指令落点失败，退到默认项目:', err.message);
+      },
+    });
+
+    const targetPath = target.path;
+    if (!targetPath) {
+      throw new HttpError(400, '没能识别出目标项目，也没有默认项目可用 —— 先在左侧打开或选一个项目');
+    }
 
     // 目标目录必须真的存在：跑在不存在的工作区上只会拿到一堆无意义的报错
     let stat = null;
@@ -1865,6 +1902,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         projectPath: targetPath,
         status: 'rejected',
         reason: '项目目录不存在',
+        targetSource: target.source,
       });
       publish('orchestrator:instruction', rejected);
       throw new HttpError(400, `项目目录不存在：${targetPath}`);
@@ -1899,8 +1937,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       });
     }
 
-    const data = await readJson(TASKS_FILE, { tasks: [] });
-    const tasks = data.tasks || [];
+    // tasks / data 已在上面读好（落点解析要用），这里不再重复读一遍
     const now = nowIso();
     const taskId = genId();
 
@@ -1961,6 +1998,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       taskId: task.id,
       status: willRun ? 'accepted' : 'created',
       reason: autoRun && !schedulingActive ? '调度已暂停，只建了任务未执行' : '',
+      // 落点是怎么定下来的（explicit / mention / agent / default），
+      // 记下来才能在流水里回答用户那句"为什么派到这儿了"
+      targetSource: target.source,
     });
 
     publish('task:created', { task });
@@ -1981,7 +2021,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       });
     }
 
-    res.json({ success: true, task, instruction: record, ran: willRun, schedulingActive });
+    res.json({ success: true, task, instruction: record, ran: willRun, schedulingActive, target });
   }));
 
   /**

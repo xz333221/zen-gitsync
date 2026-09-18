@@ -246,6 +246,8 @@ export interface OrchestratorActivity {
   text?: string
   instructionStatus?: string
   reason?: string
+  /** 落点是怎么定下来的：explicit / mention / agent / default（'' = 本次升级前的老记录） */
+  targetSource?: string
 }
 
 /** 正在执行的执行体（一行 = 一个活跃 job） */

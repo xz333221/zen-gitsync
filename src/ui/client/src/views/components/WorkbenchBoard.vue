@@ -110,17 +110,6 @@ const headerStats = computed(() => {
   }
 })
 
-/**
- * 应用当前打开的项目（L2 编辑器里那个）。
- * 选中「全部项目」时，它只是派发目标下拉的**默认项** —— 派发必须落到一个确定的
- * 目录，不能是「全部」；但"有默认值"不等于"隐式"，用户在下拉里看得见、也改得动。
- */
-const fallbackProject = computed<ProjectSummary | null>(() => {
-  const key = canonicalProjectPath(currentProjectPath.value)
-  if (!key) return null
-  return projects.value.find(p => p.key === key) || null
-})
-
 // ── 任务详情弹窗：点卡片就地看内容，不再跳进编辑器 ────────────────────
 // 点卡片只开弹窗、不改 boardMode —— 看板的用处是扫全局、就地处理，
 // 点一下就被甩到编辑器再点回来，手上的位置和筛选状态全丢了。
@@ -296,9 +285,10 @@ const defaultProjectPath = computed(
 )
 
 /**
- * 派发。目标项目由控制台自己定（选中具体项目就是它；「全部项目」则是用户在
- * 目标下拉里显式选的那个），随事件一起带上来 —— 这里不再自己猜一个回落值，
- * 免得后台换目标、提示和实际落点各说各话。
+ * 派发。projectPath 只在"选中了具体项目"时才非空（显式指定）；
+ * 「全部项目」下它是空串，由服务端 targetResolver 按指令内容判断落点
+ * （指令里点名 > 主 Agent 判断 > 默认项目）。前端不猜落点 ——
+ * 猜出来的和真正执行的各说各话时，吃亏的是用户。
  */
 async function onDispatch(payload: {
   text: string; autoRun: boolean; attachments: Attachment[]; projectPath: string
@@ -414,8 +404,6 @@ async function onToggleSchedule(next: boolean) {
         :activity="activity"
         :running-count="running.length"
         :selected-project="selectedProject"
-        :projects="projects"
-        :fallback-project="fallbackProject"
         :dispatching="dispatching"
         :toggling-schedule="togglingSchedule"
         :today-done="headerStats.todayDone"

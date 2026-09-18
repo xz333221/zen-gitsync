@@ -40,10 +40,6 @@ const props = defineProps<{
   activity: OrchestratorActivity[]
   runningCount: number
   selectedProject: ProjectSummary | null
-  /** 全部项目：可作为派发目标的项目清单（目标下拉的数据源） */
-  projects: ProjectSummary[]
-  /** 全部项目：目标下拉的默认项 = 应用当前打开的项目 */
-  fallbackProject: ProjectSummary | null
   dispatching: boolean
   togglingSchedule: boolean
   /** 今日已完成的执行轮次，由看板统一算好后传入（两处各算一遍必然对不上） */
@@ -57,8 +53,10 @@ const emit = defineEmits<{
     autoRun: boolean
     attachments: Attachment[]
     /**
-     * 目标项目路径。**由本组件决定并随事件带上去**，父组件不再自己猜一个回落值 ——
-     * 否则"提示里显示的落点"和"实际落点"会各算各的，早晚对不上。
+     * 目标项目路径。选中具体项目时显式带上；选中「全部项目」时**留空**，
+     * 由服务端 targetResolver 按指令内容判断落点（指令里点名 > 主 Agent 判断
+     * > 默认项目）。前端不做任何猜测 —— 猜出来的落点和服务端算出来的对不上时，
+     * 吃亏的是用户。
      */
     projectPath: string
   }]
@@ -66,44 +64,6 @@ const emit = defineEmits<{
 
 const draft = ref('')
 const autoRun = ref(true)
-
-/**
- * 「全部项目」下用户在目标下拉里显式选的项目 key（'' = 用默认项）。
- * 只在「全部项目」有意义 —— 选中具体项目时目标就是它，不给改。
- */
-const targetKey = ref('')
-
-/**
- * 实际落点：
- *   选中具体项目          -> 就是它
- *   「全部项目」+ 显式选过 -> 选的哪个就是哪个
- *   「全部项目」+ 没选过   -> 应用当前项目（默认项，但下拉里看得见、改得动）
- *
- * 注意这里**不喂给「项目概览」**：概览是跟随左侧选中项的信息面板，
- * 「全部项目」下就该显示「全部项目」，不能回落到某个具体项目。
- */
-const resolvedTarget = computed<ProjectSummary | null>(() => {
-  if (props.selectedProject) return props.selectedProject
-  if (targetKey.value) {
-    const picked = props.projects.find(p => p.key === targetKey.value)
-    if (picked) return picked
-  }
-  return props.fallbackProject
-})
-
-/** 下拉可选项：目录不存在的没法派发，先滤掉 */
-const targetChoices = computed(() => {
-  const list = props.projects.filter(p => p.exists !== false)
-  const cur = resolvedTarget.value
-  // 极端情况：默认项不在清单里（目录不存在 / 尚未注册）也要塞进去，
-  // 否则 <select> 会退化成显示第一项，和实际落点对不上 —— 又变成"界面在撒谎"
-  if (cur && !list.some(p => p.key === cur.key)) return [cur, ...list]
-  return list
-})
-
-function onPickTarget(e: Event) {
-  targetKey.value = (e.target as HTMLSelectElement).value
-}
 
 // ── 附件 ────────────────────────────────────────────────────────────────
 // 派发这一刻任务还不存在，没有 task/sub 可挂 → 先落服务端的暂存区
@@ -158,21 +118,19 @@ function onRemoveAttachment(att: Attachment) { removeAttachment(attachTarget.val
 function clearAttachments() { draftAttachments.value = [] }
 defineExpose({ clearAttachments })
 
-// 没有可用目标时不给派发：发出去也只会被服务端以"目录不存在"拒掉
+// 落点由服务端判断，前端不为"能不能派发"前置任何目标检查 ——
+// 判断不出目标时服务端会退到默认项目，真没有可用项目才回 400 并给出说明
 const canSend = computed(
   () => draft.value.trim().length > 0 && !props.dispatching && !attachBusy.value
-    && !!resolvedTarget.value
 )
-
 function send() {
   if (!canSend.value) return
-  const target = resolvedTarget.value
-  if (!target) return
   emit('dispatch', {
     text: draft.value.trim(),
     autoRun: autoRun.value,
     attachments: draftAttachments.value,
-    projectPath: target.path,
+    // 选中具体项目 = 显式指定；「全部项目」留空，让服务端按指令内容判断落点
+    projectPath: props.selectedProject ? props.selectedProject.path : '',
   })
   draft.value = ''
 }
@@ -211,6 +169,20 @@ function instructionNote(r: OrchestratorActivity): string {
   if (r.instructionStatus === 'accepted') return $t('@WORKBENCH:已建任务并开始执行')
   if (r.instructionStatus === 'rejected') return $t('@WORKBENCH:被拒绝：{reason}', { reason: r.reason || '' })
   return r.reason || $t('@WORKBENCH:已建任务（未执行）')
+}
+
+/**
+ * 落点是「怎么定下来的」。用户问"为什么派到这儿了"时，这行就是答案 ——
+ * 尤其要能一眼分清「模型猜的」和「压根没识别出来、退了默认项目」。
+ * explicit（用户自己选的）不解释；老记录没有 targetSource，也不解释。
+ */
+function targetReason(r: OrchestratorActivity): string {
+  switch (r.targetSource) {
+    case 'mention': return $t('@WORKBENCH:指令里提到了它')
+    case 'agent': return $t('@WORKBENCH:主 Agent 判断')
+    case 'default': return $t('@WORKBENCH:没识别出项目，用了默认项目')
+    default: return ''
+  }
 }
 
 const gitSummary = computed(() => {
@@ -284,6 +256,12 @@ const gitSummary = computed(() => {
           </div>
           <p class="oc-row__text">{{ describe(r) }}</p>
           <p v-if="instructionNote(r)" class="oc-row__note">{{ instructionNote(r) }}</p>
+          <!-- 落点 + 依据。判断错了，用户至少要能看出是"没识别出来、退了默认"
+               还是"模型猜的"，否则只能对着一个错误项目名干瞪眼 -->
+          <p v-if="r.kind === 'user' && r.projectName" class="oc-row__note">
+            {{ $t('@WORKBENCH:落点「{name}」', { name: r.projectName }) }}
+            <span v-if="targetReason(r)">· {{ targetReason(r) }}</span>
+          </p>
           <p v-if="r.kind === 'error' && r.error" class="oc-row__error" :title="r.error">{{ r.error }}</p>
           <p v-if="r.kind === 'done' && r.projectName" class="oc-row__note">{{ r.projectName }}</p>
         </li>
@@ -369,27 +347,11 @@ const gitSummary = computed(() => {
         </button>
       </div>
       <p class="oc__hint">
-        <!-- 「全部项目」下目标不能是隐式的：把落点摊成一个下拉，看得见、也改得动。
-             用 flex + gap 排版，中英文都不必靠模板里的空白节点凑间距。 -->
-        <template v-if="!selectedProject && targetChoices.length">
-          <span>{{ $t('@WORKBENCH:指令会落到') }}</span>
-          <span class="oc__target-wrap">
-            <select
-              class="oc__target"
-              :value="resolvedTarget ? resolvedTarget.key : ''"
-              :title="$t('@WORKBENCH:选择这条指令落到哪个项目')"
-              @change="onPickTarget"
-            >
-              <option v-for="p in targetChoices" :key="p.key" :value="p.key">{{ p.name }}</option>
-            </select>
-          </span>
-          <span>{{ $t('@WORKBENCH:下新建一个任务；Ctrl+Enter 派发') }}</span>
-        </template>
-        <template v-else-if="resolvedTarget">
-          {{ $t('@WORKBENCH:指令会在「{name}」下新建一个任务；Ctrl+Enter 派发', { name: resolvedTarget.name }) }}
+        <template v-if="selectedProject">
+          {{ $t('@WORKBENCH:指令会在「{name}」下新建一个任务；Ctrl+Enter 派发', { name: selectedProject.name }) }}
         </template>
         <template v-else>
-          {{ $t('@WORKBENCH:没有可用的项目，先在左侧选一个项目；Ctrl+Enter 派发') }}
+          {{ $t('@WORKBENCH:指令落到哪个项目由主 Agent 判断；Ctrl+Enter 派发') }}
         </template>
       </p>
     </div>
@@ -653,45 +615,4 @@ const gitSummary = computed(() => {
   line-height: 1.5;
   color: var(--text-tertiary);
 }
-/* 带目标下拉时这条提示是"文字 + 下拉 + 文字"三段并排：
-   用 flex + gap 控制间距，中英文都不必靠模板里的空白节点去凑 */
-.oc__hint:has(.oc__target-wrap) {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 4px;
-}
-/* 「全部项目」下的目标项目下拉：内联在提示语里，字号随提示走 */
-.oc__target-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-primary);
-}
-/* 小三角自绘（select 不支持伪元素）。appearance:none 之后原生箭头没了，这里补上 */
-.oc__target-wrap::after {
-  content: '';
-  position: absolute;
-  right: 2px;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-top: 4px solid currentColor;
-  pointer-events: none;
-}
-.oc__target {
-  appearance: none;
-  padding: 1px 12px 1px 1px;
-  border: 0;
-  /* 常驻虚线告诉人"这里能点"，hover 变实线，不额外加底色（扁平优先） */
-  border-bottom: 1px dashed currentColor;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-  cursor: pointer;
-  /* 原生下拉面板跟随系统主题，深色下不会弹出白底黑字 */
-  color-scheme: light dark;
-}
-.oc__target:hover { border-bottom-style: solid; }
-.oc__target:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 </style>

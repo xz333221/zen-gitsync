@@ -36,6 +36,7 @@ import {
   genId,
 } from './shared.js';
 import { projectName } from './projectRegistry.js';
+import { TARGET_SOURCES } from './targetResolver.js';
 
 /** 活动流最多返回多少条（前端只渲染最近的一屏，多的不传） */
 export const MAX_ACTIVITY_ENTRIES = 120;
@@ -57,6 +58,9 @@ function normalizeInstruction(raw) {
     // accepted=已建任务 / rejected=被拒绝（暂停调度、项目不存在等）/ created=只建了草稿没执行
     status: ['accepted', 'rejected', 'created'].includes(it.status) ? it.status : 'created',
     reason: typeof it.reason === 'string' ? it.reason : '',
+    // 落点是怎么定下来的（explicit / mention / agent / default）。
+    // 老记录没有这个字段 —— 留空串，别硬塞一个默认值冒充"当时就是这么判断的"。
+    targetSource: TARGET_SOURCES.includes(it.targetSource) ? it.targetSource : '',
   };
 }
 
@@ -251,6 +255,8 @@ export function buildActivityFeed({ jobs = [], tasks = [], instructions = [] } =
       reason: it.reason || '',
       projectPath: it.projectPath || '',
       projectName: projectName(it.projectPath || ''),
+      // 落点来源（'' = 本次升级前的老记录）。前端据此说明"为什么派到这儿了"
+      targetSource: it.targetSource || '',
     });
   }
 
