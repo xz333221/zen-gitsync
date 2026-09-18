@@ -294,6 +294,69 @@ async function buildFrontend() {
   }
 }
 
+// 发布物自检
+//
+// 为什么必须在发布前跑(2026-09-18 事故):`files` 是**逐条列举**的白名单,新加的
+// `src/paths.js` / `src/fsAtomic.js` / `src/configSplit.js` / `src/dataDirMigration.js`
+// 没被补进去 → 2.17.1 打出的 tarball 缺文件 → 全局 `g ui` 一起手就
+// `ERR_MODULE_NOT_FOUND: .../src/paths.js imported from .../src/config.js`。
+// 本地永远复现不了(本地有全部文件),只能靠"发布前证明发布物自洽"来守。
+//
+// 两道网,故意不合并:
+//   ① 白名单语义正确性 —— 复用 `test/package-files.test.mjs`(唯一实现,别再抄一份):
+//      展开 files → 逐个文件抽相对 import → 要求被 import 的也在发布物里。
+//   ② 真实 `npm pack` —— 防"我以为 files 会带上它,但 .npmignore/.gitignore 反手排除了"。
+async function verifyPackageContents() {
+  console.log(chalk.blue('\n=== 发布物自检 ==='))
+
+  // ① 白名单 vs 相对 import
+  try {
+    execSync(`"${process.execPath}" --test test/package-files.test.mjs`, { cwd: rootDir, stdio: 'inherit' })
+  } catch {
+    console.error(chalk.red(
+      '发布物自检失败:package.json#files 覆盖不全(上面哪几条 not ok 就补哪几个文件)。\n'
+      + '继续发布会打出缺文件的包 —— 用户装上就是 ERR_MODULE_NOT_FOUND。'
+    ))
+    process.exit(1)
+  }
+  console.log(chalk.green('① files 覆盖所有被 import 的本地模块'))
+
+  // ② 真实 npm pack(只看清单,不落盘、不联网)
+  let packJson
+  try {
+    const out = execSync('npm pack --dry-run --json', { cwd: rootDir, encoding: 'utf8' })
+    // npm 可能在前/后混入提示行,这里取第一个 '[' 到最后一个 ']' 之间
+    packJson = JSON.parse(out.slice(out.indexOf('['), out.lastIndexOf(']') + 1))
+  } catch (err) {
+    console.error(chalk.red('npm pack --dry-run 失败:'), err.message || err)
+    process.exit(1)
+  }
+
+  const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'))
+  const packed = new Set((packJson[0]?.files || []).map((f) => f.path))
+  if (packed.size === 0) {
+    console.error(chalk.red('npm pack 打出了空包,绝对有问题'))
+    process.exit(1)
+  }
+
+  const notPacked = (pkg.files || []).filter((entry) => {
+    if (entry.endsWith('/**')) {
+      const prefix = entry.slice(0, -3)
+      return ![...packed].some((p) => p === prefix || p.startsWith(prefix + '/'))
+    }
+    return !packed.has(entry)
+  })
+
+  if (notPacked.length) {
+    console.error(chalk.red(
+      `npm pack 里有 ${notPacked.length} 条 files 白名单没真正进包(大概率是 .npmignore / .gitignore 排除了):\n`
+      + notPacked.map((e) => `  - ${e}`).join('\n')
+    ))
+    process.exit(1)
+  }
+  console.log(chalk.green(`② 真实打包 ${packed.size} 个文件,白名单逐条命中`))
+}
+
 // 仅把显式白名单文件 stage,并 sanity check
 function stageReleaseFiles() {
   console.log(chalk.gray('stage 白名单文件(避免 `git add .` 误带脏文件)...'))
@@ -444,6 +507,7 @@ async function main() {
     await runTypeCheck()
     const newVersion = updateVersion()
     await buildFrontend()
+    await verifyPackageContents()
     await commitChanges(newVersion)
     await publishToNpm()
 
