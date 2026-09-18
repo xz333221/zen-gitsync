@@ -40,6 +40,20 @@ export const CONFIG_BACKUP_FILE = path.join(DATA_DIR, 'config.json.bak');
 export const LEGACY_CONFIG_FILE = path.join(os.homedir(), '.git-commit-tool.json');
 export const LEGACY_CONFIG_BACKUP_FILE = path.join(os.homedir(), '.git-commit-tool.json.bak');
 
+// ── 配置分文件存储(2026-09-18 第二轮) ─────────────────────────
+// config.json 里的 projects 占全文件 93%(605KB 中的 563KB),而其中 82% 是画布
+// flowData。任何一次琐碎写入(改主题 / 拖布局比例 / 记最近目录)都要重写整份
+// 605KB 并全量复制一份 .bak,于是拆成:
+//   config.json                        全局(theme/locale/models/ui/recentDirectories)
+//   projects/<fileId>.json             单项目配置(不含 orchestrations)
+//   orchestration/<fileId>/<orchId>.json   每条画布一个文件
+// 读写仍由 src/config.js + src/configSplit.js 包成"旧的单对象形状",调用点无感。
+export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
+export const ORCHESTRATION_DIR = path.join(DATA_DIR, 'orchestration');
+// 分文件迁移标记:存在且 config.json 里没有内联 projects 才算已拆分。
+// 两者都要看 —— 用户可能从备份恢复了旧的内联版本,那时需要重新拆一遍。
+export const SPLIT_MIGRATION_MARKER = path.join(DATA_DIR, '.split-migrated');
+
 // ── 实例注册表(每进程一个心跳文件) ────────────────────────────
 export const INSTANCES_DIR = path.join(DATA_DIR, 'instances');
 export const LEGACY_INSTANCES_DIR = path.join(os.homedir(), '.zen-gitsync-instances');

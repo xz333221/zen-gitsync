@@ -18,6 +18,15 @@ import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { CONFIG_FILE } from './paths.js';
 import { migrateDataDir } from './dataDirMigration.js';
+import { atomicWriteText } from './fsAtomic.js';
+import {
+  ensureSplitStore,
+  readSplitProjects,
+  writeSplitStore,
+  deleteProjectConfig,
+  isSplitActive,
+  splitMarkerExists,
+} from './configSplit.js';
 
 // 当前生效的配置文件路径。默认是统一数据目录下的 ~/.zen-gitsync/config.json;
 // 只有历史文件搬迁失败(被占用/无权限)时才回退到旧的 ~/.git-commit-tool.json,
@@ -220,9 +229,8 @@ function invalidateRawConfigCache() {
 //   ② 于是降级成"直接覆盖写",原子性丢失;
 //   ③ 两次 writeFile 交错写同一个 tmp 时,读者能 parse 到半截 JSON
 //      (实测报 "Unexpected non-whitespace character after JSON at position N")。
-// 现在:进程内写队列串行 + tmp 名加自增序号(多进程间 pid 天然不同),两者一起根除。
+// 现在:进程内写队列串行 + tmp 名加自增序号(序号在 fsAtomic 里,多进程间 pid 天然不同)。
 let _writeQueue = Promise.resolve();
-let _tmpSeq = 0;
 
 /**
  * 串行写入口。返回的 Promise 与本次写入的真实结果一致(失败也如实抛出),
@@ -236,24 +244,16 @@ function writeRawConfigFile(obj) {
   return p;
 }
 
-// Windows 上 rename / 覆盖写会撞上"目标此刻被别的句柄占着"(并发读者、杀毒软件
-// 实时扫描、索引器),libuv 报 EPERM / EACCES / EBUSY。这类占用都是毫秒级的,
-// 重试几次就能穿过,不该立刻降级 —— 实测并发读写时降级路径自己也会因目标被占用
-// 抛 EBUSY,把"慢一点的成功写"变成前端看到的 500。
-const BUSY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
-async function retryOnBusy(fn, { attempts = 6, baseDelayMs = 15 } = {}) {
-  let lastErr;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      // 只有"占用类"错误值得重试;ENOENT(源没了)、权限外的错误立刻上抛
-      if (!BUSY_CODES.has(err?.code)) throw err;
-      if (i < attempts - 1) await new Promise(r => setTimeout(r, baseDelayMs * (i + 1)));
-    }
-  }
-  throw lastErr;
+// 当前该按哪种模式落盘。原子写与"占用类错误重试"都收敛在 src/fsAtomic.js ——
+// 分文件后写入点变成 1 + N + M 个,重试逻辑必须有唯一实现,否则迟早有一边漏掉
+// EPERM/EACCES/EBUSY(那正是"并发读写偶发 500"的成因)。
+//
+// 模式判定优先用读路径已经定好的结论;_splitActive 还是 null(本进程还没读过
+// 任何配置)时退化成看标记文件 —— 标记存在 = 拆分成功过 = 按分文件写。
+async function resolveWriteMode() {
+  const active = isSplitActive();
+  if (active !== null) return active;
+  return splitMarkerExists();
 }
 
 // 用 tmp + rename 原子写：避免拖拽高频触发 + 防抖期间 beforeunload 同时写入时
@@ -261,33 +261,19 @@ async function retryOnBusy(fn, { attempts = 6, baseDelayMs = 15 } = {}) {
 // 触发 readRawConfigFile 在 race 时 JSON.parse 失败 → 500。
 async function writeRawConfigFileInner(obj) {
   await resolveConfigPath();
-  const tmpPath = `${configPath}.${process.pid}.${Date.now()}.${++_tmpSeq}.tmp`;
-  const data = JSON.stringify(obj, null, 2);
-  try {
-    await fs.writeFile(tmpPath, data, 'utf-8');
-    try {
-      // 先重试几次原子替换,尽量保住原子性
-      await retryOnBusy(() => fs.rename(tmpPath, configPath));
-    } catch (err) {
-      // 重试仍失败(通常是杀毒软件/索引器长时间占住,或跨进程并发写):
-      // 此时降级为直接覆盖写 —— 数据完整性由 writeFile 保证,只是丢了 rename 的
-      // 原子性(极端情况下可能留下 truncate 到一半的中间态,概率远低于整体写入失败)。
-      //
-      // 关键:降级写成功就算成功,**不能把 rename 的 err 再抛出去**。
-      // 原实现在这里 throw err,导致数据其实已经落盘、调用方却收到异常,
-      // 前端表现为"保存失败 500"。只有降级写本身失败时,下面的 await 才会抛,
-      // 交给外层 catch 清理 tmp 并向上传递。
+  if (await resolveWriteMode()) {
+    // 分文件模式:项目/画布各自成文件,只有变更过的才重写;config.json 只留全局
+    // 设置(但每次都会写,它是别的实例判断"磁盘变了没"的唯一签名来源)。
+    const res = await writeSplitStore(obj);
+    if (res.errors.length) {
       console.warn(chalk.yellow(
-        `[config] 原子写降级为覆盖写(rename 失败: ${err?.code || err?.message || err})`
+        `[config] 分文件写盘有 ${res.errors.length} 个错误: ${res.errors.slice(0, 3).join('; ')}`
       ));
-      try { await fs.unlink(tmpPath); } catch (_) {}
-      await retryOnBusy(() => fs.writeFile(configPath, data, 'utf-8'));
     }
-  } catch (err) {
-    // 写入失败时清理孤儿 tmp 文件,避免 ~/.zen-gitsync/config.json.*.tmp 堆积
-    try { await fs.unlink(tmpPath); } catch (_) { /* ignore */ }
-    throw err;
+    invalidateRawConfigCache();
+    return;
   }
+  await atomicWriteText(configPath, JSON.stringify(obj, null, 2));
   // 写盘成功后让缓存失效 — 下次 readRawConfigFile 走实盘,保证拿到最新值
   invalidateRawConfigCache();
 }
@@ -306,6 +292,35 @@ async function backupConfigFileIfExists() {
   }
 }
 
+// 把 config.json 读出来的"内联对象"转成对外使用的 raw。
+//
+// 分文件模式(configSplit)下 config.json 只留全局设置,projects 是这里从
+// projects/ + orchestration/ 组装回来的 —— 于是 loadConfig / readRawConfigFile /
+// saveConfig 看到的形状与拆分前**完全一致**,调用点一行都不用改。
+//
+// ⚠️ 返回值的 `projects` 必须是对象,**哪怕是空的**。loadConfig 靠 `raw.projects`
+// 是否存在来区分新旧两种结构(见下面的兼容分支),给出 undefined 会让它掉进
+// "旧扁平格式"分支、把项目配置当顶层字段读 —— 表现为所有项目设置静默失效。
+async function materializeRaw(inline) {
+  try {
+    const mode = await ensureSplitStore(inline, { configPath });
+    if (!mode.active) return mode.raw ?? inline;
+    const read = await readSplitProjects();
+    if (read.errors.length) {
+      // 单个项目/画布文件坏掉不阻断:其余照常可用,如实报告让用户知道少了什么
+      console.warn(chalk.yellow(
+        `[config] 读取分文件配置有 ${read.errors.length} 个问题(已跳过): ${read.errors.slice(0, 3).join('; ')}`
+      ));
+    }
+    return { ...inline, projects: read.ok ? read.projects : {} };
+  } catch (err) {
+    console.warn(chalk.yellow(
+      `[config] 分文件存储不可用,按内联模式处理: ${err?.code || err?.message}`
+    ));
+    return inline;
+  }
+}
+
 // 更安全的读取，区分“文件不存在”和“解析失败”
 async function safeLoadRaw() {
   await resolveConfigPath();
@@ -320,7 +335,10 @@ async function safeLoadRaw() {
   }
   try {
     const data = await fs.readFile(configPath, 'utf-8');
-    const obj = JSON.parse(data);
+    const inline = JSON.parse(data);
+    // 组装(必要时含一次性拆分)必须在取签名之前 —— 拆分本身会重写 config.json,
+    // 先取签名会缓存到一个已经失效的 mtime,导致下一次读误判为"外部没改"。
+    const obj = await materializeRaw(inline);
     // 读完后立刻取签名。取不到(stat 异常)则签名字段置 undefined ——
     // 之后若 stat 恢复可用,签名比对必然不命中 → 自动重读兜底;
     // 若 stat 持续异常,isRawConfigCacheFresh 会保守沿用缓存。
@@ -337,7 +355,11 @@ async function safeLoadRaw() {
       // 文件不存在：当作空对象，但可继续写入。
       // 缓存签名 mtimeMs:null —— 命中缓存时仍会 stat 一次以感知外部新建,
       // 比旧的"每次都 readFile 抛 ENOENT"便宜,比"永久信任缓存"及时。
-      const empty = {};
+      //
+      // 仍然走一次 materializeRaw:config.json 没了不代表数据没了 ——
+      // 分文件模式下项目配置在 projects/ 里,直接返回 `{}` 会让用户看到
+      // "项目全消失了",而磁盘上其实一份不少。
+      const empty = await materializeRaw({});
       _rawConfigCache = { value: empty, existed: false, mtimeMs: null, size: null };
       return { ok: true, obj: empty, existed: false };
     }
@@ -610,6 +632,19 @@ async function handleConfigCommands() {
     process.exit();
   }
 }
+/**
+ * 显式删除某个项目的全部分文件。
+ *
+ * ⚠️ 必须顺带失效读缓存 —— 删的是 projects/ 下的文件,config.json 本身没动,
+ * 而缓存新鲜度只看 config.json 的 mtime+size。不失效的话删完再读会把刚删掉的项目
+ * 从旧快照里"读回来",用户看到"删了没反应"。
+ */
+async function deleteProjectConfigAndInvalidate(key) {
+  const res = await deleteProjectConfig(key);
+  invalidateRawConfigCache();
+  return res;
+}
+
 export default {
   loadConfig,
   saveConfig,
@@ -623,7 +658,10 @@ export default {
   saveRecentDirectory,
   removeRecentDirectory,
   readRawConfigFile,
-  writeRawConfigFile
+  writeRawConfigFile,
+  // 显式删除某个项目的全部分文件。写路径刻意不做删除(防"只加载了一个项目就写回"
+  // 连带清空其它项目),清理失效项目只能走这里。
+  deleteProjectConfig: deleteProjectConfigAndInvalidate,
 };
 
 // 命名导出 — 用于测试与外部复用

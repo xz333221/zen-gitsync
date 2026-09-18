@@ -73,7 +73,7 @@ delete process.env.HOMEPATH
 
 const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..')
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
-const { writeRawConfigFile, saveConfig } = configMod.default
+const { writeRawConfigFile, saveConfig, readRawConfigFile } = configMod.default
 
 // 沙箱内的配置路径 —— 本文件所有读写都落在这里
 const configPath = path.join(fakeHome, '.zen-gitsync', 'config.json')
@@ -263,6 +263,11 @@ test('saveConfig: 合法对象串行多次写不丢字段', async () => {
   // 项目级字段写到 raw.projects[key] 而不是顶层;
   // 这里验证"saveConfig → saveConfig"链式调用后,字段持久化到正确位置
   // 且 latest 写入生效。
+  //
+  // 2026-09-18:projects 已从 config.json 拆到 projects/<fileId>.json(见 src/configSplit.js),
+  // 所以不能再直接 JSON.parse(configPath) 找 projects —— 那是存储布局,不是契约。
+  // 断言改走 readRawConfigFile()(组装后的 API 视图),它跨布局稳定,检查的仍是
+  // "字段有没有丢/写对位置"这个原本的意图。
   await saveConfig({
     defaultCommitMessage: 'chain-test',
     lockedFiles: ['a.txt'],
@@ -271,7 +276,7 @@ test('saveConfig: 合法对象串行多次写不丢字段', async () => {
     defaultCommitMessage: 'chain-test-2',
     lockedFiles: ['a.txt', 'b.txt'],
   })
-  const parsed = JSON.parse(await fs.readFile(configPath, 'utf-8'))
+  const parsed = await readRawConfigFile()
   // 找到当前项目的 key(getCurrentProjectKey 内部用 git rev-parse 或 CWD)
   const projectKeys = Object.keys(parsed.projects || {})
   assert.ok(projectKeys.length >= 1, 'projects 容器应有当前项目')
@@ -280,6 +285,13 @@ test('saveConfig: 合法对象串行多次写不丢字段', async () => {
   assert.ok(
     projectCfg.lockedFiles.includes('b.txt'),
     'lockedFiles 应保留 latest 写入的 b.txt'
+  )
+  // 配置瘦身是这次拆分的核心目标,顺带钉住:项目数据不该再回到 config.json 里
+  const onDisk = JSON.parse(await fs.readFile(configPath, 'utf-8'))
+  assert.equal(
+    onDisk.projects,
+    undefined,
+    'projects 又回到 config.json 了 —— 拆分白做了,写入放大也会回来'
   )
 })
 

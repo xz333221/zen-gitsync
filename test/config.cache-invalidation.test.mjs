@@ -108,7 +108,11 @@ test('cache: 外部进程新建文件(之前不存在)→ 下次读能感知', a
   invalidateRawConfigCache()
   try { await fs.unlink(configPathInSandbox) } catch {}
   const empty = await readRawConfigFile()
-  assert.deepEqual(empty, {}, '文件不存在时应返回空对象')
+  // 2026-09-18 起返回形状是 `{ projects: {} }`(而不是裸 `{}`)—— 分文件模式下
+  // projects 由 projects/ 组装,loadConfig 靠 `raw.projects` 是否存在区分新旧结构,
+  // 所以"空配置"也必须是带空 projects 容器的对象。契约实质不变:不抛错、无数据。
+  assert.deepEqual(empty.projects, {}, '文件不存在时应返回空对象,且 projects 容器须存在')
+  assert.equal(Object.keys(empty).length, 1, '空配置不该凭空多出别的顶层键')
 
   await externalWrite({ __test_marker: 'created-externally', padding: 'c'.repeat(48) })
   const now = await readRawConfigFile()
@@ -123,7 +127,8 @@ test('cache: 外部进程删除文件(之前存在)→ 下次读降级为空对�
 
   await fs.unlink(configPathInSandbox)
   const gone = await readRawConfigFile()
-  assert.deepEqual(gone, {}, '文件被外部删除后应返回空对象,不应抛错')
+  assert.deepEqual(gone.projects, {}, '文件被外部删除后应降级为空配置,不应抛错')
+  assert.equal(gone.__test_marker, undefined, '删掉之后不该还能读到旧值')
 })
 
 test('cache: 本进程 writeRawConfigFile 写盘后 → 下次读看到最新值(原有契约不回归)', async () => {

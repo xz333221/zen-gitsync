@@ -230,13 +230,25 @@ test('fs.js: open-new-tab-gui 用 spawn(..., argv, ...) 而非 exec 字符串', 
 
 test('config.js: writeRawConfigFile 在异常分支清理孤儿 tmp 文件', async () => {
   const fs = await import('node:fs')
+  // 2026-09-18:原子写实现已从 config.js 抽到 src/fsAtomic.js(配置分文件后写入点
+  // 从 1 个变成 1 + N + M 个,重试/降级逻辑必须有唯一实现,否则两边迟早分叉)。
+  // 断言对象跟着实现走,钉住的仍是同一件事:异常分支要清掉孤儿 tmp。
   const src = fs.readFileSync(
+    path.join(projectRoot, 'src/fsAtomic.js'),
+    'utf-8'
+  )
+  assert.ok(
+    /atomicWriteText[\s\S]{0,2500}fs\.unlink\(tmpPath\)/.test(src),
+    '原子写异常分支应调用 fs.unlink(tmpPath) 清理孤儿文件'
+  )
+  // 顺带钉住"只有一份实现"这条不变量 —— config.js 自己再写一套就等于分叉
+  const configSrc = fs.readFileSync(
     path.join(projectRoot, 'src/config.js'),
     'utf-8'
   )
   assert.ok(
-    /writeRawConfigFile[\s\S]{0,2000}fs\.unlink\(tmpPath\)/.test(src),
-    'writeRawConfigFile 异常分支应调用 fs.unlink(tmpPath) 清理孤儿文件'
+    /from '\.\/fsAtomic\.js'/.test(configSrc),
+    'config.js 应复用 fsAtomic 的原子写,不该自己再实现一份'
   )
 })
 

@@ -292,9 +292,14 @@ test('迁移:配置读写在迁移后仍可正常工作(与 config.js 的集成)
   await configMod.default.saveConfig(cfg)
   const raw = JSON.parse(await fs.readFile(newConfig, 'utf-8'))
   assert.equal(raw.theme, 'dark', '写回后顶层全局设置不应丢失')
-  assert.ok(raw.projects && typeof raw.projects === 'object', '写回应保留 projects 容器')
+  // 2026-09-18:projects 已拆到 projects/<fileId>.json,config.json 里**不该**再有它。
+  // 断言改走 readRawConfigFile()(组装后的 API 视图)—— 要钉的仍是原来那件事:
+  // 迁移过来、且不属于"当前项目"的项目条目不能被擦掉。
+  assert.equal(raw.projects, undefined, 'projects 不该再出现在 config.json 里')
+  const assembled = await configMod.default.readRawConfigFile()
+  assert.ok(assembled.projects && typeof assembled.projects === 'object', '写回应保留 projects 容器')
   assert.ok(
-    raw.projects['d:\\xz_workspace\\demo'],
+    assembled.projects['d:\\xz_workspace\\demo'],
     '迁移过来、且不属于"当前项目"的项目条目必须原样保留'
   )
   assert.equal(await exists(legacyConfig), false, '写入不该把旧文件又创建出来')
