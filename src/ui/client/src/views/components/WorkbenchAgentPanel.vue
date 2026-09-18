@@ -96,9 +96,22 @@ const rows = computed(() => props.running.map(r => ({
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 0 1 auto;
-  max-height: 42%;
-  border-top: 1px solid var(--border-color);
+  /* 不参与收缩（flex-shrink: 0）：高度要么是"内容自适应（≤42%）"，要么是用户拖出来的那个值，
+     两者都该是**结果**，不能是"参与分配后的残余"。
+     ⚠️ 这里踩过坑：最初写的 0 1 auto，拖到 195px 实际只渲染出 116px —— 项目列表内容长，
+     收缩按 flex-basis 加权分摊，把监控这块一起压扁了。验收脚本 P16a/P17a/P18a 就是这么挂的。
+     shrink: 0 之后让位的活儿全归项目列表（它是 1 1 auto + min-height: 0），
+     而高度上限已经被 clampAgentH 卡在视口 50%，列表永远还剩得下。 */
+  flex: 0 0 auto;
+  /* 高度由外面说了算，两条路：
+       · 没拖过 —— .board__left 上不会有 --wb-agents-h，走 height:auto + max-height:42%
+         （内容多高就多高，最多占左栏四成）；
+       · 拖过 —— WorkbenchBoard 把 --wb-agents-h 内联到 .board__left 上，这里直接读。
+     height 和 max-height 都得写：只写 max-height 的话，任务少的时候面板会缩回内容高度，
+     "拖大一点等会儿多开几个任务"就白拖了 —— 拖出来的高度得撑住。
+     分隔线不在这儿画 —— 移到 .board__splitter--h 上了，那条线现在兼作拖拽命中区。 */
+  height: var(--wb-agents-h, auto);
+  max-height: var(--wb-agents-h, 42%);
   overflow: hidden;
 }
 .agents__head {

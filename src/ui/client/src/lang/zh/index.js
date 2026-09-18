@@ -2362,6 +2362,7 @@ export default {
   '@WORKBENCH:收起主 Agent 控制台': '收起主 Agent 控制台',
   '@WORKBENCH:拖动调整项目列表宽度，双击恢复默认': '拖动调整项目列表宽度，双击恢复默认',
   '@WORKBENCH:拖动调整主 Agent 控制台宽度，双击恢复默认': '拖动调整主 Agent 控制台宽度，双击恢复默认',
+  '@WORKBENCH:上下拖动调整执行监控高度，双击恢复默认': '上下拖动调整执行监控高度，双击恢复默认',
   '@WORKBENCH:返回看板': '返回看板',
   '@WORKBENCH:执行于 {name}': '执行于 {name}',
   '@WORKBENCH:任务描述': '任务描述',

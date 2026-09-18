@@ -2352,6 +2352,7 @@ export default {
   '@WORKBENCH:收起主 Agent 控制台': 'Hide master agent console',
   '@WORKBENCH:拖动调整项目列表宽度，双击恢复默认': 'Drag to resize the project list — double-click to reset',
   '@WORKBENCH:拖动调整主 Agent 控制台宽度，双击恢复默认': 'Drag to resize the master agent console — double-click to reset',
+  '@WORKBENCH:上下拖动调整执行监控高度，双击恢复默认': 'Drag up or down to resize the run monitor — double-click to reset',
   '@WORKBENCH:返回看板': 'Back to board',
   '@WORKBENCH:执行于 {name}': 'runs in {name}',
   '@WORKBENCH:任务描述': 'Description',
