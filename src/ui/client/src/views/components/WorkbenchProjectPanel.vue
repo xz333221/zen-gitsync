@@ -22,13 +22,15 @@
   两处刻意的克制：
     1. Git 状态三态——exists=false 才显示「目录不存在」，exists=null（没探到）什么都不显示。
        宁可没有标记，也不谎报"你的目录没了"。
-    2. 不显示「非 Git 仓库」这类中性标记（除非真的不是仓库）：徽标位只留给需要动作的信号，
+    2. 分支位只放**真的分支**：不是 Git 仓库时整段不显示（用户看这里没有分支图标就知道了，
+       不必再用文字重复一遍"不是仓库"）。徽标位只留给需要动作的信号，
        否则一行里塞四五个标签，项目名会被挤成省略号。
 -->
 <script setup lang="ts">
 import { computed } from 'vue'
 import { $t } from '@/lang/static'
 import { Folder, FolderOpened, Grid } from '@element-plus/icons-vue'
+import SvgIcon from '@components/SvgIcon/index.vue'
 import type { ProjectSummary } from '@/types/workbench'
 import { relativeTimeFromIso } from '@/utils/relativeTime'
 
@@ -72,12 +74,22 @@ const overallProgress = computed(() =>
   totals.value.total > 0 ? Math.round((totals.value.done / totals.value.total) * 100) : 0
 )
 
+/**
+ * 左栏那一行的分支文案。**空串 = 这行不显示**：
+ * 不是 Git 仓库时不留文字 —— 那一格空着本身就是"这儿没有分支"的信号，
+ * 再写一句「不是 Git 仓库」只是把行撑长、把项目名挤成省略号。
+ */
 function gitLine(p: ProjectSummary): string {
   if (!p.git) return ''
   if (p.git.isGitRepo === null) return $t('@WORKBENCH:未知')
-  if (!p.git.isGitRepo) return $t('@WORKBENCH:不是 Git 仓库')
+  if (!p.git.isGitRepo) return ''
   if (p.git.detached) return $t('@WORKBENCH:游离 HEAD')
   return p.git.branch || $t('@WORKBENCH:未知')
+}
+
+/** 有没有分支可挂图标：只有真的落在某个分支上（含游离 HEAD）才算，"未知"没有 */
+function hasBranchIcon(p: ProjectSummary): boolean {
+  return !!(p.git && p.git.isGitRepo && (p.git.detached || p.git.branch))
 }
 </script>
 
@@ -155,7 +167,15 @@ function gitLine(p: ProjectSummary): string {
             <span class="proj-chip proj-chip--missing">{{ $t('@WORKBENCH:目录不存在') }}</span>
           </template>
           <template v-else>
-            <span class="proj-item__branch">{{ gitLine(p) }}</span>
+            <!-- gitLine 为空即"不是 Git 仓库"：不给文字，也不给图标 -->
+            <span v-if="gitLine(p)" class="proj-item__branch">
+              <svg-icon
+                v-if="hasBranchIcon(p)"
+                icon-class="git-branch"
+                class-name="proj-item__branch-icon"
+              />
+              <span class="proj-item__branch-name">{{ gitLine(p) }}</span>
+            </span>
             <span v-if="p.git && p.git.ahead > 0" class="proj-chip proj-chip--ahead">↑{{ p.git.ahead }}</span>
             <span v-if="p.git && p.git.behind > 0" class="proj-chip proj-chip--behind">↓{{ p.git.behind }}</span>
             <span v-if="p.git && p.git.changed > 0" class="proj-chip proj-chip--dirty">●{{ p.git.changed }}</span>
@@ -391,11 +411,32 @@ function gitLine(p: ProjectSummary): string {
   color: var(--text-tertiary);
 }
 .proj-item__branch {
-  white-space: nowrap;
+  /* 图标 + 分支名并排；max-width 比只有文字时略宽，给图标让出位置 */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 130px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+/* ⚠️ 省略号必须挂在分支名这层：flex item 上的 text-overflow 管不到里面的文本节点 */
+.proj-item__branch-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 110px;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  white-space: nowrap;
+}
+/* 图标与分支名同色，不抢眼。
+   ⚠️ color 这条**不能省**：SvgIcon 自己声明了 .svg-icon{color:--text-secondary}，
+   不覆盖的话图标比分支名亮一档（实测 rgb(216,220,226) vs rgb(203,208,214)）。
+   锚在 .proj-item__branch 下把权重抬到 (0,3,0) 是**防御性**的：裸 :deep() 实测也绿，
+   但那是"父组件样式后注入"这个打包顺序白送的，不是权重挣来的 —— 既然覆盖的是
+   SvgIcon 自己声明的属性，就显式赢，别把结论押在顺序上。 */
+.proj-item__branch :deep(.proj-item__branch-icon) {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: currentColor;
 }
 .proj-item__time {
   margin-left: auto;
