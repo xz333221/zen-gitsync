@@ -39,6 +39,7 @@ import WorkbenchProjectPanel from './WorkbenchProjectPanel.vue'
 import WorkbenchAgentPanel from './WorkbenchAgentPanel.vue'
 import WorkbenchKanban from './WorkbenchKanban.vue'
 import OrchestratorConsole from './OrchestratorConsole.vue'
+import WorkbenchDefaultPromptDialog from './WorkbenchDefaultPromptDialog.vue'
 import WorkbenchTaskDialog from './WorkbenchTaskDialog.vue'
 import WorkbenchTaskCreateDialog from './WorkbenchTaskCreateDialog.vue'
 
@@ -53,7 +54,9 @@ const {
 } = useWorkbenchProjects()
 const {
   active, activity, running, dispatching, togglingSchedule,
+  defaultPrompt, projectPrompts,
   loadOrchestrator, setSchedulingActive, dispatch,
+  saveDefaultPrompt, saveProjectPrompt,
 } = useOrchestrator()
 
 // ── 选中项目（'' = 全部项目） ────────────────────────────────────────
@@ -515,15 +518,20 @@ const defaultProjectPath = computed(
  * 「全部项目」下它是空串，由服务端 targetResolver 按指令内容判断落点
  * （指令里点名 > 主 Agent 判断 > 默认项目）。前端不猜落点 ——
  * 猜出来的和真正执行的各说各话时，吃亏的是用户。
+ *
+ * 默认提示词同理：前端只说"这次带不带"，带哪一条由服务端按**落点项目**解析
+ * （全局 + 该项目那条）—— 「全部项目」时前端根本不知道落点是谁。
  */
 async function onDispatch(payload: {
-  text: string; autoRun: boolean; attachments: Attachment[]; projectPath: string
+  text: string; autoRun: boolean; attachments: Attachment[]
+  projectPath: string; useDefaultPrompt: boolean
 }) {
   const result = await dispatch({
     text: payload.text,
     projectPath: payload.projectPath,
     autoRun: payload.autoRun,
     attachments: payload.attachments,
+    useDefaultPrompt: payload.useDefaultPrompt,
   })
   if (!result) return
   // 成功即可清：服务端此刻已把暂存文件搬进 `_task-{id}/`，前端留着这份记录只会指向失效路径
@@ -538,6 +546,46 @@ async function onDispatch(payload: {
 
 async function onToggleSchedule(next: boolean) {
   await setSchedulingActive(next)
+}
+
+// ── 默认提示词设置弹窗 ──────────────────────────────────────────────
+// 弹窗挂在看板这一层（不是控制台里）：它要用到项目清单与编排状态，而这两样
+// 都在这儿 —— 控制台只发一个"打开设置"的信号。
+const promptDialogOpen = ref(false)
+const savingPrompt = ref(false)
+
+/** 当前选中项目的那条提示词（没选中项目 / 没设过 = 空串） */
+const selectedProjectPrompt = computed(() => {
+  const key = selectedProject.value?.key
+  if (!key) return ''
+  return projectPrompts.value?.[key]?.prompt || ''
+})
+
+/**
+ * 保存弹窗里的草稿。
+ *
+ * 两栏分别判断**是否真的改了**再各自发一次请求：只改项目提示词时不该顺手
+ * 重写一遍全局那条（会让它的 updatedAt 无谓地跳动，也让"谁什么时候改的"失真）。
+ */
+async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt: string }) {
+  if (savingPrompt.value) return
+  const nextGlobal = payload.globalPrompt.trim()
+  const nextProject = payload.projectPrompt.trim()
+  const project = selectedProject.value
+
+  savingPrompt.value = true
+  try {
+    let ok = true
+    if (nextGlobal !== (defaultPrompt.value || '').trim()) {
+      ok = await saveDefaultPrompt(nextGlobal)
+    }
+    if (ok && project && nextProject !== selectedProjectPrompt.value.trim()) {
+      ok = await saveProjectPrompt(project.path, nextProject)
+    }
+    if (ok) promptDialogOpen.value = false
+  } finally {
+    savingPrompt.value = false
+  }
 }
 </script>
 
@@ -699,11 +747,25 @@ async function onToggleSchedule(next: boolean) {
         :toggling-schedule="togglingSchedule"
         :today-done="headerStats.todayDone"
         :collapsed="rightHidden"
+        :default-prompt="defaultPrompt"
+        :project-prompts="projectPrompts"
         @toggle-collapse="toggleRight"
         @toggle-schedule="onToggleSchedule"
         @dispatch="onDispatch"
+        @open-prompt-settings="promptDialogOpen = true"
       />
     </div>
+
+    <!-- 派发默认提示词：全局一条 + 选中项目一条，写完即生效于之后的派发 -->
+    <WorkbenchDefaultPromptDialog
+      v-model="promptDialogOpen"
+      :default-prompt="defaultPrompt"
+      :project-path="selectedProject?.path || ''"
+      :project-name="selectedProject?.name || ''"
+      :project-prompt="selectedProjectPrompt"
+      :saving="savingPrompt"
+      @save="onSavePromptDraft"
+    />
 
     <!-- 任务详情：就地弹窗，看完关掉还在原来的看板位置 -->
     <WorkbenchTaskDialog

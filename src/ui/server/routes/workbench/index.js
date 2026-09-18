@@ -51,6 +51,7 @@ import {
   SUBTASK_INSTRUCTION_FILE,
   MAX_IMAGE_BYTES,
   MAX_ATTACHMENTS_PER_SUBTASK,
+  MAX_DEFAULT_PROMPT_CHARS,
   readJson,
   writeJson,
   nowIso,
@@ -118,14 +119,17 @@ import {
   resolveTaskRepoPath,
   buildTaskDetail,
   buildProjectEntries,
+  canonicalProjectPath,
 } from './projectRegistry.js';
 import { buildEnvContextBlock } from './envContext.js';
 import { resolveInstructionTarget } from './targetResolver.js';
 import {
   readOrchestrator,
   setOrchestratorActive,
+  setDefaultPrompt,
+  setProjectPrompt,
+  resolveDispatchPrompt,
   appendInstruction,
-  isSchedulingActive,
   buildActivityFeed,
   buildRunningAgents,
 } from './orchestratorStore.js';
@@ -1706,9 +1710,11 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   // ════════════════════════════════════════════════════════════════════════
   // §16. 多项目编排台（L1 看板 + 主 Agent 控制台）
   //   GET  /api/workbench/projects               项目清单 + 看板任务
-  //   GET  /api/workbench/orchestrator           调度开关 + 指令存档 + 活动流
+  //   GET  /api/workbench/orchestrator           调度开关 + 指令存档 + 活动流 + 默认提示词
   //   POST /api/workbench/orchestrator/state     暂停 / 恢复调度
   //   POST /api/workbench/orchestrator/dispatch  派发一条人类干预指令
+  //   POST /api/workbench/orchestrator/default-prompt   写全局默认提示词
+  //   POST /api/workbench/orchestrator/project-prompt   写某个项目的默认提示词
   //
   // 「暂停调度」的实际语义：只拦**自动派发**（dispatch 里带 autoRun），
   // 手动点执行 / 子任务执行一概不受影响 —— 暂停的是主 Agent 的自主行为，
@@ -1825,6 +1831,10 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       active: state.active,
       updatedAt: state.updatedAt,
       instructions: state.instructions,
+      // 默认提示词跟着这份状态一起下发：控制台要拿它显示"当前会附带什么"，
+      // 设置弹窗打开时也不必再单独取一次（单条上限 8000 字，体积可控）
+      defaultPrompt: state.defaultPrompt,
+      projectPrompts: state.projectPrompts,
       activity: buildActivityFeed({ jobs: jobsSnap, tasks, instructions: state.instructions }),
       running: buildRunningAgents({ jobs: jobsSnap, tasks }),
     });
@@ -1836,6 +1846,57 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     const state = await setOrchestratorActive(active);
     publish('orchestrator:state', { active: state.active, updatedAt: state.updatedAt });
     res.json({ success: true, active: state.active, updatedAt: state.updatedAt });
+  }));
+
+  /** 提示词参数校验：空串是合法值（= 清除），只拦超长与非字符串 */
+  function assertPromptText(prompt) {
+    if (typeof prompt !== 'string') throw new HttpError(400, 'prompt 必须是字符串');
+    if (prompt.length > MAX_DEFAULT_PROMPT_CHARS) {
+      throw new HttpError(400, `默认提示词过长（上限 ${MAX_DEFAULT_PROMPT_CHARS} 字）`);
+    }
+  }
+
+  /**
+   * 写**全局**默认提示词。body: { prompt }
+   *
+   * 存的是"派发时自动附加的约束"，不是某条任务的内容 —— 改它只影响**之后**的派发：
+   * 已建任务在派发那一刻就把当时生效的提示词抄进了自己的 simpleOverride，
+   * 事后改设置不会去动历史任务（否则用户改一次设置，一批跑过的任务描述就对不上了）。
+   */
+  app.post('/api/workbench/orchestrator/default-prompt', asyncRoute(async (req, res) => {
+    assertPromptText(req.body?.prompt);
+    const defaultPrompt = await setDefaultPrompt(req.body.prompt);
+    res.json({ success: true, defaultPrompt });
+  }));
+
+  /**
+   * 写**某个项目**的默认提示词。body: { projectPath, prompt }
+   *
+   * 只接受项目清单里真实存在的路径：这张表的键就是项目 key，不校验的话
+   * 请求体里的任意字符串都能往里塞（那些键永远不会被读到，只会把文件撑大）。
+   */
+  app.post('/api/workbench/orchestrator/project-prompt', asyncRoute(async (req, res) => {
+    const projectPath = typeof req.body?.projectPath === 'string' ? req.body.projectPath.trim() : '';
+    if (!projectPath) throw new HttpError(400, 'projectPath 不能为空');
+    assertPromptText(req.body?.prompt);
+
+    const data = await readJson(TASKS_FILE, { tasks: [] });
+    let recentDirs = [];
+    try {
+      if (configManager && typeof configManager.getRecentDirectories === 'function') {
+        recentDirs = (await configManager.getRecentDirectories()) || [];
+      }
+    } catch (err) {
+      logger.warn('[workbench] 写项目提示词时读取最近目录失败，仅按任务路径校验:', err.message);
+    }
+    const key = canonicalProjectPath(projectPath);
+    const known = buildProjectEntries({ recentDirs, tasks: data.tasks || [] });
+    if (!key || !known.some(e => e.key === key)) {
+      throw new HttpError(400, `项目不在清单里：${projectPath}`);
+    }
+
+    const projectPrompts = await setProjectPrompt({ projectPath, prompt: req.body.prompt });
+    res.json({ success: true, projectPrompts });
   }));
 
   /**
@@ -1909,7 +1970,17 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
 
     const autoRun = req.body?.autoRun !== false;
-    const schedulingActive = await isSchedulingActive();
+    // 调度开关与默认提示词同在一份 state 里，只读一次：
+    // 分开读两次必然出现"读到的是两个瞬间"的窗口（改设置的同时派发）。
+    const orchestratorState = await readOrchestrator();
+    const schedulingActive = orchestratorState.active;
+
+    // 默认提示词按**落点项目**解析：全局那条对所有项目生效，项目级那条只在这个项目追加。
+    // useDefaultPrompt=false 是"这一次不附加" —— 全局提示词若没法单次关掉，
+    // 偶尔发一条纯指令就得先去设置里把它删了，再粘回来。
+    const dispatchPrompt = req.body?.useDefaultPrompt === false
+      ? { text: '', source: '' }
+      : resolveDispatchPrompt(orchestratorState, targetPath);
 
     // ── 附件：前端只回传 { id, ext, originalName }，服务端按 id 回暂存区找文件 ──
     // 路径完全由服务端拼（stagingPath 会同时校验 id 形状与 ext 白名单），
@@ -1980,7 +2051,10 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       promptId: null,
       type: 'simple',
       sequential: true,
-      simpleOverride: '',
+      // 默认提示词在派发这一刻抄进任务（这次生效的是什么，任务自己记着）。
+      // 之后用户改设置不会回头改写它 —— 一条已存在的任务，"它当时是被怎么派出去的"
+      // 是既成事实，不是当前配置的投影。
+      simpleOverride: dispatchPrompt.text,
       projectPath: targetPath,
       attachments,
       subtasks: [],
@@ -2001,6 +2075,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       // 落点是怎么定下来的（explicit / mention / agent / default），
       // 记下来才能在流水里回答用户那句"为什么派到这儿了"
       targetSource: target.source,
+      // 附带的是哪一级默认提示词（'' = 没带）。流水里要能说清"这段话是谁加的"
+      promptSource: dispatchPrompt.source,
     });
 
     publish('task:created', { task });
@@ -2013,7 +2089,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         title: task.title,
         desc: task.desc || '',
         status: 'todo',
-        promptOverride: '',
+        // 与 run-simple 同口径：提示词取自 task.simpleOverride（派发时已把
+        // 全局/项目默认提示词抄进去），而不是在这里再解析一次配置
+        promptOverride: task.simpleOverride || '',
         attachments: [],
       };
       runSingleSubtask(task, virtualSub, targetPath, '', []).catch(err => {

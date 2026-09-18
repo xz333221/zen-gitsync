@@ -28,6 +28,7 @@
     "verify:data-dir-migration": "node scripts/verify-data-dir-migration.mjs",
     "verify:config-split": "node scripts/verify-config-split.mjs",
     "verify:package-files": "node --test test/package-files.test.mjs",
+    "verify:wb-default-prompt": "node scripts/verify-workbench-default-prompt.cjs",
     "verify:wb-dialogs": "node scripts/verify-workbench-dialogs.cjs",
     "verify:wb-dispatch": "node scripts/verify-workbench-dispatch-attach.cjs",
     "verify:wb-env-context": "node scripts/verify-workbench-env-context.mjs",

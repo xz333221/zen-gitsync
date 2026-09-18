@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 主 Agent 控制台数据源：GET /api/workbench/orchestrator 及其两个写接口。
+// 主 Agent 控制台数据源：GET /api/workbench/orchestrator 及其四个写接口
+// （调度开关 / 派发 / 全局默认提示词 / 项目默认提示词）。
 //
 // 关于「暂停调度」的真实语义（别在 UI 上把它说成别的）：
 //   暂停只拦**自动派发** —— 通过控制台派发的指令在暂停期间只建任务不执行；
 //   手动点执行、子任务单独执行一概不受影响。暂停的是主 Agent 的自主行为，不是用户的手。
 //   拦截在服务端（routes/workbench/index.js），前端这个开关只是同一份状态的镜像。
+//
+// 关于「默认提示词」：
+//   两级（全局 + 每个项目一条），派发时服务端按**落点项目**解析后拼在指令之前，
+//   并抄进任务的 simpleOverride —— 前端只负责编辑与显示，不自己拼提示词
+//   （两边各拼一次必然会分叉）。生效规则见服务端 resolveDispatchPrompt。
 //
 // 活动流是服务端把 job 的起止事实 + 人类指令合成的结构化行，**文案由前端渲染**，
 // 所以这里不要把 taskTitle 拼成句子，交给组件里带 $t() 的模板。
@@ -29,6 +35,7 @@ import type {
   Attachment,
   OrchestratorActivity,
   OrchestratorInstruction,
+  ProjectPromptEntry,
   RunningAgent,
   Task,
 } from '@/types/workbench'
@@ -39,6 +46,8 @@ export interface DispatchPayload {
   autoRun?: boolean
   /** 已上传到暂存区的附件。只回传 id / ext / originalName，服务端自己按 id 找文件 */
   attachments?: Attachment[]
+  /** false = 本次派发不附加默认提示词（默认附加） */
+  useDefaultPrompt?: boolean
 }
 
 export function useOrchestrator() {
@@ -50,6 +59,10 @@ export function useOrchestrator() {
   const loaded = ref(false)
   const togglingSchedule = ref(false)
   const dispatching = ref(false)
+  /** 全局默认提示词（'' = 没设置） */
+  const defaultPrompt = ref('')
+  /** 各项目默认提示词，键为归一化项目路径（与 ProjectSummary.key 同口径） */
+  const projectPrompts = ref<Record<string, ProjectPromptEntry>>({})
 
   /** @param silent 静默刷新（轮询用），失败不弹 toast */
   async function loadOrchestrator(silent = false): Promise<boolean> {
@@ -64,10 +77,63 @@ export function useOrchestrator() {
       activity.value = Array.isArray(res.activity) ? res.activity : []
       running.value = Array.isArray(res.running) ? res.running : []
       updatedAt.value = res.updatedAt || null
+      defaultPrompt.value = typeof res.defaultPrompt === 'string' ? res.defaultPrompt : ''
+      projectPrompts.value = res.projectPrompts && typeof res.projectPrompts === 'object'
+        ? res.projectPrompts
+        : {}
       loaded.value = true
       return true
     } catch (err: any) {
       if (!silent) ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
+      return false
+    }
+  }
+
+  /**
+   * 写全局默认提示词（'' = 清除）。
+   *
+   * 成功后就地更新本地值而不是再拉一次整份状态：这个弹窗可能正开在用户面前，
+   * 让「保存」按钮的生命周期和一次网络往返绑在一起就够，不必多打一轮轮询接口。
+   */
+  async function saveDefaultPrompt(prompt: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/workbench/orchestrator/default-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      }).then(r => r.json())
+      if (!res?.success) {
+        ElMessage.error(res?.error || $t('@WORKBENCH:保存失败'))
+        return false
+      }
+      defaultPrompt.value = typeof res.defaultPrompt === 'string' ? res.defaultPrompt : ''
+      ElMessage.success($t('@WORKBENCH:已保存全局默认提示词'))
+      return true
+    } catch (err: any) {
+      ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
+      return false
+    }
+  }
+
+  /** 写某个项目的默认提示词（'' = 清除该项目这一条） */
+  async function saveProjectPrompt(projectPath: string, prompt: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/workbench/orchestrator/project-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath, prompt }),
+      }).then(r => r.json())
+      if (!res?.success) {
+        ElMessage.error(res?.error || $t('@WORKBENCH:保存失败'))
+        return false
+      }
+      projectPrompts.value = res.projectPrompts && typeof res.projectPrompts === 'object'
+        ? res.projectPrompts
+        : {}
+      ElMessage.success($t('@WORKBENCH:已保存项目默认提示词'))
+      return true
+    } catch (err: any) {
+      ElMessage.error($t('@WORKBENCH:网络错误: ') + (err?.message || err))
       return false
     }
   }
@@ -119,6 +185,8 @@ export function useOrchestrator() {
           text: payload.text,
           projectPath: payload.projectPath || '',
           autoRun: payload.autoRun !== false,
+          // 省缺即附加：默认提示词的默认行为是"生效"，勾掉才不带
+          useDefaultPrompt: payload.useDefaultPrompt !== false,
           // 只给 id / ext / originalName：路径由服务端在暂存区里自己拼，
           // 前端拿不到、也指定不了 absolutePath。
           attachments: (payload.attachments || []).map(a => ({
@@ -145,6 +213,8 @@ export function useOrchestrator() {
   return {
     active, instructions, activity, running, updatedAt, loaded,
     togglingSchedule, dispatching,
+    defaultPrompt, projectPrompts,
     loadOrchestrator, setSchedulingActive, dispatch,
+    saveDefaultPrompt, saveProjectPrompt,
   }
 }

@@ -29,8 +29,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Paperclip, Promotion, Expand, Fold } from '@element-plus/icons-vue'
-import type { Attachment, OrchestratorActivity, ProjectSummary } from '@/types/workbench'
+import { Paperclip, Promotion, Expand, Fold, Setting } from '@element-plus/icons-vue'
+import type {
+  Attachment,
+  OrchestratorActivity,
+  ProjectPromptEntry,
+  ProjectSummary,
+} from '@/types/workbench'
 import { clockFromIso, relativeTimeFromIso } from '@/utils/relativeTime'
 import AttachmentZone from '@/components/AttachmentZone.vue'
 import { useWorkbenchAttachments, type AttachmentTarget } from '@/composables/useWorkbenchAttachments'
@@ -50,12 +55,18 @@ const props = defineProps<{
    * 这里只认这一个布尔值，不再叠一层媒体查询判断，免得两边规则打架。
    */
   collapsed?: boolean
+  /** 全局默认提示词（'' = 没设置） */
+  defaultPrompt?: string
+  /** 各项目的默认提示词，键为归一化项目路径（与 ProjectSummary.key 同口径） */
+  projectPrompts?: Record<string, ProjectPromptEntry>
 }>()
 
 const emit = defineEmits<{
   'toggle-schedule': [next: boolean]
   /** 点折叠条 / 头部折叠按钮：翻转让看板去决定折叠还是展开 */
   'toggle-collapse': []
+  /** 打开「默认提示词」设置弹窗（弹窗由看板持有 —— 它才拿得到项目清单） */
+  'open-prompt-settings': []
   dispatch: [payload: {
     text: string
     autoRun: boolean
@@ -67,11 +78,20 @@ const emit = defineEmits<{
      * 吃亏的是用户。
      */
     projectPath: string
+    /** false = 本次派发不附加默认提示词 */
+    useDefaultPrompt: boolean
   }]
 }>()
 
 const draft = ref('')
 const autoRun = ref(true)
+/**
+ * 本次派发是否附加默认提示词。
+ *
+ * 默认勾上，留一个"这一次不带"的口子：全局提示词若没法单次关掉，偶尔发一条
+ * 纯指令就得先去设置里把它删掉、发完再粘回来。
+ */
+const useDefaultPrompt = ref(true)
 
 // ── 附件 ────────────────────────────────────────────────────────────────
 // 派发这一刻任务还不存在，没有 task/sub 可挂 → 先落服务端的暂存区
@@ -126,6 +146,41 @@ function onRemoveAttachment(att: Attachment) { removeAttachment(attachTarget.val
 function clearAttachments() { draftAttachments.value = [] }
 defineExpose({ clearAttachments })
 
+// ── 默认提示词：这里只负责"显示会带上什么"与"这次带不带" ──────────────
+// 提示词正文一律由服务端在派发时解析后写进任务（resolveDispatchPrompt），
+// 前端不自己拼一份 —— 两边各拼一次，迟早会有一边先改了规则。
+const projectKey = computed(() => props.selectedProject?.key || '')
+const globalPromptText = computed(() => (props.defaultPrompt || '').trim())
+const projectPromptText = computed(() => {
+  const k = projectKey.value
+  return k ? ((props.projectPrompts?.[k]?.prompt) || '').trim() : ''
+})
+/** 有没有任何一个项目设过提示词（选中「全部项目」时落点未定，只能这么判断） */
+const anyProjectPrompt = computed(() =>
+  Object.values(props.projectPrompts || {}).some(e => (e?.prompt || '').trim().length > 0)
+)
+/** 有提示词可附加 —— 决定"附加默认提示词"这个开关值不值得出现 */
+const anyPromptConfigured = computed(() => !!globalPromptText.value || anyProjectPrompt.value)
+
+/**
+ * 当前会带上的提示词来自哪一级。
+ *
+ * 「全部项目」时落点还没定（由服务端判断），所以只说**落点项目**而不说某个项目名：
+ * 显示的必须是"能保证的事"，而不是替服务端猜一个项目出来。
+ */
+const promptStateLabel = computed(() => {
+  const hasGlobal = !!globalPromptText.value
+  const scope = projectKey.value
+    ? (projectPromptText.value ? 'project' : 'none')
+    : (anyProjectPrompt.value ? 'target' : 'none')
+  if (hasGlobal && scope === 'project') return $t('@WORKBENCH:全局 + 本项目')
+  if (hasGlobal && scope === 'target') return $t('@WORKBENCH:全局 + 落点项目')
+  if (hasGlobal) return $t('@WORKBENCH:全局')
+  if (scope === 'project') return $t('@WORKBENCH:本项目')
+  if (scope === 'target') return $t('@WORKBENCH:落点项目')
+  return $t('@WORKBENCH:未设置')
+})
+
 // 落点由服务端判断，前端不为"能不能派发"前置任何目标检查 ——
 // 判断不出目标时服务端会退到默认项目，真没有可用项目才回 400 并给出说明
 const canSend = computed(
@@ -139,6 +194,7 @@ function send() {
     attachments: draftAttachments.value,
     // 选中具体项目 = 显式指定；「全部项目」留空，让服务端按指令内容判断落点
     projectPath: props.selectedProject ? props.selectedProject.path : '',
+    useDefaultPrompt: useDefaultPrompt.value,
   })
   draft.value = ''
 }
@@ -203,6 +259,20 @@ function targetReason(r: OrchestratorActivity): string {
     case 'mention': return $t('@WORKBENCH:指令里提到了它')
     case 'agent': return $t('@WORKBENCH:主 Agent 判断')
     case 'default': return $t('@WORKBENCH:没识别出项目，用了默认项目')
+    default: return ''
+  }
+}
+
+/**
+ * 这条指令被附加了默认提示词 —— 任务正文里会多出一段用户没亲手敲的话，
+ * 回看流水时必须能看出"这段话是设置里带进来的"，而不是以为模型自己加的。
+ * 老记录没有 promptSource（''），不解释。
+ */
+function promptNote(r: OrchestratorActivity): string {
+  switch (r.promptSource) {
+    case 'global': return $t('@WORKBENCH:附带全局默认提示词')
+    case 'project': return $t('@WORKBENCH:附带项目默认提示词')
+    case 'both': return $t('@WORKBENCH:附带全局 + 项目默认提示词')
     default: return ''
   }
 }
@@ -312,6 +382,9 @@ const gitSummary = computed(() => {
             {{ $t('@WORKBENCH:落点「{name}」', { name: r.projectName }) }}
             <span v-if="targetReason(r)">· {{ targetReason(r) }}</span>
           </p>
+          <!-- 提示词单独占一行：它解释的是"任务正文里多出来的那段话是哪来的"，
+               和落点是两件事，挤在一行会看不清 -->
+          <p v-if="r.kind === 'user' && promptNote(r)" class="oc-row__note">{{ promptNote(r) }}</p>
           <p v-if="r.kind === 'error' && r.error" class="oc-row__error" :title="r.error">{{ r.error }}</p>
           <p v-if="r.kind === 'done' && r.projectName" class="oc-row__note">{{ r.projectName }}</p>
         </li>
@@ -387,9 +460,30 @@ const gitSummary = computed(() => {
         >
           <el-icon><Paperclip /></el-icon>
         </button>
+        <!-- 默认提示词设置入口：图标按钮按项目惯例不加底色，
+             有没有设过看右侧"附加默认提示词"那个勾选（它是真实生效状态，这个只是入口） -->
+        <button
+          type="button"
+          class="oc__attach"
+          :class="{ 'is-on': anyPromptConfigured }"
+          :title="$t('@WORKBENCH:设置派发时自动附加的默认提示词（全局 / 各项目）')"
+          :aria-label="$t('@WORKBENCH:默认提示词设置')"
+          @click="emit('open-prompt-settings')"
+        >
+          <el-icon><Setting /></el-icon>
+        </button>
         <label class="oc__autorn" :title="$t('@WORKBENCH:取消勾选则只建任务草稿，不自动执行')">
           <input type="checkbox" v-model="autoRun" />
           <span>{{ $t('@WORKBENCH:立即执行') }}</span>
+        </label>
+        <!-- 一条都没设过时不出现：一个永远勾着、点了也没区别的开关只会占地方 -->
+        <label
+          v-if="anyPromptConfigured"
+          class="oc__autorn"
+          :title="$t('@WORKBENCH:取消勾选则本次派发的任务不带默认提示词（设置本身不受影响）')"
+        >
+          <input type="checkbox" v-model="useDefaultPrompt" />
+          <span>{{ $t('@WORKBENCH:默认提示词（{state}）', { state: promptStateLabel }) }}</span>
         </label>
         <button type="button" class="oc__send" :disabled="!canSend" @click="send">
           <el-icon class="oc__send-icon"><Promotion /></el-icon>
@@ -682,6 +776,10 @@ const gitSummary = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 窄栏（最小 260px）下这一行放不下"附件 + 设置 + 两个勾选 + 派发"，
+     换行比把某一项压扁成省略号好读 —— 派发按钮靠 margin-left:auto 仍钉在行尾 */
+  flex-wrap: wrap;
+  row-gap: 6px;
   margin-top: 6px;
 }
 /* 回形针：按项目惯例 —— 图标按钮不加底色/边框，只变图标色 */
@@ -701,6 +799,8 @@ const gitSummary = computed(() => {
   transition: color var(--transition-fast) var(--ease-custom);
 }
 .oc__attach:hover:not(:disabled) { color: var(--color-primary); }
+/* 已设过默认提示词：入口点亮，一次远程状态在图标上就能看出来 */
+.oc__attach.is-on { color: var(--color-primary); }
 .oc__attach:disabled { opacity: 0.4; cursor: default; }
 .oc__attach:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .oc__autorn {

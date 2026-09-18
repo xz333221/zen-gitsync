@@ -221,6 +221,21 @@ export interface OrchestratorInstruction {
   taskId: string | null
   status: 'accepted' | 'rejected' | 'created'
   reason: string
+  /** 落点是怎么定下来的：explicit / mention / agent / default（'' = 老记录） */
+  targetSource?: string
+  /** 这条指令附带了哪一级默认提示词：global / project / both（'' = 没附带） */
+  promptSource?: string
+}
+
+/**
+ * 项目级默认提示词。键是归一化后的项目路径（canonicalProjectPath），
+ * 与项目清单 / 看板同一套口径 —— 两侧一旦分叉，派发时就会查不到自己的那条。
+ */
+export interface ProjectPromptEntry {
+  /** 项目路径原始写法（大小写照原样），只用于显示 */
+  path: string
+  prompt: string
+  updatedAt: string | null
 }
 
 export type OrchestratorEventKind = 'dispatch' | 'done' | 'error' | 'cancelled' | 'user'
@@ -247,6 +262,8 @@ export interface OrchestratorActivity {
   reason?: string
   /** 落点是怎么定下来的：explicit / mention / agent / default（'' = 本次升级前的老记录） */
   targetSource?: string
+  /** 这条指令附带了哪一级默认提示词：global / project / both（'' = 没附带） */
+  promptSource?: string
 }
 
 /** 正在执行的执行体（一行 = 一个活跃 job） */
@@ -276,6 +293,10 @@ export interface OrchestratorResponse {
   active: boolean
   updatedAt: string | null
   instructions: OrchestratorInstruction[]
+  /** 全局默认提示词（'' = 没设置）。派发时自动附加在指令之前 */
+  defaultPrompt?: string
+  /** 各项目的默认提示词，键为归一化项目路径 */
+  projectPrompts?: Record<string, ProjectPromptEntry>
   activity: OrchestratorActivity[]
   running: RunningAgent[]
   error?: string

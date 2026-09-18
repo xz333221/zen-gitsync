@@ -54,6 +54,14 @@ export const DEFAULT_JOBS_CONFIG = { maxCount: 500, maxSizeMB: 256 };
 export const ORCHESTRATOR_FILE = path.join(DATA_DIR, 'orchestrator.json');
 export const MAX_ORCHESTRATOR_INSTRUCTIONS = 200;
 
+// 派发默认提示词（全局 / 各项目级）**单条**长度上限。
+// 它不是"指令"，而是一条每次派发都会被拼进 prompt 的约束 —— 4000 字足够写下一整套
+// 规范，再长只会让每一次执行都白烧一遍 token。
+// 之所以是 4000 而不是 8000：全局 + 项目级拼起来正好等于任务提示词字段
+// （simpleOverride）的 8000 上限（见 index.js 建任务路由），两道口子对齐，
+// 就不会出现"派发时写进去了、回头在编辑器里一保存又被悄悄截掉"。
+export const MAX_DEFAULT_PROMPT_CHARS = 4000;
+
 // 子项目识别 / 文件扫描时需要跳过的目录
 export const SKIP_DIRS = new Set([
   'node_modules', 'dist', 'build', '.next', '.nuxt', '__pycache__',
