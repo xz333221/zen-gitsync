@@ -130,3 +130,55 @@ test('cache: 本进程 writeRawConfigFile 写盘后 → 下次读看到最新值
   const v2 = await readRawConfigFile()
   assert.equal(v2.__test_marker, 'internal-write-2')
 })
+
+// ========== 缓存判新鲜期间被并发失效的竞态(2026-09-18) ==========
+//
+// 现场报错:GUI 顶部弹 "加载锁定文件列表失败:系统配置文件JSON格式错误…原因:
+// Cannot read properties of null (reading 'existed')",而磁盘上的配置其实是合法 JSON。
+//
+// 根因:safeLoadRaw 的命中判断是 `if (_rawConfigCache && await isRawConfigCacheFresh())`。
+// isRawConfigCacheFresh 内部先 `await fs.stat`,让出事件循环;在此期间并发路径
+// (writeRawConfigFile 尾部 / chdir)调用 invalidateRawConfigCache() 把模块级
+// _rawConfigCache 置 null,恢复执行后再解引用 `_rawConfigCache.existed` → TypeError。
+// 该 await 位于 try 之外,错误直接冒到 loadConfig,被无条件包成"JSON 格式错误"。
+//
+// 下面的用例用"同步发起读 → 立刻失效缓存"构造确定性交错,不依赖时序碰运气。
+
+test('cache: 判新鲜挂起期间被失效 → 不得抛 null 解引用,而是回落实盘读(回归)', async () => {
+  invalidateRawConfigCache()
+  await externalWrite({ __test_marker: 'race-window', padding: 'g'.repeat(32) })
+  await readRawConfigFile() // 预热:缓存 existed=true,走 stat 比对分支
+
+  // 同步发起读 —— 会一路执行到 isRawConfigCacheFresh 里的 await fs.stat 才返回控制权
+  const pending = readRawConfigFile()
+  // 模拟并发写盘路径在 stat 挂起窗口内失效缓存(真实场景:另一个请求 saveConfig 落盘)
+  invalidateRawConfigCache()
+
+  await assert.doesNotReject(
+    () => pending,
+    '读操作在缓存判新鲜挂起期间被失效时不得抛出 TypeError'
+  )
+  const obj = await pending
+  assert.equal(obj.__test_marker, 'race-window', '缓存失效后应回落实盘读取,而不是拿旧快照')
+})
+
+test('cache: 并发读 + 写高频交错 → 全部成功且最终值一致(真实竞态压力)', async () => {
+  invalidateRawConfigCache()
+  await externalWrite({ __test_marker: 'burst-0', padding: 'h'.repeat(16) })
+
+  const tasks = []
+  for (let i = 1; i <= 12; i++) {
+    tasks.push(readRawConfigFile())
+    tasks.push(writeRawConfigFile({ __test_marker: `burst-${i}`, padding: 'i'.repeat(16 + i) }))
+  }
+  const results = await Promise.allSettled(tasks)
+  const rejected = results.filter(r => r.status === 'rejected')
+  assert.equal(
+    rejected.length,
+    0,
+    `并发读写不得有失败: ${rejected.map(r => r.reason?.message).join(' | ')}`
+  )
+
+  const final = await readRawConfigFile()
+  assert.equal(final.__test_marker, 'burst-12', '最后一次写入应可读回')
+})

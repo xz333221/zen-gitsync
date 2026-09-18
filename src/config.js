@@ -150,8 +150,16 @@ async function statConfigSignature() {
   }
 }
 
-// 判断缓存是否仍新鲜。仅在 _rawConfigCache 非空时调用。
-async function isRawConfigCacheFresh() {
+// 判断缓存是否仍新鲜。
+//
+// ⚠️ 必须通过参数接收快照,不能在函数内直接闭包引用模块级 _rawConfigCache:
+// 本函数第一个 await(fs.stat)会让出事件循环,并发路径(writeRawConfigFile 尾部、
+// fs.js 的 chdir)可能在这个窗口内调用 invalidateRawConfigCache() 把它置 null,
+// 恢复执行后再解引用就抛 "Cannot read properties of null (reading 'existed')"。
+// 该 await 在 safeLoadRaw 的 try 之外,错误会一路冒到 loadConfig 并被包成
+// "系统配置文件JSON格式错误" —— 报错信息完全误导(磁盘上的文件其实是合法 JSON)。
+async function isRawConfigCacheFresh(cache) {
+  if (!cache) return false;
   const sig = await statConfigSignature();
   if (sig === undefined) {
     // stat 异常(权限等):保守沿用缓存,避免把本来可读的状态打成错误
@@ -159,10 +167,10 @@ async function isRawConfigCacheFresh() {
   }
   if (sig === null) {
     // 文件当前不存在:缓存也说"不存在"才算新鲜;缓存有值但文件被外部删了 → 需重走读取路径
-    return !_rawConfigCache.existed;
+    return !cache.existed;
   }
-  if (!_rawConfigCache.existed) return false; // 外部进程新建了配置文件 → 需重读
-  return sig.mtimeMs === _rawConfigCache.mtimeMs && sig.size === _rawConfigCache.size;
+  if (!cache.existed) return false; // 外部进程新建了配置文件 → 需重读
+  return sig.mtimeMs === cache.mtimeMs && sig.size === cache.size;
 }
 
 async function readRawConfigFile() {
@@ -183,21 +191,65 @@ function invalidateRawConfigCache() {
 }
 
 // 将原始配置对象写回磁盘
+//
+// 串行化(2026-09-18):同一进程内多个请求(锁定文件、布局比例、主题、最近目录、
+// 模型配置…)都可能并发触发写盘。旧实现的 tmpPath 只带 `pid.毫秒时间戳` ——
+// 同一毫秒内的两次写会**共用同一个 tmp 文件**:
+//   ① 先完成的 rename 把 tmp 搬走,后者的 rename 拿到 ENOENT/EPERM;
+//   ② 于是降级成"直接覆盖写",原子性丢失;
+//   ③ 两次 writeFile 交错写同一个 tmp 时,读者能 parse 到半截 JSON
+//      (实测报 "Unexpected non-whitespace character after JSON at position N")。
+// 现在:进程内写队列串行 + tmp 名加自增序号(多进程间 pid 天然不同),两者一起根除。
+let _writeQueue = Promise.resolve();
+let _tmpSeq = 0;
+
+/**
+ * 串行写入口。返回的 Promise 与本次写入的真实结果一致(失败也如实抛出),
+ * 但队列本身会吞掉失败继续跑 —— 一次写失败不能把后续写全部卡死。
+ */
+function writeRawConfigFile(obj) {
+  const run = () => writeRawConfigFileInner(obj);
+  // then(run, run):前一个写 reject 时也要继续执行本次写
+  const p = _writeQueue.then(run, run);
+  _writeQueue = p.then(() => {}, () => {});
+  return p;
+}
+
+// Windows 上 rename / 覆盖写会撞上"目标此刻被别的句柄占着"(并发读者、杀毒软件
+// 实时扫描、索引器),libuv 报 EPERM / EACCES / EBUSY。这类占用都是毫秒级的,
+// 重试几次就能穿过,不该立刻降级 —— 实测并发读写时降级路径自己也会因目标被占用
+// 抛 EBUSY,把"慢一点的成功写"变成前端看到的 500。
+const BUSY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+async function retryOnBusy(fn, { attempts = 6, baseDelayMs = 15 } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      // 只有"占用类"错误值得重试;ENOENT(源没了)、权限外的错误立刻上抛
+      if (!BUSY_CODES.has(err?.code)) throw err;
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, baseDelayMs * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 // 用 tmp + rename 原子写：避免拖拽高频触发 + 防抖期间 beforeunload 同时写入时
 // 两次 fs.writeFile 直接覆盖产生的"先 truncate 再写"的中间态空文件,
 // 触发 readRawConfigFile 在 race 时 JSON.parse 失败 → 500。
-async function writeRawConfigFile(obj) {
-  const tmpPath = `${configPath}.${process.pid}.${Date.now()}.tmp`;
+async function writeRawConfigFileInner(obj) {
+  const tmpPath = `${configPath}.${process.pid}.${Date.now()}.${++_tmpSeq}.tmp`;
   const data = JSON.stringify(obj, null, 2);
   try {
     await fs.writeFile(tmpPath, data, 'utf-8');
     try {
-      await fs.rename(tmpPath, configPath);
+      // 先重试几次原子替换,尽量保住原子性
+      await retryOnBusy(() => fs.rename(tmpPath, configPath));
     } catch (err) {
-      // Windows 上 rename 到已存在文件会抛 EPERM / EEXIST —— 杀毒软件扫描、
-      // 文件索引器占用、多个实例并发写同一个配置都会命中。此时降级为直接覆盖写:
-      // 数据完整性由 writeFile 保证,只是丢了 rename 的原子性(极端情况下
-      // 可能留下 truncate 到一半的中间态,概率远低于整体写入失败)。
+      // 重试仍失败(通常是杀毒软件/索引器长时间占住,或跨进程并发写):
+      // 此时降级为直接覆盖写 —— 数据完整性由 writeFile 保证,只是丢了 rename 的
+      // 原子性(极端情况下可能留下 truncate 到一半的中间态,概率远低于整体写入失败)。
       //
       // 关键:降级写成功就算成功,**不能把 rename 的 err 再抛出去**。
       // 原实现在这里 throw err,导致数据其实已经落盘、调用方却收到异常,
@@ -207,7 +259,7 @@ async function writeRawConfigFile(obj) {
         `[config] 原子写降级为覆盖写(rename 失败: ${err?.code || err?.message || err})`
       ));
       try { await fs.unlink(tmpPath); } catch (_) {}
-      await fs.writeFile(configPath, data, 'utf-8');
+      await retryOnBusy(() => fs.writeFile(configPath, data, 'utf-8'));
     }
   } catch (err) {
     // 写入失败时清理孤儿 tmp 文件,避免 ~/.git-commit-tool.json.*.tmp 堆积
@@ -235,8 +287,13 @@ async function backupConfigFileIfExists() {
 // 更安全的读取，区分“文件不存在”和“解析失败”
 async function safeLoadRaw() {
   // 命中缓存且签名未变(无外部进程写入)才直接返回,跳过 readFile + JSON.parse
-  if (_rawConfigCache && await isRawConfigCacheFresh()) {
-    return { ok: true, obj: _rawConfigCache.value, existed: _rawConfigCache.existed };
+  //
+  // 先取快照再判新鲜:判新鲜期间会让出事件循环,缓存可能被并发路径失效。
+  // 收尾再比对一次引用 —— 引用变了说明期间确实发生了写盘,此时不能返回旧快照
+  // (会读到"写之前的旧值"),直接落到下面重读实盘。
+  const cached = _rawConfigCache;
+  if (cached && await isRawConfigCacheFresh(cached) && _rawConfigCache === cached) {
+    return { ok: true, obj: cached.value, existed: cached.existed };
   }
   try {
     const data = await fs.readFile(configPath, 'utf-8');
@@ -267,6 +324,18 @@ async function safeLoadRaw() {
   }
 }
 
+/**
+ * 判断错误是否**真的**是 JSON 解析失败。
+ *
+ * 非解析类错误(IO 异常、内部竞态)如果也套上"JSON 格式错误"的帽子,会把排查
+ * 方向彻底带偏 —— 2026-09-18 那次缓存竞态就是这样伪装成
+ * "系统配置文件JSON格式错误…原因: Cannot read properties of null",而磁盘上的
+ * 文件其实是合法 JSON,用户照着提示去修文件只能白忙。
+ */
+function isJsonParseError(err) {
+  return err instanceof SyntaxError || err?.name === 'SyntaxError';
+}
+
 // 异步读取配置文件
 async function loadConfig() {
   const key = getCurrentProjectKey();
@@ -275,7 +344,10 @@ async function loadConfig() {
     raw = await readRawConfigFile();
   } catch (err) {
     const msg = err?.message ? String(err.message) : String(err);
-    throw new Error(`系统配置文件JSON格式错误，请修复后重试。\n文件: ${configPath}\n原因: ${msg}`);
+    const head = isJsonParseError(err)
+      ? '系统配置文件JSON格式错误，请修复后重试。'
+      : '读取系统配置文件失败。';
+    throw new Error(`${head}\n文件: ${configPath}\n原因: ${msg}`);
   }
   // 兼容旧版（全局扁平结构）
   if (raw && !raw.projects) {
@@ -322,8 +394,11 @@ async function saveConfig(config) {
   if (!state.ok) {
     const cause = state.error;
     const detail = cause?.message ? String(cause.message) : String(cause);
+    const head = isJsonParseError(cause)
+      ? '解析配置文件失败,已取消写入以避免覆盖。'
+      : '读取配置文件失败,已取消写入以避免覆盖。';
     throw new ConfigWriteError(
-      `解析配置文件失败,已取消写入以避免覆盖。\n文件: ${configPath}\n原因: ${detail}`,
+      `${head}\n文件: ${configPath}\n原因: ${detail}`,
       cause
     );
   }
@@ -448,8 +523,11 @@ async function saveRecentDirectory(dirPath) {
   if (!state.ok) {
     const cause = state.error;
     const detail = cause?.message ? String(cause.message) : String(cause);
+    const head = isJsonParseError(cause)
+      ? '解析配置文件失败,已取消写入最近目录以避免覆盖。'
+      : '读取配置文件失败,已取消写入最近目录以避免覆盖。';
     throw new ConfigWriteError(
-      `解析配置文件失败,已取消写入最近目录以避免覆盖。\n文件: ${configPath}\n原因: ${detail}`,
+      `${head}\n文件: ${configPath}\n原因: ${detail}`,
       cause
     );
   }

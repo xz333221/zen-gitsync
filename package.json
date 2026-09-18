@@ -24,6 +24,7 @@
     "test:watch": "node scripts/run-tests.cjs --watch",
     "verify:i18n": "node scripts/verify-i18n-keys.mjs",
     "verify:i18n:orphans": "node scripts/verify-i18n-keys.mjs --orphans",
+    "verify:config-concurrency": "node scripts/verify-config-concurrency.mjs",
     "verify:wb-dialogs": "node scripts/verify-workbench-dialogs.cjs",
     "verify:wb-dispatch": "node scripts/verify-workbench-dispatch-attach.cjs",
     "e2e": "cd src/ui/client && npx playwright test",

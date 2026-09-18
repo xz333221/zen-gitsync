@@ -142,9 +142,9 @@ test('writeRawConfigFile: 覆盖写 — 后写覆盖前写', async () => {
 
 test('writeRawConfigFile: 并发 2 个不同对象(20ms 间隔)— 最终文件是其一,不是混合体', async () => {
   // 用 20ms 间隔让两次写入落到不同 ms,避免 Date.now() 撞同 tmpPath。
-  // 已知 bug:writeRawConfigFile 用 `${process.pid}.${Date.now()}` 派生 tmpPath,
-  // ms 精度下并发写入落入同一 ms 时,后写者 rename 时 src 已被前写者 rename
-  // 走,会抛 ENOENT。这是独立于"原子写"语义的次级 bug,待独立 PR 修。
+  // (原注释提到"ms 精度撞 tmpPath 是待独立 PR 修的次级 bug" —— 2026-09-18 已修:
+  //  writeRawConfigFile 现在走进程内写队列串行,且 tmp 名追加自增序号。
+  //  同毫秒并发已由下面的"同一毫秒内并发多写"用例单独覆盖。)
   // 本测试只验证"原子写"本身:不出现半写 JSON、不出现混合字段。
   const objA = { __test_marker: 'concurrent-A', payload: 'A'.repeat(500) }
   const objB = { __test_marker: 'concurrent-B', payload: 'B'.repeat(500) }
@@ -176,6 +176,60 @@ test('writeRawConfigFile: 并发 2 个不同对象(20ms 间隔)— 最终文件�
 })
 
 // ========== 临时文件清理 ==========
+
+/**
+ * 捕获写入期间的 console.warn。用于断言"原子写是否降级为覆盖写"。
+ * 旧实现同毫秒并发写会共用同一个 tmpPath,后写者的 rename 必然失败
+ * (ENOENT / EPERM),从而打出这条降级日志 —— 这是本 bug 的确定性指纹,
+ * 不像"读到半截 JSON"那样靠时序碰运气。
+ */
+async function captureWriteFallbackWarnings(fn) {
+  const warnings = []
+  const orig = console.warn
+  console.warn = (...args) => { warnings.push(args.map(String).join(' ')) }
+  try {
+    await fn()
+  } finally {
+    console.warn = orig
+  }
+  return warnings.filter(w => w.includes('原子写降级为覆盖写'))
+}
+
+test('writeRawConfigFile: 同一毫秒内并发多写 — 不得降级为非原子覆盖写(回归)', async () => {
+  // 回归 2026-09-18:tmpPath 只带 pid + 毫秒时间戳时,同一 tick 发起的 8 次写
+  // 拿到完全相同的 tmpPath —— 先完成者 rename 把 src 搬走,其余 7 次 rename
+  // 全部失败 → 降级为"直接覆盖写",原子性丢失;且多个 writeFile 交错写同一个
+  // tmp 时,并发读者能 parse 到半截 JSON(现场表现为"系统配置文件JSON格式错误")。
+  // 修法:进程内写队列串行 + tmp 名追加自增序号。
+  const objs = Array.from({ length: 8 }, (_, i) => ({
+    __test_marker: `same-ms-${i}`,
+    payload: String(i).repeat(600),
+  }))
+
+  const fallbacks = await captureWriteFallbackWarnings(
+    () => Promise.all(objs.map(o => writeRawConfigFile(o)))
+  )
+  assert.deepEqual(
+    fallbacks,
+    [],
+    `同一毫秒并发写不得降级为非原子覆盖写,实际: ${JSON.stringify(fallbacks)}`
+  )
+
+  const raw = await fs.readFile(configPath, 'utf-8')
+  const parsed = JSON.parse(raw) // 半写 JSON 会在这里抛
+  assert.ok(
+    /^same-ms-\d$/.test(parsed.__test_marker),
+    `最终文件应是某一次完整写入,实际 marker: ${parsed.__test_marker}`
+  )
+  const idx = Number(parsed.__test_marker.slice(-1))
+  assert.equal(parsed.payload.length, 600, 'payload 不得被交错写坏')
+  assert.equal(parsed.payload, String(idx).repeat(600), 'marker 与 payload 必须来自同一次写入')
+
+  const leaked = (await fs.readdir(path.dirname(configPath))).filter(name =>
+    name.startsWith('.git-commit-tool.json.') && name.endsWith('.tmp')
+  )
+  assert.equal(leaked.length, 0, `并发写后不应残留 tmp,实际: ${JSON.stringify(leaked)}`)
+})
 
 test('writeRawConfigFile: 完成后不留 .pid.timestamp.tmp 临时文件', async () => {
   await writeRawConfigFile({ __test_marker: 'no-tmp-leak' })
