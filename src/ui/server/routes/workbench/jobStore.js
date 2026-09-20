@@ -52,6 +52,108 @@ export const bus = new EventEmitter();
 // 有一个简洁的"待回收"窗口。
 export const cancelledJobs = new Set();
 
+// ── 磁盘快照（跨实例同步的读取侧） ────────────────────────────
+// 背景(2026-09-20):jobs Map 只在进程启动时 hydrate 一次,之后永不回读磁盘。
+// 于是开了两个 g ui 时,跑任务的那个知道"这两条已完成",另一个(启动更早的)看板里
+// 同样的任务还挂在"待处理" —— 因为看板列是由执行记录推导的(见 projectRegistry.js
+// 的 deriveTaskColumn),而数据其实一直在 jobs.json 里,只是没第二个进程去读它。
+//
+// 现在:凡是需要"反映别的 g ui 进程"的读取路径,先 await refreshJobsFromDisk(),
+// 再用 mergedJobs() 拿「磁盘 ∪ 内存」。**内存优先** —— 本进程跑的 job 带着最新的
+// 流式输出和终态,磁盘上的那一份还可能停在 1.5s debounce 之前的旧状态。
+//
+// 同步 vs 异步:refreshJobsFromDisk() 是异步的(要 stat + 读文件),mergedJobs() /
+// snapshotJobs() 保持同步纯函数,读缓存的磁盘那一半 —— 调用点"先 await 刷新、
+// 再同步取快照"这个顺序别颠倒,否则拿到的是上一次的磁盘内容。
+//
+// 用户明确接受秒级延迟:看板本身 5s 轮询,不需要为跨实例推送再造一套 IPC/SSE。
+//
+// mtime + size 短路:jobs.json 涨到几百 KB 后,每 5s 一次的轮询不该真去 parse 它,
+// 没变就是一个 stat。
+let diskCache = { mtimeMs: -1, size: -1, jobs: [] };
+
+/** 磁盘记录自称 running/pending,但进程已消失、文件也已 N 秒没被写过 → 判为孤儿 */
+// 宽限期要大于 jobs 落盘的 1.5s debounce:job 刚结束时 child 已退出、终态还没 flush,
+// 那个窗口里(pid 死 + 磁盘 running)不该被误判。5s 足够跨过它,又快到用户感知不到。
+const ORPHAN_GRACE_MS = 5000;
+
+/** 信号 0 探测存活。任何报错都当"进程不在了"——与 taskRunner.waitProcessExit 同一口径 */
+function isProcessAlive(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch { return false; }
+}
+
+/**
+ * 磁盘上那条"还在跑"的记录是个孤儿吗?
+ * 场景:另一个 g ui 被 Ctrl+C / kill 掉在跑任务的中间,它的终态永远不会 flush ——
+ * 不做这个回收,那条 job 会在**所有其他实例**的看板上永远占着"进行中"。
+ * 口径与 hydrateJobs 启动回收一致(降级为 error,error 里写明原因)。
+ */
+function reclaimOrphan(j, fileMtimeMs) {
+  if (!j || (j.status !== 'running' && j.status !== 'pending')) return j;
+  const pid = Number(j.pid);
+  if (!Number.isFinite(pid) || pid <= 0) return j;      // 老数据没 pid,无从判断,不动它
+  if (isProcessAlive(pid)) return j;
+  if (fileMtimeMs > 0 && Date.now() - fileMtimeMs < ORPHAN_GRACE_MS) return j;
+  return {
+    ...j,
+    status: 'error',
+    error: (j.error || '') + ' [进程不存在：已回收]',
+    endedAt: j.endedAt || nowIso(),
+    exitCode: typeof j.exitCode === 'number' ? j.exitCode : 1,
+  };
+}
+
+/**
+ * 把 jobs.json 当前内容读进缓存。没变( mtime + size 都没动)就直接返回。
+ * 读失败一律降级成"沿用上次缓存":看板请求不该因为一个坏文件而 500。
+ */
+export async function refreshJobsFromDisk({ force = false } = {}) {
+  let st;
+  try {
+    st = await fsp.stat(JOBS_FILE);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      diskCache = { mtimeMs: -1, size: -1, jobs: [] };
+      return;
+    }
+    logger.warn('[workbench] jobs.json stat 失败，沿用上次缓存:', err.message);
+    return;
+  }
+  if (!force && st.mtimeMs === diskCache.mtimeMs && st.size === diskCache.size) return;
+  try {
+    const data = await readJson(JOBS_FILE, { version: 1, jobs: [] });
+    diskCache = {
+      mtimeMs: st.mtimeMs,
+      size: st.size,
+      jobs: (data && Array.isArray(data.jobs)) ? data.jobs : [],
+    };
+  } catch (err) {
+    // 半写 / 损坏:保留上一次的缓存,下一次刷新(mtime 还会变)自然会重试
+    logger.warn('[workbench] jobs.json 读取失败，沿用上次缓存:', err.message);
+  }
+}
+
+/** 本进程自己写完盘后把缓存作废,免得下一次 refresh 被 mtime 短路在旧内容上 */
+function invalidateDiskCache() {
+  diskCache = { mtimeMs: -1, size: -1, jobs: [] };
+}
+
+/**
+ * 磁盘 ∪ 内存的 job 表(id -> 记录)。内存优先。
+ * 同步、无 IO —— 磁盘那一半由 refreshJobsFromDisk() 预先填好。
+ */
+export function mergedJobs() {
+  const map = new Map();
+  for (const j of diskCache.jobs) {
+    if (!j || !j.id) continue;
+    if (jobs.has(j.id)) continue;                        // 本进程跑的,下面用内存里的覆盖
+    map.set(j.id, reclaimOrphan(j, diskCache.mtimeMs));
+  }
+  for (const [id, j] of jobs) map.set(id, j);
+  return map;
+}
+
 // ── 持久化层 ─────────────────────────────────────────────────
 // jobs.json 是历史档案；jobs Map 只承载当前进程产出的活跃 job
 let jobsSaveTimer = null;
@@ -88,11 +190,15 @@ export async function flushJobsSaveNow() {
   // 读 tasks.json 给落盘 job 反范式 taskTitle/subTitle——父任务被删后管理页仍可读
   const tasksData = await readJson(TASKS_FILE, { tasks: [] });
   const taskMap = new Map((tasksData.tasks || []).map(t => [t.id, t]));
+  // **必须并上磁盘上的历史 job 再写**：别的 g ui 进程跑的记录不在本进程内存里,
+  // 直接写内存快照会把它抹掉(一个实例落盘、另一个实例的记录就没了)。
+  await refreshJobsFromDisk();
   const payload = {
     version: 1,
-    jobs: Array.from(jobs.values()).map(j => serializeJob(j, taskMap))
+    jobs: Array.from(mergedJobs().values()).map(j => serializeJob(j, taskMap))
   };
   await writeJson(JOBS_FILE, payload);
+  invalidateDiskCache();
   await enforceRetention();
 }
 
@@ -172,6 +278,7 @@ export async function enforceRetention() {
     }
   }
   await writeJson(JOBS_FILE, data);
+  invalidateDiskCache();
   const keepIds = new Set(data.jobs.map(j => j.id));
   for (const id of Array.from(jobs.keys())) {
     if (!keepIds.has(id)) jobs.delete(id);
@@ -188,10 +295,13 @@ export function publish(event, payload) {
   bus.emit('event', { event, payload, ts: nowIso() });
 }
 
-// 给 SSE / cancel / continue 路由用：返回当前所有 job 的可序列化快照
-// 剥离 child 引用（不可序列化），只保留前端需要的字段
+// 给 SSE / 看板 / cancel / continue 路由用：返回「磁盘 ∪ 内存」的可序列化快照
+// 剥离 child 引用（不可序列化），只保留前端需要的字段。
+//
+// 同步函数,磁盘那一半读的是 refreshJobsFromDisk() 填好的缓存 —— 想让别的 g ui
+// 进程跑的 job 出现在结果里,调用前先 await 一次刷新(见文件头的说明)。
 export function snapshotJobs() {
-  return Array.from(jobs.values()).map(j => ({
+  return Array.from(mergedJobs().values()).map(j => ({
     id: j.id,
     taskId: j.taskId,
     subId: j.subId,
@@ -222,4 +332,6 @@ export const jobStore = {
   enforceRetention,
   publish,
   snapshotJobs,
+  refreshJobsFromDisk,
+  mergedJobs,
 };

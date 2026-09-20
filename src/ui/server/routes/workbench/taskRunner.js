@@ -44,6 +44,7 @@ import {
   cancelledJobs,
   publish,
   snapshotJobs,
+  refreshJobsFromDisk,
   flushJobsSaveNow,
 } from './jobStore.js';
 
@@ -512,6 +513,9 @@ export async function collectPriorOutputs(task, targetSub) {
  * runTaskQueue 在 fromIndex>0 时调这个,让"从此处开始"也能拼上前序 done sub 的结论。
  */
 export async function collectPriorOutputsUpTo(task, endIdx) {
+  // 前序 sub 可能是**另一个 g ui 实例**跑完的（或者本进程重启过），只翻内存会漏，
+  // 于是"前序结论"整段丢了。刷新有 mtime 短路，队列里每个 sub 调一次也只是个 stat。
+  await refreshJobsFromDisk();
   const prior = [];
   for (let i = 0; i < endIdx; i++) {
     const s = task.subtasks[i];

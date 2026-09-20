@@ -100,6 +100,8 @@ import {
   enforceRetention,
   publish,
   snapshotJobs,
+  refreshJobsFromDisk,
+  mergedJobs,
 } from './jobStore.js';
 import {
   launchClaudeInNewWindow,
@@ -777,7 +779,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   // ════════════════════════════════════════════════════════════════════════
   // §9. SSE 事件流（订阅 job/sub/task 更新）
   // ════════════════════════════════════════════════════════════════════════
-  app.get('/api/workbench/events', (req, res) => {
+  app.get('/api/workbench/events', asyncRoute(async (req, res) => {
     res.set({
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
@@ -785,6 +787,10 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       'X-Accel-Buffering': 'no'
     });
     res.flushHeaders?.();
+    // 先把 jobs.json 刷进缓存——别的 g ui 进程跑的 job 只在那里。刷新放在这里
+    // (await 完再往下走),是为了让后面的「取快照 → 发 hello → 注册 handler」保持
+    // 全同步:中间没有 await 就不会有 job:update 插到 hello 前面去。
+    await refreshJobsFromDisk();
     const send = (data) => {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
@@ -797,7 +803,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       clearInterval(ka);
       bus.off('event', handler);
     });
-  });
+  }));
 
   // ════════════════════════════════════════════════════════════════════════
   // §10. 提示词 CRUD
@@ -1112,7 +1118,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     }
     if (!foundTask || !foundSub) throw new HttpError(404, '子任务不存在');
     if (foundSub.status === 'running') throw new HttpError(400, '该子任务正在执行中');
-    // 兜底:即便磁盘状态是 todo,如果磁盘里还没归档的 job 还在跑(进程被孤儿),也拦一下
+    // 兜底:即便磁盘状态是 todo,如果还有 job 在跑(可能是别的 g ui 起的),也拦一下。
+    // 先刷磁盘再取快照,否则另一个实例正在跑的这个 sub 会被重复起一份。
+    await refreshJobsFromDisk();
     const liveJob = snapshotJobs().find(j => j.subId === subId && (j.status === 'running' || j.status === 'pending'));
     if (liveJob) throw new HttpError(400, '该子任务已有正在执行的 job');
     const repoPath = resolveTaskRepoPath(foundTask, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
@@ -1132,16 +1140,10 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   // §13. Job 查询（兜底，SSE 断了也能拉）
   // ════════════════════════════════════════════════════════════════════════
   app.get('/api/workbench/jobs', asyncRoute(async (_req, res) => {
-    try {
-      const data = await readJson(JOBS_FILE, { version: 1, jobs: [] });
-      const fileJobs = (data && Array.isArray(data.jobs)) ? data.jobs : [];
-      const fileIds = new Set(fileJobs.map(j => j.id));
-      const liveOnly = snapshotJobs().filter(j => !fileIds.has(j.id));
-      return res.json({ success: true, jobs: [...fileJobs, ...liveOnly] });
-    } catch (err) {
-      // 读取失败兜底：只返内存的
-      res.json({ success: true, jobs: snapshotJobs() });
-    }
+    // 与看板同源：磁盘 ∪ 内存（内存优先）。之前这里自己拼「文件 + 内存里非文件的」，
+    // 优先级正好反过来 —— 正在跑的 job 显示的是磁盘上 1.5s 前的旧快照。
+    await refreshJobsFromDisk();
+    res.json({ success: true, jobs: snapshotJobs() });
   }));
 
   // ════════════════════════════════════════════════════════════════════════
@@ -1149,7 +1151,15 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   // ════════════════════════════════════════════════════════════════════════
   app.post('/api/workbench/jobs/:id/cancel', asyncRoute(async (req, res) => {
     const job = jobs.get(req.params.id);
-    if (!job) throw new HttpError(404, 'job 不存在');
+    if (!job) {
+      // 看板现在能看到**别的 g ui 实例**正在跑的 job(执行记录合并了),但 child 句柄
+      // 只活在跑它的那个进程里 —— 这里停不了。给个说得清的理由,别让用户对着
+      // "job 不存在"发懵(他明明在卡片上看着它转)。
+      await refreshJobsFromDisk();
+      throw new HttpError(404, mergedJobs().has(req.params.id)
+        ? '这个任务正在另一个 g ui 实例里执行，请到那个窗口停止它'
+        : 'job 不存在');
+    }
     if (job.status !== 'running' && job.status !== 'pending') {
       throw new HttpError(400, `当前状态 ${job.status} 不可取消`);
     }
@@ -1241,15 +1251,11 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   // /list、/config、/batch-delete、/clear 是字面路径，必须排在 :id 之前注册
   // ════════════════════════════════════════════════════════════════════════
   async function loadAllJobs() {
+    // 与看板同源：磁盘 ∪ 内存（内存优先）。理由同 GET /api/workbench/jobs。
+    await refreshJobsFromDisk();
     const tasksData = await readJson(TASKS_FILE, { tasks: [] });
     const taskMap = new Map((tasksData.tasks || []).map(t => [t.id, t]));
-    const data = await readJson(JOBS_FILE, { version: 1, jobs: [] });
-    const fileJobs = (data && Array.isArray(data.jobs)) ? data.jobs : [];
-    const fileIds = new Set(fileJobs.map(j => j.id));
-    const liveOnly = Array.from(jobs.values())
-      .filter(j => !fileIds.has(j.id))
-      .map(j => serializeJob(j, taskMap));
-    return [...fileJobs, ...liveOnly];
+    return Array.from(mergedJobs().values()).map(j => serializeJob(j, taskMap));
   }
 
   function applyJobsFilter(list, q) {
@@ -1733,6 +1739,11 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   async function loadBoardPayload() {
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const tasks = data.tasks || [];
+    // 看板列（待处理/进行中/已完成）全由执行记录推导，而执行记录是「跨 g ui 实例共享
+    // 在 jobs.json 里、本进程内存只持有自己跑的那些」——所以取快照前必须刷一次磁盘，
+    // 否则另一个实例刚跑完的任务在本实例看板上会一直停在"待处理"。
+    // 看板 5s 轮询一次，代价是 mtime 没变时的一个 stat。
+    await refreshJobsFromDisk();
     const jobsSnap = snapshotJobs();
 
     let recentDirs = [];
@@ -1769,6 +1780,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   setEnvContextProvider(async ({ repoPath } = {}) => {
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const tasks = data.tasks || [];
+    // 任务状态同样由执行记录推导：不刷磁盘的话，Agent 看到的会是本进程启动那一刻的
+    // 旧状态（别的 g ui 跑完的任务在它眼里还没完成）。
+    await refreshJobsFromDisk();
 
     let recentDirs = [];
     try {
@@ -1827,6 +1841,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     const state = await readOrchestrator();
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const tasks = data.tasks || [];
+    // 同 loadBoardPayload：活动流 / 正在跑的 Agent 都从执行记录来，先刷磁盘才能看到
+    // 别的 g ui 实例跑出来的记录（前端的「今日完成」也是数这份 activity）。
+    await refreshJobsFromDisk();
     const jobsSnap = snapshotJobs();
     res.json({
       success: true,
