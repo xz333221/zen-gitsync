@@ -93,7 +93,7 @@ const STRINGS = {
     bannerCwd: '目录',
     thinkingLabel: '思考',
     answerLabel: '回答',
-    thinkingHint: '… 预览已收起，/think full 显示后续完整思考',
+    thinkingHint: '… 已显示前 12 行；输入 /think full 开启后续完整思考',
     emptyResponse: '模型没有返回回答，请重试或切换模型。',
     chars: '字符',
     imagePasting: '正在读取剪贴板图片…',
@@ -142,7 +142,7 @@ const STRINGS = {
     bannerCwd: 'CWD',
     thinkingLabel: 'Thinking',
     answerLabel: 'Answer',
-    thinkingHint: '… preview hidden; /think full for future reasoning',
+    thinkingHint: '… first 12 lines shown; enter /think full for future reasoning',
     emptyResponse: 'The model returned no answer. Retry or switch models.',
     chars: 'chars',
     imagePasting: 'Reading clipboard image…',
@@ -346,7 +346,9 @@ function printSlashHelp(t, locale) {
     '  /addmodel         添加新的模型配置(交互式向导)',
     '  /cd <路径>        切换智能体工作目录',
     '  /image [路径]     查看待发送图片;/image <路径> 附加本地图片;/image clear 清除',
-    '  /think [模式]     compact 预览 / full 完整 / off 隐藏思考',
+    '  /think full       完整显示后续思考（模型返回的内容）',
+    '  /think compact    预览前 12 行思考（默认）',
+    '  /think off        隐藏思考；/think 切换预览与隐藏',
     '  /tools [模式]     compact 精简 / full 完整工具输出',
     '  /stats            查看上一轮与会话累计用量、耗时',
     '  /new              开启新对话',
@@ -364,7 +366,9 @@ function printSlashHelp(t, locale) {
     '  /addmodel         Add a new model (interactive wizard)',
     '  /cd <path>        Change agent working directory',
     '  /image [path]     List pending images; attach a file; /image clear to reset',
-    '  /think [mode]     compact / full / off reasoning display',
+    '  /think full       Show future thinking returned by the model in full',
+    '  /think compact    Preview the first 12 thinking lines (default)',
+    '  /think off        Hide thinking; /think toggles preview / hidden',
     '  /tools [mode]     compact / full tool output',
     '  /stats            Last turn timing and session token usage',
     '  /new              Start a new conversation',
@@ -486,7 +490,7 @@ export async function handleSlashCommand(state, input, t) {
     }
     state.showThinking = next !== 'off'
     state.thinkingMode = next
-    printOk(zh ? `思考显示：${({ off: '隐藏', compact: '预览', full: '完整' })[next]}` : `Thinking: ${next}`)
+    printOk(zh ? `后续请求的思考显示：${({ off: '隐藏', compact: '预览前 12 行', full: '完整' })[next]}` : `Thinking for future requests: ${next}`)
     return 'ok'
   }
   if (cmd === '/tools') {

@@ -37,6 +37,7 @@ import { boxenAdaptive } from '../ui.js'
 // 常量
 // ──────────────────────────────────────────────
 export const DISPLAY_RESULT_LIMIT = 600    // 工具结果回显截断长度(完整结果仍进上下文)
+export const THINKING_PREVIEW_LINES = 12
 
 // 回显截断的"最小省略量":只超出一两个字符时截断反而碍事(实测:git status
 // 输出 614 字符被截,省略 14 字符还把路径从中间切断),不值得就不截
@@ -143,7 +144,10 @@ export const SLASH_COMMANDS = [
   { cmd: '/addmodel', descZh: '添加模型配置(向导)',  descEn: 'Add a model (wizard)' },
   { cmd: '/cd',       descZh: '切换工作目录',         descEn: 'Change working directory' },
   { cmd: '/image',    descZh: '附加 / 查看图片',      descEn: 'Attach / list images' },
-  { cmd: '/think',    descZh: '开关思考过程显示',      descEn: 'Toggle thinking display' },
+  { cmd: '/think',    descZh: '切换思考显示：预览 / 隐藏', descEn: 'Toggle preview / hidden thinking' },
+  { cmd: '/think full', descZh: '完整显示后续思考', descEn: 'Show future thinking in full' },
+  { cmd: '/think compact', descZh: '预览前 12 行思考', descEn: 'Preview the first 12 thinking lines' },
+  { cmd: '/think off', descZh: '隐藏思考（不影响模型推理）', descEn: 'Hide thinking (model still reasons)' },
   { cmd: '/tools',    descZh: '切换工具结果：精简 / 完整', descEn: 'Toggle compact / full tool output' },
   { cmd: '/stats',    descZh: '查看耗时与 Token 用量', descEn: 'Show timing and token usage' },
   { cmd: '/new',      descZh: '开启新对话',            descEn: 'Start a new chat' },
@@ -155,7 +159,7 @@ export const SLASH_COMMANDS = [
 
 /**
  * 按当前输入过滤斜杠命令(纯函数,便于单测)。
- *   - 仅当输入以 / 开头、且尚未输入空格(还在敲命令名)时才提示
+ *   - 输入以 / 开头时提示,支持 /think f 等已知子命令的参数补全
  *   - 前缀匹配,大小写不敏感
  *   - 精确等于某命令且无后续参数时仍然展示该命令(便于确认拼写)
  * @returns {{cmd:string, desc:string}[]}
@@ -163,8 +167,8 @@ export const SLASH_COMMANDS = [
 export function filterSlashCommands(input, locale) {
   const zh = !String(locale || '').startsWith('en')
   const line = String(input || '')
-  if (!line.startsWith('/') || /\s/.test(line)) return []
-  const q = line.toLowerCase()
+  if (!line.startsWith('/')) return []
+  const q = line.toLowerCase().replace(/\s+/g, ' ')
   return SLASH_COMMANDS
     .filter((c) => c.cmd.startsWith(q))
     .map((c) => ({ cmd: c.cmd, desc: zh ? c.descZh : c.descEn }))
@@ -184,9 +188,10 @@ export function renderSlashHintBody(matches, selectedIndex = -1, locale = 'zh-CN
     : -1
   const zh = !String(locale || '').startsWith('en')
   const lines = []
+  const commandWidth = Math.max(12, ...matches.map(m => String(m.cmd).length))
   for (let i = 0; i < matches.length; i++) {
     const m = matches[i]
-    const command = String(m.cmd).padEnd(12)
+    const command = String(m.cmd).padEnd(commandWidth)
     if (i === sel) {
       lines.push(`${chalk.cyanBright('›')} ${chalk.cyan(command)} ${chalk.white(m.desc)}`)
     } else {
@@ -369,9 +374,9 @@ export function drawInputBottom(write = (s) => process.stdout.write(s)) {
 // 首个 token 到达前转动;到达后 stop() 清行,接着流式输出。
 // 非 TTY 时 ora 自动退化为只打印一次文本。
 
-export function startSpinner(text) {
+export function startSpinner(text, { spinnerFactory = ora } = {}) {
   const started = performance.now()
-  const spinner = ora({
+  const spinner = spinnerFactory({
     // 琥珀色加粗,与思考内容同色系,dim 太浅看不清
     text: chalk.hex('#e8a33d').bold(text),
     spinner: 'dots',
@@ -389,8 +394,13 @@ export function startSpinner(text) {
     spinner.text = chalk.hex('#e8a33d')(text) + chalk.gray(` · ${formatDuration(performance.now() - started)}`)
   }, 100) : null
   timer?.unref()
+  let stopped = false
   return {
     stop() {
+      // ora.stop() moves the cursor even after it has stopped. Repeated calls
+      // during streaming would overwrite the text already on the current row.
+      if (stopped) return
+      stopped = true
       clearInterval(timer)
       spinner.stop()
     },
@@ -527,10 +537,10 @@ export function createAssistantWriter({
         write('\n' + THINK_ICON + ' ' + chalk.hex('#e8a33d').bold(thinkingHeader) + '\n')
         thinkAtLineStart = true
       }
-      // 按换行切段,整段着色(避免逐字符 escape 刷屏);每逢行首补一层缩进,
-      // 使多行思考整体右移成独立子块。流式 token 可能不以换行结尾,
-      // 故用 thinkAtLineStart 记住跨调用的行首状态。
+      // 保留跨分片的行宽和缩进；预览合并空白行,让行数用于实际内容。
+      // 完整模式仍保留模型返回的空行。
       for (const char of text) {
+        if (Number.isFinite(thinkingLimit) && char === '\n' && thinkAtLineStart) continue
         if (thinkingRows >= thinkingLimit) {
           clipThinking()
           break

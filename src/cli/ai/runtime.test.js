@@ -4,6 +4,7 @@ import { streamChatOnce } from './transport.js'
 import { normalizeUsage, addUsage } from './telemetry.js'
 import { runAgentTurn } from './turn.js'
 import { buildRequestMessages, repairToolHistory } from './context.js'
+import { createAssistantWriter, stripAnsi } from './termui.js'
 
 const model = { model: 'test', baseURL: 'https://example.invalid/v1', apiKey: 'test' }
 const event = data => `data: ${JSON.stringify(data)}\n\n`
@@ -82,6 +83,34 @@ const noop = () => {}
 const quiet = { startSpinner: () => ({ stop: noop }), createAssistantWriter: () => ({ writeContent: noop, writeThinking: noop, finish: noop }),
   printToolHeader: noop, printToolResult: noop, printWarn: noop, printError: noop, printTurnSummary: noop }
 const state = () => ({ messages: [{ role: 'system', content: 'rules' }], ctx: { cwd: '.' }, abortController: new AbortController(), maxToolIterations: 4 })
+
+test('turn shows 12 nonblank preview rows, supports full/off, and keeps all reasoning in history', async () => {
+  const reasoning = Array.from({ length: 15 }, (_, i) => `Inspection step ${i + 1}.`).join('\n\n')
+  for (const mode of ['compact', 'full', 'off']) {
+    const s = { ...state(), thinkingMode: mode, showThinking: mode !== 'off' }
+    let output = ''
+    const stats = await runAgentTurn(s, 'task', strings, [], {
+      ui: { ...quiet, createAssistantWriter: options => createAssistantWriter({ ...options, write: text => { output += text } }) },
+      chat: async ({ onToken }) => {
+        for (const chunk of reasoning) onToken({ thinking: chunk })
+        onToken({ content: 'Final answer.' })
+        return { content: 'Final answer.', reasoning, toolCalls: [] }
+      },
+    })
+    assert.equal(stats.status, 'completed')
+    assert.equal(s.messages.at(-1).reasoning_content, reasoning)
+    const text = stripAnsi(output)
+    assert.match(text, /Final answer/)
+    if (mode === 'compact') {
+      assert.match(text, /Inspection step 12\./)
+      assert.doesNotMatch(text, /Inspection step 13\./)
+      assert.match(text, /\/think full/)
+    } else if (mode === 'full') {
+      assert.match(text, /Inspection step 15\./)
+      assert.doesNotMatch(text, /\/think full/)
+    } else assert.doesNotMatch(text, /Inspection step/)
+  }
+})
 
 test('turn aggregates all model calls, persists progress and records response timings', async () => {
   const s = state()

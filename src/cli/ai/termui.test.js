@@ -18,9 +18,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import chalk from 'chalk'
+import ora from 'ora'
 import {
   stripAnsi, truncateDisplay, summarizeToolArgs,
-  createAssistantWriter, printToolHeader, printToolResult,
+  createAssistantWriter, printToolHeader, printToolResult, startSpinner,
   formatDuration, wrapTerminalText, renderTurnSummary,
   filterSlashCommands, renderSlashHintBody, parseKeyForSlashHint, SLASH_COMMANDS,
   renderSelectableListBody, parseKeyForSelectableList,
@@ -87,6 +88,35 @@ test('summarizeToolArgs: 未知工具回退 JSON,缺参数不炸', () => {
 })
 
 // ── createAssistantWriter ──
+test('TTY spinner stops once without moving the cursor over later streamed text', t => {
+  const c = collect()
+  const cursorOperations = []
+  const stream = {
+    isTTY: true, columns: 100,
+    write: c.write,
+    cursorTo: column => cursorOperations.push(['column', column]),
+    moveCursor: (x, y) => cursorOperations.push(['move', x, y]),
+    clearLine: direction => cursorOperations.push(['clear', direction]),
+  }
+  const spinner = startSpinner('waiting', {
+    spinnerFactory: options => ora({ ...options, stream, isEnabled: true, hideCursor: false }),
+  })
+  t.after(() => spinner.stop())
+  spinner.stop()
+  const stoppedOperations = cursorOperations.length
+  assert.ok(stoppedOperations > 0, 'must exercise the real TTY cursor operations')
+  const writer = createAssistantWriter({ write: c.write })
+  for (const chunk of ['先检查 ', 'nginx ', '配置文件。\n', '再确认 ', '项目目录。']) {
+    spinner.stop()
+    writer.writeThinking(chunk)
+  }
+  spinner.stop()
+  writer.finish()
+  assert.equal(cursorOperations.length, stoppedOperations, 'later chunks must not reset the terminal cursor')
+  assert.match(c.text(), /先检查 nginx 配置文件。\n/)
+  assert.match(c.text(), /再确认 项目目录。/)
+})
+
 test('writer: 思考段头部只打印一次,内容直写', () => {
   const c = collect()
   const w = createAssistantWriter({ thinkingHeader: '✻ 思考', write: c.write })
@@ -297,6 +327,28 @@ test('thinking previews stop after their row budget and still render the answer'
   assert.match(c.text(), /answer/)
 })
 
+test('compact thinking uses its row budget for content even across blank chunks', () => {
+  const c = collect()
+  const writer = createAssistantWriter({ write: c.write, thinkingLimit: 2 })
+  for (const chunk of ['\n\n', 'first', '\n\n', '\nsecond\n', 'third']) writer.writeThinking(chunk)
+  writer.finish()
+  assert.match(c.text(), /first\n/)
+  assert.match(c.text(), /second\n/)
+  assert.doesNotMatch(c.text(), /third/)
+  assert.equal((c.text().match(/\/think full/g) || []).length, 1)
+})
+
+test('full thinking preserves paragraph breaks and text after the preview budget', () => {
+  const c = collect()
+  const writer = createAssistantWriter({ write: c.write })
+  const content = Array.from({ length: 20 }, (_, i) => `line ${i}`).join('\n\n')
+  for (const character of content) writer.writeThinking(character)
+  writer.finish()
+  assert.match(c.text(), /line 0\n\n/)
+  assert.match(c.text(), /line 19/)
+  assert.doesNotMatch(c.text(), /\/think full/)
+})
+
 test('terminal wrapping respects wide glyphs and preserves text', () => {
   const text = '中文🙂中文abcdef'
   const rows = wrapTerminalText(chalk.cyan(text), 6)
@@ -334,9 +386,22 @@ test('filterSlashCommands: 前缀过滤,大小写不敏感', () => {
   assert.deepEqual(filterSlashCommands('/exit', 'zh').map(m => m.cmd), ['/exit'])
 })
 
-test('filterSlashCommands: 已输入空格(进入参数)时不再提示', () => {
+test('filterSlashCommands: 自由输入的参数不再提示', () => {
   assert.deepEqual(filterSlashCommands('/model 2', 'zh'), [])
   assert.deepEqual(filterSlashCommands('/cd ..', 'zh'), [])
+})
+
+test('thinking modes are discoverable from slash menu and complete after a space', () => {
+  const modes = ['/think full', '/think compact', '/think off']
+  const all = filterSlashCommands('/', 'zh').map(m => m.cmd)
+  assert.ok(modes.every(mode => all.includes(mode)))
+  assert.deepEqual(filterSlashCommands('/think ', 'zh').map(m => m.cmd), modes)
+  assert.deepEqual(filterSlashCommands('/think f', 'zh').map(m => m.cmd), ['/think full'])
+  assert.deepEqual(filterSlashCommands('/THINK   C', 'en').map(m => m.cmd), ['/think compact'])
+  assert.deepEqual(filterSlashCommands('/think full ', 'zh'), [], 'completed command must be ready to submit')
+  const lines = stripAnsi(renderSlashHintBody(filterSlashCommands('/think ', 'zh'))).split('\n')
+  assert.match(lines[0], /\/think full\s+完整/)
+  assert.match(lines[1], /\/think compact\s+预览前 12 行/)
 })
 
 test('filterSlashCommands: 非 slash 输入 / 无匹配返回空', () => {

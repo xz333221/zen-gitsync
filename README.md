@@ -456,7 +456,7 @@ to numeric input. `Esc` or `Ctrl+C` cancels the wizard cleanly.
 In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/tools`, `/stats`, `/new`, `/resume`, `/clear`, `/exit`.
 
 Reasoning, tool calls and answers have separate visual sections. Reasoning defaults to a short preview;
-`/think full` shows subsequent reasoning in full, `/think off` hides it, and `/think compact` restores the preview.
+`/think full` shows subsequent reasoning in full, `/think off` hides it, and `/think compact` previews the first 12 nonblank lines (default). All three modes appear in the `/` menu and support completion after `/think `.
 Tool output defaults to a few head/tail lines; `/tools full` shows subsequent tool results in full and
 `/tools compact` restores compact output. These display settings do not reduce model token usage.
 
@@ -1057,8 +1057,9 @@ $ g ai --model=2                # 使用第 2 个已配置的模型（序号或�
 
 会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/tools`、`/stats`、`/new`、`/resume`、`/clear`、`/exit`。
 
-思考、工具调用和回答分区展示。默认只显示简短思考预览，`/think full` 显示后续完整思考，
-`/think off` 隐藏思考，`/think compact` 恢复预览。工具结果默认保留头尾几行，
+思考、工具调用和回答分区展示。默认预览前 12 行非空思考，`/think full` 显示后续完整思考，
+`/think off` 隐藏思考，`/think compact` 恢复预览。三种模式均直接列在 `/` 菜单中，输入 `/think ` 后也可补全。
+工具结果默认保留头尾几行，
 `/tools full` 显示后续完整工具结果，`/tools compact` 恢复精简。这些显示设置不会减少模型的 Token 消耗。
 
 每轮结束显示完成时间、总耗时、首响应（含思考首字）、正文等待、模型与工具耗时，以及本轮所有模型调用的

@@ -27,7 +27,11 @@ async function fixture(t) {
     res.writeHead(200, { 'Content-Type': 'text/event-stream' })
     const send = data => res.write(`data: ${JSON.stringify(data)}\n\n`)
     if (requests.length === 1) {
-      send({ choices: [{ delta: { reasoning_content: 'Inspect the requested file.\n' } }] })
+      for (let i = 1; i <= 15; i++) {
+        for (const chunk of [`Inspection step ${i}: `, 'check the requested file.\n\n']) {
+          send({ choices: [{ delta: { reasoning_content: chunk } }] })
+        }
+      }
       send({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'read1', type: 'function', function: { name: 'read_file', arguments: '{"path":"demo.txt"}' } }] }, finish_reason: 'tool_calls' }] })
       send({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } })
     } else {
@@ -96,4 +100,23 @@ test('one-shot CLI prints the same usage footer', { timeout: 15000 }, async t =>
   const output = await run(f, ['inspect'])
   assert.match(output, /Token 180/)
   assert.match(output, /One-shot done/)
+  assert.match(output, /Inspection step 12:/)
+  assert.doesNotMatch(output, /Inspection step 13:/)
+})
+
+test('CLI help lists thinking modes and /think full shows reasoning beyond the preview', { timeout: 15000 }, async t => {
+  const f = await fixture(t)
+  let stage = 0
+  const output = await run(f, [], (stdout, child) => {
+    if (stage === 0 && stdout.includes('Zen GitSync')) { stage++; child.stdin.write('/help\n') }
+    else if (stage === 1 && stdout.includes('/think compact')) { stage++; child.stdin.write('/think full\n') }
+    else if (stage === 2 && stdout.includes('Thinking for future requests: full')) { stage++; child.stdin.write('Read demo.txt\n') }
+    else if (stage === 3 && stdout.includes('Token 180')) { stage++; child.stdin.write('/exit\n') }
+  })
+  assert.equal(stage, 4)
+  assert.match(output, /\/think full/)
+  assert.match(output, /\/think off/)
+  assert.match(output, /Inspection step 15: check the requested file\./)
+  assert.doesNotMatch(output, /first 12 lines shown/)
+  assert.equal(f.requests.length, 2, 'display commands must not call the model')
 })
