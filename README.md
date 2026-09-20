@@ -384,6 +384,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Streaming chat | SSE-based real-time streaming with thinking process, content, tool calls, and tool results rendered inline |
 | Tool call display | Each tool invocation (run_command, read_file, edit_file, list_files, search_text, write_file) is shown as a collapsible card with arguments preview and execution result |
 | Session persistence | All conversations are saved to `~/.zen-gitsync/agent-sessions/` as JSON files; the CLI agent (`g ai`) writes to the same directory so Web and CLI sessions are unified |
+| Per-turn tool limit | A single message may trigger up to N tool calls in a row (default **200**, range 1–2000). Configurable in **Settings → AI models → Agent Runtime**; hitting the limit ends the turn and asks you to send another message. The same setting drives the CLI agent |
 | Preset questions | Quick-start buttons on the welcome screen for common tasks (view project structure, analyze code quality, write tests, check git status) |
 | Stop generation | A floating stop button appears during streaming; aborts the LLM request and any running child processes |
 | Theme sync | The chat area follows the GUI's current theme (light / dark / auto) |
@@ -453,6 +454,12 @@ selection + Enter to confirm** (typing a number also jumps directly; `0` selects
 to numeric input. `Esc` or `Ctrl+C` cancels the wizard cleanly.
 
 In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/clear`, `/exit`.
+
+Tool-call budget: one message may trigger up to N tool calls in a row before the turn is
+force-ended with a "max tool iterations reached" notice (send another message to continue).
+N defaults to **200** and is configurable in **Settings → AI models → Agent Runtime**
+(`aiMaxToolIterations` in `~/.zen-gitsync/config.json`, range 1–2000) — the Web agent shares
+the same value.
 
 Images: press `Alt+V` in the REPL to paste a clipboard image (screenshot), or attach a
 local file with `/image <path>`; images are sent as multimodal `image_url` parts with your
@@ -973,6 +980,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 流式对话 | 基于 SSE 的实时流式输出，包含思考过程、正文内容、工具调用和工具结果的内联渲染 |
 | 工具调用展示 | 每次工具调用（run_command、read_file、edit_file、list_files、search_text、write_file）以可折叠卡片形式展示，含参数预览和执行结果 |
 | 会话持久化 | 所有对话保存为 JSON 文件到 `~/.zen-gitsync/agent-sessions/`；CLI 智能体（`g ai`）写入同一目录，Web 端与 CLI 端会话统一管理 |
+| 单轮工具调用上限 | 一条消息内智能体最多连续调用多少次工具（默认 **200**，可调范围 1–2000）。在 **设置 → AI 模型配置 → 智能体运行时** 中修改；达到上限本轮会被强制结束并提示再发一条消息继续。CLI 智能体共用同一项设置 |
 | 预设问题 | 开场界面提供快捷按钮（查看项目结构、分析代码质量、写测试、Git 状态检查）|
 | 停止生成 | 流式输出期间出现浮动停止按钮；中止 LLM 请求及正在运行的子进程 |
 | 主题同步 | 对话区域跟随 GUI 当前主题（浅色 / 深色 / 自动）|
@@ -1037,6 +1045,11 @@ $ g ai --model=2                # 使用第 2 个已配置的模型（序号或�
 `Esc` 或 `Ctrl+C` 一键取消整个向导。
 
 会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/clear`、`/exit`。
+
+工具调用预算：一条消息内智能体最多连续调用 N 次工具，触顶后本轮被强制结束并提示
+"已达单轮最大工具调用次数"，再发一条消息即可继续。N 默认 **200**，可在
+**设置 → AI 模型配置 → 智能体运行时** 修改（即 `~/.zen-gitsync/config.json` 的
+`aiMaxToolIterations`，范围 1–2000），Web 端智能体共用同一项设置。
 
 图片：在 REPL 中按 `Alt+V` 粘贴剪贴板图片（截图），或用 `/image <路径>` 附加本地图片；
 图片以多模态 `image_url` 部件随下一条消息发送（需视觉模型）。单独 `/image` 查看待发送图片，

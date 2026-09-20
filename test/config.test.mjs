@@ -63,7 +63,7 @@ after(async () => {
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
 // 注意:saveConfig / loadConfig 等业务函数挂在 default export 上;
 // ConfigWriteError / normalizeProjectPath 是命名导出(用于测试与复用)
-const { normalizeProjectPath, ConfigWriteError } = configMod
+const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations } = configMod
 const { saveConfig } = configMod.default
 
 // ========== normalizeProjectPath ==========
@@ -95,6 +95,45 @@ test('normalizeProjectPath: POSIX 路径保持大小写', () => {
   // macOS/Linux 默认大小写敏感,不作处理
   const out = normalizeProjectPath('/Users/Me/MyProject')
   assert.equal(out, '/Users/Me/MyProject')
+})
+
+// ========== normalizeAiMaxToolIterations(单轮工具调用上限) ==========
+
+test('normalizeAiMaxToolIterations: 合法整数原样返回', () => {
+  assert.equal(normalizeAiMaxToolIterations(200), 200)
+  assert.equal(normalizeAiMaxToolIterations(1), 1)
+  assert.equal(normalizeAiMaxToolIterations(2000), 2000)
+})
+
+test('normalizeAiMaxToolIterations: 数字字符串与小数被接受', () => {
+  // 配置文件手改 / 表单回传都可能是字符串
+  assert.equal(normalizeAiMaxToolIterations('120'), 120)
+  assert.equal(normalizeAiMaxToolIterations(88.9), 88)
+})
+
+test('normalizeAiMaxToolIterations: 越界值夹取到区间而不是回退默认', () => {
+  // 用户改成 5000 的意图是"想更大",夹到 2000 比悄悄退回 200 更贴近意图
+  assert.equal(normalizeAiMaxToolIterations(5000), 2000)
+  assert.equal(normalizeAiMaxToolIterations(0), 1)
+  assert.equal(normalizeAiMaxToolIterations(-10), 1)
+})
+
+test('normalizeAiMaxToolIterations: 无法解析的值返回 null(调用方取默认)', () => {
+  assert.equal(normalizeAiMaxToolIterations(undefined), null)
+  assert.equal(normalizeAiMaxToolIterations(null), null)
+  assert.equal(normalizeAiMaxToolIterations(''), null)
+  assert.equal(normalizeAiMaxToolIterations('abc'), null)
+  assert.equal(normalizeAiMaxToolIterations(NaN), null)
+  assert.equal(normalizeAiMaxToolIterations(Infinity), null)
+})
+
+test('normalizeAiMaxToolIterations: 默认上限不再是 40(用户反馈太小)', async () => {
+  const cfg = await configMod.default.loadConfig()
+  assert.ok(
+    cfg.aiMaxToolIterations >= 100,
+    `默认单轮工具调用上限应 >= 100,实际 ${cfg.aiMaxToolIterations}`
+  )
+  assert.equal(normalizeAiMaxToolIterations(cfg.aiMaxToolIterations), cfg.aiMaxToolIterations)
 })
 
 // ========== saveConfig 错误契约(MAINT-4 修复回归) ==========

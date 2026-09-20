@@ -1051,6 +1051,28 @@ export function registerConfigRoutes({
     }
   })
 
+  // 保存 AI 智能体运行时设置（aiMaxToolIterations 是全局配置，存配置文件顶层，跨项目共享）
+  app.post('/api/config/save-ai-settings', express.json(), async (req, res) => {
+    try {
+      const { aiMaxToolIterations } = req.body || {}
+      // 越界值在这里夹取到 [MIN, MAX]，而不是拒绝 —— 与 loadConfig 的规范化保持同一套语义
+      const normalized = configManager.normalizeAiMaxToolIterations(aiMaxToolIterations)
+      if (normalized === null) {
+        return res.status(400).json({
+          success: false,
+          error: `aiMaxToolIterations 非法: ${aiMaxToolIterations}`
+        })
+      }
+      const rawConfig = await configManager.readRawConfigFile()
+      rawConfig.aiMaxToolIterations = normalized
+      await configManager.writeRawConfigFile(rawConfig)
+      res.json({ success: true, aiMaxToolIterations: normalized })
+    } catch (error) {
+      logger.error('[save-ai-settings] failed:', error)
+      res.status(500).json({ success: false, error: error.message })
+    }
+  })
+
   // 保存 AI 模型配置（models 是全局配置，存在配置文件顶层，跨项目共享）
   app.post('/api/config/save-models', express.json(), async (req, res) => {
     try {

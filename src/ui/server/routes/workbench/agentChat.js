@@ -35,9 +35,25 @@ import { agentSessionStore } from './agentSessionStore.js';
 import { TOOL_DEFINITIONS, executeTool } from '../../../../cli/ai/tools.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
 import { guardCommand } from '../../../../cli/ai/platformGuard.js';
+import configManager from '../../../../config.js';
 
-const MAX_TOOL_ITERATIONS = 40;
+// 单轮工具调用循环数的兜底值(防失控);实际值取全局配置 aiMaxToolIterations,
+// 与 CLI 侧 src/cli/ai/agent.js 共用同一个配置项。
+const DEFAULT_MAX_TOOL_ITERATIONS = 200;
 const LLM_TIMEOUT_MS = 300000; // 5 分钟
+
+// 读取全局配置里的单轮工具调用上限。
+// 读配置失败不该把整轮对话打挂 —— 退回默认值继续跑,比用户消息直接发不出去好。
+async function resolveMaxToolIterations() {
+  try {
+    const cfg = await configManager.loadConfig();
+    const n = Number(cfg?.aiMaxToolIterations);
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  } catch (err) {
+    logger.warn(`[agentChat] 读取 aiMaxToolIterations 失败,回退默认值: ${err?.message || err}`);
+  }
+  return DEFAULT_MAX_TOOL_ITERATIONS;
+}
 
 // ── 系统提示词构建 ──────────────────────────────────────────
 // 与 CLI agent.js 的 buildSystemPrompt 保持一致，但标注来源为 Web 端
@@ -342,7 +358,9 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
   // 旧图片降级
   stripStaleImages(session.messages);
 
-  for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+  const maxIterations = await resolveMaxToolIterations();
+
+  for (let iter = 0; iter < maxIterations; iter++) {
     trimHistory(session.messages);
     sanitizeMessages(session.messages);
 
@@ -418,7 +436,7 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
   }
 
   // 达到最大迭代次数
-  send({ type: 'done', content: `已达单轮最大工具调用次数(${MAX_TOOL_ITERATIONS})，本轮结束。如需继续请再发一条消息。` });
+  send({ type: 'done', content: `已达单轮最大工具调用次数(${maxIterations})，本轮结束。如需继续请再发一条消息。` });
   return { aborted: false };
 }
 

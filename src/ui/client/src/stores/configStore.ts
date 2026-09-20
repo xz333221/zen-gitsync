@@ -191,6 +191,8 @@ export const useConfigStore = defineStore('config', () => {
   const locale = ref<SupportLocale>('zh-CN')
   // AI 模型列表
   const models = ref<ModelInfo[]>([])
+  // AI 智能体单轮最大工具调用次数（全局配置，CLI `g ai` 与 Web 智能体共用）
+  const aiMaxToolIterations = ref(200)
 
   // ============================================================
   // UI 状态（持久化到 ~/.zen-gitsync/config.json 的顶层 ui 字段）
@@ -423,6 +425,11 @@ export const useConfigStore = defineStore('config', () => {
       // 加载模型配置
       if (Array.isArray(configData.models)) {
         models.value = configData.models
+      }
+
+      // 加载 AI 智能体运行时设置（后端 loadConfig 已规范化，这里只做防御性校验）
+      if (Number.isFinite(Number(configData.aiMaxToolIterations)) && Number(configData.aiMaxToolIterations) > 0) {
+        aiMaxToolIterations.value = Math.floor(Number(configData.aiMaxToolIterations))
       }
 
       // 加载通用设置
@@ -1275,6 +1282,29 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  // 保存 AI 智能体运行时设置（单轮最大工具调用次数）
+  async function saveAiSettings(settings: { aiMaxToolIterations: number }): Promise<boolean> {
+    try {
+      const response = await fetch('/api/config/save-ai-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aiMaxToolIterations: settings.aiMaxToolIterations })
+      })
+      const result = await response.json()
+      if (result.success) {
+        // 后端会把越界值夹取到合法区间，回写夹取后的结果，避免输入框显示与磁盘不一致
+        aiMaxToolIterations.value = Number(result.aiMaxToolIterations) || settings.aiMaxToolIterations
+        return true
+      } else {
+        ElMessage.error(`${$t('@D50BB:保存 AI 设置失败: ')}${result.error}`)
+        return false
+      }
+    } catch (error) {
+      ElMessage.error(`${$t('@D50BB:保存 AI 设置失败: ')}${(error as Error).message}`)
+      return false
+    }
+  }
+
   // 保存模型配置
   async function saveModels(updatedModels: ModelInfo[]): Promise<boolean> {
     try {
@@ -1335,6 +1365,7 @@ export const useConfigStore = defineStore('config', () => {
   return {
     // 状态
     models,
+    aiMaxToolIterations,
     defaultCommitMessage,
     descriptionTemplates,
     scopeTemplates,
@@ -1371,6 +1402,7 @@ export const useConfigStore = defineStore('config', () => {
     openSystemConfigFile,
     saveTemplate,
     saveModels,
+    saveAiSettings,
     saveGeneralSettings,
     saveUiSettings,
     setAiDiffSummaryEnabled,

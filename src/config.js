@@ -50,6 +50,29 @@ function resolveConfigPath() {
   return _configPathReady;
 }
 
+// AI 智能体单轮工具调用上限的可调范围。
+// 下限 1 是为了保留"防失控"语义 —— 0 会让智能体一动手就停,没人是这个意图;
+// 上限 2000 是防手改配置写成天文数字后,一轮对话把 API 额度烧光。
+const AI_MAX_TOOL_ITERATIONS_MIN = 1;
+const AI_MAX_TOOL_ITERATIONS_MAX = 2000;
+
+/**
+ * 规范化单轮最大工具调用次数。
+ *
+ * 非法值(非数字 / NaN / 越界)一律**夹取**到合法区间而不是回退默认值 ——
+ * 用户手改成 5000 的意图明显是"想更大",夹到 2000 比悄悄退回 200 更贴近意图。
+ * 完全无法解析(undefined / 'abc')才返回 null,交给调用方取默认值。
+ */
+function normalizeAiMaxToolIterations(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const int = Math.floor(n);
+  if (int < AI_MAX_TOOL_ITERATIONS_MIN) return AI_MAX_TOOL_ITERATIONS_MIN;
+  if (int > AI_MAX_TOOL_ITERATIONS_MAX) return AI_MAX_TOOL_ITERATIONS_MAX;
+  return int;
+}
+
 // 默认配置
 const defaultConfig = {
   defaultCommitMessage: "submit",
@@ -90,6 +113,11 @@ const defaultConfig = {
   locale: 'zh-CN',  // 语言: zh-CN | en-US
   // AI 模型配置
   models: [],
+  // AI 智能体单轮最大工具调用次数(防失控)。CLI `g ai` 与 Web 智能体共用,全局生效。
+  // 2026-09-20: 40 → 200。40 轮在"读多个文件 → 逐个验证 → 再改"这类任务里很容易触顶,
+  // 触顶后本轮被强制结束,用户必须再发一条消息才能接着跑,体感像被截断。
+  // 想调小/调大改这个值即可(GUI: 设置 → AI 模型配置)。
+  aiMaxToolIterations: 200,
   // UI 状态（跨项目共享，存到顶层 ui 对象）
   // 之前散落在 localStorage，因随机端口启动而失效，迁到文件持久化
   ui: {
@@ -396,7 +424,12 @@ async function loadConfig() {
   }
   // 兼容旧版（全局扁平结构）
   if (raw && !raw.projects) {
-    return { ...defaultConfig, ...raw };
+    return {
+      ...defaultConfig,
+      ...raw,
+      aiMaxToolIterations: normalizeAiMaxToolIterations(raw.aiMaxToolIterations)
+        ?? defaultConfig.aiMaxToolIterations
+    };
   }
 
   // 新版结构：{ projects: { [key]: projectConfig }, theme?, locale?, ui?, recentDirectories? }
@@ -409,7 +442,10 @@ async function loadConfig() {
     theme: raw?.theme ?? defaultConfig.theme,
     locale: raw?.locale ?? defaultConfig.locale,
     models: raw?.models ?? defaultConfig.models,
-    ui: raw?.ui ?? defaultConfig.ui
+    ui: raw?.ui ?? defaultConfig.ui,
+    // 同 models：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
+    aiMaxToolIterations: normalizeAiMaxToolIterations(raw?.aiMaxToolIterations)
+      ?? defaultConfig.aiMaxToolIterations
   };
 }
 
@@ -457,7 +493,7 @@ async function saveConfig(config) {
 
   // 分离全局设置和项目设置
   // models / ui 也是全局配置（跨项目共享），和 theme/locale 一样存到顶层
-  const { theme, locale, models, ui, ...projectConfig } = config;
+  const { theme, locale, models, ui, aiMaxToolIterations, ...projectConfig } = config;
 
   // 保存全局设置到根级别
   if (theme !== undefined) {
@@ -471,6 +507,11 @@ async function saveConfig(config) {
   }
   if (ui !== undefined) {
     raw.ui = ui;
+  }
+  // 工具调用上限同属全局设置：非法值不落盘(保留磁盘上的旧值),避免把手改坏的值固化
+  const normalizedIterations = normalizeAiMaxToolIterations(aiMaxToolIterations);
+  if (normalizedIterations !== null) {
+    raw.aiMaxToolIterations = normalizedIterations;
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
@@ -662,7 +703,19 @@ export default {
   // 显式删除某个项目的全部分文件。写路径刻意不做删除(防"只加载了一个项目就写回"
   // 连带清空其它项目),清理失效项目只能走这里。
   deleteProjectConfig: deleteProjectConfigAndInvalidate,
+  // AI 智能体单轮工具调用上限的规范化/区间(GUI 保存前也要用,见 /api/config/save-ai-settings)
+  normalizeAiMaxToolIterations,
+  AI_MAX_TOOL_ITERATIONS_MIN,
+  AI_MAX_TOOL_ITERATIONS_MAX,
 };
 
 // 命名导出 — 用于测试与外部复用
-export { ConfigWriteError, normalizeProjectPath, invalidateCurrentProjectKey, invalidateRawConfigCache };
+export {
+  ConfigWriteError,
+  normalizeProjectPath,
+  invalidateCurrentProjectKey,
+  invalidateRawConfigCache,
+  normalizeAiMaxToolIterations,
+  AI_MAX_TOOL_ITERATIONS_MIN,
+  AI_MAX_TOOL_ITERATIONS_MAX,
+};

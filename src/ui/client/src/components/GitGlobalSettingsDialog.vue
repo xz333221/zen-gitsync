@@ -256,6 +256,30 @@
               />
             </div>
           </div>
+
+          <!-- 智能体运行时（全局设置，CLI `g ai` 与 Web 智能体共用） -->
+          <div class="settings-section">
+            <div class="section-title model-section-title">
+              <span>{{ $t('@42BB9:智能体运行时') }}</span>
+            </div>
+            <div class="setting-row">
+              <label class="setting-label">{{ $t('@42BB9:单轮最大工具调用次数') }}</label>
+              <div class="project-toggle">
+                <el-input-number
+                  v-model="aiMaxToolIterationsInput"
+                  :min="1"
+                  :max="2000"
+                  :step="10"
+                  :disabled="savingAiSettings"
+                  class="ai-iterations-input"
+                  @change="handleAiMaxToolIterationsChange"
+                />
+                <span class="setting-hint-block ai-iterations-hint">
+                  {{ $t('@42BB9:一条消息内智能体最多连续调用多少次工具。达到上限本轮会被强制结束，需要再发一条消息才能继续') }}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Git 全局设置面板 -->
@@ -526,6 +550,30 @@ const tempEditorAutoSave = ref(false)
 const aiModels = ref<ModelInfo[]>([])
 const editingModelId = ref<string | null | undefined>(undefined) // undefined=隐藏, null=新增, string=编辑
 
+// AI 智能体运行时（全局设置，立即持久化，与模型列表一样不走"保存"按钮）
+const aiMaxToolIterationsInput = ref(200)
+const savingAiSettings = ref(false)
+
+async function handleAiMaxToolIterationsChange(value: number | undefined) {
+  const next = Number(value)
+  // 输入框被清空/输入非法时不发请求，直接回滚成当前生效值
+  if (!Number.isFinite(next) || next <= 0) {
+    aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
+    return
+  }
+  if (next === configStore.aiMaxToolIterations) return
+
+  savingAiSettings.value = true
+  try {
+    const ok = await configStore.saveAiSettings({ aiMaxToolIterations: next })
+    // 后端会把越界值夹取到合法区间，成功后以 store 回写后的值为准，避免输入框与磁盘不一致
+    aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
+    if (ok) ElMessage.success($t('@42BB9:已保存'))
+  } finally {
+    savingAiSettings.value = false
+  }
+}
+
 const currentThemeForForm = computed(() =>
   configStore.theme === 'light' ? 'light' : 'dark'
 )
@@ -674,6 +722,7 @@ watch(() => props.modelValue, async (val) => {
     tempTheme.value = configStore.theme
     tempLocale.value = configStore.locale
     aiModels.value = [...configStore.models]
+    aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
     editingModelId.value = undefined
     // 加载编辑器设置
     tempEditorAutoSave.value = configStore.ui.editorAutoSave
@@ -1151,6 +1200,16 @@ async function openSystemConfigFile() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 智能体运行时的说明较长，允许换行完整展示（默认 hint 是单行省略号截断） */
+.project-toggle .ai-iterations-hint {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.5;
+}
+.ai-iterations-input {
+  width: 140px;
 }
 .setting-hint-inline {
   margin-left: 8px;

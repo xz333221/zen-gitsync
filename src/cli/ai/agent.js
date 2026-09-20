@@ -65,7 +65,7 @@ export { truncateDisplay } from './termui.js'
 // ──────────────────────────────────────────────
 // 常量
 // ──────────────────────────────────────────────
-const MAX_TOOL_ITERATIONS = 40      // 单轮用户输入允许的最大工具调用循环数(防失控)
+const DEFAULT_MAX_TOOL_ITERATIONS = 200  // 单轮工具调用循环数兜底值(防失控);实际值取配置里的 aiMaxToolIterations
 const MAX_HISTORY_MESSAGES = 40     // 历史消息上限(超出后从最旧的整段对话裁剪)
 const LLM_TIMEOUT_MS = 300000       // 单次 LLM 请求超时(5 分钟,长推理模型够用)
 
@@ -472,7 +472,11 @@ async function runAgentTurn(state, userText, t, images = []) {
   // 旧消息里的图片降级为占位文字,防止 base64 随对话轮次累积撑爆上下文
   stripStaleImages(state.messages, state.locale)
 
-  for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+  const maxIterations = Number.isFinite(state.maxToolIterations) && state.maxToolIterations > 0
+    ? state.maxToolIterations
+    : DEFAULT_MAX_TOOL_ITERATIONS
+
+  for (let iter = 0; iter < maxIterations; iter++) {
     trimHistory(state.messages)
 
     // 首个 token 到达前转 spinner,到达后停掉并让位给流式渲染
@@ -580,7 +584,7 @@ async function runAgentTurn(state, userText, t, images = []) {
     // 工具结果全部入历史后继续循环,让模型基于结果决定下一步
   }
 
-  printWarn(t.toolIterLimit(MAX_TOOL_ITERATIONS))
+  printWarn(t.toolIterLimit(maxIterations))
 }
 
 // JSON 解析失败时的参数回显:单行截断,不进 summarizeToolArgs(它没有结构化参数可用)
@@ -897,6 +901,9 @@ export async function runAiAgent(argv = []) {
     model,
     locale,
     shellDesc,
+    // 单轮工具调用上限:来自全局配置 aiMaxToolIterations(loadConfig 已规范化),
+    // 读不到时由 runAgentTurn 兜底成 DEFAULT_MAX_TOOL_ITERATIONS
+    maxToolIterations: cfg.aiMaxToolIterations,
     currentChild: null,
     abortController: null,
     cancelRequested: false,
