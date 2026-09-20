@@ -49,6 +49,7 @@ export const PROVIDERS = [
   { id: 'gemini',     label: 'Google (Gemini)',     url: 'https://generativelanguage.googleapis.com/v1beta/openai' },
   { id: 'xai',        label: 'xAI (Grok)',          url: 'https://api.x.ai/v1' },
   { id: 'meta',       label: 'Meta (Llama)',        url: 'https://api.llama-api.com/v1' },
+  { id: 'nvidia',     label: 'NVIDIA',              url: 'https://integrate.api.nvidia.com/v1' },
   { id: 'mistral',    label: 'Mistral AI',          url: 'https://api.mistral.ai/v1' },
   { id: 'minimax',    label: 'MiniMax',             url: 'https://api.minimaxi.com/v1' },
   { id: 'moonshot',   label: 'Moonshot (Kimi)',     url: 'https://api.moonshot.cn/v1' },
@@ -58,6 +59,8 @@ export const PROVIDERS = [
   { id: 'groq',       label: 'Groq',                url: 'https://api.groq.com/openai/v1' },
   { id: 'together',   label: 'Together AI',         url: 'https://api.together.xyz/v1' },
   { id: 'openrouter', label: 'OpenRouter',          url: 'https://openrouter.ai/api/v1' },
+  { id: 'opencode',   label: 'OpenCode Go',         url: 'https://opencode.ai/zen/go/v1' },
+  { id: 'agnes',      label: 'Agnes AI',            url: 'https://apihub.agnes-ai.com/v1' },
   { id: 'ollama',     label: 'Ollama (本地)',        url: 'http://localhost:11434/v1' },
 ]
 
@@ -115,8 +118,43 @@ export const BUILTIN_MODELS = {
     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
     'deepseek-ai/DeepSeek-V3',
   ],
+  'https://apihub.agnes-ai.com/v1': [
+    'agnes-2.5-pro-alpha', 'agnes-2.0-flash', 'agnes-image-2.0', 'agnes-video-v2.0',
+  ],
   'http://localhost:11434/v1': [
     'qwen2.5', 'llama3.1', 'mistral', 'deepseek-r1:7b', 'qwen3', 'llama4',
+  ],
+  'https://integrate.api.nvidia.com/v1': [
+    'nvidia/llama-3.3-nemotron-super-49b-v1',
+    'nvidia/nemotron-3-nano-30b-a3b',
+    'nvidia/nemotron-3-super-120b-a12b',
+    'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    'meta/llama-3.3-70b-instruct',
+    'meta/llama-4-maverick-17b-128e-instruct',
+    'deepseek-ai/deepseek-r1',
+    'qwen/qwq-32b',
+  ],
+  // OpenCode Go — 同一 base URL 下混了 chat / responses / messages 三族协议
+  // (协议识别与请求头由 src/utils/aiEndpoint.js 统一处理,选非 chat 族模型
+  //  在测试连接/对话时会收到可读报错提示)。更新: 2026-09-17,与 ai-model-form 同步。
+  'https://opencode.ai/zen/go/v1': [
+    // ——— OpenAI 兼容 /chat/completions ———
+    'deepseek-v4.1-flash', 'deepseek-v4-pro', 'deepseek-v4-flash',
+    'deepseek-v4-flash-vision-exp', 'deepseek-flash',
+    'glm-5.3', 'glm-5.3-flash', 'glm-5.2', 'glm-5.1', 'glm-5',
+    'kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6', 'kimi-k2.5',
+    'longcat-2.0',
+    'mimo-v2.5', 'mimo-v2.5-pro', 'mimo-v2-pro', 'mimo-v2-omni',
+    'hy4-preview', 'hy3', 'hy3-preview',
+    'omen-alpha',
+    // ——— OpenAI Responses 协议 /responses ———
+    'grok-4.6', 'grok-4.5', 'gpt-5.6-luna',
+    'muse-spark-1.3-contributor', 'muse-spark-1.2-contributor',
+    // ——— Anthropic 协议 /messages ———
+    'minimax-m3', 'minimax-m2.7', 'minimax-m2.5',
+    'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-max', 'qwen3.7-plus',
+    'qwen3.6-plus', 'qwen3.5-plus',
+    'union-alpha',
   ],
 }
 
