@@ -78,7 +78,10 @@ export const MANIFEST_FILES = [
 ];
 
 // 附件大小 / 数量限制
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;        // 单个附件最大 5MB
+// 单文件 20MB：4K 屏截图（PNG）5–15MB 是常态，卡在 5MB 会让"随手截一张就超"。
+// 真正需要小体积的是图片，由前端上传前压缩保证（见 useWorkbenchAttachments.ts），
+// 这里只做最后一道兜底，避免超大 body 把内存吃光。
+export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;       // 单个附件最大 20MB
 export const MAX_ATTACHMENTS_PER_SUBTASK = 9;          // 一个子任务最多挂 9 个附件
 
 // ── 时间 / ID 工具 ─────────────────────────────────────────

@@ -1550,7 +1550,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   // ════════════════════════════════════════════════════════════════════════
   const rawAttachment = express.raw({
     type: '*/*',
-    limit: MAX_IMAGE_BYTES * 4 // 整体路由上限 20MB；单文件大小由业务再卡
+    // 路由上限 = 单文件上限的 2 倍：留出余量让超限请求落到业务层的 413（带"不得超过 XX MB"
+    // 的可读文案），而不是 body-parser 直接抛的裸 entity.too.large
+    limit: MAX_IMAGE_BYTES * 2
   });
 
   // 共享 helper：找到一个 attachment 所在的位置

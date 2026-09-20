@@ -11,7 +11,114 @@ export const ALLOWED_MIME = new Set([
   'application/json', 'text/json', 'text/x-log'
 ])
 export const ALLOWED_EXT_HINT = '.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.pdf,.txt,.md,.csv,.json,.log'
-export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+// 单个附件硬上限。原来是 5MB，4K 屏随手一张截图（3840px，PNG 5–15MB）就顶掉，
+// 所以抬到 20MB：非图片附件（PDF / 日志 / JSON）本来就该按需给大，
+// 图片则由下面的压缩逻辑保证真正落到下游时不会超限。
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+
+/**
+ * 图片超过这个体积就先压一刀再上传。
+ *
+ * 为什么不只把上限拉到 20MB 就完事：附件最终要么被下游按路径读取
+ * （Claude Code 的 Read / 模型多模态接口），要么被 base64 塞进请求体，
+ * 这两条路都在 5MB（base64 之后）附近把大图挡下来 —— 上传时不压，
+ * 故障只是从"上传失败"推迟成更难排查的"读图失败 / 模型 400"。
+ */
+export const IMAGE_COMPRESS_THRESHOLD_BYTES = 3.5 * 1024 * 1024
+/** 首轮压缩保留原分辨率（4K 截图不降采样），只换更省的编码；压不下去才逐级降采样 */
+export const IMAGE_COMPRESS_MAX_EDGE = 3840
+/** canvas 能重编码的位图格式。SVG 是矢量、GIF 带帧，都不走压缩 */
+const COMPRESSIBLE_MIME = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/bmp'])
+
+/** 是否需要压缩：可重编码的位图 + 超过阈值（剪贴板/拖拽的文件偶尔没 mime，退回看后缀） */
+export function shouldCompressImage(file: File): boolean {
+  if (file.size <= IMAGE_COMPRESS_THRESHOLD_BYTES) return false
+  const mime = String(file.type || '').toLowerCase()
+  if (mime) return COMPRESSIBLE_MIME.has(mime)
+  return /\.(png|jpe?g|webp|bmp)$/i.test(file.name)
+}
+
+/** 换后缀（`paste-x.png` + `webp` → `paste-x.webp`），给压缩后的文件改名用 */
+export function replaceExt(name: string, ext: string): string {
+  const base = String(name || 'attachment').replace(/\.[^./\\]+$/, '')
+  return `${base}.${ext}`
+}
+
+/** Blob → 可画的位图。createImageBitmap 失败（部分浏览器对超大图有限制）退回 <img> 解码 */
+async function decodeImage(file: File): Promise<{
+  source: CanvasImageSource; width: number; height: number; release: () => void
+} | null> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(file)
+      return { source: bmp, width: bmp.width, height: bmp.height, release: () => bmp.close() }
+    } catch { /* 落到 <img> 分支 */ }
+  }
+  return await new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => resolve({
+      source: img,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      release: () => URL.revokeObjectURL(url)
+    })
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null) }
+    img.src = url
+  })
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    try {
+      canvas.toBlob(b => resolve(b && b.type === type ? b : null), type, quality)
+    } catch { resolve(null) }
+  })
+}
+
+/**
+ * 大图上传前压缩。
+ *
+ * 策略：先按原分辨率换 WebP（q0.95，4K 截图基本一步到位且不掉分辨率），不行再依次
+ * 降质量 / 降最长边，最后一档是 1920px q0.8 —— 目标仅仅是"能被下游读进去"，
+ * 而不是追求最漂亮。任何一步失败（浏览器不支持 canvas 编码 / 解不开 / 压完反而更大）
+ * 都返回 null，由调用方原样上传，再由 MAX_ATTACHMENT_BYTES 兜底。
+ */
+export async function compressImage(file: File): Promise<{ blob: Blob; ext: string } | null> {
+  const decoded = await decodeImage(file)
+  if (!decoded) return null
+  try {
+    const plans = [
+      { edge: IMAGE_COMPRESS_MAX_EDGE, quality: 0.95 },
+      { edge: IMAGE_COMPRESS_MAX_EDGE, quality: 0.85 },
+      { edge: 2560, quality: 0.85 },
+      { edge: 1920, quality: 0.8 }
+    ]
+    let best: Blob | null = null
+    for (const plan of plans) {
+      const scale = Math.min(1, plan.edge / Math.max(decoded.width, decoded.height))
+      const w = Math.max(1, Math.round(decoded.width * scale))
+      const h = Math.max(1, Math.round(decoded.height * scale))
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+      ctx.drawImage(decoded.source, 0, 0, w, h)
+      const out = (await canvasToBlob(canvas, 'image/webp', plan.quality))
+        || (await canvasToBlob(canvas, 'image/jpeg', plan.quality))
+      if (!out) return null   // canvas 编码不可用，别拿半成品糊弄用户
+      if (!best || out.size < best.size) best = out
+      if (out.size <= IMAGE_COMPRESS_THRESHOLD_BYTES) break
+    }
+    if (!best || best.size >= file.size) return null
+    return { blob: best, ext: best.type === 'image/webp' ? 'webp' : 'jpg' }
+  } catch {
+    return null
+  } finally {
+    decoded.release()
+  }
+}
 
 export type AttachmentTarget =
   | { kind: 'task'; task: Task | null }
@@ -100,10 +207,6 @@ export function useWorkbenchAttachments() {
   }
 
   async function uploadAttachment(t: AttachmentTarget, file: File) {
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      ElMessage.error(`「${file.name}」${$t('@WORKBENCH:超过 5MB 限制')}`)
-      return
-    }
     if (!ALLOWED_MIME.has(file.type) && !file.name.match(/\.(png|jpg|jpeg|gif|webp|bmp|svg|pdf|txt|md|markdown|csv|json|log)$/i)) {
       ElMessage.error(`${$t('@WORKBENCH:不支持的文件类型')}（${file.name}）`)
       return
@@ -121,20 +224,37 @@ export function useWorkbenchAttachments() {
     const key = targetKey(t)
     uploadingTargets.value[key] = true
     try {
+      // 大图先压再传：上限虽已放到 20MB，但下游（Claude Code 读图 / 模型 base64 多模态）
+      // 只认 5MB 上下，上传前是唯一能同时满足两头的卡点。压不动就原样传，由大小上限兜底。
+      let out = file
+      if (shouldCompressImage(file)) {
+        const packed = await compressImage(file)
+        if (packed) {
+          out = ensureFile(packed.blob, replaceExt(file.name, packed.ext))
+          ElMessage.info($t('@WORKBENCH:图片过大，已压缩后上传：{from} → {to}', {
+            from: humanSize(file.size),
+            to: humanSize(out.size)
+          }))
+        }
+      }
+      if (out.size > MAX_ATTACHMENT_BYTES) {
+        ElMessage.error(`「${file.name}」${$t('@WORKBENCH:超过 {size} 限制', { size: humanSize(MAX_ATTACHMENT_BYTES) })}`)
+        return
+      }
       const res = await fetch(targetUploadUrl(t), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
-          'X-Original-Name': file.name,
-          'X-Mime-Type': file.type || 'application/octet-stream'
+          'X-Original-Name': out.name,
+          'X-Mime-Type': out.type || 'application/octet-stream'
         },
-        body: file
+        body: out
       }).then(r => r.json())
       if (res.success) {
         const list = targetAttachments(t)
         list.push(res.attachment)
         setTargetAttachments(t, list)
-        ElMessage.success(`${$t('@WORKBENCH:已添加：')}${file.name}`)
+        ElMessage.success(`${$t('@WORKBENCH:已添加：')}${out.name}`)
       } else {
         ElMessage.error(res.error || $t('@WORKBENCH:上传失败'))
       }
