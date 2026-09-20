@@ -75,7 +75,8 @@ const presetQuestions = computed(() => [
   { id: 'p1', label: $t('@AGENT:查看项目结构'), prompt: $t('@AGENT:prompt_p1') },
   { id: 'p2', label: $t('@AGENT:分析代码质量'), prompt: $t('@AGENT:prompt_p2') },
   { id: 'p3', label: $t('@AGENT:帮我写测试'), prompt: $t('@AGENT:prompt_p3') },
-  { id: 'p4', label: $t('@AGENT:Git 状态检查'), prompt: $t('@AGENT:prompt_p4') }
+  { id: 'p4', label: $t('@AGENT:Git 状态检查'), prompt: $t('@AGENT:prompt_p4') },
+  { id: 'p5', label: $t('@AGENT:帮我启动项目'), prompt: $t('@AGENT:prompt_p5') }
 ])
 
 // ── 发送消息 ──────────────────────────────────────────────

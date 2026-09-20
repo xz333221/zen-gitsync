@@ -2656,10 +2656,12 @@ export default {
   '@AGENT:分析代码质量': '分析代码质量',
   '@AGENT:帮我写测试': '帮我写测试',
   '@AGENT:Git 状态检查': 'Git 状态检查',
+  '@AGENT:帮我启动项目': '帮我启动项目',
   '@AGENT:prompt_p1': '请列出当前项目的目录结构，帮我了解项目布局',
   '@AGENT:prompt_p2': '请分析当前项目的代码质量，指出潜在问题',
   '@AGENT:prompt_p3': '请帮我为最近修改的文件编写单元测试',
   '@AGENT:prompt_p4': '请检查当前 git 仓库的状态，看看有哪些未提交的改动',
+  '@AGENT:prompt_p5': '请帮我启动这个项目：先看 package.json 和 README 判断启动命令，然后启动并告诉我访问地址',
   // @AGENT: file end
   // @DIFFAI: file path: components\AiDiffSummary.vue
   '@DIFFAI:AI 文件说明': 'AI 文件说明',
