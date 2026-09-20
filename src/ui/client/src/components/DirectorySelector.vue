@@ -581,7 +581,8 @@ async function changeDirectory() {
           gitStore.fetchStatus()
         ]);
       } else {
-        ElMessage.warning($t('@67CE7:当前目录不是Git仓库，部分功能将不可用'));
+        // 切到非 Git 仓库目录不再弹 toast:左侧 GitStatus 面板会立刻切成
+        // "当前目录不是 Git 仓库 + 初始化按钮"空态,顶栏再提示一次是重复噪音。
         gitStore.$reset();
         // $reset() 会连 userName / userEmail 一起清空(见 gitStore.ts:113-114),
         // 但 Git 用户信息是用户级/全局属性,不随目录变化。

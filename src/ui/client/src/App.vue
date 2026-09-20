@@ -56,7 +56,7 @@ const WorkbenchView = defineAsyncComponent({ loader: () => import('@views/Workbe
 const MonitorView = defineAsyncComponent({ loader: () => import('@views/MonitorView.vue'), ...asyncOpts })
 const MindmapView = defineAsyncComponent({ loader: () => import('@views/MindmapView.vue'), ...asyncOpts })
 const AgentView = defineAsyncComponent({ loader: () => import('@views/AgentView.vue'), ...asyncOpts })
-import { ElMessage, ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
+import { ElConfigProvider, ElButton, ElTooltip, ElIcon } from 'element-plus'
 import { Setting, WarningFilled, Sunny, Moon } from '@element-plus/icons-vue'
 import logo from '@assets/logo.svg'
 import { useGitStore } from '@stores/gitStore'
@@ -207,9 +207,10 @@ onMounted(async () => {
           console.warn('[App] 启动静默 fetch 异常(已忽略):', err)
         })
       }, 3000)
-    } else {
-      ElMessage.warning($t('@F13B4:当前目录不是Git仓库，部分功能将不可用'))
     }
+    // 非 Git 仓库不再弹 ElMessage 提示:左侧 GitStatus 面板已经完整展示
+    // "当前目录不是 Git 仓库 / 初始化并提交 / 打开其他目录",顶栏再飘一条
+    // 同义 toast 只是重复噪音(顶栏旧的"非 Git 仓库"徽章此前已同理移除)。
   } catch (error) {
     console.error('初始化失败:', error)
   } finally {
