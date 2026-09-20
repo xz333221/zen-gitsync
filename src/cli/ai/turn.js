@@ -38,7 +38,7 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
         showThinking: state.showThinking !== false,
         thinkingHeader: t.thinkingLabel,
         answerHeader: t.answerLabel,
-        thinkingLimit: state.thinkingMode === 'full' ? Infinity : terminal.THINKING_PREVIEW_LINES,
+        thinkingLimit: state.thinkingMode === 'compact' ? terminal.THINKING_PREVIEW_LINES : Infinity,
         thinkingHint: t.thinkingHint,
       })
       const filter = createThinkFilter()

@@ -60,12 +60,19 @@ export function stripAnsi(s) {
   return stripVTControlCharacters(String(s))
 }
 
+// Normalize before grapheme segmentation: Intl.Segmenter treats CRLF as one
+// cluster, so checking only for '\n' would leave unindented physical newlines
+// inside a row and incorrectly carry its width into the next output line.
+function normalizeTerminalNewlines(text) {
+  return String(text).replace(/\r\n?/g, '\n')
+}
+
 /** Wrap terminal cells, preserving colour and CJK/emoji widths. */
 export function wrapTerminalText(text, width = 100) {
   const rows = []
   let row = '', cells = 0, lastBreak = -1, breakCells = 0
   const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-  for (const part of String(text).split(/(\x1b\[[0-9;]*m)/g)) {
+  for (const part of normalizeTerminalNewlines(text).split(/(\x1b\[[0-9;]*m)/g)) {
     if (/^\x1b\[/.test(part)) { row += part; continue }
     for (const { segment } of segmenter.segment(part.replace(/\t/g, '  '))) {
       if (segment === '\n') { rows.push(row); row = ''; cells = 0; lastBreak = -1; continue }
@@ -144,8 +151,8 @@ export const SLASH_COMMANDS = [
   { cmd: '/addmodel', descZh: '添加模型配置(向导)',  descEn: 'Add a model (wizard)' },
   { cmd: '/cd',       descZh: '切换工作目录',         descEn: 'Change working directory' },
   { cmd: '/image',    descZh: '附加 / 查看图片',      descEn: 'Attach / list images' },
-  { cmd: '/think',    descZh: '切换思考显示：预览 / 隐藏', descEn: 'Toggle preview / hidden thinking' },
-  { cmd: '/think full', descZh: '完整显示后续思考', descEn: 'Show future thinking in full' },
+  { cmd: '/think',    descZh: '切换思考显示：完整 / 隐藏', descEn: 'Toggle full / hidden thinking' },
+  { cmd: '/think full', descZh: '完整显示后续思考（默认）', descEn: 'Show future thinking in full (default)' },
   { cmd: '/think compact', descZh: '预览前 12 行思考', descEn: 'Preview the first 12 thinking lines' },
   { cmd: '/think off', descZh: '隐藏思考（不影响模型推理）', descEn: 'Hide thinking (model still reasons)' },
   { cmd: '/tools',    descZh: '切换工具结果：精简 / 完整', descEn: 'Toggle compact / full tool output' },
@@ -702,7 +709,7 @@ export function printToolHeader(name, summary, write = (s) => process.stdout.wri
  * @param {number} [durationMs] - 执行耗时(毫秒),有值时在结果末尾追加 ⏱ 计时行
  */
 export function printToolResult(result, write = (s) => process.stdout.write(s), durationMs, { full = false, locale = 'zh-CN', width = Math.min(100, termWidth() - 6) } = {}) {
-  const text = stripAnsi(result)
+  const text = normalizeTerminalNewlines(stripAnsi(result))
   // 先把 "$ <command>\n" 这一行回显从展示里剥掉(退出码仍在第二行里识别)
   const visible = text.replace(/^\$[^\n]*\n/, '').replace(/^\(exit \d+\)\n?/, '')
   const exitMatch = text.match(/^\$[^\n]*\n\(exit (\d+)\)/)

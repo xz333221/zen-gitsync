@@ -82,6 +82,8 @@ test('CLI uses switched directory, saves metrics and loads local project instruc
   assert.match(output, /first token/)
   assert.match(output, /first answer/)
   assert.match(output, /Token 180/)
+  assert.match(output, /Inspection step 15:/)
+  assert.doesNotMatch(output, /first 12 lines shown/)
   assert.equal(f.requests.length, 2)
   assert.match(f.requests[0].messages[0].content, /Fixture project rule/)
   assert.ok(f.requests[1].messages.some(m => m.role === 'tool' && m.content.includes('fixture text')))
@@ -95,13 +97,13 @@ test('CLI uses switched directory, saves metrics and loads local project instruc
   assert.equal(saved.messages.at(-1).content, 'Fixture answer.\n')
 })
 
-test('one-shot CLI prints the same usage footer', { timeout: 15000 }, async t => {
+test('one-shot CLI shows full thinking by default and prints the usage footer', { timeout: 15000 }, async t => {
   const f = await fixture(t)
   const output = await run(f, ['inspect'])
   assert.match(output, /Token 180/)
   assert.match(output, /One-shot done/)
-  assert.match(output, /Inspection step 12:/)
-  assert.doesNotMatch(output, /Inspection step 13:/)
+  assert.match(output, /Inspection step 15:/)
+  assert.doesNotMatch(output, /first 12 lines shown/)
 })
 
 test('CLI help lists thinking modes and /think full shows reasoning beyond the preview', { timeout: 15000 }, async t => {

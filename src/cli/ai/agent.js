@@ -346,9 +346,9 @@ function printSlashHelp(t, locale) {
     '  /addmodel         添加新的模型配置(交互式向导)',
     '  /cd <路径>        切换智能体工作目录',
     '  /image [路径]     查看待发送图片;/image <路径> 附加本地图片;/image clear 清除',
-    '  /think full       完整显示后续思考（模型返回的内容）',
-    '  /think compact    预览前 12 行思考（默认）',
-    '  /think off        隐藏思考；/think 切换预览与隐藏',
+    '  /think full       完整显示后续思考（默认，模型返回的内容）',
+    '  /think compact    预览前 12 行思考',
+    '  /think off        隐藏思考；/think 切换完整与隐藏',
     '  /tools [模式]     compact 精简 / full 完整工具输出',
     '  /stats            查看上一轮与会话累计用量、耗时',
     '  /new              开启新对话',
@@ -366,9 +366,9 @@ function printSlashHelp(t, locale) {
     '  /addmodel         Add a new model (interactive wizard)',
     '  /cd <path>        Change agent working directory',
     '  /image [path]     List pending images; attach a file; /image clear to reset',
-    '  /think full       Show future thinking returned by the model in full',
-    '  /think compact    Preview the first 12 thinking lines (default)',
-    '  /think off        Hide thinking; /think toggles preview / hidden',
+    '  /think full       Show future thinking returned by the model in full (default)',
+    '  /think compact    Preview the first 12 thinking lines',
+    '  /think off        Hide thinking; /think toggles full / hidden',
     '  /tools [mode]     compact / full tool output',
     '  /stats            Last turn timing and session token usage',
     '  /new              Start a new conversation',
@@ -483,7 +483,7 @@ export async function handleSlashCommand(state, input, t) {
     return 'ok'
   }
   if (cmd === '/think') {
-    const next = arg || (state.showThinking ? 'off' : 'compact')
+    const next = arg || (state.showThinking ? 'off' : 'full')
     if (!['off', 'compact', 'full'].includes(next)) {
       printWarn('/think compact | full | off')
       return 'ok'
@@ -686,7 +686,7 @@ export async function runAiAgent(argv = []) {
     cancelRequested: false,
     busy: false,
     showThinking: true,     // /think 切换:是否回显模型的思考过程
-    thinkingMode: 'compact',
+    thinkingMode: 'full',
     fullTools: false,
     lastTurnStats: null,
     sessionStats: null,

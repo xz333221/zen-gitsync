@@ -19,6 +19,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import chalk from 'chalk'
 import ora from 'ora'
+import stringWidth from 'string-width'
 import {
   stripAnsi, truncateDisplay, summarizeToolArgs,
   createAssistantWriter, printToolHeader, printToolResult, startSpinner,
@@ -249,6 +250,35 @@ test('printToolResult: 全部行统一 │ 槽线(无 └─ 拐角)', () => {
   assert.ok(!lines.some(l => l.includes('└─')), '不应出现 └─ 拐角字符')
 })
 
+test('Windows command output renders like LF output in compact and full modes', () => {
+  const names = ['.claude', '.git', '.gitattributes', '.github', '.gitignore', '.npmignore',
+    'AGENTS.md', 'docs', 'index.js', 'package.json', 'README.md', '源码笔记.md']
+  for (const full of [false, true]) {
+    const lf = collect(), windows = collect()
+    printToolResult(['$ dir /a /b', '(exit 0)', ...names].join('\n'), lf.write, 38, { full, width: 60 })
+    printToolResult(['$ dir /a /b', '(exit 0)', ...names].join('\r\n'), windows.write, 38, { full, width: 60 })
+    assert.equal(windows.text(), lf.text(), 'line endings must not change layout or the omitted row count')
+    assert.doesNotMatch(windows.text(), /\r/)
+    const rows = windows.lines().filter(Boolean)
+    assert.ok(rows.slice(0, -1).every(row => row.startsWith('  │ ')))
+    assert.match(rows.at(-1), /^  └ 完成 · 38ms · exit 0$/)
+    if (full) assert.deepEqual(rows.slice(0, -1), names.map(name => '  │ ' + name))
+    else assert.match(windows.text(), /回显省略 7 行/)
+  }
+})
+
+test('wrapped Windows paths keep every continuation row to the right of the gutter', () => {
+  const c = collect()
+  const paths = ['C:\\workspace\\项目目录\\src\\components\\DirectorySelector.vue',
+    'C:\\workspace\\项目目录\\docs\\终端显示🙂.md']
+  printToolResult(paths.join('\r\n'), c.write, undefined, { full: true, width: 24 })
+  const rows = c.lines().filter(Boolean)
+  assert.ok(rows.every(row => row.startsWith('  │ ')))
+  assert.ok(rows.every(row => stringWidth(row) <= 28), 'include the gutter when checking physical width')
+  assert.equal(rows.map(row => row.slice(4)).join(''), paths.join(''), 'preserve every path character')
+  assert.doesNotMatch(c.text(), /\r/)
+})
+
 test('printToolResult: 超长结果被截断并含省略标记', () => {
   const c = collect()
   const long = Array.from({ length: 60 }, (_, i) => `line${i} ` + 'y'.repeat(40)).join('\n')
@@ -354,6 +384,11 @@ test('terminal wrapping respects wide glyphs and preserves text', () => {
   const rows = wrapTerminalText(chalk.cyan(text), 6)
   assert.equal(stripAnsi(rows.join('')), text)
   assert.ok(rows.length >= 3)
+})
+
+test('terminal wrapping recognizes CRLF and bare carriage returns as line breaks', () => {
+  const text = chalk.cyan('first\r\n第二行🙂\nthird\rfourth\r\n')
+  assert.deepEqual(wrapTerminalText(text, 20).map(stripAnsi), ['first', '第二行🙂', 'third', 'fourth', ''])
 })
 
 test('turn summaries distinguish missing and partial usage, and show cancellation', () => {
