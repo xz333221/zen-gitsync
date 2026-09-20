@@ -35,6 +35,7 @@ import readline from 'node:readline'
 import chalk from 'chalk'
 import config from '../../config.js'
 import { startSpinner, renderSelectableListBody, parseKeyForSelectableList } from './termui.js'
+import { buildAiChatRequest, buildAiApiRequest } from '../../utils/aiEndpoint.js'
 
 // ──────────────────────────────────────────────
 // 预设服务商列表
@@ -279,14 +280,13 @@ export async function fetchModelsFromApi({ baseURL, apiKey, timeoutMs = 5000, fe
   const fetch = fetchFn || globalThis.fetch
   if (!fetch) return []
 
-  const url = `${String(baseURL || '').replace(/\/$/, '')}/models`
-  const headers = {}
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
+    // 拉模型列表也要带客户端身份/会话头：OpenCode 网关对没有身份的请求照样拦。
+    // 放在 try 里保证"本函数不抛错"的契约不被 baseURL 为空破坏。
+    const { url, headers } = buildAiApiRequest({ baseURL, path: '/models', apiKey })
     const res = await fetch(url, {
       method: 'GET',
       headers,
@@ -327,10 +327,6 @@ export async function testModelConnection({ baseURL, model, apiKey, timeoutMs = 
   const fetch = fetchFn || globalThis.fetch
   if (!fetch) throw new Error('fetch is not available')
 
-  const url = `${String(baseURL || '').replace(/\/$/, '')}/chat/completions`
-  const headers = { 'Content-Type': 'application/json' }
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
   const body = JSON.stringify({
     model,
     messages: [{ role: 'user', content: 'hi' }],
@@ -341,6 +337,8 @@ export async function testModelConnection({ baseURL, model, apiKey, timeoutMs = 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
+    // 统一构造：身份/会话头 + OpenCode 网关的协议族校验（非 chat 模型直接给可读报错）
+    const { url, headers } = buildAiChatRequest({ baseURL, model, apiKey })
     const res = await fetch(url, {
       method: 'POST',
       headers,

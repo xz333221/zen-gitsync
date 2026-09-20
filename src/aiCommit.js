@@ -19,6 +19,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import config from './config.js';
 import { execGitCommand } from './utils/index.js';
+import { buildAiChatRequest } from './utils/aiEndpoint.js';
 
 // ──────────────────────────────────────────────
 // 跳过的产物/资源/lock 文件(与 GUI config.js SKIP_FILE_PATTERNS 一致)
@@ -276,9 +277,11 @@ ${diffText || '(no staged content, please infer from the file list)'}`;
   // 4. 调用 LLM
   spinner.start('AI 正在生成提交信息...');
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
-  const url = `${defaultModel.baseURL.replace(/\/$/, '')}/chat/completions`;
-  const headers = { 'Content-Type': 'application/json' };
-  if (defaultModel.apiKey) headers['Authorization'] = `Bearer ${defaultModel.apiKey}`;
+  const { url, headers } = buildAiChatRequest({
+    baseURL: defaultModel.baseURL,
+    model: defaultModel.model,
+    apiKey: defaultModel.apiKey
+  });
   const body = JSON.stringify({
     model: defaultModel.model,
     messages: [{ role: 'user', content: prompt }],

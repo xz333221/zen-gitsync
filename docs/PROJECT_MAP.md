@@ -342,6 +342,7 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 | `src/gitCommit.js` | CLI 主控 | P0 |
 | `src/config.js` | 用户配置 | P0 |
 | `src/utils/index.js` | 共享工具(被前后端都用) | P0 |
+| `src/utils/aiEndpoint.js` | **AI 请求的 baseURL/请求头统一构造**(客户端身份 + OpenCode 网关的会话头/协议族) | P1 |
 | `src/ui/server/index.js` | GUI 后端入口,所有路由注册中心 | P0 |
 | `src/ui/client/src/main.ts` + `App.vue` | 前端启动 + 全局 shell | P0 |
 | `src/ui/client/src/views/WorkbenchView.vue` | **最大业务视图**,工作台 | P0 |

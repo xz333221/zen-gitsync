@@ -23,6 +23,7 @@
 //   - cloneMsgContent       深拷贝消息 content（避免外部 mutation 污染请求）
 
 import { stripThinkingBlocks, extractFirstJsonObject } from './jsonParse.js';
+import { buildAiChatRequest, describeAiHttpError } from '../../../../utils/aiEndpoint.js';
 
 // 非流式调用 LLM，要求返回 JSON 对象。
 // 失败时抛错；成功时返回已 parse 的对象。
@@ -32,9 +33,11 @@ import { stripThinkingBlocks, extractFirstJsonObject } from './jsonParse.js';
 export async function callLlmJson(model, prompt, opts = {}) {
   const { timeoutMs = 60000, images = [] } = opts;
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
-  const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`;
-  const headers = { 'Content-Type': 'application/json' };
-  if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
+  const { url, headers } = buildAiChatRequest({
+    baseURL: model.baseURL,
+    model: model.model,
+    apiKey: model.apiKey,
+  });
 
   let userContent;
   if (Array.isArray(images) && images.length > 0) {
@@ -115,11 +118,14 @@ export function cloneMsgContent(c) {
  * 函数返回 { aborted: true }，不抛错——上层决定怎么处理。
  */
 export async function callLlmStream(model, input, onDelta, opts = {}) {
-  const { maxTokens = 2000, timeoutMs = 600000, signal, images = [], systemPrompt } = opts;
+  const { maxTokens = 2000, timeoutMs = 600000, signal, images = [], systemPrompt, sessionId } = opts;
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
-  const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`;
-  const headers = { 'Content-Type': 'application/json' };
-  if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
+  const { url, headers } = buildAiChatRequest({
+    baseURL: model.baseURL,
+    model: model.model,
+    apiKey: model.apiKey,
+    sessionId,
+  });
 
   // 判别 input: string(旧,直接拆分)或 messages 数组(新,对话拆分)
   let messages;
@@ -167,7 +173,8 @@ export async function callLlmStream(model, input, onDelta, opts = {}) {
     const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
     if (!resp.ok || !resp.body) {
       const errText = await resp.text().catch(() => '');
-      throw new Error(errText || `HTTP ${resp.status}`);
+      // 抽 error.message，别把整坨 JSON 甩给用户（网关的报错说明都在 message 里）
+      throw new Error(describeAiHttpError(errText, resp.status));
     }
 
     // SSE 格式：每行 "data: {...}"，最后 "data: [DONE]"

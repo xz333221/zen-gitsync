@@ -19,6 +19,9 @@ import fs from 'fs/promises';
 import open from 'open';
 import logger from '../utils/logger.js';
 import { CONFIG_FILE } from '../../../paths.js';
+// AI 请求的地址/请求头统一走这里：OpenCode 网关要求自报 User-Agent 并带
+// x-opencode-session，否则直接 4xx（见 src/utils/aiEndpoint.js 顶部说明）
+import { buildAiChatRequest } from '../../../utils/aiEndpoint.js';
 
 // 跳过的产物/资源/lock 文件(用 stat 一行带过,不打 patch)
 const SKIP_FILE_PATTERNS = [
@@ -1097,9 +1100,8 @@ export function registerConfigRoutes({
     }
     try {
       const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
-      const url = `${baseURL.replace(/\/$/, '')}/chat/completions`
-      const headers = { 'Content-Type': 'application/json' }
-      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+      // 连通性探测同样要带客户端身份/会话头，否则 OpenCode 网关这条请求就被风控挡了
+      const { url, headers } = buildAiChatRequest({ baseURL, model, apiKey })
       const body = JSON.stringify({
         model,
         messages: [{ role: 'user', content: 'Hello, reply with just "ok".' }],
@@ -1183,9 +1185,11 @@ ${diffText || '(no staged content, please infer from the file list)'}`
       logger.debug('[generate-commit] locale:', userLocale, '| prompt length:', prompt.length)
       logger.debug('[generate-commit] prompt:\n' + prompt)
       const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }))
-      const url = `${defaultModel.baseURL.replace(/\/$/, '')}/chat/completions`
-      const headers = { 'Content-Type': 'application/json' }
-      if (defaultModel.apiKey) headers['Authorization'] = `Bearer ${defaultModel.apiKey}`
+      const { url, headers } = buildAiChatRequest({
+        baseURL: defaultModel.baseURL,
+        model: defaultModel.model,
+        apiKey: defaultModel.apiKey,
+      })
       const body = JSON.stringify({
         model: defaultModel.model,
         messages: [{ role: 'user', content: prompt }],

@@ -36,6 +36,7 @@ import { TOOL_DEFINITIONS, executeTool } from '../../../../cli/ai/tools.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
 import { guardCommand } from '../../../../cli/ai/platformGuard.js';
 import configManager from '../../../../config.js';
+import { buildAiChatRequest, describeAiHttpError } from '../../../../utils/aiEndpoint.js';
 
 // 单轮工具调用循环数的兜底值(防失控);实际值取全局配置 aiMaxToolIterations,
 // 与 CLI 侧 src/cli/ai/agent.js 共用同一个配置项。
@@ -154,10 +155,14 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 
 // ── LLM 流式调用(OpenAI 兼容 + function calling) ──────────
 // 返回 { content, toolCalls, aborted }
-async function streamChatOnce({ model, messages, signal, onToken }) {
-  const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`;
-  const headers = { 'Content-Type': 'application/json' };
-  if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
+async function streamChatOnce({ model, messages, signal, onToken, sessionId }) {
+  // sessionId = 对话 ID：OpenCode 网关靠它做路由与提示缓存，同一轮对话的所有请求要复用
+  const { url, headers } = buildAiChatRequest({
+    baseURL: model.baseURL,
+    model: model.model,
+    apiKey: model.apiKey,
+    sessionId,
+  });
 
   const body = JSON.stringify({
     model: model.model,
@@ -183,7 +188,8 @@ async function streamChatOnce({ model, messages, signal, onToken }) {
     const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
     if (!resp.ok || !resp.body) {
       const errText = await resp.text().catch(() => '');
-      const snippet = errText.length > 300 ? errText.slice(0, 300) + '…' : errText;
+      // 抽 error.message：网关/provider 的说明都在里面，整坨 JSON 甩到聊天窗没法看
+      const snippet = describeAiHttpError(errText, resp.status);
       if (resp.status === 400 && /tool|function/i.test(snippet)) {
         throw new Error(`HTTP 400: 当前模型可能不支持 function calling(${snippet})。请在设置中换用支持工具调用的模型。`);
       }
@@ -370,6 +376,8 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
         model,
         messages: session.messages,
         signal,
+        // 整轮对话（含后续工具调用产生的每一轮请求）复用同一个会话 ID
+        sessionId: session.sessionId,
         onToken: ({ thinking, content }) => {
           if (thinking) send({ type: 'thinking', delta: thinking });
           if (content) send({ type: 'content', delta: content });

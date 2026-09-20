@@ -32,7 +32,8 @@ export default mergeConfig(
       environment: 'jsdom',
       globals: true,
       setupFiles: ['./vitest.setup.ts'],
-      include: ['src/**/*.{test,spec}.ts'],
+      // vite-plugins/ 也在收录范围：构建期插件（svg sprite 的 svgo 配置等）同样需要回归保护
+      include: ['src/**/*.{test,spec}.ts', 'vite-plugins/**/*.{test,spec}.ts'],
       css: false,
       server: { deps: { inline: ['element-plus'] } },
     },

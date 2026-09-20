@@ -58,6 +58,7 @@ import {
 import { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes } from './images.js'
 import { runModelSetup, collectModelInput, buildModelConfig, selectFromList } from './modelSetup.js'
 import { genSessionId, autoTitle, writeSession, enforceRetention, listSessions } from './sessionStore.js'
+import { buildAiChatRequest, describeAiHttpError } from '../../utils/aiEndpoint.js'
 
 // truncateDisplay 已迁移到 termui.js;这里 re-export 保持既有测试/外部引用不断
 export { truncateDisplay } from './termui.js'
@@ -285,10 +286,14 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
 // LLM 流式调用(OpenAI 兼容 + function calling)
 // 返回 { content, toolCalls, aborted }
 // ──────────────────────────────────────────────
-async function streamChatOnce({ model, messages, signal, onToken }) {
-  const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`
-  const headers = { 'Content-Type': 'application/json' }
-  if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`
+async function streamChatOnce({ model, messages, signal, onToken, sessionId }) {
+  // sessionId = 会话 ID：OpenCode 网关靠它做路由与提示缓存，同一条会话的所有请求要复用
+  const { url, headers } = buildAiChatRequest({
+    baseURL: model.baseURL,
+    model: model.model,
+    apiKey: model.apiKey,
+    sessionId,
+  })
 
   const body = JSON.stringify({
     model: model.model,
@@ -314,7 +319,8 @@ async function streamChatOnce({ model, messages, signal, onToken }) {
     const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
     if (!resp.ok || !resp.body) {
       const errText = await resp.text().catch(() => '')
-      const snippet = errText.length > 300 ? errText.slice(0, 300) + '…' : errText
+      // 抽 error.message：provider 的说明都在里面，整坨 JSON 打到终端没法看
+      const snippet = describeAiHttpError(errText, resp.status)
       // 400 且提到 tools/functions:大概率是模型不支持 function calling
       if (resp.status === 400 && /tool|function/i.test(snippet)) {
         throw new Error(`HTTP 400: 当前模型可能不支持 function calling(${snippet})。请在 g ui 中换用支持工具调用的模型(如 deepseek / qwen / gpt 系列)。`)
@@ -512,6 +518,8 @@ async function runAgentTurn(state, userText, t, images = []) {
         model: state.model,
         messages: state.messages,
         signal: state.abortController?.signal,
+        // 同一会话（含工具调用产生的每一轮请求）复用同一个会话 ID
+        sessionId: state.sessionId,
         onToken: ({ thinking, content }) => {
           if (thinking) renderSeg({ thinking })
           if (content) for (const seg of thinkFilter.feed(content)) renderSeg(seg)

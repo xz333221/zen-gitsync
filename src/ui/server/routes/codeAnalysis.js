@@ -15,6 +15,7 @@
 import express from 'express';
 import fs from 'fs/promises';
 import path from 'path';
+import { buildAiChatRequest } from '../../../utils/aiEndpoint.js';
 
 // 代码文件扩展名
 const CODE_EXTENSIONS = [
@@ -349,9 +350,11 @@ async function buildDependencyGraph(subFiles, resolvedDir, rootPath = '') {
  */
 async function callLlmJson(model, prompt) {
   const { default: fetch } = await import('node-fetch').catch(() => ({ default: globalThis.fetch }));
-  const url = `${String(model.baseURL || '').replace(/\/$/, '')}/chat/completions`;
-  const headers = { 'Content-Type': 'application/json' };
-  if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
+  const { url, headers } = buildAiChatRequest({
+    baseURL: model.baseURL,
+    model: model.model,
+    apiKey: model.apiKey,
+  });
 
   const body = JSON.stringify({
     model: model.model,
