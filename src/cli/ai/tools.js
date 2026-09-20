@@ -24,7 +24,7 @@
 //   - 工具内部异常一律 catch 成字符串返回,不抛给 agent 循环 ——
 //     让模型看到错误信息自己修正,而不是中断整轮对话
 
-import { exec } from 'node:child_process'
+import { exec, execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import iconv from 'iconv-lite'
@@ -196,20 +196,39 @@ function decodeOutput(buf) {
 
 // 包装 exec 为 Promise,stdout/stderr 合并返回;出错(非零退出)也正常返回输出
 // encoding:'buffer' 拿原始字节,由 decodeOutput 决定真实编码
+export function terminateCommand(child) {
+  if (!child?.pid || child.exitCode !== null) return Promise.resolve()
+  if (process.platform === 'win32') {
+    return new Promise(resolve => execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => resolve()))
+  }
+  try { process.kill(-child.pid, 'SIGTERM') } catch { try { child.kill('SIGTERM') } catch {} }
+  return Promise.resolve()
+}
+
 function execCommand(command, options) {
   return new Promise((resolve) => {
-    const child = exec(command, { ...options, encoding: 'buffer' }, (err, stdout, stderr) => {
+    const { signal, timeout, onChild, ...execOptions } = options
+    let timedOut = false
+    const abort = () => { void terminateCommand(child) }
+    const child = exec(command, { ...execOptions, detached: process.platform !== 'win32', encoding: 'buffer' }, (err, stdout, stderr) => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
       resolve({
         code: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
-        killed: !!err?.killed,
+        killed: timedOut,
+        cancelled: !!signal?.aborted,
         stdout: decodeOutput(stdout),
         stderr: decodeOutput(stderr),
         errorMessage: err && !('code' in err) ? err.message : null,
       })
     })
+    const timer = setTimeout(() => { timedOut = true; void terminateCommand(child) }, timeout)
+    timer.unref()
+    signal?.addEventListener('abort', abort, { once: true })
+    if (signal?.aborted) abort()
     trackChild(child)
     // 把 child 暴露给 agent 循环,支持用户 Ctrl+C 时立即中止当前命令
-    if (typeof options.onChild === 'function') options.onChild(child)
+    if (typeof onChild === 'function') onChild(child)
   })
 }
 
@@ -253,9 +272,11 @@ async function toolRunCommand(args, ctx) {
     windowsHide: true,
     env: { ...process.env, FORCE_COLOR: '0' },
     onChild: ctx.onChild,
+    signal: ctx.signal,
   })
 
   const parts = []
+  if (result.cancelled) parts.push('[命令已由用户停止]')
   if (result.killed) parts.push(`[命令超时被终止(>${timeoutSec}s)]`)
   if (result.stdout) parts.push(result.stdout.trimEnd())
   if (result.stderr) parts.push(`[stderr]\n${result.stderr.trimEnd()}`)
@@ -333,7 +354,7 @@ async function toolEditFile(args, ctx) {
     return `错误: old_string 在 ${filePath} 中出现 ${count} 次,不唯一。请提供更多上下文让它唯一,或显式传 replace_all=true 全部替换。`
   }
 
-  const updated = args.replace_all ? raw.split(oldStr).join(newStr) : raw.replace(oldStr, newStr)
+  const updated = args.replace_all ? raw.split(oldStr).join(newStr) : raw.replace(oldStr, () => newStr)
   try {
     await fs.writeFile(filePath, updated, 'utf-8')
     return `已修改 ${filePath} (替换 ${args.replace_all ? count : 1} 处)`
@@ -478,6 +499,7 @@ const TOOL_HANDLERS = {
  * @param {{ cwd: string, onChild?: (child: object) => void }} ctx
  */
 export async function executeTool(name, args, ctx) {
+  if (ctx.signal?.aborted) return 'Cancelled by user; this tool was not executed.'
   const handler = TOOL_HANDLERS[name]
   if (!handler) return `错误: 未知工具 "${name}",可用工具: ${Object.keys(TOOL_HANDLERS).join(', ')}`
   try {

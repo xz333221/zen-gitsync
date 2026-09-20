@@ -17,7 +17,11 @@ import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import path from 'path';
 import os from 'os';
 import open from 'open';
-import { spawn, spawnSync } from 'child_process';
+import { spawn, spawnSync, execFile } from 'child_process';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const TOOL_INSTALL_PACKAGES = Object.freeze({
   claude: '@anthropic-ai/claude-code',
@@ -367,6 +371,32 @@ async function launchOpenCode(dirPath) {
   return launchInTerminal(dirPath, 'opencode');
 }
 
+// Run the CLI shipped with this server, even when `g` is not in PATH or points
+// to another install. Directory paths remain spawn options, never CMD source.
+export async function launchGai(dirPath, {
+  platform = process.platform,
+  spawnFn = execFileAsync,
+  terminalFn = launchInTerminal,
+} = {}) {
+  const entry = fileURLToPath(new URL('../../../gitCommit.js', import.meta.url));
+  if (platform !== 'win32') return terminalFn(dirPath, process.execPath, [entry, 'ai']);
+
+  const psLiteral = value => `'${String(value).replace(/'/g, "''")}'`;
+  const encode = value => Buffer.from(value, 'utf16le').toString('base64');
+  const command = `& ${psLiteral(process.execPath)} ${psLiteral(entry)} 'ai'`;
+  // The hidden launcher opens a visible interactive console. -NoExit leaves
+  // startup errors readable; no model request is sent until the user types.
+  const launcher = [
+    "$ErrorActionPreference = 'Stop';",
+    "Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe')",
+    `-ArgumentList '-NoLogo','-NoProfile','-NoExit','-EncodedCommand','${encode(command)}'`,
+    '-WorkingDirectory (Get-Location).ProviderPath -WindowStyle Normal',
+  ].join(' ');
+  return spawnFn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encode(launcher)], {
+    cwd: dirPath, windowsHide: true, timeout: 10000,
+  });
+}
+
 async function launchKimiCode(dirPath) {
   if (process.platform === 'win32') {
     const executable = await findKimiExecutable();
@@ -548,8 +578,24 @@ async function launchToolInstaller(installer, dirPath = process.cwd(), { update 
 }
 
 export function registerFileOpenRoutes({
-  app
+  app,
+  launchAi = launchGai,
 }) {
+  app.post('/api/open-directory-with-g-ai', asyncRoute(async (req, res) => {
+    const dirPath = req.body?.path;
+    if (typeof dirPath !== 'string' || !dirPath.trim() || /[\0\r\n]/.test(dirPath)) {
+      throw new HttpError(400, '目录路径不能为空或包含控制字符');
+    }
+    const target = path.resolve(dirPath);
+    let stat;
+    try { stat = await fs.stat(target); }
+    catch { throw new HttpError(400, '目录不存在或不可访问'); }
+    if (!stat.isDirectory()) throw new HttpError(400, '指定路径不是目录');
+    try { await launchAi(target); }
+    catch (error) { throw new HttpError(400, `无法启动 g ai: ${error.message}`); }
+    res.json({ success: true, message: '已在新终端中启动 g ai' });
+  }));
+
   // 打开文件
   app.post('/api/open-file', asyncRoute(async (req, res) => {
       try {

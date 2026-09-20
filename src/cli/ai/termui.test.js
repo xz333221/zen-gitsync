@@ -21,7 +21,7 @@ import chalk from 'chalk'
 import {
   stripAnsi, truncateDisplay, summarizeToolArgs,
   createAssistantWriter, printToolHeader, printToolResult,
-  formatDuration,
+  formatDuration, wrapTerminalText, renderTurnSummary,
   filterSlashCommands, renderSlashHintBody, parseKeyForSlashHint, SLASH_COMMANDS,
   renderSelectableListBody, parseKeyForSelectableList,
 } from './termui.js'
@@ -110,15 +110,16 @@ test('writer: showThinking=false 时丢弃思考段', () => {
   assert.ok(text.includes('正文'))
 })
 
-test('writer: 正文首行 🤖 子弹头,后续行缩进对齐', () => {
+test('writer: 回答标题独立显示,正文各行缩进对齐', () => {
   const c = collect()
   const w = createAssistantWriter({ write: c.write })
   w.writeContent('第一行\n第二行\n第三行')
   w.finish()
   const lines = c.lines()
-  assert.ok(lines.some(l => l.startsWith('🤖  第一行')))
-  assert.ok(lines.some(l => l.startsWith('   第二行')))
-  assert.ok(lines.some(l => l.startsWith('   第三行')))
+  assert.equal(lines.filter(l => l === '◆ 回答').length, 1)
+  assert.ok(lines.includes('  第一行'))
+  assert.ok(lines.includes('  第二行'))
+  assert.ok(lines.includes('  第三行'))
 })
 
 test('writer: 行内 markdown — bold 标记被消费,code 反引号被消费', () => {
@@ -194,19 +195,19 @@ test('writer: 头部空白行被吞掉,连续空白行合并(真实 MiniMax 输�
   const lines = c.lines()
   // null→content 自动在 🤖 上方加一空行,跳过空行找正文首行
   const firstContent = lines.find(l => l !== '')
-  assert.equal(firstContent, '🤖  答案', `首行应为 🤖  答案,实际: ${JSON.stringify(lines)}`)
+  assert.equal(firstContent, '◆ 回答')
   // "答案"与"下一段"之间最多一个空行,且空行不带缩进
-  const midBlank = lines.slice(1, lines.indexOf('   下一段')).filter(l => l === '').length
+  const midBlank = lines.slice(lines.indexOf('  答案') + 1, lines.indexOf('  下一段')).filter(l => l === '').length
   assert.ok(midBlank <= 1, `空行应被合并,实际行: ${JSON.stringify(lines)}`)
-  assert.ok(lines.includes('   下一段'))
+  assert.ok(lines.includes('  下一段'))
 })
 
 // ── 工具块 ──
-test('printToolHeader: ▶ + 名称(粗)+ 摘要(粗)', () => {
+test('printToolHeader: 工具标签与参数分行显示', () => {
   const c = collect()
   printToolHeader('run_command', '$ npm test', c.write)
   const text = c.text()
-  assert.ok(text.includes('▶  run_command'))
+  assert.ok(text.includes('▸ 执行命令  run_command'))
   assert.ok(text.includes('$ npm test'))
 })
 
@@ -214,7 +215,7 @@ test('printToolResult: 全部行统一 │ 槽线(无 └─ 拐角)', () => {
   const c = collect()
   printToolResult('$ ls\n(exit 0)\nfile1\nfile2', c.write)
   const lines = c.lines()
-  assert.ok(lines.every(l => l.startsWith('  │  ') || l === ''), `每行都应为 │ 槽线,实际: ${JSON.stringify(lines)}`)
+  assert.ok(lines.every(l => l.startsWith('  │ ') || l === ''), `每行都应为 │ 槽线,实际: ${JSON.stringify(lines)}`)
   assert.ok(!lines.some(l => l.includes('└─')), '不应出现 └─ 拐角字符')
 })
 
@@ -252,15 +253,15 @@ test('formatDuration: 无效输入返回空串', () => {
 })
 
 // ── printToolResult 带耗时 ──
-test('printToolResult: 传入 durationMs 时末尾追加 ⏱ 计时行', () => {
+test('printToolResult: 结果末尾显示状态与耗时', () => {
   const c = collect()
   printToolResult('hello world', c.write, 1500)
   // 去掉末尾空行(split('\n') 在末尾 \n 后产生空串)
   const lines = c.lines().filter(l => l !== '')
   const lastLine = lines[lines.length - 1]
-  assert.ok(lastLine.includes('⏱'), `应包含 ⏱,实际: ${lastLine}`)
+  assert.ok(lastLine.includes('完成'), `应包含状态,实际: ${lastLine}`)
   assert.ok(lastLine.includes('1.5s'), `应包含 1.5s,实际: ${lastLine}`)
-  assert.ok(lastLine.startsWith('  │  '), `计时行应与结果块同缩进,实际: ${lastLine}`)
+  assert.ok(lastLine.startsWith('  └ '), `计时行应与结果块同缩进,实际: ${lastLine}`)
 })
 
 test('printToolResult: 不传 durationMs 时无计时行(向后兼容)', () => {
@@ -271,6 +272,54 @@ test('printToolResult: 不传 durationMs 时无计时行(向后兼容)', () => {
 })
 
 // ── 斜杠命令即时提示 ──
+
+test('compact tools bound physical rows while full output preserves every line', () => {
+  const output = Array.from({ length: 80 }, (_, i) => `row ${i}`).join('\n')
+  const compact = collect(), full = collect()
+  printToolResult(output, compact.write, 10)
+  printToolResult(output, full.write, 10, { full: true })
+  assert.ok(compact.lines().filter(Boolean).length <= 7)
+  assert.ok(compact.text().includes('row 0'))
+  assert.ok(compact.text().includes('row 79'))
+  assert.ok(full.text().includes('row 40'))
+  assert.doesNotMatch(full.text(), /省略/)
+})
+
+test('thinking previews stop after their row budget and still render the answer', () => {
+  const c = collect()
+  const w = createAssistantWriter({ write: c.write, thinkingLimit: 2, width: 30 })
+  w.writeThinking('first\nsecond\nthird\nfourth')
+  w.writeThinking('hidden more')
+  w.writeContent('answer')
+  w.finish()
+  assert.match(c.text(), /first\n/)
+  assert.doesNotMatch(c.text(), /third|fourth|hidden more/)
+  assert.match(c.text(), /answer/)
+})
+
+test('terminal wrapping respects wide glyphs and preserves text', () => {
+  const text = '中文🙂中文abcdef'
+  const rows = wrapTerminalText(chalk.cyan(text), 6)
+  assert.equal(stripAnsi(rows.join('')), text)
+  assert.ok(rows.length >= 3)
+})
+
+test('turn summaries distinguish missing and partial usage, and show cancellation', () => {
+  const stats = { status: 'cancelled', totalMs: 2000, llmMs: 1800, toolsMs: 100,
+    firstTokenMs: 200, firstAnswerMs: 500, requests: 2, toolCalls: 1, usageRequests: 0, usage: null }
+  let text = stripAnsi(renderTurnSummary(stats, { width: 200 }))
+  assert.match(text, /已停止/)
+  assert.match(text, /首响应 200ms/)
+  assert.match(text, /正文等待 500ms/)
+  assert.match(text, /服务端未返回/)
+  assert.doesNotMatch(text, /Token 0/)
+  stats.usage = { totalTokens: 120, inputTokens: 100, outputTokens: 20, cachedTokens: 80, reasoningTokens: 5 }
+  stats.usageRequests = 1
+  text = stripAnsi(renderTurnSummary(stats, { width: 200 }))
+  assert.match(text, /Token 120/)
+  assert.match(text, /部分用量（1\/2/)
+  assert.match(text, /输入含缓存 80/)
+})
 
 test('filterSlashCommands: 单个 / 返回全部命令', () => {
   const got = filterSlashCommands('/', 'zh').map(m => m.cmd)

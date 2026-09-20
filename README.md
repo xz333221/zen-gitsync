@@ -453,7 +453,18 @@ selection + Enter to confirm** (typing a number also jumps directly; `0` selects
 "custom / manual input" entry). Non-TTY environments (CI, piped input) automatically fall back
 to numeric input. `Esc` or `Ctrl+C` cancels the wizard cleanly.
 
-In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/clear`, `/exit`.
+In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/tools`, `/stats`, `/new`, `/resume`, `/clear`, `/exit`.
+
+Reasoning, tool calls and answers have separate visual sections. Reasoning defaults to a short preview;
+`/think full` shows subsequent reasoning in full, `/think off` hides it, and `/think compact` restores the preview.
+Tool output defaults to a few head/tail lines; `/tools full` shows subsequent tool results in full and
+`/tools compact` restores compact output. These display settings do not reduce model token usage.
+
+Each turn ends with completion time, total duration, first-token latency (including reasoning), first-answer
+latency, model/tool durations and provider-reported input/output token usage across all model calls.
+Cache and reasoning tokens are shown as subsets when reported. Missing or partial usage is labelled explicitly;
+`/stats` also shows session totals. `Ctrl+C` stops an active task while keeping the conversation open.
+Progress is saved after each tool result; `/resume` restores the working directory and reported usage.
 
 Tool-call budget: one message may trigger up to N tool calls in a row before the turn is
 force-ended with a "max tool iterations reached" notice (send another message to continue).
@@ -1044,7 +1055,16 @@ $ g ai --model=2                # 使用第 2 个已配置的模型（序号或�
 直接输入数字跳转，`0` = 列表底部的"自定义 / 手动输入"）；非 TTY 环境下自动回退为数字输入。
 `Esc` 或 `Ctrl+C` 一键取消整个向导。
 
-会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/clear`、`/exit`。
+会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/tools`、`/stats`、`/new`、`/resume`、`/clear`、`/exit`。
+
+思考、工具调用和回答分区展示。默认只显示简短思考预览，`/think full` 显示后续完整思考，
+`/think off` 隐藏思考，`/think compact` 恢复预览。工具结果默认保留头尾几行，
+`/tools full` 显示后续完整工具结果，`/tools compact` 恢复精简。这些显示设置不会减少模型的 Token 消耗。
+
+每轮结束显示完成时间、总耗时、首响应（含思考首字）、正文等待、模型与工具耗时，以及本轮所有模型调用的
+输入 / 输出 Token 总量；服务端提供时还显示其中的缓存与推理 Token。用量来自服务端真实返回，
+缺失或不完整时明确标注；`/stats` 还可查看会话累计用量。执行中按 `Ctrl+C` 停止当前任务并保留会话。
+每个工具结果后保存进度，`/resume` 同时恢复工作目录和用量统计。
 
 工具调用预算：一条消息内智能体最多连续调用 N 次工具，触顶后本轮被强制结束并提示
 "已达单轮最大工具调用次数"，再发一条消息即可继续。N 默认 **200**，可在

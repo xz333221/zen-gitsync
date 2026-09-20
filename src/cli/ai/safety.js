@@ -67,15 +67,25 @@ function isRootTargetToken(token) {
 
 // 从命令串中抽出所有 "命令段"(按 ; && || | 切分),返回小写化前的原文段
 function splitCommandSegments(cmd) {
-  return String(cmd).split(/&&|\|\||[;|]/).map(s => s.trim()).filter(Boolean)
+  const parts = []
+  let quote = null, start = 0
+  for (let i = 0; i < cmd.length; i++) {
+    const char = cmd[i]
+    if (quote) {
+      if (char === quote && cmd[i - 1] !== '\\') quote = null
+    } else if (char === '"' || char === "'") quote = char
+    else if (';&|\n'.includes(char)) { parts.push(cmd.slice(start, i)); start = i + 1 }
+  }
+  parts.push(cmd.slice(start))
+  return parts.map(s => s.trim()).filter(Boolean)
 }
 
 // 解析命令段:返回小写命令名(跳过 sudo / doas 前缀) + 原始参数串
 // 注意:args 必须用匹配到的原始串长度切片,不能用 indexOf(小写名) —
 // 混合大小写命令(Remove-Item 等)会 indexOf 失败导致切片错位
 function parseSegment(seg) {
-  const m = seg.match(/^(?:sudo|doas)\s+(\S+)|^(\S+)/)
-  const name = (m?.[1] || m?.[2] || '')
+  const m = seg.match(/^(?:(?:sudo|doas)\s+)?("[^"]+"|'[^']+'|\S+)/)
+  const name = (m?.[1] || '').replace(/^["'@]+|["']+$/g, '').split(/[\\/]/).pop().replace(/\.exe$/i, '')
   const args = m ? seg.slice(m[0].length) : seg
   return { head: name.toLowerCase(), args }
 }
@@ -96,7 +106,7 @@ function hasRecursiveFlag(args, style) {
  * @returns {{ blocked: boolean, reason: string|null }}
  *   blocked=true 时 reason 给出中文原因(会回喂给模型,让它换方案)
  */
-export function checkDangerousCommand(cmd) {
+export function checkDangerousCommand(cmd, depth = 0) {
   if (typeof cmd !== 'string' || !cmd.trim()) {
     return { blocked: false, reason: null }
   }
@@ -123,6 +133,19 @@ export function checkDangerousCommand(cmd) {
   // ── 4. 逐段检查命令名级红线 ──
   for (const seg of splitCommandSegments(text)) {
     const { head, args } = parseSegment(seg)
+
+    // Inspect common shell wrappers too. This remains a best-effort guard,
+    // not a sandbox or an interpreter for arbitrary scripts/variable expansion.
+    if (depth < 8 && /^(cmd|powershell|pwsh|sh|bash|zsh)$/i.test(head)) {
+      const flag = head === 'cmd' ? /(?:^|\s)\/[ck]\s+/i : /(?:^|\s)-(?:command|c|lc)\s+/i
+      const match = flag.exec(args)
+      if (match) {
+        let nested = args.slice(match.index + match[0].length).trim()
+        if ((nested.startsWith('"') && nested.endsWith('"')) || (nested.startsWith("'") && nested.endsWith("'"))) nested = nested.slice(1, -1)
+        const result = checkDangerousCommand(nested, depth + 1)
+        if (result.blocked) return result
+      }
+    }
 
     // 关机/重启/停机
     if (/^(shutdown|reboot|poweroff|halt|init|telinit|stop-computer|restart-computer)$/i.test(head)) {

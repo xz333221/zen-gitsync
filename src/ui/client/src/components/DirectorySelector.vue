@@ -41,6 +41,7 @@ import {
   launchGuiInNewTab,
   openPathInFileManager,
   openPathInTerminal,
+  openPathInAi,
   openPathWithTool,
   type OpenDirectoryResult,
   type OpenWithToolId,
@@ -95,6 +96,21 @@ const recentDirsCount = ref(0);
 const isBrowserDialogVisible = ref(false);
 const installDialogVisible = ref(false);
 const selectedInstallTool = ref<ToolId | null>(null);
+const isOpeningAi = ref(false);
+
+async function onOpenInAi() {
+  if (isOpeningAi.value || warnIfEmptyDirectory()) return
+  isOpeningAi.value = true
+  try {
+    toastOpenResult(
+      await openPathInAi(currentDirectory.value),
+      '@67CE7:已在新终端中启动 g ai',
+      '@67CE7:打开失败: ',
+    )
+  } finally {
+    isOpeningAi.value = false
+  }
+}
 
 function openToolInstall(tool: ToolId) {
   selectedInstallTool.value = tool
@@ -668,6 +684,16 @@ function onBrowserSelect(path: string) {
       >
         <el-icon aria-hidden="true"><Monitor /></el-icon>
       </IconButton>
+      <IconButton
+        icon-class="g-ai"
+        :tooltip="$t('@67CE7:用 g ai 打开当前目录')"
+        :aria-label="$t('@67CE7:用 g ai 打开当前目录')"
+        :disabled="isOpeningAi || !currentDirectory"
+        :aria-busy="isOpeningAi"
+        custom-class="g-ai-launch-button"
+        size="large"
+        @click="onOpenInAi"
+      />
       <!--
         编辑器 / AI 工具：已安装的常驻显示，未安装的收进右侧"更多"菜单。
         检测未完成时全部按 checking 态显示，避免首屏按钮位置跳来跳去。

@@ -16,10 +16,10 @@
 //
 //   - 盒式输入框(Codex composer 风格):╭───╮ + ❯ 提示符 + ╰───╯
 //   - 等待 spinner(ora):首个 token 到达前持续转动
-//   - 思考过程:✻ 思考 头 + 橙黄斜体流式输出
+//   - 思考过程:琥珀色标题 + 灰色流式预览，可切换完整显示
 //   - 工具调用块(Claude Code 风格):⚙ 工具头 + 智能参数摘要,
 //     结果用 │ 缩进槽,按退出码/错误前缀着色
-//   - 正文:➤ 子弹头 + 逐行缓冲的轻量 markdown 渲染
+//   - 正文:独立回答标题 + 自适应行宽的轻量 markdown 渲染
 //     (**bold**、`code`、# 标题、``` 代码块、- 列表)
 //
 // 设计约束:
@@ -29,6 +29,8 @@
 
 import chalk from 'chalk'
 import ora from 'ora'
+import stringWidth from 'string-width'
+import { stripVTControlCharacters } from 'node:util'
 import { boxenAdaptive } from '../ui.js'
 
 // ──────────────────────────────────────────────
@@ -54,7 +56,32 @@ export function termWidth(fallback = 100) {
 
 /** 去掉 ANSI 转义(测试断言用) */
 export function stripAnsi(s) {
-  return String(s).replace(/\x1b\[[0-9;]*m/g, '')
+  return stripVTControlCharacters(String(s))
+}
+
+/** Wrap terminal cells, preserving colour and CJK/emoji widths. */
+export function wrapTerminalText(text, width = 100) {
+  const rows = []
+  let row = '', cells = 0, lastBreak = -1, breakCells = 0
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  for (const part of String(text).split(/(\x1b\[[0-9;]*m)/g)) {
+    if (/^\x1b\[/.test(part)) { row += part; continue }
+    for (const { segment } of segmenter.segment(part.replace(/\t/g, '  '))) {
+      if (segment === '\n') { rows.push(row); row = ''; cells = 0; lastBreak = -1; continue }
+      const size = stringWidth(segment)
+      if (cells && cells + size > Math.max(1, width)) {
+        if (lastBreak > 0 && breakCells >= width / 3) {
+          rows.push(row.slice(0, lastBreak)); row = row.slice(lastBreak); cells -= breakCells
+        } else { rows.push(row); row = ''; cells = 0 }
+        lastBreak = -1
+      }
+      row += segment
+      cells += size
+      if (/^[ \t]$/.test(segment)) { lastBreak = row.length; breakCells = cells }
+    }
+  }
+  rows.push(row)
+  return rows
 }
 
 /**
@@ -117,6 +144,8 @@ export const SLASH_COMMANDS = [
   { cmd: '/cd',       descZh: '切换工作目录',         descEn: 'Change working directory' },
   { cmd: '/image',    descZh: '附加 / 查看图片',      descEn: 'Attach / list images' },
   { cmd: '/think',    descZh: '开关思考过程显示',      descEn: 'Toggle thinking display' },
+  { cmd: '/tools',    descZh: '切换工具结果：精简 / 完整', descEn: 'Toggle compact / full tool output' },
+  { cmd: '/stats',    descZh: '查看耗时与 Token 用量', descEn: 'Show timing and token usage' },
   { cmd: '/new',      descZh: '开启新对话',            descEn: 'Start a new chat' },
   { cmd: '/resume',   descZh: '恢复之前的对话',         descEn: 'Resume a previous chat' },
   { cmd: '/clear',    descZh: '清空对话历史',         descEn: 'Clear conversation' },
@@ -341,6 +370,7 @@ export function drawInputBottom(write = (s) => process.stdout.write(s)) {
 // 非 TTY 时 ora 自动退化为只打印一次文本。
 
 export function startSpinner(text) {
+  const started = performance.now()
   const spinner = ora({
     // 琥珀色加粗,与思考内容同色系,dim 太浅看不清
     text: chalk.hex('#e8a33d').bold(text),
@@ -355,9 +385,14 @@ export function startSpinner(text) {
     discardStdin: false,
   })
   spinner.start()
+  const timer = spinner.isSpinning ? setInterval(() => {
+    spinner.text = chalk.hex('#e8a33d')(text) + chalk.gray(` · ${formatDuration(performance.now() - started)}`)
+  }, 100) : null
+  timer?.unref()
   return {
     stop() {
-      if (spinner.isSpinning) spinner.stop()
+      clearInterval(timer)
+      spinner.stop()
     },
   }
 }
@@ -392,7 +427,11 @@ function renderInline(line, resetFg = '') {
  */
 export function createAssistantWriter({
   showThinking = true,
-  thinkingHeader = '✻ 思考',
+  thinkingHeader = '思考',
+  answerHeader = '回答',
+  thinkingLimit = Infinity,
+  thinkingHint = '… 思考预览已收起，/think full 显示完整过程',
+  width = Math.min(100, termWidth() - 4),
   write = (s) => process.stdout.write(s),
 } = {}) {
   let mode = null          // null | 'thinking' | 'content'
@@ -401,18 +440,36 @@ export function createAssistantWriter({
   let contentLines = 0     // 已输出正文行数(首行带 ➤ 子弹头)
   let lastBlank = false    // 上一行是空白行(连续空行合并,避免模型输出头部/分隔空行刷屏)
   let thinkAtLineStart = true  // 思考流当前是否在行首(用于逐行缩进 + 计算与正文的分隔)
-  // ➤ 后留 2 个空格,后续行 3 空格对齐 — 图标与文字之间别太挤
-  // 正文 🤖(亮绿):模型最终回复的视觉锚点;用亮绿 + 加粗图标,普通绿在深背景上偏暗
-  const BULLET_FIRST = chalk.bold(chalk.hex('#5eff8b')('🤖')) + '  '
-  const BULLET_REST = '   '
+  let thinkingCells = 0, thinkingRows = 0, thinkingClipped = false
+  let answerShown = false
+  // 回答正文统一缩进；标题作为独立的视觉锚点。
+  const BULLET_FIRST = '  '
+  const BULLET_REST = '  '
   // whiteBright ANSI 码:行内 code 的 \x1b[39m 会清掉外层色,用此恢复正文亮白色
-  const WB = '\x1b[97m'
+  const WB = chalk.level ? '\x1b[97m' : ''
   // 思考内容整体右移,与正文文字左缘对齐,视觉上成为独立子块
-  const THINK_INDENT = '   '
-  // 思考用橙黄色斜体(gray/dim 太浅看不清;橙黄既醒目又与正文白、工具青区分开)
-  const thinkStyle = (s) => chalk.hex('#e8a33d').italic(s)
-  // 思考图标:🧠 大脑 — 紧贴最左(0 缩进),与工具头、正文对齐到同一左缘
-  const THINK_ICON = '🧠'
+  const THINK_INDENT = chalk.gray('  │ ')
+  // 思考正文降低视觉权重，仅标题用琥珀色。
+  const thinkStyle = (s) => chalk.hex('#aab2c0')(s)
+  // 使用单色符号，避免 emoji 在不同终端中的宽度差异。
+  const THINK_ICON = chalk.hex('#e8a33d')('◇')
+  const clipThinking = () => {
+    if (!thinkAtLineStart) write('\n')
+    write(wrapTerminalText(thinkingHint, Math.max(8, width - 2)).map(row => THINK_INDENT + chalk.gray(row)).join('\n') + '\n')
+    thinkingClipped = true
+    thinkAtLineStart = true
+  }
+
+  const showAnswerHeader = () => {
+    if (answerShown) return
+    answerShown = true
+    write(chalk.greenBright.bold(`◆ ${answerHeader}`) + '\n\n')
+  }
+  const writeContentRows = (prefix, body, withNewline) => {
+    showAnswerHeader()
+    const rows = wrapTerminalText(body, Math.max(8, width))
+    write(rows.map(row => prefix + row).join('\n') + (withNewline ? '\n' : ''))
+  }
 
   const emitContentLine = (raw, withNewline = true) => {
     // 围栏标记行:切换状态,用一个淡淡的槽线代替裸 ```
@@ -421,7 +478,8 @@ export function createAssistantWriter({
       const bullet = contentLines === 0 ? BULLET_FIRST : BULLET_REST
       contentLines++
       lastBlank = false
-      write(bullet + chalk.dim(inFence ? '┄ code ' + '┄'.repeat(8) : '┄'.repeat(14)) + (withNewline ? '\n' : ''))
+      const language = raw.trim().slice(3).trim() || 'code'
+      writeContentRows(bullet, chalk.gray(inFence ? '┌─ ' + language : '└' + '─'.repeat(12)), withNewline)
       return
     }
     // 围栏内:代码行原样带槽线(空行也保留,代码格式不能动)
@@ -429,7 +487,8 @@ export function createAssistantWriter({
       const bullet = contentLines === 0 ? BULLET_FIRST : BULLET_REST
       contentLines++
       lastBlank = false
-      write(bullet + chalk.dim('│ ') + raw + (withNewline ? '\n' : ''))
+      showAnswerHeader()
+      write(wrapTerminalText(raw, Math.max(8, width - 2)).map(row => bullet + chalk.gray('│ ') + row).join('\n') + (withNewline ? '\n' : ''))
       return
     }
     // 空白行:首个正文行之前不输出;连续空行合并为一行
@@ -447,7 +506,7 @@ export function createAssistantWriter({
     const body = h
       ? chalk.bold.whiteBright(renderInline(h[2], WB))
       : chalk.whiteBright(renderInline(raw, WB))
-    write(bullet + body + (withNewline ? '\n' : ''))
+    writeContentRows(bullet, body, withNewline)
   }
 
   const flushLineBuf = (withNewline = true) => {
@@ -459,30 +518,34 @@ export function createAssistantWriter({
   return {
     /** 思考段:橙黄斜体 + 整体右缩进(不做 markdown),段头只打印一次 */
     writeThinking(text) {
-      if (!showThinking || !text) return
+      if (!showThinking || !text || thinkingClipped) return
       if (mode !== 'thinking') {
         flushLineBuf()
         mode = 'thinking'
         // 图标 🧠 靠最左(0 缩进),与 ⚙ 工具头、➤ 正文对齐同一左缘
         // 段头前空一行与上文(spinner / 上一轮输出)分隔,视觉更清晰
-        write('\n' + THINK_ICON + '  ' + thinkStyle(chalk.bold(thinkingHeader)) + '\n')
+        write('\n' + THINK_ICON + ' ' + chalk.hex('#e8a33d').bold(thinkingHeader) + '\n')
         thinkAtLineStart = true
       }
       // 按换行切段,整段着色(避免逐字符 escape 刷屏);每逢行首补一层缩进,
       // 使多行思考整体右移成独立子块。流式 token 可能不以换行结尾,
       // 故用 thinkAtLineStart 记住跨调用的行首状态。
-      const parts = text.split('\n')
-      for (let i = 0; i < parts.length; i++) {
-        const seg = parts[i]
-        if (seg) {
-          if (thinkAtLineStart) write(THINK_INDENT)
-          write(thinkStyle(seg))
-          thinkAtLineStart = false
+      for (const char of text) {
+        if (thinkingRows >= thinkingLimit) {
+          clipThinking()
+          break
         }
-        if (i < parts.length - 1) {   // 段间的换行(最后一段后不补)
-          write('\n')
-          thinkAtLineStart = true
+        if (char === '\n' || thinkingCells + stringWidth(char) > Math.max(8, width - 2)) {
+          write('\n'); thinkingRows++; thinkingCells = 0; thinkAtLineStart = true
+          if (char === '\n') continue
+          if (thinkingRows >= thinkingLimit) {
+            clipThinking(); break
+          }
         }
+        if (thinkAtLineStart) write(THINK_INDENT)
+        write(thinkStyle(char))
+        thinkingCells += stringWidth(char)
+        thinkAtLineStart = false
       }
     },
 
@@ -535,6 +598,43 @@ export function formatDuration(ms) {
   return `${m}m${rem}s`
 }
 
+export function renderTurnSummary(stats, { locale = 'zh-CN', session, width = Math.min(100, termWidth() - 4) } = {}) {
+  const zh = !String(locale).startsWith('en')
+  const number = n => n == null ? '—' : Math.round(n).toLocaleString('en-US')
+  const usageLine = (usage, reported, requests) => {
+    if (!usage) return zh ? 'Token：服务端未返回用量' : 'Tokens: not reported by provider'
+    const parts = [
+      `Token ${number(usage.totalTokens)}`,
+      `${zh ? '输入' : 'in'} ${number(usage.inputTokens)}`,
+      `${zh ? '输出' : 'out'} ${number(usage.outputTokens)}`,
+    ]
+    if (usage.cachedTokens != null) parts.push(`${zh ? '输入含缓存' : 'cached input'} ${number(usage.cachedTokens)}`)
+    if (usage.reasoningTokens != null) parts.push(`${zh ? '输出含推理' : 'reasoning output'} ${number(usage.reasoningTokens)}`)
+    if (reported < requests) parts.push(zh ? `部分用量（${reported}/${requests} 次请求）` : `partial usage (${reported}/${requests} requests)`)
+    return parts.join(' · ')
+  }
+  const status = zh
+    ? ({ completed: '完成', cancelled: '已停止', failed: '失败', limit: '达到调用上限' }[stats.status] || '进行中')
+    : ({ completed: 'Done', cancelled: 'Stopped', failed: 'Failed', limit: 'Tool limit reached' }[stats.status] || 'Running')
+  const time = stats.completedAt ? new Date(stats.completedAt).toLocaleTimeString(zh ? 'zh-CN' : 'en-GB', { hour12: false }) : ''
+  const timing = [status + (time ? ` ${time}` : ''), `${zh ? '总耗时' : 'total'} ${formatDuration(stats.totalMs)}`]
+  if (stats.firstTokenMs != null) timing.push(`${zh ? '首响应' : 'first token'} ${formatDuration(stats.firstTokenMs)}`)
+  if (stats.firstAnswerMs != null) timing.push(`${zh ? '正文等待' : 'first answer'} ${formatDuration(stats.firstAnswerMs)}`)
+  const lines = [
+    timing.join(' · '),
+    `${zh ? '模型' : 'model'} ${formatDuration(stats.llmMs)} · ${zh ? '工具' : 'tools'} ${formatDuration(stats.toolsMs)} (${stats.toolCalls}) · ${zh ? '请求' : 'requests'} ${stats.requests}`,
+    usageLine(stats.usage, stats.usageRequests, stats.requests),
+  ]
+  if (session) lines.push(`${zh ? '会话累计' : 'Session'} (${session.turns}) · ${usageLine(session.usage, session.usageRequests, session.requests)}`)
+  const rows = lines.flatMap(line => wrapTerminalText(line, Math.max(12, width)))
+  return '\n' + chalk.gray('  ' + '─'.repeat(Math.max(12, Math.min(56, width)))) + '\n'
+    + rows.map(row => '  ' + chalk.hex('#aab2c0')(row)).join('\n') + '\n'
+}
+
+export function printTurnSummary(stats, options, write = s => process.stdout.write(s)) {
+  write(renderTurnSummary(stats, options))
+}
+
 // ──────────────────────────────────────────────
 // 工具调用块(Claude Code 风格)
 // ──────────────────────────────────────────────
@@ -568,13 +668,14 @@ export function summarizeToolArgs(name, args, { chars = '字符' } = {}) {
 }
 
 /** 工具头:▶  name  参数摘要(青色三角表示"工具执行";name 加粗白色,摘要灰色,避免整块青色) */
-export function printToolHeader(name, summary, write = (s) => process.stdout.write(s)) {
+export function printToolHeader(name, summary, write = (s) => process.stdout.write(s), { locale = 'zh-CN' } = {}) {
   // ▶ 保留青色作为工具执行的标识色;name 用白色加粗与下方结果区分;
   // summary 用浅灰(#a0aec0)— dim 在黑底下太暗看不清,浅灰可读且仍比 name 低调
-  write('\n' + chalk.cyan('▶') + '  '
-    + chalk.bold.white(name)
-    + (summary ? '  ' + chalk.hex('#a0aec0')(summary) : '')
-    + '\n')
+  const labels = { run_command: '执行命令', read_file: '读取文件', write_file: '写入文件', edit_file: '修改文件', list_files: '浏览目录', search_text: '搜索内容' }
+  const rows = wrapTerminalText(summary || '', Math.max(16, Math.min(100, termWidth() - 6)))
+  const label = String(locale).startsWith('en') ? name : labels[name] || name
+  write('\n' + chalk.cyan('▸ ') + chalk.bold.white(label) + (label !== name ? chalk.gray(`  ${name}`) : '') + '\n')
+  if (summary) write(rows.map(row => '  ' + chalk.hex('#aab2c0')(row)).join('\n') + '\n')
 }
 
 /**
@@ -590,22 +691,31 @@ export function printToolHeader(name, summary, write = (s) => process.stdout.wri
  * @param {(s: string) => void} [write] - 输出函数,默认写 stdout
  * @param {number} [durationMs] - 执行耗时(毫秒),有值时在结果末尾追加 ⏱ 计时行
  */
-export function printToolResult(result, write = (s) => process.stdout.write(s), durationMs) {
-  const text = truncateDisplay(result)
+export function printToolResult(result, write = (s) => process.stdout.write(s), durationMs, { full = false, locale = 'zh-CN', width = Math.min(100, termWidth() - 6) } = {}) {
+  const text = stripAnsi(result)
   // 先把 "$ <command>\n" 这一行回显从展示里剥掉(退出码仍在第二行里识别)
-  const visible = text.replace(/^\$[^\n]*\n/, '')
+  const visible = text.replace(/^\$[^\n]*\n/, '').replace(/^\(exit \d+\)\n?/, '')
   const exitMatch = text.match(/^\$[^\n]*\n\(exit (\d+)\)/)
   const exitCode = exitMatch ? Number(exitMatch[1]) : null
+  const isCancelled = /命令已由用户停止|Cancelled by user/.test(text)
   const isError = exitCode !== null && exitCode !== 0
     || /^(错误|已拒绝|Error)/.test(text.trim())
   // 正文用柔和灰蓝(#94a3b8)— 不再用青色,避免与工具头同色连成一片;
   // 错误用琥珀色(#f0a020)比黄色更醒目
   const colorize = isError ? chalk.hex('#f0a020') : chalk.hex('#94a3b8')
-  const lines = visible.split('\n')
-  const rendered = lines.map((l) => chalk.dim('  │  ') + colorize(l)).join('\n')
+  const zh = !String(locale).startsWith('en')
+  let lines = wrapTerminalText(visible.trimEnd(), Math.max(8, width))
+  const maxRows = isError ? 10 : 6
+  if (!full && lines.length > maxRows) {
+    const omitted = lines.length - maxRows + 1
+    const hint = width < 35 ? `… +${omitted}` : zh ? `… 回显省略 ${omitted} 行 · /tools full` : `… +${omitted} lines · /tools full`
+    lines = [...lines.slice(0, 3), hint, ...lines.slice(-(maxRows - 4))]
+  }
+  const rendered = lines.map((l) => chalk.gray('  │ ') + colorize(l)).join('\n')
   // 有耗时时在结果末尾追加 ⏱ 计时行(与结果块同缩进)
   const timingLine = (durationMs != null && Number.isFinite(durationMs))
-    ? '\n' + chalk.dim('  │  ⏱ ') + chalk.hex('#7a87a0')(formatDuration(durationMs))
+    ? '\n' + chalk.gray('  └ ') + colorize(isCancelled ? (zh ? '已停止' : 'Stopped') : isError ? (zh ? '失败' : 'Failed') : (zh ? '完成' : 'Done'))
+      + chalk.gray(` · ${formatDuration(durationMs)}${exitCode !== null ? ` · exit ${exitCode}` : ''}`)
     : ''
   write(rendered + timingLine + '\n')
 }
@@ -640,6 +750,9 @@ export default {
   summarizeToolArgs,
   printToolHeader,
   printToolResult,
+  printTurnSummary,
+  renderTurnSummary,
+  wrapTerminalText,
   printOk,
   printWarn,
   printError,

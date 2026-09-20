@@ -149,6 +149,19 @@ for (const cmd of ALLOWED) {
 
 // ========== 边界输入 ==========
 
+test('common nested shell wrappers retain system-operation checks', () => {
+  for (const command of [
+    'cmd /c shutdown /s /t 0',
+    'cmd.exe /d /s /c "shutdown.exe /s /t 0"',
+    'powershell -NoProfile -Command "Stop-Computer"',
+    'bash -c "rm -rf /"',
+    'cmd /c "echo ready & shutdown /s"',
+  ]) assert.equal(checkDangerousCommand(command).blocked, true, command)
+  for (const command of ['cmd /c "echo shutdown"', 'powershell -Command "Write-Output shutdown"', 'node -e "console.log(\'shutdown\')"']) {
+    assert.equal(checkDangerousCommand(command).blocked, false, command)
+  }
+})
+
 test('非字符串/空输入不拦截也不报错', () => {
   for (const bad of [null, undefined, 123, {}, [], '', '   ']) {
     const r = checkDangerousCommand(bad)

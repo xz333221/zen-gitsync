@@ -115,6 +115,11 @@ export function openPathInTerminal(dirPath: string): Promise<OpenDirectoryResult
   return post('/api/open_terminal', { path: dirPath })
 }
 
+/** Built-in g ai is always available with this g ui installation. */
+export function openPathInAi(dirPath: string): Promise<OpenDirectoryResult> {
+  return post('/api/open-directory-with-g-ai', { path: dirPath })
+}
+
 /**
  * 新开一个终端标签页，在目标目录里执行 `g ui`。
  * 服务端会剥掉 PORT 环境变量，子进程自己挑空闲端口 —— 所以不会和当前实例抢端口。

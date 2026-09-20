@@ -35,6 +35,29 @@ after(async () => {
 
 // ========== schema 基本形态 ==========
 
+test('edit_file preserves literal replacement tokens', async () => {
+  await executeTool('write_file', { path: 'literal.txt', content: 'before' }, ctx)
+  const replacement = '$& $$ $` $\x27'
+  await executeTool('edit_file', { path: 'literal.txt', old_string: 'before', new_string: replacement }, ctx)
+  assert.equal(await fs.readFile(path.join(tmpDir, 'literal.txt'), 'utf8'), replacement)
+})
+
+test('run_command cancellation terminates a running command promptly', async () => {
+  const controller = new AbortController()
+  const started = performance.now()
+  const result = await executeTool('run_command', { command: 'node -e "setInterval(()=>{},1000)"' }, {
+    ...ctx, signal: controller.signal, onChild: () => setTimeout(() => controller.abort(), 80),
+  })
+  assert.match(result, /用户停止/)
+  assert.ok(performance.now() - started < 5000)
+})
+
+test('an already cancelled tool does not write files', async () => {
+  const result = await executeTool('write_file', { path: 'cancelled.txt', content: 'no' }, { ...ctx, signal: AbortSignal.abort() })
+  assert.match(result, /not executed/)
+  await assert.rejects(fs.stat(path.join(tmpDir, 'cancelled.txt')), { code: 'ENOENT' })
+})
+
 test('TOOL_DEFINITIONS 符合 OpenAI function calling 格式', () => {
   assert.ok(Array.isArray(TOOL_DEFINITIONS))
   assert.ok(TOOL_DEFINITIONS.length >= 5)

@@ -37,38 +37,28 @@
 //
 // 实现注意:
 //   - 本模块属于 CLI 侧,不依赖 GUI 服务器代码(src/ui/server/**)
-//   - Ctrl+C 行为与 CLI 其他模式一致:由 gitCommit.js 的 setupSigintHandler
-//     统一 drain(trackChild 杀子进程 + cleanup 任务),整个会话退出
+//   - Ctrl+C 执行中只取消当前任务；空闲时交给主 CLI 清理并退出
 
 import readline from 'node:readline'
 import chalk from 'chalk'
 import config from '../../config.js'
 import { getCwd } from '../../utils/index.js'
 import { registerCleanup } from '../cleanup.js'
-import { TOOL_DEFINITIONS, executeTool } from './tools.js'
-import { createThinkFilter } from './streamFilter.js'
+import { terminateCommand } from './tools.js'
+import { runAgentTurn } from './turn.js'
+import { repairToolHistory, loadProjectInstructions } from './context.js'
 import {
   printBanner, printHelpPanel,
   filterSlashCommands, renderSlashHintBody, parseKeyForSlashHint,
-  startSpinner, createAssistantWriter,
-  summarizeToolArgs, printToolHeader, printToolResult,
-  formatDuration,
+  printTurnSummary,
   printOk, printWarn, printError, printDim,
 } from './termui.js'
-import { readClipboardImage, checkImageFile, imageToDataUrl, formatBytes } from './images.js'
+import { readClipboardImage, checkImageFile, formatBytes } from './images.js'
 import { runModelSetup, collectModelInput, buildModelConfig, selectFromList } from './modelSetup.js'
 import { genSessionId, autoTitle, writeSession, enforceRetention, listSessions } from './sessionStore.js'
-import { buildAiChatRequest, describeAiHttpError } from '../../utils/aiEndpoint.js'
 
 // truncateDisplay 已迁移到 termui.js;这里 re-export 保持既有测试/外部引用不断
 export { truncateDisplay } from './termui.js'
-
-// ──────────────────────────────────────────────
-// 常量
-// ──────────────────────────────────────────────
-const DEFAULT_MAX_TOOL_ITERATIONS = 200  // 单轮工具调用循环数兜底值(防失控);实际值取配置里的 aiMaxToolIterations
-const MAX_HISTORY_MESSAGES = 40     // 历史消息上限(超出后从最旧的整段对话裁剪)
-const LLM_TIMEOUT_MS = 300000       // 单次 LLM 请求超时(5 分钟,长推理模型够用)
 
 // ──────────────────────────────────────────────
 // i18n 字符串表(CLI 其他部分以中文为主,这里按 locale 给双语)
@@ -81,7 +71,7 @@ const STRINGS = {
     llmError: (msg) => `LLM 请求失败: ${msg}`,
     toolIterLimit: (n) => `已达单轮最大工具调用次数(${n}),本轮结束。如需继续请再发一条消息。`,
     toolRunning: (name) => `执行 ${name}…`,
-    busy: '智能体正在执行中,请稍候(Ctrl+C 结束会话)…',
+    busy: '任务执行中，请稍候，或按 Ctrl+C 停止当前任务。',
     bye: '已退出 g ai',
     cleared: '对话历史已清空',
     newConversation: '已开启新对话',
@@ -97,11 +87,14 @@ const STRINGS = {
     oneShotNoModel: '未配置模型,无法启动',
     oneShotDone: '单发模式完成 · 需要多轮连续对话请直接运行 g ai(不带参数)',
     helpTitle: 'g ai 命令',
-    bannerTip: 'Alt+V 粘贴图片 · /help 查看命令 · /exit 退出 · Ctrl+C 结束会话',
+    bannerTip: 'Alt+V 贴图 · /help 帮助 · Ctrl+C 停止当前任务 · /exit 退出',
     prompt: '❯ ',
     bannerModel: '模型',
     bannerCwd: '目录',
     thinkingLabel: '思考',
+    answerLabel: '回答',
+    thinkingHint: '… 预览已收起，/think full 显示后续完整思考',
+    emptyResponse: '模型没有返回回答，请重试或切换模型。',
     chars: '字符',
     imagePasting: '正在读取剪贴板图片…',
     imageAttached: (n, size) => `📎 图片 #${n} 已附加(${size}),将随下一条消息发送`,
@@ -127,7 +120,7 @@ const STRINGS = {
     llmError: (msg) => `LLM request failed: ${msg}`,
     toolIterLimit: (n) => `Hit max tool iterations (${n}) for this turn. Send another message to continue.`,
     toolRunning: (name) => `Running ${name}…`,
-    busy: 'Agent is working, please wait (Ctrl+C to end session)…',
+    busy: 'Agent is working. Wait or press Ctrl+C to stop the task.',
     bye: 'Bye',
     cleared: 'Conversation cleared',
     newConversation: 'Started a new conversation',
@@ -143,11 +136,14 @@ const STRINGS = {
     oneShotNoModel: 'No model configured, aborting',
     oneShotDone: 'One-shot done · for multi-turn chat run `g ai` with no arguments',
     helpTitle: 'g ai commands',
-    bannerTip: 'Alt+V paste image · /help for commands · /exit to quit · Ctrl+C to end session',
+    bannerTip: 'Alt+V image · /help commands · Ctrl+C stop task · /exit quit',
     prompt: '❯ ',
     bannerModel: 'Model',
     bannerCwd: 'CWD',
     thinkingLabel: 'Thinking',
+    answerLabel: 'Answer',
+    thinkingHint: '… preview hidden; /think full for future reasoning',
+    emptyResponse: 'The model returned no answer. Retry or switch models.',
     chars: 'chars',
     imagePasting: 'Reading clipboard image…',
     imageAttached: (n, size) => `📎 Image #${n} attached (${size}); sent with your next message`,
@@ -180,6 +176,10 @@ function modelLabel(m) {
 // ──────────────────────────────────────────────
 // 系统 prompt — 明确告知环境、权限边界与工作方式
 // ──────────────────────────────────────────────
+async function buildProjectPrompt(options) {
+  return buildSystemPrompt(options) + await loadProjectInstructions(options.cwd)
+}
+
 function buildSystemPrompt({ cwd, locale, shellDesc }) {
   const zh = !String(locale || '').startsWith('en')
   const now = new Date().toLocaleString()
@@ -211,7 +211,7 @@ ${isWin ? `- 当前是 Windows cmd.exe,以下 Unix 命令**不存在**,用了必
 - 工作目录内:读写文件、执行命令等所有操作直接执行
 - 其他目录:同样可以读取和修改
 - 唯一红线:不得破坏系统(格式化磁盘、删除根目录/系统目录、关机重启、写块设备等)。
-  安全守卫会拦截这类命令;被拦截时换安全方案,或告知用户需要他手动执行。
+  命令守卫只能识别部分危险写法，不是沙箱；不得通过脚本或嵌套 shell 绕过限制。
 
 # 工作方式
 - 先动手、后提问:能用工具查清的不要问用户(list_files / read_file / search_text / run_command)
@@ -221,7 +221,8 @@ ${isWin ? `- 当前是 Windows cmd.exe,以下 Unix 命令**不存在**,用了必
 - git 操作用 run_command 执行;提交代码可以用 git 命令,也可以用本 CLI 的 g -y(默认信息提交并推送)或 g --ai(AI 生成提交信息)
 - run_command 默认就在工作目录执行,不要再加 cd / cd /d 前缀;默认超时 120 秒,长任务加大 timeout_seconds(最大 600)
 - 命令在 ${shellDesc} 下执行,注意语法兼容
-- 本项目跑测试用 npm test(node --test 不支持直接传目录路径)
+- 先读取当前项目的规范、依赖与测试配置，再选择对应的验证命令，不要假定所有项目都使用 npm
+- 用户要求概述或简短回答时，只读取必要的结构与入口文件，控制探索范围
 
 # 与用户交互
 - 需要向用户确认、提问或汇报重要决策时,直接用普通文本输出 —— 用户能实时看到你的文本;
@@ -260,7 +261,7 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
 # Permissions (explicitly granted by the user — do not keep asking)
 - Inside the working directory: read/write files and run commands directly
 - Other directories: may also be read and modified
-- Single red line: never destroy the system (format disks, delete root/system dirs, shutdown/reboot, write block devices). A safety guard blocks such commands; if blocked, find a safe alternative or ask the user to run it manually.
+- Never destroy the system (format disks, delete root/system dirs, shutdown/reboot, write block devices). The command guard is not a sandbox; never bypass it with scripts or nested shells.
 
 # How to work
 - Act first, ask later: use tools (list_files / read_file / search_text / run_command) instead of asking the user
@@ -270,7 +271,8 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
 - Git operations go through run_command; to commit, use git commands or this CLI's g -y / g --ai
 - run_command already executes in the working directory — do NOT prefix with cd; default timeout 120s, raise timeout_seconds (max 600) for long tasks
 - Commands run under ${shellDesc}; keep syntax compatible
-- Run this project's tests with npm test (node --test does not accept a bare directory)
+- Read this project's instructions, dependencies and test configuration before choosing verification commands; do not assume npm
+- For a brief overview, inspect only the necessary structure and entry points; keep exploration proportional to the request
 
 # Talking to the user
 - When you need to confirm something, ask a question, or report an important decision, just write plain text — the user sees your output in real time. Never call tools that do not exist; only the 6 tools listed above are available
@@ -283,130 +285,7 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
 }
 
 // ──────────────────────────────────────────────
-// LLM 流式调用(OpenAI 兼容 + function calling)
-// 返回 { content, toolCalls, aborted }
-// ──────────────────────────────────────────────
-async function streamChatOnce({ model, messages, signal, onToken, sessionId }) {
-  // sessionId = 会话 ID：OpenCode 网关靠它做路由与提示缓存，同一条会话的所有请求要复用
-  const { url, headers } = buildAiChatRequest({
-    baseURL: model.baseURL,
-    model: model.model,
-    apiKey: model.apiKey,
-    sessionId,
-  })
-
-  const body = JSON.stringify({
-    model: model.model,
-    messages,
-    tools: TOOL_DEFINITIONS,
-    temperature: 0.3,
-    stream: true,
-  })
-
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
-  const onExternalAbort = () => controller.abort()
-  if (signal) {
-    if (signal.aborted) controller.abort()
-    else signal.addEventListener('abort', onExternalAbort)
-  }
-
-  let content = ''
-  // tool_calls 按 index 累积:provider 分片推送 id / name / arguments
-  const toolCalls = []
-  let aborted = false
-  try {
-    const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal })
-    if (!resp.ok || !resp.body) {
-      const errText = await resp.text().catch(() => '')
-      // 抽 error.message：provider 的说明都在里面，整坨 JSON 打到终端没法看
-      const snippet = describeAiHttpError(errText, resp.status)
-      // 400 且提到 tools/functions:大概率是模型不支持 function calling
-      if (resp.status === 400 && /tool|function/i.test(snippet)) {
-        throw new Error(`HTTP 400: 当前模型可能不支持 function calling(${snippet})。请在 g ui 中换用支持工具调用的模型(如 deepseek / qwen / gpt 系列)。`)
-      }
-      throw new Error(`HTTP ${resp.status}: ${snippet || resp.statusText}`)
-    }
-
-    const decoder = new TextDecoder('utf-8')
-    let buf = ''
-    for await (const chunk of resp.body) {
-      buf += decoder.decode(chunk, { stream: true })
-      const lines = buf.split('\n')
-      buf = lines.pop() ?? ''
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || !trimmed.startsWith('data:')) continue
-        const payload = trimmed.slice(5).trim()
-        if (payload === '[DONE]') continue
-        let evt
-        try { evt = JSON.parse(payload) } catch { continue }
-        const delta = evt.choices?.[0]?.delta || {}
-
-        // thinking(各 provider 字段名不同,逐一尝试)
-        const thinkingChunk = delta.reasoning_content || delta.reasoning || delta.reasoning_text || ''
-        if (thinkingChunk) onToken({ thinking: thinkingChunk })
-
-        if (delta.content) {
-          content += delta.content
-          onToken({ content: delta.content })
-        }
-
-        for (const tc of delta.tool_calls || []) {
-          const i = tc.index ?? 0
-          if (!toolCalls[i]) toolCalls[i] = { id: '', type: 'function', function: { name: '', arguments: '' } }
-          if (tc.id) toolCalls[i].id += tc.id
-          if (tc.function?.name) toolCalls[i].function.name += tc.function.name
-          if (tc.function?.arguments) toolCalls[i].function.arguments += tc.function.arguments
-        }
-      }
-    }
-  } catch (err) {
-    if (err?.name === 'AbortError' || controller.signal.aborted) {
-      aborted = true
-    } else {
-      throw err
-    }
-  } finally {
-    clearTimeout(timer)
-    if (signal) signal.removeEventListener('abort', onExternalAbort)
-  }
-  return { content, toolCalls: toolCalls.filter(Boolean), aborted }
-}
-
-// ──────────────────────────────────────────────
-// 历史裁剪:保留 system + 最近 MAX_HISTORY_MESSAGES 条
-// 切口必须落在 user 消息上,避免把 assistant(tool_calls) 与其 tool 结果从中间撕开
-// ──────────────────────────────────────────────
-function trimHistory(messages) {
-  if (messages.length <= MAX_HISTORY_MESSAGES + 1) return
-  let cut = messages.length - MAX_HISTORY_MESSAGES
-  // 至少向后扫 5 条,跳过孤立的 tool / assistant(tool_calls),
-  // 找到真正的 user 节点再切,防止撕裂 tool 调用链
-  let safety = 0
-  while (cut < messages.length && messages[cut].role !== 'user' && safety < 8) {
-    cut++
-    safety++
-  }
-  if (cut <= 1 || messages[cut]?.role !== 'user') return
-  messages.splice(1, cut - 1)
-}
-
-// ──────────────────────────────────────────────
-// 消息消毒:确保发给 LLM 的消息数组里没有空内容。
-//
-// 背景:部分 LLM provider(如 Moonshot/Kimi、智谱、火山引擎、MiniMax 等)
-// 对 assistant 历史消息 content 校验严格 —— 当某轮 assistant 只返回
-// tool_calls 而没有文本、或正文被 trim 后只剩空白时,provider 会拒绝
-// 并报 "chat content is empty (2013)"。OpenAI 官方规范允许 assistant
-// 消息在带 tool_calls 时 content 为 null,但 provider 实现不一致:
-//
-//   - assistant 带 tool_calls → content 强制 null(即使有字符串)
-//   - assistant 不带 tool_calls 且 content 全空白 → null(避免触发 2013)
-//   - user content 全空白 → 用单个空格 ' ' 占位(provider 通常可接受)
-//   - tool content 全空白 → '(no output)' 占位(防止序列化时被丢)
-//
-// CLI 与 Web 端共用本逻辑(两份实现必须保持一致)。
+// 消息兼容处理。只作用于请求副本，保留完整会话记录。
 // ──────────────────────────────────────────────
 export function sanitizeMessages(messages) {
   for (const m of messages) {
@@ -459,152 +338,6 @@ export function stripStaleImages(messages, locale) {
 // 单轮 agent 循环:用户一句话 → 流式输出 → 工具调用 → 再调用模型 … 直到模型给出最终文本
 // images: [{path, bytes}] 待发送图片(可为空数组)
 // ──────────────────────────────────────────────
-async function runAgentTurn(state, userText, t, images = []) {
-  // 有图片:编码为 OpenAI 多模态 content parts;没图片保持纯字符串
-  if (images.length > 0) {
-    const parts = [{ type: 'text', text: userText }]
-    for (const img of images) {
-      try {
-        const url = await imageToDataUrl(img.path)
-        parts.push({ type: 'image_url', image_url: { url } })
-      } catch (err) {
-        printWarn(t.imageBadPath(img.path))
-      }
-    }
-    state.messages.push({ role: 'user', content: parts })
-  } else {
-    state.messages.push({ role: 'user', content: userText })
-  }
-  // 旧消息里的图片降级为占位文字,防止 base64 随对话轮次累积撑爆上下文
-  stripStaleImages(state.messages, state.locale)
-
-  const maxIterations = Number.isFinite(state.maxToolIterations) && state.maxToolIterations > 0
-    ? state.maxToolIterations
-    : DEFAULT_MAX_TOOL_ITERATIONS
-
-  for (let iter = 0; iter < maxIterations; iter++) {
-    trimHistory(state.messages)
-
-    // 首个 token 到达前转 spinner,到达后停掉并让位给流式渲染
-    const spinner = startSpinner(t.waiting)
-    let spinnerStopped = false
-    const stopSpinner = () => {
-      if (!spinnerStopped) { spinner.stop(); spinnerStopped = true }
-    }
-    // 每次 LLM 调用一个 writer:思考(橙黄斜体)+ 正文 ➤ 子弹头 + 逐行 markdown
-    const writer = createAssistantWriter({
-      showThinking: state.showThinking,
-      thinkingHeader: t.thinkingLabel,
-    })
-    // MiniMax 系把 <think> 标签内联在 content 流里,用过滤器剥离并置灰显示
-    // (历史里仍保存模型原始输出,见 streamChatOnce 返回的 content)
-    const thinkFilter = createThinkFilter()
-    const renderSeg = (seg) => {
-      const kind = seg.content !== undefined ? 'content' : 'thinking'
-      const text = seg.content ?? seg.thinking
-      if (!text) return
-      stopSpinner()
-      if (kind === 'thinking') writer.writeThinking(text)
-      else writer.writeContent(text)
-    }
-
-    // 发送前消毒:确保历史里没有空 content 的消息(部分 provider 报 2013)
-    sanitizeMessages(state.messages)
-
-    const llmStart = performance.now()
-    let result
-    try {
-      result = await streamChatOnce({
-        model: state.model,
-        messages: state.messages,
-        signal: state.abortController?.signal,
-        // 同一会话（含工具调用产生的每一轮请求）复用同一个会话 ID
-        sessionId: state.sessionId,
-        onToken: ({ thinking, content }) => {
-          if (thinking) renderSeg({ thinking })
-          if (content) for (const seg of thinkFilter.feed(content)) renderSeg(seg)
-        },
-      })
-      // 流结束,冲刷过滤器里残留的半拉标签/未闭合 think 块
-      for (const seg of thinkFilter.flush()) renderSeg(seg)
-    } catch (err) {
-      stopSpinner()
-      writer.finish()
-      printError(t.llmError(err.message))
-      // 请求失败时,如果最后一条仍是本轮塞进去的 user 消息则撤掉,
-      // 避免历史里留一条没有回应的消息;若已进入工具循环(末尾是 tool
-      // 结果),消息链本身是完整的,保持不动
-      const last = state.messages[state.messages.length - 1]
-      if (last?.role === 'user') state.messages.pop()
-      return
-    }
-    const llmDuration = performance.now() - llmStart
-    stopSpinner()
-    writer.finish()
-
-    if (result.aborted) {
-      printWarn('⛔ 已中止')
-      return
-    }
-
-    const { content, toolCalls } = result
-
-    // 无工具调用:本轮结束,assistant 文本入历史
-    if (toolCalls.length === 0) {
-      state.messages.push({ role: 'assistant', content: content || null })
-      return
-    }
-
-    // 有工具调用:assistant(带 tool_calls)入历史,然后逐个执行
-    // content 为 null 而非空字符串:部分 provider 拒绝空字符串内容(2013 错误)
-    state.messages.push({ role: 'assistant', content: content || null, tool_calls: toolCalls })
-
-    // LLM 耗时在进入工具执行前打印(仅本轮有工具调用时显示)
-    if (llmDuration > 0) {
-      printDim(`  ⏱ LLM ${formatDuration(llmDuration)}`)
-    }
-
-    for (const tc of toolCalls) {
-      const name = tc.function?.name || ''
-      const rawArgs = tc.function?.arguments || ''
-
-      let args
-      try {
-        args = rawArgs ? JSON.parse(rawArgs) : {}
-      } catch {
-        printToolHeader(name, printDimInline(rawArgs))
-        const errResult = `错误: 工具参数不是合法 JSON: ${rawArgs.slice(0, 200)}`
-        printToolResult(errResult)
-        state.messages.push({ role: 'tool', tool_call_id: tc.id || name, name, content: errResult })
-        continue
-      }
-
-      printToolHeader(name, summarizeToolArgs(name, args, { chars: t.chars }))
-      // 长命令执行期间给个 spinner,让用户知道没有卡死
-      const toolSpinner = startSpinner(t.toolRunning(name))
-      const toolStart = performance.now()
-      const output = await executeTool(name, args, state.ctx)
-      const toolDuration = performance.now() - toolStart
-      toolSpinner.stop()
-      printToolResult(output, undefined, toolDuration)
-      state.messages.push({ role: 'tool', tool_call_id: tc.id || name, name, content: output })
-    }
-    // 工具结果全部入历史后继续循环,让模型基于结果决定下一步
-  }
-
-  printWarn(t.toolIterLimit(maxIterations))
-}
-
-// JSON 解析失败时的参数回显:单行截断,不进 summarizeToolArgs(它没有结构化参数可用)
-function printDimInline(rawArgs) {
-  let preview = String(rawArgs || '').replace(/\s+/g, ' ').trim()
-  if (preview.length > 160) preview = preview.slice(0, 160) + '…'
-  return preview
-}
-
-// ──────────────────────────────────────────────
-// 斜杠命令
-// ──────────────────────────────────────────────
 function printSlashHelp(t, locale) {
   const zh = !String(locale || '').startsWith('en')
   const lines = zh ? [
@@ -613,7 +346,9 @@ function printSlashHelp(t, locale) {
     '  /addmodel         添加新的模型配置(交互式向导)',
     '  /cd <路径>        切换智能体工作目录',
     '  /image [路径]     查看待发送图片;/image <路径> 附加本地图片;/image clear 清除',
-    '  /think            开关思考过程显示',
+    '  /think [模式]     compact 预览 / full 完整 / off 隐藏思考',
+    '  /tools [模式]     compact 精简 / full 完整工具输出',
+    '  /stats            查看上一轮与会话累计用量、耗时',
     '  /new              开启新对话',
     '  /resume           选择并恢复之前的对话',
     '  /clear            清空对话历史',
@@ -622,14 +357,16 @@ function printSlashHelp(t, locale) {
     '  Alt+V             粘贴剪贴板图片,随下一条消息发送(需视觉模型)',
     '',
     '权限说明: 工作目录内全部操作直接执行;其他目录可读写;',
-    '仅系统级破坏命令(格式化、删根目录、关机等)会被安全守卫拦截。',
+    '命令守卫识别部分系统级危险操作，不是隔离沙箱。',
   ] : [
     '  /help             Show this help',
     '  /model            List models; /model <n> to switch',
     '  /addmodel         Add a new model (interactive wizard)',
     '  /cd <path>        Change agent working directory',
     '  /image [path]     List pending images; attach a file; /image clear to reset',
-    '  /think            Toggle thinking display',
+    '  /think [mode]     compact / full / off reasoning display',
+    '  /tools [mode]     compact / full tool output',
+    '  /stats            Last turn timing and session token usage',
     '  /new              Start a new conversation',
     '  /resume           Choose and resume a previous conversation',
     '  /clear            Clear conversation history',
@@ -638,22 +375,30 @@ function printSlashHelp(t, locale) {
     '  Alt+V             Paste clipboard image (needs a vision-capable model)',
     '',
     'Permissions: full access in the working directory; other dirs readable/writable;',
-    'only system-destroying commands (format, rm -rf /, shutdown, ...) are blocked.',
+    'the command guard detects some dangerous operations; it is not a sandbox.',
   ]
   printHelpPanel(t.helpTitle, lines)
 }
 
-async function handleSlashCommand(state, input, t) {
+export async function handleSlashCommand(state, input, t) {
   const [cmd, ...rest] = input.split(/\s+/)
   const arg = rest.join(' ').trim()
+  const zh = !String(state.locale).startsWith('en')
+  if (state.busy && !['/help', '/stats', '/think', '/tools', '/exit', '/quit'].includes(cmd)) {
+    printDim(t.busy)
+    return 'ok'
+  }
 
   if (cmd === '/exit' || cmd === '/quit') return 'exit'
   if (cmd === '/help') { printSlashHelp(t, state.locale); return 'ok' }
   if (cmd === '/clear' || cmd === '/new') {
+    await state.persistSession?.()
     state.messages = [state.messages[0]]
     // 开新会话 ID,旧会话保留在磁盘上
     state.sessionId = genSessionId()
     state.sessionCreatedAt = new Date().toISOString()
+    state.lastTurnStats = null
+    state.sessionStats = null
     printOk(cmd === '/new' ? t.newConversation : t.cleared)
     return 'ok'
   }
@@ -713,10 +458,12 @@ async function handleSlashCommand(state, input, t) {
       }
       state.sessionId = session.sessionId
       state.sessionCreatedAt = session.createdAt || new Date().toISOString()
-      state.messages = session.messages.map(message => ({ ...message }))
+      state.messages = repairToolHistory(session.messages)
+      state.lastTurnStats = session.lastTurnStats || null
+      state.sessionStats = session.sessionStats || null
       const systemMessage = {
         role: 'system',
-        content: buildSystemPrompt({ cwd: state.ctx.cwd, locale: state.locale, shellDesc: state.shellDesc }),
+        content: await buildProjectPrompt({ cwd: state.ctx.cwd, locale: state.locale, shellDesc: state.shellDesc }),
       }
       if (state.messages[0]?.role === 'system') state.messages[0] = systemMessage
       else state.messages.unshift(systemMessage)
@@ -732,8 +479,25 @@ async function handleSlashCommand(state, input, t) {
     return 'ok'
   }
   if (cmd === '/think') {
-    state.showThinking = !state.showThinking
-    printOk(state.showThinking ? t.thinkOn : t.thinkOff)
+    const next = arg || (state.showThinking ? 'off' : 'compact')
+    if (!['off', 'compact', 'full'].includes(next)) {
+      printWarn('/think compact | full | off')
+      return 'ok'
+    }
+    state.showThinking = next !== 'off'
+    state.thinkingMode = next
+    printOk(zh ? `思考显示：${({ off: '隐藏', compact: '预览', full: '完整' })[next]}` : `Thinking: ${next}`)
+    return 'ok'
+  }
+  if (cmd === '/tools') {
+    if (arg && !['full', 'compact'].includes(arg)) { printWarn('/tools compact | full'); return 'ok' }
+    state.fullTools = arg ? arg === 'full' : !state.fullTools
+    printOk(zh ? `后续工具结果：${state.fullTools ? '完整' : '精简'}` : `Future tool output: ${state.fullTools ? 'full' : 'compact'}`)
+    return 'ok'
+  }
+  if (cmd === '/stats') {
+    if (state.lastTurnStats) printTurnSummary(state.lastTurnStats, { locale: state.locale, session: state.sessionStats })
+    else printDim(zh ? '完成一轮对话后显示用量与耗时。' : 'Usage and timing appear after a turn completes.')
     return 'ok'
   }
   if (cmd === '/image') {
@@ -835,7 +599,8 @@ async function handleSlashCommand(state, input, t) {
       if (!st.isDirectory()) throw new Error('not a dir')
       state.ctx.cwd = target
       // 同步更新 system prompt 里的 cwd 说明(重建首条消息)
-      state.messages[0] = { role: 'system', content: buildSystemPrompt({ cwd: target, locale: state.locale, shellDesc: state.shellDesc }) }
+      state.messages[0] = { role: 'system', content: await buildProjectPrompt({ cwd: target, locale: state.locale, shellDesc: state.shellDesc }) }
+      await state.persistSession?.()
       printOk(t.cdOk(target))
     } catch {
       printError(t.cdFail(target))
@@ -896,7 +661,7 @@ export async function runAiAgent(argv = []) {
     // 在 Web UI 智能体 tab 中可见(带 CLI 标记)
     sessionId: genSessionId(),
     sessionCreatedAt: new Date().toISOString(),
-    messages: [{ role: 'system', content: buildSystemPrompt({ cwd, locale, shellDesc }) }],
+    messages: [{ role: 'system', content: await buildProjectPrompt({ cwd, locale, shellDesc }) }],
     ctx: {
       cwd,
       onChild: (child) => {
@@ -910,13 +675,18 @@ export async function runAiAgent(argv = []) {
     locale,
     shellDesc,
     // 单轮工具调用上限:来自全局配置 aiMaxToolIterations(loadConfig 已规范化),
-    // 读不到时由 runAgentTurn 兜底成 DEFAULT_MAX_TOOL_ITERATIONS
+    // 读不到时由 runAgentTurn 兜底为 200
     maxToolIterations: cfg.aiMaxToolIterations,
     currentChild: null,
     abortController: null,
     cancelRequested: false,
     busy: false,
     showThinking: true,     // /think 切换:是否回显模型的思考过程
+    thinkingMode: 'compact',
+    fullTools: false,
+    lastTurnStats: null,
+    sessionStats: null,
+    prepareMessages: (messages) => { stripStaleImages(messages, locale); sanitizeMessages(messages) },
     pendingImages: [],      // Alt+V / /image 附加的待发送图片 [{path, bytes}]
     pasting: false,         // 剪贴板读取进行中(防 Alt+V 连打并发)
     inWizard: false,        // /addmodel 交互式向导进行中:忽略 REPL 的 line 事件
@@ -924,41 +694,52 @@ export async function runAiAgent(argv = []) {
   }
 
   // 持久化当前会话到磁盘(供 Web UI 读取)
+  let saving = Promise.resolve()
   async function persistSession() {
+    if (state.messages.length <= 1) return
     try {
       const title = autoTitle(state.messages)
-      await writeSession(state.sessionId, {
+      const sessionId = state.sessionId
+      const snapshot = JSON.parse(JSON.stringify({
         version: 1,
         sessionId: state.sessionId,
         title,
         source: 'cli',
-        cwd,
+        cwd: state.ctx.cwd,
         model: modelLabel(state.model),
         createdAt: state.sessionCreatedAt,
         updatedAt: new Date().toISOString(),
-        messages: state.messages,
-      })
+        messages: repairToolHistory(state.messages),
+        lastTurnStats: state.lastTurnStats,
+        sessionStats: state.sessionStats,
+      }))
+      saving = saving.catch(() => {}).then(() => writeSession(sessionId, snapshot))
+      await saving
       enforceRetention().catch(() => {})
     } catch (err) {
       // 持久化失败不影响 CLI 正常使用
       printDim(`(会话保存失败: ${err.message})`)
     }
   }
+  state.persistSession = persistSession
 
   // SIGINT 时中止进行中的 LLM 请求 + 正在跑的子命令
   // (进程退出与全局子进程 drain 由 gitCommit.js 的统一 handler 负责,这里只做快速止血)
-  registerCleanup('aiAgent', () => {
+  registerCleanup('aiAgent', async () => {
+    state.cancelRequested = true
     try { state.abortController?.abort() } catch (_) {}
-    try { state.currentChild?.kill('SIGTERM') } catch (_) {}
+    await terminateCommand(state.currentChild)
+    await persistSession()
   })
 
   // 单发模式:g ai "帮我改个 bug"(位置参数拼成 prompt,跑一轮就退出)
   const oneShot = argv.filter(a => !a.startsWith('-')).join(' ').trim()
   if (oneShot) {
     console.log(chalk.dim(`[${t.bannerModel}] ${modelLabel(model)} · [${t.bannerCwd}] ${cwd}`))
-    await runAgentTurn(state, oneShot, t)
-    await persistSession()
-    printDim(t.oneShotDone)
+    state.abortController = new AbortController()
+    const stats = await runAgentTurn(state, oneShot, t)
+    if (stats.status === 'completed') printDim(t.oneShotDone)
+    else process.exitCode = stats.status === 'cancelled' ? 130 : 1
     return
   }
 
@@ -976,9 +757,8 @@ export async function runAiAgent(argv = []) {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    // prompt: ❯ 用青色加粗;末尾追加 ANSI 亮白+加粗码,
-    // 让用户输入的文本继承亮白色高亮(黑底上最清晰)
-    prompt: chalk.cyan.bold(t.prompt) + '\x1b[1;97m',
+    // 颜色闭合，避免提示符的样式泄漏到后续输出。
+    prompt: chalk.cyan.bold(t.prompt + ' '),
     historySize: 200,
   })
   state.rl = rl  // 供 /addmodel 等需要 rl.question 的斜杠命令复用
@@ -1029,9 +809,6 @@ export async function runAiAgent(argv = []) {
       try { rl.prompt() } catch { /* noop */ }
     }
   }
-
-  // readline 的 clearLine() 已经写了 \r\n,不需要我们再补换行。
-  const closeInputFrame = () => {}
 
   // 在提示符上方插一行通知(粘贴进度等)。
   const notifyAbovePrompt = (text) => {
@@ -1137,7 +914,7 @@ export async function runAiAgent(argv = []) {
         neutralizeKeyForReadline(key)
         state.cancelRequested = true
         try { state.abortController?.abort() } catch (_) {}
-        try { state.currentChild?.kill('SIGTERM') } catch (_) {}
+        void terminateCommand(state.currentChild)
         return
       }
       if (slashHintRows > 0) {
@@ -1266,8 +1043,6 @@ export async function runAiAgent(argv = []) {
     state.abortController = new AbortController()
     try {
       await runAgentTurn(state, input, t, images)
-      // 每轮对话结束后持久化到磁盘,供 Web UI 读取
-      await persistSession()
     } catch (err) {
       if (state.cancelRequested) printDim(t.operationCancelled)
       else printError(err.message)
@@ -1280,6 +1055,11 @@ export async function runAiAgent(argv = []) {
   })
 
   rl.on('close', () => {
+    if (state.busy) {
+      state.cancelRequested = true
+      state.abortController?.abort()
+      void terminateCommand(state.currentChild)
+    }
     rl.input.removeListener('keypress', interceptInteractiveControlKeys)
     printWarn('\n' + t.bye)
   })

@@ -174,7 +174,9 @@ function getCurrentProjectKey() {
   }
   let key = null;
   try {
-    const gitRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+    const gitRoot = execSync('git rev-parse --show-toplevel', {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000, windowsHide: true,
+    }).trim();
     if (gitRoot) key = normalizeProjectPath(gitRoot);
   } catch (_) {
     // 非 Git 项目或 git 不可用，降级到 CWD

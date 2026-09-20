@@ -647,6 +647,8 @@ export default {
   '@67CE7:启动更新失败': '启动更新失败',
   '@67CE7:更新失败: ': '更新失败: ',
   '@67CE7:在终端中打开': '在终端中打开',
+  '@67CE7:用 g ai 打开当前目录': '用 g ai 打开当前目录',
+  '@67CE7:已在新终端中启动 g ai': '已在新终端中启动 g ai',
   '@67CE7:用 Claude Code 打开': '用 Claude Code 打开',
   '@67CE7:用 Claude Code 打开（完全批准）': '用 Claude Code 打开（完全批准）',
   '@67CE7:用 Codex 打开': '用 Codex 打开',
