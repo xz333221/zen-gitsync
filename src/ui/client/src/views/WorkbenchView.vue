@@ -35,6 +35,7 @@ import ImportSplitDialog from '@components/ImportSplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
 import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
+import { CLAUDE_AVATAR } from '@/utils/agentAvatar'
 import { useConfigStore } from '@/stores/configStore'
 import { useToolsStore } from '@/stores/toolsStore'
 const configStore = useConfigStore()
@@ -1777,7 +1778,8 @@ const {
                     :key="selectedTask.id"
                     :messages="simpleConversationMessages"
                     assistant-name="Claude"
-                    :show-avatar="false"
+                    :assistant-avatar="CLAUDE_AVATAR"
+                    :show-avatar="true"
                     :theme="configStore.theme"
                     class="wb-simple-chat"
                   />

@@ -77,7 +77,8 @@
       <ChatContainer
         :messages="chatMessages"
         :assistant-name="assistantLabel"
-        :show-avatar="false"
+        :assistant-avatar="CLAUDE_AVATAR"
+        :show-avatar="true"
         :theme="configStore.theme"
         class="wb-job-chat"
       />
@@ -123,6 +124,7 @@ import { ElMessage } from 'element-plus'
 // 模型对话 UI 改为引用 zen-ai-chat-ui(本地 chat-ui 项目发布的组件库)
 import { ChatContainer, MarkdownRenderer, type ChatMessage, type MessageStatus } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
+import { CLAUDE_AVATAR } from '@/utils/agentAvatar'
 import { $t } from '@/lang/static'
 import type { Job, JobStatus } from '@/types/workbench'
 import { useConfigStore } from '@/stores/configStore'
