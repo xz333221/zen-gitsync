@@ -154,8 +154,14 @@ const {
   loadTasks: _loadDataTasks
 } = useWorkbenchData()
 
-async function loadTasks() {
-  await _loadDataTasks()
+/**
+ * 重拉任务列表后，按「当前项目最后一次打开的任务 → 当前项目首条 → 任意首条」重新决定选中项。
+ *
+ * 只适用于**恢复**语境（首次加载 / 切项目）。写操作后的刷新一律用 refreshTasks()：
+ * 下面 `remembered.projectPath 必须属于当前项目` 那条护栏，本意是"刷新后别把别的项目的任务
+ * 恢复成选中项"，不该在用户正编辑某条跨项目任务时把他手里的任务抢走。
+ */
+function applyRestoredSelection() {
   const cp = canonicalProjectPath(currentProject.value.path)
   // 决定"应该选中的 task id":优先恢复当前项目最后一次打开的 task,否则降级到当前项目下的首条,
   // 否则(完全没有当前项目的 task)降级到任意首条。
@@ -170,6 +176,34 @@ async function loadTasks() {
     : null
   selectedTaskId.value = desiredId
   captureSnapshot()
+}
+
+/**
+ * 写操作成功后刷新任务列表，**保持当前选中的任务不变**。
+ *
+ * 为什么写操作后不能用 loadTasks()（2026-09-20 修，症状：改一下描述、自动保存后编辑器就空了）：
+ *   loadTasks() 每次都会重跑上面的选中项推导，而 rememberedId 记的是"当前项目最后一次打开的任务"
+ *   —— 键是当前项目，值却可能是用户从跨项目看板上点开的**别的项目**的任务。
+ *   于是推导时撞上 `remembered.projectPath !== cp` 这条护栏，desiredId 直接算成 null：
+ *   描述其实已经存好了，空掉的是界面里的选中项（右侧退回"请选择任务"占位）。
+ *   编辑器允许打开跨项目任务（执行目录按 task.projectPath 走），所以这不是异常路径。
+ *   触发它的入口就是"任务级字段的 1.5s 防抖自动保存"——每次自动保存都会走一遍 persistTask → 刷新。
+ *
+ * 选中项确实不存在了（被删 / 被后端清理）才退回恢复逻辑。
+ */
+async function refreshTasks() {
+  const keepId = selectedTaskId.value
+  await _loadDataTasks()
+  if (keepId && tasks.value.some(t => t.id === keepId)) {
+    captureSnapshot()
+    return
+  }
+  applyRestoredSelection()
+}
+
+async function loadTasks() {
+  await _loadDataTasks()
+  applyRestoredSelection()
 }
 // 执行日志管理弹窗：默认收起，editor 视图保持常驻
 const logsDialogVisible = ref(false)
@@ -715,7 +749,8 @@ async function deletePrompt(p: Prompt) {
       })
     }
   }
-  loadTasks()
+  // 删的是提示词，不是任务 —— 保留选中项，别把正在编辑的任务顺手清掉
+  await refreshTasks()
 }
 
 // ── 任务 CRUD ───────────────────────────────────────────────────────────────
@@ -866,7 +901,8 @@ async function setTaskType(t: Task, type: 'simple' | 'complex') {
     ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
     return
   }
-  await loadTasks()
+  // 切类型不换任务：刷新时保留选中项（跨项目任务同样适用）
+  await refreshTasks()
   ElMessage.success(type === 'simple' ? $t('@WORKBENCH:已切换为简单任务') : $t('@WORKBENCH:已切换为复杂任务'))
 }
 
@@ -1118,7 +1154,9 @@ async function persistTask(showSuccess: boolean): Promise<boolean> {
   }).then(r => r.json())
   if (res.success) {
     if (showSuccess) ElMessage.success($t('@WORKBENCH:已保存拆分'))
-    await loadTasks()
+    // 刷新必须保留选中项：这条路径由 1.5s 防抖自动保存高频触发，
+    // 一旦在这里重推导选中项，跨项目任务会瞬间被清空（见 refreshTasks 注释）
+    await refreshTasks()
     return true
   } else {
     ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))

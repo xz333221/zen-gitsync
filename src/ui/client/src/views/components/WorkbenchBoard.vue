@@ -40,7 +40,6 @@ import WorkbenchAgentPanel from './WorkbenchAgentPanel.vue'
 import WorkbenchKanban from './WorkbenchKanban.vue'
 import OrchestratorConsole from './OrchestratorConsole.vue'
 import WorkbenchDefaultPromptDialog from './WorkbenchDefaultPromptDialog.vue'
-import WorkbenchTaskDialog from './WorkbenchTaskDialog.vue'
 import WorkbenchTaskCreateDialog from './WorkbenchTaskCreateDialog.vue'
 
 const emit = defineEmits<{
@@ -113,48 +112,16 @@ const headerStats = computed(() => {
   }
 })
 
-// ── 任务详情弹窗：点卡片就地看内容，不再跳进编辑器 ────────────────────
-// 点卡片只开弹窗、不改 boardMode —— 看板的用处是扫全局、就地处理，
-// 点一下就被甩到编辑器再点回来，手上的位置和筛选状态全丢了。
-// 想深入编辑走弹窗里的「打开编辑器」这个显式动作。
-const dialogOpen = ref(false)
-const dialogTask = ref<BoardTask | null>(null)
-
-function onViewTask(t: BoardTask) {
-  dialogTask.value = t
-  dialogOpen.value = true
-}
-
-/** 这一份是"最新的"，用来判断还能不能执行：弹窗拿到的那份快照不会自己更新 */
-const dialogFreshTask = computed<BoardTask | null>(() => {
-  const id = dialogTask.value?.id
-  if (!id) return null
-  return boardTasks.value.find(x => x.id === id) || dialogTask.value
-})
-
-const dialogProjectName = computed(() => {
-  const t = dialogTask.value
-  if (!t) return ''
-  return projectLabels.value[t.projectPath] || ''
-})
-
-const dialogRunning = computed(() => (dialogFreshTask.value?.runningJobs ?? 0) > 0)
-
-/** 弹窗里的「打开编辑器」：到这一步才切 L2，并把弹窗关掉免得回头看到它 */
-function onOpenEditor(t: BoardTask) {
-  dialogOpen.value = false
+// ── 点卡片 = 直接进任务编辑器 ─────────────────────────────────────────
+// 这里曾经先弹一个只读详情弹窗（WorkbenchTaskDialog），再从里面点「打开编辑器」。
+// 那个设计成立的前提是"编辑器是另一个页面"——点卡片就被甩出去，所以先给个就地看的中间层；
+// 编辑器后来改成了浮在看板之上的弹窗（关掉即回到原位，不换页、不丢筛选），
+// 中间这一跳就只剩成本了：多一次点击，而且弹窗里的内容（描述 / 附件 / 最近执行）
+// 编辑器里全都有。2026-09-20 去掉，点卡片直接开编辑器。
+//
+// 就地处理的能力没有丢：卡片上仍然有「执行」「删除」两个按钮（@click.stop，不会触发这里）。
+function onOpenTask(t: BoardTask) {
   emit('open-task', { taskId: t.id, projectPath: t.projectPath })
-}
-
-async function onDialogRun() {
-  const fresh = dialogFreshTask.value
-  if (fresh) await runTask(fresh)
-}
-
-async function onDialogRemove(t: BoardTask) {
-  await deleteTask(t)
-  // 删掉之后这个任务已经不存在了，弹窗继续开着只会停在 404 空框上
-  dialogOpen.value = false
 }
 
 // ── 刷新：5s 轮询 + 标签页隐藏时跳过 ────────────────────────────────
@@ -698,7 +665,7 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
           :tasks="visibleTasks"
           :project-labels="projectLabels"
           :show-project-label="!selectedProject"
-          @view-task="onViewTask"
+          @open-task="onOpenTask"
           @run-task="runTask"
           @delete-task="deleteTask"
           @create-task="onCreateClick"
@@ -744,17 +711,6 @@ async function onSavePromptDraft(payload: { globalPrompt: string; projectPrompt:
       :project-prompt="selectedProjectPrompt"
       :saving="savingPrompt"
       @save="onSavePromptDraft"
-    />
-
-    <!-- 任务详情：就地弹窗，看完关掉还在原来的看板位置 -->
-    <WorkbenchTaskDialog
-      v-model="dialogOpen"
-      :task="dialogTask"
-      :project-name="dialogProjectName"
-      :running="dialogRunning"
-      @run="onDialogRun"
-      @open-editor="onOpenEditor"
-      @remove="onDialogRemove"
     />
 
     <!-- 新建任务：弹窗里问清字段，建完就关 -->

@@ -3,11 +3,11 @@
  *
  * 验收的行为契约（改这块 UI 时别破坏）：
  *   A 看板是**常驻底图** —— 它不再和编辑器二选一
- *   B 点看板卡片 -> 任务详情**就地弹窗**，看板仍在（不跳转）
- *   C 关掉详情 -> 还在看板原处
+ *   B 点看板卡片 -> **直接打开任务编辑器弹窗**，看板仍在（不再有中间的只读详情弹窗）
+ *   C 关掉编辑器 -> 还在看板原处
  *   D 「新建开发任务」-> 新建弹窗，看板仍在
  *   E 创建成功 -> 成功提示 + 弹窗自动关 + 卡片直接落在看板上
- *   F 详情里点「打开编辑器」-> 编辑器以**大弹窗**浮在看板上，看板仍在
+ *   F 点卡片 -> 编辑器以**大弹窗**浮在看板上，看板仍在
  *   G 点「返回看板」-> 编辑器弹窗关闭，看板仍在
  *   H 编辑器里点「执行日志」-> 日志弹窗必须压在编辑器之上
  *     （app shell 的 main-container 是 fixed + z-index:1001 的层叠上下文，
@@ -49,8 +49,7 @@ async function visibleDialogs(page) {
       .map(d => ({
         title: d.querySelector('.el-dialog__title')?.textContent?.trim() || '',
         hasEditor: !!d.querySelector('.wb-editor'),
-        hasCreate: !!d.querySelector('.nc'),
-        hasDetail: !!d.querySelector('.td')
+        hasCreate: !!d.querySelector('.nc')
       }))
   )
 }
@@ -108,20 +107,20 @@ async function main() {
     const allProj = page.locator('.proj-item--all')
     if (await allProj.count()) { await allProj.first().click(); await sleep(800) }
 
-    // ── B 点卡片 -> 详情弹窗（不跳转）──────────────────────────────────
+    // ── B 点卡片 -> 编辑器弹窗（不跳转、不再有中间的只读详情弹窗）────────
     const card = page.locator('.kb-card', { hasText: MARK }).first()
     if (!(await card.count())) {
-      check('B 点卡片 -> 详情弹窗（能否找到目标卡片）', false, '看板上没有测试任务卡片')
+      check('B 点卡片 -> 编辑器弹窗（能否找到目标卡片）', false, '看板上没有测试任务卡片')
     } else {
       await card.click()
-      const dlg = await waitDialog(page, d => d.hasDetail)
-      check('B 点卡片 -> 详情弹窗就地打开', !!dlg, dlg ? `title="${dlg.title}"` : '未出现详情弹窗')
+      const dlg = await waitDialog(page, d => d.hasEditor, 12000)
+      check('B 点卡片 -> 编辑器弹窗直接打开', !!dlg, dlg ? `title="${dlg.title}"` : '未出现编辑器弹窗')
       check('B2 弹窗打开时看板仍在（无视图跳转）', await boardVisible(page))
     }
 
-    // ── C 关闭详情 ────────────────────────────────────────────────────
-    await page.keyboard.press('Escape')
-    check('C 关闭详情后无可见弹窗', await noVisibleDialog(page))
+    // ── C 返回看板 ────────────────────────────────────────────────────
+    await page.locator('.wb-back-btn').first().click()
+    check('C 关闭编辑器后无可见弹窗', await noVisibleDialog(page, 12000))
     check('C2 关闭后看板仍在', await boardVisible(page))
 
     // ── D 新建走弹窗 ─────────────────────────────────────────────────
@@ -156,55 +155,51 @@ async function main() {
     check('E3 新任务卡片出现在看板上（未离开看板）', cardThere)
     check('E4 创建全程看板仍在', await boardVisible(page))
 
-    // ── F 详情 ->「打开编辑器」大弹窗 ────────────────────────────────
+    // ── F 点卡片 -> 编辑器大弹窗 ─────────────────────────────────────
+    // （这里顺带钉住"点卡片不再被中间的只读详情弹窗拦一道"：一次点击就该看到 .wb-editor）
     const card2 = page.locator('.kb-card', { hasText: MARK }).first()
     if (!(await card2.count())) {
       check('F 打开编辑器链路', false, '创建后找不到卡片')
     } else {
       await card2.click()
-      if (!(await waitDialog(page, d => d.hasDetail))) {
-        check('F 详情弹窗复现', false, '第二次点卡片未出详情弹窗')
-      } else {
-        await page.locator('.td__foot button', { hasText: '打开编辑器' }).first().click()
-        const edlg = await waitDialog(page, d => d.hasEditor, 12000)
-        check('F 「打开编辑器」打开编辑器弹窗', !!edlg, edlg ? `title="${edlg.title}"` : '未出现编辑器弹窗')
-        if (edlg) {
-          const w = await page.evaluate(() => {
-            const d = Array.from(document.querySelectorAll('.el-dialog')).find(x => x.offsetParent !== null && x.querySelector('.wb-editor'))
-            return d ? Math.round(d.getBoundingClientRect().width) : 0
-          })
-          check('F2 编辑器弹窗是"大弹窗"（宽度 ≥ 1200px）', w >= 1200, `实测 ${w}px`)
-          check('F3 编辑器打开时看板仍在 DOM（无跳转）', (await page.locator('.board').count()) > 0)
+      const edlg = await waitDialog(page, d => d.hasEditor, 12000)
+      check('F 点卡片一次点击即打开编辑器弹窗', !!edlg, edlg ? `title="${edlg.title}"` : '未出现编辑器弹窗')
+      if (edlg) {
+        const w = await page.evaluate(() => {
+          const d = Array.from(document.querySelectorAll('.el-dialog')).find(x => x.offsetParent !== null && x.querySelector('.wb-editor'))
+          return d ? Math.round(d.getBoundingClientRect().width) : 0
+        })
+        check('F2 编辑器弹窗是"大弹窗"（宽度 ≥ 1200px）', w >= 1200, `实测 ${w}px`)
+        check('F3 编辑器打开时看板仍在 DOM（无跳转）', (await page.locator('.board').count()) > 0)
 
-          // ── H 从编辑器里打开的子弹窗必须压得住编辑器 ──────────────────
-          // app shell 的 main.main-container 是 position:fixed + z-index:1001，自成层叠上下文；
-          // 没 append-to-body 的弹窗被关在里面，z-index 再高也只跟"同一上下文里的兄弟"比，
-          // 永远盖不过挂在 body 下的编辑器弹窗 —— 现象是「点了执行日志没反应」，其实开了、被盖住了。
-          await page.locator('button', { hasText: '执行日志' }).first().click()
-          await sleep(1200)
-          const logsTop = await page.evaluate(() => {
-            const d = document.querySelector('.wb-logs-dialog')
-            if (!d) return { exists: false }
-            const r = d.getBoundingClientRect()
-            const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + 120))
-            const ov = d.closest('.el-overlay')
-            return {
-              exists: true,
-              escaped: !!(ov && ov.parentElement === document.body),
-              topmost: !!(hit && hit.closest('.wb-logs-dialog'))
-            }
-          })
-          check('H 「执行日志」弹窗压在编辑器之上（已逃出 main-container）',
-            logsTop.exists && logsTop.escaped && logsTop.topmost, JSON.stringify(logsTop))
-          if (logsTop.exists) {
-            await page.locator('.wb-logs-dialog .el-dialog__headerbtn').first().click()
-            await sleep(900)
+        // ── H 从编辑器里打开的子弹窗必须压得住编辑器 ──────────────────
+        // app shell 的 main.main-container 是 position:fixed + z-index:1001，自成层叠上下文；
+        // 没 append-to-body 的弹窗被关在里面，z-index 再高也只跟"同一上下文里的兄弟"比，
+        // 永远盖不过挂在 body 下的编辑器弹窗 —— 现象是「点了执行日志没反应」，其实开了、被盖住了。
+        await page.locator('button', { hasText: '执行日志' }).first().click()
+        await sleep(1200)
+        const logsTop = await page.evaluate(() => {
+          const d = document.querySelector('.wb-logs-dialog')
+          if (!d) return { exists: false }
+          const r = d.getBoundingClientRect()
+          const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + 120))
+          const ov = d.closest('.el-overlay')
+          return {
+            exists: true,
+            escaped: !!(ov && ov.parentElement === document.body),
+            topmost: !!(hit && hit.closest('.wb-logs-dialog'))
           }
+        })
+        check('H 「执行日志」弹窗压在编辑器之上（已逃出 main-container）',
+          logsTop.exists && logsTop.escaped && logsTop.topmost, JSON.stringify(logsTop))
+        if (logsTop.exists) {
+          await page.locator('.wb-logs-dialog .el-dialog__headerbtn').first().click()
+          await sleep(900)
         }
-        await page.locator('.wb-back-btn').first().click()
-        check('G 「返回看板」关闭编辑器弹窗', await noVisibleDialog(page, 12000))
-        check('G2 关闭后看板仍在', await boardVisible(page))
       }
+      await page.locator('.wb-back-btn').first().click()
+      check('G 「返回看板」关闭编辑器弹窗', await noVisibleDialog(page, 12000))
+      check('G2 关闭后看板仍在', await boardVisible(page))
     }
   } catch (err) {
     check('脚本异常', false, String((err && err.message) || err))
