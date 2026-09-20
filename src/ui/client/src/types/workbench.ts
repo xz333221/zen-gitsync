@@ -35,8 +35,13 @@ export interface Job {
   error: string | null
   /** claude --output-format stream-json 的 system.init 事件捕获的会话 id;
    *  续接对话(`/jobs/:id/continue`)需要回传给后端做 --resume。
+   *  opencode 执行器把 sessionID 也存这里（语义 = "该执行器的会话续接标识"）。
    *  老 job 没这个字段;init 事件来之前也可能为空。 */
   claudeSessionId?: string | null
+  /** 本轮用的执行器：'claude' | 'opencode'。老 job 没这个字段（视为 claude） */
+  agent?: string
+  /** opencode 协议层 error 事件捕获的错误消息（进程退出码可能是 0，靠它判失败） */
+  agentError?: string
 }
 
 // ── Workbench 任务相关类型 ──────────────────────────────────────────

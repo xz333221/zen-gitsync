@@ -23,6 +23,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  Check,
   Document,
   Delete,
   CircleCloseFilled,
@@ -35,7 +36,7 @@ import ImportSplitDialog from '@components/ImportSplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
 import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
-import { CLAUDE_AVATAR } from '@/utils/agentAvatar'
+import { avatarForExecutor } from '@/utils/agentAvatar'
 import { useConfigStore } from '@/stores/configStore'
 import { useToolsStore } from '@/stores/toolsStore'
 const configStore = useConfigStore()
@@ -48,6 +49,8 @@ import type { Task, SubTask, Prompt } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
+import { TASK_EXECUTOR_OPTIONS, getSelectedTaskExecutor, setSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecutor'
+import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
 import { useWorkbenchData } from '@/composables/useWorkbenchData'
 import WorkbenchSidebar from '@/views/components/WorkbenchSidebar.vue'
 import WorkbenchBoard from '@/views/components/WorkbenchBoard.vue'
@@ -1305,9 +1308,46 @@ const {
     clearNonDoneJobsByTask,
     persistTask,
     loadTasks: _loadDataTasks,
-    uploadAttachment
+    uploadAttachment,
+    getExecutor: () => selectedTaskExecutor.value
   }
 )
+
+// ── 任务执行器（claude | opencode）─────────────────────────────────────
+// 默认值来自设置里的 taskExecutor（configStore），执行按钮旁可以临时切，
+// 临时选择记 localStorage（见 utils/taskExecutor.ts 的口径注释）。
+const selectedTaskExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
+
+// 本地装了哪些执行器；至少要有一个才能执行任务
+const executorAvailability = computed(() => ({
+  claude: toolsStore.claudeAvailable,
+  opencode: toolsStore.opencodeAvailable
+}))
+const hasAnyExecutor = computed(() => executorAvailability.value.claude || executorAvailability.value.opencode)
+
+// 工具检测结果变化后纠偏：临时选的执行器被卸载时回落到另一个可用的，避免
+// 点执行才发现后端 spawn ENOENT。
+watch(executorAvailability, (avail) => {
+  if (avail[selectedTaskExecutor.value]) return
+  const fallback = (Object.keys(avail) as TaskExecutorId[]).find(id => avail[id])
+  if (fallback) selectedTaskExecutor.value = fallback
+}, { immediate: true })
+
+function pickExecutor(id: TaskExecutorId) {
+  if (!executorAvailability.value[id]) return
+  selectedTaskExecutor.value = id
+  setSelectedTaskExecutor(id)
+}
+
+function executorLabel(id: TaskExecutorId): string {
+  return TASK_EXECUTOR_OPTIONS.find(o => o.id === id)?.name || id
+}
+
+// 简单任务连续对话流的助手名/头像：跟随最近一轮 job 实际用的执行器。
+// 头像与名字同源（agentForExecutor），claude → Claude 品牌图，opencode → OpenCode 品牌图。
+const lastSimpleJob = computed(() => simpleAllJobsFor(selectedTask.value).slice(-1)[0])
+const simpleAssistantLabel = computed(() => lastSimpleJob.value?.agent === 'opencode' ? 'OpenCode' : 'Claude')
+const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.value?.agent))
 </script>
 
 <template>
@@ -1469,12 +1509,42 @@ const {
             </svg>
             <span>{{ $t('@WORKBENCH:AI 拆分') }}</span>
           </button>
-          <el-button v-if="toolsStore.claudeAvailable" type="primary" :loading="false" @click="runTask(selectedTask)">
+          <!-- 执行：split button —— 主体按当前选中执行器直接跑，下拉临时切换执行器 -->
+          <el-dropdown
+            v-if="hasAnyExecutor"
+            split-button
+            type="primary"
+            class="wb-executor-split"
+            trigger="click"
+            @click="runTask(selectedTask)"
+            @command="pickExecutor"
+          >
             {{ isSimpleTask ? $t('@WORKBENCH:执行') : $t('@WORKBENCH:执行任务') }}
-          </el-button>
+            <span class="wb-executor-split__hint">
+              <TaskExecutorIcon :executor="selectedTaskExecutor" class="wb-executor-split__hint-icon" />
+              {{ executorLabel(selectedTaskExecutor) }}
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="opt in TASK_EXECUTOR_OPTIONS"
+                  :key="opt.id"
+                  :command="opt.id"
+                  :disabled="!executorAvailability[opt.id]"
+                >
+                  <span class="wb-executor-item">
+                    <TaskExecutorIcon :executor="opt.id" class="wb-executor-item__icon" />
+                    <span class="wb-executor-item__name">{{ opt.name }}</span>
+                    <el-icon v-if="selectedTaskExecutor === opt.id" class="wb-executor-item__check"><Check /></el-icon>
+                    <span v-else-if="!executorAvailability[opt.id]" class="wb-executor-item__missing">{{ $t('@42BB9:未安装') }}</span>
+                  </span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <div v-else class="wb-no-claude-hint" role="status">
             <el-icon class="wb-no-claude-hint__icon"><Warning /></el-icon>
-            <span class="wb-no-claude-hint__text">{{ $t('@WORKBENCH:未检测到本地 claude,无法执行任务') }}</span>
+            <span class="wb-no-claude-hint__text">{{ $t('@WORKBENCH:未检测到本地 claude / opencode,无法执行任务') }}</span>
             <a
               class="wb-no-claude-hint__link"
               href="https://docs.claude.com/en/docs/claude-code/setup"
@@ -1777,8 +1847,8 @@ const {
                   <ChatContainer
                     :key="selectedTask.id"
                     :messages="simpleConversationMessages"
-                    assistant-name="Claude"
-                    :assistant-avatar="CLAUDE_AVATAR"
+                    :assistant-name="simpleAssistantLabel"
+                    :assistant-avatar="simpleAssistantAvatar"
                     :show-avatar="true"
                     :theme="configStore.theme"
                     class="wb-simple-chat"
@@ -3351,6 +3421,39 @@ const {
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
+}
+/* 执行器 split button：主体「执行」+ 下拉切执行器 */
+.wb-executor-split {
+  flex-shrink: 0;
+}
+.wb-executor-split__hint {
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.85;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.wb-executor-split__hint-icon { font-size: 12px; }
+.wb-executor-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 132px;
+}
+.wb-executor-item__icon { font-size: 14px; flex: none; }
+.wb-executor-item__name {
+  flex: 1;
+}
+.wb-executor-item__check {
+  color: var(--el-color-primary);
+}
+.wb-executor-item__missing {
+  font-size: 11px;
+  color: var(--text-secondary, var(--el-text-color-secondary));
 }
 .wb-no-claude-hint__icon { font-size: 14px; opacity: 0.9; }
 .wb-no-claude-hint__text { letter-spacing: -0.05px; }

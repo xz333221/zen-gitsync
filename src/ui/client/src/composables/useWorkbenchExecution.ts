@@ -17,8 +17,14 @@ export function useWorkbenchExecution(
     persistTask: (showSuccess: boolean) => Promise<boolean>
     loadTasks: (captureSnapshot?: () => void) => Promise<void>
     uploadAttachment: (target: any, file: File) => Promise<void>
+    /** 本次执行用哪个本地 CLI（claude | opencode）。工作台执行按钮旁的临时选择 */
+    getExecutor: () => 'claude' | 'opencode'
   }
 ) {
+  // 所有执行请求统一带上 executor；不传时后端回落到配置里的全局默认。
+  function executorBody(): Record<string, string> {
+    return { executor: options.getExecutor() }
+  }
   async function runTask(t: Task) {
     if (t.type === 'simple') {
       return runSimpleTask(t)
@@ -82,7 +88,11 @@ export function useWorkbenchExecution(
       }
     }
     await options.clearNonDoneJobsByTask(t.id)
-    const res = await fetch(`/api/workbench/tasks/${t.id}/run`, { method: 'POST' }).then(r => r.json())
+    const res = await fetch(`/api/workbench/tasks/${t.id}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(executorBody())
+    }).then(r => r.json())
     if (res.success) {
       ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
     } else {
@@ -104,7 +114,11 @@ export function useWorkbenchExecution(
       }
     }
     await options.clearJobsByTask(t.id)
-    const res = await fetch(`/api/workbench/tasks/${t.id}/run-simple`, { method: 'POST' }).then(r => r.json())
+    const res = await fetch(`/api/workbench/tasks/${t.id}/run-simple`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(executorBody())
+    }).then(r => r.json())
     if (res.success) {
       ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
     } else {
@@ -164,7 +178,11 @@ export function useWorkbenchExecution(
           ElMessage.warning($t('@WORKBENCH:该子任务正在执行中'))
           return
         }
-        const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, { method: 'POST' })
+        const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(executorBody())
+        })
           .then(r => r.json())
           .catch(err => ({ success: false, error: err?.message || String(err) }))
         if (res.success) {
@@ -196,7 +214,11 @@ export function useWorkbenchExecution(
       const ok = await options.persistTask(false)
       if (!ok) return
     }
-    const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, { method: 'POST' })
+    const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(executorBody())
+    })
       .then(r => r.json())
       .catch(err => ({ success: false, error: err?.message || String(err) }))
     if (res.success) {
@@ -242,7 +264,7 @@ export function useWorkbenchExecution(
     const res = await fetch(`/api/workbench/tasks/${t.id}/run-from`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startSubIndex: startIndex })
+      body: JSON.stringify({ startSubIndex: startIndex, ...executorBody() })
     })
       .then(r => r.json())
       .catch(err => ({ success: false, error: err?.message || String(err) }))

@@ -309,11 +309,15 @@ export function snapshotJobs() {
     status: j.status,
     prompt: j.prompt || '',
     output: j.output || '',
+    thinking: j.thinking || '',
     pid: j.pid || null,
     startedAt: j.startedAt || null,
     endedAt: j.endedAt || null,
     exitCode: typeof j.exitCode === 'number' ? j.exitCode : null,
     error: j.error || null,
+    // 本轮用的执行器（claude | opencode）。前端对话区助手名 / 日志详情按它显示;
+    // 加字段时记得同步这里 —— 白名单投影会把没列出的字段静默剥掉。
+    agent: j.agent || null,
     // 续接对话用:claude --output-format stream-json 的 system.init 事件捕获到的 session_id
     claudeSessionId: j.claudeSessionId || null
   }));

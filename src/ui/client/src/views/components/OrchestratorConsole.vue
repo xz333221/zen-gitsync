@@ -29,7 +29,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { $t } from '@/lang/static'
-import { Paperclip, Promotion, Expand, Fold, Setting } from '@element-plus/icons-vue'
+import { Paperclip, Promotion, Expand, Fold, Setting, ArrowDown, Check } from '@element-plus/icons-vue'
+import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
 import type {
   Attachment,
   OrchestratorActivity,
@@ -39,6 +40,8 @@ import type {
 import { clockFromIso, relativeTimeFromIso } from '@/utils/relativeTime'
 import AttachmentZone from '@/components/AttachmentZone.vue'
 import { useWorkbenchAttachments, type AttachmentTarget } from '@/composables/useWorkbenchAttachments'
+import { TASK_EXECUTOR_OPTIONS, getSelectedTaskExecutor, setSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecutor'
+import { useToolsStore } from '@/stores/toolsStore'
 
 const props = defineProps<{
   active: boolean
@@ -80,6 +83,8 @@ const emit = defineEmits<{
     projectPath: string
     /** false = 本次派发不附加默认提示词 */
     useDefaultPrompt: boolean
+    /** 本次派发用的执行器（claude | opencode），覆盖设置里的默认值 */
+    executor: TaskExecutorId
   }]
 }>()
 
@@ -92,6 +97,34 @@ const autoRun = ref(true)
  * 纯指令就得先去设置里把它删掉、发完再粘回来。
  */
 const useDefaultPrompt = ref(true)
+
+// ── 执行器（claude | opencode）─────────────────────────────────────────
+// 与工作台执行按钮共用同一份临时选择（localStorage），两边切了互相跟手；
+// 选中的执行器没装时回落到另一个可用的（与看板卡片「执行」同一套兜底）。
+const toolsStore = useToolsStore()
+const executorAvailability = computed(() => ({
+  claude: toolsStore.claudeAvailable,
+  opencode: toolsStore.opencodeAvailable,
+}))
+const selectedExecutor = ref<TaskExecutorId>(getSelectedTaskExecutor())
+function onExecutorChange() {
+  // 原生 select 不会命中 disabled option，但键盘/历史脏值仍可能落进来
+  if (executorAvailability.value[selectedExecutor.value]) {
+    setSelectedTaskExecutor(selectedExecutor.value)
+    return
+  }
+  const fallback = (Object.keys(executorAvailability.value) as TaskExecutorId[])
+    .find(id => executorAvailability.value[id])
+  if (fallback) selectedExecutor.value = fallback
+}
+function executorName(id: TaskExecutorId): string {
+  return TASK_EXECUTOR_OPTIONS.find(o => o.id === id)?.name || id
+}
+function onExecutorPick(id: TaskExecutorId) {
+  // disabled 项 el-dropdown 根本不会发 command，这里只做兜底
+  selectedExecutor.value = id
+  onExecutorChange()
+}
 
 // ── 附件 ────────────────────────────────────────────────────────────────
 // 派发这一刻任务还不存在，没有 task/sub 可挂 → 先落服务端的暂存区
@@ -195,6 +228,7 @@ function send() {
     // 选中具体项目 = 显式指定；「全部项目」留空，让服务端按指令内容判断落点
     projectPath: props.selectedProject ? props.selectedProject.path : '',
     useDefaultPrompt: useDefaultPrompt.value,
+    executor: selectedExecutor.value,
   })
   draft.value = ''
 }
@@ -485,6 +519,37 @@ const gitSummary = computed(() => {
           <input type="checkbox" v-model="useDefaultPrompt" />
           <span>{{ $t('@WORKBENCH:默认提示词（{state}）', { state: promptStateLabel }) }}</span>
         </label>
+        <!-- 执行器：与执行按钮共用同一份临时选择，派发时覆盖设置里的默认值。
+             不用原生 select —— option 里塞不了品牌图标，el-dropdown 才有精致度 -->
+        <el-dropdown trigger="click" class="oc__executor" @command="onExecutorPick">
+          <button
+            type="button"
+            class="oc__executor-btn"
+            :title="$t('@WORKBENCH:本次派发使用的执行器（与执行按钮的临时切换共用）')"
+            :aria-label="$t('@WORKBENCH:任务执行器')"
+          >
+            <TaskExecutorIcon :executor="selectedExecutor" class="oc__executor-btn__icon" />
+            <span>{{ executorName(selectedExecutor) }}</span>
+            <el-icon class="oc__executor-btn__caret"><ArrowDown /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="opt in TASK_EXECUTOR_OPTIONS"
+                :key="opt.id"
+                :command="opt.id"
+                :disabled="!executorAvailability[opt.id]"
+              >
+                <span class="oc__executor-item">
+                  <TaskExecutorIcon :executor="opt.id" class="oc__executor-item__icon" />
+                  <span class="oc__executor-item__name">{{ opt.name }}</span>
+                  <el-icon v-if="selectedExecutor === opt.id" class="oc__executor-item__check"><Check /></el-icon>
+                  <span v-else-if="!executorAvailability[opt.id]" class="oc__executor-item__missing">{{ $t('@42BB9:未安装') }}</span>
+                </span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <button type="button" class="oc__send" :disabled="!canSend" @click="send">
           <el-icon class="oc__send-icon"><Promotion /></el-icon>
           <span>{{ dispatching ? $t('@WORKBENCH:派发中…') : $t('@WORKBENCH:派发') }}</span>
@@ -813,6 +878,42 @@ const gitSummary = computed(() => {
   user-select: none;
 }
 .oc__autorn input { cursor: pointer; }
+/* 执行器下拉：与旁边 11px 勾选项同体量，品牌图标点亮但不抢「派发」按钮的视觉重心 */
+.oc__executor { vertical-align: middle; }
+.oc__executor-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast) var(--ease-custom),
+    border-color var(--transition-fast) var(--ease-custom);
+}
+.oc__executor-btn:hover,
+.oc__executor-btn:focus-visible {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.oc__executor-btn:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
+.oc__executor-btn__icon { font-size: 13px; }
+.oc__executor-btn__caret { font-size: 10px; opacity: 0.7; }
+.oc__executor-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 132px;
+}
+.oc__executor-item__icon { font-size: 14px; flex: none; }
+.oc__executor-item__name { flex: 1; }
+.oc__executor-item__check { color: var(--color-primary); font-size: 12px; }
+.oc__executor-item__missing { font-size: 10px; color: var(--text-tertiary, var(--text-secondary)); }
 .oc__send {
   margin-left: auto;
   display: inline-flex;

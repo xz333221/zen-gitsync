@@ -186,7 +186,11 @@ export default defineConfig(({ command }) => {
     // },
     proxy: {
       "/api": {
-        target: `http://localhost:${getBackendPort()}`, // 动态设置后端服务地址
+        // 必须写 127.0.0.1 而不是 localhost：Node 的 DNS 解析常把 localhost 先解析成 ::1，
+        // 而 Windows 上完全可能出现「127.0.0.1:后端 是好实例、[::1]:同一端口 是坏/半死监听」
+        // 的分裂（2026-09-20 实测：[::1]:5546 回 502，127.0.0.1:5546 回 200），
+        // 走 localhost 代理就会随机/稳定地打到坏的那半边，前端集体「后端不可用 backend unavailable」。
+        target: `http://127.0.0.1:${getBackendPort()}`, // 动态设置后端服务地址
         changeOrigin: true,
         // rewrite: (path) => path.replace(/^\/api/, '')
       },

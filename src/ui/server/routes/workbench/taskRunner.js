@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 任务执行引擎：spawn claude CLI 跑子任务，流式收集输出，更新 job 状态。
+// 任务执行引擎：spawn 本地 agent CLI 跑子任务，流式收集输出，更新 job 状态。
 // 拆分自原 routes/workbench.js 1108-1564 行。
+//
+// 支持两种执行器（executor）：
+//   - claude   —— claude -p --output-format stream-json（默认，历史行为）
+//   - opencode —— opencode run --format json --auto（sst/opencode CLI，跟随其自身默认模型）
 //
 // 核心 API：
 //   - launchClaudeInNewWindow(cwd, prompt, resumeSessionId)  spawn claude，返回 {pid, child}
-//   - runTaskQueue(task, repoPath, branch, opts)             顺序执行 task.subtasks
+//   - launchOpencodeRun(cwd, prompt, resumeSessionId)        spawn opencode，返回 {pid, child}
+//   - normalizeTaskExecutor(value)                           非法值回落 'claude'
+//   - runTaskQueue(task, repoPath, branch, opts)             顺序执行 task.subtasks（opts.executor 透传）
 //   - runSingleSubtask(task, sub, repoPath, branch, priorOutputs, opts)  跑单个 sub
 //   - syncSubToCancelled(job)                                cancel 路径专用
 //   - persistTaskAfterRun(task)                              把 sub.status 落回 tasks.json
@@ -85,8 +91,7 @@ async function resolveEnvContext(repoPath) {
 // 返回 { pid, child }：调用方可以监听 child.stdout/stderr 实时收集输出。
 // 不再走 cmd /k 弹窗——claude -p 是非交互模式，输出通过 stdout pipe 实时回传
 // 到前端面板展示。
-export function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
-  return new Promise((resolve, reject) => {
+export function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {  return new Promise((resolve, reject) => {
     const args = [];
     // 续接历史会话:--resume 必须放在 -p 之前,确保 claude CLI 先识别 resume 上下文
     if (resumeSessionId) {
@@ -154,26 +159,195 @@ export function launchClaudeInNewWindow(cwd, promptText, resumeSessionId) {
         env: { ...process.env, LANG: 'zh_CN.UTF-8' }
       });
     }
-    child.on('error', reject);
-    child.on('spawn', () => {
-      // unref 让 claude 独立于父进程事件循环；返回 child 引用让调用方继续读 stdout。
-      child.unref();
-      // 长 prompt 通过 stdin 喂入(避开 Windows CreateProcess 32K 命令行上限)。
-      // 必须在 spawn 事件回调里 write,而不是 resolve 前同步 write——因为 spawn
-      // 返回时 child.stdin 句柄可能尚未绑定到真正的 pipe fd。
-      // write 完成后必须 end(),否则 claude CLI 会一直阻塞在读 stdin 上 → hang。
-      try {
-        child.stdin.write(promptText, () => {
-          try { child.stdin.end(); } catch { /* 子进程已关闭,忽略 */ }
-        });
-      } catch (err) {
-        // stdin 写入失败不要让 spawn 整体 reject —— 让 child 自然以错误状态收尾,
-        // 后面的 stdout/stderr 监听会捕获到 LLM 端反馈。
-        logger.warn('[workbench] stdin write failed:', err && err.message || err);
-      }
-      resolve({ pid: child.pid, child });
-    });
+    attachPromptStdin(child, promptText, resolve, reject);
   });
+}
+
+/**
+ * spawn 后的公共收尾：挂 error/spawn 监听，spawn 成功后把 prompt 从 stdin 喂进去。
+ *
+ * 长 prompt 必须走 stdin（避开 Windows CreateProcess 32K 命令行上限）。必须在
+ * spawn 事件回调里 write——spawn 返回时 child.stdin 句柄可能尚未绑定到真正的
+ * pipe fd；write 完成后必须 end()，否则 CLI 会一直阻塞在读 stdin 上 → hang。
+ */
+function attachPromptStdin(child, promptText, resolve, reject) {
+  child.on('error', reject);
+  child.on('spawn', () => {
+    // unref 让 CLI 独立于父进程事件循环；返回 child 引用让调用方继续读 stdout。
+    child.unref();
+    try {
+      child.stdin.write(promptText, () => {
+        try { child.stdin.end(); } catch { /* 子进程已关闭,忽略 */ }
+      });
+    } catch (err) {
+      // stdin 写入失败不要让 spawn 整体 reject —— 让 child 自然以错误状态收尾,
+      // 后面的 stdout/stderr 监听会捕获到 LLM 端反馈。
+      logger.warn('[workbench] stdin write failed:', err && err.message || err);
+    }
+    resolve({ pid: child.pid, child });
+  });
+}
+
+// ── 执行器（executor） ──────────────────────────────────────────────────
+// 工作台任务默认由 claude CLI 执行；opencode 作为可选执行器（2026-09-20）。
+// 两者都用「stdin 喂 prompt + stdout 结构化 JSON 事件流」的同构形态，
+// 差异只在协议：claude 是 stream-json，opencode 是 --format json 的事件 NDJSON。
+export const TASK_EXECUTORS = ['claude', 'opencode'];
+
+/** 非法/缺省的 executor 一律回落 'claude'（历史行为的兼容兜底）。
+ *  body.executor 来自网络，做一次 trim + 小写归一，与 config.js 同名函数同语义。 */
+export function normalizeTaskExecutor(value) {
+  if (typeof value !== 'string') return 'claude';
+  const v = value.trim().toLowerCase();
+  return TASK_EXECUTORS.includes(v) ? v : 'claude';
+}
+
+/**
+ * Windows 下把 opencode 解析成可直接 spawn 的 exe。
+ * npm 全局安装的 opencode 是 .cmd shim（Node 23+ 拒绝 spawn .cmd，EINVAL），
+ * shim 内容实际指向 <prefix>\node_modules\opencode-ai\bin\opencode.exe，
+ * 与 claude 的 cli.js 解析同一条套路，只是目标文件不同。
+ */
+function resolveOpencodeExe() {
+  try {
+    const cmdShim = execFileSync('where', ['opencode'], { encoding: 'utf8', windowsHide: true })
+      .split(/\r?\n/).map(s => s.trim()).find(s => /\.cmd$/i.test(s));
+    if (cmdShim) {
+      const exe = path.join(path.dirname(cmdShim), 'node_modules', 'opencode-ai', 'bin', 'opencode.exe');
+      if (fs.existsSync(exe)) return exe;
+    }
+  } catch { /* fallback */ }
+  // 兜底交给 PATH：装在非 npm 全局目录（scoop/手动下载）时通常有 opencode.exe
+  return 'opencode.exe';
+}
+
+/**
+ * opencode 子进程环境。
+ * 关键点：删掉 PWD/OLDPWD。opencode（Bun 构建）在某些路径下会拿环境里的 PWD
+ * 当 cwd 用，而从 Git Bash 继承的 POSIX 风格 PWD（/tmp/xxx）会被它解析成
+ * 不存在的 C:\tmp\xxx，SystemPrompt 阶段直接抛
+ * "FileSystem.realPath ... ENOENT"。删掉让它老老实实走 process.cwd()。
+ */
+function buildOpencodeEnv() {
+  const env = { ...process.env, LANG: 'zh_CN.UTF-8' };
+  delete env.PWD;
+  delete env.OLDPWD;
+  return env;
+}
+
+/**
+ * 用 opencode run 跑一个 prompt（非交互模式），返回 { pid, child }。
+ *
+ *   opencode run --format json --auto [--thinking] [--session <id>]
+ *
+ *   - --format json   结构化事件流（step_start/text/reasoning/tool_use/step_finish/error）
+ *   - --auto          自动批准未被显式拒绝的权限（对应 claude 的 bypassPermissions 档位）
+ *   - --thinking      输出 reasoning 事件（对应 claude 的 thinking 块）
+ *   - --session <id>  续接历史会话（对应 claude 的 --resume）
+ *   - 不传 -m：模型跟随 opencode 自身配置的默认值（用户在 opencode 里配了什么就用什么）
+ *   - prompt 从 stdin 喂入：opencode run 无位置参数时读 stdin，顺带避开命令行长度上限
+ */
+export function launchOpencodeRun(cwd, promptText, resumeSessionId) {
+  return new Promise((resolve, reject) => {
+    const args = ['run', '--format', 'json', '--auto', '--thinking'];
+    if (resumeSessionId) {
+      args.push('--session', String(resumeSessionId));
+    }
+    let child;
+    if (process.platform === 'win32') {
+      child = spawn(resolveOpencodeExe(), args, {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: false,
+        env: buildOpencodeEnv()
+      });
+    } else {
+      child = spawn('opencode', args, {
+        cwd,
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildOpencodeEnv()
+      });
+    }
+    attachPromptStdin(child, promptText, resolve, reject);
+  });
+}
+
+/**
+ * claude stream-json 事件处理器。
+ *   system/init  → session_id（--resume 续接用）
+ *   assistant    → message.content 里的 text / thinking 块
+ *   其余（tool_use / result / stream_event 等）忽略。
+ */
+function createClaudeEventHandler(job, appendOutput, appendThinking) {
+  return (evt) => {
+    if (evt.type === 'system' && evt.subtype === 'init' && typeof evt.session_id === 'string') {
+      if (!job.claudeSessionId || job.claudeSessionId !== evt.session_id) {
+        job.claudeSessionId = evt.session_id;
+        publish('job:update', job);
+      }
+      return;
+    }
+    if (evt.type !== 'assistant') return;
+    const blocks = evt.message?.content;
+    if (!Array.isArray(blocks)) return;
+    for (const b of blocks) {
+      if (b.type === 'text' && typeof b.text === 'string') {
+        appendOutput(b.text);
+      } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
+        appendThinking(b.thinking);
+      }
+    }
+  };
+}
+
+/**
+ * opencode --format json 事件处理器。
+ * 实测事件形态（opencode 1.18.x）：
+ *   { type:'step_start' | 'step_finish', sessionID, part:{ type:'step-start'|'step-finish', tokens?, cost? } }
+ *   { type:'text',      sessionID, part:{ id, type:'text',      text } }
+ *   { type:'reasoning', sessionID, part:{ id, type:'reasoning', text } }
+ *   { type:'tool_use',  sessionID, part:{ type:'tool', tool, state:{ status, input, output } } }
+ *   { type:'error',     sessionID, error:{ name, data:{ message } } }
+ * 正文/思考按 part.id 记录已落地的累计文本：同一 part 再次出现时若文本是前次的
+ * 前缀延长（累积语义）只追加增量，否则按纯增量整段追加 —— 两种推送语义都兼容。
+ * （导出仅为回归测试可见：taskRunner.opencode.test.js）
+ */
+export function createOpencodeEventHandler(job, appendOutput, appendThinking) {
+  const seenParts = new Map(); // part.id -> 已落地的累计文本
+  const appendPartText = (part, isThinking) => {
+    const text = typeof part?.text === 'string' ? part.text : '';
+    if (!text) return;
+    const id = typeof part?.id === 'string' ? part.id : '';
+    const prev = id ? seenParts.get(id) : undefined;
+    let delta = text;
+    if (prev !== undefined) {
+      delta = text.startsWith(prev) ? text.slice(prev.length) : text;
+    }
+    if (!delta) return;
+    if (id) seenParts.set(id, prev !== undefined ? prev + delta : text);
+    if (isThinking) appendThinking(delta);
+    else appendOutput(delta);
+  };
+  return (evt) => {
+    // 顶层 sessionID 是 opencode 的会话标识（--session <id> 续接）。
+    // 复用 claudeSessionId 字段：前端与续接路由都认它，换执行器只是取值来源不同。
+    if (typeof evt.sessionID === 'string' && evt.sessionID && job.claudeSessionId !== evt.sessionID) {
+      job.claudeSessionId = evt.sessionID;
+      publish('job:update', job);
+    }
+    if (evt.type === 'text' || evt.type === 'reasoning') {
+      appendPartText(evt.part, evt.type === 'reasoning');
+      return;
+    }
+    if (evt.type === 'error') {
+      const msg = evt.error?.data?.message
+        || (typeof evt.error?.message === 'string' ? evt.error.message : '')
+        || evt.error?.name
+        || 'opencode 执行出错';
+      if (!job.agentError) job.agentError = msg;
+    }
+  };
 }
 
 /**
@@ -204,7 +378,7 @@ export async function runTaskQueue(task, repoPath, branch, opts) {
   for (let i = fromIndex; i < task.subtasks.length; i++) {
     const sub = task.subtasks[i];
     if (sub.status === 'done') continue;
-    const outcome = await runSingleSubtask(task, sub, repoPath, branch, priorOutputs);
+    const outcome = await runSingleSubtask(task, sub, repoPath, branch, priorOutputs, { executor: opts.executor });
     // 逐 sub 落盘:之前只在队列跑完才 persistTaskAfterRun,中途崩溃会丢已完成
     // sub 的状态。runSingleSubtask 已经把 sub.status 改完,这里补一次落盘。
     await persistTaskAfterRun(task);
@@ -228,14 +402,17 @@ export async function runTaskQueue(task, repoPath, branch, opts) {
  *        知道上下文。单独跑一个 sub 时，这个数组里只会有"前面 done 的 sub"。
  * @param {object} [options]
  * @param {string|null} [options.resumeSessionId]
- *        续接历史 claude 会话:传入上一轮通过 stream-json 的 system.init
- *        事件捕获到的 session_id,本轮以 --resume <id> 启动,claude 会带着
- *        上下文继续对话。前端"简单任务执行完成后继续聊"走的就是这条路径。
+ *        续接历史会话:claude 走 --resume <id>，opencode 走 --session <id>。
+ *        id 来自上一轮 stream 事件捕获的会话标识(两者都记在 job.claudeSessionId)。
+ * @param {string} [options.executor]
+ *        执行器 'claude' | 'opencode'。缺省回落 'claude'；路由层负责把
+ *        "body 指定 > 配置默认"先解析好再传进来。
  * @returns {Promise<'done'|'cancelled'|'error'>} sub 的终态
  */
 export async function runSingleSubtask(task, sub, repoPath, branch, priorOutputs, options) {
   const opts = options || {};
   const resumeSessionId = opts.resumeSessionId || null;
+  const executor = normalizeTaskExecutor(opts.executor);
   const promptTemplate = sub.promptOverride || (task.promptId
     ? (await readJson(PROMPTS_FILE, { prompts: [] })).prompts.find(p => p.id === task.promptId)?.content
     : null) || '';
@@ -303,7 +480,12 @@ ${prompt}`;
     title: `${task.title} / ${sub.title}`,
     status: 'pending',
     prompt,
-    // 续接历史会话时先填上,首条 system.init 事件回来后再用真值覆盖(通常等同)
+    // 本轮用的执行器。前端日志详情按它显示助手名；简单任务续聊时
+    // 路由层用它保证"用同一个 CLI 续同一个会话"。
+    agent: executor,
+    // 续接历史会话时先填上,首条协议事件回来后再用真值覆盖(通常等同)。
+    // 字段名保留 claudeSessionId:claude 的 session_id 和 opencode 的 sessionID
+    // 都存这里,语义是"该执行器的会话续接标识"。
     claudeSessionId: resumeSessionId
   };
   jobs.set(jobId, job);
@@ -312,7 +494,8 @@ ${prompt}`;
   publish('job:update', job);
 
   try {
-    const { pid, child } = await launchClaudeInNewWindow(repoPath || process.cwd(), prompt, resumeSessionId);
+    const launcher = executor === 'opencode' ? launchOpencodeRun : launchClaudeInNewWindow;
+    const { pid, child } = await launcher(repoPath || process.cwd(), prompt, resumeSessionId);
     job.pid = pid;
     // 保存 child 引用，供 cancel 接口调用 kill
     job.child = child;
@@ -320,64 +503,64 @@ ${prompt}`;
     job.status = 'running';
     publish('job:update', job);
 
-    // 流式 NDJSON 解析：把 stdout 当作 stream-json 协议处理
-    //   assistant.text       → job.output    （用户主要关心的内容）
-    //   assistant.thinking   → job.thinking  （折叠展示，让用户知道 Claude 在想）
-    //   其他事件（init / tool_use / result 等）忽略，避免噪声
+    // 流式 NDJSON 解析：把 stdout 当作所选执行器的 JSON 事件流处理
+    //   正文/思考块            → job.output / job.thinking（前端主视图 + 折叠思考）
+    //   会话标识               → job.claudeSessionId（续接对话用）
+    //   其他事件（tool_use 等）忽略，避免噪声
     const MAX_OUTPUT = 100 * 1024 * 1024;
     const MAX_THINKING = 100 * 1024 * 1024;
     job.output = '';
     job.thinking = '';
     const lineBuf = { stdout: '', stderr: '' };
 
+    // 追加正文（尾部截断保底 + 增量推送给前端）
+    const appendOutput = (text) => {
+      if (!text) return;
+      const prevLen = job.output.length;
+      job.output = (job.output + text).slice(-MAX_OUTPUT);
+      const delta = job.output.slice(prevLen);
+      if (delta) publish('job:output-delta', { id: job.id, delta });
+    };
+
+    // 追加思考：先攒在本批缓冲里，一批 NDJSON 处理完统一发一次，避免高频小块 socket 占用
+    let thinkingBatch = '';
+    const flushThinkingBatch = () => {
+      if (thinkingBatch) {
+        publish('job:thinking-delta', { id: job.id, delta: thinkingBatch });
+        thinkingBatch = '';
+      }
+    };
+    const appendThinking = (text) => {
+      if (!text) return;
+      const prevLen = job.thinking.length;
+      job.thinking = (job.thinking + text).slice(-MAX_THINKING);
+      thinkingBatch += job.thinking.slice(prevLen);
+    };
+
+    const handleEvent = executor === 'opencode'
+      ? createOpencodeEventHandler(job, appendOutput, appendThinking)
+      : createClaudeEventHandler(job, appendOutput, appendThinking);
+
+    const handleLine = (line, channel) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      if (channel === 'stderr' || !trimmed.startsWith('{')) {
+        // 非 JSON 行：原样塞进 output（兼容老版本 claude / CLI 的错误信息）
+        appendOutput(trimmed + '\n');
+        return;
+      }
+      let evt;
+      try { evt = JSON.parse(trimmed); } catch { return; }
+      handleEvent(evt);
+    };
+
     const parseLines = (channel, buf) => {
       const chunk = buf.toString('utf8');
       lineBuf[channel] += chunk;
       const lines = lineBuf[channel].split('\n');
       lineBuf[channel] = lines.pop() ?? ''; // 最后一段可能不完整，留给下次
-      let pendingThinkingDelta = '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        if (channel === 'stderr' || !trimmed.startsWith('{')) {
-          // 非 stream-json 行：原样塞进 output（兼容老版本 claude / 错误信息）
-          const prevLen = job.output.length;
-          job.output = (job.output + trimmed + '\n').slice(-MAX_OUTPUT);
-          const delta = job.output.slice(prevLen);
-          if (delta) publish('job:output-delta', { id: job.id, delta });
-          continue;
-        }
-        let evt;
-        try { evt = JSON.parse(trimmed); } catch { continue; }
-        // 捕获 system.init 里的 session_id,供后续"续接对话"用(--resume <id>)
-        if (evt.type === 'system' && evt.subtype === 'init' && typeof evt.session_id === 'string') {
-          if (!job.claudeSessionId || job.claudeSessionId !== evt.session_id) {
-            job.claudeSessionId = evt.session_id;
-            publish('job:update', job);
-          }
-          continue;
-        }
-        if (evt.type !== 'assistant') continue;
-        const blocks = evt.message?.content;
-        if (!Array.isArray(blocks)) continue;
-        for (const b of blocks) {
-          if (b.type === 'text' && typeof b.text === 'string') {
-            const prevLen = job.output.length;
-            job.output = (job.output + b.text).slice(-MAX_OUTPUT);
-            const delta = job.output.slice(prevLen);
-            if (delta) publish('job:output-delta', { id: job.id, delta });
-          } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
-            const prevLen = job.thinking.length;
-            job.thinking = (job.thinking + b.thinking).slice(-MAX_THINKING);
-            const delta = job.thinking.slice(prevLen);
-            if (delta) pendingThinkingDelta += delta;
-          }
-        }
-      }
-      // 一批 NDJSON 处理完后统一发一次 thinking delta，避免高频小块 socket 占用
-      if (pendingThinkingDelta) {
-        publish('job:thinking-delta', { id: job.id, delta: pendingThinkingDelta });
-      }
+      for (const line of lines) handleLine(line, channel);
+      flushThinkingBatch();
     };
     if (child.stdout) child.stdout.on('data', (buf) => parseLines('stdout', buf));
     if (child.stderr) child.stderr.on('data', (buf) => parseLines('stderr', buf));
@@ -386,27 +569,14 @@ ${prompt}`;
     await waitProcessExit(pid);
     const wasCancelled = cancelledJobs.has(jobId);
     if (wasCancelled) cancelledJobs.delete(jobId);
-    // 进程退出时 stdout 可能残留最后一段未换行的 NDJSON，flush 一次
-    if (lineBuf.stdout.trim()) {
-      const outPrev = job.output.length;
-      const thinkPrev = job.thinking.length;
-      try {
-        const evt = JSON.parse(lineBuf.stdout.trim());
-        if (evt.type === 'assistant' && Array.isArray(evt.message?.content)) {
-          for (const b of evt.message.content) {
-            if (b.type === 'text' && typeof b.text === 'string') {
-              job.output = (job.output + b.text).slice(-MAX_OUTPUT);
-            } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
-              job.thinking = (job.thinking + b.thinking).slice(-MAX_THINKING);
-            }
-          }
-        }
-      } catch { /* 不是 JSON，忽略 */ }
-      const outDelta = job.output.slice(outPrev);
-      if (outDelta) publish('job:output-delta', { id: job.id, delta: outDelta });
-      const thinkDelta = job.thinking.slice(thinkPrev);
-      if (thinkDelta) publish('job:thinking-delta', { id: job.id, delta: thinkDelta });
+    // 进程退出时 stdout/stderr 可能残留最后一段未换行的 NDJSON，flush 一次
+    if (lineBuf.stdout.trim() || lineBuf.stderr.trim()) {
+      for (const line of lineBuf.stdout.split('\n')) handleLine(line, 'stdout');
+      for (const line of lineBuf.stderr.split('\n')) handleLine(line, 'stderr');
+      lineBuf.stdout = '';
+      lineBuf.stderr = '';
     }
+    flushThinkingBatch();
     job.endedAt = nowIso();
     if (wasCancelled) {
       job.exitCode = 130; // 128 + SIGINT(2)，约定俗成的"用户取消"退出码
@@ -417,6 +587,16 @@ ${prompt}`;
       // 会用 status='running' 覆盖掉前端已渲染的 cancelled 状态，导致 UI 反复跳回 running。
       sub.status = 'cancelled';
       if (!sub.error) sub.error = '用户已停止执行';
+    } else if (job.agentError) {
+      // 执行器在协议层报了 error（如模型 5xx、配置缺失）。CLI 退出码可能是 0，
+      // 但不能标 done —— 那会把失败伪装成完成，后续 sub 还会拿空输出当下文继续跑。
+      job.exitCode = 1;
+      job.status = 'error';
+      job.error = job.agentError;
+      sub.status = 'error';
+      sub.error = job.agentError;
+      sub.errorAt = nowIso();
+      appendOutput(`\n> [${executor}] ${job.agentError}\n`);
     } else {
       job.exitCode = 0;
       job.status = 'done';

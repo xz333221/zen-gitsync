@@ -77,7 +77,7 @@
       <ChatContainer
         :messages="chatMessages"
         :assistant-name="assistantLabel"
-        :assistant-avatar="CLAUDE_AVATAR"
+        :assistant-avatar="assistantAvatar"
         :show-avatar="true"
         :theme="configStore.theme"
         class="wb-job-chat"
@@ -124,7 +124,7 @@ import { ElMessage } from 'element-plus'
 // 模型对话 UI 改为引用 zen-ai-chat-ui(本地 chat-ui 项目发布的组件库)
 import { ChatContainer, MarkdownRenderer, type ChatMessage, type MessageStatus } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
-import { CLAUDE_AVATAR } from '@/utils/agentAvatar'
+import { avatarForExecutor } from '@/utils/agentAvatar'
 import { $t } from '@/lang/static'
 import type { Job, JobStatus } from '@/types/workbench'
 import { useConfigStore } from '@/stores/configStore'
@@ -237,8 +237,11 @@ const finishedStatusLabel = computed(() => {
 //   job.output        → assistant.content(Markdown 正文 + 流式光标)
 //   job.status        → message.status(streaming 光标 / pending 打字点 / done / error)
 // 流式状态由 message.status 驱动,不再需要自定义 typewriter。
-// Claude 为产品名,中英文一致,无需走 i18n
-const assistantLabel = 'Claude'
+// 助手名跟随 job 实际用的执行器（job.agent，老 job 无此字段视为 claude）。
+// 产品名,中英文一致,无需走 i18n
+const assistantLabel = computed(() => (props.job?.agent === 'opencode' ? 'OpenCode' : 'Claude'))
+// 头像与名字同源,一并跟随执行器
+const assistantAvatar = computed(() => avatarForExecutor(props.job?.agent))
 
 function mapStatus(s: JobStatus, hasContent: boolean): MessageStatus {
   if (s === 'running' || s === 'pending') {

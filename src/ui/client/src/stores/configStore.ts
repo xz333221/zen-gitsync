@@ -193,6 +193,9 @@ export const useConfigStore = defineStore('config', () => {
   const models = ref<ModelInfo[]>([])
   // AI 智能体单轮最大工具调用次数（全局配置，CLI `g ai` 与 Web 智能体共用）
   const aiMaxToolIterations = ref(200)
+  // 工作台任务执行器默认值（全局配置）：claude | opencode。
+  // 执行按钮旁的临时切换不存这里——那一份在 utils/taskExecutor.ts 的 localStorage 里。
+  const taskExecutor = ref<'claude' | 'opencode'>('claude')
 
   // ============================================================
   // UI 状态（持久化到 ~/.zen-gitsync/config.json 的顶层 ui 字段）
@@ -430,6 +433,10 @@ export const useConfigStore = defineStore('config', () => {
       // 加载 AI 智能体运行时设置（后端 loadConfig 已规范化，这里只做防御性校验）
       if (Number.isFinite(Number(configData.aiMaxToolIterations)) && Number(configData.aiMaxToolIterations) > 0) {
         aiMaxToolIterations.value = Math.floor(Number(configData.aiMaxToolIterations))
+      }
+      // 加载工作台任务执行器默认值（后端已规范化为 claude | opencode）
+      if (configData.taskExecutor === 'claude' || configData.taskExecutor === 'opencode') {
+        taskExecutor.value = configData.taskExecutor
       }
 
       // 加载通用设置
@@ -1328,7 +1335,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 保存通用设置
-  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale }) {
+  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: 'claude' | 'opencode' }) {
     try {
       const response = await fetch('/api/config/save-general-settings', {
         method: 'POST',
@@ -1337,7 +1344,7 @@ export const useConfigStore = defineStore('config', () => {
         },
         body: JSON.stringify(settings)
       })
-      
+
       const result = await response.json()
       if (result.success) {
         if (settings.theme) {
@@ -1350,6 +1357,9 @@ export const useConfigStore = defineStore('config', () => {
           setLocale(settings.locale)
           const localeStore = useLocaleStore()
           localeStore.currentLocale = settings.locale
+        }
+        if (settings.taskExecutor === 'claude' || settings.taskExecutor === 'opencode') {
+          taskExecutor.value = settings.taskExecutor
         }
         return true
       } else {
@@ -1366,6 +1376,7 @@ export const useConfigStore = defineStore('config', () => {
     // 状态
     models,
     aiMaxToolIterations,
+    taskExecutor,
     defaultCommitMessage,
     descriptionTemplates,
     scopeTemplates,

@@ -875,6 +875,10 @@ export default {
   '@42BB9:通用配置': '通用配置',
   '@42BB9:自定义应用的外观和语言': '自定义应用的外观和语言',
   '@42BB9:外观': '外观',
+  '@42BB9:任务执行': '任务执行',
+  '@42BB9:任务执行器': '任务执行器',
+  '@42BB9:工作台执行任务时使用的本地 CLI；模型跟随各自 CLI 的自身配置': '工作台执行任务时使用的本地 CLI；模型跟随各自 CLI 的自身配置',
+  '@42BB9:未安装': '未安装',
   '@42BB9:主题': '主题',
   '@42BB9:浅色': '浅色',
   '@42BB9:深色': '深色',
@@ -2099,6 +2103,8 @@ export default {
   '@WORKBENCH:暂无内容可复制': '暂无内容可复制',
   // ── 执行日志管理 ──
   '@WORKBENCH:任务执行': '任务执行',
+  '@WORKBENCH:任务执行器': '任务执行器',
+  '@WORKBENCH:本次派发使用的执行器（与执行按钮的临时切换共用）': '本次派发使用的执行器（与执行按钮的临时切换共用）',
   '@WORKBENCH:执行日志': '执行日志',
   '@WORKBENCH:清空执行': '清空执行',
   '@WORKBENCH:清空子任务': '清空子任务',
@@ -2320,6 +2326,7 @@ export default {
   '@WORKBENCH:拖动中': '拖动中…',
   '@WORKBENCH:放置位置': '释放到此处',
   '@WORKBENCH:未检测到本地 claude,无法执行任务': '未检测到本地 claude,无法执行任务',
+  '@WORKBENCH:未检测到本地 claude / opencode,无法执行任务': '未检测到本地 claude / opencode,无法执行任务',
   '@WORKBENCH:查看安装指引': '查看安装指引',
   // @WORKBENCH: file path: views/components/WorkbenchBoard.vue, WorkbenchProjectPanel.vue, WorkbenchAgentPanel.vue, WorkbenchKanban.vue, OrchestratorConsole.vue, WorkbenchDefaultPromptDialog.vue, composables/useWorkbenchProjects.ts, composables/useOrchestrator.ts, utils/relativeTime.ts (追加: 多项目编排台)
   '@WORKBENCH:多项目编排台': '多项目编排台',

@@ -14,10 +14,9 @@
 //
 // 工作台对话的助手头像。
 //
-// 这条链路（简单任务连续对话 / 执行日志详情）的实际执行者是本机的 Claude Code
-// （见 WorkbenchView 的 toolsStore.claudeAvailable 守卫），助手名也一直写死 'Claude'，
-// 所以头像直接复用 zen-ai-chat-ui 内置的 claude 品牌头像（0.1.0-beta.8 起提供 13 个
-// AI 品牌头像，见 node_modules/zen-ai-chat-ui/dist/avatars）。
+// 这条链路（简单任务连续对话 / 执行日志详情）的执行者有 claude / opencode 两种
+// （taskRunner 双执行器，job.agent 记录本轮实际用的是谁），头像按 job.agent 切换，
+// 都用 zen-ai-chat-ui 内置品牌头像（0.1.0-beta.8 起提供 13 个，见 dist/avatars）。
 //
 // resolveAvatar 的语义是「透传」：命中内置键名返回内联 data URL（运行时零网络请求），
 // 未命中则原样返回。所以将来要换成按模型动态取头像，只需把入参换掉：
@@ -28,5 +27,12 @@
 
 import { resolveAvatar } from 'zen-ai-chat-ui'
 
-/** Claude 品牌头像（内联 data URL）。WorkbenchView 简单任务对话与 JobLogDetails 共用。 */
+/** Claude Code 品牌头像（内联 data URL）。WorkbenchView 简单任务对话与 JobLogDetails 共用。 */
 export const CLAUDE_AVATAR = resolveAvatar('claude')
+/** OpenCode 品牌头像（内联 data URL）。 */
+export const OPENCODE_AVATAR = resolveAvatar('opencode')
+
+/** 按执行器 id 取头像；未知执行器回落 Claude（与标签口径一致）。 */
+export function avatarForExecutor(agent?: string | null): string {
+  return agent === 'opencode' ? OPENCODE_AVATAR : CLAUDE_AVATAR
+}

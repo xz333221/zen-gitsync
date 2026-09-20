@@ -105,6 +105,7 @@ import {
 } from './jobStore.js';
 import {
   launchClaudeInNewWindow,
+  normalizeTaskExecutor,
   runTaskQueue,
   runSingleSubtask,
   syncSubToCancelled,
@@ -137,6 +138,25 @@ import {
 } from './orchestratorStore.js';
 
 const { genSessionId, read: readSessionFile, write: writeSessionFile, delete: deleteSessionFile, listMeta: listSessionsMeta, enforceRetention: enforceSessionsRetention } = sessionStore;
+
+/**
+ * 解析本次执行用哪个执行器：body.executor 显式指定 > 配置里的全局默认 > 'claude'。
+ * 配置读失败一律回落 'claude' —— 执行器选不出来不该挡住任务本身能跑。
+ */
+async function resolveExecutor(requested) {
+  const explicit = normalizeTaskExecutor(requested);
+  if (explicit) return explicit;
+  try {
+    if (configManager) {
+      const cfg = await configManager.loadConfig();
+      const fallback = normalizeTaskExecutor(cfg?.taskExecutor);
+      if (fallback) return fallback;
+    }
+  } catch (err) {
+    logger.warn('[workbench] 读取 taskExecutor 配置失败,回落 claude:', err && err.message || err);
+  }
+  return 'claude';
+}
 
 /**
  * 注册所有 workbench 路由（共 45 个端点）。
@@ -1059,9 +1079,10 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       throw new HttpError(400, '任务没有子任务');
     }
     const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
+    const executor = await resolveExecutor(req.body?.executor);
     // 异步执行，立即返回
     res.json({ success: true, message: '已开始执行' });
-    runTaskQueue(task, repoPath, '').catch(err => {
+    runTaskQueue(task, repoPath, '', { executor }).catch(err => {
       publish('task:error', { taskId: task.id, error: err.message });
     });
   }));
@@ -1078,8 +1099,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       throw new HttpError(400, 'startSubIndex 越界');
     }
     const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
+    const executor = await resolveExecutor(req.body?.executor);
     res.json({ success: true, message: `已从第 ${startSubIndex + 1} 个子任务开始执行` });
-    runTaskQueue(task, repoPath, '', { fromIndex: startSubIndex }).catch(err => {
+    runTaskQueue(task, repoPath, '', { fromIndex: startSubIndex, executor }).catch(err => {
       publish('task:error', { taskId: task.id, error: err.message });
     });
   }));
@@ -1092,6 +1114,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       throw new HttpError(400, '该任务不是简单任务,请使用普通执行接口');
     }
     const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
+    const executor = await resolveExecutor(req.body?.executor);
     const virtualSub = {
       id: `${task.id}__simple`,
       title: task.title,
@@ -1101,7 +1124,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       attachments: Array.isArray(task.attachments) ? task.attachments : []
     };
     res.json({ success: true, message: '已开始执行简单任务' });
-    runSingleSubtask(task, virtualSub, repoPath, '', []).catch(err => {
+    runSingleSubtask(task, virtualSub, repoPath, '', [], { executor }).catch(err => {
       publish('task:error', { taskId: task.id, error: err.message });
     });
   }));
@@ -1124,11 +1147,12 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     const liveJob = snapshotJobs().find(j => j.subId === subId && (j.status === 'running' || j.status === 'pending'));
     if (liveJob) throw new HttpError(400, '该子任务已有正在执行的 job');
     const repoPath = resolveTaskRepoPath(foundTask, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
+    const executor = await resolveExecutor(req.body?.executor);
     res.json({ success: true, message: `已开始执行子任务：${foundSub.title || subId}` });
     (async () => {
       try {
         const priorOutputs = await collectPriorOutputs(foundTask, foundSub);
-        await runSingleSubtask(foundTask, foundSub, repoPath, '', priorOutputs);
+        await runSingleSubtask(foundTask, foundSub, repoPath, '', priorOutputs, { executor });
         await persistTaskAfterRun(foundTask);
       } catch (err) {
         publish('task:error', { taskId: foundTask.id, error: err.message });
@@ -1240,7 +1264,12 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     };
     const repoPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
     res.json({ success: true, message: '已加入续接队列' });
-    runSingleSubtask(task, virtualSub, repoPath, '', [], { resumeSessionId: prevJob.claudeSessionId })
+    // 执行器必须沿用上一轮 job 的 agent：claude 的 --resume 和 opencode 的 --session
+    // 互不认对方的会话 id，串了执行器续接必然失败。
+    runSingleSubtask(task, virtualSub, repoPath, '', [], {
+      resumeSessionId: prevJob.claudeSessionId,
+      executor: normalizeTaskExecutor(prevJob.agent)
+    })
       .catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });
       });
@@ -2113,7 +2142,9 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         promptOverride: task.simpleOverride || '',
         attachments: [],
       };
-      runSingleSubtask(task, virtualSub, targetPath, '', []).catch(err => {
+      // 派发控制台可以显式指定执行器；不传则用配置里的全局默认（resolveExecutor 走回落链）
+      const executor = await resolveExecutor(req.body?.executor);
+      runSingleSubtask(task, virtualSub, targetPath, '', [], { executor }).catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });
       });
     }

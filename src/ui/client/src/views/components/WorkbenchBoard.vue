@@ -33,6 +33,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Fold, Expand } from '@element-plus/icons-vue'
 import type { Attachment, BoardTask, ProjectSummary, Task } from '@/types/workbench'
 import { canonicalProjectPath } from '@/utils/path'
+import { getSelectedTaskExecutor, type TaskExecutorId } from '@/utils/taskExecutor'
+import { useToolsStore } from '@/stores/toolsStore'
 import { useWorkbenchProjects } from '@/composables/useWorkbenchProjects'
 import { useOrchestrator } from '@/composables/useOrchestrator'
 import WorkbenchProjectPanel from './WorkbenchProjectPanel.vue'
@@ -417,10 +419,25 @@ async function runTask(t: BoardTask) {
     ElMessage.warning($t('@WORKBENCH:复杂任务要先拆出子任务，打开编辑器添加后再执行'))
     return
   }
+  // 看板卡片没有执行器选择器：沿用工作台执行按钮旁的临时选择；
+  // 选的那个没装时回落到另一个可用的（toolsStore 启动即检测），都缺就交给后端报错。
+  const toolsStore = useToolsStore()
+  const avail: Record<TaskExecutorId, boolean> = {
+    claude: toolsStore.claudeAvailable,
+    opencode: toolsStore.opencodeAvailable
+  }
+  let executor = getSelectedTaskExecutor()
+  if (!avail[executor]) {
+    executor = executor === 'claude' ? 'opencode' : 'claude'
+  }
   const url = t.type === 'simple'
     ? `/api/workbench/tasks/${encodeURIComponent(t.id)}/run-simple`
     : `/api/workbench/tasks/${encodeURIComponent(t.id)}/run`
-  const res = await fetch(url, { method: 'POST' }).then(r => r.json()).catch(() => null)
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ executor })
+  }).then(r => r.json()).catch(() => null)
   if (!res?.success) {
     ElMessage.error(res?.error || $t('@WORKBENCH:执行失败'))
     return
@@ -472,6 +489,7 @@ const defaultProjectPath = computed(
 async function onDispatch(payload: {
   text: string; autoRun: boolean; attachments: Attachment[]
   projectPath: string; useDefaultPrompt: boolean
+  executor: 'claude' | 'opencode'
 }) {
   const result = await dispatch({
     text: payload.text,
@@ -479,6 +497,7 @@ async function onDispatch(payload: {
     autoRun: payload.autoRun,
     attachments: payload.attachments,
     useDefaultPrompt: payload.useDefaultPrompt,
+    executor: payload.executor,
   })
   if (!result) return
   // 成功即可清：服务端此刻已把暂存文件搬进 `_task-{id}/`，前端留着这份记录只会指向失效路径

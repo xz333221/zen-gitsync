@@ -48,6 +48,8 @@ export interface DispatchPayload {
   attachments?: Attachment[]
   /** false = 本次派发不附加默认提示词（默认附加） */
   useDefaultPrompt?: boolean
+  /** 本次派发建的任务用哪个本地 CLI 执行（claude | opencode）。缺省走服务端配置默认 */
+  executor?: 'claude' | 'opencode'
 }
 
 export function useOrchestrator() {
@@ -187,6 +189,8 @@ export function useOrchestrator() {
           autoRun: payload.autoRun !== false,
           // 省缺即附加：默认提示词的默认行为是"生效"，勾掉才不带
           useDefaultPrompt: payload.useDefaultPrompt !== false,
+          // 执行器缺省时服务端回落到配置默认；非法值也是同一个回落，不用前端兜底
+          executor: payload.executor,
           // 只给 id / ext / originalName：路径由服务端在暂存区里自己拼，
           // 前端拿不到、也指定不了 absolutePath。
           attachments: (payload.attachments || []).map(a => ({

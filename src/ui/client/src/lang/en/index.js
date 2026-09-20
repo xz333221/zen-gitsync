@@ -870,6 +870,10 @@ export default {
   '@42BB9:通用配置': 'General Configuration',
   '@42BB9:自定义应用的外观和语言': 'Customize the appearance and language of the application',
   '@42BB9:外观': 'Appearance',
+  '@42BB9:任务执行': 'Task Execution',
+  '@42BB9:任务执行器': 'Task executor',
+  '@42BB9:工作台执行任务时使用的本地 CLI；模型跟随各自 CLI 的自身配置': 'Local CLI used by the workbench to run tasks; models follow each CLI\'s own configuration',
+  '@42BB9:未安装': 'Not installed',
   '@42BB9:主题': 'Theme',
   '@42BB9:浅色': 'Light',
   '@42BB9:深色': 'Dark',
@@ -2089,6 +2093,8 @@ export default {
   '@WORKBENCH:暂无内容可复制': 'Nothing to copy',
   // ── Execution log manager ──
   '@WORKBENCH:任务执行': 'Task Execution',
+  '@WORKBENCH:任务执行器': 'Task Executor',
+  '@WORKBENCH:本次派发使用的执行器（与执行按钮的临时切换共用）': "Executor for this dispatch (shared with the run button's quick switch)",
   '@WORKBENCH:执行日志': 'Execution Logs',
   '@WORKBENCH:清空执行': 'Clear Execution',
   '@WORKBENCH:清空子任务': 'Clear Subtasks',
@@ -2310,6 +2316,7 @@ export default {
   '@WORKBENCH:拖动中': 'Dragging…',
   '@WORKBENCH:放置位置': 'Drop here',
   '@WORKBENCH:未检测到本地 claude,无法执行任务': 'Local claude not detected — tasks cannot run',
+  '@WORKBENCH:未检测到本地 claude / opencode,无法执行任务': 'No local claude / opencode detected — tasks cannot run',
   '@WORKBENCH:查看安装指引': 'View install guide',
   // @WORKBENCH: file path: views/components/WorkbenchBoard.vue, WorkbenchProjectPanel.vue, WorkbenchAgentPanel.vue, WorkbenchKanban.vue, OrchestratorConsole.vue, WorkbenchDefaultPromptDialog.vue, composables/useWorkbenchProjects.ts, composables/useOrchestrator.ts, utils/relativeTime.ts (追加: 多项目编排台)
   '@WORKBENCH:多项目编排台': 'Multi-project orchestrator',

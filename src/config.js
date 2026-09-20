@@ -73,6 +73,20 @@ function normalizeAiMaxToolIterations(value) {
   return int;
 }
 
+// 工作台任务执行器白名单。'claude' 是历史默认；'opencode' 为可选执行器
+// （opencode run --format json，模型跟随 opencode 自身配置）。
+export const TASK_EXECUTORS = ['claude', 'opencode'];
+
+/**
+ * 规范化任务执行器。非法值返回 null（交给调用方取默认），不抛错 ——
+ * 与 normalizeAiMaxToolIterations 同一套"夹取/兜底"语义。
+ */
+export function normalizeTaskExecutor(value) {
+  if (typeof value !== 'string') return null;
+  const v = value.trim().toLowerCase();
+  return TASK_EXECUTORS.includes(v) ? v : null;
+}
+
 // 默认配置
 const defaultConfig = {
   defaultCommitMessage: "submit",
@@ -118,6 +132,10 @@ const defaultConfig = {
   // 触顶后本轮被强制结束,用户必须再发一条消息才能接着跑,体感像被截断。
   // 想调小/调大改这个值即可(GUI: 设置 → AI 模型配置)。
   aiMaxToolIterations: 200,
+  // 工作台任务执行器（claude | opencode）。全局配置，跨项目共享。
+  // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
+  // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
+  taskExecutor: 'claude',
   // UI 状态（跨项目共享，存到顶层 ui 对象）
   // 之前散落在 localStorage，因随机端口启动而失效，迁到文件持久化
   ui: {
@@ -428,7 +446,8 @@ async function loadConfig() {
       ...defaultConfig,
       ...raw,
       aiMaxToolIterations: normalizeAiMaxToolIterations(raw.aiMaxToolIterations)
-        ?? defaultConfig.aiMaxToolIterations
+        ?? defaultConfig.aiMaxToolIterations,
+      taskExecutor: normalizeTaskExecutor(raw.taskExecutor) ?? defaultConfig.taskExecutor
     };
   }
 
@@ -445,7 +464,8 @@ async function loadConfig() {
     ui: raw?.ui ?? defaultConfig.ui,
     // 同 models：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     aiMaxToolIterations: normalizeAiMaxToolIterations(raw?.aiMaxToolIterations)
-      ?? defaultConfig.aiMaxToolIterations
+      ?? defaultConfig.aiMaxToolIterations,
+    taskExecutor: normalizeTaskExecutor(raw?.taskExecutor) ?? defaultConfig.taskExecutor
   };
 }
 
@@ -493,7 +513,7 @@ async function saveConfig(config) {
 
   // 分离全局设置和项目设置
   // models / ui 也是全局配置（跨项目共享），和 theme/locale 一样存到顶层
-  const { theme, locale, models, ui, aiMaxToolIterations, ...projectConfig } = config;
+  const { theme, locale, models, ui, aiMaxToolIterations, taskExecutor, ...projectConfig } = config;
 
   // 保存全局设置到根级别
   if (theme !== undefined) {
@@ -512,6 +532,11 @@ async function saveConfig(config) {
   const normalizedIterations = normalizeAiMaxToolIterations(aiMaxToolIterations);
   if (normalizedIterations !== null) {
     raw.aiMaxToolIterations = normalizedIterations;
+  }
+  // 任务执行器同属全局设置：白名单外的值不落盘
+  const normalizedExecutor = normalizeTaskExecutor(taskExecutor);
+  if (normalizedExecutor !== null) {
+    raw.taskExecutor = normalizedExecutor;
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
@@ -707,6 +732,9 @@ export default {
   normalizeAiMaxToolIterations,
   AI_MAX_TOOL_ITERATIONS_MIN,
   AI_MAX_TOOL_ITERATIONS_MAX,
+  // 工作台任务执行器规范化(GUI 保存前也要用,见 /api/config/save-general-settings)
+  normalizeTaskExecutor,
+  TASK_EXECUTORS,
 };
 
 // 命名导出 — 用于测试与外部复用

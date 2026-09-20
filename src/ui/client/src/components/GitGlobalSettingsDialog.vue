@@ -118,6 +118,36 @@
             </div>
           </div>
 
+          <!-- 任务执行：工作台任务默认用哪个本地 CLI 执行 -->
+          <div class="settings-section">
+            <div class="section-title">
+              <span>{{ $t('@42BB9:任务执行') }}</span>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@42BB9:任务执行器') }}</label>
+                <div class="project-toggle">
+                  <el-select v-model="tempTaskExecutor" class="modern-input" size="default">
+                    <el-option
+                      v-for="opt in TASK_EXECUTOR_OPTIONS"
+                      :key="opt.id"
+                      :label="opt.name"
+                      :value="opt.id"
+                      :disabled="!toolsStore.isToolAvailable(opt.id)"
+                    >
+                      <span class="executor-option">
+                        <TaskExecutorIcon :executor="opt.id" class="executor-option__icon" />
+                        {{ opt.name }}
+                        <span v-if="!toolsStore.isToolAvailable(opt.id)" class="executor-option__missing">{{ $t('@42BB9:未安装') }}</span>
+                      </span>
+                    </el-option>
+                  </el-select>
+                  <span class="setting-hint-block">{{ $t('@42BB9:工作台执行任务时使用的本地 CLI；模型跟随各自 CLI 的自身配置') }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- 界面（视图模式 / 分割比例 / 控制台 / 布局比例） -->
           <div class="settings-section">
             <div class="section-title">
@@ -514,6 +544,9 @@ import CommonDialog from './CommonDialog.vue'
 import { useGitStore } from '@/stores/gitStore'
 import { useLocaleStore } from '@/stores/localeStore'
 import { useConfigStore, type ModelInfo } from '@/stores/configStore'
+import { useToolsStore } from '@/stores/toolsStore'
+import { TASK_EXECUTOR_OPTIONS, type TaskExecutorId } from '@/utils/taskExecutor'
+import TaskExecutorIcon from './TaskExecutorIcon.vue'
 import { type SupportLocale } from '@/locales'
 import { AddModelForm } from 'ai-model-form/client'
 import type { AiModelFormSaveData } from 'ai-model-form/client'
@@ -522,6 +555,7 @@ import 'ai-model-form/dist/ai-model-form.css'
 const gitStore = useGitStore()
 const localeStore = useLocaleStore()
 const configStore = useConfigStore()
+const toolsStore = useToolsStore()
 
 export type SettingsTab = 'general' | 'ai-models' | 'git' | 'commit' | 'config' | 'editor'
 
@@ -542,6 +576,8 @@ const activeTab = ref<SettingsTab>('general')
 // 通用设置
 const tempTheme = ref<'light' | 'dark' | 'auto'>('light')
 const tempLocale = ref<SupportLocale>('zh-CN')
+// 任务执行器（全局默认值；工作台执行按钮旁的临时切换不归这里管）
+const tempTaskExecutor = ref<TaskExecutorId>('claude')
 
 // 编辑器设置
 const tempEditorAutoSave = ref(false)
@@ -596,7 +632,7 @@ const editingModelInitial = computed(() => {
 const hasChanges = computed(() => {
   if (activeTab.value === 'config') return true
   if (activeTab.value === 'general') {
-    return tempTheme.value !== initTheme || tempLocale.value !== initLocale || editingModelId.value !== undefined
+    return tempTheme.value !== initTheme || tempLocale.value !== initLocale || tempTaskExecutor.value !== initTaskExecutor || editingModelId.value !== undefined
   }
   if (activeTab.value === 'git') {
     return (
@@ -703,6 +739,7 @@ let initCoreAutoCrlf: 'true' | 'input' | 'false' = 'true'
 let initInitDefaultBranch = 'main'
 let initTheme: 'light' | 'dark' | 'auto' = 'light'
 let initLocale: SupportLocale = 'zh-CN'
+let initTaskExecutor: TaskExecutorId = 'claude'
 
 // 同步 v-model
 watch(() => props.modelValue, async (val) => {
@@ -721,6 +758,7 @@ watch(() => props.modelValue, async (val) => {
     // 加载通用设置
     tempTheme.value = configStore.theme
     tempLocale.value = configStore.locale
+    tempTaskExecutor.value = configStore.taskExecutor
     aiModels.value = [...configStore.models]
     aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
     editingModelId.value = undefined
@@ -751,6 +789,7 @@ watch(() => props.modelValue, async (val) => {
     initInitDefaultBranch = cfgInitDefaultBranch.value
     initTheme = tempTheme.value
     initLocale = tempLocale.value
+    initTaskExecutor = tempTaskExecutor.value
   }
 }, { immediate: true })
 
@@ -851,7 +890,7 @@ async function saveGlobalGitConfigs() {
 
 // 保存通用设置
 async function saveGeneralSettings() {
-  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale } = {}
+  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId } = {}
 
   // 保存主题设置（如果与初始值不同或需要强制保存）
   if (tempTheme.value !== initTheme) {
@@ -866,8 +905,14 @@ async function saveGeneralSettings() {
     initLocale = tempLocale.value
   }
 
+  // 保存任务执行器默认值（如果与初始值不同）
+  if (tempTaskExecutor.value !== initTaskExecutor) {
+    settings.taskExecutor = tempTaskExecutor.value
+    initTaskExecutor = tempTaskExecutor.value
+  }
+
   // 只要有设置项就保存（包括主题或语言）
-  if (settings.theme !== undefined || settings.locale !== undefined) {
+  if (settings.theme !== undefined || settings.locale !== undefined || settings.taskExecutor !== undefined) {
     const saved = await configStore.saveGeneralSettings(settings)
     if (saved) {
       ElMessage.success($t('@42BB9:通用设置已保存'))
@@ -1682,5 +1727,21 @@ html.dark .label-icon {
   height: auto;
   padding: 6px 12px;
   line-height: 1.3;
+}
+
+/* 任务执行器下拉选项：右侧「未安装」小标（沿用 preset-option 的排版习惯） */
+.executor-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.executor-option__icon { font-size: 14px; flex: none; }
+
+.executor-option__missing {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
 }
 </style>
