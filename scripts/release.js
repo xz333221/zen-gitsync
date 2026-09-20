@@ -28,9 +28,10 @@
  *   npm run release -- --dry-run          # 只打印计划,不真正改 package.json / commit / publish
  *   npm run release -- --poll-interval=20 --poll-timeout=600  # 调自更新重试节奏(秒)
  *
- * 发布后自更新:反复尝试 `npm install -g zen-gitsync@<版本>` 并校验全局版本;
- * 精确版本号解析不到(ETARGET)时改用 tarball URL 直连兜底。
- * 原因见 tarballUrl() / selfUpdateGlobal() 处注释 —— publish 成功不等于 packument 立即可见。
+ * 发布后自更新:每轮先探 tarball 能不能取,能取到才调 npm;两条路(`pkg@<版本>` /
+ * tarball URL 直连)都试,装上后校验全局版本,失败把原因打出来。
+ * 原因见 tarballUrl() / selfUpdateGlobal() 处注释 —— publish 成功不等于
+ * packument 立即可见,也不等于 tarball 立即可取(两种先后顺序都实测出现过)。
  */
 
 import fs from 'node:fs'
@@ -74,19 +75,81 @@ function readNumberArg(name, fallback) {
 // `npm view dist-tags` 和 `npm install pkg@ver` 读的是**同一份 packument**:
 // 等它、用它,走的是同一条被缓存的路。只把超时 600s 往上加,只是把失败往后推。
 //
-// 兜底:tarball URL 是不可变资源,发布完成即可取,且不经过 packument 的那层缓存
-// (见 tarballUrl 注释)。所以自更新不再把安装卡在 dist-tags 后面,而是
-// "反复尝试安装 + 校验全局版本",精确版本号解析不到时自动改用 tarball 直连。
+// 兜底:tarball URL 是不可变资源,且不经过 packument 那层缓存(见 tarballUrl 注释)。
+// 所以自更新不再把安装卡在 dist-tags 后面,而是"反复尝试安装 + 校验全局版本",
+// 精确版本号解析不到时自动改用 tarball 直连。
+//
+// 又实测(2026-09-20, v2.17.6):tarball 也可能**晚于** packument 就绪 ——
+// dist-tags.latest 已经是 2.17.6,而那个 tarball 的 Last-Modified 晚了 2 分钟,
+// 这 2 分钟里两条路一起失败(对象还不存在),之后又有几分钟边缘缓存回 404。
+// 于是 600s 眼看要耗尽、终端上 25 轮只有"→ npm install"没有任何原因。
+// 对策两条:① 每轮先自己探一次 tarball(isTarballFetchable,GET 而非 HEAD),
+// 取不到就跳过这一轮的 npm 调用并把状态打出来;② 失败原因压一行打出来。
+// 另外单次 npm 调用必须有时间上限(见 INSTALL_TIMEOUT_MS),否则一次网络卡死
+// 就能吃掉整个预算,外面那个 15s 一轮的循环根本没机会重试。
+//
 // 默认 15s 一轮、上限 600s;可用 `--poll-interval=<秒>` / `--poll-timeout=<秒>` 调。
 const POLL_INTERVAL_MS = readNumberArg('--poll-interval', 15) * 1000
 const POLL_TIMEOUT_MS = readNumberArg('--poll-timeout', 600) * 1000
 
-// 发布物 tarball 的地址。npm publish 是先把 tarball 推进 registry、再更新 packument;
-// tarball 按 URL 寻址、内容不可变,所以它比 packument 更早对外可用,也不会被
-// max-age 那层缓存挂在旧内容上 —— "新版本已发布、但 packument 还是旧的"时,
-// 这是唯一能立刻装上的路径。
-function tarballUrl(version) {
-  return `${NPM_REGISTRY.replace(/\/$/, '')}/${PKG_NAME}/-/${PKG_NAME}-${version}.tgz`
+// 发布物 tarball 的地址。
+//
+// 为什么值得单独走这条路:tarball 按 URL 寻址、内容不可变,不像 packument 那样被
+// max-age 挂在旧内容上 —— "新版本已发布、但 packument 还是旧的"时,它是唯一能立刻装上的路径。
+//
+// 但**两种先后顺序都实测出现过**,别押任何一边:
+//   - v2.17.4:packument 滞后 >600s,tarball 早就可取;
+//   - v2.17.6:反过来 —— dist-tags 已经是 2.17.6 了,tarball 的 Last-Modified 却晚 2 分钟,
+//     那 2 分钟里 `npm install -g pkg@2.17.6` 和直连 tarball 一起失败(取不到那个对象)。
+// 所以自更新每轮**两条路都试**,并且用 isTarballFetchable() 自己先探一次。
+//
+// `cacheBust=true` 时带一个时间戳查询串:目标 URL 在被发布出来的头几分钟里,
+// CDN 边缘可能还挂着"这个路径 404"的负缓存(实测同一分钟内 HEAD 404 / GET 200),
+// 换一个 URL 就等于绕开那份缓存。
+function tarballUrl(version, cacheBust = false) {
+  const base = `${NPM_REGISTRY.replace(/\/$/, '')}/${PKG_NAME}/-/${PKG_NAME}-${version}.tgz`
+  return cacheBust ? `${base}?t=${Date.now()}` : base
+}
+
+// 探一次 tarball 到底能不能取到 —— 这比"packument 里有没有这个版本"更接近真相。
+//
+// 三个刻意的选择:
+//   ① 用 GET 而不是 HEAD:实测同一个 URL 在同一分钟内 HEAD 返回 404、GET 返回 200,
+//      npm 真正下载用的是 GET,所以只认 GET 的结果。
+//   ② 带 `Range: bytes=0-0`,只取 1 个字节(服务端支持 Accept-Ranges);万一服务端忽略 Range
+//      回了整包,读完后 cancel() 掉,不会真把 7MB 拖下来。
+//   ③ 探不到不算致命:调用方据此跳过这一轮的 npm 调用(省下一次注定失败的 10~40s),
+//      但拿不到 fetch(老 Node)时返回 unknown,让调用方照旧去试。
+async function isTarballFetchable(version, cacheBust) {
+  if (typeof fetch !== 'function') return { ok: true, unknown: true }
+  try {
+    const res = await fetch(tarballUrl(version, cacheBust), {
+      headers: { Range: 'bytes=0-0' },
+      redirect: 'follow',
+    })
+    const status = res.status
+    try {
+      await res.body?.cancel()
+    } catch {
+      /* 流已结束,忽略 */
+    }
+    return { ok: status === 200 || status === 206, status }
+  } catch (err) {
+    return { ok: false, status: 0, error: String(err?.message || err) }
+  }
+}
+
+// 把 npm 的一大坨输出压成一行,用来在每次失败时给出"为什么",而不是只报"重试中"。
+// 例:`E404 Not Found - GET https://... - Not found`
+function summarizeInstallError(output) {
+  if (!output) return '未知错误'
+  const lines = String(output)
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('npm error') || l.startsWith('npm ERR!'))
+    .map((l) => l.replace(/^npm (error|ERR!)\s*/, ''))
+  if (lines.length === 0) return String(output).split(/\r?\n/)[0].slice(0, 160)
+  return lines.slice(0, 2).join(' / ').slice(0, 200)
 }
 
 // 跨平台 sleep:Node 原生,避免 `sleep N || ping` 的 Windows 兜底 hack
@@ -549,18 +612,33 @@ function readGlobalInstalledVersion() {
 
 // 执行一次全局安装。退出码 0 才返回 ok。
 // 输出先兜住不打印:重试期间每失败一次就刷一屏 `npm error` 太吵,
-// 只有整轮尝试全部失败时,调用方才回放最后一份输出。
+// 失败时由调用方压成一行打出来(summarizeInstallError),整轮失败才回放全文。
+//
+// 时间必须**有界**:npm 自己的 fetch-timeout 是 5 分钟、还要重试 2 次,
+// 网络卡住时单次 `npm install` 能吃掉十几分钟 —— 实测挂在一个坏代理上,
+// 一次调用就耗掉了整个 600s 预算,外面那个"每 15s 重试一轮"的循环根本没有机会跑第二轮。
+// 所以这里把 fetch 重试收紧、再给 execSync 一个硬上限:让每次尝试**快速失败**,
+// 把"重试"这件事交给外层循环(它本来就在做,而且间隔只有 15s)。
+const INSTALL_TIMEOUT_MS = 180000
 function tryInstallGlobal(spec) {
   console.log(chalk.gray(`  → npm install -g ${spec}`))
   try {
-    execSync(`npm install -g ${spec} --registry=${NPM_REGISTRY} --prefer-online`, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      maxBuffer: 8 * 1024 * 1024,
-      timeout: 300000,
-    })
+    execSync(
+      `npm install -g ${spec} --registry=${NPM_REGISTRY} --prefer-online`
+      + ' --fetch-retries=1 --fetch-retry-mintimeout=3000 --fetch-retry-maxtimeout=10000',
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 8 * 1024 * 1024,
+        timeout: INSTALL_TIMEOUT_MS,
+      }
+    )
     return { ok: true }
   } catch (err) {
+    // 超时会被 execSync 杀掉(带 SIGTERM),stderr 可能是空的 —— 补一句可读的原因
     const out = `${err.stdout ?? ''}${err.stderr ?? ''}`.trim()
+    if (!out && (err.killed || err.signal)) {
+      return { ok: false, output: `安装超时(${INSTALL_TIMEOUT_MS / 1000}s 到点被终止)` }
+    }
     return { ok: false, output: out || String(err.message || err) }
   }
 }
@@ -572,13 +650,18 @@ function tryInstallGlobal(spec) {
 // packument 被 CDN 缓存(max-age=300,实测还能更久)时两边一起滞后 ——
 // 等待阶段白等 600s,超时后再装照样 ETARGET,等于什么都没解决。
 //
-// 所以顺序反过来:先"尝试装",装不上才等。每轮按两条路试,任一条装上且校验通过就结束:
-//   ① `pkg@<version>`  —— 常规路径,packument 已同步时一次命中;
-//   ② tarball URL 直连 —— packument 还是旧的时候的唯一出路(见 tarballUrl 注释)。
+// 所以顺序反过来:先"尝试装",装不上才等。每轮:
+//   ① 先探 tarball 能不能取(isTarballFetchable)—— 取不到就别浪费一次 npm 调用,
+//      并且把"还取不到 HTTP 404"如实打出来:这是"到底卡在哪"的唯一线索;
+//   ② 取得到就按两条路试,任一条装上且校验通过即结束:
+//      `pkg@<version>`(packument 已同步时的常规路径)/ tarball URL 直连;
+//   ③ 失败原因压成一行打出来(summarizeInstallError)。**别再默默重试**——
+//      v2.17.6 那次用户看到的就是"一直在执行安装命令"、25 轮里一句原因都没有,
+//      而真实原因是那几分钟 tarball 还没对外可取(见 tarballUrl 注释)。
 async function selfUpdateGlobal(version) {
   console.log(chalk.blue('\n=== 发布后自更新全局版本 ==='))
-  console.log(chalk.gray('publish 成功 ≠ packument 立即可见(registry 处理 + CDN 缓存)。'))
-  console.log(chalk.gray('不空等 dist-tags,直接反复尝试安装;精确版本解析不到就 tarball 直连兜底。'))
+  console.log(chalk.gray('publish 成功 ≠ packument 立即可见、也 ≠ tarball 立即可取(两者先后顺序随机)。'))
+  console.log(chalk.gray('不空等 dist-tags:每轮先探 tarball,能取到才调 npm,失败会打印原因。'))
   console.log(chalk.gray(
     `间隔 ${POLL_INTERVAL_MS / 1000}s,上限 ${POLL_TIMEOUT_MS / 1000}s`
     + '(可用 --poll-interval / --poll-timeout 调)。'
@@ -586,39 +669,47 @@ async function selfUpdateGlobal(version) {
 
   const startedAt = Date.now()
   const deadline = startedAt + POLL_TIMEOUT_MS
-  const tarball = tarballUrl(version)
   let attempt = 0
   let lastOutput = ''
 
   for (;;) {
     attempt += 1
     const packumentSynced = readLatestDistTag() === version
-    // packument 已同步 → 先走常规精确版本;还没同步 → tarball 优先,争取一轮命中
-    const targets = packumentSynced
-      ? [`${PKG_NAME}@${version}`, tarball]
-      : [tarball, `${PKG_NAME}@${version}`]
+    // 第 2 轮起给 tarball 地址加时间戳,绕开 CDN 可能挂着的"这条路径 404"负缓存
+    const bust = attempt > 1
+    const tarball = tarballUrl(version, bust)
+    const probe = await isTarballFetchable(version, bust)
 
     console.log(chalk.gray(
-      `第 ${attempt} 次尝试(dist-tags.latest${packumentSynced ? '已同步' : '仍是旧版本'})...`
+      `第 ${attempt} 次尝试(dist-tags.latest${packumentSynced ? '已同步' : '仍是旧版本'},`
+      + ` tarball ${probe.ok ? '已可取' : `还取不到${probe.status ? ` HTTP ${probe.status}` : ''}`})...`
     ))
 
-    for (const spec of targets) {
-      const res = tryInstallGlobal(spec)
-      if (!res.ok) {
-        lastOutput = res.output
-        continue
+    if (probe.ok) {
+      // packument 已同步 → 先走常规精确版本;还没同步 → tarball 优先,争取一轮命中
+      const targets = packumentSynced
+        ? [`${PKG_NAME}@${version}`, tarball]
+        : [tarball, `${PKG_NAME}@${version}`]
+
+      for (const spec of targets) {
+        const res = tryInstallGlobal(spec)
+        if (!res.ok) {
+          lastOutput = res.output
+          console.log(chalk.yellow(`  ✗ ${summarizeInstallError(res.output)}`))
+          continue
+        }
+        const installed = readGlobalInstalledVersion()
+        if (installed === version) {
+          const cost = ((Date.now() - startedAt) / 1000).toFixed(1)
+          console.log(chalk.green(
+            `全局已更新到 ${PKG_NAME}@${version}(第 ${attempt} 次尝试,耗时 ${cost}s)`
+          ))
+          return
+        }
+        // 退出码 0 但版本不对(极少见):按失败处理,继续下一轮
+        lastOutput = `安装命令退出码 0,但全局版本读到 ${installed ?? '未知'}`
+        console.log(chalk.yellow(`  安装命令成功,但全局版本是 ${installed ?? '未知'},继续重试`))
       }
-      const installed = readGlobalInstalledVersion()
-      if (installed === version) {
-        const cost = ((Date.now() - startedAt) / 1000).toFixed(1)
-        console.log(chalk.green(
-          `全局已更新到 ${PKG_NAME}@${version}(第 ${attempt} 次尝试,耗时 ${cost}s)`
-        ))
-        return
-      }
-      // 退出码 0 但版本不对(极少见):按失败处理,继续下一轮
-      lastOutput = `安装命令退出码 0,但全局版本读到 ${installed ?? '未知'}`
-      console.log(chalk.yellow(`  安装命令成功,但全局版本是 ${installed ?? '未知'},继续重试`))
     }
 
     const remain = deadline - Date.now()
@@ -628,8 +719,8 @@ async function selfUpdateGlobal(version) {
       console.error(chalk.gray(
         '可稍后手动重试:\n'
         + `  npm install -g ${PKG_NAME}@${version}\n`
-        + '若仍报 ETARGET(packument 缓存滞后),直连 tarball:\n'
-        + `  npm install -g ${tarball}`
+        + '若报 ETARGET / E404(registry 元数据与 tarball 还没对齐),直连 tarball:\n'
+        + `  npm install -g ${tarballUrl(version)}`
       ))
       return
     }
@@ -646,7 +737,7 @@ async function publishToNpm(version) {
     if (DRY_RUN) {
       console.log(chalk.yellow(`[dry-run] npm publish --registry=${NPM_REGISTRY}`))
       console.log(chalk.yellow(
-        `[dry-run] 轮询 registry 直到 ${version} 可见,再 npm install -g ${PKG_NAME}@${version}`
+        `[dry-run] 反复探测并安装,直到全局 ${PKG_NAME}@${version} 校验通过(见 selfUpdateGlobal)`
       ))
       return
     }
