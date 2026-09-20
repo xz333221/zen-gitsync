@@ -26,10 +26,11 @@
  *   npm run release -- --skip-self-update # 发布后不自动 npm install -g zen-gitsync
  *   npm run release -- --skip-push        # 只发布到 npm,不 push git
  *   npm run release -- --dry-run          # 只打印计划,不真正改 package.json / commit / publish
- *   npm run release -- --poll-interval=20 --poll-timeout=600  # 调 registry 轮询节奏(秒)
+ *   npm run release -- --poll-interval=20 --poll-timeout=600  # 调自更新重试节奏(秒)
  *
- * 发布后自更新:先轮询 registry 确认新版本可见,再 `npm install -g zen-gitsync@<版本>`。
- * 原因见 POLL_INTERVAL_MS 处注释 —— publish 成功不等于 registry 立即可见。
+ * 发布后自更新:反复尝试 `npm install -g zen-gitsync@<版本>` 并校验全局版本;
+ * 精确版本号解析不到(ETARGET)时改用 tarball URL 直连兜底。
+ * 原因见 tarballUrl() / selfUpdateGlobal() 处注释 —— publish 成功不等于 packument 立即可见。
  */
 
 import fs from 'node:fs'
@@ -67,11 +68,26 @@ function readNumberArg(name, fallback) {
 // 仍是 2.17.2,versions 里没有 2.17.3;packument 响应头
 // `Cache-Control: public, max-age=300` —— 光 CDN 层就可能滞后 5 分钟。
 // 所以"publish 完立刻 npm install -g"必然装回旧版(实测 `npm ls -g` 停在 2.17.2)。
-// 对策:publish 后先轮询,确认 dist-tags.latest 已翻到目标版本,再安装。
-// 默认 15s 一轮、上限 600s(必须 > CDN 的 max-age=300,否则稳定误判超时);
-// 可用 `--poll-interval=<秒>` / `--poll-timeout=<秒>` 调。
+//
+// 再实测(2026-09-20, v2.17.4):滞后不止 600s。那次脚本"先等 dist-tags 翻牌"一直等到
+// 超时(600s 里 latest 全程是 2.17.3),超时后再 install 依旧 ETARGET —— 因为
+// `npm view dist-tags` 和 `npm install pkg@ver` 读的是**同一份 packument**:
+// 等它、用它,走的是同一条被缓存的路。只把超时 600s 往上加,只是把失败往后推。
+//
+// 兜底:tarball URL 是不可变资源,发布完成即可取,且不经过 packument 的那层缓存
+// (见 tarballUrl 注释)。所以自更新不再把安装卡在 dist-tags 后面,而是
+// "反复尝试安装 + 校验全局版本",精确版本号解析不到时自动改用 tarball 直连。
+// 默认 15s 一轮、上限 600s;可用 `--poll-interval=<秒>` / `--poll-timeout=<秒>` 调。
 const POLL_INTERVAL_MS = readNumberArg('--poll-interval', 15) * 1000
 const POLL_TIMEOUT_MS = readNumberArg('--poll-timeout', 600) * 1000
+
+// 发布物 tarball 的地址。npm publish 是先把 tarball 推进 registry、再更新 packument;
+// tarball 按 URL 寻址、内容不可变,所以它比 packument 更早对外可用,也不会被
+// max-age 那层缓存挂在旧内容上 —— "新版本已发布、但 packument 还是旧的"时,
+// 这是唯一能立刻装上的路径。
+function tarballUrl(version) {
+  return `${NPM_REGISTRY.replace(/\/$/, '')}/${PKG_NAME}/-/${PKG_NAME}-${version}.tgz`
+}
 
 // 跨平台 sleep:Node 原生,避免 `sleep N || ping` 的 Windows 兜底 hack
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -531,84 +547,95 @@ function readGlobalInstalledVersion() {
   }
 }
 
-// 轮询 registry 直到目标版本可见。
-// 返回 true = 确认可见,false = 超时(调用方据此决定是否继续装)。
-async function waitForVersionVisible(version) {
-  console.log(chalk.blue('\n=== 等待 NPM registry 同步 ==='))
-  console.log(chalk.gray('publish 返回成功 ≠ 立即可见:registry 后台处理 + CDN 缓存(packument 的 max-age=300)。'))
-  console.log(chalk.gray('实测 v2.17.3 发布后约 3 分钟才可见;这期间 install 会解析到旧版本。'))
+// 执行一次全局安装。退出码 0 才返回 ok。
+// 输出先兜住不打印:重试期间每失败一次就刷一屏 `npm error` 太吵,
+// 只有整轮尝试全部失败时,调用方才回放最后一份输出。
+function tryInstallGlobal(spec) {
+  console.log(chalk.gray(`  → npm install -g ${spec}`))
+  try {
+    execSync(`npm install -g ${spec} --registry=${NPM_REGISTRY} --prefer-online`, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: 300000,
+    })
+    return { ok: true }
+  } catch (err) {
+    const out = `${err.stdout ?? ''}${err.stderr ?? ''}`.trim()
+    return { ok: false, output: out || String(err.message || err) }
+  }
+}
+
+// 自更新全局版本:反复尝试安装,直到全局版本校验通过或超时。
+//
+// 为什么不是"先等 dist-tags 翻牌,再安装"(v2.17.4 之前的老写法):
+// `npm view dist-tags.latest` 和 `npm install -g pkg@ver` 读的是同一份 packument。
+// packument 被 CDN 缓存(max-age=300,实测还能更久)时两边一起滞后 ——
+// 等待阶段白等 600s,超时后再装照样 ETARGET,等于什么都没解决。
+//
+// 所以顺序反过来:先"尝试装",装不上才等。每轮按两条路试,任一条装上且校验通过就结束:
+//   ① `pkg@<version>`  —— 常规路径,packument 已同步时一次命中;
+//   ② tarball URL 直连 —— packument 还是旧的时候的唯一出路(见 tarballUrl 注释)。
+async function selfUpdateGlobal(version) {
+  console.log(chalk.blue('\n=== 发布后自更新全局版本 ==='))
+  console.log(chalk.gray('publish 成功 ≠ packument 立即可见(registry 处理 + CDN 缓存)。'))
+  console.log(chalk.gray('不空等 dist-tags,直接反复尝试安装;精确版本解析不到就 tarball 直连兜底。'))
   console.log(chalk.gray(
-    `轮询 dist-tags.latest,间隔 ${POLL_INTERVAL_MS / 1000}s,上限 ${POLL_TIMEOUT_MS / 1000}s;`
-    + '确认可见后才安装,避免全局装回旧版本。'
+    `间隔 ${POLL_INTERVAL_MS / 1000}s,上限 ${POLL_TIMEOUT_MS / 1000}s`
+    + '(可用 --poll-interval / --poll-timeout 调)。'
   ))
 
   const startedAt = Date.now()
   const deadline = startedAt + POLL_TIMEOUT_MS
+  const tarball = tarballUrl(version)
   let attempt = 0
+  let lastOutput = ''
 
   for (;;) {
     attempt += 1
-    const latest = readLatestDistTag()
+    const packumentSynced = readLatestDistTag() === version
+    // packument 已同步 → 先走常规精确版本;还没同步 → tarball 优先,争取一轮命中
+    const targets = packumentSynced
+      ? [`${PKG_NAME}@${version}`, tarball]
+      : [tarball, `${PKG_NAME}@${version}`]
 
-    if (latest === version) {
-      const cost = ((Date.now() - startedAt) / 1000).toFixed(1)
-      console.log(chalk.green(`registry 已可见 ${PKG_NAME}@${version}(第 ${attempt} 次检查,耗时 ${cost}s)`))
-      return true
+    console.log(chalk.gray(
+      `第 ${attempt} 次尝试(dist-tags.latest${packumentSynced ? '已同步' : '仍是旧版本'})...`
+    ))
+
+    for (const spec of targets) {
+      const res = tryInstallGlobal(spec)
+      if (!res.ok) {
+        lastOutput = res.output
+        continue
+      }
+      const installed = readGlobalInstalledVersion()
+      if (installed === version) {
+        const cost = ((Date.now() - startedAt) / 1000).toFixed(1)
+        console.log(chalk.green(
+          `全局已更新到 ${PKG_NAME}@${version}(第 ${attempt} 次尝试,耗时 ${cost}s)`
+        ))
+        return
+      }
+      // 退出码 0 但版本不对(极少见):按失败处理,继续下一轮
+      lastOutput = `安装命令退出码 0,但全局版本读到 ${installed ?? '未知'}`
+      console.log(chalk.yellow(`  安装命令成功,但全局版本是 ${installed ?? '未知'},继续重试`))
     }
 
     const remain = deadline - Date.now()
     if (remain <= 0) {
-      console.log(chalk.yellow(
-        `已等待 ${POLL_TIMEOUT_MS / 1000}s 仍未看到 ${version},`
-        + `最近一次读到 latest=${latest ?? '查询失败'}`
+      console.error(chalk.red(`已尝试 ${attempt} 次,仍未装上 ${PKG_NAME}@${version}`))
+      if (lastOutput) console.error(chalk.gray(lastOutput))
+      console.error(chalk.gray(
+        '可稍后手动重试:\n'
+        + `  npm install -g ${PKG_NAME}@${version}\n`
+        + '若仍报 ETARGET(packument 缓存滞后),直连 tarball:\n'
+        + `  npm install -g ${tarball}`
       ))
-      return false
+      return
     }
-
-    console.log(chalk.gray(
-      `第 ${attempt} 次:latest=${latest ?? '查询失败(网络或 registry 波动)'},`
-      + `期望 ${version},${Math.ceil(remain / 1000)}s 后重试`
-    ))
+    console.log(chalk.gray(`  ${Math.ceil(remain / 1000)}s 后重试`))
     await sleep(Math.min(POLL_INTERVAL_MS, remain))
   }
-}
-
-// 装"精确版本"而不是 latest:即便 dist-tags 的 CDN 缓存滞后,
-// 精确版本号也只会命中刚发布的那份 tarball。
-function installGlobal(version) {
-  console.log(chalk.gray(`执行 npm install -g ${PKG_NAME}@${version}...`))
-  execSync(
-    `npm install -g ${PKG_NAME}@${version} --registry=${NPM_REGISTRY} --prefer-online`,
-    { stdio: 'inherit' }
-  )
-}
-
-// 等待可见 → 全局安装 → 校验装到的版本(校验不看退出码,退出码 0 不代表版本对)
-async function selfUpdateGlobal(version) {
-  const visible = await waitForVersionVisible(version)
-
-  try {
-    installGlobal(version)
-  } catch (err) {
-    console.error(chalk.red('全局安装失败:'), err.message || err)
-    console.error(chalk.gray(`可稍后手动重试: npm install -g ${PKG_NAME}@${version}`))
-    return
-  }
-
-  const installed = readGlobalInstalledVersion()
-  if (installed === version) {
-    console.log(chalk.green(`全局已更新到 ${PKG_NAME}@${version}`))
-    if (!visible) {
-      console.log(chalk.gray('(轮询阶段 npm view 未查到该版本,但安装已拿到正确版本)'))
-    }
-    return
-  }
-
-  console.error(chalk.red(
-    `全局版本校验不一致:期望 ${version},实际 ${installed ?? '未知'}`
-    + (visible ? '' : '(且轮询阶段未在 registry 上看到该版本)')
-  ))
-  console.error(chalk.gray(`等 registry 同步完成后手动重试: npm install -g ${PKG_NAME}@${version}`))
 }
 
 // 发布到 NPM
