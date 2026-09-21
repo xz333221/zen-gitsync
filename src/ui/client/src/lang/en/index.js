@@ -337,6 +337,13 @@ export default {
   '@CMDPANEL:当前目录不是Git仓库': 'Current directory is not a Git repository',
   '@CMDPANEL:AI 生成失败': 'AI generation failed',
   '@CMDPANEL:项目目录已切换，定时提交已自动停止': 'Project directory changed, scheduled commit stopped automatically',
+  // @CMDPANEL: 等效命令行
+  '@CMDPANEL:等效命令行': 'Equivalent CLI',
+  '@CMDPANEL:复制命令行': 'Copy command',
+  '@CMDPANEL:命令行已复制': 'Command copied to clipboard',
+  '@CMDPANEL:复制失败': 'Copy failed',
+  '@CMDPANEL:命令行模式启动时会立即提交一次，没有跳过参数': 'The CLI commits once on start; there is no flag to skip it',
+  '@CMDPANEL:命令行模式提交成功后会推送远程，没有关闭参数': 'The CLI pushes after a successful commit; there is no flag to disable it',
   // @CMDPANEL: file end
   // @CMD01: file end
   // @CMD02: file path: components\CommandOrchestrator.vue

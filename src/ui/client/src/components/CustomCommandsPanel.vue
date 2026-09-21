@@ -16,6 +16,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import { CopyDocument } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
 import IconButton from '@components/IconButton.vue'
 import SvgIcon from '@components/SvgIcon/index.vue'
@@ -118,6 +119,54 @@ try {
 const defaultMessagePreview = computed(() =>
   configStore.defaultCommitMessage || `chore: auto commit at ${fmtClock(Date.now())}`
 )
+
+// ──────────────────────────────────────────────
+// 等效命令行:把当前定时提交设置翻译成等价的 `g` CLI 调用,
+// 让用户能在终端里跑同样的定时任务(GUI 关掉后依然生效)。
+// 参数名与 src/gitCommit.js 的解析保持一致:
+//   -y                使用配置里的默认提交信息(不弹交互)
+//   -m="<msg>"        指定提交信息
+//   --ai              AI 生成提交信息
+//   --interval=<秒>    提交间隔 —— 注意 CLI 单位是「秒」,界面是分钟/小时/天,需要换算
+//   --path="<dir>"     工作目录
+// 三档信息优先级与 runScheduledCommit 完全对齐:自定义信息 > 全局默认 > 时间戳兜底。
+// ──────────────────────────────────────────────
+const cliEquivalentCommand = computed(() => {
+  const parts = ['g']
+  const custom = scheduleCustomMessage.value.trim()
+  if (scheduleMessageMode.value === 'ai') {
+    parts.push('--ai')
+  } else if (custom) {
+    parts.push(`-m="${custom.replace(/"/g, '\\"')}"`)
+  } else if (configStore.defaultCommitMessage) {
+    parts.push('-y')
+  } else {
+    // 全局默认信息为空:界面走时间戳兜底,CLI 也用 -m 显式给出同款信息
+    // (直接 -y 会拿到空提交信息,git commit 会以 empty message 中止)
+    parts.push(`-m="chore: auto commit at ${fmtClock(Date.now())}"`)
+  }
+  parts.push(`--interval=${Math.round(intervalMs.value / 1000)}`)
+  if (configStore.currentDirectory) parts.push(`--path="${configStore.currentDirectory}"`)
+  return parts.join(' ')
+})
+
+// 界面上有、但 CLI 没有对应开关的行为差异 —— 只在这两条被关掉时提示,
+// 避免平时给用户塞无用的说明文字。
+const cliHints = computed(() => {
+  const hints: string[] = []
+  if (!scheduleCommitNow.value) hints.push($t('@CMDPANEL:命令行模式启动时会立即提交一次，没有跳过参数'))
+  if (!scheduleAutoPush.value) hints.push($t('@CMDPANEL:命令行模式提交成功后会推送远程，没有关闭参数'))
+  return hints
+})
+
+async function copyCliCommand() {
+  try {
+    await navigator.clipboard.writeText(cliEquivalentCommand.value)
+    ElMessage.success($t('@CMDPANEL:命令行已复制'))
+  } catch (e: any) {
+    ElMessage.error(`${$t('@CMDPANEL:复制失败')}${e?.message ? ': ' + e.message : ''}`)
+  }
+}
 
 let scheduleTimer: ReturnType<typeof setTimeout> | null = null
 let tickTimer: ReturnType<typeof setInterval> | null = null
@@ -553,6 +602,27 @@ async function runCommand(cmd: any) {
           </el-checkbox>
         </div>
 
+        <!-- 等效命令行:把当前设置翻译成等价的 CLI 调用,可一键复制到终端执行 -->
+        <div class="schedule-row schedule-cli-row">
+          <span class="schedule-label">{{ $t('@CMDPANEL:等效命令行') }}</span>
+          <div class="schedule-cli-box">
+            <code class="schedule-cli-text">{{ cliEquivalentCommand }}</code>
+            <IconButton
+              size="small"
+              :tooltip="$t('@CMDPANEL:复制命令行')"
+              custom-class="schedule-cli-copy"
+              @click="copyCliCommand"
+            >
+              <el-icon><CopyDocument /></el-icon>
+            </IconButton>
+          </div>
+        </div>
+        <div v-if="cliHints.length > 0" class="schedule-cli-hints">
+          <div v-for="(hint, idx) in cliHints" :key="idx" class="schedule-cli-hint">
+            {{ hint }}
+          </div>
+        </div>
+
         <!-- 运行日志:只展示最近几条 -->
         <div v-if="scheduleLogs.length > 0" class="schedule-logs">
           <div
@@ -884,6 +954,59 @@ async function runCommand(cmd: any) {
   margin-left: 2px;
   vertical-align: middle;
   cursor: help;
+}
+
+/* ── 等效命令行 ── */
+.schedule-cli-row {
+  align-items: flex-start;
+}
+
+.schedule-cli-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 3px 2px 3px 6px;
+  background: var(--bg-container);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: var(--radius-xs);
+}
+
+.schedule-cli-text {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  /* 窄侧栏里命令普遍超宽:换行显示完整内容,而不是横向截断 */
+  white-space: pre-wrap;
+  word-break: break-all;
+  /* 单击即全选整条命令,方便手动复制(不依赖剪贴板权限) */
+  user-select: all;
+}
+
+:deep(.schedule-cli-copy) {
+  flex-shrink: 0;
+}
+
+.schedule-cli-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 60px;
+}
+
+.schedule-cli-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.schedule-cli-hint::before {
+  content: '·';
+  margin-right: 4px;
 }
 
 .schedule-logs {

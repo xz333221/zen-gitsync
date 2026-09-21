@@ -61,6 +61,33 @@ const mockMediaQuery = (q: string) => ({
 })
 vi.stubGlobal('matchMedia', (q: string) => mockMediaQuery(q))
 
+// localStorage 兜底:Node 22+ 在 globalThis 上自带一个 localStorage 存取器(需要
+// --localstorage-file 才有值,否则 undefined 并打 ExperimentalWarning)。它作为
+// own property 存在,会挡住 vitest jsdom 环境注入的 window.localStorage,导致
+// 测试里读写 localStorage 直接 TypeError —— 同一个 jsdom 实例里 window.localStorage
+// 也是 undefined。这里补一个内存版 Storage,行为与 jsdom 的实现一致。
+function createMemoryStorage(): Storage {
+  const map = new Map<string, string>()
+  return {
+    get length() { return map.size },
+    key: (i: number) => [...map.keys()][i] ?? null,
+    getItem: (k: string) => (map.has(String(k)) ? map.get(String(k))! : null),
+    setItem: (k: string, v: string) => { map.set(String(k), String(v)) },
+    removeItem: (k: string) => { map.delete(String(k)) },
+    clear: () => { map.clear() },
+  } as Storage
+}
+
+for (const name of ['localStorage', 'sessionStorage'] as const) {
+  if (!globalThis[name]) {
+    Object.defineProperty(globalThis, name, {
+      value: createMemoryStorage(),
+      configurable: true,
+      writable: true,
+    })
+  }
+}
+
 if (!navigator.clipboard) {
   Object.defineProperty(navigator, 'clipboard', {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },

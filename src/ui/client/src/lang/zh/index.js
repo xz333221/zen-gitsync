@@ -343,6 +343,13 @@ export default {
   '@CMDPANEL:当前目录不是Git仓库': '当前目录不是 Git 仓库',
   '@CMDPANEL:AI 生成失败': 'AI 生成失败',
   '@CMDPANEL:项目目录已切换，定时提交已自动停止': '项目目录已切换，定时提交已自动停止',
+  // @CMDPANEL: 等效命令行
+  '@CMDPANEL:等效命令行': '等效命令行',
+  '@CMDPANEL:复制命令行': '复制命令行',
+  '@CMDPANEL:命令行已复制': '命令行已复制到剪贴板',
+  '@CMDPANEL:复制失败': '复制失败',
+  '@CMDPANEL:命令行模式启动时会立即提交一次，没有跳过参数': '命令行模式启动时会立即提交一次，没有跳过参数',
+  '@CMDPANEL:命令行模式提交成功后会推送远程，没有关闭参数': '命令行模式提交成功后会推送远程，没有关闭参数',
   // @CMDPANEL: file end
   // @CMD02: file path: components\CommandOrchestrator.vue
   '@CMD02:指令编排': '指令编排',

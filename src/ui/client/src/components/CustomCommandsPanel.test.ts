@@ -331,3 +331,86 @@ describe('CustomCommandsPanel.vue 定时提交', () => {
     expect(saved.customMessage).toBe('docs: 定时归档笔记')
   })
 })
+
+// 等效命令行预览:把界面设置翻译成 `g` CLI 参数,必须与 src/gitCommit.js 的解析一致
+describe('CustomCommandsPanel.vue 等效命令行', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    mockGitStore.isGitRepo = true
+    mockConfigStore.customCommands = []
+    mockConfigStore.currentDirectory = '/proj'
+    mockConfigStore.defaultCommitMessage = 'submit'
+  })
+
+  afterEach(() => { unmountAll() })
+
+  test('CCP-23: 默认信息模式 → -y + --interval(秒) + --path', () => {
+    const vm: any = mountPanel().vm
+    vm.scheduleInterval = 30
+    vm.scheduleUnit = 'min'
+    expect(vm.cliEquivalentCommand).toBe('g -y --interval=1800 --path="/proj"')
+  })
+
+  test('CCP-24: 单位换算 → 小时/天都折算成秒', () => {
+    const vm: any = mountPanel().vm
+    vm.scheduleInterval = 2
+    vm.scheduleUnit = 'hour'
+    expect(vm.cliEquivalentCommand).toContain('--interval=7200')
+    vm.scheduleUnit = 'day'
+    expect(vm.cliEquivalentCommand).toContain('--interval=172800')
+  })
+
+  test('CCP-25: AI 模式 → --ai(不带 -y)', () => {
+    const vm: any = mountPanel().vm
+    vm.scheduleMessageMode = 'ai'
+    const cmd = vm.cliEquivalentCommand
+    expect(cmd).toContain('--ai')
+    expect(cmd).not.toContain('-y ')
+    expect(cmd).not.toContain('-m=')
+  })
+
+  test('CCP-26: 自定义信息非空 → -m="..." 优先于 -y', () => {
+    const vm: any = mountPanel().vm
+    vm.scheduleCustomMessage = 'docs: 定时归档笔记'
+    const cmd = vm.cliEquivalentCommand
+    expect(cmd).toContain('-m="docs: 定时归档笔记"')
+    expect(cmd).not.toContain('-y')
+  })
+
+  test('CCP-27: 自定义信息里的双引号做转义,不破坏命令结构', () => {
+    const vm: any = mountPanel().vm
+    vm.scheduleCustomMessage = 'fix: "引号" 场景'
+    expect(vm.cliEquivalentCommand).toContain('-m="fix: \\"引号\\" 场景"')
+  })
+
+  test('CCP-28: 全局默认信息为空 → 用 -m 显式给出时间戳兜底(-y 会提交空信息)', () => {
+    mockConfigStore.defaultCommitMessage = ''
+    const vm: any = mountPanel().vm
+    expect(vm.cliEquivalentCommand).toMatch(/-m="chore: auto commit at \d{2}:\d{2}:\d{2}"/)
+  })
+
+  test('CCP-29: 没有当前目录 → 省略 --path', () => {
+    mockConfigStore.currentDirectory = ''
+    const vm: any = mountPanel().vm
+    expect(vm.cliEquivalentCommand).toBe('g -y --interval=1800')
+  })
+
+  test('CCP-30: cliHints 只在界面行为 CLI 无法复现时出现', async () => {
+    const vm: any = mountPanel().vm
+    // 默认:立即提交一次 + 自动推送,均与 CLI 一致 → 无提示
+    expect(vm.cliHints).toEqual([])
+    vm.scheduleCommitNow = false
+    vm.scheduleAutoPush = false
+    await vm.$nextTick?.()
+    expect(vm.cliHints.length).toBe(2)
+  })
+
+  test('CCP-31: copyCliCommand → 写入剪贴板并提示成功', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const vm: any = mountPanel().vm
+    await vm.copyCliCommand()
+    expect(writeText).toHaveBeenCalledWith('g -y --interval=1800 --path="/proj"')
+    expect(ElMessage.success).toHaveBeenCalled()
+  })
+})

@@ -80,6 +80,15 @@ import CommandConsole from '@components/CommandConsole.vue'
   overflow-y: auto;
 }
 
+/* 空状态(没有自定义命令时)也要撑满剩余高度 —— 否则整块面板塌缩成内容高度,
+   下面的「定时提交」区块会顶到最上面,有命令 / 无命令两种状态下位置不一致。
+   撑满后空态提示居中,定时提交始终贴在侧栏底部。 */
+.console-view__sidebar :deep(.custom-commands-panel .empty-container) {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* 左右布局下高度由侧栏 flex 撑满,隐藏组件自带的高度调节条(它本用于上下布局) */
 .console-view__sidebar :deep(.custom-commands-panel .resize-handle) {
   display: none !important;
