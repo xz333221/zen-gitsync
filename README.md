@@ -228,6 +228,13 @@ Create, manage, and run shell commands from the sidebar (Console view):
 - Save command **templates** for quick reuse
 - Each command has its own **enable / disable** toggle so you can stage a suite of commands without running them
 
+**Scheduled commit** (pinned to the bottom of the same sidebar): auto `git add -A` + `git commit` on an interval.
+
+- Interval in minutes / hours / days, with an optional commit right on start
+- Commit message: the configured default message, a per-schedule message, or AI-generated
+- Push to the remote after every successful commit (can be turned off)
+- The panel echoes the **equivalent `g` CLI command** — e.g. `g -y --interval=1800 --path="<dir>"` (`--interval` is in **seconds**) — with a one-click copy button, so the same schedule can be reproduced from a terminal without the GUI
+
 ---
 
 ### Flow Orchestration (Visual Workflow Designer)
@@ -832,6 +839,13 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 - 一键在新终端会话中执行命令
 - 保存**命令模板**快速复用
 - 每条命令都有 **启用 / 禁用** 开关，可以在不立即运行的情况下预排一组命令
+
+**定时提交**（固定在同一侧边栏底部）：按间隔自动 `git add -A` + `git commit`。
+
+- 间隔可选分钟 / 小时 / 天，可设置启动时立即提交一次
+- 提交信息：全局默认信息、本次自定义信息，或 AI 生成
+- 每次提交成功后自动推送到远程（可关闭）
+- 面板底部同步显示**等效的 `g` 命令行**（如 `g -y --interval=1800 --path="<目录>"`，`--interval` 单位为**秒**），带一键复制按钮，方便在终端里复现同一套定时任务
 
 ---
 
