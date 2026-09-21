@@ -20,7 +20,7 @@
 //   - 默认使用 g ui 里配置的模型(~/.zen-gitsync/config.json 顶层 models,
 //     isDefault 优先,否则取第一个);--model=<序号|名称> 或会话内 /model 切换
 //   - OpenAI 兼容流式 function calling:模型可以调用 run_command /
-//     read_file / write_file / edit_file / list_files / search_text
+//     read_file / write_file / edit_file / list_files / search_text / ask_user
 //   - 图片:Alt+V 粘贴剪贴板图片、/image <路径> 附加本地图片,
 //     以多模态(image_url)消息发给模型(需模型支持视觉)
 //   - 权限:启动目录内全开放,其他目录可读写;唯一红线由 safety.js 拦截
@@ -44,8 +44,9 @@ import chalk from 'chalk'
 import config from '../../config.js'
 import { getCwd } from '../../utils/index.js'
 import { registerCleanup } from '../cleanup.js'
-import { terminateCommand } from './tools.js'
+import { terminateCommand, TOOL_DEFINITIONS } from './tools.js'
 import { runAgentTurn } from './turn.js'
+import { AgentExtensions } from './extensions.js'
 import { repairToolHistory, loadProjectInstructions } from './context.js'
 import {
   printBanner, printHelpPanel,
@@ -96,6 +97,14 @@ const STRINGS = {
     thinkingHint: '… 已显示前 12 行；输入 /think full 开启后续完整思考',
     emptyResponse: '模型没有返回回答，请重试或切换模型。',
     chars: '字符',
+    extLoadingMcp: (n) => `正在连接 ${n} 个 MCP 服务…`,
+    extLoaded: (skills, tools) => `扩展已就绪: ${skills} 个 Skill · ${tools} 个 MCP 工具(/skills 查看)`,
+    extNone: '',
+    extSkillTitle: '已安装的 Skill',
+    extSkillEmpty: '没有装 Skill。可以在 g ui → 智能体 → Skill 广场 里挑一个装到当前项目或 g ai。',
+    extMcpTitle: '已接入的 MCP 服务',
+    extMcpEmpty: '没有接入 MCP 服务。可以在 g ui → 智能体 → MCP 广场 里挑一个装到当前项目或 g ai。',
+    extMcpFailed: '连接失败',
     imagePasting: '正在读取剪贴板图片…',
     imageAttached: (n, size) => `📎 图片 #${n} 已附加(${size}),将随下一条消息发送`,
     imageEmpty: '剪贴板中没有图片;可先截图再按 Alt+V,或用 /image <路径> 附加本地图片',
@@ -145,6 +154,14 @@ const STRINGS = {
     thinkingHint: '… first 12 lines shown; enter /think full for future reasoning',
     emptyResponse: 'The model returned no answer. Retry or switch models.',
     chars: 'chars',
+    extLoadingMcp: (n) => `Connecting to ${n} MCP server(s)…`,
+    extLoaded: (skills, tools) => `Extensions ready: ${skills} skill(s) · ${tools} MCP tool(s) (/skills for details)`,
+    extNone: '',
+    extSkillTitle: 'Installed skills',
+    extSkillEmpty: 'No skills installed. Browse g ui → Agent → Skill marketplace to install one into this project or g ai.',
+    extMcpTitle: 'Connected MCP servers',
+    extMcpEmpty: 'No MCP servers connected. Browse g ui → Agent → MCP marketplace to install one.',
+    extMcpFailed: 'failed',
     imagePasting: 'Reading clipboard image…',
     imageAttached: (n, size) => `📎 Image #${n} attached (${size}); sent with your next message`,
     imageEmpty: 'No image in clipboard; take a screenshot first, or use /image <path>',
@@ -176,14 +193,28 @@ function modelLabel(m) {
 // ──────────────────────────────────────────────
 // 系统 prompt — 明确告知环境、权限边界与工作方式
 // ──────────────────────────────────────────────
+// 顺序固定:基础人设 → 项目说明(AGENTS.md/CLAUDE.md)→ 扩展能力(skill 清单 + MCP 工具)。
+// 把扩展放最后,是因为它是"增量能力",不该插在权限与环境说明中间打断阅读。
+// state 里存着已加载的 AgentExtensions;没加载(如单测直接调)时 extra 为空,行为与改动前一致。
+function extensionSuffix(state) {
+  try {
+    return state?.extensions?.promptSuffix?.(state.locale) || ''
+  } catch {
+    return ''
+  }
+}
+
 async function buildProjectPrompt(options) {
-  return buildSystemPrompt(options) + await loadProjectInstructions(options.cwd)
+  return buildSystemPrompt(options) + await loadProjectInstructions(options.cwd) + (options.extra || '')
 }
 
 function buildSystemPrompt({ cwd, locale, shellDesc }) {
   const zh = !String(locale || '').startsWith('en')
   const now = new Date().toLocaleString()
   const isWin = process.platform === 'win32'
+  // 工具数量动态取自 tools.js —— 之前这里写死过"6 个",加 ask_user 时没人想起来改,
+  // 就变成了对模型撒谎。数字跟着定义走,以后再加工具不会漏。
+  const builtinToolCount = TOOL_DEFINITIONS.length
   if (zh) {
     return `你是 "g ai" —— zen-gitsync CLI 内置的终端编码智能体,通过工具在用户真实电脑上完成编码任务。
 
@@ -226,7 +257,8 @@ ${isWin ? `- 当前是 Windows cmd.exe,以下 Unix 命令**不存在**,用了必
 
 # 与用户交互
 - 需要向用户确认、提问或汇报重要决策时,直接用普通文本输出 —— 用户能实时看到你的文本;
-  不要调用不存在的工具,可用工具只有上面列出的 6 个
+  需要暂停当前任务并等待用户决定或补充信息时,调用 ask_user,不要猜测或只在普通文本里提问
+  不要调用不存在的工具,内置工具就是上面列出的 ${builtinToolCount} 个(若用户装了 MCP,你的工具表里还会多出 mcp__ 开头的工具)
 - 用户可能通过 Alt+V 或 /image 附加图片:图片以 image_url 部件出现在 user 消息里;
   如果当前模型不支持视觉(带图请求报错),提醒用户换用支持视觉的模型
 - 发现高风险或状态不一致的情况(例如版本号 / git tag / CHANGELOG 对不上、发布前环境异常、
@@ -265,6 +297,7 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
 
 # How to work
 - Act first, ask later: use tools (list_files / read_file / search_text / run_command) instead of asking the user
+- When a decision or missing detail must come from the user, call ask_user. Do not guess or merely describe a question in plain text.
 - After editing code, verify: run tests, builds, or at least a syntax check via run_command
 - Prefer edit_file for precise replacements; read_file first, old_string must match the file exactly
 - Read large files in segments (offset/limit)
@@ -275,7 +308,7 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
 - For a brief overview, inspect only the necessary structure and entry points; keep exploration proportional to the request
 
 # Talking to the user
-- When you need to confirm something, ask a question, or report an important decision, just write plain text — the user sees your output in real time. Never call tools that do not exist; only the 6 tools listed above are available
+- When you need to confirm something, ask a question, or report an important decision, just write plain text — the user sees your output in real time. Use ask_user when the task must pause for an answer. Never call tools that do not exist; the built-in set is the ${builtinToolCount} tools listed above (if the user installed MCP servers, extra tools prefixed with mcp__ will also appear in your tool list)
 - The user can attach images (Alt+V or /image); they arrive as image_url parts in your user messages. If the current model rejects images (no vision support), tell the user to switch to a vision-capable model
 - When you spot high-risk or inconsistent state (version number / git tag / CHANGELOG mismatch, abnormal release environment, unexpected repo state), explain the finding and its impact in text, then STOP and wait for the user's decision instead of proceeding with destructive operations
 
@@ -350,6 +383,7 @@ function printSlashHelp(t, locale) {
     '  /think compact    预览前 12 行思考',
     '  /think off        隐藏思考；/think 切换完整与隐藏',
     '  /tools [模式]     compact 精简 / full 完整工具输出',
+    '  /skills           查看已安装的 Skill 与已接入的 MCP 服务',
     '  /stats            查看上一轮与会话累计用量、耗时',
     '  /new              开启新对话',
     '  /resume           选择并恢复之前的对话',
@@ -370,6 +404,7 @@ function printSlashHelp(t, locale) {
     '  /think compact    Preview the first 12 thinking lines',
     '  /think off        Hide thinking; /think toggles full / hidden',
     '  /tools [mode]     compact / full tool output',
+    '  /skills           List installed skills and connected MCP servers',
     '  /stats            Last turn timing and session token usage',
     '  /new              Start a new conversation',
     '  /resume           Choose and resume a previous conversation',
@@ -388,7 +423,7 @@ export async function handleSlashCommand(state, input, t) {
   const [cmd, ...rest] = input.split(/\s+/)
   const arg = rest.join(' ').trim()
   const zh = !String(state.locale).startsWith('en')
-  if (state.busy && !['/help', '/stats', '/think', '/tools', '/exit', '/quit'].includes(cmd)) {
+  if (state.busy && !['/help', '/stats', '/think', '/tools', '/skills', '/mcp', '/exit', '/quit'].includes(cmd)) {
     printDim(t.busy)
     return 'ok'
   }
@@ -467,7 +502,7 @@ export async function handleSlashCommand(state, input, t) {
       state.sessionStats = session.sessionStats || null
       const systemMessage = {
         role: 'system',
-        content: await buildProjectPrompt({ cwd: state.ctx.cwd, locale: state.locale, shellDesc: state.shellDesc }),
+        content: await buildProjectPrompt({ cwd: state.ctx.cwd, locale: state.locale, shellDesc: state.shellDesc, extra: extensionSuffix(state) }),
       }
       if (state.messages[0]?.role === 'system') state.messages[0] = systemMessage
       else state.messages.unshift(systemMessage)
@@ -497,6 +532,26 @@ export async function handleSlashCommand(state, input, t) {
     if (arg && !['full', 'compact'].includes(arg)) { printWarn('/tools compact | full'); return 'ok' }
     state.fullTools = arg ? arg === 'full' : !state.fullTools
     printOk(zh ? `后续工具结果：${state.fullTools ? '完整' : '精简'}` : `Future tool output: ${state.fullTools ? 'full' : 'compact'}`)
+    return 'ok'
+  }
+  if (cmd === '/skills' || cmd === '/mcp') {
+    const info = state.extensions?.summary(state.locale) || { skills: [], servers: [] }
+    console.log(chalk.bold(`\n  ${t.extSkillTitle}`))
+    if (info.skills.length === 0) printDim(t.extSkillEmpty)
+    for (const skill of info.skills) {
+      const scope = skill.scope === 'project' ? (zh ? '项目' : 'project') : (zh ? '全局' : 'global')
+      console.log(`  · ${chalk.cyan(skill.name)} ${chalk.dim(`[${scope}]`)}${skill.description ? chalk.dim(` — ${skill.description}`) : ''}`)
+    }
+    console.log(chalk.bold(`\n  ${t.extMcpTitle}`))
+    if (info.servers.length === 0) printDim(t.extMcpEmpty)
+    for (const server of info.servers) {
+      if (server.error) {
+        console.log(`  · ${chalk.red(server.id)} ${chalk.dim(`— ${t.extMcpFailed}: ${server.error}`)}`)
+      } else {
+        console.log(`  · ${chalk.cyan(server.id)} ${chalk.dim(`— ${server.tools} ${zh ? '个工具' : 'tools'} (${server.command})`)}`)
+      }
+    }
+    console.log('')
     return 'ok'
   }
   if (cmd === '/stats') {
@@ -602,8 +657,10 @@ export async function handleSlashCommand(state, input, t) {
       const st = await fsp.stat(target)
       if (!st.isDirectory()) throw new Error('not a dir')
       state.ctx.cwd = target
-      // 同步更新 system prompt 里的 cwd 说明(重建首条消息)
-      state.messages[0] = { role: 'system', content: await buildProjectPrompt({ cwd: target, locale: state.locale, shellDesc: state.shellDesc }) }
+      // 项目级 skill 与 .mcp.json 跟着工作目录走:先重载扩展(会关掉旧目录起的 MCP 子进程),
+      // 再重建首条 system 消息 —— 顺序反了会把旧目录的 skill 清单写进新目录的提示词。
+      await state.extensions?.reload({ cwd: target, locale: state.locale, onWarn: printWarn })
+      state.messages[0] = { role: 'system', content: await buildProjectPrompt({ cwd: target, locale: state.locale, shellDesc: state.shellDesc, extra: extensionSuffix(state) }) }
       await state.persistSession?.()
       printOk(t.cdOk(target))
     } catch {
@@ -660,12 +717,21 @@ export async function runAiAgent(argv = []) {
     ? 'cmd.exe (Windows CMD)'
     : (process.env.SHELL || '/bin/sh')
 
+  // 加载扩展(Skill 清单 + MCP 服务)。MCP 要起子进程,npx 首次还得下载包,
+  // 所以这一步可能明显停顿 —— 有 MCP 时先提示一句。任何失败都只降级并打印原因。
+  const extensions = await AgentExtensions.load({
+    cwd,
+    locale,
+    onWarn: printWarn,
+    onNotice: (count) => printDim(t.extLoadingMcp(count)),
+  })
+
   const state = {
     // 会话持久化:CLI 对话也保存到 ~/.zen-gitsync/agent-sessions/,
     // 在 Web UI 智能体 tab 中可见(带 CLI 标记)
     sessionId: genSessionId(),
     sessionCreatedAt: new Date().toISOString(),
-    messages: [{ role: 'system', content: await buildProjectPrompt({ cwd, locale, shellDesc }) }],
+    messages: [{ role: 'system', content: await buildProjectPrompt({ cwd, locale, shellDesc, extra: extensions.promptSuffix(locale) }) }],
     ctx: {
       cwd,
       onChild: (child) => {
@@ -695,6 +761,7 @@ export async function runAiAgent(argv = []) {
     pasting: false,         // 剪贴板读取进行中(防 Alt+V 连打并发)
     inWizard: false,        // /addmodel 交互式向导进行中:忽略 REPL 的 line 事件
     rl: null,               // REPL readline 引用(供 /addmodel 复用做 rl.question)
+    extensions,             // 已加载的 Skill + MCP 扩展(见 extensions.js)
   }
 
   // 持久化当前会话到磁盘(供 Web UI 读取)
@@ -733,13 +800,21 @@ export async function runAiAgent(argv = []) {
     state.cancelRequested = true
     try { state.abortController?.abort() } catch (_) {}
     await terminateCommand(state.currentChild)
+    // MCP 子进程必须显式收掉:它们挂在 stdio 上,不收会让进程无法自然退出
+    await extensions.close()
     await persistSession()
   })
+
+  // 扩展摘要:一条 dim 行,没有装扩展时完全静默(extNone 为空串)
+  const extSummary = extensions.skills.length || extensions.tools.length
+    ? t.extLoaded(extensions.skills.length, extensions.tools.length)
+    : t.extNone
 
   // 单发模式:g ai "帮我改个 bug"(位置参数拼成 prompt,跑一轮就退出)
   const oneShot = argv.filter(a => !a.startsWith('-')).join(' ').trim()
   if (oneShot) {
     console.log(chalk.dim(`[${t.bannerModel}] ${modelLabel(model)} · [${t.bannerCwd}] ${cwd}`))
+    if (extSummary) printDim(extSummary)
     state.abortController = new AbortController()
     const stats = await runAgentTurn(state, oneShot, t)
     if (stats.status === 'completed') printDim(t.oneShotDone)
@@ -757,6 +832,7 @@ export async function runAiAgent(argv = []) {
     cwdText: t.bannerCwd,
     tip: t.bannerTip,
   })
+  if (extSummary) printDim(extSummary)
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -766,6 +842,94 @@ export async function runAiAgent(argv = []) {
     historySize: 200,
   })
   state.rl = rl  // 供 /addmodel 等需要 rl.question 的斜杠命令复用
+
+  // ask_user pauses the tool loop inside the same readline session. The REPL
+  // line handler is bypassed while this small wizard owns the input line.
+  state.ctx.askUser = ({ question, options = [], allowFreeText = true }) => {
+    const zh = !String(state.locale || '').startsWith('en')
+    const safeOptions = Array.isArray(options) ? options.filter(Boolean).slice(0, 20) : []
+    state.inWizard = true
+    if (safeOptions.length > 0) {
+      console.log(chalk.cyan(`\n${question}`))
+      safeOptions.forEach((option, index) => console.log(`  ${chalk.cyan(String(index + 1))}. ${option}`))
+    } else {
+      console.log(chalk.cyan(`\n${question}`))
+    }
+
+    return new Promise(resolve => {
+      let settled = false
+      const questionController = new AbortController()
+      const parentSignal = state.abortController?.signal
+      const cleanup = () => {
+        rl.removeListener?.('close', onClose)
+        rl.removeListener?.('operationCancel', onCancel)
+        rl.input?.removeListener?.('keypress', onKeypressCancel)
+        parentSignal?.removeEventListener?.('abort', onParentAbort)
+      }
+      const finish = answer => {
+        if (settled) return
+        settled = true
+        cleanup()
+        state.inWizard = false
+        resolve(answer)
+      }
+      const cancel = () => {
+        if (settled) return
+        questionController.abort()
+        finish('Cancelled by user; the question was not answered.')
+      }
+      const onClose = () => cancel()
+      const onCancel = () => {
+        state.cancelRequested = true
+        try { state.abortController?.abort() } catch (_) {}
+        cancel()
+      }
+      const onParentAbort = () => cancel()
+      const onKeypressCancel = (_str, key) => {
+        if (!key?.ctrl || key.name !== 'c') return
+        key.name = 'escape'
+        key.sequence = ''
+        key.ctrl = false
+        key.meta = false
+        key.shift = false
+        onCancel()
+      }
+
+      rl.once('close', onClose)
+      rl.once('operationCancel', onCancel)
+      rl.input?.prependListener?.('keypress', onKeypressCancel)
+      parentSignal?.addEventListener?.('abort', onParentAbort, { once: true })
+
+      const promptAnswer = () => {
+        const hint = safeOptions.length > 0
+          ? (allowFreeText ? (zh ? '请输入序号或直接输入回答' : 'Choose a number or type an answer') : (zh ? '请输入序号' : 'Choose a number'))
+          : (zh ? '请输入回答' : 'Type your answer')
+        rl.question(`${hint}: `, { signal: questionController.signal }, answer => {
+          if (settled) return
+          const trimmed = String(answer || '').trim()
+          if (safeOptions.length > 0) {
+            const index = Number.parseInt(trimmed, 10)
+            if (Number.isInteger(index) && index >= 1 && index <= safeOptions.length) {
+              finish(safeOptions[index - 1])
+              return
+            }
+            if (!allowFreeText || !trimmed) {
+              console.log(chalk.yellow(zh ? `请输入 1-${safeOptions.length} 之间的序号` : `Enter a number from 1 to ${safeOptions.length}`))
+              promptAnswer()
+              return
+            }
+          }
+          if (!trimmed) {
+            console.log(chalk.yellow(zh ? '回答不能为空' : 'Answer cannot be empty'))
+            promptAnswer()
+            return
+          }
+          finish(trimmed)
+        })
+      }
+      promptAnswer()
+    })
+  }
 
   // 输入提示符管理。
   //

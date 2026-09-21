@@ -5,11 +5,14 @@ import { normalizeUsage } from './telemetry.js'
 // Some compatible gateways reject stream_options. Remember that for this process.
 const withoutStreamUsage = new Set()
 
-export async function streamChatOnce({ model, messages, signal, onToken = () => {}, sessionId,
+export async function streamChatOnce({ model, messages, signal, onToken = () => {}, sessionId, extraTools,
   fetchFn = fetch, timeoutMs = 300000 }) {
   const { url, headers } = buildAiChatRequest({ ...model, sessionId })
   const providerKey = `${url}\n${model.model}`
-  const body = { model: model.model, messages, tools: TOOL_DEFINITIONS, temperature: 0.3, stream: true }
+  // 内置 7 个工具是底座;extraTools 是 MCP 等外部能力的叠加(见 extensions.js)。
+  // 扩展工具为空时**必须回落到原始数组**,避免把 tools: [] 发给模型。
+  const tools = Array.isArray(extraTools) && extraTools.length ? [...TOOL_DEFINITIONS, ...extraTools] : TOOL_DEFINITIONS
+  const body = { model: model.model, messages, tools, temperature: 0.3, stream: true }
   if (!withoutStreamUsage.has(providerKey)) body.stream_options = { include_usage: true }
   const controller = new AbortController()
   let timedOut = false

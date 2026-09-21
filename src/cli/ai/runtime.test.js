@@ -78,6 +78,10 @@ test('timeout and explicit cancellation have different outcomes', async () => {
 })
 
 const call = n => ({ id: `call${n}`, type: 'function', function: { name: 'read_file', arguments: '{}' } })
+const askCall = (id = 'ask1') => ({ id, type: 'function', function: {
+  name: 'ask_user',
+  arguments: JSON.stringify({ question: 'Which option?', options: ['A', 'B'], allow_free_text: false }),
+} })
 const strings = { waiting: '', toolRunning: x => x, toolIterLimit: n => String(n), llmError: x => x, emptyResponse: 'empty' }
 const noop = () => {}
 const quiet = { startSpinner: () => ({ stop: noop }), createAssistantWriter: () => ({ writeContent: noop, writeThinking: noop, finish: noop }),
@@ -131,6 +135,34 @@ test('turn aggregates all model calls, persists progress and records response ti
   assert.ok(stats.totalMs >= stats.llmMs + stats.toolsMs)
   assert.ok(saves >= 4)
   assert.equal(s.sessionStats.usage.totalTokens, 24)
+})
+
+test('ask_user pauses a turn until the answer arrives, then continues the model loop', async () => {
+  const s = state()
+  let resolveAnswer
+  let asked
+  s.ctx.askUser = args => {
+    asked = args
+    return new Promise(resolve => { resolveAnswer = resolve })
+  }
+  let round = 0
+  const turnPromise = runAgentTurn(s, 'task', strings, [], {
+    ui: quiet,
+    chat: async () => (++round === 1
+      ? { content: '', toolCalls: [askCall()] }
+      : { content: 'finished', toolCalls: [] }),
+  })
+
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(asked, { question: 'Which option?', options: ['A', 'B'], allowFreeText: false })
+  assert.equal(round, 1)
+  resolveAnswer('B')
+
+  const stats = await turnPromise
+  assert.equal(stats.status, 'completed')
+  assert.equal(round, 2)
+  assert.equal(s.messages.at(-1).content, 'finished')
+  assert.equal(s.messages.find(message => message.role === 'tool').content, 'B')
 })
 
 test('cancellation during a tool skips the remaining batch and keeps valid tool history', async () => {

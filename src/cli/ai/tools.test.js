@@ -24,6 +24,39 @@ import { TOOL_DEFINITIONS, executeTool } from './tools.js'
 let tmpDir
 const ctx = { cwd: null, onChild: null }
 
+test('ask_user schema and arguments support options plus free text', async () => {
+  const definition = TOOL_DEFINITIONS.find(tool => tool.function.name === 'ask_user')
+  assert.ok(definition)
+  assert.deepEqual(definition.function.parameters.required, ['question'])
+  assert.ok(definition.function.parameters.properties.options)
+  assert.ok(definition.function.parameters.properties.allow_free_text)
+
+  let received
+  const result = await executeTool('ask_user', {
+    question: '  Which path should I take?  ',
+    options: ['  Fast  ', '', 42, null],
+    allow_free_text: false,
+  }, {
+    ...ctx,
+    askUser: async value => {
+      received = value
+      return 'Fast'
+    },
+  })
+  assert.equal(result, 'Fast')
+  assert.deepEqual(received, {
+    question: 'Which path should I take?',
+    options: ['Fast', '42'],
+    allowFreeText: false,
+  })
+})
+
+test('ask_user returns a useful error when no interactive callback exists', async () => {
+  const result = await executeTool('ask_user', { question: 'Continue?' }, ctx)
+  assert.match(result, /ask_user is unavailable/)
+  assert.match(await executeTool('ask_user', {}, { ...ctx, askUser: async () => 'x' }), /requires a non-empty question/)
+})
+
 before(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'g-ai-tools-'))
   ctx.cwd = tmpDir

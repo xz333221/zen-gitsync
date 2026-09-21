@@ -15,9 +15,9 @@
   -->
 
 <!--
-  智能体视图：左侧会话列表 + 右侧对话区。
-  - 左侧：会话列表（搜索 / 新建 / 删除 / 重命名）
-  - 右侧：使用 zen-ai-chat-ui 的 ChatContainer 渲染对话
+  智能体视图：顶部 Tab 切换「对话 / Skill 广场 / MCP 广场」。
+  - 对话：左侧会话列表 + 右侧使用 zen-ai-chat-ui 的 ChatContainer 渲染对话
+  - 两个广场：按来源展示可安装的 Skill / MCP，装到当前项目或 g ai 智能体
   - SSE 流式：thinking + content + tool_call + tool_result
   - 会话持久化：后端自动保存到 ~/.zen-gitsync/agent-sessions/
 -->
@@ -25,13 +25,26 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox, ElTooltip, ElIcon } from 'element-plus'
-import { Plus, Search, Delete, Edit, ChatLineRound, Loading } from '@element-plus/icons-vue'
+import { Plus, Search, Delete, Edit, ChatLineRound, Loading, Check, ChatDotRound, Goods, Connection } from '@element-plus/icons-vue'
 import { ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentChat } from '@/composables/useAgentChat'
+import MarketplacePanel from '@/components/MarketplacePanel.vue'
 
 const configStore = useConfigStore()
+
+// ── 顶部 Tab ─────────────────────────────────────────────
+// 会话列表只在「对话」Tab 显示 —— 广场占满宽度更好浏览;
+// 两个广场共用一个 MarketplacePanel 实例,切类型时组件内部自己重拉数据。
+type AgentTab = 'chat' | 'skill' | 'mcp'
+const activeTab = ref<AgentTab>('chat')
+const marketplaceType = computed(() => (activeTab.value === 'mcp' ? 'mcp' : 'skill'))
+const tabs = computed(() => [
+  { id: 'chat' as const, label: $t('@AGENT:对话'), icon: ChatDotRound },
+  { id: 'skill' as const, label: $t('@AGENT:Skill 广场'), icon: Goods },
+  { id: 'mcp' as const, label: $t('@AGENT:MCP 广场'), icon: Connection },
+])
 
 const {
   sessions,
@@ -46,6 +59,9 @@ const {
   renameSession,
   newSession,
   sendMessage,
+  pendingQuestion,
+  answeringQuestion,
+  answerQuestion,
   stop
 } = useAgentChat()
 
@@ -91,6 +107,13 @@ async function onSelectPreset(q: any) {
   await sendMessage(q.prompt)
   await nextTick()
   scrollToBottom()
+}
+
+const pendingAnswer = ref('')
+
+async function submitPendingAnswer(answer = pendingAnswer.value) {
+  const submitted = await answerQuestion(answer)
+  if (submitted) pendingAnswer.value = ''
 }
 
 // ── ChatContainer ref ────────────────────────────────────
@@ -219,8 +242,9 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
 
 <template>
   <div class="agent-view">
-    <!-- ═══ 左侧：会话列表 ═══ -->
-    <aside class="agent-sidebar" :style="{ width: sidebarWidth + 'px' }">
+    <!-- ═══ 左侧：会话列表（只在「对话」Tab 显示）═══ -->
+    <template v-if="activeTab === 'chat'">
+      <aside class="agent-sidebar" :style="{ width: sidebarWidth + 'px' }">
       <!-- 顶部操作栏 -->
       <div class="sidebar-header">
         <button class="new-session-btn" @click="handleNewSession">
@@ -294,9 +318,29 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
       @mousedown="startResize"
       :class="{ active: isResizing }"
     ></div>
+    </template>
 
-    <!-- ═══ 右侧：对话区域 ═══ -->
+    <!-- ═══ 右侧：Tab 栏 + 内容区 ═══ -->
     <main class="agent-chat-area">
+      <nav class="agent-tabs" role="tablist">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          type="button"
+          class="agent-tab"
+          :class="{ active: activeTab === tab.id }"
+          role="tab"
+          :aria-selected="activeTab === tab.id"
+          @click="activeTab = tab.id"
+        >
+          <el-icon><component :is="tab.icon" /></el-icon>
+          <span>{{ tab.label }}</span>
+        </button>
+      </nav>
+
+      <div class="agent-tab-body">
+        <!-- ── 对话 ── -->
+        <div v-if="activeTab === 'chat'" class="agent-chat-pane">
       <!-- 加载中 -->
       <div v-if="sessionLoading" class="chat-loading">
         <el-icon class="is-loading" :size="32"><Loading /></el-icon>
@@ -321,6 +365,46 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
       >
       </ChatContainer>
 
+      <transition name="fade">
+        <section v-if="pendingQuestion" class="ask-user-panel" aria-live="polite">
+          <div class="ask-user-title">
+            <el-icon><ChatLineRound /></el-icon>
+            <span>{{ $t('@AGENT:等待你的回答') }}</span>
+          </div>
+          <div class="ask-user-question">{{ pendingQuestion.question }}</div>
+          <div v-if="pendingQuestion.options.length" class="ask-user-options">
+            <button
+              v-for="option in pendingQuestion.options"
+              :key="option"
+              type="button"
+              class="ask-user-option"
+              :disabled="answeringQuestion"
+              @click="submitPendingAnswer(option)"
+            >
+              <el-icon><Check /></el-icon>
+              <span>{{ option }}</span>
+            </button>
+          </div>
+          <form
+            v-if="pendingQuestion.allowFreeText || pendingQuestion.options.length === 0"
+            class="ask-user-form"
+            @submit.prevent="submitPendingAnswer()"
+          >
+            <input
+              v-model="pendingAnswer"
+              type="text"
+              :disabled="answeringQuestion"
+              :placeholder="$t('@AGENT:输入回答')"
+              :aria-label="$t('@AGENT:输入回答')"
+            />
+            <button type="submit" :disabled="answeringQuestion || !pendingAnswer.trim()">
+              <el-icon><Check /></el-icon>
+              <span>{{ $t('@AGENT:提交回答') }}</span>
+            </button>
+          </form>
+        </section>
+      </transition>
+
       <!-- 停止按钮浮层 -->
       <transition name="fade">
         <div v-if="isStreaming" class="stop-button-bar">
@@ -330,6 +414,11 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
           </button>
         </div>
       </transition>
+        </div>
+
+        <!-- ── Skill 广场 / MCP 广场 ── -->
+        <MarketplacePanel v-else :type="marketplaceType" />
+      </div>
     </main>
   </div>
 </template>
@@ -580,6 +669,65 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   overflow: hidden;
 }
 
+/* ── 顶部 Tab 栏 ────────────────────────────────── */
+.agent-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-panel);
+}
+
+.agent-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px 9px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+
+  &:hover { color: var(--text-secondary); background: var(--bg-hover); }
+
+  &.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 600;
+  }
+}
+
+.agent-tab-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 对话 Pane 保持原有的纵向布局 */
+.agent-chat-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 广场面板占满剩余空间 */
+.agent-tab-body > :deep(.marketplace-panel) {
+  flex: 1;
+  min-height: 0;
+}
+
 .chat-loading {
   flex: 1;
   display: flex;
@@ -592,6 +740,97 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
 }
 
 /* ── 停止按钮 ───────────────────────────────────── */
+.ask-user-panel {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 132px;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-container);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+}
+
+.ask-user-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ask-user-question {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ask-user-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ask-user-option,
+.ask-user-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-hover));
+  }
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+}
+
+.ask-user-form {
+  display: flex;
+  gap: 8px;
+
+  input {
+    min-width: 0;
+    flex: 1;
+    height: 32px;
+    padding: 5px 9px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+
+    &:focus {
+      border-color: var(--color-primary);
+    }
+  }
+}
+
 .stop-button-bar {
   position: absolute;
   bottom: 80px;

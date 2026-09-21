@@ -30,6 +30,13 @@ interface SessionMeta {
   isGenerating?: boolean
 }
 
+export interface PendingAgentQuestion {
+  interactionId: string
+  question: string
+  options: string[]
+  allowFreeText: boolean
+}
+
 // 后端 session 完整数据
 interface AgentSession {
   version: number
@@ -211,6 +218,8 @@ export function useAgentChat() {
   const messages = ref<ChatMessage[]>([])
   const isStreaming = ref(false)
   const sessionLoading = ref(false)
+  const pendingQuestion = ref<PendingAgentQuestion | null>(null)
+  const answeringQuestion = ref(false)
 
   // SSE 控制
   let abortController: AbortController | null = null
@@ -348,6 +357,7 @@ export function useAgentChat() {
   function newSession() {
     currentSessionId.value = null
     messages.value = []
+    pendingQuestion.value = null
     // 顺手丢掉"发起过但没落盘成功"的乐观占位条目(中止/出错、服务端未写入磁盘的
     // 情况)：留着会变成一条点进去 404 的幽灵会话。
     sessions.value = sessions.value.filter(s => !s.isGenerating)
@@ -532,9 +542,19 @@ export function useAgentChat() {
               if (tc) {
                 tc.result = String(evt.result || '')
                 tc.status = 'done'
+                if (tc.name === 'ask_user') pendingQuestion.value = null
               }
               break
             }
+
+            case 'ask_user':
+              pendingQuestion.value = {
+                interactionId: String(evt.interactionId || ''),
+                question: String(evt.question || ''),
+                options: Array.isArray(evt.options) ? evt.options.map((v: unknown) => String(v)) : [],
+                allowFreeText: evt.allowFreeText !== false,
+              }
+              break
 
             case 'done': {
               const finalContent = evt.content || assistantMsg.content
@@ -593,11 +613,40 @@ export function useAgentChat() {
     } finally {
       if (myNonce === runNonce) {
         isStreaming.value = false
+        pendingQuestion.value = null
+        answeringQuestion.value = false
         abortController = null
         // 清掉乐观徽章；成功路径的 loadSessions() 会拉到服务端真实数据，
         // 中止/出错路径靠这一步兜底，避免左栏一直显示"正在生成中..."
         if (streamSessionId) clearGeneratingSession(streamSessionId)
       }
+    }
+  }
+
+  async function answerQuestion(answer: string) {
+    const pending = pendingQuestion.value
+    const sessionId = currentSessionId.value
+    const value = String(answer || '').trim()
+    if (!pending || !sessionId || !value || answeringQuestion.value) return false
+    answeringQuestion.value = true
+    try {
+      const res = await fetch('/api/agent/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          interactionId: pending.interactionId,
+          answer: value,
+        }),
+      }).then(r => r.json())
+      if (!res.success) throw new Error(res.error || $t('@AGENT:回答提交失败'))
+      pendingQuestion.value = null
+      return true
+    } catch (err: any) {
+      ElMessage.error(err?.message || $t('@AGENT:回答提交失败'))
+      return false
+    } finally {
+      answeringQuestion.value = false
     }
   }
 
@@ -616,12 +665,15 @@ export function useAgentChat() {
     messages,
     isStreaming,
     sessionLoading,
+    pendingQuestion,
+    answeringQuestion,
     loadSessions,
     loadSession,
     deleteSession,
     renameSession,
     newSession,
     sendMessage,
+    answerQuestion,
     stop
   }
 }

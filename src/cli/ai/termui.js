@@ -156,6 +156,7 @@ export const SLASH_COMMANDS = [
   { cmd: '/think compact', descZh: '预览前 12 行思考', descEn: 'Preview the first 12 thinking lines' },
   { cmd: '/think off', descZh: '隐藏思考（不影响模型推理）', descEn: 'Hide thinking (model still reasons)' },
   { cmd: '/tools',    descZh: '切换工具结果：精简 / 完整', descEn: 'Toggle compact / full tool output' },
+  { cmd: '/skills',   descZh: '查看已装 Skill 与 MCP', descEn: 'List installed skills / MCP' },
   { cmd: '/stats',    descZh: '查看耗时与 Token 用量', descEn: 'Show timing and token usage' },
   { cmd: '/new',      descZh: '开启新对话',            descEn: 'Start a new chat' },
   { cmd: '/resume',   descZh: '恢复之前的对话',         descEn: 'Resume a previous chat' },

@@ -160,6 +160,29 @@ export const TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'ask_user',
+      description: 'Pause the current task and ask the user for a decision or missing information. Use this when the next step depends on the user. Prefer options for a small fixed set of choices; allow free text when an open answer is useful.',
+      parameters: {
+        type: 'object',
+        properties: {
+          question: { type: 'string', description: 'The question to show the user.' },
+          options: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional list of choices. Keep it short and make each item self-contained.',
+          },
+          allow_free_text: {
+            type: 'boolean',
+            description: 'Whether the user may type an answer that is not one of the listed options. Defaults to true.',
+          },
+        },
+        required: ['question'],
+      },
+    },
+  },
 ]
 
 // ──────────────────────────────────────────────
@@ -478,6 +501,20 @@ async function toolSearchText(args, ctx) {
   return `${hits.join('\n')}${suffix}`
 }
 
+async function toolAskUser(args, ctx) {
+  const question = String(args.question || '').trim()
+  if (!question) return 'Error: ask_user requires a non-empty question.'
+  if (typeof ctx.askUser !== 'function') {
+    return 'Error: ask_user is unavailable in one-shot mode; continue without asking the user.'
+  }
+
+  const options = Array.isArray(args.options)
+    ? args.options.map(option => String(option || '').trim()).filter(Boolean).slice(0, 20)
+    : []
+  const allowFreeText = options.length === 0 || args.allow_free_text !== false
+  return ctx.askUser({ question, options, allowFreeText })
+}
+
 // ──────────────────────────────────────────────
 // 工具分发
 // ──────────────────────────────────────────────
@@ -488,6 +525,7 @@ const TOOL_HANDLERS = {
   edit_file: toolEditFile,
   list_files: toolListFiles,
   search_text: toolSearchText,
+  ask_user: toolAskUser,
 }
 
 /**

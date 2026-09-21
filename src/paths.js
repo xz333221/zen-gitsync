@@ -67,6 +67,17 @@ export const AI_IMAGES_DIR = path.join(DATA_DIR, 'ai-images');
 export const LEGACY_HOME_DIR = path.join(os.homedir(), '.git-commit-tool');
 export const LEGACY_AI_IMAGES_DIR = path.join(LEGACY_HOME_DIR, 'ai-images');
 
+// ── g ai 智能体的全局扩展(2026-09-21 新增) ────────────────────
+// 智能体页面的「Skill 广场 / MCP 广场」有两个安装目标:
+//   1) 当前项目 → <cwd>/.claude/skills/<id>/ 与 <cwd>/.mcp.json(生态既有约定,别的工具也认)
+//   2) g ai 智能体(全局) → 下面这两个路径,对**所有**项目生效
+// 目录形状刻意与 .claude/skills 保持一致(每个 skill 一个子目录,内含 SKILL.md),
+// 这样 src/cli/ai/skills.js 可以用同一套解析逻辑读两处。
+export const AI_SKILLS_DIR = path.join(DATA_DIR, 'ai', 'skills');
+// MCP 服务定义。键名与内容沿用 Claude 的 mcpServers 形状,
+// 与项目里的 <cwd>/.mcp.json 可以直接合并(项目级覆盖全局同名 server)。
+export const AI_MCP_FILE = path.join(DATA_DIR, 'ai', 'mcp.json');
+
 // ── 工作台 / 会话 / 缓存 ──────────────────────────────────────
 export const WORKBENCH_IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
 export const AGENT_SESSIONS_DIR = path.join(DATA_DIR, 'agent-sessions');

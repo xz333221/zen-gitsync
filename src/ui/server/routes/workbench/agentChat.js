@@ -23,6 +23,7 @@
 //   - { type: 'content', delta }           — 正文增量
 //   - { type: 'tool_call_start', toolCallId, name, argsPreview }
 //   - { type: 'tool_result', toolCallId, name, result }
+//   - { type: 'ask_user', interactionId, question, options, allowFreeText }
 //   - { type: 'done', content }            — 本轮最终完成
 //   - { type: 'error', error }
 
@@ -62,6 +63,7 @@ function buildWebSystemPrompt({ cwd, locale }) {
   const zh = !String(locale || '').startsWith('en');
   const now = new Date().toLocaleString();
   const isWin = process.platform === 'win32';
+  const builtinToolCount = TOOL_DEFINITIONS.length;
   const shellDesc = isWin ? 'cmd.exe / PowerShell' : '/bin/sh';
 
   if (zh) {
@@ -104,7 +106,8 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
 
 # 与用户交互
 - 需要向用户确认、提问或汇报重要决策时,直接用普通文本输出
-- 不要调用不存在的工具,可用工具只有上面列出的 6 个
+- 需要暂停当前任务并等待用户决定或补充信息时,调用 ask_user,不要猜测或只在普通文本里提问
+- 不要调用不存在的工具,可用工具只有上面列出的 ${builtinToolCount} 个
 - 用户可能随消息附带图片:图片以 image_url 部件出现在 user 消息里;如果当前模型不支持视觉(带图请求报错),提醒用户换用支持视觉的模型
 - 发现高风险或状态不一致的情况时:先用文本说明发现和影响,停下来等用户指示,不要擅自继续破坏性操作
 
@@ -141,12 +144,13 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 
 # How you work
 - Act first, ask later: use tools to investigate before asking the user
+- When a decision or missing detail must come from the user, call ask_user. Do not guess or merely describe a question in plain text.
 - After modifying code, verify: run tests, build, or at least syntax check
 - Prefer edit_file for precise replacements; read_file first to confirm original text
 - Use offset/limit for large files
 - git operations via run_command
 - run_command defaults to the working directory; default timeout 120s, max 600s
-- The user may attach images to a message; they arrive as image_url parts in the user message. If the current model rejects images (no vision support), tell the user to switch to a vision-capable model
+- When the task must pause for a decision or missing detail, call ask_user and wait for the user's answer. The user may attach images to a message; they arrive as image_url parts in the user message. If the current model rejects images (no vision support), tell the user to switch to a vision-capable model
 
 # Output
 - Your text output is displayed in the user's Web UI
@@ -324,7 +328,7 @@ function stripStaleImages(messages) {
 // ── 核心入口：运行一轮 agent 对话 ────────────────────────
 //
 // 参数:
-//   { session, model, userMessage, cwd, locale, signal, send, onChild }
+//   { session, model, userMessage, cwd, locale, signal, send, onChild, askUser }
 //   - session: 从 agentSessionStore 读取的会话对象
 //   - model: { baseURL, model, apiKey }
 //   - userMessage: 用户输入文本
@@ -334,10 +338,11 @@ function stripStaleImages(messages) {
 //   - signal: AbortSignal (客户端断开时触发)
 //   - send: (obj) => void  SSE 发送函数
 //   - onChild: (child) => void  子进程回调(用于取消)
+//   - askUser: (args, meta) => Promise<string>  等待用户回答
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, signal, send, onChild }) {
-  const ctx = { cwd, locale, onChild };
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, signal, send, onChild, askUser }) {
+  const ctx = { cwd, locale, onChild, askUser };
 
   // 确保 session.messages 存在
   if (!Array.isArray(session.messages)) session.messages = [];
@@ -436,7 +441,16 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
       const argsPreview = summarizeArgs(name, args);
       send({ type: 'tool_call_start', toolCallId, name, argsPreview });
 
-      const output = await executeTool(name, args, ctx);
+      const toolCtx = { ...ctx, signal };
+      if (name === 'ask_user' && typeof ctx.askUser === 'function') {
+        toolCtx.askUser = askArgs => ctx.askUser(askArgs, {
+          sessionId: session.sessionId,
+          interactionId: toolCallId,
+          send,
+          signal,
+        });
+      }
+      const output = await executeTool(name, args, toolCtx);
       send({ type: 'tool_result', toolCallId, name, result: output });
       session.messages.push({ role: 'tool', tool_call_id: toolCallId, name, content: output });
     }

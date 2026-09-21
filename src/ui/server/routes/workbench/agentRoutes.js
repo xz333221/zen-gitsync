@@ -25,6 +25,7 @@ import path from 'node:path';
 import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 import { agentSessionStore } from './agentSessionStore.js';
 import { runAgentTurn } from './agentChat.js';
+import { registerAgentMarketplaceRoutes } from './agentMarketplace.js';
 import { nowIso } from './shared.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
@@ -45,6 +46,56 @@ function sessionBelongsTo(sessionCwd, projectCwd) {
   return Boolean(project && s === project);
 }
 
+// An ask_user call keeps its chat SSE request open until this map receives the
+// matching response. The entry is removed on every completion or disconnect.
+const pendingAgentQuestions = new Map();
+
+function interactionKey(sessionId, interactionId) {
+  return `${String(sessionId)}:${String(interactionId)}`;
+}
+
+export function waitForAgentAnswer({ sessionId, interactionId, question, options, allowFreeText, send, signal }) {
+  const key = interactionKey(sessionId, interactionId);
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      pendingAgentQuestions.delete(key);
+      signal?.removeEventListener?.('abort', onAbort);
+    };
+    const settle = (answer) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(answer);
+    };
+    const onAbort = () => settle('Cancelled by user; the question was not answered.');
+
+    pendingAgentQuestions.set(key, {
+      question,
+      options,
+      allowFreeText,
+      settle,
+    });
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+    send({ type: 'ask_user', interactionId, question, options, allowFreeText });
+    if (signal?.aborted) onAbort();
+  });
+}
+
+export function submitAgentAnswer({ sessionId, interactionId, answer }) {
+  const key = interactionKey(sessionId, interactionId);
+  const pending = pendingAgentQuestions.get(key);
+  if (!pending) return { ok: false, status: 404, error: 'No pending question for this session.' };
+
+  const value = String(answer || '').trim();
+  if (!value) return { ok: false, status: 400, error: 'Answer cannot be empty.' };
+  if (!pending.allowFreeText && pending.options.length > 0 && !pending.options.includes(value)) {
+    return { ok: false, status: 400, error: 'Choose one of the listed options.' };
+  }
+  pending.settle(value);
+  return { ok: true };
+}
+
 /**
  * 注册智能体路由。
  * @param {Object} deps
@@ -53,6 +104,8 @@ function sessionBelongsTo(sessionCwd, projectCwd) {
  * @param {Object} deps.configManager
  */
 export function registerAgentRoutes({ app, getCurrentProjectPath, configManager }) {
+
+  registerAgentMarketplaceRoutes({ app, getCurrentProjectPath });
 
   // ════════════════════════════════════════════════════════════════════════
   // §1. 会话列表
@@ -92,6 +145,22 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
     const session = await renameSession(req.params.sessionId, title);
     res.json({ success: true, session });
   }));
+
+  // Submit the answer for an ask_user tool call while its SSE request is paused.
+  app.post('/api/agent/respond', async (req, res) => {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    const interactionId = String(req.body?.interactionId || '').trim();
+    if (!sessionId || !interactionId) {
+      return res.status(400).json({ success: false, error: 'Missing sessionId or interactionId.' });
+    }
+    const result = submitAgentAnswer({
+      sessionId,
+      interactionId,
+      answer: req.body?.answer,
+    });
+    if (!result.ok) return res.status(result.status).json({ success: false, error: result.error });
+    return res.json({ success: true });
+  });
 
   // ════════════════════════════════════════════════════════════════════════
   // §5. SSE 流式聊天（含工具调用循环）
@@ -225,7 +294,16 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
         locale,
         signal: abortController.signal,
         send,
-        onChild: (child) => { activeChild = child; }
+        onChild: (child) => { activeChild = child; },
+        askUser: (args, meta = {}) => waitForAgentAnswer({
+          sessionId: session.sessionId,
+          interactionId: meta.interactionId,
+          question: args.question,
+          options: Array.isArray(args.options) ? args.options : [],
+          allowFreeText: args.allowFreeText !== false,
+          send,
+          signal: abortController.signal,
+        })
       });
 
       if (aborted) {

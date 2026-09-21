@@ -8,7 +8,21 @@ import * as terminal from './termui.js'
 
 export async function runAgentTurn(state, userText, t, images = [], dependencies = {}) {
   const chat = dependencies.chat || streamChatOnce
-  const execute = dependencies.execute || executeTool
+  const baseExecute = dependencies.execute || executeTool
+  // 扩展(目前是 MCP)工具按名字分流:名字属于扩展就走扩展,否则回落内置工具。
+  // 必须先用 owns() 判断 —— 不能把所有调用都先喂给扩展再靠 null 回落,
+  // 那样每个内置工具都会多绕一层,而且扩展端也无法假设"进来的都是自己的"。
+  // 没装扩展时 owns() 恒为 false,等价于直接调内置工具,零开销。
+  const extensions = dependencies.extensions || state.extensions
+  const execute = extensions
+    ? async (name, args, ctx) => {
+        if (extensions.owns?.(name)) {
+          const output = await extensions.execute(name, args, ctx)
+          if (output !== null && output !== undefined) return output
+        }
+        return baseExecute(name, args, ctx)
+      }
+    : baseExecute
   const ui = { ...terminal, ...dependencies.ui }
   const stats = createTurnStats()
   const started = performance.now()
@@ -55,7 +69,8 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
         const messages = buildRequestMessages(state.messages)
         state.prepareMessages?.(messages)
         result = await chat({ model: state.model, messages, signal: state.abortController?.signal,
-          sessionId: state.sessionId, onToken: token => {
+          sessionId: state.sessionId, extraTools: extensions?.tools,
+          onToken: token => {
             if (stats.firstTokenMs === null) stats.firstTokenMs = performance.now() - started
             if (token.content || (token.thinking && state.showThinking !== false)) spinner.stop()
             if (token.thinking) render({ thinking: token.thinking })
