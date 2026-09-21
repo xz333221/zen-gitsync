@@ -25,6 +25,9 @@ interface SessionMeta {
   updatedAt: string
   messageCount: number
   size: number
+  // 本地乐观标记：本轮 SSE 还在跑（服务端尚未落盘）。仅存在于前端内存，
+  // 流结束后 loadSessions() 会用服务端数据整体覆盖。
+  isGenerating?: boolean
 }
 
 // 后端 session 完整数据
@@ -241,6 +244,42 @@ export function useAgentChat() {
     }
   }
 
+  // ── 乐观插入会话(流式期间让左栏立刻出现这一条) ─────────
+  // 服务端要等整轮回答跑完才 writeSession(),前端也只在流结束后 loadSessions(),
+  // 中间这几分钟左栏完全静止。meta 事件已经带了 sessionId + 自动标题,
+  // 这里先本地插一条标记 isGenerating 的条目占位,流结束后由 loadSessions() 覆盖。
+  function upsertGeneratingSession(sessionId: string, title: string) {
+    const nowIso = new Date().toISOString()
+    const existing = sessions.value.find(s => s.sessionId === sessionId)
+    if (existing) {
+      // 老会话续聊：只打生成标记，不新建条目、不改标题(标题永远取自首条 user 消息)
+      existing.isGenerating = true
+      existing.updatedAt = nowIso
+      return
+    }
+    sessions.value = [
+      {
+        sessionId,
+        title,
+        source: 'web',
+        cwd: configStore.currentDirectory || '',
+        model: '',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        messageCount: 1,
+        size: 0,
+        isGenerating: true
+      },
+      ...sessions.value
+    ]
+  }
+
+  // 清除乐观标记(流结束/出错/中止都要清，否则徽章一直转)
+  function clearGeneratingSession(sessionId: string) {
+    const s = sessions.value.find(s => s.sessionId === sessionId)
+    if (s) s.isGenerating = false
+  }
+
   // ── 加载会话详情 ────────────────────────────────────────
   async function loadSession(sessionId: string) {
     sessionLoading.value = true
@@ -309,6 +348,9 @@ export function useAgentChat() {
   function newSession() {
     currentSessionId.value = null
     messages.value = []
+    // 顺手丢掉"发起过但没落盘成功"的乐观占位条目(中止/出错、服务端未写入磁盘的
+    // 情况)：留着会变成一条点进去 404 的幽灵会话。
+    sessions.value = sessions.value.filter(s => !s.isGenerating)
   }
 
   // ── 发送消息（SSE 流式） ────────────────────────────────
@@ -369,6 +411,9 @@ export function useAgentChat() {
     // 当前 assistant 消息的工具调用列表（实时更新）
     let currentToolCalls: ToolCall[] = []
 
+    // 本轮实际落盘的会话 ID（meta 事件到达后才有值）
+    let streamSessionId: string | null = null
+
     try {
       const resp = await fetch('/api/agent/chat', {
         method: 'POST',
@@ -415,7 +460,14 @@ export function useAgentChat() {
             case 'meta':
               if (evt.sessionId) {
                 sessionId = evt.sessionId
+                streamSessionId = evt.sessionId
                 currentSessionId.value = evt.sessionId
+                // 服务端 autoTitle 已按首条 user 消息算好标题；为空(纯图片消息等)
+                // 时退回本地文本，保证左栏不会出现空白行
+                const optimisticTitle = String(evt.title || '').trim() ||
+                  text.trim().split('\n')[0].trim().slice(0, 40) ||
+                  $t('@AGENT:无标题')
+                upsertGeneratingSession(evt.sessionId, optimisticTitle)
               }
               break
 
@@ -542,6 +594,9 @@ export function useAgentChat() {
       if (myNonce === runNonce) {
         isStreaming.value = false
         abortController = null
+        // 清掉乐观徽章；成功路径的 loadSessions() 会拉到服务端真实数据，
+        // 中止/出错路径靠这一步兜底，避免左栏一直显示"正在生成中..."
+        if (streamSessionId) clearGeneratingSession(streamSessionId)
       }
     }
   }

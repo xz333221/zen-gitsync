@@ -388,6 +388,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Feature | Description |
 |---|---|
 | Session list | Browse, search, rename, and delete past conversations; sessions created via `g ai` in the terminal also appear here with a **CLI** badge |
+| Live session entry | Sending the first message of a new session makes it show up in the list **immediately** with a "Generating..." badge, instead of waiting for the whole turn to finish; once the reply ends and the server persists the session, the entry is replaced by the real timestamp and message count |
 | Streaming chat | SSE-based real-time streaming with thinking process, content, tool calls, and tool results rendered inline |
 | Tool call display | Each tool invocation (run_command, read_file, edit_file, list_files, search_text, write_file) is shown as a collapsible card with arguments preview and execution result |
 | Session persistence | All conversations are saved to `~/.zen-gitsync/agent-sessions/` as JSON files; the CLI agent (`g ai`) writes to the same directory so Web and CLI sessions are unified |
@@ -1002,6 +1003,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 功能 | 说明 |
 |---|---|
 | 会话列表 | 浏览、搜索、重命名、删除历史对话；通过 `g ai` 在终端创建的会话也会出现在这里，带 **CLI** 标记 |
+| 会话实时入列 | 新会话发出第一条消息后，左侧列表**立刻**出现这一条（带「正在生成中…」标记），不用等整轮回答跑完；回答结束、服务端落盘后自动替换成真实的时间与条数 |
 | 流式对话 | 基于 SSE 的实时流式输出，包含思考过程、正文内容、工具调用和工具结果的内联渲染 |
 | 工具调用展示 | 每次工具调用（run_command、read_file、edit_file、list_files、search_text、write_file）以可折叠卡片形式展示，含参数预览和执行结果 |
 | 会话持久化 | 所有对话保存为 JSON 文件到 `~/.zen-gitsync/agent-sessions/`；CLI 智能体（`g ai`）写入同一目录，Web 端与 CLI 端会话统一管理 |

@@ -258,9 +258,17 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
           <div class="session-item-main">
             <div class="session-item-title">{{ s.title || $t('@AGENT:无标题') }}</div>
             <div class="session-item-meta">
-              <span class="meta-time">{{ formatDate(s.updatedAt) }}</span>
-              <span class="meta-dot">·</span>
-              <span class="meta-count">{{ s.messageCount }} {{ $t('@AGENT:条') }}</span>
+              <template v-if="s.isGenerating">
+                <span class="meta-generating">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  {{ $t('@AGENT:正在生成中...') }}
+                </span>
+              </template>
+              <template v-else>
+                <span class="meta-time">{{ formatDate(s.updatedAt) }}</span>
+                <span class="meta-dot">·</span>
+                <span class="meta-count">{{ s.messageCount }} {{ $t('@AGENT:条') }}</span>
+              </template>
               <span v-if="s.source === 'cli'" class="meta-source cli">CLI</span>
             </div>
           </div>
@@ -491,6 +499,14 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
 
   .meta-dot {
     opacity: 0.5;
+  }
+
+  /* 流式进行中的会话：用"正在生成中..."替换掉时间 + 条数 */
+  .meta-generating {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--color-primary);
   }
 
   .meta-source {
