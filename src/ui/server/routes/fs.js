@@ -23,6 +23,7 @@ import { spawn, exec, execSync } from 'child_process';
 import { ensureWithinCwd, normalizeProjectPath } from '../utils/pathGuard.js';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import { probeDirectoryGitStates, normalizeDirKey } from '../utils/directoryGitState.js';
+import { fetchDirectoryRemotes } from '../utils/directoryFetch.js';
 import { invalidateCurrentProjectKey, invalidateRawConfigCache } from '../../../config.js';
 import { invalidateCwdCache } from '../../../utils/index.js';
 
@@ -402,6 +403,42 @@ export function registerFsRoutes({
 
     const results = await probeDirectoryGitStates(targets);
     res.json({ success: true, results });
+  }));
+
+  // 对**单个**「最近目录」执行 git fetch，让卡片上的「领先/落后」从
+  // "上次 fetch 时的快照"回到真实状态。
+  //
+  // 为什么是单目录接口，而不是一个"一次刷新全部"的批量接口：
+  //   十几个仓库并发联网既慢又容易撞凭据提示；拆成一个个请求后，每个请求的
+  //   耗时被单目录超时箍住（不会出现一挂两分钟、还看不到进度的大请求），
+  //   刷新顺序与并发由调用方（列表组件）决定，还能每完成一个就地更新那张卡片。
+  //   服务端因此不需要任何调度逻辑，也不会被一个慢仓库拖住其他仓库。
+  //
+  // 安全口径与上面的 git-state 完全一致：只接受**配置里的最近目录**。
+  // 否则这个接口就是一个"对磁盘上任意仓库发起网络请求"的口子。
+  app.post('/api/recent_directories/fetch', asyncRoute(async (req, res) => {
+    const recentDirs = (await configManager.getRecentDirectories()) || [];
+    const allowed = new Map(recentDirs.map(d => [normalizeDirKey(d), d]));
+
+    const requested = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+    if (!requested) throw new HttpError(400, '缺少 path 参数');
+    const target = allowed.get(normalizeDirKey(requested));
+    if (!target) throw new HttpError(403, '该目录不在最近项目列表中');
+
+    const result = await fetchDirectoryRemotes(target);
+    // fetch 动了本地 remote-tracking 引用 → 顺手重探一次状态回给前端：
+    // 省掉一次往返，且 useCache:false 保证读到的是 fetch 之后的值
+    // （否则会拿到 15s TTL 里那份 fetch 之前的快照，等于白刷）。
+    let state = null;
+    if (result.status === 'ok') {
+      const probed = await probeDirectoryGitStates([target], { useCache: false });
+      state = probed[target] || null;
+    }
+    logger.info(`[recent_directories/fetch] ${result.status}${result.reason ? `(${result.reason})` : ''} ${target}`);
+
+    // success 表示"这次请求处理完了"，fetch 本身的结果在 status 里 ——
+    // 跳过（非仓库/无 remote）不是接口错误，前端要按三态分别计数。
+    res.json({ success: true, path: target, ...result, state });
   }));
 
   // 在资源管理器/访达中打开当前目录
