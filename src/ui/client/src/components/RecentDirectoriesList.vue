@@ -31,7 +31,7 @@
 // 目录家族文案(原 RecentProjectsList.vue 同样复用),不为此新建命名空间。
 import { computed, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Delete, DocumentCopy, Folder, Loading, Search } from "@element-plus/icons-vue";
+import { Delete, DocumentCopy, Folder, Loading, Refresh, Search } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 import { getFolderNameFromPath } from "@/utils/path";
 
@@ -62,6 +62,25 @@ interface DirectoryItem {
   base: string;
   git: DirectoryGitState | null;
 }
+
+/** 后端 /api/recent_directories/fetch 的结果 */
+interface DirectoryFetchResult {
+  /** ok=已 fetch 并带回最新状态 | skipped=不需要联网(非仓库/无 remote) | failed=fetch 没成功 */
+  status: "ok" | "skipped" | "failed";
+  reason?: string;
+  error?: string;
+  timeout?: boolean;
+  timeoutSeconds?: number;
+  /** fetch 成功后重探的状态,直接覆盖卡片徽标 */
+  state?: DirectoryGitState | null;
+}
+
+/**
+ * 「刷新全部」的并发数。
+ * 串行要等十几个网络往返（每个几秒），并发全开又会互相抢网络、更容易撞出
+ * 一堆凭据提示；3 是"总时长压到 1/3"与"别把出口打满"之间的折中。
+ */
+const REFRESH_CONCURRENCY = 3;
 
 const props = withDefaults(defineProps<{
   /** open:点击即新标签页打开 | pick:点击上抛 select 事件,由父组件决定(弹窗里是回填输入框) */
@@ -96,6 +115,25 @@ const isLoading = ref(false);
 const gitStates = ref<Record<string, DirectoryGitState>>({});
 // 搜索关键词:只在 panel 形态渲染输入框,bare 形态下始终为空
 const searchQuery = ref("");
+
+// ── 「刷新全部」────────────────────────────────────────────────────────────
+// 卡片上的「领先/落后」读的是**本地 remote-tracking 引用**——也就是"上次 fetch 时
+// 的快照"(见后端 directoryGitState.js 的文件头)。远端别人推了新提交时,列表会一直
+// 显示它已同步,只有 fetch 才更新那份引用。这个按钮就是把快照刷新一遍。
+// 「未提交 N 项」是本地工作区实时扫描的结果,本来就不受 fetch 影响。
+const isRefreshingAll = ref(false);
+const refreshProgress = ref({ done: 0, total: 0 });
+// 路径 → 失败原因。只进卡片 tooltip,不逐个弹窗:一次刷十几个,弹窗会连成一串。
+const fetchErrors = ref<Record<string, string>>({});
+// 按钮文案:刷新中直接显示进度,让"还剩几个没刷"一眼可见(图标同时在转)
+const refreshLabel = computed(() =>
+  isRefreshingAll.value
+    ? $t("@13D1C:刷新中 {done}/{total}", {
+        done: refreshProgress.value.done,
+        total: refreshProgress.value.total,
+      })
+    : $t("@13D1C:刷新全部")
+);
 
 // 平台差异只影响"Ctrl + 点击"的提示文案(⌘ / Ctrl)
 const isMac = computed(() => {
@@ -171,6 +209,9 @@ function itemTitle(item: DirectoryItem) {
   if (props.mode === "pick") lines.push(ctrlHint.value);
   lines.push(item.exists ? item.path : $t("@13D1C:目录不存在"));
   lines.push(...gitSummaryLines(item));
+  // 刷新失败的原因排在最后:它是"这一次操作"的结果,不是仓库的常态
+  const fetchError = fetchErrors.value[item.path];
+  if (fetchError) lines.push($t("@13D1C:刷新失败：{error}", { error: fetchError }));
   return lines.join("\n");
 }
 
@@ -222,6 +263,86 @@ async function load() {
     // 上抛总数:调用方(bare 形态的弹窗)在 label 上标"共 N 个",列表滚动时也能看出总量
     emit("loaded", directories.value.length);
   }
+}
+
+/** 固定并发的极简任务池:完成一个补一个(客户端只此一处需要,不引第三方依赖) */
+async function mapWithLimit<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
+  const queue = items.slice();
+  const size = Math.max(1, Math.min(limit, queue.length));
+  await Promise.all(
+    Array.from({ length: size }, async () => {
+      while (queue.length > 0) await worker(queue.shift() as T);
+    })
+  );
+}
+
+/**
+ * 刷新全部:对每个项目执行一次 git fetch,每完成一个就更新那张卡片的徽标。
+ *
+ * 逐个请求(而不是让后端一把全刷)的理由:单个项目失败/超时都不牵连其余项目;
+ * 进度是真的、能看见的;也不会出现一个挂两分钟还不返回的大请求。
+ *
+ * 失败原因只写进卡片 tooltip,不逐个弹窗 —— 刷十几个项目时弹窗会连成一串;
+ * 结尾只留一条 toast 汇总三态计数。
+ */
+async function refreshAllGitStates() {
+  if (isRefreshingAll.value) return;
+  // 不存在的目录没有 fetch 的意义(后端也会跳过),先剔除省一轮请求
+  const targets = directories.value.filter(d => d.exists !== false).map(d => d.path);
+  if (targets.length === 0) return;
+
+  isRefreshingAll.value = true;
+  refreshProgress.value = { done: 0, total: targets.length };
+  const errors: Record<string, string> = {};
+  let ok = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  try {
+    await mapWithLimit(targets, REFRESH_CONCURRENCY, async (path) => {
+      try {
+        const res = await fetch("/api/recent_directories/fetch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path }),
+        });
+        const data: DirectoryFetchResult | null = await res.json();
+        if (data?.status === "ok") {
+          ok += 1;
+          // fetch 后的最新状态由后端一并带回,直接覆盖这张卡片的徽标
+          if (data.state) gitStates.value = { ...gitStates.value, [path]: data.state };
+        } else if (data?.status === "failed") {
+          failed += 1;
+          errors[path] = data.timeout
+            ? $t("@13D1C:刷新超时（超过 {seconds} 秒）", { seconds: data.timeoutSeconds ?? 30 })
+            : data.error || $t("@13D1C:刷新失败");
+        } else {
+          skipped += 1; // 非仓库 / 没配 remote / 已在刷新中:都不算错误
+        }
+      } catch (err) {
+        failed += 1;
+        errors[path] = (err as Error).message;
+      } finally {
+        refreshProgress.value = {
+          done: refreshProgress.value.done + 1,
+          total: refreshProgress.value.total,
+        };
+      }
+    });
+  } finally {
+    isRefreshingAll.value = false;
+    // 本轮刷过的路径,旧错误先清掉再挂新错误 —— 否则修好的项目会一直背着上次那条报错
+    const stale: Record<string, string> = {};
+    for (const [p, msg] of Object.entries(fetchErrors.value)) {
+      if (!targets.includes(p)) stale[p] = msg;
+    }
+    fetchErrors.value = { ...stale, ...errors };
+  }
+
+  ElMessage({
+    message: $t("@13D1C:刷新完成：成功 {ok} · 跳过 {skipped} · 失败 {failed}", { ok, skipped, failed }),
+    type: failed > 0 ? "warning" : "success",
+  });
 }
 
 async function openInNewTab(dirPath: string) {
@@ -315,7 +436,23 @@ defineExpose({ reload: load });
     <template v-if="variant === 'panel'">
       <div class="dir-list__head">
         <span class="dir-list__title">{{ $t('@13D1C:最近项目') }}</span>
-        <span class="dir-list__hint">{{ $t('@13D1C:点击在新标签页打开') }}</span>
+        <div class="dir-list__head-actions">
+          <span class="dir-list__hint">{{ $t('@13D1C:点击在新标签页打开') }}</span>
+          <!-- 徽标里的「领先/落后」读的是本地 remote-tracking 引用 = "上次 fetch 时的
+               快照",只有 fetch 才会更新它。「未提交 N 项」是本地实时扫描,不需要刷。
+               这是个显式的联网动作(十几个项目),所以按钮上带图标+进度、并写明代价。 -->
+          <button
+            type="button"
+            class="dir-list__refresh"
+            :disabled="isRefreshingAll || directories.length === 0"
+            :title="$t('@13D1C:对所有项目执行 git fetch --all，让「领先/落后」显示真实状态（需联网，较慢）')"
+            :aria-label="$t('@13D1C:刷新全部')"
+            @click="refreshAllGitStates"
+          >
+            <el-icon :class="{ 'is-spinning': isRefreshingAll }" aria-hidden="true"><Refresh /></el-icon>
+            <span>{{ refreshLabel }}</span>
+          </button>
+        </div>
       </div>
       <div class="dir-list__search">
         <el-icon class="dir-list__search-icon" aria-hidden="true"><Search /></el-icon>
@@ -477,8 +614,11 @@ defineExpose({ reload: load });
 }
 .dir-list__head {
   display: flex;
-  align-items: baseline;
+  /* 右侧多了一个按钮:窄容器下整组换到下一行,而不是把按钮挤扁或让标题折行 */
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
+  gap: var(--spacing-sm) var(--spacing-base);
   margin-bottom: var(--spacing-base);
 }
 .dir-list__title {
@@ -490,6 +630,57 @@ defineExpose({ reload: load });
 .dir-list__hint {
   font-size: 13px;
   color: var(--text-secondary);
+}
+.dir-list__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+/* 「刷新全部」:一个要花几秒联网的显式动作,所以不做成无边框图标 ——
+   有边框才有"这里可以点"的暗示。卡片上那些 icon-only 操作用的是另一套语汇
+   (hover 才出现、无边框),两者语义不同,不强行统一。 */
+.dir-list__refresh {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--spacing-md);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  /* 显式行高:按钮高度只由 height 决定,不受外部继承的行高影响 */
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+.dir-list__refresh:hover:not(:disabled) {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--tint-primary-08);
+}
+.dir-list__refresh:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.dir-list__refresh:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.dir-list__refresh .el-icon {
+  font-size: 14px;
+}
+.dir-list__refresh .el-icon.is-spinning {
+  animation: dir-list-spin 0.9s linear infinite;
+}
+@keyframes dir-list-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dir-list__refresh .el-icon.is-spinning { animation: none; }
 }
 
 /* 搜索框:panel 形态独占 */
