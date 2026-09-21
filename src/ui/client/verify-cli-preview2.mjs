@@ -67,7 +67,8 @@ await page.click('.schedule-header-right .el-switch')
 console.log('\n--- 3) 差异提示(关掉两个 CLI 没有开关的行为) ---')
 console.log('默认 hints =', JSON.stringify(await page.$$eval('.schedule-cli-hint', els => els.map(e => e.textContent.trim()))))
 await page.click('.schedule-commit-now')       // 取消「启动时立即提交一次」
-await page.click('.schedule-row:nth-of-type(5) .el-checkbox')  // 取消「提交后自动推送到远程」
+console.log('只关「立即提交」 hints =', JSON.stringify(await page.$$eval('.schedule-cli-hint', els => els.map(e => e.textContent.trim()))))
+await page.locator('.schedule-row', { hasText: '提交后自动推送到远程' }).locator('.el-checkbox').click()  // 取消「提交后自动推送到远程」
 await page.waitForTimeout(300)
 console.log('关掉后 hints =', JSON.stringify(await page.$$eval('.schedule-cli-hint', els => els.map(e => e.textContent.trim()))))
 await page.screenshot({ path: `${OUT}/D-hints.png` })
