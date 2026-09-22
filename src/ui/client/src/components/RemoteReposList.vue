@@ -48,6 +48,11 @@ import {
   WarningFilled,
 } from '@element-plus/icons-vue'
 import { $t } from '@/lang/static'
+import {
+  dropRemoteReposCache,
+  readRemoteReposCache,
+  writeRemoteReposCache,
+} from '@/utils/remoteReposCache'
 
 /** 服务端 /api/remote-repos 的仓库条目 */
 interface RemoteRepo {
@@ -152,10 +157,37 @@ const POLL_MAX_TRIES = 24
  *  光跳浏览器那一步就可能好几分钟。2 分钟远不够。 */
 const LOGIN_MAX_TRIES = 120
 
-const data = ref<RemoteReposPayload | null>(null)
-// 初值为 true:onMounted 触发首次加载之前会先渲染一帧,那时 data 还是 null。
-// 若这里是 false,'loading/error' 的判定会先给出 error —— 界面会闪一下红字。
-const isLoading = ref(true)
+/**
+ * 缓存多久算"还新鲜"。
+ *
+ *   比这新 → 切回 Tab 直接拿缓存渲染，一个请求都不发（列表页最舒服的状态）；
+ *   比这旧 → 先把缓存画出来（不转圈），再在后台静默重拉一遍，拿到新数据替换 ——
+ *           也就是 stale-while-revalidate。这样"刚从别处推了代码"不会一直停在旧快照上，
+ *           用户也不必为了刷新干等一次 CLI。
+ * 用户主动点的「刷新」「重试」「重新检测」不受这个 TTL 限制，永远真的去拉。
+ */
+const CACHE_TTL_MS = 60_000
+
+/**
+ * 上次拉到的 payload，按平台各存一份。
+ *
+ * 为什么需要它：App.vue 里两个仓库面板是 v-if —— 切走就卸载、切回就重新挂载，
+ * 每次 onMounted 都会重新跑一遍 load()。用户看到的就是"每点一次 Tab 就转一次圈"。
+ * 而这一次 load() 背后是服务端起一个 `gh repo list --json ...` / `gitee repos` 子进程
+ * 再等网络往返，秒级；仓库列表本身几分钟内几乎不会变。为它每次都等一遍并不划算。
+ *
+ * 缓存的实体在 utils/remoteReposCache.ts —— 必须放独立模块，写在 <script setup> 里的
+ * Map 是每个实例一份，切 Tab 重建就没了（见那个文件头）。
+ */
+// 挂载那一刻读一次就够：这个组件只在挂载时决定"要不要立刻发请求"，
+// 之后自己拉回来的数据会写回缓存，不需要在渲染过程中反复读
+const cached = readRemoteReposCache<RemoteReposPayload>(props.provider)
+const data = ref<RemoteReposPayload | null>(cached?.payload ?? null)
+// 初值：没有缓存时必须先当作"加载中" —— onMounted 触发首次加载之前会先渲染一帧，
+// 那时 data 还是 null，若这里是 false，'loading/error' 的判定会先给出 error，
+// 界面会闪一下红字。有缓存时反过来，初值必须是 false —— 直接拿缓存画列表，
+// 闪一下 loading 就白缓存了。
+const isLoading = ref(!cached)
 const loadError = ref('')
 const searchQuery = ref('')
 const sortKey = ref<SortKey>('pushed')
@@ -315,18 +347,32 @@ async function readJson(res: Response): Promise<any> {
   }
 }
 
-async function load() {
-  isLoading.value = true
+/**
+ * 拉一次仓库列表,成功就顺手写进 payloadCache。
+ *
+ * `silent` 是给"屏幕上已经有东西可看"的场合用的(切回 Tab 时的后台重拉):
+ * 不翻 isLoading(不闪转圈),失败也不把 data 清空 —— 否则一次网络抖动
+ * 会把已经画好的列表直接换成错误屏,而用户什么都没做。
+ * 用户主动点的「刷新」「重试」「重新检测」走非静默:该给的转圈反馈要给,
+ * 失败了也要如实变成错误屏,不能拿旧数据糊弄过去。
+ */
+async function load(options: { silent?: boolean } = {}) {
+  const silent = options.silent === true
+  if (!silent) isLoading.value = true
   try {
     const res = await fetch(`/api/remote-repos?provider=${props.provider}`, { cache: 'no-store' })
     const payload = await readJson(res)
     if (!res.ok || !payload?.success) {
       loadError.value = payload?.error || $t('@REPOLIST:仓库列表加载失败')
-      data.value = null
+      if (!silent) {
+        data.value = null
+        dropRemoteReposCache(props.provider)
+      }
       return
     }
     loadError.value = ''
     data.value = payload as RemoteReposPayload
+    writeRemoteReposCache(props.provider, data.value)
     // 等到目标状态就收工:退出"进行中"态并停表 —— 否则这个标志会一直挂着,
     // 下次回到这一屏时按钮还显示"安装中..."
     if (pollUntil?.(data.value)) {
@@ -335,9 +381,13 @@ async function load() {
     }
   } catch (error) {
     loadError.value = (error as Error).message || $t('@REPOLIST:仓库列表加载失败')
-    data.value = null
+    if (!silent) {
+      data.value = null
+      dropRemoteReposCache(props.provider)
+    }
   } finally {
-    isLoading.value = false
+    // 静默重拉不动 isLoading —— 它可能是别处(用户点的刷新)设上的,别替人收尾
+    if (!silent) isLoading.value = false
   }
 }
 
@@ -460,7 +510,13 @@ async function recheck() {
   await load()
 }
 
-onMounted(load)
+onMounted(() => {
+  // 缓存还新鲜 → 一个请求都不发。首帧直接就是列表,和上次离开这一屏时一模一样
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return
+  // 有缓存但过期了 → 先把缓存画出来,再在后台静默重拉(拉失败也不打断用户);
+  // 没缓存(第一次切到这一屏)→ 老老实实进加载态
+  void load({ silent: Boolean(cached) })
+})
 onBeforeUnmount(stopPolling)
 </script>
 
@@ -487,7 +543,7 @@ onBeforeUnmount(stopPolling)
           class="repo-list__action"
           :disabled="isLoading"
           :title="$t('@REPOLIST:重新拉取仓库列表')"
-          @click="load"
+          @click="load()"
         >
           <el-icon :class="{ 'is-spinning': isLoading }" aria-hidden="true"><Refresh /></el-icon>
           <span>{{ $t('@REPOLIST:刷新') }}</span>
@@ -620,7 +676,7 @@ onBeforeUnmount(stopPolling)
     <div v-else-if="view === 'error'" class="repo-list__center repo-list__center--error">
       <el-icon aria-hidden="true"><WarningFilled /></el-icon>
       <span>{{ loadError || data?.error || $t('@REPOLIST:仓库列表加载失败') }}</span>
-      <button type="button" class="repo-list__btn" :disabled="isLoading" @click="load">
+      <button type="button" class="repo-list__btn" :disabled="isLoading" @click="load()">
         {{ $t('@REPOLIST:重试') }}
       </button>
     </div>

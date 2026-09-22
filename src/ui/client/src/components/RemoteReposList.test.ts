@@ -38,6 +38,7 @@ vi.mock('@/lang/static', () => ({ $t: $tInterp }))
 
 import RemoteReposList from './RemoteReposList.vue'
 import { mountWithSetup } from '@/test-utils/mount'
+import { resetRemoteReposCache } from '@/utils/remoteReposCache'
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -139,6 +140,10 @@ function mount(provider: 'github' | 'gitee' = 'github') {
 }
 
 beforeEach(() => {
+  // 缓存是模块级的(刻意如此 —— 见 utils/remoteReposCache.ts),不重置的话
+  // 前一个用例拉到的 payload 会被后一个用例当成"切回 Tab 的缓存"直接用掉,
+  // 断言里那个"应该发出的请求"就永远等不到了。
+  resetRemoteReposCache()
   vi.spyOn(window, 'open').mockImplementation(() => null as any)
 })
 
@@ -558,5 +563,119 @@ describe('RemoteReposList.vue', () => {
     expect(w.text()).toContain('已登录 xz333221')
     expect(w.findAll('.repo-card').length).toBeGreaterThan(0)
     expect(w.text()).not.toContain('登录中...')
+  })
+
+  // ── 缓存:切 Tab 不该重新跑一遍 CLI ───────────────────────────────────────
+  //   App.vue 里两个仓库面板是 v-if(切走即卸载),所以"切回 Tab"在测试里就是
+  //   unmount 之后再 mount 一次。缓存实体在 utils/remoteReposCache.ts。
+  //   用户实测反馈的正是"每点一次 Tab 都重新加载"(每条都是一次 `gh repo list`)。
+
+  test('切走再切回:直接拿缓存渲染,一个请求都不发', async () => {
+    const { calls } = stubFetch([payload({ repos: [repo()] })])
+    const w = mount()
+    await flushAll()
+    expect(cardNames(w)).toEqual(['zen-gitsync'])
+    w.unmount()
+
+    const w2 = mount()
+    // 挂载即出列表 —— 不该有"加载中"那一帧(出现了说明缓存没被用上)
+    expect(w2.text()).not.toContain('加载中')
+    expect(cardNames(w2)).toEqual(['zen-gitsync'])
+
+    await flushAll()
+    expect(calls.filter((u) => u.includes('/api/remote-repos'))).toHaveLength(1)
+  })
+
+  test('缓存过期:先把旧快照画出来,再在后台静默重拉替换', async () => {
+    vi.useFakeTimers()
+    const { calls } = stubFetch([
+      payload({ repos: [repo({ name: 'snapshot', fullName: 'xz333221/snapshot' })] }),
+      payload({ repos: [repo({ name: 'fresh', fullName: 'xz333221/fresh' })] }),
+    ])
+    const w = mount()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(cardNames(w)).toEqual(['snapshot'])
+    w.unmount()
+
+    // 跨过 TTL:缓存还在,只是不再新鲜
+    await vi.advanceTimersByTimeAsync(61_000)
+
+    const w2 = mount()
+    // 首帧就是旧快照:不转圈、不空屏(过期不等于作废)
+    expect(w2.text()).not.toContain('加载中')
+    expect(cardNames(w2)).toEqual(['snapshot'])
+    // 后台那一次拉回来之后换成新的,用户全程没被打断
+    await vi.advanceTimersByTimeAsync(0)
+    expect(cardNames(w2)).toEqual(['fresh'])
+    expect(calls.filter((u) => u.includes('/api/remote-repos'))).toHaveLength(2)
+  })
+
+  test('后台重拉失败:不动已经画好的列表(一次网络抖动不该把屏换成错误页)', async () => {
+    vi.useFakeTimers()
+    let round = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      round += 1
+      return round === 1
+        ? json(payload({ repos: [repo()] }))
+        : json({ success: false, error: 'gh repo list 超时(25 秒),请检查网络或代理设置' }, 500)
+    })
+    const w = mount()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(cardNames(w)).toEqual(['zen-gitsync'])
+    w.unmount()
+
+    await vi.advanceTimersByTimeAsync(61_000)
+    const w2 = mount()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // 列表还在、数量提示还在,没有变成那屏"仓库列表加载失败"
+    expect(cardNames(w2)).toEqual(['zen-gitsync'])
+    expect(w2.text()).toContain('共 1 个仓库')
+  })
+
+  test('点「刷新」无视缓存新鲜度,真的重新拉一次', async () => {
+    const { calls } = stubFetch([
+      payload({ repos: [repo({ name: 'before', fullName: 'xz333221/before' })] }),
+      payload({ repos: [repo({ name: 'after', fullName: 'xz333221/after' })] }),
+    ])
+    const w = mount()
+    await flushAll()
+    expect(cardNames(w)).toEqual(['before'])
+
+    await w.find('.repo-list__action').trigger('click')
+    await flushAll()
+
+    // 缓存还新鲜,但用户点了刷新 —— 就该真的去拉,拿新的盖掉旧的
+    expect(cardNames(w)).toEqual(['after'])
+    expect(calls.filter((u) => u.includes('/api/remote-repos'))).toHaveLength(2)
+  })
+
+  test('两个平台各存一份:切到 Gitee 再切回来,GitHub 那份还在且不串台', async () => {
+    const { calls } = stubFetch([
+      payload({ repos: [repo({ name: 'gh-only', fullName: 'xz333221/gh-only' })] }),
+      payload({
+        provider: 'gitee',
+        cli: 'gitee',
+        label: 'Gitee',
+        loginCommand: 'gitee auth login',
+        repos: [repo({ name: 'gitee-only', fullName: 'xz333221/gitee-only' })],
+      }),
+    ])
+    const gh = mount('github')
+    await flushAll()
+    expect(cardNames(gh)).toEqual(['gh-only'])
+    gh.unmount()
+
+    // 切到 Gitee Tab:这份缓存还没有,它自己拉一次
+    const gt = mount('gitee')
+    await flushAll()
+    expect(cardNames(gt)).toEqual(['gitee-only'])
+    gt.unmount()
+
+    // 切回 GitHub:命中的是 GitHub 那份,既不串台也不再多发一次请求
+    const back = mount('github')
+    expect(cardNames(back)).toEqual(['gh-only'])
+    await flushAll()
+    expect(calls.filter((u) => u.includes('/api/remote-repos'))).toHaveLength(2)
   })
 })

@@ -169,6 +169,7 @@ In either mode, click **AI Generate** to fill in the fields automatically based 
 - **Zero-config guidance** — a missing CLI shows the install command for your platform (winget / Homebrew / `npm install -g @gitee/gitee-cli`) with one-click install and auto-refresh; an installed but signed-out CLI shows the sign-in command plus one-click sign-in, then polls until you finish the interactive flow in the terminal
 - **Search** — filters by name, full path and description; the header switches to `匹配 M / 共 N 个仓库` so you can tell how much got filtered out
 - **Sort** — recently pushed (default) / recently created / most starred / name. Sorting happens in the frontend, so both tabs behave identically — their CLIs do not (`gh` returns most-recently-pushed first, `gitee` returns `owner/name` alphabetical)
+- **No refetch on tab switch** — the list is cached per account, so coming back to the tab paints instantly instead of shelling out to `gh repo list` again; once the cache is a minute old it paints from cache first and refreshes quietly in the background, while **刷新** always pulls for real
 - **Informative cards** — repository name, description and privacy / fork / language / star badges, plus a third line with last-push date, fork count, non-`main` default branch and license (each omitted when there is nothing to say)
 - **One click to open or copy** — clicking a card opens the repository page in your browser; the actions that appear on hover copy the URL or open it
 
@@ -801,6 +802,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 - **零配置引导** — 没装 CLI 时按平台给出安装命令（winget / Homebrew / `npm install -g @gitee/gitee-cli`），支持一键安装并自动刷新；装了但没登录时给出登录命令 + 一键登录，然后轮询等你走完终端里的交互流程
 - **搜索** — 按仓库名、完整路径、描述过滤；顶部提示同时显示 `匹配 M / 共 N 个仓库`，一眼看出筛掉了多少
 - **排序** — 最近推送（默认）/ 最近创建 / 星标最多 / 仓库名。排序在前端做，两个 Tab 口径一致 —— 它们的 CLI 并不一致（`gh` 按推送时间倒序，`gitee` 按 `owner/name` 字母序）
+- **切 Tab 不重拉** — 列表按账号各缓存一份，切回来直接渲染，不再重跑一遍 `gh repo list`；缓存超过一分钟后先用它画出来、再在后台静默刷新，点「刷新」则永远真的去拉
 - **信息更全的卡片** — 仓库名、描述，以及私有 / Fork / 语言 / 星标徽标，第三行再给最近推送日期、Fork 数、非 `main` 的默认分支与许可证（没有的项直接省略，不留占位）
 - **一键打开 / 复制** — 点击卡片在浏览器打开仓库主页，悬浮时出现的按钮可复制地址或直接打开
 
