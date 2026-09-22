@@ -39,6 +39,7 @@ import { registerBranchStatusRoutes } from './routes/branchStatus.js';
 import { registerConfigRoutes } from './routes/config.js';
 import { registerGitRoutes } from './routes/git.js';
 import { registerFsRoutes } from './routes/fs.js';
+import { registerRecentDirectoriesSummaryRoutes } from './routes/recentDirectoriesAiSummary.js';
 import { registerNpmRoutes } from './routes/npm.js';
 import { registerFileOpenRoutes } from './routes/fileOpen.js';
 import { registerRemoteReposRoutes } from './routes/remoteRepos.js';
@@ -387,6 +388,13 @@ async function startUIServer(noOpen = false, savePort = false) {
     getProjectRoomId: () => projectRoomId,
     setProjectRoomId: (v) => { projectRoomId = v; },
     setIsGitRepo: (v) => { isGitRepo = v; }
+  });
+
+  // 「最近项目 / 常用目录」的 AI 状态解读(SSE)。与上面的 recent_directories
+  // 家族同一份数据源,只是多走一次模型,所以拆成独立模块。
+  registerRecentDirectoriesSummaryRoutes({
+    app,
+    configManager
   });
 
   registerConfigRoutes({

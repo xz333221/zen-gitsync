@@ -35,6 +35,7 @@ import { Delete, DocumentCopy, Folder, Loading, Refresh, Search } from "@element
 import { $t } from "@/lang/static";
 import { getFolderNameFromPath } from "@/utils/path";
 import { oncePerLoad } from "@/utils/oncePerLoad";
+import RecentDirectoriesSummary from "@/components/RecentDirectoriesSummary.vue";
 
 /** 后端 /api/recent_directories/git-state 的单条结果 */
 interface DirectoryGitState {
@@ -134,6 +135,10 @@ const searchQuery = ref("");
 // 「未提交 N 项」是本地工作区实时扫描的结果,本来就不受 fetch 影响。
 const isRefreshingAll = ref(false);
 const refreshProgress = ref({ done: 0, total: 0 });
+// 底下那段 AI 状态说明能不能开始解读。刷新期间置 false —— 「刷新全部」是逐个目录跑的,
+// 中途每完成一个 items 就变一次,这时候解读出来的会是"刷到一半"的状态(还白烧一次调用)。
+// 刷完(或弹窗场景首次加载完)才置 true,于是整轮刷新只解读一次、且解读的是最终状态。
+const summaryReady = ref(false);
 // 路径 → 失败原因。只进卡片 tooltip,不逐个弹窗:一次刷十几个,弹窗会连成一串。
 const fetchErrors = ref<Record<string, string>>({});
 // 按钮文案:刷新中直接显示进度,让"还剩几个没刷"一眼可见(图标同时在转)
@@ -166,12 +171,12 @@ const resolvedAriaLabel = computed(() => props.ariaLabel ?? $t("@13D1C:最近项
 
 // 列表项:补一个 basename 做第一行,完整路径放第二行(同名目录靠完整路径区分)
 // 顺手把该目录的 Git 状态挂上去,模板里直接读 item.git,避免在模板里反复查表
-const items = computed<DirectoryItem[]>(() => {
-  const q = searchQuery.value.trim().toLowerCase();
-  const list = q
-    ? directories.value.filter(item => item.path.toLowerCase().includes(q))
-    : directories.value;
-  return list.map(item => {
+//
+// 分两层:allItems 是**全部**目录(搜索框不影响它),items 是过滤后的视图。
+// 底下那段 AI 状态说明读的是 allItems —— 它描述的是"这批目录现在什么状态",
+// 不该因为用户在搜索框里敲了几个字就换一段解读(那还会白烧一次模型调用)。
+const allItems = computed<DirectoryItem[]>(() =>
+  directories.value.map(item => {
     const state = gitStates.value[item.path];
     return {
       ...item,
@@ -179,7 +184,14 @@ const items = computed<DirectoryItem[]>(() => {
       // isGitRepo=null 表示没探到:当作"无状态"处理,界面上不显示 Git 标记
       git: state && state.isGitRepo !== null ? state : null,
     };
-  });
+  })
+);
+
+const items = computed<DirectoryItem[]>(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  return q
+    ? allItems.value.filter(item => item.path.toLowerCase().includes(q))
+    : allItems.value;
 });
 
 // 悬浮提示里的 Git 附加信息:按"需要动作"的顺序排 —— 落后(要拉) → 领先(要推) → 工作区明细。
@@ -265,12 +277,18 @@ async function load() {
     const res = await fetch("/api/recent_directories", { cache: "no-store" });
     const data = await res.json();
     directories.value = Array.isArray(data?.directories) ? data.directories : [];
-    // 不存在的目录没有探测意义(后端也会跳过),这里先过滤掉省一次请求
-    void loadGitStates(directories.value.filter(d => d.exists !== false).map(d => d.path));
+    // 不存在的目录没有探测意义(后端也会跳过),这里先过滤掉省一次请求。
+    // 等它回来(而不是 fire-and-forget):列表在 await 之前就已经能渲染了
+    // (isLoading 只在"目录都还没回来"时才盖住列表),但底下那段说明必须等到状态
+    // 齐了再放行 —— 否则第一份解读会把十几个目录全说成"状态未知"。
+    await loadGitStates(directories.value.filter(d => d.exists !== false).map(d => d.path));
   } catch {
     directories.value = [];
   } finally {
     isLoading.value = false;
+    // 弹窗场景没有「刷新全部」可等(那是面板上的动作),加载完即视为状态定稿;
+    // 面板场景保持 false,交给 refreshAllGitStates 结束时放行
+    if (!props.refreshOnMount) summaryReady.value = true;
     // 上抛总数:调用方(bare 形态的弹窗)在 label 上标"共 N 个",列表滚动时也能看出总量
     emit("loaded", directories.value.length);
   }
@@ -300,9 +318,14 @@ async function refreshAllGitStates() {
   if (isRefreshingAll.value) return;
   // 不存在的目录没有 fetch 的意义(后端也会跳过),先剔除省一轮请求
   const targets = directories.value.filter(d => d.exists !== false).map(d => d.path);
-  if (targets.length === 0) return;
+  if (targets.length === 0) {
+    // 没有可刷的目标也要放行解读:否则一段说明会一直卡在"未就绪"上
+    summaryReady.value = true;
+    return;
+  }
 
   isRefreshingAll.value = true;
+  summaryReady.value = false;
   refreshProgress.value = { done: 0, total: targets.length };
   const errors: Record<string, string> = {};
   let ok = 0;
@@ -342,6 +365,8 @@ async function refreshAllGitStates() {
     });
   } finally {
     isRefreshingAll.value = false;
+    // 刷新结束(成功/失败都算)才放行 AI 解读:这时徽标已经是最终状态
+    summaryReady.value = true;
     // 本轮刷过的路径,旧错误先清掉再挂新错误 —— 否则修好的项目会一直背着上次那条报错
     const stale: Record<string, string> = {};
     for (const [p, msg] of Object.entries(fetchErrors.value)) {
@@ -444,8 +469,14 @@ onMounted(async () => {
   await load();
   // 等列表拉回来再刷:没有目标(或列表为空)时刷新无从谈起。
   // 失败不额外提示 —— refreshAllGitStates 结尾那条汇总 toast 已经说明了结果。
-  if (props.refreshOnMount && oncePerLoad(AUTO_REFRESH_KEY)) {
-    void refreshAllGitStates();
+  if (props.refreshOnMount) {
+    if (oncePerLoad(AUTO_REFRESH_KEY)) {
+      void refreshAllGitStates();
+    } else {
+      // 本次页面加载里已经刷过一轮(兄弟面板刷的):这一份状态就是刷新后的结果,
+      // 直接放行解读,不必为一个新建的面板再联网刷一遍
+      summaryReady.value = true;
+    }
   }
 });
 
@@ -589,6 +620,17 @@ defineExpose({ reload: load });
         </div>
       </li>
     </ul>
+
+    <!-- 列表底下那段说明(没配 AI 模型 = 静态说明;配了 = 模型写的状态解读)。
+         传 allItems 而不是 items:说明描述的是"这批目录现在什么状态",
+         不该因为搜索框里敲了几个字就换一段解读(那还会白烧一次模型调用)。
+         组件内部自己判断有没有模型、要不要等状态定稿,调用方只管把数据和 variant 递下去。 -->
+    <RecentDirectoriesSummary
+      v-if="allItems.length > 0"
+      :items="allItems"
+      :ready="summaryReady"
+      :variant="variant"
+    />
   </div>
 </template>
 

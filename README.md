@@ -182,6 +182,8 @@ In either mode, click **AI Generate** to fill in the fields automatically based 
 
 When the GUI is opened on a directory that is not a Git repository, the right pane shows the **Recent projects** list instead — every recent directory with its Git badges (behind / ahead / uncommitted) and one-click "open in a new tab". Each page load runs a `git fetch` pass over all of them automatically, so the ahead/behind badges show the real state rather than the snapshot from the last fetch; the **刷新全部** button does the same thing on demand.
 
+The same list (and the **常用目录** list in the directory switcher dialog) carries a short note underneath the cards. With an AI model configured it is an **AI status summary** — one paragraph written by the model from the freshly fetched states, naming the projects that need a pull, have unpushed commits or uncommitted changes, and saying so when everything is in sync. It is generated once per distinct state right after the **刷新全部** pass finishes (never mid-refresh), cached for the page, and there is a regenerate button on the right; the summary is shared between the panel and the dialog, so opening the switcher never triggers a second call. Without a model configured it falls back to a static note explaining what the badges mean.
+
 ---
 
 ### Branch Management
@@ -811,6 +813,8 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 > 点击顶部条里的目录名（或文件夹图标）即可弹出该对话框。直接输入路径、点击 **浏览** 唤起系统文件选择器，或从 **常用目录** 一键切换。**使用新标签打开** 会在新 GUI 标签里加载目标路径，原项目保持不动。
 
 当 GUI 打开在一个**不是 Git 仓库**的目录上时，右侧会改为显示「最近项目」列表 —— 每个最近目录一张卡片，带 Git 徽标（落后 / 领先 / 未提交）与「在新标签页打开」。每次打开界面时会自动对所有项目跑一遍 `git fetch`，让「领先/落后」显示真实状态而不是上次 fetch 时的快照；**刷新全部** 按钮可以随时手动再刷一遍。
+
+这份列表（以及切换目录弹窗里的 **常用目录**）在卡片下方还有一段说明。配置了 AI 模型时，它是模型根据刚刷新的状态写成的 **AI 项目状态解读**：一段话说清哪些项目该 pull、哪些有未推送的提交、哪些只是工作区脏了，全都同步干净时也会明确说明。它在「刷新全部」跑完的那一刻按状态生成一次（刷新途中不会生成），整页缓存复用，右侧带重新生成按钮；面板与弹窗共用同一份解读，打开弹窗不会多问一次模型。没配模型时退回一段静态说明，讲清徽标里的数字各是什么意思。
 
 ---
 
