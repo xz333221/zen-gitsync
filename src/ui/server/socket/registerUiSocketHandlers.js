@@ -14,6 +14,7 @@
 //
 import logger from '../utils/logger.js'
 import { ensureWithinCwd } from '../utils/pathGuard.js'
+import { augmentEnvPath } from '../../../utils/shellPath.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // exec_interactive 修复(SEC-INJ-1)
@@ -73,16 +74,22 @@ function resolveBinAndArgs(command) {
   return { bin: head, args: tokens.slice(1) };
 }
 
-const INTERACTIVE_ENV = {
-  ...process.env,
-  GIT_CONFIG_PARAMETERS: "'color.ui=always' 'color.status=always' 'core.quotepath=false'",
-  FORCE_COLOR: '3',
-  NPM_CONFIG_COLOR: 'always',
-  TERM: 'xterm-256color',
-  COLORTERM: 'truecolor',
-  CLICOLOR_FORCE: '1',
-  PYTHONUNBUFFERED: '1',
-};
+// 交互式子进程的 env。PATH 交给 augmentEnvPath 补一次注册表最新值 ——
+// 服务端进程的环境块是**启动快照**，用户在这个进程活着期间装的 CLI 不在里面，
+// 表现是"GUI 里能探测到、执行却报 '不是内部或外部命令'"（2026-09-22 实测 gh）。
+// 因为要读注册表，这里必须是函数而不是模块级常量（常量会在 import 时定死）。
+async function buildInteractiveEnv() {
+  return augmentEnvPath({
+    ...process.env,
+    GIT_CONFIG_PARAMETERS: "'color.ui=always' 'color.status=always' 'core.quotepath=false'",
+    FORCE_COLOR: '3',
+    NPM_CONFIG_COLOR: 'always',
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+    CLICOLOR_FORCE: '1',
+    PYTHONUNBUFFERED: '1',
+  });
+}
 
 function isWindowsBuiltin(command) {
   if (process.platform !== 'win32') return false;
@@ -180,7 +187,7 @@ export function registerUiSocketHandlers({
 
       const childProcess = spawn(bin, args, {
         cwd: execDirectory,
-        env: INTERACTIVE_ENV,
+        env: await buildInteractiveEnv(),
         windowsHide: true,
       });
 

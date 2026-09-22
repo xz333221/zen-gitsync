@@ -20,6 +20,7 @@ import open from 'open';
 import { spawn, spawnSync, execFile } from 'child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { augmentEnvPath, pathValueOf, withPathValue } from '../../../utils/shellPath.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -478,7 +479,13 @@ export async function launchGai(dirPath, {
     '-WorkingDirectory (Get-Location).ProviderPath -WindowStyle Normal',
   ].join(' ');
   return spawnFn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encode(launcher)], {
-    cwd: dirPath, windowsHide: true, timeout: 10000,
+    cwd: dirPath,
+    windowsHide: true,
+    timeout: 10000,
+    // 这个终端窗口以及里面跑起来的 g ai，会继承下面这份 env；把注册表里新装的 CLI
+    // 目录补进去，否则窗口里 `gh repo list` 照样报"不是内部或外部命令"
+    // （本进程的 PATH 是启动快照）。见 utils/shellPath.js 顶部。
+    env: await augmentEnvPath(process.env),
   });
 }
 
@@ -682,15 +689,25 @@ async function launchToolInstaller(installer, dirPath = process.cwd(), { update 
  *   "gh 2.101.0 已安装"，可 `cmd /k gh auth login` 这个子进程按自己的 PATH 找，
  *   回一句 `'gh' 不是内部或外部命令`；而用户自己新开一个 cmd 却是好的，
  *   因为新进程拿到的是最新 PATH。
- *   解法：调用方把 CLI **实际所在的目录**传进来，这里前置进子进程的 PATH。
+ *   解法有两层，缺一不可：
+ *     1. **基线兜底**（`augmentEnvPath`）：把注册表 Machine + User 的 PATH 里本进程
+ *        快照没有的目录补进子进程 —— 语义上等价于"这个进程是现在才启动的"。
+ *        所以**不传 `pathDirs` 也不会踩旧快照**，`launchGai` 这类入口不用各自记得传。
+ *     2. `pathDirs`：调用方**已经知道 CLI 落点**时显式**前置**，抢在别的同名命令之前。
+ *        注意两层语义不同：兜底是追加（不动原有优先级），pathDirs 是前置（要优先）。
  *   比起"把可执行文件全路径拼进命令行"，前置 PATH 还顺带绕开了 cmd.exe 那套
  *   "路径带空格时的嵌套引号"地狱(`C:\Program Files\GitHub CLI\gh.exe`)。
  */
 export async function launchCommandInTerminal(command, { cwd = process.cwd(), pathDirs = [] } = {}) {
   const dirs = pathDirs.filter(Boolean);
-  const env = dirs.length
-    ? { ...process.env, PATH: [...dirs, process.env.PATH || ''].join(path.delimiter) }
-    : undefined;
+  const augmented = await augmentEnvPath(process.env);
+  let env;
+  if (dirs.length) {
+    env = withPathValue(augmented, [...dirs, pathValueOf(augmented)].filter(Boolean).join(path.delimiter));
+  } else {
+    // 没有要补的就传 undefined，让子进程原样继承父环境（与改动前行为一致）
+    env = augmented === process.env ? undefined : augmented;
+  }
 
   if (process.platform === 'win32') {
     return spawnDetached('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/k', command], { cwd, env });

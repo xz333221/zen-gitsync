@@ -31,6 +31,7 @@ import iconv from 'iconv-lite'
 import { trackChild } from '../cleanup.js'
 import { checkDangerousCommand } from './safety.js'
 import { guardCommand } from './platformGuard.js'
+import { augmentEnvPath, isCommandNotFound, pathValueOf } from '../../utils/shellPath.js'
 
 // ──────────────────────────────────────────────
 // 常量
@@ -288,15 +289,34 @@ async function toolRunCommand(args, ctx) {
     return `错误: 执行目录不存在: ${cwd}`
   }
 
-  const result = await execCommand(command, {
+  // 子进程的 PATH 每次补一次注册表最新值。
+  // 为什么不能直接 {...process.env}：服务端/GUI 进程的环境块是**启动快照**，
+  // 用户在这个进程活着期间装的 CLI（gh 就是这么被坑的）不在里面 —— 探测侧能找到，
+  // 真去执行却报"不是内部或外部命令"。详见 utils/shellPath.js 顶部。
+  const baseEnv = { ...process.env, FORCE_COLOR: '0' }
+  const execOptions = {
     cwd,
     timeout: timeoutSec * 1000,
     maxBuffer: 32 * 1024 * 1024,
     windowsHide: true,
-    env: { ...process.env, FORCE_COLOR: '0' },
     onChild: ctx.onChild,
     signal: ctx.signal,
-  })
+  }
+  const firstEnv = await augmentEnvPath(baseEnv)
+  let result = await execCommand(command, { ...execOptions, env: firstEnv })
+
+  // 仍然"命令找不到"时的最后一搏：大概率是上面那个补丁命中了 15s TTL 缓存
+  // （缓存读取发生在这个 CLI 被装上之前）。强刷一次注册表，且**只有真的多出新目录**
+  // 才重跑，避免白跑一遍命令。重跑的判据是 isCommandNotFound ——
+  // 它只认"整条命令没被执行过"的说法（不含 POSIX 的 No such file or directory，
+  // 那条可能只是参数文件缺失，重跑有副作用的命令是不安全的）。
+  if (isCommandNotFound(result.stderr, result.errorMessage)) {
+    const retryEnv = await augmentEnvPath(baseEnv, { force: true })
+    if (pathValueOf(retryEnv) !== pathValueOf(firstEnv)) {
+      const retry = await execCommand(command, { ...execOptions, env: retryEnv })
+      if (!isCommandNotFound(retry.stderr, retry.errorMessage)) result = retry
+    }
+  }
 
   const parts = []
   if (result.cancelled) parts.push('[命令已由用户停止]')

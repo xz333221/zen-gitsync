@@ -27,17 +27,20 @@
 //            然后 repo list 报 "Not logged in" —— 所以 gitee 走 JSON 解析。
 //
 // 为什么安装完能立刻检测到(不必重启服务):
-//   winget / npm 装完之后是把目录写进**用户环境变量 Path**,而已经跑起来的
-//   node 进程持有的还是老 PATH,`where.exe` 找不到新装的命令。所以这里除了
-//   where.exe,还会去读注册表 HKCU\Environment 的 Path 自己拼候选路径
-//   (与 fileOpen.js 的 findKimiExecutable 同一套思路),再兜几个装包管理器的
-//   默认落点。否则"一键安装 → 自动刷新列表"会在刷新时永远停在"未安装"。
+//   装包管理器改的是**注册表里的 PATH**(winget / MSI 写 Machine，npm -g 写 User)，
+//   而已经跑起来的 node 进程持有的还是老 PATH,`where.exe` 找不到新装的命令。
+//   所以这里除了 where.exe,还会去读注册表 **Machine + User 两边**的 Path 自己拼
+//   候选路径(读取实现统一在 utils/shellPath.js,和"给子进程补 PATH"共用一份,
+//   免得两处口径分叉 —— 这里曾经只读 HKCU,漏掉 winget 写的 Machine 那半),
+//   再兜几个装包管理器的默认落点。否则"一键安装 → 自动刷新列表"会在刷新时
+//   永远停在"未安装"。
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import { getToolInstallers, launchCommandInTerminal, parseVersionOutput, publicInstallerInfo } from './fileOpen.js';
+import { readRegistryPathDirs } from '../../../utils/shellPath.js';
 import logger from '../utils/logger.js';
 
 /** 单条 CLI 命令的超时。gh repo list / gitee repo list 都要联网,
@@ -105,25 +108,6 @@ function winCandidateScore(filePath) {
 
 // ── 可执行文件定位 ───────────────────────────────────────────────────────────
 
-/** 读注册表 HKCU\Environment 的 Path(用户级 PATH)。安装器改的是这里,
- *  而不是当前进程的 process.env.PATH,所以要单独读一次。 */
-function readUserPathEntries() {
-  if (process.platform !== 'win32') return [];
-  const out = spawnSync('reg.exe', ['query', 'HKCU\\Environment', '/v', 'Path'], {
-    encoding: 'utf8',
-    windowsHide: true,
-  }).stdout || '';
-  const line = out.split(/\r?\n/).find((l) => /\sPath\s+REG_(?:EXPAND_)?SZ\s+/i.test(l));
-  if (!line) return [];
-  const raw = line.replace(/^.*?REG_(?:EXPAND_)?SZ\s+/i, '').trim();
-  return raw
-    .split(';')
-    .map((v) => v.trim())
-    .filter(Boolean)
-    // 用户级 Path 里常见 %USERPROFILE%\... 这类未展开的变量
-    .map((v) => v.replace(/%([^%]+)%/g, (_, name) => process.env[name] || ''));
-}
-
 /** npm 的全局 bin 目录。`npm prefix -g` 是权威来源,失败时退回 %APPDATA%\npm。 */
 function npmGlobalBin() {
   const candidates = [];
@@ -182,8 +166,12 @@ export async function listCliExecutables(provider) {
     for (const line of lines) await push(line);
   }
 
-  // 2. 用户级 Path 里的目录
-  for (const dir of readUserPathEntries()) {
+  // 2. 注册表 PATH 里的目录(Machine + User 两边都要)
+  //    ⚠️ 只读 HKCU 是不够的(2026-09-22 修正):winget / MSI 默认写的是 **Machine**,
+  //    而 npm -g 写 User —— 漏掉 Machine 就会让"gh 装了却检测不到"。
+  //    force: true 是刻意的:探测是"用户明确要看最新状态"的路径,宁可多花一次 reg.exe
+  //    也不要吃 15s 缓存 —— 否则"一键安装 → 立刻刷新"会看到装之前的结论。
+  for (const dir of await readRegistryPathDirs({ force: true })) {
     for (const name of exeNames) await push(path.join(dir, name));
   }
 

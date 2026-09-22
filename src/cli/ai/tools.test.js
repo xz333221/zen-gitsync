@@ -209,6 +209,21 @@ test('run_command 不存在的 cwd 返回错误', async () => {
   assert.match(r, /目录不存在/)
 })
 
+test('run_command: 命令找不到时如实报错(补 PATH 的兜底不许吞掉错误、也不许重试到卡死)', async () => {
+  // 这条守的是 shellPath 那套「补 PATH + 找不到就强刷缓存重试一次」的边界：
+  // 重试的触发条件是 isCommandNotFound，重试前提是"确实多出了新目录"。
+  // 一个真实不存在的命令，两条都不满足 —— 必须原样把 shell 的报错交回给模型，
+  // 而不是吞成空输出、更不能循环重试。
+  const r = await executeTool('run_command', { command: 'definitely-not-a-real-cli-xyz --version' }, ctx)
+  assert.match(r, /definitely-not-a-real-cli-xyz/, '应回显执行的命令')
+  assert.match(r, /\(exit [1-9]/, '应有非 0 退出码')
+  assert.match(
+    r,
+    /不是内部或外部命令|is not recognized|command not found|ENOENT/,
+    '应保留 shell 的"命令找不到"原文，供模型判断',
+  )
+})
+
 // ========== 未知工具 ==========
 
 test('未知工具返回错误字符串并列出可用工具', async () => {

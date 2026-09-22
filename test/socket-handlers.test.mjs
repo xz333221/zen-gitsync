@@ -105,6 +105,24 @@ function makeMockIconv() {
   }
 }
 
+/**
+ * 轮询等待条件成立。
+ *
+ * 为什么需要:交互式执行现在会在 spawn 之前 `await buildInteractiveEnv()`
+ * (给子进程补一次注册表里的 PATH,见 src/utils/shellPath.js),所以 spawn
+ * **不再发生**在 socket.emit 的同一个 tick 里 —— 首次调用还要真跑一次 reg.exe,
+ * 跨的就不止一个微任务。这里用轮询而不是"等一个 tick",避免测试变成
+ * "看 reg.exe 有多快"的赌博。
+ */
+async function waitFor(predicate, { timeoutMs = 3000, stepMs = 5 } = {}) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return true
+    await new Promise((resolve) => setTimeout(resolve, stepMs))
+  }
+  return false
+}
+
 // ========== Test: connection lifecycle ==========
 
 test('registerUiSocketHandlers: connection 时 join project room + emit initial_command_history', () => {
@@ -290,7 +308,7 @@ test('registerUiSocketHandlers: exec_interactive 非字符串 command → emit i
 
 // ========== Test: exec_interactive 正常路径(stdout → socket, close → history) ==========
 
-test('registerUiSocketHandlers: exec_interactive 正常 → spawn → stdout 流到 socket → close 写入历史', () => {
+test('registerUiSocketHandlers: exec_interactive 正常 → spawn → stdout 流到 socket → close 写入历史', async () => {
   const { io, triggerConnection } = makeMockIo()
   const { socket, emitted } = makeMockSocket('client-6')
   const fakeChildren = []
@@ -333,7 +351,10 @@ test('registerUiSocketHandlers: exec_interactive 正常 → spawn → stdout 流
     sessionId: 'sess-ok'
   })
 
-  assert.equal(fakeChildren.length, 1, '应 spawn 1 个子进程')
+  assert.ok(
+    await waitFor(() => fakeChildren.length === 1),
+    '应 spawn 1 个子进程',
+  )
   const { child } = fakeChildren[0]
   // 应发 processId
   const pidEvent = emitted.find(e => e.event === 'interactive_process_id')
@@ -367,7 +388,7 @@ test('registerUiSocketHandlers: exec_interactive 正常 → spawn → stdout 流
 
 // ========== Test: exec_interactive 非 0 退出码 → success=false ==========
 
-test('registerUiSocketHandlers: exec_interactive 非 0 退出码 → interactive_exit.success=false', () => {
+test('registerUiSocketHandlers: exec_interactive 非 0 退出码 → interactive_exit.success=false', async () => {
   const { io, triggerConnection } = makeMockIo()
   const { socket, emitted } = makeMockSocket('client-7')
   const fakeChildren = []
@@ -400,6 +421,7 @@ test('registerUiSocketHandlers: exec_interactive 非 0 退出码 → interactive
 
   socket.emit('exec_interactive', { command: 'false', sessionId: 'sess-fail' })
 
+  assert.ok(await waitFor(() => fakeChildren.length === 1), '应 spawn 1 个子进程')
   const { child } = fakeChildren[0]
   child.emit('close', 1, null) // 退出码 1
 

@@ -89,6 +89,21 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
   · 查命令路径 → cmd 的 where(不是 which)
 - 必须跑 shell 时优先跨平台写法(如 node -e "..."),别用 Unix 专属命令` : `- 当前是 POSIX 环境,Unix 命令可用`}
 
+# 远程仓库(GitHub / Gitee)
+- 问"这个项目关联哪个远端" → run_command 跑 \`git remote -v\`:本地信息,不联网、不依赖任何 CLI,任何环境都能答
+- 问"我账号下有哪些仓库"或某仓库的 PR / Issue → 用官方 CLI。凭据由 CLI 自己保管:
+  · GitHub → \`gh\`。列仓库 \`gh repo list --limit 50 --json name,visibility,updatedAt,primaryLanguage\`;
+    看详情 \`gh repo view <owner/repo>\`;PR \`gh pr list\`;登录态 \`gh auth status\`
+  · Gitee → \`gitee\`。列仓库 \`gitee repo list\`;登录态 \`gitee auth status\`
+    (未登录时退出码**仍是 0**,必须看 \`--json\` 里的 status 字段,只看退出码会误判成已登录)
+  · 两者默认只覆盖**当前登录账号**;组织仓库、私有仓库可能需要更大的 token scope,拉不到就如实说明,
+    不要用其他途径绕过
+  · 绝不向用户索要 token —— 也不要让用户把 token 粘进对话
+- CLI 可能没装、或没在服务端进程的 PATH 里(装完没重启服务就是这个表现,Web 端尤其常见):
+  报"不是内部或外部命令" / command not found 时,**不要换写法反复重试**,更不要凭印象编仓库名或目录名。
+  直接告诉用户未检测到该 CLI,可在「远程仓库」页一键安装/登录,或需要时重启服务让新装的 CLI 生效;
+  若只是想回答本项目的问题,退回 \`git remote -v\`
+
 # 权限(用户已明确授权,无需反复征求同意)
 - 工作目录内:读写文件、执行命令等所有操作直接执行
 - 其他目录:同样可以读取和修改
@@ -136,6 +151,24 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
   · Tail output → PowerShell "command | Select-Object -Last N"
   · Text processing → node -e "..." or PowerShell
   · Find executable → cmd's where (not which)` : `- POSIX environment: Unix commands are available`}
+
+# Remote repositories (GitHub / Gitee)
+- "Which remote does this project point at?" → run_command \`git remote -v\`: local info, no network, no CLI needed
+- "Which repos do I have?" or a repo's PRs / issues → use the official CLI. The CLI owns the credentials:
+  · GitHub → \`gh\`. List repos \`gh repo list --limit 50 --json name,visibility,updatedAt,primaryLanguage\`;
+    details \`gh repo view <owner/repo>\`; PRs \`gh pr list\`; auth state \`gh auth status\`
+  · Gitee → \`gitee\`. List repos \`gitee repo list\`; auth state \`gitee auth status\`
+    (the exit code is still 0 when logged out — read the status field from \`--json\`, or you will
+    wrongly report "logged in")
+  · Both default to the **currently authenticated account only**; org and private repos may need
+    broader token scopes. If you cannot see them, say so plainly — do not route around it
+  · Never ask the user for a token, and never have them paste one into the conversation
+- The CLI may not be installed, or missing from the server process's PATH (that is what "installed but
+  the server cannot find it" looks like — common on the Web side):
+  on "not recognized" / command not found, do NOT retry with a different spelling and do NOT invent
+  repo or directory names. Tell the user the CLI was not found and point them to the "Remote
+  repositories" page (one-click install / login), or restart the server so a freshly installed CLI
+  becomes visible; if you only need to answer for this project, fall back to \`git remote -v\`
 
 # Permissions (explicitly granted by the user)
 - Inside the working directory: read/write files and run commands directly
