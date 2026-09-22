@@ -14,17 +14,23 @@
 //
 // src/ui/server/routes/remoteRepos.js 单元测试。
 //
-// 重点覆盖两处**实测踩过的坑**,它们都不会报错、只会静默给出错误结果:
+// 重点覆盖三处**实测踩过的坑**,它们都不会报错、只会静默给出错误结果:
 //   1. `gitee auth status` 未登录时退出码是 0 —— 用退出码判会永远认为已登录
 //   2. `parseRepoJson` 对纯对象(如 auth status 的 JSON)返回 null ——
 //      拿它去解登录态会让解析悄悄退化成文本匹配,登录后拿不到用户名
+//   3. 环境里带了"强制上色"变量(如 CLICOLOR_FORCE=1)时,CLI 的 --json 输出
+//      会带 ANSI 色码 —— JSON 解不出来、账号名抠不出来,界面上只剩 `\x1b[1;37m[`
 // 另外覆盖四条路由分支(未安装 / 未登录 / 已登录 / 拉取失败)与 provider 校验。
 //
 // 不真起 Express:沿用 branchStatus.test.js 的 mock app + mock req/res 做法。
 // CLI 调用通过 registerRemoteReposRoutes 的 *Impl 注入口换成假实现,不联网、不装 gh。
+// 唯独"色码"那几条必须真起子进程 —— 用 node 自己当被测 CLI(process.execPath),
+// 不依赖机器上有没有装 gh。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  buildCliEnv,
+  firstMeaningfulLine,
   interpretGiteeAuthStatus,
   interpretGithubAuthStatus,
   normalizeGiteeRepos,
@@ -33,7 +39,16 @@ import {
   parseRepoJson,
   pickUserName,
   registerRemoteReposRoutes,
+  runCli,
+  stripAnsi,
 } from './remoteRepos.js'
+
+const ESC = '\u001b'
+
+/** 用 node 自己当"被测 CLI":跑一段内联脚本,把 stdout 收回来。 */
+function runNode(code, options) {
+  return runCli(process.execPath, ['-e', code], options)
+}
 
 /** 最小 express app mock:只实现 get + post 与 handler 调用 */
 function makeApp() {
@@ -191,6 +206,101 @@ test('normalizeGiteeRepos: private 缺失时用 public 反推;url 缺失时用 f
   // 显式 private 优先于 public
   const [explicit] = normalizeGiteeRepos([{ name: 'c', private: true, public: true }])
   assert.equal(explicit.isPrivate, true)
+})
+
+// ── 色码(ANSI)—— 强制上色的环境会把解析和提示一起搞坏 ───────────────────────
+//
+// 实测(2026-09-22):只要启动服务的那个终端里带着 CLICOLOR_FORCE=1,gh 就**不理**
+// 我们传下去的 NO_COLOR=1,`gh repo list --json` 会吐**高亮 + 折行**的 JSON:
+//     \x1b[1;37m[\x1b[m
+//       \x1b[1;37m{\x1b[m
+//         \x1b[1;34m"name"\x1b[m\x1b[1;37m:\x1b[m \x1b[32m"zen-gitsync"\x1b[m
+// 于是:① repos 空(JSON.parse 失败)② user 为 null(账号名被色码包住)
+// ③ 界面上的"错误原因"变成 `\x1b[1;37m[\x1b[m` 这种乱码。
+
+test('stripAnsi: 剥掉 SGR 与光标类转义序列', () => {
+  assert.equal(stripAnsi(`${ESC}[1;37m[${ESC}[m`), '[')
+  assert.equal(stripAnsi('plain text'), 'plain text')
+  assert.equal(stripAnsi(`${ESC}[2K${ESC}[1Aabc`), 'abc')
+  assert.equal(stripAnsi(null), '')
+})
+
+test('buildCliEnv: 继承来的"强制上色"变量一律清掉,并显式关色(Windows 上大小写不敏感)', () => {
+  process.env.CLICOLOR_FORCE = '1'
+  process.env.gh_force_tty = '100%'
+  process.env.FORCE_COLOR = '3'
+  try {
+    const env = buildCliEnv()
+    assert.equal(env.CLICOLOR_FORCE, undefined)
+    // 小写写法必须一起清 —— Windows 上环境变量名不区分大小写,
+    // 只 delete 大写那种写法会漏掉它,而漏掉就等于没修。
+    assert.equal(env.gh_force_tty, undefined)
+    assert.equal(env.GH_FORCE_TTY, undefined)
+    assert.equal(env.FORCE_COLOR, undefined)
+    assert.equal(env.NO_COLOR, '1')
+    assert.equal(env.CLICOLOR, '0')
+    // 其它环境变量照旧带下去(子进程要能拿到 PATH 等)
+    assert.equal(env.PATH, process.env.PATH)
+  } finally {
+    delete process.env.CLICOLOR_FORCE
+    delete process.env.gh_force_tty
+    delete process.env.FORCE_COLOR
+  }
+})
+
+test('runCli: 父进程带着强制上色变量时,子进程既看不到它、输出里的色码也被剥掉', async () => {
+  const code = 'process.stdout.write(String(process.env.CLICOLOR_FORCE) + "|" + String(process.env.NO_COLOR) + "|" + String(process.env.GH_FORCE_TTY))'
+  process.env.CLICOLOR_FORCE = '1'
+  process.env.GH_FORCE_TTY = '80'
+  try {
+    const res = await runNode(code)
+    assert.equal(res.code, 0)
+    assert.equal(res.stdout, 'undefined|1|undefined')
+  } finally {
+    delete process.env.CLICOLOR_FORCE
+    delete process.env.GH_FORCE_TTY
+  }
+
+  // 色码在出口处统一剥掉(按 chunk 剥会把跨 chunk 的转义序列切坏,所以必须在收全后剥)
+  const colored = await runNode(`process.stdout.write(${JSON.stringify(`${ESC}[1;37m[${ESC}[m\nabc\n`)})`)
+  assert.equal(colored.stdout, '[\nabc\n')
+
+  // 同样适用于 stderr —— 报错信息是要直接摆到界面上的
+  const coloredErr = await runNode(`process.stderr.write(${JSON.stringify(`${ESC}[31mHTTP 401: Bad credentials${ESC}[m\n`)})`)
+  assert.equal(coloredErr.stderr, 'HTTP 401: Bad credentials\n')
+})
+
+test('runCli + interpretGithubAuthStatus: 彩色 auth status 也能抠出账号名', async () => {
+  // 没有这一层修复时,账号名被 \x1b[1;37m 包住 → 正则匹配不到 → user 为 null,
+  // 界面显示"已登录 "后面空一格(users 看不到自己是谁)。
+  const output = `github.com\n  ${ESC}[32m✓${ESC}[m Logged in to github.com account ${ESC}[1;37mxz333221${ESC}[m (keyring)\n`
+  const res = await runNode(`process.stdout.write(${JSON.stringify(`${output}\n`)})`)
+  assert.deepEqual(interpretGithubAuthStatus(res.code, res.stdout), {
+    authenticated: true,
+    user: 'xz333221',
+  })
+})
+
+test('parseJsonLoose: 高亮过的多行 JSON 剥掉色码后照常解析(兜底,不依赖 runCli)', () => {
+  const colored = [
+    `${ESC}[1;37m[${ESC}[m`,
+    `  ${ESC}[1;37m{${ESC}[m`,
+    `    ${ESC}[1;34m"name"${ESC}[m${ESC}[1;37m:${ESC}[m ${ESC}[32m"zen-gitsync"${ESC}[m`,
+    `  ${ESC}[1;37m}${ESC}[m`,
+    `${ESC}[1;37m]${ESC}[m`,
+  ].join('\n')
+  assert.deepEqual(parseJsonLoose(colored), [{ name: 'zen-gitsync' }])
+  assert.deepEqual(parseRepoJson(colored), [{ name: 'zen-gitsync' }])
+})
+
+test('firstMeaningfulLine: 剥掉色码后只剩标点的行不算"能给用户看的话"', () => {
+  // 用户看到的那行乱码正是这一条:整段输出剥完色码只剩 [,拿它当错误提示等于没说
+  assert.equal(firstMeaningfulLine('', `${ESC}[1;37m[${ESC}[m`), '')
+  assert.equal(
+    firstMeaningfulLine(`${ESC}[1;37m[${ESC}[m`, 'HTTP 401: Bad credentials (https://api.github.com/graphql)'),
+    'HTTP 401: Bad credentials (https://api.github.com/graphql)',
+  )
+  assert.equal(firstMeaningfulLine(''), '')
 })
 
 // ── 路由分支 ────────────────────────────────────────────────────────────────

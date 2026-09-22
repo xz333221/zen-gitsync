@@ -38,6 +38,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { asyncRoute, HttpError } from '../utils/asyncRoute.js';
 import { getToolInstallers, launchCommandInTerminal, parseVersionOutput, publicInstallerInfo } from './fileOpen.js';
 import { readRegistryPathDirs } from '../../../utils/shellPath.js';
@@ -226,14 +227,59 @@ export async function findCliExecutable(provider) {
 
 // ── CLI 调用 ────────────────────────────────────────────────────────────────
 
+/** 剥掉 ANSI 转义序列。CLI 一旦被"强制上色",我们拿到的就是带色码的文本 ——
+ *  那东西既不能 JSON.parse,也不能直接摆在界面上给用户看。 */
+export function stripAnsi(text) {
+  return stripVTControlCharacters(String(text ?? ''));
+}
+
+/**
+ * "强制上色"这一族环境变量。它们**优先级高于 NO_COLOR**:
+ * 实测(2026-09-22)只设 `CLICOLOR_FORCE=1` 时,gh 连我们显式传下去的
+ * `NO_COLOR=1` 都不理,`gh repo list --json` 会输出**高亮 + 折行**的 JSON,
+ * 首行正是 `\x1b[1;37m[`。
+ * 后果是三重的、而且每一条都不报错:
+ *   ① `parseRepoJson` 解不出来 → repos 空;
+ *   ② `gh auth status` 里的账号名被色码包住 → user 抠不出来(null);
+ *   ③ 界面上的"错误原因"变成 `\x1b[1;37m[\x1b[m` 这种乱码(用户截图来问的那种)。
+ * 所以不能只"设 NO_COLOR",必须把整族变量从子进程环境里删掉。
+ */
+const COLOR_FORCING_ENV_KEYS = ['CLICOLOR_FORCE', 'FORCE_COLOR', 'GH_FORCE_TTY', 'GITEE_FORCE_TTY'];
+
+/**
+ * 拼子进程环境:先删掉"强制上色"整族变量,再显式声明不要颜色与非交互。
+ *
+ * 为什么要按 key 遍历删除而不是 `delete env.CLICOLOR_FORCE`:
+ *   Windows 上环境变量名**不区分大小写**,而 `process.env` 的 key 保留原样 ——
+ *   `clicolor_force` / `gh_force_tty` 这种小写写法会被大写 delete 漏掉。
+ *   (`...overrides` 放在最后是刻意的:调用方显式指定的变量应当说话算数。)
+ */
+export function buildCliEnv(overrides = {}) {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (COLOR_FORCING_ENV_KEYS.includes(key.toUpperCase())) delete env[key];
+  }
+  return {
+    ...env,
+    NO_COLOR: '1',
+    CLICOLOR: '0',
+    GH_PROMPT_DISABLED: '1',
+    GH_NO_UPDATE_NOTIFIER: '1',
+    GITEE_NO_UPDATE_NOTIFIER: '1',
+    GIT_TERMINAL_PROMPT: '0',
+    ...overrides,
+  };
+}
+
 /**
  * 跑一条 CLI 命令并把 stdout 收全。
  *
  * 全程非交互:GH_PROMPT_DISABLED / GIT_TERMINAL_PROMPT=0 保证需要凭据时
  * **快速失败而不是挂住**(挂住会连带前端轮询一起卡死,与 directoryFetch.js
  * 里 fetch 的处理是同一个考虑)。
- * NO_COLOR + GITEE_NO_UPDATE_NOTIFIER:输出要拿来解析,不能混进 ANSI 色码,
- * 也不要让每次调用都去查一次更新。
+ * 颜色:见 buildCliEnv(删掉强制上色变量)+ finish() 里再兜一层 stripAnsi ——
+ * 万一将来某个 CLI 不认 NO_COLOR,我们也绝不会把色码当数据用。
+ * GITEE_NO_UPDATE_NOTIFIER:不要让每次调用都去查一次更新。
  *
  * Windows 上 npm 装出来的是 .cmd 垫片,不能直接 spawn,必须过一层 shell
  * (这里的 args 全部是服务端硬编码常量,不含任何用户输入)。
@@ -245,25 +291,19 @@ export function runCli(executable, args, { timeoutMs = CLI_TIMEOUT_MS, env = {} 
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       shell: useShell,
-      env: {
-        ...process.env,
-        NO_COLOR: '1',
-        GH_PROMPT_DISABLED: '1',
-        GH_NO_UPDATE_NOTIFIER: '1',
-        GITEE_NO_UPDATE_NOTIFIER: '1',
-        GIT_TERMINAL_PROMPT: '0',
-        ...env,
-      },
+      env: buildCliEnv(env),
     });
 
     let stdout = '';
     let stderr = '';
     let done = false;
+    // 色码必须在**收全之后**再剥:按 chunk 剥会把跨 chunk 的转义序列切坏
+    // (前一个 chunk 停在 `\x1b[`,后一个 chunk 从 `1;37m` 开始)。
     const finish = (code, timedOut) => {
       if (done) return;
       done = true;
       try { child.kill('SIGKILL'); } catch {}
-      resolve({ code, stdout, stderr, timedOut: !!timedOut });
+      resolve({ code, stdout: stripAnsi(stdout), stderr: stripAnsi(stderr), timedOut: !!timedOut });
     };
 
     child.stdout.on('data', (chunk) => { stdout += chunk; });
@@ -277,12 +317,20 @@ export function runCli(executable, args, { timeoutMs = CLI_TIMEOUT_MS, env = {} 
   });
 }
 
-/** 从 CLI 输出里挑一句能给用户看的话(gitee 把错误打在 stdout,gh 打在 stderr) */
-function firstMeaningfulLine(...texts) {
+/**
+ * 从 CLI 输出里挑一句能给用户看的话(gitee 把错误打在 stdout,gh 打在 stderr)。
+ *
+ * 跳过"剥掉色码后只剩标点/符号"的行:被高亮过的 JSON 压掉色码后可能只剩一个
+ * `[`,拿它当错误提示等于没说 —— 界面上就会出现用户完全看不懂的一行(实测踩到)。
+ */
+export function firstMeaningfulLine(...texts) {
   for (const text of texts) {
     if (!text) continue;
-    for (const line of String(text).split(/\r?\n/).map((s) => s.trim())) {
-      if (line && !/^\s*$/.test(line)) return line;
+    for (const raw of String(text).split(/\r?\n/)) {
+      const line = stripAnsi(raw).trim();
+      if (!line) continue;
+      if (!/[\p{L}\p{N}]/u.test(line)) continue;
+      return line;
     }
   }
   return '';
@@ -290,13 +338,19 @@ function firstMeaningfulLine(...texts) {
 
 /** 宽松 JSON 解析:容忍 CLI 在 JSON 前面打警告/更新提示行。
  *  只定位第一个 `[` 或 `{` 再整体交给 JSON.parse —— 不做任何字符串清洗,
- *  解析不出来就是 null,由调用方决定怎么降级。 */
+ *  解析不出来就是 null,由调用方决定怎么降级。
+ *
+ *  唯一"清洗"就是剥 ANSI:被强制上色的 `--json` 输出是**带色码的多行 JSON**,
+ *  色码不影响结构,剥掉就能正常解析(2026-09-22 实测:CLICOLOR_FORCE=1 时
+ *  gh 输出首行是 `\x1b[1;37m[`)。runCli 出口已经剥过一遍,这里再兜一层,
+ *  保证任何直接调用本函数的路径都不会被色码坑到。 */
 export function parseJsonLoose(text) {
   if (!text) return null;
-  const start = text.search(/[[{]/);
+  const plain = stripAnsi(text);
+  const start = plain.search(/[[{]/);
   if (start < 0) return null;
   try {
-    return JSON.parse(text.slice(start));
+    return JSON.parse(plain.slice(start));
   } catch {
     return null;
   }
