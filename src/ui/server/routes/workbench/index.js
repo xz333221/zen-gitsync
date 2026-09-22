@@ -17,16 +17,15 @@
 // 历史背景：本文件曾是 3539 行的巨型文件，包含所有顶层工具函数 + 45 个路由端点。
 // 2026-06-29 按业务域拆分为 workbench/ 子目录的 9 个模块：
 //   - shared.js          常量 + 通用工具 (nowIso, genId, readJson, writeJson, interpolate)
-//   - jsonParse.js       JSON 解析降级链 (parseSubtaskJson 等)
+//   - jsonParse.js       从 LLM 输出里抠 JSON 的纯函数
 //   - llmClient.js       LLM 客户端 (callLlmJson, callLlmStream)
 //   - projectScan.js     子项目识别 (findSubProjects, detectProjectManifest)
 //   - attachmentUtils.js 附件白名单 (sanitizeExt, resolveExt, MIME_TO_EXT)
-//   - sessionStore.js    AI 对话拆分会话持久化
 //   - instructionStore.js AI 指令读写
 //   - jobStore.js        jobs Map + bus + 持久化 + retention
-//   - taskRunner.js      任务执行引擎 (runTaskQueue, runSingleSubtask)
+//   - taskRunner.js      任务执行引擎 (runSingleSubtask —— 一次任务 = 一次会话)
 //
-// 本文件（index.js）只做 registerWorkbenchRoutes 入口聚合，按业务域分节注册 45 个路由。
+// 本文件（index.js）只做 registerWorkbenchRoutes 入口聚合，按业务域分节注册路由。
 // 错误处理：
 //   - 非 SSE 路由统一用 asyncRoute 包装，handler 内部不再写 try/catch
 //   - 异常自动走 asyncRoute → 全局 errorHandler 中间件（server/index.js 注册）
@@ -48,16 +47,14 @@ import {
   JOBS_FILE,
   ORCHESTRATOR_FILE,
   IMAGES_DIR,
-  SUBTASK_INSTRUCTION_FILE,
   MAX_IMAGE_BYTES,
-  MAX_ATTACHMENTS_PER_SUBTASK,
+  MAX_ATTACHMENTS_PER_TASK,
   MAX_DEFAULT_PROMPT_CHARS,
   readJson,
   writeJson,
   nowIso,
   genId,
 } from './shared.js';
-import { parseSubtaskJson } from './jsonParse.js';
 import { callLlmJson, callLlmJsonWithRetry, callLlmStream } from './llmClient.js';
 import {
   findSubProjects,
@@ -78,15 +75,10 @@ import {
   findStagingFile,
   cleanupDispatchStaging,
 } from './attachmentUtils.js';
-import { sessionStore } from './sessionStore.js';
 import {
   DEFAULT_INSTRUCTION,
-  DEFAULT_SUBTASK_INSTRUCTION_ZH,
-  pickDefaultSubtaskInstruction,
   readInstruction,
   writeInstruction,
-  readSubtaskInstruction,
-  writeSubtaskInstruction,
 } from './instructionStore.js';
 import {
   jobs,
@@ -104,15 +96,8 @@ import {
   mergedJobs,
 } from './jobStore.js';
 import {
-  launchClaudeInNewWindow,
   normalizeTaskExecutor,
-  runTaskQueue,
   runSingleSubtask,
-  syncSubToCancelled,
-  persistTaskAfterRun,
-  collectPriorOutputs,
-  collectPriorOutputsUpTo,
-  waitProcessExit,
   setEnvContextProvider,
 } from './taskRunner.js';
 import {
@@ -136,8 +121,6 @@ import {
   buildActivityFeed,
   buildRunningAgents,
 } from './orchestratorStore.js';
-
-const { genSessionId, read: readSessionFile, write: writeSessionFile, delete: deleteSessionFile, listMeta: listSessionsMeta, enforceRetention: enforceSessionsRetention } = sessionStore;
 
 /**
  * 解析本次执行用哪个执行器：body.executor 显式指定 > 配置里的全局默认 > 'claude'。
@@ -341,463 +324,7 @@ ${subSummaries.map((s, i) => `\n### [${i + 1}] ${s.name} (${s.root})\n${s.summar
   }));
 
   // ════════════════════════════════════════════════════════════════════════
-  // §3. AI 拆分子任务指令：读 / 写
-  // ════════════════════════════════════════════════════════════════════════
-  app.get('/api/workbench/tasks/ai-subtask-instruction', asyncRoute(async (req, res) => {
-    const def = pickDefaultSubtaskInstruction(req);
-    const instruction = await readSubtaskInstruction(req);
-    res.json({ success: true, instruction, isDefault: instruction === def });
-  }));
-
-  app.put('/api/workbench/tasks/ai-subtask-instruction', asyncRoute(async (req, res) => {
-    const text = req.body && typeof req.body.instruction === 'string'
-      ? req.body.instruction.trim()
-      : '';
-    if (!text) throw new HttpError(400, '指令不能为空');
-    if (text.length > 500000) throw new HttpError(413, '指令过长（最多 500000 字符）');
-    // 如果保存的文本正好等于当前 locale 的默认——不写文件，保持 fallback 行为
-    const def = pickDefaultSubtaskInstruction(req);
-    if (text === def) {
-      try { await fsp.unlink(SUBTASK_INSTRUCTION_FILE); } catch { /* 已不存在 */ }
-      return res.json({ success: true, isDefault: true });
-    }
-    await writeSubtaskInstruction(text);
-    res.json({ success: true, isDefault: false });
-  }));
-
-  // ════════════════════════════════════════════════════════════════════════
-  // §4. AI 拆分子任务（SSE 流式）— 保留 try/catch，错误以 SSE 帧发出
-  // ════════════════════════════════════════════════════════════════════════
-  app.post('/api/workbench/tasks/ai-split-subtasks', async (req, res) => {
-    const title = String(req.body?.title || '').trim();
-    const desc = String(req.body?.desc || '').trim();
-    const taskId = String(req.body?.taskId || '').trim();
-    const promptId = String(req.body?.promptId || '').trim();
-    const customUserBlock = typeof req.body?.customUserBlock === 'string' ? req.body.customUserBlock : '';
-    if (!title) {
-      return res.status(400).json({ success: false, error: '任务标题不能为空' });
-    }
-
-    // 建立 SSE
-    res.set({
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    });
-    res.flushHeaders?.();
-    const send = (obj) => {
-      try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {}
-    };
-
-    const abortController = new AbortController();
-    let finished = false;
-    // 客户端真实断开：监听 socket close
-    const onSocketClose = () => {
-      if (!finished) abortController.abort();
-    };
-    if (req.socket) req.socket.once('close', onSocketClose);
-
-    try {
-      let model;
-      try {
-        if (!configManager) throw new Error('configManager 不可用');
-        const rawConfig = await configManager.readRawConfigFile();
-        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
-        model = models.find(m => m.isDefault) || models[0];
-      } catch (err) {
-        send({ type: 'error', error: '读取 AI 配置失败: ' + err.message });
-        finished = true;
-        return res.end();
-      }
-      if (!model) {
-        send({ type: 'error', error: '未配置 AI 模型，请先在通用设置中添加模型' });
-        finished = true;
-        return res.end();
-      }
-
-      const userInstruction = await readSubtaskInstruction(req);
-      const projectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
-      const projectName = projectPath ? path.basename(projectPath) : '（未指定项目）';
-      const manifestHint = await detectProjectManifest(projectPath);
-
-      // 取绑定的预置模板（promptId）
-      let templateBlock = '';
-      if (promptId) {
-        try {
-          const promptData = await readJson(PROMPTS_FILE, { prompts: [] });
-          const p = (promptData.prompts || []).find(x => x.id === promptId);
-          if (p && p.content) {
-            templateBlock = `\n\n## 子任务执行模板（每个拆出的子任务最终会被这套模板包裹后送给 claude 执行；拆分时请确保子任务能让模板里的 {{sub.title}} / {{sub.desc}} 等变量填得有意义）\n模板名：${p.name || '（未命名）'}\n---\n${p.content}\n---`;
-          }
-        } catch { /* 模板读取失败不影响拆分 */ }
-      }
-
-      // 取任务附件
-      let attachmentBlock = '';
-      const imageDataUrls = [];
-      if (taskId) {
-        try {
-          const data = await readJson(TASKS_FILE, { tasks: [] });
-          const task = (data.tasks || []).find(t => t.id === taskId);
-          const atts = Array.isArray(task?.attachments) ? task.attachments : [];
-          if (atts.length > 0) {
-            const lines = [];
-            for (let i = 0; i < atts.length; i++) {
-              const a = atts[i];
-              if (!a || !a.absolutePath) continue;
-              lines.push(`  ${i + 1}. [${a.mimeType || 'application/octet-stream'}] ${a.absolutePath}`);
-              if (isImageExt(a.ext)) {
-                try {
-                  const buf = await fsp.readFile(a.absolutePath);
-                  const mime = a.mimeType || 'image/png';
-                  imageDataUrls.push(`data:${mime};base64,${buf.toString('base64')}`);
-                } catch { /* 文件丢失就跳过这张图 */ }
-              }
-            }
-            if (lines.length > 0) {
-              const imgNote = imageDataUrls.length > 0
-                ? `（其中 ${imageDataUrls.length} 张图片已随消息一并发送，请直接基于图片内容拆分）`
-                : '';
-              attachmentBlock = `\n\n## 任务附件${imgNote}\n${lines.join('\n')}`;
-            }
-          }
-        } catch { /* 没拿到附件不影响拆分 */ }
-      }
-
-      const userBlock = customUserBlock.trim() ? customUserBlock : `${userInstruction}
-
----
-
-## 待拆分的任务
-标题：${title}
-${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateBlock}
-
-## 项目上下文（仅供参考，便于拆分时考虑项目特性）
-- 项目名称：${projectName}
-- 项目根目录：${projectPath || '（未指定）'}
-- 主要 manifest：${manifestHint || '（未识别到）'}
-
-请先仔细分析（可以放在 reasoning 中或直接写出来）。仔细分析指：列出 5 个维度——任务真实目标 / 关键技术栈与边界 / 自然执行顺序 / 风险点与可能失败步骤 / 是否需要前置调研——不要简短一两句话就过；分析过后再给出 JSON。JSON 用 \`\`\`json ... \`\`\` 包裹：
-{
-  "subtasks": [
-    { "title": "子任务标题", "desc": "具体描述" }
-  ]
-}
-
-**JSON 输出严格要求**（不遵守会导致解析失败、用户无法入库）：
-1. title 和 desc 内如需引用术语 / 页面名 / 状态名，**必须使用中文引号「」或『』**，禁止使用 ASCII 双引号、单引号或反引号，否则会破坏外层 JSON 结构。
-2. JSON 中不允许尾随逗号（最后一个元素后面不能跟逗号）。
-3. JSON 中不允许写注释。
-4. 所有字符串字段必须用 ASCII 双引号包裹，字符串内部如有换行用 \\n 转义。`;
-
-      // 先把 prompt 元信息推给前端
-      send({ type: 'meta', prompt: { system: userInstruction, user: userBlock } });
-
-      // 流式调用 LLM
-      const { content, aborted } = await callLlmStream(
-        model,
-        userBlock,
-        (delta) => {
-          if (delta.thinking) send({ type: 'thinking', delta: delta.thinking });
-          if (delta.content) send({ type: 'content', delta: delta.content });
-        },
-        { maxTokens: 32000, timeoutMs: 600000, images: imageDataUrls, signal: abortController.signal }
-      );
-
-      if (aborted) {
-        send({ type: 'error', error: '已取消' });
-        finished = true;
-        return res.end();
-      }
-
-      const { parsed, parseError, parseStage } = parseSubtaskJson(content);
-      const list = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
-      const subtasks = list
-        .map(s => ({
-          title: String(s?.title || '').trim(),
-          desc: String(s?.desc || '').trim()
-        }))
-        .filter(s => s.title);
-
-      send({ type: 'done', subtasks, raw: content, parseError, parseStage });
-      finished = true;
-      res.end();
-    } catch (err) {
-      send({ type: 'error', error: 'AI 拆分失败: ' + (err?.message || String(err)) });
-      finished = true;
-      res.end();
-    }
-  });
-
-  // ════════════════════════════════════════════════════════════════════════
-  // §5. AI 拆分预览（不调 LLM，只返回拼好的 prompt）
-  // ════════════════════════════════════════════════════════════════════════
-  app.post('/api/workbench/tasks/ai-split-preview', asyncRoute(async (req, res) => {
-    const title = String(req.body?.title || '').trim();
-    const desc = String(req.body?.desc || '').trim();
-    const taskId = String(req.body?.taskId || '').trim();
-    const promptId = String(req.body?.promptId || '').trim();
-    if (!title) throw new HttpError(400, '任务标题不能为空');
-
-    const userInstruction = await readSubtaskInstruction(req);
-    const projectPath = typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '';
-    const projectName = projectPath ? path.basename(projectPath) : '（未指定项目）';
-    const manifestHint = await detectProjectManifest(projectPath);
-
-    let templateBlock = '';
-    if (promptId) {
-      try {
-        const promptData = await readJson(PROMPTS_FILE, { prompts: [] });
-        const p = (promptData.prompts || []).find(x => x.id === promptId);
-        if (p && p.content) {
-          templateBlock = `\n\n## 子任务执行模板（每个拆出的子任务最终会被这套模板包裹后送给 claude 执行；拆分时请确保子任务能让模板里的 {{sub.title}} / {{sub.desc}} 等变量填得有意义）\n模板名：${p.name || '（未命名）'}\n---\n${p.content}\n---`;
-        }
-      } catch { /* 模板读取失败不影响预览 */ }
-    }
-
-    // 附件:PDF 预提取全文,图片只计数(preview 阶段不需要 image_data_url)
-    let attachmentBlock = '';
-    let imageCount = 0;
-    if (taskId) {
-      try {
-        const data = await readJson(TASKS_FILE, { tasks: [] });
-        const task = (data.tasks || []).find(t => t.id === taskId);
-        const atts = Array.isArray(task?.attachments) ? task.attachments : [];
-        if (atts.length > 0) {
-          imageCount = atts.filter(a => a && isImageExt(a.ext)).length;
-          const result = await buildAttachmentBlock(atts, { withImageData: false });
-          attachmentBlock = result.block;
-        }
-      } catch { /* 没拿到附件不影响预览 */ }
-    }
-
-    const userBlock = `${userInstruction}
-
----
-
-## 待拆分的任务
-标题：${title}
-${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateBlock}
-
-## 项目上下文（仅供参考，便于拆分时考虑项目特性）
-- 项目名称：${projectName}
-- 项目根目录：${projectPath || '（未指定）'}
-- 主要 manifest：${manifestHint || '（未识别到）'}
-
-请先仔细分析（可以放在 reasoning 中或直接写出来）。仔细分析指：列出 5 个维度——任务真实目标 / 关键技术栈与边界 / 自然执行顺序 / 风险点与可能失败步骤 / 是否需要前置调研——不要简短一两句话就过；分析过后再给出 JSON。JSON 用 \`\`\`json ... \`\`\` 包裹：
-{
-  "subtasks": [
-    { "title": "子任务标题", "desc": "具体描述" }
-  ]
-}
-
-**JSON 输出严格要求**（不遵守会导致解析失败、用户无法入库）：
-1. title 和 desc 内如需引用术语 / 页面名 / 状态名，**必须使用中文引号「」或『』**，禁止使用 ASCII 双引号、单引号或反引号，否则会破坏外层 JSON 结构。
-2. JSON 中不允许尾随逗号（最后一个元素后面不能跟逗号）。
-3. JSON 中不允许写注释。
-4. 所有字符串字段必须用 ASCII 双引号包裹，字符串内部如有换行用 \\n 转义。`;
-
-    res.json({
-      success: true,
-      system: userInstruction,
-      user: userBlock,
-      hasImages: imageCount > 0,
-      imageCount
-    });
-  }));
-
-  // ════════════════════════════════════════════════════════════════════════
-  // §6. 解析子任务 JSON（前端用户手改后调）
-  // ════════════════════════════════════════════════════════════════════════
-  app.post('/api/workbench/tasks/parse-subtasks', asyncRoute(async (req, res) => {
-    const raw = String(req.body?.raw || '');
-    const { parsed, parseError, parseStage } = parseSubtaskJson(raw);
-    const list = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
-    const subtasks = list
-      .map(s => ({
-        title: String(s?.title || '').trim(),
-        desc: String(s?.desc || '').trim()
-      }))
-      .filter(s => s.title);
-    res.json({ success: true, subtasks, parseError, parseStage });
-  }));
-
-  // ════════════════════════════════════════════════════════════════════════
-  // §7. AI 对话拆分（多轮 SSE）— 保留 try/catch
-  // ════════════════════════════════════════════════════════════════════════
-  app.post('/api/workbench/tasks/ai-chat-split', async (req, res) => {
-    const userMessage = String(req.body?.userMessage || '').trim();
-    const sessionIdInput = String(req.body?.sessionId || '').trim();
-    const title = String(req.body?.title || '').trim();
-    const desc = String(req.body?.desc || '').trim();
-    const taskId = String(req.body?.taskId || '').trim();
-    const promptId = String(req.body?.promptId || '').trim();
-
-    // SSE 头
-    res.set({
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    });
-    res.flushHeaders?.();
-    const send = (obj) => {
-      try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {}
-    };
-    const abortController = new AbortController();
-    let finished = false;
-    if (req.socket) req.socket.once('close', () => { if (!finished) abortController.abort(); });
-
-    try {
-      // 加载或新建 session
-      let session, isNew = false;
-      if (sessionIdInput) {
-        try {
-          session = await readSessionFile(sessionIdInput);
-        } catch (err) {
-          if (err.statusCode === 404) {
-            send({ type: 'error', error: '会话不存在' });
-            return res.end();
-          }
-          throw err;
-        }
-      } else {
-        if (!title) {
-          send({ type: 'error', error: '新建会话时必须提供 title' });
-          return res.end();
-        }
-        session = {
-          version: 1,
-          sessionId: genSessionId(),
-          title, desc, taskId, promptId,
-          createdAt: nowIso(),
-          updatedAt: nowIso(),
-          messages: [],
-          latestSubtasks: [],
-          latestRaw: '',
-          latestParseStage: ''
-        };
-        isNew = true;
-      }
-
-      if (!userMessage) {
-        send({ type: 'error', error: '消息内容不能为空' });
-        return res.end();
-      }
-
-      // 拼 system message(只在第一轮)
-      if (session.messages.length === 0) {
-        const userInstruction = await readSubtaskInstruction(req);
-        const ctxLines = [];
-        if (title) ctxLines.push(`【任务标题】${title}`);
-        if (desc) ctxLines.push(`【任务描述】${desc}`);
-        const sysContent = ctxLines.length
-          ? `${userInstruction}\n\n${ctxLines.join('\n')}`
-          : userInstruction;
-        session.messages.push({ role: 'system', content: sysContent });
-      }
-
-      // 追加 user message
-      session.messages.push({ role: 'user', content: userMessage });
-
-      // 推 meta + user_echo
-      send({
-        type: 'meta',
-        sessionId: session.sessionId,
-        isNew,
-        prompt: { system: session.messages[0].content, user: userMessage }
-      });
-      send({ type: 'user_echo', userMessage });
-
-      // 加载 model
-      let model;
-      try {
-        if (!configManager) throw new Error('configManager 不可用');
-        const rawConfig = await configManager.readRawConfigFile();
-        const models = Array.isArray(rawConfig.models) ? rawConfig.models : [];
-        model = models.find(m => m.isDefault) || models[0];
-      } catch (err) {
-        send({ type: 'error', error: '读取 AI 配置失败: ' + err.message });
-        finished = true;
-        return res.end();
-      }
-      if (!model) {
-        send({ type: 'error', error: '未配置 AI 模型' });
-        finished = true;
-        return res.end();
-      }
-
-      // 流式调用(messages 模式)
-      const { content, aborted } = await callLlmStream(
-        model,
-        session.messages,
-        (delta) => {
-          if (delta.thinking) send({ type: 'thinking', delta: delta.thinking });
-          if (delta.content) send({ type: 'content', delta: delta.content });
-        },
-        { maxTokens: 32000, timeoutMs: 600000, signal: abortController.signal }
-      );
-
-      if (aborted) {
-        session.updatedAt = nowIso();
-        await writeSessionFile(session.sessionId, session).catch(() => {});
-        enforceSessionsRetention().catch(() => {});
-        send({ type: 'error', error: '已取消' });
-        finished = true;
-        return res.end();
-      }
-
-      // 解析 + 写盘
-      const { parsed, parseError, parseStage } = parseSubtaskJson(content);
-      const subtasks = Array.isArray(parsed?.subtasks)
-        ? parsed.subtasks
-            .map(s => ({
-              title: String(s?.title || '').trim(),
-              desc: String(s?.desc || '').trim()
-            }))
-            .filter(s => s.title)
-        : [];
-
-      session.messages.push({ role: 'assistant', content });
-      session.latestSubtasks = subtasks;
-      session.latestRaw = content;
-      session.latestParseStage = parseStage;
-      session.updatedAt = nowIso();
-      await writeSessionFile(session.sessionId, session);
-      enforceSessionsRetention().catch(() => {});
-
-      send({ type: 'done', subtasks, raw: content, parseError, parseStage });
-      finished = true;
-      res.end();
-    } catch (err) {
-      send({ type: 'error', error: '对话拆分失败: ' + (err?.message || String(err)) });
-      finished = true;
-      res.end();
-    }
-  });
-
-  // ════════════════════════════════════════════════════════════════════════
-  // §8. AI 对话拆分会话：列表 / 详情 / 删除
-  // ════════════════════════════════════════════════════════════════════════
-  app.get('/api/workbench/tasks/ai-chat-sessions', asyncRoute(async (_req, res) => {
-    const sessions = await listSessionsMeta();
-    res.json({ success: true, sessions });
-  }));
-
-  app.get('/api/workbench/tasks/ai-chat-sessions/:sessionId', asyncRoute(async (req, res) => {
-    // readSessionFile 抛带 statusCode 的 Error（400/404），让 asyncRoute 透传
-    const session = await readSessionFile(req.params.sessionId);
-    res.json({ success: true, session });
-  }));
-
-  app.delete('/api/workbench/tasks/ai-chat-sessions/:sessionId', asyncRoute(async (req, res) => {
-    await deleteSessionFile(req.params.sessionId);
-    res.json({ success: true });
-  }));
-
-  // ════════════════════════════════════════════════════════════════════════
-  // §9. SSE 事件流（订阅 job/sub/task 更新）
+  // §3. SSE 事件流（订阅 job/sub/task 更新）
   // ════════════════════════════════════════════════════════════════════════
   app.get('/api/workbench/events', asyncRoute(async (req, res) => {
     res.set({
@@ -954,10 +481,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   }));
 
   app.post('/api/workbench/tasks', asyncRoute(async (req, res) => {
-    const { id, title, desc, promptId, subtasks, type: rawType, simpleOverride, sequential: rawSequential } = req.body || {};
+    const { id, title, desc, promptId, simpleOverride } = req.body || {};
     const safeTitle = typeof title === 'string' ? title.trim() : '';
-    const taskType = rawType === 'simple' ? 'simple' : 'complex';
-    const sequential = rawSequential === false ? false : true;
     const safeOverride = typeof simpleOverride === 'string' ? simpleOverride.slice(0, 8000) : '';
     // 显式指定的归属项目（多项目编排台传选中项目）；不传则沿用当前项目。
     // 只影响**新建**，更新分支一律保留任务原有的 projectPath（否则编辑一次就会把任务挪到当前项目去）。
@@ -974,28 +499,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         title: safeTitle,
         desc: desc || '',
         promptId: promptId || null,
-        type: taskType,
-        sequential: taskType === 'complex' ? sequential : true,
-        simpleOverride: taskType === 'simple' ? safeOverride : '',
-        subtasks: Array.isArray(subtasks) ? subtasks.map(s => ({
-          id: s.id || genId(),
-          title: s.title || '',
-          desc: s.desc || '',
-          status: s.status || 'todo',
-          promptOverride: s.promptOverride || '',
-          error: typeof s.error === 'string' ? s.error : undefined,
-          errorAt: typeof s.errorAt === 'string' ? s.errorAt : undefined,
-          attachments: Array.isArray(s.attachments) ? s.attachments.map(a => ({
-            id: a.id,
-            originalName: a.originalName,
-            mimeType: a.mimeType,
-            size: a.size,
-            ext: a.ext,
-            storedName: a.storedName,
-            absolutePath: a.absolutePath,
-            createdAt: a.createdAt
-          })) : (tasks[i].subtasks.find(x => x.id === s.id)?.attachments || [])
-        })) : tasks[i].subtasks,
+        simpleOverride: safeOverride,
         updatedAt: now
       };
       await writeJson(TASKS_FILE, { tasks });
@@ -1006,20 +510,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       title: safeTitle,
       desc: desc || '',
       promptId: promptId || null,
-      type: taskType,
-      sequential: taskType === 'complex' ? sequential : true,
-      simpleOverride: taskType === 'simple' ? safeOverride : '',
+      simpleOverride: safeOverride,
       projectPath: bodyProjectPath || currentProjectPath || '',
-      subtasks: Array.isArray(subtasks) ? subtasks.map(s => ({
-        id: s.id || genId(),
-        title: s.title || '',
-        desc: s.desc || '',
-        status: s.status || 'todo',
-        promptOverride: s.promptOverride || '',
-        error: typeof s.error === 'string' ? s.error : undefined,
-        errorAt: typeof s.errorAt === 'string' ? s.errorAt : undefined,
-        attachments: Array.isArray(s.attachments) ? s.attachments : []
-      })) : [],
       status: 'todo',
       createdAt: now,
       updatedAt: now
@@ -1052,16 +544,6 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     } catch (e) {
       logger.warn(`[workbench] failed to remove task image dir for ${taskId}: ${e.message}`);
     }
-    if (Array.isArray(task.subtasks)) {
-      for (const sub of task.subtasks) {
-        if (!sub || !sub.id) continue;
-        try {
-          await fsp.rm(path.join(IMAGES_DIR, sub.id), { recursive: true, force: true });
-        } catch (e) {
-          logger.warn(`[workbench] failed to remove sub image dir for ${sub.id}: ${e.message}`);
-        }
-      }
-    }
 
     const tasks = allTasks.filter(t => t.id !== taskId);
     await writeJson(TASKS_FILE, { tasks });
@@ -1069,50 +551,17 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   }));
 
   // ════════════════════════════════════════════════════════════════════════
-  // §12. 执行任务（整批 / 从指定 sub / 简单 / 单 sub）
+  // §12. 执行任务（每个任务都是一次会话）
   // ════════════════════════════════════════════════════════════════════════
   app.post('/api/workbench/tasks/:id/run', asyncRoute(async (req, res) => {
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const task = (data.tasks || []).find(t => t.id === req.params.id);
     if (!task) throw new HttpError(404, '任务不存在');
-    if (!task.subtasks || task.subtasks.length === 0) {
-      throw new HttpError(400, '任务没有子任务');
-    }
-    const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
-    const executor = await resolveExecutor(req.body?.executor);
-    // 异步执行，立即返回
-    res.json({ success: true, message: '已开始执行' });
-    runTaskQueue(task, repoPath, '', { executor }).catch(err => {
-      publish('task:error', { taskId: task.id, error: err.message });
-    });
-  }));
-
-  app.post('/api/workbench/tasks/:id/run-from', asyncRoute(async (req, res) => {
-    const data = await readJson(TASKS_FILE, { tasks: [] });
-    const task = (data.tasks || []).find(t => t.id === req.params.id);
-    if (!task) throw new HttpError(404, '任务不存在');
-    if (!task.subtasks || task.subtasks.length === 0) {
-      throw new HttpError(400, '任务没有子任务');
-    }
-    const startSubIndex = Number(req.body?.startSubIndex);
-    if (!Number.isInteger(startSubIndex) || startSubIndex < 0 || startSubIndex >= task.subtasks.length) {
-      throw new HttpError(400, 'startSubIndex 越界');
-    }
-    const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
-    const executor = await resolveExecutor(req.body?.executor);
-    res.json({ success: true, message: `已从第 ${startSubIndex + 1} 个子任务开始执行` });
-    runTaskQueue(task, repoPath, '', { fromIndex: startSubIndex, executor }).catch(err => {
-      publish('task:error', { taskId: task.id, error: err.message });
-    });
-  }));
-
-  app.post('/api/workbench/tasks/:id/run-simple', asyncRoute(async (req, res) => {
-    const data = await readJson(TASKS_FILE, { tasks: [] });
-    const task = (data.tasks || []).find(t => t.id === req.params.id);
-    if (!task) throw new HttpError(404, '任务不存在');
-    if (task.type !== 'simple') {
-      throw new HttpError(400, '该任务不是简单任务,请使用普通执行接口');
-    }
+    // 兜底：磁盘上没有 running 状态，但还有 job 在跑（可能是别的 g ui 起的），也拦一下。
+    // 先刷磁盘再取快照，否则另一个实例正在跑的这个任务会被重复起一份。
+    await refreshJobsFromDisk();
+    const liveJob = snapshotJobs().find(j => j.taskId === task.id && (j.status === 'running' || j.status === 'pending'));
+    if (liveJob) throw new HttpError(400, '该任务已有正在执行的 job');
     const repoPath = resolveTaskRepoPath(task, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
     const executor = await resolveExecutor(req.body?.executor);
     const virtualSub = {
@@ -1123,41 +572,10 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       promptOverride: task.simpleOverride || '',
       attachments: Array.isArray(task.attachments) ? task.attachments : []
     };
-    res.json({ success: true, message: '已开始执行简单任务' });
-    runSingleSubtask(task, virtualSub, repoPath, '', [], { executor }).catch(err => {
+    res.json({ success: true, message: '已开始执行任务' });
+    runSingleSubtask(task, virtualSub, repoPath, '', { executor }).catch(err => {
       publish('task:error', { taskId: task.id, error: err.message });
     });
-  }));
-
-  app.post('/api/workbench/subtasks/:id/run', asyncRoute(async (req, res) => {
-    const data = await readJson(TASKS_FILE, { tasks: [] });
-    const subId = req.params.id;
-    let foundTask = null;
-    let foundSub = null;
-    for (const t of (data.tasks || [])) {
-      if (!Array.isArray(t.subtasks)) continue;
-      const s = t.subtasks.find(x => x.id === subId);
-      if (s) { foundTask = t; foundSub = s; break; }
-    }
-    if (!foundTask || !foundSub) throw new HttpError(404, '子任务不存在');
-    if (foundSub.status === 'running') throw new HttpError(400, '该子任务正在执行中');
-    // 兜底:即便磁盘状态是 todo,如果还有 job 在跑(可能是别的 g ui 起的),也拦一下。
-    // 先刷磁盘再取快照,否则另一个实例正在跑的这个 sub 会被重复起一份。
-    await refreshJobsFromDisk();
-    const liveJob = snapshotJobs().find(j => j.subId === subId && (j.status === 'running' || j.status === 'pending'));
-    if (liveJob) throw new HttpError(400, '该子任务已有正在执行的 job');
-    const repoPath = resolveTaskRepoPath(foundTask, typeof getCurrentProjectPath === 'function' ? getCurrentProjectPath() : '');
-    const executor = await resolveExecutor(req.body?.executor);
-    res.json({ success: true, message: `已开始执行子任务：${foundSub.title || subId}` });
-    (async () => {
-      try {
-        const priorOutputs = await collectPriorOutputs(foundTask, foundSub);
-        await runSingleSubtask(foundTask, foundSub, repoPath, '', priorOutputs, { executor });
-        await persistTaskAfterRun(foundTask);
-      } catch (err) {
-        publish('task:error', { taskId: foundTask.id, error: err.message });
-      }
-    })();
   }));
 
   // ════════════════════════════════════════════════════════════════════════
@@ -1193,8 +611,6 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     job.error = '用户已停止执行';
     job.endedAt = nowIso();
     publish('job:update', { ...job }); // 浅拷贝避免序列化 child 引用
-    // 同步把 sub 也置 cancelled
-    syncSubToCancelled(job).catch(err => logger.warn('[workbench] syncSubToCancelled failed:', err.message));
     // 终态：fire-and-forget 同步落盘
     flushJobsSaveNow().catch(err => logger.warn('[workbench] jobs save failed:', err.message));
     const child = job.child;
@@ -1236,7 +652,6 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const task = (data.tasks || []).find(t => t.id === prevJob.taskId);
     if (!task) throw new HttpError(404, '所属任务不存在');
-    if (task.type !== 'simple') throw new HttpError(400, '仅支持简单任务的续接');
     // 计算续接轮次号
     const subIdPrefix = `${task.id}__simple`;
     let maxRound = 0;
@@ -1266,7 +681,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     res.json({ success: true, message: '已加入续接队列' });
     // 执行器必须沿用上一轮 job 的 agent：claude 的 --resume 和 opencode 的 --session
     // 互不认对方的会话 id，串了执行器续接必然失败。
-    runSingleSubtask(task, virtualSub, repoPath, '', [], {
+    runSingleSubtask(task, virtualSub, repoPath, '', {
       resumeSessionId: prevJob.claudeSessionId,
       executor: normalizeTaskExecutor(prevJob.agent)
     })
@@ -1295,7 +710,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       if (status && j.status !== status) return false;
       if (taskId && j.taskId !== taskId) return false;
       if (term) {
-        const hay = `${j.title || ''} ${j.taskTitle || ''} ${j.subTitle || ''}`.toLowerCase();
+        const hay = `${j.title || ''} ${j.taskTitle || ''}`.toLowerCase();
         if (!hay.includes(term)) return false;
       }
       return true;
@@ -1419,31 +834,11 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       jobsData.jobs = jobsData.jobs.filter(j => j.taskId !== taskId);
       if (jobsData.jobs.length !== before) await writeJson(JOBS_FILE, jobsData);
     }
-    // 2) 重置 subtasks.status → todo
-    const tasksData = await readJson(TASKS_FILE, { tasks: [] });
-    const task = (tasksData.tasks || []).find(t => t.id === taskId);
-    if (!task) {
-      return res.json({ success: true, removedJobs: removedJobIds.length, resetSubs: 0, message: '任务不存在,仅清空 job' });
-    }
-    let resetSubs = 0;
-    if (Array.isArray(task.subtasks)) {
-      for (const s of task.subtasks) {
-        if (s.status !== 'todo') {
-          s.status = 'todo';
-          resetSubs++;
-          if (s.error) delete s.error;
-          publish('sub:update', { taskId, sub: s });
-        }
-      }
-      task.updatedAt = nowIso();
-      await writeJson(TASKS_FILE, tasksData);
-      publish('task:update', task);
-    }
+    // 2) 不用再改任务本体 —— 看板列完全由 job 推导，job 没了自然回到「待执行」
     res.json({
       success: true,
       removedJobs: removedJobIds.length,
-      resetSubs,
-      message: `已清空 ${removedJobIds.length} 条执行记录,${resetSubs} 个子任务重置为待执行`
+      message: `已清空 ${removedJobIds.length} 条执行记录`
     });
   }));
 
@@ -1475,7 +870,6 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     if (!task) {
       return res.json({ success: true, removedJobs: removedJobIds.length, message: '任务不存在,仅清空 job' });
     }
-    const removedSubCount = Array.isArray(task.subtasks) ? task.subtasks.length : 0;
     const removedAttCount = Array.isArray(task.attachments) ? task.attachments.length : 0;
     const hadDesc = !!(task.desc && task.desc.length > 0);
     const hadPrompt = !!task.promptId;
@@ -1485,7 +879,6 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     const newTask = { id: task.id, title: task.title, status: preservedStatus };
     if (preservedProjectPath) newTask.projectPath = preservedProjectPath;
     if (preservedCreatedAt) newTask.createdAt = preservedCreatedAt;
-    newTask.subtasks = [];
     newTask.attachments = [];
     newTask.updatedAt = nowIso();
     for (const k of Object.keys(task)) delete task[k];
@@ -1495,57 +888,13 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     res.json({
       success: true,
       removedJobs: removedJobIds.length,
-      removedSubs: removedSubCount,
       removedAttachments: removedAttCount,
       clearedDesc: hadDesc,
       clearedPrompt: hadPrompt,
-      message: `已清空:删除 ${removedSubCount} 个子任务${removedAttCount ? '、' + removedAttCount + ' 个附件' : ''}${hadDesc ? '、任务描述' : ''},任务标题保留`
+      message: `已清空:${removedAttCount ? '删除 ' + removedAttCount + ' 个附件' : '无附件'}${hadDesc ? '、任务描述' : ''},任务标题保留`
     });
   }));
 
-  app.post('/api/workbench/tasks/:id/clear-subtasks', asyncRoute(async (req, res) => {
-    const taskId = req.params.id;
-    if (!taskId) throw new HttpError(400, '缺少 taskId');
-    const live = [];
-    for (const j of jobs.values()) {
-      if (j.taskId !== taskId) continue;
-      if (j.status === 'running' || j.status === 'pending') live.push(j.id);
-    }
-    if (live.length > 0) {
-      throw new HttpError(400, `有 ${live.length} 个 job 正在执行,请先停止`);
-    }
-    const removedJobIds = [];
-    for (const j of jobs.values()) {
-      if (j.taskId !== taskId) continue;
-      jobs.delete(j.id);
-      removedJobIds.push(j.id);
-    }
-    const jobsData = await readJson(JOBS_FILE, { version: 1, jobs: [] });
-    if (jobsData && Array.isArray(jobsData.jobs)) {
-      const before = jobsData.jobs.length;
-      jobsData.jobs = jobsData.jobs.filter(j => j.taskId !== taskId);
-      if (jobsData.jobs.length !== before) await writeJson(JOBS_FILE, jobsData);
-    }
-    const tasksData = await readJson(TASKS_FILE, { tasks: [] });
-    const task = (tasksData.tasks || []).find(t => t.id === taskId);
-    if (!task) {
-      return res.json({ success: true, removedJobs: removedJobIds.length, removedSubs: 0, message: '任务不存在,仅清空 job' });
-    }
-    const removedSubCount = Array.isArray(task.subtasks) ? task.subtasks.length : 0;
-    if (removedSubCount === 0) {
-      return res.json({ success: true, removedJobs: removedJobIds.length, removedSubs: 0, message: '没有子任务需要清空' });
-    }
-    task.subtasks = [];
-    task.updatedAt = nowIso();
-    await writeJson(TASKS_FILE, tasksData);
-    publish('task:update', task);
-    res.json({
-      success: true,
-      removedJobs: removedJobIds.length,
-      removedSubs: removedSubCount,
-      message: `已清空 ${removedSubCount} 个子任务,任务描述和附件保留`
-    });
-  }));
 
   // GET /api/workbench/jobs/:id  (放在所有字面路径之后)
   app.get('/api/workbench/jobs/:id', asyncRoute(async (req, res) => {
@@ -1600,19 +949,10 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
         return { owner: 'task', task: t, list, att, storageDir: path.join(IMAGES_DIR, '_task-' + t.id) };
       }
     }
-    for (const t of data.tasks || []) {
-      for (const s of t.subtasks || []) {
-        const list = Array.isArray(s.attachments) ? s.attachments : [];
-        const att = list.find(x => x.id === attId);
-        if (att) {
-          return { owner: 'sub', task: t, sub: s, list, att, storageDir: path.join(IMAGES_DIR, s.id) };
-        }
-      }
-    }
     return null;
   }
 
-  // 共享 helper：写入新附件（参数化以支持 task / sub）
+  // 共享 helper：写入新附件
   async function writeAttachmentTo({ req, target, maxCount }) {
     if (!req.body || !(req.body instanceof Buffer) || req.body.length === 0) {
       throw new HttpError(400, '请求体为空');
@@ -1653,54 +993,14 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   }
 
   // 子任务附件
-  app.post('/api/workbench/subtasks/:subId/attachments', rawAttachment, asyncRoute(async (req, res) => {
-    const { subId } = req.params;
-    const data = await readJson(TASKS_FILE, { tasks: [] });
-    let foundSub = null;
-    for (const t of data.tasks || []) {
-      const s = (t.subtasks || []).find(x => x.id === subId);
-      if (s) { foundSub = s; break; }
-    }
-    if (!foundSub) throw new HttpError(404, '子任务不存在');
-    const target = { ...foundSub, storageDir: path.join(IMAGES_DIR, subId) };
-    const att = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_SUBTASK });
-    // target 是 spread 出来的浅拷贝，data 引用里的 foundSub 没改；显式 push 回去
-    foundSub.attachments = Array.isArray(foundSub.attachments) ? foundSub.attachments : [];
-    foundSub.attachments.push(att);
-    foundSub.updatedAt = nowIso();
-    await writeJson(TASKS_FILE, data);
-    res.json({ success: true, attachment: att });
-  }));
-
-  app.delete('/api/workbench/subtasks/:subId/attachments/:attId', asyncRoute(async (req, res) => {
-    const { subId, attId } = req.params;
-    const data = await readJson(TASKS_FILE, { tasks: [] });
-    let foundSub = null;
-    for (const t of data.tasks || []) {
-      const s = (t.subtasks || []).find(x => x.id === subId);
-      if (s) { foundSub = s; break; }
-    }
-    if (!foundSub) throw new HttpError(404, '子任务不存在');
-    const list = Array.isArray(foundSub.attachments) ? foundSub.attachments : [];
-    const i = list.findIndex(a => a.id === attId);
-    if (i < 0) throw new HttpError(404, '附件不存在');
-    const [removed] = list.splice(i, 1);
-    try {
-      await fsp.unlink(path.join(IMAGES_DIR, subId, removed.storedName));
-    } catch { /* 文件可能已不存在 */ }
-    foundSub.updatedAt = nowIso();
-    await writeJson(TASKS_FILE, data);
-    res.json({ success: true });
-  }));
-
-  // 主任务附件
+  // 任务附件
   app.post('/api/workbench/tasks/:taskId/attachments', rawAttachment, asyncRoute(async (req, res) => {
     const { taskId } = req.params;
     const data = await readJson(TASKS_FILE, { tasks: [] });
     const task = (data.tasks || []).find(t => t.id === taskId);
     if (!task) throw new HttpError(404, '任务不存在');
     const target = { ...task, storageDir: path.join(IMAGES_DIR, '_task-' + taskId) };
-    const att = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_SUBTASK });
+    const att = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_TASK });
     task.attachments = Array.isArray(task.attachments) ? task.attachments : [];
     task.attachments.push(att);
     task.updatedAt = nowIso();
@@ -1858,7 +1158,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     const task = (data.tasks || []).find(t => t && t.id === id);
     if (!task) throw new HttpError(404, '任务不存在');
 
-    // loadAllJobs 已经把「文件里归档的 + 内存里还活着的」合并过（含 taskTitle/subTitle）
+    // loadAllJobs 已经把「文件里归档的 + 内存里还活着的」合并过（含 taskTitle）
     const allJobs = await loadAllJobs();
     const detail = buildTaskDetail(task, allJobs.filter(j => j && j.taskId === id));
     if (!detail) throw new HttpError(404, '任务不存在');
@@ -1954,8 +1254,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
    *     > 主 Agent 判断 > 应用当前项目）。用户不必先选项目，落点会如实记进指令流水
    *   - autoRun 默认 true；调度暂停时只建任务不执行（指令记录里会写明原因）
    *
-   * 指令一律落成目标项目下的**简单任务**（一句话交给 claude 跑一轮），
-   * 而不是造一个没有子任务的复杂任务 —— 后者连执行入口都没有，只会变成看板上的死卡。
+   * 一条指令落成目标项目下的一个任务：整段指令就是那次会话的 prompt。
    */
   app.post('/api/workbench/orchestrator/dispatch', asyncRoute(async (req, res) => {
     const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
@@ -2035,8 +1334,8 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     // 所以不存在"前端指定任意路径"这回事 —— 比"信任 absolutePath 再校验前缀"干净。
     // 数量与文件存在性在这里统一校验：上传时服务端是无状态的，压根不知道前端一共攒了几个。
     const rawAttachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
-    if (rawAttachments.length > MAX_ATTACHMENTS_PER_SUBTASK) {
-      throw new HttpError(400, `附件最多 ${MAX_ATTACHMENTS_PER_SUBTASK} 个`);
+    if (rawAttachments.length > MAX_ATTACHMENTS_PER_TASK) {
+      throw new HttpError(400, `附件最多 ${MAX_ATTACHMENTS_PER_TASK} 个`);
     }
     const staged = [];
     for (const item of rawAttachments) {
@@ -2097,15 +1396,12 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
       title: text.split('\n')[0].slice(0, 120),
       desc: text,
       promptId: null,
-      type: 'simple',
-      sequential: true,
       // 默认提示词在派发这一刻抄进任务（这次生效的是什么，任务自己记着）。
       // 之后用户改设置不会回头改写它 —— 一条已存在的任务，"它当时是被怎么派出去的"
       // 是既成事实，不是当前配置的投影。
       simpleOverride: dispatchPrompt.text,
       projectPath: targetPath,
       attachments,
-      subtasks: [],
       status: 'todo',
       createdAt: now,
       updatedAt: now,
@@ -2130,21 +1426,21 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
     publish('task:created', { task });
     publish('orchestrator:instruction', record);
 
-    // 与 POST /tasks/:id/run-simple 走同一条执行路径，避免出现第二套执行入口
+    // 与 POST /tasks/:id/run 走同一条执行路径，避免出现第二套执行入口
     if (willRun) {
       const virtualSub = {
         id: `${task.id}__simple`,
         title: task.title,
         desc: task.desc || '',
         status: 'todo',
-        // 与 run-simple 同口径：提示词取自 task.simpleOverride（派发时已把
+        // 提示词取自 task.simpleOverride（派发时已把
         // 全局/项目默认提示词抄进去），而不是在这里再解析一次配置
         promptOverride: task.simpleOverride || '',
         attachments: [],
       };
       // 派发控制台可以显式指定执行器；不传则用配置里的全局默认（resolveExecutor 走回落链）
       const executor = await resolveExecutor(req.body?.executor);
-      runSingleSubtask(task, virtualSub, targetPath, '', [], { executor }).catch(err => {
+      runSingleSubtask(task, virtualSub, targetPath, '', { executor }).catch(err => {
         publish('task:error', { taskId: task.id, error: err.message });
       });
     }
@@ -2163,7 +1459,7 @@ ${desc ? `描述：${desc}` : '描述：（无）'}${attachmentBlock}${templateB
   app.post('/api/workbench/orchestrator/attachments', rawAttachment, asyncRoute(async (req, res) => {
     await fsp.mkdir(DISPATCH_STAGING_DIR, { recursive: true });
     const target = { attachments: [], storageDir: DISPATCH_STAGING_DIR };
-    const att = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_SUBTASK });
+    const att = await writeAttachmentTo({ req, target, maxCount: MAX_ATTACHMENTS_PER_TASK });
     res.json({ success: true, attachment: att });
   }));
 

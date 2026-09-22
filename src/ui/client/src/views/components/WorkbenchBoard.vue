@@ -415,10 +415,6 @@ async function onTaskCreated(payload: { task: Task; openEditor: boolean }) {
 
 async function runTask(t: BoardTask) {
   if (t.runningJobs > 0) return
-  if (t.type !== 'simple' && t.subtaskCount === 0) {
-    ElMessage.warning($t('@WORKBENCH:复杂任务要先拆出子任务，打开编辑器添加后再执行'))
-    return
-  }
   // 看板卡片没有执行器选择器：沿用工作台执行按钮旁的临时选择；
   // 选的那个没装时回落到另一个可用的（toolsStore 启动即检测），都缺就交给后端报错。
   const toolsStore = useToolsStore()
@@ -430,9 +426,7 @@ async function runTask(t: BoardTask) {
   if (!avail[executor]) {
     executor = executor === 'claude' ? 'opencode' : 'claude'
   }
-  const url = t.type === 'simple'
-    ? `/api/workbench/tasks/${encodeURIComponent(t.id)}/run-simple`
-    : `/api/workbench/tasks/${encodeURIComponent(t.id)}/run`
+  const url = `/api/workbench/tasks/${encodeURIComponent(t.id)}/run`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -450,7 +444,7 @@ async function deleteTask(t: BoardTask) {
   const name = (t.title || '').trim() || $t('@WORKBENCH:未命名任务')
   try {
     await ElMessageBox.confirm(
-      $t('@WORKBENCH:删除任务「{title}」及其所有子任务？', { title: name }),
+      $t('@WORKBENCH:删除任务「{title}」？', { title: name }),
       $t('@WORKBENCH:确认'),
       { type: 'warning' }
     )

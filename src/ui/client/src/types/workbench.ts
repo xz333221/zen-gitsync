@@ -14,7 +14,7 @@
 //
 // 工作台共享类型：执行日志（job）的两种形态
 //   - Job:     流式/SSE 用的精简形态（不含 thinking 之外的大字段冗余）
-//   - JobFull: 管理页用的完整形态（反范式 taskTitle/subTitle、size）
+//   - JobFull: 管理页用的完整形态（反范式 taskTitle、size）
 
 export type JobStatus = 'pending' | 'running' | 'done' | 'error' | 'cancelled'
 
@@ -79,27 +79,14 @@ export interface Attachment {
   createdAt?: string
 }
 
-export interface SubTask {
-  id: string
-  title: string
-  desc: string
-  status: 'todo' | 'running' | 'done' | 'error'
-  promptOverride: string
-  attachments?: Attachment[]
-  error?: string
-  errorAt?: string
-}
-
 export interface Task {
   id: string
   title: string
   desc: string
   promptId: string | null
-  type?: 'simple' | 'complex'
+  /** 任务级提示词覆盖；为空则回退到 promptId 指向的预置模板 */
   simpleOverride?: string
   projectPath?: string
-  sequential?: boolean
-  subtasks: SubTask[]
   status: string
   attachments?: Attachment[]
   createdAt?: string
@@ -118,7 +105,6 @@ export interface Prompt {
 /** 完整形态——管理页 /jobs/list 列表项、/jobs/:id 详情用 */
 export interface JobFull extends Job {
   taskTitle: string
-  subTitle: string
   size: number
 }
 
@@ -175,7 +161,6 @@ export interface ProjectStats {
   progress: number
   /** 活跃 job 数（不是任务数） */
   runningJobs: number
-  errorSubtasks: number
   lastActiveAt: string | null
 }
 
@@ -198,12 +183,8 @@ export interface BoardTask {
   id: string
   title: string
   desc: string
-  type: 'simple' | 'complex'
   projectPath: string
   column: TaskColumn
-  subtaskCount: number
-  subtaskDoneCount: number
-  subtaskErrorCount: number
   attachmentCount: number
   runningJobs: number
   lastJobStatus: string | null
@@ -218,7 +199,6 @@ export interface TaskDetailJob {
   id: string
   subId: string
   title: string
-  subTitle: string
   status: JobStatus | ''
   pid: number | null
   startedAt: string | null
@@ -279,7 +259,6 @@ export interface OrchestratorActivity {
   taskId: string | null
   subId?: string | null
   taskTitle: string
-  subTitle: string
   jobStatus?: string
   pid?: number | null
   exitCode?: number | null
@@ -302,7 +281,6 @@ export interface RunningAgent {
   taskId: string | null
   subId: string | null
   taskTitle: string
-  subTitle: string
   status: string
   pid: number | null
   startedAt: string | null

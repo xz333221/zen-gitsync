@@ -165,7 +165,7 @@ try {
   })().catch(() => { /* abort 时正常抛出 */ })
   await sleep(400)
 
-  // ── 1. 建一条简单任务(挂在当前项目下,便于后续 UI 也能看到) ──
+  // ── 1. 建一条任务(挂在当前项目下,便于后续 UI 也能看到) ──
   const cp = await fetch(`${base}/api/workbench/current-project`).then(r => r.json())
   const currentProject = cp.projectPath || projectRoot
   const createRes = await fetch(`${base}/api/workbench/tasks`, {
@@ -175,9 +175,7 @@ try {
       title: TASK_TITLE,
       desc: '列一下目录',
       promptId: null,
-      type: 'simple',
       simpleOverride: '列一下目录',
-      subtasks: [],
       projectPath: currentProject,
     }),
   })
@@ -187,13 +185,13 @@ try {
   if (!taskId) throw new Error('没有 taskId,后续断言无法继续')
 
   // ── 2. 触发执行 ──
-  const runRes = await fetch(`${base}/api/workbench/tasks/${taskId}/run-simple`, {
+  const runRes = await fetch(`${base}/api/workbench/tasks/${taskId}/run`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ executor: 'claude' }),
   })
   const runBody = await runRes.json().catch(() => ({}))
-  check(runRes.status === 200, `run-simple 应 200,实际 ${runRes.status} ${JSON.stringify(runBody)}`)
+  check(runRes.status === 200, `run 应 200,实际 ${runRes.status} ${JSON.stringify(runBody)}`)
 
   // ── 3. 等执行收尾 ──
   let job = null

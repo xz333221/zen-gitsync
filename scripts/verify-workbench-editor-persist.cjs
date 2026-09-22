@@ -3,7 +3,7 @@
  *
  * 钉住的是 2026-09-20 修的那个 bug，症状：**改一下任务描述、自动保存后编辑器就空了**。
  *
- * 机理：任务级字段（title / desc / promptId / simpleOverride / sequential）走 1.5s 防抖自动保存，
+ * 机理：任务级字段（title / desc / promptId / simpleOverride）走 1.5s 防抖自动保存，
  * 每次自动保存都会 POST → 成功 → 重拉任务列表。而重拉这一步如果顺带**重推导选中项**
  * （loadTasks() 的老行为），就会踩到它那条"记忆中的任务必须属于当前项目"的护栏：
  *   - 编辑器允许打开**别的项目**的任务（跨项目看板上点的卡片，执行目录按 task.projectPath 走）；
@@ -14,7 +14,7 @@
  *   A 跨项目任务能在编辑器里正常打开（标题/描述就位，不是空白占位）
  *   B 改描述 → 自动保存后**编辑器仍停在这条任务**（标题还在、没有退回空白占位）
  *   C 描述确实落盘（后端读得到），证明"空掉"的只是 UI
- *   D 切类型（simple → complex）后同样不丢选中项（setTaskType 走的是同一类刷新）
+ *   D 「任务类型」切换控件已移除，编辑器里不该再出现（防回归）
  *
  * 前置：dev server 已启动（npm run dev，前端 5544）。
  * 用法：node scripts/verify-workbench-editor-persist.cjs
@@ -96,7 +96,7 @@ async function main() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      title: MARK, desc: '', promptId: null, type: 'simple', simpleOverride: '', subtasks: [],
+      title: MARK, desc: '', promptId: null, simpleOverride: '',
       projectPath: otherProject
     })
   }).then(r => r.json())
@@ -165,12 +165,12 @@ async function main() {
       saved ? `desc="${(saved.desc || '').slice(0, 40)}..."` : '后端查不到该任务')
     check('C2 标题也被保留（没被清成空）', !!(saved && saved.title === MARK), saved ? `title="${saved.title}"` : '')
 
-    // ── D 切类型后同样不丢选中项（setTaskType 走同一类刷新）──────────────
-    await page.locator('.wb-mode-switch__btn', { hasText: '复杂' }).first().click()
-    await sleep(3000)
-    check('D 切类型后编辑器仍停在原任务', (await readTitleValue(page)) === MARK,
+    // ── D 「任务类型」概念已移除：编辑器里不该再有简单/复杂切换控件 ──────
+    // 这条同时是个回归守卫：哪天有人把类型切换加回来，这里会先红。
+    const modeSwitchCount = await page.locator('.wb-mode-switch__btn').count()
+    check('D 编辑器里不再出现任务类型切换控件', modeSwitchCount === 0, `count=${modeSwitchCount}`)
+    check('D2 无类型控件后编辑器仍停在原任务', (await readTitleValue(page)) === MARK,
       `title="${await readTitleValue(page)}"`)
-    check('D2 切类型后没有退回空白占位', !(await editorBlanked(page)))
   } catch (err) {
     check('脚本异常', false, String((err && err.message) || err))
   } finally {

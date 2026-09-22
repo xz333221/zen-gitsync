@@ -18,21 +18,15 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, reactive, watch } 
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Plus,
-  List,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
   Check,
   Document,
   Delete,
-  CircleCloseFilled,
   CopyDocument,
-  Upload,
   Warning
 } from '@element-plus/icons-vue'
-import AISplitDialog from '@components/AISplitDialog.vue'
-import ImportSplitDialog from '@components/ImportSplitDialog.vue'
 import AttachmentZone from '@components/AttachmentZone.vue'
 import { ChatInput, ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
@@ -41,11 +35,9 @@ import { useConfigStore } from '@/stores/configStore'
 import { useToolsStore } from '@/stores/toolsStore'
 const configStore = useConfigStore()
 const toolsStore = useToolsStore()
-import JobLogDetails from '@components/JobLogDetails.vue'
 import ExecutionLogManager from '@components/ExecutionLogManager.vue'
-import { statusColor } from '@/utils/jobStatus'
 import { canonicalProjectPath } from '@/utils/path'
-import type { Task, SubTask, Prompt } from '@/types/workbench'
+import type { Task, Prompt } from '@/types/workbench'
 import { useWorkbenchAttachments, ALLOWED_EXT_HINT, MAX_ATTACHMENT_BYTES } from '@/composables/useWorkbenchAttachments'
 import { useWorkbenchSimpleConversation } from '@/composables/useWorkbenchSimpleConversation'
 import { useWorkbenchExecution } from '@/composables/useWorkbenchExecution'
@@ -118,7 +110,7 @@ function rememberLastTask(projectPath: string, taskId: string) {
   writeLastTaskMap(map)
 }
 
-// ── 视图层级：L1 多项目编排台（常驻底图）+ L2 任务拆分编辑器（大弹窗） ──────
+// ── 视图层级：L1 多项目编排台（常驻底图）+ L2 任务编辑器（大弹窗） ──────
 // 刻意**没有**视图切换了。原来 boardMode 是二选一，进编辑器等于换页：
 // 想瞄一眼任务的子任务再回到原来的项目/筛选，就得多点一次返回，还可能滚回顶部。
 // 现在看板始终在，编辑器以弹窗浮在它上面，关掉就回到原位 —— 全程没有任何"跳转"。
@@ -151,10 +143,10 @@ async function openTaskFromBoard(payload: { taskId: string; projectPath: string 
 // ── 数据层（状态 + 加载 + CRUD） ─────────────────────────────────────────────
 const {
   prompts, tasks, jobs, currentProject,
-  syncRunningCount, jobOf,
+  syncRunningCount,
   connectSSE, disconnectSSE,
   loadPrompts, loadCurrentProject, loadJobs,
-  clearJobsByTask, clearNonDoneJobsByTask,
+  clearJobsByTask,
   loadTasks: _loadDataTasks
 } = useWorkbenchData()
 
@@ -229,25 +221,11 @@ const foreignRepo = computed<{ name: string; path: string } | null>(() => {
   const name = tp.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || tp
   return { name, path: tp }
 })
-// 兼容历史数据:缺 type 字段一律按 complex 处理
-const isSimpleTask = computed(() => selectedTask.value?.type === 'simple')
-
-// 左右布局：右侧面板当前选中的子任务 id（复杂任务）
-const selectedSubId = ref<string | null>(null)
-const activeSubtask = computed<SubTask | null>(() => {
-  if (!selectedTask.value || isSimpleTask.value) return null
-  if (!selectedSubId.value) return null
-  return selectedTask.value.subtasks.find(s => s.id === selectedSubId.value) || null
-})
-
 // 当前选中 task 在磁盘上的快照（参与 dirty 比较的字段）。
-// 拆为两份：subSnapshot 记每个 sub 的 title/desc/promptOverride，
 // metaSnapshot 记 task 自身的 title/desc/promptId/simpleOverride。
 // 任务级 title/desc/promptId/simpleOverride 改动走"防抖自动保存"。
 // - captureSnapshot()  在 loadTasks / persistTask 成功后 / 切换 selectedTaskId 时调用
-// - dirtySubIds 对比 selectedTask.subtasks 与 subSnapshot
 // - metaDirty    对比 selectedTask.{title,desc,promptId,simpleOverride} 与 metaSnapshot
-const subSnapshot = ref<Map<string, { id: string; title: string; desc: string; promptOverride: string }>>(new Map())
 const metaSnapshot = ref<{
   title: string
   desc: string
@@ -256,13 +234,6 @@ const metaSnapshot = ref<{
 }>({ title: '', desc: '', promptId: null, simpleOverride: '' })
 
 function captureSnapshot() {
-  const m = new Map<string, { id: string; title: string; desc: string; promptOverride: string }>()
-  if (selectedTask.value) {
-    for (const s of selectedTask.value.subtasks) {
-      m.set(s.id, { id: s.id, title: s.title, desc: s.desc, promptOverride: s.promptOverride })
-    }
-  }
-  subSnapshot.value = m
   if (selectedTask.value) {
     metaSnapshot.value = {
       title: selectedTask.value.title,
@@ -275,26 +246,7 @@ function captureSnapshot() {
   }
 }
 
-const dirtySubIds = computed<Set<string>>(() => {
-  const dirty = new Set<string>()
-  if (!selectedTask.value) return dirty
-  for (const s of selectedTask.value.subtasks) {
-    const snap = subSnapshot.value.get(s.id)
-    if (!snap) {
-      // 新增的 sub（快照里没有）也算 dirty
-      dirty.add(s.id)
-      continue
-    }
-    if (snap.title !== s.title || snap.desc !== s.desc || snap.promptOverride !== s.promptOverride) {
-      dirty.add(s.id)
-    }
-  }
-  return dirty
-})
-
-const hasDirtySubtasks = computed(() => dirtySubIds.value.size > 0)
-
-// ── 任务级字段（title / desc / promptId）自动保存 ────────────────────
+// ── 任务级字段（title / desc / promptId / simpleOverride）自动保存 ────────────────────
 // 改动后 1.5s 防抖自动落盘；切走/关页面前再 flush 一次。
 // 状态机：idle → saving → saved(显示时间) → idle；失败回到 idle + 弹错。
 type MetaSaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -318,14 +270,12 @@ function clearMetaSaveTimers() {
 // ── 空任务不落盘 ────────────────────────────────────────────────────
 // 「空任务」= 标题和描述都没填(点了新建就直接走人/刷新)。这种任务保留下来
 // 只会在侧边栏留一行空白条目,所以不保存:切走时直接丢弃,首次加载时清理历史遗留。
-// 判定刻意保守——带子任务 / 附件 / 绑定提示词 / 自定义拆解配置的任务一律不算空,
-// 那些字段本身就是"用户填过东西"的证据,绝不能误删。
+// 判定刻意保守——带附件 / 绑定提示词 / 自定义提示词的算不算空由下面逐条把关。
 function isTaskBlank(t: Task | null | undefined): boolean {
   if (!t) return false
   if ((t.title || '').trim() || (t.desc || '').trim()) return false
   if (t.promptId) return false
   if ((t.simpleOverride || '').trim()) return false
-  if (Array.isArray(t.subtasks) && t.subtasks.length > 0) return false
   if (Array.isArray(t.attachments) && t.attachments.length > 0) return false
   return true
 }
@@ -388,8 +338,7 @@ watch(
         title: selectedTask.value.title,
         desc: selectedTask.value.desc,
         promptId: selectedTask.value.promptId,
-        simpleOverride: selectedTask.value.simpleOverride || '',
-        sequential: selectedTask.value.sequential !== false  // 连续模式开关变更也要保存
+        simpleOverride: selectedTask.value.simpleOverride || ''
       }
     : null,
   (cur, prev) => {
@@ -411,14 +360,6 @@ watch(selectedTaskId, async (_n, _o) => {
     await flushMetaSave()
   }
   // 新 task 选中时 captureSnapshot() 会在 selectTask() / loadTasks() 内同步调用
-})
-
-// 切换/新建任务时关闭 AI 拆分弹窗。
-// AISplitDialog 由 v-if="selectedTask" 包裹，selectedTask 切换时不会卸载；
-// 不显式关闭就会看到上一个任务的 4 个 tab 残留在新任务上。
-// 由 AISplitDialog 内部的 taskId watch 负责把 phase/数据清回 idle，下次打开会重跑。
-watch(selectedTaskId, () => {
-  aiSplitDialogVisible.value = false
 })
 
 // currentProject 加载完后(loadTasks 与 loadCurrentProject 并发,loadTasks 可能先跑完 cp 还为空),
@@ -484,22 +425,6 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-/** 把子任务的 error 时间戳格式化成 YYYY-MM-DD HH:mm:ss，本地时区。 */
-function formatSubErrorTime(iso: string): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
-
-/** popover 里"复制错误信息"按钮：复制 sub.title + 错误内容。 */
-async function copySubError(sub: any) {
-  const text = `[${sub.title || $t('@WORKBENCH:未命名子任务')}]\n${sub.error || ''}`
-  const ok = await copyToClipboard(text)
-  ElMessage[ok ? 'success' : 'error'](ok ? $t('@WORKBENCH:已复制错误信息') : $t('@WORKBENCH:复制失败'))
-}
-
 /**
  * 复制任务标题/描述的小工具：
  * - 复制成功 → 短暂切换 icon 为 ✓（1.5s 后还原），并在 1.5s 内显示已复制提示
@@ -543,92 +468,21 @@ async function copyTaskDesc(t: Task | null) {
   }, 1500)
 }
 
-/** popover 里"查看执行日志"按钮：定位到该 sub 对应的任务后打开日志弹窗。 */
-function openExecutionLog(sub: any) {
-  selectedSubId.value = sub.id
-  logsDialogVisible.value = true
-}
-
-// 简单任务对话流（通 useWorkbenchSimpleConversation 合并 jobs → ChatMessage[]）
+// 任务对话流（通 useWorkbenchSimpleConversation 合并 jobs → ChatMessage[]）
 const { simpleConversationMessages, simpleAllJobsFor, simpleJobFor, simpleJobState } = useWorkbenchSimpleConversation(jobs, selectedTask)
 
 /**
  * 左侧任务条目"是否执行中"的统一判断。父组件传给 WorkbenchSidebar。
- * - 复杂任务：任一 subtask 处于 running → 在跑
- * - 简单任务：没有 subtasks，只能查 jobs（subId = ${task.id}__simple 或 __rN 后缀）。
- *   取最新一条 job，pending/running 都算在跑。
- * 关键修复：之前 sidebar 自己实现的 taskIsRunning 只看 subtasks，
- * 简单任务永远没有 subtasks → 简单任务在执行时左侧"执行中"状态完全缺失。
+ * 一条任务 = 一次会话：查 jobs（subId = ${task.id}__simple 或 __rN 后缀），
+ * 取最新一条 job，pending/running 都算在跑。
  */
 function isTaskRunning(t: Task): boolean {
   if (!t) return false
-  if (t.type !== 'simple') {
-    return Array.isArray(t.subtasks) && t.subtasks.some(s => s && s.status === 'running')
-  }
   const job = simpleJobFor(t)
   return !!job && (job.status === 'running' || job.status === 'pending')
 }
 
-// attachmentCount / subtaskCount / subtaskDoneCount → moved to WorkbenchSidebar
 // clearExecutionForSelectedTask → 来自 useWorkbenchExecution
-
-/**
- * 只清空当前 task 的 subtasks 数组(及关联的 jobs),保留 desc / attachments / promptId。
- *   1. 弹 ElMessageBox 二次确认(只告知要删的子任务数)
- *   2. 调 POST /api/workbench/tasks/:id/clear-subtasks
- *      后端只清 subtasks + jobs,desc / attachments / promptId 全部保留,broadcast task:update
- *   3. 前端收到 task:update 后会自动刷新,这里也兜底本地刷一遍
- * 与 resetSelectedTaskShell 的区别:那个是"还原成空壳"(清 desc / attachments / promptId / subtasks),
- * 这个只清拆分结果,适合"我想重新拆一次,但保留任务描述/附件"的场景。
- */
-async function clearSubtasksForSelectedTask() {
-  if (!selectedTask.value) return
-  const t = selectedTask.value
-  const subCount = Array.isArray(t.subtasks) ? t.subtasks.length : 0
-  if (subCount === 0) {
-    ElMessage.warning($t('@WORKBENCH:当前任务没有子任务'))
-    return
-  }
-  // 检查有没有 running/pending job(双重保险,后端也会拦)
-  const runningJob = jobs.value.find(j => j.taskId === t.id && (j.status === 'running' || j.status === 'pending'))
-  if (runningJob) {
-    ElMessage.warning($t('@WORKBENCH:有子任务正在执行,请先停止'))
-    return
-  }
-  try {
-    await ElMessageBox.confirm(
-      $t('@WORKBENCH:将删除 {n} 个子任务,任务描述/附件/标题保留,确认?', { n: subCount }),
-      $t('@WORKBENCH:清空子任务'),
-      {
-        confirmButtonText: $t('@WORKBENCH:清空'),
-        cancelButtonText: $t('@WORKBENCH:取消'),
-        type: 'warning'
-      }
-    )
-  } catch {
-    return
-  }
-  const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/clear-subtasks`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  })
-    .then(r => r.json())
-    .catch(err => ({ success: false, error: err?.message || String(err) }))
-  if (res?.success) {
-    // 本地内存兜底:把 selectedTask.subtasks 清空,desc / attachments 保留
-    t.subtasks = []
-    // 取消选中的 sub(已被清)
-    selectedSubId.value = null
-    // 清空 dirty / 本地 sub snapshot
-    dirtySubIds.value.clear()
-    subSnapshot.value.clear()
-    jobs.value = jobs.value.filter(j => j.taskId !== t.id)
-    syncRunningCount()
-    ElMessage.success(res.message || $t('@WORKBENCH:已清空子任务'))
-  } else {
-    ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))
-  }
-}
 
 // ── 提示词 CRUD ─────────────────────────────────────────────────────────────
 // 新建提示词：默认归属当前项目（若已选中项目）；用户可在弹窗里手动改成"全局"。
@@ -759,8 +613,8 @@ async function deletePrompt(p: Prompt) {
 
 // ── 任务 CRUD ───────────────────────────────────────────────────────────────
 // 新建任务:点按钮直接创建空任务,自动选中,右侧立即出现编辑器。不再走弹窗。
-// - 任务级 title / desc / promptId / type / simpleOverride 全部在右侧 inline 编辑
-//   (标题输入、描述折叠面板、promptId select、type segmented、simpleOverride textarea),
+// - 任务级 title / desc / promptId / simpleOverride 全部在右侧 inline 编辑
+//   (标题输入、描述折叠面板、promptId select、simpleOverride textarea),
 //   原弹窗只是「创建时的初始值收集器」,能力完全可由右侧 inline 化字段承担。
 // - 标题为空由后端存储 '' / 前端模板 fallback 显示「未命名任务」,跟弹窗里"不填则自动命名"语义一致。
 // - 连续点击防并发:creatingTask 标志位 + 按钮 disabled。
@@ -820,9 +674,7 @@ async function createTaskDirect() {
     title: '',
     desc: '',
     promptId: null,
-    type: 'simple',
-    simpleOverride: '',
-    subtasks: []
+    simpleOverride: ''
   }
   // 附带当前项目路径,后续按项目分组显示;没有当前项目时后端走默认
   if (currentProject.value.path) {
@@ -860,66 +712,9 @@ async function createTaskDirect() {
     creatingTask.value = false
   }
 }
-// 在任务列表条目上直接切换 simple/complex，不进入编辑 dialog。
-// - 简单 → 复杂：无副作用，simpleOverride 会被后端清空（仅 simple 时有意义）
-// - 复杂 → 简单：会清空现有子任务，弹 ElMessageBox 让用户确认
-// setTaskType(t, type) 是底层 setter，UI 上的所有切换入口（左侧 chip / 顶部 segmented）
-// 都通过它来保证"复杂 → 简单"的二次确认逻辑不被绕过。
-async function setTaskType(t: Task, type: 'simple' | 'complex') {
-  if (t.type === type) return
-  const isComplexToSimple = t.type === 'complex' && type === 'simple'
-  const willClearSubtasks = isComplexToSimple && (t.subtasks?.length ?? 0) > 0
-  if (willClearSubtasks) {
-    try {
-      await ElMessageBox.confirm(
-        $t('@WORKBENCH:任务「{title}」当前有 {n} 个子任务，切换为简单任务后会清空这些子任务，确认继续？', {
-          title: t.title,
-          n: t.subtasks.length
-        }),
-        $t('@WORKBENCH:切换任务类型'),
-        { type: 'warning', confirmButtonText: $t('@WORKBENCH:切换并清空'), cancelButtonText: $t('@WORKBENCH:取消') }
-      )
-    } catch {
-      return // 用户取消
-    }
-  }
-  const body: any = {
-    id: t.id,
-    title: t.title,
-    desc: t.desc,
-    promptId: t.promptId,
-    type,
-    // 切换为 simple 时后端会用 '' 覆盖 simpleOverride；为 complex 时同理
-    simpleOverride: t.simpleOverride || '',
-    // 切换为复杂任务时保留用户已设置的 sequential（避免被后端默认覆盖）
-    sequential: t.sequential !== false,
-    // 复杂 → 简单时显式传空数组清空子任务；其他情况保留现有
-    subtasks: willClearSubtasks ? [] : (t.subtasks || [])
-  }
-  const res = await fetch('/api/workbench/tasks', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  }).then(r => r.json())
-  if (!res.success) {
-    ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
-    return
-  }
-  // 切类型不换任务：刷新时保留选中项（跨项目任务同样适用）
-  await refreshTasks()
-  ElMessage.success(type === 'simple' ? $t('@WORKBENCH:已切换为简单任务') : $t('@WORKBENCH:已切换为复杂任务'))
-}
-
-// 顶部 segmented control 入口：把目标类型交给 setTaskType，
-// 当 selectedTask 已是目标类型时直接 no-op，避免误触再次落盘。
-async function onTypePillClick(target: 'simple' | 'complex') {
-  if (!selectedTask.value) return
-  await setTaskType(selectedTask.value, target)
-}
-
 async function deleteTask(t: Task) {
   await ElMessageBox.confirm(
-    $t('@WORKBENCH:删除任务「{title}」及其所有子任务？', { title: t.title }),
+    $t('@WORKBENCH:删除任务「{title}」？', { title: t.title }),
     $t('@WORKBENCH:确认'),
     { type: 'warning' }
   )
@@ -930,28 +725,16 @@ async function deleteTask(t: Task) {
 
 /**
  * 复制任务：基于源任务创建一个新任务，标题加"副本"后缀，
- * 保留 desc / promptId / type / simpleOverride / subtasks 等全部内容。
+ * 保留 desc / promptId / simpleOverride 等全部内容。
  */
 async function copyTask(t: Task) {
   const baseTitle = (t.title || $t('@WORKBENCH:未命名任务')).trim()
   const copyTitle = $t('@WORKBENCH:{title} (副本)', { title: baseTitle })
-  const newSubtasks = Array.isArray(t.subtasks)
-    ? t.subtasks.map(s => ({
-        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-        title: s.title,
-        desc: s.desc || '',
-        status: 'todo' as const,
-        promptOverride: s.promptOverride || '',
-        attachments: []
-      }))
-    : []
   const body: any = {
     title: copyTitle,
     desc: t.desc || '',
     promptId: t.promptId || null,
-    type: t.type || 'complex',
-    simpleOverride: t.simpleOverride || '',
-    subtasks: newSubtasks
+    simpleOverride: t.simpleOverride || ''
   }
   if (currentProject.value.path) {
     body.projectPath = currentProject.value.path
@@ -1056,93 +839,6 @@ function applyLocalReorder(
   return result
 }
 
-// 切换任务时自动选中第一个子任务（优先选正在执行的）
-watch(
-  () => selectedTask.value,
-  (t) => {
-    if (!t || t.type === 'simple') {
-      selectedSubId.value = null
-      return
-    }
-    const running = t.subtasks.find(s => s.status === 'running')
-    selectedSubId.value = running?.id || t.subtasks[0]?.id || null
-  },
-  { immediate: true }
-)
-// 子任务列表变化时补选（AI 拆分后 / 新增后自动选中）
-watch(
-  () => selectedTask.value?.subtasks?.length,
-  () => {
-    if (!selectedTask.value || isSimpleTask.value) return
-    if (!selectedSubId.value || !selectedTask.value.subtasks.find(s => s.id === selectedSubId.value)) {
-      selectedSubId.value = selectedTask.value.subtasks[0]?.id || null
-    }
-  }
-)
-// 队列推进时自动跟随正在执行的子任务：
-// 当前选中的 sub 已经不在 running(说明队列往后走了)→ 切到下一个 running 的 sub。
-// 若用户主动点了某个非 running 的 sub 看历史日志,不抢焦点,保持用户当前选中。
-watch(
-  () => selectedTask.value?.subtasks?.map(s => ({ id: s.id, status: s.status })) || [],
-  () => {
-    if (!selectedTask.value || isSimpleTask.value) return
-    const subs = selectedTask.value.subtasks
-    const cur = subs.find(s => s.id === selectedSubId.value)
-    // 选中的不是 running → 让位给队列里正在跑的那条
-    if (!cur || cur.status !== 'running') {
-      const running = subs.find(s => s.status === 'running')
-      if (running && running.id !== selectedSubId.value) {
-        selectedSubId.value = running.id
-      }
-    }
-  }
-)
-
-// ── 子任务编辑（拆分） ─────────────────────────────────────────────────────
-// 子任务行内的"持久化中"集合：避免连续点击同一行触发并发落盘
-const subtaskPersistingIds = ref<Set<string>>(new Set())
-function isSubtaskPersisting(id: string): boolean {
-  return subtaskPersistingIds.value.has(id)
-}
-function setSubtaskPersisting(id: string, on: boolean) {
-  if (on) subtaskPersistingIds.value.add(id)
-  else subtaskPersistingIds.value.delete(id)
-  // 触发响应式（Set 本身不响应）
-  subtaskPersistingIds.value = new Set(subtaskPersistingIds.value)
-}
-
-async function addSubtask() {
-  if (!selectedTask.value) return
-  const sub: SubTask = {
-    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    title: $t('@WORKBENCH:新子任务'),
-    desc: '',
-    status: 'todo',
-    promptOverride: ''
-  }
-  selectedTask.value.subtasks.push(sub)
-  // 自动切换到新创建的子任务
-  selectedSubId.value = sub.id
-  // 新子任务立刻落盘，避免后续「执行任务」时后端找不到 id。
-  // await 是为了保证「点完添加立刻点执行」时，后端已经能看到这条 sub。
-  setSubtaskPersisting(sub.id, true)
-  try {
-    await persistTask(false)
-  } finally {
-    setSubtaskPersisting(sub.id, false)
-  }
-}
-async function removeSubtask(sub: SubTask) {
-  if (!selectedTask.value) return
-  selectedTask.value.subtasks = selectedTask.value.subtasks.filter(s => s.id !== sub.id)
-  setSubtaskPersisting(sub.id, true)
-  try {
-    await persistTask(false)
-  } finally {
-    setSubtaskPersisting(sub.id, false)
-  }
-}
-
 /**
  * 把 selectedTask 整 task 体提交到后端。
  * 成功 → 静默刷新 selectedTaskId 指向的任务（保留 attachments 等后端规范化字段）。
@@ -1157,7 +853,7 @@ async function persistTask(showSuccess: boolean): Promise<boolean> {
     body: JSON.stringify(selectedTask.value)
   }).then(r => r.json())
   if (res.success) {
-    if (showSuccess) ElMessage.success($t('@WORKBENCH:已保存拆分'))
+    if (showSuccess) ElMessage.success($t('@WORKBENCH:已保存'))
     // 刷新必须保留选中项：这条路径由 1.5s 防抖自动保存高频触发，
     // 一旦在这里重推导选中项，跨项目任务会瞬间被清空（见 refreshTasks 注释）
     await refreshTasks()
@@ -1165,104 +861,6 @@ async function persistTask(showSuccess: boolean): Promise<boolean> {
   } else {
     ElMessage.error(res.error || $t('@WORKBENCH:保存失败'))
     return false
-  }
-}
-
-async function saveSubtasks() {
-  await persistTask(true)
-}
-
-// ── 导入拆分 ───────────────────────────────────────────────────────────────
-// 粘贴一段文本（每行一个子任务）→ 解析 → 批量生成子任务
-const importDialogVisible = ref(false)
-
-async function handleImportSplitConfirm(payload: {
-  strategy: 'append' | 'replace' | 'merge'
-  titles: string[]
-}) {
-  if (!selectedTask.value || !payload.titles.length) return
-
-  const { strategy, titles } = payload
-
-  if (strategy === 'replace') {
-    selectedTask.value.subtasks = []
-  }
-
-  const newSubs: SubTask[] = titles.map(title => ({
-    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    title,
-    desc: '',
-    status: 'todo' as const,
-    promptOverride: ''
-  }))
-
-  if (strategy === 'append' || strategy === 'replace') {
-    selectedTask.value.subtasks.push(...newSubs)
-  } else if (strategy === 'merge') {
-    // merge: 按 title 去重,已有跳过(避免破坏已有子任务的 dirty 状态)
-    const existing = new Set(selectedTask.value.subtasks.map(s => s.title.trim()))
-    const fresh = newSubs.filter(s => !existing.has(s.title.trim()))
-    selectedTask.value.subtasks.push(...fresh)
-    const skipped = newSubs.length - fresh.length
-    if (skipped > 0) {
-      ElMessage.info($t('@WORKBENCH:跳过 N 个已存在的子任务', { n: skipped }))
-    }
-  }
-
-  await persistTask(true)
-  ElMessage.success($t('@WORKBENCH:已导入 N 个子任务', { n: newSubs.length }))
-}
-
-// ── 执行 ───────────────────────────────────────────────────────────────────
-// AI 拆分子任务：打开对话框，所有过程在 AISplitDialog 内部完成
-const aiSplitDialogVisible = ref(false)
-
-function openAiSplitDialog() {
-  if (!selectedTask.value) return
-  const title = (selectedTask.value.title || '').trim()
-  if (!title) {
-    ElMessage.warning($t('@WORKBENCH:请先填写任务标题'))
-    return
-  }
-  // 若已有子任务，用户在 confirm 时直接追加
-  aiSplitDialogVisible.value = true
-}
-
-/**
- * 用户在 AI 拆分对话框点"确认入库"：把拆分结果追加到当前 task 的 subtasks 列表。
- * 自动标 dirty（已有的未保存机制会捕捉）。
- */
-function applySplitResult(newSubs: { title: string; desc: string }[]) {
-  if (!selectedTask.value) return
-  for (const s of newSubs) {
-    selectedTask.value.subtasks.push({
-      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      title: s.title,
-      desc: s.desc || '',
-      status: 'todo',
-      promptOverride: '',
-      attachments: []
-    })
-  }
-  ElMessage.success(
-    $t('@WORKBENCH:已生成 {n} 个子任务，请审阅后保存', { n: newSubs.length })
-  )
-}
-
-// cancelDone kept local (uses subSnapshot / isSubtaskPersisting)
-async function cancelDone(sub: SubTask) {
-  if (!selectedTask.value) return
-  if (isSubtaskPersisting(sub.id)) return
-  setSubtaskPersisting(sub.id, true)
-  try {
-    const snap = subSnapshot.value.get(sub.id)
-    if (snap) {
-      subSnapshot.value.set(sub.id, { ...snap, status: 'todo' } as any)
-    }
-    sub.status = 'todo'
-    await persistTask(false)
-  } finally {
-    setSubtaskPersisting(sub.id, false)
   }
 }
 
@@ -1296,18 +894,13 @@ const {
 // ── 执行层（run/cancel/continue/clear 等核心交互逻辑） ──
 const {
   runTask, onContinueSendFromChat,
-  onReExecuteJob, runSubtask, canRunSubtask, canRunFromHere, runFromHere,
   cancelJob, clearExecutionForSelectedTask
 } = useWorkbenchExecution(
   jobs, tasks, selectedTask,
   {
     syncRunningCount,
-    jobOf,
-    simpleAllJobsFor,
     clearJobsByTask,
-    clearNonDoneJobsByTask,
     persistTask,
-    loadTasks: _loadDataTasks,
     uploadAttachment,
     getExecutor: () => selectedTaskExecutor.value
   }
@@ -1343,7 +936,7 @@ function executorLabel(id: TaskExecutorId): string {
   return TASK_EXECUTOR_OPTIONS.find(o => o.id === id)?.name || id
 }
 
-// 简单任务连续对话流的助手名/头像：跟随最近一轮 job 实际用的执行器。
+// 任务连续对话流的助手名/头像：跟随最近一轮 job 实际用的执行器。
 // 头像与名字同源（agentForExecutor），claude → Claude 品牌图，opencode → OpenCode 品牌图。
 const lastSimpleJob = computed(() => simpleAllJobsFor(selectedTask.value).slice(-1)[0])
 const simpleAssistantLabel = computed(() => lastSimpleJob.value?.agent === 'opencode' ? 'OpenCode' : 'Claude')
@@ -1355,10 +948,10 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
     <!-- L1：多项目编排台 —— **常驻底图**，不再与编辑器互斥 -->
     <WorkbenchBoard @open-task="openTaskFromBoard" />
 
-    <!-- L2：单任务拆分编辑器 —— 大弹窗浮在看板之上，关掉即回到原位，全程无跳转 -->
+    <!-- L2：单任务编辑器 —— 大弹窗浮在看板之上，关掉即回到原位，全程无跳转 -->
     <CommonDialog
       v-model="editorOpen"
-      :title="$t('@WORKBENCH:任务拆分与执行')"
+      :title="$t('@WORKBENCH:任务执行')"
       type="flex"
       height-mode="fixed"
       height-offset="88px"
@@ -1384,7 +977,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
         class="wb-editor-bar__repo"
         :title="foreignRepo.path"
       >{{ $t('@WORKBENCH:执行于 {name}', { name: foreignRepo.name }) }}</span>
-      <span class="wb-editor-bar__hint">{{ $t('@WORKBENCH:任务拆分与执行') }}</span>
+      <span class="wb-editor-bar__hint">{{ $t('@WORKBENCH:任务执行') }}</span>
     </div>
     <div class="workbench__editor-row">
     <WorkbenchSidebar
@@ -1412,7 +1005,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
       @mousedown="onSidebarSplitterMouseDown"
     />
 
-    <!-- 中：单任务拆分 -->
+    <!-- 中：单任务编辑区 -->
     <section class="wb-split">
       <div v-if="!selectedTask" class="wb-placeholder">
         <p>{{ $t('@WORKBENCH:左侧选择任务，或新建一个任务开始') }}</p>
@@ -1467,48 +1060,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
             <option :value="null">{{ $t('@WORKBENCH:不绑定预置提示词') }}</option>
             <option v-for="p in availablePrompts" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
-          <!-- 任务类型 segmented control：简单/复杂二选一。
-               复杂任务下右侧再额外出现 AI 拆分按钮，组成「模式选择 + AI 动作 + 执行」的紧凑操作组。 -->
-          <div
-            class="wb-mode-switch"
-            role="tablist"
-            :aria-label="$t('@WORKBENCH:任务类型')"
-          >
-            <button
-              type="button"
-              role="tab"
-              class="wb-mode-switch__btn"
-              :class="{ 'is-active': !isSimpleTask }"
-              :aria-selected="!isSimpleTask"
-              @click="onTypePillClick('complex')"
-            >{{ $t('@WORKBENCH:复杂') }}</button>
-            <button
-              type="button"
-              role="tab"
-              class="wb-mode-switch__btn"
-              :class="{ 'is-active': isSimpleTask }"
-              :aria-selected="isSimpleTask"
-              @click="onTypePillClick('simple')"
-            >{{ $t('@WORKBENCH:简单') }}</button>
-            <span
-              class="wb-mode-switch__indicator"
-              :class="{ 'is-right': isSimpleTask }"
-              aria-hidden="true"
-            />
-          </div>
-          <button
-            v-if="!isSimpleTask"
-            type="button"
-            class="wb-ai-split-btn"
-            :disabled="!selectedTask.title || !selectedTask.title.trim()"
-            :title="$t('@WORKBENCH:AI 拆分')"
-            @click="openAiSplitDialog"
-          >
-            <svg class="wb-ai-split-btn__icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-              <path d="M8 1.5l1.6 3.4 3.4 1.6-3.4 1.6L8 11.5 6.4 8.1 3 6.5l3.4-1.6L8 1.5zM2.5 9.5l.8 1.6 1.6.8-1.6.8-.8 1.6-.8-1.6L.1 11.9l1.6-.8.8-1.6zm11 0l.8 1.6 1.6.8-1.6.8-.8 1.6-.8-1.6-1.6-.8 1.6-.8.8-1.6z" fill="currentColor"/>
-            </svg>
-            <span>{{ $t('@WORKBENCH:AI 拆分') }}</span>
-          </button>
           <!-- 执行：split button —— 主体按当前选中执行器直接跑，下拉临时切换执行器 -->
           <el-dropdown
             v-if="hasAnyExecutor"
@@ -1519,7 +1070,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
             @click="runTask(selectedTask)"
             @command="pickExecutor"
           >
-            {{ isSimpleTask ? $t('@WORKBENCH:执行') : $t('@WORKBENCH:执行任务') }}
+            {{ $t('@WORKBENCH:执行任务') }}
             <span class="wb-executor-split__hint">
               <TaskExecutorIcon :executor="selectedTaskExecutor" class="wb-executor-split__hint-icon" />
               {{ executorLabel(selectedTaskExecutor) }}
@@ -1632,187 +1183,12 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
             @dragleave="pasteHoverId = (pasteHoverId === 'task-' + selectedTask.id ? null : pasteHoverId)"
           />
         </details>
-        <!-- ── 执行主体：复杂任务用左（子任务列表）+ 右（详情）左右布局；简单任务只保留详情面板 ──
-             wb-execution-body--no-subs: 复杂任务且无子任务时合并成 1fr 单列,把空状态卡搬到右列,释放左侧 260px
-        -->
-        <div
-          class="wb-execution-body"
-          :class="{
-            'wb-execution-body--simple': isSimpleTask,
-            'wb-execution-body--no-subs': !isSimpleTask && selectedTask.subtasks.length === 0
-          }"
-        >
-          <!-- 左：子任务列表 —— 简单任务时不渲染 -->
-          <div v-if="!isSimpleTask" class="wb-exec-list">
-            <div class="wb-exec-list__header">
-              <h4 class="wb-exec-list__title">{{ $t('@WORKBENCH:子任务拆分') }}</h4>
-              <!-- 执行模式：连续 / 并行；放标题右侧，与标题同处一行避免外层单占一行 -->
-              <el-switch
-                class="wb-exec-list__mode-switch"
-                v-model="selectedTask.sequential"
-                :active-text="$t('@WORKBENCH:连续')"
-                :inactive-text="$t('@WORKBENCH:并行')"
-                inline-prompt
-                :title="$t('@WORKBENCH:连续模式下，任意子任务出错或被手动停止都会终止后续子任务')"
-              />
-              <div class="wb-split__sub-actions">
-                <el-button size="small" plain :icon="Plus" :disabled="selectedTask.subtasks.length === 0" @click="addSubtask">
-                  {{ $t('@WORKBENCH:添加子任务') }}
-                </el-button>
-                <el-button size="small" :type="hasDirtySubtasks ? 'primary' : 'default'" :disabled="selectedTask.subtasks.length === 0" @click="saveSubtasks">
-                  {{ $t('@WORKBENCH:保存拆分') }}
-                  <span v-if="hasDirtySubtasks" class="wb-dirty-badge">{{ dirtySubIds.size }}</span>
-                </el-button>
-                <el-button
-                  size="small"
-                  plain
-                  :icon="Upload"
-                  @click="importDialogVisible = true"
-                >
-                  {{ $t('@WORKBENCH:导入拆分') }}
-                </el-button>
-                <el-button
-                  size="small"
-                  type="danger"
-                  plain
-                  :icon="Delete"
-                  :disabled="!selectedTask.subtasks || selectedTask.subtasks.length === 0"
-                  :title="$t('@WORKBENCH:只清空子任务,任务描述/附件/标题保留')"
-                  @click="clearSubtasksForSelectedTask"
-                >
-                  {{ $t('@WORKBENCH:清空子任务') }}
-                </el-button>
-              </div>
-            </div>
-            <ul class="wb-exec-sub-list">
-              <li
-                v-for="sub in selectedTask.subtasks"
-                :key="sub.id"
-                class="wb-exec-sub-item"
-                :class="{
-                  'is-selected': selectedSubId === sub.id,
-                  'is-running': sub.status === 'running',
-                  'is-done': sub.status === 'done',
-                  'is-dirty': dirtySubIds.has(sub.id),
-                  'is-persisting': isSubtaskPersisting(sub.id)
-                }"
-                @click="selectedSubId = sub.id"
-              >
-                <!-- 第一行：状态徽章 + 标题 -->
-                <div class="wb-exec-sub-item__row1">
-                  <el-popover
-                    v-if="sub.status === 'error' && sub.error"
-                    placement="right-start"
-                    :width="420"
-                    trigger="hover"
-                    :show-after="120"
-                    popper-class="wb-sub-error-popover"
-                  >
-                    <template #reference>
-                      <span class="wb-sub-item__status wb-sub-item__status--dot wb-sub-item__status--clickable" :style="{ background: statusColor(sub.status) }" :title="$t('@WORKBENCH:点击查看错误详情')">
-                        <span class="wb-simple__status-dot" aria-hidden="true"></span>
-                      </span>
-                    </template>
-                    <div class="wb-sub-error">
-                      <div class="wb-sub-error__head">
-                        <el-icon class="wb-sub-error__icon"><CircleCloseFilled /></el-icon>
-                        <span class="wb-sub-error__title">{{ $t('@WORKBENCH:执行出错') }}</span>
-                        <span v-if="sub.errorAt" class="wb-sub-error__time">{{ formatSubErrorTime(sub.errorAt) }}</span>
-                      </div>
-                      <pre class="wb-sub-error__msg">{{ sub.error }}</pre>
-                      <div class="wb-sub-error__actions">
-                        <el-button size="small" :icon="CopyDocument" @click="copySubError(sub)">{{ $t('@WORKBENCH:复制错误信息') }}</el-button>
-                        <el-button size="small" type="primary" @click="openExecutionLog(sub)">{{ $t('@WORKBENCH:查看执行日志') }}</el-button>
-                      </div>
-                    </div>
-                  </el-popover>
-                  <span v-else class="wb-sub-item__status wb-sub-item__status--dot" :style="{ background: statusColor(sub.status) }" :title="$t('@WORKBENCH:任务完成状态')">
-                    <span class="wb-simple__status-dot" aria-hidden="true"></span>
-                  </span>
-                  <span class="wb-exec-sub-item__title" :title="sub.title">
-                    {{ sub.title || $t('@WORKBENCH:未命名子任务') }}
-                  </span>
-                  <span v-if="dirtySubIds.has(sub.id)" class="wb-exec-sub-item__dirty-dot" title="未保存" />
-                </div>
-                <!-- 第二行：PID + 操作按钮（hover/选中时浮现） -->
-                <div class="wb-exec-sub-item__row2">
-                  <span v-if="jobOf(sub.id)" class="wb-sub-item__pid">PID: {{ jobOf(sub.id)?.pid }}</span>
-                  <span class="wb-exec-sub-item__actions">
-                    <button v-if="canRunSubtask(sub)" class="wb-exec-sub-btn wb-exec-sub-btn--run" :title="$t('@WORKBENCH:单独执行此子任务')" @click.stop="runSubtask(sub)">{{ $t('@WORKBENCH:执行') }}</button>
-                    <button v-if="canRunFromHere(sub)" class="wb-exec-sub-btn wb-exec-sub-btn--run-from" :title="$t('@WORKBENCH:从此处执行后续子任务')" @click.stop="runFromHere(sub)">{{ $t('@WORKBENCH:从此处开始') }}</button>
-                    <button v-if="jobOf(sub.id) && (jobOf(sub.id)?.status === 'running' || jobOf(sub.id)?.status === 'pending')" class="wb-exec-sub-btn wb-exec-sub-btn--stop" :title="$t('@WORKBENCH:停止执行')" @click.stop="cancelJob(jobOf(sub.id)!)">{{ $t('@WORKBENCH:停止') }}</button>
-                    <button v-if="sub.status === 'done'" class="wb-exec-sub-btn wb-exec-sub-btn--undo" :title="$t('@WORKBENCH:取消完成')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="cancelDone(sub)">{{ $t('@WORKBENCH:取消完成') }}</button>
-                    <button class="wb-exec-sub-btn wb-exec-sub-btn--del" :title="$t('@WORKBENCH:删除')" :disabled="isSubtaskPersisting(sub.id)" @click.stop="removeSubtask(sub)">×</button>
-                  </span>
-                </div>
-              </li>
-            </ul>
-          </div>
-
-          <!-- 右：详情面板（执行内容区，宽度充足） -->
+        <!-- ── 执行主体：一条任务 = 一次会话，详情面板占满整行 ── -->
+        <div class="wb-execution-body">
+          <!-- 详情面板（执行内容区） -->
           <div class="wb-exec-detail">
-            <!-- 复杂任务详情：显示选中子任务的完整内容 -->
-            <template v-if="!isSimpleTask">
-              <!-- 复杂任务 + 无子任务:把空状态卡撑满右列(此时左列已被 grid 合并,不再占 260px) -->
-              <div v-if="selectedTask.subtasks.length === 0" class="wb-empty wb-empty--rich wb-empty--full">
-                <div class="wb-empty__art" aria-hidden="true"><el-icon><List /></el-icon></div>
-                <div class="wb-empty__title">{{ $t('@WORKBENCH:拆分任务，逐项执行') }}</div>
-                <div class="wb-empty__hint">
-                  {{ $t('@WORKBENCH:手动添加子任务，或让 AI 帮你自动拆分') }}
-                </div>
-                <div class="wb-empty__cta">
-                  <el-button type="primary" :icon="Plus" @click="addSubtask">{{ $t('@WORKBENCH:添加子任务') }}</el-button>
-                  <el-button :icon="Upload" @click="importDialogVisible = true">{{ $t('@WORKBENCH:导入拆分') }}</el-button>
-                </div>
-              </div>
-              <div v-else-if="!activeSubtask" class="wb-placeholder">
-                <p>{{ $t('@WORKBENCH:左侧选择子任务查看详情') }}</p>
-              </div>
-              <template v-else>
-                <div class="wb-exec-detail__head">
-                  <input
-                    class="wb-input"
-                    v-model="activeSubtask.title"
-                    :placeholder="$t('@WORKBENCH:子任务标题')"
-                    @click.stop
-                    @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub: activeSubtask })"
-                  />
-                  <span v-if="dirtySubIds.has(activeSubtask.id)" class="wb-sub-item__dirty" :title="$t('@WORKBENCH:有未保存的更改')">{{ $t('@WORKBENCH:未保存') }}</span>
-                </div>
-                <textarea
-                  class="wb-textarea wb-textarea--sm wb-textarea--autogrow"
-                  v-model="activeSubtask.desc"
-                  :placeholder="$t('@WORKBENCH:子任务描述 / 独立提示词覆盖')"
-                  @input="autoGrowTextarea($event)"
-                  @focus="autoGrowTextarea($event)"
-                  @blur="autoGrowTextarea($event)"
-                  @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub: activeSubtask })"
-                />
-                <JobLogDetails
-                  v-if="jobOf(activeSubtask.id)"
-                  :job="jobOf(activeSubtask.id)!"
-                  @re-execute="onReExecuteJob"
-                />
-                <AttachmentZone
-                  :attachments="activeSubtask.attachments || []"
-                  :is-image="isImageAttachment"
-                  :human-size="humanSize"
-                  :is-uploading="isUploading('sub-' + activeSubtask.id)"
-                  :is-paste-hover="pasteHoverId === activeSubtask.id"
-                  :max-count="9"
-                  :on-pick="() => pickAttachmentFile({ kind: 'sub', task: selectedTask, sub: activeSubtask! })"
-                  :on-remove="(att) => removeAttachment({ kind: 'sub', task: selectedTask, sub: activeSubtask! }, att)"
-                  @paste="onAttachmentPaste($event, { kind: 'sub', task: selectedTask, sub: activeSubtask })"
-                  @drop.prevent="onAttachmentDrop($event, { kind: 'sub', task: selectedTask, sub: activeSubtask })"
-                  @dragover.prevent="pasteHoverId = activeSubtask.id"
-                  @dragenter.prevent="pasteHoverId = activeSubtask.id"
-                  @dragleave="pasteHoverId = (pasteHoverId === activeSubtask.id ? null : pasteHoverId)"
-                />
-              </template>
-            </template>
-
-            <!-- 简单任务详情：状态完全交给 JobLogDetails 的「正在执行…」展示 -->
-            <template v-else>
+            <!-- 任务详情：状态完全交给 JobLogDetails 的「正在执行…」展示 -->
+            <template>
               <details
                 class="wb-simple__override"
                 :class="{ 'has-content': !!(selectedTask.simpleOverride && selectedTask.simpleOverride.trim()) }"
@@ -1828,7 +1204,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
                   <button
                     v-if="simpleJobState(simpleJobFor(selectedTask)) === 'running' && simpleJobFor(selectedTask)"
                     class="wb-simple__stop"
-                    :disabled="isSubtaskPersisting(simpleJobFor(selectedTask)!.id)"
                     @click.stop="cancelJob(simpleJobFor(selectedTask)!)"
                   >
                     {{ $t('@WORKBENCH:停止') }}
@@ -1837,11 +1212,11 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
                 <textarea
                   class="wb-textarea"
                   v-model="selectedTask.simpleOverride"
-                  :placeholder="$t('@WORKBENCH:留空则使用上方选定的「预置提示词」模板;可用变量同子任务:｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝')"
+                  :placeholder="$t('@WORKBENCH:留空则使用上方选定的「预置提示词」模板;可用变量:｛｛task.title｝｝ ｛｛task.desc｝｝ ｛｛repo.path｝｝ ｛｛branch｝｝')"
                   rows="6"
                 />
               </details>
-              <!-- 简单任务连续对话流：所有轮次合并到单个 ChatContainer -->
+              <!-- 任务对话流：所有轮次合并到单个 ChatContainer -->
               <template v-if="simpleAllJobsFor(selectedTask).length > 0">
                 <div class="wb-simple-chat-wrap">
                   <ChatContainer
@@ -1987,24 +1362,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
       </template>
     </el-dialog>
 
-    <!-- AI 拆分对话框：流式展示 LLM 思考 + 原始结果 + 入库确认 -->
-    <AISplitDialog
-      v-if="selectedTask"
-      v-model="aiSplitDialogVisible"
-      :title="selectedTask.title"
-      :desc="selectedTask.desc"
-      :task-id="selectedTask.id"
-      :prompt-id="selectedTask.promptId"
-      @confirm="applySplitResult"
-    />
-
-    <!-- 导入拆分对话框：粘贴文本 → 每行一个子任务 -->
-    <ImportSplitDialog
-      v-if="selectedTask"
-      v-model="importDialogVisible"
-      :existing-count="selectedTask.subtasks.length"
-      @confirm="handleImportSplitConfirm"
-    />
   </div>
 </template>
 
@@ -2477,48 +1834,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   font-weight: 500;
 }
 .wb-task-item__meta-item--accent { color: var(--color-primary); }
-/* 任务类型切换按钮：点击在 simple/complex 间互转。
-   复用 meta-item 的尺寸节奏（h=15, r=7, fz=10, fw=600），用色区分两种状态。*/
-.wb-task-item__type-toggle {
-  height: 15px;
-  padding: 0 6px;
-  border-radius: 7px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
-  font-family: inherit;
-}
-.wb-task-item__type-toggle:active { transform: scale(0.96); }
-.wb-task-item__type-toggle:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
-}
-/* 简单任务徽标：紧凑圆角胶囊,弱色调以不抢戏 */
-.wb-task-item__meta-item--simple {
-  display: inline-flex;
-  align-items: center;
-  height: 15px;
-  padding: 0 6px;
-  border-radius: 7px;
-  background: var(--tint-success-14);
-  color: var(--color-success-dark, #047857);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-}
-/* 复杂任务徽标：紫蓝调，区别于简单任务的绿色调 */
-.wb-task-item__meta-item--complex {
-  background: var(--tint-think-14);
-  color: var(--color-think-darker, #4338ca);
-}
-.wb-task-item__type-toggle:hover {
-  filter: brightness(0.95);
-}
 /* 跨项目的任务：在 meta 行内加一个简短的项目名徽标，提示"这条是别的项目的" */
 .wb-task-item__meta-item--project {
   display: inline-flex;
@@ -2598,8 +1913,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   opacity: 1;
 }
 .wb-task-item__del,
-.wb-prompt-item__del,
-.wb-sub-item__del { font-size: 13px; }
+.wb-prompt-item__del { font-size: 13px; }
 
 /* ── 提示词列表 ─────────────────────────────────────── */
 .wb-prompt-item {
@@ -2688,197 +2002,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   outline-offset: var(--focus-outline-offset);
   opacity: 1;
 }
-
-/* ── 空状态 ─────────────────────────────────────────── */
-.wb-empty {
-  padding: 24px 14px 20px;
-  text-align: center;
-  color: var(--text-tertiary);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--tint-primary-05) 50%, transparent) 100%);
-  border: 1px dashed var(--border-color-light, color-mix(in srgb, var(--border-color) 60%, transparent));
-  position: relative;
-  overflow: hidden;
-}
-/* 装饰性背景光晕 */
-.wb-empty::before {
-  content: '';
-  position: absolute;
-  top: -30px;
-  right: -30px;
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--color-primary) 5%, transparent) 0%, transparent 70%);
-  pointer-events: none;
-}
-.wb-empty--compact {
-  padding: 10px 12px;
-  flex-direction: row;
-  justify-content: center;
-  gap: 0;
-  background: var(--bg-subtle);
-  border-style: solid;
-}
-.wb-empty--compact::before { display: none; }
-.wb-empty__icon {
-  font-size: 24px;
-  color: var(--color-primary);
-  opacity: 0.7;
-  margin-bottom: 2px;
-  filter: drop-shadow(0 2px 4px color-mix(in srgb, var(--color-primary) 20%, transparent));
-}
-.wb-empty__text {
-  font-size: var(--font-size-125);
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-.wb-empty__hint {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-/* ── 空状态：富卡片版（子任务拆分） ────────────────── */
-.wb-empty--rich {
-  padding: 40px 28px 32px;
-  gap: 12px;
-  background: linear-gradient(180deg, var(--bg-container) 0%, color-mix(in srgb, var(--tint-primary-04) 80%, transparent) 100%);
-  margin: 4px 2px 2px;
-  border-radius: 16px;
-  border: 1px solid var(--border-color-light, color-mix(in srgb, var(--border-color) 50%, transparent));
-  position: relative;
-  overflow: hidden;
-}
-/* 装饰性背景 */
-.wb-empty--rich::before {
-  content: '';
-  position: absolute;
-  top: -40px;
-  right: -40px;
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--color-primary) 6%, transparent) 0%, transparent 70%);
-  pointer-events: none;
-}
-.wb-empty--rich::after {
-  content: '';
-  position: absolute;
-  bottom: -30px;
-  left: -30px;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--color-primary) 4%, transparent) 0%, transparent 70%);
-  pointer-events: none;
-}
-.wb-empty__art {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--tint-primary-12) 0%, var(--tint-primary-08) 100%);
-  color: var(--color-primary);
-  font-size: 24px;
-  margin-bottom: 4px;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 10%, transparent);
-  position: relative;
-  z-index: 1;
-}
-.wb-empty__title {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: var(--letter-spacing-heading, -0.25px);
-  color: var(--text-secondary);
-  line-height: 1.45;
-  position: relative;
-  z-index: 1;
-}
-.wb-empty--rich .wb-empty__hint {
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-tertiary);
-  max-width: 280px;
-  position: relative;
-  z-index: 1;
-}
-.wb-empty__cta {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-  position: relative;
-  z-index: 1;
-}
-/* 撑满右列的完整空状态(复杂任务 + 无子任务 时使用,占据 wb-exec-detail 全高)
-   与 wb-empty--rich 共享底色/光晕,只调整 padding 和垂直居中,适配 1fr 容器 */
-.wb-empty--full {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 320px;
-  padding: 56px 40px 48px;
-  margin: 0;
-  border-radius: 14px;
-}
-.wb-empty--full .wb-empty__art {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  font-size: 28px;
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--color-primary) 14%, transparent);
-}
-.wb-empty--full .wb-empty__title {
-  font-size: 17px;
-  letter-spacing: var(--letter-spacing-heading, -0.3px);
-}
-.wb-empty--full .wb-empty__hint {
-  font-size: 13px;
-  max-width: 360px;
-}
-.wb-empty__link {
-  appearance: none;
-  background: none;
-  border: 0;
-  /* 提升到 ≥32px 命中区，更接近 44px 触摸目标规范（ui-ux-pro-max） */
-  min-height: 32px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-primary);
-  cursor: pointer;
-  border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  transition: color 0.15s ease-out, background-color 0.15s ease-out;
-}
-.wb-empty__link:hover:not(:disabled) {
-  color: var(--color-primary);
-  background: var(--tint-primary-08);
-}
-.wb-empty__link:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset-lg);
-}
-.wb-empty__link:disabled {
-  color: var(--text-tertiary);
-  cursor: not-allowed;
-  opacity: 0.6;
-}
 @media (prefers-reduced-motion: reduce) {
-  .wb-empty__link {
-    transition: none;
-  }
 }
 
 .wb-split {
@@ -2910,280 +2034,20 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   - flex item 的 height: 100% 在父级也是 flex item 时会 fallback 到 auto(父级没有显式 height)
   - grid 子项默认 align-self: stretch + justify-self: stretch,自动撑满 cell 高度
   - 不需要 height: 100% 链,flex chain 也能正常传递 max-height 给子级
-  - 简单任务时切到 1fr 单列,详情面板占满
+  一条任务 = 一次会话,只有详情面板一列,直接 1fr。
 */
 .wb-execution-body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 1fr;
   border: none;
   border-radius: 0;
   overflow: hidden;
   gap: 16px;
 }
-.wb-execution-body--simple {
-  grid-template-columns: 1fr;
-  gap: 0;
-}
-/* 复杂任务且无子任务:整列合并到右列,左列 grid item 隐藏(grid 不会因为单一子项变 1fr,
-   显式 display: none 才能彻底让出 260px 空间) */
-.wb-execution-body--no-subs {
-  grid-template-columns: 1fr;
-  gap: 0;
-}
-.wb-execution-body--no-subs > .wb-exec-list {
-  display: none;
-}
 
-/* 左列：子任务列表（固定宽度，内部滚动） */
-.wb-exec-list {
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  border-radius: 14px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: linear-gradient(180deg, var(--bg-subtle) 0%, color-mix(in srgb, var(--bg-subtle) 95%, var(--tint-primary-03)) 100%);
-  border: 1px solid var(--border-color-light, color-mix(in srgb, var(--border-color) 50%, transparent));
-}
-.wb-exec-list__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px 8px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-.wb-exec-list__title {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.1px;
-  flex-shrink: 0;
-}
-.wb-exec-list__header .wb-split__sub-actions {
-  margin-left: auto;
-  /* 容器只有 260px,标题 + 3 个按钮一行放不下;允许按钮组内部折行,
-     标题独占一行/按钮换行,避免溢出容器被相邻列遮住。 */
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  row-gap: 4px;
-}
-.wb-exec-list__header .wb-split__sub-actions .el-button {
-  /* small 默认 7px 12px → 260px 容器装不下 3 个,
-     压到 4px 8px 可以省 ~16px(单按钮),叠加 wrap 能稳定放进容器。 */
-  padding: 5px 8px;
-}
-.wb-exec-sub-list {
-  list-style: none;
-  margin: 0;
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* 标题右侧的连续/并行开关：与标题同行，压缩字号避免挤压按钮组 */
-.wb-exec-list__mode-switch {
-  flex-shrink: 0;
-}
-.wb-exec-list__mode-switch .el-switch {
-  --el-switch-font-size: 11px;
-}
-
-/* 左列子任务条目：两行布局，标题独占第一行，操作按钮 hover 浮现 */
-.wb-exec-sub-item {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 8px 10px 6px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  user-select: none;
-  border: 1px solid transparent;
-  transition:
-    background var(--transition-fast) var(--ease-custom),
-    border-color var(--transition-fast) var(--ease-custom),
-    transform var(--transition-fast) var(--ease-custom),
-    box-shadow var(--transition-fast) var(--ease-custom);
-}
-.wb-exec-sub-item:hover {
-  background: var(--bg-container-hover);
-  border-color: var(--border-color);
-  transform: translateX(2px);
-}
-.wb-exec-sub-item.is-selected {
-  background: color-mix(in srgb, var(--color-primary) 10%, var(--bg-container));
-  border-color: var(--tint-primary-35, color-mix(in srgb, var(--color-primary) 35%, transparent));
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 8%, transparent);
-}
-.wb-exec-sub-item.is-running {
-  border-color: var(--tint-primary-45);
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
-}
-/* 执行面板内的徽章：和左侧子任务列表复用同一套执行中特效 */
-.wb-exec-sub-item.is-running .wb-sub-item__status {
-  background: linear-gradient(
-    90deg,
-    var(--color-primary) 0%,
-    color-mix(in srgb, var(--color-primary) 70%, #fff) 50%,
-    var(--color-primary) 100%
-  ) !important;
-  background-size: 200% 100% !important;
-  animation: wb-status-pulse 2.4s ease-in-out infinite,
-             wb-status-shimmer 2.4s linear infinite;
-  box-shadow:
-    0 0 0 0 var(--tint-primary-45),
-    0 0 12px var(--tint-primary-35);
-}
-.wb-exec-sub-item.is-running .wb-sub-item__status::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
-  animation: wb-status-dot 1.2s ease-in-out infinite;
-}
-.wb-exec-sub-item.is-running .wb-sub-item__status::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.4) 50%,
-    transparent 100%
-  );
-  animation: wb-status-sweep 2.4s ease-in-out infinite;
-  pointer-events: none;
-}
-.wb-exec-sub-item.is-done:not(.is-selected) {
-  opacity: 0.75;
-}
-
-/* 第一行：状态徽章 + 标题 */
-.wb-exec-sub-item__row1 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-/* 第二行：PID + 操作按钮（默认高度0隐藏，hover/selected 时展开） */
-.wb-exec-sub-item__row2 {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow: hidden;
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  transition:
-    max-height 0.18s var(--ease-custom),
-    opacity 0.15s var(--ease-custom),
-    padding-top 0.18s var(--ease-custom);
-}
-.wb-exec-sub-item:hover .wb-exec-sub-item__row2,
-.wb-exec-sub-item.is-selected .wb-exec-sub-item__row2,
-.wb-exec-sub-item.is-running .wb-exec-sub-item__row2 {
-  max-height: 28px;
-  opacity: 1;
-  padding-top: 5px;
-}
-.wb-exec-sub-item__actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-}
-/* 第二行 dirty 小圆点 */
-.wb-exec-sub-item__dirty-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--color-warning);
-  flex-shrink: 0;
-}
-
-/* 操作按钮（统一小尺寸胶囊） */
-.wb-exec-sub-btn {
-  appearance: none;
-  border: 1px solid var(--border-color-medium);
-  background: var(--bg-container);
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-weight: 600;
-  padding: 0 7px;
-  height: 20px;
-  border-radius: 10px;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.wb-exec-sub-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.wb-exec-sub-btn--run {
-  color: var(--color-primary);
-  border-color: var(--tint-primary-35);
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
-}
-.wb-exec-sub-btn--run:hover { background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container)); }
-/* "从此处开始" — 次级操作,视觉权重比主"执行"低一档,避免和主按钮抢眼 */
-.wb-exec-sub-btn--run-from {
-  color: var(--text-secondary);
-  border-color: var(--border-secondary, var(--border-default));
-  background: transparent;
-}
-.wb-exec-sub-btn--run-from:hover { color: var(--color-primary); border-color: var(--tint-primary-35); background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container)); }
-.wb-exec-sub-btn--stop {
-  color: var(--color-danger-bright, #ef4444);
-  border-color: var(--tint-danger-50);
-  background: var(--tint-danger-06);
-}
-.wb-exec-sub-btn--stop:hover { background: var(--tint-danger-14); }
-.wb-exec-sub-btn--undo {
-  color: var(--color-primary);
-  border-color: var(--tint-primary-35);
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
-}
-.wb-exec-sub-btn--undo:hover { background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container)); }
-.wb-exec-sub-btn--del {
-  width: 20px;
-  padding: 0;
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-.wb-exec-sub-btn--del:hover { color: var(--color-danger); border-color: var(--tint-danger-50); background: var(--tint-danger-06); }
-
-.wb-exec-sub-item__title {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.35;
-}
-.wb-exec-sub-item.is-selected .wb-exec-sub-item__title {
-  color: var(--color-primary);
-}
-.wb-exec-sub-item.is-done .wb-exec-sub-item__title {
-  text-decoration: line-through;
-  text-decoration-color: var(--border-color);
-  text-decoration-thickness: 1px;
-}
-
-/* 右列：详情面板（充满剩余宽度，内部滚动交给 JobLogDetails 的 wb-log-pre） */
+/* 详情面板（充满整行，内部滚动交给 JobLogDetails 的 wb-log-pre） */
 .wb-exec-detail {
   min-width: 0;
   min-height: 0;
@@ -3195,18 +2059,8 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   padding: 4px 4px 8px;
   background: transparent;
 }
-/* 详情面板头部：标题输入 + dirty 标记 */
-.wb-exec-detail__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-.wb-exec-detail__head .wb-input {
-  flex: 1;
-}
 
-/* ── 任务拆分头部：标题 + 提示词下拉 + 按钮组 ────────────────── */
+/* ── 任务头操作区：标题 + 提示词下拉 + 按钮组 ────────────────── */
 .wb-split__header {
   display: flex;
   gap: 10px;
@@ -3278,133 +2132,13 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   margin-left: 2px;
 }
 .wb-copy-btn--inline .wb-copy-btn__icon { font-size: 11px; }
-
-/* ── 任务类型 segmented control（顶部头部右侧） ────────────────
-   设计参照 Claude Code Overview/Models tab：圆角 8px 灰底容器，
-   内部两个等宽按钮，激活态用滑块 + 阴影强调，非激活态保持透明。 */
-.wb-mode-switch {
-  position: relative;
-  display: inline-flex;
-  align-items: stretch;
-  height: 32px;
-  padding: 3px;
-  border-radius: 10px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-  flex-shrink: 0;
-  user-select: none;
-  isolation: isolate;
-}
-.wb-mode-switch__btn {
-  position: relative;
-  z-index: 1;
-  appearance: none;
-  border: none;
-  background: transparent;
-  padding: 0 14px;
-  min-width: 64px;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  color: var(--text-tertiary);
-  border-radius: 7px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.18s var(--ease-custom);
-}
-.wb-mode-switch__btn:hover:not(.is-active) {
-  color: var(--text-secondary);
-}
-.wb-mode-switch__btn.is-active {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-.wb-mode-switch__btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-/* 滑块：用 transform 在两按钮之间滑动，激活态显示白底+阴影+细描边 */
-.wb-mode-switch__indicator {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc(50% - 3px);
-  border-radius: 7px;
-  background: var(--bg-container);
-  border: 1px solid var(--border-color-medium);
-  box-shadow:
-    var(--shadow-sm),
-    0 0 0 1px var(--tint-primary-06);
-  transition: transform 0.22s var(--ease-custom, cubic-bezier(0.4, 0, 0.2, 1));
-  z-index: 0;
-  pointer-events: none;
-}
-.wb-mode-switch__indicator.is-right {
-  transform: translateX(100%);
-}
 @media (prefers-reduced-motion: reduce) {
-  .wb-mode-switch__indicator { transition: none; }
-}
-
-/* ── AI 拆分按钮（次要动作，accent 描边 + sparkle icon） ────────
-   视觉权重略低于主「执行任务」按钮，但比 el-button info/plain 灰底明显。 */
-.wb-ai-split-btn {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--tint-primary-35, color-mix(in srgb, var(--color-primary) 35%, transparent));
-  background: color-mix(in srgb, var(--color-primary) 5%, var(--bg-container));
-  color: var(--color-primary);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1px;
-  border-radius: 10px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition:
-    background 0.15s var(--ease-custom, ease),
-    border-color 0.15s var(--ease-custom, ease),
-    color 0.15s var(--ease-custom, ease),
-    transform 0.1s var(--ease-custom, ease);
-}
-.wb-ai-split-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-container));
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-.wb-ai-split-btn:active:not(:disabled) { transform: scale(0.98); }
-.wb-ai-split-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background: transparent;
-  border-color: var(--border-color);
-  color: var(--text-tertiary);
-}
-.wb-ai-split-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-.wb-ai-split-btn__icon {
-  flex-shrink: 0;
-  /* 给图标加一点 pulse 微动效，强化"这是一个 AI 动作"的视觉提示 */
-  animation: wb-ai-sparkle-pulse 2.6s ease-in-out infinite;
-  transform-origin: center;
 }
 @keyframes wb-ai-sparkle-pulse {
   0%, 100% { transform: scale(1);   opacity: 0.9; }
   50%      { transform: scale(1.12); opacity: 1; }
 }
-.wb-ai-split-btn:disabled .wb-ai-split-btn__icon { animation: none; opacity: 0.5; }
 @media (prefers-reduced-motion: reduce) {
-  .wb-ai-split-btn__icon { animation: none; }
 }
 
 /* 「执行日志」内联按钮：紧贴「执行任务」右侧，视觉重量接近 secondary */
@@ -3647,8 +2381,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   max-height: 500px;
   transition: max-height 0.2s var(--ease-custom);
 }
-.wb-textarea--sm { min-height: 44px; padding: 8px 12px; font-size: 13px; }
-.wb-textarea--sm.wb-textarea--autogrow { min-height: 44px; }
 
 /* 自适应高度 textarea:禁掉手动 resize,高度由 autoGrowTextarea() 写入。
    设 overflow-y: hidden 默认,JS 在内容超 max 时改 overflow-y: auto。 */
@@ -3675,13 +2407,8 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   font-weight: 600;
   color: var(--text-secondary);
 }
-.wb-split__sub-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
 
-/* ── 简单任务编辑区 ─────────────────────────── */
+/* ── 任务编辑区 ─────────────────────────── */
 .wb-simple__header {
   display: flex;
   align-items: baseline;
@@ -3703,9 +2430,8 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   color: var(--text-tertiary);
 }
 
-/* ── 简单任务完成态 pill ── */
-/* 圆点版：只用状态点+颜色表达状态,无文字。running 时由外层 wb-exec-sub-item
-   的边框跑马灯承担动效,pill 本身只做圆点呼吸。 */
+/* ── 任务完成态 pill ── */
+/* 圆点版：只用状态点+颜色表达状态,无文字。 */
 .wb-simple__status-row {
   display: flex;
   align-items: center;
@@ -3730,14 +2456,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
 .wb-simple__status--dot {
   border-radius: 50%;
 }
-.wb-simple__status-dot {
-  display: none; /* 圆点 pill 内不再嵌套小圆点 */
-}
-/* running: pill 圆点呼吸(白光环) */
-.wb-exec-sub-item.is-running .wb-simple__status {
-  animation: wb-status-dot-pulse 1.4s ease-in-out infinite;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
-}
 .wb-simple__status-text {
   display: none;
 }
@@ -3758,7 +2476,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   background: var(--text-tertiary);
 }
 
-/* ── 简单任务「停止」按钮(running 时详情区状态条末尾) ── */
+/* ── 任务「停止」按钮(running 时详情区状态条末尾) ── */
 .wb-simple__stop {
   margin-left: auto;
   padding: 2px 10px;
@@ -3782,7 +2500,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   cursor: not-allowed;
 }
 
-/* ── 简单任务「覆盖预置提示词」可折叠 ── */
+/* ── 任务「覆盖预置提示词」可折叠 ── */
 .wb-simple__override {
   border-radius: var(--radius-md);
 }
@@ -3821,7 +2539,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   letter-spacing: 0.2px;
 }
 
-/* ── 简单任务单一对话流：合并所有轮次到一个 ChatContainer ── */
+/* ── 任务单一对话流：合并所有轮次到一个 ChatContainer ── */
 .wb-simple-chat-wrap {
   display: flex;
   flex-direction: column;
@@ -3887,71 +2605,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   min-height: 0;
   overflow-y: auto;
 }
-.wb-sub-item {
-  position: relative;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 10px;
-  transition: border-color 0.15s, box-shadow 0.15s;
-  /* 单卡允许内部纵向滚动：执行中子任务展开日志/思考/附件后可能非常高，
-     让卡片自身在超出可视区时出现滚动条，避免把列表下方卡片挤出屏幕。
-     border-radius 配合 overflow:hidden 保持圆角裁切效果。 */
-  max-height: min(70vh, 720px);
-  overflow: auto;
-}
-.wb-sub-item.is-dirty {
-  border-color: var(--tint-warning-45);
-  background: var(--tint-warning-04);
-}
-
-/* ── 执行中：卡片整体光环 + 顶部流动光带 ────────────────── */
-.wb-sub-item.is-running {
-  border-color: var(--tint-primary-55);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--color-primary) 6%, var(--bg-surface)) 0%,
-      var(--bg-surface) 60%
-    );
-  box-shadow:
-    0 0 0 1px var(--tint-primary-30),
-    0 4px 18px -4px color-mix(in srgb, var(--color-primary) 25%, transparent);
-  animation: wb-card-glow 2.4s ease-in-out infinite;
-}
-.wb-sub-item.is-running::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--color-primary) 50%,
-    transparent 100%
-  );
-  background-size: 50% 100%;
-  background-repeat: no-repeat;
-  animation: wb-progress-slide 1.6s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 1;
-}
-.wb-sub-item.is-running::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--tint-primary-10) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: wb-card-sweep 3.2s linear infinite;
-  pointer-events: none;
-  opacity: 0.5;
-}
 
 @keyframes wb-progress-slide {
   0%   { background-position: -50% 0; }
@@ -3974,264 +2627,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   100% { background-position: -200% 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .wb-sub-item.is-running,
-  .wb-sub-item.is-running::before,
-  .wb-sub-item.is-running::after {
-    animation: none;
-  }
-}
-.wb-sub-item__dirty {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--color-warning-dark, #b45309);
-  background: var(--tint-warning-14);
-  padding: 2px 7px;
-  border-radius: 8px;
-  flex-shrink: 0;
-  letter-spacing: 0.2px;
-}
-.wb-sub-item__dirty::before {
-  content: '';
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--color-warning);
-}
-.wb-dirty-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
-  margin-left: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  color: #fff;
-  background: var(--color-danger);
-  border-radius: 8px;
-  vertical-align: middle;
-}
-.wb-sub-item__row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 6px;
-  /* 整行可点击展开/收起：除操作按钮外任意位置都触发切换 */
-  cursor: pointer;
-  user-select: none;
-  /* 悬停态平滑过渡；与现有 wb-card 背景变化保持一致节奏 */
-  padding: 4px 6px;
-  margin-left: -6px;
-  margin-right: -6px;
-  border-radius: var(--radius-sm, 4px);
-  transition:
-    background var(--transition-fast) var(--ease-custom),
-    box-shadow var(--transition-fast) var(--ease-custom);
-}
-.wb-sub-item__row:hover {
-  background: var(--bg-container-hover);
-  box-shadow: inset 0 0 0 1px var(--tint-primary-12, transparent);
-}
-/* 操作按钮 hover 不应再次加深背景，避免双重叠加 */
-.wb-sub-item__row:hover .wb-sub-item__toggle,
-.wb-sub-item__row:hover .wb-sub-item__undo,
-.wb-sub-item__row:hover .wb-sub-item__del,
-.wb-sub-item__row:hover .wb-sub-item__run,
-.wb-sub-item__row:hover .wb-sub-item__stop {
-  /* 让按钮自带 hover 样式生效，不被行底色压住 */
-  position: relative;
-  z-index: 1;
-}
-.wb-sub-item__row:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset);
-  border-radius: var(--radius-sm, 4px);
-}
-
-/* ── 折叠态：紧凑单行 ─────────────────────────────────────── */
-.wb-sub-item__row--compact {
-  margin-bottom: 0;
-  cursor: pointer;
-  gap: 6px;
-}
-.wb-sub-item__title-compact {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  letter-spacing: -0.05px;
-  line-height: 1.3;
-  /* 已完成的标题：略灰，区别于进行中 */
-  text-decoration: line-through;
-  text-decoration-color: var(--border-color);
-  text-decoration-thickness: 1px;
-}
-.wb-sub-item__toggle {
-  border: 1px solid var(--border-color-medium);
-  background: var(--bg-container);
-  color: var(--text-tertiary);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm, 4px);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 12px;
-  flex-shrink: 0;
-  transition: background var(--transition-fast) var(--ease-custom),
-              border-color var(--transition-fast) var(--ease-custom),
-              color var(--transition-fast) var(--ease-custom);
-}
-/* 箭头旋转过渡：折叠/展开切换时平滑旋转，而非瞬时跳变 */
-.wb-sub-item__toggle .el-icon {
-  display: inline-flex;
-  transition: transform var(--transition-base, 200ms) var(--ease-custom);
-}
-.wb-sub-item__toggle:hover .el-icon {
-  transform: scale(1.12);
-}
-.wb-sub-item__toggle:hover {
-  background: var(--bg-container-hover);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-.wb-sub-item__toggle:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset);
-}
-.wb-sub-item__undo {
-  border: 1px solid var(--tint-primary-35);
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-container));
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1px;
-  padding: 0 10px;
-  height: 28px;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background var(--transition-fast) var(--ease-custom),
-              border-color var(--transition-fast) var(--ease-custom),
-              color var(--transition-fast) var(--ease-custom);
-}
-.wb-sub-item__undo:hover {
-  background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-container));
-  border-color: var(--color-primary);
-  color: var(--color-primary-dark, var(--color-primary));
-}
-.wb-sub-item__undo:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset);
-}
-.wb-sub-item__toggle:disabled,
-.wb-sub-item__undo:disabled,
-.wb-sub-item__del:disabled,
-.wb-sub-item__run:disabled,
-.wb-sub-item__stop:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-/* ── 已完成态：绿色微底 + 圆角柔化（与执行中红色脉冲对比） ─────────── */
-.wb-sub-item.is-done:not(.is-running) {
-  border-color: var(--tint-success-30);
-  background: var(--tint-success-04);
-}
-.wb-sub-item.is-done.is-collapsed {
-  padding: 8px 10px;
-}
-/* ── 状态点 pill（无文字,只用圆点+边框传递状态）
-   running 时不动 pill 本身,而是把动效挪到 wb-exec-sub-item 的边框上 —— 见下方 ── */
-.wb-sub-item__status {
-  position: relative;
-  font-size: 11px;
-  color: #fff;
-  padding: 0;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  overflow: hidden;
-  width: 8px;
-  height: 8px;
-}
-.wb-sub-item__status--dot {
-  border-radius: 50%;
-}
-
-/* idle 状态：inline 注入的背景是 --bg-subtle（灰底），不能用白字
-   —— 通过 style 属性匹配把文字色降为中性色，保持可读。 */
-.wb-sub-item__status[style*="--bg-subtle"] {
-  color: var(--text-secondary);
-}
-.wb-sub-item__status[style*="--bg-subtle"] .wb-simple__status-dot {
-  background: var(--text-tertiary);
-}
-
-/* ── 执行中：边框跑马灯 + 状态点呼吸
-   pill 内部 ::before/::after 已禁用(让 pill 退化为纯圆点),
-   动效全部交给外层 .wb-exec-sub-item 的边框 + 外发光。 ─────────── */
-.wb-sub-item.is-running .wb-sub-item__status,
-.wb-exec-sub-item.is-running .wb-sub-item__status {
-  animation: wb-status-dot-pulse 1.4s ease-in-out infinite;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
-}
-.wb-sub-item.is-running .wb-sub-item__status::before,
-.wb-sub-item.is-running .wb-sub-item__status::after,
-.wb-exec-sub-item.is-running .wb-sub-item__status::before,
-.wb-exec-sub-item.is-running .wb-sub-item__status::after {
-  content: none;
-}
-
-/* 复杂任务子任务 running：边框跑马灯 + 整行外发光 */
-.wb-sub-item.is-running {
-  position: relative;
-  border-color: var(--color-primary);
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0%,
-      var(--tint-primary-18) 50%,
-      transparent 100%
-    ) var(--tint-primary-04);
-  background-size: 200% 100%;
-  animation: wb-border-shimmer 2.4s linear infinite;
-  box-shadow: 0 0 0 1px var(--tint-primary-45),
-              0 0 12px var(--tint-primary-25);
-}
-
-/* 简单任务 running（外层用 wb-exec-sub-item 包） */
-.wb-exec-sub-item.is-running {
-  position: relative;
-  border-color: var(--color-primary);
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0%,
-      var(--tint-primary-18) 50%,
-      transparent 100%
-    ) var(--tint-primary-04);
-  background-size: 200% 100%;
-  animation: wb-border-shimmer 2.4s linear infinite;
-  box-shadow: 0 0 0 1px var(--tint-primary-45),
-              0 0 12px var(--tint-primary-25);
 }
 
 @keyframes wb-border-shimmer {
@@ -4254,21 +2649,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   50%      { opacity: 0.55; transform: scale(0.7); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .wb-sub-item.is-running,
-  .wb-exec-sub-item.is-running,
-  .wb-sub-item.is-running .wb-sub-item__status,
-  .wb-exec-sub-item.is-running .wb-sub-item__status,
-  .wb-sub-item.is-running .wb-sub-item__status::before,
-  .wb-sub-item.is-running .wb-sub-item__status::after,
-  .wb-exec-sub-item.is-running .wb-sub-item__status::before,
-  .wb-exec-sub-item.is-running .wb-sub-item__status::after,
-  .wb-exec-sub-item.is-running .wb-simple__status-dot {
-    animation: none;
-  }
-  .wb-sub-item__toggle .el-icon,
-  .wb-sub-item__row {
-    transition: none;
-  }
   .wb-sub-expand-enter-active,
   .wb-sub-expand-leave-active {
     transition: none;
@@ -4302,48 +2682,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   min-height: 0;
   overflow: hidden;
 }
-.wb-sub-item__pid {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-family: ui-monospace, monospace;
-  flex-shrink: 0;
-}
-.wb-sub-item__stop {
-  border: 1px solid var(--tint-danger-50);
-  background: var(--tint-danger-08);
-  color: var(--color-danger-bright, #ef4444);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 10px;
-  height: 28px;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
-}
-.wb-sub-item__stop:hover {
-  background: var(--color-danger);
-  color: #fff;
-  border-color: var(--color-danger);
-}
-.wb-sub-item__run {
-  border: 1px solid var(--color-primary);
-  background: var(--color-primary);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 10px;
-  height: 28px;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: opacity 0.15s, filter 0.15s;
-}
-.wb-sub-item__run:hover {
-  opacity: 0.88;
-  filter: brightness(1.05);
-}
-.wb-sub-item__row .wb-input { flex: 1; }
 
 /* 日志面板样式已抽到 components/JobLogDetails.vue（self-contained scoped） */
 
@@ -4511,58 +2849,5 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
   max-height: calc(88vh - 60px);
   overflow: auto;
   padding: 12px 20px 16px;
-}
-
-/* 子任务"执行出错"小圆点：让用户看出是可点击的 */
-.wb-sub-item__status--clickable {
-  cursor: help;
-  outline: 1px solid color-mix(in oklab, currentColor 35%, transparent);
-  outline-offset: 1px;
-  transition: outline-color 0.15s ease;
-}
-.wb-sub-item__status--clickable:hover {
-  outline-color: currentColor;
-}
-
-/* popover 内容布局 */
-.wb-sub-error-popover { padding: 4px 2px; }
-.wb-sub-error {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.wb-sub-error__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  color: var(--el-color-danger);
-}
-.wb-sub-error__icon { font-size: 16px; }
-.wb-sub-error__title { flex: 0 0 auto; }
-.wb-sub-error__time {
-  margin-left: auto;
-  font-weight: 400;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-.wb-sub-error__msg {
-  margin: 0;
-  padding: 10px 12px;
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  font-family: var(--el-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 12.5px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 240px;
-  overflow: auto;
-  color: var(--el-text-color-primary);
-}
-.wb-sub-error__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 </style>

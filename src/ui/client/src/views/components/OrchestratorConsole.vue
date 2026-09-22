@@ -249,7 +249,7 @@ function onInputKeydown(e: KeyboardEvent) {
 
 /** 活动流一行的正文。文案全部走 i18n，服务端只给结构化字段 */
 function describe(r: OrchestratorActivity): string {
-  const task = r.taskTitle || r.subTitle || $t('@WORKBENCH:未命名任务')
+  const task = r.taskTitle || $t('@WORKBENCH:未命名任务')
   const project = r.projectName || '—'
   switch (r.kind) {
     case 'user':

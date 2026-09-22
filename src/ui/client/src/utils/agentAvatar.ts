@@ -14,7 +14,7 @@
 //
 // 工作台对话的助手头像。
 //
-// 这条链路（简单任务连续对话 / 执行日志详情）的执行者有 claude / opencode 两种
+// 这条链路（任务连续对话 / 执行日志详情）的执行者有 claude / opencode 两种
 // （taskRunner 双执行器，job.agent 记录本轮实际用的是谁），头像按 job.agent 切换，
 // 都用 zen-ai-chat-ui 内置品牌头像（0.1.0-beta.8 起提供 13 个，见 dist/avatars）。
 //
@@ -27,7 +27,7 @@
 
 import { resolveAvatar } from 'zen-ai-chat-ui'
 
-/** Claude Code 品牌头像（内联 data URL）。WorkbenchView 简单任务对话与 JobLogDetails 共用。 */
+/** Claude Code 品牌头像（内联 data URL）。WorkbenchView 任务对话与 JobLogDetails 共用。 */
 export const CLAUDE_AVATAR = resolveAvatar('claude')
 /** OpenCode 品牌头像（内联 data URL）。 */
 export const OPENCODE_AVATAR = resolveAvatar('opencode')

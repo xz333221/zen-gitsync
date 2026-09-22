@@ -83,7 +83,7 @@ async function main() {
   const created = await fetch(`${BASE}/api/workbench/tasks`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ title: MARK, desc: '用于验证弹窗链路', type: 'complex', promptId: null, simpleOverride: '', subtasks: [] })
+    body: JSON.stringify({ title: MARK, desc: '用于验证弹窗链路', promptId: null, simpleOverride: '' })
   }).then(r => r.json()).catch(() => null)
   if (!created?.success) { console.error('无法创建测试任务，dev server 起了吗？', created); process.exit(2) }
   const taskId = created.task.id

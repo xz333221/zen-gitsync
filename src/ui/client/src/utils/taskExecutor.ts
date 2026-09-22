@@ -4,7 +4,7 @@
 //   - 默认执行器在「设置 → 通用设置 → 任务执行器」里配置（config.taskExecutor，全局）
 //   - 工作台执行按钮旁可以**临时切**，选择记在 localStorage——比"只在内存"多活一次刷新，
 //     又不污染文件配置（文件里那份始终代表"默认值"）
-//   - 简单任务续聊不走这里：续哪个执行器由上一轮 job.agent 决定（服务端强制），
+//   - 任务续聊不走这里：续哪个执行器由上一轮 job.agent 决定（服务端强制），
 //     否则 claude 的 --resume 和 opencode 的 --session 会互不认对方的会话 id
 //
 // localStorage 键沿用 `zen-gitsync-` 前缀（历史上迁移 UI 状态到 config.json 时

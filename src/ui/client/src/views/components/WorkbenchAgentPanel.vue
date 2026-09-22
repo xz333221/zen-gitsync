@@ -77,7 +77,6 @@ const rows = computed(() => props.running.map(r => ({
           </span>
         </div>
         <p class="agent-item__task" :title="r.taskTitle">{{ r.taskTitle || $t('@WORKBENCH:未命名任务') }}</p>
-        <p v-if="r.subTitle" class="agent-item__sub" :title="r.subTitle">{{ r.subTitle }}</p>
         <div class="agent-item__row3">
           <span v-if="r.pid" class="agent-item__pid">PID {{ r.pid }}</span>
           <span class="agent-item__elapsed">{{ r.elapsed }}</span>
@@ -191,15 +190,6 @@ const rows = computed(() => props.running.map(r => ({
   margin: 3px 0 0 12px;
   font-size: 11.5px;
   color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.5;
-}
-.agent-item__sub {
-  margin: 1px 0 0 12px;
-  font-size: 11px;
-  color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

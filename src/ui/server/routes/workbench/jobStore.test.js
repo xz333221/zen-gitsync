@@ -95,7 +95,7 @@ const diskJob = (id, taskId, status, extra = {}) => ({
   ...extra,
 });
 
-const simpleTask = (id) => ({ id, title: id, type: 'simple', subtasks: [], projectPath: 'c:\\ws\\a' });
+const simpleTask = (id) => ({ id, title: id, type: 'simple', projectPath: 'c:\\ws\\a' });
 
 // ── 沙箱自检 ────────────────────────────────────────────────────────
 // 这条不是形式主义:DATA_DIR 一旦没落在沙箱里,下面每个用例都会去写用户真实的

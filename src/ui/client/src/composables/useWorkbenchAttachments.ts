@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { Attachment, Task, SubTask } from '@/types/workbench'
+import type { Attachment, Task } from '@/types/workbench'
 
 export const ALLOWED_MIME = new Set([
   'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
@@ -122,7 +122,6 @@ export async function compressImage(file: File): Promise<{ blob: Blob; ext: stri
 
 export type AttachmentTarget =
   | { kind: 'task'; task: Task | null }
-  | { kind: 'sub'; task: Task | null; sub: SubTask }
   /**
    * 派发前的草稿附件 —— 主 Agent 控制台用。
    * 这一刻任务还不存在，没有 task/sub 可挂，所以附件先落在服务端的暂存区
@@ -145,30 +144,24 @@ export function useWorkbenchAttachments() {
   }
 
   function targetKey(t: AttachmentTarget): string {
-    if (t.kind === 'draft') return 'draft'
-    return t.kind === 'task' ? `task-${t.task?.id ?? ''}` : `sub-${t.sub.id}`
+    return t.kind === 'draft' ? 'draft' : `task-${t.task?.id ?? ''}`
   }
   function targetAttachments(t: AttachmentTarget): Attachment[] {
     if (t.kind === 'draft') return t.list
-    const arr = t.kind === 'task' ? t.task?.attachments : t.sub.attachments
+    const arr = t.task?.attachments
     return Array.isArray(arr) ? (arr as Attachment[]) : []
   }
   function setTargetAttachments(t: AttachmentTarget, att: Attachment[]) {
     if (t.kind === 'draft') { t.replace(att); return }
-    if (t.kind === 'task') { if (t.task) t.task.attachments = att }
-    else t.sub.attachments = att
+    if (t.task) t.task.attachments = att
   }
   function targetUploadUrl(t: AttachmentTarget): string {
     if (t.kind === 'draft') return '/api/workbench/orchestrator/attachments'
-    return t.kind === 'task'
-      ? `/api/workbench/tasks/${t.task?.id ?? ''}/attachments`
-      : `/api/workbench/subtasks/${t.sub.id}/attachments`
+    return `/api/workbench/tasks/${t.task?.id ?? ''}/attachments`
   }
   function targetDeleteUrl(t: AttachmentTarget, attId: string): string {
     if (t.kind === 'draft') return `/api/workbench/orchestrator/attachments/${attId}`
-    return t.kind === 'task'
-      ? `/api/workbench/tasks/${t.task?.id ?? ''}/attachments/${attId}`
-      : `/api/workbench/subtasks/${t.sub.id}/attachments/${attId}`
+    return `/api/workbench/tasks/${t.task?.id ?? ''}/attachments/${attId}`
   }
 
   function onAttachmentPaste(e: ClipboardEvent, t: AttachmentTarget) {

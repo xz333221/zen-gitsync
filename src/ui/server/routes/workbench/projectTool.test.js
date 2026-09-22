@@ -42,7 +42,7 @@ function project(overrides = {}) {
     unstaged: 0,
     untracked: 0,
   };
-  const baseStats = { total: 0, todo: 0, doing: 0, done: 0, progress: 0, runningJobs: 0, errorSubtasks: 0 };
+  const baseStats = { total: 0, todo: 0, doing: 0, done: 0, progress: 0, runningJobs: 0 };
   const merged = {
     path: 'D:\\ws\\proj',
     key: 'd:\\ws\\proj',
@@ -112,10 +112,9 @@ test('非仓库 / 目录不存在 / 探测超时都能区分，不谎报成"干�
 });
 
 test('任务进度按看板三列报出，无任务时说"无"', () => {
-  const withTasks = formatProjectList([project({ stats: { total: 9, todo: 1, doing: 2, done: 6, runningJobs: 1, errorSubtasks: 1 } })]);
+  const withTasks = formatProjectList([project({ stats: { total: 9, todo: 1, doing: 2, done: 6, runningJobs: 1 } })]);
   assert.match(withTasks, /待处理 1 \/ 进行中 2 \/ 已完成 6/);
   assert.match(withTasks, /正在执行 1/);
-  assert.match(withTasks, /子任务报错 1/);
 
   assert.match(formatProjectList([project()]), /任务: 无/);
 });

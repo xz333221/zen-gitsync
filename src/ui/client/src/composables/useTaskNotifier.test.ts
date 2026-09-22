@@ -126,7 +126,7 @@ describe('shouldAnnounce', () => {
 })
 
 describe('jobNoticeTitle', () => {
-  it('折叠"任务名 / 任务名"这种复读（简单任务的 job.title 就是两半相同）', () => {
+  it('折叠"任务名 / 任务名"这种复读（历史数据的 job.title 两半相同）', () => {
     expect(jobNoticeTitle({ title: '写代码 / 写代码' })).toBe('写代码')
   })
 

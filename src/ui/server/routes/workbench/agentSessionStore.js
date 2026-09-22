@@ -14,7 +14,7 @@
 //
 // 智能体对话 session 持久化层。
 //
-// 与 ai-split-sessions 不同，这里存储的是完整 agent 对话（含工具调用）。
+// 这里存储的是完整 agent 对话（含工具调用）—— 智能体面板专用，与任务执行链路的 job 记录互不相干。
 // 消息格式兼容 OpenAI chat completions：
 //   - { role: 'system', content: string }
 //   - { role: 'user', content: string | content_parts[] }
@@ -29,7 +29,7 @@ import path from 'path';
 import { logger } from './shared.js';
 import { AGENT_SESSIONS_DIR } from '../../../../paths.js';
 
-// 数据目录：与 ai-split-sessions 平级，定义见 src/paths.js
+// 数据目录定义见 src/paths.js
 export { AGENT_SESSIONS_DIR };
 // 历史遗留别名:此前这里有个"从 import.meta.url 推路径"的错误实现(Windows 下不可靠),
 // 后来补了个 _FIXED 版本两套并存。现在统一到 paths.js 的单一常量。

@@ -159,11 +159,10 @@ export function mergedJobs() {
 let jobsSaveTimer = null;
 
 // 序列化 job 落盘：剥离 child 引用（ChildProcess 无法 JSON.stringify），
-// 反范式 taskTitle/subTitle 方便管理页直接读
+// 反范式 taskTitle 方便管理页直接读
 export function serializeJob(j, taskMap) {
   const { child, ...rest } = j;
   const t = taskMap ? taskMap.get(rest.taskId) : null;
-  const sub = t && Array.isArray(t.subtasks) ? t.subtasks.find(s => s.id === rest.subId) : null;
   // size 是保留策略（maxSizeMB）的计价口径，工具调用也会占体积，必须算进去，
   // 否则一份全是工具流水的 job 会被当成"很小"而留下来。
   const toolCallsSize = Array.isArray(rest.toolCalls)
@@ -178,7 +177,6 @@ export function serializeJob(j, taskMap) {
   return {
     ...rest,
     taskTitle: t ? t.title : '',
-    subTitle: sub ? sub.title : '',
     size
   };
 }
@@ -195,7 +193,7 @@ export function scheduleJobsSave() {
 // 立即落盘（终态调用）：把 jobs Map 当前快照写到 jobs.json，然后跑 retention
 export async function flushJobsSaveNow() {
   if (jobsSaveTimer) { clearTimeout(jobsSaveTimer); jobsSaveTimer = null; }
-  // 读 tasks.json 给落盘 job 反范式 taskTitle/subTitle——父任务被删后管理页仍可读
+  // 读 tasks.json 给落盘 job 反范式 taskTitle——父任务被删后管理页仍可读
   const tasksData = await readJson(TASKS_FILE, { tasks: [] });
   const taskMap = new Map((tasksData.tasks || []).map(t => [t.id, t]));
   // **必须并上磁盘上的历史 job 再写**：别的 g ui 进程跑的记录不在本进程内存里,

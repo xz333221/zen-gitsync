@@ -23,12 +23,12 @@
 //   - launchClaudeInNewWindow(cwd, prompt, resumeSessionId)  spawn claude，返回 {pid, child}
 //   - launchOpencodeRun(cwd, prompt, resumeSessionId)        spawn opencode，返回 {pid, child}
 //   - normalizeTaskExecutor(value)                           非法值回落 'claude'
-//   - runTaskQueue(task, repoPath, branch, opts)             顺序执行 task.subtasks（opts.executor 透传）
-//   - runSingleSubtask(task, sub, repoPath, branch, priorOutputs, opts)  跑单个 sub
-//   - syncSubToCancelled(job)                                cancel 路径专用
-//   - persistTaskAfterRun(task)                              把 sub.status 落回 tasks.json
-//   - collectPriorOutputs(task, targetSub)                   收集前序 done sub 的输出
+//   - runSingleSubtask(task, sub, repoPath, branch, opts)    跑一次任务（sub 是运行载体，见下）
 //   - waitProcessExit(pid)                                   polling 等进程退出
+//
+// 关于 `sub`：任务不再有子任务，但执行器仍以一个「运行载体」对象作为入参 ——
+// 它携带本次要跑的 title / desc / promptOverride / attachments。路由层构造它，
+// 续聊时同一任务会造出新的载体（`{taskId}__simple__r1` 等），job.subId 记的就是它。
 
 import fs from 'fs';
 import path from 'path';
@@ -36,9 +36,7 @@ import { spawn, execFileSync } from 'child_process';
 import {
   logger,
   PROMPTS_FILE,
-  TASKS_FILE,
   readJson,
-  writeJson,
   nowIso,
   genId,
   interpolate,
@@ -49,8 +47,6 @@ import {
   jobs,
   cancelledJobs,
   publish,
-  snapshotJobs,
-  refreshJobsFromDisk,
   flushJobsSaveNow,
 } from './jobStore.js';
 
@@ -590,55 +586,13 @@ export function createOpencodeEventHandler(job, appendOutput, appendThinking, to
 }
 
 /**
- * 顺序执行一个任务下所有子任务；上一个结束再启动下一个。
- * 入参 fromIndex 指定从哪个 sub 开始(0-based,默认 0),用于"从此处开始"入口;
- * fromIndex>0 时,把 [0, fromIndex) 区间内已 done 的 sub 输出预填到 priorOutputs,
- * 这样后续 sub 仍能拿到前序上下文(跟单 sub 执行的语义保持一致)。
+ * 执行一次任务。任务一次只跑一个进程，本函数是唯一的执行入口
+ * （首次执行、手动重跑、续聊都走它）。
  *
- * 连续模式（默认）：任意 sub 终态非 done（cancelled / error）→ 整批停，后续 sub 保持 todo。
- * AI 拆出来的 sub 一般前后强依赖（前一步产出是后一步输入），出错就停下来让用户决策。
- * 关闭后回退旧行为：单个 sub 失败不影响后续 sub 继续跑。
- */
-export async function runTaskQueue(task, repoPath, branch, opts) {
-  // 前序上下文:跑完一个 sub 后把它"完成态"输出存到这里,下一个 sub 启动时
-  // 拼到 prompt 头部,让 Claude 知道前面做了什么、产出了什么。
-  // 现在 LLM 都是百万 token 上下文窗口,完整透传 raw output,不做截断——
-  // 关键产物(生成的代码块、JSON、结论)在中间被砍掉反而会让后续 sub 失去依据。
-  const requested = Number(opts && opts.fromIndex);
-  const fromIndex = Number.isInteger(requested) && requested >= 0 && requested < task.subtasks.length
-    ? requested
-    : 0;
-  // 从 fromIndex 开始时,把前面已 done 的 sub 输出预填进 priorOutputs,
-  // 否则"从中间开始"会丢失前序上下文。
-  const priorOutputs = fromIndex > 0
-    ? await collectPriorOutputsUpTo(task, fromIndex)
-    : [];
-  const sequential = task.sequential !== false;
-  for (let i = fromIndex; i < task.subtasks.length; i++) {
-    const sub = task.subtasks[i];
-    if (sub.status === 'done') continue;
-    const outcome = await runSingleSubtask(task, sub, repoPath, branch, priorOutputs, { executor: opts.executor });
-    // 逐 sub 落盘:之前只在队列跑完才 persistTaskAfterRun,中途崩溃会丢已完成
-    // sub 的状态。runSingleSubtask 已经把 sub.status 改完,这里补一次落盘。
-    await persistTaskAfterRun(task);
-    if (sequential && outcome !== 'done') {
-      // cancelled / error → 后续 sub 全部保持 todo，不再继续
-      break;
-    }
-  }
-}
-
-/**
- * 执行单个子任务。被 runTaskQueue(整批)和"单 sub 执行"endpoint 共用。
- *
- * @param {object} task         主任务对象
- * @param {object} sub          要跑的子任务
+ * @param {object} task         任务对象
+ * @param {object} sub          本次运行载体：{ id, title, desc, promptOverride, attachments }
  * @param {string} repoPath     仓库路径
  * @param {string} branch       分支名（可空）
- * @param {Array<{title:string,output:string}>} priorOutputs
- *        前序 done 子任务的输出摘要（in-place 追加）。用于把同一任务下
- *        前面已完成的 sub 产物拼到当前 sub 的 prompt 头部，让 Claude
- *        知道上下文。单独跑一个 sub 时，这个数组里只会有"前面 done 的 sub"。
  * @param {object} [options]
  * @param {string|null} [options.resumeSessionId]
  *        续接历史会话:claude 走 --resume <id>，opencode 走 --session <id>。
@@ -646,9 +600,9 @@ export async function runTaskQueue(task, repoPath, branch, opts) {
  * @param {string} [options.executor]
  *        执行器 'claude' | 'opencode'。缺省回落 'claude'；路由层负责把
  *        "body 指定 > 配置默认"先解析好再传进来。
- * @returns {Promise<'done'|'cancelled'|'error'>} sub 的终态
+ * @returns {Promise<'done'|'cancelled'|'error'>} 本次运行的终态
  */
-export async function runSingleSubtask(task, sub, repoPath, branch, priorOutputs, options) {
+export async function runSingleSubtask(task, sub, repoPath, branch, options) {
   const opts = options || {};
   const resumeSessionId = opts.resumeSessionId || null;
   const executor = normalizeTaskExecutor(opts.executor);
@@ -662,28 +616,13 @@ export async function runSingleSubtask(task, sub, repoPath, branch, priorOutputs
     branch: branch || ''
   };
   const interpolated = interpolate(promptTemplate, ctx);
-  // 标题与描述可能逐字相同（派发建的简单任务就是），去重规则见 promptParts.js
+  // 标题与描述可能逐字相同（派发建的任务就是），去重规则见 promptParts.js
   let prompt = composePromptBody(interpolated, sub.title, sub.desc);
-
-  // ── 前序上下文：把前几个 done 子任务的输出完整拼到 prompt 头部 ──
-  if (priorOutputs && priorOutputs.length > 0) {
-    const prevBlock = priorOutputs.map((p, i) => {
-      return `### [${i + 1}] ${p.title}\n${p.output || ''}`;
-    }).join('\n\n');
-    prompt = `以下是同一任务下已经完成的前序子任务输出（仅作上下文参考，请基于这些结论继续当前子任务，无需重复执行它们）：
-
-${prevBlock}
-
----
-
-${prompt}`;
-  }
 
   // ── 附件：合并 sub.attachments + task.attachments 后拼到 prompt 末尾 ──
   // PDF 附件在服务端预提取全文(Claude CLI v2.1.x 的 pdfParse 有 bug),
   // 图片和其他文件仍列路径让 Claude CLI 直接读取。
-  // 主任务附件对所有 sub 都可见；子任务自己的附件只对该 sub 可见。
-  // 注意：run-simple 路径下 virtualSub.attachments 就是 task.attachments 的同一引用，
+  // 注意：首次执行时 sub.attachments 就是 task.attachments 的同一引用，
   // 不去重会把同一张图在 prompt 里列两遍。按 absolutePath 去重。
   const taskAtts = Array.isArray(task.attachments) ? task.attachments : [];
   const subAtts = Array.isArray(sub.attachments) ? sub.attachments : [];
@@ -703,7 +642,7 @@ ${prompt}`;
   }
 
   // ── 运行环境上下文：项目清单 + 看板概览 + 真相源文件路径 ──
-  // 拼在**最前面**、任务正文压尾，与上面 priorOutputs 的位置口径一致：
+  // 拼在**最前面**、任务正文压尾：
   // 越靠后离模型的注意力中心越近，用户真正要办的那句话必须在最后一屏。
   // task.envContext === false 可以单任务关掉（默认开 —— 老任务不迁移也一并受益）。
   if (task.envContext !== false) {
@@ -716,7 +655,8 @@ ${prompt}`;
     id: jobId,
     taskId: task.id,
     subId: sub.id,
-    title: `${task.title} / ${sub.title}`,
+    // 一条任务 = 一次会话：日志标题就用任务标题（sub 只是运行载体，标题同源）
+    title: task.title,
     status: 'pending',
     prompt,
     // 本轮用的执行器。前端日志详情按它显示助手名；简单任务续聊时
@@ -731,8 +671,6 @@ ${prompt}`;
     toolCalls: []
   };
   jobs.set(jobId, job);
-  sub.status = 'running';
-  publish('sub:update', { taskId: task.id, sub });
   publish('job:update', job);
 
   // 声明在 try 之外：启动器就抛错时 finally 也要能安全收口（见 toolTracker?.seal）
@@ -836,43 +774,28 @@ ${prompt}`;
       job.exitCode = 130; // 128 + SIGINT(2)，约定俗成的"用户取消"退出码
       job.status = 'cancelled';
       job.error = '用户已停止执行';
-      // 同步把闭包里的 sub 也置 cancelled（cancel 接口的 syncSubToCancelled 改了磁盘 task
-      // 引用，但 runSingleSubtask 形参里的 sub 是另一份内存引用）。否则 finally publish sub:update
-      // 会用 status='running' 覆盖掉前端已渲染的 cancelled 状态，导致 UI 反复跳回 running。
-      sub.status = 'cancelled';
-      if (!sub.error) sub.error = '用户已停止执行';
     } else if (job.agentError) {
       // 执行器在协议层报了 error（如模型 5xx、配置缺失）。CLI 退出码可能是 0，
-      // 但不能标 done —— 那会把失败伪装成完成，后续 sub 还会拿空输出当下文继续跑。
+      // 但不能标 done —— 那会把失败伪装成完成。
       job.exitCode = 1;
       job.status = 'error';
       job.error = job.agentError;
-      sub.status = 'error';
-      sub.error = job.agentError;
-      sub.errorAt = nowIso();
       appendOutput(`\n> [${executor}] ${job.agentError}\n`);
     } else {
       job.exitCode = 0;
       job.status = 'done';
-      sub.status = 'done';
-      // 把这个 sub 的输出累积到前序上下文，喂给下一个 sub
-      if (priorOutputs) priorOutputs.push({ title: sub.title, output: job.output || '' });
     }
   } catch (err) {
     const errMsg = err && err.message ? err.message : String(err);
     job.error = errMsg;
     job.status = 'error';
-    sub.status = 'error';
-    sub.error = errMsg;
-    sub.errorAt = nowIso();
   } finally {
     // 工具调用收口：进程都退了，还挂在 running 的调用不会再有下文。先标终态再推 job:update，
-    // 否则前端那些工具块会一直转圈（跟 sub 终态没写回时 UI 一直 running 同一类问题）。
+    // 否则前端那些工具块会一直转圈。
     toolTracker?.seal(job.status);
     // 移除 child 引用——避免后续被 SSE 序列化到前端
     delete job.child;
     publish('job:update', job);
-    publish('sub:update', { taskId: task.id, sub });
     // 终态：await 同步落盘,确保 done/cancelled/error 全部立即归档。
     try {
       await flushJobsSaveNow();
@@ -880,92 +803,7 @@ ${prompt}`;
       logger.warn('[workbench] flushJobsSaveNow failed (job id=' + job.id + ', status=' + job.status + '):', err && err.message || err);
     }
   }
-  // 把 sub 的终态返回给 runTaskQueue，用于「连续模式」判断要不要 break 整批队列
   return job.status;  // 'done' | 'cancelled' | 'error'
-}
-
-/**
- * 把被取消的 sub 同步置 'cancelled' 并落盘。
- * cancelJob 路径专用：前端 taskIsRunning/sub.is-running 都看 sub.status，不改就会出现
- * "主任务黄点 + sub running 动效 + 右侧执行完成"三处不一致。
- *
- * 简单任务的虚拟 subId 不在 tasks.json 里（task.subtasks 是 complex 才有），所以这里
- * 找不到 sub 时静默返回；简单任务的 running 状态由 job 数组单独维护（见 taskIsRunning）。
- *
- * @returns {{ taskId: string, sub: object } | null}  找到并更新时返回新 sub，否则 null
- */
-export async function syncSubToCancelled(job) {
-  if (!job || !job.taskId || !job.subId) return null;
-  const data = await readJson(TASKS_FILE, { tasks: [] });
-  const task = (data.tasks || []).find(x => x.id === job.taskId);
-  if (!task || !Array.isArray(task.subtasks)) return null;
-  const sub = task.subtasks.find(s => s && s.id === job.subId);
-  if (!sub) return null;
-  if (sub.status === 'cancelled') return { taskId: task.id, sub };  // 已置过，幂等返回
-  sub.status = 'cancelled';
-  sub.error = '用户已停止执行';
-  sub.errorAt = nowIso();
-  task.updatedAt = nowIso();
-  await writeJson(TASKS_FILE, data);
-  publish('sub:update', { taskId: task.id, sub });
-  publish('task:update', task);
-  return { taskId: task.id, sub };
-}
-
-/** 把 task.subtasks 写回 tasks.json,并广播 task:update。runTaskQueue 和"单 sub 执行"共用。 */
-export async function persistTaskAfterRun(task) {
-  const data = await readJson(TASKS_FILE, { tasks: [] });
-  const t = data.tasks.find(x => x.id === task.id);
-  if (t) {
-    // 仅同步 status 之外的 error/errorAt 字段，避免覆盖用户编辑过的 title/desc 等。
-    const newMap = new Map(task.subtasks.map(s => [s.id, s]));
-    t.subtasks = (t.subtasks || []).map(old => {
-      const fresh = newMap.get(old.id);
-      if (!fresh) return old;
-      return {
-        ...old,
-        status: fresh.status ?? old.status,
-        error: fresh.error ?? old.error,
-        errorAt: fresh.errorAt ?? old.errorAt,
-      };
-    });
-    t.updatedAt = nowIso();
-    await writeJson(TASKS_FILE, data);
-    publish('task:update', t);
-  }
-}
-
-/**
- * 构建单 sub 执行时的 priorOutputs：把同一 task 下"排在当前 sub 之前"且已 done 的
- * 子任务输出摘要收集起来。这样单独跑一个 sub 时,它也能拿到前序上下文。
- */
-export async function collectPriorOutputs(task, targetSub) {
-  const targetIdx = task.subtasks.findIndex(s => s.id === targetSub.id);
-  if (targetIdx < 0) return [];
-  return collectPriorOutputsUpTo(task, targetIdx);
-}
-
-/**
- * 收集 [0, endIdx) 区间内已 done 的 sub 输出摘要,作为队列内 sub 的前序上下文。
- * runTaskQueue 在 fromIndex>0 时调这个,让"从此处开始"也能拼上前序 done sub 的结论。
- */
-export async function collectPriorOutputsUpTo(task, endIdx) {
-  // 前序 sub 可能是**另一个 g ui 实例**跑完的（或者本进程重启过），只翻内存会漏，
-  // 于是"前序结论"整段丢了。刷新有 mtime 短路，队列里每个 sub 调一次也只是个 stat。
-  await refreshJobsFromDisk();
-  const prior = [];
-  for (let i = 0; i < endIdx; i++) {
-    const s = task.subtasks[i];
-    if (s.status !== 'done') continue;
-    // 从 jobs 列表里找最近一个属于这个 sub 且 status=done 的 job,
-    // 取其 output 作为"前序上下文"。完整透传,不做字符截断。
-    const job = snapshotJobs()
-      .filter(j => j.subId === s.id && j.status === 'done')
-      .sort((a, b) => (b.endedAt || '').localeCompare(a.endedAt || ''))[0];
-    if (!job) continue;
-    prior.push({ title: s.title, output: job.output || '' });
-  }
-  return prior;
 }
 
 // polling 等进程退出：信号 0 探测存活；30 分钟超时兜底

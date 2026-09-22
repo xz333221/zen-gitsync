@@ -79,7 +79,6 @@ function taskLineOf(p) {
   if (!s.total) return '任务: 无';
   const parts = [`待处理 ${s.todo || 0}`, `进行中 ${s.doing || 0}`, `已完成 ${s.done || 0}`];
   if (s.runningJobs > 0) parts.push(`正在执行 ${s.runningJobs}`);
-  if (s.errorSubtasks > 0) parts.push(`子任务报错 ${s.errorSubtasks}`);
   return `任务: ${parts.join(' / ')}`;
 }
 

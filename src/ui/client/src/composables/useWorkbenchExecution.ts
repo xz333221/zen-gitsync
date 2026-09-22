@@ -1,21 +1,23 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { $t } from '@/lang/static'
 import type { Ref, ComputedRef } from 'vue'
-import type { Task, SubTask, Job } from '@/types/workbench'
+import type { Task, Job } from '@/types/workbench'
 import type { SelectedFile } from 'zen-ai-chat-ui'
 
+/**
+ * 工作台的执行动作。
+ *
+ * 每个任务都是一次会话：执行 = 把任务标题/描述（+ 附件 + 提示词覆盖）交给本地 CLI 跑一轮。
+ * 因此这里只有一条执行路径，`runTask` 是唯一入口（首次执行、重跑、卡片上的「执行」都走它）。
+ */
 export function useWorkbenchExecution(
   jobs: Ref<Job[]>,
   tasks: Ref<Task[]>,
   selectedTask: ComputedRef<Task | null>,
   options: {
     syncRunningCount: () => void
-    jobOf: (subId: string) => Job | null
-    simpleAllJobsFor: (task: Task | null) => Job[]
     clearJobsByTask: (taskId: string) => Promise<number>
-    clearNonDoneJobsByTask: (taskId: string) => Promise<number>
     persistTask: (showSuccess: boolean) => Promise<boolean>
-    loadTasks: (captureSnapshot?: () => void) => Promise<void>
     uploadAttachment: (target: any, file: File) => Promise<void>
     /** 本次执行用哪个本地 CLI（claude | opencode）。工作台执行按钮旁的临时选择 */
     getExecutor: () => 'claude' | 'opencode'
@@ -25,100 +27,31 @@ export function useWorkbenchExecution(
   function executorBody(): Record<string, string> {
     return { executor: options.getExecutor() }
   }
-  async function runTask(t: Task) {
-    if (t.type === 'simple') {
-      return runSimpleTask(t)
-    }
-    if (!t.subtasks || t.subtasks.length === 0) {
-      ElMessage.warning($t('@WORKBENCH:请先拆分任务'))
-      return
-    }
-    if (selectedTask.value && selectedTask.value.id === t.id) {
-      const onDisk = tasks.value.find(x => x.id === t.id)
-      const dirty = !onDisk
-        || onDisk.title !== selectedTask.value.title
-        || onDisk.desc !== selectedTask.value.desc
-        || JSON.stringify(onDisk.subtasks) !== JSON.stringify(selectedTask.value.subtasks)
-        || onDisk.promptId !== selectedTask.value.promptId
-      if (dirty) {
-        const ok = await options.persistTask(false)
-        if (!ok) return
-      }
-    }
-    const doneSubs = t.subtasks.filter(s => s.status === 'done')
-    if (doneSubs.length > 0) {
-      let choice: 'confirm' | 'cancel' | 'close' = 'close'
-      try {
-        await ElMessageBox.confirm(
-          $t('@WORKBENCH:该任务有 {n} 个子任务已 done,如何处理?', { n: doneSubs.length }) + '\n\n' +
-            $t('@WORKBENCH:点"确定"将重置全部 done 为 todo,从头跑一遍(会消耗 token)') + '\n' +
-            $t('@WORKBENCH:点"取消"将保留 done 状态,只跑未完成的 sub'),
-          $t('@WORKBENCH:检测到已完成子任务'),
-          {
-            confirmButtonText: $t('@WORKBENCH:重置全部并重跑'),
-            cancelButtonText: $t('@WORKBENCH:只跑未完成'),
-            type: 'warning',
-            distinguishCancelAndClose: true,
-            showClose: true
-          }
-        )
-        choice = 'confirm'
-      } catch (action: any) {
-        choice = action === 'cancel' ? 'cancel' : 'close'
-      }
-      if (choice === 'close') return
-      if (choice === 'confirm') {
-        const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/clear-execution`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        }).then(r => r.json()).catch(err => ({ success: false, error: err?.message || String(err) }))
-        if (!res?.success) {
-          ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))
-          return
-        }
-        if (Array.isArray(t.subtasks)) {
-          for (const s of t.subtasks) {
-            s.status = 'todo'
-            if (s.error) delete s.error
-          }
-        }
-        jobs.value = jobs.value.filter(j => j.taskId !== t.id)
-        options.syncRunningCount()
-        ElMessage.success(res.message || $t('@WORKBENCH:已重置,准备从头执行'))
-      }
-    }
-    await options.clearNonDoneJobsByTask(t.id)
-    const res = await fetch(`/api/workbench/tasks/${t.id}/run`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(executorBody())
-    }).then(r => r.json())
-    if (res.success) {
-      ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
-    } else {
-      ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
-    }
+
+  /** 编辑器里改了没落盘时，执行前先存一次 —— 否则跑的还是旧内容 */
+  async function persistIfDirty(t: Task): Promise<boolean> {
+    if (!selectedTask.value || selectedTask.value.id !== t.id) return true
+    const onDisk = tasks.value.find(x => x.id === t.id)
+    const dirty = !onDisk
+      || onDisk.title !== selectedTask.value.title
+      || onDisk.desc !== selectedTask.value.desc
+      || onDisk.promptId !== selectedTask.value.promptId
+      || (onDisk.simpleOverride || '') !== (selectedTask.value.simpleOverride || '')
+    if (!dirty) return true
+    return await options.persistTask(false)
   }
 
-  async function runSimpleTask(t: Task) {
-    if (selectedTask.value && selectedTask.value.id === t.id) {
-      const onDisk = tasks.value.find(x => x.id === t.id)
-      const dirty = !onDisk
-        || onDisk.title !== selectedTask.value.title
-        || onDisk.desc !== selectedTask.value.desc
-        || onDisk.promptId !== selectedTask.value.promptId
-        || (onDisk.simpleOverride || '') !== (selectedTask.value.simpleOverride || '')
-      if (dirty) {
-        const ok = await options.persistTask(false)
-        if (!ok) return
-      }
-    }
+  async function runTask(t: Task) {
+    if (!(await persistIfDirty(t))) return
+    // 重跑 = 新的一轮：先清掉这个任务旧的执行记录，否则对话区会把上一轮和这一轮混在一起
     await options.clearJobsByTask(t.id)
-    const res = await fetch(`/api/workbench/tasks/${t.id}/run-simple`, {
+    const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(executorBody())
-    }).then(r => r.json())
+    })
+      .then(r => r.json())
+      .catch(err => ({ success: false, error: err?.message || String(err) }))
     if (res.success) {
       ElMessage.success(res.message || $t('@WORKBENCH:已加入执行队列'))
     } else {
@@ -127,7 +60,9 @@ export function useWorkbenchExecution(
   }
 
   async function continueChat(t: Task, message: string) {
-    const latest = options.simpleAllJobsFor(t).slice(-1)[0]
+    const latest = jobs.value
+      .filter(j => j.taskId === t.id)
+      .slice(-1)[0]
     if (!latest) {
       ElMessage.error($t('@WORKBENCH:没有可续接的会话'))
       return
@@ -157,122 +92,18 @@ export function useWorkbenchExecution(
     await continueChat(t, msg)
   }
 
+  /**
+   * 执行日志里点「重新执行」：找回这条 job 所属的任务再跑一轮。
+   * job.subId 形如 `{taskId}__simple[__rN]`，但更稳的是直接用 taskId —— 任务被删过就报错。
+   */
   async function onReExecuteJob(j: Job) {
-    const subId = j.subId || ''
-    const simpleMatch = subId.match(/^(.+)__simple(?:__r\d+)?$/)
-    if (simpleMatch) {
-      const taskId = simpleMatch[1]
-      const t = tasks.value.find(x => x.id === taskId)
-      if (!t) {
-        ElMessage.error($t('@WORKBENCH:任务不存在,无法重新执行'))
-        return
-      }
-      await runSimpleTask(t)
+    const t = tasks.value.find(x => x.id === j.taskId)
+      || tasks.value.find(x => x.id === String(j.subId || '').replace(/__simple(?:__r\d+)?$/, ''))
+    if (!t) {
+      ElMessage.error($t('@WORKBENCH:找不到对应任务,无法重新执行'))
       return
     }
-    for (const t of tasks.value) {
-      const sub = (t.subtasks || []).find(s => s.id === subId)
-      if (sub) {
-        const live = options.jobOf(sub.id)
-        if (live && (live.status === 'running' || live.status === 'pending')) {
-          ElMessage.warning($t('@WORKBENCH:该子任务正在执行中'))
-          return
-        }
-        const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(executorBody())
-        })
-          .then(r => r.json())
-          .catch(err => ({ success: false, error: err?.message || String(err) }))
-        if (res.success) {
-          ElMessage.success(res.message || $t('@WORKBENCH:已开始执行子任务'))
-        } else {
-          ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
-        }
-        return
-      }
-    }
-    ElMessage.error($t('@WORKBENCH:找不到对应任务,无法重新执行'))
-  }
-
-  async function runSubtask(sub: SubTask) {
-    if (!selectedTask.value) return
-    const t = selectedTask.value
-    const live = options.jobOf(sub.id)
-    if (live && (live.status === 'running' || live.status === 'pending')) {
-      ElMessage.warning($t('@WORKBENCH:该子任务正在执行中'))
-      return
-    }
-    const onDisk = tasks.value.find(x => x.id === t.id)
-    const dirty = !onDisk
-      || onDisk.title !== t.title
-      || onDisk.desc !== t.desc
-      || JSON.stringify(onDisk.subtasks) !== JSON.stringify(t.subtasks)
-      || onDisk.promptId !== t.promptId
-    if (dirty) {
-      const ok = await options.persistTask(false)
-      if (!ok) return
-    }
-    const res = await fetch(`/api/workbench/subtasks/${sub.id}/run`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(executorBody())
-    })
-      .then(r => r.json())
-      .catch(err => ({ success: false, error: err?.message || String(err) }))
-    if (res.success) {
-      ElMessage.success(res.message || $t('@WORKBENCH:已开始执行子任务'))
-    } else {
-      ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
-    }
-  }
-
-  function canRunSubtask(sub: SubTask): boolean {
-    if (sub.status === 'done') return false
-    const j = options.jobOf(sub.id)
-    if (j && (j.status === 'running' || j.status === 'pending')) return false
-    return true
-  }
-
-  function canRunFromHere(sub: SubTask): boolean {
-    if (!canRunSubtask(sub)) return false
-    if (!selectedTask.value) return false
-    const subs = selectedTask.value.subtasks || []
-    const idx = subs.findIndex(s => s.id === sub.id)
-    if (idx < 0) return false
-    if (idx === subs.length - 1) return false
-    return true
-  }
-
-  async function runFromHere(sub: SubTask) {
-    if (!selectedTask.value) return
-    const t = selectedTask.value
-    const subs = t.subtasks || []
-    const startIndex = subs.findIndex(s => s.id === sub.id)
-    if (startIndex < 0) return
-    const onDisk = tasks.value.find(x => x.id === t.id)
-    const dirty = !onDisk
-      || onDisk.title !== t.title
-      || onDisk.desc !== t.desc
-      || JSON.stringify(onDisk.subtasks) !== JSON.stringify(t.subtasks)
-      || onDisk.promptId !== t.promptId
-    if (dirty) {
-      const ok = await options.persistTask(false)
-      if (!ok) return
-    }
-    const res = await fetch(`/api/workbench/tasks/${t.id}/run-from`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startSubIndex: startIndex, ...executorBody() })
-    })
-      .then(r => r.json())
-      .catch(err => ({ success: false, error: err?.message || String(err) }))
-    if (res.success) {
-      ElMessage.success(res.message || $t('@WORKBENCH:已从此处开始执行'))
-    } else {
-      ElMessage.error(res.error || $t('@WORKBENCH:执行失败'))
-    }
+    await runTask(t)
   }
 
   async function cancelJob(j: Job) {
@@ -299,26 +130,14 @@ export function useWorkbenchExecution(
     }
   }
 
-  async function cancelDone(sub: SubTask, persistTaskFn: (showSuccess: boolean) => Promise<boolean>) {
-    if (!selectedTask.value) return
-    sub.status = 'todo'
-    await persistTaskFn(false)
-  }
-
   async function clearExecutionForSelectedTask() {
     if (!selectedTask.value) return
     const t = selectedTask.value
-    const subs = Array.isArray(t.subtasks) ? t.subtasks : []
-    const doneCount = subs.filter(s => s.status === 'done').length
-    const errCount = subs.filter(s => s.status === 'error').length
-    const runCount = subs.filter(s => s.status === 'running').length
     const localJobs = jobs.value.filter(j => j.taskId === t.id)
-    const confirmMsg = doneCount + errCount === 0
+    const runCount = localJobs.filter(j => j.status === 'running' || j.status === 'pending').length
+    const confirmMsg = localJobs.length === 0
       ? $t('@WORKBENCH:当前任务还没有执行内容,确认仍要清空?')
-      : $t('@WORKBENCH:将清空 {n} 个已执行/失败的子任务和 {m} 条执行记录,任务拆分/描述/附件保留。', {
-          n: doneCount + errCount,
-          m: localJobs.length
-        })
+      : $t('@WORKBENCH:将清空 {m} 条执行记录,任务描述/附件保留。', { m: localJobs.length })
     try {
       await ElMessageBox.confirm(
         confirmMsg,
@@ -333,7 +152,7 @@ export function useWorkbenchExecution(
       return
     }
     if (runCount > 0) {
-      ElMessage.warning($t('@WORKBENCH:有 {n} 个子任务正在执行,请先停止', { n: runCount }))
+      ElMessage.warning($t('@WORKBENCH:任务正在执行,请先停止'))
       return
     }
     const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/clear-execution`, {
@@ -343,12 +162,6 @@ export function useWorkbenchExecution(
       .then(r => r.json())
       .catch(err => ({ success: false, error: err?.message || String(err) }))
     if (res?.success) {
-      if (Array.isArray(t.subtasks)) {
-        for (const s of t.subtasks) {
-          s.status = 'todo'
-          if (s.error) delete s.error
-        }
-      }
       jobs.value = jobs.value.filter(j => j.taskId !== t.id)
       options.syncRunningCount()
       ElMessage.success(res.message || $t('@WORKBENCH:已清空执行内容'))
@@ -357,53 +170,9 @@ export function useWorkbenchExecution(
     }
   }
 
-  async function clearSubtasksForSelectedTask(clearDirty: () => void) {
-    if (!selectedTask.value) return
-    const t = selectedTask.value
-    const subCount = Array.isArray(t.subtasks) ? t.subtasks.length : 0
-    if (subCount === 0) {
-      ElMessage.warning($t('@WORKBENCH:当前任务没有子任务'))
-      return
-    }
-    const runningJob = jobs.value.find(j => j.taskId === t.id && (j.status === 'running' || j.status === 'pending'))
-    if (runningJob) {
-      ElMessage.warning($t('@WORKBENCH:有子任务正在执行,请先停止'))
-      return
-    }
-    try {
-      await ElMessageBox.confirm(
-        $t('@WORKBENCH:将删除 {n} 个子任务,任务描述/附件/标题保留,确认?', { n: subCount }),
-        $t('@WORKBENCH:清空子任务'),
-        {
-          confirmButtonText: $t('@WORKBENCH:清空'),
-          cancelButtonText: $t('@WORKBENCH:取消'),
-          type: 'warning'
-        }
-      )
-    } catch {
-      return
-    }
-    const res = await fetch(`/api/workbench/tasks/${encodeURIComponent(t.id)}/clear-subtasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    })
-      .then(r => r.json())
-      .catch(err => ({ success: false, error: err?.message || String(err) }))
-    if (res?.success) {
-      t.subtasks = []
-      clearDirty()
-      jobs.value = jobs.value.filter(j => j.taskId !== t.id)
-      options.syncRunningCount()
-      ElMessage.success(res.message || $t('@WORKBENCH:已清空子任务'))
-    } else {
-      ElMessage.error(res?.error || $t('@WORKBENCH:清空失败'))
-    }
-  }
-
   return {
-    runTask, runSimpleTask, continueChat, onContinueSendFromChat,
-    onReExecuteJob, runSubtask, canRunSubtask, canRunFromHere, runFromHere,
-    cancelJob, cancelDone,
-    clearExecutionForSelectedTask, clearSubtasksForSelectedTask
+    runTask, continueChat, onContinueSendFromChat,
+    onReExecuteJob, cancelJob,
+    clearExecutionForSelectedTask
   }
 }

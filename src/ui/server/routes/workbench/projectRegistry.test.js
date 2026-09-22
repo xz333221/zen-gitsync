@@ -33,7 +33,6 @@ import {
 } from './projectRegistry.js';
 import { normalizeOrchestrator, buildActivityFeed, buildRunningAgents } from './orchestratorStore.js';
 
-const sub = (id, status) => ({ id, title: id, desc: '', status, promptOverride: '' });
 const job = (id, taskId, status, startedAt, endedAt = null) => ({
   id, taskId, subId: `${taskId}__${id}`, title: '', status, startedAt, endedAt,
 });
@@ -84,28 +83,25 @@ test('resolveTaskRepoPath 优先用任务自己的项目，空则回退当前项
 // ── 看板列推导 ──────────────────────────────────────────────────────
 
 test('deriveTaskColumn: 从没动过的任务在待处理', () => {
-  assert.equal(deriveTaskColumn({ subtasks: [] }, []), 'todo');
-  assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'todo')] }, []), 'todo');
+  assert.equal(deriveTaskColumn({}, []), 'todo');
 });
 
-test('deriveTaskColumn: 有 job 在跑或子任务 running 就是进行中', () => {
-  assert.equal(deriveTaskColumn({ subtasks: [] }, [job('j1', 't1', 'running', '2026-01-01T00:00:00Z')]), 'doing');
-  assert.equal(deriveTaskColumn({ subtasks: [] }, [job('j1', 't1', 'pending', '2026-01-01T00:00:00Z')]), 'doing');
-  assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'running')] }, []), 'doing');
+test('deriveTaskColumn: 有 job 在跑就是进行中', () => {
+  assert.equal(deriveTaskColumn({}, [job('j1', 't1', 'running', '2026-01-01T00:00:00Z')]), 'doing');
+  assert.equal(deriveTaskColumn({}, [job('j1', 't1', 'pending', '2026-01-01T00:00:00Z')]), 'doing');
 });
 
-test('deriveTaskColumn: 子任务全部完成才算已完成', () => {
-  assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'done'), sub('s2', 'done')] }, []), 'done');
-  // 一半完成 → 仍待处理，错误与进度由卡片标记展示
-  assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'done'), sub('s2', 'todo')] }, []), 'todo');
-  // 有子任务报错也算"需要人看一眼"
-  assert.equal(deriveTaskColumn({ subtasks: [sub('s1', 'error'), sub('s2', 'todo')] }, []), 'todo');
-});
-
-test('deriveTaskColumn: 无子任务的任务只能看执行记录', () => {
-  assert.equal(deriveTaskColumn({ subtasks: [], type: 'simple' }, [job('j1', 't1', 'done', '2026-01-01T00:00:00Z')]), 'done');
-  assert.equal(deriveTaskColumn({ subtasks: [], type: 'simple' }, [job('j1', 't1', 'cancelled', '2026-01-01T00:00:00Z')]), 'todo');
-  assert.equal(deriveTaskColumn({ subtasks: [], type: 'simple' }, [job('j1', 't1', 'error', '2026-01-01T00:00:00Z')]), 'todo');
+test('deriveTaskColumn: 看执行记录 —— 最近一条 done 才算已完成', () => {
+  assert.equal(deriveTaskColumn({}, [job('j1', 't1', 'done', '2026-01-01T00:00:00Z')]), 'done');
+  // 错误与取消都退回待处理：列表示任务是否仍待处理，错误是这一轮执行的结果
+  assert.equal(deriveTaskColumn({}, [job('j1', 't1', 'cancelled', '2026-01-01T00:00:00Z')]), 'todo');
+  assert.equal(deriveTaskColumn({}, [job('j1', 't1', 'error', '2026-01-01T00:00:00Z')]), 'todo');
+  // 最新一条失败、前面成功过 → 仍然待处理
+  const jobs = [
+    job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z'),
+    job('j2', 't1', 'error', '2026-01-02T00:00:00Z', '2026-01-02T00:01:00Z'),
+  ];
+  assert.equal(deriveTaskColumn({}, jobs), 'todo');
 });
 
 test('latestJob 按 startedAt 取最新的一条', () => {
@@ -152,7 +148,7 @@ test('buildProjectEntries: 目录段大小写不同也是同一个项目（旧�
   assert.equal(entries[0].name, 'xuze3');
   // 项目行只认这个 key 的任务，key 分叉会连带把任务计数拆到两行上去
   const stats = summarizeProjectTasks(
-    [{ id: 't1', projectPath: 'C:\\Users\\xuze3', subtasks: [] }],
+    [{ id: 't1', projectPath: 'C:\\Users\\xuze3' }],
     [],
   );
   assert.equal(stats.get('c:\\users\\xuze3').total, 1);
@@ -172,11 +168,11 @@ test('buildProjectEntries: 目录段大小写不同也是同一个项目（旧�
 test('summarizeProjectTasks: 按项目汇总列数量、进度、活跃执行与最后活跃时间', () => {
   const tasks = [
     // A 项目：1 个已完成
-    { id: 'a1', projectPath: 'D:\\a', subtasks: [sub('a1s', 'done')], updatedAt: '2026-01-01T00:00:00Z' },
+    { id: 'a1', projectPath: 'D:\\a', updatedAt: '2026-01-01T00:00:00Z' },
     // A 项目：1 个在跑（job running）
-    { id: 'a2', projectPath: 'D:\\a', subtasks: [sub('a2s', 'running')], updatedAt: '2026-01-02T00:00:00Z' },
+    { id: 'a2', projectPath: 'D:\\a', updatedAt: '2026-01-02T00:00:00Z' },
     // B 项目：1 个待处理
-    { id: 'b1', projectPath: 'D:\\b', subtasks: [sub('b1s', 'todo')], updatedAt: '2026-01-03T00:00:00Z' },
+    { id: 'b1', projectPath: 'D:\\b', updatedAt: '2026-01-03T00:00:00Z' },
   ];
   const jobs = [
     job('j1', 'a2', 'running', '2026-01-04T00:00:00Z'),
@@ -204,15 +200,10 @@ test('summarizeProjectTasks: 按项目汇总列数量、进度、活跃执行与
 test('decorateTaskForBoard: 只回卡片需要的字段', () => {
   const card = decorateTaskForBoard({
     id: 't1', title: '标题', desc: '描述', projectPath: 'D:\\a',
-    subtasks: [sub('s1', 'done'), sub('s2', 'error')],
     attachments: [{ id: 'at1' }],
     createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z',
   }, []);
   assert.equal(card.column, 'todo');
-  assert.equal(card.type, 'complex');
-  assert.equal(card.subtaskCount, 2);
-  assert.equal(card.subtaskDoneCount, 1);
-  assert.equal(card.subtaskErrorCount, 1);
   assert.equal(card.attachmentCount, 1);
   assert.equal(card.runningJobs, 0);
   // 没跑过就没有完成时间——看板「已完成」列的排序靠它，空值必须显式是 null
@@ -226,7 +217,7 @@ test('decorateTaskForBoard: lastJobEndedAt 取最近一条 job 的结束时间�
     job('j2', 't1', 'done', '2026-01-03T00:00:00Z', '2026-01-03T00:20:00Z'),
     job('j3', 't1', 'error', '2026-01-02T00:00:00Z', '2026-01-02T00:05:00Z'),
   ];
-  const base = { id: 't1', title: '', desc: '', subtasks: [], createdAt: '2025-12-31T00:00:00Z' };
+  const base = { id: 't1', title: '', desc: '', createdAt: '2025-12-31T00:00:00Z' };
 
   // 只有 j2 是"最近"的，即使它的结束时间排在 startedAt 序里也是最后
   assert.equal(decorateTaskForBoard(base, jobs).lastJobEndedAt, '2026-01-03T00:20:00Z');
@@ -261,11 +252,7 @@ test('buildActivityFeed: job 起止合成两条记录，与人类指令一起按
     id: 'j1', taskId: 't1', subId: 's1', status: 'done', pid: 123,
     startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:05:00Z', exitCode: 0,
   }];
-  const tasks = [{
-    id: 't1', projectPath: 'D:\\ws\\proj-a',
-    subtasks: [{ id: 's1', title: '子任务一', status: 'done' }],
-    title: '任务一',
-  }];
+  const tasks = [{ id: 't1', projectPath: 'D:\\ws\\proj-a', title: '任务一' }];
   const instructions = [{
     id: 'i1', text: '把这些重构一下', projectPath: 'D:\\ws\\proj-a',
     at: '2026-01-01T00:10:00Z', status: 'accepted',
@@ -275,7 +262,6 @@ test('buildActivityFeed: job 起止合成两条记录，与人类指令一起按
   assert.equal(feed.length, 3);
   assert.deepEqual(feed.map(r => r.kind), ['user', 'done', 'dispatch']);
   assert.equal(feed[1].taskTitle, '任务一');
-  assert.equal(feed[1].subTitle, '子任务一');
   assert.equal(feed[1].projectName, 'proj-a');
   assert.equal(feed[2].pid, 123);
   assert.equal(feed[0].instructionStatus, 'accepted');
@@ -287,7 +273,7 @@ test('buildActivityFeed: 指令带起来的起跑并进指令行，不再重复�
     startedAt: '2026-01-01T00:00:01Z', endedAt: '2026-01-01T00:05:00Z',
   }];
   // 任务标题就是指令首行，所以派发行和指令行本来长得一模一样
-  const tasks = [{ id: 't1', title: '把这些重构一下', projectPath: 'D:\\ws\\proj-a', subtasks: [] }];
+  const tasks = [{ id: 't1', title: '把这些重构一下', projectPath: 'D:\\ws\\proj-a' }];
   const instructions = [{
     id: 'i1', text: '把这些重构一下', taskId: 't1', projectPath: 'D:\\ws\\proj-a',
     at: '2026-01-01T00:00:00Z', status: 'accepted',
@@ -304,7 +290,7 @@ test('buildActivityFeed: 只吸收指令后的首次起跑，手动重跑仍保�
     { id: 'j1', taskId: 't1', status: 'done', startedAt: '2026-01-01T00:00:01Z', endedAt: '2026-01-01T00:05:00Z' },
     { id: 'j2', taskId: 't1', status: 'done', startedAt: '2026-01-01T00:10:00Z', endedAt: '2026-01-01T00:15:00Z' },
   ];
-  const tasks = [{ id: 't1', title: '跑一下', projectPath: 'D:\\ws\\proj-a', subtasks: [] }];
+  const tasks = [{ id: 't1', title: '跑一下', projectPath: 'D:\\ws\\proj-a' }];
   const instructions = [{
     id: 'i1', text: '跑一下', taskId: 't1', projectPath: 'D:\\ws\\proj-a',
     at: '2026-01-01T00:00:00Z', status: 'accepted',
@@ -318,7 +304,7 @@ test('buildActivityFeed: 只吸收指令后的首次起跑，手动重跑仍保�
 test('buildActivityFeed: 指令还没跑起来时，起跑行照旧保留给别的 job', () => {
   // 指令建了任务但没执行（调度暂停）——此时该任务的任何起跑都不是它带起来的
   const jobs = [{ id: 'j1', taskId: 't1', status: 'done', startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:05:00Z' }];
-  const tasks = [{ id: 't1', title: '手跑的', projectPath: 'D:\\a', subtasks: [] }];
+  const tasks = [{ id: 't1', title: '手跑的', projectPath: 'D:\\a' }];
   const instructions = [{
     id: 'i1', text: '手跑的', taskId: 't1', projectPath: 'D:\\a',
     at: '2026-01-01T00:20:00Z', status: 'created',
@@ -333,7 +319,7 @@ test('buildActivityFeed: 失败与取消分别落成 error / cancelled', () => {
     { id: 'j1', taskId: 't1', subId: 's1', status: 'error', startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:01:00Z', error: 'boom' },
     { id: 'j2', taskId: 't1', subId: 's2', status: 'cancelled', startedAt: '2026-01-01T00:02:00Z', endedAt: '2026-01-01T00:03:00Z' },
   ];
-  const feed = buildActivityFeed({ jobs, tasks: [{ id: 't1', projectPath: 'D:\\a', subtasks: [] }] });
+  const feed = buildActivityFeed({ jobs, tasks: [{ id: 't1', projectPath: 'D:\\a' }] });
   const kinds = feed.map(r => r.kind);
   assert.ok(kinds.includes('error'));
   assert.ok(kinds.includes('cancelled'));
@@ -348,23 +334,18 @@ test('buildActivityFeed: 任务已被删除时仍能出记录（不留孤儿空�
   assert.equal(feed[0].projectName, '');
 });
 
-test('buildRunningAgents: 只列活跃 job，到 job 粒度而不是任务粒度', () => {
-  const tasks = [{
-    id: 't1', projectPath: 'D:\\ws\\proj-a', subtasks: [
-      { id: 's1', title: '子任务一', status: 'running' },
-      { id: 's2', title: '子任务二', status: 'running' },
-    ],
-  }];
+test('buildRunningAgents: 只列活跃 job，按 startedAt 倒序', () => {
+  const tasks = [{ id: 't1', title: '任务一', projectPath: 'D:\\ws\\proj-a' }];
   const jobs = [
-    { id: 'j1', taskId: 't1', subId: 's1', status: 'running', pid: 111, startedAt: '2026-01-01T00:02:00Z' },
-    { id: 'j2', taskId: 't1', subId: 's2', status: 'pending', pid: 222, startedAt: '2026-01-01T00:01:00Z' },
-    { id: 'j3', taskId: 't1', subId: 's3', status: 'done', pid: 333, startedAt: '2026-01-01T00:00:00Z' },
+    { id: 'j1', taskId: 't1', subId: 't1__simple', status: 'running', pid: 111, startedAt: '2026-01-01T00:02:00Z' },
+    { id: 'j2', taskId: 't1', subId: 't1__simple__r1', status: 'pending', pid: 222, startedAt: '2026-01-01T00:01:00Z' },
+    { id: 'j3', taskId: 't1', subId: 't1__simple__r2', status: 'done', pid: 333, startedAt: '2026-01-01T00:00:00Z' },
   ];
   const running = buildRunningAgents({ jobs, tasks });
   assert.equal(running.length, 2);
   // 最新的排在前面
   assert.equal(running[0].jobId, 'j1');
-  assert.equal(running[0].subTitle, '子任务一');
+  assert.equal(running[0].taskTitle, '任务一');
   assert.equal(running[0].projectName, 'proj-a');
   assert.equal(running[1].status, 'pending');
 });
@@ -416,11 +397,7 @@ test('buildTaskDetail: 任务缺失返回 null（交路由转 404）', () => {
 });
 
 test('buildTaskDetail: lastJob 取最新一条，recentJobs 倒序且被限制条数', () => {
-  const task = {
-    id: 't1', title: '任务', desc: '', type: 'complex',
-    subtasks: [sub('s1', 'done'), sub('s2', 'running')],
-    attachments: [{ id: 'a1' }],
-  };
+  const task = { id: 't1', title: '任务', desc: '', attachments: [{ id: 'a1' }] };
   const jobs = [
     job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z'),
     job('j3', 't1', 'running', '2026-01-01T00:02:00Z'),
@@ -439,7 +416,7 @@ test('buildTaskDetail: lastJob 取最新一条，recentJobs 倒序且被限制�
 });
 
 test('buildTaskDetail: recentJobLimit 生效；无 job 时 lastJob 为 null 而不是抛错', () => {
-  const task = { id: 't2', title: '', desc: '', type: 'simple', subtasks: [] };
+  const task = { id: 't2', title: '', desc: '' };
   const jobs = [1, 2, 3, 4, 5, 6].map(i => job('j' + i, 't2', 'done', `2026-01-0${i}T00:00:00Z`));
   const d = buildTaskDetail(task, jobs, { recentJobLimit: 2 });
   assert.equal(d.recentJobs.length, 2);

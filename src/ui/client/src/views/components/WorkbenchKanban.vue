@@ -18,7 +18,7 @@
 
   关于「列」的一处重要克制：这四列是**推导出来的阶段**，不是可拖拽的状态字段。
   待处理/进行中/已完成 全部由执行事实推出（后端 deriveTaskColumn）：
-  有 job 在跑就是进行中、子任务全完成才是已完成……
+  有 job 在跑就是进行中、最近一条 job 跑完才是已完成……
   所以卡片不支持拖动换列——拖过去也没有对应的写操作可做，
   与其做一个拖了就弹回去的假交互，不如让动作落在「执行 / 查看详情」这两个真按钮上。
 
@@ -65,7 +65,6 @@ watch(view, (v) => {
 })
 
 const search = ref('')
-const typeFilter = ref<'all' | 'simple' | 'complex'>('all')
 const onlyErrors = ref(false)
 
 const COLUMNS: { key: TaskColumn; labelKey: string }[] = [
@@ -77,8 +76,7 @@ const COLUMNS: { key: TaskColumn; labelKey: string }[] = [
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   return props.tasks.filter(t => {
-    if (typeFilter.value !== 'all' && t.type !== typeFilter.value) return false
-    if (onlyErrors.value && t.subtaskErrorCount === 0 && t.lastJobStatus !== 'error') return false
+    if (onlyErrors.value && t.lastJobStatus !== 'error') return false
     if (!q) return true
     return (t.title || '').toLowerCase().includes(q) || (t.desc || '').toLowerCase().includes(q)
   })
@@ -99,8 +97,8 @@ const columns = computed(() =>
  * 排序键刻意和卡片上显示的时间是同一个值（见 cardTime）——
  * 拿 A 排、显示 B 的话，用户看到的会是一列时间乱跳的卡片，看着就像没排过。
  * 回退链：最近一条 job 的结束时间 → updatedAt → createdAt。
- * 需要回退是因为复杂任务可以手动把子任务全勾成 done（一条 job 都没有），
- * 这种任务的"完成时刻"只能退到它最后一次被改动的时刻。
+ * 需要回退是因为一条任务可能在"没有 job 记录"的情况下进入已完成列
+ * （例如完成任务后执行记录被清空），这种任务的"完成时刻"只能退到它最后一次被改动的时刻。
  */
 function doneAt(t: BoardTask): string {
   return String(t.lastJobEndedAt || t.updatedAt || t.createdAt || '')
@@ -138,9 +136,9 @@ function projectLabel(t: BoardTask): string {
   return props.projectLabels[t.projectPath] || ''
 }
 
-/** 有未完成却报过错的子任务——给卡片一个"需要你看一眼"的标记 */
+/** 最近一次执行报过错——给卡片一个"需要你看一眼"的标记 */
 function hasError(t: BoardTask): boolean {
-  return t.subtaskErrorCount > 0 || t.lastJobStatus === 'error'
+  return t.lastJobStatus === 'error'
 }
 </script>
 
@@ -167,12 +165,7 @@ function hasError(t: BoardTask): boolean {
       </div>
 
       <div class="kb__filters">
-        <select class="kb__select" v-model="typeFilter" :aria-label="$t('@WORKBENCH:任务类型')">
-          <option value="all">{{ $t('@WORKBENCH:全部类型') }}</option>
-          <option value="simple">{{ $t('@WORKBENCH:简单') }}</option>
-          <option value="complex">{{ $t('@WORKBENCH:复杂') }}</option>
-        </select>
-        <label class="kb__check" :title="$t('@WORKBENCH:只显示子任务或最近一次执行报错的任务')">
+        <label class="kb__check" :title="$t('@WORKBENCH:只显示最近一次执行报错的任务')">
           <input type="checkbox" v-model="onlyErrors" />
           <span>{{ $t('@WORKBENCH:仅看报错') }}</span>
         </label>
@@ -207,26 +200,12 @@ function hasError(t: BoardTask): boolean {
           >
             <div class="kb-card__row1">
               <span v-if="t.runningJobs > 0" class="kb-card__running" aria-hidden="true" />
-              <span v-if="t.type === 'simple'" class="kb-card__type">{{ $t('@WORKBENCH:简单') }}</span>
-              <span v-if="t.subtaskErrorCount > 0" class="kb-card__error">
-                {{ $t('@WORKBENCH:{n} 个子任务报错', { n: t.subtaskErrorCount }) }}
-              </span>
               <span class="kb-card__time">{{ relativeTimeFromIso(cardTime(t)) }}</span>
             </div>
 
             <p class="kb-card__title" :title="cardTitle(t)">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</p>
 
             <p v-if="showProjectLabel && projectLabel(t)" class="kb-card__project">{{ projectLabel(t) }}</p>
-
-            <div v-if="t.subtaskCount > 0" class="kb-card__progress">
-              <span class="kb-card__bar" aria-hidden="true">
-                <i
-                  class="kb-card__bar-fill"
-                  :style="{ width: Math.round((t.subtaskDoneCount / t.subtaskCount) * 100) + '%' }"
-                />
-              </span>
-              <span class="kb-card__progress-text">{{ t.subtaskDoneCount }}/{{ t.subtaskCount }}</span>
-            </div>
 
             <div class="kb-card__actions">
               <button
@@ -263,8 +242,6 @@ function hasError(t: BoardTask): boolean {
           <tr>
             <th class="kb-table__th">{{ $t('@WORKBENCH:任务') }}</th>
             <th class="kb-table__th kb-table__th--narrow">{{ $t('@WORKBENCH:状态') }}</th>
-            <th class="kb-table__th kb-table__th--narrow">{{ $t('@WORKBENCH:类型') }}</th>
-            <th class="kb-table__th kb-table__th--narrow">{{ $t('@WORKBENCH:子任务') }}</th>
             <th class="kb-table__th kb-table__th--narrow">{{ $t('@WORKBENCH:更新时间') }}</th>
           </tr>
         </thead>
@@ -279,17 +256,10 @@ function hasError(t: BoardTask): boolean {
                 {{ $t(COLUMNS.find(c => c.key === t.column)!.labelKey) }}
               </span>
             </td>
-            <td class="kb-table__td">
-              {{ t.type === 'simple' ? $t('@WORKBENCH:简单') : $t('@WORKBENCH:复杂') }}
-            </td>
-            <td class="kb-table__td kb-table__td--num">
-              <template v-if="t.subtaskCount > 0">{{ t.subtaskDoneCount }}/{{ t.subtaskCount }}</template>
-              <template v-else>—</template>
-            </td>
             <td class="kb-table__td kb-table__td--num">{{ relativeTimeFromIso(t.updatedAt || t.createdAt) }}</td>
           </tr>
           <tr v-if="filtered.length === 0">
-            <td class="kb-table__td kb-table__empty" colspan="5">{{ $t('@WORKBENCH:暂无任务') }}</td>
+            <td class="kb-table__td kb-table__empty" colspan="3">{{ $t('@WORKBENCH:暂无任务') }}</td>
           </tr>
         </tbody>
       </table>
@@ -349,18 +319,6 @@ function hasError(t: BoardTask): boolean {
   margin-left: auto;
   flex-wrap: wrap;
 }
-.kb__select {
-  height: 24px;
-  padding: 0 4px;
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  outline: none;
-}
-.kb__select:focus-visible { outline: var(--focus-outline); outline-offset: 1px; }
 .kb__check {
   display: inline-flex;
   align-items: center;
@@ -484,22 +442,6 @@ function hasError(t: BoardTask): boolean {
   flex-shrink: 0;
   animation: kb-pulse 1.4s ease-in-out infinite;
 }
-.kb-card__type {
-  flex-shrink: 0;
-  padding: 0 4px;
-  border-radius: 3px;
-  line-height: 14px;
-  background: var(--bg-subtle);
-  color: var(--text-tertiary);
-}
-.kb-card__error {
-  flex-shrink: 0;
-  padding: 0 4px;
-  border-radius: 3px;
-  line-height: 14px;
-  color: var(--color-danger-light);
-  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
-}
 .kb-card__time { margin-left: auto; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .kb-card__title {
   margin: 0;
@@ -520,33 +462,6 @@ function hasError(t: BoardTask): boolean {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.kb-card__progress {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-}
-.kb-card__bar {
-  flex: 1;
-  min-width: 0;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--bg-subtle);
-  overflow: hidden;
-}
-.kb-card__bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--color-primary);
-  transition: width var(--transition-base) var(--ease-custom);
-}
-.kb-card__progress-text {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
 }
 
 /* hover 才出现的操作组：绝对定位不占位，空闲时连点击也一起让开
@@ -570,12 +485,12 @@ function hasError(t: BoardTask): boolean {
 }
 
 /*
- * 操作组正压在进度条和 "0/8" 上。这里**不用"给它加背景"的办法去盖**：
+ * 操作组（绝对定位在右下角）会压在标题/项目名的右端。这里**不用"给它加背景"的办法去盖**：
  *   · 面板/容器类底色 token 在深色主题下本身就是半透明的
  *     （--bg-panel-dark = rgba(255,255,255,.06)），拿它当浮层背景等于没挡；
  *   · 换成不透明的 --bg-container 又比卡片暗，左边缘会留一道色阶；
  *   · 而且浮层底色还得跟着 hover / focus-within / is-running 逐一对齐，很容易漏。
- * 改成把**底下的进度行在右侧渐隐掉**：不涉及任何颜色，深浅主题都成立，也没有接缝。
+ * 改成把**底下的文字在右侧渐隐掉**：不涉及任何颜色，深浅主题都成立，也没有接缝。
  * （组内按钮本身是 transparent，所以必须让它所在区域完全透明，不能只减淡。）
  *
  * 渐隐位置按操作组的实际占位反推：组右边缘距卡片右内边 8px、组宽 ≈ 62px
@@ -584,8 +499,10 @@ function hasError(t: BoardTask): boolean {
  * 整个落在全透明区里，不会露出半截字形；再往左 16px 是淡出段。
  * 英文标签（Run）比中文窄，组更小、左边缘更靠右，同样被完全透明区覆盖，不会失效。
  */
-.kb-card:hover .kb-card__progress,
-.kb-card:focus-within .kb-card__progress {
+.kb-card:hover .kb-card__title,
+.kb-card:focus-within .kb-card__title,
+.kb-card:hover .kb-card__project,
+.kb-card:focus-within .kb-card__project {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
   mask-image: linear-gradient(to right, #000 calc(100% - 80px), transparent calc(100% - 64px));
 }

@@ -307,7 +307,7 @@ function toggleSelectAllOnPage(checked: any) {
 
 /**
  * 日志卡片内点"重新执行"按钮。
- * ExecutionLogManager 只展示历史,没有重跑上下文(task/subtask 反查需要主视图),
+ * ExecutionLogManager 只展示历史,没有重跑上下文(task 反查需要主视图),
  * 给个引导提示让用户去工作台主面板操作。
  */
 function onReExecuteInLog(_j: any) {

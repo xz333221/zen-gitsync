@@ -1,13 +1,13 @@
 <!--
   JobLogDetails.vue
-  共享的"执行日志"折叠面板，WorkbenchView 子任务行 + ExecutionLogManager 卡片复用。
+  共享的"执行日志"折叠面板，WorkbenchView 任务详情 + ExecutionLogManager 卡片复用。
   - 单 prop: job（Job 或 JobFull，结构兼容）
   - 自带 copy / displayOutput 截断（不依赖父组件），彻底解耦
   - 视觉：单轮 job 内部用 zen-ai-chat-ui 的 ChatContainer 渲染对话
     · 用户提示词 → 右侧气泡（user 消息）
     · Claude 思考 → 左侧气泡内可折叠思考块（assistant.reasoning）
     · 模型返回  → 左侧气泡正文（assistant.content，Markdown 渲染 + 流式光标）
-  - 简单任务的"续聊"由父组件 v-for 多轮叠加，天然形成纵向对话流；
+  - 任务的"续聊"由父组件 v-for 多轮叠加，天然形成纵向对话流；
     续聊输入框在父组件，本组件隐藏 ChatContainer 自带输入框（避免多输入框冲突）。
 -->
 <!--
@@ -288,7 +288,7 @@ const chatMessages = computed<ChatMessage[]>(() => {
     reasoningStatus: hasThinking
       ? (hasOutput ? 'done' : (status === 'streaming' ? 'streaming' : 'done'))
       : undefined,
-    // 工具调用块（读文件 / 跑命令 / 改代码）。与 WorkbenchView 的简单任务对话流同一份映射，
+    // 工具调用块（读文件 / 跑命令 / 改代码）。与 WorkbenchView 的任务对话流同一份映射，
     // 免得同一个 job 在两个视图里显示得不一样。
     toolCalls: hasToolCalls ? toolCalls : undefined,
     status,
@@ -346,7 +346,7 @@ function onFullscreenClosed() {
 
 // ── 重新执行 ────────────────────────────────────────────────────────
 // 仅在任务处于终态 + 有 prompt 时才显示"重新执行"按钮
-// 父组件在 v-for 模式下需要根据 job 上下文(所属 task/subtask)决定如何重跑
+// 父组件在 v-for 模式下需要根据 job 上下文(所属 task)决定如何重跑
 const canReExecute = computed(() => {
   return isFinished.value && !!(props.job.prompt)
 })

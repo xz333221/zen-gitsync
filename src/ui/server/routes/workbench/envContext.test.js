@@ -57,11 +57,11 @@ test('项目清单带名称、路径与三列计数，并标出当前项目', ()
   const projects = [entry('D:\\ws\\zen-gitsync'), entry('D:\\ws\\article-generator')];
   const tasks = [
     // 已完成：simple 任务跑过一次且 job 是 done
-    { id: 't1', projectPath: 'D:\\ws\\zen-gitsync', type: 'simple', subtasks: [] },
+    { id: 't1', projectPath: 'D:\\ws\\zen-gitsync', type: 'simple' },
     // 进行中：有 job 处于 running
-    { id: 't2', projectPath: 'D:\\ws\\article-generator', type: 'simple', subtasks: [] },
+    { id: 't2', projectPath: 'D:\\ws\\article-generator', type: 'simple' },
     // 待处理：没子任务也没执行过
-    { id: 't3', projectPath: 'D:\\ws\\article-generator', type: 'simple', subtasks: [] },
+    { id: 't3', projectPath: 'D:\\ws\\article-generator', type: 'simple' },
   ];
   const jobs = [job('j1', 't1', 'done'), job('j2', 't2', 'running')];
 
@@ -106,7 +106,7 @@ test('项目数超过上限时只列前 N 个，但合计仍按全量算', () =>
   for (let i = 0; i < total; i += 1) {
     const p = `D:\\ws\\p${i}`;
     projects.push(entry(p));
-    tasks.push({ id: `t${i}`, projectPath: p, type: 'simple', subtasks: [] });
+    tasks.push({ id: `t${i}`, projectPath: p, type: 'simple' });
   }
 
   const block = buildEnvContextBlock({
@@ -133,8 +133,8 @@ test('maxProjects 可覆盖，且非法值回落到默认上限', () => {
 test('没关联项目的任务不计入项目行，但计入合计', () => {
   const projects = [entry('D:\\ws\\a')];
   const tasks = [
-    { id: 't1', projectPath: 'D:\\ws\\a', type: 'simple', subtasks: [] },
-    { id: 't2', projectPath: '', type: 'simple', subtasks: [] },
+    { id: 't1', projectPath: 'D:\\ws\\a', type: 'simple' },
+    { id: 't2', projectPath: '', type: 'simple' },
   ];
   const block = buildEnvContextBlock({ projects, tasks, jobs: [], ...PATHS });
   // 项目行只认 key 匹配得上的那条（t1）→ 待处理 1
@@ -153,8 +153,8 @@ test('没关联项目的任务不计入项目行，但计入合计', () => {
 test('项目行/合计的段数必须与 TASK_COLUMNS 一致，且每列都有中文标签', () => {
   const projects = [entry('D:\\ws\\a')];
   const tasks = [
-    { id: 't1', projectPath: 'D:\\ws\\a', type: 'simple', subtasks: [] },
-    { id: 't2', projectPath: 'D:\\ws\\a', type: 'simple', subtasks: [] },
+    { id: 't1', projectPath: 'D:\\ws\\a', type: 'simple' },
+    { id: 't2', projectPath: 'D:\\ws\\a', type: 'simple' },
   ];
   const block = buildEnvContextBlock({ projects, tasks, jobs: [], ...PATHS });
 

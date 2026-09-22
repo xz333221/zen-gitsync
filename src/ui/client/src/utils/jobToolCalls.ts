@@ -19,7 +19,7 @@
 //   1. 字段兜底（老 job 没有 toolCalls / 历史数据字段缺失）
 //   2. 终态归一（进程都退了还挂在 running 的调用不该在前端一直转圈）
 //
-// 两个视图（WorkbenchView 简单任务对话流、JobLogDetails 子任务详情）共享这一份，
+// 两个视图（WorkbenchView 任务对话流、JobLogDetails 执行日志详情）共享这一份，
 // 免得"同一个 job 在两处显示得不一样"。
 
 import type { ToolCall } from 'zen-ai-chat-ui'

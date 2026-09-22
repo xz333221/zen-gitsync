@@ -60,9 +60,9 @@ export function shouldAnnounce(prev: unknown, next: unknown): boolean {
 
 /**
  * 提示里显示的任务名。
- * job.title 的形态是 `${task.title} / ${sub.title}`，简单任务下两半逐字相同
- * （sub 是 task 的虚拟副本），直接显示会变成 "xxx / xxx" 这种复读。
- * 只在两半完全相同时折叠，避免把真的含 " / " 的标题改坏。
+ * job.title 现在直接是任务标题（sub 只是运行载体，标题同源）。
+ * 旧数据里可能存在 `${task.title} / ${sub.title}` 这种形态，两半完全相同时折叠掉，
+ * 避免显示成 "xxx / xxx" 复读；只在两半相同时折叠，不会改坏真含 " / " 的标题。
  */
 export function jobNoticeTitle(job: { title?: unknown } | null | undefined): string {
   const raw = String(job?.title ?? '').trim()

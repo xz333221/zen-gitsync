@@ -89,7 +89,6 @@ zen-gitsync/                                    [根: 配置文件 + 顶层脚�
 │   ├── release.js           # 发版(必走)
 │   ├── dev-ping.cjs         # dev server 探测
 │   ├── verify-file-search.mjs
-│   ├── verify-subtask-row.mjs
 │   ├── convert-*-to-vars.cjs # 4 个颜色/字号/间距 → CSS vars 转换器
 │   └── README_*.md          # 转换器用法
 ├── src/                     # [核心: 三段式主体]

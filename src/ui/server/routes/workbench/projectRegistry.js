@@ -127,30 +127,17 @@ export function latestJob(jobsForTask) {
  * 把一个任务推导到看板的四列之一。纯函数，单测覆盖。
  *
  * 口径（按优先级，逐条短路）：
- *   1. 有 job 处于 running/pending，或子任务状态是 running → `doing`
- *   2. 有子任务且全部 done → `done`
- *   3. 有子任务但没全 done：
- *        - 动过（有 done 的子任务 / 执行过 / 有 error 的子任务）→ `todo`
- *        - 完全没动过 → `todo`
- *   4. 没子任务（简单任务，或还没拆分的复杂任务）：
- *        - 从没执行过 → `todo`
- *        - 最近一条 job 是 done → `done`；其余终态（error/cancelled）→ `todo`
+ *   1. 有 job 处于 running/pending → `doing`
+ *   2. 从没执行过 → `todo`
+ *   3. 最近一条 job 是 done → `done`；其余终态（error/cancelled）→ `todo`
  *
  * error/cancelled 不再单列：列表示任务是否仍待处理，错误是这一轮执行的结果，
  * 具体错误继续通过卡片标记和任务详情展示。
  */
 export function deriveTaskColumn(task, jobsForTask = []) {
-  const subs = Array.isArray(task && task.subtasks) ? task.subtasks : [];
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
 
   if (jobs.some(j => j && (j.status === 'running' || j.status === 'pending'))) return 'doing';
-  if (subs.some(s => s && s.status === 'running')) return 'doing';
-
-  if (subs.length > 0) {
-    const doneCount = subs.filter(s => s && s.status === 'done').length;
-    if (doneCount === subs.length) return 'done';
-    return 'todo';
-  }
 
   if (jobs.length === 0) return 'todo';
   const last = latestJob(jobs);
@@ -161,7 +148,7 @@ export function deriveTaskColumn(task, jobsForTask = []) {
 function emptyStats() {
   return {
     total: 0, todo: 0, doing: 0, done: 0,
-    progress: 0, runningJobs: 0, errorSubtasks: 0, lastActiveAt: null,
+    progress: 0, runningJobs: 0, lastActiveAt: null,
   };
 }
 
@@ -191,9 +178,6 @@ export function summarizeProjectTasks(tasks, jobs) {
     const column = deriveTaskColumn(t, jobsForTask);
     agg.total += 1;
     agg[column] += 1;
-    if (Array.isArray(t.subtasks)) {
-      agg.errorSubtasks += t.subtasks.filter(s => s && s.status === 'error').length;
-    }
     agg.lastActiveAt = laterOf(agg.lastActiveAt, t.updatedAt || t.createdAt);
     // 最后活跃时间也要把执行记录算进来：任务本身可能很久没改，但刚刚跑过
     for (const j of jobsForTask) {
@@ -316,26 +300,20 @@ export async function listProjects({
 
 /** 看板任务卡需要的精简字段（完整任务体在 /api/workbench/tasks，这里只给卡片用得到的） */
 export function decorateTaskForBoard(task, jobsForTask = []) {
-  const subs = Array.isArray(task && task.subtasks) ? task.subtasks : [];
   const jobs = Array.isArray(jobsForTask) ? jobsForTask : [];
   const last = latestJob(jobs);
   return {
     id: task.id,
     title: task.title || '',
     desc: task.desc || '',
-    type: task.type === 'simple' ? 'simple' : 'complex',
     projectPath: task.projectPath || '',
     column: deriveTaskColumn(task, jobs),
-    subtaskCount: subs.length,
-    subtaskDoneCount: subs.filter(s => s && s.status === 'done').length,
-    subtaskErrorCount: subs.filter(s => s && s.status === 'error').length,
     attachmentCount: Array.isArray(task.attachments) ? task.attachments.length : 0,
     runningJobs: jobs.filter(j => j && (j.status === 'running' || j.status === 'pending')).length,
     lastJobStatus: last ? last.status : null,
     // 最近一条 job 的结束时间 = 这张卡片"跑完"的时刻。
     // 看板的「已完成」列要按完成时间倒序排（最新完成的在最上边），而 updatedAt 撑不起这个排序：
-    // 简单任务的执行完成只写 jobs.json，tasks.json 里的 updatedAt 一直停在创建时间
-    //（见 taskRunner.persistTaskAfterRun —— 它只有复杂任务才走），
+    // 执行完成只写 jobs.json，tasks.json 里的 updatedAt 一直停在创建/编辑时间，
     // 于是十几张卡片的时间会全是创建时刻，"最新完成的"根本排不出来。
     lastJobEndedAt: last ? (last.endedAt || last.startedAt || null) : null,
     createdAt: task.createdAt || null,
@@ -368,7 +346,6 @@ export function trimJobForDetail(job) {
     id: job.id || '',
     subId: job.subId || '',
     title: job.title || '',
-    subTitle: job.subTitle || '',
     status: job.status || '',
     pid: typeof job.pid === 'number' ? job.pid : null,
     startedAt: job.startedAt || null,
@@ -384,7 +361,7 @@ export function trimJobForDetail(job) {
 /**
  * 组装单个任务的详情。纯函数，单测覆盖。
  *
- * @param {object} task           完整任务（含 subtasks / attachments）
+ * @param {object} task           完整任务（含 attachments）
  * @param {Array}  jobsForTask    属于该任务的 job（顺序不限，内部会按时间排）
  * @param {number} recentJobLimit 最多回带几条 job 明细（默认 10）
  * @returns {object|null}         task 缺失时返回 null，由路由转成 404

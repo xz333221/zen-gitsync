@@ -29,8 +29,8 @@ type Row = Record<string, any>
 
 function makeTask(over: Partial<Row>): Row {
   return {
-    id: 'x', title: '', desc: '', promptId: null, type: 'simple', simpleOverride: '',
-    subtasks: [], attachments: [], sequential: true, ...over
+    id: 'x', title: '', desc: '', promptId: null, simpleOverride: '',
+    attachments: [], ...over
   }
 }
 

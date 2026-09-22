@@ -261,8 +261,7 @@ export async function clearInstructions() {
 /**
  * 正在执行的执行体清单（看板左栏「执行监控」用）。
  *
- * 一行 = 一个活跃 job（不是任务）：一个任务并行跑 3 个子任务就是三行，
- * 因为"谁在跑什么"只有到 job 粒度才说得清。job 只是执行进程，
+ * 一行 = 一个活跃 job（不是任务）：job 只是执行进程，
  * 所以文案上叫「执行」而不是「Agent」—— 不要把正在跑的 claude 进程
  * 渲染成一个并不存在的"智能体集群"。
  *
@@ -274,15 +273,12 @@ export function buildRunningAgents({ jobs = [], tasks = [] } = {}) {
     .filter(j => j && (j.status === 'running' || j.status === 'pending'))
     .map(j => {
       const task = taskMap.get(j.taskId) || null;
-      const subs = task && Array.isArray(task.subtasks) ? task.subtasks : [];
-      const sub = subs.find(s => s && s.id === j.subId) || null;
       const projectPath = (task && task.projectPath) || '';
       return {
         jobId: j.id,
         taskId: j.taskId || null,
         subId: j.subId || null,
         taskTitle: (task && task.title) || '',
-        subTitle: (sub && sub.title) || '',
         status: j.status,
         pid: j.pid || null,
         startedAt: j.startedAt || null,
@@ -317,14 +313,11 @@ export function buildActivityFeed({ jobs = [], tasks = [], instructions = [] } =
   for (const j of Array.isArray(jobs) ? jobs : []) {
     if (!j || !j.id) continue;
     const task = taskMap.get(j.taskId) || null;
-    const subs = task && Array.isArray(task.subtasks) ? task.subtasks : [];
-    const sub = subs.find(s => s && s.id === j.subId) || null;
     const base = {
       jobId: j.id,
       taskId: j.taskId || null,
       subId: j.subId || null,
       taskTitle: (task && task.title) || '',
-      subTitle: (sub && sub.title) || '',
       jobStatus: j.status || '',
       pid: j.pid || null,
       ...projectOf(task),

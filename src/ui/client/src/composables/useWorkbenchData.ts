@@ -15,10 +15,6 @@ export function useWorkbenchData() {
     wbStatus.setRunning(jobs.value.filter(j => j.status === 'running').length)
   }
 
-  function jobOf(subId: string): Job | null {
-    return jobs.value.find(j => j.subId === subId) || null
-  }
-
   function applyJobEvent(evt: string, payload: any) {
     if (evt === 'hello') {
       jobs.value = payload.jobs || []
@@ -60,13 +56,6 @@ export function useWorkbenchData() {
         else job.toolCalls.push(u)
       }
       return
-    }
-    if (evt === 'sub:update') {
-      const t = tasks.value.find(x => x.id === payload.taskId)
-      if (t) {
-        const i = t.subtasks.findIndex(s => s.id === payload.sub.id)
-        if (i >= 0) t.subtasks[i] = payload.sub
-      }
     }
     if (evt === 'task:update') {
       const i = tasks.value.findIndex(t => t.id === payload.id)
@@ -148,31 +137,12 @@ export function useWorkbenchData() {
     }
   }
 
-  async function clearNonDoneJobsByTask(taskId: string): Promise<number> {
-    try {
-      const res = await fetch(`/api/workbench/jobs/by-task/${encodeURIComponent(taskId)}?keepDone=true`, { method: 'DELETE' }).then(r => r.json())
-      if (!res?.success) {
-        console.warn('[clearNonDoneJobsByTask] failed:', res?.error)
-        return 0
-      }
-      const removedIds = new Set(res.ids || [])
-      jobs.value = jobs.value.filter(j => !(j.taskId === taskId && removedIds.has(j.id)))
-      syncRunningCount()
-      return res.removed || 0
-    } catch (err) {
-      console.warn('[clearNonDoneJobsByTask] error:', err)
-      return 0
-    }
-  }
-
   async function createTask(currentProjectPath?: string): Promise<Task | null> {
     const body: any = {
       title: '',
       desc: '',
       promptId: null,
-      type: 'simple',
-      simpleOverride: '',
-      subtasks: []
+      simpleOverride: ''
     }
     if (currentProjectPath) {
       body.projectPath = currentProjectPath
@@ -196,9 +166,9 @@ export function useWorkbenchData() {
 
   return {
     prompts, tasks, jobs, currentProject,
-    syncRunningCount, jobOf, applyJobEvent,
+    syncRunningCount, applyJobEvent,
     connectSSE, disconnectSSE,
     loadPrompts, loadTasks, loadCurrentProject, loadJobs,
-    clearJobsByTask, clearNonDoneJobsByTask, createTask
+    clearJobsByTask, createTask
   }
 }

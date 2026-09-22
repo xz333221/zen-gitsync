@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// 简单任务对话流（执行流）里「工具调用」这条接线的回归测试。
+// 任务对话流（执行流）里「工具调用」这条接线的回归测试。
 //
 // 背景（2026-09-22）：任务执行流以前只显示「思考 + 正文」，模型闷头调工具的几分钟
 // 完全看不出它在干什么。服务端已经采集 job.toolCalls，这里守的是前端这一段：
@@ -37,10 +37,8 @@ function makeTask(patch: Partial<Task> = {}): Task {
     title: '任务',
     desc: '描述',
     promptId: null,
-    type: 'simple',
     simpleOverride: '',
     projectPath: 'C:\\proj',
-    subtasks: [],
     status: 'todo',
     ...patch
   } as Task

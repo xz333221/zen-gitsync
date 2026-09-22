@@ -12,19 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// AI 拆分子任务 JSON 多级降级解析。
-// 拆分自原 routes/workbench.js 395-776 行。
+// 从 LLM 输出里抠 JSON 的两个纯函数。
 //
-// 模型经常会犯几类格式错：在 desc 里用 ASCII 双引号引用术语 / 末尾留尾随逗号 /
-// 输出被 token 上限截断导致代码块未闭合。直接 JSON.parse 一旦失败就会让前端的
-// "确认入库" 按钮永远是 (0)，用户看不到原因。这里按"越简单越优先"的顺序尝试：
-//   ① ```json``` 代码块 / ```any``` 代码块 / 第一个完整 { ... } 范围
-//   ② 把候选片段去掉尾随逗号 + 块/行注释 再 parse
-//   ③ 用括号深度扫描，从开头找一个语法平衡的 { ... } 子串
-//   ④ 启发式转义模型夹在字符串内部的未转义 ASCII 双引号
-// 任一步成功就返回 parsed，全部失败时返回最后一次 JSON.parse 的错误，
-// 用 parseStage 告知前端"模型输出哪一步崩了"，并把原始 raw 一并回传。
-
+// 模型经常把 JSON 包在 思考块、代码块或总结：{...}这类散文里，直接 JSON.parse 必崩。
+// 这里提供两级：
+//   ① stripThinkingBlocks —— 先剥掉 思考块 与代码块围栏
+//   ② extractFirstJsonObject —— 在剩下的文本里定位第一个「平衡花括号对象」
+// 上层的 llmClient 用它俩抠 JSON；抠不出来时由调用方决定怎么降级。
 // 剥离 LLM 输出的 思考块、```json``` 代码块围栏，以及首尾说明文字。
 // 原贪婪正则 /({[\s\S]*})/ 会把 思考块（内含未配对花括号或字符串）一起吞进 JSON.parse，
 // 在 DeepSeek 等会输出 推理链的模型上偶发 "Unterminated string in JSON"。
@@ -85,135 +79,4 @@ export function extractFirstJsonObject(content) {
   }
   // 兜底：找不到平衡对象时返回原文（让上层 JSON.parse 报清晰错误）
   return s;
-}
-
-// 从字符串中提取首个语法平衡的 { ... } 子串。
-// 跟踪字符串字面量（含转义），避免把 desc 里的 } 当成结束。
-export function extractBalancedJson(text) {
-  const s = String(text || '');
-  const start = s.indexOf('{');
-  if (start < 0) return '';
-  let depth = 0;
-  let inStr = false;
-  let strCh = '';
-  let esc = false;
-  for (let i = start; i < s.length; i++) {
-    const c = s[i];
-    if (inStr) {
-      if (esc) { esc = false; continue; }
-      if (c === '\\') { esc = true; continue; }
-      if (c === strCh) { inStr = false; }
-      continue;
-    }
-    if (c === '"' || c === "'") { inStr = true; strCh = c; continue; }
-    if (c === '{') depth++;
-    else if (c === '}') {
-      depth--;
-      if (depth === 0) return s.slice(start, i + 1);
-    }
-  }
-  return '';
-}
-
-// ④ 级降级：把字符串字面量内部出现的、未转义的 ASCII 双引号自动转义。
-// 实战中模型最常见的错误是 "desc": "...用户点击"保存"按钮..." 这种—
-// 中间的 "保存" 把外层字符串截断成两段，后面变成裸文本，JSON.parse 必崩。
-//
-// 启发式判断：扫描时若处于字符串中且遇到 "，往后看第一个非空白字符：
-//   - 是 , } ] : 或文本结尾 → 这是真闭合，正常退出字符串
-//   - 否则 → 是模型乱写的字面量引号，改写为 \" 并继续留在字符串里
-// 不依赖正则、不破坏已经转义的 \"，对嵌套 / 多行字符串都安全。
-export function reescapeUnescapedQuotes(text) {
-  const s = String(text || '');
-  if (!s) return '';
-  const out = [];
-  let inStr = false;
-  let strCh = '';
-  let esc = false;
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (!inStr) {
-      out.push(c);
-      if (c === '"' || c === "'") { inStr = true; strCh = c; }
-      continue;
-    }
-    // 字符串内部
-    if (esc) { out.push(c); esc = false; continue; }
-    if (c === '\\') { out.push(c); esc = true; continue; }
-    if (c !== strCh) { out.push(c); continue; }
-    // 遇到与开闭引号相同的字符——往后看下一个非空白
-    let j = i + 1;
-    while (j < s.length && (s[j] === ' ' || s[j] === '\t')) j++;
-    const next = j < s.length ? s[j] : '';
-    if (next === '' || next === ',' || next === '}' || next === ']'
-        || next === ':' || next === '\n' || next === '\r') {
-      // 真闭合
-      out.push(c);
-      inStr = false;
-      strCh = '';
-    } else {
-      // 字面量裸引号——转义
-      out.push('\\', c);
-    }
-  }
-  return out.join('');
-}
-
-// AI 拆分子任务 JSON 多级降级解析主入口。
-// 返回 { parsed, parseError, parseStage }：
-//   - parsed: 解析成功时的对象，失败时为 null
-//   - parseError: 失败时的错误信息
-//   - parseStage: 'empty' / '' (成功) / 'cleaned' / 'balanced' / 'reescaped' / 'failed'
-export function parseSubtaskJson(content) {
-  let src = String(content || '');
-  if (!src.trim()) {
-    return { parsed: null, parseError: '模型未返回任何内容', parseStage: 'empty' };
-  }
-
-  // 预处理：剥离 deepseek-r1 / QwQ 等模型在 content 前输出的 <think>...</think> 思考块
-  src = src.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<think\s*\/>/gi, '').trim();
-
-  const candidates = [];
-  const fenced = src.match(/```json\s*([\s\S]*?)```/i) || src.match(/```\s*([\s\S]*?)```/);
-  if (fenced) candidates.push(fenced[1]);
-  // 平衡花括号扫描：避免贪婪正则把多段 JSON / 散落的 { } 全包进去
-  const balancedFirst = extractBalancedJson(src);
-  if (balancedFirst) candidates.push(balancedFirst);
-  // 兜底：整段当 JSON 试
-  candidates.push(src);
-
-  let lastErr = null;
-  for (const raw of candidates) {
-    const txt = String(raw || '').trim();
-    if (!txt) continue;
-    // ① 直 parse
-    try { return { parsed: JSON.parse(txt), parseError: '', parseStage: '' }; }
-    catch (e) { lastErr = e; }
-    // ② 清洗：去 //…/* */ 注释 + 尾随逗号
-    const cleaned = txt
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/(^|[^:"'\\])\/\/[^\n]*/g, '$1')
-      .replace(/,(\s*[}\]])/g, '$1');
-    try { return { parsed: JSON.parse(cleaned), parseError: '', parseStage: 'cleaned' }; }
-    catch (e) { lastErr = e; }
-    // ③ 平衡花括号扫描
-    const balanced = extractBalancedJson(cleaned);
-    if (balanced && balanced !== cleaned) {
-      try { return { parsed: JSON.parse(balanced), parseError: '', parseStage: 'balanced' }; }
-      catch (e) { lastErr = e; }
-    }
-    // ④ 启发式转义字符串内的未转义双引号
-    const base = balanced || cleaned;
-    const reescaped = reescapeUnescapedQuotes(base);
-    if (reescaped && reescaped !== base) {
-      try { return { parsed: JSON.parse(reescaped), parseError: '', parseStage: 'reescaped' }; }
-      catch (e) { lastErr = e; }
-    }
-  }
-
-  return {
-    parsed: null,
-    parseError: lastErr ? (lastErr.message || String(lastErr)) : '未能从模型输出中提取出 JSON',
-    parseStage: 'failed'
-  };
 }

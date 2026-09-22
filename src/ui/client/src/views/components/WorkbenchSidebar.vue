@@ -16,8 +16,8 @@ const props = defineProps<{
   creatingTask: boolean
   /**
    * 判断 task 是否正在执行（用于在左侧任务条目上打 is-running 标记 + 脉动圆点）。
-   * 父组件传入是因为 sidebar 不持有 jobs，简单任务的"在跑"必须看 jobs.subId，
-   * 而 jobs 与 SIMPLE_SUB_ID_SUFFIX 的拼接规则只在父组件知道。
+   * 父组件传入是因为 sidebar 不持有 jobs，任务的"在跑"必须看 jobs.subId，
+   * 而 jobs 与 taskId 的拼接规则只在父组件知道。
    */
   isTaskRunning: (task: Task) => boolean
 }>()
@@ -63,13 +63,13 @@ function taskTooltip(t: Task): string {
   return name ? `${name} · ${hint}` : hint
 }
 // 直接复用父组件传入的判断函数，sidebar 自己不持有 jobs，
-// 也就不重复实现 SIMPLE_SUB_ID_SUFFIX 拼接规则。
+// 也就不重复实现 subId 拼接规则。
 function taskIsRunning(t: Task): boolean {
   return props.isTaskRunning(t)
 }
 
 // ── 拖动排序（自实现 mousedown+mousemove+mouseup，不走 HTML5 DnD） ──────
-// 为什么不用原生 drag & drop：HTML5 dragstart 在 <button>（复制/删除/类型切换）
+// 为什么不用原生 drag & drop：HTML5 dragstart 在 <button>（复制/删除）
 // 或文本子元素上会被浏览器吞掉 → 用户感觉"拖不动"。改成手动监听后，整行任何
 // 位置按下都能进入拖动态，不依赖 HTML5 DnD 的距离阈值和 button 的 draggable=false。
 // - mousedown: 记录起点 + 起点 task id，绑全局 mousemove/mouseup
@@ -237,8 +237,7 @@ function onWindowMouseUp(_e: MouseEvent) {
               @mousedown="onTaskMouseDown($event, t, group.path, $event.currentTarget as HTMLElement)"
             >
               <!-- 单行展示:只显示标题;没写标题用任务描述压平后顶上(CSS ellipsis 截断)。
-                   子任务数 / 附件数 / 类型 chip 等 meta 行已移除,降噪;
-                   类型切换走右侧头部的 复杂/简单 segmented -->
+                   子任务数 / 附件数 等 meta 行已移除,降噪 -->
               <div class="wb-task-item__body">
                 <div class="wb-task-item__title" :title="taskDisplayName(t)">{{ taskDisplayName(t) }}</div>
               </div>
@@ -258,7 +257,7 @@ function onWindowMouseUp(_e: MouseEvent) {
                   <el-icon><CopyDocument /></el-icon>
                 </button>
                 <!-- 执行中不允许删除:避免误杀正在跑的实例(jobs 还在内存里,
-                     任务从 tasks.json 消失后,runTaskQueue / runSingleSubtask 读不到 task
+                     任务从 tasks.json 消失后,runSingleSubtask 读不到 task
                      会留一堆孤儿 job)。后端 DELETE 路由也加了同样的 live-job 守卫兜底 -->
                 <button
                   v-if="!taskIsRunning(t)"

@@ -38,11 +38,6 @@ export const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 export const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 export const IMAGES_DIR = path.join(DATA_DIR, 'workbench-images');
 export const INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-instruction.json');
-export const SUBTASK_INSTRUCTION_FILE = path.join(DATA_DIR, 'ai-subtask-instruction.json');
-// AI 对话拆分会话存档：每个 sessionId 一个文件，重启可恢复多轮上下文
-export const SESSIONS_DIR = path.join(DATA_DIR, 'ai-split-sessions');
-export const MAX_SESSIONS = 100;     // 软上限，触发清理
-export const SESSIONS_KEEP = 50;     // 超过上限时保留最新 N 个
 // 执行日志持久化：jobs.json 是历史档案，jobs-config.json 是保留策略
 export const JOBS_FILE = path.join(DATA_DIR, 'jobs.json');
 export const JOBS_CONFIG_FILE = path.join(DATA_DIR, 'jobs-config.json');
@@ -82,7 +77,7 @@ export const MANIFEST_FILES = [
 // 真正需要小体积的是图片，由前端上传前压缩保证（见 useWorkbenchAttachments.ts），
 // 这里只做最后一道兜底，避免超大 body 把内存吃光。
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;       // 单个附件最大 20MB
-export const MAX_ATTACHMENTS_PER_SUBTASK = 9;          // 一个子任务最多挂 9 个附件
+export const MAX_ATTACHMENTS_PER_TASK = 9;             // 一个任务最多挂 9 个附件
 
 // ── 时间 / ID 工具 ─────────────────────────────────────────
 export function nowIso() {
@@ -109,7 +104,7 @@ export async function readJson(file, fallback) {
   }
 }
 
-// 原子写：tmp + rename。避免半写状态被读到（与 sessionStore 一致）
+// 原子写：tmp + rename。避免半写状态被读到（与 jobStore 一致）
 export async function writeJson(file, data) {
   await ensureDataDir();
   const tmp = `${file}.tmp`;

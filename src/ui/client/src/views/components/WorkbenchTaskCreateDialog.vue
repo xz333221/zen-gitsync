@@ -18,14 +18,11 @@
 
   原来「新建开发任务」是"先悄悄建一个空任务、再把你甩进编辑器"，
   在编排台里这是个反模式：点一下按钮就离开看板，而且还没说明任务属于哪个项目。
-  这里把该问的一次问清（项目 / 标题 / 描述 / 类型），建完就关，卡片直接出现在看板上。
+  这里把该问的一次问清（项目 / 标题 / 描述），建完就关，卡片直接出现在看板上。
 
-  两个刻意的决定：
-    1. **默认「复杂」任务**。简单任务必须配一条提示词才跑得起来（simpleOverride），
-       而这个弹窗不收集提示词 —— 默认成简单会造出一个"点执行就跑不动"的任务。
-       提示词在编辑器里填，所以想建简单任务请走「创建并打开编辑器」。
-    2. **标题与描述至少填一个**。看板上的空任务会被 pruneBlankTasks 清掉，
-       从这里放行一个空任务只会让用户以为"建成功了"，然后它自己消失。
+  一个刻意的决定：
+    **标题与描述至少填一个**。看板上的空任务会被 pruneBlankTasks 清掉，
+    从这里放行一个空任务只会让用户以为"建成功了"，然后它自己消失。
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
@@ -49,7 +46,6 @@ const emit = defineEmits<{
 
 const title = ref('')
 const desc = ref('')
-const taskType = ref<'simple' | 'complex'>('complex')
 const projectPath = ref('')
 const submitting = ref(false)
 const error = ref('')
@@ -76,7 +72,6 @@ watch(() => props.modelValue, (open) => {
   if (!open) return
   title.value = ''
   desc.value = ''
-  taskType.value = 'complex'
   projectPath.value = matchOptionPath(props.defaultProjectPath)
   error.value = ''
   submitting.value = false
@@ -104,10 +99,8 @@ async function submit(openEditor: boolean) {
     const body: Record<string, unknown> = {
       title: title.value.trim(),
       desc: desc.value,
-      type: taskType.value,
       promptId: null,
       simpleOverride: '',
-      subtasks: [],
     }
     if (projectPath.value) body.projectPath = projectPath.value
     const res = await fetch('/api/workbench/tasks', {
@@ -175,22 +168,6 @@ async function submit(openEditor: boolean) {
         />
       </div>
 
-      <div class="nc__field">
-        <span class="nc__label">{{ $t('@WORKBENCH:类型') }}</span>
-        <div class="nc__radios">
-          <label class="nc__radio" :class="{ 'is-on': taskType === 'complex' }">
-            <input v-model="taskType" type="radio" value="complex" />
-            <span class="nc__radio-name">{{ $t('@WORKBENCH:复杂') }}</span>
-            <span class="nc__radio-desc">{{ $t('@WORKBENCH:先拆成子任务再逐个执行，适合一次改多处') }}</span>
-          </label>
-          <label class="nc__radio" :class="{ 'is-on': taskType === 'simple' }">
-            <input v-model="taskType" type="radio" value="simple" />
-            <span class="nc__radio-name">{{ $t('@WORKBENCH:简单') }}</span>
-            <span class="nc__radio-desc">{{ $t('@WORKBENCH:直接跑一条提示词，提示词要在编辑器里填') }}</span>
-          </label>
-        </div>
-      </div>
-
       <p v-if="error" class="nc__error">{{ error }}</p>
     </div>
 
@@ -256,23 +233,6 @@ async function submit(openEditor: boolean) {
   max-height: 260px;
 }
 .nc__hint { margin: 0; font-size: 10.5px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* 类型：扁平单选，不做卡片 */
-.nc__radios { display: flex; flex-direction: column; gap: 6px; }
-.nc__radio {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  padding: 6px 8px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--transition-fast) var(--ease-custom);
-}
-.nc__radio:hover { background: var(--bg-container-hover); }
-.nc__radio.is-on { background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
-.nc__radio input { cursor: pointer; flex-shrink: 0; align-self: center; }
-.nc__radio-name { font-size: 12.5px; color: var(--text-primary); flex-shrink: 0; }
-.nc__radio-desc { font-size: 11px; color: var(--text-tertiary); }
 
 .nc__error {
   margin: 0;
