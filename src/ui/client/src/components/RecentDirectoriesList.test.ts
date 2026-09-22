@@ -36,6 +36,7 @@ const { $tInterp } = vi.hoisted(() => ({
 vi.mock('@/lang/static', () => ({ $t: $tInterp }))
 
 import RecentDirectoriesList from './RecentDirectoriesList.vue'
+import { resetOncePerLoad } from '@/utils/oncePerLoad'
 import { mountWithSetup } from '@/test-utils/mount'
 
 interface DirEntry {
@@ -326,5 +327,57 @@ describe('RecentDirectoriesList.vue 「刷新全部」', () => {
       message: '@13D1C:刷新完成：成功 12 · 跳过 0 · 失败 0',
       type: 'success',
     })
+  })
+})
+
+// ── 启动时自动刷一遍（refresh-on-mount）─────────────────────────────────────
+// 只在 g ui 首屏那块常驻面板上开(App.vue 传 refresh-on-mount)。
+// 每个用例前重置"这一页"的门闸(utils/oncePerLoad):它是模块级状态,同一个测试文件里
+// 模块只加载一次,不重置的话第一个用例就会把后面的用例挡掉。
+describe('RecentDirectoriesList.vue 启动时自动刷新', () => {
+  beforeEach(() => resetOncePerLoad())
+
+  test('RCL-10: 默认关闭 —— 挂载只取数据,不发 fetch', async () => {
+    const spy = setupFetch({ dirs: [{ path: 'D:\\a', exists: true }] })
+    const w = mountList()
+    await flushAll()
+
+    expect(fetchCalls(spy)).toHaveLength(0)
+    // 列表本身照常拉回来(自动刷新关掉不代表面板不加载)
+    expect(w.findAll('.dir-card').length).toBe(1)
+  })
+
+  test('RCL-11: refresh-on-mount 挂载即自动刷,且整页只刷一次', async () => {
+    const dirs: DirEntry[] = [
+      { path: 'D:\\a', exists: true },
+      { path: 'D:\\gone', exists: false },
+    ]
+    const spy = setupFetch({
+      dirs,
+      onFetch: () => ({ status: 'ok', state: gitState({ behind: 2 }) }),
+    })
+
+    // 不用点按钮:挂载 + 列表回来之后自己就刷了
+    const w = mountList({ refreshOnMount: true })
+    await flushAll()
+    await flushAll()
+
+    expect(fetchCalls(spy)).toHaveLength(1)
+    const sent = spy.mock.calls
+      .filter((c: any[]) => String(typeof c[0] === 'string' ? c[0] : c[0].url).includes('/fetch'))
+      .map((c: any[]) => JSON.parse(c[1].body).path)
+    // 失效目录不发(与点按钮时同一套过滤)
+    expect(sent).toEqual(['D:\\a'])
+    // 刷完的徽标直接落在那张卡片上
+    expect(w.find('.dir-card__tag--behind').text()).toContain('落后 2')
+
+    // 切目录会让面板卸载重建:第二次挂载不该再联网刷一轮
+    wrapper.unmount()
+    wrapper = null
+    const w2 = mountList({ refreshOnMount: true })
+    await flushAll()
+    await flushAll()
+    expect(fetchCalls(spy)).toHaveLength(1)
+    expect(w2.findAll('.dir-card').length).toBe(2)
   })
 })

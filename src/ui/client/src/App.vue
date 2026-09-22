@@ -909,8 +909,11 @@ function stopHResize() {
       <div class="commit-form-panel commit-form-panel--empty" v-else>
         <!-- 非 Git 仓库时,右侧空态直接用"最近项目"列表代替原"Git 仓库初始化"卡片
              (左侧 GitStatus 已经有"初始化 Git 仓库"按钮 + "尚未配置远程仓库"提示,这里不重复)
-             默认即 panel(自带标题/搜索) + open(点击在新标签页打开)形态 -->
-        <RecentDirectoriesList />
+             默认即 panel(自带标题/搜索) + open(点击在新标签页打开)形态。
+             refresh-on-mount:这是 g ui 首屏常驻的那块面板 —— 每次打开界面(页面加载)
+             自动跑一遍「刷新全部」,免得「领先/落后」一直停在"上次 fetch 时的快照"上。
+             整页只跑一次,切目录重建面板不会重复联网(守卫在组件模块作用域里)。 -->
+        <RecentDirectoriesList refresh-on-mount />
       </div>
 
       <!-- 水平分隔条（提交表单 | 提交历史） -->

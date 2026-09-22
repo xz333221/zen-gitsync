@@ -259,3 +259,37 @@ test('run_command 本地化错误消息解码正确(Windows GBK 回归)', async 
     assert.match(r, /not found|未找到/)
   }
 })
+
+// ========== list_projects: 只在 GUI 里有实现,CLI 下要给一句能照着做的话 ==========
+
+test('list_projects 把参数透传给注入的实现', async () => {
+  const definition = TOOL_DEFINITIONS.find(tool => tool.function.name === 'list_projects')
+  assert.ok(definition, 'TOOL_DEFINITIONS 里必须有 list_projects')
+  assert.deepEqual(definition.function.parameters.required, [])
+
+  const seen = []
+  const out = await executeTool('list_projects', { refresh: true }, {
+    ...ctx,
+    listProjects: async args => {
+      seen.push(args)
+      return '清单文本'
+    },
+  })
+  assert.equal(out, '清单文本')
+  assert.deepEqual(seen, [{ refresh: true }])
+})
+
+test('list_projects 默认不刷新(只读本地快照)', async () => {
+  const seen = []
+  await executeTool('list_projects', {}, { ...ctx, listProjects: async args => { seen.push(args); return 'x' } })
+  assert.deepEqual(seen, [{ refresh: false }])
+  // 非布尔值一律按"不刷新"处理,不能被字符串 "true"/1 之类的脏参数带跑
+  await executeTool('list_projects', { refresh: 'true' }, { ...ctx, listProjects: async args => { seen.push(args); return 'x' } })
+  assert.deepEqual(seen[1], { refresh: false })
+})
+
+test('list_projects 没有注入实现时(CLI 下)给出可执行的替代做法', async () => {
+  const r = await executeTool('list_projects', {}, ctx)
+  assert.match(r, /只在 g ui/)
+  assert.match(r, /git -C/)
+})

@@ -90,6 +90,11 @@ ${isWin ? `- 当前是 Windows,以下 Unix 命令**不存在**,用了必定报"�
 - 必须跑 shell 时优先跨平台写法(如 node -e "..."),别用 Unix 专属命令` : `- 当前是 POSIX 环境,Unix 命令可用`}
 
 # 远程仓库(GitHub / Gitee)
+- 问"我有哪些项目""哪些项目需要 pull / 推送" → 用 list_projects 工具。它返回的就是 g ui
+  「最近项目」面板那份清单(最近目录 + 建过任务的目录,带分支/领先/落后/未提交数与任务进度),
+  口径与界面完全一致。**不要**用 list_files 自己扫盘数仓库 —— 那会把 node_modules 里的嵌套
+  仓库也算进来,数出来的个数跟界面对不上。领先/落后是本地快照,要真实值就带 refresh=true
+  先联网 fetch 一轮,再回答"要不要 pull"
 - 问"这个项目关联哪个远端" → run_command 跑 \`git remote -v\`:本地信息,不联网、不依赖任何 CLI,任何环境都能答
 - 问"我账号下有哪些仓库"或某仓库的 PR / Issue → 用官方 CLI。凭据由 CLI 自己保管:
   · GitHub → \`gh\`。列仓库 \`gh repo list --limit 50 --json name,visibility,updatedAt,primaryLanguage\`;
@@ -153,6 +158,12 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
   · Find executable → cmd's where (not which)` : `- POSIX environment: Unix commands are available`}
 
 # Remote repositories (GitHub / Gitee)
+- "Which projects do I have?" / "Which ones need a pull or push?" → use the list_projects tool.
+  It returns exactly the list behind the GUI's "Recent projects" panel (recent directories plus any
+  directory a task was created in, with branch / ahead / behind / uncommitted counts and task
+  progress) — the same numbers the UI shows. Do NOT scan the disk with list_files to count repos:
+  that also picks up nested repos inside node_modules and the totals will not match the UI.
+  Ahead/behind comes from local refs, so pass refresh=true for a real answer about pulling
 - "Which remote does this project point at?" → run_command \`git remote -v\`: local info, no network, no CLI needed
 - "Which repos do I have?" or a repo's PRs / issues → use the official CLI. The CLI owns the credentials:
   · GitHub → \`gh\`. List repos \`gh repo list --limit 50 --json name,visibility,updatedAt,primaryLanguage\`;
@@ -361,7 +372,7 @@ function stripStaleImages(messages) {
 // ── 核心入口：运行一轮 agent 对话 ────────────────────────
 //
 // 参数:
-//   { session, model, userMessage, cwd, locale, signal, send, onChild, askUser }
+//   { session, model, userMessage, cwd, locale, signal, send, onChild, askUser, listProjects }
 //   - session: 从 agentSessionStore 读取的会话对象
 //   - model: { baseURL, model, apiKey }
 //   - userMessage: 用户输入文本
@@ -372,10 +383,12 @@ function stripStaleImages(messages) {
 //   - send: (obj) => void  SSE 发送函数
 //   - onChild: (child) => void  子进程回调(用于取消)
 //   - askUser: (args, meta) => Promise<string>  等待用户回答
+//   - listProjects: (args) => Promise<string>  list_projects 工具的数据源
+//     (由 agentRoutes 注入:最近目录/tasks.json/看板统计只有 GUI 侧拿得到)
 //
 // 返回: { aborted: boolean }
-export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, signal, send, onChild, askUser }) {
-  const ctx = { cwd, locale, onChild, askUser };
+export async function runAgentTurn({ session, model, userMessage, images = [], cwd, locale, signal, send, onChild, askUser, listProjects }) {
+  const ctx = { cwd, locale, onChild, askUser, listProjects };
 
   // 确保 session.messages 存在
   if (!Array.isArray(session.messages)) session.messages = [];

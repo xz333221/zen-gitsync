@@ -34,6 +34,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Delete, DocumentCopy, Folder, Loading, Refresh, Search } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 import { getFolderNameFromPath } from "@/utils/path";
+import { oncePerLoad } from "@/utils/oncePerLoad";
 
 /** 后端 /api/recent_directories/git-state 的单条结果 */
 interface DirectoryGitState {
@@ -94,6 +95,12 @@ const props = withDefaults(defineProps<{
   removable?: "missing" | "always";
   /** 挂载时自动拉取;弹窗场景传 false,由父组件在打开时调 reload() */
   autoLoad?: boolean;
+  /**
+   * 挂载时自动跑一遍「刷新全部」(联网 fetch)。
+   * 只在 g ui 首屏那块常驻面板上开(见 App.vue):打开界面就该看到真实的领先/落后,
+   * 而不是"上次 fetch 时的快照"。弹窗场景保持关闭 —— 打开一个选目录的弹窗不该联网刷十几个仓库。
+   */
+  refreshOnMount?: boolean;
   /** 卡片网格每列最小宽度,窄容器下自动降为单列 */
   minCardWidth?: string;
   /** 移除按钮的提示文案(两处语境不同,由调用方传) */
@@ -107,6 +114,7 @@ const props = withDefaults(defineProps<{
   variant: "panel",
   removable: "missing",
   autoLoad: true,
+  refreshOnMount: false,
   minCardWidth: "380px",
 });
 
@@ -425,8 +433,20 @@ async function removeDirectory(dirPath: string) {
   }
 }
 
-onMounted(() => {
-  if (props.autoLoad) load();
+// 「启动时自动刷一遍」整页只做一次。门闸必须放在**模块**里而不是这里：
+// <script setup> 整块都编译进 setup()，写在这儿的变量是每个实例一份 ——
+// 切目录会让面板卸载重建（v-if），标记跟着重置，就变成"每切一次目录联网刷十几遍"。
+// 详见 utils/oncePerLoad.ts 的文件头。
+const AUTO_REFRESH_KEY = "recent-dirs-auto-refresh";
+
+onMounted(async () => {
+  if (!props.autoLoad) return;
+  await load();
+  // 等列表拉回来再刷:没有目标(或列表为空)时刷新无从谈起。
+  // 失败不额外提示 —— refreshAllGitStates 结尾那条汇总 toast 已经说明了结果。
+  if (props.refreshOnMount && oncePerLoad(AUTO_REFRESH_KEY)) {
+    void refreshAllGitStates();
+  }
 });
 
 // 弹窗在每次打开时都需要最新数据(用户可能刚在别处切过目录)

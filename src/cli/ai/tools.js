@@ -164,6 +164,25 @@ export const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'list_projects',
+      description: '列出用户本机的「最近项目」——就是 g ui 里最近项目面板的同一份清单(最近目录 ∪ 建过任务的目录),每条带 Git 状态(分支/领先/落后/未提交数)与任务进度。'
+        + '被问到"我有哪些项目""哪个项目该 pull / 该推了"时必须用它,不要靠 list_files 扫盘或猜目录名(扫盘会把 node_modules 里的嵌套仓库也算进来,口径与界面不一致)。'
+        + '注意:领先/落后读的是本地 remote-tracking 引用 = "上次 fetch 时的快照";用户问的是否需要 pull/推送且要真实状态时,传 refresh=true 先联网 fetch 一轮。',
+      parameters: {
+        type: 'object',
+        properties: {
+          refresh: {
+            type: 'boolean',
+            description: `true = 先对每个项目执行一次 git fetch 再统计(联网,较慢,需要认证的仓库若无凭据会快速失败);默认 false 只读本地快照,不联网`,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'ask_user',
       description: 'Pause the current task and ask the user for a decision or missing information. Use this when the next step depends on the user. Prefer options for a small fixed set of choices; allow free text when an open answer is useful.',
       parameters: {
@@ -521,6 +540,19 @@ async function toolSearchText(args, ctx) {
   return `${hits.join('\n')}${suffix}`
 }
 
+// list_projects 的数据源刻意不在本文件里:最近目录 / tasks.json / 看板统计都是
+// GUI 侧的东西,CLI 与 Web 共用的这个模块只该知道"有这么个工具"。
+// 由 GUI 侧(workbench/agentRoutes.js)把实现注入 ctx.listProjects ——
+// 与 ask_user 依赖 ctx.askUser 同一手法:没有实现时给一句能照着做的话,而不是崩掉。
+async function toolListProjects(args, ctx) {
+  if (typeof ctx.listProjects !== 'function') {
+    return '错误: list_projects 只在 g ui(GUI 界面)的内置智能体里可用。'
+      + '命令行 g ai 下请改用 run_command 直接跑 git 命令,例如 '
+      + 'git -C <项目路径> status -sb 与 git -C <项目路径> log --oneline @{u}..'
+  }
+  return ctx.listProjects({ refresh: args.refresh === true })
+}
+
 async function toolAskUser(args, ctx) {
   const question = String(args.question || '').trim()
   if (!question) return 'Error: ask_user requires a non-empty question.'
@@ -545,6 +577,7 @@ const TOOL_HANDLERS = {
   edit_file: toolEditFile,
   list_files: toolListFiles,
   search_text: toolSearchText,
+  list_projects: toolListProjects,
   ask_user: toolAskUser,
 }
 

@@ -26,6 +26,7 @@ import { asyncRoute, HttpError } from '../../utils/asyncRoute.js';
 import { agentSessionStore } from './agentSessionStore.js';
 import { runAgentTurn } from './agentChat.js';
 import { registerAgentMarketplaceRoutes } from './agentMarketplace.js';
+import { createProjectListProvider } from './projectTool.js';
 import { nowIso } from './shared.js';
 
 const { genSessionId, autoTitle, read: readSession, write: writeSession, delete: deleteSession, listMeta: listSessionsMeta, enforceRetention, rename: renameSession } = agentSessionStore;
@@ -106,6 +107,11 @@ export function submitAgentAnswer({ sessionId, interactionId, answer }) {
 export function registerAgentRoutes({ app, getCurrentProjectPath, configManager }) {
 
   registerAgentMarketplaceRoutes({ app, getCurrentProjectPath });
+
+  // list_projects 的数据源。在这里建一次、复用:它要读最近目录(配置)、tasks.json
+  // 与看板统计,这些依赖只有本层拿得到 —— 与 taskRunner 的 setEnvContextProvider 同理。
+  // 不给它加缓存:agent 一轮里最多问一两次,而"项目状态"本来就要现读才准。
+  const listProjects = createProjectListProvider({ configManager, getCurrentProjectPath });
 
   // ════════════════════════════════════════════════════════════════════════
   // §1. 会话列表
@@ -303,7 +309,8 @@ export function registerAgentRoutes({ app, getCurrentProjectPath, configManager 
           allowFreeText: args.allowFreeText !== false,
           send,
           signal: abortController.signal,
-        })
+        }),
+        listProjects
       });
 
       if (aborted) {

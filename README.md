@@ -166,6 +166,8 @@ In either mode, click **AI Generate** to fill in the fields automatically based 
 
 > Click the directory name in the header (or the folder icon) to open this dialog. Type a path, hit **浏览** to use the OS file picker, or pick from **常用目录** for one-click switching. **使用新标签打开** spawns a new GUI tab on that path so you can keep the current project open.
 
+When the GUI is opened on a directory that is not a Git repository, the right pane shows the **Recent projects** list instead — every recent directory with its Git badges (behind / ahead / uncommitted) and one-click "open in a new tab". Each page load runs a `git fetch` pass over all of them automatically, so the ahead/behind badges show the real state rather than the snapshot from the last fetch; the **刷新全部** button does the same thing on demand.
+
 ---
 
 ### Branch Management
@@ -391,6 +393,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Live session entry | Sending the first message of a new session makes it show up in the list **immediately** with a "Generating..." badge, instead of waiting for the whole turn to finish; once the reply ends and the server persists the session, the entry is replaced by the real timestamp and message count |
 | Streaming chat | SSE-based real-time streaming with thinking process, content, tool calls, and tool results rendered inline |
 | Tool call display | Each tool invocation (run_command, read_file, edit_file, list_files, search_text, write_file) is shown as a collapsible card with arguments preview and execution result |
+| Recent-projects awareness | Ask "which of my projects need a pull?" and the agent calls its built-in `list_projects` tool instead of scanning the disk: it returns exactly the list behind the GUI's **Recent projects** panel (recent directories plus any directory a task was created in, with branch / ahead / behind / uncommitted counts and task progress), so the agent's answer and the UI agree. Ahead/behind reads local refs, so the agent can pass `refresh=true` to run a `git fetch` pass first when the question is about pulling |
 | Session persistence | All conversations are saved to `~/.zen-gitsync/agent-sessions/` as JSON files; the CLI agent (`g ai`) writes to the same directory so Web and CLI sessions are unified |
 | Per-turn tool limit | A single message may trigger up to N tool calls in a row (default **200**, range 1–2000). Configurable in **Settings → AI models → Agent Runtime**; hitting the limit ends the turn and asks you to send another message. The same setting drives the CLI agent |
 | Preset questions | Quick-start buttons on the welcome screen for common tasks (view project structure, analyze code quality, write tests, check git status) |
@@ -779,6 +782,8 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 > 点击顶部条里的目录名（或文件夹图标）即可弹出该对话框。直接输入路径、点击 **浏览** 唤起系统文件选择器，或从 **常用目录** 一键切换。**使用新标签打开** 会在新 GUI 标签里加载目标路径，原项目保持不动。
 
+当 GUI 打开在一个**不是 Git 仓库**的目录上时，右侧会改为显示「最近项目」列表 —— 每个最近目录一张卡片，带 Git 徽标（落后 / 领先 / 未提交）与「在新标签页打开」。每次打开界面时会自动对所有项目跑一遍 `git fetch`，让「领先/落后」显示真实状态而不是上次 fetch 时的快照；**刷新全部** 按钮可以随时手动再刷一遍。
+
 ---
 
 ### 分支管理
@@ -1006,6 +1011,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 会话实时入列 | 新会话发出第一条消息后，左侧列表**立刻**出现这一条（带「正在生成中…」标记），不用等整轮回答跑完；回答结束、服务端落盘后自动替换成真实的时间与条数 |
 | 流式对话 | 基于 SSE 的实时流式输出，包含思考过程、正文内容、工具调用和工具结果的内联渲染 |
 | 工具调用展示 | 每次工具调用（run_command、read_file、edit_file、list_files、search_text、write_file）以可折叠卡片形式展示，含参数预览和执行结果 |
+| 最近项目感知 | 问「我哪些项目需要 pull」时，智能体调用内置的 `list_projects` 工具，而不是自己去扫盘：返回的就是 GUI「最近项目」面板那份清单（最近目录 + 建过任务的目录，带分支 / 领先 / 落后 / 未提交数与任务进度），回答与界面对得上。领先/落后读的是本地引用，因此问到"要不要拉"时它可以带 `refresh=true` 先联网 fetch 一轮再答 |
 | 会话持久化 | 所有对话保存为 JSON 文件到 `~/.zen-gitsync/agent-sessions/`；CLI 智能体（`g ai`）写入同一目录，Web 端与 CLI 端会话统一管理 |
 | 单轮工具调用上限 | 一条消息内智能体最多连续调用多少次工具（默认 **200**，可调范围 1–2000）。在 **设置 → AI 模型配置 → 智能体运行时** 中修改；达到上限本轮会被强制结束并提示再发一条消息继续。CLI 智能体共用同一项设置 |
 | 预设问题 | 开场界面提供快捷按钮（查看项目结构、分析代码质量、写测试、Git 状态检查）|
