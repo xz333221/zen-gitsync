@@ -298,19 +298,25 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
 
     const { content, toolCalls } = result;
 
+    // 推理内容必须原样带回历史。DeepSeek 系 thinking 模式下带 tool_calls 的 assistant
+    // 消息一旦缺 reasoning_content，下一轮回传就被上游 400 拒掉:
+    // "The `reasoning_content` in the thinking mode must be passed back to the API"。
+    // 口径与 CLI 侧 src/cli/ai/turn.js 的 assistant.reasoning_content 保持一致。
+    const withReasoning = msg => (result.reasoning ? { ...msg, reasoning_content: result.reasoning } : msg);
+
     // 无工具调用：本轮结束
     if (toolCalls.length === 0) {
-      session.messages.push({ role: 'assistant', content: content || null });
+      session.messages.push(withReasoning({ role: 'assistant', content: content || null }));
       send({ type: 'done', content: content || '' });
       return { aborted: false };
     }
 
     // 有工具调用：assistant(带 tool_calls)入历史
-    session.messages.push({
+    session.messages.push(withReasoning({
       role: 'assistant',
       content: content || null,
       tool_calls: toolCalls
-    });
+    }));
 
     // 逐个执行工具
     for (const tc of toolCalls) {

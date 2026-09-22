@@ -165,3 +165,19 @@ test('共享模块本身必须导出这些口径', () => {
     }
   }
 });
+
+test('两个入口都把推理内容写进 assistant 历史消息', () => {
+  // 上游要求（DeepSeek 系 thinking 模式 + tool calls）：回传的历史里，assistant 消息当初产出的
+  // reasoning_content 必须原样带回，否则下一轮请求被 400 拒掉：
+  //   The `reasoning_content` in the thinking mode must be passed back to the API.
+  // 传输层已经把它返回了（streamChatOnce 的 result.reasoning），漏的是"入历史"这一步 ——
+  // Web 侧曾经只解构 content/toolCalls，于是纯聊天没事、一调工具就挂，又是两个入口表现分叉。
+  // 只认代码行，注释里的提及不算（CLI 是 `assistant.reasoning_content = …`，Web 是 `reasoning_content: …`）。
+  for (const { label, file } of ENTRY_POINTS) {
+    const code = readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .filter(line => !/^\s*(\/\/|\*|\/\*)/.test(line))
+      .join('\n');
+    assert.match(code, /reasoning_content/, `${label} 没有把推理内容写进 assistant 历史消息`);
+  }
+});
