@@ -24,6 +24,7 @@
  * 用法:
  *   npm run release                      # 全流程,自伤护栏全部开启
  *   npm run release -- --skip-self-update # 发布后不自动 npm install -g zen-gitsync
+ *   npm run release -- --keep-instances   # 装全局前不停掉运行中的 UI 实例(默认会停)
  *   npm run release -- --skip-push        # 只发布到 npm,不 push git
  *   npm run release -- --dry-run          # 只打印计划,不真正改 package.json / commit / publish
  *   npm run release -- --poll-interval=20 --poll-timeout=600  # 调自更新重试节奏(秒)
@@ -32,15 +33,20 @@
  * tarball URL 直连)都试,装上后校验全局版本,失败把原因打出来。
  * 原因见 tarballUrl() / selfUpdateGlobal() 处注释 —— publish 成功不等于
  * packument 立即可见,也不等于 tarball 立即可取(两种先后顺序都实测出现过)。
+ *
+ * 自更新前置步骤:先把运行中的 UI 实例停掉(见 stopRunningInstances 处注释)——
+ * Windows 上全局包目录被实例占着时,npm 删旧目录会 EPERM,装不上或装出半成品。
  */
 
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync, spawn } from 'node:child_process'
 import chalk from 'chalk'
 import readline from 'node:readline/promises'
+import { createInstanceRegistry, getRegistryPath } from '../src/ui/server/utils/instanceRegistry.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -50,6 +56,7 @@ const argv = process.argv.slice(2)
 const DRY_RUN = argv.includes('--dry-run')
 const SKIP_SELF_UPDATE = argv.includes('--skip-self-update')
 const SKIP_PUSH = argv.includes('--skip-push')
+const KEEP_INSTANCES = argv.includes('--keep-instances')
 
 const NPM_REGISTRY = 'https://registry.npmjs.org/'
 const PKG_NAME = 'zen-gitsync'
@@ -582,22 +589,28 @@ function readLatestDistTag() {
   }
 }
 
+// 当前 npm 的全局根(即 `npm install -g` 的落点)。
+// `npm root -g` 不可用 / 超时:按 Node 安装目录兜底(Windows 下 npm 默认全局根就在这里)。
+function readGlobalRoot() {
+  try {
+    const out = execSync('npm root -g', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30000,
+    }).trim()
+    if (out) return out
+  } catch {
+    /* npm 不可用,走兜底 */
+  }
+  return path.join(path.dirname(process.execPath), 'node_modules')
+}
+
 // 读本地全局已安装的版本,读不到返回 null。
 // 不走 `npm ls -g <pkg> --json`:该包不存在时它退出码为 1 且输出里没有 dependencies
 // 字段(实测只返回 {"name":"<node 版本目录名>"}),字段结构还随 npm 版本变;
 // 直接读"当前 npm 的全局根"下该包的 package.json 更确定,也和 `npm install -g` 落点一致。
 function readGlobalInstalledVersion() {
-  let globalRoot
-  try {
-    globalRoot = execSync('npm root -g', {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 30000,
-    }).trim()
-  } catch {
-    // npm 不可用 / 超时:按 Node 安装目录兜底(Windows 下 npm 默认全局根就在这里)
-    globalRoot = path.join(path.dirname(process.execPath), 'node_modules')
-  }
+  const globalRoot = readGlobalRoot()
   if (!globalRoot) return null
 
   try {
@@ -643,6 +656,147 @@ function tryInstallGlobal(spec) {
   }
 }
 
+// ===========================================================================
+// 安装前停止运行中的实例
+// ===========================================================================
+//
+// 为什么必须做:全局包在 Windows 上"装不上/装不干净",根因通常不是权限,是**文件被占**。
+// `g ui` 起的每个实例都是 `node <globalRoot>/zen-gitsync/src/gitCommit.js ui`,进程握着
+// 全局包目录下的一堆模块句柄;npm 装新版前要先删掉旧的全局包目录 → rmdir EPERM →
+// 一屏 `npm warn cleanup Failed to remove some directories: ... EPERM ...`,安装失败
+// (2026-09-22 v2.17.12 实测:发布成功、全局停在 2.17.11)。
+//
+// 实例清单不靠猜:每个 UI 实例都把自己的 pid/port/projectPath 写进实例注册表
+// (`~/.zen-gitsync/instances/<pid>.json`)—— 那份数据就是 UI 右上角"运行中的实例",
+// 也是 `/api/instances` 的数据源。这里读同一份注册表,按 PID 发 SIGTERM 再摘条目,
+// 与 UI 的"关闭全部"(routes/instances.js close-all)走同一条链路。
+//
+// 注:注册表的旧路径(~/.zen-gitsync-instances 目录、~/.zen-gitsync-instances.json 文件)
+// 由 app 侧 dataDirMigration / instanceRegistry.migrateLegacy 在启动时收进当前目录,
+// 这里不单独兼容。
+const STOP_WAIT_MS = 8000        // 等实例退出的上限
+const LOCK_SETTLE_MS = 1200      // 实例退出后留给 Windows 释放句柄 / 杀软松手的缓冲
+
+// 本轮被停掉的实例数(结尾提示用户重新起)。--skip-self-update / --dry-run / --keep-instances 时为 0。
+let stoppedInstanceCount = 0
+
+// 存活性检查:信号 0 只做检查不发信号。EPERM = 进程存在但没权限,按存活处理
+// (与 instanceRegistry.defaultIsProcessAlive 同一判定)。
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    if (err && (err.code === 'ESRCH' || err.code === 'ENOENT')) return false
+    return true
+  }
+}
+
+// 列出注册表里仍存活的实例(pruneStale 会顺手清掉 PID 已死 / 心跳超时的条目,不会误杀)。
+// 注册表本身是 app 的模块,直接复用,避免在这里重写一遍 stale 判定 / 损坏文件自愈。
+async function listRunningInstances() {
+  try {
+    const registry = createInstanceRegistry({
+      fs: fsp,
+      path,
+      os,
+      registryPath: getRegistryPath(),
+    })
+    const all = await registry.list({ pruneStale: true })
+    // 别把自己写进 kill 名单:release 脚本不是 UI 实例,理论上不会出现在表里,
+    // 但"自杀"这种事不该有理论上的可能。
+    return { registry, instances: all.filter((i) => i.pid !== process.pid && i.pid !== process.ppid) }
+  } catch (err) {
+    console.log(chalk.yellow(`  读实例注册表失败(${err?.message || err}),按"没有运行实例"继续`))
+    return { registry: null, instances: [] }
+  }
+}
+
+// 停掉所有已注册实例,返回真正停掉的条目(供结尾提示用户重新起)。
+async function stopRunningInstances({ quiet = false } = {}) {
+  if (!quiet) {
+    console.log(chalk.blue('\n=== 安装前停止运行中的实例 ==='))
+    console.log(chalk.gray('数据来源:实例注册表(与 UI 右上角"运行中的实例"同一份)'))
+  }
+
+  const { registry, instances } = await listRunningInstances()
+  if (instances.length === 0) {
+    if (!quiet) console.log(chalk.gray('没有运行中的实例,跳过'))
+    return []
+  }
+
+  for (const ins of instances) {
+    const label = `${ins.projectName || '(未命名)'} pid=${ins.pid} port=${ins.port}`
+    try {
+      process.kill(ins.pid, 'SIGTERM')
+      console.log(chalk.gray(`  → SIGTERM ${label}`))
+    } catch (err) {
+      if (err?.code === 'ESRCH' || err?.code === 'ENOENT') {
+        console.log(chalk.gray(`  · 已自行退出 ${label}`))
+      } else {
+        console.log(chalk.yellow(`  ✗ 停止失败 ${label}: ${err?.message || err}`))
+      }
+    }
+    // Windows 的 process.kill 直接终止目标,目标来不及执行自己的 unregister,
+    // 由发起侧立即摘条目(与 routes/instances.js 的 close 同一策略);
+    // 目标自己也会 unregister 的情况重复删同一个文件,幂等(deleteEntry 容忍 ENOENT)。
+    try {
+      await registry?.unregister(ins.pid)
+    } catch (err) {
+      console.log(chalk.yellow(`  · 摘除注册条目失败 pid=${ins.pid}: ${err?.message || err}`))
+    }
+  }
+
+  // 必须确认真的退出了再往下走 —— 没退出就等于没停,文件照样被占
+  const alivePids = new Set(instances.map((i) => i.pid).filter(isPidAlive))
+  const deadline = Date.now() + STOP_WAIT_MS
+  while (alivePids.size > 0 && Date.now() < deadline) {
+    await sleep(200)
+    for (const pid of [...alivePids]) {
+      if (!isPidAlive(pid)) alivePids.delete(pid)
+    }
+  }
+
+  const stopped = instances.filter((i) => !alivePids.has(i.pid))
+  if (alivePids.size > 0) {
+    console.log(chalk.yellow(
+      `  ⚠ ${alivePids.size} 个实例 ${STOP_WAIT_MS / 1000}s 内没退出`
+      + `(pid: ${[...alivePids].join(', ')}),安装仍可能因文件占用失败`
+    ))
+  }
+  if (stopped.length > 0) {
+    console.log(chalk.green(`已停止 ${stopped.length} 个实例`))
+    // 进程没了 ≠ 目录马上能删:Windows 上杀软 / 索引器可能还捏着句柄一小会儿
+    await sleep(LOCK_SETTLE_MS)
+    stoppedInstanceCount += stopped.length
+  }
+  return stopped
+}
+
+// npm 的失败输出里出现这些字样 = Windows 文件占用,不是"registry 还没同步"。
+// 这两类失败的处理方式相反:文件占用要"再杀一轮 + 强删旧目录",registry 滞后只能等。
+const LOCKED_FILE_PATTERN = /EPERM|EBUSY|ENOTEMPTY|operation not permitted|Failed to remove/i
+
+function looksLikeFileLock(output) {
+  return LOCKED_FILE_PATTERN.test(String(output || ''))
+}
+
+// 手动强删旧的全局包目录。fs.rm 自带 Windows 重试(EBUSY/EPERM/ENOTEMPTY 退避重试),
+// 比 npm 自己那层浅清理更能啃下被占的目录。
+//
+// 只在真撞上文件占用时才调:提前删掉会让"还得等 tarball 就绪"的那几分钟里
+// 用户的全局命令彻底不可用 —— 宁可先让 npm 自己去删,失败了再补刀。
+async function forceRemoveGlobalPackage() {
+  const target = path.join(readGlobalRoot(), PKG_NAME)
+  try {
+    await fsp.rm(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 400 })
+    console.log(chalk.gray(`  已清掉被占用的旧全局目录: ${target}`))
+  } catch (err) {
+    console.log(chalk.yellow(`  ✗ 清旧全局目录失败: ${err?.message || err}`))
+  }
+}
+
 // 自更新全局版本:反复尝试安装,直到全局版本校验通过或超时。
 //
 // 为什么不是"先等 dist-tags 翻牌,再安装"(v2.17.4 之前的老写法):
@@ -671,6 +825,9 @@ async function selfUpdateGlobal(version) {
   const deadline = startedAt + POLL_TIMEOUT_MS
   let attempt = 0
   let lastOutput = ''
+  // 实例只在"第一次真要装"之前停一次,不在进循环时就停:前面的探测阶段可能还要等好几分钟
+  // (tarball 还没对外可取),提前停等于白白占掉用户几分钟的 UI。
+  let stopDone = false
 
   for (;;) {
     attempt += 1
@@ -686,6 +843,17 @@ async function selfUpdateGlobal(version) {
     ))
 
     if (probe.ok) {
+      // 真要装之前,先把运行中的实例停掉:tarball 已可取,接下来就是 npm 删旧目录 →
+      // 目录被实例占着会 EPERM(见 stopRunningInstances 处注释)。只做一次。
+      if (!stopDone) {
+        stopDone = true
+        if (KEEP_INSTANCES) {
+          console.log(chalk.yellow('--keep-instances: 不停运行中的实例,若安装报 EPERM / 文件占用属预期'))
+        } else {
+          await stopRunningInstances()
+        }
+      }
+
       // packument 已同步 → 先走常规精确版本;还没同步 → tarball 优先,争取一轮命中
       const targets = packumentSynced
         ? [`${PKG_NAME}@${version}`, tarball]
@@ -696,6 +864,13 @@ async function selfUpdateGlobal(version) {
         if (!res.ok) {
           lastOutput = res.output
           console.log(chalk.yellow(`  ✗ ${summarizeInstallError(res.output)}`))
+          // 文件占用和"registry 还没同步"是两类失败:前者要再杀一轮 + 强删旧目录,
+          // 后者只能等。混在一起会让前者白等满 600s。
+          if (looksLikeFileLock(res.output)) {
+            console.log(chalk.yellow('  检测到文件占用(Windows 常见):再停一轮实例 + 强制清旧全局目录'))
+            if (!KEEP_INSTANCES) await stopRunningInstances({ quiet: true })
+            await forceRemoveGlobalPackage()
+          }
           continue
         }
         const installed = readGlobalInstalledVersion()
@@ -716,6 +891,12 @@ async function selfUpdateGlobal(version) {
     if (remain <= 0) {
       console.error(chalk.red(`已尝试 ${attempt} 次,仍未装上 ${PKG_NAME}@${version}`))
       if (lastOutput) console.error(chalk.gray(lastOutput))
+      if (looksLikeFileLock(lastOutput)) {
+        console.error(chalk.yellow(
+          '看起来是文件被占(不是 registry 滞后):关掉所有 UI 实例 / 编辑器后重试,\n'
+          + '必要时手动删掉全局包目录再装(注意会短暂失去全局命令)。'
+        ))
+      }
       console.error(chalk.gray(
         '可稍后手动重试:\n'
         + `  npm install -g ${PKG_NAME}@${version}\n`
@@ -738,6 +919,9 @@ async function publishToNpm(version) {
       console.log(chalk.yellow(`[dry-run] npm publish --registry=${NPM_REGISTRY}`))
       console.log(chalk.yellow(
         `[dry-run] 反复探测并安装,直到全局 ${PKG_NAME}@${version} 校验通过(见 selfUpdateGlobal)`
+      ))
+      console.log(chalk.yellow(
+        '[dry-run] 安装前先停掉实例注册表里的所有运行实例(见 stopRunningInstances)'
       ))
       return
     }
@@ -766,6 +950,7 @@ async function main() {
     console.log(chalk.yellow('--dry-run: type-check / vue-tsc / npm run build 仍会真跑(可在失败前中止)'))
   }
   if (SKIP_SELF_UPDATE) console.log(chalk.yellow('--skip-self-update: 发版后不自动 npm install -g'))
+  if (KEEP_INSTANCES) console.log(chalk.yellow('--keep-instances: 装全局前不停运行中的实例'))
   if (SKIP_PUSH) console.log(chalk.yellow('--skip-push: 不 push git'))
 
   try {
@@ -776,6 +961,13 @@ async function main() {
     await verifyPackageContents()
     await commitChanges(newVersion)
     await publishToNpm(newVersion)
+
+    if (stoppedInstanceCount > 0) {
+      console.log(chalk.yellow(
+        `提示:刚才停掉的 ${stoppedInstanceCount} 个实例不会自动恢复,`
+        + '需要时到对应目录重新执行 `g ui`。'
+      ))
+    }
 
     console.log(chalk.green('\n🎉 发布完成!'))
   } catch (err) {
