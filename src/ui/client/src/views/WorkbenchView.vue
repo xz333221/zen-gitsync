@@ -1187,10 +1187,14 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
         <div class="wb-execution-body">
           <!-- 详情面板（执行内容区） -->
           <div class="wb-exec-detail">
-            <!-- 任务详情：状态完全交给 JobLogDetails 的「正在执行…」展示 -->
-            <template>
-              <details
-                class="wb-simple__override"
+            <!-- ⚠️ 这一层**不要**用裸 <template> 包起来（踩过，2026-09-22）：
+                 Vue 3 只把带 v-if / v-else / v-for / v-slot 的 <template> 编译成片段，
+                 裸 <template> 会被当成真的 <template> 元素渲染 —— 浏览器把子节点全塞进
+                 template.content（inert DocumentFragment），不产生任何布局盒。
+                 症状：任务在跑、看板「执行中」、执行监控有 PID，但对话区一片空白，
+                 而 innerText 里明明有内容（元素 0×0）。重构移除子任务概念时留下的空壳。 -->
+            <details
+              class="wb-simple__override"
                 :class="{ 'has-content': !!(selectedTask.simpleOverride && selectedTask.simpleOverride.trim()) }"
               >
                 <summary class="wb-form-item__label wb-simple__override-summary">
@@ -1250,7 +1254,6 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
                   </div>
                 </div>
               </template>
-            </template>
           </div>
         </div>
       </template>
