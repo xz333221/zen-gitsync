@@ -9,6 +9,9 @@
  *   P4  往右拖到底：夹在上限（= min(420, 视口 26%)），不会把看板吃光
  *   P5  双击分隔条：回到媒体查询给的默认 264
  *   P6  右分隔条方向正确：往**左**拖是变宽；拖完右栏宽 > 260
+ *   P6c 上限放开到 min(900, 46% 视口)：1600 下能拖到 736（旧上限 560 一碰就到顶）
+ *   P6d 拉满时看板仍 ≥ 视口 30%
+ *   P6e 右栏变宽真的传给了输入框（这栏的主要用途是写指令）
  *   P7  持久化：reload 后拖出来的宽度还在（localStorage）
  *   P8  折叠左栏：.board__left 宽 = 0、分隔条消失、看板变宽；再点一次恢复
  *   P9  折叠右栏：.oc 收到 32px 收纳条、正文块 display:none、输入草稿仍在 DOM 里
@@ -32,6 +35,12 @@
  *       同时是 flex-shrink 那个坑的回归护栏 —— 早先 0 1 auto 会把 260px 压成 ~118px）
  *   P24 拖到下限：内容改成列表内滚动，面板没溢出左栏
  *   P25 再拖回去：被裁的内容重新完整可见（"可上下调节"的闭环）
+ *   ── 以下守右栏派发输入框（需求："输入框也调大一些"）──
+ *   P26 默认：rows=4、高度 ≥ 76（旧的 min-height 52）、上限从写死的 160 放到 min(380px, 45vh)
+ *   P27 拖右下角 grip：高度真的变大，并落进 localStorage（wb.ocInputHeight.v1）
+ *   P28 持久化：reload 后高度还在（不用每次开局重拖一遍）
+ *   P29 拖到超限：夹在 max-height，但**仍然写盘** —— 拖到顶也是用户的选择
+ *   P30 窗口变矮：高度被 max-height 压低，此时**不许覆盖**已存的高度（P29 的值要还在）
  *
  * ⚠️ 断言全部用几何量（boundingBox / getComputedStyle），不是"截图看着对"。
  */
@@ -66,6 +75,30 @@ async function waitUntil(fn, timeout = 6000, interval = 100) {
 
 /** 页面侧测量：一次拿全布局几何 + 关键 computed 值 */
 function MEASURE() {
+  /**
+   * 元素实际生效的 max-height（px）。
+   *
+   * 为什么不直接 parseFloat(getComputedStyle().maxHeight)：输入框那条规则写的是
+   * `min(380px, 45vh)`，部分浏览器会把 min()/clamp() 原样当字符串返回，
+   * parseFloat 拿到 NaN，"有没有被夹住"就永远判不出来了。
+   * 这时用一个探针 div（高 9999、套同一条 max-height）量出真实生效值 ——
+   * 量的是浏览器自己的解析结果，和被测元素同一条规则。
+   *
+   * 注意：这个 helper 必须写在 MEASURE 内部 —— page.evaluate(MEASURE) 只序列化
+   * 这个函数本身，外面的同级函数在页面里并不存在。
+   */
+  const effMaxH = (el) => {
+    const raw = getComputedStyle(el).maxHeight
+    const direct = parseFloat(raw)
+    if (Number.isFinite(direct)) return direct
+    const probe = document.createElement('div')
+    probe.style.cssText =
+      'position:absolute;top:-9999px;left:-9999px;width:10px;height:9999px;visibility:hidden;max-height:' + raw
+    document.body.appendChild(probe)
+    const v = probe.getBoundingClientRect().height
+    probe.remove()
+    return Number.isFinite(v) && v < 9999 ? v : NaN
+  }
   const box = (sel) => {
     const n = document.querySelector(sel)
     if (!n) return null
@@ -118,6 +151,30 @@ function MEASURE() {
       ? { scrollH: agentsList.scrollHeight, clientH: agentsList.clientHeight }
       : null,
     agentCards: document.querySelectorAll('.agent-item').length,
+    // ── 派发输入框（右栏 compose 区）──
+    input: (() => {
+      const n = document.querySelector('.oc__input')
+      if (!n) return null
+      const cs = getComputedStyle(n)
+      const maxH = effMaxH(n)
+      const r = n.getBoundingClientRect()
+      return {
+        h: +r.height.toFixed(1),
+        w: +r.width.toFixed(1),
+        top: +r.top.toFixed(1),
+        bottom: +r.bottom.toFixed(1),
+        minH: cs.minHeight,
+        maxH: cs.maxHeight,
+        maxHpx: maxH,
+        /** 当前是不是正被 max-height 夹着（夹住 = 这个高度不是用户拖出来的） */
+        clamped: Number.isFinite(maxH) && n.offsetHeight >= maxH - 1,
+        rows: n.getAttribute('rows'),
+        inline: n.style.height || '',
+        resize: cs.resize,
+        /** 组件为"记住手拖高度"落的那把 key */
+        storedH: (() => { try { return localStorage.getItem('wb.ocInputHeight.v1') } catch { return null } })(),
+      }
+    })(),
     stored: (() => { try { return localStorage.getItem('wb.boardLayout.v1') } catch { return null } })(),
   }
 }
@@ -211,6 +268,30 @@ async function injectFakeCards(page, n, cardH = 70) {
   await sleep(150)
 }
 
+/** 拖 textarea 右下角那个**原生** resize grip（需求："输入框也调大一些"）。
+ *  grip 是浏览器内部实现的，不是 DOM 节点，只能靠坐标命中右下角那十几个像素 ——
+ *  所以从右下角往内缩 4px 起手，再按 dy 往下拖。
+ *  注意：输入框钉在右栏底部，拖动时它是**往上长**的（上面的活动流让位），
+ *  光标会一路移到元素外面 —— 这正是真实用户的操作，不该拦。 */
+async function dragInputGrip(page, dy) {
+  const el = page.locator('.oc__input')
+  if (!(await el.count())) return false
+  const b = await el.first().boundingBox()
+  if (!b) return false
+  const x = b.x + b.width - 4
+  const y = b.y + b.height - 4
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  const steps = 8
+  for (let i = 1; i <= steps; i++) {
+    await page.mouse.move(x, y + (dy * i) / steps)
+    await sleep(20)
+  }
+  await page.mouse.up()
+  await sleep(320)
+  return true
+}
+
 async function main() {
   const alive = await fetch(`${API}/api/app-version`).then(r => r.ok).catch(() => false)
   if (!alive) {
@@ -291,6 +372,18 @@ async function main() {
       m.left.width === 264 && m.main.width < mainBefore,
       `left=${m.left?.width} main=${m.main?.width}`)
     await shot(page, '1600-right-dragged')
+
+    /* ══ P6c 右栏上限放开（需求："右侧区域要能调大"，旧上限 560 拖到那儿就卡住）══ */
+    await dragSplitter(page, '.board__splitter--right', -900)
+    m = await M()
+    // 上限 = min(900, 1600 * 0.46 = 736) = 736
+    check('P6c 拖到上限 = min(900, 46% 视口) = 736（不再卡在旧的 560）',
+      m.oc.width === 736, `width=${m.oc?.width}`)
+    check('P6d 右栏拉满时看板仍 ≥ 视口 30%（没把看板吃光）',
+      m.main.width >= m.vw * 0.3, `main=${m.main?.width} vw=${m.vw}`)
+    check('P6e 右栏变宽真的传给了输入框（这栏的主要用途：写指令）',
+      !!m.input && m.input.w > 600, `input.w=${m.input?.w}（默认 360 宽时约 336）`)
+    await shot(page, '1600-right-max')
 
     /* ══ P7 持久化 ══ */
     const wantRight = m.oc.width
@@ -531,6 +624,74 @@ async function main() {
     check('P25b 拖高之后项目列表仍在（没有为了看监控把列表牺牲掉）',
       m.proj.height > 150, `proj=${m.proj?.height}`)
     await shot(page, '1600-agents-realcontent-expanded')
+
+    /* ══ P26 派发输入框的默认高度（需求："输入框也调大一些"）══
+       P14 清过一次 localStorage，这一节从"没拖过"的干净态开始量默认值。 */
+    await setSize(page, 1600, 900)
+    await page.evaluate(() => { try { localStorage.removeItem('wb.ocInputHeight.v1') } catch {} })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openBoard(page)
+    m = await M()
+    check('P26a 输入框默认 4 行（旧的是 3 行）', m.input?.rows === '4', `rows=${m.input?.rows}`)
+    check('P26b 默认高度 ≥ 76（旧的 min-height 是 52，量出来约 88）',
+      !!m.input && m.input.h >= 76 && m.input.h <= 120, `h=${m.input?.h}`)
+    check('P26c 上限从写死的 160 放开到 min(380px, 45vh) —— 900 高视口下 = 380',
+      m.input?.maxHpx === 380 && m.input?.resize === 'vertical',
+      `max-height=${m.input?.maxH} (${m.input?.maxHpx}px) resize=${m.input?.resize}`)
+    check('P26d 没拖过时不写内联高度、localStorage 里也没有那把 key（默认完全交给 CSS）',
+      m.input?.inline === '' && m.input?.storedH === null,
+      `inline="${m.input?.inline}" storedH=${m.input?.storedH}`)
+    await shot(page, '1600-input-default')
+
+    /* ══ P27 拖右下角变高 + 落盘 ══ */
+    const inputBefore = m.input.h
+    await dragInputGrip(page, 120)
+    m = await M()
+    check('P27a 拖右下角真的把输入框拖高了（约 +120）',
+      m.input.h > inputBefore + 90, `前 ${inputBefore} → 后 ${m.input?.h}`)
+    check('P27b 拖出来的高度落进 localStorage（key = wb.ocInputHeight.v1）',
+      m.input.storedH !== null && Number(m.input.storedH) === Math.round(m.input.h),
+      `storedH=${m.input?.storedH} h=${m.input?.h}`)
+    check('P27c 输入框变高时是往上长的（底边不动、上面的活动流让位，没把容器顶穿）',
+      m.input.bottom <= m.oc.bottom + 1 && m.input.bottom > m.input.top,
+      `input.bottom=${m.input?.bottom} oc.bottom=${m.oc?.bottom}`)
+    const wantInputH = Math.round(m.input.h)
+    await shot(page, '1600-input-dragged')
+
+    /* ══ P28 持久化：重新加载后还是这么高 ══ */
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openBoard(page)
+    m = await M()
+    check('P28a reload 后输入框高度还在（不用每次开局重拖）',
+      Math.round(m.input.h) === wantInputH, `${wantInputH} → ${m.input?.h}`)
+    check('P28b reload 后用内联高度还原（不是又回到 88）',
+      m.input.inline !== '' && Number(parseFloat(m.input.inline)) === wantInputH,
+      `inline="${m.input?.inline}"`)
+    await shot(page, '1600-input-after-reload')
+
+    /* ══ P29 拖到超限：夹住，但仍算用户的选择（要写盘）══ */
+    await dragInputGrip(page, 500)
+    m = await M()
+    check('P29a 拖过头被 max-height 夹住在 380',
+      m.input.h === 380 && m.input.clamped === true, `h=${m.input?.h} clamped=${m.input?.clamped}`)
+    check('P29b 夹住的值仍然写盘（拖到顶也是一次真实拖拽，下次还得是这个高度）',
+      Math.round(Number(m.input.storedH)) === 380, `storedH=${m.input?.storedH}`)
+    await shot(page, '1600-input-max')
+
+    /* ══ P30 反向：窗口变矮把高度压低时，不许把偏好一起改小 ══ */
+    await setSize(page, 1600, 620)
+    m = await M()
+    // 45vh = 279 < 380 → 实际高度被压到 279
+    check('P30a 视口变矮（45vh = 279）后输入框被 max-height 压低',
+      m.input.h < 300 && m.input.clamped === true, `h=${m.input?.h} maxH=${m.input?.maxH}`)
+    check('P30b 被压低时**没有**覆盖已存的高度（否则窗口小一次，偏好就永久没了）',
+      Number(m.input.storedH) === 380, `storedH=${m.input?.storedH}（应仍为 380）`)
+    await shot(page, '1600-input-short-viewport')
+
+    await setSize(page, 1600, 900)
+    m = await M()
+    check('P30c 视口恢复后输入框回到 380（偏好本来就没丢）', m.input.h === 380, `h=${m.input?.h}`)
+    await shot(page, '1600-input-restored')
   } catch (err) {
     check('脚本异常', false, String(err?.message || err))
   } finally {
@@ -541,7 +702,7 @@ async function main() {
   const pairs = [
     { title: '1600 · 默认（左 264 / 右 360，右比左宽）', a: '1600-default', b: null },
     { title: '1600 · 左栏拖宽 60px vs 拖到上限 416', a: '1600-left-dragged', b: '1600-left-max' },
-    { title: '1600 · 右栏拖宽（往左拖 = 变宽）', a: '1600-right-dragged', b: null },
+    { title: '1600 · 右栏拖宽（往左拖 = 变宽）', a: '1600-right-dragged', b: '1600-right-max' },
     { title: '1600 · 折叠左栏 vs 折叠右栏', a: '1600-left-collapsed', b: '1600-right-collapsed' },
     { title: '900 · 左栏浮层抽屉', a: '900-narrow', b: null },
     { title: '780 · 竖排（右栏铺满、无分隔条）', a: '780-stacked', b: null },
@@ -551,6 +712,9 @@ async function main() {
     { title: '900 · 抽屉展开后也能上下拖执行监控', a: '900-agents-drawer', b: null },
     { title: '执行监控（合成卡片撑满内容）· 默认态不裁 vs 拖到下限改成内滚', a: '1600-agents-realcontent-default', b: '1600-agents-realcontent-min' },
     { title: '执行监控 · 拖回去后内容重新完整可见', a: '1600-agents-realcontent-expanded', b: null },
+    { title: '派发输入框 · 默认（4 行）vs 拖高', a: '1600-input-default', b: '1600-input-dragged' },
+    { title: '派发输入框 · reload 后高度还在 vs 拖到上限 380', a: '1600-input-after-reload', b: '1600-input-max' },
+    { title: '派发输入框 · 视口变矮被压低（偏好不丢）vs 恢复后回到 380', a: '1600-input-short-viewport', b: '1600-input-restored' },
   ]
   const b64 = (f) => fs.readFileSync(path.join(SHOT_DIR, `${f}.png`)).toString('base64')
   const rowsHtml = pairs.map((p) => `

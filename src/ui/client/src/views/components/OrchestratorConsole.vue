@@ -27,7 +27,7 @@
   两者混在同一条时间线上，才看得出"我说了什么 → 系统做了什么"。
 -->
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { $t } from '@/lang/static'
 import { Paperclip, Promotion, Expand, Fold, Setting, ArrowDown, Check } from '@element-plus/icons-vue'
 import TaskExecutorIcon from '@components/TaskExecutorIcon.vue'
@@ -247,6 +247,99 @@ function onInputKeydown(e: KeyboardEvent) {
   send()
 }
 
+// ── 输入框高度：手拖过就记住 ────────────────────────────────────────────
+// 这块是"主要用来添加任务"的入口，一条指令常常十几行；默认那几行写起来得
+// 一边写一边往上滚。textarea 自带的 resize: vertical 能拖，但高度**只活在
+// 当前这个 DOM 节点上** —— 刷新页面就回到 rows 给的行数，第二天又得拖一遍。
+// 所以把用户拖出来的高度落进 localStorage（和看板的分隔条布局同一个套路）。
+//
+// 为什么用 ResizeObserver 而不是监听 mouseup：原生拖拽的 mouseup 落在哪儿由
+// 浏览器决定，`@mouseup` 未必收到；而高度变了一定会被观察到。
+//
+// 写盘的两个条件（满足其一即可），各自挡一类脏数据：
+//   · inputDragging  —— mousedown 落在右下角那个 grip 上，说明用户正在拖高度，
+//     这时量到的一定是他的选择；包括"拖到上限被 max-height 夹住"的情况 ——
+//     那也是一次真实的拖拽，该记住。
+//   · 没被 max-height 夹住 —— 兜底：万一浏览器没把 mousedown 派给 textarea，
+//     只要高度不是被夹出来的，就还是有效值。
+// 反过来，**既没在拖、又被夹住**时绝不写盘：那是窗口变矮时 CSS 强加的高度，
+// 记下去就把用户真正想要的高度永久覆盖成小的了（窗口小一次，偏好就没了）。
+// 夹住的判据是 offsetHeight == max-height（全局 `* { box-sizing: border-box }`，
+// 两者同口径，可直接比）。
+const INPUT_H_KEY = 'wb.ocInputHeight.v1'
+/** 与 CSS 里的 min-height 同值：低于它的量值一律当成"没拖过" */
+const OC_INPUT_MIN_H = 76
+
+function readInputH(): number | null {
+  try {
+    const raw = localStorage.getItem(INPUT_H_KEY)
+    if (!raw) return null
+    const n = Number(raw)
+    return Number.isFinite(n) && n >= OC_INPUT_MIN_H ? Math.round(n) : null
+  } catch {
+    // 隐私模式：不记住高度而已，不影响输入
+    return null
+  }
+}
+
+const inputRef = ref<HTMLTextAreaElement | null>(null)
+const inputH = ref<number | null>(readInputH())
+/** 没拖过时不写内联高度，让它整个交给 CSS（rows + min/max-height） */
+const inputStyle = computed<Record<string, string>>(() => {
+  const s: Record<string, string> = {}
+  if (inputH.value) s.height = `${inputH.value}px`
+  return s
+})
+
+let inputRO: ResizeObserver | null = null
+let inputDragging = false
+let inputROFirst = true
+
+/**
+ * 只有落在右下角 grip 上的 mousedown 才算"开始拖高度"。
+ * 不判断坐标的话，随便点一下输入框（放下光标）也会把标志位置起来 ——
+ * 之后任何一次因窗口变化触发的高度改动都会被当成用户的选择写盘。
+ * grip 的实际命中区在浏览器里是十几个像素，这里留 20px 足够宽。
+ */
+const INPUT_GRIP_PX = 20
+function onInputMouseDown(e: MouseEvent) {
+  const el = inputRef.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  inputDragging = r.right - e.clientX <= INPUT_GRIP_PX && r.bottom - e.clientY <= INPUT_GRIP_PX
+}
+/** 解绑挂在 window 上：拖到元素外面松手也要能收尾（否则标志位会一直留着） */
+function onWindowMouseUp() { inputDragging = false }
+
+function commitInputH(el: HTMLTextAreaElement) {
+  const next = Math.round(el.offsetHeight)
+  if (next < OC_INPUT_MIN_H || next === inputH.value) return
+  inputH.value = next
+  try { localStorage.setItem(INPUT_H_KEY, String(next)) } catch { /* quota 不该阻塞输入 */ }
+}
+
+onMounted(() => {
+  const el = inputRef.value
+  if (!el) return
+  window.addEventListener('mouseup', onWindowMouseUp)
+  if (typeof ResizeObserver === 'undefined') return
+  inputRO = new ResizeObserver(() => {
+    // 首次回调是 observe() 那一刻的初始观测 —— 量到的就是刚渲染出来的高度
+    // （可能来自 localStorage，也可能是 CSS 默认），不是用户这一下改的，跳过。
+    if (inputROFirst) { inputROFirst = false; return }
+    const maxH = parseFloat(getComputedStyle(el).maxHeight)
+    const clamped = Number.isFinite(maxH) && el.offsetHeight >= maxH - 1
+    if (!inputDragging && clamped) return
+    commitInputH(el)
+  })
+  inputRO.observe(el)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('mouseup', onWindowMouseUp)
+  inputRO?.disconnect()
+  inputRO = null
+})
+
 /** 活动流一行的正文。文案全部走 i18n，服务端只给结构化字段 */
 function describe(r: OrchestratorActivity): string {
   const task = r.taskTitle || $t('@WORKBENCH:未命名任务')
@@ -459,12 +552,15 @@ const gitSummary = computed(() => {
       <!-- 粘贴事件必须同时挂在 textarea 上：在输入框里按 Ctrl+V 时事件只到 textarea，
            不会冒泡经过下面的附件区 -->
       <textarea
+        ref="inputRef"
         class="oc__input"
         v-model="draft"
-        rows="3"
+        :style="inputStyle"
+        rows="4"
         :placeholder="$t('@WORKBENCH:给主 Agent 下一条指令，例如：把登录模块的错误处理重构一遍')"
         @keydown="onInputKeydown"
         @paste="onPaste"
+        @mousedown="onInputMouseDown"
       />
       <AttachmentZone
         v-if="draftAttachments.length > 0 || attachBusy"
@@ -821,9 +917,13 @@ const gitSummary = computed(() => {
 }
 .oc__input {
   width: 100%;
+  /* 右下手拖调高。上限用 min(px, vh) 而不是写死 px：
+     这块栏高度是满屏的，固定 380 在小窗口上会把上面的活动流压成一条，
+     甚至把输入区自己顶出容器。45vh 保证"上下都能看见"，380px 是宽屏下的实际手拖上限。
+     （拖动后的高度由组件记进 localStorage，见 script 里的 INPUT_H_KEY） */
   resize: vertical;
-  min-height: 52px;
-  max-height: 160px;
+  min-height: 76px;
+  max-height: min(380px, 45vh);
   padding: 7px 8px;
   font-size: 12px;
   line-height: 1.5;
