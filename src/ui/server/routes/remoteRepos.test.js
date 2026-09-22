@@ -208,6 +208,62 @@ test('normalizeGiteeRepos: private 缺失时用 public 反推;url 缺失时用 f
   assert.equal(explicit.isPrivate, true)
 })
 
+// ── 排序 / 卡片元信息用到的字段 ──────────────────────────────────────────────
+//
+// 前端默认按 pushedAt 倒序排,卡片第三行显示"最近推送 / Fork / 默认分支 / 许可证"。
+// 这些字段名两个平台各不相同,映射写错**不会报错** —— 只会静默变成 null,
+// 表现成"卡片上少半行字"或"排序乱掉",所以逐个钉住。
+test('normalizeGithubRepos: forkCount/defaultBranchRef/licenseInfo 映射到统一字段', () => {
+  const [repo] = normalizeGithubRepos([{
+    nameWithOwner: 'xz333221/zen-gitsync',
+    forkCount: 4,
+    defaultBranchRef: { name: 'develop' },
+    licenseInfo: { key: 'mit', name: 'MIT License' },
+    pushedAt: '2026-09-22T12:00:00Z',
+    createdAt: '2024-11-25T08:11:38Z',
+  }])
+  assert.equal(repo.forks, 4)
+  assert.equal(repo.defaultBranch, 'develop')
+  assert.equal(repo.license, 'MIT License')
+  assert.equal(repo.pushedAt, '2026-09-22T12:00:00Z')
+  assert.equal(repo.createdAt, '2024-11-25T08:11:38Z')
+
+  // 字段缺失时是 null / 0,不是 undefined —— 前端直接拿它做判断和比较
+  const [bare] = normalizeGithubRepos([{}])
+  assert.equal(bare.forks, 0)
+  assert.equal(bare.defaultBranch, null)
+  assert.equal(bare.license, null)
+  assert.equal(bare.pushedAt, null)
+})
+
+test('normalizeGithubRepos: licenseInfo.key=other(有 LICENSE 但认不出)不算许可证', () => {
+  // 实测:本仓库自己的 licenseInfo 就是 {key:'other', name:'Other'} ——
+  // 卡片上显示一个 "Other" 徽标是纯噪音,当成没有处理。
+  const [repo] = normalizeGithubRepos([{ nameWithOwner: 'a/b', licenseInfo: { key: 'other', name: 'Other' } }])
+  assert.equal(repo.license, null)
+})
+
+test('normalizeGiteeRepos: 未设置许可证时 gitee 给空串,要归一成 null', () => {
+  const [none] = normalizeGiteeRepos([{ full_name: 'flowdash/blog', license: '' }])
+  assert.equal(none.license, null)
+  assert.equal(none.forks, 0)
+  assert.equal(none.defaultBranch, null)
+
+  const [full] = normalizeGiteeRepos([{
+    full_name: 'flowdash/article-generator',
+    license: 'MIT',
+    forks_count: 2,
+    default_branch: 'develop',
+    pushed_at: '2026-09-02T01:08:48+08:00',
+    created_at: '2026-04-30T01:29:35+08:00',
+  }])
+  assert.equal(full.license, 'MIT')
+  assert.equal(full.forks, 2)
+  assert.equal(full.defaultBranch, 'develop')
+  assert.equal(full.pushedAt, '2026-09-02T01:08:48+08:00')
+  assert.equal(full.createdAt, '2026-04-30T01:29:35+08:00')
+})
+
 // ── 色码(ANSI)—— 强制上色的环境会把解析和提示一起搞坏 ───────────────────────
 //
 // 实测(2026-09-22):只要启动服务的那个终端里带着 CLICOLOR_FORCE=1,gh 就**不理**

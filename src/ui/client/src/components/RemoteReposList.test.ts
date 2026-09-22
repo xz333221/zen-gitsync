@@ -87,11 +87,20 @@ function repo(overrides: Record<string, unknown> = {}) {
     isFork: false,
     language: 'JavaScript',
     stars: 1,
-    updatedAt: '2026-09-22T00:00:00Z',
+    forks: 0,
+    license: null,
+    defaultBranch: 'main',
+    updatedAt: '2026-09-22T12:00:00Z',
+    pushedAt: '2026-09-22T12:00:00Z',
+    createdAt: '2025-01-01T12:00:00Z',
     url: 'https://github.com/xz333221/zen-gitsync',
     ...overrides,
   }
 }
+
+/** 卡片显示顺序(仓库名) —— 排序断言只看这个,不去比整段 DOM */
+const cardNames = (w: { findAll: (s: string) => Array<{ text: () => string }> }) =>
+  w.findAll('.repo-card__name-base').map((el) => el.text())
 
 /** 按 URL 分派的 fetch mock;/api/remote-repos 的响应取自 remoteQueue(耗尽后复用最后一个) */
 function stubFetch(remoteQueue: Array<Record<string, unknown>>) {
@@ -212,9 +221,13 @@ describe('RemoteReposList.vue', () => {
     expect(w.findAll('.repo-card')).toHaveLength(2)
     expect(w.text()).toContain('已登录 xz333221')
     expect(w.text()).toContain('共 2 个仓库')
-    // 私有徽标只出现在私有仓库那张卡上
-    const tags = w.findAll('.repo-card')[1].findAll('.repo-card__tag')
-    expect(tags.some((t) => t.text() === '私有')).toBe(true)
+    // 私有徽标只出现在私有仓库那张卡上(按内容找卡片,不按下标 —— 默认排序
+    // 按推送时间,先后来回变,写死下标会随排序规则一起碎)
+    const cards = w.findAll('.repo-card')
+    const privateCard = cards.find((c) => c.text().includes('file-guard'))!
+    const publicCard = cards.find((c) => c.text().includes('zen-gitsync'))!
+    expect(privateCard.findAll('.repo-card__tag').some((t) => t.text() === '私有')).toBe(true)
+    expect(publicCard.findAll('.repo-card__tag').some((t) => t.text() === '私有')).toBe(false)
   })
 
   test('已登录:搜索按仓库名/描述过滤,清空后恢复', async () => {
@@ -241,6 +254,98 @@ describe('RemoteReposList.vue', () => {
 
     await w.find('.repo-list__search-clear').trigger('click')
     expect(w.findAll('.repo-card')).toHaveLength(2)
+  })
+
+  // ── 排序:两个平台的 CLI 原始顺序并不一致(gh 按推送倒序 / gitee 按 full_name
+  //    字母序),面板里统一在前端排,不然切个 Tab 就换一种排法 ──────────────────
+  test('默认按最近推送倒序:', async () => {
+    stubFetch([
+      payload({
+        repos: [
+          repo({ name: 'old', fullName: 'xz333221/old', pushedAt: '2026-01-01T12:00:00Z' }),
+          repo({ name: 'newest', fullName: 'xz333221/newest', pushedAt: '2026-09-01T12:00:00Z' }),
+          repo({ name: 'middle', fullName: 'xz333221/middle', pushedAt: '2026-05-01T12:00:00Z' }),
+        ],
+      }),
+    ])
+    const w = mount()
+    await flushAll()
+
+    expect(cardNames(w)).toEqual(['newest', 'middle', 'old'])
+  })
+
+  test('切换排序:仓库名 / 星标最多 / 最近创建,切回去还能回到原顺序', async () => {
+    stubFetch([
+      payload({
+        repos: [
+          repo({ name: 'beta', fullName: 'xz333221/beta', pushedAt: '2026-09-01T12:00:00Z', stars: 1, createdAt: '2026-06-01T12:00:00Z' }),
+          repo({ name: 'Alpha', fullName: 'xz333221/Alpha', pushedAt: '2026-08-01T12:00:00Z', stars: 9, createdAt: '2026-01-01T12:00:00Z' }),
+          repo({ name: 'gamma', fullName: 'xz333221/gamma', pushedAt: '2026-07-01T12:00:00Z', stars: 5, createdAt: '2026-03-01T12:00:00Z' }),
+        ],
+      }),
+    ])
+    const w = mount()
+    await flushAll()
+    expect(cardNames(w)).toEqual(['beta', 'Alpha', 'gamma'])
+
+    const select = w.find('.repo-list__sort-select')
+    // 名称:大小写不敏感(与 gitee CLI 的字母序口径一致,大写开头不会乱插队)
+    await select.setValue('name')
+    expect(cardNames(w)).toEqual(['Alpha', 'beta', 'gamma'])
+
+    await select.setValue('stars')
+    expect(cardNames(w)).toEqual(['Alpha', 'gamma', 'beta'])
+
+    await select.setValue('created')
+    expect(cardNames(w)).toEqual(['beta', 'gamma', 'Alpha'])
+
+    // 排序是"排副本"——回来还应该是服务端给的原始相对顺序,而不是被上一次排序改过
+    await select.setValue('pushed')
+    expect(cardNames(w)).toEqual(['beta', 'Alpha', 'gamma'])
+  })
+
+  test('卡片第三行:最近推送 / Fork 数 / 非默认分支 / 许可证,没有的项不留占位', async () => {
+    stubFetch([
+      payload({
+        repos: [
+          repo({
+            name: 'rich',
+            fullName: 'xz333221/rich',
+            pushedAt: '2026-09-20T12:00:00Z',
+            forks: 3,
+            defaultBranch: 'develop',
+            license: 'MIT',
+          }),
+          repo({
+            name: 'bare',
+            fullName: 'xz333221/bare',
+            pushedAt: '2026-09-19T12:00:00Z',
+            forks: 0,
+            defaultBranch: 'main',
+            license: null,
+          }),
+        ],
+      }),
+    ])
+    const w = mount()
+    await flushAll()
+
+    const [rich, bare] = w.findAll('.repo-card')
+    expect(rich.find('.repo-card__meta').text()).toBe('更新于 2026-09-20 · 3 个 Fork · 分支 develop · MIT')
+    // main 分支 / 0 个 Fork / 无许可证都省略 —— 满屏 "main" 和 "0 Fork" 是纯噪音
+    expect(bare.find('.repo-card__meta').text()).toBe('更新于 2026-09-19')
+  })
+
+  test('搜到几条先说几条:总数提示变成「匹配 M / 共 N」', async () => {
+    stubFetch([
+      payload({ repos: [repo(), repo({ name: 'file-guard', fullName: 'xz333221/file-guard' })] }),
+    ])
+    const w = mount()
+    await flushAll()
+    expect(w.text()).toContain('共 2 个仓库')
+
+    await w.find('.repo-list__search-input').setValue('guard')
+    expect(w.text()).toContain('匹配 1 / 共 2 个仓库')
   })
 
   test('已登录:点卡片在浏览器打开仓库主页', async () => {

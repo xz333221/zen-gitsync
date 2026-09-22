@@ -441,6 +441,25 @@ async function detectCli(provider, executable, version) {
   };
 }
 
+/**
+ * 两个平台都要给的字段(前端排序 + 卡片元信息要用):
+ *   pushedAt      最近推送 —— 前端默认按它倒序排(最活跃的排前面)
+ *   createdAt     创建时间
+ *   forks         复刻数
+ *   defaultBranch 默认分支 —— 卡片上只在非 main/master 时显示
+ *   license       许可证
+ * 取不到时一律 null(不写 0),前端据此判断"这条信息没有",而不是显示一个假的 0。
+ */
+function commonRepoFields(source) {
+  return {
+    pushedAt: source.pushedAt || null,
+    createdAt: source.createdAt || null,
+    forks: typeof source.forks === 'number' ? source.forks : 0,
+    defaultBranch: source.defaultBranch || null,
+    license: source.license || null,
+  };
+}
+
 /** gh repo list 的 --json 字段 → 统一形状 */
 export function normalizeGithubRepos(raw) {
   return raw.map((r) => ({
@@ -453,6 +472,19 @@ export function normalizeGithubRepos(raw) {
     stars: typeof r.stargazerCount === 'number' ? r.stargazerCount : 0,
     updatedAt: r.updatedAt || null,
     url: r.url || '',
+    ...commonRepoFields({
+      pushedAt: r.pushedAt,
+      createdAt: r.createdAt,
+      forks: typeof r.forkCount === 'number' ? r.forkCount : undefined,
+      // defaultBranchRef 是对象({name}),没设默认分支时为 null
+      defaultBranch: r.defaultBranchRef?.name,
+      // gh 的 licenseInfo 只给 key/name/nickname(spdxId 在 list 里没有)。
+      // key === 'other' 表示"有这个 LICENSE 文件但 GitHub 认不出是哪一种",
+      // 显示成 "Other" 是纯噪音,直接当作没有。
+      license: r.licenseInfo && r.licenseInfo.key !== 'other'
+        ? (r.licenseInfo.name || r.licenseInfo.key)
+        : undefined,
+    }),
   }));
 }
 
@@ -469,6 +501,14 @@ export function normalizeGiteeRepos(raw) {
     stars: typeof r.stargazers_count === 'number' ? r.stargazers_count : 0,
     updatedAt: r.updated_at || null,
     url: r.html_url || (r.full_name ? `https://gitee.com/${r.full_name}` : ''),
+    ...commonRepoFields({
+      pushedAt: r.pushed_at,
+      createdAt: r.created_at,
+      forks: typeof r.forks_count === 'number' ? r.forks_count : undefined,
+      defaultBranch: r.default_branch,
+      // 未设置许可证时 gitee 给的是空字符串(实测),当成 null
+      license: r.license,
+    }),
   }));
 }
 
@@ -479,7 +519,9 @@ async function listRepos(provider, executable) {
     const res = await runCli(executable, [
       'repo', 'list',
       '--limit', String(GH_LIMIT),
-      '--json', 'name,nameWithOwner,description,isPrivate,isFork,primaryLanguage,stargazerCount,updatedAt,url',
+      // 字段要和 normalizeGithubRepos 一一对应:少一个不会报错,只会静默变成 null,
+      // 表现成"卡片上少了半行信息"。
+      '--json', 'name,nameWithOwner,description,isPrivate,isFork,primaryLanguage,stargazerCount,forkCount,defaultBranchRef,licenseInfo,updatedAt,pushedAt,createdAt,url',
     ]);
     if (res.timedOut) return { repos: [], error: 'gh repo list 超时(25 秒),请检查网络或代理设置' };
     const parsed = parseRepoJson(res.stdout);
@@ -497,7 +539,7 @@ async function listRepos(provider, executable) {
       'repo', 'list',
       '--limit', String(GITEE_PAGE_SIZE),
       '--page', String(page),
-      '--json=full_name,human_name,name,path,description,private,public,fork,language,stargazers_count,updated_at,html_url',
+      '--json=full_name,human_name,name,path,description,private,public,fork,language,stargazers_count,forks_count,default_branch,license,updated_at,pushed_at,created_at,html_url',
       '--no-tui',
     ]);
     if (res.timedOut) {

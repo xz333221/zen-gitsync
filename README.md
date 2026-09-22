@@ -10,6 +10,7 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
 - [What's New](#v2xx--whats-new)
 - [GUI](#gui)
   - [Core Git Panel](#core-git-panel)
+  - [GitHub / Gitee Repositories](#github--gitee-repositories)
   - [Branch Management](#branch-management)
   - [Remote Management](#remote-management)
   - [Stash Management](#stash-management)
@@ -44,6 +45,7 @@ npm install -g zen-gitsync
 - **Visual GUI** — Full graphical interface for Git operations
 - **Branch management** — Create, switch, and track local/remote branches
 - **Remote management** — Manage multiple remotes (add / rename / retarget / delete) from one dialog, configure multi push URLs, and push to a chosen remote or to all remotes at once
+- **Repository browser** — GitHub / Gitee tabs listing every repository your CLI account can see (private ones included), with search, sorting (recently pushed / recently created / most starred / name) and cards that carry last-push date, fork count, default branch and license
 - **Stash management** — Save and restore stashes with locked-file filtering
 - **Tag management** — Create lightweight and annotated tags
 - **Merge support** — Detect and complete in-progress merges
@@ -157,6 +159,18 @@ The commit form supports two modes toggled by a switch:
 - **Free-text mode** — single text area for any commit message
 
 In either mode, click **AI Generate** to fill in the fields automatically based on the staged diff.
+
+---
+
+### GitHub / Gitee Repositories
+
+> The Git view has three tabs: **当前项目** (current project), **GitHub 仓库**, and **Gitee 仓库**. The latter two list every repository your `gh` / `gitee` account can see — private ones included. ZenGitSync never touches your token: both panels shell out to the official CLI (`gh`, `@gitee/gitee-cli`), which keeps its own credentials.
+
+- **Zero-config guidance** — a missing CLI shows the install command for your platform (winget / Homebrew / `npm install -g @gitee/gitee-cli`) with one-click install and auto-refresh; an installed but signed-out CLI shows the sign-in command plus one-click sign-in, then polls until you finish the interactive flow in the terminal
+- **Search** — filters by name, full path and description; the header switches to `匹配 M / 共 N 个仓库` so you can tell how much got filtered out
+- **Sort** — recently pushed (default) / recently created / most starred / name. Sorting happens in the frontend, so both tabs behave identically — their CLIs do not (`gh` returns most-recently-pushed first, `gitee` returns `owner/name` alphabetical)
+- **Informative cards** — repository name, description and privacy / fork / language / star badges, plus a third line with last-push date, fork count, non-`main` default branch and license (each omitted when there is nothing to say)
+- **One click to open or copy** — clicking a card opens the repository page in your browser; the actions that appear on hover copy the URL or open it
 
 ---
 
@@ -595,6 +609,7 @@ $ g --check-lock=config.json
 - [新特性](#v2xx--新特性)
 - [GUI 界面](#gui-界面)
   - [核心 Git 面板](#核心-git-面板)
+  - [GitHub / Gitee 仓库](#github--gitee-仓库)
   - [分支管理](#分支管理)
   - [远程仓库管理](#远程仓库管理)
   - [Stash 管理](#stash-管理)
@@ -629,6 +644,7 @@ npm install -g zen-gitsync
 - **可视化 GUI** — 完整的 Git 图形操作界面
 - **分支管理** — 创建、切换、追踪本地/远程分支
 - **远程仓库管理** — 在一个弹窗里管理多个远程仓库（添加/重命名/改地址/删除）、配置多推送地址，并支持推送到指定远程或一键推送全部
+- **仓库浏览器** — GitHub / Gitee 两个 Tab 列出 CLI 账号下的全部仓库（含私有），支持搜索与排序（最近推送 / 最近创建 / 星标最多 / 仓库名），卡片带最近推送日期、Fork 数、默认分支与许可证
 - **Stash 管理** — 储藏与恢复变更，支持排除锁定文件
 - **Tag 管理** — 创建轻量/附注标签
 - **合并支持** — 自动检测并引导完成进行中的合并
@@ -773,6 +789,18 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 - **自由模式** — 单一文本框，输入任意提交信息
 
 两种模式下均可点击 **AI 生成** 按钮，根据当前 staged diff 自动填充提交信息。
+
+---
+
+### GitHub / Gitee 仓库
+
+> Git 视图有三个 Tab：**当前项目**、**GitHub 仓库**、**Gitee 仓库**。后两个列出你的 `gh` / `gitee` 账号下能看到的全部仓库（含私有）。ZenGitSync 全程不接触你的令牌：面板调用的是官方 CLI（`gh`、`@gitee/gitee-cli`），凭据由 CLI 自己保管。
+
+- **零配置引导** — 没装 CLI 时按平台给出安装命令（winget / Homebrew / `npm install -g @gitee/gitee-cli`），支持一键安装并自动刷新；装了但没登录时给出登录命令 + 一键登录，然后轮询等你走完终端里的交互流程
+- **搜索** — 按仓库名、完整路径、描述过滤；顶部提示同时显示 `匹配 M / 共 N 个仓库`，一眼看出筛掉了多少
+- **排序** — 最近推送（默认）/ 最近创建 / 星标最多 / 仓库名。排序在前端做，两个 Tab 口径一致 —— 它们的 CLI 并不一致（`gh` 按推送时间倒序，`gitee` 按 `owner/name` 字母序）
+- **信息更全的卡片** — 仓库名、描述，以及私有 / Fork / 语言 / 星标徽标，第三行再给最近推送日期、Fork 数、非 `main` 的默认分支与许可证（没有的项直接省略，不留占位）
+- **一键打开 / 复制** — 点击卡片在浏览器打开仓库主页，悬浮时出现的按钮可复制地址或直接打开
 
 ---
 

@@ -58,7 +58,14 @@ interface RemoteRepo {
   isFork: boolean
   language: string | null
   stars: number
+  forks: number
+  license: string | null
+  defaultBranch: string | null
   updatedAt: string | null
+  /** 最近推送。排序默认看它 —— "更新" 在有 wiki/issue 活动时也会变,
+   *  推送时间才代表"代码最近动过" */
+  pushedAt: string | null
+  createdAt: string | null
   url: string
 }
 
@@ -96,6 +103,44 @@ const TOOL_ID = { github: 'gh', gitee: 'gitee' } as const
 /** 卡片网格每列最小宽度:和「最近项目」保持同一档,切 Tab 时卡片不会跳尺寸 */
 const CARD_MIN_WIDTH = '420px'
 
+/** 排序方式。
+ *
+ *  为什么要显式排序:两个平台的 CLI 原始顺序**并不一致** —— gh 按推送时间倒序,
+ *  gitee 按 owner/name 字母序(它的 --sort 默认值是 full_name)。同一个面板、
+ *  切个 Tab 就换一种排法,用户没法形成预期。这里统一在前端排,顺带把选择权交出去。
+ *
+ *  默认「最近推送」:仓库列表最常被用来回答"我最近在动哪个项目"。 */
+type SortKey = 'pushed' | 'created' | 'stars' | 'name'
+
+const SORT_OPTIONS: Array<{ value: SortKey, labelKey: string }> = [
+  { value: 'pushed', labelKey: '@REPOLIST:最近推送' },
+  { value: 'created', labelKey: '@REPOLIST:最近创建' },
+  { value: 'stars', labelKey: '@REPOLIST:星标最多' },
+  { value: 'name', labelKey: '@REPOLIST:仓库名' },
+]
+
+/** 默认分支是这两个之一就不在卡片上占一行 —— 满屏 "main" 是没有信息量的噪音
+ *  (与「★0 不显示」同一条原则)。 */
+const COMMON_BRANCHES = ['main', 'master']
+
+/** 日期容器的兜底:两个平台都给 ISO 串,解析不出来时按"没有这个时间"处理 */
+function timeValue(value: string | null) {
+  if (!value) return 0
+  const time = Date.parse(value)
+  return Number.isNaN(time) ? 0 : time
+}
+
+/** 名称比较:统一小写再比 —— 和 gitee CLI 的字母序口径一致(它也按全名排),
+ *  同时避免 ASCII 下 'Z' < 'a' 让大写开头的仓库名显得随机。
+ *  不用 localeCompare:它依赖运行时 ICU,node 与浏览器可能给出不同顺序,
+ *  排序结果会变得不可测。 */
+function compareFullName(a: RemoteRepo, b: RemoteRepo) {
+  const left = a.fullName.toLowerCase()
+  const right = b.fullName.toLowerCase()
+  if (left === right) return 0
+  return left < right ? -1 : 1
+}
+
 /** 安装后自动轮询:5 秒一次,最多 24 次(2 分钟)。
  *  与 ToolInstallDialog 同一档 —— 装包管理器跑完通常在这个区间内,
  *  超时后仍可手动「重新检测」。 */
@@ -113,6 +158,7 @@ const data = ref<RemoteReposPayload | null>(null)
 const isLoading = ref(true)
 const loadError = ref('')
 const searchQuery = ref('')
+const sortKey = ref<SortKey>('pushed')
 
 // 一键安装:点完之后进入等待态并开始轮询
 const isInstalling = ref(false)
@@ -156,6 +202,16 @@ const needsElevation = computed(
 /** 有仓库可展示吗?没登录/没安装时都为 false,走各自的引导态 */
 const hasRepos = computed(() => (data.value?.repos.length || 0) > 0)
 
+/** 头部数量提示。搜索时先说"命中了几个" —— 只说总数会让人以为搜索没生效
+ *  (搜完还是"共 70 个仓库",看不出筛掉了多少)。 */
+const countHint = computed(() => {
+  const total = data.value?.repos.length || 0
+  if (searchQuery.value.trim()) {
+    return $t('@REPOLIST:匹配 {matched} / 共 {total} 个仓库', { matched: items.value.length, total })
+  }
+  return $t('@REPOLIST:共 {count} 个仓库', { count: total })
+})
+
 /** 当前应该渲染哪一屏。顺序即优先级:先解决"有没有装",再解决"有没有登录"。 */
 const view = computed<'loading' | 'install' | 'login' | 'error' | 'list'>(() => {
   if (!data.value) return isLoading.value ? 'loading' : 'error'
@@ -169,20 +225,64 @@ const view = computed<'loading' | 'install' | 'login' | 'error' | 'list'>(() => 
 const items = computed(() => {
   const list = data.value?.repos || []
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return list
-  return list.filter((repo) =>
-    repo.name.toLowerCase().includes(q)
-    || repo.fullName.toLowerCase().includes(q)
-    || (repo.description || '').toLowerCase().includes(q)
-  )
+  const filtered = q
+    ? list.filter((repo) =>
+      repo.name.toLowerCase().includes(q)
+      || repo.fullName.toLowerCase().includes(q)
+      || (repo.description || '').toLowerCase().includes(q)
+    )
+    : list
+
+  // 复制一份再排:list 是响应式源数据,原地 sort 会连着 data.value.repos 一起改,
+  // 排序切换后就再也回不到"服务端给的原始顺序"了。
+  const sorted = [...filtered]
+  sorted.sort((a, b) => {
+    switch (sortKey.value) {
+      case 'created':
+        return timeValue(b.createdAt) - timeValue(a.createdAt) || compareFullName(a, b)
+      case 'stars':
+        return b.stars - a.stars || compareFullName(a, b)
+      case 'name':
+        return compareFullName(a, b)
+      case 'pushed':
+      default:
+        // 有的仓库还没推过(pushedAt 为空),退回 updatedAt;两个都没有 = 排到最后
+        return timeValue(b.pushedAt || b.updatedAt) - timeValue(a.pushedAt || a.updatedAt)
+          || compareFullName(a, b)
+    }
+  })
+  return sorted
 })
 
-/** 卡片的悬浮提示:仓库名 + 完整路径 + 描述 + 更新时间 */
+/**
+ * 卡片第三行的元信息:最近推送 / Fork 数 / 默认分支 / 许可证。
+ *
+ * 全是**可选**项 —— 缺哪条就少哪条,不留空占位。这样同一屏里每张卡片
+ * 带的信息量不同,但读到的每一段都是有意义的(而不是一片 "0 / main / 无")。
+ */
+function repoMeta(repo: RemoteRepo) {
+  const parts: string[] = []
+  const date = formatDate(repo.pushedAt || repo.updatedAt)
+  if (date) parts.push($t('@REPOLIST:更新于 {date}', { date }))
+  if (repo.forks > 0) parts.push($t('@REPOLIST:{count} 个 Fork', { count: repo.forks }))
+  if (repo.defaultBranch && !COMMON_BRANCHES.includes(repo.defaultBranch)) {
+    parts.push($t('@REPOLIST:分支 {branch}', { branch: repo.defaultBranch }))
+  }
+  if (repo.license) parts.push(repo.license)
+  return parts.join(' · ')
+}
+
+/** 卡片的悬浮提示:比卡片多给"创建时间 / 默认分支 / 许可证"——
+ *  卡片上放不下的次要信息都在这里,不用点开浏览器就能核对。 */
 function repoTooltip(repo: RemoteRepo) {
   const lines = [repo.fullName]
   if (repo.description) lines.push(repo.description)
-  const date = formatDate(repo.updatedAt)
-  if (date) lines.push($t('@REPOLIST:更新于 {date}', { date }))
+  const pushed = formatDate(repo.pushedAt)
+  const created = formatDate(repo.createdAt)
+  if (pushed) lines.push($t('@REPOLIST:最近推送 {date}', { date: pushed }))
+  if (created) lines.push($t('@REPOLIST:创建于 {date}', { date: created }))
+  if (repo.defaultBranch) lines.push($t('@REPOLIST:默认分支 {branch}', { branch: repo.defaultBranch }))
+  if (repo.license) lines.push($t('@REPOLIST:许可证 {license}', { license: repo.license }))
   return lines.join('\n')
 }
 
@@ -379,7 +479,7 @@ onBeforeUnmount(stopPolling)
           {{ $t('@REPOLIST:已登录 {user}', { user: data.user }) }}
         </span>
         <span v-if="data?.authenticated && hasRepos" class="repo-list__hint">
-          {{ $t('@REPOLIST:共 {count} 个仓库', { count: data.repos.length }) }}
+          {{ countHint }}
         </span>
         <button
           v-if="view === 'list' || view === 'error'"
@@ -527,22 +627,36 @@ onBeforeUnmount(stopPolling)
 
     <!-- ⑤ 仓库列表 -->
     <template v-else>
-      <div class="repo-list__search">
-        <el-icon class="repo-list__search-icon" aria-hidden="true"><Search /></el-icon>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="repo-list__search-input"
-          :placeholder="$t('@REPOLIST:搜索仓库...')"
-          :aria-label="$t('@REPOLIST:搜索仓库')"
-        />
-        <button
-          v-if="searchQuery"
-          type="button"
-          class="repo-list__search-clear"
-          :aria-label="$t('@REPOLIST:清空搜索')"
-          @click="searchQuery = ''"
-        >×</button>
+      <div class="repo-list__toolbar">
+        <div class="repo-list__search">
+          <el-icon class="repo-list__search-icon" aria-hidden="true"><Search /></el-icon>
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="repo-list__search-input"
+            :placeholder="$t('@REPOLIST:搜索仓库...')"
+            :aria-label="$t('@REPOLIST:搜索仓库')"
+          />
+          <button
+            v-if="searchQuery"
+            type="button"
+            class="repo-list__search-clear"
+            :aria-label="$t('@REPOLIST:清空搜索')"
+            @click="searchQuery = ''"
+          >×</button>
+        </div>
+
+        <!-- 排序。用原生 select 而不是 el-select:同一个面板里的搜索框就是原生 input,
+             两处控件高度/边框/圆角可以完全对齐;原生下拉也不会在窄宽度下被 popper 挤歪。
+             (深色主题下 option 的可读性由 styles/common.scss 的 `select option` 规则兜底。) -->
+        <label class="repo-list__sort">
+          <span class="repo-list__sort-label">{{ $t('@REPOLIST:排序') }}</span>
+          <select v-model="sortKey" class="repo-list__sort-select" :aria-label="$t('@REPOLIST:排序方式')">
+            <option v-for="option in SORT_OPTIONS" :key="option.value" :value="option.value">
+              {{ $t(option.labelKey) }}
+            </option>
+          </select>
+        </label>
       </div>
 
       <!-- 拉取失败但有旧数据:不打断列表,只在顶部补一条说明 -->
@@ -579,6 +693,8 @@ onBeforeUnmount(stopPolling)
               <span class="repo-card__name-path">
                 {{ repo.description || repo.fullName }}
               </span>
+              <!-- 第三行:最近推送 / Fork / 默认分支 / 许可证。全空时整行不渲染 -->
+              <span v-if="repoMeta(repo)" class="repo-card__meta">{{ repoMeta(repo) }}</span>
             </span>
             <span class="repo-card__tags">
               <span v-if="repo.isFork" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:Fork') }}</span>
@@ -934,6 +1050,58 @@ onBeforeUnmount(stopPolling)
   font-size: 14px;
 }
 
+/* ── 工具行:搜索 + 排序 ───────────────────────────────────────────── */
+.repo-list__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+/* 搜索框吃掉剩余宽度,排序固定宽 —— 窗口变窄时先压搜索框(它是可选的),
+   不让排序被挤出去。 */
+.repo-list__toolbar .repo-list__search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.repo-list__sort {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.repo-list__sort-select {
+  height: 40px; /* 与搜索框同高:一行里两个控件视觉齐平 */
+  padding: 0 28px 0 12px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 10px;
+  /* ⚠️ 必须是**不透明**的 --bg-container,不能用 --bg-panel:后者在深色主题下是
+     rgba(255,255,255,.06),而原生下拉的弹出层是独立画布,会拿 select 自身的
+     background-color 当底色 → 半透明叠在 UA 浅色兜底上 = 白底弹出层。
+     (详细原理与回归脚本见 styles/common.scss 的 `select option` 注释) */
+  background-color: var(--bg-container);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  /* 自绘 chevron,与工作台的 .wb-select 同一个图形,避免默认箭头的视觉噪音 */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.repo-list__sort-select:hover {
+  border-color: var(--color-primary);
+}
+.repo-list__sort-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
+
 /* ── 搜索框 ───────────────────────────────────────────────────────── */
 .repo-list__search {
   position: relative;
@@ -1094,6 +1262,14 @@ onBeforeUnmount(stopPolling)
 .repo-card__name-path {
   font-size: 12px;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 第三行是元信息(最近推送 / Fork / 分支 / 许可证):比描述更低一档,同样单行省略 */
+.repo-card__meta {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
