@@ -695,6 +695,8 @@ export default {
   '@67CE7:切换目录失败': 'Failed to switch directory',
   '@67CE7:切换': 'Switch',
   '@67CE7:已复制目录路径': 'Directory path copied',
+  '@67CE7:复制文件夹名称': 'Copy folder name',
+  '@67CE7:已复制文件夹名称': 'Folder name copied',
   '@67CE7:复制失败': 'Copy failed',
   '@67CE7:展开未安装的工具': 'Show uninstalled tools',
   '@67CE7:收起未安装的工具': 'Hide uninstalled tools',

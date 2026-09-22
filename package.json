@@ -39,6 +39,7 @@
     "verify:wb-toolcalls": "node scripts/verify-workbench-toolcalls.mjs",
     "verify:wb-responsive": "node scripts/verify-wb-responsive.cjs",
     "verify:wb-editor-persist": "node scripts/verify-workbench-editor-persist.cjs",
+    "verify:wb-copy-folder-name": "node scripts/verify-copy-folder-name.cjs",
     "e2e": "cd src/ui/client && npx playwright test",
     "e2e:headed": "cd src/ui/client && npx playwright test --headed",
     "e2e:install": "cd src/ui/client && npx playwright install chromium",

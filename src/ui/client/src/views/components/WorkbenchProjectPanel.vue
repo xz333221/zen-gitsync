@@ -33,6 +33,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { $t } from '@/lang/static'
 import { ElMessage } from 'element-plus'
 import {
+  CopyDocument,
   Folder,
   FolderOpened,
   Grid,
@@ -224,6 +225,22 @@ async function launchGui(p: ProjectSummary) {
   const r = await launchGuiInNewTab(p.path)
   if (r.success) ElMessage.success($t('@WORKBENCH:已在新标签页启动 g ui'))
   else ElMessage.error(r.error || $t('@WORKBENCH:启动 g ui 失败'))
+}
+
+/**
+ * 复制项目**文件夹名称**（只有最后一级目录名，不是完整路径）。
+ * 顶栏目录选择器有同一个入口（同一个 i18n key、同一句成功提示）：
+ * 拿目录名去建同名目录 / 当文件名 / 写文档标题比粘一条绝对路径更常用。
+ */
+async function copyFolderName(p: ProjectSummary) {
+  closeOpenMenu()
+  if (!p.name) return
+  try {
+    await navigator.clipboard.writeText(p.name)
+    ElMessage.success($t('@67CE7:已复制文件夹名称'))
+  } catch {
+    ElMessage.error($t('@67CE7:复制失败'))
+  }
 }
 
 /**
@@ -471,6 +488,19 @@ async function openWithTool(p: ProjectSummary, tool: ToolId, permissionMode?: st
               >
                 <span class="proj-menu__icon"><el-icon aria-hidden="true"><Promotion /></el-icon></span>
                 <span class="proj-menu__label">{{ $t('@WORKBENCH:在新标签页启动 g ui') }}</span>
+              </li>
+              <!-- 复制文件夹名称：放在"打开"这一组里，因为它操作的是项目目录本身，
+                   而不是"用哪个工具打开"（下面那组有独立标题）。 -->
+              <li
+                class="proj-menu__item"
+                role="menuitem"
+                tabindex="-1"
+                @click="copyFolderName(p)"
+                @keydown.enter.prevent="copyFolderName(p)"
+                @keydown.space.prevent="copyFolderName(p)"
+              >
+                <span class="proj-menu__icon"><el-icon aria-hidden="true"><CopyDocument /></el-icon></span>
+                <span class="proj-menu__label">{{ $t('@67CE7:复制文件夹名称') }}</span>
               </li>
 
               <li class="proj-menu__sep" role="separator" />

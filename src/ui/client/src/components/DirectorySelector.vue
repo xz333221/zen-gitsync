@@ -18,7 +18,7 @@ import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { FilePickerModal as FilePicker } from 'local-file-picker/client';
 import { ElMessage, ElMessageBox, ElPopover } from "element-plus";
-import { Folder, FolderOpened, Clock, Monitor, ArrowDown, ArrowUp } from "@element-plus/icons-vue";
+import { Folder, FolderOpened, Clock, Monitor, ArrowDown, ArrowUp, CopyDocument } from "@element-plus/icons-vue";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
@@ -79,6 +79,25 @@ async function onCopyDirectory() {
   try {
     await navigator.clipboard.writeText(currentDirectory.value);
     ElMessage.success($t('@67CE7:已复制目录路径'));
+  } catch {
+    ElMessage.error($t('@67CE7:复制失败'));
+  }
+}
+
+/**
+ * 复制**文件夹名称**(只有最后一级目录名,不是完整路径)。
+ *
+ * 与上面"右键复制路径"是两个不同的东西:路径粘进终端就能 cd,
+ * 而目录名是拿去做文件名、建同名目录、写文档标题时更常用的那一份 ——
+ * 复制路径再手动删前缀既麻烦又容易删错。编排台项目列表的「打开方式」菜单里
+ * 也有同一项(同一个 key、同一句成功提示),两处行为保持一致。
+ */
+async function onCopyFolderName() {
+  const name = currentFolderName.value;
+  if (!name) return;
+  try {
+    await navigator.clipboard.writeText(name);
+    ElMessage.success($t('@67CE7:已复制文件夹名称'));
   } catch {
     ElMessage.error($t('@67CE7:复制失败'));
   }
@@ -683,6 +702,17 @@ function onBrowserSelect(path: string) {
         @click="onOpenTerminal"
       >
         <el-icon aria-hidden="true"><Monitor /></el-icon>
+      </IconButton>
+      <!-- 复制文件夹名称：只取最后一级目录名（右键目录名复制的是完整路径，
+           两者场景不同，所以这里是独立按钮而不复用 onCopyDirectory）。 -->
+      <IconButton
+        :tooltip="$t('@67CE7:复制文件夹名称')"
+        :aria-label="$t('@67CE7:复制文件夹名称')"
+        :disabled="!currentDirectory"
+        size="large"
+        @click="onCopyFolderName"
+      >
+        <el-icon aria-hidden="true"><CopyDocument /></el-icon>
       </IconButton>
       <IconButton
         icon-class="g-ai"
