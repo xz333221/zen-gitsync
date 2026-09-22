@@ -28,6 +28,9 @@
  *     真人不会遇到（鼠标一进到行上按钮就已经可点了），纯粹是 headless 时序问题。
  *   · 「用工具打开」是 `.proj-menu__title`（分组标题），不是 `.proj-menu__label` ——
  *     只查 label 的断言会误报"少了这一项"。
+ *   · ⚠️ 断言 toast **不能只看第一条** `.el-message`：界面上可能同时堆着别条（实测启动时
+ *     「Git 状态已刷新」会先出现并霸占 `querySelector('.el-message')`）→ 假阴性。
+ *     要 `querySelectorAll` 后 any 匹配，并在点击前 `clearToasts()` 让看到的就是新弹的那条。
  *
  * 剪贴板怎么断言：headless 里 navigator.clipboard 需要权限，所以用 addInitScript
  * 在页面脚本之前把它换成记录器（window.__copied 数组）。这样断言的是"我们到底
@@ -98,7 +101,11 @@ async function main() {
 
   const copied = () => page.evaluate(() => window.__copied || [])
   const lastCopied = async () => { const all = await copied(); return all[all.length - 1] }
-  const toast = () => page.evaluate(() => (document.querySelector('.el-message')?.textContent || '').trim())
+  // ⚠️ 不能只看第一条 .el-message：界面上可能同时堆着别的 message（实测启动时的
+  //    「Git 状态已刷新」会先出现并霸占 querySelector('.el-message')），
+  //    断言"某条提示是我要的"必须 any 匹配，否则会假阴性。
+  const toasts = () => page.evaluate(() => Array.from(document.querySelectorAll('.el-message')).map(n => (n.textContent || '').trim()))
+  const hasToast = async (s) => (await toasts()).some(t => t.includes(s))
   const clearToasts = () => page.evaluate(() => document.querySelectorAll('.el-message').forEach(n => n.remove()))
 
   try {
@@ -115,9 +122,10 @@ async function main() {
     check('A1b 目录非空时按钮可用', !(await copyBtn.first().isDisabled()))
 
     if (hasBtn) {
+      await clearToasts() // 先清干净别条提示，让下面看到的就是新弹出的这条
       await copyBtn.first().click()
-      await waitUntil(async () => (await toast()).includes('已复制文件夹名称'))
-      check('A3 提示「已复制文件夹名称」', (await toast()).includes('已复制文件夹名称'), `toast="${await toast()}"`)
+      await waitUntil(async () => await hasToast('已复制文件夹名称'))
+      check('A3 提示「已复制文件夹名称」', await hasToast('已复制文件夹名称'), `toasts=${JSON.stringify(await toasts())}`)
       const got = await lastCopied()
       check('A2a 复制内容是文件夹名', got === expectedName, `copied="${got}"`)
       check('A2b 复制内容不是完整路径', got !== currentDir, `copied="${got}"`)
@@ -126,9 +134,9 @@ async function main() {
 
     // A4 反向锚：右键目录名 → 复制完整路径（老行为不能被新功能吃掉）
     await page.locator('.directory-display').first().click({ button: 'right' })
-    await waitUntil(async () => (await toast()).includes('已复制目录路径'))
+    await waitUntil(async () => await hasToast('已复制目录路径'))
     const gotPath = await lastCopied()
-    check('A4a 右键目录名仍是「已复制目录路径」', (await toast()).includes('已复制目录路径'), `toast="${await toast()}"`)
+    check('A4a 右键目录名仍是「已复制目录路径」', await hasToast('已复制目录路径'), `toasts=${JSON.stringify(await toasts())}`)
     check('A4b 右键复制的是完整路径', gotPath === currentDir, `copied="${gotPath}"`)
     await clearToasts()
 
@@ -198,8 +206,9 @@ async function main() {
         JSON.stringify(layout))
 
       if (itemOk) {
+        await clearToasts()
         await item.click()
-        await waitUntil(async () => (await toast()).includes('已复制文件夹名称'))
+        await waitUntil(async () => await hasToast('已复制文件夹名称'))
         const got = await lastCopied()
         check('B2a 复制的是项目文件夹名', got === firstName, `copied="${got}" 期望="${firstName}"`)
         check('B2b 复制内容是该路径的 basename、不是完整路径',
