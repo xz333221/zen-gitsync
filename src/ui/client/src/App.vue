@@ -36,6 +36,9 @@ import ActivityBar from '@/components/ActivityBar.vue'
 import InstanceSwitcher from '@/components/InstanceSwitcher.vue'
 import AppErrorBanner from '@/components/AppErrorBanner.vue'
 import RecentDirectoriesList from '@/components/RecentDirectoriesList.vue'
+// GitHub / Gitee 仓库列表面板(Git 视图的另外两个 Tab)。静态导入:只有切到对应
+// Tab 才挂载,不占首屏请求;但它本身不大,不值得为它多开一个异步 chunk。
+import RemoteReposList from '@/components/RemoteReposList.vue'
 import ViewLoading from '@/components/ViewLoading.vue'
 // 控制台视图:默认加载(静态导入),首屏即打包进 chunk,切过去无需等待。
 import ConsoleView from '@views/ConsoleView.vue'
@@ -271,6 +274,21 @@ function handleBranchChanged() {
 
 // 活动视图切换
 const activeView = ref<'git' | 'console' | 'editor' | 'source-map' | 'workbench' | 'monitor' | 'mindmap' | 'agent'>('git')
+
+// Git 视图内的三个 Tab:
+//   current → 当前项目(原有的 GitStatus + CommitForm/最近项目 + LogList 布局,原样保留)
+//   github  → GitHub 账号下的仓库列表(需要 gh)
+//   gitee   → Gitee 账号下的仓库列表(需要 @gitee/gitee-cli)
+// 默认停在「当前项目」,行为与加 Tab 之前完全一致。
+// 只有切到对应 Tab 才会挂载 RemoteReposList(v-if),也就不会在启动时白跑一次
+// gh / gitee 的检测与联网请求。
+type GitTab = 'current' | 'github' | 'gitee'
+const gitTab = ref<GitTab>('current')
+const GIT_TABS: Array<{ id: GitTab; labelKey: string }> = [
+  { id: 'current', labelKey: '@F13B4:当前项目' },
+  { id: 'github', labelKey: '@F13B4:GitHub 仓库' },
+  { id: 'gitee', labelKey: '@F13B4:Gitee 仓库' },
+]
 
 // 待编辑器打开的文件路径(由文件差异页"在编辑器中打开"按钮触发)。
 // 设到这而不是直接 emit:EditorView 是 async 组件,activeView 切到 editor 后才挂载,
@@ -812,7 +830,26 @@ function stopHResize() {
       <!-- Git 视图:2 列布局 — 左 GitStatus | 右(上 commit-form / h-resizer / 下 log-list)
            非 Git 仓库时:右上 RecentDirectoriesList 占满右侧整列,隐藏 h-resizer + log-list-panel,
            由 .grid-layout--no-bottom 控制 grid-template-rows 去掉下方行 -->
-      <div v-show="activeView === 'git'" class="view-pane grid-layout" :class="{ 'grid-layout--no-bottom': !gitStore.isGitRepo }">
+      <div v-show="activeView === 'git'" class="view-pane git-pane">
+      <!-- 三个 Tab:当前项目 / GitHub 仓库 / Gitee 仓库。
+           用 v-show + v-if 混合:当前项目那块要一直挂着(两个 resizer 的拖拽比例、
+           LogList 的滚动位置都在它身上,不能反复销毁重建);
+          两个仓库面板则是 v-if,切过去才挂载 —— 启动时不白跑 CLI 检测。 -->
+      <div class="git-tabs" role="tablist" :aria-label="$t('@F13B4:Git 视图切换')">
+        <button
+          v-for="tab in GIT_TABS"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          class="git-tab"
+          :class="{ 'is-active': gitTab === tab.id }"
+          :aria-selected="gitTab === tab.id"
+          @click="gitTab = tab.id"
+        >{{ $t(tab.labelKey) }}</button>
+      </div>
+
+      <div class="git-pane__body">
+      <div v-show="gitTab === 'current'" class="grid-layout" :class="{ 'grid-layout--no-bottom': !gitStore.isGitRepo }">
       <!-- 左侧Git状态 -->
       <div class="git-status-panel">
         <GitStatus ref="gitStatusRef" :initial-directory="currentDirectory" />
@@ -897,6 +934,17 @@ function stopHResize() {
       <div v-show="gitStore.isGitRepo" class="log-list-panel">
         <LogList />
       </div>
+
+      </div><!-- /grid-layout（当前项目） -->
+
+      <!-- GitHub 仓库列表。v-if 而非 v-show:切过来才发请求、才去检测 gh ——
+           否则每次启动都会白跑一次 CLI 探测。 -->
+      <RemoteReposList v-if="gitTab === 'github'" provider="github" />
+
+      <!-- Gitee 仓库列表(检测 gitee / @gitee/gitee-cli) -->
+      <RemoteReposList v-if="gitTab === 'gitee'" provider="gitee" />
+
+      </div><!-- /git-pane__body -->
 
       </div><!-- /view-pane git -->
 
@@ -1097,6 +1145,81 @@ body {
 
 .config-broken-banner .banner-actions {
   flex-shrink: 0;
+}
+
+/* ── Git 视图的 Tab 外壳(当前项目 / GitHub 仓库 / Gitee 仓库) ────────────
+   .git-pane 取代原来 .view-pane.grid-layout 的双重身份:自己只负责"列方向
+   flex + 撑满",网格布局下移到 .git-pane__body 里的 .grid-layout。
+   .grid-layout 的类名必须保留 —— App.vue 里两个 resizer 都靠
+   querySelector('.grid-layout') 读写 grid-template-rows/columns。 */
+.git-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.git-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 var(--spacing-md);
+  border-bottom: 1px solid var(--border-color-light);
+  background: var(--bg-panel);
+}
+
+.git-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 var(--spacing-base);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-md);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.git-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-component-hover);
+}
+.git-tab.is-active {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+/* 选中态下划线压在 1px 分隔线上(bottom:-1px),视觉上把两个区域连起来 */
+.git-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: var(--spacing-sm);
+  right: var(--spacing-sm);
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-primary);
+}
+.git-tab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.git-pane__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* 当前项目那格:min-height:0 是关键 —— 没有它,grid 的 min-content 会把
+   flex 项顶高,底部的提交历史会被挤出视口(与 .dir-list--panel 同一个坑) */
+.git-pane__body > .grid-layout {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .grid-layout {

@@ -41,6 +41,7 @@ import { registerGitRoutes } from './routes/git.js';
 import { registerFsRoutes } from './routes/fs.js';
 import { registerNpmRoutes } from './routes/npm.js';
 import { registerFileOpenRoutes } from './routes/fileOpen.js';
+import { registerRemoteReposRoutes } from './routes/remoteRepos.js';
 import { registerWorkbenchRoutes } from './routes/workbench.js';
 import { registerGitOpsRoutes } from './routes/gitOps.js';
 import { registerCodeRoutes } from './routes/code.js';
@@ -403,6 +404,9 @@ async function startUIServer(noOpen = false, savePort = false) {
   registerFileOpenRoutes({
     app
   });
+
+  // 远程托管平台仓库列表(GitHub / Gitee 两个 Tab 的数据源)
+  registerRemoteReposRoutes({ app });
 
   registerWorkbenchRoutes({
     app,

@@ -38,6 +38,10 @@ const TOOL_DOCS_URLS = Object.freeze({
   kimi: 'https://moonshotai.github.io/kimi-code/en/guides/getting-started',
   zcode: 'https://zcode.z.ai/',
   dsh: 'https://github.com/deepseek-ai/deepseek-harness',
+  // 远程仓库列表页(RemoteReposList)用到的两个托管平台 CLI。它们不是"AI 工具",
+  // 不参与 /api/check-tools 的 open-with 菜单,只借这里的白名单走 /api/install-tool。
+  gh: 'https://cli.github.com/',
+  gitee: 'https://gitee.com/oschina/gitee-cli',
 });
 
 function commandExists(command, platform = process.platform) {
@@ -251,10 +255,91 @@ export function getToolInstallers(platform = process.platform, hasCommand = comm
     updatePackageManager: 'ZCode 官方安装包',
     updateNote: 'ZCode 是桌面应用，升级请到官网下载新版安装包覆盖安装。',
   };
+
+  // ── 远程托管平台 CLI(远程仓库列表页用)──────────────────────────────────
+  // 与上面的 AI 工具共用同一份白名单,好处是"前端只能提交 tool id、命令由服务端
+  // 决定"这条安全边界不用再实现一遍。它们不出现在 open-with 菜单里 —— 那个菜单
+  // 是 useDirectoryOpenActions.ts 里的硬编码数组,不看这张表。
+  if (platform === 'win32') {
+    const wingetAvailable = hasCommand('winget', platform);
+    installers.gh = {
+      supported: wingetAvailable,
+      command: 'winget install --id GitHub.cli -e --accept-package-agreements --accept-source-agreements',
+      packageManager: 'winget',
+      docsUrl: TOOL_DOCS_URLS.gh,
+      note: wingetAvailable
+        ? '将在新终端中通过 winget 安装 GitHub CLI；装完请在新终端执行 gh auth login 登录。'
+        : '未检测到 winget，请到 cli.github.com 下载安装包。',
+      executable: 'winget',
+      args: ['install', '--id', 'GitHub.cli', '-e', '--accept-package-agreements', '--accept-source-agreements'],
+      updateCommand: wingetAvailable
+        ? 'winget upgrade --id GitHub.cli -e --accept-package-agreements --accept-source-agreements'
+        : undefined,
+      updatePackageManager: 'winget',
+      updateNote: wingetAvailable ? '将在新终端中通过 winget upgrade 升级 GitHub CLI。' : '未检测到 winget。',
+      updateExecutable: wingetAvailable ? 'winget' : undefined,
+      updateArgs: wingetAvailable
+        ? ['upgrade', '--id', 'GitHub.cli', '-e', '--accept-package-agreements', '--accept-source-agreements']
+        : undefined,
+    };
+  } else if (platform === 'darwin') {
+    const brewAvailable = hasCommand('brew', platform);
+    installers.gh = {
+      supported: brewAvailable,
+      command: 'brew install gh',
+      packageManager: 'Homebrew',
+      docsUrl: TOOL_DOCS_URLS.gh,
+      note: brewAvailable
+        ? '将在新终端中通过 Homebrew 安装 GitHub CLI；装完请执行 gh auth login 登录。'
+        : '未检测到 Homebrew，请到 cli.github.com 下载安装包。',
+      executable: 'brew',
+      args: ['install', 'gh'],
+      updateCommand: brewAvailable ? 'brew upgrade gh' : undefined,
+      updatePackageManager: 'Homebrew',
+      updateNote: brewAvailable ? '将在新终端中通过 brew upgrade 升级 GitHub CLI。' : '未检测到 brew。',
+      updateExecutable: brewAvailable ? 'brew' : undefined,
+      updateArgs: brewAvailable ? ['upgrade', 'gh'] : undefined,
+    };
+  } else {
+    // Debian/Ubuntu 官方源里已有 gh;其它发行版请看 docsUrl(Arch: pacman -S github-cli)
+    const aptAvailable = hasCommand('apt-get', platform);
+    installers.gh = {
+      supported: aptAvailable,
+      command: 'sudo apt-get install -y gh',
+      packageManager: 'apt',
+      docsUrl: TOOL_DOCS_URLS.gh,
+      note: aptAvailable
+        ? '将在新终端中通过 apt 安装 GitHub CLI，可能需要输入系统密码；装完请执行 gh auth login 登录。'
+        : '当前 Linux 环境未检测到 apt-get，请按 docsUrl 里对应发行版的说明安装。',
+      executable: 'sudo',
+      args: ['apt-get', 'install', '-y', 'gh'],
+      // apt 没有"就地升级单个包"的稳定动词,不给一键更新,引导去官方文档
+      updateCommand: undefined,
+      updatePackageManager: 'apt',
+      updateNote: '请按官方文档升级 GitHub CLI。',
+    };
+  }
+  installers.gitee = {
+    supported: npmAvailable,
+    command: 'npm install -g @gitee/gitee-cli',
+    packageManager: 'npm',
+    docsUrl: TOOL_DOCS_URLS.gitee,
+    note: npmAvailable
+      ? '将在新终端中通过 npm 全局安装 Gitee CLI；装完请执行 gitee auth login 粘贴私人令牌。'
+      : '未检测到 npm，请先安装 Node.js/npm，或按官方文档手动安装。',
+    executable: npmExecutable,
+    args: ['install', '-g', '@gitee/gitee-cli'],
+    updateCommand: 'npm install -g @gitee/gitee-cli@latest',
+    updatePackageManager: 'npm',
+    updateNote: '将在新终端中执行 `npm install -g @gitee/gitee-cli@latest`。已是最新时 npm 会跳过。',
+    updateExecutable: npmExecutable,
+    updateArgs: ['install', '-g', '@gitee/gitee-cli@latest'],
+  };
+
   return installers;
 }
 
-function publicInstallerInfo(installers) {
+export function publicInstallerInfo(installers) {
   return Object.fromEntries(Object.entries(installers).map(([tool, installer]) => [tool, {
     supported: installer.supported,
     command: installer.command,
@@ -575,6 +660,44 @@ async function launchToolInstaller(installer, dirPath = process.cwd(), { update 
   }
 
   return launchInTerminal(dirPath, installer[executableField], installer[argsField]);
+}
+
+/**
+ * 在新终端窗口里跑一条**服务端白名单内的**命令，跑完窗口不自动关。
+ *
+ * 与 launchToolInstaller 的区别：那个吃 installer 描述符(executable + args)，
+ * 这个直接吃整条命令串。给「登录」这类**交互式** CLI 用 —— `gh auth login`
+ * 会走一串问答(选 GitHub.com / 协议 / 浏览器还是粘贴 token)，必须在真终端里跑：
+ * 被 spawn 出去又没有 TTY 的话，它直接就失败了，用户屏幕上什么也看不到。
+ *
+ * Windows 用 `cmd /k`：登录完成后窗口留着，用户能看清结果；失败也能看到报错。
+ *
+ * ⚠️ command 必须是服务端自己拼出来的常量。永远不要把它接成请求体里的字符串 ——
+ * 那等于开了一个任意命令执行的口子(和 /api/install-tool 同一条原则)。
+ *
+ * `pathDirs` 是**必须**看的参数(2026-09-22 实测踩到)：
+ *   本进程的 `process.env.PATH` 是"启动那一刻"的快照。用户在界面里刚装好 gh，
+ *   安装器改的是**注册表**里的 PATH，我们这个已经跑着的 node 进程看不见 ——
+ *   于是出现很割裂的一幕：**探测**能找到 gh(它走注册表 + 默认落点)，界面显示
+ *   "gh 2.101.0 已安装"，可 `cmd /k gh auth login` 这个子进程按自己的 PATH 找，
+ *   回一句 `'gh' 不是内部或外部命令`；而用户自己新开一个 cmd 却是好的，
+ *   因为新进程拿到的是最新 PATH。
+ *   解法：调用方把 CLI **实际所在的目录**传进来，这里前置进子进程的 PATH。
+ *   比起"把可执行文件全路径拼进命令行"，前置 PATH 还顺带绕开了 cmd.exe 那套
+ *   "路径带空格时的嵌套引号"地狱(`C:\Program Files\GitHub CLI\gh.exe`)。
+ */
+export async function launchCommandInTerminal(command, { cwd = process.cwd(), pathDirs = [] } = {}) {
+  const dirs = pathDirs.filter(Boolean);
+  const env = dirs.length
+    ? { ...process.env, PATH: [...dirs, process.env.PATH || ''].join(path.delimiter) }
+    : undefined;
+
+  if (process.platform === 'win32') {
+    return spawnDetached('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/k', command], { cwd, env });
+  }
+  // posix 侧不额外处理 PATH：那边没有"安装器改注册表"这套机制，
+  // 终端模拟器直接继承图形会话的环境，不会出现上面的错配。
+  return launchInTerminal(cwd, 'bash', ['-lc', command]);
 }
 
 export function registerFileOpenRoutes({
