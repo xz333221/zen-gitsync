@@ -5,6 +5,17 @@ import { normalizeUsage } from './telemetry.js'
 // Some compatible gateways reject stream_options. Remember that for this process.
 const withoutStreamUsage = new Set()
 
+// 把"网关返回了什么"翻成"用户该做什么"。400 且正文提到 tool/function 时,十有八九是
+// 模型本身不支持 function calling —— 直接说清楚,比把网关 JSON 原样甩出来有用。
+// 这条口径原先只在 Web 智能体面板里写了一份,现在收敛到此处,CLI 与 Web 共用。
+function httpFailure(status, detail, statusText) {
+  const suffix = detail || statusText || ''
+  if (status === 400 && /tool|function/i.test(String(detail || ''))) {
+    return new Error(`HTTP 400: 当前模型可能不支持 function calling(${suffix})。请在设置中换用支持工具调用的模型。`)
+  }
+  return new Error(`HTTP ${status}: ${suffix}`)
+}
+
 export async function streamChatOnce({ model, messages, signal, onToken = () => {}, sessionId, extraTools,
   fetchFn = fetch, timeoutMs = 300000 }) {
   const { url, headers } = buildAiChatRequest({ ...model, sessionId })
@@ -60,10 +71,10 @@ export async function streamChatOnce({ model, messages, signal, onToken = () => 
         delete body.stream_options
         withoutStreamUsage.add(providerKey)
         resp = await request()
-      } else throw new Error(`HTTP ${resp.status}: ${detail || resp.statusText}`)
+      } else throw httpFailure(resp.status, detail, resp.statusText)
     }
     if (!resp.ok || !resp.body) {
-      throw new Error(`HTTP ${resp.status}: ${describeAiHttpError(await resp.text().catch(() => ''), resp.status) || resp.statusText}`)
+      throw httpFailure(resp.status, describeAiHttpError(await resp.text().catch(() => ''), resp.status), resp.statusText)
     }
     const decoder = new TextDecoder()
     let buf = ''

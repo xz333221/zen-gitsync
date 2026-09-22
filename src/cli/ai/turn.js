@@ -2,7 +2,7 @@ import { executeTool } from './tools.js'
 import { streamChatOnce } from './transport.js'
 import { createThinkFilter } from './streamFilter.js'
 import { imageToDataUrl } from './images.js'
-import { buildRequestMessages } from './context.js'
+import { prepareRequestMessages } from './context.js'
 import { createTurnStats, addUsage, accumulateSessionStats } from './telemetry.js'
 import * as terminal from './termui.js'
 
@@ -66,8 +66,9 @@ export async function runAgentTurn(state, userText, t, images = [], dependencies
       const llmStart = performance.now()
       stats.requests++
       try {
-        const messages = buildRequestMessages(state.messages)
-        state.prepareMessages?.(messages)
+        // 统一入口(与 Web 智能体面板共用):有界化 + 旧图片降级 + 消毒,只作用于请求副本,
+        // 磁盘上的完整会话记录不受影响。
+        const messages = prepareRequestMessages(state.messages, { locale: state.locale })
         result = await chat({ model: state.model, messages, signal: state.abortController?.signal,
           sessionId: state.sessionId, extraTools: extensions?.tools,
           onToken: token => {

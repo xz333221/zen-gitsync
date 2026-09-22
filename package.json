@@ -36,6 +36,7 @@
     "verify:wb-proj-branch": "node scripts/verify-workbench-proj-branch.cjs",
     "verify:wb-proj-filter": "node scripts/verify-wb-proj-filter.cjs",
     "verify:wb-panel-resize": "node scripts/verify-wb-panel-resize.cjs",
+    "verify:wb-toolcalls": "node scripts/verify-workbench-toolcalls.mjs",
     "verify:wb-responsive": "node scripts/verify-wb-responsive.cjs",
     "verify:wb-editor-persist": "node scripts/verify-workbench-editor-persist.cjs",
     "e2e": "cd src/ui/client && npx playwright test",

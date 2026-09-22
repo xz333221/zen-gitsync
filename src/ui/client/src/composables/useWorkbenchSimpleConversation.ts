@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { ChatMessage, MessageStatus } from 'zen-ai-chat-ui'
 import type { Job, Task } from '@/types/workbench'
+import { buildJobToolCalls } from '@/utils/jobToolCalls'
 
 const SIMPLE_SUB_ID_SUFFIX = '__simple'
 const MAX_LOG_DISPLAY_SIMPLE = 64 * 1024
@@ -65,7 +66,11 @@ export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: C
         : rawThinking
       const hasOutput = !!outputText
       const hasThinking = !!thinkingText
-      const hasContent = hasOutput || hasThinking
+      // 工具调用也算法内容：模型可能一句正文都不说就直接开干，
+      // 只按 output/thinking 判断的话这条 assistant 消息会整条不显示。
+      const toolCalls = buildJobToolCalls(j)
+      const hasToolCalls = toolCalls.length > 0
+      const hasContent = hasOutput || hasThinking || hasToolCalls
       let status: MessageStatus
       if (!isLast) {
         status = 'done'
@@ -87,6 +92,9 @@ export function useWorkbenchSimpleConversation(jobs: Ref<Job[]>, selectedTask: C
         reasoningStatus: hasThinking
           ? (!isLast && hasOutput ? 'done' : (hasOutput ? 'done' : (status === 'streaming' ? 'streaming' : 'done')))
           : undefined,
+        // 工具调用（读文件 / 跑命令 / 改代码）——没有它就只能看到"模型在思考"，
+        // 看不出这一轮到底干了什么（2026-09-22）。
+        toolCalls: hasToolCalls ? toolCalls : undefined,
         status,
         error: status === 'error' ? (j.error || undefined) : undefined,
         createdAt

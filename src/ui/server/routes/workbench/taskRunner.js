@@ -273,18 +273,228 @@ export function launchOpencodeRun(cwd, promptText, resumeSessionId) {
   });
 }
 
+// ── 工具调用（tool_use）收集 ──────────────────────────────────────────────
+// 为什么要有这一层：job.output 只承载「模型说的话」。工具调用（读了哪个文件、跑了什么命令、
+// 拿到了什么结果）原本在两个事件处理器里被整段丢掉，于是前端只剩「思考 + 正文」两块，
+// 模型闷头干活的几分钟就完全看不出它在干什么（2026-09-22 用户反馈）。
+//
+// 这里把两种执行器的 tool_use / tool_result 归一成 zen-ai-chat-ui 的 ToolCall 形态：
+//   { id, name, argsPreview, arguments, result, status, error }
+// 挂在 job.toolCalls 上随 job 一起落盘（jobs.json），并通过 job:toolcalls 事件流式推给前端。
+//
+// 截断统一在服务端做：前端只是展示层，两边看到的字段含义一致。
+export const MAX_TOOL_CALLS = 150;
+const MAX_TOOL_ARGS = 2000;
+const MAX_TOOL_RESULT = 4000;
+const MAX_TOOL_ERROR = 1000;
+const TOOL_ARGS_PREVIEW = 200;
+
+/** 截断（保留开头：工具名 / 命令的关键信息都在前面） */
+function clipText(text, max) {
+  const s = String(text ?? '');
+  return s.length > max ? `${s.slice(0, max)}\n…（已截断 ${s.length - max} 字）` : s;
+}
+
+/**
+ * 参数摘要的截断：严格不超过 max（含那个省略号）。
+ * 摘要是一行展示用，尾部再挂「已截断 N 字」反而把这一行撑爆 ——
+ * 完整参数在 arguments 里，那里才有必要标出截断。
+ */
+function clipPreview(text, max = TOOL_ARGS_PREVIEW) {
+  const s = String(text ?? '');
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function safeJson(value) {
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+/**
+ * 工具参数一行摘要（折叠态展示用）。
+ *
+ * 不做「按工具名分派」——claude（Bash / Read / Edit）与 opencode（bash / read / edit）
+ * 的工具名并不统一，按名分派等于给自己挖一个要跟着 CLI 版本改的坑。
+ * 改成「先挑常见的主语字段，挑不到就退化成紧凑 JSON」。
+ */
+function summarizeToolArgs(rawArgsText) {
+  const raw = String(rawArgsText || '').trim();
+  if (!raw) return '';
+  const flat = raw.replace(/\s+/g, ' ');
+  if (!raw.startsWith('{')) return clipPreview(flat);
+  let obj;
+  try { obj = JSON.parse(raw); } catch { return clipPreview(flat); }
+  if (!obj || typeof obj !== 'object') return clipPreview(flat);
+  const preferred = ['command', 'cmd', 'file_path', 'filePath', 'path', 'pattern', 'query', 'url', 'description', 'prompt', 'title'];
+  for (const key of preferred) {
+    const v = obj[key];
+    if (typeof v === 'string' && v.trim()) {
+      return clipPreview(v.trim().replace(/\s+/g, ' '));
+    }
+  }
+  return clipPreview(safeJson(obj).replace(/\s+/g, ' '));
+}
+
+/**
+ * 工具结果文本抽取。
+ * claude 的 tool_result.content 可能是 string，也可能是 [{type:'text',text}] 块数组
+ * （还可能夹图片块）；opencode 的 state.output 是 string 或对象；错误对象常见形态是 {message}。
+ * 统一压成一段文本。
+ */
+function extractToolText(content) {
+  if (content == null) return '';
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const parts = [];
+    for (const b of content) {
+      if (b == null) continue;
+      if (typeof b !== 'object') { parts.push(String(b)); continue; }
+      if (typeof b.text === 'string') parts.push(b.text);
+      else if (b.type === 'image') parts.push('[图片]');
+      else if (b.type) parts.push(`[${b.type}]`);
+    }
+    return parts.join('\n');
+  }
+  if (typeof content === 'object') {
+    if (typeof content.message === 'string') return content.message;
+    return safeJson(content);
+  }
+  return String(content);
+}
+
+/**
+ * 建一个工具调用收集器。
+ *
+ * 为什么批量 flush 而不是每条立即 publish：一次 NDJSON 批次里可能含多个 tool_use
+ * （模型并行调工具），攒成一批发一次，跟 thinking 的处理口径一致，避免高频小块 socket。
+ *
+ * @param {object} job   执行记录（toolCalls 挂到它身上，随 job 落盘）
+ * @param {(updates: Array) => void} [onUpdates]  增量回调；不传则只写 job 不推送（单测用）
+ */
+export function createToolCallTracker(job, onUpdates) {
+  if (!Array.isArray(job.toolCalls)) job.toolCalls = [];
+  const byId = new Map();
+  let pending = [];
+  let anonSeq = 0;
+
+  // 只推可序列化字段（跟 snapshotJobs 的投影口径一致），存的是快照不是引用，
+  // 免得后续状态变更悄悄改掉已经 emit 出去、还堆在 pending 里的那一份。
+  const snapshot = (call) => ({
+    id: call.id,
+    name: call.name,
+    argsPreview: call.argsPreview,
+    arguments: call.arguments,
+    result: call.result,
+    status: call.status,
+    error: call.error
+  });
+
+  /**
+   * 记录一次工具调用的新增 / 状态变更。同一个 id 反复出现只更新同一条
+   * （opencode 会按 running → completed 推同一个 part，claude 的 tool_result
+   * 也回指 tool_use 的 id）。
+   *
+   * @param {{ id?: string, name?: string, input?: any, status?: string, output?: any, error?: any }} info
+   */
+  function record(info) {
+    const src = info || {};
+    const name = src.name ? String(src.name).slice(0, 80) : '';
+    const id = src.id ? String(src.id) : `anon-${++anonSeq}`;
+    let call = byId.get(id);
+    if (!call) {
+      // 超上限后直接丢弃新调用：保持数组有界，免得一次长跑生成上千条把 jobs.json 撑爆。
+      // 已经记下的那些照常更新，不会因为超限变成"半截"。
+      if (job.toolCalls.length >= MAX_TOOL_CALLS) return null;
+      call = { id, name, argsPreview: '', arguments: '', result: '', status: 'running' };
+      byId.set(id, call);
+      job.toolCalls.push(call);
+    }
+    if (name) call.name = name;
+    // 参数只在第一次拿到时写：opencode 的后续事件可能只剩 state.output
+    if (src.input !== undefined && src.input !== null && !call.arguments) {
+      const raw = typeof src.input === 'string' ? src.input : safeJson(src.input);
+      call.arguments = clipText(raw, MAX_TOOL_ARGS);
+      call.argsPreview = summarizeToolArgs(raw);
+    }
+    if (src.status && src.status !== call.status) call.status = src.status;
+    if (src.output !== undefined && src.output !== null) {
+      const text = extractToolText(src.output);
+      if (text) call.result = clipText(text, MAX_TOOL_RESULT);
+    }
+    if (src.error) {
+      call.error = clipText(extractToolText(src.error) || '工具执行失败', MAX_TOOL_ERROR);
+      call.status = 'error';
+    }
+    if (onUpdates) pending.push(snapshot(call));
+    return call;
+  }
+
+  /** 把攒下的一批增量推给前端（一批 NDJSON 处理完 flush 一次） */
+  function flush() {
+    if (!onUpdates || pending.length === 0) return;
+    const updates = pending;
+    pending = [];
+    onUpdates(updates);
+  }
+
+  /**
+   * 进程已退出，还挂在 pending / running 的调用不会再有下文 —— 收口成终态。
+   * 不做这一步，前端那个工具块会一直转圈（跟 job 终态不写回时 sub 一直 running 同一类 bug）。
+   */
+  function seal(jobStatus) {
+    for (const call of job.toolCalls) {
+      if (call.status !== 'running' && call.status !== 'pending') continue;
+      if (jobStatus === 'cancelled') {
+        call.status = 'error';
+        call.error = call.error || '未返回结果（执行已停止）';
+      } else if (jobStatus === 'error') {
+        call.status = 'error';
+        call.error = call.error || '未返回结果（执行出错）';
+      } else {
+        call.status = 'done';
+      }
+      if (onUpdates) pending.push(snapshot(call));
+    }
+    flush();
+  }
+
+  return { record, flush, seal };
+}
+
 /**
  * claude stream-json 事件处理器。
- *   system/init  → session_id（--resume 续接用）
- *   assistant    → message.content 里的 text / thinking 块
- *   其余（tool_use / result / stream_event 等）忽略。
+ *   system/init    → session_id（--resume 续接用）
+ *   assistant      → message.content 里的 text / thinking / tool_use 块
+ *   user           → message.content 里的 tool_result 块（工具执行结果，回指 tool_use 的 id）
+ *   其余（result / stream_event 等）忽略。
+ * （导出仅为回归测试可见：taskRunner.toolcalls.test.js）
  */
-function createClaudeEventHandler(job, appendOutput, appendThinking) {
+export function createClaudeEventHandler(job, appendOutput, appendThinking, toolCalls) {
+  const tracker = toolCalls || createToolCallTracker(job);
   return (evt) => {
     if (evt.type === 'system' && evt.subtype === 'init' && typeof evt.session_id === 'string') {
       if (!job.claudeSessionId || job.claudeSessionId !== evt.session_id) {
         job.claudeSessionId = evt.session_id;
         publish('job:update', job);
+      }
+      return;
+    }
+    // 工具结果：claude 把 tool_result 包在一条 user 事件里回传
+    //   {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":…}]}}
+    // 用块类型区分它和"用户自己那条 prompt"（那条 message.content 是字符串）。
+    if (evt.type === 'user') {
+      const ublocks = evt.message?.content;
+      if (Array.isArray(ublocks)) {
+        for (const b of ublocks) {
+          if (b && b.type === 'tool_result' && b.tool_use_id) {
+            const text = extractToolText(b.content);
+            tracker.record({
+              id: b.tool_use_id,
+              status: b.is_error ? 'error' : 'done',
+              output: text,
+              error: b.is_error ? (text || '工具执行失败') : ''
+            });
+          }
+        }
       }
       return;
     }
@@ -296,6 +506,8 @@ function createClaudeEventHandler(job, appendOutput, appendThinking) {
         appendOutput(b.text);
       } else if (b.type === 'thinking' && typeof b.thinking === 'string') {
         appendThinking(b.thinking);
+      } else if (b.type === 'tool_use') {
+        tracker.record({ id: b.id, name: b.name, input: b.input, status: 'running' });
       }
     }
   };
@@ -307,13 +519,16 @@ function createClaudeEventHandler(job, appendOutput, appendThinking) {
  *   { type:'step_start' | 'step_finish', sessionID, part:{ type:'step-start'|'step-finish', tokens?, cost? } }
  *   { type:'text',      sessionID, part:{ id, type:'text',      text } }
  *   { type:'reasoning', sessionID, part:{ id, type:'reasoning', text } }
- *   { type:'tool_use',  sessionID, part:{ type:'tool', tool, state:{ status, input, output } } }
+ *   { type:'tool_use',  sessionID, part:{ id, callID, type:'tool', tool, state:{ status, input, output } } }
  *   { type:'error',     sessionID, error:{ name, data:{ message } } }
  * 正文/思考按 part.id 记录已落地的累计文本：同一 part 再次出现时若文本是前次的
  * 前缀延长（累积语义）只追加增量，否则按纯增量整段追加 —— 两种推送语义都兼容。
+ * tool_use 按 part.id / callID 归并：opencode 会按 state.status（running → completed）
+ * 反复推同一个 part，落成一条工具调用（status 映射 completed → done）。
  * （导出仅为回归测试可见：taskRunner.opencode.test.js）
  */
-export function createOpencodeEventHandler(job, appendOutput, appendThinking) {
+export function createOpencodeEventHandler(job, appendOutput, appendThinking, toolCalls) {
+  const tracker = toolCalls || createToolCallTracker(job);
   const seenParts = new Map(); // part.id -> 已落地的累计文本
   const appendPartText = (part, isThinking) => {
     const text = typeof part?.text === 'string' ? part.text : '';
@@ -329,6 +544,26 @@ export function createOpencodeEventHandler(job, appendOutput, appendThinking) {
     if (isThinking) appendThinking(delta);
     else appendOutput(delta);
   };
+  // opencode 的 state.status: pending | running | completed | error
+  const mapToolStatus = (raw) => {
+    const s = typeof raw === 'string' ? raw.toLowerCase() : '';
+    if (s === 'completed' || s === 'done' || s === 'success') return 'done';
+    if (s === 'error' || s === 'failed') return 'error';
+    return 'running';
+  };
+  const recordToolPart = (part) => {
+    if (!part || part.type !== 'tool') return;
+    const st = part.state || {};
+    const status = mapToolStatus(st.status);
+    tracker.record({
+      id: part.callID || part.id,
+      name: part.tool || part.name,
+      input: st.input,
+      status,
+      output: status === 'done' ? st.output : undefined,
+      error: status === 'error' ? (st.error || st.output || 'opencode 工具执行出错') : ''
+    });
+  };
   return (evt) => {
     // 顶层 sessionID 是 opencode 的会话标识（--session <id> 续接）。
     // 复用 claudeSessionId 字段：前端与续接路由都认它，换执行器只是取值来源不同。
@@ -338,6 +573,10 @@ export function createOpencodeEventHandler(job, appendOutput, appendThinking) {
     }
     if (evt.type === 'text' || evt.type === 'reasoning') {
       appendPartText(evt.part, evt.type === 'reasoning');
+      return;
+    }
+    if (evt.type === 'tool_use') {
+      recordToolPart(evt.part);
       return;
     }
     if (evt.type === 'error') {
@@ -486,12 +725,18 @@ ${prompt}`;
     // 续接历史会话时先填上,首条协议事件回来后再用真值覆盖(通常等同)。
     // 字段名保留 claudeSessionId:claude 的 session_id 和 opencode 的 sessionID
     // 都存这里,语义是"该执行器的会话续接标识"。
-    claudeSessionId: resumeSessionId
+    claudeSessionId: resumeSessionId,
+    // 工具调用流水（{id,name,argsPreview,arguments,result,status,error}[]）。
+    // 先给个空数组，前端拿到的 job:update 就有了稳定形态，不用到处判 undefined。
+    toolCalls: []
   };
   jobs.set(jobId, job);
   sub.status = 'running';
   publish('sub:update', { taskId: task.id, sub });
   publish('job:update', job);
+
+  // 声明在 try 之外：启动器就抛错时 finally 也要能安全收口（见 toolTracker?.seal）
+  let toolTracker = null;
 
   try {
     const launcher = executor === 'opencode' ? launchOpencodeRun : launchClaudeInNewWindow;
@@ -504,9 +749,10 @@ ${prompt}`;
     publish('job:update', job);
 
     // 流式 NDJSON 解析：把 stdout 当作所选执行器的 JSON 事件流处理
-    //   正文/思考块            → job.output / job.thinking（前端主视图 + 折叠思考）
-    //   会话标识               → job.claudeSessionId（续接对话用）
-    //   其他事件（tool_use 等）忽略，避免噪声
+    //   正文/思考块   → job.output / job.thinking（前端主视图 + 折叠思考）
+    //   会话标识      → job.claudeSessionId（续接对话用）
+    //   工具调用      → job.toolCalls（前端工具块 + 落盘归档）
+    //   其他事件      → 忽略，避免噪声
     const MAX_OUTPUT = 100 * 1024 * 1024;
     const MAX_THINKING = 100 * 1024 * 1024;
     job.output = '';
@@ -537,9 +783,15 @@ ${prompt}`;
       thinkingBatch += job.thinking.slice(prevLen);
     };
 
+    // 工具调用：写进 job.toolCalls（随 job 落盘），并按批推 job:toolcalls 给前端。
+    // 收口（把没收尾的调用标终态）在 finally 里做，见下方 toolTracker.seal()。
+    toolTracker = createToolCallTracker(job, (updates) => {
+      publish('job:toolcalls', { id: job.id, updates });
+    });
+
     const handleEvent = executor === 'opencode'
-      ? createOpencodeEventHandler(job, appendOutput, appendThinking)
-      : createClaudeEventHandler(job, appendOutput, appendThinking);
+      ? createOpencodeEventHandler(job, appendOutput, appendThinking, toolTracker)
+      : createClaudeEventHandler(job, appendOutput, appendThinking, toolTracker);
 
     const handleLine = (line, channel) => {
       const trimmed = line.trim();
@@ -561,6 +813,7 @@ ${prompt}`;
       lineBuf[channel] = lines.pop() ?? ''; // 最后一段可能不完整，留给下次
       for (const line of lines) handleLine(line, channel);
       flushThinkingBatch();
+      toolTracker?.flush();
     };
     if (child.stdout) child.stdout.on('data', (buf) => parseLines('stdout', buf));
     if (child.stderr) child.stderr.on('data', (buf) => parseLines('stderr', buf));
@@ -577,6 +830,7 @@ ${prompt}`;
       lineBuf.stderr = '';
     }
     flushThinkingBatch();
+    toolTracker?.flush();
     job.endedAt = nowIso();
     if (wasCancelled) {
       job.exitCode = 130; // 128 + SIGINT(2)，约定俗成的"用户取消"退出码
@@ -612,6 +866,9 @@ ${prompt}`;
     sub.error = errMsg;
     sub.errorAt = nowIso();
   } finally {
+    // 工具调用收口：进程都退了，还挂在 running 的调用不会再有下文。先标终态再推 job:update，
+    // 否则前端那些工具块会一直转圈（跟 sub 终态没写回时 UI 一直 running 同一类问题）。
+    toolTracker?.seal(job.status);
     // 移除 child 引用——避免后续被 SSE 序列化到前端
     delete job.child;
     publish('job:update', job);

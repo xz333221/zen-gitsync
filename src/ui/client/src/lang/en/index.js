@@ -895,6 +895,13 @@ export default {
   '@42BB9:语言': 'Language',
   '@42BB9:界面语言': 'Interface Language',
   '@42BB9:通用设置已保存': 'General settings saved',
+  // Task finished notice (global toggle, off by default). Granting browser notification
+  // permission is triggered the moment the toggle is switched on.
+  '@42BB9:任务完成提示': 'Task finished notice',
+  '@42BB9:任务执行结束时提醒我：页面在后台发系统通知，在前台弹应用内提示': 'Notify me when a task finishes: a system notification when the page is in the background, an in-app toast when it is focused',
+  '@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）': 'The browser has denied notification permission, so only in-app toasts will show (restore it in the site settings of the address bar)',
+  '@42BB9:当前环境不支持系统通知，只能在页面内提示': 'This environment does not support system notifications, so only in-app toasts will show',
+  '@42BB9:浏览器已拒绝通知权限，将只在页面内提示': 'The browser has denied notification permission, so only in-app toasts will show',
   '@42BB9:编辑配置': 'Edit Config',
   '@42BB9:编辑当前项目的配置文件': 'Edit current project configuration file',
   '@42BB9:直接编辑 JSON，支持所有配置项': 'Edit JSON directly, all config keys supported',
@@ -2500,6 +2507,15 @@ export default {
   '@WORKBENCH:启动 g ui 失败': 'Failed to launch g ui',
   '@WORKBENCH:用工具打开': 'Open with a tool',
   // @WORKBENCH: file end
+
+  // @WORKBENCH: file path: composables/useTaskNotifier.ts (append: task finished notice)
+  '@WORKBENCH:任务执行完成': 'Task finished',
+  '@WORKBENCH:任务执行出错': 'Task failed',
+  '@WORKBENCH:任务已停止': 'Task stopped',
+  '@WORKBENCH:已完成：{name}': 'Finished: {name}',
+  '@WORKBENCH:执行出错：{name}': 'Failed: {name}',
+  '@WORKBENCH:已停止：{name}': 'Stopped: {name}',
+  // @WORKBENCH: file end (append: task finished notice)
 
   // @ACTBAR: file path: components/ActivityBar.vue (append: monitor)
   '@ACTBAR:系统监控': 'System Monitor',

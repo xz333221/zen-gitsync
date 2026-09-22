@@ -32,17 +32,17 @@ import os from 'os';
 import { logger } from './shared.js';
 import { agentSessionStore } from './agentSessionStore.js';
 
-// 从 CLI 侧导入工具定义与执行器（同一 monorepo，路径可达）
+// 从 CLI 侧导入工具定义、执行器与 LLM 传输层（同一 monorepo，路径可达）
 import { TOOL_DEFINITIONS, executeTool } from '../../../../cli/ai/tools.js';
+import { prepareRequestMessages } from '../../../../cli/ai/context.js';
+import { streamChatOnce } from '../../../../cli/ai/transport.js';
 import { checkDangerousCommand } from '../../../../cli/ai/safety.js';
 import { guardCommand } from '../../../../cli/ai/platformGuard.js';
 import configManager from '../../../../config.js';
-import { buildAiChatRequest, describeAiHttpError } from '../../../../utils/aiEndpoint.js';
 
 // 单轮工具调用循环数的兜底值(防失控);实际值取全局配置 aiMaxToolIterations,
 // 与 CLI 侧 src/cli/ai/agent.js 共用同一个配置项。
 const DEFAULT_MAX_TOOL_ITERATIONS = 200;
-const LLM_TIMEOUT_MS = 300000; // 5 分钟
 
 // 读取全局配置里的单轮工具调用上限。
 // 读配置失败不该把整轮对话打挂 —— 退回默认值继续跑,比用户消息直接发不出去好。
@@ -201,173 +201,20 @@ ${isWin ? `- This is Windows. The following Unix commands do NOT exist here:
 - After completing a task, briefly summarize the result`;
 }
 
-// ── LLM 流式调用(OpenAI 兼容 + function calling) ──────────
-// 返回 { content, toolCalls, aborted }
-async function streamChatOnce({ model, messages, signal, onToken, sessionId }) {
-  // sessionId = 对话 ID：OpenCode 网关靠它做路由与提示缓存，同一轮对话的所有请求要复用
-  const { url, headers } = buildAiChatRequest({
-    baseURL: model.baseURL,
-    model: model.model,
-    apiKey: model.apiKey,
-    sessionId,
-  });
+// ── LLM 流式调用 ─────────────────────────────────────────
+// 统一实现在 src/cli/ai/transport.js 的 streamChatOnce —— CLI 的 `g ai` 与这条
+// Web 链路共用同一份。比这里原先那份多出来的能力:请求 usage(带 stream_options
+// 降级重试)、校验 tool call index 边界、吃 evt.error,以及最要紧的一条 ——
+// 流被截断但 tool_calls 已经部分到达时抛"中断"、拒绝执行半截的工具调用。
+// 这里曾经是第二份实现,弱就弱在最后那条:半截参数有可能被拿去执行。
 
-  const body = JSON.stringify({
-    model: model.model,
-    messages,
-    tools: TOOL_DEFINITIONS,
-    temperature: 0.3,
-    stream: true,
-  });
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
-  const onExternalAbort = () => controller.abort();
-  if (signal) {
-    if (signal.aborted) controller.abort();
-    else signal.addEventListener('abort', onExternalAbort);
-  }
-
-  let content = '';
-  const toolCalls = [];
-  let aborted = false;
-
-  try {
-    const resp = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
-    if (!resp.ok || !resp.body) {
-      const errText = await resp.text().catch(() => '');
-      // 抽 error.message：网关/provider 的说明都在里面，整坨 JSON 甩到聊天窗没法看
-      const snippet = describeAiHttpError(errText, resp.status);
-      if (resp.status === 400 && /tool|function/i.test(snippet)) {
-        throw new Error(`HTTP 400: 当前模型可能不支持 function calling(${snippet})。请在设置中换用支持工具调用的模型。`);
-      }
-      throw new Error(`HTTP ${resp.status}: ${snippet || resp.statusText}`);
-    }
-
-    const decoder = new TextDecoder('utf-8');
-    let buf = '';
-    for await (const chunk of resp.body) {
-      buf += decoder.decode(chunk, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop() ?? '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data:')) continue;
-        const payload = trimmed.slice(5).trim();
-        if (payload === '[DONE]') continue;
-        let evt;
-        try { evt = JSON.parse(payload); } catch { continue; }
-        const delta = evt.choices?.[0]?.delta || {};
-
-        const thinkingChunk = delta.reasoning_content || delta.reasoning || delta.reasoning_text || '';
-        if (thinkingChunk) onToken({ thinking: thinkingChunk });
-
-        if (delta.content) {
-          content += delta.content;
-          onToken({ content: delta.content });
-        }
-
-        for (const tc of delta.tool_calls || []) {
-          const i = tc.index ?? 0;
-          if (!toolCalls[i]) toolCalls[i] = { id: '', type: 'function', function: { name: '', arguments: '' } };
-          if (tc.id) toolCalls[i].id += tc.id;
-          if (tc.function?.name) toolCalls[i].function.name += tc.function.name;
-          if (tc.function?.arguments) toolCalls[i].function.arguments += tc.function.arguments;
-        }
-      }
-    }
-  } catch (err) {
-    if (err?.name === 'AbortError' || controller.signal.aborted) {
-      aborted = true;
-    } else {
-      throw err;
-    }
-  } finally {
-    clearTimeout(timer);
-    if (signal) signal.removeEventListener('abort', onExternalAbort);
-  }
-  return { content, toolCalls: toolCalls.filter(Boolean), aborted };
-}
-
-// ── 消息消毒 ──────────────────────────────────────────────
-// 目的:确保发往 LLM provider 的 messages 数组里没有"空内容"或
-// "看似有内容但全是空白"的字段。
+// ── 消息准备(消毒 / 历史有界化 / 旧图片降级) ──────────────────
+// 统一实现在 src/cli/ai/context.js 的 prepareRequestMessages —— CLI 的 `g ai`
+// 与这条 Web 链路共用同一份,两侧不再各写一遍。
 //
-// 背景:部分 LLM provider(Moonshot/Kimi、智谱、火山引擎、MiniMax 等)
-// 对 assistant 历史消息 content 校验严格 —— 当某轮 assistant 只返回
-// tool_calls 而没有文本、或正文被 trim 后只剩空白时,provider 会拒绝
-// 并报 "chat content is empty (2013)"。OpenAI 官方规范允许 assistant
-// 消息在带 tool_calls 时 content 为 null,但 provider 实现不一致:
-//
-//   - assistant 带 tool_calls → content 强制 null(即使有字符串)
-//   - assistant 不带 tool_calls 且 content 全空白 → null(避免触发 2013)
-//   - user content 全空白 → 用单个空格 ' ' 占位(provider 通常可接受)
-//   - tool content 全空白 → '(no output)' 占位(防止序列化时被丢)
-function sanitizeMessages(messages) {
-  for (const m of messages) {
-    if (m == null || typeof m !== 'object') continue;
-    // 非字符串 content(数组形态的多模态 user 消息、已是 null 等) 不动
-    if (m.content === null || m.content === undefined) {
-      // assistant 必须显式 null,不要让 provider 看到 undefined
-      if (m.role === 'assistant') m.content = null;
-      continue;
-    }
-    if (typeof m.content !== 'string') continue;
-    const trimmed = m.content.trim();
-    if (trimmed === '') {
-      if (m.role === 'assistant') {
-        // 带 tool_calls 时强制 null;否则也置 null(provider 更安全)
-        m.content = null;
-      } else if (m.role === 'tool') {
-        m.content = '(no output)';
-      } else if (m.role === 'user') {
-        // user 不能 null(部分 provider 拒),用单个空格占位
-        m.content = ' ';
-      }
-      continue;
-    }
-    // assistant 带 tool_calls:即使是有效正文也强制 null
-    // (OpenAI 规范要求 tool_calls 出现时 content=null,避免 provider 误判)
-    if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
-      m.content = null;
-    }
-  }
-  return messages;
-}
-
-// ── 历史裁剪 ──────────────────────────────────────────────
-// 保留 system + 最近 MAX_HISTORY_MESSAGES 条
-// 切口必须落在 user 消息上,避免把 assistant(tool_calls) 与其 tool 结果从中间撕开
-const MAX_HISTORY_MESSAGES = 40;
-function trimHistory(messages) {
-  if (messages.length <= MAX_HISTORY_MESSAGES + 1) return;
-  let cut = messages.length - MAX_HISTORY_MESSAGES;
-  // 至少向后扫 5 条,跳过孤立的 tool / assistant(tool_calls),
-  // 找到真正的 user 节点再切,防止撕裂 tool 调用链
-  let safety = 0;
-  while (cut < messages.length && messages[cut].role !== 'user' && safety < 8) {
-    cut++;
-    safety++;
-  }
-  if (cut <= 1 || messages[cut]?.role !== 'user') return;
-  messages.splice(1, cut - 1);
-}
-
-// ── 多模态历史:旧图片降级为文字 ──────────────────────────
-function stripStaleImages(messages) {
-  const placeholder = '[图片已从历史中省略]';
-  let seenLatest = false;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m?.role !== 'user' || !Array.isArray(m.content)) continue;
-    const hasImage = m.content.some(p => p?.type === 'image_url');
-    if (!hasImage) continue;
-    if (!seenLatest) { seenLatest = true; continue; }
-    m.content = m.content.map(p => p?.type === 'image_url'
-      ? { type: 'text', text: placeholder }
-      : p);
-  }
-}
+// 这里曾经是第二份实现:历史只按条数硬切(MAX_HISTORY_MESSAGES=40)+ 纯 splice 丢弃,
+// 而 CLI 侧早已改成「条数/字符双预算 + 丢弃项摘录成一条梗概」,两侧行为因此分叉 ——
+// Web 面板聊久了模型会直接失忆,CLI 还记得要点。现在收敛到一处,口径见 context.js。
 
 // ── 核心入口：运行一轮 agent 对话 ────────────────────────
 //
@@ -412,20 +259,19 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
       : userMessage
   });
 
-  // 旧图片降级
-  stripStaleImages(session.messages);
-
   const maxIterations = await resolveMaxToolIterations();
 
   for (let iter = 0; iter < maxIterations; iter++) {
-    trimHistory(session.messages);
-    sanitizeMessages(session.messages);
+    // 每轮都从完整会话记录重新构建一次请求副本:条数/字符双预算 → 被丢掉的旧消息
+    // 摘录成一条梗概 → 旧图片降级 → provider 兼容消毒。
+    // 只作用于副本,session.messages 保持完整(与 CLI 的磁盘口径一致)。
+    const messages = prepareRequestMessages(session.messages, { locale });
 
     let result;
     try {
       result = await streamChatOnce({
         model,
-        messages: session.messages,
+        messages,
         signal,
         // 整轮对话（含后续工具调用产生的每一轮请求）复用同一个会话 ID
         sessionId: session.sessionId,

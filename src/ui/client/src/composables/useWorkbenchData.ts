@@ -43,6 +43,24 @@ export function useWorkbenchData() {
       ;(jobs.value[i] as any)[field] = cur + delta
       return
     }
+    // 工具调用增量：服务端按批推「整条调用的最新快照」（不是补丁），
+    // 所以按 id 覆盖式合并即可 —— 同一条调用先 running 后 done 会推两次，顺序天然正确。
+    if (evt === 'job:toolcalls') {
+      const updates: any[] = Array.isArray(payload?.updates) ? payload.updates : []
+      if (!updates.length) return
+      const i = jobs.value.findIndex(x => x.id === payload.id)
+      if (i < 0) return
+      const job = jobs.value[i]
+      for (const u of updates) {
+        if (!u || !u.id) continue
+        // 懒初始化：整批都是脏数据时不留一个空数组（老 job 的 toolCalls 语义保持 undefined）
+        if (!Array.isArray(job.toolCalls)) job.toolCalls = []
+        const k = job.toolCalls.findIndex(c => c.id === u.id)
+        if (k >= 0) job.toolCalls[k] = { ...job.toolCalls[k], ...u }
+        else job.toolCalls.push(u)
+      }
+      return
+    }
     if (evt === 'sub:update') {
       const t = tasks.value.find(x => x.id === payload.taskId)
       if (t) {

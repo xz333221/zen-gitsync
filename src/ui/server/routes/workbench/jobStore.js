@@ -40,7 +40,7 @@ import {
 } from './shared.js';
 
 // 进程表：记录每个子任务的运行状态
-// jobId -> { id, taskId, subId, status, pid, startedAt, endedAt, exitCode, error, prompt, child, output, thinking, claudeSessionId }
+// jobId -> { id, taskId, subId, status, pid, startedAt, endedAt, exitCode, error, prompt, child, output, thinking, claudeSessionId, toolCalls }
 export const jobs = new Map();
 
 // 事件总线：SSE /api/workbench/events 监听 'event'，路由层用 publish() 推送
@@ -164,9 +164,17 @@ export function serializeJob(j, taskMap) {
   const { child, ...rest } = j;
   const t = taskMap ? taskMap.get(rest.taskId) : null;
   const sub = t && Array.isArray(t.subtasks) ? t.subtasks.find(s => s.id === rest.subId) : null;
+  // size 是保留策略（maxSizeMB）的计价口径，工具调用也会占体积，必须算进去，
+  // 否则一份全是工具流水的 job 会被当成"很小"而留下来。
+  const toolCallsSize = Array.isArray(rest.toolCalls)
+    ? rest.toolCalls.reduce((sum, c) => sum + (typeof c?.arguments === 'string' ? c.arguments.length : 0)
+      + (typeof c?.result === 'string' ? c.result.length : 0)
+      + (typeof c?.argsPreview === 'string' ? c.argsPreview.length : 0), 0)
+    : 0;
   const size = ((rest.prompt || '').length
     + (rest.output || '').length
-    + (rest.thinking || '').length);
+    + (rest.thinking || '').length
+    + toolCallsSize);
   return {
     ...rest,
     taskTitle: t ? t.title : '',
@@ -252,7 +260,10 @@ export async function hydrateJobs() {
     }
     // 旧版本可能没 size 字段；补齐以兼容历史文件
     if (typeof j.size !== 'number') {
-      j.size = ((j.prompt || '').length + (j.output || '').length + (j.thinking || '').length);
+      const toolSize = Array.isArray(j.toolCalls)
+        ? j.toolCalls.reduce((sum, c) => sum + (c?.arguments || '').length + (c?.result || '').length, 0)
+        : 0;
+      j.size = ((j.prompt || '').length + (j.output || '').length + (j.thinking || '').length + toolSize);
     }
     jobs.set(j.id, j);
   }
@@ -318,6 +329,9 @@ export function snapshotJobs() {
     // 本轮用的执行器（claude | opencode）。前端对话区助手名 / 日志详情按它显示;
     // 加字段时记得同步这里 —— 白名单投影会把没列出的字段静默剥掉。
     agent: j.agent || null,
+    // 工具调用流水（{id,name,argsPreview,arguments,result,status,error}[]）。
+    // 前端靠它画工具块;刷新页面 / 换实例后仍然可见,所以必须过白名单。
+    toolCalls: Array.isArray(j.toolCalls) ? j.toolCalls : [],
     // 续接对话用:claude --output-format stream-json 的 system.init 事件捕获到的 session_id
     claudeSessionId: j.claudeSessionId || null
   }));

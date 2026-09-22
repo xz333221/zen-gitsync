@@ -63,8 +63,12 @@ after(async () => {
 const configMod = await import(pathToFileURL(path.join(projectRoot, 'src/config.js')).href)
 // 注意:saveConfig / loadConfig 等业务函数挂在 default export 上;
 // ConfigWriteError / normalizeProjectPath 是命名导出(用于测试与复用)
-const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations } = configMod
+const { normalizeProjectPath, ConfigWriteError, normalizeAiMaxToolIterations, normalizeNotifyOnTaskDone } = configMod
 const { saveConfig } = configMod.default
+
+// 直接读沙箱磁盘上的 config.json：比走 loadConfig 更能暴露"写入位置不对"
+const configFilePath = path.join(fakeHome, '.zen-gitsync', 'config.json')
+const readRawConfig = async () => JSON.parse(await fs.readFile(configFilePath, 'utf-8'))
 
 // ========== normalizeProjectPath ==========
 
@@ -134,6 +138,46 @@ test('normalizeAiMaxToolIterations: 默认上限不再是 40(用户反馈太小)
     `默认单轮工具调用上限应 >= 100,实际 ${cfg.aiMaxToolIterations}`
   )
   assert.equal(normalizeAiMaxToolIterations(cfg.aiMaxToolIterations), cfg.aiMaxToolIterations)
+})
+
+// ========== normalizeNotifyOnTaskDone(任务执行结束提示开关) ==========
+
+test('normalizeNotifyOnTaskDone: 只接受布尔值', () => {
+  assert.equal(normalizeNotifyOnTaskDone(true), true)
+  assert.equal(normalizeNotifyOnTaskDone(false), false)
+})
+
+test('normalizeNotifyOnTaskDone: 非布尔值一律 null(调用方取默认/保留磁盘值)', () => {
+  // 'false' 是重点：如果这里被 !!value 强转成 true，用户在设置里明明关着
+  // 却照样被弹通知，而且错值一旦落盘就一直是错的。
+  for (const bad of [undefined, null, 0, 1, '', 'true', 'false', {}, [], NaN]) {
+    assert.equal(normalizeNotifyOnTaskDone(bad), null, `${JSON.stringify(bad)} 应返回 null`)
+  }
+})
+
+test('notifyOnTaskDone: 默认关闭', async () => {
+  const cfg = await configMod.default.loadConfig()
+  assert.equal(cfg.notifyOnTaskDone, false, '新装/未设置时应为关（不在用户没同意的情况下弹系统通知）')
+})
+
+test('notifyOnTaskDone: 存成顶层全局键，且能读回/能关掉', async () => {
+  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: true })
+  assert.equal((await readRawConfig()).notifyOnTaskDone, true, '应写在 config.json 顶层')
+  assert.equal(
+    (await configMod.default.loadConfig()).notifyOnTaskDone,
+    true,
+    'loadConfig 应读回 true（顶层值优先于项目配置里的副本）'
+  )
+
+  // 关得掉才算真的可用
+  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: false })
+  assert.equal((await readRawConfig()).notifyOnTaskDone, false, '关掉后应落盘为 false')
+})
+
+test('notifyOnTaskDone: 非法值不落盘，保留磁盘旧值', async () => {
+  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: true })
+  await saveConfig({ defaultCommitMessage: 'test', notifyOnTaskDone: 'false' })
+  assert.equal((await readRawConfig()).notifyOnTaskDone, true, '非法值应被忽略，而不是覆盖成 true')
 })
 
 // ========== saveConfig 错误契约(MAINT-4 修复回归) ==========

@@ -986,10 +986,10 @@ export function registerConfigRoutes({
     }
   })
 
-  // 保存通用设置（主题、语言、工作台任务执行器）
+  // 保存通用设置（主题、语言、工作台任务执行器、任务完成提示）
   app.post('/api/config/save-general-settings', express.json(), async (req, res) => {
     try {
-      const { theme, locale, taskExecutor } = req.body
+      const { theme, locale, taskExecutor, notifyOnTaskDone } = req.body
 
       // 读取原始配置以保留项目设置
       const rawConfig = await configManager.readRawConfigFile()
@@ -1007,9 +1007,22 @@ export function registerConfigRoutes({
         rawConfig.taskExecutor = normalizedExecutor
       }
 
+      // 任务执行结束提示开关（全局，默认关）。只接受布尔值，其它类型静默忽略，
+      // 避免前端误传字符串 'false' 被当成真值落盘后永久打开。
+      // ⚠️ 规范化函数对非法值返回的是 **null**（与 normalizeTaskExecutor 同语义），
+      // 不是 undefined —— 判 `!== undefined` 会把非法值原样写进去变成 `null`。
+      const normalizedNotify = configManager.normalizeNotifyOnTaskDone(notifyOnTaskDone)
+      if (normalizedNotify !== null) {
+        rawConfig.notifyOnTaskDone = normalizedNotify
+      }
+
       // 直接写入原始配置，避免覆盖项目设置
       await configManager.writeRawConfigFile(rawConfig)
-      res.json({ success: true, taskExecutor: normalizedExecutor || undefined })
+      res.json({
+        success: true,
+        taskExecutor: normalizedExecutor || undefined,
+        notifyOnTaskDone: normalizedNotify ?? undefined
+      })
     } catch (error) {
       res.status(500).json({ success: false, error: error.message })
     }

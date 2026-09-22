@@ -64,6 +64,64 @@ export function buildRequestMessages(messages, { maxMessages = 40, maxChars = 80
   return result
 }
 
+// Provider compatibility. Some providers (Moonshot/Kimi, Zhipu, Volcengine, MiniMax…)
+// reject an assistant message whose content is empty while tool_calls are present
+// ("chat content is empty (2013)"), and implementations disagree on which shapes are
+// legal. Runs on the request copy only — what the model actually produced stays on disk.
+//   - assistant with tool_calls → content forced to null
+//   - assistant with blank content → null
+//   - user with blank content → a single space (null is rejected by some providers)
+//   - tool with blank content → '(no output)' (otherwise it can be dropped while serializing)
+export function sanitizeMessages(messages) {
+  for (const m of messages) {
+    if (m == null || typeof m !== 'object') continue
+    // Non-string content (multimodal user parts, already null) is left alone.
+    if (m.content === null || m.content === undefined) {
+      if (m.role === 'assistant') m.content = null
+      continue
+    }
+    if (typeof m.content !== 'string') continue
+    if (m.content.trim() === '') {
+      if (m.role === 'assistant') m.content = null
+      else if (m.role === 'tool') m.content = '(no output)'
+      else if (m.role === 'user') m.content = ' '
+      continue
+    }
+    if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+      m.content = null
+    }
+  }
+  return messages
+}
+
+// Base64 images dominate the payload, so only the newest image-bearing user message
+// keeps its images; older ones degrade to a text placeholder (the model still knows
+// an image was there). Reassigns `content` on the request copy, never on the transcript.
+export function stripStaleImages(messages, locale) {
+  const placeholder = String(locale || '').startsWith('en')
+    ? '[image omitted from history]'
+    : '[图片已从历史中省略]'
+  let seenLatest = false
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m?.role !== 'user' || !Array.isArray(m.content)) continue
+    if (!m.content.some(p => p?.type === 'image_url')) continue
+    if (!seenLatest) { seenLatest = true; continue }
+    m.content = m.content.map(p => p?.type === 'image_url' ? { type: 'text', text: placeholder } : p)
+  }
+  return messages
+}
+
+// Single entry point for every outgoing payload. The CLI (`turn.js`) and the GUI agent
+// panel (`agentChat.js`) must both call this instead of assembling their own copy —
+// that is the only thing keeping the two from drifting apart again.
+// Returns a fresh array; the caller's transcript is never modified.
+export function prepareRequestMessages(messages, { locale, maxMessages = 40, maxChars = 80000 } = {}) {
+  const copy = buildRequestMessages(messages, { maxMessages, maxChars })
+  stripStaleImages(copy, locale)
+  return sanitizeMessages(copy)
+}
+
 // Only load explicitly named project instruction files, with bounded local redirects.
 export async function loadProjectInstructions(cwd) {
   const visited = new Set(), sections = []

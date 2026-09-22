@@ -18,6 +18,27 @@
 
 export type JobStatus = 'pending' | 'running' | 'done' | 'error' | 'cancelled'
 
+/** 工具调用状态（与 zen-ai-chat-ui 的 ToolCallStatus 对齐） */
+export type JobToolCallStatus = 'pending' | 'running' | 'done' | 'error'
+
+/**
+ * job 上记录的单次工具调用。
+ * 形态对齐 zen-ai-chat-ui 的 ToolCall：服务端已做截断，前端直接用。
+ * claude（Bash/Read/Edit）与 opencode（bash/read/edit）都归一成这一种。
+ */
+export interface JobToolCall {
+  id: string
+  name: string
+  /** 一行参数摘要（折叠态展示） */
+  argsPreview?: string
+  /** 完整参数（JSON 字符串，服务端已截断） */
+  arguments?: string
+  /** 执行结果（服务端已截断） */
+  result?: string
+  status?: JobToolCallStatus
+  error?: string
+}
+
 /** 流式 / SSE 事件传输形态——前端 jobs.value 数组里就是这个 */
 export interface Job {
   id: string
@@ -42,6 +63,8 @@ export interface Job {
   agent?: string
   /** opencode 协议层 error 事件捕获的错误消息（进程退出码可能是 0，靠它判失败） */
   agentError?: string
+  /** 工具调用流水。老 job 可能没有这个字段（视为空） */
+  toolCalls?: JobToolCall[]
 }
 
 // ── Workbench 任务相关类型 ──────────────────────────────────────────

@@ -13,7 +13,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 
-const projectRoot = 'D:/xz_workspace/github_workspace/zen-gitsync'
+const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..')
 const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), 'zgs-mig-e2e-'))
 const PORT = 5598
 const base = `http://127.0.0.1:${PORT}`

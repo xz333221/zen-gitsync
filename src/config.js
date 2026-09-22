@@ -87,6 +87,17 @@ export function normalizeTaskExecutor(value) {
   return TASK_EXECUTORS.includes(v) ? v : null;
 }
 
+/**
+ * 规范化「任务执行结束提示」开关。只接受布尔值，其它类型返回 null
+ * （交给调用方取默认），不抛错 —— 与 normalizeTaskExecutor 同一套语义。
+ *
+ * 为什么不做 `!!value`：这个值控制是否弹浏览器系统通知，`'false'` 这种字符串
+ * 被强转成 true 之后用户会在设置里明明关着却照样被弹，且落盘后一直错下去。
+ */
+export function normalizeNotifyOnTaskDone(value) {
+  return typeof value === 'boolean' ? value : null;
+}
+
 // 默认配置
 const defaultConfig = {
   defaultCommitMessage: "submit",
@@ -136,6 +147,9 @@ const defaultConfig = {
   // 决定「执行任务 / 执行子任务 / 从此处开始 / 简单任务续聊」这条链路
   // 默认 spawn 哪个本地 CLI；执行入口可以按次覆盖（见 workbench 执行路由）。
   taskExecutor: 'claude',
+  // 任务执行结束提示（全局，默认关）。开启后工作台任务从"跑着"变终态时，
+  // 页面在后台发浏览器系统通知、在前台发应用内提示条。见 useTaskNotifier。
+  notifyOnTaskDone: false,
   // UI 状态（跨项目共享，存到顶层 ui 对象）
   // 之前散落在 localStorage，因随机端口启动而失效，迁到文件持久化
   ui: {
@@ -449,7 +463,8 @@ async function loadConfig() {
       ...raw,
       aiMaxToolIterations: normalizeAiMaxToolIterations(raw.aiMaxToolIterations)
         ?? defaultConfig.aiMaxToolIterations,
-      taskExecutor: normalizeTaskExecutor(raw.taskExecutor) ?? defaultConfig.taskExecutor
+      taskExecutor: normalizeTaskExecutor(raw.taskExecutor) ?? defaultConfig.taskExecutor,
+      notifyOnTaskDone: normalizeNotifyOnTaskDone(raw.notifyOnTaskDone) ?? defaultConfig.notifyOnTaskDone
     };
   }
 
@@ -467,7 +482,9 @@ async function loadConfig() {
     // 同 models：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
     aiMaxToolIterations: normalizeAiMaxToolIterations(raw?.aiMaxToolIterations)
       ?? defaultConfig.aiMaxToolIterations,
-    taskExecutor: normalizeTaskExecutor(raw?.taskExecutor) ?? defaultConfig.taskExecutor
+    taskExecutor: normalizeTaskExecutor(raw?.taskExecutor) ?? defaultConfig.taskExecutor,
+    // 同 taskExecutor：全局配置，始终取顶层，防止被项目配置里的旧值覆盖
+    notifyOnTaskDone: normalizeNotifyOnTaskDone(raw?.notifyOnTaskDone) ?? defaultConfig.notifyOnTaskDone
   };
 }
 
@@ -515,7 +532,7 @@ async function saveConfig(config) {
 
   // 分离全局设置和项目设置
   // models / ui 也是全局配置（跨项目共享），和 theme/locale 一样存到顶层
-  const { theme, locale, models, ui, aiMaxToolIterations, taskExecutor, ...projectConfig } = config;
+  const { theme, locale, models, ui, aiMaxToolIterations, taskExecutor, notifyOnTaskDone, ...projectConfig } = config;
 
   // 保存全局设置到根级别
   if (theme !== undefined) {
@@ -539,6 +556,11 @@ async function saveConfig(config) {
   const normalizedExecutor = normalizeTaskExecutor(taskExecutor);
   if (normalizedExecutor !== null) {
     raw.taskExecutor = normalizedExecutor;
+  }
+  // 任务完成提示开关同属全局设置：非布尔值不落盘(保留磁盘旧值)
+  const normalizedNotify = normalizeNotifyOnTaskDone(notifyOnTaskDone);
+  if (normalizedNotify !== null) {
+    raw.notifyOnTaskDone = normalizedNotify;
   }
 
   // 写入当前项目配置（在 defaultConfig 基础上合并，但不清空顶层其它键）
@@ -737,6 +759,8 @@ export default {
   // 工作台任务执行器规范化(GUI 保存前也要用,见 /api/config/save-general-settings)
   normalizeTaskExecutor,
   TASK_EXECUTORS,
+  // 任务执行结束提示开关规范化(同上)
+  normalizeNotifyOnTaskDone,
 };
 
 // 命名导出 — 用于测试与外部复用

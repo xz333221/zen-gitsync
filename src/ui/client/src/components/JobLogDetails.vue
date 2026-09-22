@@ -80,6 +80,7 @@
         :assistant-avatar="assistantAvatar"
         :show-avatar="true"
         :theme="configStore.theme"
+        :tool-calls-config="{ group: true, collapseThreshold: 2 }"
         class="wb-job-chat"
       />
 
@@ -125,6 +126,7 @@ import { ElMessage } from 'element-plus'
 import { ChatContainer, MarkdownRenderer, type ChatMessage, type MessageStatus } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
 import { avatarForExecutor } from '@/utils/agentAvatar'
+import { buildJobToolCalls } from '@/utils/jobToolCalls'
 import { $t } from '@/lang/static'
 import type { Job, JobStatus } from '@/types/workbench'
 import { useConfigStore } from '@/stores/configStore'
@@ -272,7 +274,9 @@ const chatMessages = computed<ChatMessage[]>(() => {
   const thinkingText = displayThinking()
   const hasOutput = !!outputText
   const hasThinking = !!thinkingText
-  const hasContent = hasOutput || hasThinking
+  const toolCalls = buildJobToolCalls(j)
+  const hasToolCalls = toolCalls.length > 0
+  const hasContent = hasOutput || hasThinking || hasToolCalls
   const status = mapStatus(j.status, hasContent)
 
   msgs.push({
@@ -284,6 +288,9 @@ const chatMessages = computed<ChatMessage[]>(() => {
     reasoningStatus: hasThinking
       ? (hasOutput ? 'done' : (status === 'streaming' ? 'streaming' : 'done'))
       : undefined,
+    // 工具调用块（读文件 / 跑命令 / 改代码）。与 WorkbenchView 的简单任务对话流同一份映射，
+    // 免得同一个 job 在两个视图里显示得不一样。
+    toolCalls: hasToolCalls ? toolCalls : undefined,
     status,
     error: status === 'error' ? (j.error || undefined) : undefined,
     createdAt

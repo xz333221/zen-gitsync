@@ -145,6 +145,21 @@
                   <span class="setting-hint-block">{{ $t('@42BB9:工作台执行任务时使用的本地 CLI；模型跟随各自 CLI 的自身配置') }}</span>
                 </div>
               </div>
+
+              <!-- 任务执行结束提示：跑完一个任务时给个动静（页面在后台发系统通知） -->
+              <div class="setting-row">
+                <label class="setting-label">{{ $t('@42BB9:任务完成提示') }}</label>
+                <div class="project-toggle">
+                  <el-switch v-model="tempNotifyOnTaskDone" @change="onNotifyToggleChange" />
+                  <span class="setting-hint-block notify-hint">{{ $t('@42BB9:任务执行结束时提醒我：页面在后台发系统通知，在前台弹应用内提示') }}</span>
+                  <span v-if="notifyPermissionState === 'denied'" class="setting-hint-block notify-hint notify-hint--warn">
+                    {{ $t('@42BB9:浏览器已拒绝通知权限，只能在页面内提示（可在浏览器地址栏的站点设置里恢复）') }}
+                  </span>
+                  <span v-else-if="notifyPermissionState === 'unsupported'" class="setting-hint-block notify-hint notify-hint--warn">
+                    {{ $t('@42BB9:当前环境不支持系统通知，只能在页面内提示') }}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -546,6 +561,11 @@ import { useLocaleStore } from '@/stores/localeStore'
 import { useConfigStore, type ModelInfo } from '@/stores/configStore'
 import { useToolsStore } from '@/stores/toolsStore'
 import { TASK_EXECUTOR_OPTIONS, type TaskExecutorId } from '@/utils/taskExecutor'
+import {
+  notificationPermission,
+  requestNotificationPermission,
+  type NotifyPermission
+} from '@/utils/taskNotify'
 import TaskExecutorIcon from './TaskExecutorIcon.vue'
 import { type SupportLocale } from '@/locales'
 import { AddModelForm } from 'ai-model-form/client'
@@ -578,6 +598,11 @@ const tempTheme = ref<'light' | 'dark' | 'auto'>('light')
 const tempLocale = ref<SupportLocale>('zh-CN')
 // 任务执行器（全局默认值；工作台执行按钮旁的临时切换不归这里管）
 const tempTaskExecutor = ref<TaskExecutorId>('claude')
+// 任务执行结束提示开关（全局，默认关）
+const tempNotifyOnTaskDone = ref(false)
+// 只读镜像，用来在开关下方如实展示"系统通知到底能不能发出去"：
+// 权限已拒 / 环境不支持时，光看开关是不知道的，用户会以为开了却没动静。
+const notifyPermissionState = ref<NotifyPermission>('default')
 
 // 编辑器设置
 const tempEditorAutoSave = ref(false)
@@ -632,7 +657,7 @@ const editingModelInitial = computed(() => {
 const hasChanges = computed(() => {
   if (activeTab.value === 'config') return true
   if (activeTab.value === 'general') {
-    return tempTheme.value !== initTheme || tempLocale.value !== initLocale || tempTaskExecutor.value !== initTaskExecutor || editingModelId.value !== undefined
+    return tempTheme.value !== initTheme || tempLocale.value !== initLocale || tempTaskExecutor.value !== initTaskExecutor || tempNotifyOnTaskDone.value !== initNotifyOnTaskDone || editingModelId.value !== undefined
   }
   if (activeTab.value === 'git') {
     return (
@@ -740,6 +765,7 @@ let initInitDefaultBranch = 'main'
 let initTheme: 'light' | 'dark' | 'auto' = 'light'
 let initLocale: SupportLocale = 'zh-CN'
 let initTaskExecutor: TaskExecutorId = 'claude'
+let initNotifyOnTaskDone = false
 
 // 同步 v-model
 watch(() => props.modelValue, async (val) => {
@@ -759,6 +785,9 @@ watch(() => props.modelValue, async (val) => {
     tempTheme.value = configStore.theme
     tempLocale.value = configStore.locale
     tempTaskExecutor.value = configStore.taskExecutor
+    tempNotifyOnTaskDone.value = configStore.notifyOnTaskDone
+    // 每次打开都重读权限：用户可能在浏览器地址栏里改过，或上一次授权弹窗刚被关掉
+    notifyPermissionState.value = notificationPermission()
     aiModels.value = [...configStore.models]
     aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
     editingModelId.value = undefined
@@ -790,6 +819,7 @@ watch(() => props.modelValue, async (val) => {
     initTheme = tempTheme.value
     initLocale = tempLocale.value
     initTaskExecutor = tempTaskExecutor.value
+    initNotifyOnTaskDone = tempNotifyOnTaskDone.value
   }
 }, { immediate: true })
 
@@ -890,7 +920,7 @@ async function saveGlobalGitConfigs() {
 
 // 保存通用设置
 async function saveGeneralSettings() {
-  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId } = {}
+  const settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: TaskExecutorId, notifyOnTaskDone?: boolean } = {}
 
   // 保存主题设置（如果与初始值不同或需要强制保存）
   if (tempTheme.value !== initTheme) {
@@ -911,8 +941,14 @@ async function saveGeneralSettings() {
     initTaskExecutor = tempTaskExecutor.value
   }
 
+  // 保存任务完成提示开关（如果与初始值不同）
+  if (tempNotifyOnTaskDone.value !== initNotifyOnTaskDone) {
+    settings.notifyOnTaskDone = tempNotifyOnTaskDone.value
+    initNotifyOnTaskDone = tempNotifyOnTaskDone.value
+  }
+
   // 只要有设置项就保存（包括主题或语言）
-  if (settings.theme !== undefined || settings.locale !== undefined || settings.taskExecutor !== undefined) {
+  if (settings.theme !== undefined || settings.locale !== undefined || settings.taskExecutor !== undefined || settings.notifyOnTaskDone !== undefined) {
     const saved = await configStore.saveGeneralSettings(settings)
     if (saved) {
       ElMessage.success($t('@42BB9:通用设置已保存'))
@@ -921,6 +957,23 @@ async function saveGeneralSettings() {
   }
 
   return true
+}
+
+// 开关被拨到"开"的那一刻申请通知权限。
+//
+// ⚠️ 必须挂在点击事件上，不能等任务跑完再补申请：浏览器只在**用户手势**里响应
+// requestPermission（Chrome 之后不再允许非手势调用弹窗），在 SSE 回调里调只会拿回
+// 'default'，然后就永久卡住 —— 用户会觉得"开了开关但从来没提示过"。
+// 关掉时不申请（没意义），但把状态回读一次，保证下方提示行即时更新。
+async function onNotifyToggleChange(value: string | number | boolean) {
+  if (value === true) {
+    notifyPermissionState.value = await requestNotificationPermission()
+    if (notifyPermissionState.value === 'denied') {
+      ElMessage.warning($t('@42BB9:浏览器已拒绝通知权限，将只在页面内提示'))
+    }
+  } else {
+    notifyPermissionState.value = notificationPermission()
+  }
 }
 
 // 重置界面布局比例（左/中/右/上面板比例）
@@ -1252,6 +1305,16 @@ async function openSystemConfigFile() {
   overflow: visible;
   text-overflow: clip;
   line-height: 1.5;
+}
+/* 任务完成提示的说明/告警同理：单行截断会把"浏览器已拒绝权限"这类关键信息吃掉 */
+.project-toggle .notify-hint {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.5;
+}
+.notify-hint--warn {
+  color: var(--el-color-warning);
 }
 .ai-iterations-input {
   width: 140px;

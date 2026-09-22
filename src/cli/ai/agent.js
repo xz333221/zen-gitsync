@@ -351,54 +351,10 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
 }
 
 // ──────────────────────────────────────────────
-// 消息兼容处理。只作用于请求副本，保留完整会话记录。
+// 消息准备(消毒 / 旧图片降级)统一实现在 context.js —— CLI 与 Web 智能体面板
+// 共用同一份,避免两侧各写一遍后行为分叉。这里 re-export 保持既有引用与测试不断。
 // ──────────────────────────────────────────────
-export function sanitizeMessages(messages) {
-  for (const m of messages) {
-    if (m == null || typeof m !== 'object') continue
-    if (m.content === null || m.content === undefined) {
-      if (m.role === 'assistant') m.content = null
-      continue
-    }
-    if (typeof m.content !== 'string') continue
-    const trimmed = m.content.trim()
-    if (trimmed === '') {
-      if (m.role === 'assistant') {
-        m.content = null
-      } else if (m.role === 'tool') {
-        m.content = '(no output)'
-      } else if (m.role === 'user') {
-        m.content = ' '
-      }
-      continue
-    }
-    if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
-      m.content = null
-    }
-  }
-  return messages
-}
-
-// ──────────────────────────────────────────────
-// 多模态历史:base64 图片很占上下文,只保留"最近一条带图消息"里的图片,
-// 更早消息里的 image_url 部件降级为文字占位(模型仍知道这里曾有图)
-// ──────────────────────────────────────────────
-export function stripStaleImages(messages, locale) {
-  const placeholder = String(locale || '').startsWith('en')
-    ? '[image omitted from history]'
-    : '[图片已从历史中省略]'
-  let seenLatest = false
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]
-    if (m?.role !== 'user' || !Array.isArray(m.content)) continue
-    const hasImage = m.content.some(p => p?.type === 'image_url')
-    if (!hasImage) continue
-    if (!seenLatest) { seenLatest = true; continue }
-    m.content = m.content.map(p => p?.type === 'image_url'
-      ? { type: 'text', text: placeholder }
-      : p)
-  }
-}
+export { sanitizeMessages, stripStaleImages } from './context.js'
 
 // ──────────────────────────────────────────────
 // 单轮 agent 循环:用户一句话 → 流式输出 → 工具调用 → 再调用模型 … 直到模型给出最终文本
@@ -789,7 +745,6 @@ export async function runAiAgent(argv = []) {
     fullTools: false,
     lastTurnStats: null,
     sessionStats: null,
-    prepareMessages: (messages) => { stripStaleImages(messages, locale); sanitizeMessages(messages) },
     pendingImages: [],      // Alt+V / /image 附加的待发送图片 [{path, bytes}]
     pasting: false,         // 剪贴板读取进行中(防 Alt+V 连打并发)
     inWizard: false,        // /addmodel 交互式向导进行中:忽略 REPL 的 line 事件

@@ -27,7 +27,9 @@ import path from 'node:path'
 import os from 'node:os'
 import crypto from 'node:crypto'
 
-const projectRoot = 'D:/xz_workspace/github_workspace/zen-gitsync'
+// 仓库根用脚本自身位置推导，不要写死盘符：工作区曾在 D:/xz_workspace 与
+// C:/workspace/github_workspace/xz333221 之间搬过家，写死路径的脚本会静默跑不起来。
+const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..')
 const realHome = os.homedir()
 const realConfig = path.join(realHome, '.zen-gitsync', 'config.json')
 
@@ -249,6 +251,9 @@ try {
   const light = await post('/api/config/save-general-settings', {
     theme: targetTheme,
     locale: fixtureRaw.locale || 'zh-CN',
+    // 顺带带上一个全局开关：它必须是"顶层全局键"，
+    // 一旦被当成项目级字段写进 projects/<fileId>.json，下面 dProjects 就会非空。
+    notifyOnTaskDone: true,
   })
   const lightMs = Date.now() - t0
   check(light.status === 200 && light.json?.success === true, `save-general-settings 应 200,实际 ${light.status}`)
@@ -266,8 +271,26 @@ try {
   notes.push(`改全局设置耗时 ${lightMs}ms,项目/画布文件改动数 0`)
 
   // 全局设置确实生效了
-  const afterTheme = JSON.parse(await fs.readFile(configFile, 'utf-8')).theme
-  check(afterTheme === targetTheme, `全局设置应写进 config.json(期望 ${targetTheme},实际 ${afterTheme})`)
+  const afterRaw = JSON.parse(await fs.readFile(configFile, 'utf-8'))
+  check(afterRaw.theme === targetTheme, `全局设置应写进 config.json(期望 ${targetTheme},实际 ${afterRaw.theme})`)
+
+  // 任务完成提示开关：落在顶层全局键、且不被项目配置覆盖
+  check(afterRaw.notifyOnTaskDone === true, `notifyOnTaskDone 应写进顶层全局键,实际 ${JSON.stringify(afterRaw.notifyOnTaskDone)}`)
+  const pollutedProjects = Object.entries(afterRaw.projects || {})
+    .filter(([, p]) => p && typeof p === 'object' && 'notifyOnTaskDone' in p)
+    .map(([k]) => k)
+  check(
+    pollutedProjects.length === 0,
+    `notifyOnTaskDone 是全局设置,不该出现在项目配置里: ${pollutedProjects.join(', ')}`
+  )
+  const reread = await fetch(`${base}/api/config/getConfig`).then((r) => r.json()).catch(() => null)
+  check(reread?.notifyOnTaskDone === true, `GET /api/config/getConfig 应读回 notifyOnTaskDone=true,实际 ${JSON.stringify(reread?.notifyOnTaskDone)}`)
+
+  // 非布尔值必须被拒（前端误传字符串 'false' 时不能把它当"开"落盘）
+  const badNotify = await post('/api/config/save-general-settings', { notifyOnTaskDone: 'false' })
+  check(badNotify.status === 200, `非法 notifyOnTaskDone 不应报错,实际 ${badNotify.status}`)
+  const afterBad = JSON.parse(await fs.readFile(configFile, 'utf-8'))
+  check(afterBad.notifyOnTaskDone === true, `非法值应被忽略并保留磁盘旧值(true),实际 ${JSON.stringify(afterBad.notifyOnTaskDone)}`)
 
   // ── 3) 新增画布:只多出一个画布文件 ──────────────────────────
   const beforeOrch2 = await snapshotTree(orchRoot)

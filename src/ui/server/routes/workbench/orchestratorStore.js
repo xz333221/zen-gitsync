@@ -299,6 +299,8 @@ export function buildRunningAgents({ jobs = [], tasks = [] } = {}) {
  * 一条 job 产出两条记录（派发 / 收尾），这是它的真实生命周期：
  *   dispatch   ← startedAt 存在
  *   done / error / cancelled ← endedAt 存在，按 status 分
+ * 唯一例外：job 是由一条指令直接带起来的，那次起跑并进指令行（见
+ * absorbInstructionDispatches）—— 否则派发行和指令行会同秒同文地出现两遍。
  * 只回结构化字段，句子交给前端 i18n。
  *
  * @param {{ jobs?: object[], tasks?: object[], instructions?: object[] }} input
@@ -367,6 +369,44 @@ export function buildActivityFeed({ jobs = [], tasks = [], instructions = [] } =
   }
 
   // 时间缺失的排最后（排序键用空串，天然沉底）
-  rows.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
-  return rows.slice(0, MAX_ACTIVITY_ENTRIES);
+  return absorbInstructionDispatches(rows)
+    .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))
+    .slice(0, MAX_ACTIVITY_ENTRIES);
+}
+
+/**
+ * 把「由指令直接带起来的那一次起跑」并进指令行，不再单独出「派发」。
+ *
+ * 派发行的正文是「{taskTitle}」派发至 {project}，而任务标题就是指令首行
+ * （建任务时 `text.split('\n')[0]` 取的）—— 于是同一秒里会出现两行几乎一字不差：
+ * 一行标「用户派发」、一行标「派发」，看着像日志重复打印了一遍。
+ * 落点信息本来也没丢：指令行自己就带 projectName，前端还会补上落点与依据。
+ *
+ * 只吸收**每条指令之后的第一次**起跑，不是吸收这个任务的所有起跑：
+ * 同一个任务被手动重跑时，后面那些派发行没有指令与之对应，抹掉就会出现
+ * 「连着两条完成，却找不到第二次是从哪儿开始的」。
+ *
+ * 手动点执行产生的 job（没有对应指令）一概不动 —— 那种情况下派发行是**唯一**
+ * 能说明"它是什么时候跑起来的"的记录。
+ */
+function absorbInstructionDispatches(rows) {
+  const startsByTask = new Map();
+  for (const r of rows) {
+    if (r.kind !== 'dispatch' || !r.taskId) continue;
+    if (!startsByTask.has(r.taskId)) startsByTask.set(r.taskId, []);
+    startsByTask.get(r.taskId).push(r);
+  }
+  for (const list of startsByTask.values()) {
+    list.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+  }
+
+  const absorbed = new Set();
+  for (const r of rows) {
+    if (r.kind !== 'user' || !r.taskId || !r.at) continue;
+    const start = (startsByTask.get(r.taskId) || []).find(
+      x => !absorbed.has(x.id) && String(x.at || '') >= String(r.at)
+    );
+    if (start) absorbed.add(start.id);
+  }
+  return absorbed.size ? rows.filter(r => !absorbed.has(r.id)) : rows;
 }

@@ -70,6 +70,7 @@ import { useToolsStore } from '@stores/toolsStore'
 import { useMonitorStore } from '@stores/monitorStore'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { useThemeObserver } from '@/composables/useThemeObserver'
+import { useTaskNotifier } from '@/composables/useTaskNotifier'
 
 const configInfo = ref('')
 // 添加组件实例类型
@@ -104,6 +105,11 @@ function stopHeaderMonitor() {
     monitorTimer = null
   }
 }
+
+// 任务执行结束提示：独立订阅一条 workbench SSE（不依赖是否打开工作台视图），
+// 只把「跑着 → 结束」的跃迁翻译成系统通知 / 应用内提示。
+// 开关在 设置 → 通用设置 → 任务完成提示（默认关），每次事件实时读取。
+const taskNotifier = useTaskNotifier()
 
 // 添加初始化完成状态
 const initCompleted = ref(false)
@@ -163,6 +169,9 @@ onMounted(async () => {
 
   // 启动 header 右侧 CPU/内存监控轮询（全局常驻，不依赖是否打开系统监控面板）
   startHeaderMonitor()
+
+  // 启动任务结束提示的 SSE 订阅（同样全局常驻：任务跑完时用户多半不在工作台视图）
+  taskNotifier.start()
 
   try {
     // 并行加载配置和目录信息
@@ -238,6 +247,9 @@ onBeforeUnmount(() => {
 
   // 停止 header CPU/内存监控轮询
   stopHeaderMonitor()
+
+  // 断开任务结束提示的 SSE 订阅（停掉后不再自动重连）
+  taskNotifier.stop()
 
   // 主题 observer 由 useThemeObserver 自动清理
 

@@ -1851,6 +1851,7 @@ const simpleAssistantAvatar = computed(() => avatarForExecutor(lastSimpleJob.val
                     :assistant-avatar="simpleAssistantAvatar"
                     :show-avatar="true"
                     :theme="configStore.theme"
+                    :tool-calls-config="{ group: true, collapseThreshold: 2 }"
                     class="wb-simple-chat"
                   />
                   <!-- 终态控件 -->

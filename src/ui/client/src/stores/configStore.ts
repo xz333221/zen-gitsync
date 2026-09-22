@@ -196,6 +196,9 @@ export const useConfigStore = defineStore('config', () => {
   // 工作台任务执行器默认值（全局配置）：claude | opencode。
   // 执行按钮旁的临时切换不存这里——那一份在 utils/taskExecutor.ts 的 localStorage 里。
   const taskExecutor = ref<'claude' | 'opencode'>('claude')
+  // 任务执行结束时是否提示（全局配置）。默认关：浏览器通知属于"会被打扰"的能力，
+  // 得用户主动开（开启那一刻顺带申请通知权限，见 GitGlobalSettingsDialog）。
+  const notifyOnTaskDone = ref(false)
 
   // ============================================================
   // UI 状态（持久化到 ~/.zen-gitsync/config.json 的顶层 ui 字段）
@@ -437,6 +440,10 @@ export const useConfigStore = defineStore('config', () => {
       // 加载工作台任务执行器默认值（后端已规范化为 claude | opencode）
       if (configData.taskExecutor === 'claude' || configData.taskExecutor === 'opencode') {
         taskExecutor.value = configData.taskExecutor
+      }
+      // 任务执行结束提示开关（缺省 false —— 老配置里没有这个字段）
+      if (typeof configData.notifyOnTaskDone === 'boolean') {
+        notifyOnTaskDone.value = configData.notifyOnTaskDone
       }
 
       // 加载通用设置
@@ -1335,7 +1342,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   // 保存通用设置
-  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: 'claude' | 'opencode' }) {
+  async function saveGeneralSettings(settings: { theme?: 'light' | 'dark' | 'auto', locale?: SupportLocale, taskExecutor?: 'claude' | 'opencode', notifyOnTaskDone?: boolean }) {
     try {
       const response = await fetch('/api/config/save-general-settings', {
         method: 'POST',
@@ -1361,6 +1368,9 @@ export const useConfigStore = defineStore('config', () => {
         if (settings.taskExecutor === 'claude' || settings.taskExecutor === 'opencode') {
           taskExecutor.value = settings.taskExecutor
         }
+        if (typeof settings.notifyOnTaskDone === 'boolean') {
+          notifyOnTaskDone.value = settings.notifyOnTaskDone
+        }
         return true
       } else {
         ElMessage.error(`保存通用设置失败: ${result.error}`)
@@ -1377,6 +1387,7 @@ export const useConfigStore = defineStore('config', () => {
     models,
     aiMaxToolIterations,
     taskExecutor,
+    notifyOnTaskDone,
     defaultCommitMessage,
     descriptionTemplates,
     scopeTemplates,
