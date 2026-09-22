@@ -286,12 +286,12 @@ describe('RecentDirectoriesList.vue 「刷新全部」', () => {
     expect(done.text()).toContain('刷新全部')
   })
 
-  test('RCL-07: 并发上限 3 —— 不能把十几个仓库一次性全放出去', async () => {
+  test('RCL-07: 并发上限 6 —— 不能把十几个仓库一次性全放出去', async () => {
     let active = 0
     let peak = 0
     const gates = new Map<string, ReturnType<typeof deferred>>()
     setupFetch({
-      dirs: Array.from({ length: 7 }, (_, i) => ({ path: `D:\\p${i}`, exists: true })),
+      dirs: Array.from({ length: 12 }, (_, i) => ({ path: `D:\\p${i}`, exists: true })),
       onFetch: (path) => {
         active += 1
         peak = Math.max(peak, active)
@@ -309,11 +309,11 @@ describe('RecentDirectoriesList.vue 「刷新全部」', () => {
     await w.find('button.dir-list__refresh').trigger('click')
     await flushAll()
 
-    expect(peak).toBe(3)
-    expect(gates.size).toBe(3)
+    expect(peak).toBe(6)
+    expect(gates.size).toBe(6)
 
     // 放完剩下的（每放行一个就补一个，所以边放边收集）
-    for (let i = 0; i < 20 && gates.size > 0; i += 1) {
+    for (let i = 0; i < 40 && gates.size > 0; i += 1) {
       const [path, gate] = [...gates.entries()][0]
       gates.delete(path)
       gate.resolve({ status: 'ok', state: gitState() })
@@ -321,9 +321,9 @@ describe('RecentDirectoriesList.vue 「刷新全部」', () => {
     }
     await flushAll()
 
-    expect(peak).toBe(3)
+    expect(peak).toBe(6)
     expect(ElMessage).toHaveBeenCalledWith({
-      message: '@13D1C:刷新完成：成功 7 · 跳过 0 · 失败 0',
+      message: '@13D1C:刷新完成：成功 12 · 跳过 0 · 失败 0',
       type: 'success',
     })
   })

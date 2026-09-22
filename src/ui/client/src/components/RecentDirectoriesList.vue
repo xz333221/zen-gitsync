@@ -78,9 +78,12 @@ interface DirectoryFetchResult {
 /**
  * 「刷新全部」的并发数。
  * 串行要等十几个网络往返（每个几秒），并发全开又会互相抢网络、更容易撞出
- * 一堆凭据提示；3 是"总时长压到 1/3"与"别把出口打满"之间的折中。
+ * 一堆凭据提示；6 是"列表里的仓库基本一批刷完"与"别把出口打满"之间的折中 ——
+ * 列表通常十来个目录、其中还有几个是非仓库（只跑一次本地 git remote 就跳过），
+ * 6 路能把真正联网的那批压到 1–2 轮。
+ * 再往上调收益就很小了：瓶颈是单个仓库自己的 fetch 速度，不是并发度。
  */
-const REFRESH_CONCURRENCY = 3;
+const REFRESH_CONCURRENCY = 6;
 
 const props = withDefaults(defineProps<{
   /** open:点击即新标签页打开 | pick:点击上抛 select 事件,由父组件决定(弹窗里是回填输入框) */
