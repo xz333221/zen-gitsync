@@ -184,6 +184,8 @@ export interface BoardTask {
   attachmentCount: number
   runningJobs: number
   lastJobStatus: string | null
+  /** 最近一条 job 的结束时间（= 这张卡片跑完的时刻），从没执行过时为 null */
+  lastJobEndedAt: string | null
   createdAt: string | null
   updatedAt: string | null
 }

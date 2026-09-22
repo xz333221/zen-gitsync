@@ -85,8 +85,36 @@ const filtered = computed(() => {
 })
 
 const columns = computed(() =>
-  COLUMNS.map(c => ({ ...c, tasks: filtered.value.filter(t => t.column === c.key) }))
+  COLUMNS.map(c =>
+    c.key === 'done'
+      ? { ...c, tasks: filtered.value.filter(t => t.column === c.key).sort(byDoneAtDesc) }
+      : { ...c, tasks: filtered.value.filter(t => t.column === c.key) }
+  )
 )
+
+/**
+ * 「已完成」列要回答的是"我刚干完的是什么"，所以按**完成时间**倒序，最新完成的在最上边。
+ * 另两列不动：待处理/进行中沿用 tasks.json 的顺序（= 创建顺序），那里"先来后到"更有意义。
+ *
+ * 排序键刻意和卡片上显示的时间是同一个值（见 cardTime）——
+ * 拿 A 排、显示 B 的话，用户看到的会是一列时间乱跳的卡片，看着就像没排过。
+ * 回退链：最近一条 job 的结束时间 → updatedAt → createdAt。
+ * 需要回退是因为复杂任务可以手动把子任务全勾成 done（一条 job 都没有），
+ * 这种任务的"完成时刻"只能退到它最后一次被改动的时刻。
+ */
+function doneAt(t: BoardTask): string {
+  return String(t.lastJobEndedAt || t.updatedAt || t.createdAt || '')
+}
+
+function byDoneAtDesc(a: BoardTask, b: BoardTask): number {
+  // ISO 字符串直接字典序比较即可（与后端 laterOf 同一口径）
+  return doneAt(b).localeCompare(doneAt(a))
+}
+
+/** 卡片右上角的时间：已完成列给完成时间，其余列给最后变动时间 */
+function cardTime(t: BoardTask): string {
+  return t.column === 'done' ? doneAt(t) : (t.updatedAt || t.createdAt || '')
+}
 
 /**
  * 列轨道数跟着列数走。
@@ -183,7 +211,7 @@ function hasError(t: BoardTask): boolean {
               <span v-if="t.subtaskErrorCount > 0" class="kb-card__error">
                 {{ $t('@WORKBENCH:{n} 个子任务报错', { n: t.subtaskErrorCount }) }}
               </span>
-              <span class="kb-card__time">{{ relativeTimeFromIso(t.updatedAt || t.createdAt) }}</span>
+              <span class="kb-card__time">{{ relativeTimeFromIso(cardTime(t)) }}</span>
             </div>
 
             <p class="kb-card__title" :title="cardTitle(t)">{{ cardTitle(t) || $t('@WORKBENCH:未命名任务') }}</p>

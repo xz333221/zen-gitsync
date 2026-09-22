@@ -332,6 +332,12 @@ export function decorateTaskForBoard(task, jobsForTask = []) {
     attachmentCount: Array.isArray(task.attachments) ? task.attachments.length : 0,
     runningJobs: jobs.filter(j => j && (j.status === 'running' || j.status === 'pending')).length,
     lastJobStatus: last ? last.status : null,
+    // 最近一条 job 的结束时间 = 这张卡片"跑完"的时刻。
+    // 看板的「已完成」列要按完成时间倒序排（最新完成的在最上边），而 updatedAt 撑不起这个排序：
+    // 简单任务的执行完成只写 jobs.json，tasks.json 里的 updatedAt 一直停在创建时间
+    //（见 taskRunner.persistTaskAfterRun —— 它只有复杂任务才走），
+    // 于是十几张卡片的时间会全是创建时刻，"最新完成的"根本排不出来。
+    lastJobEndedAt: last ? (last.endedAt || last.startedAt || null) : null,
     createdAt: task.createdAt || null,
     updatedAt: task.updatedAt || null,
   };

@@ -215,6 +215,29 @@ test('decorateTaskForBoard: 只回卡片需要的字段', () => {
   assert.equal(card.subtaskErrorCount, 1);
   assert.equal(card.attachmentCount, 1);
   assert.equal(card.runningJobs, 0);
+  // 没跑过就没有完成时间——看板「已完成」列的排序靠它，空值必须显式是 null
+  // 而不是 undefined（前端 doneAt 的回退链要能一路退到 updatedAt）
+  assert.equal(card.lastJobEndedAt, null);
+});
+
+test('decorateTaskForBoard: lastJobEndedAt 取最近一条 job 的结束时间（已完成列排序用）', () => {
+  const jobs = [
+    job('j1', 't1', 'done', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'),
+    job('j2', 't1', 'done', '2026-01-03T00:00:00Z', '2026-01-03T00:20:00Z'),
+    job('j3', 't1', 'error', '2026-01-02T00:00:00Z', '2026-01-02T00:05:00Z'),
+  ];
+  const base = { id: 't1', title: '', desc: '', subtasks: [], createdAt: '2025-12-31T00:00:00Z' };
+
+  // 只有 j2 是"最近"的，即使它的结束时间排在 startedAt 序里也是最后
+  assert.equal(decorateTaskForBoard(base, jobs).lastJobEndedAt, '2026-01-03T00:20:00Z');
+
+  // 简单任务执行完成不写 tasks.json 的 updatedAt，所以完成时间只能由 job 给——
+  // 这条断言守的就是"卡片时间不能退化成创建时间"这个坑
+  assert.equal(decorateTaskForBoard(base, jobs).updatedAt, null);
+
+  // 还在跑（没有 endedAt）时退到 startedAt，卡片至少有个时间可显示
+  const running = [job('j9', 't1', 'running', '2026-02-01T00:00:00Z')];
+  assert.equal(decorateTaskForBoard(base, running).lastJobEndedAt, '2026-02-01T00:00:00Z');
 });
 
 // ── 编排状态与活动流 ────────────────────────────────────────────────
@@ -256,6 +279,53 @@ test('buildActivityFeed: job 起止合成两条记录，与人类指令一起按
   assert.equal(feed[1].projectName, 'proj-a');
   assert.equal(feed[2].pid, 123);
   assert.equal(feed[0].instructionStatus, 'accepted');
+});
+
+test('buildActivityFeed: 指令带起来的起跑并进指令行，不再重复出一遍「派发」', () => {
+  const jobs = [{
+    id: 'j1', taskId: 't1', status: 'done',
+    startedAt: '2026-01-01T00:00:01Z', endedAt: '2026-01-01T00:05:00Z',
+  }];
+  // 任务标题就是指令首行，所以派发行和指令行本来长得一模一样
+  const tasks = [{ id: 't1', title: '把这些重构一下', projectPath: 'D:\\ws\\proj-a', subtasks: [] }];
+  const instructions = [{
+    id: 'i1', text: '把这些重构一下', taskId: 't1', projectPath: 'D:\\ws\\proj-a',
+    at: '2026-01-01T00:00:00Z', status: 'accepted',
+  }];
+
+  const feed = buildActivityFeed({ jobs, tasks, instructions });
+  assert.deepEqual(feed.map(r => r.kind), ['done', 'user']);
+  // 落点没丢：指令行自己带着项目名，前端据此渲染「落点「proj-a」」
+  assert.equal(feed[1].projectName, 'proj-a');
+});
+
+test('buildActivityFeed: 只吸收指令后的首次起跑，手动重跑仍保留派发行', () => {
+  const jobs = [
+    { id: 'j1', taskId: 't1', status: 'done', startedAt: '2026-01-01T00:00:01Z', endedAt: '2026-01-01T00:05:00Z' },
+    { id: 'j2', taskId: 't1', status: 'done', startedAt: '2026-01-01T00:10:00Z', endedAt: '2026-01-01T00:15:00Z' },
+  ];
+  const tasks = [{ id: 't1', title: '跑一下', projectPath: 'D:\\ws\\proj-a', subtasks: [] }];
+  const instructions = [{
+    id: 'i1', text: '跑一下', taskId: 't1', projectPath: 'D:\\ws\\proj-a',
+    at: '2026-01-01T00:00:00Z', status: 'accepted',
+  }];
+
+  const feed = buildActivityFeed({ jobs, tasks, instructions });
+  assert.deepEqual(feed.map(r => r.kind), ['done', 'dispatch', 'done', 'user']);
+  assert.equal(feed[1].jobId, 'j2'); // 留下的是第二次（重跑）那次
+});
+
+test('buildActivityFeed: 指令还没跑起来时，起跑行照旧保留给别的 job', () => {
+  // 指令建了任务但没执行（调度暂停）——此时该任务的任何起跑都不是它带起来的
+  const jobs = [{ id: 'j1', taskId: 't1', status: 'done', startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:05:00Z' }];
+  const tasks = [{ id: 't1', title: '手跑的', projectPath: 'D:\\a', subtasks: [] }];
+  const instructions = [{
+    id: 'i1', text: '手跑的', taskId: 't1', projectPath: 'D:\\a',
+    at: '2026-01-01T00:20:00Z', status: 'created',
+  }];
+
+  const feed = buildActivityFeed({ jobs, tasks, instructions });
+  assert.deepEqual(feed.map(r => r.kind), ['user', 'done', 'dispatch']);
 });
 
 test('buildActivityFeed: 失败与取消分别落成 error / cancelled', () => {
