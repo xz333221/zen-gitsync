@@ -37,7 +37,7 @@
 // 弹窗重开(它有自己的 RecentDirectoriesSummary 实例)就会重新问一次模型。
 // 详见 utils/directorySummaryCache.ts 的文件头。
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { MagicStick, Refresh, Warning } from "@element-plus/icons-vue";
+import { Refresh, Warning } from "@element-plus/icons-vue";
 import { $t } from "@/lang/static";
 import { useConfigStore } from "@stores/configStore";
 import { dropDirectorySummary, pendingDirectorySummary, readDirectorySummary, trackPendingDirectorySummary, writeDirectorySummary } from "@/utils/directorySummaryCache";
@@ -343,7 +343,6 @@ const bodyText = computed(() => {
   >
     <!-- 标题行只在"有 AI 解读"时出现;没配模型时它就是一段说明文字,不需要标题 -->
     <header v-if="hasModel" class="dir-summary__head">
-      <el-icon class="dir-summary__badge" aria-hidden="true"><MagicStick /></el-icon>
       <span class="dir-summary__title">{{ $t('@13D1C:AI 项目状态解读') }}</span>
       <button
         type="button"
@@ -379,13 +378,12 @@ const bodyText = computed(() => {
 
 <style scoped>
 /* 说明块:列表下方一块"抬头可见、不抢焦点"的浅色条 ——
-   用左侧一道品牌色竖线表明这是"对上面这批卡片的解读",而不是又一张卡片。 */
+   靠浅色底与四周同宽的细边和上面的卡片区分开,不用左侧色条抢注意力。 */
 .dir-summary {
   flex-shrink: 0;
   margin-top: var(--spacing-base);
   padding: var(--spacing-base) var(--spacing-md);
   border: 1px solid var(--border-color-light);
-  border-left: 3px solid var(--border-color-light);
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
   /* 与列表根一致:截断 Element Plus 表单控件的行高继承(见 RecentDirectoriesList) */
@@ -395,8 +393,8 @@ const bodyText = computed(() => {
 }
 /* 有 AI 解读时换成品牌色系:同一块地方,内容从"说明"升级成"解读" */
 .dir-summary.is-ai {
-  border-left-color: var(--tint-primary-45);
-  background: var(--tint-primary-04);
+  border-color: var(--tint-primary-22);
+  background: var(--tint-primary-06);
 }
 .dir-summary--bare {
   margin-top: var(--spacing-sm);
@@ -407,11 +405,6 @@ const bodyText = computed(() => {
   align-items: center;
   gap: 6px;
   margin-bottom: var(--spacing-xs);
-}
-.dir-summary__badge {
-  flex-shrink: 0;
-  font-size: 14px;
-  color: var(--color-primary);
 }
 .dir-summary__title {
   font-size: var(--font-size-sm);
