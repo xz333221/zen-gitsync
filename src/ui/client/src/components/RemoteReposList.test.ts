@@ -309,6 +309,111 @@ describe('RemoteReposList.vue', () => {
     expect(cardNames(w)).toEqual(['beta', 'Alpha', 'gamma'])
   })
 
+  // ── 分组:同一工作空间(owner)下的仓库收拢在一起 ───────────────────────
+  //   用户实测反馈:纯按时间平铺时,同一个空间下的仓库被打散在整屏里 ——
+  //   空间下只有三五个仓库,想回答"我这个空间下都有哪些项目"只能靠肉眼在几十张卡里捞。
+
+  /** 两个空间各两个仓库:pushed 序与名称序的组间先后正好相反,
+   *  这样"组间顺序也跟随排序规则"才验得出来(同序的话切换前后一样,断言等于没断)。
+   *  描述留空 —— 这样"第二行该显示什么"的断言不会被描述挡在前面。 */
+  const twoWorkspaces = () => [
+    repo({ name: 'zzz-old', fullName: 'zzz/zzz-old', description: '', pushedAt: '2026-09-10T12:00:00Z' }),
+    repo({ name: 'zzz-new', fullName: 'zzz/zzz-new', description: '', pushedAt: '2026-09-20T12:00:00Z' }),
+    repo({ name: 'aaa-new', fullName: 'aaa/aaa-new', description: '', pushedAt: '2026-09-15T12:00:00Z' }),
+    repo({ name: 'aaa-old', fullName: 'aaa/aaa-old', description: '', pushedAt: '2026-09-01T12:00:00Z' }),
+  ]
+
+  const groupOwners = (w: { findAll: (s: string) => Array<{ text: () => string }> }) =>
+    w.findAll('.repo-group__owner').map((el) => el.text())
+
+  test('默认按工作空间分组:同一 owner 的仓库连在一起,组头写明空间名与数量', async () => {
+    stubFetch([payload({ repos: twoWorkspaces() })])
+    const w = mount()
+    await flushAll()
+
+    // 组间顺序 = 组内排最前的那个仓库的位次:zzz 组有 09-20 的推送 → 整组排前面
+    expect(cardNames(w)).toEqual(['zzz-new', 'zzz-old', 'aaa-new', 'aaa-old'])
+    expect(groupOwners(w)).toEqual(['zzz', 'aaa'])
+    expect(w.findAll('.repo-group__count').map((el) => el.text())).toEqual(['2', '2'])
+    // 顺序对还不够 —— 那也可能是"恰好排成这样"。同一个空间必须落在同一个容器里,
+    // 分组容器本身才是承诺(改回平铺而顺序碰巧一致时,这条会碎)
+    expect(w.findAll('.repo-group__grid')).toHaveLength(2)
+  })
+
+  test('切换排序:组间顺序也跟随排序规则,不只是组内重排', async () => {
+    stubFetch([payload({ repos: twoWorkspaces() })])
+    const w = mount()
+    await flushAll()
+
+    await w.find('.repo-list__sort-select').setValue('name')
+    // 名称序下 aaa/... 排在 zzz/... 前面 → 连组带卡整体翻过来
+    expect(cardNames(w)).toEqual(['aaa-new', 'aaa-old', 'zzz-new', 'zzz-old'])
+    expect(groupOwners(w)).toEqual(['aaa', 'zzz'])
+  })
+
+  test('切「不分组」:回到全局排序,组头消失,卡片第二行退回 fullName', async () => {
+    stubFetch([payload({ repos: twoWorkspaces() })])
+    const w = mount()
+    await flushAll()
+
+    await w.find('.repo-list__group-select').setValue('none')
+    // 跨空间按推送时间平铺:zzz-new(09-20) → aaa-new(09-15) → zzz-old(09-10) → aaa-old(09-01)
+    expect(cardNames(w)).toEqual(['zzz-new', 'aaa-new', 'zzz-old', 'aaa-old'])
+    expect(w.findAll('.repo-group__head')).toHaveLength(0)
+    // 没有组头就等于没有"这是哪个空间"的线索,第二行必须把 fullName 还回来
+    expect(w.findAll('.repo-card__name-path').map((el) => el.text()))
+      .toEqual(['zzz/zzz-new', 'aaa/aaa-new', 'zzz/zzz-old', 'aaa/aaa-old'])
+  })
+
+  test('只有一个工作空间时不渲染组头(那时它只是把每张卡片的前缀重复一遍)', async () => {
+    stubFetch([payload({ repos: [repo()] })])
+    const w = mount()
+    await flushAll()
+
+    expect(w.findAll('.repo-card')).toHaveLength(1)
+    expect(w.findAll('.repo-group__head')).toHaveLength(0)
+  })
+
+  test('分组态下的卡片第二行:有描述才渲染,没描述整行不出现', async () => {
+    stubFetch([
+      payload({
+        repos: [
+          repo({ name: 'documented', fullName: 'zzz/documented', description: '有描述的仓库' }),
+          repo({ name: 'bare', fullName: 'aaa/bare', description: '' }),
+        ],
+      }),
+    ])
+    const w = mount()
+    await flushAll()
+
+    const cards = w.findAll('.repo-card')
+    const documented = cards.find((c) => c.find('.repo-card__name-base').text() === 'documented')!
+    const bare = cards.find((c) => c.find('.repo-card__name-base').text() === 'bare')!
+    // 空间名已经在组头上,卡片里不再重复 fullName,只留描述
+    expect(documented.find('.repo-card__name-path').text()).toBe('有描述的仓库')
+    expect(bare.find('.repo-card__name-path').exists()).toBe(false)
+  })
+
+  test('搜索命中的仓库照样按空间分组', async () => {
+    stubFetch([
+      payload({
+        repos: [
+          repo({ name: 'book-a', fullName: 'zzz/book-a' }),
+          repo({ name: 'note', fullName: 'aaa/note' }),
+          repo({ name: 'book-b', fullName: 'aaa/book-b' }),
+        ],
+      }),
+    ])
+    const w = mount()
+    await flushAll()
+
+    await w.find('.repo-list__search-input').setValue('book')
+    // 三条仓库的推送时间相同 → 排序退化成名称序,aaa/book-b 在 zzz/book-a 之前
+    expect(cardNames(w)).toEqual(['book-b', 'book-a'])
+    // 命中两个空间各一条,组头仍要写清楚谁是谁
+    expect(groupOwners(w)).toEqual(['aaa', 'zzz'])
+  })
+
   test('卡片第三行:最近推送 / Fork 数 / 非默认分支 / 许可证,没有的项不留占位', async () => {
     stubFetch([
       payload({

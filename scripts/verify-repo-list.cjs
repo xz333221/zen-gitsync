@@ -16,7 +16,15 @@
  *   P6 明暗两套主题下,排序下拉与 option 的底色都必须是**不透明**的
  *      —— 原生下拉弹出层是独立画布,拿 select 自身的 background-color 当底色,
  *      半透明会叠在 UA 浅色兜底上 = 白底弹出层(见 styles/common.scss 的 select option 注释)
- *   P7 卡片高度容得下三行
+ *   P7 卡片高度容得下三行(在「不分组」下量 —— 分组态下没描述的卡片只有两行)
+ *   P8 默认按工作空间分组:同一 owner 的仓库收拢在同一个容器里,组头写明空间名与数量,
+ *      组内顺序仍跟随排序规则,组间顺序 = 组内最靠前的那个仓库的位次;
+ *      只有一个空间时不渲染组头(那时它只是把每张卡片的前缀重复一遍)
+ *
+ * ⚠️ 排序断言(P2 / P4)一律在**不分组**下做:分组会把跨空间的全局顺序按空间收拢,
+ *    在分组态下比全局序列必然对不上 —— 那是分组生效的证据,不是排序坏了。
+ * ⚠️ 分组态下卡片第二行是**描述**(空间名已经在组头上,不再重复 fullName),
+ *    所以拿 fullName 要从卡片的 title 取,不能从第二行取。
  *
  * ⚠️ 写这个脚本时踩的坑:判"不透明"时只匹配了 rgba() 的四段式,
  *    而浅色主题算出来是 `rgb(255, 255, 255)`(三段、本来就不透明)—— 被自己的正则判成 FAIL。
@@ -93,7 +101,63 @@ const byFullName = (a, b) => (a.fullName.toLowerCase() < b.fullName.toLowerCase(
   const sortValue = await page.$eval('.repo-list__sort-select', (e) => e.value)
   check('P1 默认排序 = 最近推送', sortValue === 'pushed', `value=${sortValue}`)
 
-  // ── P2 默认顺序 = pushedAt 倒序 ────────────────────────────────────────
+  // ── P8 分组:同一工作空间(owner)下的仓库收拢在一起 ─────────────────────
+  // 先验:此刻还是默认的分组态(DOM 就是首屏那张)
+  const groupOptions = await page.$$eval('.repo-list__group-select option', (els) => els.map((e) => e.textContent.trim()))
+  check('P8 分组下拉渲染了 2 个选项', groupOptions.length === 2, groupOptions.join(' / '))
+  const groupValue = await page.$eval('.repo-list__group-select', (e) => e.value)
+  check('P8 默认分组 = 按工作空间', groupValue === 'workspace', `value=${groupValue}`)
+
+  const owners = [...new Set(serverOrder.map((r) => r.fullName.split('/')[0]))]
+  const domGroups = await page.$$eval('.repo-group', (sections) => sections.map((s) => ({
+    owner: s.querySelector('.repo-group__owner')?.textContent.trim() ?? '',
+    count: s.querySelector('.repo-group__count')?.textContent.trim() ?? '',
+    // 分组态下卡片第二行是描述,拿 fullName 得从 title(第一行就是)
+    repos: [...s.querySelectorAll('.repo-card')].map((c) => (c.getAttribute('title') || '').split('\n')[0]),
+  })))
+  check('P8 每个空间一个分组', domGroups.length === owners.length,
+    `${domGroups.length} 组 / 数据里 ${owners.length} 个空间`)
+
+  if (owners.length > 1) {
+    // "收拢"的字面含义:一个分组里不能混进别的空间的仓库
+    const mixed = domGroups.filter((g) => g.repos.some((f) => f.split('/')[0] !== g.owner))
+    check('P8 没有跨空间混装的分组', mixed.length === 0, mixed.map((g) => g.owner).join(', '))
+    check('P8 组头数量 = 组内卡片数',
+      domGroups.every((g) => Number(g.count) === g.repos.length),
+      domGroups.map((g) => `${g.owner}:${g.count}/${g.repos.length}`).join(' '))
+  } else {
+    // 只有一个空间时组头是纯噪音,不该出现
+    check('P8 只有一个空间时不渲染组头', domGroups.length === 1 && domGroups[0].owner === '',
+      `owner="${domGroups[0]?.owner}"`)
+  }
+
+  const groupOrderOk = domGroups.every((g) => {
+    const expected = serverOrder
+      .filter((r) => r.fullName.split('/')[0] === g.owner)
+      .sort((a, b) => Date.parse(b.pushedAt || 0) - Date.parse(a.pushedAt || 0) || byFullName(a, b))
+      .map((r) => r.fullName)
+    return JSON.stringify(expected) === JSON.stringify(g.repos)
+  })
+  check('P8 组内顺序 = 最近推送倒序(分组没有打乱组内排序)', groupOrderOk,
+    domGroups.map((g) => `${g.owner}[${g.repos.length}]`).join(' '))
+
+  // 组间顺序 = 组内排最前的那个仓库的位次 —— "最近有推送的空间排前面"
+  const domGroupOwners = domGroups.map((g) => g.owner)
+  const expectedGroupOwners = [...owners].sort((a, b) => {
+    const first = (owner) => {
+      const list = serverOrder.filter((r) => r.fullName.split('/')[0] === owner)
+      return list.sort((x, y) => Date.parse(y.pushedAt || 0) - Date.parse(x.pushedAt || 0) || byFullName(x, y))[0]
+    }
+    const fa = first(a)
+    const fb = first(b)
+    return Date.parse(fb.pushedAt || 0) - Date.parse(fa.pushedAt || 0) || byFullName(fa, fb)
+  })
+  check('P8 组间顺序 = 组内最靠前的仓库的位次', JSON.stringify(domGroupOwners) === JSON.stringify(expectedGroupOwners),
+    domGroupOwners.join(', '))
+
+  // ── P2 默认顺序 = pushedAt 倒序(不分组下比全局序列) ────────────────────
+  await page.selectOption('.repo-list__group-select', 'none')
+  await sleep(300)
   const expectedPushed = [...serverOrder]
     .sort((a, b) => Date.parse(b.pushedAt || 0) - Date.parse(a.pushedAt || 0) || byFullName(a, b))
     .map((r) => r.name)
@@ -171,34 +235,47 @@ const byFullName = (a, b) => (a.fullName.toLowerCase() < b.fullName.toLowerCase(
     }, theme)
     await sleep(200)
     const colors = await page.evaluate(() => {
-      const select = document.querySelector('.repo-list__sort-select')
-      const option = document.querySelector('.repo-list__sort-select option')
-      return {
-        select: getComputedStyle(select).backgroundColor,
-        option: getComputedStyle(option).backgroundColor,
-        optionText: getComputedStyle(option).color,
+      // 两个下拉(分组 / 排序)共用同一条样式规则,但分别取一遍 ——
+      // 哪天分组那个被拆出去单独写样式,这条能立刻发现
+      const pick = (sel) => {
+        const select = document.querySelector(sel)
+        const option = document.querySelector(`${sel} option`)
+        return {
+          select: getComputedStyle(select).backgroundColor,
+          option: getComputedStyle(option).backgroundColor,
+          optionText: getComputedStyle(option).color,
+        }
       }
+      return { sort: pick('.repo-list__sort-select'), group: pick('.repo-list__group-select') }
     })
-    check(`P6 ${theme} 主题:排序下拉底色不透明(弹出层不会叠在白底上)`, isOpaque(colors.select), colors.select)
+    check(`P6 ${theme} 主题:排序下拉底色不透明(弹出层不会叠在白底上)`, isOpaque(colors.sort.select), colors.sort.select)
     check(`P6 ${theme} 主题:option 底色不透明且与文字色不同`,
-      isOpaque(colors.option) && colors.option !== colors.optionText,
-      `option ${colors.option} / 文字 ${colors.optionText}`)
+      isOpaque(colors.sort.option) && colors.sort.option !== colors.sort.optionText,
+      `option ${colors.sort.option} / 文字 ${colors.sort.optionText}`)
+    check(`P6 ${theme} 主题:分组下拉同款底色`,
+      isOpaque(colors.group.select) && isOpaque(colors.group.option),
+      `${colors.group.select} / option ${colors.group.option}`)
   }
   // 只改 DOM 属性,不落盘、不碰用户配置
   await page.evaluate(() => document.documentElement.removeAttribute('data-theme'))
   await sleep(200)
 
-  // ── P7 卡片高度 ────────────────────────────────────────────────────────
+  // ── P7 卡片高度(不分组下量:分组态里没描述的卡片只有两行,量不出三行) ────
   const box = await (await page.$('.repo-card')).boundingBox()
   check('P7 卡片高度容得下三行', box.height >= 56, `${box.height}px`)
 
   // ── 截图存证 ───────────────────────────────────────────────────────────
   const shotDir = process.env.ZEN_SHOT_DIR || os.tmpdir()
+  await page.selectOption('.repo-list__group-select', 'workspace')
+  await sleep(400)
+  await page.screenshot({ path: path.join(shotDir, 'repolist-grouped.png') })
+  await page.selectOption('.repo-list__group-select', 'none')
+  await sleep(300)
   await page.screenshot({ path: path.join(shotDir, 'repolist-sorted.png') })
   await page.fill('.repo-list__search-input', 'book')
   await sleep(400)
   await page.screenshot({ path: path.join(shotDir, 'repolist-search.png') })
-  console.log(`  截图: ${path.join(shotDir, 'repolist-sorted.png')} / repolist-search.png`)
+  console.log(`  截图: ${path.join(shotDir, 'repolist-grouped.png')} / repolist-sorted.png / repolist-search.png`)
   check('  页面无 console error', consoleErrors.length === 0, consoleErrors.slice(0, 2).join(' | '))
 
   await browser.close()

@@ -124,6 +124,24 @@ const SORT_OPTIONS: Array<{ value: SortKey, labelKey: string }> = [
   { value: 'name', labelKey: '@REPOLIST:仓库名' },
 ]
 
+/**
+ * 分组维度。
+ *
+ *  为什么需要:纯按时间平铺时,**同一个空间下的仓库会被打散在整屏里** ——
+ *  账号下有 sync_space / flowdash / xz_web 好几个空间,每个空间又只有三五个仓库,
+ *  想回答"我这个空间下都有哪些项目"得靠肉眼在几十张卡里捞(用户实测反馈)。
+ *
+ *  默认按工作空间分组。组间顺序跟随当前排序规则(即"最近有推送的空间排前面"),
+ *  组内也是同一条规则 —— 分组不改变"谁更新",只把同一空间的收拢到一起。
+ *  不想被分组打断"我最近在动哪个项目"的连贯视角时,切回不分组。
+ */
+type GroupKey = 'workspace' | 'none'
+
+const GROUP_OPTIONS: Array<{ value: GroupKey, labelKey: string }> = [
+  { value: 'workspace', labelKey: '@REPOLIST:按工作空间' },
+  { value: 'none', labelKey: '@REPOLIST:不分组' },
+]
+
 /** 默认分支是这两个之一就不在卡片上占一行 —— 满屏 "main" 是没有信息量的噪音
  *  (与「★0 不显示」同一条原则)。 */
 const COMMON_BRANCHES = ['main', 'master']
@@ -191,6 +209,7 @@ const isLoading = ref(!cached)
 const loadError = ref('')
 const searchQuery = ref('')
 const sortKey = ref<SortKey>('pushed')
+const groupKey = ref<GroupKey>('workspace')
 
 // 一键安装:点完之后进入等待态并开始轮询
 const isInstalling = ref(false)
@@ -285,6 +304,64 @@ const items = computed(() => {
   })
   return sorted
 })
+
+/** 一个分组(一个工作空间下的仓库) */
+interface RepoGroup {
+  /** 归一化后的分组键(小写),只用于 v-for 的 key */
+  key: string
+  /** 取第一次出现的原样写法展示 —— 空间名在平台上是大小写敏感的 */
+  owner: string
+  repos: RemoteRepo[]
+}
+
+/**
+ * 从 `owner/name` 里取 owner(gitee 叫「空间/组织」,github 叫 owner)。
+ *
+ * 拿不到 `/` 的异常数据不硬编一个假空间名,而是**退回全名当键** ——
+ * 那样每个异常仓库自成一组,至少不会把无关的仓库塞进同一个组里。
+ */
+function ownerOf(repo: RemoteRepo) {
+  const slash = repo.fullName.indexOf('/')
+  return slash > 0 ? repo.fullName.slice(0, slash) : repo.fullName
+}
+
+/**
+ * 分组结果。输入是**已经过滤 + 排好序**的 items,所以:
+ *   - 搜索命中的仓库照样按空间分组(搜 "book" 也想看清它属于哪个空间)
+ *   - 组内顺序 = 当前排序规则;组间顺序 = 组内排最前的那个仓库的位次
+ *     (Map 保序),也就是"最近活跃的空间排前面",和组内用的是同一条规则
+ */
+const groups = computed<RepoGroup[]>(() => {
+  const list = items.value
+  if (groupKey.value === 'none') return [{ key: '__all__', owner: '', repos: list }]
+
+  const byOwner = new Map<string, RepoGroup>()
+  for (const repo of list) {
+    const owner = ownerOf(repo)
+    const key = owner.toLowerCase()
+    const group = byOwner.get(key)
+    if (group) group.repos.push(repo)
+    else byOwner.set(key, { key, owner, repos: [repo] })
+  }
+  return [...byOwner.values()]
+})
+
+/** 只有一个组时不渲染组头 —— 组头是用来**分开不同空间**的,只有一组时
+ *  它只是把每张卡片的前缀重复一遍(不分组时同理恒为 false)。 */
+const showGroupHeaders = computed(() => groups.value.length > 1)
+
+/**
+ * 卡片第二行。
+ *
+ * 分组态下组头已经写明空间名,再逐张卡重复 `owner/name` 是纯噪音 ——
+ * 这时只显示描述,没描述就整行不渲染(与"没有信息的项不留占位"同一条原则)。
+ * 不分组 / 只有一个组时保持原样,退回 fullName 兜底 —— 那种情况下
+ * 第二行仍是"这张卡是谁"的唯一线索。
+ */
+function repoSubtitle(repo: RemoteRepo) {
+  if (showGroupHeaders.value) return repo.description || ''
+  return repo.description || repo.fullName
+}
 
 /**
  * 卡片第三行的元信息:最近推送 / Fork 数 / 默认分支 / 许可证。
@@ -702,11 +779,23 @@ onBeforeUnmount(stopPolling)
           >×</button>
         </div>
 
+        <!-- 分组。同款原生 select,与排序并排 —— 两个都是"换个看法"的开关,
+             同一行里读起来是一组控件。放排序**左边**:排序是最常用的那个,
+             位置保持不动,不会因为多了个分组而被挤走。 -->
+        <label class="repo-list__control">
+          <span class="repo-list__control-label">{{ $t('@REPOLIST:分组') }}</span>
+          <select v-model="groupKey" class="repo-list__group-select" :aria-label="$t('@REPOLIST:分组方式')">
+            <option v-for="option in GROUP_OPTIONS" :key="option.value" :value="option.value">
+              {{ $t(option.labelKey) }}
+            </option>
+          </select>
+        </label>
+
         <!-- 排序。用原生 select 而不是 el-select:同一个面板里的搜索框就是原生 input,
              两处控件高度/边框/圆角可以完全对齐;原生下拉也不会在窄宽度下被 popper 挤歪。
              (深色主题下 option 的可读性由 styles/common.scss 的 `select option` 规则兜底。) -->
-        <label class="repo-list__sort">
-          <span class="repo-list__sort-label">{{ $t('@REPOLIST:排序') }}</span>
+        <label class="repo-list__control">
+          <span class="repo-list__control-label">{{ $t('@REPOLIST:排序') }}</span>
           <select v-model="sortKey" class="repo-list__sort-select" :aria-label="$t('@REPOLIST:排序方式')">
             <option v-for="option in SORT_OPTIONS" :key="option.value" :value="option.value">
               {{ $t(option.labelKey) }}
@@ -735,55 +824,66 @@ onBeforeUnmount(stopPolling)
         </template>
       </div>
 
-      <ul v-else class="repo-list__items" :style="{ '--repo-card-min': CARD_MIN_WIDTH }" :aria-label="title">
-        <li v-for="repo in items" :key="repo.fullName" class="repo-card" :title="repoTooltip(repo)">
-          <button
-            type="button"
-            class="repo-card__btn"
-            :aria-label="$t('@REPOLIST:在浏览器中打开 {name}', { name: repo.fullName })"
-            @click="openUrl(repo.url)"
-          >
-            <el-icon class="repo-card__icon" aria-hidden="true"><Connection /></el-icon>
-            <span class="repo-card__name">
-              <span class="repo-card__name-base">{{ repo.name }}</span>
-              <span class="repo-card__name-path">
-                {{ repo.description || repo.fullName }}
+      <div v-else class="repo-list__items" :style="{ '--repo-card-min': CARD_MIN_WIDTH }" :aria-label="title">
+        <section v-for="group in groups" :key="group.key" class="repo-group" :aria-label="group.owner || title">
+          <!-- 组头:空间名 + 该空间下的仓库数。只有一个组(含"不分组")时整块不渲染 ——
+               那时它只是把每张卡片的前缀重复一遍。 -->
+          <div v-if="showGroupHeaders" class="repo-group__head">
+            <span class="repo-group__owner">{{ group.owner }}</span>
+            <span class="repo-group__count">{{ group.repos.length }}</span>
+          </div>
+
+          <ul class="repo-group__grid">
+            <li v-for="repo in group.repos" :key="repo.fullName" class="repo-card" :title="repoTooltip(repo)">
+              <button
+                type="button"
+                class="repo-card__btn"
+                :aria-label="$t('@REPOLIST:在浏览器中打开 {name}', { name: repo.fullName })"
+                @click="openUrl(repo.url)"
+              >
+                <el-icon class="repo-card__icon" aria-hidden="true"><Connection /></el-icon>
+                <span class="repo-card__name">
+                  <span class="repo-card__name-base">{{ repo.name }}</span>
+                  <!-- 第二行:描述。分组态下空间名已经在组头上,这里不再重复 fullName,
+                       没描述就整行不渲染;不分组时退回 fullName 兜底 -->
+                  <span v-if="repoSubtitle(repo)" class="repo-card__name-path">{{ repoSubtitle(repo) }}</span>
+                  <!-- 第三行:最近推送 / Fork / 默认分支 / 许可证。全空时整行不渲染 -->
+                  <span v-if="repoMeta(repo)" class="repo-card__meta">{{ repoMeta(repo) }}</span>
+                </span>
+                <span class="repo-card__tags">
+                  <span v-if="repo.isFork" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:Fork') }}</span>
+                  <span v-if="repo.isPrivate" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:私有') }}</span>
+                  <span v-if="repo.language" class="repo-card__tag repo-card__tag--plain">{{ repo.language }}</span>
+                  <!-- 星标只在有人 star 时才出现:满屏 ★0 是没有信息量的噪音 -->
+                  <span v-if="repo.stars > 0" class="repo-card__tag repo-card__tag--star">
+                    <el-icon aria-hidden="true"><Star /></el-icon>{{ repo.stars }}
+                  </span>
+                </span>
+              </button>
+              <span class="repo-card__actions">
+                <button
+                  type="button"
+                  class="repo-card__action"
+                  :title="$t('@REPOLIST:复制仓库地址')"
+                  :aria-label="$t('@REPOLIST:复制仓库地址 {name}', { name: repo.fullName })"
+                  @click.stop="copyText(repo.url, $t('@REPOLIST:仓库地址已复制'))"
+                >
+                  <el-icon aria-hidden="true"><DocumentCopy /></el-icon>
+                </button>
+                <button
+                  type="button"
+                  class="repo-card__action"
+                  :title="$t('@REPOLIST:在浏览器中打开')"
+                  :aria-label="$t('@REPOLIST:在浏览器中打开 {name}', { name: repo.fullName })"
+                  @click.stop="openUrl(repo.url)"
+                >
+                  <el-icon aria-hidden="true"><Link /></el-icon>
+                </button>
               </span>
-              <!-- 第三行:最近推送 / Fork / 默认分支 / 许可证。全空时整行不渲染 -->
-              <span v-if="repoMeta(repo)" class="repo-card__meta">{{ repoMeta(repo) }}</span>
-            </span>
-            <span class="repo-card__tags">
-              <span v-if="repo.isFork" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:Fork') }}</span>
-              <span v-if="repo.isPrivate" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:私有') }}</span>
-              <span v-if="repo.language" class="repo-card__tag repo-card__tag--plain">{{ repo.language }}</span>
-              <!-- 星标只在有人 star 时才出现:满屏 ★0 是没有信息量的噪音 -->
-              <span v-if="repo.stars > 0" class="repo-card__tag repo-card__tag--star">
-                <el-icon aria-hidden="true"><Star /></el-icon>{{ repo.stars }}
-              </span>
-            </span>
-          </button>
-          <span class="repo-card__actions">
-            <button
-              type="button"
-              class="repo-card__action"
-              :title="$t('@REPOLIST:复制仓库地址')"
-              :aria-label="$t('@REPOLIST:复制仓库地址 {name}', { name: repo.fullName })"
-              @click.stop="copyText(repo.url, $t('@REPOLIST:仓库地址已复制'))"
-            >
-              <el-icon aria-hidden="true"><DocumentCopy /></el-icon>
-            </button>
-            <button
-              type="button"
-              class="repo-card__action"
-              :title="$t('@REPOLIST:在浏览器中打开')"
-              :aria-label="$t('@REPOLIST:在浏览器中打开 {name}', { name: repo.fullName })"
-              @click.stop="openUrl(repo.url)"
-            >
-              <el-icon aria-hidden="true"><Link /></el-icon>
-            </button>
-          </span>
-        </li>
-      </ul>
+            </li>
+          </ul>
+        </section>
+      </div>
 
       <p v-if="items.length > 0 && !searchQuery" class="repo-list__footnote">
         <el-icon aria-hidden="true"><CircleCheck /></el-icon>
@@ -1118,7 +1218,7 @@ onBeforeUnmount(stopPolling)
   flex: 1 1 auto;
   min-width: 0;
 }
-.repo-list__sort {
+.repo-list__control {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -1126,7 +1226,10 @@ onBeforeUnmount(stopPolling)
   font-size: 13px;
   color: var(--text-secondary);
 }
-.repo-list__sort-select {
+/* 两个下拉(分组 / 排序)共用一套外观:`__sort-select` 这个名字是历史原因保留的
+   (验收脚本按它取排序下拉),分组那个用 `__group-select`,样式完全一致 */
+.repo-list__sort-select,
+.repo-list__group-select {
   height: 40px; /* 与搜索框同高:一行里两个控件视觉齐平 */
   padding: 0 28px 0 12px;
   border: 1px solid var(--border-color-light);
@@ -1149,10 +1252,12 @@ onBeforeUnmount(stopPolling)
   appearance: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
-.repo-list__sort-select:hover {
+.repo-list__sort-select:hover,
+.repo-list__group-select:hover {
   border-color: var(--color-primary);
 }
-.repo-list__sort-select:focus {
+.repo-list__sort-select:focus,
+.repo-list__group-select:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: var(--focus-ring);
@@ -1241,14 +1346,58 @@ onBeforeUnmount(stopPolling)
   color: var(--color-primary);
 }
 
-/* ── 卡片网格 ─────────────────────────────────────────────────────── */
+/* ── 卡片网格(按工作空间分段) ─────────────────────────────────────── */
+/* 滚动容器本身不再是网格,而是"一叠分组":每个分组是一张独立的卡片网格。
+   分组之间的间距比卡片之间大一档 —— 分组的边界先靠间隔读出来,组头再把它写明。 */
 .repo-list__items {
-  list-style: none;
-  margin: calc(-1 * var(--spacing-xs));
-  padding: var(--spacing-xs);
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  /* 负 margin + 等量 padding:给卡片的 hover 描边留出空间,不让滚动容器把外扩的
+     outline 裁掉(与原来作为 grid 时同一个处理) */
+  margin: calc(-1 * var(--spacing-xs));
+  padding: var(--spacing-xs);
+}
+.repo-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-base);
+}
+/* 组头:空间名 + 该空间下的仓库数,右边拉一条细线到容器边缘 ——
+   一行就把"下面是这一组"的范围画清楚,不用色块或分隔条 */
+.repo-group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 0 2px;
+}
+.repo-group__head::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color-light);
+}
+.repo-group__owner {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+.repo-group__count {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-component-hover);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+.repo-group__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(var(--repo-card-min, 420px), 100%), 1fr));
   align-content: start;
