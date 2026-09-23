@@ -36,8 +36,21 @@ const { $tInterp } = vi.hoisted(() => ({
 
 vi.mock('@/lang/static', () => ({ $t: $tInterp }))
 
+// 目录选择器是模态,单测里不让它真渲染(它自带一堆 DOM 与副作用),
+// 但 props 要留着 —— 「克隆到文件夹」的用例要断言它被打开、且 mode=directory
+vi.mock('local-file-picker/client', () => ({
+  FilePickerModal: {
+    name: 'FilePickerModal',
+    props: ['visible', 'mode', 'theme', 'locale'],
+    emits: ['confirm', 'close'],
+    template: '<div class="fake-file-picker" />',
+  },
+}))
+
 import RemoteReposList from './RemoteReposList.vue'
+import { ElMessage } from 'element-plus'
 import { mountWithSetup } from '@/test-utils/mount'
+import { resetLocalClones } from '@/utils/localClones'
 import { resetRemoteReposCache } from '@/utils/remoteReposCache'
 
 const json = (body: unknown, status = 200) =>
@@ -103,18 +116,35 @@ function repo(overrides: Record<string, unknown> = {}) {
 const cardNames = (w: { findAll: (s: string) => Array<{ text: () => string }> }) =>
   w.findAll('.repo-card__name-base').map((el) => el.text())
 
-/** 按 URL 分派的 fetch mock;/api/remote-repos 的响应取自 remoteQueue(耗尽后复用最后一个) */
-function stubFetch(remoteQueue: Array<Record<string, unknown>>) {
+/** 按 URL 分派的 fetch mock;/api/remote-repos 的响应取自 remoteQueue(耗尽后复用最后一个)。
+ *  localRepos 是 /api/local-repos 的响应(键=本地目录,值=origin),
+ *  传 null 模拟"服务端还没有这个接口"。 */
+function stubFetch(
+  remoteQueue: Array<Record<string, unknown>>,
+  cloneResponse: Record<string, unknown> = { success: true, path: 'C:/tmp/zen-gitsync' },
+  localRepos: Record<string, string> | null = {}
+) {
   let index = 0
   const calls: string[] = []
   const bodies: Array<Record<string, unknown>> = []
   const loginBodies: Array<Record<string, unknown>> = []
+  const cloneBodies: Array<Record<string, unknown>> = []
+  const openBodies: Array<Record<string, unknown>> = []
+  const guiBodies: Array<Record<string, unknown>> = []
   const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any, init: any) => {
     const url = typeof input === 'string' ? input : input.url
     calls.push(url)
     if (url.includes('/api/install-tool')) {
       bodies.push(JSON.parse(init?.body || '{}'))
       return json({ success: true, message: '安装命令已在新终端中启动' })
+    }
+    if (url.includes('/api/open-new-tab-gui')) {
+      guiBodies.push(JSON.parse(init?.body || '{}'))
+      return json({ success: true })
+    }
+    if (url.includes('/api/clone')) {
+      cloneBodies.push(JSON.parse(init?.body || '{}'))
+      return json(cloneResponse)
     }
     // 必须排在 /api/remote-repos 之前:登录接口是它的子路径,顺序写反了
     // 登录请求会被当成列表请求,把轮询队列白吃掉一格。
@@ -127,9 +157,24 @@ function stubFetch(remoteQueue: Array<Record<string, unknown>>) {
       index += 1
       return json(body)
     }
+    if (url.includes('/api/local-repos')) {
+      // null = 模拟"服务端还是旧进程、没有这个接口":SPA 兜底会回一份 HTML,
+      // 前端 JSON.parse 失败 —— 徽标必须安静地缺席,不能把列表带崩
+      if (localRepos === null) {
+        return new Response('<!DOCTYPE html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        })
+      }
+      return json({ success: true, scanning: false, scannedAt: 1, repos: localRepos || {} })
+    }
+    if (url.includes('/api/open_directory')) {
+      openBodies.push(JSON.parse(init?.body || '{}'))
+      return json({ success: true, message: '已在文件管理器中打开目录' })
+    }
     return json({})
   })
-  return { spy, calls, bodies, loginBodies }
+  return { spy, calls, bodies, loginBodies, cloneBodies, openBodies, guiBodies }
 }
 
 function mount(provider: 'github' | 'gitee' = 'github') {
@@ -144,6 +189,8 @@ beforeEach(() => {
   // 前一个用例拉到的 payload 会被后一个用例当成"切回 Tab 的缓存"直接用掉,
   // 断言里那个"应该发出的请求"就永远等不到了。
   resetRemoteReposCache()
+  // 「本地已克隆」的映射同样是模块级缓存(utils/localClones.ts),同一个理由
+  resetLocalClones()
   vi.spyOn(window, 'open').mockImplementation(() => null as any)
 })
 
@@ -718,7 +765,13 @@ describe('RemoteReposList.vue', () => {
   test('后台重拉失败:不动已经画好的列表(一次网络抖动不该把屏换成错误页)', async () => {
     vi.useFakeTimers()
     let round = 0
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+      const url = typeof input === 'string' ? input : input.url
+      // 「已克隆」那次探测与列表无关,单独给个空结果:它不能占下面的轮次计数
+      // (这个 mock 按"第几次调用"决定成功还是失败,混进一次别的请求就串位了)
+      if (url.includes('/api/local-repos')) {
+        return json({ success: true, scanning: false, repos: {} })
+      }
       round += 1
       return round === 1
         ? json(payload({ repos: [repo()] }))
@@ -755,6 +808,20 @@ describe('RemoteReposList.vue', () => {
     expect(calls.filter((u) => u.includes('/api/remote-repos'))).toHaveLength(2)
   })
 
+  test('点「刷新」顺带让服务端重扫本机仓库 —— 在终端里 clone 完回来刷新,徽标才是准的', async () => {
+    // 服务端那份"本机仓库清单"是落盘缓存(TTL 10 分钟),不主动重扫的话,
+    // 用户在外面 clone 完再回来点刷新,卡片上还是缺徽标 —— 看着就像刷新没生效
+    const { calls } = stubFetch([payload({ repos: [repo()] })])
+    const w = mount()
+    await flushAll()
+    calls.length = 0
+
+    await w.find('.repo-list__action').trigger('click')
+    await flushAll()
+
+    expect(calls.filter((u) => u.includes('/api/local-repos/scan'))).toHaveLength(1)
+  })
+
   test('两个平台各存一份:切到 Gitee 再切回来,GitHub 那份还在且不串台', async () => {
     const { calls } = stubFetch([
       payload({ repos: [repo({ name: 'gh-only', fullName: 'xz333221/gh-only' })] }),
@@ -782,5 +849,399 @@ describe('RemoteReposList.vue', () => {
     expect(cardNames(back)).toEqual(['gh-only'])
     await flushAll()
     expect(calls.filter((u) => u.includes('/api/remote-repos'))).toHaveLength(2)
+  })
+
+  // ── 复制地址 ──────────────────────────────────────────────────────────
+  // 操作区里两个复制按钮:HTTPS 复制仓库页地址,SSH 复制 git@ 克隆地址。
+  // SSH 那一份是前端按固定规则拼的(组件里的 toSshUrl),所以这几条用例要同时
+  // 钉住"按钮在不在"和"拼出来的串对不对" —— 只断言按钮存在挡不住拼错。
+
+  /** jsdom 默认没有 navigator.clipboard,装一个可断言的进去 */
+  function stubClipboard() {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    })
+    return writeText
+  }
+
+  test('复制 SSH 地址:GitHub 的网页地址拼成 git@ 形式', async () => {
+    const writeText = stubClipboard()
+    stubFetch([payload({ repos: [repo()] })])
+    const w = mount()
+    await flushAll()
+
+    // 克隆到文件夹 / 复制 HTTPS / 复制 SSH / 在浏览器中打开
+    const actions = w.findAll('.repo-card__action')
+    expect(actions).toHaveLength(4)
+
+    const ssh = actions.find((b) => b.attributes('title') === '复制 SSH 地址')
+    expect(ssh).toBeTruthy()
+    await ssh!.trigger('click')
+    await flushAll()
+
+    expect(writeText).toHaveBeenCalledWith('git@github.com:xz333221/zen-gitsync.git')
+  })
+
+  test('复制 HTTPS 地址:仍然复制仓库页地址', async () => {
+    const writeText = stubClipboard()
+    stubFetch([payload({ repos: [repo()] })])
+    const w = mount()
+    await flushAll()
+
+    const https = w
+      .findAll('.repo-card__action')
+      .find((b) => b.attributes('title') === '复制 HTTPS 地址')
+    expect(https).toBeTruthy()
+    await https!.trigger('click')
+    await flushAll()
+
+    expect(writeText).toHaveBeenCalledWith('https://github.com/xz333221/zen-gitsync')
+  })
+
+  test('Gitee 的地址同样能拼出 SSH(host 跟着地址走,不写死 github.com)', async () => {
+    const writeText = stubClipboard()
+    stubFetch([
+      payload({
+        provider: 'gitee',
+        cli: 'gitee',
+        label: 'Gitee',
+        loginCommand: 'gitee auth login',
+        repos: [
+          repo({
+            name: 'xiangyu-sites',
+            fullName: 'xz_web/xiangyu-sites',
+            url: 'https://gitee.com/xz_web/xiangyu-sites',
+          }),
+        ],
+      }),
+    ])
+    const w = mount('gitee')
+    await flushAll()
+
+    const ssh = w
+      .findAll('.repo-card__action')
+      .find((b) => b.attributes('title') === '复制 SSH 地址')
+    expect(ssh).toBeTruthy()
+    await ssh!.trigger('click')
+    await flushAll()
+
+    expect(writeText).toHaveBeenCalledWith('git@gitee.com:xz_web/xiangyu-sites.git')
+  })
+
+  test('地址不是标准网页形态时不渲染 SSH 按钮 —— 宁可少给一个,也不给一个错的', async () => {
+    stubClipboard()
+    stubFetch([payload({ repos: [repo({ url: '' })] })])
+    const w = mount()
+    await flushAll()
+
+    const titles = w.findAll('.repo-card__action').map((b) => b.attributes('title'))
+    expect(titles).toContain('复制 HTTPS 地址')
+    expect(titles).not.toContain('复制 SSH 地址')
+  })
+
+  // ── 克隆到文件夹 ──────────────────────────────────────────────────────
+  // 三步链路:点按钮开选择器 → 选中父目录 → POST /api/clone。
+  // 重点断言"发出去的 body":地址必须是 SSH、parentDir 必须是用户选的那个目录
+  // —— 这两点错了界面不会有任何异常,只会在几分钟后以超时或"克隆到别处"的形式暴露。
+
+  /** 按 title 找卡片操作按钮 —— 按钮顺序会变,不写死下标 */
+  const actionButton = (w: ReturnType<typeof mount>, title: string) =>
+    w.findAll('.repo-card__action').find((b) => b.attributes('title') === title)
+
+  const pickerOf = (w: ReturnType<typeof mount>) =>
+    w.findComponent({ name: 'FilePickerModal' })
+
+  test('点「克隆到文件夹」打开目录选择器,且是 directory 模式', async () => {
+    stubFetch([payload({ repos: [repo()] })])
+    const w = mount()
+    await flushAll()
+
+    expect(pickerOf(w).props('visible')).toBe(false)
+    expect(pickerOf(w).props('mode')).toBe('directory')
+
+    const cloneBtn = actionButton(w, '克隆到文件夹')
+    expect(cloneBtn).toBeTruthy()
+    await cloneBtn!.trigger('click')
+
+    expect(pickerOf(w).props('visible')).toBe(true)
+  })
+
+  test('选中父目录 → POST /api/clone 带上 SSH 地址与那个目录', async () => {
+    const { calls, cloneBodies, openBodies } = stubFetch([payload({ repos: [repo()] })])
+    const w = mount()
+    await flushAll()
+
+    await actionButton(w, '克隆到文件夹')!.trigger('click')
+    pickerOf(w).vm.$emit('confirm', ['C:/projects'])
+    await flushAll()
+
+    expect(calls).toContain('/api/clone')
+    expect(cloneBodies).toEqual([
+      { url: 'git@github.com:xz333221/zen-gitsync.git', parentDir: 'C:/projects' },
+    ])
+    // 克隆完顺手打开落点文件夹(默认响应里 path=C:/tmp/zen-gitsync)
+    expect(openBodies).toEqual([{ path: 'C:/tmp/zen-gitsync' }])
+    // 选完就关,不留一个悬空的模态
+    expect(pickerOf(w).props('visible')).toBe(false)
+  })
+
+  test('克隆完成后:服务端已登记的新仓库立刻反映到徽标上(不等重扫)', async () => {
+    // 第一次拉快照:本地还没有这个仓库 → 卡片上不该有徽标;
+    // 克隆成功后服务端会就地登记它,前端那趟 force 拉回来 → 徽标当场就亮。
+    // 这条钉的是"克隆完要立刻看到已克隆"这个需求,以及它**不能**靠等下一次
+    // 全盘扫描(十几秒)或 TTL 过期来实现。
+    let localCalls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+      const url = typeof input === 'string' ? input : input.url
+      if (url.includes('/api/local-repos')) {
+        localCalls += 1
+        return json({
+          success: true,
+          scanning: false,
+          repos: localCalls === 1
+            ? {}
+            : { 'C:/projects/zen-gitsync': 'git@github.com:xz333221/zen-gitsync.git' },
+        })
+      }
+      if (url.includes('/api/clone')) return json({ success: true, path: 'C:/projects/zen-gitsync' })
+      if (url.includes('/api/open_directory')) return json({ success: true })
+      return json(payload({ repos: [repo()] }))
+    })
+
+    const w = mount()
+    await flushAll()
+    expect(w.findAll('.repo-card__tag').some((t) => t.text() === '已克隆')).toBe(false)
+
+    await actionButton(w, '克隆到文件夹')!.trigger('click')
+    pickerOf(w).vm.$emit('confirm', ['C:/projects'])
+    await flushAll()
+
+    expect(w.findAll('.repo-card__tag').some((t) => t.text() === '已克隆')).toBe(true)
+  })
+
+  test('克隆失败:请求确实发出去了,按钮不卡在转圈状态', async () => {
+    const { cloneBodies } = stubFetch([payload({ repos: [repo()] })], {
+      success: false,
+      error: '目标文件夹已存在：C:/projects/zen-gitsync',
+    })
+    const w = mount()
+    await flushAll()
+
+    await actionButton(w, '克隆到文件夹')!.trigger('click')
+    pickerOf(w).vm.$emit('confirm', ['C:/projects'])
+    await flushAll()
+
+    expect(cloneBodies).toHaveLength(1)
+    expect(actionButton(w, '克隆到文件夹')!.attributes('disabled')).toBeUndefined()
+  })
+
+  test('取消选择(confirm 没带路径)不发起任何请求', async () => {
+    const { cloneBodies } = stubFetch([payload({ repos: [repo()] })])
+    const w = mount()
+    await flushAll()
+
+    await actionButton(w, '克隆到文件夹')!.trigger('click')
+    pickerOf(w).vm.$emit('confirm', [])
+    await flushAll()
+
+    expect(cloneBodies).toHaveLength(0)
+    expect(pickerOf(w).props('visible')).toBe(false)
+  })
+
+  test('推导不出 SSH 地址的仓库,克隆按钮同样不渲染', async () => {
+    stubFetch([payload({ repos: [repo({ url: '' })] })])
+    const w = mount()
+    await flushAll()
+
+    expect(actionButton(w, '克隆到文件夹')).toBeUndefined()
+  })
+
+  // ── 「已克隆」徽标 ──────────────────────────────────────────────────────
+  // 判据是**地址对上**,不是目录名相同:本地 origin 一般写成 SSH,而列表里给的
+  // 是仓库页地址 —— 两种写法必须能落到同一张卡上(归一化规则见远程仓库的
+  // utils/remoteUrl.ts)。
+  test('本地已有克隆的仓库标出「已克隆」,其余不标', async () => {
+    const { calls } = stubFetch(
+      [
+        payload({
+          repos: [
+            repo(),
+            repo({
+              name: 'file-guard',
+              fullName: 'xz333221/file-guard',
+              description: '文件守卫',
+              url: 'https://github.com/xz333221/file-guard',
+            }),
+          ],
+        }),
+      ],
+      undefined,
+      // 键是本地目录,值是它的 origin —— 这里故意用 SSH 写法
+      { 'D:/workspace/github_workspace/zen-gitsync': 'git@github.com:xz333221/zen-gitsync.git' },
+    )
+    const w = mount()
+    await flushAll()
+
+    expect(calls).toContain('/api/local-repos')
+
+    const cards = w.findAll('.repo-card')
+    const cloned = cards.find((c) => c.text().includes('zen-gitsync'))!
+    const notCloned = cards.find((c) => c.text().includes('file-guard'))!
+    expect(cloned.findAll('.repo-card__tag').some((t) => t.text() === '已克隆')).toBe(true)
+    expect(notCloned.findAll('.repo-card__tag').some((t) => t.text() === '已克隆')).toBe(false)
+    // 克隆到哪写在悬浮提示里:卡片上放不下,但点克隆按钮之前正要看这个
+    expect(cloned.attributes('title')).toContain(
+      '本地已克隆：D:/workspace/github_workspace/zen-gitsync',
+    )
+    // 快捷键说明只能挂在这里 —— 徽标 hover 时会淡出给操作按钮让位,挂上去就看不见了
+    expect(cloned.attributes('title')).toContain('按住 Ctrl 点击用 g ui 打开')
+    expect(notCloned.attributes('title')).not.toContain('按住 Ctrl')
+  })
+
+  test('拿不到本地克隆信息(旧服务端回 HTML)时:列表照常渲染,只是没有徽标', async () => {
+    stubFetch([payload({ repos: [repo()] })], undefined, null)
+    const w = mount()
+    await flushAll()
+
+    expect(w.findAll('.repo-card')).toHaveLength(1)
+    expect(w.findAll('.repo-card__tag').some((t) => t.text() === '已克隆')).toBe(false)
+    // 徽标是补充信息,拿不到不是用户的错,不该冒提示
+    expect(w.text()).not.toContain('失败')
+  })
+
+  test('Ctrl+点卡片 → 在本地那个目录里新开标签页跑 g ui,且不走"浏览器打开主页"', async () => {
+    const localDir = 'D:/workspace/github_workspace/zen-gitsync'
+    const { guiBodies } = stubFetch(
+      [payload({ repos: [repo()] })],
+      undefined,
+      { [localDir]: 'git@github.com:xz333221/zen-gitsync.git' },
+    )
+    const w = mount()
+    await flushAll()
+
+    await w.find('.repo-card__btn').trigger('click', { ctrlKey: true })
+    await flushAll()
+
+    // 路径必须是本地那个真实落点(不是仓库名、也不是当前工作目录)
+    expect(guiBodies).toEqual([{ path: localDir }])
+    expect(window.open).not.toHaveBeenCalled()
+  })
+
+  test('Cmd+点卡片同理(macOS 上 Cmd 才是"新开一个"的惯用键)', async () => {
+    const localDir = 'D:/w/zen-gitsync'
+    const { guiBodies } = stubFetch(
+      [payload({ repos: [repo()] })],
+      undefined,
+      { [localDir]: 'git@github.com:xz333221/zen-gitsync.git' },
+    )
+    const w = mount()
+    await flushAll()
+
+    await w.find('.repo-card__btn').trigger('click', { metaKey: true })
+    await flushAll()
+
+    expect(guiBodies).toEqual([{ path: localDir }])
+  })
+
+  test('普通点卡片不跑 g ui —— 仍旧是在浏览器打开仓库主页', async () => {
+    const { guiBodies } = stubFetch(
+      [payload({ repos: [repo()] })],
+      undefined,
+      { 'D:/workspace/github_workspace/zen-gitsync': 'git@github.com:xz333221/zen-gitsync.git' },
+    )
+    const w = mount()
+    await flushAll()
+
+    await w.find('.repo-card__btn').trigger('click')
+    await flushAll()
+
+    expect(guiBodies).toEqual([])
+    expect(window.open).toHaveBeenCalledWith(
+      'https://github.com/xz333221/zen-gitsync',
+      '_blank',
+      'noopener,noreferrer',
+    )
+  })
+
+  test('本地没有克隆时 Ctrl+点卡片退回原行为:没有目录可去,不该只是"点了没反应"', async () => {
+    const { guiBodies } = stubFetch(
+      [payload({ repos: [repo()] })],
+      undefined,
+      // 本地只有别的仓库,和这张卡对不上
+      { 'D:/w/other': 'git@gitee.com:xz_web/xiangqi.git' },
+    )
+    const w = mount()
+    await flushAll()
+
+    await w.find('.repo-card__btn').trigger('click', { ctrlKey: true })
+    await flushAll()
+
+    expect(guiBodies).toEqual([])
+    expect(window.open).toHaveBeenCalledWith(
+      'https://github.com/xz333221/zen-gitsync',
+      '_blank',
+      'noopener,noreferrer',
+    )
+  })
+
+  test('启动 g ui 失败时给出提示,不静默', async () => {
+    stubFetch(
+      [payload({ repos: [repo()] })],
+      undefined,
+      { 'D:/w/zen-gitsync': 'git@github.com:xz333221/zen-gitsync.git' },
+    )
+    // 让 /api/open-new-tab-gui 明确失败(服务端会说清是目录没了还是终端拉不起来)
+    const spy = vi.mocked(globalThis.fetch)
+    const original = spy.getMockImplementation()!
+    spy.mockImplementation(async (input: any, init: any) => {
+      const url = typeof input === 'string' ? input : input.url
+      if (url.includes('/api/open-new-tab-gui')) {
+        return json({ success: false, error: '目标目录已不存在' })
+      }
+      return original(input, init)
+    })
+    vi.mocked(ElMessage.error).mockClear()
+
+    const w = mount()
+    await flushAll()
+    await w.find('.repo-card__btn').trigger('click', { ctrlKey: true })
+    await flushAll()
+
+    // 服务端给的原因优先于笼统的兜底文案
+    expect(ElMessage.error).toHaveBeenCalledWith('目标目录已不存在')
+  })
+})
+
+// jsdom 既不做 CSS 布局计算、也不加载 <style>(vitest 配置里 css:false),
+// 所以「操作按钮什么时候才该显示」这条约束只能从样式源码层面守住 ——
+// 而它一旦退回 :focus-within,点完卡片右侧按钮会永久挂在屏幕上、鼠标移出也不消失
+// (用户实测报过;「最近项目」面板早先踩过同一个坑并改成 :has)。
+describe('RemoteReposList.vue CSS 守卫', () => {
+  // 用 vite 的 ?raw 取 SFC 源码文本(import.meta.url 在 vitest 下不是 file: scheme,
+  // 喂给 readFileSync 会报 "must be of scheme file")。
+  const rawModules = import.meta.glob('./RemoteReposList.vue', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  }) as Record<string, string>
+  const src = Object.values(rawModules)[0] ?? ''
+  // 去掉注释再断言:解释这段取舍的注释里正好会提到那个"不要用的选择器",
+  // 不剥掉就会把自己绊倒(注释里写的是反面例子,不是真的规则)
+  const rules = src.slice(src.indexOf('<style')).replace(/\/\*[\s\S]*?\*\//g, '')
+
+  test('操作按钮的显隐靠 :has(操作按钮:focus-visible),不能退回 :focus-within', () => {
+    // 键盘 Tab 落到操作按钮上时仍要让位(可访问性不能丢)
+    expect(rules).toContain(':has(.repo-card__action:focus-visible)')
+    // 而点击卡片主体按钮留下的焦点不该让它们常驻
+    expect(rules).not.toMatch(/\.repo-card:focus-within/)
+  })
+
+  test('操作按钮隐藏时 pointer-events:none —— 否则会在徽标位置吞掉本该落到卡片的点击', () => {
+    const actions = rules.slice(rules.indexOf('.repo-card__actions'))
+    const body = actions.slice(actions.indexOf('{') + 1, actions.indexOf('}'))
+    expect(body).toContain('pointer-events: none')
   })
 })

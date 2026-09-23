@@ -42,6 +42,7 @@ import { registerFsRoutes } from './routes/fs.js';
 import { registerRecentDirectoriesSummaryRoutes } from './routes/recentDirectoriesAiSummary.js';
 import { registerNpmRoutes } from './routes/npm.js';
 import { registerFileOpenRoutes } from './routes/fileOpen.js';
+import { registerLocalReposRoutes } from './routes/localRepos.js';
 import { registerRemoteReposRoutes } from './routes/remoteRepos.js';
 import { registerWorkbenchRoutes } from './routes/workbench.js';
 import { registerGitOpsRoutes } from './routes/gitOps.js';
@@ -415,6 +416,9 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   // 远程托管平台仓库列表(GitHub / Gitee 两个 Tab 的数据源)
   registerRemoteReposRoutes({ app });
+
+  // 本机 Git 仓库清单 —— 仓库卡片上「已克隆」徽标的判据(全盘扫描 + 落盘缓存)
+  registerLocalReposRoutes({ app });
 
   registerWorkbenchRoutes({
     app,

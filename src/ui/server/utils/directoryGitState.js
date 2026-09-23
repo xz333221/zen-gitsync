@@ -288,6 +288,55 @@ export async function probeDirectoryGitStates(paths, options = {}) {
   return results;
 }
 
+/**
+ * 探测单个目录的 origin 远程地址。
+ *
+ * 用途:远程仓库列表要回答"这个仓库本地已经克隆过了吗" —— 判据只能是本地
+ * 某个目录的 origin 指向谁。口径与 probeDirectoryGitState 一致:一次 spawn、
+ * 超时即放弃、**不联网**(`git remote get-url` 只读 .git/config,不发请求)。
+ *
+ * 非仓库、目录不存在、没有名为 origin 的 remote 都是失败(退出码非 0)——
+ * 统一收敛成 null:对"是不是克隆来的"这个问题,这些情况的答案都是"不知道/不是",
+ * 调用方不需要区分。
+ */
+export async function probeDirectoryOrigin(dirPath, { timeoutMs = DEFAULT_PROBE_TIMEOUT_MS } = {}) {
+  try {
+    const { stdout } = await execFileAsync(
+      'git',
+      ['-C', dirPath, 'remote', 'get-url', 'origin'],
+      { timeout: timeoutMs, maxBuffer: MAX_BUFFER, windowsHide: true }
+    );
+    const url = String(stdout || '').trim();
+    return url || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 批量探测 origin 地址。返回 `{ [调用方传入的原始路径]: url|null }`
+ * —— 键用原始字符串,前端可以直接 `origins[item.path]` 取。
+ *
+ * 为什么不做缓存(同一个文件里 git 状态就有 15s TTL):remote 是用户随时在改的
+ * 东西(刚加了 remote、刚把地址换成 SSH),缓存只会让「已克隆」这个标识慢半拍地
+ * 骗人;而调用方只有仓库列表挂载时那一次请求,重复扫的代价可以忽略。
+ */
+export async function probeDirectoryOrigins(paths, options = {}) {
+  const { timeoutMs = DEFAULT_PROBE_TIMEOUT_MS, concurrency = DEFAULT_CONCURRENCY } = options;
+  const list = Array.isArray(paths) ? paths.filter(p => typeof p === 'string' && p.trim()) : [];
+  // 同一个目录可能以不同写法出现在配置里,先按原始串去重再探(normalizeDirKey
+  // 会把 `D:/x` 与 `d:\x\` 合并,但这里要保持"键用原始串"的约定)
+  const unique = [...new Set(list)];
+  const results = {};
+
+  const probed = await runWithConcurrency(unique, concurrency, async (dir) => ({
+    dir,
+    url: await probeDirectoryOrigin(dir, { timeoutMs }),
+  }));
+  for (const { dir, url } of probed) results[dir] = url;
+  return results;
+}
+
 /** 仅供测试:清空缓存 */
 export function clearGitStateCache() {
   cache.clear();

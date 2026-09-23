@@ -25,6 +25,7 @@ import { createDiffHelpers } from './git/diffUtils.js';
 import { registerGitStashRoutes } from './git/stash.js';
 import { registerGitTagRoutes } from './git/tags.js';
 import { registerGitRemoteRoutes, __testables as remoteTestables } from './git/remotes.js';
+import { registerGitCloneRoutes } from './git/clone.js';
 import {
   assertGitRef,
   assertGitHash,
@@ -1015,6 +1016,10 @@ export function registerGitOpsRoutes({
     execGitCommand,
     setRecentPushStatus
   });
+
+  // 克隆到指定文件夹:远程仓库列表卡片上的「克隆到文件夹」。
+  // 注意它不接 execGitCommand —— clone 的 cwd 是用户选的那个目录,不是当前工作目录。
+  registerGitCloneRoutes({ app });
 
   // 重置暂存区 (git reset HEAD)
   app.post('/api/reset-head', async (req, res) => {

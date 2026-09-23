@@ -26,6 +26,8 @@ import {
   normalizeDirKey,
   probeDirectoryGitState,
   probeDirectoryGitStates,
+  probeDirectoryOrigin,
+  probeDirectoryOrigins,
   clearGitStateCache,
 } from './directoryGitState.js';
 
@@ -257,6 +259,51 @@ test('probeDirectoryGitState: 真实远端 → 读出上游分支与领先/落�
     assert.equal(diverged.ahead, 1);
     assert.equal(diverged.behind, 1);
     assert.equal(diverged.hasUpstream, true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+// ── origin 远程地址探测(远程仓库列表的「已克隆」徽标) ──────────────────
+test('probeDirectoryOrigin: 有 origin 读到地址,没有 / 非仓库 / 目录不存在都是 null', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-origin-'));
+  const withOrigin = path.join(root, 'with-origin');
+  const noRemote = path.join(root, 'no-remote');
+  const plain = path.join(root, 'plain');
+  try {
+    await fs.mkdir(withOrigin);
+    await fs.mkdir(noRemote);
+    await fs.mkdir(plain);
+    await git(['init', '-q'], withOrigin);
+    await git(['init', '-q'], noRemote);
+    await git(['remote', 'add', 'origin', 'git@gitee.com:xz_web/xiangqi.git'], withOrigin);
+
+    assert.equal(await probeDirectoryOrigin(withOrigin), 'git@gitee.com:xz_web/xiangqi.git');
+    // 仓库但没配 origin / 根本不是仓库 / 目录不存在 —— 对"是不是克隆来的"
+    // 这三个答案都是"不知道",统一收敛成 null
+    assert.equal(await probeDirectoryOrigin(noRemote), null);
+    assert.equal(await probeDirectoryOrigin(plain), null);
+    assert.equal(await probeDirectoryOrigin(path.join(root, 'ghost')), null);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('probeDirectoryOrigins: 键是调用方原始路径,空值与非字符串入参被过滤', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zen-origins-'));
+  const repoDir = path.join(root, 'repo');
+  const plainDir = path.join(root, 'plain');
+  try {
+    await fs.mkdir(repoDir);
+    await fs.mkdir(plainDir);
+    await git(['init', '-q'], repoDir);
+    await git(['remote', 'add', 'origin', 'https://gitee.com/xz_web/xiangqi.git'], repoDir);
+
+    const results = await probeDirectoryOrigins([repoDir, plainDir, '', null, repoDir]);
+    // 重复路径只探一次但保留在结果里(键去重),空串 / null 不进结果
+    assert.deepEqual(Object.keys(results).sort(), [repoDir, plainDir].sort());
+    assert.equal(results[repoDir], 'https://gitee.com/xz_web/xiangqi.git');
+    assert.equal(results[plainDir], null);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

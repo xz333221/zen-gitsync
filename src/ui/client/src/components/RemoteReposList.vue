@@ -39,6 +39,7 @@ import {
   Connection,
   DocumentCopy,
   Download,
+  FolderAdd,
   Key,
   Link,
   Loading,
@@ -47,7 +48,14 @@ import {
   Star,
   WarningFilled,
 } from '@element-plus/icons-vue'
+import { storeToRefs } from 'pinia'
+import { FilePickerModal as FilePicker } from 'local-file-picker/client'
 import { $t } from '@/lang/static'
+import { useConfigStore } from '@/stores/configStore'
+import { useLocaleStore } from '@/stores/localeStore'
+import { loadLocalClones, rescanLocalClones } from '@/utils/localClones'
+import { launchGuiInNewTab } from '@/composables/useDirectoryOpenActions'
+import { toRepoKey, toSshUrl } from '@/utils/remoteUrl'
 import {
   dropRemoteReposCache,
   readRemoteReposCache,
@@ -381,10 +389,18 @@ function repoMeta(repo: RemoteRepo) {
   return parts.join(' · ')
 }
 
-/** 卡片的悬浮提示:比卡片多给"创建时间 / 默认分支 / 许可证"——
- *  卡片上放不下的次要信息都在这里,不用点开浏览器就能核对。 */
+/** 卡片的悬浮提示:比卡片多给"本地克隆到哪 / 创建时间 / 默认分支 / 许可证"——
+ *  卡片上放不下的次要信息都在这里,不用点开浏览器就能核对。
+ *  本地克隆那句排在描述前面:决定"要不要点克隆"时,它比仓库简介有用。 */
 function repoTooltip(repo: RemoteRepo) {
   const lines = [repo.fullName]
+  const localPath = clonedPathOf(repo)
+  if (localPath) {
+    lines.push($t('@REPOLIST:本地已克隆：{path}', { path: localPath }))
+    // 悬浮提示是这条快捷键唯一的说明处：徽标在 hover 时会淡出给操作按钮让位，
+    // 所以没法把提示挂在徽标上
+    lines.push($t('@REPOLIST:按住 Ctrl 点击用 g ui 打开'))
+  }
   if (repo.description) lines.push(repo.description)
   const pushed = formatDate(repo.pushedAt)
   const created = formatDate(repo.createdAt)
@@ -507,6 +523,80 @@ function startPolling(until: (payload: RemoteReposPayload) => boolean, maxTries 
   }, POLL_INTERVAL_MS)
 }
 
+// ── 本地已克隆 ──────────────────────────────────────────────────────────────
+// 卡片上的「已克隆」徽标：这个仓库在本地某个常用目录里已经有克隆了。
+//
+// 判据是**地址对上**，不是目录名相同 —— 本地目录叫什么、克隆在哪个盘，和仓库名
+// 都不必一致（把仓库克隆成别的目录名是常事），只有 origin 指向谁才是可靠依据。
+// 归一化规则在 utils/remoteUrl.ts 的 toRepoKey，这里只查表。
+//
+// 它是**补充信息**：拿不到（服务端还没重启、接口报错）就只是没有徽标，不影响
+// 列表、不弹错。缓存与并发去重都在 utils/localClones.ts —— 必须是独立模块，
+// 写在组件里的模块级变量随 Tab 切换重建就没了（见那个文件头）。
+const localClones = ref<Record<string, string>>({})
+
+/** 该仓库本地是否已有克隆？有则返回本地目录（给 tooltip 用），没有返回空串 */
+function clonedPathOf(repo: RemoteRepo) {
+  const key = toRepoKey(repo.url)
+  return key ? localClones.value[key] || '' : ''
+}
+
+/** 拉一份「本地已克隆」映射。失败静默：徽标有就有、没有就没有。
+ *  force 用于"刚克隆完一个仓库"—— 服务端那一刻已就地登记了它，这一趟只取回新快照 */
+async function refreshLocalClones(force = false) {
+  localClones.value = await loadLocalClones(force)
+}
+
+/**
+ * 「刷新」：重拉仓库列表之外，还让服务端**重扫一遍本机仓库**。
+ *
+ * 为什么刷新要带上重扫：本机仓库清单是落盘缓存（TTL 10 分钟），而用户完全可能
+ * 在终端里 clone 完再回来点刷新 —— 不重扫的话那张卡片还是没徽标，看着就像
+ * "刷新没生效"。重扫要十几秒，所以**不 await**：列表先出来，徽标扫完自己补上。
+ */
+function refreshAll() {
+  void rescanLocalClones().then((map) => { localClones.value = map })
+  return load()
+}
+
+/**
+ * Ctrl+点击「已克隆」徽标 → 在本地那个目录里**新开一个终端标签页跑 `g ui`**。
+ *
+ * 走 launchGuiInNewTab（useDirectoryOpenActions）：它复用服务端的 /api/open-new-tab-gui，
+ * 那边负责平台差异（Windows 走 `start /D`、macOS 走 Terminal.app、Linux 走 gnome-terminal）
+ * 并剥掉 PORT，让新实例自己挑空闲端口 —— 所以不会和当前这个实例抢 5545。
+ *
+ * 只给 error 提示、不给成功提示：新窗口弹出来本身就是反馈，再补一句 toast 是噪音
+ * （与 RecentDirectoriesList 的「在新标签页打开」保持一致）。
+ */
+async function openClonedInGuiUi(dirPath: string) {
+  if (!dirPath) return
+  const result = await launchGuiInNewTab(dirPath)
+  if (!result.success) {
+    ElMessage.error(result.error || $t('@REPOLIST:无法在该目录启动 g ui'))
+  }
+}
+
+/**
+ * 卡片点击。
+ *
+ * - 普通点击 = 在浏览器打开仓库主页（一直以来的行为，不变）
+ * - Ctrl/Cmd+点击 **且本地已有克隆** = 到那个目录里新开标签页跑 `g ui`
+ *
+ * 为什么挂在整张卡片而不是「已克隆」徽标上：徽标在卡片 hover 时会淡出给右侧操作
+ * 按钮让位（交叉淡入那一套），做成点击区就等于让它在最该被点的时刻消失。
+ *
+ * 没克隆时 Ctrl+点击退回原行为 —— 没有本地目录可去，不该只是"这次点击没反应"。
+ */
+function onCardClick(repo: RemoteRepo, event: MouseEvent) {
+  const localPath = clonedPathOf(repo)
+  if (localPath && (event.ctrlKey || event.metaKey)) {
+    void openClonedInGuiUi(localPath)
+    return
+  }
+  openUrl(repo.url)
+}
+
 // ── 动作 ────────────────────────────────────────────────────────────────────
 
 /** 一键安装。命令由服务端按平台从白名单选,这里只提交 tool id。 */
@@ -560,6 +650,105 @@ async function login() {
   }
 }
 
+const configStore = useConfigStore()
+const { currentLocale } = storeToRefs(useLocaleStore())
+
+/** 文件选择器的主题跟随界面主题(与 DirectorySelector / MindmapView 同一套判断) */
+const isDark = computed(() => {
+  const t = configStore.theme
+  if (t === 'dark') return true
+  if (t === 'light') return false
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+})
+
+// ── 克隆到文件夹 ────────────────────────────────────────────────────────
+// 交互:点卡片上的「克隆到文件夹」→ 选一个父目录 → 在它下面建出以仓库名命名的
+// 子目录(与命令行 `git clone` 的落点规则一致)。
+//
+// 用哪个地址:SSH(由 utils/remoteUrl.ts 从仓库页地址推导)。理由在凭据 ——
+// 用户在两个平台的 SSH key 都已经配好,而 HTTPS 会去撞 Git Credential Manager
+// 的图形弹窗,服务端子进程又没有 TTY,弹不出来就会一路挂到超时。
+//
+// 推导不出 SSH 地址的仓库干脆不渲染这个按钮(与「复制 SSH 地址」同一条件):
+// 宁可少给一个入口,也不给一个点下去必然失败的按钮。
+const clonePickerVisible = ref(false)
+/** 正在克隆的仓库 fullName;null = 当前没有进行中的克隆 */
+const cloningRepo = ref<string | null>(null)
+const cloneTargetRepo = ref<RemoteRepo | null>(null)
+
+function openClonePicker(repo: RemoteRepo) {
+  cloneTargetRepo.value = repo
+  clonePickerVisible.value = true
+}
+
+/** local-file-picker 的 confirm 回调:paths[0] 就是选中的父目录绝对路径 */
+async function onCloneDirConfirm(paths: string[]) {
+  clonePickerVisible.value = false
+  const repo = cloneTargetRepo.value
+  cloneTargetRepo.value = null
+  const parentDir = paths?.[0]
+  if (!repo || !parentDir) return
+
+  const url = toSshUrl(repo.url)
+  if (!url) {
+    ElMessage.error($t('@REPOLIST:无法解析该仓库的克隆地址'))
+    return
+  }
+
+  cloningRepo.value = repo.fullName
+  try {
+    const response = await fetch('/api/clone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, parentDir }),
+    })
+    const result = await response.json().catch(() => null)
+    if (!response.ok || !result?.success) {
+      // 后端把 git 的最后一句话原样带出来了(目标已存在 / 认证失败 / 网络不通),
+      // 直接显示 —— 它比任何"克隆失败"的笼统说法都有用
+      ElMessage.error(result?.error || $t('@REPOLIST:克隆失败'))
+      return
+    }
+    const clonedPath = String(result.path || '')
+    ElMessage.success($t('@REPOLIST:已克隆到 {path}', { path: clonedPath }))
+    // 刚克隆出来的仓库立刻标「已克隆」：服务端在 clone 成功那一刻就把它登记进
+    // 本机仓库清单了，这一趟 force 只取回新快照（不重扫盘，几十毫秒）。
+    // 少了这一步就要等下一次全盘扫（十几秒）或 TTL 过期 —— 而那十几秒正是
+    // 用户盯着这张卡看的时刻，看起来就像"功能没生效"。
+    void refreshLocalClones(true)
+    // 克隆完顺手打开那个目录：用户接下来八成要进去，而它可能被建在一个
+    // 刚选的、他自己都不熟的路径下
+    void openDirectory(clonedPath)
+  } catch (error) {
+    ElMessage.error((error as Error).message || $t('@REPOLIST:克隆失败'))
+  } finally {
+    cloningRepo.value = null
+  }
+}
+
+/**
+ * 在系统文件管理器里打开一个目录(克隆完成后用)。
+ *
+ * 走服务端的 /api/open_directory(它用 `open` 包,跨平台),前端不拼 shell 命令 ——
+ * 与"命令一律由服务端从白名单给"同一条原则。
+ * 失败只给一句 warning:克隆本身已经成功了,打开文件夹是顺手的下一步,
+ * 报成 error 会让用户以为克隆出了问题。
+ */
+async function openDirectory(dirPath: string) {
+  if (!dirPath) return
+  try {
+    const res = await fetch('/api/open_directory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: dirPath }),
+    })
+    const data = await readJson(res).catch(() => null)
+    if (!data?.success) ElMessage.warning(data?.error || $t('@REPOLIST:打开文件夹失败'))
+  } catch (error) {
+    ElMessage.warning((error as Error).message || $t('@REPOLIST:打开文件夹失败'))
+  }
+}
+
 async function copyText(text: string, successMessage: string) {
   if (!text) return
   try {
@@ -588,6 +777,11 @@ async function recheck() {
 }
 
 onMounted(() => {
+  // 「已克隆」是独立的一份数据(本地磁盘 → 本地接口),与仓库列表的缓存无关:
+  // 放在下面的早退**之前**,保证"列表直接拿缓存画出来"时徽标也能补上。
+  // 它自带请求级去重,两个 Tab 同时挂载也只会真发一次。
+  void refreshLocalClones()
+
   // 缓存还新鲜 → 一个请求都不发。首帧直接就是列表,和上次离开这一屏时一模一样
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return
   // 有缓存但过期了 → 先把缓存画出来,再在后台静默重拉(拉失败也不打断用户);
@@ -620,7 +814,7 @@ onBeforeUnmount(stopPolling)
           class="repo-list__action"
           :disabled="isLoading"
           :title="$t('@REPOLIST:重新拉取仓库列表')"
-          @click="load()"
+          @click="refreshAll()"
         >
           <el-icon :class="{ 'is-spinning': isLoading }" aria-hidden="true"><Refresh /></el-icon>
           <span>{{ $t('@REPOLIST:刷新') }}</span>
@@ -839,7 +1033,7 @@ onBeforeUnmount(stopPolling)
                 type="button"
                 class="repo-card__btn"
                 :aria-label="$t('@REPOLIST:在浏览器中打开 {name}', { name: repo.fullName })"
-                @click="openUrl(repo.url)"
+                @click="onCardClick(repo, $event)"
               >
                 <el-icon class="repo-card__icon" aria-hidden="true"><Connection /></el-icon>
                 <span class="repo-card__name">
@@ -851,6 +1045,13 @@ onBeforeUnmount(stopPolling)
                   <span v-if="repoMeta(repo)" class="repo-card__meta">{{ repoMeta(repo) }}</span>
                 </span>
                 <span class="repo-card__tags">
+                  <!-- 「已克隆」排在最前:它是"本地已经有了"的结论,比 Fork / 私有 /
+                       语言这类仓库自身的属性更该被一眼看到(尤其在点克隆按钮之前)。
+                       Ctrl+点击整张卡片 = 到那个目录里跑 g ui(见 onCardClick);
+                       徽标自己不做点击区 —— hover 时它会淡出给操作按钮让位。 -->
+                  <span v-if="clonedPathOf(repo)" class="repo-card__tag repo-card__tag--cloned">
+                    {{ $t('@REPOLIST:已克隆') }}
+                  </span>
                   <span v-if="repo.isFork" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:Fork') }}</span>
                   <span v-if="repo.isPrivate" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:私有') }}</span>
                   <span v-if="repo.language" class="repo-card__tag repo-card__tag--plain">{{ repo.language }}</span>
@@ -862,13 +1063,40 @@ onBeforeUnmount(stopPolling)
               </button>
               <span class="repo-card__actions">
                 <button
+                  v-if="toSshUrl(repo.url)"
                   type="button"
                   class="repo-card__action"
-                  :title="$t('@REPOLIST:复制仓库地址')"
-                  :aria-label="$t('@REPOLIST:复制仓库地址 {name}', { name: repo.fullName })"
-                  @click.stop="copyText(repo.url, $t('@REPOLIST:仓库地址已复制'))"
+                  :disabled="cloningRepo === repo.fullName"
+                  :title="$t('@REPOLIST:克隆到文件夹')"
+                  :aria-label="$t('@REPOLIST:克隆 {name} 到指定文件夹', { name: repo.fullName })"
+                  @click.stop="openClonePicker(repo)"
+                >
+                  <el-icon
+                    :class="{ 'is-spinning': cloningRepo === repo.fullName }"
+                    aria-hidden="true"
+                  >
+                    <Loading v-if="cloningRepo === repo.fullName" />
+                    <FolderAdd v-else />
+                  </el-icon>
+                </button>
+                <button
+                  type="button"
+                  class="repo-card__action"
+                  :title="$t('@REPOLIST:复制 HTTPS 地址')"
+                  :aria-label="$t('@REPOLIST:复制 HTTPS 地址 {name}', { name: repo.fullName })"
+                  @click.stop="copyText(repo.url, $t('@REPOLIST:HTTPS 地址已复制'))"
                 >
                   <el-icon aria-hidden="true"><DocumentCopy /></el-icon>
+                </button>
+                <button
+                  v-if="toSshUrl(repo.url)"
+                  type="button"
+                  class="repo-card__action"
+                  :title="$t('@REPOLIST:复制 SSH 地址')"
+                  :aria-label="$t('@REPOLIST:复制 SSH 地址 {name}', { name: repo.fullName })"
+                  @click.stop="copyText(toSshUrl(repo.url), $t('@REPOLIST:SSH 地址已复制'))"
+                >
+                  <el-icon aria-hidden="true"><Key /></el-icon>
                 </button>
                 <button
                   type="button"
@@ -890,6 +1118,17 @@ onBeforeUnmount(stopPolling)
         {{ $t('@REPOLIST:点击卡片在浏览器中打开仓库主页') }}
       </p>
     </template>
+
+    <!-- 克隆目标文件夹选择（local-file-picker）。选中的是**父目录** ——
+         仓库会在它下面建出以仓库名命名的子目录，与命令行 git clone 一致。 -->
+    <FilePicker
+      :visible="clonePickerVisible"
+      mode="directory"
+      :theme="isDark ? 'dark' : 'light'"
+      :locale="currentLocale"
+      @close="clonePickerVisible = false"
+      @confirm="onCloneDirConfirm"
+    />
   </div>
 </template>
 
@@ -1508,7 +1747,18 @@ onBeforeUnmount(stopPolling)
   background: var(--tint-primary-08);
   color: var(--color-primary);
 }
-/* 操作按钮:静止时不占位,hover 卡片时与徽标交叉淡入 —— 与「最近项目」卡片同一套做法 */
+/* 本地已有克隆:用成功色,和「这件事已经成了」的语义一致(它比 Fork / 私有
+   更需要被看到)。底色取淡档,不做无边界强调 —— 它是个状态说明,不是荣誉标记,
+   不该和星标抢同一块的注意力。 */
+.repo-card__tag--cloned {
+  background: var(--tint-success-14);
+  color: var(--text-success);
+}
+/* 操作按钮:静止时不占位,hover 卡片时与徽标交叉淡入 —— 与「最近项目」卡片同一套做法。
+   ⚠️ 用 `:has(操作按钮:focus-visible)` 而不是 `.repo-card:focus-within`:
+   点击卡片主体按钮后 Chrome 会把焦点留在它上面,用 :focus-within 会让操作按钮
+   在鼠标移出卡片后**一直挂着**(徽标也一直隐身);只有键盘 Tab 真正落到操作按钮上
+   才需要让位。这个坑「最近项目」面板先踩过一遍,那边是同一个写法。 */
 .repo-card__actions {
   position: absolute;
   right: var(--spacing-base);
@@ -1518,16 +1768,17 @@ onBeforeUnmount(stopPolling)
   gap: 2px;
   transform: translateY(-50%);
   opacity: 0;
+  /* 隐藏时不可点,否则会在徽标位置吞掉本该落到卡片的点击 */
   pointer-events: none;
   transition: opacity var(--transition-fast);
 }
 .repo-card:hover .repo-card__actions,
-.repo-card:focus-within .repo-card__actions {
+.repo-card:has(.repo-card__action:focus-visible) .repo-card__actions {
   opacity: 1;
   pointer-events: auto;
 }
 .repo-card:hover .repo-card__tags,
-.repo-card:focus-within .repo-card__tags {
+.repo-card:has(.repo-card__action:focus-visible) .repo-card__tags {
   opacity: 0;
 }
 .repo-card__action {
@@ -1544,13 +1795,27 @@ onBeforeUnmount(stopPolling)
   cursor: pointer;
   transition: color var(--transition-fast), background var(--transition-fast);
 }
-.repo-card__action:hover {
+.repo-card__action:hover:not(:disabled) {
   color: var(--color-primary);
   background: var(--tint-primary-12);
 }
 .repo-card__action:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+/* 克隆进行中:图标从 FolderAdd 换成转圈的 Loading,同时禁掉重复点击 */
+.repo-card__action:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.repo-card__action .el-icon.is-spinning {
+  animation: repo-card-spin 0.9s linear infinite;
+}
+@keyframes repo-card-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .repo-card__action .el-icon.is-spinning { animation: none; }
 }
 
 .repo-list__footnote {

@@ -616,7 +616,9 @@ export function registerFsRoutes({
 
         res.json({ success: true });
       } catch (error) {
-        res.status(400).json({ success: false, error: `无法打开: ${'$'}{error.message}` });
+        // 注意别把 ${error.message} 写成字符串字面量 —— 之前这里多包了一层引号，
+        // 用户看到的就是"无法打开: ${error.message}"这种原文
+        res.status(400).json({ success: false, error: `无法在 "${directoryPath}" 中启动 g ui: ${error.message}` });
       }
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
