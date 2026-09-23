@@ -19,9 +19,12 @@
 // 一概不在里面。于是用户问"我的项目有哪些"，Agent 只能就着当前目录猜 ——
 // 而数据其实全在本机，只是没人告诉它路径。
 //
-// 这里做两件事，缺一不可：
+// 这里做三件事，缺一不可：
 //   1. 给**摘要** —— 项目清单 + 各列任务计数（顺着看板口径，一眼看到进度）；
-//   2. 给**真相源文件路径** —— 要细节自己去读。
+//   2. 给**真相源文件路径** —— 要细节自己去读；
+//   3. 给**用户偏好** —— 克隆仓库优先 SSH。这一条不是"运行环境"的事实，而是工作台任务的
+//      Agent 是外部 CLI（claude / opencode），系统提示词不归我们写 —— 这里是唯一能把偏好
+//      递进去的地方。少这一句，任务里克隆仓库就会退回 https，弹凭据窗口把任务停住。
 // 刻意不把 tasks.json 全文塞进 prompt：几十条任务、每条还挂着执行输出，
 // 既烧 token，又会把用户真正要办的那句话淹掉。
 //
@@ -120,6 +123,17 @@ export function buildEnvContextBlock({
   lines.push(
     `看板任务概览：全部项目合计 ${total.total} 条 —— ` +
     TASK_COLUMNS.map(k => `${COLUMN_LABELS[k]} ${total[k] || 0}`).join(' / '),
+  );
+  lines.push('');
+  // 用户偏好（见文件头第 3 条）。放在"读文件"之前、"看板概览"之后 ——
+  // 它是**行为**约定，与上面的事实清单分开；压尾的那句仍是"去读文件"，
+  // 那是整块上下文里最需要被记住的动作。
+  lines.push(
+    '用户偏好：克隆仓库 / 添加远端时**优先使用 SSH**（https 地址先换算成 ' +
+    'git@github.com:owner/repo.git，Gitee 同理 git@gitee.com:owner/repo.git —— ' +
+    '走 https 会弹凭据窗口，把任务停在半路等用户输账号密码）。' +
+    '只有 SSH 不可用（Permission denied (publickey) / Host key verification failed）' +
+    '才退回 https，并说明这次走的是 https。',
   );
   lines.push('');
   lines.push('需要细节时直接读这些文件（本机绝对路径，你有读取权限，不必先问用户）:');

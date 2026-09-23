@@ -176,3 +176,17 @@ test('项目行/合计的段数必须与 TASK_COLUMNS 一致，且每列都有�
   // 两个任务都是待处理 → 第一段是 2，其余列是 0（顺序由 TASK_COLUMNS 决定，不是写死的下标）
   assert.equal(rowCounts[TASK_COLUMNS.indexOf('todo')], '2');
 });
+
+// ── 用户偏好：克隆仓库优先 SSH ────────────────────────────────────────
+//
+// 这条只对**工作台任务**起作用（执行器是外部 CLI claude / opencode，系统提示词不归我们写，
+// envContext 是唯一能把偏好递进去的地方）。断言钉住两个平台的地址都写全 —— 用户实际踩的
+// 那个坑就是 Gitee 走 https 弹了凭据窗口；只留 GitHub 一条等于只覆盖一半场景。
+test('注入块带上「克隆优先 SSH」这条用户偏好', () => {
+  const block = buildEnvContextBlock({ projects: [entry('D:\\ws\\a')], tasks: [], jobs: [], ...PATHS });
+  assert.match(block, /优先使用 SSH/);
+  assert.match(block, /git@github\.com:owner\/repo\.git/);
+  assert.match(block, /git@gitee\.com:owner\/repo\.git/);
+  // 退回条件也得在：没写清"什么时候可以退回"，模型会在 SSH 失败后来回重试
+  assert.match(block, /Permission denied \(publickey\)/);
+});

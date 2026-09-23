@@ -122,6 +122,15 @@ const FACTS = [
     en: [/Never ask the user for a token/],
     commands: [],
   },
+  {
+    // 用户明确提过的偏好：让 AI 克隆仓库时优先 SSH。走 https 会弹 Git Credential Manager，
+    // 把任务停在半路等人输账号密码（实测）。四个入口都得守同一条，否则从某个入口克隆
+    // 又会退回去走 https —— 这类"少写一条不报错"的失效方式正是本文件存在的理由。
+    what: '克隆 / 加远端优先 SSH（https 先换算，无密钥才退回）',
+    zh: [/优先用 SSH/, /git@github\.com:owner\/repo\.git/, /Permission denied \(publickey\)/],
+    en: [/prefer SSH/, /git@github\.com:owner\/repo\.git/, /Permission denied \(publickey\)/],
+    commands: ['git@github.com:owner/repo.git', 'git@gitee.com:owner/repo.git', 'git remote set-url origin'],
+  },
 ];
 
 test('四条提示词覆盖同样的事实，命令串逐字一致（跨语言对齐）', () => {

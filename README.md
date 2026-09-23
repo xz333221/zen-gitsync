@@ -413,6 +413,7 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Tool call display | Each tool invocation (run_command, read_file, edit_file, list_files, search_text, write_file) is shown as a collapsible card with arguments preview and execution result |
 | Recent-projects awareness | Ask "which of my projects need a pull?" and the agent calls its built-in `list_projects` tool instead of scanning the disk: it returns exactly the list behind the GUI's **Recent projects** panel (recent directories plus any directory a task was created in, with branch / ahead / behind / uncommitted counts and task progress), so the agent's answer and the UI agree. Ahead/behind reads local refs, so the agent can pass `refresh=true` to run a `git fetch` pass first when the question is about pulling |
 | Session persistence | All conversations are saved to `~/.zen-gitsync/agent-sessions/` as JSON files; the CLI agent (`g ai`) writes to the same directory so Web and CLI sessions are unified |
+| SSH-first cloning | When you ask it to clone a repo (or add a remote) it uses the SSH form — `git@github.com:owner/repo.git` / `git@gitee.com:owner/repo.git` — converting an `https://` URL first, so the clone never stalls on a Git Credential Manager username/password prompt; it falls back to https only when SSH genuinely fails (`Permission denied (publickey)` / host-key verification) and says which one it used. The same preference is injected into every workbench task, whose executor is an external CLI with a system prompt this app does not own |
 | Per-turn tool limit | A single message may trigger up to N tool calls in a row (default **200**, range 1–2000). Configurable in **Settings → AI models → Agent Runtime**; hitting the limit ends the turn and asks you to send another message. The same setting drives the CLI agent |
 | Preset questions | Quick-start buttons on the welcome screen for common tasks (view project structure, analyze code quality, write tests, check git status) |
 | Stop generation | A floating stop button appears during streaming; aborts the LLM request and any running child processes |
@@ -1049,6 +1050,7 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 工具调用展示 | 每次工具调用（run_command、read_file、edit_file、list_files、search_text、write_file）以可折叠卡片形式展示，含参数预览和执行结果 |
 | 最近项目感知 | 问「我哪些项目需要 pull」时，智能体调用内置的 `list_projects` 工具，而不是自己去扫盘：返回的就是 GUI「最近项目」面板那份清单（最近目录 + 建过任务的目录，带分支 / 领先 / 落后 / 未提交数与任务进度），回答与界面对得上。领先/落后读的是本地引用，因此问到"要不要拉"时它可以带 `refresh=true` 先联网 fetch 一轮再答 |
 | 会话持久化 | 所有对话保存为 JSON 文件到 `~/.zen-gitsync/agent-sessions/`；CLI 智能体（`g ai`）写入同一目录，Web 端与 CLI 端会话统一管理 |
+| 克隆优先 SSH | 让它克隆仓库（或加远端）时走 SSH 形式 —— `git@github.com:owner/repo.git` / `git@gitee.com:owner/repo.git`；拿到 `https://` 地址先换算，克隆不会停在 Git Credential Manager 的账号密码弹窗上。只有 SSH 真的不可用（`Permission denied (publickey)` / 主机密钥校验失败）才退回 https，并说明这次走的是哪条。同一条偏好也会注入到每个工作台任务的 prompt —— 那里执行器是外部 CLI，系统提示词不归本应用管，环境上下文块是唯一的注入口 |
 | 单轮工具调用上限 | 一条消息内智能体最多连续调用多少次工具（默认 **200**，可调范围 1–2000）。在 **设置 → AI 模型配置 → 智能体运行时** 中修改；达到上限本轮会被强制结束并提示再发一条消息继续。CLI 智能体共用同一项设置 |
 | 预设问题 | 开场界面提供快捷按钮（查看项目结构、分析代码质量、写测试、Git 状态检查）|
 | 停止生成 | 流式输出期间出现浮动停止按钮；中止 LLM 请求及正在运行的子进程 |

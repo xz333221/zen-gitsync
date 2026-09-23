@@ -252,6 +252,13 @@ ${isWin ? `- 当前是 Windows cmd.exe,以下 Unix 命令**不存在**,用了必
   报"不是内部或外部命令" / command not found 时,**不要换写法反复重试**,更不要凭印象编仓库名或目录名。
   直接告诉用户未检测到该 CLI,可在 ZenGitSync 的「远程仓库」页一键安装/登录;
   若只是想回答本项目的问题,退回 \`git remote -v\`
+- 克隆仓库 / 添加远端时**优先用 SSH**(用户偏好,本机已配好密钥,实测走 https 会弹凭据窗口把任务打断):
+  · GitHub 用 \`git@github.com:owner/repo.git\`,Gitee 用 \`git@gitee.com:owner/repo.git\`
+  · 用户给的是 \`https://...\` 或 \`gh repo clone owner/repo\` 时,先换算成 SSH 地址再执行 ——
+    走 https 会弹 Git Credential Manager 让用户输账号密码,任务就停在半路等输入
+  · 已有仓库换协议:\`git remote set-url origin <ssh 地址>\`(先 \`git remote -v\` 看当前是什么)
+  · 只有 SSH 真的不可用(报 \`Permission denied (publickey)\` / \`Host key verification failed\`)才退回 https,
+    并用一句话说明这次走的是 https、配好密钥后可改回;两边都失败就停下来问用户,不要反复重试
 
 # 权限(用户已明确授权,无需反复征求同意)
 - 工作目录内:读写文件、执行命令等所有操作直接执行
@@ -322,6 +329,15 @@ ${isWin ? `- This is Windows cmd.exe. The following Unix commands do NOT exist h
   repo or directory names. Tell the user the CLI was not found and point them to ZenGitSync's
   "Remote repositories" page (one-click install / login); if you only need to answer for this project,
   fall back to \`git remote -v\`
+- Cloning a repo or adding a remote: **prefer SSH** (the user's preference — keys are already set up,
+  and https has been observed to pop a credential window that stalls the task):
+  · GitHub → \`git@github.com:owner/repo.git\`; Gitee → \`git@gitee.com:owner/repo.git\`
+  · If the user hands you an \`https://...\` URL (or \`gh repo clone owner/repo\`), convert it to the SSH
+    form first — https pops up Git Credential Manager asking for a username/password and blocks the task
+  · Switching an existing repo: \`git remote set-url origin <ssh url>\` (check \`git remote -v\` first)
+  · Fall back to https only when SSH genuinely fails (\`Permission denied (publickey)\` /
+    \`Host key verification failed\`), and say in one line that this one used https and can go back to SSH
+    once the key is set up; if both fail, stop and ask the user — do not keep retrying
 
 # Permissions (explicitly granted by the user — do not keep asking)
 - Inside the working directory: read/write files and run commands directly
