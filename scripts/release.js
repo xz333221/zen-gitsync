@@ -28,6 +28,7 @@
  *   npm run release -- --skip-push        # 只发布到 npm,不 push git
  *   npm run release -- --dry-run          # 只打印计划,不真正改 package.json / commit / publish
  *   npm run release -- --poll-interval=20 --poll-timeout=600  # 调自更新重试节奏(秒)
+ *   npm run release -- --install-timeout=900               # 单次 npm install 上限(秒),0 = 不限时(默认)
  *
  * 发布后自更新:每轮先探 tarball 能不能取,能取到才调 npm;两条路(`pkg@<版本>` /
  * tarball URL 直连)都试,装上后校验全局版本,失败把原因打出来。
@@ -92,8 +93,9 @@ function readNumberArg(name, fallback) {
 // 于是 600s 眼看要耗尽、终端上 25 轮只有"→ npm install"没有任何原因。
 // 对策两条:① 每轮先自己探一次 tarball(isTarballFetchable,GET 而非 HEAD),
 // 取不到就跳过这一轮的 npm 调用并把状态打出来;② 失败原因压一行打出来。
-// 另外单次 npm 调用必须有时间上限(见 INSTALL_TIMEOUT_MS),否则一次网络卡死
-// 就能吃掉整个预算,外面那个 15s 一轮的循环根本没机会重试。
+// 单次 npm 调用不再硬性截断(见 INSTALL_TIMEOUT_MS):曾经给 180s 是为了"快速失败、
+// 把重试交给外层循环",但实测更常见的是 180s 不够 —— 每轮装到一半被杀、下轮从零重来,
+// 进度永远清零(2026-09-24 v2.17.14 卡了 27 轮)。要收紧可用 `--install-timeout=<秒>`。
 //
 // 默认 15s 一轮、上限 600s;可用 `--poll-interval=<秒>` / `--poll-timeout=<秒>` 调。
 const POLL_INTERVAL_MS = readNumberArg('--poll-interval', 15) * 1000
@@ -627,30 +629,43 @@ function readGlobalInstalledVersion() {
 // 输出先兜住不打印:重试期间每失败一次就刷一屏 `npm error` 太吵,
 // 失败时由调用方压成一行打出来(summarizeInstallError),整轮失败才回放全文。
 //
-// 时间必须**有界**:npm 自己的 fetch-timeout 是 5 分钟、还要重试 2 次,
-// 网络卡住时单次 `npm install` 能吃掉十几分钟 —— 实测挂在一个坏代理上,
-// 一次调用就耗掉了整个 600s 预算,外面那个"每 15s 重试一轮"的循环根本没有机会跑第二轮。
-// 所以这里把 fetch 重试收紧、再给 execSync 一个硬上限:让每次尝试**快速失败**,
-// 把"重试"这件事交给外层循环(它本来就在做,而且间隔只有 15s)。
-const INSTALL_TIMEOUT_MS = 180000
+// 单次安装要不要设上限:**默认不设**(--install-timeout=0)。
+//
+// 早期这里硬写 180s,理由是"npm 自己的 fetch-timeout 是 5 分钟、还要重试 2 次,
+// 网络卡住时单次 install 能吃掉十几分钟";但实测发现更常见的是反过来的坑 ——
+// 首次装一个大包 + 冷缓存 + 国内直连 registry.npmjs.org,180s 根本不够,
+// 于是每一轮都是"装到一半被杀 → 下一轮从零重来",27 轮全卡在同一处,
+// 永远装不上(2026-09-24 v2.17.14)。**杀掉重来 ≠ 快速失败**,它只是把进度清零。
+//
+// 现在把上限交给调用方:INSTALL_TIMEOUT_MS > 0 时才给 execSync 传 timeout;
+// 为 0 时不传该选项 —— 单次 install 跑到自然结束(npm 自身的 fetch-timeout 仍在,
+// 所以不会真的无限挂住)。
+const INSTALL_TIMEOUT_MS = readNumberArg('--install-timeout', 0) * 1000
 function tryInstallGlobal(spec) {
-  console.log(chalk.gray(`  → npm install -g ${spec}`))
+  const limit = INSTALL_TIMEOUT_MS
+  console.log(chalk.gray(`  → npm install -g ${spec}${limit > 0 ? `(上限 ${limit / 1000}s)` : '(不限时)'}`))
   try {
+    const opts = {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 8 * 1024 * 1024,
+    }
+    if (limit > 0) opts.timeout = limit
     execSync(
       `npm install -g ${spec} --registry=${NPM_REGISTRY} --prefer-online`
       + ' --fetch-retries=1 --fetch-retry-mintimeout=3000 --fetch-retry-maxtimeout=10000',
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        maxBuffer: 8 * 1024 * 1024,
-        timeout: INSTALL_TIMEOUT_MS,
-      }
+      opts
     )
     return { ok: true }
   } catch (err) {
     // 超时会被 execSync 杀掉(带 SIGTERM),stderr 可能是空的 —— 补一句可读的原因
     const out = `${err.stdout ?? ''}${err.stderr ?? ''}`.trim()
     if (!out && (err.killed || err.signal)) {
-      return { ok: false, output: `安装超时(${INSTALL_TIMEOUT_MS / 1000}s 到点被终止)` }
+      return {
+        ok: false,
+        output: limit > 0
+          ? `安装超时(${limit / 1000}s 到点被终止,可用 --install-timeout=<秒> 放宽或 =0 不限时)`
+          : '安装被中断(信号终止)',
+      }
     }
     return { ok: false, output: out || String(err.message || err) }
   }
@@ -818,7 +833,9 @@ async function selfUpdateGlobal(version) {
   console.log(chalk.gray('不空等 dist-tags:每轮先探 tarball,能取到才调 npm,失败会打印原因。'))
   console.log(chalk.gray(
     `间隔 ${POLL_INTERVAL_MS / 1000}s,上限 ${POLL_TIMEOUT_MS / 1000}s`
-    + '(可用 --poll-interval / --poll-timeout 调)。'
+    + '(可用 --poll-interval / --poll-timeout 调);'
+    + `单次安装${INSTALL_TIMEOUT_MS > 0 ? `上限 ${INSTALL_TIMEOUT_MS / 1000}s` : '不限时'}`
+    + '(可用 --install-timeout=<秒> 调,0 = 不限时)。'
   ))
 
   const startedAt = Date.now()
