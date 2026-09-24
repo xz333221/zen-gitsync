@@ -22,7 +22,7 @@ import TreeIcon from '@/components/icons/TreeIcon.vue'
 import IconButton from '@/components/IconButton.vue'
 import ListIcon from '@/components/icons/ListIcon.vue'
 import SvgIcon from '@/components/SvgIcon/index.vue'
-import { useGitStore } from '@stores/gitStore'
+import { useGitStore, DEFAULT_INITIAL_COMMIT_MESSAGE, buildInitialCommitGitignoreRules } from '@stores/gitStore'
 import { useConfigStore } from '@stores/configStore'
 import { useToolsStore } from '@stores/toolsStore'
 import { isFilePathLocked } from '@/utils/fileLock'
@@ -640,6 +640,41 @@ function openDirectoryDialog() {
 // 初始化Git仓库
 const isInitializingRepo = ref(false)
 
+// "初始化并提交"的规模确认。
+//
+// 背景:一键初始化会对整个目录 git add . ,漏了 .gitignore 时 node_modules /
+// dist 会被整体写进首个提交,一旦 push 就只能重写历史才清得掉。所以
+// gitStore.createInitialCommit 在规模可疑时会返回 confirm-required 而不提交,
+// 由这里把明细摊开让用户选:取消 / 仍要提交 / 补充 .gitignore 后提交。
+//
+// 用 Promise 把弹窗包成可 await 的,避免把 initGitRepo 拆成一串回调。
+type InitScopeDecision = 'cancel' | 'force' | 'gitignore'
+const initScopeDialogVisible = ref(false)
+let resolveInitScopeDecision: ((decision: InitScopeDecision) => void) | null = null
+
+function askInitScopeDecision(): Promise<InitScopeDecision> {
+  initScopeDialogVisible.value = true
+  return new Promise<InitScopeDecision>((resolve) => {
+    resolveInitScopeDecision = resolve
+  })
+}
+
+function decideInitScope(decision: InitScopeDecision) {
+  // 先取走 resolver 再关弹窗:关闭会触发 CommonDialog 的 @close,而 @close 也会
+  // 调 decideInitScope('cancel')。先把 resolver 置空,后面那次调用就是纯 no-op,
+  // 不会覆盖用户的选择,也不会让 Promise 悬着。
+  const resolve = resolveInitScopeDecision
+  resolveInitScopeDecision = null
+  initScopeDialogVisible.value = false
+  resolve?.(decision)
+}
+
+// 确认框要展示的明细。取自 store 里最近一次预检结果,
+// 用 computed 包一层(而不是在模板里直接解构可选链),避免模板侧的类型告警。
+const initScopeTotal = computed(() => gitStore.initialCommitScope?.total ?? 0)
+const initScopeGenerated = computed(() => gitStore.initialCommitScope?.generated ?? [])
+const initScopeTopDirs = computed(() => gitStore.initialCommitScope?.topDirs ?? [])
+
 // "最近项目"列表已抽出为独立组件 @/components/RecentProjectsList.vue
 // 在 App.vue 中间空态(非 git 仓库时)和原本的 Git 仓库初始化卡片一起展示
 async function initGitRepo() {
@@ -671,7 +706,42 @@ async function initGitRepo() {
       // push -u 建上游,所以"初始化 → 提交 → 推送"一次点击就全部走完。
       // 必须放在 fetchLog 之后:createInitialCommit 用 log 是否为空判断当前是否
       // 已有提交,用来防御"目录已被外部 git init"的并发场景。
-      const initCommitResult = await gitStore.createInitialCommit()
+      let initCommitResult = await gitStore.createInitialCommit()
+
+      // 待提交规模可疑(疑似漏了 .gitignore):先把"要提交什么"给用户看清楚。
+      // 这里必须发生在 addAllToStage 之前,否则文件已经进了 Git 历史。
+      if (initCommitResult === 'confirm-required') {
+        const decision = await askInitScopeDecision()
+        if (decision === 'cancel') {
+          ElMessage.info($t('@13D1C:已取消首次提交，补充 .gitignore 后可以重新点击初始化'))
+          return
+        }
+        if (decision === 'gitignore') {
+          const totalBefore = gitStore.initialCommitScope?.total ?? 0
+          // 规则 = 命中的生成目录 + 工具运行产物(.port),见 buildInitialCommitGitignoreRules
+          const rules = buildInitialCommitGitignoreRules(gitStore.initialCommitScope)
+          const ensured = await gitStore.ensureGitignore(rules)
+          if (!ensured.ok) {
+            // 写 .gitignore 失败就不继续提交 —— 否则等于把用户明确拒绝的文件
+            // 又提了上去,比直接报错更糟
+            ElMessage.error(`${$t('@13D1C:补充 .gitignore 失败: ')}${ensured.error || ''}`)
+            return
+          }
+          // 刷新状态:被忽略的文件会从 fileList 里消失,再提交就只剩源码
+          await loadStatus()
+          const totalAfter = gitStore.inspectInitialCommitScope().total
+          ElMessage.success($t('@13D1C:已补充 .gitignore，排除了 {removed} 个文件', {
+            removed: Math.max(totalBefore - totalAfter, 0)
+          }))
+        }
+        // 走到这里说明用户已明确要继续(主动选"仍要提交",或补完 .gitignore),
+        // 带 force 放行预检
+        initCommitResult = await gitStore.createInitialCommit(
+          DEFAULT_INITIAL_COMMIT_MESSAGE,
+          { force: true }
+        )
+      }
+
       if (initCommitResult === 'skipped-no-files') {
         ElMessage.info($t('@13D1C:目录中没有可提交的文件，已跳过首次提交'))
       }
@@ -1630,6 +1700,54 @@ defineExpose({
     </FileDiffViewer>
   </CommonDialog>
 
+  <!-- "初始化并提交":待提交规模可疑(疑似漏了 .gitignore)时的确认框。
+       由 initGitRepo 在 createInitialCommit 返回 confirm-required 时弹出。
+       三个出口:取消 / 仍要提交全部文件 / 补充 .gitignore 后提交。 -->
+  <CommonDialog
+    v-model="initScopeDialogVisible"
+    :title="$t('@13D1C:即将提交的文件数量异常')"
+    width="min(520px, 92vw)"
+    custom-class="init-scope-dialog"
+    @close="decideInitScope('cancel')"
+  >
+    <div class="init-scope-body">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        :title="$t('@13D1C:这次首个提交会包含 {total} 个文件', { total: initScopeTotal })"
+      />
+      <template v-if="initScopeGenerated.length">
+        <p class="init-scope-hint">{{ $t('@13D1C:下面的目录通常是依赖或构建产物，不应该写进 Git 历史：') }}</p>
+        <ul class="init-scope-list">
+          <li v-for="item in initScopeGenerated" :key="item.path">
+            <code>{{ item.path }}</code>
+            <span>{{ $t('@13D1C:{count} 个文件', { count: item.count }) }}</span>
+          </li>
+        </ul>
+      </template>
+      <template v-else>
+        <p class="init-scope-hint">{{ $t('@13D1C:文件数最多的目录：') }}</p>
+        <ul class="init-scope-list">
+          <li v-for="item in initScopeTopDirs" :key="item.path">
+            <code>{{ item.path }}</code>
+            <span>{{ $t('@13D1C:{count} 个文件', { count: item.count }) }}</span>
+          </li>
+        </ul>
+      </template>
+      <p class="init-scope-tip">{{ $t('@13D1C:建议先补充 .gitignore 再提交。一旦提交并推送，这些文件就会进入 Git 历史，之后只能重写历史才能清理。') }}</p>
+    </div>
+    <template #footer>
+      <div class="init-scope-footer">
+        <el-button @click="decideInitScope('cancel')">{{ $t('@13D1C:取消') }}</el-button>
+        <div class="init-scope-footer-right">
+          <el-button @click="decideInitScope('force')">{{ $t('@13D1C:仍要提交全部文件') }}</el-button>
+          <el-button type="primary" @click="decideInitScope('gitignore')">{{ $t('@13D1C:补充 .gitignore 后提交') }}</el-button>
+        </div>
+      </div>
+    </template>
+  </CommonDialog>
+
   <!-- 锁定文件管理对话框 -->
   <CommonDialog
     v-model="showLockedFilesDialog"
@@ -2576,6 +2694,89 @@ html.dark .pull-error-type.is-error {
   background: rgba(245, 108, 108, 0.12);
   border-color: rgba(245, 108, 108, 0.3);
   color: #f87171;
+}
+
+/* —— "初始化并提交"的规模确认框 ——
+   颜色一律走变量(--text-secondary / --bg-code / --border-console 在暗色主题里
+   都有对应的 -dark 映射),所以这里不需要再写 html.dark 覆盖。 */
+.init-scope-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.init-scope-hint,
+.init-scope-tip {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.init-scope-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-base);
+  /* 生成目录可能列很长(例如同时命中多个 module 缓存),超过就滚动 */
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.init-scope-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-base);
+  padding: 6px var(--spacing-base);
+  background: var(--bg-code);
+  border: 1px solid var(--border-console);
+  border-radius: var(--radius-md);
+}
+
+.init-scope-list code {
+  /* 多级生成目录(如 frontend/node_modules)可能很长:允许收缩并断行,
+     否则会把整行撑得比弹框还宽 */
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.init-scope-list span {
+  flex: 0 0 auto;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-warning, #d46b08);
+}
+
+.init-scope-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* 三个按钮 + 英文文案更长时允许换行,避免撑破弹框右边界 */
+  flex-wrap: wrap;
+  gap: var(--spacing-base) var(--spacing-md);
+  width: 100%;
+}
+
+.init-scope-footer-right {
+  display: flex;
+  align-items: center;
+  /* 换行后右组仍整体靠右 */
+  flex-wrap: wrap;
+  margin-left: auto;
+  gap: var(--spacing-base);
+}
+
+.init-scope-footer .el-button {
+  border-radius: var(--btn-radius);
+  /* 取消 el-button 相邻按钮的默认左间距,交给 gap 统一控制 */
+  margin-left: 0;
 }
 
 </style>

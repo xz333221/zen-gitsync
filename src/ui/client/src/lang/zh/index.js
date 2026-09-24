@@ -1234,6 +1234,7 @@ export default {
   '@C298B:应用stash失败: ': '应用stash失败: ',
   '@C298B:删除stash失败: ': '删除stash失败: ',
   '@C298B:清空stash失败: ': '清空stash失败: ',
+  '@C298B:写入 .gitignore 失败': '写入 .gitignore 失败',
   // @C298B: file end
   // @5C735: file path: utils\index.ts
   '@5C735:刚刚': '刚刚',
@@ -1747,6 +1748,18 @@ export default {
   '@13D1C:取消全选': '取消全选',
   '@13D1C:退出选择模式': '退出选择模式',
   '@13D1C:选择文件进行储藏': '选择文件进行储藏',
+  // 「初始化并提交」的规模预检(疑似漏了 .gitignore)确认框
+  '@13D1C:即将提交的文件数量异常': '即将提交的文件数量异常',
+  '@13D1C:这次首个提交会包含 {total} 个文件': '这次首个提交会包含 {total} 个文件',
+  '@13D1C:下面的目录通常是依赖或构建产物，不应该写进 Git 历史：': '下面的目录通常是依赖或构建产物，不应该写进 Git 历史：',
+  '@13D1C:文件数最多的目录：': '文件数最多的目录：',
+  '@13D1C:{count} 个文件': '{count} 个文件',
+  '@13D1C:建议先补充 .gitignore 再提交。一旦提交并推送，这些文件就会进入 Git 历史，之后只能重写历史才能清理。': '建议先补充 .gitignore 再提交。一旦提交并推送，这些文件就会进入 Git 历史，之后只能重写历史才能清理。',
+  '@13D1C:仍要提交全部文件': '仍要提交全部文件',
+  '@13D1C:补充 .gitignore 后提交': '补充 .gitignore 后提交',
+  '@13D1C:已取消首次提交，补充 .gitignore 后可以重新点击初始化': '已取消首次提交，补充 .gitignore 后可以重新点击初始化',
+  '@13D1C:补充 .gitignore 失败: ': '补充 .gitignore 失败: ',
+  '@13D1C:已补充 .gitignore，排除了 {removed} 个文件': '已补充 .gitignore，排除了 {removed} 个文件',
   // @13D1C: file end
   // @A1833: file path: views\components\LogList.vue
   '@A1833:选择作者': '选择作者',

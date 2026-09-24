@@ -1230,6 +1230,7 @@ export default {
   '@C298B:应用stash失败: ': 'Application stash failed:',
   '@C298B:删除stash失败: ': 'Failed to delete stash:',
   '@C298B:清空stash失败: ': 'Clearing stash failed:',
+  '@C298B:写入 .gitignore 失败': 'Failed to write .gitignore',
   // @C298B: file end
   // @5C735: file path: utils\index.ts
   '@5C735:刚刚': 'Just now',
@@ -1740,6 +1741,18 @@ export default {
   '@13D1C:取消全选': 'Deselect All',
   '@13D1C:退出选择模式': 'Exit Selection Mode',
   '@13D1C:选择文件进行储藏': 'Select Files to Stash',
+  // 「初始化并提交」的规模预检(疑似漏了 .gitignore)确认框
+  '@13D1C:即将提交的文件数量异常': 'Unusually large number of files to commit',
+  '@13D1C:这次首个提交会包含 {total} 个文件': 'This first commit will include {total} files',
+  '@13D1C:下面的目录通常是依赖或构建产物，不应该写进 Git 历史：': 'The directories below are usually dependencies or build output, and should not go into Git history:',
+  '@13D1C:文件数最多的目录：': 'Directories with the most files:',
+  '@13D1C:{count} 个文件': '{count} files',
+  '@13D1C:建议先补充 .gitignore 再提交。一旦提交并推送，这些文件就会进入 Git 历史，之后只能重写历史才能清理。': 'Add a .gitignore before committing. Once committed and pushed, these files enter Git history and can only be removed by rewriting it.',
+  '@13D1C:仍要提交全部文件': 'Commit all files anyway',
+  '@13D1C:补充 .gitignore 后提交': 'Add .gitignore, then commit',
+  '@13D1C:已取消首次提交，补充 .gitignore 后可以重新点击初始化': 'First commit cancelled. Add a .gitignore, then click Initialize again.',
+  '@13D1C:补充 .gitignore 失败: ': 'Failed to update .gitignore:',
+  '@13D1C:已补充 .gitignore，排除了 {removed} 个文件': 'Updated .gitignore, excluded {removed} files',
   // @13D1C: file end
   // @A1833: file path: views\components\LogList.vue
   '@A1833:选择作者': 'Select author',

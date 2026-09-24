@@ -35,6 +35,79 @@ const backendPort = getBackendPort()
 // 刻意不走 i18n:提交信息是写进 git 历史的实体数据,不应该随界面语言变化。
 export const DEFAULT_INITIAL_COMMIT_MESSAGE = 'chore: init'
 
+// ── "初始化并提交"的规模预检 ────────────────────────────────────────────────
+//
+// 为什么需要它:一键初始化会对整个目录执行 `git add .`。目录里没有 .gitignore
+// 时,node_modules / dist 这类生成目录会被整体纳入首个提交 —— 实测一个只有
+// 20 多个源文件的 Vue 项目因此提交了 4298 个文件(node_modules 占 4272 个 /
+// 114MB),推到远端后仓库 20MB,最后只能重写历史才清得掉。
+//
+// 判断数据来自 fileList(即 /api/status_porcelain,已带 --untracked-files=all),
+// 统计的正是 `git add .` 会纳入的文件;已被 .gitignore 忽略的文件根本不在列表里,
+// 所以忽略规则写好的项目不会被误报。
+const INIT_COMMIT_FILE_COUNT_LIMIT = 1000
+
+// 几乎不该进版本库的生成目录名(小写比较)。命中即视为可疑,不看文件总数 ——
+// 小项目里 node_modules 可能只有几百个文件,单靠总数阈值抓不住。
+const GENERATED_DIR_NAMES = new Set([
+  // JS / TS
+  'node_modules', 'bower_components', 'jspm_packages',
+  'dist', 'build', 'out', 'coverage',
+  '.next', '.nuxt', '.output', '.svelte-kit', '.parcel-cache', '.turbo', '.cache',
+  // Python
+  '.venv', 'venv', '__pycache__', '.tox', '.mypy_cache', '.pytest_cache',
+  // 其他生态
+  '.gradle', 'target', 'Pods'
+])
+
+export interface InitialCommitScopeEntry {
+  // 相对仓库根的目录路径(生成目录可能是多级,如 frontend/node_modules)
+  path: string
+  count: number
+}
+
+export interface InitialCommitScope {
+  // 即将进入首个提交的文件总数
+  total: number
+  // 命中的生成目录,按文件数倒序
+  generated: InitialCommitScopeEntry[]
+  // 文件数最多的前几个顶层目录,用来给出"大头在哪"的直觉
+  topDirs: InitialCommitScopeEntry[]
+  // 是否需要用户先确认再提交
+  suspicious: boolean
+}
+
+// 找出仓库相对路径中第一个"生成目录"段,返回截止该段的目录前缀。
+//   frontend/node_modules/vite/dist/x.js → frontend/node_modules
+// 只检查目录段(不含最后一段文件名),避免把恰好叫 dist 的普通文件算进来。
+export function findGeneratedDirPrefix(relPath: string): string | null {
+  const segments = String(relPath || '').split('/').filter(Boolean)
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (GENERATED_DIR_NAMES.has(segments[i].toLowerCase())) {
+      return segments.slice(0, i + 1).join('/')
+    }
+  }
+  return null
+}
+
+// 工具自身会在项目根留下的运行产物,同样不该进版本库。
+//   .port —— `g ui` 启动时把实际监听端口写进 `cwd/.port`
+//            (见 src/ui/server/utils/createSavePortToFile.js),供其它进程读取。
+//            本仓库自己的 .gitignore 也忽略了它,用户项目里没有理由跟踪。
+// 注意:这些是文件而非目录,所以不带 / 后缀。
+export const RUNTIME_ARTIFACT_IGNORES: readonly string[] = ['.port']
+
+// 「补充 .gitignore」实际要写入的规则 = 命中的生成目录(带 / 后缀)
+//                                       + 工具运行产物。
+// 抽成独立函数是为了可单测:规则拼错会直接写坏用户的 .gitignore。
+export function buildInitialCommitGitignoreRules(scope: InitialCommitScope | null): string[] {
+  const rules = (scope?.generated ?? []).map(item => `${item.path}/`)
+  for (const extra of RUNTIME_ARTIFACT_IGNORES) {
+    if (!rules.includes(extra)) rules.push(extra)
+  }
+  return rules
+}
+
 // 远程仓库信息(与后端 GET /api/remotes 的返回元素对应)
 export interface RemoteInfo {
   name: string
@@ -2140,6 +2213,93 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // 最近一次"初始化并提交"的规模预检结果。
+  // createInitialCommit 命中可疑规模时会写入这里,调用方据此渲染确认框明细。
+  const initialCommitScope = ref<InitialCommitScope | null>(null)
+
+  // 统计"即将进入首个提交"的文件规模。
+  // 只读 fileList,不发请求;调用前请确保状态是新的
+  // (GitStatus.initGitRepo 里是在 loadStatus / fetchLog 之后调用的)。
+  function inspectInitialCommitScope(): InitialCommitScope {
+    const generatedCounts = new Map<string, number>()
+    const dirCounts = new Map<string, number>()
+    let total = 0
+
+    for (const file of fileList.value) {
+      const relPath = String(file.path || '')
+      if (!relPath) continue
+      total += 1
+      const generatedPrefix = findGeneratedDirPrefix(relPath)
+      if (generatedPrefix) {
+        generatedCounts.set(generatedPrefix, (generatedCounts.get(generatedPrefix) || 0) + 1)
+      } else {
+        // 仓库根下的直属文件用 '.' 归一组,方便在确认框里一并展示
+        const topDir = relPath.includes('/') ? relPath.slice(0, relPath.indexOf('/')) : '.'
+        dirCounts.set(topDir, (dirCounts.get(topDir) || 0) + 1)
+      }
+    }
+
+    const toEntries = (map: Map<string, number>): InitialCommitScopeEntry[] =>
+      [...map.entries()]
+        .map(([path, count]) => ({ path, count }))
+        .sort((a, b) => b.count - a.count)
+
+    const generated = toEntries(generatedCounts)
+    return {
+      total,
+      generated,
+      topDirs: toEntries(dirCounts).slice(0, 5),
+      suspicious: total >= INIT_COMMIT_FILE_COUNT_LIMIT || generated.length > 0
+    }
+  }
+
+  // 把规则合并进工作区根目录的 .gitignore(不存在则创建)。
+  //
+  // 只追加缺失的规则:已有内容原样保留,已存在的规则不重复添加,
+  // 因此对用户自己维护的 .gitignore 是安全的。
+  // 返回本次新增的规则,便于调用方提示"到底加了什么"。
+  async function ensureGitignore(rules: string[]): Promise<{ ok: boolean; added: string[]; error?: string }> {
+    const desired = [...new Set(rules.map(rule => String(rule).trim()).filter(Boolean))]
+    if (!desired.length) return { ok: true, added: [] }
+
+    try {
+      // 1) 读现有 .gitignore。文件不存在时后端返回 success:false,按空文件处理
+      let existing = ''
+      const readRes = await fetch('/api/editor/file?path=.gitignore')
+      const readData = await readRes.json().catch(() => ({}))
+      if (readData?.success && typeof readData.content === 'string') {
+        existing = readData.content
+      }
+
+      // 2) 只补缺失的规则。逐行归一化比较(去首尾空白、去结尾斜杠),
+      //    避免把 `node_modules/` 与 `node_modules` 当成两条重复规则加进去。
+      const normalize = (line: string) => line.trim().replace(/\/+$/, '')
+      const present = new Set(
+        existing
+          .split(/\r?\n/)
+          .filter(line => line.trim() && !line.trim().startsWith('#'))
+          .map(normalize)
+      )
+      const added = desired.filter(rule => !present.has(normalize(rule)))
+      if (!added.length) return { ok: true, added: [] }
+
+      // 3) 追加写入:原有内容以换行结尾时不额外留空行,否则先补一个换行
+      const base = existing.length ? (existing.endsWith('\n') ? existing : `${existing}\n`) : ''
+      const writeRes = await fetch('/api/editor/file', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: '.gitignore', content: `${base}${added.join('\n')}\n` })
+      })
+      const writeData = await writeRes.json().catch(() => ({}))
+      if (!writeData?.success) {
+        return { ok: false, added: [], error: writeData?.error || $t('@C298B:写入 .gitignore 失败') }
+      }
+      return { ok: true, added }
+    } catch (error) {
+      return { ok: false, added: [], error: (error as Error).message }
+    }
+  }
+
   // 初始化仓库后的"首次提交"一步到位。
   //
   // 只串联 addAllToStage + commitChanges,不新增后端接口。
@@ -2150,8 +2310,14 @@ export const useGitStore = defineStore('git', () => {
   //   'committed'           已创建首次提交
   //   'skipped-has-commits' 仓库已有提交(重复初始化 / 目录被外部并发 init),不补提交
   //   'skipped-no-files'    没有可提交的文件(空目录 / 文件全被 .gitignore 忽略)
+  //   'confirm-required'    待提交规模可疑(疑似缺 .gitignore),需调用方确认后带 force 重试
   //   'failed'              暂存或提交失败(具体原因已由内层 toast 呈现)
-  async function createInitialCommit(message = DEFAULT_INITIAL_COMMIT_MESSAGE) {
+  async function createInitialCommit(
+    message = DEFAULT_INITIAL_COMMIT_MESSAGE,
+    options: { force?: boolean } = {}
+  ) {
+    const { force = false } = options
+
     // 1) 已有提交就不补"首次提交",避免在既有历史上多压一个无关提交。
     //    刚 git init 的仓库处于 unborn HEAD,git log 返回空,所以 log 为空
     //    正是"还没有任何提交"。isGitRepo=true 时该面板本就不渲染,这里是
@@ -2160,13 +2326,21 @@ export const useGitStore = defineStore('git', () => {
       return 'skipped-has-commits' as const
     }
 
-    // 2) 暂存全部文件。静默执行,避免"已添加到暂存区"与"提交成功"两条 toast 叠加
+    // 2) 规模预检。这在"文件写进 Git 历史之前"拦一下 —— 一旦提交再 push,
+    //    想清掉就只能重写历史。force=true 表示用户已经看过明细并选择继续。
+    const scope = inspectInitialCommitScope()
+    initialCommitScope.value = scope
+    if (scope.suspicious && !force) {
+      return 'confirm-required' as const
+    }
+
+    // 3) 暂存全部文件。静默执行,避免"已添加到暂存区"与"提交成功"两条 toast 叠加
     const staged = await addAllToStage({ silent: true })
     if (!staged) {
       return 'failed' as const
     }
 
-    // 3) 暂存区为空 → 目录里没有任何可提交的文件。
+    // 4) 暂存区为空 → 目录里没有任何可提交的文件。
     //    此时直接提交会抛 git 原始的 "nothing to commit",提前拦掉交给调用方
     //    提示更友好。porcelain 中 index 侧有变更的文件统一为 'added'
     //    (见 parseStatusPorcelain:暂存的 A/M/D/R 都归到 'added')。
@@ -2175,7 +2349,7 @@ export const useGitStore = defineStore('git', () => {
       return 'skipped-no-files' as const
     }
 
-    // 4) 提交。空消息会让 git commit 直接失败,这里兜底默认文案
+    // 5) 提交。空消息会让 git commit 直接失败,这里兜底默认文案
     const ok = await commitChanges(message.trim() || DEFAULT_INITIAL_COMMIT_MESSAGE)
     return ok ? ('committed' as const) : ('failed' as const)
   }
@@ -2811,6 +2985,9 @@ export const useGitStore = defineStore('git', () => {
     attachRemoteBranch,
     gitInit,
     createInitialCommit,
+    initialCommitScope,
+    inspectInitialCommitScope,
+    ensureGitignore,
     copyRemoteUrl,
     copyCloneCommand,
     copyCurrentDiff,

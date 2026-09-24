@@ -22,7 +22,7 @@
 //   2. $reset() 确实会清空用户信息 —— 这正是切目录后必须重拉的缘由。
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useGitStore, DEFAULT_INITIAL_COMMIT_MESSAGE } from './gitStore'
+import { useGitStore, DEFAULT_INITIAL_COMMIT_MESSAGE, findGeneratedDirPrefix, buildInitialCommitGitignoreRules } from './gitStore'
 
 function stubUserInfo(payload: unknown, { fail = false }: { fail?: boolean } = {}) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -248,5 +248,272 @@ describe('gitStore.createInitialCommit', () => {
 
     expect(result).toBe('failed')
     expect(calls.length).toBe(0)
+  })
+
+  // ── 规模预检:疑似漏了 .gitignore ──────────────────────────────────────
+  //
+  // 背景:一键初始化会对整个目录执行 `git add .`。目录缺 .gitignore 时
+  // node_modules / dist 会被整体写进首个提交 —— 实测一个只有 20 多个源文件的
+  // Vue 项目因此提了 4298 个文件(node_modules 占 4272 / 114MB),推到远端后
+  // 仓库 20MB,最后只能重写历史才清得掉。
+  //
+  // 本组锁定:可疑规模必须在**暂存之前**就拦下并交回调用方,而不是先提交再提示
+  // (那时文件已经进 Git 历史了)。同时要保证正常项目不被误拦。
+  test('文件数超过阈值时返回 confirm-required,且不暂存不提交', async () => {
+    const { calls } = stubRepoApi({ porcelain: 'A  index.html' })
+    const store = useGitStore()
+    store.isGitRepo = true
+    // 1100 个普通源文件:不命中生成目录,只能靠总数阈值触发
+    store.fileList = Array.from({ length: 1100 }, (_, i) => ({ path: `src/f${i}.ts`, type: 'untracked' }))
+
+    const result = await store.createInitialCommit()
+
+    expect(result).toBe('confirm-required')
+    expect(calls.some(u => u.startsWith('/api/add-all'))).toBe(false)
+    expect(calls.some(u => u.startsWith('/api/commit'))).toBe(false)
+    expect(store.initialCommitScope?.total).toBe(1100)
+    expect(store.initialCommitScope?.suspicious).toBe(true)
+  })
+
+  test('命中生成目录时即使文件很少也拦截,并识别多级路径', async () => {
+    const { calls } = stubRepoApi({ porcelain: 'A  index.html' })
+    const store = useGitStore()
+    store.isGitRepo = true
+    // node_modules 不在仓库根(在 frontend 下),所以不能只看顶层目录名
+    store.fileList = [
+      { path: 'README.md', type: 'untracked' },
+      { path: 'frontend/node_modules/vue/index.js', type: 'untracked' },
+      { path: 'frontend/node_modules/vue/package.json', type: 'untracked' }
+    ]
+
+    const result = await store.createInitialCommit()
+
+    expect(result).toBe('confirm-required')
+    expect(calls.some(u => u.startsWith('/api/add-all'))).toBe(false)
+    expect(store.initialCommitScope?.total).toBe(3)
+    // 明细里要给出"到底是哪个目录",否则确认框无从判断
+    expect(store.initialCommitScope?.generated).toEqual([
+      { path: 'frontend/node_modules', count: 2 }
+    ])
+  })
+
+  test('规模正常的项目不被误拦,直接走到提交', async () => {
+    const { calls, commitBodies } = stubRepoApi({ porcelain: 'A  index.html' })
+    const store = useGitStore()
+    store.isGitRepo = true
+    store.fileList = [
+      { path: 'README.md', type: 'untracked' },
+      { path: 'src/index.ts', type: 'untracked' },
+      // 文件名里含 dist,但它不是"目录段",不该被当成生成目录
+      { path: 'docs/dist.md', type: 'untracked' }
+    ]
+
+    const result = await store.createInitialCommit()
+
+    expect(result).toBe('committed')
+    expect(calls.some(u => u.startsWith('/api/add-all'))).toBe(true)
+    expect(commitBodies[0].message).toBe(DEFAULT_INITIAL_COMMIT_MESSAGE)
+  })
+
+  test('force=true 时跳过预检(用户已看过明细并选择继续)', async () => {
+    const { calls, commitBodies } = stubRepoApi({ porcelain: 'A  index.html' })
+    const store = useGitStore()
+    store.isGitRepo = true
+    store.fileList = Array.from({ length: 1100 }, (_, i) => ({ path: `node_modules/p${i}/index.js`, type: 'untracked' }))
+
+    const result = await store.createInitialCommit(DEFAULT_INITIAL_COMMIT_MESSAGE, { force: true })
+
+    expect(result).toBe('committed')
+    expect(calls.some(u => u.startsWith('/api/add-all'))).toBe(true)
+    expect(commitBodies[0].message).toBe(DEFAULT_INITIAL_COMMIT_MESSAGE)
+  })
+
+  test('预检不做任何网络请求(只读已有状态)', async () => {
+    const { calls } = stubRepoApi({ porcelain: 'A  index.html' })
+    const store = useGitStore()
+    store.isGitRepo = true
+    store.fileList = [{ path: 'node_modules/vue/index.js', type: 'untracked' }]
+
+    await store.createInitialCommit()
+
+    // 拦住之后必须一个请求都没发出去 —— 否则"拦截"就没意义了
+    expect(calls.length).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ensureGitignore:补 .gitignore 的安全边界。
+//
+// 这是"拦截 → 一键补忽略规则"里的写盘环节,风险在于改动用户自己维护的
+// .gitignore。锁定三点:已有内容原样保留、重复规则不重复追加、
+// 无可加规则时不写文件(避免无谓地改动文件 mtime)。
+// ---------------------------------------------------------------------------
+describe('gitStore.ensureGitignore', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  // GET 走 /api/editor/file?path=...,没有 init;写入走同一路径的 PUT
+  function stubEditorFile(
+    options: { existing?: string | null; writeOk?: boolean; writeError?: string } = {}
+  ) {
+    const putBodies: any[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: any) => {
+      const json = (payload: unknown) => new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (init?.method === 'PUT') {
+        putBodies.push(JSON.parse(init.body || '{}'))
+        return json(options.writeOk === false
+          ? { success: false, error: options.writeError ?? 'boom' }
+          : { success: true })
+      }
+      // existing === null 表示文件不存在(后端返回 success:false)
+      return options.existing === null
+        ? json({ success: false, error: 'ENOENT' })
+        : json({ success: true, content: options.existing ?? '' })
+    }))
+    return { putBodies }
+  }
+
+  test('保留原有内容,只追加缺失规则', async () => {
+    const { putBodies } = stubEditorFile({ existing: '# 我的规则\nnode_modules\n*.log\n' })
+    const store = useGitStore()
+
+    const result = await store.ensureGitignore(['node_modules/', 'dist/'])
+
+    expect(result.ok).toBe(true)
+    // node_modules 已在(.gitignore 里带不带斜杠都算同一条),只该补 dist/
+    expect(result.added).toEqual(['dist/'])
+    expect(putBodies.length).toBe(1)
+    expect(putBodies[0].path).toBe('.gitignore')
+    expect(putBodies[0].content).toBe('# 我的规则\nnode_modules\n*.log\ndist/\n')
+  })
+
+  test('.gitignore 不存在时创建并写入规则', async () => {
+    const { putBodies } = stubEditorFile({ existing: null })
+    const store = useGitStore()
+
+    const result = await store.ensureGitignore(['frontend/node_modules/'])
+
+    expect(result.ok).toBe(true)
+    expect(result.added).toEqual(['frontend/node_modules/'])
+    expect(putBodies[0].content).toBe('frontend/node_modules/\n')
+  })
+
+  test('规则都已存在时不写文件', async () => {
+    const { putBodies } = stubEditorFile({ existing: 'node_modules/\ndist/\n' })
+    const store = useGitStore()
+
+    const result = await store.ensureGitignore(['node_modules/', 'dist/'])
+
+    expect(result.ok).toBe(true)
+    expect(result.added).toEqual([])
+    expect(putBodies.length).toBe(0)
+  })
+
+  test('写入失败时如实返回 ok=false 与原因,不谎报成功', async () => {
+    const { putBodies } = stubEditorFile({ existing: null, writeOk: false, writeError: '磁盘只读' })
+    const store = useGitStore()
+
+    const result = await store.ensureGitignore(['node_modules/'])
+
+    expect(putBodies.length).toBe(1)
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe('磁盘只读')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// findGeneratedDirPrefix / buildInitialCommitGitignoreRules
+//
+// 前者决定"哪些文件算生成产物",后者决定"往用户 .gitignore 里写什么"。
+// 两者串起来就是"拦截 → 一键补规则"的判定核心:
+//   - 判错 → 要么漏拦(node_modules 进了首个提交),要么误拦(正常源码项目被卡)
+//   - 规则拼错 → 直接写坏用户的 .gitignore
+// 所以单独锁死边界。
+// ---------------------------------------------------------------------------
+describe('findGeneratedDirPrefix', () => {
+  test('命中根级生成目录', () => {
+    expect(findGeneratedDirPrefix('node_modules/vue/index.js')).toBe('node_modules')
+    expect(findGeneratedDirPrefix('dist/bundle.js')).toBe('dist')
+  })
+
+  test('命中多级路径,返回截止生成目录的前缀', () => {
+    expect(findGeneratedDirPrefix('frontend/node_modules/vue/index.js')).toBe('frontend/node_modules')
+    expect(findGeneratedDirPrefix('packages/a/.next/server/x.js')).toBe('packages/a/.next')
+  })
+
+  test('大小写不敏感(node_modules / NODE_MODULES 都算)', () => {
+    expect(findGeneratedDirPrefix('NODE_MODULES/vue/index.js')).toBe('NODE_MODULES')
+  })
+
+  test('只看目录段:恰好叫 dist 的文件不算生成产物', () => {
+    // 这是最容易写错的地方 —— 若改成对整条路径 includes(),
+    // docs/dist.md 会被误判成生成产物,导致正常项目被拦。
+    expect(findGeneratedDirPrefix('docs/dist.md')).toBeNull()
+    expect(findGeneratedDirPrefix('src/build.ts')).toBeNull()
+  })
+
+  test('普通源文件与空路径返回 null', () => {
+    expect(findGeneratedDirPrefix('src/index.ts')).toBeNull()
+    expect(findGeneratedDirPrefix('README.md')).toBeNull()
+    expect(findGeneratedDirPrefix('')).toBeNull()
+  })
+
+  test('生成目录本身作为最后一段时不算(由上层保证只传文件路径)', () => {
+    // 传入 'node_modules' 这种纯目录名时,最后一段被当作文件名,不命中
+    expect(findGeneratedDirPrefix('node_modules')).toBeNull()
+  })
+})
+
+describe('buildInitialCommitGitignoreRules', () => {
+  test('生成目录带 / 后缀,并补上工具运行产物 .port', () => {
+    const rules = buildInitialCommitGitignoreRules({
+      total: 10,
+      generated: [
+        { path: 'node_modules', count: 8 },
+        { path: 'frontend/dist', count: 2 }
+      ],
+      topDirs: [],
+      suspicious: true
+    })
+
+    expect(rules).toEqual(['node_modules/', 'frontend/dist/', '.port'])
+  })
+
+  test('即使没有命中生成目录,也要带上 .port', () => {
+    // `g ui` 会把监听端口写进 cwd/.port。若这里不带上,用户点完"补充 .gitignore"
+    // 首个提交仍会带上 .port —— 正是本功能想避免的那类噪音。
+    const rules = buildInitialCommitGitignoreRules({
+      total: 1200,
+      generated: [],
+      topDirs: [{ path: 'src', count: 1200 }],
+      suspicious: true
+    })
+
+    expect(rules).toEqual(['.port'])
+  })
+
+  test('scope 为 null 时仍返回 .port,不抛异常', () => {
+    // 确认框渲染依赖 store.initialCommitScope,理论上不会为 null;
+    // 但模板侧已按可选链取值,这里保证不会因为 null 崩掉。
+    expect(buildInitialCommitGitignoreRules(null)).toEqual(['.port'])
+  })
+
+  test('幂等:同一 scope 反复调用结果一致', () => {
+    const scope = {
+      total: 3,
+      generated: [{ path: 'node_modules', count: 3 }],
+      topDirs: [],
+      suspicious: true
+    }
+
+    expect(buildInitialCommitGitignoreRules(scope)).toEqual(buildInitialCommitGitignoreRules(scope))
   })
 })
