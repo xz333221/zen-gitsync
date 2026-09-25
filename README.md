@@ -24,7 +24,6 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
   - [Project Startup](#project-startup)
   - [Views at a glance](#views-at-a-glance)
   - [Built-in Code Editor](#built-in-code-editor)
-  - [Source Map](#source-map-ai-codebase-visualization)
   - [Workbench](#workbench-task-driven-agent-execution)
   - [AI Agent](#ai-agent-web)
   - [Settings](#settings)
@@ -59,7 +58,6 @@ npm install -g zen-gitsync
 - **Custom commands** — Save, parameterize, and reuse shell commands
 - **Project startup** — Auto-run commands or workflows when a project opens
 - **Built-in code editor** — Monaco-based file editor with Markdown preview
-- **Source map** — AI-generated interactive codebase dependency graph
 - **Workbench** — a multi-project board with a kanban view and a master-agent dispatch console; task-driven agent execution (Claude Code or OpenCode) with prompt presets, isolated per-task processes, live streaming output, AI-generated presets and task-level attachments
 - **Repository cloning** — clone any GitHub / Gitee repository into a folder straight from the repo browser, with an *Already cloned* badge (and its local path) backed by a whole-disk local-repository scan
 - **Skill / MCP marketplace** — install skills and MCP servers from the Agent view into the current project or the `g ai` agent
@@ -83,7 +81,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-The GUI runs as a local web server and opens in your default browser on the first free port it finds in `4000–6000` (set `PORT` to pin a fixed one). It attaches to the current Git repository automatically. The activity bar on the left switches between **Git**, **Console**, **Agent**, **Editor**, **Workbench**, **System Monitor** and **Mindmap**, top to bottom. The **Source Map** entry is currently hidden in the activity bar (`SHOW_SOURCE_MAP` in `ActivityBar.vue`) — the view itself is unchanged and comes back by flipping that flag. See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
+The GUI runs as a local web server and opens in your default browser on the first free port it finds in `4000–6000` (set `PORT` to pin a fixed one). It attaches to the current Git repository automatically. The activity bar on the left switches between **Git**, **Console**, **Agent**, **Editor**, **Workbench**, **System Monitor** and **Mindmap**, top to bottom. See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
 
 ### Architecture at a glance
 
@@ -131,8 +129,7 @@ The GUI runs as a local web server and opens in your default browser on the firs
   4.  Stage & commit  → Activity Bar → Git, pick files, fill commit form, push
   5.  AI commit msg   → click ✨ AI 生成 in commit form, diff → Conventional Commits
   6.  Background job  → Activity Bar → Workbench, run task, watch live logs
-  7.  Visualize code  → Activity Bar → Source Map → 开始分析 → click nodes
-  8.  Quick command   → Activity Bar → Console → pick saved command → run
+  7.  Quick command   → Activity Bar → Console → pick saved command → run
 ```
 
 ---
@@ -337,7 +334,7 @@ Configure commands or workflows to run automatically when a project is opened:
 | **Workbench** | Multi-project board for dispatching and running agent tasks | Tasks, prompts, board layout, log retention | Kanban board, master-agent console, executor choice, live chat-style logs |
 | **Agent** | Chat with the built-in AI agent (web + CLI sessions) | Sessions, pending questions | Streaming answers, tool-call cards, Skill / MCP plaza |
 
-**Console**, **System Monitor** and **Mindmap** are utility views on the same rail. **Source Map** is documented below, but its Activity Bar entry is currently hidden.
+**Console**, **System Monitor** and **Mindmap** are utility views on the same rail.
 
 ---
 
@@ -357,32 +354,6 @@ A full IDE-like editor (fourth icon in the activity bar) for browsing and editin
 | Rename / Delete | Rename or delete any file or folder directly from the tree |
 | Resizable sidebar | Drag the divider to adjust file tree width |
 | Theme sync | Editor theme follows the global light / dark setting |
-
----
-
-### Source Map (AI Codebase Visualization)
-
-![Source Map view](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/source-map.png)
-
-> Three-pane layout: file tree on the left, interactive dependency graph in the middle (drag / zoom / fit-view / minimap), source preview on the right. Click **开始分析** to send the project to the configured LLM and the graph populates with color-coded subsystems, an entry-point node, and tech-stack detection. Live progress streams into the **AGENT 日志** panel at the bottom.
-
-A dedicated view that uses an AI model to build a visual dependency graph of your project. Its Activity Bar entry is currently hidden (`SHOW_SOURCE_MAP = false` in `ActivityBar.vue`) — the view and its backend are unchanged, so flipping that flag brings it back.
-
-| Feature | Description |
-|---|---|
-| File scanner | Recursively scans all source files and builds a file tree |
-| Outline tab | The left pane toggles between the file list and an outline of the analysed structure |
-| AI analysis | Sends file contents to an OpenAI-compatible model to infer structure |
-| Dependency graph | Interactive node-edge graph (drag, zoom, fit-view, minimap) |
-| Layout optimization | 优化布局 re-runs the graph layout for a cleaner arrangement |
-| Subsystems | Automatically clusters files into color-coded subsystems |
-| Node detail | Click a node to view its source code in a Monaco editor panel |
-| Tech stack | Detects the language and frameworks in use |
-| Entry point | Identifies the main entry file and function |
-| Analysis log | Real-time progress log during scanning and analysis |
-| Resizable panels | File tree, graph, and source panels are all independently resizable |
-
-Configure the model endpoint, API key, and model name in **Settings → AI models**.
 
 ---
 
@@ -673,7 +644,6 @@ $ g --check-lock=config.json
   - [项目启动](#项目启动)
   - [视图一览](#视图一览)
   - [内置代码编辑器](#内置代码编辑器)
-  - [源码地图](#源码地图ai-代码库可视化)
   - [工作台](#工作台任务驱动的智能体执行)
   - [智能体](#智能体web-端)
   - [设置](#设置)
@@ -708,7 +678,6 @@ npm install -g zen-gitsync
 - **自定义命令** — 保存、参数化并复用 Shell 命令
 - **项目启动** — 打开项目时自动运行命令或工作流
 - **内置代码编辑器** — 基于 Monaco 的文件编辑器，支持 Markdown 预览
-- **源码地图** — AI 生成的交互式代码库依赖关系图
 - **工作台** — 多项目看板 + 主 Agent 派发控制台；任务驱动的智能体执行（Claude Code 或 OpenCode），支持提示词预置、任务级附件、独立进程、实时流式回传与 AI 生成预置提示词
 - **仓库克隆** — 在仓库浏览器里把任意 GitHub / Gitee 仓库直接克隆到指定文件夹，卡片带「已克隆」徽标与本地路径（由全盘本地仓库扫描得出）
 - **Skill / MCP 广场** — 在智能体页把 Skill 与 MCP 服务安装到当前项目或 `g ai` 智能体
@@ -732,7 +701,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。端口默认在 `4000–6000` 里挑第一个可用的（可用 `PORT` 固定）。左侧 Activity Bar 自上而下为 **Git** / **控制台** / **智能体** / **编辑器** / **工作台** / **系统监控** / **思维导图**；**源码地图** 的入口目前在 Activity Bar 中隐藏（`ActivityBar.vue` 的 `SHOW_SOURCE_MAP`），视图本身没有改动，把该开关改回 `true` 即可恢复。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
+GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。端口默认在 `4000–6000` 里挑第一个可用的（可用 `PORT` 固定）。左侧 Activity Bar 自上而下为 **Git** / **控制台** / **智能体** / **编辑器** / **工作台** / **系统监控** / **思维导图**。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
 
 ### 监听地址
 
@@ -811,8 +780,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
   4.  暂存并提交        → Activity Bar → Git,勾选文件,填提交表单,推送
   5.  AI 生成提交信息   → 点击提交表单里的 ✨ AI 生成,基于 diff 生成
   6.  后台任务          → Activity Bar → 工作台,执行任务,实时日志
-  7.  可视化代码        → Activity Bar → 源码地图 → 开始分析 → 点击节点
-  8.  快速命令          → Activity Bar → 控制台 → 选保存的命令 → 执行
+  7.  快速命令          → Activity Bar → 控制台 → 选保存的命令 → 执行
 ```
 
 ---
@@ -1017,7 +985,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 | **工作台** | 多项目看板：派发并执行智能体任务 | 任务、提示词、看板布局、日志保留策略 | 看板视图、主 Agent 控制台、执行器选择、对话式实时日志 |
 | **智能体** | 与内置 AI 智能体对话（Web + CLI 会话） | 会话、待回答问题 | 流式回答、工具调用卡片、Skill / MCP 广场 |
 
-**控制台**、**系统监控**、**思维导图** 是同一导航栏上的辅助视图；**源码地图** 见下文，其 Activity Bar 入口目前隐藏。
+**控制台**、**系统监控**、**思维导图** 是同一导航栏上的辅助视图。
 
 ---
 
@@ -1037,32 +1005,6 @@ Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 | 重命名 / 删除 | 在树中直接对文件或文件夹重命名、删除 |
 | 侧边栏调整 | 拖拽分隔条自由调整文件树宽度 |
 | 主题同步 | 编辑器主题跟随全局明/暗设置 |
-
----
-
-### 源码地图（AI 代码库可视化）
-
-![源码地图视图](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/source-map.png)
-
-> 三栏布局：左侧文件树 / 中间可交互依赖图（拖拽、缩放、适配视图、缩略图） / 右侧源码预览。点击 **开始分析** 把项目发给配置好的 LLM，图上就会填入颜色分明的子系统、入口节点、技术栈识别结果。底部 **AGENT 日志** 实时输出扫描进度。
-
-调用 AI 模型将项目代码库生成可交互的依赖关系图。其 Activity Bar 入口目前隐藏（`ActivityBar.vue` 的 `SHOW_SOURCE_MAP = false`），视图与后端均未改动，把该开关改回 `true` 即可恢复。
-
-| 功能 | 说明 |
-|---|---|
-| 文件扫描 | 递归扫描所有源码文件并构建文件树 |
-| 大纲 | 左栏可在「文件列表」与「大纲」两个 tab 之间切换 |
-| AI 分析 | 将文件内容发送到 OpenAI 兼容接口，推断项目结构 |
-| 依赖关系图 | 可拖拽、缩放、适配视图的节点边图（带缩略图导航） |
-| 优化布局 | 「优化布局」重新计算一次关系图排布，让节点更整齐 |
-| 子系统聚类 | 自动将文件聚类为颜色区分的子系统 |
-| 节点详情 | 点击节点在右侧 Monaco 面板中查看对应源码 |
-| 技术栈检测 | 识别项目使用的语言和框架 |
-| 入口点识别 | 标记主入口文件和入口函数 |
-| 分析日志 | 扫描与分析过程实时输出进度日志 |
-| 多面板布局 | 文件树、关系图、源码三个面板均可独立拖拽调整宽度 |
-
-在 **设置 → AI 模型配置** 中配置模型接口地址、API Key 和模型名称。
 
 ---
 
