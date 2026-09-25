@@ -11,6 +11,7 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
 - [GUI](#gui)
   - [Core Git Panel](#core-git-panel)
   - [GitHub / Gitee Repositories](#github--gitee-repositories)
+  - [Quick Directory Switch](#quick-directory-switch)
   - [Branch Management](#branch-management)
   - [Remote Management](#remote-management)
   - [Stash Management](#stash-management)
@@ -19,13 +20,16 @@ A Git automation platform with interactive commits, scheduled sync, custom comma
   - [Custom Commands](#custom-commands)
   - [Flow Orchestration](#flow-orchestration-visual-workflow-designer)
   - [NPM Scripts Panel](#npm-scripts-panel)
-  - [Built-in Terminal](#built-in-terminal)
+  - [Console Panel](#console-panel)
   - [Project Startup](#project-startup)
+  - [Views at a glance](#views-at-a-glance)
   - [Built-in Code Editor](#built-in-code-editor)
   - [Source Map](#source-map-ai-codebase-visualization)
-  - [Workbench](#workbench-task-driven-claude-execution)
+  - [Workbench](#workbench-task-driven-agent-execution)
   - [AI Agent](#ai-agent-web)
   - [Settings](#settings)
+  - [Self-Upgrade](#self-upgrade)
+- [Development Notes](#development-notes)
 - [CLI Commands](#cli-commands)
 
 ---
@@ -56,7 +60,9 @@ npm install -g zen-gitsync
 - **Project startup** — Auto-run commands or workflows when a project opens
 - **Built-in code editor** — Monaco-based file editor with Markdown preview
 - **Source map** — AI-generated interactive codebase dependency graph
-- **Workbench** — task-driven Claude execution with prompt presets, subtask splitting, isolated bypass-permissions windows, live stdout streaming, AI-generated presets, and sub-task file attachments
+- **Workbench** — a multi-project board with a kanban view and a master-agent dispatch console; task-driven agent execution (Claude Code or OpenCode) with prompt presets, isolated per-task processes, live streaming output, AI-generated presets and task-level attachments
+- **Repository cloning** — clone any GitHub / Gitee repository into a folder straight from the repo browser, with an *Already cloned* badge (and its local path) backed by a whole-disk local-repository scan
+- **Skill / MCP marketplace** — install skills and MCP servers from the Agent view into the current project or the `g ai` agent
 - **Reset to remote** — One-click `git reset --hard origin/<branch>` from the Git panel (auto-refreshes branch info first to avoid wrong-target resets)
 - **AI commit message** — Generate commit message from staged diff automatically
 - **Selection-scoped diff** — AI commit message and quick commit/push use only the diff of currently selected files when the Git view is the active tab
@@ -77,43 +83,49 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-The GUI runs as a local web server and opens in your default browser. It attaches to the current Git repository automatically. The activity bar on the left switches between four primary views: **Git**, **Editor**, **Source Map**, and **Workbench** — plus three utility views (**Console**, **System Monitor**, **Mindmap**). See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
+The GUI runs as a local web server and opens in your default browser on the first free port it finds in `4000–6000` (set `PORT` to pin a fixed one). It attaches to the current Git repository automatically. The activity bar on the left switches between **Git**, **Console**, **Agent**, **Editor**, **Workbench**, **System Monitor** and **Mindmap**, top to bottom. The **Source Map** entry is currently hidden in the activity bar (`SHOW_SOURCE_MAP` in `ActivityBar.vue`) — the view itself is unchanged and comes back by flipping that flag. See the [Core Git Panel](#core-git-panel) screenshot below for what the main view looks like.
 
 ### Architecture at a glance
 
 ```
                   ┌─────────────────────────────────────────────┐
-                  │  Header:  current dir · theme · user        │
+                  │  Header:  current dir · theme · instances   │
                   ├─────────────────────────────────────────────┤
                   │  Activity Bar (left rail)                   │
                   │  ┌───┐                                      │
-                  │  │Git│────► Git panel  (file list + commit) │
+                  │  │Git│────► Git panel  (files + commit)     │
                   │  └───┘                                      │
-                  │  ┌─────┐                                    │
-                  │  │Edit│────► Monaco editor + file tree     │
-                  │  └─────┘                                    │
                   │  ┌──────┐                                   │
-                  │  │SrcMap│─► AI dependency graph             │
+                  │  │Consol│─► Saved commands + terminal       │
                   │  └──────┘                                   │
-                  │  ┌──────┐                                    │
-                  │  │Bench │─► Tasks + Claude runs             │
-                  │  └──────┘                                    │
-                  │  ┌──────┐                                    │
-                  │  │Consol│─► Commands + terminal             │
-                  │  └──────┘                                    │
+                  │  ┌──────┐                                   │
+                  │  │Agent │─► Web agent + Skill/MCP plaza     │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │Edit  │─► Monaco editor + file tree       │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │Bench │─► Board: projects·kanban·agent│
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │Monit │─► System monitor                  │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │ Mind │─► Mindmap                         │
+                  │  └──────┘                                   │
                   └─────────────────────────────────────────────┘
                        ▲              ▲              ▲
                        │              │              │
                   Pinia stores ──── EventBus ──── Socket.IO
                        ▲
                        │
-                  Backend Express server (port 5545) → git / npm / shell
+                  Backend Express server (free port 4000–6000) → git / npm / shell
 ```
 
 ### A typical day in the GUI
 
 ```
-  1.  g ui            → browser opens at http://127.0.0.1:5544
+  1.  g ui            → browser opens on the first free port in 4000–6000
   2.  Glance header   → current dir, branch, instance count, theme toggle
   3.  Edit files      → Activity Bar → Editor, save with Ctrl+S
   4.  Stage & commit  → Activity Bar → Git, pick files, fill commit form, push
@@ -133,7 +145,7 @@ The GUI runs as a local web server and opens in your default browser. It attache
 
 | Feature | Description |
 |---|---|
-| File list | Shows all changed files grouped by staged / unstaged / untracked / conflicted |
+| File list | Shows all changed files grouped by staged / unstaged / untracked / conflicted — plus intent-to-add files as their own "to be staged" group |
 | View toggle | Switch between flat list and directory tree view (persisted) |
 | Selection mode | Multi-select files to stage or stash only chosen files. When the Git view is the active tab, **Quick Commit / Quick Push** and **AI commit message** automatically scope their action to the current selection (button label switches to *Commit Selected* / *Push Selected*). |
 | Per-file actions | Stage, unstage, or revert individual files |
@@ -146,7 +158,7 @@ The GUI runs as a local web server and opens in your default browser. It attache
 | Reset to remote | One-click `git reset --hard origin/<branch>`; auto-refreshes branch info first to avoid stale-branch targets; hidden when working tree is clean and no unpushed commits |
 | Merge | Merge another branch; detects and surfaces in-progress merge state |
 | Diff viewer | Monaco-based side-by-side diff for any changed file |
-| In-diff preview | Toggle a preview pane below the diff for `.html` / `.htm` / `.svg` (sandboxed iframe with JavaScript enabled — interactive reports work, isolated from the app via an opaque origin) and `.md` / `.markdown` (rendered Markdown) — same preview experience as the built-in editor, with a draggable vertical resizer; split ratio is persisted per project |
+| In-diff preview | Toggle a preview pane below the diff for `.html` / `.htm` / `.svg` (sandboxed iframe with JavaScript enabled — interactive reports work, isolated from the app via an opaque origin), `.md` / `.markdown` (rendered Markdown) and Office documents (`.doc` / `.docx` / `.xls` / `.xlsx` / `.ppt` / `.pptx` / `.odt` / `.ods` / `.odp`, converted server-side) — same preview experience as the built-in editor, with a draggable vertical resizer; split ratio is persisted per project |
 | Commit log | Browse commit history with author, date, branch tags, and changed files |
 | Remote URL | Display and one-click copy the remote repository URL; the gear icon beside it opens **Remote Management** (multi-remote setups, multi push URLs) |
 | Auto-refresh | Silently refreshes status and branch info when the window gains focus, the tab becomes visible, or you switch back to the **Git** view in the Activity Bar |
@@ -172,6 +184,8 @@ In either mode, click **AI Generate** to fill in the fields automatically based 
 - **Group by workspace** — repositories are grouped by their `owner` by default, so everything under one account or organisation sits together instead of being scattered across the grid by push date; group order follows the current sort rule (the workspace pushed most recently comes first) and so does the order inside each group, with the header showing how many repositories that workspace holds. Switch to **No grouping** for a flat, cross-workspace timeline
 - **No refetch on tab switch** — the list is cached per account, so coming back to the tab paints instantly instead of shelling out to `gh repo list` again; once the cache is a minute old it paints from cache first and refreshes quietly in the background, while **刷新** always pulls for real
 - **Informative cards** — repository name, description and privacy / fork / language / star badges, plus a third line with last-push date, fork count, non-`main` default branch and license (each omitted when there is nothing to say)
+- **Clone straight to a folder** — a repository that is not on your disk yet offers **Clone to folder…**: pick a directory and the clone runs over SSH (`git@github.com:owner/repo.git`), with an `https://` URL normalised first so it never stalls on a Git Credential Manager prompt
+- **"Already cloned" badge** — the server keeps a whole-disk index of local Git repositories (built in the background and refreshable on demand), so a card for a repo you already have shows its local path instead of offering another clone
 - **One click to open or copy** — clicking a card opens the repository page in your browser; the actions that appear on hover copy the URL or open it
 
 ---
@@ -181,6 +195,8 @@ In either mode, click **AI Generate** to fill in the fields automatically based 
 ![Directory switcher dialog](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/directory-switcher.png)
 
 > Click the directory name in the header (or the folder icon) to open this dialog. Type a path, hit **浏览** to use the OS file picker, or pick from **常用目录** for one-click switching. **使用新标签打开** spawns a new GUI tab on that path so you can keep the current project open.
+
+The header row beside the directory name carries its own quick actions: open in the file manager, open in a terminal, copy the folder name (last path segment only), open with `g ai`, and one button per detected editor / AI tool — VS Code, Codex, OpenCode, Kimi Code, ZCode, DeepSeek Harness and Claude Code (right-click the Claude button for the default / fully-approved menu, or right-click any tool button to update it to the latest version). Tools that are not installed are collected into a **more** menu, where clicking one opens the install guide.
 
 When the GUI is opened on a directory that is not a Git repository, the right pane shows the **Recent projects** list instead — every recent directory with its Git badges (behind / ahead / uncommitted) and one-click "open in a new tab". Each page load runs a `git fetch` pass over all of them automatically, so the ahead/behind badges show the real state rather than the snapshot from the last fetch; the **刷新全部** button does the same thing on demand.
 
@@ -267,6 +283,10 @@ Build automated pipelines with a drag-and-drop canvas:
 | **Command** | Execute a saved custom command |
 | **Wait** | Pause execution for 1–3600 seconds |
 | **Version** | Bump `package.json` version (patch / minor / major) or modify a dependency |
+| **Confirm** | Pause the flow and wait for the user to confirm before continuing |
+| **User input** | Pause the flow and collect parameter values from the user |
+| **Code** | Run an inline code snippet and pass its output to downstream nodes |
+| **Condition** | Branch the flow according to a condition |
 
 - Nodes are executed in topological order
 - Flows are saved and editable
@@ -276,7 +296,7 @@ Build automated pipelines with a drag-and-drop canvas:
 
 ### NPM Scripts Panel
 
-> The panel lives inside the Git view (left column). It scans every `package.json` in the repo on demand, groups scripts by package, and lets you click any script name to run it directly. The **NPM 路径** setting under **Settings** configures the scan root and exclusion patterns.
+> The panel lives inside the Git view (left column). It scans every `package.json` in the repo on demand, groups scripts by package, and lets you click any script name to run it directly. The panel's own settings dialog configures the scan root and exclusion patterns.
 
 - Automatically discovers all `package.json` files in the project tree
 - Lists their `scripts` entries
@@ -308,20 +328,22 @@ Configure commands or workflows to run automatically when a project is opened:
 
 ---
 
-### Four primary views at a glance
+### Views at a glance
 
 | View | Purpose | Persistent state | Highlights |
 |---|---|---|---|
 | **Git** | Day-to-day staging, committing, pushing, history review | Per-project UI prefs (view mode, layout ratios) | Structured commit form, AI commit message, selection-scoped quick push |
 | **Editor** | Browse & edit project files without leaving the GUI | Open tabs, unsaved markers, recent files | Monaco editor with syntax highlighting, Markdown preview, file search |
-| **Source Map** | AI-built visual dependency graph | Last analyzed project, layout ratios | Three-pane (tree / graph / source), subsystems, entry-point detection |
-| **Workbench** | Batch Claude execution on the repo | Tasks, prompts, log retention | Subtask attachments, isolated contexts, live SSE logs, simple-task continuation |
+| **Workbench** | Multi-project board for dispatching and running agent tasks | Tasks, prompts, board layout, log retention | Kanban board, master-agent console, executor choice, live chat-style logs |
+| **Agent** | Chat with the built-in AI agent (web + CLI sessions) | Sessions, pending questions | Streaming answers, tool-call cards, Skill / MCP plaza |
+
+**Console**, **System Monitor** and **Mindmap** are utility views on the same rail. **Source Map** is documented below, but its Activity Bar entry is currently hidden.
 
 ---
 
 ### Built-in Code Editor
 
-A full IDE-like editor (second icon in the activity bar) for browsing and editing project files without leaving the tool:
+A full IDE-like editor (fourth icon in the activity bar) for browsing and editing project files without leaving the tool:
 
 | Feature | Description |
 |---|---|
@@ -344,13 +366,15 @@ A full IDE-like editor (second icon in the activity bar) for browsing and editin
 
 > Three-pane layout: file tree on the left, interactive dependency graph in the middle (drag / zoom / fit-view / minimap), source preview on the right. Click **开始分析** to send the project to the configured LLM and the graph populates with color-coded subsystems, an entry-point node, and tech-stack detection. Live progress streams into the **AGENT 日志** panel at the bottom.
 
-A dedicated view (third icon in the activity bar) that uses an AI model to build a visual dependency graph of your project:
+A dedicated view that uses an AI model to build a visual dependency graph of your project. Its Activity Bar entry is currently hidden (`SHOW_SOURCE_MAP = false` in `ActivityBar.vue`) — the view and its backend are unchanged, so flipping that flag brings it back.
 
 | Feature | Description |
 |---|---|
 | File scanner | Recursively scans all source files and builds a file tree |
+| Outline tab | The left pane toggles between the file list and an outline of the analysed structure |
 | AI analysis | Sends file contents to an OpenAI-compatible model to infer structure |
 | Dependency graph | Interactive node-edge graph (drag, zoom, fit-view, minimap) |
+| Layout optimization | 优化布局 re-runs the graph layout for a cleaner arrangement |
 | Subsystems | Automatically clusters files into color-coded subsystems |
 | Node detail | Click a node to view its source code in a Monaco editor panel |
 | Tech stack | Detects the language and frameworks in use |
@@ -358,46 +382,43 @@ A dedicated view (third icon in the activity bar) that uses an AI model to build
 | Analysis log | Real-time progress log during scanning and analysis |
 | Resizable panels | File tree, graph, and source panels are all independently resizable |
 
-Configure the model endpoint, API key, and model name in **Settings → AI**.
+Configure the model endpoint, API key, and model name in **Settings → AI models**.
 
 ---
 
-### Workbench (Task-Driven Claude Execution)
+### Workbench (Task-Driven Agent Execution)
 
-![Workbench — task detail with Claude execution log](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/workbench-task-detail.png)
+![Workbench — multi-project board](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/workbench-board.png)
 
-> Sidebar lists tasks (grouped by project, current project first) and prompt presets. The main pane is split between the task definition (commit-code field, preset selector, run/stop buttons) and the live **Claude** execution stream — a chronological card stack of stdout/stderr output, scrolled to the latest. The bottom composer captures follow-up prompts for `claude --resume`.
+> Three panes on one board: the project list with its run monitor on the left, a kanban board in the middle, and the **master-agent console** on the right. Type an instruction into the console — the master agent decides which project it lands in, or you can target the project you selected yourself. Clicking a card opens the task editor as an overlay over the board, which stays mounted underneath.
 
-A dedicated view (fourth icon in the activity bar) for batch-running Claude against your repo. Define a task, split it into ordered subtasks, attach a reusable prompt preset, then click **Run task** — each subtask launches in its own terminal window with `claude --permission-mode bypassPermissions`, so context never piles up.
+A dedicated view for running coding agents across one or many projects. Every task carries its own prompt preset, attachments and executor, and runs as its own detached process, so context never piles up.
 
 | Feature | Description |
 |---|---|
-| Task list | Create, edit, delete tasks. Each row is a single line — the title, or the first characters of the description (ellipsised) when the title is empty. Subtask / attachment / type badges are gone to cut noise, and tasks with neither a title nor a description count as drafts that are never saved (switching away drops them) |
-| Resizable sidebar | Drag the divider between the sidebar and the main pane to resize it (200–480 px); the width is remembered across sessions. In grouped mode task rows are indented under their project header |
-| Resizable / collapsible board panels | On the multi-project board, drag the divider on either side to resize the project list (180–420 px) and the master-agent console (260–560 px); the console is wider by default and both widths are remembered across sessions. Either side also collapses on demand — the top-bar button folds the project list, the console's own button folds it into a 32 px rail that expands on click. Double-click a divider to reset it to the responsive default. The run monitor below the project list has a divider of its own: drag it up or down when several jobs run at once and the cards no longer fit (120 px up to half the viewport height), and that height is remembered too |
+| Task list | Create, edit, delete tasks. Rows are grouped by project (current project first), each a single line — the title, or the first characters of the description (ellipsised) when the title is empty. Tasks with neither a title nor a description count as drafts that are never saved (switching away drops them) |
+| Multi-project board | Three resizable / collapsible panes: the project list with its run monitor, the kanban board, and the master-agent console. Drag a divider to resize (project list 180–420 px, console 260–560 px), double-click it to reset the responsive default, or fold a side away — the top-bar button folds the project list, the console folds into a 32 px rail that expands on click. The run monitor has its own divider (120 px up to half the viewport height) for when several jobs run at once. All widths / heights are remembered across sessions |
+| Kanban board | **Todo / Doing / Done** columns with the done column sorted newest-first; a filter checkbox narrows the board to tasks whose last run failed, and a table view is one click away for a denser listing |
+| Master-agent console | Give the master agent an instruction and it dispatches a new task, deciding the target project itself (or honouring the project you selected). Enter dispatches, Shift+Enter starts a new line. Dispatching can be paused and resumed — while paused, a dispatch creates the task without running it |
 | Dispatch default prompts | Give every dispatch a standing prompt: one **global** entry that applies to all projects, plus one **per project** that is appended after it whenever you dispatch to that project (it supplements the global one rather than replacing it). Both are edited from the gear button in the console's composer; the combined text is prepended to the instruction, a "Default prompt (global + this project)" checkbox appears next to **Run now** so a single dispatch can opt out, and the activity feed records which level was attached. The prompt is copied onto the task at dispatch time, so editing the setting later never rewrites tasks that already exist; it lands in the task's own prompt field, where you can still edit it per task |
 | Open-with menu per project | Hovering a project row in the board's project list reveals two buttons: **Open folder** (straight to your file manager) and **Open with**, a menu holding file manager / terminal / `g ui` in a new tab plus every editor and AI tool (VS Code, Codex, OpenCode, Kimi Code, ZCode, DeepSeek Harness, and Claude Code in default or fully-approved mode). Tools that are not installed are dimmed and labelled "Not installed" — clicking one opens the very same install guide the top bar uses. Every action applies to that row's project only; the board's selection is never touched |
-| Top-bar type switch | A segmented control (Complex / Simple) lives in the task header, right next to **Run task** — now the only entry point for flipping a task's type, since the per-row badge was dropped to keep rows single-line; the confirmation rule (Complex → Simple with subtasks asks first) applies |
-| AI split (promoted) | The "AI split" action is now a dedicated accent button with a sparkle icon and a subtle pulse, sitting between the type switcher and the primary **Run task** button — it is always enabled for complex tasks with a non-empty title |
-| Description collapsible by default | Selecting a task collapses the description + attachment area into a one-line summary "Task description (optional)" to free up vertical space; click the summary to expand. When the description is filled or attachments are present, an "Filled" badge and the attachment count appear on the right of the summary |
-| Minimal task & chat layout | The task execution view is now stripped of redundant borders / shadows: a flatter sidebar, transparent title input and textarea, and a clean left/right execution body. Visual reference follows the Claude Code desktop app |
-| Subtask breakdown | Add / edit / remove subtasks per task, with per-subtask status; the empty state ships a centered illustration card with a primary "Add subtask" CTA and a secondary "Split with AI" shortcut |
-| Subtask attachments | Attach up to 9 files per subtask (image / PDF / text / Markdown / CSV / JSON / log, ≤ 20 MB each); images over 3.5 MB are re-encoded/downscaled in the browser before upload so 4K screenshots still fit what the model and the reader can take. Their absolute paths are appended to the prompt so Claude reads them directly. Right-click an image attachment to copy it to the system clipboard (`image/png` / `jpeg` / `webp` / `gif`) |
-| Prompt presets | Reusable prompt templates with `{{task.title}}` / `{{task.desc}}` / `{{sub.title}}` / `{{sub.desc}}` / `{{repo.path}}` / `{{branch}}` variable interpolation |
-| AI prompt generation | "New / Edit preset" dialog has an **AI Generate** button — the server reads the current project tree (depth 2) + README + manifests (package.json / pyproject.toml / go.mod / Cargo.toml / …) and asks the configured LLM to draft a project-aware preset (name + body) |
-| Per-subtask override | Override the preset's content for a specific subtask in its description field |
-| Sequential execution | Runs subtasks in declared order; the next one starts only after the previous process exits |
-| Pipe-mode launcher | Spawns `claude -p "<prompt>" --output-format text --permission-mode bypassPermissions --dangerously-skip-permissions` with stdout/stderr piped to the server — no external terminal window is opened, so output streams directly into the UI |
-| Isolated windows | Every subtask runs as its own detached process with fresh context, so memory and conversation state never accumulate across subtasks |
-| Live log | Each subtask has a "执行日志 / Execution log" panel that **opens by default** and auto-scrolls, showing accumulated `stdout` + `stderr` (capped at 256 KB server-side, last 64 KB rendered client-side) |
-| Live status | Subtask status (todo / pending / running / done / error) and PID stream in real time over SSE |
-| Running animation | Subtasks in `running` state get a breathing primary-color glow + a sliding progress bar on top of the card; the status badge uses a shimmer gradient with a pulsing white dot and outer halo, easing back to neutral on completion |
-| Cross-view indicator | While any Workbench subtask is running, a pulsing dot appears on the Workbench icon in the Activity Bar so you can see job state from the Git or Editor view |
-| Execution log manager (dialog) | The "Execution logs" button in the workbench top bar (replaces the previous standalone tab) opens a dialog with the list / filter / batch delete / clear / retention-policy UI; the task execution view stays mounted so no work-in-progress state is dropped |
-| Continue chat (simple task) | After a simple task finishes (done / error / cancelled), the detail panel grows an **Exit** button and a follow-up composer; sending a follow-up message spawns `claude --resume <session_id> -p <newPrompt>` to continue the prior conversation, and each new turn appears as its own card stacked into a chat-style flow. The `session_id` is captured from claude's stream-json `system.init` event and persisted on the job |
-| Local tool detection (vscode / claude) | On startup + every 10 min the server probes `code --version` and `claude --version` (3 s timeout). The Workbench "Execute task" button — and the header's "Open in Claude Code" popover — hide when the corresponding CLI is missing, replaced by a status hint linking to the install guide |
+| Task editor overlay | Clicking a board card opens the editor as an overlay: a flat sidebar holding the task list and prompt presets, then the task header, preset selector, executor split-button, the execution-log / clear-execution actions, and a chat-style execution body. The description collapses into a one-line "Task description (optional)" summary until clicked, showing a "Filled" badge and the attachment count once there is content |
+| Executor choice | Run each task with **Claude Code** or **OpenCode**. The global default is set in **Settings → General → Task executor** (`config.taskExecutor`); the split-button next to the run button switches it for the next run and remembers that pick in the browser. A continued conversation always stays on the executor that started it — Claude's `--resume` and OpenCode's `--session` ids are not interchangeable |
+| Attachments | Up to 9 files per task (image / PDF / text / Markdown / CSV / JSON / log, ≤ 20 MB each); images over 3.5 MB are re-encoded / downscaled in the browser before upload so 4K screenshots still fit what the model and the reader can take. Their absolute paths are appended to the prompt so the agent reads them directly. Right-click an image attachment to copy it to the system clipboard (`image/png` / `jpeg` / `webp` / `gif`) |
+| Prompt presets | Reusable prompt templates with `{{task.title}}` / `{{task.desc}}` / `{{repo.path}}` / `{{branch}}` variable interpolation |
+| AI prompt generation | The "New / Edit preset" dialog carries an **AI Generate project architecture** button plus an **Edit instruction** button: the server recursively finds every sub-project (a directory holding `.git` or one of 9 manifests), reads each one's key files on its own (manifest 20 KB / README 8 KB / a 2-level tree), calls the LLM concurrently to produce a per-sub-project architecture description, and merges them into one when there are several. **Edit instruction** customises the prompt used for generation (persisted to `~/.zen-gitsync/ai-instruction.json`) |
+| Pipe-mode launcher | Spawns the selected executor as a detached process with stdout/stderr piped to the server — no external terminal window is opened, so output streams directly into the UI. Claude Code runs as `claude -p - --output-format stream-json --verbose --permission-mode bypassPermissions --dangerously-skip-permissions` (the prompt goes in over stdin to dodge Windows' 32 K command-line limit); OpenCode runs as `opencode run --format json --auto --thinking`, following whatever default model OpenCode itself is configured with |
+| Isolated processes | Every run is its own detached process with fresh context, so memory and conversation state never accumulate across tasks |
+| Live log | The "执行日志 / Execution log" panel **opens by default** and auto-scrolls, showing accumulated `stdout` + `stderr` (last 64 KB rendered client-side; the server keeps up to 100 MB per job) |
+| Live status | Task status (pending / running / done / error / cancelled) and PID stream in real time over SSE |
+| Tool-call stream | The model's tool calls are rendered inline in the conversation flow, so you can follow what the agent actually did |
+| Finish notice | When a run finishes or fails you get an in-app toast while the page is in the foreground, and a system notification when it is not — so you can be looking at another view or window and still be told |
+| Cross-view indicator | While any Workbench task is running, a pulsing dot appears on the Workbench icon in the Activity Bar so you can see job state from the Git or Editor view |
+| Execution log manager (dialog) | The "Execution logs" button in the workbench top bar opens a dialog with the list / filter / batch delete / clear / retention-policy UI (defaults: 500 records, 256 MB); the task execution view stays mounted so no work-in-progress state is dropped |
+| Continue chat | After a task reaches a done / error / cancelled state, a follow-up composer appears; sending a message resumes the previous session (`claude --resume <session_id>` for Claude Code, `--session` for OpenCode), and each new turn stacks into the same chat-style flow |
+| Local tool detection | On startup + every 10 min the server probes 7 CLIs (`code`, `claude`, `codex`, `opencode`, `kimi`, `zcode`, `dsh`). Tools that are missing are dimmed and labelled "Not installed" — clicking one opens the install guide, and right-clicking a tool button offers an update to the latest published version |
 
-Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.zen-gitsync/tasks.json` (cross-project, shared across repos).
+Prompt presets and tasks are persisted to `~/.zen-gitsync/prompts.json` and `~/.zen-gitsync/tasks.json` (cross-project, shared across repos); run history and the retention policy live in `jobs.json` / `jobs-config.json`, the master-agent console state in `orchestrator.json`, and task attachments under `~/.zen-gitsync/workbench-images/_task-<taskId>/`.
 
 ---
 
@@ -413,9 +434,10 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 | Tool call display | Each tool invocation (run_command, read_file, edit_file, list_files, search_text, write_file) is shown as a collapsible card with arguments preview and execution result |
 | Recent-projects awareness | Ask "which of my projects need a pull?" and the agent calls its built-in `list_projects` tool instead of scanning the disk: it returns exactly the list behind the GUI's **Recent projects** panel (recent directories plus any directory a task was created in, with branch / ahead / behind / uncommitted counts and task progress), so the agent's answer and the UI agree. Ahead/behind reads local refs, so the agent can pass `refresh=true` to run a `git fetch` pass first when the question is about pulling |
 | Session persistence | All conversations are saved to `~/.zen-gitsync/agent-sessions/` as JSON files; the CLI agent (`g ai`) writes to the same directory so Web and CLI sessions are unified |
+| Skill / MCP plaza | The **Skill plaza** and **MCP plaza** tabs list skills and MCP servers from several sources, each with its description, weekly downloads / usage count and install state. Install one into the **current project** or into the **`g ai` agent** — entries already installed can be uninstalled from the same card, and ones that still need environment variables are flagged. From a terminal, `g ai` lists what is installed with `/skills` (`/mcp` is an alias) |
 | SSH-first cloning | When you ask it to clone a repo (or add a remote) it uses the SSH form — `git@github.com:owner/repo.git` / `git@gitee.com:owner/repo.git` — converting an `https://` URL first, so the clone never stalls on a Git Credential Manager username/password prompt; it falls back to https only when SSH genuinely fails (`Permission denied (publickey)` / host-key verification) and says which one it used. The same preference is injected into every workbench task, whose executor is an external CLI with a system prompt this app does not own |
 | Per-turn tool limit | A single message may trigger up to N tool calls in a row (default **200**, range 1–2000). Configurable in **Settings → AI models → Agent Runtime**; hitting the limit ends the turn and asks you to send another message. The same setting drives the CLI agent |
-| Preset questions | Quick-start buttons on the welcome screen for common tasks (view project structure, analyze code quality, write tests, check git status) |
+| Preset questions | Quick-start buttons on the welcome screen for common tasks (view project structure, analyze code quality, write tests, check git status, start the project) |
 | Stop generation | A floating stop button appears during streaming; aborts the LLM request and any running child processes |
 | Theme sync | The chat area follows the GUI's current theme (light / dark / auto) |
 
@@ -425,22 +447,22 @@ A dedicated view (robot icon in the activity bar) for chatting with the built-in
 
 ![User settings dialog — general tab](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/settings-general.png)
 
-> Click the gear icon in the top-right header. Tabs cover **General / Git / Commit / AI / Theme / Language / File Locking / NPM Paths**. Most toggles take effect immediately without restarting the GUI.
+> Click the gear icon in the top-right header. The dialog has six tabs — **General settings / AI models / Git global settings / Commit settings / Edit config / Editor settings** — and most toggles take effect immediately without restarting the GUI. Clicking the default-model name in the footer jumps straight to the **AI models** tab. Two things that used to live here have their own dialogs now: locked files are managed from the **Locked files** dialog in the Git view, and the npm scan root from the NPM scripts panel's settings.
 
-| Setting | Description |
+| Tab | What's inside |
 |---|---|
-| Git user | Set `user.name` and `user.email` |
-| Default commit message | Fallback message when none is provided |
-| Theme | Light / dark (follows system preference by default) |
-| Language | Chinese / English |
-| File locking | Lock files so they are never staged or stashed |
-| NPM paths | Configure where to look for `package.json` files |
+| General settings | Appearance (theme — light / dark / follow the system — and language), task execution (task executor, task-finish notifications) and UI options (file-list view, diff split ratio, AI diff explanation, command console, layout ratios) |
+| AI models | OpenAI-compatible endpoints — API key, base URL, model name — with several entries side by side, a default model, plus the **Agent runtime** section holding the per-turn tool-call budget |
+| Git global settings | `user.name` / `user.email`, auto-set upstream, pull strategy, auto-prune remote branches, line-ending handling, the default branch for `git init` |
+| Commit settings | Standardised commit form, skip hooks (`--no-verify`), Enter-to-commit, auto-close the push modal, pull before push, auto-fill the default commit message |
+| Edit config | Raw JSON editor for the config, plus a button to open the file on disk |
+| Editor settings | Editor behaviour such as auto-save on focus loss |
 
 ---
 
 ### Self-Upgrade
 
-The footer version chip in the GUI checks npm for newer releases once per session. When an update is available, a **Upgrade** button appears next to the version; clicking it streams `npm install -g zen-gitsync` output into a modal dialog. On success, the dialog switches to a "Restart and reload now" CTA. Clicking it calls `POST /api/app-restart`, which **self-respawns a new Node process** (no external launcher / desktop shell is required), waits for the new process to bind its port, streams that port back to the browser over NDJSON, and gracefully exits the old process. The browser then **redirects** to the new port (preserving the current path, query, and hash) so the upgraded backend serves the next request. The footer version also updates instantly to the new number so you can see the bump even before restarting. If the child process fails to come up within 8s, the old process is preserved and an error toast is shown — your session stays connected.
+The footer version chip in the GUI checks npm for newer releases once per session. When an update is available, a **Upgrade** button appears next to the version; clicking it streams `npm install -g zen-gitsync` output into a modal dialog. On success, the dialog switches to a "Restart and reload now" CTA. Clicking it calls `POST /api/app-restart`, which **self-respawns a new Node process** (no external launcher / desktop shell is required), waits for the new process to bind its port, streams that port back to the browser over NDJSON, and gracefully exits the old process. The browser then **redirects** to the new port (preserving the current path, query, and hash) so the upgraded backend serves the next request. The footer version also updates instantly to the new number so you can see the bump even before restarting. If the child process fails to come up within 15s, the old process is preserved and an error toast is shown — your session stays connected.
 
 On macOS / Linux, the global install is run under `sudo -n` (non-interactive); if sudo can't authenticate non-interactively, re-launch the GUI with admin rights and try again.
 
@@ -483,7 +505,12 @@ selection + Enter to confirm** (typing a number also jumps directly; `0` selects
 "custom / manual input" entry). Non-TTY environments (CI, piped input) automatically fall back
 to numeric input. `Esc` or `Ctrl+C` cancels the wizard cleanly.
 
-In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/tools`, `/stats`, `/new`, `/resume`, `/clear`, `/exit`.
+`/skills` (alias `/mcp`) lists the skills and MCP servers already installed for the agent and
+where they came from. Installation itself happens in the GUI's **Skill / MCP plaza** (Agent
+view): pick the current project or the `g ai` agent as the target, and the entry becomes usable
+from that side.
+
+In-session commands: `/help`, `/model`, `/addmodel`, `/cd <path>`, `/image [path]`, `/think`, `/tools`, `/stats`, `/new`, `/resume`, `/skills` (`/mcp` is an alias), `/clear`, `/exit` (or `/quit`).
 
 Reasoning, tool calls and answers have separate visual sections. Reasoning returned by the model is shown in full by default;
 `/think full` restores full display, `/think off` hides it, and `/think compact` previews the first 12 nonblank lines. All three modes appear in the `/` menu and support completion after `/think `.
@@ -526,6 +553,13 @@ Enter your commit message: fix login page style
 $ g -y
 ```
 
+### AI-generated commit (skip prompt):
+```bash
+$ g --ai                  # the model writes the message, then commit + push
+$ g --ai --no-diff        # same, without printing the diff
+$ g --ai --interval=600   # AI commit every 10 minutes
+```
+
 ### Commit with inline message:
 ```bash
 $ g -m <message>
@@ -546,6 +580,12 @@ $ g get-config
 ```shell
 $ g -h
 $ g --help
+```
+
+### Add helper scripts to `package.json`:
+```bash
+$ g addScript        # adds "g:y": "g -y"
+$ g addResetScript   # adds "g:reset": "git reset --hard origin/<current-branch>"
 ```
 
 ### Scheduled auto-commit (default interval: 1 hour):
@@ -571,6 +611,11 @@ start /min cmd /k "g --cmd=\"echo hello\" --cmd-interval=5"     # every 5 second
 start /min cmd /k "g --cmd=\"echo at-time\" --at=23:59"         # once at 23:59
 start /min cmd /k "g --cmd=\"echo daily\" --at=23:59 --daily"   # daily at 23:59
 ```
+
+`--repeat=daily` and `--at-repeat=daily` are aliases of `--daily`. Custom commands run in a
+shell by default; add `--cmd-strict` to split the command into argv and run it through
+`execFile` instead — pipes, redirection and globs then stop working, which is exactly the
+point when you do not want shell interpretation.
 
 ### Suppress git diff output:
 ```shell
@@ -615,6 +660,7 @@ $ g --check-lock=config.json
 - [GUI 界面](#gui-界面)
   - [核心 Git 面板](#核心-git-面板)
   - [GitHub / Gitee 仓库](#github--gitee-仓库)
+  - [快速切换目录](#快速切换目录)
   - [分支管理](#分支管理)
   - [远程仓库管理](#远程仓库管理)
   - [Stash 管理](#stash-管理)
@@ -623,13 +669,16 @@ $ g --check-lock=config.json
   - [自定义命令](#自定义命令)
   - [可视化流程编排](#可视化流程编排)
   - [NPM 脚本面板](#npm-脚本面板)
-  - [内置终端](#内置终端)
+  - [控制台面板](#控制台面板)
   - [项目启动](#项目启动)
+  - [视图一览](#视图一览)
   - [内置代码编辑器](#内置代码编辑器)
   - [源码地图](#源码地图ai-代码库可视化)
-  - [工作台](#工作台任务驱动的-claude-执行)
+  - [工作台](#工作台任务驱动的智能体执行)
   - [智能体](#智能体web-端)
   - [设置](#设置)
+  - [自升级](#自升级)
+- [开发约定](#开发约定)
 - [命令行](#命令行)
 
 ---
@@ -660,7 +709,9 @@ npm install -g zen-gitsync
 - **项目启动** — 打开项目时自动运行命令或工作流
 - **内置代码编辑器** — 基于 Monaco 的文件编辑器，支持 Markdown 预览
 - **源码地图** — AI 生成的交互式代码库依赖关系图
-- **工作台** — 任务驱动的 Claude 执行视图：提示词预置、子任务拆分、独立 bypass-permissions 进程、stdout 实时回传、AI 自动生成预置提示词、子任务附件、任务字段自动保存、简单/复杂任务分类
+- **工作台** — 多项目看板 + 主 Agent 派发控制台；任务驱动的智能体执行（Claude Code 或 OpenCode），支持提示词预置、任务级附件、独立进程、实时流式回传与 AI 生成预置提示词
+- **仓库克隆** — 在仓库浏览器里把任意 GitHub / Gitee 仓库直接克隆到指定文件夹，卡片带「已克隆」徽标与本地路径（由全盘本地仓库扫描得出）
+- **Skill / MCP 广场** — 在智能体页把 Skill 与 MCP 服务安装到当前项目或 `g ai` 智能体
 - **重置到远程** — 在 Git 面板一键执行 `git reset --hard origin/<branch>`（点击前会先自动刷新分支信息，避免重置到陈旧分支）
 - **AI 生成提交信息** — 基于 staged diff 自动生成提交消息
 - **选择模式差异** — 当 Git 视图为当前激活标签时，AI 生成提交信息与一键提交/推送仅作用于当前勾选文件的 diff
@@ -681,7 +732,7 @@ npm install -g zen-gitsync
 $ g ui
 ```
 
-GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。左侧 Activity Bar 可在四个主视图（**Git** / **编辑器** / **源码地图** / **工作台**）与三个辅助视图（**控制台** / **系统监控** / **思维导图**）之间切换。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
+GUI 以本地 Web 服务器形式运行，自动在浏览器中打开，并附加到当前 Git 仓库。端口默认在 `4000–6000` 里挑第一个可用的（可用 `PORT` 固定）。左侧 Activity Bar 自上而下为 **Git** / **控制台** / **智能体** / **编辑器** / **工作台** / **系统监控** / **思维导图**；**源码地图** 的入口目前在 Activity Bar 中隐藏（`ActivityBar.vue` 的 `SHOW_SOURCE_MAP`），视图本身没有改动，把该开关改回 `true` 即可恢复。主界面长什么样可参考下方[核心 Git 面板](#核心-git-面板)的截图。
 
 ### 监听地址
 
@@ -718,37 +769,43 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 ```
                   ┌─────────────────────────────────────────────┐
-                  │  顶部条: 当前目录 · 主题 · 用户              │
+                  │  顶部条: 当前目录 · 主题 · 实例数            │
                   ├─────────────────────────────────────────────┤
                   │  Activity Bar(左侧导航)                     │
                   │  ┌───┐                                      │
                   │  │Git│────► Git 面板 (文件列表 + 提交)       │
                   │  └───┘                                      │
-                  │  ┌─────┐                                    │
-                  │  │编辑│────► Monaco 编辑器 + 文件树         │
-                  │  └─────┘                                    │
                   │  ┌──────┐                                   │
-                  │  │源图 │──► AI 依赖关系图                    │
+                  │  │控制 │──► 保存的命令 + 终端                 │
                   │  └──────┘                                   │
-                  │  ┌──────┐                                    │
-                  │  │工作 │──► 任务 + Claude 实时执行           │
-                  │  └──────┘                                    │
-                  │  ┌──────┐                                    │
-                  │  │控制 │──► 命令 + 终端                       │
-                  │  └──────┘                                    │
+                  │  ┌──────┐                                   │
+                  │  │智能 │──► Web 智能体 + Skill/MCP 广场      │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │编辑 │──► Monaco 编辑器 + 文件树           │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │工作 │──► 看板: 项目 · 看板 · 主 Agent     │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │监控 │──► 系统监控                         │
+                  │  └──────┘                                   │
+                  │  ┌──────┐                                   │
+                  │  │导图 │──► 思维导图                         │
+                  │  └──────┘                                   │
                   └─────────────────────────────────────────────┘
                        ▲              ▲              ▲
                        │              │              │
                   Pinia stores ──── EventBus ──── Socket.IO
                        ▲
                        │
-                  后端 Express (端口 5545) → git / npm / shell
+                  后端 Express(4000–6000 中挑可用端口) → git / npm / shell
 ```
 
 ### GUI 典型一天
 
 ```
-  1.  g ui              → 浏览器自动打开 http://127.0.0.1:5544
+  1.  g ui              → 浏览器自动打开（4000–6000 中第一个可用端口）
   2.  看顶部条          → 当前目录 / 当前分支 / 实例数 / 主题切换
   3.  编辑文件          → Activity Bar → 编辑器,Ctrl+S 保存
   4.  暂存并提交        → Activity Bar → Git,勾选文件,填提交表单,推送
@@ -768,7 +825,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 | 功能 | 说明 |
 |---|---|
-| 文件列表 | 按已暂存/未暂存/未追踪/冲突分组显示所有变更文件 |
+| 文件列表 | 按已暂存/未暂存/未追踪/冲突分组显示所有变更文件；`git add -N` 的意向添加文件单独成一组「已声明添加（待暂存）」 |
 | 视图切换 | 平铺列表与目录树形视图切换（持久化保存） |
 | 选择模式 | 多选文件，仅对选中文件执行暂存或储藏。在 Git 视图下，**一键提交 / 一键推送** 与 **AI 生成提交信息** 会自动仅作用于当前勾选的文件（按钮文案切换为「一键提交所选」/「一键推送所选」） |
 | 单文件操作 | 对每个文件独立执行暂存、取消暂存或还原 |
@@ -781,7 +838,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 | 重置到远程 | 一键执行 `git reset --hard origin/<branch>`；点击前会先刷新分支信息，避免重置到陈旧分支；当工作区干净且无未推送提交时按钮自动隐藏 |
 | 合并 | 合并其他分支，自动检测并引导处理合并中间状态 |
 | Diff 查看器 | 基于 Monaco 编辑器的并排文件差异视图 |
-| 差异内预览 | 在差异下方一键展开预览面板：`.html` / `.htm` / `.svg` 走沙箱化 iframe（允许 JS 执行，报告类页面的按钮/交互可用，同时以不透明 origin 与宿主应用隔离），`.md` / `.markdown` 走 Markdown 渲染，与内置编辑器一致的预览体验；上下比例可拖拽，按项目持久化 |
+| 差异内预览 | 在差异下方一键展开预览面板：`.html` / `.htm` / `.svg` 走沙箱化 iframe（允许 JS 执行，报告类页面的按钮/交互可用，同时以不透明 origin 与宿主应用隔离），`.md` / `.markdown` 走 Markdown 渲染，Office 文档（`.doc` / `.docx` / `.xls` / `.xlsx` / `.ppt` / `.pptx` / `.odt` / `.ods` / `.odp`）走服务端转换预览，与内置编辑器一致的预览体验；上下比例可拖拽，按项目持久化 |
 | 提交日志 | 浏览历史提交（作者、时间、分支标签、变更文件） |
 | 远程地址 | 显示并一键复制远程仓库 URL；旁边的齿轮图标打开 **远程仓库管理**（多远程、多推送地址） |
 | 自动刷新 | 窗口获得焦点、标签页重新可见，或从 Activity Bar 切回 **Git** 视图时，自动静默刷新文件状态与分支信息 |
@@ -807,6 +864,8 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 - **按工作空间分组** — 默认按 `owner` 分组，同一账号／组织下的仓库收拢在一起，不再被推送时间打散在整屏里；组间顺序跟随当前排序规则（最近有推送的空间排前面），组内同样排序，组头写明该空间下的仓库数（只有一个空间时不显示组头）。切到「不分组」即回到跨空间的平铺视图
 - **切 Tab 不重拉** — 列表按账号各缓存一份，切回来直接渲染，不再重跑一遍 `gh repo list`；缓存超过一分钟后先用它画出来、再在后台静默刷新，点「刷新」则永远真的去拉
 - **信息更全的卡片** — 仓库名、描述，以及私有 / Fork / 语言 / 星标徽标，第三行再给最近推送日期、Fork 数、非 `main` 的默认分支与许可证（没有的项直接省略，不留占位）
+- **直接克隆到文件夹** — 本地还没有的仓库提供「克隆到文件夹」：选好目录即可开始克隆，走 SSH 形式（`git@github.com:owner/repo.git`），遇到 `https://` 地址会先归一化，不会再卡在 Git Credential Manager 的账密弹窗上
+- **「已克隆」徽标** — 服务端维护一份全盘本地 Git 仓库索引（后台构建、也可随时手动重扫），因此本地已有的仓库卡片会直接标出本地路径，而不是再让你克隆一遍
 - **一键打开 / 复制** — 点击卡片在浏览器打开仓库主页，悬浮时出现的按钮可复制地址或直接打开
 
 ---
@@ -816,6 +875,8 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 ![切换目录弹窗](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/directory-switcher.png)
 
 > 点击顶部条里的目录名（或文件夹图标）即可弹出该对话框。直接输入路径、点击 **浏览** 唤起系统文件选择器，或从 **常用目录** 一键切换。**使用新标签打开** 会在新 GUI 标签里加载目标路径，原项目保持不动。
+
+目录名旁边的顶部条自带一排快捷操作：在资源管理器中打开、在终端中打开、复制文件夹名称（只复制最后一级目录名）、用 `g ai` 打开，以及每个已检测到的编辑器 / AI 工具各一个按钮 —— VS Code、Codex、OpenCode、Kimi Code、ZCode、DeepSeek Harness 与 Claude Code（右键 Claude 按钮可选默认 / 完全批准，右键任意工具按钮可升级到最新版本）。没安装的工具会收进 **更多** 菜单，点一下弹出安装引导。
 
 当 GUI 打开在一个**不是 Git 仓库**的目录上时，右侧会改为显示「最近项目」列表 —— 每个最近目录一张卡片，带 Git 徽标（落后 / 领先 / 未提交）与「在新标签页打开」。每次打开界面时会自动对所有项目跑一遍 `git fetch`，让「领先/落后」显示真实状态而不是上次 fetch 时的快照；**刷新全部** 按钮可以随时手动再刷一遍。
 
@@ -902,6 +963,10 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 | **命令节点** | 执行一个已保存的自定义命令 |
 | **等待节点** | 暂停执行 1–3600 秒 |
 | **版本节点** | 修改 `package.json` 版本号（patch/minor/major）或依赖版本 |
+| **用户确认** | 暂停流程，等用户确认后继续 |
+| **用户输入** | 暂停流程并收集参数值 |
+| **代码节点** | 执行一段内联代码，并把输出传给后续节点 |
+| **条件** | 按条件分支 |
 
 - 节点按拓扑顺序执行
 - 流程可保存并二次编辑
@@ -911,7 +976,7 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 ### NPM 脚本面板
 
-> 面板嵌在 Git 视图左下角。按需扫描仓库里的所有 `package.json`，按包分组列出 scripts，点击脚本名即可直接运行。扫描根路径与排除规则在 **设置** 的 **NPM 路径** 中配置。
+> 面板嵌在 Git 视图左下角。按需扫描仓库里的所有 `package.json`，按包分组列出 scripts，点击脚本名即可直接运行。扫描根路径与排除规则在面板自己的设置弹窗里配置。
 
 - 自动扫描项目中所有 `package.json` 文件
 - 列出其中的 `scripts` 条目
@@ -943,20 +1008,22 @@ $ ZEN_ALLOWED_ORIGINS="https://zen.example.com,http://10.0.0.5:8080" g ui
 
 ---
 
-### 四个主视图对照
+### 视图一览
 
 | 视图 | 用途 | 持久化状态 | 高亮特性 |
 |---|---|---|---|
 | **Git** | 日常暂存、提交、推送、历史回看 | 每个项目的 UI 偏好（视图模式、布局比例） | 结构化提交表单、AI 生成提交信息、选择范围一键推送 |
 | **编辑器** | 不离开 GUI 浏览并编辑项目文件 | 打开的 tab、未保存标记、最近访问 | Monaco 编辑器带语法高亮、Markdown 预览、文件搜索 |
-| **源码地图** | AI 生成的可视化依赖图 | 最近分析的项目、布局比例 | 三栏布局（树 / 图 / 源码）、子系统聚类、入口点识别 |
-| **工作台** | 在仓库上批量执行 Claude | 任务、提示词、日志保留策略 | 子任务附件、独立上下文、实时 SSE 日志、简单任务续聊 |
+| **工作台** | 多项目看板：派发并执行智能体任务 | 任务、提示词、看板布局、日志保留策略 | 看板视图、主 Agent 控制台、执行器选择、对话式实时日志 |
+| **智能体** | 与内置 AI 智能体对话（Web + CLI 会话） | 会话、待回答问题 | 流式回答、工具调用卡片、Skill / MCP 广场 |
+
+**控制台**、**系统监控**、**思维导图** 是同一导航栏上的辅助视图；**源码地图** 见下文，其 Activity Bar 入口目前隐藏。
 
 ---
 
 ### 内置代码编辑器
 
-Activity Bar 第二个视图，在 GUI 内直接浏览并编辑项目文件：
+Activity Bar 第四个视图，在 GUI 内直接浏览并编辑项目文件：
 
 | 功能 | 说明 |
 |---|---|
@@ -979,13 +1046,15 @@ Activity Bar 第二个视图，在 GUI 内直接浏览并编辑项目文件：
 
 > 三栏布局：左侧文件树 / 中间可交互依赖图（拖拽、缩放、适配视图、缩略图） / 右侧源码预览。点击 **开始分析** 把项目发给配置好的 LLM，图上就会填入颜色分明的子系统、入口节点、技术栈识别结果。底部 **AGENT 日志** 实时输出扫描进度。
 
-Activity Bar 第三个视图，调用 AI 模型将项目代码库生成可交互的依赖关系图：
+调用 AI 模型将项目代码库生成可交互的依赖关系图。其 Activity Bar 入口目前隐藏（`ActivityBar.vue` 的 `SHOW_SOURCE_MAP = false`），视图与后端均未改动，把该开关改回 `true` 即可恢复。
 
 | 功能 | 说明 |
 |---|---|
 | 文件扫描 | 递归扫描所有源码文件并构建文件树 |
+| 大纲 | 左栏可在「文件列表」与「大纲」两个 tab 之间切换 |
 | AI 分析 | 将文件内容发送到 OpenAI 兼容接口，推断项目结构 |
 | 依赖关系图 | 可拖拽、缩放、适配视图的节点边图（带缩略图导航） |
+| 优化布局 | 「优化布局」重新计算一次关系图排布，让节点更整齐 |
 | 子系统聚类 | 自动将文件聚类为颜色区分的子系统 |
 | 节点详情 | 点击节点在右侧 Monaco 面板中查看对应源码 |
 | 技术栈检测 | 识别项目使用的语言和框架 |
@@ -993,48 +1062,43 @@ Activity Bar 第三个视图，调用 AI 模型将项目代码库生成可交互
 | 分析日志 | 扫描与分析过程实时输出进度日志 |
 | 多面板布局 | 文件树、关系图、源码三个面板均可独立拖拽调整宽度 |
 
-在 **设置 → AI** 中配置模型接口地址、API Key 和模型名称。
+在 **设置 → AI 模型配置** 中配置模型接口地址、API Key 和模型名称。
 
 ---
 
-### 工作台（任务驱动的 Claude 执行）
+### 工作台（任务驱动的智能体执行）
 
-![工作台 — 任务详情 + Claude 实时执行日志](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/workbench-task-detail.png)
+![工作台 — 多项目编排台](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/workbench-board.png)
 
-> 侧边栏按项目分组列出任务（当前项目排在最前）和提示词预置；主面板上半部分是任务定义（提交代码字段、预置提示词下拉、运行 / 停止按钮），下半部分是 **Claude** 实时执行流 —— 按时间顺序堆叠的 stdout / stderr 卡片，自动滚到最新。底部续聊输入框可以接着 `claude --resume` 继续对话。
+> 一块看板三栏：左侧项目列表（下方是执行监控），中间看板，右侧是 **主 Agent 控制台**。在控制台里写一条指令，由主 Agent 判断落到哪个项目，也可以先选中项目再指派。点击卡片时任务编辑器以浮层打开，看板保持挂载不丢状态。
 
-Activity Bar 第四个视图，用于在当前仓库上批量调度 Claude：定义任务、拆成有序子任务、绑定可复用的提示词预置，点 **执行任务** 后按顺序依次执行。
+面向单个或多个项目运行编码智能体：每个任务自带提示词预置、附件与执行器，各自跑在独立进程里，上下文不会跨任务累积。
 
 | 功能 | 说明 |
 |---|---|
-| 任务列表 | 新建、编辑、删除任务；每条任务只占一行 —— 有标题显示标题，没标题则显示描述前若干字符（超出省略）；子任务数 / 附件数 / 类型徽标已移除降噪；标题和描述都没填的任务视为草稿，切走时直接丢弃、不落盘 |
-| 侧边栏可拖动 | 侧边栏与主面板之间的分隔条可拖动调整宽度（200–480 px），松手后记住设置；分组模式下任务项相对组头缩进一层 |
-| 两侧栏可拖动 / 可折叠 | 多项目编排台里，项目列表与主 Agent 控制台两侧的分隔条都能拖动（左 180–420 px、右 260–560 px），右栏默认更宽，宽度跨会话记住；两侧也都能手动收起 —— 顶栏按钮收项目列表，控制台自己的按钮把它收成 32px 收纳条、点一下展开。双击分隔条恢复响应式默认值。项目列表下方的执行监控也有一条自己的分隔条：并行跑多个任务、卡片显示不全时上下拖动即可加高（120 px ～ 视口高度一半），这个高度同样跨会话记住 |
+| 任务列表 | 新建、编辑、删除任务；按项目分组（当前项目排在最前），每条任务只占一行 —— 有标题显示标题，没标题则显示描述前若干字符（超出省略）；标题和描述都没填的任务视为草稿，切走时直接丢弃、不落盘 |
+| 多项目看板 | 三栏均可拖动 / 可折叠：项目列表（含执行监控）、看板、主 Agent 控制台。拖动分隔条调整宽度（项目列表 180–420 px、控制台 260–560 px），双击恢复响应式默认值；两侧也都能收起 —— 顶栏按钮收项目列表，控制台自己的按钮把它收成 32px 收纳条、点一下展开。项目列表下方的执行监控有独立分隔条（120 px ～ 视口高度一半），并行跑多个任务时上下拖动即可加高。所有宽高跨会话记住 |
+| 看板视图 | **待处理 / 进行中 / 已完成** 三列，已完成列按完成时间倒序；顶部勾选可只看「最近一次执行报错」的任务；一键切换成表格视图，信息密度更高 |
+| 主 Agent 控制台 | 写一条指令，主 Agent 派发成一个新任务，落点由它判断（或遵从此前选中的项目）；Enter 派发，Shift+Enter 换行。调度可暂停 / 恢复，暂停期间派发只建任务不执行 |
 | 派发默认提示词 | 给每次派发配一段常驻提示词：一条**全局**的（所有项目都附加）+ 每个项目一条（派发到该项目时追加在全局之后，是补充而不是覆盖）。两者都在控制台输入区的齿轮按钮里设置；拼好的正文放在指令**之前**，「立即执行」旁边会多出一个「默认提示词（全局 + 本项目）」勾选，单次派发可以取消勾选，活动流里也记下这条指令附带的是哪一级。提示词在派发那一刻就抄进任务自己的提示词字段，之后改设置不会回头改写已建任务，单条任务仍可再改 |
 | 项目行打开方式 | 编排台项目列表里 hover 任意一行会出现两个按钮：「打开文件夹」一键进资源管理器，以及「打开方式」菜单 —— 文件管理器 / 终端 / 新标签页跑 `g ui`，以及各编辑器与 AI 工具（VS Code、Codex、OpenCode、Kimi Code、ZCode、DeepSeek Harness，加上默认权限或完全批准的 Claude Code）。没安装的工具会置灰并标「未安装」，点它弹的是顶栏那套安装引导；菜单里的动作只作用于该行项目，不会改变看板选中态 |
-| 顶部类型切换器 | 任务头部增加 segmented control（复杂 / 简单），是切换任务类型的唯一入口（左侧行内徽标已移除，保证任务行单行展示）；复杂→简单且带子任务时弹窗确认 |
-| AI 拆分（升级） | AI 拆分升级为带 sparkle 图标 + 轻微 pulse 动效的 accent 按钮，位置紧贴主「执行任务」按钮；只要标题非空，复杂任务下始终可点 |
-| 任务描述默认折叠 | 选中任务后默认仅显示一行「任务描述（可选）」摘要，节省首屏纵向空间；点击 summary 展开后即可看到描述输入框和附件区；已填写描述或挂有附件时摘要右侧会出现「已填写」徽标和附件数量 |
-| 极简任务 / 对话样式 | 任务执行视图整体极简化：减少冗余边框与阴影、标题 / 描述输入框透明化、执行主体左右两段式分列；视觉参考 Claude Code 桌面版 |
-| 执行中状态点 pill | 任务行 / 详情区 pill 退化为 8px 彩色圆点（无文字），running 时由外层行边框跑马灯 + 圆点呼吸两层动效传达"进行中"，避免文字 pill 与动效叠加产生视觉歧义 |
-| 任务字段自动保存 | 标题 / 描述 / 预置提示词 / 简单任务覆盖 改动后 1.5s 防抖落盘，标题右侧显示「保存中 / 已保存 / 有未保存的更改」状态徽标；切换任务或关页面前自动 flush（含 `navigator.sendBeacon` 兜底） |
-| 简单任务 | 新建任务时选「简单（直接执行）」即跳过子任务拆分；执行时把 task.desc 拼成单 sub 走 `/tasks/:id/run-simple`；可填「覆盖预置提示词」独立覆写预置模板；主任务附件 + 描述 + 覆盖三者合并驱动 Claude；运行中详情区状态条末尾带「停止」按钮（带二次确认），与复杂任务子任务停止按钮对齐 |
-| 子任务拆分 | 增删改子任务，实时显示每个子任务的执行状态；空态提供居中插画卡片、主 CTA「添加子任务」与「用 AI 自动拆分」次级入口（仅复杂任务显示） |
-| 子任务附件 | 每个子任务最多挂 9 个附件（图片 / PDF / 文本 / Markdown / CSV / JSON / log，单个 ≤ 20 MB）；超过 3.5 MB 的图片会先在浏览器里压缩（先按原分辨率转 WebP，压不下去再逐级降采样），4K 屏截图不用再手动裁剪；同 `originalName + size` 已存在则直接复用，跳过重复上传；执行时绝对路径会自动追加到 prompt 末尾，Claude 直接按路径读取。**右键图片附件可一键复制到系统剪贴板**（支持 png / jpeg / webp / gif） |
-| 提示词预置 | 可复用提示词模板，支持 `{{task.title}}` / `{{task.desc}}` / `{{sub.title}}` / `{{sub.desc}}` / `{{repo.path}}` / `{{branch}}` 变量插值 |
+| 任务编辑器浮层 | 点击看板卡片时以浮层打开：左侧是扁平化的任务列表与提示词预置，右侧依次是任务头部、预置下拉、执行器 split 按钮、「执行日志 / 清空执行」动作，以及对话式执行主体。描述默认折叠成一行「任务描述（可选）」摘要，点击展开；已填写描述或挂有附件时摘要右侧显示「已填写」徽标与附件数量 |
+| 执行器选择 | 每个任务可用 **Claude Code** 或 **OpenCode** 执行。全局默认在 **设置 → 通用设置 → 任务执行器**（`config.taskExecutor`）；执行按钮旁的 split 按钮可临时切换下一次执行用的执行器，选择记在浏览器里。续聊固定沿用最初那个执行器 —— Claude 的 `--resume` 与 OpenCode 的 `--session` 会话 id 互不通用 |
+| 附件 | 每个任务最多挂 9 个附件（图片 / PDF / 文本 / Markdown / CSV / JSON / log，单个 ≤ 20 MB）；超过 3.5 MB 的图片会先在浏览器里压缩（先按原分辨率转 WebP，压不下去再逐级降采样），4K 屏截图不用再手动裁剪；执行时绝对路径会自动追加到 prompt 末尾，智能体直接按路径读取。**右键图片附件可一键复制到系统剪贴板**（支持 png / jpeg / webp / gif） |
+| 提示词预置 | 可复用提示词模板，支持 `{{task.title}}` / `{{task.desc}}` / `{{repo.path}}` / `{{branch}}` 变量插值 |
 | AI 生成预置 | 「新建 / 编辑预置」对话框内置 **AI 生成项目架构说明** 按钮 + **编辑指令** 按钮：服务端递归识别当前项目里的所有子项目（含 `.git` 或 9 种 manifest 之一的目录），为每个子项目独立读取关键文件（manifest 20 KB / README 8 KB / 2 层目录树），并发调 LLM 产出各子项目架构说明，多子项目场景再合并成一份整体说明；用户可点「编辑指令」自定义生成策略（持久化到 `~/.zen-gitsync/ai-instruction.json`）；`max_tokens=4000`，单次请求最多 20 分钟 |
-| 子任务覆盖 | 在子任务描述框可独立覆盖预置提示词的内容 |
-| 顺序执行 | 按声明顺序依次执行子任务；上一个进程退出后才启动下一个 |
-| 管道模式启动 | 直接以 `claude -p "<prompt>" --output-format text --permission-mode bypassPermissions --dangerously-skip-permissions` 拉起进程，stdout / stderr 通过管道回传服务端，不再弹外部终端窗口 |
-| 独立上下文 | 每个子任务都是独立的 detached 进程，上下文与状态不会跨子任务累积 |
-| 实时日志 | 子任务的「执行日志」面板**默认展开**（不再仅在运行中展开），方便随时回看上次执行结果；面板内自动滚到底，展示累积的 stdout / stderr（服务端缓存 256 KB，客户端渲染最近 64 KB） |
-| 实时状态 | 子任务状态（todo / pending / running / done / error）和 PID 通过 SSE 实时推送 |
-| 执行中动效 | 状态为 `running` 的子任务卡片整体呈现蓝色呼吸光晕 + 顶部流动进度光带；状态徽章为渐变 shimmer + 脉冲白点 + 外发光，停下后平滑恢复 |
-| 跨视图指示 | 任意子任务运行中时，Activity Bar 上的工作台图标会显示脉动小圆点；切换到 Git 或编辑器视图也能看到运行状态 |
-| 执行日志管理（弹窗） | 顶部「执行日志」按钮（替代原独立 tab）唤起弹窗：列表 / 过滤 / 批量删除 / 清空 / 保留策略全部可在此一次性管理；弹窗关闭后任务执行视图常驻，避免切换时不必要的卸载 |
-| 简单任务继续对话 | 简单任务执行完（done / error / cancelled）后，详情区底部出现「退出」按钮和续聊输入框；点退出走 `clearJobsByTask` 一键清空整段对话回到 idle；输入续聊消息发送则后端用 `claude --resume <session_id> -p <newPrompt>` 续接历史会话，**新一轮 = 新 job**（subId 形如 `__simple__r${n}`），多轮纵向堆叠成对话流。session_id 在 stream-json 的首条 `system.init` 事件里捕获并持久化到 job |
+| 管道模式启动 | 选定执行器以 detached 进程拉起，stdout / stderr 通过管道回传服务端，不再弹外部终端窗口。Claude Code 走 `claude -p - --output-format stream-json --verbose --permission-mode bypassPermissions --dangerously-skip-permissions`（prompt 从 stdin 喂入，避开 Windows 32K 命令行上限）；OpenCode 走 `opencode run --format json --auto --thinking`，模型跟随 opencode 自身配置的默认值 |
+| 独立进程 | 每次执行都是独立的 detached 进程，上下文与状态不会跨任务累积 |
+| 实时日志 | 「执行日志」面板**默认展开**，方便随时回看上次执行结果；面板内自动滚到底，展示累积的 stdout / stderr（客户端渲染最近 64 KB，服务端单个 job 最多保留 100 MB 输出） |
+| 实时状态 | 任务状态（pending / running / done / error / cancelled）和 PID 通过 SSE 实时推送 |
+| 工具调用流 | 模型的工具调用直接渲染在对话流里，能看清智能体具体做了什么 |
+| 结束提示 | 任务结束或报错时：页面在前台弹应用内提示，页面在后台/别的窗口发系统通知，切到别的视图也不会漏掉结果 |
+| 跨视图指示 | 任意任务运行中时，Activity Bar 上的工作台图标会显示脉动小圆点；切换到 Git 或编辑器视图也能看到运行状态 |
+| 执行日志管理（弹窗） | 顶部「执行日志」按钮唤起弹窗：列表 / 过滤 / 批量删除 / 清空 / 保留策略全部可在此一次性管理（默认保留 500 条、256 MB）；弹窗关闭后任务执行视图常驻，避免切换时不必要的卸载 |
+| 继续对话 | 任务进入终态（done / error / cancelled）后出现续聊输入框；发送续聊消息会用 `claude --resume <session_id>`（Claude Code）或 `--session`（OpenCode）续接上一轮会话，**新一轮 = 新 job**，多轮纵向堆叠成对话流 |
+| 本地工具检测 | 启动时 + 每 10 分钟探测 7 个 CLI（`code` / `claude` / `codex` / `opencode` / `kimi` / `zcode` / `dsh`）。未安装的工具置灰并标「未安装」，点击弹出安装引导；右键工具按钮可升级到最新已发布版本 |
 
-提示词预置与任务数据持久化到 `~/.zen-gitsync/prompts.json` 和 `~/.zen-gitsync/tasks.json`（跨项目共享）。子任务附件落盘在 `~/.zen-gitsync/workbench-images/<subId>/`。
+提示词预置与任务数据持久化到 `~/.zen-gitsync/prompts.json` 和 `~/.zen-gitsync/tasks.json`（跨项目共享）；执行历史与保留策略在 `jobs.json` / `jobs-config.json`，主 Agent 控制台状态在 `orchestrator.json`，任务附件落盘在 `~/.zen-gitsync/workbench-images/_task-<taskId>/`。
 
 ---
 
@@ -1050,9 +1114,10 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 | 工具调用展示 | 每次工具调用（run_command、read_file、edit_file、list_files、search_text、write_file）以可折叠卡片形式展示，含参数预览和执行结果 |
 | 最近项目感知 | 问「我哪些项目需要 pull」时，智能体调用内置的 `list_projects` 工具，而不是自己去扫盘：返回的就是 GUI「最近项目」面板那份清单（最近目录 + 建过任务的目录，带分支 / 领先 / 落后 / 未提交数与任务进度），回答与界面对得上。领先/落后读的是本地引用，因此问到"要不要拉"时它可以带 `refresh=true` 先联网 fetch 一轮再答 |
 | 会话持久化 | 所有对话保存为 JSON 文件到 `~/.zen-gitsync/agent-sessions/`；CLI 智能体（`g ai`）写入同一目录，Web 端与 CLI 端会话统一管理 |
+| Skill / MCP 广场 | **Skill 广场** 与 **MCP 广场** 两个 tab 列出多个来源的 Skill 与 MCP 服务，每项带说明、周下载 / 使用次数与安装状态。可安装到**当前项目**或 **`g ai` 智能体**；已安装的可在同一张卡片上卸载，还缺环境变量的会标出「还缺环境变量」。终端侧 `g ai` 用 `/skills`（`/mcp` 为别名）查看已装清单 |
 | 克隆优先 SSH | 让它克隆仓库（或加远端）时走 SSH 形式 —— `git@github.com:owner/repo.git` / `git@gitee.com:owner/repo.git`；拿到 `https://` 地址先换算，克隆不会停在 Git Credential Manager 的账号密码弹窗上。只有 SSH 真的不可用（`Permission denied (publickey)` / 主机密钥校验失败）才退回 https，并说明这次走的是哪条。同一条偏好也会注入到每个工作台任务的 prompt —— 那里执行器是外部 CLI，系统提示词不归本应用管，环境上下文块是唯一的注入口 |
 | 单轮工具调用上限 | 一条消息内智能体最多连续调用多少次工具（默认 **200**，可调范围 1–2000）。在 **设置 → AI 模型配置 → 智能体运行时** 中修改；达到上限本轮会被强制结束并提示再发一条消息继续。CLI 智能体共用同一项设置 |
-| 预设问题 | 开场界面提供快捷按钮（查看项目结构、分析代码质量、写测试、Git 状态检查）|
+| 预设问题 | 开场界面提供快捷按钮（查看项目结构、分析代码质量、写测试、Git 状态检查、帮我启动项目）|
 | 停止生成 | 流式输出期间出现浮动停止按钮；中止 LLM 请求及正在运行的子进程 |
 | 主题同步 | 对话区域跟随 GUI 当前主题（浅色 / 深色 / 自动）|
 
@@ -1062,23 +1127,22 @@ Activity Bar 中的机器人图标视图，可直接在浏览器中与内置 AI 
 
 ![用户设置弹窗 — 通用 tab](https://raw.githubusercontent.com/xz333221/zen-gitsync/main/public/images/settings-general.png)
 
-> 点击顶部条右上角齿轮图标。tab 包含 **通用 / Git / 提交 / AI / 主题 / 语言 / 文件锁定 / NPM 路径**。大部分开关即时生效，无需重启 GUI。点击底栏的 **默认模型** 名称可一键定位到「AI 模型」tab。
+> 点击顶部条右上角齿轮图标。弹窗共 6 个 tab —— **通用设置 / AI 模型配置 / Git 全局设置 / 提交设置 / 编辑配置 / 编辑器设置**，大部分开关即时生效，无需重启 GUI。点击底栏的 **默认模型** 名称可一键定位到「AI 模型配置」tab。原先放在这里的两项现在各有自己的入口：锁定文件在 Git 视图的 **锁定文件管理** 弹窗里管理，npm 扫描根路径在 NPM 脚本面板自己的设置弹窗里配置。
 
-| 设置项 | 说明 |
+| tab | 内容 |
 |---|---|
-| Git 用户信息 | 设置 `user.name` 和 `user.email` |
-| 默认提交信息 | 未填写时的回退提交消息 |
-| 主题 | 明亮/暗黑模式（默认跟随系统） |
-| 语言 | 中文 / English |
-| 文件锁定 | 锁定文件，使其永远不被暂存或储藏 |
-| NPM 路径 | 配置 `package.json` 的扫描位置 |
-| AI 模型 | 配置 OpenAI / Claude 等兼容 OpenAI 协议的 LLM 端点（API Key、baseURL、模型名），可设置默认模型，多套配置并存 |
+| 通用设置 | 外观（主题 —— 浅色 / 深色 / 跟随系统，以及界面语言）、任务执行（任务执行器、任务完成提示），以及界面选项（文件列表视图、文件差异分割、AI 差异说明、命令控制台、布局比例） |
+| AI 模型配置 | 兼容 OpenAI 协议的模型端点 —— API Key、baseURL、模型名，可多套并存并设置默认模型；另有 **智能体运行时** 存放单轮工具调用上限 |
+| Git 全局设置 | `user.name` / `user.email`、自动设置上游、拉取策略、自动清理远程分支、换行符处理、`git init` 默认分支 |
+| 提交设置 | 标准化提交、跳过钩子检查（`--no-verify`）、回车自动提交、Push 完成自动关闭、推送前拉取更新、自动填充默认提交信息 |
+| 编辑配置 | 直接编辑配置 JSON，并可打开系统配置文件 |
+| 编辑器设置 | 编辑器行为，例如失去焦点时自动保存 |
 
 ---
 
 ### 自升级
 
-GUI 底栏版本号每个会话会向 npm 查询一次最新版本。检测到更新时版本旁会出现 **升级** 按钮，点击后在弹窗里实时回传 `npm install -g zen-gitsync` 的输出；升级成功后弹窗会切换为「**立即重启并刷新**」主 CTA。点击后调用 `POST /api/app-restart`，后端**自行 spawn 新 Node 进程**（不依赖任何外层 launcher / 桌面壳），通过 NDJSON 流把新进程端口推回前端，旧进程再优雅退出；浏览器**重定向**到新端口（保留当前 path、query、hash）由新后端服务后续请求。同时底栏版本号会立刻刷新到新版本号，重启前就能看到。若子进程 8 秒内未就绪，旧进程不退出并弹错误提示，您的会话保持连接。
+GUI 底栏版本号每个会话会向 npm 查询一次最新版本。检测到更新时版本旁会出现 **升级** 按钮，点击后在弹窗里实时回传 `npm install -g zen-gitsync` 的输出；升级成功后弹窗会切换为「**立即重启并刷新**」主 CTA。点击后调用 `POST /api/app-restart`，后端**自行 spawn 新 Node 进程**（不依赖任何外层 launcher / 桌面壳），通过 NDJSON 流把新进程端口推回前端，旧进程再优雅退出；浏览器**重定向**到新端口（保留当前 path、query、hash）由新后端服务后续请求。同时底栏版本号会立刻刷新到新版本号，重启前就能看到。若子进程 15 秒内未就绪，旧进程不退出并弹错误提示，您的会话保持连接。
 
 > macOS / Linux 上全局安装需要 sudo，前端会用 `sudo -n` 非交互式尝试；如非免密 sudo，请以管理员权限重启 GUI 后再试。
 
@@ -1115,7 +1179,10 @@ $ g ai --model=2                # 使用第 2 个已配置的模型（序号或�
 直接输入数字跳转，`0` = 列表底部的"自定义 / 手动输入"）；非 TTY 环境下自动回退为数字输入。
 `Esc` 或 `Ctrl+C` 一键取消整个向导。
 
-会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/tools`、`/stats`、`/new`、`/resume`、`/clear`、`/exit`。
+`/skills`（`/mcp` 为别名）列出智能体当前已安装的 Skill 与 MCP 服务及来源。安装本身在 GUI 的
+**Skill / MCP 广场**（智能体视图）里完成：选择安装到当前项目或 `g ai` 智能体，装好后对应一侧即可使用。
+
+会话内命令：`/help`、`/model`、`/addmodel`、`/cd <路径>`、`/image [路径]`、`/think`、`/tools`、`/stats`、`/new`、`/resume`、`/skills`（`/mcp` 为别名）、`/clear`、`/exit`（或 `/quit`）。
 
 思考、工具调用和回答分区展示。默认完整显示模型返回的思考，`/think full` 恢复完整显示，
 `/think off` 隐藏思考，`/think compact` 切换为前 12 行非空预览。三种模式均直接列在 `/` 菜单中，输入 `/think ` 后也可补全。
@@ -1153,6 +1220,13 @@ $ g
 $ g -y
 ```
 
+#### AI 生成提交信息并提交（跳过输入）：
+```bash
+$ g --ai                  # 模型写好提交信息，然后提交 + 推送
+$ g --ai --no-diff        # 同上，但不打印 diff
+$ g --ai --interval=600   # 每 10 分钟用 AI 提交一次
+```
+
 #### 传入 message 直接提交：
 ```bash
 $ g -m <message>
@@ -1173,6 +1247,12 @@ $ g get-config
 ```shell
 $ g -h
 $ g --help
+```
+
+#### 向 `package.json` 写入快捷脚本：
+```bash
+$ g addScript        # 写入 "g:y": "g -y"
+$ g addResetScript   # 写入 "g:reset": "git reset --hard origin/<当前分支>"
 ```
 
 #### 定时执行自动提交（默认间隔 1 小时）：
@@ -1198,6 +1278,10 @@ start /min cmd /k "g --cmd=\"echo hello\" --cmd-interval=5"     # 每5秒执行�
 start /min cmd /k "g --cmd=\"echo at-time\" --at=23:59"         # 在23:59执行一次
 start /min cmd /k "g --cmd=\"echo daily\" --at=23:59 --daily"   # 每天23:59执行一次
 ```
+
+`--repeat=daily` 与 `--at-repeat=daily` 是 `--daily` 的别名。自定义命令默认在 shell 里执行；
+加 `--cmd-strict` 后会拆成 argv 走 `execFile`，管道 / 重定向 / 通配符随之失效 —— 当你不希望
+命令被 shell 解释时，这正是想要的效果。
 
 #### 不显示 git diff 内容：
 ```shell
