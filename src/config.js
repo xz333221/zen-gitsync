@@ -163,6 +163,10 @@ const defaultConfig = {
       splitPercent: 25,                // 15-85
     },
     editorAutoSave: false,
+    // 顶栏工具图标（VSCode / Claude Code / Codex / …）中**隐藏**的那几个。
+    // 白名单式的默认空数组：以后新增工具默认就固定显示，不需要回头改默认值。
+    // 未勾选（= 落在本数组里）的工具连同未安装的一起收进顶栏右侧「更多」菜单。
+    headerToolsHidden: [],
   }
 };
 

@@ -235,6 +235,8 @@ export const useConfigStore = defineStore('config', () => {
     commandConsole: UiCommandConsole
     editorAutoSave: boolean
     mindmapDir: string
+    /** 顶栏工具图标中隐藏的工具 id（未勾选的收进「更多」菜单） */
+    headerToolsHidden: string[]
   }
 
   const defaultUiSettings: UiSettings = {
@@ -252,6 +254,7 @@ export const useConfigStore = defineStore('config', () => {
     },
     editorAutoSave: false,
     mindmapDir: '',
+    headerToolsHidden: [],
   }
 
   // 浅拷贝默认值（避免外部 mutate 到 defaultUiSettings）
@@ -605,6 +608,9 @@ export const useConfigStore = defineStore('config', () => {
           },
           editorAutoSave: typeof configData.ui.editorAutoSave === 'boolean' ? configData.ui.editorAutoSave : defaultUiSettings.editorAutoSave,
           mindmapDir: typeof configData.ui.mindmapDir === 'string' ? configData.ui.mindmapDir : defaultUiSettings.mindmapDir,
+          headerToolsHidden: Array.isArray(configData.ui.headerToolsHidden)
+            ? configData.ui.headerToolsHidden.filter((id: unknown): id is string => typeof id === 'string')
+            : [],
         }
       }
 
@@ -742,6 +748,7 @@ export const useConfigStore = defineStore('config', () => {
   watch(() => ui.value.fileDiffSplitPercent, (v) => { if (isUiLoaded.value) saveUiSettings({ fileDiffSplitPercent: v }) })
   watch(() => ui.value.diffPreviewSplitPercent, (v) => { if (isUiLoaded.value && v != null) saveUiSettings({ diffPreviewSplitPercent: v }) })
   watch(() => ui.value.editorAutoSave, (v) => { if (isUiLoaded.value) saveUiSettings({ editorAutoSave: v }) })
+  watch(() => ui.value.headerToolsHidden, (v) => { if (isUiLoaded.value && Array.isArray(v)) saveUiSettings({ headerToolsHidden: v }) })
   // layout 是当前项目的工作副本。变化时把当前项目的 layoutsByProject 条目更新为该值,
   // 同时持久化整张 layoutsByProject map(服务端对这个 key 做深合并,保留其它项目)。
   // 不再写全局 ui.layout(否则一个项目拖完会被另一个项目读到),保持 layout 字段为静态默认。

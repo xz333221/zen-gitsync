@@ -1,4 +1,4 @@
-﻿// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
+// 这里是自动生成的内容 Thu Oct 23 2025 16:02:20 GMT+0800 (中国标准时间)
 export default {
   // @F13B4: file path: App.vue
   '@F13B4:编辑项目配置': 'Edit project configuration',
@@ -695,12 +695,13 @@ export default {
   '@67CE7:切换目录失败': 'Failed to switch directory',
   '@67CE7:切换': 'Switch',
   '@67CE7:已复制目录路径': 'Directory path copied',
+  '@67CE7:复制目录路径': 'Copy directory path',
   '@67CE7:复制文件夹名称': 'Copy folder name',
   '@67CE7:已复制文件夹名称': 'Folder name copied',
   '@67CE7:复制失败': 'Copy failed',
-  '@67CE7:展开未安装的工具': 'Show uninstalled tools',
-  '@67CE7:收起未安装的工具': 'Hide uninstalled tools',
-  '@67CE7:未安装的工具': 'Not installed',
+  '@67CE7:更多工具': 'More tools',
+  '@67CE7:展开更多工具': 'Show more tools',
+  '@67CE7:收起更多工具': 'Hide more tools',
   '@67CE7:未安装': 'Not installed',
   // @67CE7: file end
   // @NPM01: file path: components\NpmScriptsPanel.vue
@@ -977,6 +978,8 @@ export default {
   '@42BB9:显示终端会话': 'Show terminal sessions',
   '@42BB9:控制台高度比例': 'Console height',
   '@42BB9:布局比例': 'Layout ratios',
+  '@42BB9:顶部工具栏': 'Header toolbar',
+  '@42BB9:勾选后固定在顶栏显示，取消勾选的工具会收进右侧「更多」菜单': 'Checked tools stay pinned in the header; unchecked ones move into the "More" menu on the right',
   '@42BB9:重置为默认布局': 'Reset to default layout',
   '@42BB9:恢复默认的左/中/右/上面板比例': 'Restore default left/center/right/top panel ratios',
   '@42BB9:布局比例已重置为默认值': 'Layout ratios have been reset to default',

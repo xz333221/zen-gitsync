@@ -389,6 +389,64 @@ function repoMeta(repo: RemoteRepo) {
   return parts.join(' · ')
 }
 
+/* ── 卡片上的两个视觉件:左侧字母块 / 语言色点 ─────────────────────── */
+
+/**
+ * 字母块的色相只从这 6 档里取,不铺满整圈 360°。
+ *
+ *  为什么不是随机色相:一屏几十个块,色相转满一圈就成了调色盘,反而更乱 ——
+ *  这里要的是"能区分",不是"够鲜艳"。档位少还有个好处:相邻分组的块常撞色,
+ *  看上去仍是同一套色系,而不是"同一屏里塞了好几套 UI"。
+ */
+const AVATAR_HUES = [217, 199, 168, 262, 32, 340]
+
+/** 名字 → 稳定的色相档位:同一张卡刷新 / 换排序 / 换分组都不变色 */
+function avatarHue(seed: string) {
+  let h = 0
+  for (const ch of seed) h = (h * 31 + (ch.codePointAt(0) ?? 0)) % 9973
+  return AVATAR_HUES[h % AVATAR_HUES.length]
+}
+
+/** 字母块里放什么:仓库名 / 空间名的首字符。按码点取,别把 emoji 切成半个 */
+function avatarInitial(seed: string) {
+  return [...seed][0]?.toUpperCase() ?? '#'
+}
+
+/**
+ * 语言 → 官方品牌色(GitHub linguist 那一套)。
+ *
+ *  只收录常出现的几种:算不出准确颜色的语言(比如 gitee 会返回的 "Node.js")
+ *  退回中性灰点 —— 宁可少一个色点,也不要给一个错的色点。
+ */
+const LANGUAGE_COLORS: Record<string, string> = {
+  JavaScript: '#f1e05a',
+  TypeScript: '#3178c6',
+  Vue: '#41b883',
+  HTML: '#e34c26',
+  CSS: '#563d7c',
+  SCSS: '#c6538c',
+  Less: '#1d365d',
+  Python: '#3572a5',
+  Java: '#b07219',
+  Go: '#00add8',
+  Rust: '#dea584',
+  C: '#555555',
+  'C++': '#f34b7d',
+  'C#': '#178600',
+  PHP: '#4f5d95',
+  Ruby: '#701516',
+  Shell: '#89e051',
+  Kotlin: '#a97bff',
+  Swift: '#f05138',
+  Dart: '#00b4ab',
+  Lua: '#000080',
+  Markdown: '#083fa1',
+}
+
+function languageColor(language: string) {
+  return LANGUAGE_COLORS[language] ?? 'var(--text-tertiary)'
+}
+
 /** 卡片的悬浮提示:比卡片多给"本地克隆到哪 / 创建时间 / 默认分支 / 许可证"——
  *  卡片上放不下的次要信息都在这里,不用点开浏览器就能核对。
  *  本地克隆那句排在描述前面:决定"要不要点克隆"时,它比仓库简介有用。 */
@@ -1023,19 +1081,32 @@ onBeforeUnmount(stopPolling)
           <!-- 组头:空间名 + 该空间下的仓库数。只有一个组(含"不分组")时整块不渲染 ——
                那时它只是把每张卡片的前缀重复一遍。 -->
           <div v-if="showGroupHeaders" class="repo-group__head">
+            <span
+              class="repo-group__avatar"
+              :style="{ '--avatar-hue': avatarHue(group.owner) }"
+              aria-hidden="true"
+            >{{ avatarInitial(group.owner) }}</span>
             <span class="repo-group__owner">{{ group.owner }}</span>
             <span class="repo-group__count">{{ group.repos.length }}</span>
           </div>
 
           <ul class="repo-group__grid">
-            <li v-for="repo in group.repos" :key="repo.fullName" class="repo-card" :title="repoTooltip(repo)">
+            <li
+              v-for="repo in group.repos"
+              :key="repo.fullName"
+              class="repo-card"
+              :style="{ '--avatar-hue': avatarHue(repo.name) }"
+              :title="repoTooltip(repo)"
+            >
               <button
                 type="button"
                 class="repo-card__btn"
                 :aria-label="$t('@REPOLIST:在浏览器中打开 {name}', { name: repo.fullName })"
                 @click="onCardClick(repo, $event)"
               >
-                <el-icon class="repo-card__icon" aria-hidden="true"><Connection /></el-icon>
+                <!-- 字母块:纯装饰(名字本身就在右边),但它是"快速定位到某张卡"的
+                     锚点 —— 整屏几十张同构卡片,光靠文字扫得很慢 -->
+                <span class="repo-card__avatar" aria-hidden="true">{{ avatarInitial(repo.name) }}</span>
                 <span class="repo-card__name">
                   <span class="repo-card__name-base">{{ repo.name }}</span>
                   <!-- 第二行:描述。分组态下空间名已经在组头上,这里不再重复 fullName,
@@ -1050,11 +1121,19 @@ onBeforeUnmount(stopPolling)
                        Ctrl+点击整张卡片 = 到那个目录里跑 g ui(见 onCardClick);
                        徽标自己不做点击区 —— hover 时它会淡出给操作按钮让位。 -->
                   <span v-if="clonedPathOf(repo)" class="repo-card__tag repo-card__tag--cloned">
+                    <el-icon aria-hidden="true"><CircleCheck /></el-icon>
                     {{ $t('@REPOLIST:已克隆') }}
                   </span>
                   <span v-if="repo.isFork" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:Fork') }}</span>
                   <span v-if="repo.isPrivate" class="repo-card__tag repo-card__tag--plain">{{ $t('@REPOLIST:私有') }}</span>
-                  <span v-if="repo.language" class="repo-card__tag repo-card__tag--plain">{{ repo.language }}</span>
+                  <!-- 语言色点用官方品牌色,算不出颜色的语言退回中性灰点(见 languageColor) -->
+                  <span v-if="repo.language" class="repo-card__tag repo-card__tag--plain">
+                    <span
+                      class="repo-card__lang-dot"
+                      :style="{ background: languageColor(repo.language) }"
+                      aria-hidden="true"
+                    />{{ repo.language }}
+                  </span>
                   <!-- 星标只在有人 star 时才出现:满屏 ★0 是没有信息量的噪音 -->
                   <span v-if="repo.stars > 0" class="repo-card__tag repo-card__tag--star">
                     <el-icon aria-hidden="true"><Star /></el-icon>{{ repo.stars }}
@@ -1135,6 +1214,14 @@ onBeforeUnmount(stopPolling)
 <style scoped>
 /* 外壳沿用「最近项目」面板的形态(卡片化 + 标题行 + 内部滚动),
    两个 Tab 之间切换时视觉不跳。 */
+/* 组头是 sticky 的,而 scoped 样式给子元素加的 data 属性会挡住
+   `html.dark .repo-card__avatar` 这类选择器 —— 深色下的字母块配色写在
+   :global 里,靠 .repo-list 这个根类限定作用域,不会漏到别的面板。 */
+:global(html.dark .repo-list .repo-card__avatar),
+:global(html.dark .repo-list .repo-group__avatar) {
+  color: hsl(var(--avatar-hue, 217) 80% 74%);
+  background: color-mix(in srgb, hsl(var(--avatar-hue, 217) 65% 62%) 22%, transparent);
+}
 .repo-list {
   display: flex;
   flex-direction: column;
@@ -1606,12 +1693,20 @@ onBeforeUnmount(stopPolling)
   gap: var(--spacing-base);
 }
 /* 组头:空间名 + 该空间下的仓库数,右边拉一条细线到容器边缘 ——
-   一行就把"下面是这一组"的范围画清楚,不用色块或分隔条 */
+   一行就把"下面是这一组"的范围画清楚,不用色块或分隔条。
+   吸顶(sticky):一个空间下仓库多时,滚到第二屏就不知道自己在哪一组了;
+   组头贴着滚动容器顶走,`background` 必须是不透明的 —— 否则卡片会从字缝里透出来。 */
 .repo-group__head {
+  position: sticky;
+  /* 滚动容器有 padding(= --spacing-xs),贴 0 会在头顶留一条透光的缝,
+     所以往上顶同样的距离,再用等量 padding 把字放回来 */
+  top: calc(-1 * var(--spacing-xs));
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 0 2px;
+  padding: var(--spacing-xs) 2px;
+  background: var(--bg-container);
 }
 .repo-group__head::after {
   content: '';
@@ -1622,6 +1717,7 @@ onBeforeUnmount(stopPolling)
 .repo-group__owner {
   font-size: 13px;
   font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.01em;
   color: var(--text-primary);
 }
 .repo-group__count {
@@ -1647,20 +1743,65 @@ onBeforeUnmount(stopPolling)
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
-  padding: var(--spacing-sm) var(--spacing-base);
+  /* 上下比原来(4px)宽:三行文字贴着上下边框会显得很挤,卡片本身却看不出原因 */
+  padding: 10px var(--spacing-md);
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
+  /* 静止时一层极浅的投影:让"这是张卡"在一屏灰底里自己成立,不靠描边硬撑 */
+  box-shadow: var(--shadow-sm);
   font-size: var(--font-size-md);
   color: var(--text-primary);
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    box-shadow var(--transition-fast), transform var(--transition-fast);
 }
 .repo-card:hover {
   background: var(--bg-component-hover);
-  border-color: var(--border-color);
+  border-color: var(--tint-primary-45);
+  box-shadow: var(--shadow-md);
+  /* 抬 1px:和「最近项目」的卡片一样,状态变化只动背景与描边 ——
+     位移仅 1px,不引起重排,但鼠标扫过一排卡时能明确"现在指着哪张" */
+  transform: translateY(-1px);
 }
 .repo-card:active {
   background: var(--tint-primary-08);
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .repo-card:hover {
+    transform: none;
+  }
+}
+
+/* 左侧字母块:整屏几十张同构卡片,纯文字扫起来很慢 ——
+   一个等宽的彩色块就是"定位到某张卡"的锚点,顺便把卡片左侧的留白用起来。
+   色相由名字算(avatarHue),块与块之间能区分,整体仍是同一套色系。 */
+.repo-card__avatar,
+.repo-group__avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  user-select: none;
+  color: hsl(var(--avatar-hue, 217) 72% 38%);
+  background: color-mix(in srgb, hsl(var(--avatar-hue, 217) 70% 52%) 14%, transparent);
+}
+/* 深色下的配色见文件顶部 <style> 里的 :global 规则(scoped 的 data 属性
+   会挡住 `html.dark .repo-card__avatar` 这种跨层选择器) */
+.repo-card__avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+/* 组头的块比卡片小一档:它是分组的标点,不该和卡片本身抢注意力 */
+.repo-group__avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
 }
 .repo-card__btn {
   display: flex;
@@ -1680,11 +1821,6 @@ onBeforeUnmount(stopPolling)
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   border-radius: var(--radius-base);
-}
-.repo-card__icon {
-  flex-shrink: 0;
-  color: var(--text-secondary);
-  font-size: 16px;
 }
 .repo-card__name {
   display: flex;
@@ -1738,6 +1874,15 @@ onBeforeUnmount(stopPolling)
 }
 .repo-card__tag .el-icon {
   font-size: var(--font-size-xs);
+}
+/* 语言色点:7px 的小圆,颜色由后端返回的语言名映射(见 LANGUAGE_COLORS)。
+   比"语言名前面加个图标"轻,也比只写文字多一层可扫的颜色线索 */
+.repo-card__lang-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 .repo-card__tag--plain {
   background: var(--bg-component-hover);

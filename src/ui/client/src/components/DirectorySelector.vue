@@ -18,7 +18,7 @@ import { $t } from '@/lang/static'
 import CommonDialog from "@components/CommonDialog.vue";
 import { FilePickerModal as FilePicker } from 'local-file-picker/client';
 import { ElMessage, ElMessageBox, ElPopover } from "element-plus";
-import { Folder, FolderOpened, Clock, Monitor, ArrowDown, ArrowUp, CopyDocument } from "@element-plus/icons-vue";
+import { Folder, FolderOpened, Clock, ArrowDown, ArrowUp, CopyDocument } from "@element-plus/icons-vue";
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useConfigStore } from "@/stores/configStore";
 import { useGitStore } from "@/stores/gitStore";
@@ -87,10 +87,9 @@ async function onCopyDirectory() {
 /**
  * 复制**文件夹名称**(只有最后一级目录名,不是完整路径)。
  *
- * 与上面"右键复制路径"是两个不同的东西:路径粘进终端就能 cd,
- * 而目录名是拿去做文件名、建同名目录、写文档标题时更常用的那一份 ——
- * 复制路径再手动删前缀既麻烦又容易删错。编排台项目列表的「打开方式」菜单里
- * 也有同一项(同一个 key、同一句成功提示),两处行为保持一致。
+ * 目录名右键走的就是这里:写标题、建同名目录、做文件名时最常用的一份;
+ * 想拿完整路径(粘进终端 cd)用旁边的「复制路径」按钮 —— 同一个 key、
+ * 同一句成功提示与编排台项目列表的「打开方式」菜单保持一致。
  */
 async function onCopyFolderName() {
   const name = currentFolderName.value;
@@ -227,9 +226,10 @@ async function onClaudeContextMenu() {
   }
 }
 
-// ── 工具按钮分组：已安装常驻显示，未安装收进"更多"菜单 ────────────────
-// header 空间有限，7 个工具全铺开太长。未安装的工具点了也只会弹安装引导，
-// 没必要占常驻位，收进菜单里按需取用。
+// ── 工具按钮分组：固定显示 / 收进「更多」菜单 ────────────────────────
+// header 空间有限，7 个工具全铺开太长。哪些固定在顶栏由「设置 → 通用设置 →
+// 顶部工具栏」决定（config.ui.headerToolsHidden），未勾选的与未安装的一起
+// 收进「更多」菜单：菜单里点了能打开的直接打开，没装的就弹安装引导。
 
 /** 除 claude 外的工具（claude 有右键菜单，单独渲染） */
 type SimpleToolId = OpenWithToolId
@@ -278,39 +278,58 @@ function toggleMoreTools() {
 /** 检测未完成前全部按 checking 态显示，不做分组，避免首屏按钮跳来跳去 */
 const toolsDetected = computed(() => toolsStore.lastCheckedAt !== null)
 
-/** 常驻显示的工具：检测中显示全部，检测后只显示已安装的 */
+/** 该工具是否被设置在顶栏固定显示（设置里取消勾选的会进隐藏名单） */
+function isToolPinned(id: ToolId): boolean {
+  return !configStore.ui.headerToolsHidden.includes(id)
+}
+
+/** 常驻显示：配置里勾选，且（检测完成后）本机已安装 */
 const visibleTools = computed(() =>
-  !toolsDetected.value ? simpleTools : simpleTools.filter((t) => toolsStore.isToolAvailable(t.id))
+  simpleTools.filter(
+    (t) => isToolPinned(t.id) && (!toolsDetected.value || toolsStore.isToolAvailable(t.id))
+  )
 )
 
-/** 未安装的 claude 也要进菜单（已安装的 claude 单独常驻渲染） */
-const missingTools = computed(() => {
-  const list: { id: ToolId; name: string; icon?: string; label: string }[] = []
+/**
+ * 「更多」菜单：没固定在顶栏的 + 固定了但没装的。
+ * missing 决定是否显示"未安装"角标（菜单里两者都能点：装了直接打开，没装弹安装引导）。
+ */
+const moreTools = computed(() => {
+  const list: { id: ToolId; name: string; icon?: string; label: string; missing: boolean }[] = []
   if (!toolsDetected.value) return list
   for (const t of simpleTools) {
-    if (!toolsStore.isToolAvailable(t.id)) {
-      list.push({ id: t.id, name: t.name, icon: t.icon, label: t.label })
-    }
+    const installed = toolsStore.isToolAvailable(t.id)
+    if (installed && isToolPinned(t.id)) continue
+    list.push({ id: t.id, name: t.name, icon: t.icon, label: t.label, missing: !installed })
   }
-  if (!toolsStore.claudeAvailable) {
-    list.push({ id: 'claude', name: TOOL_DISPLAY_NAMES.claude, label: '用 Claude Code 打开' })
+  if (!(toolsStore.claudeAvailable && isToolPinned('claude'))) {
+    list.push({
+      id: 'claude',
+      name: TOOL_DISPLAY_NAMES.claude,
+      label: '用 Claude Code 打开',
+      missing: !toolsStore.claudeAvailable,
+    })
   }
   return list
 })
-const hasMissingTools = computed(() => missingTools.value.length > 0)
+const hasMoreTools = computed(() => moreTools.value.length > 0)
 
-function runMissingTool(tool: { id: ToolId }) {
+function runMoreTool(tool: { id: ToolId }) {
   moreToolsVisible.value = false
   if (tool.id === 'claude') {
-    openToolInstall('claude')
+    // 装了就直接以默认权限打开，没装才是安装引导
+    if (toolsStore.claudeAvailable) void onOpenInClaudeCode()
+    else openToolInstall('claude')
     return
   }
   const found = simpleTools.find((t) => t.id === tool.id)
   if (found) runOrInstall(found.id, found.action)
 }
 
-/** 已安装 claude 时才常驻渲染（未安装的走"更多"菜单） */
-const claudePinned = computed(() => !toolsDetected.value || toolsStore.claudeAvailable)
+/** 勾选了 + 已安装（或还没检测完）才把 claude 常驻渲染，其余走「更多」菜单 */
+const claudePinned = computed(
+  () => isToolPinned('claude') && (!toolsDetected.value || toolsStore.claudeAvailable)
+)
 
 // 定义emits
 defineEmits<{
@@ -671,7 +690,7 @@ function onBrowserSelect(path: string) {
       :title="$t('@67CE7:切换工作目录') + '\n' + currentDirectory"
       :aria-label="$t('@67CE7:切换工作目录: {path}', { path: currentDirectory })"
       @click="onOpenDialog"
-      @contextmenu.prevent="onCopyDirectory"
+      @contextmenu.prevent="onCopyFolderName"
     >
       {{ currentFolderName }}
     </button>
@@ -679,14 +698,8 @@ function onBrowserSelect(path: string) {
          "当前目录不是 Git 仓库 + 初始化按钮 + 打开其他目录",顶栏重复出现
          反而挤占目录名空间、显得啰嗦。打开目录后让左侧面板统一兜底即可。 -->
     <div class="directory-actions flex">
-      <IconButton
-        :tooltip="$t('@67CE7:切换工作目录')"
-        :aria-label="$t('@67CE7:切换工作目录')"
-        size="large"
-        @click="onOpenDialog"
-      >
-        <el-icon aria-hidden="true"><Folder /></el-icon>
-      </IconButton>
+      <!-- 原「切换工作目录」文件夹图标已移除：点目录名走的就是同一个对话框，
+           顶栏不必再占一个位（2026-09 与用户对齐）。 -->
       <IconButton
         :tooltip="$t('@67CE7:在资源管理器中打开')"
         :aria-label="$t('@67CE7:在资源管理器中打开')"
@@ -701,16 +714,32 @@ function onBrowserSelect(path: string) {
         size="large"
         @click="onOpenTerminal"
       >
-        <el-icon aria-hidden="true"><Monitor /></el-icon>
+        <!-- 圆角命令行图标：不用 element-plus 的显示器图标，观感与控制台 tab 对齐。
+             尺寸跟着同排 el-icon 走（22px），否则会明显小一圈。 -->
+        <svg
+          viewBox="0 0 24 24"
+          width="22"
+          height="22"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="2.5" y="4.5" width="19" height="15" rx="4.5" />
+          <path d="M7 10.2l3.1 2.3L7 14.8" />
+          <line x1="12.6" y1="14.8" x2="17" y2="14.8" />
+        </svg>
       </IconButton>
-      <!-- 复制文件夹名称：只取最后一级目录名（右键目录名复制的是完整路径，
-           两者场景不同，所以这里是独立按钮而不复用 onCopyDirectory）。 -->
+      <!-- 复制目录路径：完整路径粘进终端就能 cd。（右键目录名复制的是文件夹名称，
+           写标题 / 建同名目录时更常用，两者场景不同，所以这里是独立按钮。） -->
       <IconButton
-        :tooltip="$t('@67CE7:复制文件夹名称')"
-        :aria-label="$t('@67CE7:复制文件夹名称')"
+        :tooltip="$t('@67CE7:复制目录路径')"
+        :aria-label="$t('@67CE7:复制目录路径')"
         :disabled="!currentDirectory"
         size="large"
-        @click="onCopyFolderName"
+        @click="onCopyDirectory"
       >
         <el-icon aria-hidden="true"><CopyDocument /></el-icon>
       </IconButton>
@@ -855,11 +884,11 @@ function onBrowserSelect(path: string) {
         </ul>
       </el-popover>
       <!--
-        未安装的工具收起在这里：点击展开菜单列出，点某一项走 runOrInstall
-        （已装就直接打开，没装就弹安装引导）。
+        没固定在顶栏的工具 + 未安装的工具都收起在这里：点击展开菜单列出，
+        点某一项走 runOrInstall（已装就直接打开，没装就弹安装引导）。
       -->
       <el-popover
-        v-if="hasMissingTools"
+        v-if="hasMoreTools"
         :visible="moreToolsVisible"
         :trigger="('manual' as any)"
         placement="bottom-end"
@@ -875,8 +904,8 @@ function onBrowserSelect(path: string) {
             @click.prevent.stop="toggleMoreTools"
           >
             <IconButton
-              :tooltip="moreToolsVisible ? $t('@67CE7:收起未安装的工具') : $t('@67CE7:展开未安装的工具')"
-              :aria-label="moreToolsVisible ? $t('@67CE7:收起未安装的工具') : $t('@67CE7:展开未安装的工具')"
+              :tooltip="moreToolsVisible ? $t('@67CE7:收起更多工具') : $t('@67CE7:展开更多工具')"
+              :aria-label="moreToolsVisible ? $t('@67CE7:收起更多工具') : $t('@67CE7:展开更多工具')"
               :active="moreToolsVisible"
               :pressed="moreToolsVisible"
               custom-class="tool-button--more"
@@ -892,17 +921,18 @@ function onBrowserSelect(path: string) {
           </span>
         </template>
         <div class="tools-more">
-          <div class="tools-more__title">{{ $t('@67CE7:未安装的工具') }}</div>
-          <ul class="tools-more__list" role="menu" :aria-label="$t('@67CE7:未安装的工具')">
+          <div class="tools-more__title">{{ $t('@67CE7:更多工具') }}</div>
+          <ul class="tools-more__list" role="menu" :aria-label="$t('@67CE7:更多工具')">
             <li
-              v-for="tool in missingTools"
+              v-for="tool in moreTools"
               :key="tool.id"
               class="tools-more__item"
+              :class="{ 'is-missing': tool.missing }"
               role="menuitem"
               tabindex="-1"
-              @click="runMissingTool(tool)"
-              @keydown.enter.prevent="runMissingTool(tool)"
-              @keydown.space.prevent="runMissingTool(tool)"
+              @click="runMoreTool(tool)"
+              @keydown.enter.prevent="runMoreTool(tool)"
+              @keydown.space.prevent="runMoreTool(tool)"
             >
               <span class="tools-more__icon">
                 <img
@@ -914,7 +944,7 @@ function onBrowserSelect(path: string) {
                 <svg-icon v-else :icon-class="tool.icon ?? ''" />
               </span>
               <span class="tools-more__label">{{ tool.name }}</span>
-              <span class="tools-more__hint">{{ $t('@67CE7:未安装') }}</span>
+              <span v-if="tool.missing" class="tools-more__hint">{{ $t('@67CE7:未安装') }}</span>
             </li>
           </ul>
         </div>
@@ -1067,6 +1097,15 @@ function onBrowserSelect(path: string) {
     0 14px 34px rgba(15, 23, 42, 0.14),
     0 4px 12px rgba(15, 23, 42, 0.08),
     0 0 0 1px rgba(255, 255, 255, 0.75) inset;
+}
+
+/* 目录名：不占额外空白，只在整条胶囊放不下时才被压缩省略。
+   原来 min-width:0 + flex:1 会两头顶：有余量时右侧留一大片空白（换成固定
+   min-width 也一样），空间不够时又被压成 "zen-gits…" —— 所以用 flex-grow:0
+   让它按文字宽度走，靠 flex-shrink 在 720px 上限内自动省略。 */
+.directory-selector--header .directory-display {
+  flex: 0 1 auto;
+  min-width: 72px;
 }
 
 .directory-selector--header:hover {
@@ -1305,11 +1344,15 @@ function onBrowserSelect(path: string) {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  /* 未安装的工具统一降饱和度，和常驻按钮的 missing 态视觉一致；
-     hover 时恢复，暗示"可以点它去安装" */
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+/* 只有「未安装」的工具降饱和度（和常驻按钮的 missing 态一致，暗示"点了去安装"）；
+   被设置收进菜单、但本机其实装了的工具保持原色 —— 它和顶栏里的图标长得一样，
+   灰掉会让人以为没装。 */
+.tools-more__item.is-missing .tools-more__icon {
   opacity: 0.55;
   filter: grayscale(0.65);
-  transition: opacity 0.15s ease, filter 0.15s ease;
 }
 
 .tools-more__item:hover .tools-more__icon,

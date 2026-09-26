@@ -251,6 +251,28 @@
               </div>
             </div>
           </div>
+
+          <!-- 顶栏工具图标：勾选的固定在顶栏，取消勾选的收进右侧「更多」菜单 -->
+          <div class="settings-section">
+            <div class="section-title">
+              <span>{{ $t('@42BB9:顶部工具栏') }}</span>
+            </div>
+            <!-- 不套 setting-row：7 个开关需要整行宽度，塞进 160px 标签列会被挤成竖排 -->
+            <div class="header-tools-row">
+              <div class="header-tools">
+                <el-switch
+                  v-for="tool in headerToolOptions"
+                  :key="tool.id"
+                  :model-value="isHeaderToolVisible(tool.id)"
+                  :active-text="tool.name"
+                  @change="(v: string | number | boolean) => toggleHeaderTool(tool.id, !!v)"
+                />
+              </div>
+              <span class="setting-hint-block">
+                {{ $t('@42BB9:勾选后固定在顶栏显示，取消勾选的工具会收进右侧「更多」菜单') }}
+              </span>
+            </div>
+          </div>
         </div>
 
         <!-- AI 模型配置面板 -->
@@ -559,8 +581,9 @@ import CommonDialog from './CommonDialog.vue'
 import { useGitStore } from '@/stores/gitStore'
 import { useLocaleStore } from '@/stores/localeStore'
 import { useConfigStore, type ModelInfo } from '@/stores/configStore'
-import { useToolsStore } from '@/stores/toolsStore'
+import { useToolsStore, type ToolId } from '@/stores/toolsStore'
 import { TASK_EXECUTOR_OPTIONS, type TaskExecutorId } from '@/utils/taskExecutor'
+import { TOOL_DISPLAY_NAMES } from '@/composables/useDirectoryOpenActions'
 import {
   notificationPermission,
   requestNotificationPermission,
@@ -576,6 +599,22 @@ const gitStore = useGitStore()
 const localeStore = useLocaleStore()
 const configStore = useConfigStore()
 const toolsStore = useToolsStore()
+
+/** 顶栏工具图标的勾选项（顺序 = 顶栏渲染顺序；claude 在顶栏是单独带右键菜单渲染的） */
+const HEADER_TOOL_IDS: ToolId[] = ['vscode', 'claude', 'codex', 'opencode', 'kimi', 'zcode', 'dsh']
+const headerToolOptions = HEADER_TOOL_IDS.map((id) => ({ id, name: TOOL_DISPLAY_NAMES[id] }))
+
+function isHeaderToolVisible(id: ToolId): boolean {
+  return !configStore.ui.headerToolsHidden.includes(id)
+}
+
+/** 取消勾选 = 该工具收进顶栏右侧「更多」菜单；写新数组以触发 configStore 的落盘 watch */
+function toggleHeaderTool(id: ToolId, show: boolean) {
+  const next = new Set(configStore.ui.headerToolsHidden)
+  if (show) next.delete(id)
+  else next.add(id)
+  configStore.ui.headerToolsHidden = [...next]
+}
 
 export type SettingsTab = 'general' | 'ai-models' | 'git' | 'commit' | 'config' | 'editor'
 
@@ -1274,6 +1313,17 @@ async function openSystemConfigFile() {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+}
+/* 顶栏工具图标：一行排不下时自动换行，开关之间留出可点的间隙 */
+.header-tools-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+.header-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
 }
 .console-split-row {
   display: flex;
