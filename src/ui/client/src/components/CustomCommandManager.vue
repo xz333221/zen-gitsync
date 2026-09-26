@@ -836,10 +836,13 @@ defineExpose({
     :empty-description="$t('@CMD01:暂无保存的命令模板')"
   />
 
-  <!-- 目录浏览器弹窗 -->
+  <!-- 目录浏览器弹窗。default-global-search / global-search-change 与其它入口共用
+       ui.pickerGlobalSearch，弹窗里「全局」开关的选择会被记住（落盘见 configStore）。 -->
   <FilePicker
     :visible="isBrowserDialogVisible"
     :locale="currentLocale"
+    :default-global-search="configStore.ui.pickerGlobalSearch"
+    @global-search-change="(active: boolean) => { configStore.ui.pickerGlobalSearch = active }"
     @close="isBrowserDialogVisible = false"
     @confirm="(paths: string[]) => { onBrowserSelect(paths[0]); isBrowserDialogVisible = false }"
   />

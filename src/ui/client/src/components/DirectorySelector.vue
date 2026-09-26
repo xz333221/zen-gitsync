@@ -1058,11 +1058,16 @@ function onBrowserSelect(path: string) {
   </CommonDialog>
 
   <!-- 目录浏览器弹窗 -->
+  <!-- default-global-search / global-search-change：把弹窗里「全局」开关的选择写进
+       ui.pickerGlobalSearch，下次打开（任意入口的弹窗）都按上次的选择开局，
+       落盘由 configStore 里同名字段的 watch 负责 -->
   <FilePicker
     :visible="isBrowserDialogVisible"
     mode="directory"
     :theme="isDark ? 'dark' : 'light'"
     :locale="currentLocale"
+    :default-global-search="configStore.ui.pickerGlobalSearch"
+    @global-search-change="(active: boolean) => { configStore.ui.pickerGlobalSearch = active }"
     @close="isBrowserDialogVisible = false"
     @confirm="(paths: string[]) => { onBrowserSelect(paths[0]); isBrowserDialogVisible = false }"
   />

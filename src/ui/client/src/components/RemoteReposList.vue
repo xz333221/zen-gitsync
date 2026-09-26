@@ -1199,12 +1199,15 @@ onBeforeUnmount(stopPolling)
     </template>
 
     <!-- 克隆目标文件夹选择（local-file-picker）。选中的是**父目录** ——
-         仓库会在它下面建出以仓库名命名的子目录，与命令行 git clone 一致。 -->
+         仓库会在它下面建出以仓库名命名的子目录，与命令行 git clone 一致。
+         「全局」开关的状态与其它入口共用 ui.pickerGlobalSearch（记住上次的选择）。 -->
     <FilePicker
       :visible="clonePickerVisible"
       mode="directory"
       :theme="isDark ? 'dark' : 'light'"
       :locale="currentLocale"
+      :default-global-search="configStore.ui.pickerGlobalSearch"
+      @global-search-change="(active: boolean) => { configStore.ui.pickerGlobalSearch = active }"
       @close="clonePickerVisible = false"
       @confirm="onCloneDirConfirm"
     />

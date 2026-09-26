@@ -234,9 +234,15 @@ export const useConfigStore = defineStore('config', () => {
     diffPreviewSplitPercent?: number
     commandConsole: UiCommandConsole
     editorAutoSave: boolean
+    /** 思维导图目录列表（多根聚合，每个目录只列本级 *.mindmap.json） */
+    mindmapDirs: string[]
+    /** @deprecated 旧的单目录字段，仅作为迁移输入保留，不再写入 */
     mindmapDir: string
     /** 顶栏工具图标中隐藏的工具 id（未勾选的收进「更多」菜单） */
     headerToolsHidden: string[]
+    /** 目录/文件选择弹窗(local-file-picker)打开时是否默认开启「全局」搜索。
+     *  存的是上次用过的选择，打开弹窗时回传给 defaultGlobalSearch 就是"记住上次"。 */
+    pickerGlobalSearch: boolean
   }
 
   const defaultUiSettings: UiSettings = {
@@ -253,8 +259,10 @@ export const useConfigStore = defineStore('config', () => {
       splitPercent: 25,
     },
     editorAutoSave: false,
+    mindmapDirs: [],
     mindmapDir: '',
     headerToolsHidden: [],
+    pickerGlobalSearch: false,
   }
 
   // 浅拷贝默认值（避免外部 mutate 到 defaultUiSettings）
@@ -583,6 +591,27 @@ export const useConfigStore = defineStore('config', () => {
           if (typeof enabled === 'boolean') aiDiffSummaryByProject[projPath] = enabled
         }
 
+        // 思维导图目录列表: 多根聚合(每个目录只列本级 *.mindmap.json)。
+        // 归一化只做 trim + 去空 + 小写比较去重(Windows 不区分大小写,展示保留原串),
+        // 尾部分隔符/绝对路径的规范化由 mindmapStore.addDirs 负责。
+        // 旧的单目录字段 mindmapDir 仅作迁移输入: mindmapDirs 为空时迁移为单元素数组。
+        const legacyMindmapDir = typeof configData.ui.mindmapDir === 'string' ? configData.ui.mindmapDir.trim() : ''
+        const mindmapDirs: string[] = []
+        const seenMindmapDirs = new Set<string>()
+        const rawMindmapDirs = Array.isArray(configData.ui.mindmapDirs) ? configData.ui.mindmapDirs : []
+        for (const entry of rawMindmapDirs) {
+          if (typeof entry !== 'string') continue
+          const dir = entry.trim()
+          if (!dir) continue
+          const key = dir.toLowerCase()
+          if (seenMindmapDirs.has(key)) continue
+          seenMindmapDirs.add(key)
+          mindmapDirs.push(dir)
+        }
+        if (mindmapDirs.length === 0 && legacyMindmapDir) {
+          mindmapDirs.push(legacyMindmapDir)
+        }
+
         // layout 字段: 全局默认兜底值(legacy 也指它)。保留 configData.ui.layout 原值,
         // 不再被按项目覆盖写,所以 ref 里的 layout 仅作为"新项目进入时的初值"。
         const globalLayout: UiLayout = { ...defaultUiSettings.layout, ...(configData.ui.layout || {}) }
@@ -607,10 +636,14 @@ export const useConfigStore = defineStore('config', () => {
               : defaultUiSettings.commandConsole.splitPercent,
           },
           editorAutoSave: typeof configData.ui.editorAutoSave === 'boolean' ? configData.ui.editorAutoSave : defaultUiSettings.editorAutoSave,
-          mindmapDir: typeof configData.ui.mindmapDir === 'string' ? configData.ui.mindmapDir : defaultUiSettings.mindmapDir,
+          mindmapDirs,
+          mindmapDir: legacyMindmapDir,
           headerToolsHidden: Array.isArray(configData.ui.headerToolsHidden)
             ? configData.ui.headerToolsHidden.filter((id: unknown): id is string => typeof id === 'string')
             : [],
+          pickerGlobalSearch: typeof configData.ui.pickerGlobalSearch === 'boolean'
+            ? configData.ui.pickerGlobalSearch
+            : defaultUiSettings.pickerGlobalSearch,
         }
       }
 
@@ -749,6 +782,10 @@ export const useConfigStore = defineStore('config', () => {
   watch(() => ui.value.diffPreviewSplitPercent, (v) => { if (isUiLoaded.value && v != null) saveUiSettings({ diffPreviewSplitPercent: v }) })
   watch(() => ui.value.editorAutoSave, (v) => { if (isUiLoaded.value) saveUiSettings({ editorAutoSave: v }) })
   watch(() => ui.value.headerToolsHidden, (v) => { if (isUiLoaded.value && Array.isArray(v)) saveUiSettings({ headerToolsHidden: v }) })
+  // 思维导图目录列表(多根聚合)：增删目录后自动落盘
+  watch(() => ui.value.mindmapDirs, (v) => { if (isUiLoaded.value && Array.isArray(v)) saveUiSettings({ mindmapDirs: v }) })
+  // 选择弹窗的「全局」搜索开关：用户在弹窗里拨一下就落盘，下次打开弹窗按这个值开局。
+  watch(() => ui.value.pickerGlobalSearch, (v) => { if (isUiLoaded.value) saveUiSettings({ pickerGlobalSearch: v }) })
   // layout 是当前项目的工作副本。变化时把当前项目的 layoutsByProject 条目更新为该值,
   // 同时持久化整张 layoutsByProject map(服务端对这个 key 做深合并,保留其它项目)。
   // 不再写全局 ui.layout(否则一个项目拖完会被另一个项目读到),保持 layout 字段为静态默认。

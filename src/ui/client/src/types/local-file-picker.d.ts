@@ -27,6 +27,11 @@ declare module 'local-file-picker/client' {
        * 实际 JS 支持但本地 .d.ts 未声明,这里补齐类型。
        */
       defaultPath?: string;
+      /**
+       * 打开弹窗时「全局」搜索开关的初始状态(0.2.4 起)。
+       * 配合 global-search-change 事件即可实现"记住上次的选择"。
+       */
+      defaultGlobalSearch?: boolean;
       messages?: Record<string, Record<string, string>> | null;
     },
     object,
