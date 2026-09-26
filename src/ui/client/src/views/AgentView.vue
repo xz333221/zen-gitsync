@@ -24,7 +24,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { $t } from '@/lang/static'
-import { ElMessage, ElMessageBox, ElTooltip, ElIcon } from 'element-plus'
+import { ElMessageBox, ElTooltip, ElIcon } from 'element-plus'
 import { Plus, Search, Delete, Edit, ChatLineRound, Loading, Check, ChatDotRound, Goods, Connection } from '@element-plus/icons-vue'
 import { ChatContainer } from 'zen-ai-chat-ui'
 import 'zen-ai-chat-ui/style.css'
@@ -62,6 +62,7 @@ const {
   pendingQuestion,
   answeringQuestion,
   answerQuestion,
+  isSessionGenerating,
   stop
 } = useAgentChat()
 
@@ -129,30 +130,19 @@ watch(() => messages.value.length, () => {
 })
 
 // ── 选中会话 ──────────────────────────────────────────────
+// 可随时切换：正在生成的会话在后台继续跑，切回来能看到实时进度
 function selectSession(sessionId: string) {
-  if (isStreaming.value) {
-    ElMessage.warning($t('@AGENT:请先停止当前生成'))
-    return
-  }
   loadSession(sessionId)
 }
 
 // ── 新建会话 ──────────────────────────────────────────────
 function handleNewSession() {
-  if (isStreaming.value) {
-    ElMessage.warning($t('@AGENT:请先停止当前生成'))
-    return
-  }
   newSession()
 }
 
 // ── 删除会话 ──────────────────────────────────────────────
 function handleDelete(sessionId: string, e: Event) {
   e.stopPropagation()
-  if (isStreaming.value && currentSessionId.value === sessionId) {
-    ElMessage.warning($t('@AGENT:请先停止当前生成'))
-    return
-  }
   deleteSession(sessionId)
 }
 
@@ -282,7 +272,7 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
           <div class="session-item-main">
             <div class="session-item-title">{{ s.title || $t('@AGENT:无标题') }}</div>
             <div class="session-item-meta">
-              <template v-if="s.isGenerating">
+              <template v-if="s.isGenerating || isSessionGenerating(s.sessionId)">
                 <span class="meta-generating">
                   <el-icon class="is-loading"><Loading /></el-icon>
                   {{ $t('@AGENT:正在生成中...') }}

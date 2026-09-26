@@ -6,7 +6,7 @@
 //   3. 后端 OpenAI 格式消息 → zen-ai-chat-ui ChatMessage 格式转换
 //   4. 取消正在进行的请求
 
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import type { ChatMessage, ToolCall, ChatAttachment, SelectedFile } from 'zen-ai-chat-ui'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { uid } from 'zen-ai-chat-ui'
@@ -65,6 +65,9 @@ interface AgentMsg {
 
 // ── 常量 ──────────────────────────────────────────────────
 const MAX_LOG_DISPLAY = 64 * 1024
+
+// 新会话在服务端 meta 事件返回真实 sessionId 之前使用的本地临时 key 前缀
+const LOCAL_KEY_PREFIX = 'local-'
 
 // ── 后端消息 → ChatMessage 转换 ──────────────────────────
 // 把 OpenAI 格式的消息数组转换为 zen-ai-chat-ui 的 ChatMessage[]
@@ -205,6 +208,21 @@ function mimeFromDataUrl(u: string): string {
   return m ? m[1] : ''
 }
 
+// ── 单个会话的运行时状态 ─────────────────────────────────
+// 每个会话各持一份：后台流写自己的 run，切换会话只改 currentSessionId 指向，
+// 不再打断正在跑的流，也不会把增量写进别的会话。
+interface SessionRun {
+  key: string
+  sessionId: string | null
+  title: string
+  messages: ChatMessage[]
+  isStreaming: boolean
+  abortController: AbortController | null
+  nonce: number
+  pendingQuestion: PendingAgentQuestion | null
+  answeringQuestion: boolean
+}
+
 // ── composable ───────────────────────────────────────────
 export function useAgentChat() {
   const configStore = useConfigStore()
@@ -213,20 +231,86 @@ export function useAgentChat() {
   const sessions = ref<SessionMeta[]>([])
   const sessionsLoading = ref(false)
 
-  // 当前选中的会话
-  const currentSessionId = ref<string | null>(null)
-  const messages = ref<ChatMessage[]>([])
-  const isStreaming = ref(false)
-  const sessionLoading = ref(false)
-  const pendingQuestion = ref<PendingAgentQuestion | null>(null)
-  const answeringQuestion = ref(false)
+  // 打开过的会话的运行时状态，按 key（真实 sessionId / 未落盘时的本地临时 key）索引
+  const runs = reactive(new Map<string, SessionRun>())
 
-  // SSE 控制
-  let abortController: AbortController | null = null
-  let runNonce = 0
+  // 当前激活的会话 key
+  const currentSessionId = ref<string | null>(null)
+  const sessionLoading = ref(false)
+
+  // 会话列表请求计数（防止乱序响应覆盖）；各会话 SSE 用 run.nonce 各自独立
   let sessionsRequestNonce = 0
+  let localKeySeed = 0
+
+  // ── 运行时状态存取 ─────────────────────────────────────
+  function createRun(key: string): SessionRun {
+    return {
+      key,
+      sessionId: key.startsWith(LOCAL_KEY_PREFIX) ? null : key,
+      title: '',
+      messages: [],
+      isStreaming: false,
+      abortController: null,
+      nonce: 0,
+      pendingQuestion: null,
+      answeringQuestion: false
+    }
+  }
+
+  function ensureRun(key: string): SessionRun {
+    let run = runs.get(key)
+    if (!run) {
+      runs.set(key, createRun(key))
+      // 必须从 map 取回(响应式代理),否则新建的这一条拿到的还是原始对象，
+      // 之后 push 消息/改 isStreaming 都不会触发视图更新
+      run = runs.get(key)!
+    }
+    return run
+  }
+
+  // 当前激活会话的派生视图
+  const activeRun = computed<SessionRun | null>(() =>
+    currentSessionId.value ? runs.get(currentSessionId.value) ?? null : null
+  )
+  const messages = computed<ChatMessage[]>(() => activeRun.value?.messages ?? [])
+  const isStreaming = computed(() => activeRun.value?.isStreaming ?? false)
+  const pendingQuestion = computed<PendingAgentQuestion | null>(() => activeRun.value?.pendingQuestion ?? null)
+  const answeringQuestion = computed(() => activeRun.value?.answeringQuestion ?? false)
+
+  // 供会话列表判断某个会话是否正在生成（含后台生成）
+  function isSessionGenerating(sessionId: string): boolean {
+    return Boolean(runs.get(sessionId)?.isStreaming)
+  }
 
   // ── 加载会话列表(按当前项目隔离) ─────────────────────
+  // 服务端只返回已落盘的会话；正在后台流式、尚未落盘的会话要补回列表，
+  // 否则并发/切会话时刷新列表会把还在生成的那条"吞掉"。
+  function mergeGeneratingSessions(server: SessionMeta[]): SessionMeta[] {
+    const merged = [...server]
+    for (const run of runs.values()) {
+      if (!run.isStreaming || !run.sessionId) continue
+      const idx = merged.findIndex(s => s.sessionId === run.sessionId)
+      if (idx === -1) {
+        const nowIso = new Date().toISOString()
+        merged.unshift({
+          sessionId: run.sessionId,
+          title: run.title || $t('@AGENT:无标题'),
+          source: 'web',
+          cwd: configStore.currentDirectory || '',
+          model: '',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          messageCount: run.messages.filter(m => m.role === 'user').length || 1,
+          size: 0,
+          isGenerating: true
+        })
+      } else {
+        merged[idx] = { ...merged[idx], isGenerating: true }
+      }
+    }
+    return merged
+  }
+
   async function loadSessions() {
     const requestNonce = ++sessionsRequestNonce
     const cwd = configStore.currentDirectory || ''
@@ -244,7 +328,8 @@ export function useAgentChat() {
         ElMessage.error(res.error || $t('@AGENT:加载会话列表失败'))
         return
       }
-      sessions.value = Array.isArray(res.sessions) ? res.sessions : []
+      const server = Array.isArray(res.sessions) ? res.sessions : []
+      sessions.value = mergeGeneratingSessions(server)
     } catch (err: any) {
       if (requestNonce !== sessionsRequestNonce) return
       ElMessage.error($t('@AGENT:加载会话列表失败') + ': ' + (err?.message || err))
@@ -269,7 +354,7 @@ export function useAgentChat() {
     sessions.value = [
       {
         sessionId,
-        title,
+        title: title || $t('@AGENT:无标题'),
         source: 'web',
         cwd: configStore.currentDirectory || '',
         model: '',
@@ -291,6 +376,12 @@ export function useAgentChat() {
 
   // ── 加载会话详情 ────────────────────────────────────────
   async function loadSession(sessionId: string) {
+    // 该会话正在后台流式：直接挂载它的实时缓冲，别用磁盘(尚未落盘)内容覆盖
+    const existing = runs.get(sessionId)
+    if (existing?.isStreaming) {
+      currentSessionId.value = sessionId
+      return
+    }
     sessionLoading.value = true
     currentSessionId.value = sessionId
     try {
@@ -299,7 +390,10 @@ export function useAgentChat() {
         ElMessage.error(res.error || $t('@AGENT:加载会话失败'))
         return
       }
-      messages.value = convertSessionToMessages(res.session)
+      const run = ensureRun(sessionId)
+      run.sessionId = sessionId
+      run.messages = convertSessionToMessages(res.session)
+      if (res.session?.title) run.title = res.session.title
     } catch (err: any) {
       ElMessage.error($t('@AGENT:加载会话失败') + ': ' + (err?.message || err))
     } finally {
@@ -314,6 +408,12 @@ export function useAgentChat() {
     } catch {
       return
     }
+    // 正在后台生成的会话先中止它，避免删完还有流继续写
+    const run = runs.get(sessionId)
+    if (run?.abortController) {
+      try { run.abortController.abort() } catch {}
+    }
+    runs.delete(sessionId)
     try {
       const res = await fetch(`/api/agent/sessions/${encodeURIComponent(sessionId)}`, {
         method: 'DELETE'
@@ -325,7 +425,6 @@ export function useAgentChat() {
       sessions.value = sessions.value.filter(s => s.sessionId !== sessionId)
       if (currentSessionId.value === sessionId) {
         currentSessionId.value = null
-        messages.value = []
       }
       ElMessage.success($t('@AGENT:已删除'))
     } catch (err: any) {
@@ -347,30 +446,33 @@ export function useAgentChat() {
       }
       const s = sessions.value.find(s => s.sessionId === sessionId)
       if (s) s.title = title
+      const run = runs.get(sessionId)
+      if (run) run.title = title
       ElMessage.success($t('@AGENT:已重命名'))
     } catch (err: any) {
       ElMessage.error($t('@AGENT:重命名失败') + ': ' + (err?.message || err))
     }
   }
 
-  // ── 新建会话（清空当前状态，首次发消息时后端自动创建） ──
+  // ── 新建会话（切到一个空白会话，首次发消息时后端自动创建） ──
+  // 不再清空其它会话状态：后台正在生成的会话保持继续。
   function newSession() {
     currentSessionId.value = null
-    messages.value = []
-    pendingQuestion.value = null
-    // 顺手丢掉"发起过但没落盘成功"的乐观占位条目(中止/出错、服务端未写入磁盘的
-    // 情况)：留着会变成一条点进去 404 的幽灵会话。
-    sessions.value = sessions.value.filter(s => !s.isGenerating)
   }
 
-  // ── 发送消息（SSE 流式） ────────────────────────────────
+  // ── 发送消息（SSE 流式，按会话隔离，可后台并行） ────────
   async function sendMessage(text: string, files: SelectedFile[] = []) {
     // 组件库允许选任意文件，但多模态消息只支持图片；非图片提示后忽略
     const imageFiles = files.filter(f => f?.file?.type?.startsWith('image/'))
     if (imageFiles.length < files.length) {
       ElMessage.warning($t('@AGENT:仅支持发送图片，非图片文件已忽略'))
     }
-    if ((!text.trim() && imageFiles.length === 0) || isStreaming.value) return
+
+    // 目标会话：已有会话用其 id；全新会话先用本地临时 key，等 meta 回来再迁移
+    const runKey = currentSessionId.value || `${LOCAL_KEY_PREFIX}${Date.now()}-${++localKeySeed}`
+    const run = ensureRun(runKey)
+    // 只在"当前激活会话"层面拦截重复发送，不影响其它会话后台继续
+    if ((!text.trim() && imageFiles.length === 0) || run.isStreaming) return
 
     // 图片 File → base64 dataURL，随请求发给后端组装多模态 content
     const settled = await Promise.allSettled(imageFiles.map(f => fileToDataUrl(f.file)))
@@ -378,9 +480,15 @@ export function useAgentChat() {
       .map(r => (r.status === 'fulfilled' ? r.value : ''))
       .filter(u => u.startsWith('data:image/'))
 
-    const myNonce = ++runNonce
-    abortController = new AbortController()
-    const myController = abortController
+    // 切到这条会话(新会话从 null 切到本地 key)，让乐观消息立刻可见
+    currentSessionId.value = run.key
+
+    run.nonce += 1
+    const myNonce = run.nonce
+    run.abortController = new AbortController()
+    const myController = run.abortController
+    run.pendingQuestion = null
+    run.answeringQuestion = false
 
     // 乐观推入 user 消息（图片以附件缩略图展示）
     const userMsg: ChatMessage = {
@@ -399,10 +507,10 @@ export function useAgentChat() {
         preview: f.preview
       }))
     }
-    messages.value.push(userMsg)
+    run.messages.push(userMsg)
 
     // 占位 assistant 消息
-    // 注意:必须用 reactive() 包装,否则 push 进 messages.value 后,
+    // 注意:必须用 reactive() 包装,否则 push 进 run.messages 后,
     // assistantMsg 变量指向原始 plain object,SSE 循环里的
     // `assistantMsg.content += delta` 修改的是 plain object,
     // 而 Vue 渲染看到的是 reactive Proxy(初始 content=''),
@@ -414,22 +522,22 @@ export function useAgentChat() {
       status: 'pending',
       createdAt: Date.now()
     })
-    messages.value.push(assistantMsg)
+    run.messages.push(assistantMsg)
 
-    isStreaming.value = true
+    run.isStreaming = true
 
     // 当前 assistant 消息的工具调用列表（实时更新）
     let currentToolCalls: ToolCall[] = []
 
     // 本轮实际落盘的会话 ID（meta 事件到达后才有值）
-    let streamSessionId: string | null = null
+    let streamSessionId: string | null = run.sessionId
 
     try {
       const resp = await fetch('/api/agent/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({
-          sessionId: currentSessionId.value || '',
+          sessionId: run.sessionId || '',
           userMessage: text,
           // 新建会话时服务端用它确定项目归属(已有会话沿用其落盘 cwd)
           cwd: configStore.currentDirectory || '',
@@ -438,7 +546,7 @@ export function useAgentChat() {
         signal: myController.signal
       })
 
-      if (myNonce !== runNonce) return
+      if (myNonce !== run.nonce) return
 
       if (!resp.ok || !resp.body) {
         const errText = await resp.text().catch(() => '')
@@ -448,11 +556,10 @@ export function useAgentChat() {
       const reader = resp.body.getReader()
       const decoder = new TextDecoder('utf-8')
       let buf = ''
-      let sessionId = currentSessionId.value
 
       while (true) {
         const { value, done } = await reader.read()
-        if (myNonce !== runNonce) return
+        if (myNonce !== run.nonce) return
         if (done) break
         buf += decoder.decode(value, { stream: true })
         const lines = buf.split('\n')
@@ -469,15 +576,27 @@ export function useAgentChat() {
           switch (evt.type) {
             case 'meta':
               if (evt.sessionId) {
-                sessionId = evt.sessionId
-                streamSessionId = evt.sessionId
-                currentSessionId.value = evt.sessionId
+                const realId = String(evt.sessionId)
+                streamSessionId = realId
+                // 新会话：把 run 从本地临时 key 迁移到服务端真实 sessionId，
+                // 这样后台继续跑的同时左栏/切换都能按真实 id 找到它
+                if (run.sessionId !== realId) {
+                  const oldKey = run.key
+                  run.sessionId = realId
+                  run.key = realId
+                  if (oldKey !== realId) {
+                    runs.delete(oldKey)
+                    runs.set(realId, run)
+                    if (currentSessionId.value === oldKey) currentSessionId.value = realId
+                  }
+                }
                 // 服务端 autoTitle 已按首条 user 消息算好标题；为空(纯图片消息等)
                 // 时退回本地文本，保证左栏不会出现空白行
                 const optimisticTitle = String(evt.title || '').trim() ||
                   text.trim().split('\n')[0].trim().slice(0, 40) ||
                   $t('@AGENT:无标题')
-                upsertGeneratingSession(evt.sessionId, optimisticTitle)
+                if (!run.title) run.title = optimisticTitle
+                upsertGeneratingSession(realId, optimisticTitle)
               }
               break
 
@@ -542,13 +661,13 @@ export function useAgentChat() {
               if (tc) {
                 tc.result = String(evt.result || '')
                 tc.status = 'done'
-                if (tc.name === 'ask_user') pendingQuestion.value = null
+                if (tc.name === 'ask_user') run.pendingQuestion = null
               }
               break
             }
 
             case 'ask_user':
-              pendingQuestion.value = {
+              run.pendingQuestion = {
                 interactionId: String(evt.interactionId || ''),
                 question: String(evt.question || ''),
                 options: Array.isArray(evt.options) ? evt.options.map((v: unknown) => String(v)) : [],
@@ -580,25 +699,16 @@ export function useAgentChat() {
               break
           }
         }
-        // 触发响应式更新
-        messages.value = [...messages.value]
       }
 
-      if (myNonce !== runNonce) return
+      if (myNonce !== run.nonce) return
 
       // 如果 assistant 状态还是 pending（没有任何内容），标记为 done
       if (assistantMsg.status === 'pending') {
         assistantMsg.status = 'done'
       }
-
-      // 刷新会话列表（标题可能已更新）
-      if (sessionId && sessionId !== currentSessionId.value) {
-        currentSessionId.value = sessionId
-      }
-      loadSessions().catch(() => {})
-
     } catch (err: any) {
-      if (myNonce !== runNonce) return
+      if (myNonce !== run.nonce) return
       if (err?.name === 'AbortError' || myController.signal.aborted) {
         assistantMsg.content = (assistantMsg.content || '') + '\n\n[' + $t('@AGENT:已停止') + ']'
         assistantMsg.status = 'done'
@@ -611,24 +721,27 @@ export function useAgentChat() {
         ElMessage.error(assistantMsg.error || $t('@AGENT:对话失败'))
       }
     } finally {
-      if (myNonce === runNonce) {
-        isStreaming.value = false
-        pendingQuestion.value = null
-        answeringQuestion.value = false
-        abortController = null
-        // 清掉乐观徽章；成功路径的 loadSessions() 会拉到服务端真实数据，
-        // 中止/出错路径靠这一步兜底，避免左栏一直显示"正在生成中..."
-        if (streamSessionId) clearGeneratingSession(streamSessionId)
+      if (myNonce === run.nonce) {
+        run.isStreaming = false
+        run.pendingQuestion = null
+        run.answeringQuestion = false
+        run.abortController = null
       }
+      // 清掉乐观徽章；成功路径的 loadSessions() 会拉到服务端真实数据，
+      // 中止/出错路径靠这一步兜底，避免左栏一直显示"正在生成中..."
+      if (streamSessionId) clearGeneratingSession(streamSessionId)
+      // 刷新会话列表：并入仍在后台流的其它会话，并顺带清掉未落盘的幽灵条目
+      loadSessions().catch(() => {})
     }
   }
 
   async function answerQuestion(answer: string) {
-    const pending = pendingQuestion.value
-    const sessionId = currentSessionId.value
+    const run = activeRun.value
+    const pending = run?.pendingQuestion
+    const sessionId = run?.sessionId
     const value = String(answer || '').trim()
-    if (!pending || !sessionId || !value || answeringQuestion.value) return false
-    answeringQuestion.value = true
+    if (!run || !pending || !sessionId || !value || run.answeringQuestion) return false
+    run.answeringQuestion = true
     try {
       const res = await fetch('/api/agent/respond', {
         method: 'POST',
@@ -640,21 +753,22 @@ export function useAgentChat() {
         }),
       }).then(r => r.json())
       if (!res.success) throw new Error(res.error || $t('@AGENT:回答提交失败'))
-      pendingQuestion.value = null
+      run.pendingQuestion = null
       return true
     } catch (err: any) {
       ElMessage.error(err?.message || $t('@AGENT:回答提交失败'))
       return false
     } finally {
-      answeringQuestion.value = false
+      run.answeringQuestion = false
     }
   }
 
-  // ── 停止生成 ────────────────────────────────────────────
+  // ── 停止生成（只中止当前激活会话的流，其它后台会话不受影响） ──
   function stop() {
-    if (abortController) {
-      abortController.abort()
-      abortController = null
+    const run = activeRun.value
+    if (run?.abortController) {
+      run.abortController.abort()
+      run.abortController = null
     }
   }
 
@@ -667,6 +781,7 @@ export function useAgentChat() {
     sessionLoading,
     pendingQuestion,
     answeringQuestion,
+    isSessionGenerating,
     loadSessions,
     loadSession,
     deleteSession,
