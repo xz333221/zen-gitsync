@@ -257,20 +257,53 @@
             <div class="section-title">
               <span>{{ $t('@42BB9:顶部工具栏') }}</span>
             </div>
-            <!-- 不套 setting-row：7 个开关需要整行宽度，塞进 160px 标签列会被挤成竖排 -->
+            <!-- 不套 setting-row：这里是一整格工具开关网格(两列)，塞进 160px 标签列会被挤成竖排 -->
             <div class="header-tools-row">
               <div class="header-tools">
-                <el-switch
+                <div
                   v-for="tool in headerToolOptions"
                   :key="tool.id"
-                  :model-value="isHeaderToolVisible(tool.id)"
-                  :active-text="tool.name"
-                  @change="(v: string | number | boolean) => toggleHeaderTool(tool.id, !!v)"
-                />
+                  class="header-tool"
+                  :class="{ 'is-off': !isHeaderToolVisible(tool.id) }"
+                >
+                  <span class="header-tool__icon">
+                    <svg-icon :icon-class="tool.icon" />
+                  </span>
+                  <span class="header-tool__name">{{ tool.name }}</span>
+                  <el-switch
+                    class="header-tool__switch"
+                    :model-value="isHeaderToolVisible(tool.id)"
+                    @change="(v: string | number | boolean) => toggleHeaderTool(tool.id, !!v)"
+                  />
+                </div>
               </div>
               <span class="setting-hint-block">
                 {{ $t('@42BB9:勾选后固定在顶栏显示，取消勾选的工具会收进右侧「更多」菜单') }}
               </span>
+            </div>
+          </div>
+
+          <!-- 系统集成：把 g ui 注册进 Windows 资源管理器右键菜单（写 HKCU，不需要管理员权限） -->
+          <div class="settings-section">
+            <div class="section-title">
+              <span>{{ $t('@42BB9:系统集成') }}</span>
+            </div>
+            <div class="settings-grid">
+              <!-- 说明文案较长，整行铺开：半宽单元格里会被挤成好几行 -->
+              <div class="setting-row setting-row--span">
+                <label class="setting-label">{{ $t('@42BB9:资源管理器右键菜单') }}</label>
+                <div class="layout-actions">
+                  <el-button
+                    size="default"
+                    :loading="explorerMenuBusy"
+                    :disabled="!explorerMenuSupported"
+                    @click="onToggleExplorerMenu"
+                  >
+                    {{ explorerMenuInstalled ? $t('@42BB9:从右键菜单移除') : $t('@42BB9:添加到右键菜单') }}
+                  </el-button>
+                  <span class="setting-hint-block">{{ explorerMenuHint }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -590,6 +623,7 @@ import {
   type NotifyPermission
 } from '@/utils/taskNotify'
 import TaskExecutorIcon from './TaskExecutorIcon.vue'
+import SvgIcon from './SvgIcon/index.vue'
 import { type SupportLocale } from '@/locales'
 import { AddModelForm } from 'ai-model-form/client'
 import type { AiModelFormSaveData } from 'ai-model-form/client'
@@ -602,7 +636,21 @@ const toolsStore = useToolsStore()
 
 /** 顶栏工具图标的勾选项（顺序 = 顶栏渲染顺序；claude 在顶栏是单独带右键菜单渲染的） */
 const HEADER_TOOL_IDS: ToolId[] = ['vscode', 'claude', 'codex', 'opencode', 'kimi', 'zcode', 'dsh']
-const headerToolOptions = HEADER_TOOL_IDS.map((id) => ({ id, name: TOOL_DISPLAY_NAMES[id] }))
+/** 各工具在 sprite 里的图标名：除 claude 外都与 tool id 同名，claude 用 -color 后缀的彩色版 */
+const HEADER_TOOL_ICONS: Record<ToolId, string> = {
+  vscode: 'vscode',
+  claude: 'claudecode-color',
+  codex: 'codex',
+  opencode: 'opencode',
+  kimi: 'kimi',
+  zcode: 'zcode',
+  dsh: 'dsh',
+}
+const headerToolOptions = HEADER_TOOL_IDS.map((id) => ({
+  id,
+  name: TOOL_DISPLAY_NAMES[id],
+  icon: HEADER_TOOL_ICONS[id],
+}))
 
 function isHeaderToolVisible(id: ToolId): boolean {
   return !configStore.ui.headerToolsHidden.includes(id)
@@ -827,6 +875,8 @@ watch(() => props.modelValue, async (val) => {
     tempNotifyOnTaskDone.value = configStore.notifyOnTaskDone
     // 每次打开都重读权限：用户可能在浏览器地址栏里改过，或上一次授权弹窗刚被关掉
     notifyPermissionState.value = notificationPermission()
+    // 资源管理器右键菜单状态：可能在别的实例里加过/删过，同样每次打开重读
+    void loadExplorerMenuStatus()
     aiModels.value = [...configStore.models]
     aiMaxToolIterationsInput.value = configStore.aiMaxToolIterations
     editingModelId.value = undefined
@@ -1012,6 +1062,56 @@ async function onNotifyToggleChange(value: string | number | boolean) {
     }
   } else {
     notifyPermissionState.value = notificationPermission()
+  }
+}
+
+// ===== 系统集成：资源管理器右键菜单（仅 Windows，写 HKCU 注册表）=====
+// 状态不在 configStore 里（写的是注册表，不是配置文件），所以打开弹窗时单独问后端一次；
+// 点按钮立即生效，不走 footer 的"保存设置" —— 注册表没有"未保存"这个中间态。
+const explorerMenuSupported = ref(false)
+const explorerMenuInstalled = ref(false)
+const explorerMenuBusy = ref(false)
+
+const explorerMenuHint = computed(() => {
+  if (!explorerMenuSupported.value) return $t('@42BB9:仅支持 Windows 资源管理器')
+  if (explorerMenuInstalled.value) return $t('@42BB9:已添加：右键文件夹（或文件夹空白处）即可用 g UI 打开该目录')
+  return $t('@42BB9:右键文件夹（或文件夹空白处）即可用 g UI 打开该目录；Windows 11 需在「显示更多选项」中查找')
+})
+
+async function loadExplorerMenuStatus() {
+  try {
+    const res = await fetch('/api/explorer-context-menu')
+    const data = await res.json()
+    if (!data?.success) return
+    explorerMenuSupported.value = data.supported === true
+    explorerMenuInstalled.value = data.installed === true
+  } catch {
+    // 后端挂了就当"不支持"：按钮置灰，总比显示成"已添加"却点不动强
+    explorerMenuSupported.value = false
+  }
+}
+
+async function onToggleExplorerMenu() {
+  const installing = !explorerMenuInstalled.value
+  explorerMenuBusy.value = true
+  try {
+    const res = await fetch(`/api/explorer-context-menu/${installing ? 'install' : 'uninstall'}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // 菜单标题跟随当前界面语言：用户此刻看到的是中文，右键菜单就写中文
+      body: JSON.stringify({ label: $t('@42BB9:用 g UI 打开') }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.success) {
+      ElMessage.error(data?.error || $t('@42BB9:操作失败，请重试'))
+      return
+    }
+    explorerMenuInstalled.value = installing
+    ElMessage.success(installing ? $t('@42BB9:已添加到资源管理器右键菜单') : $t('@42BB9:已从资源管理器右键菜单移除'))
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    explorerMenuBusy.value = false
   }
 }
 
@@ -1217,6 +1317,8 @@ async function openSystemConfigFile() {
 
 .settings-panel {
   height: 100%;
+  /* 设置项统一的两列节奏：标签列宽度 + 间隙 = 控件列的起始缩进 */
+  --setting-label-width: 160px;
 }
 
 .user-form {
@@ -1262,7 +1364,7 @@ async function openSystemConfigFile() {
 
 .setting-row {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: var(--setting-label-width) 1fr;
   gap: var(--spacing-md);
   align-items: center;
 }
@@ -1309,21 +1411,66 @@ async function openSystemConfigFile() {
 .setting-row--full {
   align-items: start; /* label 顶部对齐到 sub-options 顶部 */
 }
+/* 跨整行：说明文案长（系统集成那类），半宽单元格里会被压成好几行 */
+.setting-row--span {
+  grid-column: 1 / -1;
+}
 .console-sub-options {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
 }
-/* 顶栏工具图标：一行排不下时自动换行，开关之间留出可点的间隙 */
+/* 顶栏工具图标：两列网格，每项 = 品牌图标 + 名称 + 右侧开关。
+   整体从控件列起（标签列 + 间隙），左侧留白和其它设置项的内容对齐，不贴分区标题的左边 */
 .header-tools-row {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+  padding-left: calc(var(--setting-label-width) + var(--spacing-md));
 }
 .header-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px var(--spacing-xl);
+}
+.header-tool {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px 22px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.header-tool__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  font-size: 16px;
+}
+.header-tool__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--el-text-color-regular);
+}
+/* 开关贴格子右侧：两列的开关各成一列，扫一眼就知道哪些开了 */
+.header-tool__switch {
+  margin-left: auto;
+  flex-shrink: 0;
+  --el-switch-on-color: var(--color-primary);
+  --el-switch-off-color: var(--el-border-color);
+}
+/* 取消勾选 = 该工具收进「更多」菜单：图标降饱和 + 名称转次要色，和开着的区分开 */
+.header-tool.is-off .header-tool__icon {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+.header-tool.is-off .header-tool__name {
+  color: var(--el-text-color-secondary);
 }
 .console-split-row {
   display: flex;

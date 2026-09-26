@@ -43,6 +43,7 @@ import { registerRecentDirectoriesSummaryRoutes } from './routes/recentDirectori
 import { registerNpmRoutes } from './routes/npm.js';
 import { registerFileOpenRoutes } from './routes/fileOpen.js';
 import { registerLocalReposRoutes } from './routes/localRepos.js';
+import { registerExplorerContextMenuRoutes } from './routes/explorerContextMenu.js';
 import { registerRemoteReposRoutes } from './routes/remoteRepos.js';
 import { registerWorkbenchRoutes } from './routes/workbench.js';
 import { registerGitOpsRoutes } from './routes/gitOps.js';
@@ -419,6 +420,9 @@ async function startUIServer(noOpen = false, savePort = false) {
 
   // 本机 Git 仓库清单 —— 仓库卡片上「已克隆」徽标的判据(全盘扫描 + 落盘缓存)
   registerLocalReposRoutes({ app });
+
+  // 资源管理器右键菜单(设置 → 通用设置 → 系统集成 的按钮,写 HKCU 注册表)
+  registerExplorerContextMenuRoutes({ app });
 
   registerWorkbenchRoutes({
     app,

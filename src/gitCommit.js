@@ -17,7 +17,8 @@
 import {
   coloredLog, errorLog, execGitCommand, showHelp,
   getCwd, judgePlatform, judgeLog, judgeHelp, exec_exit, judgeUnmerged, formatDuration,
-  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit, delay, addScriptToPackageJson, addResetScriptToPackageJson
+  exec_push, execPull, judgeRemote, execDiff, execAddAndCommit, delay, addScriptToPackageJson, addResetScriptToPackageJson,
+  parseCwdArg, invalidateCwdCache
 } from './utils/index.js';
 import readline from 'readline'
 import ora from 'ora';
@@ -258,6 +259,22 @@ async function main() {
 
   // 检查是否是UI命令
   if (process.argv.includes('ui')) {
+    // `g ui --path=<目录>`:资源管理器右键菜单写进注册表的命令就是
+    //   node <pkg>/src/gitCommit.js ui --path="%V"
+    // (%V = 被右键的目录,由 Explorer 展开)。先切到目标目录再起服务端 ——
+    // server 用 process.cwd() 当"当前项目",这样浏览器打开的就是右键的那个仓库。
+    // 路径带空格时命令行里的引号会被 Windows 的 argv 解析吞掉(node 实测),这里拿到
+    // 的已是干净路径。切目录失败只警告、不阻断,否则目录被删就整个 GUI 起不来。
+    const uiPath = parseCwdArg(process.argv);
+    if (uiPath) {
+      try {
+        process.chdir(uiPath);
+        invalidateCwdCache(); // getCwd() 缓存的是"启动时的目录"语义,换目录后必须失效
+      } catch (error) {
+        console.warn(chalk.yellow(`⚠️ 无法切换到目录 ${uiPath},仍从 ${process.cwd()} 启动: ${error.message}`));
+      }
+    }
+
     const startUIServer = await loadStartUIServer();
     await startUIServer(false, false); // 传入noOpen=false, savePort=false
     return;
