@@ -24,7 +24,7 @@
 //   - 工具内部异常一律 catch 成字符串返回,不抛给 agent 循环 ——
 //     让模型看到错误信息自己修正,而不是中断整轮对话
 
-import { exec, execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import iconv from 'iconv-lite'
@@ -44,6 +44,19 @@ const MAX_SEARCH_HITS = 100        // search_text 最多命中
 const MAX_SEARCH_FILE_SIZE = 1024 * 1024  // search_text 跳过大文件(1MB)
 const CMD_TIMEOUT_DEFAULT = 120    // run_command 默认超时(秒)
 const CMD_TIMEOUT_MAX = 600        // run_command 超时上限(秒)
+
+// 已知的长耗时命令(装依赖 / 构建 / 测试 / clone …)。模型不给 timeout_seconds 时
+// 默认只有 120s,这类命令经常跑不完就被终止,模型再换个写法重试 —— 白等好几轮。
+// 命中即直接给到上限,不再依赖模型自己判断。
+const LONG_CMD_RE = /(?:^|[\s;&|(])(?:npm|pnpm|yarn|bun)\s+(?:i\b|install\b|ci\b|add\b|create\b)|(?:^|[\s;&|(])(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:build|test|lint|e2e|typecheck)\b|(?:^|[\s;&|(])git\s+clone\b|(?:^|[\s;&|(])pip3?\s+install\b/i
+
+// run_command 本次执行的超时(秒)。长耗时命令即使模型给了更小的值也抬到上限 ——
+// 它填小值基本都是照抄默认值,而不是"想快速失败"。
+export function resolveCommandTimeout(command, requestedSeconds) {
+  const n = Number(requestedSeconds) || CMD_TIMEOUT_DEFAULT
+  const clamped = Math.max(1, Math.min(CMD_TIMEOUT_MAX, n))
+  return LONG_CMD_RE.test(String(command || '')) ? CMD_TIMEOUT_MAX : clamped
+}
 
 // 目录遍历时跳过的目录名(产物/依赖/VCS)
 const SKIP_DIRS = new Set([
@@ -237,8 +250,9 @@ function decodeOutput(buf) {
   }
 }
 
-// 包装 exec 为 Promise,stdout/stderr 合并返回;出错(非零退出)也正常返回输出
-// encoding:'buffer' 拿原始字节,由 decodeOutput 决定真实编码
+// 子进程执行封装:stdout/stderr 原始字节累计到结束再整体解码
+// (由 decodeOutput 决定真实编码,GBK 兜底);执行中若有 onOutput 回调,
+// 每来一块就推一块已解码文本 —— Web 端据此把命令输出实时推给界面。
 export function terminateCommand(child) {
   if (!child?.pid || child.exitCode !== null) return Promise.resolve()
   if (process.platform === 'win32') {
@@ -250,21 +264,56 @@ export function terminateCommand(child) {
 
 function execCommand(command, options) {
   return new Promise((resolve) => {
-    const { signal, timeout, onChild, ...execOptions } = options
+    const { signal, timeout, onChild, onOutput, ...spawnOptions } = options
     let timedOut = false
+    let spawnError = null
+    const child = spawn(command, {
+      ...spawnOptions,
+      shell: true,
+      detached: process.platform !== 'win32',
+      windowsHide: true,
+      // stdin 直接给 EOF:命令等输入时尽快失败,不再挂在永不关闭的 stdin 管道上干等超时
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    // 原始字节缓冲上限(对应 exec 时代的 maxBuffer);超限丢最老的块,保留尾部
+    const MAX_BUFFER_BYTES = 32 * 1024 * 1024
+    const chunks = { stdout: [], stderr: [] }
+    const bytes = { stdout: 0, stderr: 0 }
+    // 实时预览用增量 UTF-8 解码。GBK 输出在预览里可能显示成乱码,
+    // 但最终结果仍走 decodeOutput(UTF-8 严格解码失败 → GBK 兜底),不影响回喂模型。
+    const decoders = { stdout: new TextDecoder('utf-8'), stderr: new TextDecoder('utf-8') }
+
+    const onChunk = (stream, buf) => {
+      chunks[stream].push(buf)
+      bytes[stream] += buf.length
+      while (bytes[stream] > MAX_BUFFER_BYTES && chunks[stream].length > 1) {
+        bytes[stream] -= chunks[stream].shift().length
+      }
+      if (typeof onOutput === 'function') {
+        const text = decoders[stream].decode(buf, { stream: true })
+        if (text) onOutput(text)
+      }
+    }
+    child.stdout?.on('data', (buf) => onChunk('stdout', buf))
+    child.stderr?.on('data', (buf) => onChunk('stderr', buf))
+    child.on('error', (err) => { spawnError = err })
+
     const abort = () => { void terminateCommand(child) }
-    const child = exec(command, { ...execOptions, detached: process.platform !== 'win32', encoding: 'buffer' }, (err, stdout, stderr) => {
+    const finish = (code) => {
       clearTimeout(timer)
       signal?.removeEventListener('abort', abort)
       resolve({
-        code: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
+        code: typeof code === 'number' ? code : 1,
         killed: timedOut,
         cancelled: !!signal?.aborted,
-        stdout: decodeOutput(stdout),
-        stderr: decodeOutput(stderr),
-        errorMessage: err && !('code' in err) ? err.message : null,
+        stdout: decodeOutput(Buffer.concat(chunks.stdout)),
+        stderr: decodeOutput(Buffer.concat(chunks.stderr)),
+        errorMessage: spawnError ? spawnError.message : null,
       })
-    })
+    }
+    child.on('close', finish)
+
     const timer = setTimeout(() => { timedOut = true; void terminateCommand(child) }, timeout)
     timer.unref()
     signal?.addEventListener('abort', abort, { once: true })
@@ -297,8 +346,7 @@ async function toolRunCommand(args, ctx) {
   }
 
   const cwd = resolvePath(ctx, args.cwd)
-  let timeoutSec = Number(args.timeout_seconds) || CMD_TIMEOUT_DEFAULT
-  timeoutSec = Math.max(1, Math.min(CMD_TIMEOUT_MAX, timeoutSec))
+  const timeoutSec = resolveCommandTimeout(command, args.timeout_seconds)
 
   // 验证 cwd 存在,避免 exec 抛模糊错误
   try {
@@ -316,10 +364,11 @@ async function toolRunCommand(args, ctx) {
   const execOptions = {
     cwd,
     timeout: timeoutSec * 1000,
-    maxBuffer: 32 * 1024 * 1024,
     windowsHide: true,
     onChild: ctx.onChild,
     signal: ctx.signal,
+    // 执行中的增量输出(Web 端推 SSE 给界面;CLI 不传,等于没有副作用)
+    onOutput: ctx.onOutput,
   }
   const firstEnv = await augmentEnvPath(baseEnv)
   let result = await execCommand(command, { ...execOptions, env: firstEnv })

@@ -22,6 +22,7 @@
 //   - { type: 'thinking', delta }          — 推理过程增量
 //   - { type: 'content', delta }           — 正文增量
 //   - { type: 'tool_call_start', toolCallId, name, argsPreview }
+//   - { type: 'tool_output', toolCallId, chunk }       — 命令执行中的增量输出(仅展示)
 //   - { type: 'tool_result', toolCallId, name, result }
 //   - { type: 'ask_user', interactionId, question, options, allowFreeText }
 //   - { type: 'done', content }            — 本轮最终完成
@@ -355,7 +356,16 @@ export async function runAgentTurn({ session, model, userMessage, images = [], c
       const argsPreview = summarizeArgs(name, args);
       send({ type: 'tool_call_start', toolCallId, name, argsPreview });
 
-      const toolCtx = { ...ctx, signal };
+      const toolCtx = {
+        ...ctx,
+        signal,
+        // run_command 执行期间的增量输出 → 前端实时显示。
+        // 只用于展示,不进会话历史 —— 历史里存的仍是带 exit code 的最终结果。
+        onOutput: (chunk) => {
+          const text = String(chunk || '');
+          if (text) send({ type: 'tool_output', toolCallId, name, chunk: text });
+        },
+      };
       if (name === 'ask_user' && typeof ctx.askUser === 'function') {
         toolCtx.askUser = askArgs => ctx.askUser(askArgs, {
           sessionId: session.sessionId,

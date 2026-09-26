@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { TOOL_DEFINITIONS, executeTool } from './tools.js'
+import { TOOL_DEFINITIONS, executeTool, resolveCommandTimeout } from './tools.js'
 
 let tmpDir
 const ctx = { cwd: null, onChild: null }
@@ -258,6 +258,40 @@ test('run_command 本地化错误消息解码正确(Windows GBK 回归)', async 
   } else {
     assert.match(r, /not found|未找到/)
   }
+})
+
+// ========== run_command: 实时输出 + 超时选择 ==========
+
+test('run_command 执行期间通过 onOutput 增量回传输出(命令结束前就能拿到)', async () => {
+  const chunks = []
+  let returned = false
+  const pending = executeTool('run_command', {
+    command: 'node -e "console.log(\'live-1\'); setTimeout(()=>console.log(\'live-2\'), 600)"',
+  }, { ...ctx, onOutput: text => chunks.push(text) }).then(r => { returned = true; return r })
+
+  const deadline = Date.now() + 5000
+  while (!chunks.join('').includes('live-1') && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 20))
+  }
+  assert.match(chunks.join(''), /live-1/, '命令还在跑时就该收到第一行输出')
+  assert.equal(returned, false, '此时 run_command 不应已返回')
+
+  const result = await pending
+  assert.match(result, /live-1/)
+  assert.match(result, /live-2/)
+})
+
+test('resolveCommandTimeout: 长耗时命令抬到上限,普通命令保持默认 / 模型给的值', () => {
+  // 安装 / 构建 / clone 这类命令:模型不给够超时容易被 120s 杀掉再重试
+  assert.equal(resolveCommandTimeout('npm install', undefined), 600)
+  assert.equal(resolveCommandTimeout('npm i --save-dev vite', undefined), 600)
+  assert.equal(resolveCommandTimeout('pnpm install && npm run build', 60), 600)
+  assert.equal(resolveCommandTimeout('git clone git@github.com:a/b.git', undefined), 600)
+  // 普通命令不动
+  assert.equal(resolveCommandTimeout('echo hi', undefined), 120)
+  assert.equal(resolveCommandTimeout('echo hi', 30), 30)
+  // 起服务这类命令不抬:它本来就不该等到超时
+  assert.equal(resolveCommandTimeout('npm run dev', 60), 60)
 })
 
 // ========== list_projects: 只在 GUI 里有实现,CLI 下要给一句能照着做的话 ==========

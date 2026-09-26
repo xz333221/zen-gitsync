@@ -72,8 +72,9 @@ const LOCAL_KEY_PREFIX = 'local-'
 // ── 后端消息 → ChatMessage 转换 ──────────────────────────
 // 把 OpenAI 格式的消息数组转换为 zen-ai-chat-ui 的 ChatMessage[]
 // system 消息被跳过（不展示给用户）
-// assistant + tool_calls → 合并为一条 assistant 消息，tool_calls 展示为 ToolCall[]
-// tool 消息 → 附加到前一条 assistant 的 toolCalls 对应项的 result
+// 一次 AI 回合（工具循环会产生多条 assistant + tool 记录）→ 合并为一条
+// assistant 消息：各轮正文拼接，tool_calls 汇总为 ToolCall[]，tool 结果
+// 附加到对应 toolCall 的 result
 export function convertSessionToMessages(session: AgentSession | null): ChatMessage[] {
   if (!session || !Array.isArray(session.messages)) return []
   const result: ChatMessage[] = []
@@ -114,55 +115,64 @@ export function convertSessionToMessages(session: AgentSession | null): ChatMess
         })
       }
     } else if (m.role === 'assistant') {
+      // 工具循环的每一轮都会落成一条独立 assistant 记录（紧随其后是该轮的
+      // role:'tool' 结果）。展示时合并到同一条 ChatMessage，才能和实时流式
+      // 一致 —— 流式时所有轮次都累加在同一个占位消息上；历史若不合并，
+      // 每个工具调用会渲染成独立气泡。
+      // 合并范围：从当前 assistant 直到下一个 user/system 消息之前的连续记录。
+      const id = `msg-${i}`
       let content = ''
-      if (typeof m.content === 'string') {
-        content = m.content
+      const toolCalls: ToolCall[] = []
+
+      let j = i
+      while (j < msgCount) {
+        const cur = session.messages[j]
+        if (cur.role !== 'assistant' && cur.role !== 'tool') break
+
+        if (cur.role === 'assistant') {
+          if (typeof cur.content === 'string') content += cur.content
+          if (cur.tool_calls && cur.tool_calls.length > 0) {
+            for (const tc of cur.tool_calls) {
+              toolCalls.push({
+                id: tc.id || tc.function?.name || uid(),
+                name: tc.function?.name || '',
+                arguments: tc.function?.arguments || '',
+                argsPreview: summarizeToolArgs(tc.function?.name || '', tc.function?.arguments || ''),
+                status: 'done',
+                result: ''
+              })
+            }
+          }
+        } else {
+          // 工具结果挂到对应 toolCall 的 result 上
+          const toolCallId = cur.tool_call_id || cur.name || ''
+          const tc = toolCalls.find(t => t.id === toolCallId)
+          if (tc) {
+            let toolResult = cur.content
+            if (typeof toolResult !== 'string') toolResult = '(non-text result)'
+            if (toolResult.length > MAX_LOG_DISPLAY) {
+              toolResult = `…（前文已截断）\n${toolResult.slice(-MAX_LOG_DISPLAY)}`
+            }
+            tc.result = toolResult
+          }
+        }
+        j++
       }
+      // 已合并的记录一并跳过，外层 i++ 后指向下一条未消费消息
+      i = j - 1
 
       // 截断过长内容
       if (content.length > MAX_LOG_DISPLAY) {
         content = `…（前文已截断）\n${content.slice(-MAX_LOG_DISPLAY)}`
       }
 
-      const toolCalls: ToolCall[] = []
-      if (m.tool_calls && m.tool_calls.length > 0) {
-        for (const tc of m.tool_calls) {
-          toolCalls.push({
-            id: tc.id || tc.function?.name || uid(),
-            name: tc.function?.name || '',
-            arguments: tc.function?.arguments || '',
-            argsPreview: summarizeToolArgs(tc.function?.name || '', tc.function?.arguments || ''),
-            status: 'done',
-            result: ''
-          })
-        }
-      }
-
-      // 收集后续的 tool 消息结果
-      let j = i + 1
-      while (j < msgCount && session.messages[j].role === 'tool') {
-        const toolMsg = session.messages[j]
-        const toolCallId = toolMsg.tool_call_id || toolMsg.name || ''
-        const tc = toolCalls.find(t => t.id === toolCallId)
-        if (tc) {
-          let result = toolMsg.content
-          if (typeof result !== 'string') result = '(non-text result)'
-          if (result.length > MAX_LOG_DISPLAY) {
-            result = `…（前文已截断）\n${result.slice(-MAX_LOG_DISPLAY)}`
-          }
-          tc.result = result
-        }
-        i = j
-        j++
-      }
-
       const hasContent = !!content
       const hasToolCalls = toolCalls.length > 0
       if (hasContent || hasToolCalls) {
         result.push({
-          id: `msg-${i}`,
+          id,
           role: 'assistant',
-          content: content || '',
+          content,
           toolCalls: hasToolCalls ? toolCalls : undefined,
           status: 'done',
           createdAt: Date.now()
@@ -652,6 +662,19 @@ export function useAgentChat() {
               assistantMsg.toolCalls.push(tc)
               if (assistantMsg.status === 'pending') {
                 assistantMsg.status = 'streaming'
+              }
+              break
+            }
+
+            // 命令执行中的实时输出：先累加到 toolCall.result 上，界面在运行期间
+            // 就能看到命令进度；tool_result 到达后再用带 exit code 的最终结果覆盖
+            case 'tool_output': {
+              const tc = currentToolCalls.find(t => t.id === evt.toolCallId)
+              if (tc) {
+                const next = `${tc.result || ''}${String(evt.chunk || '')}`
+                tc.result = next.length > MAX_LOG_DISPLAY
+                  ? `…（前文已截断）\n${next.slice(-MAX_LOG_DISPLAY)}`
+                  : next
               }
               break
             }
