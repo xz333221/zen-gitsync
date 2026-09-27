@@ -42,7 +42,7 @@ npm run e2e:report
 - `playwright.config.ts` — Playwright 配置
 - `e2e/*.spec.ts` — 测试用例
   - `commit-flow.spec.ts` — 提交主流程(按钮守卫/命令预览/成功/失败/请求体契约)
-  - `app-smoke.spec.ts` — 应用冒烟(启动/导航/默认视图)
+  - `app-smoke.spec.ts` — 应用冒烟(启动/导航/默认视图/附件分流/g ai 面板恒两页/智能体视图窄屏折行)
   - `selective-stage.spec.ts` — 选择性暂存
   - `directory-selector.spec.ts` — 目录选择器/Ctrl+点击新标签
   - `dialog-system.spec.ts` — 弹窗系统
@@ -97,6 +97,25 @@ npm run e2e:report
    ```bash
    node node_modules/@playwright/test/cli.js test --output=/tmp/pw-out
    ```
+12. **先分清"按宽度折行"和"恒两页",两者的断言方向相反**。
+   - **文件空间 g ai 面板 = 恒两页**(不依赖宽度)。原先"列表压上面 + 对话在下面"的
+     堆叠形态已废除 —— 列表一开就只剩两三行对话。现在任何宽度都是
+     「会话列表页 ↔ 对话页」,头部按钮来回翻。它的用例要**同时**在宽窄两个视口下
+     断言同一个结果(用例 11),并且断言 `not.toHaveClass(/is-narrow/)` ——
+     否则哪天有人把宽度分支加回来(宽了就退回堆叠),窄视口那条仍会绿。
+   - **智能体视图(AgentView)= 按面板自身宽度折行**(阈值 680,见
+     `src/composables/useNarrowPane.ts`)。判据是**容器自身**宽度,不是视口宽度:
+     它在编辑器区跟 Monaco 分宽度。所以必须**固定 `setViewportSize`**,并先断言
+     "确实在窄屏分支"(`.agent-page-bar` 存在),否则阈值一调,用例会静默地测
+     另一条分支还照样绿。
+   - 两者都别再断言 `.acu-conv` 出现在"对话页"上:列表块在对话页是 `display:none`,
+     那条断言只会永远红(列表渲染现由对应用例翻页后覆盖)。
+13. **"在输入框内部"这类位置断言,`toBeVisible()` 是靠不住的**。组件库的 `ChatInput`
+   没有插槽,「当前文档」卡片是宿主侧往 `.acu-input-wrap` 插锚点、再 Teleport 进去的 ——
+   上一版做成了绝对定位**浮在输入框上方**,`toBeVisible()` 照样绿,是靠截图才看出位置错的。
+   两条一起断言才有意义:① 父链(`.acu-input-wrap .agent-context-att` 命中);
+   ② 几何(`getBoundingClientRect()` 里卡片底边 ≤ `.acu-input-row` 顶边)。
+   同理,凡是"相对库内部元素的位置",**先 `evaluate()` 打印父链和 rect 再写断言**。
 
 ## 写新测试
 

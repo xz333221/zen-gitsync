@@ -82,7 +82,7 @@ test.describe('App smoke', () => {
     })
   }
 
-  test('9. 文件空间: g ai 对话面板可打开,并显示当前文档 chip', async ({ page }) => {
+  test('9. 文件空间: g ai 对话面板可打开,当前文档卡片落在输入框内部', async ({ page }) => {
     await page.locator('.activity-bar button[aria-label^="文件空间"]').first().click()
     await expect(page.locator('.editor-pane')).toBeVisible()
 
@@ -97,7 +97,19 @@ test.describe('App smoke', () => {
     await toggle.click()
     await expect(toggle).toHaveClass(/active/)
     await expect(page.locator('.editor-agent-panel')).toBeVisible()
-    await expect(page.locator('.agent-context-chip')).toBeVisible()
+    // 当前文档卡片在输入框**内部**第一行（库的附件行 .acu-input-attachments 待的那一层），
+    // 不是浮在输入框外面。这里不只断言"可见"，还量了它确实排在 .acu-input-row 之上 ——
+    // 光 `toBeVisible()` 的话，绝对定位浮在输入框上方也能骗过用例（上一版就是这么错的）。
+    const ctxCard = page.locator('.editor-agent-panel .acu-input-wrap .agent-context-att')
+    await expect(ctxCard).toBeVisible()
+    await expect(page.locator('.agent-panel-header .agent-context-att')).toHaveCount(0)
+    expect(await ctxCard.evaluate(el => {
+      const row = el.closest('.acu-input-wrap')?.querySelector('.acu-input-row')
+      if (!row) return false
+      return el.getBoundingClientRect().bottom <= row.getBoundingClientRect().top + 1
+    })).toBe(true)
+    // 和附件一样带移除按钮（只是它移除的是"这一条不带当前文档"，不是删文件）
+    await expect(page.locator('.editor-agent-panel .agent-context-att-remove')).toHaveCount(1)
 
     // 光"可见"不够：组件库的样式表要真的生效，否则面板是裸的（2026-09-27 用户实测报过）。
     // 本用例是全新 context、直接进文件空间，从未加载 AgentView / WorkbenchView / JobLogDetails
@@ -106,8 +118,8 @@ test.describe('App smoke', () => {
     const chatDir = await page.locator('.editor-agent-panel .acu-chat')
       .evaluate(el => getComputedStyle(el).flexDirection)
     expect(chatDir).toBe('column')
-    // 会话列表同理：库的 ConversationList 根节点（样式表没加载也能"可见"，配套上面那条断言）
-    await expect(page.locator('.editor-agent-panel .acu-conv').first()).toBeVisible()
+    // 会话列表的渲染与样式由下面第 11 条用例守（它会翻到列表页）。
+    // 这里不再断言 .acu-conv —— 列表默认整块 display:none，写在这里只会永远红。
   })
 
   // 附件：图片走多模态（images[] dataURL），非图片走"服务端落盘 + 只把路径给模型"（attachments[]）。
@@ -142,6 +154,19 @@ test.describe('App smoke', () => {
     ])
     await expect(page.locator('.editor-agent-panel .acu-input-att')).toHaveCount(2)
 
+    // 「当前文档」卡片和这两个附件**并排在同一行**（这就是"跟加附件一样"）：
+    // 它住在 .acu-input-attachments 里，是那一行的一个 flex item。
+    // 上一版靠"插在输入框最前面"保位置，Vue 更新输入框时会把它挤到下一行 —— 用户截图报过。
+    // 判据用"垂直方向有重叠"而不是"top 相等"：附件里的图片缩略图是 56px 固定高，
+    // flex 的 align-items 会把同行各 item 拉伸成不同高度，top 本来就不一定相等。
+    expect(await page.locator('.editor-agent-panel .agent-context-att').evaluate(el => {
+      const att = el.closest('.acu-input-attachments')?.querySelector('.acu-input-att')
+      if (!att) return false
+      const a = el.getBoundingClientRect()
+      const b = att.getBoundingClientRect()
+      return a.bottom > b.top && a.top < b.bottom
+    })).toBe(true)
+
     await page.locator('.editor-agent-panel .acu-input-textarea').fill('看下这两个')
     await page.locator('.editor-agent-panel .acu-input-send').click()
 
@@ -150,5 +175,68 @@ test.describe('App smoke', () => {
     expect(bodies[0].attachments[0].dataUrl).toMatch(/^data:text\/plain;base64,/)
     expect(bodies[0].images).toHaveLength(1)
     expect(bodies[0].images[0]).toMatch(/^data:image\/png;base64,/)
+  })
+
+  // ── 文件空间 g ai 面板：会话列表 ↔ 对话 **恒为两个整页** ──
+  // 这块面板挂在编辑器里跟 Monaco 分宽度，天生长得窄；原先"列表压在上面 + 对话在下面"，
+  // 列表一开就只剩两三行对话。现在不按宽度分支，任何宽度都是两个整页 ——
+  // 所以这里要**同时**在宽窄两个视口下断言，防止哪天有人把宽度分支加回来。
+  test('11. 文件空间 g ai 面板：会话列表页 ↔ 对话页（恒两页，与宽度无关）', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+
+    await page.locator('.activity-bar button[aria-label^="文件空间"]').first().click()
+    await expect(page.locator('.tree-node--file').first()).toBeVisible({ timeout: 30_000 })
+    await page.locator('.tree-node--file').first().click()
+    await page.locator('.agent-toggle-btn').click()
+
+    const panel = page.locator('.editor-agent-panel')
+    await expect(panel).toBeVisible()
+    // 恒两页：宽度分支该留下的痕迹一个都不该有
+    await expect(panel).not.toHaveClass(/is-narrow/)
+
+    // 默认在对话页：对话铺满，列表整块让位
+    await expect(panel.locator('.agent-panel-chat')).toBeVisible()
+    await expect(panel.locator('.agent-panel-convs')).toBeHidden()
+
+    // 点头部按钮 → 会话列表页整页铺开（组件库的 ConversationList 真的渲染出来）
+    await panel.locator('.agent-panel-list-btn').click()
+    await expect(panel.locator('.acu-conv').first()).toBeVisible()
+    await expect(panel.locator('.agent-panel-chat')).toBeHidden()
+    // 头部整条让给「返回对话 + 会话列表」，列表按钮退场
+    await expect(panel.locator('.agent-panel-back-btn')).toBeVisible()
+    await expect(panel.locator('.agent-panel-title')).toHaveText('会话列表')
+    await expect(panel.locator('.agent-panel-list-btn')).toHaveCount(0)
+
+    // 点 ← 返回对话页
+    await panel.locator('.agent-panel-back-btn').click()
+    await expect(panel.locator('.agent-panel-chat')).toBeVisible()
+    await expect(panel.locator('.agent-panel-convs')).toBeHidden()
+
+    // 视口拉宽（面板跟着变宽）后**仍是两页** —— 这正是"恒两页"与旧版的分水岭：
+    // 旧版一宽就退回上下堆叠（列表与对话同屏），用户看到的就是"没变"。
+    await page.setViewportSize({ width: 1600, height: 900 })
+    await expect(panel).toBeVisible()
+    await expect(panel.locator('.agent-panel-chat')).toBeVisible()
+    await expect(panel.locator('.agent-panel-convs')).toBeHidden()
+  })
+
+  test('12. 窄屏：智能体视图折成「会话列表页 ↔ 对话页」', async ({ page }) => {
+    await page.setViewportSize({ width: 520, height: 720 })
+    await page.locator('.activity-bar button[aria-label^="智能体"]').first().click()
+
+    const view = page.locator('.agent-view')
+    await expect(view).toBeVisible({ timeout: 30_000 })
+
+    // 窄屏：宽屏那套并排的左侧栏 + 拖拽条整块不渲染
+    await expect(view.locator('.agent-page-bar')).toBeVisible()
+    await expect(view.locator('.agent-sidebar')).toHaveCount(0)
+    await expect(view.locator('.sidebar-resizer')).toHaveCount(0)
+    await expect(view.locator('.acu-chat')).toBeVisible()
+
+    // 返回箭头 → 会话列表页独占，对话整块退场
+    await view.locator('.agent-page-back').click()
+    await expect(view.locator('.agent-list-page .acu-conv').first()).toBeVisible()
+    await expect(view.locator('.acu-chat')).toHaveCount(0)
+    await expect(view.locator('.agent-page-bar')).toHaveCount(0)
   })
 })

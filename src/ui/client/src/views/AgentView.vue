@@ -31,9 +31,17 @@ import 'zen-ai-chat-ui/style.css'
 import { useConfigStore } from '@/stores/configStore'
 import { useAgentChat, AGENT_UPLOAD_ACCEPT } from '@/composables/useAgentChat'
 import { buildConversationItems, agentConversationLabels, agentQuestionLabels, AGENT_ASSISTANT_NAME } from '@/utils/agentConversations'
+import { useNarrowPane } from '@/composables/useNarrowPane'
 import MarketplacePanel from '@/components/MarketplacePanel.vue'
 
 const configStore = useConfigStore()
+
+// ── 面板宽度：够窄就把「会话列表」和「对话」折成两个页面 ──────────
+// 量的是这个视图容器自己的宽度（窄屏下拖动侧栏 / 分屏都会变；视口宽度反映不了）。
+const rootRef = ref<HTMLElement | null>(null)
+const { narrow } = useNarrowPane(rootRef)
+/** 窄屏下的当前页。宽屏两栏并排时用不到它 */
+const chatPage = ref<'list' | 'chat'>('chat')
 
 // ── 顶部 Tab ─────────────────────────────────────────────
 // 会话列表只在「对话」Tab 显示 —— 广场占满宽度更好浏览;
@@ -81,6 +89,11 @@ const chatTheme = computed<'light' | 'dark'>(() => {
 const conversationItems = computed(() => buildConversationItems(sessions.value, isSessionGenerating))
 const conversationLabels = agentConversationLabels()
 
+/** 窄屏对话页顶部返回条上的标题：直接取当前会话在列表里的那条（标题兜底/截断规则与列表一致） */
+const currentSessionTitle = computed(
+  () => conversationItems.value.find(i => i.id === currentSessionId.value)?.title || $t('@AGENT:对话')
+)
+
 // ── 预设问题 ──────────────────────────────────────────────
 const presetQuestions = computed(() => [
   { id: 'p1', label: $t('@AGENT:查看项目结构'), prompt: $t('@AGENT:prompt_p1') },
@@ -120,14 +133,17 @@ watch(() => messages.value.length, () => {
 })
 
 // ── 选中会话 ──────────────────────────────────────────────
-// 可随时切换：正在生成的会话在后台继续跑，切回来能看到实时进度
+// 可随时切换：正在生成的会话在后台继续跑，切回来能看到实时进度。
+// 窄屏下顺带切到对话页 —— 在列表页点了会话却停在原地，等于没反应。
 function selectSession(sessionId: string) {
   loadSession(sessionId)
+  chatPage.value = 'chat'
 }
 
 // ── 新建会话 ──────────────────────────────────────────────
 function handleNewSession() {
   newSession()
+  chatPage.value = 'chat'
 }
 
 // ── 侧边栏宽度拖拽 ────────────────────────────────────────
@@ -155,6 +171,13 @@ function startResize(e: MouseEvent) {
   document.addEventListener('mouseup', onUp)
 }
 
+// ── 变宽后回到对话页 ──────────────────────────────────────
+// 两栏重新出现时列表已经能同时看到，没必要再停在列表页 ——
+// 否则下次变窄会莫名其妙地「一进来就是列表」。
+watch(narrow, (isNarrow) => {
+  if (!isNarrow) chatPage.value = 'chat'
+})
+
 // ── 项目切换:会话列表按项目隔离 ──────────────────────────
 // currentDirectory 变化(socket 推送 / 启动后异步就绪)时重新拉取;
 // 流式生成期间不打断，结束后再次检查并清掉不属于新项目的旧会话。
@@ -174,9 +197,10 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
 </script>
 
 <template>
-  <div class="agent-view">
-    <!-- ═══ 左侧：会话列表（只在「对话」Tab 显示）═══ -->
-    <template v-if="activeTab === 'chat'">
+  <div ref="rootRef" class="agent-view">
+    <!-- ═══ 宽屏：左侧会话列表（只在「对话」Tab 显示）═══
+         窄屏时这一整块不渲染，会话列表改成 body 里的一个整页（见 .agent-list-page） -->
+    <template v-if="activeTab === 'chat' && !narrow">
       <aside class="agent-sidebar" :style="{ width: sidebarWidth + 'px' }">
       <!-- 会话列表：UI 与交互都在组件库的 ConversationList 里 -->
       <ConversationList
@@ -221,35 +245,76 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
       <div class="agent-tab-body">
         <!-- ── 对话 ── -->
         <div v-if="activeTab === 'chat'" class="agent-chat-pane">
-      <!-- 加载中 -->
-      <div v-if="sessionLoading" class="chat-loading">
-        <el-icon class="is-loading" :size="32"><Loading /></el-icon>
-        <span>{{ $t('@AGENT:加载会话中...') }}</span>
-      </div>
+          <!-- 窄屏 · 会话列表页：列表独占整页 -->
+          <div v-if="narrow && chatPage === 'list'" class="agent-list-page">
+            <ConversationList
+              class="agent-conversations"
+              :items="conversationItems"
+              :active-id="currentSessionId"
+              :loading="sessionsLoading"
+              :labels="conversationLabels"
+              @select="selectSession"
+              @new="handleNewSession"
+              @rename="renameSession"
+              @delete="deleteSession"
+            />
+          </div>
 
-      <!-- ChatContainer -->
-      <ChatContainer
-        v-else
-        ref="chatContainerRef"
-        :messages="messages"
-        :preset-questions="presetQuestions"
-        :welcome-title="$t('@AGENT:智能体助手')"
-        :welcome-description="$t('@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。')"
-        :assistant-name="AGENT_ASSISTANT_NAME"
-        :theme="chatTheme"
-        :disabled="isStreaming"
-        :generating="isStreaming"
-        :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
-        :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
-        :question="pendingQuestion"
-        :question-submitting="answeringQuestion"
-        :question-labels="questionLabels"
-        @send="onSend"
-        @select="onSelectPreset"
-        @stop="stop"
-        @answer="answerQuestion"
-      >
-      </ChatContainer>
+          <!-- 对话页（窄屏时顶上多一条返回条；宽屏左侧就摆着列表，不需要） -->
+          <template v-else>
+            <div v-if="narrow" class="agent-page-bar">
+              <button
+                type="button"
+                class="agent-page-back"
+                :title="$t('@AGENT:返回会话列表')"
+                :aria-label="$t('@AGENT:返回会话列表')"
+                @click="chatPage = 'list'"
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+                </svg>
+              </button>
+              <span class="agent-page-title">{{ currentSessionTitle }}</span>
+            </div>
+
+            <!--
+              对话宿主：单独开一层裁剪边界。
+              欢迎页在矮/窄窗口里会比可用高度还高，而它是垂直居中的 —— 溢出的部分
+              会**向上**跑出 .acu-chat，盖到刚加的返回条上（把返回条的点击也一起吃掉，
+              e2e 实测就是这个症状）。宿主的 overflow:hidden 把它裁在自己这一格里。
+            -->
+            <div class="agent-chat-host">
+              <!-- 加载中 -->
+              <div v-if="sessionLoading" class="chat-loading">
+                <el-icon class="is-loading" :size="32"><Loading /></el-icon>
+                <span>{{ $t('@AGENT:加载会话中...') }}</span>
+              </div>
+
+              <!-- ChatContainer -->
+              <ChatContainer
+                v-else
+                ref="chatContainerRef"
+                :messages="messages"
+                :preset-questions="presetQuestions"
+                :welcome-title="$t('@AGENT:智能体助手')"
+                :welcome-description="$t('@AGENT:我可以帮你阅读代码、执行命令、修改文件。选择下方话题或直接输入你的问题。')"
+                :assistant-name="AGENT_ASSISTANT_NAME"
+                :theme="chatTheme"
+                :disabled="isStreaming"
+                :generating="isStreaming"
+                :upload-config="{ accept: AGENT_UPLOAD_ACCEPT }"
+                :placeholder="isStreaming ? $t('@AGENT:正在生成中...') : $t('@AGENT:输入消息，Enter 发送')"
+                :question="pendingQuestion"
+                :question-submitting="answeringQuestion"
+                :question-labels="questionLabels"
+                @send="onSend"
+                @select="onSelectPreset"
+                @stop="stop"
+                @answer="answerQuestion"
+              >
+              </ChatContainer>
+            </div>
+          </template>
         </div>
 
         <!-- ── Skill 广场 / MCP 广场 ── -->
@@ -377,6 +442,77 @@ watch(() => [configStore.currentDirectory, isStreaming.value] as const, async ([
   gap: 12px;
   color: var(--text-tertiary);
   font-size: var(--font-size-base);
+}
+
+/* ── 窄屏：会话列表页 / 对话页 ─────────────────────────
+   面板放不下并排两栏时（阈值见 useNarrowPane，默认 680px），
+   改成两个整页轮换：点会话进对话、左上角返回箭头回列表。 */
+.agent-list-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-panel);
+
+  /* 独占整页了，左右不用再迁就窄栏，给足留白 */
+  .agent-conversations {
+    padding: 12px 12px 10px 14px;
+  }
+}
+
+.agent-page-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 12px 0 6px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-panel);
+}
+
+.agent-page-back {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: var(--transition-ui-fast);
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+}
+
+.agent-page-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-mid);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 对话宿主：自己开一层裁剪边界。
+   欢迎页在矮/窄窗口里比可用高度还高、又是垂直居中的，溢出的部分会向上跑出
+   .acu-chat 盖住返回条（连返回条的点击一起吃掉）。顺带给 .acu-chat 的
+   height: 100% 一个明确的参照高度。 */
+.agent-chat-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ── 欢迎区预设卡片：把落单的第 5 张拉满整行 ────────────────
