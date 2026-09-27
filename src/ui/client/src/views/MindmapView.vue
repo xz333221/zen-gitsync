@@ -33,6 +33,7 @@ import 'flow-mindmap/style.css'
 import { useMindmapStore, isUnderDir } from '@/stores/mindmapStore'
 import { useConfigStore } from '@/stores/configStore'
 import { useLocaleStore } from '@/stores/localeStore'
+import { openPathInFileManager } from '@/composables/useDirectoryOpenActions'
 import { storeToRefs } from 'pinia'
 
 const store = useMindmapStore()
@@ -233,6 +234,48 @@ async function handleRemoveDir(dir: string) {
   ElMessage.success($t('@MINDMAP:已移除目录'))
 }
 
+// ── 目录右键菜单 ────────────────────────────────────────────────
+// 目录上的操作（打开目录 / 在此新建 / 移除目录）统一收进右键菜单：
+// 行内 hover 按钮会随鼠标出现/消失, 容易误点, 且每个分组头都要为它留出遮罩位置。
+interface DirCtxMenu {
+  x: number
+  y: number
+  dir: string
+}
+const ctxMenu = ref<DirCtxMenu | null>(null)
+
+function openDirContextMenu(e: MouseEvent, dir: string) {
+  e.preventDefault()
+  ctxMenu.value = { x: e.clientX, y: e.clientY, dir }
+}
+
+function closeCtxMenu() {
+  ctxMenu.value = null
+}
+
+// 在系统文件管理器 / 访达里打开目录
+async function ctxOpenDir() {
+  const dir = ctxMenu.value?.dir
+  closeCtxMenu()
+  if (!dir) return
+  const r = await openPathInFileManager(dir)
+  if (r.success) ElMessage.success(r.message || $t('@MINDMAP:已在文件管理器中打开'))
+  else ElMessage.error(r.error || $t('@MINDMAP:打开目录失败'))
+}
+
+// 在该目录下新建思维导图（等价原分组头的「在此新建」）
+function ctxNewFile() {
+  const dir = ctxMenu.value?.dir
+  closeCtxMenu()
+  if (dir) handleNewFile(dir)
+}
+
+function ctxRemoveDir() {
+  const dir = ctxMenu.value?.dir
+  closeCtxMenu()
+  if (dir) handleRemoveDir(dir)
+}
+
 // 删除 / 重命名
 async function handleDelete(file: { path: string; title: string }) {
   try {
@@ -404,11 +447,14 @@ const mmData = computed(() => {
 // 生命周期
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
+  // 点击任意位置（含左键点击分组头展开/折叠）都关掉右键菜单
+  document.addEventListener('click', closeCtxMenu)
   await store.init()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('click', closeCtxMenu)
   cancelAutosave()
 })
 
@@ -513,6 +559,7 @@ function formatSize(bytes: number): string {
                 :class="{ active: isActiveDir(group.dir) }"
                 :title="group.dir"
                 @click="toggleGroup(group.dir)"
+                @contextmenu="openDirContextMenu($event, group.dir)"
               >
                 <el-icon class="mm-group-caret" :class="{ collapsed: collapsedGroups[group.dir] }">
                   <ArrowDown />
@@ -523,23 +570,6 @@ function formatSize(bytes: number): string {
                     <span class="mm-group-count">{{ group.files.length }}</span>
                   </div>
                   <div class="mm-group-path">{{ group.dir }}</div>
-                </div>
-                <div class="mm-group-actions" @click.stop>
-                  <el-button
-                    size="small"
-                    text
-                    :icon="Plus"
-                    :title="$t('@MINDMAP:在此新建')"
-                    @click="handleNewFile(group.dir)"
-                  />
-                  <el-button
-                    size="small"
-                    text
-                    type="danger"
-                    :icon="Delete"
-                    :title="$t('@MINDMAP:移除目录')"
-                    @click="handleRemoveDir(group.dir)"
-                  />
                 </div>
               </div>
 
@@ -640,6 +670,44 @@ function formatSize(bytes: number): string {
       @close="filePickerVisible = false"
       @confirm="onPickerConfirm"
     />
+
+    <!-- 目录右键菜单：打开目录 / 在此新建 / 移除目录 -->
+    <teleport to="body">
+      <div
+        v-if="ctxMenu"
+        class="ctx-menu"
+        :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
+        @click.stop
+      >
+        <button class="ctx-menu-item" @click="ctxOpenDir">
+          <!-- folder icon -->
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2"/>
+          </svg>
+          {{ $t('@MINDMAP:打开目录') }}
+        </button>
+        <button class="ctx-menu-item" @click="ctxNewFile">
+          <!-- new-file icon -->
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="13" x2="12" y2="19"/><line x1="9" y1="16" x2="15" y2="16"/>
+          </svg>
+          {{ $t('@MINDMAP:在此新建') }}
+        </button>
+        <div class="ctx-menu-sep" />
+        <button class="ctx-menu-item ctx-menu-item--danger" @click="ctxRemoveDir">
+          <!-- trash icon -->
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/>
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+          </svg>
+          {{ $t('@MINDMAP:移除目录') }}
+        </button>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -783,7 +851,6 @@ function formatSize(bytes: number): string {
 }
 
 .mm-group-header {
-  position: relative; /* hover 才出现的操作按钮绝对定位在这一行的右端 */
   display: flex;
   align-items: center;
   gap: 6px;
@@ -797,10 +864,7 @@ function formatSize(bytes: number): string {
   background: var(--bg-container-hover);
 }
 
-/* 当前「新建 / 导入」的目标目录：背景高亮（与文件条目的选中样式一致，
-   不再用左侧竖条 —— 竖条配圆角在列表行里显得突兀）。
-   底色必须**不透明**：半透明的话，浮层按钮的遮罩（background: inherit）继承过来
-   挡不住下面的文字，图标会和标题糊在一起 —— 这里用面板色做基底混出实色。 */
+/* 当前「新建 / 导入」的目标目录：背景高亮（与文件条目的选中样式一致） */
 .mm-group-header.active {
   background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-container));
 }
@@ -857,31 +921,6 @@ function formatSize(bytes: number): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* hover 才出现的操作按钮：不占布局（否则隐藏时也占着右侧一条宽度），
-   绝对定位浮在行右端；不可见时连点击也一起禁掉，避免点到"看不见的按钮"。
-   background: inherit = 拿行自身的底色当遮罩，被按钮盖住的文字是干净地切掉，
-   而不是和图标糊在一起；top/bottom 0 让遮罩撑满整行高度（只盖住按钮那点高度的话，
-   两行文字会从上下露出来）；transition 同步，避免遮罩比行的 hover 底色先到位。 */
-.mm-group-actions {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 6px;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  background: inherit;
-  padding-left: 8px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease, background 0.15s ease;
-}
-
-.mm-group-header:hover .mm-group-actions {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .mm-group-body {
@@ -948,7 +987,7 @@ function formatSize(bytes: number): string {
   text-overflow: ellipsis;
 }
 
-/* 同 .mm-group-actions：不占位，hover 时浮在行右端，用行底色遮住被盖住的文字 */
+/* 文件行的 hover 操作按钮：不占位，hover 时浮在行右端，用行底色遮住被盖住的文字 */
 .mm-file-actions {
   position: absolute;
   top: 0;
@@ -971,7 +1010,6 @@ function formatSize(bytes: number): string {
 
 /* 遮罩上的 danger 图标压深一档：Element 的 #f56c6c 在浅色遮罩上只有 ~2.5:1，
    小图标会看不清是"删除"；#dc2626 ≈ 4.2:1。深色主题下浅红反而更清楚，所以只改浅色主题。 */
-html:not(.dark) .mm-group-actions :deep(.el-button--danger),
 html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
   color: #dc2626;
 }
@@ -1017,6 +1055,57 @@ html:not(.dark) .mm-file-actions :deep(.el-button--danger) {
   font-size: 13px;
   color: var(--text-tertiary);
   margin: 0;
+}
+
+/* ── 目录右键菜单 ─────────────────────────────────────────────── */
+/* teleport 到 body：scoped 属性会跟着一起带过去，所以样式仍写在 <style scoped> 里。
+   与 EditorView 的右键菜单保持同一套观感。 */
+.ctx-menu {
+  position: fixed;
+  z-index: 9999;
+  /* 使用容器背景而非面板背景:深色主题下 --bg-panel 是半透明 rgba,
+     会导致右键菜单"通透",文字与底层内容重叠看不清。 */
+  background: var(--bg-container);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  min-width: 160px;
+  user-select: none;
+}
+
+.ctx-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.ctx-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.ctx-menu-item--danger {
+  color: var(--color-danger);
+}
+
+.ctx-menu-item--danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ctx-menu-sep {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 2px;
 }
 
 /* ── 响应式 ───────────────────────────────────────────────────── */
